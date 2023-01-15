@@ -14,8 +14,6 @@ State 182 conflicts: 1 shift/reduce
 State 391 conflicts: 2 shift/reduce
 State 467 conflicts: 7 shift/reduce
 State 671 conflicts: 2 shift/reduce
-State 1035 conflicts: 6 shift/reduce
-State 1037 conflicts: 6 shift/reduce
 
 
 Grammar
@@ -2236,6 +2234,31 @@ State 51
     "::"      [reduce using rule 222 (name_in_namespace)]
     $default  reduce using rule 222 (name_in_namespace)
 
+    shift/reduce conflict on token "::":
+      222 name_in_namespace: "name" .
+      223 name_in_namespace: "name" . "::" "name"
+      First example: program optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list "name" '=' "typeinfo" '(' "name" . "::" "name" expr ')' ';' '}' $end
+      Shift derivation
+        $accept
+        `-> program                                                                                                                                                                             $end
+            `-> program enum_declaration
+                        `-> optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list                                                                         '}'
+                                                                                                          `-> enum_list "name" '=' expr_type_info                                       ';'
+                                                                                                                                   `-> "typeinfo" '(' name_in_namespace        expr ')'
+                                                                                                                                                      `-> "name" . "::" "name"
+      Second example: program optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list "name" '=' "typeinfo" '(' "name" . "::" "name" ')' ';' '}' $end
+      Reduce derivation
+        $accept
+        `-> program                                                                                                                                                                                           $end
+            `-> program enum_declaration
+                        `-> optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list                                                                                       '}'
+                                                                                                          `-> enum_list "name" '=' expr                                                               ';'
+                                                                                                                                   `-> expr_type_info
+                                                                                                                                       `-> "typeinfo" '(' name_in_namespace expr                  ')'
+                                                                                                                                                          `-> "name" .      `-> name_in_namespace
+                                                                                                                                                                                `-> "::" "name"
+
+
 
 State 52
 
@@ -3121,6 +3144,33 @@ State 148
     '('       [reduce using rule 557 (auto_type_declaration)]
     $default  reduce using rule 557 (auto_type_declaration)
 
+    shift/reduce conflict on token '(':
+      557 auto_type_declaration: "auto" .
+      558 auto_type_declaration: "auto" . '(' "name" ')'
+      First example: program optional_annotation_list "enum" optional_public_or_private_enum enum_name enum_list "name" '=' "new" "auto" . '(' "name" ')' ';' enum_list '}' $end
+      Shift derivation
+        $accept
+        `-> program                                                                                                                                                                            $end
+            `-> program enum_declaration
+                        `-> optional_annotation_list "enum" optional_public_or_private_enum enum_name enum_list                                                                  enum_list '}'
+                                                                                                      `-> enum_list "name" '=' expr                                          ';'
+                                                                                                                               `-> expr_new
+                                                                                                                                   `-> "new" type_declaration_no_options
+                                                                                                                                             `-> auto_type_declaration
+                                                                                                                                                 `-> "auto" . '(' "name" ')'
+      Second example: program optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list "name" '=' "new" "auto" . '(' ')' ';' '}' $end
+      Reduce derivation
+        $accept
+        `-> program                                                                                                                                                                          $end
+            `-> program enum_declaration
+                        `-> optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list                                                                      '}'
+                                                                                                          `-> enum_list "name" '=' expr                                              ';'
+                                                                                                                                   `-> expr_new
+                                                                                                                                       `-> "new" type_declaration_no_options '(' ')'
+                                                                                                                                                 `-> auto_type_declaration
+                                                                                                                                                     `-> "auto" .
+
+
 
 State 149
 
@@ -3166,6 +3216,34 @@ State 154
 
     '<'       [reduce using rule 549 (basic_type_declaration)]
     $default  reduce using rule 549 (basic_type_declaration)
+
+    shift/reduce conflict on token '<':
+      549 basic_type_declaration: "bitfield" .
+      564 bitfield_type_declaration: "bitfield" . '<' $@34 bitfield_bits '>' $@35
+      First example: program optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list "name" '=' "new" "bitfield" . '<' $@34 bitfield_bits '>' $@35 '<' expr ';' '}' $end
+      Shift derivation
+        $accept
+        `-> program                                                                                                                                                                                                    $end
+            `-> program enum_declaration
+                        `-> optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list                                                                                                '}'
+                                                                                                          `-> enum_list "name" '=' expr                                                                        ';'
+                                                                                                                                   `-> expr_new                                                       '<' expr
+                                                                                                                                       `-> "new" type_declaration_no_options
+                                                                                                                                                 `-> bitfield_type_declaration
+                                                                                                                                                     `-> "bitfield" . '<' $@34 bitfield_bits '>' $@35
+      Second example: program optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list "name" '=' "new" "bitfield" . '<' expr ';' '}' $end
+      Reduce derivation
+        $accept
+        `-> program                                                                                                                                                                               $end
+            `-> program enum_declaration
+                        `-> optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list                                                                           '}'
+                                                                                                          `-> enum_list "name" '=' expr                                                   ';'
+                                                                                                                                   `-> expr                                      '<' expr
+                                                                                                                                       `-> expr_new
+                                                                                                                                           `-> "new" type_declaration_no_options
+                                                                                                                                                     `-> basic_type_declaration
+                                                                                                                                                         `-> "bitfield" .
+
 
 
 State 155
@@ -3242,6 +3320,57 @@ State 164
     '<'       [reduce using rule 597 (type_declaration_no_options)]
     $default  reduce using rule 597 (type_declaration_no_options)
 
+    shift/reduce conflict on token '<':
+      597 type_declaration_no_options: "block" .
+      600 type_declaration_no_options: "block" . '<' $@44 type_declaration '>' $@45
+      First example: program optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list "name" '=' "new" "block" . '<' $@44 type_declaration '>' $@45 '<' expr ';' '}' $end
+      Shift derivation
+        $accept
+        `-> program                                                                                                                                                                                                $end
+            `-> program enum_declaration
+                        `-> optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list                                                                                            '}'
+                                                                                                          `-> enum_list "name" '=' expr                                                                    ';'
+                                                                                                                                   `-> expr_new                                                   '<' expr
+                                                                                                                                       `-> "new" type_declaration_no_options
+                                                                                                                                                 `-> "block" . '<' $@44 type_declaration '>' $@45
+      Second example: program optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list "name" '=' "new" "block" . '<' expr ';' '}' $end
+      Reduce derivation
+        $accept
+        `-> program                                                                                                                                                                               $end
+            `-> program enum_declaration
+                        `-> optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list                                                                           '}'
+                                                                                                          `-> enum_list "name" '=' expr                                                   ';'
+                                                                                                                                   `-> expr                                      '<' expr
+                                                                                                                                       `-> expr_new
+                                                                                                                                           `-> "new" type_declaration_no_options
+                                                                                                                                                     `-> "block" .
+
+    shift/reduce conflict on token '<':
+      597 type_declaration_no_options: "block" .
+      603 type_declaration_no_options: "block" . '<' $@46 optional_function_argument_list optional_function_type '>' $@47
+      First example: program optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list "name" '=' "new" "block" . '<' $@46 optional_function_argument_list optional_function_type '>' $@47 '<' expr ';' '}' $end
+      Shift derivation
+        $accept
+        `-> program                                                                                                                                                                                                                                      $end
+            `-> program enum_declaration
+                        `-> optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list                                                                                                                                  '}'
+                                                                                                          `-> enum_list "name" '=' expr                                                                                                          ';'
+                                                                                                                                   `-> expr_new                                                                                         '<' expr
+                                                                                                                                       `-> "new" type_declaration_no_options
+                                                                                                                                                 `-> "block" . '<' $@46 optional_function_argument_list optional_function_type '>' $@47
+      Second example: program optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list "name" '=' "new" "block" . '<' expr ';' '}' $end
+      Reduce derivation
+        $accept
+        `-> program                                                                                                                                                                               $end
+            `-> program enum_declaration
+                        `-> optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list                                                                           '}'
+                                                                                                          `-> enum_list "name" '=' expr                                                   ';'
+                                                                                                                                   `-> expr                                      '<' expr
+                                                                                                                                       `-> expr_new
+                                                                                                                                           `-> "new" type_declaration_no_options
+                                                                                                                                                     `-> "block" .
+
+
 
 State 165
 
@@ -3275,6 +3404,57 @@ State 168
     '<'       [reduce using rule 604 (type_declaration_no_options)]
     $default  reduce using rule 604 (type_declaration_no_options)
 
+    shift/reduce conflict on token '<':
+      604 type_declaration_no_options: "function" .
+      607 type_declaration_no_options: "function" . '<' $@48 type_declaration '>' $@49
+      First example: program optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list "name" '=' "new" "function" . '<' $@48 type_declaration '>' $@49 '<' expr ';' '}' $end
+      Shift derivation
+        $accept
+        `-> program                                                                                                                                                                                                   $end
+            `-> program enum_declaration
+                        `-> optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list                                                                                               '}'
+                                                                                                          `-> enum_list "name" '=' expr                                                                       ';'
+                                                                                                                                   `-> expr_new                                                      '<' expr
+                                                                                                                                       `-> "new" type_declaration_no_options
+                                                                                                                                                 `-> "function" . '<' $@48 type_declaration '>' $@49
+      Second example: program optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list "name" '=' "new" "function" . '<' expr ';' '}' $end
+      Reduce derivation
+        $accept
+        `-> program                                                                                                                                                                               $end
+            `-> program enum_declaration
+                        `-> optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list                                                                           '}'
+                                                                                                          `-> enum_list "name" '=' expr                                                   ';'
+                                                                                                                                   `-> expr                                      '<' expr
+                                                                                                                                       `-> expr_new
+                                                                                                                                           `-> "new" type_declaration_no_options
+                                                                                                                                                     `-> "function" .
+
+    shift/reduce conflict on token '<':
+      604 type_declaration_no_options: "function" .
+      610 type_declaration_no_options: "function" . '<' $@50 optional_function_argument_list optional_function_type '>' $@51
+      First example: program optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list "name" '=' "new" "function" . '<' $@50 optional_function_argument_list optional_function_type '>' $@51 '<' expr ';' '}' $end
+      Shift derivation
+        $accept
+        `-> program                                                                                                                                                                                                                                         $end
+            `-> program enum_declaration
+                        `-> optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list                                                                                                                                     '}'
+                                                                                                          `-> enum_list "name" '=' expr                                                                                                             ';'
+                                                                                                                                   `-> expr_new                                                                                            '<' expr
+                                                                                                                                       `-> "new" type_declaration_no_options
+                                                                                                                                                 `-> "function" . '<' $@50 optional_function_argument_list optional_function_type '>' $@51
+      Second example: program optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list "name" '=' "new" "function" . '<' expr ';' '}' $end
+      Reduce derivation
+        $accept
+        `-> program                                                                                                                                                                               $end
+            `-> program enum_declaration
+                        `-> optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list                                                                           '}'
+                                                                                                          `-> enum_list "name" '=' expr                                                   ';'
+                                                                                                                                   `-> expr                                      '<' expr
+                                                                                                                                       `-> expr_new
+                                                                                                                                           `-> "new" type_declaration_no_options
+                                                                                                                                                     `-> "function" .
+
+
 
 State 169
 
@@ -3286,6 +3466,57 @@ State 169
 
     '<'       [reduce using rule 611 (type_declaration_no_options)]
     $default  reduce using rule 611 (type_declaration_no_options)
+
+    shift/reduce conflict on token '<':
+      611 type_declaration_no_options: "lambda" .
+      614 type_declaration_no_options: "lambda" . '<' $@52 type_declaration '>' $@53
+      First example: program optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list "name" '=' "new" "lambda" . '<' $@52 type_declaration '>' $@53 '<' expr ';' '}' $end
+      Shift derivation
+        $accept
+        `-> program                                                                                                                                                                                                 $end
+            `-> program enum_declaration
+                        `-> optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list                                                                                             '}'
+                                                                                                          `-> enum_list "name" '=' expr                                                                     ';'
+                                                                                                                                   `-> expr_new                                                    '<' expr
+                                                                                                                                       `-> "new" type_declaration_no_options
+                                                                                                                                                 `-> "lambda" . '<' $@52 type_declaration '>' $@53
+      Second example: program optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list "name" '=' "new" "lambda" . '<' expr ';' '}' $end
+      Reduce derivation
+        $accept
+        `-> program                                                                                                                                                                               $end
+            `-> program enum_declaration
+                        `-> optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list                                                                           '}'
+                                                                                                          `-> enum_list "name" '=' expr                                                   ';'
+                                                                                                                                   `-> expr                                      '<' expr
+                                                                                                                                       `-> expr_new
+                                                                                                                                           `-> "new" type_declaration_no_options
+                                                                                                                                                     `-> "lambda" .
+
+    shift/reduce conflict on token '<':
+      611 type_declaration_no_options: "lambda" .
+      617 type_declaration_no_options: "lambda" . '<' $@54 optional_function_argument_list optional_function_type '>' $@55
+      First example: program optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list "name" '=' "new" "lambda" . '<' $@54 optional_function_argument_list optional_function_type '>' $@55 '<' expr ';' '}' $end
+      Shift derivation
+        $accept
+        `-> program                                                                                                                                                                                                                                       $end
+            `-> program enum_declaration
+                        `-> optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list                                                                                                                                   '}'
+                                                                                                          `-> enum_list "name" '=' expr                                                                                                           ';'
+                                                                                                                                   `-> expr_new                                                                                          '<' expr
+                                                                                                                                       `-> "new" type_declaration_no_options
+                                                                                                                                                 `-> "lambda" . '<' $@54 optional_function_argument_list optional_function_type '>' $@55
+      Second example: program optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list "name" '=' "new" "lambda" . '<' expr ';' '}' $end
+      Reduce derivation
+        $accept
+        `-> program                                                                                                                                                                               $end
+            `-> program enum_declaration
+                        `-> optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list                                                                           '}'
+                                                                                                          `-> enum_list "name" '=' expr                                                   ';'
+                                                                                                                                   `-> expr                                      '<' expr
+                                                                                                                                       `-> expr_new
+                                                                                                                                           `-> "new" type_declaration_no_options
+                                                                                                                                                     `-> "lambda" .
+
 
 
 State 170
@@ -3403,6 +3634,53 @@ State 182
 
     '['       [reduce using rule 624 (type_declaration)]
     $default  reduce using rule 624 (type_declaration)
+
+    shift/reduce conflict on token '[':
+      624 type_declaration: type_declaration_no_options .
+      571 type_declaration_no_options: type_declaration_no_options . '[' expr ']'
+      First example: program "name" $@31 '=' type_declaration_no_options . '[' expr ']' single_alias structure_declaration $end
+      Shift derivation
+        $accept
+        `-> program                                                                                                                       $end
+            `-> program                                                                                             structure_declaration
+                `-> program alias_declaration
+                            `-> single_alias                                                           single_alias
+                                `-> "name" $@31 '=' type_declaration
+                                                    `-> type_declaration_no_options
+                                                        `-> type_declaration_no_options . '[' expr ']'
+      Second example: program "typedef" "name" $@31 '=' type_declaration_no_options . '[' annotation_list ']' class_or_struct optional_public_or_private_structure $@32 structure_name $@33 '{' struct_variable_declaration_list '}' $end
+      Reduce derivation
+        $accept
+        `-> program                                                                                                                                                                                                                                    $end
+            `-> program                                                                         structure_declaration
+                `-> program alias_declaration                                                   `-> optional_annotation_list    class_or_struct optional_public_or_private_structure $@32 structure_name $@33 '{' struct_variable_declaration_list '}'
+                            `-> "typedef" single_alias                                              `-> '[' annotation_list ']'
+                                          `-> "name" $@31 '=' type_declaration
+                                                              `-> type_declaration_no_options .
+
+    shift/reduce conflict on token '[':
+      624 type_declaration: type_declaration_no_options .
+      572 type_declaration_no_options: type_declaration_no_options . '[' ']'
+      First example: program "name" $@31 '=' type_declaration_no_options . '[' ']' single_alias structure_declaration $end
+      Shift derivation
+        $accept
+        `-> program                                                                                                                  $end
+            `-> program                                                                                        structure_declaration
+                `-> program alias_declaration
+                            `-> single_alias                                                      single_alias
+                                `-> "name" $@31 '=' type_declaration
+                                                    `-> type_declaration_no_options
+                                                        `-> type_declaration_no_options . '[' ']'
+      Second example: program "typedef" "name" $@31 '=' type_declaration_no_options . '[' annotation_list ']' class_or_struct optional_public_or_private_structure $@32 structure_name $@33 '{' struct_variable_declaration_list '}' $end
+      Reduce derivation
+        $accept
+        `-> program                                                                                                                                                                                                                                    $end
+            `-> program                                                                         structure_declaration
+                `-> program alias_declaration                                                   `-> optional_annotation_list    class_or_struct optional_public_or_private_structure $@32 structure_name $@33 '{' struct_variable_declaration_list '}'
+                            `-> "typedef" single_alias                                              `-> '[' annotation_list ']'
+                                          `-> "name" $@31 '=' type_declaration
+                                                              `-> type_declaration_no_options .
+
 
 
 State 183
@@ -6712,6 +6990,124 @@ State 391
     '('       [reduce using rule 328 (expr)]
     $default  reduce using rule 328 (expr)
 
+    shift/reduce conflict on token '(':
+      328 expr: name_in_namespace .
+      310 expr_named_call: name_in_namespace . '(' '[' make_struct_fields ']' ')'
+      First example: program optional_annotation_list "def" optional_public_or_private_function $@5 function_declaration_header '{' expressions expr '=' "@ <|" name_in_namespace . '(' '[' make_struct_fields ']' ')' expression_any '}' $end
+      Shift derivation
+        $accept
+        `-> program                                                                                                                                                                                                                                                  $end
+            `-> program global_function_declaration
+                        `-> optional_annotation_list "def" function_declaration
+                                                           `-> optional_public_or_private_function $@5 function_declaration_header expression_block
+                                                                                                                                   `-> '{' expressions                                                                                                           '}'
+                                                                                                                                           `-> expressions                                                                                        expression_any
+                                                                                                                                               `-> expressions expr_assign_pipe
+                                                                                                                                                               `-> expr '=' "@ <|" expr
+                                                                                                                                                                                   `-> expr_named_call
+                                                                                                                                                                                       `-> name_in_namespace . '(' '[' make_struct_fields ']' ')'
+      Second example: program optional_annotation_list "def" optional_public_or_private_function $@5 function_declaration_header '{' expressions expr '=' "@ <|" name_in_namespace . '(' expr ')' '=' "@ <|" expr '}' $end
+      Reduce derivation
+        $accept
+        `-> program                                                                                                                                                                                                                                         $end
+            `-> program global_function_declaration
+                        `-> optional_annotation_list "def" function_declaration
+                                                           `-> optional_public_or_private_function $@5 function_declaration_header expression_block
+                                                                                                                                   `-> '{' expressions                                                                                                  '}'
+                                                                                                                                           `-> expressions                                                     expression_any
+                                                                                                                                               `-> expressions expression_any                                  `-> expr_assign_pipe
+                                                                                                                                                               `-> expr_assign_pipe                                `-> expr             '=' "@ <|" expr
+                                                                                                                                                                   `-> expr '=' "@ <|" expr                            `-> '(' expr ')'
+                                                                                                                                                                                       `-> name_in_namespace .
+
+    shift/reduce conflict on token '(':
+      328 expr: name_in_namespace .
+      375 expr: name_in_namespace . '(' ')'
+      First example: program optional_annotation_list "def" optional_public_or_private_function $@5 function_declaration_header '{' expressions expr '=' "@ <|" name_in_namespace . '(' ')' expression_any '}' $end
+      Shift derivation
+        $accept
+        `-> program                                                                                                                                                                                                                   $end
+            `-> program global_function_declaration
+                        `-> optional_annotation_list "def" function_declaration
+                                                           `-> optional_public_or_private_function $@5 function_declaration_header expression_block
+                                                                                                                                   `-> '{' expressions                                                                            '}'
+                                                                                                                                           `-> expressions                                                         expression_any
+                                                                                                                                               `-> expressions expr_assign_pipe
+                                                                                                                                                               `-> expr '=' "@ <|" expr
+                                                                                                                                                                                   `-> name_in_namespace . '(' ')'
+      Second example: program optional_annotation_list "def" optional_public_or_private_function $@5 function_declaration_header '{' expressions expr '=' "@ <|" name_in_namespace . '(' expr ')' '=' "@ <|" expr '}' $end
+      Reduce derivation
+        $accept
+        `-> program                                                                                                                                                                                                                                         $end
+            `-> program global_function_declaration
+                        `-> optional_annotation_list "def" function_declaration
+                                                           `-> optional_public_or_private_function $@5 function_declaration_header expression_block
+                                                                                                                                   `-> '{' expressions                                                                                                  '}'
+                                                                                                                                           `-> expressions                                                     expression_any
+                                                                                                                                               `-> expressions expression_any                                  `-> expr_assign_pipe
+                                                                                                                                                               `-> expr_assign_pipe                                `-> expr             '=' "@ <|" expr
+                                                                                                                                                                   `-> expr '=' "@ <|" expr                            `-> '(' expr ')'
+                                                                                                                                                                                       `-> name_in_namespace .
+
+    shift/reduce conflict on token '(':
+      328 expr: name_in_namespace .
+      376 expr: name_in_namespace . '(' expr_list ')'
+      First example: program optional_annotation_list "def" optional_public_or_private_function $@5 function_declaration_header '{' expressions expr '=' "@ <|" name_in_namespace . '(' expr_list ')' expression_any '}' $end
+      Shift derivation
+        $accept
+        `-> program                                                                                                                                                                                                                             $end
+            `-> program global_function_declaration
+                        `-> optional_annotation_list "def" function_declaration
+                                                           `-> optional_public_or_private_function $@5 function_declaration_header expression_block
+                                                                                                                                   `-> '{' expressions                                                                                      '}'
+                                                                                                                                           `-> expressions                                                                   expression_any
+                                                                                                                                               `-> expressions expr_assign_pipe
+                                                                                                                                                               `-> expr '=' "@ <|" expr
+                                                                                                                                                                                   `-> name_in_namespace . '(' expr_list ')'
+      Second example: program optional_annotation_list "def" optional_public_or_private_function $@5 function_declaration_header '{' expressions expr '=' "@ <|" name_in_namespace . '(' expr ')' '=' "@ <|" expr '}' $end
+      Reduce derivation
+        $accept
+        `-> program                                                                                                                                                                                                                                         $end
+            `-> program global_function_declaration
+                        `-> optional_annotation_list "def" function_declaration
+                                                           `-> optional_public_or_private_function $@5 function_declaration_header expression_block
+                                                                                                                                   `-> '{' expressions                                                                                                  '}'
+                                                                                                                                           `-> expressions                                                     expression_any
+                                                                                                                                               `-> expressions expression_any                                  `-> expr_assign_pipe
+                                                                                                                                                               `-> expr_assign_pipe                                `-> expr             '=' "@ <|" expr
+                                                                                                                                                                   `-> expr '=' "@ <|" expr                            `-> '(' expr ')'
+                                                                                                                                                                                       `-> name_in_namespace .
+
+    shift/reduce conflict on token "name":
+      328 expr: name_in_namespace .
+      410 expr: name_in_namespace . "name"
+      First example: program optional_annotation_list "def" optional_public_or_private_function $@5 function_declaration_header '{' expressions expr '=' "@ <|" name_in_namespace . "name" expression_any '}' $end
+      Shift derivation
+        $accept
+        `-> program                                                                                                                                                                                                                  $end
+            `-> program global_function_declaration
+                        `-> optional_annotation_list "def" function_declaration
+                                                           `-> optional_public_or_private_function $@5 function_declaration_header expression_block
+                                                                                                                                   `-> '{' expressions                                                                           '}'
+                                                                                                                                           `-> expressions                                                        expression_any
+                                                                                                                                               `-> expressions expr_assign_pipe
+                                                                                                                                                               `-> expr '=' "@ <|" expr
+                                                                                                                                                                                   `-> name_in_namespace . "name"
+      Second example: program optional_annotation_list "def" optional_public_or_private_function $@5 function_declaration_header '{' expressions expr '=' "@ <|" name_in_namespace . "name" '=' "@ <|" expr '}' $end
+      Reduce derivation
+        $accept
+        `-> program                                                                                                                                                                                                                                              $end
+            `-> program global_function_declaration
+                        `-> optional_annotation_list "def" function_declaration
+                                                           `-> optional_public_or_private_function $@5 function_declaration_header expression_block
+                                                                                                                                   `-> '{' expressions                                                                                                       '}'
+                                                                                                                                           `-> expressions                                                     expression_any
+                                                                                                                                               `-> expressions expression_any                                  `-> expr_assign_pipe
+                                                                                                                                                               `-> expr_assign_pipe                                `-> expr                  '=' "@ <|" expr
+                                                                                                                                                                   `-> expr '=' "@ <|" expr                            `-> name_in_namespace
+                                                                                                                                                                                       `-> name_in_namespace .             `-> "name"
+
+
 
 State 392
 
@@ -7937,6 +8333,309 @@ State 467
     '['       [reduce using rule 227 (expr_new)]
     '('       [reduce using rule 227 (expr_new)]
     $default  reduce using rule 227 (expr_new)
+
+    shift/reduce conflict on token '(':
+      227 expr_new: "new" type_declaration_no_options .
+      228 expr_new: "new" type_declaration_no_options . '(' ')'
+      First example: program optional_annotation_list "def" optional_public_or_private_function $@5 function_declaration_header '{' expressions expr '=' "@ <|" "new" type_declaration_no_options . '(' ')' expression_any '}' $end
+      Shift derivation
+        $accept
+        `-> program                                                                                                                                                                                                                                       $end
+            `-> program global_function_declaration
+                        `-> optional_annotation_list "def" function_declaration
+                                                           `-> optional_public_or_private_function $@5 function_declaration_header expression_block
+                                                                                                                                   `-> '{' expressions                                                                                                '}'
+                                                                                                                                           `-> expressions                                                                             expression_any
+                                                                                                                                               `-> expressions expr_assign_pipe
+                                                                                                                                                               `-> expr '=' "@ <|" expr
+                                                                                                                                                                                   `-> expr_new
+                                                                                                                                                                                       `-> "new" type_declaration_no_options . '(' ')'
+      Second example: program optional_annotation_list "def" optional_public_or_private_function $@5 function_declaration_header '{' expressions expr '=' "@ <|" "new" type_declaration_no_options . '(' expr ')' '=' "@ <|" expr '}' $end
+      Reduce derivation
+        $accept
+        `-> program                                                                                                                                                                                                                                                             $end
+            `-> program global_function_declaration
+                        `-> optional_annotation_list "def" function_declaration
+                                                           `-> optional_public_or_private_function $@5 function_declaration_header expression_block
+                                                                                                                                   `-> '{' expressions                                                                                                                      '}'
+                                                                                                                                           `-> expressions                                                                         expression_any
+                                                                                                                                               `-> expressions expression_any                                                      `-> expr_assign_pipe
+                                                                                                                                                               `-> expr_assign_pipe                                                    `-> expr             '=' "@ <|" expr
+                                                                                                                                                                   `-> expr '=' "@ <|" expr                                                `-> '(' expr ')'
+                                                                                                                                                                                       `-> expr_new
+                                                                                                                                                                                           `-> "new" type_declaration_no_options .
+
+    shift/reduce conflict on token '(':
+      227 expr_new: "new" type_declaration_no_options .
+      229 expr_new: "new" type_declaration_no_options . '(' expr_list ')'
+      First example: program optional_annotation_list "def" optional_public_or_private_function $@5 function_declaration_header '{' expressions expr '=' "@ <|" "new" type_declaration_no_options . '(' expr_list ')' expression_any '}' $end
+      Shift derivation
+        $accept
+        `-> program                                                                                                                                                                                                                                                 $end
+            `-> program global_function_declaration
+                        `-> optional_annotation_list "def" function_declaration
+                                                           `-> optional_public_or_private_function $@5 function_declaration_header expression_block
+                                                                                                                                   `-> '{' expressions                                                                                                          '}'
+                                                                                                                                           `-> expressions                                                                                       expression_any
+                                                                                                                                               `-> expressions expr_assign_pipe
+                                                                                                                                                               `-> expr '=' "@ <|" expr
+                                                                                                                                                                                   `-> expr_new
+                                                                                                                                                                                       `-> "new" type_declaration_no_options . '(' expr_list ')'
+      Second example: program optional_annotation_list "def" optional_public_or_private_function $@5 function_declaration_header '{' expressions expr '=' "@ <|" "new" type_declaration_no_options . '(' expr ')' '=' "@ <|" expr '}' $end
+      Reduce derivation
+        $accept
+        `-> program                                                                                                                                                                                                                                                             $end
+            `-> program global_function_declaration
+                        `-> optional_annotation_list "def" function_declaration
+                                                           `-> optional_public_or_private_function $@5 function_declaration_header expression_block
+                                                                                                                                   `-> '{' expressions                                                                                                                      '}'
+                                                                                                                                           `-> expressions                                                                         expression_any
+                                                                                                                                               `-> expressions expression_any                                                      `-> expr_assign_pipe
+                                                                                                                                                               `-> expr_assign_pipe                                                    `-> expr             '=' "@ <|" expr
+                                                                                                                                                                   `-> expr '=' "@ <|" expr                                                `-> '(' expr ')'
+                                                                                                                                                                                       `-> expr_new
+                                                                                                                                                                                           `-> "new" type_declaration_no_options .
+
+    shift/reduce conflict on token '[':
+      227 expr_new: "new" type_declaration_no_options .
+      571 type_declaration_no_options: type_declaration_no_options . '[' expr ']'
+      First example: program optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list "name" '=' "new" type_declaration_no_options . '[' expr ']' '[' expr ']' ';' '}' $end
+      Shift derivation
+        $accept
+        `-> program                                                                                                                                                                                                  $end
+            `-> program enum_declaration
+                        `-> optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list                                                                                              '}'
+                                                                                                          `-> enum_list "name" '=' expr                                                                      ';'
+                                                                                                                                   `-> expr_new                                                 '[' expr ']'
+                                                                                                                                       `-> "new" type_declaration_no_options
+                                                                                                                                                 `-> type_declaration_no_options . '[' expr ']'
+      Second example: program optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list "name" '=' "new" type_declaration_no_options . '[' expr ']' ';' '}' $end
+      Reduce derivation
+        $accept
+        `-> program                                                                                                                                                                                     $end
+            `-> program enum_declaration
+                        `-> optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list                                                                                 '}'
+                                                                                                          `-> enum_list "name" '=' expr                                                         ';'
+                                                                                                                                   `-> expr                                        '[' expr ']'
+                                                                                                                                       `-> expr_new
+                                                                                                                                           `-> "new" type_declaration_no_options .
+
+    shift/reduce conflict on token '[':
+      227 expr_new: "new" type_declaration_no_options .
+      572 type_declaration_no_options: type_declaration_no_options . '[' ']'
+      First example: program optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list "name" '=' "new" type_declaration_no_options . '[' ']' '[' expr ']' ';' '}' $end
+      Shift derivation
+        $accept
+        `-> program                                                                                                                                                                                             $end
+            `-> program enum_declaration
+                        `-> optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list                                                                                         '}'
+                                                                                                          `-> enum_list "name" '=' expr                                                                 ';'
+                                                                                                                                   `-> expr_new                                            '[' expr ']'
+                                                                                                                                       `-> "new" type_declaration_no_options
+                                                                                                                                                 `-> type_declaration_no_options . '[' ']'
+      Second example: program optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list "name" '=' "new" type_declaration_no_options . '[' expr ']' ';' '}' $end
+      Reduce derivation
+        $accept
+        `-> program                                                                                                                                                                                     $end
+            `-> program enum_declaration
+                        `-> optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list                                                                                 '}'
+                                                                                                          `-> enum_list "name" '=' expr                                                         ';'
+                                                                                                                                   `-> expr                                        '[' expr ']'
+                                                                                                                                       `-> expr_new
+                                                                                                                                           `-> "new" type_declaration_no_options .
+
+    shift/reduce conflict on token '-':
+      227 expr_new: "new" type_declaration_no_options .
+      573 type_declaration_no_options: type_declaration_no_options . '-' '[' ']'
+      First example: program optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list "name" '=' "new" type_declaration_no_options . '-' '[' ']' '-' expr ';' '}' $end
+      Shift derivation
+        $accept
+        `-> program                                                                                                                                                                                             $end
+            `-> program enum_declaration
+                        `-> optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list                                                                                         '}'
+                                                                                                          `-> enum_list "name" '=' expr                                                                 ';'
+                                                                                                                                   `-> expr_new                                                '-' expr
+                                                                                                                                       `-> "new" type_declaration_no_options
+                                                                                                                                                 `-> type_declaration_no_options . '-' '[' ']'
+      Second example: program optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list "name" '=' "new" type_declaration_no_options . '-' expr ';' '}' $end
+      Reduce derivation
+        $accept
+        `-> program                                                                                                                                                                                 $end
+            `-> program enum_declaration
+                        `-> optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list                                                                             '}'
+                                                                                                          `-> enum_list "name" '=' expr                                                     ';'
+                                                                                                                                   `-> expr                                        '-' expr
+                                                                                                                                       `-> expr_new
+                                                                                                                                           `-> "new" type_declaration_no_options .
+
+    shift/reduce conflict on token '-':
+      227 expr_new: "new" type_declaration_no_options .
+      576 type_declaration_no_options: type_declaration_no_options . '-' "const"
+      First example: program optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list "name" '=' "new" type_declaration_no_options . '-' "const" '-' expr ';' '}' $end
+      Shift derivation
+        $accept
+        `-> program                                                                                                                                                                                             $end
+            `-> program enum_declaration
+                        `-> optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list                                                                                         '}'
+                                                                                                          `-> enum_list "name" '=' expr                                                                 ';'
+                                                                                                                                   `-> expr_new                                                '-' expr
+                                                                                                                                       `-> "new" type_declaration_no_options
+                                                                                                                                                 `-> type_declaration_no_options . '-' "const"
+      Second example: program optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list "name" '=' "new" type_declaration_no_options . '-' expr ';' '}' $end
+      Reduce derivation
+        $accept
+        `-> program                                                                                                                                                                                 $end
+            `-> program enum_declaration
+                        `-> optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list                                                                             '}'
+                                                                                                          `-> enum_list "name" '=' expr                                                     ';'
+                                                                                                                                   `-> expr                                        '-' expr
+                                                                                                                                       `-> expr_new
+                                                                                                                                           `-> "new" type_declaration_no_options .
+
+    shift/reduce conflict on token '&':
+      227 expr_new: "new" type_declaration_no_options .
+      577 type_declaration_no_options: type_declaration_no_options . '&'
+      First example: program optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list "name" '=' "new" type_declaration_no_options . '&' '&' expr ';' '}' $end
+      Shift derivation
+        $accept
+        `-> program                                                                                                                                                                                     $end
+            `-> program enum_declaration
+                        `-> optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list                                                                                 '}'
+                                                                                                          `-> enum_list "name" '=' expr                                                         ';'
+                                                                                                                                   `-> expr_new                                        '&' expr
+                                                                                                                                       `-> "new" type_declaration_no_options
+                                                                                                                                                 `-> type_declaration_no_options . '&'
+      Second example: program optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list "name" '=' "new" type_declaration_no_options . '&' expr ';' '}' $end
+      Reduce derivation
+        $accept
+        `-> program                                                                                                                                                                                 $end
+            `-> program enum_declaration
+                        `-> optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list                                                                             '}'
+                                                                                                          `-> enum_list "name" '=' expr                                                     ';'
+                                                                                                                                   `-> expr                                        '&' expr
+                                                                                                                                       `-> expr_new
+                                                                                                                                           `-> "new" type_declaration_no_options .
+
+    shift/reduce conflict on token '-':
+      227 expr_new: "new" type_declaration_no_options .
+      578 type_declaration_no_options: type_declaration_no_options . '-' '&'
+      First example: program optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list "name" '=' "new" type_declaration_no_options . '-' '&' '-' expr ';' '}' $end
+      Shift derivation
+        $accept
+        `-> program                                                                                                                                                                                         $end
+            `-> program enum_declaration
+                        `-> optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list                                                                                     '}'
+                                                                                                          `-> enum_list "name" '=' expr                                                             ';'
+                                                                                                                                   `-> expr_new                                            '-' expr
+                                                                                                                                       `-> "new" type_declaration_no_options
+                                                                                                                                                 `-> type_declaration_no_options . '-' '&'
+      Second example: program optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list "name" '=' "new" type_declaration_no_options . '-' expr ';' '}' $end
+      Reduce derivation
+        $accept
+        `-> program                                                                                                                                                                                 $end
+            `-> program enum_declaration
+                        `-> optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list                                                                             '}'
+                                                                                                          `-> enum_list "name" '=' expr                                                     ';'
+                                                                                                                                   `-> expr                                        '-' expr
+                                                                                                                                       `-> expr_new
+                                                                                                                                           `-> "new" type_declaration_no_options .
+
+    shift/reduce conflict on token '-':
+      227 expr_new: "new" type_declaration_no_options .
+      581 type_declaration_no_options: type_declaration_no_options . '-' '#'
+      First example: program optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list "name" '=' "new" type_declaration_no_options . '-' '#' '-' expr ';' '}' $end
+      Shift derivation
+        $accept
+        `-> program                                                                                                                                                                                         $end
+            `-> program enum_declaration
+                        `-> optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list                                                                                     '}'
+                                                                                                          `-> enum_list "name" '=' expr                                                             ';'
+                                                                                                                                   `-> expr_new                                            '-' expr
+                                                                                                                                       `-> "new" type_declaration_no_options
+                                                                                                                                                 `-> type_declaration_no_options . '-' '#'
+      Second example: program optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list "name" '=' "new" type_declaration_no_options . '-' expr ';' '}' $end
+      Reduce derivation
+        $accept
+        `-> program                                                                                                                                                                                 $end
+            `-> program enum_declaration
+                        `-> optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list                                                                             '}'
+                                                                                                          `-> enum_list "name" '=' expr                                                     ';'
+                                                                                                                                   `-> expr                                        '-' expr
+                                                                                                                                       `-> expr_new
+                                                                                                                                           `-> "new" type_declaration_no_options .
+
+    shift/reduce conflict on token "==":
+      227 expr_new: "new" type_declaration_no_options .
+      582 type_declaration_no_options: type_declaration_no_options . "==" "const"
+      First example: program optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list "name" '=' "new" type_declaration_no_options . "==" "const" "==" expr ';' '}' $end
+      Shift derivation
+        $accept
+        `-> program                                                                                                                                                                                               $end
+            `-> program enum_declaration
+                        `-> optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list                                                                                           '}'
+                                                                                                          `-> enum_list "name" '=' expr                                                                   ';'
+                                                                                                                                   `-> expr_new                                                 "==" expr
+                                                                                                                                       `-> "new" type_declaration_no_options
+                                                                                                                                                 `-> type_declaration_no_options . "==" "const"
+      Second example: program optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list "name" '=' "new" type_declaration_no_options . "==" expr ';' '}' $end
+      Reduce derivation
+        $accept
+        `-> program                                                                                                                                                                                  $end
+            `-> program enum_declaration
+                        `-> optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list                                                                              '}'
+                                                                                                          `-> enum_list "name" '=' expr                                                      ';'
+                                                                                                                                   `-> expr                                        "==" expr
+                                                                                                                                       `-> expr_new
+                                                                                                                                           `-> "new" type_declaration_no_options .
+
+    shift/reduce conflict on token '?':
+      227 expr_new: "new" type_declaration_no_options .
+      583 type_declaration_no_options: type_declaration_no_options . '?'
+      First example: program optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list "name" '=' "new" type_declaration_no_options . '?' '?' expr ':' expr ';' '}' $end
+      Shift derivation
+        $accept
+        `-> program                                                                                                                                                                                              $end
+            `-> program enum_declaration
+                        `-> optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list                                                                                          '}'
+                                                                                                          `-> enum_list "name" '=' expr                                                                  ';'
+                                                                                                                                   `-> expr_new                                        '?' expr ':' expr
+                                                                                                                                       `-> "new" type_declaration_no_options
+                                                                                                                                                 `-> type_declaration_no_options . '?'
+      Second example: program optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list "name" '=' "new" type_declaration_no_options . '?' expr ':' expr ';' '}' $end
+      Reduce derivation
+        $accept
+        `-> program                                                                                                                                                                                          $end
+            `-> program enum_declaration
+                        `-> optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list                                                                                      '}'
+                                                                                                          `-> enum_list "name" '=' expr                                                              ';'
+                                                                                                                                   `-> expr                                        '?' expr ':' expr
+                                                                                                                                       `-> expr_new
+                                                                                                                                           `-> "new" type_declaration_no_options .
+
+    shift/reduce conflict on token "??":
+      227 expr_new: "new" type_declaration_no_options .
+      587 type_declaration_no_options: type_declaration_no_options . "??"
+      First example: program optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list "name" '=' "new" type_declaration_no_options . "??" "??" expr ';' '}' $end
+      Shift derivation
+        $accept
+        `-> program                                                                                                                                                                                       $end
+            `-> program enum_declaration
+                        `-> optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list                                                                                   '}'
+                                                                                                          `-> enum_list "name" '=' expr                                                           ';'
+                                                                                                                                   `-> expr_new                                         "??" expr
+                                                                                                                                       `-> "new" type_declaration_no_options
+                                                                                                                                                 `-> type_declaration_no_options . "??"
+      Second example: program optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list "name" '=' "new" type_declaration_no_options . "??" expr ';' '}' $end
+      Reduce derivation
+        $accept
+        `-> program                                                                                                                                                                                  $end
+            `-> program enum_declaration
+                        `-> optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list                                                                              '}'
+                                                                                                          `-> enum_list "name" '=' expr                                                      ';'
+                                                                                                                                   `-> expr                                        "??" expr
+                                                                                                                                       `-> expr_new
+                                                                                                                                           `-> "new" type_declaration_no_options .
+
 
 
 State 468
@@ -17346,6 +18045,59 @@ State 671
     STRING_CHARACTER      [reduce using rule 26 (string_builder_body)]
     STRING_CHARACTER_ESC  [reduce using rule 26 (string_builder_body)]
     $default              reduce using rule 26 (string_builder_body)
+
+    shift/reduce conflict on token STRING_CHARACTER:
+       26 string_builder_body: string_builder_body character_sequence .
+       22 character_sequence: character_sequence . STRING_CHARACTER
+      First example: program optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list "name" '=' "start of the string" string_builder_body character_sequence . STRING_CHARACTER "end of the string" ';' '}' $end
+      Shift derivation
+        $accept
+        `-> program                                                                                                                                                                                                                                            $end
+            `-> program enum_declaration
+                        `-> optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list                                                                                                                                        '}'
+                                                                                                          `-> enum_list "name" '=' expr                                                                                                                ';'
+                                                                                                                                   `-> string_builder
+                                                                                                                                       `-> "start of the string" string_builder_body                                               "end of the string"
+                                                                                                                                                                 `-> string_builder_body character_sequence
+                                                                                                                                                                                         `-> character_sequence . STRING_CHARACTER
+      Second example: program optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list "name" '=' "start of the string" string_builder_body character_sequence . STRING_CHARACTER "end of the string" ';' '}' $end
+      Reduce derivation
+        $accept
+        `-> program                                                                                                                                                                                                                                                $end
+            `-> program enum_declaration
+                        `-> optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list                                                                                                                                            '}'
+                                                                                                          `-> enum_list "name" '=' expr                                                                                                                    ';'
+                                                                                                                                   `-> string_builder
+                                                                                                                                       `-> "start of the string" string_builder_body                                                   "end of the string"
+                                                                                                                                                                 `-> string_builder_body                          character_sequence
+                                                                                                                                                                     `-> string_builder_body character_sequence . `-> STRING_CHARACTER
+
+    shift/reduce conflict on token STRING_CHARACTER_ESC:
+       26 string_builder_body: string_builder_body character_sequence .
+       23 character_sequence: character_sequence . STRING_CHARACTER_ESC
+      First example: program optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list "name" '=' "start of the string" string_builder_body character_sequence . STRING_CHARACTER_ESC "end of the string" ';' '}' $end
+      Shift derivation
+        $accept
+        `-> program                                                                                                                                                                                                                                                $end
+            `-> program enum_declaration
+                        `-> optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list                                                                                                                                            '}'
+                                                                                                          `-> enum_list "name" '=' expr                                                                                                                    ';'
+                                                                                                                                   `-> string_builder
+                                                                                                                                       `-> "start of the string" string_builder_body                                                   "end of the string"
+                                                                                                                                                                 `-> string_builder_body character_sequence
+                                                                                                                                                                                         `-> character_sequence . STRING_CHARACTER_ESC
+      Second example: program optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list "name" '=' "start of the string" string_builder_body character_sequence . STRING_CHARACTER_ESC "end of the string" ';' '}' $end
+      Reduce derivation
+        $accept
+        `-> program                                                                                                                                                                                                                                                    $end
+            `-> program enum_declaration
+                        `-> optional_annotation_list "enum" optional_public_or_private_enum enum_name '{' enum_list                                                                                                                                                '}'
+                                                                                                          `-> enum_list "name" '=' expr                                                                                                                        ';'
+                                                                                                                                   `-> string_builder
+                                                                                                                                       `-> "start of the string" string_builder_body                                                       "end of the string"
+                                                                                                                                                                 `-> string_builder_body                          character_sequence
+                                                                                                                                                                     `-> string_builder_body character_sequence . `-> STRING_CHARACTER_ESC
+
 
 
 State 672
@@ -33188,8 +33940,6 @@ State 1035
     "as"   shift, and go to state 506
     "<<"   shift, and go to state 507
     ">>"   shift, and go to state 508
-    "++"   shift, and go to state 509
-    "--"   shift, and go to state 510
     "<="   shift, and go to state 511
     ">="   shift, and go to state 512
     "=="   shift, and go to state 513
@@ -33212,20 +33962,10 @@ State 1035
     '&'    shift, and go to state 530
     '<'    shift, and go to state 531
     '>'    shift, and go to state 532
-    '-'    shift, and go to state 533
-    '+'    shift, and go to state 534
-    '*'    shift, and go to state 535
     '/'    shift, and go to state 536
-    '%'    shift, and go to state 537
     '.'    shift, and go to state 538
     '['    shift, and go to state 539
 
-    "++"      [reduce using rule 309 (expr_assign_pipe)]
-    "--"      [reduce using rule 309 (expr_assign_pipe)]
-    '-'       [reduce using rule 309 (expr_assign_pipe)]
-    '+'       [reduce using rule 309 (expr_assign_pipe)]
-    '*'       [reduce using rule 309 (expr_assign_pipe)]
-    '%'       [reduce using rule 309 (expr_assign_pipe)]
     $default  reduce using rule 309 (expr_assign_pipe)
 
 
@@ -33384,8 +34124,6 @@ State 1037
     "as"   shift, and go to state 506
     "<<"   shift, and go to state 507
     ">>"   shift, and go to state 508
-    "++"   shift, and go to state 509
-    "--"   shift, and go to state 510
     "<="   shift, and go to state 511
     ">="   shift, and go to state 512
     "=="   shift, and go to state 513
@@ -33408,20 +34146,10 @@ State 1037
     '&'    shift, and go to state 530
     '<'    shift, and go to state 531
     '>'    shift, and go to state 532
-    '-'    shift, and go to state 533
-    '+'    shift, and go to state 534
-    '*'    shift, and go to state 535
     '/'    shift, and go to state 536
-    '%'    shift, and go to state 537
     '.'    shift, and go to state 538
     '['    shift, and go to state 539
 
-    "++"      [reduce using rule 307 (expr_assign_pipe)]
-    "--"      [reduce using rule 307 (expr_assign_pipe)]
-    '-'       [reduce using rule 307 (expr_assign_pipe)]
-    '+'       [reduce using rule 307 (expr_assign_pipe)]
-    '*'       [reduce using rule 307 (expr_assign_pipe)]
-    '%'       [reduce using rule 307 (expr_assign_pipe)]
     $default  reduce using rule 307 (expr_assign_pipe)
 
 
