@@ -72,7 +72,7 @@ def public lookup_intinsic(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCall
     var result :  LLVMOpaqueValue?
     let call_name = "{expr.func._module.name}::{expr.func.name}"
     g_intrin_lookup |> find_if_exists(call_name) <| $ ( pfun )
-        result = *pfun |> invoke(g_builder, expr, arguments)
+        result = pfun |> invoke(g_builder, expr, arguments)
     return result
 
 // intrinsics, $ aka builtin
@@ -260,7 +260,7 @@ def intrinsic_bit_nzp_op1(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallF
     assume opType = expr.arguments[0]._type
     var op_name : string
     bit_op1_name |> find_if_exists(string(expr.name)) <| $ ( pname )
-        op_name = *pname
+        op_name = pname
     if op_name==""
         failed_E(expr, "intrinsic {expr.name}({describe(opType)}) is not supported (yet?)")
         return null
@@ -281,7 +281,7 @@ def intrinsic_bit_op1(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>
     assume opType = expr.arguments[0]._type
     var op_name : string
     bit_op1_name |> find_if_exists(string(expr.name)) <| $ ( pname )
-        op_name = *pname
+        op_name = pname
     if op_name==""
         failed_E(expr, "intrinsic {expr.name}({describe(opType)}) is not supported (yet?)")
         return null
@@ -308,7 +308,7 @@ def intrinsic_op2(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; ar
     assume opType = expr.arguments[0]._type
     var op_name : string
     op2_name |> find_if_exists(string(expr.name)) <| $ ( pname )
-        op_name = *pname
+        op_name = pname
     if op_name==""
         failed_E(expr, "intrinsic {expr.name}({describe(opType)}) is not supported (yet?)")
         return null

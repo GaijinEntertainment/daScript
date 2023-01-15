@@ -467,8 +467,8 @@ class LlvmJitVisitor : AstVisitor
         if length(blk.finalList)==0
             add_default_terminator(blk)
         else
-            afterFinallyBlocks  |> find_if_exists(get_ptr(blk)) <| $ ( pAfterFinallyBlocks)
-                if length(*pAfterFinallyBlocks)>0
+            afterFinallyBlocks  |> find_if_exists(get_ptr(blk)) <| $ ( AfterFinallyBlocks )
+                if length(AfterFinallyBlocks)>0
                     var cc = LLVMBuildLoad(g_builder, callBlock, "")
                     var needCond = thisFunc.body!=get_ptr(blk) && thisBlock!=get_ptr(blk)
                     var do_jump, skip_jump : LLVMOpaqueBasicBlock?
@@ -478,8 +478,8 @@ class LlvmJitVisitor : AstVisitor
                         var not_null = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntNE, cc, LLVMConstNull(LLVMPointerType(LLVMInt8Type(),0u)), "")
                         LLVMBuildCondBr(g_builder, not_null, do_jump, skip_jump)
                         LLVMPositionBuilderAtEnd(g_builder, do_jump)
-                    var indb = LLVMBuildIndirectBr(g_builder, cc, uint(length(*pAfterFinallyBlocks)))
-                    for bb in *pAfterFinallyBlocks
+                    var indb = LLVMBuildIndirectBr(g_builder, cc, uint(length(AfterFinallyBlocks)))
+                    for bb in AfterFinallyBlocks
                         LLVMAddDestination(indb, bb)
                     if skip_jump!=null
                         LLVMPositionBuilderAtEnd(g_builder, skip_jump)
@@ -3188,7 +3188,7 @@ class LlvmJitVisitor : AstVisitor
     def getE_ptr ( e : Expression?; canFail:bool = true )
         var res : LLVMOpaqueValue?
         e2v |> find_if_exists(e) <| $ ( val )
-            res = *val
+            res = val
         if res == null && canFail
             res = LLVMGetUndef(LLVMInt32Type())
             failed_E(e, "unresolved expression at {describe(e.at)}")
@@ -3197,7 +3197,7 @@ class LlvmJitVisitor : AstVisitor
     def getE ( e : ExpressionPtr )
         var res : LLVMOpaqueValue?
         e2v |> find_if_exists(get_ptr(e)) <| $ ( val )
-            res = *val
+            res = val
         if res == null
             res = LLVMGetUndef(LLVMInt32Type())
             failed_E(e, "unresolved expression {describe(e)}")
@@ -3206,7 +3206,7 @@ class LlvmJitVisitor : AstVisitor
     def tryE ( e : ExpressionPtr; blk:block<LLVMOpaqueValue?> )
         var res : LLVMOpaqueValue?
         e2v |> find_if_exists(get_ptr(e)) <| $ ( val )
-            res = *val
+            res = val
         if res == null
             res = invoke(blk)
         return res
@@ -3220,7 +3220,7 @@ class LlvmJitVisitor : AstVisitor
     def getV_ptr ( e : Variable?; canFail:bool = true )
         var res : LLVMOpaqueValue?
         v2v |> find_if_exists(e) <| $ ( val )
-            res = *val
+            res = val
         if res == null && canFail
             res = LLVMGetUndef(LLVMInt32Type())
             failed_V(e, "unresolved variable at line {int(e.at.line)}")
@@ -3229,7 +3229,7 @@ class LlvmJitVisitor : AstVisitor
     def getV ( e : VariablePtr )
         var res : LLVMOpaqueValue?
         v2v |> find_if_exists(get_ptr(e)) <| $ ( val )
-            res = *val
+            res = val
         if res == null
             res = LLVMGetUndef(LLVMInt32Type())
             failed_V(e, "unresolved variable {describe(e)}")
@@ -3238,7 +3238,7 @@ class LlvmJitVisitor : AstVisitor
     def tryGetV ( e : VariablePtr )
         var res : LLVMOpaqueValue?
         v2v |> find_if_exists(get_ptr(e)) <| $ ( val )
-            res = *val
+            res = val
         return res
 
 [macro_function]
