@@ -418,7 +418,6 @@
 %type <pExpression>     make_struct_dim
 %type <pExpression>     make_tuple
 %type <pExpression>     make_map_tuple
-%type <pExpression>     make_any_tuple
 %type <pExpression>     make_dim
 %type <pExpression>     make_dim_decl
 %type <pExpression>     make_table
@@ -2629,6 +2628,12 @@ make_tuple
     :   expr[val] {
         $$ = $val;
     }
+    |   expr[kval] MAPTO[mkt] expr[vval] {
+        ExprMakeTuple * mt = new ExprMakeTuple(tokAt(scanner,@mkt));
+        mt->values.push_back(ExpressionPtr($kval));
+        mt->values.push_back(ExpressionPtr($vval));
+        $$ = mt;
+    }
     |   make_tuple[mkt] ',' expr[val] {
         ExprMakeTuple * mt;
         if ( $mkt->rtti_isMakeTuple() ) {
@@ -2654,18 +2659,13 @@ make_map_tuple
     }
     ;
 
-make_any_tuple
-    :   make_tuple[mkt]         { $$ = $mkt; }
-    |   make_map_tuple[mkm]     { $$ = $mkm; }
-    ;
-
 make_dim
-    :   make_any_tuple[val] {
+    :   make_tuple[val] {
         auto mka = new ExprMakeArray();
         mka->values.push_back(ExpressionPtr($val));
         $$ = mka;
     }
-    |   make_dim[mka] ';' make_any_tuple[val] {
+    |   make_dim[mka] ';' make_tuple[val] {
         ((ExprMakeArray *) $mka)->values.push_back(ExpressionPtr($val));
         $$ = $mka;
     }
