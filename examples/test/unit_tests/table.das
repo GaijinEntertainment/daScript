@@ -2,8 +2,8 @@ def test_find
     let const_tab <- {{ "one"=>1; "two"=>2 }}
     find(const_tab,"one") <| $(num)
         assert(deref(num)==1)
-    find_if_exists(const_tab,"one") <| $(num:int?)
-        assert(deref(num)==1)
+    find_if_exists(const_tab,"one") <| $(num)
+        assert(num==1)
     find(const_tab,"one") <| $(num)    // this one will optimize into find_if_exists
         if num != null
             assert(deref(num)==1)
@@ -20,9 +20,9 @@ def test_find
             assert(deref(num)==3)
             deref(num) = 4
     assert(find(tab,"one") ?? 100500 == 4)
-    find_for_edit_if_exists(tab,"one") <| $(var num:int?)
-        assert(deref(num)==4)
-        deref(num) = 5
+    find_for_edit_if_exists(tab,"one") <| $(var num)
+        assert(num==4)
+        num = 5
     assert(find(tab,"one") ?? 100500 == 5)
     unsafe
         deref(find_for_edit(tab,"one"))=1

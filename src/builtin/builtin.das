@@ -250,27 +250,13 @@ def find(Tab:table<auto(keyT);auto(valT)>|#;at:keyT-#;blk:block<(p:valT?#):void>
         invoke(blk,reinterpret<valT?#> val)
     __builtin_table_unlock(Tab)
 
-def find(Tab:table<auto(keyT);auto(valT)>|#;at:string#;blk:block<(p:valT?#):void>)
-    __builtin_table_lock(Tab)
-    let at_nt := at
-    var val = __builtin_table_find(Tab,at_nt)
-    unsafe
-        invoke(blk,reinterpret<valT?#> val)
-    __builtin_table_unlock(Tab)
-
 def find(Tab:table<auto(keyT);void>;at:keyT|#;blk:block<(p:void?):void>)
     concept_assert(false,"find(table<keyT;void>,...) is not supported")
 
 // semi-unsafe find for use with ?? operator
 
 [unsafe_operation]
-def find(Tab:table<auto(keyT);auto(valT)|#>;at:string#):valT const?
-    let at_nt := at
-    unsafe
-        return reinterpret<valT const?>(__builtin_table_find(Tab,at_nt))
-
-[unsafe_operation]
-def find(Tab:table<auto(keyT);auto(valT)|#>;at:keyT|#):valT const?
+def find(Tab:table<auto(keyT);auto(valT)|#>;at:keyT-#):valT const?
     unsafe
         return reinterpret<valT const?>(__builtin_table_find(Tab,at))
 
@@ -279,13 +265,7 @@ def find(Tab:table<auto(keyT);void>;at:keyT|#):void const?
     concept_assert(false,"find(table<keyT;void>,...) is not supported")
 
 [unsafe_operation]
-def find(Tab:table<auto(keyT);auto(valT)>#;at:string#):valT const?#
-    let at_nt := at
-    unsafe
-        return reinterpret<valT const?#>(__builtin_table_find(Tab,at))
-
-[unsafe_operation]
-def find(Tab:table<auto(keyT);auto(valT)>#;at:keyT|#):valT const?#
+def find(Tab:table<auto(keyT);auto(valT)>#;at:keyT-#):valT const?#
     unsafe
         return reinterpret<valT const?#>(__builtin_table_find(Tab,at))
 
@@ -295,30 +275,22 @@ def find(Tab:table<auto(keyT);void>#;at:keyT|#):void const?#
 
 // find if exists
 
-def find_if_exists(Tab:table<auto(keyT);auto(valT)>;at:keyT|#;blk:block<(p:valT?):void>)
+def find_if_exists(Tab:table<auto(keyT);auto(valT)>;at:keyT-#;blk:block<(p:valT&):void>)
     var val = __builtin_table_find(Tab,at)
     if val != null
         __builtin_table_lock(Tab)
-        invoke(blk,val)
+        invoke(blk,*val)
         __builtin_table_unlock(Tab)
         return true
     else
         return false
 
-def find_if_exists(Tab:table<auto(keyT);void>;at:keyT|#;blk:block<(p:void?):void>)
+def find_if_exists(Tab:table<auto(keyT);void>;at:keyT-#;blk:block<(p:void?):void>)
     concept_assert(false,"find_if_exists(table<keyT;void>,...) is not supported")
 
 // find for edit
 
-def find_for_edit(var Tab:table<auto(keyT);auto(valT)>|#;at:string#;blk:block<(var p:valT?#):void>)
-    __builtin_table_lock(Tab)
-    let at_nt := at
-    var val = __builtin_table_find(Tab,at_nt)
-    unsafe
-        invoke(blk,reinterpret<valT?#> val)
-    __builtin_table_unlock(Tab)
-
-def find_for_edit(var Tab:table<auto(keyT);auto(valT)>|#;at:keyT|#;blk:block<(var p:valT?#):void>)
+def find_for_edit(var Tab:table<auto(keyT);auto(valT)>|#;at:keyT-#;blk:block<(var p:valT?#):void>)
     __builtin_table_lock(Tab)
     var val = __builtin_table_find(Tab,at)
     unsafe
@@ -329,12 +301,7 @@ def find_for_edit(var Tab:table<auto(keyT);void>;at:keyT|#;blk:block<(var p:void
     concept_assert(false,"find_for_edit(table<keyT;void>,...) is not supported")
 
 [unsafe_operation]
-def find_for_edit(var Tab:table<auto(keyT);auto(valT)>|#;at:string#):valT?
-    let at_nt := at
-    return __builtin_table_find(Tab,at_nt)
-
-[unsafe_operation]
-def find_for_edit(var Tab:table<auto(keyT);auto(valT)>|#;at:keyT|#):valT?
+def find_for_edit(var Tab:table<auto(keyT);auto(valT)>|#;at:keyT-#):valT?
     return __builtin_table_find(Tab,at)
 
 [unsafe_operation]
@@ -343,11 +310,20 @@ def find_for_edit(var Tab:table<auto(keyT);void>;at:keyT|#):void?
 
 // find for edit if exists
 
-def find_for_edit_if_exists(var Tab:table<auto(keyT);auto(valT)>;at:keyT|#;blk:block<(var p:valT?):void>)
+def find_for_edit_if_exists(var Tab:table<auto(keyT);auto(valT)>#;at:keyT-#;blk:block<(var p:valT#&):void>)
     var val = __builtin_table_find(Tab,at)
     if val != null
         __builtin_table_lock(Tab)
-        invoke(blk,val)
+        unsafe
+            invoke(blk,*(reinterpret<valT?#> val))
+        __builtin_table_unlock(Tab)
+
+def find_for_edit_if_exists(var Tab:table<auto(keyT);auto(valT)>;at:keyT-#;blk:block<(var p:valT&):void>)
+    var val = __builtin_table_find(Tab,at)
+    if val != null
+        __builtin_table_lock(Tab)
+        unsafe
+            invoke(blk,*(reinterpret<valT?> val))
         __builtin_table_unlock(Tab)
 
 def find_for_edit_if_exists(var Tab:table<auto(keyT);void>;at:keyT|#;blk:block<(var p:void?):void>)
@@ -359,6 +335,12 @@ def _at_with_lockcheck ( var Tab:table<auto(keyT);auto(valT)>; at:keyT|# ) : val
     unsafe
         return Tab[at]
 
+def erase(var Tab:table<auto(keyT);auto(valT)>|#;at:string#):bool
+    if typeinfo(need_lock_check type<valT>)
+        _builtin_verify_locks(Tab)
+    let at_nt := at
+    return __builtin_table_erase(Tab,at_nt)
+
 def erase(var Tab:table<auto(keyT);auto(valT)>|#;at:keyT|#):bool
     if typeinfo(need_lock_check type<valT>)
         _builtin_verify_locks(Tab)
@@ -366,6 +348,10 @@ def erase(var Tab:table<auto(keyT);auto(valT)>|#;at:keyT|#):bool
 
 def insert(var Tab:table<auto(keyT);void>;at:keyT|#)
     __builtin_table_set_insert(Tab,at)
+
+def key_exists(Tab:table<auto(keyT);auto(valT)>;at:string#):bool
+    let at_nt := at
+    return __builtin_table_key_exists(Tab,at_nt)
 
 def key_exists(Tab:table<auto(keyT);auto(valT)>;at:keyT|#):bool
     return __builtin_table_key_exists(Tab,at)
@@ -385,7 +371,7 @@ def clone_to_move(clone_src:auto(TT)|#) : TT -const -#
         clone_dest := clone_src
         return <- clone_dest
 
-def clone_dim(var a;b:auto)
+def clone_dim(var a;b:auto|#)
     static_if typeinfo(is_dim a) && typeinfo(is_dim b) && typeinfo(dim a)==typeinfo(dim b)
         for aV,bV in a,b
             aV := bV
@@ -467,16 +453,13 @@ def finalize(var a:table<auto(TK);auto(TV)>)
 
 // temporal
 
-def lock ( Tab : table<auto(keyT);auto(valT)>; blk : block<(t : table<keyT;valT>#):void >  )
+def lock ( Tab : table<auto(keyT);auto(valT)>|#; blk : block<(t : table<keyT;valT>#):void >  )
     __builtin_table_lock(Tab)
     unsafe
         invoke(blk,reinterpret<table<auto(keyT);auto(valT)> const>(Tab))
     __builtin_table_unlock(Tab)
 
-def lock ( Tab : table<auto(keyT);auto(valT)>#; blk : block<(t : table<keyT;valT>#):void >  )
-    invoke(blk,Tab)
-
-def lock_forever ( var Tab : table<auto(keyT);auto(valT)> ) : table<keyT;valT> #
+def lock_forever ( var Tab : table<auto(keyT);auto(valT)>|# ) : table<keyT;valT> #
     __builtin_table_lock(Tab)
     unsafe
         return <- reinterpret<table<keyT;valT> #>(Tab)
@@ -719,19 +702,19 @@ def sort ( var a : array<auto(TT)>|#; cmp : block<(x,y:TT):bool> )
             else
                 __builtin_sort_array_any_ref_cblock ( a, typeinfo(sizeof a[0]), length(a), cmp )
 
-def lock ( var a : array<auto(TT)> ==const; blk : block<(var x : array<TT>#)> )
+def lock ( var a : array<auto(TT)> ==const|#; blk : block<(var x : array<TT>#)> )
     __builtin_array_lock(a)
     unsafe
         invoke(blk, reinterpret<array<auto(TT)> -const #> a)
     __builtin_array_unlock(a)
 
-def lock ( a : array<auto(TT)> ==const; blk : block<(x : array<TT>#)> )
+def lock ( a : array<auto(TT)> ==const|#; blk : block<(x : array<TT>#)> )
     __builtin_array_lock(a)
     unsafe
         invoke(blk, reinterpret<array<auto(TT)> const #> a)
     __builtin_array_unlock(a)
 
-def lock_data ( var a : array<auto(TT)> ==const; blk : block<(var p:TT?#;s:int)> )
+def lock_data ( var a : array<auto(TT)> ==const|#; blk : block<(var p:TT?#;s:int)> )
     let len = length(a)
     if len != 0
         __builtin_array_lock(a)
@@ -743,7 +726,7 @@ def lock_data ( var a : array<auto(TT)> ==const; blk : block<(var p:TT?#;s:int)>
         unsafe
             invoke(blk, reinterpret<TT?#> nullT, 0)
 
-def lock_data ( a : array<auto(TT)> ==const; blk : block<(p:TT const?#;s:int)> )
+def lock_data ( a : array<auto(TT)> ==const|#; blk : block<(p:TT const?#;s:int)> )
     let len = length(a)
     if len != 0
         __builtin_array_lock(a)
@@ -753,6 +736,8 @@ def lock_data ( a : array<auto(TT)> ==const; blk : block<(p:TT const?#;s:int)> )
     else
         unsafe
             invoke(blk, reinterpret<TT const?#> null, 0)
+
+// find_index
 
 def find_index ( arr : array<auto(TT)>|#; key : TT )
     for i in range(length(arr))

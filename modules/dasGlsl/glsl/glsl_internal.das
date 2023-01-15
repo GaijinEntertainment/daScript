@@ -964,12 +964,10 @@ class GlslExport : AstVisitor
         unsafe
             fnName = self->glsl_function_name(reinterpret<FunctionPtr> expr.func)
         if caps.output_compatibility_constructors
-            glsl_compatibility_constructors |> find_if_exists(fnName) <| $(newName:string?)
-                if newName != null
-                    fnName = *newName
-        glsl_functions |> find_if_exists(fnName) <| $(newName:string?)
-            if newName != null
-                fnName = *newName
+            glsl_compatibility_constructors |> find_if_exists(fnName) <| $(newName)
+                fnName = newName
+        glsl_functions |> find_if_exists(fnName) <| $(newName)
+            fnName = newName
         *writer |> write("{fnName}(")
     def override visitExprCall(expr:smart_ptr<ExprCall>) : ExpressionPtr
         *writer |> write(")")

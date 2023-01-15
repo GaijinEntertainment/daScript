@@ -43,10 +43,7 @@ def public temp_ptr(var x : auto(T)? implicit ==const) : T ?#
 
 [tag_function(shared_addr_tag)]
 def public shared_addr ( tab:table<auto(KEY); auto(VAL)>; k:KEY )
-    var pVal : VAL?
-    find_if_exists(tab, k) <| $ ( val )
-        pVal = val
-    return pVal
+    return unsafe(find(tab,k))
 
 [tag_function(shared_addr_tag)]
 def public shared_addr ( val:auto(VALUE)& )

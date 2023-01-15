@@ -6634,14 +6634,12 @@ namespace das {
                                 auto resT = TypeDecl::inferGenericType(argT, passT, true);
                                 DAS_ASSERTF(resT, "how? we had this working at findMatchingGenerics");
                                 resT->ref = false;                          // by default no ref
-                                // resT->implicit = argT->implicit;            // copy implicit on the arguments
-                                // resT->explicitConst = argT->explicitConst;  // copy const explicitness
                                 TypeDecl::applyAutoContracts(resT, argT);
-                                if (resT->isRefType()) {   // we don't pass boxed type by reference ever
-                                    resT->ref = false;
-                                }
+                                TypeDecl::applyRefToRef(resT, true);
                                 resT->isExplicit = isAutoWto; // this is generic for this type, and this type only
                                 argT = resT;
+                            } else {
+                                TypeDecl::applyRefToRef(argT, true);
                             }
                         }
                         // resolve tail-end types

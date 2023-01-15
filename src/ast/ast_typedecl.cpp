@@ -87,6 +87,35 @@ namespace das
         return this;
     }
 
+    void TypeDecl::applyRefToRef ( TypeDeclPtr TT, bool topLevel ) {
+        if ( topLevel && TT->ref && TT->isRefType() ) {
+            TT->ref = false;
+        }
+        if ( TT->isPointer() ) {
+            if ( TT->firstType ) {
+                applyRefToRef(TT->firstType);
+            }
+        } else if ( TT->baseType==Type::tIterator ) {
+            applyRefToRef(TT->firstType);
+        } else if ( TT->baseType==Type::tArray ) {
+            applyRefToRef(TT->firstType);
+        } else if ( TT->baseType==Type::tTable ) {
+            applyRefToRef(TT->firstType);
+            applyRefToRef(TT->secondType);
+        } else if ( TT->baseType==Type::tBlock || TT->baseType==Type::tFunction || TT->baseType==Type::tLambda ) {
+            if ( TT->firstType ) {
+                applyRefToRef(TT->firstType);
+            }
+            for ( auto & arg : TT->argTypes ) {
+                applyRefToRef(arg, true);
+            }
+        } else if ( TT->baseType==Type::tTuple || TT->baseType==Type::tVariant ) {
+            for ( auto & arg : TT->argTypes ) {
+                applyRefToRef(arg);
+            }
+        }
+    }
+
     void TypeDecl::applyAutoContracts ( TypeDeclPtr TT, TypeDeclPtr autoT ) {
         if ( !autoT->isAuto() ) return;
         TT->ref = (TT->ref | autoT->ref) && !autoT->removeRef && !TT->removeRef;
@@ -97,7 +126,9 @@ namespace das
         TT->removeDim = false;
         TT->removeRef = false;
         if ( autoT->isPointer() ) {
-            applyAutoContracts(TT->firstType, autoT->firstType);
+            if ( TT->firstType ) {
+                applyAutoContracts(TT->firstType, autoT->firstType);
+            }
         } else if ( autoT->baseType==Type::tIterator ) {
             applyAutoContracts(TT->firstType, autoT->firstType);
         } else if ( autoT->baseType==Type::tArray ) {

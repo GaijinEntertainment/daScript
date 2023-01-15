@@ -181,6 +181,7 @@ namespace das {
         static TypeDeclPtr inferGenericType ( TypeDeclPtr autoT, TypeDeclPtr initT, bool topLevel = false, OptionsMap * options = nullptr );
         static TypeDeclPtr inferGenericInitType ( TypeDeclPtr autoT, TypeDeclPtr initT );
         static void applyAutoContracts ( TypeDeclPtr TT, TypeDeclPtr autoT );
+        static void applyRefToRef ( TypeDeclPtr TT, bool topLevel = false );
         static void updateAliasMap ( const TypeDeclPtr & decl, const TypeDeclPtr & pass, AliasMap & aliases, OptionsMap & options );
         Type getRangeBaseType() const;
         TypeDecl * findAlias ( const string & name, bool allowAuto = false );
