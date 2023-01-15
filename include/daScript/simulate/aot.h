@@ -2510,10 +2510,11 @@ namespace das {
     void peek_das_string_T(const string & str, TT && block, Context *, LineInfoArg *) {
         block((char *)str.c_str());
     }
-
     void peek_das_string(const string & str, const TBlock<void,TTemporary<const char *>> & block, Context * context, LineInfoArg *);
-
     char * builtin_string_clone ( const char *str, Context * context );
+
+    __forceinline bool builtin_empty(const char* str) { return !str || str[0] == 0; }
+    __forceinline bool builtin_empty_das_string(const string & str) { return str.empty(); }
 
     template <typename TT, typename QQ>
     struct das_clone {

@@ -1356,6 +1356,11 @@ namespace das
         // das-string
         addExtern<DAS_BIND_FUN(das_str_equ)>(*this, lib, "==", SideEffects::none, "das_str_equ");
         addExtern<DAS_BIND_FUN(das_str_nequ)>(*this, lib, "!=", SideEffects::none, "das_str_nequ");
+        // string emptiness
+        addExtern<DAS_BIND_FUN(builtin_empty)>(*this, lib, "empty",
+            SideEffects::none, "builtin_empty")->arg("str");
+        addExtern<DAS_BIND_FUN(builtin_empty_das_string)>(*this, lib, "empty",
+            SideEffects::none, "builtin_empty_das_string")->arg("str");
         // das-string extra
         STR_DSTR_REG(  eq,==);
         STR_DSTR_REG( neq,!=);
