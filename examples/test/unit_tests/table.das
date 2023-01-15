@@ -7,23 +7,23 @@ def test_find
     find(const_tab,"one") <| $(num)    // this one will optimize into find_if_exists
         if num != null
             assert(deref(num)==1)
-    assert(find(const_tab,"one") ?? 100500 == 1)
+    assert(const_tab?["one"] ?? 100500 == 1)
     var tab <- {{ "one"=>1; "two"=>2 }}
     find(tab,"one") <| $(num)
         assert(deref(num)==1)
     find_for_edit(tab,"one") <| $(var num)
         assert(deref(num)==1)
         deref(num) = 3
-    assert(find(tab,"one") ?? 100500 == 3)
+    assert(tab?["one"] ?? 100500 == 3)
     find_for_edit(tab,"one") <| $(var num)     // this one will optimize into find_for_edit_if_exists
         if num!=null
             assert(deref(num)==3)
             deref(num) = 4
-    assert(find(tab,"one") ?? 100500 == 4)
+    assert(tab?["one"] ?? 100500 == 4)
     find_for_edit_if_exists(tab,"one") <| $(var num)
         assert(num==4)
         num = 5
-    assert(find(tab,"one") ?? 100500 == 5)
+    assert(tab?["one"] ?? 100500 == 5)
     unsafe
         deref(find_for_edit(tab,"one"))=1
         assert(deref(find_for_edit(tab,"one"))==1)
@@ -68,7 +68,7 @@ def test : bool
                 assert(i%7==0)
         i ++
     while i < total
-        let pValue = unsafe(find(tab,string(i)))
+        let pValue = unsafe(tab?[string(i)])
         if pValue!=null
             assert(deref(pValue)==i)
         else

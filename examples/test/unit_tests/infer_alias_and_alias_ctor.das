@@ -14,7 +14,6 @@ def findObject(objects : table<string; auto(T)>; guid : string): T?
             foundObj = reinterpret<T?> obj
     return foundObj
 
-
 [export]
 def test:bool
     var a:array<float>
@@ -24,6 +23,7 @@ def test:bool
     let t = join(a)
     assert(t==6.0)
     let tab <- {{ "one" => 1; "two" => 2 }}
-    verify(findObject(tab,"one") ?? 0==1)
-    verify(findObject(tab,"two") ?? 0==2)
+    unsafe
+        verify(findObject(tab,"one") ?? 0==1)
+        verify(findObject(tab,"two") ?? 0==2)
     return true

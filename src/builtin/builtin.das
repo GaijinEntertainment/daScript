@@ -253,26 +253,6 @@ def find(Tab:table<auto(keyT);auto(valT)>|#;at:keyT-#;blk:block<(p:valT?#):void>
 def find(Tab:table<auto(keyT);void>;at:keyT|#;blk:block<(p:void?):void>)
     concept_assert(false,"find(table<keyT;void>,...) is not supported")
 
-// semi-unsafe find for use with ?? operator
-
-[unsafe_operation]
-def find(Tab:table<auto(keyT);auto(valT)|#>;at:keyT-#):valT const?
-    unsafe
-        return reinterpret<valT const?>(__builtin_table_find(Tab,at))
-
-[unsafe_operation]
-def find(Tab:table<auto(keyT);void>;at:keyT|#):void const?
-    concept_assert(false,"find(table<keyT;void>,...) is not supported")
-
-[unsafe_operation]
-def find(Tab:table<auto(keyT);auto(valT)>#;at:keyT-#):valT const?#
-    unsafe
-        return reinterpret<valT const?#>(__builtin_table_find(Tab,at))
-
-[unsafe_operation]
-def find(Tab:table<auto(keyT);void>#;at:keyT|#):void const?#
-    concept_assert(false,"find(table<keyT;void>,...) is not supported")
-
 // find if exists
 
 def find_if_exists(Tab:table<auto(keyT);auto(valT)>;at:keyT-#;blk:block<(p:valT&):void>)
