@@ -196,7 +196,7 @@ namespace das
         }
     }
 
-    TypeDeclPtr TypeDecl::inferGenericType ( TypeDeclPtr autoT, TypeDeclPtr initT, bool topLevel, OptionsMap * options ) {
+    TypeDeclPtr TypeDecl::inferGenericType ( TypeDeclPtr autoT, TypeDeclPtr initT, bool topLevel, bool passType, OptionsMap * options ) {
         // for option type, we go through all the options in order. first matching is good
         if ( autoT->baseType==Type::option ) {
             for ( size_t i = 0; i!=autoT->argTypes.size(); ++i ) {
@@ -211,7 +211,7 @@ namespace das
                 TT->explicitConst = TT->explicitConst | autoT->explicitConst;
                 TT->implicit = TT->implicit | autoT->implicit;
                 // now we infer type
-                if ( auto resT = inferGenericType(TT,initT,topLevel,options) ) {
+                if ( auto resT = inferGenericType(TT,initT,topLevel,passType,options) ) {
                     if ( options!=nullptr ) (*options)[autoT.get()] = int(i);
                     return resT;
                 }
@@ -254,7 +254,7 @@ namespace das
                     cm = ConstMatters::no;
                 }
             }
-            if ( autoT->isSameType(*initT, rm,cm, TemporaryMatters::yes, AllowSubstitute::yes ) ) {
+            if ( autoT->isSameType(*initT, rm,cm, TemporaryMatters::yes, AllowSubstitute::yes, true, passType ) ) {
                 return make_smart<TypeDecl>(*autoT);
             } else {
                 return nullptr;
