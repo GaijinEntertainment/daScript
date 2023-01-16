@@ -267,6 +267,7 @@ def find_if_exists(Tab:table<auto(keyT);auto(valT)>;at:keyT-#;blk:block<(p:valT&
 
 def find_if_exists(Tab:table<auto(keyT);void>;at:keyT-#;blk:block<(p:void?):void>)
     concept_assert(false,"find_if_exists(table<keyT;void>,...) is not supported")
+    return false
 
 // find for edit
 
@@ -297,6 +298,9 @@ def find_for_edit_if_exists(var Tab:table<auto(keyT);auto(valT)>#;at:keyT-#;blk:
         unsafe
             invoke(blk,*(reinterpret<valT?#> val))
         __builtin_table_unlock(Tab)
+        return true
+    else
+        return false
 
 def find_for_edit_if_exists(var Tab:table<auto(keyT);auto(valT)>;at:keyT-#;blk:block<(var p:valT&):void>)
     var val = __builtin_table_find(Tab,at)
@@ -305,9 +309,13 @@ def find_for_edit_if_exists(var Tab:table<auto(keyT);auto(valT)>;at:keyT-#;blk:b
         unsafe
             invoke(blk,*(reinterpret<valT?> val))
         __builtin_table_unlock(Tab)
+        return true
+    else
+        return false
 
 def find_for_edit_if_exists(var Tab:table<auto(keyT);void>;at:keyT|#;blk:block<(var p:void?):void>)
     concept_assert(false,"find_for_edit_if_exists(table<keyT;void>,...) is not supported")
+    return false
 
 def _at_with_lockcheck ( var Tab:table<auto(keyT);auto(valT)>; at:keyT|# ) : valT &
     static_if typeinfo(need_lock_check type<valT>)
