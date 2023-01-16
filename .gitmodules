@@ -24,7 +24,7 @@
 	url = https://github.com/borisbat/dasSFML.git
 [submodule "modules/dasLLVM"]
 	path = modules/dasLLVM
-	url = https://github.com/borisbat/dasLLVM.git
+	url = git@github.com:borisbat/dasLLVM.git
 [submodule "modules/dasQuirrel"]
 	path = modules/dasQuirrel
-	url = https://github.com/borisbat/dasQuirrel.git
+	url = git@github.com:borisbat/dasQuirrel.git
