@@ -306,7 +306,7 @@ def joj(val : JsonValue?; id : string) : JsonValue?
     if val == null || !(val is _object)
         return res
     find_if_exists(val as _object, id) <| $(v)
-        res = *v
+        res = v
     return res
 
 def jon(val : JsonValue?; id : string; defVal = 0lf) : double
@@ -314,8 +314,8 @@ def jon(val : JsonValue?; id : string; defVal = 0lf) : double
     if val == null || !(val is _object)
         return res
     find_if_exists(val.value as _object, id) <| $(v)
-        if v != null && (*v).value is _number
-            res = (*v).value as _number
+        if v.value is _number
+            res = v.value as _number
     return res
 
 def j_s(val : JsonValue?; defVal = "") : string
@@ -326,8 +326,8 @@ def jos(val : JsonValue?; id : string; defVal = "") : string
     if val == null || !(val is _object)
         return res
     find_if_exists(val.value as _object, id) <| $(v)
-        if v != null && (*v).value is _string
-            res = (*v).value as _string
+        if v.value is _string
+            res = v.value as _string
     return res
 
 def job(val : JsonValue?; id : string; defVal = false) : bool
@@ -335,6 +335,6 @@ def job(val : JsonValue?; id : string; defVal = false) : bool
     if val == null || !(val is _object)
         return res
     find_if_exists(val.value as _object, id) <| $(v)
-        if v != null && (*v).value is _bool
-            res = (*v).value as _bool
+        if v.value is _bool
+            res = v.value as _bool
     return res

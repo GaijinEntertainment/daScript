@@ -315,6 +315,7 @@
 %type <type>            enum_basic_type_declaration
 %type <pTypeDecl>       type_declaration
 %type <pTypeDecl>       type_declaration_no_options
+%type <pTypeDecl>       new_type_declaration
 %type <pTypeDecl>       auto_type_declaration
 %type <pTypeDecl>       bitfield_type_declaration
 %type <pTypeDecl>       optional_function_type
@@ -418,7 +419,6 @@
 %type <pExpression>     make_struct_dim
 %type <pExpression>     make_tuple
 %type <pExpression>     make_map_tuple
-%type <pExpression>     make_any_tuple
 %type <pExpression>     make_dim
 %type <pExpression>     make_dim_decl
 %type <pExpression>     make_table
@@ -462,7 +462,7 @@
 %right      QQ
 %right      UNARY_MINUS UNARY_PLUS '~' '!' PRE_INC PRE_DEC ADDADD SUBSUB
 %left       DAS_IS DAS_AS
-%left       LPIPE RPIPE LBPIPE LAPIPE
+%left       LPIPE RPIPE LBPIPE LAPIPE LFPIPE
 %left       POST_INC POST_DEC RARROW DEREF
 %left       '.'
 %nonassoc  '[' ']' '(' ')' QDOT QBRA BRABRAB BRACBRB CBRCBRB
@@ -1159,14 +1159,23 @@ expression_delete
     }
     ;
 
+new_type_declaration
+    :  '<' { yyextra->das_arrow_depth ++; } type_declaration[typeDecl] '>' { yyextra->das_arrow_depth --; } {
+        $$ = $typeDecl;
+    }
+    |   structure_type_declaration[typeDecl]   {
+        $$ = $typeDecl;
+    }
+    ;
+
 expr_new
-    :   DAS_NEWT[loc] type_declaration_no_options[typeDecl]   {
+    :   DAS_NEWT[loc] new_type_declaration[typeDecl]   {
         $$ = new ExprNew(tokAt(scanner,@loc),TypeDeclPtr($typeDecl),false);
     }
-    |   DAS_NEWT[loc] type_declaration_no_options[typeDecl] '(' ')'   {
+    |   DAS_NEWT[loc] new_type_declaration[typeDecl] '(' ')'   {
         $$ = new ExprNew(tokAt(scanner,@loc),TypeDeclPtr($typeDecl),true);
     }
-    |   DAS_NEWT[loc] type_declaration_no_options[typeDecl] '(' expr_list[arguments] ')'   {
+    |   DAS_NEWT[loc] new_type_declaration[typeDecl] '(' expr_list[arguments] ')'   {
         auto pNew = new ExprNew(tokAt(scanner,@loc),TypeDeclPtr($typeDecl),true);
         $$ = parseFunctionArguments(pNew,$arguments);
     }
@@ -1414,10 +1423,10 @@ expr_assign
     ;
 
 expr_assign_pipe
-    :   expr[left] '='[loc]    LAPIPE expr[right]   { $$ = new ExprCopy(tokAt(scanner,@loc),ExpressionPtr($left),ExpressionPtr($right)); }
-    |   expr[left] '='[loc]    LFPIPE expr[right]   { $$ = new ExprCopy(tokAt(scanner,@loc),ExpressionPtr($left),ExpressionPtr($right)); }
-    |   expr[left] LARROW[loc] LAPIPE expr[right]   { $$ = new ExprMove(tokAt(scanner,@loc),ExpressionPtr($left), ExpressionPtr($right)); }
-    |   expr[left] LARROW[loc] LFPIPE expr[right]   { $$ = new ExprMove(tokAt(scanner,@loc),ExpressionPtr($left), ExpressionPtr($right)); }
+    :   expr[left] '='[loc]    LAPIPE expr_block[right]   { $$ = new ExprCopy(tokAt(scanner,@loc),ExpressionPtr($left),ExpressionPtr($right)); }
+    |   expr[left] '='[loc]    LFPIPE expr_block[right]   { $$ = new ExprCopy(tokAt(scanner,@loc),ExpressionPtr($left),ExpressionPtr($right)); }
+    |   expr[left] LARROW[loc] LAPIPE expr_block[right]   { $$ = new ExprMove(tokAt(scanner,@loc),ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] LARROW[loc] LFPIPE expr_block[right]   { $$ = new ExprMove(tokAt(scanner,@loc),ExpressionPtr($left), ExpressionPtr($right)); }
     ;
 
 expr_named_call
@@ -2629,6 +2638,12 @@ make_tuple
     :   expr[val] {
         $$ = $val;
     }
+    |   expr[kval] MAPTO[mkt] expr[vval] {
+        ExprMakeTuple * mt = new ExprMakeTuple(tokAt(scanner,@mkt));
+        mt->values.push_back(ExpressionPtr($kval));
+        mt->values.push_back(ExpressionPtr($vval));
+        $$ = mt;
+    }
     |   make_tuple[mkt] ',' expr[val] {
         ExprMakeTuple * mt;
         if ( $mkt->rtti_isMakeTuple() ) {
@@ -2654,18 +2669,13 @@ make_map_tuple
     }
     ;
 
-make_any_tuple
-    :   make_tuple[mkt]         { $$ = $mkt; }
-    |   make_map_tuple[mkm]     { $$ = $mkm; }
-    ;
-
 make_dim
-    :   make_any_tuple[val] {
+    :   make_tuple[val] {
         auto mka = new ExprMakeArray();
         mka->values.push_back(ExpressionPtr($val));
         $$ = mka;
     }
-    |   make_dim[mka] ';' make_any_tuple[val] {
+    |   make_dim[mka] ';' make_tuple[val] {
         ((ExprMakeArray *) $mka)->values.push_back(ExpressionPtr($val));
         $$ = $mka;
     }

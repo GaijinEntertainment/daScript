@@ -46,7 +46,7 @@ def test:bool
         assert(pq?._0 ?? 0==1)
         assert(pq?._1 ?? 0.0==2.0)
         assert(pq?._2 ?? "nothing" =="3")
-    var qq = new tuple < int; float >
+    var qq = new <tuple<int;float>>
     qq._0 = 1
     qq._1 = 2.0
     assert(qq?._0 ?? 0==1)

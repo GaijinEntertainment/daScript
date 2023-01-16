@@ -87,6 +87,35 @@ namespace das
         return this;
     }
 
+    void TypeDecl::applyRefToRef ( TypeDeclPtr TT, bool topLevel ) {
+        if ( topLevel && TT->ref && TT->isRefType() ) {
+            TT->ref = false;
+        }
+        if ( TT->isPointer() ) {
+            if ( TT->firstType ) {
+                applyRefToRef(TT->firstType);
+            }
+        } else if ( TT->baseType==Type::tIterator ) {
+            applyRefToRef(TT->firstType);
+        } else if ( TT->baseType==Type::tArray ) {
+            applyRefToRef(TT->firstType);
+        } else if ( TT->baseType==Type::tTable ) {
+            applyRefToRef(TT->firstType);
+            applyRefToRef(TT->secondType);
+        } else if ( TT->baseType==Type::tBlock || TT->baseType==Type::tFunction || TT->baseType==Type::tLambda ) {
+            if ( TT->firstType ) {
+                applyRefToRef(TT->firstType);
+            }
+            for ( auto & arg : TT->argTypes ) {
+                applyRefToRef(arg, true);
+            }
+        } else if ( TT->baseType==Type::tTuple || TT->baseType==Type::tVariant ) {
+            for ( auto & arg : TT->argTypes ) {
+                applyRefToRef(arg);
+            }
+        }
+    }
+
     void TypeDecl::applyAutoContracts ( TypeDeclPtr TT, TypeDeclPtr autoT ) {
         if ( !autoT->isAuto() ) return;
         TT->ref = (TT->ref | autoT->ref) && !autoT->removeRef && !TT->removeRef;
@@ -97,7 +126,9 @@ namespace das
         TT->removeDim = false;
         TT->removeRef = false;
         if ( autoT->isPointer() ) {
-            applyAutoContracts(TT->firstType, autoT->firstType);
+            if ( TT->firstType ) {
+                applyAutoContracts(TT->firstType, autoT->firstType);
+            }
         } else if ( autoT->baseType==Type::tIterator ) {
             applyAutoContracts(TT->firstType, autoT->firstType);
         } else if ( autoT->baseType==Type::tArray ) {
@@ -165,7 +196,7 @@ namespace das
         }
     }
 
-    TypeDeclPtr TypeDecl::inferGenericType ( TypeDeclPtr autoT, TypeDeclPtr initT, bool topLevel, OptionsMap * options ) {
+    TypeDeclPtr TypeDecl::inferGenericType ( TypeDeclPtr autoT, TypeDeclPtr initT, bool topLevel, bool passType, OptionsMap * options ) {
         // for option type, we go through all the options in order. first matching is good
         if ( autoT->baseType==Type::option ) {
             for ( size_t i = 0; i!=autoT->argTypes.size(); ++i ) {
@@ -180,7 +211,7 @@ namespace das
                 TT->explicitConst = TT->explicitConst | autoT->explicitConst;
                 TT->implicit = TT->implicit | autoT->implicit;
                 // now we infer type
-                if ( auto resT = inferGenericType(TT,initT,topLevel,options) ) {
+                if ( auto resT = inferGenericType(TT,initT,topLevel,passType,options) ) {
                     if ( options!=nullptr ) (*options)[autoT.get()] = int(i);
                     return resT;
                 }
@@ -223,7 +254,7 @@ namespace das
                     cm = ConstMatters::no;
                 }
             }
-            if ( autoT->isSameType(*initT, rm,cm, TemporaryMatters::yes, AllowSubstitute::yes ) ) {
+            if ( autoT->isSameType(*initT, rm,cm, TemporaryMatters::yes, AllowSubstitute::yes, true, passType ) ) {
                 return make_smart<TypeDecl>(*autoT);
             } else {
                 return nullptr;

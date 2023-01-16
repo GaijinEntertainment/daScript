@@ -6,12 +6,13 @@ def join(a:array<auto(numt)>)
         t += x
     return t
 
+[unsafe_operation]
 def findObject(objects : table<string; auto(T)>; guid : string): T?
     var foundObj : T?
-    find(objects, guid) <| $(obj:T?)
-        foundObj = obj
+    find(objects, guid) <| $(obj)
+        unsafe
+            foundObj = reinterpret<T?> obj
     return foundObj
-
 
 [export]
 def test:bool
@@ -22,6 +23,7 @@ def test:bool
     let t = join(a)
     assert(t==6.0)
     let tab <- {{ "one" => 1; "two" => 2 }}
-    verify(findObject(tab,"one") ?? 0==1)
-    verify(findObject(tab,"two") ?? 0==2)
+    unsafe
+        verify(findObject(tab,"one") ?? 0==1)
+        verify(findObject(tab,"two") ?? 0==2)
     return true

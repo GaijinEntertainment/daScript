@@ -37,10 +37,11 @@ def public cache_shader_program(vtx,frag:string# implicit) : uint
     return programs[phash]
 
 [apply_in_context(opengl_cache)]
-def public cache_image(filename:string# implicit) : uint
+def public cache_image(_filename:string# implicit) : uint
     var value = 0u
-    images |> find_if_exists(filename) <| $ ( pimg:uint? ) : void
-        value = *pimg
+    let filename = clone_string(_filename)
+    images |> find_if_exists(filename) <| $ ( pimg )
+        value = pimg
     if value==0u
         value = load_image_from_file(filename, true)
         images[clone_string(filename)] = value

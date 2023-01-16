@@ -47,7 +47,7 @@ struct SFoo
     a : int
     b : float
 
-def operator == ( a,b: SFoo )
+def operator == ( a,b: SFoo|# )
     return a.a==b.a && a.b==b.b
 
 struct NFoo
@@ -68,7 +68,7 @@ def operator == ( a,b:int[4] )
             return false
     return true
 
-def operator == ( a,b:SFoo[2] )
+def operator == ( a,b:SFoo[2]|# )
     for A,B in a,b
         if !(A==B)
             return false
@@ -98,7 +98,7 @@ def array_types ( t: T? )
 
 typedef TFoo = tuple<int; float; string>
 
-def operator == ( a,b: TFoo )
+def operator == ( a,b: TFoo|# )
     return a._0==b._0 && a._1==b._1 && a._2==b._2
 
 [test]
