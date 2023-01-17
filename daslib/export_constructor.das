@@ -18,7 +18,7 @@ class ExportConstructor : AstStructureAnnotation
             errors := "expecting [export_constructor] to have no arguments"
             return false
         var qfn <- qmacro_function("make`{st.name}") <|
-            return new $t(st)()
+            return new <$t(st)>()
         qfn.flags |= FunctionFlags exports
         add_function(st._module, qfn)
         return true
