@@ -1,3 +1,4 @@
+options no_aot
 options indenting = 4
 options no_global_variables = false
 options no_unused_block_arguments = false
@@ -115,9 +116,8 @@ def private resolve_path(path: string; paths: array<string>; aliases: table<stri
     return path |> resolve_path(paths)
 
 def private resolve_path_cache(path: string; paths: array<string>; aliases: table<string; string>; var cache: table<string; string>): string
-    let res = cache |> find(path)
-    if res != null
-        return *res
+    if cache |> key_exists(path)
+        return cache?[path] ?? ""
     let absPath = resolve_path(path, paths, aliases)
     cache[path] = absPath
     return absPath
@@ -888,21 +888,21 @@ class private DAgent: DapiDebugAgent
                 i += 1
                 if !compare_path(fileBr, file)
                     continue
-                let brs = breakpoints |> find(file)
-                var brIdx = 0
-                while brs != null && brIdx < length(*brs)
-                    let br & = unsafe((*brs)[brIdx++])
-                    // self->log("search break `{file}` {brs} in {file}\n")
-                    if br.line != uint(at.line)
-                        continue
-                    self->sendStopped(ctx, ctxData, file, at, "breakpoint", "", br.id)
+                breakpoints |> find(file) <| $(brs)
+                    var brIdx = 0
+                    while brs != null && brIdx < length(*brs)
+                        let br & = unsafe((*brs)[brIdx++])
+                        // self->log("search break `{file}` {brs} in {file}\n")
+                        if br.line != uint(at.line)
+                            continue
+                        self->sendStopped(ctx, ctxData, file, at, "breakpoint", "", br.id)
 
-                    ctxData.continueRequested = false
-                    while !ctxData.continueRequested && !ctxData.stepInRequested && ctxData.stepRequestedStack == 0
-                        tick_debugger()
-                    ctxData.continueRequested = false
-                    self->afterPause()
-                    break
+                        ctxData.continueRequested = false
+                        while !ctxData.continueRequested && !ctxData.stepInRequested && ctxData.stepRequestedStack == 0
+                            tick_debugger()
+                        ctxData.continueRequested = false
+                        self->afterPause()
+                        break
 
     def nextStep(var ctx: Context; var ctxData:DAContext; path: string; at:LineInfo)
         delete ctxData.stack

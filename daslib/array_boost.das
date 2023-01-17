@@ -11,7 +11,7 @@ require daslib/contracts
 [unsafe_operation, template (a), unused_argument(a)]
 def private array_helper ( var arr : auto implicit ==const; a : auto(TT) ) : array<TT -const-#>
     var res : array<TT -const-#>
-    let lenA = length(arr)
+    let lenA = _::length(arr)
     if lenA>=1
         unsafe
             _builtin_make_temp_array(res, addr(arr[0]), lenA)
@@ -20,7 +20,7 @@ def private array_helper ( var arr : auto implicit ==const; a : auto(TT) ) : arr
 [unsafe_operation, template (a), unused_argument(a)]
 def private array_helper ( arr : auto implicit ==const; a : auto(TT) ) : array<TT -const-#>
     var res : array<TT -const-#>
-    let lenA = length(arr)
+    let lenA = _::length(arr)
     if lenA>=1
         unsafe
             _builtin_make_temp_array(res, addr(arr[0]), lenA)
