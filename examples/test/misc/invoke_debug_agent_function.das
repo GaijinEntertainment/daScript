@@ -1,6 +1,4 @@
-require rtti
 require debugapi
-require jobque
 
 class MyDebugAgent : DapiDebugAgent
     def add_ii ( var res:int&; a,b:int )
