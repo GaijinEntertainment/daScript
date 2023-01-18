@@ -903,14 +903,8 @@ namespace das
     }
 
     // Context
-
-    struct DebugAgentInstance {
-        DebugAgentPtr   debugAgent;
-        ContextPtr      debugAgentContext;
-    };
-
-    static std::recursive_mutex g_DebugAgentMutex;
-    static das_safe_map<string, DebugAgentInstance>   g_DebugAgents;
+    std::recursive_mutex g_DebugAgentMutex;
+    das_safe_map<string, DebugAgentInstance>   g_DebugAgents;
     static DAS_THREAD_LOCAL bool g_isInDebugAgentCreation = false;
 
     template <typename TT>

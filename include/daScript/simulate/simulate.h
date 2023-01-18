@@ -718,6 +718,11 @@ namespace das
 #endif
     };
 
+    struct DebugAgentInstance {
+        DebugAgentPtr   debugAgent;
+        ContextPtr      debugAgentContext;
+    };
+
     void tickDebugAgent ( );
     void collectDebugAgentState ( Context & ctx, const LineInfo & at );
     void onBreakpointsReset ( const char * file, int breakpointsNum );
