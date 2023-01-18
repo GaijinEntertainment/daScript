@@ -9,9 +9,9 @@ def join(a:array<auto(numt)>)
 [unsafe_operation]
 def findObject(objects : table<string; auto(T)>; guid : string): T?
     var foundObj : T?
-    find(objects, guid) <| $(obj)
+    get(objects, guid) <| $(obj)
         unsafe
-            foundObj = reinterpret<T?> obj
+            foundObj = reinterpret<T?> addr(obj)
     return foundObj
 
 [export]

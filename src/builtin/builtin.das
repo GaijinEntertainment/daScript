@@ -243,6 +243,7 @@ def empty(a:array<auto>|#) : bool
 def empty(a:table<auto;auto>|#) : bool
     return length(a)==0
 
+[deprecated(message="use tab?[key] or `get` instead")]
 def find(Tab:table<auto(keyT);auto(valT)>|#;at:keyT-#;blk:block<(p:valT?#):void>)
     __builtin_table_lock(Tab)
     var val = __builtin_table_find(Tab,at)
@@ -250,11 +251,63 @@ def find(Tab:table<auto(keyT);auto(valT)>|#;at:keyT-#;blk:block<(p:valT?#):void>
         invoke(blk,reinterpret<valT?#> val)
     __builtin_table_unlock(Tab)
 
+[deprecated(message="use tab?[key] or `get` instead")]
 def find(Tab:table<auto(keyT);void>;at:keyT|#;blk:block<(p:void?):void>)
     concept_assert(false,"find(table<keyT;void>,...) is not supported")
 
+// one table lookup with block to rule them all 'get'
+
+def get(Tab:table<auto(keyT);auto(valT)> ==const #;at:keyT-#;blk:block<(p:valT#&):void>)
+    var val = __builtin_table_find(Tab,at)
+    if val != null
+        __builtin_table_lock(Tab)
+        unsafe
+            invoke(blk,*(reinterpret<valT?#> val))
+        __builtin_table_unlock(Tab)
+        return true
+    else
+        return false
+
+def get(Tab:table<auto(keyT);auto(valT)> ==const;at:keyT-#;blk:block<(p:valT&):void>)
+    var val = __builtin_table_find(Tab,at)
+    if val != null
+        __builtin_table_lock(Tab)
+        unsafe
+            invoke(blk,*(reinterpret<valT?> val))
+        __builtin_table_unlock(Tab)
+        return true
+    else
+        return false
+
+def get(var Tab:table<auto(keyT);auto(valT)> ==const #;at:keyT-#;blk:block<(var p:valT#&):void>)
+    var val = __builtin_table_find(Tab,at)
+    if val != null
+        __builtin_table_lock(Tab)
+        unsafe
+            invoke(blk,*(reinterpret<valT?#> val))
+        __builtin_table_unlock(Tab)
+        return true
+    else
+        return false
+
+def get(var Tab:table<auto(keyT);auto(valT)> ==const;at:keyT-#;blk:block<(var p:valT&):void>)
+    var val = __builtin_table_find(Tab,at)
+    if val != null
+        __builtin_table_lock(Tab)
+        unsafe
+            invoke(blk,*(reinterpret<valT?> val))
+        __builtin_table_unlock(Tab)
+        return true
+    else
+        return false
+
+def get(Tab:table<auto(keyT);void>;at:keyT|#;blk:block<(var p:void?):void>)
+    concept_assert(false,"get(table<keyT>,...) is not supported. use `key_exists` instead")
+    return false
+
 // find if exists
 
+[deprecated(message="use tab?[key] or `get` instead")]
 def find_if_exists(Tab:table<auto(keyT);auto(valT)>;at:keyT-#;blk:block<(p:valT&):void>)
     var val = __builtin_table_find(Tab,at)
     if val != null
@@ -265,6 +318,7 @@ def find_if_exists(Tab:table<auto(keyT);auto(valT)>;at:keyT-#;blk:block<(p:valT&
     else
         return false
 
+[deprecated(message="use tab?[key] or `get` instead")]
 def find_if_exists(Tab:table<auto(keyT);auto(valT)>#;at:keyT-#;blk:block<(p:valT&#):void>)
     var val = __builtin_table_find(Tab,at)
     if val != null
@@ -275,12 +329,14 @@ def find_if_exists(Tab:table<auto(keyT);auto(valT)>#;at:keyT-#;blk:block<(p:valT
     else
         return false
 
+[deprecated(message="use tab?[key] or `get` instead")]
 def find_if_exists(Tab:table<auto(keyT);void>;at:keyT-#;blk:block<(p:void?):void>)
     concept_assert(false,"find_if_exists(table<keyT;void>,...) is not supported")
     return false
 
 // find for edit
 
+[deprecated(message="use tab?[key] or `get` instead")]
 def find_for_edit(var Tab:table<auto(keyT);auto(valT)>;at:keyT-#;blk:block<(var p:valT?#):void>)
     __builtin_table_lock(Tab)
     var val = __builtin_table_find(Tab,at)
@@ -288,6 +344,7 @@ def find_for_edit(var Tab:table<auto(keyT);auto(valT)>;at:keyT-#;blk:block<(var 
         invoke(blk,reinterpret<valT?#> val)
     __builtin_table_unlock(Tab)
 
+[deprecated(message="use tab?[key] or `get` instead")]
 def find_for_edit(var Tab:table<auto(keyT);void>;at:keyT|#;blk:block<(var p:void?):void>)
     concept_assert(false,"find_for_edit(table<keyT;void>,...) is not supported")
 
@@ -301,6 +358,7 @@ def find_for_edit(var Tab:table<auto(keyT);void>;at:keyT|#):void?
 
 // find for edit if exists
 
+[deprecated(message="use tab?[key] or `get` instead")]
 def find_for_edit_if_exists(var Tab:table<auto(keyT);auto(valT)>#;at:keyT-#;blk:block<(var p:valT#&):void>)
     var val = __builtin_table_find(Tab,at)
     if val != null
@@ -312,6 +370,7 @@ def find_for_edit_if_exists(var Tab:table<auto(keyT);auto(valT)>#;at:keyT-#;blk:
     else
         return false
 
+[deprecated(message="use tab?[key] or `get` instead")]
 def find_for_edit_if_exists(var Tab:table<auto(keyT);auto(valT)>;at:keyT-#;blk:block<(var p:valT&):void>)
     var val = __builtin_table_find(Tab,at)
     if val != null
@@ -323,6 +382,7 @@ def find_for_edit_if_exists(var Tab:table<auto(keyT);auto(valT)>;at:keyT-#;blk:b
     else
         return false
 
+[deprecated(message="use tab?[key] or `get` instead")]
 def find_for_edit_if_exists(var Tab:table<auto(keyT);void>;at:keyT|#;blk:block<(var p:void?):void>)
     concept_assert(false,"find_for_edit_if_exists(table<keyT;void>,...) is not supported")
     return false

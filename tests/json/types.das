@@ -105,15 +105,15 @@ def operator == ( a,b: TFoo|# )
 def tuple_types ( t: T? )
     test_equ(t, [[auto 1,2.0,"3"]])
 
-def op_equ_tab ( a,b:table<string;auto> )
+def op_equ_tab ( a,b:table<string;auto(TT)> )
     if a|>length != b|> length
         return false
     for k,v in keys(a), values(a)
         if !(b |> key_exists(k))
             return false
         var same = false
-        b |> find(k) <| $ ( pv )
-            same = pv!=null && *pv==v
+        b |> get(k) <| $ ( pv )
+            same = pv==v
     return true
 
 def operator == ( a,b:table<string;int> )

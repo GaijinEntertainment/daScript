@@ -181,7 +181,7 @@ class private TemplateVisitor : AstVisitor
             if key_exists(rules.blockArgName, vn)
                 arg.name := rules.blockArgName[vn]
         for ann in blk.annotations
-            rules.annArg |> find_if_exists("{ann.annotation.name}") <| $(cb)
+            rules.annArg |> get("{ann.annotation.name}") <| $(cb)
                 cb |> invoke(*ann)
         let nargs = blk.arguments.length
         for ai in range(nargs)
