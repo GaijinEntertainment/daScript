@@ -71,7 +71,7 @@ let g_intrin_lookup <- {{
 def public lookup_intinsic(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
     var result :  LLVMOpaqueValue?
     let call_name = "{expr.func._module.name}::{expr.func.name}"
-    g_intrin_lookup |> find_if_exists(call_name) <| $ ( pfun )
+    g_intrin_lookup |> get(call_name) <| $ ( pfun )
         result = pfun |> invoke(g_builder, expr, arguments)
     return result
 
@@ -259,7 +259,7 @@ def build_op_name ( op_name:string; opType:TypeDeclPtr ) : string
 def intrinsic_bit_nzp_op1(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
     assume opType = expr.arguments[0]._type
     var op_name : string
-    bit_op1_name |> find_if_exists(string(expr.name)) <| $ ( pname )
+    bit_op1_name |> get(string(expr.name)) <| $ ( pname )
         op_name = pname
     if op_name==""
         failed_E(expr, "intrinsic {expr.name}({describe(opType)}) is not supported (yet?)")
@@ -280,7 +280,7 @@ def intrinsic_bit_nzp_op1(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallF
 def intrinsic_bit_op1(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
     assume opType = expr.arguments[0]._type
     var op_name : string
-    bit_op1_name |> find_if_exists(string(expr.name)) <| $ ( pname )
+    bit_op1_name |> get(string(expr.name)) <| $ ( pname )
         op_name = pname
     if op_name==""
         failed_E(expr, "intrinsic {expr.name}({describe(opType)}) is not supported (yet?)")
@@ -307,7 +307,7 @@ let private op2_name <- {{
 def intrinsic_op2(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
     assume opType = expr.arguments[0]._type
     var op_name : string
-    op2_name |> find_if_exists(string(expr.name)) <| $ ( pname )
+    op2_name |> get(string(expr.name)) <| $ ( pname )
         op_name = pname
     if op_name==""
         failed_E(expr, "intrinsic {expr.name}({describe(opType)}) is not supported (yet?)")
