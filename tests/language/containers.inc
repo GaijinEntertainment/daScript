@@ -6,14 +6,14 @@ struct Foo
 [test]
 def test_temp_containers ( t : T? )
     t |> run("temporary array operations") <| @ ( t : T? )
-        var a : array<Foo>#
-        var et : Foo# := [[Foo a=2]]
+        var a : array<Foo>
+        var et : Foo := [[Foo a=2]]
         array_ops(t, a, [[Foo a=1]], et)
     t |> run("temporary table operations") <| @ ( t : T? )
-        var a : table<int; Foo>#
+        var a : table<int; Foo>
         table_ops ( t, a, [[Foo a=1]], [[Foo a=2]])
 
-def array_ops ( t : T?; var a:array<Foo>#; var e:Foo; var et:Foo# )
+def array_ops ( t : T?; var a:array<Foo>; var e:Foo; var et:Foo# implicit )
     reserve(a,10)
     for i in range(10)
         push(a, [[Foo a=i]])
@@ -58,7 +58,7 @@ def array_ops ( t : T?; var a:array<Foo>#; var e:Foo; var et:Foo# )
     t |> equal(2, length(a) )
 
 
-def table_ops ( t : T?; var a:table<int;Foo>#; var e:Foo; var et:Foo# implicit )
+def table_ops ( t : T?; var a:table<int;Foo>; var e:Foo; var et:Foo implicit )
     for i in range(10)
         a[i] = [[Foo a=i]]
     t |> equal(10, length(a))

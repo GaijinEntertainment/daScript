@@ -25,8 +25,10 @@ def test_find
         num = 5
     assert(tab?["one"] ?? 100500 == 5)
     unsafe
-        deref(find_for_edit(tab,"one"))=1
-        assert(deref(find_for_edit(tab,"one"))==1)
+        var dummy = 0
+        tab?["one"] ?? dummy = 1
+        assert(tab?["one"] ?? 100500==1)
+        assert(dummy==0)
     return true
 
 [export]
