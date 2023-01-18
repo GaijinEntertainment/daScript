@@ -784,6 +784,8 @@ namespace das
                 bool    unsafeOutsideOfFor : 1;
                 bool    skipLockCheck : 1;
                 bool    safeImplicit : 1;
+
+                bool    deprecated : 1;
             };
             uint32_t moreFlags = 0;
 
@@ -1220,6 +1222,7 @@ namespace das
         bool allow_shared_lambda = false;
         bool ignore_shared_modules = false;
         bool default_module_public = true;              // by default module is 'public', not 'private'
+        bool no_deprecated = false;
     // environment
         bool no_optimizations = false;                  // disable optimizations, regardless of settings
         bool fail_on_no_aot = true;                     // AOT link failure is error

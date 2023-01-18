@@ -138,6 +138,7 @@ namespace das {
         bool checkUnusedArgument;
         bool checkUnusedBlockArgument;
         bool checkUnsafe;
+        bool checkDeprecated;
     public:
         LintVisitor ( const ProgramPtr & prog ) : program(prog) {
             checkOnlyFastAot = program->options.getBoolOption("only_fast_aot", program->policies.only_fast_aot);
@@ -148,6 +149,7 @@ namespace das {
             checkUnusedArgument = program->options.getBoolOption("no_unused_function_arguments", program->policies.no_unused_function_arguments);
             checkUnusedBlockArgument = program->options.getBoolOption("no_unused_block_arguments", program->policies.no_unused_block_arguments);
             checkUnsafe = program->policies.no_unsafe || program->thisModule->doNotAllowUnsafe;
+            checkDeprecated = program->options.getBoolOption("no_deprecated", program->policies.no_deprecated);
         }
     protected:
         void verifyOnlyFastAot ( Function * _func, const LineInfo & at ) {
@@ -314,6 +316,10 @@ namespace das {
         virtual void preVisit ( ExprCall * expr ) override {
             Visitor::preVisit(expr);
             verifyOnlyFastAot(expr->func, expr->at);
+            if ( checkDeprecated && expr->func && expr->func->deprecated ) {
+                program->error("function " + expr->func->getMangledName() + " is deprecated.","deprecated functions are prohibited by CodeOfPolicies", "",
+                    expr->at, CompilationError::deprecated_function);
+            }
             for ( const auto & annDecl : expr->func->annotations ) {
                 auto ann = annDecl->annotation;
                 if ( ann->rtti_isFunctionAnnotation() ) {
@@ -542,6 +548,7 @@ namespace das {
         "no_global_variables_at_all",   Type::tBool,
         "no_unused_function_arguments", Type::tBool,
         "no_unused_block_arguments",    Type::tBool,
+        "no_deprecated",                Type::tBool,
     // memory
         "stack",                        Type::tInt,
         "intern_strings",               Type::tBool,

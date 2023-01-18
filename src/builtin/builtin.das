@@ -291,11 +291,11 @@ def find_for_edit(var Tab:table<auto(keyT);auto(valT)>;at:keyT-#;blk:block<(var 
 def find_for_edit(var Tab:table<auto(keyT);void>;at:keyT|#;blk:block<(var p:void?):void>)
     concept_assert(false,"find_for_edit(table<keyT;void>,...) is not supported")
 
-[unsafe_operation]
+[unsafe_operation, deprecated(message="use tab?[key] instead")]
 def find_for_edit(var Tab:table<auto(keyT);auto(valT)>|#;at:keyT-#):valT?
     return __builtin_table_find(Tab,at)
 
-[unsafe_operation]
+[unsafe_operation, deprecated(message="use tab?[key] instead")]
 def find_for_edit(var Tab:table<auto(keyT);void>;at:keyT|#):void?
     concept_assert(false,"find_for_edit(table<keyT;void>,...) is not supported")
 

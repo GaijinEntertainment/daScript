@@ -81,6 +81,23 @@ namespace das
         };
     };
 
+    struct DeprecatedFunctionAnnotation : MarkFunctionAnnotation {
+        DeprecatedFunctionAnnotation() : MarkFunctionAnnotation("deprecated") { }
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+            func->deprecated = true;
+            return true;
+        };
+        virtual bool verifyCall ( ExprCallFunc * call, const AnnotationArgumentList & args,
+            const AnnotationArgumentList & /*progArgs */, string & /*err*/ ) override {
+            DAS_ASSERT(daScriptEnvironment::bound->g_compilerLog);
+            (*daScriptEnvironment::bound->g_compilerLog) << call->at.describe() << ": *warning* function " << call->func->name << " is deprecated\n";
+            if ( auto arg = args.find("message",Type::tString) ) {
+                (*daScriptEnvironment::bound->g_compilerLog) << "\t" << arg->sValue << "\n";
+            }
+            return true;
+        }
+    };
+
     // dummy annotation for optimization hints on functions or blocks
     struct HintFunctionAnnotation : FunctionAnnotation {
         HintFunctionAnnotation() : FunctionAnnotation("hint") { }
@@ -1045,6 +1062,7 @@ namespace das
         addAnnotation(make_smart<MacroFnFunctionAnnotation>());
         addAnnotation(make_smart<HintFunctionAnnotation>());
         addAnnotation(make_smart<RequestJitFunctionAnnotation>());
+        addAnnotation(make_smart<DeprecatedFunctionAnnotation>());
         addAnnotation(make_smart<ExportFunctionAnnotation>());
         addAnnotation(make_smart<NoLintFunctionAnnotation>());
         addAnnotation(make_smart<SideEffectsFunctionAnnotation>());
