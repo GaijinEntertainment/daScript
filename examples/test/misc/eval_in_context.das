@@ -133,10 +133,10 @@ def compileAndRun ( text, self_text:string ) : tuple<ok:bool;result:string>
                 access |> set_file_source("__current.das", string(data))
         else
             print("failed to open `{self_text}`\n")
-    using <| $(var mg:ModuleGroup#)
-        using <| $(var cop:CodeOfPolicies#)
+    using <| $(var mg:ModuleGroup)
+        using <| $(var cop:CodeOfPolicies)
             cop.allow_local_variable_shadowing = true
-            compile_file("__project",access,addr(mg),cop) <| $(ok,program,errors)
+            compile_file("__project",access,unsafe(addr(mg)),cop) <| $(ok,program,errors)
                 if ok
                     simulate(program) <| $ ( sok; context; serrors )
                         if sok

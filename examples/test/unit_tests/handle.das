@@ -79,9 +79,9 @@ def test_fancy
     assert(fc0.value==13)
     var fc = FancyClass(1,2)
     assert(fc.value==3)
-    using() <| $( var f : FancyClass# )
+    using() <| $( var f : FancyClass )
         assert(f.value==13)
-    using(1,3) <| $( var f : FancyClass# )
+    using(1,3) <| $( var f : FancyClass )
         assert(f.value==4)
 
 def test_nc_alias
