@@ -516,15 +516,15 @@ namespace das
     struct registerVectorFunctions<TT,false> {
         static void init ( Module * mod, const ModuleLibrary & lib, bool canCopy, bool canMove ) {
             if ( canMove ) {
-                auto emplaceFunc = addExtern<DAS_BIND_FUN((das_vector_emplace<TT>)),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "emplace",
+                addExtern<DAS_BIND_FUN((das_vector_emplace<TT>)),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "emplace",
                     SideEffects::modifyArgument, "das_vector_emplace");
-                auto emplaceBackFunc = addExtern<DAS_BIND_FUN((das_vector_emplace_back<TT>)),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "emplace",
+                addExtern<DAS_BIND_FUN((das_vector_emplace_back<TT>)),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "emplace",
                     SideEffects::modifyArgument, "das_vector_emplace_back");
             }
             if ( canCopy ) {
-                auto pushFunc = addExtern<DAS_BIND_FUN((das_vector_push<TT>)),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "push",
+                addExtern<DAS_BIND_FUN((das_vector_push<TT>)),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "push",
                     SideEffects::modifyArgument, "das_vector_push");
-                auto pushBackFunc = addExtern<DAS_BIND_FUN((das_vector_push_back<TT>)),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "push",
+                addExtern<DAS_BIND_FUN((das_vector_push_back<TT>)),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "push",
                     SideEffects::modifyArgument, "das_vector_push_back");
             }
             if ( std::is_default_constructible<typename TT::value_type>::value ) {
