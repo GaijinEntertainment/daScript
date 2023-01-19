@@ -377,7 +377,7 @@ namespace das {
         virtual void preVisit ( ExprCall * expr ) override {
             Visitor::preVisit(expr);
             verifyOnlyFastAot(expr->func, expr->at);
-            if ( checkDeprecated && expr->func && expr->func->deprecated ) {
+            if ( checkDeprecated && expr->func->deprecated ) {
                 program->error("function " + expr->func->getMangledName() + " is deprecated.","deprecated functions are prohibited by CodeOfPolicies", "",
                     expr->at, CompilationError::deprecated_function);
             }
