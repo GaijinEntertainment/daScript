@@ -888,10 +888,10 @@ class private DAgent: DapiDebugAgent
                 i += 1
                 if !compare_path(fileBr, file)
                     continue
-                breakpoints |> find(file) <| $(brs)
+                breakpoints |> get(file) <| $(brs)
                     var brIdx = 0
-                    while brs != null && brIdx < length(*brs)
-                        let br & = unsafe((*brs)[brIdx++])
+                    while brIdx < length(brs)
+                        let br & = unsafe((brs)[brIdx++])
                         // self->log("search break `{file}` {brs} in {file}\n")
                         if br.line != uint(at.line)
                             continue
