@@ -508,13 +508,6 @@ namespace das
         }
     };
 
-    template <typename T>
-    void generatedWithImplicitFirstArg(T extFunc)
-    {
-        extFunc->generated = true;
-        extFunc->arguments[0]->type->implicit = true;
-    }
-
     template <typename TT, bool byValue = has_cast<typename TT::value_type>::value >
     struct registerVectorFunctions;
 
@@ -525,18 +518,14 @@ namespace das
             if ( canMove ) {
                 auto emplaceFunc = addExtern<DAS_BIND_FUN((das_vector_emplace<TT>)),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "emplace",
                     SideEffects::modifyArgument, "das_vector_emplace");
-                generatedWithImplicitFirstArg(emplaceFunc);
                 auto emplaceBackFunc = addExtern<DAS_BIND_FUN((das_vector_emplace_back<TT>)),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "emplace",
                     SideEffects::modifyArgument, "das_vector_emplace_back");
-                generatedWithImplicitFirstArg(emplaceBackFunc);
             }
             if ( canCopy ) {
                 auto pushFunc = addExtern<DAS_BIND_FUN((das_vector_push<TT>)),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "push",
                     SideEffects::modifyArgument, "das_vector_push");
-                generatedWithImplicitFirstArg(pushFunc);
                 auto pushBackFunc = addExtern<DAS_BIND_FUN((das_vector_push_back<TT>)),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "push",
                     SideEffects::modifyArgument, "das_vector_push_back");
-                generatedWithImplicitFirstArg(pushBackFunc);
             }
             if ( std::is_default_constructible<typename TT::value_type>::value ) {
                 addExtern<DAS_BIND_FUN((das_vector_push_empty<TT>)),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "push_empty",
