@@ -733,6 +733,8 @@ namespace das
         das_set<Function *>     useFunctions;
         das_set<Variable *>     useGlobalVariables;
         Structure *         classParent = nullptr;
+        vector<int>         resultAliases;
+        vector<vector<int>> argumentAliases;
         union {
             struct {
                 bool    builtIn : 1;
@@ -1223,6 +1225,7 @@ namespace das
         bool ignore_shared_modules = false;
         bool default_module_public = true;              // by default module is 'public', not 'private'
         bool no_deprecated = false;
+        bool no_aliasing = false;
     // environment
         bool no_optimizations = false;                  // disable optimizations, regardless of settings
         bool fail_on_no_aot = true;                     // AOT link failure is error
@@ -1287,8 +1290,9 @@ namespace das
         void fixupAnnotations();
         void inferTypes(TextWriter & logs, ModuleGroup & libGroup);
         void inferTypesDirty(TextWriter & logs, bool verbose);
-        void lint ( ModuleGroup & libGroup );
+        void lint (TextWriter & logs, ModuleGroup & libGroup );
         void checkSideEffects();
+        void deriveAliases(TextWriter & logs);
         void foldUnsafe();
         bool optimizationRefFolding();
         bool optimizationConstFolding();

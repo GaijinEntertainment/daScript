@@ -153,6 +153,7 @@ namespace das
     ,   unused_block_argument                   =   40208       // foo() <| $ ( a ) ..... /* no a here */
     ,   top_level_no_sideeffect_operation       =   40209       // a == b
     ,   deprecated_function                     =   40210       // [deprecated] function
+    ,   argument_aliasing                       =   40211       // a = fun(a) with some form of potential cmres
 
     ,   too_many_infer_passes                   =   41000
 

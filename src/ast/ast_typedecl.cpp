@@ -1373,8 +1373,7 @@ namespace das
         return fields.size()>=1 && fields.size()<=4;
     }
 
-    bool TypeDecl::isVectorType() const {
-        if ( dim.size() ) return false;
+    bool TypeDecl::isBaseVectorType() const {
         switch (baseType) {
             case tInt2:
             case tInt3:
@@ -1391,6 +1390,11 @@ namespace das
             default:
                 return false;
         }
+    }
+
+    bool TypeDecl::isVectorType() const {
+        if ( dim.size() ) return false;
+        return isBaseVectorType();
     }
 
     int TypeDecl::getVectorDim() const {
@@ -2638,6 +2642,82 @@ namespace das
             }
         }
     }
+
+    void TypeDecl::collectAliasing ( TypeAliasMap & aliases, das_set<Structure *> & dep ) const {
+        auto mname = getMangledName();
+        auto it = aliases.find(mname);
+        if ( it==aliases.end() ) {
+            aliases[mname] = (TypeDecl *) this;
+            if ( isBaseVectorType() ) {
+                auto bt = make_smart<TypeDecl>(getVectorBaseType());
+                aliases[bt->getMangledName()] = bt;
+        }
+        }
+        if ( baseType==Type::tArray ) {
+            if ( firstType  ) {
+                firstType->collectAliasing(aliases, dep);
+            }
+        } else if ( baseType==Type::tTable ) {
+            if ( secondType ) {
+                secondType->collectAliasing(aliases, dep);
+            }
+        } else if ( baseType==Type::tStructure ) {
+            if ( structType ) {
+                if (dep.find(structType) != dep.end()) return;
+                dep.insert(structType);
+                for ( auto & fld : structType->fields ) {
+                    fld.type->collectAliasing(aliases, dep);
+                }
+            }
+        } else if ( baseType==Type::tTuple || baseType==Type::tVariant ) {
+            for ( auto & argT : argTypes ) {
+                argT->collectAliasing(aliases, dep);
+            }
+        } else if ( baseType==Type::tPointer ) {
+            if ( firstType ) {
+                firstType->collectAliasing(aliases, dep);
+            }
+        }
+    }
+
+    void TypeDecl::collectContainerAliasing ( TypeAliasMap & aliases, das_set<Structure *> & dep ) const {
+        if ( constant ) return;
+        if ( baseType==Type::tArray ) {
+            if ( firstType && !firstType->constant ) {
+                auto mname = firstType->getMangledName();
+                auto it = aliases.find(mname);
+                if ( it==aliases.end() ) aliases[mname] = firstType.get();
+                firstType->collectContainerAliasing(aliases, dep);
+            }
+        } else if ( baseType==Type::tTable ) {
+            if ( secondType && !secondType->constant ) {
+                auto mname = secondType->getMangledName();
+                auto it = aliases.find(mname);
+                if ( it==aliases.end() ) aliases[mname] = secondType.get();
+                secondType->collectContainerAliasing(aliases, dep);
+            }
+        } else if ( baseType==Type::tStructure ) {
+            if ( structType ) {
+                if (dep.find(structType) != dep.end()) return;
+                dep.insert(structType);
+                for ( auto & fld : structType->fields ) {
+                    if ( !fld.type->constant ) {
+                        fld.type->collectContainerAliasing(aliases, dep);
+                    }
+                }
+            }
+        } else if ( baseType==Type::tTuple || baseType==Type::tVariant ) {
+            for ( auto & argT : argTypes ) {
+                argT->collectContainerAliasing(aliases, dep);
+            }
+        } else if ( baseType==Type::tPointer ) {
+            if ( firstType ) {
+                firstType->collectContainerAliasing(aliases, dep);
+            }
+        }
+    }
+
+    // Mangled name parser
 
     void MangledNameParser::error ( const string &, const char * ) {
         DAS_VERIFY(0 && "invalid mangled name");

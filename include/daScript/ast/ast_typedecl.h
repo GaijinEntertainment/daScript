@@ -32,6 +32,8 @@ namespace das {
     class ModuleLibrary;
     class ModuleGroup;
 
+    typedef das_hash_map<string,TypeDeclPtr> TypeAliasMap;
+
     struct TypeDecl : ptr_ref_count {
         enum {
             dimAuto = -1,
@@ -153,6 +155,7 @@ namespace das {
         bool isAlias() const;
         bool isAliasOrExpr() const;
         bool isVectorType() const;
+        bool isBaseVectorType() const;
         bool isBitfield() const;
         bool isLocal() const;
         bool isLocal( das_set<Structure*> & dep ) const;
@@ -188,6 +191,9 @@ namespace das {
         int findArgumentIndex(const string & name) const;
         void addVariant(const string & name, const TypeDeclPtr & tt);
         string findBitfieldName ( uint32_t value ) const;
+        void collectAliasing ( TypeAliasMap & aliases, das_set<Structure *> & dep ) const;
+        void collectContainerAliasing ( TypeAliasMap & aliases, das_set<Structure *> & dep ) const;
+    public:
         Type                    baseType = Type::tVoid;
         Structure *             structType = nullptr;
         Enumeration *           enumType = nullptr;

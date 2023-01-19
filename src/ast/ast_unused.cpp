@@ -209,7 +209,7 @@ namespace das {
                 auto swiz = (ExprSwizzle *) expr;
                 swiz->write = true;
                 propagateWrite(swiz->value.get());
-            } else if ( expr->rtti_isAt() ) {
+            } else if ( expr->rtti_isAt() || expr->rtti_isSafeAt() ) {
                 auto at = (ExprAt *) expr;
                 at->write = true;
                 propagateWrite(at->subexpr.get());

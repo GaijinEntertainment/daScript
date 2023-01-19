@@ -129,6 +129,61 @@ namespace das {
         return false;
     }
 
+    typedef das_hash_set<Variable *> ExpressionSources;
+
+    bool collectSources ( Expression * expr, ExpressionSources & src ) {
+        if ( expr->rtti_isVar() ) {
+            auto evar = static_cast<ExprVar *>(expr);
+            src.insert(evar->variable.get());
+        } else if ( expr->rtti_isAt() || expr->rtti_isSafeAt() ) {
+            auto eat = static_cast<ExprAt *>(expr);
+            collectSources(eat->subexpr.get(), src);
+        } else if ( expr->rtti_isField() || expr->rtti_isSafeField()
+                || expr->rtti_isAsVariant() || expr->rtti_isSafeAsVariant() ) {
+            auto efld = static_cast<ExprField *>(expr);
+            collectSources(efld->value.get(), src);
+        } else if ( expr->rtti_isSwizzle() ) {
+            auto eswiz = (ExprSwizzle *) expr;
+            collectSources(eswiz->value.get(), src);
+        } else if ( expr->rtti_isNullCoalescing() ) {
+            auto enull = (ExprNullCoalescing *) expr;
+            collectSources(enull->subexpr.get(), src);
+            collectSources(enull->defaultValue.get(), src);
+        } else if ( expr->rtti_isCast() ) {
+            auto ecast = (ExprCast *) expr;
+            collectSources(ecast->subexpr.get(), src);
+        } else if ( expr->rtti_isOp3() ) {
+            auto eop3 = (ExprOp3 *) expr;
+            collectSources(eop3->left.get(), src);
+            collectSources(eop3->right.get(), src);
+        } else if ( expr->rtti_isRef2Ptr() ) {
+            auto eref = (ExprRef2Ptr *)expr;
+            collectSources(eref->subexpr.get(), src);
+        } else if ( expr->rtti_isPtr2Ref() ) {
+            auto eptr = (ExprPtr2Ref *)expr;
+            collectSources(eptr->subexpr.get(), src);
+            return true;                                // we don't know, its pointer to `something`
+        } else if ( expr->rtti_isR2V() ) {
+            auto eptr = (ExprRef2Value *)expr;
+            collectSources(eptr->subexpr.get(), src);
+        } else {
+            // TODO: this is not going to be necessary
+            DAS_ASSERTF(false, "unsupported expression type %s", expr->__rtti);
+        }
+        return false;
+    }
+
+    Variable * intersectSources ( ExpressionSources & a, ExpressionSources & b ) {
+        for ( auto va : a ) {
+            for ( auto vb : b ) {
+                if ( va==vb ) {
+                    return va;
+                }
+            }
+        }
+        return nullptr;
+    }
+
     class LintVisitor : public Visitor {
         bool checkOnlyFastAot;
         bool checkAotSideEffects;
@@ -139,6 +194,9 @@ namespace das {
         bool checkUnusedBlockArgument;
         bool checkUnsafe;
         bool checkDeprecated;
+        bool checkAliasing;
+        bool needCmresDest;
+        das_hash_map<Expression *,Expression *> cmresDest;
     public:
         LintVisitor ( const ProgramPtr & prog ) : program(prog) {
             checkOnlyFastAot = program->options.getBoolOption("only_fast_aot", program->policies.only_fast_aot);
@@ -150,6 +208,9 @@ namespace das {
             checkUnusedBlockArgument = program->options.getBoolOption("no_unused_block_arguments", program->policies.no_unused_block_arguments);
             checkUnsafe = program->policies.no_unsafe || program->thisModule->doNotAllowUnsafe;
             checkDeprecated = program->options.getBoolOption("no_deprecated", program->policies.no_deprecated);
+            checkAliasing = program->options.getBoolOption("no_aliasing", program->policies.no_aliasing);
+            // extra computations
+            needCmresDest = checkAliasing;
         }
     protected:
         void verifyOnlyFastAot ( Function * _func, const LineInfo & at ) {
@@ -351,6 +412,32 @@ namespace das {
                         arg->at, CompilationError::cant_be_null);
                 }
             }
+            if ( checkAliasing ) {
+                if ( expr->func->resultAliases.size() ) {
+                    auto it = cmresDest.find(expr);
+                    if ( it!=cmresDest.end() ) {
+                        auto resOut = it->second;
+                        ExpressionSources resSrc;
+                        if ( collectSources(resOut, resSrc) ) {
+                            program->error("function " + expr->func->describeName() + " result always aliases",
+                                "some form of ... *ptr ... = " + expr->func->name + "( ... ) where we don't know where pointer came from", "",
+                                    expr->at, CompilationError::argument_aliasing);
+                        }
+                        for ( auto ai : expr->func->resultAliases ) {
+                            ExpressionSources argSrc;
+                            if ( collectSources(expr->arguments[ai].get(), argSrc) ) {
+                                program->error("function " + expr->func->describeName() + " result aliases argument " + expr->func->arguments[ai]->name,
+                                    "some form of ... = " + expr->func->name + "( ... *ptr ... ) where we don't know where pointer came from", "",
+                                        expr->at, CompilationError::argument_aliasing);
+                            } else if ( auto aliasVar = intersectSources ( resSrc, argSrc ) ) {
+                                program->error("function " + expr->func->describeName() + " result aliases argument " + expr->func->arguments[ai]->name,
+                                    "some form of ... " + aliasVar->name + " ... = " + expr->func->name + "( ... " + aliasVar->name + " ... )", "",
+                                        expr->at, CompilationError::argument_aliasing);
+                            }
+                        }
+                    }
+                }
+            }
         }
         virtual void preVisit ( ExprOp1 * expr ) override {
             Visitor::preVisit(expr);
@@ -392,6 +479,9 @@ namespace das {
                 program->error("can't assign null pointer to " + expr->left->type->describe(), "", "",
                     expr->right->at, CompilationError::cant_be_null);
             }
+            if ( needCmresDest ) {
+                cmresDest[expr->right.get()] = expr->left.get();
+            }
         }
         virtual void preVisit ( ExprMove * expr ) override {
             Visitor::preVisit(expr);
@@ -405,6 +495,9 @@ namespace das {
             if ( needAvoidNullPtr(expr->left->type,false) && expr->right->rtti_isNullPtr() ) {
                 program->error("can't assign null pointer to " + expr->left->type->describe(), "", "",
                     expr->right->at, CompilationError::cant_be_null);
+            }
+            if ( needCmresDest ) {
+                cmresDest[expr->right.get()] = expr->left.get();
             }
         }
         virtual void preVisit ( ExprClone * expr ) override {
@@ -475,9 +568,11 @@ namespace das {
                     }
                 }
             }
+
         }
         virtual FunctionPtr visit ( Function * fn ) override {
             func = nullptr;
+            cmresDest.clear();
             return Visitor::visit(fn);
         }
         virtual void preVisitArgument ( Function * fn, const VariablePtr & var, bool lastArg ) override {
@@ -582,6 +677,7 @@ namespace das {
         "log_mn_hash",                  Type::tBool,
         "log_gmn_hash",                 Type::tBool,
         "log_ad_hash",                  Type::tBool,
+        "log_aliasing",                 Type::tBool,
         "print_ref",                    Type::tBool,
         "print_var_access",             Type::tBool,
         "print_c_style",                Type::tBool,
@@ -616,13 +712,56 @@ namespace das {
         DAS_VERIFYF(!failed, "verifyOptions failed");
     }
 
-    void Program::lint ( ModuleGroup & libGroup ) {
+    void deriveAliasing ( const FunctionPtr & func, TextWriter & logs, bool logAliasing ) {
+        if ( func->arguments.size()==0 ) return;
+        if ( func->result->isRef() ) {
+            if ( logAliasing ) logs << "function " << func->getMangledName() << " returns by reference\n";
+            func->resultAliases.clear();
+            das_set<Structure *> rdep;
+            TypeAliasMap resTypeAliases;
+            func->result->collectAliasing(resTypeAliases, rdep);
+            for ( int i=0; i!=func->arguments.size(); ++i ) {
+                if ( !(func->arguments[i]->type->isRef() || func->arguments[i]->type->baseType==Type::tPointer) ) {
+                    continue;
+                }
+                das_set<Structure *> dep;
+                TypeAliasMap typeAliases;
+                func->arguments[i]->type->collectAliasing(typeAliases, dep);
+                for ( auto resT : resTypeAliases ) {
+                    for ( auto alias : typeAliases ) {
+                        if ( alias.second->isSameType(*(resT.second),RefMatters::no,ConstMatters::no,TemporaryMatters::no,AllowSubstitute::yes,false,false) ) {
+                            func->resultAliases.push_back(i);
+                            if ( logAliasing ) logs << "\targument " << i << " aliasing result with type "
+                                << func->arguments[i]->type->describe() << "\n";
+                            goto nada;
+                        }
+                    }
+                }
+                nada:;
+            }
+
+        }
+    }
+
+    void Program::deriveAliases(TextWriter & logs) {
+        if ( !policies.no_aliasing ) return;
+        bool logAliasing = options.getBoolOption("log_aliasing", false);
+        if ( logAliasing ) logs << "ALIASING:\n";
+        thisModule->functions.foreach([&](const FunctionPtr & func) {
+            if ( func->builtIn || !func->used ) return;
+            deriveAliasing(func, logs, logAliasing);
+        });
+        if ( logAliasing ) logs << "\n";
+    }
+
+    void Program::lint ( TextWriter & logs, ModuleGroup & libGroup ) {
         if (!options.getBoolOption("lint", true)) {
             return;
         }
         // note: build access flags is now called before patchAnnotations, and is no longer needed in lint
         // TextWriter logs; buildAccessFlags(logs);
         checkSideEffects();
+        deriveAliases(logs);
         // lint it
         LintVisitor lintV(this);
         visit(lintV);
