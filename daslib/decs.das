@@ -413,7 +413,7 @@ def public for_eid_archetype ( eid:EntityId implicit; hash:ComponentHash; var er
     if lookup.generation != eid.generation
         return false
     var qi = -1
-    decsState.queryLookup |> find_if_exists(hash) <| $ ( ql )
+    decsState.queryLookup |> get(hash) <| $ ( ql )
         qi = ql - 1
     if qi == -1
         qi = lookup_request(invoke(erq))
@@ -432,7 +432,7 @@ def public for_each_archetype ( hash:ComponentHash; var erq : function<():EcsReq
     //! Invokes block for each entity of each archetype that can be processed by the request.
     //! Request is returned by a specified function.
     var qi = -1
-    decsState.queryLookup |> find_if_exists(hash) <| $ ( ql )
+    decsState.queryLookup |> get(hash) <| $ ( ql )
         qi = ql - 1
     if qi == -1
         qi = lookup_request(invoke(erq))
@@ -448,7 +448,7 @@ def public for_each_archetype_find ( hash:ComponentHash; var erq : function<():E
     //! Request is returned by a specified function.
     //! If block returns true, iteration is stopped.
     var qi = -1
-    decsState.queryLookup |> find_if_exists(hash) <| $ ( ql )
+    decsState.queryLookup |> get(hash) <| $ ( ql )
         qi = ql - 1
     if qi == -1
         qi = lookup_request(invoke(erq))
