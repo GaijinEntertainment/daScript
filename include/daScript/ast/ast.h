@@ -733,8 +733,16 @@ namespace das
         das_set<Function *>     useFunctions;
         das_set<Variable *>     useGlobalVariables;
         Structure *         classParent = nullptr;
+    // this is what we use for alias checking
         vector<int>         resultAliases;
         vector<vector<int>> argumentAliases;
+        struct AliasInfo {
+            Variable *  var = nullptr;
+            Function *  func = nullptr;
+            bool        viaPointer = false;
+        };
+        vector<AliasInfo>  resultAliasesGlobals;
+    // end of what we use for alias checking
         union {
             struct {
                 bool    builtIn : 1;

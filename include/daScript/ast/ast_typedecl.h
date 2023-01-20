@@ -32,7 +32,7 @@ namespace das {
     class ModuleLibrary;
     class ModuleGroup;
 
-    typedef das_hash_map<string,TypeDeclPtr> TypeAliasMap;
+    typedef das_hash_map<string,pair<TypeDeclPtr,bool>> TypeAliasMap;
 
     struct TypeDecl : ptr_ref_count {
         enum {
@@ -191,8 +191,8 @@ namespace das {
         int findArgumentIndex(const string & name) const;
         void addVariant(const string & name, const TypeDeclPtr & tt);
         string findBitfieldName ( uint32_t value ) const;
-        void collectAliasing ( TypeAliasMap & aliases, das_set<Structure *> & dep ) const;
-        void collectContainerAliasing ( TypeAliasMap & aliases, das_set<Structure *> & dep ) const;
+        void collectAliasing ( TypeAliasMap & aliases, das_set<Structure *> & dep, bool viaPointer ) const;
+        void collectContainerAliasing ( TypeAliasMap & aliases, das_set<Structure *> & dep, bool viaPointer ) const;
     public:
         Type                    baseType = Type::tVoid;
         Structure *             structType = nullptr;

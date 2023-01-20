@@ -1,3 +1,6 @@
+
+options no_aliasing
+
 require daslib/random
 
 var seed : int4
@@ -8,29 +11,60 @@ struct Foo
     a : int
     b : float4
 
+// potential alias - cmres vs argument a
 def set ( a : Foo )
     var b = [[Foo a = 13]]
     b.a += a.a
     return b
 
+// potential alias - cmres.a vs argument inc
 def set2 ( inc : int& )
     var b = [[Foo a = 13]]
     b.a += inc
     return b
 
+// no aliasing ever
 def set2_ok ( inc : int )
     var b = [[Foo a = 13]]
     b.a += inc
     return b
 
+// potential alias - cmres.b.{xyzw} vs argument incf
 def set3 ( incf : float& )
     var b = [[Foo b = float4(13.) ]]
     b.b += float4(incf)
     return b
 
+// potential alias - cmres.a vs argument inc via *inc
 def set4 ( inc : int? )
     var b = [[Foo a = 13]]
     b.a += *inc
+    return b
+
+var g_a, g_b : Foo
+
+var g_p_a = new Foo()
+var g_p_b = g_p_a
+
+// potential alias - global variable cmres vs global variable g_a
+def set5
+    var b = [[Foo a = 13]]
+    b.a += g_a.a
+    return b
+
+def get_a : Foo
+    return g_a
+
+// potential alias - global variable cmres vs global variable g_a via get_a function
+def set6
+    var b = [[Foo a = 13]]
+    b.a += get_a().a
+    return b
+
+// this function ALWAYS aliases its result, becase it reads g_p_a pointer
+def set7
+    var b = [[Foo a = 13]]
+    b.a += g_p_a?.a ?? 100500
     return b
 
 [export]
@@ -91,7 +125,31 @@ def main
         b = set2(*paa)      // 40211: function set result aliases argument a
                                 // note - false aliasing
         set2(*paa)          // this oke ok
+    if FULL_TEST
+        g_a = [[Foo a = 1]]
+        g_a = set5()        // 40211: function set5 result aliases global variable ::g_a S<::Foo> through function set5
+        g_a = [[Foo a = 1]]
+        g_b = set5()        // this one ok
+    if FULL_TEST
+        g_a = [[Foo a = 1]]
+        g_a = set6()        // 40211: function set6 result aliases global variable ::g_a S<::Foo> through function get_a
+        g_a = [[Foo a = 1]]
+        g_b = set6()        // this one ok
+    if FULL_TEST
+        var a = new [[Foo a = 1]]
+        var b : Foo
+        b = set(*a)         // 40211: function set result aliases argument a
+                                // note - false aliasing
+    if FULL_TEST
+        var a = [[Foo a = 1]]
+        var b = new [[Foo]]
+        *b = set(a)     // 40211: function set result always aliases
+                                // note - false aliasing
+    if FULL_TEST
+        g_b = set7()    // 40211: function set7 result aliases global variable ::g_p_a 1<S<::Foo>>? through function set7
+                                // note - false aliasing
 
+// options log_aliasing
 
 
 

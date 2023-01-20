@@ -2643,58 +2643,59 @@ namespace das
         }
     }
 
-    void TypeDecl::collectAliasing ( TypeAliasMap & aliases, das_set<Structure *> & dep ) const {
-        auto mname = getMangledName();
-        auto it = aliases.find(mname);
-        if ( it==aliases.end() ) {
-            aliases[mname] = (TypeDecl *) this;
-            if ( isBaseVectorType() ) {
-                auto bt = make_smart<TypeDecl>(getVectorBaseType());
-                aliases[bt->getMangledName()] = bt;
+    void append ( TypeAliasMap & aliases, const TypeDeclPtr & td, bool viaPointer ) {
+        auto mname = td->getMangledName();
+        auto & aMain = aliases[mname];
+        aMain.first = td;
+        aMain.second |= viaPointer;
+        if ( td->isBaseVectorType() ) {
+            auto bt = make_smart<TypeDecl>(td->getVectorBaseType());
+            auto & aSub = aliases[bt->getMangledName()];
+            aSub.first = bt;
+            aSub.second |= viaPointer;
         }
-        }
+    }
+
+    void TypeDecl::collectAliasing ( TypeAliasMap & aliases, das_set<Structure *> & dep, bool viaPointer ) const {
+        append(aliases, (TypeDecl *) this, viaPointer);
         if ( baseType==Type::tArray ) {
             if ( firstType  ) {
-                firstType->collectAliasing(aliases, dep);
+                firstType->collectAliasing(aliases, dep, viaPointer);
             }
         } else if ( baseType==Type::tTable ) {
             if ( secondType ) {
-                secondType->collectAliasing(aliases, dep);
+                secondType->collectAliasing(aliases, dep, viaPointer);
             }
         } else if ( baseType==Type::tStructure ) {
             if ( structType ) {
                 if (dep.find(structType) != dep.end()) return;
                 dep.insert(structType);
                 for ( auto & fld : structType->fields ) {
-                    fld.type->collectAliasing(aliases, dep);
+                    fld.type->collectAliasing(aliases, dep, viaPointer);
                 }
             }
         } else if ( baseType==Type::tTuple || baseType==Type::tVariant ) {
             for ( auto & argT : argTypes ) {
-                argT->collectAliasing(aliases, dep);
+                argT->collectAliasing(aliases, dep, viaPointer);
             }
         } else if ( baseType==Type::tPointer ) {
             if ( firstType ) {
-                firstType->collectAliasing(aliases, dep);
+                firstType->collectAliasing(aliases, dep, true);
             }
         }
     }
 
-    void TypeDecl::collectContainerAliasing ( TypeAliasMap & aliases, das_set<Structure *> & dep ) const {
+    void TypeDecl::collectContainerAliasing ( TypeAliasMap & aliases, das_set<Structure *> & dep, bool viaPointer ) const {
         if ( constant ) return;
         if ( baseType==Type::tArray ) {
             if ( firstType && !firstType->constant ) {
-                auto mname = firstType->getMangledName();
-                auto it = aliases.find(mname);
-                if ( it==aliases.end() ) aliases[mname] = firstType.get();
-                firstType->collectContainerAliasing(aliases, dep);
+                append(aliases, firstType, viaPointer);
+                firstType->collectContainerAliasing(aliases, dep, viaPointer);
             }
         } else if ( baseType==Type::tTable ) {
             if ( secondType && !secondType->constant ) {
-                auto mname = secondType->getMangledName();
-                auto it = aliases.find(mname);
-                if ( it==aliases.end() ) aliases[mname] = secondType.get();
-                secondType->collectContainerAliasing(aliases, dep);
+                append(aliases, secondType, viaPointer);
+                secondType->collectContainerAliasing(aliases, dep, viaPointer);
             }
         } else if ( baseType==Type::tStructure ) {
             if ( structType ) {
@@ -2702,17 +2703,17 @@ namespace das
                 dep.insert(structType);
                 for ( auto & fld : structType->fields ) {
                     if ( !fld.type->constant ) {
-                        fld.type->collectContainerAliasing(aliases, dep);
+                        fld.type->collectContainerAliasing(aliases, dep, viaPointer);
                     }
                 }
             }
         } else if ( baseType==Type::tTuple || baseType==Type::tVariant ) {
             for ( auto & argT : argTypes ) {
-                argT->collectContainerAliasing(aliases, dep);
+                argT->collectContainerAliasing(aliases, dep, viaPointer);
             }
         } else if ( baseType==Type::tPointer ) {
             if ( firstType ) {
-                firstType->collectContainerAliasing(aliases, dep);
+                firstType->collectContainerAliasing(aliases, dep, viaPointer);
             }
         }
     }
