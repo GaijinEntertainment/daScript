@@ -77,6 +77,7 @@ namespace das {
     }
 
     void Program::deriveAliases(TextWriter & logs) {
+        if ( !options.getBoolOption("no_aliasing", policies.no_aliasing) ) return;
         bool logAliasing = options.getBoolOption("log_aliasing", false);
         if ( logAliasing ) logs << "ALIASING:\n";
         thisModule->functions.foreach([&](const FunctionPtr & func) {
