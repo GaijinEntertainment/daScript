@@ -36,7 +36,7 @@ class PrintVisitor : AstVisitor
         print("// program\n")
     def override visitProgram(prog:ProgramPtr)
         print("// end program\n")
-    def override preVisitProgramBody(prog:ProgramPtr)
+    def override preVisitProgramBody(prog:ProgramPtr; mod:Module?)
         print("// program body\n")
 // type
     ET : bool = false
@@ -101,7 +101,7 @@ class PrintVisitor : AstVisitor
         if fun.result != null && !fun.result.isVoid
             print(" : {describe([decl=fun.result,extra=extraTypeInfo])}")
         print("\n")
-    def override visitFunction(fun:FunctionPtr; expr:ExpressionPtr) : FunctionPtr
+    def override visitFunction(fun:FunctionPtr) : FunctionPtr
         print("\n")
         return fun
     def override preVisitFunctionArgument(fun:FunctionPtr;arg:VariablePtr;last:bool)
