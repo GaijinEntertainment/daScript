@@ -98,6 +98,14 @@ namespace das
         }
     };
 
+    struct NeverAliasCMRESFunctionAnnotation : MarkFunctionAnnotation {
+        NeverAliasCMRESFunctionAnnotation() : MarkFunctionAnnotation("never_alias_cmres") { }
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+            func->neverAliasCMRES = true;
+            return true;
+        };
+    };
+
     // dummy annotation for optimization hints on functions or blocks
     struct HintFunctionAnnotation : FunctionAnnotation {
         HintFunctionAnnotation() : FunctionAnnotation("hint") { }
@@ -1063,6 +1071,7 @@ namespace das
         addAnnotation(make_smart<HintFunctionAnnotation>());
         addAnnotation(make_smart<RequestJitFunctionAnnotation>());
         addAnnotation(make_smart<DeprecatedFunctionAnnotation>());
+        addAnnotation(make_smart<NeverAliasCMRESFunctionAnnotation>());
         addAnnotation(make_smart<ExportFunctionAnnotation>());
         addAnnotation(make_smart<NoLintFunctionAnnotation>());
         addAnnotation(make_smart<SideEffectsFunctionAnnotation>());

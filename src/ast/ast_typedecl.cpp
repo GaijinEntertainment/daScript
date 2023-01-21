@@ -2658,6 +2658,7 @@ namespace das
 
     void TypeDecl::collectAliasing ( TypeAliasMap & aliases, das_set<Structure *> & dep, bool viaPointer ) const {
         append(aliases, (TypeDecl *) this, viaPointer);
+        if ( temporary ) return;    // temporary types never alias
         if ( baseType==Type::tArray ) {
             if ( firstType  ) {
                 firstType->collectAliasing(aliases, dep, viaPointer);

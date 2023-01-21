@@ -168,7 +168,7 @@ namespace das {
             collectSources(eptr->subexpr.get(), src);
         } else {
             // TODO: this is not going to be necessary
-            DAS_ASSERTF(false, "unsupported expression type %s", expr->__rtti);
+            // DAS_ASSERTF(false, "unsupported expression type %s", expr->__rtti);
         }
         return false;
     }
@@ -182,19 +182,6 @@ namespace das {
             }
         }
         return nullptr;
-    }
-
-    void collectIndVariables ( Function * at, Function * lookup, das_hash_map<Variable *,Function *>  & indGlobalVariables, das_hash_set<Function *> & accessed ) {
-        if ( accessed.find(lookup)!=accessed.end() ) return;
-        accessed.insert(lookup);
-        for ( auto var : lookup->useGlobalVariables ) {
-            if ( indGlobalVariables.find(var)==indGlobalVariables.end() ) {
-                indGlobalVariables[var] = lookup;
-            }
-        }
-        for ( auto fun : lookup->useFunctions ) {
-            collectIndVariables(at, fun, indGlobalVariables, accessed);
-        }
     }
 
     class LintVisitor : public Visitor {
@@ -449,7 +436,6 @@ namespace das {
                             }
                         }
                         for ( auto & vit : expr->func->resultAliasesGlobals) {
-                            TextPrinter tp;
                             ExpressionSources argSrc;
                             argSrc.insert(vit.var);
                             if ( vit.viaPointer ) {
@@ -746,82 +732,13 @@ namespace das {
         DAS_VERIFYF(!failed, "verifyOptions failed");
     }
 
-    void deriveAliasing ( const FunctionPtr & func, TextWriter & logs, bool logAliasing ) {
-        if ( !func->result->isRef() ) return;
-        if ( func->arguments.size()==0 && func->useGlobalVariables.size()==0 && func->useFunctions.size()==0 ) return;
-    // collect indirect global variables
-        das_hash_map<Variable *,Function *> ind;
-        das_hash_set<Function *> depInd;
-        collectIndVariables(func.get(),func.get(),ind,depInd);
-        if ( func->arguments.size()==0 && ind.size()==0 ) return;
-    // collect type aliasing
-        if ( logAliasing ) logs << "function " << func->getMangledName() << " returns by reference\n";
-        func->resultAliases.clear();
-        das_set<Structure *> rdep;
-        TypeAliasMap resTypeAliases;
-        func->result->collectAliasing(resTypeAliases, rdep, false);
-    // do arguments
-        for ( int i=0; i!=func->arguments.size(); ++i ) {
-            if ( !(func->arguments[i]->type->isRef() || func->arguments[i]->type->baseType==Type::tPointer) ) {
-                continue;
-            }
-            das_set<Structure *> dep;
-            TypeAliasMap typeAliases;
-            func->arguments[i]->type->collectAliasing(typeAliases, dep, false);
-            for ( auto resT : resTypeAliases ) {
-                for ( auto alias : typeAliases ) {
-                    if ( alias.second.first->isSameType(*(resT.second.first),RefMatters::no,ConstMatters::no,TemporaryMatters::no,AllowSubstitute::yes,false,false) ) {
-                        func->resultAliases.push_back(i);
-                        if ( logAliasing ) logs << "\targument " << i << " aliasing result with type "
-                            << func->arguments[i]->type->describe() << "\n";
-                        goto nada;
-                    }
-                }
-            }
-            nada:;
-        }
-    // do globals
-        for ( auto & it : ind ) {
-            if ( !(it.first->type->isRef() || it.first->type->baseType==Type::tPointer) ) {
-                continue;
-            }
-            das_set<Structure *> dep;
-            TypeAliasMap typeAliases;
-            it.first->type->collectAliasing(typeAliases, dep, false);
-            for ( auto resT : resTypeAliases ) {
-                for ( auto alias : typeAliases ) {
-                    if ( alias.second.first->isSameType(*(resT.second.first),RefMatters::no,ConstMatters::no,TemporaryMatters::no,AllowSubstitute::yes,false,false) ) {
-                        Function::AliasInfo info = {it.first, it.second, resT.second.second || alias.second.second};
-                        func->resultAliasesGlobals.emplace_back(info);
-                        if ( logAliasing ) logs << "\tglobal variable " << it.first->getMangledName() << " aliasing result with type "
-                            << it.first->type->describe() << (info.viaPointer ? " through pointer aliasing" : "") <<  "\n";
-                        goto nadaHere;
-                    }
-                }
-            }
-            nadaHere:;
-        }
-    }
-
-    void Program::deriveAliases(TextWriter & logs) {
-        if ( !options.getBoolOption("no_aliasing", policies.no_aliasing) ) return;
-        bool logAliasing = options.getBoolOption("log_aliasing", false);
-        if ( logAliasing ) logs << "ALIASING:\n";
-        thisModule->functions.foreach([&](const FunctionPtr & func) {
-            if ( func->builtIn || !func->used ) return;
-            deriveAliasing(func, logs, logAliasing);
-        });
-        if ( logAliasing ) logs << "\n";
-    }
-
-    void Program::lint ( TextWriter & logs, ModuleGroup & libGroup ) {
+    void Program::lint ( TextWriter & /*logs*/, ModuleGroup & libGroup ) {
         if (!options.getBoolOption("lint", true)) {
             return;
         }
         // note: build access flags is now called before patchAnnotations, and is no longer needed in lint
         // TextWriter logs; buildAccessFlags(logs);
         checkSideEffects();
-        deriveAliases(logs);
         // lint it
         LintVisitor lintV(this);
         visit(lintV);

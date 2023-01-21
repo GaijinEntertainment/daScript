@@ -719,6 +719,7 @@ namespace das
             return this;
         }
         Function * getOrigin() const;
+        bool allowCmresAlias() const { return (copyOnReturn || moveOnReturn) && (neverAliasCMRES || !aliasCMRES);  }
     public:
         AnnotationList      annotations;
         string              name;
@@ -796,6 +797,8 @@ namespace das
                 bool    safeImplicit : 1;
 
                 bool    deprecated : 1;
+                bool    aliasCMRES : 1;
+                bool    neverAliasCMRES : 1;
             };
             uint32_t moreFlags = 0;
 
@@ -1300,7 +1303,6 @@ namespace das
         void inferTypesDirty(TextWriter & logs, bool verbose);
         void lint (TextWriter & logs, ModuleGroup & libGroup );
         void checkSideEffects();
-        void deriveAliases(TextWriter & logs);
         void foldUnsafe();
         bool optimizationRefFolding();
         bool optimizationConstFolding();
@@ -1320,6 +1322,7 @@ namespace das
         void clearSymbolUse();
         void dumpSymbolUse(TextWriter & logs);
         void allocateStack(TextWriter & logs);
+        void deriveAliases(TextWriter & logs);
         bool simulate ( Context & context, TextWriter & logs, StackAllocator * sharedStack = nullptr );
         uint64_t getInitSemanticHashWithDep( uint64_t initHash ) const;
         void error ( const string & str, const string & extra, const string & fixme, const LineInfo & at, CompilationError cerr = CompilationError::unspecified );

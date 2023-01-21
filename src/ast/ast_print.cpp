@@ -80,12 +80,14 @@ namespace das {
                 printRef = program->options.getBoolOption("print_ref");
                 printVarAccess = program->options.getBoolOption("print_var_access");
                 printCStyle = program->options.getBoolOption("print_c_style");
+                printAliases= program->options.getBoolOption("log_aliasing");
             }
         }
         string str() const { return ss.str(); };
         bool printRef = false;
         bool printVarAccess = false;
         bool printCStyle = false;
+        bool printAliases = false;
     protected:
         void newLine () {
             auto nlPos = ss.tellp();
@@ -285,6 +287,24 @@ namespace das {
             if ( fn->isClassMethod ) { ss << "[class_method(" << fn->classParent->getMangledName() << ")]\n"; }
             if ( fn->generator ) { ss << "[GENERATOR]\n"; }
             logAnnotations(fn->annotations);
+            if ( printAliases ) {
+                if ( fn->resultAliases.size() ) {
+                    ss << "// cmres aliases arguments";
+                    for ( auto ai : fn->resultAliases ) {
+                        ss << " " << fn->arguments[ai]->name;
+                    }
+                    ss << "\n";
+                }
+                if ( fn->resultAliasesGlobals.size() ) {
+                    for ( auto & vinfo : fn->resultAliasesGlobals ) {
+                        ss << "// cmres " << (vinfo.viaPointer ? "always " : "") << "aliases " << vinfo.var->getMangledName();
+                        if ( fn != vinfo.func ) {
+                            ss << " via function " << vinfo.func->getMangledName();
+                        }
+                        ss << "\n";
+                    }
+                }
+            }
             ss << "def " << (fn->privateFunction ? "private " : "public ") << fn->name;
             if ( fn->arguments.size() ) ss << " ( ";
         }
