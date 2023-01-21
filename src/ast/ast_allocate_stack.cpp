@@ -131,7 +131,7 @@ namespace das {
                     mkl->doesNotNeedSp = true;
                 } else if ( var->init->rtti_isCall() ) {
                     auto cll = static_pointer_cast<ExprCall>(var->init);
-                    if ( cll->func->allowCmresAlias() ) {
+                    if ( cll->func->allowCmresAlias() && !cll->cmresAlias ) {
                         cll->doesNotNeedSp = true;
                     }
                 } else if ( var->init->rtti_isInvoke() ) {
@@ -216,7 +216,7 @@ namespace das {
                     mkl->doesNotNeedInit = false;
                 } else if ( expr->subexpr->rtti_isCall() ) {
                     auto cll = static_pointer_cast<ExprCall>(expr->subexpr);
-                    if ( cll->func->allowCmresAlias() ) {
+                    if ( cll->func->allowCmresAlias() && !cll->cmresAlias ) {
                         cll->doesNotNeedSp = true;
                         expr->returnCallCMRES = true;
                     }
@@ -519,7 +519,7 @@ namespace das {
                 mkl->doesNotNeedInit = false;
             } else if ( expr->right->rtti_isCall() ) {
                 auto cll = static_pointer_cast<ExprCall>(expr->right);
-                if ( cll->func->allowCmresAlias() ) {
+                if ( cll->func->allowCmresAlias() && !cll->cmresAlias ) {
                     cll->doesNotNeedSp = true;
                 }
             } else if ( expr->right->rtti_isInvoke() ) {
@@ -546,7 +546,7 @@ namespace das {
                 mkl->doesNotNeedInit = false;
             } else if ( expr->right->rtti_isCall() ) {
                 auto cll = static_pointer_cast<ExprCall>(expr->right);
-                if ( cll->func->allowCmresAlias() ) {
+                if ( cll->func->allowCmresAlias() && !cll->cmresAlias ) {
                     cll->doesNotNeedSp = true;
                 }
             } else if ( expr->right->rtti_isInvoke() ) {

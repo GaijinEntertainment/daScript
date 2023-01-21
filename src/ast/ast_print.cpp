@@ -594,7 +594,9 @@ namespace das {
     // call
         virtual void preVisit ( ExprCall * call ) override {
             Visitor::preVisit(call);
-            ss << call->name << "(";
+            ss << call->name;
+            if ( printAliases && call->doesNotNeedSp ) ss << " /*no_sp*/ ";
+            ss << "(";
         }
         virtual ExpressionPtr visitCallArg ( ExprCall * call, Expression * arg, bool last ) override {
             if ( !last ) ss << ",";

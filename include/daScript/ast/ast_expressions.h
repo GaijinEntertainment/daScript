@@ -1175,7 +1175,8 @@ namespace das
         virtual ExpressionPtr visit(Visitor & vis) override;
         static SimNode_CallBase * simulateCall (const FunctionPtr & func, const ExprLooksLikeCall * expr,
             Context & context, SimNode_CallBase * pCall);
-        bool            doesNotNeedSp = false;
+        bool doesNotNeedSp = false;
+        bool cmresAlias = false;
     };
 
     struct ExprIfThenElse : Expression {

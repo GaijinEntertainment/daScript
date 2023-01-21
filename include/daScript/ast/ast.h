@@ -1236,7 +1236,7 @@ namespace das
         bool ignore_shared_modules = false;
         bool default_module_public = true;              // by default module is 'public', not 'private'
         bool no_deprecated = false;
-        bool no_aliasing = false;
+        bool no_aliasing = false;                       // if true, aliasing will be reported as error, otherwise will turn off optimization
     // environment
         bool no_optimizations = false;                  // disable optimizations, regardless of settings
         bool fail_on_no_aot = true;                     // AOT link failure is error

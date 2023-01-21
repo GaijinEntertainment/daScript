@@ -1,11 +1,14 @@
-expect 40211:19
-options no_aliasing
+// expect 40211:19
+// options no_aliasing
+
+options log
+options log_aliasing
 
 require daslib/random
 
 var seed : int4
 
-let FULL_TEST = true
+let FULL_TEST = false
 
 struct Foo
     a : int
@@ -80,7 +83,10 @@ def main
         var a = [[Foo a = 1]]
         var b : Foo
         a = set(a)                  // (1) 40211: function set result aliases argument a
+        print("a = {a}\n")
+        a = [[Foo a = 1]]
         b = set(a)                  // this one ok
+        print("b = {b}\n")
     if FULL_TEST // field aliasing
         var a = [[Foo a = 1]]
         var b : Foo
@@ -160,3 +166,4 @@ def main
         a = set(pass_ref_a(a))  // (19) 40211: function set result aliases argument a
         a = [[Foo a = 1]]
         a = set(pass_a(a))      // this one ok
+

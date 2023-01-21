@@ -1,11 +1,10 @@
-expect 40211:19
-options no_aliasing
+require dastest/testing_boost public
 
 require daslib/random
 
 var seed : int4
 
-let FULL_TEST = true
+let FULL_TEST = false
 
 struct Foo
     a : int
@@ -74,89 +73,150 @@ def pass_ref_a ( var a:Foo ) : Foo&
     unsafe
         return a
 
-[export]
-def main
-    if FULL_TEST // straight up aliasing
+[test]
+def test_aliasing ( t : T? )
+    t |> run("straight up aliasing") <| @ ( t : T? )
         var a = [[Foo a = 1]]
         var b : Foo
         a = set(a)                  // (1) 40211: function set result aliases argument a
+        t |> equal ( 14, a.a)
+        a = [[Foo a = 1]]
         b = set(a)                  // this one ok
-    if FULL_TEST // field aliasing
+        t |> equal ( 14, b.a)
+    t |> run("field aliasing") <| @ ( t : T? )
         var a = [[Foo a = 1]]
         var b : Foo
         a = set2(a.a)               // (2) 40211: function set result aliases argument inc
+        t |> equal(14, a.a)
+        a = [[Foo a = 1]]
         a = set2_ok(a.a)            // this one ok
+        t |> equal(14, a.a)
+        a = [[Foo a = 1]]
         b = set2(a.a)               // this one ok
-    if FULL_TEST // swizzle + vector subtype aliasing
+        t |> equal(14, b.a)
+    t |> run("swizzle + vector subtype aliasing") <| @ ( t : T? )
         var a = [[Foo b = float4(1.)]]
         var b : Foo
         a = set3(a.b.x)             // (3) 40211: function set result aliases argument incf
+        t |> equal(14., a.b.x)
+        a = [[Foo b = float4(1.)]]
         b = set3(a.b.y)             // this one ok
-    if FULL_TEST // array [] aliasing
+        t |> equal(14., b.b.y)
+    t |> run("array [] aliasing") <| @ ( t : T? )
         var a,b : Foo[2]
+        a[1] = [[Foo a = 1]]
         a[0] = set(a[1])            // (4) 40211: function set result aliases argument a
                                         // note - false aliasing
+        t |> equal(14, a[0].a)
+        a[1] = [[Foo a = 1]]
         b[0] = set(a[1])            // this one ok
-    if FULL_TEST  // array ?[] aliasing, ?? aliasing
+        t |> equal(14, b[0].a)
+    t |> run("array ?[] aliasing, ?? aliasing") <| @ ( t : T? )
         var a,b : Foo[2]
-        var defv : Foo
+        var defv = [[Foo a = 2]]
+        a[0] = [[Foo a = 1]]
         a?[0] ?? defv = set(a[0])   // (5) 40211: function set result aliases argument a
+        t |> equal(14, a[0].a)
+        t |> equal(2, defv.a)
+        a[0] = [[Foo a = 1]]
         a?[1] ?? defv = set(defv)   // (6) 40211: function set result aliases argument a
+        t |> equal(15, a[1].a)
+        t |> equal(2, defv.a)
+        a[0] = [[Foo a = 1]]
         b?[0] ?? defv = set(a[0])   // this one ok
-    if FULL_TEST // cast aliasing
+        t |> equal(14, b[0].a)
+        t |> equal(2, defv.a)
+        a[0] = [[Foo a = 1]]
+        b?[3] ?? defv = set(a[0])   // this one ok
+        t |> equal(14, defv.a)
+    t |> run("cast aliasing") <| @ ( t : T? )
         var a = [[Foo a = 1]]
-        var b : Foo
-        unsafe
-            a = set2(reinterpret<int&> a.b) // (7) 40211: function set result aliases argument inc
-            a = set2(reinterpret<int&> b.b) // this one ok
-    if FULL_TEST // op3 aliasing
+        var b = [[Foo a = 2]]
+        a = set2(unsafe(reinterpret<int&> a.b)) // (7) 40211: function set result aliases argument inc
+        t |> equal(13, a.a)
+        a = [[Foo a = 1]]
+        a = set2(unsafe(reinterpret<int&> b.b)) // this one ok
+        t |> equal(13, a.a)
+    t |> run("op3 aliasing") <| @ ( t : T? )
         var a = [[Foo a = 1]]
-        var b : Foo
+        var b = [[Foo a = 2]]
         var cond = (random_int(seed) & 1) != 0
         cond ? a : b = set(a)       // (8) 40211: function set result aliases argument a
+        t |> equal ( 14, cond ? a.a : b.a)
+        a = [[Foo a = 1]]
+        b = [[Foo a = 2]]
         a = set ( cond ? a : b )    // (9) 40211: function set result aliases argument a
+        t |> equal ( cond ? 14 : 15, a.a )
+        a = [[Foo a = 1]]
+        b = [[Foo a = 2]]
         a = set ( cond ? b : b )    // this one ok
-    if FULL_TEST // ref2ptr
+        t |> equal ( 15, a.a )
+    t |> run("ref2ptr aliasing") <| @ ( t : T? )
         var a = [[Foo a = 1]]
-        var b : Foo
+        var b = [[Foo a = 2]]
         a = set4(unsafe(addr(a.a))) // (10) 40211: function set result aliases argument a
+        t |> equal(14, a.a)
+        a = [[Foo a = 1]]
+        b = [[Foo a = 2]]
         b = set4(unsafe(addr(a.a))) // this one ok
+        t |> equal(14, b.a)
+        a = [[Foo a = 1]]
+        b = [[Foo a = 2]]
         a = set4(unsafe(addr(b.a))) // this one ok
-    if FULL_TEST // ptr2ref, ref2value
+        t |> equal(15, a.a)
+    t |> run("ptr2ref, ref2value aliasing") <| @ ( t : T? )
         var a = [[Foo a = 1]]
         var pa = unsafe(addr(a))
         var paa = unsafe(addr(a.a))
         var b : Foo
         a = set2(*paa)      // (11) 40211: function set result aliases argument a
+        t |> equal(14, a.a)
+        a = [[Foo a = 1]]
         *pa = set2(a.a)     // (12) 40211: function set result aliases argument a
+        t |> equal(14, a.a)
+        a = [[Foo a = 1]]
         b = set2(*paa)      // (13) 40211: function set result aliases argument a
                                 // note - false aliasing
+        t |> equal(14, b.a)
+        a = [[Foo a = 1]]
         set2(*paa)          // this oke ok
-    if FULL_TEST
+        t |> equal(1, a.a)
+    t |> run("global variable aliasing") <| @ ( t : T? )
         g_a = [[Foo a = 1]]
         g_a = set5()        // (14) 40211: function set5 result aliases global variable ::g_a S<::Foo> through function set5
+        t |> equal(14, g_a.a)
         g_a = [[Foo a = 1]]
         g_b = set5()        // this one ok
-    if FULL_TEST
+        t |> equal(14, g_b.a)
+    t |> run("global variable through function aliasing") <| @ ( t : T? )
         g_a = [[Foo a = 1]]
         g_a = set6()        // (15) 40211: function set6 result aliases global variable ::g_a S<::Foo> through function get_a
+        t |> equal(14, g_a.a)
         g_a = [[Foo a = 1]]
         g_b = set6()        // this one ok
-    if FULL_TEST
+        t |> equal(14, g_b.a)
+    t |> run("pointer argument false aliasing") <| @ ( t : T? )
         var a = new [[Foo a = 1]]
         var b : Foo
         b = set(*a)         // (16) 40211: function set result aliases argument a
                                 // note - false aliasing
-    if FULL_TEST
+        t |> equal(14, b.a)
+    t |> run("pointer result false aliasing") <| @ ( t : T? )
         var a = [[Foo a = 1]]
         var b = new [[Foo]]
         *b = set(a)     // (17) 40211: function set result always aliases
                                 // note - false aliasing
-    if FULL_TEST
+        t |> equal(14, b.a)
+    t |> run("global variable pointer aliasing") <| @ ( t : T? )
+        *g_p_a = [[Foo a = 1]]
         g_b = set7()    // (18) 40211: function set7 result aliases global variable ::g_p_a 1<S<::Foo>>? through function set7
                                 // note - false aliasing
-    if FULL_TEST
+        t |> equal(14, g_b.a)
+    t |> run("pass_ref call aliasing") <| @ ( t : T? )
         var a = [[Foo a = 1]]
         a = set(pass_ref_a(a))  // (19) 40211: function set result aliases argument a
+        t |> equal(14, a.a)
         a = [[Foo a = 1]]
         a = set(pass_a(a))      // this one ok
+        t |> equal(14, a.a)
+

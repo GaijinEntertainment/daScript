@@ -129,75 +129,6 @@ namespace das {
         return false;
     }
 
-    typedef das_hash_set<Variable *> ExpressionSources;
-    class SourceCollector : public Visitor {
-    public:
-        SourceCollector() {
-            enabled.push_back(true);
-        }
-    protected:
-    // we found source
-        virtual void preVisit ( ExprVar * expr ) override {
-            Visitor::preVisit(expr);
-            if ( enabled.back() ) sources.insert(expr->variable.get());
-        }
-    // in op3 only sources can alias
-        virtual void preVisit ( ExprOp3 * expr ) override {
-            Visitor::preVisit(expr);
-            enabled.push_back(false);
-        }
-        virtual void preVisitLeft  ( ExprOp3 * expr, Expression * left ) {
-            Visitor::preVisitLeft(expr,left);
-            enabled.back() = true;
-        }
-        virtual ExpressionPtr visit ( ExprOp3 * expr ) override {
-            enabled.pop_back();
-            return Visitor::visit(expr);
-        }
-    // pointer deref - all bets are off
-        virtual void preVisit ( ExprPtr2Ref * expr ) override {
-            Visitor::preVisit(expr);
-            alwaysAliases = true;
-        }
-    // function call - does not alias when does not return ref
-        virtual void preVisit ( ExprCall * expr ) override {
-            Visitor::preVisit(expr);
-            if ( !expr->func->result->ref ) enabled.push_back(false);
-        }
-        virtual ExpressionPtr visit ( ExprCall * expr ) override {
-            if ( !expr->func->result->ref ) enabled.push_back(true);
-            return Visitor::visit(expr);
-        }
-    // invoke - all bets are off
-        virtual void preVisit ( ExprInvoke * expr ) override {
-            Visitor::preVisit(expr);
-            alwaysAliases = true;
-        }
-    protected:
-        vector<bool> enabled;
-    public:
-        ExpressionSources sources;
-        bool alwaysAliases = false;
-    };
-
-    bool collectSources ( Expression * expr, ExpressionSources & src ) {
-        SourceCollector srr;
-        expr->visit(srr);
-        src = move(srr.sources);
-        return srr.alwaysAliases;
-    }
-
-    Variable * intersectSources ( ExpressionSources & a, ExpressionSources & b ) {
-        for ( auto va : a ) {
-            for ( auto vb : b ) {
-                if ( va==vb ) {
-                    return va;
-                }
-            }
-        }
-        return nullptr;
-    }
-
     class LintVisitor : public Visitor {
         bool checkOnlyFastAot;
         bool checkAotSideEffects;
@@ -208,9 +139,6 @@ namespace das {
         bool checkUnusedBlockArgument;
         bool checkUnsafe;
         bool checkDeprecated;
-        bool checkAliasing;
-        bool needCmresDest;
-        das_hash_map<Expression *,Expression *> cmresDest;
     public:
         LintVisitor ( const ProgramPtr & prog ) : program(prog) {
             checkOnlyFastAot = program->options.getBoolOption("only_fast_aot", program->policies.only_fast_aot);
@@ -222,9 +150,6 @@ namespace das {
             checkUnusedBlockArgument = program->options.getBoolOption("no_unused_block_arguments", program->policies.no_unused_block_arguments);
             checkUnsafe = program->policies.no_unsafe || program->thisModule->doNotAllowUnsafe;
             checkDeprecated = program->options.getBoolOption("no_deprecated", program->policies.no_deprecated);
-            checkAliasing = program->options.getBoolOption("no_aliasing", program->policies.no_aliasing);
-            // extra computations
-            needCmresDest = checkAliasing;
         }
     protected:
         void verifyOnlyFastAot ( Function * _func, const LineInfo & at ) {
@@ -426,51 +351,6 @@ namespace das {
                         arg->at, CompilationError::cant_be_null);
                 }
             }
-            if ( checkAliasing ) {
-                if ( expr->func->resultAliases.size() || expr->func->resultAliasesGlobals.size() ) {
-                    auto it = cmresDest.find(expr);
-                    if ( it!=cmresDest.end() ) {
-                        auto resOut = it->second;
-                        ExpressionSources resSrc;
-                        if ( collectSources(resOut, resSrc) ) {
-                            program->error("function " + expr->func->describeName() + " result always aliases",
-                                "some form of ... *ptr ... = " + expr->func->name + "( ... ) where we don't know where pointer came from", "",
-                                    expr->at, CompilationError::argument_aliasing);
-                        }
-                        for ( auto ai : expr->func->resultAliases ) {
-                            ExpressionSources argSrc;
-                            if ( collectSources(expr->arguments[ai].get(), argSrc) ) {
-                                program->error("function " + expr->func->describeName() + " result aliases argument " + expr->func->arguments[ai]->name,
-                                    "some form of ... = " + expr->func->name + "( ... *ptr ... ) where we don't know where pointer came from", "",
-                                        expr->at, CompilationError::argument_aliasing);
-                            } else if ( auto aliasVar = intersectSources ( resSrc, argSrc ) ) {
-                                program->error("function " + expr->func->describeName() + " result aliases argument " + expr->func->arguments[ai]->name,
-                                    "some form of ... " + aliasVar->name + " ... = " + expr->func->name + "( ... " + aliasVar->name + " ... )", "",
-                                        expr->at, CompilationError::argument_aliasing);
-                            }
-                        }
-                        for ( auto & vit : expr->func->resultAliasesGlobals) {
-                            ExpressionSources argSrc;
-                            argSrc.insert(vit.var);
-                            if ( vit.viaPointer ) {
-                                program->error("function " + expr->func->describeName() + " result aliases global variable " + vit.var->getMangledName() + " through function " + vit.func->getMangledName(),
-                                    "some form of ... = " + expr->func->name + "(...) where we don't know where the pointer in " + vit.var->name + " came from", "",
-                                        expr->at, CompilationError::argument_aliasing);
-                            } else if ( auto aliasVar = intersectSources ( resSrc, argSrc ) ) {
-                                string whereMessage;
-                                if ( vit.func == expr->func ) {
-                                    whereMessage = expr->func->name + "() uses " + vit.var->name;
-                                } else {
-                                    whereMessage = expr->func->name + "() indirectly calls " + vit.func->name + "() which uses " + vit.var->name;
-                                }
-                                program->error("function " + expr->func->describeName() + " result aliases global variable " + vit.var->getMangledName() + " through function " + vit.func->getMangledName(),
-                                    "some form of ... " + aliasVar->name + " ... = " + expr->func->name + "(...) where " + whereMessage, "",
-                                        expr->at, CompilationError::argument_aliasing);
-                            }
-                        }
-                    }
-                }
-            }
         }
         virtual void preVisit ( ExprOp1 * expr ) override {
             Visitor::preVisit(expr);
@@ -512,9 +392,6 @@ namespace das {
                 program->error("can't assign null pointer to " + expr->left->type->describe(), "", "",
                     expr->right->at, CompilationError::cant_be_null);
             }
-            if ( needCmresDest ) {
-                cmresDest[expr->right.get()] = expr->left.get();
-            }
         }
         virtual void preVisit ( ExprMove * expr ) override {
             Visitor::preVisit(expr);
@@ -528,9 +405,6 @@ namespace das {
             if ( needAvoidNullPtr(expr->left->type,false) && expr->right->rtti_isNullPtr() ) {
                 program->error("can't assign null pointer to " + expr->left->type->describe(), "", "",
                     expr->right->at, CompilationError::cant_be_null);
-            }
-            if ( needCmresDest ) {
-                cmresDest[expr->right.get()] = expr->left.get();
             }
         }
         virtual void preVisit ( ExprClone * expr ) override {
@@ -605,7 +479,6 @@ namespace das {
         }
         virtual FunctionPtr visit ( Function * fn ) override {
             func = nullptr;
-            cmresDest.clear();
             return Visitor::visit(fn);
         }
         virtual void preVisitArgument ( Function * fn, const VariablePtr & var, bool lastArg ) override {

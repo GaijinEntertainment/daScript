@@ -303,6 +303,7 @@ namespace das {
         AstExprCallAnnotation(ModuleLibrary & ml)
             :  AstExprCallFuncAnnotation<ExprCall> ("ExprCall", ml) {
             addField<DAS_BIND_MANAGED_FIELD(doesNotNeedSp)>("doesNotNeedSp");
+            addField<DAS_BIND_MANAGED_FIELD(cmresAlias)>("cmresAlias");
         }
     };
 

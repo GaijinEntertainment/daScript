@@ -5,6 +5,76 @@
 
 namespace das {
 
+    typedef das_hash_set<Variable *> ExpressionSources;
+    class SourceCollector : public Visitor {
+    public:
+        SourceCollector() {
+            enabled.push_back(true);
+        }
+    protected:
+    // we found source
+        virtual void preVisit ( ExprVar * expr ) override {
+            Visitor::preVisit(expr);
+            if ( enabled.back() ) sources.insert(expr->variable.get());
+        }
+    // in op3 only sources can alias
+        virtual void preVisit ( ExprOp3 * expr ) override {
+            Visitor::preVisit(expr);
+            enabled.push_back(false);
+        }
+        virtual void preVisitLeft  ( ExprOp3 * expr, Expression * left ) {
+            Visitor::preVisitLeft(expr,left);
+            enabled.back() = true;
+        }
+        virtual ExpressionPtr visit ( ExprOp3 * expr ) override {
+            enabled.pop_back();
+            return Visitor::visit(expr);
+        }
+    // pointer deref - all bets are off
+        virtual void preVisit ( ExprPtr2Ref * expr ) override {
+            Visitor::preVisit(expr);
+            alwaysAliases = true;
+        }
+    // function call - does not alias when does not return ref
+        virtual void preVisit ( ExprCall * expr ) override {
+            Visitor::preVisit(expr);
+            if ( !expr->func->result->ref ) enabled.push_back(false);
+        }
+        virtual ExpressionPtr visit ( ExprCall * expr ) override {
+            if ( !expr->func->result->ref ) enabled.push_back(true);
+            return Visitor::visit(expr);
+        }
+    // invoke - all bets are off
+        virtual void preVisit ( ExprInvoke * expr ) override {
+            Visitor::preVisit(expr);
+            alwaysAliases = true;
+        }
+    protected:
+        vector<bool> enabled;
+    public:
+        ExpressionSources sources;
+        bool alwaysAliases = false;
+    };
+
+    bool collectSources ( Expression * expr, ExpressionSources & src ) {
+        SourceCollector srr;
+        expr->visit(srr);
+        src = move(srr.sources);
+        return srr.alwaysAliases;
+    }
+
+    Variable * intersectSources ( ExpressionSources & a, ExpressionSources & b ) {
+        for ( auto va : a ) {
+            for ( auto vb : b ) {
+                if ( va==vb ) {
+                    return va;
+                }
+            }
+        }
+        return nullptr;
+    }
+
+
     void collectIndVariables ( Function * at, Function * lookup, das_hash_map<Variable *,Function *>  & indGlobalVariables, das_hash_set<Function *> & accessed ) {
         if ( accessed.find(lookup)!=accessed.end() ) return;
         accessed.insert(lookup);
@@ -76,14 +146,117 @@ namespace das {
         }
     }
 
+    class AliasMarker : public Visitor {
+    public:
+        AliasMarker ( const ProgramPtr & prog, TextWriter & ls ) : program(prog), logs(ls) {
+            checkAliasing = program->options.getBoolOption("no_aliasing", program->policies.no_aliasing);
+            logAliasing = program->options.getBoolOption("log_aliasing", false);
+        }
+    protected:
+        ProgramPtr  program;
+        das_hash_map<Expression *,Expression *> cmresDest;
+        bool checkAliasing = false;
+        bool logAliasing = false;
+        TextWriter & logs;
+    protected:
+        virtual void preVisit ( ExprCopy * expr ) override {
+            Visitor::preVisit(expr);
+            cmresDest[expr->right.get()] = expr->left.get();
+        }
+        virtual void preVisit ( ExprMove * expr ) override {
+            Visitor::preVisit(expr);
+            cmresDest[expr->right.get()] = expr->left.get();
+        }
+        virtual FunctionPtr visit ( Function * fn ) override {
+            cmresDest.clear();
+            return Visitor::visit(fn);
+        }
+        virtual void preVisit ( ExprCall * expr ) override {
+            Visitor::preVisit(expr);
+            if ( expr->func->resultAliases.size() || expr->func->resultAliasesGlobals.size() ) {
+                auto it = cmresDest.find(expr);
+                if ( it!=cmresDest.end() ) {
+                    auto resOut = it->second;
+                    ExpressionSources resSrc;
+                    if ( collectSources(resOut, resSrc) ) {
+                        if ( checkAliasing ) {
+                            program->error("function " + expr->func->describeName() + " result always aliases",
+                                "some form of ... *ptr ... = " + expr->func->name + "( ... ) where we don't know where pointer came from", "",
+                                    expr->at, CompilationError::argument_aliasing);
+                        } else {
+                            expr->cmresAlias = true;
+                            goto bailout;
+                        }
+                    }
+                    for ( auto ai : expr->func->resultAliases ) {
+                        ExpressionSources argSrc;
+                        if ( collectSources(expr->arguments[ai].get(), argSrc) ) {
+                            if ( checkAliasing ) {
+                                program->error("function " + expr->func->describeName() + " result aliases argument " + expr->func->arguments[ai]->name,
+                                    "some form of ... = " + expr->func->name + "( ... *ptr ... ) where we don't know where pointer came from", "",
+                                        expr->at, CompilationError::argument_aliasing);
+                            } else {
+                                expr->cmresAlias = true;
+                                goto bailout;
+                            }
+                        } else if ( auto aliasVar = intersectSources ( resSrc, argSrc ) ) {
+                            if ( checkAliasing ) {
+                                program->error("function " + expr->func->describeName() + " result aliases argument " + expr->func->arguments[ai]->name,
+                                    "some form of ... " + aliasVar->name + " ... = " + expr->func->name + "( ... " + aliasVar->name + " ... )", "",
+                                        expr->at, CompilationError::argument_aliasing);
+                            } else {
+                                expr->cmresAlias = true;
+                                goto bailout;
+                            }
+                        }
+                    }
+                    for ( auto & vit : expr->func->resultAliasesGlobals) {
+                        ExpressionSources argSrc;
+                        argSrc.insert(vit.var);
+                        if ( vit.viaPointer ) {
+                            if ( checkAliasing ) {
+                                program->error("function " + expr->func->describeName() + " result aliases global variable " + vit.var->getMangledName() + " through function " + vit.func->getMangledName(),
+                                    "some form of ... = " + expr->func->name + "(...) where we don't know where the pointer in " + vit.var->name + " came from", "",
+                                        expr->at, CompilationError::argument_aliasing);
+                            } else {
+                                expr->cmresAlias = true;
+                                goto bailout;
+                            }
+                        } else if ( auto aliasVar = intersectSources ( resSrc, argSrc ) ) {
+                            if ( checkAliasing ) {
+                                string whereMessage;
+                                if ( vit.func == expr->func ) {
+                                    whereMessage = expr->func->name + "() uses " + vit.var->name;
+                                } else {
+                                    whereMessage = expr->func->name + "() indirectly calls " + vit.func->name + "() which uses " + vit.var->name;
+                                }
+                                program->error("function " + expr->func->describeName() + " result aliases global variable " + vit.var->getMangledName() + " through function " + vit.func->getMangledName(),
+                                    "some form of ... " + aliasVar->name + " ... = " + expr->func->name + "(...) where " + whereMessage, "",
+                                        expr->at, CompilationError::argument_aliasing);
+                            } else {
+                                expr->cmresAlias = true;
+                                goto bailout;
+                            }
+                        }
+                    }
+                }
+            }
+        bailout:;
+            if ( logAliasing && expr->cmresAlias ) {
+                logs << expr->at.describe() << ": " << expr->func->describeName() << " aliases with CMRES, stack optimization disabled\n";
+            }
+        }
+    };
+
     void Program::deriveAliases(TextWriter & logs) {
-        if ( !options.getBoolOption("no_aliasing", policies.no_aliasing) ) return;
         bool logAliasing = options.getBoolOption("log_aliasing", false);
         if ( logAliasing ) logs << "ALIASING:\n";
         thisModule->functions.foreach([&](const FunctionPtr & func) {
             if ( func->builtIn || !func->used ) return;
             deriveAliasing(func, logs, logAliasing);
         });
+        AliasMarker marker(this, logs);
+        visit(marker);
         if ( logAliasing ) logs << "\n";
     }
 }
