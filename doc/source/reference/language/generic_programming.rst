@@ -27,7 +27,7 @@ We can do even more.  For example::
 
     def setSomeField(var obj; val: auto(valT))
         if typeinfo(has_field<someField> obj)
-            if typeinfo(typename obj.someField) == typeinfo(typename type valT delete const)
+            if typeinfo(typename obj.someField) == typeinfo(typename type valT -const)
                 obj.someField = val
 
 This function sets ``someField`` in the provided argument *if* it is a struct with a ``someField`` member, and only if ``someField`` is of the same type as ``val``!
@@ -103,6 +103,6 @@ Usage of named ``auto`` with ``typeinfo`` ::
 You can also modify the type with delete syntax::
 
     def fn(a: auto(some))
-        print(typeinfo(typename type some delete const))
+        print(typeinfo(typename type some -const))
 
     fn(1) // print "int"
