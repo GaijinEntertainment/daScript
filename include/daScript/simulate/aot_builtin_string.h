@@ -65,10 +65,7 @@ namespace das {
     char * builtin_string_replace ( const char * str, const char * toSearch, const char * replaceStr, Context * context );
     char * builtin_string_rtrim ( char* s, Context * context );
 
-    __forceinline bool builtin_empty(const char* str) { return !str || str[0] == 0; }
-    __forceinline bool builtin_empty_das_string(const string & str) { return str.empty(); }
-
-     char * builtin_reserve_string_buffer ( const char * str, int32_t length, Context * context );
+    char * builtin_reserve_string_buffer ( const char * str, int32_t length, Context * context );
 
     template <typename TT>
     __forceinline char * format ( const char * fmt, TT value, Context * context ) {

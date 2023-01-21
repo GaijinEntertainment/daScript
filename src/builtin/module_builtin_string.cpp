@@ -756,10 +756,6 @@ namespace das
                 SideEffects::none, "builtin_string_toupper")->args({"str","context"});
             addExtern<DAS_BIND_FUN(builtin_string_tolower)>(*this, lib, "to_lower",
                 SideEffects::none, "builtin_string_tolower")->args({"str","context"});
-            addExtern<DAS_BIND_FUN(builtin_empty)>(*this, lib, "empty",
-                SideEffects::none, "builtin_empty")->arg("str");
-            addExtern<DAS_BIND_FUN(builtin_empty_das_string)>(*this, lib, "empty",
-                SideEffects::none, "builtin_empty_das_string")->arg("str");
             addExtern<DAS_BIND_FUN(builtin_string_tolower_in_place)>(*this, lib, "to_lower_in_place",
                 SideEffects::none, "builtin_string_tolower_in_place")->arg("str")->unsafeOperation = true;
             addExtern<DAS_BIND_FUN(builtin_string_toupper_in_place)>(*this, lib, "to_upper_in_place",

@@ -103,3 +103,16 @@ Local class variables are unsafe::
 
     unsafe
         var g = Goo()                           // potential lifetime issues
+
+========
+implicit
+========
+
+`implicit` keyword is used to specify that type can be either temporary or regular type, and will be treated as defined.
+For example::
+
+    def foo ( a : Foo implicit )    // a will be treated as Foo, but will also accept Foo# as argument
+    def foo ( a : Foo# implicit )   // a will be treated as Foo#, but will also accept Foo as argument
+
+Unfortunately implicit conversions like this are unsafe, so `implicit` is unsafe by definition.
+

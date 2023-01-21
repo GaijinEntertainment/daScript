@@ -32,6 +32,8 @@ namespace das {
     class ModuleLibrary;
     class ModuleGroup;
 
+    typedef das_hash_map<string,pair<TypeDeclPtr,bool>> TypeAliasMap;
+
     struct TypeDecl : ptr_ref_count {
         enum {
             dimAuto = -1,
@@ -148,10 +150,12 @@ namespace das {
         bool isAutoArrayResolved() const;
         bool isAuto() const;
         bool isAutoOrAlias() const;
+        bool isAutoWithoutOptions(bool & appendHasOptions) const;
         bool isAotAlias () const;
         bool isAlias() const;
         bool isAliasOrExpr() const;
         bool isVectorType() const;
+        bool isBaseVectorType() const;
         bool isBitfield() const;
         bool isLocal() const;
         bool isLocal( das_set<Structure*> & dep ) const;
@@ -177,15 +181,19 @@ namespace das {
         static int getMaskFieldIndex ( char ch );
         static bool isSequencialMask ( const vector<uint8_t> & fields );
         static bool buildSwizzleMask ( const string & mask, int dim, vector<uint8_t> & fields );
-        static TypeDeclPtr inferGenericType ( TypeDeclPtr autoT, TypeDeclPtr initT, bool topLevel = false, OptionsMap * options = nullptr );
+        static TypeDeclPtr inferGenericType ( TypeDeclPtr autoT, TypeDeclPtr initT, bool topLevel = false, bool isPassType = false, OptionsMap * options = nullptr );
         static TypeDeclPtr inferGenericInitType ( TypeDeclPtr autoT, TypeDeclPtr initT );
         static void applyAutoContracts ( TypeDeclPtr TT, TypeDeclPtr autoT );
+        static void applyRefToRef ( TypeDeclPtr TT, bool topLevel = false );
         static void updateAliasMap ( const TypeDeclPtr & decl, const TypeDeclPtr & pass, AliasMap & aliases, OptionsMap & options );
         Type getRangeBaseType() const;
         TypeDecl * findAlias ( const string & name, bool allowAuto = false );
         int findArgumentIndex(const string & name) const;
         void addVariant(const string & name, const TypeDeclPtr & tt);
         string findBitfieldName ( uint32_t value ) const;
+        void collectAliasing ( TypeAliasMap & aliases, das_set<Structure *> & dep, bool viaPointer ) const;
+        void collectContainerAliasing ( TypeAliasMap & aliases, das_set<Structure *> & dep, bool viaPointer ) const;
+    public:
         Type                    baseType = Type::tVoid;
         Structure *             structType = nullptr;
         Enumeration *           enumType = nullptr;

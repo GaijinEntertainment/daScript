@@ -15,6 +15,7 @@ namespace das {
     vec4f pinvoke_impl ( Context & context, SimNode_CallBase * call, vec4f * args );
     vec4f pinvoke_impl2 ( Context & context, SimNode_CallBase * call, vec4f * args );
     vec4f pinvoke_impl3 ( Context & context, SimNode_CallBase * call, vec4f * args );
+    vec4f invokeInDebugAgent ( Context & context, SimNode_CallBase * call, vec4f * args );
 
     vec4f get_global_variable ( Context & context, SimNode_CallBase * call, vec4f * args );
     vec4f get_global_variable_by_index ( Context & context, SimNode_CallBase * node, vec4f * args );

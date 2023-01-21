@@ -87,10 +87,10 @@ def test_file(file_name: string; ctx: SuiteCtx; file_ctx: FileCtx): SuiteResult
     var res: SuiteResult
     var access := make_file_access(ctx.projectPath)
     access |> add_file_access_root("dastest", ctx.dastestRoot)
-    using <| $(var mg:ModuleGroup#)
-        using <| $(var cop:CodeOfPolicies#)
+    using <| $(var mg:ModuleGroup)
+        using <| $(var cop:CodeOfPolicies)
             cop.aot_module = true
-            compile_file(file_name, access, addr(mg), cop) <| $(ok, program, output)
+            compile_file(file_name, access, unsafe(addr(mg)), cop) <| $(ok, program, output)
                 var expectedErrors : table<CompilationError; int>
                 if program != null
                     program |> for_each_expected_error <| $ ( err, count )

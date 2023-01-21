@@ -1809,8 +1809,8 @@ namespace das {
                     << ", " << field->fieldIndex
                     <<  ">::get(";
             } else {
-                ss  << ",&" << vtype->structType->name << "::" << field->name
-                    << ">::get(";
+                ss  << ",&" << (vtype->structType->module->name.empty() ? "" : vtype->structType->module->name + "::")
+                    << vtype->structType->name << "::" << field->name << ">::get(";
             }
         }
         virtual ExpressionPtr visit ( ExprSafeField * field ) override {

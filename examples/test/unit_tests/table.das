@@ -1,32 +1,32 @@
 def test_find
     let const_tab <- {{ "one"=>1; "two"=>2 }}
-    find(const_tab,"one") <| $(num:int?)
+    find(const_tab,"one") <| $(num)
         assert(deref(num)==1)
-    find_if_exists(const_tab,"one") <| $(num:int?)
-        assert(deref(num)==1)
-    find(const_tab,"one") <| $(num:int?)    // this one will optimize into find_if_exists
+    get(const_tab,"one") <| $(num)
+        assert(num==1)
+    find(const_tab,"one") <| $(num)
         if num != null
             assert(deref(num)==1)
-    assert(deref(find(const_tab,"one"))==1)
+    assert(const_tab?["one"] ?? 100500 == 1)
     var tab <- {{ "one"=>1; "two"=>2 }}
-    find(tab,"one") <| $(num:int?)
+    find(tab,"one") <| $(num)
         assert(deref(num)==1)
-    find_for_edit(tab,"one") <| $(var num:int?)
-        assert(deref(num)==1)
-        deref(num) = 3
-    assert(deref(find(tab,"one"))==3)
-    find_for_edit(tab,"one") <| $(var num:int?)     // this one will optimize into find_for_edit_if_exists
-        if num!=null
-            assert(deref(num)==3)
-            deref(num) = 4
-    assert(deref(find(tab,"one"))==4)
-    find_for_edit_if_exists(tab,"one") <| $(var num:int?)
-        assert(deref(num)==4)
-        deref(num) = 5
-    assert(deref(find(tab,"one"))==5)
+    get(tab,"one") <| $(var num)
+        num = 3
+    assert(tab?["one"] ?? 100500 == 3)
+    get(tab,"one") <| $(var num)
+        assert(num==3)
+        num = 4
+    assert(tab?["one"] ?? 100500 == 4)
+    get(tab,"one") <| $(var num)
+        assert(num==4)
+        num = 5
+    assert(tab?["one"] ?? 100500 == 5)
     unsafe
-        deref(find_for_edit(tab,"one"))=1
-        assert(deref(find_for_edit(tab,"one"))==1)
+        var dummy = 0
+        tab?["one"] ?? dummy = 1
+        assert(tab?["one"] ?? 100500==1)
+        assert(dummy==0)
     return true
 
 [export]
@@ -61,14 +61,14 @@ def test : bool
     // debug(tab)
     i = 0
     while i < total
-        find(tab,string(i)) <| $(pValue:int?)
+        find(tab,string(i)) <| $(pValue)
             if pValue!=null
                 assert(deref(pValue)==i)
             else
                 assert(i%7==0)
         i ++
     while i < total
-        let pValue = find(tab,string(i))
+        let pValue = unsafe(tab?[string(i)])
         if pValue!=null
             assert(deref(pValue)==i)
         else
@@ -78,7 +78,7 @@ def test : bool
         var j,k:int=0
         i = 0
         while i < total
-            find(tab,string(i)) <| $(pVal:int?)
+            find(tab,string(i)) <| $(pVal)
                 j+= pVal ?? 0
             if i%7!=0
                 k +=i
@@ -90,7 +90,7 @@ def test : bool
         var j,k,zero:int=0
         i = 0
         while i < total
-            find(tab,string(i)) <| $(pVal:int?)
+            find(tab,string(i)) <| $(pVal)
                 j += pVal ?? zero
             if i%7!=0
                 k +=i
@@ -162,7 +162,7 @@ def test_lock_panic
     var tab <- {{ "one" => 1; "two" => 2 }}
     var failed = false
     try
-        find(tab,"one") <| $(t:int?)
+        find(tab,"one") <| $(t)
             assert(t!=null)
             tab["three"] = 3
     recover
@@ -170,7 +170,7 @@ def test_lock_panic
     assert(failed)
     failed = false
     try
-        find(tab,"three") <| $(t:int?)
+        find(tab,"three") <| $(t)
             assert(t==null)
             erase(tab,"three")
     recover

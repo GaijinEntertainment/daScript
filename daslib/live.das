@@ -185,9 +185,9 @@ def private set_new_context ( var ptr : smart_ptr<Context>; full_restart:bool = 
 def public recompile(full_restart:bool=false)
     to_log(LOG_TRACE, "LIVE: recompile full_restart={full_restart}\n")
     var access := make_file_access("")
-    using <| $(var mg:ModuleGroup#)
-        using <| $(var cop:CodeOfPolicies#)
-            compile_file("{appDir}/{appFile}",access,addr(mg),cop) <| $(ok,program,issues)
+    using <| $(var mg:ModuleGroup)
+        using <| $(var cop:CodeOfPolicies)
+            compile_file("{appDir}/{appFile}",access,unsafe(addr(mg)),cop) <| $(ok,program,issues)
                 if ok
                     simulate(program) <| $ ( sok; context; serrors )
                         if sok

@@ -113,7 +113,7 @@ def public extract_variable_nonref ( method_name:string; expr )
     return expr
 
 [tag_function(extract_variable_tag),sideeffects]
-def public extract_variable_ref ( method_name:string; var expr:auto(TT)& =const ) : TT&
+def public extract_variable_ref ( method_name:string; var expr:auto(TT)& ==const ) : TT&
     unsafe
         return expr
 

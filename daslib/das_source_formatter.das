@@ -1,7 +1,6 @@
 options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
-options no_global_variables = false
 
 module das_source_formatter shared private
 

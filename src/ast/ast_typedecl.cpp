@@ -87,6 +87,35 @@ namespace das
         return this;
     }
 
+    void TypeDecl::applyRefToRef ( TypeDeclPtr TT, bool topLevel ) {
+        if ( topLevel && TT->ref && TT->isRefType() ) {
+            TT->ref = false;
+        }
+        if ( TT->isPointer() ) {
+            if ( TT->firstType ) {
+                applyRefToRef(TT->firstType);
+            }
+        } else if ( TT->baseType==Type::tIterator ) {
+            applyRefToRef(TT->firstType);
+        } else if ( TT->baseType==Type::tArray ) {
+            applyRefToRef(TT->firstType);
+        } else if ( TT->baseType==Type::tTable ) {
+            applyRefToRef(TT->firstType);
+            applyRefToRef(TT->secondType);
+        } else if ( TT->baseType==Type::tBlock || TT->baseType==Type::tFunction || TT->baseType==Type::tLambda ) {
+            if ( TT->firstType ) {
+                applyRefToRef(TT->firstType);
+            }
+            for ( auto & arg : TT->argTypes ) {
+                applyRefToRef(arg, true);
+            }
+        } else if ( TT->baseType==Type::tTuple || TT->baseType==Type::tVariant ) {
+            for ( auto & arg : TT->argTypes ) {
+                applyRefToRef(arg);
+            }
+        }
+    }
+
     void TypeDecl::applyAutoContracts ( TypeDeclPtr TT, TypeDeclPtr autoT ) {
         if ( !autoT->isAuto() ) return;
         TT->ref = (TT->ref | autoT->ref) && !autoT->removeRef && !TT->removeRef;
@@ -97,7 +126,9 @@ namespace das
         TT->removeDim = false;
         TT->removeRef = false;
         if ( autoT->isPointer() ) {
-            applyAutoContracts(TT->firstType, autoT->firstType);
+            if ( TT->firstType ) {
+                applyAutoContracts(TT->firstType, autoT->firstType);
+            }
         } else if ( autoT->baseType==Type::tIterator ) {
             applyAutoContracts(TT->firstType, autoT->firstType);
         } else if ( autoT->baseType==Type::tArray ) {
@@ -165,15 +196,30 @@ namespace das
         }
     }
 
-    TypeDeclPtr TypeDecl::inferGenericType ( TypeDeclPtr autoT, TypeDeclPtr initT, bool topLevel, OptionsMap * options ) {
+    TypeDeclPtr TypeDecl::inferGenericType ( TypeDeclPtr autoT, TypeDeclPtr initT, bool topLevel, bool passType, OptionsMap * options ) {
         // for option type, we go through all the options in order. first matching is good
         if ( autoT->baseType==Type::option ) {
             for ( size_t i = 0; i!=autoT->argTypes.size(); ++i ) {
-                if ( auto resT = inferGenericType(autoT->argTypes[i],initT,topLevel,options) ) {
+                // we copy type qualifiers for each option
+                auto & TT = autoT->argTypes[i];
+                TT->ref = TT->ref | autoT->ref;
+                TT->constant = TT->constant | autoT->constant;
+                TT->temporary = TT->temporary | autoT->temporary;
+                TT->removeConstant = TT->removeConstant | autoT->removeConstant;
+                TT->removeDim = TT->removeDim | autoT->removeDim;
+                TT->removeRef = TT->removeRef | autoT->removeRef;
+                TT->explicitConst = TT->explicitConst | autoT->explicitConst;
+                TT->implicit = TT->implicit | autoT->implicit;
+                // now we infer type
+                if ( auto resT = inferGenericType(TT,initT,topLevel,passType,options) ) {
                     if ( options!=nullptr ) (*options)[autoT.get()] = int(i);
                     return resT;
                 }
             }
+            return nullptr;
+        }
+        // explicit const mast match
+        if ( autoT->explicitConst && (autoT->constant != initT->constant) ) {
             return nullptr;
         }
         // can't infer from the type, which is already 'auto'
@@ -208,7 +254,7 @@ namespace das
                     cm = ConstMatters::no;
                 }
             }
-            if ( autoT->isSameType(*initT, rm,cm, TemporaryMatters::yes) ) {
+            if ( autoT->isSameType(*initT, rm,cm, TemporaryMatters::yes, AllowSubstitute::yes, true, passType ) ) {
                 return make_smart<TypeDecl>(*autoT);
             } else {
                 return nullptr;
@@ -268,6 +314,8 @@ namespace das
         TT->removeConstant = false;
         TT->removeTemporary = false;
         TT->removeDim = false;
+        TT->implicit |= autoT->implicit;
+        TT->explicitConst |= autoT->explicitConst;
         if ( autoT->isPointer() ) {
             // if it's a pointer, infer pointer-to separately
             TT->firstType = inferGenericType(autoT->firstType, initT->firstType, false, options);
@@ -474,7 +522,11 @@ namespace das
             stream << " const";
         }
         for ( auto d : dim ) {
-            stream << "[" << d << "]";
+            if ( d==-1 ) {
+                stream << "[]";
+            } else {
+                stream << "[" << d << "]";
+            }
         }
         if ( ref ) {
             stream << "&";
@@ -489,7 +541,7 @@ namespace das
             stream << " explicit";
         }
         if ( explicitConst ) {
-            stream << " =const";
+            stream << " ==const";
         }
         if (contracts == DescribeContracts::yes) {
             if (removeConstant || removeRef || removeDim || removeTemporary) {
@@ -1321,8 +1373,7 @@ namespace das
         return fields.size()>=1 && fields.size()<=4;
     }
 
-    bool TypeDecl::isVectorType() const {
-        if ( dim.size() ) return false;
+    bool TypeDecl::isBaseVectorType() const {
         switch (baseType) {
             case tInt2:
             case tInt3:
@@ -1339,6 +1390,11 @@ namespace das
             default:
                 return false;
         }
+    }
+
+    bool TypeDecl::isVectorType() const {
+        if ( dim.size() ) return false;
+        return isBaseVectorType();
     }
 
     int TypeDecl::getVectorDim() const {
@@ -1658,7 +1714,7 @@ namespace das
             return any;
         } else if ( baseType==Type::tBlock || baseType==Type::tFunction ||
                    baseType==Type::tLambda || baseType==Type::tTuple ||
-                   baseType==Type::tVariant || baseType==Type::option ) {
+                   baseType==Type::tVariant ) {
             bool any = false;
             if ( firstType )
                 any |= firstType->isAuto();
@@ -1668,6 +1724,47 @@ namespace das
         }
         return false;
     }
+
+    bool TypeDecl::isAutoWithoutOptions(bool & hasOptions) const {
+        // auto is auto.... or auto....?
+        // also dim[] is aito
+        for ( auto di : dim ) {
+            if ( di==TypeDecl::dimAuto ) {
+                return true;
+            }
+        }
+        if ( baseType==Type::autoinfer ) {
+            return true;
+        } else if ( baseType==Type::tPointer ) {
+            if ( firstType )
+                return firstType->isAutoWithoutOptions(hasOptions);
+        } else if ( baseType==Type::tIterator ) {
+            if ( firstType )
+                return firstType->isAutoWithoutOptions(hasOptions);
+        } else if ( baseType==Type::tArray ) {
+            if ( firstType )
+                return firstType->isAutoWithoutOptions(hasOptions);
+        } else if ( baseType==Type::tTable ) {
+            bool any = false;
+            if ( firstType )
+                any |= firstType->isAutoWithoutOptions(hasOptions);
+            if ( secondType )
+                any |= secondType->isAutoWithoutOptions(hasOptions);
+            return any;
+        } else if ( baseType==Type::tBlock || baseType==Type::tFunction ||
+                   baseType==Type::tLambda || baseType==Type::tTuple ||
+                   baseType==Type::tVariant || baseType==Type::option ) {
+            if ( baseType==Type::option ) hasOptions = true;
+            bool any = false;
+            if ( firstType )
+                any |= firstType->isAutoWithoutOptions(hasOptions);
+            for ( auto & arg : argTypes )
+                any |= arg->isAutoWithoutOptions(hasOptions);
+            return any;
+        }
+        return false;
+    }
+
 
     bool TypeDecl::isAutoOrAlias() const {
         // auto is auto.... or auto....?
@@ -1701,7 +1798,7 @@ namespace das
             return any;
         } else if (baseType == Type::tBlock || baseType == Type::tFunction ||
             baseType == Type::tLambda || baseType == Type::tTuple ||
-            baseType == Type::tVariant || baseType == Type::option ) {
+            baseType == Type::tVariant ) {
             bool any = false;
             if (firstType)
                 any |= firstType->isAutoOrAlias();
@@ -2545,6 +2642,84 @@ namespace das
             }
         }
     }
+
+    void append ( TypeAliasMap & aliases, const TypeDeclPtr & td, bool viaPointer ) {
+        auto mname = td->getMangledName();
+        auto & aMain = aliases[mname];
+        aMain.first = td;
+        aMain.second |= viaPointer;
+        if ( td->isBaseVectorType() ) {
+            auto bt = make_smart<TypeDecl>(td->getVectorBaseType());
+            auto & aSub = aliases[bt->getMangledName()];
+            aSub.first = bt;
+            aSub.second |= viaPointer;
+        }
+    }
+
+    void TypeDecl::collectAliasing ( TypeAliasMap & aliases, das_set<Structure *> & dep, bool viaPointer ) const {
+        append(aliases, (TypeDecl *) this, viaPointer);
+        if ( temporary ) return;    // temporary types never alias
+        if ( baseType==Type::tArray ) {
+            if ( firstType  ) {
+                firstType->collectAliasing(aliases, dep, viaPointer);
+            }
+        } else if ( baseType==Type::tTable ) {
+            if ( secondType ) {
+                secondType->collectAliasing(aliases, dep, viaPointer);
+            }
+        } else if ( baseType==Type::tStructure ) {
+            if ( structType ) {
+                if (dep.find(structType) != dep.end()) return;
+                dep.insert(structType);
+                for ( auto & fld : structType->fields ) {
+                    fld.type->collectAliasing(aliases, dep, viaPointer);
+                }
+            }
+        } else if ( baseType==Type::tTuple || baseType==Type::tVariant ) {
+            for ( auto & argT : argTypes ) {
+                argT->collectAliasing(aliases, dep, viaPointer);
+            }
+        } else if ( baseType==Type::tPointer ) {
+            if ( firstType ) {
+                firstType->collectAliasing(aliases, dep, true);
+            }
+        }
+    }
+
+    void TypeDecl::collectContainerAliasing ( TypeAliasMap & aliases, das_set<Structure *> & dep, bool viaPointer ) const {
+        if ( constant ) return;
+        if ( baseType==Type::tArray ) {
+            if ( firstType && !firstType->constant ) {
+                append(aliases, firstType, viaPointer);
+                firstType->collectContainerAliasing(aliases, dep, viaPointer);
+            }
+        } else if ( baseType==Type::tTable ) {
+            if ( secondType && !secondType->constant ) {
+                append(aliases, secondType, viaPointer);
+                secondType->collectContainerAliasing(aliases, dep, viaPointer);
+            }
+        } else if ( baseType==Type::tStructure ) {
+            if ( structType ) {
+                if (dep.find(structType) != dep.end()) return;
+                dep.insert(structType);
+                for ( auto & fld : structType->fields ) {
+                    if ( !fld.type->constant ) {
+                        fld.type->collectContainerAliasing(aliases, dep, viaPointer);
+                    }
+                }
+            }
+        } else if ( baseType==Type::tTuple || baseType==Type::tVariant ) {
+            for ( auto & argT : argTypes ) {
+                argT->collectContainerAliasing(aliases, dep, viaPointer);
+            }
+        } else if ( baseType==Type::tPointer ) {
+            if ( firstType ) {
+                firstType->collectContainerAliasing(aliases, dep, viaPointer);
+            }
+        }
+    }
+
+    // Mangled name parser
 
     void MangledNameParser::error ( const string &, const char * ) {
         DAS_VERIFY(0 && "invalid mangled name");

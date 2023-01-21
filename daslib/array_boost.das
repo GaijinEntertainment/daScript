@@ -9,25 +9,25 @@ require daslib/templates
 require daslib/contracts
 
 [unsafe_operation, template (a), unused_argument(a)]
-def private array_helper ( var arr : auto implicit =const; a : auto(TT) ) : array<TT -const-#>
+def private array_helper ( var arr : auto implicit ==const; a : auto(TT) ) : array<TT -const-#>
     var res : array<TT -const-#>
-    let lenA = length(arr)
+    let lenA = _::length(arr)
     if lenA>=1
         unsafe
             _builtin_make_temp_array(res, addr(arr[0]), lenA)
     return <- res
 
 [unsafe_operation, template (a), unused_argument(a)]
-def private array_helper ( arr : auto implicit =const; a : auto(TT) ) : array<TT -const-#>
+def private array_helper ( arr : auto implicit ==const; a : auto(TT) ) : array<TT -const-#>
     var res : array<TT -const-#>
-    let lenA = length(arr)
+    let lenA = _::length(arr)
     if lenA>=1
         unsafe
             _builtin_make_temp_array(res, addr(arr[0]), lenA)
     return <- res
 
 [unsafe_operation]
-def public temp_array ( var arr : auto implicit =const )
+def public temp_array ( var arr : auto implicit ==const )
     //! Creates temporary array from the given object.
     //! Important requirements are:
     //!     * object memory is linear
@@ -37,7 +37,7 @@ def public temp_array ( var arr : auto implicit =const )
         return <- array_helper ( arr, decltype(arr[0]) )
 
 [unsafe_operation]
-def public temp_array ( arr : auto implicit =const)
+def public temp_array ( arr : auto implicit ==const)
     unsafe
         return <- array_helper ( arr, decltype(arr[0]) )
 

@@ -35,14 +35,14 @@ I.e. if the object can `expire` while in scope, with delete, garbage collection,
 Safe temporary address
 ++++++++++++++++++++++
 
-  *  :ref:`safe_addr (x:auto(T)& =const -const) : T -&?# <function-_at_safe_addr_c__c_safe_addr_&_eq_Y_ls_T_gr_.>` 
-  *  :ref:`safe_addr (x:auto(T) const& =const) : T -&? const# <function-_at_safe_addr_c__c_safe_addr_C&_eq_Y_ls_T_gr_.>` 
+  *  :ref:`safe_addr (x:auto(T)& ==const -const) : T -&?# <function-_at_safe_addr_c__c_safe_addr_&_eq_Y_ls_T_gr_.>` 
+  *  :ref:`safe_addr (x:auto(T) const& ==const) : T -&? const# <function-_at_safe_addr_c__c_safe_addr_C&_eq_Y_ls_T_gr_.>` 
   *  :ref:`shared_addr (tab:table\<auto(KEY);auto(VAL)\> const;k:KEY const) : auto <function-_at_safe_addr_c__c_shared_addr_C1_ls_Y_ls_KEY_gr_._gr_2_ls_Y_ls_VAL_gr_._gr_T_CY_ls_KEY_gr_L>` 
   *  :ref:`shared_addr (val:auto(VALUE) const&) : auto <function-_at_safe_addr_c__c_shared_addr_C&Y_ls_VALUE_gr_.>` 
 
 .. _function-_at_safe_addr_c__c_safe_addr_&_eq_Y_ls_T_gr_.:
 
-.. das:function:: safe_addr(x: auto(T)& =const)
+.. das:function:: safe_addr(x: auto(T)& ==const)
 
 safe_addr returns T?#
 
@@ -57,7 +57,7 @@ returns temporary pointer to the given expression
 
 .. _function-_at_safe_addr_c__c_safe_addr_C&_eq_Y_ls_T_gr_.:
 
-.. das:function:: safe_addr(x: auto(T) const& =const)
+.. das:function:: safe_addr(x: auto(T) const& ==const)
 
 safe_addr returns T? const#
 
@@ -106,12 +106,12 @@ returns address of the given shared variable. it's safe because shared variables
 Temporary pointers
 ++++++++++++++++++
 
-  *  :ref:`temp_ptr (x:auto(T)? const implicit =const) : T? const# <function-_at_safe_addr_c__c_temp_ptr_CI_eq_1_ls_Y_ls_T_gr_._gr_?>` 
-  *  :ref:`temp_ptr (x:auto(T)? implicit =const -const) : T?# <function-_at_safe_addr_c__c_temp_ptr_I_eq_1_ls_Y_ls_T_gr_._gr_?>` 
+  *  :ref:`temp_ptr (x:auto(T)? const implicit ==const) : T? const# <function-_at_safe_addr_c__c_temp_ptr_CI_eq_1_ls_Y_ls_T_gr_._gr_?>` 
+  *  :ref:`temp_ptr (x:auto(T)? implicit ==const -const) : T?# <function-_at_safe_addr_c__c_temp_ptr_I_eq_1_ls_Y_ls_T_gr_._gr_?>` 
 
 .. _function-_at_safe_addr_c__c_temp_ptr_CI_eq_1_ls_Y_ls_T_gr_._gr_?:
 
-.. das:function:: temp_ptr(x: auto(T)? const implicit =const)
+.. das:function:: temp_ptr(x: auto(T)? const implicit ==const)
 
 temp_ptr returns T? const#
 
@@ -126,7 +126,7 @@ returns temporary pointer from a given pointer
 
 .. _function-_at_safe_addr_c__c_temp_ptr_I_eq_1_ls_Y_ls_T_gr_._gr_?:
 
-.. das:function:: temp_ptr(x: auto(T)? implicit =const)
+.. das:function:: temp_ptr(x: auto(T)? implicit ==const)
 
 temp_ptr returns T?#
 

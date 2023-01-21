@@ -18,12 +18,12 @@ All functions and symbols are in "array_boost" module, use require to get access
 Temporary arrays
 ++++++++++++++++
 
-  *  :ref:`temp_array (arr:auto implicit =const -const) : auto <function-_at_array_boost_c__c_temp_array_I_eq_.>` 
-  *  :ref:`temp_array (arr:auto const implicit =const) : auto <function-_at_array_boost_c__c_temp_array_CI_eq_.>` 
+  *  :ref:`temp_array (arr:auto implicit ==const -const) : auto <function-_at_array_boost_c__c_temp_array_I_eq_.>` 
+  *  :ref:`temp_array (arr:auto const implicit ==const) : auto <function-_at_array_boost_c__c_temp_array_CI_eq_.>` 
 
 .. _function-_at_array_boost_c__c_temp_array_I_eq_.:
 
-.. das:function:: temp_array(arr: auto implicit =const)
+.. das:function:: temp_array(arr: auto implicit ==const)
 
 temp_array returns auto
 
@@ -45,7 +45,7 @@ Important requirements are:
 
 .. _function-_at_array_boost_c__c_temp_array_CI_eq_.:
 
-.. das:function:: temp_array(arr: auto const implicit =const)
+.. das:function:: temp_array(arr: auto const implicit ==const)
 
 temp_array returns auto
 

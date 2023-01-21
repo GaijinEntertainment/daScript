@@ -140,7 +140,12 @@ namespace das
             this->modifyExternal = true;
             this->invoke = true;
             vector<TypeDeclPtr> args = makeBuiltinArgs<void,Args...>(lib);
-            args.emplace_back(makeType<const TBlock<void,TTemporary<TExplicit<CType>>>>(lib));
+            auto argT = makeType<CType>(lib);
+            if ( !argT->canCopy() && !argT->canMove() ) {
+                args.emplace_back(makeType<const TBlock<void,TExplicit<CType>>>(lib));
+            } else {
+                args.emplace_back(makeType<const TBlock<void,TTemporary<TExplicit<CType>>>>(lib));
+            }
             construct(args);
         }
         virtual SimNode * makeSimNode ( Context & context, const vector<ExpressionPtr> & ) override {

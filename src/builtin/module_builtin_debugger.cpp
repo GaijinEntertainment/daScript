@@ -45,7 +45,7 @@ namespace debugapi {
 
     struct DebugAgentAdapter : DebugAgent, DapiDebugAgent_Adapter {
         DebugAgentAdapter ( char * pClass, const StructInfo * info, Context * ctx )
-            : DapiDebugAgent_Adapter(info), classPtr(pClass), context(ctx) {
+            : DapiDebugAgent_Adapter(info), classPtr(pClass), classInfo(info), context(ctx) {
        }
         virtual void onInstall ( DebugAgent * agent ) override {
             if ( auto fnOnInstall = get_onInstall(classPtr) ) {
@@ -150,9 +150,10 @@ namespace debugapi {
                 context->unlock();
             }
         }
-    protected:
-        void *      classPtr;
-        Context *   context;
+    public:
+        void *              classPtr = nullptr;
+        const StructInfo *  classInfo = nullptr;
+        Context *           context = nullptr;
     };
 
     struct AstDebugAgentAnnotation : ManagedStructureAnnotation<DebugAgent,false,true> {
@@ -835,6 +836,93 @@ namespace debugapi {
         return res;
     }
 
+    // invoke_debug_agent_method("category","function",....)
+
+    extern std::recursive_mutex g_DebugAgentMutex;
+    extern das_safe_map<string, DebugAgentInstance>   g_DebugAgents;
+
+#define MAX_DEBUG_AGENT_ARGS 16
+
+    vec4f invokeInDebugAgent ( Context & context, SimNode_CallBase * call, vec4f * args ) {
+        if ( call->nArguments>=MAX_DEBUG_AGENT_ARGS-3 ) context.throw_error_at(call->debugInfo, "too many arguments");
+        const char * category = cast<char *>::to(args[0]);
+        if ( !category ) context.throw_error_at(call->debugInfo, "need to specify category");
+        const char * function_name = cast<char *>::to(args[1]);
+        if ( !function_name ) context.throw_error_at(call->debugInfo, "need to specify method name");
+        g_DebugAgentMutex.lock();
+        auto it = g_DebugAgents.find(category);
+        if ( it == g_DebugAgents.end() ) {
+            g_DebugAgentMutex.unlock();
+            context.throw_error_at(call->debugInfo, "can't get debug agent '%s'", category);
+        }
+        auto invCtx = it->second.debugAgentContext.get();
+        if ( !invCtx ) {
+            g_DebugAgentMutex.unlock();
+            context.throw_error_at(call->debugInfo, "debug agent '%s' is a CPP-only agent", category);
+        }
+        Func * func = nullptr;
+        auto adapter = (DebugAgentAdapter *) it->second.debugAgent.get();
+        auto sinfo = adapter->classInfo;
+        for ( uint32_t fi=0; fi!=sinfo->count; ++fi ) {
+            auto field = sinfo->fields[fi];
+            if ( strcmp(field->name, function_name)==0 ) {
+                func = (Func *) ( ((char *) adapter->classPtr) + field->offset );
+                vec4f args2[MAX_DEBUG_AGENT_ARGS];
+                args2[0] = cast<Context *>::from(invCtx);
+                args2[1] = cast<Func>::from(*func);
+                args2[2] = cast<void *>::from(adapter->classPtr);
+                for ( int32_t ai=2; ai!=call->nArguments; ++ai ) {
+                    args2[ai + 1] = args[ai];
+                }
+                auto result = pinvoke_impl2(context, call, args2);
+                g_DebugAgentMutex.unlock();
+                return result;
+            }
+        }
+
+        g_DebugAgentMutex.unlock();
+        context.throw_error_at(call->debugInfo, "debug agent '%s' is a CPP-only agent", category);
+        return v_zero();
+    }
+
+    // invoke_debug_agent_function("category","function",....)
+
+    vec4f invokeInDebugAgent2 ( Context & context, SimNode_CallBase * call, vec4f * args ) {
+        if ( call->nArguments>=MAX_DEBUG_AGENT_ARGS-3 ) context.throw_error_at(call->debugInfo, "too many arguments");
+        const char * category = cast<char *>::to(args[0]);
+        if ( !category ) context.throw_error_at(call->debugInfo, "need to specify category");
+        const char * function_name = cast<char *>::to(args[1]);
+        if ( !function_name ) context.throw_error_at(call->debugInfo, "need to specify method name");
+        g_DebugAgentMutex.lock();
+        auto it = g_DebugAgents.find(category);
+        if ( it == g_DebugAgents.end() ) {
+            g_DebugAgentMutex.unlock();
+            context.throw_error_at(call->debugInfo, "can't get debug agent '%s'", category);
+        }
+        auto invCtx = it->second.debugAgentContext.get();
+        if ( !invCtx ) {
+            g_DebugAgentMutex.unlock();
+            context.throw_error_at(call->debugInfo, "debug agent '%s' is a CPP-only agent", category);
+        }
+        Func func;
+        func.PTR = invCtx->findFunction(function_name);
+        if ( !func.PTR ) {
+            g_DebugAgentMutex.unlock();
+            context.throw_error_at(call->debugInfo, "function '%s' not found in debug agent '%s'", function_name, category);
+        }
+        auto adapter = (DebugAgentAdapter *) it->second.debugAgent.get();
+        vec4f args2[MAX_DEBUG_AGENT_ARGS];
+        args2[0] = cast<Context *>::from(invCtx);
+        args2[1] = cast<Func>::from(func);
+        args2[2] = cast<void *>::from(adapter->classPtr);
+        for ( int32_t ai=2; ai!=call->nArguments; ++ai ) {
+            args2[ai + 1] = args[ai];
+        }
+        auto result = pinvoke_impl2(context, call, args2);
+        g_DebugAgentMutex.unlock();
+        return result;
+    }
+
     vec4f get_global_variable ( Context & context, SimNode_CallBase * node, vec4f * args ) {
         auto ctx = cast<Context *>::to(args[0]);
         if ( ctx==nullptr ) context.throw_error_at(node->debugInfo, "expecting context pointer");
@@ -1081,6 +1169,52 @@ namespace debugapi {
                 SideEffects::worstDefault,"pinvoke_impl3")->unsafeOperation = true;
             addInterop<pinvoke_impl3,void,vec4f,Lambda,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_in_context",
                 SideEffects::worstDefault,"pinvoke_impl3")->unsafeOperation = true;
+            // invoke debug agent function (local to da context)
+            addInterop<invokeInDebugAgent,void,char *,char *>(*this,lib,"invoke_debug_agent_method",
+                SideEffects::worstDefault,"invokeInDebugAgent")->unsafeOperation = true;
+            addInterop<invokeInDebugAgent,void,char *,char *,vec4f>(*this,lib,"invoke_debug_agent_method",
+                SideEffects::worstDefault,"invokeInDebugAgent")->unsafeOperation = true;
+            addInterop<invokeInDebugAgent,void,char *,char *,vec4f,vec4f>(*this,lib,"invoke_debug_agent_method",
+                SideEffects::worstDefault,"invokeInDebugAgent")->unsafeOperation = true;
+            addInterop<invokeInDebugAgent,void,char *,char *,vec4f,vec4f,vec4f>(*this,lib,"invoke_debug_agent_method",
+                SideEffects::worstDefault,"invokeInDebugAgent")->unsafeOperation = true;
+            addInterop<invokeInDebugAgent,void,char *,char *,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_debug_agent_method",
+                SideEffects::worstDefault,"invokeInDebugAgent")->unsafeOperation = true;
+            addInterop<invokeInDebugAgent,void,char *,char *,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_debug_agent_method",
+                SideEffects::worstDefault,"invokeInDebugAgent")->unsafeOperation = true;
+            addInterop<invokeInDebugAgent,void,char *,char *,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_debug_agent_method",
+                SideEffects::worstDefault,"invokeInDebugAgent")->unsafeOperation = true;
+            addInterop<invokeInDebugAgent,void,char *,char *,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_debug_agent_method",
+                SideEffects::worstDefault,"invokeInDebugAgent")->unsafeOperation = true;
+            addInterop<invokeInDebugAgent,void,char *,char *,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_debug_agent_method",
+                SideEffects::worstDefault,"invokeInDebugAgent")->unsafeOperation = true;
+            addInterop<invokeInDebugAgent,void,char *,char *,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_debug_agent_method",
+                SideEffects::worstDefault,"invokeInDebugAgent")->unsafeOperation = true;
+            addInterop<invokeInDebugAgent,void,char *,char *,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_debug_agent_method",
+                SideEffects::worstDefault,"invokeInDebugAgent")->unsafeOperation = true;
+            // invoke debug agent function (local to da context)
+            addInterop<invokeInDebugAgent2,void,char *,char *>(*this,lib,"invoke_debug_agent_function",
+                SideEffects::worstDefault,"invokeInDebugAgent2")->unsafeOperation = true;
+            addInterop<invokeInDebugAgent2,void,char *,char *,vec4f>(*this,lib,"invoke_debug_agent_function",
+                SideEffects::worstDefault,"invokeInDebugAgent2")->unsafeOperation = true;
+            addInterop<invokeInDebugAgent2,void,char *,char *,vec4f,vec4f>(*this,lib,"invoke_debug_agent_function",
+                SideEffects::worstDefault,"invokeInDebugAgent2")->unsafeOperation = true;
+            addInterop<invokeInDebugAgent2,void,char *,char *,vec4f,vec4f,vec4f>(*this,lib,"invoke_debug_agent_function",
+                SideEffects::worstDefault,"invokeInDebugAgent2")->unsafeOperation = true;
+            addInterop<invokeInDebugAgent2,void,char *,char *,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_debug_agent_function",
+                SideEffects::worstDefault,"invokeInDebugAgent2")->unsafeOperation = true;
+            addInterop<invokeInDebugAgent2,void,char *,char *,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_debug_agent_function",
+                SideEffects::worstDefault,"invokeInDebugAgent2")->unsafeOperation = true;
+            addInterop<invokeInDebugAgent2,void,char *,char *,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_debug_agent_function",
+                SideEffects::worstDefault,"invokeInDebugAgent2")->unsafeOperation = true;
+            addInterop<invokeInDebugAgent2,void,char *,char *,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_debug_agent_function",
+                SideEffects::worstDefault,"invokeInDebugAgent2")->unsafeOperation = true;
+            addInterop<invokeInDebugAgent2,void,char *,char *,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_debug_agent_function",
+                SideEffects::worstDefault,"invokeInDebugAgent2")->unsafeOperation = true;
+            addInterop<invokeInDebugAgent2,void,char *,char *,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_debug_agent_function",
+                SideEffects::worstDefault,"invokeInDebugAgent2")->unsafeOperation = true;
+            addInterop<invokeInDebugAgent2,void,char *,char *,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f,vec4f>(*this,lib,"invoke_debug_agent_function",
+                SideEffects::worstDefault,"invokeInDebugAgent2")->unsafeOperation = true;
             // lock debug context
             addExtern<DAS_BIND_FUN(lockDebugAgent)>(*this, lib, "lock_debug_agent",
                 SideEffects::modifyExternal, "lockDebugAgent")

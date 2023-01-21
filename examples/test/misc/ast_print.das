@@ -36,7 +36,7 @@ class PrintVisitor : AstVisitor
         print("// program\n")
     def override visitProgram(prog:ProgramPtr)
         print("// end program\n")
-    def override preVisitProgramBody(prog:ProgramPtr; mod:Module?)
+    def override preVisitProgramBody(prog:ProgramPtr;mod:Module?)
         print("// program body\n")
 // type
     ET : bool = false

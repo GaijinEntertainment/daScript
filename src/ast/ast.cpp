@@ -531,6 +531,10 @@ namespace das {
         cfun->sideEffectFlags = sideEffectFlags;
         cfun->inferStack = inferStack;
         cfun->classParent = classParent;
+        // copy aliasing info
+        cfun->resultAliases = resultAliases;
+        cfun->argumentAliases = argumentAliases;
+        cfun->resultAliasesGlobals = resultAliasesGlobals;
         return cfun;
     }
 

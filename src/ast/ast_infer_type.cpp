@@ -709,12 +709,12 @@ namespace das {
                 }
                 // match auto argument
                 if (argType->isAuto()) {
-                    return TypeDecl::inferGenericType(argType, passType, true, options) != nullptr;
+                    return TypeDecl::inferGenericType(argType, passType, true, true, options) != nullptr;
                 }
             }
             // match inferable block
             if (inferBlock && passType->isAuto() && (passType->isGoodBlockType() || passType->isGoodLambdaType() || passType->isGoodFunctionType())) {
-                return TypeDecl::inferGenericType(passType, argType, options) != nullptr;
+                return TypeDecl::inferGenericType(passType, argType, true, true, options) != nullptr;
             }
             // compare types which don't need inference
             auto tempMatters = argType->implicit ? TemporaryMatters::no : TemporaryMatters::yes;
@@ -1402,8 +1402,8 @@ namespace das {
                     reportAstChanged();
                 } else {
                     error("not fully resolved yet",  "", "", decl.at);
+                    return;
                 }
-                return;
             }
             if ( decl.type->isAlias() ) {
                 if ( auto aT = inferAlias(decl.type) ) {
@@ -6520,7 +6520,7 @@ namespace das {
                         if ( arg->rtti_isMakeBlock() ) { // "it's always MakeBlock. unless its function and @@funcName
                             auto mkBlock = static_pointer_cast<ExprMakeBlock>(arg);
                             auto block = static_pointer_cast<ExprBlock>(mkBlock->block);
-                            auto retT = TypeDecl::inferGenericType(mkBlock->type, funcC->arguments[iF]->type, true);
+                            auto retT = TypeDecl::inferGenericType(mkBlock->type, funcC->arguments[iF]->type, true, true);
                             DAS_ASSERTF ( retT, "how? it matched during findMatchingFunctions the same way");
                             TypeDecl::applyAutoContracts(mkBlock->type, funcC->arguments[iF]->type);
                             block->returnType = make_smart<TypeDecl>(*retT->firstType);
@@ -6617,19 +6617,19 @@ namespace das {
                             if (argT->isAlias()) {
                                 argT = inferPartialAliases(argT, clone, &aliases);
                             }
-                            if (argT->isAuto()) {
+                            bool appendHasOptions = false;
+                            bool isAutoWto = argT->isAutoWithoutOptions(appendHasOptions);
+                            if ( isAutoWto || appendHasOptions) {
                                 auto & passT = types[sz];
-                                auto resT = TypeDecl::inferGenericType(argT, passT, true);
+                                auto resT = TypeDecl::inferGenericType(argT, passT, true, true);
                                 DAS_ASSERTF(resT, "how? we had this working at findMatchingGenerics");
                                 resT->ref = false;                          // by default no ref
-                                resT->implicit = argT->implicit;            // copy implicit on the arguments
-                                resT->explicitConst = argT->explicitConst;  // copy const explicitness
                                 TypeDecl::applyAutoContracts(resT, argT);
-                                if (resT->isRefType()) {   // we don't pass boxed type by reference ever
-                                    resT->ref = false;
-                                }
-                                resT->isExplicit = true; // this is generic for this type, and this type only
+                                TypeDecl::applyRefToRef(resT, true);
+                                resT->isExplicit = isAutoWto; // this is generic for this type, and this type only
                                 argT = resT;
+                            } else {
+                                TypeDecl::applyRefToRef(argT, true);
                             }
                         }
                         // resolve tail-end types

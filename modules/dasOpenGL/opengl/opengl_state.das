@@ -189,11 +189,10 @@ def report_float4 ( var ctx:Context; what:uint; category,name:string )
 def report_enum ( var ctx:Context; what:uint; category,name:string; en:table<uint;string> )
     var d32 : int
     glGetIntegerv(what, safe_addr(d32))
-    en |> find(uint(d32)) <| $ ( pname )
-        if pname!=null
-            report_to_debugger(ctx, category, name, *pname)
-        else
-            report_to_debugger(ctx, category, name, uint(d32))
+    let found = en |> get(uint(d32)) <| $ ( pname )
+        report_to_debugger(ctx, category, name, pname)
+    if !found
+        report_to_debugger(ctx, category, name, uint(d32))
 
 class ContextStateAgent : DapiDebugAgent
     def logDebugMessages(var ctx:Context)
@@ -245,11 +244,10 @@ class ContextStateAgent : DapiDebugAgent
             return
         // error
         var err = glGetError()
-        opengl_last_error |> find(err) <| $ ( pname )
-            if pname!=null
-                report_to_debugger(ctx, "OPENGL", "last error", *pname)
-            else
-                report_to_debugger(ctx, "OPENGL", "last error", err)
+        let found = opengl_last_error |> get(err) <| $ ( pname )
+            report_to_debugger(ctx, "OPENGL", "last error", pname)
+        if !found
+            report_to_debugger(ctx, "OPENGL", "last error", err)
         var flags : int
         glGetIntegerv(GL_CONTEXT_FLAGS, safe_addr(flags))
         if (uint(flags) & GL_CONTEXT_FLAG_DEBUG_BIT)!=0u

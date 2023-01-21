@@ -106,3 +106,80 @@ You can also modify the type with delete syntax::
         print(typeinfo(typename type some -const))
 
     fn(1) // print "int"
+
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+type contracts and type operations
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Generic function arguments, result, and inferred type aliases can be operated on during the inference.
+
+`const` specifies, that constant and regular expressions will be matched::
+
+    def foo ( a : Foo const )   // accepts Foo and Foo const
+
+`==const` specifies, that const of the expression has to match const of the argument::
+
+    def foo ( a : Foo const ==const )   // accepts Foo const only
+    def foo ( var a : Foo ==const )     // accepts Foo only
+
+`-const` will remove const from the matching type::
+
+    def foo ( a : array<auto -const> )  // matches any array, with non-const elements
+
+`#` specifies that only temporary types are accepted::
+
+    def foo ( a : Foo# )    // accepts Foo# only
+
+`-#` will remove temporary type from the matching type::
+
+    def foo ( a : auto(TT) )        // accepts any type
+        var temp : TT -# := a;      // TT -# is now a regular type, and when `a` is temporary, it can clone it into `temp`
+
+`&` specifies that argument is passed by reference::
+
+    def foo ( a : auto& )           // accepts any type, passed by reference
+
+`-&` will remove reference from the matching type::
+
+    def foo ( a : auto(TT)& )       // accepts any type, passed by reference
+        var temp : TT -& = a;       // TT -& is not a local reference
+
+`[]` specifies that the argument is a static array of arbitrary dimension::
+
+    def foo ( a : auto[] )          // accepts static array of any type of any size
+
+`-[]` will remove static array dimension from the matching type::
+
+    def take_dim( a : auto(TT) )
+        var temp : TT -[]           // temp is type of element of a
+    // if a is int[10] temp is int
+    // if a is int[10][20][30] temp is still int
+
+`implicit` specifies that both temporary and regular types can be matched, but the type will be treated as specified. `implicit` is _UNSAFE_::
+
+    def foo ( a : Foo implicit )    // accepts Foo and Foo#, a will be treated as Foo
+    def foo ( a : Foo# implicit )   // accepts Foo and Foo#, a will be treated as Foo#
+
+`explicit` specifies that LSP will not be applied, and only exact type match will be accepted::
+
+    def foo ( a : Foo )             // accepts Foo and any type that is inherited from Foo directly or indirectly
+    def foo ( a : Foo explicit )    // accepts Foo only
+
+^^^^^^^
+options
+^^^^^^^
+
+Multiple options can be specified as a function argument::
+
+    def foo ( a : int | float )   // accepts int or float
+
+Optional types always make function generic.
+
+Generic options will be matched in the order listed::
+
+    def foo ( a : Bar explicit | Foo )   // first will try to match exactly Bar, than anything else inherited from Foo
+
+`|#` shortcat matches previous type, with temporary flipped::
+
+    def foo ( a : Foo |# )   // accepts Foo and Foo# in that order
+    def foo ( a : Foo# |# )  // accepts Foo# and Foo in that order

@@ -47,7 +47,7 @@ struct SFoo
     a : int
     b : float
 
-def operator == ( a,b: SFoo )
+def operator == ( a,b: SFoo|# )
     return a.a==b.a && a.b==b.b
 
 struct NFoo
@@ -68,7 +68,7 @@ def operator == ( a,b:int[4] )
             return false
     return true
 
-def operator == ( a,b:SFoo[2] )
+def operator == ( a,b:SFoo[2]|# )
     for A,B in a,b
         if !(A==B)
             return false
@@ -98,22 +98,22 @@ def array_types ( t: T? )
 
 typedef TFoo = tuple<int; float; string>
 
-def operator == ( a,b: TFoo )
+def operator == ( a,b: TFoo|# )
     return a._0==b._0 && a._1==b._1 && a._2==b._2
 
 [test]
 def tuple_types ( t: T? )
     test_equ(t, [[auto 1,2.0,"3"]])
 
-def op_equ_tab ( a,b:table<string;auto> )
+def op_equ_tab ( a,b:table<string;auto(TT)> )
     if a|>length != b|> length
         return false
     for k,v in keys(a), values(a)
         if !(b |> key_exists(k))
             return false
         var same = false
-        b |> find(k) <| $ ( pv )
-            same = pv!=null && *pv==v
+        b |> get(k) <| $ ( pv )
+            same = pv==v
     return true
 
 def operator == ( a,b:table<string;int> )

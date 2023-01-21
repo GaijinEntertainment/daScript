@@ -81,6 +81,31 @@ namespace das
         };
     };
 
+    struct DeprecatedFunctionAnnotation : MarkFunctionAnnotation {
+        DeprecatedFunctionAnnotation() : MarkFunctionAnnotation("deprecated") { }
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+            func->deprecated = true;
+            return true;
+        };
+        virtual bool verifyCall ( ExprCallFunc * call, const AnnotationArgumentList & args,
+            const AnnotationArgumentList & /*progArgs */, string & /*err*/ ) override {
+            DAS_ASSERT(daScriptEnvironment::bound->g_compilerLog);
+            (*daScriptEnvironment::bound->g_compilerLog) << call->at.describe() << ": *warning* function " << call->func->name << " is deprecated\n";
+            if ( auto arg = args.find("message",Type::tString) ) {
+                (*daScriptEnvironment::bound->g_compilerLog) << "\t" << arg->sValue << "\n";
+            }
+            return true;
+        }
+    };
+
+    struct NeverAliasCMRESFunctionAnnotation : MarkFunctionAnnotation {
+        NeverAliasCMRESFunctionAnnotation() : MarkFunctionAnnotation("never_alias_cmres") { }
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+            func->neverAliasCMRES = true;
+            return true;
+        };
+    };
+
     // dummy annotation for optimization hints on functions or blocks
     struct HintFunctionAnnotation : FunctionAnnotation {
         HintFunctionAnnotation() : FunctionAnnotation("hint") { }
@@ -1045,6 +1070,8 @@ namespace das
         addAnnotation(make_smart<MacroFnFunctionAnnotation>());
         addAnnotation(make_smart<HintFunctionAnnotation>());
         addAnnotation(make_smart<RequestJitFunctionAnnotation>());
+        addAnnotation(make_smart<DeprecatedFunctionAnnotation>());
+        addAnnotation(make_smart<NeverAliasCMRESFunctionAnnotation>());
         addAnnotation(make_smart<ExportFunctionAnnotation>());
         addAnnotation(make_smart<NoLintFunctionAnnotation>());
         addAnnotation(make_smart<SideEffectsFunctionAnnotation>());
@@ -1356,6 +1383,11 @@ namespace das
         // das-string
         addExtern<DAS_BIND_FUN(das_str_equ)>(*this, lib, "==", SideEffects::none, "das_str_equ");
         addExtern<DAS_BIND_FUN(das_str_nequ)>(*this, lib, "!=", SideEffects::none, "das_str_nequ");
+        // string emptiness
+        addExtern<DAS_BIND_FUN(builtin_empty)>(*this, lib, "empty",
+            SideEffects::none, "builtin_empty")->arg("str");
+        addExtern<DAS_BIND_FUN(builtin_empty_das_string)>(*this, lib, "empty",
+            SideEffects::none, "builtin_empty_das_string")->arg("str");
         // das-string extra
         STR_DSTR_REG(  eq,==);
         STR_DSTR_REG( neq,!=);

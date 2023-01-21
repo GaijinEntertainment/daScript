@@ -8,11 +8,13 @@ struct Color {
     float luminance() const { return 0.2126f*r + 0.7152f*g + 0.0722f*b; }
 };
 
+
+
 // create type factory, so that type can be bound
 MAKE_TYPE_FACTORY(Color, Color);
 
 // create type annotation, which exposes it to C++
-struct ColorAnnotation : public ManagedStructureAnnotation<Color,true,true> {
+struct ColorAnnotation : public ManagedStructureAnnotation<Color,false,false> {
     ColorAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("Color", ml) {
         // expose individual fields
         addField<DAS_BIND_MANAGED_FIELD(r)>("r");
@@ -25,6 +27,13 @@ struct ColorAnnotation : public ManagedStructureAnnotation<Color,true,true> {
     virtual bool isLocal() const override { return true; }  // this ref-value can appear as local variable in das
     virtual bool canCopy() const override { return true; }  // this ref-value can be copied
     virtual bool canMove() const override { return true; }  // this ref-value can be moved
+    virtual bool isSmart() const override { return false; }
+    virtual bool isRefType() const override { return false; }
+    virtual bool hasNonTrivialCtor() const override { return false; }
+    virtual bool isPod() const override { return true; }
+    virtual bool isRawPod() const override { return true; }
+    virtual bool rtti_isBasicStructureAnnotation() const override { return true; }
+    //virtual bool rtti_isHandledTypeAnnotation() const override { return false; }
 };
 
 // custom function, which takes type as an input, as well as returns it

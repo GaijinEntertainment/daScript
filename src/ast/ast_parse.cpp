@@ -362,7 +362,10 @@ namespace das {
                 }
             }
             if ( !program->failed() ) {
-                program->lint(libGroup);
+                if (!program->failed())
+                    program->deriveAliases(logs);
+                if (!program->failed())
+                    program->lint(logs, libGroup);
                 if ( policies.macro_context_collect ) libGroup.collectMacroContexts();
                 program->foldUnsafe();
                 auto timeO = ref_time_ticks();
