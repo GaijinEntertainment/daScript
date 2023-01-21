@@ -2,7 +2,7 @@ options log = true
 
 require ast
 require daslib/ast_boost
-require daslib/templates
+require daslib/templates_boost
 
 [export]
 def test
@@ -13,12 +13,12 @@ def test
 
     print(describe(expr))
 
-    var rules = new Template()
-    // rules->replaceVariable("x") <| ExpressionPtr(new [[ExprVar() name:="y"]])
-    rules->renameVariable("x", "y")
+    var rules : Template
+    //rules |> replaceVariable("x") <| ExpressionPtr(new [[ExprVar() name:="y"]])
+    rules |> renameVariable("x", "y")
 
-    var res_expr <- apply_template(rules, expr)
+    apply_template(rules, expr.at, expr)
 
-    print(describe(res_expr))
+    print(describe(expr))
 
     return true

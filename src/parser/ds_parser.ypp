@@ -2014,7 +2014,7 @@ enum_list
     |   enum_list[pE] NAME[name] ';' {
         das_checkName(scanner,*$name,tokAt(scanner,@name));
         if ( !$pE->add(*$name,nullptr,tokAt(scanner,@name)) ) {
-            das_yyerror(scanner,"enumeration alread declared " + *$name, tokAt(scanner,@name),
+            das_yyerror(scanner,"enumeration already declared " + *$name, tokAt(scanner,@name),
                 CompilationError::enumeration_value_already_declared);
         }
         delete $name;
@@ -2023,7 +2023,7 @@ enum_list
     |   enum_list[pE] NAME[name] '=' expr[value] ';' {
         das_checkName(scanner,*$name,tokAt(scanner,@name));
         if ( !$pE->add(*$name,ExpressionPtr($value),tokAt(scanner,@name)) ) {
-            das_yyerror(scanner,"enumeration value alread declared " + *$name, tokAt(scanner,@name),
+            das_yyerror(scanner,"enumeration value already declared " + *$name, tokAt(scanner,@name),
                 CompilationError::enumeration_value_already_declared);
         }
         delete $name;
