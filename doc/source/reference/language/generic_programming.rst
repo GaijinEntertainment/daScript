@@ -90,7 +90,7 @@ Also, consider the following::
 
 If you call this function with an array of floats and an int, you would get a not-so-obvious compiler error message::
 
-    def set0(a: array<auto(some>); b: some; index: int) // a is of array type, of same type as b
+    def set0(a: array<auto(some)>; b: some; index: int) // a is of array type, of same type as b
         return a[index] = b
 
 Usage of named ``auto`` with ``typeinfo`` ::
