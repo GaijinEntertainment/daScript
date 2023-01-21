@@ -1177,6 +1177,10 @@ namespace das
             Context & context, SimNode_CallBase * pCall);
         bool doesNotNeedSp = false;
         bool cmresAlias = false;
+        __forceinline bool allowCmresSkip() const {
+            return func && (func->copyOnReturn || func->moveOnReturn)
+                && !((func->aliasCMRES || cmresAlias) && !func->neverAliasCMRES);
+        }
     };
 
     struct ExprIfThenElse : Expression {

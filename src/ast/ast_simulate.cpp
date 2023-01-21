@@ -119,7 +119,7 @@ namespace das
         // now, call with CMRES
         if ( rE->rtti_isCall() ) {
             auto cll = static_pointer_cast<ExprCall>(rE);
-            if ( cll->func->allowCmresAlias() && !cll->cmresAlias ) {
+            if ( cll->allowCmresSkip() ) {
                 SimNode_CallBase * right = (SimNode_CallBase *) rE->simulate(context);
                 right->cmresEval = context.code->makeNode<SimNode_GetCMResOfs>(rE->at, offset);
                 return right;
@@ -154,7 +154,7 @@ namespace das
         // now, call with CMRES
         if ( rE->rtti_isCall() ) {
             auto cll = static_pointer_cast<ExprCall>(rE);
-            if ( cll->func->allowCmresAlias() && !cll->cmresAlias ) {
+            if ( cll->allowCmresSkip() ) {
                 SimNode_CallBase * rightC = (SimNode_CallBase *) right;
                 rightC->cmresEval = context.code->makeNode<SimNode_GetCMResOfs>(rE->at, offset);
                 return rightC;
@@ -191,7 +191,7 @@ namespace das
         // now, call with CMRES
         if ( rE->rtti_isCall() ) {
             auto cll = static_pointer_cast<ExprCall>(rE);
-            if ( cll->func->allowCmresAlias() && !cll->cmresAlias ) {
+            if ( cll->allowCmresSkip() ) {
                 SimNode_CallBase * right = (SimNode_CallBase *) rE->simulate(context);
                 right->cmresEval = context.code->makeNode<SimNode_GetLocalRefOff>(rE->at, stackTop, offset);
                 return right;
@@ -226,7 +226,7 @@ namespace das
         // now, call with CMRES
         if ( rE->rtti_isCall() ) {
             auto cll = static_pointer_cast<ExprCall>(rE);
-            if ( cll->func->allowCmresAlias() && !cll->cmresAlias ) {
+            if ( cll->allowCmresSkip() ) {
                 SimNode_CallBase * rightC = (SimNode_CallBase *) right;
                 rightC->cmresEval = context.code->makeNode<SimNode_GetLocalRefOff>(rE->at, stackTop, offset);
                 return rightC;
@@ -263,7 +263,7 @@ namespace das
         // now, call with CMRES
         if ( rE->rtti_isCall() ) {
             auto cll = static_pointer_cast<ExprCall>(rE);
-            if ( cll->func->allowCmresAlias() && !cll->cmresAlias ) {
+            if ( cll->allowCmresSkip() ) {
                 SimNode_CallBase * right = (SimNode_CallBase *) rE->simulate(context);
                 right->cmresEval = context.code->makeNode<SimNode_GetLocal>(rE->at, stackTop);
                 return right;
@@ -297,7 +297,7 @@ namespace das
         // now, call with CMRES
         if ( rE->rtti_isCall() ) {
             auto cll = static_pointer_cast<ExprCall>(rE);
-            if ( cll->func->allowCmresAlias() && !cll->cmresAlias ) {
+            if ( cll->allowCmresSkip() ) {
                 SimNode_CallBase * right = (SimNode_CallBase *) rE->simulate(context);
                 right->cmresEval = context.code->makeNode<SimNode_GetLocal>(rE->at, stackTop);
                 return right;
@@ -339,7 +339,7 @@ namespace das
         // now, call with CMRES
         if ( rE->rtti_isCall() ) {
             auto cll = static_pointer_cast<ExprCall>(rE);
-            if ( cll->func->allowCmresAlias() && !cll->cmresAlias ) {
+            if ( cll->allowCmresSkip() ) {
                 SimNode_CallBase * right = (SimNode_CallBase *) rE->simulate(context);
                 right->cmresEval = lE->simulate(context);
                 return right;
@@ -377,7 +377,7 @@ namespace das
         // now, call with CMRES
         if ( rE->rtti_isCall() ) {
             auto cll = static_pointer_cast<ExprCall>(rE);
-            if ( cll->func->allowCmresAlias() && !cll->cmresAlias ) {
+            if ( cll->allowCmresSkip() ) {
                 SimNode_CallBase * right = (SimNode_CallBase *) rE->simulate(context);
                 right->cmresEval = lE->simulate(context);
                 return right;
@@ -518,7 +518,7 @@ namespace das
                 mkl->setRefSp(ref, cmres, sp, offset);
             } else if ( decl->value->rtti_isCall() ) {
                 auto cll = static_pointer_cast<ExprCall>(decl->value);
-                if ( cll->func->allowCmresAlias() && !cll->cmresAlias ) {
+                if ( cll->allowCmresSkip() ) {
                     cll->doesNotNeedSp = true;
                 }
             } else if ( decl->value->rtti_isInvoke() ) {
@@ -643,7 +643,7 @@ namespace das
                     mkl->setRefSp(ref, cmres, sp, offset);
                 } else if ( decl->value->rtti_isCall() ) {
                     auto cll = static_pointer_cast<ExprCall>(decl->value);
-                    if ( cll->func->allowCmresAlias() && !cll->cmresAlias ) {
+                    if ( cll->allowCmresSkip() ) {
                         cll->doesNotNeedSp = true;
                     }
                 } else if ( decl->value->rtti_isInvoke() ) {
@@ -860,7 +860,7 @@ namespace das
                 mkl->setRefSp(ref, cmres, sp, offset);
             } else if ( val->rtti_isCall() ) {
                 auto cll = static_pointer_cast<ExprCall>(val);
-                if ( cll->func->allowCmresAlias() && !cll->cmresAlias ) {
+                if ( cll->allowCmresSkip() ) {
                     cll->doesNotNeedSp = true;
                 }
             } else if ( val->rtti_isInvoke() ) {
@@ -958,7 +958,7 @@ namespace das
                 mkl->setRefSp(ref, cmres, sp, offset);
             } else if ( val->rtti_isCall() ) {
                 auto cll = static_pointer_cast<ExprCall>(val);
-                if ( cll->func->allowCmresAlias() && !cll->cmresAlias ) {
+                if ( cll->allowCmresSkip() ) {
                     cll->doesNotNeedSp = true;
                 }
             } else if ( val->rtti_isInvoke() ) {
@@ -2770,7 +2770,7 @@ namespace das
             const auto & rE = var->init;
             if ( rE->rtti_isCall() ) {
                 auto cll = static_pointer_cast<ExprCall>(rE);
-                if ( cll->func->allowCmresAlias() && !cll->cmresAlias ) {
+                if ( cll->allowCmresSkip() ) {
                     retN = (SimNode_CallBase *) rE->simulate(context);
                     retN->cmresEval = varExpr->simulate(context);
                 }

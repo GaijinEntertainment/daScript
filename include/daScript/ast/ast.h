@@ -719,7 +719,6 @@ namespace das
             return this;
         }
         Function * getOrigin() const;
-        bool allowCmresAlias() const { return (copyOnReturn || moveOnReturn) && (neverAliasCMRES || !aliasCMRES);  }
     public:
         AnnotationList      annotations;
         string              name;
