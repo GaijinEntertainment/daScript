@@ -1402,8 +1402,8 @@ namespace das {
                     reportAstChanged();
                 } else {
                     error("not fully resolved yet",  "", "", decl.at);
+                    return;
                 }
-                return;
             }
             if ( decl.type->isAlias() ) {
                 if ( auto aT = inferAlias(decl.type) ) {
