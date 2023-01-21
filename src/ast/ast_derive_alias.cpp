@@ -19,13 +19,13 @@ namespace das {
     }
 
     void deriveAliasing ( const FunctionPtr & func, TextWriter & logs, bool logAliasing ) {
-        if ( !func->result->isRef() ) return;
         if ( func->arguments.size()==0 && func->useGlobalVariables.size()==0 && func->useFunctions.size()==0 ) return;
     // collect indirect global variables
         das_hash_map<Variable *,Function *> ind;
         das_hash_set<Function *> depInd;
         collectIndVariables(func.get(),func.get(),ind,depInd);
-        if ( func->arguments.size()==0 && ind.size()==0 ) return;
+        if ( !(func->copyOnReturn || func->moveOnReturn) ) return;  // not a cmres function, we don't need cmres aliasing
+        if ( func->arguments.size()==0 && ind.size()==0 ) return;   // no arguments, no globals, no cmres aliasing
     // collect type aliasing
         if ( logAliasing ) logs << "function " << func->getMangledName() << " returns by reference\n";
         das_set<Structure *> rdep;

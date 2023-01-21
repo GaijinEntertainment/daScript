@@ -130,47 +130,61 @@ namespace das {
     }
 
     typedef das_hash_set<Variable *> ExpressionSources;
+    class SourceCollector : public Visitor {
+    public:
+        SourceCollector() {
+            enabled.push_back(true);
+        }
+    protected:
+    // we found source
+        virtual void preVisit ( ExprVar * expr ) override {
+            Visitor::preVisit(expr);
+            if ( enabled.back() ) sources.insert(expr->variable.get());
+        }
+    // in op3 only sources can alias
+        virtual void preVisit ( ExprOp3 * expr ) override {
+            Visitor::preVisit(expr);
+            enabled.push_back(false);
+        }
+        virtual void preVisitLeft  ( ExprOp3 * expr, Expression * left ) {
+            Visitor::preVisitLeft(expr,left);
+            enabled.back() = true;
+        }
+        virtual ExpressionPtr visit ( ExprOp3 * expr ) override {
+            enabled.pop_back();
+            return Visitor::visit(expr);
+        }
+    // pointer deref - all bets are off
+        virtual void preVisit ( ExprPtr2Ref * expr ) override {
+            Visitor::preVisit(expr);
+            alwaysAliases = true;
+        }
+    // function call - does not alias when does not return ref
+        virtual void preVisit ( ExprCall * expr ) override {
+            Visitor::preVisit(expr);
+            if ( !expr->func->result->ref ) enabled.push_back(false);
+        }
+        virtual ExpressionPtr visit ( ExprCall * expr ) override {
+            if ( !expr->func->result->ref ) enabled.push_back(true);
+            return Visitor::visit(expr);
+        }
+    // invoke - all bets are off
+        virtual void preVisit ( ExprInvoke * expr ) override {
+            Visitor::preVisit(expr);
+            alwaysAliases = true;
+        }
+    protected:
+        vector<bool> enabled;
+    public:
+        ExpressionSources sources;
+        bool alwaysAliases = false;
+    };
 
     bool collectSources ( Expression * expr, ExpressionSources & src ) {
-        if ( expr->rtti_isVar() ) {
-            auto evar = static_cast<ExprVar *>(expr);
-            src.insert(evar->variable.get());
-        } else if ( expr->rtti_isAt() || expr->rtti_isSafeAt() ) {
-            auto eat = static_cast<ExprAt *>(expr);
-            collectSources(eat->subexpr.get(), src);
-        } else if ( expr->rtti_isField() || expr->rtti_isSafeField()
-                || expr->rtti_isAsVariant() || expr->rtti_isSafeAsVariant() ) {
-            auto efld = static_cast<ExprField *>(expr);
-            collectSources(efld->value.get(), src);
-        } else if ( expr->rtti_isSwizzle() ) {
-            auto eswiz = (ExprSwizzle *) expr;
-            collectSources(eswiz->value.get(), src);
-        } else if ( expr->rtti_isNullCoalescing() ) {
-            auto enull = (ExprNullCoalescing *) expr;
-            collectSources(enull->subexpr.get(), src);
-            collectSources(enull->defaultValue.get(), src);
-        } else if ( expr->rtti_isCast() ) {
-            auto ecast = (ExprCast *) expr;
-            collectSources(ecast->subexpr.get(), src);
-        } else if ( expr->rtti_isOp3() ) {
-            auto eop3 = (ExprOp3 *) expr;
-            collectSources(eop3->left.get(), src);
-            collectSources(eop3->right.get(), src);
-        } else if ( expr->rtti_isRef2Ptr() ) {
-            auto eref = (ExprRef2Ptr *)expr;
-            collectSources(eref->subexpr.get(), src);
-        } else if ( expr->rtti_isPtr2Ref() ) {
-            auto eptr = (ExprPtr2Ref *)expr;
-            collectSources(eptr->subexpr.get(), src);
-            return true;                                // we don't know, its pointer to `something`
-        } else if ( expr->rtti_isR2V() ) {
-            auto eptr = (ExprRef2Value *)expr;
-            collectSources(eptr->subexpr.get(), src);
-        } else {
-            // TODO: this is not going to be necessary
-            // DAS_ASSERTF(false, "unsupported expression type %s", expr->__rtti);
-        }
-        return false;
+        SourceCollector srr;
+        expr->visit(srr);
+        src = move(srr.sources);
+        return srr.alwaysAliases;
     }
 
     Variable * intersectSources ( ExpressionSources & a, ExpressionSources & b ) {
