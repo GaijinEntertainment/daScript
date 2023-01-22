@@ -219,4 +219,9 @@ def test_aliasing ( t : T? )
         a = [[Foo a = 1]]
         a = set(pass_a(a))      // this one ok
         t |> equal(14, a.a)
+        a = [[Foo a = 1]]
+        a = pass_ref_a(set(a))      // this one ok
+        t |> equal(14, a.a)
+
+
 

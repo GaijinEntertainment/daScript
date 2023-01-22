@@ -173,7 +173,11 @@ namespace das {
         }
         virtual void preVisit ( ExprCall * expr ) override {
             Visitor::preVisit(expr);
-            if ( expr->func->resultAliases.size() || expr->func->resultAliasesGlobals.size() ) {
+            if ( expr->func->aliasCMRES ) {
+                expr->cmresAlias = true;
+                goto bailout;
+            }
+            if ( !expr->func->neverAliasCMRES && (expr->func->resultAliases.size() || expr->func->resultAliasesGlobals.size()) ) {
                 auto it = cmresDest.find(expr);
                 if ( it!=cmresDest.end() ) {
                     auto resOut = it->second;
