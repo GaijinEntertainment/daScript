@@ -684,7 +684,7 @@ namespace das {
         ss << describeCppType(vtype,substituteRef,CpptSkipRef::no,CpptSkipConst::yes);
     }
 
-    string aotFuncNameEx ( const string & funcName ) {
+    string aotSuffixNameEx ( const string & funcName, const char * suffix ) {
         string name;
         bool prefix = false;
         for ( char ch : funcName ) {
@@ -719,16 +719,16 @@ namespace das {
                 }
             }
         }
-        return prefix ? ("_Func" + name) : name;
+        return prefix ? (suffix + name) : name;
     }
 
     string aotFuncName ( Function * func ) {
         if ( func->hash ) {
             TextWriter tw;
-            tw << aotFuncNameEx(func->name) << "_" << HEX << func->hash << DEC;
+            tw << aotSuffixNameEx(func->name,"_Func") << "_" << HEX << func->hash << DEC;
             return tw.str();
         } else {
-            return aotFuncNameEx(func->name);
+            return aotSuffixNameEx(func->name,"_Func");
         }
     }
 
@@ -763,7 +763,7 @@ namespace das {
         }
         void renameVariable ( Variable * var ) {
             if ( needRenaming(var) ) {
-                string newName = "__" + var->name + "_rename_at_" + to_string(var->at.line);
+                string newName = "__" + aotSuffixNameEx(var->name,"_Var") + "_rename_at_" + to_string(var->at.line);
                 rename[var] = newName;
             }
         }

@@ -775,6 +775,8 @@ namespace das {
 
     // rename variable to unique name variable
 
+    string aotSuffixNameEx ( const string & funcName, const char * suffix );
+
     class RenameVar : public Visitor {
     public:
         virtual void preVisit ( ExprBlock * block ) override {
@@ -790,7 +792,7 @@ namespace das {
             if ( scopes.size()==1 ) {   // only top level block
                 for ( auto & var : expr->variables ) {
                     if ( var->name[0]!='_' || var->name[1]!='_' ) {
-                        string newName = "__" + var->name + "_rename_at_" + to_string(var->at.line);
+                        string newName = "__" + aotSuffixNameEx(var->name,"_Var") + "_rename_at_" + to_string(var->at.line);
                         rename[var->name] = newName;
                         var->name = newName;
                     }
