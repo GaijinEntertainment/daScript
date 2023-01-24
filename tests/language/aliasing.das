@@ -10,6 +10,9 @@ struct Foo
     a : int
     b : float4
 
+struct Bar
+    f : Foo
+
 // potential alias - cmres vs argument a
 def set ( a : Foo )
     var b = [[Foo a = 13]]
@@ -208,7 +211,7 @@ def test_aliasing ( t : T? )
                                 // note - false aliasing
         t |> equal(14, b.a)
     t |> run("global variable pointer aliasing") <| @ ( t : T? )
-        *g_p_a = [[Foo a = 1]]
+        *g_p_a = [[Foo a = 1]]  // (I) 40212: [[ExprMakeStruct ]] always aliases
         g_b = set7()    // (18) 40211: function set7 result aliases global variable ::g_p_a 1<S<::Foo>>? through function set7
                                 // note - false aliasing
         t |> equal(14, g_b.a)
@@ -222,6 +225,19 @@ def test_aliasing ( t : T? )
         a = [[Foo a = 1]]
         a = pass_ref_a(set(a))      // this one ok
         t |> equal(14, a.a)
-
+    t |> run("make struct aliasing") <| @ ( t : T? )
+        var b : Bar
+        b.f = [[Foo a = 1]]
+        b = [[Bar f = set(b.f)]]    // (II) 40212: [[ExprMakeStruct ]] aliases
+        t |> equal(14, b.f.a)
+    t |> run("make struct aliasing") <| @ ( t : T? )
+        var b2 : Bar[2]
+        b2[0].f = [[Foo a=1]]
+        b2 = [[Bar                      // (III) 40212: [[ExprMakeStruct ]] aliases
+            f = [[Foo a = 13]];
+            f = [[Foo a = b2[0].f.a+13]]
+        ]]
+        t |> equal(13, b2[0].f.a)
+        t |> equal(14, b2[1].f.a)
 
 

@@ -8,26 +8,55 @@ namespace das {
     typedef das_hash_set<Variable *> ExpressionSources;
     class SourceCollector : public Visitor {
     public:
-        SourceCollector() {
-            enabled.push_back(true);
-        }
+        SourceCollector ( bool anyC ) : anyCallAliasing(anyC) {}
     protected:
+    // this speeds up walking
+        virtual bool canVisitIfSubexpr ( ExprIfThenElse * ) override { return !disabled; }
+        virtual bool canVisitExpr ( ExprTypeInfo *, Expression * )  override  { return false; }
+        virtual bool canVisitMakeStructureBlock ( ExprMakeStruct *, Expression * )  override  { return false; }
+        virtual bool canVisitMakeStructureBody ( ExprMakeStruct * )  override { return true; }
+        virtual bool canVisitQuoteSubexpression ( ExprQuote * )  override  { return false; }
+        virtual bool canVisitWithAliasSubexpression ( ExprAssume * )  override  { return false; }
+        virtual bool canVisitMakeBlockBody ( ExprMakeBlock * )  override  { return false; }
     // we found source
         virtual void preVisit ( ExprVar * expr ) override {
             Visitor::preVisit(expr);
-            if ( enabled.back() ) sources.insert(expr->variable.get());
+            if ( !disabled ) sources.insert(expr->variable.get());
+        }
+    // in [] only value can alias
+        virtual void preVisit ( ExprAt * expr ) override {
+            Visitor::preVisit(expr);
+        }
+        virtual void preVisitAtIndex ( ExprAt * expr, Expression * index ) override {
+            Visitor::preVisitAtIndex(expr,index);
+            disabled ++;
+        }
+        virtual ExpressionPtr visit ( ExprAt * expr ) override {
+            disabled --;
+            return Visitor::visit(expr);
+        }
+    // in ?[] only value can alias
+        virtual void preVisit ( ExprSafeAt * expr ) override {
+            Visitor::preVisit(expr);
+        }
+        virtual void preVisitSafeAtIndex ( ExprSafeAt * expr, Expression * index ) override {
+            Visitor::preVisitSafeAtIndex(expr,index);
+            disabled ++;
+        }
+        virtual ExpressionPtr visit ( ExprSafeAt * expr ) override {
+            disabled --;
+            return Visitor::visit(expr);
         }
     // in op3 only sources can alias
         virtual void preVisit ( ExprOp3 * expr ) override {
             Visitor::preVisit(expr);
-            enabled.push_back(false);
+            disabled ++;
         }
         virtual void preVisitLeft  ( ExprOp3 * expr, Expression * left ) {
             Visitor::preVisitLeft(expr,left);
-            enabled.back() = true;
+            disabled --;
         }
         virtual ExpressionPtr visit ( ExprOp3 * expr ) override {
-            enabled.pop_back();
             return Visitor::visit(expr);
         }
     // pointer deref - all bets are off
@@ -38,10 +67,18 @@ namespace das {
     // function call - does not alias when does not return ref
         virtual void preVisit ( ExprCall * expr ) override {
             Visitor::preVisit(expr);
-            if ( !expr->func->result->ref ) enabled.push_back(false);
+            if ( anyCallAliasing ) {
+                if ( !expr->func->result->isRef() ) disabled ++;
+            } else {
+                if ( !expr->func->result->ref ) disabled ++;
+            }
         }
         virtual ExpressionPtr visit ( ExprCall * expr ) override {
-            if ( !expr->func->result->ref ) enabled.push_back(true);
+            if ( anyCallAliasing ) {
+                if ( !expr->func->result->isRef() ) disabled --;
+            } else {
+                if ( !expr->func->result->ref ) disabled --;
+            }
             return Visitor::visit(expr);
         }
     // invoke - all bets are off
@@ -50,16 +87,26 @@ namespace das {
             alwaysAliases = true;
         }
     protected:
-        vector<bool> enabled;
+        int disabled = 0;
     public:
         ExpressionSources sources;
         bool alwaysAliases = false;
+        bool anyCallAliasing = false;
     };
 
-    bool collectSources ( Expression * expr, ExpressionSources & src ) {
-        SourceCollector srr;
+    bool collectSources ( Expression * expr, ExpressionSources & src, bool anyC ) {
+        SourceCollector srr(anyC);
         expr->visit(srr);
         src = move(srr.sources);
+        return srr.alwaysAliases;
+    }
+
+    bool appendSources ( Expression * expr, ExpressionSources & src, bool anyC ) {
+        SourceCollector srr(anyC);
+        expr->visit(srr);
+        for ( auto s : srr.sources ) {
+            src.insert(s);
+        }
         return srr.alwaysAliases;
     }
 
@@ -73,7 +120,6 @@ namespace das {
         }
         return nullptr;
     }
-
 
     void collectIndVariables ( Function * at, Function * lookup, das_hash_map<Variable *,Function *>  & indGlobalVariables, das_hash_set<Function *> & accessed ) {
         if ( accessed.find(lookup)!=accessed.end() ) return;
@@ -171,6 +217,84 @@ namespace das {
             cmresDest.clear();
             return Visitor::visit(fn);
         }
+    // make local
+        template <typename TT>
+        void preVisitMakeLocal ( ExprMakeLocal * expr, TT && collectAliasSources ) {
+            auto it = cmresDest.find(expr);
+            if ( it!=cmresDest.end() ) {
+                // left
+                auto resOut = it->second;
+                ExpressionSources resSrc;
+                if ( collectSources(resOut, resSrc,false) ) {
+                    if ( checkAliasing ) {
+                        program->error("[[" + string(expr->__rtti) + " ]] always aliases",
+                            "some form of ... *ptr ... = [[" + string(expr->__rtti) + " ...]] where we don't know where pointer came from", "",
+                                expr->at, CompilationError::make_local_aliasing);
+                    } else {
+                        expr->alwaysAlias = true;
+                    }
+                    return;
+                }
+                // right
+                ExpressionSources argSrc;
+                if ( collectAliasSources(argSrc) ) {
+                    if ( checkAliasing ) {
+                        program->error("[[" + string(expr->__rtti) + " ]] always aliases",
+                            "some form of ... = [[" + string(expr->__rtti) + " ... *ptr ... ]] where we don't know where pointer came from", "",
+                                expr->at, CompilationError::make_local_aliasing);
+                    } else {
+                        expr->alwaysAlias = true;
+                    }
+                } else if ( auto aliasVar = intersectSources ( resSrc, argSrc ) ) {
+                    if ( checkAliasing ) {
+                        program->error("[[" + string(expr->__rtti) + " ]] aliases",
+                            "some form of ... " + aliasVar->name + " ... = [[" + string(expr->__rtti) + " ... " + aliasVar->name + " ... ]]", "",
+                                expr->at, CompilationError::make_local_aliasing);
+                    } else {
+                        expr->alwaysAlias = true;
+                    }
+                }
+            }
+        }
+        virtual void preVisit ( ExprMakeArray * expr ) override {
+            Visitor::preVisit(expr);
+            preVisitMakeLocal(expr,[&](ExpressionSources & argSrc) -> bool {
+                for ( auto & arg : expr->values ) {
+                    if ( appendSources(arg.get(), argSrc, true) ) return true;
+                }
+                return false;
+            });
+        }
+        virtual void preVisit ( ExprMakeStruct * expr ) override {
+            Visitor::preVisit(expr);
+            preVisitMakeLocal(expr,[&](ExpressionSources & argSrc) -> bool {
+                for ( auto & arg : expr->structs ) {
+                    for ( auto & subarg : *arg ) {
+                        if ( appendSources(subarg->value.get(), argSrc, true) ) return true;
+                    }
+                }
+                return false;
+            });
+        }
+        virtual void preVisit ( ExprMakeTuple * expr ) override {
+            Visitor::preVisit(expr);
+            preVisitMakeLocal(expr,[&](ExpressionSources & argSrc) -> bool {
+                for ( auto & arg : expr->values ) {
+                    if ( appendSources(arg.get(), argSrc, true) ) return true;
+                }
+                return false;
+            });
+        }
+        virtual void preVisit ( ExprMakeVariant * expr ) override {
+            Visitor::preVisit(expr);
+            preVisitMakeLocal(expr,[&](ExpressionSources & argSrc) -> bool {
+                for ( auto & arg : expr->variants ) {
+                    if ( appendSources(arg->value.get(), argSrc, true) ) return true;
+                }
+                return false;
+            });
+        }
+    // call
         virtual void preVisit ( ExprCall * expr ) override {
             Visitor::preVisit(expr);
             if ( expr->func->aliasCMRES ) {
@@ -182,7 +306,7 @@ namespace das {
                 if ( it!=cmresDest.end() ) {
                     auto resOut = it->second;
                     ExpressionSources resSrc;
-                    if ( collectSources(resOut, resSrc) ) {
+                    if ( collectSources(resOut, resSrc, false) ) {
                         if ( checkAliasing ) {
                             program->error("function " + expr->func->describeName() + " result always aliases",
                                 "some form of ... *ptr ... = " + expr->func->name + "( ... ) where we don't know where pointer came from", "",
@@ -194,7 +318,7 @@ namespace das {
                     }
                     for ( auto ai : expr->func->resultAliases ) {
                         ExpressionSources argSrc;
-                        if ( collectSources(expr->arguments[ai].get(), argSrc) ) {
+                        if ( collectSources(expr->arguments[ai].get(), argSrc, false) ) {
                             if ( checkAliasing ) {
                                 program->error("function " + expr->func->describeName() + " result aliases argument " + expr->func->arguments[ai]->name,
                                     "some form of ... = " + expr->func->name + "( ... *ptr ... ) where we don't know where pointer came from", "",

@@ -507,16 +507,18 @@ namespace das {
             Visitor::preVisit(expr);
             if ( inStruct ) return;
             if ( expr->right->rtti_isMakeLocal() ) {
-                uint32_t sz = sizeof(void *);
-                expr->stackTop = allocateStack(sz);
-                expr->takeOverRightStack = true;
-                if ( log ) {
-                    logs << "\t" << expr->stackTop << "\t" << sz
-                        << "\tcopy [[ ]], line " << expr->at.line << "\n";
-                }
                 auto mkl = static_pointer_cast<ExprMakeLocal>(expr->right);
-                mkl->setRefSp(true, false, expr->stackTop, 0);
-                mkl->doesNotNeedInit = false;
+                if ( !mkl->alwaysAlias ) {
+                    uint32_t sz = sizeof(void *);
+                    expr->stackTop = allocateStack(sz);
+                    expr->takeOverRightStack = true;
+                    if ( log ) {
+                        logs << "\t" << expr->stackTop << "\t" << sz
+                            << "\tcopy [[ ]], line " << expr->at.line << "\n";
+                    }
+                    mkl->setRefSp(true, false, expr->stackTop, 0);
+                    mkl->doesNotNeedInit = false;
+                }
             } else if ( expr->right->rtti_isCall() ) {
                 auto cll = static_pointer_cast<ExprCall>(expr->right);
                 if ( cll->allowCmresSkip() ) {
@@ -534,16 +536,18 @@ namespace das {
             Visitor::preVisit(expr);
             if ( inStruct ) return;
             if ( expr->right->rtti_isMakeLocal() ) {
-                uint32_t sz = sizeof(void *);
-                expr->stackTop = allocateStack(sz);
-                expr->takeOverRightStack = true;
-                if ( log ) {
-                    logs << "\t" << expr->stackTop << "\t" << sz
-                        << "\tcopy [[ ]], line " << expr->at.line << "\n";
-                }
                 auto mkl = static_pointer_cast<ExprMakeLocal>(expr->right);
-                mkl->setRefSp(true, false, expr->stackTop, 0);
-                mkl->doesNotNeedInit = false;
+                if ( !mkl->alwaysAlias ) {
+                    uint32_t sz = sizeof(void *);
+                    expr->stackTop = allocateStack(sz);
+                    expr->takeOverRightStack = true;
+                    if ( log ) {
+                        logs << "\t" << expr->stackTop << "\t" << sz
+                            << "\tcopy [[ ]], line " << expr->at.line << "\n";
+                    }
+                    mkl->setRefSp(true, false, expr->stackTop, 0);
+                    mkl->doesNotNeedInit = false;
+                }
             } else if ( expr->right->rtti_isCall() ) {
                 auto cll = static_pointer_cast<ExprCall>(expr->right);
                 if ( cll->allowCmresSkip() ) {

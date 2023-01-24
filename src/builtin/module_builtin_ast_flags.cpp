@@ -64,7 +64,7 @@ namespace das {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
         ft->alias = "ExprMakeLocalFlags";
         ft->argNames = { "useStackRef", "useCMRES", "doesNotNeedSp",
-            "doesNotNeedInit", "initAllFields" };
+            "doesNotNeedInit", "initAllFields", "alwaysAlias" };
         return ft;
     }
 

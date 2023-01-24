@@ -1253,6 +1253,7 @@ namespace das
                 bool    doesNotNeedSp : 1;
                 bool    doesNotNeedInit : 1;
                 bool    initAllFields : 1;
+                bool    alwaysAlias : 1;
             };
             uint32_t makeFlags = 0;
         };

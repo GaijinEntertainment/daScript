@@ -154,6 +154,7 @@ namespace das
     ,   top_level_no_sideeffect_operation       =   40209       // a == b
     ,   deprecated_function                     =   40210       // [deprecated] function
     ,   argument_aliasing                       =   40211       // a = fun(a) with some form of potential cmres
+    ,   make_local_aliasing                     =   40212       // a = [[... a.x ...]] with some form of potential cmres
 
     ,   too_many_infer_passes                   =   41000
 
