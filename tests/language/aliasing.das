@@ -69,9 +69,6 @@ def set7
     b.a += g_p_a?.a ?? 100500
     return b
 
-def pass_a ( var a:Foo )
-    return a
-
 def pass_ref_a ( var a:Foo ) : Foo&
     unsafe
         return a
@@ -220,7 +217,7 @@ def test_aliasing ( t : T? )
         a = set(pass_ref_a(a))  // (19) 40211: function set result aliases argument a
         t |> equal(14, a.a)
         a = [[Foo a = 1]]
-        a = set(pass_a(a))      // this one ok
+        a = set(local_copy(a))      // this one ok
         t |> equal(14, a.a)
         a = [[Foo a = 1]]
         a = pass_ref_a(set(a))      // this one ok

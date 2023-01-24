@@ -423,6 +423,10 @@ def binary_load(var obj; data:array<uint8>)
     _builtin_binary_load(obj,data)
 
 [skip_lock_check]
+def local_copy ( var a : auto(TT) ) : TT
+    return <- a
+
+[skip_lock_check]
 def clone_to_move(clone_src:auto(TT)|#) : TT -const -#
     unsafe
         var clone_dest : TT - #
