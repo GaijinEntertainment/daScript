@@ -489,6 +489,7 @@ namespace das {
             if ( printVarAccess && !var->access_pass ) ss << "%";
             ss << var->name;
             if ( !var->aka.empty() ) ss << " aka " << var->aka;
+            if ( printAliases && var->aliasCMRES ) ss << "/*cmres*/";
             ss << ":" << var->type->describe();
         }
         virtual VariablePtr visitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
@@ -635,7 +636,12 @@ namespace das {
     // looks like call
         virtual void preVisit ( ExprLooksLikeCall * call ) override {
             Visitor::preVisit(call);
-            ss << call->name << "(";
+            ss << call->name;
+            if ( call->rtti_isInvoke() ) {
+                auto * inv = (ExprInvoke *) call;
+                if ( printAliases && inv->doesNotNeedSp ) ss << " /*no_sp*/ ";
+            }
+            ss << "(";
         }
         virtual ExpressionPtr visitLooksLikeCallArg ( ExprLooksLikeCall * call, Expression * arg, bool last ) override {
             if ( !last ) ss << ",";

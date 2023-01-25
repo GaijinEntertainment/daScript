@@ -73,6 +73,26 @@ def pass_ref_a ( var a:Foo ) : Foo&
     unsafe
         return a
 
+def set_with_extra ( var b : Foo; extra : int ) : Foo
+    var a = [[Foo a = extra]]
+    a.a += b.a
+    return a
+
+[export]
+def set_with_extra_which_touches_global_but_no_addr_taken ( var b : Foo; extra:int ) : Foo
+    b.a += g_a.a + extra
+    return b
+
+def set_with_2_extra ( var b : Foo; e1, e2 : int ) : Foo
+    var a = [[Foo a = e1 + e2]]
+    a.a += b.a
+    return a
+
+[export]
+def set_with_2_extra_which_touches_global ( var b : Foo; e1, e2:int ) : Foo
+    b.a += g_a.a + e1 + e2
+    return b
+
 [test]
 def test_aliasing ( t : T? )
     t |> run("straight up aliasing") <| @ ( t : T? )
@@ -236,5 +256,55 @@ def test_aliasing ( t : T? )
         ]]
         t |> equal(13, b2[0].f.a)
         t |> equal(14, b2[1].f.a)
-
-
+    t |> run("straight up invoke function aliasing") <| @ ( t : T? )
+        var fn = @@set
+        var a = [[Foo a = 1]]
+        var b : Foo
+        a = invoke(fn,a)                  // (20) 40211: function set result aliases argument a
+        t |> equal ( 14, a.a)
+        a = [[Foo a = 1]]
+        b = invoke(fn,a)                  // this one ok
+        t |> equal ( 14, b.a)
+    t |> run("global function without aliasing") <| @ ( t : T? )
+        var fn = @@set_with_extra
+        g_a = [[Foo a = 1]]
+        g_a = invoke(fn,[[Foo a = 1]],13)               // this one ok
+        t |> equal ( 14, g_a.a)
+    t |> run("global function with aliasing") <| @ ( t : T? )
+        var fn = @@set_with_2_extra
+        fn = @@set_with_2_extra_which_touches_global     // we take address of function (anywhere in the program)
+        fn = @@set_with_2_extra
+        g_a = [[Foo a = 1]]
+        g_a = invoke(fn,[[Foo a = 1]],6,7)               // (21) 40211: invoke result potentially aliases global g_a through function set_with_2_extra_which_touches_global S<::Foo> Ci Ci
+        t |> equal ( 14, g_a.a)
+    t |> run("straight up lambda aliasing") <| @ ( t : T? )
+        var fn <- @ <| ( a : Foo )
+            var b = [[Foo a = 13]]
+            b.a += a.a
+            return b
+        var a = [[Foo a = 1]]
+        var b : Foo
+        a = invoke(fn,a)                  // (22) 40211: function set result aliases argument a
+        t |> equal ( 14, a.a)
+        a = [[Foo a = 1]]
+        b = invoke(fn,a)                  // this one ok
+        t |> equal ( 14, b.a)
+    t |> run("global lambda without aliasing") <| @ ( t : T? )
+        var fn <- @ <| ( var b : Foo; extra : int ) : Foo
+            var a = [[Foo a = extra]]
+            a.a += b.a
+            return a
+        g_a = [[Foo a = 1]]
+        g_a = invoke(fn,[[Foo a = 1]],13)               // this one ok
+        t |> equal ( 14, g_a.a)
+    t |> run("global lambda with aliasing") <| @ ( t : T? )
+        var fn <- @ <| ( var b : Foo; e1, e2:int ) : Foo
+            b.a += g_a.a + e1 + e2
+            return b
+        fn <- @ <| ( var b : Foo; e1, e2 : int ) : Foo
+            var a = [[Foo a = e1 + e2]]
+            a.a += b.a
+            return a
+        g_a = [[Foo a = 1]]
+        g_a = invoke(fn,[[Foo a = 1]],6,7)               // (23) 40211: invoke result potentially aliases global g_a through lambda at d:\Work\daScript\tests\language\aliasing.das:303:12
+        t |> equal ( 14, g_a.a)

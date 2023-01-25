@@ -423,14 +423,14 @@ def binary_load(var obj; data:array<uint8>)
     _builtin_binary_load(obj,data)
 
 [skip_lock_check]
-def copy_to_local ( a : auto(TT) ) : TT
+def copy_to_local ( a : auto(TT) ) : TT -const
     static_if typeinfo(can_copy a)
-        return a
+        return unsafe(reinterpret<TT-const> a)
     else
         concept_assert(false,"can't copy this type")
 
 [skip_lock_check]
-def move_to_local ( var a : auto(TT) ) : TT
+def move_to_local ( var a : auto(TT) ) : TT -const
     static_if typeinfo(can_move a)
         return <- a
     else

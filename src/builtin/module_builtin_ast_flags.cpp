@@ -78,7 +78,7 @@ namespace das {
     TypeDeclPtr makeExprAscendFlags() {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
         ft->alias = "ExprAscendFlags";
-        ft->argNames = { "useStackRef", "needTypeInfo" };
+        ft->argNames = { "useStackRef", "needTypeInfo", "isMakeLambda" };
         return ft;
     }
 
@@ -183,7 +183,7 @@ namespace das {
         ft->alias = "MoreFunctionFlags";
         ft->argNames = {
             "macroFunction", "needStringCast", "aotHashDeppendsOnArguments", "lateInit", "requestJit",
-            "unsafeOutsideOfFor", "skipLockCheck", "safeImplicit", "deprecated", "aliasCMRES", "neverAliasCMRES"
+            "unsafeOutsideOfFor", "skipLockCheck", "safeImplicit", "deprecated", "aliasCMRES", "neverAliasCMRES", "addressTaken"
         };
         return ft;
     }

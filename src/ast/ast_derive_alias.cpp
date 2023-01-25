@@ -5,16 +5,89 @@
 
 namespace das {
 
+    typedef das_hash_map<Variable *,Function *> IndirectSources;
     typedef das_hash_set<Variable *> ExpressionSources;
+
+    void appendIndVariables ( Function * lookup, IndirectSources & indGlobalVariables, das_hash_set<Function *> & accessed ) {
+        if ( accessed.find(lookup)!=accessed.end() ) return;
+        accessed.insert(lookup);
+        for ( auto var : lookup->useGlobalVariables ) {
+            if ( indGlobalVariables.find(var)==indGlobalVariables.end() ) {
+                indGlobalVariables[var] = lookup;
+            }
+        }
+        for ( auto fun : lookup->useFunctions ) {
+            appendIndVariables(fun, indGlobalVariables, accessed);
+        }
+    }
+
+    bool isCompatibleFunction ( const FunctionPtr & func, const TypeDeclPtr & inv ) {
+        if ( func->arguments.size()!=inv->argTypes.size() ) return false;
+        if ( !inv->firstType->isSameType(*func->result, RefMatters::yes, ConstMatters::yes, TemporaryMatters::yes) ) {
+            return false;
+        }
+        for ( uint32_t i=0; i!=func->arguments.size(); ++i ) {
+            if ( !inv->argTypes[i]->isSameType(*func->arguments[i]->type, RefMatters::yes, ConstMatters::yes, TemporaryMatters::yes, AllowSubstitute::yes, false, false) ) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    void collectInvokeIndVariables ( const ProgramPtr & program, const TypeDeclPtr & inv, IndirectSources & sources ) {
+        das_hash_set<Function *> accessed;
+        program->library.foreach([&](Module * mod){
+            ExpressionSources globSrc;
+            mod->functions.foreach([&](const FunctionPtr & gfunc){
+                // not built-in, used, address taken, can potentially alias, compatible
+                if ( !gfunc->builtIn && gfunc->used && gfunc->addressTaken && !gfunc->aliasCMRES && isCompatibleFunction(gfunc, inv) ) {
+                    appendIndVariables(gfunc.get(), sources, accessed);
+                }
+            });
+            return true;
+        },"*");
+    }
+
+    bool isCompatibleLambdaFunction ( const FunctionPtr & func, const TypeDeclPtr & inv ) {
+        if ( func->arguments.size()!=inv->argTypes.size()+1 ) return false;
+        if ( !inv->firstType->isSameType(*func->result, RefMatters::yes, ConstMatters::yes, TemporaryMatters::yes) ) {
+            return false;
+        }
+        for ( uint32_t i=0; i!=inv->argTypes.size(); ++i ) {    // note, we skip 1st argument
+            if ( !inv->argTypes[i]->isSameType(*func->arguments[i+1]->type, RefMatters::yes, ConstMatters::yes, TemporaryMatters::yes, AllowSubstitute::yes, false, false) ) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    void collectInvokeIndLambdaVariables ( const ProgramPtr & program, const TypeDeclPtr & inv, IndirectSources & sources ) {
+        das_hash_set<Function *> accessed;
+        program->library.foreach([&](Module * mod){
+            ExpressionSources globSrc;
+            mod->functions.foreach([&](const FunctionPtr & gfunc){
+                // not built-in, used, address taken, can potentially alias, compatible
+                if ( !gfunc->builtIn && gfunc->used && gfunc->addressTaken && !gfunc->aliasCMRES && gfunc->lambda && isCompatibleLambdaFunction(gfunc, inv) ) {
+                    appendIndVariables(gfunc.get(), sources, accessed);
+                }
+            });
+            return true;
+        },"*");
+    }
+
     class SourceCollector : public Visitor {
     public:
-        SourceCollector ( bool anyC ) : anyCallAliasing(anyC) {}
+        SourceCollector ( const ProgramPtr & prog, bool anyC ) : program(prog), anyCallAliasing(anyC) {}
     protected:
     // this speeds up walking
-        virtual bool canVisitIfSubexpr ( ExprIfThenElse * ) override { return !disabled; }
+        virtual bool canVisitIfSubexpr ( ExprIfThenElse * ) override {
+            return !disabled;
+        }
         virtual bool canVisitExpr ( ExprTypeInfo *, Expression * )  override  { return false; }
         virtual bool canVisitMakeStructureBlock ( ExprMakeStruct *, Expression * )  override  { return false; }
-        virtual bool canVisitMakeStructureBody ( ExprMakeStruct * )  override { return true; }
+        virtual bool canVisitMakeStructureBody ( ExprMakeStruct * )  override {
+            return !disabled;
+        }
         virtual bool canVisitQuoteSubexpression ( ExprQuote * )  override  { return false; }
         virtual bool canVisitWithAliasSubexpression ( ExprAssume * )  override  { return false; }
         virtual bool canVisitMakeBlockBody ( ExprMakeBlock * )  override  { return false; }
@@ -81,28 +154,63 @@ namespace das {
             }
             return Visitor::visit(expr);
         }
-    // invoke - all bets are off
+    // invoke
         virtual void preVisit ( ExprInvoke * expr ) override {
             Visitor::preVisit(expr);
-            alwaysAliases = true;
+            auto argT = expr->arguments[0]->type;
+            if ( argT->isGoodBlockType() ) {
+                disabled ++; // block never aliases
+            } else if ( anyCallAliasing ) {
+                if ( !argT->firstType->isRef() ) disabled ++;
+            } else {
+                if ( !argT->firstType->ref ) disabled ++;
+            }
+            if ( !disabled ) {
+                if ( argT->isGoodFunctionType() ) {
+                    IndirectSources globSrc;
+                    collectInvokeIndVariables(program, expr->arguments[0]->type, globSrc);
+                    for ( auto & src : globSrc ) {
+                        sources.insert(src.first);
+                    }
+                } else if ( argT->isGoodLambdaType() ) {
+                    IndirectSources globSrc;
+                    collectInvokeIndLambdaVariables(program, expr->arguments[0]->type, globSrc);
+                    for ( auto & src : globSrc ) {
+                        sources.insert(src.first);
+                    }
+                }
+            }
+        }
+        virtual ExpressionPtr visit ( ExprInvoke * expr ) override {
+            auto argT = expr->arguments[0]->type;
+            if ( argT->isGoodBlockType() ) {
+                disabled --;
+            } else if ( anyCallAliasing ) {
+                if ( !argT->firstType->isRef() ) disabled --;
+            } else {
+                if ( !argT->firstType->ref ) disabled --;
+            }
+            return Visitor::visit(expr);
         }
     protected:
         int disabled = 0;
+        ProgramPtr program;
+        set<Expression *> invokeBlocks;
     public:
         ExpressionSources sources;
         bool alwaysAliases = false;
         bool anyCallAliasing = false;
     };
 
-    bool collectSources ( Expression * expr, ExpressionSources & src, bool anyC ) {
-        SourceCollector srr(anyC);
+    bool collectSources ( const ProgramPtr & prog, Expression * expr, ExpressionSources & src, bool anyC ) {
+        SourceCollector srr(prog, anyC);
         expr->visit(srr);
         src = move(srr.sources);
         return srr.alwaysAliases;
     }
 
-    bool appendSources ( Expression * expr, ExpressionSources & src, bool anyC ) {
-        SourceCollector srr(anyC);
+    bool appendSources ( const ProgramPtr & prog, Expression * expr, ExpressionSources & src, bool anyC ) {
+        SourceCollector srr(prog, anyC);
         expr->visit(srr);
         for ( auto s : srr.sources ) {
             src.insert(s);
@@ -111,35 +219,25 @@ namespace das {
     }
 
     Variable * intersectSources ( ExpressionSources & a, ExpressionSources & b ) {
-        for ( auto va : a ) {
+        if ( a.size() < b.size() ) {
+            for ( auto va : a ) {
+                if ( b.find(va)!=b.end() ) return va;
+            }
+            return nullptr;
+        } else {
             for ( auto vb : b ) {
-                if ( va==vb ) {
-                    return va;
-                }
+                if ( a.find(vb)!=a.end() ) return vb;
             }
-        }
-        return nullptr;
-    }
-
-    void collectIndVariables ( Function * at, Function * lookup, das_hash_map<Variable *,Function *>  & indGlobalVariables, das_hash_set<Function *> & accessed ) {
-        if ( accessed.find(lookup)!=accessed.end() ) return;
-        accessed.insert(lookup);
-        for ( auto var : lookup->useGlobalVariables ) {
-            if ( indGlobalVariables.find(var)==indGlobalVariables.end() ) {
-                indGlobalVariables[var] = lookup;
-            }
-        }
-        for ( auto fun : lookup->useFunctions ) {
-            collectIndVariables(at, fun, indGlobalVariables, accessed);
+            return nullptr;
         }
     }
 
     void deriveAliasing ( const FunctionPtr & func, TextWriter & logs, bool logAliasing ) {
         if ( func->arguments.size()==0 && func->useGlobalVariables.size()==0 && func->useFunctions.size()==0 ) return;
     // collect indirect global variables
-        das_hash_map<Variable *,Function *> ind;
+        IndirectSources ind;
         das_hash_set<Function *> depInd;
-        collectIndVariables(func.get(),func.get(),ind,depInd);
+        appendIndVariables(func.get(),ind,depInd);
         if ( !(func->copyOnReturn || func->moveOnReturn) ) return;  // not a cmres function, we don't need cmres aliasing
         if ( func->arguments.size()==0 && ind.size()==0 ) return;   // no arguments, no globals, no cmres aliasing
     // collect type aliasing
@@ -225,7 +323,7 @@ namespace das {
                 // left
                 auto resOut = it->second;
                 ExpressionSources resSrc;
-                if ( collectSources(resOut, resSrc,false) ) {
+                if ( collectSources(program, resOut, resSrc,false) ) {
                     if ( checkAliasing ) {
                         program->error("[[" + string(expr->__rtti) + " ]] always aliases",
                             "some form of ... *ptr ... = [[" + string(expr->__rtti) + " ...]] where we don't know where pointer came from", "",
@@ -260,7 +358,7 @@ namespace das {
             Visitor::preVisit(expr);
             preVisitMakeLocal(expr,[&](ExpressionSources & argSrc) -> bool {
                 for ( auto & arg : expr->values ) {
-                    if ( appendSources(arg.get(), argSrc, true) ) return true;
+                    if ( appendSources(program, arg.get(), argSrc, true) ) return true;
                 }
                 return false;
             });
@@ -270,7 +368,7 @@ namespace das {
             preVisitMakeLocal(expr,[&](ExpressionSources & argSrc) -> bool {
                 for ( auto & arg : expr->structs ) {
                     for ( auto & subarg : *arg ) {
-                        if ( appendSources(subarg->value.get(), argSrc, true) ) return true;
+                        if ( appendSources(program, subarg->value.get(), argSrc, true) ) return true;
                     }
                 }
                 return false;
@@ -280,7 +378,7 @@ namespace das {
             Visitor::preVisit(expr);
             preVisitMakeLocal(expr,[&](ExpressionSources & argSrc) -> bool {
                 for ( auto & arg : expr->values ) {
-                    if ( appendSources(arg.get(), argSrc, true) ) return true;
+                    if ( appendSources(program, arg.get(), argSrc, true) ) return true;
                 }
                 return false;
             });
@@ -289,10 +387,92 @@ namespace das {
             Visitor::preVisit(expr);
             preVisitMakeLocal(expr,[&](ExpressionSources & argSrc) -> bool {
                 for ( auto & arg : expr->variants ) {
-                    if ( appendSources(arg->value.get(), argSrc, true) ) return true;
+                    if ( appendSources(program, arg->value.get(), argSrc, true) ) return true;
                 }
                 return false;
             });
+        }
+    // invoke
+        virtual void preVisit ( ExprInvoke * expr ) override {
+            Visitor::preVisit(expr);
+            auto it = cmresDest.find(expr);
+            if ( it!=cmresDest.end() ) {
+                auto argT = expr->arguments[0]->type;
+                if ( argT->isGoodBlockType() ) {
+                    return; // block never aliases
+                }
+                if ( !(argT->firstType->isRefType() && !argT->firstType->ref) ) {
+                    return; // not a CMRES
+                }
+                // everything can alias on the right
+                auto resOut = it->second;
+                ExpressionSources resSrc;
+                if ( collectSources(program, resOut, resSrc, false) ) {
+                    if ( checkAliasing ) {
+                        program->error("invoke result always aliases",
+                            "some form of ... *ptr ... = invoke( ... ) where we don't know where pointer came from", "",
+                                expr->at, CompilationError::argument_aliasing);
+                    } else {
+                        expr->cmresAlias = true;
+                        return;
+                    }
+                }
+                // invoke arguments can only alias invoke of function or lambda
+                for ( size_t ai=1; ai != expr->arguments.size(); ++ai ) {   // note - from 1st argument
+                    if ( !(expr->arguments[ai]->type->isRef() || expr->arguments[ai]->type->baseType==Type::tPointer) ) {
+                        continue;
+                    }
+                    ExpressionSources argSrc;
+                    if ( collectSources(program, expr->arguments[ai].get(), argSrc, false) ) {
+                        if ( checkAliasing ) {
+                            program->error("invoke result aliases argument " + to_string(ai),
+                                "some form of ... = invoke( ... *ptr ... ) where we don't know where pointer came from", "",
+                                    expr->at, CompilationError::argument_aliasing);
+                        } else {
+                            expr->cmresAlias = true;
+                            return;
+                        }
+                    } else if ( auto aliasVar = intersectSources ( resSrc, argSrc ) ) {
+                        if ( checkAliasing ) {
+                            program->error("invoke result aliases argument " + to_string(ai),
+                                "some form of ... " + aliasVar->name + " ... = invoke( ... " + aliasVar->name + " ... )", "",
+                                    expr->at, CompilationError::argument_aliasing);
+                        } else {
+                            expr->cmresAlias = true;
+                            return;
+                        }
+                    }
+                }
+                // we never get invoke(@@....,....) because its converted into a call
+                // we can analyze functions by signature, and collect all global variables referenced by matching functions
+                {
+                    IndirectSources globSrc;
+                    if ( argT->isGoodFunctionType() ) {
+                        collectInvokeIndVariables(program, expr->arguments[0]->type, globSrc);
+                    } else {
+                        collectInvokeIndLambdaVariables(program, expr->arguments[0]->type, globSrc);
+                    }
+                    for ( auto gIt : globSrc ) {
+                        if ( resSrc.find(gIt.first)!=resSrc.end() ) {
+                            if ( checkAliasing ) {
+                                if ( argT->isGoodFunctionType() ) {
+                                    program->error("invoke result potentially aliases global " + gIt.first->name + " through function " + gIt.second->getMangledName(),
+                                        "some form of ... " + gIt.first->name + " ... = invoke( ... " + gIt.first->name + " ... )", "",
+                                            expr->at, CompilationError::argument_aliasing);
+                                } else {
+                                    program->error("invoke result potentially aliases global " + gIt.first->name + " through lambda at " + gIt.second->at.describe(),
+                                        "some form of ... " + gIt.first->name + " ... = invoke( ... " + gIt.first->name + " ... )", "",
+                                            expr->at, CompilationError::argument_aliasing);
+                                }
+                            } else {
+                                expr->cmresAlias = true;
+                                goto bailout;
+                            }
+                        }
+                    }
+                }
+                bailout:;
+            }
         }
     // call
         virtual void preVisit ( ExprCall * expr ) override {
@@ -306,7 +486,7 @@ namespace das {
                 if ( it!=cmresDest.end() ) {
                     auto resOut = it->second;
                     ExpressionSources resSrc;
-                    if ( collectSources(resOut, resSrc, false) ) {
+                    if ( collectSources(program, resOut, resSrc, false) ) {
                         if ( checkAliasing ) {
                             program->error("function " + expr->func->describeName() + " result always aliases",
                                 "some form of ... *ptr ... = " + expr->func->name + "( ... ) where we don't know where pointer came from", "",
@@ -318,7 +498,7 @@ namespace das {
                     }
                     for ( auto ai : expr->func->resultAliases ) {
                         ExpressionSources argSrc;
-                        if ( collectSources(expr->arguments[ai].get(), argSrc, false) ) {
+                        if ( collectSources(program, expr->arguments[ai].get(), argSrc, false) ) {
                             if ( checkAliasing ) {
                                 program->error("function " + expr->func->describeName() + " result aliases argument " + expr->func->arguments[ai]->name,
                                     "some form of ... = " + expr->func->name + "( ... *ptr ... ) where we don't know where pointer came from", "",

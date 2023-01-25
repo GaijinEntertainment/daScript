@@ -798,6 +798,7 @@ namespace das
                 bool    deprecated : 1;
                 bool    aliasCMRES : 1;
                 bool    neverAliasCMRES : 1;
+                bool    addressTaken : 1;
             };
             uint32_t moreFlags = 0;
 

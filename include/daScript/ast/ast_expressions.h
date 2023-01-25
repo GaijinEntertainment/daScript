@@ -966,9 +966,11 @@ namespace das
         virtual SimNode * simulate (Context & context) const override;
         virtual bool rtti_isInvoke() const override { return true; }
         bool isCopyOrMove() const;
+        __forceinline bool allowCmresSkip() const { return !cmresAlias && isCopyOrMove(); }
         uint32_t    stackTop = 0;
         bool        doesNotNeedSp = false;
         bool        isInvokeMethod = false;
+        bool        cmresAlias = false;
     };
 
     struct ExprAssert : ExprLikeCall<ExprAssert> {

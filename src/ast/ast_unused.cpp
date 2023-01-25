@@ -555,6 +555,11 @@ namespace das {
                 }
             }
         }
+    // addr
+        virtual void preVisit ( ExprAddr * expr ) override {
+            Visitor::preVisit(expr);
+            expr->func->addressTaken = true;
+        }
     };
 
 
