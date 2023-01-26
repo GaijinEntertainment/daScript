@@ -77,7 +77,7 @@ namespace das {
 
     class SourceCollector : public Visitor {
     public:
-        SourceCollector ( const ProgramPtr & prog, bool anyC ) : program(prog), anyCallAliasing(anyC) {}
+        SourceCollector ( const ProgramPtr & prog, bool anyC, bool anyG ) : program(prog), anyCallAliasing(anyC), anyGlobals(anyG) {}
     protected:
     // this speeds up walking
         virtual bool canVisitIfSubexpr ( ExprIfThenElse * ) override {
@@ -165,7 +165,7 @@ namespace das {
             } else {
                 if ( !argT->firstType->ref ) disabled ++;
             }
-            if ( !disabled ) {
+            if ( !disabled && anyGlobals ) {
                 if ( argT->isGoodFunctionType() ) {
                     IndirectSources globSrc;
                     collectInvokeIndVariables(program, expr->arguments[0]->type, globSrc);
@@ -200,17 +200,18 @@ namespace das {
         ExpressionSources sources;
         bool alwaysAliases = false;
         bool anyCallAliasing = false;
+        bool anyGlobals = false;
     };
 
-    bool collectSources ( const ProgramPtr & prog, Expression * expr, ExpressionSources & src, bool anyC ) {
-        SourceCollector srr(prog, anyC);
+    bool collectSources ( const ProgramPtr & prog, Expression * expr, ExpressionSources & src, bool anyC, bool anyG ) {
+        SourceCollector srr(prog, anyC, anyG);
         expr->visit(srr);
         src = move(srr.sources);
         return srr.alwaysAliases;
     }
 
-    bool appendSources ( const ProgramPtr & prog, Expression * expr, ExpressionSources & src, bool anyC ) {
-        SourceCollector srr(prog, anyC);
+    bool appendSources ( const ProgramPtr & prog, Expression * expr, ExpressionSources & src, bool anyC, bool anyG ) {
+        SourceCollector srr(prog, anyC, anyG);
         expr->visit(srr);
         for ( auto s : srr.sources ) {
             src.insert(s);
@@ -323,7 +324,7 @@ namespace das {
                 // left
                 auto resOut = it->second;
                 ExpressionSources resSrc;
-                if ( collectSources(program, resOut, resSrc,false) ) {
+                if ( collectSources(program, resOut, resSrc, false, true) ) {
                     if ( checkAliasing ) {
                         program->error("[[" + string(expr->__rtti) + " ]] always aliases",
                             "some form of ... *ptr ... = [[" + string(expr->__rtti) + " ...]] where we don't know where pointer came from", "",
@@ -333,9 +334,17 @@ namespace das {
                     }
                     return;
                 }
+                // check if there are any globals
+                bool anyGlobals = false;
+                for ( auto v : resSrc ) {
+                    if ( v->global ) {
+                        anyGlobals = true;
+                        break;
+                    }
+                }
                 // right
                 ExpressionSources argSrc;
-                if ( collectAliasSources(argSrc) ) {
+                if ( collectAliasSources(argSrc,anyGlobals) ) {
                     if ( checkAliasing ) {
                         program->error("[[" + string(expr->__rtti) + " ]] always aliases",
                             "some form of ... = [[" + string(expr->__rtti) + " ... *ptr ... ]] where we don't know where pointer came from", "",
@@ -356,19 +365,19 @@ namespace das {
         }
         virtual void preVisit ( ExprMakeArray * expr ) override {
             Visitor::preVisit(expr);
-            preVisitMakeLocal(expr,[&](ExpressionSources & argSrc) -> bool {
+            preVisitMakeLocal(expr,[&](ExpressionSources & argSrc, bool anyGlobals) -> bool {
                 for ( auto & arg : expr->values ) {
-                    if ( appendSources(program, arg.get(), argSrc, true) ) return true;
+                    if ( appendSources(program, arg.get(), argSrc, true, anyGlobals) ) return true;
                 }
                 return false;
             });
         }
         virtual void preVisit ( ExprMakeStruct * expr ) override {
             Visitor::preVisit(expr);
-            preVisitMakeLocal(expr,[&](ExpressionSources & argSrc) -> bool {
+            preVisitMakeLocal(expr,[&](ExpressionSources & argSrc, bool anyGlobals) -> bool {
                 for ( auto & arg : expr->structs ) {
                     for ( auto & subarg : *arg ) {
-                        if ( appendSources(program, subarg->value.get(), argSrc, true) ) return true;
+                        if ( appendSources(program, subarg->value.get(), argSrc, true, anyGlobals) ) return true;
                     }
                 }
                 return false;
@@ -376,18 +385,18 @@ namespace das {
         }
         virtual void preVisit ( ExprMakeTuple * expr ) override {
             Visitor::preVisit(expr);
-            preVisitMakeLocal(expr,[&](ExpressionSources & argSrc) -> bool {
+            preVisitMakeLocal(expr,[&](ExpressionSources & argSrc, bool anyGlobals) -> bool {
                 for ( auto & arg : expr->values ) {
-                    if ( appendSources(program, arg.get(), argSrc, true) ) return true;
+                    if ( appendSources(program, arg.get(), argSrc, true, anyGlobals) ) return true;
                 }
                 return false;
             });
         }
         virtual void preVisit ( ExprMakeVariant * expr ) override {
             Visitor::preVisit(expr);
-            preVisitMakeLocal(expr,[&](ExpressionSources & argSrc) -> bool {
+            preVisitMakeLocal(expr,[&](ExpressionSources & argSrc, bool anyGlobals) -> bool {
                 for ( auto & arg : expr->variants ) {
-                    if ( appendSources(program, arg->value.get(), argSrc, true) ) return true;
+                    if ( appendSources(program, arg->value.get(), argSrc, true, anyGlobals) ) return true;
                 }
                 return false;
             });
@@ -407,7 +416,7 @@ namespace das {
                 // everything can alias on the right
                 auto resOut = it->second;
                 ExpressionSources resSrc;
-                if ( collectSources(program, resOut, resSrc, false) ) {
+                if ( collectSources(program, resOut, resSrc, false, true) ) {
                     if ( checkAliasing ) {
                         program->error("invoke result always aliases",
                             "some form of ... *ptr ... = invoke( ... ) where we don't know where pointer came from", "",
@@ -417,13 +426,21 @@ namespace das {
                         return;
                     }
                 }
+                // check if there are any globals
+                bool anyGlobals = false;
+                for ( auto v : resSrc ) {
+                    if ( v->global ) {
+                        anyGlobals = true;
+                        break;
+                    }
+                }
                 // invoke arguments can only alias invoke of function or lambda
-                for ( size_t ai=1; ai != expr->arguments.size(); ++ai ) {   // note - from 1st argument
+                for ( size_t ai=0; ai != expr->arguments.size(); ++ai ) {
                     if ( !(expr->arguments[ai]->type->isRef() || expr->arguments[ai]->type->baseType==Type::tPointer) ) {
                         continue;
                     }
                     ExpressionSources argSrc;
-                    if ( collectSources(program, expr->arguments[ai].get(), argSrc, false) ) {
+                    if ( collectSources(program, expr->arguments[ai].get(), argSrc, false, anyGlobals) ) {
                         if ( checkAliasing ) {
                             program->error("invoke result aliases argument " + to_string(ai),
                                 "some form of ... = invoke( ... *ptr ... ) where we don't know where pointer came from", "",
@@ -445,7 +462,7 @@ namespace das {
                 }
                 // we never get invoke(@@....,....) because its converted into a call
                 // we can analyze functions by signature, and collect all global variables referenced by matching functions
-                {
+                if ( anyGlobals) {
                     IndirectSources globSrc;
                     if ( argT->isGoodFunctionType() ) {
                         collectInvokeIndVariables(program, expr->arguments[0]->type, globSrc);
@@ -486,7 +503,7 @@ namespace das {
                 if ( it!=cmresDest.end() ) {
                     auto resOut = it->second;
                     ExpressionSources resSrc;
-                    if ( collectSources(program, resOut, resSrc, false) ) {
+                    if ( collectSources(program, resOut, resSrc, false, true) ) {
                         if ( checkAliasing ) {
                             program->error("function " + expr->func->describeName() + " result always aliases",
                                 "some form of ... *ptr ... = " + expr->func->name + "( ... ) where we don't know where pointer came from", "",
@@ -496,9 +513,18 @@ namespace das {
                             goto bailout;
                         }
                     }
+                    // check if there are any globals
+                    bool anyGlobals = false;
+                    for ( auto v : resSrc ) {
+                        if ( v->global ) {
+                            anyGlobals = true;
+                            break;
+                        }
+                    }
+                    // now go thorough all arguments, which are potential aliases
                     for ( auto ai : expr->func->resultAliases ) {
                         ExpressionSources argSrc;
-                        if ( collectSources(program, expr->arguments[ai].get(), argSrc, false) ) {
+                        if ( collectSources(program, expr->arguments[ai].get(), argSrc, false, anyGlobals) ) {
                             if ( checkAliasing ) {
                                 program->error("function " + expr->func->describeName() + " result aliases argument " + expr->func->arguments[ai]->name,
                                     "some form of ... = " + expr->func->name + "( ... *ptr ... ) where we don't know where pointer came from", "",

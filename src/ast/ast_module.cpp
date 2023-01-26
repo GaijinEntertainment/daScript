@@ -310,6 +310,7 @@ namespace das {
     bool Module::addVariable ( const VariablePtr & var, bool canFail ) {
         if ( globals.insert(var->name, var) ) {
             var->module = this;
+            var->global = true;
             return true;
         } else {
             if ( !canFail ) {

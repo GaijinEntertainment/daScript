@@ -291,6 +291,7 @@ namespace das
                 bool    can_shadow : 1;             // can shadow block or function arguments, as block argument
                 bool    private_variable : 1;
                 bool    tag : 1;
+                bool    global : 1;
             };
             uint32_t flags = 0;
         };
