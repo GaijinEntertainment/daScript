@@ -1278,29 +1278,14 @@ namespace das
                 if ( argTypes.size() != decl.argTypes.size() ) {
                     return false;
                 }
-                if (baseType == Type::tVariant) {
-                    if (argNames.size() != decl.argNames.size()) {
-                        return false;
-                    }
-                    for ( size_t i=0; i != argNames.size(); ++i ) {
-                        const auto & arg = argNames[i];
-                        const auto & declArg = decl.argNames[i];
-                        if ( arg != declArg ) {
-                            return false;
-                        }
-                    }
-                }
                 for ( size_t i=0; i != argTypes.size(); ++i ) {
                     const auto & argType = argTypes[i];
                     const auto & passType = decl.argTypes[i];
-                    auto tempMatters = argType->implicit ? TemporaryMatters::no : TemporaryMatters::yes;
-                    if ( !argType->isSameType(*passType, RefMatters::no, ConstMatters::no,
-                            tempMatters,AllowSubstitute::no,true ) ) {
+                    auto refMatters = argType->isRefType() ? RefMatters::no : RefMatters::yes;
+                    if ( !argType->isSameType(*passType, refMatters, ConstMatters::yes,
+                            TemporaryMatters::yes,AllowSubstitute::no,true ) ) {
                         return false;
                     }
-                    if ( argType->isRef() && !passType->isRef() ) return false;   // can't pass non-ref to ref
-                    if ( argType->isRef() && !argType->constant && passType->constant) return false; // ref types can only add constness
-                    if ( argType->isPointer() && !argType->constant && passType->constant) return false; // pointer types can only add constant
                 }
             }
         }
