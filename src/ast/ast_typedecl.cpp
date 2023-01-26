@@ -1238,9 +1238,7 @@ namespace das
                 return false;
             }
         }
-        if ( baseType==Type::tBlock || baseType==Type::tFunction ||
-            baseType==Type::tLambda || baseType==Type::tTuple ||
-            baseType==Type::tVariant || baseType==Type::option ) {
+        if ( baseType==Type::tTuple || baseType==Type::tVariant || baseType==Type::option ) {
             if ( firstType && decl.firstType && !firstType->isSameType(*decl.firstType,RefMatters::yes,ConstMatters::yes,
                     TemporaryMatters::yes,AllowSubstitute::no,true) ) {
                 return false;
@@ -1268,6 +1266,41 @@ namespace das
                             TemporaryMatters::yes,AllowSubstitute::no,true ) ) {
                         return false;
                     }
+                }
+            }
+        }
+        if ( baseType==Type::tBlock || baseType==Type::tFunction ||baseType==Type::tLambda  ) {
+            if ( firstType && decl.firstType && !firstType->isSameType(*decl.firstType,RefMatters::yes,ConstMatters::yes,
+                    TemporaryMatters::yes,AllowSubstitute::no,true) ) {
+                return false;
+            }
+            if ( firstType || argTypes.size() ) {    // if not any block or any function
+                if ( argTypes.size() != decl.argTypes.size() ) {
+                    return false;
+                }
+                if (baseType == Type::tVariant) {
+                    if (argNames.size() != decl.argNames.size()) {
+                        return false;
+                    }
+                    for ( size_t i=0; i != argNames.size(); ++i ) {
+                        const auto & arg = argNames[i];
+                        const auto & declArg = decl.argNames[i];
+                        if ( arg != declArg ) {
+                            return false;
+                        }
+                    }
+                }
+                for ( size_t i=0; i != argTypes.size(); ++i ) {
+                    const auto & argType = argTypes[i];
+                    const auto & passType = decl.argTypes[i];
+                    auto tempMatters = argType->implicit ? TemporaryMatters::no : TemporaryMatters::yes;
+                    if ( !argType->isSameType(*passType, RefMatters::no, ConstMatters::no,
+                            tempMatters,AllowSubstitute::no,true ) ) {
+                        return false;
+                    }
+                    if ( argType->isRef() && !passType->isRef() ) return false;   // can't pass non-ref to ref
+                    if ( argType->isRef() && !argType->constant && passType->constant) return false; // ref types can only add constness
+                    if ( argType->isPointer() && !argType->constant && passType->constant) return false; // pointer types can only add constant
                 }
             }
         }
