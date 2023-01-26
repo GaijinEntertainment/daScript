@@ -6589,6 +6589,7 @@ namespace das {
                         }
                         // we build alias map for the generic
                         AliasMap aliases;
+                        vector<bool> defaultRef(types.size());
                         for (;; ) {
                             bool anyFailed = false;
                             auto totalAliases = aliases.size();
@@ -6604,6 +6605,13 @@ namespace das {
                                     continue;
                                 }
                                 TypeDecl::updateAliasMap(argType, passType, aliases, options);
+                                if ( argType->baseType==Type::option ) {
+                                    auto it = options.find(argType.get());
+                                    if ( it!=options.end() ) {
+                                        auto optionType = argType->argTypes[it->second].get();
+                                        defaultRef[ai] = optionType->isAuto() ? false : optionType->ref;
+                                    }
+                                }
                             }
                             if (!anyFailed) break;
                             if (totalAliases == aliases.size()) {
@@ -6623,7 +6631,7 @@ namespace das {
                                 auto & passT = types[sz];
                                 auto resT = TypeDecl::inferGenericType(argT, passT, true, true);
                                 DAS_ASSERTF(resT, "how? we had this working at findMatchingGenerics");
-                                resT->ref = false;                          // by default no ref
+                                resT->ref = defaultRef[sz];
                                 TypeDecl::applyAutoContracts(resT, argT);
                                 TypeDecl::applyRefToRef(resT, true);
                                 resT->isExplicit = isAutoWto; // this is generic for this type, and this type only

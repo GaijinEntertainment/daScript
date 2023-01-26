@@ -1281,8 +1281,8 @@ namespace das
                 for ( size_t i=0; i != argTypes.size(); ++i ) {
                     const auto & argType = argTypes[i];
                     const auto & passType = decl.argTypes[i];
-                    auto refMatters = argType->isRefType() ? RefMatters::no : RefMatters::yes;
-                    if ( !argType->isSameType(*passType, refMatters, ConstMatters::yes,
+                    auto rMat = argType->isRefType() ? RefMatters::no : RefMatters::yes;
+                    if ( !argType->isSameType(*passType, rMat, ConstMatters::yes,
                             TemporaryMatters::yes,AllowSubstitute::no,true ) ) {
                         return false;
                     }
