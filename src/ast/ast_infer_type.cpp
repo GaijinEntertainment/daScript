@@ -6609,8 +6609,10 @@ namespace das {
                                     auto it = options.find(argType.get());
                                     if ( it!=options.end() ) {
                                         auto optionType = argType->argTypes[it->second].get();
-                                        defaultRef[ai] = optionType->isAuto() ? false : optionType->ref;
+                                        defaultRef[ai] = optionType->ref;
                                     }
+                                } else {
+                                    defaultRef[ai] = argType->ref;
                                 }
                             }
                             if (!anyFailed) break;
