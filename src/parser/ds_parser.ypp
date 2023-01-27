@@ -1007,7 +1007,10 @@ function_name
     |   DAS_OPERATOR QQ    { $$ = new string("??"); }
     |   DAS_OPERATOR DAS_IS { $$ = new string("`is"); }
     |   DAS_OPERATOR DAS_AS { $$ = new string("`as"); }
+    |   DAS_OPERATOR DAS_IS NAME[name] { $$ = $name; *$name = "`is`" + *$name; }
+    |   DAS_OPERATOR DAS_AS NAME[name] { $$ = $name; *$name = "`as`" + *$name; }
     |   DAS_OPERATOR '?' DAS_AS { $$ = new string("?as"); }
+    |   DAS_OPERATOR '?' DAS_AS NAME[name] { $$ = $name; *$name = "?as`" + *$name; }
     |   DAS_TBOOL    { $$ = new string("bool"); }
     |   DAS_TSTRING  { $$ = new string("string"); }
     |   DAS_TINT     { $$ = new string("int"); }
