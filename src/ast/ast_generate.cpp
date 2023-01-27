@@ -1146,7 +1146,7 @@ namespace das {
         // names
         string loopVar = "_loop_at_" + to_string(expr->at.line);
         vector<string> srcNames, pVarNames;
-        for ( size_t si=0; si!=expr->sources.size(); ++si ) {
+        for ( size_t si=0, sis=expr->sources.size(); si!=sis; ++si ) {
             srcNames.push_back("_source_" + to_string(si) + "_at_" + to_string(expr->at.line));
             pVarNames.push_back("_pvar_" + to_string(si) + "_at_" + to_string(expr->at.line));
         }
@@ -1163,7 +1163,7 @@ namespace das {
         leqt->variables.push_back(lvar);
         blk->list.push_back(leqt);
         // sources
-        for ( size_t si=0; si!=expr->sources.size(); ++si ) {
+        for ( size_t si=0, sis=expr->sources.size(); si!=sis; ++si ) {
             const string & srcName = srcNames[si];
             const string & pVarName = pVarNames[si];
             const string & srcVarName = expr->iterators[si];
@@ -1263,7 +1263,7 @@ namespace das {
                                           "continue for at line " + to_string(expr->at.line));
         blk->list.push_back(mll);
         // loop &= _builtin_iterator_next(it0,pvar0)
-        for ( size_t si=0; si!=expr->sources.size(); ++si ) {
+        for ( size_t si=0, sis=expr->sources.size(); si!=sis; ++si ) {
             const string & srcName = srcNames[si];
             const string & pVarName = pVarNames[si];
             auto cbif = make_smart<ExprCall>(expr->at, "_builtin_iterator_next");
@@ -1285,7 +1285,7 @@ namespace das {
             }
         }
         // loop &= _builtin_iterator_close(it0,pvar0)
-        for ( size_t si=0; si!=expr->sources.size(); ++si ) {
+        for ( size_t si=0, sis=expr->sources.size(); si!=sis; ++si ) {
             const string & srcName = srcNames[si];
             const string & pVarName = pVarNames[si];
             auto cbif = make_smart<ExprCall>(expr->at, "_builtin_iterator_close");
@@ -1324,7 +1324,7 @@ namespace das {
         fn->arguments.push_back(arg1);
         auto block = make_smart<ExprBlock>();
         block->at = at;
-        for ( size_t argi=0; argi!=tupleType->argTypes.size(); ++argi ) {
+        for ( size_t argi=0, argis=tupleType->argTypes.size(); argi!=argis; ++argi ) {
             string argn = "_" + to_string(argi);
             auto lv = make_smart<ExprVar>(at, "dest");
             auto lf = make_smart<ExprField>(at, lv, argn);
@@ -1357,7 +1357,7 @@ namespace das {
         auto block = make_smart<ExprBlock>();
         block->at = at;
         bool needUnsafe = false;
-        for ( size_t argi=0; argi!=tupleType->argTypes.size(); ++argi ) {
+        for ( size_t argi=0, argis=tupleType->argTypes.size(); argi!=argis; ++argi ) {
             if ( !tupleType->argTypes[argi]->constant && tupleType->argTypes[argi]->needDelete() ) {
                 if ( tupleType->isPointer() && tupleType->firstType && tupleType->firstType->constant ) continue;
                 string argn = "_" + to_string(argi);
@@ -1409,7 +1409,7 @@ namespace das {
         auto block = make_smart<ExprBlock>();
         block->at = at;
         smart_ptr<ExprIfThenElse> topIf, lastIf;
-        for ( size_t argi=0; argi!=variantType->argTypes.size(); ++argi ) {
+        for ( size_t argi=0, argis=variantType->argTypes.size(); argi!=argis; ++argi ) {
             const string & argn = variantType->argNames[argi];
             auto cb = make_smart<ExprBlock>();
             cb->at = at;
@@ -1465,7 +1465,7 @@ namespace das {
         block->at = at;
         smart_ptr<ExprIfThenElse> topIf, lastIf;
         bool needUnsafe = false;
-        for ( size_t argi=0; argi!=variantType->argTypes.size(); ++argi ) {
+        for ( size_t argi=0, argis=variantType->argTypes.size(); argi!=argis; ++argi ) {
             if ( !variantType->argTypes[argi]->constant && variantType->argTypes[argi]->needDelete() ) {
                 if ( variantType->argTypes[argi]->isPointer() && variantType->argTypes[argi]->firstType
                     && variantType->argTypes[argi]->firstType->constant ) continue;

@@ -301,7 +301,7 @@ namespace das {
                 b
             */
             if (!block->isClosure && block->list.size() > 1) {
-                for ( int i=0; i!=int(block->list.size())-1; ++i ) {
+                for ( int i=0, is=int(block->list.size())-1; i!=is; ++i ) {
                     auto expr = block->list[i];
                     if (expr != block->list.back()) {
                         if (expr->rtti_isIfThenElse()) {

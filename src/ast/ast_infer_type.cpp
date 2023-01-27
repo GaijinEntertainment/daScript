@@ -313,7 +313,7 @@ namespace das {
         // within current context
         TypeDeclPtr findAlias ( const string & name ) const {
             if ( func ) {
-                for ( auto it = local.rbegin(); it!=local.rend(); ++it ) {
+                for ( auto it = local.rbegin(), its=local.rend(); it!=its; ++it ) {
                     auto & var = *it;
                     if ( auto vT = var->type->findAlias(name) ) {
                         return vT;
@@ -428,7 +428,7 @@ namespace das {
                     if ( !resT->secondType ) return nullptr;
                 }
             } else if ( decl->baseType==Type::tFunction || decl->baseType==Type::tLambda || decl->baseType==Type::tBlock  ) {
-                for ( size_t iA=0; iA!=decl->argTypes.size(); ++iA ) {
+                for ( size_t iA=0, iAs=decl->argTypes.size(); iA!=iAs; ++iA ) {
                     auto & declAT = decl->argTypes[iA];
                     if ( auto infAT = inferAlias(declAT,fptr,aliases,options) ) {
                         resT->argTypes[iA] = infAT;
@@ -440,7 +440,7 @@ namespace das {
                 resT->firstType = inferAlias(decl->firstType,fptr,aliases,options);
                 if ( !resT->firstType ) return nullptr;
             } else if ( decl->baseType==Type::tVariant || decl->baseType==Type::tTuple || decl->baseType==Type::option ) {
-                for ( size_t iA=0; iA!=decl->argTypes.size(); ++iA ) {
+                for ( size_t iA=0, iAs=decl->argTypes.size(); iA!=iAs; ++iA ) {
                     auto & declAT = decl->argTypes[iA];
                     if ( auto infAT = inferAlias(declAT,fptr,aliases,options) ) {
                         resT->argTypes[iA] = infAT;
@@ -504,7 +504,7 @@ namespace das {
             } else if ( decl->baseType==Type::tFunction || decl->baseType==Type::tLambda
                 || decl->baseType==Type::tBlock || decl->baseType==Type::tVariant ||
                     decl->baseType==Type::tTuple|| decl->baseType==Type::option ) {
-                for ( size_t iA=0; iA!=decl->argTypes.size(); ++iA ) {
+                for ( size_t iA=0, iAs=decl->argTypes.size(); iA!=iAs; ++iA ) {
                     auto & declAT = decl->argTypes[iA];
                     resT->argTypes[iA] = inferPartialAliases(declAT,fptr,aliases);
                 }
@@ -746,7 +746,7 @@ namespace das {
                 for ( ;; ) {
                     bool anyFailed = false;
                     auto totalAliases = aliases.size();
-                    for ( size_t ai = 0; ai != types.size(); ++ai ) {
+                    for ( size_t ai=0, ais=types.size(); ai!=ais; ++ai ) {
                         auto argType = pFn->arguments[ai]->type;
                         if ( argType->isAlias() ) {
                             argType = inferPartialAliases(argType, pFn, &aliases);
@@ -767,13 +767,13 @@ namespace das {
                     }
                 }
             } else {
-                for ( size_t ai = 0; ai != types.size(); ++ai ) {
+                for ( size_t ai=0, ais=types.size(); ai!=ais; ++ai ) {
                     if (!isMatchingArgument(pFn, pFn->arguments[ai]->type, types[ai],inferAuto,inferBlock)) {
                         return false;
                     }
                 }
             }
-            for ( auto ti = types.size(); ti != pFn->arguments.size(); ++ti ) {
+            for ( auto ti=types.size(), tis=pFn->arguments.size(); ti!=tis; ++ti ) {
                 if ( !pFn->arguments[ti]->init ) {
                     return false;
                 }
@@ -795,7 +795,7 @@ namespace das {
                 return false;
             }
             size_t fnArgIndex = 0;
-            for ( size_t ai = 0; ai != arguments.size(); ++ai ) {
+            for ( size_t ai=0, ais=arguments.size(); ai!=ais; ++ai ) {
                 auto & arg = arguments[ai];
                 for ( ;; ) {
                     if ( fnArgIndex >= pFn->arguments.size() ) {    // out of source arguments. done
@@ -860,7 +860,7 @@ namespace das {
             }
             TextWriter ss;
             size_t fnArgIndex = 0;
-            for ( size_t ai = 0; ai != arguments.size(); ++ai ) {
+            for ( size_t ai=0, ais=arguments.size(); ai!=ais; ++ai ) {
                 auto & arg = arguments[ai];
                 for ( ;; ) {
                     if ( fnArgIndex >= pFn->arguments.size() ) {
@@ -913,7 +913,7 @@ namespace das {
                     ss << describeMismatchingArgument(arg->name, passType, arg->type, (int)ai);
                 }
             }
-            for ( ; ai!= pFn->arguments.size(); ++ai ) {
+            for ( size_t ais=pFn->arguments.size(); ai!=ais; ++ai ) {
                 auto & arg = pFn->arguments[ai];
                 if ( !arg->init ) {
                     ss << "\t\tmissing argument " << arg->name << "\n";
@@ -1187,7 +1187,7 @@ namespace das {
         }
 
         ExprWith * hasMatchingWith ( const string & fieldName ) const {
-            for ( auto it=with.rbegin(); it!=with.rend(); ++it ) {
+            for ( auto it=with.rbegin(), its=with.rend(); it!=its; ++it ) {
                 auto eW = *it;
                 if ( auto eWT = eW->with->type ) {
                     StructurePtr pSt;
@@ -1208,7 +1208,7 @@ namespace das {
 
         bool inferTypeExpr ( TypeDecl * type ) {
             bool any = false;
-            for ( size_t i=0; i!=type->dim.size(); ++i ) {
+            for ( size_t i=0, is=type->dim.size(); i!=is; ++i ) {
                 if ( type->dim[i]==TypeDecl::dimConst ) {
                     if ( type->dimExpr[i] ) {
                         if ( auto constExpr = getConstExpr(type->dimExpr[i].get()) ) {
@@ -1829,7 +1829,7 @@ namespace das {
         }
     // ExprGoto
         Expression * findLabel ( int32_t label ) const {
-            for ( auto it = scopes.rbegin(); it!=scopes.rend(); ++it ) {
+            for ( auto it = scopes.rbegin(), its=scopes.rend(); it!=its; ++it ) {
                 auto blk = *it;
                 for ( const auto & ex : blk->list ) {
                     if ( ex->rtti_isLabel() ) {
@@ -2563,7 +2563,7 @@ namespace das {
                     error("expecting " + to_string(blockT->argTypes.size()) + " arguments, got " + to_string(expr->arguments.size()-1) ,  "", "",
                         expr->at, CompilationError::invalid_argument_count);
                 } else {
-                    for ( size_t i=0; i != blockT->argTypes.size(); ++i ) {
+                    for ( size_t i=0, is=blockT->argTypes.size(); i!=is; ++i ) {
                         auto & arg = expr->arguments[i+1];
                         auto & passType = arg->type;
                         auto & argType = blockT->argTypes[i];
@@ -2595,7 +2595,7 @@ namespace das {
             if ( expr->arguments[0]->rtti_isStringConstant() ) {
                 auto cname = static_pointer_cast<ExprConstString>(expr->arguments[0])->text;
                 auto call = make_smart<ExprCall>(expr->at, cname);
-                for ( size_t i=1; i<expr->arguments.size(); ++i ) {
+                for ( size_t i=1, is=expr->arguments.size(); i<is; ++i ) {
                     call->arguments.push_back(expr->arguments[i]->clone());
                 }
                 reportAstChanged();
@@ -2614,7 +2614,7 @@ namespace das {
             if ( blockT->isGoodLambdaType() ) {
                 expr->arguments[0] = Expression::autoDereference(expr->arguments[0]);
             }
-            for ( size_t i=0; i != blockT->argTypes.size(); ++i ) {
+            for ( size_t i=0, is=blockT->argTypes.size(); i!=is; ++i ) {
                 auto & passType = expr->arguments[i+1]->type;
                 auto & argType = blockT->argTypes[i];
                 if ( !isMatchingArgument(nullptr, argType, passType, false,false) ) {
@@ -3548,7 +3548,7 @@ namespace das {
             }
             funT->firstType->constant = cresT->constant;
             // arguments
-            for ( size_t i=0; i!=seTF->argTypes.size(); ++i ) {
+            for ( size_t i=0, is=seTF->argTypes.size(); i!=is; ++i ) {
                 auto seT = seTF->argTypes[i];
                 auto cT = cTF->argTypes[i];
                 if ( !cT->isSameType(*seT,RefMatters::yes, ConstMatters::no, TemporaryMatters::no) ) {
@@ -4642,7 +4642,7 @@ namespace das {
         }
         virtual ExpressionPtr visit ( ExprVar * expr ) override {
             // assume (that on the stack)
-            for ( auto it = assume.rbegin(); it!=assume.rend(); ++it ) {
+            for ( auto it = assume.rbegin(), its=assume.rend(); it!=its; ++it ) {
                 auto ita = *it;
                 if ( ita->alias==expr->name ) {
                     reportAstChanged();
@@ -6036,7 +6036,7 @@ namespace das {
         ExpressionPtr demoteCall ( ExprNamedCall * expr, const FunctionPtr & pFn ) {
             auto newCall = make_smart<ExprCall>(expr->at,pFn->name);
             size_t fnArgIndex = 0;
-            for ( size_t ai = 0; ai != expr->arguments.size(); ++ai ) {
+            for ( size_t ai=0, ais=expr->arguments.size(); ai!=ais; ++ai ) {
                 auto & arg = expr->arguments[ai];
                 for ( ;; ) {
                     DAS_ASSERTF ( fnArgIndex < pFn->arguments.size(), "somehow matched function which does not match. not enough args" );
@@ -6216,7 +6216,7 @@ namespace das {
         // however many casts is where its at
         static int computeSubstituteDistance ( const vector<TypeDeclPtr> & arguments, const FunctionPtr & fn ) {
             int distance = 0;
-            for ( size_t i=0; i!=arguments.size(); ++i ) {
+            for ( size_t i=0, is=arguments.size(); i!=is; ++i ) {
                 const auto & argType = arguments[i];
                 const auto & funType = fn->arguments[i]->type;
                 if ( !argType->isSameType ( *funType, RefMatters::no, ConstMatters::no,
@@ -6328,7 +6328,7 @@ namespace das {
                 bool more = false;
                 DAS_ASSERT(t1->argTypes.size() && passType->argTypes.size() && "how did it match otherwise?");
                 DAS_ASSERT(t2->argTypes.size() && passType->argTypes.size() && "how did it match otherwise?");
-                for ( size_t aI=0; aI!=t1->argTypes.size(); ++aI ) {
+                for ( size_t aI=0, aIs=t1->argTypes.size(); aI!=aIs; ++aI ) {
                     int cmpr = moreSpecialized(
                         t1->argTypes[aI],
                         t2->argTypes[aI],
@@ -6349,7 +6349,7 @@ namespace das {
                 else if ( cmpr>0 ) more = true;
                 DAS_ASSERT(t1->argTypes.size() && passType->argTypes.size() && "how did it match otherwise?");
                 DAS_ASSERT(t2->argTypes.size() && passType->argTypes.size() && "how did it match otherwise?");
-                for ( size_t aI=0; aI!=t1->argTypes.size(); ++aI ) {
+                for ( size_t aI=0, aIs=t1->argTypes.size(); aI!=aIs; ++aI ) {
                     cmpr = moreSpecialized(
                         t1->argTypes[aI],
                         t2->argTypes[aI],
@@ -6517,7 +6517,7 @@ namespace das {
                     expr->type = make_smart<TypeDecl>(*funcC->result);
                 }
                 // infer FORWARD types
-                for ( size_t iF=0; iF!=expr->arguments.size(); ++iF ) {
+                for ( size_t iF=0, iFs=expr->arguments.size(); iF!=iFs; ++iF ) {
                     auto & arg = expr->arguments[iF];
                     if ( arg->type->isAuto() && (arg->type->isGoodBlockType() || arg->type->isGoodLambdaType() || arg->type->isGoodFunctionType()) ) {
                         if ( arg->rtti_isMakeBlock() ) { // "it's always MakeBlock. unless its function and @@funcName
@@ -6527,7 +6527,7 @@ namespace das {
                             DAS_ASSERTF ( retT, "how? it matched during findMatchingFunctions the same way");
                             TypeDecl::applyAutoContracts(mkBlock->type, funcC->arguments[iF]->type);
                             block->returnType = make_smart<TypeDecl>(*retT->firstType);
-                            for ( size_t ba=0; ba!=retT->argTypes.size(); ++ba ) {
+                            for ( size_t ba=0, bas=retT->argTypes.size(); ba!=bas; ++ba ) {
                                 block->arguments[ba]->type = make_smart<TypeDecl>(*retT->argTypes[ba]);
                             }
                             setBlockCopyMoveFlags(block.get());
@@ -6536,7 +6536,7 @@ namespace das {
                     }
                 }
                 // append default arguments
-                for ( size_t iT = expr->arguments.size(); iT != funcC->arguments.size(); ++iT ) {
+                for ( size_t iT=expr->arguments.size(), iTs=funcC->arguments.size(); iT!=iTs; ++iT ) {
                     auto newArg = funcC->arguments[iT]->init->clone();
                     if ( !newArg->type ) {
                         // recursive resolve???
@@ -6548,7 +6548,7 @@ namespace das {
                     expr->arguments.push_back(newArg);
                 }
                 // dereference what needs dereferences
-                for ( size_t iA = 0; iA != expr->arguments.size(); ++iA )
+                for ( size_t iA=0, iAs=expr->arguments.size(); iA!=iAs; ++iA )
                     if ( !funcC->arguments[iA]->type->isRef() )
                         expr->arguments[iA] = Expression::autoDereference(expr->arguments[iA]);
                 // and all good
@@ -6596,7 +6596,7 @@ namespace das {
                         for (;; ) {
                             bool anyFailed = false;
                             auto totalAliases = aliases.size();
-                            for (size_t ai = 0; ai != types.size(); ++ai) {
+                            for (size_t ai=0, ais=types.size(); ai!=ais; ++ai) {
                                 auto argType = clone->arguments[ai]->type;
                                 if (argType->isAlias()) {
                                     argType = inferPartialAliases(argType, clone, &aliases);
@@ -6625,7 +6625,7 @@ namespace das {
                             }
                         }
                         // now, we resolve types given inferred aliases
-                        for (size_t sz = 0; sz != types.size(); ++sz) {
+                        for (size_t sz=0, szs=types.size(); sz!=szs; ++sz) {
                             auto & argT = clone->arguments[sz]->type;
                             if (argT->isAlias()) {
                                 argT = inferPartialAliases(argT, clone, &aliases);
@@ -6646,7 +6646,7 @@ namespace das {
                             }
                         }
                         // resolve tail-end types
-                        for ( size_t ai = types.size(); ai!= clone->arguments.size(); ++ai ) {
+                        for ( size_t ai=types.size(), ais=clone->arguments.size(); ai!=ais; ++ai ) {
                             auto & arg = clone->arguments[ai];
                             if ( arg->type->isAuto() ) {
                                 if ( arg->init ) {
@@ -7388,7 +7388,7 @@ namespace das {
                     int uidx = expr->recordType->getVariantUniqueFieldIndex(init->type);
                     if ( uidx==-1 ) {
                         vector<pair<string,TypeDeclPtr>> options;
-                        for ( size_t vi=0; vi != expr->recordType->argTypes.size(); ++vi ) {
+                        for ( size_t vi=0, vis=expr->recordType->argTypes.size(); vi!=vis; ++vi ) {
                             const auto & argT = expr->recordType->argTypes[vi];
                             if ( argT->isSameType(*init->type,RefMatters::no,ConstMatters::no,TemporaryMatters::no,AllowSubstitute::no) ) {
                                 options.emplace_back(expr->recordType->argNames[vi], argT);

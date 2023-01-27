@@ -89,7 +89,7 @@ namespace das {
         fni->stackSize = fn.totalStackSize;
         fni->count = (uint32_t) fn.arguments.size();
         fni->fields = (VarInfo **) debugInfo->allocate(sizeof(VarInfo *) * fni->count);
-        for ( uint32_t i=0; i!=fni->count; ++i ) {
+        for ( uint32_t i=0, is=fni->count; i!=is; ++i ) {
             fni->fields[i] = makeVariableDebugInfo(*fn.arguments[i]);
         }
         fni->flags = 0;
@@ -114,7 +114,7 @@ namespace das {
         fakeFunc.at = at;
         fakeFunc.result = blk->firstType ? blk->firstType : make_smart<TypeDecl>(Type::tVoid);
         fakeFunc.totalStackSize = sizeof(Prologue);
-        for ( size_t ai=0; ai!=blk->argTypes.size(); ++ ai ) {
+        for ( size_t ai=0, ais=blk->argTypes.size(); ai!=ais; ++ ai ) {
             auto argV = make_smart<Variable>();
             argV->at = at;
             argV->name = blk->argNames.empty() ? ("arg_" + to_string(ai)) : blk->argNames[ai];
@@ -141,7 +141,7 @@ namespace das {
         sti->count = (uint32_t) st.fields.size();
         sti->size = st.getSizeOf();
         sti->fields = (VarInfo **) debugInfo->allocate( sizeof(VarInfo *) * sti->count );
-        for ( uint32_t i=0; i!=sti->count; ++i ) {
+        for ( uint32_t i=0, is=sti->count; i!=is; ++i ) {
             auto & var = st.fields[i];
             VarInfo * vi = makeVariableDebugInfo(st, var);
             sti->fields[i] = vi;
@@ -175,7 +175,7 @@ namespace das {
         info->dimSize = (uint32_t) type->dim.size();
         if ( info->dimSize ) {
             info->dim = (uint32_t *) debugInfo->allocate(sizeof(uint32_t) * info->dimSize );
-            for ( uint32_t i=0; i != info->dimSize; ++i ) {
+            for ( uint32_t i=0, is=info->dimSize; i!=is; ++i ) {
                 info->dim[i] = type->dim[i];
             }
         }
@@ -244,7 +244,7 @@ namespace das {
             info->argCount = uint32_t(type->argTypes.size());
             if ( info->argCount ) {
                 info->argTypes = (TypeInfo **) debugInfo->allocate(sizeof(TypeInfo *) * info->argCount );
-                for ( uint32_t i=0; i!=info->argCount; ++i ) {
+                for ( uint32_t i=0, is=info->argCount; i!=is; ++i ) {
                     info->argTypes[i] = makeTypeInfo(nullptr, type->argTypes[i]);
                 }
             }
@@ -254,7 +254,7 @@ namespace das {
             info->argCount = uint32_t(type->argNames.size());
             if ( info->argCount ) {
                 info->argNames = (const char **) debugInfo->allocate(sizeof(char *) * info->argCount );
-                for ( uint32_t i=0; i!=info->argCount; ++i ) {
+                for ( uint32_t i=0, is=info->argCount; i!=is; ++i ) {
                     info->argNames[i] = debugInfo->allocateCachedName(type->argNames[i]);
                 }
             }

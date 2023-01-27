@@ -342,7 +342,7 @@ namespace das {
                     }
                 }
             }
-            for ( size_t i=0; i!=expr->arguments.size(); ++i ) {
+            for ( size_t i=0, is=expr->arguments.size(); i!=is; ++i ) {
                 const auto & arg = expr->arguments[i];
                 const auto & funArg = expr->func->arguments[i];
                 const auto & argType = funArg->type;

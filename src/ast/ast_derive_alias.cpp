@@ -26,7 +26,7 @@ namespace das {
         if ( !inv->firstType->isSameType(*func->result, RefMatters::yes, ConstMatters::yes, TemporaryMatters::yes) ) {
             return false;
         }
-        for ( uint32_t i=0; i!=func->arguments.size(); ++i ) {
+        for ( uint32_t i=0, is=func->arguments.size(); i!=is; ++i ) {
             if ( !inv->argTypes[i]->isSameType(*func->arguments[i]->type, RefMatters::yes, ConstMatters::yes, TemporaryMatters::yes, AllowSubstitute::yes, false, false) ) {
                 return false;
             }
@@ -53,7 +53,7 @@ namespace das {
         if ( !inv->firstType->isSameType(*func->result, RefMatters::yes, ConstMatters::yes, TemporaryMatters::yes) ) {
             return false;
         }
-        for ( uint32_t i=0; i!=inv->argTypes.size(); ++i ) {    // note, we skip 1st argument
+        for ( uint32_t i=0, is=inv->argTypes.size(); i!=is; ++i ) {    // note, we skip 1st argument
             if ( !inv->argTypes[i]->isSameType(*func->arguments[i+1]->type, RefMatters::yes, ConstMatters::yes, TemporaryMatters::yes, AllowSubstitute::yes, false, false) ) {
                 return false;
             }
@@ -248,7 +248,7 @@ namespace das {
         func->result->collectAliasing(resTypeAliases, rdep, false);
     // do arguments
         func->resultAliases.clear();
-        for ( int i=0; i!=func->arguments.size(); ++i ) {
+        for ( int i=0, is=func->arguments.size(); i!=is; ++i ) {
             if ( !(func->arguments[i]->type->isRef() || func->arguments[i]->type->baseType==Type::tPointer) ) {
                 continue;
             }
@@ -435,7 +435,7 @@ namespace das {
                     }
                 }
                 // invoke arguments can only alias invoke of function or lambda
-                for ( size_t ai=0; ai != expr->arguments.size(); ++ai ) {
+                for ( size_t ai=0, ais=expr->arguments.size(); ai!=ais; ++ai ) {
                     if ( !(expr->arguments[ai]->type->isRef() || expr->arguments[ai]->type->baseType==Type::tPointer) ) {
                         continue;
                     }

@@ -68,7 +68,7 @@ namespace das
     }
 
     TypeDeclPtr TypeDecl::visit ( Visitor & vis ) {
-        for ( size_t i=0; i!=dim.size(); ++i ) {
+        for ( size_t i=0, is=dim.size(); i!=is; ++i ) {
             if ( dim[i]==TypeDecl::dimConst ) {
                 if ( dimExpr[i] ) {
                     dimExpr[i] = dimExpr[i]->visit(vis);
@@ -142,7 +142,7 @@ namespace das
             if ( TT->firstType ) {
                 applyAutoContracts(TT->firstType, autoT->firstType);
             }
-            for ( size_t i=0; i!=autoT->argTypes.size(); ++i ) {
+            for ( size_t i=0, is=autoT->argTypes.size(); i!=is; ++i ) {
                 applyAutoContracts(TT->argTypes[i], autoT->argTypes[i]);
             }
         }
@@ -178,7 +178,7 @@ namespace das
         } else {
             if ( decl->firstType ) updateAliasMap(decl->firstType, pass->firstType, aliases, options);
             if ( decl->secondType ) updateAliasMap(decl->secondType, pass->secondType, aliases, options);
-            for ( size_t iA=0; iA!=decl->argTypes.size(); ++iA ) {
+            for ( size_t iA=0, iAs = decl->argTypes.size(); iA!=iAs; ++iA ) {
                 updateAliasMap(decl->argTypes[iA], pass->argTypes[iA], aliases, options);
             }
         }
@@ -199,7 +199,7 @@ namespace das
     TypeDeclPtr TypeDecl::inferGenericType ( TypeDeclPtr autoT, TypeDeclPtr initT, bool topLevel, bool passType, OptionsMap * options ) {
         // for option type, we go through all the options in order. first matching is good
         if ( autoT->baseType==Type::option ) {
-            for ( size_t i = 0; i!=autoT->argTypes.size(); ++i ) {
+            for ( size_t i=0, is=autoT->argTypes.size(); i!=is; ++i ) {
                 // we copy type qualifiers for each option
                 auto & TT = autoT->argTypes[i];
                 TT->ref = TT->ref | autoT->ref;
@@ -272,7 +272,7 @@ namespace das
         if ( autoT->dim.size() ) {
             if ( autoT->dim.size()!=initT->dim.size() )
                 return nullptr;
-            for ( size_t di=0; di!=autoT->dim.size(); ++di ) {
+            for ( size_t di=0, dis=autoT->dim.size(); di!=dis; ++di ) {
                 int32_t aDI = autoT->dim[di];
                 int32_t iDI = initT->dim[di];
                 if ( aDI!=TypeDecl::dimAuto && aDI!=iDI ) {
@@ -343,7 +343,7 @@ namespace das
                 TT->firstType = inferGenericType(autoT->firstType, initT->firstType, false, options);
                 if ( !TT->firstType ) return nullptr;
             }
-            for ( size_t i=0; i!=autoT->argTypes.size(); ++i ) {
+            for ( size_t i=0, is=autoT->argTypes.size(); i!=is; ++i ) {
                 TT->argTypes[i] = inferGenericType(autoT->argTypes[i], initT->argTypes[i], false, options);
                 if ( !TT->argTypes[i] ) return nullptr;
             }
@@ -442,7 +442,7 @@ namespace das
             stream << das_to_string(baseType) << "<";
             if ( argTypes.size() ) {
                 stream << "(";
-                for ( size_t ai=0; ai!=argTypes.size(); ++ ai ) {
+                for ( size_t ai=0, ais=argTypes.size(); ai!=ais; ++ ai ) {
                     if ( ai!=0 ) stream << ";";
                     if (!argTypes[ai]->isConst()) {
                         stream << "var ";
@@ -1128,7 +1128,7 @@ namespace das
                 return false;
             }
         if ( dim.size() != decl.dim.size() ) return false;
-        for ( size_t i=0; i!=dim.size(); ++i ) {
+        for ( size_t i=0, is=dim.size(); i!=is; ++i ) {
             if ( dim[i] != decl.dim[i] ) {
                 return false;
             }
@@ -1136,13 +1136,13 @@ namespace das
         if ( !isSameExactNullType(firstType,decl.firstType) ) return false;
         if ( !isSameExactNullType(secondType,decl.secondType) ) return false;
         if ( argTypes.size() != decl.argTypes.size() ) return false;
-        for ( size_t i=0; i!=argTypes.size(); ++i ) {
+        for ( size_t i=0, is=argTypes.size(); i!=is; ++i ) {
             if ( !argTypes[i]->isSameExactType(*(decl.argTypes[i])) ) {
                 return false;
             }
         }
         if ( argNames.size() != decl.argNames.size() ) return false;
-        for ( size_t i=0; i!=argNames.size(); ++i ) {
+        for ( size_t i=0, is=argNames.size(); i!=is; ++i ) {
             if ( argNames[i]!=decl.argNames[i] ) {
                 return false;
             }
@@ -1251,7 +1251,7 @@ namespace das
                     if (argNames.size() != decl.argNames.size()) {
                         return false;
                     }
-                    for ( size_t i=0; i != argNames.size(); ++i ) {
+                    for ( size_t i=0, is=argNames.size(); i!=is; ++i ) {
                         const auto & arg = argNames[i];
                         const auto & declArg = decl.argNames[i];
                         if ( arg != declArg ) {
@@ -1259,7 +1259,7 @@ namespace das
                         }
                     }
                 }
-                for ( size_t i=0; i != argTypes.size(); ++i ) {
+                for ( size_t i=0, is=argTypes.size(); i!=is; ++i ) {
                     const auto & arg = argTypes[i];
                     const auto & declArg = decl.argTypes[i];
                     if ( !arg->isSameType(*declArg, RefMatters::yes, ConstMatters::yes,
@@ -1278,7 +1278,7 @@ namespace das
                 if ( argTypes.size() != decl.argTypes.size() ) {
                     return false;
                 }
-                for ( size_t i=0; i != argTypes.size(); ++i ) {
+                for ( size_t i=0, is=argTypes.size(); i!=is; ++i ) {
                     const auto & argType = argTypes[i];
                     const auto & passType = decl.argTypes[i];
                     auto rMat = argType->isRefType() ? RefMatters::no : RefMatters::yes;
@@ -1309,7 +1309,7 @@ namespace das
                 if (argNames.size() != decl.argNames.size()) {
                     return false;
                 }
-                for ( size_t i=0; i != argNames.size(); ++i ) {
+                for ( size_t i=0, is=argNames.size(); i!=is; ++i ) {
                     const auto & arg = argNames[i];
                     const auto & declArg = decl.argNames[i];
                     if ( arg != declArg ) {
@@ -1352,7 +1352,7 @@ namespace das
     // validate swizzle mask and build mask type
 
     bool TypeDecl::isSequencialMask ( const vector<uint8_t> & fields ) {
-        for ( size_t i=1; i<fields.size(); ++i ) {
+        for ( size_t i=1, is=fields.size(); i<is; ++i ) {
             if ( (fields[i-1]+1)!=fields[i] ) {
                 return false;
             }
@@ -2470,14 +2470,14 @@ namespace das
     int TypeDecl::getStride() const {
         int size = 1;
         if ( dim.size() > 1 ) {
-            for ( size_t i=1; i!=dim.size(); ++i )
+            for ( size_t i=1, is=dim.size(); i!=is; ++i )
                 size *= dim[i];
         }
         return getBaseSizeOf() * size;
     }
 
     int TypeDecl::findArgumentIndex( const string & name ) const {
-        for (int index = 0; index != int(argNames.size()); ++index) {
+        for (int index=0, indexs=int(argNames.size()); index!=indexs; ++index) {
             if (argNames[index] == name) return index;
         }
         return -1;

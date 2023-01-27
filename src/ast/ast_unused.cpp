@@ -417,7 +417,7 @@ namespace das {
                 // if modified, modify CALL
                 auto sef = getSideEffects(expr->func);
                 if ( sef & uint32_t(SideEffects::modifyArgument) ) {
-                    for ( size_t ai=0; ai != expr->arguments.size(); ++ai ) {
+                    for ( size_t ai=0, ais=expr->arguments.size(); ai!=ais; ++ai ) {
                         const auto & argT = expr->func->arguments[ai]->type;
                         if ( argT->canWrite() ) {
                             if ( !expr->func->builtIn ) {
@@ -455,7 +455,7 @@ namespace das {
             // if modified, modify NEW
             auto sef = getSideEffects(expr->func);
             if ( sef & uint32_t(SideEffects::modifyArgument) ) {
-                for ( size_t ai=0; ai != expr->arguments.size(); ++ai ) {
+                for ( size_t ai=0, ais=expr->arguments.size(); ai!=ais; ++ai ) {
                     const auto & argT = expr->func->arguments[ai]->type;
                     if ( argT->canWrite() ) {
                         if ( !expr->func->builtIn ) {
@@ -474,7 +474,7 @@ namespace das {
     // LooksLikeCall
         virtual void preVisit ( ExprLooksLikeCall * expr ) override {
             Visitor::preVisit(expr);
-            for ( size_t ai=0; ai != expr->arguments.size(); ++ai ) {
+            for ( size_t ai=0, ais=expr->arguments.size(); ai!=ais; ++ai ) {
                 const auto & argT = expr->arguments[ai]->type;
                 if ( argT->isRefOrPointer() && !argT->constant ) {
                     propagateWrite(expr->arguments[ai].get());
@@ -487,7 +487,7 @@ namespace das {
             if ( func ) {
                 func->sideEffectFlags |= uint32_t(SideEffects::invoke);
             }
-            for ( size_t ai=0; ai != expr->arguments.size(); ++ai ) {
+            for ( size_t ai=0, ais=expr->arguments.size(); ai!=ais; ++ai ) {
                 const auto & argT = expr->arguments[ai]->type;
                 if ( argT->isRefOrPointer() && !argT->constant ) {
                     propagateWrite(expr->arguments[ai].get());

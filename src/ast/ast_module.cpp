@@ -663,7 +663,7 @@ namespace das {
     void ModuleLibrary::foreach_in_order ( const callable<bool (Module * module)> & func, Module * thisM ) const {
         DAS_ASSERT(modules.size());
         // {builtin} {THIS_MODULE} {require1} {require2} ...
-        for ( auto m = modules.begin(); m!=modules.end(); ++m ) {
+        for ( auto m = modules.begin(), ms=modules.end(); m!=ms; ++m ) {
             if ( *m==thisM ) continue;
             if ( !func(*m) ) return;
         }
@@ -888,21 +888,17 @@ namespace das {
 
     using ModulesPullers = das::vector<module_pull_t>;
 
-    static ModulesPullers &get_pullers()
-    {
+    static ModulesPullers & get_pullers() {
         static ModulesPullers pullers;
         return pullers;
     }
 
-    ModulePullHelper::ModulePullHelper(module_pull_t pull)
-    {
+    ModulePullHelper::ModulePullHelper(module_pull_t pull) {
         get_pullers().push_back(pull);
     }
 
-    void pull_all_auto_registered_modules()
-    {
-        for (module_pull_t pull : get_pullers())
-        {
+    void pull_all_auto_registered_modules() {
+        for (module_pull_t pull : get_pullers()) {
             das::ModuleKarma += unsigned(intptr_t(pull()));
         }
     }

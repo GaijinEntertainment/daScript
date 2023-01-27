@@ -156,7 +156,7 @@ namespace das {
             }
         }
         if ( type->dim.size() ) {
-            for ( size_t d=0; d!=type->dim.size(); ++d ) {
+            for ( size_t d=0, ds=type->dim.size(); d!=ds; ++d ) {
                 stream << "TDim<";
             }
         }
@@ -265,7 +265,7 @@ namespace das {
             stream << das_to_cppString(baseType);
         }
         if ( type->dim.size() ) {
-            for ( auto itd = type->dim.rbegin(); itd!=type->dim.rend(); ++itd ) {
+            for ( auto itd=type->dim.rbegin(), itds=type->dim.rend(); itd!=itds; ++itd ) {
                 stream << "," << *itd << ">";
             }
         }
@@ -407,7 +407,7 @@ namespace das {
         void writeDim ( TextWriter & ss, TypeInfo * info, const string & suffix = ""  ) const {
             if ( info->dimSize ) {
                 ss << "uint32_t " << typeInfoName(info) << "_dim" << suffix << "[" << info->dimSize << "] = { ";
-                for ( uint32_t i=0; i!=info->dimSize; ++i ) {
+                for ( uint32_t i=0, is=info->dimSize; i!=is; ++i ) {
                     if ( i ) ss << ", ";
                     ss << info->dim[i];
                 }
@@ -417,7 +417,7 @@ namespace das {
         void writeArgNames ( TextWriter & ss, TypeInfo * info, const string & suffix = "" ) const {
             if ( info->argCount && info->argNames ) {
                 ss << "const char * " << typeInfoName(info) << "_arg_names" << suffix << "[" << info->argCount << "] = { ";
-                for ( uint32_t i=0; i!=info->argCount; ++i ) {
+                for ( uint32_t i=0, is=info->argCount; i!=is; ++i ) {
                     if ( i ) ss << ", ";
                     ss << "\"" << info->argNames[i] << "\"";
                 }
@@ -427,7 +427,7 @@ namespace das {
         void writeArgTypes ( TextWriter & ss, TypeInfo * info, const string & suffix = ""  ) const {
             if ( info->argCount && info->argTypes ) {
                 ss << "TypeInfo * " << typeInfoName(info) << "_arg_types" << suffix << "[" << info->argCount << "] = { ";
-                for ( uint32_t i=0; i!=info->argCount; ++i ) {
+                for ( uint32_t i=0, is=info->argCount; i!=is; ++i ) {
                     if ( i ) ss << ", ";
                     ss << "&" << typeInfoName(info->argTypes[i]);
                 }
@@ -525,7 +525,7 @@ namespace das {
         }
         void describeCppStructInfoFields ( TextWriter & ss, StructInfo * info ) const {
             if ( !info->fields ) return;
-            for ( uint32_t fi=0; fi!=info->count; ++fi ) {
+            for ( uint32_t fi=0, fis=info->count; fi!=fis; ++fi ) {
                 auto suffix = "_var_" + to_string(info->hash);
                 writeDim(ss, info->fields[fi], suffix);
                 writeArgTypes(ss, info->fields[fi], suffix);
@@ -535,7 +535,7 @@ namespace das {
                 ss << " };\n";
             }
             ss << "VarInfo * " << structInfoName(info) << "_fields[" << info->count << "] =  { ";
-            for ( uint32_t fi=0; fi!=info->count; ++fi ) {
+            for ( uint32_t fi=0, fis=info->count; fi!=fis; ++fi ) {
                 if ( fi ) ss << ", ";
                 ss << "&" << structInfoName(info) << "_field_" << fi;
             }
@@ -556,7 +556,7 @@ namespace das {
         }
         void describeCppFuncInfoFields ( TextWriter & ss, FuncInfo * info ) const {
             if ( !info->fields ) return;
-            for ( uint32_t fi=0; fi!=info->count; ++fi ) {
+            for ( uint32_t fi=0, fis=info->count; fi!=fis; ++fi ) {
                 auto suffix = "_var_" + to_string(info->hash);
                 writeDim(ss, info->fields[fi], suffix);
                 writeArgTypes(ss, info->fields[fi], suffix);
@@ -566,7 +566,7 @@ namespace das {
                 ss << " };\n";
             }
             ss << "VarInfo * " << funcInfoName(info) << "_fields[" << info->count << "] =  { ";
-            for ( uint32_t fi=0; fi!=info->count; ++fi ) {
+            for ( uint32_t fi=0, fis=info->count; fi!=fis; ++fi ) {
                 if ( fi ) ss << ", ";
                 ss << "&" << funcInfoName(info) << "_field_" << fi;
             }
@@ -589,13 +589,13 @@ namespace das {
                 << "0x" << HEX << info->flags << DEC;
         }
         void describeCppEnumInfoValues ( TextWriter & ss, EnumInfo * einfo ) const {
-            for ( uint32_t v=0; v!=einfo->count; ++v ) {
+            for ( uint32_t v=0, vs=einfo->count; v!=vs; ++v ) {
                 auto val = einfo->fields[v];
                 ss << "EnumValueInfo " << enumInfoName(einfo) << "_value_" << v << " = { \""
                 << val->name << "\", " << val->value << " };\n";
             }
             ss << "EnumValueInfo * " << enumInfoName(einfo) << "_values [] = { ";
-            for ( uint32_t v=0; v!=einfo->count; ++v ) {
+            for ( uint32_t v=0, vs=einfo->count; v!=vs; ++v ) {
                 if ( v ) ss << ", ";
                 ss << "&" << enumInfoName(einfo) << "_value_" << v;
             }
@@ -787,7 +787,7 @@ namespace das {
     // let
         ExprBlock * getCurrentBlock() const {
             ExprBlock * block = nullptr;
-            for (auto it = stack.rbegin(); it != stack.rend(); ++it) {
+            for (auto it=stack.rbegin(), its=stack.rend(); it!=its; ++it) {
                 ExprBlock * pb = *it;
                 if (pb->isClosure) {
                     block = pb;
@@ -801,7 +801,7 @@ namespace das {
             return block;
         }
         ExprBlock * getFinalBlock () const {
-            for ( auto it = stack.rbegin(); it!=stack.rend(); ++it ) {
+            for ( auto it=stack.rbegin(), its=stack.rend(); it!=its; ++it ) {
                 auto blk = *it;
                 if ( blk->finalList.size() ) return blk;
                 if ( blk->isClosure ) return nullptr;
@@ -809,7 +809,7 @@ namespace das {
             return nullptr;
         }
         ExprBlock * getTopBlock () const {
-            for ( auto it = stack.rbegin(); it!=stack.rend(); ++it ) {
+            for ( auto it=stack.rbegin(), its=stack.rend(); it!=its; ++it ) {
                 auto blk = *it;
                 if ( blk->isClosure ) return blk;
             }
@@ -1359,7 +1359,7 @@ namespace das {
         virtual ExpressionPtr visit(ExprGoto *that) override {
             if ( that->subexpr ) {
                 ss << ") {\n";
-                for ( auto it = scopes.rbegin(); it!=scopes.rend(); ++it ) {
+                for ( auto it=scopes.rbegin(), its=scopes.rend(); it!=its; ++it ) {
                     auto blk = *it;
                     for ( const auto & ex : blk->list ) {
                         if ( ex->rtti_isLabel() ) {
@@ -2249,7 +2249,7 @@ namespace das {
                     ss << "das_swizzle<"
                         << describeCppType(expr->type,CpptSubstitureRef::no,CpptSkipRef::yes) << ","
                         << describeCppType(expr->value->type,CpptSubstitureRef::no,CpptSkipRef::yes);
-                    for ( size_t i=0; i!=expr->fields.size(); ++i ) {
+                    for ( size_t i=0, its=expr->fields.size(); i!=its; ++i ) {
                         ss << ",";
                         ss << int32_t(expr->fields[i]);
                     }
@@ -2299,7 +2299,7 @@ namespace das {
             }
             string debug_info_name = "__tinfo_" + to_string(debugInfoGlobal++);
             sti << "TypeInfo * " << debug_info_name << "[" << nArgs << "] = { ";
-            for ( size_t i=0; i!=elInfo.size(); ++i ) {
+            for ( size_t i=0, is=elInfo.size(); i!=is; ++i ) {
                 auto info = elInfo[i];
                 if ( i ) sti << ", ";
                 sti << "&" << helper.typeInfoName(info);
@@ -3083,9 +3083,10 @@ namespace das {
             return func->needStringCast && arg->isString() && !arg->ref;
         }
         void CallFunc_preVisitCallArg ( ExprCallFunc * call, Expression * arg, bool ) {
-            vector<ExpressionPtr>::iterator it;
             int argIndex = 0;
-            for ( it = call->arguments.begin(); it!=call->arguments.end(); ++it, ++argIndex ) {
+            auto it = call->arguments.begin();
+            auto its = call->arguments.end();
+            for ( ; it!=its; ++it, ++argIndex ) {
                 if ( it->get()==arg ) {
                     break;
                 }
@@ -3128,9 +3129,10 @@ namespace das {
             }
         }
         void CallFunc_visitCallArg ( ExprCallFunc * call, Expression * arg, bool last ) {
-            vector<ExpressionPtr>::iterator it;
             int argIndex = 0;
-            for ( it = call->arguments.begin(); it!=call->arguments.end(); ++it, ++argIndex ) {
+            auto it = call->arguments.begin();
+            auto its = call->arguments.end();
+            for ( ; it!=its; ++it, ++argIndex ) {
                 if ( it->get()==arg ) {
                     break;
                 }
@@ -3232,7 +3234,8 @@ namespace das {
         virtual void preVisitForSource ( ExprFor * ffor, Expression * that, bool last ) override {
             Visitor::preVisitForSource(ffor, that, last);
             size_t idx;
-            for ( idx=0; idx!=ffor->sources.size(); ++idx ) {
+            auto idxs = ffor->sources.size();
+            for ( idx=0; idx!=idxs; ++idx ) {
                 if ( ffor->sources[idx].get()==that ) {
                     break;
                 }
@@ -3245,7 +3248,8 @@ namespace das {
         }
         virtual ExpressionPtr visitForSource ( ExprFor * ffor, Expression * that , bool last ) override {
             size_t idx;
-            for ( idx=0; idx!=ffor->sources.size(); ++idx ) {
+            auto idxs = ffor->sources.size();
+            for ( idx=0; idx!=idxs; ++idx ) {
                 if ( ffor->sources[idx].get()==that ) {
                     break;
                 }
@@ -3304,7 +3308,7 @@ namespace das {
             logs << "\nvoid registerAot ( AotLibrary & aotLib )\n{\n";
         }
         bool funInit = false;
-        for ( int i=0; i!=context.totalFunctions; ++i ) {
+        for ( int i=0, is=context.totalFunctions; i!=is; ++i ) {
             if ( fnn[i]->module != thisModule.get() )
                 continue;
             if ( fnn[i]->init ) {

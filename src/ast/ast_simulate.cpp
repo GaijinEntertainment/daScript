@@ -617,7 +617,7 @@ namespace das
         auto simlist = simulateLocal(context);
         block->total = int(simlist.size());
         block->list = (SimNode **) context.code->allocate(sizeof(SimNode *)*block->total);
-        for ( uint32_t i = 0; i != block->total; ++i )
+        for ( uint32_t i=0, is=block->total; i!=is; ++i )
             block->list[i] = simlist[i];
         return block;
     }
@@ -841,7 +841,7 @@ namespace das
         auto simlist = simulateLocal(context);
         blk->total = int(simlist.size());
         blk->list = (SimNode **) context.code->allocate(sizeof(SimNode *)*blk->total);
-        for ( uint32_t i = 0; i != blk->total; ++i )
+        for ( uint32_t i=0, is=blk->total; i!=is; ++i )
             blk->list[i] = simlist[i];
         return blk;
     }
@@ -940,7 +940,7 @@ namespace das
         auto simlist = simulateLocal(context);
         block->total = int(simlist.size());
         block->list = (SimNode **) context.code->allocate(sizeof(SimNode *)*block->total);
-        for ( uint32_t i = 0; i != block->total; ++i )
+        for ( uint32_t i=0, is=block->total; i!=is; ++i )
             block->list[i] = simlist[i];
         return block;
     }
@@ -1038,7 +1038,7 @@ namespace das
         auto simlist = simulateLocal(context);
         block->total = int(simlist.size());
         block->list = (SimNode **) context.code->allocate(sizeof(SimNode *)*block->total);
-        for ( uint32_t i = 0; i != block->total; ++i )
+        for ( uint32_t i=0, is=block->total; i!=is; ++i )
             block->list[i] = simlist[i];
         return block;
     }
@@ -1714,7 +1714,7 @@ namespace das
         block->totalFinal = int(simFList.size());
         if ( block->totalFinal ) {
             block->finalList = (SimNode **) context.code->allocate(sizeof(SimNode *)*block->totalFinal);
-            for ( uint32_t i = 0; i != block->totalFinal; ++i )
+            for ( uint32_t i=0, is=block->totalFinal; i!=is; ++i )
                 block->finalList[i] = simFList[i];
         }
     }
@@ -1725,7 +1725,7 @@ namespace das
         block->total = int(simlist.size());
         if ( block->total ) {
             block->list = (SimNode **) context.code->allocate(sizeof(SimNode *)*block->total);
-            for ( uint32_t i = 0; i != block->total; ++i )
+            for ( uint32_t i=0, is=block->total; i!=is; ++i )
                 block->list[i] = simlist[i];
         }
         simulateLabels(context, block, ofsmap);
@@ -1735,7 +1735,7 @@ namespace das
         if ( maxLabelIndex!=-1 ) {
             block->totalLabels = maxLabelIndex + 1;
             block->labels = (uint32_t *) context.code->allocate(block->totalLabels * sizeof(uint32_t));
-            for ( uint32_t i=0; i!=block->totalLabels; ++i ) {
+            for ( uint32_t i=0, is=block->totalLabels; i!=is; ++i ) {
                 block->labels[i] = -1U;
             }
             for ( auto & it : ofsmap ) {
@@ -1814,7 +1814,7 @@ namespace das
             block->total = int(simlist.size());
             if ( block->total ) {
                 block->list = (SimNode **) context.code->allocate(sizeof(SimNode *)*block->total);
-                for ( uint32_t i = 0; i != block->total; ++i )
+                for ( uint32_t i=0, is=block->total; i!=is; ++i )
                     block->list[i] = simlist[i];
             }
             if ( !inTheLoop ) {
@@ -2349,7 +2349,7 @@ namespace das
                         auto simlist = mkl->simulateLocal(context);
                         blockT->total = int(simlist.size());
                         blockT->list = (SimNode **) context.code->allocate(sizeof(SimNode *)*blockT->total);
-                        for ( uint32_t i = 0; i != blockT->total; ++i )
+                        for ( uint32_t i=0, is=blockT->total; i!=is; ++i )
                             blockT->list[i] = simlist[i];
                         return blockT;
                     }
@@ -2855,7 +2855,7 @@ namespace das
     void Program::buildGMNLookup ( Context & context, TextWriter & logs ) {
         context.tabGMnLookup = make_shared<das_hash_map<uint64_t,uint32_t>>();
         context.tabGMnLookup->clear();
-        for ( int i=0; i!=context.totalVariables; ++i ) {
+        for ( int i=0, is=context.totalVariables; i!=is; ++i ) {
             auto mnh = context.globalVariables[i].mangledNameHash;
             (*context.tabGMnLookup)[mnh] = context.globalVariables[i].offset;
         }
@@ -2864,7 +2864,7 @@ namespace das
                 << "totalGlobals: " << context.totalVariables << "\n"
                 << "tabGMnLookup:" << context.tabGMnLookup->size() << "\n";
         }
-        for ( int i=0; i!=context.totalVariables; ++i ) {
+        for ( int i=0, is=context.totalVariables; i!=is; ++i ) {
             auto & gvar = context.globalVariables[i];
             uint32_t voffset = context.globalOffsetByMangledName(gvar.mangledNameHash);
             if ( voffset != gvar.offset ) {
@@ -3105,7 +3105,7 @@ namespace das
         // log all functions
         if ( options.getBoolOption("log_nodes",false) ) {
             bool displayHash = options.getBoolOption("log_nodes_aot_hash",false);
-            for ( int i=0; i!=context.totalVariables; ++i ) {
+            for ( int i=0, is=context.totalVariables; i!=is; ++i ) {
                 auto & pv = context.globalVariables[i];
                 if ( pv.init ) {
                     logs << "// init " << pv.name << "\n";
@@ -3113,7 +3113,7 @@ namespace das
                     logs << "\n\n";
                 }
             }
-            for ( int i=0; i!=context.totalFunctions; ++i ) {
+            for ( int i=0, is=context.totalFunctions; i!=is; ++i ) {
                 if (SimFunction * fn = context.getFunction(i)) {
                     logs << "// " << fn->name << " " << fn->mangledName << "\n";
                     printSimFunction(logs, &context, indexToFunction[i], fn->code, displayHash);
@@ -3150,7 +3150,7 @@ namespace das
         // find first late init
         InitSort initSort;
         int firstLateInit = -1;
-        for ( int i=0; i!=(int)allInitFunctions.size(); ++i ) {
+        for ( int i=0, is=int(allInitFunctions.size()); i!=is; ++i ) {
             auto initFn = allInitFunctions[i];
             if ( initFn->debugInfo->flags & FuncInfo::flag_late_init ) {
                 if ( firstLateInit==-1 ) firstLateInit = i;
@@ -3169,7 +3169,7 @@ namespace das
         }
         if ( firstLateInit!=-1 ) {
             auto sorted = initSort.sort();
-            for ( int i=0; i!=(int)sorted.size(); ++i ) {
+            for ( int i=0, is=(int)sorted.size(); i!=is; ++i ) {
                 allInitFunctions[firstLateInit+i] = context.fnByMangledName(sorted[i]);
             }
         }
@@ -3229,7 +3229,7 @@ namespace das
             }
             return true;
         }, thisModule.get());
-        for ( int i=0; i!=context.totalFunctions; ++i ) {
+        for ( int i=0, is=context.totalFunctions; i!=is; ++i ) {
             Function *func = indexToFunction[i];
             for (auto &ann : func->annotations) {
                 if ( ann->annotation->rtti_isFunctionAnnotation() ) {
@@ -3312,13 +3312,13 @@ namespace das
                 indexToFunction[pfun->index] = pfun.get();
             });
         }
-        for ( int fni=0; fni!=context.totalFunctions; ++fni ) {
+        for ( int fni=0, fnis=context.totalFunctions; fni!=fnis; ++fni ) {
             if ( !fnn[fni]->noAot ) {
                 SimFunction & fn = context.functions[fni];
                 fnn[fni]->hash = getFunctionHash(fnn[fni], fn.code, &context);
             }
         }
-        for ( int fni=0; fni!=context.totalFunctions; ++fni ) {
+        for ( int fni=0, fnis=context.totalFunctions; fni!=fnis; ++fni ) {
             if ( !fnn[fni]->noAot ) {
                 SimFunction & fn = context.functions[fni];
                 uint64_t semHash = fnn[fni]->aotHash = getFunctionAotHash(fnn[fni]);

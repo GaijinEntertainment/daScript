@@ -1445,7 +1445,7 @@ namespace das
             return false;
         }
         DebugInfoHelper helper;
-        for ( uint32_t index=0; index != info->count; ++ index ) {
+        for ( uint32_t index=0, indexs=info->count; index!=indexs; ++ index ) {
             auto argType = info->fields[index];
             if ( argType->type==Type::anyArgument ) {
                 continue;

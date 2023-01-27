@@ -353,7 +353,7 @@ namespace das {
     ExpressionPtr FoldingVisitor::evalAndFoldStringBuilder ( ExprStringBuilder * expr )  {
         // concatinate all constant strings, which are close together
         smart_ptr<ExprConstString> str;
-        for ( auto it = expr->elements.begin(); it != expr->elements.end(); ) {
+        for ( auto it=expr->elements.begin(); it != expr->elements.end(); ) { // note - loop has erase, don't store 'end'
             auto & elem = *it;
             if ( elem->rtti_isStringConstant() ) {
                 auto selem = static_pointer_cast<ExprConstString>(elem);
