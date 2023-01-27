@@ -244,6 +244,14 @@ Function specialization can be limited by contracts (contract macros)::
 
 In the example above, only arrays will be matched.
 
+Its possible to do boolean logic operations on the contracts::
+
+    [expect_any_tuple(blah) || expect_any_variant(blah)]
+    def print_blah ...
+
+In the example above print_blah will accept any tuple or variant.
+Available logic operations are `!`, `&&`, `||` and `^^`.
+
 LSP can be explicitly prohibited for a particular function argument via the `explicit` keyword::
 
     def foo ( a : Foo explicit ) // will accept Foo, but not any subtype of Foo

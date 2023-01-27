@@ -17,6 +17,7 @@
 #include "daScript/misc/sysos.h"
 #include "daScript/misc/fpe.h"
 #include "daScript/simulate/debug_print.h"
+#include "../parser/parser_impl.h"
 
 namespace das
 {
@@ -436,6 +437,97 @@ namespace das
         }
     };
 
+
+    struct LogicOpAnnotation : FunctionAnnotation {
+        LogicOpAnnotation(const string & name) : FunctionAnnotation(name) { }
+        virtual bool apply ( const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &, string & ) override { return true; }
+        virtual bool apply(ExprBlock *, ModuleGroup &, const AnnotationArgumentList &, string &) override { return true; }
+        virtual bool finalize(ExprBlock *, ModuleGroup &,const AnnotationArgumentList &, const AnnotationArgumentList &, string &) override { return true; }
+        virtual bool finalize(const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &, const AnnotationArgumentList &, string &) override { return true; }
+        virtual bool isSpecialized() const override { return true; }
+    };
+
+    struct LogicOpNotAnnotation : LogicOpAnnotation {
+        LogicOpNotAnnotation(const AnnotationDeclarationPtr & decl) : LogicOpAnnotation("!"), subexpr(decl) { }
+        virtual bool isCompatible ( const FunctionPtr & fun, const vector<TypeDeclPtr> & types, const AnnotationDeclaration &, string & errors  ) const override  {
+            if ( !subexpr ) return false;
+            return !((FunctionAnnotation *)(subexpr->annotation.get()))->isCompatible(fun, types, *subexpr, errors);
+        }
+        virtual void appendToMangledName( const FunctionPtr & fun, const AnnotationDeclaration &, string & mangledName ) const override {
+            if ( !subexpr ) return;
+            string mna ;
+            ((FunctionAnnotation *)(subexpr->annotation.get()))->appendToMangledName(fun, *subexpr, mna);
+            mangledName = "!(" + mna + ")";
+        }
+        virtual void log ( TextWriter & ss, const AnnotationDeclaration & ) const override {
+            if ( !subexpr ) return;
+            ss << "!(";
+            subexpr->annotation->log(ss, *subexpr);
+            ss << ")";
+        }
+        AnnotationDeclarationPtr subexpr;
+    };
+
+    struct LogicOp2Annotation : LogicOpAnnotation {
+        LogicOp2Annotation ( const string & name, const AnnotationDeclarationPtr & arg0, const AnnotationDeclarationPtr & arg1 )
+            : LogicOpAnnotation(name), left(arg0), right(arg1) { }
+        virtual void appendToMangledName( const FunctionPtr & fun, const AnnotationDeclaration &, string & mangledName ) const override {
+            if ( !left || !right ) return;
+            string mna1, mna2;
+            ((FunctionAnnotation *)(left->annotation.get()))->appendToMangledName(fun, *left, mna1);
+            ((FunctionAnnotation *)(right->annotation.get()))->appendToMangledName(fun, *right, mna2);
+            mangledName = "(" + mna1 + name + mna2 + ")";
+        }
+        virtual void log ( TextWriter & ss, const AnnotationDeclaration & ) const override  {
+            if ( !left || !right ) return;
+            ss << "(";
+            left->annotation->log(ss, *left);
+            ss << " " << name << " ";
+            right->annotation->log(ss, *right);
+            ss << ")";
+        }
+        AnnotationDeclarationPtr left, right;
+    };
+
+    struct LogicOpAndAnnotation : LogicOp2Annotation {
+        LogicOpAndAnnotation ( const AnnotationDeclarationPtr & arg0, const AnnotationDeclarationPtr & arg1 )
+            : LogicOp2Annotation("&&",arg0,arg1) { }
+        virtual bool isCompatible ( const FunctionPtr & fun, const vector<TypeDeclPtr> & types, const AnnotationDeclaration &, string & errors  ) const override  {
+            if ( !left || !right ) return false;
+            return ((FunctionAnnotation *)(left->annotation.get()))->isCompatible(fun, types, *left, errors) &&
+                ((FunctionAnnotation *)(right->annotation.get()))->isCompatible(fun, types, *right, errors);
+        }
+    };
+
+    struct LogicOpOrAnnotation : LogicOp2Annotation {
+        LogicOpOrAnnotation ( const AnnotationDeclarationPtr & arg0, const AnnotationDeclarationPtr & arg1 )
+            : LogicOp2Annotation("||",arg0,arg1) { }
+        virtual bool isCompatible ( const FunctionPtr & fun, const vector<TypeDeclPtr> & types, const AnnotationDeclaration &, string & errors  ) const override  {
+            if ( !left || !right ) return false;
+            return ((FunctionAnnotation *)(left->annotation.get()))->isCompatible(fun, types, *left, errors) ||
+                ((FunctionAnnotation *)(right->annotation.get()))->isCompatible(fun, types, *right, errors);
+        }
+    };
+
+    struct LogicOpXOrAnnotation : LogicOp2Annotation {
+        LogicOpXOrAnnotation ( const AnnotationDeclarationPtr & arg0, const AnnotationDeclarationPtr & arg1 )
+            : LogicOp2Annotation("^^",arg0,arg1) { }
+        virtual bool isCompatible ( const FunctionPtr & fun, const vector<TypeDeclPtr> & types, const AnnotationDeclaration &, string & errors  ) const override {
+            if ( !left || !right ) return false;
+            return ((FunctionAnnotation *)(left->annotation.get()))->isCompatible(fun, types, *left, errors) !=
+                ((FunctionAnnotation *)(right->annotation.get()))->isCompatible(fun, types, *right, errors);
+        }
+    };
+
+    AnnotationPtr newLogicAnnotation ( LogicAnnotationOp op, const AnnotationDeclarationPtr & arg0, const AnnotationDeclarationPtr & arg1 ) {
+        switch ( op ) {
+        case LogicAnnotationOp::Not:    return make_smart<LogicOpNotAnnotation>(arg0);
+        case LogicAnnotationOp::And:    return make_smart<LogicOpAndAnnotation>(arg0,arg1);
+        case LogicAnnotationOp::Or:     return make_smart<LogicOpOrAnnotation>(arg0,arg1);
+        case LogicAnnotationOp::Xor:    return make_smart<LogicOpXOrAnnotation>(arg0,arg1);
+        }
+        return nullptr;
+    }
 
 #if defined(__clang__)
 #pragma clang diagnostic pop

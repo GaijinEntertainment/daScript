@@ -343,6 +343,7 @@
 %type <aaList>          annotation_argument_list
 %type <aaList>          annotation_argument_value_list
 %type <aaList>          optional_field_annotation
+%type <fa>              annotation_declaration_basic
 %type <fa>              annotation_declaration
 %type <faList>          annotation_list
 %type <faList>          optional_annotation_list
@@ -846,7 +847,7 @@ annotation_declaration_name
     |   DAS_PRIVATE                 { $$ = new string("private"); }
     ;
 
-annotation_declaration
+annotation_declaration_basic
     :   annotation_declaration_name[name] {
         $$ = new AnnotationDeclaration();
         $$->at = tokAt(scanner,@name);
@@ -864,6 +865,56 @@ annotation_declaration
         swap ( $$->arguments, *$argL );
         delete $argL;
         delete $name;
+    }
+    ;
+
+annotation_declaration
+    :   annotation_declaration_basic[ann] {
+        $$ = $ann;
+    }
+    |   '!'[nott] annotation_declaration[ann] {
+        if ( !$ann->annotation->rtti_isFunctionAnnotation() || !((FunctionAnnotation *)($ann->annotation.get()))->isSpecialized() ) {
+            das_yyerror(scanner,"can only run logical operations on contracts", tokAt(scanner, @ann),
+                CompilationError::invalid_annotation); }
+        $$ = new AnnotationDeclaration();
+        $$->at = tokAt(scanner, @nott);
+        $$->annotation = newLogicAnnotation(LogicAnnotationOp::Not,$ann,nullptr);
+    }
+    |   annotation_declaration[ann] ANDAND[andd] annotation_declaration[ann2] {
+        if ( !$ann->annotation->rtti_isFunctionAnnotation() || !((FunctionAnnotation *)($ann->annotation.get()))->isSpecialized() ) {
+            das_yyerror(scanner,"can only run logical operations on contracts", tokAt(scanner, @ann),
+                CompilationError::invalid_annotation); }
+        if ( !$ann2->annotation->rtti_isFunctionAnnotation() || !((FunctionAnnotation *)($ann2->annotation.get()))->isSpecialized() ) {
+            das_yyerror(scanner,"can only run logical operations on contracts", tokAt(scanner, @ann2),
+                CompilationError::invalid_annotation); }
+        $$ = new AnnotationDeclaration();
+        $$->at = tokAt(scanner, @andd);
+        $$->annotation = newLogicAnnotation(LogicAnnotationOp::And,$ann,$ann2);
+    }
+    |   annotation_declaration[ann] OROR[andd] annotation_declaration[ann2] {
+        if ( !$ann->annotation->rtti_isFunctionAnnotation() || !((FunctionAnnotation *)($ann->annotation.get()))->isSpecialized() ) {
+            das_yyerror(scanner,"can only run logical operations on contracts", tokAt(scanner, @ann),
+                CompilationError::invalid_annotation); }
+        if ( !$ann2->annotation->rtti_isFunctionAnnotation() || !((FunctionAnnotation *)($ann2->annotation.get()))->isSpecialized() ) {
+            das_yyerror(scanner,"can only run logical operations on contracts", tokAt(scanner, @ann2),
+                CompilationError::invalid_annotation); }
+        $$ = new AnnotationDeclaration();
+        $$->at = tokAt(scanner, @andd);
+        $$->annotation = newLogicAnnotation(LogicAnnotationOp::Or,$ann,$ann2);
+    }
+    |   annotation_declaration[ann] XORXOR[andd] annotation_declaration[ann2] {
+        if ( !$ann->annotation->rtti_isFunctionAnnotation() || !((FunctionAnnotation *)($ann->annotation.get()))->isSpecialized() ) {
+            das_yyerror(scanner,"can only run logical operations on contracts", tokAt(scanner, @ann),
+                CompilationError::invalid_annotation); }
+        if ( !$ann2->annotation->rtti_isFunctionAnnotation() || !((FunctionAnnotation *)($ann2->annotation.get()))->isSpecialized() ) {
+            das_yyerror(scanner,"can only run logical operations on contracts", tokAt(scanner, @ann2),
+                CompilationError::invalid_annotation); }
+        $$ = new AnnotationDeclaration();
+        $$->at = tokAt(scanner, @andd);
+        $$->annotation = newLogicAnnotation(LogicAnnotationOp::Xor,$ann,$ann2);
+    }
+    |   '(' annotation_declaration[ann] ')' {
+        $$ = $ann;
     }
     ;
 

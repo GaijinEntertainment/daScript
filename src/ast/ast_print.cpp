@@ -152,12 +152,7 @@ namespace das {
                 bool first = true;
                 for (const auto & ann : annList) {
                     if ( first ) first = false; else ss << ",";
-                    ss << ann->annotation->name;
-                    if (!ann->arguments.empty()) {
-                        ss << "(";
-                        logAnnotationArguments(ann->arguments);
-                        ss << ")";
-                    }
+                    ann->annotation->log(ss, *ann);
                 }
                 ss << "]\n";
             }

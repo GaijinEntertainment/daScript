@@ -509,7 +509,7 @@ def public get_ro ( arch:Archetype; name:string; value:auto(TT)[] ) : array<TT[t
     unsafe
         return <- get(arch, name, value)
 
-[expect_not_dim(value)]
+[!expect_dim(value)]
 def public get_ro ( arch:Archetype; name:string; value:auto(TT) ) : array<TT-const-&-#> const
     //! Returns const temporary array of component given specific name and type of component for regular components.
     unsafe

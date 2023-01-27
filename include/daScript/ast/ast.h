@@ -62,6 +62,7 @@ namespace das
     typedef smart_ptr<SimulateMacro> SimulateMacroPtr;
 
     struct AnnotationArgumentList;
+    struct AnnotationDeclaration;
 
     //      [annotation (value,value,...,value)]
     //  or  [annotation (key=value,key,value,...,key=value)]
@@ -115,6 +116,7 @@ namespace das
         virtual bool rtti_isBasicStructureAnnotation() const { return false;  }
         string describe() const { return name; }
         string getMangledName() const;
+        virtual void log ( TextWriter & ss, const AnnotationDeclaration & decl ) const;
         Module *    module = nullptr;
     };
 

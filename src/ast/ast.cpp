@@ -74,13 +74,12 @@ namespace das {
         return call->func->getAotBasicName();
     }
 
-    string AnnotationDeclaration::getMangledName() const {
-        TextWriter tw;
-        tw << "[" << annotation->getMangledName();
-        if (arguments.size()) {
+    void Annotation::log ( TextWriter & tw, const AnnotationDeclaration & decl ) const {
+        tw << decl.annotation->getMangledName();
+        if ( decl.arguments.size() ) {
             tw << "(";
-            for (auto & arg : arguments) {
-                if (&arg != &arguments.front()) {
+            for (auto & arg : decl.arguments) {
+                if (&arg != &decl.arguments.front()) {
                     tw << ",";
                 }
                 tw << arg.name << ":" << das_to_string(arg.type) << "=";
@@ -94,6 +93,12 @@ namespace das {
             }
             tw << ")";
         }
+    }
+
+    string AnnotationDeclaration::getMangledName() const {
+        TextWriter tw;
+        tw << "[";
+        annotation->log(tw, *this);
         tw << "]";
         return tw.str();
     }
