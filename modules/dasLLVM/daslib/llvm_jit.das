@@ -32,50 +32,51 @@ def private get_expr_ptr ( expr:ExpressionPtr )
     return get_ptr(expr)
 
 struct private IteBlock
-    [[do_not_delete]] if_true  : LLVMOpaqueBasicBlock?
-    [[do_not_delete]] if_false : LLVMOpaqueBasicBlock?
-    [[do_not_delete]] if_end   : LLVMOpaqueBasicBlock?
-    [[do_not_delete]] phi_true  : LLVMOpaqueBasicBlock?
-    [[do_not_delete]] phi_false : LLVMOpaqueBasicBlock?
+    if_true  : LLVMOpaqueBasicBlock?
+    if_false : LLVMOpaqueBasicBlock?
+    if_end   : LLVMOpaqueBasicBlock?
+    phi_true  : LLVMOpaqueBasicBlock?
+    phi_false : LLVMOpaqueBasicBlock?
     if_true_terminates, if_false_terminates : bool
 
 struct private LoopBlock
-    [[do_not_delete]] loop_start : LLVMOpaqueBasicBlock?
-    [[do_not_delete]] loop_body  : LLVMOpaqueBasicBlock?
-    [[do_not_delete]] loop_end   : LLVMOpaqueBasicBlock?
+    loop_start : LLVMOpaqueBasicBlock?
+    loop_body  : LLVMOpaqueBasicBlock?
+    loop_end   : LLVMOpaqueBasicBlock?
 
 struct SLabel
     index : int
-    [[do_not_deletel]] blk : LLVMOpaqueBasicBlock?
+    blk : LLVMOpaqueBasicBlock?
 
 [macro]
 class LlvmJitVisitor : AstVisitor
     adapter : smart_ptr<VisitorAdapter>
-    [[do_not_delete]] e2v : table<Expression?;LLVMOpaqueValue?>
-    [[do_not_delete]] v2v : table<Variable?;LLVMOpaqueValue?>
-    [[do_not_delete]] call2cmres : table<Expression?;LLVMOpaqueValue?>
-    [[do_not_delete]] ffunc, wfunc : LLVMOpaqueValue?
-    [[do_not_delete]] ite2blocks : table<Expression?; IteBlock>
-    [[do_not_delete]] thisFunc : Function?
-    [[do_not_delete]] thisBlock : ExprBlock?
-    [[do_not_delete]] subblocks : table<LLVMOpaqueBasicBlock?; LLVMOpaqueBasicBlock?>
-    [[do_not_delete]] loop_stack : array<LoopBlock>
-    [[do_not_delete]] block_stack : array<ExprBlock?>
-    [[do_not_delete]] jit_context : Context?
-    [[do_not_delete]] function_entry : LLVMOpaqueBasicBlock?
-    [[do_not_delete]] function_body : LLVMOpaqueBasicBlock?
-    [[do_not_delete]] monad2block : table<Expression?;LLVMOpaqueBasicBlock?>
-    [[do_not_delete]] prologue : LLVMOpaqueValue?
-    [[do_not_delete]] labels : table<int;LLVMOpaqueBasicBlock?>
-    [[do_not_delete]] sortedLabels : array<SLabel>
-    [[do_not_delete]] finallyBlocks : table<ExprBlock?; LLVMOpaqueBasicBlock?>
-    [[do_not_delete,skip_field_lock_check]] afterFinallyBlocks : table<ExprBlock?;array<LLVMOpaqueBasicBlock?>>
-    [[do_not_delete]] callBlock : LLVMOpaqueValue?
-    [[do_not_delete]] g_builder : LLVMOpaqueBuilder?
-    [[do_not_delete]] g_di_builder : LLVMOpaqueDIBuilder?
-    [[do_not_delete]] di_file_location : table<string;LLVMOpaqueMetadata?>
-    [[do_not_deelte]] di_function : LLVMOpaqueMetadata?
-    [[do_not_deelte]] di_cu : LLVMOpaqueMetadata?
+    e2v : table<Expression?;LLVMOpaqueValue?>
+    v2v : table<Variable?;LLVMOpaqueValue?>
+    call2cmres : table<Expression?;LLVMOpaqueValue?>
+    ffunc, wfunc : LLVMOpaqueValue?
+    ite2blocks : table<Expression?; IteBlock>
+    thisFunc : Function?
+    thisBlock : ExprBlock?
+    subblocks : table<LLVMOpaqueBasicBlock?; LLVMOpaqueBasicBlock?>
+    loop_stack : array<LoopBlock>
+    for_source_skip : table<Variable?; LLVMOpaqueBasicBlock?>
+    block_stack : array<ExprBlock?>
+    jit_context : Context?
+    function_entry : LLVMOpaqueBasicBlock?
+    function_body : LLVMOpaqueBasicBlock?
+    monad2block : table<Expression?;LLVMOpaqueBasicBlock?>
+    prologue : LLVMOpaqueValue?
+    labels : table<int;LLVMOpaqueBasicBlock?>
+    sortedLabels : array<SLabel>
+    finallyBlocks : table<ExprBlock?; LLVMOpaqueBasicBlock?>
+    [[skip_field_lock_check]] afterFinallyBlocks : table<ExprBlock?;array<LLVMOpaqueBasicBlock?>>
+    callBlock : LLVMOpaqueValue?
+    g_builder : LLVMOpaqueBuilder?
+    g_di_builder : LLVMOpaqueDIBuilder?
+    di_file_location : table<string;LLVMOpaqueMetadata?>
+    di_function : LLVMOpaqueMetadata?
+    di_cu : LLVMOpaqueMetadata?
     option_no_range_check : bool = false
     option_no_alias : bool = false
     option_no_capture : bool = false
@@ -1618,17 +1619,27 @@ class LlvmJitVisitor : AstVisitor
             loop_end = LLVMAppendBasicBlock(ffunc, "for_end")
         ]]
         loop_stack |> push(lblk)
+        for svar in expr.iteratorVariables
+            for_source_skip[get_ptr(svar)] = LLVMAppendBasicBlock(ffunc, "for_skip_{svar.name}")
 
     def override visitExprFor(expr:smart_ptr<ExprFor>) : ExpressionPtr
         var lblk = loop_stack |> back()
         loop_stack |> pop()
         LLVMBuildBr(g_builder, lblk.loop_start)
         LLVMPositionBuilderAtEnd(g_builder,lblk.loop_end)
-        for svar,ssrc in expr.iteratorVariables,expr.sources
+        let len = length(expr.iteratorVariables)
+        for i in range(len)
+            let ri = len - i - 1
+            let svar & = unsafe(expr.iteratorVariables[ri])
+            let ssrc & = unsafe(expr.sources[ri])
             if ssrc._type.isGoodArrayType
                 build_array_unlock(getE(ssrc))
             elif ssrc._type.isIterator
                 build_iter_close(getE(ssrc), getV(svar))
+            let skip = for_source_skip[get_ptr(svar)]
+            assert(skip!=null)
+            LLVMBuildBr(g_builder, skip)
+            LLVMPositionBuilderAtEnd(g_builder,skip)
         if expr.body is ExprBlock
             let body = expr.body as ExprBlock
             if length(body.finalList) != 0
@@ -1663,7 +1674,7 @@ class LlvmJitVisitor : AstVisitor
                 var sto = LLVMBuildExtractElement(g_builder, srange, LLVMConstInt(LLVMInt32Type(),1ul,0), "range_to_{svar.name}")
                 var cmp_from_to = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntSLT, sfrom, sto, "")
                 var okay = LLVMAppendBasicBlock(ffunc, "for_{svar.name}_not_empty")
-                LLVMBuildCondBr(g_builder, cmp_from_to, okay, lblk.loop_end)
+                LLVMBuildCondBr(g_builder, cmp_from_to, okay, for_source_skip[get_ptr(svar)])
                 LLVMPositionBuilderAtEnd(g_builder,okay)
                 range2[get_ptr(ssrc)] = sto
                 LLVMBuildStore(g_builder, sfrom, getV(svar))
@@ -1682,7 +1693,7 @@ class LlvmJitVisitor : AstVisitor
                 var size = LLVMBuildExtractValue(g_builder, arr, uint(JIT_ARRAY SIZE), "array.size")
                 var cmp_from_to = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntNE, size, LLVMConstInt(LLVMInt32Type(),0ul,0), "")
                 var okay = LLVMAppendBasicBlock(ffunc, "for_{svar.name}_not_empty")
-                LLVMBuildCondBr(g_builder, cmp_from_to, okay, lblk.loop_end)
+                LLVMBuildCondBr(g_builder, cmp_from_to, okay, for_source_skip[get_ptr(svar)])
                 LLVMPositionBuilderAtEnd(g_builder,okay)
                 build_array_lock(getE(ssrc))
                 var data = LLVMBuildExtractValue(g_builder, arr, uint(JIT_ARRAY DATA), "array.data")
@@ -1695,7 +1706,7 @@ class LlvmJitVisitor : AstVisitor
                 var piter = LLVMBuildExtractValue(g_builder, seq, uint(JIT_SEQUENCE ITERATOR), "")
                 var cmp_iter = LLVMBuildIsNull(g_builder, piter, "")
                 var okay = LLVMAppendBasicBlock(ffunc, "for_{svar.name}_not_empty")
-                LLVMBuildCondBr(g_builder, cmp_iter, lblk.loop_end, okay)
+                LLVMBuildCondBr(g_builder, cmp_iter, for_source_skip[get_ptr(svar)], okay)
                 LLVMPositionBuilderAtEnd(g_builder,okay)
             else
                 failed_E(ssrc, "unsupported loop source {describe(ssrc._type)}")
@@ -2313,9 +2324,11 @@ class LlvmJitVisitor : AstVisitor
         var res : LLVMOpaqueValue?
         if expr.castType.isPointer && expr.subexpr._type.isPointer
             res = LLVMBuildPointerCast(g_builder, getE(expr.subexpr), type_to_llvm_type(expr.castType), "")
+        elif expr.castType.isRef && expr.subexpr._type.isRef
+            res = LLVMBuildPointerCast(g_builder, getE(expr.subexpr), LLVMPointerType(type_to_llvm_type(expr.castType),0u), "")
         else
             res = LLVMGetUndef(type_to_llvm_type(expr.castType))
-            failed_E(expr, "cast<{describe(expr.castType)} is not supported yet")
+            failed_E(expr, "cast<{describe(expr.castType)}> is not supported yet")
         setE(expr, res)
         return expr
 
