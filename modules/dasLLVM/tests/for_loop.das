@@ -117,6 +117,13 @@ def test_comprehension ( t:T? )
         for x,y in a,range(10)
             t |> equal ( x, y )
 
+[jit]
+def add_elements ( a:array<int> )
+    var summ = 0
+    for i in a
+        summ += i
+    return summ
+
 [test]
 def test_for_loop ( t:T? )
     t |> run("range for") <| @ ( t : T? )
@@ -160,3 +167,10 @@ def test_for_loop ( t:T? )
         t |> success ( is_jit_function ( @@hybrid_for ) )
         t |> equal ( 7, hybrid_for(10) )
         t |> equal ( 5, hybrid_for(5) )
+    t |> run("empty for") <| @ ( t : T? )
+        t |> success ( is_jit_function ( @@add_elements ) )
+        var a <- [{int 1;2;3}]
+        t |> equal(6, add_elements(a))
+        a |> clear()
+        t |> equal(0, add_elements(a))
+
