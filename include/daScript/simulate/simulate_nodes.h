@@ -316,7 +316,7 @@ namespace das {
         virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             auto pH = (TT **) subexpr->evalPtr(context);
-            for ( uint32_t i=0; i!=total; ++i, pH++ ) {
+            for ( uint32_t i=0, is=total; i!=is; ++i, pH++ ) {
                 if ( *pH ) {
                     delete * pH;
                     *pH = nullptr;
@@ -334,7 +334,7 @@ namespace das {
         virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
             DAS_PROFILE_NODE
             auto pH = (TT **) subexpr->evalPtr(context);
-            for ( uint32_t i=0; i!=total; ++i, pH++ ) {
+            for ( uint32_t i=0, is=total; i!=is; ++i, pH++ ) {
                 if ( *pH ) {
                     (*pH)->delRef();
                     *pH = nullptr;
@@ -2343,7 +2343,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         __forceinline char * compute ( Context & context ) {
             DAS_PROFILE_NODE
             auto nodes = (char **)(context.stack.sp() + stackTop);
-            for ( uint32_t i=0; i!=count; ++i ) {
+            for ( uint32_t i=0, is=count; i!=is; ++i ) {
                 nodes[i] = newNode->evalPtr(context);
             }
             return (char *) nodes;

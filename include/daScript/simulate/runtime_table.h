@@ -182,7 +182,7 @@ namespace das
                 auto pValues = newTab.data;
                 auto pOldKeys = (const KeyType *) tab.keys;
                 auto pOldHashes = tab.hashes;
-                for ( uint32_t i=0; i!=tab.capacity; ++i ) {
+                for ( uint32_t i=0, is=tab.capacity; i!=is; ++i ) {
                     auto hash = pOldHashes[i];
                     if ( hash>HASH_KILLED64 ) {
                         int index = insertNew(newTab, hash);

@@ -336,7 +336,7 @@ namespace das {
                 if ( ui ) {
                     ss << "(";
                     bool any = false;
-                    for ( uint32_t bit=0; bit!=info->argCount; ++bit ) {
+                    for ( uint32_t bit=0, bits=info->argCount; bit!=bits; ++bit ) {
                         if ( ui & (1<<bit) ) {
                             if ( any ) ss << "|"; else any = true;
                             ss << info->argNames[bit];
@@ -405,7 +405,7 @@ namespace das {
             ss << "block 0x" << HEX << intptr_t(pa->body) << DEC;
         }
         virtual void WalkEnumeration ( int32_t & value, EnumInfo * info ) override {
-            for ( uint32_t t=0; t!=info->count; ++t ) {
+            for ( uint32_t t=0, ts=info->count; t!=ts; ++t ) {
                 if ( value == info->fields[t]->value ) {
                     ss << info->fields[t]->name;
                     return;
@@ -414,7 +414,7 @@ namespace das {
             ss << "enum " << value;
         }
         virtual void WalkEnumeration8 ( int8_t & value, EnumInfo * info ) override {
-            for ( uint32_t t=0; t!=info->count; ++t ) {
+            for ( uint32_t t=0, ts=info->count; t!=ts; ++t ) {
                 if ( value == info->fields[t]->value ) {
                     ss << info->fields[t]->name;
                     return;
@@ -423,7 +423,7 @@ namespace das {
             ss << "enum " << value;
         }
         virtual void WalkEnumeration16 ( int16_t & value, EnumInfo * info ) override {
-            for ( uint32_t t=0; t!=info->count; ++t ) {
+            for ( uint32_t t=0, ts=info->count; t!=ts; ++t ) {
                 if ( value == info->fields[t]->value ) {
                     ss << info->fields[t]->name;
                     return;

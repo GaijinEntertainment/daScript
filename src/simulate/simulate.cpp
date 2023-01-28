@@ -124,7 +124,7 @@ namespace das
         DAS_PROFILE_NODE
         auto pStruct = (char **) subexpr->evalPtr(context);
         pStruct = pStruct + total - 1;
-        for ( uint32_t i=0; i!=total; ++i, pStruct-- ) {
+        for ( uint32_t i=0, is=total; i!=is; ++i, pStruct-- ) {
             if ( *pStruct ) {
                 if ( persistent ) {
                     das_aligned_free16(*pStruct);
@@ -144,7 +144,7 @@ namespace das
         auto pStruct = (char **) subexpr->evalPtr(context);
         pStruct = pStruct + total - 1;
         auto sizeOf = sizeexpr->evalInt(context);
-        for ( uint32_t i=0; i!=total; ++i, pStruct-- ) {
+        for ( uint32_t i=0, is=total; i!=is; ++i, pStruct-- ) {
             if ( *pStruct ) {
                 context.heap->free(*pStruct, sizeOf);
                 *pStruct = nullptr;
@@ -157,7 +157,7 @@ namespace das
         DAS_PROFILE_NODE
         auto pLambda = (Lambda *) subexpr->evalPtr(context);
         pLambda = pLambda + total - 1;
-        for ( uint32_t i=0; i!=total; ++i, pLambda-- ) {
+        for ( uint32_t i=0, is=total; i!=is; ++i, pLambda-- ) {
             if ( pLambda->capture ) {
                 SimFunction ** fnMnh = (SimFunction **) pLambda->capture;
                 SimFunction * simFunc = fnMnh[1];
@@ -706,7 +706,7 @@ namespace das
 
     vec4f SimNode_Let::eval ( Context & context ) {
         DAS_PROFILE_NODE
-        for ( uint32_t i = 0; i!=total && !context.stopFlags; ) {
+        for ( uint32_t i=0, is=total; i!=is && !context.stopFlags; ) {
             list[i++]->eval(context);
         }
         return v_zero();
@@ -997,7 +997,7 @@ namespace das
             tw << "\t\ttableGMN[" << tabGMnLookup->size() << "]\n";
             tw << "\t\ttableAd[" << tabAdLookup->size() << "]\n";
             int aotf = 0;
-            for ( int i=0; i!=totalFunctions; ++i ) {
+            for ( int i=0, is=totalFunctions; i!=is; ++i ) {
                 if ( functions[i].aotFunction ) aotf++;
             }
             if ( aotf>0 ) {
@@ -1209,7 +1209,7 @@ namespace das
         if ( totalFunctions ) {
             SimFunction * newFunctions = (SimFunction *) rel.newCode->allocate(totalFunctions*sizeof(SimFunction));
             memcpy ( newFunctions, functions, totalFunctions*sizeof(SimFunction));
-            for ( int i=0; i!=totalFunctions; ++i ) {
+            for ( int i=0, is=totalFunctions; i!=is; ++i ) {
                 newFunctions[i].name = rel.newCode->allocateName(functions[i].name);
                 newFunctions[i].mangledName = rel.newCode->allocateName(functions[i].mangledName);
             }
@@ -1218,7 +1218,7 @@ namespace das
         if ( totalVariables ) {
             GlobalVariable * newVariables = (GlobalVariable *) rel.newCode->allocate(totalVariables*sizeof(GlobalVariable));
             memcpy ( newVariables, globalVariables, totalVariables*sizeof(GlobalVariable));
-            for ( int i=0; i!=totalVariables; ++i ) {
+            for ( int i=0, is=totalVariables; i!=is; ++i ) {
                 newVariables[i].name = rel.newCode->allocateName(globalVariables[i].name);
             }
             globalVariables = newVariables;
@@ -1238,7 +1238,7 @@ namespace das
         }
         // relocate variables
         if ( totalVariables ) {
-            for ( int j=0; j!=totalVariables; ++j ) {
+            for ( int j=0, js=totalVariables; j!=js; ++j ) {
                 auto & var = globalVariables[j];
                 if ( var.init) {
                     var.init = var.init->visit(rel);
@@ -1246,7 +1246,7 @@ namespace das
             }
         }
         // relocate functions
-        for ( int i=0; i!=totalFunctions; ++i ) {
+        for ( int i=0, is=totalFunctions; i!=is; ++i ) {
             auto & fn = functions[i];
             fn.code = fn.code->visit(rel);
         }
@@ -1303,7 +1303,7 @@ namespace das
             finfo.name = (char *) "Context::runInitScript";
             // TODO: init arguments?
 #endif
-            for ( int i=0; i!=totalVariables && !stopFlags; ++i ) {
+            for ( int i=0, is=totalVariables; i!=is && !stopFlags; ++i ) {
                 auto & pv = globalVariables[i];
                 if ( pv.init ) {
                     if ( sharedOwner || !pv.shared ) {
@@ -1325,7 +1325,7 @@ namespace das
         abiArg = nullptr;
         stack.pop(EP,SP);
         if ( !aotInitScript ) {
-            for ( int j=0; j!=totalInitFunctions && !stopFlags; ++j ) {
+            for ( int j=0, js=totalInitFunctions; j!=js && !stopFlags; ++j ) {
                 auto & pf = initFunctions[j];
                 callOrFastcall(pf, nullptr, 0);
             }
@@ -1333,7 +1333,7 @@ namespace das
         // now, share the data
         if ( sharedOwner && shared ) {
             SharedDataWalker sdw;
-            for ( int i=0; i!=totalVariables; ++i ) {
+            for ( int i=0, is=totalVariables; i!=is; ++i ) {
                 auto & pv = globalVariables[i];
                 if ( pv.init && pv.shared ) {
                     sdw.walk(shared + pv.offset, pv.debugInfo);
@@ -1347,7 +1347,7 @@ namespace das
         if ( shutdown ) return false;
         shutdown = true;
         return runWithCatch([&](){
-            for ( int j=0; j!=totalFunctions && !stopFlags; ++j ) {
+            for ( int j=0, js=totalFunctions; j!=js && !stopFlags; ++j ) {
                 auto & pf = functions[j];
                 if ( pf.debugInfo->flags & FuncInfo::flag_shutdown ) {
                     callOrFastcall(&pf, nullptr, 0);
@@ -1392,7 +1392,7 @@ namespace das
     }
 
     int Context::findVariable ( const char * fnname ) const {
-        for ( int vni = 0; vni != totalVariables; ++vni ) {
+        for ( int vni=0, vnis=totalVariables; vni!=vnis; ++vni ) {
             if ( strcmp(globalVariables[vni].name, fnname)==0 ) {
                 return vni;
             }
@@ -1979,7 +1979,7 @@ namespace das
             char txt[2];
             txt[1] = 0;
             int col = 0;
-            for ( uint32_t i = 0; i!=fi->sourceLength; ++i ) {
+            for ( uint32_t i=0, is=fi->sourceLength; i!=is; ++i ) {
                 if ( newLine ) {
                     line ++;
                     col = 0;
@@ -2069,11 +2069,11 @@ namespace das
     }
 
     void Context::runVisitor ( SimVisitor * vis ) const {
-        for ( int gvi=0; gvi!=totalVariables; ++gvi ) {
+        for ( int gvi=0, gvis=totalVariables; gvi!=gvis; ++gvi ) {
             const auto & gv = globalVariables[gvi];
             if ( gv.init ) gv.init->visit(*vis);
         }
-        for ( int fni=0; fni!=totalFunctions; ++fni ) {
+        for ( int fni=0, fnis=totalFunctions; fni!=fnis; ++fni ) {
             const auto & fn = functions[fni];
             if ( fn.code ) fn.code->visit(*vis);
         }

@@ -488,7 +488,7 @@ namespace das
                 pi[t] = (char **)(context.stack.sp() + stackTop[t]);
             }
             SimNode ** __restrict tail = list + total;
-            for (uint32_t i = 0; i != size; ++i) {
+            for (uint32_t i=0, is=size; i!=is; ++i) {
                 for (int t = 0; t != totalCount; ++t) {
                     *pi[t] = ph[t];
                     ph[t] += strides[t];
@@ -535,7 +535,7 @@ namespace das
             char ** __restrict pi = (char **)(context.stack.sp() + stackTop[0]);
             auto stride = strides[0];
             SimNode ** __restrict tail = list + total;
-            for (uint32_t i = 0; i != size; ++i) {
+            for (uint32_t i=0, is=size; i!=is; ++i) {
                 *pi = ph;
                 ph += stride;
                 SimNode ** __restrict body = list;
@@ -570,7 +570,7 @@ namespace das
                 pi[t] = (char **)(context.stack.sp() + stackTop[t]);
             }
             SimNode * __restrict body = list[0];
-            for (uint32_t i = 0; i != size && !context.stopFlags; ++i) {
+            for (uint32_t i=0, is=size; i!=is && !context.stopFlags; ++i) {
                 for (int t = 0; t != totalCount; ++t) {
                     *pi[t] = ph[t];
                     ph[t] += strides[t];
@@ -613,7 +613,7 @@ namespace das
             char ** __restrict pi = (char **)(context.stack.sp() + stackTop[0]);
             auto stride = strides[0];
             SimNode * __restrict body = list[0];
-            for (uint32_t i = 0; i != size && !context.stopFlags; ++i) {
+            for (uint32_t i=0, is=size; i!=is && !context.stopFlags; ++i) {
                 *pi = ph;
                 ph += stride;
                 body->eval(context);
@@ -647,7 +647,7 @@ namespace das
                 pi[t] = (char **)(context.stack.sp() + this->stackTop[t]);
             }
             SimNode ** __restrict tail = this->list + this->total;
-            for (uint32_t i = 0; i != this->size; ++i) {
+            for (uint32_t i=0, is=this->size; i!=is; ++i) {
                 for (int t = 0; t != totalCount; ++t) {
                     *pi[t] = ph[t];
                     ph[t] += this->strides[t];
@@ -681,7 +681,7 @@ namespace das
             char ** __restrict pi = (char **)(context.stack.sp() + stackTop[0]);
             auto stride = strides[0];
             SimNode ** __restrict tail = list + total;
-            for (uint32_t i = 0; i != size; ++i) {
+            for (uint32_t i=0, is=size; i!=is; ++i) {
                 *pi = ph;
                 ph += stride;
                 SimNode ** __restrict body = list;
@@ -713,7 +713,7 @@ namespace das
             for ( int t=0; t!=totalCount; ++t ) {
                 pi[t] = (char **)(context.stack.sp() + this->stackTop[t]);
             }
-            for (uint32_t i = 0; i != this->size && !context.stopFlags; ++i) {
+            for (uint32_t i=0, is=this->size; i!=is && !context.stopFlags; ++i) {
                 for (int t = 0; t != totalCount; ++t) {
                     *pi[t] = ph[t];
                     ph[t] += this->strides[t];
@@ -743,7 +743,7 @@ namespace das
             char * __restrict ph = cast<char *>::to(sources[0]->eval(context));
             char ** __restrict pi = (char **)(context.stack.sp() + stackTop[0]);
             auto stride = strides[0];
-            for (uint32_t i = 0; i != size && !context.stopFlags; ++i) {
+            for (uint32_t i=0, is=size; i!=is && !context.stopFlags; ++i) {
                 *pi = ph;
                 ph += stride;
                 SimNode * body = list[0];    // note: instruments

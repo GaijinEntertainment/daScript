@@ -779,7 +779,7 @@ namespace das {
     void SimNode_Block::visitLabels ( SimVisitor & vis ) {
         if ( labels ) {
             V_ARG(totalLabels);
-            for ( uint32_t i=0; i!=totalLabels; ++i ) {
+            for ( uint32_t i=0, is=totalLabels; i!=is; ++i ) {
                 if ( labels[i]!=-1U ) {
                     char name[32];
                     snprintf(name, 32, "label_%i", i);

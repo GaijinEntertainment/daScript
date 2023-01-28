@@ -857,7 +857,7 @@ __forceinline void profileNode ( SimNode * node ) {
         virtual SimNode * copyNode ( Context & context, NodeAllocator * code ) override;
         void visitCall ( SimVisitor & vis );
         __forceinline void evalArgs ( Context & context, vec4f * argValues ) {
-            for ( int i=0; i!=nArguments && !context.stopFlags; ++i ) {
+            for ( int i=0, is=nArguments; i!=is && !context.stopFlags; ++i ) {
                 argValues[i] = arguments[i]->eval(context);
             }
         }
@@ -888,7 +888,7 @@ __forceinline void profileNode ( SimNode * node ) {
             if ( totalFinal ) {
                 auto SF = context.stopFlags;
                 context.stopFlags = 0;
-                for ( uint32_t i=0; i!=totalFinal; ++i ) {
+                for ( uint32_t i=0, is=totalFinal; i!=is; ++i ) {
                     finalList[i]->eval(context);
                 }
                 context.stopFlags = SF;
@@ -899,7 +899,7 @@ __forceinline void profileNode ( SimNode * node ) {
             if ( totalFinal ) {
                 auto SF = context.stopFlags;
                 context.stopFlags = 0;
-                for ( uint32_t i=0; i!=totalFinal; ++i ) {
+                for ( uint32_t i=0, is=totalFinal; i!=is; ++i ) {
                     DAS_SINGLE_STEP(context,finalList[i]->debugInfo,false);
                     finalList[i]->eval(context);
                 }

@@ -293,7 +293,7 @@ namespace das
         virtual void beforeTupleEntry ( char * ps, TypeInfo * ti, char * pv, TypeInfo * vi, bool last ) override {
             DataWalker::beforeTupleEntry(ps,ti,pv,vi,last);
             uint32_t VI = -1u;
-            for ( uint32_t i=0; i!=ti->argCount; ++i ) {
+            for ( uint32_t i=0, is=ti->argCount; i!=is; ++i ) {
                 if ( ti->argTypes[i]==vi ) {
                     VI = i;
                     break;
@@ -370,7 +370,7 @@ namespace das
         }
         void ReportHistory ( void ) {
             tp << "\t";
-            for (size_t i=0; i!=history.size(); ++i ) {
+            for (size_t i=0, is=history.size(); i!=is; ++i ) {
                 if ( i!=0 && (history[i].empty() || history[i][0]!='[') ) tp << ".";
                 tp << history[i];
             }
@@ -390,7 +390,7 @@ namespace das
         // mark globals
         if ( sharedOwner ) {
             tp << "SHARED GLOBALS:\n";
-            for ( int i=0; i!=totalVariables; ++i ) {
+            for ( int i=0, is=totalVariables; i!=is; ++i ) {
                 auto & pv = globalVariables[i];
                 if ( !pv.shared ) continue;
                 if ( (pv.debugInfo->flags | walker.gcAlways) & walker.gcFlags ) {
@@ -400,7 +400,7 @@ namespace das
             }
         }
         tp << "GLOBALS:\n";
-        for ( int i=0; i!=totalVariables; ++i ) {
+        for ( int i=0, is=totalVariables; i!=is; ++i ) {
             auto & pv = globalVariables[i];
             if ( pv.shared ) continue;
             if ( (pv.debugInfo->flags | walker.gcAlways) & walker.gcFlags ) {
@@ -430,7 +430,7 @@ namespace das
             if ( info ) {
                 if ( info->count ) {
                     tp << "ARGUMENTS:\n";
-                    for ( uint32_t i = 0; i != info->count; ++i ) {
+                    for ( uint32_t i=0, is=info->count; i!=is; ++i ) {
                         if ( (info->fields[i]->flags | walker.gcAlways) & walker.gcFlags ) {
                             walker.prepare(info->fields[i]->name);
                             walker.walk(pp->arguments[i], info->fields[i]);
@@ -439,7 +439,7 @@ namespace das
                 }
                 if ( info->locals ) {
                     tp << "LOCALS:\n";
-                    for ( uint32_t i = 0; i != info->localCount; ++i ) {
+                    for ( uint32_t i=0, is=info->localCount; i!=is; ++i ) {
                         auto lv = info->locals[i];
                         bool inScope = lineAt ? lineAt->inside(lv->visibility) : false;
                         if ( !inScope ) continue;
@@ -527,13 +527,13 @@ namespace das
         walker.validate = validate;
         // mark globals
         if ( sharedOwner ) {
-            for ( int i=0; i!=totalVariables; ++i ) {
+            for ( int i=0, is=totalVariables; i!=is; ++i ) {
                 auto & pv = globalVariables[i];
                 if ( !pv.shared ) continue;
                 walker.walk(shared + pv.offset, pv.debugInfo);
             }
         }
-        for ( int i=0; i!=totalVariables; ++i ) {
+        for ( int i=0, is=totalVariables; i!=is; ++i ) {
             auto & pv = globalVariables[i];
             if ( pv.shared ) continue;
             walker.walk(globals + pv.offset, pv.debugInfo);
@@ -557,11 +557,11 @@ namespace das
                 }
             }
             if ( info ) {
-                for ( uint32_t i = 0; i != info->count; ++i ) {
+                for ( uint32_t i=0, is=info->count; i!=is; ++i ) {
                     walker.walk(pp->arguments[i], info->fields[i]);
                 }
                 if ( info->locals ) {
-                    for ( uint32_t i = 0; i != info->localCount; ++i ) {
+                    for ( uint32_t i=0, is=info->localCount; i!=is; ++i ) {
                         auto lv = info->locals[i];
                         bool inScope = lineAt ? lineAt->inside(lv->visibility) : false;
                         if ( !inScope ) continue;
@@ -782,14 +782,14 @@ namespace das
         walker.validate = validate;
         // mark globals
         if ( sharedOwner ) {
-            for ( int i=0; i!=totalVariables; ++i ) {
+            for ( int i=0, is=totalVariables; i!=is; ++i ) {
                 auto & pv = globalVariables[i];
                 if ( !pv.shared ) continue;
                 walker.prepare();
                 walker.walk(shared + pv.offset, pv.debugInfo);
             }
         }
-        for ( int i=0; i!=totalVariables; ++i ) {
+        for ( int i=0, is=totalVariables; i!=is; ++i ) {
             auto & pv = globalVariables[i];
             if ( pv.shared ) continue;
             walker.prepare();
@@ -814,12 +814,12 @@ namespace das
                 }
             }
             if ( info ) {
-                for ( uint32_t i = 0; i != info->count; ++i ) {
+                for ( uint32_t i=0, is=info->count; i!=is; ++i ) {
                     walker.prepare();
                     walker.walk(pp->arguments[i], info->fields[i]);
                 }
                 if ( info->locals ) {
-                    for ( uint32_t i = 0; i != info->localCount; ++i ) {
+                    for ( uint32_t i=0, is=info->localCount; i!=is; ++i ) {
                         auto lv = info->locals[i];
                         bool inScope = lineAt ? lineAt->inside(lv->visibility) : false;
                         if ( !inScope ) continue;

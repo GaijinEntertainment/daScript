@@ -28,7 +28,7 @@ namespace das
     // TableIterator
 
     size_t TableIterator::nextValid ( size_t index ) const {
-        for (; index < table->capacity; index++) {
+        for ( auto indexs=table->capacity; index < indexs; index++) {
             if (table->hashes[index] > HASH_KILLED64) {
                 break;
             }
@@ -105,7 +105,7 @@ namespace das
         DAS_PROFILE_NODE
         auto pTable = (Table *) subexpr->evalPtr(context);
         pTable = pTable + total - 1;
-        for ( uint32_t i=0; i!=total; ++i, pTable-- ) {
+        for ( uint32_t i=0, is=total; i!=is; ++i, pTable-- ) {
             if ( pTable->data ) {
                 if ( !pTable->isLocked() ) {
                     uint32_t oldSize = pTable->capacity*(vts_add_kts + sizeof(uint64_t));

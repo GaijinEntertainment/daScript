@@ -1732,7 +1732,7 @@ namespace das {
     __forceinline char * das_string_builder ( Context * __context__, const SimNode_AotInteropBase & node ) {
         StringBuilderWriter writer;
         DebugDataWalker<StringBuilderWriter> walker(writer, PrintFlags::string_builder);
-        for ( int i = 0; i!=node.nArguments; ++i ) {
+        for ( int i=0, is=node.nArguments; i!=is; ++i ) {
             walker.walk(node.argumentValues[i], node.types[i]);
         }
         auto length = writer.tellp();

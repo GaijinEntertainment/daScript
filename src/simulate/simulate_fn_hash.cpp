@@ -95,7 +95,7 @@ namespace das {
         virtual void sub ( SimNode ** nodes, uint32_t count, const char * argN ) override {
             write(&count, sizeof(count));
             write(argN);
-            for ( uint32_t t = 0; t!=count; ++t ) {
+            for ( uint32_t t=0; t!=count; ++t ) {
                 nodes[t] = nodes[t]->visit(*this);
             }
         }

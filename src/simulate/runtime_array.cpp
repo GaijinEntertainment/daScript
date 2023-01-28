@@ -126,7 +126,7 @@ namespace das
         DAS_PROFILE_NODE
         auto pArray = (Array *) subexpr->evalPtr(context);
         pArray = pArray + total - 1;
-        for ( uint32_t i=0; i!=total; ++i, pArray-- ) {
+        for ( uint32_t i=0, is=total; i!=is; ++i, pArray-- ) {
             if ( pArray->data ) {
                 if ( !pArray->isLocked() ) {
                     uint32_t oldSize = pArray->capacity*stride;

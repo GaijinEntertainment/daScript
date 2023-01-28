@@ -208,7 +208,7 @@ namespace das {
             bool anyFusion = true;
             while ( anyFusion) {
                 anyFusion = false;
-                for ( int g=0; g!=context.totalVariables; ++g ) {
+                for ( int g=0, gs=context.totalVariables; g!=gs; ++g ) {
                     GlobalVariable * var = context.globalVariables + g;
                     if ( var->init ) {
                         SimNodeCollector collector;
@@ -218,7 +218,7 @@ namespace das {
                         anyFusion |= fuse.fused;
                     }
                 }
-                for ( int i=0; i!=context.totalFunctions; ++i ) {
+                for ( int i=0, is=context.totalFunctions; i!=is; ++i ) {
                     SimFunction * fn = context.getFunction(i);
                     SimNodeCollector collector;
                     fn->code->visit(collector);

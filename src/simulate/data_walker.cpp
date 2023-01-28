@@ -33,7 +33,7 @@ namespace das {
                 afterStructureCancel(ps, si);
                 return;
             }
-            for ( uint32_t i=0; i!=si->count; ++i ) {
+            for ( uint32_t i=0, is=si->count; i!=is; ++i ) {
                 bool last = i==(si->count-1);
                 VarInfo * vi = si->fields[i];
                 char * pf = ps + vi->offset;
@@ -62,7 +62,7 @@ namespace das {
             beforeTuple(ps, ti);
             if ( cancel ) return;
             int fieldOffset = 0;
-            for ( uint32_t i=0; i!=ti->argCount; ++i ) {
+            for ( uint32_t i=0, is=ti->argCount; i!=is; ++i ) {
                 bool last = i==(ti->argCount-1);
                 TypeInfo * vi = ti->argTypes[i];
                 auto fa = getTypeAlign(vi) - 1;
@@ -125,7 +125,7 @@ namespace das {
         copyInfo.dimSize --;
         vector<uint32_t> udim;
         if ( copyInfo.dimSize ) {
-            for ( uint32_t i=0; i!=copyInfo.dimSize; ++i) {
+            for ( uint32_t i=0, is=copyInfo.dimSize; i!=is; ++i) {
                 udim.push_back(ti->dim[i+1]);
             }
             copyInfo.dim = udim.data();
@@ -144,7 +144,7 @@ namespace das {
         int keySize = info->firstType->size;
         int valueSize = info->secondType->size;
         uint32_t count = 0;
-        for ( uint32_t i=0; i!=tab->capacity; ++i ) {
+        for ( uint32_t i=0, is=tab->capacity; i!=is; ++i ) {
             if ( tab->hashes[i] > HASH_KILLED64 ) {
                 bool last = (count == (tab->size-1));
                 // key

@@ -11,7 +11,7 @@ namespace das {
         , mJobsRunning(0) {
         mThreadCount = max(1,(static_cast<int>(thread::hardware_concurrency())));
         SetCurrentThreadPriority(JobPriority::High);
-        for (int j = 0; j < mThreadCount; j++) {
+        for (int j = 0, js = mThreadCount; j < js; j++) {
             mThreads.emplace_back(make_unique<thread>([=]() {
                 string thread_name = "JobQue_Job_" + to_string(j);
                 SetCurrentThreadName(thread_name);

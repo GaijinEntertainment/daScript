@@ -177,7 +177,7 @@ namespace das
 
     int getStructAlign ( StructInfo * info ) {
         int al = 0;
-        for ( uint32_t i=0; i!=info->count; ++i ) {
+        for ( uint32_t i=0, is=info->count; i!=is; ++i ) {
             al = das::max ( al, getTypeAlign(info->fields[i]) );
         }
         return al;
@@ -185,7 +185,7 @@ namespace das
 
     int getTupleAlign ( TypeInfo * info ) {
         int al = 0;
-        for ( uint32_t i=0; i!=info->argCount; ++i ) {
+        for ( uint32_t i=0, is=info->argCount; i!=is; ++i ) {
             al = das::max ( al, getTypeAlign(info->argTypes[i]) );
         }
         return al;
@@ -193,7 +193,7 @@ namespace das
 
     int getTupleSize ( TypeInfo * info ) {
         int size = 0;
-        for ( uint32_t i=0; i!=info->argCount; ++i ) {
+        for ( uint32_t i=0, is=info->argCount; i!=is; ++i ) {
             int al = getTypeAlign(info->argTypes[i]) - 1;
             size = (size + al) & ~al;
             size += getTypeSize(info->argTypes[i]);
@@ -205,7 +205,7 @@ namespace das
 
     int getVariantAlign ( TypeInfo * info ) {
         int al = getTypeBaseAlign(Type::tInt);
-        for ( uint32_t i=0; i!=info->argCount; ++i ) {
+        for ( uint32_t i=0, is=info->argCount; i!=is; ++i ) {
             al = das::max ( al, getTypeAlign(info->argTypes[i]) );
         }
         return al;
@@ -214,7 +214,7 @@ namespace das
     int getVariantSize ( TypeInfo * info ) {
         int maxSize = 0;
         int al = getVariantAlign(info) - 1;
-        for ( uint32_t i=0; i!=info->argCount; ++i ) {
+        for ( uint32_t i=0, is=info->argCount; i!=is; ++i ) {
             int size = (getTypeBaseSize(Type::tInt) + al) & ~al;
             size += getTypeSize(info->argTypes[i]);
             maxSize = das::max(size, maxSize);
@@ -254,7 +254,7 @@ namespace das
     int getDimSize ( TypeInfo * info ) {
         int size = 1;
         if ( info->dimSize ) {
-            for ( uint32_t i=0; i!=info->dimSize; ++i ) {
+            for ( uint32_t i=0, is=info->dimSize; i!=is; ++i ) {
                 size *= info->dim[i];
             }
         }
@@ -348,7 +348,7 @@ namespace das
                 if ( THIS->argCount != decl->argCount ) {
                     return false;
                 }
-                for ( uint32_t i=0; i != THIS->argCount; ++i ) {
+                for ( uint32_t i=0, is=THIS->argCount; i!=is; ++i ) {
                     auto arg = THIS->argTypes[i];
                     auto declArg = decl->argTypes[i];
                     if ( !isSameType(arg,declArg,RefMatters::yes, ConstMatters::yes, TemporaryMatters::yes,true) ) {
@@ -360,7 +360,7 @@ namespace das
         if ( THIS->dimSize != decl->dimSize ) {
             return false;
         } else if ( THIS->dim ) {
-            for ( uint32_t i=0; i!=THIS->dimSize; ++i ) {
+            for ( uint32_t i=0,is=THIS->dimSize; i!=is; ++i ) {
                 if ( THIS->dim[i] != decl->dim[i] ) {
                     return false;
                 }
@@ -388,7 +388,7 @@ namespace das
         if ( castS->count < THIS->count ) {
             return false;
         }
-        for ( uint32_t i=0; i!=THIS->count; ++i ) {
+        for ( uint32_t i=0, is=THIS->count; i!=is; ++i ) {
             VarInfo * fd = THIS->fields[i];
             VarInfo * cfd = castS->fields[i];
             if ( strcmp(fd->name,cfd->name)!=0 ) {
@@ -421,7 +421,7 @@ namespace das
             stream << "iterator<" << (info->firstType ? debug_type(info->firstType) : "") << ">";
         } else if ( info->type==Type::tTuple || info->type==Type::tVariant ) {
             stream << das_to_string(info->type) << "<";
-            for ( uint32_t a=0; a!=info->argCount; ++a ) {
+            for ( uint32_t a=0, as=info->argCount; a!=as; ++a ) {
                 if ( a!=0 ) stream << "; ";
                 if ( info->argNames ) {
                     stream << info->argNames[a] << ":";
@@ -433,7 +433,7 @@ namespace das
             stream << das_to_string(info->type) << "<";
             if ( info->argCount ) {
                 stream << "(";
-                for ( uint32_t ai=0; ai!=info->argCount; ++ ai ) {
+                for ( uint32_t ai=0, ais=info->argCount; ai!=ais; ++ ai ) {
                     if ( ai!=0 ) stream << "; ";
                     if (!info->argTypes[ai]->isConst()) {
                         stream << "var ";
@@ -458,7 +458,7 @@ namespace das
             stream << "bitfield";
             if ( info->argNames ) {
                 stream << "<";
-                for ( uint32_t ai = 0; ai!=info->argCount; ++ai ) {
+                for ( uint32_t ai=0, ais=info->argCount; ai!=ais; ++ai ) {
                     if ( ai !=0 ) stream << "; ";
                     stream << info->argNames[ai];
                 }
@@ -467,7 +467,7 @@ namespace das
         } else {
             stream << das_to_string(info->type);
         }
-        for ( uint32_t i=0; i!=info->dimSize; ++i ) {
+        for ( uint32_t i=0, is=info->dimSize; i!=is; ++i ) {
             stream << "[" << info->dim[i] << "]";
         }
         if ( info->flags & TypeInfo::flag_isConst ) {
@@ -494,13 +494,13 @@ namespace das
         //  if ( isExplicit )   ss << "X";
         //  if ( aotAlias )     ss << "F";
         if ( info->dimSize ) {
-            for ( uint32_t d=0; d!=info->dimSize; ++d ) {
+            for ( uint32_t d=0, ds=info->dimSize; d!=ds; ++d ) {
                 ss << "[" << info->dim[d] << "]";
             }
         }
         if ( info->argNames ) {
             ss << "N<";
-            for ( uint32_t a=0; a!=info->argCount; ++a ) {
+            for ( uint32_t a=0, as=info->argCount; a!=as; ++a ) {
                 if ( a ) ss << ";";
                 ss << info->argNames[a];
             }
@@ -508,7 +508,7 @@ namespace das
         }
         if ( info->argTypes ) {
             ss << "0<";
-            for ( uint32_t a=0; a!=info->argCount; ++a ) {
+            for ( uint32_t a=0, as=info->argCount; a!=as; ++a ) {
                 if ( a ) ss << ";";
                 ss << getTypeInfoMangledName(info->argTypes[a]);
             }

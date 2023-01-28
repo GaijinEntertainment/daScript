@@ -36,13 +36,13 @@ namespace das {
         virtual SimNode * visit ( SimNode * node ) override {
             if ( node->rtti_node_isBlock() ) {
                 SimNode_Block * blk = (SimNode_Block *) node;
-                for ( uint32_t i=0; i!=blk->total; ++i ) {
+                for ( uint32_t i=0, is=blk->total; i!=is; ++i ) {
                     auto & expr = blk->list[i];
                     if ( anyLine || isCorrectFileAndLine(expr->debugInfo) ) {
                         expr = isInstrumenting ? instrumentNode(expr) : clearNode(expr);
                     }
                 }
-                for ( uint32_t i=0; i!=blk->totalFinal; ++i ) {
+                for ( uint32_t i=0, is=blk->totalFinal; i!=is; ++i ) {
                     auto & expr = blk->finalList[i];
                     if ( anyLine || isCorrectFileAndLine(expr->debugInfo) ) {
                         expr = isInstrumenting ? instrumentNode(expr) : clearNode(expr);
@@ -93,7 +93,7 @@ namespace das {
             }
         };
         if ( FNPTR==nullptr ) {
-            for ( int fni=0; fni!=totalFunctions; ++fni ) {
+            for ( int fni=0, fnis=totalFunctions; fni!=fnis; ++fni ) {
                 instFn(&functions[fni], functions[fni].mangledNameHash);
             }
         } else {

@@ -334,7 +334,7 @@ namespace das
         evalArgs(context, argValues);
         StringBuilderWriter writer;
         DebugDataWalker<StringBuilderWriter> walker(writer, PrintFlags::string_builder);
-        for ( int i = 0; i!=nArguments; ++i ) {
+        for ( int i=0, is=nArguments; i!=is; ++i ) {
             walker.walk(argValues[i], types[i]);
         }
         int length = writer.tellp();
