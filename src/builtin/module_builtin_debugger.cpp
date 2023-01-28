@@ -701,7 +701,7 @@ namespace debugapi {
             }
             if ( info ) {
                 if ( walker->canWalkArguments() ) {
-                    for ( uint32_t i = 0; i != info->count; ++i ) {
+                    for ( uint32_t i=0, is=info->count; i!=is; ++i ) {
                         walker->onArgument(info, i, info->fields[i], pp->arguments[i]);
                     }
                 }
@@ -710,7 +710,7 @@ namespace debugapi {
             if ( info && info->locals ) {
                 if ( walker->canWalkVariables() ) {
                     walker->onBeforeVariables();
-                    for ( uint32_t i = 0; i != info->localCount; ++i ) {
+                    for ( uint32_t i=0, is=info->localCount; i!=is; ++i ) {
                         auto lv = info->locals[i];
                         bool inScope = lineAt ? lineAt->inside(lv->visibility) : false;
                         if ( !walker->canWalkOutOfScopeVariables() && !inScope ) {
@@ -863,7 +863,7 @@ namespace debugapi {
         Func * func = nullptr;
         auto adapter = (DebugAgentAdapter *) it->second.debugAgent.get();
         auto sinfo = adapter->classInfo;
-        for ( uint32_t fi=0; fi!=sinfo->count; ++fi ) {
+        for ( uint32_t fi=0, fis=sinfo->count; fi!=fis; ++fi ) {
             auto field = sinfo->fields[fi];
             if ( strcmp(field->name, function_name)==0 ) {
                 func = (Func *) ( ((char *) adapter->classPtr) + field->offset );
@@ -871,7 +871,7 @@ namespace debugapi {
                 args2[0] = cast<Context *>::from(invCtx);
                 args2[1] = cast<Func>::from(*func);
                 args2[2] = cast<void *>::from(adapter->classPtr);
-                for ( int32_t ai=2; ai!=call->nArguments; ++ai ) {
+                for ( int32_t ai=2, ais=call->nArguments; ai!=ais; ++ai ) {
                     args2[ai + 1] = args[ai];
                 }
                 auto result = pinvoke_impl2(context, call, args2);
@@ -915,7 +915,7 @@ namespace debugapi {
         args2[0] = cast<Context *>::from(invCtx);
         args2[1] = cast<Func>::from(func);
         args2[2] = cast<void *>::from(adapter->classPtr);
-        for ( int32_t ai=2; ai!=call->nArguments; ++ai ) {
+        for ( int32_t ai=2, ais=call->nArguments; ai!=ais; ++ai ) {
             args2[ai + 1] = args[ai];
         }
         auto result = pinvoke_impl2(context, call, args2);
@@ -952,7 +952,7 @@ namespace debugapi {
     }
 
     void instrument_all_functions_ex ( Context & ctx, const TBlock<uint64_t,Func,const SimFunction *> & blk, Context * context, LineInfoArg * arg ) {
-        for ( int fni=0; fni!=ctx.getTotalFunctions(); ++fni ) {
+        for ( int fni=0, fnis=ctx.getTotalFunctions(); fni!=fnis; ++fni ) {
             Func fn;
             fn.PTR = ctx.getFunction(fni);
             uint64_t userData = das_invoke<uint64_t>::invoke(context,arg,blk,fn,fn.PTR);

@@ -103,7 +103,7 @@ namespace das {
     char * jit_string_builder ( Context & context, SimNode_CallBase * call, vec4f * args ) {
         StringBuilderWriter writer;
         DebugDataWalker<StringBuilderWriter> walker(writer, PrintFlags::string_builder);
-        for ( int i = 0; i!=call->nArguments; ++i ) {
+        for ( int i=0, is=call->nArguments; i!=is; ++i ) {
             walker.walk(args[i], call->types[i]);
         }
         auto length = writer.tellp();

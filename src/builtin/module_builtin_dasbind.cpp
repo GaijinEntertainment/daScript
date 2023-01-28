@@ -207,7 +207,7 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
 
     FastCallWrapper getWrapper ( Function * fun, int nReg ) {
         int args = ( fun->result->baseType==Type::tFloat || fun->result->baseType==Type::tDouble ) ? (1<<nReg) : 0;
-        for ( int a=0; a<int(fun->arguments.size()); ++a ) {
+        for ( int a=0, as=int(fun->arguments.size()); a<as; ++a ) {
             if ( a==4 ) break;
             auto tp = fun->arguments[a]->type->baseType;
             if ( tp==Type::tFloat || tp==Type::tDouble ) {
@@ -248,7 +248,7 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
                 int perm=0;
                 int nargs = int(fun->arguments.size());
                 int res = ( fun->result->baseType==Type::tFloat || fun->result->baseType==Type::tDouble ) ? 0 : 1;
-                for ( size_t ai=0; ai!=fun->arguments.size(); ++ai ) {
+                for ( size_t ai=0, ais=fun->arguments.size(); ai!=ais; ++ai ) {
                     const auto & arg = fun->arguments[ai];
                     if ( arg->type->isSimpleType(Type::tFloat) || arg->type->isSimpleType(Type::tDouble) ) {
                         perm |= (1<<int(ai));
@@ -333,7 +333,7 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
             if ( fun->arguments.size()>6 ) {
                 nargs = int(fun->arguments.size());
                 res = ( fun->result->baseType==Type::tFloat || fun->result->baseType==Type::tDouble ) ? 0 : 1;
-                for ( size_t ai=0; ai!=fun->arguments.size(); ++ai ) {
+                for ( size_t ai=0, ais=fun->arguments.size(); ai!=ais; ++ai ) {
                     const auto & arg = fun->arguments[ai];
                     if ( arg->type->isSimpleType(Type::tFloat) || arg->type->isSimpleType(Type::tDouble) ) {
                         perm |= (1<<int(ai));

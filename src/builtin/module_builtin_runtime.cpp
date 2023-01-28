@@ -399,7 +399,7 @@ namespace das
                 err = "unknown function";
                 return false;
             }
-            for ( size_t i=0; i!=call->func->arguments.size(); ++i ) {
+            for ( size_t i=0, is=call->func->arguments.size(); i!=is; ++i ) {
                 auto & farg = call->func->arguments[i];
                 if ( auto it = args.find(farg->name, Type::tBool) ) {
                     auto & carg = call->arguments[i];

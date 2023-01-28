@@ -15,7 +15,7 @@
 namespace das {
 
     int adapt_field_offset ( const char * fName, const StructInfo * info ) {
-        for ( uint32_t i=0; i!=info->count; ++i ) {
+        for ( uint32_t i=0, is=info->count; i!=is; ++i ) {
             if ( strcmp(info->fields[i]->name,fName)==0 ) {
                 return info->fields[i]->offset;
             }
@@ -215,7 +215,7 @@ namespace das {
         if ( !tab->data ) return;
         char * values = tab->data;
         char * keys = tab->keys;
-        for ( uint32_t index=0; index!=tab->capacity; index++, keys+=keyStride, values+=valueStride ) {
+        for ( uint32_t index=0, indexs=tab->capacity; index!=indexs; index++, keys+=keyStride, values+=valueStride ) {
             if ( tab->hashes[index] > HASH_KILLED64 ) {
                 das_invoke<void>::invoke<void *,void *>(context,at,blk,(void*)keys,(void*)values);
             }
@@ -226,7 +226,7 @@ namespace das {
         auto arr = (Array *) _arr;
         if ( !arr->data ) return;
         char * values = arr->data;
-        for ( uint32_t index=0; index!=arr->size; index++, values+=stride ) {
+        for ( uint32_t index=0, indexs=arr->size; index!=indexs; index++, values+=stride ) {
             das_invoke<void>::invoke<void *>(context,at,blk,(void*)values);
         }
     }
@@ -457,7 +457,7 @@ namespace das {
         node->argumentValues = nullptr;
         if ( node->nArguments ) {
             node->types = (TypeInfo **) ctx.code->allocate(node->nArguments * sizeof(TypeInfo*));
-            for ( int i=0; i!=node->nArguments; ++i ) {
+            for ( int i=0, is=node->nArguments; i!=is; ++i ) {
                 node->types[i] = ctx.thisHelper->makeTypeInfo(nullptr, call->arguments[i]->type);
             }
         } else {
@@ -480,7 +480,7 @@ namespace das {
         node->argumentValues = nullptr;
         if ( node->nArguments ) {
             node->types = (TypeInfo **) ctx.code->allocate(node->nArguments * sizeof(TypeInfo*));
-            for ( int i=0; i!=node->nArguments; ++i ) {
+            for ( int i=0, is=node->nArguments; i!=is; ++i ) {
                 node->types[i] = ctx.thisHelper->makeTypeInfo(nullptr, call->elements[i]->type);
             }
         } else {
