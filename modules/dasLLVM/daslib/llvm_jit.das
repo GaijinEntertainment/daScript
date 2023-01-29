@@ -329,7 +329,7 @@ class LlvmJitVisitor : AstVisitor
         LLVMPositionBuilderAtEnd(g_builder, wentry)
         var wargs : array<LLVMOpaqueValue?>
         var args = LLVMGetParam(wfunc,1u)
-        for a,ai in arguments, range(100500)
+        for a,ai in arguments, range(INT_MAX)
             var arg_ptr = LLVMBuildGEP(g_builder, args, LLVMConstInt(LLVMInt32Type(), uint64(ai), 0), "arg_ptr_{ai}")
             arg_ptr = LLVMBuildPointerCast(g_builder, arg_ptr, LLVMPointerType(type_to_llvm_abi_type(a._type),0u), "")
             var arg_v : LLVMOpaqueValue?
@@ -709,7 +709,7 @@ class LlvmJitVisitor : AstVisitor
 
     def build_call_params ( expr:smart_ptr<ExprCallFunc>; extern_func : Function? = null )
         var params : array<LLVMOpaqueValue?>
-        for a,ai in expr.arguments,range(100500)
+        for a,ai in expr.arguments,range(INT_MAX)
             if a._type.baseType==Type fakeContext
                 params |> push(get_context_param())
             elif a._type.baseType==Type fakeLineInfo
@@ -2146,7 +2146,7 @@ class LlvmJitVisitor : AstVisitor
     def build_invoke_params ( expr:smart_ptr<ExprInvoke> )
         assume blockT = expr.arguments[0]._type
         var params : array<LLVMOpaqueValue?>
-        for a,ai in expr.arguments,range(100500)
+        for a,ai in expr.arguments,range(INT_MAX)
             if ai==0        // skip first argument
                 continue
             if a._type.baseType==Type fakeContext
@@ -2568,7 +2568,7 @@ class LlvmJitVisitor : AstVisitor
             else
                 assert(expr.fields.length!=1)
                 var res = LLVMGetUndef(type_to_llvm_type(expr._type))
-                for i,fi in range(100500),expr.fields
+                for i,fi in range(INT_MAX),expr.fields
                     var f = LLVMBuildExtractElement(g_builder, val, LLVMConstInt(LLVMInt32Type(), uint64(fi), 0), "")
                     res = LLVMBuildInsertElement(g_builder, res, f, LLVMConstInt(LLVMInt32Type(), uint64(i), 0), "")
                 setE(expr, res)
@@ -2777,7 +2777,7 @@ class LlvmJitVisitor : AstVisitor
             var cblk = (*astVisitor)->before_function_entry()
             var carg = (*astVisitor)->get_capture_param()
             carg = LLVMBuildLoad(astVisitor.g_builder, carg, "capture")
-            for c,ai in capture,range(100500)
+            for c,ai in capture,range(INT_MAX)
                 var arg_i = LLVMBuildExtractValue(astVisitor.g_builder, carg, uint(ai+first_field_index), "var_{c.variable.name}_index_{ai}_stindex_{ai+first_field_index}")
                 (*astVisitor)->setV_ptr(c.variable, arg_i)
             (*astVisitor)->after_function_entry(cblk)
@@ -2807,7 +2807,7 @@ class LlvmJitVisitor : AstVisitor
         // allocate block, set capture fields
         var blk = LLVMBuildAlloca(g_builder, this_block_type, "block_at_{int(expr.at.line)}")
         var blkv = LLVMGetUndef(this_block_type)
-        for c,idx in capture,range(100500)
+        for c,idx in capture,range(INT_MAX)
             var v_ptr = getV_ptr(c.variable, false)
             if v_ptr == null
                 v_ptr = getE_ptr(c.expression, false)

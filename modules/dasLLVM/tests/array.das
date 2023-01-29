@@ -17,7 +17,7 @@ def addAll ( var a : array<int> )
 
 [jit]
 def resizeLocked ( var a : array<int> )
-    for _a,i in a,range(100500)
+    for _a,i in a,range(INT_MAX)
         if i==3
             a |> resize(20)
 
