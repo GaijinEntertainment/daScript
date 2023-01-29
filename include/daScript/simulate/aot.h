@@ -1062,33 +1062,6 @@ namespace das {
         __forceinline das_iterator(const RangeType<TT> & r) : das_iterator<const RangeType<TT>>(r) {}
     };
 
-    template <typename TT, int from, int to>
-    struct das_iterator_range;
-
-    template <typename TT, int from, int to>
-    struct das_iterator_range<RangeType<TT>,from,to> {
-        __forceinline das_iterator_range(const RangeType<TT> &) {}
-        __forceinline bool first ( Context *, TT & i ) { i = from; return i < to; }
-        __forceinline bool next  ( Context *, TT & i ) { i++; return i!=to; }
-        __forceinline void close ( Context *, TT &   ) {}
-    };
-
-    template <int from>
-    struct das_iterator_range<RangeType<int32_t>,from,0x7fffffff> {
-        __forceinline das_iterator_range(const RangeType<int32_t> &) {}
-        __forceinline bool first ( Context *, int32_t & i ) { i = from; return true; }
-        __forceinline bool next  ( Context *, int32_t & i ) { i++; return true; }
-        __forceinline void close ( Context *, int32_t &   ) {}
-    };
-
-    template <int from>
-    struct das_iterator_range<RangeType<uint32_t>,from,0xffffffff> {
-        __forceinline das_iterator_range(const RangeType<int32_t> &) {}
-        __forceinline bool first ( Context *, int32_t & i ) { i = from; return true; }
-        __forceinline bool next  ( Context *, int32_t & i ) { i++; return true; }
-        __forceinline void close ( Context *, int32_t &   ) {}
-    };
-
     template <>
     struct das_iterator <char * const> {
         __forceinline das_iterator(const char * st) : str(st) {}

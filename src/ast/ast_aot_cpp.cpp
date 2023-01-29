@@ -3243,17 +3243,9 @@ namespace das {
             auto & var = ffor->iteratorVariables[idx];
             ss << string(tab,'\t') << "// " << var->name << " : " << var->type->describe() << "\n";
             auto ft = ffor->sources[idx]->type;
-            if ( ft->isRange() && ffor->sources[idx]->rtti_isConstant() ) {
-                auto crange = static_pointer_cast<ExprConst>(ffor->sources[idx]);
-                auto rng = cast<range>::to(crange->value);
-                ss << string(tab,'\t') << "das_iterator_range<"
-                    << describeCppType(ft,CpptSubstitureRef::yes,CpptSkipRef::yes,CpptSkipConst::no)
-                        << "," << rng.x << "," << rng.y << "> " << forSrcName(var->name) << "(";
-            } else {
-                ss << string(tab,'\t') << "das_iterator<"
-                    << describeCppType(ft,CpptSubstitureRef::yes,CpptSkipRef::yes,CpptSkipConst::no)
-                        << "> " << forSrcName(var->name) << "(";
-            }
+            ss << string(tab,'\t') << "das_iterator<"
+                << describeCppType(ft,CpptSubstitureRef::yes,CpptSkipRef::yes,CpptSkipConst::no)
+                    << "> " << forSrcName(var->name) << "(";
         }
         virtual ExpressionPtr visitForSource ( ExprFor * ffor, Expression * that , bool last ) override {
             size_t idx;
