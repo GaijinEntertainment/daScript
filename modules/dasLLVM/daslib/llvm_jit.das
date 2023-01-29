@@ -71,6 +71,7 @@ class LlvmJitVisitor : AstVisitor
     sortedLabels : array<SLabel>
     finallyBlocks : table<ExprBlock?; LLVMOpaqueBasicBlock?>
     [[skip_field_lock_check]] afterFinallyBlocks : table<ExprBlock?;array<LLVMOpaqueBasicBlock?>>
+    skipCall : table<ExprCall?>
     callBlock : LLVMOpaqueValue?
     g_builder : LLVMOpaqueBuilder?
     g_di_builder : LLVMOpaqueDIBuilder?
@@ -841,6 +842,9 @@ class LlvmJitVisitor : AstVisitor
     def override visitExprCall(expr:smart_ptr<ExprCall>) : ExpressionPtr
         make_call(expr, expr.doesNotNeedSp)
         return expr
+
+    def override canVisitCall ( expr:ExprCall? ) : bool
+        return !skipCall |> key_exists(expr)
 
 // ExprNullCoalescing
     def override preVisitExprNullCoalescing(expr:smart_ptr<ExprNullCoalescing>): void
@@ -1631,6 +1635,12 @@ class LlvmJitVisitor : AstVisitor
         ]]
         LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, FN_JIT_ITERATOR_CLOSE), params, "")
 
+    def is_count_or_ucount ( expr : ExpressionPtr )
+        if !(expr is ExprCall)
+            return false
+        var cf = expr as ExprCall
+        return cf.func.flags.builtIn && cf.func._module.name=="$" && (cf.func.name=="count" || cf.func.name=="ucount")
+
     def override preVisitExprFor(expr:smart_ptr<ExprFor>) : void
         var lblk = [[LoopBlock
             loop_start = LLVMAppendBasicBlock(ffunc, "for_body"),
@@ -1640,6 +1650,9 @@ class LlvmJitVisitor : AstVisitor
         loop_stack |> push(lblk)
         for svar in expr.iteratorVariables
             for_source_skip[get_ptr(svar)] = LLVMAppendBasicBlock(ffunc, "for_skip_{svar.name}")
+        for ssrc in expr.sources
+            if is_count_or_ucount(ssrc)
+                skipCall |> insert(ssrc as ExprCall)
 
     def override visitExprFor(expr:smart_ptr<ExprFor>) : ExpressionPtr
         var lblk = loop_stack |> back()
@@ -1654,7 +1667,11 @@ class LlvmJitVisitor : AstVisitor
             if ssrc._type.isGoodArrayType
                 build_array_unlock(getE(ssrc))
             elif ssrc._type.isIterator
-                build_iter_close(getE(ssrc), getV(svar))
+                if is_count_or_ucount(ssrc)
+                    // we do nothing for count
+                    pass
+                else
+                    build_iter_close(getE(ssrc), getV(svar))
             let skip = for_source_skip[get_ptr(svar)]
             assert(skip!=null)
             LLVMBuildBr(g_builder, skip)
@@ -1721,12 +1738,18 @@ class LlvmJitVisitor : AstVisitor
                 sto = LLVMBuildPtrToInt(g_builder, sto, LLVMIntPtrType(), "array_end")
                 range2[get_ptr(ssrc)] = sto
             elif ssrc._type.isIterator
-                var seq = LLVMBuildLoad(g_builder, getE(ssrc), "")
-                var piter = LLVMBuildExtractValue(g_builder, seq, uint(JIT_SEQUENCE ITERATOR), "")
-                var cmp_iter = LLVMBuildIsNull(g_builder, piter, "")
-                var okay = LLVMAppendBasicBlock(ffunc, "for_{svar.name}_not_empty")
-                LLVMBuildCondBr(g_builder, cmp_iter, for_source_skip[get_ptr(svar)], okay)
-                LLVMPositionBuilderAtEnd(g_builder,okay)
+                if is_count_or_ucount(ssrc)
+                    var ccount = ssrc as ExprCall
+                    visit(ccount.arguments[0], adapter)
+                    visit(ccount.arguments[1], adapter)
+                    LLVMBuildStore(g_builder, getE(ccount.arguments[0]), getV(svar))
+                else
+                    var seq = LLVMBuildLoad(g_builder, getE(ssrc), "")
+                    var piter = LLVMBuildExtractValue(g_builder, seq, uint(JIT_SEQUENCE ITERATOR), "")
+                    var cmp_iter = LLVMBuildIsNull(g_builder, piter, "")
+                    var okay = LLVMAppendBasicBlock(ffunc, "for_{svar.name}_not_empty")
+                    LLVMBuildCondBr(g_builder, cmp_iter, for_source_skip[get_ptr(svar)], okay)
+                    LLVMPositionBuilderAtEnd(g_builder,okay)
             else
                 failed_E(ssrc, "unsupported loop source {describe(ssrc._type)}")
         var for_iterate = LLVMAppendBasicBlock(ffunc, "for_body_loop")
@@ -1746,8 +1769,14 @@ class LlvmJitVisitor : AstVisitor
                 var svar_i = LLVMBuildGEP2(g_builder, type_to_llvm_type(svar._type), svar_v, LLVMConstInt(LLVMInt32Type(),1ul,0), "")
                 LLVMBuildStore(g_builder, svar_i, getV(svar))
             elif ssrc._type.isIterator
-                // next fills it as is
-                pass
+                if is_count_or_ucount(ssrc)
+                    var ccount = ssrc as ExprCall
+                    var vvar = LLVMBuildLoad(g_builder, getV(svar), "")
+                    var vadd = LLVMBuildAdd(g_builder, vvar, getE(ccount.arguments[1]), "")
+                    LLVMBuildStore(g_builder, vadd, getV(svar))
+                else
+                    // next fills as is
+                    pass
             else
                 failed_E(ssrc, "unsupported loop source {describe(ssrc._type)}")
         LLVMBuildBr(g_builder, for_iterate)
@@ -1777,10 +1806,13 @@ class LlvmJitVisitor : AstVisitor
                 LLVMBuildCondBr(g_builder, rcond, lblk.loop_end, okay)
                 LLVMPositionBuilderAtEnd(g_builder,okay)
             elif ssrc._type.isIterator
-                var rcond = build_iter_iterate(getE(ssrc), getV(svar))
-                var okay = LLVMAppendBasicBlock(ffunc, "for_{svar.name}_okay")
-                LLVMBuildCondBr(g_builder, rcond, okay, lblk.loop_end)
-                LLVMPositionBuilderAtEnd(g_builder,okay)
+                if is_count_or_ucount(ssrc)
+                    pass
+                else
+                    var rcond = build_iter_iterate(getE(ssrc), getV(svar))
+                    var okay = LLVMAppendBasicBlock(ffunc, "for_{svar.name}_okay")
+                    LLVMBuildCondBr(g_builder, rcond, okay, lblk.loop_end)
+                    LLVMPositionBuilderAtEnd(g_builder,okay)
             else
                 failed_E(ssrc, "unsupported loop source {describe(ssrc._type)}")
         LLVMBuildBr(g_builder, lblk.loop_body)

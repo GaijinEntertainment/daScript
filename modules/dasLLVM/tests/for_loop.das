@@ -124,6 +124,13 @@ def add_elements ( a:array<int> )
         summ += i
     return summ
 
+[jit]
+def special_count ( max,start,step:int )
+    var add = 0
+    for i,j in range(max),count(start,step)
+        add += j
+    return add
+
 [test]
 def test_for_loop ( t:T? )
     t |> run("range for") <| @ ( t : T? )
@@ -173,4 +180,9 @@ def test_for_loop ( t:T? )
         t |> equal(6, add_elements(a))
         a |> clear()
         t |> equal(0, add_elements(a))
+    t |> run("special count") <| @ ( t : T? )
+        t |> success ( is_jit_function ( @@special_count ) )
+        t |> equal(3,  special_count(3,0,1))    // 0, 1, 2
+        t |> equal(6,  special_count(3,0,2))    // 0, 2, 4
+        t |> equal(12, special_count(3,1,3))    // 1, 4, 7
 
