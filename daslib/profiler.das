@@ -53,7 +53,7 @@ class ProfilerDebugAgent : DapiDebugAgent
     def override onInstall ( agent:DebugAgent? ) : void
         this_context().name := "__PROFILER__"
         var args <- get_command_line_arguments()
-        for argv,i in args,range(INT_MAX)
+        for argv,i in args,count()
             if argv=="--das-profiler-log-file" && out==null && ((i+1)<length(args))
                 out = fopen(args[i+1], "wb")
             elif argv=="--das-profiler-manual"

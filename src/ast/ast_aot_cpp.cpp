@@ -1205,7 +1205,8 @@ namespace das {
             for ( auto & tmp : temps ) {
                 ss << string(tab,'\t');
                 describeVarLocalCppType(ss, tmp->type);
-                ss << " " << makeLocalTempName(tmp) << ";\n";
+                auto tempName = makeLocalTempName(tmp);
+                ss << " " << tempName << "; " << tempName << ";\n";
             }
         }
         virtual void preVisitBlockArgumentInit ( ExprBlock * block, const VariablePtr & var, Expression * init ) override {
@@ -3231,6 +3232,11 @@ namespace das {
             ss << " )\n";
             ss << string(tab,'\t');
         }
+        bool isCountOrUCount ( Expression * expr ) const {
+            if ( !expr->rtti_isCallFunc() ) return nullptr;
+            auto call = static_cast<ExprCallFunc *>(expr);
+            return  call->func->builtIn && call->func->module->name=="$" && (call->name=="count" || call->name=="ucount");
+        }
         virtual void preVisitForSource ( ExprFor * ffor, Expression * that, bool last ) override {
             Visitor::preVisitForSource(ffor, that, last);
             size_t idx;
@@ -3240,12 +3246,16 @@ namespace das {
                     break;
                 }
             }
+            auto & src = ffor->sources[idx];
             auto & var = ffor->iteratorVariables[idx];
             ss << string(tab,'\t') << "// " << var->name << " : " << var->type->describe() << "\n";
-            auto ft = ffor->sources[idx]->type;
-            ss << string(tab,'\t') << "das_iterator<"
-                << describeCppType(ft,CpptSubstitureRef::yes,CpptSkipRef::yes,CpptSkipConst::no)
-                    << "> " << forSrcName(var->name) << "(";
+            if ( isCountOrUCount(src.get()) ) {
+                ss << string(tab,'\t') << "das_iterator_" << ((ExprCallFunc *) src.get())->func->name << " DAS_COMMENT(";
+            } else {
+                ss << string(tab,'\t') << "das_iterator<"
+                    << describeCppType(src->type,CpptSubstitureRef::yes,CpptSkipRef::yes,CpptSkipConst::no)
+                        << "> " << forSrcName(var->name) << "(";
+            }
         }
         virtual ExpressionPtr visitForSource ( ExprFor * ffor, Expression * that , bool last ) override {
             size_t idx;
@@ -3255,8 +3265,18 @@ namespace das {
                     break;
                 }
             }
-            ss << ");\n";
+            auto & src = ffor->sources[idx];
             auto & var = ffor->iteratorVariables[idx];
+            if ( isCountOrUCount(src.get()) ) {
+                auto pCall = ((ExprCall *) src.get());
+                ss << ") " << forSrcName(var->name) << "(";
+                pCall->arguments[0]->visit(*this);
+                ss << ",";
+                pCall->arguments[1]->visit(*this);
+                ss << ");\n";
+            } else {
+                ss << ");\n";
+            }
             // source
             bool skipTC = var->type->isString() && !var->type->ref;
             ss << string(tab,'\t') << describeCppType(var->type,CpptSubstitureRef::yes,CpptSkipRef::no,

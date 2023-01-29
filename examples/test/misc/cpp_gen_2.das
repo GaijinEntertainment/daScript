@@ -17,7 +17,7 @@ def parse_node ( f:FILE const?; header:string; offset:int )
     var node = new [[Node
         text = slice(header, offset)
     ]]
-    for ch,sp in node.text,range(INT_MAX)
+    for ch,sp in node.text,count()
         if ch==' ' || ch=='\n' || ch=='\r'
             node.name = slice(node.text,0,sp)
             break

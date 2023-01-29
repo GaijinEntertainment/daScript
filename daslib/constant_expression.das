@@ -58,12 +58,12 @@ class ConstantExpressionMacro : AstFunctionAnnotation
         macro_verify(expr.func!=null,compiling_program(),expr.at,"expecting inferred function")
         var argi : array<int>
         var anni = -1
-        for ann,idd in expr.func.annotations,range(INT_MAX)
+        for ann,idd in expr.func.annotations,count()
             if ann.annotation.name=="constant_expression"
                 anni = idd
                 for arg in ann.arguments
                     macro_verify(arg.basicType==Type tBool, compiling_program(), expr.at,"unsupported argument type {arg.basicType}")
-                    for farg,fidx in expr.func.arguments,range(INT_MAX)
+                    for farg,fidx in expr.func.arguments,count()
                         if farg.name==arg.name
                             if !isConstantExpression(expr.arguments[fidx])
                                 if arg.bValue

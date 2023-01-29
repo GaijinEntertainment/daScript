@@ -213,7 +213,7 @@ class SoaForLoop : AstForLoopMacro
         if is_in_completion()
             return [[ExpressionPtr]]
         var soa_index = -1
-        for index,its in range(INT_MAX),expr.sources
+        for index,its in count(),expr.sources
             if its._type!=null && its._type.isStructure
                 var is_soa = false
                 peek(its._type.structType.name) <| $(sn)

@@ -78,7 +78,7 @@ class LpipeMacro : AstCallMacro
                 return
             var blk = astc.scopes[astc.scopes.length-1] as ExprBlock
             var eidx = -1
-            for i,expr in range(INT_MAX),blk.list
+            for i,expr in count(),blk.list
                 if expr==call
                     eidx = i
                     break

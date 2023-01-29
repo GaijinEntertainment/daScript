@@ -824,7 +824,7 @@ def find_index ( arr : auto(TT)[]|#; key : TT )
     return -1
 
 def find_index ( arr : iterator<auto(TT)>; key : TT - & )
-    for o,i in arr,range(INT_MAX)
+    for o,i in arr,count()
         if o == key
             return i
     return -1
@@ -842,7 +842,7 @@ def find_index_if ( arr : auto(TT)[]|#; blk : block<(key:TT):bool> )
     return -1
 
 def find_index_if ( arr : iterator<auto(TT)>; blk : block<(key:TT - &):bool> )
-    for o,i in arr,range(INT_MAX)
+    for o,i in arr,count()
         if invoke(blk,o)
             return i
     return -1

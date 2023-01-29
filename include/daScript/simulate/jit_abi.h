@@ -24,19 +24,36 @@ template <typename Head, typename... Tail> struct AnyVectorType<Head, Tail...>
     { enum { value = WrapType<Head>::value || AnyVectorType<Tail...>::value }; };
 
 template <typename TT> struct NeedVectorWrap;
-template <typename Ret, typename ... Args> struct NeedVectorWrap< Ret(*)(Args...) >
-    { enum { value = WrapType<Ret>::value || AnyVectorType<Args...>::value }; };
+template <typename Ret, typename ... Args> struct NeedVectorWrap< Ret(*)(Args...) > {
+    enum {
+        result = WrapType<Ret>::value,
+        arguments = AnyVectorType<Args...>::value,
+        value = result || arguments
+    };
+};
+
+template <int CMRES, int wrap, typename FuncT, FuncT fn> struct ImplWrapCall;
+
+template <typename FuncT, FuncT fn>     // no cmres, no wrap
+struct ImplWrapCall<false,false,FuncT,fn> {
+    static void * get_builtin_address() { return (void *) fn; }
+};
+
+template <int wrap, typename RetT, typename ...Args, RetT(*fn)(Args...)>    // cmres
+struct ImplWrapCall<true,wrap,RetT(*)(Args...),fn> {                        // when cmres, we always wrap
+    static typename void static_call ( RetT * result, typename WrapType<Args>::type... args ) {
+        *result = fn(args...);
+    };
+    static void * get_builtin_address() { return (void *) &static_call; }
+};
 
 
-template <int needWarap, typename FuncT, FuncT fn> struct ImplWrapCall;
-template <typename RetT, typename ...Args, RetT(*fn)(Args...)> struct ImplWrapCall<true,RetT(*)(Args...),fn> {
+template <typename RetT, typename ...Args, RetT(*fn)(Args...)>
+struct ImplWrapCall<false,true,RetT(*)(Args...),fn> {   // no cmres, wrap
     static typename WrapType<RetT>::type static_call ( typename WrapType<Args>::type... args ) {
         return fn(args...);
     };
     static void * get_builtin_address() { return (void *) &static_call; }
-};
-template <typename FuncT, FuncT fn> struct ImplWrapCall<false,FuncT,fn> {
-    static void * get_builtin_address() { return (void *) fn; }
 };
 
 }

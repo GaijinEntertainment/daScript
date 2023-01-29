@@ -20,7 +20,7 @@ def main
     for it in soa
         print("it.pos={it.pos} it.color={it.color}\n")
     var count = 0
-    for q,it in range(INT_MAX),soa
+    for q,it in count(),soa
         count ++
     assert(count==2)
 

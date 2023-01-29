@@ -742,13 +742,13 @@ def add_annotation_argument ( var arguments:AnnotationArgumentList; ann : rtti::
     return argIdx
 
 def get_for_source_index(expr:smart_ptr<ExprFor>; svar:VariablePtr)
-    for v,t in expr.iteratorVariables,range(INT_MAX)
+    for v,t in expr.iteratorVariables,count()
         if v==svar
             return t
     return -1
 
 def get_for_source_index(expr:smart_ptr<ExprFor>; source:ExpressionPtr)
-    for s,t in expr.sources,range(INT_MAX)
+    for s,t in expr.sources,count()
         if s==source
             return t
     return -1
@@ -799,7 +799,7 @@ def public function_to_type ( fn : FunctionPtr ) : TypeDeclPtr
     unsafe
         td.firstType <- fn.result!=null ? clone_type(fn.result) : new [[TypeDecl() baseType=Type autoinfer]]
         td.argNames |> resize(length(fn.arguments))
-        for arg,argi in fn.arguments,range(INT_MAX)
+        for arg,argi in fn.arguments,count()
             td.argTypes |> emplace_new <| clone_type(arg._type)
             td.argNames[argi] := arg.name
     return td
@@ -833,7 +833,7 @@ def public get_workhorse_types
     ]]
 
 def public find_argument_index ( typ:TypeDeclPtr; name:string )
-    for a,ai in typ.argNames,range(INT_MAX)
+    for a,ai in typ.argNames,count()
         if a==name
             return ai
     return -1
@@ -896,7 +896,7 @@ def private debug_expression_impl ( var writer:StringBuilderWriter; expr:Express
                 if length(*pv)!=0
                     let ts = repeat("  ",tabs+2)
                     writer |> write("\n{ts}[{name}\n")
-                    for l,i in *pv,range(INT_MAX)
+                    for l,i in *pv,count()
                         writer |> write("{ts}  ")
                         debug_expression_impl(writer, l,tabs+2)
                         if i != length(*pv)-1
@@ -907,7 +907,7 @@ def private debug_expression_impl ( var writer:StringBuilderWriter; expr:Express
                 if length(*pv)!=0
                     let ts = repeat("  ",tabs+2)
                     writer |> write("\n{ts}[{name}\n")
-                    for l,i in *pv,range(INT_MAX)
+                    for l,i in *pv,count()
                         writer |> write("{ts}  ")
                         writer |> write("{l.name}:{describe(l._type)}")
                         if l.init!=null

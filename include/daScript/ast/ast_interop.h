@@ -54,7 +54,7 @@ namespace das
 #endif
         }
         virtual void * getBuiltinAddress() const override {
-            return ImplWrapCall<NeedVectorWrap<FuncT>::value, FuncT, fn>::get_builtin_address();
+            return ImplWrapCall<SimNodeT::IS_CMRES, NeedVectorWrap<FuncT>::value, FuncT, fn>::get_builtin_address();
         }
     };
 

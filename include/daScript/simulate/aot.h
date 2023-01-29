@@ -1039,11 +1039,15 @@ namespace das {
     template <typename TT>
     struct TSequence : Sequence {
         __forceinline TSequence () { this->iter = nullptr; }
+        __forceinline TSequence ( Iterator * it ) { this->iter = it; }
         __forceinline TSequence ( Sequence && s ) { this->iter = s.iter; s.iter = nullptr; }
         __forceinline TSequence ( const Sequence & s ) { this->iter = s.iter; }
         __forceinline TSequence<TT> & operator = ( Sequence && s ) { this->iter = s.iter; s.iter = nullptr;return *this; }
         __forceinline TSequence<TT> & operator = ( const Sequence & s ) { this->iter = s.iter; return *this; }
     };
+
+    TSequence<int32_t> builtin_count ( int32_t start, int32_t step, Context * context );
+    TSequence<uint32_t> builtin_ucount ( uint32_t start, uint32_t step, Context * context );
 
     template <typename TT>
     struct das_iterator;
@@ -1061,6 +1065,18 @@ namespace das {
     struct das_iterator <RangeType<TT>> : das_iterator<const RangeType<TT>> {
         __forceinline das_iterator(const RangeType<TT> & r) : das_iterator<const RangeType<TT>>(r) {}
     };
+
+    template <typename TT>
+    struct das_iterator_tcount {
+        __forceinline das_iterator_tcount(TT _start, TT _step) : start(_start), step(_step) {}
+        __forceinline bool first ( Context *, TT & i ) { i=start; return true; }
+        __forceinline bool next  ( Context *, TT & i ) { i++; return true; }
+        __forceinline void close ( Context *, TT &   ) {}
+        TT start = 0;
+        TT step = 0;
+    };
+    typedef das_iterator_tcount<int32_t> das_iterator_count;
+    typedef das_iterator_tcount<uint32_t> das_iterator_ucount;
 
     template <>
     struct das_iterator <char * const> {

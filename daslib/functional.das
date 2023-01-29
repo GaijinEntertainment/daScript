@@ -164,15 +164,6 @@ def islice( var src : iterator<auto(TT)>; start,stop : int )
                     yield x
             return false
 
-// [[ start; start+step; start+2*step ]]
-[generic]
-def count(var start,step:int) : iterator<int>
-    //! endlessly iterates from `start` and yields `start+step`, `start+2*step`, ...
-    return <- each() <| @(var result:int&) : bool
-        result = start
-        start += step
-        return true
-
 // [[ value; value; value; .... count times ]]
 def repeat_ref ( value:auto(TT); var total:int )
     //! yields `value` by reference `count` times

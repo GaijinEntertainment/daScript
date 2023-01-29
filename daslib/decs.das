@@ -293,7 +293,7 @@ def private with_archetype ( hash:ComponentHash; blk : block<(var arch:Archetype
 def private create_archetype ( var arch:Archetype; cmp:ComponentMap; idx:int )
     assert(length(arch.components)==0)
     arch.eidIndex = -1
-    for kv,kvi in cmp,range(INT_MAX)
+    for kv,kvi in cmp,count()
         var ct & = unsafe(decsState.componentTypeCheck[kv.name])
         if ct.hash != 0ul
             if kv.info.hash != ct.hash
@@ -389,7 +389,7 @@ def public lookup_request ( var erq : EcsRequest )
         compile_request(erq)
     var ql & = unsafe(decsState.queryLookup[erq.hash])
     if ql == 0
-        for arch,archi in decsState.allArchetypes,range(INT_MAX)
+        for arch,archi in decsState.allArchetypes,count()
             if erq |> can_process_request(arch)
                 erq.archetypes |> push(archi)
         decsState.ecsQueries |> push_clone(erq)

@@ -10,7 +10,7 @@ def test
                 var dict : table<string; int>
                 fread(f) <| $(data)
                     var offset, length, index = 0
-                    for ch,index in data,range(INT_MAX)
+                    for ch,index in data,count()
                         if is_alpha(ch)
                             if length == 0
                                 offset = index

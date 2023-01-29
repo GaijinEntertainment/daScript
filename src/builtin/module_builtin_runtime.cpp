@@ -564,6 +564,42 @@ namespace das
         int32_t     range_to = 0;
     };
 
+    struct CountIterator : Iterator {
+        CountIterator ( int32_t _start, int32_t _step ) : start(_start), step(_step) {};
+        virtual bool first ( Context &, char * _value ) override {
+            int32_t * value = (int32_t *) _value;
+            *value = start;
+            return true;
+        }
+        virtual bool next  ( Context &, char * _value ) override {
+            int32_t * value = (int32_t *) _value;
+            *value += step;
+            return true;
+        }
+        virtual void close ( Context &, char * ) override { }
+        int32_t start = 0;
+        int32_t step = 0;
+    };
+
+    int32_t START = 0;
+    int32_t STEP = 0;
+
+    TSequence<int32_t> builtin_count ( int32_t start, int32_t step, Context * context ) {
+        START = start;
+        STEP = step;
+        char * iter = context->heap->allocate(sizeof(CountIterator));
+        context->heap->mark_comment(iter, "count iterator");
+        new (iter) CountIterator(start, step);
+        return TSequence<int>((Iterator *)iter);
+    }
+
+    TSequence<uint32_t> builtin_ucount ( uint32_t start, uint32_t step, Context * context ) {
+        char * iter = context->heap->allocate(sizeof(CountIterator));
+        context->heap->mark_comment(iter, "ucount iterator");
+        new (iter) CountIterator(start, step);
+        return TSequence<int>((Iterator *)iter);
+    }
+
     // core functions
 
     void builtin_throw ( char * text, Context * context, LineInfoArg * at ) {
@@ -1228,6 +1264,17 @@ namespace das
         addExtern<DAS_BIND_FUN(builtin_iterator_empty)>(*this, lib, "empty",
             SideEffects::modifyArgumentAndExternal, "builtin_iterator_empty")
                 ->arg("iterator");
+        // count and ucount iterators
+        auto fnCount = addExtern<DAS_BIND_FUN(builtin_count),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "count",
+            SideEffects::modifyExternal, "builtin_count")
+                ->args({"start","step","context"});
+        fnCount->arguments[0]->init = make_smart<ExprConstInt>(0);  // start=0
+        fnCount->arguments[1]->init = make_smart<ExprConstInt>(1);  // step=0
+        auto fnuCount = addExtern<DAS_BIND_FUN(builtin_ucount),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "ucount",
+            SideEffects::none, "builtin_ucount")
+                ->args({"start","step","context"});
+        fnuCount->arguments[0]->init = make_smart<ExprConstUInt>(0);  // start=0
+        fnuCount->arguments[1]->init = make_smart<ExprConstUInt>(1);  // step=0
         // make-iterator functions
         addExtern<DAS_BIND_FUN(builtin_make_good_array_iterator)>(*this, lib,  "_builtin_make_good_array_iterator",
             SideEffects::modifyArgumentAndExternal, "builtin_make_good_array_iterator")
