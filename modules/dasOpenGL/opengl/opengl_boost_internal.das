@@ -101,7 +101,7 @@ class GlslVertexBuffer : AstStructureAnnotation
         var blk <- new [[ExprBlock() at=st.at]]
         // for each field
         var stype <- new [[TypeDecl() baseType=Type tStructure, structType=get_ptr(st), at=st.at]]
-        for fld,attri in st.fields,range(100500)
+        for fld,attri in st.fields,range(INT_MAX)
             // attri+vindex
             var vattr_i <- new [[ExprOp2() at=fld.at,
                 op := "+",

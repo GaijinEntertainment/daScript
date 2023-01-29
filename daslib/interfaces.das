@@ -53,7 +53,7 @@ class ImplementsMacro : AstStructureAnnotation
         var cls <- make_class(iface_class_name, parent, st._module)
         cls.flags |= StructureFlags privateStructure
         var iface_index = -1
-        for ann,ii in cls.annotations,range(100500)
+        for ann,ii in cls.annotations,range(INT_MAX)
             if ann.annotation.name == "interface"
                 iface_index = ii
                 break

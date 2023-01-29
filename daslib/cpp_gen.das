@@ -827,7 +827,7 @@ def genFunction(fn:ClangFunc; castbind:bool; df:FILE const?)
     fprint(df,"\t->args(\{")
     if fn.isMethod
         fprint(df,"\"self\",")
-    for arg,argi in fn.args,range(100500)
+    for arg,argi in fn.args,range(INT_MAX)
         if argi!=0
             fprint(df,",")
         if empty(arg.name)
@@ -849,7 +849,7 @@ def genFunction(fn:ClangFunc; castbind:bool; df:FILE const?)
     if revArgs
         get(rev_enums, rtype) <| $ ( rt )
             fprint(df,"\t\t->res_type(makeType<{rt}>(lib))\n")
-    for arg,_argi in fn.args,range(100500)
+    for arg,_argi in fn.args,range(INT_MAX)
         let argi = fn.isMethod ? _argi+1 : _argi
         var thisArgEnum = ""
         if revArgs

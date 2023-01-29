@@ -2,7 +2,7 @@
 def checkIt ( gen : iterator<int> )
     //print("testing:\n")
     var count = 0
-    for x, y in gen, range(100500)
+    for x, y in gen, range(INT_MAX)
         //print("{x} vs {y}\n")
         if y >= 10
             assert(false,"output too long")

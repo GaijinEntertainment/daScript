@@ -955,3 +955,4 @@ def clear ( var t : table<auto(KT); auto(VT)> )
     static_if typeinfo(need_lock_check type<VT>)
         _builtin_verify_locks(t)
     _builtin_table_clear(t)
+

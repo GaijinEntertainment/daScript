@@ -217,7 +217,7 @@ class AnyGenBind
         clang_disposeIndex(index)
     def namespace_struct_name ( dash:string="::" ) : string
         return build_string <| $ ( wr )
-            for n,i in nspaces,range(100500)
+            for n,i in nspaces,range(INT_MAX)
                 if i != 0
                     wr |> write(dash)
                 wr |> write(n)
@@ -1363,7 +1363,7 @@ class CppGenBind : AnyGenBind
             while lsp |> key_exists(qv)
                 qv = lsp[qv]
                 pp |> push(qv)
-            for p,i in pp,range(100500)
+            for p,i in pp,range(INT_MAX)
                 if i!=0
                     fprint(struct_add_file,",")
                 fprint(struct_add_file,"\"{p}\"")

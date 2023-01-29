@@ -335,7 +335,7 @@ class GlslExport : AstVisitor
             tw |> write <| self->describe_glsl_type(fun.result)
             var funname = self->glsl_function_name(fun)
             tw |> write (" {funname} ( ")
-            for arg,i in fun.arguments,range(100500)
+            for arg,i in fun.arguments,range(INT_MAX)
                 if i!=0
                     tw |> write(", ")
                 if arg._type.isRef && !arg._type.flags.constant
@@ -360,7 +360,7 @@ class GlslExport : AstVisitor
                 *writer |> write("{t.structType.name}_STRUCTURE_INITIALIZER(")
             else
                 *writer |> write("{t.structType.name}(")
-            for fld,i in t.structType.fields,range(100500)
+            for fld,i in t.structType.fields,range(INT_MAX)
                 if i!=0
                     *writer |> write(",")
                 self->produce_zero(fld._type)
@@ -1129,18 +1129,18 @@ class GlslExport : AstVisitor
 // make structure
     def outputMakeStruct(expr:smart_ptr<ExprMakeStruct>;index:int)
         var prev = -1
-        for st,j in *(expr.structs[index]),range(100500)
-            for sf,i in expr._type.structType.fields,range(100500)
+        for st,j in *(expr.structs[index]),range(INT_MAX)
+            for sf,i in expr._type.structType.fields,range(INT_MAX)
                 if sf.name == st.name
                     if prev > i
                         self->error("out of order initialization is not supported by GLSL yet", st.at)
                     if !st.value.flags.noSideEffects
                         prev = i
-        for sf,i in expr._type.structType.fields,range(100500)
+        for sf,i in expr._type.structType.fields,range(INT_MAX)
             if i!=0
                 *writer |> write(",")
             var has = false
-            for st,j in *(expr.structs[index]),range(100500)
+            for st,j in *(expr.structs[index]),range(INT_MAX)
                 if sf.name == st.name
                     has = true
                     visit(st.value, astVisitorAdapter)

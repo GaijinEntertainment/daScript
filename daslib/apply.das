@@ -57,7 +57,7 @@ def generateApplyVisitTuple ( stype:TypeDeclPtr; fnname:string; at:LineInfo )
     selfT.flags |= TypeDeclFlags isExplicit | TypeDeclFlags explicitConst
     var blkList : array<ExpressionPtr>; defer_delete(blkList)
     var func_args : array<VariablePtr>; defer_delete(func_args)
-    for flda,fldi in stype.argTypes,range(100500)
+    for flda,fldi in stype.argTypes,range(INT_MAX)
         let fldname = length(stype.argNames)==length(stype.argTypes) ? string(stype.argNames[fldi]) : "_{fldi}"
         blkList |> emplace_new <|  qmacro(invoke($i("__arg_{fldname}"),$v(fldname),_`_self.$f(fldname)))
         var argT <- new [[TypeDecl() baseType=Type tBlock, at=at]]                         // block<(name:string;x:field1type)>
@@ -94,7 +94,7 @@ def generateApplyVisitVariant ( stype:TypeDeclPtr; fnname:string; at:LineInfo )
     selfT.flags |= TypeDeclFlags isExplicit | TypeDeclFlags explicitConst
     var blkList : array<ExpressionPtr>; defer_delete(blkList)
     var func_args : array<VariablePtr>; defer_delete(func_args)
-    for flda,fldi in stype.argTypes,range(100500)
+    for flda,fldi in stype.argTypes,range(INT_MAX)
         let fldname = length(stype.argNames)==length(stype.argTypes) ? string(stype.argNames[fldi]) : "_{fldi}"
         var vexpr <- qmacro_block <|
             if variant_index(_`_self)==$v(fldi)
