@@ -581,12 +581,7 @@ namespace das
         int32_t step = 0;
     };
 
-    int32_t START = 0;
-    int32_t STEP = 0;
-
     TSequence<int32_t> builtin_count ( int32_t start, int32_t step, Context * context ) {
-        START = start;
-        STEP = step;
         char * iter = context->heap->allocate(sizeof(CountIterator));
         context->heap->mark_comment(iter, "count iterator");
         new (iter) CountIterator(start, step);
