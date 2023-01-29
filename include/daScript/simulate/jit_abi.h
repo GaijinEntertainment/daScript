@@ -41,7 +41,7 @@ struct ImplWrapCall<false,false,FuncT,fn> {
 
 template <int wrap, typename RetT, typename ...Args, RetT(*fn)(Args...)>    // cmres
 struct ImplWrapCall<true,wrap,RetT(*)(Args...),fn> {                        // when cmres, we always wrap
-    static typename void static_call ( RetT * result, typename WrapType<Args>::type... args ) {
+    static void static_call ( RetT * result, typename WrapType<Args>::type... args ) {
         *result = fn(args...);
     };
     static void * get_builtin_address() { return (void *) &static_call; }
