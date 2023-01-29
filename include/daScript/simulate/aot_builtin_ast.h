@@ -60,6 +60,7 @@ namespace das {
         DECL_VISIT(ExprNewArgument);
         DECL_VISIT(ExprNamedCall);
         DECL_VISIT(ExprNamedCallArgument);
+        Func fnCanVisitCall;
         DECL_VISIT(ExprCall);
         DECL_VISIT(ExprCallArgument);
         DECL_VISIT(ExprLooksLikeCall);
@@ -263,6 +264,7 @@ namespace das {
         virtual MakeFieldDeclPtr visitNamedCallArg ( ExprNamedCall * expr, MakeFieldDecl * arg , bool last ) override;
     // call
         IMPL_BIND_EXPR(ExprCall);
+        virtual bool canVisitCall ( ExprCall * expr ) override;
         virtual void preVisitCallArg ( ExprCall * expr, Expression * arg, bool last ) override;
         virtual ExpressionPtr visitCallArg ( ExprCall * expr, Expression * arg , bool last ) override;
     // looks like call

@@ -2362,13 +2362,17 @@ namespace das {
     // ExprCall
 
     ExpressionPtr ExprCall::visit(Visitor & vis) {
-        vis.preVisit(this);
-        for ( auto & arg : arguments ) {
-            vis.preVisitCallArg(this, arg.get(), arg==arguments.back());
-            arg = arg->visit(vis);
-            arg = vis.visitCallArg(this, arg.get(), arg==arguments.back());
+        if ( vis.canVisitCall(this) ) {
+            vis.preVisit(this);
+            for ( auto & arg : arguments ) {
+                vis.preVisitCallArg(this, arg.get(), arg==arguments.back());
+                arg = arg->visit(vis);
+                arg = vis.visitCallArg(this, arg.get(), arg==arguments.back());
+            }
+            return vis.visit(this);
+        } else {
+            return this;
         }
-        return vis.visit(this);
     }
 
     ExpressionPtr ExprCall::clone( const ExpressionPtr & expr ) const {

@@ -156,6 +156,7 @@ namespace das {
         IMPL_ADAPT(ExprNewArgument);
         IMPL_ADAPT(ExprNamedCall);
         IMPL_ADAPT(ExprNamedCallArgument);
+        fnCanVisitCall = adapt("canVisitCall",pClass,info);
         IMPL_ADAPT(ExprCall);
         IMPL_ADAPT(ExprCallArgument);
         IMPL_ADAPT(ExprLooksLikeCall);
@@ -454,6 +455,14 @@ namespace das {
         { IMPL_VISIT3(ExprNamedCallArgument,ExprNamedCall,MakeFieldDecl,arg,MakeFieldDeclPtr,arg,bool,last); }
 // call
     IMPL_BIND_EXPR(ExprCall);
+    bool VisitorAdapter::canVisitCall ( ExprCall * expr ) {
+        if ( fnCanVisitCall ) {
+            return das_invoke_function<bool>::invoke<void *,ExprCall *>
+                (context,nullptr,fnCanVisitCall,classPtr,expr);
+        } else {
+            return true;
+        }
+    }
     void VisitorAdapter::preVisitCallArg ( ExprCall * expr, Expression * arg, bool last )
         { IMPL_PREVISIT3(ExprCallArgument,ExprCall,ExpressionPtr,arg,bool,last); }
     ExpressionPtr VisitorAdapter::visitCallArg ( ExprCall * expr, Expression * arg , bool last )
