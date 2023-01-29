@@ -253,6 +253,9 @@ def describe ( blk:LLVMOpaqueBasicBlock? )
 def LLVMSetFunctionCallConv(ofunc:LLVMOpaqueValue?; conv:LLVMCallConv)
     LLVMSetFunctionCallConv(ofunc, uint(conv))
 
+def LLVMSetInstructionCallConv(ccall:LLVMOpaqueValue?; conv:LLVMCallConv)
+    LLVMSetInstructionCallConv(ccall, uint(conv))
+
 def set_meta_dereferenceable ( instr:LLVMOpaqueValue?; bytes:int; nil:bool )
     var values : LLVMOpaqueValue? [1]
     values[0] = LLVMConstInt(LLVMInt64Type(), uint64(bytes), 0)

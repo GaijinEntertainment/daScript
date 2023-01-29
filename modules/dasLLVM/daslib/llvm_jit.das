@@ -225,7 +225,7 @@ class LlvmJitVisitor : AstVisitor
                     elif arg.name=="unsafe_capture"
                         option_no_capture = true
                     elif arg.name=="align16" && arg.basicType == Type tString
-                        for a,ai in arguments,urange(100500)
+                        for a,ai in arguments,ucount()
                             if a.name==arg.sValue
                                 LLVMSetParamAlignment(LLVMGetParam(ffunc,ai), 16u)
         if alwaysInline
@@ -270,7 +270,7 @@ class LlvmJitVisitor : AstVisitor
         var readonly_attr = LLVMGetEnumAttribute("readonly")
         var noalias_attr = LLVMGetEnumAttribute("noalias")
         var nocapture_attr = LLVMGetEnumAttribute("nocapture")
-        for a,ai in arguments,urange(100500)
+        for a,ai in arguments,ucount()
             if a._type.isRef
                 LLVMSetParamAlignment(LLVMGetParam(ffunc,ai), uint(a._type.alignOf))
             elif a._type.isPointer && a._type.firstType!=null
@@ -329,7 +329,7 @@ class LlvmJitVisitor : AstVisitor
         LLVMPositionBuilderAtEnd(g_builder, wentry)
         var wargs : array<LLVMOpaqueValue?>
         var args = LLVMGetParam(wfunc,1u)
-        for a,ai in arguments, range(INT_MAX)
+        for a,ai in arguments, count()
             var arg_ptr = LLVMBuildGEP(g_builder, args, LLVMConstInt(LLVMInt32Type(), uint64(ai), 0), "arg_ptr_{ai}")
             arg_ptr = LLVMBuildPointerCast(g_builder, arg_ptr, LLVMPointerType(type_to_llvm_abi_type(a._type),0u), "")
             var arg_v : LLVMOpaqueValue?
@@ -667,9 +667,14 @@ class LlvmJitVisitor : AstVisitor
         var ofunc = LLVMGetNamedFunction(g_mod, mangled_name)
         if ofunc == null
             var arg_types : array<LLVMOpaqueType?>
+            var res_type : LLVMOpaqueType?
+            res_type = type_to_llvm_type(expr.func.result)
+            let cmres = isCMRES(expr.func)
+            if cmres
+                arg_types |> push(LLVMPointerType(res_type,0u))
+                res_type = LLVMVoidType()
             for arg in expr.func.arguments
                 arg_types |> push(type_to_llvm_abi_type(arg._type))
-            var res_type = type_to_llvm_type(expr.func.result)
             ofunc = LLVMAddFunction(g_mod, mangled_name, LLVMFunctionType(res_type,arg_types))
             let FUNC_PTR = get_builtin_function_address(expr.func)
             if FUNC_PTR==null
@@ -681,9 +686,12 @@ class LlvmJitVisitor : AstVisitor
                 LLVMAddAttributeToFunction(ofunc, LLVMGetEnumAttribute("willreturn"))
             if !expr.func.sideEffectFlags.modifyExternal
                 var nocapture_attr = LLVMGetEnumAttribute("nocapture")
-                for arg,ai in expr.func.arguments,urange(100500)
+                var ao = cmres ? 1u : 0u
+                for arg,ai in expr.func.arguments,ucount()
                     if arg._type.isRef
-                        LLVMAddAttributeToFunctionArgument(ofunc, ai, nocapture_attr)
+                        LLVMAddAttributeToFunctionArgument(ofunc, ai + ao, nocapture_attr)
+                if cmres
+                    LLVMAddAttributeToFunctionArgument(ofunc, 0u, nocapture_attr)
         return ofunc
 
     def register_interop_function ( expr:smart_ptr<ExprCallFunc> ) : LLVMOpaqueValue?
@@ -709,7 +717,7 @@ class LlvmJitVisitor : AstVisitor
 
     def build_call_params ( expr:smart_ptr<ExprCallFunc>; extern_func : Function? = null )
         var params : array<LLVMOpaqueValue?>
-        for a,ai in expr.arguments,range(INT_MAX)
+        for a,ai in expr.arguments,count()
             if a._type.baseType==Type fakeContext
                 params |> push(get_context_param())
             elif a._type.baseType==Type fakeLineInfo
@@ -735,6 +743,15 @@ class LlvmJitVisitor : AstVisitor
             let MNH = hash(mangled_name)
             MNH_ADDR = get_function_address(MNH,*jit_context)
         return MNH_ADDR
+
+    def set_meta_cconv ( instr:LLVMOpaqueValue?; conv:string )
+        var values : LLVMOpaqueValue? [1]
+        values[0] = LLVMMDString(conv, uint(length(conv)))
+        let msg = "cconv"
+        LLVMSetMetadata(
+            instr,
+            LLVMGetMDKindID(msg, uint(length(msg))),
+            LLVMMDNode(unsafe(addr(values[0])), 1u))
 
     def make_call ( expr:smart_ptr<ExprCallFunc>; doesNotNeedSp:bool )
         // lookup intrinsics first
@@ -779,11 +796,13 @@ class LlvmJitVisitor : AstVisitor
             else
                 var params <- build_call_params(expr, expr.func)
                 var func = register_extern_function(expr)
-                var ccall = LLVMBuildCall(g_builder, func, params, "")
                 if cmresEval!=null
-                    LLVMBuildStore2Aligned(g_builder, type_to_llvm_type(expr.func.result), ccall, cmresEval, uint(expr._type.alignOf))
+                    var cmresPtr = LLVMBuildPointerCast(g_builder,cmresEval,LLVMPointerType(type_to_llvm_type(expr.func.result),0u),"cmresPTR")
+                    params |> push(cmresPtr, 0)
+                    var ccall = LLVMBuildCall(g_builder, func, params, "")
                     setE(expr, cmresEval)
                 else
+                    var ccall = LLVMBuildCall(g_builder, func, params, "")
                     setE(expr, ccall)
         else
             if expr.func.moreFlags.requestJit
@@ -2146,7 +2165,7 @@ class LlvmJitVisitor : AstVisitor
     def build_invoke_params ( expr:smart_ptr<ExprInvoke> )
         assume blockT = expr.arguments[0]._type
         var params : array<LLVMOpaqueValue?>
-        for a,ai in expr.arguments,range(INT_MAX)
+        for a,ai in expr.arguments,count()
             if ai==0        // skip first argument
                 continue
             if a._type.baseType==Type fakeContext
@@ -2568,7 +2587,7 @@ class LlvmJitVisitor : AstVisitor
             else
                 assert(expr.fields.length!=1)
                 var res = LLVMGetUndef(type_to_llvm_type(expr._type))
-                for i,fi in range(INT_MAX),expr.fields
+                for i,fi in count(),expr.fields
                     var f = LLVMBuildExtractElement(g_builder, val, LLVMConstInt(LLVMInt32Type(), uint64(fi), 0), "")
                     res = LLVMBuildInsertElement(g_builder, res, f, LLVMConstInt(LLVMInt32Type(), uint64(i), 0), "")
                 setE(expr, res)
@@ -2777,7 +2796,7 @@ class LlvmJitVisitor : AstVisitor
             var cblk = (*astVisitor)->before_function_entry()
             var carg = (*astVisitor)->get_capture_param()
             carg = LLVMBuildLoad(astVisitor.g_builder, carg, "capture")
-            for c,ai in capture,range(INT_MAX)
+            for c,ai in capture,count()
                 var arg_i = LLVMBuildExtractValue(astVisitor.g_builder, carg, uint(ai+first_field_index), "var_{c.variable.name}_index_{ai}_stindex_{ai+first_field_index}")
                 (*astVisitor)->setV_ptr(c.variable, arg_i)
             (*astVisitor)->after_function_entry(cblk)
@@ -2807,7 +2826,7 @@ class LlvmJitVisitor : AstVisitor
         // allocate block, set capture fields
         var blk = LLVMBuildAlloca(g_builder, this_block_type, "block_at_{int(expr.at.line)}")
         var blkv = LLVMGetUndef(this_block_type)
-        for c,idx in capture,range(INT_MAX)
+        for c,idx in capture,count()
             var v_ptr = getV_ptr(c.variable, false)
             if v_ptr == null
                 v_ptr = getE_ptr(c.expression, false)
