@@ -2,6 +2,8 @@
 
 require llvm/llvm_jit
 
+require daslib/unroll
+
 // options log_nodes=true
 
 require math
@@ -39,12 +41,13 @@ def digestBlock(data:uint?; var hash:uint[8])
     for j in range(16)
         unsafe
             digest[j] = data[j]
-    for j in range(16,64)
-        let v0 = digest[j-15]
-        let s0 = (v0 >>> 7u) ^ (v0 >>> 18u) ^ (v0>>3u)
-        let v1 = digest[j-2]
-        let s1 = (v1 >>> 17u) ^ (v1 >>> 19u) ^ (v1>>10u)
-        digest[j] = digest[j-16] + s0 + digest[j-7] + s1
+    unroll <|
+        for j in range(16,64)
+            let v0 = digest[j-15]
+            let s0 = (v0 >>> 7u) ^ (v0 >>> 18u) ^ (v0>>3u)
+            let v1 = digest[j-2]
+            let s1 = (v1 >>> 17u) ^ (v1 >>> 19u) ^ (v1>>10u)
+            digest[j] = digest[j-16] + s0 + digest[j-7] + s1
     var a = hash[0]
     var b = hash[1]
     var c = hash[2]
