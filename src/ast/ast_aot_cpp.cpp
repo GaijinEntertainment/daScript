@@ -3233,7 +3233,7 @@ namespace das {
             ss << string(tab,'\t');
         }
         bool isCountOrUCount ( Expression * expr ) const {
-            if ( !expr->rtti_isCallFunc() ) return nullptr;
+            if ( !expr->rtti_isCallFunc() ) return false;
             auto call = static_cast<ExprCallFunc *>(expr);
             return  call->func->builtIn && call->func->module->name=="$" && (call->name=="count" || call->name=="ucount");
         }
