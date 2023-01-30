@@ -67,11 +67,7 @@ def replaceType ( var self:Template; name,newName:string )
     //! Adds a rule to the template to replace a type alias with another type alias, specified by name.
     self.type2type[name] = newName
 
-def replaceTypeWithTypeDecl ( var self:Template; name:string; var st : StructurePtr  )
-    //! Adds a rule to the template to replace a type alias with another type alias, specified by type declaration.
-    self.type2etype[name] <- new [[TypeDecl() at=st.at, baseType=Type tStructure, structType = get_ptr(st)]]
-
-def replaceTypeWithTypeDecl ( var self:Template; name:string; var expr : TypeDeclPtr  )
+def replaceTypeWithTypeDecl ( var self:Template; name:string; var expr : TypeDeclPtr )
     //! Adds a rule to the template to replace a type alias with another type alias, specified by type declaration.
     self.type2etype[name] <- expr
 
@@ -386,14 +382,21 @@ def public add_array_ptr_ref ( var a : array<smart_ptr<auto(TT)>> ) : array<smar
     var q := a
     return <- q
 
-def public add_type_ptr_ref ( var a : TypeDeclPtr ) : TypeDeclPtr
+def public add_type_ptr_ref ( var a : TypeDeclPtr; flags:TypeDeclFlags ) : TypeDeclPtr
     //! Implementation details for the reification. This adds any array to the rules.
-    var q := a
+    // var q := a
+    var q <- clone_type(a)
+    q.flags |= flags & (
+            TypeDeclFlags ref | TypeDeclFlags removeRef
+        |   TypeDeclFlags temporary | TypeDeclFlags removeTemporary
+        |   TypeDeclFlags _implicit | TypeDeclFlags explicitConst
+        |   TypeDeclFlags removeConstant | TypeDeclFlags removeDim
+        )
     return <- q
 
-def public add_type_ptr_ref ( var a : StructurePtr ) : StructurePtr
+def public add_type_ptr_ref ( var st : StructurePtr; flags:TypeDeclFlags ) : TypeDeclPtr
     //! Implementation details for the reification. This adds any array to the rules.
-    return a // notice,
+    return new [[TypeDecl() at=st.at, baseType=Type tStructure, structType = get_ptr(st), flags=flags]]
 
 def private generatedExpr( var expr : ExpressionPtr ) : ExpressionPtr
     expr.genFlags |= ExprGenFlags generated
@@ -425,15 +428,20 @@ class private QRulesVisitor : AstVisitor
                 baseType = Type alias,
                 alias := new_tag_name
             ]]
+            ntyp.flags |= typ.flags & ~TypeDeclFlags isTag
             rblock.list |> emplace_new <| new [[ExprCall() at=typ.at,
                 name:="replaceTypeWithTypeDecl",
                 arguments:=[{ExpressionPtr
                     new [[ExprVar() at=typ.at, name:="rules"]];
                     new [[ExprConstString() at=typ.at, value:=new_tag_name]] |> generatedExpr();
                     new [[ExprCall() at=typ.at, name:="add_type_ptr_ref",
-                        arguments := [{ExpressionPtr[1] clone_expression(typ.firstType.dimExpr[0]) }]
+                        arguments := [{ExpressionPtr
+                            clone_expression(typ.firstType.dimExpr[0]);
+                            new [[ExprConstBitfield() at=typ.at, value:=ntyp.flags]]
+                        }]
                     ]]
-                }]]]
+                }]
+            ]]
             return <- ntyp
         if typ.firstType != null
             visitTD(typ.firstType)
