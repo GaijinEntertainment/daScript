@@ -3235,7 +3235,7 @@ namespace das {
         bool isCountOrUCount ( Expression * expr ) const {
             if ( !expr->rtti_isCallFunc() ) return false;
             auto call = static_cast<ExprCallFunc *>(expr);
-            return  call->func->builtIn && call->func->module->name=="$" && (call->name=="count" || call->name=="ucount");
+            return  call->func && call->func->builtIn && call->func->module->name=="$" && (call->name=="count" || call->name=="ucount");
         }
         virtual void preVisitForSource ( ExprFor * ffor, Expression * that, bool last ) override {
             Visitor::preVisitForSource(ffor, that, last);
