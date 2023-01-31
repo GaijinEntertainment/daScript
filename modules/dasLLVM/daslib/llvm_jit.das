@@ -2862,6 +2862,14 @@ class LlvmJitVisitor : AstVisitor
             var v_ptr = getV_ptr(c.variable, false)
             if v_ptr == null
                 v_ptr = getE_ptr(c.expression, false)
+            // TODO:
+            //  recapture block arguments
+            if v_ptr == null
+                // its a function argument
+                for a in thisFunc.arguments
+                    if a == c.variable
+                        v_ptr = LLVMGetParam(ffunc, uint(c.expression.argumentIndex))
+                        break
             if v_ptr == null
                 failed_E(expr, "capture {c.variable.name} not found")
                 return
