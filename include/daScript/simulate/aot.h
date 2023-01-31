@@ -2975,6 +2975,8 @@ namespace das {
         }
         return -1;
     }
+
+    void builtin_try_recover ( const Block & try_block, const Block & catch_block, Context * context, LineInfoArg * at );
 }
 
 #if defined(_MSC_VER)

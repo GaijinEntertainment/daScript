@@ -26,7 +26,7 @@ namespace das {
         if ( !inv->firstType->isSameType(*func->result, RefMatters::yes, ConstMatters::yes, TemporaryMatters::yes) ) {
             return false;
         }
-        for ( uint32_t i=0, is=func->arguments.size(); i!=is; ++i ) {
+        for ( size_t i=0, is=func->arguments.size(); i!=is; ++i ) {
             if ( !inv->argTypes[i]->isSameType(*func->arguments[i]->type, RefMatters::yes, ConstMatters::yes, TemporaryMatters::yes, AllowSubstitute::yes, false, false) ) {
                 return false;
             }
@@ -53,7 +53,7 @@ namespace das {
         if ( !inv->firstType->isSameType(*func->result, RefMatters::yes, ConstMatters::yes, TemporaryMatters::yes) ) {
             return false;
         }
-        for ( uint32_t i=0, is=inv->argTypes.size(); i!=is; ++i ) {    // note, we skip 1st argument
+        for ( size_t i=0, is=inv->argTypes.size(); i!=is; ++i ) {    // note, we skip 1st argument
             if ( !inv->argTypes[i]->isSameType(*func->arguments[i+1]->type, RefMatters::yes, ConstMatters::yes, TemporaryMatters::yes, AllowSubstitute::yes, false, false) ) {
                 return false;
             }
@@ -248,7 +248,7 @@ namespace das {
         func->result->collectAliasing(resTypeAliases, rdep, false);
     // do arguments
         func->resultAliases.clear();
-        for ( int i=0, is=func->arguments.size(); i!=is; ++i ) {
+        for ( size_t i=0, is=func->arguments.size(); i!=is; ++i ) {
             if ( !(func->arguments[i]->type->isRef() || func->arguments[i]->type->baseType==Type::tPointer) ) {
                 continue;
             }
@@ -258,7 +258,7 @@ namespace das {
             for ( auto resT : resTypeAliases ) {
                 for ( auto alias : typeAliases ) {
                     if ( alias.second.first->isSameType(*(resT.second.first),RefMatters::no,ConstMatters::no,TemporaryMatters::no,AllowSubstitute::yes,false,false) ) {
-                        func->resultAliases.push_back(i);
+                        func->resultAliases.push_back(int(i));
                         if ( logAliasing ) logs << "\targument " << i << " aliasing result with type "
                             << func->arguments[i]->type->describe() << "\n";
                         goto nada;

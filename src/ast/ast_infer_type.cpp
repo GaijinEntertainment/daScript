@@ -5239,7 +5239,19 @@ namespace das {
             return Visitor::visit(expr);
         }
     // ExprTryCatch
-        // do nothing
+        ExpressionPtr visit ( ExprTryCatch * expr ) override {
+            if ( program->policies.jit ) {
+                auto tryBlock = make_smart<ExprMakeBlock>(expr->try_block->at,expr->try_block);
+                ((ExprBlock *)tryBlock->block.get())->returnType = make_smart<TypeDecl>(Type::autoinfer);
+                auto catchBlock = make_smart<ExprMakeBlock>(expr->catch_block->at,expr->catch_block);
+                ((ExprBlock *)catchBlock->block.get())->returnType = make_smart<TypeDecl>(Type::autoinfer);
+                auto ccall = make_smart<ExprCall>(expr->at, "builtin_try_recover");
+                ccall->arguments.push_back(tryBlock);
+                ccall->arguments.push_back(catchBlock);
+                return ccall;
+            }
+            return Visitor::visit(expr);
+        }
     // ExprReturn
         bool inferReturnType ( TypeDeclPtr & resType, ExprReturn * expr ) {
             if ( resType->isAuto() ) {

@@ -1256,6 +1256,8 @@ namespace das
         //      1. disables [fastcall]
         bool profiler = false;
         string profile_module;
+    // jit
+        bool jit = true;
     };
 
     struct CommentReader : public ptr_ref_count {

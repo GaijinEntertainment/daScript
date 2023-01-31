@@ -1810,9 +1810,10 @@ namespace das
         auto atba = abiThisBlockArg;
         char * EP, * SP;
         stack.watermark(EP,SP);
+        vec4f vres = v_zero();
 #if DAS_ENABLE_EXCEPTIONS
         try {
-            return node->eval(*this);
+            vres = node->eval(*this);
         } catch ( const dasException & ) {
             /*
              to_err("\nunhandled exception\n");
@@ -1826,23 +1827,22 @@ namespace das
             abiCMRES = acm;
             abiThisBlockArg = atba;
             stack.pop(EP,SP);
-            return v_zero();
         }
 #else
         jmp_buf ev;
         jmp_buf * JB = throwBuf;
         throwBuf = &ev;
         if ( !setjmp(ev) ) {
-            return node->eval(*this);
+            vres = node->eval(*this);
         } else {
             abiArg = aa;
             abiCMRES = acm;
             abiThisBlockArg = atba;
             stack.pop(EP,SP);
-            throwBuf = JB;
-            return v_zero();
         }
+        throwBuf = JB;
 #endif
+        return vres;
     }
 
     bool Context::runWithCatch ( const callable<void()> & subexpr ) {
@@ -1851,10 +1851,11 @@ namespace das
         auto atba = abiThisBlockArg;
         char * EP, * SP;
         stack.watermark(EP,SP);
+        bool bres = false;
 #if DAS_ENABLE_EXCEPTIONS
         try {
             subexpr();
-            return true;
+            bres = true;
         } catch ( const dasException & ) {
             /*
              to_err("\nunhandled exception\n");
@@ -1868,7 +1869,6 @@ namespace das
             abiCMRES = acm;
             abiThisBlockArg = atba;
             stack.pop(EP,SP);
-            return false;
         }
 #else
         jmp_buf ev;
@@ -1876,17 +1876,16 @@ namespace das
         throwBuf = &ev;
         if ( !setjmp(ev) ) {
             subexpr();
+            bres = true;
         } else {
             abiArg = aa;
             abiCMRES = acm;
             abiThisBlockArg = atba;
             stack.pop(EP,SP);
-            throwBuf = JB;
-            return false;
         }
         throwBuf = JB;
-        return true;
 #endif
+        return bres;
     }
 
     vec4f Context::evalWithCatch ( SimFunction * fnPtr, vec4f * args, void * res ) {
@@ -1895,9 +1894,10 @@ namespace das
         auto atba = abiThisBlockArg;
         char * EP, * SP;
         stack.watermark(EP,SP);
+        vec4f vres = v_zero();
 #if DAS_ENABLE_EXCEPTIONS
         try {
-            return callWithCopyOnReturn(fnPtr, args, res, 0);
+            vres = callWithCopyOnReturn(fnPtr, args, res, 0);
         } catch ( const dasException & ) {
             /*
             to_err("\nunhandled exception\n");
@@ -1911,23 +1911,22 @@ namespace das
             abiCMRES = acm;
             abiThisBlockArg = atba;
             stack.pop(EP,SP);
-            return v_zero();
         }
 #else
         jmp_buf ev;
         jmp_buf * JB = throwBuf;
         throwBuf = &ev;
         if ( !setjmp(ev) ) {
-            return callWithCopyOnReturn(fnPtr, args, res, 0);
+            vres = callWithCopyOnReturn(fnPtr, args, res, 0);
         } else {
             abiArg = aa;
             abiCMRES = acm;
             abiThisBlockArg = atba;
             stack.pop(EP,SP);
-            throwBuf = JB;
-            return v_zero();
         }
+        throwBuf = JB;
 #endif
+        return vres;
     }
 
     struct FileInfoCollector : SimVisitor {
