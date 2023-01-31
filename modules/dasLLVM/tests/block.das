@@ -3,6 +3,8 @@ require dastest/testing_boost
 require llvm/llvm_jit
 require jit
 
+require daslib/lpipe
+
 var g_A = 0
 var g_B = 0.
 
@@ -70,6 +72,24 @@ def test_make_block_nested(q:float)
             f.b = b + q
     return f
 
+var g_a_i : array<int>
+
+[jit]
+def capture_args ( var a : array<int> )
+    invoke <| $ ( var b : array<int> )
+        invoke <|
+            g_a_i <- b
+    lpipe(a)
+
+var g_i : int
+
+[jit]
+def capture_args_ref ( var a : int& )
+    invoke <| $ ( var b : int& )
+        invoke <|
+            g_i <- b
+    lpipe(a)
+
 [test]
 def test_block ( t:T? )
     t |> run("make block") <| @ ( t : T? )
@@ -109,3 +129,18 @@ def test_block ( t:T? )
         var res = test_make_block_nested(10.)
         t |> equal ( 11, res.a )
         t |> equal ( 12., res.b )
+    t |> run("make block capture refval nested") <| @ ( t : T? )
+        verify(is_jit_function(@@capture_args))
+        var a <- [{auto 1;2;3;4}]
+        g_a_i |> clear
+        capture_args(a)
+        t |> equal ( 4, g_a_i |> length )
+        t |> equal ( 0, a |> length )
+    t |> run("make block capture by ref nested") <| @ ( t : T? )
+        verify(is_jit_function(@@capture_args_ref))
+        var a = 13
+        g_i = 0
+        capture_args_ref(a)
+        t |> equal ( 13, g_i )
+        t |> equal ( a, 0 )
+
