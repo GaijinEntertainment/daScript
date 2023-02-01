@@ -7,6 +7,7 @@ enum Color
     green
     blue
 
+[sideeffects]
 def enum_match ( color:Color ) : int
     match(color) <|
         if Color black
@@ -16,11 +17,12 @@ def enum_match ( color:Color ) : int
         if $v(anything)
             return -1
 
-def enum_static_match ( color ) : int
+[sideeffects]
+def enum_static_match ( color, blah ) : int
     static_match(color) <|
         if Color black
             return 0
-        if 1234
+        if blah
             return 1
         if $v(anything)
             return -1
@@ -33,7 +35,7 @@ def test_all_match ( t:T? )
         t |> equal ( -1, enum_match(Color green) )
         t |> equal ( -1, enum_match(Color blue) )
     t |> run("enum static match") <| @@ ( t : T? )
-        t |> equal ( 0, enum_static_match(Color black) )
-        t |> equal ( 1, enum_static_match(1234) )
-        t |> equal ( -1, enum_static_match(5678) )
-        t |> equal ( -1, enum_static_match("a") )
+        t |> equal ( 0, enum_static_match(Color black,null) )
+        t |> equal ( 1, enum_static_match(1234,1234) )
+        t |> equal ( -1, enum_static_match(5678,1234) )
+        t |> equal ( -1, enum_static_match("a",1234) )

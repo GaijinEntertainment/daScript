@@ -82,6 +82,10 @@ def match_any ( what:TypeDeclPtr; wth:ExpressionPtr; access:ExpressionPtr; var t
         log_m("\tadd condition {describe(access)} == {describe(wth)}\n")
         to.conditions |> emplace_new <| qmacro( $e(access) == $e(wth) )
         return true
+    elif wth._type!=null && is_same_type(what,wth._type, RefMatters no, ConstMatters no, TemporaryMatters no)
+        log_m("\tadd condition {describe(access)} == {describe(wth)}\n")
+        to.conditions |> emplace_new <| qmacro( $e(access) == $e(wth) )
+        return true
     else
         to.errors |> match_error("usupported match syntax", wth.at)
         return false
