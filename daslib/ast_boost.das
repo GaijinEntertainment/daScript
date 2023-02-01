@@ -842,6 +842,12 @@ def public isCMRESType ( blockT:TypeDeclPtr )
     return blockT!=null && blockT.isRefType && !blockT.flags.ref
 
 def private debug_expression_impl ( var writer:StringBuilderWriter; expr:ExpressionPtr; tabs:int=0 )
+    if expr==null
+        writer |> write("null")
+        return
+    if empty(expr.__rtti)
+        writer |> write("[NO RTTI]")
+        return
     writer |> write("({expr.__rtti}")
     if string(expr.__rtti) |> starts_with("ExprConst")
         writer |> write(" {describe(expr)})")

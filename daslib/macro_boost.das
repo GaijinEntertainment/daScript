@@ -21,10 +21,12 @@ class MacroVerifyMacro : AstFunctionAnnotation
     //!        return [[ExpressionPtr]]
     def override transform ( var call : smart_ptr<ExprCallFunc>; var errors : das_string ) : ExpressionPtr
         // if ..
-        return <- qmacro_block() <|
+        var res <- qmacro_block() <|
             if !$e(call.arguments[0])
                 macro_error($e(call.arguments[1]),$e(call.arguments[2]),$e(call.arguments[3]))
                 return [[ExpressionPtr]]
+        res |> force_at(call.at)
+        return <- res
 
 [macro]
 class CaptureBlock : AstVisitor
