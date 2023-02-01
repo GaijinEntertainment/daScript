@@ -24,12 +24,13 @@ struct MatchTo
     conditions   : array<ExpressionPtr>
     declarations : array<ExpressionPtr>
     errors       : array<MatchError>
+    failed       : bool
 
 def log_m ( msg:string )
     static_if LOG_MATCH
         to_log(LOG_INFO, msg)
 
-def match_error ( var errors : array<MatchError>; msg:string; at:LineInfo )
+def match_error ( var errors : array<MatchError>; msg:string; at:LineInfo ) // !!!do not put access.at in there
     errors |> push([[MatchError msg=msg, at=unsafe(addr(at))]])
 
 // [[ ExprMakeStruct ]]
@@ -56,6 +57,33 @@ def match_any ( what:TypeDeclPtr; wths:ExprMakeStruct?; access:ExpressionPtr; va
                 return false
     return true
 
+// as variant
+def match_any ( what:TypeDeclPtr; wthAs:ExprAsVariant?; access:ExpressionPtr; var to:MatchTo )
+    to.conditions |> emplace_new <| new [[ExprIsVariant() at=wthAs.at,
+        value <- clone_expression(access),
+        name := wthAs.name
+    ]]
+    var new_access <- new [[ExprAsVariant() at=wthAs.at,
+        value <- clone_expression(access),
+        name := wthAs.name
+    ]]; defer_delete(new_access)
+    return match_any(what, wthAs.value, access, to)
+
+// match_type(expr, type)
+def match_type ( what:TypeDeclPtr; wthmt:ExprCall?; access:ExpressionPtr; var to:MatchTo )
+    assume value = wthmt.arguments[0]
+    assume mtype = wthmt.arguments[1]._type
+    if mtype==null
+        to.errors |> match_error("unresolved type", wthmt.arguments[1].at)
+        to.failed = true
+        return false
+    if is_same_type(what, mtype, RefMatters no, ConstMatters no, TemporaryMatters no)
+        log_m("\tmatch_type {describe(what)} passed\n")
+        return match_any(what, value, access, to)
+    else
+        to.errors |> match_error("mismatching type {describe(what)} vs {describe(mtype)}", wthmt.arguments[1].at)
+        return false
+
 def match_any ( what:TypeDeclPtr; wth:ExpressionPtr; access:ExpressionPtr; var to:MatchTo )
     log_m("match {describe(what)} {debug_expression(wth)}:\n")
     if wth is ExprTag
@@ -72,6 +100,10 @@ def match_any ( what:TypeDeclPtr; wth:ExpressionPtr; access:ExpressionPtr; var t
             return false
     elif wth is ExprMakeStruct
         return match_any(what, wth as ExprMakeStruct, access, to)
+    elif wth is ExprAsVariant
+        return match_any(what, wth as ExprAsVariant, access, to)
+    elif (wth is ExprCall) && ((wth as ExprCall).name=="match_type" || (wth as ExprCall).name=="__::match`match_type")
+        return match_type(what, wth as ExprCall, access, to)
     elif string(wth.__rtti) |> starts_with("ExprConst")
         if wth._type == null
             to.errors |> match_error("unresolved constant type", wth.at)
@@ -86,8 +118,12 @@ def match_any ( what:TypeDeclPtr; wth:ExpressionPtr; access:ExpressionPtr; var t
         log_m("\tadd condition {describe(access)} == {describe(wth)}\n")
         to.conditions |> emplace_new <| qmacro( $e(access) == $e(wth) )
         return true
+    elif wth._type!=null && !is_same_type(what,wth._type, RefMatters no, ConstMatters no, TemporaryMatters no)
+        to.errors |> match_error("expression type mismatch {wth.__rtti}", wth.at)
+        return false
     else
-        to.errors |> match_error("usupported match syntax", wth.at)
+        to.errors |> match_error("usupported match syntax {wth.__rtti}", wth.at)
+        to.failed = true
         return false
 
 def join_conditions ( var conditions:array<ExpressionPtr> )
@@ -151,7 +187,7 @@ class MatchMacro : AstCallMacro
                 new_iff.if_true <- nblk
                 new_iff.if_false <- iff
                 iff <- new_iff
-            elif report_match_errors
+            elif report_match_errors || to.failed
                 any_errors = true
                 if to.errors|>length != 0
                     for e in to.errors
@@ -159,6 +195,9 @@ class MatchMacro : AstCallMacro
                 else
                     macro_error(prog, eto.at, "unspecified match error")
                 break
+            static_if LOG_MATCH
+                for e in to.errors
+                    log_m("\tERROR:: {e.msg} at {describe(*e.at)}\n")
             delete to
         if any_errors
             return [[ExpressionPtr]]
@@ -171,4 +210,4 @@ class MatchMacro : AstCallMacro
 class StaticMatchMacro : MatchMacro
     override report_match_errors = false
 
-
+def public match_type(anything,anytype) : void {}

@@ -27,6 +27,14 @@ def enum_static_match ( color, blah ) : int
         if $v(anything)
             return -1
 
+[sideeffects]
+def static_match_by_type ( what ) : string
+    static_match(what) <|
+        if match_type($v(expr),type<int>)
+            return "int {expr}"
+        if $v(anything)
+            return "anything"
+
 [test]
 def test_all_match ( t:T? )
     t |> run("enum match") <| @@ ( t : T? )
