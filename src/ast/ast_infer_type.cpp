@@ -5504,7 +5504,7 @@ namespace das {
                 expr->cond = Expression::autoDereference(expr->cond);
             }
             // now, for the static if
-            if ( enableInferTimeFolding || expr->isStatic ) {
+            if ( (enableInferTimeFolding && !expr->doNotFold) || expr->isStatic ) {
                 if ( auto constCond = getConstExpr(expr->cond.get()) ) {
                     reportAstChanged();
                     auto condR = static_pointer_cast<ExprConstBool>(constCond)->getValue();

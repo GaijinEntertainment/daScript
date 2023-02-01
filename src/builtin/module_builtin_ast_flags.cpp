@@ -228,6 +228,13 @@ namespace das {
         return ft;
     }
 
+    TypeDeclPtr makeExprIfFlags() {
+        auto ft = make_smart<TypeDecl>(Type::tBitfield);
+        ft->alias = "IfFlags";
+        ft->argNames = { "isStatic", "doNotFold" };
+        return ft;
+    }
+
     void Module_Ast::registerFlags(ModuleLibrary & ) {
         // FLAGS?
         addAlias(makeTypeDeclFlags());
@@ -257,5 +264,6 @@ namespace das {
         addAlias(makeExprMakeBlockFlags());
         addAlias(makeExprCopyFlags());
         addAlias(makeExprMoveFlags());
+        addAlias(makeExprIfFlags());
     }
 }

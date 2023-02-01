@@ -1196,7 +1196,13 @@ namespace das
         virtual bool rtti_isIfThenElse() const override { return true; }
         virtual uint32_t getEvalFlags() const override;
         ExpressionPtr   cond, if_true, if_false;
-        bool isStatic = false;
+        union {
+            struct {
+                bool isStatic : 1;
+                bool doNotFold : 1;
+            };
+            uint32_t ifFlags = 0;
+        };
     };
 
     struct MakeFieldDecl;

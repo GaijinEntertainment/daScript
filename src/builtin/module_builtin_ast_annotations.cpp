@@ -438,7 +438,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(cond)>("cond");
             addField<DAS_BIND_MANAGED_FIELD(if_true)>("if_true");
             addField<DAS_BIND_MANAGED_FIELD(if_false)>("if_false");
-            addField<DAS_BIND_MANAGED_FIELD(isStatic)>("isStatic");
+            addFieldEx ( "if_flags", "ifFlags", offsetof(ExprIfThenElse, ifFlags), makeExprIfFlags() );
         }
     };
 

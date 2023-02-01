@@ -102,6 +102,15 @@ def join_conditions ( var conditions:array<ExpressionPtr> )
 [call_macro(name="match")]
 class MatchMacro : AstCallMacro
     report_match_errors = true
+    def override preVisit ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprCallMacro> ) : void
+        return  if expr.arguments |> length != 2
+        assume blk = expr.arguments[1]
+        return  if !blk._type.isGoodBlockType
+        return  if !(blk is ExprMakeBlock)
+        var eblk = ((blk as ExprMakeBlock)._block as ExprBlock)
+        for ee in eblk.list
+            if ee is ExprIfThenElse
+                (ee as ExprIfThenElse).if_flags |= IfFlags doNotFold
     def override visit ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr
         macro_verify(expr.arguments |> length == 2, prog, expr.at, "expecting match(what) <| block")
         assume what = expr.arguments[0]
@@ -112,14 +121,9 @@ class MatchMacro : AstCallMacro
         var eblk = ((blk as ExprMakeBlock)._block as ExprBlock)
         macro_verify(eblk.finalList |> length == 0, prog, expr.at, "match `block` argument can't have finally section")
         for ee in eblk.list
-            if ee is ExprCall
-                var eto = ee as ExprCall
-                macro_verify(eto.name == "__::match`to" || eto.name=="to", prog, ee.at,
-                    "match `block` argument can only contain match-to calls, not {eto.name}")
-                macro_verify(eto.arguments |> length == 2, prog, ee.at,
-                    "match `block` argument can only contain match-to calls, expecting to(with) <| block")
-                macro_verify(eto.arguments[1]._type.isGoodBlockType, prog, ee.at,
-                    "expecting to(with) <| block")
+            if ee is ExprIfThenElse
+                let eite = ee as ExprIfThenElse
+                macro_verify(eite.if_false==null, prog, expr.at, "match to `if` can't have `else` section")
             else
                 macro_error(prog, ee.at, "match `block` argument can only contain match-to calls, not {ee.__rtti}")
         let what_name = make_unique_private_name("__match_what",expr.at)
@@ -131,19 +135,16 @@ class MatchMacro : AstCallMacro
         let eli = length(eblk.list)
         var any_errors = false
         for ei in range(eli)
-            var eto = (eblk.list[eli-ei-1]) as ExprCall
+            var eto = (eblk.list[eli-ei-1]) as ExprIfThenElse
             var to : MatchTo
-            if match_any(what._type, eto.arguments[0], access, to)
-                var cond <- join_conditions(to.conditions)
-                var ablk <- unquote_block(eto.arguments[1])
-                var new_iff <- new [[ExprIfThenElse() at=eto.at, cond<-cond]]
+            if match_any(what._type, eto.cond, access, to)
+                var new_iff <- new [[ExprIfThenElse() at=eto.at, cond<-join_conditions(to.conditions)]]
                 var nblk <- new [[ExprBlock() at=eto.at]]
                 for d in to.declarations
                     nblk.list |> emplace(d)
-                for l in ablk.list
+                for l in (eto.if_true as ExprBlock).list
                     nblk.list |> emplace_new <| clone_expression(l)
                 new_iff.if_true <- nblk
-                ablk := null
                 new_iff.if_false <- iff
                 iff <- new_iff
             elif report_match_errors
@@ -166,6 +167,4 @@ class MatchMacro : AstCallMacro
 class StaticMatchMacro : MatchMacro
     override report_match_errors = false
 
-[sideeffects]
-def public to(antyhing; anyBlock) {}
 

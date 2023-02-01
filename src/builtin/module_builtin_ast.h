@@ -169,4 +169,5 @@ namespace das {
     TypeDeclPtr makeVariableAccessFlags();
     TypeDeclPtr makeExprCopyFlags();
     TypeDeclPtr makeExprMoveFlags();
+    TypeDeclPtr makeExprIfFlags();
 }

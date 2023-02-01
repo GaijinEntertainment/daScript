@@ -2109,7 +2109,7 @@ namespace das {
         cexpr->if_true = if_true->clone();
         if ( if_false )
             cexpr->if_false = if_false->clone();
-        cexpr->isStatic = isStatic;
+        cexpr->ifFlags = ifFlags;
         return cexpr;
     }
 

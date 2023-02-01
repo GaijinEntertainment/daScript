@@ -9,20 +9,20 @@ enum Color
 
 def enum_match ( color:Color ) : int
     match(color) <|
-        to(Color black) <|
+        if Color black
             return 0
-        to(Color red) <|
+        if Color red
             return 1
-        to($v(anything)) <|
+        if $v(anything)
             return -1
 
 def enum_static_match ( color ) : int
     static_match(color) <|
-        to(Color black) <|
+        if Color black
             return 0
-        to(1234) <|
+        if 1234
             return 1
-        to($v(anything)) <|
+        if $v(anything)
             return -1
 
 [test]
