@@ -1,6 +1,6 @@
 
 require daslib/contracts
-require safe_addr
+require daslib/safe_addr
 
 require UnitTest
 
@@ -21,7 +21,7 @@ def print_arr ( blah )
     for i in range(length(blah))
         print("{blah[i]}\n")
 
-[expect_not_ref(arg)]
+[!expect_ref(arg)]
 def test_accept_ref(var arg : int)
     print("{typeinfo(typename arg)}\n")
 
