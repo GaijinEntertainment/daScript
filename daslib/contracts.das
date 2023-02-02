@@ -168,3 +168,39 @@ class IsAnyFunctionNonPtrMacro : IsAnyType
                         errors := "argument {argv.name} is not a function, it is {describe(typ)}"
                         return false
         return true
+
+[contract(name="expect_ref")]
+class IsRefMacro : IsAnyType
+    //! [expect_ref(argname)] contract, which only accepts references
+    def override isCompatible ( var func:FunctionPtr; var types:VectorTypeDeclPtr; decl:AnnotationDeclaration; var errors:das_string ) : bool
+        for fna,typ in func.arguments,types // note: N^2
+            for argv in decl.arguments
+                if fna.name==argv.name
+                    if !typ.isRef
+                        errors := "argument {argv.name} is not a reference, it is {describe(typ)}"
+                        return false
+        return true
+
+[contract(name="expect_not_ref")]
+class IsNotRefMacro : IsAnyType
+    //! [expect_not_ref(argname)] contract, which only accepts non references
+    def override isCompatible ( var func:FunctionPtr; var types:VectorTypeDeclPtr; decl:AnnotationDeclaration; var errors:das_string ) : bool
+        for fna,typ in func.arguments,types // note: N^2
+            for argv in decl.arguments
+                if fna.name==argv.name
+                    if typ.isRef
+                        errors := "argument {argv.name} is a reference (expected not references only), it is {describe(typ)}"
+                        return false
+        return true
+
+[contract(name="expect_pointer")]
+class IsPointer : IsAnyType
+    //! [expect_pointer(argname)] contract, which only accepts pointers
+    def override isCompatible ( var func:FunctionPtr; var types:VectorTypeDeclPtr; decl:AnnotationDeclaration; var errors:das_string ) : bool
+        for fna,typ in func.arguments,types // note: N^2
+            for argv in decl.arguments
+                if fna.name==argv.name
+                    if typ.baseType!=Type tPointer
+                        errors := "argument {argv.name} is not a pointer, it is {describe(typ)}"
+                        return false
+        return true
