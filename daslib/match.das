@@ -22,7 +22,7 @@ struct MatchError
 
 struct MatchTo
     conditions   : array<ExpressionPtr>
-    declarations : array<ExpressionPtr>
+    declarations : table<string; ExpressionPtr>
     errors       : array<MatchError>
     failed       : bool
 
@@ -89,11 +89,13 @@ def match_any ( what:TypeDeclPtr; wth:ExpressionPtr; access:ExpressionPtr; var t
     if wth is ExprTag
         var tag = wth as ExprTag
         if tag.subexpr is ExprVar
-            let tname & = unsafe((tag.subexpr as ExprVar).name)
-            var decl <- qmacro_expr <|
-                let $i(tname) & = unsafe($e(access))
-            to.declarations |> emplace(decl)
-            log_m("\tadd variable {tname} as {describe(decl)}\n")
+            let tname  = string((tag.subexpr as ExprVar).name)
+            if to.declarations |> key_exists(tname)
+                to.errors |> match_error("duplicate variable {tname}", tag.at)
+                return false
+            unsafe
+                to.declarations[tname] <- clone_expression(access)
+            log_m("\tadd variable {tname} as {describe(access)}\n")
             return true
         else
             to.errors |> match_error("invalid $v syntax", tag.at)
@@ -180,8 +182,10 @@ class MatchMacro : AstCallMacro
             if match_any(what._type, eto.cond, access, to)
                 var new_iff <- new [[ExprIfThenElse() at=eto.at, cond<-join_conditions(to.conditions)]]
                 var nblk <- new [[ExprBlock() at=eto.at]]
-                for d in to.declarations
-                    nblk.list |> emplace(d)
+                for dn,de in keys(to.declarations),values(to.declarations)
+                    var ndecl <- qmacro_expr <|
+                        let $i(dn) & = unsafe($e(de))
+                    nblk.list |> emplace(ndecl)
                 for l in (eto.if_true as ExprBlock).list
                     nblk.list |> emplace_new <| clone_expression(l)
                 new_iff.if_true <- nblk
