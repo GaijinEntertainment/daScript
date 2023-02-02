@@ -14,6 +14,9 @@ struct Bar
     a : int
     b : float
 
+struct AB
+    a, b : int
+
 [sideeffects]
 def enum_match ( color:Color ) : int
     match(color) <|
@@ -60,6 +63,14 @@ def struct_match ( b : Bar ) : int
         if $v(anything)
             return -1
 
+[sideeffects]
+def guards_match ( ab : AB ) : string
+    match(ab) <|
+        if [[AB a=$v(a), b=$v(b)]] && (b > a)
+            return "{b} > {a}"
+        if [[AB a=$v(a), b=$v(b)]]
+            return "{b} <= {a}"
+
 [test]
 def test_all_match ( t:T? )
     t |> run("enum match") <| @@ ( t : T? )
@@ -78,4 +89,8 @@ def test_all_match ( t:T? )
         t |> equal ( 0, struct_match([[Bar a=13]]) )
         t |> equal ( 23, struct_match([[Bar a=23, b=13.0]]) )
         t |> equal ( -1, struct_match([[Bar a=23, b=14.0]]) )
+    t |> run("guards match") <| @@ ( t : T? )
+        t |> equal( "2 > 1", guards_match([[AB a=1, b=2]]) )
+        t |> equal( "1 <= 2", guards_match([[AB a=2, b=1]]) )
+
 

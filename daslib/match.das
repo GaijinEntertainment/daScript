@@ -84,6 +84,19 @@ def match_type ( what:TypeDeclPtr; wthmt:ExprCall?; access:ExpressionPtr; var to
         to.errors |> match_error("mismatching type {describe(what)} vs {describe(mtype)}", wthmt.arguments[1].at)
         return false
 
+// match guards
+def match_guards ( what:TypeDeclPtr; wth:ExprOp2?; access:ExpressionPtr; var to:MatchTo )
+    if match_any(what, wth.left, access, to)
+        log_m("\tguards {describe(wth.right)} at {wth.right.at}\n")
+        var guards <- clone_expression(wth.right)
+        apply_template(guards) <| $ ( rules )
+            for dv,dn in keys(to.declarations),values(to.declarations)
+                rules |> replaceVariable(dv) <| clone_expression(dn)
+        to.conditions |> emplace(guards)
+        return true
+    else
+        return false
+
 def match_any ( what:TypeDeclPtr; wth:ExpressionPtr; access:ExpressionPtr; var to:MatchTo )
     log_m("match {describe(what)} {debug_expression(wth)}:\n")
     if wth is ExprTag
@@ -106,6 +119,8 @@ def match_any ( what:TypeDeclPtr; wth:ExpressionPtr; access:ExpressionPtr; var t
         return match_any(what, wth as ExprAsVariant, access, to)
     elif (wth is ExprCall) && ((wth as ExprCall).name=="match_type" || (wth as ExprCall).name=="__::match`match_type")
         return match_type(what, wth as ExprCall, access, to)
+    elif (wth is ExprOp2) && (wth as ExprOp2).op=="&&"
+        return match_guards(what, wth as ExprOp2, access, to)
     elif string(wth.__rtti) |> starts_with("ExprConst")
         if wth._type == null
             to.errors |> match_error("unresolved constant type", wth.at)
