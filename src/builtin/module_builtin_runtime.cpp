@@ -993,6 +993,13 @@ namespace das
         return true;
     }
 
+    bool is_reporting_compilation_errors ( ) {
+        if ( daScriptEnvironment::bound && daScriptEnvironment::bound->g_Program ) {
+            return daScriptEnvironment::bound->g_Program->reportingInferErrors;
+        }
+        return false;
+    }
+
     // static storage
 
     DAS_THREAD_LOCAL das_hash_map<uint64_t, void*> g_static_storage;
@@ -1286,6 +1293,8 @@ namespace das
         addExtern<DAS_BIND_FUN(is_compiling_macros_in_module)>(*this, lib, "is_compiling_macros_in_module",
             SideEffects::accessExternal, "is_compiling_macros_in_module")
                 ->args({"name","context"});
+        addExtern<DAS_BIND_FUN(is_reporting_compilation_errors)>(*this, lib, "is_reporting_compilation_errors",
+            SideEffects::accessExternal, "is_reporting_compilation_errors");
         // iterator functions
         addExtern<DAS_BIND_FUN(builtin_iterator_first)>(*this, lib, "_builtin_iterator_first",
             SideEffects::modifyArgumentAndExternal, "builtin_iterator_first")

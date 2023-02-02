@@ -1475,6 +1475,17 @@ namespace das {
                 return true;
             }
         }
+        virtual bool canFoldReturnResult ( ExprCallMacro * expr ) override {
+            if ( auto fnCanFoldResult = get_canFoldReturnResult(classPtr) ) {
+                bool result = true;
+                runMacroFunction(context, "canFoldReturnResult", [&]() {
+                    result = invoke_canFoldReturnResult(context,fnCanFoldResult,classPtr,expr);
+                });
+                return result;
+            } else {
+                return true;
+            }
+        }
     protected:
         void *      classPtr;
         Context *   context;

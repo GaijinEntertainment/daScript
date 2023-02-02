@@ -18,7 +18,7 @@ struct AB
     a, b : int
 
 [sideeffects]
-def enum_match ( color:Color ) : int
+def enum_match ( color:Color )
     match(color) <|
         if Color black
             return 0
@@ -28,7 +28,7 @@ def enum_match ( color:Color ) : int
             return -1
 
 [sideeffects]
-def enum_static_match ( color, blah ) : int
+def enum_static_match ( color, blah )
     static_match(color) <|
         if Color black
             return 0
@@ -38,7 +38,7 @@ def enum_static_match ( color, blah ) : int
             return -1
 
 [sideeffects]
-def static_match_by_type ( what ) : string
+def static_match_by_type ( what )
     static_match(what) <|
         if match_type($v(expr),type<int>)
             return "int {expr}"
@@ -46,7 +46,7 @@ def static_match_by_type ( what ) : string
             return "anything"
 
 [sideeffects]
-def struct_match ( f : Foo ) : int
+def struct_match ( f : Foo )
     match(f) <|
         if [[Foo a=13]]
             return 0
@@ -54,7 +54,7 @@ def struct_match ( f : Foo ) : int
             return anyA
 
 [sideeffects]
-def struct_match ( b : Bar ) : int
+def struct_match ( b : Bar )
     match(b) <|
         if [[Bar a=13]]
             return 0
@@ -64,7 +64,7 @@ def struct_match ( b : Bar ) : int
             return -1
 
 [sideeffects]
-def guards_match ( ab : AB ) : string
+def guards_match ( ab : AB )
     match(ab) <|
         if [[AB a=$v(a), b=$v(b)]] && (b > a)
             return "{b} > {a}"

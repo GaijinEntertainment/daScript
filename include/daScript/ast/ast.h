@@ -1144,6 +1144,7 @@ namespace das
         virtual ExpressionPtr visit (  Program *, Module *, ExprCallMacro * ) { return nullptr; }
         virtual void seal( Module * m ) { module = m; }
         virtual bool canVisitArguments ( ExprCallMacro * ) { return true; }
+        virtual bool canFoldReturnResult ( ExprCallMacro * ) { return true; }
         string name;
         Module * module = nullptr;
     };
@@ -1386,6 +1387,7 @@ namespace das
         uint32_t                    globalInitStackSize = 0;
         uint32_t                    globalStringHeapSize = 0;
         bool                        folding = false;
+        bool                        reportingInferErrors = false;
         union {
             struct {
                 bool    failToCompile : 1;

@@ -57,6 +57,7 @@ namespace das {
         vector<ExprAssume *>    assume;
         vector<size_t>          varStack;
         vector<size_t>          assumeStack;
+        bool                    canFoldResult = true;
         das_hash_set<int32_t>   labels;
         size_t                  fieldOffset = 0;
         int32_t                 fieldIndex = 0;
@@ -1627,6 +1628,7 @@ namespace das {
         }
         virtual void preVisit ( Function * f ) override {
             Visitor::preVisit(f);
+            canFoldResult = true;
             unsafeDepth = 0;
             func = f;
             func->hasReturn = false;
@@ -1694,7 +1696,7 @@ namespace das {
         }
         virtual FunctionPtr visit ( Function * that ) override {
             // if function got no 'result', function is a void function
-            if ( !func->hasReturn ) {
+            if ( !func->hasReturn && canFoldResult ) {
                 if ( func->result->isAuto() ) {
                     func->result = make_smart<TypeDecl>(Type::tVoid);
                     reportAstChanged();
@@ -4205,7 +4207,7 @@ namespace das {
                               block->at, CompilationError::invalid_block);
                     }
                 }
-                if ( !block->hasReturn && block->type->isAuto() ) {
+                if ( !block->hasReturn && canFoldResult && block->type->isAuto() ) {
                     block->returnType = make_smart<TypeDecl>(Type::tVoid);
                     block->type = make_smart<TypeDecl>(Type::tVoid);
                     setBlockCopyMoveFlags(block);
@@ -6009,6 +6011,7 @@ namespace das {
         virtual void preVisit ( ExprCallMacro * expr ) override {
             auto errc = ctx.thisProgram->errors.size();
             auto thisModule = ctx.thisProgram->thisModule.get();
+            canFoldResult = expr->macro->canFoldReturnResult(expr) && canFoldResult;
             expr->macro->preVisit(ctx.thisProgram, thisModule, expr);
             if ( errc==ctx.thisProgram->errors.size() ) {
                 error("unsupported call macro " + expr->macro->name,  "", "",
@@ -7581,7 +7584,9 @@ namespace das {
                             return false;
                         }
                         if ( anyWork ) {                        // if macro did anything, we done
+                            reportingInferErrors = true;
                             inferTypesDirty(logs, true);
+                            reportingInferErrors = false;
                             if ( failed() ) {                   // if it failed to infer types after, we report it
                                 error("macro " + mod->name + "::" + pm->name + " failed to infer", "", "", LineInfo());
                                 anyMacrosFailedToInfer = true;
@@ -7600,7 +7605,11 @@ namespace das {
             libGroup.foreach(modMacro, "*");
         } while ( !failed() && anyMacrosDidWork );
     failed_to_infer:;
-        if ( failed() && !anyMacrosFailedToInfer && !macroException ) inferTypesDirty(logs, true);
+        if ( failed() && !anyMacrosFailedToInfer && !macroException ) {
+            reportingInferErrors = true;
+            inferTypesDirty(logs, true);
+            reportingInferErrors = false;
+        }
     }
 
     void Program::inferTypesDirty(TextWriter & logs, bool verbose) {

@@ -47,6 +47,15 @@ def match_any ( what:TypeDeclPtr; wths:ExprMakeStruct?; access:ExpressionPtr; va
         to.errors |> match_error("{describe(what)} number of elements does not match [[describe(wths.makeType)}[{wths.structs|>length}] ... ]]", wths.at)
         return false
     for i in range(wths.structs|>length)
+        var fields : table<string>
+        for mf in *wths.structs[i]
+            let mfname = string(mf.name)
+            if fields |> key_exists(mfname)
+                to.errors |> match_error("duplicate field {mf.name}", mf.at)
+                return false
+            fields |> insert(mfname)
+        delete fields
+    for i in range(wths.structs|>length)
         for mf in *wths.structs[i]
             var newAccess <- whatDim==1 ? qmacro($e(access).$f(mf.name)) : qmacro($e(access)[$v(i)].$f(mf.name))
             var fdecl = find_structure_field(what.structType, string(mf.name))
@@ -159,11 +168,18 @@ def join_conditions ( var conditions:array<ExpressionPtr> )
 [call_macro(name="match")]
 class MatchMacro : AstCallMacro
     report_match_errors = true
+    def override canVisitArguments ( expr:smart_ptr<ExprCallMacro> ) : bool
+        // if we are reporting errors, and macro did not fold - no point showing errors inside match - there will be too many, and they are meaningless
+        return !is_reporting_compilation_errors()
+    def override canFoldReturnResult ( expr:smart_ptr<ExprCallMacro> ) : bool
+        // function can't decide if its void or not, until match is folded
+        return false
     def override preVisit ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprCallMacro> ) : void
         return  if expr.arguments |> length != 2
         assume blk = expr.arguments[1]
         return  if !blk._type.isGoodBlockType
         return  if !(blk is ExprMakeBlock)
+        // we mark all if's inside the match to not fold, so that we can fold the match later
         var eblk = ((blk as ExprMakeBlock)._block as ExprBlock)
         for ee in eblk.list
             if ee is ExprIfThenElse

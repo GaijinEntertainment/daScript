@@ -149,6 +149,7 @@ class AstCallMacro
     def abstract preVisit ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprCallMacro> ) : void
     def abstract visit ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr
     def abstract canVisitArguments ( expr:smart_ptr<ExprCallMacro> ) : bool
+    def abstract canFoldReturnResult ( expr:smart_ptr<ExprCallMacro> ) : bool
 
 [macro_interface]
 class AstTypeInfoMacro
