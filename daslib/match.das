@@ -62,6 +62,7 @@ def match_any ( what:TypeDeclPtr; wths:ExprMakeStruct?; access:ExpressionPtr; va
             if fdecl == null
                 to.errors |> match_error("field {mf.name} not found", mf.at)
                 return false
+            log_m("\t[[structure[{i}] {mf.name}]] match passed\n")
             if !match_any(fdecl._type, mf.value, newAccess, to)
                 return false
     return true
@@ -92,6 +93,7 @@ def match_any ( what:TypeDeclPtr; wths:ExprMakeVariant?; access:ExpressionPtr; v
                     value <- clone_expression(access),
                     name := mf.name
                 ]]
+                log_m("\t[[variant {mf.name}]] match passed\n")
                 if !match_any(ft, mf.value, newAccess, to)
                     return false
                 break
@@ -110,6 +112,7 @@ def match_any ( what:TypeDeclPtr; wthAs:ExprAsVariant?; access:ExpressionPtr; va
         value <- clone_expression(access),
         name := wthAs.name
     ]]; defer_delete(new_access)
+    log_m("\tas {wthAs.name} match passed\n")
     return match_any(what, wthAs.value, access, to)
 
 // match_type(expr, type)
