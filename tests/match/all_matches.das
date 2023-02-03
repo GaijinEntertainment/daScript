@@ -109,20 +109,28 @@ def variant_match ( v : IF )
 [sideeffects]
 def static_array_match ( A : int[3] )
     match(A) <|
-        if [[auto $v(a);$v(b);$v(c)]] && (a+b+c)==6
+        if [[auto $v(a);$v(b);$v(c)]] && (a+b+c)==6 // total of 3 elements, sum is 6
             return 1
-        if [[int 0;0;0]]
+        if [[int 0;...]]    // starts with 0
             return 0
+        if [[int ...;13]]   // ends with 13
+            return 2
+        if [[int 12;...;12]]    // starts and ends with 12
+            return 3
         if _
             return -1
 
 [sideeffects]
 def dynamic_array_match ( A : array<int> )
     match(A) <|
-        if [[auto $v(a);$v(b);$v(c)]] && (a+b+c)==6 // total of 3 elements, sum is 6
+        if [{auto $v(a);$v(b);$v(c)}] && (a+b+c)==6 // total of 3 elements, sum is 6
             return 1
-        if [{int 0;0;0}]    // first 3 elements are 0
+        if [{int 0;0;0;...}]    // first 3 are 0
             return 0
+        if [{int ...;1;2}]      // ends with 1,2
+            return 2
+        if [{int 0;1;...;2;3}]    // starts with 0,1, ends with 2,3
+            return 3
         if _
             return -1
 
@@ -159,12 +167,19 @@ def test_all_match ( t:T? )
         t |> equal(0, nested_struct_match([[Foo a=13, v=[[IF i=1]]]]))
     t |> run("static array match") <| @@ ( t : T? )
         t |> equal( 1, static_array_match([[int 1;2;3]]))
-        t |> equal( 0, static_array_match([[int 0;0;0]]))
+        t |> equal( 0, static_array_match([[int 0;1;2]]))   // strts with 0
+        t |> equal( 0, static_array_match([[int 0;0;0]]))   // strts with 0
         t |> equal(-1, static_array_match([[int 3;3;3]]))
+        t |> equal(2, static_array_match([[int 3;3;13]]))  // ends with 12
+        t |> equal(3, static_array_match([[int 12;3;12]]))  // starts and ends with 12
     t |> run("dynamic array match") <| @@ ( t : T? )
-        t |> equal( 1, dynamic_array_match([{int 1;2;3}]))
-        t |> equal( 0, dynamic_array_match([{int 0;0;0}]))
-        t |> equal( 0, dynamic_array_match([{int 0;0;0;1;2;3}]))
+        t |> equal( 1, dynamic_array_match([{int 1;2;3}]))          // summ is 6, 3 total
+        t |> equal( 0, dynamic_array_match([{int 0;0;0}]))          // first 3 are 0
+        t |> equal( 0, dynamic_array_match([{int 0;0;0;1;2;3}]))    // first 3 are 0
         t |> equal(-1, dynamic_array_match([{int 3;3;3}]))
         t |> equal(-1, dynamic_array_match([{int 1;2;3;4}]))
-        t |> equal(-1, dynamic_array_match([{int 1;2}]))
+        t |> equal(-1, dynamic_array_match([{int 2;2}]))
+        t |> equal(2, dynamic_array_match([{int 1;2}]))     // ends with 1,2
+        t |> equal(2, dynamic_array_match([{int 2;1;2}]))   // ends with 1,2
+        t |> equal(3, dynamic_array_match([{int 0;1;2;3}]))   // starts with 0,1, ends with 2,3
+        t |> equal(3, dynamic_array_match([{int 0;1;12;11;10;2;3}]))   // starts with 0,1, ends with 2,3

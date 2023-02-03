@@ -616,6 +616,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
     return '{';
 }
 <normal>"\:\:"                              return COLCOL;
+<normal>"\.\.\."                            return MTAG_DOTDOTDOT;
 <normal>"\.\."                              return DOTDOT;
 <normal>"\|\>"                              return RPIPE;
 <normal>\<\|[ \t\r]*\/\/.*\n {

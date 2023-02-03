@@ -284,6 +284,7 @@
 %token  MTAG_T              "$t"
 %token  MTAG_C              "$c"
 %token  MTAG_F              "$f"
+%token  MTAG_DOTDOTDOT      "..."
 
 %token  BRABRAB             "[["    /* [[ */
 %token  BRACBRB             "[{"    /* [{ */
@@ -1696,6 +1697,7 @@ expr_mtag
     |   MTAG_V '(' expr[subexpr] ')'                 { $$ = new ExprTag(tokAt(scanner,@subexpr),$subexpr,"v"); }
     |   MTAG_B '(' expr[subexpr] ')'                 { $$ = new ExprTag(tokAt(scanner,@subexpr),$subexpr,"b"); }
     |   MTAG_A '(' expr[subexpr] ')'                 { $$ = new ExprTag(tokAt(scanner,@subexpr),$subexpr,"a"); }
+    |   MTAG_DOTDOTDOT[subexpr]                      { $$ = new ExprTag(tokAt(scanner,@subexpr),nullptr,"..."); }
     |   MTAG_C[cname] '(' expr[subexpr] ')' '(' ')' [atend] {
             auto ccall = yyextra->g_Program->makeCall(tokAt(scanner,@cname),tokAt(scanner,@atend),"``MACRO``TAG``CALL``");
             $$ = new ExprTag(tokAt(scanner,@cname),$subexpr,ccall,"c");

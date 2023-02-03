@@ -74,32 +74,56 @@ def match_any ( what:TypeDeclPtr; wths:ExprMakeStruct?; access:ExpressionPtr; va
 def match_any ( what:TypeDeclPtr; wths:ExprMakeArray?; dynamic:bool; access:ExpressionPtr; var to:MatchTo )
     let wdl = what.dim|>length
     var recT : TypeDeclPtr; defer_delete(recT)
+    // find if there is ..., get its index
+    var tagIndex = INT_MAX
+    for v,i in wths.values,count()
+        if (v is ExprTag) && (v as ExprTag).name=="..."
+            if tagIndex!=INT_MAX
+                to.errors |> match_error("... can only apper once per array match", wths.at)
+                return false
+            tagIndex = i
+    // check lengths
+    let wthsLength =wths.values |> length
     if wdl != 0 // check if static array
         if dynamic
             to.errors |> match_error("{describe(what)} is not a dynamic array", wths.at)
             return false
         let whatDim = what.dim[wdl-1]
-        if whatDim!=wths.values|>length
-            to.errors |> match_error("{describe(what)} number of elements does not match [[describe(wths.makeType)}[{wths.values|>length}] ... ]]", wths.at)
-            return false
+        if tagIndex==INT_MAX
+            if whatDim!=wthsLength
+                to.errors |> match_error("{describe(what)} number of elements does not match [[describe(wths.makeType)}[{wths.values|>length}] ... ]] array", wths.at)
+                return false
+        else
+            if whatDim < wthsLength-1
+                to.errors |> match_error("{describe(what)} needs at least {wthsLength-1} array elements to match", wths.at)
+                return false
         unsafe
             recT <- clone_type(what)
         recT.dim |> pop()
         if !wths.makeType.isAuto && !is_same_type(recT, wths.makeType, RefMatters no, ConstMatters no, TemporaryMatters no)
-            to.errors |> match_error("{describe(what)} type does not match [[{describe(wths.recordType)}[{wths.values|>length}] ... ]] variant", wths.at)
+            to.errors |> match_error("{describe(what)} type does not match [[{describe(wths.recordType)}[{wths.values|>length}] ... ]] array", wths.at)
             return false
     elif !what.isGoodArrayType // check if dynamic array
         to.errors |> match_error("{describe(what)} is not an array", wths.at)
         return false
     else
+        if !dynamic
+            to.errors |> match_error("{describe(what)} is not a static array", wths.at)
+            return false
         recT := what.firstType
-        var lenCond <- (dynamic ?
-            qmacro($e(access) |> length >= $v(wths.values|>length)) :
-            qmacro($e(access) |> length == $v(wths.values|>length)))
+        var lenCond <- (tagIndex!=INT_MAX ?
+            qmacro($e(access) |> length >= $v(wthsLength-1)) :
+            qmacro($e(access) |> length == $v(wthsLength)))
         to.conditions |> emplace(lenCond)
     log_m("\tarray match passed\n")
-    for i in range(wths.values|>length)
-        var newAccess <- qmacro($e(access)[$v(i)]); defer_delete(newAccess)
+    for i in range(wthsLength)
+        if i == tagIndex    // skip ...
+            continue
+        var ei = i
+        if  i > tagIndex
+            ei = wthsLength-i
+        var newAccess <- i<tagIndex ? qmacro($e(access)[$v(ei)]) : qmacro($e(access)[length($e(access)) - $v(ei)])
+        defer_delete(newAccess)
         if !match_any(recT, wths.values[i], newAccess, to)
             return false
     return true

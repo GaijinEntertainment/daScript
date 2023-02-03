@@ -1800,7 +1800,9 @@ namespace das {
 
     ExpressionPtr ExprTag::visit(Visitor & vis) {
         vis.preVisit(this);
-        subexpr = subexpr->visit(vis);
+        if ( subexpr ) {
+            subexpr = subexpr->visit(vis);
+        }
         if ( value ) {
             vis.preVisitTagValue(this, value.get());
             value = value->visit(vis);
@@ -1811,7 +1813,7 @@ namespace das {
     ExpressionPtr ExprTag::clone ( const ExpressionPtr & expr ) const {
         auto cexpr = clonePtr<ExprTag>(expr);
         Expression::clone(cexpr);
-        cexpr->subexpr = subexpr->clone();
+        if ( subexpr )  cexpr->subexpr = subexpr->clone();
         if ( value ) cexpr->value = value->clone();
         cexpr->name = name;
         return cexpr;
