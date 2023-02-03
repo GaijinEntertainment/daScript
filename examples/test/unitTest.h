@@ -48,7 +48,7 @@ SomeEnum98 efn_takeOne_giveTwo_98 ( SomeEnum98 one );
 SomeEnum98_DasProxy efn_takeOne_giveTwo_98_DasProxy ( SomeEnum98_DasProxy two );
 
 //sample of your-engine-float3-type to be aliased as float3 in daScript.
-struct Point3 { float x, y, z; };
+class Point3 { public: float x, y, z; };
 
 template <> struct das::das_alias<Point3> : das::das_alias_vec<Point3,float3> {};
 
