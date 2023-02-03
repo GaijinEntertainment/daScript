@@ -11,8 +11,10 @@ require daslib/macro_boost
 require daslib/strings_boost
 require daslib/defer
 
+/*
 options debugger
 require daslib/debug
+*/
 
 let LOG_MATCH = false
 
@@ -58,6 +60,7 @@ def match_any ( what:TypeDeclPtr; wths:ExprMakeStruct?; access:ExpressionPtr; va
     for i in range(wths.structs|>length)
         for mf in *wths.structs[i]
             var newAccess <- whatDim==1 ? qmacro($e(access).$f(mf.name)) : qmacro($e(access)[$v(i)].$f(mf.name))
+            defer_delete(newAccess)
             var fdecl = find_structure_field(what.structType, string(mf.name))
             if fdecl == null
                 to.errors |> match_error("field {mf.name} not found", mf.at)
@@ -65,6 +68,40 @@ def match_any ( what:TypeDeclPtr; wths:ExprMakeStruct?; access:ExpressionPtr; va
             log_m("\t[[structure[{i}] {mf.name}]] match passed\n")
             if !match_any(fdecl._type, mf.value, newAccess, to)
                 return false
+    return true
+
+// [[ ExprMakeArray ]]
+def match_any ( what:TypeDeclPtr; wths:ExprMakeArray?; dynamic:bool; access:ExpressionPtr; var to:MatchTo )
+    let wdl = what.dim|>length
+    var recT : TypeDeclPtr; defer_delete(recT)
+    if wdl != 0 // check if static array
+        if dynamic
+            to.errors |> match_error("{describe(what)} is not a dynamic array", wths.at)
+            return false
+        let whatDim = what.dim[wdl-1]
+        if whatDim!=wths.values|>length
+            to.errors |> match_error("{describe(what)} number of elements does not match [[describe(wths.makeType)}[{wths.values|>length}] ... ]]", wths.at)
+            return false
+        unsafe
+            recT <- clone_type(what)
+        recT.dim |> pop()
+        if !wths.makeType.isAuto && !is_same_type(recT, wths.makeType, RefMatters no, ConstMatters no, TemporaryMatters no)
+            to.errors |> match_error("{describe(what)} type does not match [[{describe(wths.recordType)}[{wths.values|>length}] ... ]] variant", wths.at)
+            return false
+    elif !what.isGoodArrayType // check if dynamic array
+        to.errors |> match_error("{describe(what)} is not an array", wths.at)
+        return false
+    else
+        recT := what.firstType
+        var lenCond <- (dynamic ?
+            qmacro($e(access) |> length >= $v(wths.values|>length)) :
+            qmacro($e(access) |> length == $v(wths.values|>length)))
+        to.conditions |> emplace(lenCond)
+    log_m("\tarray match passed\n")
+    for i in range(wths.values|>length)
+        var newAccess <- qmacro($e(access)[$v(i)]); defer_delete(newAccess)
+        if !match_any(recT, wths.values[i], newAccess, to)
+            return false
     return true
 
 // [[ ExprMakeVariant ]]
@@ -85,6 +122,7 @@ def match_any ( what:TypeDeclPtr; wths:ExprMakeVariant?; access:ExpressionPtr; v
         return false
     for mf,i in wths.variants,count()
         var newAccess <- whatDim==1 ? qmacro($e(access) as $f(mf.name)) : qmacro($e(access)[$v(i)] as $f(mf.name))
+        defer_delete(newAccess)
         var found = false
         for ft,fn in wths.makeType.argTypes, wths.makeType.argNames
             if fn==mf.name
@@ -159,14 +197,33 @@ def match_any ( what:TypeDeclPtr; wth:ExpressionPtr; access:ExpressionPtr; var t
         else
             to.errors |> match_error("invalid $v syntax", tag.at)
             return false
+    elif (wth is ExprVar) && (wth as ExprVar).name=="_"
+        log_m("\tmatch anything via _n")
+        return true
     elif wth is ExprMakeStruct
         return match_any(what, wth as ExprMakeStruct, access, to)
+    elif wth is ExprMakeArray
+        return match_any(what, wth as ExprMakeArray, false, access, to)
     elif wth is ExprMakeVariant
         return match_any(what, wth as ExprMakeVariant, access, to)
     elif wth is ExprAsVariant
         return match_any(what, wth as ExprAsVariant, access, to)
     elif (wth is ExprCall) && ((wth as ExprCall).name=="match_type" || (wth as ExprCall).name=="__::match`match_type")
+        var cll = wth as ExprCall
+        if cll.arguments|>length!=2
+            to.errors |> match_error("match_type expects 2 arguments", cll.at)
+            return false
         return match_type(what, wth as ExprCall, access, to)
+    elif (wth is ExprCall) && ((wth as ExprCall).name=="to_array_move" || (wth as ExprCall).name=="__::builtin`to_array_move")
+        var cll = wth as ExprCall
+        if cll.arguments|>length!=1
+            to.errors |> match_error("to_array_move expects 1 argument", cll.at)
+            return false
+        if cll.arguments[0] is ExprMakeArray
+            return match_any(what, cll.arguments[0] as ExprMakeArray, true, access, to)
+        else
+            to.errors |> match_error("to_array_move expects array", cll.at)
+            return false
     elif (wth is ExprOp2) && (wth as ExprOp2).op=="&&"
         return match_guards(what, wth as ExprOp2, access, to)
     elif string(wth.__rtti) |> starts_with("ExprConst")
@@ -242,6 +299,8 @@ class MatchMacro : AstCallMacro
         var what_type <- clone_type(what._type); defer_delete(what_type)
         if !what_type.isRefType
             what_type.flags &= ~ TypeDeclFlags ref
+        else
+            what_type.flags |= TypeDeclFlags ref
         var access <- qmacro($i(what_name)); defer_delete(access)
         var iff : smart_ptr<ExprIfThenElse>; defer_delete(iff)
         let eli = length(eblk.list)
