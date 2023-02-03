@@ -7,8 +7,13 @@ enum Color
     green
     blue
 
+variant IF
+    i : int
+    f : float
+
 struct Foo
     a : int
+    v : IF
 
 struct Bar
     a : int
@@ -71,6 +76,26 @@ def guards_match ( ab : AB )
         if [[AB a=$v(a), b=$v(b)]]
             return "{b} <= {a}"
 
+[sideeffects]
+def variant_as_match ( v : IF )
+    match(v) <|
+        if $v(i) as i
+            return "int"
+        if $v(f) as f
+            return "float"
+        if $v(anything)
+            return "anything"
+
+[sideeffects]
+def nested_struct_match ( v : Foo )
+    match(v) <|
+        if [[Foo a=1, v=$v(i) as i]]
+            return 1
+        if [[Foo v=$v(f) as f]]
+            return 2
+        if $v(anything)
+            return 0
+
 [test]
 def test_all_match ( t:T? )
     t |> run("enum match") <| @@ ( t : T? )
@@ -92,5 +117,13 @@ def test_all_match ( t:T? )
     t |> run("guards match") <| @@ ( t : T? )
         t |> equal( "2 > 1", guards_match([[AB a=1, b=2]]) )
         t |> equal( "1 <= 2", guards_match([[AB a=2, b=1]]) )
+    t |> run("variant as match") <| @@ ( t : T? )
+        t |> equal("int", variant_as_match([[IF i=1]]))
+        t |> equal("float", variant_as_match([[IF f=1.0]]))
+    t |> run("nested struct + variant as match") <| @@ ( t : T? )
+        t |> equal(1, nested_struct_match([[Foo a=1, v=[[IF i=1]]]]))
+        t |> equal(2, nested_struct_match([[Foo v=[[IF f=1.]]]]))
+        t |> equal(0, nested_struct_match([[Foo a=13, v=[[IF i=1]]]]))
+
 
 
