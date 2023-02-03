@@ -96,6 +96,16 @@ def nested_struct_match ( v : Foo )
         if $v(anything)
             return 0
 
+[sideeffects]
+def variant_match ( v : IF )
+    match(v) <|
+        if [[IF i=$v(i)]]
+            return 1
+        if [[IF f=$v(f)]]
+            return 2
+        if $v(anything)
+            return 0
+
 [test]
 def test_all_match ( t:T? )
     t |> run("enum match") <| @@ ( t : T? )
@@ -117,6 +127,9 @@ def test_all_match ( t:T? )
     t |> run("guards match") <| @@ ( t : T? )
         t |> equal( "2 > 1", guards_match([[AB a=1, b=2]]) )
         t |> equal( "1 <= 2", guards_match([[AB a=2, b=1]]) )
+    t |> run("variant match") <| @@ ( t : T? )
+        t |> equal(1, variant_match([[IF i=1]]))
+        t |> equal(2, variant_match([[IF f=1.0]]))
     t |> run("variant as match") <| @@ ( t : T? )
         t |> equal("int", variant_as_match([[IF i=1]]))
         t |> equal("float", variant_as_match([[IF f=1.0]]))

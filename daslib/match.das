@@ -66,6 +66,40 @@ def match_any ( what:TypeDeclPtr; wths:ExprMakeStruct?; access:ExpressionPtr; va
                 return false
     return true
 
+// [[ ExprMakeVariant ]]
+def match_any ( what:TypeDeclPtr; wths:ExprMakeVariant?; access:ExpressionPtr; var to:MatchTo )
+    if what.baseType!=Type tVariant
+        to.errors |> match_error("{describe(what)} does not match [[ ... ]] variant", wths.at)
+        return false
+    if wths.makeType==null || !(wths.makeType.baseType==Type autoinfer || wths.makeType.baseType==Type tVariant)
+        to.errors |> match_error("variant type has not been resolved", wths.at)
+        return false
+    if !wths.makeType.isAuto && !is_same_type(what, wths.makeType, RefMatters no, ConstMatters no, TemporaryMatters no)
+        to.errors |> match_error("{describe(what)} type does not match [[{describe(wths.makeType)} ... ]] variant", wths.at)
+        return false
+    let wdl = what.dim|>length
+    let whatDim = wdl>0 ? what.dim[wdl-1] : 1
+    if wths.variants|>length != whatDim
+        to.errors |> match_error("{describe(what)} number of variant elements does not match [[describe(wths.makeType)}[{wths.variants|>length}] ... ]]", wths.at)
+        return false
+    for mf,i in wths.variants,count()
+        var newAccess <- whatDim==1 ? qmacro($e(access) as $f(mf.name)) : qmacro($e(access)[$v(i)] as $f(mf.name))
+        var found = false
+        for ft,fn in wths.makeType.argTypes, wths.makeType.argNames
+            if fn==mf.name
+                found = true
+                to.conditions |> emplace_new <| new [[ExprIsVariant() at=wths.at,
+                    value <- clone_expression(access),
+                    name := mf.name
+                ]]
+                if !match_any(ft, mf.value, newAccess, to)
+                    return false
+                break
+        if !found
+            to.errors |> match_error("variant {mf.name} not found", mf.at)
+            return false
+    return true
+
 // as variant
 def match_any ( what:TypeDeclPtr; wthAs:ExprAsVariant?; access:ExpressionPtr; var to:MatchTo )
     to.conditions |> emplace_new <| new [[ExprIsVariant() at=wthAs.at,
@@ -124,6 +158,8 @@ def match_any ( what:TypeDeclPtr; wth:ExpressionPtr; access:ExpressionPtr; var t
             return false
     elif wth is ExprMakeStruct
         return match_any(what, wth as ExprMakeStruct, access, to)
+    elif wth is ExprMakeVariant
+        return match_any(what, wth as ExprMakeVariant, access, to)
     elif wth is ExprAsVariant
         return match_any(what, wth as ExprAsVariant, access, to)
     elif (wth is ExprCall) && ((wth as ExprCall).name=="match_type" || (wth as ExprCall).name=="__::match`match_type")
@@ -214,8 +250,9 @@ class MatchMacro : AstCallMacro
                 var new_iff <- new [[ExprIfThenElse() at=eto.at, cond<-join_conditions(to.conditions)]]
                 var nblk <- new [[ExprBlock() at=eto.at]]
                 for dn,de in keys(to.declarations),values(to.declarations)
+                    de.genFlags |= ExprGenFlags alwaysSafe
                     var ndecl <- qmacro_expr <|
-                        let $i(dn) & = unsafe($e(de))
+                        let $i(dn) & = $e(de)
                     nblk.list |> emplace(ndecl)
                 for l in (eto.if_true as ExprBlock).list
                     nblk.list |> emplace_new <| clone_expression(l)
@@ -236,8 +273,10 @@ class MatchMacro : AstCallMacro
             delete to
         if any_errors
             return [[ExpressionPtr]]
+        var cwhat <- clone_expression(what); defer_delete(cwhat)
+        cwhat.genFlags |= ExprGenFlags alwaysSafe
         var res <- qmacro_block <|
-            var $i(what_name) : $t(what_type) = $e(what)
+            var $i(what_name) : $t(what_type) = $e(cwhat)
             $e(iff)
         return <- res
 
