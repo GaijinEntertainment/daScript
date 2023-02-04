@@ -134,6 +134,15 @@ def dynamic_array_match ( A : array<int> )
         if _
             return -1
 
+
+[sideeffects]
+def ascending_array_match ( A : int[3] )
+    match(A) <|
+        if [[int $v(x);match_expr(x+1);match_expr(x+2)]]
+            return true
+        if _
+            return false
+
 [test]
 def test_all_match ( t:T? )
     t |> run("enum match") <| @@ ( t : T? )
@@ -183,3 +192,7 @@ def test_all_match ( t:T? )
         t |> equal(2, dynamic_array_match([{int 2;1;2}]))   // ends with 1,2
         t |> equal(3, dynamic_array_match([{int 0;1;2;3}]))   // starts with 0,1, ends with 2,3
         t |> equal(3, dynamic_array_match([{int 0;1;12;11;10;2;3}]))   // starts with 0,1, ends with 2,3
+    t |> run("match_expr") <| @@ ( t : T? )
+        t |> equal( true, ascending_array_match([[int 1;2;3]]))
+        t |> equal( true, ascending_array_match([[int 0;1;2]]))
+        t |> equal( false, ascending_array_match([[int 1;1;2]]))
