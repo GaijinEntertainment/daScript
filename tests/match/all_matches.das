@@ -158,6 +158,22 @@ def tuple_match ( A : tuple<int;float;string> )
         if _
             return 0
 
+[sideeffects]
+def or_match ( i :int )
+    match(i) <|
+        if 1 || 2
+            return true
+        if _
+            return false
+
+[sideeffects]
+def or_match_v ( B:Bar )
+    match(B) <|
+        if [[Bar a=1, b=$v(b)]] || [[Bar a=2, b=$v(b)]]
+            return b
+        if _
+            return 0.0
+
 [test]
 def test_all_match ( t:T? )
     t |> run("enum match") <| @@ ( t : T? )
@@ -217,5 +233,13 @@ def test_all_match ( t:T? )
         t |> equal(2, tuple_match([[auto 13,2.0,"4"]]))
         t |> equal(3, tuple_match([[auto 11,2.0,"13"]]))
         t |> equal(4, tuple_match([[auto 2,2.0,"2"]]))
+    t |> run("or match") <| @@ ( t : T? )
+        t |> equal(true, or_match(1))
+        t |> equal(true, or_match(2))
+        t |> equal(false, or_match(3))
+    t |> run("or match with variable") <| @@ ( t : T? )
+        t |> equal(1., or_match_v([[Bar a=1, b=1.]]))
+        t |> equal(1., or_match_v([[Bar a=2, b=1.]]))
+        t |> equal(0., or_match_v([[Bar a=3, b=1.]]))
 
 

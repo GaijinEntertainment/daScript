@@ -269,6 +269,33 @@ def match_guards ( what:TypeDeclPtr; wth:ExprOp2?; access:ExpressionPtr; var to:
     else
         return false
 
+// left || right
+def match_or ( what:TypeDeclPtr; wth:ExprOp2?; access:ExpressionPtr; var to:MatchTo )
+    var toL : MatchTo; defer_delete(toL)
+    toL.declarations := to.declarations
+    if !match_any(what, wth.left, access, toL)
+        return false
+    var toR : MatchTo; defer_delete(toR);
+    if !match_any(what, wth.right, access, toR)
+        return false
+    for k in keys(to.declarations)
+        toL.declarations |> erase(k)
+        toR.declarations |> erase(k)
+    if length(toL.declarations) != length(toR.declarations)
+        to.errors |> match_error("mismatching variable declarations in ||", wth.at)
+        return false
+    for k,vL in keys(toL.declarations),values(toL.declarations)
+        if describe(vL) != describe(toR.declarations[k])
+            to.errors |> match_error("mismatching variable {k} declaration in ||", wth.at)
+            return false
+    delete to.declarations
+    to.declarations <- toL.declarations // because its a superset
+    var lcond <- join_conditions(toL.conditions); defer_delete(lcond)
+    var rcond <- join_conditions(toR.conditions); defer_delete(rcond)
+    var cond <- qmacro($e(lcond) || $e(rcond))
+    to.conditions |> emplace(cond)
+    return true
+
 // $v(variable)
 def match_tag ( what:TypeDeclPtr; wth:ExpressionPtr; access:ExpressionPtr; var to:MatchTo )
     var tag = wth as ExprTag
@@ -326,6 +353,8 @@ def match_any ( what:TypeDeclPtr; wth:ExpressionPtr; access:ExpressionPtr; var t
             return false
     elif (wth is ExprOp2) && (wth as ExprOp2).op=="&&"
         return match_guards(what, wth as ExprOp2, access, to)
+    elif (wth is ExprOp2) && (wth as ExprOp2).op=="||"
+        return match_or(what, wth as ExprOp2, access, to)
     elif string(wth.__rtti) |> starts_with("ExprConst")
         if wth._type == null
             to.errors |> match_error("unresolved constant type", wth.at)
