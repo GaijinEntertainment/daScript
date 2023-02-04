@@ -37,7 +37,7 @@ def enum_static_match ( color, blah )
     static_match(color) <|
         if Color black
             return 0
-        if blah
+        if match_expr(blah)
             return 1
         if _
             return -1
