@@ -192,3 +192,15 @@ class IsPointer : IsAnyType
                         errors := "argument {argv.name} is not a pointer, it is {describe(typ)}"
                         return false
         return true
+
+[contract(name="expect_value_handle")]
+class IsValueHandle : IsAnyType
+    //! [expect_value_handle(argname)] contract, which only accepts value handles
+    def override isCompatible ( var func:FunctionPtr; var types:VectorTypeDeclPtr; decl:AnnotationDeclaration; var errors:das_string ) : bool
+        for fna,typ in func.arguments,types // note: N^2
+            for argv in decl.arguments
+                if fna.name==argv.name
+                    if typ.baseType!=Type tHandle || typ.isRefType
+                        errors := "argument {argv.name} is not a value handle, it is {describe(typ)}"
+                        return false
+        return true
