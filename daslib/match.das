@@ -37,6 +37,19 @@ def match_error ( var errors : array<MatchError>; msg:string; at:LineInfo ) // !
 
 // [[ ExprMakeStruct ]]
 def match_struct ( what:TypeDeclPtr; wths:ExprMakeStruct?; access:ExpressionPtr; var to:MatchTo )
+    // if its a pointer to ast::Expression or such, we need to 'as' cast first
+    if (wths.makeType.isHandle && isExpression(wths.makeType)
+            && what.isPointer && what.firstType!=null && isExpression(what.firstType))
+        var cond_nz <- new [[ExprIsVariant() at=wths.at,
+            value <- clone_expression(access),
+            name := wths.makeType.annotation.name
+        ]]
+        to.conditions |> emplace(cond_nz)
+        var access_expr <- new [[ExprAsVariant() at=wths.at,
+            value <- clone_expression(access),
+            name := wths.makeType.annotation.name
+        ]]; defer_delete(access_expr)
+        return match_struct(wths.makeType, wths, access_expr, to)
     // if its pointer to structure, automatically dereference it
     if what.baseType==Type tPointer && what.firstType!=null && (what.firstType.isStructure || what.firstType.isHandle)
         var cond_nz <- qmacro($e(access) != null)
@@ -69,7 +82,7 @@ def match_struct ( what:TypeDeclPtr; wths:ExprMakeStruct?; access:ExpressionPtr;
             var newAccess <- whatDim==1 ? qmacro($e(access).$f(mf.name)) : qmacro($e(access)[$v(i)].$f(mf.name))
             newAccess |> force_at(wths.at)
             defer_delete(newAccess)
-            var ftype <- get_field_type(what, string(mf.name), true); defer_delete(ftype)
+            var ftype <- get_field_type(what, string(mf.name), what.flags.constant); defer_delete(ftype)
             if ftype == null
                 to.errors |> match_error("field {mf.name} not found", mf.at)
                 return false

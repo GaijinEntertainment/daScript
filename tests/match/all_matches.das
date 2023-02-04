@@ -1,6 +1,6 @@
 require dastest/testing_boost public
 require daslib/match
-require daslib/ast
+require daslib/ast_boost
 require daslib/defer
 
 enum Color
@@ -146,7 +146,7 @@ def ascending_array_match ( A : int[3] )
             return false
 
 
-[export,sideeffects]
+[sideeffects]
 def tuple_match ( A : tuple<int;float;string> )
     match(A) <|
         if [[auto 1,_,"3"]]
@@ -188,13 +188,23 @@ def struct_ptr_match ( f : Foo? )
         if _
             return -2
 
-[export, sideeffects]
+[sideeffects]
 def match_handle_ptr ( T:TypeDeclPtr )
     match(T) <|
         if null
             return "null"
         if [[TypeDecl() baseType=Type tPointer]]
             return "pointer"
+        if _
+            return "anything"
+
+[sideeffects]
+def match_ast_expr_ptr ( E:ExpressionPtr )
+    match(E) <|
+        if null
+            return "null"
+        if [[ExprConstInt() value=$v(v)]]
+            return "int {v}"
         if _
             return "anything"
 
@@ -275,5 +285,10 @@ def test_all_match ( t:T? )
         t |> equal("pointer", match_handle_ptr(tp))
         var tnp <- new [[TypeDecl() baseType=Type tInt]]; defer_delete(tnp)
         t |> equal("anything", match_handle_ptr(tnp))
-
+    t |> run("match ast expression ptr") <| @@ ( t : T? )
+        t |> equal("null", match_ast_expr_ptr([[ExpressionPtr]]))
+        var ep <- new [[ExprConstInt() value=13]]; defer_delete(ep)
+        t |> equal("int 13", match_ast_expr_ptr(ep))
+        var fp <- new [[ExprConstFloat() value=13.0]]; defer_delete(fp)
+        t |> equal("anything", match_ast_expr_ptr(fp))
 
