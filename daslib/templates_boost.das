@@ -22,6 +22,7 @@ struct Template
     blockArgName : table<string; string>
     annArg : table<string; lambda<(var ann: AnnotationDeclaration):void> >
     blkArg : table<string; array<VariablePtr>>
+    tag2expr : table<string; smart_ptr<Expression>>
 
 def kaboomVarField ( var self:Template; name,prefix,suffix:string )
     //! Adds a rule to to the template to replace a variable field access with a prefix and suffix.
@@ -31,6 +32,10 @@ def kaboomVarField ( var self:Template; name,prefix,suffix:string )
 def replaceVariable ( var self:Template; name:string; var expr : smart_ptr<ast::Expression> )
     //! Adds a rule to the template to replace a variable with an expression.
     self.var2expr[name] <- expr
+
+def replaceVarTag ( var self:Template; name:string; var expr : smart_ptr<ast::Expression> )
+    //! Adds a rule to the template to replace a variable tag with an expression.
+    self.tag2expr[name] <- expr
 
 def replaceArgumentWithList ( var self:Template; name:string; blka:array<VariablePtr> )
     //! Adds a rule to the template to replace a block argument with a list of variables.
@@ -91,6 +96,15 @@ class private TemplateVisitor : AstVisitor
     [[do_not_delete]] rules : Template?
     def TemplateVisitor ( r : Template? )
         rules = r
+    def override visitExprTag ( var expr:smart_ptr<ExprTag> ) : ExpressionPtr
+        if expr.name=="v"
+            if expr.subexpr is ExprVar
+                var tn = string((expr.subexpr as ExprVar).name)
+                if key_exists(rules.tag2expr, tn)
+                    var rexpr <- clone_expression(rules.tag2expr[tn])
+                    rexpr.at = expr.at
+                    return rexpr
+        return expr
     def override visitExprIsVariant(var expr:smart_ptr<ExprIsVariant>) : ExpressionPtr
         let fname = string(expr.name)
         if rules.field2name |> key_exists(fname)

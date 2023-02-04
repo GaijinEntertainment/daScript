@@ -251,6 +251,7 @@ def match_expr ( what:TypeDeclPtr; wthmt:ExprCall?; access:ExpressionPtr; var to
     apply_template(expr) <| $ ( rules )
         for dv,dn in keys(to.declarations),values(to.declarations)
             rules |> replaceVariable(dv) <| clone_expression(dn)
+        rules |> replaceVarTag("_") <| clone_expression(access)
     var cond <- qmacro($e(access) == $e(expr))
     cond |> force_at(value.at)
     to.conditions |> emplace(cond)
@@ -264,6 +265,7 @@ def match_guards ( what:TypeDeclPtr; wth:ExprOp2?; access:ExpressionPtr; var to:
         apply_template(guards) <| $ ( rules )
             for dv,dn in keys(to.declarations),values(to.declarations)
                 rules |> replaceVariable(dv) <| clone_expression(dn)
+            rules |> replaceVarTag("_") <| clone_expression(access)
         to.conditions |> emplace(guards)
         return true
     else
