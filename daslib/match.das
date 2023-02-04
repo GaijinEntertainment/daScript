@@ -36,7 +36,7 @@ def match_error ( var errors : array<MatchError>; msg:string; at:LineInfo ) // !
     errors |> push([[MatchError msg=msg, at=unsafe(addr(at))]])
 
 // [[ ExprMakeStruct ]]
-def match_any ( what:TypeDeclPtr; wths:ExprMakeStruct?; access:ExpressionPtr; var to:MatchTo )
+def match_struct ( what:TypeDeclPtr; wths:ExprMakeStruct?; access:ExpressionPtr; var to:MatchTo )
     if what.baseType!=Type tStructure
         to.errors |> match_error("{describe(what)} does not match [[ ... ]]", wths.at)
         return false
@@ -71,8 +71,47 @@ def match_any ( what:TypeDeclPtr; wths:ExprMakeStruct?; access:ExpressionPtr; va
                 return false
     return true
 
+// [[ ExprMakeTuple ]]
+def match_tuple ( what:TypeDeclPtr; wths:ExprMakeTuple?; access:ExpressionPtr; var to:MatchTo )
+    if what.baseType!=Type tTuple
+        to.errors |> match_error("{describe(what)} does not match [[ ... ]] tuple", wths.at)
+        return false
+    if wths.makeType!=null && !wths.makeType.isAuto && !is_same_type(what, wths.makeType, RefMatters no, ConstMatters no, TemporaryMatters no)
+        to.errors |> match_error("{describe(what)} type does not match [[{describe(wths.makeType)} ... ]] tuple", wths.at)
+        return false
+    // find if there is ..., get its index
+    var tagIndex = INT_MAX
+    for v,i in wths.values,count()
+        if (v is ExprTag) && (v as ExprTag).name=="..."
+            if tagIndex!=INT_MAX
+                to.errors |> match_error("... can only apper once per tuple match", wths.at)
+                return false
+            tagIndex = i
+    // check lengths
+    let wthsLength = wths.values |> length
+    let whatDim = what.argTypes |> length
+    if tagIndex==INT_MAX
+        if whatDim != wthsLength
+            to.errors |> match_error("{describe(what)} number of elements does not match [[describe(wths.makeType)} ... ]] tuple", wths.at)
+            return false
+    else
+        if whatDim < wthsLength-1
+            to.errors |> match_error("{describe(what)} needs at least {wthsLength-1} tuple elements to match", wths.at)
+            return false
+    log_m("\tuple match passed\n")
+    for i in range(wthsLength)
+        if i == tagIndex    // skip ...
+            continue
+        var ei = i<= tagIndex ? i : whatDim - (wthsLength - i)
+        var newAccess <- qmacro($e(access).$f("_{ei}"))
+        newAccess |> force_at(wths.at)
+        defer_delete(newAccess)
+        if !match_any(what.argTypes[ei], wths.values[i], newAccess, to)
+            return false
+    return true
+
 // [[ ExprMakeArray ]]
-def match_any ( what:TypeDeclPtr; wths:ExprMakeArray?; dynamic:bool; access:ExpressionPtr; var to:MatchTo )
+def match_array ( what:TypeDeclPtr; wths:ExprMakeArray?; dynamic:bool; access:ExpressionPtr; var to:MatchTo )
     let wdl = what.dim|>length
     var recT : TypeDeclPtr; defer_delete(recT)
     // find if there is ..., get its index
@@ -121,9 +160,7 @@ def match_any ( what:TypeDeclPtr; wths:ExprMakeArray?; dynamic:bool; access:Expr
     for i in range(wthsLength)
         if i == tagIndex    // skip ...
             continue
-        var ei = i
-        if  i > tagIndex
-            ei = wthsLength-i
+        var ei = i<=tagIndex ? i : wthsLength-i
         var newAccess <- i<tagIndex ? qmacro($e(access)[$v(ei)]) : qmacro($e(access)[length($e(access)) - $v(ei)])
         newAccess |> force_at(wths.at)
         defer_delete(newAccess)
@@ -238,12 +275,16 @@ def match_any ( what:TypeDeclPtr; wth:ExpressionPtr; access:ExpressionPtr; var t
             to.errors |> match_error("invalid $v syntax", tag.at)
             return false
     elif (wth is ExprVar) && (wth as ExprVar).name=="_"
-        log_m("\tmatch anything via _n")
+        log_m("\tmatch anything via _n\n")
         return true
     elif wth is ExprMakeStruct
-        return match_any(what, wth as ExprMakeStruct, access, to)
+        return match_struct(what, wth as ExprMakeStruct, access, to)
     elif wth is ExprMakeArray
-        return match_any(what, wth as ExprMakeArray, false, access, to)
+        var mka = wth as ExprMakeArray
+        if mka.values|>length==1 && (mka.values[0] is ExprMakeTuple)
+            return match_tuple(what, (mka.values[0] as ExprMakeTuple), access, to)
+        else
+            return match_array(what, wth as ExprMakeArray, false, access, to)
     elif wth is ExprMakeVariant
         return match_any(what, wth as ExprMakeVariant, access, to)
     elif wth is ExprAsVariant
@@ -266,7 +307,7 @@ def match_any ( what:TypeDeclPtr; wth:ExpressionPtr; access:ExpressionPtr; var t
             to.errors |> match_error("to_array_move expects 1 argument", cll.at)
             return false
         if cll.arguments[0] is ExprMakeArray
-            return match_any(what, cll.arguments[0] as ExprMakeArray, true, access, to)
+            return match_array(what, cll.arguments[0] as ExprMakeArray, true, access, to)
         else
             to.errors |> match_error("to_array_move expects array", cll.at)
             return false
@@ -361,6 +402,7 @@ class MatchMacro : AstCallMacro
             var eto = (eblk.list[eli-ei-1]) as ExprIfThenElse
             var to : MatchTo
             if match_any(what._type, eto.cond, access, to)
+                log_m("match_any ok\n\n")
                 var new_iff <- new [[ExprIfThenElse() at=eto.at, cond<-join_conditions(to.conditions)]]
                 var nblk <- new [[ExprBlock() at=eto.at]]
                 for dn,de in keys(to.declarations),values(to.declarations)
@@ -375,6 +417,7 @@ class MatchMacro : AstCallMacro
                 new_iff.if_false <- iff
                 iff <- new_iff
             elif report_match_errors || to.failed
+                log_m("match_any failed\n\n")
                 any_errors = true
                 if to.errors|>length != 0
                     for e in to.errors

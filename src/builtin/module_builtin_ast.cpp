@@ -310,7 +310,10 @@ namespace das {
                      TypeDeclPtr decl,
                      RefMatters refMatters,
                      ConstMatters constMatters,
-                     TemporaryMatters temporaryMatters ) {
+                     TemporaryMatters temporaryMatters,
+                     Context * context, LineInfoArg * at ) {
+        if ( !THIS ) context->throw_error_at(at ? *at : LineInfo(), "expecting left type");
+        if ( !decl ) context->throw_error_at(at ? *at : LineInfo(), "expecting right type");
         return THIS->isSameType(*decl,refMatters,constMatters,temporaryMatters);
     }
 
@@ -642,7 +645,7 @@ namespace das {
                 ->args({"type","refMatters"});
         addExtern<DAS_BIND_FUN(isSameAstType)>(*this, lib,  "is_same_type",
             SideEffects::none, "isSameAstType")
-                ->args({"type1","type2","refMatters","constMatters","tempMatters"});
+                ->args({"leftType","rightType","refMatters","constMatters","tempMatters","context","at"});
         addExtern<DAS_BIND_FUN(clone_type)>(*this, lib,  "clone_type",
             SideEffects::none, "clone_type")
                 ->arg("type");

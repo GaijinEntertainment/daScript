@@ -143,6 +143,21 @@ def ascending_array_match ( A : int[3] )
         if _
             return false
 
+
+[export,sideeffects]
+def tuple_match ( A : tuple<int;float;string> )
+    match(A) <|
+        if [[auto 1,_,"3"]]
+            return 1
+        if [[auto 13,...]]      // starts with 13
+            return 2
+        if [[auto ...,"13"]]    // ends with 13
+            return 3
+        if [[auto 2,...,"2"]]   // starts with 2, ends with "2"
+            return 4
+        if _
+            return 0
+
 [test]
 def test_all_match ( t:T? )
     t |> run("enum match") <| @@ ( t : T? )
@@ -196,3 +211,11 @@ def test_all_match ( t:T? )
         t |> equal( true, ascending_array_match([[int 1;2;3]]))
         t |> equal( true, ascending_array_match([[int 0;1;2]]))
         t |> equal( false, ascending_array_match([[int 1;1;2]]))
+    t |> run("match tuple") <| @@ ( t : T? )
+        t |> equal(1, tuple_match([[auto 1,2.0,"3"]]))
+        t |> equal(0, tuple_match([[auto 1,2.0,"4"]]))
+        t |> equal(2, tuple_match([[auto 13,2.0,"4"]]))
+        t |> equal(3, tuple_match([[auto 11,2.0,"13"]]))
+        t |> equal(4, tuple_match([[auto 2,2.0,"2"]]))
+
+
