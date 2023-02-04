@@ -201,6 +201,13 @@ int das_aot_main ( int argc, char * argv[] ) {
                 }
                 projectFile = argv[ai+1];
                 ai += 1;
+            } else if ( strcmp(argv[ai],"-dasroot")==0 ) {
+                if ( ai+1 > argc ) {
+                    tout << "dasroot requires argument";
+                    return -1;
+                }
+                setDasRoot(argv[ai+1]);
+                ai += 1;
             } else if ( strcmp(argv[ai],"--")==0 ) {
                 scriptArgs = true;
             } else if ( !scriptArgs ) {
@@ -337,11 +344,13 @@ void print_help() {
         << "    -log        output program code\n"
         << "    -pause      pause after errors and pause again before exiting program\n"
         << "    -dry-run    compile and simulate script without execution\n"
+        << "    -dasroot    set path to dascript root folder (with daslib)\n"
         << "daScript -aot <in_script.das> <out_script.das.cpp> {-q} {-p}\n"
         << "    -project <path.das_project> path to project file\n"
         << "    -p          paranoid validation of CPP AOT\n"
         << "    -q          supress all output\n"
         << "    -dry-run    no changes will be written\n"
+        << "    -dasroot    set path to dascript root folder (with daslib)\n"
     ;
 }
 
