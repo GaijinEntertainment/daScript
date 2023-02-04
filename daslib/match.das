@@ -438,14 +438,7 @@ class MatchMacro : AstCallMacro
                 macro_verify(eite.if_false==null, prog, expr.at, "match to `if` can't have `else` section")
             else
                 macro_error(prog, ee.at, "match `block` argument can only contain match-to calls, not {ee.__rtti}")
-        let what_name = make_unique_private_name("__match_what",expr.at)
-        var what_type <- clone_type(what._type); defer_delete(what_type)
-        if !what_type.isRefType && !(what._type.isPointer && what._type.flags.smartPtr)
-            what_type.flags &= ~ TypeDeclFlags ref
-        else
-            what_type.flags |= TypeDeclFlags ref
-        var access <- qmacro($i(what_name)); defer_delete(access)
-        access |> force_at(what.at)
+        var access <- clone_expression(what); defer_delete(access)
         var iff : smart_ptr<ExprIfThenElse>; defer_delete(iff)
         let eli = length(eblk.list)
         var any_errors = false
@@ -456,14 +449,12 @@ class MatchMacro : AstCallMacro
                 log_m("match_any ok\n\n")
                 var new_iff <- new [[ExprIfThenElse() at=eto.at, cond<-join_conditions(to.conditions)]]
                 var nblk <- new [[ExprBlock() at=eto.at]]
-                for dn,de in keys(to.declarations),values(to.declarations)
-                    de.genFlags |= ExprGenFlags alwaysSafe
-                    var ndecl <- qmacro_expr <|
-                        let $i(dn) & = $e(de)
-                    ndecl |> force_at(de.at)
-                    nblk.list |> emplace(ndecl)
                 for l in (eto.if_true as ExprBlock).list
                     nblk.list |> emplace_new <| clone_expression(l)
+                apply_template(nblk) <| $ ( rules )
+                    for dv,dn in keys(to.declarations),values(to.declarations)
+                        rules |> replaceVariable(dv) <| clone_expression(dn)
+                    rules |> replaceVarTag("_") <| clone_expression(access)
                 new_iff.if_true <- nblk
                 new_iff.if_false <- iff
                 iff <- new_iff
@@ -482,10 +473,7 @@ class MatchMacro : AstCallMacro
             delete to
         if any_errors
             return [[ExpressionPtr]]
-        var cwhat <- clone_expression(what); defer_delete(cwhat)
-        cwhat.genFlags |= ExprGenFlags alwaysSafe
         var res <- qmacro_block <|
-            var $i(what_name) : $t(what_type) = $e(cwhat)
             $e(iff)
         return <- res
 
