@@ -5498,7 +5498,7 @@ namespace das {
             }
             // infer
             if ( !expr->cond->type->isSimpleType(Type::tBool) ) {
-                error("if-then-else condition must be boolean",  "", "",
+                error("if-then-else condition must be boolean, and not " + expr->cond->type->describe(),  "", "",
                     expr->at, CompilationError::condition_must_be_bool);
                 return Visitor::visit(expr);
             }

@@ -38,16 +38,16 @@ def match_error ( var errors : array<MatchError>; msg:string; at:LineInfo ) // !
 // [[ ExprMakeStruct ]]
 def match_struct ( what:TypeDeclPtr; wths:ExprMakeStruct?; access:ExpressionPtr; var to:MatchTo )
     // if its pointer to structure, automatically dereference it
-    if what.baseType==Type tPointer && what.firstType!=null && what.firstType.baseType==Type tStructure
+    if what.baseType==Type tPointer && what.firstType!=null && (what.firstType.isStructure || what.firstType.isHandle)
         var cond_nz <- qmacro($e(access) != null)
         to.conditions |> emplace(cond_nz)
         var access_nz <- qmacro(*($e(access))); defer_delete(access_nz)
         return match_struct(what.firstType, wths, access_nz, to)
-    if what.baseType!=Type tStructure
+    if !(what.isStructure || what.isHandle)
         to.errors |> match_error("{describe(what)} does not match [[ ... ]]", wths.at)
         return false
-    if !wths.makeType.isAuto && what.structType!=wths.makeType.structType
-        to.errors |> match_error("{describe(what)} type does not match [[{describe(wths.makeType)} ... ]]", wths.at)
+    if wths.makeType!=null && !wths.makeType.isAuto && !is_same_type(what, wths.makeType, RefMatters no, ConstMatters no, TemporaryMatters no)
+        to.errors |> match_error("{describe(what)} type does not match [[{describe(wths.makeType)} ... ]] structure", wths.at)
         return false
     let wdl = length(what.dim)
     let wthsLength = length(wths.structs)
@@ -69,12 +69,12 @@ def match_struct ( what:TypeDeclPtr; wths:ExprMakeStruct?; access:ExpressionPtr;
             var newAccess <- whatDim==1 ? qmacro($e(access).$f(mf.name)) : qmacro($e(access)[$v(i)].$f(mf.name))
             newAccess |> force_at(wths.at)
             defer_delete(newAccess)
-            var fdecl = find_structure_field(what.structType, string(mf.name))
-            if fdecl == null
+            var ftype <- get_field_type(what, string(mf.name), true); defer_delete(ftype)
+            if ftype == null
                 to.errors |> match_error("field {mf.name} not found", mf.at)
                 return false
             log_m("\t[[structure[{i}] {mf.name}]] match passed\n")
-            if !match_any(fdecl._type, mf.value, newAccess, to)
+            if !match_any(ftype, mf.value, newAccess, to)
                 return false
     return true
 
@@ -369,7 +369,9 @@ def match_any ( what:TypeDeclPtr; wth:ExpressionPtr; access:ExpressionPtr; var t
         if wth._type == null
             to.errors |> match_error("unresolved constant type", wth.at)
             return false
-        if !is_same_type(what, wth._type, RefMatters no, ConstMatters no, TemporaryMatters no)
+        if wth.__rtti=="ExprConstPtr" && what.isPointer
+            pass
+        elif !is_same_type(what, wth._type, RefMatters no, ConstMatters no, TemporaryMatters no)
             to.errors |> match_error("condition type mismatch {describe(what)} vs {describe(wth._type)}", wth.at)
             return false
         log_m("\tadd condition {describe(access)} == {describe(wth)}\n")
@@ -438,7 +440,7 @@ class MatchMacro : AstCallMacro
                 macro_error(prog, ee.at, "match `block` argument can only contain match-to calls, not {ee.__rtti}")
         let what_name = make_unique_private_name("__match_what",expr.at)
         var what_type <- clone_type(what._type); defer_delete(what_type)
-        if !what_type.isRefType
+        if !what_type.isRefType && !(what._type.isPointer && what._type.flags.smartPtr)
             what_type.flags &= ~ TypeDeclFlags ref
         else
             what_type.flags |= TypeDeclFlags ref

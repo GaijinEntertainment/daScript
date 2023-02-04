@@ -530,6 +530,8 @@ namespace das {
     float4 evalSingleExpression ( const ExpressionPtr & expr, bool & ok );
     ExpressionPtr makeCall ( const LineInfo & at, const char * name );
     bool builtin_isVisibleDirectly ( Module * from, Module * too );
+    bool builtin_hasField ( TypeDeclPtr ptr, const char * field, bool constant );
+    TypeDeclPtr builtin_fieldType ( TypeDeclPtr ptr, const char * field, bool constant );
     Module * findRttiModule ( smart_ptr<Program> THAT_PROGRAM, const char * name, Context *, LineInfoArg *);
     smart_ptr<Function> findRttiFunction ( Module * mod, Func func, Context * context, LineInfoArg * line_info );
     void for_each_module ( Program * prog, const TBlock<void,Module *> & block, Context * context, LineInfoArg * at );

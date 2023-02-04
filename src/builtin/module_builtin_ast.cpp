@@ -429,6 +429,18 @@ namespace das {
         return false;
     }
 
+    TypeDeclPtr builtin_fieldType ( TypeDeclPtr ptr, const char * field, bool constant ) {
+        if ( !field || !ptr ) return nullptr;
+        if ( ptr->baseType==Type::tStructure ) {
+            return ptr->structType->findField(field)->type;
+        } else if ( ptr->baseType==Type::tHandle ) {
+            return ptr->annotation->makeFieldType(field, constant);
+        } else if ( ptr->baseType==Type::tPointer && ptr->firstType ) {
+            return builtin_fieldType(ptr->firstType, field, constant);
+        }
+        return nullptr;
+    }
+
     Structure::FieldDeclaration * ast_findStructureField ( Structure * structType, const char * field, Context * context, LineInfoArg * at ) {
         if ( !structType ) context->throw_error_at(at ? *at : LineInfo(),"expecting structure");
         if ( !field ) return nullptr;
@@ -703,6 +715,9 @@ namespace das {
                 ->args({"annotation","block","context","line"});
         addExtern<DAS_BIND_FUN(builtin_hasField)>(*this, lib, "has_field",
             SideEffects::modifyExternal, "builtin_hasField")
+                ->args({"type","fieldName","constant"});
+        addExtern<DAS_BIND_FUN(builtin_fieldType)>(*this, lib, "get_field_type",
+            SideEffects::modifyExternal, "builtin_fieldType")
                 ->args({"type","fieldName","constant"});
         // type
         addExtern<DAS_BIND_FUN(builtin_isVisibleDirectly)>(*this, lib, "is_visible_directly",

@@ -1,5 +1,7 @@
 require dastest/testing_boost public
 require daslib/match
+require daslib/ast
+require daslib/defer
 
 enum Color
     black
@@ -186,6 +188,16 @@ def struct_ptr_match ( f : Foo? )
         if _
             return -2
 
+[export, sideeffects]
+def match_handle_ptr ( T:TypeDeclPtr )
+    match(T) <|
+        if null
+            return "null"
+        if [[TypeDecl() baseType=Type tPointer]]
+            return "pointer"
+        if _
+            return "anything"
+
 [test]
 def test_all_match ( t:T? )
     t |> run("enum match") <| @@ ( t : T? )
@@ -257,4 +269,11 @@ def test_all_match ( t:T? )
         t |> equal( -1, struct_ptr_match(null) )
         t |> equal( 0, struct_ptr_match(new [[Foo a=13]]) )
         t |> equal( 23, struct_ptr_match(new [[Foo a=23]]) )
+    t |> run("match handle ptr") <| @@ ( t : T? )
+        t |> equal("null", match_handle_ptr([[TypeDeclPtr]]))
+        var tp <- new [[TypeDecl() baseType=Type tPointer]]; defer_delete(tp)
+        t |> equal("pointer", match_handle_ptr(tp))
+        var tnp <- new [[TypeDecl() baseType=Type tInt]]; defer_delete(tnp)
+        t |> equal("anything", match_handle_ptr(tnp))
+
 
