@@ -37,6 +37,12 @@ def match_error ( var errors : array<MatchError>; msg:string; at:LineInfo ) // !
 
 // [[ ExprMakeStruct ]]
 def match_struct ( what:TypeDeclPtr; wths:ExprMakeStruct?; access:ExpressionPtr; var to:MatchTo )
+    // if its pointer to structure, automatically dereference it
+    if what.baseType==Type tPointer && what.firstType!=null && what.firstType.baseType==Type tStructure
+        var cond_nz <- qmacro($e(access) != null)
+        to.conditions |> emplace(cond_nz)
+        var access_nz <- qmacro(*($e(access))); defer_delete(access_nz)
+        return match_struct(what.firstType, wths, access_nz, to)
     if what.baseType!=Type tStructure
         to.errors |> match_error("{describe(what)} does not match [[ ... ]]", wths.at)
         return false
@@ -209,6 +215,8 @@ def match_any ( what:TypeDeclPtr; wths:ExprMakeVariant?; access:ExpressionPtr; v
 
 // as variant
 def match_any ( what:TypeDeclPtr; wthAs:ExprAsVariant?; access:ExpressionPtr; var to:MatchTo )
+    // todo: variant name check
+    // fixme: correct what for submatch
     to.conditions |> emplace_new <| new [[ExprIsVariant() at=wthAs.at,
         value <- clone_expression(access),
         name := wthAs.name

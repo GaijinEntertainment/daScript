@@ -99,7 +99,7 @@ class private TemplateVisitor : AstVisitor
     def override visitExprTag ( var expr:smart_ptr<ExprTag> ) : ExpressionPtr
         if expr.name=="v"
             if expr.subexpr is ExprVar
-                var tn = string((expr.subexpr as ExprVar).name)
+                let tn = string((expr.subexpr as ExprVar).name)
                 if key_exists(rules.tag2expr, tn)
                     var rexpr <- clone_expression(rules.tag2expr[tn])
                     rexpr.at = expr.at

@@ -174,6 +174,18 @@ def or_match_v ( B:Bar )
         if _
             return 0.0
 
+[sideeffects]
+def struct_ptr_match ( f : Foo? )
+    match(f) <|
+        if null
+            return -1
+        if [[Foo a=13]]
+            return 0
+        if [[Foo a=$v(anyA)]]
+            return anyA
+        if _
+            return -2
+
 [test]
 def test_all_match ( t:T? )
     t |> run("enum match") <| @@ ( t : T? )
@@ -241,5 +253,8 @@ def test_all_match ( t:T? )
         t |> equal(1., or_match_v([[Bar a=1, b=1.]]))
         t |> equal(1., or_match_v([[Bar a=2, b=1.]]))
         t |> equal(0., or_match_v([[Bar a=3, b=1.]]))
-
+    t |> run("struct ptr match") <| @@ ( t : T? )
+        t |> equal( -1, struct_ptr_match(null) )
+        t |> equal( 0, struct_ptr_match(new [[Foo a=13]]) )
+        t |> equal( 23, struct_ptr_match(new [[Foo a=23]]) )
 
