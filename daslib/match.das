@@ -28,28 +28,43 @@ struct MatchTo
     errors       : array<MatchError>
     failed       : bool
 
+[macro_function]
 def log_m ( msg:string )
     static_if LOG_MATCH
         to_log(LOG_INFO, msg)
 
+[macro_function]
 def match_error ( var errors : array<MatchError>; msg:string; at:LineInfo ) // !!!do not put access.at in there
     errors |> push([[MatchError msg=msg, at=unsafe(addr(at))]])
 
-// [[ ExprMakeStruct ]]
+[macro_function]
+def match_as_is ( what:TypeDeclPtr; wths:ExprMakeStruct?; as_is_name:das_string; access:ExpressionPtr; var to:MatchTo )
+    var cond_nz <- new [[ExprIsVariant() at=wths.at,
+        value <- clone_expression(access),
+        name := as_is_name
+    ]]
+    to.conditions |> emplace(cond_nz)
+    var access_expr <- new [[ExprAsVariant() at=wths.at,
+        value <- clone_expression(access),
+        name := as_is_name
+    ]]; defer_delete(access_expr)
+    return match_struct(wths.makeType, wths, access_expr, to)
+
+[macro_function]
+def get_is_as ( typ:TypeDeclPtr )
+    if !typ.isStructure || typ.structType==null
+        return false
+    for ann in typ.structType.annotations
+        if ann.annotation.name=="match_as_is"
+            return true
+    return false
+
+[macro_function]
 def match_struct ( what:TypeDeclPtr; wths:ExprMakeStruct?; access:ExpressionPtr; var to:MatchTo )
     // if its a pointer to ast::Expression or such, we need to 'as' cast first
     if (wths.makeType.isHandle && isExpression(wths.makeType)
             && what.isPointer && what.firstType!=null && isExpression(what.firstType))
-        var cond_nz <- new [[ExprIsVariant() at=wths.at,
-            value <- clone_expression(access),
-            name := wths.makeType.annotation.name
-        ]]
-        to.conditions |> emplace(cond_nz)
-        var access_expr <- new [[ExprAsVariant() at=wths.at,
-            value <- clone_expression(access),
-            name := wths.makeType.annotation.name
-        ]]; defer_delete(access_expr)
-        return match_struct(wths.makeType, wths, access_expr, to)
+        return match_as_is(what, wths, wths.makeType.annotation.name, access, to)
     // if its pointer to structure, automatically dereference it
     if what.baseType==Type tPointer && what.firstType!=null && (what.firstType.isStructure || what.firstType.isHandle)
         var cond_nz <- qmacro($e(access) != null)
@@ -60,6 +75,8 @@ def match_struct ( what:TypeDeclPtr; wths:ExprMakeStruct?; access:ExpressionPtr;
         to.errors |> match_error("{describe(what)} does not match [[ ... ]]", wths.at)
         return false
     if wths.makeType!=null && !wths.makeType.isAuto && !is_same_type(what, wths.makeType, RefMatters no, ConstMatters no, TemporaryMatters no)
+        if what.isStructure && wths.makeType.isStructure && get_is_as(wths.makeType)
+            return match_as_is(what, wths, wths.makeType.structType.name, access, to)
         to.errors |> match_error("{describe(what)} type does not match [[{describe(wths.makeType)} ... ]] structure", wths.at)
         return false
     let wdl = length(what.dim)
@@ -91,7 +108,7 @@ def match_struct ( what:TypeDeclPtr; wths:ExprMakeStruct?; access:ExpressionPtr;
                 return false
     return true
 
-// [[ ExprMakeTuple ]]
+[macro_function]
 def match_tuple ( what:TypeDeclPtr; wths:ExprMakeTuple?; access:ExpressionPtr; var to:MatchTo )
     if what.baseType!=Type tTuple
         to.errors |> match_error("{describe(what)} does not match [[ ... ]] tuple", wths.at)
@@ -130,7 +147,7 @@ def match_tuple ( what:TypeDeclPtr; wths:ExprMakeTuple?; access:ExpressionPtr; v
             return false
     return true
 
-// [[ ExprMakeArray ]]
+[macro_function]
 def match_array ( what:TypeDeclPtr; wths:ExprMakeArray?; dynamic:bool; access:ExpressionPtr; var to:MatchTo )
     let wdl = length(what.dim)
     var recT : TypeDeclPtr; defer_delete(recT)
@@ -188,7 +205,7 @@ def match_array ( what:TypeDeclPtr; wths:ExprMakeArray?; dynamic:bool; access:Ex
             return false
     return true
 
-// [[ ExprMakeVariant ]]
+[macro_function]
 def match_any ( what:TypeDeclPtr; wths:ExprMakeVariant?; access:ExpressionPtr; var to:MatchTo )
     if what.baseType!=Type tVariant
         to.errors |> match_error("{describe(what)} does not match [[ ... ]] variant", wths.at)
@@ -226,8 +243,8 @@ def match_any ( what:TypeDeclPtr; wths:ExprMakeVariant?; access:ExpressionPtr; v
             return false
     return true
 
-// as variant
-def match_any ( what:TypeDeclPtr; wthAs:ExprAsVariant?; access:ExpressionPtr; var to:MatchTo )
+[macro_function]
+def match_as_variant ( what:TypeDeclPtr; wthAs:ExprAsVariant?; access:ExpressionPtr; var to:MatchTo )
     // todo: variant name check
     // fixme: correct what for submatch
     to.conditions |> emplace_new <| new [[ExprIsVariant() at=wthAs.at,
@@ -241,9 +258,9 @@ def match_any ( what:TypeDeclPtr; wthAs:ExprAsVariant?; access:ExpressionPtr; va
     log_m("\tas {wthAs.name} match passed\n")
     return match_any(what, wthAs.value, access, to)
 
-// match_type(expr, type)
+[macro_function]
 def match_type ( what:TypeDeclPtr; wthmt:ExprCall?; access:ExpressionPtr; var to:MatchTo )
-    if length(wthmt.arguments)!=2
+    if length(wthmt.arguments)!=2   // match_type(expr, type)
         to.errors |> match_error("match_type expects 2 arguments", wthmt.at)
         return false
     assume value = wthmt.arguments[0]
@@ -259,9 +276,9 @@ def match_type ( what:TypeDeclPtr; wthmt:ExprCall?; access:ExpressionPtr; var to
         to.errors |> match_error("mismatching type {describe(what)} vs {describe(mtype)}", wthmt.arguments[1].at)
         return false
 
-// match_expr(expr)
+[macro_function]
 def match_expr ( what:TypeDeclPtr; wthmt:ExprCall?; access:ExpressionPtr; var to:MatchTo )
-    if length(wthmt.arguments)!=1
+    if length(wthmt.arguments)!=1   // match_expr(expr)
         to.errors |> match_error("match_expr expects 1 argument", wthmt.at)
         return false
     assume value = wthmt.arguments[0]
@@ -278,7 +295,7 @@ def match_expr ( what:TypeDeclPtr; wthmt:ExprCall?; access:ExpressionPtr; var to
     to.conditions |> emplace(cond)
     return true
 
-// && guards
+[macro_function]
 def match_guards ( what:TypeDeclPtr; wth:ExprOp2?; access:ExpressionPtr; var to:MatchTo )
     if match_any(what, wth.left, access, to)
         log_m("\tguards {describe(wth.right)} at {wth.right.at}\n")
@@ -292,7 +309,7 @@ def match_guards ( what:TypeDeclPtr; wth:ExprOp2?; access:ExpressionPtr; var to:
     else
         return false
 
-// left || right
+[macro_function]
 def match_or ( what:TypeDeclPtr; wth:ExprOp2?; access:ExpressionPtr; var to:MatchTo )
     var toL : MatchTo; defer_delete(toL)
     toL.declarations := to.declarations
@@ -319,7 +336,7 @@ def match_or ( what:TypeDeclPtr; wth:ExprOp2?; access:ExpressionPtr; var to:Matc
     to.conditions |> emplace(cond)
     return true
 
-// $v(variable)
+[macro_function]
 def match_tag ( what:TypeDeclPtr; wth:ExpressionPtr; access:ExpressionPtr; var to:MatchTo )
     var tag = wth as ExprTag
     if tag.name!="v"
@@ -338,9 +355,11 @@ def match_tag ( what:TypeDeclPtr; wth:ExpressionPtr; access:ExpressionPtr; var t
         to.errors |> match_error("invalid $v syntax", tag.at)
         return false
 
+[macro_function]
 def is_match_call ( wth:ExpressionPtr; name:string )
     return (wth is ExprCall) && ((wth as ExprCall).name=="match_{name}" || (wth as ExprCall).name=="__::match`match_{name}")
 
+[macro_function]
 def match_any ( what:TypeDeclPtr; wth:ExpressionPtr; access:ExpressionPtr; var to:MatchTo )
     log_m("match {describe(what)} {debug_expression(wth)}:\n")
     if wth is ExprTag
@@ -359,7 +378,7 @@ def match_any ( what:TypeDeclPtr; wth:ExpressionPtr; access:ExpressionPtr; var t
     elif wth is ExprMakeVariant
         return match_any(what, wth as ExprMakeVariant, access, to)
     elif wth is ExprAsVariant
-        return match_any(what, wth as ExprAsVariant, access, to)
+        return match_as_variant(what, wth as ExprAsVariant, access, to)
     elif wth |> is_match_call("type")
         return match_type(what, wth as ExprCall, access, to)
     elif wth |> is_match_call("expr")
@@ -403,6 +422,7 @@ def match_any ( what:TypeDeclPtr; wth:ExpressionPtr; access:ExpressionPtr; var t
         to.failed = true
         return false
 
+[macro_function]
 def join_conditions ( var conditions:array<ExpressionPtr> )
     let clen = length(conditions)
     if clen == 0
@@ -493,6 +513,9 @@ class MatchMacro : AstCallMacro
 [call_macro(name="static_match")]
 class StaticMatchMacro : MatchMacro
     override report_match_errors = false
+
+[structure_macro(name="match_as_is")]
+class MatchAsIs : AstStructureAnnotation {}
 
 def public match_type(anything,anytype) : void {}
 

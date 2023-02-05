@@ -208,6 +208,44 @@ def match_ast_expr_ptr ( E:ExpressionPtr )
         if _
             return "anything"
 
+struct Cmd
+    rtti = "Cmd"
+
+[match_as_is]
+struct CmdMove : Cmd
+    override rtti = "CmdMove"
+    x : float
+    y : float
+
+def operator is CmdMove ( cmd:Cmd )
+    return cmd.rtti=="CmdMove"
+
+def operator is CmdMove ( anything )
+    return false
+
+def operator as CmdMove ( cmd:Cmd ==const ) : CmdMove const&
+    assert(cmd.rtti=="CmdMove")
+    unsafe
+        return reinterpret<CmdMove const&> cmd
+
+def operator as CmdMove ( var cmd:Cmd ==const ) : CmdMove&
+    assert(cmd.rtti=="CmdMove")
+    unsafe
+        return reinterpret<CmdMove&> cmd
+
+def operator as CmdMove ( anything )
+    panic("Cannot cast to CmdMove")
+    return [[CmdMove]]
+
+
+[sideeffects]
+def matching_as_and_is ( cmd:Cmd )
+    match(cmd) <|
+        if [[CmdMove x=$v(x), y=$v(y)]]
+            return x + y
+        if _
+            return 0.
+
 [test]
 def test_all_match ( t:T? )
     t |> run("enum match") <| @@ ( t : T? )
@@ -291,4 +329,7 @@ def test_all_match ( t:T? )
         t |> equal("int 13", match_ast_expr_ptr(ep))
         var fp <- new [[ExprConstFloat() value=13.0]]; defer_delete(fp)
         t |> equal("anything", match_ast_expr_ptr(fp))
+    t |> run("match as is") <| @@ ( t : T? )
+        t |> equal(0., matching_as_and_is(Cmd()))
+        t |> equal(3., matching_as_and_is([[CmdMove() x=1.,y=2.]]))
 
