@@ -701,7 +701,7 @@ class private  AstQCallMacro : AstCallMacro
     //! This macro implements expression reification
     apply_call = "apply_qmacro"
     macro_call = "qmacro"
-    def override canVisitArguments ( call:smart_ptr<ExprCallMacro> ) : bool
+    def override canVisitArgument ( call:smart_ptr<ExprCallMacro>; argIndex:int ) : bool
         return false    // nop, this one is just like quote
     def wrap_call ( var expr:ExpressionPtr ) : ExpressionPtr
         return expr
@@ -793,6 +793,8 @@ class private AstQNamedMacro : AstCallMacro
     //! This macro implements expression reification for the named expressions (function, variable, etc.)
     apply_call = "apply_qmacro_function"
     macro_call = "qmacro_function"
+    def override canVisitArgument ( call:smart_ptr<ExprCallMacro>; argIndex:int ) : bool
+        return argIndex==0
     def override visit ( prog:ProgramPtr; mod:Module?; var call:smart_ptr<ExprCallMacro> ) : ExpressionPtr
         if call.arguments.length != 2
             macro_error(prog,call.at,"expecting 2 arguments, {macro_call}(name,expression)")
@@ -828,6 +830,8 @@ class private AstQVariableMacro : AstQNamedMacro
 class private AstQNamedClassMacro : AstCallMacro
     apply_call = "apply_qmacro_method"
     macro_call = "qmacro_method"
+    def override canVisitArgument ( call:smart_ptr<ExprCallMacro>; argIndex:int ) : bool
+        return argIndex==0 || argIndex==1
     //! This macro implements expression reification for the named expressions (function, variable, etc.)
     def override visit ( prog:ProgramPtr; mod:Module?; var call:smart_ptr<ExprCallMacro> ) : ExpressionPtr
         if call.arguments.length != 3

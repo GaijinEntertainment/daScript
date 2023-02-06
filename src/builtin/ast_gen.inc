@@ -696,7 +696,7 @@ protected:
   enum {
     __fn_preVisit = 0,
     __fn_visit = 1,
-    __fn_canVisitArguments = 2,
+    __fn_canVisitArgument = 2,
     __fn_canFoldReturnResult = 3,
   };
 protected:
@@ -705,7 +705,7 @@ public:
   AstCallMacro_Adapter ( const StructInfo * info ) {
       _das_class_method_offset[__fn_preVisit] = adapt_field_offset("preVisit",info);
       _das_class_method_offset[__fn_visit] = adapt_field_offset("visit",info);
-      _das_class_method_offset[__fn_canVisitArguments] = adapt_field_offset("canVisitArguments",info);
+      _das_class_method_offset[__fn_canVisitArgument] = adapt_field_offset("canVisitArgument",info);
       _das_class_method_offset[__fn_canFoldReturnResult] = adapt_field_offset("canFoldReturnResult",info);
   }
   __forceinline Func get_preVisit ( void * self ) const {
@@ -726,14 +726,14 @@ public:
         (__context__,nullptr,__funcCall__,
           self,prog,mod,expr).marshal();
   }
-  __forceinline Func get_canVisitArguments ( void * self ) const {
-    return getDasClassMethod(self,_das_class_method_offset[__fn_canVisitArguments]);
+  __forceinline Func get_canVisitArgument ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_canVisitArgument]);
   }
-  __forceinline bool invoke_canVisitArguments ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<ExprCallMacro> const  expr ) const {
+  __forceinline bool invoke_canVisitArgument ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<ExprCallMacro> const  expr, int32_t argIndex ) const {
     return das_invoke_function<bool>::invoke
-      <void *,smart_ptr_raw<ExprCallMacro> const >
+      <void *,smart_ptr_raw<ExprCallMacro> const ,int32_t>
         (__context__,nullptr,__funcCall__,
-          self,expr);
+          self,expr,argIndex);
   }
   __forceinline Func get_canFoldReturnResult ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_canFoldReturnResult]);

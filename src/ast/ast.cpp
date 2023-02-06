@@ -2299,12 +2299,14 @@ namespace das {
 
     ExpressionPtr ExprCallMacro::visit(Visitor & vis) {
         vis.preVisit(this);
-        if ( !macro || macro->canVisitArguments(this) ) {
-            for ( auto & arg : arguments ) {
+        int index = 0;
+        for ( auto & arg : arguments ) {
+            if ( !macro || macro->canVisitArguments(this,index) ) {
                 vis.preVisitLooksLikeCallArg(this, arg.get(), arg==arguments.back());
                 arg = arg->visit(vis);
                 arg = vis.visitLooksLikeCallArg(this, arg.get(), arg==arguments.back());
             }
+            index ++;
         }
         return vis.visit(this);
     }

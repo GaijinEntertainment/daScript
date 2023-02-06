@@ -1464,11 +1464,11 @@ namespace das {
                 return nullptr;
             }
         }
-        virtual bool canVisitArguments ( ExprCallMacro * expr ) override {
-            if ( auto fnCanVisitArguments = get_canVisitArguments(classPtr) ) {
+        virtual bool canVisitArguments ( ExprCallMacro * expr, int index ) override {
+            if ( auto fnCanVisitArguments = get_canVisitArgument(classPtr) ) {
                 bool result = true;
                 runMacroFunction(context, "canVisitArguments", [&]() {
-                    result = invoke_canVisitArguments(context,fnCanVisitArguments,classPtr,expr);
+                    result = invoke_canVisitArgument(context,fnCanVisitArguments,classPtr,expr,index);
                 });
                 return result;
             } else {

@@ -440,7 +440,7 @@ def join_conditions ( var conditions:array<ExpressionPtr> )
 [call_macro(name="match")]
 class MatchMacro : AstCallMacro
     report_match_errors = true
-    def override canVisitArguments ( expr:smart_ptr<ExprCallMacro> ) : bool
+    def override canVisitArgument ( expr:smart_ptr<ExprCallMacro>; argIndex:int ) : bool
         // if we are reporting errors, and macro did not fold - no point showing errors inside match - there will be too many, and they are meaningless
         return !is_reporting_compilation_errors()
     def override canFoldReturnResult ( expr:smart_ptr<ExprCallMacro> ) : bool
