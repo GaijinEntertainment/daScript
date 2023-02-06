@@ -1203,12 +1203,12 @@ namespace das
             try {
                 das_invoke<void>::invoke(context, at, try_block);
             } catch ( const dasException & ) {
-                context.abiArg = aa;
-                context.abiCMRES = acm;
-                context.stack.pop(EP,SP);
-                context.stopFlags = 0;
-                context.last_exception = context.exception;
-                context.exception = nullptr;
+                context->abiArg = aa;
+                context->abiCMRES = acm;
+                context->stack.pop(EP,SP);
+                context->stopFlags = 0;
+                context->last_exception = context->exception;
+                context->exception = nullptr;
                 das_invoke<void>::invoke(context, at, catch_block);
             }
         #else
