@@ -264,17 +264,17 @@ def match_type ( what:TypeDeclPtr; wthmt:ExprCall?; access:ExpressionPtr; var to
     if length(wthmt.arguments)!=2   // match_type(expr, type)
         to.errors |> match_error("match_type expects 2 arguments", wthmt.at)
         return false
-    assume value = wthmt.arguments[0]
-    assume mtype = wthmt.arguments[1]._type
+    assume value = wthmt.arguments[1]
+    assume mtype = wthmt.arguments[0]._type
     if mtype==null
-        to.errors |> match_error("unresolved type", wthmt.arguments[1].at)
+        to.errors |> match_error("unresolved type", mtype.at)
         to.failed = true
         return false
     if is_same_type(what, mtype, RefMatters no, ConstMatters no, TemporaryMatters no)
         log_m("\tmatch_type {describe(what)} passed\n")
         return match_any(what, value, access, to)
     else
-        to.errors |> match_error("mismatching type {describe(what)} vs {describe(mtype)}", wthmt.arguments[1].at)
+        to.errors |> match_error("mismatching type {describe(what)} vs {describe(mtype)}", mtype.at)
         return false
 
 [macro_function]
@@ -527,4 +527,5 @@ def private setup
     if is_compiling_macros_in_module("match")
         compiling_module() |> add_keyword("match", false)
         compiling_module() |> add_keyword("static_match", false)
+        compiling_module() |> add_keyword("match_type", true)
 

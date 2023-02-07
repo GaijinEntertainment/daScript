@@ -2459,7 +2459,7 @@ YY_RULE_SETUP
     yylval_param->s = new string(yytext);
     auto it = yyextra->das_keywords.find(*yylval_param->s);
     if ( it != yyextra->das_keywords.end() ) {
-        yyextra->das_need_oxford_comma = it->second;
+        if ( !it->second ) yyextra->das_need_oxford_comma = false;
         return KEYWORD;
     } else {
         return NAME;

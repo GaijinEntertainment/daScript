@@ -47,10 +47,10 @@ def enum_static_match ( color, blah )
 [sideeffects]
 def static_match_by_type ( what )
     static_match what
-        if match_type($v(expr),type<int>)
-            return "int {expr}"
+        if match_type<int> $v(expr)
+            return expr
         if _
-            return "anything"
+            return -1
 
 [sideeffects]
 def struct_match ( f : Foo )
@@ -256,6 +256,9 @@ def test_all_match ( t:T? )
         t |> equal ( 1, enum_static_match(1234,1234) )
         t |> equal ( -1, enum_static_match(5678,1234) )
         t |> equal ( -1, enum_static_match("a",1234) )
+    t |> run("enum static match by type") <| @@ ( t : T? )
+        t |> equal ( 13, static_match_by_type(13) )
+        t |> equal ( -1, static_match_by_type(13.) )
     t |> run("struct match") <| @@ ( t : T? )
         t |> equal( 0, struct_match([[Foo a=13]]) )
         t |> equal( 23, struct_match([[Foo a=23]]) )
