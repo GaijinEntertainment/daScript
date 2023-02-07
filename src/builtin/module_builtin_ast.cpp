@@ -421,6 +421,10 @@ namespace das {
         if ( !field || !ptr ) return false;
         if ( ptr->baseType==Type::tStructure ) {
             return ptr->structType->findField(field);
+        } else if ( ptr->baseType==Type::tTuple ) {
+            return ptr->tupleFieldIndex(field) != -1;
+        } else if ( ptr->baseType==Type::tVariant ) {
+            return ptr->variantFieldIndex(field) != -1;
         } else if ( ptr->baseType==Type::tHandle ) {
             return ptr->annotation->makeFieldType(field, constant);
         } else if ( ptr->baseType==Type::tPointer && ptr->firstType ) {
@@ -433,6 +437,12 @@ namespace das {
         if ( !field || !ptr ) return nullptr;
         if ( ptr->baseType==Type::tStructure ) {
             return ptr->structType->findField(field)->type;
+        } else if ( ptr->baseType==Type::tTuple ) {
+            auto idx = ptr->tupleFieldIndex(field);
+            return idx!=-1 ? ptr->argTypes[idx] : nullptr;
+        } else if ( ptr->baseType==Type::tVariant ) {
+            auto idx = ptr->variantFieldIndex(field);
+            return idx!=-1 ? ptr->argTypes[idx] : nullptr;
         } else if ( ptr->baseType==Type::tHandle ) {
             return ptr->annotation->makeFieldType(field, constant);
         } else if ( ptr->baseType==Type::tPointer && ptr->firstType ) {

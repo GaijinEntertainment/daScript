@@ -4432,7 +4432,7 @@ namespace das {
             } else if ( valT->isBitfield() ) {
                 expr->value = Expression::autoDereference(expr->value);
                 valT = expr->value->type;
-                int index = expr->bitFieldIndex();
+                int index = valT->bitFieldIndex(expr->name);
                 if ( index==-1 || index>=int(valT->argNames.size()) ) {
                     error("can't get bit field " + expr->name + " in " + describeType(valT), "", "",
                         expr->at, CompilationError::cant_get_field);
@@ -4459,7 +4459,7 @@ namespace das {
                     if ( expr->type )
                         expr->type->constant |= valT->constant | valT->firstType->constant;
                 } else if ( valT->firstType->isGoodTupleType() ) {
-                    int index = expr->tupleFieldIndex();
+                    int index = valT->tupleFieldIndex(expr->name);
                     if ( index==-1 || index>=int(valT->firstType->argTypes.size()) ) {
                         error("can't get tuple field " + expr->name, "", "",
                             expr->at, CompilationError::cant_get_field);
@@ -4472,7 +4472,7 @@ namespace das {
                             expr->at, CompilationError::unsafe);
                         return Visitor::visit(expr);
                     }
-                    int index = expr->variantFieldIndex();
+                    int index = valT->variantFieldIndex(expr->name);
                     if ( index==-1 || index>=int(valT->firstType->argTypes.size()) ) {
                         error("can't get variant field " + expr->name, "", "",
                             expr->at, CompilationError::cant_get_field);
@@ -4481,7 +4481,7 @@ namespace das {
                     expr->fieldIndex = index;
                 }
             } else if ( valT->isGoodTupleType() ) {
-                int index = expr->tupleFieldIndex();
+                int index = valT->tupleFieldIndex(expr->name);
                 if ( index==-1 || index>=int(valT->argTypes.size()) ) {
                     error("can't get tuple field " + expr->name, "", "",
                         expr->at, CompilationError::cant_get_field);
@@ -4494,7 +4494,7 @@ namespace das {
                         expr->at, CompilationError::unsafe);
                     return Visitor::visit(expr);
                 }
-                int index = expr->variantFieldIndex();
+                int index = valT->variantFieldIndex(expr->name);
                 if ( index==-1 || index>=int(valT->argTypes.size()) ) {
                     error("can't get variant field " + expr->name, "", "",
                         expr->at, CompilationError::cant_get_field);
@@ -4570,7 +4570,7 @@ namespace das {
                     return Visitor::visit(expr);
                 }
             } else if ( valT->firstType->isGoodTupleType() ) {
-                int index = expr->tupleFieldIndex();
+                int index = valT->tupleFieldIndex(expr->name);
                 if ( index==-1 || index>=int(valT->firstType->argTypes.size()) ) {
                     error("can't get tuple field " + expr->name, "", "",
                         expr->at, CompilationError::cant_get_field);
@@ -4584,7 +4584,7 @@ namespace das {
                         expr->at, CompilationError::unsafe);
                     return Visitor::visit(expr);
                 }
-                int index = expr->variantFieldIndex();
+                int index = valT->variantFieldIndex(expr->name);
                 if ( index==-1 || index>=int(valT->firstType->argTypes.size()) ) {
                     error("can't get variant field " + expr->name, "", "",
                         expr->at, CompilationError::cant_get_field);

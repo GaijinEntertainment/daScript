@@ -189,6 +189,9 @@ namespace das {
         Type getRangeBaseType() const;
         TypeDecl * findAlias ( const string & name, bool allowAuto = false );
         int findArgumentIndex(const string & name) const;
+        int tupleFieldIndex( const string & name ) const;
+        int variantFieldIndex( const string & name ) const;
+        int bitFieldIndex( const string & name ) const;
         void addVariant(const string & name, const TypeDeclPtr & tt);
         string findBitfieldName ( uint32_t value ) const;
         void collectAliasing ( TypeAliasMap & aliases, das_set<Structure *> & dep, bool viaPointer ) const;

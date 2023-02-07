@@ -2737,6 +2737,34 @@ namespace das
         }
     }
 
+    int TypeDecl::tupleFieldIndex( const string & name ) const {
+        int index = 0;
+        if ( sscanf(name.c_str(),"_%i",&index)==1 ) {
+            return index;
+        } else {
+            auto vT = isPointer() ? firstType.get() : this;
+            if (!vT) return -1;
+            if ( name=="_first" ) {
+                return 0;
+            } else if ( name=="_last" ) {
+                return int(vT->argTypes.size())-1;
+            } else {
+                return vT->findArgumentIndex(name);
+            }
+            return -1;
+        }
+    }
+
+    int TypeDecl::variantFieldIndex ( const string & name ) const {
+        auto vT = isPointer() ? firstType.get() : this;
+        if (!vT) return -1;
+        return vT->findArgumentIndex(name);
+    }
+
+    int TypeDecl::bitFieldIndex ( const string & name ) const {
+        return findArgumentIndex(name);
+    }
+
     // Mangled name parser
 
     void MangledNameParser::error ( const string &, const char * ) {

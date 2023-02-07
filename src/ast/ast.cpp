@@ -1668,34 +1668,6 @@ namespace das {
         return cexpr;
     }
 
-    int ExprField::tupleFieldIndex() const {
-        int index = 0;
-        if ( sscanf(name.c_str(),"_%i",&index)==1 ) {
-            return index;
-        } else {
-            auto vT = value->type->isPointer() ? value->type->firstType : value->type;
-            if (!vT) return -1;
-            if ( name=="_first" ) {
-                return 0;
-            } else if ( name=="_last" ) {
-                return int(vT->argTypes.size())-1;
-            } else {
-                return vT->findArgumentIndex(name);
-            }
-            return -1;
-        }
-    }
-
-    int ExprField::variantFieldIndex() const {
-        auto vT = value->type->isPointer() ? value->type->firstType : value->type;
-        if (!vT) return -1;
-        return vT->findArgumentIndex(name);
-    }
-
-    int ExprField::bitFieldIndex() const {
-        return value->type->findArgumentIndex(name);
-    }
-
     // ExprIs
 
     ExpressionPtr ExprIsVariant::visit(Visitor & vis) {

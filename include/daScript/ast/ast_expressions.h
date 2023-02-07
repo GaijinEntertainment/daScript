@@ -250,9 +250,6 @@ namespace das
         virtual SimNode * trySimulate (Context & context, uint32_t extraOffset, const TypeDeclPtr & r2vType ) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual bool rtti_isField() const override { return true; }
-        int tupleFieldIndex() const;
-        int variantFieldIndex() const;
-        int bitFieldIndex() const;
         ExpressionPtr   value;
         string          name;
         LineInfo        atField;
