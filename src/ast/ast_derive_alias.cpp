@@ -125,7 +125,7 @@ namespace das {
             Visitor::preVisit(expr);
             disabled ++;
         }
-        virtual void preVisitLeft  ( ExprOp3 * expr, Expression * left ) {
+        virtual void preVisitLeft  ( ExprOp3 * expr, Expression * left ) override {
             Visitor::preVisitLeft(expr,left);
             disabled --;
         }

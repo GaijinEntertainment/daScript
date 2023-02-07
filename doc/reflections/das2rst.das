@@ -85,7 +85,7 @@ def document_module_builtin(root:string)
         group_by_regex("Containers", mod, %regex~(capacity|clear|length|resize|reserve|each|emplace|erase|find|
 find_for_edit|find_if_exists|find_index|find_index_if|has_value|key_exists|keys|values|lock|each_enum|each_ref|
 find_for_edit_if_exists|lock_forever|next|nothing|pop|push|push_clone|back|sort|to_array|to_table|to_array_move|
-to_table_move|empty|subarray|insert|move_to_ref)$%%);
+to_table_move|empty|subarray|insert|move_to_ref|copy_to_local|move_to_local|get)$%%);
         group_by_regex("Character set groups", mod, %regex~(is_alpha|is_number|is_white_space|is_char_in_set)$%%);
         group_by_regex("das::string manipulation", mod, %regex~(peek|set)$%%);
         group_by_regex("String builder", mod, %regex~(build_string|write|write_char|write_chars|write_escape_string)$%%);
@@ -93,7 +93,7 @@ to_table_move|empty|subarray|insert|move_to_ref)$%%);
         group_by_regex("Vector and matrix math", mod, %regex~(float3x4|float4x4|identity|inverse|rotate|translation|transpose)$%%);
         group_by_regex("GC0 infrastructure", mod, %regex~gc0%%);
         group_by_regex("Smart ptr infrastructure", mod, %regex~(add_ptr_ref|smart_ptr|get_const_ptr|get_ptr$)%%);
-        group_by_regex("Macro infrastructure", mod, %regex~(is_compiling|is_in_completion)%%);
+        group_by_regex("Macro infrastructure", mod, %regex~(is_compiling|is_in_completion|is_reporting_compilation_errors)%%);
         group_by_regex("Profiler", mod, %regex~(profile|reset_profiler|dump_profile_info|collect_profile_info)$%%);
         group_by_regex("System infastructure", mod, %regex~(panic|print|sprint|to_log|error|terminate|breakpoint|stackwalk|get_das_root|is_in_aot)$%%);
         group_by_regex("Memory manipulation", mod, %regex~(intptr|memcmp|variant_index|set_variant_index|hash|memcpy|lock_data|map_to_array|map_to_ro_array)$%%);
@@ -108,7 +108,7 @@ to_table_move|empty|subarray|insert|move_to_ref)$%%);
         hide_group(group_by_regex("Jit",mod,%regex~(invoke_code|.*jit.*)$%%));
         group_by_regex("Lock verification", mod, %regex~(set_verify_context_locks)$%%);
         group_by_regex("Initialization and finalization", mod, %regex~(using|clone|finalize)$%%);
-        group_by_regex("Algorithms", mod, %regex~(swap|iter_range)$%%)
+        group_by_regex("Algorithms", mod, %regex~(swap|iter_range|count|ucount)$%%)
     }]
     document("Built-in runtime",mod,"{root}/builtin.rst","{root}/detail/builtin.rst",groups)
 
@@ -184,7 +184,6 @@ def document_module_ast(root:string)
         group_by_regex("Cloning", mod, %regex~clone.*%%);
         group_by_regex("Mangled name", mod, %regex~(parse_mangled_name|get_mangled_name)%%);
         group_by_regex("Size and offset", mod, %regex~.*_(size|offset)%%);
-        group_by_regex("Properties", mod, %regex~(is|has)_.*%%);
         group_by_regex("Pointer conversion", mod, %regex~(ExpressionPtr|FunctionPtr|StructurePtr)%%);
         group_by_regex("Evaluations", mod, %regex~(eval_single_expression)%%);
         group_by_regex("Error reporting", mod, %regex~(macro_error)%%);
@@ -193,6 +192,7 @@ def document_module_ast(root:string)
         group_by_regex("Use queries", mod, %regex~(get_use_global_variables|get_use_functions)%%);
         group_by_regex("Log", mod, %regex~(to_compilation_log)%%);
         group_by_regex("Removal", mod, %regex~(remove.*)%%);
+        group_by_regex("Properties", mod, %regex~(is|has|get)_.*%%);
         hide_group(group_by_regex("Internal ast infrastructure", mod, %regex~(builtin_ast_.*)%%))
     }]
     document("AST manipulation library",mod,"{root}/ast.rst","{root}/detail/ast.rst",groups)

@@ -12387,123 +12387,6 @@ any_table_size returns int
 
 |function-ast-any_table_size|
 
-++++++++++
-Properties
-++++++++++
-
-  *  :ref:`is_temp_type (type:smart_ptr\<ast::TypeDecl\> const implicit;refMatters:bool const) : bool <function-_at_ast_c__c_is_temp_type_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_Cb>` 
-  *  :ref:`is_same_type (leftType:smart_ptr\<ast::TypeDecl\> const implicit;rightType:smart_ptr\<ast::TypeDecl\> const implicit;refMatters:rtti::RefMatters const;constMatters:rtti::ConstMatters const;tempMatters:rtti::TemporaryMatters const;context:__context const;at:__lineInfo const) : bool <function-_at_ast_c__c_is_same_type_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_CE_ls_rtti_c__c_RefMatters_gr__CE_ls_rtti_c__c_ConstMatters_gr__CE_ls_rtti_c__c_TemporaryMatters_gr__C_c_C_l>` 
-  *  :ref:`has_field (type:smart_ptr\<ast::TypeDecl\> const implicit;fieldName:string const implicit;constant:bool const) : bool <function-_at_ast_c__c_has_field_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_CIs_Cb>` 
-  *  :ref:`is_visible_directly (from_module:rtti::Module? const implicit;which_module:rtti::Module? const implicit) : bool <function-_at_ast_c__c_is_visible_directly_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?>` 
-  *  :ref:`is_expr_like_call (expression:smart_ptr\<ast::Expression\> const& implicit) : bool <function-_at_ast_c__c_is_expr_like_call_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr_?W>` 
-  *  :ref:`is_expr_const (expression:smart_ptr\<ast::Expression\> const& implicit) : bool <function-_at_ast_c__c_is_expr_const_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr_?W>` 
-
-.. _function-_at_ast_c__c_is_temp_type_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_Cb:
-
-.. das:function:: is_temp_type(type: smart_ptr<ast::TypeDecl> const implicit; refMatters: bool const)
-
-is_temp_type returns bool
-
-+----------+----------------------------------------------------------------------+
-+argument  +argument type                                                         +
-+==========+======================================================================+
-+type      +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` > const implicit+
-+----------+----------------------------------------------------------------------+
-+refMatters+bool const                                                            +
-+----------+----------------------------------------------------------------------+
-
-
-|function-ast-is_temp_type|
-
-.. _function-_at_ast_c__c_is_same_type_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_CE_ls_rtti_c__c_RefMatters_gr__CE_ls_rtti_c__c_ConstMatters_gr__CE_ls_rtti_c__c_TemporaryMatters_gr__C_c_C_l:
-
-.. das:function:: is_same_type(leftType: smart_ptr<ast::TypeDecl> const implicit; rightType: smart_ptr<ast::TypeDecl> const implicit; refMatters: RefMatters const; constMatters: ConstMatters const; tempMatters: TemporaryMatters const)
-
-is_same_type returns bool
-
-+------------+----------------------------------------------------------------------+
-+argument    +argument type                                                         +
-+============+======================================================================+
-+leftType    +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` > const implicit+
-+------------+----------------------------------------------------------------------+
-+rightType   +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` > const implicit+
-+------------+----------------------------------------------------------------------+
-+refMatters  + :ref:`rtti::RefMatters <enum-rtti-RefMatters>`  const                +
-+------------+----------------------------------------------------------------------+
-+constMatters+ :ref:`rtti::ConstMatters <enum-rtti-ConstMatters>`  const            +
-+------------+----------------------------------------------------------------------+
-+tempMatters + :ref:`rtti::TemporaryMatters <enum-rtti-TemporaryMatters>`  const    +
-+------------+----------------------------------------------------------------------+
-
-
-|function-ast-is_same_type|
-
-.. _function-_at_ast_c__c_has_field_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_CIs_Cb:
-
-.. das:function:: has_field(type: smart_ptr<ast::TypeDecl> const implicit; fieldName: string const implicit; constant: bool const)
-
-has_field returns bool
-
-+---------+----------------------------------------------------------------------+
-+argument +argument type                                                         +
-+=========+======================================================================+
-+type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` > const implicit+
-+---------+----------------------------------------------------------------------+
-+fieldName+string const implicit                                                 +
-+---------+----------------------------------------------------------------------+
-+constant +bool const                                                            +
-+---------+----------------------------------------------------------------------+
-
-
-|function-ast-has_field|
-
-.. _function-_at_ast_c__c_is_visible_directly_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?:
-
-.. das:function:: is_visible_directly(from_module: rtti::Module? const implicit; which_module: rtti::Module? const implicit)
-
-is_visible_directly returns bool
-
-+------------+----------------------------------------------------------+
-+argument    +argument type                                             +
-+============+==========================================================+
-+from_module + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit+
-+------------+----------------------------------------------------------+
-+which_module+ :ref:`rtti::Module <handle-rtti-Module>` ? const implicit+
-+------------+----------------------------------------------------------+
-
-
-|function-ast-is_visible_directly|
-
-.. _function-_at_ast_c__c_is_expr_like_call_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr_?W:
-
-.. das:function:: is_expr_like_call(expression: smart_ptr<ast::Expression> const& implicit)
-
-is_expr_like_call returns bool
-
-+----------+---------------------------------------------------------------------------+
-+argument  +argument type                                                              +
-+==========+===========================================================================+
-+expression+smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` > const& implicit+
-+----------+---------------------------------------------------------------------------+
-
-
-|function-ast-is_expr_like_call|
-
-.. _function-_at_ast_c__c_is_expr_const_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr_?W:
-
-.. das:function:: is_expr_const(expression: smart_ptr<ast::Expression> const& implicit)
-
-is_expr_const returns bool
-
-+----------+---------------------------------------------------------------------------+
-+argument  +argument type                                                              +
-+==========+===========================================================================+
-+expression+smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` > const& implicit+
-+----------+---------------------------------------------------------------------------+
-
-
-|function-ast-is_expr_const|
-
 ++++++++++++++++++
 Pointer conversion
 ++++++++++++++++++
@@ -12740,9 +12623,76 @@ remove_structure returns bool
 
 |function-ast-remove_structure|
 
-+++++++++++++
-Uncategorized
-+++++++++++++
+++++++++++
+Properties
+++++++++++
+
+  *  :ref:`is_temp_type (type:smart_ptr\<ast::TypeDecl\> const implicit;refMatters:bool const) : bool <function-_at_ast_c__c_is_temp_type_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_Cb>` 
+  *  :ref:`is_same_type (leftType:smart_ptr\<ast::TypeDecl\> const implicit;rightType:smart_ptr\<ast::TypeDecl\> const implicit;refMatters:rtti::RefMatters const;constMatters:rtti::ConstMatters const;tempMatters:rtti::TemporaryMatters const;context:__context const;at:__lineInfo const) : bool <function-_at_ast_c__c_is_same_type_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_CE_ls_rtti_c__c_RefMatters_gr__CE_ls_rtti_c__c_ConstMatters_gr__CE_ls_rtti_c__c_TemporaryMatters_gr__C_c_C_l>` 
+  *  :ref:`has_field (type:smart_ptr\<ast::TypeDecl\> const implicit;fieldName:string const implicit;constant:bool const) : bool <function-_at_ast_c__c_has_field_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_CIs_Cb>` 
+  *  :ref:`get_field_type (type:smart_ptr\<ast::TypeDecl\> const implicit;fieldName:string const implicit;constant:bool const) : smart_ptr\<ast::TypeDecl\> <function-_at_ast_c__c_get_field_type_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_CIs_Cb>` 
+  *  :ref:`is_visible_directly (from_module:rtti::Module? const implicit;which_module:rtti::Module? const implicit) : bool <function-_at_ast_c__c_is_visible_directly_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?>` 
+  *  :ref:`is_expr_like_call (expression:smart_ptr\<ast::Expression\> const& implicit) : bool <function-_at_ast_c__c_is_expr_like_call_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr_?W>` 
+  *  :ref:`is_expr_const (expression:smart_ptr\<ast::Expression\> const& implicit) : bool <function-_at_ast_c__c_is_expr_const_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr_?W>` 
+
+.. _function-_at_ast_c__c_is_temp_type_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_Cb:
+
+.. das:function:: is_temp_type(type: smart_ptr<ast::TypeDecl> const implicit; refMatters: bool const)
+
+is_temp_type returns bool
+
++----------+----------------------------------------------------------------------+
++argument  +argument type                                                         +
++==========+======================================================================+
++type      +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` > const implicit+
++----------+----------------------------------------------------------------------+
++refMatters+bool const                                                            +
++----------+----------------------------------------------------------------------+
+
+
+|function-ast-is_temp_type|
+
+.. _function-_at_ast_c__c_is_same_type_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_CE_ls_rtti_c__c_RefMatters_gr__CE_ls_rtti_c__c_ConstMatters_gr__CE_ls_rtti_c__c_TemporaryMatters_gr__C_c_C_l:
+
+.. das:function:: is_same_type(leftType: smart_ptr<ast::TypeDecl> const implicit; rightType: smart_ptr<ast::TypeDecl> const implicit; refMatters: RefMatters const; constMatters: ConstMatters const; tempMatters: TemporaryMatters const)
+
+is_same_type returns bool
+
++------------+----------------------------------------------------------------------+
++argument    +argument type                                                         +
++============+======================================================================+
++leftType    +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` > const implicit+
++------------+----------------------------------------------------------------------+
++rightType   +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` > const implicit+
++------------+----------------------------------------------------------------------+
++refMatters  + :ref:`rtti::RefMatters <enum-rtti-RefMatters>`  const                +
++------------+----------------------------------------------------------------------+
++constMatters+ :ref:`rtti::ConstMatters <enum-rtti-ConstMatters>`  const            +
++------------+----------------------------------------------------------------------+
++tempMatters + :ref:`rtti::TemporaryMatters <enum-rtti-TemporaryMatters>`  const    +
++------------+----------------------------------------------------------------------+
+
+
+|function-ast-is_same_type|
+
+.. _function-_at_ast_c__c_has_field_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_CIs_Cb:
+
+.. das:function:: has_field(type: smart_ptr<ast::TypeDecl> const implicit; fieldName: string const implicit; constant: bool const)
+
+has_field returns bool
+
++---------+----------------------------------------------------------------------+
++argument +argument type                                                         +
++=========+======================================================================+
++type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` > const implicit+
++---------+----------------------------------------------------------------------+
++fieldName+string const implicit                                                 +
++---------+----------------------------------------------------------------------+
++constant +bool const                                                            +
++---------+----------------------------------------------------------------------+
+
+
+|function-ast-has_field|
 
 .. _function-_at_ast_c__c_get_field_type_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_CIs_Cb:
 
@@ -12762,5 +12712,52 @@ get_field_type returns smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >
 
 
 |function-ast-get_field_type|
+
+.. _function-_at_ast_c__c_is_visible_directly_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?:
+
+.. das:function:: is_visible_directly(from_module: rtti::Module? const implicit; which_module: rtti::Module? const implicit)
+
+is_visible_directly returns bool
+
++------------+----------------------------------------------------------+
++argument    +argument type                                             +
++============+==========================================================+
++from_module + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit+
++------------+----------------------------------------------------------+
++which_module+ :ref:`rtti::Module <handle-rtti-Module>` ? const implicit+
++------------+----------------------------------------------------------+
+
+
+|function-ast-is_visible_directly|
+
+.. _function-_at_ast_c__c_is_expr_like_call_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr_?W:
+
+.. das:function:: is_expr_like_call(expression: smart_ptr<ast::Expression> const& implicit)
+
+is_expr_like_call returns bool
+
++----------+---------------------------------------------------------------------------+
++argument  +argument type                                                              +
++==========+===========================================================================+
++expression+smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` > const& implicit+
++----------+---------------------------------------------------------------------------+
+
+
+|function-ast-is_expr_like_call|
+
+.. _function-_at_ast_c__c_is_expr_const_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr_?W:
+
+.. das:function:: is_expr_const(expression: smart_ptr<ast::Expression> const& implicit)
+
+is_expr_const returns bool
+
++----------+---------------------------------------------------------------------------+
++argument  +argument type                                                              +
++==========+===========================================================================+
++expression+smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` > const& implicit+
++----------+---------------------------------------------------------------------------+
+
+
+|function-ast-is_expr_const|
 
 

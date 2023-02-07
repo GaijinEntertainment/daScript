@@ -723,6 +723,8 @@ def document_function(doc_file:file;mod:Module?;func:FunctionPtr)
         fwrite(doc_file,"{func.name} returns {describe_type(func.result)}\n\n")
     if func.flags.unsafeOperation
         document_warning(doc_file,"This is unsafe operation.")
+    if func.moreFlags.deprecated
+        document_warning(doc_file,"This function is deprecated.")
     document_function_arguments(doc_file,argNames,argTypes)
     document_topic(doc_file,topic("function",mod,"{func.name}"))
 

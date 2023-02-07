@@ -24,6 +24,8 @@
 
 .. |typedef-ast-ExprAtFlags| replace:: properties of the `ExprAt` object.
 
+.. |typedef-ast-IfFlags| replace:: properties of the `ExprIf` object.
+
 .. |typedef-ast-ExprMakeLocalFlags| replace:: properties of the `ExprMakeLocal` object (`ExprMakeArray`, `ExprMakeStruct`, 'ExprMakeTuple', 'ExprMakeVariant').
 
 .. |typedef-ast-ExprAscendFlags| replace:: properties of the `ExprAscend` object.
@@ -219,7 +221,9 @@
 
 .. |method-ast-AstCallMacro.visit| replace:: This callback occurs during the `infer` pass for every `ExprCallMacro`, after its arguments are inferred. When fully inferred macro is expected to replace `ExprCallMacro` with meaningful expression.
 
-.. |method-ast-AstCallMacro.canVisitArguments| replace:: This callback occurs during the `infer` pass before the arguments of the call macro are visited. If callback returns true, the arguments are visited, otherwise the call macro is not visited (and acts like a query expression).
+.. |method-ast-AstCallMacro.canVisitArgument| replace:: This callback occurs during the `infer` pass before the arguments of the call macro are visited. If callback returns true, the argument of given index is visited, otherwise it acts like a query expression.
+
+.. |method-ast-AstCallMacro.canFoldReturnResult| replace:: If true the enclosing function can infer return result as `void` when unspecified. If false function will have to wait for the macro to fold.
 
 .. |class-ast-AstTypeInfoMacro| replace:: This macro is used to implement type info traits, i.e. `typeinfo(YourTraitHere ...)` expressions.
 
@@ -255,6 +259,8 @@
 .. |method-ast-AstVisitor.preVisitAlias| replace:: before `TypeDecl`
 
 .. |method-ast-AstVisitor.visitAlias| replace:: after `TypeDecl`
+
+.. |method-ast-AstVisitor.canVisitCall| replace:: If false call will be completely skipped, otherwise it behaves normally.
 
 .. |method-ast-AstVisitor.canVisitWithAliasSubexpression| replace:: before the sub expression in the `ExprAssume`
 
@@ -922,6 +928,8 @@
 
 .. |function-ast-clone_structure| replace:: Returns clone of the `Structure`.
 
+.. |function-ast-add_keyword| replace:: Adds new `keyword`. It can appear in the `keyword <type> expr` or `keyword expr block` syntax. See daslib/match as implementation example.
+
 .. |function-ast-describe_typedecl| replace:: Returns description of the `TypeDecl` which should match corresponding daScript type declaration.
 
 .. |function-ast-describe_typedecl_cpp| replace:: Returns description of the `TypeDecl` which should match corresponding C++ type declaration.
@@ -974,7 +982,9 @@
 
 .. |function-ast-for_each_field| replace:: Iterates through every field in the `BuiltinStructure` handled type.
 
-.. |function-ast-has_field| replace:: Returns if structure or handled type or pointer to either of those has specific field.
+.. |function-ast-has_field| replace:: Returns if structure, variant, tuple, or handled type or pointer to either of those has specific field.
+
+.. |function-ast-get_field_type| replace:: Returns type of the field if structure, variant, tuple, or handled type or pointer to either of those has it. It's null otherwise.
 
 .. |function-ast-is_visible_directly| replace:: Returns true if module is visible directly from the other module.
 
