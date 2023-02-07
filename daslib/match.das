@@ -518,7 +518,10 @@ class StaticMatchMacro : MatchMacro
     override report_match_errors = false
 
 [structure_macro(name="match_as_is")]
-class MatchAsIs : AstStructureAnnotation {}
+class MatchAsIs : AstStructureAnnotation {
+    //! Implements `match_as_is` annotation.
+    //! This annotation is used to mark that structure can be matched with different type via is and as machinery.
+}
 
 def public match_type(anytype,anything) : void
     //! this is a macro, it will be replaced with a match expression of specified type

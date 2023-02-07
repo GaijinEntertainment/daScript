@@ -10,6 +10,7 @@ Pattern matching
 .. _match:
 
 The MATCH module implements pattern matching in daScript.
+(See also the :ref:`pattern-matching` section.)
 
 All functions and symbols are in "match" module, use require to get access to it. ::
 
@@ -40,38 +41,7 @@ Structure macros
 
 .. das:attribute:: match_as_is
 
-|structure_macro-match-match_as_is|
-
-+++++++++++++
-Uncategorized
-+++++++++++++
-
-.. _function-_at_match_c__c_match_type_C._C.:
-
-.. das:function:: match_type(anytype: auto const; anything: auto const)
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+anytype +auto const   +
-+--------+-------------+
-+anything+auto const   +
-+--------+-------------+
-
-
-this is a macro, it will be replaced with a match expression of specified type
-
-.. _function-_at_match_c__c_match_expr_C.:
-
-.. das:function:: match_expr(anything: auto const)
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+anything+auto const   +
-+--------+-------------+
-
-
-this is a macro, it will be replaced with a match expression
+Implements `match_as_is` annotation.
+This annotation is used to mark that structure can be matched with different type via is and as machinery.
 
 

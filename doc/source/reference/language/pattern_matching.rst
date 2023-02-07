@@ -1,4 +1,4 @@
-.. _match:
+.. _pattern-matching:
 
 ================
 Pattern matching
@@ -9,6 +9,8 @@ This technique allows us to take a complex value, such as an array or a variant,
 If the value fits a certain pattern, the matching process continues and we can extract specific values from that value.
 This is a powerful tool for making our code more readable and efficient,
 and in this section we'll be exploring the different ways that pattern matching can be used in daScript.
+
+In daScript pattern matching is implement via macros in the `daslib/match` module.
 
 ^^^^^^^^^^^^^^^^^^^^
 Enumeration Matching
@@ -106,9 +108,9 @@ Example::
 
     def variant_as_match (v:IF)
         match v
-            if $v(as_int)
+            if $v(as_int) as i
                 return as_int
-            if $v(as_float)
+            if $v(as_float) as f
                 return as_float
             if _
                 return None
@@ -322,6 +324,57 @@ If either of these options match, the value of b is returned. If neither of the 
 
 It's important to note that for the || expression to work, both sides of the statement must declare the same variables.
 
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[match_as_is] Structure Annotation
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The [match_as_is] structure annotation in daScript allows you to perform pattern matching for structures of different types.
+This allows you to match structures of different types in a single pattern matching expression,
+as long as the necessary is and as operators have been implemented for the matching types.
+
+Here's an example of how to use the [match_as_is] structure annotation::
+
+    [match_as_is]
+    struct CmdMove : Cmd
+        override rtti = "CmdMove"
+        x : float
+        y : float
+
+In this example, the structure CmdMove is marked with the [match_as_is] annotation, allowing it to participate in pattern matching::
+
+    def operator is CmdMove ( cmd:Cmd )
+        return cmd.rtti=="CmdMove"
+
+    def operator is CmdMove ( anything )
+        return false
+
+    def operator as CmdMove ( cmd:Cmd ==const ) : CmdMove const&
+        assert(cmd.rtti=="CmdMove")
+        unsafe
+            return reinterpret<CmdMove const&> cmd
+
+    def operator as CmdMove ( var cmd:Cmd ==const ) : CmdMove&
+        assert(cmd.rtti=="CmdMove")
+        unsafe
+            return reinterpret<CmdMove&> cmd
+
+    def operator as CmdMove ( anything )
+        panic("Cannot cast to CmdMove")
+        return [[CmdMove]]
+
+    def matching_as_and_is (cmd:Cmd)
+        match cmd
+            if [[CmdMove x=$v(x), y=$v(y)]]
+                return x + y
+            if _
+                return 0.
+
+In this example, the necessary is and as operators have been implemented for the CmdMove structure to allow it to participate in pattern matching. The is operator is used to determine the compatibility of the types, and the as operator is used to perform the actual type casting.
+
+In the matching_as_and_is function, cmd is matched against the CmdMove structure using the [[CmdMove x=$v(x), y=$v(y)]] pattern. If the match is successful, the values of x and y are extracted and the sum is returned. If the match is not successful, the catch-all _ case is matched, and 0.0 is returned.
+
+**Note** that the [match_as_is] structure annotation only works if the necessary is and as operators have been implemented for the matching types. In the example above, the necessary is and as operators have been implemented for the CmdMove structure to allow it to participate in pattern matching.
+
 ^^^^^^^^^^^^^^^^^^^^
 Static Matching
 ^^^^^^^^^^^^^^^^^^^^
@@ -364,6 +417,33 @@ Here is an example::
 In this example, color is matched against the enumeration values red, green, and blue. If the match expression color is equal to the enumeration value red, 0 will be returned.
 If the match expression color is equal to the value of blah, 1 will be returned. If none of the patterns match, -1 will be returned.
 
-Note that match_expr is used to match blah against the match expression color, rather than directly matching blah against the enumeration value.
+**Note** that match_expr is used to match blah against the match expression color, rather than directly matching blah against the enumeration value.
 
 If color is not Color first match will fail. If blah is not Color, second match will fail. But the function will always compile.
+
+^^^^^^^^^^
+match_type
+^^^^^^^^^^
+
+The match_type subexpression in daScript allows you to perform pattern matching based on the type of an expression.
+It is used within the static_match statement to specify the type of expression that you want to match.
+
+The syntax for match_type is as follows::
+
+    if match_type<Type> expr
+        // code to run if match is successful
+
+where Type is the type that you want to match and. expr is the expression that you want to match against.
+
+Here's an example of how to use the match_type subexpression::
+
+    def static_match_by_type (what)
+        static_match what
+            if match_type<int> $v(expr)
+                return expr
+            if _
+                return -1
+
+In this example, what is the expression that is being matched. If what is of type int, then it is assigned to the variable $v and the expression expr is returned. If what is not of type int, the match falls through to the catch-all _ case, and -1 is returned.
+
+**Note** that the match_type subexpression only matches types, and mismatched values are ignored. This is in contrast to regular pattern matching, where both type and value must match for a match to be successful.

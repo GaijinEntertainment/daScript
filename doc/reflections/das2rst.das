@@ -600,8 +600,7 @@ def document_module_fuzzer(root:string)
 def document_module_match(root:string)
     var mod = find_module("match")
     var groups <- [{DocGroup
-        group_by_regex("Stub1", mod, %regex~(stub1)$%%);
-        group_by_regex("Stub2", mod, %regex~(stub2)$%%)
+        hide_group(group_by_regex("Implementation details", mod, %regex~(match_type|match_expr)$%%))
     }]
     document("Pattern matching",mod,"{root}/match.rst","{root}/detail/match.rst",groups)
 
