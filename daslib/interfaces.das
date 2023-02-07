@@ -67,7 +67,7 @@ class ImplementsMacro : AstStructureAnnotation
         // add function {st}::get`{Foo} : Foo?
         var fn_get_i <- qmacro_method(iface_get_name_func,st) <| $ ( var self: $t(st) ) : $t(iface_ptr)
             if self.$f(iface_var_name) == null
-                self.$f(iface_var_name) = new $t(cls)(unsafe(addr(self)))
+                self.$f(iface_var_name) = new <$t(cls)>(unsafe(addr(self)))
             return self.$f(iface_var_name)
         add_function(st._module, fn_get_i)
         // add {cls}::_self : {ST}?

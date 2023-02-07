@@ -152,7 +152,7 @@ def tuple_match ( A : tuple<int;float;string> )
             return 1
         if [[auto 13,...]]      // starts with 13
             return 2
-        if [[auto ...,"13"]]    // ends with 13
+        if [[auto ...,"13"]]    // ends with "13"
             return 3
         if [[auto 2,...,"2"]]   // starts with 2, ends with "2"
             return 4

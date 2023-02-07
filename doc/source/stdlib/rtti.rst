@@ -1221,73 +1221,83 @@ SimFunction properties are
 
 CodeOfPolicies fields are
 
-+------------------------------+----+
-+aot_module                    +bool+
-+------------------------------+----+
-+fail_on_no_aot                +bool+
-+------------------------------+----+
-+fail_on_lack_of_aot_export    +bool+
-+------------------------------+----+
-+profiler                      +bool+
-+------------------------------+----+
-+debugger                      +bool+
-+------------------------------+----+
-+aot_order_side_effects        +bool+
-+------------------------------+----+
-+macro_context_collect         +bool+
-+------------------------------+----+
-+rtti                          +bool+
-+------------------------------+----+
-+ignore_shared_modules         +bool+
-+------------------------------+----+
-+aot                           +bool+
-+------------------------------+----+
-+allow_shared_lambda           +bool+
-+------------------------------+----+
-+allow_local_variable_shadowing+bool+
-+------------------------------+----+
-+multiple_contexts             +bool+
-+------------------------------+----+
-+heap_size_hint                +uint+
-+------------------------------+----+
-+persistent_heap               +bool+
-+------------------------------+----+
-+no_global_heap                +bool+
-+------------------------------+----+
-+intern_strings                +bool+
-+------------------------------+----+
-+no_optimizations              +bool+
-+------------------------------+----+
-+allow_block_variable_shadowing+bool+
-+------------------------------+----+
-+no_unused_function_arguments  +bool+
-+------------------------------+----+
-+stack                         +uint+
-+------------------------------+----+
-+no_unused_block_arguments     +bool+
-+------------------------------+----+
-+smart_pointer_by_value_unsafe +bool+
-+------------------------------+----+
-+solid_context                 +bool+
-+------------------------------+----+
-+no_global_variables           +bool+
-+------------------------------+----+
-+completion                    +bool+
-+------------------------------+----+
-+string_heap_size_hint         +uint+
-+------------------------------+----+
-+macro_context_persistent_heap +bool+
-+------------------------------+----+
-+no_unsafe                     +bool+
-+------------------------------+----+
-+local_ref_is_unsafe           +bool+
-+------------------------------+----+
-+no_global_variables_at_all    +bool+
-+------------------------------+----+
-+only_fast_aot                 +bool+
-+------------------------------+----+
-+default_module_public         +bool+
-+------------------------------+----+
++------------------------------+--------------------------------------------------------+
++aot_module                    +bool                                                    +
++------------------------------+--------------------------------------------------------+
++fail_on_no_aot                +bool                                                    +
++------------------------------+--------------------------------------------------------+
++jit                           +bool                                                    +
++------------------------------+--------------------------------------------------------+
++fail_on_lack_of_aot_export    +bool                                                    +
++------------------------------+--------------------------------------------------------+
++profiler                      +bool                                                    +
++------------------------------+--------------------------------------------------------+
++debugger                      +bool                                                    +
++------------------------------+--------------------------------------------------------+
++aot_order_side_effects        +bool                                                    +
++------------------------------+--------------------------------------------------------+
++macro_context_collect         +bool                                                    +
++------------------------------+--------------------------------------------------------+
++rtti                          +bool                                                    +
++------------------------------+--------------------------------------------------------+
++ignore_shared_modules         +bool                                                    +
++------------------------------+--------------------------------------------------------+
++no_deprecated                 +bool                                                    +
++------------------------------+--------------------------------------------------------+
++aot                           +bool                                                    +
++------------------------------+--------------------------------------------------------+
++allow_shared_lambda           +bool                                                    +
++------------------------------+--------------------------------------------------------+
++allow_local_variable_shadowing+bool                                                    +
++------------------------------+--------------------------------------------------------+
++multiple_contexts             +bool                                                    +
++------------------------------+--------------------------------------------------------+
++heap_size_hint                +uint                                                    +
++------------------------------+--------------------------------------------------------+
++profile_module                + :ref:`builtin::das_string <handle-builtin-das_string>` +
++------------------------------+--------------------------------------------------------+
++persistent_heap               +bool                                                    +
++------------------------------+--------------------------------------------------------+
++no_global_heap                +bool                                                    +
++------------------------------+--------------------------------------------------------+
++intern_strings                +bool                                                    +
++------------------------------+--------------------------------------------------------+
++no_optimizations              +bool                                                    +
++------------------------------+--------------------------------------------------------+
++allow_block_variable_shadowing+bool                                                    +
++------------------------------+--------------------------------------------------------+
++no_unused_function_arguments  +bool                                                    +
++------------------------------+--------------------------------------------------------+
++stack                         +uint                                                    +
++------------------------------+--------------------------------------------------------+
++no_unused_block_arguments     +bool                                                    +
++------------------------------+--------------------------------------------------------+
++smart_pointer_by_value_unsafe +bool                                                    +
++------------------------------+--------------------------------------------------------+
++solid_context                 +bool                                                    +
++------------------------------+--------------------------------------------------------+
++no_global_variables           +bool                                                    +
++------------------------------+--------------------------------------------------------+
++completion                    +bool                                                    +
++------------------------------+--------------------------------------------------------+
++string_heap_size_hint         +uint                                                    +
++------------------------------+--------------------------------------------------------+
++macro_context_persistent_heap +bool                                                    +
++------------------------------+--------------------------------------------------------+
++no_unsafe                     +bool                                                    +
++------------------------------+--------------------------------------------------------+
++local_ref_is_unsafe           +bool                                                    +
++------------------------------+--------------------------------------------------------+
++no_aliasing                   +bool                                                    +
++------------------------------+--------------------------------------------------------+
++no_global_variables_at_all    +bool                                                    +
++------------------------------+--------------------------------------------------------+
++only_fast_aot                 +bool                                                    +
++------------------------------+--------------------------------------------------------+
++debug_module                  + :ref:`builtin::das_string <handle-builtin-das_string>` +
++------------------------------+--------------------------------------------------------+
++default_module_public         +bool                                                    +
++------------------------------+--------------------------------------------------------+
 
 
 |structure_annotation-rtti-CodeOfPolicies|
@@ -1336,10 +1346,10 @@ Initialization and finalization
 
   *  :ref:`LineInfo () : rtti::LineInfo <function-_at_rtti_c__c_LineInfo>` 
   *  :ref:`LineInfo (arg0:rtti::FileInfo? const implicit;arg1:int const;arg2:int const;arg3:int const;arg4:int const) : rtti::LineInfo <function-_at_rtti_c__c_LineInfo_CI1_ls_H_ls_rtti_c__c_FileInfo_gr__gr_?_Ci_Ci_Ci_Ci>` 
-  *  :ref:`using (arg0:block\<(var arg0:rtti::recursive_mutex# explicit):void\> const implicit) : void <function-_at_rtti_c__c_using_CI0_ls__hh_XH_ls_rtti_c__c_recursive_mutex_gr__gr_1_ls_v_gr__builtin_>` 
+  *  :ref:`using (arg0:block\<(var arg0:rtti::recursive_mutex explicit):void\> const implicit) : void <function-_at_rtti_c__c_using_CI0_ls_XH_ls_rtti_c__c_recursive_mutex_gr__gr_1_ls_v_gr__builtin_>` 
   *  :ref:`CodeOfPolicies () : rtti::CodeOfPolicies <function-_at_rtti_c__c_CodeOfPolicies>` 
-  *  :ref:`using (arg0:block\<(var arg0:rtti::CodeOfPolicies# explicit):void\> const implicit) : void <function-_at_rtti_c__c_using_CI0_ls__hh_XH_ls_rtti_c__c_CodeOfPolicies_gr__gr_1_ls_v_gr__builtin_>` 
-  *  :ref:`using (arg0:block\<(var arg0:rtti::ModuleGroup# explicit):void\> const implicit) : void <function-_at_rtti_c__c_using_CI0_ls__hh_XH_ls_rtti_c__c_ModuleGroup_gr__gr_1_ls_v_gr__builtin_>` 
+  *  :ref:`using (arg0:block\<(var arg0:rtti::CodeOfPolicies explicit):void\> const implicit) : void <function-_at_rtti_c__c_using_CI0_ls_XH_ls_rtti_c__c_CodeOfPolicies_gr__gr_1_ls_v_gr__builtin_>` 
+  *  :ref:`using (arg0:block\<(var arg0:rtti::ModuleGroup explicit):void\> const implicit) : void <function-_at_rtti_c__c_using_CI0_ls_XH_ls_rtti_c__c_ModuleGroup_gr__gr_1_ls_v_gr__builtin_>` 
   *  :ref:`RttiValue_nothing () : auto <function-_at_rtti_c__c_RttiValue_nothing>` 
 
 .. _function-_at_rtti_c__c_LineInfo:
@@ -1373,15 +1383,15 @@ LineInfo returns  :ref:`rtti::LineInfo <handle-rtti-LineInfo>`
 
 |function-rtti-LineInfo|
 
-.. _function-_at_rtti_c__c_using_CI0_ls__hh_XH_ls_rtti_c__c_recursive_mutex_gr__gr_1_ls_v_gr__builtin_:
+.. _function-_at_rtti_c__c_using_CI0_ls_XH_ls_rtti_c__c_recursive_mutex_gr__gr_1_ls_v_gr__builtin_:
 
-.. das:function:: using(arg0: block<(var arg0:rtti::recursive_mutex# explicit):void> const implicit)
+.. das:function:: using(arg0: block<(var arg0:rtti::recursive_mutex explicit):void> const implicit)
 
-+--------+------------------------------------------------------------------------------------------+
-+argument+argument type                                                                             +
-+========+==========================================================================================+
-+arg0    +block<( :ref:`rtti::recursive_mutex <handle-rtti-recursive_mutex>` #):void> const implicit+
-+--------+------------------------------------------------------------------------------------------+
++--------+-----------------------------------------------------------------------------------------+
++argument+argument type                                                                            +
++========+=========================================================================================+
++arg0    +block<( :ref:`rtti::recursive_mutex <handle-rtti-recursive_mutex>` ):void> const implicit+
++--------+-----------------------------------------------------------------------------------------+
 
 
 |function-rtti-using|
@@ -1394,28 +1404,28 @@ CodeOfPolicies returns  :ref:`rtti::CodeOfPolicies <handle-rtti-CodeOfPolicies>`
 
 |function-rtti-CodeOfPolicies|
 
-.. _function-_at_rtti_c__c_using_CI0_ls__hh_XH_ls_rtti_c__c_CodeOfPolicies_gr__gr_1_ls_v_gr__builtin_:
+.. _function-_at_rtti_c__c_using_CI0_ls_XH_ls_rtti_c__c_CodeOfPolicies_gr__gr_1_ls_v_gr__builtin_:
 
-.. das:function:: using(arg0: block<(var arg0:rtti::CodeOfPolicies# explicit):void> const implicit)
+.. das:function:: using(arg0: block<(var arg0:rtti::CodeOfPolicies explicit):void> const implicit)
 
-+--------+----------------------------------------------------------------------------------------+
-+argument+argument type                                                                           +
-+========+========================================================================================+
-+arg0    +block<( :ref:`rtti::CodeOfPolicies <handle-rtti-CodeOfPolicies>` #):void> const implicit+
-+--------+----------------------------------------------------------------------------------------+
++--------+---------------------------------------------------------------------------------------+
++argument+argument type                                                                          +
++========+=======================================================================================+
++arg0    +block<( :ref:`rtti::CodeOfPolicies <handle-rtti-CodeOfPolicies>` ):void> const implicit+
++--------+---------------------------------------------------------------------------------------+
 
 
 |function-rtti-using|
 
-.. _function-_at_rtti_c__c_using_CI0_ls__hh_XH_ls_rtti_c__c_ModuleGroup_gr__gr_1_ls_v_gr__builtin_:
+.. _function-_at_rtti_c__c_using_CI0_ls_XH_ls_rtti_c__c_ModuleGroup_gr__gr_1_ls_v_gr__builtin_:
 
-.. das:function:: using(arg0: block<(var arg0:rtti::ModuleGroup# explicit):void> const implicit)
+.. das:function:: using(arg0: block<(var arg0:rtti::ModuleGroup explicit):void> const implicit)
 
-+--------+----------------------------------------------------------------------------------+
-+argument+argument type                                                                     +
-+========+==================================================================================+
-+arg0    +block<( :ref:`rtti::ModuleGroup <handle-rtti-ModuleGroup>` #):void> const implicit+
-+--------+----------------------------------------------------------------------------------+
++--------+---------------------------------------------------------------------------------+
++argument+argument type                                                                    +
++========+=================================================================================+
++arg0    +block<( :ref:`rtti::ModuleGroup <handle-rtti-ModuleGroup>` ):void> const implicit+
++--------+---------------------------------------------------------------------------------+
 
 
 |function-rtti-using|

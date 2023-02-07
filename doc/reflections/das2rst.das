@@ -52,6 +52,7 @@ require daslib/interfaces
 require daslib/export_constructor
 require daslib/faker
 require daslib/fuzzer
+require daslib/match
 
 def document_module_math(root:string)
     var mod = get_module("math")
@@ -596,6 +597,15 @@ def document_module_fuzzer(root:string)
     }]
     document("Fuzzer",mod,"{root}/fuzzer.rst","{root}/detail/fuzzer.rst",groups)
 
+def document_module_match(root:string)
+    var mod = find_module("match")
+    var groups <- [{DocGroup
+        group_by_regex("Stub1", mod, %regex~(stub1)$%%);
+        group_by_regex("Stub2", mod, %regex~(stub2)$%%)
+    }]
+    document("Pattern matching",mod,"{root}/match.rst","{root}/detail/match.rst",groups)
+
+
 [export]
 def main
     let root = get_das_root()+"/doc/source/stdlib"  // todo: modify to output /temp so that we can merge changes
@@ -664,3 +674,4 @@ def main
     document_module_unroll(root)
     document_module_uriparser_boost(root)
     document_module_utf8_utils(root)
+    document_module_match(root)

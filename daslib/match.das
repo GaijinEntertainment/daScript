@@ -440,6 +440,7 @@ def join_conditions ( var conditions:array<ExpressionPtr> )
 
 [call_macro(name="match")]
 class MatchMacro : AstCallMacro
+    //! Implements `match` macro.
     report_match_errors = true
     def override canVisitArgument ( expr:smart_ptr<ExprCallMacro>; argIndex:int ) : bool
         // if we are reporting errors, and macro did not fold - no point showing errors inside match - there will be too many, and they are meaningless
@@ -513,14 +514,19 @@ class MatchMacro : AstCallMacro
 
 [call_macro(name="static_match")]
 class StaticMatchMacro : MatchMacro
+    //! Implements `static_match` macro.
     override report_match_errors = false
 
 [structure_macro(name="match_as_is")]
 class MatchAsIs : AstStructureAnnotation {}
 
-def public match_type(anything,anytype) : void {}
+def public match_type(anytype,anything) : void
+    //! this is a macro, it will be replaced with a match expression of specified type
+    pass
 
-def public match_expr(anything) : void {}
+def public match_expr(anything) : void
+    //! this is a macro, it will be replaced with a match expression
+    pass
 
 [_macro]
 def private setup

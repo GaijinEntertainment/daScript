@@ -815,13 +815,13 @@ Queries
   *  :ref:`find_unique_function (mod:rtti::Module? const;name:string const;canfail:bool const) : smart_ptr\<ast::Function\> <function-_at_ast_boost_c__c_find_unique_function_C1_ls_H_ls_rtti_c__c_Module_gr__gr_?_Cs_Cb>` 
   *  :ref:`find_unique_generic (mod:rtti::Module? const;name:string const;canfail:bool const) : smart_ptr\<ast::Function\> <function-_at_ast_boost_c__c_find_unique_generic_C1_ls_H_ls_rtti_c__c_Module_gr__gr_?_Cs_Cb>` 
   *  :ref:`find_annotation (mod_name:string const;ann_name:string const) : rtti::Annotation const? <function-_at_ast_boost_c__c_find_annotation_Cs_Cs>` 
-  *  :ref:`get_for_source_index (expr:smart_ptr\<ast::ExprFor\> const;svar:smart_ptr\<ast::Variable\> const) : int const <function-_at_ast_boost_c__c_get_for_source_index_C1_ls_H_ls_ast_c__c_ExprFor_gr__gr_?M_CY_ls_VariablePtr_gr_1_ls_H_ls_ast_c__c_Variable_gr__gr_?M>` 
-  *  :ref:`get_for_source_index (expr:smart_ptr\<ast::ExprFor\> const;source:smart_ptr\<ast::Expression\> const) : int const <function-_at_ast_boost_c__c_get_for_source_index_C1_ls_H_ls_ast_c__c_ExprFor_gr__gr_?M_CY_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M>` 
+  *  :ref:`get_for_source_index (expr:smart_ptr\<ast::ExprFor\> const;svar:smart_ptr\<ast::Variable\> const) : int <function-_at_ast_boost_c__c_get_for_source_index_C1_ls_H_ls_ast_c__c_ExprFor_gr__gr_?M_CY_ls_VariablePtr_gr_1_ls_H_ls_ast_c__c_Variable_gr__gr_?M>` 
+  *  :ref:`get_for_source_index (expr:smart_ptr\<ast::ExprFor\> const;source:smart_ptr\<ast::Expression\> const) : int <function-_at_ast_boost_c__c_get_for_source_index_C1_ls_H_ls_ast_c__c_ExprFor_gr__gr_?M_CY_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M>` 
   *  :ref:`isCMRES (fun:smart_ptr\<ast::Function\> const) : bool <function-_at_ast_boost_c__c_isCMRES_CY_ls_FunctionPtr_gr_1_ls_H_ls_ast_c__c_Function_gr__gr_?M>` 
   *  :ref:`isCMRES (fun:ast::Function? const) : bool <function-_at_ast_boost_c__c_isCMRES_C1_ls_H_ls_ast_c__c_Function_gr__gr_?>` 
   *  :ref:`isMakeLocal (expr:smart_ptr\<ast::Expression\> const) : bool <function-_at_ast_boost_c__c_isMakeLocal_CY_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M>` 
   *  :ref:`get_workhorse_types () : rtti::Type[28] <function-_at_ast_boost_c__c_get_workhorse_types>` 
-  *  :ref:`find_argument_index (typ:smart_ptr\<ast::TypeDecl\> const;name:string const) : int const <function-_at_ast_boost_c__c_find_argument_index_CY_ls_TypeDeclPtr_gr_1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Cs>` 
+  *  :ref:`find_argument_index (typ:smart_ptr\<ast::TypeDecl\> const;name:string const) : int <function-_at_ast_boost_c__c_find_argument_index_CY_ls_TypeDeclPtr_gr_1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Cs>` 
   *  :ref:`isCMRESType (blockT:smart_ptr\<ast::TypeDecl\> const) : bool <function-_at_ast_boost_c__c_isCMRESType_CY_ls_TypeDeclPtr_gr_1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M>` 
 
 .. _function-_at_ast_boost_c__c_isVectorType_CE_ls_rtti_c__c_Type_gr_:
@@ -966,7 +966,7 @@ find_annotation returns  :ref:`rtti::Annotation <handle-rtti-Annotation>`  const
 
 .. das:function:: get_for_source_index(expr: smart_ptr<ast::ExprFor> const; svar: VariablePtr)
 
-get_for_source_index returns int const
+get_for_source_index returns int
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -983,7 +983,7 @@ get_for_source_index returns int const
 
 .. das:function:: get_for_source_index(expr: smart_ptr<ast::ExprFor> const; source: ExpressionPtr)
 
-get_for_source_index returns int const
+get_for_source_index returns int
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -1053,7 +1053,7 @@ get_workhorse_types returns  :ref:`rtti::Type <enum-rtti-Type>` [28]
 
 .. das:function:: find_argument_index(typ: TypeDeclPtr; name: string const)
 
-find_argument_index returns int const
+find_argument_index returns int
 
 +--------+----------------------------------------+
 +argument+argument type                           +

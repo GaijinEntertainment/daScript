@@ -77,6 +77,7 @@ THE SOFTWARE.
    export_constructor.rst
    faker.rst
    fuzzer.rst
+   match.rst
 
 
 
