@@ -206,7 +206,7 @@ def match_array ( what:TypeDeclPtr; wths:ExprMakeArray?; dynamic:bool; access:Ex
     return true
 
 [macro_function]
-def match_any ( what:TypeDeclPtr; wths:ExprMakeVariant?; access:ExpressionPtr; var to:MatchTo )
+def match_variant ( what:TypeDeclPtr; wths:ExprMakeVariant?; access:ExpressionPtr; var to:MatchTo )
     if what.baseType!=Type tVariant
         to.errors |> match_error("{describe(what)} does not match [[ ... ]] variant", wths.at)
         return false
@@ -226,27 +226,28 @@ def match_any ( what:TypeDeclPtr; wths:ExprMakeVariant?; access:ExpressionPtr; v
         var newAccess <- whatDim==1 ? qmacro($e(access) as $f(mf.name)) : qmacro($e(access)[$v(i)] as $f(mf.name))
         newAccess |> force_at(wths.at)
         defer_delete(newAccess)
-        var found = false
-        for ft,fn in wths.makeType.argTypes, wths.makeType.argNames
-            if fn==mf.name
-                found = true
-                to.conditions |> emplace_new <| new [[ExprIsVariant() at=wths.at,
-                    value <- clone_expression(access),
-                    name := mf.name
-                ]]
-                log_m("\t[[variant {mf.name}]] match passed\n")
-                if !match_any(ft, mf.value, newAccess, to)
-                    return false
-                break
-        if !found
+        var ftype <- get_field_type(what, string(mf.name), what.flags.constant); defer_delete(ftype)
+        if ftype == null
             to.errors |> match_error("variant {mf.name} not found", mf.at)
+            return false
+        to.conditions |> emplace_new <| new [[ExprIsVariant() at=wths.at,
+            value <- clone_expression(access),
+            name := mf.name
+        ]]
+        log_m("\t[[variant {mf.name}]] match passed\n")
+        if !match_any(ftype, mf.value, newAccess, to)
             return false
     return true
 
 [macro_function]
 def match_as_variant ( what:TypeDeclPtr; wthAs:ExprAsVariant?; access:ExpressionPtr; var to:MatchTo )
-    // todo: variant name check
-    // fixme: correct what for submatch
+    if what.baseType!=Type tVariant
+        to.errors |> match_error("{describe(what)} is not a variant", wthAs.at)
+        return false
+    var ftype <- get_field_type(what, string(wthAs.name), what.flags.constant); defer_delete(ftype)
+    if ftype == null
+        to.errors |> match_error("variant {wthAs.name} not found", wthAs.at)
+        return false
     to.conditions |> emplace_new <| new [[ExprIsVariant() at=wthAs.at,
         value <- clone_expression(access),
         name := wthAs.name
@@ -256,7 +257,7 @@ def match_as_variant ( what:TypeDeclPtr; wthAs:ExprAsVariant?; access:Expression
         name := wthAs.name
     ]]; defer_delete(new_access)
     log_m("\tas {wthAs.name} match passed\n")
-    return match_any(what, wthAs.value, access, to)
+    return match_any(ftype, wthAs.value, access, to)
 
 [macro_function]
 def match_type ( what:TypeDeclPtr; wthmt:ExprCall?; access:ExpressionPtr; var to:MatchTo )
@@ -376,7 +377,7 @@ def match_any ( what:TypeDeclPtr; wth:ExpressionPtr; access:ExpressionPtr; var t
         else
             return match_array(what, wth as ExprMakeArray, false, access, to)
     elif wth is ExprMakeVariant
-        return match_any(what, wth as ExprMakeVariant, access, to)
+        return match_variant(what, wth as ExprMakeVariant, access, to)
     elif wth is ExprAsVariant
         return match_as_variant(what, wth as ExprAsVariant, access, to)
     elif wth |> is_match_call("type")
