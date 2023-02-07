@@ -26,7 +26,7 @@ struct AB
 
 [sideeffects]
 def enum_match ( color:Color )
-    match(color) <|
+    match color
         if Color black
             return 0
         if Color red
@@ -36,7 +36,7 @@ def enum_match ( color:Color )
 
 [sideeffects]
 def enum_static_match ( color, blah )
-    static_match(color) <|
+    static_match color
         if Color black
             return 0
         if match_expr(blah)
@@ -46,7 +46,7 @@ def enum_static_match ( color, blah )
 
 [sideeffects]
 def static_match_by_type ( what )
-    static_match(what) <|
+    static_match what
         if match_type($v(expr),type<int>)
             return "int {expr}"
         if _
@@ -54,7 +54,7 @@ def static_match_by_type ( what )
 
 [sideeffects]
 def struct_match ( f : Foo )
-    match(f) <|
+    match f
         if [[Foo a=13]]
             return 0
         if [[Foo a=$v(anyA)]]
@@ -62,7 +62,7 @@ def struct_match ( f : Foo )
 
 [sideeffects]
 def struct_match ( b : Bar )
-    match(b) <|
+    match b
         if [[Bar a=13]]
             return 0
         if [[Bar a=$v(anyA), b=13.0]]
@@ -72,7 +72,7 @@ def struct_match ( b : Bar )
 
 [sideeffects]
 def guards_match ( ab : AB )
-    match(ab) <|
+    match ab
         if [[AB a=$v(a), b=$v(b)]] && (b > a)
             return "{b} > {a}"
         if [[AB a=$v(a), b=$v(b)]]
@@ -80,7 +80,7 @@ def guards_match ( ab : AB )
 
 [sideeffects]
 def variant_as_match ( v : IF )
-    match(v) <|
+    match v
         if $v(i) as i
             return "int"
         if $v(f) as f
@@ -90,7 +90,7 @@ def variant_as_match ( v : IF )
 
 [sideeffects]
 def nested_struct_match ( v : Foo )
-    match(v) <|
+    match v
         if [[Foo a=1, v=$v(i) as i]]
             return 1
         if [[Foo v=$v(f) as f]]
@@ -100,7 +100,7 @@ def nested_struct_match ( v : Foo )
 
 [sideeffects]
 def variant_match ( v : IF )
-    match(v) <|
+    match v
         if [[IF i=$v(i)]]
             return 1
         if [[IF f=$v(f)]]
@@ -110,7 +110,7 @@ def variant_match ( v : IF )
 
 [sideeffects]
 def static_array_match ( A : int[3] )
-    match(A) <|
+    match A
         if [[auto $v(a);$v(b);$v(c)]] && (a+b+c)==6 // total of 3 elements, sum is 6
             return 1
         if [[int 0;...]]    // starts with 0
@@ -124,7 +124,7 @@ def static_array_match ( A : int[3] )
 
 [sideeffects]
 def dynamic_array_match ( A : array<int> )
-    match(A) <|
+    match A
         if [{auto $v(a);$v(b);$v(c)}] && (a+b+c)==6 // total of 3 elements, sum is 6
             return 1
         if [{int 0;0;0;...}]    // first 3 are 0
@@ -139,16 +139,15 @@ def dynamic_array_match ( A : array<int> )
 
 [sideeffects]
 def ascending_array_match ( A : int[3] )
-    match(A) <|
+    match A
         if [[int $v(x);match_expr(x+1);match_expr(x+2)]]
             return true
         if _
             return false
 
-
 [sideeffects]
 def tuple_match ( A : tuple<int;float;string> )
-    match(A) <|
+    match A
         if [[auto 1,_,"3"]]
             return 1
         if [[auto 13,...]]      // starts with 13
@@ -162,7 +161,7 @@ def tuple_match ( A : tuple<int;float;string> )
 
 [sideeffects]
 def or_match ( i :int )
-    match(i) <|
+    match i
         if 1 || 2
             return true
         if _
@@ -170,7 +169,7 @@ def or_match ( i :int )
 
 [sideeffects]
 def or_match_v ( B:Bar )
-    match(B) <|
+    match B
         if [[Bar a=1, b=$v(b)]] || [[Bar a=2, b=$v(b)]]
             return b
         if _
@@ -178,7 +177,7 @@ def or_match_v ( B:Bar )
 
 [sideeffects]
 def struct_ptr_match ( f : Foo? )
-    match(f) <|
+    match f
         if null
             return -1
         if [[Foo a=13]]
@@ -190,7 +189,7 @@ def struct_ptr_match ( f : Foo? )
 
 [sideeffects]
 def match_handle_ptr ( T:TypeDeclPtr )
-    match(T) <|
+    match T
         if null
             return "null"
         if [[TypeDecl() baseType=Type tPointer]]
@@ -200,7 +199,7 @@ def match_handle_ptr ( T:TypeDeclPtr )
 
 [sideeffects]
 def match_ast_expr_ptr ( E:ExpressionPtr )
-    match(E) <|
+    match E
         if null
             return "null"
         if [[ExprConstInt() value=$v(v)]]
@@ -237,10 +236,9 @@ def operator as CmdMove ( anything )
     panic("Cannot cast to CmdMove")
     return [[CmdMove]]
 
-
 [sideeffects]
 def matching_as_and_is ( cmd:Cmd )
-    match(cmd) <|
+    match cmd
         if [[CmdMove x=$v(x), y=$v(y)]]
             return x + y
         if _

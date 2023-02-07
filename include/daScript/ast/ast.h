@@ -948,6 +948,7 @@ namespace das
         bool addReaderMacro ( const ReaderMacroPtr & ptr, bool canFail = false );
         bool addCommentReader ( const CommentReaderPtr & ptr, bool canFail = false );
         bool addCallMacro ( const CallMacroPtr & ptr, bool canFail = false );
+        bool addKeyword ( const string & kwd, bool needOxfordComma, bool canFail = false );
         TypeDeclPtr findAlias ( const string & name ) const;
         VariablePtr findVariable ( const string & name ) const;
         FunctionPtr findFunction ( const string & mangledName ) const;
@@ -1024,6 +1025,7 @@ namespace das
         vector<SimulateMacroPtr>                    simulateMacros;     // simulate macros (every time we simulate context)
         das_map<string,ReaderMacroPtr>              readMacros;         // %foo "blah"
         CommentReaderPtr                            commentReader;      // /* blah */ or // blah
+        vector<pair<string,bool>>                   keywords;           // keywords (and if they need oxford comma)
         string  name;
         union {
             struct {

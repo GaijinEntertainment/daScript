@@ -251,20 +251,21 @@ extern int das_yydebug;
     FLOAT = 411,                   /* "floating point constant"  */
     DOUBLE = 412,                  /* "double constant"  */
     NAME = 413,                    /* "name"  */
-    BEGIN_STRING = 414,            /* "start of the string"  */
-    STRING_CHARACTER = 415,        /* STRING_CHARACTER  */
-    STRING_CHARACTER_ESC = 416,    /* STRING_CHARACTER_ESC  */
-    END_STRING = 417,              /* "end of the string"  */
-    BEGIN_STRING_EXPR = 418,       /* "{"  */
-    END_STRING_EXPR = 419,         /* "}"  */
-    END_OF_READ = 420,             /* "end of failed eader macro"  */
-    UNARY_MINUS = 421,             /* UNARY_MINUS  */
-    UNARY_PLUS = 422,              /* UNARY_PLUS  */
-    PRE_INC = 423,                 /* PRE_INC  */
-    PRE_DEC = 424,                 /* PRE_DEC  */
-    POST_INC = 425,                /* POST_INC  */
-    POST_DEC = 426,                /* POST_DEC  */
-    DEREF = 427                    /* DEREF  */
+    KEYWORD = 414,                 /* "keyword"  */
+    BEGIN_STRING = 415,            /* "start of the string"  */
+    STRING_CHARACTER = 416,        /* STRING_CHARACTER  */
+    STRING_CHARACTER_ESC = 417,    /* STRING_CHARACTER_ESC  */
+    END_STRING = 418,              /* "end of the string"  */
+    BEGIN_STRING_EXPR = 419,       /* "{"  */
+    END_STRING_EXPR = 420,         /* "}"  */
+    END_OF_READ = 421,             /* "end of failed eader macro"  */
+    UNARY_MINUS = 422,             /* UNARY_MINUS  */
+    UNARY_PLUS = 423,              /* UNARY_PLUS  */
+    PRE_INC = 424,                 /* PRE_INC  */
+    PRE_DEC = 425,                 /* PRE_DEC  */
+    POST_INC = 426,                /* POST_INC  */
+    POST_DEC = 427,                /* POST_DEC  */
+    DEREF = 428                    /* DEREF  */
   };
   typedef enum das_yytokentype das_yytoken_kind_t;
 #endif

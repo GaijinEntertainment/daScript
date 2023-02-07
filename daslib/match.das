@@ -521,3 +521,10 @@ class MatchAsIs : AstStructureAnnotation {}
 def public match_type(anything,anytype) : void {}
 
 def public match_expr(anything) : void {}
+
+[_macro]
+def private setup
+    if is_compiling_macros_in_module("match")
+        compiling_module() |> add_keyword("match", false)
+        compiling_module() |> add_keyword("static_match", false)
+

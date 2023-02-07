@@ -348,6 +348,20 @@ namespace das {
         }
     }
 
+    bool Module::addKeyword (const string & kwd, bool needOxfordComma, bool canFail ) {
+        auto it = find_if(keywords.begin(), keywords.end(), [&](auto value){
+            return value.first == kwd;
+        });
+        if ( it != keywords.end() ) {
+            if ( !canFail ) {
+                DAS_FATAL_ERROR("can't add duplicate keyword %s to module %s\n", kwd.c_str(), name.c_str() );
+            }
+            return false;
+        }
+        keywords.emplace_back(kwd, needOxfordComma);
+        return true;
+    }
+
     bool Module::addFunction ( const FunctionPtr & fn, bool canFail ) {
         fn->module = this;
         auto mangledName = fn->getMangledName();

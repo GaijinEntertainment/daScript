@@ -70,6 +70,9 @@
     void das_yybegin_reader ( yyscan_t yyscanner );
     void das_yyend_reader ( yyscan_t yyscanner );
 
+    namespace das { class Module; }
+    void das_collect_keywords ( das::Module * mod, yyscan_t yyscanner );
+
     #undef yyextra
     #define yyextra (*((das::DasParserState **)(scanner)))
 %}
@@ -297,6 +300,7 @@
 %token<fd>      FLOAT                   "floating point constant"
 %token<d>       DOUBLE                  "double constant"
 %token<s>       NAME                    "name"
+%token<s>       KEYWORD                 "keyword"
 
 /* %printer { fprintf (yyo, "%i", $$); } <i> */
 
@@ -333,6 +337,7 @@
 %type <pVarDeclList>    tuple_type_list
 %type <pVarDecl>        variant_type
 %type <pVarDeclList>    variant_type_list
+%type <s>               keyword_or_name
 %type <s>               name_in_namespace
 %type <s>               annotation_declaration_name
 %type <s>               function_name
@@ -405,6 +410,7 @@
 %type <pExpression>     expression_try_catch
 %type <pExpression>     expr_new
 %type <pExpression>     expr_pipe
+%type <pExpression>     expr_keyword
 %type <pExpression>     expr_type_info
 %type <pExpression>     expr_type_decl
 %type <pExpression>     expr_cast
@@ -635,21 +641,26 @@ require_declaration
     :   DAS_REQUIRE require_module
     ;
 
+keyword_or_name
+    :   NAME[name]      { $$ = $name; }
+    |   KEYWORD[name]   { $$ = $name; }
+    ;
+
 require_module_name
-    :   NAME[name] {
+    :   keyword_or_name[name] {
         $$ = $name;
     }
     |   '%' require_module_name[req] {
         *$req = "%" + *$req;
         $$ = $req;
     }
-    |   require_module_name[req] '.' NAME[name] {
+    |   require_module_name[req] '.' keyword_or_name[name] {
         *$req += ".";
         *$req += *$name;
         delete $name;
         $$ = $req;
     }
-    |   require_module_name[req] '/' NAME[name] {
+    |   require_module_name[req] '/' keyword_or_name[name] {
         *$req += "/";
         *$req += *$name;
         delete $name;
@@ -1107,6 +1118,7 @@ expression_block
 expression_any
     :   ';'                                 { $$ = nullptr; }
     |   expr_pipe[subexpr]                  { $$ = $subexpr; }
+    |   expr_keyword[subexpr]               { $$ = $subexpr; }
     |   expr_assign_pipe[subexpr]           { $$ = $subexpr; }
     |   expr_assign[subexpr] ';'            { $$ = $subexpr; }
     |   expression_delete[subexpr] ';'      { $$ = $subexpr; }
@@ -1141,6 +1153,18 @@ expressions
     }
     |   expressions[block] error {
         delete $block; $$ = nullptr; YYABORT;
+    }
+    ;
+
+expr_keyword
+    :   KEYWORD[kwd] expr[subexpr] expression_block[block] {
+        auto pCall = yyextra->g_Program->makeCall(tokAt(scanner,@kwd),*$kwd);
+        pCall->arguments.push_back(ExpressionPtr($subexpr));
+        auto resT = new TypeDecl(Type::autoinfer);
+        auto blk = ast_makeBlock(scanner,0,nullptr,nullptr,nullptr,resT,$block,tokAt(scanner,@block),tokAt(scanner,@block));
+        pCall->arguments.push_back(ExpressionPtr(blk));
+        delete $kwd;
+        $$ = pCall;
     }
     ;
 

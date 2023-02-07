@@ -39,6 +39,12 @@ namespace das {
         return module->addFunction(func, true);
     }
 
+    bool addModuleKeyword ( Module * module, char * kwd, bool needOxfordComma, Context * context, LineInfoArg * lineInfo ) {
+        if ( !module ) context->throw_error_at(*lineInfo, "expecting module, not null");
+        if ( !kwd || kwd[0]==0 ) context->throw_error_at(*lineInfo, "expecting keyword, not empty string");
+        return module->addKeyword(kwd, needOxfordComma, true);
+    }
+
     void forEachFunction ( Module * module, const char * name, const TBlock<void,FunctionPtr> & block, Context * context, LineInfoArg * lineInfo ) {
         if ( !module ) context->throw_error_at(*lineInfo, "expecting module, not null");
         vec4f args[1];
@@ -596,6 +602,9 @@ namespace das {
         addExtern<DAS_BIND_FUN(addModuleVariable)>(*this, lib, "add_variable",
             SideEffects::modifyExternal, "addModuleVariable")
                 ->args({"module","variable","context","line"});
+        addExtern<DAS_BIND_FUN(addModuleKeyword)>(*this, lib, "add_keyword",
+            SideEffects::modifyExternal, "addModuleKeyword")
+                ->args({"module","keyword","needOxfordComma","context","line"});
         addExtern<DAS_BIND_FUN(findModuleVariable)>(*this, lib, "find_variable",
             SideEffects::modifyExternal, "findModuleVariable")
                 ->args({"module","variable"});
