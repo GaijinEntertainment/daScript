@@ -4,11 +4,11 @@
 Pattern matching
 ================
 
-Pattern matching is a powerful feature in programming that allows for more concise and readable code by allowing a programmer
-to easily test a value against a set of patterns, and bind values in the process. It is a versatile mechanism that can be used
-for many different tasks, such as data validation, data extraction, and flow control. With pattern matching, you can write more
-expressive code by breaking down complex structures into simple, recognizable patterns. Whether you're working with simple data types
-like integers and strings, or more complex data structures like arrays and variants, pattern matching is a valuable tool for writing clean and efficient code.
+In the world of computer programming, there is a concept known as pattern matching.
+This technique allows us to take a complex value, such as an array or a variant, and compare it to a set of patterns.
+If the value fits a certain pattern, the matching process continues and we can extract specific values from that value.
+This is a powerful tool for making our code more readable and efficient,
+and in this section we'll be exploring the different ways that pattern matching can be used in daScript.
 
 ^^^^^^^^^^^^^^^^^^^^
 Enumeration Matching
