@@ -448,17 +448,16 @@ def match_any ( what:TypeDeclPtr; wth:ExpressionPtr; access:ExpressionPtr; var t
         return false
 
 [macro_function]
-def join_conditions ( var conditions:array<ExpressionPtr> )
+def join_conditions ( var conditions:array<ExpressionPtr> ) : ExpressionPtr
     let clen = length(conditions)
     if clen == 0
-        return quote(true)
+        return new [[ExprConstBool() value=true]]
     var tail <- conditions |> back()
     conditions |> pop()
     while length(conditions) > 0
         var last <- conditions |> back()
         conditions |> pop()
-        var new_tail <- qmacro($e(last) && $e(tail))
-        new_tail |> force_at(last.at)
+        var new_tail <- new [[ExprOp2() at=last.at, op:="&&", left<-last, right<-tail]]
         tail <- new_tail
     return tail
 
@@ -574,4 +573,3 @@ def private setup
         compiling_module() |> add_keyword("match", false)
         compiling_module() |> add_keyword("static_match", false)
         compiling_module() |> add_keyword("match_type", true)
-
