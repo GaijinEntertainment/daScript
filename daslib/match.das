@@ -498,13 +498,13 @@ class MatchMacro : AstCallMacro
             else
                 macro_error(prog, ee.at, "match `block` argument can only contain match-to calls, not {ee.__rtti}")
         var access <- clone_expression(what); defer_delete(access)
-        var iff : smart_ptr<ExprIfThenElse>
+        var iff : smart_ptr<ExprIfThenElse>; defer_delete(iff)
         let eli = length(eblk.list)
         var any_errors = false
         var prefix : array<ExpressionPtr>; defer_delete(prefix)
         for ei in range(eli)
             var eto = (eblk.list[eli-ei-1]) as ExprIfThenElse
-            var to : MatchTo
+            var to : MatchTo; defer_delete(to)
             if match_any(what._type, eto.cond, access, to)
                 log_m("match_any ok\n\n")
                 var new_iff <- new [[ExprIfThenElse() at=eto.at, cond<-join_conditions(to.conditions)]]
@@ -535,11 +535,12 @@ class MatchMacro : AstCallMacro
                 prefix |> resize(p0+length(to.prefix))
                 for p,i in to.prefix,count(p0)
                     prefix[i] <- p
-            delete to
         if any_errors
             return [[ExpressionPtr]]
         prefix |> emplace(iff)
-        return <- qmacro($b(prefix))
+        var res <- qmacro($b(prefix))
+        // print("match result {debug_expression(res)}\n")
+        return res
 
 [call_macro(name="static_match")]
 class StaticMatchMacro : MatchMacro

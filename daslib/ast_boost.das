@@ -848,7 +848,7 @@ def private debug_expression_impl ( var writer:StringBuilderWriter; expr:Express
     if empty(expr.__rtti)
         writer |> write("[NO RTTI]")
         return
-    writer |> write("({expr.__rtti}")
+    writer |> write("({expr.__rtti}<{smart_ptr_use_count(expr)}>")
     if string(expr.__rtti) |> starts_with("ExprConst")
         writer |> write(" {describe(expr)})")
         return
