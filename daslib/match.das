@@ -25,6 +25,7 @@ struct MatchError
 struct MatchTo
     conditions   : array<ExpressionPtr>
     declarations : table<string; ExpressionPtr>
+    prefix       : array<ExpressionPtr>
     errors       : array<MatchError>
     failed       : bool
 
@@ -36,6 +37,22 @@ def log_m ( msg:string )
 [macro_function]
 def match_error ( var errors : array<MatchError>; msg:string; at:LineInfo ) // !!!do not put access.at in there
     errors |> push([[MatchError msg=msg, at=unsafe(addr(at))]])
+
+enum MatchType
+    none
+    as_is
+    copy
+
+[macro_function]
+def get_match_type ( typ:TypeDeclPtr )
+    if !typ.isStructure || typ.structType==null
+        return MatchType none
+    for ann in typ.structType.annotations
+        if ann.annotation.name=="match_as_is"
+            return MatchType as_is
+        elif ann.annotation.name=="match_copy"
+            return MatchType copy
+    return MatchType none
 
 [macro_function]
 def match_as_is ( what:TypeDeclPtr; wths:ExprMakeStruct?; as_is_name:das_string; access:ExpressionPtr; var to:MatchTo )
@@ -51,13 +68,17 @@ def match_as_is ( what:TypeDeclPtr; wths:ExprMakeStruct?; as_is_name:das_string;
     return match_struct(wths.makeType, wths, access_expr, to)
 
 [macro_function]
-def get_is_as ( typ:TypeDeclPtr )
-    if !typ.isStructure || typ.structType==null
-        return false
-    for ann in typ.structType.annotations
-        if ann.annotation.name=="match_as_is"
-            return true
-    return false
+def match_copy ( what:TypeDeclPtr; wths:ExprMakeStruct?; as_is_name:das_string; access:ExpressionPtr; var to:MatchTo )
+    let tempName = make_unique_private_name("__`match`copy",wths.at)
+    var prefixType <- clone_type(wths.makeType); defer_delete(prefixType)
+    var prefix <- qmacro_expr <|
+        let $i(tempName) : $t(prefixType)
+    to.prefix |> emplace_new <| clone_expression(prefix)
+    defer_delete(prefix)
+    var access_new <- qmacro($i(tempName)); defer_delete(access_new)
+    var cond_nz <- qmacro(match_copy($i(tempName), $e(access)))
+    to.conditions |> emplace(cond_nz)
+    return match_struct(wths.makeType, wths, access_new, to)
 
 [macro_function]
 def match_struct ( what:TypeDeclPtr; wths:ExprMakeStruct?; access:ExpressionPtr; var to:MatchTo )
@@ -75,8 +96,12 @@ def match_struct ( what:TypeDeclPtr; wths:ExprMakeStruct?; access:ExpressionPtr;
         to.errors |> match_error("{describe(what)} does not match [[ ... ]]", wths.at)
         return false
     if wths.makeType!=null && !wths.makeType.isAuto && !is_same_type(what, wths.makeType, RefMatters no, ConstMatters no, TemporaryMatters no)
-        if what.isStructure && wths.makeType.isStructure && get_is_as(wths.makeType)
-            return match_as_is(what, wths, wths.makeType.structType.name, access, to)
+        if wths.makeType.isStructure
+            let mtype = get_match_type(wths.makeType)
+            if mtype==MatchType as_is
+                return match_as_is(what, wths, wths.makeType.structType.name, access, to)
+            elif mtype==MatchType copy
+                return match_copy(what, wths, wths.makeType.structType.name, access, to)
         to.errors |> match_error("{describe(what)} type does not match [[{describe(wths.makeType)} ... ]] structure", wths.at)
         return false
     let wdl = length(what.dim)
@@ -474,9 +499,10 @@ class MatchMacro : AstCallMacro
             else
                 macro_error(prog, ee.at, "match `block` argument can only contain match-to calls, not {ee.__rtti}")
         var access <- clone_expression(what); defer_delete(access)
-        var iff : smart_ptr<ExprIfThenElse>; defer_delete(iff)
+        var iff : smart_ptr<ExprIfThenElse>
         let eli = length(eblk.list)
         var any_errors = false
+        var prefix : array<ExpressionPtr>; defer_delete(prefix)
         for ei in range(eli)
             var eto = (eblk.list[eli-ei-1]) as ExprIfThenElse
             var to : MatchTo
@@ -505,12 +531,16 @@ class MatchMacro : AstCallMacro
             static_if LOG_MATCH
                 for e in to.errors
                     log_m("\tERROR:: {e.msg} at {describe(*e.at)}\n")
+            if length(to.prefix) != 0
+                let p0 = length(prefix)
+                prefix |> resize(p0+length(to.prefix))
+                for p,i in to.prefix,count(p0)
+                    prefix[i] <- p
             delete to
         if any_errors
             return [[ExpressionPtr]]
-        var res <- qmacro_block <|
-            $e(iff)
-        return <- res
+        prefix |> emplace(iff)
+        return <- qmacro($b(prefix))
 
 [call_macro(name="static_match")]
 class StaticMatchMacro : MatchMacro
@@ -522,6 +552,13 @@ class MatchAsIs : AstStructureAnnotation {
     //! Implements `match_as_is` annotation.
     //! This annotation is used to mark that structure can be matched with different type via is and as machinery.
 }
+
+[structure_macro(name="match_copy")]
+class MatchCopy : AstStructureAnnotation {
+    //! Implements `match_copy` annotation.
+    //! This annotation is used to mark that structure can be matched with different type via match_copy machinery.
+}
+
 
 def public match_type(anytype,anything) : void
     //! this is a macro, it will be replaced with a match expression of specified type

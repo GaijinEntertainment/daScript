@@ -375,6 +375,54 @@ In the matching_as_and_is function, cmd is matched against the CmdMove structure
 
 **Note** that the [match_as_is] structure annotation only works if the necessary is and as operators have been implemented for the matching types. In the example above, the necessary is and as operators have been implemented for the CmdMove structure to allow it to participate in pattern matching.
 
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+[match_copy] Structure Annotation
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+The [match_copy] structure annotation in daScript allows you to perform pattern matching for structures of different types.
+This allows you to match structures of different types in a single pattern matching expression,
+as long as the necessary match_copy function has been implemented for the matching types.
+
+Here's an example of how to use the [match_copy] structure annotation::
+
+    [match_copy]
+    struct CmdLocate : Cmd
+        override rtti = "CmdLocate"
+        x : float
+        y : float
+        z : float
+
+In this example, the structure CmdLocate is marked with the [match_copy] annotation, allowing it to participate in pattern matching.
+
+The match_copy function is used to match structures of different types. Here's an example of the implementation of the match_copy function for the CmdLocate structure::
+
+    def match_copy ( var cmdm:CmdLocate; cmd:Cmd )
+        if cmd.rtti != "CmdLocate"
+            return false
+        unsafe
+            cmdm = reinterpret<CmdLocate const&> cmd
+        return true
+
+In this example, the match_copy function takes two parameters: cmdm of type CmdLocate and cmd of type Cmd.
+The purpose of this function is to determine if the cmd parameter is of type CmdLocate.
+If it is, the function performs a type cast to CmdLocate using the reinterpret, and assigns the result to cmdm.
+The function then returns true to indicate that the type cast was successful. If the cmd parameter is not of type CmdLocate, the function returns false.
+
+Here's an example of how the match_copy function is used in a matching_copy function::
+
+    def matching_copy ( cmd:Cmd )
+        match cmd
+            if [[CmdLocate x=$v(x), y=$v(y), z=$v(z)]]
+                return x + y + z
+            if _
+                return 0.
+
+In this example, the matching_copy function takes a single parameter cmd of type Cmd. This function performs a type matching operation on the cmd parameter to determine its type.
+If the cmd parameter is of type CmdLocate, the function returns the sum of the values of its x, y, and z fields. If the cmd parameter is of any other type, the function returns 0.
+
+**Note** that the [match_copy] structure annotation only works if the necessary match_copy function has been implemented for the matching types.
+In the example above, the necessary match_copy function has been implemented for the CmdLocate structure to allow it to participate in pattern matching.
+
 ^^^^^^^^^^^^^^^^^^^^
 Static Matching
 ^^^^^^^^^^^^^^^^^^^^

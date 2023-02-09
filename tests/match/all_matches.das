@@ -244,6 +244,28 @@ def matching_as_and_is ( cmd:Cmd )
         if _
             return 0.
 
+[match_copy]
+struct CmdLocate : Cmd
+    override rtti = "CmdLocate"
+    x : float
+    y : float
+    z : float
+
+def match_copy ( var cmdm:CmdLocate; cmd:Cmd )
+    if cmd.rtti != "CmdLocate"
+        return false
+    unsafe
+        cmdm = reinterpret<CmdLocate const&> cmd
+    return true
+
+[sideeffects]
+def matching_copy ( cmd:Cmd )
+    match cmd
+        if [[CmdLocate x=$v(x), y=$v(y), z=$v(z)]]
+            return x + y + z
+        if _
+            return 0.
+
 [test]
 def test_all_match ( t:T? )
     t |> run("enum match") <| @@ ( t : T? )
@@ -333,4 +355,7 @@ def test_all_match ( t:T? )
     t |> run("match as is") <| @@ ( t : T? )
         t |> equal(0., matching_as_and_is(Cmd()))
         t |> equal(3., matching_as_and_is([[CmdMove() x=1.,y=2.]]))
+    t |> run("match copy") <| @@ ( t : T? )
+        t |> equal(0., matching_copy(Cmd()))
+        t |> equal(6., matching_copy([[CmdLocate() x=1.,y=2.,z=3.]]))
 
