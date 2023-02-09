@@ -73,8 +73,7 @@ def match_copy ( what:TypeDeclPtr; wths:ExprMakeStruct?; as_is_name:das_string; 
     var prefixType <- clone_type(wths.makeType); defer_delete(prefixType)
     var prefix <- qmacro_expr <|
         let $i(tempName) : $t(prefixType)
-    to.prefix |> emplace_new <| clone_expression(prefix)
-    defer_delete(prefix)
+    to.prefix |> emplace <| prefix
     var access_new <- qmacro($i(tempName)); defer_delete(access_new)
     var cond_nz <- qmacro(match_copy($i(tempName), $e(access)))
     to.conditions |> emplace(cond_nz)
