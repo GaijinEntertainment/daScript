@@ -120,16 +120,17 @@ def match_struct ( what:TypeDeclPtr; wths:ExprMakeStruct?; access:ExpressionPtr;
         delete fields
     for i in range(wthsLength)
         for mf in *wths.structs[i]
-            var newAccess <- whatDim==1 ? qmacro($e(access).$f(mf.name)) : qmacro($e(access)[$v(i)].$f(mf.name))
-            newAccess |> force_at(wths.at)
-            defer_delete(newAccess)
-            var ftype <- get_field_type(what, string(mf.name), what.flags.constant); defer_delete(ftype)
-            if ftype == null
-                to.errors |> match_error("field {mf.name} not found", mf.at)
-                return false
-            log_m("\t[[structure[{i}] {mf.name}]] match passed\n")
-            if !match_any(ftype, mf.value, newAccess, to)
-                return false
+            if true // to create scope for defer_delete
+                var new_access <- whatDim==1 ? qmacro($e(access).$f(mf.name)) : qmacro($e(access)[$v(i)].$f(mf.name))
+                new_access |> force_at(wths.at)
+                defer_delete(new_access)
+                var ftype <- get_field_type(what, string(mf.name), what.flags.constant); defer_delete(ftype)
+                if ftype == null
+                    to.errors |> match_error("field {mf.name} not found", mf.at)
+                    return false
+                log_m("\t[[structure[{i}] {mf.name}]] match passed\n")
+                if !match_any(ftype, mf.value, new_access, to)
+                    return false
     return true
 
 [macro_function]
@@ -164,11 +165,12 @@ def match_tuple ( what:TypeDeclPtr; wths:ExprMakeTuple?; access:ExpressionPtr; v
         if i == tagIndex    // skip ...
             continue
         var ei = i<= tagIndex ? i : whatDim - (wthsLength - i)
-        var newAccess <- qmacro($e(access).$f("_{ei}"))
-        newAccess |> force_at(wths.at)
-        defer_delete(newAccess)
-        if !match_any(what.argTypes[ei], wths.values[i], newAccess, to)
-            return false
+        var new_access <- qmacro($e(access).$f("_{ei}"))
+        new_access |> force_at(wths.at)
+        if true // to create scope for defer delete
+            defer_delete(new_access)
+            if !match_any(what.argTypes[ei], wths.values[i], new_access, to)
+                return false
     return true
 
 [macro_function]
@@ -219,14 +221,13 @@ def match_array ( what:TypeDeclPtr; wths:ExprMakeArray?; dynamic:bool; access:Ex
         to.conditions |> emplace(lenCond)
     log_m("\tarray match passed\n")
     for i in range(wthsLength)
-        if i == tagIndex    // skip ...
-            continue
-        var ei = i<=tagIndex ? i : wthsLength-i
-        var newAccess <- i<tagIndex ? qmacro($e(access)[$v(ei)]) : qmacro($e(access)[length($e(access)) - $v(ei)])
-        newAccess |> force_at(wths.at)
-        defer_delete(newAccess)
-        if !match_any(recT, wths.values[i], newAccess, to)
-            return false
+        if i != tagIndex
+            var ei = i<=tagIndex ? i : wthsLength-i
+            var new_access <- i<tagIndex ? qmacro($e(access)[$v(ei)]) : qmacro($e(access)[length($e(access)) - $v(ei)])
+            new_access |> force_at(wths.at)
+            defer_delete(new_access)
+            if !match_any(recT, wths.values[i], new_access, to)
+                return false
     return true
 
 [macro_function]
@@ -247,20 +248,21 @@ def match_variant ( what:TypeDeclPtr; wths:ExprMakeVariant?; access:ExpressionPt
         to.errors |> match_error("{describe(what)} number of variant elements does not match [[describe(wths.makeType)}[{wthsLength}] ... ]]", wths.at)
         return false
     for mf,i in wths.variants,count()
-        var newAccess <- whatDim==1 ? qmacro($e(access) as $f(mf.name)) : qmacro($e(access)[$v(i)] as $f(mf.name))
-        newAccess |> force_at(wths.at)
-        defer_delete(newAccess)
-        var ftype <- get_field_type(what, string(mf.name), what.flags.constant); defer_delete(ftype)
-        if ftype == null
-            to.errors |> match_error("variant {mf.name} not found", mf.at)
-            return false
-        to.conditions |> emplace_new <| new [[ExprIsVariant() at=wths.at,
-            value <- clone_expression(access),
-            name := mf.name
-        ]]
-        log_m("\t[[variant {mf.name}]] match passed\n")
-        if !match_any(ftype, mf.value, newAccess, to)
-            return false
+        if true // to create scope for defer delete
+            var new_access <- whatDim==1 ? qmacro($e(access) as $f(mf.name)) : qmacro($e(access)[$v(i)] as $f(mf.name))
+            new_access |> force_at(wths.at)
+            defer_delete(new_access)
+            var ftype <- get_field_type(what, string(mf.name), what.flags.constant); defer_delete(ftype)
+            if ftype == null
+                to.errors |> match_error("variant {mf.name} not found", mf.at)
+                return false
+            to.conditions |> emplace_new <| new [[ExprIsVariant() at=wths.at,
+                value <- clone_expression(access),
+                name := mf.name
+            ]]
+            log_m("\t[[variant {mf.name}]] match passed\n")
+            if !match_any(ftype, mf.value, new_access, to)
+                return false
     return true
 
 [macro_function]
@@ -502,38 +504,39 @@ class MatchMacro : AstCallMacro
         var any_errors = false
         var prefix : array<ExpressionPtr>; defer_delete(prefix)
         for ei in range(eli)
-            var eto = (eblk.list[eli-ei-1]) as ExprIfThenElse
-            var to : MatchTo; defer_delete(to)
-            if match_any(what._type, eto.cond, access, to)
-                log_m("match_any ok\n\n")
-                var new_iff <- new [[ExprIfThenElse() at=eto.at, cond<-join_conditions(to.conditions)]]
-                var nblk <- new [[ExprBlock() at=eto.at]]
-                for l in (eto.if_true as ExprBlock).list
-                    nblk.list |> emplace_new <| clone_expression(l)
-                apply_template(nblk) <| $ ( rules )
-                    for dv,dn in keys(to.declarations),values(to.declarations)
-                        rules |> replaceVariable(dv) <| clone_expression(dn)
-                    rules |> replaceVarTag("_") <| clone_expression(access)
-                new_iff.if_true <- nblk
-                new_iff.if_false <- iff
-                iff <- new_iff
-            elif report_match_errors || to.failed
-                log_m("match_any failed\n\n")
-                any_errors = true
-                if length(to.errors) != 0
+            if true
+                var eto = (eblk.list[eli-ei-1]) as ExprIfThenElse
+                var to : MatchTo; defer_delete(to)
+                if match_any(what._type, eto.cond, access, to)
+                    log_m("match_any ok\n\n")
+                    var new_iff <- new [[ExprIfThenElse() at=eto.at, cond<-join_conditions(to.conditions)]]
+                    var nblk <- new [[ExprBlock() at=eto.at]]
+                    for l in (eto.if_true as ExprBlock).list
+                        nblk.list |> emplace_new <| clone_expression(l)
+                    apply_template(nblk) <| $ ( rules )
+                        for dv,dn in keys(to.declarations),values(to.declarations)
+                            rules |> replaceVariable(dv) <| clone_expression(dn)
+                        rules |> replaceVarTag("_") <| clone_expression(access)
+                    new_iff.if_true <- nblk
+                    new_iff.if_false <- iff
+                    iff <- new_iff
+                elif report_match_errors || to.failed
+                    log_m("match_any failed\n\n")
+                    any_errors = true
+                    if length(to.errors) != 0
+                        for e in to.errors
+                            macro_error(prog, *e.at, e.msg)
+                    else
+                        macro_error(prog, eto.at, "unspecified match error")
+                    break
+                static_if LOG_MATCH
                     for e in to.errors
-                        macro_error(prog, *e.at, e.msg)
-                else
-                    macro_error(prog, eto.at, "unspecified match error")
-                break
-            static_if LOG_MATCH
-                for e in to.errors
-                    log_m("\tERROR:: {e.msg} at {describe(*e.at)}\n")
-            if length(to.prefix) != 0
-                let p0 = length(prefix)
-                prefix |> resize(p0+length(to.prefix))
-                for p,i in to.prefix,count(p0)
-                    prefix[i] <- p
+                        log_m("\tERROR:: {e.msg} at {describe(*e.at)}\n")
+                if length(to.prefix) != 0
+                    let p0 = length(prefix)
+                    prefix |> resize(p0+length(to.prefix))
+                    for p,i in to.prefix,count(p0)
+                        prefix[i] <- p
         if any_errors
             return [[ExpressionPtr]]
         prefix |> emplace(iff)

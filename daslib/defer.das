@@ -41,10 +41,14 @@ class DeferMacro : AstFunctionAnnotation
                 success = false
             else
                 var scope = astc.scopes[astc.scopes.length-1] as ExprBlock
-                var c_arg <- clone_expression(call.arguments[0])
-                var from_block <- move_unquote_block(c_arg)
-                from_block.blockFlags ^= ExprBlockFlags isClosure
-                scope.finalList |> emplace(from_block,0)
+                if scope.blockFlags.inTheLoop
+                    compiling_program() |>macro_error(call.at,"defer can't be used in the loop. finally section of the loop only runs one. enclose in `if true` to ensure scope")
+                    success = false
+                else
+                    var c_arg <- clone_expression(call.arguments[0])
+                    var from_block <- move_unquote_block(c_arg)
+                    from_block.blockFlags ^= ExprBlockFlags isClosure
+                    scope.finalList |> emplace(from_block,0)
         return !success ? [[ExpressionPtr]] : quote() <| nada()
 
 [call_macro(name="defer_delete")]
@@ -63,8 +67,12 @@ class DeferDeleteMacro : AstCallMacro
                 success = false
             else
                 var scope = astc.scopes[astc.scopes.length-1] as ExprBlock
-                var e_del <- new [[ExprDelete() at=call.at,
-                    subexpr <- clone_expression(call.arguments[0])
-                ]]
-                scope.finalList |> emplace(e_del,0)
+                if scope.blockFlags.inTheLoop
+                    compiling_program() |>macro_error(call.at,"defer_delete can't be used in the loop. finally section of the loop only runs one. enclose in `if true` to ensure scope")
+                    success = false
+                else
+                    var e_del <- new [[ExprDelete() at=call.at,
+                        subexpr <- clone_expression(call.arguments[0])
+                    ]]
+                    scope.finalList |> emplace(e_del,0)
         return !success ? [[ExpressionPtr]] : quote() <| nada()
