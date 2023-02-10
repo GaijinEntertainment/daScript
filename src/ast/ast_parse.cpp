@@ -470,6 +470,9 @@ namespace das {
         ReuseCacheGuard rcg;
         auto time0 = ref_time_ticks();
         totParse = 0;
+        totInfer = 0;
+        totOpt = 0;
+        totM = 0;
         vector<ModuleInfo> req;
         vector<string> missing, circular, notAllowed;
         das_set<string> dependencies;
