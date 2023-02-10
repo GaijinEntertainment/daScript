@@ -1155,9 +1155,6 @@ class private DAServer: Server
             toRead = 0
             var error : string
             var msg = json::read_json(current_string, error)
-            defer <| $
-                unsafe
-                    delete msg
             clear(current_string)
             self->log(">>>\n\n{write_json(msg)}\n\n")
 
@@ -1209,6 +1206,8 @@ class private DAServer: Server
                         self->log("[Error] unknown request message\n{write_json(msg)}\n")
             else
                 self->log("[Error] unknown message\n{write_json(msg)}\n")
+            unsafe
+                delete msg
 
     def reqInitialize(seq: double; command: string; arguments: JsonValue?)
         // var ini <- InitializeRequestArguments(arguments)
