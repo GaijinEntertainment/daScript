@@ -13,6 +13,14 @@ ${CMAKE_SOURCE_DIR}/examples/tutorial/tutorial00.cpp
 )
 DAS_TUTORIAL(tutorial00 "${TUTORIAL_00_SRC}")
 
+####################
+# tutorial 00 - utf8
+####################
+SET(TUTORIAL_00_UTF8_SRC
+${CMAKE_SOURCE_DIR}/examples/tutorial/tutorial00utf8.cpp
+)
+DAS_TUTORIAL(tutorial00utf8 "${TUTORIAL_00_UTF8_SRC}")
+
 ##################################################
 # tutorial 01 - all error checking, external files
 ##################################################
