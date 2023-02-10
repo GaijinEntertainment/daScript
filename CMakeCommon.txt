@@ -89,6 +89,7 @@ MACRO(SETUP_COMPILER)
 			cmake_host_system_information(RESULT Ncpu QUERY NUMBER_OF_LOGICAL_CORES)
 			message("PARALLEL BUILD ON ${Ncpu} CORES" )
 			set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MP${Ncpu}")
+			set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /utf-8")
 			# end setup
 			string(REPLACE "/W3" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
 			string(REPLACE "/EHsc" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
