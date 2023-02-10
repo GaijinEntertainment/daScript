@@ -928,3 +928,10 @@ def public debug_expression ( expr:ExpressionPtr )
     return build_string <| $ ( writer )
         debug_expression_impl(writer, expr)
 
+def public debug_expression ( expr:Expression? )
+    unsafe
+        return debug_expression(reinterpret<ExpressionPtr> expr)
+
+def public describe ( expr:Expression? )
+    unsafe
+        return describe(reinterpret<ExpressionPtr> expr)

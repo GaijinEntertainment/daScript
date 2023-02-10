@@ -244,6 +244,14 @@ def matching_as_and_is ( cmd:Cmd )
         if _
             return 0.
 
+[sideeffects]
+def matching_type_as_is ( cmd:Cmd )
+    match cmd
+        if match_type<CmdMove> $v(cmdm)
+            return cmdm.x + cmdm.y
+        if _
+            return 0.
+
 [match_copy]
 struct CmdLocate : Cmd
     override rtti = "CmdLocate"
@@ -263,6 +271,14 @@ def matching_copy ( cmd:Cmd )
     match cmd
         if [[CmdLocate x=$v(x), y=$v(y), z=$v(z)]]
             return x + y + z
+        if _
+            return 0.
+
+[sideeffects]
+def matching_type_copy ( cmd:Cmd )
+    match cmd
+        if match_type<CmdLocate> $v(cmdl)
+            return cmdl.x + cmdl.y + cmdl.z
         if _
             return 0.
 
@@ -355,7 +371,13 @@ def test_all_match ( t:T? )
     t |> run("match as is") <| @@ ( t : T? )
         t |> equal(0., matching_as_and_is(Cmd()))
         t |> equal(3., matching_as_and_is([[CmdMove() x=1.,y=2.]]))
+    t |> run("match type is") <| @@ ( t : T? )
+        t |> equal(0., matching_type_as_is(Cmd()))
+        t |> equal(3., matching_type_as_is([[CmdMove() x=1.,y=2.]]))
     t |> run("match copy") <| @@ ( t : T? )
         t |> equal(0., matching_copy(Cmd()))
         t |> equal(6., matching_copy([[CmdLocate() x=1.,y=2.,z=3.]]))
+    t |> run("match type copy") <| @@ ( t : T? )
+        t |> equal(0., matching_type_copy(Cmd()))
+        t |> equal(6., matching_type_copy([[CmdLocate() x=1.,y=2.,z=3.]]))
 
