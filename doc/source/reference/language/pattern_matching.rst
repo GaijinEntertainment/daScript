@@ -495,3 +495,56 @@ Here's an example of how to use the match_type subexpression::
 In this example, what is the expression that is being matched. If what is of type int, then it is assigned to the variable $v and the expression expr is returned. If what is not of type int, the match falls through to the catch-all _ case, and -1 is returned.
 
 **Note** that the match_type subexpression only matches types, and mismatched values are ignored. This is in contrast to regular pattern matching, where both type and value must match for a match to be successful.
+
+^^^^^^^^^^^^^^^^^^^^^^^^^
+Multi-Match
+^^^^^^^^^^^^^^^^^^^^^^^^^
+
+In daScript, you can use the multi_match feature to match multiple values in a single expression. This is useful when you want to match a value based on several different conditions.
+
+Here is an example of using the multi_match feature::
+
+    def multi_match_test ( a:int )
+        var text = "{a}"
+        multi_match a
+            if 0
+                text += " zero"
+            if 1
+                text += " one"
+            if 2
+                text += " two"
+            if $v(a) && (a % 2 == 0) && (a!=0)
+                text += " even"
+            if $v(a) && (a % 2 == 1)
+                text += " odd"
+        return text
+
+In this example, the function multi_match_test takes an integer value a and matches it using the multi_match feature.
+The first three options match when a is equal to 0, 1, or 2, respectively.
+The fourth option matches when a is not equal to 0 and is an even number.
+The fifth option matches when a is an odd number. The variable text is updated based on the matching conditions.
+The final result is returned as the string representation of text.
+
+It's important to note that the multi_match feature allows for multiple conditions to be matched in a single expression.
+This makes the code more concise and easier to read compared to using multiple match and if statements.
+
+The same example using regular match would look like this::
+
+    def multi_match_test ( a:int )
+        var text = "{a}"
+        match a
+            if 0
+                text += " zero"
+        match a
+            if 1
+                text += " one"
+        match a
+            if 2
+                text += " two"
+        match a
+            if $v(a) && (a % 2 == 0) && (a!=0)
+                text += " even"
+        match a
+            if $v(a) && (a % 2 == 1)
+                text += " odd"
+        return text
