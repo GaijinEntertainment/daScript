@@ -935,3 +935,8 @@ def public debug_expression ( expr:Expression? )
 def public describe ( expr:Expression? )
     unsafe
         return describe(reinterpret<ExpressionPtr> expr)
+
+def public force_generated_at ( expr:ExpressionPtr; at:LineInfo )
+    expr |> force_at(at)
+    expr |> force_generated(true)
+
