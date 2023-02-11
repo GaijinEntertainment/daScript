@@ -282,6 +282,22 @@ def matching_type_copy ( cmd:Cmd )
         if _
             return 0.
 
+[sideeffects]
+def multi_match_test ( a:int )
+    var text = "{a}"
+    multi_match a
+        if 0
+            text += " zero"
+        if 1
+            text += " one"
+        if 2
+            text += " two"
+        if $v(a) && (a % 2 == 0) && (a!=0)
+            text += " even"
+        if $v(a) && (a % 2 == 1)
+            text += " odd"
+    return text
+
 [test]
 def test_all_match ( t:T? )
     t |> run("enum match") <| @@ ( t : T? )
@@ -380,4 +396,10 @@ def test_all_match ( t:T? )
     t |> run("match type copy") <| @@ ( t : T? )
         t |> equal(0., matching_type_copy(Cmd()))
         t |> equal(6., matching_type_copy([[CmdLocate() x=1.,y=2.,z=3.]]))
+    t |> run("multi-match test") <| @@ ( t : T? )
+        t |> equal("0 zero", multi_match_test(0))
+        t |> equal("1 one odd", multi_match_test(1))
+        t |> equal("2 two even", multi_match_test(2))
+        t |> equal("3 odd", multi_match_test(3))
+
 

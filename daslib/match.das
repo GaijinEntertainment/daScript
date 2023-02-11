@@ -56,6 +56,7 @@ def get_match_type ( typ:TypeDeclPtr )
 
 [macro_function]
 def match_as_is ( what:TypeDeclPtr; wths:Expression?; makeType:TypeDeclPtr; as_is_name:das_string; access:ExpressionPtr; var to:MatchTo )
+    log_m("\tmatch_as_is {describe(what)} {describe(makeType)} {describe(access)}")
     var cond_nz <- new [[ExprIsVariant() at=wths.at,
         value <- clone_expression(access),
         name := as_is_name
@@ -69,13 +70,15 @@ def match_as_is ( what:TypeDeclPtr; wths:Expression?; makeType:TypeDeclPtr; as_i
 
 [macro_function]
 def match_copy ( what:TypeDeclPtr; wths:Expression?; makeType:TypeDeclPtr; as_is_name:das_string; access:ExpressionPtr; var to:MatchTo )
+    log_m("\tmatch_copy {describe(what)} {describe(makeType)} {describe(access)}")
     let tempName = make_unique_private_name("__`match`copy",wths.at)
     var prefixType <- clone_type(makeType); defer_delete(prefixType)
     var prefix <- qmacro_expr <|
         let $i(tempName) : $t(prefixType)
+    prefix |> force_at(wths.at)
     to.prefix |> emplace <| prefix
-    var access_new <- qmacro($i(tempName)); defer_delete(access_new)
-    var cond_nz <- qmacro(match_copy($i(tempName), $e(access)))
+    var access_new <- qmacro($i(tempName)); defer_delete(access_new); access_new |> force_at(wths.at)
+    var cond_nz <- qmacro(match_copy($i(tempName), $e(access))); cond_nz |> force_at(wths.at)
     to.conditions |> emplace(cond_nz)
     return match_any(makeType, wths, access_new, to)
 
@@ -165,8 +168,7 @@ def match_tuple ( what:TypeDeclPtr; wths:ExprMakeTuple?; access:ExpressionPtr; v
         if i == tagIndex    // skip ...
             continue
         var ei = i<= tagIndex ? i : whatDim - (wthsLength - i)
-        var new_access <- qmacro($e(access).$f("_{ei}"))
-        new_access |> force_at(wths.at)
+        var new_access <- qmacro($e(access).$f("_{ei}")); new_access |> force_at(wths.at)
         if true // to create scope for defer delete
             defer_delete(new_access)
             if !match_any(what.argTypes[ei], get_ptr(wths.values[i]), new_access, to)
@@ -322,8 +324,7 @@ def match_expr ( what:TypeDeclPtr; wthmt:ExprCall?; access:ExpressionPtr; var to
         for dv,dn in keys(to.declarations),values(to.declarations)
             rules |> replaceVariable(dv) <| clone_expression(dn)
         rules |> replaceVarTag("_") <| clone_expression(access)
-    var cond <- qmacro($e(access) == $e(expr))
-    cond |> force_at(value.at)
+    var cond <- qmacro($e(access) == $e(expr)); cond |> force_at(value.at)
     to.conditions |> emplace(cond)
     return true
 
@@ -362,10 +363,11 @@ def match_or ( what:TypeDeclPtr; wth:ExprOp2?; access:ExpressionPtr; var to:Matc
             return false
     delete to.declarations
     to.declarations <- toL.declarations // because its a superset
-    var lcond <- join_conditions(toL.conditions); defer_delete(lcond)
-    var rcond <- join_conditions(toR.conditions); defer_delete(rcond)
-    var cond <- qmacro($e(lcond) || $e(rcond))
+    var lcond <- join_conditions(toL.conditions, wth.left.at); defer_delete(lcond)
+    var rcond <- join_conditions(toR.conditions, wth.right.at); defer_delete(rcond)
+    var cond <- qmacro($e(lcond) || $e(rcond)); cond |> force_at(wth.at)
     to.conditions |> emplace(cond)
+    log_m("\tmatch_or {describe(what)} passed\n")
     return true
 
 [macro_function]
@@ -440,15 +442,13 @@ def match_any ( what:TypeDeclPtr; wth:Expression?; access:ExpressionPtr; var to:
             return false
         log_m("\tadd condition {describe(access)} == {describe(wth)}\n")
         var ee <- unsafe(reinterpret<ExpressionPtr> copy_to_local(wth))
-        var cond <- qmacro($e(access) == $e(ee))
-        cond |> force_at(wth.at)
+        var cond <- qmacro($e(access) == $e(ee)); cond |> force_at(wth.at)
         to.conditions |> emplace(cond)
         return true
     elif wth._type!=null && is_same_type(what,wth._type, RefMatters no, ConstMatters no, TemporaryMatters no)
         log_m("\tadd condition {describe(access)} == {describe(wth)}\n")
         var ee <- unsafe(reinterpret<ExpressionPtr> copy_to_local(wth))
-        var cond <- qmacro($e(access) == $e(ee))
-        cond |> force_at(wth.at)
+        var cond <- qmacro($e(access) == $e(ee)); cond |> force_at(wth.at)
         to.conditions |> emplace(cond)
         return true
     else
@@ -457,10 +457,10 @@ def match_any ( what:TypeDeclPtr; wth:Expression?; access:ExpressionPtr; var to:
         return false
 
 [macro_function]
-def join_conditions ( var conditions:array<ExpressionPtr> ) : ExpressionPtr
+def join_conditions ( var conditions:array<ExpressionPtr>; at:LineInfo ) : ExpressionPtr
     let clen = length(conditions)
     if clen == 0
-        return new [[ExprConstBool() value=true]]
+        return new [[ExprConstBool() value=true, at=at]]
     var tail <- conditions |> back()
     conditions |> pop()
     while length(conditions) > 0
@@ -474,6 +474,7 @@ def join_conditions ( var conditions:array<ExpressionPtr> ) : ExpressionPtr
 class MatchMacro : AstCallMacro
     //! Implements `match` macro.
     report_match_errors = true
+    multi_match = false
     def override canVisitArgument ( expr:smart_ptr<ExprCallMacro>; argIndex:int ) : bool
         // if we are reporting errors, and macro did not fold - no point showing errors inside match - there will be too many, and they are meaningless
         return !is_reporting_compilation_errors()
@@ -507,16 +508,17 @@ class MatchMacro : AstCallMacro
                 macro_error(prog, ee.at, "match `block` argument can only contain match-to calls, not {ee.__rtti}")
         var access <- clone_expression(what); defer_delete(access)
         var iff : smart_ptr<ExprIfThenElse>; defer_delete(iff)
+        var iffb : array<smart_ptr<ExprIfThenElse>>; defer_delete(iffb)
         let eli = length(eblk.list)
         var any_errors = false
         var prefix : array<ExpressionPtr>; defer_delete(prefix)
         for ei in range(eli)
             if true
-                var eto = (eblk.list[eli-ei-1]) as ExprIfThenElse
+                var eto = (eblk.list[multi_match ? ei : eli-ei-1]) as ExprIfThenElse
                 var to : MatchTo; defer_delete(to)
                 if match_any(what._type, get_ptr(eto.cond), access, to)
                     log_m("match_any ok\n\n")
-                    var new_iff <- new [[ExprIfThenElse() at=eto.at, cond<-join_conditions(to.conditions)]]
+                    var new_iff <- new [[ExprIfThenElse() at=eto.at, cond<-join_conditions(to.conditions, eto.at)]]
                     var nblk <- new [[ExprBlock() at=eto.at]]
                     for l in (eto.if_true as ExprBlock).list
                         nblk.list |> emplace_new <| clone_expression(l)
@@ -525,8 +527,11 @@ class MatchMacro : AstCallMacro
                             rules |> replaceVariable(dv) <| clone_expression(dn)
                         rules |> replaceVarTag("_") <| clone_expression(access)
                     new_iff.if_true <- nblk
-                    new_iff.if_false <- iff
-                    iff <- new_iff
+                    if multi_match
+                        iffb |> emplace(new_iff)
+                    else
+                        new_iff.if_false <- iff
+                        iff <- new_iff
                 elif report_match_errors || to.failed
                     log_m("match_any failed\n\n")
                     any_errors = true
@@ -546,14 +551,28 @@ class MatchMacro : AstCallMacro
                         prefix[i] <- p
         if any_errors
             return [[ExpressionPtr]]
-        prefix |> emplace(iff)
-        var res <- qmacro($b(prefix))
-        // print("match result {debug_expression(res)}\n")
-        return res
+        if multi_match
+            for ib in iffb
+                prefix |> emplace(ib)
+            return <- qmacro($b(prefix))
+        else
+            prefix |> emplace(iff)
+            return <- qmacro($b(prefix))
 
 [call_macro(name="static_match")]
 class StaticMatchMacro : MatchMacro
     //! Implements `static_match` macro.
+    override report_match_errors = false
+
+[call_macro(name="multi_match")]
+class MultiMatchMacro : MatchMacro
+    //! Implements `multi_match` macro.
+    override multi_match = true
+
+[call_macro(name="static_multi_match")]
+class StaticMultiMatchMacro : MatchMacro
+    //! Implements `static_multi_match` macro.
+    override multi_match = true
     override report_match_errors = false
 
 [structure_macro(name="match_as_is")]
@@ -582,4 +601,6 @@ def private setup
     if is_compiling_macros_in_module("match")
         compiling_module() |> add_keyword("match", false)
         compiling_module() |> add_keyword("static_match", false)
+        compiling_module() |> add_keyword("multi_match", false)
+        compiling_module() |> add_keyword("static_multi_match", false)
         compiling_module() |> add_keyword("match_type", true)
