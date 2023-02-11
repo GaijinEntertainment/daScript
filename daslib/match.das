@@ -508,7 +508,7 @@ class MatchMacro : AstCallMacro
             else
                 macro_error(prog, ee.at, "match `block` argument can only contain match-to calls, not {ee.__rtti}")
         var access <- clone_expression(what); defer_delete(access)
-        var iff : smart_ptr<ExprIfThenElse>; defer_delete(iff)
+        var iff : smart_ptr<ExprIfThenElse>
         var iffb : array<smart_ptr<ExprIfThenElse>>; defer_delete(iffb)
         let eli = length(eblk.list)
         var any_errors = false

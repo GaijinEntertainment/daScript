@@ -631,7 +631,7 @@ ___noinline void testParticlesI(int count) {
 ___noinline void testTryCatch(Context * context) {
     #if _CPPUNWIND || __cpp_exceptions
     int arr[1000];
-    int cnt = 0;
+    int cnt = 0; cnt;
     for (int j = 0; j != 100; ++j) {
         int fail = 0;
         for (int i = 0; i != 2000; ++i) {
