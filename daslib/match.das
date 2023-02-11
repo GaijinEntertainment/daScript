@@ -554,6 +554,7 @@ class MatchMacro : AstCallMacro
         if multi_match
             for ib in iffb
                 prefix |> emplace(ib)
+            iffb |> clear()
             return <- qmacro($b(prefix))
         else
             prefix |> emplace(iff)
