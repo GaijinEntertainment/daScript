@@ -267,12 +267,21 @@ inline size_t das_aligned_memsize(void * ptr){
 }
 #endif
 
+// when enabled, Context heap memory will track where the allocation came from
+// via mark_location and mark_comment
 #ifndef DAS_TRACK_ALLOCATIONS
 #define DAS_TRACK_ALLOCATIONS   0
 #endif
 
+// when enabled, Context heap memory will be filled with 0xcd when deleted
 #ifndef DAS_SANITIZER
 #define DAS_SANITIZER   0
+#endif
+
+// when enabled, TypeDecl, Expression, Variable, Structure, Enumeration and Function
+// will be filled with 0xcd when deleted
+#ifndef DAS_MACRO_SANITIZER
+#define DAS_MACRO_SANITIZER 0
 #endif
 
 #if !_TARGET_64BIT && !defined(__clang__) && (_MSC_VER <= 1900)

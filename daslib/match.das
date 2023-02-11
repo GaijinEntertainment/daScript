@@ -395,7 +395,8 @@ def is_match_call ( wth:Expression?; name:string )
 
 [macro_function]
 def match_any ( what:TypeDeclPtr; wth:Expression?; access:ExpressionPtr; var to:MatchTo )
-    log_m("match {describe(what)} {debug_expression(wth)}:\n")
+    if LOG_MATCH
+        log_m("match {describe(what)} {debug_expression(wth)}:\n")
     if wth is ExprTag
         return match_tag(what, wth, access, to)
     elif (wth is ExprVar) && (wth as ExprVar).name=="_"

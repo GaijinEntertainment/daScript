@@ -166,6 +166,12 @@ namespace das
         Type                baseType = Type::tInt;
         AnnotationList      annotations;
         bool                isPrivate = false;
+#if DAS_MACRO_SANITIZER
+    public:
+        void* operator new ( size_t count ) { return das_aligned_alloc16(count); }
+        void operator delete  ( void* ptr ) { auto size = das_aligned_memsize(ptr);
+            memset(ptr, 0xcd, size); das_aligned_free16(ptr); }
+#endif
     };
 
     class Structure : public ptr_ref_count {
@@ -258,6 +264,12 @@ namespace das
             };
             uint32_t    flags = 0;
         };
+#if DAS_MACRO_SANITIZER
+    public:
+        void* operator new ( size_t count ) { return das_aligned_alloc16(count); }
+        void operator delete  ( void* ptr ) { auto size = das_aligned_memsize(ptr);
+            memset(ptr, 0xcd, size); das_aligned_free16(ptr); }
+#endif
     };
 
     struct Variable : ptr_ref_count {
@@ -308,6 +320,12 @@ namespace das
             uint32_t access_flags = 0;
         };
         AnnotationArgumentList  annotation;
+#if DAS_MACRO_SANITIZER
+    public:
+        void* operator new ( size_t count ) { return das_aligned_alloc16(count); }
+        void operator delete  ( void* ptr ) { auto size = das_aligned_memsize(ptr);
+            memset(ptr, 0xcd, size); das_aligned_free16(ptr); }
+#endif
     };
 
     struct VarLessPred {
@@ -601,6 +619,12 @@ namespace das
             };
             uint32_t    printFlags = 0;
         };
+#if DAS_MACRO_SANITIZER
+    public:
+        void* operator new ( size_t count ) { return das_aligned_alloc16(count); }
+        void operator delete  ( void* ptr ) { auto size = das_aligned_memsize(ptr);
+            memset(ptr, 0xcd, size); das_aligned_free16(ptr); }
+#endif
     };
 
     struct ExprLooksLikeCall;
@@ -821,6 +845,12 @@ namespace das
         Function * fromGeneric = nullptr;
         uint64_t hash = 0;
         uint64_t aotHash = 0;
+#if DAS_MACRO_SANITIZER
+    public:
+        void* operator new ( size_t count ) { return das_aligned_alloc16(count); }
+        void operator delete  ( void* ptr ) { auto size = das_aligned_memsize(ptr);
+            memset(ptr, 0xcd, size); das_aligned_free16(ptr); }
+#endif
     };
 
     uint64_t getFunctionHash ( Function * fun, SimNode * node, Context * context );

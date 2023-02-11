@@ -230,6 +230,12 @@ namespace das {
         string              alias;
         LineInfo            at;
         Module *            module = nullptr;
+#if DAS_MACRO_SANITIZER
+    public:
+        void* operator new ( size_t count ) { return das_aligned_alloc16(count); }
+        void operator delete  ( void* ptr ) { auto size = das_aligned_memsize(ptr);
+            memset(ptr, 0xcd, size); das_aligned_free16(ptr); }
+#endif
     };
 
     template <typename TT> struct ToBasicType {

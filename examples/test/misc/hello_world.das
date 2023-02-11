@@ -1,37 +1,5 @@
 require daslib/match
-
-struct AB
-    a, b : int
-
-struct Bar
-    a : int
-    b : float
-
-def or_match ( B:Bar )
-    match B
-        if [[Bar a=1, b=$v(b)]] || [[Bar a=2, b=$v(b)]]
-            return b
-        if _
-            return 0.0
-
-[sideeffects]
-def guards_match ( ab : AB )
-    match ab
-        if [[AB a=$v(a), b=$v(b)]] && (b > a)
-            return "{b} > {a}"
-        if [[AB a=$v(a), b=$v(b)]]
-            return "{b} <= {a}"
-
-
-struct Foo
-    a : int
-
-def struct_match ( f : Foo )
-    match f
-        if [[Foo a=13]]
-            return 0
-        if [[Foo a=$v(anyA)]]
-            return anyA
+require daslib/ast_boost
 
 enum Color
     black
@@ -39,6 +7,22 @@ enum Color
     green
     blue
 
+variant IF
+    i : int
+    f : float
+
+struct Foo
+    a : int
+    v : IF
+
+struct Bar
+    a : int
+    b : float
+
+struct AB
+    a, b : int
+
+[sideeffects,export]
 def enum_match ( color:Color )
     match color
         if Color black
@@ -48,31 +32,270 @@ def enum_match ( color:Color )
         if _
             return -1
 
-variant IF
-    i : int
-    f : float
+[sideeffects,export]
+def enum_static_match ( color, blah )
+    static_match color
+        if Color black
+            return 0
+        if match_expr(blah)
+            return 1
+        if _
+            return -1
 
+[sideeffects,export]
+def static_match_by_type ( what )
+    static_match what
+        if match_type<int> $v(expr)
+            return expr
+        if _
+            return -1
+
+[sideeffects,export]
+def struct_match ( f : Foo )
+    match f
+        if [[Foo a=13]]
+            return 0
+        if [[Foo a=$v(anyA)]]
+            return anyA
+
+[sideeffects,export]
+def struct_match ( b : Bar )
+    match b
+        if [[Bar a=13]]
+            return 0
+        if [[Bar a=$v(anyA), b=13.0]]
+            return anyA
+        if _
+            return -1
+
+[sideeffects,export]
+def guards_match ( ab : AB )
+    match ab
+        if [[AB a=$v(a), b=$v(b)]] && (b > a)
+            return "{b} > {a}"
+        if [[AB a=$v(a), b=$v(b)]]
+            return "{b} <= {a}"
+
+[sideeffects,export]
 def variant_as_match ( v : IF )
     match v
-        if _ as i
+        if $v(i) as i
             return "int"
-        if _ as f
+        if $v(f) as f
             return "float"
         if _
             return "anything"
 
-[sideeffects]
-def static_match_by_type ( what )
-    static_match what
-        if match_type<int> $v(expr)
-            return "int {expr}"
+[sideeffects,export]
+def nested_struct_match ( v : Foo )
+    match v
+        if [[Foo a=1, v=$v(i) as i]]
+            return 1
+        if [[Foo v=$v(f) as f]]
+            return 2
+        if _
+            return 0
+
+[sideeffects,export]
+def variant_match ( v : IF )
+    match v
+        if [[IF i=$v(i)]]
+            return 1
+        if [[IF f=$v(f)]]
+            return 2
+        if _
+            return 0
+
+[sideeffects,export]
+def static_array_match ( A : int[3] )
+    match A
+        if [[auto $v(a);$v(b);$v(c)]] && (a+b+c)==6 // total of 3 elements, sum is 6
+            return 1
+        if [[int 0;...]]    // starts with 0
+            return 0
+        if [[int ...;13]]   // ends with 13
+            return 2
+        if [[int 12;...;12]]    // starts and ends with 12
+            return 3
+        if _
+            return -1
+
+[sideeffects,export]
+def dynamic_array_match ( A : array<int> )
+    match A
+        if [{auto $v(a);$v(b);$v(c)}] && (a+b+c)==6 // total of 3 elements, sum is 6
+            return 1
+        if [{int 0;0;0;...}]    // first 3 are 0
+            return 0
+        if [{int ...;1;2}]      // ends with 1,2
+            return 2
+        if [{int 0;1;...;2;3}]    // starts with 0,1, ends with 2,3
+            return 3
+        if _
+            return -1
+
+
+[sideeffects,export]
+def ascending_array_match ( A : int[3] )
+    match A
+        if [[int $v(x);match_expr(x+1);match_expr(x+2)]]
+            return true
+        if _
+            return false
+
+[sideeffects,export]
+def tuple_match ( A : tuple<int;float;string> )
+    match A
+        if [[auto 1,_,"3"]]
+            return 1
+        if [[auto 13,...]]      // starts with 13
+            return 2
+        if [[auto ...,"13"]]    // ends with "13"
+            return 3
+        if [[auto 2,...,"2"]]   // starts with 2, ends with "2"
+            return 4
+        if _
+            return 0
+
+[sideeffects,export]
+def or_match ( i :int )
+    match i
+        if 1 || 2
+            return true
+        if _
+            return false
+
+[sideeffects,export]
+def or_match_v ( B:Bar )
+    match B
+        if [[Bar a=1, b=$v(b)]] || [[Bar a=2, b=$v(b)]]
+            return b
+        if _
+            return 0.0
+
+[sideeffects,export]
+def struct_ptr_match ( f : Foo? )
+    match f
+        if null
+            return -1
+        if [[Foo a=13]]
+            return 0
+        if [[Foo a=$v(anyA)]]
+            return anyA
+        if _
+            return -2
+
+[sideeffects,export]
+def match_handle_ptr ( T:TypeDeclPtr )
+    match T
+        if null
+            return "null"
+        if [[TypeDecl() baseType=Type tPointer]]
+            return "pointer"
         if _
             return "anything"
+
+[sideeffects,export]
+def match_ast_expr_ptr ( E:ExpressionPtr )
+    match E
+        if null
+            return "null"
+        if [[ExprConstInt() value=$v(v)]]
+            return "int {v}"
+        if _
+            return "anything"
+
+struct Cmd
+    rtti = "Cmd"
+
+[match_as_is]
+struct CmdMove : Cmd
+    override rtti = "CmdMove"
+    x : float
+    y : float
+
+def operator is CmdMove ( cmd:Cmd )
+    return cmd.rtti=="CmdMove"
+
+def operator is CmdMove ( anything )
+    return false
+
+def operator as CmdMove ( cmd:Cmd ==const ) : CmdMove const&
+    assert(cmd.rtti=="CmdMove")
+    unsafe
+        return reinterpret<CmdMove const&> cmd
+
+def operator as CmdMove ( var cmd:Cmd ==const ) : CmdMove&
+    assert(cmd.rtti=="CmdMove")
+    unsafe
+        return reinterpret<CmdMove&> cmd
+
+def operator as CmdMove ( anything )
+    panic("Cannot cast to CmdMove")
+    return [[CmdMove]]
+
+[sideeffects,export]
+def matching_as_and_is ( cmd:Cmd )
+    match cmd
+        if [[CmdMove x=$v(x), y=$v(y)]]
+            return x + y
+        if _
+            return 0.
+
+[sideeffects,export]
+def matching_type_as_is ( cmd:Cmd )
+    match cmd
+        if match_type<CmdMove> $v(cmdm)
+            return cmdm.x + cmdm.y
+        if _
+            return 0.
+
+[match_copy]
+struct CmdLocate : Cmd
+    override rtti = "CmdLocate"
+    x : float
+    y : float
+    z : float
+
+def match_copy ( var cmdm:CmdLocate; cmd:Cmd )
+    if cmd.rtti != "CmdLocate"
+        return false
+    unsafe
+        cmdm = reinterpret<CmdLocate const&> cmd
+    return true
+
+[sideeffects,export]
+def matching_copy ( cmd:Cmd )
+    match cmd
+        if [[CmdLocate x=$v(x), y=$v(y), z=$v(z)]]
+            return x + y + z
+        if _
+            return 0.
+
+[sideeffects,export]
+def matching_type_copy ( cmd:Cmd )
+    match cmd
+        if match_type<CmdLocate> $v(cmdl)
+            return cmdl.x + cmdl.y + cmdl.z
+        if _
+            return 0.
+
+[sideeffects,export]
+def multi_match_test ( a:int )
+    var text = "{a}"
+    multi_match a
+        if 0
+            text += " zero"
+        if 1
+            text += " one"
+        if 2
+            text += " two"
+        if $v(a) && (a % 2 == 0) && (a!=0)
+            text += " even"
+        if $v(a) && (a % 2 == 1)
+            text += " odd"
+    return text
 
 [export]
 def main
     print("hello, world!\n")
-    static_match_by_type(1)
-    static_match_by_type(1.0)
-
-options log
