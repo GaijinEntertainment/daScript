@@ -551,6 +551,7 @@ class MatchMacro : AstCallMacro
                     for p,i in to.prefix,count(p0)
                         prefix[i] <- p
         if any_errors
+            delete iff
             return [[ExpressionPtr]]
         if multi_match
             for ib in iffb
