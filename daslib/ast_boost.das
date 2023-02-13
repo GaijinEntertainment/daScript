@@ -58,7 +58,7 @@ def describe(list:AnnotationList)
     return join([{ for arg in list; describe(*arg) }], ",")
 
 def describe(vvar:VariablePtr)
-    return "{vvar.name}:{describe(vvar._type)}"
+    return vvar._type!=null ? "{vvar.name}:{describe(vvar._type)}" : "{vvar.name}:null"
 
 def describe_bitfield(bf;merger:string = "")
     static_if typeinfo(is_bitfield bf)

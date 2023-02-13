@@ -86,6 +86,8 @@ class SampleStackWalker : DapiStackWalker
         else
             describe_arg(*ctxid,vinfo,unsafe(addr(arg)))
     def override onVariable ( inf:FuncInfo; vinfo:LocalVariableInfo; arg:void?; inScope:bool ) : void
+        if !inScope
+            return
         describe_arg(*ctxid,vinfo,arg)
     def override onAfterCall ( pp:Prologue ) : bool
         return false    // only stack top
@@ -102,12 +104,6 @@ class ContextStateAgent : DapiDebugAgent
             delete walker_adapter
             delete walker
     def override onCollect(var ctx:Context; at:LineInfo)
-        walker.ctxid = unsafe(addr(ctx))
-        walk_stack(walker_adapter,ctx,at)
-    def override onBreakpoint ( var ctx:Context; at:LineInfo; reason,text:string ) : void
-        walker.ctxid = unsafe(addr(ctx))
-        walk_stack(walker_adapter,ctx,at)
-    def override onSingleStep ( var ctx:Context; at:LineInfo ) : void
         walker.ctxid = unsafe(addr(ctx))
         walk_stack(walker_adapter,ctx,at)
 
