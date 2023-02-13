@@ -63,7 +63,11 @@ class SampleStackWalker : DapiStackWalker
     def override onVariable ( inf:FuncInfo; vinfo:LocalVariableInfo; arg:void?; inScope:bool ) : void
         if !inScope
             return
-        describe_arg(*ctxid, vinfo, arg)
+        if vinfo.flags.ref || vinfo.flags.refType
+            unsafe
+                describe_arg(*ctxid,vinfo,* reinterpret<void??>(arg))
+        else
+            describe_arg(*ctxid, vinfo, arg)
     def override onAfterCall ( pp:Prologue ) : bool
         return false    // only stack top
 
