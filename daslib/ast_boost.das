@@ -841,14 +841,19 @@ def public find_argument_index ( typ:TypeDeclPtr; name:string )
 def public isCMRESType ( blockT:TypeDeclPtr )
     return blockT!=null && blockT.isRefType && !blockT.flags.ref
 
-def private debug_expression_impl ( var writer:StringBuilderWriter; expr:ExpressionPtr; tabs:int=0 )
+bitfield DebugExpressionFlags
+    refCount
+
+def private debug_expression_impl ( var writer:StringBuilderWriter; expr:ExpressionPtr; deFlags:DebugExpressionFlags; tabs:int )
     if expr==null
         writer |> write("null")
         return
     if empty(expr.__rtti)
         writer |> write("[NO RTTI]")
         return
-    writer |> write("({expr.__rtti}<{smart_ptr_use_count(expr)}>")
+    writer |> write("({expr.__rtti}")
+    if deFlags.refCount
+        writer |> write("<{smart_ptr_use_count(expr)}>")
     if string(expr.__rtti) |> starts_with("ExprConst")
         writer |> write(" {describe(expr)})")
         return
@@ -866,7 +871,7 @@ def private debug_expression_impl ( var writer:StringBuilderWriter; expr:Express
                 let pv = unsafe(reinterpret<ExpressionPtr?> p8)
                 let ts = repeat("  ",tabs+2)
                 writer |> write("\n{ts}({name} ")
-                debug_expression_impl(writer, *pv,tabs+2)
+                debug_expression_impl(writer, *pv,deFlags,tabs+2)
                 writer |> write(")")
             elif tstr=="$::das_string"
                 let pv = unsafe(reinterpret<das_string?> p8)
@@ -904,7 +909,7 @@ def private debug_expression_impl ( var writer:StringBuilderWriter; expr:Express
                     writer |> write("\n{ts}[{name}\n")
                     for l,i in *pv,count()
                         writer |> write("{ts}  ")
-                        debug_expression_impl(writer, l,tabs+2)
+                        debug_expression_impl(writer,l,deFlags,tabs+2)
                         if i != length(*pv)-1
                             writer |> write("\n")
                     writer |> write("]")
@@ -918,15 +923,15 @@ def private debug_expression_impl ( var writer:StringBuilderWriter; expr:Express
                         writer |> write("{l.name}:{describe(l._type)}")
                         if l.init!=null
                             writer |> write(" = ")
-                            debug_expression_impl(writer, l.init,tabs+2)
+                            debug_expression_impl(writer,l.init,deFlags,tabs+2)
                         if i != length(*pv)-1
                             writer |> write("\n")
                     writer |> write("]")
     writer |> write(")")
 
-def public debug_expression ( expr:ExpressionPtr )
+def public debug_expression ( expr:ExpressionPtr; deFlags:DebugExpressionFlags=bitfield(0) )
     return build_string <| $ ( writer )
-        debug_expression_impl(writer, expr)
+        debug_expression_impl(writer, expr, deFlags, 0)
 
 def public debug_expression ( expr:Expression? )
     unsafe
