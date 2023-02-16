@@ -367,7 +367,6 @@ namespace das {
             das_set<const TypeDecl *> all;
             return isFullySealedType(ptr, all);
         }
-
         // infer alias type
         TypeDeclPtr inferAlias ( const TypeDeclPtr & decl, const FunctionPtr & fptr = nullptr, AliasMap * aliases = nullptr, OptionsMap * options = nullptr ) const {
             if ( decl->baseType==Type::autoinfer ) {    // until alias is fully resolved, can't infer
@@ -451,6 +450,70 @@ namespace das {
                 }
             }
             return resT;
+        }
+
+        string reportInferAliasErrors ( const TypeDeclPtr & decl ) const {
+            if ( !verbose ) return "";
+            TextWriter tw;
+            reportInferAliasErrors(decl, tw);
+            return tw.str();
+        }
+
+        void reportInferAliasErrors ( const TypeDeclPtr & decl, TextWriter & tw ) const {
+            if ( decl->baseType==Type::autoinfer ) {    // until alias is fully resolved, can't infer
+                tw << "\tcan't infer type for auto\n";
+                return;
+            }
+            if ( decl->baseType==Type::alias ) {
+                if ( decl->isTag ) {
+                    tw << "\tcan't infer type for $t\n";
+                    return;
+                }
+                auto aT = findAlias(decl->alias);
+                if ( !aT ) {
+                    auto bT = nameToBasicType(decl->alias);
+                    if ( bT != Type::none ) {
+                        aT = make_smart<TypeDecl>(bT);
+                    }
+                }
+                if ( !aT ) {
+                    tw << "\tdon't know what " << decl->alias << " is\n";
+                    return;
+                }
+            }
+            if ( decl->baseType==Type::tPointer ) {
+                if ( decl->firstType ) {
+                    reportInferAliasErrors(decl->firstType,tw);
+                }
+            } else if ( decl->baseType==Type::tIterator ) {
+                if ( decl->firstType ) {
+                    reportInferAliasErrors(decl->firstType,tw);
+                }
+            } else if ( decl->baseType==Type::tArray ) {
+                if ( decl->firstType ) {
+                    reportInferAliasErrors(decl->firstType,tw);
+                }
+            } else if ( decl->baseType==Type::tTable ) {
+                if ( decl->firstType ) {
+                    reportInferAliasErrors(decl->firstType,tw);
+                }
+                if ( decl->secondType ) {
+                    reportInferAliasErrors(decl->secondType,tw);
+                }
+            } else if ( decl->baseType==Type::tFunction || decl->baseType==Type::tLambda || decl->baseType==Type::tBlock ||
+                            decl->baseType==Type::tVariant || decl->baseType==Type::tTuple || decl->baseType==Type::option ) {
+                for ( size_t iA=0, iAs=decl->argTypes.size(); iA!=iAs; ++iA ) {
+                    auto & declAT = decl->argTypes[iA];
+                    reportInferAliasErrors(declAT,tw);
+                }
+                if ( decl->baseType==Type::tFunction || decl->baseType==Type::tLambda || decl->baseType==Type::tBlock  ) {
+                    if ( !decl->firstType ) {
+                        tw << "\tcan't infer return type for " << das_to_string(decl->baseType) << "\n";
+                        return;
+                    }
+                    reportInferAliasErrors(decl->firstType,tw);
+                }
+            }
         }
 
         // infer alias type
@@ -1287,7 +1350,7 @@ namespace das {
                     return ta;
                 } else {
                     ta = inferAlias(td);
-                    error("can't be inferred " + describeType(td),  "", "",
+                    error("can't be inferred " + describeType(td),  reportInferAliasErrors(td), "",
                         td->at, CompilationError::invalid_type);
                 }
             }
@@ -1412,8 +1475,8 @@ namespace das {
                     decl.type->sanitize();
                     reportAstChanged();
                 } else {
-                    error("undefined structure field type " + describeType(decl.type),  "", "",
-                        decl.at, CompilationError::invalid_structure_field_type );
+                    error("undefined structure field type " + describeType(decl.type),
+                        reportInferAliasErrors(decl.type), "", decl.at, CompilationError::invalid_structure_field_type );
                 }
             }
             if ( decl.type->isAuto() && decl.init && decl.init->type ) {
@@ -1529,8 +1592,8 @@ namespace das {
                     var->type = aT;
                     reportAstChanged();
                 } else {
-                    error("undefined global variable type " + describeType(var->type),  "", "",
-                        var->at, CompilationError::invalid_type );
+                    error("undefined global variable type " + describeType(var->type),
+                        reportInferAliasErrors(var->type), "", var->at, CompilationError::invalid_type );
                 }
             }
         }
@@ -1645,8 +1708,8 @@ namespace das {
                     var->type = aT;
                     reportAstChanged();
                 } else {
-                    error("undefined function argument type " + describeType(var->type),  "", "",
-                        var->at, CompilationError::type_not_found );
+                    error("undefined function argument type " + describeType(var->type),
+                        reportInferAliasErrors(var->type), "", var->at, CompilationError::type_not_found );
                 }
             }
             if ( var->type->ref && var->type->isRefType() ) {   // silently fix a : Foo& into a : Foo
@@ -1711,8 +1774,8 @@ namespace das {
                     func->result->sanitize();
                     reportAstChanged();
                 } else {
-                    error("undefined function result type " + describeType(func->result),  "", "",
-                        func->at, CompilationError::type_not_found );
+                    error("undefined function result type " + describeType(func->result),
+                        reportInferAliasErrors(func->result), "", func->at, CompilationError::type_not_found );
                 }
             }
             verifyType(func->result);
@@ -1928,8 +1991,8 @@ namespace das {
                         expr->funcType = aT;
                         reportAstChanged();
                     } else {
-                        error("undefined address expression type " + describeType(expr->funcType),  "", "",
-                            expr->at, CompilationError::type_not_found);
+                        error("undefined address expression type " + describeType(expr->funcType),
+                            reportInferAliasErrors(expr->funcType), "", expr->at, CompilationError::type_not_found);
                         return Visitor::visit(expr);
                     }
                 }
@@ -2200,8 +2263,8 @@ namespace das {
                     expr->iterType = aT;
                     reportAstChanged();
                 } else {
-                    error("undefined generator type " + describeType(expr->iterType),  "", "",
-                        expr->at, CompilationError::type_not_found);
+                    error("undefined generator type " + describeType(expr->iterType),
+                        reportInferAliasErrors(expr->iterType), "", expr->at, CompilationError::type_not_found);
                     return Visitor::visit(expr);
                 }
             }
@@ -2758,8 +2821,8 @@ namespace das {
                     reportAstChanged();
                     return Visitor::visit(expr);
                 } else {
-                    error("undefined is expression type " + describeType(expr->typeexpr), "", "",
-                          expr->at, CompilationError::type_not_found);
+                    error("undefined is expression type " + describeType(expr->typeexpr),
+                        reportInferAliasErrors(expr->typeexpr), "", expr->at, CompilationError::type_not_found);
                     return Visitor::visit(expr);
                 }
             }
@@ -2798,8 +2861,8 @@ namespace das {
                 reportAstChanged();
                 return Visitor::visit(expr);
             } else {
-                error("undefined type<" + describeType(expr->typeexpr)+">", "", "",
-                    expr->at, CompilationError::type_not_found);
+                error("undefined type<" + describeType(expr->typeexpr)+">",
+                    reportInferAliasErrors(expr->typeexpr), "", expr->at, CompilationError::type_not_found);
                 return Visitor::visit(expr);
             }
         }
@@ -2847,8 +2910,8 @@ namespace das {
                         reportAstChanged();
                         return Visitor::visit(expr);
                     } else if ( !allowMissingType ) {
-                        error("undefined typeinfo type expression type " + describeType(expr->typeexpr), "", "",
-                            expr->at, CompilationError::type_not_found);
+                        error("undefined typeinfo type expression type " + describeType(expr->typeexpr),
+                            reportInferAliasErrors(expr->typeexpr), "", expr->at, CompilationError::type_not_found);
                         return Visitor::visit(expr);
                     }
                 }
@@ -3584,8 +3647,8 @@ namespace das {
                     expr->castType->sanitize();
                     reportAstChanged();
                 } else {
-                    error("undefined cast type " + describeType(expr->castType),  "", "",
-                        expr->at, CompilationError::type_not_found);
+                    error("undefined cast type " + describeType(expr->castType),
+                        reportInferAliasErrors(expr->castType), "", expr->at, CompilationError::type_not_found);
                     return Visitor::visit(expr);
                 }
             }
@@ -4115,8 +4178,8 @@ namespace das {
                     var->type = aT;
                     reportAstChanged();
                 } else {
-                    error("undefined block argument type " + describeType(var->type),  "", "",
-                        var->at, CompilationError::type_not_found);
+                    error("undefined block argument type " + describeType(var->type),
+                        reportInferAliasErrors(var->type), "", var->at, CompilationError::type_not_found);
                 }
             }
             if ( var->type->isAuto() && !var->init) {
@@ -5808,8 +5871,8 @@ namespace das {
                     var->type->sanitize();
                     reportAstChanged();
                 } else {
-                    error("undefined let type " + describeType(var->type), "", "",
-                        var->at, CompilationError::type_not_found);
+                    error("undefined let type " + describeType(var->type),
+                        reportInferAliasErrors(var->type), "", var->at, CompilationError::type_not_found);
                 }
             }
             if ( var->type->isAuto() && !var->init) {
@@ -7052,8 +7115,8 @@ namespace das {
                     expr->makeType = aT;
                     reportAstChanged();
                 } else {
-                    error("undefined [[ ]] expression type " + describeType(expr->makeType),  "", "",
-                        expr->makeType->at, CompilationError::type_not_found );
+                    error("undefined [[ ]] expression type " + describeType(expr->makeType),
+                        reportInferAliasErrors(expr->makeType), "", expr->makeType->at, CompilationError::type_not_found );
                 }
             }
             if ( expr->block ) {
