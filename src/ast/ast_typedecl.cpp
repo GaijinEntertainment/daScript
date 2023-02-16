@@ -834,7 +834,7 @@ namespace das
 
     bool TypeDecl::isRawPod() const {
         if ( baseType==Type::tArray || baseType==Type::tTable || baseType==Type::tString
-            || baseType==Type::tBlock || baseType==Type::tLambda )
+            || baseType==Type::tBlock || baseType==Type::tLambda || baseType==Type::tFunction )
             return false;
         if ( baseType==Type::tStructure && structType )
             return structType->isRawPod();
