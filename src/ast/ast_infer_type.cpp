@@ -3657,7 +3657,7 @@ namespace das {
                     expr->at, CompilationError::type_not_found);
                 return Visitor::visit(expr);
             }
-            if ( expr->subexpr->type->isSameType(*expr->castType, RefMatters::yes, ConstMatters::yes, TemporaryMatters::yes) ) {
+            if ( expr->subexpr->type->isSameExactType(*expr->castType) ) {
                 reportAstChanged();
                 return expr->subexpr;
             }
