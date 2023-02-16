@@ -132,12 +132,10 @@ def able_selected_submodule(submodule_name: str):
 
     if subprocess.call(["cmake", "-D" + option_name + ":BOOL=OFF ", oldpath]) == 0:
         print("%s turned on successfully (see log above)!" % submodule_name)
-        goback_to_directory(oldpath)
-        all_submodules = get_all_submodule_names()
-        fill_cmake_options_cache(all_submodules)
     else:
         print("ERROR: there was an error executing 'cmake -D%s:BOOL=OFF %s' " % (option_name, oldpath))
-        goback_to_directory(oldpath)
+
+    goback_to_directory(oldpath)
 
 
 def disable_selected_submodule(submodule_name: str):
@@ -147,18 +145,19 @@ def disable_selected_submodule(submodule_name: str):
 
     if subprocess.call(["cmake", "-D" + option_name + ":BOOL=ON ", oldpath]) == 0:
         print("%s turned off successfully (see log above)!" % submodule_name)
-        goback_to_directory(oldpath)
-        all_submodules = get_all_submodule_names()
-        fill_cmake_options_cache(all_submodules)
     else:
         print("ERROR: there was an error executing 'cmake -D%s:BOOL=ON %s' " % (option_name, oldpath))
-        goback_to_directory(oldpath)
+
+    goback_to_directory(oldpath)
 
 
 def disable_all_submodules():
     for module, sign in cmake_options_cache.items():
         if sign == "+":
             disable_selected_submodule(module)
+
+    all_submodules = get_all_submodule_names()
+    fill_cmake_options_cache(all_submodules)
 
 
 def change_submodule_availability(submodule: str):
@@ -170,6 +169,25 @@ def change_submodule_availability(submodule: str):
         able_selected_submodule(submodule)
     else:
         print("Option with this name (%s) doesn't exist." % submodule)
+
+    all_submodules = get_all_submodule_names()
+    fill_cmake_options_cache(all_submodules)
+
+
+def cmd_submodule_configuration(on_list: List[str], off_list: List[str], all_modules: List[str]):
+    if on_list is not None:
+        for on_sub in on_list:
+            if on_sub not in all_modules:
+                print("Submodule with this name (%s) doesn't exist." % on_sub)
+                continue
+            able_selected_submodule(on_sub)
+
+    if off_list is not None:
+        for off_sub in off_list:
+            if off_sub not in all_modules:
+                print("Submodule with this name (%s) doesn't exist." % off_sub)
+                continue
+            disable_selected_submodule(off_sub)
 
 
 class _Getch:
@@ -221,13 +239,22 @@ if __name__ == "__main__":
         It allows to manage cmake submodules options and turn them on (in case they were off)
         or turn off (in case they were on). Tool also clones the submodule while it turns it on,
         if it hasn't been cloned yet.
-        example: D:\daScript> python3 modules.py <cmake_build_folder>''')
+        example: D:\daScript> python3 modules.py --path <cmake_build_folder> --on <submodule_name> --off <submodule_name>''')
+
     parser.add_argument(
-        "path",
-        metavar="<cmake build path>" ,
+        "--path", required=True,
+        # metavar="<cmake build path>" ,
         help='''relative path to build directory processed by cmake''')
 
-    if len(sys.argv) != 2:
+    parser.add_argument (
+        "--on", nargs='+',
+        help='''list of submodules for turning on''')
+
+    parser.add_argument (
+        "--off", nargs='+',
+        help='''list of submodules for turning off''')
+
+    if len(sys.argv) == 1:
         parser.print_help()
         exit(0)
 
@@ -236,6 +263,11 @@ if __name__ == "__main__":
 
     submodules_list = get_all_submodule_names()
     selected_submodule_ind = 0
+
+    if args.on is not None or args.off is not None:
+        cmd_submodule_configuration(args.on, args.off, submodules_list)
+        print("\nPress any key to continue ...")
+        getch()
 
     is_break_out = False
     while not is_break_out:
