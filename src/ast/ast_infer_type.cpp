@@ -5966,7 +5966,7 @@ namespace das {
                         var->inScope = true;
                         auto eVar = make_smart<ExprVar>(var->at, var->name);
                         auto exprDel = make_smart<ExprDelete>(var->at, eVar);
-                        scopes.back()->finalList.emplace_back(exprDel);
+                        scopes.back()->finalList.insert(scopes.back()->finalList.begin(), exprDel);
                         reportAstChanged();
                     } else {
                         error("can't delete " + describeType(var->type), "", "",
