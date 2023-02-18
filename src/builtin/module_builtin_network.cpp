@@ -6,6 +6,8 @@
 #include "daScript/ast/ast_handle.h"
 #include "module_builtin_rtti.h"
 
+#include <atomic>
+
 MAKE_TYPE_FACTORY(NetworkServer,Server)
 
 namespace das {

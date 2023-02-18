@@ -1,0 +1,117 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+
+  ###########################################################
+  build:
+  ###########################################################
+    runs-on: ${{ matrix.runner }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [linux, darwin, windows]
+        architecture: [32, 64]
+        build_system: [cmake]
+
+        include:
+          - target: linux
+            runner: ubuntu-latest
+            archive_ext: tar.gz
+
+          - target: darwin
+            runner: macos-latest
+            archive_ext: tar.gz
+
+          - build_system: cmake
+            cmake_configuration: RelWithDebInfo
+
+          - target: windows
+            runner: windows-latest
+            archive_ext: zip
+
+          - target: windows
+            build_system: cmake
+            cmake_generator: Visual Studio 17 2022
+            
+          - target: linux
+            build_system: cmake
+            cmake_generator: Unix Makefiles
+
+          - target: windows
+            architecture: 32
+            architecture_string: Win32
+
+          - target: windows
+            architecture: 64
+            architecture_string: x64
+
+        exclude:
+          - target: darwin
+            architecture: 32
+            
+          - target: linux
+            architecture: 32
+
+    steps:
+    - name: "SCM Checkout"
+      uses: actions/checkout@v3
+
+    - name: "Install: Required Dev Packages"
+      run: |
+        set -eux
+        case "${{ matrix.target }}${{ matrix.architecture }}" in
+          linux64)
+            echo "MARCH=64" >> $GITHUB_ENV
+            sudo apt-get update -y
+            sudo apt-get install --no-install-recommends -y \
+              libatomic-ops-dev \
+              libglu1-mesa-dev \
+              freeglut3-dev \
+              mesa-common-dev \
+              libglfw3-dev \
+              libfreetype6-dev \
+              libudev-dev \
+              libopenal-dev \
+              libvorbis-dev \
+              libflac-dev \
+              libclang-dev \
+              libx11-dev \
+              libxrandr-dev \
+              libxcursor-dev \
+              libxinerama-dev \
+              libxi-dev
+            ;;
+        esac
+
+    - name: "Build: DaScript"
+      run: |
+        set -eux
+        mkdir build
+        case "${{ matrix.build_system }}" in
+          cmake)
+            case "${{ matrix.target }}${{ matrix.architecture }}" in
+              linux64)
+                cmake --no-warn-unused-cli -H. -B./build -G "${{ matrix.cmake_generator }}"
+                cmake --build ./build --config ${{ matrix.cmake_configuration }} --target daScript
+                ;;
+              windows*)
+                cmake --no-warn-unused-cli -H. -B./build -G "${{ matrix.cmake_generator }}" -T host=x86 -A ${{ matrix.architecture_string }}
+                cmake --build ./build --config ${{ matrix.cmake_configuration }} --target daScript
+                ;;
+              *)
+                CC=clang CXX=clang++ cmake -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64" -DCMAKE_INSTALL_PREFIX=. -DCMAKE_BUILD_TYPE=DEBUG  -G Xcode -T buildsystem=1
+                export PATH=$PATH:~/projects/dascript-mac/bin/Debug
+                cmake --build . --config ${{ matrix.cmake_configuration }} --target daScript
+                ;;
+            esac
+            ;;
+        esac
