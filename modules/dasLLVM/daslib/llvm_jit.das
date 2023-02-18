@@ -254,7 +254,7 @@ class LlvmJitVisitor : AstVisitor
             return a.index < b.index
 
     def build_llvm_function_pair ( fun_name:string; isCmres:bool; var arguments:dasvector`smart_ptr`Variable; var result:TypeDeclPtr; captureType:LLVMOpaqueType?; annotations:AnnotationList )
-        var nat <- build_noalias_list(annotations); defer_delete(nat)
+        var inscope nat <- build_noalias_list(annotations)
         // implementation function
         var fun_args <-  [{for a in arguments; type_to_llvm_abi_type(a._type)}]
         if captureType!=null
@@ -954,7 +954,7 @@ class LlvmJitVisitor : AstVisitor
             else
                 setE(expr, ptr_idx)
         elif subExprT.dim.length != 0
-            var etype <- clone_type(subExprT); defer_delete(etype)
+            var inscope etype <- clone_type(subExprT)
             let maxIndex = etype.dim[etype.dim.length-1]
             etype.dim |> pop()
             check_range(tidx, LLVMConstInt(LLVMInt32Type(), uint64(maxIndex), 0), "dim index out of range")
@@ -996,7 +996,7 @@ class LlvmJitVisitor : AstVisitor
         var tidx = getE(expr.index)
         assume subExprT = expr.subexpr._type
         if subExprT.dim.length != 0 || (subExprT.isPointer && subExprT.firstType.dim.length != 0)
-            var etype <- subExprT.isPointer ? clone_type(subExprT.firstType) : clone_type(subExprT); defer_delete(etype)
+            var inscope etype <- subExprT.isPointer ? clone_type(subExprT.firstType) : clone_type(subExprT)
             let maxIndex = etype.dim[etype.dim.length-1]
             etype.dim |> pop()
             var resType = LLVMPointerType(type_to_llvm_type(etype),0u)
@@ -1014,7 +1014,7 @@ class LlvmJitVisitor : AstVisitor
             setE(expr, res)
         elif subExprT.isGoodArrayType || (subExprT.isPointer && subExprT.firstType.isGoodArrayType)
             var if_not_null = !subExprT.isGoodArrayType ? LLVMBuildIsNotNull(g_builder, tsrc, "") : LLVMConstInt(LLVMInt1Type(), 1ul, 0)
-            var etype := subExprT.isPointer ? subExprT.firstType.firstType : subExprT.firstType; defer_delete(etype)
+            var inscope etype := subExprT.isPointer ? subExprT.firstType.firstType : subExprT.firstType
             var resType = LLVMPointerType(type_to_llvm_type(etype),0u)
             var res = build_select(if_not_null, resType) <|
                 var arr = LLVMBuildLoad(g_builder, tsrc, "arr")
@@ -1031,7 +1031,7 @@ class LlvmJitVisitor : AstVisitor
             setE(expr, res)
         elif subExprT.isGoodTableType || (subExprT.isPointer && subExprT.firstType.isGoodTableType)
             var if_not_null = !subExprT.isGoodTableType ? LLVMBuildIsNotNull(g_builder, tsrc, "") : LLVMConstInt(LLVMInt1Type(), 1ul, 0)
-            var etype := subExprT.isPointer ? subExprT.firstType : subExprT; defer_delete(etype)
+            var inscope etype := subExprT.isPointer ? subExprT.firstType : subExprT
             var resType = LLVMPointerType(type_to_llvm_type(etype.secondType),0u)
             var res = build_select(if_not_null, resType) <|
                 var tab = LLVMBuildLoad(g_builder, tsrc, "tab")

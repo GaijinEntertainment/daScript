@@ -517,7 +517,7 @@ def public type_to_llvm_abi_type ( t:TypeDeclPtr )
 def public type_to_llvm_type ( t:TypeDeclPtr )
     var res : LLVMOpaqueType?
     if t.dim.length != 0
-        var ndt <- clone_type(t); defer_delete(ndt)
+        var inscope ndt <- clone_type(t)
         ndt.dim |> clear()
         res = type_to_llvm_type(ndt)
         for d in t.dim
@@ -581,7 +581,7 @@ def public dim_element_type_to_llvm_type ( typ:TypeDeclPtr )
     if typ.dim.length == 0
         return type_to_llvm_type(typ)
     else
-        var ndt <- clone_type(typ); defer_delete(ndt)
+        var inscope ndt <- clone_type(typ)
         ndt.dim |> clear()
         return type_to_llvm_type(ndt)
 
