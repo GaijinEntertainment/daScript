@@ -42,6 +42,10 @@ jobs:
             build_system: cmake
             cmake_generator: Visual Studio 17 2022
             
+          - target: darwin
+            build_system: cmake
+            cmake_generator: Unix Makefiles
+            
           - target: linux
             build_system: cmake
             cmake_generator: Unix Makefiles
@@ -102,16 +106,36 @@ jobs:
               linux64)
                 cmake --no-warn-unused-cli -H. -B./build -G "${{ matrix.cmake_generator }}"
                 cmake --build ./build --config ${{ matrix.cmake_configuration }} --target daScript
+                cmake --build ./build --config ${{ matrix.cmake_configuration }} --target daScriptTest
                 ;;
               windows*)
                 cmake --no-warn-unused-cli -H. -B./build -G "${{ matrix.cmake_generator }}" -T host=x86 -A ${{ matrix.architecture_string }}
                 cmake --build ./build --config ${{ matrix.cmake_configuration }} --target daScript
+                cmake --build ./build --config ${{ matrix.cmake_configuration }} --target daScriptTest
                 ;;
               *)
-                CC=clang CXX=clang++ cmake -DCMAKE_OSX_ARCHITECTURES="x86_64;arm64" -DCMAKE_INSTALL_PREFIX=. -DCMAKE_BUILD_TYPE=DEBUG  -G Xcode -T buildsystem=1
-                export PATH=$PATH:~/projects/dascript-mac/bin/Debug
+                CC=clang CXX=clang++ cmake -DCMAKE_OSX_ARCHITECTURES="x86_64" -DCMAKE_INSTALL_PREFIX=. -DCMAKE_BUILD_TYPE=STRING=${{ matrix.cmake_configuration }}  -G "${{ matrix.cmake_generator }}"
                 cmake --build . --config ${{ matrix.cmake_configuration }} --target daScript
+                cmake --build . --config ${{ matrix.cmake_configuration }} --target daScriptTest
                 ;;
             esac
+            ;;
+        esac
+
+    - name: "Test"
+      run: |
+        set -eux
+        case "${{ matrix.target }}${{ matrix.architecture }}" in
+           linux64)
+            cd bin
+            ./daScriptTest
+            ;;
+           windows*)
+            cd bin/"${{ matrix.cmake_configuration }}"
+            ./daScriptTest.exe
+            ;;
+           *)
+            cd bin
+            ./daScriptTest
             ;;
         esac
