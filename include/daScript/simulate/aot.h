@@ -1070,7 +1070,7 @@ namespace das {
     struct das_iterator_tcount {
         __forceinline das_iterator_tcount(TT _start, TT _step) : start(_start), step(_step) {}
         __forceinline bool first ( Context *, TT & i ) { i=start; return true; }
-        __forceinline bool next  ( Context *, TT & i ) { i++; return true; }
+        __forceinline bool next  ( Context *, TT & i ) { i+=step; return true; }
         __forceinline void close ( Context *, TT &   ) {}
         TT start = 0;
         TT step = 0;
