@@ -61,9 +61,9 @@ class AppendCondAnnotation : AstFunctionAnnotation
     let resName = "__res__"
     let ctxCloneFnName = "CONTEXT_CLONE`{func.name}"
     let ctxFnName = "CONTEXT`{func.name}"
-    var ctxFnArguments : array<VariablePtr>; defer_delete(ctxFnArguments)
-    var ctxFnBlockList : array<ExpressionPtr>; defer_delete(ctxFnBlockList)
-    var callInCtxArguments : array<ExpressionPtr>; defer_delete(callInCtxArguments)
+    var inscope ctxFnArguments : array<VariablePtr>
+    var inscope ctxFnBlockList : array<ExpressionPtr>
+    var inscope callInCtxArguments : array<ExpressionPtr>
     for arg in func.arguments
       ctxFnArguments |> emplace_new <| clone_variable(arg)
       callInCtxArguments |> emplace_new <| qmacro($i(arg.name))
@@ -83,10 +83,10 @@ class AppendCondAnnotation : AstFunctionAnnotation
     fn.name := ctxCloneFnName
     fn.flags |= FunctionFlags generated | FunctionFlags privateFunction | FunctionFlags exports
     func.body := null
-    var funcBlocklist : array<ExpressionPtr>; defer_delete(funcBlocklist)
+    var inscope funcBlocklist : array<ExpressionPtr>
     if !func.result.isVoid
       funcBlocklist |> emplace_new <| qmacro_expr(${let $i(resName) : $t(func.result);})
-    var pinvokeArguments : array<ExpressionPtr>; defer_delete(pinvokeArguments)
+    var inscope pinvokeArguments : array<ExpressionPtr>
     for arg in func.arguments
       if arg._type.isRef && !arg._type.isRefType
         pinvokeArguments |> emplace_new <| qmacro(unsafe(addr($i(arg.name))))

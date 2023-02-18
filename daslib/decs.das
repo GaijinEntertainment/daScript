@@ -399,8 +399,7 @@ def public lookup_request ( var erq : EcsRequest )
 def public for_each_archetype ( var erq : EcsRequest; blk:block<(arch:Archetype):void> )
     //! Invokes block for each entity of each archetype that can be processed by the request.
     let qi = lookup_request(erq)
-    var aclone := decsState.ecsQueries[qi].archetypes
-    defer_delete(aclone)
+    var inscope aclone := decsState.ecsQueries[qi].archetypes
     for aidx in aclone
         var arch & = unsafe(decsState.allArchetypes[aidx])
         if arch.size > 0
@@ -436,8 +435,7 @@ def public for_each_archetype ( hash:ComponentHash; var erq : function<():EcsReq
         qi = ql - 1
     if qi == -1
         qi = lookup_request(invoke(erq))
-    var aclone := decsState.ecsQueries[qi].archetypes
-    defer_delete(aclone)
+    var inscope aclone := decsState.ecsQueries[qi].archetypes
     for aidx in aclone
         var arch & = unsafe(decsState.allArchetypes[aidx])
         if arch.size > 0
@@ -452,8 +450,7 @@ def public for_each_archetype_find ( hash:ComponentHash; var erq : function<():E
         qi = ql - 1
     if qi == -1
         qi = lookup_request(invoke(erq))
-    var aclone := decsState.ecsQueries[qi].archetypes
-    defer_delete(aclone)
+    var inscope aclone := decsState.ecsQueries[qi].archetypes
     for aidx in aclone
         var arch & = unsafe(decsState.allArchetypes[aidx])
         if arch.size > 0

@@ -1178,6 +1178,16 @@ namespace das
         logger(level, getLogMarker(level), text);
     }
 
+    void toCompilerLog ( const char * text, Context * context, LineInfoArg * at ) {
+        if ( daScriptEnvironment::bound->g_compilerLog ) {
+            if ( text ) {
+                (*daScriptEnvironment::bound->g_compilerLog) << text;
+            }
+        } else {
+            context->throw_error_at(at ? *at : LineInfo(), "can only write to compiler log during compilation");
+        }
+    }
+
     bool is_in_aot ( ) {
         return daScriptEnvironment::bound ? daScriptEnvironment::bound->g_isInAot : false;
     }
@@ -1612,7 +1622,9 @@ namespace das
             SideEffects::worstDefault, "is_in_completion");
         // logger
         addExtern<DAS_BIND_FUN(toLog)>(*this, lib, "to_log",
-            SideEffects::modifyExternal, "toLog");
+            SideEffects::modifyExternal, "toLog")->arg("text");
+        addExtern<DAS_BIND_FUN(toCompilerLog)>(*this, lib, "to_compiler_log",
+            SideEffects::modifyExternal, "toCompilerLog")->args({"text","context","at"});
         // log levels
         addConstant<int>(*this, "LOG_CRITICAL", LogLevel::critical);
         addConstant<int>(*this, "LOG_ERROR",    LogLevel::error);

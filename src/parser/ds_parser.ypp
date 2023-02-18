@@ -199,6 +199,7 @@
 %token  DAS_PRIVATE         "private"
 %token  DAS_SMART_PTR       "smart_ptr"
 %token  DAS_UNSAFE          "unsafe"
+%token  DAS_INSCOPE         "inscope"
 
 /* basic types */
 %token  DAS_TBOOL           "bool"
@@ -372,6 +373,7 @@
 %type <b>               optional_public_or_private_function
 %type <b>               optional_public_or_private_member_variable
 %type <b>               optional_public_or_private_enum
+%type <b>               optional_in_scope
 
 %type <b>               if_or_static_if
 %type <b>               elif_or_static_elif
@@ -1346,9 +1348,14 @@ kwd_let
     |   DAS_VAR  { $$ = false; }
     ;
 
+optional_in_scope
+    :   DAS_INSCOPE { $$ = true; }
+    |   /* empty */  { $$ = false; }
+    ;
+
 expression_let
-    :   kwd_let let_variable_declaration[decl] {
-        $$ = ast_Let(scanner,$kwd_let,$decl,tokAt(scanner,@kwd_let),tokAt(scanner,@decl));
+    :   kwd_let optional_in_scope let_variable_declaration[decl] {
+        $$ = ast_Let(scanner,$kwd_let,$optional_in_scope,$decl,tokAt(scanner,@kwd_let),tokAt(scanner,@decl));
     }
     ;
 

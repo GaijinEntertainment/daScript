@@ -142,6 +142,7 @@ namespace das {
         virtual ModuleAotType aotRequire ( TextWriter & tw ) const override;
    };
 
+    TypeDeclPtr makeExprLetFlagsFlags();
     TypeDeclPtr makeExprGenFlagsFlags();
     TypeDeclPtr makeExprFlagsFlags();
     TypeDeclPtr makeExprPrintFlagsFlags();

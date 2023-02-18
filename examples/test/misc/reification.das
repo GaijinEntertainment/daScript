@@ -14,14 +14,14 @@ def test_block_to_array
 
 def test_addr
     let foobar = "FOO_BAR"
-    var aaddr <- qmacro(@@ $i(foobar)); defer_delete(aaddr)
+    var inscope aaddr <- qmacro(@@ $i(foobar))
     print("\nADDR IS:\n{describe(aaddr)}\n")
 
 def test_fun_arg
-    var foo <- [{VariablePtr
+    var inscope foo <- [{VariablePtr
         new [[Variable() name:="v1", _type<-qmacro_type(type<int>)]];
         new [[Variable() name:="v2", _type<-qmacro_type(type<float>), init<-qmacro(1.2)]]
-    }]; defer_delete(foo)
+    }]
     var fun <- qmacro_function("add") <| $ ( a: int; $a(foo); b : int )
         return a + b
     print("\nFUNCTION ARGUMENTS ARE:\n{describe(fun)}\n")
@@ -29,12 +29,12 @@ def test_fun_arg
 
 def test_var
     var tt <- typeinfo(ast_typedecl type<float>)
-    var vvar <- qmacro_variable("foo",type<$t(tt)?>); defer_delete(vvar)
+    var inscope vvar <- qmacro_variable("foo",type<$t(tt)?>)
     print("\nVARIABLE IS:\n{describe(vvar)}\n")
 
 def test_type
     var argT <- typeinfo(ast_typedecl type<int>)
-    var resT <- qmacro_type(type<$t(argT)???>); defer_delete(resT)
+    var inscope resT <- qmacro_type(type<$t(argT)???>)
     print("\nTYPE IS:\n{describe(resT)}\n")
 
 def test_fun
@@ -60,12 +60,12 @@ def test_regular
     var a1 = 1
     var a2 = a1 + 1
     var a3 = a1 + 13
-    var expr <- quote(length(bus)); defer_delete(expr)
-    var qqblk : array<ExpressionPtr>; defer_delete(qqblk)
+    var inscope expr <- quote(length(bus));
+    var inscope qqblk : array<ExpressionPtr>
     for i in range(3)
         qqblk |> emplace_new <| qmacro(print("{$v(i)}\n"))
-    var arguments <- [{ExpressionPtr quote(a1); quote(a2)}]; defer_delete(arguments)
-    var aargs <- [{ExpressionPtr quote(a1); quote(a2); quote(a3)}]; defer_delete(aargs)
+    var inscope arguments <- [{ExpressionPtr quote(a1); quote(a2)}]
+    var inscope aargs <- [{ExpressionPtr quote(a1); quote(a2); quote(a3)}]
     var subtype <- typeinfo(ast_typedecl type<int>)
     var blk <- qmacro <|
         let t = $i(bus)

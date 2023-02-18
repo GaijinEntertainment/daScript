@@ -1210,9 +1210,8 @@ class private DAServer: Server
                 delete msg
 
     def reqInitialize(seq: double; command: string; arguments: JsonValue?)
-        // var ini <- InitializeRequestArguments(arguments)
-        // defer_delete(ini)
-        var res = [[Capabilities
+        // var inscope ini <- InitializeRequestArguments(arguments)
+        var inscope res = [[Capabilities
                                 supportsConfigurationDoneRequest=true,
                                 supportsRestartRequest=false,
                                 supportTerminateDebuggee=true,
@@ -1222,7 +1221,6 @@ class private DAServer: Server
                                 supportsDataBreakpoints=true
                                 // supportsDelayedStackTraceLoading=true
                     ]]
-        defer_delete(res)
         self->sendSuccessResponse(seq, command, JV(res))
         initialized = 100
         // self->sendEvent("initialized")
@@ -1232,10 +1230,8 @@ class private DAServer: Server
         self->sendSuccessResponse(seq, command, null)
 
     def setPaths(data: JsonValue?)
-        var resPaths: array<string>
-        var pathAliases: table<string; string>
-        defer_delete(resPaths)
-        defer_delete(pathAliases)
+        var inscope resPaths: array<string>
+        var inscope pathAliases: table<string; string>
         if data != null && data is _object
             let paths = data |> joj("paths")
             if paths != null && paths is _array
@@ -1269,8 +1265,7 @@ class private DAServer: Server
         self->sendSuccessResponse(seq, command, null)
 
     def reqDisconnect(seq: double; command: string; data: JsonValue?)
-        // var ini = DisconnectRequest(data)
-        // defer_delete(ini)
+        // var inscope ini = DisconnectRequest(data)
         self->sendSuccessResponse(seq, command, null)
         for ctx in agent.contexts
             ctx |> reset_debug_flags()
@@ -1287,15 +1282,12 @@ class private DAServer: Server
             fio::exit(0)
 
     def reqSetBreakpoints(seq: double; command: string; data: JsonValue?)
-        var ini <- SetBreakpointsArguments(data)
-        defer_delete(ini)
-        var res <- agent->onBreakpointsChanged(ini)
-        defer_delete(res)
+        var inscope ini <- SetBreakpointsArguments(data)
+        var inscope res <- agent->onBreakpointsChanged(ini)
         self->sendSuccessResponse(seq, command, JV(res))
 
     def reqDataBreakpointInfo(seq: double; command: string; data: JsonValue?)
-        var ini <- DataBreakpointInfoArguments(data)
-        defer_delete(ini)
+        var inscope ini <- DataBreakpointInfoArguments(data)
         let ctxAndFrame = uint64(ini.variablesReference) / MAX_VARIABLES
         let ctxId = uint64(ctxAndFrame) / MAX_STACK
         var found = false
@@ -1312,8 +1304,7 @@ class private DAServer: Server
                             found = true
                             valid = v.address != 0ul
                             if valid
-                                var res = [[DataBreakpointInfoResponse dataId="{intptr(ctxData.ctx)},{v.address},{int(v.size)}", description="{v.name} ({v.address}:{min(8, int(v.size))})" ]]
-                                defer_delete(res)
+                                var inscope res = [[DataBreakpointInfoResponse dataId="{intptr(ctxData.ctx)},{v.address},{int(v.size)}", description="{v.name} ({v.address}:{min(8, int(v.size))})" ]]
                                 self->sendSuccessResponse(seq, command, JV(res))
                         return found
                 elif kind >= STATE_VARS && kind <= BLOCKS_POOL
@@ -1323,8 +1314,7 @@ class private DAServer: Server
                                 found = true
                                 valid = v.address != 0ul
                                 if valid
-                                    var res = [[DataBreakpointInfoResponse dataId="{intptr(ctxData.ctx)},{v.address},{int(v.size)}", description="{v.name} ({v.address}:{min(8, int(v.size))})" ]]
-                                    defer_delete(res)
+                                    var inscope res = [[DataBreakpointInfoResponse dataId="{intptr(ctxData.ctx)},{v.address},{int(v.size)}", description="{v.name} ({v.address}:{min(8, int(v.size))})" ]]
                                     self->sendSuccessResponse(seq, command, JV(res))
                                 break
                 else
@@ -1334,19 +1324,15 @@ class private DAServer: Server
                                 found = true
                                 valid = vr.address != 0ul
                                 if valid
-                                    var res = [[DataBreakpointInfoResponse dataId="{intptr(ctxData.ctx)},{vr.address},{int(vr.size)}", description="{v.name}.{vr.name} ({vr.address}:{min(8, int(vr.size))})" ]]
-                                    defer_delete(res)
+                                    var inscope res = [[DataBreakpointInfoResponse dataId="{intptr(ctxData.ctx)},{vr.address},{int(vr.size)}", description="{v.name}.{vr.name} ({vr.address}:{min(8, int(vr.size))})" ]]
                                     self->sendSuccessResponse(seq, command, JV(res))
                             return found
         if !found || !valid
             self->sendSuccessResponse(seq, command, JVNull())
 
     def reqSetDataBreakpoints(seq: double; command: string; data: JsonValue?)
-        var ini <- SetDataBreakpointsArguments(data)
-        defer_delete(ini)
-
-        var res: SetBreakpointsResponse
-        defer_delete(res)
+        var inscope ini <- SetDataBreakpointsArguments(data)
+        var inscope res: SetBreakpointsResponse
 
         for bp in agent.hwBreakpoints
             unsafe
@@ -1373,18 +1359,15 @@ class private DAServer: Server
         self->sendSuccessResponse(seq, command, JV(res))
 
     def reqThreads(seq: double; command: string; data: JsonValue?)
-        var res: ThreadsResponseBody
-        defer_delete(res)
+        var inscope res: ThreadsResponseBody
         threadsDone = true
         for ctx in agent.contexts
             res.threads |> emplace([[Thread id=double(ctx.id), name=ctx |> to_string() ]])
         self->sendSuccessResponse(seq, command, JV(res))
 
     def reqStackTrace(seq: double; command: string; data: JsonValue?)
-        var ini <- StackTraceArguments(data)
-        defer_delete(ini)
-        var res: StackTraceResponseBody
-        defer_delete(res)
+        var inscope ini <- StackTraceArguments(data)
+        var inscope res: StackTraceResponseBody
         agent->getContextData(uint64(ini.threadId)) <| $(var ctxData: DAContext)
             for idx, line in range(ini.levels), ctxData.stack
                 res.stackFrames |> emplace([[StackFrame
@@ -1398,10 +1381,8 @@ class private DAServer: Server
         self->sendSuccessResponse(seq, command, JV(res))
 
     def reqScopes(seq: double; command: string; data: JsonValue?)
-        var ini <- ScopesArguments(data)
-        defer_delete(ini)
-        var res: ScopesResponseBody
-        defer_delete(res)
+        var inscope ini <- ScopesArguments(data)
+        var inscope res: ScopesResponseBody
         let ctxId = uint64(ini.frameId / double(MAX_STACK))
         agent->getContextData(ctxId) <| $(var ctxData: DAContext)
             let frameId = int(ini.frameId % double(MAX_STACK))
@@ -1440,10 +1421,8 @@ class private DAServer: Server
         self->sendSuccessResponse(seq, command, JV(res))
 
     def reqVariables(seq: double; command: string; data: JsonValue?)
-        var ini <- VariablesArguments(data)
-        defer_delete(ini)
-        var res: VariablesResponseBody
-        defer_delete(res)
+        var inscope ini <- VariablesArguments(data)
+        var inscope res: VariablesResponseBody
         let ctxAndFrame = uint64(ini.variablesReference) / MAX_VARIABLES
         let ctxId = uint64(ctxAndFrame) / MAX_STACK
         if ctxId == 0ul // eval ctx
@@ -1508,31 +1487,27 @@ class private DAServer: Server
         self->sendSuccessResponse(seq, command, JV(res))
 
     def reqContinue(seq: double; command: string; data: JsonValue?)
-        var ini <- ContinueArguments(data)
-        defer_delete(ini)
+        var inscope ini <- ContinueArguments(data)
         agent->getContextData(uint64(ini.threadId)) <| $(var ctx: DAContext)
             ctx |> reset_debug_flags()
             ctx.continueRequested = true
         self->sendSuccessResponse(seq, command, null)
 
     def reqPause(seq: double; command: string; data: JsonValue?)
-        var ini <- PauseArguments(data)
-        defer_delete(ini)
+        var inscope ini <- PauseArguments(data)
         agent->getContextData(uint64(ini.threadId)) <| $(var ctx: DAContext)
             agent->reqPause(ctx)
         self->sendSuccessResponse(seq, command, null)
 
     def reqStepIn(seq: double; command: string; data: JsonValue?)
-        var ini <- StepInArguments(data)
-        defer_delete(ini)
+        var inscope ini <- StepInArguments(data)
         agent->getContextData(uint64(ini.threadId)) <| $(var ctx: DAContext)
             ctx |> reset_debug_flags()
             ctx.stepInRequested = true
         self->sendSuccessResponse(seq, command, null)
 
     def reqNext(seq: double; command: string; data: JsonValue?)
-        var ini <- NextArguments(data)
-        defer_delete(ini)
+        var inscope ini <- NextArguments(data)
         agent->getContextData(uint64(ini.threadId)) <| $(var ctx: DAContext)
             ctx |> reset_debug_flags()
             ctx.stepRequestedStack = stack_depth(*ctx.ctx)
@@ -1540,8 +1515,7 @@ class private DAServer: Server
         self->sendSuccessResponse(seq, command, null)
 
     def reqStepOut(seq: double; command: string; data: JsonValue?)
-        var ini <- NextArguments(data)
-        defer_delete(ini)
+        var inscope ini <- NextArguments(data)
         agent->getContextData(uint64(ini.threadId)) <| $(var ctx: DAContext)
             ctx |> reset_debug_flags()
             ctx.stepRequestedStack = max(stack_depth(*ctx.ctx) - 1, 0)
@@ -1549,10 +1523,8 @@ class private DAServer: Server
         self->sendSuccessResponse(seq, command, null)
 
     def reqEvaluate(seq: double; command: string; data: JsonValue?)
-        var ini <- EvaluateArguments(data)
-        defer_delete(ini)
-        var res: EvaluateResponse
-        defer_delete(res)
+        var inscope ini <- EvaluateArguments(data)
+        var inscope res: EvaluateResponse
         var found = false
         agent.evalFrame |> find_child_var() <| $(child, idx)
             if child.name == ini.expression
@@ -1589,8 +1561,7 @@ class private DAServer: Server
             self->sendOutput("console", "{msg}\n")
 
     def sendOutput(category: string; output: string)
-        var res = [[OutputEventBody category=category, output=output ]]
-        defer_delete(res)
+        var inscope res = [[OutputEventBody category=category, output=output ]]
         self->sendRawData(JV({{"type"=>JV("event"); "event"=>JV("output"); "body"=>JV(res)}}), /*log*/false)
 
     def sendEvent(event: string; body: JsonValue?)

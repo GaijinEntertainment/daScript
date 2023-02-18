@@ -155,6 +155,7 @@ namespace das
     ,   deprecated_function                     =   40210       // [deprecated] function
     ,   argument_aliasing                       =   40211       // a = fun(a) with some form of potential cmres
     ,   make_local_aliasing                     =   40212       // a = [[... a.x ...]] with some form of potential cmres
+    ,   in_scope_in_the_loop                    =   40213       // for ( a in b ) { let in scope ... ; }
 
     ,   too_many_infer_passes                   =   41000
 

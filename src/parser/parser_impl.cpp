@@ -652,10 +652,11 @@ namespace das {
         return mkb;
     }
 
-    Expression * ast_Let ( yyscan_t scanner, bool kwd_let, VariableDeclaration * decl, const LineInfo & kwd_letAt, const LineInfo & declAt ) {
+    Expression * ast_Let ( yyscan_t scanner, bool kwd_let, bool inScope, VariableDeclaration * decl, const LineInfo & kwd_letAt, const LineInfo & declAt ) {
         auto pLet = new ExprLet();
         pLet->at = kwd_letAt;
         pLet->atInit = declAt;
+        pLet->inScope = inScope;
         if ( decl->pTypeDecl ) {
             for ( const auto & name_at : *decl->pNameList ) {
                 if ( !pLet->find(name_at.name) ) {

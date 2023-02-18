@@ -34,14 +34,14 @@ struct ExtractMethodDesc
 def JV ( li:LineInfo )
     let fname = li.fileInfo!=null ? string(li.fileInfo.name) : ""
     let tabSize = li.fileInfo?.tabSize ?? 4
-    var kv <- {{
+    var inscope kv <- {{
         "line" => "{int(li.line)}";
         "column" => "{int(li.column)}";
         "last_line" => "{int(li.last_line)}";
         "last_column" => "{int(li.last_column)}";
         "file" => fname;
         "tab" => "{tabSize}"
-    }}; defer_delete(kv)
+    }}
     return JV(kv)
 
 [tag_function_macro(tag="extract_method_tag")]

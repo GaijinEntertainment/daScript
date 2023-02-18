@@ -62,7 +62,7 @@ class ImplementsMacro : AstStructureAnnotation
             return false
         cls.annotations |> erase(iface_index)
         // add {st}::_interface_{Foo} : Foo?
-        var iface_ptr <- qmacro_type(type<$t(StructurePtr(parent))?>); defer_delete(iface_ptr)
+        var inscope iface_ptr <- qmacro_type(type<$t(StructurePtr(parent))?>)
         st |> add_structure_field ( iface_var_name, clone_type(iface_ptr), [[ExpressionPtr]]);
         // add function {st}::get`{Foo} : Foo?
         var fn_get_i <- qmacro_method(iface_get_name_func,st) <| $ ( var self: $t(st) ) : $t(iface_ptr)
@@ -71,7 +71,7 @@ class ImplementsMacro : AstStructureAnnotation
             return self.$f(iface_var_name)
         add_function(st._module, fn_get_i)
         // add {cls}::_self : {ST}?
-        var st_ptr <- qmacro_type(type<$t(st)?>); defer_delete(st_ptr)
+        var inscope st_ptr <- qmacro_type(type<$t(st)?>)
         let fi = cls |> add_structure_field ( "_self", clone_type(st_ptr), [[ExpressionPtr]]);
         cls.fields[fi].annotation |> add_annotation_argument("do_not_delete",true)
         cls.fields[fi].flags |= FieldDeclarationFlags doNotDelete | FieldDeclarationFlags privateField
@@ -101,8 +101,8 @@ class ImplementsMacro : AstStructureAnnotation
                         cm.init := null
                         unsafe
                             cm.init <- qmacro(cast<$t(cm._type)>(@@$i(fmethod_name)))
-                        var fmethod_args : array<VariablePtr>; defer_delete(fmethod_args)
-                        var fcall_args : array<ExpressionPtr>; defer_delete(fcall_args)
+                        var inscope fmethod_args : array<VariablePtr>
+                        var inscope fcall_args : array<ExpressionPtr>
                         for n,t in cm._type.argNames,cm._type.argTypes
                             if n != "self"
                                 fcall_args |> emplace <| qmacro($i(n))

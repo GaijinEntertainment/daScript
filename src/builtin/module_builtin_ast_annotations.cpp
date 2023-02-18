@@ -221,6 +221,7 @@ namespace das {
             :  AstExpressionAnnotation<ExprLet> ("ExprLet", ml) {
             addField<DAS_BIND_MANAGED_FIELD(variables)>("variables");
             addField<DAS_BIND_MANAGED_FIELD(atInit)>("atInit");
+            addFieldEx("letFlags", "letFlags", offsetof(ExprLet, letFlags), makeExprLetFlagsFlags());
         }
     };
 

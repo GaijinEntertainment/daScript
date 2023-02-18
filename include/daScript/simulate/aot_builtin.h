@@ -55,6 +55,7 @@ namespace das {
     void builtin_table_free ( Table & tab, int szk, int szv, Context * __context__ );
 
     void toLog ( int level, const char * text );
+    void toCompilerLog ( const char * text, Context * context, LineInfoArg * at );
 
     vec4f builtin_verify_locks ( Context & context, SimNode_CallBase * node, vec4f * args );
     bool builtin_set_verify_array_locks ( Array & arr, bool value );

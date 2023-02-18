@@ -57,6 +57,7 @@ class DeferDeleteMacro : AstCallMacro
     //! into {}, and add delete expression to the finally section of the current block
     def override visit ( prog:ProgramPtr; mod:Module?; var call:smart_ptr<ExprCallMacro> ) : ExpressionPtr
         macro_verify(call.arguments.length==1,prog,call.at,"expecting defer_delete(expr)")
+        to_compiler_log("{describe(call.at)}: *warning* defer_delete is deprecated. use var inscope instead\n")
         var success = true
         prog |> get_ast_context(call) <| $(valid, astc)
             if !valid

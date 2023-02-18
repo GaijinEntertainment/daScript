@@ -5858,6 +5858,10 @@ namespace das {
             expr->visibility.last_column = scope->at.last_column;
             expr->visibility.last_line = scope->at.last_line;
             DAS_ASSERT(expr->visibility.line);
+            if ( expr->inScope && scopes.back()->inTheLoop ) {
+                error("in scope let is not allowed in the loop",
+                    "you can always create scope with 'if true'", "", expr->at, CompilationError::in_scope_in_the_loop);
+            }
         }
         virtual void preVisitLet ( ExprLet * expr, const VariablePtr & var, bool last ) override {
             Visitor::preVisitLet(expr, var, last);
@@ -5914,6 +5918,9 @@ namespace das {
             if ( !var->init ) {
                 local.push_back(var);
             }
+            if ( expr->inScope && var->type && var->type->isConst() ) {
+                error("in scope let can't be const", "", "", var->at, CompilationError::invalid_variable_type);
+            }
         }
         virtual VariablePtr visitLet ( ExprLet * expr, const VariablePtr & var, bool last ) override {
             if ( var->type && var->type->isExprType() ) {
@@ -5952,6 +5959,18 @@ namespace das {
                     if ( castExpr->castType->isAuto() ) {
                         reportAstChanged();
                         castExpr->castType = make_smart<TypeDecl>(*var->type);
+                    }
+                }
+                if ( expr->inScope && !var->inScope ) {
+                    if ( var->type->canDelete() ) {
+                        var->inScope = true;
+                        auto eVar = make_smart<ExprVar>(var->at, var->name);
+                        auto exprDel = make_smart<ExprDelete>(var->at, eVar);
+                        scopes.back()->finalList.emplace_back(exprDel);
+                        reportAstChanged();
+                    } else {
+                        error("can't delete " + describeType(var->type), "", "",
+                            var->at, CompilationError::bad_delete);
                     }
                 }
             }

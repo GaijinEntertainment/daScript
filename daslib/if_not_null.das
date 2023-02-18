@@ -33,7 +33,7 @@ class ApplyMacro : AstCallMacro
             macro_verify(PTR._type.isPointer,prog,expr.at,"first argument must be pointer , expecting ptr |> if_not_null() <| call()")
             let ifnn_name = "__ifnn_ptr_{if_not_null_index++}"
             var fcall = expr.arguments[1] as ExprCall
-            var vtype <- clone_type(PTR._type); defer_delete(vtype)
+            var inscope vtype <- clone_type(PTR._type)
             if !PTR._type.flags.constant
                 vtype.flags |= TypeDeclFlags removeConstant
             var tblk <- qmacro_block <|

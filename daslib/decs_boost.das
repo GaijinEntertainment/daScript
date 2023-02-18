@@ -41,8 +41,8 @@ class DecsTemplate : AstStructureAnnotation
             return false
         let ppref = decs_prefix(args)
         let prefix = (ppref is yes) ? (ppref as yes) : "{st.name}_"
-        var blkApply : array<ExpressionPtr>; defer_delete(blkApply)
-        var blkErase : array<ExpressionPtr>; defer_delete(blkErase)
+        var inscope blkApply : array<ExpressionPtr>
+        var inscope blkErase : array<ExpressionPtr>
         for fld in st.fields
             blkApply |> emplace_new <| qmacro(decs::set(cmp,$v("{prefix}{fld.name}"),src.$f(fld.name)))
             blkErase |> emplace_new <| qmacro(decs::remove(cmp,$v("{prefix}{fld.name}")))
@@ -154,7 +154,7 @@ def private append_iterator ( arch_name:string; var qloop:smart_ptr<ExprFor>; a;
     if getter=="get_default_ro"
         qloop.sources |> emplace_new <| qmacro($c(getter)($i(arch_name),$v("{prefix}{a.name}"),$e(a.init)))
     else
-        var ftype <- clone_type(a._type); defer_delete(ftype)
+        var inscope ftype <- clone_type(a._type)
         ftype.flags &= ~ TypeDeclFlags constant
         ftype.flags &= ~ TypeDeclFlags ref
         qloop.sources |> emplace_new <| qmacro($c(getter)($i(arch_name),$v("{prefix}{a.name}"),type<$t(ftype)>))
@@ -170,7 +170,7 @@ def private append_index_lookup ( arch_name:string; var qblock:smart_ptr<ExprBlo
         unsafe
             iget <- clone_expression(a.init)
     else
-        var ftype <- clone_type(a._type); defer_delete(ftype)
+        var inscope ftype <- clone_type(a._type)
         ftype.flags &= ~ TypeDeclFlags constant
         ftype.flags &= ~ TypeDeclFlags ref
         iget := qmacro($c(getter)($i(arch_name),$v("{prefix}{a.name}"),type<$t(ftype)>)[entity_index])

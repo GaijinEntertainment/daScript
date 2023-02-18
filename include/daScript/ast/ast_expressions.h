@@ -806,6 +806,12 @@ namespace das
         vector<VariablePtr>     variables;
         LineInfo                visibility;
         LineInfo                atInit;
+        union {
+            struct {
+                bool    inScope : 1;
+            };
+            uint32_t    letFlags = 0;
+        };
     };
 
     // for a,b in foo,bar where a>b ...

@@ -23,8 +23,7 @@ class InstanceFunctionAnnotation : AstFunctionAnnotation
     //!     def inst {}
     def override apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
         var generic_name = ""
-        var rules : Template
-        defer_delete(rules)
+        var inscope rules : Template
         for argv in args
             let val = get_annotation_argument_value(argv)
             if val is tBool

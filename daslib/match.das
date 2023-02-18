@@ -62,22 +62,22 @@ def match_as_is ( what:TypeDeclPtr; wths:Expression?; makeType:TypeDeclPtr; as_i
         name := as_is_name
     ]]
     to.conditions |> emplace(cond_nz)
-    var access_expr <- new [[ExprAsVariant() at=wths.at,
+    var inscope access_expr <- new [[ExprAsVariant() at=wths.at,
         value <- clone_expression(access),
         name := as_is_name
-    ]]; defer_delete(access_expr)
+    ]]
     return match_any(makeType, wths, access_expr, to)
 
 [macro_function]
 def match_copy ( what:TypeDeclPtr; wths:Expression?; makeType:TypeDeclPtr; as_is_name:das_string; access:ExpressionPtr; var to:MatchTo )
     log_m("\tmatch_copy {describe(what)} {describe(makeType)} {describe(access)}")
     let tempName = make_unique_private_name("__`match`copy",wths.at)
-    var prefixType <- clone_type(makeType); defer_delete(prefixType)
+    var inscope prefixType <- clone_type(makeType)
     var prefix <- qmacro_expr <|
         let $i(tempName) : $t(prefixType)
     prefix |> force_at(wths.at)
     to.prefix |> emplace <| prefix
-    var access_new <- qmacro($i(tempName)); defer_delete(access_new); access_new |> force_at(wths.at)
+    var inscope access_new <- qmacro($i(tempName)); access_new |> force_at(wths.at)
     var cond_nz <- qmacro(match_copy($i(tempName), $e(access))); cond_nz |> force_at(wths.at)
     to.conditions |> emplace(cond_nz)
     return match_any(makeType, wths, access_new, to)
@@ -92,7 +92,7 @@ def match_struct ( what:TypeDeclPtr; wths:ExprMakeStruct?; access:ExpressionPtr;
     if what.baseType==Type tPointer && what.firstType!=null && (what.firstType.isStructure || what.firstType.isHandle)
         var cond_nz <- qmacro($e(access) != null)
         to.conditions |> emplace(cond_nz)
-        var access_nz <- qmacro(*($e(access))); defer_delete(access_nz)
+        var inscope access_nz <- qmacro(*($e(access)))
         return match_struct(what.firstType, wths, access_nz, to)
     if !(what.isStructure || what.isHandle)
         to.errors |> match_error("{describe(what)} does not match [[ ... ]]", wths.at)
@@ -123,11 +123,10 @@ def match_struct ( what:TypeDeclPtr; wths:ExprMakeStruct?; access:ExpressionPtr;
         delete fields
     for i in range(wthsLength)
         for mf in *wths.structs[i]
-            if true // to create scope for defer_delete
-                var new_access <- whatDim==1 ? qmacro($e(access).$f(mf.name)) : qmacro($e(access)[$v(i)].$f(mf.name))
+            if true // to create scope
+                var inscope new_access <- whatDim==1 ? qmacro($e(access).$f(mf.name)) : qmacro($e(access)[$v(i)].$f(mf.name))
                 new_access |> force_at(wths.at)
-                defer_delete(new_access)
-                var ftype <- get_field_type(what, string(mf.name), what.flags.constant); defer_delete(ftype)
+                var inscope ftype <- get_field_type(what, string(mf.name), what.flags.constant)
                 if ftype == null
                     to.errors |> match_error("field {mf.name} not found", mf.at)
                     return false
@@ -168,9 +167,8 @@ def match_tuple ( what:TypeDeclPtr; wths:ExprMakeTuple?; access:ExpressionPtr; v
         if i == tagIndex    // skip ...
             continue
         var ei = i<= tagIndex ? i : whatDim - (wthsLength - i)
-        var new_access <- qmacro($e(access).$f("_{ei}")); new_access |> force_at(wths.at)
         if true // to create scope for defer delete
-            defer_delete(new_access)
+            var inscope new_access <- qmacro($e(access).$f("_{ei}")); new_access |> force_at(wths.at)
             if !match_any(what.argTypes[ei], get_ptr(wths.values[i]), new_access, to)
                 return false
     return true
@@ -178,7 +176,7 @@ def match_tuple ( what:TypeDeclPtr; wths:ExprMakeTuple?; access:ExpressionPtr; v
 [macro_function]
 def match_array ( what:TypeDeclPtr; wths:ExprMakeArray?; dynamic:bool; access:ExpressionPtr; var to:MatchTo )
     let wdl = length(what.dim)
-    var recT : TypeDeclPtr; defer_delete(recT)
+    var inscope recT : TypeDeclPtr
     // find if there is ..., get its index
     var tagIndex = INT_MAX
     for v,i in wths.values,count()
@@ -225,9 +223,8 @@ def match_array ( what:TypeDeclPtr; wths:ExprMakeArray?; dynamic:bool; access:Ex
     for i in range(wthsLength)
         if i != tagIndex
             var ei = i<=tagIndex ? i : wthsLength-i
-            var new_access <- i<tagIndex ? qmacro($e(access)[$v(ei)]) : qmacro($e(access)[length($e(access)) - $v(ei)])
+            var inscope new_access <- i<tagIndex ? qmacro($e(access)[$v(ei)]) : qmacro($e(access)[length($e(access)) - $v(ei)])
             new_access |> force_at(wths.at)
-            defer_delete(new_access)
             if !match_any(recT, get_ptr(wths.values[i]), new_access, to)
                 return false
     return true
@@ -251,10 +248,9 @@ def match_variant ( what:TypeDeclPtr; wths:ExprMakeVariant?; access:ExpressionPt
         return false
     for mf,i in wths.variants,count()
         if true // to create scope for defer delete
-            var new_access <- whatDim==1 ? qmacro($e(access) as $f(mf.name)) : qmacro($e(access)[$v(i)] as $f(mf.name))
+            var inscope new_access <- whatDim==1 ? qmacro($e(access) as $f(mf.name)) : qmacro($e(access)[$v(i)] as $f(mf.name))
             new_access |> force_at(wths.at)
-            defer_delete(new_access)
-            var ftype <- get_field_type(what, string(mf.name), what.flags.constant); defer_delete(ftype)
+            var inscope ftype <- get_field_type(what, string(mf.name), what.flags.constant)
             if ftype == null
                 to.errors |> match_error("variant {mf.name} not found", mf.at)
                 return false
@@ -272,7 +268,7 @@ def match_as_variant ( what:TypeDeclPtr; wthAs:ExprAsVariant?; access:Expression
     if what.baseType!=Type tVariant
         to.errors |> match_error("{describe(what)} is not a variant", wthAs.at)
         return false
-    var ftype <- get_field_type(what, string(wthAs.name), what.flags.constant); defer_delete(ftype)
+    var inscope ftype <- get_field_type(what, string(wthAs.name), what.flags.constant)
     if ftype == null
         to.errors |> match_error("variant {wthAs.name} not found", wthAs.at)
         return false
@@ -280,10 +276,10 @@ def match_as_variant ( what:TypeDeclPtr; wthAs:ExprAsVariant?; access:Expression
         value <- clone_expression(access),
         name := wthAs.name
     ]]
-    var new_access <- new [[ExprAsVariant() at=wthAs.at,
+    var inscope new_access <- new [[ExprAsVariant() at=wthAs.at,
         value <- clone_expression(access),
         name := wthAs.name
-    ]]; defer_delete(new_access)
+    ]]
     log_m("\tas {wthAs.name} match passed\n")
     return match_any(ftype, get_ptr(wthAs.value), access, to)
 
@@ -319,7 +315,7 @@ def match_expr ( what:TypeDeclPtr; wthmt:ExprCall?; access:ExpressionPtr; var to
     if value._type!=null && !is_same_type(what, value._type, RefMatters no, ConstMatters no, TemporaryMatters no)
         to.errors |> match_error("mismatching expression type {describe(what)} vs {describe(value._type)}", value.at)
         return false
-    var expr <- clone_expression(value); defer_delete(expr)
+    var inscope expr <- clone_expression(value)
     apply_template(expr) <| $ ( rules )
         for dv,dn in keys(to.declarations),values(to.declarations)
             rules |> replaceVariable(dv) <| clone_expression(dn)
@@ -344,11 +340,11 @@ def match_guards ( what:TypeDeclPtr; wth:ExprOp2?; access:ExpressionPtr; var to:
 
 [macro_function]
 def match_or ( what:TypeDeclPtr; wth:ExprOp2?; access:ExpressionPtr; var to:MatchTo )
-    var toL : MatchTo; defer_delete(toL)
+    var inscope toL : MatchTo
     toL.declarations := to.declarations
     if !match_any(what, get_ptr(wth.left), access, toL)
         return false
-    var toR : MatchTo; defer_delete(toR);
+    var inscope toR : MatchTo
     if !match_any(what, get_ptr(wth.right), access, toR)
         return false
     for k in keys(to.declarations)
@@ -363,8 +359,8 @@ def match_or ( what:TypeDeclPtr; wth:ExprOp2?; access:ExpressionPtr; var to:Matc
             return false
     delete to.declarations
     to.declarations <- toL.declarations // because its a superset
-    var lcond <- join_conditions(toL.conditions, wth.left.at); defer_delete(lcond)
-    var rcond <- join_conditions(toR.conditions, wth.right.at); defer_delete(rcond)
+    var inscope lcond <- join_conditions(toL.conditions, wth.left.at)
+    var inscope rcond <- join_conditions(toR.conditions, wth.right.at)
     var cond <- qmacro($e(lcond) || $e(rcond)); cond |> force_at(wth.at)
     to.conditions |> emplace(cond)
     log_m("\tmatch_or {describe(what)} passed\n")
@@ -507,16 +503,16 @@ class MatchMacro : AstCallMacro
                 macro_verify(eite.if_false==null, prog, expr.at, "match to `if` can't have `else` section")
             else
                 macro_error(prog, ee.at, "match `block` argument can only contain match-to calls, not {ee.__rtti}")
-        var access <- clone_expression(what); defer_delete(access)
+        var inscope access <- clone_expression(what)
         var iff : smart_ptr<ExprIfThenElse>
-        var iffb : array<smart_ptr<ExprIfThenElse>>; defer_delete(iffb)
+        var inscope iffb : array<smart_ptr<ExprIfThenElse>>
         let eli = length(eblk.list)
         var any_errors = false
-        var prefix : array<ExpressionPtr>; defer_delete(prefix)
+        var inscope prefix : array<ExpressionPtr>
         for ei in range(eli)
             if true
                 var eto = (eblk.list[multi_match ? ei : eli-ei-1]) as ExprIfThenElse
-                var to : MatchTo; defer_delete(to)
+                var inscope to : MatchTo
                 if match_any(what._type, get_ptr(eto.cond), access, to)
                     log_m("match_any ok\n\n")
                     var new_iff <- new [[ExprIfThenElse() at=eto.at, cond<-join_conditions(to.conditions, eto.at)]]

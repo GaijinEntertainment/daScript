@@ -65,7 +65,7 @@ class private CoroutineMacro : AstFunctionAnnotation
     //! Generator yields bool if its a void coroutine, and yields the return type otherwise.
     //! If return type is specified coroutine can serve as an advanced form of a generator.
     def override apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
-        var retT : TypeDeclPtr; defer_delete(retT)
+        var inscope retT : TypeDeclPtr
         if func.result.baseType == Type tVoid || func.result.baseType == Type autoinfer
             unsafe
                 retT <- qmacro_type <| type<bool>

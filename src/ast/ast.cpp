@@ -2255,6 +2255,7 @@ namespace das {
             cexpr->variables.push_back(var->clone());
         cexpr->visibility = visibility;
         cexpr->atInit = atInit;
+        cexpr->letFlags = letFlags;
         return cexpr;
     }
 

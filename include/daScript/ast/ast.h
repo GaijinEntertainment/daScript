@@ -306,6 +306,7 @@ namespace das
                 bool    private_variable : 1;
                 bool    tag : 1;
                 bool    global : 1;
+                bool    inScope : 1;
             };
             uint32_t flags = 0;
         };
