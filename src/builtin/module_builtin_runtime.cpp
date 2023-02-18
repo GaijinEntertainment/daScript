@@ -1622,7 +1622,7 @@ namespace das
             SideEffects::worstDefault, "is_in_completion");
         // logger
         addExtern<DAS_BIND_FUN(toLog)>(*this, lib, "to_log",
-            SideEffects::modifyExternal, "toLog")->arg("text");
+            SideEffects::modifyExternal, "toLog")->args({"level", "text"});
         addExtern<DAS_BIND_FUN(toCompilerLog)>(*this, lib, "to_compiler_log",
             SideEffects::modifyExternal, "toCompilerLog")->args({"text","context","at"});
         // log levels
