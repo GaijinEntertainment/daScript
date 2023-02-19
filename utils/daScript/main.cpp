@@ -358,6 +358,10 @@ void print_help() {
   #define MAIN_FUNC_NAME main
 #endif
 
+#if DAS_SMART_PTR_TRACKER
+#include <inttypes.h>
+#endif
+
 int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     if ( argc>2 && strcmp(argv[1],"-aot")==0 ) {
         return das_aot_main(argc, argv);
@@ -485,5 +489,8 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     // and done
     if ( pauseAfterDone ) getchar();
     Module::Shutdown();
+#if DAS_SMART_PTR_TRACKER
+    printf("%" PRId64 " smart pointers left\n", uint64_t(g_smart_ptr_total));
+#endif
     return failedFiles;
 }

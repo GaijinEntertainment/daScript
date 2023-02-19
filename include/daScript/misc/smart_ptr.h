@@ -4,6 +4,14 @@
 #define DAS_SMART_PTR_ID    0
 #endif
 
+#ifndef DAS_SMART_PTR_TRACKER
+#define DAS_SMART_PTR_TRACKER 0
+#endif
+
+#if DAS_SMART_PTR_TRACKER
+#include <atomic>
+#endif
+
 void os_debug_break();
 
 namespace das {
@@ -311,6 +319,15 @@ namespace das {
     #define DAS_TRACK_SMART_PTR_ID
 #endif
 
+#if DAS_SMART_PTR_TRACKER
+    extern std::atomic<uint64_t>  g_smart_ptr_total;
+    #define DAS_SMART_PTR_NEW     g_smart_ptr_total++;
+    #define DAS_SMART_PTR_DELETE  g_smart_ptr_total--;
+#else
+    #define DAS_SMART_PTR_NEW
+    #define DAS_SMART_PTR_DELETE
+#endif
+
     class ptr_ref_count {
     public:
 #if DAS_SMART_PTR_ID
@@ -321,17 +338,21 @@ namespace das {
     public:
         __forceinline ptr_ref_count () {
             DAS_UPDATE_SMART_PTR_ID
+            DAS_SMART_PTR_NEW
         }
         __forceinline ptr_ref_count ( const ptr_ref_count &  ) {
             DAS_UPDATE_SMART_PTR_ID
+            DAS_SMART_PTR_NEW
         }
         __forceinline ptr_ref_count ( const ptr_ref_count && ) {
             DAS_UPDATE_SMART_PTR_ID
+            DAS_SMART_PTR_NEW
         }
         __forceinline ptr_ref_count & operator = ( const ptr_ref_count & ) { return *this;}
         __forceinline ptr_ref_count & operator = ( ptr_ref_count && ) { return *this; }
         virtual ~ptr_ref_count() {
             DAS_ASSERTF(ref_count == 0, "can only delete when ref_count==0");
+            DAS_SMART_PTR_DELETE
         }
         __forceinline void addRef() {
             DAS_TRACK_SMART_PTR_ID
