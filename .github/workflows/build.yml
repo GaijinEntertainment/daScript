@@ -129,13 +129,16 @@ jobs:
            linux64)
             cd bin
             ./daScriptTest
+            ./daScript _dasroot_/dastest/dastest.das -- --color --test ../tests
             ;;
            windows*)
             cd bin/"${{ matrix.cmake_configuration }}"
             ./daScriptTest.exe
+            ./daScript _dasroot_/dastest/dastest.das -- --color --test ../../tests
             ;;
            *)
             cd bin
             ./daScriptTest
+            ./daScript _dasroot_/dastest/dastest.das -- --color --test ../tests
             ;;
         esac
