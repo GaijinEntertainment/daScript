@@ -48,7 +48,7 @@ def main()
     let runIdx = args |> find_index("--run")
     if runIdx != -1
         let res = suite::test_file(args[runIdx + 1], SuiteCtx(args))
-        log::info_raw("{jsonResultPrefix}{write_json(JV(res))}")
+        log::info_raw("\n{jsonResultPrefix}{write_json(JV(res))}\n{jsonResultPrefix}")
         return
 
     var res: SuiteResult
@@ -103,7 +103,7 @@ def main()
                     while !feof(f)
                         let st = fgets(f)
                         if st == jsonResultPrefix
-                            readJson = true
+                            readJson = !readJson
                             continue
                         if readJson
                             jsonResult += st

@@ -62,7 +62,7 @@ def describe(vvar:VariablePtr)
 
 def describe_bitfield(bf;merger:string = "")
     static_if typeinfo(is_bitfield bf)
-        let bftd <- typeinfo(ast_typedecl bf)
+        var inscope bftd <- typeinfo(ast_typedecl bf)
         return join( [{ for name,bit in bftd.argNames,range(32); "[{name}]";
             where (int(bf) & (1<<bit)) != 0 }], merger )
     else
@@ -603,13 +603,13 @@ def private walk_and_convert ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : 
         return walk_and_convert_basic(data,info,at)
 
 def convert_to_expression ( var value : auto& ==const; at:LineInfo )
-	let info <- typeinfo(ast_typedecl value)
+	var inscope info <- typeinfo(ast_typedecl value)
     unsafe
 	    let pval = addr(value)
 	    return walk_and_convert(reinterpret<uint8?> pval, info, at)
 
 def convert_to_expression ( value : auto ==const; at:LineInfo )
-	let info <- typeinfo(ast_typedecl value)
+	var inscope info <- typeinfo(ast_typedecl value)
     unsafe
 	    let pval = addr(value)
 	    return walk_and_convert(reinterpret<uint8?> pval, info, at)

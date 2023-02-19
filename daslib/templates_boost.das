@@ -639,7 +639,7 @@ def private apply_qrules ( var expr:smart_ptr<Expression>& ) : smart_ptr<ExprBlo
     var eblk <- new [[ExprBlock() at=expr.at,
         returnType <- new [[TypeDecl() at=expr.at, baseType=Type tVoid]],
         arguments := [{VariablePtr[1]
-            new [[Variable() at=expr.at, name := "rules", _type <- clone_type(typeinfo(ast_typedecl type<Template>)) ]] |> generatedVariable()
+            new [[Variable() at=expr.at, name := "rules", _type <- typeinfo(ast_typedecl type<Template>) ]] |> generatedVariable()
         }],
         blockFlags = ExprBlockFlags isClosure
     ]]

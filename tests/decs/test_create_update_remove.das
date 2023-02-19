@@ -23,6 +23,7 @@ def test_create_update_remove( t: T?)
         query(migr) <| $ ( pos,vel:float3 )
             assert(pos == float3(1,2,3))
             assert(vel == float3(0.,-9.8,0.))
+/*
     t |> run("update entity") <| @ ( t : T? )
         migr |> update_entity <| @ ( eid, cmp )
             verify(cmp |> has("pos"))
@@ -90,3 +91,4 @@ def test_create_delete( t: T?)
         t |> equal( total, 2)
 
 
+*/

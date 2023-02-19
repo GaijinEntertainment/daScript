@@ -1118,6 +1118,7 @@ namespace das {
         }
         __forceinline char * compute(Context &) {
             DAS_PROFILE_NODE
+            typeExpr->addRef();
             return (char *) typeExpr;
         }
         TypeDecl *  typeExpr;   // requires RTTI

@@ -85,7 +85,7 @@ def test_file(file_name: string; ctx: SuiteCtx): SuiteResult
 
 def test_file(file_name: string; ctx: SuiteCtx; file_ctx: FileCtx): SuiteResult
     var res: SuiteResult
-    var access := make_file_access(ctx.projectPath)
+    var inscope access <- make_file_access(ctx.projectPath)
     access |> add_file_access_root("dastest", ctx.dastestRoot)
     using <| $(var mg:ModuleGroup)
         using <| $(var cop:CodeOfPolicies)
@@ -135,7 +135,9 @@ def test_file(file_name: string; ctx: SuiteCtx; file_ctx: FileCtx): SuiteResult
                     else
                         res.passed += 1
                     return
+
                 simulate(program) <| $ (sok; context; serrors)
+                    print("{serrors}\n")
                     if !sok
                         res.total += 1
                         res.errors += 1
@@ -153,7 +155,6 @@ def test_file(file_name: string; ctx: SuiteCtx; file_ctx: FileCtx): SuiteResult
                         if context == null
                             msg = "{msg}. Current context is null."
                         log::error(msg)
-    access := null
     return res
 
 
@@ -175,7 +176,7 @@ def test_module(var mod: rtti::Module; var context: rtti::Context; suite_ctx: Su
         if f.hash == 0ul
             return
         let func = context |> get_function_by_mnh(f.hash)
-        let fn <- modPtr |> find_module_function_via_rtti(func)
+        var inscope fn <- modPtr |> find_module_function_via_rtti(func)
         if fn == null
             return
         for ann in fn.annotations
