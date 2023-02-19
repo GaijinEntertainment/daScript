@@ -1,8 +1,9 @@
-name: Build
+name: Build/Test cross-platform CMake project
 
 on:
   push:
   pull_request:
+  workflow_dispatch:
 
 defaults:
   run:
@@ -20,7 +21,7 @@ jobs:
       matrix:
         target: [linux, darwin, windows]
         architecture: [32, 64]
-        build_system: [cmake]
+        cmake_preset: [ Debug, Release, RelWithDebInfo ]
 
         include:
           - target: linux
@@ -30,9 +31,6 @@ jobs:
           - target: darwin
             runner: macos-latest
             archive_ext: tar.gz
-
-          - build_system: cmake
-            cmake_configuration: RelWithDebInfo
 
           - target: windows
             runner: windows-latest
@@ -64,6 +62,15 @@ jobs:
             
           - target: linux
             architecture: 32
+            
+          - target: windows
+            cmake_preset: Debug
+            
+          - target: linux
+            cmake_preset: RelWithDebInfo
+            
+          - target: darwin
+            cmake_preset: RelWithDebInfo
 
     steps:
     - name: "SCM Checkout"
@@ -105,18 +112,18 @@ jobs:
             case "${{ matrix.target }}${{ matrix.architecture }}" in
               linux64)
                 cmake --no-warn-unused-cli -H. -B./build -G "${{ matrix.cmake_generator }}"
-                cmake --build ./build --config ${{ matrix.cmake_configuration }} --target daScript
-                cmake --build ./build --config ${{ matrix.cmake_configuration }} --target daScriptTest
+                cmake --build ./build --config ${{ matrix.cmake_preset }} --target daScript
+                cmake --build ./build --config ${{ matrix.cmake_preset }} --target daScriptTest
                 ;;
               windows*)
                 cmake --no-warn-unused-cli -H. -B./build -G "${{ matrix.cmake_generator }}" -T host=x86 -A ${{ matrix.architecture_string }}
-                cmake --build ./build --config ${{ matrix.cmake_configuration }} --target daScript
-                cmake --build ./build --config ${{ matrix.cmake_configuration }} --target daScriptTest
+                cmake --build ./build --config ${{ matrix.cmake_preset }} --target daScript
+                cmake --build ./build --config ${{ matrix.cmake_preset }} --target daScriptTest
                 ;;
               *)
-                CC=clang CXX=clang++ cmake -DCMAKE_OSX_ARCHITECTURES="x86_64" -DCMAKE_INSTALL_PREFIX=. -DCMAKE_BUILD_TYPE=STRING=${{ matrix.cmake_configuration }}  -G "${{ matrix.cmake_generator }}"
-                cmake --build . --config ${{ matrix.cmake_configuration }} --target daScript
-                cmake --build . --config ${{ matrix.cmake_configuration }} --target daScriptTest
+                CC=clang CXX=clang++ cmake -DCMAKE_OSX_ARCHITECTURES="x86_64" -DCMAKE_INSTALL_PREFIX=. -DCMAKE_BUILD_TYPE=STRING=${{ matrix.cmake_preset }}  -G "${{ matrix.cmake_generator }}"
+                cmake --build . --config ${{ matrix.cmake_preset }} --target daScript
+                cmake --build . --config ${{ matrix.cmake_preset }} --target daScriptTest
                 ;;
             esac
             ;;
@@ -132,7 +139,7 @@ jobs:
             ./daScript _dasroot_/dastest/dastest.das -- --color --test ../tests
             ;;
            windows*)
-            cd bin/"${{ matrix.cmake_configuration }}"
+            cd bin/"${{ matrix.cmake_preset }}"
             ./daScriptTest.exe
             ./daScript _dasroot_/dastest/dastest.das -- --color --test ../../tests
             ;;
