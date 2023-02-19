@@ -60,10 +60,16 @@ namespace das
         if ( context.skipLockChecks ) return v_zero();
         auto typeInfo = node->types[0];
         auto value = args[0];
-        LockDataWalker walker;
-        walker.walk(value,typeInfo);
-        LineInfo atProblem = rtti_get_line_info(2,&context,(LineInfoArg *) &node->debugInfo);
-        if ( walker.locked ) context.throw_error_at(atProblem, "object contains locked elements and can't be resized");
+        bool failed = false;
+        {
+            LockDataWalker walker;
+            walker.walk(value,typeInfo);
+            failed = walker.locked;
+        }
+        if ( failed ) {
+            LineInfo atProblem = rtti_get_line_info(2,&context,(LineInfoArg *) &node->debugInfo);
+            context.throw_error_at(atProblem, "object contains locked elements and can't be resized");
+        }
         return v_zero();
     }
 
