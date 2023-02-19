@@ -1,4 +1,4 @@
-name: Build/Test cross-platform CMake project
+name: build
 
 on:
   push:
