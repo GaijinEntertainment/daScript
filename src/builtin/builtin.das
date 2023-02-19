@@ -109,7 +109,7 @@ def push(var Arr:array<auto(numT)[]>; varr:numT[]-#)
     else
         concept_assert(false,"can't push value, which can't be copied")
 
-def emplace(var Arr:array<auto(numT)>;var value:numT-#;at:int)
+def emplace(var Arr:array<auto(numT)>;var value:numT-#&;at:int)
     static_if typeinfo(can_move value)
         static_if typeinfo(need_lock_check type<numT>)
             _builtin_verify_locks(Arr)
@@ -117,7 +117,7 @@ def emplace(var Arr:array<auto(numT)>;var value:numT-#;at:int)
     else
         concept_assert(false,"can't emplace value, which can't be moved")
 
-def emplace(var Arr:array<auto(numT)>;var value:numT-#)
+def emplace(var Arr:array<auto(numT)>;var value:numT-#&)
     static_if typeinfo(can_move value)
         static_if typeinfo(need_lock_check type<numT>)
             _builtin_verify_locks(Arr)

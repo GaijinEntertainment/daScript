@@ -237,6 +237,7 @@ namespace das
         bool hasNonTrivialDtor ( das_set<Structure *> & dep ) const;
         bool hasNonTrivialCopy ( das_set<Structure *> & dep ) const;
         bool canBePlacedInContainer ( das_set<Structure *> & dep ) const;
+        bool needInScope ( das_set<Structure *> & dep ) const;
         string describe() const { return name; }
         string getMangledName() const;
         bool hasAnyInitializers() const;
@@ -435,6 +436,7 @@ namespace das
         virtual bool isLocal() const {
             return isPod() && !hasNonTrivialCtor() && !hasNonTrivialDtor() && !hasNonTrivialCopy();
         }
+        virtual bool needInScope() const { return false; }
         virtual bool canNew() const { return false; }
         virtual bool canDelete() const { return false; }
         virtual bool needDelete() const { return canDelete(); }
@@ -1274,6 +1276,7 @@ namespace das
         bool default_module_public = true;              // by default module is 'public', not 'private'
         bool no_deprecated = false;
         bool no_aliasing = false;                       // if true, aliasing will be reported as error, otherwise will turn off optimization
+        bool strict_smart_pointers = false;              // collection of tests for smart pointers, like van inscope for any local, etc
     // environment
         bool no_optimizations = false;                  // disable optimizations, regardless of settings
         bool fail_on_no_aot = true;                     // AOT link failure is error

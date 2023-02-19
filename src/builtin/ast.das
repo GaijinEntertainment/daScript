@@ -723,128 +723,92 @@ def make_simulate_macro ( name : string; someClassPtr ) : SimulateMacroPtr
 
 [macro_function]
 def add_new_block_annotation ( name:string; someClassPtr )
-    var ann <- make_block_annotation(name, someClassPtr)
+    var inscope ann <- make_block_annotation(name, someClassPtr)
     this_module() |> add_function_annotation(ann)
-    unsafe
-        delete ann
 
 [macro_function]
 def add_new_function_annotation ( name:string; someClassPtr )
-    var ann <- make_function_annotation(name, someClassPtr)
+    var inscope ann <- make_function_annotation(name, someClassPtr)
     this_module() |> add_function_annotation(ann)
-    unsafe
-        delete ann
 
 [macro_function]
 def add_new_contract_annotation ( name:string; someClassPtr )
-    var ann <- make_function_annotation(name, someClassPtr)
+    var inscope ann <- make_function_annotation(name, someClassPtr)
     this_module() |> add_function_annotation(ann)
-    unsafe
-        delete ann
 
 [macro_function]
 def add_new_structure_annotation ( name:string; someClassPtr )
-    var ann <- make_structure_annotation(name, someClassPtr)
+    var inscope ann <- make_structure_annotation(name, someClassPtr)
     this_module() |> add_structure_annotation(ann)
-    unsafe
-        delete ann
 
 [macro_function]
 def add_new_enumeration_annotation ( name:string; someClassPtr )
-    var ann <- make_enumeration_annotation(name, someClassPtr)
+    var inscope ann <- make_enumeration_annotation(name, someClassPtr)
     this_module() |> add_enumeration_annotation(ann)
-    unsafe
-        delete ann
 
 [macro_function]
 def add_new_variant_macro ( name:string; someClassPtr )
-    var ann <- make_variant_macro(name, someClassPtr)
+    var inscope ann <- make_variant_macro(name, someClassPtr)
     this_module() |> add_variant_macro(ann)
-    unsafe
-        delete ann
 
 [macro_function]
 def add_new_for_loop_macro ( name:string; someClassPtr )
-    var ann <- make_for_loop_macro(name, someClassPtr)
+    var inscope ann <- make_for_loop_macro(name, someClassPtr)
     this_module() |> add_for_loop_macro(ann)
-    unsafe
-        delete ann
 
 [macro_function]
 def add_new_capture_macro ( name:string; someClassPtr )
-    var ann <- make_capture_macro(name, someClassPtr)
+    var inscope ann <- make_capture_macro(name, someClassPtr)
     this_module() |> add_capture_macro(ann)
-    unsafe
-        delete ann
 
 [macro_function]
 def add_new_simulate_macro ( name:string; someClassPtr )
-    var ann <- make_simulate_macro(name, someClassPtr)
+    var inscope ann <- make_simulate_macro(name, someClassPtr)
     this_module() |> add_simulate_macro(ann)
-    unsafe
-        delete ann
 
 [macro_function]
 def add_new_reader_macro ( name:string; someClassPtr )
-    var ann <- make_reader_macro(name, someClassPtr)
+    var inscope ann <- make_reader_macro(name, someClassPtr)
     this_module() |> add_reader_macro(ann)
-    unsafe
-        delete ann
 
 def add_new_comment_reader ( name:string; someClassPtr )
-    var ann <- make_comment_reader(name, someClassPtr)
+    var inscope ann <- make_comment_reader(name, someClassPtr)
     this_module() |> add_comment_reader(ann)
-    unsafe
-        delete ann
 
 [macro_function]
 def add_new_call_macro ( name:string; someClassPtr )
-    var ann <- make_call_macro(name, someClassPtr)
+    var inscope ann <- make_call_macro(name, someClassPtr)
     this_module() |> add_call_macro(ann)
-    unsafe
-        delete ann
 
 [macro_function]
 def add_new_typeinfo_macro ( name:string; someClassPtr )
-    var ann <- make_typeinfo_macro(name, someClassPtr)
+    var inscope ann <- make_typeinfo_macro(name, someClassPtr)
     this_module() |> add_typeinfo_macro(ann)
-    unsafe
-        delete ann
 
 [macro_function]
 def add_new_infer_macro ( name:string; someClassPtr )
-    var ann <- make_pass_macro(name, someClassPtr)
+    var inscope ann <- make_pass_macro(name, someClassPtr)
     this_module() |> add_infer_macro(ann)
-    unsafe
-        delete ann
 
 [macro_function]
 def add_new_dirty_infer_macro ( name:string; someClassPtr )
-    var ann <- make_pass_macro(name, someClassPtr)
+    var inscope ann <- make_pass_macro(name, someClassPtr)
     this_module() |> add_dirty_infer_macro(ann)
-    unsafe
-        delete ann
 
 [macro_function]
 def add_new_lint_macro ( name:string; someClassPtr )
-    var ann <- make_pass_macro(name, someClassPtr)
+    var inscope ann <- make_pass_macro(name, someClassPtr)
     this_module() |> add_lint_macro(ann)
-    unsafe
-        delete ann
 
 [macro_function]
 def add_new_global_lint_macro ( name:string; someClassPtr )
-    var ann <- make_pass_macro(name, someClassPtr)
+    var inscope ann <- make_pass_macro(name, someClassPtr)
     this_module() |> add_global_lint_macro(ann)
-    unsafe
-        delete ann
 
 [macro_function]
 def add_new_optimization_macro ( name:string; someClassPtr )
-    var ann <- make_pass_macro(name, someClassPtr)
+    var inscope ann <- make_pass_macro(name, someClassPtr)
     this_module() |> add_optimization_macro(ann)
-    unsafe
-        delete ann
 
 [generic]
 def find_module(prog:smart_ptr<Program>; name:string) : Module?

@@ -2746,7 +2746,7 @@ YY_RULE_SETUP
     } else {
         if ( !yyextra->das_nested_curly_braces ) {
             das_yyfatalerror(yylloc_param,yyscanner,"mismatching curly braces", CompilationError::mismatching_curly_bracers);
-            return LEXER_ERROR;
+            return '}';
         }
         yyextra->das_nested_curly_braces --;
         return '}';
