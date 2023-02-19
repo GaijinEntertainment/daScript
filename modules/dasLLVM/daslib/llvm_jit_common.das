@@ -614,3 +614,16 @@ def public expand_scalar ( builder:LLVMOpaqueBuilder?; scalar:LLVMOpaqueValue?; 
         vec = LLVMBuildInsertElement(builder, vec, scalar, idx, "")
     return vec
 
+def public build_lifetime ( g_builder:LLVMOpaqueBuilder?; size:uint64; ptr:LLVMOpaqueValue?; begin:bool ) : LLVMOpaqueValue?
+    let lifetime_name = begin ? "llvm.lifetime.start" : "llvm.lifetime.end"
+    var args <- [{auto[]
+        LLVMConstInt(LLVMInt64Type(), size, 0);
+        ptr
+    }]
+    var argTypes <- [{auto LLVMTypeOf(ptr) }]
+    var id = LLVMLookupIntrinsicID(lifetime_name)
+    var decl = LLVMGetIntrinsicDeclaration(g_mod, id, argTypes)
+    if decl==null
+        failed("missing intrinsic {lifetime_name}")
+        return null
+    return LLVMBuildCall(g_builder, decl, args, "")
