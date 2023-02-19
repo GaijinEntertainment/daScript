@@ -372,6 +372,15 @@ namespace das {
         return module ? module->name+"::"+name : name;
     }
 
+    bool Structure::needInScope(das_set<Structure *> & dep) const {   // &&
+        for ( const auto & fd : fields ) {
+            if ( fd.type && fd.type->needInScope(dep) ) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     bool Structure::canBePlacedInContainer(das_set<Structure *> & dep) const {   // &&
         for ( const auto & fd : fields ) {
             if ( fd.type && !fd.type->canBePlacedInContainer(dep) ) {

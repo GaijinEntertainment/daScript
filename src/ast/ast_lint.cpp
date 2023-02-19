@@ -551,6 +551,7 @@ namespace das {
         "no_unused_block_arguments",    Type::tBool,
         "no_deprecated",                Type::tBool,
         "no_aliasing",                  Type::tBool,
+        "strict_smart_pointers",        Type::tBool,
     // memory
         "stack",                        Type::tInt,
         "intern_strings",               Type::tBool,

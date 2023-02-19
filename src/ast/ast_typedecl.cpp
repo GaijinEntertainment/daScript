@@ -852,6 +852,36 @@ namespace das
         return true;
     }
 
+    bool TypeDecl::needInScope() const {
+        das_set<Structure *> dep;
+        return needInScope(dep);
+    }
+
+    bool TypeDecl::needInScope( das_set<Structure*> & dep ) const {
+        if ( baseType==Type::tHandle ) {
+            return annotation->needInScope();
+        } else if ( baseType==Type::tStructure ) {
+            if (structType) {
+                if (dep.find(structType) != dep.end()) return false;
+                dep.insert(structType);
+                return structType->needInScope(dep);
+            }
+        } else if ( baseType==Type::tTuple || baseType==Type::tVariant || baseType == Type::option ) {
+            for ( const auto & arg : argTypes ) {
+                if ( arg->needInScope(dep) ) {
+                    return true;
+                }
+            }
+            return false;
+        } else if ( baseType==Type::tArray || baseType==Type::tTable ) {
+            if ( firstType && firstType->needInScope(dep) ) return true;
+            if ( secondType && secondType->needInScope(dep) ) return true;
+        } else if ( baseType==Type::tPointer) {
+            return smartPtr;
+        }
+        return false;
+    }
+
     bool TypeDecl::canBePlacedInContainer() const {
         das_set<Structure *> dep;
         return canBePlacedInContainer(dep);

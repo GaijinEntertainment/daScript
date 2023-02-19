@@ -935,6 +935,19 @@ namespace das
         }
     }
 
+    void builtin_smart_ptr_move_ptr ( smart_ptr_raw<void> & dest, const void * src ) {
+        ptr_ref_count * t = (ptr_ref_count *) dest.ptr;
+        dest.ptr = (void *) src;
+        if ( t ) t->delRef();
+    }
+
+    void builtin_smart_ptr_move ( smart_ptr_raw<void> & dest, smart_ptr_raw<void> & src ) {
+        ptr_ref_count * t = (ptr_ref_count *) dest.ptr;
+        dest.ptr = src.ptr;
+        src.ptr = nullptr;
+        if ( t ) t->delRef();
+    }
+
     void builtin_smart_ptr_clone_ptr ( smart_ptr_raw<void> & dest, const void * src ) {
         ptr_ref_count * t = (ptr_ref_count *) dest.ptr;
         dest.ptr = (void *) src;
@@ -1499,6 +1512,12 @@ namespace das
         // blocks
         addCall<ExprInvoke>("invoke");
         // smart ptr stuff
+        addExtern<DAS_BIND_FUN(builtin_smart_ptr_move_ptr)>(*this, lib, "move",
+            SideEffects::modifyArgument, "builtin_smart_ptr_move_ptr")
+                ->args({"dest","src"});
+        addExtern<DAS_BIND_FUN(builtin_smart_ptr_move)>(*this, lib, "move",
+            SideEffects::modifyArgument, "builtin_smart_ptr_move")
+                ->args({"dest","src"});
         addExtern<DAS_BIND_FUN(builtin_smart_ptr_clone_ptr)>(*this, lib, "smart_ptr_clone",
             SideEffects::modifyArgument, "builtin_smart_ptr_clone_ptr")
                 ->args({"dest","src"});

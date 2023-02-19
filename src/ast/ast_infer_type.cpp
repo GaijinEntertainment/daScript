@@ -44,6 +44,7 @@ namespace das {
             disableAot = prog->options.getBoolOption("no_aot",false);
             multiContext = prog->options.getBoolOption("multiple_contexts", prog->policies.multiple_contexts);
             checkNoGlobalVariablesAtAll = prog->options.getBoolOption("no_global_variables_at_all", prog->policies.no_global_variables_at_all);
+            strictSmartPointers = prog->options.getBoolOption("strict_smart_pointers", prog->policies.strict_smart_pointers);
         }
         bool finished() const { return !needRestart; }
         bool verbose = true;
@@ -71,6 +72,7 @@ namespace das {
         Expression *            lastEnuValue = nullptr;
         int32_t                 unsafeDepth = 0;
         bool                    checkNoGlobalVariablesAtAll = false;
+        bool                    strictSmartPointers = false;
     public:
         vector<FunctionPtr>     extraFunctions;
     protected:
@@ -5961,16 +5963,23 @@ namespace das {
                         castExpr->castType = make_smart<TypeDecl>(*var->type);
                     }
                 }
-                if ( expr->inScope && !var->inScope ) {
-                    if ( var->type->canDelete() ) {
-                        var->inScope = true;
-                        auto eVar = make_smart<ExprVar>(var->at, var->name);
-                        auto exprDel = make_smart<ExprDelete>(var->at, eVar);
-                        scopes.back()->finalList.insert(scopes.back()->finalList.begin(), exprDel);
-                        reportAstChanged();
-                    } else {
-                        error("can't delete " + describeType(var->type), "", "",
-                            var->at, CompilationError::bad_delete);
+                if ( expr->inScope ) {
+                    if ( !var->inScope ) {
+                        if ( var->type->canDelete() ) {
+                            var->inScope = true;
+                            auto eVar = make_smart<ExprVar>(var->at, var->name);
+                            auto exprDel = make_smart<ExprDelete>(var->at, eVar);
+                            scopes.back()->finalList.insert(scopes.back()->finalList.begin(), exprDel);
+                            reportAstChanged();
+                        } else {
+                            error("can't delete " + describeType(var->type), "", "",
+                                var->at, CompilationError::bad_delete);
+                        }
+                    }
+                } else {
+                    if ( strictSmartPointers && !var->generated && var->type->needInScope() ) {
+                        error("variable " + var->name + " of type " + describeType(var->type) + " requires var inscope", "", "",
+                            var->at, CompilationError::invalid_variable_type);
                     }
                 }
             }
@@ -6789,6 +6798,7 @@ namespace das {
                         reportAstChanged();
                     }
                 } else if ( generics.size()>1 ) {
+                    copmareFunctionSpecialization(generics.front(),generics[1],expr);
                     reportExcess(expr, types, "too many matching functions or generics ", functions, generics);
                 } else {
                     if ( auto aliasT = findAlias(expr->name) ) {

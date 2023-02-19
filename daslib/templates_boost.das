@@ -199,14 +199,14 @@ class private TemplateVisitor : AstVisitor
             assume arg = blk.arguments[rai]
             let vname = string(arg.name)
             if key_exists(rules.blkArg, vname)
-                var new_args <- [{for a in rules.blkArg[vname];
-                    new [[Variable()
-                        at=arg.at,
-                        name:=a.name,
-                        _type <- clone_type(a._type),
-                        init <- clone_expression(a.init)
-                    ]]
-                }]
+                var new_args : array<VariablePtr>
+                for a in rules.blkArg[vname]
+                    new_args |> emplace_new <| new [[Variable()
+                            at=arg.at,
+                            name:=a.name,
+                            _type <- clone_type(a._type),
+                            init <- clone_expression(a.init)
+                        ]]
                 new_args |> reverse
                 blk.arguments |> erase(rai)
                 for na in new_args
@@ -226,7 +226,9 @@ class private TemplateVisitor : AstVisitor
             if arg is ExprVar
                 let vname = string((arg as ExprVar).name)
                 if key_exists(rules.var2exprList, vname)
-                    var new_args <- [{for a in rules.var2exprList[vname]; clone_expression(a)}]
+                    var new_args : array<ExpressionPtr>
+                    for a in rules.var2exprList[vname]
+                        new_args |> emplace_new <| clone_expression(a)
                     new_args |> reverse
                     arguments |> erase(rai)
                     for na in new_args

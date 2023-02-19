@@ -256,7 +256,7 @@ def from_JV ( var v:JsonValue?; anything : auto(TT) )
 		unsafe
 			var arr & = v.value as _array
             for i in range(arr |> length)
-                ret |> emplace <| from_JV(arr[i], decltype_noref(anything[0]))
+                ret |> push <| from_JV(arr[i], decltype_noref(anything[0]))
 			return <- ret
     static_elif typeinfo(is_variant anything)
         var ret : TT
