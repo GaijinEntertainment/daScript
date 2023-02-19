@@ -21,7 +21,7 @@ jobs:
       matrix:
         target: [linux, darwin, windows]
         architecture: [32, 64]
-        cmake_preset: [ Debug, Release, RelWithDebInfo ]
+        cmake_preset: [ Debug, Release ]
 
         include:
           - target: linux
@@ -62,15 +62,6 @@ jobs:
             
           - target: linux
             architecture: 32
-            
-          - target: windows
-            cmake_preset: Debug
-            
-          - target: linux
-            cmake_preset: RelWithDebInfo
-            
-          - target: darwin
-            cmake_preset: RelWithDebInfo
 
     steps:
     - name: "SCM Checkout"
@@ -112,8 +103,8 @@ jobs:
             case "${{ matrix.target }}${{ matrix.architecture }}" in
               linux64)
                 cmake --no-warn-unused-cli -H. -B./build -G "${{ matrix.cmake_generator }}"
-                cmake --build ./build --config ${{ matrix.cmake_preset }} --target daScript
-                cmake --build ./build --config ${{ matrix.cmake_preset }} --target daScriptTest
+                cmake --build ./build --config ${{ matrix.cmake_preset }} --target daScript -j$(nproc)
+                cmake --build ./build --config ${{ matrix.cmake_preset }} --target daScriptTest -j$(nproc)
                 ;;
               windows*)
                 cmake --no-warn-unused-cli -H. -B./build -G "${{ matrix.cmake_generator }}" -T host=x86 -A ${{ matrix.architecture_string }}
@@ -122,8 +113,8 @@ jobs:
                 ;;
               *)
                 CC=clang CXX=clang++ cmake -DCMAKE_OSX_ARCHITECTURES="x86_64" -DCMAKE_INSTALL_PREFIX=. -DCMAKE_BUILD_TYPE=STRING=${{ matrix.cmake_preset }}  -G "${{ matrix.cmake_generator }}"
-                cmake --build . --config ${{ matrix.cmake_preset }} --target daScript
-                cmake --build . --config ${{ matrix.cmake_preset }} --target daScriptTest
+                cmake --build . --config ${{ matrix.cmake_preset }} --target daScript -j$(sysctl -n hw.ncpu)
+                cmake --build . --config ${{ matrix.cmake_preset }} --target daScriptTest -j$(sysctl -n hw.ncpu)
                 ;;
             esac
             ;;
