@@ -22,31 +22,31 @@ def test_fun_arg
         new [[Variable() name:="v1", _type<-qmacro_type(type<int>)]];
         new [[Variable() name:="v2", _type<-qmacro_type(type<float>), init<-qmacro(1.2)]]
     }]
-    var fun <- qmacro_function("add") <| $ ( a: int; $a(foo); b : int )
+    var inscope fun <- qmacro_function("add") <| $ ( a: int; $a(foo); b : int )
         return a + b
     print("\nFUNCTION ARGUMENTS ARE:\n{describe(fun)}\n")
     delete fun
 
 def test_var
-    var tt <- typeinfo(ast_typedecl type<float>)
+    var inscope tt <- typeinfo(ast_typedecl type<float>)
     var inscope vvar <- qmacro_variable("foo",type<$t(tt)?>)
     print("\nVARIABLE IS:\n{describe(vvar)}\n")
 
 def test_type
-    var argT <- typeinfo(ast_typedecl type<int>)
+    var inscope argT <- typeinfo(ast_typedecl type<int>)
     var inscope resT <- qmacro_type(type<$t(argT)???>)
     print("\nTYPE IS:\n{describe(resT)}\n")
 
 def test_fun
-    var argT <- typeinfo(ast_typedecl type<int???>)
-    var fun <- qmacro_function("add") <| $ ( a:$t(argT); b:float )
+    var inscope argT <- typeinfo(ast_typedecl type<int???>)
+    var inscope fun <- qmacro_function("add") <| $ ( a:$t(argT); b:float )
         return $i("a") + b
     print("\nFUNCTION REIFICATION IS:\n{describe(fun)}\n")
     delete fun
 
 def test_for
     var bus = "BUS"
-    var blk <- qmacro_block <|
+    var inscope blk <- qmacro_block <|
         for $i(bus) in foobar
             print("{$i(bus)}\n")
     print("\nFOR REIFICATION IS:\n{describe(blk)}\n")
@@ -66,8 +66,8 @@ def test_regular
         qqblk |> emplace_new <| qmacro(print("{$v(i)}\n"))
     var inscope arguments <- [{ExpressionPtr quote(a1); quote(a2)}]
     var inscope aargs <- [{ExpressionPtr quote(a1); quote(a2); quote(a3)}]
-    var subtype <- typeinfo(ast_typedecl type<int>)
-    var blk <- qmacro <|
+    var inscope subtype <- typeinfo(ast_typedecl type<int>)
+    var inscope blk <- qmacro <|
         let t = $i(bus)
         let q = $v([[auto a1,car]])
         let lb = $e(expr)
