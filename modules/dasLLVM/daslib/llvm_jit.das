@@ -2377,6 +2377,8 @@ class LlvmJitVisitor : AstVisitor
             res = LLVMBuildPointerCast(g_builder, getE(expr.subexpr), type_to_llvm_type(expr.castType), "")
         elif expr.castType.isRef && expr.subexpr._type.isRef
             res = LLVMBuildPointerCast(g_builder, getE(expr.subexpr), LLVMPointerType(type_to_llvm_type(expr.castType),0u), "")
+        elif expr.castType.isInteger && (expr.castType.baseType==Type tInt64 || expr.castType.baseType==Type tUInt64) && expr.subexpr._type.isPointer
+            res = LLVMBuildPtrToInt(g_builder, getE(expr.subexpr), type_to_llvm_type(expr.castType), "")
         else
             res = LLVMGetUndef(type_to_llvm_type(expr.castType))
             failed_E(expr, "cast<{describe(expr.castType)}> is not supported yet")
@@ -3104,6 +3106,10 @@ class LlvmJitVisitor : AstVisitor
             if bt==Type tInt || bt==Type tUInt || bt==Type tBitfield
                 var tbit = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
                 tres = LLVMBuildBitCast(g_builder, tbit, LLVMInt32Type(), "vec4f_to_int")
+            elif bt==Type tInt64 || bt==Type tUInt64
+                var tvec = LLVMBuildBitCast(g_builder, v4f, LLVMVectorType(LLVMInt64Type(),2u), "")
+                var tbit = LLVMBuildExtractElement(g_builder, tvec, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
+                return tbit
             elif bt == Type tFloat4
                 return v4f
             elif bt == Type tFloat3
