@@ -88,5 +88,3 @@ def test_create_delete( t: T?)
                 t->fatal("deleted something else {name}")
             total ++
         t |> equal( total, 2)
-
-

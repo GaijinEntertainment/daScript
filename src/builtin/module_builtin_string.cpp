@@ -47,9 +47,13 @@ namespace das
         return (cmpLen > strLen) ? false : memcmp(str, cmp, cmpLen) == 0;
     }
 
+    __forceinline bool is_space ( char c ) {
+        return c==' ' || c=='\t' || c=='\r' || c=='\n' || c=='\f' || c=='\v';
+    }
+
     static inline const char* strip_l(const char *str) {
         const char *t = str;
-        while (((*t) != '\0') && isspace(*t))
+        while (((*t) != '\0') && is_space(*t))
             t++;
         return t;
     }
@@ -58,7 +62,7 @@ namespace das
         if (len == 0)
             return str;
         const char *t = &str[len-1];
-        while (t >= str && isspace(*t))
+        while (t >= str && is_space(*t))
             t--;
         return t + 1;
     }

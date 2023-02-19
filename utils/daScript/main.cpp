@@ -490,7 +490,10 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     if ( pauseAfterDone ) getchar();
     Module::Shutdown();
 #if DAS_SMART_PTR_TRACKER
-    printf("%" PRId64 " smart pointers left\n", uint64_t(g_smart_ptr_total));
+    if ( g_smart_ptr_total!=0 ) {
+        printf("%" PRId64 " smart pointers left\n", uint64_t(g_smart_ptr_total));
+        exit(1);
+    }
 #endif
     return failedFiles;
 }
