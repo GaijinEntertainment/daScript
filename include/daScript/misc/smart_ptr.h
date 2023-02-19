@@ -5,7 +5,19 @@
 #endif
 
 #ifndef DAS_SMART_PTR_TRACKER
-#define DAS_SMART_PTR_TRACKER 0
+    #ifdef NDEBUG
+        #define DAS_SMART_PTR_TRACKER   0
+    #else
+        #define DAS_SMART_PTR_TRACKER   1
+    #endif
+#endif
+
+#ifndef DAS_SMART_PTR_MAGIC
+    #ifdef NDEBUG
+        #define DAS_SMART_PTR_MAGIC     0
+    #else
+        #define DAS_SMART_PTR_MAGIC     1
+    #endif
 #endif
 
 #if DAS_SMART_PTR_TRACKER
@@ -357,11 +369,21 @@ namespace das {
         __forceinline void addRef() {
             DAS_TRACK_SMART_PTR_ID
             ref_count ++;
+#if DAS_SMART_PTR_MAGIC
+            DAS_VERIFYF(ref_count, "ref_count overflow");
+            DAS_VERIFYF(magic==0x1ee7c0de, "magic number is wrong, object was deleted or corrupted");
+#else
             DAS_ASSERTF(ref_count, "ref_count overflow");
+#endif
         }
         __forceinline bool delRef() {
             DAS_TRACK_SMART_PTR_ID
+#if DAS_SMART_PTR_MAGIC
+            DAS_VERIFYF(ref_count, "deleting reference on the object with ref_count==0");
+            DAS_VERIFYF(magic==0x1ee7c0de, "magic number is wrong, object was deleted or corrupted");
+#else
             DAS_ASSERTF(ref_count, "deleting reference on the object with ref_count==0");
+#endif
             if ( --ref_count==0 ) {
                 delete this;
                 return true;
@@ -373,6 +395,9 @@ namespace das {
             return ref_count;
         }
     private:
+#if DAS_SMART_PTR_MAGIC
+        unsigned int magic = 0x1ee7c0de;
+#endif
         unsigned int ref_count = 0;
     };
 

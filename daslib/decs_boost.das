@@ -360,10 +360,10 @@ class DecsQueryMacro : AstCallMacro
         apply_template(qblock) <| $ ( rules )
             if qt==DecsQueryType eid_query
                 rules |> replaceVariable("tag_eid") <| clone_expression(expr.arguments[0])
-            rules |> replaceVariable("tag_erq") <| erq_fun
+            rules |> replaceVariable("tag_erq") <| add_ptr_ref(erq_fun)
             rules |> replaceBlockArgument("tag_arch") <| arch_name
             rules |> replaceVariable("tag_req") <| new [[ExprConstUInt64() at=expr.at, value=req.hash]]
-            rules |> replaceVariable("tag_loop") <| qtop
+            rules |> replaceVariable("tag_loop") <| add_ptr_ref(qtop)
         var inscope qres <- move_unquote_block(qblock)
         assert(length(qres.list)==1 && length(qres.finalList)==0)
         var inscope rqres <- qres.list[0]
