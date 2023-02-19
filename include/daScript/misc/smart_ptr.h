@@ -5,7 +5,7 @@
 #endif
 
 #ifndef DAS_SMART_PTR_TRACKER
-#define DAS_SMART_PTR_TRACKER 1
+#define DAS_SMART_PTR_TRACKER 0
 #endif
 
 #if DAS_SMART_PTR_TRACKER

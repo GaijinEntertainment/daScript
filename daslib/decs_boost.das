@@ -15,8 +15,6 @@ require daslib/defer
 require daslib/decs_state
 require daslib/macro_boost
 
-//  options strict_smart_pointers
-
 /*
 from:
     query ( ) <| $ ( pos:float3&; vel:float3; col:uint=0x12345678 )
