@@ -560,10 +560,10 @@ def make_function_annotation ( name : string; someClassPtr ) : FunctionAnnotatio
     static_if typeinfo(is_pointer someClassPtr) && typeinfo(is_class *someClassPtr)
         gc_root_AstFunctionAnnotation |> push(someClassPtr)
         let classInfo = class_info(*someClassPtr)
-        return make_function_annotation(name, someClassPtr, classInfo)
+        return <- make_function_annotation(name, someClassPtr, classInfo)
     else
         concept_assert(false,"expecting pointer to class")
-        return [[FunctionAnnotationPtr]]
+        return <- [[FunctionAnnotationPtr]]
 
 var private gc_root_AstBlockAnnotation : array<AstBlockAnnotation?>
 
@@ -572,10 +572,10 @@ def make_block_annotation ( name : string; someClassPtr ) : FunctionAnnotationPt
     static_if typeinfo(is_pointer someClassPtr) && typeinfo(is_class *someClassPtr)
         gc_root_AstBlockAnnotation |> push(someClassPtr)
         let classInfo = class_info(*someClassPtr)
-        return make_block_annotation(name, someClassPtr, classInfo)
+        return <- make_block_annotation(name, someClassPtr, classInfo)
     else
         concept_assert(false,"expecting pointer to class")
-        return [[FunctionAnnotationPtr]]
+        return <- [[FunctionAnnotationPtr]]
 
 var private gc_root_AstStructureAnnotation : array<AstStructureAnnotation?>
 
@@ -584,10 +584,10 @@ def make_structure_annotation ( name : string; someClassPtr ) : StructureAnnotat
     static_if typeinfo(is_pointer someClassPtr) && typeinfo(is_class *someClassPtr)
         gc_root_AstStructureAnnotation |> push(someClassPtr)
         let classInfo = class_info(*someClassPtr)
-        return make_structure_annotation(name, someClassPtr, classInfo)
+        return <- make_structure_annotation(name, someClassPtr, classInfo)
     else
         concept_assert(false,"expecting pointer to class")
-        return [[StructureAnnotationPtr]]
+        return <- [[StructureAnnotationPtr]]
 
 var private gc_root_AstEnumerationAnnotation : array<AstEnumerationAnnotation?>
 
@@ -596,10 +596,10 @@ def make_enumeration_annotation ( name : string; someClassPtr ) : EnumerationAnn
     static_if typeinfo(is_pointer someClassPtr) && typeinfo(is_class *someClassPtr)
         gc_root_AstEnumerationAnnotation |> push(someClassPtr)
         let classInfo = class_info(*someClassPtr)
-        return make_enumeration_annotation(name, someClassPtr, classInfo)
+        return <- make_enumeration_annotation(name, someClassPtr, classInfo)
     else
         concept_assert(false,"expecting pointer to class")
-        return [[EnumerationAnnotationPtr]]
+        return <- [[EnumerationAnnotationPtr]]
 
 def make_visitor ( someClass ) : smart_ptr<VisitorAdapter>
     static_if typeinfo(is_class someClass)
@@ -618,10 +618,10 @@ def make_reader_macro ( name : string; someClassPtr ) : ReaderMacroPtr
     static_if typeinfo(is_pointer someClassPtr) && typeinfo(is_class *someClassPtr)
         gc_root_AstReaderMacro |> push(someClassPtr)
         let classInfo = class_info(*someClassPtr)
-        return make_reader_macro(name, someClassPtr, classInfo)
+        return <- make_reader_macro(name, someClassPtr, classInfo)
     else
         concept_assert(false,"expecting pointer to class")
-        return [[ReaderMacroPtr]]
+        return <- [[ReaderMacroPtr]]
 
 var private gc_root_AstCommentReader : array<AstCommentReader?>
 
@@ -630,10 +630,10 @@ def make_comment_reader ( name : string; someClassPtr ) : CommentReaderPtr
     static_if typeinfo(is_pointer someClassPtr) && typeinfo(is_class *someClassPtr)
         gc_root_AstCommentReader |> push(someClassPtr)
         let classInfo = class_info(*someClassPtr)
-        return make_comment_reader(someClassPtr, classInfo)
+        return <- make_comment_reader(someClassPtr, classInfo)
     else
         concept_assert(false,"expecting pointer to class")
-        return [[ReaderMacroPtr]]
+        return <- [[ReaderMacroPtr]]
 
 var private gc_root_AstCallMacro : array<AstCallMacro?>
 
@@ -642,10 +642,10 @@ def make_call_macro ( name : string; someClassPtr ) : CallMacroPtr
     static_if typeinfo(is_pointer someClassPtr) && typeinfo(is_class *someClassPtr)
         gc_root_AstCallMacro |> push(someClassPtr)
         let classInfo = class_info(*someClassPtr)
-        return make_call_macro(name, someClassPtr, classInfo)
+        return <- make_call_macro(name, someClassPtr, classInfo)
     else
         concept_assert(false,"expecting pointer to class")
-        return [[CallMacroPtr]]
+        return <- [[CallMacroPtr]]
 
 var private gc_root_AstTypeInfoMacro : array<AstTypeInfoMacro?>
 
@@ -654,10 +654,10 @@ def make_typeinfo_macro ( name : string; someClassPtr ) : TypeInfoMacroPtr
     static_if typeinfo(is_pointer someClassPtr) && typeinfo(is_class *someClassPtr)
         gc_root_AstTypeInfoMacro |> push(someClassPtr)
         let classInfo = class_info(*someClassPtr)
-        return make_typeinfo_macro(name, someClassPtr, classInfo)
+        return <- make_typeinfo_macro(name, someClassPtr, classInfo)
     else
         concept_assert(false,"expecting pointer to class")
-        return [[TypeInfoMacroPtr]]
+        return <- [[TypeInfoMacroPtr]]
 
 var private gc_root_AstPassMacro : array<AstPassMacro?>
 
@@ -666,10 +666,10 @@ def make_pass_macro ( name : string; someClassPtr ) : PassMacroPtr
     static_if typeinfo(is_pointer someClassPtr) && typeinfo(is_class *someClassPtr)
         gc_root_AstPassMacro |> push(someClassPtr)
         let classInfo = class_info(*someClassPtr)
-        return make_pass_macro(name, someClassPtr, classInfo)
+        return <- make_pass_macro(name, someClassPtr, classInfo)
     else
         concept_assert(false,"expecting pointer to class")
-        return [[PassMacroPtr]]
+        return <- [[PassMacroPtr]]
 
 var private gc_root_AstVariantMacro : array<AstVariantMacro?>
 
@@ -678,10 +678,10 @@ def make_variant_macro ( name : string; someClassPtr ) : VariantMacroPtr
     static_if typeinfo(is_pointer someClassPtr) && typeinfo(is_class *someClassPtr)
         gc_root_AstVariantMacro |> push(someClassPtr)
         let classInfo = class_info(*someClassPtr)
-        return make_variant_macro(name, someClassPtr, classInfo)
+        return <- make_variant_macro(name, someClassPtr, classInfo)
     else
         concept_assert(false,"expecting pointer to class")
-        return [[VariantMacroPtr]]
+        return <- [[VariantMacroPtr]]
 
 var private gc_root_AstForLoopMacro : array<AstForLoopMacro?>
 
@@ -690,10 +690,10 @@ def make_for_loop_macro ( name : string; someClassPtr ) : ForLoopMacroPtr
     static_if typeinfo(is_pointer someClassPtr) && typeinfo(is_class *someClassPtr)
         gc_root_AstForLoopMacro |> push(someClassPtr)
         let classInfo = class_info(*someClassPtr)
-        return make_for_loop_macro(name, someClassPtr, classInfo)
+        return <- make_for_loop_macro(name, someClassPtr, classInfo)
     else
         concept_assert(false,"expecting pointer to class")
-        return [[ForLoopMacroPtr]]
+        return <- [[ForLoopMacroPtr]]
 
 var private gc_root_AstCaptureMacro : array<AstCaptureMacro?>
 
@@ -702,10 +702,10 @@ def make_capture_macro ( name : string; someClassPtr ) : CaptureMacroPtr
     static_if typeinfo(is_pointer someClassPtr) && typeinfo(is_class *someClassPtr)
         gc_root_AstCaptureMacro |> push(someClassPtr)
         let classInfo = class_info(*someClassPtr)
-        return make_capture_macro(name, someClassPtr, classInfo)
+        return <- make_capture_macro(name, someClassPtr, classInfo)
     else
         concept_assert(false,"expecting pointer to class")
-        return [[CaptureMacroPtr]]
+        return <- [[CaptureMacroPtr]]
 
 var private gc_root_AstSimulateMacro : array<AstSimulateMacro?>
 
@@ -714,10 +714,10 @@ def make_simulate_macro ( name : string; someClassPtr ) : SimulateMacroPtr
     static_if typeinfo(is_pointer someClassPtr) && typeinfo(is_class *someClassPtr)
         gc_root_AstSimulateMacro |> push(someClassPtr)
         let classInfo = class_info(*someClassPtr)
-        return make_simulate_macro(name, someClassPtr, classInfo)
+        return <- make_simulate_macro(name, someClassPtr, classInfo)
     else
         concept_assert(false,"expecting pointer to class")
-        return [[SimulateMacroPtr]]
+        return <- [[SimulateMacroPtr]]
 
 [macro_function]
 def add_new_block_annotation ( name:string; someClassPtr )
