@@ -935,6 +935,13 @@ namespace das
         }
     }
 
+    void builtin_smart_ptr_move_new ( smart_ptr_raw<void> & dest, smart_ptr_raw<void> src ) {
+        ptr_ref_count * t = (ptr_ref_count *) dest.ptr;
+        dest.ptr = src.ptr;
+        src.ptr = nullptr;
+        if ( t ) t->delRef();
+    }
+
     void builtin_smart_ptr_move_ptr ( smart_ptr_raw<void> & dest, const void * src ) {
         ptr_ref_count * t = (ptr_ref_count *) dest.ptr;
         dest.ptr = (void *) src;
@@ -1512,6 +1519,9 @@ namespace das
         // blocks
         addCall<ExprInvoke>("invoke");
         // smart ptr stuff
+        addExtern<DAS_BIND_FUN(builtin_smart_ptr_move_new)>(*this, lib, "move_new",
+            SideEffects::modifyArgument, "builtin_smart_ptr_move_new")
+                ->args({"dest","src"});
         addExtern<DAS_BIND_FUN(builtin_smart_ptr_move_ptr)>(*this, lib, "move",
             SideEffects::modifyArgument, "builtin_smart_ptr_move_ptr")
                 ->args({"dest","src"});

@@ -101,6 +101,7 @@ namespace das {
     void builtin_smart_ptr_clone_ptr ( smart_ptr_raw<void> & dest, const void * src );
     void builtin_smart_ptr_clone ( smart_ptr_raw<void> & dest, const smart_ptr_raw<void> src );
     uint32_t builtin_smart_ptr_use_count ( const smart_ptr_raw<void> src );
+    void builtin_smart_ptr_move_new ( smart_ptr_raw<void> & dest, smart_ptr_raw<void> src );
     void builtin_smart_ptr_move_ptr ( smart_ptr_raw<void> & dest, const void * src );
     void builtin_smart_ptr_move ( smart_ptr_raw<void> & dest, smart_ptr_raw<void> & src );
 

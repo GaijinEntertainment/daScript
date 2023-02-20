@@ -13,20 +13,16 @@ let
 [generic]
 def intptr ( p : void? ) : uint64
 	static_if typeinfo(sizeof p)==4
-        unsafe
-		    return uint64(reinterpret<uint> p)
+        return unsafe(uint64(reinterpret<uint> p))
 	else
-        unsafe
-		    return reinterpret<uint64> p
+        return unsafe(reinterpret<uint64> p)
 
 [generic]
 def intptr ( p : smart_ptr<auto> ) : uint64
 	static_if typeinfo(sizeof p)==4
-        unsafe
-		    return uint64(reinterpret<uint> p)
+        return unsafe(uint64(reinterpret<uint> p))
 	else
-        unsafe
-		    return reinterpret<uint64> p
+        return unsafe(reinterpret<uint64> p)
 
 def _move_with_lockcheck ( var a:auto(valA)&; var b:auto(valB)& )
     static_if typeinfo(need_lock_check type<valA>)
@@ -867,7 +863,7 @@ def get_const_ptr ( src : smart_ptr<auto(TT)> ) : TT ? const
 
 def add_ptr_ref ( src : smart_ptr<auto(TT)> ) : smart_ptr<TT>
     var dst := src
-    return dst
+    return <- dst
 
 [generic]
 def get_command_line_arguments : array<string>

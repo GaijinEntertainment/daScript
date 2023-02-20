@@ -1,6 +1,7 @@
 options indenting=4
 options no_aot=true
 options remove_unused_symbols=false
+options strict_smart_pointers
 
 require ast
 require rtti public
@@ -47,21 +48,18 @@ def describe ( expr : smart_ptr<Function> )
 
 def ExpressionPtr ( expr : smart_ptr<auto(TT)> ) : ExpressionPtr
     static_if starts_with(typeinfo(fulltypename expr),"smart_ptr<ast::Expr")
-        unsafe
-            return reinterpret<smart_ptr<Expression>> expr
+        return <- unsafe(reinterpret<smart_ptr<Expression>> expr)
     else
         concept_assert(false, "not derived from ast::Expression")
-        return [[ExpressionPtr]]
+        return <- [[ExpressionPtr]]
 
 [generic]
 def FunctionPtr ( fun : Function? ) : FunctionPtr
-    unsafe
-        return reinterpret<FunctionPtr> fun
+    return <- unsafe(reinterpret<FunctionPtr> fun)
 
 [generic]
 def StructurePtr ( stru : Structure? ) : StructurePtr
-    unsafe
-        return reinterpret<StructurePtr> stru
+    return <- unsafe(reinterpret<StructurePtr> stru)
 
 [macro_interface]
 class AstFunctionAnnotation
@@ -608,10 +606,10 @@ def make_visitor ( someClass ) : smart_ptr<VisitorAdapter>
         unsafe
             let classPtr = addr(someClass)
             let classInfo = class_info(someClass)
-            return make_visitor(classPtr, classInfo)
+            return <- make_visitor(classPtr, classInfo)
     else
         concept_assert(false,"can't make visitor of non-class")
-        return [[smart_ptr<VisitorAdpater>]]
+        return <- [[smart_ptr<VisitorAdpater>]]
 
 var private gc_root_AstReaderMacro : array<AstReaderMacro?>
 
