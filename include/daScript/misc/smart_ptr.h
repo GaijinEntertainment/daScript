@@ -332,7 +332,7 @@ namespace das {
 #endif
 
 #if DAS_SMART_PTR_TRACKER
-    extern std::atomic<uint64_t>  g_smart_ptr_total;
+    extern atomic<uint64_t>  g_smart_ptr_total;
     #define DAS_SMART_PTR_NEW     g_smart_ptr_total++;
     #define DAS_SMART_PTR_DELETE  g_smart_ptr_total--;
 #else
