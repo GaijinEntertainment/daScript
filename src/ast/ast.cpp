@@ -392,29 +392,29 @@ namespace das {
 
     bool Structure::hasNonTrivialCtor(das_set<Structure *> & dep) const {   // &&
         for ( const auto & fd : fields ) {
-            if ( fd.type && !fd.type->hasNonTrivialCtor(dep) ) {
-                return false;
+            if ( fd.type && fd.type->hasNonTrivialCtor(dep) ) {
+                return true;
             }
         }
-        return true;
+        return false;
     }
 
     bool Structure::hasNonTrivialDtor(das_set<Structure *> & dep) const {   // &&
         for ( const auto & fd : fields ) {
-            if ( fd.type && !fd.type->hasNonTrivialDtor(dep) ) {
-                return false;
+            if ( fd.type && fd.type->hasNonTrivialDtor(dep) ) {
+                return true;
             }
         }
-        return true;
+        return false;
     }
 
     bool Structure::hasNonTrivialCopy(das_set<Structure *> & dep) const {   // &&
         for ( const auto & fd : fields ) {
-            if ( fd.type && !fd.type->hasNonTrivialCopy(dep) ) {
-                return false;
+            if ( fd.type && fd.type->hasNonTrivialCopy(dep) ) {
+                return true;
             }
         }
-        return true;
+        return false;
     }
 
     bool Structure::isExprTypeAnywhere(das_set<Structure *> & dep) const {   // &&
