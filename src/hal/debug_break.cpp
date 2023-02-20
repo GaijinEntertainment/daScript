@@ -10,7 +10,7 @@
 #endif
 
 #if DAS_SMART_PTR_TRACKER
-    std::atomic<uint64_t> das::g_smart_ptr_total {0};
+    das::atomic<uint64_t> das::g_smart_ptr_total {0};
 #endif
 
 void os_debug_break()
