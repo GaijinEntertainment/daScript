@@ -1,0 +1,98 @@
+name: wasm_build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+
+  ###########################################################
+  wasm_build:
+  ###########################################################
+    runs-on: ${{ matrix.runner }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [linux, darwin, windows]
+        architecture: [ 64 ]
+        cmake_preset: [ Release ]
+
+        include:
+          - target: linux
+            runner: ubuntu-latest
+
+          - target: darwin
+            runner: macos-latest
+
+          - target: windows
+            runner: windows-latest
+
+          - target: windows
+            architecture: 64
+            architecture_string: x64
+
+    steps:
+    - name: "SCM Checkout"
+      uses: actions/checkout@v3
+      
+    - uses: lukka/get-cmake@latest
+
+    - name: "Install: Required Dev Packages"
+      run: |
+        set -eux
+        
+        git clone https://github.com/emscripten-core/emsdk.git
+        
+        case "${{ matrix.target }}${{ matrix.architecture }}" in
+          linux64)
+            echo "MARCH=64" >> $GITHUB_ENV
+            sudo apt-get update -y
+            sudo apt-get install --no-install-recommends -y \
+              libatomic-ops-dev \
+              libglu1-mesa-dev \
+              freeglut3-dev \
+              mesa-common-dev \
+              libglfw3-dev \
+              libfreetype6-dev \
+              libudev-dev \
+              libopenal-dev \
+              libvorbis-dev \
+              libflac-dev \
+              libclang-dev \
+              libx11-dev \
+              libxrandr-dev \
+              libxcursor-dev \
+              libxinerama-dev \
+              libxi-dev
+              
+            ./emsdk/emsdk install latest
+            ./emsdk/emsdk activate latest
+            source "/home/runner/work/daScript/daScript/emsdk/emsdk_env.sh"
+            ;;
+          windows*)
+            ./emsdk/emsdk install latest
+            ./emsdk/emsdk activate latest
+            ./emsdk/emsdk_env.bat
+            ;;
+          *)
+            ./emsdk/emsdk install latest
+            ./emsdk/emsdk activate latest
+            source "/Users/runner/work/daScript/daScript/emsdk/emsdk_env.sh"
+            ;;
+        esac
+    - name: "Build: DaScript web"
+      run: |
+        set -eux
+        cd web
+        cp ../CMakeXxdImpl.txt .
+        rm -r -f cmake_temp
+        mkdir cmake_temp
+        cd cmake_temp
+        cmake -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -G Ninja -DCMAKE_TOOLCHAIN_FILE=../emsdk/upstream/emscripten/cmake/Modules/Platform/Emscripten.cmake ../
+        ninja
