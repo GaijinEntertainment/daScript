@@ -42,11 +42,11 @@ jobs:
             
           - target: darwin
             build_system: cmake
-            cmake_generator: Unix Makefiles
+            cmake_generator: Ninja
             
           - target: linux
             build_system: cmake
-            cmake_generator: Unix Makefiles
+            cmake_generator: Ninja
 
           - target: windows
             architecture: 32
@@ -69,6 +69,9 @@ jobs:
     steps:
     - name: "SCM Checkout"
       uses: actions/checkout@v3
+      
+    - name: "Install CMake and Ninja"
+      uses: lukka/get-cmake@latest
 
     - name: "Install: Required Dev Packages"
       run: |
@@ -95,6 +98,11 @@ jobs:
               libxinerama-dev \
               libxi-dev
             ;;
+          darwin64)
+            brew install bison
+            echo 'export PATH="/usr/local/opt/bison/bin:$PATH"' >> ~/.bash_profile
+            export LDFLAGS="-L/usr/local/opt/bison/lib"
+            ;;
         esac
 
     - name: "Build: DaScript"
@@ -105,19 +113,22 @@ jobs:
           cmake)
             case "${{ matrix.target }}${{ matrix.architecture }}" in
               linux64)
-                cmake --no-warn-unused-cli -H. -B./build -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -G "${{ matrix.cmake_generator }}"
-                cmake --build ./build --config ${{ matrix.cmake_preset }} --target daScript -j$(nproc)
-                cmake --build ./build --config ${{ matrix.cmake_preset }} --target daScriptTest -j$(nproc)
+                cmake --no-warn-unused-cli -B./build -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -G "${{ matrix.cmake_generator }}"
+                cd build
+                ninja daScript
+                ninja daScriptTest
                 ;;
               windows*)
-                cmake --no-warn-unused-cli -H. -B./build -G "${{ matrix.cmake_generator }}" -T host=x86 -A ${{ matrix.architecture_string }}
+                cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -T host=x86 -A ${{ matrix.architecture_string }}
                 cmake --build ./build --config ${{ matrix.cmake_preset }} --target daScript
                 cmake --build ./build --config ${{ matrix.cmake_preset }} --target daScriptTest
                 ;;
               *)
-                CC=clang CXX=clang++ cmake -DCMAKE_OSX_ARCHITECTURES="x86_64" -DCMAKE_INSTALL_PREFIX=. -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }}  -G "${{ matrix.cmake_generator }}"
-                cmake --build . --config ${{ matrix.cmake_preset }} --target daScript -j$(sysctl -n hw.ncpu)
-                cmake --build . --config ${{ matrix.cmake_preset }} --target daScriptTest -j$(sysctl -n hw.ncpu)
+                CC=clang CXX=clang++ 
+                cmake --no-warn-unused-cli -B./build -DCMAKE_OSX_ARCHITECTURES="x86_64" -DCMAKE_PREFIX_PATH=/usr/local/opt/bison/bin -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }}  -G "${{ matrix.cmake_generator }}"
+                cd build
+                ninja daScript
+                ninja daScriptTest
                 ;;
             esac
             ;;
