@@ -208,6 +208,7 @@ class LlvmJitVisitor : AstVisitor
 
     def process_function_hints ( annotations:AnnotationList; var arguments:dasvector`smart_ptr`Variable )
         var alwaysInline = false
+        var noInline = false
         var hot = false
         option_no_range_check = false
         option_no_alias = false
@@ -217,6 +218,8 @@ class LlvmJitVisitor : AstVisitor
                 for arg in ann.arguments
                     if arg.name=="alwaysinline"
                         alwaysInline = true
+                    if arg.name=="noinline"
+                        noInline = true
                     elif arg.name=="hot"
                         hot = true
                     elif arg.name=="unsafe_range_check"
@@ -231,6 +234,8 @@ class LlvmJitVisitor : AstVisitor
                                 LLVMSetParamAlignment(LLVMGetParam(ffunc,ai), 16u)
         if alwaysInline
             LLVMAddAttributeToFunction(ffunc, LLVMGetEnumAttribute("alwaysinline"))
+        elif noInline
+            LLVMAddAttributeToFunction(ffunc, LLVMGetEnumAttribute("noinline"))
         if hot
             LLVMAddAttributeToFunction(ffunc, LLVMGetEnumAttribute("hot"))
 
@@ -3104,6 +3109,10 @@ class LlvmJitVisitor : AstVisitor
             if bt==Type tInt || bt==Type tUInt || bt==Type tBitfield
                 var tbit = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
                 tres = LLVMBuildBitCast(g_builder, tbit, LLVMInt32Type(), "vec4f_to_int")
+            elif bt==Type tInt64 || bt==Type tUInt64
+                var t64 = LLVMBuildBitCast(g_builder, v4f, LLVMVectorType(LLVMInt64Type(),2u), "")
+                var tbit = LLVMBuildExtractElement(g_builder, t64, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
+                return tbit
             elif bt == Type tFloat4
                 return v4f
             elif bt == Type tFloat3
