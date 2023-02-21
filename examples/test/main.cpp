@@ -280,7 +280,8 @@ bool isolated_unit_test ( const string & fn, bool useAot ) {
     Module::Shutdown();
 #if DAS_SMART_PTR_TRACKER
     if ( g_smart_ptr_total ) {
-        printf("FAILED: %" PRId64 " smart pointers left\n", uint64_t(g_smart_ptr_total));
+        TextPrinter tp;
+        tp << uint64_t(g_smart_ptr_total) << " smart pointers left\n";
     }
 #endif
     return result;
@@ -487,7 +488,8 @@ int main( int argc, char * argv[] ) {
     // shutdown
     Module::Shutdown();
 #if DAS_SMART_PTR_TRACKER
-    printf("%" PRId64 " smart pointers left\n", uint64_t(g_smart_ptr_total));
+    TextPrinter tp;
+    tp << uint64_t(g_smart_ptr_total) << " smart pointers left\n";
 #endif
     return ok ? 0 : -1;
 }
