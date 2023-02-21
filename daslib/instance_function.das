@@ -39,7 +39,7 @@ class InstanceFunctionAnnotation : AstFunctionAnnotation
         if empty(generic_name)
             errors := "expecting name of the generic or function"
             return false
-        var fn <- compiling_module() |> find_unique_generic(generic_name)
+        var inscope fn <- compiling_module() |> find_unique_generic(generic_name)
         if fn == null
             errors := "generic not found {generic_name}"
             return false

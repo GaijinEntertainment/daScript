@@ -491,7 +491,8 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     Module::Shutdown();
 #if DAS_SMART_PTR_TRACKER
     if ( g_smart_ptr_total!=0 ) {
-        printf("%" PRId64 " smart pointers left\n", uint64_t(g_smart_ptr_total));
+        TextPrinter tp;
+        tp << uint64_t(g_smart_ptr_total) << " smart pointers left\n";
         exit(1);
     }
 #endif

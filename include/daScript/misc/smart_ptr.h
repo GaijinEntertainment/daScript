@@ -365,6 +365,9 @@ namespace das {
         virtual ~ptr_ref_count() {
             DAS_ASSERTF(ref_count == 0, "can only delete when ref_count==0");
             DAS_SMART_PTR_DELETE
+#if DAS_SMART_PTR_MAGIC
+            magic = 0xdeadbeef;
+#endif
         }
         __forceinline void addRef() {
             DAS_TRACK_SMART_PTR_ID
@@ -393,6 +396,13 @@ namespace das {
         }
         __forceinline unsigned int use_count() const {
             return ref_count;
+        }
+        __forceinline bool is_valid() const {
+#if DAS_SMART_PTR_MAGIC
+            return magic==0x1ee7c0de && ref_count!=0;
+#else
+            return ref_count!=0;
+#endif
         }
     private:
 #if DAS_SMART_PTR_MAGIC

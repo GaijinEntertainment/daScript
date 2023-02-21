@@ -3146,6 +3146,9 @@ namespace das {
                 } else if (expr->trait == "is_void_pointer") {
                      reportAstChanged();
                      return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isVoidPointer());
+                } else if ( expr->trait=="need_inscope" ) {
+                    reportAstChanged();
+                    return make_smart<ExprConstBool>(expr->at, expr->typeexpr->needInScope());
                 } else if ( expr->trait=="can_be_placed_in_container" ) {
                     reportAstChanged();
                     return make_smart<ExprConstBool>(expr->at, expr->typeexpr->canBePlacedInContainer());
@@ -5124,6 +5127,10 @@ namespace das {
             } else if ( expr->right->type->isTemp(true,false) ) {
                 error("can't move temporary value"+moveErrorInfo(expr), "", "",
                     expr->at, CompilationError::cant_pass_temporary);
+            } else if ( strictSmartPointers && !safeExpression(expr) && expr->right->type->needInScope() ) {
+                error("moving values which contain smart pointers is unsafe",
+                    "try `move(smart_ptr&) <| smart_ptr&` or `move_new(smart_ptr&) <| new [[YouTypeHere ...]]` instead", "",
+                        expr->at, CompilationError::unsafe);
             } else if ( expr->right->type->isPointer() && expr->right->type->smartPtr ) {
                 if ( !expr->right->type->ref && !safeExpression(expr) && !expr->right->rtti_isAscend() ) {
                     error("moving from the smart pointer value requires unsafe",  "",
@@ -5422,6 +5429,10 @@ namespace das {
                     error("returning temporary value from block requires unsafe", "", "",
                         func->result->at,CompilationError::invalid_return_type);
                 }
+                if ( strictSmartPointers && block->returnType && !expr->moveSemantics && !safeExpression(expr) && block->returnType->needInScope() ) {
+                    error("returning smart pointers without move semantics is unsafe", "use return <- instead", "",
+                        expr->at,CompilationError::unsafe);
+                }
                 if ( block->returnType ) expr->returnType = make_smart<TypeDecl>(*block->returnType);
             } else {
                 // infer
@@ -5449,7 +5460,11 @@ namespace das {
                     error("returning temporary value from function requires unsafe", "", "",
                         func->result->at,CompilationError::invalid_return_type);
                 }
-                if ( func->result ) expr->returnType = make_smart<TypeDecl>(*func->result);
+                if ( strictSmartPointers && !expr->moveSemantics && !safeExpression(expr) && func->result->needInScope() ) {
+                    error("returning smart pointers without move semantics is unsafe", "use return <- instead", "",
+                        expr->at,CompilationError::unsafe);
+                }
+               if ( func->result ) expr->returnType = make_smart<TypeDecl>(*func->result);
             }
             if ( expr->moveSemantics && expr->subexpr && expr->subexpr->type && expr->subexpr->type->lockCheck() ) {
                 if ( !(expr->at.fileInfo && expr->at.fileInfo->name=="builtin.das") ) {
@@ -5977,8 +5992,8 @@ namespace das {
                         }
                     }
                 } else {
-                    if ( strictSmartPointers && !var->generated && var->type->needInScope() ) {
-                        error("variable " + var->name + " of type " + describeType(var->type) + " requires var inscope", "", "",
+                    if ( strictSmartPointers && !var->generated && !safeExpression(expr) && var->type->needInScope() ) {
+                        error("variable " + var->name + " of type " + describeType(var->type) + " requires var inscope to be safe", "", "",
                             var->at, CompilationError::invalid_variable_type);
                     }
                 }
