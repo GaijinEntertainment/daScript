@@ -7564,7 +7564,7 @@ namespace das {
                 auto initl = static_cast<ExprMakeLocal *>(init);
                 expr->initAllFields &= initl->initAllFields;
             }
-            return Expression::autoDereference( Visitor::visitMakeArrayIndex(expr,index,init,last) );
+            return Visitor::visitMakeArrayIndex(expr,index,init,last);
         }
         virtual ExpressionPtr visit ( ExprMakeArray * expr ) override {
             if ( expr->makeType && expr->makeType->isExprType() ) {
