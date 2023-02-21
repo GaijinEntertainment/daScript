@@ -13,14 +13,14 @@ let
 [generic]
 def intptr ( p : void? ) : uint64
 	static_if typeinfo(sizeof p)==4
-        return unsafe(uint64(reinterpret<uint> p))
+        return uint64(unsafe(reinterpret<uint> p))
 	else
         return unsafe(reinterpret<uint64> p)
 
 [generic]
 def intptr ( p : smart_ptr<auto> ) : uint64
 	static_if typeinfo(sizeof p)==4
-        return unsafe(uint64(reinterpret<uint> p))
+        return uint64(unsafe(reinterpret<uint> p))
 	else
         return unsafe(reinterpret<uint64> p)
 
