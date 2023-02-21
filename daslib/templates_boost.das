@@ -714,7 +714,7 @@ class private  AstQCallMacro : AstCallMacro
             arguments := [{ExpressionPtr
                 new [[ExprQuote()
                     at=call.at,
-                    arguments := [{ExpressionPtr[1] move_to_local(qclone)}]
+                    arguments := [{ExpressionPtr[1] qclone}]
                 ]];
                 new [[ExprMakeBlock() _block<-qblk, at=call.at]]
             }]
@@ -804,7 +804,7 @@ class private AstQNamedMacro : AstCallMacro
                 clone_expression(call.arguments[0]);
                 new [[ExprQuote()
                     at=call.at,
-                    arguments := [{ExpressionPtr move_to_local(qclone)}]
+                    arguments := [{ExpressionPtr[1] qclone}]
                 ]];
                 new [[ExprMakeBlock() _block<-qblk, at=call.at]]
             }]
@@ -842,7 +842,7 @@ class private AstQNamedClassMacro : AstCallMacro
                 clone_expression(call.arguments[1]);
                 new [[ExprQuote()
                     at=call.at,
-                    arguments := [{ExpressionPtr move_to_local(qclone)}]
+                    arguments := [{ExpressionPtr[1] qclone}]
                 ]];
                 new [[ExprMakeBlock() _block<-qblk, at=call.at]]
             }]
