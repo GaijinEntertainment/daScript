@@ -98,12 +98,12 @@ namespace das {
     __forceinline void set_variant_index(Variant & v, int32_t index) { memcpy(&v, &index, sizeof(int32_t)); }
 #endif
 
-    void builtin_smart_ptr_clone_ptr ( smart_ptr_raw<void> & dest, const void * src );
-    void builtin_smart_ptr_clone ( smart_ptr_raw<void> & dest, const smart_ptr_raw<void> src );
-    uint32_t builtin_smart_ptr_use_count ( const smart_ptr_raw<void> src );
-    void builtin_smart_ptr_move_new ( smart_ptr_raw<void> & dest, smart_ptr_raw<void> src );
-    void builtin_smart_ptr_move_ptr ( smart_ptr_raw<void> & dest, const void * src );
-    void builtin_smart_ptr_move ( smart_ptr_raw<void> & dest, smart_ptr_raw<void> & src );
+    void builtin_smart_ptr_clone_ptr ( smart_ptr_raw<void> & dest, const void * src, Context * context, LineInfoArg * at );
+    void builtin_smart_ptr_clone ( smart_ptr_raw<void> & dest, const smart_ptr_raw<void> src, Context * context, LineInfoArg * at );
+    uint32_t builtin_smart_ptr_use_count ( const smart_ptr_raw<void> src, Context * context, LineInfoArg * at );
+    void builtin_smart_ptr_move_new ( smart_ptr_raw<void> & dest, smart_ptr_raw<void> src, Context * context, LineInfoArg * at );
+    void builtin_smart_ptr_move_ptr ( smart_ptr_raw<void> & dest, const void * src, Context * context, LineInfoArg * at );
+    void builtin_smart_ptr_move ( smart_ptr_raw<void> & dest, smart_ptr_raw<void> & src, Context * context, LineInfoArg * at );
 
     __forceinline bool equ_sptr_sptr ( const smart_ptr_raw<void> left, const smart_ptr_raw<void> right ) { return left.get() == right.get(); }
     __forceinline bool nequ_sptr_sptr ( const smart_ptr_raw<void> left, const smart_ptr_raw<void> right ) { return left.get() != right.get(); }

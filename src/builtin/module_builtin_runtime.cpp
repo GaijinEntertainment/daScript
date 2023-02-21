@@ -935,41 +935,58 @@ namespace das
         }
     }
 
-    void builtin_smart_ptr_move_new ( smart_ptr_raw<void> & dest, smart_ptr_raw<void> src ) {
+    __forceinline void validate_smart_ptr ( void * ptr, Context * context, LineInfoArg * at ) {
+        if ( !ptr ) return;
+        ptr_ref_count * t = (ptr_ref_count *) ptr;
+        if ( !t->is_valid() ) context->throw_error_at(at ? *at : LineInfo(), "invalid smart pointer %p", ptr);
+    }
+
+    void builtin_smart_ptr_move_new ( smart_ptr_raw<void> & dest, smart_ptr_raw<void> src, Context * context, LineInfoArg * at ) {
+        validate_smart_ptr(src.ptr, context, at);
+        validate_smart_ptr(dest.ptr, context, at);
         ptr_ref_count * t = (ptr_ref_count *) dest.ptr;
         dest.ptr = src.ptr;
         src.ptr = nullptr;
         if ( t ) t->delRef();
     }
 
-    void builtin_smart_ptr_move_ptr ( smart_ptr_raw<void> & dest, const void * src ) {
+    void builtin_smart_ptr_move_ptr ( smart_ptr_raw<void> & dest, const void * src, Context * context, LineInfoArg * at ) {
+        validate_smart_ptr((void *)src, context, at);
+        validate_smart_ptr(dest.ptr, context, at);
         ptr_ref_count * t = (ptr_ref_count *) dest.ptr;
         dest.ptr = (void *) src;
         if ( t ) t->delRef();
     }
 
-    void builtin_smart_ptr_move ( smart_ptr_raw<void> & dest, smart_ptr_raw<void> & src ) {
+    void builtin_smart_ptr_move ( smart_ptr_raw<void> & dest, smart_ptr_raw<void> & src, Context * context, LineInfoArg * at ) {
+        validate_smart_ptr(src.ptr, context, at);
+        validate_smart_ptr(dest.ptr, context, at);
         ptr_ref_count * t = (ptr_ref_count *) dest.ptr;
         dest.ptr = src.ptr;
         src.ptr = nullptr;
         if ( t ) t->delRef();
     }
 
-    void builtin_smart_ptr_clone_ptr ( smart_ptr_raw<void> & dest, const void * src ) {
+    void builtin_smart_ptr_clone_ptr ( smart_ptr_raw<void> & dest, const void * src, Context * context, LineInfoArg * at ) {
+        validate_smart_ptr((void *)src, context, at);
+        validate_smart_ptr(dest.ptr, context, at);
         ptr_ref_count * t = (ptr_ref_count *) dest.ptr;
         dest.ptr = (void *) src;
         if ( src ) ((ptr_ref_count *) src)->addRef();
         if ( t ) t->delRef();
     }
 
-    void builtin_smart_ptr_clone ( smart_ptr_raw<void> & dest, const smart_ptr_raw<void> src ) {
+    void builtin_smart_ptr_clone ( smart_ptr_raw<void> & dest, const smart_ptr_raw<void> src, Context * context, LineInfoArg * at ) {
+        validate_smart_ptr(src.ptr, context, at);
+        validate_smart_ptr(dest.ptr, context, at);
         ptr_ref_count * t = (ptr_ref_count *) dest.ptr;
         dest.ptr = src.ptr;
         if ( src.ptr ) ((ptr_ref_count *) src.ptr)->addRef();
         if ( t ) t->delRef();
     }
 
-    uint32_t builtin_smart_ptr_use_count ( const smart_ptr_raw<void> src ) {
+    uint32_t builtin_smart_ptr_use_count ( const smart_ptr_raw<void> src, Context * context, LineInfoArg * at ) {
+        validate_smart_ptr(src.ptr, context, at);
         ptr_ref_count * psrc = (ptr_ref_count *) src.ptr;
         return psrc ? psrc->use_count() : 0;
     }
@@ -1521,22 +1538,22 @@ namespace das
         // smart ptr stuff
         addExtern<DAS_BIND_FUN(builtin_smart_ptr_move_new)>(*this, lib, "move_new",
             SideEffects::modifyArgument, "builtin_smart_ptr_move_new")
-                ->args({"dest","src"});
+                ->args({"dest","src","context","at"});
         addExtern<DAS_BIND_FUN(builtin_smart_ptr_move_ptr)>(*this, lib, "move",
             SideEffects::modifyArgument, "builtin_smart_ptr_move_ptr")
-                ->args({"dest","src"});
+                ->args({"dest","src","context","at"});
         addExtern<DAS_BIND_FUN(builtin_smart_ptr_move)>(*this, lib, "move",
             SideEffects::modifyArgument, "builtin_smart_ptr_move")
-                ->args({"dest","src"});
+                ->args({"dest","src","context","at"});
         addExtern<DAS_BIND_FUN(builtin_smart_ptr_clone_ptr)>(*this, lib, "smart_ptr_clone",
             SideEffects::modifyArgument, "builtin_smart_ptr_clone_ptr")
-                ->args({"dest","src"});
+                ->args({"dest","src","context","at"});
         addExtern<DAS_BIND_FUN(builtin_smart_ptr_clone)>(*this, lib, "smart_ptr_clone",
             SideEffects::modifyArgument, "builtin_smart_ptr_clone")
-                ->args({"dest","src"});
+                ->args({"dest","src","context","at"});
         addExtern<DAS_BIND_FUN(builtin_smart_ptr_use_count)>(*this, lib, "smart_ptr_use_count",
             SideEffects::none, "builtin_smart_ptr_use_count")
-                ->arg("ptr");
+                ->args({"ptr","context","at"});
         addExtern<DAS_BIND_FUN(equ_sptr_sptr)>(*this, lib, "==", SideEffects::none, "equ_sptr_sptr");
         addExtern<DAS_BIND_FUN(nequ_sptr_sptr)>(*this, lib, "!=", SideEffects::none, "nequ_sptr_sptr");
         addExtern<DAS_BIND_FUN(equ_ptr_sptr)>(*this, lib, "==", SideEffects::none, "equ_ptr_sptr");

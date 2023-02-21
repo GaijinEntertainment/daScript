@@ -739,14 +739,6 @@ def get_for_source_index(expr:smart_ptr<ExprFor>; source:ExpressionPtr)
             return t
     return -1
 
-def visit_expression ( var expr:ExpressionPtr&; var adapter:smart_ptr<VisitorAdapter> )
-    unsafe
-        // note: visit returns smart_ptr_raw, so we need to be careful with lifetime here
-        var newExpr <- expr |> visit(adapter)
-        if expr != newExpr
-            expr := null
-        expr <- newExpr
-
 [macro_function]
 def make_static_assert_false ( text : string; at:LineInfo )
     var inscope esa <- new [[ExprStaticAssert() at=at]]
