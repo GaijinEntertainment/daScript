@@ -24,14 +24,13 @@ def test_resize_array ( t : T? )
             t |> equal(null, b)
         if true
             var inscope b : ExpressionPtr <- new [[ExprOp2() op:="=="]]
-            var inscope a <- [{ExpressionPtr move_to_local(b)}]
+            var inscope a <- [{ExpressionPtr[1] move_to_local(b)}]
             t |> equal(1, length(a))
             t |> equal(null, b)
-        // TODO: fix this
         /*
         if true
             var inscope b : ExpressionPtr <- new [[ExprOp2() op:="=="]]
-            var inscope a <- [{ExpressionPtr b}]
+            var inscope a <- [{ExpressionPtr b}]    // 40103: can't create array from smart pointer by value. did u mean [{Type[1] value}] instead of [{Type value}]
             t |> equal(1, length(a))
             t |> equal(null, b)
         */

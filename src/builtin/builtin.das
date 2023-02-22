@@ -658,6 +658,8 @@ def to_array_move(var a:auto(TT)[]) : array<TT -const>
 def to_array_move(var a:auto(TT)) : array<TT -const>
     unsafe
         var arr : array<TT -const>
+        static_if typeinfo(is_smart_ptr a)
+            concept_assert(false,"can't create array from smart pointer by value. did u mean [\{Type[1] value\}] instead of [\{Type value\}]")
         static_if typeinfo(can_copy a)
             arr |> push(a)
         static_elif typeinfo(can_move a)

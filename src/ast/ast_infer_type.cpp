@@ -3098,6 +3098,9 @@ namespace das {
                 } else if ( expr->trait=="is_pointer" ) {
                     reportAstChanged();
                     return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isPointer());
+                } else if ( expr->trait=="is_smart_ptr" ) {
+                    reportAstChanged();
+                    return make_smart<ExprConstBool>(expr->at, expr->typeexpr->smartPtr && expr->typeexpr->isPointer());
                 } else if ( expr->trait=="is_iterator" ) {
                     reportAstChanged();
                     return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isGoodIteratorType());
