@@ -24,7 +24,7 @@ class MacroVerifyMacro : AstFunctionAnnotation
         var res <- qmacro_block() <|
             if !$e(call.arguments[0])
                 macro_error($e(call.arguments[1]),$e(call.arguments[2]),$e(call.arguments[3]))
-                return [[ExpressionPtr]]
+                return <- [[ExpressionPtr]]
         res |> force_at(call.at)
         return <- res
 

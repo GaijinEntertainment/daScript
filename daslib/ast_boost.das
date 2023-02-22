@@ -192,7 +192,7 @@ def private apply_tag_annotation(tag:string; ann:FunctionAnnotationPtr)
         add_function_annotation(func, tagAnn)
 
 def setup_tag_annotation(name,tag:string; classPtr)
-    var ann <- make_function_annotation(name, classPtr)
+    var inscope ann <- make_function_annotation(name, classPtr)
     apply_tag_annotation(tag, ann)
     this_module() |> add_function_annotation(ann)
 
@@ -609,10 +609,10 @@ def convert_to_expression ( value : auto ==const; at:LineInfo )
 	    return walk_and_convert(reinterpret<uint8?> pval, info, at)
 
 def convert_to_expression ( var value : auto ==const )
-    return convert_to_expression(value,[[LineInfo]])
+    return <- convert_to_expression(value,[[LineInfo]])
 
 def convert_to_expression ( value : auto ==const )
-    return convert_to_expression(value,[[LineInfo]])
+    return <- convert_to_expression(value,[[LineInfo]])
 
 def find_annotation ( mod_name,ann_name:string ) : Annotation const?
     var mod = find_compiling_module(mod_name)
