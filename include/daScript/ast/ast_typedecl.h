@@ -226,6 +226,7 @@ namespace das {
                 bool    isExplicit : 1;
                 bool    isNativeDim : 1;
                 bool    isTag: 1;
+                bool    explicitRef : 1;
             };
             uint32_t flags = 0;
         };

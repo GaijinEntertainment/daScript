@@ -2456,6 +2456,10 @@ type_declaration_no_options
         $typeDecl->explicitConst = true;
         $$ = $typeDecl;
     }
+    |   type_declaration_no_options[typeDecl] EQUEQU '&' {
+        $typeDecl->explicitRef = true;
+        $$ = $typeDecl;
+    }
     |   type_declaration_no_options[typeDecl] '?' {
         $$ = new TypeDecl(Type::tPointer);
         $$->at = tokAt(scanner,@typeDecl);

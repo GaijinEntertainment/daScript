@@ -491,6 +491,7 @@ namespace das
         if ( info->flags & TypeInfo::flag_isTemp )      ss << "#";
         if ( info->flags & TypeInfo::flag_isImplicit )  ss << "I";
         //  if ( explicitConst )ss << "=";
+        //  if ( explicitRef )  ss << "R";
         //  if ( isExplicit )   ss << "X";
         //  if ( aotAlias )     ss << "F";
         if ( info->dimSize ) {

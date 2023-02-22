@@ -209,6 +209,7 @@ namespace das
                 TT->removeDim = TT->removeDim | autoT->removeDim;
                 TT->removeRef = TT->removeRef | autoT->removeRef;
                 TT->explicitConst = TT->explicitConst | autoT->explicitConst;
+                TT->explicitRef = TT->explicitRef | autoT->explicitRef;
                 TT->implicit = TT->implicit | autoT->implicit;
                 // now we infer type
                 if ( auto resT = inferGenericType(TT,initT,topLevel,passType,options) ) {
@@ -220,6 +221,10 @@ namespace das
         }
         // explicit const mast match
         if ( autoT->explicitConst && (autoT->constant != initT->constant) ) {
+            return nullptr;
+        }
+        // explicit ref match
+        if ( autoT->explicitRef && (autoT->ref != initT->ref) ) {
             return nullptr;
         }
         // can't infer from the type, which is already 'auto'
@@ -247,7 +252,7 @@ namespace das
             auto rm = RefMatters::yes;
             auto cm = ConstMatters::yes;
             if ( topLevel ) {
-                if ( !autoT->ref || autoT->isRefType() ) {
+                if ( (!autoT->ref && !autoT->explicitRef) || autoT->isRefType()  ) {
                     rm = RefMatters::no;
                 }
                 if ( autoT->constant && !autoT->explicitConst ) {
@@ -316,6 +321,7 @@ namespace das
         TT->removeDim = false;
         TT->implicit |= autoT->implicit;
         TT->explicitConst |= autoT->explicitConst;
+        TT->explicitRef |= autoT->explicitRef;
         if ( autoT->isPointer() ) {
             // if it's a pointer, infer pointer-to separately
             TT->firstType = inferGenericType(autoT->firstType, initT->firstType, false, options);
@@ -542,6 +548,9 @@ namespace das
         }
         if ( explicitConst ) {
             stream << " ==const";
+        }
+        if ( explicitRef ) {
+            stream << " ==&";
         }
         if (contracts == DescribeContracts::yes) {
             if (removeConstant || removeRef || removeDim || removeTemporary) {
@@ -2574,6 +2583,7 @@ namespace das
         if ( temporary )    ss << "#";
         if ( implicit )     ss << "I";
         if ( explicitConst )ss << "=";
+        if ( explicitRef )  ss << "R";
         if ( isExplicit )   ss << "X";
         if ( aotAlias )     ss << "F";
         if ( dim.size() ) {
@@ -3090,6 +3100,12 @@ namespace das
                 ch ++;
                 auto pt = parseTypeFromMangledName(ch,library,thisModule);
                 pt->explicitConst = true;
+                return pt;
+            };
+            case 'R': {
+                ch ++;
+                auto pt = parseTypeFromMangledName(ch,library,thisModule);
+                pt->explicitRef = true;
                 return pt;
             };
             case 'F': {
