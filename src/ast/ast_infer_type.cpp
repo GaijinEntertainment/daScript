@@ -758,8 +758,10 @@ namespace das {
             if (!passType) {
                 return false;
             }
-            // explicit const mast match
-            if ( argType->explicitConst && (argType->constant != passType->constant) ) {
+            if ( argType->explicitConst && (argType->constant != passType->constant) ) {    // explicit const mast match
+                return false;
+            }
+            if ( argType->explicitRef && (argType->ref != passType->ref) ) {                // explicit ref match
                 return false;
             }
             if ( argType->baseType==Type::anyArgument ) {
