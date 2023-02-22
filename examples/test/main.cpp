@@ -281,7 +281,7 @@ bool isolated_unit_test ( const string & fn, bool useAot ) {
 #if DAS_SMART_PTR_TRACKER
     if ( g_smart_ptr_total ) {
         TextPrinter tp;
-        tp << uint64_t(g_smart_ptr_total) << " smart pointers left\n";
+        tp << "smart pointers leaked: " << uint64_t(g_smart_ptr_total) << "\n";
     }
 #endif
     return result;
@@ -489,7 +489,7 @@ int main( int argc, char * argv[] ) {
     Module::Shutdown();
 #if DAS_SMART_PTR_TRACKER
     TextPrinter tp;
-    tp << uint64_t(g_smart_ptr_total) << " smart pointers left\n";
+    tp << "smart pointers leaked: " << uint64_t(g_smart_ptr_total) << "\n";
 #endif
     return ok ? 0 : -1;
 }

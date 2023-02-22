@@ -4,22 +4,6 @@
 #define DAS_SMART_PTR_ID    0
 #endif
 
-#ifndef DAS_SMART_PTR_TRACKER
-    #ifdef NDEBUG
-        #define DAS_SMART_PTR_TRACKER   0
-    #else
-        #define DAS_SMART_PTR_TRACKER   1
-    #endif
-#endif
-
-#ifndef DAS_SMART_PTR_MAGIC
-    #ifdef NDEBUG
-        #define DAS_SMART_PTR_MAGIC     0
-    #else
-        #define DAS_SMART_PTR_MAGIC     1
-    #endif
-#endif
-
 #if DAS_SMART_PTR_TRACKER
 #include <atomic>
 #endif
