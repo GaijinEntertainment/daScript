@@ -347,18 +347,22 @@ namespace das {
         __forceinline ptr_ref_count & operator = ( const ptr_ref_count & ) { return *this;}
         __forceinline ptr_ref_count & operator = ( ptr_ref_count && ) { return *this; }
         virtual ~ptr_ref_count() {
-            DAS_ASSERTF(ref_count == 0, "can only delete when ref_count==0");
-            DAS_SMART_PTR_DELETE
 #if DAS_SMART_PTR_MAGIC
+            if ( ref_count!=0 ) DAS_FATAL_ERROR("ref_count=%i, can't delete", ref_count);
+            if ( magic!=0x1ee7c0de ) DAS_FATAL_ERROR("magic=%08x, object was deleted or corrupted", magic);
             magic = 0xdeadbeef;
+#else
+            DAS_ASSERTF(ref_count == 0, "can only delete when ref_count==0");
 #endif
+            DAS_SMART_PTR_DELETE
         }
         __forceinline void addRef() {
             DAS_TRACK_SMART_PTR_ID
             ref_count ++;
 #if DAS_SMART_PTR_MAGIC
-            DAS_VERIFYF(ref_count, "ref_count overflow");
-            DAS_VERIFYF(magic==0x1ee7c0de, "magic number is wrong, object was deleted or corrupted");
+            if ( ref_count==0 || magic!=0x1ee7c0de ) {
+                DAS_FATAL_ERROR("ref_count=%i, magic=%08x, object was deleted or corrupted", ref_count, magic);
+            }
 #else
             DAS_ASSERTF(ref_count, "ref_count overflow");
 #endif
@@ -366,8 +370,9 @@ namespace das {
         __forceinline bool delRef() {
             DAS_TRACK_SMART_PTR_ID
 #if DAS_SMART_PTR_MAGIC
-            DAS_VERIFYF(ref_count, "deleting reference on the object with ref_count==0");
-            DAS_VERIFYF(magic==0x1ee7c0de, "magic number is wrong, object was deleted or corrupted");
+            if ( ref_count==0 || magic!=0x1ee7c0de ) {
+                DAS_FATAL_ERROR("ref_count=%i, magic=%08x, object was deleted or corrupted", ref_count, magic);
+            }
 #else
             DAS_ASSERTF(ref_count, "deleting reference on the object with ref_count==0");
 #endif

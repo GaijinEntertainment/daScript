@@ -870,8 +870,9 @@ def get_const_ptr ( src : smart_ptr<auto(TT)> ) : TT ? const
         return reinterpret<TT ? const> src
 
 def add_ptr_ref ( src : smart_ptr<auto(TT)> ) : smart_ptr<TT>
-    var dst := src
-    return <- dst
+    unsafe
+        var dst := src
+        return <- dst
 
 [generic]
 def get_command_line_arguments : array<string>

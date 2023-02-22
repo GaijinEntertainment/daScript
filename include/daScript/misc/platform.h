@@ -306,6 +306,13 @@ inline size_t das_aligned_memsize(void * ptr){
     #endif
 #endif
 
+#ifdef DAS_SMART_PTR_DEBUG
+    #define DAS_SMART_PTR_TRACKER   1
+    #define DAS_SMART_PTR_MAGIC     1
+#else
+    #error "undefined DAS_SMART_PTR_DEBUG"
+#endif
+
 #ifndef DAS_SMART_PTR_TRACKER
     #ifdef NDEBUG
         #define DAS_SMART_PTR_TRACKER   0

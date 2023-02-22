@@ -105,8 +105,8 @@ class ImplementsMacro : AstStructureAnnotation
                         var inscope fcall_args : array<ExpressionPtr>
                         for n,t in cm._type.argNames,cm._type.argTypes
                             if n != "self"
-                                fcall_args |> emplace <| qmacro($i(n))
-                                fmethod_args |> emplace <| new [[Variable() name:=n, _type<-clone_type(t)]]
+                                fcall_args |> emplace_new <| qmacro($i(n))
+                                fmethod_args |> emplace_new <| new [[Variable() name:=n, _type<-clone_type(t)]]
                         var fmethod <- qmacro_method(fmethod_name,cls) <| $ ( self : $t(cls); $a(fmethod_args) ) : $t(cm._type.firstType)
                             generic_return ( invoke ( self._self.$f(fld.name), *self._self, $a(fcall_args) ) )
                         add_function(st._module, fmethod)
