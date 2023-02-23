@@ -273,9 +273,6 @@ namespace das {
                     if ( lr->moveSemantics != rr->moveSemantics ) {
                         lr.reset(); // move semantics must match
                         rr.reset();
-                    } else if ( lr->moveSemantics && lr->returnType->isPointer() && lr->returnType->smartPtr ) {
-                        lr.reset(); // we don't touch return <- of smart pointers (for now)
-                        rr.reset();
                     }
                 }
                 if (lr && rr) {
