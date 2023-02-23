@@ -1,10 +1,8 @@
 # daScript
 daScript - high-performance statically strong typed scripting language
 
-Win64 build status [![Build status](https://ci.appveyor.com/api/projects/status/87jho7utcy3d5pcc/branch/master?svg=true)](https://ci.appveyor.com/project/imp5imp5/dascript/branch/master)\
-Linux build status [![Build status](https://ci.appveyor.com/api/projects/status/n2xv2i829xuvjv3g/branch/master?svg=true)](https://ci.appveyor.com/project/imp5imp5/dascript-linux/branch/master)\
-macOS build status [![Build status](https://ci.appveyor.com/api/projects/status/dk833vli83lko0m4/branch/master?svg=true)](https://ci.appveyor.com/project/imp5imp5/dascript-mac/branch/master)
-
+MacOS/linux/win32/win64 build status [![build](https://github.com/GaijinEntertainment/daScript/actions/workflows/build.yml/badge.svg)](https://github.com/GaijinEntertainment/daScript/actions/workflows/build.yml)\
+MacOS/linux/win64 wasm build status [![wasm_build](https://github.com/GaijinEntertainment/daScript/actions/workflows/wasm_build.yml/badge.svg)](https://github.com/GaijinEntertainment/daScript/actions/workflows/wasm_build.yml)
 
 11/26/2021
   * hardware breakpoints are now supported on mac arm64
