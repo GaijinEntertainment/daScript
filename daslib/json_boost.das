@@ -1,6 +1,7 @@
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 options indenting = 4
+options strict_smart_pointers = true
 
 module json_boost shared public
 
@@ -37,18 +38,18 @@ class private BetterJsonMacro : AstVariantMacro
     //! It essencially substitutes `value as name` with `value.value as name` and `value is name` with `value.value is name`.
     def override visitExprIsVariant(prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprIsVariant>) : ExpressionPtr
         if is_json_ptr_value(expr.value._type)
-            var vdr <- new [[ExprField() at=expr.at, name:="value", value <- clone_expression(expr.value)]]
-            var isv <- new [[ExprIsVariant() at=expr.at, name:=expr.name, value <- vdr ]]
+            var inscope vdr <- new [[ExprField() at=expr.at, name:="value", value <- clone_expression(expr.value)]]
+            var inscope isv <- new [[ExprIsVariant() at=expr.at, name:=expr.name, value <- vdr ]]
             isv.genFlags = expr.genFlags
-            return isv
-        return [[ExpressionPtr]]
+            return <- isv
+        return <- [[ExpressionPtr]]
     def override visitExprAsVariant(prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprAsVariant>) : ExpressionPtr
         if is_json_ptr_value(expr.value._type)
-            var vdr <- new [[ExprField() at=expr.at, name:="value", value <- clone_expression(expr.value)]]
-            var isv <- new [[ExprAsVariant() at=expr.at, name:=expr.name, value <- vdr ]]
+            var inscope vdr <- new [[ExprField() at=expr.at, name:="value", value <- clone_expression(expr.value)]]
+            var inscope isv <- new [[ExprAsVariant() at=expr.at, name:=expr.name, value <- vdr ]]
             isv.genFlags = expr.genFlags
-            return isv
-        return [[ExpressionPtr]]
+            return <- isv
+        return <- [[ExpressionPtr]]
 
 [reader_macro(name="json")]
 class private JsonReader : AstReaderMacro
@@ -72,7 +73,7 @@ class private JsonReader : AstReaderMacro
         var error = ""
         var json = read_json(seqStr, error)
         macro_verify(json!=null,prog,expr.at,"json did not parse ({error})")
-        return convert_to_expression(json,expr.at)
+        return <- convert_to_expression(json,expr.at)
 
 [expect_any_enum(ent), template(ent)]
 def from_JV ( v:JsonValue?; ent : auto(EnumT); defV : EnumT = [[EnumT]] ) : EnumT
