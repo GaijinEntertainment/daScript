@@ -3,6 +3,7 @@ options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 options no_aot
 options multiple_contexts
+options strict_smart_pointers = true
 
 module decs_boost shared private
 
@@ -268,7 +269,7 @@ class DecsQueryMacro : AstCallMacro
         macro_verify(totalArgs==1 || totalArgs==2,prog,expr.at,"expecting query($(block_with_arguments)) or query(eid,$(block_with_arguments))")
         let qt = totalArgs==2 ? DecsQueryType eid_query : DecsQueryType query
         let block_arg_index = totalArgs-1
-        return self->implement(expr, block_arg_index, qt)
+        return <- self->implement(expr, block_arg_index, qt)
     def implement ( var expr:smart_ptr<ExprCallMacro>; block_arg_index:int; qt:DecsQueryType ) : ExpressionPtr
         for arg in expr.arguments
             macro_verify(!arg._type.isAutoOrAlias,compiling_program(),expr.at,"argument types are not fully inferred")
@@ -295,16 +296,16 @@ class DecsQueryMacro : AstCallMacro
                     kaboom |> push <| [[auto string(a.name),detp as yes,"_{a.name}"]]
                     for f in a._type.structType.fields
                         if !append_index_lookup(arch_name, qlbody, f, detp as yes, "_{a.name}", a._type.flags.constant, false)
-                            return [[ExpressionPtr]]
+                            return <- [[ExpressionPtr]]
                 else
                     if !append_index_lookup(arch_name, qlbody, a, "", "")
-                        return [[ExpressionPtr]]
+                        return <- [[ExpressionPtr]]
             for l in qblk.list
                 qlbody.list |> emplace_new <| clone_expression(l)
             for fl in qblk.finalList
                 qlbody.finalList |> emplace_new <| clone_expression(fl)
             convert_block_to_loop(qlbody, true, false, false)
-            qtop <- qlbody
+            move(qtop) <| qlbody
         else
             // for s1, s2 ...
             var inscope qloop <- new [[ExprFor() at=qblk.at, visibility=qblk.at]]
@@ -316,10 +317,10 @@ class DecsQueryMacro : AstCallMacro
                     kaboom |> push <| [[auto string(a.name),detp as yes,"_{a.name}"]]
                     for f in a._type.structType.fields
                         if !append_iterator(arch_name, qloop, f, detp as yes, "_{a.name}", a._type.flags.constant, false)
-                            return [[ExpressionPtr]]
+                            return <- [[ExpressionPtr]]
                 else
                     if !append_iterator(arch_name, qloop, a, "", "")
-                        return [[ExpressionPtr]]
+                        return <- [[ExpressionPtr]]
             var inscope qlbody <- new [[ExprBlock() at=qblk.at]]
             for l in qblk.list
                 qlbody.list |> emplace_new <| clone_expression(l)
@@ -329,8 +330,8 @@ class DecsQueryMacro : AstCallMacro
                 convert_block_to_loop(qlbody, false, true, false )
             else
                 convert_block_to_loop(qlbody, false, true, true )
-            qloop.body <- qlbody
-            qtop <- qloop
+            move(qloop.body) <| qlbody
+            move(qtop) <| qloop
         apply_template(qtop) <| $ ( rules )
             for kb in kaboom
                 rules |> kaboomVarField(kb._0,kb._1,kb._2)
@@ -389,7 +390,7 @@ class DecsFindQueryMacro : DecsQueryMacro
     //! Note: if return is missing, or end of find_query block is reached - its assumed that find_query did not find anything, and will return false.
     def override visit ( prog:ProgramPtr; mod:Module?; var expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr
         macro_verify(length(expr.arguments)==1,prog,expr.at,"expecting find_query($(block_with_arguments))")
-        return self->implement(expr, 0, DecsQueryType find_query)
+        return <- self->implement(expr, 0, DecsQueryType find_query)
 
 [function_macro(name="decs")]
 class DecsEcsMacro : AstFunctionAnnotation
@@ -419,7 +420,7 @@ class DecsEcsMacro : AstFunctionAnnotation
         var cquery = cqq as ExprCallMacro
         var inscope qblk <- new [[ExprBlock() at=func.body.at]]                 // inside the query block
         qblk.blockFlags |= ExprBlockFlags isClosure
-        qblk.returnType <- new [[TypeDecl() baseType=Type tVoid, at=func.at]]
+        move_new(qblk.returnType) <| new [[TypeDecl() baseType=Type tVoid, at=func.at]]
         var req, nreq : array<string>
         for arg in args
             if arg.basicType==Type tString

@@ -4,6 +4,8 @@ options no_global_variables = false
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 options persistent_heap = true
+options strict_smart_pointers = true
+
 module debug shared
 
 require math
@@ -1116,9 +1118,10 @@ class private DAServer: Server
 
     def restart()
         if _server != null
-            var session : smart_ptr<NetworkServer>
-            self->save(session)
-            gc0_save_smart_ptr("telnet-session", session)
+            unsafe
+                var session : smart_ptr<NetworkServer>
+                self->save(session)
+                gc0_save_smart_ptr("telnet-session", session)
 
     def override tick()
         Server`tick(self)
@@ -1635,9 +1638,8 @@ class private EvalWalker : DapiStackWalker
 def private getStackVariableDefinitions(var ctx:Context; at: LineInfo)
     let text = build_string <| $ ( st )
         var walker = new EvalWalker(st)
-        var walker_adapter <- make_stack_walker(walker)
+        var inscope walker_adapter <- make_stack_walker(walker)
         walk_stack(walker_adapter,ctx,at)
-        walker_adapter := null
         unsafe
             delete walker
     var lines <- split(text,"\n")
@@ -1688,7 +1690,7 @@ def getRequire ( var ctx:Context; var self_text:string& )
 def compileAndRun ( text, self_text:string ) : tuple<ok:bool;result:string>
     var failed = true
     var result = ""
-    var access := make_file_access("")
+    var inscope access <- make_file_access("")
     access |> set_file_source("__project", text)
     fopen(self_text, "rb") <| $(fr)
         if fr != null

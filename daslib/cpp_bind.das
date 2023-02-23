@@ -2,6 +2,7 @@ options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 options no_aot = true
+options strict_smart_pointers = true
 
 module cpp_bind public
 
@@ -12,7 +13,7 @@ require daslib/ast_boost
 require daslib/strings_boost
 
 def private log_cpp_class_method ( cpp_file:file; name:string; fntype:TypeDeclPtr )
-    var cft <- clone_type(fntype.firstType)
+    var inscope cft <- clone_type(fntype.firstType)
     cft.flags |= TypeDeclFlags smartPtrNative
     let rettd = describe_cpp(cft)
     fwrite(cpp_file, "{rettd} {name} ( Context * __context__, Func __funcCall__")
@@ -57,7 +58,7 @@ def log_cpp_class_adapter ( cpp_file:file; name:string; cinfo:TypeDeclPtr )
     //!     log_cpp_class_adapter(cppFileNameDotInc, "daScriptClassName", typeinfo(ast_typedecl type<daScriptClassName>))
     assert(cinfo.isClass,"can only make adapter out of a class")
     var methods : array<string>
-    var types : array<TypeDeclPtr>
+    var inscope types : array<TypeDeclPtr>
     for fld in cinfo.structType.fields
         if !fld._type.isFunction || fld.name=="__finalize" || fld.init!=null
             continue
