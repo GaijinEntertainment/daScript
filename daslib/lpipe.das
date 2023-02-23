@@ -2,6 +2,7 @@ options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 options no_aot = true
+options strict_smart_pointers = true
 
 module lpipe shared private
 
@@ -11,47 +12,43 @@ require daslib/ast_boost
 require daslib/templates_boost
 require daslib/macro_boost
 
-def lpipe_expr ( var fnCall:ExpressionPtr; var arg:ExpressionPtr ) : ExpressionPtr
-    if fnCall |> is_expr_like_call()
-        unsafe
-            var pCall = reinterpret<ExprLooksLikeCall?> fnCall
-            if string(pCall.name)=="lpipe"  // not piping pipe into pipe
-                return [[ExpressionPtr]]
-            pCall.arguments |> emplace(arg)
-        return fnCall
-    elif fnCall is ExprVar
+def lpipe_expr ( var fnCall:ExpressionPtr&; var arg:ExpressionPtr& ) : ExpressionPtr
+    if fnCall is ExprVar
         var pVar = fnCall as ExprVar
-        var pCall <- make_call(pVar.at, "{pVar.name}")
-        unsafe
-            delete fnCall
-            var pCallFunc = reinterpret<ExprLooksLikeCall?> pCall
-            pCallFunc.arguments |> emplace(arg)
-        return pCall
+        var inscope pCall <- make_call(pVar.at, "{pVar.name}")
+        delete fnCall
+        var pCallFunc = unsafe(reinterpret<ExprLooksLikeCall?> pCall)
+        pCallFunc.arguments |> emplace(arg)
+        return <- pCall
     elif fnCall is ExprCopy
-        var cCopy <- clone_expression(fnCall)
-        (cCopy as ExprCopy).right := lpipe_expr((fnCall as ExprCopy).right, arg)
-        return cCopy
+        var inscope cCopy <- clone_expression(fnCall)
+        move_new((cCopy as ExprCopy).right) <| lpipe_expr((fnCall as ExprCopy).right, arg)
+        return <- cCopy
     elif fnCall is ExprMove
-        var cCopy <- clone_expression(fnCall)
-        (cCopy as ExprMove).right := lpipe_expr((fnCall as ExprMove).right, arg)
-        return cCopy
+        var inscope cCopy <- clone_expression(fnCall)
+        move_new((cCopy as ExprMove).right) <| lpipe_expr((fnCall as ExprMove).right, arg)
+        return <- cCopy
     elif fnCall is ExprClone
-        var cCopy <- clone_expression(fnCall)
-        (cCopy as ExprClone).right := lpipe_expr((fnCall as ExprClone).right, arg)
-        return cCopy
+        var inscope cCopy <- clone_expression(fnCall)
+        move_new((cCopy as ExprClone).right) <| lpipe_expr((fnCall as ExprClone).right, arg)
+        return <- cCopy
     elif fnCall is ExprLet
         var pLet = fnCall as ExprLet
         if length(pLet.variables)!=1 || pLet.variables[0].init==null
-            unsafe
-                delete arg
-            return [[ExpressionPtr]]
-        var cLet <- clone_expression(fnCall)
-        (cLet as ExprLet).variables[0].init := lpipe_expr(pLet.variables[0].init, arg)
-        return cLet
-    else
-        unsafe
             delete arg
-        return [[ExpressionPtr]]
+            return <- [[ExpressionPtr]]
+        var inscope cLet <- clone_expression(fnCall)
+        move_new((cLet as ExprLet).variables[0].init) <| lpipe_expr(pLet.variables[0].init, arg)
+        return <- cLet
+    elif fnCall |> is_expr_like_call()
+        var pCall = unsafe(reinterpret<ExprLooksLikeCall?> fnCall)
+        if string(pCall.name)=="lpipe"  // not piping pipe into pipe
+            return <- [[ExpressionPtr]]
+        pCall.arguments |> emplace(arg)
+        return <- fnCall
+    else
+        delete arg
+        return <- [[ExpressionPtr]]
 
 
 [call_macro(name="lpipe")]
@@ -89,14 +86,14 @@ class LpipeMacro : AstCallMacro
                 macro_error(prog,call.at,"can't pipe first expression in the block")
                 return
             let pidx = eidx - 1
-            var pipe <- lpipe_expr(blk.list[pidx], clone_expression(call.arguments[0]) )
+            var inscope pipe <- lpipe_expr(blk.list[pidx], call.arguments[0] )
             if pipe==null
                 macro_error(prog,call.at,"can only pipe to a function call, and not {blk.list[pidx].__rtti}")
                 return
-            blk.list[pidx] <- pipe
-            blk.list[eidx] := null
+            move(blk.list[pidx]) <| pipe
+            delete blk.list[eidx]
             success = true
         if !success
-            return [[ExpressionPtr]]
-        return quote <|
+            return <- [[ExpressionPtr]]
+        return <- quote <|
             pass

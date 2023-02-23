@@ -2,6 +2,7 @@ options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 options no_aot = true
+options strict_smart_pointers = true
 
 module defer shared private
 
@@ -45,11 +46,11 @@ class DeferMacro : AstFunctionAnnotation
                     compiling_program() |>macro_error(call.at,"defer can't be used in the loop. finally section of the loop only runs one. enclose in `if true` to ensure scope")
                     success = false
                 else
-                    var c_arg <- clone_expression(call.arguments[0])
-                    var from_block <- move_unquote_block(c_arg)
+                    var inscope c_arg <- clone_expression(call.arguments[0])
+                    var inscope from_block <- move_unquote_block(c_arg)
                     from_block.blockFlags ^= ExprBlockFlags isClosure
                     scope.finalList |> emplace(from_block,0)
-        return !success ? [[ExpressionPtr]] : quote() <| nada()
+        return <- !success ? [[ExpressionPtr]] : quote() <| nada()
 
 [call_macro(name="defer_delete")]
 class DeferDeleteMacro : AstCallMacro
@@ -72,8 +73,7 @@ class DeferDeleteMacro : AstCallMacro
                     compiling_program() |>macro_error(call.at,"defer_delete can't be used in the loop. finally section of the loop only runs one. enclose in `if true` to ensure scope")
                     success = false
                 else
-                    var e_del <- new [[ExprDelete() at=call.at,
-                        subexpr <- clone_expression(call.arguments[0])
-                    ]]
-                    scope.finalList |> emplace(e_del,0)
-        return !success ? [[ExpressionPtr]] : quote() <| nada()
+                    scope.finalList |> emplace_new <| new [[ExprDelete() at=call.at,
+                            subexpr <- clone_expression(call.arguments[0])
+                        ]]
+        return <- !success ? [[ExpressionPtr]] : quote() <| nada()

@@ -2,6 +2,7 @@ options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 options no_aot = true
+options strict_smart_pointers = true
 
 module if_not_null shared private
 
@@ -36,10 +37,9 @@ class ApplyMacro : AstCallMacro
             var inscope vtype <- clone_type(PTR._type)
             if !PTR._type.flags.constant
                 vtype.flags |= TypeDeclFlags removeConstant
-            var tblk <- qmacro_block <|
+            return <- qmacro_block <|
                 let $i(ifnn_name) : $t(vtype) = $e(PTR)
                 if $i(ifnn_name)!=null
                     $c(fcall.name)(*$i(ifnn_name),$a(fcall.arguments))
-            return tblk
-        return [[ExpressionPtr]]
+        return <- [[ExpressionPtr]]
 

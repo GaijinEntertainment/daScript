@@ -2,6 +2,7 @@ options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 options no_aot = true
+options strict_smart_pointers = true
 
 module lint shared private
 
@@ -35,21 +36,21 @@ class LintVisitor : AstVisitor
             if ann.annotation.name=="no_lint"
                 noLint = true
                 break
-    def override visitFunction(fun:FunctionPtr) : FunctionPtr
+    def override visitFunction(var fun:FunctionPtr) : FunctionPtr
         noLint = false
-        return fun
+        return <- fun
     def override preVisitExprBlock(blk:smart_ptr<ExprBlock>) : void
         exprForTerminator |> push(0ul)
-    def override visitExprBlock(blk:smart_ptr<ExprBlock>) : ExpressionPtr
+    def override visitExprBlock(var blk:smart_ptr<ExprBlock>) : ExpressionPtr
         exprForTerminator |> pop()
-        return blk
-    def override visitExprBlockExpression(blk:smart_ptr<ExprBlock>;expr:ExpressionPtr) : ExpressionPtr
+        return <- blk
+    def override visitExprBlockExpression(blk:smart_ptr<ExprBlock>;var expr:ExpressionPtr) : ExpressionPtr
         let lb = exprForTerminator |> back()
         if lb != 0ul
             let eb = intptr(get_ptr(expr))
             if lb != eb
                 self->lint_error("unreachable code", expr.at)
-        return expr
+        return <- expr
     def override preVisitExprLabel(expr:smart_ptr<ExprLabel>) : void
         exprForTerminator |> pop()
         exprForTerminator |> push(0ul)

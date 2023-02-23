@@ -2,6 +2,7 @@ options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 options no_aot = true
+options strict_smart_pointers = true
 
 module enum_trait shared private
 
@@ -15,8 +16,8 @@ class TypeInfoGetEnumLength : AstTypeInfoMacro
         if expr.typeexpr != null
             if !expr.typeexpr.isEnum
                 errors := "expecting enumeration"
-                return [[ExpressionPtr]]
+                return <- [[ExpressionPtr]]
             let sz = length(expr.typeexpr.enumType.list)
-            return new [[ExprConstInt() at=expr.at, value=sz]]
+            return <- new [[ExprConstInt() at=expr.at, value=sz]]
         errors := "type is missing or not inferred"
-        return [[ExpressionPtr]]
+        return <- [[ExpressionPtr]]

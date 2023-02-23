@@ -2,6 +2,7 @@ options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 options no_aot = true
+options strict_smart_pointers = true
 
 module jobque_boost shared public
 
@@ -43,24 +44,24 @@ class private NewJobMacro : AstFunctionAnnotation
         var mks = asc.subexpr as ExprMakeStruct
         macro_verify(!(mks._type==null || mks._type.baseType!=Type tStructure),compiling_program(),call.at,"expecting lambda declaration, not a structure")
         // clone structure type. make fields non-constant, so that they can be cloned
-        var stype <- clone_structure(mks._type.structType)
+        var inscope stype <- clone_structure(mks._type.structType)
         stype.name := "{stype.name}_new_job_clone"
         var stype_ptr = get_ptr(stype)
-        var sttype <- new [[TypeDecl() at=call.at, baseType=Type tStructure, structType = stype_ptr]]
+        var inscope sttype <- new [[TypeDecl() at=call.at, baseType=Type tStructure, structType = stype_ptr]]
         for fld in stype.fields // TODO: verify field type here
             fld._type.flags &= ~(TypeDeclFlags constant)
             fld.flags &= ~(FieldDeclarationFlags capturedConstant)
-        var pclone <- make_clone_structure(stype_ptr)
+        var inscope pclone <- make_clone_structure(stype_ptr)
         compiling_module() |> add_function(pclone)
         compiling_module() |> add_structure(stype)
         // make an @@<function<(var L;L):void> type
-        var ftype <- new [[TypeDecl() at=call.at, baseType=Type tFunction ]]
-        ftype.firstType <- new [[TypeDecl() at=call.at, baseType=Type tVoid]]
+        var inscope ftype <- new [[TypeDecl() at=call.at, baseType=Type tFunction ]]
+        move_new(ftype.firstType) <| new [[TypeDecl() at=call.at, baseType=Type tVoid]]
         ftype.argTypes |> emplace_new <| clone_type(sttype)
         ftype.argTypes |> emplace <| sttype
         ftype.argTypes[1].flags |= TypeDeclFlags constant
         // make a new_job_invoke call
-        var ncall <- new [[ExprCall() at=call.at, name:="{call.name}_invoke"]]
+        var inscope ncall <- new [[ExprCall() at=call.at, name:="{call.name}_invoke"]]
         ncall.arguments |> emplace_new <| clone_expression(call.arguments[0])
         ncall.arguments |> emplace_new <| new [[ExprAddr() at=call.at, target:="clone", funcType <- ftype]]
         ncall.arguments |> emplace_new <| new [[ExprConstInt() at=call.at, value=int(mks._type.sizeOf)]]
@@ -145,21 +146,21 @@ class private ChannelAndStatusCapture : AstCaptureMacro
     def override captureExpression ( prog:Program?; mod:Module?; expr:ExpressionPtr; typ:TypeDeclPtr ) : ExpressionPtr
         //! Implementation details for the capture macro.
         if typ |> isPtrToJQ("Channel")
-            var pCall <- new [[ExprCall() at=expr.at, name:="jobque_boost::capture_jobque_channel"]]
+            var inscope pCall <- new [[ExprCall() at=expr.at, name:="jobque_boost::capture_jobque_channel"]]
             pCall.arguments |> emplace_new <| clone_expression(expr)
-            return pCall
+            return <- pCall
         elif typ |> isPtrToJQ("JobStatus")
-            var pCall <- new [[ExprCall() at=expr.at, name:="jobque_boost::capture_jobque_job_status"]]
+            var inscope pCall <- new [[ExprCall() at=expr.at, name:="jobque_boost::capture_jobque_job_status"]]
             pCall.arguments |> emplace_new <| clone_expression(expr)
-            return pCall
-        return [[ExpressionPtr]]
+            return <- pCall
+        return <- [[ExpressionPtr]]
     def override captureFunction ( prog:Program?; mod:Module?; var lcs:Structure?; var fun:FunctionPtr ) : void
         //! Implementation details for the capture macro.
         if fun.flags._generator // generator gets finally section called every single time. nothing we can do
             return
         for fld in lcs.fields
             if fld._type |> isPtrToJQ("Channel")
-                var pCall <- new [[ExprCall() at=fld.at, name:="jobque_boost::release_capture_jobque_channel"]]
+                var inscope pCall <- new [[ExprCall() at=fld.at, name:="jobque_boost::release_capture_jobque_channel"]]
                 pCall.arguments |> emplace_new <| new [[ExprField() at=fld.at,
                     value <- new [[ExprVar() at=fld.at, name:="__this"]],
                     name := fld.name,
@@ -167,7 +168,7 @@ class private ChannelAndStatusCapture : AstCaptureMacro
                 ]]
                 (fun.body as ExprBlock).finalList |> emplace(pCall)
             elif fld._type |> isPtrToJQ("JobStatus")
-                var pCall <- new [[ExprCall() at=fld.at, name:="jobque_boost::release_capture_jobque_job_status"]]
+                var inscope pCall <- new [[ExprCall() at=fld.at, name:="jobque_boost::release_capture_jobque_job_status"]]
                 pCall.arguments |> emplace_new <| new [[ExprField() at=fld.at,
                     value <- new [[ExprVar() at=fld.at, name:="__this"]],
                     name := fld.name,
