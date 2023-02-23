@@ -124,8 +124,7 @@ jobs:
                 cmake --build ./build --config ${{ matrix.cmake_preset }} --target daScriptTest
                 ;;
               *)
-                CC=clang CXX=clang++ 
-                cmake --no-warn-unused-cli -B./build -DCMAKE_OSX_ARCHITECTURES="x86_64" -DCMAKE_PREFIX_PATH=/usr/local/opt/bison/bin -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }}  -G "${{ matrix.cmake_generator }}"
+                CC=clang CXX=clang++ cmake --no-warn-unused-cli -B./build -DCMAKE_OSX_ARCHITECTURES="x86_64" -DCMAKE_PREFIX_PATH=/usr/local/opt/bison/bin -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }}  -G "${{ matrix.cmake_generator }}"
                 cd build
                 ninja daScript
                 ninja daScriptTest
