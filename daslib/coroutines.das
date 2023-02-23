@@ -1,6 +1,7 @@
 options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
+options strict_smart_pointers = true
 
 module coroutines shared public
 
@@ -25,7 +26,7 @@ class private YieldFrom : AstCallMacro
         macro_verify( call.arguments.length==1,prog,call.at,"expecting yeild_from(iterator)" )
         macro_verify( call.arguments[0]._type.isIterator,prog,call.at,"expecting iterator" )
         let iname = make_unique_private_name("_yield_from_iterator",call.at)
-        return qmacro_block <|
+        return <- qmacro_block <|
             for $i(iname) in $e(call.arguments[0])
                 yield $i(iname)
 
@@ -38,7 +39,7 @@ class private CoContinue : AstCallMacro
         // TODO: verify if we are in coroutine
         // TODO: verify if we are in coroutine which returns bool
         macro_verify( call.arguments.length==0,prog,call.at,"expecting co_continue()" )
-        return qmacro_expr <|
+        return <- qmacro_expr <|
             yield true
 
 [call_macro(name="co_await")]
@@ -53,7 +54,7 @@ class private CoAwait : AstCallMacro
         // TODO: verify if we are calling co_await on a coroutine.
         macro_verify( call.arguments.length==1,prog,call.at,"expecting co_await(subroutine)" )
         let iname = make_unique_private_name("_co_await_iterator",call.at)
-        return qmacro_block <|
+        return <- qmacro_block <|
             for $i(iname) in $e(call.arguments[0])
                 yield $i(iname)
 
@@ -67,20 +68,15 @@ class private CoroutineMacro : AstFunctionAnnotation
     def override apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
         var inscope retT : TypeDeclPtr
         if func.result.baseType == Type tVoid || func.result.baseType == Type autoinfer
-            unsafe
-                retT <- qmacro_type <| type<bool>
+            move_new(retT) <| qmacro_type(type<bool>)
         else
-            unsafe
-                retT <- clone_type <| func.result
-        var blk <- qmacro_block <|
+            move_new(retT) <| clone_type(func.result)
+        var inscope blk <- qmacro_block <|
             return <- generator<$t(retT)>() <|
                 $e(func.body)
                 return false
-        func.body := null
-        func.body <- blk
-        func.result := null
-        unsafe
-            func.result <- qmacro_type <| type<iterator<$t(retT)>>
+        move(func.body) <| blk
+        move_new(func.result) <| qmacro_type(type<iterator<$t(retT)>>)
         return true
 
 def public cr_run ( var a : Coroutine )

@@ -2,6 +2,7 @@ options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 options multiple_contexts
+options strict_smart_pointers = true
 
 module decs shared public
 
