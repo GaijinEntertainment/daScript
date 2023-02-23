@@ -270,10 +270,20 @@ namespace das {
                     }
                 }
                 if (lr && rr) {
+                    if ( lr->moveSemantics != rr->moveSemantics ) {
+                        lr.reset(); // move semantics must match
+                        rr.reset();
+                    } else if ( lr->moveSemantics && lr->returnType->isPointer() && lr->returnType->smartPtr ) {
+                        lr.reset(); // we don't touch return <- of smart pointers (for now)
+                        rr.reset();
+                    }
+                }
+                if (lr && rr) {
                     if ( lr->subexpr ) {
                         auto newCond = make_smart<ExprOp3>(expr->at, "?", expr->cond, lr->subexpr, rr->subexpr);
                         newCond->type = make_smart<TypeDecl>(*lr->subexpr->type);
                         auto newRet = make_smart<ExprReturn>(expr->at, newCond);
+                        newRet->moveSemantics = lr->moveSemantics;
                         reportFolding();
                         return newRet;
                     } else {

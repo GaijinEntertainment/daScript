@@ -2,6 +2,7 @@ options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 options no_aot = true
+options strict_smart_pointers = true
 
 module ast_block_to_loop shared private
 
@@ -19,10 +20,10 @@ class B2LVisitor : AstVisitor
         replaceReturnWithContinue = rRetWC
         requireContinueCond = rCC
         loop_depth |> push(0)
-    def override visitExprReturn(expr:smart_ptr<ExprReturn>) : ExpressionPtr
+    def override visitExprReturn(var expr:smart_ptr<ExprReturn>) : ExpressionPtr
         if inClosure==0 && inArchetype==0
             if failOnReturn
-                return make_static_assert_false("return is not allowed inside this macros's block", expr.at)
+                return <- make_static_assert_false("return is not allowed inside this macros's block", expr.at)
             elif replaceReturnWithContinue
                 if expr.subexpr != null
                     return  <- new [[ExprIfThenElse() at=expr.at,
@@ -37,43 +38,43 @@ class B2LVisitor : AstVisitor
                         macro_error(compiling_program(),expr.at,"expecting return boolean (continue or stop)")
                     else
                         return <- new [[ExprContinue() at=expr.at]]
-        return expr
+        return <- expr
     def override preVisitExprFor(expr:smart_ptr<ExprFor>) : void
         loop_depth |> back ++
-    def override visitExprFor(expr:smart_ptr<ExprFor>) : ExpressionPtr
+    def override visitExprFor(var expr:smart_ptr<ExprFor>) : ExpressionPtr
         loop_depth |> back --
-        return expr
+        return <- expr
     def override preVisitExprWhile(expr:smart_ptr<ExprWhile>) : void
         loop_depth |> back ++
-    def override visitExprWhile(expr:smart_ptr<ExprWhile>) : ExpressionPtr
+    def override visitExprWhile(var expr:smart_ptr<ExprWhile>) : ExpressionPtr
         loop_depth |> back --
-        return expr
+        return <- expr
     def override preVisitExprBlock(blk:smart_ptr<ExprBlock>) : void
         if blk.blockFlags.isClosure
             inClosure ++
             loop_depth |> push(0)
-    def override visitExprBlock(blk:smart_ptr<ExprBlock>) : ExpressionPtr
+    def override visitExprBlock(var blk:smart_ptr<ExprBlock>) : ExpressionPtr
         if blk.blockFlags.isClosure
             inClosure --
             loop_depth |> pop()
-        return blk
+        return <- blk
     def override preVisitExprCall(expr:smart_ptr<ExprCall>): void
         if expr.name=="for_each_archetype"
             inArchetype ++
             loop_depth |> push(0)
-    def override visitExprCall(expr:smart_ptr<ExprCall>) : ExpressionPtr
+    def override visitExprCall(var expr:smart_ptr<ExprCall>) : ExpressionPtr
         if expr.name=="for_each_archetype"
             loop_depth |> pop()
             inArchetype --
-        return expr
-    def override visitExprBreak(expr:smart_ptr<ExprBreak>) : ExpressionPtr
+        return <- expr
+    def override visitExprBreak(var expr:smart_ptr<ExprBreak>) : ExpressionPtr
         if inClosure!=0 || inArchetype!=0 || loop_depth|>back!=0
-            return expr
-        return make_static_assert_false("break is not allowed inside this macros's block {loop_depth}", expr.at)
-    def override visitExprContinue(expr:smart_ptr<ExprContinue>) : ExpressionPtr
+            return <- expr
+        return <- make_static_assert_false("break is not allowed inside this macros's block {loop_depth}", expr.at)
+    def override visitExprContinue(var expr:smart_ptr<ExprContinue>) : ExpressionPtr
         if inClosure!=0 || inArchetype!=0 || loop_depth|>back!=0
-            return expr
-        return make_static_assert_false("continue is not allowed inside this macros's block {loop_depth}", expr.at)
+            return <- expr
+        return <- make_static_assert_false("continue is not allowed inside this macros's block {loop_depth}", expr.at)
 
 [macro_function]
 def public convert_block_to_loop(var blk:smart_ptr<Expression>; failOnReturn,replaceReturnWithContinue,requireContinueCond:bool )
@@ -82,9 +83,8 @@ def public convert_block_to_loop(var blk:smart_ptr<Expression>; failOnReturn,rep
     //! If `replaceReturnWithContinue` is true, then `return cond;` are replaced with `if cond; continue;`.
     //! If `requireContinueCond` is false, then `return;` is replaced with `continue;`, otherwise it is an error.
     var astVisitor = new B2LVisitor(failOnReturn,replaceReturnWithContinue,requireContinueCond)
-    var astVisitorAdapter <- make_visitor(*astVisitor)
+    var inscope astVisitorAdapter <- make_visitor(*astVisitor)
     visit(blk, astVisitorAdapter)
-    astVisitorAdapter := null
     unsafe
         delete astVisitor
 
