@@ -1650,6 +1650,13 @@ namespace das {
                     return promoteToCloneToMove(var);
                 }
             }
+            if ( var->init->rtti_isVar() ) {    // this folds specifically global a = b, where b is const
+                auto ivar = static_pointer_cast<ExprVar>(var->init);
+                if ( ivar->isGlobalVariable() && ivar->variable->init && ivar->variable->init->rtti_isConstant() ) {
+                    reportAstChanged();
+                    return ivar->variable->init;
+                }
+            }
             return Visitor::visitGlobalLetInit(var, init);
         }
         virtual VariablePtr visitGlobalLet ( const VariablePtr & var ) override {
@@ -4785,13 +4792,6 @@ namespace das {
             auto vars = findMatchingVar(expr->name, false);
             if ( vars.size()==1 ) {
                 auto var = vars.back();
-                if ( var->type && var->type->constant && var->init ) {  // try folding global variable values
-                    auto cvar = getConstExpr(var->init.get());
-                    if ( cvar ) {
-                        reportAstChanged();
-                        return cvar;
-                    }
-                }
                 expr->variable = var;
                 expr->type = make_smart<TypeDecl>(*var->type);
                 expr->type->ref = true;
