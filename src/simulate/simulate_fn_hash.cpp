@@ -6,13 +6,13 @@
 namespace das {
 
 #if 1
-#define debug_hash  sizeof
+#define debug_hash(...)
 #else
 #define debug_hash  printf
 #endif
 
 #if 1
-#define debug_aot_hash  sizeof
+#define debug_aot_hash(...)
 #else
 #define debug_aot_hash  printf
 #endif
@@ -190,7 +190,7 @@ namespace das {
 
     void collectDependencies ( FunctionPtr fun, const TBlock<void,TArray<Function *>,TArray<Variable *>> & block, Context * context, LineInfoArg * line ) {
         auto program = daScriptEnvironment::bound->g_Program;
-        if ( !program ) context->throw_error_at(*line, "Can't collect dependencies outside of compilation.");
+        if ( !program ) context->throw_error_at(line, "Can't collect dependencies outside of compilation.");
         program->markExecutableSymbolUse();
         DependencyCollector collector;
         collector.collect(fun.get());

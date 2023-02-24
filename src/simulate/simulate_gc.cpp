@@ -593,7 +593,7 @@ namespace das
                 tw << " " << uint64_t(f);
             }
             auto etext = stringHeap->allocateString(tw.str());
-            throw_error_at(*at, etext);
+            throw_error_at(at, etext);
         }
     }
 
@@ -853,7 +853,7 @@ namespace das
                 tw << " " << uint64_t(f);
             }
             auto etext = stringHeap->allocateString(tw.str());
-            throw_error_at(*at, etext);
+            throw_error_at(at, etext);
         }
     }
 }

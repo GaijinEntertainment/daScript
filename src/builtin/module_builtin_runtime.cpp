@@ -598,7 +598,7 @@ namespace das
     // core functions
 
     void builtin_throw ( char * text, Context * context, LineInfoArg * at ) {
-        context->throw_error_at(at ? *at : LineInfo(), text);
+        context->throw_error_at(at, text);
     }
 
     void builtin_print ( char * text, Context * context ) {
@@ -938,7 +938,7 @@ namespace das
     __forceinline void validate_smart_ptr ( void * ptr, Context * context, LineInfoArg * at ) {
         if ( !ptr ) return;
         ptr_ref_count * t = (ptr_ref_count *) ptr;
-        if ( !t->is_valid() ) context->throw_error_at(at ? *at : LineInfo(), "invalid smart pointer %p", ptr);
+        if ( !t->is_valid() ) context->throw_error_at(at, "invalid smart pointer %p", ptr);
     }
 
     void builtin_smart_ptr_move_new ( smart_ptr_raw<void> & dest, smart_ptr_raw<void> src, Context * context, LineInfoArg * at ) {
@@ -1044,7 +1044,7 @@ namespace das
     void gc0_save_ptr ( char * name, void * data, Context * context, LineInfoArg * line ) {
         uint64_t hash = hash_function ( *context, name );
         if ( g_static_storage.find(hash)!=g_static_storage.end() ) {
-            context->throw_error_at(*line, "gc0 already there %s (or hash collision)", name);
+            context->throw_error_at(line, "gc0 already there %s (or hash collision)", name);
         }
         g_static_storage[hash] = data;
     }
@@ -1221,7 +1221,7 @@ namespace das
                 (*daScriptEnvironment::bound->g_compilerLog) << text;
             }
         } else {
-            context->throw_error_at(at ? *at : LineInfo(), "can only write to compiler log during compilation");
+            context->throw_error_at(at, "can only write to compiler log during compilation");
         }
     }
 

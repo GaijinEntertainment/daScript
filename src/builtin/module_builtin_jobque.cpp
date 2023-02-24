@@ -93,17 +93,17 @@ namespace das {
     }
 
     void channelPush ( Channel * ch, void * data, Context * context, LineInfoArg * at ) {
-        if ( !ch ) context->throw_error_at(*at, "channelPush: channel is null");
+        if ( !ch ) context->throw_error_at(at, "channelPush: channel is null");
         ch->push(data, context);
     }
 
     void * channelPop ( Channel * ch, Context * context, LineInfoArg * at ) {
-        if ( !ch ) context->throw_error_at(*at, "channelPop: channel is null");
+        if ( !ch ) context->throw_error_at(at, "channelPop: channel is null");
         return ch->pop();
     }
 
     int channelAppend ( Channel * ch, int size, Context * context, LineInfoArg * at ) {
-        if ( !ch ) context->throw_error_at(*at, "channelPop: channel is null");
+        if ( !ch ) context->throw_error_at(at, "channelPop: channel is null");
         return ch->append(size);
     }
 
@@ -112,7 +112,7 @@ namespace das {
         ch.addRef();
         das_invoke<void>::invoke<Channel *>(context, at, blk, &ch);
         if ( ch.releaseRef() ) {
-            context->throw_error_at(*at, "channel beeing deleted while being used");
+            context->throw_error_at(at, "channel beeing deleted while being used");
         }
     }
 
@@ -121,7 +121,7 @@ namespace das {
         ch.addRef();
         das_invoke<void>::invoke<Channel *>(context, at, blk, &ch);
         if ( ch.releaseRef() ) {
-            context->throw_error_at(*at, "channel beeing deleted while being used");
+            context->throw_error_at(at, "channel beeing deleted while being used");
         }
     }
 
@@ -133,34 +133,34 @@ namespace das {
 
     void channelRemove( Channel * ch, Context * context, LineInfoArg * at ) {
         if (ch->releaseRef()) {
-            context->throw_error_at(*at, "channel beeing deleted while being used");
+            context->throw_error_at(at, "channel beeing deleted while being used");
         }
         delete ch;
     }
 
     void channelAddRef ( Channel * ch, Context * context, LineInfoArg * at ) {
-        if ( !ch ) context->throw_error_at(*at, "channelAddRef: channel is null");
+        if ( !ch ) context->throw_error_at(at, "channelAddRef: channel is null");
         ch->addRef();
     }
 
     void channelReleaseRef ( Channel * & ch, Context * context, LineInfoArg * at ) {
-        if ( !ch ) context->throw_error_at(*at, "channelReleaseRef: channel is null");
+        if ( !ch ) context->throw_error_at(at, "channelReleaseRef: channel is null");
         ch->releaseRef();
         ch = nullptr;
     }
 
     void waitForChannel ( Channel * status, Context * context, LineInfoArg * at ) {
-        if ( !status ) context->throw_error_at(*at, "waitForChannel: channel is null");
+        if ( !status ) context->throw_error_at(at, "waitForChannel: channel is null");
         status->wait();
     }
 
     void notifyChannel ( Channel * status, Context * context, LineInfoArg * at ) {
-        if ( !status ) context->throw_error_at(*at, "notifyChannel: channel is null");
+        if ( !status ) context->throw_error_at(at, "notifyChannel: channel is null");
         status->notify();
     }
 
     void notifyAndReleaseChannel ( Channel * & status, Context * context, LineInfoArg * at ) {
-        if ( !status ) context->throw_error_at(*at, "notifyAndReleaseChannel: channel is null");
+        if ( !status ) context->throw_error_at(at, "notifyAndReleaseChannel: channel is null");
         status->notifyAndRelease();
         status = nullptr;
     }
@@ -189,7 +189,7 @@ das::Context* get_clone_context( das::Context * ctx, uint32_t category );//link 
 namespace das {
 
     void new_job_invoke ( Lambda lambda, Func fn, int32_t lambdaSize, Context * context, LineInfoArg * lineinfo ) {
-        if ( !g_jobQue ) context->throw_error_at(*lineinfo, "need to be in 'with_job_que' block");
+        if ( !g_jobQue ) context->throw_error_at(lineinfo, "need to be in 'with_job_que' block");
         shared_ptr<Context> forkContext;
         forkContext.reset(get_clone_context(context, uint32_t(ContextCategory::job_clone)));
         auto ptr = forkContext->heap->allocate(lambdaSize + 16);
@@ -250,12 +250,12 @@ namespace das {
     }
 
     void jobStatusAddRef ( JobStatus * status, Context * context, LineInfoArg * at ) {
-        if ( !status ) context->throw_error_at(*at, "jobStatusAddRef: status is null");
+        if ( !status ) context->throw_error_at(at, "jobStatusAddRef: status is null");
         status->addRef();
     }
 
     void jobStatusReleaseRef ( JobStatus * & status, Context * context, LineInfoArg * at ) {
-        if ( !status ) context->throw_error_at(*at, "jobStatusReleaseRef: status is null");
+        if ( !status ) context->throw_error_at(at, "jobStatusReleaseRef: status is null");
         status->releaseRef();
         status = nullptr;
     }
@@ -267,28 +267,28 @@ namespace das {
         args[0] = cast<JobStatus *>::from(&status);
         context->invoke(block,args,nullptr,lineInfo);
         if ( int ref = status.releaseRef() ) {
-            context->throw_error_at(*lineInfo, "job status beeing deleted while being used (ref %i)", ref);
+            context->throw_error_at(lineInfo, "job status beeing deleted while being used (ref %i)", ref);
         }
     }
 
     void waitForJob ( JobStatus * status, Context * context, LineInfoArg * at ) {
-        if ( !status ) context->throw_error_at(*at, "waitForJob: status is null");
+        if ( !status ) context->throw_error_at(at, "waitForJob: status is null");
         status->Wait();
     }
 
     void notifyJob ( JobStatus * status, Context * context, LineInfoArg * at ) {
-        if ( !status ) context->throw_error_at(*at, "notifyJob: status is null");
+        if ( !status ) context->throw_error_at(at, "notifyJob: status is null");
         status->Notify();
     }
 
     void notifyAndReleaseJob ( JobStatus * & status, Context * context, LineInfoArg * at ) {
-        if ( !status ) context->throw_error_at(*at, "notifyAndReleaseJob: status is null");
+        if ( !status ) context->throw_error_at(at, "notifyAndReleaseJob: status is null");
         status->NotifyAndRelease();
         status = nullptr;
     }
 
     int getTotalHwJobs( Context * context, LineInfoArg * at ) {
-        if ( !g_jobQue ) context->throw_error_at(*at, "need to be in 'with_job_que' block");
+        if ( !g_jobQue ) context->throw_error_at(at, "need to be in 'with_job_que' block");
         return g_jobQue->getTotalHwJobs();
     }
 

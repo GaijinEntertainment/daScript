@@ -272,7 +272,7 @@ namespace das {
     }
 
     bool Module::addTypeInfoMacro ( const TypeInfoMacroPtr & ptr, bool canFail ) {
-        if ( typeInfoMacros.insert(make_pair(ptr->name, move(ptr))).second ) {
+        if ( typeInfoMacros.insert(make_pair(ptr->name, ptr)).second ) {
             ptr->seal(this);
             return true;
         } else {
@@ -284,7 +284,7 @@ namespace das {
     }
 
     bool Module::addReaderMacro ( const ReaderMacroPtr & ptr, bool canFail ) {
-        if ( readMacros.insert(make_pair(ptr->name, move(ptr))).second ) {
+        if ( readMacros.insert(make_pair(ptr->name, ptr)).second ) {
             ptr->seal(this);
             return true;
         } else {

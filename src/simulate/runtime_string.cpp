@@ -26,7 +26,7 @@ namespace das
             context.stringHeap->recognize(sAB);
             return cast<char *>::from(sAB);
         } else {
-            context.throw_error_at(at ? *at : LineInfo(), "can't add two strings, out of heap");
+            context.throw_error_at(at, "can't add two strings, out of heap");
             return v_zero();
         }
     }
@@ -47,7 +47,7 @@ namespace das
             *pA = sAB;
             context.stringHeap->recognize(sAB);
         } else {
-            context.throw_error_at(at ? *at : LineInfo(), "can't add two strings, out of heap");
+            context.throw_error_at(at, "can't add two strings, out of heap");
         }
     }
 
