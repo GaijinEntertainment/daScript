@@ -12,8 +12,26 @@ defaults:
 jobs:
 
   ###########################################################
+  pre_job:
+  ###########################################################
+    # continue-on-error: true # Uncomment once integration is finished
+    runs-on: ubuntu-latest
+    # Map a step output to a job output
+    outputs:
+      should_skip: ${{ steps.skip_check.outputs.should_skip }}
+    steps:
+      - id: skip_check
+        uses: fkirc/skip-duplicate-actions@v5
+        with:
+          # All of these options are optional, so you can remove them if you are happy with the defaults
+          concurrent_skipping: 'same_content_newer'
+          do_not_skip: '["workflow_dispatch"]'
+
+  ###########################################################
   build:
   ###########################################################
+    needs: pre_job
+    if: needs.pre_job.outputs.should_skip != 'true'
     runs-on: ${{ matrix.runner }}
 
     strategy:
@@ -62,9 +80,6 @@ jobs:
             
           - target: linux
             architecture: 32
-            
-          - target: darwin
-            cmake_preset: Release
 
     steps:
     - name: "SCM Checkout"
@@ -149,7 +164,11 @@ jobs:
             ;;
            *)
             cd bin
-            ./daScriptTest
+            case "${{ matrix.cmake_preset }}" in
+              Debug)
+                ./daScriptTest
+                ;;
+            esac
             ./daScript _dasroot_/dastest/dastest.das -- --color --test ../tests
             ;;
         esac
