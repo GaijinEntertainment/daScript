@@ -164,7 +164,11 @@ jobs:
             ;;
            *)
             cd bin
-          # ./daScriptTest
+            case "${{ matrix.cmake_preset }}" in
+              Debug)
+                ./daScriptTest
+                ;;
+            esac
             ./daScript _dasroot_/dastest/dastest.das -- --color --test ../tests
             ;;
         esac
