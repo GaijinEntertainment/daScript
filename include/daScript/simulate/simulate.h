@@ -343,6 +343,7 @@ namespace das
         DAS_NORETURN_PREFIX void throw_error ( const char * message ) DAS_NORETURN_SUFFIX;
         DAS_NORETURN_PREFIX void throw_error_ex ( const char * message, ... ) DAS_NORETURN_SUFFIX;
         DAS_NORETURN_PREFIX void throw_error_at ( const LineInfo & at, const char * message, ... ) DAS_NORETURN_SUFFIX;
+        DAS_NORETURN_PREFIX void throw_error_at ( const LineInfo * at, const char * message, ... ) DAS_NORETURN_SUFFIX;
         DAS_NORETURN_PREFIX void throw_fatal_error ( const char * message, const LineInfo & at ) DAS_NORETURN_SUFFIX;
         DAS_NORETURN_PREFIX void rethrow () DAS_NORETURN_SUFFIX;
 
@@ -406,7 +407,7 @@ namespace das
             char * EP, *SP;
             if (!stack.push(fn->stackSize, EP, SP)) {
                 if ( line ) {
-                    throw_error_at(*line, "stack overflow while calling %s",fn->mangledName);
+                    throw_error_at(line, "stack overflow while calling %s",fn->mangledName);
                 } else {
                     throw_error_ex("stack overflow while calling %s",fn->mangledName);
                 }
@@ -447,7 +448,7 @@ namespace das
                 char * EP, *SP;
                 if (!stack.push(fn->stackSize, EP, SP)) {
                 if ( line ) {
-                    throw_error_at(*line, "stack overflow while calling %s",fn->mangledName);
+                    throw_error_at(line, "stack overflow while calling %s",fn->mangledName);
                 } else {
                     throw_error_ex("stack overflow while calling %s",fn->mangledName);
                 }
@@ -480,7 +481,7 @@ namespace das
             char * EP, *SP;
             if (!stack.push(fn->stackSize, EP, SP)) {
                 if ( line ) {
-                    throw_error_at(*line, "stack overflow while calling %s",fn->mangledName);
+                    throw_error_at(line, "stack overflow while calling %s",fn->mangledName);
                 } else {
                     throw_error_ex("stack overflow while calling %s",fn->mangledName);
                 }
@@ -520,7 +521,7 @@ namespace das
 #if DAS_ENABLE_STACK_WALK
             if (!stack.push_invoke(sizeof(Prologue), block.stackOffset, EP, SP)) {
                 if ( line ) {
-                    throw_error_at(*line, "stack overflow during invoke");
+                    throw_error_at(line, "stack overflow during invoke");
                 } else {
                     throw_error_ex("stack overflow during invoke");
                 }
@@ -568,7 +569,7 @@ namespace das
             char * EP, *SP;
             if(!stack.push(fn->stackSize,EP,SP)) {
                 if ( line ) {
-                    throw_error_at(*line, "stack overflow while calling %s",fn->mangledName);
+                    throw_error_at(line, "stack overflow while calling %s",fn->mangledName);
                 } else {
                     throw_error_ex("stack overflow while calling %s",fn->mangledName);
                 }
@@ -1009,7 +1010,7 @@ __forceinline void profileNode ( SimNode * node ) {
 #if DAS_ENABLE_STACK_WALK
         if (!stack.push_invoke(sizeof(Prologue), block.stackOffset, EP, SP)) {
                 if ( line ) {
-                    throw_error_at(*line, "stack overflow during invokeEx");
+                    throw_error_at(line, "stack overflow during invokeEx");
                 } else {
                     throw_error_ex("stack overflow while during invokeEx");
                 }

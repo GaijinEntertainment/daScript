@@ -154,7 +154,7 @@ namespace das {
 
 
     void builtin_fprint ( const FILE * f, const char * text, Context * context, LineInfoArg * at ) {
-        if ( !f ) context->throw_error_at(*at, "can't fprint NULL");
+        if ( !f ) context->throw_error_at(at, "can't fprint NULL");
         if ( text ) fputs(text,(FILE *)f);
     }
 
@@ -169,12 +169,12 @@ namespace das {
     }
 
     void builtin_fclose ( const FILE * f, Context * context, LineInfoArg * at ) {
-        if ( !f ) context->throw_error_at(*at, "can't fclose NULL");
+        if ( !f ) context->throw_error_at(at, "can't fclose NULL");
         fclose((FILE *)f);
     }
 
     void builtin_fflush ( const FILE * f, Context * context, LineInfoArg * at ) {
-        if ( !f ) context->throw_error_at(*at, "can't fflush NULL");
+        if ( !f ) context->throw_error_at(at, "can't fflush NULL");
         fflush((FILE *)f);
     }
 
@@ -196,7 +196,7 @@ namespace das {
     }
 
     void builtin_map_file(const FILE* f, const TBlock<void, TTemporary<TArray<uint8_t>>>& blk, Context* context, LineInfoArg * at) {
-        if ( !f ) context->throw_error_at(*at, "can't map NULL file");
+        if ( !f ) context->throw_error_at(at, "can't map NULL file");
         struct stat st;
         int fd = fileno((FILE *)f);
         fstat(fd, &st);
@@ -213,17 +213,17 @@ namespace das {
     }
 
     int64_t builtin_ftell ( const FILE * f, Context * context, LineInfoArg * at ) {
-        if ( !f ) context->throw_error_at(*at, "can't ftell NULL");
+        if ( !f ) context->throw_error_at(at, "can't ftell NULL");
         return ftell((FILE *)f);
     }
 
     int64_t builtin_fseek ( const FILE * f, int64_t offset, int32_t mode, Context * context, LineInfoArg * at ) {
-        if ( !f ) context->throw_error_at(*at, "can't fseek NULL");
+        if ( !f ) context->throw_error_at(at, "can't fseek NULL");
         return fseek((FILE *)f, long(offset), mode);
     }
 
     char * builtin_fread ( const FILE * f, Context * context, LineInfoArg * at ) {
-        if ( !f ) context->throw_error_at(*at, "can't fread NULL");
+        if ( !f ) context->throw_error_at(at, "can't fread NULL");
         struct stat st;
         int fd = fileno((FILE*)f);
         fstat(fd, &st);
@@ -231,13 +231,13 @@ namespace das {
         fseek((FILE*)f, 0, SEEK_SET);
         auto bytes = fread(res, 1, st.st_size, (FILE *)f);
         if ( uint64_t(bytes) != uint64_t(st.st_size) ) {
-            context->throw_error_at(*at, "incorrect fread result, expected %d, got %d bytes. read requires binary file mode", st.st_size, bytes);
+            context->throw_error_at(at, "incorrect fread result, expected %d, got %d bytes. read requires binary file mode", st.st_size, bytes);
         }
         return res;
     }
 
     char * builtin_fgets(const FILE* f, Context* context, LineInfoArg * at ) {
-        if ( !f ) context->throw_error_at(*at, "can't fgets NULL");
+        if ( !f ) context->throw_error_at(at, "can't fgets NULL");
         char buffer[16384];
         if (char* buf = fgets(buffer, sizeof(buffer), (FILE *)f)) {
             return context->stringHeap->allocateString(buf, uint32_t(strlen(buf)));
@@ -247,7 +247,7 @@ namespace das {
     }
 
     void builtin_fwrite ( const FILE * f, char * str, Context * context, LineInfoArg * at ) {
-        if ( !f ) context->throw_error_at(*at, "can't fprint NULL");
+        if ( !f ) context->throw_error_at(at, "can't fprint NULL");
         if (!str) return;
         uint32_t len = stringLength(*context, str);
         if (len) fwrite(str, 1, len, (FILE*)f);
@@ -365,7 +365,7 @@ namespace das {
     }
 
     bool builtin_fstat ( const FILE * f, FStat & fs, Context * context, LineInfoArg * at ) {
-        if ( !f ) context->throw_error_at(*at, "fstat of null");
+        if ( !f ) context->throw_error_at(at, "fstat of null");
         return fstat(fileno((FILE *)f), &fs.stats) == 0;
     }
 
@@ -428,7 +428,7 @@ namespace das {
 
     int builtin_popen ( const char * cmd, const TBlock<void,const FILE *> & blk, Context * context, LineInfoArg * at ) {
         if ( !cmd ) {
-            context->throw_error_at(*at, "popen of null");
+            context->throw_error_at(at, "popen of null");
             return -1;
         }
 #ifdef _MSC_VER

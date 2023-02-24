@@ -1787,33 +1787,33 @@ namespace das {
 
     void astVisit ( smart_ptr_raw<Program> program, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info ) {
         if (!adapter)
-            context->throw_error_at(*line_info, "adapter is required");
+            context->throw_error_at(line_info, "adapter is required");
         if (!program)
-            context->throw_error_at(*line_info, "program is required");
+            context->throw_error_at(line_info, "program is required");
         program->visit(*adapter);
     }
 
     void astVisitModulesInOrder ( smart_ptr_raw<Program> program, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info ) {
         if (!adapter)
-            context->throw_error_at(*line_info, "adapter is required");
+            context->throw_error_at(line_info, "adapter is required");
         if (!program)
-            context->throw_error_at(*line_info, "program is required");
+            context->throw_error_at(line_info, "program is required");
         program->visitModulesInOrder(*adapter);
     }
 
     void astVisitFunction ( smart_ptr_raw<Function> func, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info ) {
         if (!adapter)
-            context->throw_error_at(*line_info, "adapter is required");
+            context->throw_error_at(line_info, "adapter is required");
         if (!func)
-            context->throw_error_at(*line_info, "func is required");
+            context->throw_error_at(line_info, "func is required");
         func->visit(*adapter);
     }
 
     smart_ptr_raw<Expression> astVisitExpression ( smart_ptr_raw<Expression> expr, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info ) {
         if (!adapter)
-            context->throw_error_at(*line_info, "adapter is required");
+            context->throw_error_at(line_info, "adapter is required");
         if (!expr)
-            context->throw_error_at(*line_info, "expr is required");
+            context->throw_error_at(line_info, "expr is required");
         smart_ptr<Expression> res = expr->visit(*adapter);
         if ( res.get()!=expr.get() ) {
             DAS_VERIFYF(res->use_count()==1,"visitor returns new value, refcount must be 1 or else there will be a leak");
@@ -1824,9 +1824,9 @@ namespace das {
 
     void astVisitBlockFinally ( smart_ptr_raw<ExprBlock> expr, smart_ptr_raw<VisitorAdapter> adapter, Context * context, LineInfoArg * line_info ) {
         if (!adapter)
-            context->throw_error_at(*line_info, "adapter is required");
+            context->throw_error_at(line_info, "adapter is required");
         if (!expr)
-            context->throw_error_at(*line_info, "expr is required");
+            context->throw_error_at(line_info, "expr is required");
         expr->visitFinally(*adapter);
     }
 

@@ -1607,7 +1607,7 @@ namespace das
     }
 
     void installDebugAgent ( DebugAgentPtr newAgent, const char * category, LineInfoArg * at, Context * context ) {
-        if ( !category ) context->throw_error_at(*at, "need to specify category");
+        if ( !category ) context->throw_error_at(at, "need to specify category");
         std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
         auto it = g_DebugAgents.find(category);
         if ( it != g_DebugAgents.end() ) {
@@ -1627,16 +1627,16 @@ namespace das
     }
 
     Context & getDebugAgentContext ( const char * category, LineInfoArg * at, Context * context ) {
-        if ( !category ) context->throw_error_at(*at, "need to specify category");
+        if ( !category ) context->throw_error_at(at, "need to specify category");
         std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
         auto it = g_DebugAgents.find(category);
-        if ( it == g_DebugAgents.end() ) context->throw_error_at(*at, "can't get debug agent '%s'", category);
-        if ( !it->second.debugAgentContext ) context->throw_error_at(*at, "debug agent '%s' is a CPP-only agent", category);
+        if ( it == g_DebugAgents.end() ) context->throw_error_at(at, "can't get debug agent '%s'", category);
+        if ( !it->second.debugAgentContext ) context->throw_error_at(at, "debug agent '%s' is a CPP-only agent", category);
         return *it->second.debugAgentContext;
     }
 
     bool hasDebugAgentContext ( const char * category, LineInfoArg * at, Context * context ) {
-        if ( !category ) context->throw_error_at(*at, "need to specify category");
+        if ( !category ) context->throw_error_at(at, "need to specify category");
         std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
         auto it = g_DebugAgents.find(category);
         return it != g_DebugAgents.end();
@@ -1712,6 +1712,16 @@ namespace das
         if (message) {
             das_to_stderr("%s", message);
         }
+    }
+
+    void Context::throw_error_at ( const LineInfo * at, const char * message, ... ) {
+        const int PRINT_BUFFER_SIZE = 8192;
+        char buffer[PRINT_BUFFER_SIZE];
+        va_list args;
+        va_start (args, message);
+        vsnprintf (buffer,PRINT_BUFFER_SIZE,message, args);
+        va_end (args);
+        throw_fatal_error(buffer, at ? *at : LineInfo());
     }
 
     void Context::throw_error_at ( const LineInfo & at, const char * message, ... ) {

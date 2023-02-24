@@ -197,7 +197,7 @@ namespace das {
         case Type::tDouble:         return (void *) &TAB_FUN<double>; \
         case Type::tPointer:        return (void *) &TAB_FUN<void *>; \
     } \
-    context->throw_error_at(at ? *at : LineInfo(), "unsupported key type %s", das_to_string(Type(baseType)).c_str() ); \
+    context->throw_error_at(at, "unsupported key type %s", das_to_string(Type(baseType)).c_str() ); \
     return nullptr;
 
     template <typename KeyType>

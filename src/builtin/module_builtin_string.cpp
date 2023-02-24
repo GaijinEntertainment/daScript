@@ -316,44 +316,28 @@ namespace das
     int32_t fast_to_int ( const char *str, bool hex ) {
         if ( !str ) return 0;
         int32_t res = 0;
-        if ( hex ) {
-            sscanf(str,"%" SCNx32,&res);
-        } else {
-            sscanf(str,"%" SCNd32,&res);
-        }
+        if ( sscanf(str,hex ? ("%" SCNx32) : ("%" SCNd32),&res)!=1 ) res = 0;
         return res;
     }
 
     uint32_t fast_to_uint ( const char *str, bool hex ) {
         if ( !str ) return 0;
         uint32_t res = 0;
-        if ( hex ) {
-            sscanf(str,"%" SCNx32,&res);
-        } else {
-            sscanf(str,"%" SCNu32,&res);
-        }
+        if ( sscanf(str, hex ? ("%" SCNx32) : ("%" SCNu32),&res)!=1 ) res = 0;
         return res;
     }
 
     int64_t fast_to_int64 ( const char *str, bool hex ) {
         if ( !str ) return 0;
         int64_t res = 0;
-        if ( hex ) {
-            sscanf(str,"%" SCNx64,&res);
-        } else {
-            sscanf(str,"%" SCNd64,&res);
-        }
+        if ( sscanf(str,hex ? ("%" SCNx64) : ("%" SCNd64),&res)!=1 ) res = 0;
         return res;
     }
 
     uint64_t fast_to_uint64 ( const char *str, bool hex ) {
         if ( !str ) return 0;
         uint64_t res = 0;
-        if ( hex ) {
-            sscanf(str,"%" SCNx64,&res);
-        } else {
-            sscanf(str,"%" SCNu64,&res);
-        }
+        if ( sscanf(str, hex ? ("%" SCNx64) : ("%" SCNu64),&res)!=1 ) res = 0;
         return res;
     }
 

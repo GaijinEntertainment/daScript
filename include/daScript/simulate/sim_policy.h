@@ -40,12 +40,12 @@ namespace  das {
         static __forceinline TT IncPost ( TT & x, Context &, LineInfo * ) { return x++; }
         static __forceinline TT DecPost ( TT & x, Context &, LineInfo * ) { return x--; }
         static __forceinline TT Div ( TT a, TT b, Context & context, LineInfo * at ) {
-            if ( b==0 ) context.throw_error_at(at ? *at : LineInfo(), "division by zero");
+            if ( b==0 ) context.throw_error_at(at, "division by zero");
             return a / b;
         }
         static __forceinline TT Mul ( TT a, TT b, Context &, LineInfo * ) { return a * b; }
         static __forceinline void SetDiv  ( TT & a, TT b, Context & context, LineInfo * at ) {
-            if ( b==0 ) context.throw_error_at(at ? *at : LineInfo(), "division by zero");
+            if ( b==0 ) context.throw_error_at(at, "division by zero");
             a /= b;
         }
         static __forceinline void SetMul  ( TT & a, TT b, Context &, LineInfo * ) { a *= b; }
@@ -65,7 +65,7 @@ namespace  das {
     struct SimPolicy_Bin : SimPolicy_Type<TT> {
         enum { BITS = sizeof(TT)*8 };
         static __forceinline TT Mod ( TT a, TT b, Context & context, LineInfo * at ) {
-            if ( b==0 ) context.throw_error_at(at ? *at : LineInfo(), "division by zero in modulo");
+            if ( b==0 ) context.throw_error_at(at, "division by zero in modulo");
             return a % b;
         }
         static __forceinline TT BinNot ( TT x, Context &, LineInfo * ) { return ~x; }
@@ -100,7 +100,7 @@ namespace  das {
             _a = TT((a >> b) | (a << (BITS - b)));
         }
         static __forceinline void SetMod    ( TT & a, TT b, Context & context, LineInfo * at ) {
-            if ( b==0 ) context.throw_error_at(at ? *at : LineInfo(), "division by zero in modulo");
+            if ( b==0 ) context.throw_error_at(at, "division by zero in modulo");
             a %= b;
         }
     };
@@ -390,14 +390,14 @@ namespace  das {
         }
         static __forceinline vec4f Div ( vec4f a, vec4f b, Context & context, LineInfo * at ) {
             if ( v_signmask(v_cast_vec4f(v_cmp_eqi(v_cast_vec4i(v_zero()),v_cast_vec4i(b)))) & mask )
-                context.throw_error_at(*at,"division by zero");
+                context.throw_error_at(at,"division by zero");
                     if ( mask==7 )  return v_cast_vec4f(v_divi3(v_cast_vec4i(a),v_cast_vec4i(b)));
             else    if ( mask==3 )  return v_cast_vec4f(v_divi2(v_cast_vec4i(a),v_cast_vec4i(b)));
             else                    return v_cast_vec4f(v_divi4(v_cast_vec4i(a),v_cast_vec4i(b)));
         }
         static __forceinline vec4f Mod ( vec4f a, vec4f b, Context & context, LineInfo * at ) {
             if ( v_signmask(v_cast_vec4f(v_cmp_eqi(v_cast_vec4i(v_zero()),v_cast_vec4i(b)))) & mask )
-                context.throw_error_at(*at,"division by zero");
+                context.throw_error_at(at,"division by zero");
                     if ( mask==7 )  return v_cast_vec4f(v_modi3(v_cast_vec4i(a),v_cast_vec4i(b)));
             else    if ( mask==3 )  return v_cast_vec4f(v_modi2(v_cast_vec4i(a),v_cast_vec4i(b)));
             else                    return v_cast_vec4f(v_modi4(v_cast_vec4i(a),v_cast_vec4i(b)));
@@ -436,7 +436,7 @@ namespace  das {
         }
         static __forceinline void SetDiv  ( char * a, vec4f b, Context & context, LineInfo * at ) {
             if ( v_signmask(v_cast_vec4f(v_cmp_eqi(v_cast_vec4i(v_zero()),v_cast_vec4i(b)))) & mask )
-                context.throw_error_at(*at,"division by zero");
+                context.throw_error_at(at,"division by zero");
             TT * pa = (TT *)a;
                     if ( mask==7 )  *pa = cast<TT>::to (v_cast_vec4f(v_divi3(v_cast_vec4i(cast<TT>::from(*pa)), v_cast_vec4i(b))));
             else    if ( mask==3 )  *pa = cast<TT>::to (v_cast_vec4f(v_divi2(v_cast_vec4i(cast<TT>::from(*pa)), v_cast_vec4i(b))));
@@ -444,7 +444,7 @@ namespace  das {
         }
         static __forceinline void SetMod  ( char * a, vec4f b, Context & context, LineInfo * at ) {
             if ( v_signmask(v_cast_vec4f(v_cmp_eqi(v_cast_vec4i(v_zero()),v_cast_vec4i(b)))) & mask )
-                context.throw_error_at(*at,"division by zero");
+                context.throw_error_at(at,"division by zero");
             TT * pa = (TT *)a;
                     if ( mask==7 )  *pa = cast<TT>::to (v_cast_vec4f(v_modi3(v_cast_vec4i(cast<TT>::from(*pa)), v_cast_vec4i(b))));
             else    if ( mask==3 )  *pa = cast<TT>::to (v_cast_vec4f(v_modi2(v_cast_vec4i(cast<TT>::from(*pa)), v_cast_vec4i(b))));
@@ -486,21 +486,21 @@ namespace  das {
         }
         static __forceinline vec4f DivVecScal ( vec4f a, vec4f b, Context & context, LineInfo * at ) {
             if ( v_extract_xi(v_cast_vec4i(b))==0 )
-                context.throw_error_at(*at,"division by zero");
+                context.throw_error_at(at,"division by zero");
                     if ( mask==7 )  return v_cast_vec4f(v_divi3(v_cast_vec4i(a),v_splat_xi(v_cast_vec4i(b))));
             else    if ( mask==3 )  return v_cast_vec4f(v_divi2(v_cast_vec4i(a),v_splat_xi(v_cast_vec4i(b))));
             else                    return v_cast_vec4f(v_divi4(v_cast_vec4i(a),v_splat_xi(v_cast_vec4i(b))));
         }
         static __forceinline vec4f DivScalVec ( vec4f a, vec4f b, Context & context, LineInfo * at ) {
             if ( v_signmask(v_cast_vec4f(v_cmp_eqi(v_cast_vec4i(v_zero()),v_cast_vec4i(b)))) & mask )
-                context.throw_error_at(*at,"division by zero");
+                context.throw_error_at(at,"division by zero");
                     if ( mask==7 )  return v_cast_vec4f(v_divi3(v_splat_xi(v_cast_vec4i(a)),v_cast_vec4i(b)));
             else    if ( mask==3 )  return v_cast_vec4f(v_divi2(v_splat_xi(v_cast_vec4i(a)),v_cast_vec4i(b)));
             else                    return v_cast_vec4f(v_divi4(v_splat_xi(v_cast_vec4i(a)),v_cast_vec4i(b)));
         }
         static __forceinline void SetDivScal ( char * a, vec4f b, Context & context, LineInfo * at ) {
             if ( v_extract_xi(v_cast_vec4i(b))==0 )
-                context.throw_error_at(*at,"division by zero");
+                context.throw_error_at(at,"division by zero");
             TT * pa = (TT *)a;
                     if ( mask==7 )  *pa = cast<TT>::to (v_cast_vec4f(v_divi3(v_cast_vec4i(cast<TT>::from(*pa)),v_splat_xi(v_cast_vec4i(b)))));
             else    if ( mask==3 )  *pa = cast<TT>::to (v_cast_vec4f(v_divi2(v_cast_vec4i(cast<TT>::from(*pa)),v_splat_xi(v_cast_vec4i(b)))));
@@ -531,14 +531,14 @@ namespace  das {
         }
         static __forceinline vec4f Div ( vec4f a, vec4f b, Context & context, LineInfo * at ) {
             if ( v_signmask(v_cast_vec4f(v_cmp_eqi(v_cast_vec4i(v_zero()),v_cast_vec4i(b)))) & mask )
-                context.throw_error_at(*at,"division by zero");
+                context.throw_error_at(at,"division by zero");
                     if ( mask==7 )  return v_cast_vec4f(v_divu3(v_cast_vec4i(a), v_cast_vec4i(b)));
             else    if ( mask==3 )  return v_cast_vec4f(v_divu2(v_cast_vec4i(a), v_cast_vec4i(b)));
             else                    return v_cast_vec4f(v_divu4(v_cast_vec4i(a), v_cast_vec4i(b)));
         }
         static __forceinline vec4f Mod ( vec4f a, vec4f b, Context & context, LineInfo * at ) {
             if ( v_signmask(v_cast_vec4f(v_cmp_eqi(v_cast_vec4i(v_zero()),v_cast_vec4i(b)))) & mask )
-                context.throw_error_at(*at,"division by zero");
+                context.throw_error_at(at,"division by zero");
                     if ( mask==7 )  return v_cast_vec4f(v_modu3(v_cast_vec4i(a),v_cast_vec4i(b)));
             else    if ( mask==3 )  return v_cast_vec4f(v_modu2(v_cast_vec4i(a),v_cast_vec4i(b)));
             else                    return v_cast_vec4f(v_modu4(v_cast_vec4i(a),v_cast_vec4i(b)));
@@ -549,7 +549,7 @@ namespace  das {
         }
         static __forceinline void SetDiv  ( char * a, vec4f b, Context & context, LineInfo * at ) {
             if ( v_signmask(v_cast_vec4f(v_cmp_eqi(v_cast_vec4i(v_zero()),v_cast_vec4i(b)))) & mask )
-                context.throw_error_at(*at,"division by zero");
+                context.throw_error_at(at,"division by zero");
             TT * pa = (TT *)a;
                     if ( mask==7 )  *pa = cast<TT>::to (v_cast_vec4f(v_divu3(v_cast_vec4i(cast<TT>::from(*pa)), v_cast_vec4i(b))));
             else    if ( mask==3 )  *pa = cast<TT>::to (v_cast_vec4f(v_divu2(v_cast_vec4i(cast<TT>::from(*pa)), v_cast_vec4i(b))));
@@ -557,7 +557,7 @@ namespace  das {
         }
         static __forceinline void SetMod  ( char * a, vec4f b, Context & context, LineInfo * at ) {
             if ( v_signmask(v_cast_vec4f(v_cmp_eqi(v_cast_vec4i(v_zero()),v_cast_vec4i(b)))) & mask )
-                context.throw_error_at(*at,"division by zero");
+                context.throw_error_at(at,"division by zero");
             TT * pa = (TT *)a;
                     if ( mask==7 )  *pa = cast<TT>::to (v_cast_vec4f(v_modu3(v_cast_vec4i(cast<TT>::from(*pa)), v_cast_vec4i(b))));
             else    if ( mask==3 )  *pa = cast<TT>::to (v_cast_vec4f(v_modu2(v_cast_vec4i(cast<TT>::from(*pa)), v_cast_vec4i(b))));
@@ -586,21 +586,21 @@ namespace  das {
         }
         static __forceinline vec4f DivVecScal ( vec4f a, vec4f b, Context & context, LineInfo * at ) {
             if ( v_extract_xi(v_cast_vec4i(b))==0 )
-                context.throw_error_at(*at,"division by zero");
+                context.throw_error_at(at,"division by zero");
                     if ( mask==7 )  return v_cast_vec4f(v_divu3(v_cast_vec4i(a),v_splat_xi(v_cast_vec4i(b))));
             else    if ( mask==3 )  return v_cast_vec4f(v_divu2(v_cast_vec4i(a),v_splat_xi(v_cast_vec4i(b))));
             else                    return v_cast_vec4f(v_divu4(v_cast_vec4i(a),v_splat_xi(v_cast_vec4i(b))));
         }
         static __forceinline vec4f DivScalVec ( vec4f a, vec4f b, Context & context, LineInfo * at ) {
             if ( v_signmask(v_cast_vec4f(v_cmp_eqi(v_cast_vec4i(v_zero()),v_cast_vec4i(b)))) & mask )
-                context.throw_error_at(*at,"division by zero");
+                context.throw_error_at(at,"division by zero");
                     if ( mask==7 )  return v_cast_vec4f(v_divu3(v_splat_xi(v_cast_vec4i(a)), v_cast_vec4i(b)));
             else    if ( mask==3 )  return v_cast_vec4f(v_divu2(v_splat_xi(v_cast_vec4i(a)), v_cast_vec4i(b)));
             else                    return v_cast_vec4f(v_divu4(v_splat_xi(v_cast_vec4i(a)), v_cast_vec4i(b)));
         }
         static __forceinline void SetDivScal ( char * a, vec4f b, Context & context, LineInfo * at ) {
             if ( v_extract_xi(v_cast_vec4i(b))==0 )
-                context.throw_error_at(*at,"division by zero");
+                context.throw_error_at(at,"division by zero");
             TT * pa = (TT *)a;
                     if ( mask==7 )  *pa = cast<TT>::to (v_cast_vec4f(v_divu3(v_cast_vec4i(cast<TT>::from(*pa)),v_splat_xi(v_cast_vec4i(b)))));
             else    if ( mask==3 )  *pa = cast<TT>::to (v_cast_vec4f(v_divu2(v_cast_vec4i(cast<TT>::from(*pa)),v_splat_xi(v_cast_vec4i(b)))));
