@@ -1650,6 +1650,13 @@ namespace das {
                     return promoteToCloneToMove(var);
                 }
             }
+            if ( var->init->rtti_isVar() ) {    // this folds specifically global a = b, where b is const
+                auto ivar = static_pointer_cast<ExprVar>(var->init);
+                if ( ivar->isGlobalVariable() && ivar->variable->init && ivar->variable->init->rtti_isConstant() ) {
+                    reportAstChanged();
+                    return ivar->variable->init;
+                }
+            }
             return Visitor::visitGlobalLetInit(var, init);
         }
         virtual VariablePtr visitGlobalLet ( const VariablePtr & var ) override {
