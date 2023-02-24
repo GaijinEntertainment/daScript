@@ -33,7 +33,8 @@ def _move_with_lockcheck ( var a:auto(valA)&; var b:auto(valB)& )
         unsafe
             a <- b
     else
-        a <- b
+        unsafe
+            a <- b
 
 def _return_with_lockcheck ( var a:auto(valT)& ==const ) : valT&
     static_if typeinfo(need_lock_check type<valT>)

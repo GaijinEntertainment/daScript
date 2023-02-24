@@ -1,4 +1,5 @@
 options indenting = 4
+options strict_smart_pointers = true
 
 module utf8_utils shared
 

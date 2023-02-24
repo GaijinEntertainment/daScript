@@ -1,6 +1,7 @@
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 options indenting = 4
+options strict_smart_pointers = true
 
 module regex_boost shared private
 
@@ -29,10 +30,10 @@ class RegexReader : AstReaderMacro
         if !is_valid(regex)
             delete regex
             macro_error(prog,expr.at,"regular expression did not compile")
-            return [[ExpressionPtr]]
+            return <- [[ExpressionPtr]]
         // TODO: turn into AOT?
-        var re_data <- convert_to_expression(regex,expr.at)
+        var inscope re_data <- convert_to_expression(regex,expr.at)
         delete regex
-        var creg <- new [[ExprCall() at=expr.at, name:="regex::regex_compile"]]
+        var inscope creg <- new [[ExprCall() at=expr.at, name:="regex::regex_compile"]]
         emplace(creg.arguments,re_data)
-        return creg
+        return <- creg
