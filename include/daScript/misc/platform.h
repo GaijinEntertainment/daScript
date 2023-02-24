@@ -194,6 +194,8 @@ __forceinline uint32_t rotr_c(uint32_t a, uint32_t b) {
 
 #include "daScript/misc/hal.h"
 
+void os_debug_break();
+
 #ifndef DAS_FATAL_LOG
 #define DAS_FATAL_LOG   printf
 #endif
@@ -207,26 +209,74 @@ __forceinline uint32_t rotr_c(uint32_t a, uint32_t b) {
 #endif
 
 #ifndef DAS_ASSERT
-    #define DAS_ASSERT(a)   assert(a)
-#endif
-
-#ifndef DAS_VERIFY
     #ifdef NDEBUG
-        #define DAS_VERIFY(a)   (a)
+        #define DAS_ASSERT(cond)
     #else
-        #define DAS_VERIFY(a)   assert(a)
+        #define DAS_ASSERT(cond) { \
+            if ( !(cond) ) { \
+                printf("assertion failed: %s, %s:%d\n", #cond, __FILE__, __LINE__); \
+                fflush(stdout); \
+                os_debug_break(); \
+            } \
+        }
     #endif
 #endif
 
 #ifndef DAS_ASSERTF
-    #define DAS_ASSERTF(a, msg, ...)   assert((a) && (msg))
+    #ifdef NDEBUG
+        #define DAS_ASSERTF(cond,...)
+    #else
+        #define DAS_ASSERTF(cond,...) { \
+            if ( !(cond) ) { \
+                printf("assertion failed: %s, %s:%d\n", #cond, __FILE__, __LINE__); \
+                printf(__VA_ARGS__); \
+                fflush(stdout); \
+                os_debug_break(); \
+            } \
+        }
+    #endif
+#endif
+
+
+#ifndef DAS_VERIFY
+    #ifdef NDEBUG
+        #define DAS_VERIFY(cond) { \
+            if ( !(cond) ) { \
+                printf("verify failed: %s, %s:%d\n", #cond, __FILE__, __LINE__); \
+                fflush(stdout); \
+                exit(-1); \
+            } \
+        }
+    #else
+        #define DAS_VERIFY(cond) { \
+            if ( !(cond) ) { \
+                printf("verify failed: %s, %s:%d\n", #cond, __FILE__, __LINE__); \
+                fflush(stdout); \
+                os_debug_break(); \
+            } \
+        }
+    #endif
 #endif
 
 #ifndef DAS_VERIFYF
     #ifdef NDEBUG
-        #define DAS_VERIFYF(a, msg, ...)   (a)
+        #define DAS_VERIFYF(cond,...) { \
+            if ( !(cond) ) { \
+                printf("verify failed: %s, %s:%d\n", #cond, __FILE__, __LINE__); \
+                printf(__VA_ARGS__); \
+                fflush(stdout); \
+                exit(-1); \
+            } \
+        }
     #else
-        #define DAS_VERIFYF(a, msg, ...)   assert((a) && (msg))
+        #define DAS_VERIFYF(cond,...) { \
+            if ( !(cond) ) { \
+                printf("verify failed: %s, %s:%d\n", #cond, __FILE__, __LINE__); \
+                printf(__VA_ARGS__); \
+                fflush(stdout); \
+                os_debug_break(); \
+            } \
+        }
     #endif
 #endif
 
