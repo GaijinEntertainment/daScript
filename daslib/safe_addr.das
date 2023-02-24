@@ -2,6 +2,7 @@ options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 options no_aot = true
+options strict_smart_pointers = true
 
 module safe_addr shared private
 
@@ -28,7 +29,7 @@ class SafeAddrMacro : AstFunctionAnnotation
     def override transform ( var call : smart_ptr<ExprCallFunc>; var errors : das_string ) : ExpressionPtr
         if !is_local_or_global_expr(ExpressionPtr(call.arguments[0]))
             compiling_program() |> macro_error(call.at,"not a local value")
-        return [[ExpressionPtr]]
+        return <- [[ExpressionPtr]]
 
 // [tag_function(temp_addr_tag)]
 def public temp_ptr(x : auto(T)? implicit ==const) : T ? const #

@@ -2,6 +2,7 @@ options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 options no_aot = true
+options strict_smart_pointers = true
 
 module stub shared private
 
@@ -19,17 +20,15 @@ class TemplateMacro : AstFunctionAnnotation
             arg.flags |= VariableFlags marked_used
         if func.result.baseType == Type tVoid
             return true
-        var resType <- clone_type(func.result)
+        var inscope resType <- clone_type(func.result)
         if !resType.flags.ref
             resType.flags &= ~TypeDeclFlags constant
-        var qblk <- qmacro_block <|
+        var inscope qblk <- qmacro_block <|
             panic("stub function called")
             unsafe
                 var dummy : $t(resType)
                 return <- dummy
         qblk |> force_at(func.body.at)
-        func.body := qblk
-        delete qblk
-        delete resType
+        move(func.body) <| qblk
         return true
 
