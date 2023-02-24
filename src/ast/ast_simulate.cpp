@@ -2948,7 +2948,7 @@ namespace das
                     if (!pvar->used)
                         return;
                     if ( pvar->index<0 ) {
-                        error("Internalc compiler errors. Simulating variable which is not used" + pvar->name,
+                        error("Internal compiler errors. Simulating variable which is not used" + pvar->name,
                             "", "", LineInfo());
                         return;
                     }

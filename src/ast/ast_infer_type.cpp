@@ -4785,6 +4785,13 @@ namespace das {
             auto vars = findMatchingVar(expr->name, false);
             if ( vars.size()==1 ) {
                 auto var = vars.back();
+                if ( var->type && var->type->constant && var->init ) {  // try folding global variable values
+                    auto cvar = getConstExpr(var->init.get());
+                    if ( cvar ) {
+                        reportAstChanged();
+                        return cvar;
+                    }
+                }
                 expr->variable = var;
                 expr->type = make_smart<TypeDecl>(*var->type);
                 expr->type->ref = true;

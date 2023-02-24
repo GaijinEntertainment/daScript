@@ -273,6 +273,30 @@ namespace das {
                 }
             }
         }
+        virtual void preVisitGlobalLetInit ( const VariablePtr & var, Expression * that ) override {
+            Visitor::preVisitGlobalLetInit(var,that);
+            globalVar = var.get();
+        }
+        virtual ExpressionPtr visitGlobalLetInit ( const VariablePtr & var, Expression * that ) override {
+            globalVar->index = -3; // initialized. -1 by default
+            globalVar = nullptr;
+            return Visitor::visitGlobalLetInit(var,that);;
+        }
+        virtual void preVisit(ExprVar * expr) override {
+            Visitor::preVisit(expr);
+            if ( globalVar && expr->isGlobalVariable() ) {
+                if ( expr->variable->index!=-3 ) {
+                    if ( expr->variable==globalVar ) {
+                        program->error("global variable " + expr->name + " cant't be initialized with itself",
+                            "", "", expr->at, CompilationError::variable_not_found);
+                    } else {
+                        program->error("global variable " + expr->name + " is initialized after " + globalVar->name,
+                            "", "", expr->at, CompilationError::variable_not_found);
+                    }
+                }
+            }
+        }
+
         virtual void preVisit(ExprFor * expr) override {
             Visitor::preVisit(expr);
             DAS_ASSERT(expr->visibility.line);
@@ -533,6 +557,7 @@ namespace das {
     public:
         ProgramPtr program;
         Function * func = nullptr;
+        Variable * globalVar = nullptr;
         bool anyUnsafe = false;
     };
 
