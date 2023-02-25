@@ -27,7 +27,7 @@ add_link_options(-fwasm-exceptions)
 add_compile_definitions(DAS_ENABLE_EXCEPTIONS)
 add_compile_definitions(_EMSCRIPTEN_VER)
 
-set(CMAKE_CXX_FLAGS "-s TOTAL_MEMORY=128MB")
+set(CMAKE_CXX_FLAGS_RELEASE "-s TOTAL_MEMORY=128MB")
 
 INCLUDE(../CMakeCommon.txt)
 
