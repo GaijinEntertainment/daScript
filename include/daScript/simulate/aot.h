@@ -2086,7 +2086,7 @@ namespace das {
             bool unique = false;
             SimFunction * simFunc = __context__->findFunction(funcName, unique);
             if (!simFunc) __context__->throw_error("invoke null function");
-            if (!unique) __context__->throw_error_ex("invoke non-unique function ", funcName);
+            if (!unique) __context__->throw_error_ex("invoke non-unique function %s", funcName);
             if ( simFunc->cmres ) __context__->throw_error_ex("can't dynamically invoke function %s, which returns by reference",funcName);
             if ( simFunc->unsafe ) __context__->throw_error_ex("can't dynamically invoke unsafe function %s",funcName);
             if ( simFunc->aotFunction ) {
@@ -2104,7 +2104,7 @@ namespace das {
             bool unique = false;
             SimFunction * simFunc = __context__->findFunction(funcName, unique);
             if (!simFunc) __context__->throw_error("invoke null function");
-            if (!unique) __context__->throw_error_ex("invoke non-unique function ", funcName);
+            if (!unique) __context__->throw_error_ex("invoke non-unique function %s", funcName);
             if ( simFunc->cmres ) __context__->throw_error_ex("can't dynamically invoke function %s, which returns by reference",funcName);
             if ( simFunc->unsafe ) __context__->throw_error_ex("can't dynamically invoke unsafe function %s",funcName);
             if ( simFunc->aotFunction ) {
@@ -2126,7 +2126,7 @@ namespace das {
             bool unique = false;
             SimFunction * simFunc = __context__->findFunction(funcName, unique);
             if (!simFunc) __context__->throw_error("invoke null function");
-            if (!unique) __context__->throw_error_ex("invoke non-unique function ", funcName);
+            if (!unique) __context__->throw_error_ex("invoke non-unique function %s", funcName);
             if ( simFunc->cmres ) __context__->throw_error_ex("can't dynamically invoke function %s, which returns by reference",funcName);
             if ( simFunc->unsafe ) __context__->throw_error_ex("can't dynamically invoke unsafe function %s",funcName);
             __context__->callOrFastcall(simFunc, nullptr, __lineinfo__);
@@ -2138,7 +2138,7 @@ namespace das {
             bool unique = false;
             SimFunction * simFunc = __context__->findFunction(funcName, unique);
             if (!simFunc) __context__->throw_error("invoke null function");
-            if (!unique) __context__->throw_error_ex("invoke non-unique function ", funcName);
+            if (!unique) __context__->throw_error_ex("invoke non-unique function %s", funcName);
             if ( simFunc->cmres ) __context__->throw_error_ex("can't dynamically invoke function %s, which returns by reference",funcName);
             if ( simFunc->unsafe ) __context__->throw_error_ex("can't dynamically invoke unsafe function %s",funcName);
             __context__->callOrFastcall(simFunc, arguments, __lineinfo__);

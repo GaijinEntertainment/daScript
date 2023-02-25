@@ -598,7 +598,7 @@ namespace das
     // core functions
 
     void builtin_throw ( char * text, Context * context, LineInfoArg * at ) {
-        context->throw_error_at(at, text);
+        context->throw_error_at(at, "%s", text);
     }
 
     void builtin_print ( char * text, Context * context ) {
