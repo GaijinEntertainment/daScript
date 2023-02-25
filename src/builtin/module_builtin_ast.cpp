@@ -545,6 +545,9 @@ namespace das {
         lib.addBuiltInModule();
         lib.addModule(Module::require("rtti"));
         registerAnnotations(lib);
+        registerAnnotations1(lib);
+        registerAnnotations2(lib);
+        registerAnnotations3(lib);
         registerAdapterAnnotations(lib);
         registerMacroExpressions(lib);
         registerFunctions(lib);

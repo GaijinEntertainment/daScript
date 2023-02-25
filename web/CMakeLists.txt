@@ -632,7 +632,7 @@ if (NOT ${DAS_BUILD_TOOLS} MATCHES NO)
   SOURCE_GROUP_FILES("main" DASCRIPT_MAIN_SRC)
 
   add_executable(daScript ${DASCRIPT_MAIN_SRC})
-  TARGET_LINK_LIBRARIES(daScript libDaScript libDaScriptProfile  Threads::Threads ${DAS_MODULES_LIBS})
+  TARGET_LINK_LIBRARIES(daScript libDaScript Threads::Threads ${DAS_MODULES_LIBS})
   SETUP_CPP11(daScript)
   SETUP_LTO(daScript)
 
