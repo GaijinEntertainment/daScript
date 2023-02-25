@@ -218,6 +218,7 @@ namespace das
         const FieldDeclaration * findField ( const string & name ) const;
         const Structure * findFieldParent ( const string & name ) const;
         int getSizeOf() const;
+        uint64_t getSizeOf64() const;
         int getAlignOf() const;
         __forceinline bool canCopy() const { return canCopy(false); }
         bool canCopy(bool tempMatters) const;

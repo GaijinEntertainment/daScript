@@ -193,6 +193,13 @@ namespace das {
             Visitor::preVisit(td);
             lintType(td);
         }
+        virtual void preVisitAlias ( TypeDecl * td, const string & name ) override {
+            Visitor::preVisitAlias(td,name);
+            if ( td->getSizeOf64()>0x7fffffff ) {
+                program->error("alias " + name + " is too big", "", "",
+                    td->at, CompilationError::invalid_type );
+            }
+        }
         virtual void preVisit ( Enumeration * enu ) override {
             Visitor::preVisit(enu);
             if (!isValidEnumName(enu->name)) {
@@ -215,6 +222,10 @@ namespace das {
             if (!isValidStructureName(var->name)) {
                 program->error("invalid structure name " + var->name, "", "",
                     var->at, CompilationError::invalid_name );
+            }
+            if ( var->getSizeOf64()>0x7fffffff ) {
+                program->error("structure " + var->name + " is too big", "", "",
+                    var->at, CompilationError::invalid_type );
             }
         }
         virtual void preVisitExpression ( Expression * expr ) override {
@@ -272,6 +283,10 @@ namespace das {
                         var->init->at, CompilationError::cant_be_null);
                 }
             }
+            if ( var->type->getSizeOf64()>0x7fffffff ) {
+                program->error("global variable " + var->name + " is too big", "", "",
+                    var->at,CompilationError::invalid_variable_type);
+            }
         }
         virtual void preVisitGlobalLetInit ( const VariablePtr & var, Expression * that ) override {
             Visitor::preVisitGlobalLetInit(var,that);
@@ -327,6 +342,10 @@ namespace das {
                         program->error("local variable of type " + var->type->describe() + " can't be initialized with null", "", "",
                             var->init->at, CompilationError::cant_be_null);
                     }
+                }
+                if ( var->type->getSizeOf64()>0x7fffffff ) {
+                    program->error("local variable " + var->name + " is too big", "", "",
+                        var->at,CompilationError::invalid_variable_type);
                 }
             }
         }
@@ -441,6 +460,20 @@ namespace das {
                 }
             }
         }
+        virtual void preVisit ( ExprAscend * expr ) override {
+            Visitor::preVisit(expr);
+            if ( expr->subexpr->type->getSizeOf64()>0x7fffffff ) {
+                program->error("can't ascend type which is too big", "", "",
+                    expr->at, CompilationError::invalid_new_type);
+            }
+        }
+        virtual void preVisit ( ExprNew * expr ) override {
+            Visitor::preVisit(expr);
+            if ( expr->typeexpr->getSizeOf64()>0x7fffffff ) {
+                program->error("can't new to a type that is too big", "", "",
+                    expr->at, CompilationError::invalid_new_type);
+            }
+        }
         virtual void preVisit ( ExprAssert * expr ) override {
             Visitor::preVisit(expr);
             if ( !expr->isVerify && !expr->arguments[0]->noSideEffects ) {
@@ -518,6 +551,10 @@ namespace das {
                         var->at, CompilationError::unused_function_argument);
                 }
             }
+            if ( var->type->getSizeOf64()>0x7fffffff ) {
+                program->error("argument variable " + var->name + " is too big", "", "",
+                    var->at,CompilationError::invalid_variable_type);
+            }
         }
         virtual void preVisit ( ExprBlock * block ) override {
             Visitor::preVisit(block);
@@ -542,6 +579,10 @@ namespace das {
                           "use [unused_argument(" + var->name + ")] if intentional",
                         var->at, CompilationError::unused_block_argument);
                 }
+            }
+            if ( var->type->getSizeOf64()>0x7fffffff ) {
+                program->error("block argument variable " + var->name + " is too big", "", "",
+                    var->at,CompilationError::invalid_variable_type);
             }
         }
         virtual void preVisitBlockExpression ( ExprBlock * block, Expression * expr ) override {

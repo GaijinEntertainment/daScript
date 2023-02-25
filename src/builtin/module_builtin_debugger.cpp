@@ -771,7 +771,7 @@ namespace debugapi {
                 exText = invCtx->exception;
             }
         });
-        if ( !exText.empty() ) context.throw_error_at(exAt, exText.c_str());
+        if ( !exText.empty() ) context.throw_error_at(exAt, "%s", exText.c_str());
         return res;
     }
 
@@ -801,7 +801,7 @@ namespace debugapi {
                 exText = invCtx->exception;
             }
         });
-        if ( !exText.empty() ) context.throw_error_at(exAt, exText.c_str());
+        if ( !exText.empty() ) context.throw_error_at(exAt, "%s", exText.c_str());
         return res;
     }
 
@@ -832,7 +832,7 @@ namespace debugapi {
                 exText = invCtx->exception;
             }
         });
-        if ( !exText.empty() ) context.throw_error_at(exAt, exText.c_str());
+        if ( !exText.empty() ) context.throw_error_at(exAt, "%s", exText.c_str());
         return res;
     }
 

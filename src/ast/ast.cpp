@@ -311,7 +311,13 @@ namespace das {
     }
 
     int Structure::getSizeOf() const {
-        int size = 0;
+        uint64_t size = getSizeOf64();
+        DAS_ASSERTF(size<=0x7fffffff,"structure %s is too big, %ul",name.c_str(),(unsigned long)size);
+        return (int) (size <= 0x7fffffff ? size : 1);
+    }
+
+    uint64_t Structure::getSizeOf64() const {
+        uint64_t size = 0;
         const Structure * cppLayoutParent = nullptr;
         for ( const auto & fd : fields ) {
             int fieldAlignemnt = fd.type->getAlignOf();
@@ -320,13 +326,13 @@ namespace das {
                 auto fp = findFieldParent(fd.name);
                 if ( fp!=cppLayoutParent ) {
                     if (DAS_NON_POD_PADDING || !cppLayoutNotPod) {
-                        size = cppLayoutParent ? cppLayoutParent->getSizeOf() : 0;
+                        size = cppLayoutParent ? cppLayoutParent->getSizeOf64() : 0;
                     }
                     cppLayoutParent = fp;
                 }
             }
             size = (size + al) & ~al;
-            size += fd.type->getSizeOf();
+            size += fd.type->getSizeOf64();
         }
         int al = getAlignOf() - 1;
         size = (size + al) & ~al;
