@@ -206,7 +206,7 @@ namespace das {
     bool collectSources ( const ProgramPtr & prog, Expression * expr, ExpressionSources & src, bool anyC, bool anyG ) {
         SourceCollector srr(prog, anyC, anyG);
         expr->visit(srr);
-        src = move(srr.sources);
+        src = das::move(srr.sources);
         return srr.alwaysAliases;
     }
 

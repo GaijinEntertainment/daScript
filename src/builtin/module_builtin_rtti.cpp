@@ -756,7 +756,7 @@ namespace das {
         uint32_t str_len = stringLengthSafe(*context, str);
         auto access = make_smart<FileAccess>();
         auto fileInfo = make_unique<TextFileInfo>((char *) str, uint32_t(str_len), false);
-        access->setFileInfo(modName, move(fileInfo));
+        access->setFileInfo(modName, das::move(fileInfo));
         ModuleGroup dummyLibGroup;
         auto program = parseDaScript(modName, access, issues, dummyLibGroup, exportAll, false, cop);
         if ( program ) {
@@ -1028,7 +1028,7 @@ namespace das {
         if ( !str ) context->throw_error("can't introduce empty file");
         uint32_t str_len = stringLengthSafe(*context, str);
         auto fileInfo = make_unique<TextFileInfo>(str, str_len, false);
-        return access->setFileInfo(fname, move(fileInfo)) != nullptr;
+        return access->setFileInfo(fname, das::move(fileInfo)) != nullptr;
     }
 
 #else

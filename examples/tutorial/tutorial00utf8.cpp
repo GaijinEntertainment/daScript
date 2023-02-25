@@ -30,7 +30,7 @@ int main( int, char * [] ) {
     // make file access, introduce string as if it was a file
     auto fAccess = make_smart<FsFileAccess>();
     auto fileInfo = make_unique<TextFileInfo>(tutorial_text, uint32_t(strlen(tutorial_text)), false);
-    fAccess->setFileInfo("dummy.das", move(fileInfo));
+    fAccess->setFileInfo("dummy.das", das::move(fileInfo));
     // compile script
     TextPrinter tout;
     ModuleGroup dummyLibGroup;

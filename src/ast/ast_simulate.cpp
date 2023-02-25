@@ -72,7 +72,7 @@ namespace das
                 vector<Node> sorted;
                 sorted.reserve(lnodes);
                 while ( unsorted.size() ) {
-                    auto node = move(unsorted[0]);
+                    auto node = das::move(unsorted[0]);
                     unsorted.erase(unsorted.begin());
                     if ( node.before.size()==0 ) {
                         for ( auto & other : unsorted ) {

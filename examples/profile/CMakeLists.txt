@@ -20,7 +20,7 @@ add_executable(profiler_dasAot ${PROFILER_DASAOT_MAIN_SRC} )
 target_compile_definitions(profiler_dasAot PUBLIC MAIN_FUNC_NAME=dascript_dummy_main) # dascript_dummy_main is here to rename main function from daScript
 TARGET_LINK_LIBRARIES(profiler_dasAot libDaScript libDaScriptTest libDaScriptProfile Threads::Threads ${DAS_MODULES_LIBS})
 ADD_DEPENDENCIES(profiler_dasAot libDaScript libDaScriptTest libDaScriptProfile ${DAS_MODULES_LIBS})
-SETUP_CPP11(pofiler_dasAot)
+SETUP_CPP11(profiler_dasAot)
 SETUP_LTO(profiler_dasAot)
 
 add_custom_target(daScriptProfileAot)

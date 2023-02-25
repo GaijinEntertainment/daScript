@@ -1501,13 +1501,13 @@ namespace das {
         das_final_call & operator = (const das_final_call &) = delete;
         das_final_call & operator = (das_final_call &&) = delete;
         das_final_call(das_final_call &&) = default;
-        __forceinline das_final_call ( TT && fn ) : finalizer(move(fn)) {}
+        __forceinline das_final_call ( TT && fn ) : finalizer(das::move(fn)) {}
         __forceinline ~das_final_call () { finalizer(); }
     };
 
     template <typename TT>
     inline das_final_call<TT> das_finally(TT && fn) {
-        return das_final_call<TT>(move(fn));
+        return das_final_call<TT>(das::move(fn));
     }
 
     template <typename TT>
@@ -2467,7 +2467,7 @@ namespace das {
 
     template <typename TT, typename QQ = typename TT::value_type>
     __forceinline void das_vector_emplace ( TT & vec, QQ & value, int32_t at ) {
-        vec.emplace(vec.begin()+at, move(value));
+        vec.emplace(vec.begin()+at, das::move(value));
     }
 
     template <typename TT, typename QQ = typename TT::value_type>
@@ -2487,7 +2487,7 @@ namespace das {
 
     template <typename TT, typename QQ = typename TT::value_type>
     __forceinline void das_vector_emplace_back ( TT & vec, QQ & value ) {
-        vec.emplace_back(move(value));
+        vec.emplace_back(das::move(value));
     }
 
     template <typename TT>

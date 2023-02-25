@@ -85,7 +85,7 @@ namespace das {
             failed.lastOp = lOp;
             return failed;
         }
-        return Uri(move(absoluteDest));
+        return Uri(das::move(absoluteDest));
     }
 
     Uri Uri::strip(bool query, bool fragment) const {
@@ -112,7 +112,7 @@ namespace das {
             failed.lastOp = lOp;
             return failed;
         }
-        return Uri(move(dest));
+        return Uri(das::move(dest));
     }
 
     bool Uri::normalize() {

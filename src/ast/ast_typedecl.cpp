@@ -2860,7 +2860,7 @@ namespace das
                 if ( *ch!='>' ) error("expecting '>'", ch);
                 ch ++;
                 auto pt = parseTypeFromMangledName(ch,library,thisModule);
-                pt->firstType = move(ft);
+                pt->firstType = das::move(ft);
                 return pt;
             };
             case '2': {
@@ -2871,7 +2871,7 @@ namespace das
                 if ( *ch!='>' ) error("expecting '>'", ch);
                 ch ++;
                 auto pt = parseTypeFromMangledName(ch,library,thisModule);
-                pt->secondType = move(ft);
+                pt->secondType = das::move(ft);
                 return pt;
             };
             case 'H': {
@@ -2915,7 +2915,7 @@ namespace das
                 if ( *ch!='>' ) error("expecting '>'", ch);
                 ch++;
                 auto pt = parseTypeFromMangledName(ch,library,thisModule);
-                pt->argTypes = move(types);
+                pt->argTypes = das::move(types);
                 return pt;
             };
             case 'N': {
@@ -2929,7 +2929,7 @@ namespace das
                 if ( *ch!='>' ) error("expecting '>'", ch);
                 ch++;
                 auto pt = parseTypeFromMangledName(ch,library,thisModule);
-                pt->argNames = move(names);
+                pt->argNames = das::move(names);
                 return pt;
             };
             case 'E': {

@@ -107,8 +107,8 @@ namespace das {
             }
         }
         void RemoveUnusedSymbols ( Module & mod ) {
-            auto functions = move(mod.functions);
-            auto globals = move(mod.globals);
+            auto functions = das::move(mod.functions);
+            auto globals = das::move(mod.globals);
             mod.functionsByName.clear();
             // mod.globals.clear();
             for ( auto & fn : functions.each() ) {

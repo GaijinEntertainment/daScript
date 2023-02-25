@@ -35,7 +35,7 @@ namespace das {
 
     bool addModuleFunction ( Module * module, FunctionPtr & _func, Context * context, LineInfoArg * lineInfo ) {
         if ( !module ) context->throw_error_at(lineInfo, "expecting module, not null");
-        FunctionPtr func = move(_func);
+        FunctionPtr func = das::move(_func);
         return module->addFunction(func, true);
     }
 
@@ -91,14 +91,14 @@ namespace das {
 
     bool addModuleGeneric ( Module * module, FunctionPtr & _func, Context * context, LineInfoArg * lineInfo ) {
         if ( !module ) context->throw_error_at(lineInfo, "expecting module, not null");
-        FunctionPtr func = move(_func);
+        FunctionPtr func = das::move(_func);
         return module->addGeneric(func, true);
     }
 
     bool addModuleVariable ( Module * module, VariablePtr & _var, Context * context, LineInfoArg * lineInfo ) {
         if ( !module ) context->throw_error_at(lineInfo, "expecting module, not null");
-        VariablePtr var = move(_var);
-        return module->addVariable(move(var), true);
+        VariablePtr var = das::move(_var);
+        return module->addVariable(das::move(var), true);
     }
 
     VariablePtr findModuleVariable ( Module * module, const char * name ) {
@@ -106,17 +106,17 @@ namespace das {
     }
 
     bool addModuleStructure ( Module * module, StructurePtr & _struct ) {
-        StructurePtr stru = move(_struct);
+        StructurePtr stru = das::move(_struct);
         return module->addStructure(stru, true);
     }
 
     bool removeModuleStructure ( Module * module, StructurePtr & _struct ) {
-        StructurePtr stru = move(_struct);
+        StructurePtr stru = das::move(_struct);
         return module->removeStructure(stru);
     }
 
     bool addModuleAlias ( Module * module, TypeDeclPtr & _ptr ) {
-        TypeDeclPtr ptr = move(_ptr);
+        TypeDeclPtr ptr = das::move(_ptr);
         return module->addAlias(ptr, true);
     }
 

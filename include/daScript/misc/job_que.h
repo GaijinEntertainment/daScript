@@ -70,7 +70,7 @@ namespace das {
     protected:
         struct JobEntry {
             JobEntry( Job&& _function, JobCategory _category, JobPriority _priority) {
-                function = move(_function);
+                function = das::move(_function);
                 priority = _priority;
                 category = _category;
             }
