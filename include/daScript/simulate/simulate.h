@@ -346,9 +346,9 @@ namespace das
         DAS_NORETURN_PREFIX void throw_error_at ( const LineInfo & at, __format_string const char * message, ... ) DAS_NORETURN_SUFFIX;
         DAS_NORETURN_PREFIX void throw_error_at ( const LineInfo * at, __format_string const char * message, ... ) DAS_NORETURN_SUFFIX;
 #elif defined(__GNUC__) || defined(__clang__)
-        DAS_NORETURN_PREFIX void throw_error_ex ( const char * message, ... ) DAS_NORETURN_SUFFIX __attribute__ ((format (printf, 1, 2)));
-        DAS_NORETURN_PREFIX void throw_error_at ( const LineInfo & at, const char * message, ... ) DAS_NORETURN_SUFFIX __attribute__ ((format (printf, 2, 3)));
-        DAS_NORETURN_PREFIX void throw_error_at ( const LineInfo * at, const char * message, ... ) DAS_NORETURN_SUFFIX __attribute__ ((format (printf, 2, 3)));
+        DAS_NORETURN_PREFIX void throw_error_ex ( const char * message, ... ) DAS_NORETURN_SUFFIX __attribute__ ((format (printf, 2, 3)));
+        DAS_NORETURN_PREFIX void throw_error_at ( const LineInfo & at, const char * message, ... ) DAS_NORETURN_SUFFIX __attribute__ ((format (printf, 3, 4)));
+        DAS_NORETURN_PREFIX void throw_error_at ( const LineInfo * at, const char * message, ... ) DAS_NORETURN_SUFFIX __attribute__ ((format (printf, 3, 4)));
 #else
         DAS_NORETURN_PREFIX void throw_error_ex ( const char * message, ... ) DAS_NORETURN_SUFFIX;
         DAS_NORETURN_PREFIX void throw_error_at ( const LineInfo & at, const char * message, ... ) DAS_NORETURN_SUFFIX;
