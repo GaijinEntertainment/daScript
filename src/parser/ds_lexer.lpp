@@ -262,6 +262,13 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
     unput(*yytext);
     YYCOLUMN(yyextra->das_yycolumn--, "UNPUT");
     if (yyextra->das_current_line_indent > yyextra->das_indent_level*yyextra->das_tab_size ) {
+        if ( yyextra->das_current_line_indent > (1 + yyextra->das_indent_level) * yyextra->das_tab_size ) {
+            #ifdef FLEX_DEBUG
+            printf("INVALID INDENT at %i, emit BEGIN_STRING\n", yyextra->das_current_line_indent);
+            #endif
+            das_yyfatalerror(yylloc_param,yyscanner,"invalid indentation"); // pretend tab was pressed
+            return BEGIN_STRING;
+        }
         if ( yyextra->das_current_line_indent % yyextra->das_tab_size ) {
             #ifdef FLEX_DEBUG
             printf("INVALID INDENT at %i, emit {\n", yyextra->das_current_line_indent);
