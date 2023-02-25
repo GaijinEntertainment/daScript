@@ -341,9 +341,20 @@ namespace das
         bool  runWithCatch ( const callable<void()> & subexpr );
 
         DAS_NORETURN_PREFIX void throw_error ( const char * message ) DAS_NORETURN_SUFFIX;
+#ifdef _MSC_VER
+        DAS_NORETURN_PREFIX void throw_error_ex ( __format_string const char * message, ... ) DAS_NORETURN_SUFFIX;
+        DAS_NORETURN_PREFIX void throw_error_at ( const LineInfo & at, __format_string const char * message, ... ) DAS_NORETURN_SUFFIX;
+        DAS_NORETURN_PREFIX void throw_error_at ( const LineInfo * at, __format_string const char * message, ... ) DAS_NORETURN_SUFFIX;
+#elif defined(__GNUC__) || defined(__clang__)
+        DAS_NORETURN_PREFIX void throw_error_ex ( const char * message, ... ) DAS_NORETURN_SUFFIX __attribute__ ((format (printf, 1, 2)));
+        DAS_NORETURN_PREFIX void throw_error_at ( const LineInfo & at, const char * message, ... ) DAS_NORETURN_SUFFIX __attribute__ ((format (printf, 2, 3)));
+        DAS_NORETURN_PREFIX void throw_error_at ( const LineInfo * at, const char * message, ... ) DAS_NORETURN_SUFFIX __attribute__ ((format (printf, 2, 3)));
+#else
         DAS_NORETURN_PREFIX void throw_error_ex ( const char * message, ... ) DAS_NORETURN_SUFFIX;
         DAS_NORETURN_PREFIX void throw_error_at ( const LineInfo & at, const char * message, ... ) DAS_NORETURN_SUFFIX;
         DAS_NORETURN_PREFIX void throw_error_at ( const LineInfo * at, const char * message, ... ) DAS_NORETURN_SUFFIX;
+#endif
+
         DAS_NORETURN_PREFIX void throw_fatal_error ( const char * message, const LineInfo & at ) DAS_NORETURN_SUFFIX;
         DAS_NORETURN_PREFIX void rethrow () DAS_NORETURN_SUFFIX;
 

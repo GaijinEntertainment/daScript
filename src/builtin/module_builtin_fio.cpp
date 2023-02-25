@@ -231,7 +231,8 @@ namespace das {
         fseek((FILE*)f, 0, SEEK_SET);
         auto bytes = fread(res, 1, st.st_size, (FILE *)f);
         if ( uint64_t(bytes) != uint64_t(st.st_size) ) {
-            context->throw_error_at(at, "incorrect fread result, expected %d, got %d bytes. read requires binary file mode", st.st_size, bytes);
+            context->throw_error_at(at, "incorrect fread result, expected %lu, got %lu bytes. read requires binary file mode",
+                (unsigned long)st.st_size, (unsigned long)bytes);
         }
         return res;
     }
