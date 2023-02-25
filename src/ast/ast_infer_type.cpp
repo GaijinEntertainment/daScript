@@ -1550,14 +1550,14 @@ namespace das {
                     auto fp = st->findFieldParent(decl.name);
                     if ( fp!=cppLayoutParent ) {
                         if (DAS_NON_POD_PADDING || cppLayoutPod) {
-                            fieldOffset = cppLayoutParent ? cppLayoutParent->getSizeOf() : 0;
+                            fieldOffset = cppLayoutParent ? cppLayoutParent->getSizeOf64() : 0;
                         }
                         cppLayoutParent = fp;
                     }
                 }
                 fieldOffset = (fieldOffset + fa) & ~fa;
                 decl.offset = int(fieldOffset);
-                fieldOffset += decl.type->getSizeOf();
+                fieldOffset += decl.type->getSizeOf64();
             }
             verifyType(decl.type);
         }
