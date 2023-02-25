@@ -2395,12 +2395,18 @@ namespace das
     }
 
     int TypeDecl::getTupleSize() const {
+        uint64_t size = getTupleSize64();
+        DAS_ASSERTF(size<=0x7fffffff,"tuple size is too big %ul",(unsigned long)size);
+        return (int) (size<=0x7fffffff ? size : 1);
+    }
+
+    uint64_t TypeDecl::getTupleSize64() const {
         DAS_ASSERT(baseType==Type::tTuple);
-        int size = 0;
+        uint64_t size = 0;
         for ( const auto & argT : argTypes ) {
             int al = argT->getAlignOf() - 1;
             size = (size + al) & ~al;
-            size += argT->getSizeOf();
+            size += argT->getSizeOf64();
         }
         int al = getTupleAlign() - 1;
         size = (size + al) & ~al;
@@ -2442,12 +2448,18 @@ namespace das
     }
 
     int TypeDecl::getVariantSize() const {
+        uint64_t size = getVariantSize64();
+        DAS_ASSERTF(size<=0x7fffffff,"variant size is too big %ul",(unsigned long)size);
+        return (int) (size<=0x7fffffff ? size : 1);
+    }
+
+    uint64_t TypeDecl::getVariantSize64() const {
         DAS_ASSERT(baseType==Type::tVariant);
-        int maxSize = 0;
+        uint64_t maxSize = 0;
         int al = getVariantAlign() - 1;
         for ( const auto & argT : argTypes ) {
-            int size = (getTypeBaseSize(Type::tInt) + al) & ~al;
-            size += argT->getSizeOf();
+            uint64_t size = (getTypeBaseSize(Type::tInt) + al) & ~al;
+            size += argT->getSizeOf64();
             maxSize = das::max(size, maxSize);
         }
         maxSize = (maxSize + al) & ~al;
@@ -2464,14 +2476,20 @@ namespace das
     }
 
     int TypeDecl::getBaseSizeOf() const {
+        uint64_t size = getBaseSizeOf64();
+        DAS_ASSERTF(size<=0x7fffffff,"base size %ul is too big", (unsigned long)size);
+        return int(size<=0x7fffffff ? size : 1);
+    }
+
+    uint64_t TypeDecl::getBaseSizeOf64() const {
         if ( baseType==Type::tHandle ) {
-            return int(annotation->getSizeOf());
+            return annotation->getSizeOf();
         } else if ( baseType==Type::tStructure ) {
-            return structType->getSizeOf();
+            return structType->getSizeOf64();
         } else if ( baseType==Type::tTuple ) {
-            return getTupleSize();
+            return getTupleSize64();
         } else if ( baseType==Type::tVariant ) {
-            return getVariantSize();
+            return getVariantSize64();
         } else if ( isEnumT() ) {
             return enumType ? getTypeBaseSize(enumType->baseType) : getTypeBaseSize(Type::tInt);
         } else {
@@ -2496,23 +2514,43 @@ namespace das
     }
 
     int TypeDecl::getCountOf() const {
-        int size = 1;
-        for ( auto i : dim )
+        uint64_t count = getCountOf64();
+        DAS_ASSERTF(count <= 0x7fffffff, "count too big %lu", (unsigned long)count);
+        return int(count <= 0x7fffffff ? count : 1);
+    }
+
+    uint64_t TypeDecl::getCountOf64() const {
+        uint64_t size = 1;
+        for ( auto i : dim ) {
             size *= i;
+        }
         return size;
     }
 
     int TypeDecl::getSizeOf() const {
-        return getBaseSizeOf() * getCountOf();
+        uint64_t size = getSizeOf64();
+        DAS_ASSERTF(size <= 0x7fffffff, "size too big %lu", (unsigned long)size);
+        return int(size <= 0x7fffffff ? size : 1);
+    }
+
+    uint64_t TypeDecl::getSizeOf64() const {
+        return getBaseSizeOf64() * getCountOf64();
     }
 
     int TypeDecl::getStride() const {
-        int size = 1;
+        uint64_t stride = getStride64();
+        DAS_ASSERTF(stride <= 0x7fffffff, "stride too big %lu", (unsigned long)stride);
+        return int(stride <= 0x7fffffff ? stride : 1);
+    }
+
+    uint64_t TypeDecl::getStride64() const {
+        uint64_t size = 1;
         if ( dim.size() > 1 ) {
-            for ( size_t i=1, is=dim.size(); i!=is; ++i )
+            for ( size_t i=1, is=dim.size(); i!=is; ++i ) {
                 size *= dim[i];
+            }
         }
-        return getBaseSizeOf() * size;
+        return getBaseSizeOf64() * size;
     }
 
     int TypeDecl::findArgumentIndex( const string & name ) const {

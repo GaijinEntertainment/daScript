@@ -142,10 +142,17 @@ namespace das {
                       decl->at,CompilationError::invalid_type);
             }
             */
+            uint64_t size = 1;
             for ( auto di : decl->dim ) {
                 if ( di<=0 ) {
                     error("array dimension can't be 0 or less, " + describeType(decl), "", "",
                           decl->at,CompilationError::invalid_array_dimension);
+                }
+                size *= di;
+                if ( size>0x7fffffff ) {
+                    error("array is too big, " + describeType(decl), "", "",
+                          decl->at,CompilationError::invalid_array_dimension);
+                    break;
                 }
             }
             if ( decl->baseType==Type::tFunction || decl->baseType==Type::tLambda
@@ -1543,14 +1550,14 @@ namespace das {
                     auto fp = st->findFieldParent(decl.name);
                     if ( fp!=cppLayoutParent ) {
                         if (DAS_NON_POD_PADDING || cppLayoutPod) {
-                            fieldOffset = cppLayoutParent ? cppLayoutParent->getSizeOf() : 0;
+                            fieldOffset = cppLayoutParent ? cppLayoutParent->getSizeOf64() : 0;
                         }
                         cppLayoutParent = fp;
                     }
                 }
                 fieldOffset = (fieldOffset + fa) & ~fa;
                 decl.offset = int(fieldOffset);
-                fieldOffset += decl.type->getSizeOf();
+                fieldOffset += decl.type->getSizeOf64();
             }
             verifyType(decl.type);
         }
@@ -2946,7 +2953,13 @@ namespace das {
                         return Visitor::visit(expr);
                     }
                     reportAstChanged();
-                    return make_smart<ExprConstInt>(expr->at, expr->typeexpr->getSizeOf());
+                    uint64_t size = expr->typeexpr->getSizeOf64();
+                    if ( size>0x7fffffff ) {
+                        error("typeinfo(sizeof " + describeType(expr->typeexpr) + ") is too big",  "", "",
+                            expr->at, CompilationError::invalid_type);
+                        return Visitor::visit(expr);
+                    }
+                    return make_smart<ExprConstInt>(expr->at, int(size));
                 } else if ( expr->trait=="alignof" ) {
                     if ( expr->typeexpr->isExprTypeAnywhere() ) {
                         error("typeinfo(alignof " + describeType(expr->typeexpr) + ") is not fully inferred, expecting resolved dim",  "", "",
