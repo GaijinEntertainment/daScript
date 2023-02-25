@@ -385,6 +385,9 @@ SET(BUILTIN_SRC
 ../src/builtin/module_builtin_ast.cpp
 ../src/builtin/module_builtin_ast_flags.cpp
 ../src/builtin/module_builtin_ast_annotations.cpp
+../src/builtin/module_builtin_ast_annotations_1.cpp
+../src/builtin/module_builtin_ast_annotations_2.cpp
+../src/builtin/module_builtin_ast_annotations_3.cpp
 ../src/builtin/module_builtin_ast_adapters.cpp
 ../src/builtin/module_builtin_ast.h
 ../src/builtin/module_builtin_uriparser.h
