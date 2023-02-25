@@ -325,7 +325,7 @@ namespace das {
     void ast_enumDeclaration (  yyscan_t scanner, AnnotationList * annL, const LineInfo & atannL, bool pubE, Enumeration * pEnum, Enumeration * pE, Type ebt ) {
         pEnum->baseType = ebt;
         pEnum->isPrivate = !pubE;
-        pEnum->list = move(pE->list);
+        pEnum->list = das::move(pE->list);
         if ( annL ) {
             for ( auto pA : *annL ) {
                 if ( pA->annotation ) {
@@ -406,7 +406,7 @@ namespace das {
                 pVar->global_shared = glob_shar;
                 pVar->private_variable = !pub_var;
                 if ( ann ) {
-                    pVar->annotation = move(*ann);
+                    pVar->annotation = das::move(*ann);
                     delete ann;
                 }
                 if ( !yyextra->g_Program->addVariable(pVar) )

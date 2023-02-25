@@ -456,7 +456,7 @@ namespace das {
         TextWriter issues;
         auto access = make_smart<FileAccess>();
         auto fileInfo = make_unique<TextFileInfo>((char *) str, uint32_t(str_len), false);
-        access->setFileInfo(modName, move(fileInfo));
+        access->setFileInfo(modName, das::move(fileInfo));
         ModuleGroup dummyLibGroup;
         auto program = parseDaScript(modName, access, issues, dummyLibGroup, true);
         ownFileInfo = access->letGoOfFileInfo(modName);

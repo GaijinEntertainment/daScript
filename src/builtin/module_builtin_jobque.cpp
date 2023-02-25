@@ -39,7 +39,7 @@ namespace das {
         if ( pipe.empty() ) {
             tail.clear();
         } else {
-            tail = move ( pipe.front() );
+            tail = das::move(pipe.front());
             pipe.pop();
         }
         return tail.data;

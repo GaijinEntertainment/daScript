@@ -1561,13 +1561,13 @@ namespace das
 
     void onCreateCppDebugAgent ( const char * category, function<void (Context *)> && lmb ) {
         onCppDebugAgent(category, [&](CppOnlyDebugAgent * agent){
-            agent->onCreateContextOp = move(lmb);
+            agent->onCreateContextOp = das::move(lmb);
         });
     }
 
     void onDestroyCppDebugAgent ( const char * category, function<void (Context *)> && lmb ) {
         onCppDebugAgent(category, [&](CppOnlyDebugAgent * agent){
-            agent->onDestroyContextOp = move(lmb);
+            agent->onDestroyContextOp = das::move(lmb);
         });
 
     }

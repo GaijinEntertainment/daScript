@@ -1536,7 +1536,7 @@ namespace das {
     }
 
     void addModuleReaderMacro ( Module * module, ReaderMacroPtr & _newM, Context * context ) {
-        ReaderMacroPtr newM = move(_newM);
+        ReaderMacroPtr newM = das::move(_newM);
         if ( !module->addReaderMacro(newM, true) ) {
             context->throw_error_ex("can't add reader macro %s to module %s", newM->name.c_str(), module->name.c_str());
         }
@@ -1547,7 +1547,7 @@ namespace das {
     }
 
     void addModuleCommentReader ( Module * module, CommentReaderPtr & _newM, Context * context ) {
-        CommentReaderPtr newM = move(_newM);
+        CommentReaderPtr newM = das::move(_newM);
         if ( !module->addCommentReader(newM, true) ) {
             context->throw_error_ex("can't add comment reader to module %s", module->name.c_str());
         }
@@ -1558,7 +1558,7 @@ namespace das {
     }
 
     void addModuleCallMacro ( Module * module, CallMacroPtr & _newM, Context * context ) {
-        CallMacroPtr newM = move(_newM);
+        CallMacroPtr newM = das::move(_newM);
         if ( ! module->addCallMacro(newM->name, [=](const LineInfo & at) -> ExprLooksLikeCall * {
             auto ecm = new ExprCallMacro(at, newM->name);
             ecm->macro = newM.get();
@@ -1573,7 +1573,7 @@ namespace das {
     }
 
     void addModuleTypeInfoMacro ( Module * module, TypeInfoMacroPtr & _newM, Context * context ) {
-        TypeInfoMacroPtr newM = move(_newM);
+        TypeInfoMacroPtr newM = das::move(_newM);
         if ( ! module->addTypeInfoMacro(newM,true) ) {
             context->throw_error_ex("can't add type info macro %s to module %s", newM->name.c_str(), module->name.c_str());
         }
@@ -1592,7 +1592,7 @@ namespace das {
     }
 
     void addModuleVariantMacro ( Module * module, VariantMacroPtr & _newM, Context * ) {
-        VariantMacroPtr newM = move(_newM);
+        VariantMacroPtr newM = das::move(_newM);
         module->variantMacros.push_back(newM);
     }
 
@@ -1601,7 +1601,7 @@ namespace das {
     }
 
     void addModuleForLoopMacro ( Module * module, ForLoopMacroPtr & _newM, Context * ) {
-        ForLoopMacroPtr newM = move(_newM);
+        ForLoopMacroPtr newM = das::move(_newM);
         module->forLoopMacros.push_back(newM);
     }
 
@@ -1610,7 +1610,7 @@ namespace das {
     }
 
     void addModuleCaptureMacro ( Module * module, CaptureMacroPtr & _newM, Context * ) {
-        CaptureMacroPtr newM = move(_newM);
+        CaptureMacroPtr newM = das::move(_newM);
         module->captureMacros.push_back(newM);
     }
 
@@ -1619,32 +1619,32 @@ namespace das {
     }
 
     void addModuleSimulateMacro ( Module * module, SimulateMacroPtr & _newM, Context * ) {
-        SimulateMacroPtr newM = move(_newM);
+        SimulateMacroPtr newM = das::move(_newM);
         module->simulateMacros.push_back(newM);
     }
 
     void addModuleInferMacro ( Module * module, PassMacroPtr & _newM, Context * ) {
-        PassMacroPtr newM = move(_newM);
+        PassMacroPtr newM = das::move(_newM);
         module->macros.push_back(newM);
     }
 
     void addModuleInferDirtyMacro ( Module * module, PassMacroPtr & _newM, Context * ) {
-        PassMacroPtr newM = move(_newM);
+        PassMacroPtr newM = das::move(_newM);
         module->inferMacros.push_back(newM);
     }
 
     void addModuleLintMacro ( Module * module, PassMacroPtr & _newM, Context * ) {
-        PassMacroPtr newM = move(_newM);
+        PassMacroPtr newM = das::move(_newM);
         module->lintMacros.push_back(newM);
     }
 
     void addModuleGlobalLintMacro ( Module * module, PassMacroPtr & _newM, Context * ) {
-        PassMacroPtr newM = move(_newM);
+        PassMacroPtr newM = das::move(_newM);
         module->globalLintMacros.push_back(newM);
     }
 
     void addModuleOptimizationMacro ( Module * module, PassMacroPtr & _newM, Context * ) {
-        PassMacroPtr newM = move(_newM);
+        PassMacroPtr newM = das::move(_newM);
         module->optimizationMacros.push_back(newM);
     }
 
@@ -1653,7 +1653,7 @@ namespace das {
     }
 
     void addModuleEnumerationAnnotation ( Module * module, EnumerationAnnotationPtr & _ann, Context * context ) {
-        EnumerationAnnotationPtr ann = move(_ann);
+        EnumerationAnnotationPtr ann = das::move(_ann);
         if ( !module->addAnnotation(ann, true) ) {
             context->throw_error_ex("can't add enumeration annotation %s to module %s",
                 ann->name.c_str(), module->name.c_str());
@@ -1678,7 +1678,7 @@ namespace das {
     }
 
     void addModuleStructureAnnotation ( Module * module, StructureAnnotationPtr & _ann, Context * context ) {
-        StructureAnnotationPtr ann = move(_ann);
+        StructureAnnotationPtr ann = das::move(_ann);
         if ( !module->addAnnotation(ann, true) ) {
             context->throw_error_ex("can't add structure annotation %s to module %s",
                 ann->name.c_str(), module->name.c_str());
@@ -1686,7 +1686,7 @@ namespace das {
     }
 
     void addStructureStructureAnnotation ( smart_ptr_raw<Structure> st, StructureAnnotationPtr & _ann, Context * context ) {
-        StructureAnnotationPtr ann = move(_ann);
+        StructureAnnotationPtr ann = das::move(_ann);
         string err;
         ModuleGroup dummy;
         if ( !ann->touch(st, dummy, AnnotationArgumentList(), err) ) {
@@ -1707,7 +1707,7 @@ namespace das {
     }
 
     void addModuleFunctionAnnotation ( Module * module, FunctionAnnotationPtr & _ann, Context * context ) {
-        FunctionAnnotationPtr ann = move(_ann);
+        FunctionAnnotationPtr ann = das::move(_ann);
         if ( !module->addAnnotation(ann, true) ) {
             context->throw_error_ex("can't add function annotation %s to module %s",
                 ann->name.c_str(), module->name.c_str());
@@ -1715,7 +1715,7 @@ namespace das {
     }
 
     void addFunctionFunctionAnnotation ( smart_ptr_raw<Function> func, FunctionAnnotationPtr & _ann, Context * context ) {
-        FunctionAnnotationPtr ann = move(_ann);
+        FunctionAnnotationPtr ann = das::move(_ann);
         string err;
         ModuleGroup dummy;
         if ( !ann->apply(func, dummy, AnnotationArgumentList(), err) ) {
@@ -1728,7 +1728,7 @@ namespace das {
     }
 
     void addBlockBlockAnnotation ( smart_ptr_raw<ExprBlock> blk, FunctionAnnotationPtr & _ann, Context * context ) {
-        FunctionAnnotationPtr ann = move(_ann);
+        FunctionAnnotationPtr ann = das::move(_ann);
         string err;
         ModuleGroup dummy;
         if ( !ann->apply(blk.ptr, dummy, AnnotationArgumentList(), err) ) {

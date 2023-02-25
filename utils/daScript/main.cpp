@@ -266,7 +266,7 @@ bool compile_and_run ( const string & fn, const string & mainFnName, bool output
     auto access = get_file_access((char*)(projectFile.empty() ? nullptr : projectFile.c_str()));
     if ( introFile ) {
         auto fileInfo = make_unique<TextFileInfo>(introFile, uint32_t(strlen(introFile)), false);
-        access->setFileInfo("____intro____", move(fileInfo));
+        access->setFileInfo("____intro____", das::move(fileInfo));
     }
     bool success = false;
     ModuleGroup dummyGroup;

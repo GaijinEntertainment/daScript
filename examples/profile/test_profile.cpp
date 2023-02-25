@@ -159,7 +159,7 @@ struct EsFunctionAnnotation : FunctionAnnotation {
         }
         block->annotationDataSid = hash_blockz64((uint8_t *)mangledName.c_str());
         buildAttributeTable(*tab, block->arguments, err);
-        esData->g_esBlockTable.emplace_back(move(tab));
+        esData->g_esBlockTable.emplace_back(das::move(tab));
         return err.empty();
     }
     virtual bool apply ( const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList & args, string & err ) override {
@@ -213,7 +213,7 @@ struct EsFunctionAnnotation : FunctionAnnotation {
         }
         tab->mangledNameHash = func->getMangledNameHash();
         buildAttributeTable(*tab, func->arguments, err);
-        esData->g_esPassTable.emplace_back(move(tab));
+        esData->g_esPassTable.emplace_back(das::move(tab));
 
         return err.empty();
     }

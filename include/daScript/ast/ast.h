@@ -1029,7 +1029,7 @@ namespace das
             if ( callThis.find(fnName)!=callThis.end() ) {
                 return false;
             }
-            callThis[fnName] = move(factory);
+            callThis[fnName] = das::move(factory);
             return true;
         }
     public:

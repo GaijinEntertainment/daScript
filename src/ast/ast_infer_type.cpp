@@ -4884,7 +4884,7 @@ namespace das {
             if ( opName != tempCall->name ) {   // this happens when the operator gets instanced
                 reportAstChanged();
                 auto opCall = make_smart<ExprCall>(expr->at, tempCall->name);
-                opCall->arguments = move(tempCall->arguments);
+                opCall->arguments = das::move(tempCall->arguments);
                 return opCall;
             }
             if ( expr->func ) {
@@ -5031,7 +5031,7 @@ namespace das {
             if ( opName != tempCall->name ) {   // this happens when the operator gets instanced
                 reportAstChanged();
                 auto opCall = make_smart<ExprCall>(expr->at, tempCall->name);
-                opCall->arguments = move(tempCall->arguments);
+                opCall->arguments = das::move(tempCall->arguments);
                 return opCall;
             }
             if ( expr->func ) {
@@ -6875,12 +6875,12 @@ namespace das {
             if ( opName != tempCall->name ) {   // this happens when the operator gets instanced
                 reportAstChanged();
                 auto opCall = make_smart<ExprCall>(expr_at, tempCall->name);
-                opCall->arguments = move(tempCall->arguments);
+                opCall->arguments = das::move(tempCall->arguments);
                 return opCall;
             } else if ( ffunc ) { // function found
                 reportAstChanged();
                 auto opCall = make_smart<ExprCall>(expr_at, opN);
-                opCall->arguments = move(tempCall->arguments);
+                opCall->arguments = das::move(tempCall->arguments);
                 return opCall;
             } else {
                 return nullptr;

@@ -385,6 +385,9 @@ SET(BUILTIN_SRC
 ../src/builtin/module_builtin_ast.cpp
 ../src/builtin/module_builtin_ast_flags.cpp
 ../src/builtin/module_builtin_ast_annotations.cpp
+../src/builtin/module_builtin_ast_annotations_1.cpp
+../src/builtin/module_builtin_ast_annotations_2.cpp
+../src/builtin/module_builtin_ast_annotations_3.cpp
 ../src/builtin/module_builtin_ast_adapters.cpp
 ../src/builtin/module_builtin_ast.h
 ../src/builtin/module_builtin_uriparser.h
@@ -632,7 +635,7 @@ if (NOT ${DAS_BUILD_TOOLS} MATCHES NO)
   SOURCE_GROUP_FILES("main" DASCRIPT_MAIN_SRC)
 
   add_executable(daScript ${DASCRIPT_MAIN_SRC})
-  TARGET_LINK_LIBRARIES(daScript libDaScript libDaScriptProfile  Threads::Threads ${DAS_MODULES_LIBS})
+  TARGET_LINK_LIBRARIES(daScript libDaScript Threads::Threads ${DAS_MODULES_LIBS})
   SETUP_CPP11(daScript)
   SETUP_LTO(daScript)
 
