@@ -289,8 +289,8 @@ namespace das {
                     if ( expr->variable==globalVar ) {
                         program->error("global variable " + expr->name + " cant't be initialized with itself",
                             "", "", expr->at, CompilationError::variable_not_found);
-                    } else {
-                        program->error("global variable " + expr->name + " is initialized after " + globalVar->name,
+                    } else if ( expr->variable->module==globalVar->module ) {
+                        program->error("global variable " + expr->name + " is initialized after " + globalVar->name + " (" + to_string(expr->variable->index) + ")",
                             "", "", expr->at, CompilationError::variable_not_found);
                     }
                 }

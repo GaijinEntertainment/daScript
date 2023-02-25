@@ -602,6 +602,8 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     lib.addModule(Module::require("math"));
     lib.addBuiltInModule();
     addEnumTest(lib);
+    // constant
+    addConstant(*this, "UNIT_TEST_CONSTANT", 0x12345678);
     // structure annotations
     addAnnotation(make_smart<CheckRange>());
     addAnnotation(make_smart<IntFieldsAnnotation>());
