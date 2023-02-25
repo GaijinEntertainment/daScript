@@ -19,7 +19,7 @@ namespace das {
         typedef R (*invoke_fn_t)(const char*, Args...);
         template <typename Functor>
         static __forceinline R invoke_fn(Functor* fn, Args... args) {
-            return (*fn)(forward<Args>(args)...);
+            return (*fn)(das::forward<Args>(args)...);
         }
         invoke_fn_t     invoke_f;
         const char *    data_ptr;
@@ -33,7 +33,7 @@ namespace das {
             , data_ptr(reinterpret_cast<const char *>(&f)) {
         }
         __forceinline R operator()(Args... args) const {
-            return this->invoke_f(this->data_ptr, forward<Args>(args)...);
+            return this->invoke_f(this->data_ptr, das::forward<Args>(args)...);
         }
     };
 }
