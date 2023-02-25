@@ -16,7 +16,7 @@ void tutorial () {
     char fileName[256];
     das_get_root(fileName, sizeof(fileName));
     int charsLeft = ((int)sizeof(fileName)) - ((int)strlen(fileName)) - 1;
-    assert(charsLeft>=0 && "fileName buffer is too small " ## (sizeof(fileName)));
+    assert(charsLeft>=0 && "fileName buffer is too small ");
     strncat ( fileName, TUTORIAL_NAME, (size_t)charsLeft);
     // compile program
     das_program * program = das_program_compile(fileName, fAccess, tout, dummyLibGroup);
