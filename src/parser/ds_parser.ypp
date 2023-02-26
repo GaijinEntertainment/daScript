@@ -134,7 +134,7 @@
 %destructor { if ( $$->use_count()==1 ) delete $$; } <pEnum>
 %destructor { delete $$; } <pCapt>
 %destructor { delete $$; } <pCaptList>
-%destructor { delete $$.firstType; $$.secondType; } <aTypePair>
+%destructor { delete $$.firstType; delete $$.secondType; } <aTypePair>
 
 %token  LEXER_ERROR         "lexer error"
 

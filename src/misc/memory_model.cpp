@@ -131,7 +131,7 @@ namespace das {
         size = (size + alignMask) & ~alignMask;
         nsize = (nsize + alignMask) & ~alignMask;
         char * nptr = allocate(nsize);
-        DAS_ASSERT(nptr && "out of memory?");
+        DAS_VERIFYF(nptr,"out of memory?");
         memcpy ( nptr, ptr, das::min(size,nsize) );
 #if DAS_TRACK_ALLOCATIONS
         auto pAt = bigStuffAt.find(ptr);

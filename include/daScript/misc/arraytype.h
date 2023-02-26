@@ -87,9 +87,12 @@ namespace das
         Tuple() {}
     };
 
+#pragma pack(1)
     struct Variant {
+        int32_t index = 0;
         Variant() {}
     };
+#pragma pack()
 
     struct Array {
         char *      data;

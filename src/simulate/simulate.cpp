@@ -1316,6 +1316,9 @@ namespace das
                         pp->line = &pv.init->debugInfo;
 #endif
                         pv.init->eval(*this);
+#if DAS_ENABLE_STACK_WALK
+                        pp->info = nullptr;
+#endif
                     }
                 } else {
                     memset ( globals + pv.offset, 0, pv.size );
