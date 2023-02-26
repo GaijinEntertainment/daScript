@@ -966,7 +966,7 @@ namespace das {
         TVariant & operator = ( const TVariant & arr ) { moveT(arr); return *this; }
         TVariant & operator = ( TVariant && arr ) { moveT(arr); return *this; }
         __forceinline void moveT ( const TVariant & arr ) {
-            memcpy ( data, &arr, variantSize );
+            memcpy ( (char *)this, &arr, variantSize );
         }
         char data[variantSize-sizeof(int32_t)];
     };
