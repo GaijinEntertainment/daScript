@@ -630,7 +630,7 @@ ___noinline void testParticlesI(int count) {
 
 ___noinline void testTryCatch(Context * context) {
     #if _CPPUNWIND || __cpp_exceptions
-    int arr[1000];
+    int arr[1000]; memset(arr, 0, sizeof(arr));
     int cnt = 0; cnt;
     for (int j = 0; j != 100; ++j) {
         int fail = 0;

@@ -42,7 +42,7 @@ namespace das
             array_reserve(context, arr, newCapacity, stride);
         }
         if ( zero && newSize>arr.size ) {
-            memset ( arr.data + arr.size*stride, 0, (newSize-arr.size)*stride );
+            memset ( arr.data + arr.size*stride, 0, size_t(newSize-arr.size)*size_t(stride) );
         }
         arr.size = newSize;
     }

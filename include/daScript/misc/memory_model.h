@@ -211,8 +211,8 @@ namespace das {
                 for ( auto ch = chunks[si]; ch; ch=ch->next ) {
                     d ++;
                     pages ++;
-                    bytes += ch->allocated * ch->size;
-                    totalBytes += ch->total * ch->size + (ch->total/32*4);
+                    bytes += uint64_t(ch->allocated) * uint64_t(ch->size);
+                    totalBytes += uint64_t(ch->total) * uint64_t(ch->size) + uint64_t(ch->total/32*4);
                 }
                 depth = das::max(depth, d);
             }

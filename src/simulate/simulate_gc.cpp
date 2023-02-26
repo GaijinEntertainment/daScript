@@ -666,7 +666,7 @@ namespace das
         }
         virtual void beforeArray ( Array * PA, TypeInfo * ti ) override {
             DataWalker::beforeArray(PA,ti);
-            PtrRange rdata(PA->data, ti->firstType->size * PA->capacity);
+            PtrRange rdata(PA->data, size_t(ti->firstType->size) * size_t(PA->capacity));
             markAndPushRange(rdata);
         }
         virtual void afterArray ( Array * pa, TypeInfo * ti ) override {
@@ -675,7 +675,7 @@ namespace das
         }
         virtual void beforeTable ( Table * PT, TypeInfo * ti ) override {
             DataWalker::beforeTable(PT, ti);
-            PtrRange rdata(PT->data, (ti->firstType->size+ti->secondType->size+sizeof(uint64_t))*PT->capacity);
+            PtrRange rdata(PT->data, (ti->firstType->size+ti->secondType->size+sizeof(uint64_t))*size_t(PT->capacity));
             markAndPushRange(rdata);
         }
         virtual void afterTable ( Table * pa, TypeInfo * ti ) override {
