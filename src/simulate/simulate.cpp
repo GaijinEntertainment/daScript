@@ -1717,7 +1717,7 @@ namespace das
         }
     }
 
-    void Context::throw_error_at ( const LineInfo * at, const char * message, ... ) {
+    void Context::throw_error_at ( const LineInfo * at, DAS_FORMAT_STRING_PREFIX const char * message, ... ) {
         const int PRINT_BUFFER_SIZE = 8192;
         char buffer[PRINT_BUFFER_SIZE];
         va_list args;
@@ -1727,7 +1727,7 @@ namespace das
         throw_fatal_error(buffer, at ? *at : LineInfo());
     }
 
-    void Context::throw_error_at ( const LineInfo & at, const char * message, ... ) {
+    void Context::throw_error_at ( const LineInfo & at, DAS_FORMAT_STRING_PREFIX const char * message, ... ) {
         const int PRINT_BUFFER_SIZE = 8192;
         char buffer[PRINT_BUFFER_SIZE];
         va_list args;
@@ -1737,7 +1737,7 @@ namespace das
         throw_fatal_error(buffer, at);
     }
 
-    void Context::throw_error_ex ( const char * message, ... ) {
+    void Context::throw_error_ex ( DAS_FORMAT_STRING_PREFIX const char * message, ... ) {
         const int PRINT_BUFFER_SIZE = 8192;
         char buffer[PRINT_BUFFER_SIZE];
         va_list args;

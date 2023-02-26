@@ -3,7 +3,7 @@ require daslib/fuzzer
 require daslib/faker
 
 [test]
-def test_aka_everything ( t : T? )
+def test_bit_counting_everything ( t : T? )
     t |> run("clz,ctz 32") <| @ ( t : T? )
         for i in urange(32)
             let bits = 1u << i

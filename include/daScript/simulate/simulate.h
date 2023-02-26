@@ -339,22 +339,10 @@ namespace das
         vec4f DAS_EVAL_ABI evalWithCatch ( SimFunction * fnPtr, vec4f * args = nullptr, void * res = nullptr );
         vec4f DAS_EVAL_ABI evalWithCatch ( SimNode * node );
         bool  runWithCatch ( const callable<void()> & subexpr );
-
         DAS_NORETURN_PREFIX void throw_error ( const char * message ) DAS_NORETURN_SUFFIX;
-#ifdef _MSC_VER
-        DAS_NORETURN_PREFIX void throw_error_ex ( __format_string const char * message, ... ) DAS_NORETURN_SUFFIX;
-        DAS_NORETURN_PREFIX void throw_error_at ( const LineInfo & at, __format_string const char * message, ... ) DAS_NORETURN_SUFFIX;
-        DAS_NORETURN_PREFIX void throw_error_at ( const LineInfo * at, __format_string const char * message, ... ) DAS_NORETURN_SUFFIX;
-#elif defined(__GNUC__) || defined(__clang__)
-        DAS_NORETURN_PREFIX void throw_error_ex ( const char * message, ... ) DAS_NORETURN_SUFFIX __attribute__ ((format (printf, 2, 3)));
-        DAS_NORETURN_PREFIX void throw_error_at ( const LineInfo & at, const char * message, ... ) DAS_NORETURN_SUFFIX __attribute__ ((format (printf, 3, 4)));
-        DAS_NORETURN_PREFIX void throw_error_at ( const LineInfo * at, const char * message, ... ) DAS_NORETURN_SUFFIX __attribute__ ((format (printf, 3, 4)));
-#else
-        DAS_NORETURN_PREFIX void throw_error_ex ( const char * message, ... ) DAS_NORETURN_SUFFIX;
-        DAS_NORETURN_PREFIX void throw_error_at ( const LineInfo & at, const char * message, ... ) DAS_NORETURN_SUFFIX;
-        DAS_NORETURN_PREFIX void throw_error_at ( const LineInfo * at, const char * message, ... ) DAS_NORETURN_SUFFIX;
-#endif
-
+        DAS_NORETURN_PREFIX void throw_error_ex ( DAS_FORMAT_STRING_PREFIX const char * message, ... ) DAS_NORETURN_SUFFIX DAS_FORMAT_PRINT_ATTRIBUTE(2,3);
+        DAS_NORETURN_PREFIX void throw_error_at ( const LineInfo & at, DAS_FORMAT_STRING_PREFIX const char * message, ... ) DAS_NORETURN_SUFFIX DAS_FORMAT_PRINT_ATTRIBUTE(3,4);
+        DAS_NORETURN_PREFIX void throw_error_at ( const LineInfo * at, DAS_FORMAT_STRING_PREFIX const char * message, ... ) DAS_NORETURN_SUFFIX DAS_FORMAT_PRINT_ATTRIBUTE(3,4);
         DAS_NORETURN_PREFIX void throw_fatal_error ( const char * message, const LineInfo & at ) DAS_NORETURN_SUFFIX;
         DAS_NORETURN_PREFIX void rethrow () DAS_NORETURN_SUFFIX;
 

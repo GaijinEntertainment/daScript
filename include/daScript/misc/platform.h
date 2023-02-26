@@ -98,18 +98,26 @@
 
 #if defined(__GNUC__) || defined(__clang__)
     #define DAS_NORETURN_PREFIX
-    #define DAS_NORETURN_SUFFIX  __attribute__((noreturn))
+    #define DAS_NORETURN_SUFFIX                 __attribute__((noreturn))
+    #define DAS_FORMAT_PRINT_ATTRIBUTE(a,b)     __attribute__((format(printf,a,b)))
+    #define DAS_FORMAT_STRING_PREFIX
 #elif defined(_MSC_VER)
     #if _MSC_VER>=1900
-        #define DAS_NORETURN_PREFIX  __declspec(noreturn)
+        #define DAS_NORETURN_PREFIX             __declspec(noreturn)
         #define DAS_NORETURN_SUFFIX
+        #define DAS_FORMAT_PRINT_ATTRIBUTE(a,b)
+        #define DAS_FORMAT_STRING_PREFIX        __format_string
     #else
         #define DAS_NORETURN_PREFIX
         #define DAS_NORETURN_SUFFIX
+        #define DAS_FORMAT_PRINT_ATTRIBUTE(a,b)
+        #define DAS_FORMAT_STRING_PREFIX
     #endif
 #else
     #define DAS_NORETURN_PREFIX
     #define DAS_NORETURN_SUFFIX
+    #define DAS_FORMAT_PRINT_ATTRIBUTE(a,b)
+    #define DAS_FORMAT_STRING_PREFIX
 #endif
 
 #if defined(_MSC_VER)
