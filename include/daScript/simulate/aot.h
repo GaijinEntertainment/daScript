@@ -957,6 +957,7 @@ namespace das {
         }
     };
 
+#pragma pack(1)
     template <int variantSize, typename ...TA>
     struct TVariant : Variant {
         TVariant() {}
@@ -965,10 +966,11 @@ namespace das {
         TVariant & operator = ( const TVariant & arr ) { moveT(arr); return *this; }
         TVariant & operator = ( TVariant && arr ) { moveT(arr); return *this; }
         __forceinline void moveT ( const TVariant & arr ) {
-            memcpy ( data, &arr, variantSize );
+            memcpy ( (char *)this, &arr, variantSize );
         }
-        char data[variantSize];
+        char data[variantSize-sizeof(int32_t)];
     };
+#pragma pack()
 
     template <typename TT, int offset, int variant>
     struct das_get_variant_field {

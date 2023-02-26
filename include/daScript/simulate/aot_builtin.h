@@ -90,13 +90,8 @@ namespace das {
     void builtin_sort_any_cblock ( void * anyData, int32_t elementSize, int32_t length, const Block & cmp, Context * context, LineInfoArg * lineinfo );
     void builtin_sort_any_ref_cblock ( void * anyData, int32_t elementSize, int32_t length, const Block & cmp, Context * context, LineInfoArg * lineinfo );
 
-#if defined(_MSC_VER) && !defined(__clang__)
-    __forceinline int32_t variant_index(const Variant & v) { return *(int32_t *)&v; }
-    __forceinline void set_variant_index(Variant & v, int32_t index) { *(int32_t *)&v = index; }
-#else
-    __forceinline int32_t variant_index(const Variant & v) { int32_t index; memcpy(&index, &v, sizeof(int32_t)); return index; }
-    __forceinline void set_variant_index(Variant & v, int32_t index) { memcpy(&v, &index, sizeof(int32_t)); }
-#endif
+    __forceinline int32_t variant_index(const Variant & v) { return v.index; }
+    __forceinline void set_variant_index(Variant & v, int32_t index) { v.index = index; }
 
     void builtin_smart_ptr_clone_ptr ( smart_ptr_raw<void> & dest, const void * src, Context * context, LineInfoArg * at );
     void builtin_smart_ptr_clone ( smart_ptr_raw<void> & dest, const smart_ptr_raw<void> src, Context * context, LineInfoArg * at );

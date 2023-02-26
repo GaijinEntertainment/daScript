@@ -242,9 +242,9 @@ namespace das {
 
     void JobStatus::Wait() {
         unique_lock<mutex> lock(mCompleteMutex);
-        while ( mRemaining ) {
-            mCond.wait(lock);
-        }
+        mCond.wait(lock, [this] {
+            return mRemaining==0;
+        });
     }
 
     bool JobStatus::isReady() {

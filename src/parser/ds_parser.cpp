@@ -4942,7 +4942,7 @@ yydestruct (const char *yymsg,
         break;
 
     case YYSYMBOL_table_type_pair: /* table_type_pair  */
-            { delete ((*yyvaluep).aTypePair).firstType; ((*yyvaluep).aTypePair).secondType; }
+            { delete ((*yyvaluep).aTypePair).firstType; delete ((*yyvaluep).aTypePair).secondType; }
         break;
 
     case YYSYMBOL_type_declaration_no_options: /* type_declaration_no_options  */
