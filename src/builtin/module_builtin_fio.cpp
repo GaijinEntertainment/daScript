@@ -239,8 +239,8 @@ namespace das {
 
     char * builtin_fgets(const FILE* f, Context* context, LineInfoArg * at ) {
         if ( !f ) context->throw_error_at(at, "can't fgets NULL");
-        char buffer[16384];
-        if (char* buf = fgets(buffer, sizeof(buffer), (FILE *)f)) {
+        vector<char> buffer(16384);
+        if (char* buf = fgets(buffer.data(), buffer.size(), (FILE *)f)) {
             return context->stringHeap->allocateString(buf, uint32_t(strlen(buf)));
         } else {
             return nullptr;

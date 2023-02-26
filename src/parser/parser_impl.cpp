@@ -406,8 +406,10 @@ namespace das {
                 pVar->global_shared = glob_shar;
                 pVar->private_variable = !pub_var;
                 if ( ann ) {
+                    // note: we can do this because the annotation syntax is for single variable only
                     pVar->annotation = das::move(*ann);
                     delete ann;
+                    ann = nullptr;
                 }
                 if ( !yyextra->g_Program->addVariable(pVar) )
                     das_yyerror(scanner,"global variable is already declared " + name_at.name,name_at.at,

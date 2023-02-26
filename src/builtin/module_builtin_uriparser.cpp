@@ -31,7 +31,7 @@ char * das::makeNewGuid( das::Context * context ) {
 	UUID id;
 	if ( UuidCreate(&id)!=RPC_S_OK ) context->throw_error("can't create UUID");
     CHAR* uuidstr = NULL;
-    UuidToStringA(&id, (RPC_CSTR *)&uuidstr);
+    if ( UuidToStringA(&id, (RPC_CSTR *)&uuidstr)!=RPC_S_OK ) context->throw_error("can't convert UUID to string");
     char * res = context->stringHeap->allocateString(uuidstr);
     RpcStringFreeA((RPC_CSTR *)&uuidstr);
     return res;

@@ -128,7 +128,7 @@ namespace das {
         uint32_t idx = pArray.size;
         array_grow(*context, pArray, stride);
         if ( uint32_t(index) >= pArray.size ) context->throw_error_ex("insert index out of range, %u of %u", uint32_t(index), pArray.size);
-        memmove ( pArray.data+(index+1)*stride, pArray.data+index*stride, (idx-index)*stride );
+        memmove ( pArray.data+(index+1)*stride, pArray.data+index*stride, size_t(idx-index)*size_t(stride) );
         return index;
     }
 
@@ -136,7 +136,7 @@ namespace das {
         uint32_t idx = pArray.size;
         array_grow(*context, pArray, stride);
         if ( uint32_t(index) >= pArray.size ) context->throw_error_ex("insert index out of range, %u of %u", uint32_t(index), pArray.size);
-        memmove ( pArray.data+(index+1)*stride, pArray.data+index*stride, (idx-index)*stride );
+        memmove ( pArray.data+(index+1)*stride, pArray.data+index*stride, size_t(idx-index)*size_t(stride) );
         memset ( pArray.data + index*stride, 0, stride );
         return index;
     }

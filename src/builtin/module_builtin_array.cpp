@@ -37,7 +37,7 @@ namespace das {
             context->throw_error_ex("erase index out of range, %u of %u", uint32_t(index), pArray.size);
             return;
         }
-        memmove ( pArray.data+index*stride, pArray.data+(index+1)*stride, (pArray.size-index-1)*stride );
+        memmove ( pArray.data+index*stride, pArray.data+(index+1)*stride, size_t(pArray.size-index-1)*size_t(stride) );
         array_resize(*context, pArray, pArray.size-1, stride, false);
     }
 
@@ -46,7 +46,7 @@ namespace das {
             context->throw_error_ex("erasing array range is invalid: index=%i count=%i size=%u", index, count, pArray.size);
             return;
         }
-        memmove ( pArray.data+index*stride, pArray.data+(index+count)*stride, (pArray.size-index-count)*stride );
+        memmove ( pArray.data+index*stride, pArray.data+(index+count)*stride, size_t(pArray.size-index-count)*size_t(stride) );
         array_resize(*context, pArray, pArray.size-count, stride, false);
     }
 
