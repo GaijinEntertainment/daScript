@@ -2,6 +2,8 @@
 
 #include "daScript/ast/ast.h"
 
+#include <inttypes.h>
+
 namespace das
 {
     TypeDeclPtr makeHandleType(const ModuleLibrary & library, const char * typeName) {
@@ -2477,7 +2479,7 @@ namespace das
 
     int TypeDecl::getBaseSizeOf() const {
         uint64_t size = getBaseSizeOf64();
-        DAS_ASSERTF(size<=0x7fffffff,"base size %ul is too big", (unsigned long)size);
+        DAS_ASSERTF(size<=0x7fffffff,"base size %" PRIu64 " is too big", size);
         return int(size<=0x7fffffff ? size : 1);
     }
 
