@@ -155,12 +155,12 @@ jobs:
            linux64)
             cd bin
             ./daScriptTest
-            ./daScript _dasroot_/dastest/dastest.das -- --color --test ../tests
+            ./daScript _dasroot_/dastest/dastest.das -- --color --isolated-mode --timeout 1200 --test ../tests
             ;;
            windows*)
             cd bin/"${{ matrix.cmake_preset }}"
             ./daScriptTest.exe
-            ./daScript _dasroot_/dastest/dastest.das -- --color --test ../../tests
+            ./daScript _dasroot_/dastest/dastest.das -- --color --isolated-mode --timeout 1200 --test ../../tests
             ;;
            *)
             cd bin
@@ -169,6 +169,6 @@ jobs:
                 ./daScriptTest
                 ;;
             esac
-            ./daScript _dasroot_/dastest/dastest.das -- --color --test ../tests
+            ./daScript _dasroot_/dastest/dastest.das -- --color --isolated-mode --timeout 1200 --test ../tests
             ;;
         esac

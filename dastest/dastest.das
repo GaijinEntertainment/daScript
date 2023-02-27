@@ -104,7 +104,7 @@ def main()
             res += status
     else
         let totalFiles = length(files)
-        let totalThreads = max(1, args |> get_int_arg("--isolated-mode-threads", 2)) // get_total_hw_threads() - 2) // 1 for main thread, 1 for timeout thread
+        let totalThreads = max(1, args |> get_int_arg("--isolated-mode-threads", get_total_hw_threads() * 2)) // magic x2, os should be able to schedule sub processes in parallel
         log::info("Running {totalFiles} tests in isolated mode with {totalThreads} threads\n")
         with_channel(totalFiles) <| $ (inputChannel)
             with_channel(totalFiles) <| $ (outputChannel)
