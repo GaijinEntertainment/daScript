@@ -12,13 +12,13 @@ struct SuiteResult
     skipped: int // number of skipped tests
 
 
-def operator +(var a: SuiteResult; b: SuiteResult): SuiteResult
+def operator +(var a: SuiteResult; b: SuiteResult | #): SuiteResult
     var res := a
     res += b
     return res
 
 
-def operator +=(var a: SuiteResult; b: SuiteResult): void
+def operator +=(var a: SuiteResult; b: SuiteResult | #): void
     a.passed += b.passed
     a.failed += b.failed
     a.total += b.total
@@ -26,7 +26,7 @@ def operator +=(var a: SuiteResult; b: SuiteResult): void
     a.skipped += b.skipped
 
 
-def operator ==(a: SuiteResult; b: SuiteResult): bool
+def operator ==(a: SuiteResult | #; b: SuiteResult | #): bool
     return (
         a.passed == b.passed &&
         a.failed == b.failed &&
@@ -36,7 +36,7 @@ def operator ==(a: SuiteResult; b: SuiteResult): bool
     )
 
 
-def operator !=(a: SuiteResult; b: SuiteResult): bool
+def operator !=(a: SuiteResult | #; b: SuiteResult | #): bool
     return !(a == b)
 
 

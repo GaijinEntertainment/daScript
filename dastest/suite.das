@@ -135,9 +135,7 @@ def test_file(file_name: string; ctx: SuiteCtx; file_ctx: FileCtx): SuiteResult
                     else
                         res.passed += 1
                     return
-
                 simulate(program) <| $ (sok; context; serrors)
-                    print("{serrors}\n")
                     if !sok
                         res.total += 1
                         res.errors += 1
@@ -288,6 +286,7 @@ def private test_any(name: string; func; args_num: int; var context: FileCtx; va
                 *context.context |> invoke_in_context(func, testing)
             dt = get_time_usec(t0)
     recover
+        failed = true
         if !deliberateRecover
             dt = get_time_usec(t0)
             res.errors += 1
@@ -305,6 +304,8 @@ def private test_any(name: string; func; args_num: int; var context: FileCtx; va
         expectFailure = false
         failed = true
         log::error("{context.indenting}--- expect test failure, but it's success '{name}' {time_dt_hr(dt)}")
+    elif !expectFailure && failed
+        failed = false
 
     if failed
         res.failed += 1
