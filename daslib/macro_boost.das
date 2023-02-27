@@ -10,7 +10,7 @@ module macro_boost shared private
 require daslib/ast_boost
 require daslib/templates_boost
 
-[tag_function(macro_verify_tag)]
+[macro_function,tag_function(macro_verify_tag)]
 def public macro_verify ( expr:bool; prog:ProgramPtr; at:LineInfo; message:string )
     //! Same as verify, only the check will produce macro error, followed by return [[ExpressionPtr]]
     pass
