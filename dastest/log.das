@@ -12,45 +12,45 @@ let private uriPaths = false
 
 var useTtyColors = false
 
-def info_raw(msg: string)
+def info_raw(msg: string | #)
     print("{msg}")
 
-def info(msg: string)
+def info(msg: string | #)
     if !verbose
         print("{msg}\n")
     else
         print("{msg} @{file_info_hr(get_line_info(1), uriPaths)}\n")
 
 
-def warn(msg: string)
+def warn(msg: string | #)
     if !verbose
         print(yellow_str("[W] {msg}\n"))
     else
         print(yellow_str("[W] {msg} @{file_info_hr(get_line_info(1), uriPaths)}\n"))
 
 
-def error(msg: string)
+def error(msg: string | #)
     if !verbose
         print(red_str("[E] {msg}\n"))
     else
         print(red_str("[E] {msg} @{file_info_hr(get_line_info(1), uriPaths)}\n"))
 
 
-def green(msg: string)
+def green(msg: string | #)
     if !verbose
         print(green_str("{msg}\n"))
     else
         print(green_str("{msg} @{file_info_hr(get_line_info(1), uriPaths)}\n"))
 
 
-def red(msg: string)
+def red(msg: string | #)
     if !verbose
         print(red_str("{msg}\n"))
     else
         print(red_str("{msg} @{file_info_hr(get_line_info(1), uriPaths)}\n"))
 
 
-def blue(msg: string)
+def blue(msg: string | #)
     if !verbose
         print(blue_str("{msg}\n"))
     else

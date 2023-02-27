@@ -10,7 +10,7 @@ require daslib/jobque_boost
 require fs
 require suite
 require log
-
+require math
 
 let private jsonResultPrefix = "##dastest##\n"
 
@@ -40,6 +40,23 @@ def private get_float_arg(args: array<string>; name: string; def_val: float): fl
     let idx = find_index(args, name)
     return idx >= 0 && idx + 1 < length(args) ? float(args[idx + 1]) : def_val
 
+def private get_int_arg(args: array<string>; name: string; def_val: int): int
+    let idx = find_index(args, name)
+    return idx >= 0 && idx + 1 < length(args) ? int(args[idx + 1]) : def_val
+
+struct IsoInput
+    uri: string
+    cmd: string
+
+struct IsolatedResult
+    uri: string
+    cmd: string
+    exitCode : int
+    parsedResult : bool
+    status: SuiteResult
+    fileDt : int
+    err : array<string>
+    log : array<string>
 
 [export]
 def main()
@@ -86,49 +103,81 @@ def main()
                 log::red("FAIL {uri} {time_dt_hr(fileDt)}")
             res += status
     else
-        for file in files
-            let uri = ctx.uriPaths ? file_name_to_uri(file) : file
-            let singleTest = "{args[0]} {args[1]} -- --run {file} {log::useTtyColors ? " --color" : ""}"
-            var exitCode = 0
-            var parsedResult = false
-            var status: SuiteResult
-            let fileTime = ref_time_ticks()
-            unsafe
-                exitCode = popen(singleTest) <| $(f)
-                    if f == null
-                        log::error("Internal error: Failed to execute cmd > {singleTest}")
-                        return
-                    var readJson = false
-                    var jsonResult = ""
-                    while !feof(f)
-                        let st = fgets(f)
-                        if st == jsonResultPrefix
-                            readJson = !readJson
-                            continue
-                        if readJson
-                            jsonResult += st
+        let totalFiles = length(files)
+        let totalThreads = max(1, args |> get_int_arg("--isolated-mode-threads", 2)) // get_total_hw_threads() - 2) // 1 for main thread, 1 for timeout thread
+        log::info("Running {totalFiles} tests in isolated mode with {totalThreads} threads\n")
+        with_channel(totalFiles) <| $ (inputChannel)
+            with_channel(totalFiles) <| $ (outputChannel)
+                with_job_status(totalThreads) <| $ (completion)
+
+                    for t in range(totalThreads)
+                        new_thread <| @
+                            for_each(inputChannel) <| $ (input : IsoInput#)
+                                var isoRes : IsolatedResult
+                                isoRes.uri = clone_string(input.uri)
+                                isoRes.cmd = clone_string(input.cmd)
+                                let fileTime = ref_time_ticks()
+                                unsafe
+                                    isoRes.exitCode = popen(input.cmd) <| $(f)
+                                        if f == null
+                                            // log::error("Internal error: Failed to execute cmd > {input.cmd}")
+                                            isoRes.err |> push("Internal error: Failed to execute cmd > {input.cmd}")
+                                            return
+                                        var readJson = false
+                                        var jsonResult = ""
+                                        while !feof(f)
+                                            let st = fgets(f)
+                                            if st == jsonResultPrefix
+                                                readJson = !readJson
+                                                continue
+                                            if readJson
+                                                jsonResult += st
+                                            else
+                                                // log::info_raw(st)
+                                                isoRes.log |> push(st)
+                                        var jsError: string
+                                        var js = jsonResult |> read_json(jsError)
+                                        if !empty(jsError)
+                                            // log::error("Internal error: failed to parse json result {jsError}")
+                                            isoRes.err |> push("Internal error: failed to parse json result {jsError}")
+                                        elif js != null
+                                            isoRes.parsedResult = true
+                                            isoRes.status = SuiteResult(js)
+                                isoRes.fileDt = get_time_usec(fileTime)
+
+                                outputChannel |> push_clone(isoRes)
+                                outputChannel |> notify()
+
+                            inputChannel |> release()
+                            outputChannel |> release()
+                            completion |> notify_and_release()
+
+                    for file in files
+                        let uri = ctx.uriPaths ? file_name_to_uri(file) : file
+                        let singleTest = "{args[0]} {args[1]} -- --run {file} {log::useTtyColors ? " --color" : ""}"
+                        inputChannel |> push_clone([[IsoInput uri=clone_string(uri), cmd=clone_string(singleTest)]])
+                        inputChannel |> notify()
+
+                    for isoRes in each(outputChannel, type<IsolatedResult>)
+                        res += isoRes.status
+                        for err in isoRes.err
+                            log::error(err)
+                        for l in isoRes.log
+                            log::info_raw(l)
+                        if isoRes.exitCode == 0 && isoRes.parsedResult && isoRes.status.failed + isoRes.status.errors == 0
+                            log::green("PASS {isoRes.uri} {time_dt_hr(isoRes.fileDt)}")
                         else
-                            log::info_raw(st)
-                    var jsError: string
-                    var js = jsonResult |> read_json(jsError)
-                    if !empty(jsError)
-                        log::error("Internal error: failed to parse json result {jsError}")
-                    elif js != null
-                        parsedResult = true
-                        status = SuiteResult(js)
-            let fileDt = get_time_usec(fileTime)
-            res += status
-            if exitCode == 0 && parsedResult && status.failed + status.errors == 0
-                log::green("PASS {uri} {time_dt_hr(fileDt)}")
-            else
-                log::red("FAIL {uri} {time_dt_hr(fileDt)}")
-                if exitCode != 0
-                    log::red("exit status {exitCode}")
-                if !parsedResult
-                    res.total += 1
-                    res.errors += 1
-                    log::red("`{uri}` execution was interrupted, crashed for example")
-                    log::info("to get more information, run the test manually\n> {singleTest}")
+                            log::red("FAIL {isoRes.uri} {time_dt_hr(isoRes.fileDt)}")
+                            if isoRes.exitCode != 0 || !isoRes.parsedResult
+                                res.total += 1
+                                res.errors += 1
+                            if !isoRes.parsedResult
+                                log::red("`{isoRes.uri}` execution was interrupted, crashed for example")
+                                log::info("to get more information, run the test manually\n> {isoRes.cmd}")
+                            if isoRes.exitCode != 0
+                                log::red("exit status {isoRes.exitCode}")
+
+                    completion |> join()
     finish_tests(res, startTime)
 
 
