@@ -154,7 +154,6 @@ class TagFunctionAnnotation : AstFunctionAnnotation
             if !(val is tBool)
                 errors := "tag_function annotation expects only tag names"
                 return false
-        func.flags |= FunctionFlags exports
         return true
 
 class TagStructureAnnotation : AstStructureAnnotation
