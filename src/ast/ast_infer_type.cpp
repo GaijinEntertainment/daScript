@@ -50,6 +50,7 @@ namespace das {
         bool verbose = true;
     protected:
         FunctionPtr             func;
+        VariablePtr             globalVar;
         vector<VariablePtr>     local;
         vector<ExpressionPtr>   loop;
         vector<ExprBlock *>     blocks;
@@ -1608,7 +1609,12 @@ namespace das {
                 }
             }
         }
+        virtual void preVisitGlobalLetInit ( const VariablePtr & var, Expression * init ) override {
+            Visitor::preVisitGlobalLetInit(var, init);
+            globalVar = var;
+        }
         virtual ExpressionPtr visitGlobalLetInit ( const VariablePtr & var, Expression * init ) override {
+            globalVar = nullptr;
             if ( !var->init->type ) return Visitor::visitGlobalLetInit(var, init);
             if ( var->type->isAuto() ) {
                 auto varT = TypeDecl::inferGenericInitType(var->type, var->init->type);
@@ -4805,6 +4811,11 @@ namespace das {
             auto vars = findMatchingVar(expr->name, false);
             if ( vars.size()==1 ) {
                 auto var = vars.back();
+                if ( var==globalVar ) {
+                    error("global variable " + expr->name + " cant't be initialized with itself",
+                        "", "", expr->at, CompilationError::variable_not_found);
+                    return Visitor::visit(expr);
+                }
                 expr->variable = var;
                 expr->type = make_smart<TypeDecl>(*var->type);
                 expr->type->ref = true;

@@ -308,11 +308,22 @@ namespace das {
     }
 
 #if DAS_SMART_PTR_ID
-    #define DAS_UPDATE_SMART_PTR_ID        ref_count_id = ++ref_count_total;
+    #define DAS_NEW_SMART_PTR_ID \
+    { \
+        lock_guard<mutex> guard(ref_count_mutex); \
+        ref_count_id = ++ref_count_total; \
+        ref_count_ids.insert(ref_count_id); \
+    }
+    #define DAS_DELETE_SMART_PTR_ID \
+    { \
+        lock_guard<mutex> guard(ref_count_mutex); \
+        ref_count_ids.erase(ref_count_id); \
+    }
     #define DAS_TRACK_SMART_PTR_ID         if ( ref_count_id==ref_count_track ) os_debug_break();
 #else
-    #define DAS_UPDATE_SMART_PTR_ID
+    #define DAS_NEW_SMART_PTR_ID
     #define DAS_TRACK_SMART_PTR_ID
+    #define DAS_DELETE_SMART_PTR_ID
 #endif
 
 #if DAS_SMART_PTR_TRACKER
@@ -327,21 +338,23 @@ namespace das {
     class ptr_ref_count {
     public:
 #if DAS_SMART_PTR_ID
-        uint64_t    ref_count_id;
-        static uint64_t ref_count_total;
-        static uint64_t ref_count_track;
+        uint64_t                    ref_count_id;
+        static uint64_t             ref_count_total;
+        static uint64_t             ref_count_track;
+        static das_set<uint64_t>    ref_count_ids;
+        static mutex                ref_count_mutex;
 #endif
     public:
         __forceinline ptr_ref_count () {
-            DAS_UPDATE_SMART_PTR_ID
+            DAS_NEW_SMART_PTR_ID
             DAS_SMART_PTR_NEW
         }
         __forceinline ptr_ref_count ( const ptr_ref_count &  ) {
-            DAS_UPDATE_SMART_PTR_ID
+            DAS_NEW_SMART_PTR_ID
             DAS_SMART_PTR_NEW
         }
         __forceinline ptr_ref_count ( const ptr_ref_count && ) {
-            DAS_UPDATE_SMART_PTR_ID
+            DAS_NEW_SMART_PTR_ID
             DAS_SMART_PTR_NEW
         }
         __forceinline ptr_ref_count & operator = ( const ptr_ref_count & ) { return *this;}
@@ -354,6 +367,7 @@ namespace das {
 #else
             DAS_ASSERTF(ref_count == 0, "can only delete when ref_count==0");
 #endif
+            DAS_DELETE_SMART_PTR_ID
             DAS_SMART_PTR_DELETE
         }
         __forceinline void addRef() {

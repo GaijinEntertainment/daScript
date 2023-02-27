@@ -7,6 +7,8 @@
 #if DAS_SMART_PTR_ID
     uint64_t das::ptr_ref_count::ref_count_total = 0;
     uint64_t das::ptr_ref_count::ref_count_track = 0;
+    das::das_set<uint64_t> das::ptr_ref_count::ref_count_ids;
+    das::mutex             das::ptr_ref_count::ref_count_mutex;
 #endif
 
 #if DAS_SMART_PTR_TRACKER
