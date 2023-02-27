@@ -301,10 +301,7 @@ namespace das {
             Visitor::preVisit(expr);
             if ( globalVar && expr->isGlobalVariable() ) {
                 if ( expr->variable->index!=-3 ) {
-                    if ( expr->variable==globalVar ) {
-                        program->error("global variable " + expr->name + " cant't be initialized with itself",
-                            "", "", expr->at, CompilationError::variable_not_found);
-                    } else if ( expr->variable->module==globalVar->module ) {
+                    if ( expr->variable->module==globalVar->module ) {
                         program->error("global variable " + expr->name + " is initialized after " + globalVar->name + " (" + to_string(expr->variable->index) + ")",
                             "", "", expr->at, CompilationError::variable_not_found);
                     }

@@ -416,6 +416,26 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                 }
                 projectFile = argv[i+1];
                 i += 1;
+            } else if ( cmd=="-track-smart-ptr" ) {
+                // script will pick up next argument by itself
+                if ( i+1 > argc ) {
+                    printf("expecting smart pointer id\n");
+                    print_help();
+                    return -1;
+                }
+#if DAS_SMART_PTR_ID
+                uint64_t id = 0;
+                if ( sscanf(argv[i+1], "%" PRIx64, &id)!=1 ) {
+                    printf("expecting smart pointer id, got %s\n", argv[i+1]);
+                    return -1;
+                }
+                ptr_ref_count::ref_count_track = id;
+                i += 1;
+                printf("tracking %" PRIx64 "\n", id);
+#else
+                printf("smart ptr id tracking is disabled\n");
+                return -1;
+#endif
             } else if ( cmd=="-das-wait-debugger") {
                 debuggerRequired = true;
             } else if ( cmd=="-das-profiler") {
@@ -428,7 +448,6 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                     return -1;
                 }
                 i += 1;
-
             } else if ( cmd=="-das-profiler-manual" ) {
                 // do nohting, script handles it
             } else if ( cmd=="-das-profiler-memory" ) {
@@ -493,6 +512,13 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     if ( g_smart_ptr_total!=0 ) {
         TextPrinter tp;
         tp << "smart pointers leaked: " << uint64_t(g_smart_ptr_total) << "\n";
+#if DAS_SMART_PTR_ID
+        tp << "leaked ids:";
+        for ( auto it : ptr_ref_count::ref_count_ids ) {
+            tp << " " << HEX << it << DEC;
+        }
+        tp << "\n";
+#endif
         exit(1);
     }
 #endif
