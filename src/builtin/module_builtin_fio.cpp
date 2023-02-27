@@ -436,6 +436,15 @@ namespace das {
         FILE * f = _popen(cmd, "rt");
 #elif defined(__linux__)
         FILE * f = popen(cmd, "r");
+#elif defined(__APPLE__)
+        FILE * f = nullptr;
+        {
+            // `popen` sometimes returns 127 on OSX when executed in parallel.
+            // Related: https://github.com/microsoft/vcpkg-tool/pull/695#discussion_r973364608
+            static mutex mtx;
+            lock_guard<mutex> lock(mtx);
+            f = popen(cmd, "r+");
+        }
 #else
         FILE * f = popen(cmd, "r+");
 #endif
