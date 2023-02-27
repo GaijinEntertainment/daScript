@@ -438,10 +438,10 @@ namespace das {
         FILE * f = popen(cmd, "r");
 #elif defined(__APPLE__)
         FILE * f = nullptr;
+        static mutex mtx;
         {
             // `popen` sometimes returns 127 on OSX when executed in parallel.
             // Related: https://github.com/microsoft/vcpkg-tool/pull/695#discussion_r973364608
-            static mutex mtx;
             lock_guard<mutex> lock(mtx);
             f = popen(cmd, "r+");
         }
@@ -453,6 +453,12 @@ namespace das {
         context->invoke(blk, args, nullptr, at);
 #ifdef _MSC_VER
         return _pclose( f );
+#elif defined(__APPLE__)
+        {
+            lock_guard<mutex> lock(mtx);
+            auto t = pclose(f);
+            return WIFEXITED(t) ? WEXITSTATUS(t) : WIFSIGNALED(t) ? WTERMSIG(t) : t;
+        }
 #else
         auto t = pclose(f);
         return WIFEXITED(t) ? WEXITSTATUS(t) : WIFSIGNALED(t) ? WTERMSIG(t) : t;
