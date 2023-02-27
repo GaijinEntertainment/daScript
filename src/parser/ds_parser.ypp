@@ -135,6 +135,7 @@
 %destructor { delete $$; } <pCapt>
 %destructor { delete $$; } <pCaptList>
 %destructor { delete $$.firstType; delete $$.secondType; } <aTypePair>
+%destructor { $$->delRef(); } <pFuncDecl>
 
 %token  LEXER_ERROR         "lexer error"
 
