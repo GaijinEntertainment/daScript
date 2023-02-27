@@ -102,8 +102,9 @@ def each ( var channel:Channel?; tinfo : auto(TT) )
                     break
                 unsafe
                     yield * reinterpret<TT?#> void_data
-            channel |> release
             return false
+        finally
+            channel |> release
 
 def public capture_jobque_channel ( ch:Channel? ) : Channel?
     //! this function is used to capture a channel that is used by the jobque.
