@@ -20,9 +20,7 @@ class ValidateShaderVisitor : AstVisitor
 
 [simulate_macro(name="shader_like")]
 class JIT_LLVM : AstSimulateMacro
-    def override simulate ( prog:Program?; var ctx:Context? ) : bool
-        return true if is_in_completion() || is_compiling_macros()
-        return true if ctx.category.debug_context || ctx.category.macro_context || ctx.category.folding_context || ctx.category.debugger_tick || ctx.category.debugger_attached
+    def lint_module ( prog:Program?; var ctx:Context? )
         var astVisitor = new ValidateShaderVisitor()
         var inscope adapter <- make_visitor(*astVisitor)
         prog |> for_each_module <| $ ( mod )
@@ -37,4 +35,16 @@ class JIT_LLVM : AstSimulateMacro
                         visit(g.init, adapter)
         unsafe
             delete astVisitor
+    def override simulate ( prog:Program?; var ctx:Context? ) : bool
+        return true if is_in_completion() || is_compiling_macros()
+        return true if ctx.category.debug_context || ctx.category.macro_context || ctx.category.folding_context || ctx.category.debugger_tick || ctx.category.debugger_attached
+        for opt in prog._options
+            if opt.name=="shader_like" && opt.bValue
+                lint_module(prog,ctx)
+                return true
         return true
+
+[_macro]
+def init_shader_like
+    if is_compiling_macros_in_module("shader_like")
+        this_module() |> add_module_option("shader_like",Type tBool)

@@ -968,7 +968,7 @@ namespace das
         virtual ~Module();
         virtual void addPrerequisits ( ModuleLibrary & ) const {}
         virtual ModuleAotType aotRequire ( TextWriter & ) const { return ModuleAotType::no_aot; }
-        virtual Type getOptionType ( const string & ) const { return Type::none; }
+        virtual Type getOptionType ( const string & ) const;
         virtual bool initDependencies() { return true; }
         bool addAlias ( const TypeDeclPtr & at, bool canFail = false );
         bool addVariable ( const VariablePtr & var, bool canFail = false );
@@ -1060,6 +1060,7 @@ namespace das
         das_map<string,ReaderMacroPtr>              readMacros;         // %foo "blah"
         CommentReaderPtr                            commentReader;      // /* blah */ or // blah
         vector<pair<string,bool>>                   keywords;           // keywords (and if they need oxford comma)
+        das_hash_map<string,Type>                   options;            // options
         string  name;
         union {
             struct {

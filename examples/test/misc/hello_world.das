@@ -1,6 +1,7 @@
 require daslib/shader_like
-
 require daslib/lpipe
+
+options shader_like
 
 // this fails
 var arr : array<int>    // 40104: global variable arr requires heap

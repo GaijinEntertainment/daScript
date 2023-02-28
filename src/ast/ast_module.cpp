@@ -169,6 +169,15 @@ namespace das {
         return nullptr;
     }
 
+    Type Module::getOptionType ( const string & optName ) const {
+        auto it = options.find(optName);
+        if ( it != options.end() ) {
+            return it->second;
+        } else {
+            return Type::none;
+        }
+    }
+
     Type Module::findOption ( const string & name ) {
         Type optT = Type::none;
         for ( auto m = daScriptEnvironment::bound->modules; m != nullptr; m = m->next ) {
@@ -514,6 +523,10 @@ namespace das {
                 addReaderMacro(rm.second);
             }
             commentReader = ptm->commentReader;
+            for ( auto & op : ptm->options) {
+                DAS_ASSERTF(options.find(op.first)==options.end(),"duplicate option %s", op.first.c_str());
+                options[op.first] = op.second;
+            }
             return true;
         } else {
             DAS_FATAL_ERROR("builtin module did not parse %s\n", modName.c_str());
