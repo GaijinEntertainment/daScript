@@ -8,6 +8,7 @@ module validate_code shared private
 require daslib/ast_boost
 require daslib/rtti
 require daslib/strings
+require daslib/contracts
 
 [macro_function]
 def check_recursive ( at:LineInfo; fun:Function?; var call_graph:array<Function?>; var visited:table<Function?> )
@@ -46,7 +47,7 @@ class ValidateCompletionVisitor : AstVisitor
     def override preVisitExprFor(expr:smart_ptr<ExprFor>) : void
         var srcOk = false
         for src in expr.sources
-            if src._type.isRange || src._type.isGoodArrayType
+            if src._type.isRange || src._type.isArray || src._type.isGoodArrayType || isYetAnotherVectorTemplate(src._type)
                 srcOk = true
                 break
         if !srcOk

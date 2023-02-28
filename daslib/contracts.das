@@ -9,7 +9,7 @@ module contracts shared private
 require ast
 require daslib/ast_boost
 
-def public isYetAnotherVectorTemplate ( var td:TypeDeclPtr )
+def public isYetAnotherVectorTemplate ( td:TypeDeclPtr )
     //! returns true if the given type declaration is a das::vector template bound on C++ side
     return td.isHandle && td.annotation!=null && td.annotation.is_any_vector
 
