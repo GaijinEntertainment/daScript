@@ -548,3 +548,6 @@ The same example using regular match would look like this::
             if $v(a) && (a % 2 == 1)
                 text += " odd"
         return text
+
+`static_multi_match` is a variant of `multi_match` that works with `static_match`.
+

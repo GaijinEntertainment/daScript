@@ -429,3 +429,7 @@
 .. |function-builtin-count| replace:: returns iterator which iterates from `start` value by incrementing it by `step` value. It is the intended way to have counter together with other values in the `for` loop.
 
 .. |function-builtin-ucount| replace:: returns iterator which iterates from `start` value by incrementing it by `step` value. It is the intended way to have counter together with other values in the `for` loop.
+
+.. |function-builtin-move_new| replace:: Moves the new [[...]] value into smart_ptr.
+
+.. |function-builtin-move| replace:: Moves one smart_ptr into another. Semantic equivalent of move(a,b) => a := null, a <- b

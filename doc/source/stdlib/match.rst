@@ -33,6 +33,18 @@ Implements `match` macro.
 
 Implements `static_match` macro.
 
+.. _call-macro-match-multi_match:
+
+.. das:attribute:: multi_match
+
+Implements `multi_match` macro.
+
+.. _call-macro-match-static_multi_match:
+
+.. das:attribute:: static_multi_match
+
+Implements `static_multi_match` macro.
+
 ++++++++++++++++
 Structure macros
 ++++++++++++++++
@@ -43,5 +55,12 @@ Structure macros
 
 Implements `match_as_is` annotation.
 This annotation is used to mark that structure can be matched with different type via is and as machinery.
+
+.. _handle-match-match_copy:
+
+.. das:attribute:: match_copy
+
+Implements `match_copy` annotation.
+This annotation is used to mark that structure can be matched with different type via match_copy machinery.
 
 

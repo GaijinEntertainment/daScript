@@ -463,8 +463,8 @@ Containers
   *  :ref:`push (Arr:array\<auto(numT)\> -const;varr:array\<numT\> const -#) : auto <function-_at__builtin__c__c_push_1_ls_Y_ls_numT_gr_._gr_A_C1_ls_Y_ls_numT_gr_L_gr_A>` 
   *  :ref:`push (Arr:array\<auto(numT)\> -const;varr:numT const[] -#) : auto <function-_at__builtin__c__c_push_1_ls_Y_ls_numT_gr_._gr_A_C[-1]Y_ls_numT_gr_L>` 
   *  :ref:`push (Arr:array\<auto(numT)[]\> -const;varr:numT const[] -#) : auto <function-_at__builtin__c__c_push_1_ls_[-1]Y_ls_numT_gr_._gr_A_C[-1]Y_ls_numT_gr_L>` 
-  *  :ref:`emplace (Arr:array\<auto(numT)\> -const;value:numT -const -#;at:int const) : auto <function-_at__builtin__c__c_emplace_1_ls_Y_ls_numT_gr_._gr_A_Y_ls_numT_gr_L_Ci>` 
-  *  :ref:`emplace (Arr:array\<auto(numT)\> -const;value:numT -const -#) : auto <function-_at__builtin__c__c_emplace_1_ls_Y_ls_numT_gr_._gr_A_Y_ls_numT_gr_L>` 
+  *  :ref:`emplace (Arr:array\<auto(numT)\> -const;value:numT& -const -#;at:int const) : auto <function-_at__builtin__c__c_emplace_1_ls_Y_ls_numT_gr_._gr_A_&Y_ls_numT_gr_L_Ci>` 
+  *  :ref:`emplace (Arr:array\<auto(numT)\> -const;value:numT& -const -#) : auto <function-_at__builtin__c__c_emplace_1_ls_Y_ls_numT_gr_._gr_A_&Y_ls_numT_gr_L>` 
   *  :ref:`emplace (Arr:array\<auto(numT)\> -const;value:numT[] -const -#) : auto <function-_at__builtin__c__c_emplace_1_ls_Y_ls_numT_gr_._gr_A_[-1]Y_ls_numT_gr_L>` 
   *  :ref:`emplace (Arr:array\<auto(numT)[]\> -const;value:numT[] -const -#) : auto <function-_at__builtin__c__c_emplace_1_ls_[-1]Y_ls_numT_gr_._gr_A_[-1]Y_ls_numT_gr_L>` 
   *  :ref:`push_clone (Arr:array\<auto(numT)\> -const;value:numT|numT# const;at:int const) : auto <function-_at__builtin__c__c_push_clone_1_ls_Y_ls_numT_gr_._gr_A_C0_ls_Y_ls_numT_gr_L;_hh_Y_ls_numT_gr_L_gr_|_Ci>` 
@@ -504,7 +504,7 @@ Containers
   *  :ref:`key_exists (Tab:table\<auto(keyT);auto(valT)\> const|table\<auto(keyT);auto(valT)\># const;at:string const#) : bool <function-_at__builtin__c__c_key_exists_C0_ls_C1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T;_hh_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_gr_|_C_hh_s>` 
   *  :ref:`key_exists (Tab:table\<auto(keyT);auto(valT)\> const|table\<auto(keyT);auto(valT)\># const;at:keyT|keyT# const) : bool <function-_at__builtin__c__c_key_exists_C0_ls_C1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T;_hh_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_gr_|_C0_ls_Y_ls_keyT_gr_L;_hh_Y_ls_keyT_gr_L_gr_|>` 
   *  :ref:`copy_to_local (a:auto(TT) const) : TT -const <function-_at__builtin__c__c_copy_to_local_CY_ls_TT_gr_.>` 
-  *  :ref:`move_to_local (a:auto(TT) -const) : TT -const <function-_at__builtin__c__c_move_to_local_Y_ls_TT_gr_.>` 
+  *  :ref:`move_to_local (a:auto(TT)& -const) : TT -const -& <function-_at__builtin__c__c_move_to_local_&Y_ls_TT_gr_.>` 
   *  :ref:`keys (a:table\<auto(keyT);auto(valT)\> const|table\<auto(keyT);auto(valT)\># const) : iterator\<keyT const&\> <function-_at__builtin__c__c_keys_C0_ls_C1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T;_hh_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_gr_|>` 
   *  :ref:`values (a:table\<auto(keyT);void\> const ==const|table\<auto(keyT);void\> const# ==const const) : auto <function-_at__builtin__c__c_values_C0_ls_C_eq_1_ls_Y_ls_keyT_gr_._gr_2_ls_v_gr_T;C_hh__eq_1_ls_Y_ls_keyT_gr_._gr_2_ls_v_gr_T_gr_|>` 
   *  :ref:`values (a:table\<auto(keyT);void\> ==const -const|table\<auto(keyT);void\># ==const -const -const) : auto <function-_at__builtin__c__c_values_0_ls__eq_1_ls_Y_ls_keyT_gr_._gr_2_ls_v_gr_T;_hh__eq_1_ls_Y_ls_keyT_gr_._gr_2_ls_v_gr_T_gr_|>` 
@@ -806,9 +806,9 @@ push returns auto
 
 |function-builtin-push|
 
-.. _function-_at__builtin__c__c_emplace_1_ls_Y_ls_numT_gr_._gr_A_Y_ls_numT_gr_L_Ci:
+.. _function-_at__builtin__c__c_emplace_1_ls_Y_ls_numT_gr_._gr_A_&Y_ls_numT_gr_L_Ci:
 
-.. das:function:: emplace(Arr: array<auto(numT)>; value: numT; at: int const)
+.. das:function:: emplace(Arr: array<auto(numT)>; value: numT&; at: int const)
 
 emplace returns auto
 
@@ -817,7 +817,7 @@ emplace returns auto
 +========+=================+
 +Arr     +array<auto(numT)>+
 +--------+-----------------+
-+value   +numT             +
++value   +numT&            +
 +--------+-----------------+
 +at      +int const        +
 +--------+-----------------+
@@ -825,9 +825,9 @@ emplace returns auto
 
 |function-builtin-emplace|
 
-.. _function-_at__builtin__c__c_emplace_1_ls_Y_ls_numT_gr_._gr_A_Y_ls_numT_gr_L:
+.. _function-_at__builtin__c__c_emplace_1_ls_Y_ls_numT_gr_._gr_A_&Y_ls_numT_gr_L:
 
-.. das:function:: emplace(Arr: array<auto(numT)>; value: numT)
+.. das:function:: emplace(Arr: array<auto(numT)>; value: numT&)
 
 emplace returns auto
 
@@ -836,7 +836,7 @@ emplace returns auto
 +========+=================+
 +Arr     +array<auto(numT)>+
 +--------+-----------------+
-+value   +numT             +
++value   +numT&            +
 +--------+-----------------+
 
 
@@ -1565,16 +1565,16 @@ copy_to_local returns TT
 
 |function-builtin-copy_to_local|
 
-.. _function-_at__builtin__c__c_move_to_local_Y_ls_TT_gr_.:
+.. _function-_at__builtin__c__c_move_to_local_&Y_ls_TT_gr_.:
 
-.. das:function:: move_to_local(a: auto(TT))
+.. das:function:: move_to_local(a: auto(TT)&)
 
 move_to_local returns TT
 
 +--------+-------------+
 +argument+argument type+
 +========+=============+
-+a       +auto(TT)     +
++a       +auto(TT)&    +
 +--------+-------------+
 
 
@@ -2512,14 +2512,62 @@ gc0_restore_smart_ptr returns smart_ptr<void>
 Smart ptr infrastructure
 ++++++++++++++++++++++++
 
-  *  :ref:`smart_ptr_clone (dest:smart_ptr\<void\>& implicit;src:void? const implicit) : void <function-_at__builtin__c__c_smart_ptr_clone_&I1_ls_v_gr_?M_CI?>` 
-  *  :ref:`smart_ptr_clone (dest:smart_ptr\<void\>& implicit;src:smart_ptr\<void\> const implicit) : void <function-_at__builtin__c__c_smart_ptr_clone_&I1_ls_v_gr_?M_CI1_ls_v_gr_?M>` 
-  *  :ref:`smart_ptr_use_count (ptr:smart_ptr\<void\> const implicit) : uint <function-_at__builtin__c__c_smart_ptr_use_count_CI1_ls_v_gr_?M>` 
+  *  :ref:`move_new (dest:smart_ptr\<void\>& implicit;src:smart_ptr\<void\> const implicit;context:__context const;at:__lineInfo const) : void <function-_at__builtin__c__c_move_new_&I1_ls_v_gr_?M_CI1_ls_v_gr_?M_C_c_C_l>` 
+  *  :ref:`move (dest:smart_ptr\<void\>& implicit;src:void? const implicit;context:__context const;at:__lineInfo const) : void <function-_at__builtin__c__c_move_&I1_ls_v_gr_?M_CI?_C_c_C_l>` 
+  *  :ref:`move (dest:smart_ptr\<void\>& implicit;src:smart_ptr\<void\>& implicit;context:__context const;at:__lineInfo const) : void <function-_at__builtin__c__c_move_&I1_ls_v_gr_?M_&I1_ls_v_gr_?M_C_c_C_l>` 
+  *  :ref:`smart_ptr_clone (dest:smart_ptr\<void\>& implicit;src:void? const implicit;context:__context const;at:__lineInfo const) : void <function-_at__builtin__c__c_smart_ptr_clone_&I1_ls_v_gr_?M_CI?_C_c_C_l>` 
+  *  :ref:`smart_ptr_clone (dest:smart_ptr\<void\>& implicit;src:smart_ptr\<void\> const implicit;context:__context const;at:__lineInfo const) : void <function-_at__builtin__c__c_smart_ptr_clone_&I1_ls_v_gr_?M_CI1_ls_v_gr_?M_C_c_C_l>` 
+  *  :ref:`smart_ptr_use_count (ptr:smart_ptr\<void\> const implicit;context:__context const;at:__lineInfo const) : uint <function-_at__builtin__c__c_smart_ptr_use_count_CI1_ls_v_gr_?M_C_c_C_l>` 
   *  :ref:`get_ptr (src:smart_ptr\<auto(TT)\> const) : TT? <function-_at__builtin__c__c_get_ptr_C1_ls_Y_ls_TT_gr_._gr_?M>` 
   *  :ref:`get_const_ptr (src:smart_ptr\<auto(TT)\> const) : TT? const <function-_at__builtin__c__c_get_const_ptr_C1_ls_Y_ls_TT_gr_._gr_?M>` 
   *  :ref:`add_ptr_ref (src:smart_ptr\<auto(TT)\> const) : smart_ptr\<TT\> <function-_at__builtin__c__c_add_ptr_ref_C1_ls_Y_ls_TT_gr_._gr_?M>` 
 
-.. _function-_at__builtin__c__c_smart_ptr_clone_&I1_ls_v_gr_?M_CI?:
+.. _function-_at__builtin__c__c_move_new_&I1_ls_v_gr_?M_CI1_ls_v_gr_?M_C_c_C_l:
+
+.. das:function:: move_new(dest: smart_ptr<void>& implicit; src: smart_ptr<void> const implicit)
+
++--------+------------------------------+
++argument+argument type                 +
++========+==============================+
++dest    +smart_ptr<void>& implicit     +
++--------+------------------------------+
++src     +smart_ptr<void> const implicit+
++--------+------------------------------+
+
+
+|function-builtin-move_new|
+
+.. _function-_at__builtin__c__c_move_&I1_ls_v_gr_?M_CI?_C_c_C_l:
+
+.. das:function:: move(dest: smart_ptr<void>& implicit; src: void? const implicit)
+
++--------+-------------------------+
++argument+argument type            +
++========+=========================+
++dest    +smart_ptr<void>& implicit+
++--------+-------------------------+
++src     +void? const implicit     +
++--------+-------------------------+
+
+
+|function-builtin-move|
+
+.. _function-_at__builtin__c__c_move_&I1_ls_v_gr_?M_&I1_ls_v_gr_?M_C_c_C_l:
+
+.. das:function:: move(dest: smart_ptr<void>& implicit; src: smart_ptr<void>& implicit)
+
++--------+-------------------------+
++argument+argument type            +
++========+=========================+
++dest    +smart_ptr<void>& implicit+
++--------+-------------------------+
++src     +smart_ptr<void>& implicit+
++--------+-------------------------+
+
+
+|function-builtin-move|
+
+.. _function-_at__builtin__c__c_smart_ptr_clone_&I1_ls_v_gr_?M_CI?_C_c_C_l:
 
 .. das:function:: smart_ptr_clone(dest: smart_ptr<void>& implicit; src: void? const implicit)
 
@@ -2534,7 +2582,7 @@ Smart ptr infrastructure
 
 |function-builtin-smart_ptr_clone|
 
-.. _function-_at__builtin__c__c_smart_ptr_clone_&I1_ls_v_gr_?M_CI1_ls_v_gr_?M:
+.. _function-_at__builtin__c__c_smart_ptr_clone_&I1_ls_v_gr_?M_CI1_ls_v_gr_?M_C_c_C_l:
 
 .. das:function:: smart_ptr_clone(dest: smart_ptr<void>& implicit; src: smart_ptr<void> const implicit)
 
@@ -2549,7 +2597,7 @@ Smart ptr infrastructure
 
 |function-builtin-smart_ptr_clone|
 
-.. _function-_at__builtin__c__c_smart_ptr_use_count_CI1_ls_v_gr_?M:
+.. _function-_at__builtin__c__c_smart_ptr_use_count_CI1_ls_v_gr_?M_C_c_C_l:
 
 .. das:function:: smart_ptr_use_count(ptr: smart_ptr<void> const implicit)
 
@@ -2727,7 +2775,8 @@ System infastructure
   *  :ref:`breakpoint () : void <function-_at__builtin__c__c_breakpoint>` 
   *  :ref:`stackwalk (args:bool const;vars:bool const;context:__context const;lineinfo:__lineInfo const) : void <function-_at__builtin__c__c_stackwalk_Cb_Cb_C_c_C_l>` 
   *  :ref:`is_in_aot () : bool <function-_at__builtin__c__c_is_in_aot>` 
-  *  :ref:`to_log (arg0:int const;arg1:string const implicit) : void <function-_at__builtin__c__c_to_log_Ci_CIs>` 
+  *  :ref:`to_log (level:int const;text:string const implicit) : void <function-_at__builtin__c__c_to_log_Ci_CIs>` 
+  *  :ref:`to_compiler_log (text:string const implicit;context:__context const;at:__lineInfo const) : void <function-_at__builtin__c__c_to_compiler_log_CIs_C_c_C_l>` 
 
 .. _function-_at__builtin__c__c_get_das_root_C_c:
 
@@ -2830,18 +2879,31 @@ is_in_aot returns bool
 
 .. _function-_at__builtin__c__c_to_log_Ci_CIs:
 
-.. das:function:: to_log(arg0: int const; arg1: string const implicit)
+.. das:function:: to_log(level: int const; text: string const implicit)
 
 +--------+---------------------+
 +argument+argument type        +
 +========+=====================+
-+arg0    +int const            +
++level   +int const            +
 +--------+---------------------+
-+arg1    +string const implicit+
++text    +string const implicit+
 +--------+---------------------+
 
 
 |function-builtin-to_log|
+
+.. _function-_at__builtin__c__c_to_compiler_log_CIs_C_c_C_l:
+
+.. das:function:: to_compiler_log(text: string const implicit)
+
++--------+---------------------+
++argument+argument type        +
++========+=====================+
++text    +string const implicit+
++--------+---------------------+
+
+
+|function-builtin-to_compiler_log|
 
 +++++++++++++++++++
 Memory manipulation

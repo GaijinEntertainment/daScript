@@ -92,10 +92,10 @@ to_table_move|empty|subarray|insert|move_to_ref|copy_to_local|move_to_local|get)
         group_by_regex("Heap reporting", mod, %regex~(heap|string_heap|memory_report)%%);
         group_by_regex("Vector and matrix math", mod, %regex~(float3x4|float4x4|identity|inverse|rotate|translation|transpose)$%%);
         group_by_regex("GC0 infrastructure", mod, %regex~gc0%%);
-        group_by_regex("Smart ptr infrastructure", mod, %regex~(add_ptr_ref|smart_ptr|get_const_ptr|get_ptr$)%%);
+        group_by_regex("Smart ptr infrastructure", mod, %regex~(add_ptr_ref|smart_ptr|get_const_ptr|move|move_new|get_ptr$)%%);
         group_by_regex("Macro infrastructure", mod, %regex~(is_compiling|is_in_completion|is_reporting_compilation_errors)%%);
         group_by_regex("Profiler", mod, %regex~(profile|reset_profiler|dump_profile_info|collect_profile_info)$%%);
-        group_by_regex("System infastructure", mod, %regex~(panic|print|sprint|to_log|error|terminate|breakpoint|stackwalk|get_das_root|is_in_aot)$%%);
+        group_by_regex("System infastructure", mod, %regex~(panic|print|sprint|to_log|to_compiler_log|error|terminate|breakpoint|stackwalk|get_das_root|is_in_aot)$%%);
         group_by_regex("Memory manipulation", mod, %regex~(intptr|memcmp|variant_index|set_variant_index|hash|memcpy|lock_data|map_to_array|map_to_ro_array)$%%);
         group_by_regex("Binary serializer", mod, %regex~(binary_load|binary_save)$%%);
         group_by_regex("Path and command line", mod, %regex~(get_command_line_arguments)$%%);

@@ -139,6 +139,11 @@ Generic function arguments, result, and inferred type aliases can be operated on
 
     def foo ( a : auto& )           // accepts any type, passed by reference
 
+`==&` specifies that reference of the expression has to match reference of the argument::
+
+    def foo ( a : auto& ==& )   // accepts any type, passed by reference (for example variable i, even if its integer)
+    def foo ( a : auto ==& )    // accepts any type, passed by value     (for example value 3)
+
 `-&` will remove reference from the matching type::
 
     def foo ( a : auto(TT)& )       // accepts any type, passed by reference

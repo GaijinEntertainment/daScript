@@ -24,6 +24,8 @@
 
 .. |typedef-ast-ExprAtFlags| replace:: properties of the `ExprAt` object.
 
+.. |typedef-ast-ExprLetFlags| replace:: properties of the `ExprLet` object.
+
 .. |typedef-ast-IfFlags| replace:: properties of the `ExprIf` object.
 
 .. |typedef-ast-ExprMakeLocalFlags| replace:: properties of the `ExprMakeLocal` object (`ExprMakeArray`, `ExprMakeStruct`, 'ExprMakeTuple', 'ExprMakeVariant').

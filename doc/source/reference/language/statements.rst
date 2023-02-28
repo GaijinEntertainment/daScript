@@ -290,14 +290,18 @@ Local variables declaration
     initz ::= id [:type] [= exp]
     initz ::= id [:type] [<- exp]
     initz ::= id [:type] [:= exp]
-    ro_stat ::= 'let' initz
-    rw_stat ::= 'var' initz
+    scope ::= `inscope`
+    ro_stat ::= 'let' [scope] initz
+    rw_stat ::= 'var' [scope] initz
 
 Local variables can be declared at any point in a function. They exist between their
 declaration and the end of the visibility block where they have been declared.
 ``let`` declares read only variables, and ``var`` declares mutable (read-write) variables.
 
 Copy ``=``, move ``->``, or clone ``:=`` semantics indicate how the variable is to be initialized.
+
+If ``inscope`` is specified, the ``delete id`` statement is added in the finally section of the block, where the variable is declared.
+It can't appear directly in the loop block, since finally section of the loop is executed only once.
 
 --------------------
 Function declaration
