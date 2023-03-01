@@ -8,22 +8,22 @@ def bad_loop ( all : iterator<int>; cond_const:bool )
     for t,r in all,range(100500)        // this one ok
         print("t = {t}\n")
     var cond = true
-    while cond
+    while cond                          // 40104: we can't tell if this `while` loop ever finishes
         print("nop\n")
         cond = false
+    var tab <- {{1=>1; 2=>2; 3=>3}}
+    for x in tab |> keys()              // this one ok - we know keys and values are finite
+        print("x = {x}\n")
 
 [export,verify_completion]
 def simple_recursive
     print("simple\n")
     simple_recursive()  // 40104: recursive calls are not allowed
 
-
-[export,verify_completion]
 def rec_a
     print("a\n")
     rec_b() // 40104: recursive calls are not allowed -> rec_b -> rec_a -> rec_b
 
-[export,verify_completion]
 def rec_b
     print("b\n")
     rec_a() // 40104: recursive calls are not allowed -> rec_a -> rec_b -> rec_a

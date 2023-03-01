@@ -36,6 +36,16 @@ def check_recursive ( at:LineInfo; fun:Function? )
     var visited : table<Function?>
     check_recursive(at, fun, call_graph, visited)
 
+[macro_function]
+def collect_call_tree ( fun:Function?; var visited:table<Function?> )
+    if fun.flags.builtIn
+        return
+    if visited |> key_exists(fun)
+        return
+    visited |> insert(fun)
+    unsafe(reinterpret<FunctionPtr> fun) |> get_use_functions <| $ ( f )
+        collect_call_tree(get_ptr(f), visited)
+
 [macro]
 class ValidateCompletionVisitor : AstVisitor
     [[do_not_delete]] thisFunc:Function?
@@ -50,6 +60,12 @@ class ValidateCompletionVisitor : AstVisitor
             if src._type.isRange || src._type.isArray || src._type.isGoodArrayType || isYetAnotherVectorTemplate(src._type)
                 srcOk = true
                 break
+            elif src is ExprCall
+                let srcc = src as ExprCall
+                if srcc.name=="__::builtin`keys" || srcc.name=="__::builtin`values"
+                    srcOk = true
+                    break
+                // TODO: add support for more known finite sources
         if !srcOk
             macro_error(compiling_program(), expr.at, "we don't know if this `for` loop ever finishes. add explicit range")
     def override preVisitExprWhile(expr:smart_ptr<ExprWhile>) : void
@@ -65,9 +81,12 @@ class ValidateCompletionVisitor : AstVisitor
 [function_macro(name="verify_completion")]
 class VerifyCompletion : AstFunctionAnnotation
     def override lint ( var func:FunctionPtr; var group:ModuleGroup; args,progArgs:AnnotationArgumentList; var errors : das_string ) : bool
+        var visited : table<Function?>
         var astVisitor = new ValidateCompletionVisitor()
         var inscope adapter <- make_visitor(*astVisitor)
-        visit(func, adapter)
+        collect_call_tree(get_ptr(func), visited)
+        for fun in visited |> keys()
+            visit(unsafe(reinterpret<FunctionPtr> fun), adapter)
         unsafe
             delete astVisitor
         return true
@@ -87,22 +106,16 @@ class JIT_LLVM : AstSimulateMacro
     def lint_module ( prog:Program?; var ctx:Context? )
         var astVisitor = new ValidateShaderVisitor()
         var inscope adapter <- make_visitor(*astVisitor)
-        print("COMPILING {ctx.name}\n")
         prog |> for_each_module <| $ ( mod )
             mod |> for_each_function("") <| $ ( f )
                 if f.flags.used
-                    print("{f.name} {f.index}\n")
-                    if f.flags.exports
-                        print("EXPORT {f.name}\n")
                     visit(f, adapter)
-            /*
             mod |> for_each_global() <| $ ( g )
                 if g.flags.used
                     if !g._type.isNoHeapType
                         macro_error(compiling_program(), g.at, "global variable {g.name} requires heap")
                     elif g.init!=null
                         visit(g.init, adapter)
-            */
         unsafe
             delete astVisitor
     def override simulate ( prog:Program?; var ctx:Context? ) : bool
