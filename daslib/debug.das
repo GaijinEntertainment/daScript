@@ -1701,6 +1701,7 @@ def compileAndRun ( text, self_text:string ) : tuple<ok:bool;result:string>
     using <| $(var mg:ModuleGroup)
         using <| $(var cop:CodeOfPolicies)
             cop.allow_local_variable_shadowing = true
+            cop.export_all = true
             compile_file("__project",access,unsafe(addr(mg)),cop) <| $(ok,program,errors)
                 if ok
                     simulate(program) <| $ ( sok; context; serrors )
