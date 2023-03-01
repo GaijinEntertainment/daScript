@@ -705,7 +705,13 @@ namespace das {
             if ( it != ao.end() ) {
                 optT = it->second;
             } else {
-                optT = Module::findOption(opt.name);
+                for ( auto & mod : libGroup.modules ) {
+                    auto ot = mod->getOptionType(opt.name);
+                    if ( ot!=Type::none ) {
+                        optT = ot;
+                        break;
+                    }
+                }
             }
             if ( optT!=Type::none && optT!=opt.type ) {
                 error("invalid option type for " + opt.name

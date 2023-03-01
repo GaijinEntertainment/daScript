@@ -602,6 +602,8 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     lib.addModule(Module::require("math"));
     lib.addBuiltInModule();
     addEnumTest(lib);
+    // options
+    options["unit_test"] = Type::tFloat;
     // constant
     addConstant(*this, "UNIT_TEST_CONSTANT", 0x12345678);
     // structure annotations
@@ -749,11 +751,6 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
        DAS_CALL_MEMBER_CPP(TestObjectFoo::hitMe));
     // and verify
     verifyAotReady();
-}
-
-Type Module_UnitTest::getOptionType ( const string & optName ) const {
-    if ( optName=="unit_test" ) return Type::tFloat;
-    return Type::none;
 }
 
 ModuleAotType Module_UnitTest::aotRequire ( TextWriter & tw ) const {

@@ -536,6 +536,13 @@ namespace das {
         return mod->findAnnotation(expr->__rtti).get();
     }
 
+    void addModuleOption ( Module * mod, char * option, Type type, Context * context, LineInfoArg * at ) {
+        if ( !mod ) context->throw_error_at(at, "expecting module");
+        if ( !option ) context->throw_error_at(at, "expecting option name");
+        if ( mod->getOptionType(option) != Type::none ) context->throw_error_at(at, "option %s already exists", option);
+        mod->options[option] = type;
+    }
+
     #include "ast.das.inc"
 
     Module_Ast::Module_Ast() : Module("ast") {
@@ -802,6 +809,10 @@ namespace das {
         addExtern<DAS_BIND_FUN(das_comp_log)>(*this, lib,  "to_compilation_log",
             SideEffects::modifyExternal, "das_comp_log")
                 ->args({"text","context","at"});
+        //options
+        addExtern<DAS_BIND_FUN(addModuleOption)>(*this, lib,  "add_module_option",
+            SideEffects::modifyExternal, "addModuleOption")
+                ->args({"module","option","type","context","at"});
     }
 
     ModuleAotType Module_Ast::aotRequire ( TextWriter & tw ) const {
