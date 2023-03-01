@@ -633,6 +633,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(aot)>("aot");
             addField<DAS_BIND_MANAGED_FIELD(aot_module)>("aot_module");
             addField<DAS_BIND_MANAGED_FIELD(completion)>("completion");
+            addField<DAS_BIND_MANAGED_FIELD(export_all)>("export_all");
         // memory
             addField<DAS_BIND_MANAGED_FIELD(stack)>("stack");
             addField<DAS_BIND_MANAGED_FIELD(intern_strings)>("intern_strings");
@@ -993,7 +994,7 @@ namespace das {
             const TBlock<void,bool,smart_ptr<Program>,const string> & block, Context * context, LineInfoArg * at ) {
         TextWriter issues;
         if ( !access ) access = make_smart<FsFileAccess>();
-        auto program = compileDaScript(modName, access, issues, *module_group, true, cop);
+        auto program = compileDaScript(modName, access, issues, *module_group, cop.export_all, cop);
         if ( program ) {
             if (program->failed()) {
                 for (auto & err : program->errors) {
