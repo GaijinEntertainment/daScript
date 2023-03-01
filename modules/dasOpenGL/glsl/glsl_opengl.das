@@ -51,10 +51,10 @@ def private generate_bind_uniform(fnMain:FunctionPtr; var fn:FunctionPtr)
     var blk <- new [[ExprBlock() at=fn.at]]
     collect_dependencies(fnMain) <| $ ( vfun, vvar )
         for vv in vvar
-            if find_arg("uniform", vv.annotation) is tBool
+            if vv.annotation |> find_arg("uniform") is tBool
                 if is_glsl_structure(vv,"sampler2D")
                     // bind_sampler_2d(binding, varName.texture2D)
-                    var binding = find_arg("stage", vv.annotation) ?as tInt ?? 0
+                    var binding = vv.annotation |> find_arg("stage") ?as tInt ?? 0
                     var vtex <- new [[ExprField() at=vv.at,
                         value <- new [[ExprVar() at=vv.at, name:=vv.name]],
                         name := "texture2D"
@@ -73,7 +73,7 @@ def private generate_bind_uniform(fnMain:FunctionPtr; var fn:FunctionPtr)
                     blk.list |>emplace(cll_uni)
                 elif is_glsl_structure(vv,"sampler3D")
                     // bind_sampler_2d(binding, varName.texture2D)
-                    var binding = find_arg("stage", vv.annotation) ?as tInt ?? 0
+                    var binding = vv.annotation |> find_arg("stage") ?as tInt ?? 0
                     var vtex <- new [[ExprField() at=vv.at,
                         value <- new [[ExprVar() at=vv.at, name:=vv.name]],
                         name := "texture3D"
@@ -93,17 +93,17 @@ def private generate_bind_uniform(fnMain:FunctionPtr; var fn:FunctionPtr)
                 elif is_glsl_structure(vv,"image2D") || is_glsl_structure(vv,"image3D")
                     // bind_sampler_any(binding, varName.texture?D, format, access)
                     let is2D = is_glsl_structure(vv,"image2D")
-                    var binding = find_arg("stage", vv.annotation) ?as tInt ?? 0
+                    var binding = vv.annotation |> find_arg("stage") ?as tInt ?? 0
                     var vtex <- new [[ExprField() at=vv.at,
                         value <- new [[ExprVar() at=vv.at, name:=vv.name]],
                         name := is2D ? "texture2D" : "texture3D"
                     ]]
-                    var format = find_arg("format", vv.annotation) ?as tString ?? "rgba8"
+                    var format = vv.annotation |> find_arg("format") ?as tString ?? "rgba8"
                     format = "GL_{to_upper(format)}"
                     var access = "GL_READ_WRITE"
-                    if find_arg("writeonly", vv.annotation) is tBool
+                    if vv.annotation |> find_arg("writeonly") is tBool
                         access = "GL_WRITE_ONLY"
-                    if find_arg("readonly", vv.annotation) is tBool
+                    if vv.annotation |> find_arg("readonly") is tBool
                         access = "GL_READ_ONLY"
                     var cll_uni <- new [[ExprCall() at=vv.at, name:="bind_image_any"]]
                     cll_uni.arguments |> emplace_new() <| new [[ExprConstInt() at=vv.at, value=binding]]

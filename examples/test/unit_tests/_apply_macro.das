@@ -15,7 +15,7 @@ def private prepend_cond(var fn:FunctionPtr; cond:string)
 class AppendCondAnnotation : AstFunctionAnnotation
     def override apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
         var cond = ""
-        let argName = find_arg("cond", args)
+        let argName =args |> find_arg("cond")
         if !(argName is tString)
             panic("cond must be string")
         else

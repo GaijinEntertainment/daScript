@@ -179,7 +179,14 @@ def private for_each_tag_function(mod:Module?; tag:string; blk : block<(var func
                     if t.name==tag
                         invoke(blk, func)
 
+[deprecated]
 def find_arg(argn:string; args:AnnotationArgumentList) : RttiValue
+    for a in args
+        if a.name==argn
+            return get_annotation_argument_value(a)
+    return RttiValue_nothing()
+
+def find_arg(args:AnnotationArgumentList; argn:string) : RttiValue
     for a in args
         if a.name==argn
             return get_annotation_argument_value(a)
@@ -284,7 +291,7 @@ class SetupAnyAnnotation : AstStructureAnnotation
     def setup_call(var st:StructurePtr;var cll:smart_ptr<ExprCall>)
         emplace_new(cll.arguments,new [[ExprConstString() at=st.at, value:=name]])
     def override apply ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
-        let argName = find_arg("name", args)
+        let argName = args |> find_arg("name")
         if argName is nothing
             name = "{st.name}"
         elif !(argName is tString)
@@ -363,7 +370,7 @@ class TagFunctionMacro : SetupAnyAnnotation
         emplace_new(cll.arguments,new [[ExprConstString() at=st.at, value:=name]])
         emplace_new(cll.arguments,new [[ExprConstString() at=st.at, value:=tag]])
     def override apply ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
-        let argTag = find_arg("tag", args)
+        let argTag = args |> find_arg("tag")
         if argTag is nothing
             errors := "missing tag argument"
             return false
@@ -482,7 +489,7 @@ def private walk_and_convert_structure ( data : uint8?; info:TypeDeclPtr; at:Lin
 	let stype = info.structType
     var inscope mkS <- new [[ MakeStruct() ]]
 	for x in stype.fields
-        if find_arg("do_not_convert",x.annotation) is nothing
+        if x.annotation |> find_arg("do_not_convert") is nothing
             unsafe
                 let fdata = data + x.offset
                 var elem <- walk_and_convert ( fdata, x._type, at)

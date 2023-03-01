@@ -128,7 +128,7 @@ namespace das {
     }
 
     Module * findRttiModule ( smart_ptr<Program> THAT_PROGRAM, const char * name, Context *, LineInfoArg *) {
-        if ( !name ) return nullptr;
+        name = name ? name : "";
         auto found = THAT_PROGRAM->library.findModule(name);
         return found ? found : Module::require(name);
     }

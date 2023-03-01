@@ -31,7 +31,7 @@ class AppendCondAnnotation : AstFunctionAnnotation
 
     for ann in func.annotations
       if ann.annotation.name=="apply_in_context"
-        if !(find_arg("patched",ann.arguments) is nothing)
+        if !(find_arg(ann.arguments,"patched") is nothing)
           return true
 
     if args.length != 1

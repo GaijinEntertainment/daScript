@@ -64,7 +64,7 @@ variant ItCheck
 
 [macro_function]
 def private decs_prefix ( arg:AnnotationArgumentList )
-    var p = find_arg ( "prefix", arg)
+    var p = arg |> find_arg("prefix")
     if p is tString
         return [[ItCheck yes=p as tString]]
     elif p is tBool
@@ -94,7 +94,7 @@ def build_req_from_args ( qblk:ExprBlock? ) : EcsRequest
                 for f in a._type.structType.fields
                     req.req |> push("{detp as yes}{f.name}")
             else
-                if !(find_arg("optional",a.annotation) ?as tBool ?? false)
+                if !(find_arg(a.annotation,"optional") ?as tBool ?? false)
                     req.req |> push(string(a.name))
     for aa in qblk.annotations
         let isreq = aa.annotation.name=="REQUIRE"
@@ -115,7 +115,7 @@ def getter_name ( a; const_parent:bool; can_be_optional:bool )
         elif !const_parent
             getter = "get"
     else
-        if find_arg("optional",a.annotation) ?as tBool ?? false
+        if find_arg(a.annotation,"optional") ?as tBool ?? false
             if a.init != null
                 macro_error(compiling_program(),a.at,"optional argument {a.name} can't have a default value")
                 return ""
@@ -403,7 +403,7 @@ class DecsEcsMacro : AstFunctionAnnotation
     //!
     //! In the example above a query is added to the `update_ai` stage. The query also requires that each entity passed to it has an `ai_turret` property.
     def override apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
-        let argPass = find_arg("stage", args)
+        let argPass = find_arg(args,"stage")
         if !(argPass is tString)
             errors := "need to specify stage"
             return false

@@ -121,10 +121,9 @@ class JIT_LLVM : AstSimulateMacro
     def override simulate ( prog:Program?; var ctx:Context? ) : bool
         return true if is_in_completion() || is_compiling_macros()
         return true if ctx.category.debug_context || ctx.category.macro_context || ctx.category.folding_context || ctx.category.debugger_tick || ctx.category.debugger_attached
-        for opt in prog._options
-            if opt.name=="shader_like" && opt.bValue
-                lint_module(prog,ctx)
-                return true
+        if prog._options |> find_arg("shader_like") ?as tBool ?? false
+            lint_module(prog,ctx)
+            return true
         return true
 
 [_macro,macro_function]

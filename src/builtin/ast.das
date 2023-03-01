@@ -814,7 +814,8 @@ def find_module(prog:smart_ptr<Program>; name:string) : Module?
     program_for_each_module(prog) <| $ ( mod )
         if string(mod.name)==name
             rm = mod
-    verify(rm!=null,"module not found")
+    if rm==null
+        panic("module `{name}` not found")
     return rm
 
 [generic]
