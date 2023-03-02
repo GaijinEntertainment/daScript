@@ -290,6 +290,7 @@ uint32_t EsRunBlock ( Context & context, const Block & block, const vector<EsCom
         context.throw_error("EsRunBlock - query missing annotation data");
     }
     uint32_t nAttr = (uint32_t) table->attributes.size();
+    DAS_VERIFYF(nAttr, "EsRunBlock - query has no attributes");
     vec4f * _args = (vec4f *)(alloca(table->attributes.size() * sizeof(vec4f)));
     context.invokeEx(block, _args, nullptr, [&](SimNode * code){
         vec4f * args = _args;
@@ -340,6 +341,7 @@ string aotEsRunBlockName ( EsAttributeTable * table, const vector<EsComponent> &
     TextWriter nw;
     nw << "__query_es";
     uint32_t nAttr = (uint32_t) table->attributes.size();
+    DAS_VERIFYF(nAttr, "EsRunBlock - query has no attributes");
     for ( uint32_t a=0; a!=nAttr; ++a ) {
         auto it = find_if ( components.begin(), components.end(), [&](const EsComponent & esc){
             return esc.name == table->attributes[a].name;
@@ -367,6 +369,7 @@ void aotEsRunBlock ( TextWriter & ss, EsAttributeTable * table, const vector<EsC
     ss << "\tfor ( uint32_t i=0; i != g_total; ++i ) {\n";
     ss << "\t\tblock(";
     uint32_t nAttr = (uint32_t) table->attributes.size();
+    DAS_VERIFYF(nAttr, "EsRunBlock - query has no attributes");
     for ( uint32_t a=0; a!=nAttr; ++a ) {
         auto it = find_if ( components.begin(), components.end(), [&](const EsComponent & esc){
             return esc.name == table->attributes[a].name;
