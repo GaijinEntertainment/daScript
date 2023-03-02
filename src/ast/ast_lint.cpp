@@ -139,6 +139,7 @@ namespace das {
         bool checkUnusedBlockArgument;
         bool checkUnsafe;
         bool checkDeprecated;
+        bool disableInit;
     public:
         LintVisitor ( const ProgramPtr & prog ) : program(prog) {
             checkOnlyFastAot = program->options.getBoolOption("only_fast_aot", program->policies.only_fast_aot);
@@ -150,6 +151,7 @@ namespace das {
             checkUnusedBlockArgument = program->options.getBoolOption("no_unused_block_arguments", program->policies.no_unused_block_arguments);
             checkUnsafe = program->policies.no_unsafe || program->thisModule->doNotAllowUnsafe;
             checkDeprecated = program->options.getBoolOption("no_deprecated", program->policies.no_deprecated);
+            disableInit = prog->options.getBoolOption("no_init", prog->policies.no_init);
         }
     protected:
         void verifyOnlyFastAot ( Function * _func, const LineInfo & at ) {
@@ -293,6 +295,10 @@ namespace das {
             globalVar = var.get();
         }
         virtual ExpressionPtr visitGlobalLetInit ( const VariablePtr & var, Expression * that ) override {
+            if ( disableInit && !var->init->rtti_isConstant() ) {   // we double check here, if it made it past infer
+                program->error("[init] is disabled in the options or CodeOfPolicies", "", "",
+                        var->at, CompilationError::no_init);
+            }
             globalVar->index = -3; // initialized. -1 by default
             globalVar = nullptr;
             return Visitor::visitGlobalLetInit(var,that);;
@@ -529,7 +535,10 @@ namespace das {
                     }
                 }
             }
-
+            if ( (fn->init | fn->shutdown) && disableInit ) { // we double-check here. we check in the infer first, but this here is for the case where macro does it later
+                program->error("[init] is disabled in the options or CodeOfPolicies",  "", "",
+                    fn->at, CompilationError::no_init);
+            }
         }
         virtual FunctionPtr visit ( Function * fn ) override {
             func = nullptr;
@@ -615,6 +624,7 @@ namespace das {
         "no_deprecated",                Type::tBool,
         "no_aliasing",                  Type::tBool,
         "strict_smart_pointers",        Type::tBool,
+        "no_init",                      Type::tBool,
     // memory
         "stack",                        Type::tInt,
         "intern_strings",               Type::tBool,

@@ -2921,6 +2921,7 @@ namespace das
     bool Program::simulate ( Context & context, TextWriter & logs, StackAllocator * sharedStack ) {
         auto time0 = ref_time_ticks();
         isSimulating = true;
+        auto disableInit = options.getBoolOption("no_init", policies.no_init);
         context.thisProgram = this;
         context.persistent = options.getBoolOption("persistent_heap", policies.persistent_heap);
         if ( context.persistent ) {
@@ -2984,6 +2985,11 @@ namespace das
                 pm->functions.foreach([&](auto pfun){
                     if (pfun->index < 0 || !pfun->used)
                         return;
+                    if ( (pfun->init | pfun->shutdown) && disableInit ) {
+                        error("[init] is disabled in the options or CodeOfPolicies",
+                            "internal compiler error. [init] function made it all the way to simulate somehow", "",
+                                pfun->at, CompilationError::no_init);
+                    }
                     auto mangledName = pfun->getMangledName();
                     auto MNH = hash_blockz64((uint8_t *)mangledName.c_str());
                     if ( MNH==0 ) {
@@ -3026,6 +3032,11 @@ namespace das
                         return;
                     auto & gvar = context.globalVariables[pvar->index];
                     if ( !folding && pvar->init ) {
+                        if ( disableInit && !pvar->init->rtti_isConstant() ) {
+                            error("[init] is disabled in the options or CodeOfPolicies",
+                                "internal compiler error. [init] function made it all the way to simulate somehow", "",
+                                    pvar->at, CompilationError::no_init);
+                        }
                         if ( pvar->init->rtti_isMakeLocal() ) {
                             if ( pvar->global_shared ) {
                                 auto sl = context.code->makeNode<SimNode_GetSharedMnh>(pvar->init->at, pvar->stackTop, pvar->getMangledNameHash());

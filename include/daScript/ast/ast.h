@@ -1247,7 +1247,7 @@ namespace das
         bool        aot = false;                        // enable AOT
         bool        aot_module = false;                 // this is how AOT tool knows module is module, and not an entry point
         bool        completion = false;                 // this code is being compiled for 'completion' mode
-        bool        export_all = false;                  // when user compiles, export all (public?) functions
+        bool        export_all = false;                 // when user compiles, export all (public?) functions
     // memory
         uint32_t    stack = 16*1024;                    // 0 for unique stack
         bool        intern_strings = false;             // use string interning lookup for regular string heap
@@ -1263,7 +1263,7 @@ namespace das
         bool rtti = false;                              // create extended RTTI
     // language
         bool no_unsafe = false;
-        bool local_ref_is_unsafe = true;               // var a & = ... unsafe. should be
+        bool local_ref_is_unsafe = true;                // var a & = ... unsafe. should be
         bool no_global_variables = false;
         bool no_global_variables_at_all = false;
         bool no_global_heap = false;
@@ -1279,7 +1279,8 @@ namespace das
         bool default_module_public = true;              // by default module is 'public', not 'private'
         bool no_deprecated = false;
         bool no_aliasing = false;                       // if true, aliasing will be reported as error, otherwise will turn off optimization
-        bool strict_smart_pointers = false;              // collection of tests for smart pointers, like van inscope for any local, etc
+        bool strict_smart_pointers = false;             // collection of tests for smart pointers, like van inscope for any local, etc
+        bool no_init = false;                           // if true, then no [init] is allowed in any shape or form
     // environment
         bool no_optimizations = false;                  // disable optimizations, regardless of settings
         bool fail_on_no_aot = true;                     // AOT link failure is error

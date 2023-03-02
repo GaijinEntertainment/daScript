@@ -45,6 +45,7 @@ namespace das {
             multiContext = prog->options.getBoolOption("multiple_contexts", prog->policies.multiple_contexts);
             checkNoGlobalVariablesAtAll = prog->options.getBoolOption("no_global_variables_at_all", prog->policies.no_global_variables_at_all);
             strictSmartPointers = prog->options.getBoolOption("strict_smart_pointers", prog->policies.strict_smart_pointers);
+            disableInit = prog->options.getBoolOption("no_init", prog->policies.no_init);
         }
         bool finished() const { return !needRestart; }
         bool verbose = true;
@@ -74,6 +75,7 @@ namespace das {
         int32_t                 unsafeDepth = 0;
         bool                    checkNoGlobalVariablesAtAll = false;
         bool                    strictSmartPointers = false;
+        bool                    disableInit = false;
     public:
         vector<FunctionPtr>     extraFunctions;
     protected:
@@ -1670,6 +1672,10 @@ namespace das {
                     return ivar->variable->init;
                 }
             }
+            if ( disableInit && !var->init->rtti_isConstant() ) {
+                program->error("[init] is disabled in the options or CodeOfPolicies", "", "",
+                        var->at, CompilationError::no_init);
+            }
             return Visitor::visitGlobalLetInit(var, init);
         }
         virtual VariablePtr visitGlobalLet ( const VariablePtr & var ) override {
@@ -1723,6 +1729,10 @@ namespace das {
             if ( f->arguments.size() > DAS_MAX_FUNCTION_ARGUMENTS ) {
                 error("function has too many arguments, max allowed is DAS_MAX_FUNCTION_ARGUMENTS=" DAS_STR(DAS_MAX_FUNCTION_ARGUMENTS),  "", "",
                     f->at, CompilationError::too_many_arguments);
+            }
+            if ( (f->init | f->shutdown) && disableInit ) {
+                error("[init] is disabled in the options or CodeOfPolicies",  "", "",
+                    f->at, CompilationError::no_init);
             }
         }
         virtual void preVisitArgument ( Function * fn, const VariablePtr & var, bool lastArg ) override {
