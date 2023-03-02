@@ -535,7 +535,7 @@ namespace das {
                     }
                 }
             }
-            if ( fn->init && disableInit ) { // we double-check here. we check in the infer first, but this here is for the case where macro does it later
+            if ( (fn->init | fn->shutdown) && disableInit ) { // we double-check here. we check in the infer first, but this here is for the case where macro does it later
                 program->error("[init] is disabled in the options or CodeOfPolicies",  "", "",
                     fn->at, CompilationError::no_init);
             }

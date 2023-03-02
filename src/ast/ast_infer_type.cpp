@@ -1730,7 +1730,7 @@ namespace das {
                 error("function has too many arguments, max allowed is DAS_MAX_FUNCTION_ARGUMENTS=" DAS_STR(DAS_MAX_FUNCTION_ARGUMENTS),  "", "",
                     f->at, CompilationError::too_many_arguments);
             }
-            if ( f->init && disableInit ) {
+            if ( (f->init | f->shutdown) && disableInit ) {
                 error("[init] is disabled in the options or CodeOfPolicies",  "", "",
                     f->at, CompilationError::no_init);
             }

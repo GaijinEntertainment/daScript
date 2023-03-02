@@ -1,4 +1,4 @@
-expect 40214:2
+expect 40214:3
 
 options no_init
 
@@ -13,6 +13,10 @@ var b = foo()   // 40214: [init] is disabled in the options or CodeOfPolicies
 [init]          // 40214: [init] is disabled in the options or CodeOfPolicies
 def bar
     print("hello, world\n")
+
+[finalize]
+def car         // 40214: [init] is disabled in the options or CodeOfPolicies
+    print("goodbye, world\n")
 
 [export]
 def main
