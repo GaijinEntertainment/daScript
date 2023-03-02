@@ -2309,34 +2309,34 @@ namespace das
         }
         if ( returnReference ) {
             if ( returnInBlock ) {
-                DAS_ASSERTF(simSubE, "internal error. can't be zero");
+                DAS_VERIFYF(simSubE, "internal error. can't be zero");
                 return context.code->makeNode<SimNode_ReturnReferenceFromBlock>(at, simSubE);
             } else {
-                DAS_ASSERTF(simSubE, "internal error. can't be zero");
+                DAS_VERIFYF(simSubE, "internal error. can't be zero");
                 return context.code->makeNode<SimNode_ReturnReference>(at, simSubE);
             }
         } else if ( returnInBlock ) {
             if ( returnCallCMRES ) {
-                DAS_ASSERTF(simSubE, "internal error. can't be zero");
+                DAS_VERIFYF(simSubE, "internal error. can't be zero");
                 SimNode_CallBase * simRet = (SimNode_CallBase *) simSubE;
                 simRet->cmresEval = context.code->makeNode<SimNode_GetBlockCMResOfs>(at,0,stackTop);
                 return context.code->makeNode<SimNode_Return>(at, simSubE);
             } else if ( takeOverRightStack ) {
-                DAS_ASSERTF(simSubE, "internal error. can't be zero");
+                DAS_VERIFYF(simSubE, "internal error. can't be zero");
                 return context.code->makeNode<SimNode_ReturnRefAndEvalFromBlock>(at,
                             simSubE, refStackTop, stackTop);
             } else if ( block->copyOnReturn  ) {
-                DAS_ASSERTF(simSubE, "internal error. can't be zero");
+                DAS_VERIFYF(simSubE, "internal error. can't be zero");
                 return context.code->makeNode<SimNode_ReturnAndCopyFromBlock>(at,
                             simSubE, subexpr->type->getSizeOf(), stackTop);
             } else if ( block->moveOnReturn ) {
-                DAS_ASSERTF(simSubE, "internal error. can't be zero");
+                DAS_VERIFYF(simSubE, "internal error. can't be zero");
                 return context.code->makeNode<SimNode_ReturnAndMoveFromBlock>(at,
                     simSubE, subexpr->type->getSizeOf(), stackTop);
             }
         } else if ( subexpr ) {
             if ( returnCallCMRES ) {
-                DAS_ASSERTF(simSubE, "internal error. can't be zero");
+                DAS_VERIFYF(simSubE, "internal error. can't be zero");
                 SimNode_CallBase * simRet = (SimNode_CallBase *) simSubE;
                 simRet->cmresEval = context.code->makeNode<SimNode_GetCMResOfs>(at,0);
                 return context.code->makeNode<SimNode_Return>(at, simSubE);
@@ -2354,20 +2354,20 @@ namespace das
                         return blockT;
                     }
                 }
-                DAS_ASSERTF(simSubE, "internal error. can't be zero");
+                DAS_VERIFYF(simSubE, "internal error. can't be zero");
                 return context.code->makeNode<SimNode_Return>(at, simSubE);
             } else if ( takeOverRightStack ) {
-                DAS_ASSERTF(simSubE, "internal error. can't be zero");
+                DAS_VERIFYF(simSubE, "internal error. can't be zero");
                 return context.code->makeNode<SimNode_ReturnRefAndEval>(at, simSubE, refStackTop);
             } else if ( returnFunc && returnFunc->copyOnReturn ) {
-                DAS_ASSERTF(simSubE, "internal error. can't be zero");
+                DAS_VERIFYF(simSubE, "internal error. can't be zero");
                 return context.code->makeNode<SimNode_ReturnAndCopy>(at, simSubE, subexpr->type->getSizeOf());
             } else if ( returnFunc && returnFunc->moveOnReturn ) {
-                DAS_ASSERTF(simSubE, "internal error. can't be zero");
+                DAS_VERIFYF(simSubE, "internal error. can't be zero");
                 return context.code->makeNode<SimNode_ReturnAndMove>(at, simSubE, subexpr->type->getSizeOf());
             }
         }
-        DAS_ASSERTF(simSubE, "internal error. can't be zero");
+        DAS_VERIFYF(simSubE, "internal error. can't be zero");
         if ( moveSemantics ) {
             // TODO: support by-value annotations?
             if ( subexpr->type->isRef() ) {
