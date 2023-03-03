@@ -572,6 +572,8 @@ def public type_to_llvm_type ( t:TypeDeclPtr )
         res = LLVMStructType(table_fields)
     elif t.isVoid
         res = LLVMVoidType()
+    elif t.isHandle
+        res = LLVMArrayType(LLVMInt8Type(), uint(t.sizeOf))
     else
         failed("type_to_llvm_type: unsupported type {describe(t)} at {describe(t.at)}")
         res = LLVMInt32Type()

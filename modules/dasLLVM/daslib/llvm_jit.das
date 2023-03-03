@@ -687,7 +687,8 @@ class LlvmJitVisitor : AstVisitor
                 failed_E(expr, "missing interop function pointer for {expr.func._module.name}::{expr.func.name}")
             LLVMAddGlobalMapping(g_engine, ofunc, FUNC_PTR)
             if expr.func.sideEffectFlags == bitfield(0)
-                LLVMAddAttributeToFunction(ofunc, LLVMGetEnumAttribute("readonly"))
+                if !cmres
+                    LLVMAddAttributeToFunction(ofunc, LLVMGetEnumAttribute("readonly"))
                 LLVMAddAttributeToFunction(ofunc, LLVMGetEnumAttribute("nounwind"))     // TODO: better no-unwind?
                 LLVMAddAttributeToFunction(ofunc, LLVMGetEnumAttribute("willreturn"))
             if !expr.func.sideEffectFlags.modifyExternal
@@ -1135,7 +1136,15 @@ class LlvmJitVisitor : AstVisitor
                 error("unsupported bit reduction operator {op}")
         return result
 
-    def visitExprOp2_NonMonade(expr:smart_ptr<ExprOp2>)
+    def visitExprOp2_Func(var expr:smart_ptr<ExprOp2>)
+        expr.arguments |> resize(2)
+        expr.arguments[0] := expr.left
+        expr.arguments[1] := expr.right
+        // emplace_new <| expr.left
+        // expr.arguments |> emplace_new <| expr.right
+        make_call(expr, false)
+
+    def visitExprOp2_NonMonade(var expr:smart_ptr<ExprOp2>)
         var left = getE(expr.left)
         var right = getE(expr.right)
         assume opType = expr.right._type
@@ -1364,7 +1373,16 @@ class LlvmJitVisitor : AstVisitor
         else
             failed_E(expr, "unsupported binary operator {expr.op}")
 
+    def isExprOp2_Func(expr:smart_ptr<ExprOp2>)
+        if !expr.func.flags.builtIn
+            return true
+        if expr.left._type.isHandle || expr.right._type.isHandle
+            return true
+        return false
+
     def override preVisitExprOp2Right(expr:smart_ptr<ExprOp2>;right:ExpressionPtr): void
+        if isExprOp2_Func(expr)
+            return
         if expr.op=="&&" || expr.op=="&&=" || expr.op=="||" || expr.op=="||="
             var monad_true = LLVMAppendBasicBlock(ffunc,"monad_true_at_{int(expr.at.line)}")
             var monad_false = LLVMAppendBasicBlock(ffunc,"monad_true_at_{int(expr.at.line)}")
@@ -1386,8 +1404,10 @@ class LlvmJitVisitor : AstVisitor
                 LLVMBuildCondBr(g_builder, monad_cond, monad_false, monad_true)
             LLVMPositionBuilderAtEnd(g_builder,monad_true)
 
-    def override visitExprOp2(expr:smart_ptr<ExprOp2>) : ExpressionPtr
-        if expr.op=="&&" || expr.op=="&&=" || expr.op=="||" || expr.op=="||="
+    def override visitExprOp2(var expr:smart_ptr<ExprOp2>) : ExpressionPtr
+        if isExprOp2_Func(expr)
+            visitExprOp2_Func(expr)
+        elif expr.op=="&&" || expr.op=="&&=" || expr.op=="||" || expr.op=="||="
             var monad_false = monad2block[get_ptr(ExpressionPtr(expr))]
             LLVMBuildStore(g_builder, getE(expr.right), getE(expr))
             LLVMBuildBr(g_builder, monad_false)
