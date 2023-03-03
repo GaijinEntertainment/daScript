@@ -76,9 +76,9 @@ namespace das {
 
     void Channel::wait() {
         unique_lock<mutex> uguard(lock);
-        while ( remaining ) {
-            cond.wait(uguard);
-        }
+        cond.wait(uguard, [&]() {
+            return remaining==0;
+        });
     }
 
     int Channel::append(int size) {
