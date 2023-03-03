@@ -247,9 +247,9 @@ namespace das {
     };
 
     template <typename EXPR>
-    struct AstExprOpAnnotation : AstExpressionAnnotation<EXPR> {
+    struct AstExprOpAnnotation : AstExprCallFuncAnnotation<EXPR> {
         AstExprOpAnnotation(const string & na, ModuleLibrary & ml)
-            :  AstExpressionAnnotation<EXPR> (na, ml) {
+            :  AstExprCallFuncAnnotation<EXPR> (na, ml) {
             using ManagedType = EXPR;
             this->template addField<DAS_BIND_MANAGED_FIELD(op)>("op");
         }
