@@ -1240,6 +1240,7 @@ namespace das
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         string      name;
+        vector<ExpressionPtr>  nonNamedArguments;
         MakeStruct  arguments;
         bool        argumentsFailedToInfer = false;
     };
