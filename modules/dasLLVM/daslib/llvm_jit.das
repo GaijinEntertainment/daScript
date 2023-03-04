@@ -2157,7 +2157,6 @@ class LlvmJitVisitor : AstVisitor
 
 // ExprRef2Value
     def override visitExprRef2Value(expr:smart_ptr<ExprRef2Value>) : ExpressionPtr
-        assert(expr._type.isWorkhorseType)
         setE(expr, LLVMBuildLoadDataAligned(g_builder, getE(expr.subexpr), uint(expr._type.alignOf), "r2v"))
         return expr
 
@@ -3239,6 +3238,13 @@ class LlvmJitVisitor : AstVisitor
             tbits = LLVMBuildPtrToInt(g_builder, tbits, LLVMInt64Type(), "")
             var vsrc = LLVMBuildInsertElement(g_builder, vvec, tbits, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "function")
             tres = LLVMBuildBitCast(g_builder, vsrc, LLVMFloat4Type(), "return_result")
+        elif etype.isHandle
+            var inscope tp <- get_underlying_value_type(etype)
+            if tp==null
+                failed("internal integration error.`get_underlying_value_type` returned null for {describe(etype)}")
+            elif !tp.isWorkhorseType
+                failed("internal error. expecting workhorse type from `get_underlying_value_type` for {describe(etype)}")
+            tres = cast_to_vec4f(tp, tsrc)
         else
             failed("unsupported cast_to_vec4f type {describe(etype)}")
         return tres

@@ -510,6 +510,19 @@ def public type_to_llvm_abi_type ( t:TypeDeclPtr )
         return LLVMVoidType()
     elif t.baseType==Type fakeContext || t.baseType==Type fakeLineInfo
         return LLVMPointerType(LLVMVoidType(),0u)
+    elif t.baseType==Type tHandle
+        if t.isRefType
+            failed("type_to_llvm_abi_type: internal error. unsupported type {describe(t)} at {describe(t.at)}")
+            return LLVMPointerType(LLVMVoidType(),0u)
+        else
+            var inscope tp <- get_underlying_value_type(t)
+            if tp==null
+                failed("internal integration error.`get_underlying_value_type` returned null for {describe(t)} at {describe(t.at)}")
+                return LLVMInt32Type()
+            elif !tp.isWorkhorseType
+                failed("internal error. expecting workhorse type from `get_underlying_value_type` for {describe(t)} at {describe(t.at)}")
+                return LLVMInt32Type()
+            return type_to_llvm_abi_type(tp)
     else
         failed("type_to_llvm_abi_type: unsupported type {describe(t)} at {describe(t.at)}")
         return LLVMInt32Type()
@@ -573,7 +586,17 @@ def public type_to_llvm_type ( t:TypeDeclPtr )
     elif t.isVoid
         res = LLVMVoidType()
     elif t.isHandle
-        res = LLVMArrayType(LLVMInt8Type(), uint(t.sizeOf))
+        if t.isRefType
+            res = LLVMArrayType(LLVMInt8Type(), uint(t.sizeOf))
+        else
+            var inscope tp <- get_underlying_value_type(t)
+            if tp==null
+                failed("internal integration error.`get_underlying_value_type` returned null for {describe(t)} at {describe(t.at)}")
+                return LLVMInt32Type()
+            elif !tp.isWorkhorseType
+                failed("internal error. expecting workhorse type from `get_underlying_value_type` for {describe(t)} at {describe(t.at)}")
+                return LLVMInt32Type()
+            res = type_to_llvm_type(tp)
     else
         failed("type_to_llvm_type: unsupported type {describe(t)} at {describe(t.at)}")
         res = LLVMInt32Type()
