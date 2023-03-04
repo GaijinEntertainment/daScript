@@ -1492,6 +1492,14 @@ expr_named_call
         delete $name;
         $$ = nc;
     }
+    |   name_in_namespace[name] '(' expr_list[arguments] ',' '[' make_struct_fields[list] ']' ')' {
+        auto nc = new ExprNamedCall(tokAt(scanner,@name),*$name);
+        nc->nonNamedArguments = sequenceToList($arguments);
+        nc->arguments = *$list;
+        delete $list;
+        delete $name;
+        $$ = nc;
+    }
     ;
 
 /* a->b(args) is short for invoke(a.b, a, args)  */

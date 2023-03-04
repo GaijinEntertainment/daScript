@@ -2388,8 +2388,15 @@ namespace das {
 
     ExpressionPtr ExprNamedCall::visit(Visitor & vis) {
         vis.preVisit(this);
-        for ( auto & arg : arguments ) {
-            vis.preVisitNamedCallArg(this, arg.get(), arg==arguments.back());
+
+        for ( auto & arg : nonNamedArguments ) {
+            //TODO: check if is it corrent use nullptr? Possible inherit ExprNamedCall from ExprCall/ExprLooksLikeCall?
+            vis.preVisitCallArg(nullptr, arg.get(), arg == nonNamedArguments.back());
+            arg = arg->visit(vis);
+            arg = vis.visitCallArg(nullptr, arg.get(), arg == nonNamedArguments.back());
+        }
+        for (auto& arg : arguments) {
+            vis.preVisitNamedCallArg(this, arg.get(), arg == arguments.back());
             arg->value = arg->value->visit(vis);
             arg = vis.visitNamedCallArg(this, arg.get(), arg==arguments.back());
         }
