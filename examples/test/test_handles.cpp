@@ -578,6 +578,7 @@ struct EntityIdAnnotation final: das::ManagedValueAnnotation <EntityId> {
     virtual bool isLocal() const override { return true; }
     virtual bool hasNonTrivialCtor() const override { return false; }
     virtual bool canBePlacedInContainer() const override { return true;}
+    virtual TypeDeclPtr makeValueType() const override { return make_smart<TypeDecl>(Type::tInt); }
 };
 
 void tempArrayAliasExample(const das::TArray<Point3> & arr,

@@ -543,6 +543,12 @@ namespace das {
         mod->options[option] = type;
     }
 
+    TypeDeclPtr getUnderlyingValueType ( smart_ptr_raw<TypeDecl> type, Context * context, LineInfoArg * at ) {
+        if ( !type ) context->throw_error_at(at, "expecting type");
+        if ( type->baseType!=Type::tHandle ) context->throw_error_at(at, "expecting handle type");
+        return type->annotation->makeValueType();
+    }
+
     #include "ast.das.inc"
 
     Module_Ast::Module_Ast() : Module("ast") {
@@ -709,6 +715,9 @@ namespace das {
         addExtern<DAS_BIND_FUN(any_table_size)>(*this, lib,  "any_table_size",
             SideEffects::none, "any_table_size")
                 ->arg("table");
+        addExtern<DAS_BIND_FUN(getUnderlyingValueType)>(*this, lib,  "get_underlying_value_type",
+            SideEffects::none, "getUnderlyingValueType")
+                ->args({"type","context","line"});
         // module
         addExtern<DAS_BIND_FUN(for_each_typedef)>(*this, lib,  "for_each_typedef",
             SideEffects::modifyExternal, "for_each_typedef")

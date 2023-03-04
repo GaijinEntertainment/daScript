@@ -3,6 +3,7 @@
 #include "daScript/simulate/simulate.h"
 #include "daScript/simulate/bind_enum.h"
 #include "daScript/simulate/aot.h"
+#include "daScript/simulate/jit_abi.h"
 
 enum class SomeEnum {
     zero
@@ -235,6 +236,7 @@ namespace das {
         static __forceinline EntityId to ( vec4f x )            { return EntityId(v_extract_xi(v_cast_vec4i(x))); }
         static __forceinline vec4f from ( EntityId x )          { return v_cast_vec4f(v_seti_x(x.value)); }
     };
+    template <> struct WrapType<EntityId> { enum { value = true }; typedef int32_t type; };
 }
 __forceinline EntityId make_invalid_id() {
     return EntityId(-1);
