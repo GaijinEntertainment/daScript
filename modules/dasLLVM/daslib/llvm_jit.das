@@ -1140,8 +1140,6 @@ class LlvmJitVisitor : AstVisitor
         expr.arguments |> resize(2)
         expr.arguments[0] := expr.left
         expr.arguments[1] := expr.right
-        // emplace_new <| expr.left
-        // expr.arguments |> emplace_new <| expr.right
         make_call(expr, false)
 
     def visitExprOp2_NonMonade(var expr:smart_ptr<ExprOp2>)
@@ -2725,7 +2723,22 @@ class LlvmJitVisitor : AstVisitor
         return expr
 
 // ExprOp1
-    def override visitExprOp1(expr:smart_ptr<ExprOp1>) : ExpressionPtr
+    def isExprOp1_Func(expr:smart_ptr<ExprOp1>)
+        if !expr.func.flags.builtIn
+            return true
+        if expr.subexpr._type.isHandle
+            return true
+        return false
+
+    def visitExprOp1_Func(var expr:smart_ptr<ExprOp1>)
+        expr.arguments |> resize(1)
+        expr.arguments[0] := expr.subexpr
+        make_call(expr, false)
+
+    def override visitExprOp1(var expr:smart_ptr<ExprOp1>) : ExpressionPtr
+        if isExprOp1_Func(expr)
+            visitExprOp1_Func(expr)
+            return expr
         var sexpr = getE(expr.subexpr)
         assume opType = expr.subexpr._type
         if expr.op=="+++" || expr.op=="++"
