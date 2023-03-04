@@ -189,12 +189,12 @@ namespace das
     TypeDeclPtr TypeDecl::inferGenericInitType ( TypeDeclPtr autoT, TypeDeclPtr initT ) {
         if ( autoT->ref ) {
             autoT->ref = false;
-            auto resT = inferGenericType(autoT, initT, true);
+            auto resT = inferGenericType(autoT, initT, true, false, nullptr);
             if ( resT ) resT->ref = true;
             autoT->ref = true;
             return resT;
         } else {
-            return inferGenericType(autoT, initT, true);
+            return inferGenericType(autoT, initT, true, false, nullptr);
         }
     }
 
@@ -326,33 +326,33 @@ namespace das
         TT->explicitRef |= autoT->explicitRef;
         if ( autoT->isPointer() ) {
             // if it's a pointer, infer pointer-to separately
-            TT->firstType = inferGenericType(autoT->firstType, initT->firstType, false, options);
+            TT->firstType = inferGenericType(autoT->firstType, initT->firstType, false, false, options);
             if ( !TT->firstType ) return nullptr;
         } else if ( autoT->baseType==Type::tIterator ) {
             // if it's a iterator, infer iterator-ofo separately
-            TT->firstType = inferGenericType(autoT->firstType, initT->firstType, false, options);
+            TT->firstType = inferGenericType(autoT->firstType, initT->firstType, false, false, options);
             if ( !TT->firstType ) return nullptr;
         } else if ( autoT->baseType==Type::tArray ) {
             // if it's an array, infer array type separately
-            TT->firstType = inferGenericType(autoT->firstType, initT->firstType, false, options);
+            TT->firstType = inferGenericType(autoT->firstType, initT->firstType, false, false, options);
             if ( !TT->firstType ) return nullptr;
         } else if ( autoT->baseType==Type::tTable ) {
             // if it's a table, infer table keys and values types separately
-            TT->firstType = inferGenericType(autoT->firstType, initT->firstType, false, options);
+            TT->firstType = inferGenericType(autoT->firstType, initT->firstType, false, false, options);
             if ( !TT->firstType ) return nullptr;
             if ( !TT->firstType->isWorkhorseType() ) return nullptr;            // table key has to be hashable too
-            TT->secondType = inferGenericType(autoT->secondType, initT->secondType, false, options);
+            TT->secondType = inferGenericType(autoT->secondType, initT->secondType, false, false, options);
             if ( !TT->secondType ) return nullptr;
         } else if ( autoT->baseType==Type::tBlock || autoT->baseType==Type::tFunction
                    || autoT->baseType==Type::tLambda || autoT->baseType==Type::tTuple
                    || autoT->baseType==Type::tVariant ) {
             // if it's a block or function, infer argument and return types
             if ( autoT->firstType ) {
-                TT->firstType = inferGenericType(autoT->firstType, initT->firstType, false, options);
+                TT->firstType = inferGenericType(autoT->firstType, initT->firstType, false, false, options);
                 if ( !TT->firstType ) return nullptr;
             }
             for ( size_t i=0, is=autoT->argTypes.size(); i!=is; ++i ) {
-                TT->argTypes[i] = inferGenericType(autoT->argTypes[i], initT->argTypes[i], false, options);
+                TT->argTypes[i] = inferGenericType(autoT->argTypes[i], initT->argTypes[i], false, false, options);
                 if ( !TT->argTypes[i] ) return nullptr;
             }
             if ( TT->argNames.size()==0 && !autoT->argNames.empty() ) {
@@ -2398,7 +2398,7 @@ namespace das
 
     int TypeDecl::getTupleSize() const {
         uint64_t size = getTupleSize64();
-        DAS_ASSERTF(size<=0x7fffffff,"tuple size is too big %ul",(unsigned long)size);
+        DAS_ASSERTF(size<=0x7fffffff,"tuple size is too big %lu",(unsigned long)size);
         return (int) (size<=0x7fffffff ? size : 1);
     }
 
@@ -2451,7 +2451,7 @@ namespace das
 
     int TypeDecl::getVariantSize() const {
         uint64_t size = getVariantSize64();
-        DAS_ASSERTF(size<=0x7fffffff,"variant size is too big %ul",(unsigned long)size);
+        DAS_ASSERTF(size<=0x7fffffff,"variant size is too big %lu",(unsigned long)size);
         return (int) (size<=0x7fffffff ? size : 1);
     }
 
