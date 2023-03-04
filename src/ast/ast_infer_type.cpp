@@ -1494,7 +1494,7 @@ namespace das {
                 }
             }
             if ( decl.type->isAuto() && decl.init && decl.init->type ) {
-                auto varT = TypeDecl::inferGenericType(decl.type, decl.init->type);
+                auto varT = TypeDecl::inferGenericType(decl.type, decl.init->type, false, false, nullptr);
                 if ( !varT ) {
                     error("structure field initialization type can't be inferred, "
                           + describeType(decl.type) + " = " + describeType(decl.init->type), "", "",
@@ -1758,7 +1758,7 @@ namespace das {
         }
         virtual ExpressionPtr visitArgumentInit ( Function * f, const VariablePtr & arg, Expression * that ) override {
             if (arg->type->isAuto() && arg->init->type) {
-                auto varT = TypeDecl::inferGenericType(arg->type, arg->init->type);
+                auto varT = TypeDecl::inferGenericType(arg->type, arg->init->type, false, false, nullptr);
                 if ( !varT ) {
                     error("generic argument type can't be inferred, "
                         + describeType(arg->type) + " = " + describeType(arg->init->type), "", "",
@@ -4245,7 +4245,7 @@ namespace das {
                 return Visitor::visitBlockArgumentInit(block, arg, that);
             }
             if ( arg->type->isAuto() ) {
-                auto argT = TypeDecl::inferGenericType(arg->type, arg->init->type);
+                auto argT = TypeDecl::inferGenericType(arg->type, arg->init->type, false, false, nullptr);
                 if ( !argT ) {
                     error("block argument initialization type can't be inferred, "
                           + describeType(arg->type) + " = " + describeType(arg->init->type), "", "",
@@ -5383,7 +5383,7 @@ namespace das {
                         error("subexpresion type is not fully resolved yet", "", "", expr->at);
                         return true;
                     }
-                    auto resT = TypeDecl::inferGenericType(resType, expr->subexpr->type);
+                    auto resT = TypeDecl::inferGenericType(resType, expr->subexpr->type, false, false, nullptr);
                     if ( !resT ) {
                         error("type can't be inferred, "
                               + describeType(resType) + ", returns " + describeType(expr->subexpr->type),"", "",
@@ -6690,7 +6690,7 @@ namespace das {
                         if ( arg->rtti_isMakeBlock() ) { // "it's always MakeBlock. unless its function and @@funcName
                             auto mkBlock = static_pointer_cast<ExprMakeBlock>(arg);
                             auto block = static_pointer_cast<ExprBlock>(mkBlock->block);
-                            auto retT = TypeDecl::inferGenericType(mkBlock->type, funcC->arguments[iF]->type, true, true);
+                            auto retT = TypeDecl::inferGenericType(mkBlock->type, funcC->arguments[iF]->type, true, true, nullptr);
                             DAS_ASSERTF ( retT, "how? it matched during findMatchingFunctions the same way");
                             TypeDecl::applyAutoContracts(mkBlock->type, funcC->arguments[iF]->type);
                             block->returnType = make_smart<TypeDecl>(*retT->firstType);
@@ -6801,7 +6801,7 @@ namespace das {
                             bool isAutoWto = argT->isAutoWithoutOptions(appendHasOptions);
                             if ( isAutoWto || appendHasOptions) {
                                 auto & passT = types[sz];
-                                auto resT = TypeDecl::inferGenericType(argT, passT, true, true);
+                                auto resT = TypeDecl::inferGenericType(argT, passT, true, true, nullptr);
                                 DAS_ASSERTF(resT, "how? we had this working at findMatchingGenerics");
                                 resT->ref = defaultRef[sz];
                                 TypeDecl::applyAutoContracts(resT, argT);
@@ -7226,7 +7226,7 @@ namespace das {
                         passT->dim.clear();
                         if ( rec ) passT->dim.push_back(rec);
                         if ( arg->type->isAuto() ) {
-                            auto nargT = TypeDecl::inferGenericType(passT, arg->type);
+                            auto nargT = TypeDecl::inferGenericType(passT, arg->type, false, false, nullptr);
                             if ( nargT ) {
                                 TypeDecl::applyAutoContracts(nargT, arg->type);
                                 arg->type = nargT;
@@ -7521,14 +7521,14 @@ namespace das {
                             if (expr->makeType->dim.size() == 1 && expr->makeType->dim[0] == TypeDecl::dimAuto) {
                                 auto infT = make_smart<TypeDecl>(*expr->makeType);
                                 infT->dim.clear();
-                                mkt = TypeDecl::inferGenericType(infT, init->type);
+                                mkt = TypeDecl::inferGenericType(infT, init->type, false, false, nullptr);
                                 if (mkt) {
                                     mkt->dim.resize(1);
                                     mkt->dim[0] = int32_t(expr->values.size());
                                 }
                             }
                         } else {
-                            mkt = TypeDecl::inferGenericType(expr->makeType, init->type);
+                            mkt = TypeDecl::inferGenericType(expr->makeType, init->type, false, false, nullptr);
                         }
                         if ( !mkt ) {
                             error("array type can't be inferred, "

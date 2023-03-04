@@ -312,7 +312,7 @@ namespace das {
 
     int Structure::getSizeOf() const {
         uint64_t size = getSizeOf64();
-        DAS_ASSERTF(size<=0x7fffffff,"structure %s is too big, %ul",name.c_str(),(unsigned long)size);
+        DAS_ASSERTF(size<=0x7fffffff,"structure %s is too big, %lu",name.c_str(),(unsigned long)size);
         return (int) (size <= 0x7fffffff ? size : 1);
     }
 

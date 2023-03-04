@@ -189,7 +189,7 @@ namespace das {
         static int getMaskFieldIndex ( char ch );
         static bool isSequencialMask ( const vector<uint8_t> & fields );
         static bool buildSwizzleMask ( const string & mask, int dim, vector<uint8_t> & fields );
-        static TypeDeclPtr inferGenericType ( TypeDeclPtr autoT, TypeDeclPtr initT, bool topLevel = false, bool isPassType = false, OptionsMap * options = nullptr );
+        static TypeDeclPtr inferGenericType ( TypeDeclPtr autoT, TypeDeclPtr initT, bool topLevel, bool isPassType, OptionsMap * options );
         static TypeDeclPtr inferGenericInitType ( TypeDeclPtr autoT, TypeDeclPtr initT );
         static void applyAutoContracts ( TypeDeclPtr TT, TypeDeclPtr autoT );
         static void applyRefToRef ( TypeDeclPtr TT, bool topLevel = false );
