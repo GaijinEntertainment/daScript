@@ -23,6 +23,7 @@ namespace das {
     float4x4 float4x4_mul(const float4x4 &a, const float4x4 &b);
     float4x4 float4x4_transpose ( const float4x4 & src );
     float4x4 float4x4_inverse( const float4x4 & src);
+    float4x4 float4x4_neg( const float4x4 & src);
     inline float3x4 float3x4_inverse( const float3x4 & src ) {
         mat44f mat, invMat;
         v_mat44_make_from_43cu_unsafe(mat, &src.m[0].x);
@@ -31,7 +32,9 @@ namespace das {
         v_mat_43cu_from_mat44(&ret.m[0].x, invMat);
         return ret;
     }
+    float3x4 float3x4_neg ( const float3x4 & mat );
     float3x3 float3x3_inverse( const float3x3 & src);
+    float3x3 float3x3_neg ( const float3x3 & mat );
     float4x4 float4x4_from_float34 ( const float3x4 & mat );
     float3x3 float3x3_from_float44 ( const float4x4 & mat );
     float3x3 float3x3_from_float34 ( const float3x4 & mat );
