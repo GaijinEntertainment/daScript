@@ -373,6 +373,9 @@ src/builtin/module_builtin_rtti.cpp
 src/builtin/module_builtin_ast.cpp
 src/builtin/module_builtin_ast_flags.cpp
 src/builtin/module_builtin_ast_annotations.cpp
+src/builtin/module_builtin_ast_annotations_1.cpp
+src/builtin/module_builtin_ast_annotations_2.cpp
+src/builtin/module_builtin_ast_annotations_3.cpp
 src/builtin/module_builtin_ast_adapters.cpp
 src/builtin/module_builtin_ast.h
 src/builtin/module_builtin_uriparser.h
@@ -623,15 +626,15 @@ if (NOT ${DAS_BUILD_TOOLS} MATCHES NO)
   SOURCE_GROUP_FILES("main" DAS_DASCRIPT_MAIN_SRC)
 
   add_executable(daScript ${DAS_DASCRIPT_MAIN_SRC})
-  TARGET_LINK_LIBRARIES(daScript libDaScript libDaScriptProfile libDaScriptTest Threads::Threads ${DAS_MODULES_LIBS})
-  # ADD_DEPENDENCIES(daScript libDaScript libDaScriptProfile libDaScriptTest ${DAS_MODULES_LIBS})
+  TARGET_LINK_LIBRARIES(daScript libDaScript libDaScriptTest Threads::Threads ${DAS_MODULES_LIBS})
+  # ADD_DEPENDENCIES(daScript libDaScript libDaScriptTest ${DAS_MODULES_LIBS})
   SETUP_CPP11(daScript)
   SETUP_LTO(daScript)
 
   #IF(APPLE)
   #  add_executable(daScriptOsx MACOSX_BUNDLE ${DAS_DASCRIPT_MAIN_SRC})
-  #  TARGET_LINK_LIBRARIES(daScriptOsx libDaScript libDaScriptProfile libDaScriptTest Threads::Threads ${DAS_MODULES_LIBS})
-  #  ADD_DEPENDENCIES(daScriptOsx libDaScript libDaScriptProfile libDaScriptTest  need_and_resolve ${DAS_MODULES_LIBS})
+  #  TARGET_LINK_LIBRARIES(daScriptOsx libDaScript libDaScriptTest Threads::Threads ${DAS_MODULES_LIBS})
+  #  ADD_DEPENDENCIES(daScriptOsx libDaScript libDaScriptTest  need_and_resolve ${DAS_MODULES_LIBS})
   #  SETUP_CPP11(daScriptOsx)
   #  SETUP_LTO(daScriptOsx)
   #  set_target_properties(daScriptOsx PROPERTIES MACOSX_BUNDLE_BUNDLE_NAME "daScript")

@@ -1,6 +1,7 @@
 options indenting = 4
 options remove_unused_symbols = false
 options no_aot = true
+options strict_smart_pointers = true
 
 require debugapi
 
@@ -26,13 +27,11 @@ class DapiDebugAgent
 def install_new_debug_agent ( var agentPtr; category:string )
     static_if typeinfo(is_class *agentPtr)
         let agentInfo = class_info(*agentPtr)
-        var agentAdapter <- make_debug_agent(agentPtr,agentInfo)
+        var inscope agentAdapter <- make_debug_agent(agentPtr,agentInfo)
         unsafe
             agentPtr.thisAgent = reinterpret<DebugAgent?>(agentAdapter)
         install_debug_agent(agentAdapter,category)
         this_context().name := "debug agent {category}"
-        unsafe
-            delete agentAdapter
     else
         concept_assert(false,"can't make debug agent of non-class")
 
@@ -146,10 +145,10 @@ class DapiDataWalker
 def make_data_walker ( classPtr ) : smart_ptr<DataWalker>
     static_if typeinfo(is_class *classPtr)
         let classInfo = class_info(*classPtr)
-        return make_data_walker(classPtr, classInfo)
+        return <- make_data_walker(classPtr, classInfo)
     else
         concept_assert(false,"can't make data walker of non-class")
-        return [[smart_ptr<DataWalker>]]
+        return <- [[smart_ptr<DataWalker>]]
 
 class DapiStackWalker
     def abstract canWalkArguments : bool
@@ -168,7 +167,7 @@ class DapiStackWalker
 def make_stack_walker ( classPtr ) : smart_ptr<StackWalker>
     static_if typeinfo(is_class *classPtr)
         let classInfo = class_info(*classPtr)
-        return make_stack_walker(classPtr, classInfo)
+        return <- make_stack_walker(classPtr, classInfo)
     else
         concept_assert(false,"can't make stack walker of non-class")
-        return [[smart_ptr<StackWalker>]]
+        return <- [[smart_ptr<StackWalker>]]

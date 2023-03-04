@@ -139,6 +139,7 @@ namespace das {
         bool checkUnusedBlockArgument;
         bool checkUnsafe;
         bool checkDeprecated;
+        bool disableInit;
     public:
         LintVisitor ( const ProgramPtr & prog ) : program(prog) {
             checkOnlyFastAot = program->options.getBoolOption("only_fast_aot", program->policies.only_fast_aot);
@@ -150,6 +151,7 @@ namespace das {
             checkUnusedBlockArgument = program->options.getBoolOption("no_unused_block_arguments", program->policies.no_unused_block_arguments);
             checkUnsafe = program->policies.no_unsafe || program->thisModule->doNotAllowUnsafe;
             checkDeprecated = program->options.getBoolOption("no_deprecated", program->policies.no_deprecated);
+            disableInit = prog->options.getBoolOption("no_init", prog->policies.no_init);
         }
     protected:
         void verifyOnlyFastAot ( Function * _func, const LineInfo & at ) {
@@ -193,6 +195,13 @@ namespace das {
             Visitor::preVisit(td);
             lintType(td);
         }
+        virtual void preVisitAlias ( TypeDecl * td, const string & name ) override {
+            Visitor::preVisitAlias(td,name);
+            if ( td->getSizeOf64()>0x7fffffff ) {
+                program->error("alias " + name + " is too big", "", "",
+                    td->at, CompilationError::invalid_type );
+            }
+        }
         virtual void preVisit ( Enumeration * enu ) override {
             Visitor::preVisit(enu);
             if (!isValidEnumName(enu->name)) {
@@ -215,6 +224,10 @@ namespace das {
             if (!isValidStructureName(var->name)) {
                 program->error("invalid structure name " + var->name, "", "",
                     var->at, CompilationError::invalid_name );
+            }
+            if ( var->getSizeOf64()>0x7fffffff ) {
+                program->error("structure " + var->name + " is too big", "", "",
+                    var->at, CompilationError::invalid_type );
             }
         }
         virtual void preVisitExpression ( Expression * expr ) override {
@@ -272,7 +285,36 @@ namespace das {
                         var->init->at, CompilationError::cant_be_null);
                 }
             }
+            if ( var->type->getSizeOf64()>0x7fffffff ) {
+                program->error("global variable " + var->name + " is too big", "", "",
+                    var->at,CompilationError::invalid_variable_type);
+            }
         }
+        virtual void preVisitGlobalLetInit ( const VariablePtr & var, Expression * that ) override {
+            Visitor::preVisitGlobalLetInit(var,that);
+            globalVar = var.get();
+        }
+        virtual ExpressionPtr visitGlobalLetInit ( const VariablePtr & var, Expression * that ) override {
+            if ( disableInit && !var->init->rtti_isConstant() ) {   // we double check here, if it made it past infer
+                program->error("[init] is disabled in the options or CodeOfPolicies", "", "",
+                        var->at, CompilationError::no_init);
+            }
+            globalVar->index = -3; // initialized. -1 by default
+            globalVar = nullptr;
+            return Visitor::visitGlobalLetInit(var,that);;
+        }
+        virtual void preVisit(ExprVar * expr) override {
+            Visitor::preVisit(expr);
+            if ( globalVar && expr->isGlobalVariable() ) {
+                if ( expr->variable->index!=-3 ) {
+                    if ( expr->variable->module==globalVar->module ) {
+                        program->error("global variable " + expr->name + " is initialized after " + globalVar->name + " (" + to_string(expr->variable->index) + ")",
+                            "", "", expr->at, CompilationError::variable_not_found);
+                    }
+                }
+            }
+        }
+
         virtual void preVisit(ExprFor * expr) override {
             Visitor::preVisit(expr);
             DAS_ASSERT(expr->visibility.line);
@@ -303,6 +345,10 @@ namespace das {
                         program->error("local variable of type " + var->type->describe() + " can't be initialized with null", "", "",
                             var->init->at, CompilationError::cant_be_null);
                     }
+                }
+                if ( var->type->getSizeOf64()>0x7fffffff ) {
+                    program->error("local variable " + var->name + " is too big", "", "",
+                        var->at,CompilationError::invalid_variable_type);
                 }
             }
         }
@@ -417,6 +463,20 @@ namespace das {
                 }
             }
         }
+        virtual void preVisit ( ExprAscend * expr ) override {
+            Visitor::preVisit(expr);
+            if ( expr->subexpr->type->getSizeOf64()>0x7fffffff ) {
+                program->error("can't ascend type which is too big", "", "",
+                    expr->at, CompilationError::invalid_new_type);
+            }
+        }
+        virtual void preVisit ( ExprNew * expr ) override {
+            Visitor::preVisit(expr);
+            if ( expr->typeexpr->getSizeOf64()>0x7fffffff ) {
+                program->error("can't new to a type that is too big", "", "",
+                    expr->at, CompilationError::invalid_new_type);
+            }
+        }
         virtual void preVisit ( ExprAssert * expr ) override {
             Visitor::preVisit(expr);
             if ( !expr->isVerify && !expr->arguments[0]->noSideEffects ) {
@@ -475,7 +535,10 @@ namespace das {
                     }
                 }
             }
-
+            if ( (fn->init | fn->shutdown) && disableInit ) { // we double-check here. we check in the infer first, but this here is for the case where macro does it later
+                program->error("[init] is disabled in the options or CodeOfPolicies",  "", "",
+                    fn->at, CompilationError::no_init);
+            }
         }
         virtual FunctionPtr visit ( Function * fn ) override {
             func = nullptr;
@@ -493,6 +556,10 @@ namespace das {
                           "use [unused_argument(" + var->name + ")] if intentional",
                         var->at, CompilationError::unused_function_argument);
                 }
+            }
+            if ( var->type->getSizeOf64()>0x7fffffff ) {
+                program->error("argument variable " + var->name + " is too big", "", "",
+                    var->at,CompilationError::invalid_variable_type);
             }
         }
         virtual void preVisit ( ExprBlock * block ) override {
@@ -519,6 +586,10 @@ namespace das {
                         var->at, CompilationError::unused_block_argument);
                 }
             }
+            if ( var->type->getSizeOf64()>0x7fffffff ) {
+                program->error("block argument variable " + var->name + " is too big", "", "",
+                    var->at,CompilationError::invalid_variable_type);
+            }
         }
         virtual void preVisitBlockExpression ( ExprBlock * block, Expression * expr ) override {
             Visitor::preVisitBlockExpression(block, expr);
@@ -533,6 +604,7 @@ namespace das {
     public:
         ProgramPtr program;
         Function * func = nullptr;
+        Variable * globalVar = nullptr;
         bool anyUnsafe = false;
     };
 
@@ -551,6 +623,8 @@ namespace das {
         "no_unused_block_arguments",    Type::tBool,
         "no_deprecated",                Type::tBool,
         "no_aliasing",                  Type::tBool,
+        "strict_smart_pointers",        Type::tBool,
+        "no_init",                      Type::tBool,
     // memory
         "stack",                        Type::tInt,
         "intern_strings",               Type::tBool,
@@ -641,7 +715,13 @@ namespace das {
             if ( it != ao.end() ) {
                 optT = it->second;
             } else {
-                optT = Module::findOption(opt.name);
+                for ( auto & mod : libGroup.modules ) {
+                    auto ot = mod->getOptionType(opt.name);
+                    if ( ot!=Type::none ) {
+                        optT = ot;
+                        break;
+                    }
+                }
             }
             if ( optT!=Type::none && optT!=opt.type ) {
                 error("invalid option type for " + opt.name

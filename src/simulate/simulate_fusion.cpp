@@ -213,7 +213,7 @@ namespace das {
                     if ( var->init ) {
                         SimNodeCollector collector;
                         var->init->visit(collector);
-                        SimFusion fuse(&context, logs, move(collector.info));
+                        SimFusion fuse(&context, logs, das::move(collector.info));
                         var->init = var->init->visit(fuse);
                         anyFusion |= fuse.fused;
                     }
@@ -222,7 +222,7 @@ namespace das {
                     SimFunction * fn = context.getFunction(i);
                     SimNodeCollector collector;
                     fn->code->visit(collector);
-                    SimFusion fuse(&context, logs, move(collector.info));
+                    SimFusion fuse(&context, logs, das::move(collector.info));
                     fn->code = fn->code->visit(fuse);
                     anyFusion |= fuse.fused;
                 }

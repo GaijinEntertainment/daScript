@@ -5,8 +5,8 @@ ${DAS_DASCRIPT_MAIN_SRC}
 )
 add_executable(pathtracer_dasAot ${PATHTRACER_DASAOT_MAIN_SRC} )
 target_compile_definitions(pathtracer_dasAot PUBLIC MAIN_FUNC_NAME=dascript_dummy_main) # dascript_dummy_main is here to rename main function from daScript
-TARGET_LINK_LIBRARIES(pathtracer_dasAot libDaScript libDaScriptProfile libDaScriptTest Threads::Threads ${DAS_MODULES_LIBS})
-ADD_DEPENDENCIES(pathtracer_dasAot libDaScript libDaScriptProfile libDaScriptTest ${DAS_MODULES_LIBS})
+TARGET_LINK_LIBRARIES(pathtracer_dasAot libDaScript libDaScriptTest Threads::Threads ${DAS_MODULES_LIBS})
+ADD_DEPENDENCIES(pathtracer_dasAot libDaScript libDaScriptTest ${DAS_MODULES_LIBS})
 SETUP_CPP11(pathtracer_dasAot)
 SETUP_LTO(pathtracer_dasAot)
 

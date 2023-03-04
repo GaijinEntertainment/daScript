@@ -771,7 +771,7 @@ namespace debugapi {
                 exText = invCtx->exception;
             }
         });
-        if ( !exText.empty() ) context.throw_error_at(exAt, exText.c_str());
+        if ( !exText.empty() ) context.throw_error_at(exAt, "%s", exText.c_str());
         return res;
     }
 
@@ -801,7 +801,7 @@ namespace debugapi {
                 exText = invCtx->exception;
             }
         });
-        if ( !exText.empty() ) context.throw_error_at(exAt, exText.c_str());
+        if ( !exText.empty() ) context.throw_error_at(exAt, "%s", exText.c_str());
         return res;
     }
 
@@ -832,7 +832,7 @@ namespace debugapi {
                 exText = invCtx->exception;
             }
         });
-        if ( !exText.empty() ) context.throw_error_at(exAt, exText.c_str());
+        if ( !exText.empty() ) context.throw_error_at(exAt, "%s", exText.c_str());
         return res;
     }
 
@@ -943,7 +943,7 @@ namespace debugapi {
     }
 
     void instrument_function ( Context & ctx, Func fn, bool isInstrumenting, uint64_t userData, Context * context, LineInfoArg * arg ) {
-        if ( !fn ) context->throw_error_at(*arg, "expecting function");
+        if ( !fn ) context->throw_error_at(arg, "expecting function");
         ctx.instrumentFunction(fn.PTR, isInstrumenting, userData);
     }
 

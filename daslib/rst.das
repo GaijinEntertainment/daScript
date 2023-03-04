@@ -2,6 +2,7 @@ options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 options no_aot = true
+options strict_smart_pointers = true
 
 module rst private
 
@@ -723,6 +724,8 @@ def document_function(doc_file:file;mod:Module?;func:FunctionPtr)
         fwrite(doc_file,"{func.name} returns {describe_type(func.result)}\n\n")
     if func.flags.unsafeOperation
         document_warning(doc_file,"This is unsafe operation.")
+    if func.moreFlags.deprecated
+        document_warning(doc_file,"This function is deprecated.")
     document_function_arguments(doc_file,argNames,argTypes)
     document_topic(doc_file,topic("function",mod,"{func.name}"))
 

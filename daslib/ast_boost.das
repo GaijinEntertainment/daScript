@@ -2,6 +2,7 @@ options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 options no_aot = true
+options strict_smart_pointers
 
 module ast_boost shared public
 
@@ -58,11 +59,11 @@ def describe(list:AnnotationList)
     return join([{ for arg in list; describe(*arg) }], ",")
 
 def describe(vvar:VariablePtr)
-    return "{vvar.name}:{describe(vvar._type)}"
+    return vvar._type!=null ? "{vvar.name}:{describe(vvar._type)}" : "{vvar.name}:null"
 
 def describe_bitfield(bf;merger:string = "")
     static_if typeinfo(is_bitfield bf)
-        let bftd <- typeinfo(ast_typedecl bf)
+        var inscope bftd <- typeinfo(ast_typedecl bf)
         return join( [{ for name,bit in bftd.argNames,range(32); "[{name}]";
             where (int(bf) & (1<<bit)) != 0 }], merger )
     else
@@ -127,12 +128,11 @@ def emplace_new ( var vec:MakeStruct; var ptr:smart_ptr<MakeFieldDecl> )
 def override_method ( var str:StructurePtr; name,funcName:string ) : bool
     for fld in str.fields
         if fld.name==name
-            var vcast <- new [[ExprCast() at=str.at,
+            var inscope vcast <- new [[ExprCast() at=str.at,
                 subexpr <- new [[ExprAddr() at=str.at,target:=funcName]],
                 castType <- new [[TypeDecl() at=str.at,baseType=Type autoinfer]]
             ]]
-            fld.init := null
-            fld.init <- vcast
+            move(fld.init) <| vcast
             return true
     return false
 
@@ -140,11 +140,11 @@ class MacroMacro : AstFunctionAnnotation
     def override apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
         compiling_program().flags |= ProgramFlags needMacroModule
         func.flags |= FunctionFlags macroInit
-        var blk <- new [[ExprBlock() at=func.at]]
-        var ifm <- new [[ExprCall() at=func.at, name:="is_compiling_macros"]]
-        var ife <- new [[ExprIfThenElse() at=func.at, cond<-ifm, if_true<-func.body]]
+        var inscope blk <- new [[ExprBlock() at=func.at]]
+        var inscope ifm <- new [[ExprCall() at=func.at, name:="is_compiling_macros"]]
+        var inscope ife <- new [[ExprIfThenElse() at=func.at, cond<-ifm, if_true<-func.body]]
         emplace(blk.list,ife)
-        func.body <- blk
+        move(func.body) <| blk
         return true
 
 class TagFunctionAnnotation : AstFunctionAnnotation
@@ -154,7 +154,6 @@ class TagFunctionAnnotation : AstFunctionAnnotation
             if !(val is tBool)
                 errors := "tag_function annotation expects only tag names"
                 return false
-        func.flags |= FunctionFlags exports
         return true
 
 class TagStructureAnnotation : AstStructureAnnotation
@@ -180,7 +179,14 @@ def private for_each_tag_function(mod:Module?; tag:string; blk : block<(var func
                     if t.name==tag
                         invoke(blk, func)
 
+[deprecated]
 def find_arg(argn:string; args:AnnotationArgumentList) : RttiValue
+    for a in args
+        if a.name==argn
+            return get_annotation_argument_value(a)
+    return RttiValue_nothing()
+
+def find_arg(args:AnnotationArgumentList; argn:string) : RttiValue
     for a in args
         if a.name==argn
             return get_annotation_argument_value(a)
@@ -188,55 +194,55 @@ def find_arg(argn:string; args:AnnotationArgumentList) : RttiValue
 
 def private apply_tag_annotation(tag:string; ann:FunctionAnnotationPtr)
     for_each_tag_function(this_module(), tag) <| $ ( func )
-        var tagAnn := ann
+        var inscope tagAnn := ann
         add_function_annotation(func, tagAnn)
 
 def setup_tag_annotation(name,tag:string; classPtr)
-    var ann <- make_function_annotation(name, classPtr)
+    var inscope ann <- make_function_annotation(name, classPtr)
     apply_tag_annotation(tag, ann)
     this_module() |> add_function_annotation(ann)
 
 def find_unique_function ( mod : Module?; name : string; canfail:bool = false )
-    var res : FunctionPtr
+    var inscope res : FunctionPtr
     var count = 0
     for_each_function(mod, name) <| $ ( func )
-        res <- func
+        res := func
         count ++
     if count > 1
         if !canfail
             panic("more than one function encountered")
-        return [[FunctionPtr]]
-    return res
+        return <- [[FunctionPtr]]
+    return <- res
 
 def find_unique_generic ( mod : Module?; name : string; canfail:bool = false )
-    var res : FunctionPtr
+    var inscope res : FunctionPtr
     var count = 0
     for_each_generic(mod, name) <| $ ( func )
-        res <- func
+        res := func
         count ++
     if count > 1
         if !canfail
             panic("more than one generic function encountered")
-        return [[FunctionPtr]]
-    return res
+        return <- [[FunctionPtr]]
+    return <- res
 
 def setup_call_list(name: string; at:LineInfo; subblock:block<(var fn:FunctionPtr):void> ) : ExprBlock?
-    var fn <- compiling_module() |> find_unique_function(name)
+    var inscope fn <- compiling_module() |> find_unique_function(name)
     if fn == null
-        fn <- new [[Function() at=at, atDecl=at, name:="{name}"]]
-        fn.flags |= FunctionFlags generated
-        fn.result <- new [[TypeDecl() baseType=Type autoinfer, at=at]]
-        var blk <- new [[ExprBlock() at=at]]
+        move_new(fn) <| new [[Function() at=at, atDecl=at, name:="{name}",
+            flags = FunctionFlags generated,
+            result <- new [[TypeDecl() baseType=Type autoinfer, at=at]]
+        ]]
+        var inscope blk <- new [[ExprBlock() at=at]]
         var res = get_ptr(blk)
-        fn.body <- blk
+        move(fn.body) <| blk
         invoke(subblock, fn)
         if !(compiling_module() |> add_function(fn))
             panic("failed to setup macro, can't add function {fn.name}")
         return res
     elif fn.body.__rtti != "ExprBlock"
         panic("expecting func.ExprBlock")
-    unsafe
-        return reinterpret<ExprBlock?> fn.body
+    return unsafe(reinterpret<ExprBlock?> fn.body)
 
 def setup_call_list(name: string; at:LineInfo; isInit:bool = false; isPrivate:bool = true; isLateInit:bool = false) : ExprBlock?
     return setup_call_list(name,at) <| $ ( fn )
@@ -249,22 +255,21 @@ def setup_call_list(name: string; at:LineInfo; isInit:bool = false; isPrivate:bo
 
 def setup_macro(name: string; at:LineInfo) : ExprBlock?
     compiling_program().flags |= ProgramFlags needMacroModule
-    var fn <- compiling_module() |> find_unique_function(name)
+    var inscope fn <- compiling_module() |> find_unique_function(name)
     if fn == null
-        fn <- new [[Function() at=at, atDecl=at, name:="{name}"]]
-        fn.flags |= FunctionFlags generated
-        fn.flags |= FunctionFlags macroInit
-        fn.flags |= FunctionFlags privateFunction
-        fn.result <- new [[TypeDecl() baseType=Type autoinfer, at=at]]
-        var blk <- new [[ExprBlock() at=at]]
-        var iblk <- new [[ExprBlock() at=at]]
+        move_new(fn) <| new [[Function() at=at, atDecl=at, name:="{name}",
+            flags = FunctionFlags generated | FunctionFlags macroInit | FunctionFlags privateFunction,
+            result <- new [[TypeDecl() baseType=Type autoinfer, at=at]]
+        ]]
+        var inscope blk <- new [[ExprBlock() at=at]]
+        var inscope iblk <- new [[ExprBlock() at=at]]
         let res = get_ptr(iblk)
-        var ifm <- new [[ExprCall() at=at, name:="is_compiling_macros_in_module"]]
-        var ifmn <- new [[ExprConstString() at=at, value:=compiling_module().name]]
+        var inscope ifm <- new [[ExprCall() at=at, name:="is_compiling_macros_in_module"]]
+        var inscope ifmn <- new [[ExprConstString() at=at, value:=compiling_module().name]]
         emplace(ifm.arguments,ifmn)
-        var ife <- new [[ExprIfThenElse() at=at, cond<-ifm, if_true<-iblk]]
+        var inscope ife <- new [[ExprIfThenElse() at=at, cond<-ifm, if_true<-iblk]]
         emplace(blk.list,ife)
-        fn.body <- blk
+        move(fn.body) <| blk
         if !(compiling_module() |> add_function(fn))
             panic("failed to setup macro, can't add function {fn.name}")
         return res
@@ -286,7 +291,7 @@ class SetupAnyAnnotation : AstStructureAnnotation
     def setup_call(var st:StructurePtr;var cll:smart_ptr<ExprCall>)
         emplace_new(cll.arguments,new [[ExprConstString() at=st.at, value:=name]])
     def override apply ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
-        let argName = find_arg("name", args)
+        let argName = args |> find_arg("name")
         if argName is nothing
             name = "{st.name}"
         elif !(argName is tString)
@@ -295,10 +300,11 @@ class SetupAnyAnnotation : AstStructureAnnotation
         else
             name = argName as tString
         var blk <- setup_macro("__setup_macros", st.at)
-        var cll <- new [[ExprCall() at=st.at, name:=annotation_function_call]]
+        var inscope cll <- new [[ExprCall() at=st.at, name:=annotation_function_call]]
         self->setup_call(st,cll)
-        var nee <- new [[ExprNew() at=st.at, initializer=true]]
-        nee.typeexpr <- new [[TypeDecl() baseType=Type tStructure, structType=get_ptr(st), at=st.at]]
+        var inscope nee <- new [[ExprNew() at=st.at, initializer=true,
+            typeexpr <- new [[TypeDecl() baseType=Type tStructure, structType=get_ptr(st), at=st.at]]
+        ]]
         emplace(cll.arguments,nee)
         emplace(blk.list,cll)
         return true
@@ -364,7 +370,7 @@ class TagFunctionMacro : SetupAnyAnnotation
         emplace_new(cll.arguments,new [[ExprConstString() at=st.at, value:=name]])
         emplace_new(cll.arguments,new [[ExprConstString() at=st.at, value:=tag]])
     def override apply ( var st:StructurePtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
-        let argTag = find_arg("tag", args)
+        let argTag = args |> find_arg("tag")
         if argTag is nothing
             errors := "missing tag argument"
             return false
@@ -379,91 +385,88 @@ def public panic_expr_as : void?
     return null
 
 def private makeAsOrSafeAs ( expr; var enull:ExpressionPtr )
-    var vdr <- new [[ExprField() at=expr.at, name:="__rtti", value <- clone_expression(expr.value)]]
-    var cna <- new [[ExprConstString() at=expr.at, value:=expr.name]]
-    var cond <- new [[ExprOp2() at=expr.at, op:="==", left<-vdr, right<-cna]]
-    var ctype <- new [[TypeDecl() at=expr.at,
+    var inscope vdr <- new [[ExprField() at=expr.at, name:="__rtti", value <- clone_expression(expr.value)]]
+    var inscope cna <- new [[ExprConstString() at=expr.at, value:=expr.name]]
+    var inscope cond <- new [[ExprOp2() at=expr.at, op:="==", left<-vdr, right<-cna]]
+    var inscope ctype <- new [[TypeDecl() at=expr.at,
         baseType=Type tPointer,
         firstType <- new [[TypeDecl() at=expr.at,baseType=Type alias,alias:=expr.name]]
     ]]
-    var esub <- clone_expression(expr.value)
+    var inscope esub <- clone_expression(expr.value)
     if expr.value._type.baseType==Type tPointer
-        var neqz <- new [[ExprOp2() at=expr.at, op:="!=",
-            left <-clone_expression(expr.value),
+        var inscope neqz <- new [[ExprOp2() at=expr.at, op:="!=",
+            left <- clone_expression(expr.value),
             right <-new [[ExprConstPtr() at=expr.at]]
         ]]
-        var nand <- new [[ExprOp2() at=expr.at, op:="&&",
+        var inscope nand <- new [[ExprOp2() at=expr.at, op:="&&",
             left <- neqz,
             right <- cond
         ]]
-        cond <- nand
+        move(cond) <| nand
     else
-        var nsub <- new [[ExprRef2Ptr() at=expr.at,
+        var inscope nsub <- new [[ExprRef2Ptr() at=expr.at,
             subexpr<-esub,
             genFlags = ExprGenFlags alwaysSafe
         ]]
-        esub <- nsub
-    var vcast <- new [[ExprCast() at=expr.at,
+        move(esub) <| nsub
+    var inscope vcast <- new [[ExprCast() at=expr.at,
         subexpr <- esub,
         castType <- ctype,
         castFlags = ExprCastFlags reinterpretCast,
         genFlags = ExprGenFlags alwaysSafe
     ]]
-    var tri <- new [[ExprOp3() at=expr.at, op:="?",
+    var inscope tri <- new [[ExprOp3() at=expr.at, op:="?",
         subexpr <- cond,
         left <- vcast,
         right <- enull
     ]]
     tri.genFlags = expr.genFlags
-    return tri
+    return <- tri
 
 // replacing ExprIsVariant(value,name) => ExprOp2('==",value.__rtti,"name")
 // if value is ast::Expr*
 class BetterRttiVisitor : AstVariantMacro
     def override visitExprIsVariant ( prog:ProgramPtr; mod:Module?;expr:smart_ptr<ExprIsVariant> ) : ExpressionPtr
         if isExpression(expr.value._type)
-            var vdr <- new [[ExprField() at=expr.at, name:="__rtti", value <- clone_expression(expr.value)]]
-            var cna <- new [[ExprConstString() at=expr.at, value:=expr.name]]
-            var veq <- new [[ExprOp2() at=expr.at, op:="==", left<-vdr, right<-cna]]
-            return veq
-        return [[ExpressionPtr]]
+            var inscope vdr <- new [[ExprField() at=expr.at, name:="__rtti", value <- clone_expression(expr.value)]]
+            var inscope cna <- new [[ExprConstString() at=expr.at, value:=expr.name]]
+            var inscope veq <- new [[ExprOp2() at=expr.at, op:="==", left<-vdr, right<-cna]]
+            return <- veq
+        return <- [[ExpressionPtr]]
     def override visitExprAsVariant ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprAsVariant> ) : ExpressionPtr
         if isExpression(expr.value._type)
-            return makeAsOrSafeAs(expr, new [[ExprCall() at=expr.at, name:="panic_expr_as"]])
-        return [[ExpressionPtr]]
+            return <- makeAsOrSafeAs(expr, new [[ExprCall() at=expr.at, name:="panic_expr_as"]])
+        return <- [[ExpressionPtr]]
     def override visitExprSafeAsVariant ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprSafeAsVariant> ) : ExpressionPtr
         if isExpression(expr.value._type)
-            return makeAsOrSafeAs(expr, new [[ExprConstPtr() at=expr.at]])
-        return [[ExpressionPtr]]
+            return <- makeAsOrSafeAs(expr, new [[ExprConstPtr() at=expr.at]])
+        return <- [[ExpressionPtr]]
 
 def private walk_and_convert_array ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
     let total = any_array_size(data)
     if total != 0
         let stride = info.firstType.sizeOf
-        var mkArr <- new [[ExprMakeArray() at=at, makeType<-clone_type(info.firstType)]]
+        var inscope mkArr <- new [[ExprMakeArray() at=at, makeType<-clone_type(info.firstType)]]
         any_array_foreach(data, stride) <| $ ( value )
-            var elem <- walk_and_convert(value, info.firstType, at)
-            emplace(mkArr.values, elem)
+            emplace_new(mkArr.values) <| walk_and_convert(value, info.firstType, at)
         push(mkArr.makeType.dim,total)
-        var mkToArrayMove <- new [[ExprCall() at=at, name:="to_array_move"]]
+        var inscope mkToArrayMove <- new [[ExprCall() at=at, name:="to_array_move"]]
         emplace(mkToArrayMove.arguments,mkArr)
-        return mkToArrayMove
+        return <- mkToArrayMove
     else
-        var mkArr <- new [[ExprMakeStruct() at=at, makeType<-clone_type(info)]]
-        return mkArr
+        return <- new [[ExprMakeStruct() at=at, makeType<-clone_type(info)]]
 
 def private walk_and_convert_dim ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
 	let stride = info.baseSizeOf
 	let total = info.countOf
-	var einfo <- clone_type(info)
+	var inscope einfo <- clone_type(info)
 	clear(einfo.dim)
-	var mkArr <- new [[ExprMakeArray() at=at, makeType := info]]
+	var inscope mkArr <- new [[ExprMakeArray() at=at, makeType := info]]
 	for x in range(total)
         unsafe
             var elem <- walk_and_convert(data + stride*x, einfo, at)
             emplace(mkArr.values, elem)
-    einfo := null
-	return mkArr
+	return <- mkArr
 
 def private walk_and_convert_pointer ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
     unsafe
@@ -473,20 +476,20 @@ def private walk_and_convert_pointer ( data : uint8?; info:TypeDeclPtr; at:LineI
         return mkAsc
 
 def private walk_and_convert_tuple ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
-    var mkArr <- new [[ExprMakeTuple() at=at, recordType<-clone_type(info)]]
+    var inscope mkArr <- new [[ExprMakeTuple() at=at, recordType<-clone_type(info)]]
     for idx in range( info.argTypes.length)
         let offset = get_tuple_field_offset(info,idx)
         unsafe
             var elem <- walk_and_convert(data + offset, info.argTypes[idx], at)
             emplace(mkArr.values, elem)
-    return mkArr
+    return <- mkArr
 
 def private walk_and_convert_structure ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
-	var mkStruct <- new [[ExprMakeStruct() at=at, makeType<-clone_type(info)]]
+	var inscope mkStruct <- new [[ExprMakeStruct() at=at, makeType<-clone_type(info)]]
 	let stype = info.structType
-    var mkS <- new [[ MakeStruct() ]]
+    var inscope mkS <- new [[ MakeStruct() ]]
 	for x in stype.fields
-        if find_arg("do_not_convert",x.annotation) is nothing
+        if x.annotation |> find_arg("do_not_convert") is nothing
             unsafe
                 let fdata = data + x.offset
                 var elem <- walk_and_convert ( fdata, x._type, at)
@@ -495,7 +498,7 @@ def private walk_and_convert_structure ( data : uint8?; info:TypeDeclPtr; at:Lin
                     mkF.flags = MakeFieldDeclFlags moveSemantics
                 emplace_new(*mkS, mkF)
     emplace(mkStruct.structs, mkS)
-	return mkStruct
+	return <- mkStruct
 
 def private walk_and_convert_variant ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
     unsafe
@@ -512,28 +515,25 @@ def private walk_and_convert_variant ( data : uint8?; info:TypeDeclPtr; at:LineI
 def private walk_and_convert_table ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
     let total = any_table_size(data)
     if total != 0
-        var tupT <- new [[TypeDecl() baseType=Type tTuple, at=at]]
+        var inscope tupT <- new [[TypeDecl() baseType=Type tTuple, at=at]]
         emplace_new(tupT.argTypes,clone_type(info.firstType))
         emplace_new(tupT.argTypes,clone_type(info.secondType))
-        var arrT <- clone_type(tupT)
-        var mkArr <- new [[ExprMakeArray() at=at, makeType <- arrT]]
+        var inscope mkArr <- new [[ExprMakeArray() at=at, makeType <- clone_type(tupT)]]
         let key_stride = info.firstType.sizeOf
         let value_stride = info.secondType.sizeOf
         any_table_foreach ( data, key_stride, value_stride ) <| $ ( pkey, pvalue )
-            var key <- walk_and_convert ( pkey, info.firstType, at)
-            var value <- walk_and_convert ( pvalue, info.secondType, at)
-            var mkTup <- new [[ExprMakeTuple() at=at, recordType<-clone_type(tupT), isKeyValue=true]]
+            var inscope key <- walk_and_convert ( pkey, info.firstType, at)
+            var inscope value <- walk_and_convert ( pvalue, info.secondType, at)
+            var inscope mkTup <- new [[ExprMakeTuple() at=at, recordType<-clone_type(tupT), isKeyValue=true]]
             emplace(mkTup.values,key)
             emplace(mkTup.values,value)
             emplace(mkArr.values,mkTup)
         push(mkArr.makeType.dim,total)
-        var mkToTableMove <- new [[ExprCall() at=at, name:="to_table_move"]]
+        var inscope mkToTableMove <- new [[ExprCall() at=at, name:="to_table_move"]]
         emplace(mkToTableMove.arguments,mkArr)
-        tupT := null
-        return mkToTableMove
+        return <- mkToTableMove
     else
-        var mkArr <- new [[ExprMakeStruct() at=at, makeType<-clone_type(info)]]
-        return mkArr
+        return <- new [[ExprMakeStruct() at=at, makeType<-clone_type(info)]]
 
 def private walk_and_convert_basic ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
     unsafe
@@ -573,14 +573,14 @@ def private walk_and_convert_enumeration ( data : uint8?; info:TypeDeclPtr; at:L
             eval = int(* reinterpret<uint16?> data)
     else
         panic("unsupported enumeration")
-    return new [[ExprConstEnumeration() enumType:=info.enumType, value:=info.enumType.list[eval].name]]
+    return <- new [[ExprConstEnumeration() enumType:=info.enumType, value:=info.enumType.list[eval].name]]
 
 def private walk_and_convert ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : ExpressionPtr
 	// print("0x{intptr(data)} {describe(info)}\n")
 	if info.dim.length != 0
-		return walk_and_convert_dim(data,info,at)
+		return <- walk_and_convert_dim(data,info,at)
 	elif info.baseType == Type tArray
-		return walk_and_convert_array(data,info,at)
+		return <- walk_and_convert_array(data,info,at)
 	elif info.baseType == Type tPointer
         unsafe
             if *reinterpret<uint8??>data == null
@@ -590,35 +590,35 @@ def private walk_and_convert ( data : uint8?; info:TypeDeclPtr; at:LineInfo ) : 
             else
                 return walk_and_convert_pointer(data,info,at)
 	elif info.baseType == Type tStructure
-		return walk_and_convert_structure(data,info,at)
+		return <- walk_and_convert_structure(data,info,at)
 	elif info.baseType == Type tVariant
-		return walk_and_convert_variant(data,info,at)
+		return <- walk_and_convert_variant(data,info,at)
 	elif info.baseType == Type tTuple
-		return walk_and_convert_tuple(data,info,at)
+		return <- walk_and_convert_tuple(data,info,at)
 	elif info.baseType == Type tTable
-		return walk_and_convert_table(data,info,at)
+		return <- walk_and_convert_table(data,info,at)
     elif info.baseType == Type tEnumeration8 || info.baseType == Type tEnumeration16 || info.baseType == Type tEnumeration
-        return walk_and_convert_enumeration(data,info,at)
+        return <- walk_and_convert_enumeration(data,info,at)
     else
-        return walk_and_convert_basic(data,info,at)
+        return <- walk_and_convert_basic(data,info,at)
 
 def convert_to_expression ( var value : auto& ==const; at:LineInfo )
-	let info <- typeinfo(ast_typedecl value)
+	var inscope info <- typeinfo(ast_typedecl value)
     unsafe
 	    let pval = addr(value)
 	    return walk_and_convert(reinterpret<uint8?> pval, info, at)
 
 def convert_to_expression ( value : auto ==const; at:LineInfo )
-	let info <- typeinfo(ast_typedecl value)
+	var inscope info <- typeinfo(ast_typedecl value)
     unsafe
 	    let pval = addr(value)
 	    return walk_and_convert(reinterpret<uint8?> pval, info, at)
 
 def convert_to_expression ( var value : auto ==const )
-    return convert_to_expression(value,[[LineInfo]])
+    return <- convert_to_expression(value,[[LineInfo]])
 
 def convert_to_expression ( value : auto ==const )
-    return convert_to_expression(value,[[LineInfo]])
+    return <- convert_to_expression(value,[[LineInfo]])
 
 def find_annotation ( mod_name,ann_name:string ) : Annotation const?
     var mod = find_compiling_module(mod_name)
@@ -634,9 +634,8 @@ def find_annotation ( mod_name,ann_name:string ) : Annotation const?
 def append_annotation ( mod_name,ann_name:string; args:array< tuple<argname:string;argvalue:RttiValue> > )
     var ann = find_annotation(mod_name, ann_name)
     assert(ann!=null)
-    var decl <- new [[AnnotationDeclaration()]]
-    unsafe
-        decl.annotation := reinterpret<smart_ptr<Annotation>> ann
+    var inscope decl <- new [[AnnotationDeclaration()]]
+    decl.annotation := unsafe(reinterpret<smart_ptr<Annotation>> ann)
     for argP in args
         let argName & = argP.argname
         let arg & = argP.argvalue
@@ -655,52 +654,45 @@ def append_annotation ( mod_name,ann_name:string; args:array< tuple<argname:stri
 def append_annotation ( mod_name,ann_name:string )
     var ann = find_annotation(mod_name, ann_name)
     assert(ann!=null)
-    var decl <- new [[AnnotationDeclaration()]]
-    unsafe
-        decl.annotation := reinterpret<smart_ptr<Annotation>> ann
+    var inscope decl <- new [[AnnotationDeclaration()]]
+    decl.annotation := unsafe(reinterpret<smart_ptr<Annotation>> ann)
     return <- decl
 
 def append_annotation ( var func:FunctionPtr; mod_name,ann_name:string )
     var ann = find_annotation(mod_name, ann_name)
     assert(ann!=null)
-    var decl <- append_annotation(mod_name, ann_name)
+    var inscope decl <- append_annotation(mod_name, ann_name)
     add_function_annotation(func, decl)
-    decl := null
 
 def append_annotation ( var blk:smart_ptr<ExprBlock>; mod_name,ann_name:string )
     var ann = find_annotation(mod_name, ann_name)
     assert(ann!=null)
-    var decl <- append_annotation(mod_name, ann_name)
+    var inscope decl <- append_annotation(mod_name, ann_name)
     add_block_annotation(blk, decl)
-    decl := null
 
 def append_annotation ( var st:smart_ptr<Structure>; mod_name,ann_name:string )
     var ann = find_annotation(mod_name, ann_name)
     assert(ann!=null)
-    var decl <- append_annotation(mod_name, ann_name)
+    var inscope decl <- append_annotation(mod_name, ann_name)
     add_structure_annotation(st, decl)
-    decl := null
 
 def append_annotation ( var func:FunctionPtr; mod_name,ann_name:string; args:array< tuple<argname:string;argvalue:RttiValue> > )
     var ann = find_annotation(mod_name, ann_name)
     assert(ann!=null)
-    var decl <- append_annotation(mod_name, ann_name, args)
+    var inscope decl <- append_annotation(mod_name, ann_name, args)
     add_function_annotation(func, decl)
-    decl := null
 
 def append_annotation ( var blk:smart_ptr<ExprBlock>; mod_name,ann_name:string; args:array< tuple<argname:string;argvalue:RttiValue> > )
     var ann = find_annotation(mod_name, ann_name)
     assert(ann!=null)
-    var decl <- append_annotation(mod_name, ann_name, args)
+    var inscope decl <- append_annotation(mod_name, ann_name, args)
     add_block_annotation(blk, decl)
-    decl := null
 
 def append_annotation ( var st:smart_ptr<Structure>; mod_name,ann_name:string; args:array< tuple<argname:string;argvalue:RttiValue> > )
     var ann = find_annotation(mod_name, ann_name)
     assert(ann!=null)
-    var decl <- append_annotation(mod_name, ann_name, args)
+    var inscope decl <- append_annotation(mod_name, ann_name, args)
     add_structure_annotation(st, decl)
-    decl := null
 
 def add_annotation_argument ( var arguments:AnnotationArgumentList; argName:string; val:bool )
     let argIdx = arguments |> add_annotation_argument(argName)
@@ -753,18 +745,12 @@ def get_for_source_index(expr:smart_ptr<ExprFor>; source:ExpressionPtr)
             return t
     return -1
 
-def visit_expression ( var expr:ExpressionPtr&; var adapter:smart_ptr<VisitorAdapter> )
-    var newExpr <- expr |> visit(adapter)
-    if newExpr != expr
-        expr := null
-    expr <- newExpr
-
 [macro_function]
 def make_static_assert_false ( text : string; at:LineInfo )
-    var esa <- new [[ExprStaticAssert() at=at]]
+    var inscope esa <- new [[ExprStaticAssert() at=at]]
     esa.arguments |> emplace_new <| new [[ExprConstBool() at=at, value=false]]
     esa.arguments |> emplace_new <| new [[ExprConstString() at=at, value:=text]]
-    return esa
+    return <- esa
 
 [_macro]
 def private setup
@@ -795,14 +781,14 @@ def private setup
 
 
 def public function_to_type ( fn : FunctionPtr ) : TypeDeclPtr
-    var td <- new [[TypeDecl() baseType=Type tFunction]]
-    unsafe
-        td.firstType <- fn.result!=null ? clone_type(fn.result) : new [[TypeDecl() baseType=Type autoinfer]]
-        td.argNames |> resize(length(fn.arguments))
-        for arg,argi in fn.arguments,count()
-            td.argTypes |> emplace_new <| clone_type(arg._type)
-            td.argNames[argi] := arg.name
-    return td
+    var inscope td <- new [[TypeDecl() baseType=Type tFunction,
+        firstType <- fn.result!=null ? clone_type(fn.result) : new [[TypeDecl() baseType=Type autoinfer]]
+    ]]
+    td.argNames |> resize(length(fn.arguments))
+    for arg,argi in fn.arguments,count()
+        td.argTypes |> emplace_new <| clone_type(arg._type)
+        td.argNames[argi] := arg.name
+    return <- td
 
 def public visit_finally ( blk:ExprBlock?; adapter:smart_ptr<VisitorAdapter> )
     unsafe
@@ -841,7 +827,10 @@ def public find_argument_index ( typ:TypeDeclPtr; name:string )
 def public isCMRESType ( blockT:TypeDeclPtr )
     return blockT!=null && blockT.isRefType && !blockT.flags.ref
 
-def private debug_expression_impl ( var writer:StringBuilderWriter; expr:ExpressionPtr; tabs:int=0 )
+bitfield DebugExpressionFlags
+    refCount
+
+def private debug_expression_impl ( var writer:StringBuilderWriter; expr:ExpressionPtr; deFlags:DebugExpressionFlags; tabs:int )
     if expr==null
         writer |> write("null")
         return
@@ -849,6 +838,8 @@ def private debug_expression_impl ( var writer:StringBuilderWriter; expr:Express
         writer |> write("[NO RTTI]")
         return
     writer |> write("({expr.__rtti}")
+    if deFlags.refCount
+        writer |> write("<{smart_ptr_use_count(expr)}>")
     if string(expr.__rtti) |> starts_with("ExprConst")
         writer |> write(" {describe(expr)})")
         return
@@ -866,7 +857,7 @@ def private debug_expression_impl ( var writer:StringBuilderWriter; expr:Express
                 let pv = unsafe(reinterpret<ExpressionPtr?> p8)
                 let ts = repeat("  ",tabs+2)
                 writer |> write("\n{ts}({name} ")
-                debug_expression_impl(writer, *pv,tabs+2)
+                debug_expression_impl(writer, *pv,deFlags,tabs+2)
                 writer |> write(")")
             elif tstr=="$::das_string"
                 let pv = unsafe(reinterpret<das_string?> p8)
@@ -904,7 +895,7 @@ def private debug_expression_impl ( var writer:StringBuilderWriter; expr:Express
                     writer |> write("\n{ts}[{name}\n")
                     for l,i in *pv,count()
                         writer |> write("{ts}  ")
-                        debug_expression_impl(writer, l,tabs+2)
+                        debug_expression_impl(writer,l,deFlags,tabs+2)
                         if i != length(*pv)-1
                             writer |> write("\n")
                     writer |> write("]")
@@ -918,13 +909,20 @@ def private debug_expression_impl ( var writer:StringBuilderWriter; expr:Express
                         writer |> write("{l.name}:{describe(l._type)}")
                         if l.init!=null
                             writer |> write(" = ")
-                            debug_expression_impl(writer, l.init,tabs+2)
+                            debug_expression_impl(writer,l.init,deFlags,tabs+2)
                         if i != length(*pv)-1
                             writer |> write("\n")
                     writer |> write("]")
     writer |> write(")")
 
-def public debug_expression ( expr:ExpressionPtr )
+def public debug_expression ( expr:ExpressionPtr; deFlags:DebugExpressionFlags=bitfield(0) )
     return build_string <| $ ( writer )
-        debug_expression_impl(writer, expr)
+        debug_expression_impl(writer, expr, deFlags, 0)
 
+def public debug_expression ( expr:Expression? )
+    unsafe
+        return debug_expression(reinterpret<ExpressionPtr> expr)
+
+def public describe ( expr:Expression? )
+    unsafe
+        return describe(reinterpret<ExpressionPtr> expr)

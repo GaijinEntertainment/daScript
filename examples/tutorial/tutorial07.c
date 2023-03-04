@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <string.h>
 #include <stddef.h>
+#include <assert.h>
 
 #include "daScript/daScriptC.h"
 
@@ -14,7 +15,9 @@ void tutorial () {
     // get path to tutorial
     char fileName[256];
     das_get_root(fileName, sizeof(fileName));
-    strncat ( fileName, TUTORIAL_NAME, sizeof(fileName));
+    int charsLeft = ((int)sizeof(fileName)) - ((int)strlen(fileName)) - 1;
+    assert(charsLeft>=0 && "fileName buffer is too small ");
+    strncat ( fileName, TUTORIAL_NAME, (size_t)charsLeft);
     // compile program
     das_program * program = das_program_compile(fileName, fAccess, tout, dummyLibGroup);
     int err_count = das_program_err_count(program);

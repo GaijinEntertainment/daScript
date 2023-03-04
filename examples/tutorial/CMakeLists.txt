@@ -13,6 +13,14 @@ ${CMAKE_SOURCE_DIR}/examples/tutorial/tutorial00.cpp
 )
 DAS_TUTORIAL(tutorial00 "${TUTORIAL_00_SRC}")
 
+####################
+# tutorial 00 - utf8
+####################
+SET(TUTORIAL_00_UTF8_SRC
+${CMAKE_SOURCE_DIR}/examples/tutorial/tutorial00utf8.cpp
+)
+DAS_TUTORIAL(tutorial00utf8 "${TUTORIAL_00_UTF8_SRC}")
+
 ##################################################
 # tutorial 01 - all error checking, external files
 ##################################################
@@ -45,8 +53,8 @@ ${DAS_DASCRIPT_MAIN_SRC}
 )
 add_executable(tutorial02_dasAot ${TUTORIAL_02_DASAOT_MAIN_SRC} )
 target_compile_definitions(tutorial02_dasAot PUBLIC MAIN_FUNC_NAME=dascript_dummy_main) # dascript_dummy_main is here to rename main function from daScript
-TARGET_LINK_LIBRARIES(tutorial02_dasAot libDaScript libDaScriptProfile libDaScriptTest Threads::Threads ${DAS_MODULES_LIBS})
-ADD_DEPENDENCIES(tutorial02_dasAot libDaScript libDaScriptProfile libDaScriptTest ${DAS_MODULES_LIBS})
+TARGET_LINK_LIBRARIES(tutorial02_dasAot libDaScript libDaScriptTest Threads::Threads ${DAS_MODULES_LIBS})
+ADD_DEPENDENCIES(tutorial02_dasAot libDaScript libDaScriptTest ${DAS_MODULES_LIBS})
 SETUP_CPP11(tutorial02_dasAot)
 SETUP_LTO(tutorial02_dasAot)
 

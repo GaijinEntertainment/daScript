@@ -85,11 +85,12 @@ def test_file(file_name: string; ctx: SuiteCtx): SuiteResult
 
 def test_file(file_name: string; ctx: SuiteCtx; file_ctx: FileCtx): SuiteResult
     var res: SuiteResult
-    var access := make_file_access(ctx.projectPath)
+    var inscope access <- make_file_access(ctx.projectPath)
     access |> add_file_access_root("dastest", ctx.dastestRoot)
     using <| $(var mg:ModuleGroup)
         using <| $(var cop:CodeOfPolicies)
             cop.aot_module = true
+            cop.export_all = false
             compile_file(file_name, access, unsafe(addr(mg)), cop) <| $(ok, program, output)
                 var expectedErrors : table<CompilationError; int>
                 if program != null
@@ -153,7 +154,6 @@ def test_file(file_name: string; ctx: SuiteCtx; file_ctx: FileCtx): SuiteResult
                         if context == null
                             msg = "{msg}. Current context is null."
                         log::error(msg)
-    access := null
     return res
 
 
@@ -175,7 +175,7 @@ def test_module(var mod: rtti::Module; var context: rtti::Context; suite_ctx: Su
         if f.hash == 0ul
             return
         let func = context |> get_function_by_mnh(f.hash)
-        let fn <- modPtr |> find_module_function_via_rtti(func)
+        var inscope fn <- modPtr |> find_module_function_via_rtti(func)
         if fn == null
             return
         for ann in fn.annotations
@@ -287,6 +287,7 @@ def private test_any(name: string; func; args_num: int; var context: FileCtx; va
                 *context.context |> invoke_in_context(func, testing)
             dt = get_time_usec(t0)
     recover
+        failed = true
         if !deliberateRecover
             dt = get_time_usec(t0)
             res.errors += 1
@@ -304,6 +305,8 @@ def private test_any(name: string; func; args_num: int; var context: FileCtx; va
         expectFailure = false
         failed = true
         log::error("{context.indenting}--- expect test failure, but it's success '{name}' {time_dt_hr(dt)}")
+    elif !expectFailure && failed
+        failed = false
 
     if failed
         res.failed += 1

@@ -30,12 +30,6 @@ Function annotations
 
 [expect_dim(argname)] contract, which only accepts T[]
 
-.. _handle-contracts-expect_not_dim:
-
-.. das:attribute:: expect_not_dim
-
-[expect_not_dim(argname)] contract, which never accepts T[]
-
 .. _handle-contracts-expect_any_enum:
 
 .. das:attribute:: expect_any_enum
@@ -90,6 +84,24 @@ Workhorse types are: bool,int*,uint*,float*,double,range and urange,string,enume
 .. das:attribute:: expect_any_function
 
 [expect_any_function(argname)] contract, which only accepts functions
+
+.. _handle-contracts-expect_ref:
+
+.. das:attribute:: expect_ref
+
+[expect_ref(argname)] contract, which only accepts references
+
+.. _handle-contracts-expect_pointer:
+
+.. das:attribute:: expect_pointer
+
+[expect_pointer(argname)] contract, which only accepts pointers
+
+.. _handle-contracts-expect_value_handle:
+
+.. das:attribute:: expect_value_handle
+
+[expect_value_handle(argname)] contract, which only accepts value handles
 
 ++++++++++++
 Type queries

@@ -64,7 +64,7 @@ class GlslShader : AstFunctionAnnotation
         pass
     def override apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
         func.flags |= FunctionFlags exports // note: this is temporary, until we are done with dependency collecting etc
-        let argName = find_arg("name", args) ?as tString ?? "{func.name}`shader_text"
+        let argName = args |> find_arg("name") ?as tString ?? "{func.name}`shader_text"
         if !add_global_var(compiling_module(),argName, new [[TypeDecl() at=func.at, baseType=Type tString]], func.at, false)
             errors := "can't add global variable {argName}"
             return false
@@ -116,18 +116,18 @@ class GlslShader : AstFunctionAnnotation
             caps |= ShaderExportCaps resolve_supported_semantics
         return caps
     def override fixup ( var func:FunctionPtr; var group:ModuleGroup; args,progArgs:AnnotationArgumentList; var errors : das_string ) : bool
-        let argName = find_arg("name", args) ?as tString ?? "{func.name}`shader_text"
-        var version = find_arg("version", args) ?as tInt ?? (shaderType==ShaderType compute ? 430 : 330)
+        let argName = args |> find_arg("name") ?as tString ?? "{func.name}`shader_text"
+        var version = args |> find_arg("version") ?as tInt ?? (shaderType==ShaderType compute ? 430 : 330)
         var compute_local_size : int3
         if shaderType==ShaderType compute
-            let arg_local_size_x = find_arg("local_size_x", args)
+            let arg_local_size_x = args |> find_arg("local_size_x")
             if arg_local_size_x is tInt
                 compute_local_size.x = arg_local_size_x as tInt
             else
                 errors := "missing local_size_x"
                 return false
-            compute_local_size.y = find_arg("local_size_y", args) ?as tInt ?? 0
-            compute_local_size.z = find_arg("local_size_z", args) ?as tInt ?? 0
+            compute_local_size.y = args |> find_arg("local_size_y") ?as tInt ?? 0
+            compute_local_size.z = args |> find_arg("local_size_z") ?as tInt ?? 0
         // TODO: 'find_global(name)'
         var err : array<string>
         var glob <- find_variable(compiling_module(), argName)
@@ -662,7 +662,7 @@ class GlslExport : AstVisitor
         *writer |> write(")")
         for ann in fun.annotations
             if ann.annotation.name=="pixel_shader" // TODO: other ann
-                let argo = find_arg("output",ann.arguments)
+                let argo = ann.arguments |> find_arg("output")
                 if argo is tString
                     *writer |> write(" : {argo as tString}")
         self->newLine(1)
@@ -762,7 +762,7 @@ class GlslExport : AstVisitor
         let st = self->getSamplerType(arg._type)
         if st==""
             return false
-        let stage = (find_arg("stage",arg.annotation) ?as tInt) ?? 0
+        let stage = arg.annotation |> find_arg("stage") ?as tInt ?? 0
         let sfunc = to_upper(st)
         *writer |> write(sfunc)
         *writer |> write("({arg.name},{stage})")
@@ -773,12 +773,12 @@ class GlslExport : AstVisitor
         let st = self->getImageType(arg._type)
         if st==""
             return false
-        let format =  (find_arg("format",arg.annotation) ?as tString) ?? "rgba8"
-        let binding = (find_arg("stage",arg.annotation) ?as tInt) ?? 0
+        let format =  arg.annotation |> find_arg("format") ?as tString ?? "rgba8"
+        let binding = arg.annotation |> find_arg("stage") ?as tInt ?? 0
         var suffix = "_RW"
-        if (find_arg("writeonly",arg.annotation) ?as tBool) ?? false
+        if arg.annotation |> find_arg("writeonly") ?as tBool ?? false
             suffix = "_WR"
-        elif (find_arg("readonly",arg.annotation) ?as tBool) ?? false
+        elif arg.annotation |> find_arg("readonly") ?as tBool ?? false
             suffix = "_RO"
         let sfunc = to_upper(st)
         *writer |> write(sfunc)
@@ -788,17 +788,17 @@ class GlslExport : AstVisitor
         self->line(arg.at)
         if caps.restrict_array_as_result
             if length(arg._type.dim)>0
-                let need_init = find_arg("need_init",arg.annotation) ?as tBool ?? true
-                let group_shared = find_arg("groupshared",arg.annotation) ?as tBool ?? false
+                let need_init = arg.annotation |> find_arg("need_init") ?as tBool ?? true
+                let group_shared = arg.annotation |> find_arg("groupshared") ?as tBool ?? false
                 if need_init && !group_shared
                     self->error("returning arrays is prohibited in this shader model",arg.at)
         if !caps.output_inout
-            if ( !(find_arg("inout", arg.annotation) is nothing) ||
-                 !(find_arg("in",  arg.annotation) is nothing) ||
-                 !(find_arg("out", arg.annotation) is nothing) )
+            if ( !(arg.annotation |> find_arg("inout") is nothing) ||
+                 !(arg.annotation |> find_arg("in") is nothing) ||
+                 !(arg.annotation |> find_arg("out") is nothing) )
                 *writer |> write("// ")
-        if find_arg("ssbo", arg.annotation) is tBool
-            var binding = find_arg("stage", arg.annotation) ?as tInt ?? 0
+        if arg.annotation |> find_arg("ssbo") is tBool
+            var binding = arg.annotation |> find_arg("stage") ?as tInt ?? 0
             *writer |> write("layout(std430, binding={binding}) buffer {arg.name}_ssbo")
             self->newLine(1)
             *writer |> write("\{")
@@ -807,65 +807,65 @@ class GlslExport : AstVisitor
             self->newLine(1)
             *writer |> write("\}")
         else
-            var needInit = find_arg("need_init", arg.annotation) ?as tBool ?? true
-            if find_arg("groupshared", arg.annotation) ?as tBool ?? false
+            var needInit = arg.annotation |> find_arg("need_init") ?as tBool ?? true
+            if arg.annotation |> find_arg("groupshared") ?as tBool ?? false
                 needInit = false
             if shaderType==ShaderType vertex
-                if find_arg("uniform", arg.annotation) is tBool
+                if arg.annotation |> find_arg("uniform") is tBool
                     self->checkUniformType(arg._type)
                     if self->outputSamplerMacro(arg)
                         return
                     *writer |> write("uniform "); needInit = false
-                let argLoc = find_arg("location", arg.annotation)
+                let argLoc = arg.annotation |> find_arg("location")
                 if argLoc is tInt
                     *writer |> write("layout(location={argLoc as tInt}) "); needInit = false
-                if find_arg("in", arg.annotation) is tBool
+                if arg.annotation |> find_arg("in") is tBool
                     *writer |> write("in "); needInit = false
-                if find_arg("inout", arg.annotation) is tBool
+                if arg.annotation |> find_arg("inout") is tBool
                     *writer |> write("out "); needInit = false
             elif shaderType==ShaderType fragment
-                if find_arg("uniform", arg.annotation) is tBool
+                if arg.annotation |> find_arg("uniform") is tBool
                     self->checkUniformType(arg._type)
                     if self->outputSamplerMacro(arg)
                         return
                     *writer |> write("uniform "); needInit = false
-                if find_arg("in", arg.annotation) is tBool
+                if arg.annotation |> find_arg("in") is tBool
                     *writer |> write("in "); needInit = false
-                if find_arg("out", arg.annotation) is tBool
+                if arg.annotation |> find_arg("out") is tBool
                     *writer |> write("out "); needInit = false
-                if find_arg("inout", arg.annotation) is tBool
+                if arg.annotation |> find_arg("inout") is tBool
                     *writer |> write("in "); needInit = false
             elif shaderType==ShaderType compute
-                if find_arg("groupshared", arg.annotation) is tBool
+                if arg.annotation |> find_arg("groupshared") is tBool
                     if caps.output_unfirom_macro_declarations
                         *writer |> write("SHARED ")
                     else
                         *writer |> write("shared ")
-                if find_arg("uniform", arg.annotation) is tBool
+                if arg.annotation |> find_arg("uniform") is tBool
                     self->checkUniformType(arg._type)
                     if self->outputSamplerMacro(arg)
                         return
                     if self->outputImageMacro(arg)
                         return
                     *writer |> write("uniform "); needInit = false
-                if find_arg("in", arg.annotation) is tBool
+                if arg.annotation |> find_arg("in") is tBool
                     *writer |> write("in "); needInit = false
-                if find_arg("out", arg.annotation) is tBool
+                if arg.annotation |> find_arg("out") is tBool
                     *writer |> write("out "); needInit = false
-                if find_arg("inout", arg.annotation) is tBool
+                if arg.annotation |> find_arg("inout") is tBool
                     *writer |> write("in "); needInit = false
                 if is_glsl_structure(arg,"image2D") || is_glsl_structure(arg,"image3D")
                     var layouts : array<string>
-                    let i_writeonly = find_arg("writeonly", arg.annotation)
+                    let i_writeonly = arg.annotation |> find_arg("writeonly")
                     if i_writeonly is tBool
                         *writer |> write("writeonly "); needInit = false
-                    let i_readonly = find_arg("readonly", arg.annotation)
+                    let i_readonly = arg.annotation |> find_arg("readonly")
                     if i_readonly is tBool
                         *writer |> write("readonly "); needInit = false
-                    let s_format = find_arg("format", arg.annotation)
+                    let s_format = arg.annotation |> find_arg("format")
                     if s_format is tString
                         layouts |> push(s_format as tString)
-                    let i_binding = find_arg("stage", arg.annotation)
+                    let i_binding = arg.annotation |> find_arg("stage")
                     if i_binding is tInt
                         layouts |> push("binding={i_binding as tInt}")
                     if !empty(layouts)
@@ -878,7 +878,7 @@ class GlslExport : AstVisitor
                 *writer |> write(" = ")
                 self->produce_zero(arg._type)
     def override visitGlobalLetVariable(arg:VariablePtr;lastArg:bool)
-        let reg = find_arg("register", arg.annotation)
+        let reg = arg.annotation |> find_arg("register")
         if reg is tString
             *writer |> write(": register({reg as tString})")
         *writer |> write(";")
@@ -886,12 +886,12 @@ class GlslExport : AstVisitor
         var is_inout = false
         if caps.output_inout_stub
             is_inout = true
-            if !(find_arg("inout", arg.annotation) is nothing)
+            if !(arg.annotation |> find_arg("inout") is nothing)
                 if shaderType==ShaderType vertex
                     inout_stub += "$output {arg.name}\n"
                 elif shaderType==ShaderType compute || shaderType==ShaderType fragment
                     inout_stub += "$input {arg.name}\n"
-            elif !(find_arg("in", arg.annotation) is nothing)
+            elif !(arg.annotation |> find_arg("in") is nothing)
                 inout_stub += "$input {arg.name}\n"
                 if caps.restrict_vertex_attribute_names
                     if !glsl_restricted_vertex_attribute_names |> key_exists("{arg.name}")
@@ -899,12 +899,12 @@ class GlslExport : AstVisitor
                         let allowed_names = join(names,",")
                         self->error("invalid vertex attribute name {arg.name}, supported names are {allowed_names}", arg.at)
                         delete names
-            elif !(find_arg("out", arg.annotation) is nothing)
+            elif !(arg.annotation |> find_arg("out") is nothing)
                 inout_stub += "$output {arg.name}\n"
             else
                 is_inout = false
         if is_inout && caps.output_inout_decl
-            let sema = find_arg("semantics", arg.annotation)
+            let sema = arg.annotation |> find_arg("semantics")
             var suffix = ""
             if sema is tString
                 suffix = " : {sema as tString}"
@@ -1532,10 +1532,10 @@ def get_decl_info ( typ:TypeDeclPtr; arguments:AnnotationArgumentList ) : tuple<
     if length(typ.dim)>0 || !(typ.isNumeric || typ.isVectorType)
         return [[auto false, [[FieldDeclInfo]]]]
     var fdi = [[FieldDeclInfo
-        sizei = find_arg("size", arguments) ?as tInt ?? -1,
-        typet = get_decl_type_from_name(find_arg("type", arguments) ?as tString ?? ""),
-        normalized = (find_arg("normalized", arguments) ?as tBool) ?? false,
-        as_int = (find_arg("as_int", arguments) ?as tBool) ?? false
+        sizei = arguments |> find_arg("size") ?as tInt ?? -1,
+        typet = get_decl_type_from_name(arguments |> find_arg("type") ?as tString ?? ""),
+        normalized = arguments |> find_arg("normalized") ?as tBool ?? false,
+        as_int = arguments |> find_arg("as_int") ?as tBool ?? false
     ]]
     if fdi.sizei==-1
         fdi.sizei = typ.isVectorType ? typ.vectorDim : 1

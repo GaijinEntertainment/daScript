@@ -166,6 +166,12 @@ namespace das
         Type                baseType = Type::tInt;
         AnnotationList      annotations;
         bool                isPrivate = false;
+#if DAS_MACRO_SANITIZER
+    public:
+        void* operator new ( size_t count ) { return das_aligned_alloc16(count); }
+        void operator delete  ( void* ptr ) { auto size = das_aligned_memsize(ptr);
+            memset(ptr, 0xcd, size); das_aligned_free16(ptr); }
+#endif
     };
 
     class Structure : public ptr_ref_count {
@@ -212,6 +218,7 @@ namespace das
         const FieldDeclaration * findField ( const string & name ) const;
         const Structure * findFieldParent ( const string & name ) const;
         int getSizeOf() const;
+        uint64_t getSizeOf64() const;
         int getAlignOf() const;
         __forceinline bool canCopy() const { return canCopy(false); }
         bool canCopy(bool tempMatters) const;
@@ -231,6 +238,7 @@ namespace das
         bool hasNonTrivialDtor ( das_set<Structure *> & dep ) const;
         bool hasNonTrivialCopy ( das_set<Structure *> & dep ) const;
         bool canBePlacedInContainer ( das_set<Structure *> & dep ) const;
+        bool needInScope ( das_set<Structure *> & dep ) const;
         string describe() const { return name; }
         string getMangledName() const;
         bool hasAnyInitializers() const;
@@ -258,6 +266,12 @@ namespace das
             };
             uint32_t    flags = 0;
         };
+#if DAS_MACRO_SANITIZER
+    public:
+        void* operator new ( size_t count ) { return das_aligned_alloc16(count); }
+        void operator delete  ( void* ptr ) { auto size = das_aligned_memsize(ptr);
+            memset(ptr, 0xcd, size); das_aligned_free16(ptr); }
+#endif
     };
 
     struct Variable : ptr_ref_count {
@@ -294,6 +308,7 @@ namespace das
                 bool    private_variable : 1;
                 bool    tag : 1;
                 bool    global : 1;
+                bool    inScope : 1;
             };
             uint32_t flags = 0;
         };
@@ -308,6 +323,12 @@ namespace das
             uint32_t access_flags = 0;
         };
         AnnotationArgumentList  annotation;
+#if DAS_MACRO_SANITIZER
+    public:
+        void* operator new ( size_t count ) { return das_aligned_alloc16(count); }
+        void operator delete  ( void* ptr ) { auto size = das_aligned_memsize(ptr);
+            memset(ptr, 0xcd, size); das_aligned_free16(ptr); }
+#endif
     };
 
     struct VarLessPred {
@@ -416,6 +437,7 @@ namespace das
         virtual bool isLocal() const {
             return isPod() && !hasNonTrivialCtor() && !hasNonTrivialDtor() && !hasNonTrivialCopy();
         }
+        virtual bool needInScope() const { return false; }
         virtual bool canNew() const { return false; }
         virtual bool canDelete() const { return false; }
         virtual bool needDelete() const { return canDelete(); }
@@ -431,6 +453,7 @@ namespace das
         virtual string getSmartAnnotationCloneFunction () const { return ""; }
         virtual size_t getSizeOf() const { return sizeof(void *); }
         virtual size_t getAlignOf() const { return 1; }
+        virtual TypeDeclPtr makeValueType() const { return nullptr; }
         virtual TypeDeclPtr makeFieldType ( const string &, bool ) const { return nullptr; }
         virtual TypeDeclPtr makeSafeFieldType ( const string &, bool ) const { return nullptr; }
         virtual TypeDeclPtr makeIndexType ( const ExpressionPtr & /*src*/, const ExpressionPtr & /*idx*/ ) const { return nullptr; }
@@ -601,6 +624,12 @@ namespace das
             };
             uint32_t    printFlags = 0;
         };
+#if DAS_MACRO_SANITIZER
+    public:
+        void* operator new ( size_t count ) { return das_aligned_alloc16(count); }
+        void operator delete  ( void* ptr ) { auto size = das_aligned_memsize(ptr);
+            memset(ptr, 0xcd, size); das_aligned_free16(ptr); }
+#endif
     };
 
     struct ExprLooksLikeCall;
@@ -821,6 +850,12 @@ namespace das
         Function * fromGeneric = nullptr;
         uint64_t hash = 0;
         uint64_t aotHash = 0;
+#if DAS_MACRO_SANITIZER
+    public:
+        void* operator new ( size_t count ) { return das_aligned_alloc16(count); }
+        void operator delete  ( void* ptr ) { auto size = das_aligned_memsize(ptr);
+            memset(ptr, 0xcd, size); das_aligned_free16(ptr); }
+#endif
     };
 
     uint64_t getFunctionHash ( Function * fun, SimNode * node, Context * context );
@@ -934,7 +969,7 @@ namespace das
         virtual ~Module();
         virtual void addPrerequisits ( ModuleLibrary & ) const {}
         virtual ModuleAotType aotRequire ( TextWriter & ) const { return ModuleAotType::no_aot; }
-        virtual Type getOptionType ( const string & ) const { return Type::none; }
+        virtual Type getOptionType ( const string & ) const;
         virtual bool initDependencies() { return true; }
         bool addAlias ( const TypeDeclPtr & at, bool canFail = false );
         bool addVariable ( const VariablePtr & var, bool canFail = false );
@@ -948,6 +983,7 @@ namespace das
         bool addReaderMacro ( const ReaderMacroPtr & ptr, bool canFail = false );
         bool addCommentReader ( const CommentReaderPtr & ptr, bool canFail = false );
         bool addCallMacro ( const CallMacroPtr & ptr, bool canFail = false );
+        bool addKeyword ( const string & kwd, bool needOxfordComma, bool canFail = false );
         TypeDeclPtr findAlias ( const string & name ) const;
         VariablePtr findVariable ( const string & name ) const;
         FunctionPtr findFunction ( const string & mangledName ) const;
@@ -995,7 +1031,7 @@ namespace das
             if ( callThis.find(fnName)!=callThis.end() ) {
                 return false;
             }
-            callThis[fnName] = move(factory);
+            callThis[fnName] = das::move(factory);
             return true;
         }
     public:
@@ -1024,6 +1060,8 @@ namespace das
         vector<SimulateMacroPtr>                    simulateMacros;     // simulate macros (every time we simulate context)
         das_map<string,ReaderMacroPtr>              readMacros;         // %foo "blah"
         CommentReaderPtr                            commentReader;      // /* blah */ or // blah
+        vector<pair<string,bool>>                   keywords;           // keywords (and if they need oxford comma)
+        das_hash_map<string,Type>                   options;            // options
         string  name;
         union {
             struct {
@@ -1143,7 +1181,7 @@ namespace das
         virtual void preVisit (  Program *, Module *, ExprCallMacro * ) { }
         virtual ExpressionPtr visit (  Program *, Module *, ExprCallMacro * ) { return nullptr; }
         virtual void seal( Module * m ) { module = m; }
-        virtual bool canVisitArguments ( ExprCallMacro * ) { return true; }
+        virtual bool canVisitArguments ( ExprCallMacro *, int ) { return true; }
         virtual bool canFoldReturnResult ( ExprCallMacro * ) { return true; }
         string name;
         Module * module = nullptr;
@@ -1210,6 +1248,7 @@ namespace das
         bool        aot = false;                        // enable AOT
         bool        aot_module = false;                 // this is how AOT tool knows module is module, and not an entry point
         bool        completion = false;                 // this code is being compiled for 'completion' mode
+        bool        export_all = false;                 // when user compiles, export all (public?) functions
     // memory
         uint32_t    stack = 16*1024;                    // 0 for unique stack
         bool        intern_strings = false;             // use string interning lookup for regular string heap
@@ -1225,7 +1264,7 @@ namespace das
         bool rtti = false;                              // create extended RTTI
     // language
         bool no_unsafe = false;
-        bool local_ref_is_unsafe = true;               // var a & = ... unsafe. should be
+        bool local_ref_is_unsafe = true;                // var a & = ... unsafe. should be
         bool no_global_variables = false;
         bool no_global_variables_at_all = false;
         bool no_global_heap = false;
@@ -1241,6 +1280,8 @@ namespace das
         bool default_module_public = true;              // by default module is 'public', not 'private'
         bool no_deprecated = false;
         bool no_aliasing = false;                       // if true, aliasing will be reported as error, otherwise will turn off optimization
+        bool strict_smart_pointers = false;             // collection of tests for smart pointers, like van inscope for any local, etc
+        bool no_init = false;                           // if true, then no [init] is allowed in any shape or form
     // environment
         bool no_optimizations = false;                  // disable optimizations, regardless of settings
         bool fail_on_no_aot = true;                     // AOT link failure is error

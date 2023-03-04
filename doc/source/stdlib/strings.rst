@@ -204,8 +204,6 @@ String properties
   *  :ref:`starts_with (str:string const implicit;cmp:string const implicit;cmpLen:uint const;context:__context const) : bool <function-_at_strings_c__c_starts_with_CIs_CIs_Cu_C_c>` 
   *  :ref:`length (str:string const implicit;context:__context const) : int <function-_at_strings_c__c_length_CIs_C_c>` 
   *  :ref:`length (str:$::das_string const implicit) : int <function-_at_strings_c__c_length_CIH_ls__builtin__c__c_das_string_gr_>` 
-  *  :ref:`empty (str:string const implicit) : bool <function-_at_strings_c__c_empty_CIs>` 
-  *  :ref:`empty (str:$::das_string const implicit) : bool <function-_at_strings_c__c_empty_CIH_ls__builtin__c__c_das_string_gr_>` 
 
 .. _function-_at_strings_c__c_ends_with_CIs_CIs_C_c:
 
@@ -306,36 +304,6 @@ length returns int
 
 
 |function-strings-length|
-
-.. _function-_at_strings_c__c_empty_CIs:
-
-.. das:function:: empty(str: string const implicit)
-
-empty returns bool
-
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+str     +string const implicit+
-+--------+---------------------+
-
-
-|function-strings-empty|
-
-.. _function-_at_strings_c__c_empty_CIH_ls__builtin__c__c_das_string_gr_:
-
-.. das:function:: empty(str: das_string const implicit)
-
-empty returns bool
-
-+--------+-----------------------------------------------------------------------+
-+argument+argument type                                                          +
-+========+=======================================================================+
-+str     + :ref:`builtin::das_string <handle-builtin-das_string>`  const implicit+
-+--------+-----------------------------------------------------------------------+
-
-
-|function-strings-empty|
 
 ++++++++++++++
 String builder

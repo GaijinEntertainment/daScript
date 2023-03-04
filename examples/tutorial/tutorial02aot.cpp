@@ -43,7 +43,7 @@ void tutorial () {
         return;
     }
     // evaluate 'test' function in the context
-    ctx.eval(fnTest, nullptr);
+    ctx.evalWithCatch(fnTest, nullptr);
     if ( auto ex = ctx.getException() ) {       // if function cased panic, report it
         tout << "exception: " << ex << "\n";
         return;

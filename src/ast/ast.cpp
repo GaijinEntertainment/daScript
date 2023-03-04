@@ -311,7 +311,13 @@ namespace das {
     }
 
     int Structure::getSizeOf() const {
-        int size = 0;
+        uint64_t size = getSizeOf64();
+        DAS_ASSERTF(size<=0x7fffffff,"structure %s is too big, %lu",name.c_str(),(unsigned long)size);
+        return (int) (size <= 0x7fffffff ? size : 1);
+    }
+
+    uint64_t Structure::getSizeOf64() const {
+        uint64_t size = 0;
         const Structure * cppLayoutParent = nullptr;
         for ( const auto & fd : fields ) {
             int fieldAlignemnt = fd.type->getAlignOf();
@@ -320,13 +326,13 @@ namespace das {
                 auto fp = findFieldParent(fd.name);
                 if ( fp!=cppLayoutParent ) {
                     if (DAS_NON_POD_PADDING || !cppLayoutNotPod) {
-                        size = cppLayoutParent ? cppLayoutParent->getSizeOf() : 0;
+                        size = cppLayoutParent ? cppLayoutParent->getSizeOf64() : 0;
                     }
                     cppLayoutParent = fp;
                 }
             }
             size = (size + al) & ~al;
-            size += fd.type->getSizeOf();
+            size += fd.type->getSizeOf64();
         }
         int al = getAlignOf() - 1;
         size = (size + al) & ~al;
@@ -372,6 +378,15 @@ namespace das {
         return module ? module->name+"::"+name : name;
     }
 
+    bool Structure::needInScope(das_set<Structure *> & dep) const {   // &&
+        for ( const auto & fd : fields ) {
+            if ( fd.type && fd.type->needInScope(dep) ) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     bool Structure::canBePlacedInContainer(das_set<Structure *> & dep) const {   // &&
         for ( const auto & fd : fields ) {
             if ( fd.type && !fd.type->canBePlacedInContainer(dep) ) {
@@ -383,29 +398,29 @@ namespace das {
 
     bool Structure::hasNonTrivialCtor(das_set<Structure *> & dep) const {   // &&
         for ( const auto & fd : fields ) {
-            if ( fd.type && !fd.type->hasNonTrivialCtor(dep) ) {
-                return false;
+            if ( fd.type && fd.type->hasNonTrivialCtor(dep) ) {
+                return true;
             }
         }
-        return true;
+        return false;
     }
 
     bool Structure::hasNonTrivialDtor(das_set<Structure *> & dep) const {   // &&
         for ( const auto & fd : fields ) {
-            if ( fd.type && !fd.type->hasNonTrivialDtor(dep) ) {
-                return false;
+            if ( fd.type && fd.type->hasNonTrivialDtor(dep) ) {
+                return true;
             }
         }
-        return true;
+        return false;
     }
 
     bool Structure::hasNonTrivialCopy(das_set<Structure *> & dep) const {   // &&
         for ( const auto & fd : fields ) {
-            if ( fd.type && !fd.type->hasNonTrivialCopy(dep) ) {
-                return false;
+            if ( fd.type && fd.type->hasNonTrivialCopy(dep) ) {
+                return true;
             }
         }
-        return true;
+        return false;
     }
 
     bool Structure::isExprTypeAnywhere(das_set<Structure *> & dep) const {   // &&
@@ -1668,34 +1683,6 @@ namespace das {
         return cexpr;
     }
 
-    int ExprField::tupleFieldIndex() const {
-        int index = 0;
-        if ( sscanf(name.c_str(),"_%i",&index)==1 ) {
-            return index;
-        } else {
-            auto vT = value->type->isPointer() ? value->type->firstType : value->type;
-            if (!vT) return -1;
-            if ( name=="_first" ) {
-                return 0;
-            } else if ( name=="_last" ) {
-                return int(vT->argTypes.size())-1;
-            } else {
-                return vT->findArgumentIndex(name);
-            }
-            return -1;
-        }
-    }
-
-    int ExprField::variantFieldIndex() const {
-        auto vT = value->type->isPointer() ? value->type->firstType : value->type;
-        if (!vT) return -1;
-        return vT->findArgumentIndex(name);
-    }
-
-    int ExprField::bitFieldIndex() const {
-        return value->type->findArgumentIndex(name);
-    }
-
     // ExprIs
 
     ExpressionPtr ExprIsVariant::visit(Visitor & vis) {
@@ -2283,6 +2270,7 @@ namespace das {
             cexpr->variables.push_back(var->clone());
         cexpr->visibility = visibility;
         cexpr->atInit = atInit;
+        cexpr->letFlags = letFlags;
         return cexpr;
     }
 
@@ -2299,12 +2287,14 @@ namespace das {
 
     ExpressionPtr ExprCallMacro::visit(Visitor & vis) {
         vis.preVisit(this);
-        if ( !macro || macro->canVisitArguments(this) ) {
-            for ( auto & arg : arguments ) {
+        int index = 0;
+        for ( auto & arg : arguments ) {
+            if ( !macro || macro->canVisitArguments(this,index) ) {
                 vis.preVisitLooksLikeCallArg(this, arg.get(), arg==arguments.back());
                 arg = arg->visit(vis);
                 arg = vis.visitLooksLikeCallArg(this, arg.get(), arg==arguments.back());
             }
+            index ++;
         }
         return vis.visit(this);
     }

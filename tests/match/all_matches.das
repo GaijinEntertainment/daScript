@@ -26,7 +26,7 @@ struct AB
 
 [sideeffects]
 def enum_match ( color:Color )
-    match(color) <|
+    match color
         if Color black
             return 0
         if Color red
@@ -36,7 +36,7 @@ def enum_match ( color:Color )
 
 [sideeffects]
 def enum_static_match ( color, blah )
-    static_match(color) <|
+    static_match color
         if Color black
             return 0
         if match_expr(blah)
@@ -46,15 +46,15 @@ def enum_static_match ( color, blah )
 
 [sideeffects]
 def static_match_by_type ( what )
-    static_match(what) <|
-        if match_type($v(expr),type<int>)
-            return "int {expr}"
+    static_match what
+        if match_type<int> $v(expr)
+            return expr
         if _
-            return "anything"
+            return -1
 
 [sideeffects]
 def struct_match ( f : Foo )
-    match(f) <|
+    match f
         if [[Foo a=13]]
             return 0
         if [[Foo a=$v(anyA)]]
@@ -62,7 +62,7 @@ def struct_match ( f : Foo )
 
 [sideeffects]
 def struct_match ( b : Bar )
-    match(b) <|
+    match b
         if [[Bar a=13]]
             return 0
         if [[Bar a=$v(anyA), b=13.0]]
@@ -72,7 +72,7 @@ def struct_match ( b : Bar )
 
 [sideeffects]
 def guards_match ( ab : AB )
-    match(ab) <|
+    match ab
         if [[AB a=$v(a), b=$v(b)]] && (b > a)
             return "{b} > {a}"
         if [[AB a=$v(a), b=$v(b)]]
@@ -80,7 +80,7 @@ def guards_match ( ab : AB )
 
 [sideeffects]
 def variant_as_match ( v : IF )
-    match(v) <|
+    match v
         if $v(i) as i
             return "int"
         if $v(f) as f
@@ -90,7 +90,7 @@ def variant_as_match ( v : IF )
 
 [sideeffects]
 def nested_struct_match ( v : Foo )
-    match(v) <|
+    match v
         if [[Foo a=1, v=$v(i) as i]]
             return 1
         if [[Foo v=$v(f) as f]]
@@ -100,7 +100,7 @@ def nested_struct_match ( v : Foo )
 
 [sideeffects]
 def variant_match ( v : IF )
-    match(v) <|
+    match v
         if [[IF i=$v(i)]]
             return 1
         if [[IF f=$v(f)]]
@@ -110,7 +110,7 @@ def variant_match ( v : IF )
 
 [sideeffects]
 def static_array_match ( A : int[3] )
-    match(A) <|
+    match A
         if [[auto $v(a);$v(b);$v(c)]] && (a+b+c)==6 // total of 3 elements, sum is 6
             return 1
         if [[int 0;...]]    // starts with 0
@@ -124,7 +124,7 @@ def static_array_match ( A : int[3] )
 
 [sideeffects]
 def dynamic_array_match ( A : array<int> )
-    match(A) <|
+    match A
         if [{auto $v(a);$v(b);$v(c)}] && (a+b+c)==6 // total of 3 elements, sum is 6
             return 1
         if [{int 0;0;0;...}]    // first 3 are 0
@@ -139,21 +139,20 @@ def dynamic_array_match ( A : array<int> )
 
 [sideeffects]
 def ascending_array_match ( A : int[3] )
-    match(A) <|
+    match A
         if [[int $v(x);match_expr(x+1);match_expr(x+2)]]
             return true
         if _
             return false
 
-
 [sideeffects]
 def tuple_match ( A : tuple<int;float;string> )
-    match(A) <|
+    match A
         if [[auto 1,_,"3"]]
             return 1
         if [[auto 13,...]]      // starts with 13
             return 2
-        if [[auto ...,"13"]]    // ends with 13
+        if [[auto ...,"13"]]    // ends with "13"
             return 3
         if [[auto 2,...,"2"]]   // starts with 2, ends with "2"
             return 4
@@ -162,7 +161,7 @@ def tuple_match ( A : tuple<int;float;string> )
 
 [sideeffects]
 def or_match ( i :int )
-    match(i) <|
+    match i
         if 1 || 2
             return true
         if _
@@ -170,7 +169,7 @@ def or_match ( i :int )
 
 [sideeffects]
 def or_match_v ( B:Bar )
-    match(B) <|
+    match B
         if [[Bar a=1, b=$v(b)]] || [[Bar a=2, b=$v(b)]]
             return b
         if _
@@ -178,7 +177,7 @@ def or_match_v ( B:Bar )
 
 [sideeffects]
 def struct_ptr_match ( f : Foo? )
-    match(f) <|
+    match f
         if null
             return -1
         if [[Foo a=13]]
@@ -190,7 +189,7 @@ def struct_ptr_match ( f : Foo? )
 
 [sideeffects]
 def match_handle_ptr ( T:TypeDeclPtr )
-    match(T) <|
+    match T
         if null
             return "null"
         if [[TypeDecl() baseType=Type tPointer]]
@@ -200,13 +199,104 @@ def match_handle_ptr ( T:TypeDeclPtr )
 
 [sideeffects]
 def match_ast_expr_ptr ( E:ExpressionPtr )
-    match(E) <|
+    match E
         if null
             return "null"
         if [[ExprConstInt() value=$v(v)]]
             return "int {v}"
         if _
             return "anything"
+
+struct Cmd
+    rtti = "Cmd"
+
+[match_as_is]
+struct CmdMove : Cmd
+    override rtti = "CmdMove"
+    x : float
+    y : float
+
+def operator is CmdMove ( cmd:Cmd )
+    return cmd.rtti=="CmdMove"
+
+def operator is CmdMove ( anything )
+    return false
+
+def operator as CmdMove ( cmd:Cmd ==const ) : CmdMove const&
+    assert(cmd.rtti=="CmdMove")
+    unsafe
+        return reinterpret<CmdMove const&> cmd
+
+def operator as CmdMove ( var cmd:Cmd ==const ) : CmdMove&
+    assert(cmd.rtti=="CmdMove")
+    unsafe
+        return reinterpret<CmdMove&> cmd
+
+def operator as CmdMove ( anything )
+    panic("Cannot cast to CmdMove")
+    return [[CmdMove]]
+
+[sideeffects]
+def matching_as_and_is ( cmd:Cmd )
+    match cmd
+        if [[CmdMove x=$v(x), y=$v(y)]]
+            return x + y
+        if _
+            return 0.
+
+[sideeffects]
+def matching_type_as_is ( cmd:Cmd )
+    match cmd
+        if match_type<CmdMove> $v(cmdm)
+            return cmdm.x + cmdm.y
+        if _
+            return 0.
+
+[match_copy]
+struct CmdLocate : Cmd
+    override rtti = "CmdLocate"
+    x : float
+    y : float
+    z : float
+
+def match_copy ( var cmdm:CmdLocate; cmd:Cmd )
+    if cmd.rtti != "CmdLocate"
+        return false
+    unsafe
+        cmdm = reinterpret<CmdLocate const&> cmd
+    return true
+
+[sideeffects]
+def matching_copy ( cmd:Cmd )
+    match cmd
+        if [[CmdLocate x=$v(x), y=$v(y), z=$v(z)]]
+            return x + y + z
+        if _
+            return 0.
+
+[sideeffects]
+def matching_type_copy ( cmd:Cmd )
+    match cmd
+        if match_type<CmdLocate> $v(cmdl)
+            return cmdl.x + cmdl.y + cmdl.z
+        if _
+            return 0.
+
+[sideeffects]
+def multi_match_test ( a:int )
+    var text = "{a}"
+    multi_match a
+        if 0
+            text += " zero"
+        if 1
+            text += " one"
+        if 2
+            text += " two"
+        if $v(a) && (a % 2 == 0) && (a!=0)
+            text += " even"
+        if $v(a) && (a % 2 == 1)
+            text += " odd"
+    return text
 
 [test]
 def test_all_match ( t:T? )
@@ -220,6 +310,9 @@ def test_all_match ( t:T? )
         t |> equal ( 1, enum_static_match(1234,1234) )
         t |> equal ( -1, enum_static_match(5678,1234) )
         t |> equal ( -1, enum_static_match("a",1234) )
+    t |> run("enum static match by type") <| @@ ( t : T? )
+        t |> equal ( 13, static_match_by_type(13) )
+        t |> equal ( -1, static_match_by_type(13.) )
     t |> run("struct match") <| @@ ( t : T? )
         t |> equal( 0, struct_match([[Foo a=13]]) )
         t |> equal( 23, struct_match([[Foo a=23]]) )
@@ -281,14 +374,32 @@ def test_all_match ( t:T? )
         t |> equal( 23, struct_ptr_match(new [[Foo a=23]]) )
     t |> run("match handle ptr") <| @@ ( t : T? )
         t |> equal("null", match_handle_ptr([[TypeDeclPtr]]))
-        var tp <- new [[TypeDecl() baseType=Type tPointer]]; defer_delete(tp)
+        var inscope tp <- new [[TypeDecl() baseType=Type tPointer]]
         t |> equal("pointer", match_handle_ptr(tp))
-        var tnp <- new [[TypeDecl() baseType=Type tInt]]; defer_delete(tnp)
+        var inscope tnp <- new [[TypeDecl() baseType=Type tInt]]
         t |> equal("anything", match_handle_ptr(tnp))
     t |> run("match ast expression ptr") <| @@ ( t : T? )
         t |> equal("null", match_ast_expr_ptr([[ExpressionPtr]]))
-        var ep <- new [[ExprConstInt() value=13]]; defer_delete(ep)
+        var inscope ep <- new [[ExprConstInt() value=13]]
         t |> equal("int 13", match_ast_expr_ptr(ep))
-        var fp <- new [[ExprConstFloat() value=13.0]]; defer_delete(fp)
+        var inscope fp <- new [[ExprConstFloat() value=13.0]]
         t |> equal("anything", match_ast_expr_ptr(fp))
+    t |> run("match as is") <| @@ ( t : T? )
+        t |> equal(0., matching_as_and_is(Cmd()))
+        t |> equal(3., matching_as_and_is([[CmdMove() x=1.,y=2.]]))
+    t |> run("match type is") <| @@ ( t : T? )
+        t |> equal(0., matching_type_as_is(Cmd()))
+        t |> equal(3., matching_type_as_is([[CmdMove() x=1.,y=2.]]))
+    t |> run("match copy") <| @@ ( t : T? )
+        t |> equal(0., matching_copy(Cmd()))
+        t |> equal(6., matching_copy([[CmdLocate() x=1.,y=2.,z=3.]]))
+    t |> run("match type copy") <| @@ ( t : T? )
+        t |> equal(0., matching_type_copy(Cmd()))
+        t |> equal(6., matching_type_copy([[CmdLocate() x=1.,y=2.,z=3.]]))
+    t |> run("multi-match test") <| @@ ( t : T? )
+        t |> equal("0 zero", multi_match_test(0))
+        t |> equal("1 one odd", multi_match_test(1))
+        t |> equal("2 two even", multi_match_test(2))
+        t |> equal("3 odd", multi_match_test(3))
+
 

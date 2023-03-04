@@ -443,7 +443,7 @@ namespace das {
     int32_t get_tuple_field_offset ( smart_ptr_raw<TypeDecl> td, int32_t index, Context * context, LineInfoArg * at );
 
     __forceinline void mks_vector_emplace ( MakeStruct & vec, MakeFieldDeclPtr & value ) {
-        vec.emplace_back(move(value));
+        vec.emplace_back(das::move(value));
     }
     __forceinline void mks_vector_pop ( MakeStruct & vec ) {
         vec.pop_back();
@@ -493,6 +493,7 @@ namespace das {
     bool addModuleFunction ( Module * module, FunctionPtr & func, Context * context, LineInfoArg * lineInfo );
     bool addModuleGeneric ( Module * module, FunctionPtr & func, Context * context, LineInfoArg * lineInfo );
     bool addModuleVariable ( Module * module, VariablePtr & var, Context * context, LineInfoArg * lineInfo );
+    bool addModuleKeyword ( Module * module, char * kwd, bool needOxfordComma, Context * context, LineInfoArg * lineInfo );
     VariablePtr findModuleVariable ( Module * module, const char * name );
     bool removeModuleStructure ( Module * module, StructurePtr & _stru );
     bool addModuleStructure ( Module * module, StructurePtr & stru );
@@ -554,6 +555,8 @@ namespace das {
     void das_comp_log ( const char * text, Context * context, LineInfoArg * at );
     TypeInfo * das_make_type_info_structure ( Context & ctx, TypeDeclPtr ptr, Context * context, LineInfoArg * at );
     bool isSameAstType ( TypeDeclPtr THIS, TypeDeclPtr decl, RefMatters refMatters, ConstMatters constMatters, TemporaryMatters temporaryMatters, Context * context, LineInfoArg * at );
+    void addModuleOption ( Module * mod, char * option, Type type, Context * context, LineInfoArg * at );
+    TypeDeclPtr getUnderlyingValueType ( smart_ptr_raw<TypeDecl> type, Context * context, LineInfoArg * at );
 
     template <>
     struct das_iterator <AnnotationArgumentList> : das_iterator<vector<AnnotationArgument>> {

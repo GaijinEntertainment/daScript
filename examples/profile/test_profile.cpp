@@ -159,7 +159,7 @@ struct EsFunctionAnnotation : FunctionAnnotation {
         }
         block->annotationDataSid = hash_blockz64((uint8_t *)mangledName.c_str());
         buildAttributeTable(*tab, block->arguments, err);
-        esData->g_esBlockTable.emplace_back(move(tab));
+        esData->g_esBlockTable.emplace_back(das::move(tab));
         return err.empty();
     }
     virtual bool apply ( const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList & args, string & err ) override {
@@ -213,7 +213,7 @@ struct EsFunctionAnnotation : FunctionAnnotation {
         }
         tab->mangledNameHash = func->getMangledNameHash();
         buildAttributeTable(*tab, func->arguments, err);
-        esData->g_esPassTable.emplace_back(move(tab));
+        esData->g_esPassTable.emplace_back(das::move(tab));
 
         return err.empty();
     }
@@ -290,6 +290,7 @@ uint32_t EsRunBlock ( Context & context, const Block & block, const vector<EsCom
         context.throw_error("EsRunBlock - query missing annotation data");
     }
     uint32_t nAttr = (uint32_t) table->attributes.size();
+    DAS_VERIFYF(nAttr, "EsRunBlock - query has no attributes");
     vec4f * _args = (vec4f *)(alloca(table->attributes.size() * sizeof(vec4f)));
     context.invokeEx(block, _args, nullptr, [&](SimNode * code){
         vec4f * args = _args;
@@ -340,6 +341,7 @@ string aotEsRunBlockName ( EsAttributeTable * table, const vector<EsComponent> &
     TextWriter nw;
     nw << "__query_es";
     uint32_t nAttr = (uint32_t) table->attributes.size();
+    DAS_VERIFYF(nAttr, "EsRunBlock - query has no attributes");
     for ( uint32_t a=0; a!=nAttr; ++a ) {
         auto it = find_if ( components.begin(), components.end(), [&](const EsComponent & esc){
             return esc.name == table->attributes[a].name;
@@ -367,6 +369,7 @@ void aotEsRunBlock ( TextWriter & ss, EsAttributeTable * table, const vector<EsC
     ss << "\tfor ( uint32_t i=0; i != g_total; ++i ) {\n";
     ss << "\t\tblock(";
     uint32_t nAttr = (uint32_t) table->attributes.size();
+    DAS_VERIFYF(nAttr, "EsRunBlock - query has no attributes");
     for ( uint32_t a=0; a!=nAttr; ++a ) {
         auto it = find_if ( components.begin(), components.end(), [&](const EsComponent & esc){
             return esc.name == table->attributes[a].name;
@@ -630,8 +633,8 @@ ___noinline void testParticlesI(int count) {
 
 ___noinline void testTryCatch(Context * context) {
     #if _CPPUNWIND || __cpp_exceptions
-    int arr[1000];
-    int cnt = 0;
+    int arr[1000]; memset(arr, 0, sizeof(arr));
+    int cnt = 0; cnt;
     for (int j = 0; j != 100; ++j) {
         int fail = 0;
         for (int i = 0; i != 2000; ++i) {

@@ -169,6 +169,15 @@ namespace das {
         return nullptr;
     }
 
+    Type Module::getOptionType ( const string & optName ) const {
+        auto it = options.find(optName);
+        if ( it != options.end() ) {
+            return it->second;
+        } else {
+            return Type::none;
+        }
+    }
+
     Type Module::findOption ( const string & name ) {
         Type optT = Type::none;
         for ( auto m = daScriptEnvironment::bound->modules; m != nullptr; m = m->next ) {
@@ -272,7 +281,7 @@ namespace das {
     }
 
     bool Module::addTypeInfoMacro ( const TypeInfoMacroPtr & ptr, bool canFail ) {
-        if ( typeInfoMacros.insert(make_pair(ptr->name, move(ptr))).second ) {
+        if ( typeInfoMacros.insert(make_pair(ptr->name, ptr)).second ) {
             ptr->seal(this);
             return true;
         } else {
@@ -284,7 +293,7 @@ namespace das {
     }
 
     bool Module::addReaderMacro ( const ReaderMacroPtr & ptr, bool canFail ) {
-        if ( readMacros.insert(make_pair(ptr->name, move(ptr))).second ) {
+        if ( readMacros.insert(make_pair(ptr->name, ptr)).second ) {
             ptr->seal(this);
             return true;
         } else {
@@ -346,6 +355,20 @@ namespace das {
             }
             return false;
         }
+    }
+
+    bool Module::addKeyword (const string & kwd, bool needOxfordComma, bool canFail ) {
+        auto it = find_if(keywords.begin(), keywords.end(), [&](auto value){
+            return value.first == kwd;
+        });
+        if ( it != keywords.end() ) {
+            if ( !canFail ) {
+                DAS_FATAL_ERROR("can't add duplicate keyword %s to module %s\n", kwd.c_str(), name.c_str() );
+            }
+            return false;
+        }
+        keywords.emplace_back(kwd, needOxfordComma);
+        return true;
     }
 
     bool Module::addFunction ( const FunctionPtr & fn, bool canFail ) {
@@ -442,7 +465,7 @@ namespace das {
         TextWriter issues;
         auto access = make_smart<FileAccess>();
         auto fileInfo = make_unique<TextFileInfo>((char *) str, uint32_t(str_len), false);
-        access->setFileInfo(modName, move(fileInfo));
+        access->setFileInfo(modName, das::move(fileInfo));
         ModuleGroup dummyLibGroup;
         auto program = parseDaScript(modName, access, issues, dummyLibGroup, true);
         ownFileInfo = access->letGoOfFileInfo(modName);
@@ -500,6 +523,10 @@ namespace das {
                 addReaderMacro(rm.second);
             }
             commentReader = ptm->commentReader;
+            for ( auto & op : ptm->options) {
+                DAS_ASSERTF(options.find(op.first)==options.end(),"duplicate option %s", op.first.c_str());
+                options[op.first] = op.second;
+            }
             return true;
         } else {
             DAS_FATAL_ERROR("builtin module did not parse %s\n", modName.c_str());

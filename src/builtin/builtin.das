@@ -13,20 +13,16 @@ let
 [generic]
 def intptr ( p : void? ) : uint64
 	static_if typeinfo(sizeof p)==4
-        unsafe
-		    return uint64(reinterpret<uint> p)
+        return uint64(unsafe(reinterpret<uint> p))
 	else
-        unsafe
-		    return reinterpret<uint64> p
+        return unsafe(reinterpret<uint64> p)
 
 [generic]
 def intptr ( p : smart_ptr<auto> ) : uint64
 	static_if typeinfo(sizeof p)==4
-        unsafe
-		    return uint64(reinterpret<uint> p)
+        return uint64(unsafe(reinterpret<uint> p))
 	else
-        unsafe
-		    return reinterpret<uint64> p
+        return unsafe(reinterpret<uint64> p)
 
 def _move_with_lockcheck ( var a:auto(valA)&; var b:auto(valB)& )
     static_if typeinfo(need_lock_check type<valA>)
@@ -37,7 +33,8 @@ def _move_with_lockcheck ( var a:auto(valA)&; var b:auto(valB)& )
         unsafe
             a <- b
     else
-        a <- b
+        unsafe
+            a <- b
 
 def _return_with_lockcheck ( var a:auto(valT)& ==const ) : valT&
     static_if typeinfo(need_lock_check type<valT>)
@@ -109,19 +106,21 @@ def push(var Arr:array<auto(numT)[]>; varr:numT[]-#)
     else
         concept_assert(false,"can't push value, which can't be copied")
 
-def emplace(var Arr:array<auto(numT)>;var value:numT-#;at:int)
+def emplace(var Arr:array<auto(numT)>;var value:numT-#&;at:int)
     static_if typeinfo(can_move value)
         static_if typeinfo(need_lock_check type<numT>)
             _builtin_verify_locks(Arr)
-        Arr[__builtin_array_push(Arr,at,typeinfo(sizeof Arr[0]))] <- value
+        unsafe
+            Arr[__builtin_array_push(Arr,at,typeinfo(sizeof Arr[0]))] <- value
     else
         concept_assert(false,"can't emplace value, which can't be moved")
 
-def emplace(var Arr:array<auto(numT)>;var value:numT-#)
+def emplace(var Arr:array<auto(numT)>;var value:numT-#&)
     static_if typeinfo(can_move value)
         static_if typeinfo(need_lock_check type<numT>)
             _builtin_verify_locks(Arr)
-        Arr[__builtin_array_push_back(Arr,typeinfo(sizeof Arr[0]))] <- value
+        unsafe
+            Arr[__builtin_array_push_back(Arr,typeinfo(sizeof Arr[0]))] <- value
     else
         concept_assert(false,"can't emplace value, which can't be moved")
 
@@ -130,7 +129,8 @@ def emplace(var Arr:array<auto(numT)>;var value:numT[]-#)
         static_if typeinfo(need_lock_check type<numT>)
             _builtin_verify_locks(Arr)
         for t in value
-            Arr[__builtin_array_push_back(Arr,typeinfo(sizeof Arr[0]))] <- t
+            unsafe
+                Arr[__builtin_array_push_back(Arr,typeinfo(sizeof Arr[0]))] <- t
     else
         concept_assert(false,"can't emplace value, which can't be moved")
 
@@ -139,7 +139,8 @@ def emplace(var Arr:array<auto(numT)[]>;var value:numT[]-#)
         static_if typeinfo(sizeof Arr[0])==typeinfo(sizeof value)
             static_if typeinfo(need_lock_check type<numT>)
                 _builtin_verify_locks(Arr)
-            Arr[__builtin_array_push_back(Arr,typeinfo(sizeof Arr[0]))] <- value
+            unsafe
+                Arr[__builtin_array_push_back(Arr,typeinfo(sizeof Arr[0]))] <- value
         else
             concept_assert(false,"can't emplace array of different size")
     else
@@ -430,7 +431,7 @@ def copy_to_local ( a : auto(TT) ) : TT -const
         concept_assert(false,"can't copy this type")
 
 [skip_lock_check]
-def move_to_local ( var a : auto(TT) ) : TT -const
+def move_to_local ( var a : auto(TT)& ) : TT -const -&
     static_if typeinfo(can_move a)
         return <- a
     else
@@ -640,29 +641,33 @@ def to_array(a:auto(TT)[]) : array<TT -const>
 
 [skip_lock_check]
 def to_array_move(var a:auto(TT)[]) : array<TT -const>
-    var arr : array<TT -const>
-    static_if typeinfo(can_copy a)
-        resize(arr,length(a))
-        unsafe
-            reinterpret<TT -const[typeinfo(dim a)]>(addr(arr[0])) = a
-    static_elif typeinfo(can_move a)
-        resize(arr,length(a))
-        unsafe
-            reinterpret<TT -const[typeinfo(dim a)]>(addr(arr[0])) <- a
-    else
-        concept_assert(false,"this array can't be copied or moved")
-    return <- arr
+    unsafe
+        var arr : array<TT -const>
+        static_if typeinfo(can_copy a)
+            resize(arr,length(a))
+            unsafe
+                reinterpret<TT -const[typeinfo(dim a)]>(addr(arr[0])) = a
+        static_elif typeinfo(can_move a)
+            resize(arr,length(a))
+            unsafe
+                reinterpret<TT -const[typeinfo(dim a)]>(addr(arr[0])) <- a
+        else
+            concept_assert(false,"this array can't be copied or moved")
+        return <- arr
 
 [skip_lock_check]
 def to_array_move(var a:auto(TT)) : array<TT -const>
-    var arr : array<TT -const>
-    static_if typeinfo(can_copy a)
-        arr |> push(a)
-    static_elif typeinfo(can_move a)
-        arr |> emplace(a)
-    else
-        concept_assert(false,"this array can't be copied or moved")
-    return <- arr
+    unsafe
+        var arr : array<TT -const>
+        static_if typeinfo(is_smart_ptr a)
+            concept_assert(false,"can't create array from smart pointer by value. did u mean [\{Type[1] value\}] instead of [\{Type value\}]")
+        static_if typeinfo(can_copy a)
+            arr |> push(a)
+        static_elif typeinfo(can_move a)
+            arr |> emplace(a)
+        else
+            concept_assert(false,"this array can't be copied or moved")
+        return <- arr
 
 [skip_lock_check]
 def to_table(a:tuple<auto(keyT);auto(valT)>[]) : table<keyT -const;valT>
@@ -866,8 +871,9 @@ def get_const_ptr ( src : smart_ptr<auto(TT)> ) : TT ? const
         return reinterpret<TT ? const> src
 
 def add_ptr_ref ( src : smart_ptr<auto(TT)> ) : smart_ptr<TT>
-    var dst := src
-    return dst
+    unsafe
+        var dst := src
+        return <- dst
 
 [generic]
 def get_command_line_arguments : array<string>
@@ -894,9 +900,10 @@ def map_to_ro_array ( data:void?; len:int; blk:block<(arg:array<auto(TT)>#)> )
         _builtin_temp_array(data, num_elem, blk)
 
 def swap ( var a,b:auto(TT)& )
-    var t : TT - & <- a
-    a <- b
-    b <- t
+    unsafe
+        var t : TT - & <- a
+        a <- b
+        b <- t
 
 def subarray ( a:auto(TT)[]; r:range )
     static_if typeinfo(can_copy type<TT>)

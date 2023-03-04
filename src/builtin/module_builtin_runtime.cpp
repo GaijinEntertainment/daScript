@@ -598,7 +598,7 @@ namespace das
     // core functions
 
     void builtin_throw ( char * text, Context * context, LineInfoArg * at ) {
-        context->throw_error_at(at ? *at : LineInfo(), text);
+        context->throw_error_at(at, "%s", text);
     }
 
     void builtin_print ( char * text, Context * context ) {
@@ -935,21 +935,58 @@ namespace das
         }
     }
 
-    void builtin_smart_ptr_clone_ptr ( smart_ptr_raw<void> & dest, const void * src ) {
+    __forceinline void validate_smart_ptr ( void * ptr, Context * context, LineInfoArg * at ) {
+        if ( !ptr ) return;
+        ptr_ref_count * t = (ptr_ref_count *) ptr;
+        if ( !t->is_valid() ) context->throw_error_at(at, "invalid smart pointer %p", ptr);
+    }
+
+    void builtin_smart_ptr_move_new ( smart_ptr_raw<void> & dest, smart_ptr_raw<void> src, Context * context, LineInfoArg * at ) {
+        validate_smart_ptr(src.ptr, context, at);
+        validate_smart_ptr(dest.ptr, context, at);
+        ptr_ref_count * t = (ptr_ref_count *) dest.ptr;
+        dest.ptr = src.ptr;
+        src.ptr = nullptr;
+        if ( t ) t->delRef();
+    }
+
+    void builtin_smart_ptr_move_ptr ( smart_ptr_raw<void> & dest, const void * src, Context * context, LineInfoArg * at ) {
+        validate_smart_ptr((void *)src, context, at);
+        validate_smart_ptr(dest.ptr, context, at);
+        ptr_ref_count * t = (ptr_ref_count *) dest.ptr;
+        dest.ptr = (void *) src;
+        if ( t ) t->delRef();
+    }
+
+    void builtin_smart_ptr_move ( smart_ptr_raw<void> & dest, smart_ptr_raw<void> & src, Context * context, LineInfoArg * at ) {
+        validate_smart_ptr(src.ptr, context, at);
+        validate_smart_ptr(dest.ptr, context, at);
+        ptr_ref_count * t = (ptr_ref_count *) dest.ptr;
+        dest.ptr = src.ptr;
+        src.ptr = nullptr;
+        if ( t ) t->delRef();
+    }
+
+    void builtin_smart_ptr_clone_ptr ( smart_ptr_raw<void> & dest, const void * src, Context * context, LineInfoArg * at ) {
+        validate_smart_ptr((void *)src, context, at);
+        validate_smart_ptr(dest.ptr, context, at);
         ptr_ref_count * t = (ptr_ref_count *) dest.ptr;
         dest.ptr = (void *) src;
         if ( src ) ((ptr_ref_count *) src)->addRef();
         if ( t ) t->delRef();
     }
 
-    void builtin_smart_ptr_clone ( smart_ptr_raw<void> & dest, const smart_ptr_raw<void> src ) {
+    void builtin_smart_ptr_clone ( smart_ptr_raw<void> & dest, const smart_ptr_raw<void> src, Context * context, LineInfoArg * at ) {
+        validate_smart_ptr(src.ptr, context, at);
+        validate_smart_ptr(dest.ptr, context, at);
         ptr_ref_count * t = (ptr_ref_count *) dest.ptr;
         dest.ptr = src.ptr;
         if ( src.ptr ) ((ptr_ref_count *) src.ptr)->addRef();
         if ( t ) t->delRef();
     }
 
-    uint32_t builtin_smart_ptr_use_count ( const smart_ptr_raw<void> src ) {
+    uint32_t builtin_smart_ptr_use_count ( const smart_ptr_raw<void> src, Context * context, LineInfoArg * at ) {
+        validate_smart_ptr(src.ptr, context, at);
         ptr_ref_count * psrc = (ptr_ref_count *) src.ptr;
         return psrc ? psrc->use_count() : 0;
     }
@@ -1007,7 +1044,7 @@ namespace das
     void gc0_save_ptr ( char * name, void * data, Context * context, LineInfoArg * line ) {
         uint64_t hash = hash_function ( *context, name );
         if ( g_static_storage.find(hash)!=g_static_storage.end() ) {
-            context->throw_error_at(*line, "gc0 already there %s (or hash collision)", name);
+            context->throw_error_at(line, "gc0 already there %s (or hash collision)", name);
         }
         g_static_storage[hash] = data;
     }
@@ -1178,6 +1215,16 @@ namespace das
         logger(level, getLogMarker(level), text);
     }
 
+    void toCompilerLog ( const char * text, Context * context, LineInfoArg * at ) {
+        if ( daScriptEnvironment::bound->g_compilerLog ) {
+            if ( text ) {
+                (*daScriptEnvironment::bound->g_compilerLog) << text;
+            }
+        } else {
+            context->throw_error_at(at, "can only write to compiler log during compilation");
+        }
+    }
+
     bool is_in_aot ( ) {
         return daScriptEnvironment::bound ? daScriptEnvironment::bound->g_isInAot : false;
     }
@@ -1203,12 +1250,12 @@ namespace das
             try {
                 das_invoke<void>::invoke(context, at, try_block);
             } catch ( const dasException & ) {
-                context.abiArg = aa;
-                context.abiCMRES = acm;
-                context.stack.pop(EP,SP);
-                context.stopFlags = 0;
-                context.last_exception = context.exception;
-                context.exception = nullptr;
+                context->abiArg = aa;
+                context->abiCMRES = acm;
+                context->stack.pop(EP,SP);
+                context->stopFlags = 0;
+                context->last_exception = context->exception;
+                context->exception = nullptr;
                 das_invoke<void>::invoke(context, at, catch_block);
             }
         #else
@@ -1489,15 +1536,24 @@ namespace das
         // blocks
         addCall<ExprInvoke>("invoke");
         // smart ptr stuff
+        addExtern<DAS_BIND_FUN(builtin_smart_ptr_move_new)>(*this, lib, "move_new",
+            SideEffects::modifyArgument, "builtin_smart_ptr_move_new")
+                ->args({"dest","src","context","at"});
+        addExtern<DAS_BIND_FUN(builtin_smart_ptr_move_ptr)>(*this, lib, "move",
+            SideEffects::modifyArgument, "builtin_smart_ptr_move_ptr")
+                ->args({"dest","src","context","at"});
+        addExtern<DAS_BIND_FUN(builtin_smart_ptr_move)>(*this, lib, "move",
+            SideEffects::modifyArgument, "builtin_smart_ptr_move")
+                ->args({"dest","src","context","at"});
         addExtern<DAS_BIND_FUN(builtin_smart_ptr_clone_ptr)>(*this, lib, "smart_ptr_clone",
             SideEffects::modifyArgument, "builtin_smart_ptr_clone_ptr")
-                ->args({"dest","src"});
+                ->args({"dest","src","context","at"});
         addExtern<DAS_BIND_FUN(builtin_smart_ptr_clone)>(*this, lib, "smart_ptr_clone",
             SideEffects::modifyArgument, "builtin_smart_ptr_clone")
-                ->args({"dest","src"});
+                ->args({"dest","src","context","at"});
         addExtern<DAS_BIND_FUN(builtin_smart_ptr_use_count)>(*this, lib, "smart_ptr_use_count",
             SideEffects::none, "builtin_smart_ptr_use_count")
-                ->arg("ptr");
+                ->args({"ptr","context","at"});
         addExtern<DAS_BIND_FUN(equ_sptr_sptr)>(*this, lib, "==", SideEffects::none, "equ_sptr_sptr");
         addExtern<DAS_BIND_FUN(nequ_sptr_sptr)>(*this, lib, "!=", SideEffects::none, "nequ_sptr_sptr");
         addExtern<DAS_BIND_FUN(equ_ptr_sptr)>(*this, lib, "==", SideEffects::none, "equ_ptr_sptr");
@@ -1612,7 +1668,9 @@ namespace das
             SideEffects::worstDefault, "is_in_completion");
         // logger
         addExtern<DAS_BIND_FUN(toLog)>(*this, lib, "to_log",
-            SideEffects::modifyExternal, "toLog");
+            SideEffects::modifyExternal, "toLog")->args({"level", "text"});
+        addExtern<DAS_BIND_FUN(toCompilerLog)>(*this, lib, "to_compiler_log",
+            SideEffects::modifyExternal, "toCompilerLog")->args({"text","context","at"});
         // log levels
         addConstant<int>(*this, "LOG_CRITICAL", LogLevel::critical);
         addConstant<int>(*this, "LOG_ERROR",    LogLevel::error);

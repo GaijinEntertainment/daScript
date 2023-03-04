@@ -2,13 +2,15 @@ options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 options no_aot = true
+options strict_smart_pointers = true
+
 
 module macro_boost shared private
 
 require daslib/ast_boost
 require daslib/templates_boost
 
-[tag_function(macro_verify_tag)]
+[macro_function,tag_function(macro_verify_tag)]
 def public macro_verify ( expr:bool; prog:ProgramPtr; at:LineInfo; message:string )
     //! Same as verify, only the check will produce macro error, followed by return [[ExpressionPtr]]
     pass
@@ -21,10 +23,10 @@ class MacroVerifyMacro : AstFunctionAnnotation
     //!        return [[ExpressionPtr]]
     def override transform ( var call : smart_ptr<ExprCallFunc>; var errors : das_string ) : ExpressionPtr
         // if ..
-        var res <- qmacro_block() <|
+        var inscope res <- qmacro_block() <|
             if !$e(call.arguments[0])
                 macro_error($e(call.arguments[1]),$e(call.arguments[2]),$e(call.arguments[3]))
-                return [[ExpressionPtr]]
+                return <- [[ExpressionPtr]]
         res |> force_at(call.at)
         return <- res
 
@@ -54,10 +56,9 @@ struct public CapturedVariable
 def public capture_block(expr:ExpressionPtr) : array<CapturedVariable>
     //! Collect all captured variables in the expression.
     var astVisitor = new CaptureBlock()
-    var adapter <- make_visitor(*astVisitor)
+    var inscope adapter <- make_visitor(*astVisitor)
     visit(expr, adapter)
     var res <- [{for k,v in keys(astVisitor.capture),values(astVisitor.capture); [[CapturedVariable variable=k,expression=v]] }]
-    adapter := null
     unsafe
         delete astVisitor
     return <- res
@@ -77,10 +78,9 @@ def public collect_finally(expr:ExpressionPtr)
     //! Returns array of ExprBlock? with all the blocks which have `finally` section
     //! Does not go into 'make_block' expression, such as `lambda`, or 'block' expressions
     var astVisitor = new ColletFinally()
-    var adapter <- make_visitor(*astVisitor)
+    var inscope adapter <- make_visitor(*astVisitor)
     visit(expr, adapter)
     var res <- [{for k in keys(astVisitor.blocks); k }]
-    adapter := null
     unsafe
         delete astVisitor
     return <- res
@@ -98,10 +98,9 @@ def public collect_labels(expr:ExpressionPtr)
     //! Collect all labels in the expression. Returns array of integer with label indices
     //! Does not go into 'make_block' expression, such as `lambda`, or 'block' expressions
     var astVisitor = new ColletLabels()
-    var adapter <- make_visitor(*astVisitor)
+    var inscope adapter <- make_visitor(*astVisitor)
     visit(expr, adapter)
     var res <- [{for k in keys(astVisitor.labels); k }]
-    adapter := null
     unsafe
         delete astVisitor
     return <- res

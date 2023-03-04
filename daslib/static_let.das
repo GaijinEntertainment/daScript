@@ -2,6 +2,7 @@ options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 options no_aot = true
+options strict_smart_pointers = true
 
 module static_let shared private
 
@@ -22,17 +23,17 @@ def public static_let_finalize ( blk : block )
     pass
 
 def private make_shutdown_function ( varname:string; at:LineInfo )
-    var fn <- new [[Function() at=at, atDecl=at, name:="shutdown`{varname}"]]
+    var inscope fn <- new [[Function() at=at, atDecl=at, name:="shutdown`{varname}"]]
     fn.flags |= FunctionFlags generated
     fn.flags |= FunctionFlags shutdown
-    fn.result <- new [[TypeDecl() baseType=Type tVoid, at=at]]
-    var blk <- new [[ExprBlock() at=at]]
-    var delv <- new [[ExprDelete() at=at,
+    move_new(fn.result) <| new [[TypeDecl() baseType=Type tVoid, at=at]]
+    var inscope blk <- new [[ExprBlock() at=at]]
+    var inscope delv <- new [[ExprDelete() at=at,
         subexpr <- new [[ExprVar() at=at, name:=varname]]
     ]]
     delv.genFlags |= ExprGenFlags alwaysSafe
     emplace(blk.list,delv)
-    fn.body <- blk
+    move(fn.body) <| blk
     return compiling_module() |> add_function(fn)
 
 [tag_function_macro(tag="static_let_tag")]
@@ -44,39 +45,41 @@ class StaticLetMacro : AstFunctionAnnotation
         var blk = mblk._block as ExprBlock
         if blk.finalList.length != 0
             errors := "not expecting finally section in the static_let"
-            return [[ExpressionPtr]]
+            return <- [[ExpressionPtr]]
         let prefix = "`static`at_line_{int(call.at.line)}`"
-        var rules : Template
+        var inscope renames : array<tuple<old_name:string;new_name:string>>
         for ex in blk.list
             if !(ex is ExprLet)
                 errors := "expecting let ... expressions in the static_let"
-                return [[ExpressionPtr]]
+                return <- [[ExpressionPtr]]
             var lexpr = ex as ExprLet
             for vvar in lexpr.variables
-                var vclone <- clone_variable(vvar)
-                vclone.flags |= VariableFlags private_variable
-                vclone.flags |= VariableFlags generated
-                let old_name = "{vclone.name}"
-                let new_name = "{prefix}{vclone.name}"
-                vclone.name := new_name
-                rules |> renameVariable(old_name) <| new_name
-                if !(compiling_module() |> add_variable(vclone))
-                    errors := "can't add global variable {new_name}"
-                    return [[ExpressionPtr]]
-                if "{call.name}"=="static_let_finalize"
-                    if !make_shutdown_function(new_name,vvar.at)
-                        errors := "can't add shutdown function {new_name}"
-                        return [[ExpressionPtr]]
+                if true
+                    var inscope vclone <- clone_variable(vvar)
+                    vclone.flags |= VariableFlags private_variable
+                    vclone.flags |= VariableFlags generated
+                    let old_name = "{vclone.name}"
+                    let new_name = "{prefix}{vclone.name}"
+                    vclone.name := new_name
+                    renames |> push([[auto old_name,new_name]])
+                    if !(compiling_module() |> add_variable(vclone))
+                        errors := "can't add global variable {new_name}"
+                        return <- [[ExpressionPtr]]
+                    if "{call.name}"=="static_let_finalize"
+                        if !make_shutdown_function(new_name,vvar.at)
+                            errors := "can't add shutdown function {new_name}"
+                            return <- [[ExpressionPtr]]
         var success = true
         compiling_program() |> get_ast_context(call) <| $(valid, astc)
             if !valid
                 errors := "can't get valid program context"
                 success = false
             else
-                apply_template(rules, call.at, astc.scopes[astc.scopes.length-1],false)
-        delete rules
+                apply_template(astc.scopes[astc.scopes.length-1]) <| $ ( rules )
+                    for r in renames
+                        rules |> renameVariable(r.old_name) <| r.new_name
         if !success
-            return [[ExpressionPtr]]
-        return quote <|
+            return <- [[ExpressionPtr]]
+        return <- quote <|
             pass
 

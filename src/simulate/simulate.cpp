@@ -1316,6 +1316,9 @@ namespace das
                         pp->line = &pv.init->debugInfo;
 #endif
                         pv.init->eval(*this);
+#if DAS_ENABLE_STACK_WALK
+                        pp->info = nullptr;
+#endif
                     }
                 } else {
                     memset ( globals + pv.offset, 0, pv.size );
@@ -1561,13 +1564,13 @@ namespace das
 
     void onCreateCppDebugAgent ( const char * category, function<void (Context *)> && lmb ) {
         onCppDebugAgent(category, [&](CppOnlyDebugAgent * agent){
-            agent->onCreateContextOp = move(lmb);
+            agent->onCreateContextOp = das::move(lmb);
         });
     }
 
     void onDestroyCppDebugAgent ( const char * category, function<void (Context *)> && lmb ) {
         onCppDebugAgent(category, [&](CppOnlyDebugAgent * agent){
-            agent->onDestroyContextOp = move(lmb);
+            agent->onDestroyContextOp = das::move(lmb);
         });
 
     }
@@ -1607,7 +1610,7 @@ namespace das
     }
 
     void installDebugAgent ( DebugAgentPtr newAgent, const char * category, LineInfoArg * at, Context * context ) {
-        if ( !category ) context->throw_error_at(*at, "need to specify category");
+        if ( !category ) context->throw_error_at(at, "need to specify category");
         std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
         auto it = g_DebugAgents.find(category);
         if ( it != g_DebugAgents.end() ) {
@@ -1627,16 +1630,16 @@ namespace das
     }
 
     Context & getDebugAgentContext ( const char * category, LineInfoArg * at, Context * context ) {
-        if ( !category ) context->throw_error_at(*at, "need to specify category");
+        if ( !category ) context->throw_error_at(at, "need to specify category");
         std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
         auto it = g_DebugAgents.find(category);
-        if ( it == g_DebugAgents.end() ) context->throw_error_at(*at, "can't get debug agent '%s'", category);
-        if ( !it->second.debugAgentContext ) context->throw_error_at(*at, "debug agent '%s' is a CPP-only agent", category);
+        if ( it == g_DebugAgents.end() ) context->throw_error_at(at, "can't get debug agent '%s'", category);
+        if ( !it->second.debugAgentContext ) context->throw_error_at(at, "debug agent '%s' is a CPP-only agent", category);
         return *it->second.debugAgentContext;
     }
 
     bool hasDebugAgentContext ( const char * category, LineInfoArg * at, Context * context ) {
-        if ( !category ) context->throw_error_at(*at, "need to specify category");
+        if ( !category ) context->throw_error_at(at, "need to specify category");
         std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
         auto it = g_DebugAgents.find(category);
         return it != g_DebugAgents.end();
@@ -1714,7 +1717,17 @@ namespace das
         }
     }
 
-    void Context::throw_error_at ( const LineInfo & at, const char * message, ... ) {
+    void Context::throw_error_at ( const LineInfo * at, DAS_FORMAT_STRING_PREFIX const char * message, ... ) {
+        const int PRINT_BUFFER_SIZE = 8192;
+        char buffer[PRINT_BUFFER_SIZE];
+        va_list args;
+        va_start (args, message);
+        vsnprintf (buffer,PRINT_BUFFER_SIZE,message, args);
+        va_end (args);
+        throw_fatal_error(buffer, at ? *at : LineInfo());
+    }
+
+    void Context::throw_error_at ( const LineInfo & at, DAS_FORMAT_STRING_PREFIX const char * message, ... ) {
         const int PRINT_BUFFER_SIZE = 8192;
         char buffer[PRINT_BUFFER_SIZE];
         va_list args;
@@ -1724,7 +1737,7 @@ namespace das
         throw_fatal_error(buffer, at);
     }
 
-    void Context::throw_error_ex ( const char * message, ... ) {
+    void Context::throw_error_ex ( DAS_FORMAT_STRING_PREFIX const char * message, ... ) {
         const int PRINT_BUFFER_SIZE = 8192;
         char buffer[PRINT_BUFFER_SIZE];
         va_list args;

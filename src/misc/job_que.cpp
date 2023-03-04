@@ -26,7 +26,7 @@ namespace das {
 
     void JobQue::EvalOnMainThread(Job && expr) {
         lock_guard<mutex> guard(mEvalMainThreadMutex);
-        mEvalMainThread.emplace_back(move(expr));
+        mEvalMainThread.emplace_back(das::move(expr));
     }
 
     void JobQue::EvalMainThreadJobs() {
@@ -95,12 +95,12 @@ namespace das {
     void JobQue::submit(Job && job, JobCategory category, JobPriority priority) {
         auto  it = lower_bound(mFifo.begin(), mFifo.end(), priority, [](const JobEntry& lhs, JobPriority priority) {
             return lhs.priority >= priority; });
-        mFifo.emplace(it, move(job), category, priority);
+        mFifo.emplace(it, das::move(job), category, priority);
     }
 
     void JobQue::push(Job && job, JobCategory category, JobPriority priority) {
         lock_guard<mutex> lock(mFifoMutex);
-        submit(move(job), category, priority);
+        submit(das::move(job), category, priority);
         mCond.notify_one();
     }
 
@@ -111,7 +111,7 @@ namespace das {
                 unique_lock<mutex> lock(mFifoMutex);
                 if ( mCond.wait_for(lock, chrono::milliseconds(mSleepMs), [&]() { return mFifo.size() != 0; }) ) {
                     DAS_ASSERTF(mFifo.size() > 0, "There must be at least one job available");
-                    job = move(mFifo.front().function);
+                    job = das::move(mFifo.front().function);
                     mThreads[threadIndex].currentPriority = mFifo.front().priority;
                     mThreads[threadIndex].currentCategory = mFifo.front().category;
                     mFifo.pop_front();
@@ -242,9 +242,9 @@ namespace das {
 
     void JobStatus::Wait() {
         unique_lock<mutex> lock(mCompleteMutex);
-        while ( mRemaining ) {
-            mCond.wait(lock);
-        }
+        mCond.wait(lock, [this] {
+            return mRemaining==0;
+        });
     }
 
     bool JobStatus::isReady() {

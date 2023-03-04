@@ -24,6 +24,19 @@ Type aliases
 
 |typedef-ast_boost-AnnotationDeclarationPtr|
 
+.. _alias-DebugExpressionFlags:
+
+.. das:attribute:: DebugExpressionFlags is a bitfield
+
++--------+---+-----+
++field   +bit+value+
++========+===+=====+
++refCount+0  +1    +
++--------+---+-----+
+
+
+|typedef-ast_boost-DebugExpressionFlags|
+
 ++++++++++++++++++++
 Function annotations
 ++++++++++++++++++++
@@ -693,7 +706,9 @@ Textual descriptions of the objects
   *  :ref:`describe (list:rtti::AnnotationList const) : string const <function-_at_ast_boost_c__c_describe_CH_ls_rtti_c__c_AnnotationList_gr_>` 
   *  :ref:`describe (vvar:smart_ptr\<ast::Variable\> const) : string <function-_at_ast_boost_c__c_describe_CY_ls_VariablePtr_gr_1_ls_H_ls_ast_c__c_Variable_gr__gr_?M>` 
   *  :ref:`describe_function_short (func:smart_ptr\<ast::Function\> const) : string const <function-_at_ast_boost_c__c_describe_function_short_CY_ls_FunctionPtr_gr_1_ls_H_ls_ast_c__c_Function_gr__gr_?M>` 
-  *  :ref:`debug_expression (expr:smart_ptr\<ast::Expression\> const) : string <function-_at_ast_boost_c__c_debug_expression_CY_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M>` 
+  *  :ref:`debug_expression (expr:smart_ptr\<ast::Expression\> const;deFlags:bitfield\<refCount\> const) : string <function-_at_ast_boost_c__c_debug_expression_CY_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_CY_ls_DebugExpressionFlags_gr_N_ls_refCount_gr_t>` 
+  *  :ref:`debug_expression (expr:ast::Expression? const) : string <function-_at_ast_boost_c__c_debug_expression_C1_ls_H_ls_ast_c__c_Expression_gr__gr_?>` 
+  *  :ref:`describe (expr:ast::Expression? const) : string <function-_at_ast_boost_c__c_describe_C1_ls_H_ls_ast_c__c_Expression_gr__gr_?>` 
   *  :ref:`describe_bitfield (bf:auto const;merger:string const) : auto <function-_at_ast_boost_c__c_describe_bitfield_C._Cs>` 
 
 .. _function-_at_ast_boost_c__c_describe_CH_ls_rtti_c__c_AnnotationArgumentList_gr_:
@@ -771,20 +786,52 @@ describe_function_short returns string const
 
 |function-ast_boost-describe_function_short|
 
-.. _function-_at_ast_boost_c__c_debug_expression_CY_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M:
+.. _function-_at_ast_boost_c__c_debug_expression_CY_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_CY_ls_DebugExpressionFlags_gr_N_ls_refCount_gr_t:
 
-.. das:function:: debug_expression(expr: ExpressionPtr)
+.. das:function:: debug_expression(expr: ExpressionPtr; deFlags: DebugExpressionFlags)
 
 debug_expression returns string
 
-+--------+--------------------------------------------+
-+argument+argument type                               +
-+========+============================================+
-+expr    + :ref:`ExpressionPtr <alias-ExpressionPtr>` +
-+--------+--------------------------------------------+
++--------+----------------------------------------------------------+
++argument+argument type                                             +
++========+==========================================================+
++expr    + :ref:`ExpressionPtr <alias-ExpressionPtr>`               +
++--------+----------------------------------------------------------+
++deFlags + :ref:`DebugExpressionFlags <alias-DebugExpressionFlags>` +
++--------+----------------------------------------------------------+
 
 
 |function-ast_boost-debug_expression|
+
+.. _function-_at_ast_boost_c__c_debug_expression_C1_ls_H_ls_ast_c__c_Expression_gr__gr_?:
+
+.. das:function:: debug_expression(expr: ast::Expression? const)
+
+debug_expression returns string
+
++--------+-------------------------------------------------------+
++argument+argument type                                          +
++========+=======================================================+
++expr    + :ref:`ast::Expression <handle-ast-Expression>` ? const+
++--------+-------------------------------------------------------+
+
+
+|function-ast_boost-debug_expression|
+
+.. _function-_at_ast_boost_c__c_describe_C1_ls_H_ls_ast_c__c_Expression_gr__gr_?:
+
+.. das:function:: describe(expr: ast::Expression? const)
+
+describe returns string
+
++--------+-------------------------------------------------------+
++argument+argument type                                          +
++========+=======================================================+
++expr    + :ref:`ast::Expression <handle-ast-Expression>` ? const+
++--------+-------------------------------------------------------+
+
+
+|function-ast_boost-describe|
 
 .. _function-_at_ast_boost_c__c_describe_bitfield_C._Cs:
 
@@ -815,13 +862,13 @@ Queries
   *  :ref:`find_unique_function (mod:rtti::Module? const;name:string const;canfail:bool const) : smart_ptr\<ast::Function\> <function-_at_ast_boost_c__c_find_unique_function_C1_ls_H_ls_rtti_c__c_Module_gr__gr_?_Cs_Cb>` 
   *  :ref:`find_unique_generic (mod:rtti::Module? const;name:string const;canfail:bool const) : smart_ptr\<ast::Function\> <function-_at_ast_boost_c__c_find_unique_generic_C1_ls_H_ls_rtti_c__c_Module_gr__gr_?_Cs_Cb>` 
   *  :ref:`find_annotation (mod_name:string const;ann_name:string const) : rtti::Annotation const? <function-_at_ast_boost_c__c_find_annotation_Cs_Cs>` 
-  *  :ref:`get_for_source_index (expr:smart_ptr\<ast::ExprFor\> const;svar:smart_ptr\<ast::Variable\> const) : int const <function-_at_ast_boost_c__c_get_for_source_index_C1_ls_H_ls_ast_c__c_ExprFor_gr__gr_?M_CY_ls_VariablePtr_gr_1_ls_H_ls_ast_c__c_Variable_gr__gr_?M>` 
-  *  :ref:`get_for_source_index (expr:smart_ptr\<ast::ExprFor\> const;source:smart_ptr\<ast::Expression\> const) : int const <function-_at_ast_boost_c__c_get_for_source_index_C1_ls_H_ls_ast_c__c_ExprFor_gr__gr_?M_CY_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M>` 
+  *  :ref:`get_for_source_index (expr:smart_ptr\<ast::ExprFor\> const;svar:smart_ptr\<ast::Variable\> const) : int <function-_at_ast_boost_c__c_get_for_source_index_C1_ls_H_ls_ast_c__c_ExprFor_gr__gr_?M_CY_ls_VariablePtr_gr_1_ls_H_ls_ast_c__c_Variable_gr__gr_?M>` 
+  *  :ref:`get_for_source_index (expr:smart_ptr\<ast::ExprFor\> const;source:smart_ptr\<ast::Expression\> const) : int <function-_at_ast_boost_c__c_get_for_source_index_C1_ls_H_ls_ast_c__c_ExprFor_gr__gr_?M_CY_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M>` 
   *  :ref:`isCMRES (fun:smart_ptr\<ast::Function\> const) : bool <function-_at_ast_boost_c__c_isCMRES_CY_ls_FunctionPtr_gr_1_ls_H_ls_ast_c__c_Function_gr__gr_?M>` 
   *  :ref:`isCMRES (fun:ast::Function? const) : bool <function-_at_ast_boost_c__c_isCMRES_C1_ls_H_ls_ast_c__c_Function_gr__gr_?>` 
   *  :ref:`isMakeLocal (expr:smart_ptr\<ast::Expression\> const) : bool <function-_at_ast_boost_c__c_isMakeLocal_CY_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M>` 
   *  :ref:`get_workhorse_types () : rtti::Type[28] <function-_at_ast_boost_c__c_get_workhorse_types>` 
-  *  :ref:`find_argument_index (typ:smart_ptr\<ast::TypeDecl\> const;name:string const) : int const <function-_at_ast_boost_c__c_find_argument_index_CY_ls_TypeDeclPtr_gr_1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Cs>` 
+  *  :ref:`find_argument_index (typ:smart_ptr\<ast::TypeDecl\> const;name:string const) : int <function-_at_ast_boost_c__c_find_argument_index_CY_ls_TypeDeclPtr_gr_1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Cs>` 
   *  :ref:`isCMRESType (blockT:smart_ptr\<ast::TypeDecl\> const) : bool <function-_at_ast_boost_c__c_isCMRESType_CY_ls_TypeDeclPtr_gr_1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M>` 
 
 .. _function-_at_ast_boost_c__c_isVectorType_CE_ls_rtti_c__c_Type_gr_:
@@ -966,7 +1013,7 @@ find_annotation returns  :ref:`rtti::Annotation <handle-rtti-Annotation>`  const
 
 .. das:function:: get_for_source_index(expr: smart_ptr<ast::ExprFor> const; svar: VariablePtr)
 
-get_for_source_index returns int const
+get_for_source_index returns int
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -983,7 +1030,7 @@ get_for_source_index returns int const
 
 .. das:function:: get_for_source_index(expr: smart_ptr<ast::ExprFor> const; source: ExpressionPtr)
 
-get_for_source_index returns int const
+get_for_source_index returns int
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -1053,7 +1100,7 @@ get_workhorse_types returns  :ref:`rtti::Type <enum-rtti-Type>` [28]
 
 .. das:function:: find_argument_index(typ: TypeDeclPtr; name: string const)
 
-find_argument_index returns int const
+find_argument_index returns int
 
 +--------+----------------------------------------+
 +argument+argument type                           +
@@ -1460,23 +1507,7 @@ convert_to_expression returns auto
 Visitors
 ++++++++
 
-  *  :ref:`visit_expression (expr:smart_ptr\<ast::Expression\>& -const;adapter:smart_ptr\<ast::VisitorAdapter\> -const) : void <function-_at_ast_boost_c__c_visit_expression_&Y_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_1_ls_H_ls_ast_c__c_VisitorAdapter_gr__gr_?M>` 
   *  :ref:`visit_finally (blk:ast::ExprBlock? const;adapter:smart_ptr\<ast::VisitorAdapter\> const) : void <function-_at_ast_boost_c__c_visit_finally_C1_ls_H_ls_ast_c__c_ExprBlock_gr__gr_?_C1_ls_H_ls_ast_c__c_VisitorAdapter_gr__gr_?M>` 
-
-.. _function-_at_ast_boost_c__c_visit_expression_&Y_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_1_ls_H_ls_ast_c__c_VisitorAdapter_gr__gr_?M:
-
-.. das:function:: visit_expression(expr: ExpressionPtr; adapter: smart_ptr<ast::VisitorAdapter>)
-
-+--------+-------------------------------------------------------------------+
-+argument+argument type                                                      +
-+========+===================================================================+
-+expr    + :ref:`ExpressionPtr <alias-ExpressionPtr>`                        +
-+--------+-------------------------------------------------------------------+
-+adapter +smart_ptr< :ref:`ast::VisitorAdapter <handle-ast-VisitorAdapter>` >+
-+--------+-------------------------------------------------------------------+
-
-
-|function-ast_boost-visit_expression|
 
 .. _function-_at_ast_boost_c__c_visit_finally_C1_ls_H_ls_ast_c__c_ExprBlock_gr__gr_?_C1_ls_H_ls_ast_c__c_VisitorAdapter_gr__gr_?M:
 

@@ -1,6 +1,7 @@
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 options indenting = 4
+options strict_smart_pointers = true
 
 options multiple_contexts
 
@@ -28,7 +29,10 @@ var public decsLiveData : array<uint8>
 var private liveContext : smart_ptr<Context>
 
 def public get_live_context : smart_ptr<Context>
-    return liveContext
+    //! get live context. WARNING: this does not increase reference count, no need for delete
+    //! intended use is invoke_in_context(get_live_context()) <| @ ...
+    unsafe
+        return liveContext  // we don't clone here?
 
 [export]
 def saveLiveContext
@@ -184,7 +188,7 @@ def private set_new_context ( var ptr : smart_ptr<Context>; full_restart:bool = 
 
 def public recompile(full_restart:bool=false)
     to_log(LOG_TRACE, "LIVE: recompile full_restart={full_restart}\n")
-    var access := make_file_access("")
+    var inscope access <- make_file_access("")
     using <| $(var mg:ModuleGroup)
         using <| $(var cop:CodeOfPolicies)
             compile_file("{appDir}/{appFile}",access,unsafe(addr(mg)),cop) <| $(ok,program,issues)

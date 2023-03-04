@@ -19,8 +19,9 @@ namespace das {
         bool das_supress_errors = false;
         bool das_in_normal = false;
         vector<int> das_line_no;
-        das_set<string> das_already_include;
-        das_map<string,string>   das_module_alias;
+        das_hash_set<string> das_already_include;
+        das_hash_map<string,string>   das_module_alias;
+        das_hash_map<string,bool> das_keywords;
         Structure * g_thisStructure = nullptr;
         vector<CommentReader *> g_CommentReaders;
         ReaderMacro * g_ReaderMacro = nullptr;

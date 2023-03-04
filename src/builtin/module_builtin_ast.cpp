@@ -34,13 +34,19 @@ namespace das {
     }
 
     bool addModuleFunction ( Module * module, FunctionPtr & _func, Context * context, LineInfoArg * lineInfo ) {
-        if ( !module ) context->throw_error_at(*lineInfo, "expecting module, not null");
-        FunctionPtr func = move(_func);
+        if ( !module ) context->throw_error_at(lineInfo, "expecting module, not null");
+        FunctionPtr func = das::move(_func);
         return module->addFunction(func, true);
     }
 
+    bool addModuleKeyword ( Module * module, char * kwd, bool needOxfordComma, Context * context, LineInfoArg * lineInfo ) {
+        if ( !module ) context->throw_error_at(lineInfo, "expecting module, not null");
+        if ( !kwd || kwd[0]==0 ) context->throw_error_at(lineInfo, "expecting keyword, not empty string");
+        return module->addKeyword(kwd, needOxfordComma, true);
+    }
+
     void forEachFunction ( Module * module, const char * name, const TBlock<void,FunctionPtr> & block, Context * context, LineInfoArg * lineInfo ) {
-        if ( !module ) context->throw_error_at(*lineInfo, "expecting module, not null");
+        if ( !module ) context->throw_error_at(lineInfo, "expecting module, not null");
         vec4f args[1];
         if ( builtin_empty(name) ) {
             auto & fnbn = module->functions;
@@ -62,7 +68,7 @@ namespace das {
     }
 
     void forEachGenericFunction ( Module * module, const char * name, const TBlock<void,FunctionPtr> & block, Context * context, LineInfoArg * lineInfo ) {
-        if ( !module ) context->throw_error_at(*lineInfo, "expecting module, not null");
+        if ( !module ) context->throw_error_at(lineInfo, "expecting module, not null");
         vec4f args[1];
         if ( builtin_empty(name) ) {
             auto & fnbn = module->generics;
@@ -84,15 +90,15 @@ namespace das {
     }
 
     bool addModuleGeneric ( Module * module, FunctionPtr & _func, Context * context, LineInfoArg * lineInfo ) {
-        if ( !module ) context->throw_error_at(*lineInfo, "expecting module, not null");
-        FunctionPtr func = move(_func);
+        if ( !module ) context->throw_error_at(lineInfo, "expecting module, not null");
+        FunctionPtr func = das::move(_func);
         return module->addGeneric(func, true);
     }
 
     bool addModuleVariable ( Module * module, VariablePtr & _var, Context * context, LineInfoArg * lineInfo ) {
-        if ( !module ) context->throw_error_at(*lineInfo, "expecting module, not null");
-        VariablePtr var = move(_var);
-        return module->addVariable(move(var), true);
+        if ( !module ) context->throw_error_at(lineInfo, "expecting module, not null");
+        VariablePtr var = das::move(_var);
+        return module->addVariable(das::move(var), true);
     }
 
     VariablePtr findModuleVariable ( Module * module, const char * name ) {
@@ -100,35 +106,36 @@ namespace das {
     }
 
     bool addModuleStructure ( Module * module, StructurePtr & _struct ) {
-        StructurePtr stru = move(_struct);
+        StructurePtr stru = das::move(_struct);
         return module->addStructure(stru, true);
     }
 
     bool removeModuleStructure ( Module * module, StructurePtr & _struct ) {
-        StructurePtr stru = move(_struct);
+        StructurePtr stru = das::move(_struct);
         return module->removeStructure(stru);
     }
 
     bool addModuleAlias ( Module * module, TypeDeclPtr & _ptr ) {
-        TypeDeclPtr ptr = move(_ptr);
+        TypeDeclPtr ptr = das::move(_ptr);
         return module->addAlias(ptr, true);
     }
 
     Module * thisModule ( Context * context, LineInfoArg * lineinfo ) {
         if ( !context->thisProgram ) {
-            context->throw_error_at(*lineinfo, "can't get this module past compilation");
+            context->throw_error_at(lineinfo, "can't get this module past compilation");
         }
         return context->thisProgram->thisModule.get();
     }
 
     Module * findRttiModule ( smart_ptr<Program> THAT_PROGRAM, const char * name, Context *, LineInfoArg *) {
-        auto found = THAT_PROGRAM->library.findModule(name ? name : "");
+        name = name ? name : "";
+        auto found = THAT_PROGRAM->library.findModule(name);
         return found ? found : Module::require(name);
     }
 
     smart_ptr<Function> findRttiFunction ( Module * mod, Func func, Context * context, LineInfoArg * line_info ) {
-        if ( !func.PTR ) context->throw_error_at(*line_info, "function not found");
-        if ( !mod ) context->throw_error_at(*line_info, "module not found");
+        if ( !func.PTR ) context->throw_error_at(line_info, "function not found");
+        if ( !mod ) context->throw_error_at(line_info, "module not found");
         return mod->findFunction(func.PTR->mangledName);
     }
 
@@ -149,7 +156,7 @@ namespace das {
     }
 
     char * ast_describe_typedecl ( smart_ptr_raw<TypeDecl> t, bool d_extra, bool d_contracts, bool d_module, Context * context, LineInfoArg * at ) {
-        if ( !t ) context->throw_error_at(at ? *at : LineInfo(), "expecting type, not null");
+        if ( !t ) context->throw_error_at(at, "expecting type, not null");
         return context->stringHeap->allocateString(t->describe(
             d_extra ? TypeDecl::DescribeExtra::yes : TypeDecl::DescribeExtra::no,
             d_contracts ? TypeDecl::DescribeContracts::yes : TypeDecl::DescribeContracts::no,
@@ -157,7 +164,7 @@ namespace das {
     }
 
     char * ast_describe_typedecl_cpp ( smart_ptr_raw<TypeDecl> t, bool d_substitureRef, bool d_skipRef, bool d_skipConst, bool d_redundantConst, Context * context, LineInfoArg * at ) {
-        if ( !t ) context->throw_error_at(at ? *at : LineInfo(), "expecting type, not null");
+        if ( !t ) context->throw_error_at(at, "expecting type, not null");
         return context->stringHeap->allocateString(describeCppType(t,
             d_substitureRef ? CpptSubstitureRef::yes : CpptSubstitureRef::no,
             d_skipRef ? CpptSkipRef::yes : CpptSkipRef::no,
@@ -166,14 +173,14 @@ namespace das {
     }
 
     char * ast_describe_expression ( smart_ptr_raw<Expression> t, Context * context, LineInfoArg * at ) {
-        if ( !t ) context->throw_error_at(at ? *at : LineInfo(), "expecting expression, not null");
+        if ( !t ) context->throw_error_at(at, "expecting expression, not null");
         TextWriter ss;
         ss << *t;
         return context->stringHeap->allocateString(ss.str());
     }
 
     char * ast_describe_function ( smart_ptr_raw<Function> t, Context * context, LineInfoArg * at ) {
-        if ( !t ) context->throw_error_at(at ? *at : LineInfo(), "expecting function, not null");
+        if ( !t ) context->throw_error_at(at, "expecting function, not null");
         TextWriter ss;
         ss << *t;
         return context->stringHeap->allocateString(ss.str());
@@ -184,7 +191,7 @@ namespace das {
     }
 
     char * ast_find_bitfield_name ( smart_ptr_raw<TypeDecl> bft, Bitfield value, Context * context, LineInfoArg * at ) {
-        if ( !bft ) context->throw_error_at(at ? *at : LineInfo(), "expecting bitfield type, not null");
+        if ( !bft ) context->throw_error_at(at, "expecting bitfield type, not null");
         return context->stringHeap->allocateString(bft->findBitfieldName(value));
     }
 
@@ -194,19 +201,19 @@ namespace das {
     }
 
     void ast_error ( ProgramPtr prog, const LineInfo & at, const char * message, Context * context, LineInfoArg * lineInfo ) {
-        if ( !prog ) context->throw_error_at(*lineInfo,"program can't be null (expecting compiling_program())");
+        if ( !prog ) context->throw_error_at(lineInfo,"program can't be null (expecting compiling_program())");
         prog->error(message ? message : "macro error","","",at,CompilationError::macro_failed);
     }
 
     int32_t get_variant_field_offset ( smart_ptr_raw<TypeDecl> td, int32_t index, Context * context, LineInfoArg * at ) {
-        if ( !td ) context->throw_error_at(at ? *at : LineInfo(),"expecting variant type");
-        if ( td->baseType!=Type::tVariant ) context->throw_error_at(at ? *at : LineInfo(),"expecting variant type, not %s", td->describe().c_str());
+        if ( !td ) context->throw_error_at(at,"expecting variant type");
+        if ( td->baseType!=Type::tVariant ) context->throw_error_at(at,"expecting variant type, not %s", td->describe().c_str());
         return td->getVariantFieldOffset(index);
     }
 
     int32_t get_tuple_field_offset ( smart_ptr_raw<TypeDecl> td, int32_t index, Context * context, LineInfoArg * at ) {
-        if ( !td ) context->throw_error_at(at ? *at : LineInfo(),"expecting tuple type");
-        if ( td->baseType!=Type::tTuple ) context->throw_error_at(at ? *at : LineInfo(),"expecting tuple type, not %s", td->describe().c_str());
+        if ( !td ) context->throw_error_at(at,"expecting tuple type");
+        if ( td->baseType!=Type::tTuple ) context->throw_error_at(at,"expecting tuple type, not %s", td->describe().c_str());
         return td->getTupleFieldOffset(index);
     }
 
@@ -312,8 +319,8 @@ namespace das {
                      ConstMatters constMatters,
                      TemporaryMatters temporaryMatters,
                      Context * context, LineInfoArg * at ) {
-        if ( !THIS ) context->throw_error_at(at ? *at : LineInfo(), "expecting left type");
-        if ( !decl ) context->throw_error_at(at ? *at : LineInfo(), "expecting right type");
+        if ( !THIS ) context->throw_error_at(at, "expecting left type");
+        if ( !decl ) context->throw_error_at(at, "expecting right type");
         return THIS->isSameType(*decl,refMatters,constMatters,temporaryMatters);
     }
 
@@ -327,34 +334,34 @@ namespace das {
     }
 
     char * get_mangled_name ( smart_ptr_raw<Function> func, Context * context, LineInfoArg * at ) {
-        if ( !func ) context->throw_error_at(at ? *at : LineInfo(),"expecting function");
+        if ( !func ) context->throw_error_at(at,"expecting function");
         return context->stringHeap->allocateString(func->getMangledName());
     }
 
     char * get_mangled_name_t ( smart_ptr_raw<TypeDecl> typ, Context * context, LineInfoArg * at ) {
-        if ( !typ ) context->throw_error_at(at ? *at : LineInfo(),"expecting function");
+        if ( !typ ) context->throw_error_at(at,"expecting function");
         return context->stringHeap->allocateString(typ->getMangledName());
     }
 
     char * get_mangled_name_v ( smart_ptr_raw<Variable> var, Context * context, LineInfoArg * at ) {
-        if ( !var ) context->throw_error_at(at ? *at : LineInfo(),"expecting function");
+        if ( !var ) context->throw_error_at(at,"expecting function");
         return context->stringHeap->allocateString(var->getMangledName());
     }
 
     char * get_mangled_name_b ( smart_ptr_raw<ExprBlock> expr, Context * context, LineInfoArg * at ) {
-        if ( !expr ) context->throw_error_at(at ? *at : LineInfo(),"expecting block");
+        if ( !expr ) context->throw_error_at(at,"expecting block");
         return context->stringHeap->allocateString(expr->getMangledName());
     }
 
     void get_use_global_variables ( smart_ptr_raw<Function> func, const TBlock<void,VariablePtr> & block, Context * context, LineInfoArg * at ) {
-        if ( !func ) context->throw_error_at(at ? *at : LineInfo(),"expecting function");
+        if ( !func ) context->throw_error_at(at,"expecting function");
         for ( auto & var : func->useGlobalVariables ) {
             das_invoke<void>::invoke<VariablePtr>(context,at,block,var);
         }
     }
 
     void get_use_functions ( smart_ptr_raw<Function> func, const TBlock<void,FunctionPtr> & block, Context * context, LineInfoArg * at ) {
-        if ( !func ) context->throw_error_at(at ? *at : LineInfo(),"expecting function");
+        if ( !func ) context->throw_error_at(at,"expecting function");
         for ( auto & fn : func->useFunctions ) {
             das_invoke<void>::invoke<FunctionPtr>(context,at,block,fn);
         }
@@ -362,7 +369,7 @@ namespace das {
 
     class MangledNameParserCtx : public MangledNameParser {
         virtual void error ( const string & err, const char * ch ) override {
-            context->throw_error_at(*at, "%s, near %s", err.c_str(), ch );
+            context->throw_error_at(at, "%s, near %s", err.c_str(), ch );
         }
     public:
         Context *   context = nullptr;
@@ -370,7 +377,7 @@ namespace das {
     };
 
     TypeDeclPtr parseMangledNameFn ( const char * txt, ModuleGroup & lib, Module * thisModule, Context * context, LineInfoArg * at ) {
-        if ( !txt ) context->throw_error_at(*at, "can't parse empty mangled name");
+        if ( !txt ) context->throw_error_at(at, "can't parse empty mangled name");
         MangledNameParserCtx parser;
         parser.context = context;
         parser.at = at;
@@ -421,6 +428,10 @@ namespace das {
         if ( !field || !ptr ) return false;
         if ( ptr->baseType==Type::tStructure ) {
             return ptr->structType->findField(field);
+        } else if ( ptr->baseType==Type::tTuple ) {
+            return ptr->tupleFieldIndex(field) != -1;
+        } else if ( ptr->baseType==Type::tVariant ) {
+            return ptr->variantFieldIndex(field) != -1;
         } else if ( ptr->baseType==Type::tHandle ) {
             return ptr->annotation->makeFieldType(field, constant);
         } else if ( ptr->baseType==Type::tPointer && ptr->firstType ) {
@@ -433,6 +444,12 @@ namespace das {
         if ( !field || !ptr ) return nullptr;
         if ( ptr->baseType==Type::tStructure ) {
             return ptr->structType->findField(field)->type;
+        } else if ( ptr->baseType==Type::tTuple ) {
+            auto idx = ptr->tupleFieldIndex(field);
+            return idx!=-1 ? ptr->argTypes[idx] : nullptr;
+        } else if ( ptr->baseType==Type::tVariant ) {
+            auto idx = ptr->variantFieldIndex(field);
+            return idx!=-1 ? ptr->argTypes[idx] : nullptr;
         } else if ( ptr->baseType==Type::tHandle ) {
             return ptr->annotation->makeFieldType(field, constant);
         } else if ( ptr->baseType==Type::tPointer && ptr->firstType ) {
@@ -442,31 +459,31 @@ namespace das {
     }
 
     Structure::FieldDeclaration * ast_findStructureField ( Structure * structType, const char * field, Context * context, LineInfoArg * at ) {
-        if ( !structType ) context->throw_error_at(at ? *at : LineInfo(),"expecting structure");
+        if ( !structType ) context->throw_error_at(at,"expecting structure");
         if ( !field ) return nullptr;
         return (Structure::FieldDeclaration *) structType->findField(field);
     }
 
     Structure * find_unique_structure ( smart_ptr_raw<Program> prog, const char * name, Context * context, LineInfoArg * at ) {
         if ( !name ) return nullptr;
-        if ( !prog ) context->throw_error_at(*at, "expecting program");
+        if ( !prog ) context->throw_error_at(at, "expecting program");
         auto st = prog->findStructure(name);
         if ( st.size()!=1 ) return nullptr;
         return st.back().get();
     }
 
     void * das_get_builtin_function_address ( Function * fn, Context * context, LineInfoArg * at ) {
-        if ( !fn ) context->throw_error_at(*at, "expecting function");
-        if ( !fn->builtIn ) context->throw_error_at(*at, "expecting built-in interop function");
+        if ( !fn ) context->throw_error_at(at, "expecting function");
+        if ( !fn->builtIn ) context->throw_error_at(at, "expecting built-in interop function");
         return ((BuiltInFunction *)fn)->getBuiltinAddress();
     }
 
     void * das_make_interop_node ( Context & ctx, ExprCallFunc * call, Context * context, LineInfoArg * at ) {
-        if ( !call ) context->throw_error_at(*at, "expecting function call");
+        if ( !call ) context->throw_error_at(at, "expecting function call");
         auto fn = call->func;
-        if ( !fn ) context->throw_error_at(*at, "expecting function");
-        if ( !fn->builtIn || !fn->interopFn ) context->throw_error_at(*at, "expecting built-in interop function");
-        if ( !ctx.thisHelper ) context->throw_error_at(*at, "missing debug info helper. get_aot_interop_node can only be called in the SimulateMacro");
+        if ( !fn ) context->throw_error_at(at, "expecting function");
+        if ( !fn->builtIn || !fn->interopFn ) context->throw_error_at(at, "expecting built-in interop function");
+        if ( !ctx.thisHelper ) context->throw_error_at(at, "missing debug info helper. get_aot_interop_node can only be called in the SimulateMacro");
         auto node = ctx.code->makeNode<SimNode_AotInteropBase>();
         node->nArguments = (int) call->arguments.size();
         node->argumentValues = nullptr;
@@ -482,14 +499,14 @@ namespace das {
     }
 
     TypeInfo * das_make_type_info_structure ( Context & ctx, TypeDeclPtr ptr, Context * context, LineInfoArg * at ) {
-        if ( !ptr ) context->throw_error_at(at ? *at : LineInfo(), "expecting type");
-        if ( !ctx.thisHelper ) context->throw_error_at(at ? *at : LineInfo(), "missing type-info helper. context allready fully compiled");
+        if ( !ptr ) context->throw_error_at(at, "expecting type");
+        if ( !ctx.thisHelper ) context->throw_error_at(at, "missing type-info helper. context allready fully compiled");
         return ctx.thisHelper->makeTypeInfo(nullptr, ptr);
     }
 
     void * das_sb_make_interop_node ( Context & ctx, ExprStringBuilder * call, Context * context, LineInfoArg * at ) {
-        if ( !call ) context->throw_error_at(*at, "expecting string builder");
-        if ( !ctx.thisHelper ) context->throw_error_at(*at, "missing debug info helper. get_aot_interop_node can only be called in the SimulateMacro");
+        if ( !call ) context->throw_error_at(at, "expecting string builder");
+        if ( !ctx.thisHelper ) context->throw_error_at(at, "missing debug info helper. get_aot_interop_node can only be called in the SimulateMacro");
         auto node = ctx.code->makeNode<SimNode_AotInteropBase>();
         node->nArguments = (int) call->elements.size();
         node->argumentValues = nullptr;
@@ -507,16 +524,29 @@ namespace das {
     void das_comp_log ( const char * text, Context * context, LineInfoArg * at ) {
         if ( !text ) return;
         if ( !daScriptEnvironment::bound || !daScriptEnvironment::bound->g_compilerLog ) {
-             context->throw_error_at(at ? *at:LineInfo(), "compiler log is not set. its only available for the macros during compilation");
+             context->throw_error_at(at, "compiler log is not set. its only available for the macros during compilation");
         }
         (*daScriptEnvironment::bound->g_compilerLog) << text;
     }
 
     Annotation * get_expression_annotation ( Expression * expr, Context * context, LineInfoArg * at ) {
         if ( !expr ) return nullptr;
-        if ( !daScriptEnvironment::bound ) context->throw_error_at(at ? *at:LineInfo(), "expecting bound environment");
+        if ( !daScriptEnvironment::bound ) context->throw_error_at(at, "expecting bound environment");
         auto mod = Module::require("ast");
         return mod->findAnnotation(expr->__rtti).get();
+    }
+
+    void addModuleOption ( Module * mod, char * option, Type type, Context * context, LineInfoArg * at ) {
+        if ( !mod ) context->throw_error_at(at, "expecting module");
+        if ( !option ) context->throw_error_at(at, "expecting option name");
+        if ( mod->getOptionType(option) != Type::none ) context->throw_error_at(at, "option %s already exists", option);
+        mod->options[option] = type;
+    }
+
+    TypeDeclPtr getUnderlyingValueType ( smart_ptr_raw<TypeDecl> type, Context * context, LineInfoArg * at ) {
+        if ( !type ) context->throw_error_at(at, "expecting type");
+        if ( type->baseType!=Type::tHandle ) context->throw_error_at(at, "expecting handle type");
+        return type->annotation->makeValueType();
     }
 
     #include "ast.das.inc"
@@ -528,6 +558,9 @@ namespace das {
         lib.addBuiltInModule();
         lib.addModule(Module::require("rtti"));
         registerAnnotations(lib);
+        registerAnnotations1(lib);
+        registerAnnotations2(lib);
+        registerAnnotations3(lib);
         registerAdapterAnnotations(lib);
         registerMacroExpressions(lib);
         registerFunctions(lib);
@@ -586,6 +619,9 @@ namespace das {
         addExtern<DAS_BIND_FUN(addModuleVariable)>(*this, lib, "add_variable",
             SideEffects::modifyExternal, "addModuleVariable")
                 ->args({"module","variable","context","line"});
+        addExtern<DAS_BIND_FUN(addModuleKeyword)>(*this, lib, "add_keyword",
+            SideEffects::modifyExternal, "addModuleKeyword")
+                ->args({"module","keyword","needOxfordComma","context","line"});
         addExtern<DAS_BIND_FUN(findModuleVariable)>(*this, lib, "find_variable",
             SideEffects::modifyExternal, "findModuleVariable")
                 ->args({"module","variable"});
@@ -679,6 +715,9 @@ namespace das {
         addExtern<DAS_BIND_FUN(any_table_size)>(*this, lib,  "any_table_size",
             SideEffects::none, "any_table_size")
                 ->arg("table");
+        addExtern<DAS_BIND_FUN(getUnderlyingValueType)>(*this, lib,  "get_underlying_value_type",
+            SideEffects::none, "getUnderlyingValueType")
+                ->args({"type","context","line"});
         // module
         addExtern<DAS_BIND_FUN(for_each_typedef)>(*this, lib,  "for_each_typedef",
             SideEffects::modifyExternal, "for_each_typedef")
@@ -779,6 +818,10 @@ namespace das {
         addExtern<DAS_BIND_FUN(das_comp_log)>(*this, lib,  "to_compilation_log",
             SideEffects::modifyExternal, "das_comp_log")
                 ->args({"text","context","at"});
+        //options
+        addExtern<DAS_BIND_FUN(addModuleOption)>(*this, lib,  "add_module_option",
+            SideEffects::modifyExternal, "addModuleOption")
+                ->args({"module","option","type","context","at"});
     }
 
     ModuleAotType Module_Ast::aotRequire ( TextWriter & tw ) const {

@@ -633,6 +633,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(aot)>("aot");
             addField<DAS_BIND_MANAGED_FIELD(aot_module)>("aot_module");
             addField<DAS_BIND_MANAGED_FIELD(completion)>("completion");
+            addField<DAS_BIND_MANAGED_FIELD(export_all)>("export_all");
         // memory
             addField<DAS_BIND_MANAGED_FIELD(stack)>("stack");
             addField<DAS_BIND_MANAGED_FIELD(intern_strings)>("intern_strings");
@@ -652,6 +653,8 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(no_global_variables_at_all)>("no_global_variables_at_all");
             addField<DAS_BIND_MANAGED_FIELD(no_global_heap)>("no_global_heap");
             addField<DAS_BIND_MANAGED_FIELD(no_deprecated)>("no_deprecated");
+            addField<DAS_BIND_MANAGED_FIELD(strict_smart_pointers)>("strict_smart_pointers");
+            addField<DAS_BIND_MANAGED_FIELD(no_init)>("no_init");
             addField<DAS_BIND_MANAGED_FIELD(no_aliasing)>("no_aliasing");
             addField<DAS_BIND_MANAGED_FIELD(only_fast_aot)>("only_fast_aot");
             addField<DAS_BIND_MANAGED_FIELD(aot_order_side_effects)>("aot_order_side_effects");
@@ -756,7 +759,7 @@ namespace das {
         uint32_t str_len = stringLengthSafe(*context, str);
         auto access = make_smart<FileAccess>();
         auto fileInfo = make_unique<TextFileInfo>((char *) str, uint32_t(str_len), false);
-        access->setFileInfo(modName, move(fileInfo));
+        access->setFileInfo(modName, das::move(fileInfo));
         ModuleGroup dummyLibGroup;
         auto program = parseDaScript(modName, access, issues, dummyLibGroup, exportAll, false, cop);
         if ( program ) {
@@ -993,7 +996,7 @@ namespace das {
             const TBlock<void,bool,smart_ptr<Program>,const string> & block, Context * context, LineInfoArg * at ) {
         TextWriter issues;
         if ( !access ) access = make_smart<FsFileAccess>();
-        auto program = compileDaScript(modName, access, issues, *module_group, true, cop);
+        auto program = compileDaScript(modName, access, issues, *module_group, cop.export_all, cop);
         if ( program ) {
             if (program->failed()) {
                 for (auto & err : program->errors) {
@@ -1028,7 +1031,7 @@ namespace das {
         if ( !str ) context->throw_error("can't introduce empty file");
         uint32_t str_len = stringLengthSafe(*context, str);
         auto fileInfo = make_unique<TextFileInfo>(str, str_len, false);
-        return access->setFileInfo(fname, move(fileInfo)) != nullptr;
+        return access->setFileInfo(fname, das::move(fileInfo)) != nullptr;
     }
 
 #else

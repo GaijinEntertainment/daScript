@@ -325,7 +325,7 @@ namespace das {
     void ast_enumDeclaration (  yyscan_t scanner, AnnotationList * annL, const LineInfo & atannL, bool pubE, Enumeration * pEnum, Enumeration * pE, Type ebt ) {
         pEnum->baseType = ebt;
         pEnum->isPrivate = !pubE;
-        pEnum->list = move(pE->list);
+        pEnum->list = das::move(pE->list);
         if ( annL ) {
             for ( auto pA : *annL ) {
                 if ( pA->annotation ) {
@@ -406,8 +406,10 @@ namespace das {
                 pVar->global_shared = glob_shar;
                 pVar->private_variable = !pub_var;
                 if ( ann ) {
-                    pVar->annotation = move(*ann);
+                    // note: we can do this because the annotation syntax is for single variable only
+                    pVar->annotation = das::move(*ann);
                     delete ann;
+                    ann = nullptr;
                 }
                 if ( !yyextra->g_Program->addVariable(pVar) )
                     das_yyerror(scanner,"global variable is already declared " + name_at.name,name_at.at,
@@ -652,10 +654,11 @@ namespace das {
         return mkb;
     }
 
-    Expression * ast_Let ( yyscan_t scanner, bool kwd_let, VariableDeclaration * decl, const LineInfo & kwd_letAt, const LineInfo & declAt ) {
+    Expression * ast_Let ( yyscan_t scanner, bool kwd_let, bool inScope, VariableDeclaration * decl, const LineInfo & kwd_letAt, const LineInfo & declAt ) {
         auto pLet = new ExprLet();
         pLet->at = kwd_letAt;
         pLet->atInit = declAt;
+        pLet->inScope = inScope;
         if ( decl->pTypeDecl ) {
             for ( const auto & name_at : *decl->pNameList ) {
                 if ( !pLet->find(name_at.name) ) {

@@ -2,6 +2,7 @@
 options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
+options strict_smart_pointers = true
 
 module heartbeat private
 
@@ -31,33 +32,32 @@ class AddHeartbeat : AstVisitor
             return
         if (body.list[0] is ExprCall) && (body.list[0] as ExprCall).name=="heartbeat"
             return
-        var expr <- qmacro(heartbeat())
+        var inscope expr <- qmacro(heartbeat())
         body.list |> emplace(expr, 0)
         astChanged = true
-    def override visitFunction(fun:FunctionPtr) : FunctionPtr
+    def override visitFunction(var fun:FunctionPtr) : FunctionPtr
         if fun.body==null || !(fun.body is ExprBlock)
-            return fun
+            return <- fun
         heartbeatBlock(fun.body as ExprBlock)
-        return fun
-    def override visitExprFor(expr:smart_ptr<ExprFor>) : ExpressionPtr
+        return <- fun
+    def override visitExprFor(var expr:smart_ptr<ExprFor>) : ExpressionPtr
         if expr.body==null || !(expr.body is ExprBlock)
-            return expr
+            return <- expr
         heartbeatBlock(expr.body as ExprBlock)
-        return expr
-    def override visitExprWhile(expr:smart_ptr<ExprWhile>) : ExpressionPtr
+        return <- expr
+    def override visitExprWhile(var expr:smart_ptr<ExprWhile>) : ExpressionPtr
         if expr.body==null || !(expr.body is ExprBlock)
-            return expr
+            return <- expr
         heartbeatBlock(expr.body as ExprBlock)
-        return expr
+        return <- expr
 
 [infer_macro]
 class HeartbeatPass : AstPassMacro
     def override apply ( prog:ProgramPtr; mod:Module? ) : bool
         var astVisitor = new AddHeartbeat()
-        var astVisitorAdapter <- make_visitor(*astVisitor)
+        var inscope astVisitorAdapter <- make_visitor(*astVisitor)
         visit(prog, astVisitorAdapter)
         var result = astVisitor.astChanged
-        astVisitorAdapter := null
         unsafe
             delete astVisitor
         return result

@@ -70,6 +70,9 @@
     void das_yybegin_reader ( yyscan_t yyscanner );
     void das_yyend_reader ( yyscan_t yyscanner );
 
+    namespace das { class Module; }
+    void das_collect_keywords ( das::Module * mod, yyscan_t yyscanner );
+
     #undef yyextra
     #define yyextra (*((das::DasParserState **)(scanner)))
 %}
@@ -131,7 +134,8 @@
 %destructor { if ( $$->use_count()==1 ) delete $$; } <pEnum>
 %destructor { delete $$; } <pCapt>
 %destructor { delete $$; } <pCaptList>
-%destructor { delete $$.firstType; $$.secondType; } <aTypePair>
+%destructor { delete $$.firstType; delete $$.secondType; } <aTypePair>
+%destructor { $$->delRef(); } <pFuncDecl>
 
 %token  LEXER_ERROR         "lexer error"
 
@@ -196,6 +200,7 @@
 %token  DAS_PRIVATE         "private"
 %token  DAS_SMART_PTR       "smart_ptr"
 %token  DAS_UNSAFE          "unsafe"
+%token  DAS_INSCOPE         "inscope"
 
 /* basic types */
 %token  DAS_TBOOL           "bool"
@@ -297,6 +302,7 @@
 %token<fd>      FLOAT                   "floating point constant"
 %token<d>       DOUBLE                  "double constant"
 %token<s>       NAME                    "name"
+%token<s>       KEYWORD                 "keyword"
 
 /* %printer { fprintf (yyo, "%i", $$); } <i> */
 
@@ -333,6 +339,7 @@
 %type <pVarDeclList>    tuple_type_list
 %type <pVarDecl>        variant_type
 %type <pVarDeclList>    variant_type_list
+%type <s>               keyword_or_name
 %type <s>               name_in_namespace
 %type <s>               annotation_declaration_name
 %type <s>               function_name
@@ -367,6 +374,7 @@
 %type <b>               optional_public_or_private_function
 %type <b>               optional_public_or_private_member_variable
 %type <b>               optional_public_or_private_enum
+%type <b>               optional_in_scope
 
 %type <b>               if_or_static_if
 %type <b>               elif_or_static_elif
@@ -403,8 +411,10 @@
 %type <pExpression>     expression_if_one_liner
 %type <pExpression>     expression_else_one_liner
 %type <pExpression>     expression_try_catch
+%type <pExpression>     expression_keyword
 %type <pExpression>     expr_new
 %type <pExpression>     expr_pipe
+%type <pExpression>     expr_keyword
 %type <pExpression>     expr_type_info
 %type <pExpression>     expr_type_decl
 %type <pExpression>     expr_cast
@@ -635,21 +645,26 @@ require_declaration
     :   DAS_REQUIRE require_module
     ;
 
+keyword_or_name
+    :   NAME[name]      { $$ = $name; }
+    |   KEYWORD[name]   { $$ = $name; }
+    ;
+
 require_module_name
-    :   NAME[name] {
+    :   keyword_or_name[name] {
         $$ = $name;
     }
     |   '%' require_module_name[req] {
         *$req = "%" + *$req;
         $$ = $req;
     }
-    |   require_module_name[req] '.' NAME[name] {
+    |   require_module_name[req] '.' keyword_or_name[name] {
         *$req += ".";
         *$req += *$name;
         delete $name;
         $$ = $req;
     }
-    |   require_module_name[req] '/' NAME[name] {
+    |   require_module_name[req] '/' keyword_or_name[name] {
         *$req += "/";
         *$req += *$name;
         delete $name;
@@ -1107,6 +1122,7 @@ expression_block
 expression_any
     :   ';'                                 { $$ = nullptr; }
     |   expr_pipe[subexpr]                  { $$ = $subexpr; }
+    |   expr_keyword[subexpr]               { $$ = $subexpr; }
     |   expr_assign_pipe[subexpr]           { $$ = $subexpr; }
     |   expr_assign[subexpr] ';'            { $$ = $subexpr; }
     |   expression_delete[subexpr] ';'      { $$ = $subexpr; }
@@ -1141,6 +1157,28 @@ expressions
     }
     |   expressions[block] error {
         delete $block; $$ = nullptr; YYABORT;
+    }
+    ;
+
+expr_keyword
+    :   KEYWORD[kwd] expr[subexpr] expression_block[block] {
+        auto pCall = yyextra->g_Program->makeCall(tokAt(scanner,@kwd),*$kwd);
+        pCall->arguments.push_back(ExpressionPtr($subexpr));
+        auto resT = new TypeDecl(Type::autoinfer);
+        auto blk = ast_makeBlock(scanner,0,nullptr,nullptr,nullptr,resT,$block,tokAt(scanner,@block),tokAt(scanner,@block));
+        pCall->arguments.push_back(ExpressionPtr(blk));
+        delete $kwd;
+        $$ = pCall;
+    };
+
+expression_keyword
+    :   KEYWORD[kwd] '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[decl] '>' { yyextra->das_arrow_depth --; } expr[subexpr] {
+        auto pCall = yyextra->g_Program->makeCall(tokAt(scanner,@kwd),*$kwd);
+        auto td = new ExprTypeDecl(tokAt(scanner,@decl),TypeDeclPtr($decl));
+        pCall->arguments.push_back(ExpressionPtr(td));
+        pCall->arguments.push_back(ExpressionPtr($subexpr));
+        delete $kwd;
+        $$ = pCall;
     }
     ;
 
@@ -1311,9 +1349,14 @@ kwd_let
     |   DAS_VAR  { $$ = false; }
     ;
 
+optional_in_scope
+    :   DAS_INSCOPE { $$ = true; }
+    |   /* empty */  { $$ = false; }
+    ;
+
 expression_let
-    :   kwd_let let_variable_declaration[decl] {
-        $$ = ast_Let(scanner,$kwd_let,$decl,tokAt(scanner,@kwd_let),tokAt(scanner,@decl));
+    :   kwd_let optional_in_scope let_variable_declaration[decl] {
+        $$ = ast_Let(scanner,$kwd_let,$optional_in_scope,$decl,tokAt(scanner,@kwd_let),tokAt(scanner,@decl));
     }
     ;
 
@@ -1690,13 +1733,14 @@ expr
     |   expr_named_call[subexpr]                { $$ = $subexpr; }
     |   expr_block[subexpr]                     { $$ = $subexpr; }
     |   expr[fncall] LPIPE[loc] expr[arg]       { $$ = ast_lpipe(scanner,$fncall,$arg,tokAt(scanner,@loc)); }
-    |   expr[arg] RPIPE[loc] expr[fncall]       { $$ =ast_rpipe(scanner,$arg,$fncall,tokAt(scanner,@loc)); }
+    |   expr[arg] RPIPE[loc] expr[fncall]       { $$ = ast_rpipe(scanner,$arg,$fncall,tokAt(scanner,@loc)); }
     | name_in_namespace[ena] NAME[eni]          { $$ = ast_NameName(scanner,$ena,$eni,tokAt(scanner,@ena),tokAt(scanner,@eni)); }
     |   DAS_UNSAFE '(' expr[subexpr] ')' {
         $subexpr->alwaysSafe = true;
         $subexpr->userSaidItsSafe = true;
         $$ = $subexpr;
     }
+    |   expression_keyword[kwd] { $$ = $kwd; }
     ;
 
 expr_mtag
@@ -2419,6 +2463,10 @@ type_declaration_no_options
     }
     |   type_declaration_no_options[typeDecl] EQUEQU DAS_CONST {
         $typeDecl->explicitConst = true;
+        $$ = $typeDecl;
+    }
+    |   type_declaration_no_options[typeDecl] EQUEQU '&' {
+        $typeDecl->explicitRef = true;
         $$ = $typeDecl;
     }
     |   type_declaration_no_options[typeDecl] '?' {

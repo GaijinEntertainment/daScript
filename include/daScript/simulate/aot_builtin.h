@@ -55,6 +55,7 @@ namespace das {
     void builtin_table_free ( Table & tab, int szk, int szv, Context * __context__ );
 
     void toLog ( int level, const char * text );
+    void toCompilerLog ( const char * text, Context * context, LineInfoArg * at );
 
     vec4f builtin_verify_locks ( Context & context, SimNode_CallBase * node, vec4f * args );
     bool builtin_set_verify_array_locks ( Array & arr, bool value );
@@ -89,17 +90,15 @@ namespace das {
     void builtin_sort_any_cblock ( void * anyData, int32_t elementSize, int32_t length, const Block & cmp, Context * context, LineInfoArg * lineinfo );
     void builtin_sort_any_ref_cblock ( void * anyData, int32_t elementSize, int32_t length, const Block & cmp, Context * context, LineInfoArg * lineinfo );
 
-#if defined(_MSC_VER) && !defined(__clang__)
-    __forceinline int32_t variant_index(const Variant & v) { return *(int32_t *)&v; }
-    __forceinline void set_variant_index(Variant & v, int32_t index) { *(int32_t *)&v = index; }
-#else
-    __forceinline int32_t variant_index(const Variant & v) { int32_t index; memcpy(&index, &v, sizeof(int32_t)); return index; }
-    __forceinline void set_variant_index(Variant & v, int32_t index) { memcpy(&v, &index, sizeof(int32_t)); }
-#endif
+    __forceinline int32_t variant_index(const Variant & v) { return v.index; }
+    __forceinline void set_variant_index(Variant & v, int32_t index) { v.index = index; }
 
-    void builtin_smart_ptr_clone_ptr ( smart_ptr_raw<void> & dest, const void * src );
-    void builtin_smart_ptr_clone ( smart_ptr_raw<void> & dest, const smart_ptr_raw<void> src );
-    uint32_t builtin_smart_ptr_use_count ( const smart_ptr_raw<void> src );
+    void builtin_smart_ptr_clone_ptr ( smart_ptr_raw<void> & dest, const void * src, Context * context, LineInfoArg * at );
+    void builtin_smart_ptr_clone ( smart_ptr_raw<void> & dest, const smart_ptr_raw<void> src, Context * context, LineInfoArg * at );
+    uint32_t builtin_smart_ptr_use_count ( const smart_ptr_raw<void> src, Context * context, LineInfoArg * at );
+    void builtin_smart_ptr_move_new ( smart_ptr_raw<void> & dest, smart_ptr_raw<void> src, Context * context, LineInfoArg * at );
+    void builtin_smart_ptr_move_ptr ( smart_ptr_raw<void> & dest, const void * src, Context * context, LineInfoArg * at );
+    void builtin_smart_ptr_move ( smart_ptr_raw<void> & dest, smart_ptr_raw<void> & src, Context * context, LineInfoArg * at );
 
     __forceinline bool equ_sptr_sptr ( const smart_ptr_raw<void> left, const smart_ptr_raw<void> right ) { return left.get() == right.get(); }
     __forceinline bool nequ_sptr_sptr ( const smart_ptr_raw<void> left, const smart_ptr_raw<void> right ) { return left.get() != right.get(); }
@@ -129,7 +128,7 @@ namespace das {
         uint32_t idx = pArray.size;
         array_grow(*context, pArray, stride);
         if ( uint32_t(index) >= pArray.size ) context->throw_error_ex("insert index out of range, %u of %u", uint32_t(index), pArray.size);
-        memmove ( pArray.data+(index+1)*stride, pArray.data+index*stride, (idx-index)*stride );
+        memmove ( pArray.data+(index+1)*stride, pArray.data+index*stride, size_t(idx-index)*size_t(stride) );
         return index;
     }
 
@@ -137,7 +136,7 @@ namespace das {
         uint32_t idx = pArray.size;
         array_grow(*context, pArray, stride);
         if ( uint32_t(index) >= pArray.size ) context->throw_error_ex("insert index out of range, %u of %u", uint32_t(index), pArray.size);
-        memmove ( pArray.data+(index+1)*stride, pArray.data+index*stride, (idx-index)*stride );
+        memmove ( pArray.data+(index+1)*stride, pArray.data+index*stride, size_t(idx-index)*size_t(stride) );
         memset ( pArray.data + index*stride, 0, stride );
         return index;
     }

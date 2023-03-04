@@ -2,6 +2,7 @@ options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 options no_aot = true
+options strict_smart_pointers = true
 
 module ast_debug shared private
 
@@ -86,7 +87,13 @@ class SampleStackWalker : DapiStackWalker
         else
             describe_arg(*ctxid,vinfo,unsafe(addr(arg)))
     def override onVariable ( inf:FuncInfo; vinfo:LocalVariableInfo; arg:void?; inScope:bool ) : void
-        describe_arg(*ctxid,vinfo,arg)
+        if !inScope
+            return
+        if vinfo.flags.ref || vinfo.flags.refType
+            unsafe
+                describe_arg(*ctxid,vinfo,* reinterpret<void??>(arg))
+        else
+            describe_arg(*ctxid,vinfo,arg)
     def override onAfterCall ( pp:Prologue ) : bool
         return false    // only stack top
 
@@ -102,12 +109,6 @@ class ContextStateAgent : DapiDebugAgent
             delete walker_adapter
             delete walker
     def override onCollect(var ctx:Context; at:LineInfo)
-        walker.ctxid = unsafe(addr(ctx))
-        walk_stack(walker_adapter,ctx,at)
-    def override onBreakpoint ( var ctx:Context; at:LineInfo; reason,text:string ) : void
-        walker.ctxid = unsafe(addr(ctx))
-        walk_stack(walker_adapter,ctx,at)
-    def override onSingleStep ( var ctx:Context; at:LineInfo ) : void
         walker.ctxid = unsafe(addr(ctx))
         walk_stack(walker_adapter,ctx,at)
 

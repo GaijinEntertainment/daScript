@@ -29,7 +29,6 @@ Map, reduce
   *  :ref:`all (it:auto const) : auto <function-_at_functional_c__c_all_C.>` 
   *  :ref:`cycle (src:iterator\<auto(TT)\> -const) : auto <function-_at_functional_c__c_cycle_1_ls_Y_ls_TT_gr_._gr_G>` 
   *  :ref:`islice (src:iterator\<auto(TT)\> -const;start:int const;stop:int const) : auto <function-_at_functional_c__c_islice_1_ls_Y_ls_TT_gr_._gr_G_Ci_Ci>` 
-  *  :ref:`count (start:int -const;step:int -const) : iterator\<int\> <function-_at_functional_c__c_count_i_i>` 
   *  :ref:`repeat_ref (value:auto(TT) const;total:int -const) : auto <function-_at_functional_c__c_repeat_ref_CY_ls_TT_gr_._i>` 
   *  :ref:`repeat (value:auto(TT) const;count:int -const) : auto <function-_at_functional_c__c_repeat_CY_ls_TT_gr_._i>` 
   *  :ref:`not (x:auto const) : auto <function-_at_functional_c__c_not_C.>` 
@@ -237,23 +236,6 @@ islice returns auto
 
 
 iterates over `src` and yields only the elements in the range [start,stop)
-
-.. _function-_at_functional_c__c_count_i_i:
-
-.. das:function:: count(start: int; step: int)
-
-count returns iterator<int>
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+start   +int          +
-+--------+-------------+
-+step    +int          +
-+--------+-------------+
-
-
-endlessly iterates from `start` and yields `start+step`, `start+2*step`, ...
 
 .. _function-_at_functional_c__c_repeat_ref_CY_ls_TT_gr_._i:
 

@@ -187,3 +187,5 @@
 .. |function-ast_boost-visit_finally| replace:: Calls visitor on the `finally` section of the block.
 
 .. |function-ast_boost-debug_expression| replace:: Gives hierarchical lisp-like textual representation of `expression` with all its subexpressions.
+
+.. |typedef-ast_boost-DebugExpressionFlags| replace:: Which things to print in debug_expression.

@@ -343,6 +343,7 @@ SET(AST_SRC
 ../src/ast/ast_infer_type.cpp
 ../src/ast/ast_lint.cpp
 ../src/ast/ast_allocate_stack.cpp
+../src/ast/ast_derive_alias.cpp
 ../src/ast/ast_const_folding.cpp
 ../src/ast/ast_block_folding.cpp
 ../src/ast/ast_unused.cpp
@@ -384,10 +385,14 @@ SET(BUILTIN_SRC
 ../src/builtin/module_builtin_ast.cpp
 ../src/builtin/module_builtin_ast_flags.cpp
 ../src/builtin/module_builtin_ast_annotations.cpp
+../src/builtin/module_builtin_ast_annotations_1.cpp
+../src/builtin/module_builtin_ast_annotations_2.cpp
+../src/builtin/module_builtin_ast_annotations_3.cpp
 ../src/builtin/module_builtin_ast_adapters.cpp
 ../src/builtin/module_builtin_ast.h
 ../src/builtin/module_builtin_uriparser.h
 ../src/builtin/module_builtin_uriparser.cpp
+../src/builtin/module_jit.cpp
 ../src/builtin/ast_gen.inc
 ../src/builtin/module_builtin_fio.cpp
 ../src/builtin/module_builtin_dasbind.cpp
@@ -553,6 +558,7 @@ SET(SIMULATE_SRC
 ../include/daScript/simulate/aot_builtin_jobque.h
 ../include/daScript/simulate/aot_builtin_dasbind.h
 ../include/daScript/simulate/aot_builtin_uriparser.h
+../include/daScript/simulate/aot_builtin_jit.h
 ../include/daScript/simulate/fs_file_info.h
 ../src/simulate/fs_file_info.cpp
 ${DAS_MODULES_RESOLVE_INC}
@@ -629,7 +635,7 @@ if (NOT ${DAS_BUILD_TOOLS} MATCHES NO)
   SOURCE_GROUP_FILES("main" DASCRIPT_MAIN_SRC)
 
   add_executable(daScript ${DASCRIPT_MAIN_SRC})
-  TARGET_LINK_LIBRARIES(daScript libDaScript libDaScriptProfile  Threads::Threads ${DAS_MODULES_LIBS})
+  TARGET_LINK_LIBRARIES(daScript libDaScript Threads::Threads ${DAS_MODULES_LIBS})
   SETUP_CPP11(daScript)
   SETUP_LTO(daScript)
 

@@ -10,6 +10,10 @@
 #include <dirent.h>
 #endif
 
+#if DAS_SMART_PTR_TRACKER
+#include <inttypes.h>
+#endif
+
 using namespace das;
 
 bool g_reportCompilationFailErrors = false;
@@ -255,6 +259,42 @@ bool run_unit_tests( const string & path, bool check_aot = false ) {
     }
 }
 
+bool isolated_unit_test ( const string & fn, bool useAot ) {
+    // register modules
+    g_collectSharedModules = false;
+    NEED_MODULE(Module_BuiltIn);
+    NEED_MODULE(Module_Math);
+    NEED_MODULE(Module_Strings);
+    NEED_MODULE(Module_UnitTest);
+    NEED_MODULE(Module_Rtti);
+    NEED_MODULE(Module_Ast);
+    NEED_MODULE(Module_Debugger);
+    NEED_MODULE(Module_Network);
+    NEED_MODULE(Module_UriParser);
+    NEED_MODULE(Module_JobQue);
+    NEED_MODULE(Module_FIO);
+    NEED_MODULE(Module_DASBIND);
+    Module::Initialize();
+    bool result = unit_test(fn,useAot);
+    // shutdown
+    Module::Shutdown();
+#if DAS_SMART_PTR_TRACKER
+    if ( g_smart_ptr_total ) {
+        TextPrinter tp;
+        tp << "smart pointers leaked: " << uint64_t(g_smart_ptr_total) << "\n";
+    }
+#endif
+    return result;
+}
+
+bool run_isolated_unit_tests( const string & path, bool check_aot = false ) {
+    if ( check_aot ) {
+        return run_tests(path, isolated_unit_test, false) && run_tests(path, unit_test, true);
+    } else {
+        return run_tests(path, isolated_unit_test, false);
+    }
+}
+
 bool run_compilation_fail_tests( const string & path ) {
     return run_tests(path, compilation_fail_test, false);
 }
@@ -329,6 +369,12 @@ int main( int argc, char * argv[] ) {
 #if defined(_MSC_VER) || defined(__i386__)
     _mm_setcsr((_mm_getcsr()&~_MM_ROUND_MASK) | _MM_FLUSH_ZERO_MASK | _MM_ROUND_NEAREST | 0x40);//0x40
     FPE_ENABLE_ALL;
+#endif
+    // isolated uint tests
+    // those are to test memory leaks on individual tests
+#if 0
+    run_isolated_unit_tests(getDasRoot() +  "/examples/test/unit_tests", false);
+    return 0;
 #endif
     // register modules
     NEED_MODULE(Module_BuiltIn);
@@ -441,5 +487,9 @@ int main( int argc, char * argv[] ) {
     tout << "TESTS " << (ok ? "PASSED " : "FAILED!!! ") << ((usec/1000)/1000.0) << "\n";
     // shutdown
     Module::Shutdown();
+#if DAS_SMART_PTR_TRACKER
+    TextPrinter tp;
+    tp << "smart pointers leaked: " << uint64_t(g_smart_ptr_total) << "\n";
+#endif
     return ok ? 0 : -1;
 }

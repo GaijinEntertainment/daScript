@@ -64,6 +64,8 @@
 
 .. |function-builtin-is_compiling_macros_in_module| replace:: returns true if context is being compiled, its macro pass, and its in the specific module
 
+.. |function-builtin-is_reporting_compilation_errors| replace:: returns true if context failed to compile, and infer pass is reporting compilation errors
+
 .. |function-builtin-length| replace:: length will return current size of table or array `arg`.
 
 .. |function-builtin-memcmp| replace:: similar to C 'memcmp', compares `size` bytes of `left`` and `right` memory. returns -1 if left is less, 1 if left is greater, and 0 if left is same as right
@@ -123,6 +125,8 @@
 .. |function-builtin-finalize| replace:: to be documented
 
 .. |function-builtin-finalize_dim| replace:: to be documented
+
+.. |function-builtin-get| replace:: will execute `block_arg` with argument reference-to-value in `table_arg` referencing value indexed by `key`. Will return false if `key` doesn't exist in `table_arg`, otherwise true.
 
 .. |function-builtin-find| replace:: will execute `block_arg` with argument pointer-to-value in `table_arg` pointing to value indexed by `key`, or null if `key` doesn't exist in `table_arg`.
 
@@ -213,6 +217,12 @@
 .. |variable-builtin-LOG_TRACE| replace:: indicates log level for the most noisy debug and tracing messages
 
 .. |variable-builtin-print_flags_debugger| replace:: printing flags similar to those used by the 'debug' function
+
+.. |function_annotation-builtin-deprecated| replace:: deprecated annotation is used to mark a function as deprecated. it will generate a warning during compilation, and will not be callable from the final compiled context
+
+.. |function_annotation-builtin-alias_cmres| replace:: indicates that function always aliases cmres (copy or move result), and cmres optimizations are disabled.
+
+.. |function_annotation-builtin-never_alias_cmres| replace:: indicates that function never aliases cmres (copy or move result), and cmres checks will not be performed
 
 .. |function_annotation-builtin-marker| replace:: marker annotation is used to attach arbitrary marker values to a function (in form of annotation arguments). its typically used for implementation of macros
 
@@ -316,6 +326,10 @@
 
 .. |function-builtin-move_to_ref| replace:: moves `b` into `a`. if `b` is value, it will be copied to `a` instead
 
+.. |function-builtin-copy_to_local| replace:: copies value and returns it as local value on stack. used to work around aliasing issues
+
+.. |function-builtin-move_to_local| replace:: moves value and returns it as local value on stack. used to work around aliasing issues
+
 .. |reader_macro-builtin-_esc| replace:: returns raw string input, without regards for escape sequences. For example %_esc\\n\\r%_esc will return 4 character string '\\','n','\\','r'
 
 .. |typeinfo_macro-builtin-rtti_classinfo| replace:: Generates TypeInfo for the class initialization.
@@ -411,3 +425,11 @@
 .. |function_annotation-builtin-hint| replace:: Hints the compiler to use specific optimization.
 
 .. |function-builtin-set_verify_context_locks| replace:: Enables or disables array or table lock runtime verification per context
+
+.. |function-builtin-count| replace:: returns iterator which iterates from `start` value by incrementing it by `step` value. It is the intended way to have counter together with other values in the `for` loop.
+
+.. |function-builtin-ucount| replace:: returns iterator which iterates from `start` value by incrementing it by `step` value. It is the intended way to have counter together with other values in the `for` loop.
+
+.. |function-builtin-move_new| replace:: Moves the new [[...]] value into smart_ptr.
+
+.. |function-builtin-move| replace:: Moves one smart_ptr into another. Semantic equivalent of move(a,b) => a := null, a <- b

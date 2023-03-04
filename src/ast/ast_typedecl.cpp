@@ -2,6 +2,8 @@
 
 #include "daScript/ast/ast.h"
 
+#include <inttypes.h>
+
 namespace das
 {
     TypeDeclPtr makeHandleType(const ModuleLibrary & library, const char * typeName) {
@@ -187,12 +189,12 @@ namespace das
     TypeDeclPtr TypeDecl::inferGenericInitType ( TypeDeclPtr autoT, TypeDeclPtr initT ) {
         if ( autoT->ref ) {
             autoT->ref = false;
-            auto resT = inferGenericType(autoT, initT, true);
+            auto resT = inferGenericType(autoT, initT, true, false, nullptr);
             if ( resT ) resT->ref = true;
             autoT->ref = true;
             return resT;
         } else {
-            return inferGenericType(autoT, initT, true);
+            return inferGenericType(autoT, initT, true, false, nullptr);
         }
     }
 
@@ -209,6 +211,7 @@ namespace das
                 TT->removeDim = TT->removeDim | autoT->removeDim;
                 TT->removeRef = TT->removeRef | autoT->removeRef;
                 TT->explicitConst = TT->explicitConst | autoT->explicitConst;
+                TT->explicitRef = TT->explicitRef | autoT->explicitRef;
                 TT->implicit = TT->implicit | autoT->implicit;
                 // now we infer type
                 if ( auto resT = inferGenericType(TT,initT,topLevel,passType,options) ) {
@@ -220,6 +223,10 @@ namespace das
         }
         // explicit const mast match
         if ( autoT->explicitConst && (autoT->constant != initT->constant) ) {
+            return nullptr;
+        }
+        // explicit ref match
+        if ( autoT->explicitRef && (autoT->ref != initT->ref) ) {
             return nullptr;
         }
         // can't infer from the type, which is already 'auto'
@@ -247,7 +254,7 @@ namespace das
             auto rm = RefMatters::yes;
             auto cm = ConstMatters::yes;
             if ( topLevel ) {
-                if ( !autoT->ref || autoT->isRefType() ) {
+                if ( (!autoT->ref && !autoT->explicitRef) || autoT->isRefType()  ) {
                     rm = RefMatters::no;
                 }
                 if ( autoT->constant && !autoT->explicitConst ) {
@@ -316,35 +323,36 @@ namespace das
         TT->removeDim = false;
         TT->implicit |= autoT->implicit;
         TT->explicitConst |= autoT->explicitConst;
+        TT->explicitRef |= autoT->explicitRef;
         if ( autoT->isPointer() ) {
             // if it's a pointer, infer pointer-to separately
-            TT->firstType = inferGenericType(autoT->firstType, initT->firstType, false, options);
+            TT->firstType = inferGenericType(autoT->firstType, initT->firstType, false, false, options);
             if ( !TT->firstType ) return nullptr;
         } else if ( autoT->baseType==Type::tIterator ) {
             // if it's a iterator, infer iterator-ofo separately
-            TT->firstType = inferGenericType(autoT->firstType, initT->firstType, false, options);
+            TT->firstType = inferGenericType(autoT->firstType, initT->firstType, false, false, options);
             if ( !TT->firstType ) return nullptr;
         } else if ( autoT->baseType==Type::tArray ) {
             // if it's an array, infer array type separately
-            TT->firstType = inferGenericType(autoT->firstType, initT->firstType, false, options);
+            TT->firstType = inferGenericType(autoT->firstType, initT->firstType, false, false, options);
             if ( !TT->firstType ) return nullptr;
         } else if ( autoT->baseType==Type::tTable ) {
             // if it's a table, infer table keys and values types separately
-            TT->firstType = inferGenericType(autoT->firstType, initT->firstType, false, options);
+            TT->firstType = inferGenericType(autoT->firstType, initT->firstType, false, false, options);
             if ( !TT->firstType ) return nullptr;
             if ( !TT->firstType->isWorkhorseType() ) return nullptr;            // table key has to be hashable too
-            TT->secondType = inferGenericType(autoT->secondType, initT->secondType, false, options);
+            TT->secondType = inferGenericType(autoT->secondType, initT->secondType, false, false, options);
             if ( !TT->secondType ) return nullptr;
         } else if ( autoT->baseType==Type::tBlock || autoT->baseType==Type::tFunction
                    || autoT->baseType==Type::tLambda || autoT->baseType==Type::tTuple
                    || autoT->baseType==Type::tVariant ) {
             // if it's a block or function, infer argument and return types
             if ( autoT->firstType ) {
-                TT->firstType = inferGenericType(autoT->firstType, initT->firstType, false, options);
+                TT->firstType = inferGenericType(autoT->firstType, initT->firstType, false, false, options);
                 if ( !TT->firstType ) return nullptr;
             }
             for ( size_t i=0, is=autoT->argTypes.size(); i!=is; ++i ) {
-                TT->argTypes[i] = inferGenericType(autoT->argTypes[i], initT->argTypes[i], false, options);
+                TT->argTypes[i] = inferGenericType(autoT->argTypes[i], initT->argTypes[i], false, false, options);
                 if ( !TT->argTypes[i] ) return nullptr;
             }
             if ( TT->argNames.size()==0 && !autoT->argNames.empty() ) {
@@ -542,6 +550,9 @@ namespace das
         }
         if ( explicitConst ) {
             stream << " ==const";
+        }
+        if ( explicitRef ) {
+            stream << " ==&";
         }
         if (contracts == DescribeContracts::yes) {
             if (removeConstant || removeRef || removeDim || removeTemporary) {
@@ -834,7 +845,7 @@ namespace das
 
     bool TypeDecl::isRawPod() const {
         if ( baseType==Type::tArray || baseType==Type::tTable || baseType==Type::tString
-            || baseType==Type::tBlock || baseType==Type::tLambda )
+            || baseType==Type::tBlock || baseType==Type::tLambda || baseType==Type::tFunction )
             return false;
         if ( baseType==Type::tStructure && structType )
             return structType->isRawPod();
@@ -850,6 +861,36 @@ namespace das
             }
         }
         return true;
+    }
+
+    bool TypeDecl::needInScope() const {
+        das_set<Structure *> dep;
+        return needInScope(dep);
+    }
+
+    bool TypeDecl::needInScope( das_set<Structure*> & dep ) const {
+        if ( baseType==Type::tHandle ) {
+            return annotation->needInScope();
+        } else if ( baseType==Type::tStructure ) {
+            if (structType) {
+                if (dep.find(structType) != dep.end()) return false;
+                dep.insert(structType);
+                return structType->needInScope(dep);
+            }
+        } else if ( baseType==Type::tTuple || baseType==Type::tVariant || baseType == Type::option ) {
+            for ( const auto & arg : argTypes ) {
+                if ( arg->needInScope(dep) ) {
+                    return true;
+                }
+            }
+            return false;
+        } else if ( baseType==Type::tArray || baseType==Type::tTable ) {
+            if ( firstType && firstType->needInScope(dep) ) return true;
+            if ( secondType && secondType->needInScope(dep) ) return true;
+        } else if ( baseType==Type::tPointer) {
+            return smartPtr;
+        }
+        return false;
     }
 
     bool TypeDecl::canBePlacedInContainer() const {
@@ -2356,12 +2397,18 @@ namespace das
     }
 
     int TypeDecl::getTupleSize() const {
+        uint64_t size = getTupleSize64();
+        DAS_ASSERTF(size<=0x7fffffff,"tuple size is too big %lu",(unsigned long)size);
+        return (int) (size<=0x7fffffff ? size : 1);
+    }
+
+    uint64_t TypeDecl::getTupleSize64() const {
         DAS_ASSERT(baseType==Type::tTuple);
-        int size = 0;
+        uint64_t size = 0;
         for ( const auto & argT : argTypes ) {
             int al = argT->getAlignOf() - 1;
             size = (size + al) & ~al;
-            size += argT->getSizeOf();
+            size += argT->getSizeOf64();
         }
         int al = getTupleAlign() - 1;
         size = (size + al) & ~al;
@@ -2403,12 +2450,18 @@ namespace das
     }
 
     int TypeDecl::getVariantSize() const {
+        uint64_t size = getVariantSize64();
+        DAS_ASSERTF(size<=0x7fffffff,"variant size is too big %lu",(unsigned long)size);
+        return (int) (size<=0x7fffffff ? size : 1);
+    }
+
+    uint64_t TypeDecl::getVariantSize64() const {
         DAS_ASSERT(baseType==Type::tVariant);
-        int maxSize = 0;
+        uint64_t maxSize = 0;
         int al = getVariantAlign() - 1;
         for ( const auto & argT : argTypes ) {
-            int size = (getTypeBaseSize(Type::tInt) + al) & ~al;
-            size += argT->getSizeOf();
+            uint64_t size = (getTypeBaseSize(Type::tInt) + al) & ~al;
+            size += argT->getSizeOf64();
             maxSize = das::max(size, maxSize);
         }
         maxSize = (maxSize + al) & ~al;
@@ -2425,14 +2478,20 @@ namespace das
     }
 
     int TypeDecl::getBaseSizeOf() const {
+        uint64_t size = getBaseSizeOf64();
+        DAS_ASSERTF(size<=0x7fffffff,"base size %" PRIu64 " is too big", size);
+        return int(size<=0x7fffffff ? size : 1);
+    }
+
+    uint64_t TypeDecl::getBaseSizeOf64() const {
         if ( baseType==Type::tHandle ) {
-            return int(annotation->getSizeOf());
+            return annotation->getSizeOf();
         } else if ( baseType==Type::tStructure ) {
-            return structType->getSizeOf();
+            return structType->getSizeOf64();
         } else if ( baseType==Type::tTuple ) {
-            return getTupleSize();
+            return getTupleSize64();
         } else if ( baseType==Type::tVariant ) {
-            return getVariantSize();
+            return getVariantSize64();
         } else if ( isEnumT() ) {
             return enumType ? getTypeBaseSize(enumType->baseType) : getTypeBaseSize(Type::tInt);
         } else {
@@ -2457,23 +2516,43 @@ namespace das
     }
 
     int TypeDecl::getCountOf() const {
-        int size = 1;
-        for ( auto i : dim )
+        uint64_t count = getCountOf64();
+        DAS_ASSERTF(count <= 0x7fffffff, "count too big %lu", (unsigned long)count);
+        return int(count <= 0x7fffffff ? count : 1);
+    }
+
+    uint64_t TypeDecl::getCountOf64() const {
+        uint64_t size = 1;
+        for ( auto i : dim ) {
             size *= i;
+        }
         return size;
     }
 
     int TypeDecl::getSizeOf() const {
-        return getBaseSizeOf() * getCountOf();
+        uint64_t size = getSizeOf64();
+        DAS_ASSERTF(size <= 0x7fffffff, "size too big %lu", (unsigned long)size);
+        return int(size <= 0x7fffffff ? size : 1);
+    }
+
+    uint64_t TypeDecl::getSizeOf64() const {
+        return getBaseSizeOf64() * getCountOf64();
     }
 
     int TypeDecl::getStride() const {
-        int size = 1;
+        uint64_t stride = getStride64();
+        DAS_ASSERTF(stride <= 0x7fffffff, "stride too big %lu", (unsigned long)stride);
+        return int(stride <= 0x7fffffff ? stride : 1);
+    }
+
+    uint64_t TypeDecl::getStride64() const {
+        uint64_t size = 1;
         if ( dim.size() > 1 ) {
-            for ( size_t i=1, is=dim.size(); i!=is; ++i )
+            for ( size_t i=1, is=dim.size(); i!=is; ++i ) {
                 size *= dim[i];
+            }
         }
-        return getBaseSizeOf() * size;
+        return getBaseSizeOf64() * size;
     }
 
     int TypeDecl::findArgumentIndex( const string & name ) const {
@@ -2544,6 +2623,7 @@ namespace das
         if ( temporary )    ss << "#";
         if ( implicit )     ss << "I";
         if ( explicitConst )ss << "=";
+        if ( explicitRef )  ss << "R";
         if ( isExplicit )   ss << "X";
         if ( aotAlias )     ss << "F";
         if ( dim.size() ) {
@@ -2737,6 +2817,34 @@ namespace das
         }
     }
 
+    int TypeDecl::tupleFieldIndex( const string & name ) const {
+        int index = 0;
+        if ( sscanf(name.c_str(),"_%i",&index)==1 ) {
+            return index;
+        } else {
+            auto vT = isPointer() ? firstType.get() : this;
+            if (!vT) return -1;
+            if ( name=="_first" ) {
+                return 0;
+            } else if ( name=="_last" ) {
+                return int(vT->argTypes.size())-1;
+            } else {
+                return vT->findArgumentIndex(name);
+            }
+            return -1;
+        }
+    }
+
+    int TypeDecl::variantFieldIndex ( const string & name ) const {
+        auto vT = isPointer() ? firstType.get() : this;
+        if (!vT) return -1;
+        return vT->findArgumentIndex(name);
+    }
+
+    int TypeDecl::bitFieldIndex ( const string & name ) const {
+        return findArgumentIndex(name);
+    }
+
     // Mangled name parser
 
     void MangledNameParser::error ( const string &, const char * ) {
@@ -2792,7 +2900,7 @@ namespace das
                 if ( *ch!='>' ) error("expecting '>'", ch);
                 ch ++;
                 auto pt = parseTypeFromMangledName(ch,library,thisModule);
-                pt->firstType = move(ft);
+                pt->firstType = das::move(ft);
                 return pt;
             };
             case '2': {
@@ -2803,7 +2911,7 @@ namespace das
                 if ( *ch!='>' ) error("expecting '>'", ch);
                 ch ++;
                 auto pt = parseTypeFromMangledName(ch,library,thisModule);
-                pt->secondType = move(ft);
+                pt->secondType = das::move(ft);
                 return pt;
             };
             case 'H': {
@@ -2847,7 +2955,7 @@ namespace das
                 if ( *ch!='>' ) error("expecting '>'", ch);
                 ch++;
                 auto pt = parseTypeFromMangledName(ch,library,thisModule);
-                pt->argTypes = move(types);
+                pt->argTypes = das::move(types);
                 return pt;
             };
             case 'N': {
@@ -2861,7 +2969,7 @@ namespace das
                 if ( *ch!='>' ) error("expecting '>'", ch);
                 ch++;
                 auto pt = parseTypeFromMangledName(ch,library,thisModule);
-                pt->argNames = move(names);
+                pt->argNames = das::move(names);
                 return pt;
             };
             case 'E': {
@@ -3032,6 +3140,12 @@ namespace das
                 ch ++;
                 auto pt = parseTypeFromMangledName(ch,library,thisModule);
                 pt->explicitConst = true;
+                return pt;
+            };
+            case 'R': {
+                ch ++;
+                auto pt = parseTypeFromMangledName(ch,library,thisModule);
+                pt->explicitRef = true;
                 return pt;
             };
             case 'F': {

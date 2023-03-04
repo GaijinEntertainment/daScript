@@ -28,7 +28,8 @@
     LineInfo tokAt ( yyscan_t scanner, const struct DAS_YYLTYPE & li );
 
     #define YY_USER_ACTION \
-        yylloc_param->first_line = yylloc_param->last_line = yylineno; \
+        yylloc_param->first_line = yylloc_param->last_line = \
+            (yytext[yyleng - 1] == '\n' || yytext[yyleng - 1] == '\r') ? yylineno - 1 : yylineno; \
         yylloc_param->first_column = yyextra->das_yycolumn; \
         yylloc_param->last_column = yyextra->das_yycolumn + yyleng - 1; \
         YYCOLUMN (yyextra->das_yycolumn += yyleng, "YY_USER_ACTION");
@@ -262,6 +263,13 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
     unput(*yytext);
     YYCOLUMN(yyextra->das_yycolumn--, "UNPUT");
     if (yyextra->das_current_line_indent > yyextra->das_indent_level*yyextra->das_tab_size ) {
+        if ( yyextra->das_current_line_indent > (1 + yyextra->das_indent_level) * yyextra->das_tab_size ) {
+            #ifdef FLEX_DEBUG
+            printf("INVALID INDENT at %i, emit BEGIN_STRING\n", yyextra->das_current_line_indent);
+            #endif
+            das_yyfatalerror(yylloc_param,yyscanner,"invalid indentation"); // pretend tab was pressed
+            return BEGIN_STRING;
+        }
         if ( yyextra->das_current_line_indent % yyextra->das_tab_size ) {
             #ifdef FLEX_DEBUG
             printf("INVALID INDENT at %i, emit {\n", yyextra->das_current_line_indent);
@@ -403,6 +411,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
     return DAS_UNSAFE;
 }
 <normal>"unsafe"                                        yyextra->das_need_oxford_comma = false; return DAS_UNSAFE;
+<normal>"inscope"                                       return DAS_INSCOPE;
 <normal>"as"                                            return DAS_AS;
 <normal>"is"                                            return DAS_IS;
 <normal>"deref"                                         return DAS_DEREF;
@@ -443,7 +452,16 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 <normal>"float2"                                        return DAS_TFLOAT2;
 <normal>"float3"                                        return DAS_TFLOAT3;
 <normal>"float4"                                        return DAS_TFLOAT4;
-<normal>[_[:alpha:]][_[:alnum:]\`]*                     yylval_param->s = new string(yytext);  return NAME;    // TODO: track allocations
+<normal>[_[:alpha:]][_[:alnum:]\`]* {
+    yylval_param->s = new string(yytext);
+    auto it = yyextra->das_keywords.find(*yylval_param->s);
+    if ( it != yyextra->das_keywords.end() ) {
+        if ( !it->second ) yyextra->das_need_oxford_comma = false;
+        return KEYWORD;
+    } else {
+        return NAME;
+    }
+}
 <normal>\"                                  {
         BEGIN(strb);
         return BEGIN_STRING;
@@ -601,7 +619,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
     } else {
         if ( !yyextra->das_nested_curly_braces ) {
             das_yyfatalerror(yylloc_param,yyscanner,"mismatching curly braces", CompilationError::mismatching_curly_bracers);
-            return LEXER_ERROR;
+            return '}';
         }
         yyextra->das_nested_curly_braces --;
         return '}';
@@ -813,12 +831,24 @@ void das_yyend_reader ( yyscan_t yyscanner ) {
 extern int das_yydebug;
 #endif
 
+void das_collect_keywords ( Module * mod, yyscan_t yyscanner ) {
+    struct yyguts_t * yyg = (struct yyguts_t*)yyscanner;
+    for ( auto & kwd : mod->keywords ) {
+        auto it = yyextra->das_keywords.find(kwd.first);
+        if ( it != yyextra->das_keywords.end() ) {
+            yyextra->g_Program->error("duplicate keyword " + kwd.first + " in module " + mod->name,"","",LineInfo());
+            return;
+        }
+        yyextra->das_keywords[kwd.first] = kwd.second;
+    }
+}
+
 void das_yybegin(const char * str, uint32_t len, yyscan_t yyscanner ) {
     struct yyguts_t * yyg = (struct yyguts_t*)yyscanner;
-
     yyextra->g_thisStructure = nullptr;
     yyextra->das_module_alias.clear();
     yyextra->das_already_include.clear();
+    yyextra->das_keywords.clear();
 #if DAS_YYDEBUG
     das_yydebug = 0;
 #endif

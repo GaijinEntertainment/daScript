@@ -1,0 +1,174 @@
+name: build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+
+  ###########################################################
+  pre_job:
+  ###########################################################
+    # continue-on-error: true # Uncomment once integration is finished
+    runs-on: ubuntu-latest
+    # Map a step output to a job output
+    outputs:
+      should_skip: ${{ steps.skip_check.outputs.should_skip }}
+    steps:
+      - id: skip_check
+        uses: fkirc/skip-duplicate-actions@v5
+        with:
+          # All of these options are optional, so you can remove them if you are happy with the defaults
+          concurrent_skipping: 'same_content'
+          do_not_skip: '["pull_request", "workflow_dispatch"]'
+
+  ###########################################################
+  build:
+  ###########################################################
+    needs: pre_job
+    if: needs.pre_job.outputs.should_skip != 'true'
+    runs-on: ${{ matrix.runner }}
+
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [linux, darwin, windows]
+        architecture: [32, 64]
+        cmake_preset: [ Debug, Release ]
+
+        include:
+          - target: linux
+            runner: ubuntu-latest
+            archive_ext: tar.gz
+
+          - target: darwin
+            runner: macos-latest
+            archive_ext: tar.gz
+
+          - target: windows
+            runner: windows-latest
+            archive_ext: zip
+
+          - target: windows
+            build_system: cmake
+            cmake_generator: Visual Studio 17 2022
+            
+          - target: darwin
+            build_system: cmake
+            cmake_generator: Ninja
+            
+          - target: linux
+            build_system: cmake
+            cmake_generator: Ninja
+
+          - target: windows
+            architecture: 32
+            architecture_string: Win32
+
+          - target: windows
+            architecture: 64
+            architecture_string: x64
+
+        exclude:
+          - target: darwin
+            architecture: 32
+            
+          - target: linux
+            architecture: 32
+
+    steps:
+    - name: "SCM Checkout"
+      uses: actions/checkout@v3
+      
+    - name: "Install CMake and Ninja"
+      uses: lukka/get-cmake@latest
+
+    - name: "Install: Required Dev Packages"
+      run: |
+        set -eux
+        case "${{ matrix.target }}${{ matrix.architecture }}" in
+          linux64)
+            echo "MARCH=64" >> $GITHUB_ENV
+            sudo apt-get update -y
+            sudo apt-get install --no-install-recommends -y \
+              libatomic-ops-dev \
+              libglu1-mesa-dev \
+              freeglut3-dev \
+              mesa-common-dev \
+              libglfw3-dev \
+              libfreetype6-dev \
+              libudev-dev \
+              libopenal-dev \
+              libvorbis-dev \
+              libflac-dev \
+              libclang-dev \
+              libx11-dev \
+              libxrandr-dev \
+              libxcursor-dev \
+              libxinerama-dev \
+              libxi-dev
+            ;;
+          darwin64)
+            brew install bison
+            echo 'export PATH="/usr/local/opt/bison/bin:$PATH"' >> ~/.bash_profile
+            export LDFLAGS="-L/usr/local/opt/bison/lib"
+            ;;
+        esac
+
+    - name: "Build: DaScript"
+      run: |
+        set -eux
+        mkdir build
+        case "${{ matrix.build_system }}" in
+          cmake)
+            case "${{ matrix.target }}${{ matrix.architecture }}" in
+              linux64)
+                cmake --no-warn-unused-cli -B./build -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }} -G "${{ matrix.cmake_generator }}"
+                cd build
+                ninja daScript
+                ninja daScriptTest
+                ;;
+              windows*)
+                cmake --no-warn-unused-cli -B./build -G "${{ matrix.cmake_generator }}" -T host=x86 -A ${{ matrix.architecture_string }}
+                cmake --build ./build --config ${{ matrix.cmake_preset }} --target daScript
+                cmake --build ./build --config ${{ matrix.cmake_preset }} --target daScriptTest
+                ;;
+              *)
+                CC=clang CXX=clang++ cmake --no-warn-unused-cli -B./build -DCMAKE_OSX_ARCHITECTURES="x86_64" -DCMAKE_PREFIX_PATH=/usr/local/opt/bison/bin -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }}  -G "${{ matrix.cmake_generator }}"
+                cd build
+                ninja daScript
+                ninja daScriptTest
+                ;;
+            esac
+            ;;
+        esac
+
+    - name: "Test"
+      run: |
+        set -eux
+        case "${{ matrix.target }}${{ matrix.architecture }}" in
+           linux64)
+            cd bin
+            ./daScriptTest
+            ./daScript _dasroot_/dastest/dastest.das -- --color --isolated-mode --timeout 1200 --test ../tests
+            ;;
+           windows*)
+            cd bin/"${{ matrix.cmake_preset }}"
+            ./daScriptTest.exe
+            ./daScript _dasroot_/dastest/dastest.das -- --color --isolated-mode --timeout 1200 --test ../../tests
+            ;;
+           *)
+            cd bin
+            case "${{ matrix.cmake_preset }}" in
+              Debug)
+                ./daScriptTest
+                ;;
+            esac
+            ./daScript _dasroot_/dastest/dastest.das -- --color --isolated-mode --timeout 1200 --test ../tests
+            ;;
+        esac

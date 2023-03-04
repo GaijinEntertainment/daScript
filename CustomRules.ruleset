@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<RuleSet Name="Example" Description="Enable Warnings" ToolsVersion="10.0">
+  <!-- Default rules available in Visual Studio -->
+  <Include Path="NativeRecommendedRules.ruleset" Action="Default" />
+  <Rules AnalyzerId="Microsoft.Analyzers.NativeCodeAnalysis"
+         RuleNamespace="Microsoft.Rules.Native">
+    <Rule Id="C26451" Action="None" /> <!-- Exclude: Declare noexcept -->
+    <Rule Id="C26495" Action="None" /> <!-- Include: No const_cast<> -->
+    <Rule Id="C26439" Action="None" /> <!-- Exclude: This kind of function should not throw. Declare it 'noexcept' (f.6). -->
+    <Rule Id="C26813" Action="None" /> <!-- Exclude: Use 'bitwise and' to check if a flag is set. -->
+    <Rule Id="C6255" Action="None" /> <!-- _alloca indicates failure by raising a stack overflow exception. Consider using _malloca instead. -->
+  </Rules>
+</RuleSet>

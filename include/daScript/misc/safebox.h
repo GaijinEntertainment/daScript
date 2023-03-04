@@ -25,9 +25,9 @@ namespace das {
     public:
         safebox() {}
         safebox( this_type && sb ) {
-            objects = move(sb.objects);
-            objectsInOrder = move(sb.objectsInOrder);
-            postponed = move(sb.postponed);
+            objects = das::move(sb.objects);
+            objectsInOrder = das::move(sb.objectsInOrder);
+            postponed = das::move(sb.postponed);
         }
         safebox ( const this_type & sb ) {
             objects = sb.objects;
@@ -35,9 +35,9 @@ namespace das {
             postponed = sb.postponed;
         }
         this_type & operator = ( this_type && sb ) {
-            objects = move(sb.objects);
-            objectsInOrder = move(sb.objectsInOrder);
-            postponed = move(sb.postponed);
+            objects = das::move(sb.objects);
+            objectsInOrder = das::move(sb.objectsInOrder);
+            postponed = das::move(sb.postponed);
             return * this;
         }
         this_type & operator = ( const this_type & sb ) {

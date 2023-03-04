@@ -51,7 +51,7 @@ ExprCalc::ExprCalc ( const string & expr, const ExprVars & vars ) {
     TextPrinter tout;
     auto fAccess = make_smart<FsFileAccess>();
     auto fileInfo = make_unique<TextFileInfo>(text.c_str(), uint32_t(text.length()), false);
-    fAccess->setFileInfo("dummy.das", move(fileInfo));
+    fAccess->setFileInfo("dummy.das", das::move(fileInfo));
     // compile script
     ModuleGroup dummyLibGroup;
     auto program = compileDaScript("dummy.das", fAccess, tout, dummyLibGroup);

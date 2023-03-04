@@ -72,7 +72,7 @@ namespace das
                 vector<Node> sorted;
                 sorted.reserve(lnodes);
                 while ( unsorted.size() ) {
-                    auto node = move(unsorted[0]);
+                    auto node = das::move(unsorted[0]);
                     unsorted.erase(unsorted.begin());
                     if ( node.before.size()==0 ) {
                         for ( auto & other : unsorted ) {
@@ -2309,34 +2309,34 @@ namespace das
         }
         if ( returnReference ) {
             if ( returnInBlock ) {
-                DAS_ASSERTF(simSubE, "internal error. can't be zero");
+                DAS_VERIFYF(simSubE, "internal error. can't be zero");
                 return context.code->makeNode<SimNode_ReturnReferenceFromBlock>(at, simSubE);
             } else {
-                DAS_ASSERTF(simSubE, "internal error. can't be zero");
+                DAS_VERIFYF(simSubE, "internal error. can't be zero");
                 return context.code->makeNode<SimNode_ReturnReference>(at, simSubE);
             }
         } else if ( returnInBlock ) {
             if ( returnCallCMRES ) {
-                DAS_ASSERTF(simSubE, "internal error. can't be zero");
+                DAS_VERIFYF(simSubE, "internal error. can't be zero");
                 SimNode_CallBase * simRet = (SimNode_CallBase *) simSubE;
                 simRet->cmresEval = context.code->makeNode<SimNode_GetBlockCMResOfs>(at,0,stackTop);
                 return context.code->makeNode<SimNode_Return>(at, simSubE);
             } else if ( takeOverRightStack ) {
-                DAS_ASSERTF(simSubE, "internal error. can't be zero");
+                DAS_VERIFYF(simSubE, "internal error. can't be zero");
                 return context.code->makeNode<SimNode_ReturnRefAndEvalFromBlock>(at,
                             simSubE, refStackTop, stackTop);
             } else if ( block->copyOnReturn  ) {
-                DAS_ASSERTF(simSubE, "internal error. can't be zero");
+                DAS_VERIFYF(simSubE, "internal error. can't be zero");
                 return context.code->makeNode<SimNode_ReturnAndCopyFromBlock>(at,
                             simSubE, subexpr->type->getSizeOf(), stackTop);
             } else if ( block->moveOnReturn ) {
-                DAS_ASSERTF(simSubE, "internal error. can't be zero");
+                DAS_VERIFYF(simSubE, "internal error. can't be zero");
                 return context.code->makeNode<SimNode_ReturnAndMoveFromBlock>(at,
                     simSubE, subexpr->type->getSizeOf(), stackTop);
             }
         } else if ( subexpr ) {
             if ( returnCallCMRES ) {
-                DAS_ASSERTF(simSubE, "internal error. can't be zero");
+                DAS_VERIFYF(simSubE, "internal error. can't be zero");
                 SimNode_CallBase * simRet = (SimNode_CallBase *) simSubE;
                 simRet->cmresEval = context.code->makeNode<SimNode_GetCMResOfs>(at,0);
                 return context.code->makeNode<SimNode_Return>(at, simSubE);
@@ -2354,20 +2354,20 @@ namespace das
                         return blockT;
                     }
                 }
-                DAS_ASSERTF(simSubE, "internal error. can't be zero");
+                DAS_VERIFYF(simSubE, "internal error. can't be zero");
                 return context.code->makeNode<SimNode_Return>(at, simSubE);
             } else if ( takeOverRightStack ) {
-                DAS_ASSERTF(simSubE, "internal error. can't be zero");
+                DAS_VERIFYF(simSubE, "internal error. can't be zero");
                 return context.code->makeNode<SimNode_ReturnRefAndEval>(at, simSubE, refStackTop);
             } else if ( returnFunc && returnFunc->copyOnReturn ) {
-                DAS_ASSERTF(simSubE, "internal error. can't be zero");
+                DAS_VERIFYF(simSubE, "internal error. can't be zero");
                 return context.code->makeNode<SimNode_ReturnAndCopy>(at, simSubE, subexpr->type->getSizeOf());
             } else if ( returnFunc && returnFunc->moveOnReturn ) {
-                DAS_ASSERTF(simSubE, "internal error. can't be zero");
+                DAS_VERIFYF(simSubE, "internal error. can't be zero");
                 return context.code->makeNode<SimNode_ReturnAndMove>(at, simSubE, subexpr->type->getSizeOf());
             }
         }
-        DAS_ASSERTF(simSubE, "internal error. can't be zero");
+        DAS_VERIFYF(simSubE, "internal error. can't be zero");
         if ( moveSemantics ) {
             // TODO: support by-value annotations?
             if ( subexpr->type->isRef() ) {
@@ -2921,6 +2921,7 @@ namespace das
     bool Program::simulate ( Context & context, TextWriter & logs, StackAllocator * sharedStack ) {
         auto time0 = ref_time_ticks();
         isSimulating = true;
+        auto disableInit = options.getBoolOption("no_init", policies.no_init);
         context.thisProgram = this;
         context.persistent = options.getBoolOption("persistent_heap", policies.persistent_heap);
         if ( context.persistent ) {
@@ -2948,7 +2949,7 @@ namespace das
                     if (!pvar->used)
                         return;
                     if ( pvar->index<0 ) {
-                        error("Internalc compiler errors. Simulating variable which is not used" + pvar->name,
+                        error("Internal compiler errors. Simulating variable which is not used" + pvar->name,
                             "", "", LineInfo());
                         return;
                     }
@@ -2984,6 +2985,11 @@ namespace das
                 pm->functions.foreach([&](auto pfun){
                     if (pfun->index < 0 || !pfun->used)
                         return;
+                    if ( (pfun->init | pfun->shutdown) && disableInit ) {
+                        error("[init] is disabled in the options or CodeOfPolicies",
+                            "internal compiler error. [init] function made it all the way to simulate somehow", "",
+                                pfun->at, CompilationError::no_init);
+                    }
                     auto mangledName = pfun->getMangledName();
                     auto MNH = hash_blockz64((uint8_t *)mangledName.c_str());
                     if ( MNH==0 ) {
@@ -3026,6 +3032,11 @@ namespace das
                         return;
                     auto & gvar = context.globalVariables[pvar->index];
                     if ( !folding && pvar->init ) {
+                        if ( disableInit && !pvar->init->rtti_isConstant() ) {
+                            error("[init] is disabled in the options or CodeOfPolicies",
+                                "internal compiler error. [init] function made it all the way to simulate somehow", "",
+                                    pvar->at, CompilationError::no_init);
+                        }
                         if ( pvar->init->rtti_isMakeLocal() ) {
                             if ( pvar->global_shared ) {
                                 auto sl = context.code->makeNode<SimNode_GetSharedMnh>(pvar->init->at, pvar->stackTop, pvar->getMangledNameHash());

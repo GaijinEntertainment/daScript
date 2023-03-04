@@ -98,18 +98,26 @@
 
 #if defined(__GNUC__) || defined(__clang__)
     #define DAS_NORETURN_PREFIX
-    #define DAS_NORETURN_SUFFIX  __attribute__((noreturn))
+    #define DAS_NORETURN_SUFFIX                 __attribute__((noreturn))
+    #define DAS_FORMAT_PRINT_ATTRIBUTE(a,b)     __attribute__((format(printf,a,b)))
+    #define DAS_FORMAT_STRING_PREFIX
 #elif defined(_MSC_VER)
     #if _MSC_VER>=1900
-        #define DAS_NORETURN_PREFIX  __declspec(noreturn)
+        #define DAS_NORETURN_PREFIX             __declspec(noreturn)
         #define DAS_NORETURN_SUFFIX
+        #define DAS_FORMAT_PRINT_ATTRIBUTE(a,b)
+        #define DAS_FORMAT_STRING_PREFIX        __format_string
     #else
         #define DAS_NORETURN_PREFIX
         #define DAS_NORETURN_SUFFIX
+        #define DAS_FORMAT_PRINT_ATTRIBUTE(a,b)
+        #define DAS_FORMAT_STRING_PREFIX
     #endif
 #else
     #define DAS_NORETURN_PREFIX
     #define DAS_NORETURN_SUFFIX
+    #define DAS_FORMAT_PRINT_ATTRIBUTE(a,b)
+    #define DAS_FORMAT_STRING_PREFIX
 #endif
 
 #if defined(_MSC_VER)
@@ -194,6 +202,8 @@ __forceinline uint32_t rotr_c(uint32_t a, uint32_t b) {
 
 #include "daScript/misc/hal.h"
 
+void os_debug_break();
+
 #ifndef DAS_FATAL_LOG
 #define DAS_FATAL_LOG   printf
 #endif
@@ -207,26 +217,74 @@ __forceinline uint32_t rotr_c(uint32_t a, uint32_t b) {
 #endif
 
 #ifndef DAS_ASSERT
-    #define DAS_ASSERT(a)   assert(a)
-#endif
-
-#ifndef DAS_VERIFY
     #ifdef NDEBUG
-        #define DAS_VERIFY(a)   (a)
+        #define DAS_ASSERT(cond)
     #else
-        #define DAS_VERIFY(a)   assert(a)
+        #define DAS_ASSERT(cond) { \
+            if ( !(cond) ) { \
+                printf("assertion failed: %s, %s:%d\n", #cond, __FILE__, __LINE__); \
+                fflush(stdout); \
+                os_debug_break(); \
+            } \
+        }
     #endif
 #endif
 
 #ifndef DAS_ASSERTF
-    #define DAS_ASSERTF(a, msg, ...)   assert((a) && (msg))
+    #ifdef NDEBUG
+        #define DAS_ASSERTF(cond,...)
+    #else
+        #define DAS_ASSERTF(cond,...) { \
+            if ( !(cond) ) { \
+                printf("assertion failed: %s, %s:%d\n", #cond, __FILE__, __LINE__); \
+                printf(__VA_ARGS__); \
+                fflush(stdout); \
+                os_debug_break(); \
+            } \
+        }
+    #endif
+#endif
+
+
+#ifndef DAS_VERIFY
+    #ifdef NDEBUG
+        #define DAS_VERIFY(cond) { \
+            if ( !(cond) ) { \
+                printf("verify failed: %s, %s:%d\n", #cond, __FILE__, __LINE__); \
+                fflush(stdout); \
+                exit(-1); \
+            } \
+        }
+    #else
+        #define DAS_VERIFY(cond) { \
+            if ( !(cond) ) { \
+                printf("verify failed: %s, %s:%d\n", #cond, __FILE__, __LINE__); \
+                fflush(stdout); \
+                os_debug_break(); \
+            } \
+        }
+    #endif
 #endif
 
 #ifndef DAS_VERIFYF
     #ifdef NDEBUG
-        #define DAS_VERIFYF(a, msg, ...)   (a)
+        #define DAS_VERIFYF(cond,...) { \
+            if ( !(cond) ) { \
+                printf("verify failed: %s, %s:%d\n", #cond, __FILE__, __LINE__); \
+                printf(__VA_ARGS__); \
+                fflush(stdout); \
+                exit(-1); \
+            } \
+        }
     #else
-        #define DAS_VERIFYF(a, msg, ...)   assert((a) && (msg))
+        #define DAS_VERIFYF(cond,...) { \
+            if ( !(cond) ) { \
+                printf("verify failed: %s, %s:%d\n", #cond, __FILE__, __LINE__); \
+                printf(__VA_ARGS__); \
+                fflush(stdout); \
+                os_debug_break(); \
+            } \
+        }
     #endif
 #endif
 
@@ -267,12 +325,21 @@ inline size_t das_aligned_memsize(void * ptr){
 }
 #endif
 
+// when enabled, Context heap memory will track where the allocation came from
+// via mark_location and mark_comment
 #ifndef DAS_TRACK_ALLOCATIONS
 #define DAS_TRACK_ALLOCATIONS   0
 #endif
 
+// when enabled, Context heap memory will be filled with 0xcd when deleted
 #ifndef DAS_SANITIZER
 #define DAS_SANITIZER   0
+#endif
+
+// when enabled, TypeDecl, Expression, Variable, Structure, Enumeration and Function
+// will be filled with 0xcd when deleted
+#ifndef DAS_MACRO_SANITIZER
+#define DAS_MACRO_SANITIZER 0
 #endif
 
 #if !_TARGET_64BIT && !defined(__clang__) && (_MSC_VER <= 1900)
@@ -294,6 +361,27 @@ inline size_t das_aligned_memsize(void * ptr){
         #endif
     #else
         #define DAS_AOT_INLINE_LAMBDA __attribute__((always_inline))
+    #endif
+#endif
+
+#ifdef DAS_SMART_PTR_DEBUG
+    #define DAS_SMART_PTR_TRACKER   1
+    #define DAS_SMART_PTR_MAGIC     1
+#endif
+
+#ifndef DAS_SMART_PTR_TRACKER
+    #ifdef NDEBUG
+        #define DAS_SMART_PTR_TRACKER   0
+    #else
+        #define DAS_SMART_PTR_TRACKER   1
+    #endif
+#endif
+
+#ifndef DAS_SMART_PTR_MAGIC
+    #ifdef NDEBUG
+        #define DAS_SMART_PTR_MAGIC     0
+    #else
+        #define DAS_SMART_PTR_MAGIC     1
     #endif
 #endif
 

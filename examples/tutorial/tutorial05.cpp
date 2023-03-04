@@ -36,7 +36,7 @@ void tutorial () {
     }
     // evaluate 'test' function in the context
     Sequence it;
-    vec4f res = ctx.eval(fnTest, nullptr, &it);
+    vec4f res = ctx.evalWithCatch(fnTest, nullptr, &it);
     if ( auto ex = ctx.getException() ) {       // if function cased panic, report it
         tout << "exception: " << ex << "\n";
         return;

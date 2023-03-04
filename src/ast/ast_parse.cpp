@@ -15,6 +15,7 @@ union YYSTYPE;
 
 void das_yybegin(const char * str, uint32_t len, yyscan_t yyscanner);
 int das_yyparse(yyscan_t yyscanner);
+void das_collect_keywords ( das::Module * mod, yyscan_t yyscanner );
 
 namespace das {
 
@@ -324,6 +325,7 @@ namespace das {
                 das_yybegin(src, len, scanner);
             }
             libGroup.foreach([&](Module * mod){
+                das_collect_keywords(mod, scanner);
                 if ( mod->commentReader ) {
                     parserState.g_CommentReaders.push_back(mod->commentReader.get());
                 }
@@ -468,6 +470,9 @@ namespace das {
         ReuseCacheGuard rcg;
         auto time0 = ref_time_ticks();
         totParse = 0;
+        totInfer = 0;
+        totOpt = 0;
+        totM = 0;
         vector<ModuleInfo> req;
         vector<string> missing, circular, notAllowed;
         das_set<string> dependencies;

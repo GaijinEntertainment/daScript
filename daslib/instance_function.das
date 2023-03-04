@@ -2,6 +2,7 @@ options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 options no_aot = true
+options strict_smart_pointers = true
 
 module instance_function shared private
 
@@ -23,8 +24,7 @@ class InstanceFunctionAnnotation : AstFunctionAnnotation
     //!     def inst {}
     def override apply ( var func:FunctionPtr; var group:ModuleGroup; args:AnnotationArgumentList; var errors : das_string ) : bool
         var generic_name = ""
-        var rules : Template
-        defer_delete(rules)
+        var inscope rules : Template
         for argv in args
             let val = get_annotation_argument_value(argv)
             if val is tBool
@@ -40,7 +40,7 @@ class InstanceFunctionAnnotation : AstFunctionAnnotation
         if empty(generic_name)
             errors := "expecting name of the generic or function"
             return false
-        var fn <- compiling_module() |> find_unique_generic(generic_name)
+        var inscope fn <- compiling_module() |> find_unique_generic(generic_name)
         if fn == null
             errors := "generic not found {generic_name}"
             return false

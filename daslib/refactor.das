@@ -1,6 +1,7 @@
 options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
+options strict_smart_pointers = true
 
 module refactor shared private
 
@@ -34,14 +35,14 @@ struct ExtractMethodDesc
 def JV ( li:LineInfo )
     let fname = li.fileInfo!=null ? string(li.fileInfo.name) : ""
     let tabSize = li.fileInfo?.tabSize ?? 4
-    var kv <- {{
+    var inscope kv <- {{
         "line" => "{int(li.line)}";
         "column" => "{int(li.column)}";
         "last_line" => "{int(li.last_line)}";
         "last_column" => "{int(li.last_column)}";
         "file" => fname;
         "tab" => "{tabSize}"
-    }}; defer_delete(kv)
+    }}
     return JV(kv)
 
 [tag_function_macro(tag="extract_method_tag")]
@@ -122,12 +123,12 @@ class ExtractVariableMacro : AstCallMacro
     def override visit ( prog:ProgramPtr; mod:Module?; var expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr
         if !(expr.arguments[0] is ExprConstString)
             macro_error(prog,expr.at,"extract_variable: first argument must be a string literal")
-            return [[ExpressionPtr]]
+            return <- [[ExpressionPtr]]
         assume varType = expr.arguments[1]._type
         if varType==null || varType.isAutoOrAlias
             macro_error(prog,expr.at,"extract_variable: unresolve expression type")
-            return [[ExpressionPtr]]
-        var ccall <- new [[ExprCall() at=expr.at]]
+            return <- [[ExpressionPtr]]
+        var inscope ccall <- new [[ExprCall() at=expr.at]]
         ccall.name := (varType.isRef && !varType.isConst) ? "extract_variable_ref" : "extract_variable_nonref"
         ccall.arguments |> emplace_new <| clone_expression(expr.arguments[0])
         ccall.arguments |> emplace_new <| clone_expression(expr.arguments[1])
@@ -141,10 +142,10 @@ class ExtractVariableFunction : AstFunctionAnnotation
         assume varType = call.arguments[1]._type
         if call.func!=null && cffg!=null && cffg.name=="extract_variable"
             if varType.isConst || !varType.isRef
-                var ccall <- clone_expression(call)
+                var inscope ccall <- clone_expression(call)
                 (ccall as ExprCall).name := "extract_variable_nonref"
                 return <- ccall
-        return [[ExpressionPtr]]
+        return <- [[ExpressionPtr]]
     def override verifyCall ( var call : smart_ptr<ExprCallFunc>; args,progArgs:AnnotationArgumentList; var errors : das_string ) : bool
         if !(call.arguments[0] is ExprConstString)
             print("extract_variable: first argument must be a string literal")

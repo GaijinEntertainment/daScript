@@ -578,6 +578,7 @@ struct EntityIdAnnotation final: das::ManagedValueAnnotation <EntityId> {
     virtual bool isLocal() const override { return true; }
     virtual bool hasNonTrivialCtor() const override { return false; }
     virtual bool canBePlacedInContainer() const override { return true;}
+    virtual TypeDeclPtr makeValueType() const override { return make_smart<TypeDecl>(Type::tInt); }
 };
 
 void tempArrayAliasExample(const das::TArray<Point3> & arr,
@@ -602,6 +603,10 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     lib.addModule(Module::require("math"));
     lib.addBuiltInModule();
     addEnumTest(lib);
+    // options
+    options["unit_test"] = Type::tFloat;
+    // constant
+    addConstant(*this, "UNIT_TEST_CONSTANT", 0x12345678);
     // structure annotations
     addAnnotation(make_smart<CheckRange>());
     addAnnotation(make_smart<IntFieldsAnnotation>());
@@ -747,11 +752,6 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
        DAS_CALL_MEMBER_CPP(TestObjectFoo::hitMe));
     // and verify
     verifyAotReady();
-}
-
-Type Module_UnitTest::getOptionType ( const string & optName ) const {
-    if ( optName=="unit_test" ) return Type::tFloat;
-    return Type::none;
 }
 
 ModuleAotType Module_UnitTest::aotRequire ( TextWriter & tw ) const {

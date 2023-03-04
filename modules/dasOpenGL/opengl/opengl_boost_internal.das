@@ -34,7 +34,7 @@ def get_shader_const_name ( arg:ExpressionPtr; var errors:das_string )
         return ""
     for ann in aAddr.func.annotations
         if ann.annotation.name=="vertex_program" || ann.annotation.name=="fragment_program" || ann.annotation.name=="compute_program"
-            let cname = find_arg("name",ann.arguments) ?as tString ?? ""
+            let cname = ann.arguments |> find_arg("name") ?as tString ?? ""
             if cname==""
                 return "{aAddr.func.name}`shader_text"
             else

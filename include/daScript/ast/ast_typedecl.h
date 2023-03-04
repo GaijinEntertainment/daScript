@@ -114,14 +114,20 @@ namespace das {
         bool isVariant() const;
         bool isMoveableValue() const;
         int getSizeOf() const;
+        uint64_t getSizeOf64() const;
         int getCountOf() const;
+        uint64_t getCountOf64() const;
         int getAlignOf() const;
         int getBaseSizeOf() const;
+        uint64_t getBaseSizeOf64() const;
         int getStride() const;
+        uint64_t getStride64() const;
         int getTupleSize() const;
+        uint64_t getTupleSize64() const;
         int getTupleAlign() const;
         int getTupleFieldOffset ( int index ) const;
         int getVariantSize() const;
+        uint64_t getVariantSize64() const;
         int getVariantAlign() const;
         int getVariantFieldOffset ( int index ) const;
         int getVariantUniqueFieldIndex ( const TypeDeclPtr & uniqueType ) const;
@@ -173,6 +179,8 @@ namespace das {
         bool hasNonTrivialCopy( das_set<Structure*> & dep ) const;
         bool canBePlacedInContainer() const;
         bool canBePlacedInContainer( das_set<Structure*> & dep ) const;
+        bool needInScope() const;
+        bool needInScope( das_set<Structure*> & dep ) const;
         Annotation * isPointerToAnnotation() const;
         Type getVectorBaseType() const;
         int getVectorDim() const;
@@ -181,7 +189,7 @@ namespace das {
         static int getMaskFieldIndex ( char ch );
         static bool isSequencialMask ( const vector<uint8_t> & fields );
         static bool buildSwizzleMask ( const string & mask, int dim, vector<uint8_t> & fields );
-        static TypeDeclPtr inferGenericType ( TypeDeclPtr autoT, TypeDeclPtr initT, bool topLevel = false, bool isPassType = false, OptionsMap * options = nullptr );
+        static TypeDeclPtr inferGenericType ( TypeDeclPtr autoT, TypeDeclPtr initT, bool topLevel, bool isPassType, OptionsMap * options );
         static TypeDeclPtr inferGenericInitType ( TypeDeclPtr autoT, TypeDeclPtr initT );
         static void applyAutoContracts ( TypeDeclPtr TT, TypeDeclPtr autoT );
         static void applyRefToRef ( TypeDeclPtr TT, bool topLevel = false );
@@ -189,6 +197,9 @@ namespace das {
         Type getRangeBaseType() const;
         TypeDecl * findAlias ( const string & name, bool allowAuto = false );
         int findArgumentIndex(const string & name) const;
+        int tupleFieldIndex( const string & name ) const;
+        int variantFieldIndex( const string & name ) const;
+        int bitFieldIndex( const string & name ) const;
         void addVariant(const string & name, const TypeDeclPtr & tt);
         string findBitfieldName ( uint32_t value ) const;
         void collectAliasing ( TypeAliasMap & aliases, das_set<Structure *> & dep, bool viaPointer ) const;
@@ -221,12 +232,19 @@ namespace das {
                 bool    isExplicit : 1;
                 bool    isNativeDim : 1;
                 bool    isTag: 1;
+                bool    explicitRef : 1;
             };
             uint32_t flags = 0;
         };
         string              alias;
         LineInfo            at;
         Module *            module = nullptr;
+#if DAS_MACRO_SANITIZER
+    public:
+        void* operator new ( size_t count ) { return das_aligned_alloc16(count); }
+        void operator delete  ( void* ptr ) { auto size = das_aligned_memsize(ptr);
+            memset(ptr, 0xcd, size); das_aligned_free16(ptr); }
+#endif
     };
 
     template <typename TT> struct ToBasicType {

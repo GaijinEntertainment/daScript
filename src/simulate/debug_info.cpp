@@ -491,6 +491,7 @@ namespace das
         if ( info->flags & TypeInfo::flag_isTemp )      ss << "#";
         if ( info->flags & TypeInfo::flag_isImplicit )  ss << "I";
         //  if ( explicitConst )ss << "=";
+        //  if ( explicitRef )  ss << "R";
         //  if ( isExplicit )   ss << "X";
         //  if ( aotAlias )     ss << "F";
         if ( info->dimSize ) {
@@ -670,13 +671,13 @@ namespace das
     FileInfoPtr FileAccess::letGoOfFileInfo ( const string & fileName ) {
         auto it = files.find(fileName);
         if ( it == files.end() ) return nullptr;
-        return move(it->second);
+        return das::move(it->second);
     }
 
     FileInfo * FileAccess::setFileInfo ( const string & fileName, FileInfoPtr && info ) {
         // TODO: test. for now we need to allow replace
         // if ( files.find(fileName)!=files.end() ) return nullptr;
-        files[fileName] = move(info);
+        files[fileName] = das::move(info);
         auto ins = files.find(fileName);
         ins->second->name = (char *) ins->first.c_str();
         return ins->second.get();

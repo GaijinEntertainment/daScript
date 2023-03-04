@@ -34,6 +34,7 @@
    language/generic_programming.rst
    language/macros.rst
    language/reification.rst
+   language/pattern_matching.rst
 
 *****************************
  The Runtime

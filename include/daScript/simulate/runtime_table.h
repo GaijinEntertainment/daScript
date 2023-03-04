@@ -173,7 +173,7 @@ namespace das
             newTab.flags = tab.flags;
             newTab.maxLookups = computeMaxLookups(newCapacity);
             newTab.shift = computeShift(newCapacity);
-            if ( valueTypeSize ) memset(newTab.data, 0, newCapacity*valueTypeSize);
+            if ( valueTypeSize ) memset(newTab.data, 0, size_t(newCapacity)*size_t(valueTypeSize));
             auto pHashes = newTab.hashes;
             memset(pHashes, 0, newCapacity * sizeof(uint64_t));
             if ( tab.size ) {

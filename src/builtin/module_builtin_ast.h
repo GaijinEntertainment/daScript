@@ -127,6 +127,13 @@ MAKE_EXTERNAL_TYPE_FACTORY(ExprReader,das::ExprReader);
 MAKE_EXTERNAL_TYPE_FACTORY(ExprCallMacro,das::ExprCallMacro);
 MAKE_EXTERNAL_TYPE_FACTORY(ExprUnsafe,das::ExprUnsafe);
 
+DAS_BASE_BIND_ENUM(das::SideEffects, SideEffects,
+    none, unsafe, userScenario, modifyExternal, accessExternal, modifyArgument,
+    modifyArgumentAndExternal, worstDefault, accessGlobal, invoke, inferredSideEffects)
+
+DAS_BASE_BIND_ENUM(das::CaptureMode, CaptureMode,
+    capture_any, capture_by_copy, capture_by_reference, capture_by_clone, capture_by_move)
+
 namespace das {
 
     class Module_Ast : public Module {
@@ -137,11 +144,15 @@ namespace das {
         void registerFlags(ModuleLibrary & lib);
         void registerAdapterAnnotations(ModuleLibrary & lib);
         void registerAnnotations(ModuleLibrary & lib);
+        void registerAnnotations1(ModuleLibrary & lib);
+        void registerAnnotations2(ModuleLibrary & lib);
+        void registerAnnotations3(ModuleLibrary & lib);
         void registerFunctions(ModuleLibrary & lib);
         void registerMacroExpressions(ModuleLibrary & lib);
         virtual ModuleAotType aotRequire ( TextWriter & tw ) const override;
    };
 
+    TypeDeclPtr makeExprLetFlagsFlags();
     TypeDeclPtr makeExprGenFlagsFlags();
     TypeDeclPtr makeExprFlagsFlags();
     TypeDeclPtr makeExprPrintFlagsFlags();
@@ -170,4 +181,161 @@ namespace das {
     TypeDeclPtr makeExprCopyFlags();
     TypeDeclPtr makeExprMoveFlags();
     TypeDeclPtr makeExprIfFlags();
+
+    void init_expr ( BasicStructureAnnotation & ann );
+    bool canSubstituteExpr ( const TypeAnnotation* thisAnn, TypeAnnotation* ann );
+    void init_expr_looks_like_call ( BasicStructureAnnotation & ann );
+
+    template <typename EXPR>
+    struct AstExprAnnotation : ManagedStructureAnnotation <EXPR> {
+        const char * parentExpression = nullptr;
+        AstExprAnnotation(const string & en, ModuleLibrary & ml)
+            : ManagedStructureAnnotation<EXPR> (en, ml) {
+        }
+        __forceinline void init() {
+            init_expr(*this);
+        }
+        virtual bool canSubstitute ( TypeAnnotation * ann ) const override {
+            return canSubstituteExpr(this, ann);
+        }
+    };
+
+    template <typename EXPR>
+    struct AstExpressionAnnotation : AstExprAnnotation<EXPR> {
+        AstExpressionAnnotation(const string & en, ModuleLibrary & ml)
+            :  AstExprAnnotation<EXPR> (en, ml) {
+            this->init();
+        }
+    };
+
+    template <typename EXPR>
+    struct AstExprLooksLikeCallAnnotation : AstExpressionAnnotation<EXPR> {
+        AstExprLooksLikeCallAnnotation(const string & na, ModuleLibrary & ml)
+            :  AstExpressionAnnotation<EXPR> (na, ml) {
+            init_expr_looks_like_call(*this);
+        }
+    };
+
+    template <typename EXPR>
+    struct AstExprCallFuncAnnotation : AstExprLooksLikeCallAnnotation<EXPR> {
+        AstExprCallFuncAnnotation(const string & na, ModuleLibrary & ml)
+            :  AstExprLooksLikeCallAnnotation<EXPR> (na, ml) {
+            using ManagedType = EXPR;
+            this->template addField<DAS_BIND_MANAGED_FIELD(func)>("func");
+            this->template addField<DAS_BIND_MANAGED_FIELD(stackTop)>("stackTop");
+        }
+    };
+
+    template <typename EXPR>
+    struct AstExprPtr2RefAnnotation : AstExpressionAnnotation<EXPR> {
+        AstExprPtr2RefAnnotation(const string & na, ModuleLibrary & ml)
+            :  AstExpressionAnnotation<EXPR> (na, ml) {
+            using ManagedType = EXPR;
+            this->template addField<DAS_BIND_MANAGED_FIELD(subexpr)>("subexpr");
+        }
+    };
+
+    template <typename EXPR>
+    struct AstExprAtAnnotation : AstExpressionAnnotation<EXPR> {
+        AstExprAtAnnotation(const string & na, ModuleLibrary & ml)
+            :  AstExpressionAnnotation<EXPR> (na, ml) {
+            using ManagedType = EXPR;
+            this->template addField<DAS_BIND_MANAGED_FIELD(subexpr)>("subexpr");
+            this->template addField<DAS_BIND_MANAGED_FIELD(index)>("index");
+            this->addFieldEx ( "atFlags", "atFlags", offsetof(ExprAt, atFlags), makeExprAtFlags() );
+        }
+    };
+
+    template <typename EXPR>
+    struct AstExprOpAnnotation : AstExprCallFuncAnnotation<EXPR> {
+        AstExprOpAnnotation(const string & na, ModuleLibrary & ml)
+            :  AstExprCallFuncAnnotation<EXPR> (na, ml) {
+            using ManagedType = EXPR;
+            this->template addField<DAS_BIND_MANAGED_FIELD(op)>("op");
+        }
+    };
+
+    template <typename EXPR>
+    struct AstExprOp2Annotation : AstExprOpAnnotation<EXPR> {
+        AstExprOp2Annotation(const string & na, ModuleLibrary & ml)
+            :  AstExprOpAnnotation<EXPR> (na, ml) {
+            using ManagedType = EXPR;
+            this->template addField<DAS_BIND_MANAGED_FIELD(left)>("left");
+            this->template addField<DAS_BIND_MANAGED_FIELD(right)>("right");
+        }
+    };
+
+    template <typename EXPR>
+    struct AstExprMakeLocalAnnotation : AstExpressionAnnotation<EXPR> {
+        AstExprMakeLocalAnnotation(const string & na, ModuleLibrary & ml)
+            :  AstExpressionAnnotation<EXPR> (na, ml) {
+            using ManagedType = EXPR;
+            this->template addField<DAS_BIND_MANAGED_FIELD(makeType)>("makeType");
+            this->template addField<DAS_BIND_MANAGED_FIELD(stackTop)>("stackTop");
+            this->template addField<DAS_BIND_MANAGED_FIELD(extraOffset)>("extraOffset");
+            this->addFieldEx ( "makeFlags", "makeFlags", offsetof(ExprMakeLocal, makeFlags), makeExprMakeLocalFlags() );
+        }
+    };
+
+    template <typename EXPR>
+    struct AstExprMakeArrayAnnotation : AstExprMakeLocalAnnotation<EXPR> {
+        AstExprMakeArrayAnnotation(const string & na, ModuleLibrary & ml)
+            :  AstExprMakeLocalAnnotation<EXPR> (na, ml) {
+                using ManagedType = EXPR;
+            this->template addField<DAS_BIND_MANAGED_FIELD(recordType)>("recordType");
+            this->template addField<DAS_BIND_MANAGED_FIELD(values)>("values");
+        }
+    };
+
+    template <typename EXPR>
+    struct AstExprLikeCallAnnotation : AstExprLooksLikeCallAnnotation<EXPR> {
+        AstExprLikeCallAnnotation(const string & na, ModuleLibrary & ml)
+            :  AstExprLooksLikeCallAnnotation<EXPR> (na, ml) {
+        }
+    };
+
+    template <typename EXPR>
+    struct AstExprFieldAnnotation : AstExpressionAnnotation<EXPR> {
+        AstExprFieldAnnotation(const string & na, ModuleLibrary & ml)
+            :  AstExpressionAnnotation<EXPR> (na, ml) {
+            using ManagedType = EXPR;
+            this->template addField<DAS_BIND_MANAGED_FIELD(value)>("value");
+            this->template addField<DAS_BIND_MANAGED_FIELD(name)>("name");
+            this->template addField<DAS_BIND_MANAGED_FIELD(atField)>("atField");
+            this->template addField<DAS_BIND_MANAGED_FIELD(field)>("field");
+            this->template addField<DAS_BIND_MANAGED_FIELD(fieldIndex)>("fieldIndex");
+            this->template addField<DAS_BIND_MANAGED_FIELD(annotation)>("annotation");
+            this->addFieldEx ( "derefFlags", "derefFlags", offsetof(ExprField, derefFlags), makeExprFieldDerefFlags() );
+            this->addFieldEx ( "fieldFlags", "fieldFlags", offsetof(ExprField, fieldFlags), makeExprFieldFieldFlags() );
+        }
+    };
+
+    template <typename EXPR>
+    struct AstExprConstAnnotation : AstExpressionAnnotation<EXPR> {
+        AstExprConstAnnotation(const string & na, ModuleLibrary & ml)
+            :  AstExpressionAnnotation<EXPR> (na, ml) {
+            using ManagedType = EXPR;
+            this->template addField<DAS_BIND_MANAGED_FIELD(baseType)>("baseType");
+        }
+        template <typename TT>
+        void init( ModuleLibrary & ml ) {
+            auto cpptype = makeType<TT>(ml);
+            string cppname = "cvalue<" + describeCppType(cpptype) + ">()";
+            this->addFieldEx ( "value", cppname, offsetof(ExprConst, value), cpptype );
+        }
+    };
+
+    template <typename EXPR, typename TT>
+    struct AstExprConstTAnnotation : AstExprConstAnnotation<EXPR> {
+        AstExprConstTAnnotation(const string & na, ModuleLibrary & ml)
+            :  AstExprConstAnnotation<EXPR> (na, ml) {
+            this->template init<TT>(ml);
+        }
+    };
+
+    template <typename TT>
+    smart_ptr<TT> Module_Ast::addExpressionAnnotation ( const smart_ptr<TT> & ann ) {
+        addAnnotation(ann);
+        return ann;
+    }
 }

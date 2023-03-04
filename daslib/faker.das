@@ -1,6 +1,7 @@
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 options indenting = 4
+options strict_smart_pointers = true
 
 module faker shared private
 
@@ -67,7 +68,7 @@ def public long_string ( var faker:Faker )
     var len = 0u
     faker.rnd |> next(len)
     len %= faker.max_long_string
-    var arr : array<uint8>; defer_delete(arr)
+    var inscope arr : array<uint8>
     arr |> reserve(int(len))
     for t in urange(len)
         var Ch = 0u

@@ -16,16 +16,20 @@ int main( int, char * [] ) {
     // make file access, introduce string as if it was a file
     auto fAccess = make_smart<FsFileAccess>();
     auto fileInfo = make_unique<TextFileInfo>(tutorial_text, uint32_t(strlen(tutorial_text)), false);
-    fAccess->setFileInfo("dummy.das", move(fileInfo));
+    fAccess->setFileInfo("dummy.das", das::move(fileInfo));
     // compile script
     TextPrinter tout;
     ModuleGroup dummyLibGroup;
     auto program = compileDaScript("dummy.das", fAccess, tout, dummyLibGroup);
+    if ( program->failed() ) return -1;
     // create context
     Context ctx(program->getContextStackSize());
-    program->simulate(ctx, tout);
+    if ( !program->simulate(ctx, tout) ) return -2;
+    // find function. its up to application to check, if function is not null
+    auto function = ctx.findFunction("test");
+    if ( !function ) return -3;
     // call context function
-    ctx.eval(ctx.findFunction("test"), nullptr);
+    ctx.evalWithCatch(function, nullptr);
     // shut-down daScript, free all memory
     Module::Shutdown();
     return 0;
