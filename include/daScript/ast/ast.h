@@ -551,6 +551,7 @@ namespace das
         virtual bool rtti_isInvoke() const { return false; }
         virtual bool rtti_isCallLikeExpr() const { return false; }
         virtual bool rtti_isCallFunc() const { return false; }
+        virtual bool rtti_isNamedCall() const { return false; }
         virtual bool rtti_isLet() const { return false; }
         virtual bool rtti_isReturn() const { return false; }
         virtual bool rtti_isBreak() const { return false; }

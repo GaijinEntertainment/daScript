@@ -1242,6 +1242,7 @@ namespace das
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        virtual bool rtti_isNamedCall() const override { return true; }
         string      name;
         vector<ExpressionPtr>  nonNamedArguments;
         MakeStruct  arguments;

@@ -1,4 +1,4 @@
-expect 30304:10,  30101:2
+expect 30304:12,  30101:2
 
 require dastest/testing_boost public
 require daslib/contracts
@@ -22,12 +22,17 @@ def test_invalid_types ( t : T? )
     func(3, [b=6])
     func(3, [a=5])              //30304: no matching functions or generics func
     func("hello", [a=5, b=6])   //30304: no matching functions or generics func
+    1 |> func(1,1, [b=6]) 
+    "hello" |> func([a=5, b=6]) //30304: no matching functions or generics func
 
     gen(1, [a=5, c=6])          //30304: no matching functions or generics gen
     gen("ttt", [b="ttt"])
     gen(1,1,1, [a=5, b=6])
     gen(1,1,1,1, [a=5, b=6])    //30304: no matching functions or generics gen
     gen(3, [a=5, b=6])
+    3 |> gen([a=5, b=6])
+    3 |> gen(5, [b=6])
+    1 |> gen(1,1,1, [a=5, b=6])    //30304: no matching functions or generics gen
 
     gen(3, [b=6])
     gen(3, [a=5])               //30304: no matching functions or generics gen
