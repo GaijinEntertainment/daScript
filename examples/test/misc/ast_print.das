@@ -798,7 +798,7 @@ def allExpr(arg:int)
     bfc = ExprPrintFlags argLevel
 
 [export]
-def main
+def test
     var astVisitor = new PrintVisitor()
     var astVisitorAdapter <- make_visitor(*astVisitor)
     visit(this_program(), astVisitorAdapter)
