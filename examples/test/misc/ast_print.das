@@ -667,6 +667,7 @@ def allExpr(arg:int)
     sb = ""
     // ExprNamedCall
     add([a=1,b=2])
+    add(3,4,[a=1,b=2])
     // ExprNew
     var pFoo1 = new Foo
     var pFoo2 = new Foo(1)
@@ -797,7 +798,7 @@ def allExpr(arg:int)
     bfc = ExprPrintFlags argLevel
 
 [export]
-def test
+def main
     var astVisitor = new PrintVisitor()
     var astVisitorAdapter <- make_visitor(*astVisitor)
     visit(this_program(), astVisitorAdapter)
