@@ -53,6 +53,7 @@ namespace das {
         AstExprNamedCallAnnotation(ModuleLibrary & ml)
             :  AstExpressionAnnotation<ExprNamedCall> ("ExprNamedCall", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
+            addField<DAS_BIND_MANAGED_FIELD(nonNamedArguments)>("nonNamedArguments");
             addField<DAS_BIND_MANAGED_FIELD(arguments)>("arguments");
             addField<DAS_BIND_MANAGED_FIELD(argumentsFailedToInfer)>("argumentsFailedToInfer");
         }

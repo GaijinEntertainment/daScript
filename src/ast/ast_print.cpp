@@ -613,9 +613,13 @@ namespace das {
     // named call
         virtual void preVisit ( ExprNamedCall * call ) override {
             Visitor::preVisit(call);
-            ss << call->name << "([";
+            ss << call->name << "(";
         }
         virtual void preVisitNamedCallArg ( ExprNamedCall * call, MakeFieldDecl * arg, bool last ) override {
+            if (call->arguments[0] == arg) {
+                if (call->nonNamedArguments.size() > 0) ss << ",";
+                ss << "[";
+            }
             Visitor::preVisitNamedCallArg(call, arg, last);
             ss << arg->name << (arg->moveSemantics ? "<-" : "=" );
         }

@@ -817,6 +817,12 @@ namespace das {
             delete pVar;
             pCall->arguments.insert(pCall->arguments.begin(),ExpressionPtr(arg));
             return pCall;
+        }
+        else if (fncall->rtti_isNamedCall()) {
+            auto pCall = (ExprNamedCall*)fncall;
+            pCall->nonNamedArguments.insert(pCall->nonNamedArguments.begin(), ExpressionPtr(arg));
+            return fncall;
+
         } else {
             das_yyerror(scanner,"can only rpipe into a function call",locAt,CompilationError::cant_pipe);
             return fncall;

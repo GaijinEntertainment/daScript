@@ -2378,8 +2378,18 @@ namespace das {
 
     ExpressionPtr ExprNamedCall::visit(Visitor & vis) {
         vis.preVisit(this);
-        for ( auto & arg : arguments ) {
-            vis.preVisitNamedCallArg(this, arg.get(), arg==arguments.back());
+
+        if (nonNamedArguments.size() > 0) {
+            ExprCall dummy;
+            for (auto& arg : nonNamedArguments) {
+                vis.preVisitCallArg(&dummy, arg.get(), arg == nonNamedArguments.back());
+                arg = arg->visit(vis);
+                arg = vis.visitCallArg(&dummy, arg.get(), arg == nonNamedArguments.back());
+            }
+            this->argumentsFailedToInfer = dummy.argumentsFailedToInfer;
+        }
+        for (auto& arg : arguments) {
+            vis.preVisitNamedCallArg(this, arg.get(), arg == arguments.back());
             arg->value = arg->value->visit(vis);
             arg = vis.visitNamedCallArg(this, arg.get(), arg==arguments.back());
         }

@@ -815,7 +815,7 @@ namespace das {
             return true;
         }
 
-        bool isFunctionCompatible ( const FunctionPtr & pFn, const vector<TypeDeclPtr> & types, bool inferAuto, bool inferBlock ) const {
+        bool isFunctionCompatible ( const FunctionPtr & pFn, const vector<TypeDeclPtr> & types, bool inferAuto, bool inferBlock, bool checkLastArgumentsInit = true ) const {
             if ( pFn->arguments.size() < types.size() ) {
                 return false;
             }
@@ -851,9 +851,11 @@ namespace das {
                     }
                 }
             }
-            for ( auto ti=types.size(), tis=pFn->arguments.size(); ti!=tis; ++ti ) {
-                if ( !pFn->arguments[ti]->init ) {
-                    return false;
+            if (checkLastArgumentsInit) {
+                for (auto ti = types.size(), tis = pFn->arguments.size(); ti != tis; ++ti) {
+                    if (!pFn->arguments[ti]->init) {
+                        return false;
+                    }
                 }
             }
             for ( const auto & ann : pFn->annotations ) {
@@ -868,10 +870,16 @@ namespace das {
             return true;
         }
 
-        bool isFunctionCompatible ( const FunctionPtr & pFn, const vector<MakeFieldDeclPtr> & arguments, bool inferAuto, bool inferBlock ) const {
-            if ( pFn->arguments.size() < arguments.size() ) {
+        bool isFunctionCompatible ( const FunctionPtr & pFn, const vector<TypeDeclPtr>& nonNamedTypes, const vector<MakeFieldDeclPtr> & arguments, bool inferAuto, bool inferBlock ) const {
+            if ( ( pFn->arguments.size() < arguments.size() ) || ( pFn->arguments.size() < nonNamedTypes.size() ) ) {
                 return false;
             }
+
+            if ( !isFunctionCompatible(pFn, nonNamedTypes, inferAuto, inferBlock, false) ) {
+                return false;
+            }
+
+
             size_t fnArgIndex = 0;
             for ( size_t ai=0, ais=arguments.size(); ai!=ais; ++ai ) {
                 auto & arg = arguments[ai];
@@ -883,7 +891,8 @@ namespace das {
                     if ( fnArg->name == arg->name ) {               // found it, name matches
                         break;
                     }
-                    if ( !fnArg->init ) {                           // can't skip - no default value
+                    
+                    if ( !fnArg->init && fnArgIndex >= nonNamedTypes.size() ) {    // can't skip - no default value
                         return false;
                     }
                     fnArgIndex ++;
@@ -932,7 +941,7 @@ namespace das {
             return ss.str();
         }
 
-        string describeMismatchingFunction(const FunctionPtr & pFn, const vector<MakeFieldDeclPtr> & arguments, bool inferAuto, bool inferBlock) const {
+        string describeMismatchingFunction(const FunctionPtr & pFn, const vector<TypeDeclPtr>& nonNamedTypes, const vector<MakeFieldDeclPtr> & arguments, bool inferAuto, bool inferBlock) const {
             if ( pFn->arguments.size() < arguments.size() ) {
                 return "\t\ttoo many arguments\n";
             }
@@ -956,7 +965,7 @@ namespace das {
                     if ( fnArg->name == arg->name ) {
                         break;
                     }
-                    if ( !fnArg->init ) {
+                    if ( !fnArg->init && fnArgIndex >= nonNamedTypes.size()) {
                         ss << "\t\twhile looking for argument " << arg->name
                             << ", can't skip function argument " << fnArg->name << " because it has no default value\n";
                         return ss.str();
@@ -1009,7 +1018,7 @@ namespace das {
             return ss.str();
         }
 
-        MatchingFunctions findMatchingFunctions ( const string & name, const vector<MakeFieldDeclPtr> & arguments, bool inferBlock = false ) const {
+        MatchingFunctions findMatchingFunctions ( const string & name, const vector<TypeDeclPtr>& types, const vector<MakeFieldDeclPtr> & arguments, bool inferBlock = false ) const {
             string moduleName, funcName;
             splitTypeName(name, moduleName, funcName);
             MatchingFunctions result;
@@ -1024,7 +1033,7 @@ namespace das {
                         if ( isVisibleFunc(inWhichModule,getFunctionVisModule(pFn.get())) ) {
                             if ( !pFn->fromGeneric || thisModule->isVisibleDirectly(mod) ) {
                                 if ( canCallPrivate(pFn,inWhichModule,thisModule) ) {
-                                    if ( isFunctionCompatible(pFn, arguments, false, inferBlock) ) {
+                                    if ( isFunctionCompatible(pFn, types, arguments, false, inferBlock) ) {
                                         result.push_back(pFn.get());
                                     }
                                 }
@@ -1065,7 +1074,7 @@ namespace das {
             return result;
         }
 
-        MatchingFunctions findMatchingGenerics ( const string & name, const vector<MakeFieldDeclPtr> & arguments ) const {
+        MatchingFunctions findMatchingGenerics ( const string & name, const vector<TypeDeclPtr>& types, const vector<MakeFieldDeclPtr> & arguments ) const {
             string moduleName, funcName;
             splitTypeName(name, moduleName, funcName);
             MatchingFunctions result;
@@ -1079,7 +1088,7 @@ namespace das {
                     for ( auto & pFn : goodFunctions ) {
                         if ( isVisibleFunc(inWhichModule,getFunctionVisModule(pFn.get())) ) {
                             if ( canCallPrivate(pFn,inWhichModule,thisModule) ) {
-                                if ( isFunctionCompatible(pFn, arguments, true, true) ) {   // infer block here?
+                                if ( isFunctionCompatible(pFn, types, arguments, true, true) ) {   // infer block here?
                                     result.push_back(pFn.get());
                                 }
                             }
@@ -1170,7 +1179,8 @@ namespace das {
 
         void reportFunctionNotFound( const string & , const string & extra,
                                     const LineInfo & at, const MatchingFunctions & candidateFunctions,
-                                    const vector<MakeFieldDeclPtr> & arguments, bool inferAuto, bool inferBlocks, bool reportDetails ,
+                                    const vector<TypeDeclPtr>& nonNamedTypes, const vector<MakeFieldDeclPtr> & arguments,
+                                    bool inferAuto, bool inferBlocks, bool reportDetails ,
                                     CompilationError cerror = CompilationError::function_not_found) {
             if ( verbose ) {
                 TextWriter ss;
@@ -1191,7 +1201,7 @@ namespace das {
                     }
                     ss << "\n";
                     if ( reportDetails ) {
-                        ss << describeMismatchingFunction(missFn, arguments, inferAuto, inferBlocks);
+                        ss << describeMismatchingFunction(missFn, nonNamedTypes, arguments, inferAuto, inferBlocks);
                     }
                 }
                 error(extra, ss.str(), "", at, cerror);
@@ -6211,8 +6221,15 @@ namespace das {
                     if ( fnArg->name == arg->name ) {
                         break;
                     }
-                    DAS_ASSERTF( fnArg->init, "somehow matched function, which does not match. can only skip defaults");
-                    newCall->arguments.push_back(fnArg->init->clone());
+
+                    if (fnArgIndex < expr->nonNamedArguments.size()) {
+                        newCall->arguments.push_back(expr->nonNamedArguments[fnArgIndex]->clone());
+                    }
+                    else
+                    {
+                        DAS_ASSERTF(fnArg->init, "somehow matched function, which does not match. can only skip defaults");
+                        newCall->arguments.push_back(fnArg->init->clone());
+                    }
                     fnArgIndex ++;
                 }
                 newCall->arguments.push_back(arg->value->clone());
@@ -6229,7 +6246,7 @@ namespace das {
         virtual void preVisit ( ExprNamedCall * call ) override {
             Visitor::preVisit(call);
             call->argumentsFailedToInfer = false;
-            if ( call->arguments.size() > DAS_MAX_FUNCTION_ARGUMENTS ) {
+            if ( (call->arguments.size() > DAS_MAX_FUNCTION_ARGUMENTS) || ( call->nonNamedArguments.size() > DAS_MAX_FUNCTION_ARGUMENTS) ) {
                 error("too many arguments in " + call->name + ", max allowed is DAS_MAX_FUNCTION_ARGUMENTS=" DAS_STR(DAS_MAX_FUNCTION_ARGUMENTS),  "", "",
                     call->at, CompilationError::too_many_arguments);
             }
@@ -6242,19 +6259,19 @@ namespace das {
             }
             return Visitor::visitNamedCallArg(call, arg, last);
         }
-        void reportMissing ( ExprNamedCall * expr, const string & msg, bool reportDetails,
+        void reportMissing ( ExprNamedCall * expr, const vector<TypeDeclPtr>& nonNamedArguments, const string & msg, bool reportDetails,
                                     CompilationError cerror = CompilationError::function_not_found) {
             auto can1 = findCandidates(expr->name, expr->arguments);
             auto can2 = findGenericCandidates(expr->name, expr->arguments);
             can1.reserve(can1.size()+can2.size());
             can1.insert(can1.end(), can2.begin(), can2.end());
-            reportFunctionNotFound(expr->name, msg + expr->name, expr->at, can1, expr->arguments, false, true, reportDetails, cerror);
+            reportFunctionNotFound(expr->name, msg + expr->name, expr->at, can1, nonNamedArguments, expr->arguments, false, true, reportDetails, cerror);
         }
-        void reportExcess ( ExprNamedCall * expr, const string & msg, MatchingFunctions can1, const MatchingFunctions & can2,
+        void reportExcess ( ExprNamedCall * expr, const vector<TypeDeclPtr>& nonNamedArguments, const string & msg, MatchingFunctions can1, const MatchingFunctions & can2,
                                     CompilationError cerror = CompilationError::function_not_found) {
             can1.reserve(can1.size()+can2.size());
             can1.insert(can1.end(), can2.begin(), can2.end());
-            reportFunctionNotFound(expr->name, msg + expr->name, expr->at, can1, expr->arguments, false, true, false, cerror);
+            reportFunctionNotFound(expr->name, msg + expr->name, expr->at, can1, nonNamedArguments,expr->arguments, false, true, false, cerror);
         }
         void reportMissing ( ExprLooksLikeCall * expr, const vector<TypeDeclPtr> & types,
                                     const string & msg, bool reportDetails,
@@ -6274,8 +6291,14 @@ namespace das {
         }
         virtual ExpressionPtr visit ( ExprNamedCall * expr ) override {
             if ( expr->argumentsFailedToInfer ) return Visitor::visit(expr);
-            auto functions = findMatchingFunctions(expr->name, expr->arguments, true);
-            auto generics = findMatchingGenerics(expr->name, expr->arguments);
+
+            vector<TypeDeclPtr> nonNamedTypes;
+            if (!inferArguments(nonNamedTypes, expr->nonNamedArguments)) {
+                //TODO: report error
+                return Visitor::visit(expr);
+            }
+            auto functions = findMatchingFunctions(expr->name, nonNamedTypes, expr->arguments, true);
+            auto generics = findMatchingGenerics(expr->name, nonNamedTypes, expr->arguments);
             if ( functions.size()> 1 ) {
                 vector<TypeDeclPtr> types;
                 types.reserve(expr->arguments.size());
@@ -6285,20 +6308,20 @@ namespace das {
                 applyLSP(types, functions);
             }
             if ( generics.size()>1 || functions.size()>1 ) {
-                reportExcess(expr, "too many matching functions or generics ", functions, generics);
+                reportExcess(expr, nonNamedTypes, "too many matching functions or generics ", functions, generics);
             } else if ( functions.size()==0 ) {
                 if ( generics.size()==1 ) {
                     reportAstChanged();
                     return demoteCall(expr,generics.back());
                 } else {
-                    reportMissing(expr, "no matching functions or generics ", true);
+                    reportMissing(expr, nonNamedTypes, "no matching functions or generics ", true);
                 }
             } else {
                 auto fun = functions.back();
                 if ( generics.size()==1 ) {
                     auto gen = generics.back();
                     if ( fun->fromGeneric != gen ) { // TODO: getOrigin??
-                        reportExcess(expr, "too many matching functions or generics ", functions, generics);
+                        reportExcess(expr, nonNamedTypes, "too many matching functions or generics ", functions, generics);
                         return Visitor::visit(expr);
                     }
                 }
@@ -6653,13 +6676,12 @@ namespace das {
             operatorOp2,
             tryOperator
         };
-        FunctionPtr inferFunctionCall ( ExprLooksLikeCall * expr, InferCallError cerr=InferCallError::functionOrGeneric ) {
-            // infer
-            vector<TypeDeclPtr> types;
-            types.reserve(expr->arguments.size());
-            for ( auto & ar : expr->arguments ) {
-                if ( !ar->type ) {
-                    return nullptr;
+
+        bool inferArguments(vector<TypeDeclPtr>& types, const vector<ExpressionPtr>& arguments) {
+            types.reserve(arguments.size());
+            for (auto& ar : arguments) {
+                if (!ar->type) {
+                    return false;
                 }
                 DAS_ASSERT(!ar->type->isExprType()
                     && "if this happens, we are calling infer function call without checking for '[expr]'. do that from where we call up the stack.");
@@ -6667,10 +6689,18 @@ namespace das {
                 // we only allow it, if its a block or lambda
                 if ( ar->type->baseType!=Type::tBlock && ar->type->baseType!=Type::tLambda && ar->type->baseType!=Type::tFunction ) {
                     if ( ar->type->isAutoOrAlias() ) {
-                        return nullptr;
+                        return false;
                     }
                 }
                 types.push_back(ar->type);
+            }
+            return true;
+        }
+
+        FunctionPtr inferFunctionCall ( ExprLooksLikeCall * expr, InferCallError cerr=InferCallError::functionOrGeneric ) {
+            vector<TypeDeclPtr> types;
+            if (!inferArguments(types, expr->arguments)) {
+                return nullptr;
             }
             auto functions = findMatchingFunctions(expr->name, types, true);
             auto generics = findMatchingGenerics(expr->name, types);
