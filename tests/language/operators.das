@@ -1,5 +1,7 @@
 require dastest/testing_boost public
 
+require daslib/strings_boost
+
 struct Foo
     a : int
 
@@ -20,6 +22,37 @@ def operator is Bar ( anything )
 def operator is Bar ( a : Bar )
     return true
 
+struct Goo
+    a : string
+
+def operator [] ( t:Goo; cmp:string )
+    return "{t . . a}-{cmp}"
+
+def operator ?[] ( t:Goo; cmp:string ) : string const?#
+    if cmp==t . . a
+        unsafe
+            return reinterpret<string const?#> addr(t . . a)
+    else
+        unsafe
+            return reinterpret<string const?#> null
+
+def operator . ( t:Goo; name:string )
+    return [[Goo a="{t . . a}.{name}"]]
+
+def operator ?. ( t:Goo; name:string ) : string const?#
+    if name=="yes"
+        unsafe
+            return reinterpret<string const?#> addr(t . . a)
+    else
+        unsafe
+            return reinterpret<string const?#> null
+
+def operator . length ( t:Goo )
+    return length(t . . a)
+
+def operator ?. length ( t:Goo )
+    return length(t . . a) + 1
+
 [test]
 def test_operators ( t : T? )
     t |> run("as, ?as, is") <| @ ( t : T? )
@@ -34,3 +67,20 @@ def test_operators ( t : T? )
         var nf : Foo?
         var nb = nf ?as Bar ?? [[Bar a = 1.0]]
         t |> equal(1., nb.a)
+    t |> run("[], ?[], ., ?.") <| @ ( t : T? )
+        var T = [[Goo a="hello"]]
+        var z = T["blah"]
+        var w = T?["blah"] ?? "not_blah"
+        var W = T?["hello"] ?? "this???"
+        var EZ = T.GooBar
+        var HARD_YES = T?.yes ?? "how??"
+        var HARD_NO = T?.no ?? "hard no"
+        t |> equal("hello-blah",z)
+        t |> equal("not_blah",w)
+        t |> equal("hello",W)
+        t |> equal("hello.GooBar",EZ . . a)
+        t |> equal("hello",HARD_YES)
+        t |> equal("hard no",HARD_NO)
+        t |> equal(5,T.length)
+        t |> equal(6,T?.length)
+

@@ -63,7 +63,8 @@ extern int das_yydebug;
 
 #if defined(_MSC_VER) && !defined(__clang__)
     #if defined(DAS_RELWITHDEBINFO)
-        #pragma optimize( "s", on )
+        // #pragma optimize( "s", on )
+        #pragma optimize( "", off )
     #endif
 #endif
 
