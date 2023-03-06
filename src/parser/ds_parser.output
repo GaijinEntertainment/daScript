@@ -1,7 +1,7 @@
 Terminals unused in grammar
 
-   "lexer error"
-   "end of failed eader macro"
+    "lexer error"
+    "end of failed eader macro"
 
 
 State 53 conflicts: 1 shift/reduce
@@ -952,696 +952,858 @@ Grammar
 
 Terminals, with rules where they appear
 
-$end (0) 0
-'!' (33) 104 119 360
-'#' (35) 604 606 652
-'$' (36) 17 290
-'%' (37) 32 38 139 372
-'&' (38) 147 293 379 486 495 602 603 608
-'(' (40) 95 102 108 114 115 248 249 282 283 284 332 333 334 335 337
-    390 398 399 400 401 403 404 405 406 434 436 437 438 439 440 442
-    443 444 445 446 447 448 449 450 451 473 497 546 583 584 672 673
-    675
-')' (41) 95 102 108 114 115 248 249 282 283 284 332 333 334 335 337
-    390 398 399 400 401 403 404 405 406 434 436 437 438 439 440 442
-    443 444 445 446 447 448 449 450 451 473 497 546 583 584 672 673
-    675
-'*' (42) 137 370 402
-'+' (43) 135 362 368
-',' (44) 47 84 97 110 286 298 333 499 500 548 549 664 665 678
-'-' (45) 136 363 369 598 601 603 606
-'.' (46) 39 164 345 346 349 392 394 396 444 446 447
-'/' (47) 40 138 371
-':' (58) 49 50 117 408 477 480 487 488 501 502 503 531 533
-';' (59) 13 70 71 207 211 212 219 220 225 226 227 256 261 284 465 467
-    470 475 479 482 501 502 504 518 519 522 523 586 591 655 657 667
-    682 686 689 690 691
-'<' (60) 140 234 245 272 275 278 281 283 284 341 344 373 405 406 411
-    417 422 589 612 616 619 622 626 629 633 636 640 643 646 649
-'=' (61) 76 88 89 90 91 92 93 95 294 310 328 329 483 491 519 521
-'>' (62) 141 234 245 272 275 278 281 283 284 341 344 374 405 406 411
-    417 422 589 612 616 619 622 626 629 633 636 640 643 646 649
-'?' (63) 173 174 408 419 422 423 449 609
-'@' (64) 291 292 338 341 344 451
-'[' (91) 112 162 332 333 391 392 470 596 597 598
-']' (93) 112 162 163 300 332 333 391 392 393 394 453 470 596 597 598
-    670 671 672 673 674 675 683 684 690 691
-'^' (94) 149 381
-'{' (123) 205 206 514 524 530 531 544 655 657
-'|' (124) 148 380 651 652
-'}' (125) 205 206 514 524 530 531 544 655 657 674 675 684 687 691
-'~' (126) 120 361
-error (256) 230 349
-"lexer error" (258)
-"struct" (259) 538
-"class" (260) 537
-"let" (261) 265
-"def" (262) 198 467 469
-"while" (263) 73
-"if" (264) 58 70
-"static_if" (265) 59
-"else" (266) 56 62
-"for" (267) 71 690 691
-"recover" (268) 264
-"true" (269) 81 92 356
-"false" (270) 82 93 357
-"new" (271) 247 248 249 250
-"typeinfo" (272) 282 283 284
-"type" (273) 86 281 411 417 422
-"in" (274) 71 87 690 691
-"is" (275) 169 171 411 412 413 450
-"as" (276) 42 170 172 173 174 414 417 418 419 422 423 448 449
-"elif" (277) 53
-"static_elif" (278) 54
-"array" (279) 616
-"return" (280) 253 254 255 257 258
-"null" (281) 350
-"break" (282) 251
-"try" (283) 264
-"options" (284) 33
-"table" (285) 619
-"expect" (286) 45
-"const" (287) 458 600 601 607
-"require" (288) 34 99
-"operator" (289) 119 120 121 122 123 124 125 126 127 128 129 130 131
-    132 133 134 135 136 137 138 139 140 141 142 143 144 145 146 147
-    148 149 150 151 152 153 154 155 156 157 158 159 160 161 162 163
-    164 165 166 167 168 169 170 171 172 173 174
-"enum" (290) 530 531
-"finally" (291) 206
-"delete" (292) 167 241 242
-"deref" (293) 403
-"typedef" (294) 524 525
-"with" (295) 74
-"aka" (296) 498 500 547 549
-"assume" (297) 76
-"cast" (298) 272
-"override" (299) 455
-"abstract" (300) 467
-"upcast" (301) 275
-"iterator" (302) 622
-"var" (303) 266 472
-"addr" (304) 404
-"continue" (305) 252
-"where" (306) 669 689
-"pass" (307) 227
-"reinterpret" (308) 278
-"module" (309) 19
-"public" (310) 15 44 201 460 513 528 541
-"label" (311) 50 51
-"goto" (312) 51 52
-"implicit" (313) 605
-"explicit" (314) 242 599
-"shared" (315) 510
-"private" (316) 16 100 200 461 512 527 540
-"smart_ptr" (317) 612
-"unsafe" (318) 72 434
-"inscope" (319) 267
-"bool" (320) 175 550
-"void" (321) 570
-"string" (322) 176 551
-"auto" (323) 582 583
-"int" (324) 177 552 575
-"int2" (325) 178 556
-"int3" (326) 179 557
-"int4" (327) 180 558
-"uint" (328) 181 559 578
-"bitfield" (329) 574 589 657
-"uint2" (330) 182 563
-"uint3" (331) 183 564
-"uint4" (332) 184 565
-"float" (333) 185 566
-"float2" (334) 186 567
-"float3" (335) 187 568
-"float4" (336) 188 569
-"range" (337) 189 571
-"urange" (338) 190 572
-"block" (339) 623 626 629
-"int64" (340) 191 555
-"uint64" (341) 192 562
-"double" (342) 193 573
-"function" (343) 630 633 636
-"lambda" (344) 637 640 643
-"int8" (345) 194 553 576
-"uint8" (346) 195 560 579
-"int16" (347) 196 554 577
-"uint16" (348) 197 561 580
-"tuple" (349) 646
-"variant" (350) 649 655
-"generator" (351) 405 406
-"yield" (352) 259 260 262 263
-"sealed" (353) 456 535
-"+=" (354) 121 319
-"-=" (355) 122 320
-"/=" (356) 124 322
-"*=" (357) 123 321
-"%=" (358) 125 323
-"&=" (359) 126 313
-"|=" (360) 127 314
-"^=" (361) 128 315
-"<<" (362) 154 364
-">>" (363) 155 365
-"++" (364) 150 152 386 388
-"--" (365) 151 153 387 389
-"<=" (366) 145 377
-"<<=" (367) 156 324
-">>=" (368) 157 325
-">=" (369) 146 378
-"==" (370) 143 375 607 608
-"!=" (371) 144 376
-"->" (372) 334 335
-"<-" (373) 255 258 260 263 289 295 311 330 331 484 492
-"??" (374) 168 407 613
-"?." (375) 165 395 396 445 447
-"?[" (376) 163 393 394
-"<|" (377) 431
-" <|" (378) 235
-"@ <|" (379) 236 328 330
-"@@ <|" (380) 237 329 331
-"|>" (381) 432
-":=" (382) 166 296 312 493 663 665
-"<<<" (383) 158 366
-">>>" (384) 159 367
-"<<<=" (385) 160 326
-">>>=" (386) 161 327
-"=>" (387) 288 289 677 679
-"::" (388) 239 240
-"&&" (389) 105 132 382
-"||" (390) 106 133 383
-"^^" (391) 107 134 384
-"&&=" (392) 129 316
-"||=" (393) 130 317
-"^^=" (394) 131 318
-".." (395) 142 385
-"$$" (396) 436
-"$i" (397) 337 437 497 546
-"$v" (398) 438
-"$b" (399) 439
-"$a" (400) 440 473
-"$t" (401) 584
-"$c" (402) 442 443 451
-"$f" (403) 444 445 446 447 448 449 450
-"..." (404) 441
-"[[" (405) 300 453 670 671 672 673 683 690
-"[{" (406) 674 675 684 691
-"{{" (407) 687
-"integer constant" (408) 48 49 50 51 79 90 303
-"long integer constant" (409) 305
-"unsigned integer constant" (410) 304
-"unsigned long integer constant" (411) 306
-"floating point constant" (412) 80 91 307
-"double constant" (413) 308
-"name" (414) 18 35 42 76 78 85 89 118 171 172 174 238 239 240 283 284
-    293 294 295 296 334 335 345 346 395 396 413 414 419 433 477 480
-    496 498 499 500 518 519 521 529 536 545 547 548 549 583 585 586
-    655 657 662 663 664 665
-"keyword" (415) 36 231 234
-"start of the string" (416) 24 28
-STRING_CHARACTER (417) 20 22 29 30
-STRING_CHARACTER_ESC (418) 21 23
-"end of the string" (419) 24 28
-"{" (420) 27
-"}" (421) 27
-"end of failed eader macro" (422)
-UNARY_MINUS (423)
-UNARY_PLUS (424)
-PRE_INC (425)
-PRE_DEC (426)
-POST_INC (427)
-POST_DEC (428)
-DEREF (429)
+    $end (0) 0
+    '!' (33) 104 119 360
+    '#' (35) 604 606 652
+    '$' (36) 17 290
+    '%' (37) 32 38 139 372
+    '&' (38) 147 293 379 486 495 602 603 608
+    '(' (40) 95 102 108 114 115 248 249 282 283 284 332 333 334 335 337 390 398 399 400 401 403 404 405 406 434 436 437 438 439 440 442 443 444 445 446 447 448 449 450 451 473 497 546 583 584 672 673 675
+    ')' (41) 95 102 108 114 115 248 249 282 283 284 332 333 334 335 337 390 398 399 400 401 403 404 405 406 434 436 437 438 439 440 442 443 444 445 446 447 448 449 450 451 473 497 546 583 584 672 673 675
+    '*' (42) 137 370 402
+    '+' (43) 135 362 368
+    ',' (44) 47 84 97 110 286 298 333 499 500 548 549 664 665 678
+    '-' (45) 136 363 369 598 601 603 606
+    '.' (46) 39 164 345 346 349 392 394 396 444 446 447
+    '/' (47) 40 138 371
+    ':' (58) 49 50 117 408 477 480 487 488 501 502 503 531 533
+    ';' (59) 13 70 71 207 211 212 219 220 225 226 227 256 261 284 465 467 470 475 479 482 501 502 504 518 519 522 523 586 591 655 657 667 682 686 689 690 691
+    '<' (60) 140 234 245 272 275 278 281 283 284 341 344 373 405 406 411 417 422 589 612 616 619 622 626 629 633 636 640 643 646 649
+    '=' (61) 76 88 89 90 91 92 93 95 294 310 328 329 483 491 519 521
+    '>' (62) 141 234 245 272 275 278 281 283 284 341 344 374 405 406 411 417 422 589 612 616 619 622 626 629 633 636 640 643 646 649
+    '?' (63) 173 174 408 419 422 423 449 609
+    '@' (64) 291 292 338 341 344 451
+    '[' (91) 112 162 332 333 391 392 470 596 597 598
+    ']' (93) 112 162 163 300 332 333 391 392 393 394 453 470 596 597 598 670 671 672 673 674 675 683 684 690 691
+    '^' (94) 149 381
+    '{' (123) 205 206 514 524 530 531 544 655 657
+    '|' (124) 148 380 651 652
+    '}' (125) 205 206 514 524 530 531 544 655 657 674 675 684 687 691
+    '~' (126) 120 361
+    error (256) 230 349
+    "lexer error" (258)
+    "struct" (259) 538
+    "class" (260) 537
+    "let" (261) 265
+    "def" (262) 198 467 469
+    "while" (263) 73
+    "if" (264) 58 70
+    "static_if" (265) 59
+    "else" (266) 56 62
+    "for" (267) 71 690 691
+    "recover" (268) 264
+    "true" (269) 81 92 356
+    "false" (270) 82 93 357
+    "new" (271) 247 248 249 250
+    "typeinfo" (272) 282 283 284
+    "type" (273) 86 281 411 417 422
+    "in" (274) 71 87 690 691
+    "is" (275) 169 171 411 412 413 450
+    "as" (276) 42 170 172 173 174 414 417 418 419 422 423 448 449
+    "elif" (277) 53
+    "static_elif" (278) 54
+    "array" (279) 616
+    "return" (280) 253 254 255 257 258
+    "null" (281) 350
+    "break" (282) 251
+    "try" (283) 264
+    "options" (284) 33
+    "table" (285) 619
+    "expect" (286) 45
+    "const" (287) 458 600 601 607
+    "require" (288) 34 99
+    "operator" (289) 119 120 121 122 123 124 125 126 127 128 129 130 131 132 133 134 135 136 137 138 139 140 141 142 143 144 145 146 147 148 149 150 151 152 153 154 155 156 157 158 159 160 161 162 163 164 165 166 167 168 169 170 171 172 173 174
+    "enum" (290) 530 531
+    "finally" (291) 206
+    "delete" (292) 167 241 242
+    "deref" (293) 403
+    "typedef" (294) 524 525
+    "with" (295) 74
+    "aka" (296) 498 500 547 549
+    "assume" (297) 76
+    "cast" (298) 272
+    "override" (299) 455
+    "abstract" (300) 467
+    "upcast" (301) 275
+    "iterator" (302) 622
+    "var" (303) 266 472
+    "addr" (304) 404
+    "continue" (305) 252
+    "where" (306) 669 689
+    "pass" (307) 227
+    "reinterpret" (308) 278
+    "module" (309) 19
+    "public" (310) 15 44 201 460 513 528 541
+    "label" (311) 50 51
+    "goto" (312) 51 52
+    "implicit" (313) 605
+    "explicit" (314) 242 599
+    "shared" (315) 510
+    "private" (316) 16 100 200 461 512 527 540
+    "smart_ptr" (317) 612
+    "unsafe" (318) 72 434
+    "inscope" (319) 267
+    "bool" (320) 175 550
+    "void" (321) 570
+    "string" (322) 176 551
+    "auto" (323) 582 583
+    "int" (324) 177 552 575
+    "int2" (325) 178 556
+    "int3" (326) 179 557
+    "int4" (327) 180 558
+    "uint" (328) 181 559 578
+    "bitfield" (329) 574 589 657
+    "uint2" (330) 182 563
+    "uint3" (331) 183 564
+    "uint4" (332) 184 565
+    "float" (333) 185 566
+    "float2" (334) 186 567
+    "float3" (335) 187 568
+    "float4" (336) 188 569
+    "range" (337) 189 571
+    "urange" (338) 190 572
+    "block" (339) 623 626 629
+    "int64" (340) 191 555
+    "uint64" (341) 192 562
+    "double" (342) 193 573
+    "function" (343) 630 633 636
+    "lambda" (344) 637 640 643
+    "int8" (345) 194 553 576
+    "uint8" (346) 195 560 579
+    "int16" (347) 196 554 577
+    "uint16" (348) 197 561 580
+    "tuple" (349) 646
+    "variant" (350) 649 655
+    "generator" (351) 405 406
+    "yield" (352) 259 260 262 263
+    "sealed" (353) 456 535
+    "+=" (354) 121 319
+    "-=" (355) 122 320
+    "/=" (356) 124 322
+    "*=" (357) 123 321
+    "%=" (358) 125 323
+    "&=" (359) 126 313
+    "|=" (360) 127 314
+    "^=" (361) 128 315
+    "<<" (362) 154 364
+    ">>" (363) 155 365
+    "++" (364) 150 152 386 388
+    "--" (365) 151 153 387 389
+    "<=" (366) 145 377
+    "<<=" (367) 156 324
+    ">>=" (368) 157 325
+    ">=" (369) 146 378
+    "==" (370) 143 375 607 608
+    "!=" (371) 144 376
+    "->" (372) 334 335
+    "<-" (373) 255 258 260 263 289 295 311 330 331 484 492
+    "??" (374) 168 407 613
+    "?." (375) 165 395 396 445 447
+    "?[" (376) 163 393 394
+    "<|" (377) 431
+    " <|" (378) 235
+    "@ <|" (379) 236 328 330
+    "@@ <|" (380) 237 329 331
+    "|>" (381) 432
+    ":=" (382) 166 296 312 493 663 665
+    "<<<" (383) 158 366
+    ">>>" (384) 159 367
+    "<<<=" (385) 160 326
+    ">>>=" (386) 161 327
+    "=>" (387) 288 289 677 679
+    "::" (388) 239 240
+    "&&" (389) 105 132 382
+    "||" (390) 106 133 383
+    "^^" (391) 107 134 384
+    "&&=" (392) 129 316
+    "||=" (393) 130 317
+    "^^=" (394) 131 318
+    ".." (395) 142 385
+    "$$" (396) 436
+    "$i" (397) 337 437 497 546
+    "$v" (398) 438
+    "$b" (399) 439
+    "$a" (400) 440 473
+    "$t" (401) 584
+    "$c" (402) 442 443 451
+    "$f" (403) 444 445 446 447 448 449 450
+    "..." (404) 441
+    "[[" (405) 300 453 670 671 672 673 683 690
+    "[{" (406) 674 675 684 691
+    "{{" (407) 687
+    "integer constant" <i> (408) 48 49 50 51 79 90 303
+    "long integer constant" <i64> (409) 305
+    "unsigned integer constant" <ui> (410) 304
+    "unsigned long integer constant" <ui64> (411) 306
+    "floating point constant" <fd> (412) 80 91 307
+    "double constant" <d> (413) 308
+    "name" <s> (414) 18 35 42 76 78 85 89 118 171 172 174 238 239 240 283 284 293 294 295 296 334 335 345 346 395 396 413 414 419 433 477 480 496 498 499 500 518 519 521 529 536 545 547 548 549 583 585 586 655 657 662 663 664 665
+    "keyword" <s> (415) 36 231 234
+    "start of the string" (416) 24 28
+    STRING_CHARACTER <ch> (417) 20 22 29 30
+    STRING_CHARACTER_ESC (418) 21 23
+    "end of the string" (419) 24 28
+    "{" (420) 27
+    "}" (421) 27
+    "end of failed eader macro" (422)
+    UNARY_MINUS (423)
+    UNARY_PLUS (424)
+    PRE_INC (425)
+    PRE_DEC (426)
+    POST_INC (427)
+    POST_DEC (428)
+    DEREF (429)
 
 
 Nonterminals, with rules where they appear
 
-$accept (202)
-    on left: 0
-program (203)
-    on left: 1 2 3 4 5 6 7 8 9 10 11 12 13, on right: 0 2 3 4 5 6 7
-    8 9 10 11 12 13
-optional_public_or_private_module (204)
-    on left: 14 15 16, on right: 19
-module_name (205)
-    on left: 17 18, on right: 19
-module_declaration (206)
-    on left: 19, on right: 2
-character_sequence (207)
-    on left: 20 21 22 23, on right: 22 23 24 26
-string_constant (208)
-    on left: 24, on right: 77 88
-string_builder_body (209)
-    on left: 25 26 27, on right: 26 27 28
-string_builder (210)
-    on left: 28, on right: 354
-reader_character_sequence (211)
-    on left: 29 30, on right: 30 32
-expr_reader (212)
-    on left: 32, on right: 353
-$@1 (213)
-    on left: 31, on right: 32
-options_declaration (214)
-    on left: 33, on right: 9
-require_declaration (215)
-    on left: 34, on right: 8
-keyword_or_name (216)
-    on left: 35 36, on right: 37 39 40
-require_module_name (217)
-    on left: 37 38 39 40, on right: 38 39 40 41 42
-require_module (218)
-    on left: 41 42, on right: 34
-is_public_module (219)
-    on left: 43 44, on right: 41 42
-expect_declaration (220)
-    on left: 45, on right: 7
-expect_list (221)
-    on left: 46 47, on right: 45 47
-expect_error (222)
-    on left: 48 49, on right: 46 47
-expression_label (223)
-    on left: 50, on right: 225
-expression_goto (224)
-    on left: 51 52, on right: 226
-elif_or_static_elif (225)
-    on left: 53 54, on right: 57
-expression_else (226)
-    on left: 55 56 57, on right: 57 68
-if_or_static_if (227)
-    on left: 58 59, on right: 68
-expression_else_one_liner (228)
-    on left: 60 62, on right: 70
-$@2 (229)
-    on left: 61, on right: 62
-expression_if_one_liner (230)
-    on left: 63 64 65 66 67, on right: 62 70
-expression_if_then_else (231)
-    on left: 68 70, on right: 223
-$@3 (232)
-    on left: 69, on right: 70
-expression_for_loop (233)
-    on left: 71, on right: 218
-expression_unsafe (234)
-    on left: 72, on right: 215
-expression_while_loop (235)
-    on left: 73, on right: 214
-expression_with (236)
-    on left: 74, on right: 216
-expression_with_alias (237)
-    on left: 76, on right: 217
-$@4 (238)
-    on left: 75, on right: 76
-annotation_argument_value (239)
-    on left: 77 78 79 80 81 82, on right: 83 84
-annotation_argument_value_list (240)
-    on left: 83 84, on right: 84 95
-annotation_argument_name (241)
-    on left: 85 86 87, on right: 88 89 90 91 92 93 94 95
-annotation_argument (242)
-    on left: 88 89 90 91 92 93 94 95, on right: 96 97
-annotation_argument_list (243)
-    on left: 96 97, on right: 33 97 102 453
-annotation_declaration_name (244)
-    on left: 98 99 100, on right: 101 102
-annotation_declaration_basic (245)
-    on left: 101 102, on right: 103
-annotation_declaration (246)
-    on left: 103 104 105 106 107 108, on right: 104 105 106 107 108
-    109 110
-annotation_list (247)
-    on left: 109 110, on right: 110 112 470
-optional_annotation_list (248)
-    on left: 111 112, on right: 198 302 467 469 530 531 544
-optional_function_argument_list (249)
-    on left: 113 114 115, on right: 202 302 344 629 636 643
-optional_function_type (250)
-    on left: 116 117, on right: 202 302 344 629 636 643
-function_name (251)
-    on left: 118 119 120 121 122 123 124 125 126 127 128 129 130 131
-    132 133 134 135 136 137 138 139 140 141 142 143 144 145 146 147
-    148 149 150 151 152 153 154 155 156 157 158 159 160 161 162 163
-    164 165 166 167 168 169 170 171 172 173 174 175 176 177 178 179
-    180 181 182 183 184 185 186 187 188 189 190 191 192 193 194 195
-    196 197, on right: 202
-global_function_declaration (252)
-    on left: 198, on right: 6
-optional_public_or_private_function (253)
-    on left: 199 200 201, on right: 204
-function_declaration_header (254)
-    on left: 202, on right: 204 467 469
-function_declaration (255)
-    on left: 204, on right: 198
-$@5 (256)
-    on left: 203, on right: 204
-expression_block (257)
-    on left: 205 206, on right: 56 57 68 71 72 73 74 204 231 264 287
-    301 469
-expression_any (258)
-    on left: 207 208 209 210 211 212 213 214 215 216 217 218 219 220
-    221 222 223 224 225 226 227, on right: 229
-expressions (259)
-    on left: 228 229 230, on right: 205 206 229 230
-expr_keyword (260)
-    on left: 231, on right: 209
-expression_keyword (261)
-    on left: 234, on right: 435
-$@6 (262)
-    on left: 232, on right: 234
-$@7 (263)
-    on left: 233, on right: 234
-expr_pipe (264)
-    on left: 235 236 237, on right: 208 257 258 262 263 490 503 505
-name_in_namespace (265)
-    on left: 238 239 240, on right: 32 98 282 283 284 332 333 336 351
-    398 399 433 533 581
-expression_delete (266)
-    on left: 241 242, on right: 212
-new_type_declaration (267)
-    on left: 245 246, on right: 247 248 249
-$@8 (268)
-    on left: 243, on right: 245
-$@9 (269)
-    on left: 244, on right: 245
-expr_new (270)
-    on left: 247 248 249 250, on right: 427
-expression_break (271)
-    on left: 251, on right: 66 219
-expression_continue (272)
-    on left: 252, on right: 67 220
-expression_return_no_pipe (273)
-    on left: 253 254 255, on right: 64 256
-expression_return (274)
-    on left: 256 257 258, on right: 221
-expression_yield_no_pipe (275)
-    on left: 259 260, on right: 65 261
-expression_yield (276)
-    on left: 261 262 263, on right: 222
-expression_try_catch (277)
-    on left: 264, on right: 224
-kwd_let (278)
-    on left: 265 266, on right: 269 514 516
-optional_in_scope (279)
-    on left: 267 268, on right: 269
-expression_let (280)
-    on left: 269, on right: 213
-expr_cast (281)
-    on left: 272 275 278, on right: 426
-$@10 (282)
-    on left: 270, on right: 272
-$@11 (283)
-    on left: 271, on right: 272
-$@12 (284)
-    on left: 273, on right: 275
-$@13 (285)
-    on left: 274, on right: 275
-$@14 (286)
-    on left: 276, on right: 278
-$@15 (287)
-    on left: 277, on right: 278
-expr_type_decl (288)
-    on left: 281, on right: 425
-$@16 (289)
-    on left: 279, on right: 281
-$@17 (290)
-    on left: 280, on right: 281
-expr_type_info (291)
-    on left: 282 283 284, on right: 424
-expr_list (292)
-    on left: 285 286, on right: 71 249 286 333 335 399 401 443 690
-    691
-block_or_simple_block (293)
-    on left: 287 288 289, on right: 302
-block_or_lambda (294)
-    on left: 290 291 292, on right: 302
-capture_entry (295)
-    on left: 293 294 295 296, on right: 297 298
-capture_list (296)
-    on left: 297 298, on right: 298 300
-optional_capture_list (297)
-    on left: 299 300, on right: 302 405 406
-expr_block (298)
-    on left: 301 302, on right: 235 236 237 328 329 330 331 430 669
-expr_numeric_const (299)
-    on left: 303 304 305 306 307 308, on right: 352
-expr_assign (300)
-    on left: 309 310 311 312 313 314 315 316 317 318 319 320 321 322
-    323 324 325 326 327, on right: 211 235
-expr_assign_pipe (301)
-    on left: 328 329 330 331, on right: 210
-expr_named_call (302)
-    on left: 332 333, on right: 429
-expr_method_call (303)
-    on left: 334 335, on right: 428
-func_addr_name (304)
-    on left: 336 337, on right: 338 341 344
-func_addr_expr (305)
-    on left: 338 341 344, on right: 397
-$@18 (306)
-    on left: 339, on right: 341
-$@19 (307)
-    on left: 340, on right: 341
-$@20 (308)
-    on left: 342, on right: 344
-$@21 (309)
-    on left: 343, on right: 344
-expr_field (310)
-    on left: 345 346 349, on right: 358
-$@22 (311)
-    on left: 347, on right: 349
-$@23 (312)
-    on left: 348, on right: 349
-expr (313)
-    on left: 350 351 352 353 354 355 356 357 358 359 360 361 362 363
-    364 365 366 367 368 369 370 371 372 373 374 375 376 377 378 379
-    380 381 382 383 384 385 386 387 388 389 390 391 392 393 394 395
-    396 397 398 399 400 401 402 403 404 405 406 407 408 411 412 413
-    414 417 418 419 422 423 424 425 426 427 428 429 430 431 432 433
-    434 435, on right: 27 52 57 63 68 70 73 74 76 231 234 241 242 254
-    255 259 260 272 275 278 282 283 284 285 286 288 289 309 310 311
-    312 313 314 315 316 317 318 319 320 321 322 323 324 325 326 327
-    328 329 330 331 334 335 337 345 346 349 360 361 362 363 364 365
-    366 367 368 369 370 371 372 373 374 375 376 377 378 379 380 381
-    382 383 384 385 386 387 388 389 390 391 392 393 394 395 396 402
-    403 404 406 407 408 411 412 413 414 417 418 419 422 423 431 432
-    434 436 437 438 439 440 442 443 444 445 446 447 448 449 450 451
-    473 488 489 497 502 504 519 546 584 596 662 663 664 665 676 677
-    678 679 680 689 690 691
-$@24 (314)
-    on left: 409, on right: 411
-$@25 (315)
-    on left: 410, on right: 411
-$@26 (316)
-    on left: 415, on right: 417
-$@27 (317)
-    on left: 416, on right: 417
-$@28 (318)
-    on left: 420, on right: 422
-$@29 (319)
-    on left: 421, on right: 422
-expr_mtag (320)
-    on left: 436 437 438 439 440 441 442 443 444 445 446 447 448 449
-    450 451, on right: 359
-optional_field_annotation (321)
-    on left: 452 453, on right: 462 471 472 508 516
-optional_override (322)
-    on left: 454 455 456, on right: 462 469
-optional_constant (323)
-    on left: 457 458, on right: 469
-optional_public_or_private_member_variable (324)
-    on left: 459 460 461, on right: 462 467 469
-structure_variable_declaration (325)
-    on left: 462, on right: 465
-struct_variable_declaration_list (326)
-    on left: 463 465 467 469 470, on right: 465 467 469 470 544
-$@30 (327)
-    on left: 464, on right: 465
-$@31 (328)
-    on left: 466, on right: 467
-$@32 (329)
-    on left: 468, on right: 469
-function_argument_declaration (330)
-    on left: 471 472 473, on right: 474 475
-function_argument_list (331)
-    on left: 474 475, on right: 115 475
-tuple_type (332)
-    on left: 476 477, on right: 478 479
-tuple_type_list (333)
-    on left: 478 479, on right: 479 646
-variant_type (334)
-    on left: 480, on right: 481 482
-variant_type_list (335)
-    on left: 481 482, on right: 482 649 655
-copy_or_move (336)
-    on left: 483 484, on right: 488 489 490 662 664
-variable_declaration (337)
-    on left: 485 486 487 488 489 490, on right: 462 471 472
-copy_or_move_or_clone (338)
-    on left: 491 492 493, on right: 502 503 504 505
-optional_ref (339)
-    on left: 494 495, on right: 504 505
-let_variable_name_with_pos_list (340)
-    on left: 496 497 498 499 500, on right: 499 500 501 502 503 504
-    505
-let_variable_declaration (341)
-    on left: 501 502 503 504 505, on right: 269 508 516
-global_variable_declaration_list (342)
-    on left: 506 508, on right: 508 514
-$@33 (343)
-    on left: 507, on right: 508
-optional_shared (344)
-    on left: 509 510, on right: 19 514 516
-optional_public_or_private_variable (345)
-    on left: 511 512 513, on right: 514 516
-global_let (346)
-    on left: 514 516, on right: 5
-$@34 (347)
-    on left: 515, on right: 516
-enum_list (348)
-    on left: 517 518 519, on right: 518 519 530 531
-single_alias (349)
-    on left: 521, on right: 522 523 525
-$@35 (350)
-    on left: 520, on right: 521
-alias_list (351)
-    on left: 522 523, on right: 523 524
-alias_declaration (352)
-    on left: 524 525, on right: 10
-optional_public_or_private_enum (353)
-    on left: 526 527 528, on right: 530 531
-enum_name (354)
-    on left: 529, on right: 530 531
-enum_declaration (355)
-    on left: 530 531, on right: 4
-optional_structure_parent (356)
-    on left: 532 533, on right: 536
-optional_sealed (357)
-    on left: 534 535, on right: 536
-structure_name (358)
-    on left: 536, on right: 544
-class_or_struct (359)
-    on left: 537 538, on right: 544
-optional_public_or_private_structure (360)
-    on left: 539 540 541, on right: 544
-structure_declaration (361)
-    on left: 544, on right: 3
-$@36 (362)
-    on left: 542, on right: 544
-$@37 (363)
-    on left: 543, on right: 544
-variable_name_with_pos_list (364)
-    on left: 545 546 547 548 549, on right: 71 485 486 487 488 489
-    490 548 549 690 691
-basic_type_declaration (365)
-    on left: 550 551 552 553 554 555 556 557 558 559 560 561 562 563
-    564 565 566 567 568 569 570 571 572 573 574, on right: 400 401
-    412 418 423 592
-enum_basic_type_declaration (366)
-    on left: 575 576 577 578 579 580, on right: 531
-structure_type_declaration (367)
-    on left: 581, on right: 246 595
-auto_type_declaration (368)
-    on left: 582 583 584, on right: 593
-bitfield_bits (369)
-    on left: 585 586, on right: 586 589 657
-bitfield_type_declaration (370)
-    on left: 589, on right: 594
-$@38 (371)
-    on left: 587, on right: 589
-$@39 (372)
-    on left: 588, on right: 589
-table_type_pair (373)
-    on left: 590 591, on right: 619
-type_declaration_no_options (374)
-    on left: 592 593 594 595 596 597 598 599 600 601 602 603 604 605
-    606 607 608 609 612 613 616 619 622 623 626 629 630 633 636 637
-    640 643 646 649, on right: 234 272 275 278 341 405 406 411 501
-    502 503 596 597 598 599 600 601 602 603 604 605 606 607 608 609
-    613 650 651 670 671 672 673 674 675 683 684
-$@40 (375)
-    on left: 610, on right: 612
-$@41 (376)
-    on left: 611, on right: 612
-$@42 (377)
-    on left: 614, on right: 616
-$@43 (378)
-    on left: 615, on right: 616
-$@44 (379)
-    on left: 617, on right: 619
-$@45 (380)
-    on left: 618, on right: 619
-$@46 (381)
-    on left: 620, on right: 622
-$@47 (382)
-    on left: 621, on right: 622
-$@48 (383)
-    on left: 624, on right: 626
-$@49 (384)
-    on left: 625, on right: 626
-$@50 (385)
-    on left: 627, on right: 629
-$@51 (386)
-    on left: 628, on right: 629
-$@52 (387)
-    on left: 631, on right: 633
-$@53 (388)
-    on left: 632, on right: 633
-$@54 (389)
-    on left: 634, on right: 636
-$@55 (390)
-    on left: 635, on right: 636
-$@56 (391)
-    on left: 638, on right: 640
-$@57 (392)
-    on left: 639, on right: 640
-$@58 (393)
-    on left: 641, on right: 643
-$@59 (394)
-    on left: 642, on right: 643
-$@60 (395)
-    on left: 644, on right: 646
-$@61 (396)
-    on left: 645, on right: 646
-$@62 (397)
-    on left: 647, on right: 649
-$@63 (398)
-    on left: 648, on right: 649
-type_declaration (399)
-    on left: 650 651 652, on right: 117 245 281 417 422 476 477 480
-    487 488 521 590 591 612 616 622 626 633 640 651 652
-variant_alias_declaration (400)
-    on left: 655, on right: 11
-$@64 (401)
-    on left: 653, on right: 655
-$@65 (402)
-    on left: 654, on right: 655
-bitfield_alias_declaration (403)
-    on left: 657, on right: 12
-$@66 (404)
-    on left: 656, on right: 657
-make_decl (405)
-    on left: 658 659 660 661, on right: 250 355
-make_struct_fields (406)
-    on left: 662 663 664 665, on right: 332 333 664 665 666 667
-make_struct_dim (407)
-    on left: 666 667, on right: 667 670 673 674 675
-optional_block (408)
-    on left: 668 669, on right: 670 671 672 673 674 675
-make_struct_decl (409)
-    on left: 670 671 672 673 674 675, on right: 658
-make_tuple (410)
-    on left: 676 677 678, on right: 678 681 682
-make_map_tuple (411)
-    on left: 679 680, on right: 685 686
-make_dim (412)
-    on left: 681 682, on right: 682 683 684
-make_dim_decl (413)
-    on left: 683 684, on right: 659
-make_table (414)
-    on left: 685 686, on right: 686 687
-make_table_decl (415)
-    on left: 687, on right: 660
-array_comprehension_where (416)
-    on left: 688 689, on right: 690 691
-array_comprehension (417)
-    on left: 690 691, on right: 661
+    $accept (202)
+        on left: 0
+    program (203)
+        on left: 1 2 3 4 5 6 7 8 9 10 11 12 13
+        on right: 0 2 3 4 5 6 7 8 9 10 11 12 13
+    optional_public_or_private_module <b> (204)
+        on left: 14 15 16
+        on right: 19
+    module_name <s> (205)
+        on left: 17 18
+        on right: 19
+    module_declaration (206)
+        on left: 19
+        on right: 2
+    character_sequence <s> (207)
+        on left: 20 21 22 23
+        on right: 22 23 24 26
+    string_constant <s> (208)
+        on left: 24
+        on right: 77 88
+    string_builder_body <pExpression> (209)
+        on left: 25 26 27
+        on right: 26 27 28
+    string_builder <pExpression> (210)
+        on left: 28
+        on right: 354
+    reader_character_sequence (211)
+        on left: 29 30
+        on right: 30 32
+    expr_reader <pExpression> (212)
+        on left: 32
+        on right: 353
+    $@1 (213)
+        on left: 31
+        on right: 32
+    options_declaration (214)
+        on left: 33
+        on right: 9
+    require_declaration (215)
+        on left: 34
+        on right: 8
+    keyword_or_name <s> (216)
+        on left: 35 36
+        on right: 37 39 40
+    require_module_name <s> (217)
+        on left: 37 38 39 40
+        on right: 38 39 40 41 42
+    require_module (218)
+        on left: 41 42
+        on right: 34
+    is_public_module <b> (219)
+        on left: 43 44
+        on right: 41 42
+    expect_declaration (220)
+        on left: 45
+        on right: 7
+    expect_list (221)
+        on left: 46 47
+        on right: 45 47
+    expect_error (222)
+        on left: 48 49
+        on right: 46 47
+    expression_label <pExpression> (223)
+        on left: 50
+        on right: 225
+    expression_goto <pExpression> (224)
+        on left: 51 52
+        on right: 226
+    elif_or_static_elif <b> (225)
+        on left: 53 54
+        on right: 57
+    expression_else <pExpression> (226)
+        on left: 55 56 57
+        on right: 57 68
+    if_or_static_if <b> (227)
+        on left: 58 59
+        on right: 68
+    expression_else_one_liner <pExpression> (228)
+        on left: 60 62
+        on right: 70
+    $@2 (229)
+        on left: 61
+        on right: 62
+    expression_if_one_liner <pExpression> (230)
+        on left: 63 64 65 66 67
+        on right: 62 70
+    expression_if_then_else <pExpression> (231)
+        on left: 68 70
+        on right: 223
+    $@3 (232)
+        on left: 69
+        on right: 70
+    expression_for_loop <pExpression> (233)
+        on left: 71
+        on right: 218
+    expression_unsafe <pExpression> (234)
+        on left: 72
+        on right: 215
+    expression_while_loop <pExpression> (235)
+        on left: 73
+        on right: 214
+    expression_with <pExpression> (236)
+        on left: 74
+        on right: 216
+    expression_with_alias <pExpression> (237)
+        on left: 76
+        on right: 217
+    $@4 (238)
+        on left: 75
+        on right: 76
+    annotation_argument_value <aa> (239)
+        on left: 77 78 79 80 81 82
+        on right: 83 84
+    annotation_argument_value_list <aaList> (240)
+        on left: 83 84
+        on right: 84 95
+    annotation_argument_name <s> (241)
+        on left: 85 86 87
+        on right: 88 89 90 91 92 93 94 95
+    annotation_argument <aa> (242)
+        on left: 88 89 90 91 92 93 94 95
+        on right: 96 97
+    annotation_argument_list <aaList> (243)
+        on left: 96 97
+        on right: 33 97 102 453
+    annotation_declaration_name <s> (244)
+        on left: 98 99 100
+        on right: 101 102
+    annotation_declaration_basic <fa> (245)
+        on left: 101 102
+        on right: 103
+    annotation_declaration <fa> (246)
+        on left: 103 104 105 106 107 108
+        on right: 104 105 106 107 108 109 110
+    annotation_list <faList> (247)
+        on left: 109 110
+        on right: 110 112 470
+    optional_annotation_list <faList> (248)
+        on left: 111 112
+        on right: 198 302 467 469 530 531 544
+    optional_function_argument_list <pVarDeclList> (249)
+        on left: 113 114 115
+        on right: 202 302 344 629 636 643
+    optional_function_type <pTypeDecl> (250)
+        on left: 116 117
+        on right: 202 302 344 629 636 643
+    function_name <s> (251)
+        on left: 118 119 120 121 122 123 124 125 126 127 128 129 130 131 132 133 134 135 136 137 138 139 140 141 142 143 144 145 146 147 148 149 150 151 152 153 154 155 156 157 158 159 160 161 162 163 164 165 166 167 168 169 170 171 172 173 174 175 176 177 178 179 180 181 182 183 184 185 186 187 188 189 190 191 192 193 194 195 196 197
+        on right: 202
+    global_function_declaration (252)
+        on left: 198
+        on right: 6
+    optional_public_or_private_function <b> (253)
+        on left: 199 200 201
+        on right: 204
+    function_declaration_header <pFuncDecl> (254)
+        on left: 202
+        on right: 204 467 469
+    function_declaration <pFuncDecl> (255)
+        on left: 204
+        on right: 198
+    $@5 (256)
+        on left: 203
+        on right: 204
+    expression_block <pExpression> (257)
+        on left: 205 206
+        on right: 56 57 68 71 72 73 74 204 231 264 287 301 469
+    expression_any <pExpression> (258)
+        on left: 207 208 209 210 211 212 213 214 215 216 217 218 219 220 221 222 223 224 225 226 227
+        on right: 229
+    expressions <pExpression> (259)
+        on left: 228 229 230
+        on right: 205 206 229 230
+    expr_keyword <pExpression> (260)
+        on left: 231
+        on right: 209
+    expression_keyword <pExpression> (261)
+        on left: 234
+        on right: 435
+    $@6 (262)
+        on left: 232
+        on right: 234
+    $@7 (263)
+        on left: 233
+        on right: 234
+    expr_pipe <pExpression> (264)
+        on left: 235 236 237
+        on right: 208 257 258 262 263 490 503 505
+    name_in_namespace <s> (265)
+        on left: 238 239 240
+        on right: 32 98 282 283 284 332 333 336 351 398 399 433 533 581
+    expression_delete <pExpression> (266)
+        on left: 241 242
+        on right: 212
+    new_type_declaration <pTypeDecl> (267)
+        on left: 245 246
+        on right: 247 248 249
+    $@8 (268)
+        on left: 243
+        on right: 245
+    $@9 (269)
+        on left: 244
+        on right: 245
+    expr_new <pExpression> (270)
+        on left: 247 248 249 250
+        on right: 427
+    expression_break <pExpression> (271)
+        on left: 251
+        on right: 66 219
+    expression_continue <pExpression> (272)
+        on left: 252
+        on right: 67 220
+    expression_return_no_pipe <pExpression> (273)
+        on left: 253 254 255
+        on right: 64 256
+    expression_return <pExpression> (274)
+        on left: 256 257 258
+        on right: 221
+    expression_yield_no_pipe <pExpression> (275)
+        on left: 259 260
+        on right: 65 261
+    expression_yield <pExpression> (276)
+        on left: 261 262 263
+        on right: 222
+    expression_try_catch <pExpression> (277)
+        on left: 264
+        on right: 224
+    kwd_let <b> (278)
+        on left: 265 266
+        on right: 269 514 516
+    optional_in_scope <b> (279)
+        on left: 267 268
+        on right: 269
+    expression_let <pExpression> (280)
+        on left: 269
+        on right: 213
+    expr_cast <pExpression> (281)
+        on left: 272 275 278
+        on right: 426
+    $@10 (282)
+        on left: 270
+        on right: 272
+    $@11 (283)
+        on left: 271
+        on right: 272
+    $@12 (284)
+        on left: 273
+        on right: 275
+    $@13 (285)
+        on left: 274
+        on right: 275
+    $@14 (286)
+        on left: 276
+        on right: 278
+    $@15 (287)
+        on left: 277
+        on right: 278
+    expr_type_decl <pExpression> (288)
+        on left: 281
+        on right: 425
+    $@16 (289)
+        on left: 279
+        on right: 281
+    $@17 (290)
+        on left: 280
+        on right: 281
+    expr_type_info <pExpression> (291)
+        on left: 282 283 284
+        on right: 424
+    expr_list <pExpression> (292)
+        on left: 285 286
+        on right: 71 249 286 333 335 399 401 443 690 691
+    block_or_simple_block <pExpression> (293)
+        on left: 287 288 289
+        on right: 302
+    block_or_lambda <i> (294)
+        on left: 290 291 292
+        on right: 302
+    capture_entry <pCapt> (295)
+        on left: 293 294 295 296
+        on right: 297 298
+    capture_list <pCaptList> (296)
+        on left: 297 298
+        on right: 298 300
+    optional_capture_list <pCaptList> (297)
+        on left: 299 300
+        on right: 302 405 406
+    expr_block <pExpression> (298)
+        on left: 301 302
+        on right: 235 236 237 328 329 330 331 430 669
+    expr_numeric_const <pExpression> (299)
+        on left: 303 304 305 306 307 308
+        on right: 352
+    expr_assign <pExpression> (300)
+        on left: 309 310 311 312 313 314 315 316 317 318 319 320 321 322 323 324 325 326 327
+        on right: 211 235
+    expr_assign_pipe <pExpression> (301)
+        on left: 328 329 330 331
+        on right: 210
+    expr_named_call <pExpression> (302)
+        on left: 332 333
+        on right: 429
+    expr_method_call <pExpression> (303)
+        on left: 334 335
+        on right: 428
+    func_addr_name <pExpression> (304)
+        on left: 336 337
+        on right: 338 341 344
+    func_addr_expr <pExpression> (305)
+        on left: 338 341 344
+        on right: 397
+    $@18 (306)
+        on left: 339
+        on right: 341
+    $@19 (307)
+        on left: 340
+        on right: 341
+    $@20 (308)
+        on left: 342
+        on right: 344
+    $@21 (309)
+        on left: 343
+        on right: 344
+    expr_field <pExpression> (310)
+        on left: 345 346 349
+        on right: 358
+    $@22 (311)
+        on left: 347
+        on right: 349
+    $@23 (312)
+        on left: 348
+        on right: 349
+    expr <pExpression> (313)
+        on left: 350 351 352 353 354 355 356 357 358 359 360 361 362 363 364 365 366 367 368 369 370 371 372 373 374 375 376 377 378 379 380 381 382 383 384 385 386 387 388 389 390 391 392 393 394 395 396 397 398 399 400 401 402 403 404 405 406 407 408 411 412 413 414 417 418 419 422 423 424 425 426 427 428 429 430 431 432 433 434 435
+        on right: 27 52 57 63 68 70 73 74 76 231 234 241 242 254 255 259 260 272 275 278 282 283 284 285 286 288 289 309 310 311 312 313 314 315 316 317 318 319 320 321 322 323 324 325 326 327 328 329 330 331 334 335 337 345 346 349 360 361 362 363 364 365 366 367 368 369 370 371 372 373 374 375 376 377 378 379 380 381 382 383 384 385 386 387 388 389 390 391 392 393 394 395 396 402 403 404 406 407 408 411 412 413 414 417 418 419 422 423 431 432 434 436 437 438 439 440 442 443 444 445 446 447 448 449 450 451 473 488 489 497 502 504 519 546 584 596 662 663 664 665 676 677 678 679 680 689 690 691
+    $@24 (314)
+        on left: 409
+        on right: 411
+    $@25 (315)
+        on left: 410
+        on right: 411
+    $@26 (316)
+        on left: 415
+        on right: 417
+    $@27 (317)
+        on left: 416
+        on right: 417
+    $@28 (318)
+        on left: 420
+        on right: 422
+    $@29 (319)
+        on left: 421
+        on right: 422
+    expr_mtag <pExpression> (320)
+        on left: 436 437 438 439 440 441 442 443 444 445 446 447 448 449 450 451
+        on right: 359
+    optional_field_annotation <aaList> (321)
+        on left: 452 453
+        on right: 462 471 472 508 516
+    optional_override <i> (322)
+        on left: 454 455 456
+        on right: 462 469
+    optional_constant <b> (323)
+        on left: 457 458
+        on right: 469
+    optional_public_or_private_member_variable <b> (324)
+        on left: 459 460 461
+        on right: 462 467 469
+    structure_variable_declaration <pVarDecl> (325)
+        on left: 462
+        on right: 465
+    struct_variable_declaration_list <pVarDeclList> (326)
+        on left: 463 465 467 469 470
+        on right: 465 467 469 470 544
+    $@30 (327)
+        on left: 464
+        on right: 465
+    $@31 (328)
+        on left: 466
+        on right: 467
+    $@32 (329)
+        on left: 468
+        on right: 469
+    function_argument_declaration <pVarDecl> (330)
+        on left: 471 472 473
+        on right: 474 475
+    function_argument_list <pVarDeclList> (331)
+        on left: 474 475
+        on right: 115 475
+    tuple_type <pVarDecl> (332)
+        on left: 476 477
+        on right: 478 479
+    tuple_type_list <pVarDeclList> (333)
+        on left: 478 479
+        on right: 479 646
+    variant_type <pVarDecl> (334)
+        on left: 480
+        on right: 481 482
+    variant_type_list <pVarDeclList> (335)
+        on left: 481 482
+        on right: 482 649 655
+    copy_or_move <b> (336)
+        on left: 483 484
+        on right: 488 489 490 662 664
+    variable_declaration <pVarDecl> (337)
+        on left: 485 486 487 488 489 490
+        on right: 462 471 472
+    copy_or_move_or_clone <i> (338)
+        on left: 491 492 493
+        on right: 502 503 504 505
+    optional_ref <b> (339)
+        on left: 494 495
+        on right: 504 505
+    let_variable_name_with_pos_list <pNameWithPosList> (340)
+        on left: 496 497 498 499 500
+        on right: 499 500 501 502 503 504 505
+    let_variable_declaration <pVarDecl> (341)
+        on left: 501 502 503 504 505
+        on right: 269 508 516
+    global_variable_declaration_list <pVarDeclList> (342)
+        on left: 506 508
+        on right: 508 514
+    $@33 (343)
+        on left: 507
+        on right: 508
+    optional_shared <b> (344)
+        on left: 509 510
+        on right: 19 514 516
+    optional_public_or_private_variable <b> (345)
+        on left: 511 512 513
+        on right: 514 516
+    global_let (346)
+        on left: 514 516
+        on right: 5
+    $@34 (347)
+        on left: 515
+        on right: 516
+    enum_list <pEnum> (348)
+        on left: 517 518 519
+        on right: 518 519 530 531
+    single_alias (349)
+        on left: 521
+        on right: 522 523 525
+    $@35 (350)
+        on left: 520
+        on right: 521
+    alias_list (351)
+        on left: 522 523
+        on right: 523 524
+    alias_declaration (352)
+        on left: 524 525
+        on right: 10
+    optional_public_or_private_enum <b> (353)
+        on left: 526 527 528
+        on right: 530 531
+    enum_name <pEnum> (354)
+        on left: 529
+        on right: 530 531
+    enum_declaration (355)
+        on left: 530 531
+        on right: 4
+    optional_structure_parent <s> (356)
+        on left: 532 533
+        on right: 536
+    optional_sealed <b> (357)
+        on left: 534 535
+        on right: 536
+    structure_name <pStructure> (358)
+        on left: 536
+        on right: 544
+    class_or_struct <b> (359)
+        on left: 537 538
+        on right: 544
+    optional_public_or_private_structure <b> (360)
+        on left: 539 540 541
+        on right: 544
+    structure_declaration (361)
+        on left: 544
+        on right: 3
+    $@36 (362)
+        on left: 542
+        on right: 544
+    $@37 (363)
+        on left: 543
+        on right: 544
+    variable_name_with_pos_list <pNameWithPosList> (364)
+        on left: 545 546 547 548 549
+        on right: 71 485 486 487 488 489 490 548 549 690 691
+    basic_type_declaration <type> (365)
+        on left: 550 551 552 553 554 555 556 557 558 559 560 561 562 563 564 565 566 567 568 569 570 571 572 573 574
+        on right: 400 401 412 418 423 592
+    enum_basic_type_declaration <type> (366)
+        on left: 575 576 577 578 579 580
+        on right: 531
+    structure_type_declaration <pTypeDecl> (367)
+        on left: 581
+        on right: 246 595
+    auto_type_declaration <pTypeDecl> (368)
+        on left: 582 583 584
+        on right: 593
+    bitfield_bits <pNameList> (369)
+        on left: 585 586
+        on right: 586 589 657
+    bitfield_type_declaration <pTypeDecl> (370)
+        on left: 589
+        on right: 594
+    $@38 (371)
+        on left: 587
+        on right: 589
+    $@39 (372)
+        on left: 588
+        on right: 589
+    table_type_pair <aTypePair> (373)
+        on left: 590 591
+        on right: 619
+    type_declaration_no_options <pTypeDecl> (374)
+        on left: 592 593 594 595 596 597 598 599 600 601 602 603 604 605 606 607 608 609 612 613 616 619 622 623 626 629 630 633 636 637 640 643 646 649
+        on right: 234 272 275 278 341 405 406 411 501 502 503 596 597 598 599 600 601 602 603 604 605 606 607 608 609 613 650 651 670 671 672 673 674 675 683 684
+    $@40 (375)
+        on left: 610
+        on right: 612
+    $@41 (376)
+        on left: 611
+        on right: 612
+    $@42 (377)
+        on left: 614
+        on right: 616
+    $@43 (378)
+        on left: 615
+        on right: 616
+    $@44 (379)
+        on left: 617
+        on right: 619
+    $@45 (380)
+        on left: 618
+        on right: 619
+    $@46 (381)
+        on left: 620
+        on right: 622
+    $@47 (382)
+        on left: 621
+        on right: 622
+    $@48 (383)
+        on left: 624
+        on right: 626
+    $@49 (384)
+        on left: 625
+        on right: 626
+    $@50 (385)
+        on left: 627
+        on right: 629
+    $@51 (386)
+        on left: 628
+        on right: 629
+    $@52 (387)
+        on left: 631
+        on right: 633
+    $@53 (388)
+        on left: 632
+        on right: 633
+    $@54 (389)
+        on left: 634
+        on right: 636
+    $@55 (390)
+        on left: 635
+        on right: 636
+    $@56 (391)
+        on left: 638
+        on right: 640
+    $@57 (392)
+        on left: 639
+        on right: 640
+    $@58 (393)
+        on left: 641
+        on right: 643
+    $@59 (394)
+        on left: 642
+        on right: 643
+    $@60 (395)
+        on left: 644
+        on right: 646
+    $@61 (396)
+        on left: 645
+        on right: 646
+    $@62 (397)
+        on left: 647
+        on right: 649
+    $@63 (398)
+        on left: 648
+        on right: 649
+    type_declaration <pTypeDecl> (399)
+        on left: 650 651 652
+        on right: 117 245 281 417 422 476 477 480 487 488 521 590 591 612 616 622 626 633 640 651 652
+    variant_alias_declaration (400)
+        on left: 655
+        on right: 11
+    $@64 (401)
+        on left: 653
+        on right: 655
+    $@65 (402)
+        on left: 654
+        on right: 655
+    bitfield_alias_declaration (403)
+        on left: 657
+        on right: 12
+    $@66 (404)
+        on left: 656
+        on right: 657
+    make_decl <pExpression> (405)
+        on left: 658 659 660 661
+        on right: 250 355
+    make_struct_fields <pMakeStruct> (406)
+        on left: 662 663 664 665
+        on right: 332 333 664 665 666 667
+    make_struct_dim <pExpression> (407)
+        on left: 666 667
+        on right: 667 670 673 674 675
+    optional_block <pExpression> (408)
+        on left: 668 669
+        on right: 670 671 672 673 674 675
+    make_struct_decl <pExpression> (409)
+        on left: 670 671 672 673 674 675
+        on right: 658
+    make_tuple <pExpression> (410)
+        on left: 676 677 678
+        on right: 678 681 682
+    make_map_tuple <pExpression> (411)
+        on left: 679 680
+        on right: 685 686
+    make_dim <pExpression> (412)
+        on left: 681 682
+        on right: 682 683 684
+    make_dim_decl <pExpression> (413)
+        on left: 683 684
+        on right: 659
+    make_table <pExpression> (414)
+        on left: 685 686
+        on right: 686 687
+    make_table_decl <pExpression> (415)
+        on left: 687
+        on right: 660
+    array_comprehension_where <pExpression> (416)
+        on left: 688 689
+        on right: 690 691
+    array_comprehension <pExpression> (417)
+        on left: 690 691
+        on right: 661
 
 
 State 0
