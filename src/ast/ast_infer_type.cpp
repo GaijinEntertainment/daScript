@@ -891,7 +891,7 @@ namespace das {
                     if ( fnArg->name == arg->name ) {               // found it, name matches
                         break;
                     }
-                    
+
                     if ( !fnArg->init && fnArgIndex >= nonNamedTypes.size() ) {    // can't skip - no default value
                         return false;
                     }
@@ -4389,8 +4389,8 @@ namespace das {
                 return substitute;
             }
             // generic operator
-            if ( auto opE = inferGenericOperatorWithName("`as",expr->at,expr->value,expr->name) ) return opE;
             if ( auto opE = inferGenericOperator("`as`"+expr->name,expr->at,expr->value,nullptr) ) return opE;
+            if ( auto opE = inferGenericOperatorWithName("`as",expr->at,expr->value,expr->name) ) return opE;
             // regular infer
             auto valT = expr->value->type;
             if ( !valT->isGoodVariantType() ) {
@@ -4435,8 +4435,8 @@ namespace das {
                 return substitute;
             }
             // generic operator
-            if ( auto opE = inferGenericOperatorWithName("?as",expr->at,expr->value,expr->name) ) return opE;
             if ( auto opE = inferGenericOperator("?as`"+expr->name,expr->at,expr->value,nullptr) ) return opE;
+            if ( auto opE = inferGenericOperatorWithName("?as",expr->at,expr->value,expr->name) ) return opE;
             // regular infer
             if ( !expr->value->type->isPointer() && !safeExpression(expr) ) {
                 error("variant ?as on non-pointer requires unsafe", "", "",
@@ -4493,8 +4493,8 @@ namespace das {
                 return substitute;
             }
             // generic operator
-            if ( auto opE = inferGenericOperatorWithName("`is",expr->at,expr->value,expr->name) ) return opE;
             if ( auto opE = inferGenericOperator("`is`"+expr->name,expr->at,expr->value,nullptr) ) return opE;
+            if ( auto opE = inferGenericOperatorWithName("`is",expr->at,expr->value,expr->name) ) return opE;
             // regular infer
             auto valT = expr->value->type;
             if ( !valT->isGoodVariantType() ) {
@@ -4542,6 +4542,7 @@ namespace das {
                 return Visitor::visit(expr);
             }
             if ( !expr->no_promotion ) {
+                if ( auto opE = inferGenericOperator(".`"+expr->name,expr->at,expr->value,nullptr) ) return opE;
                 if ( auto opE = inferGenericOperatorWithName(".",expr->at,expr->value,expr->name) ) return opE;
             }
             auto valT = expr->value->type;
@@ -4663,6 +4664,7 @@ namespace das {
         virtual ExpressionPtr visit ( ExprSafeField * expr ) override {
             if ( !expr->value->type || expr->value->type->isAliasOrExpr() ) return Visitor::visit(expr);    // failed to infer
             if ( !expr->no_promotion ) {
+                if ( auto opE = inferGenericOperator("?.`"+expr->name,expr->at,expr->value,nullptr) ) return opE;
                 if ( auto opE = inferGenericOperatorWithName("?.",expr->at,expr->value,expr->name) ) return opE;
             }
             auto valT = expr->value->type;

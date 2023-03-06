@@ -325,3 +325,92 @@ statements in that function (just before the return).
 
 Currently, daScript doesn't support tail recursion.
 It is implied that a daScript function always returns.
+
+---------------------------------------------
+Operator Overloading
+---------------------------------------------
+
+daScript allows you to overload operators, which means that you can define custom behavior for operators when used with your own data types.
+To overload an operator, you need to define a special function with the name of the operator you want to overload. Here's the syntax::
+
+    def operator <operator>(<arguments>) : <return_type>
+        # Implementation here
+
+In this syntax, <operator> is the name of the operator you want to overload (e.g. +, -, *, /, ==, etc.),
+<arguments> are the parameters that the operator function takes, and <return_type> is the return type of the operator function.
+
+For example, here's how you could overload the == operator for a custom struct called iVec2::
+
+    struct iVec2:
+        x, y: int
+
+    def operator==(a, b: iVec2)
+        return (a.x == b.x) && (a.y == b.y)
+
+In this example, we define a structure called iVec2 with two integer fields (x and y).
+
+We then define an operator== function that takes two parameters (a and b) of type iVec2. This function returns a bool value indicating whether a and b are equal.
+The implementation checks whether the x and y components of a and b are equal using the == operator.
+
+With this operator overloaded, you can now use the == operator to compare iVec2 objects, like this::
+
+    let v1 = iVec2(1, 2)
+    let v2 = iVec2(1, 2)
+    let v3 = iVec2(3, 4)
+
+    print("{v1==v2}") # prints "true"
+    print("{v1==v3}") # prints "false"
+
+In this example, we create three iVec2 objects and compare them using the == operator. The first comparison (v1 == v2) returns true because the x and y components of v1 and v2 are equal.
+The second comparison (v1 == v3) returns false because the x and y components of v1 and v3 are not equal.
+
+---------------------------------------------
+Overloading the '.' and '?.' operators
+---------------------------------------------
+
+daScript allows you to overload the dot . operator, which is used to access fields of structure or a class.
+To overload the dot . operator, you need to define a special function with the name operator `.` Here's the syntax::
+
+    def operator.(<object>: <type>; <name>: string) : <return_type>
+        # Implementation here
+
+Alternatively you can specify field explicitly::
+
+    def operator.<name> (<object>: <type>) : <return_type>
+        # Implementation here
+
+In this syntax, <object> is the object you want to access, <type> is the type of the object, <name> is the name of the field you want to access, and <return_type> is the return type of the operator function.
+
+Operator ?. works in a similar way.
+
+For example, here's how you could overload the dot . operator for a custom structure called Goo::
+
+    struct Goo
+        a: string
+
+    def operator.(t: Goo, name: string) : string
+        return "{name} = {t . . a}"
+
+    def operator. length(t: Goo) : int
+        return length(t . . a)
+
+In this example, we define a struct called Goo with a string field called a.
+
+We then define two operator. functions:
+
+The first one takes two parameters (t and name) and returns a string value that contains the name of the field or method being accessed (name)
+and the value of the a field of the Goo object (t.a).
+The second one takes one parameter (t) and returns the length of the a field of the Goo object (t.a).
+With these operators overloaded, you can now use the dot . operator to access fields and methods of a Goo object, like this::
+
+    var g = [[Goo a ="hello"]]
+    var field = g.a
+    var length = g.length
+
+In this example, we create an instance of the Goo struct and access its world field using the dot . operator.
+The overloaded operator. function is called and returns the string "world = hello".
+We also access the length property of the Goo object using the dot . operator.
+The overloaded operator. length function is called and returns the length of the a field of the Goo object (5 in this case).
+
+The . . syntax is used to access the fields of a structure or a class while bypassing overloaded operations.
+

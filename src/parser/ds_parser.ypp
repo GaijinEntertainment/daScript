@@ -1018,6 +1018,8 @@ function_name
     |   DAS_OPERATOR QBRA ']'   { $$ = new string("?[]"); }
     |   DAS_OPERATOR '.'     { $$ = new string("."); }
     |   DAS_OPERATOR QDOT    { $$ = new string("?."); }
+    |   DAS_OPERATOR '.' NAME[name]    { $$ = new string(".`"+*$name); delete $name; }
+    |   DAS_OPERATOR QDOT NAME[name]   { $$ = new string("?.`"+*$name); delete $name;}
     |   DAS_OPERATOR CLONEEQU   { $$ = new string("clone"); }
     |   DAS_OPERATOR DAS_DELETE { $$ = new string("finalize"); }
     |   DAS_OPERATOR QQ    { $$ = new string("??"); }
