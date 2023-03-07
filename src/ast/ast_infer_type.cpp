@@ -6864,7 +6864,9 @@ namespace das {
                         }
                         // now we verify if tail end can indeed be fully inferred
                         if (!program->addFunction(clone)) {
+                            clone->module = program->thisModule.get();
                             auto exf = program->thisModule->functions.find(clone->getMangledName());
+                            clone->module = nullptr;
                             DAS_ASSERTF(exf, "if we can't add, this means there is function with exactly this mangled name");
                             if (exf->fromGeneric != clone->fromGeneric) { // TODO: getOrigin??
                                 error("can't instance generic " + describeFunction(clone),
@@ -7329,6 +7331,7 @@ namespace das {
                             }
                         }
                     }
+                    if ( !expr->structs.size() ) expr->structs.emplace_back(make_smart<MakeStruct>());
                     bool anyInit = false;
                     for ( auto & st : expr->structs ) {
                         for ( auto & fi : expr->makeType->structType->fields ) {
