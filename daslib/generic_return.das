@@ -14,7 +14,7 @@ require daslib/macro_boost
 class GenericReturn : AstCallMacro
     //! This macro convert fake_numeric(func_id) to the comprehensive faker test::
     def override visit ( prog:ProgramPtr; mod:Module?; var expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr
-        if expr.arguments.length !=1
+        if expr.arguments |> length !=1
             macro_error(prog,expr.at,"generic_return expecting 1 argument")
             return <- [[ExpressionPtr]]
         assume ret_expr = expr.arguments[0]

@@ -15,12 +15,12 @@ class QsortMacro : AstCallMacro
     //! For the regular array<> or dim it's replaced with `sort(value,block)`.
     //! For the handled types like das`vector its replaced with `sort(temp_array(value),block)`.
     def override visit ( prog:ProgramPtr; mod:Module?; var expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr
-        macro_verify(expr.arguments.length==2,prog,expr.at,"expecting qsort(value, block)")
+        macro_verify(expr.arguments |> length==2,prog,expr.at,"expecting qsort(value, block)")
         if expr.arguments[0]._type==null || expr.arguments[1]._type==null
             return <- [[ExpressionPtr]]
         // todo: verify correct block type?
         macro_verify(expr.arguments[1]._type.baseType == Type tBlock,prog,expr.at,"expecting 2nd argument to be block(<a,b:auto(TT)>:bool))")
-        if expr.arguments[0]._type.dim.length != 0 || expr.arguments[0]._type.baseType==Type tArray
+        if expr.arguments[0]._type.dim |> length != 0 || expr.arguments[0]._type.baseType==Type tArray
             var inscope call <- new [[ExprCall() name:="sort", at=expr.at]]
             emplace_new(call.arguments) <| clone_expression(expr.arguments[0])
             emplace_new(call.arguments) <| clone_expression(expr.arguments[1])

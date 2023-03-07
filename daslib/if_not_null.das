@@ -27,7 +27,7 @@ class ApplyMacro : AstCallMacro
     //!
     if_not_null_index : int = 0
     def override visit ( prog:ProgramPtr; mod:Module?; var expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr
-        macro_verify(expr.arguments.length==2,prog,expr.at,"expecting 2 arguments, expecting ptr |> if_not_null() <| call()")
+        macro_verify(expr.arguments |> length==2,prog,expr.at,"expecting 2 arguments, expecting ptr |> if_not_null() <| call()")
         macro_verify(expr.arguments[1] is ExprCall,prog,expr.at,"2nd argument must be call(), expecting ptr |> if_not_null() <| call()")
         assume PTR = expr.arguments[0]
         if PTR._type!=null    // need value inferred

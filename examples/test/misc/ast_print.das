@@ -64,12 +64,12 @@ class PrintVisitor : AstVisitor
         return enu
 // structure
     def override preVisitStructure(str:StructurePtr)
-        if str.annotations.length != 0
+        if str.annotations |> length != 0
             print("[{describe(str.annotations)}]\n")
         print("{str.flags.isClass ? "class" : "struct"} {str.name}\n")
     def override preVisitStructureField(str:StructurePtr;decl:FieldDeclaration;last:bool)
         print("\t")
-        if decl.annotation.length != 0
+        if decl.annotation |> length != 0
             print("[{describe(decl.annotation)}] ")
         print("{decl.name} : {describe([decl=decl._type,extra=extraTypeInfo])}")
         if decl.flags.parentType
@@ -90,13 +90,13 @@ class PrintVisitor : AstVisitor
                 print("// {describe_bitfield(fun.sideEffectFlags)}\n")
         let bfa : FunctionFlags = fun.flags & function_annotation_flags
         print("{describe_bitfield(bfa,"\n")}")
-        if fun.annotations.length != 0
+        if fun.annotations |> length != 0
             print("[{describe(fun.annotations)}]\n")
         print("def {fun.name}")
-        if fun.arguments.length != 0
+        if fun.arguments |> length != 0
             print(" ( ")
     def override preVisitFunctionBody(fun:FunctionPtr; expr:ExpressionPtr)
-        if fun.arguments.length != 0
+        if fun.arguments |> length != 0
             print(" ) ")
         if fun.result != null && !fun.result.isVoid
             print(" : {describe([decl=fun.result,extra=extraTypeInfo])}")
@@ -105,7 +105,7 @@ class PrintVisitor : AstVisitor
         print("\n")
         return fun
     def override preVisitFunctionArgument(fun:FunctionPtr;arg:VariablePtr;last:bool)
-        if arg.annotation.length != 0
+        if arg.annotation |> length != 0
             print("[{describe(arg.annotation)}] ")
         if !arg._type.flags.constant
             print("var ")
@@ -121,15 +121,15 @@ class PrintVisitor : AstVisitor
 // block
     def override preVisitExprBlock(blk:smart_ptr<ExprBlock>)
         if blk.blockFlags.isClosure
-            if blk.returnType!=null || blk.arguments.length!=0
+            if blk.returnType!=null || blk.arguments |> length!=0
                 print("$(")
-                for arg,argIndex in blk.arguments,range(blk.arguments.length)
-                    if arg.annotation.length != 0
+                for arg,argIndex in blk.arguments,range(blk.arguments |> length)
+                    if arg.annotation |> length != 0
                         print("[{describe(arg.annotation)}] ")
                     if arg._type.flags.constant
                         print("var ")
                     print("{arg.name} : {describe([decl=arg._type,extra=extraTypeInfo])}")
-                    if argIndex != blk.arguments.length-1
+                    if argIndex != blk.arguments |> length-1
                         print("; ")
                 print(")")
                 if blk.returnType!=null

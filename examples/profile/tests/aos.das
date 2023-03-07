@@ -5,7 +5,7 @@ require testProfile
 [sideeffects]
 def perks_disabler_unset_es(var game_effect_dot_allowedMods:ObjectArray;var allowedMods:ObjectArray)
 	for perk in game_effect_dot_allowedMods
-		for i in range(allowedMods.length)
+		for i in range(allowedMods |> length)
 			if allowedMods[i] == perk
 				return true
 	return false
@@ -59,7 +59,7 @@ def init(var objects:ObjectArray)
     var index = 0
     for obj in objects
         initObj(index++,obj)
-    assert(index==objects.length)
+    assert(index==objects |> length)
 
 def init(var objects:NObject[10000])
     var index = 0
@@ -87,7 +87,7 @@ def verifyObj(total:int;objects:NObject[10000])
 
 def verifyManagedInt
 	testManagedInt() <| $ ( arr )
-		assert(arr.length==10)
+		assert(arr |> length==10)
 		for x in range(10)
 			assert(arr[x]==x)
 		for x,y in range(10),arr

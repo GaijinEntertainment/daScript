@@ -34,7 +34,7 @@ class AppendCondAnnotation : AstFunctionAnnotation
         if !(find_arg(ann.arguments,"patched") is nothing)
           return true
 
-    if args.length != 1
+    if args |> length != 1
       errors := "expecting one argument"
       return false
 

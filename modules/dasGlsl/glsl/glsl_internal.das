@@ -601,7 +601,7 @@ class GlslExport : AstVisitor
     def override preVisitStructureField(str:StructurePtr;decl:FieldDeclaration;last:bool)
         self->line(decl.at)
         *writer |> write("\t")
-        //if decl.annotation.length != 0
+        //if decl.annotation |> length != 0
         //    *writer |> write("[{describe(decl.annotation)}] ")
         *writer |> write("{self->describe_glsl_type_ex(decl._type,false)} {decl.name}")
         if decl.init != null

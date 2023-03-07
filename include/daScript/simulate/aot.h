@@ -2525,6 +2525,16 @@ namespace das {
     }
 
     template <typename TT>
+    __forceinline int32_t das_vector_length ( const TT & vec ) {
+        return int32_t(vec.size());
+    }
+
+    template <typename TT>
+    __forceinline int32_t das_vector_capacity ( const TT & vec ) {
+        return int32_t(vec.capacity());
+    }
+
+    template <typename TT>
     void peek_das_string_T(const string & str, TT && block, Context *, LineInfoArg *) {
         block((char *)str.c_str());
     }

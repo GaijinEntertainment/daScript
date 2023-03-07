@@ -32,10 +32,10 @@ class UnrollMacro : AstFunctionAnnotation
         unsafe
             var mblk = reinterpret<ExprMakeBlock?> call.arguments[0]
             var blk = reinterpret<ExprBlock?> mblk._block
-            if blk.finalList.length != 0
+            if blk.finalList |> length != 0
                 errors := "not expecting finally section in the unroll"
                 return [[ExpressionPtr]]
-            if blk.list.length != 1 || !(blk.list[0] is ExprFor)
+            if blk.list |> length != 1 || !(blk.list[0] is ExprFor)
                 errors := "expecting unroll <| for ..."
                 return [[ExpressionPtr]]
             let efor = reinterpret<ExprFor?> blk.list[0]
