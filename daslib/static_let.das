@@ -43,7 +43,7 @@ class StaticLetMacro : AstFunctionAnnotation
         assert(call.arguments[0] is ExprMakeBlock)
         let mblk = call.arguments[0] as ExprMakeBlock
         var blk = mblk._block as ExprBlock
-        if blk.finalList.length != 0
+        if blk.finalList |> length != 0
             errors := "not expecting finally section in the static_let"
             return <- [[ExpressionPtr]]
         let prefix = "`static`at_line_{int(call.at.line)}`"
@@ -75,7 +75,7 @@ class StaticLetMacro : AstFunctionAnnotation
                 errors := "can't get valid program context"
                 success = false
             else
-                apply_template(astc.scopes[astc.scopes.length-1]) <| $ ( rules )
+                apply_template(astc.scopes[astc.scopes |> length-1]) <| $ ( rules )
                     for r in renames
                         rules |> renameVariable(r.old_name) <| r.new_name
         if !success

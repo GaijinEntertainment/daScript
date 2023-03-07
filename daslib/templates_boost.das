@@ -191,7 +191,7 @@ class private TemplateVisitor : AstVisitor
         for ann in blk.annotations
             rules.annArg |> get("{ann.annotation.name}") <| $(cb)
                 cb |> invoke(*ann)
-        let nargs = blk.arguments.length
+        let nargs = blk.arguments |> length
         for ai in range(nargs)
             let rai = nargs - ai - 1
             assume arg = blk.arguments[rai]
@@ -214,7 +214,7 @@ class private TemplateVisitor : AstVisitor
     def preVisitAnythingCall(var arguments:dasvector`smart_ptr`Expression) : void
         if length(rules.var2exprList)==0
             return
-        let nargs = arguments.length
+        let nargs = arguments |> length
         if nargs == 0
             return
         for ai in range(nargs)
@@ -437,7 +437,7 @@ class private QRulesVisitor : AstVisitor
             typ <- newTyp
     def override visitTypeDecl(var typ:TypeDeclPtr) : TypeDeclPtr
         if (typ.baseType == Type alias) && (typ.flags.isTag)
-            if typ.firstType==null || typ.firstType.dimExpr.length!=1
+            if typ.firstType==null || typ.firstType.dimExpr |> length!=1
                 compiling_program() |> macro_error(typ.at,"unsupported type tag")
                 failed = true
                 return <- typ
@@ -681,7 +681,7 @@ def public apply_qblock_expr ( var expr:smart_ptr<Expression>; blk:block<(var ru
     var inscope res <- apply_template(expr, blk)
     assert(res is ExprMakeBlock)
     var inscope qblk <- move_unquote_block(res)
-    assert(qblk.list.length == 1)
+    assert(qblk.list |> length == 1)
     return <- clone_to_move(qblk.list[0])
 
 def public apply_qtype ( var expr:smart_ptr<Expression>; blk:block<(var rules:Template):void> ) : TypeDeclPtr
@@ -702,7 +702,7 @@ class private  AstQCallMacro : AstCallMacro
     def override canVisitArgument ( call:smart_ptr<ExprCallMacro>; argIndex:int ) : bool
         return false    // nop, this one is just like quote
     def override visit ( prog:ProgramPtr; mod:Module?; var call:smart_ptr<ExprCallMacro> ) : ExpressionPtr
-        if call.arguments.length != 1
+        if call.arguments |> length != 1
             macro_error(prog,call.at,"expecting 1 argument, {macro_call}(expression)")
             return <- [[ExpressionPtr]]
         var inscope qclone <- clone_expression(call.arguments[0])
@@ -788,7 +788,7 @@ class private AstQNamedMacro : AstCallMacro
     def override canVisitArgument ( call:smart_ptr<ExprCallMacro>; argIndex:int ) : bool
         return argIndex==0
     def override visit ( prog:ProgramPtr; mod:Module?; var call:smart_ptr<ExprCallMacro> ) : ExpressionPtr
-        if call.arguments.length != 2
+        if call.arguments |> length != 2
             macro_error(prog,call.at,"expecting 2 arguments, {macro_call}(name,expression)")
             return <- [[ExpressionPtr]]
         if !(call.arguments[0]._type.isString)
@@ -825,7 +825,7 @@ class private AstQNamedClassMacro : AstCallMacro
         return argIndex==0 || argIndex==1
     //! This macro implements expression reification for the named expressions (function, variable, etc.)
     def override visit ( prog:ProgramPtr; mod:Module?; var call:smart_ptr<ExprCallMacro> ) : ExpressionPtr
-        if call.arguments.length != 3
+        if call.arguments |> length != 3
             macro_error(prog,call.at,"expecting 3 arguments, {macro_call}(name,class,expression)")
             return <- [[ExpressionPtr]]
         if !(call.arguments[0]._type.isString)

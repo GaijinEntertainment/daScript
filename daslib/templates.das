@@ -19,7 +19,7 @@ class DecltypeMacro : AstCallMacro
     //!
     remove_ref = false
     def override visit ( prog:ProgramPtr; mod:Module?; var expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr
-        if expr.arguments.length !=1
+        if expr.arguments |> length !=1
             macro_error(prog,expr.at,"decltype expecting 1 argument")
             return <- [[ExpressionPtr]]
         if expr.arguments[0]._type==null || expr.arguments[0]._type.isAutoOrAlias

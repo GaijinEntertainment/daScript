@@ -135,9 +135,9 @@ def describe_type(td:TypeDeclPtr)
         elif baseType==Type tBlock || baseType==Type tFunction || baseType==Type tLambda
             write(writer,das_to_string(baseType))
             write(writer,"<")
-            if td.argTypes.length!=0
+            if td.argTypes |> length!=0
                 write(writer,"(")
-                if td.argNames.length!=0
+                if td.argNames |> length!=0
                     var first = true
                     for at,an in td.argTypes,td.argNames
                         if first
@@ -163,8 +163,8 @@ def describe_type(td:TypeDeclPtr)
         elif baseType==Type tTuple || baseType==Type tVariant
             write(writer,das_to_string(baseType))
             write(writer,"<")
-            if td.argTypes.length!=0
-                if td.argNames.length!=0
+            if td.argTypes |> length!=0
+                if td.argNames |> length!=0
                     var first = true
                     for at,an in td.argTypes,td.argNames
                         if first

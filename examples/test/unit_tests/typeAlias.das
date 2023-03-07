@@ -58,7 +58,7 @@ def test:bool
     assert(hitDir.x==nhdh.x && hitDir.y==nhdh.y && hitDir.z==nhdh.z)
 
     testPoint3Array() <| $(arr)
-        assert(arr.length==10)
+        assert(arr |> length==10)
         for p in arr
             assert(p.x==1.0 && p.y==2.0 && p.z==3.0)
 

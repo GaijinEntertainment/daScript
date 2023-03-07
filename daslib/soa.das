@@ -24,14 +24,14 @@ class SoaCallMacro : AstFunctionAnnotation
     def override transform ( var expr : smart_ptr<ExprCallFunc>; var errors : das_string ) : ExpressionPtr
         if is_in_completion()
             return <- [[ExpressionPtr]]
-        if expr.arguments.length != 2
+        if expr.arguments |> length != 2
             errors := "expecting soa[index].field"
             return <- [[ExpressionPtr]]
         if !(expr.arguments[0] is ExprCall)
             errors := "expecting soa[index] as first argument, got {expr.__rtti}"
             return <- [[ExpressionPtr]]
         let idx_call = expr.arguments[0] as ExprCall
-        if idx_call.name!="[]" || idx_call.arguments.length!=2
+        if idx_call.name!="[]" || idx_call.arguments |> length!=2
             errors := "expecting soa[index] as first argument, got {describe(expr.arguments[1])}"
             return <- [[ExpressionPtr]]
         if !(expr.arguments[1] is ExprConstString)
@@ -68,7 +68,7 @@ class SoaStructMacro : AstStructureAnnotation
             ]]
             compiling_module() |> add_alias(tdef)
             return true
-        if st.fields.length == 0
+        if st.fields |> length == 0
             errors := "soa macro expects at least one field"
             return false
         // soa

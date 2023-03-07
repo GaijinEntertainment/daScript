@@ -64,16 +64,16 @@ class LpipeMacro : AstCallMacro
     //!     lpipe <|    // this block will pipe into take2
     //!         print("block2\n")
     def override visit ( prog:ProgramPtr; mod:Module?; var call:smart_ptr<ExprCallMacro> ) : ExpressionPtr
-        macro_verify(call.arguments.length==1,prog,call.at,"expecting lpipe(value)")
+        macro_verify(call.arguments |> length==1,prog,call.at,"expecting lpipe(value)")
         var success = false
         compiling_program() |> get_ast_context(call) <| $(valid, astc)
             if !valid
                 macro_error(prog,call.at,"can't get valid program context")
                 return
-            if astc.scopes.length<=0
+            if astc.scopes |> length<=0
                 macro_error(prog,call.at,"missing scope")
                 return
-            var blk = astc.scopes[astc.scopes.length-1] as ExprBlock
+            var blk = astc.scopes[astc.scopes |> length-1] as ExprBlock
             var eidx = -1
             for i,expr in count(),blk.list
                 if expr==call

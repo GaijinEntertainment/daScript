@@ -23,7 +23,7 @@ class private YieldFrom : AstCallMacro
     //!
     //! The idea is that coroutine or generator can continuesly yield from another sub-coroutine or generator.
     def override visit ( prog:ProgramPtr; mod:Module?; var call:smart_ptr<ExprCallMacro> ) : ExpressionPtr
-        macro_verify( call.arguments.length==1,prog,call.at,"expecting yeild_from(iterator)" )
+        macro_verify( call.arguments |> length==1,prog,call.at,"expecting yeild_from(iterator)" )
         macro_verify( call.arguments[0]._type.isIterator,prog,call.at,"expecting iterator" )
         let iname = make_unique_private_name("_yield_from_iterator",call.at)
         return <- qmacro_block <|
@@ -38,7 +38,7 @@ class private CoContinue : AstCallMacro
     def override visit ( prog:ProgramPtr; mod:Module?; var call:smart_ptr<ExprCallMacro> ) : ExpressionPtr
         // TODO: verify if we are in coroutine
         // TODO: verify if we are in coroutine which returns bool
-        macro_verify( call.arguments.length==0,prog,call.at,"expecting co_continue()" )
+        macro_verify( call.arguments |> length==0,prog,call.at,"expecting co_continue()" )
         return <- qmacro_expr <|
             yield true
 
@@ -52,7 +52,7 @@ class private CoAwait : AstCallMacro
     //! The idea is that coroutine or generator can wait for a sub-coroutine to finish.
     def override visit ( prog:ProgramPtr; mod:Module?; var call:smart_ptr<ExprCallMacro> ) : ExpressionPtr
         // TODO: verify if we are calling co_await on a coroutine.
-        macro_verify( call.arguments.length==1,prog,call.at,"expecting co_await(subroutine)" )
+        macro_verify( call.arguments |> length==1,prog,call.at,"expecting co_await(subroutine)" )
         let iname = make_unique_private_name("_co_await_iterator",call.at)
         return <- qmacro_block <|
             for $i(iname) in $e(call.arguments[0])

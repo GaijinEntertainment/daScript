@@ -28,7 +28,7 @@ def is_shared_expr ( expr:ExpressionPtr )
         return false
     elif expr is ExprAt
         let ea = expr as ExprAt
-        if ea.subexpr._type!=null && ea.subexpr._type.dim.length!=0
+        if ea.subexpr._type!=null && ea.subexpr._type.dim |> length!=0
             return is_shared_expr(ea.subexpr)
     elif expr is ExprField
         let ef = expr as ExprField
@@ -44,7 +44,7 @@ def is_local_expr ( expr:ExpressionPtr )
         return (expr as ExprVar).varFlags.local
     elif expr is ExprAt
         let ea = expr as ExprAt
-        if ea.subexpr._type!=null && ea.subexpr._type.dim.length!=0
+        if ea.subexpr._type!=null && ea.subexpr._type.dim |> length!=0
             return is_local_expr(ea.subexpr)
     elif expr is ExprField
         let ef = expr as ExprField
@@ -61,7 +61,7 @@ def is_local_or_global_expr ( expr:ExpressionPtr )
         return ev.varFlags.local || !(ev.varFlags.argument || ev.varFlags._block)
     elif expr is ExprAt
         let ea = expr as ExprAt
-        if ea.subexpr._type!=null && ea.subexpr._type.dim.length!=0
+        if ea.subexpr._type!=null && ea.subexpr._type.dim |> length!=0
             return is_local_or_global_expr(ea.subexpr)
     elif expr is ExprField
         let ef = expr as ExprField
@@ -78,7 +78,7 @@ def is_scope_expr ( expr:ExpressionPtr )
         return true
     elif expr is ExprAt
         let ea = expr as ExprAt
-        if ea.subexpr._type!=null && ea.subexpr._type.dim.length!=0
+        if ea.subexpr._type!=null && ea.subexpr._type.dim |> length!=0
             return is_scope_expr(ea.subexpr)
     elif expr is ExprField
         let ef = expr as ExprField
