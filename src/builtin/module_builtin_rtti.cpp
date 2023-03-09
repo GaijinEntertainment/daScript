@@ -1248,12 +1248,12 @@ namespace das {
             addAnnotation(make_smart<AstModuleGroupAnnotation>(lib));
             addEnumeration(make_smart<EnumerationType>());
             addAnnotation(make_smart<AnnotationArgumentAnnotation>(lib));
-            addAnnotation(make_smart<ManagedVectorAnnotation<AnnotationArguments>>("AnnotationArguments",lib));
-            addAnnotation(make_smart<ManagedVectorAnnotation<AnnotationArgumentList>>("AnnotationArgumentList",lib));
+            addVectorAnnotation<AnnotationArguments>(this,lib,"AnnotationArguments");
+            addVectorAnnotation<AnnotationArgumentList>(this,lib,"AnnotationArgumentList");
             addAnnotation(make_smart<ProgramAnnotation>(lib));
             addAnnotation(make_smart<AnnotationAnnotation>(lib));
             addAnnotation(make_smart<AnnotationDeclarationAnnotation>(lib));
-            addAnnotation(make_smart<ManagedVectorAnnotation<AnnotationList>>("AnnotationList",lib));
+            addVectorAnnotation<AnnotationList>(this,lib,"AnnotationList");
             addAnnotation(make_smart<TypeAnnotationAnnotation>(lib));
             addAnnotation(make_smart<BasicStructureAnnotationAnnotation>(lib));
             addAnnotation(make_smart<EnumValueInfoAnnotation>(lib));
@@ -1447,9 +1447,6 @@ namespace das {
             addExtern<DAS_BIND_FUN(das_get_SimFunction_by_MNH)>(*this, lib, "get_function_address",
                 SideEffects::none, "das_get_SimFunction_by_MNH")
                     ->args({"MNH","at"});
-            // extras
-            registerVectorFunctions<AnnotationList>::init(this,lib,false,true);
-            registerVectorFunctions<AnnotationArgumentList>::init(this,lib,false,false);
             // add builtin module
             compileBuiltinModule("rtti.das",rtti_das, sizeof(rtti_das));
             // lets make sure its all aot ready

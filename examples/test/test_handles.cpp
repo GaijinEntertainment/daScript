@@ -629,8 +629,7 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     addAnnotation(make_smart<TestFunctionAnnotation>());
     // point3 array
     addAlias(typeFactory<Point3>::make(lib));
-    addAnnotation(make_smart<Point3ArrayAnnotation>(lib));
-    registerVectorFunctions<Point3Array>::init(this,lib,true,true);
+    addVectorAnnotation<Point3Array>(this,lib,make_smart<Point3ArrayAnnotation>(lib));
     addCtorAndUsing<Point3Array>(*this, lib, "Point3Array", "Point3Array");
     addExtern<DAS_BIND_FUN(testPoint3Array)>(*this, lib, "testPoint3Array",
         SideEffects::modifyExternal, "testPoint3Array");

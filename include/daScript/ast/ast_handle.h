@@ -565,6 +565,21 @@ namespace das
         }
     };
 
+    template <typename TT>
+    __forceinline void addVectorAnnotation(Module * mod, ModuleLibrary & lib, const AnnotationPtr & ptr ) {
+        DAS_VERIFYF(ptr,"annotation is null");
+        DAS_VERIFYF(ptr->rtti_isHandledTypeAnnotation(),"annotation %s not a handled type annotation", ptr->name.c_str());
+        mod->addAnnotation(ptr);
+        using VT = typename TT::value_type;
+        auto vta = typeFactory<VT>::make(lib);
+        registerVectorFunctions<TT>::init(mod,lib,vta->canCopy(),vta->canMove());
+    }
+
+    template <typename TT>
+    __forceinline void addVectorAnnotation(Module * mod, ModuleLibrary & lib, const string & name ) {
+        return addVectorAnnotation<TT>(mod,lib,make_smart<ManagedVectorAnnotation<TT>>(name,lib));
+    }
+
     template <typename OT>
     struct ManagedValueAnnotation : TypeAnnotation {
         static_assert(sizeof(OT)<=sizeof(vec4f), "value types have to fit in ABI");
