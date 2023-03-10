@@ -20,7 +20,7 @@ var
     c0 : float2 = float2(-0.2f, 0.05f)
 // cp1, cn1
     enable_1 : bool = true
-    cp1 : float2 = float2(0.25f, 0.0f)
+    cp1 : float2 = float2(0.27f, 0.0f)
     cn1 : float2 = float2(0.0f, 0.10f)
 // cp2, cn2
     enable_2 : bool = false
@@ -54,7 +54,7 @@ def imgui_app ( title:string; blk : block )
         glViewport(0, 0, display_w, display_h)
         glClearColor(clear_color.x, clear_color.y, clear_color.z, clear_color.w)
         glClear(GL_COLOR_BUFFER_BIT)
-        let time = rotating ? glfwGetTime() * double(rps) % 1.0lf : 0.0lf
+        let time = rotating ? glfwGetTime() * double(rps) % 1.0lf : double(tt)
         let t = float(time)
         // compute vectors
         let p0 = c0
@@ -62,8 +62,6 @@ def imgui_app ( title:string; blk : block )
         let pn1 = mul_complex(cn1,rot_complex(-1.0*t*2.0*PI))
         let pp2 = mul_complex(cp2,rot_complex( 2.0*t*2.0*PI))
         let pn2 = mul_complex(cn2,rot_complex(-2.0*t*2.0*PI))
-        // graph
-        draw_graph(float3(1.0f,1.0f,0.0f))
         // c0
         draw_arrow(float2(0.0f,0.0f), p0, float3(1.0f,0.0f,0.0f))
         if enable_1
@@ -85,6 +83,8 @@ def imgui_app ( title:string; blk : block )
                 draw_circle(p, length(cn2), float3(0.0f,0.0f,0.0f))
                 draw_arrow (p, pn2, float3(1.0f,0.0f,0.0f))
                 p += pn2
+        // graph
+        draw_graph(float3(1.0f,1.0f,0.0f))
         // and done
         ImGui_ImplOpenGL3_RenderDrawData(GetDrawData())
         glfwMakeContextCurrent(window)
