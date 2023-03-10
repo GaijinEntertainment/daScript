@@ -8,6 +8,8 @@
 #undef yyextra
 #define yyextra (*((das::DasParserState **)(scanner)))
 
+void das_collect_keywords ( das::Module * mod, yyscan_t yyscanner );
+
 namespace das {
 
     static __forceinline string inThisModule ( const string & name ) { return "_::" + name; }
@@ -732,11 +734,21 @@ namespace das {
         return pFunction.orphan();
     }
 
+    void das_collect_all_keywords ( Module * mod, yyscan_t scanner ) {
+        das_collect_keywords(mod,scanner);
+        for ( auto it : mod->requireModule ) {
+            if ( it.second ) {
+                das_collect_keywords(it.first,scanner);
+            }
+        }
+    }
+
     void ast_requireModule ( yyscan_t scanner, string * name, string * modalias, bool pub, const LineInfo & atName ) {
         auto info = yyextra->g_Access->getModuleInfo(*name, yyextra->g_FileAccessStack.back()->name);
         if ( auto mod = yyextra->g_Program->addModule(info.moduleName) ) {
             yyextra->g_Program->allRequireDecl.push_back(make_tuple(mod,*name,"",pub,atName));
             yyextra->g_Program->thisModule->addDependency(mod, pub);
+            das_collect_all_keywords(mod,scanner);
             if ( !info.importName.empty() ) {
                 auto malias = modalias ? *modalias : info.importName;
                 auto ita = yyextra->das_module_alias.find(malias);
