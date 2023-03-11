@@ -150,7 +150,7 @@ namespace das
     template <typename RetT, typename ThisT, RetT(ThisT::*fn)()>
     struct CallProperty<RetT(ThisT::*)(),fn> {
         enum { ref = is_reference<RetT>::value };
-        static typename RetT static_call ( ThisT & this_ ) {
+        static RetT static_call ( ThisT & this_ ) {
             return (this_.*fn)();
         };
     };
@@ -158,7 +158,7 @@ namespace das
     template <typename RetT, typename ThisT, RetT(ThisT::*fn)() const>
     struct CallProperty<RetT(ThisT::*)() const,fn> {
         enum { ref = is_reference<RetT>::value };
-        static typename RetT static_call ( const ThisT & this_ ) {
+        static RetT static_call ( const ThisT & this_ ) {
             return (this_.*fn)();
         };
     };
