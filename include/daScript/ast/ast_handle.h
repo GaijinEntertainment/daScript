@@ -90,6 +90,7 @@ namespace das
         };
         BasicStructureAnnotation(const string & n, const string & cpn, ModuleLibrary * l)
             : TypeAnnotation(n,cpn), mlib(l) {
+            mlib->getThisModule()->registerAnnotation(this);
         }
         virtual string getSmartAnnotationCloneFunction() const override { return "smart_ptr_clone"; }
         virtual void seal(Module * m) override;
@@ -144,6 +145,41 @@ namespace das
         }
     };
 
+    template <typename FuncT, FuncT fn> struct CallProperty;
+
+    template <typename RetT, typename ThisT, RetT(ThisT::*fn)()>
+    struct CallProperty<RetT(ThisT::*)(),fn> {
+        enum { ref = is_reference<RetT>::value };
+        static typename RetT static_call ( ThisT & this_ ) {
+            return (this_.*fn)();
+        };
+    };
+
+    template <typename RetT, typename ThisT, RetT(ThisT::*fn)() const>
+    struct CallProperty<RetT(ThisT::*)() const,fn> {
+        enum { ref = is_reference<RetT>::value };
+        static typename RetT static_call ( const ThisT & this_ ) {
+            return (this_.*fn)();
+        };
+    };
+
+    template <int isRef, typename callT> struct RegisterProperty;
+
+    template <typename callT> struct RegisterProperty <true,callT> {
+        __forceinline static void reg ( ModuleLibrary * mlib, const string & dotName, const string & cppPropName, bool explicitConst=false ) {
+            addExternProperty<decltype(&callT::static_call),callT::static_call,SimNode_ExtFuncCallRef>(
+                *(mlib->getThisModule()), *mlib, dotName.c_str(), cppPropName.c_str(), explicitConst)->args({"this"});
+        }
+    };
+
+    template <typename callT> struct RegisterProperty <false,callT> {
+        __forceinline static void reg ( ModuleLibrary * mlib, const string & dotName, const string & cppPropName, bool explicitConst=false ) {
+            addExternProperty<decltype(&callT::static_call),callT::static_call>(
+                *(mlib->getThisModule()), *mlib, dotName.c_str(), cppPropName.c_str(), explicitConst)->args({"this"});
+        }
+    };
+
+
     template <typename OT>
     struct ManagedStructureAnnotation<OT,false,false> : BasicStructureAnnotation {
         typedef OT ManagedType;
@@ -173,85 +209,19 @@ namespace das
         }
         template <typename FunT, FunT PROP>
         void addProperty ( const string & na, const string & cppNa="" ) {
-            auto & field = fields[na];
-            if ( field.decl ) {
-                DAS_FATAL_ERROR("structure field %s already exist in structure %s\n", na.c_str(), name.c_str() );
-            }
-            using resultType = decltype((((ManagedType *)0)->*PROP)());
-            field.cppName = (cppNa.empty() ? na : cppNa) + "()";
-            field.decl = makeType<resultType>(*mlib);
-            DAS_ASSERTF ( !(field.decl->isRefType() && !field.decl->ref), "property can't be CMRES, in %s", field.decl->describe().c_str() );
-            field.offset = -1U;
-            auto sft = make_smart<TypeDecl>(*field.decl);
-            field.factory = [sft](FactoryNodeType nt,Context & context,const LineInfo & at, const ExpressionPtr & value) -> SimNode * {
-                switch ( nt ) {
-                    case FactoryNodeType::getField:
-                        return context.code->makeNode<SimNode_Property<ManagedType,FunT,PROP,false>>(at, value->simulate(context));
-                    case FactoryNodeType::getFieldPtr:
-                        return context.code->makeNode<SimNode_Property<ManagedType,FunT,PROP,true>>(at, value->simulate(context));
-                    case FactoryNodeType::getFieldR2V: {
-                        auto getFieldNode = context.code->makeNode<SimNode_Property<ManagedType,FunT,PROP,true>>(at, value->simulate(context));
-                        return ExprRef2Value::GetR2V(context, at, sft, getFieldNode);
-                    }
-                    case FactoryNodeType::safeGetField:
-                    case FactoryNodeType::safeGetFieldPtr:
-                    case FactoryNodeType::getFieldPtrR2V:
-                        DAS_ASSERTF(0, "property requested property type, which is meaningless for the non-ref"
-                                    "we should not be here, since property can't have ref type"
-                                    "daScript compiler will later report missing node error");
-                    default:
-                        return nullptr;
-                }
-            };
+            string dotName = ".`" + na;\
+            string cppPropName = (cppNa.empty() ? na : cppNa);
+            using callT = CallProperty<FunT,PROP>;
+            RegisterProperty<callT::ref,callT>::reg(mlib, dotName, cppPropName);
         }
         template <typename FunT, FunT PROP, typename FunTConst, FunTConst PROP_CONST>
         void addPropertyExtConst ( const string & na, const string & cppNa="" ) {
-            auto & field = fields[na];
-            if ( field.decl ) {
-                DAS_FATAL_ERROR("structure field %s already exist in structure %s\n", na.c_str(), name.c_str() );
-            }
-            using resultType = decltype((((ManagedType *)0)->*PROP)());
-            field.cppName = (cppNa.empty() ? na : cppNa) + "()";
-            field.decl = makeType<resultType>(*mlib);
-            DAS_ASSERTF ( !(field.decl->isRefType() && !field.decl->ref), "property can't be CMRES, in %s", field.decl->describe().c_str() );
-            using constResultType = decltype((((ManagedType *)0)->*PROP_CONST)());
-            field.constDecl = makeType<constResultType>(*mlib);
-            DAS_ASSERTF ( !(field.constDecl->isRefType() && !field.constDecl->ref), "property can't be CMRES, in %s", field.constDecl->describe().c_str() );
-            field.offset = -1U;
-            auto sft = make_smart<TypeDecl>(*field.decl);
-            auto sftc = make_smart<TypeDecl>(*field.constDecl);
-            field.factory = [sft,sftc](FactoryNodeType nt,Context & context,const LineInfo & at, const ExpressionPtr & value) -> SimNode * {
-                switch ( nt ) {
-                    case FactoryNodeType::getField:
-                        if ( value->type->constant ) {
-                            return context.code->makeNode<SimNode_Property<ManagedType,FunTConst,PROP_CONST,false>>(at, value->simulate(context));
-                        } else {
-                            return context.code->makeNode<SimNode_Property<ManagedType,FunT,PROP,false>>(at, value->simulate(context));
-                        }
-                    case FactoryNodeType::getFieldPtr:
-                        if ( value->type->constant ) {
-                            return context.code->makeNode<SimNode_Property<ManagedType,FunTConst,PROP_CONST,true>>(at, value->simulate(context));
-                        } else {
-                            return context.code->makeNode<SimNode_Property<ManagedType,FunT,PROP,true>>(at, value->simulate(context));
-                        }
-                    case FactoryNodeType::getFieldR2V:
-                        if ( value->type->constant ) {
-                            auto getFieldNode =  context.code->makeNode<SimNode_Property<ManagedType,FunTConst,PROP_CONST,false>>(at, value->simulate(context));
-                            return ExprRef2Value::GetR2V(context, at, sftc, getFieldNode);
-                        } else {
-                            auto getFieldNode =  context.code->makeNode<SimNode_Property<ManagedType,FunT,PROP,false>>(at, value->simulate(context));
-                            return ExprRef2Value::GetR2V(context, at, sft, getFieldNode);
-                        }
-                    case FactoryNodeType::safeGetField:
-                    case FactoryNodeType::safeGetFieldPtr:
-                    case FactoryNodeType::getFieldPtrR2V:
-                        DAS_ASSERTF(0, "property requested property type, which is meaningless for the non-ref"
-                                    "we should not be here, since property can't have ref type"
-                                    "daScript compiler will later report missing node error");
-                    default:
-                        return nullptr;
-                }
-            };
+            string dotName = ".`" + na;\
+            string cppPropName = (cppNa.empty() ? na : cppNa);
+            using callT = CallProperty<FunT,PROP>;
+            RegisterProperty<callT::ref,callT>::reg(mlib, dotName, cppPropName, true);
+            using callTConst = CallProperty<FunTConst,PROP_CONST>;
+            RegisterProperty<callTConst::ref,callTConst>::reg(mlib, dotName, cppPropName, true);
         }
         template <typename TT, off_t off>
         __forceinline StructureField & addField ( const string & na, const string & cppNa = "" ) {
