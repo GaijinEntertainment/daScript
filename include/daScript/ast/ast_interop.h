@@ -158,6 +158,28 @@ namespace das
 #if DAS_SLOW_CALL_INTEROP
     template <typename FuncT, FuncT fn, template <typename FuncTT> class SimNodeT = SimNode_ExtFuncCall, typename QQ = defaultTempFn>
 #else
+    template <typename FuncT, FuncT fn, template <typename FuncTT, FuncTT fnt> class SimNodeT = SimNode_ExtFuncCall>
+#endif
+    inline auto addExternProperty ( Module & mod, const ModuleLibrary & lib, const char * name, const char * cppName = nullptr, bool explicitConst=false ) {
+#if DAS_SLOW_CALL_INTEROP
+        using SimNodeType = SimNodeT<FuncT>;
+        auto fnX = make_smart<ExternalFn<FuncT, SimNodeType, FuncT>>(fn, name, lib, cppName);
+#else
+        using SimNodeType = SimNodeT<FuncT, fn>;
+        auto fnX = make_smart<ExternalFn<FuncT, fn, SimNodeType, FuncT>>(name, lib, cppName);
+#endif
+        defaultTempFn tempFn;
+        tempFn(fnX.get());
+        fnX->arguments[0]->type->explicitConst = explicitConst;
+        fnX->setSideEffects(SideEffects::none);
+        fnX->propertyFunction = true;
+        mod.addFunction(fnX,true);  // yes, this one can fail. same C++ bound property can be in multiple classes before or after refactor
+        return fnX;
+    }
+
+#if DAS_SLOW_CALL_INTEROP
+    template <typename FuncT, FuncT fn, template <typename FuncTT> class SimNodeT = SimNode_ExtFuncCall, typename QQ = defaultTempFn>
+#else
     template <typename FuncT, FuncT fn, template <typename FuncTT, FuncTT fnt> class SimNodeT = SimNode_ExtFuncCall, typename QQ = defaultTempFn>
 #endif
     inline auto addExtern ( Module & mod, const ModuleLibrary & lib, const char * name, SideEffects seFlags,

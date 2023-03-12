@@ -268,8 +268,16 @@ namespace das {
         }
     }
 
+    void Module::registerAnnotation ( const AnnotationPtr & ptr ) {
+        if ( handleTypes.find(ptr->name)==nullptr ) {
+            handleTypes.insert(ptr->name, ptr);
+            ptr->module = this;
+        }
+    }
+
     bool Module::addAnnotation ( const AnnotationPtr & ptr, bool canFail ) {
-        if ( handleTypes.insert(ptr->name, ptr) ) {
+        auto pptr = handleTypes.find(ptr->name);
+        if ( pptr==ptr || handleTypes.insert(ptr->name, ptr)  ) {
             ptr->seal(this);
             return true;
         } else {
@@ -535,6 +543,9 @@ namespace das {
     }
 
     bool isValidBuiltinName ( const string & name, bool canPunkt ) {
+        if ( name.size()>=2 && name[0]=='.' && name[1]=='`') {  // any name starting with .` is ok
+            return true;
+        }
         bool hasPunkt = false;
         bool hasAlNum = false;
         for ( auto ch : name ) {
@@ -665,6 +676,7 @@ namespace das {
     bool ModuleLibrary::addModule ( Module * module ) {
         DAS_ASSERTF(module, "module not found? or you have forgotten to NEED_MODULE(Module_<name>) be called first before addModule(require(<name>))");
         if ( module ) {
+            thisModule = thisModule ? thisModule : module;
             if ( find(modules.begin(),modules.end(),module)==modules.end() ) {
                 for ( auto dep : module->requireModule ) {
                     if ( dep.first != module ) {

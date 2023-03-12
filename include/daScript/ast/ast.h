@@ -832,6 +832,7 @@ namespace das
                 bool    aliasCMRES : 1;
                 bool    neverAliasCMRES : 1;
                 bool    addressTaken : 1;
+                bool    propertyFunction : 1;
             };
             uint32_t moreFlags = 0;
 
@@ -980,6 +981,7 @@ namespace das
         bool addFunction ( const FunctionPtr & fn, bool canFail = false );
         bool addGeneric ( const FunctionPtr & fn, bool canFail = false );
         bool addAnnotation ( const AnnotationPtr & ptr, bool canFail = false );
+        void registerAnnotation ( const AnnotationPtr & ptr );
         bool addTypeInfoMacro ( const TypeInfoMacroPtr & ptr, bool canFail = false );
         bool addReaderMacro ( const ReaderMacroPtr & ptr, bool canFail = false );
         bool addCommentReader ( const CommentReaderPtr & ptr, bool canFail = false );
@@ -1137,9 +1139,11 @@ namespace das
         TypeDeclPtr makeHandleType ( const string & name ) const;
         TypeDeclPtr makeEnumType ( const string & name ) const;
         Module* front() const { return modules.front(); }
+        Module* getThisModule() const { return thisModule; }
         void reset();
     protected:
         vector<Module *>                modules;
+        Module *                        thisModule = nullptr;
     };
 
     struct ModuleGroupUserData {

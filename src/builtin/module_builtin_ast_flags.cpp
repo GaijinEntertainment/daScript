@@ -191,7 +191,8 @@ namespace das {
         ft->alias = "MoreFunctionFlags";
         ft->argNames = {
             "macroFunction", "needStringCast", "aotHashDeppendsOnArguments", "lateInit", "requestJit",
-            "unsafeOutsideOfFor", "skipLockCheck", "safeImplicit", "deprecated", "aliasCMRES", "neverAliasCMRES", "addressTaken"
+            "unsafeOutsideOfFor", "skipLockCheck", "safeImplicit", "deprecated", "aliasCMRES", "neverAliasCMRES",
+            "addressTaken", "propertyFunction"
         };
         return ft;
     }

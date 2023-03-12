@@ -490,6 +490,7 @@ class MatchMacro : AstCallMacro
     def override preVisit ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprCallMacro> ) : void
         return  if length(expr.arguments) != 2
         assume blk = expr.arguments[1]
+        return  if blk._type==null
         return  if !blk._type.isGoodBlockType
         return  if !(blk is ExprMakeBlock)
         // we mark all if's inside the match to not fold, so that we can fold the match later

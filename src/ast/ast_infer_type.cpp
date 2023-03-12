@@ -4541,30 +4541,17 @@ namespace das {
                         expr->at, CompilationError::cant_get_field);
                 return Visitor::visit(expr);
             }
-            if ( !expr->no_promotion ) {
-                if ( auto opE = inferGenericOperator(".`"+expr->name,expr->at,expr->value,nullptr) ) return opE;
-                if ( auto opE = inferGenericOperatorWithName(".",expr->at,expr->value,expr->name) ) return opE;
-            }
             auto valT = expr->value->type;
-            if ( valT->isVectorType() ) {
-                reportAstChanged();
-                return make_smart<ExprSwizzle>(expr->at,expr->value,expr->name);
-            } else if ( valT->isBitfield() ) {
-                expr->value = Expression::autoDereference(expr->value);
-                valT = expr->value->type;
-                int index = valT->bitFieldIndex(expr->name);
-                if ( index==-1 || index>=int(valT->argNames.size()) ) {
-                    error("can't get bit field " + expr->name + " in " + describeType(valT), "", "",
-                        expr->at, CompilationError::cant_get_field);
-                    return Visitor::visit(expr);
+            if ( valT->isPointer() ) {
+                if ( !expr->no_promotion && valT->firstType ) {
+                    auto derefV = make_smart<ExprPtr2Ref>(expr->at, expr->value);
+                    derefV->type = valT->firstType;
+                    TypeDecl::applyAutoContracts(derefV->type,valT->firstType);
+                    derefV->type->ref = true;
+                    derefV->type->constant |= valT->constant;
+                    if ( auto opE = inferGenericOperator(".`"+expr->name,expr->at,derefV,nullptr) ) return opE;
+                    if ( auto opE = inferGenericOperatorWithName(".",expr->at,derefV,expr->name) ) return opE;
                 }
-                expr->fieldIndex = index;
-            } else if ( valT->isHandle() ) {
-                expr->annotation = valT->annotation;
-                expr->type = expr->annotation->makeFieldType(expr->name, valT->constant);
-            } else if ( valT->isStructure() ) {
-                expr->field = valT->structType->findField(expr->name);
-            } else if ( valT->isPointer() ) {
                 expr->value = Expression::autoDereference(expr->value);
                 expr->unsafeDeref = func ? func->unsafeDeref : false;
                 if ( !valT->firstType ) {
@@ -4600,31 +4587,55 @@ namespace das {
                     }
                     expr->fieldIndex = index;
                 }
-            } else if ( valT->isGoodTupleType() ) {
-                int index = valT->tupleFieldIndex(expr->name);
-                if ( index==-1 || index>=int(valT->argTypes.size()) ) {
-                    error("can't get tuple field " + expr->name, "", "",
-                        expr->at, CompilationError::cant_get_field);
-                    return Visitor::visit(expr);
-                }
-                expr->fieldIndex = index;
-            } else if ( valT->isGoodVariantType() ) {
-                if ( !safeExpression(expr) ) {
-                    error("variant.field requires unsafe", "", "",
-                        expr->at, CompilationError::unsafe);
-                    return Visitor::visit(expr);
-                }
-                int index = valT->variantFieldIndex(expr->name);
-                if ( index==-1 || index>=int(valT->argTypes.size()) ) {
-                    error("can't get variant field " + expr->name, "", "",
-                        expr->at, CompilationError::cant_get_field);
-                    return Visitor::visit(expr);
-                }
-                expr->fieldIndex = index;
             } else {
-                error("can't get field " + expr->name + " of " + describeType(expr->value->type), "", "",
-                      expr->at, CompilationError::cant_get_field);
-                return Visitor::visit(expr);
+                if ( !expr->no_promotion ) {
+                    if ( auto opE = inferGenericOperator(".`"+expr->name,expr->at,expr->value,nullptr) ) return opE;
+                    if ( auto opE = inferGenericOperatorWithName(".",expr->at,expr->value,expr->name) ) return opE;
+                }
+                if ( valT->isVectorType() ) {
+                    reportAstChanged();
+                    return make_smart<ExprSwizzle>(expr->at,expr->value,expr->name);
+                } else if ( valT->isBitfield() ) {
+                    expr->value = Expression::autoDereference(expr->value);
+                    valT = expr->value->type;
+                    int index = valT->bitFieldIndex(expr->name);
+                    if ( index==-1 || index>=int(valT->argNames.size()) ) {
+                        error("can't get bit field " + expr->name + " in " + describeType(valT), "", "",
+                            expr->at, CompilationError::cant_get_field);
+                        return Visitor::visit(expr);
+                    }
+                    expr->fieldIndex = index;
+                } else if ( valT->isHandle() ) {
+                    expr->annotation = valT->annotation;
+                    expr->type = expr->annotation->makeFieldType(expr->name, valT->constant);
+                } else if ( valT->isStructure() ) {
+                    expr->field = valT->structType->findField(expr->name);
+                } else if ( valT->isGoodTupleType() ) {
+                    int index = valT->tupleFieldIndex(expr->name);
+                    if ( index==-1 || index>=int(valT->argTypes.size()) ) {
+                        error("can't get tuple field " + expr->name, "", "",
+                            expr->at, CompilationError::cant_get_field);
+                        return Visitor::visit(expr);
+                    }
+                    expr->fieldIndex = index;
+                } else if ( valT->isGoodVariantType() ) {
+                    if ( !safeExpression(expr) ) {
+                        error("variant.field requires unsafe", "", "",
+                            expr->at, CompilationError::unsafe);
+                        return Visitor::visit(expr);
+                    }
+                    int index = valT->variantFieldIndex(expr->name);
+                    if ( index==-1 || index>=int(valT->argTypes.size()) ) {
+                        error("can't get variant field " + expr->name, "", "",
+                            expr->at, CompilationError::cant_get_field);
+                        return Visitor::visit(expr);
+                    }
+                    expr->fieldIndex = index;
+                } else {
+                    error("can't get field " + expr->name + " of " + describeType(expr->value->type), "", "",
+                        expr->at, CompilationError::cant_get_field);
+                    return Visitor::visit(expr);
+                }
             }
             // lets verify private field lookup
             if ( !verifyPrivateFieldLookup(expr) ) {

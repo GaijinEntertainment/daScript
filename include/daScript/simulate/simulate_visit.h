@@ -261,14 +261,6 @@ namespace das {
         V_END();
     }
 
-    template <typename OT, typename Fun, Fun PROP, bool SAFE, typename CTYPE>
-    SimNode *  SimNode_PropertyImpl<OT,Fun,PROP,SAFE,CTYPE>::visit ( SimVisitor & vis ) {
-        V_BEGIN();
-        V_OP("PropertyImpl");
-        V_SUB_OPT(subexpr);
-        V_END();
-    }
-
     template <typename TT>
     SimNode * SimNode_ReturnAndMoveR2V<TT>::visit ( SimVisitor & vis ) {
         V_BEGIN();

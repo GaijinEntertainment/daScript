@@ -3,6 +3,7 @@
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_visitor.h"
 #include "daScript/ast/ast_generate.h"
+#include "daScript/ast/ast_interop.h"
 
 #include "daScript/misc/enums.h"
 #include "daScript/simulate/hash.h"
@@ -2997,6 +2998,13 @@ namespace das {
         }
         void CallFunc_preVisit ( ExprCallFunc * call ) {
             Visitor::preVisit(call);
+            if ( call->func->propertyFunction ) {   // property function goes ((arg0).name()). we do `((` here
+                if ( call->func->result->aotAlias ) {
+                    ss << "das_alias<" << call->func->result->alias << ">::from(";
+                }
+                ss << "((";
+                return;
+            }
             string aotName = call->func->getAotName(call);
             for ( auto & ann : call->func->annotations ) {
                 if ( ann->annotation->rtti_isFunctionAnnotation() ) {
@@ -3084,6 +3092,7 @@ namespace das {
             return func->needStringCast && arg->isString() && !arg->ref;
         }
         void CallFunc_preVisitCallArg ( ExprCallFunc * call, Expression * arg, bool ) {
+            if ( call->func->propertyFunction ) return; // property function goes ((arg0).name()). we do nothing here
             int argIndex = 0;
             auto it = call->arguments.begin();
             auto its = call->arguments.end();
@@ -3130,6 +3139,7 @@ namespace das {
             }
         }
         void CallFunc_visitCallArg ( ExprCallFunc * call, Expression * arg, bool last ) {
+            if ( call->func->propertyFunction ) return; // property function goes ((arg0).name()). we do nothing here
             int argIndex = 0;
             auto it = call->arguments.begin();
             auto its = call->arguments.end();
@@ -3162,6 +3172,19 @@ namespace das {
             if ( !last ) ss << ",";
         }
         void CallFunc_visit ( ExprCallFunc * call ) {
+            if ( call->func->propertyFunction ) {   // property function goes ((arg0).name()). we do `).name())` here
+                if ( call->func->builtIn ) {
+                    auto efn = static_cast<ExternalFnBase *>(call->func);
+                    ss << ")." << efn->cppName << "())";    // we skip .` part of the deal
+                } else {
+                    DAS_ASSERT(call->func->name[0]=='.' && call->func->name[1]=='`');
+                    ss << ")." << (call->func->name.c_str()+2) << "())";    // we skip .` part of the deal
+                }
+                if ( call->func->result->aotAlias ) {
+                    ss << ")";
+                }
+                return;
+            }
             if ( call->func->interopFn ) {
                 ss << ")";
             }

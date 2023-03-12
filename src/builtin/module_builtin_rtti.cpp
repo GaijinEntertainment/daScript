@@ -592,6 +592,8 @@ namespace das {
             // default values
             addField<DAS_BIND_MANAGED_FIELD(sValue)>("sValue");
             addField<DAS_BIND_MANAGED_FIELD(value)>("value");
+            // from
+            from("TypeInfo");
         }
     };
 
@@ -609,6 +611,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(stackTop)>("stackTop");
             addField<DAS_BIND_MANAGED_FIELD(visibility)>("visibility");
             addFieldEx ( "localFlags", "localFlags", offsetof(LocalVariableInfo, localFlags), makeLocalVariableInfoFlagsFlags());
+            from("TypeInfo");
         }
     };
 
