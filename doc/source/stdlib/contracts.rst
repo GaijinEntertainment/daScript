@@ -107,9 +107,9 @@ Workhorse types are: bool,int*,uint*,float*,double,range and urange,string,enume
 Type queries
 ++++++++++++
 
-  *  :ref:`isYetAnotherVectorTemplate (td:smart_ptr\<ast::TypeDecl\> -const) : bool <function-_at_contracts_c__c_isYetAnotherVectorTemplate_Y_ls_TypeDeclPtr_gr_1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M>` 
+  *  :ref:`isYetAnotherVectorTemplate (td:smart_ptr\<ast::TypeDecl\> const) : bool <function-_at_contracts_c__c_isYetAnotherVectorTemplate_CY_ls_TypeDeclPtr_gr_1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M>` 
 
-.. _function-_at_contracts_c__c_isYetAnotherVectorTemplate_Y_ls_TypeDeclPtr_gr_1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M:
+.. _function-_at_contracts_c__c_isYetAnotherVectorTemplate_CY_ls_TypeDeclPtr_gr_1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M:
 
 .. das:function:: isYetAnotherVectorTemplate(td: TypeDeclPtr)
 

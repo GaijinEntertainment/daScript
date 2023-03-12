@@ -23,14 +23,14 @@ Handled structures
 
 .. das:attribute:: Channel
 
-Channel properties are
+Channel property operators are
 
-+-------+----+
-+size   +int +
 +-------+----+
 +isEmpty+bool+
 +-------+----+
 +isReady+bool+
++-------+----+
++size   +int +
 +-------+----+
 
 
@@ -40,7 +40,7 @@ Channel properties are
 
 .. das:attribute:: JobStatus
 
-JobStatus properties are
+JobStatus property operators are
 
 +-------+----+
 +isReady+bool+

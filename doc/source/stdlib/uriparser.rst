@@ -126,14 +126,14 @@ Uri fields are
 +---+------------------------------------------------------+
 
 
-Uri properties are
+Uri property operators are
 
++------+----+
++empty +bool+
 +------+----+
 +size  +int +
 +------+----+
 +status+int +
-+------+----+
-+empty +bool+
 +------+----+
 
 

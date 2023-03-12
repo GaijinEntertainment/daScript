@@ -595,15 +595,15 @@ Adds a rule to the template to replace a variable with an expression list.
 
 .. das:function:: replaceVariableWithList(self: Template; name: string const; expr: dasvector`smart_ptr`Expression const)
 
-+--------+------------------------------------------------------------------------------------------------------+
-+argument+argument type                                                                                         +
-+========+======================================================================================================+
-+self    + :ref:`templates_boost::Template <struct-templates_boost-Template>`                                   +
-+--------+------------------------------------------------------------------------------------------------------+
-+name    +string const                                                                                          +
-+--------+------------------------------------------------------------------------------------------------------+
-+expr    + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>`  const+
-+--------+------------------------------------------------------------------------------------------------------+
++--------+--------------------------------------------------------------------+
++argument+argument type                                                       +
++========+====================================================================+
++self    + :ref:`templates_boost::Template <struct-templates_boost-Template>` +
++--------+--------------------------------------------------------------------+
++name    +string const                                                        +
++--------+--------------------------------------------------------------------+
++expr    +vector<smart_ptr<Expression>> const                                 +
++--------+--------------------------------------------------------------------+
 
 
 Adds a rule to the template to replace a variable with an expression list.
@@ -714,11 +714,11 @@ Create ExprBlock and move all expressions from expr to the list of the block.
 
 make_expression_block returns smart_ptr< :ref:`ast::ExprBlock <handle-ast-ExprBlock>` >
 
-+--------+------------------------------------------------------------------------------------------------+
-+argument+argument type                                                                                   +
-+========+================================================================================================+
-+exprs   + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
-+--------+------------------------------------------------------------------------------------------------+
++--------+-----------------------------+
++argument+argument type                +
++========+=============================+
++exprs   +vector<smart_ptr<Expression>>+
++--------+-----------------------------+
 
 
 Create ExprBlock and move all expressions from expr to the list of the block.

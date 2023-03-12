@@ -5158,4 +5158,53 @@ unpack_byte_to_float returns float4
 
 |function-math-unpack_byte_to_float|
 
++++++++++++++
+Uncategorized
++++++++++++++
+
+.. _function-_at_math_c__c_-_CIH_ls_math_c__c_float4x4_gr_:
+
+.. das:function:: operator -(x: float4x4 const implicit)
+
+- returns  :ref:`math::float4x4 <handle-math-float4x4>` 
+
++--------+-------------------------------------------------------------+
++argument+argument type                                                +
++========+=============================================================+
++x       + :ref:`math::float4x4 <handle-math-float4x4>`  const implicit+
++--------+-------------------------------------------------------------+
+
+
+|function-math--|
+
+.. _function-_at_math_c__c_-_CIH_ls_math_c__c_float3x4_gr_:
+
+.. das:function:: operator -(x: float3x4 const implicit)
+
+- returns  :ref:`math::float3x4 <handle-math-float3x4>` 
+
++--------+-------------------------------------------------------------+
++argument+argument type                                                +
++========+=============================================================+
++x       + :ref:`math::float3x4 <handle-math-float3x4>`  const implicit+
++--------+-------------------------------------------------------------+
+
+
+|function-math--|
+
+.. _function-_at_math_c__c_-_CIH_ls_math_c__c_float3x3_gr_:
+
+.. das:function:: operator -(x: float3x3 const implicit)
+
+- returns  :ref:`math::float3x3 <handle-math-float3x3>` 
+
++--------+-------------------------------------------------------------+
++argument+argument type                                                +
++========+=============================================================+
++x       + :ref:`math::float3x3 <handle-math-float3x3>`  const implicit+
++--------+-------------------------------------------------------------+
+
+
+|function-math--|
+
 
