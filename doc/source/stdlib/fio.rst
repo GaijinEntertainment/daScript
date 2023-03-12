@@ -84,20 +84,20 @@ FStat fields are
 +--------+----+
 
 
-FStat properties are
+FStat property operators are
 
-+------+----------------------------------------------+
-+atime + :ref:`builtin::clock <handle-builtin-clock>` +
 +------+----------------------------------------------+
 +size  +uint64                                        +
 +------+----------------------------------------------+
-+ctime + :ref:`builtin::clock <handle-builtin-clock>` +
++atime + :ref:`builtin::clock <handle-builtin-clock>` +
 +------+----------------------------------------------+
-+is_dir+bool                                          +
++ctime + :ref:`builtin::clock <handle-builtin-clock>` +
 +------+----------------------------------------------+
 +mtime + :ref:`builtin::clock <handle-builtin-clock>` +
 +------+----------------------------------------------+
 +is_reg+bool                                          +
++------+----------------------------------------------+
++is_dir+bool                                          +
 +------+----------------------------------------------+
 
 

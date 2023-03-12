@@ -641,13 +641,13 @@ Containers
 
 .. das:function:: emplace_new(vec: dasvector`smart_ptr`Expression; ptr: smart_ptr<ast::Expression>)
 
-+--------+------------------------------------------------------------------------------------------------+
-+argument+argument type                                                                                   +
-+========+================================================================================================+
-+vec     + :ref:`builtin::dasvector`smart_ptr`Expression <handle-builtin-dasvector`smart_ptr`Expression>` +
-+--------+------------------------------------------------------------------------------------------------+
-+ptr     +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >                                     +
-+--------+------------------------------------------------------------------------------------------------+
++--------+-----------------------------------------------------------+
++argument+argument type                                              +
++========+===========================================================+
++vec     +vector<smart_ptr<Expression>>                              +
++--------+-----------------------------------------------------------+
++ptr     +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++--------+-----------------------------------------------------------+
 
 
 |function-ast_boost-emplace_new|
@@ -656,13 +656,13 @@ Containers
 
 .. das:function:: emplace_new(vec: dasvector`smart_ptr`TypeDecl; ptr: smart_ptr<ast::TypeDecl>)
 
-+--------+--------------------------------------------------------------------------------------------+
-+argument+argument type                                                                               +
-+========+============================================================================================+
-+vec     + :ref:`builtin::dasvector`smart_ptr`TypeDecl <handle-builtin-dasvector`smart_ptr`TypeDecl>` +
-+--------+--------------------------------------------------------------------------------------------+
-+ptr     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >                                     +
-+--------+--------------------------------------------------------------------------------------------+
++--------+-------------------------------------------------------+
++argument+argument type                                          +
++========+=======================================================+
++vec     +vector<smart_ptr<TypeDecl>>                            +
++--------+-------------------------------------------------------+
++ptr     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
++--------+-------------------------------------------------------+
 
 
 |function-ast_boost-emplace_new|
@@ -671,13 +671,13 @@ Containers
 
 .. das:function:: emplace_new(vec: dasvector`smart_ptr`Variable; ptr: smart_ptr<ast::Variable>)
 
-+--------+--------------------------------------------------------------------------------------------+
-+argument+argument type                                                                               +
-+========+============================================================================================+
-+vec     + :ref:`builtin::dasvector`smart_ptr`Variable <handle-builtin-dasvector`smart_ptr`Variable>` +
-+--------+--------------------------------------------------------------------------------------------+
-+ptr     +smart_ptr< :ref:`ast::Variable <handle-ast-Variable>` >                                     +
-+--------+--------------------------------------------------------------------------------------------+
++--------+-------------------------------------------------------+
++argument+argument type                                          +
++========+=======================================================+
++vec     +vector<smart_ptr<Variable>>                            +
++--------+-------------------------------------------------------+
++ptr     +smart_ptr< :ref:`ast::Variable <handle-ast-Variable>` >+
++--------+-------------------------------------------------------+
 
 
 |function-ast_boost-emplace_new|
@@ -859,6 +859,7 @@ Queries
   *  :ref:`is_same_or_inherited (parent:ast::Structure? const;child:ast::Structure? const) : bool const <function-_at_ast_boost_c__c_is_same_or_inherited_C1_ls_H_ls_ast_c__c_Structure_gr__gr_?_C1_ls_H_ls_ast_c__c_Structure_gr__gr_?>` 
   *  :ref:`is_class_method (cinfo:smart_ptr\<ast::Structure\> const;finfo:smart_ptr\<ast::TypeDecl\> const) : bool const <function-_at_ast_boost_c__c_is_class_method_CY_ls_StructurePtr_gr_1_ls_H_ls_ast_c__c_Structure_gr__gr_?M_CY_ls_TypeDeclPtr_gr_1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M>` 
   *  :ref:`find_arg (argn:string const;args:rtti::AnnotationArgumentList const) : variant\<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any\> <function-_at_ast_boost_c__c_find_arg_Cs_CH_ls_rtti_c__c_AnnotationArgumentList_gr_>` 
+  *  :ref:`find_arg (args:rtti::AnnotationArgumentList const;argn:string const) : variant\<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any\> <function-_at_ast_boost_c__c_find_arg_CH_ls_rtti_c__c_AnnotationArgumentList_gr__Cs>` 
   *  :ref:`find_unique_function (mod:rtti::Module? const;name:string const;canfail:bool const) : smart_ptr\<ast::Function\> <function-_at_ast_boost_c__c_find_unique_function_C1_ls_H_ls_rtti_c__c_Module_gr__gr_?_Cs_Cb>` 
   *  :ref:`find_unique_generic (mod:rtti::Module? const;name:string const;canfail:bool const) : smart_ptr\<ast::Function\> <function-_at_ast_boost_c__c_find_unique_generic_C1_ls_H_ls_rtti_c__c_Module_gr__gr_?_Cs_Cb>` 
   *  :ref:`find_annotation (mod_name:string const;ann_name:string const) : rtti::Annotation const? <function-_at_ast_boost_c__c_find_annotation_Cs_Cs>` 
@@ -943,12 +944,32 @@ is_class_method returns bool const
 
 find_arg returns  :ref:`RttiValue <alias-RttiValue>` 
 
+.. warning:: 
+  This function is deprecated.
+
 +--------+--------------------------------------------------------------------------------+
 +argument+argument type                                                                   +
 +========+================================================================================+
 +argn    +string const                                                                    +
 +--------+--------------------------------------------------------------------------------+
 +args    + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
++--------+--------------------------------------------------------------------------------+
+
+
+|function-ast_boost-find_arg|
+
+.. _function-_at_ast_boost_c__c_find_arg_CH_ls_rtti_c__c_AnnotationArgumentList_gr__Cs:
+
+.. das:function:: find_arg(args: AnnotationArgumentList const; argn: string const)
+
+find_arg returns  :ref:`RttiValue <alias-RttiValue>` 
+
++--------+--------------------------------------------------------------------------------+
++argument+argument type                                                                   +
++========+================================================================================+
++args    + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  const+
++--------+--------------------------------------------------------------------------------+
++argn    +string const                                                                    +
 +--------+--------------------------------------------------------------------------------+
 
 

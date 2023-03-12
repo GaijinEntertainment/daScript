@@ -513,8 +513,6 @@ Containers
   *  :ref:`lock (Tab:table\<auto(keyT);auto(valT)\>|table\<auto(keyT);auto(valT)\># const;blk:block\<(t:table\<keyT;valT\> const#):void\> const) : auto <function-_at__builtin__c__c_lock_C0_ls_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T;_hh_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_gr_|_CN_ls_t_gr_0_ls_C_hh_1_ls_Y_ls_keyT_gr_L_gr_2_ls_Y_ls_valT_gr_L_gr_T_gr_1_ls_v_gr__builtin_>` 
   *  :ref:`lock_forever (Tab:table\<auto(keyT);auto(valT)\>|table\<auto(keyT);auto(valT)\># -const) : table\<keyT;valT\># <function-_at__builtin__c__c_lock_forever_0_ls_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T;_hh_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_gr_|>` 
   *  :ref:`next (it:iterator\<auto(TT)\> const;value:TT& -const) : bool <function-_at__builtin__c__c_next_C1_ls_Y_ls_TT_gr_._gr_G_&Y_ls_TT_gr_L>` 
-  *  :ref:`length (vec:auto const) : auto <function-_at__builtin__c__c_length_C.>` 
-  *  :ref:`capacity (vec:auto const) : auto <function-_at__builtin__c__c_capacity_C.>` 
   *  :ref:`each (rng:range const) : iterator\<int\> <function-_at__builtin__c__c_each_Cr>` 
   *  :ref:`each (str:string const) : iterator\<int\> <function-_at__builtin__c__c_each_Cs>` 
   *  :ref:`each (a:auto(TT) const[]) : iterator\<TT&\> <function-_at__builtin__c__c_each_C[-1]Y_ls_TT_gr_.>` 
@@ -1703,36 +1701,6 @@ next returns bool
 
 
 |function-builtin-next|
-
-.. _function-_at__builtin__c__c_length_C.:
-
-.. das:function:: length(vec: auto const)
-
-length returns auto
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+vec     +auto const   +
-+--------+-------------+
-
-
-|function-builtin-length|
-
-.. _function-_at__builtin__c__c_capacity_C.:
-
-.. das:function:: capacity(vec: auto const)
-
-capacity returns auto
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+vec     +auto const   +
-+--------+-------------+
-
-
-|function-builtin-capacity|
 
 .. _function-_at__builtin__c__c_each_Cr:
 

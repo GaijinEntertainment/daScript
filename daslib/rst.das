@@ -99,7 +99,24 @@ def describe_type(td:TypeDeclPtr)
             if !empty(td.alias)
                 write(writer,"({td.alias})")
         elif baseType==Type tHandle
-            write(writer,make_ref(handle_label_name(td.annotation),"{module_name(td.annotation._module)}::{td.annotation.name}"))
+            let hname = string(td.annotation.name)
+            if hname |> starts_with("dasvector`smart_ptr`") // 20 characters
+                write(writer,"vector<smart_ptr<")
+                write(writer,hname |> slice(20))
+                write(writer,">>")
+            elif hname |> starts_with("dasvector`") // 10 characters
+                write(writer,"vector<")
+                write(writer,hname |> slice(10))
+                write(writer,">")
+            elif hname |> starts_with("pair`") // 5 characters
+                write(writer,"pair<")
+                var parts <- split(hname,"`")
+                write(writer,parts[1])
+                write(writer,",")
+                write(writer,parts[2])
+                write(writer,">")
+            else
+                write(writer,make_ref(handle_label_name(td.annotation),"{module_name(td.annotation._module)}::{td.annotation.name}"))
         elif baseType==Type tStructure
             write(writer,make_ref(struct_label_name(td.structType),"{module_name(td.structType._module)}::{td.structType.name}"))
         elif baseType==Type tEnumeration || baseType==Type tEnumeration8 || baseType==Type tEnumeration16
@@ -492,9 +509,7 @@ def document_structure_annotation(doc_file:file;mod:Module?;value)
     fwrite(doc_file,"{value.name}\n\n")
     var any_fields = false
     var any_props = false
-    var ann : BasicStructureAnnotation?
-    unsafe
-        ann = reinterpret<BasicStructureAnnotation?> value
+    var ann = unsafe(reinterpret<BasicStructureAnnotation?> value)
     for_each_field(*ann) <| $ ( name,cppName,xtype,offset)
         if offset != -1u
             any_fields = true
@@ -520,6 +535,26 @@ def document_structure_annotation(doc_file:file;mod:Module?;value)
                 emplace(tab,line)
         fwrite(doc_file,"{value.name} properties are\n\n")
         fwrite(doc_file,make_table(tab))
+    var props : array<array<string>>
+    var inscope annT <- new [[TypeDecl() baseType=Type tHandle,
+        annotation=unsafe(reinterpret<TypeAnnotation?> value)]]
+    for_each_function(mod, "") <| $(func)
+        if !func.moreFlags.propertyFunction
+            return
+        if func.arguments|>length != 1
+            return
+        let fna = string(func.name)
+        if !fna|>starts_with(".`") || length(fna)<=2
+            return
+        if !is_same_type(func.arguments[0]._type,annT,RefMatters no,ConstMatters no,TemporaryMatters no)
+            return
+        var line : array<string>
+        push(line,slice(fna,2))
+        push(line,describe_type(func.result))
+        emplace(props,line)
+    if !empty(props)
+        fwrite(doc_file,"{value.name} property operators are\n\n")
+        fwrite(doc_file,make_table(props))
     document_topic(doc_file,topic("structure_annotation",mod,string(value.name)))
 
 def document_structure_annotations(doc_file:file;mod:Module?)
@@ -670,6 +705,8 @@ def function_needs_documenting(func:FunctionPtr)
     if func.flags.privateFunction
         return false
     if func.fromGeneric != null
+        return false
+    if func.moreFlags.propertyFunction
         return false
     var isBuiltin = false
     peek(func._module.name) <| $(name)
