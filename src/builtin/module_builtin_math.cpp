@@ -214,7 +214,7 @@ namespace das {
         enum { ColC = sizeof(VecT) / sizeof(float) };
     public:
         MatrixAnnotation(ModuleLibrary & lib) :
-            ManagedStructureAnnotation( "float" + to_string(ColC) + "x" + to_string(RowC), lib,
+            ManagedStructureAnnotation<Matrix<VecT,RowC>>( "float" + to_string(ColC) + "x" + to_string(RowC), lib,
                  "float" + to_string(ColC) + "x" + to_string(RowC)) {
             const char * fieldNames [] = {"x","y","z","w"};
             for ( int r=0; r!=RowC; ++r ) {
