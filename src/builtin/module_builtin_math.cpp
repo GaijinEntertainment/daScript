@@ -218,7 +218,7 @@ namespace das {
                  "float" + to_string(ColC) + "x" + to_string(RowC)) {
             const char * fieldNames [] = {"x","y","z","w"};
             for ( int r=0; r!=RowC; ++r ) {
-                addFieldEx(fieldNames[r], "m[" + to_string(r) + "]", r*ColC*sizeof(float),
+                this->addFieldEx(fieldNames[r], "m[" + to_string(r) + "]", r*ColC*sizeof(float),
                     make_smart<TypeDecl>(TypeDecl::getVectorType(Type::tFloat, ColC)));
             }
         }
