@@ -45,6 +45,15 @@ namespace das {
         return gcf;
     }
 
+    uint32_t BasicStructureAnnotation::getFieldOffset ( const string & na ) const {
+        auto it = fields.find(na);
+        if ( it!=fields.end() ) {
+            return it->second.offset;
+        } else {
+            return -1U;
+        }
+    }
+
     TypeDeclPtr BasicStructureAnnotation::makeFieldType ( const string & na, bool isConst ) const {
         auto it = fields.find(na);
         if ( it!=fields.end() ) {
@@ -68,55 +77,6 @@ namespace das {
             } else {
                 return nullptr;
             }
-        } else {
-            return nullptr;
-        }
-    }
-
-    SimNode * BasicStructureAnnotation::simulateGetField ( const string & na, Context & context,
-            const LineInfo & at, const ExpressionPtr & value ) const {
-        auto it = fields.find(na);
-        if ( it!=fields.end() ) {
-            if ( value->type->isPointer() ) {
-                return it->second.factory(FactoryNodeType::getFieldPtr,context,at,value);
-            } else {
-                return it->second.factory(FactoryNodeType::getField,context,at,value);
-            }
-        } else {
-            return nullptr;
-        }
-    }
-
-    SimNode * BasicStructureAnnotation::simulateGetFieldR2V ( const string & na, Context & context,
-            const LineInfo & at, const ExpressionPtr & value ) const {
-        auto it = fields.find(na);
-        if ( it!=fields.end() ) {
-            auto itT = it->second.decl;
-            if ( value->type->isPointer() ) {
-                return it->second.factory(FactoryNodeType::getFieldPtrR2V,context,at,value);
-            } else {
-                return it->second.factory(FactoryNodeType::getFieldR2V,context,at,value);
-            }
-        } else {
-            return nullptr;
-        }
-    }
-
-    SimNode * BasicStructureAnnotation::simulateSafeGetField ( const string & na, Context & context,
-            const LineInfo & at, const ExpressionPtr & value ) const {
-        auto it = fields.find(na);
-        if ( it!=fields.end() ) {
-            return it->second.factory(FactoryNodeType::safeGetField,context,at,value);
-        } else {
-            return nullptr;
-        }
-    }
-
-    SimNode * BasicStructureAnnotation::simulateSafeGetFieldPtr ( const string & na, Context & context,
-            const LineInfo & at, const ExpressionPtr & value ) const {
-        auto it = fields.find(na);
-        if ( it!=fields.end() ) {
-            return it->second.factory(FactoryNodeType::safeGetFieldPtr,context,at,value);
         } else {
             return nullptr;
         }
@@ -163,35 +123,6 @@ namespace das {
         field.cppName = cppNa;
         field.decl = pT;
         field.offset = offset;
-        auto baseType = make_smart<TypeDecl>(*field.decl);
-        field.factory = [offset,baseType](FactoryNodeType nt,Context & context,const LineInfo & at, const ExpressionPtr & value) -> SimNode * {
-            if ( !value->type->isPointer() ) {
-                if ( nt==FactoryNodeType::getField || nt==FactoryNodeType::getFieldR2V ) {
-                    auto r2vType = (nt==FactoryNodeType::getField) ? make_smart<TypeDecl>(Type::none) : baseType;
-                    auto tnode = value->trySimulate(context, offset, r2vType);
-                    if ( tnode ) {
-                        return tnode;
-                    }
-                }
-            }
-            auto simV = value->simulate(context);
-            switch ( nt ) {
-            case FactoryNodeType::getField:
-                return context.code->makeNode<SimNode_FieldDeref>(at,simV,offset);
-            case FactoryNodeType::getFieldR2V:
-                return context.code->makeValueNode<SimNode_FieldDerefR2V>(baseType->baseType,at,simV,offset);
-            case FactoryNodeType::getFieldPtr:
-                return context.code->makeNode<SimNode_PtrFieldDeref>(at,simV,offset);
-            case FactoryNodeType::getFieldPtrR2V:
-                return context.code->makeValueNode<SimNode_PtrFieldDerefR2V>(baseType->baseType,at,simV,offset);
-            case FactoryNodeType::safeGetField:
-                return context.code->makeNode<SimNode_SafeFieldDeref>(at,simV,offset);
-            case FactoryNodeType::safeGetFieldPtr:
-                return context.code->makeNode<SimNode_SafeFieldDerefPtr>(at,simV,offset);
-            default:
-                return nullptr;
-            }
-        };
         return field;
     }
 

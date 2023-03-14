@@ -126,10 +126,6 @@ void testAdd ( int & a, int b ) {
     a += b;
 }
 
-struct IntFields {
-    das_hash_map<string,int32_t> fields;
-};
-
 struct CheckRange : StructureAnnotation {
     CheckRange() : StructureAnnotation("checkRange") {}
     virtual bool touch(const StructurePtr & st, ModuleGroup &,
@@ -171,178 +167,6 @@ struct CheckRange : StructureAnnotation {
         return ok;
     }
 };
-
-struct IntFieldsAnnotation : StructureTypeAnnotation {
-
-    // NOTE - SafeGetFieldPtr is not necessary, since its Int always
-
-    // FIELD .
-    struct SimNode_IntFieldDeref : SimNode {
-        DAS_PTR_NODE;
-        SimNode_IntFieldDeref ( const LineInfo & at, SimNode * rv, char * n ) : SimNode(at), value(rv), name(n) {}
-        virtual SimNode * visit ( SimVisitor & vis ) override {
-            V_BEGIN();
-            V_OP(IntFieldDeref);
-            V_SUB(value);
-            V_ARG(name);
-            V_END();
-        }
-        virtual SimNode * copyNode ( Context & context, NodeAllocator * code ) override {
-            SimNode_IntFieldDeref * that = (SimNode_IntFieldDeref *) SimNode::copyNode(context, code);
-            that->name = code->allocateName(name);
-            return that;
-        }
-        char * compute ( Context & context ) {
-            DAS_PROFILE_NODE
-            vec4f rv = value->eval(context);
-            if ( IntFields * prv = cast<IntFields *>::to(rv) ) {
-                auto it = prv->fields.find(name);
-                if ( it != prv->fields.end() ) {
-                    return (char *) (&it->second);
-                } else {
-                    context.throw_error_at(debugInfo, "field %s not found", name);
-                    return nullptr;
-                }
-            } else {
-                context.throw_error_at(debugInfo,"dereferencing null pointer");
-                return nullptr;
-            }
-        }
-        SimNode *   value;
-        char *      name;
-    };
-
-    struct SimNode_IntFieldDerefR2V : SimNode_IntFieldDeref {
-        DAS_INT_NODE;
-        SimNode_IntFieldDerefR2V ( const LineInfo & at, SimNode * rv, char * n )
-            : SimNode_IntFieldDeref(at,rv,n) {}
-        virtual SimNode * visit ( SimVisitor & vis ) override {
-            V_BEGIN();
-            V_OP(IntFieldDerefR2V);
-            V_SUB(value);
-            V_ARG(name);
-            V_END();
-        }
-        __forceinline int32_t compute ( Context & context ) {
-            DAS_PROFILE_NODE
-            vec4f rv = value->eval(context);
-            if ( IntFields * prv = cast<IntFields *>::to(rv) ) {
-                auto it = prv->fields.find(name);
-                if ( it != prv->fields.end() ) {
-                    return it->second;
-                } else {
-                    context.throw_error_at(debugInfo,"field %s not found",name);
-                    return 0;
-                }
-            } else {
-                context.throw_error_at(debugInfo,"dereferencing null pointer");
-                return 0;
-            }
-        }
-    };
-
-    // FIELD ?.
-    struct SimNode_SafeIntFieldDeref : SimNode_IntFieldDeref {
-        DAS_PTR_NODE;
-        SimNode_SafeIntFieldDeref ( const LineInfo & at, SimNode * rv, char * n ) : SimNode_IntFieldDeref(at,rv,n) {}
-        virtual SimNode * visit ( SimVisitor & vis ) override {
-            V_BEGIN();
-            V_OP(SafeIntFieldDeref);
-            V_SUB(value);
-            V_ARG(name);
-            V_END();
-        }
-        __forceinline char * compute ( Context & context ) {
-            DAS_PROFILE_NODE
-            vec4f rv = value->eval(context);
-            if ( IntFields * prv = cast<IntFields *>::to(rv) ) {
-                auto it = prv->fields.find(name);
-                if ( it != prv->fields.end() ) {
-                    return (char *) &it->second;
-                } else {
-                    return nullptr;
-                }
-            } else {
-                return nullptr;
-            }
-        }
-    };
-
-    IntFieldsAnnotation() : StructureTypeAnnotation("IntFields") {}
-    virtual TypeAnnotationPtr clone ( const TypeAnnotationPtr & p = nullptr ) const override {
-        smart_ptr<IntFieldsAnnotation> cp =  p ? static_pointer_cast<IntFieldsAnnotation>(p) : make_smart<IntFieldsAnnotation>();
-        return StructureTypeAnnotation::clone(cp);
-    }
-    virtual bool create ( const smart_ptr<Structure> & st, const AnnotationArgumentList & args, string & err ) override {
-        if( !StructureTypeAnnotation::create(st,args,err) )
-            return false;
-        bool fail = false;
-        for ( auto & f : st->fields ) {
-            if ( !f.type->isSimpleType(Type::tInt) ) {
-                err += "field " + f.name + " must be int\n";
-                fail = true;
-            }
-        }
-        return !fail;
-    }
-    virtual TypeDeclPtr makeFieldType ( const string & na, bool isConst ) const override {
-        if ( auto pF = makeSafeFieldType(na, isConst) ) {
-            pF->ref = true;
-            return pF;
-        } else {
-            return nullptr;
-        }
-    }
-    virtual TypeDeclPtr makeSafeFieldType ( const string & na, bool ) const override {
-        auto pF = structureType->findField(na);
-        return pF ? make_smart<TypeDecl>(*pF->type) : nullptr;
-    }
-    virtual SimNode * simulateGetField ( const string & na, Context & context,
-                                        const LineInfo & at, const ExpressionPtr & rv ) const  override {
-        return context.code->makeNode<SimNode_IntFieldDeref>(at,rv->simulate(context),context.code->allocateName(na));
-    }
-    virtual SimNode * simulateGetFieldR2V ( const string & na, Context & context,
-                                           const LineInfo & at, const ExpressionPtr & rv ) const  override {
-        return context.code->makeNode<SimNode_IntFieldDerefR2V>(at,rv->simulate(context),context.code->allocateName(na));
-    }    virtual SimNode * simulateSafeGetField ( const string & na, Context & context,
-                                            const LineInfo & at, const ExpressionPtr & rv ) const  override {
-        return context.code->makeNode<SimNode_SafeIntFieldDeref>(at,rv->simulate(context),context.code->allocateName(na));
-    }
-    virtual size_t getSizeOf() const override { return sizeof(IntFields); }
-    virtual size_t getAlignOf() const override { return alignof(IntFields); }
-};
-
-void testFields ( Context * ctx ) {
-    int32_t t = 0;
-    (void)t;
-    IntFields x;
-    auto fx = ctx->findFunction("testFields");
-    if (!fx) {
-        ctx->throw_error("function testFields not found");
-        return;
-    }
-    vec4f args[1] = { cast<IntFields *>::from(&x) };
-    x.fields["a"] = 1;
-    t = cast<int32_t>::to ( ctx->eval(fx, args) );
-    assert(!ctx->getException());
-    assert(t==1);
-    x.fields["b"] = 2;
-    t = cast<int32_t>::to ( ctx->eval(fx, args) );
-    assert(!ctx->getException());
-    assert(t==3);
-    x.fields["c"] = 3;
-    t = cast<int32_t>::to ( ctx->eval(fx, args) );
-    assert(!ctx->getException());
-    assert(t==6);
-    x.fields["d"] = 4;
-    t = cast<int32_t>::to ( ctx->eval(fx, args) );
-    assert(!ctx->getException());
-    assert(t==10);
-    x.fields.erase("b");
-    t = cast<int32_t>::to ( ctx->eval(fx, args) );
-    assert(!ctx->getException());
-    assert(t==8);
-}
 
 void test_das_string(const Block & block, Context * context, LineInfoArg * at) {
     string str = "test_das_string";
@@ -609,7 +433,6 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     addConstant(*this, "UNIT_TEST_CONSTANT", 0x12345678);
     // structure annotations
     addAnnotation(make_smart<CheckRange>());
-    addAnnotation(make_smart<IntFieldsAnnotation>());
     // dummy type example
     addAnnotation(make_smart<DummyTypeAnnotation>("SomeDummyType", "SomeDummyType", sizeof(SomeDummyType), alignof(SomeDummyType)));
     // register types
@@ -657,8 +480,6 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
         SideEffects::modifyArgument, "testFoo");
     addExtern<DAS_BIND_FUN(testAdd)>(*this, lib, "testAdd",
         SideEffects::modifyArgument, "testAdd");
-    addExtern<DAS_BIND_FUN(testFields)>(*this, lib, "testFields",
-        SideEffects::modifyExternal, "testFields");
     addExtern<DAS_BIND_FUN(getSamplePoint3)>(*this, lib, "getSamplePoint3",
         SideEffects::modifyExternal, "getSamplePoint3");
     addExtern<DAS_BIND_FUN(doubleSamplePoint3)>(*this, lib, "doubleSamplePoint3",

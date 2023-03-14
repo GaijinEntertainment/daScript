@@ -118,10 +118,6 @@ There are numerous ``simulate...`` routines that provide specific simulation nod
         virtual SimNode * simulateCopy ( Context &, const LineInfo &, SimNode *, SimNode * ) const
         virtual SimNode * simulateClone ( Context &, const LineInfo &, SimNode *, SimNode * ) const
         virtual SimNode * simulateRef2Value ( Context &, const LineInfo &, SimNode * ) const
-        virtual SimNode * simulateGetField ( const string &, Context &, const LineInfo &, const ExpressionPtr & ) const
-        virtual SimNode * simulateGetFieldR2V ( const string &, Context &, const LineInfo &, const ExpressionPtr & ) const
-        virtual SimNode * simulateSafeGetField ( const string &, Context &, const LineInfo &, const ExpressionPtr & ) const
-        virtual SimNode * simulateSafeGetFieldPtr ( const string &, Context &, const LineInfo &, const ExpressionPtr & ) const
         virtual SimNode * simulateGetNew ( Context &, const LineInfo & ) const
         virtual SimNode * simulateGetAt ( Context &, const LineInfo &, const TypeDeclPtr &,
                                          const ExpressionPtr &, const ExpressionPtr &, uint32_t ) const

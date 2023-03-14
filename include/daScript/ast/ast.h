@@ -453,6 +453,7 @@ namespace das
         virtual string getSmartAnnotationCloneFunction () const { return ""; }
         virtual size_t getSizeOf() const { return sizeof(void *); }
         virtual size_t getAlignOf() const { return 1; }
+        virtual uint32_t getFieldOffset ( const string & ) const { return -1U; }
         virtual TypeDeclPtr makeValueType() const { return nullptr; }
         virtual TypeDeclPtr makeFieldType ( const string &, bool ) const { return nullptr; }
         virtual TypeDeclPtr makeSafeFieldType ( const string &, bool ) const { return nullptr; }
@@ -470,10 +471,6 @@ namespace das
         virtual SimNode * simulateClone ( Context &, const LineInfo &, SimNode *, SimNode * ) const { return nullptr; }
         virtual SimNode * simulateRef2Value ( Context &, const LineInfo &, SimNode * ) const { return nullptr; }
         virtual SimNode * simulateNullCoalescing ( Context &, const LineInfo &, SimNode *, SimNode * ) const { return nullptr; }
-        virtual SimNode * simulateGetField ( const string &, Context &, const LineInfo &, const ExpressionPtr & ) const { return nullptr; }
-        virtual SimNode * simulateGetFieldR2V ( const string &, Context &, const LineInfo &, const ExpressionPtr & ) const { return nullptr; }
-        virtual SimNode * simulateSafeGetField ( const string &, Context &, const LineInfo &, const ExpressionPtr & ) const { return nullptr; }
-        virtual SimNode * simulateSafeGetFieldPtr ( const string &, Context &, const LineInfo &, const ExpressionPtr & ) const { return nullptr; }
         virtual SimNode * simulateGetNew ( Context &, const LineInfo & ) const { return nullptr; }
         virtual SimNode * simulateGetAt ( Context &, const LineInfo &, const TypeDeclPtr &,
                                          const ExpressionPtr &, const ExpressionPtr &, uint32_t ) const { return nullptr; }
@@ -512,7 +509,7 @@ namespace das
 
     // annotated structure
     //  needs to override
-    //      create,clone, simulateGetField, simulateGetFieldR2V, SafeGetField, and SafeGetFieldPtr
+    //      create,clone
     struct StructureTypeAnnotation : TypeAnnotation {
         StructureTypeAnnotation ( const string & n ) : TypeAnnotation(n) {}
         virtual bool rtti_isStructureTypeAnnotation() const override { return true; }
