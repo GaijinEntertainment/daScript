@@ -210,71 +210,20 @@ namespace das {
     }
 
     template <typename VecT, int RowC>
-    class MatrixAnnotation : public TypeAnnotation {
+    class MatrixAnnotation : public ManagedStructureAnnotation<Matrix<VecT,RowC>> {
         enum { ColC = sizeof(VecT) / sizeof(float) };
-        typedef MatrixAnnotation<VecT,RowC> ThisAnnotation;
-        typedef Matrix<VecT,RowC> ThisMatrix;
-    protected:
-        DebugInfoHelper            helpA;
-        TypeInfo *                 matrixTypeInfo;
-    protected:
-        int GetField ( const string & na ) const {
-            if ( na.length()!=1 )
-                return -1;
-            int field = TypeDecl::getMaskFieldIndex(na[0]);
-            if ( field<0 || field>=RowC )
-                return -1;
-            return field;
-        }
     public:
-        MatrixAnnotation() : TypeAnnotation( "float" + to_string(ColC) + "x" + to_string(RowC) ) {
-            matrixTypeInfo = helpA.debugInfo->makeNode<TypeInfo>();
-            auto bt = ToBasicType<VecT>::type;
-            auto tt = make_smart<TypeDecl>(Type(bt));
-            tt->dim.push_back(RowC);
-            helpA.makeTypeInfo(matrixTypeInfo, tt);
-        }
-        virtual TypeAnnotationPtr clone ( const TypeAnnotationPtr & p = nullptr ) const override {
-            smart_ptr<ThisAnnotation> cp =  p ? static_pointer_cast<ThisAnnotation>(p) : make_smart<ThisAnnotation>();
-            return TypeAnnotation::clone(cp);
-        }
-        virtual bool rtti_isHandledTypeAnnotation() const override {
-            return true;
-        }
-        virtual bool isRefType() const override { return true; }
-        virtual bool isLocal() const override { return true; }
-        virtual bool canBePlacedInContainer() const override { return true; }
-        virtual bool hasNonTrivialCtor() const override { return false; }
-        virtual bool hasNonTrivialDtor() const override { return false; }
-        virtual bool canMove() const override { return true; }
-        virtual bool canCopy() const override { return true; }
-        virtual bool canClone() const override { return true; }
-        virtual bool canNew() const override { return true; }
-        virtual bool isPod() const override { return true; }
-        virtual bool isRawPod() const override { return true; }
-        virtual bool isIndexable ( const TypeDeclPtr & decl ) const override {
-            return decl->isIndex();
-        }
-        virtual size_t getAlignOf() const override {
-            return alignof(VecT);
-        }
-        virtual size_t getSizeOf() const override {
-            return sizeof(ThisMatrix);
-        }
-        virtual TypeDeclPtr makeFieldType ( const string & na, bool isConst ) const override {
-            if ( auto ft = makeSafeFieldType(na, isConst) ) {
-                ft->ref = true;
-                return ft;
-            } else {
-                return nullptr;
+        MatrixAnnotation(ModuleLibrary & lib) :
+            ManagedStructureAnnotation<Matrix<VecT,RowC>>( "float" + to_string(ColC) + "x" + to_string(RowC), lib,
+                 "float" + to_string(ColC) + "x" + to_string(RowC)) {
+            const char * fieldNames [] = {"x","y","z","w"};
+            for ( int r=0; r!=RowC; ++r ) {
+                this->addFieldEx(fieldNames[r], "m[" + to_string(r) + "]", r*ColC*sizeof(float),
+                    make_smart<TypeDecl>(TypeDecl::getVectorType(Type::tFloat, ColC)));
             }
         }
-        virtual TypeDeclPtr makeSafeFieldType ( const string & na, bool ) const override {
-            int field = GetField(na);
-            if ( field<0  )
-                return nullptr;
-            auto bt = TypeDecl::getVectorType(Type::tFloat, ColC);
-            return make_smart<TypeDecl>(bt);
+        virtual bool isIndexable ( const TypeDeclPtr & decl ) const override {
+            return decl->isIndex();
         }
         virtual TypeDeclPtr makeIndexType ( const ExpressionPtr &, const ExpressionPtr & idx ) const override {
             auto decl = idx->type;
@@ -284,85 +233,6 @@ namespace das {
             pt->ref = true;
             return pt;
         }
-        // aot
-        virtual void aotVisitGetField ( TextWriter & ss, const string & fieldName ) override {
-            ss << ".m[" << TypeDecl::getMaskFieldIndex(fieldName[0]) << "]";
-        }
-        virtual void aotVisitGetFieldPtr ( TextWriter & ss, const string & fieldName ) override {
-            ss << "->m[" << TypeDecl::getMaskFieldIndex(fieldName[0]) << "]";
-        }
-        // simulate
-        virtual SimNode * simulateCopy ( Context & context, const LineInfo & at, SimNode * l, SimNode * r ) const override {
-            return context.code->makeNode<SimNode_CopyRefValue>(at, l, r, uint32_t(sizeof(ThisMatrix)));
-        }
-        virtual SimNode * simulateClone ( Context & context, const LineInfo & at, SimNode * l, SimNode * r ) const override {
-            return context.code->makeNode<SimNode_CopyRefValue>(at, l, r, uint32_t(sizeof(ThisMatrix)));
-        }
-        virtual SimNode * simulateGetField ( const string & na, Context & context,
-                                            const LineInfo & at, const ExpressionPtr & value ) const override {
-            int field = GetField(na);
-            if ( field!=-1 ) {
-                if ( !value->type->isPointer() ) {
-                    auto tnode = value->trySimulate(context, field*sizeof(VecT), make_smart<TypeDecl>(Type::none));
-                    if ( tnode ) {
-                        return tnode;
-                    }
-                }
-                return context.code->makeNode<SimNode_FieldDeref>(at,
-                                                                  value->simulate(context),
-                                                                  uint32_t(field*sizeof(VecT)));
-            } else {
-                return nullptr;
-            }
-        }
-        virtual SimNode * simulateGetFieldR2V ( const string & na, Context & context,
-                                               const LineInfo & at, const ExpressionPtr & value ) const override {
-            int field = GetField(na);
-            if ( field!=-1 ) {
-                auto bt = TypeDecl::getVectorType(Type::tFloat, ColC);
-                if ( !value->type->isPointer() ) {
-                    auto tnode = value->trySimulate(context, field*sizeof(VecT), make_smart<TypeDecl>(bt));
-                    if ( tnode ) {
-                        return tnode;
-                    }
-                }
-                return context.code->makeValueNode<SimNode_FieldDerefR2V>(bt,
-                                                                          at,
-                                                                          value->simulate(context),
-                                                                          uint32_t(field*sizeof(VecT)));
-            } else {
-                return nullptr;
-            }
-        }
-        virtual SimNode * simulateGetNew ( Context & context, const LineInfo & at ) const override {
-            return context.code->makeNode<SimNode_New>(at,int32_t(sizeof(ThisMatrix)),false);
-        }
-        virtual SimNode * simulateDeletePtr ( Context & context, const LineInfo & at, SimNode * sube, uint32_t count ) const override {
-            uint32_t ms = uint32_t(sizeof(ThisMatrix));
-            return context.code->makeNode<SimNode_DeleteStructPtr>(at,sube,count,ms, false, false);
-        }
-        virtual SimNode * simulateSafeGetField ( const string & na, Context & context,
-                                                const LineInfo & at, const ExpressionPtr & value ) const override {
-            int field = GetField(na);
-            if ( field!=-1 ) {
-                return context.code->makeNode<SimNode_SafeFieldDeref>(at,
-                                                                      value->simulate(context),
-                                                                      uint32_t(field*sizeof(VecT)));
-            } else {
-                return nullptr;
-            }
-        };
-        virtual SimNode * simulateSafeGetFieldPtr ( const string & na, Context & context,
-                                                   const LineInfo & at, const ExpressionPtr & value ) const override {
-            int field = GetField(na);
-            if ( field!=-1 ) {
-                return context.code->makeNode<SimNode_SafeFieldDerefPtr>(at,
-                                                                         value->simulate(context),
-                                                                         uint32_t(field*sizeof(VecT)));
-            } else {
-                return nullptr;
-            }
-        };
         SimNode * trySimulate ( Context & context, const ExpressionPtr & subexpr, const ExpressionPtr & index,
                                const TypeDeclPtr & r2vType, uint32_t ofs ) const {
             if ( index->rtti_isConstant() ) {
@@ -404,9 +274,6 @@ namespace das {
                                                                     idx->simulate(context),
                                                                     uint32_t(sizeof(float)*ColC), ofs, RowC);
             }
-        }
-        virtual void walk ( DataWalker & walker, void * data ) override {
-            walker.walk((char *)data, matrixTypeInfo);
         }
     };
 
@@ -762,9 +629,9 @@ namespace das {
             addFunctionCommonConversion<int3, float3>(*this,lib);
             addFunctionCommonConversion<int4, float4>(*this,lib);
             // structure annotations
-            addAnnotation(make_smart<float4x4_ann>());
-            addAnnotation(make_smart<float3x4_ann>());
-            addAnnotation(make_smart<float3x3_ann>());
+            addAnnotation(make_smart<float4x4_ann>(lib));
+            addAnnotation(make_smart<float3x4_ann>(lib));
+            addAnnotation(make_smart<float3x3_ann>(lib));
             // c-tor
             addFunction ( make_smart< BuiltInFn< SimNode_MatrixCtor<float3x3>,float3x3 > >("float3x3",lib) );
             addFunction ( make_smart< BuiltInFn< SimNode_MatrixCtor<float3x4>,float3x4 > >("float3x4",lib) );
