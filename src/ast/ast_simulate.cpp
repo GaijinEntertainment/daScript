@@ -771,7 +771,9 @@ namespace das
                     DAS_ASSERT(fieldType && "how did this infer?");
                     uint32_t fieldSize = fieldType->getSizeOf();
                     SimNode * cpy = nullptr;
-                    auto left = ann->simulateGetField(decl->name, context, at, fakeExpr);
+                    uint32_t fieldOffset = ann->getFieldOffset(decl->name);
+                    SimNode * simV = fakeExpr->simulate(context);
+                    auto left = context.code->makeNode<SimNode_FieldDeref>(at,simV,fieldOffset);
                     auto right = decl->value->simulate(context);
                     if ( !decl->value->type->isRef() ) {
                         if ( decl->value->type->isHandle() ) {
@@ -1867,36 +1869,19 @@ namespace das
             auto simV = value->simulate(context);
             uint32_t mask = 1u << fieldIndex;
             return context.code->makeNode<SimNode_GetBitField>(at, simV, mask);
-        } else if ( !field  && fieldIndex==-1 ) {
-            if ( r2v ) {
-                auto resN = annotation->simulateGetFieldR2V(name, context, at, value);
-                if ( !resN ) {
-                    context.thisProgram->error("integration error, simulateGetFieldR2V returned null", "", "",
-                                               at, CompilationError::missing_node );
-                }
-                return resN;
-            } else {
-                auto resN = annotation->simulateGetField(name, context, at, value);
-                if ( !resN ) {
-                    context.thisProgram->error("integration error, simulateGetField returned null", "", "",
-                                               at, CompilationError::missing_node );
-                }
-                return resN;
-            }
         } else {
             return trySimulate(context, 0, r2v ? type : make_smart<TypeDecl>(Type::none));
         }
     }
 
     SimNode * ExprField::trySimulate (Context & context, uint32_t extraOffset, const TypeDeclPtr & r2vType ) const {
-        if ( !field && fieldIndex==-1 ) {
-            return nullptr;
-        }
         if ( value->type->isBitfield() ) {
             return nullptr;
         }
         int fieldOffset = -1;
-        if ( fieldIndex != - 1 ) {
+        if ( !field && fieldIndex==-1 ) {
+            fieldOffset = (int) annotation->getFieldOffset(name);
+        } else if ( fieldIndex != - 1 ) {
             if ( value->type->isPointer() ) {
                 if ( value->type->firstType->isVariant() ) {
                     fieldOffset = value->type->firstType->getVariantFieldOffset(fieldIndex);
@@ -1992,28 +1977,11 @@ namespace das
             }
             DAS_ASSERTF(fieldOffset>=0,"field offset is somehow not there");
         }
+        if ( annotation ) fieldOffset = (int) annotation->getFieldOffset(name);
         if ( skipQQ ) {
-            if ( annotation ) {
-                auto resN = annotation->simulateSafeGetFieldPtr(name, context, at, value);
-                if ( !resN ) {
-                    context.thisProgram->error("integration error, simulateSafeGetFieldPtr returned null", "", "",
-                                               at, CompilationError::missing_node );
-                }
-                return resN;
-            } else {
-                return context.code->makeNode<SimNode_SafeFieldDerefPtr>(at,value->simulate(context),fieldOffset);
-            }
+            return context.code->makeNode<SimNode_SafeFieldDerefPtr>(at,value->simulate(context),fieldOffset);
         } else {
-            if ( annotation ) {
-                auto resN = annotation->simulateSafeGetField(name, context, at, value);
-                if ( !resN ) {
-                    context.thisProgram->error("integration error, simulateSafeGetField returned null", "", "",
-                                               at, CompilationError::missing_node );
-                }
-                return resN;
-            } else {
-                return context.code->makeNode<SimNode_SafeFieldDeref>(at,value->simulate(context),fieldOffset);
-            }
+            return context.code->makeNode<SimNode_SafeFieldDeref>(at,value->simulate(context),fieldOffset);
         }
     }
 
