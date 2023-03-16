@@ -1,4 +1,4 @@
-/* A Bison parser, made by GNU Bison 3.7.6.  */
+/* A Bison parser, made by GNU Bison 3.8.2.  */
 
 /* Bison interface for Yacc-like parsers in C
 
@@ -327,6 +327,8 @@ struct DAS_YYLTYPE
 
 
 
+
 int das_yyparse (yyscan_t scanner);
+
 
 #endif /* !YY_DAS_YY_DS_PARSER_HPP_INCLUDED  */
