@@ -260,6 +260,20 @@ def read_json ( text : array<uint8>; var error : string& ) : JsonValue?
     delete lex
     return res
 
+var private no_trailing_zeros = false
+
+def set_no_trailing_zeros ( value : bool )
+    var old_ntz = no_trailing_zeros
+    no_trailing_zeros = value
+    return old_ntz
+
+var private no_empty_arrays = false
+
+def set_no_empty_arrays ( value : bool )
+    var old_nea = no_empty_arrays
+    no_empty_arrays = value
+    return old_nea
+
 // note - we use StringBuilderWriter for performance reasons here
 def private write_value ( var writer : StringBuilderWriter; jsv : JsonValue?; depth : int )
     if jsv == null
@@ -269,7 +283,10 @@ def private write_value ( var writer : StringBuilderWriter; jsv : JsonValue?; de
         write_escape_string(writer, jsv.value as _string)
         write(writer, "\"")
     elif jsv.value is _number
-        write(writer, jsv.value as _number)
+        if no_trailing_zeros
+            write(writer, format("%.17f",jsv.value as _number) |> rtrim("0") |> rtrim("."))
+        else
+            write(writer, jsv.value as _number)
     elif jsv.value is _array
         if length(jsv.value as _array)==0
             write(writer, "[]")
@@ -293,6 +310,10 @@ def private write_value ( var writer : StringBuilderWriter; jsv : JsonValue?; de
             write(writer, "\{\n")
             var first = true
             for elemK, elemV in keys(jsv.value as _object), values(jsv.value as _object)
+                if no_empty_arrays
+                    if elemV.value is _array
+                        if length(elemV.value as _array)==0
+                            continue
                 if first
                     first = false
                 else

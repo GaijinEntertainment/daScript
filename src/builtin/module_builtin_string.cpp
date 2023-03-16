@@ -623,6 +623,32 @@ namespace das
         }
     }
 
+    bool is_char_in_string ( char c, const char * str ) {
+        while ( *str ) {
+            if ( *str++==c ) return true;
+        }
+        return false;
+    }
+
+    char * builtin_string_rtrim_ts ( char* s, char * ts, Context * context ) {
+        if ( !s ) return nullptr;
+        if ( !ts ) return s;
+        char * str_end_o = s + strlen(s);
+        char * str_end = str_end_o;
+        while ( str_end > s && is_char_in_string(str_end[-1],ts) ) str_end--;
+        if ( str_end==s ) {
+            return nullptr;
+        } else if ( str_end!=str_end_o ) {
+            auto len = str_end - s;
+            char * res = context->stringHeap->allocateString(nullptr, int32_t(len));
+            memcpy ( res, s, len );
+            res[len] = 0;
+            return res;
+        } else {
+            return s;
+        }
+    }
+
     void builtin_string_peek ( const char * str, const TBlock<void,TTemporary<TArray<uint8_t> const>> & block, Context * context, LineInfoArg * at ) {
         if ( !str ) return;
         Array arr;
@@ -787,7 +813,9 @@ namespace das
             addExtern<DAS_BIND_FUN(builtin_string_replace)>(*this, lib, "replace",
                 SideEffects::none, "builtin_string_replace")->args({"str","toSearch","replace","context"});
             addExtern<DAS_BIND_FUN(builtin_string_rtrim)>(*this, lib, "rtrim",
-            SideEffects::none, "builtin_string_rtrim")->args({"str","context"});
+                SideEffects::none, "builtin_string_rtrim")->args({"str","context"});
+            addExtern<DAS_BIND_FUN(builtin_string_rtrim_ts)>(*this, lib, "rtrim",
+                SideEffects::none, "builtin_string_rtrim_ts")->args({"str","chars","context"});
             // format
             addExtern<DAS_BIND_FUN(format<int32_t>)> (*this, lib, "format",
                 SideEffects::none, "format<int32_t>")->args({"format","value","context"});
