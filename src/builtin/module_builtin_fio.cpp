@@ -477,6 +477,13 @@ namespace das {
         return remove(path) == 0;
     }
 
+    char * get_env_variable ( const char * var, Context * context ) {
+        if ( !var ) return nullptr;
+        auto res = getenv(var);
+        if ( !res ) return nullptr;
+        return context->stringHeap->allocateString(res);
+    }
+
     class Module_FIO : public Module {
     public:
         Module_FIO() : Module("fio") {
@@ -577,6 +584,9 @@ namespace das {
             addExtern<DAS_BIND_FUN(get_full_file_name)>(*this, lib, "get_full_file_name",
                 SideEffects::accessExternal, "get_full_file_name")
                     ->args({"path","context","at"});
+            addExtern<DAS_BIND_FUN(get_env_variable)>(*this, lib, "get_env_variable",
+                SideEffects::accessExternal, "get_env_variable")
+                    ->args({"var","context"});
             // add builtin module
             compileBuiltinModule("fio.das",fio_das, sizeof(fio_das));
             // lets verify all names

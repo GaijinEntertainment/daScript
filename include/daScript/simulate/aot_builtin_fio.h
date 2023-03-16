@@ -33,4 +33,5 @@ namespace das {
     int builtin_popen ( const char * cmd, const TBlock<void,const FILE *> & blk, Context * context, LineInfoArg * at );
     char * get_full_file_name ( const char * path, Context * context, LineInfoArg * );
     bool builtin_remove_file ( const char * path );
+    char * get_env_variable ( const char * var, Context * context );
 }
