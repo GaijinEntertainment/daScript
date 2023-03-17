@@ -13,6 +13,7 @@ namespace das {
 
     char * builtin_string_escape ( const char *str, Context * context );
     char * builtin_string_unescape ( const char *str, Context * context );
+    char * builtin_string_safe_unescape ( const char *str, Context * context );
 
     vec4f builtin_strdup ( Context &, SimNode_CallBase * call, vec4f * args );
 

@@ -539,6 +539,13 @@ namespace das
         return context->stringHeap->allocateString(estr);
     }
 
+    char * builtin_string_safe_unescape ( const char *str, Context * context ) {
+        if ( !str ) return nullptr;
+        bool err = false;
+        auto estr = unescapeString(str, &err, false);
+        return context->stringHeap->allocateString(estr);
+    }
+
     int builtin_find_first_char_of ( const char * str, int Ch, Context * context ) {
         uint32_t strlen = stringLengthSafe ( *context, str );
         for ( uint32_t o=0; o!=strlen; ++o ) {
@@ -810,6 +817,8 @@ namespace das
                 SideEffects::none, "builtin_string_escape")->args({"str","context"});
             addExtern<DAS_BIND_FUN(builtin_string_unescape)>(*this, lib, "unescape",
                 SideEffects::none, "builtin_string_unescape")->args({"str","context"});
+            addExtern<DAS_BIND_FUN(builtin_string_safe_unescape)>(*this, lib, "safe_unescape",
+                SideEffects::none, "builtin_string_safe_unescape")->args({"str","context"});
             addExtern<DAS_BIND_FUN(builtin_string_replace)>(*this, lib, "replace",
                 SideEffects::none, "builtin_string_replace")->args({"str","toSearch","replace","context"});
             addExtern<DAS_BIND_FUN(builtin_string_rtrim)>(*this, lib, "rtrim",

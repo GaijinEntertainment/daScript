@@ -15,8 +15,12 @@ struct public HttpResponse
 def public HTTP_REQ ( method:string; uri:string; header:string; var data:string; blk:block<(resp:HttpResponse?):void> )
     //! HTTP request
     if ! data |> empty
-        data = data |> replace("\n", "")
+        data = data |> replace("\n", "")    // todo: we need multi-replace?
         data = data |> replace("\t", "")
+        data = data |> replace("^", "^^")
+        data = data |> replace("|", "^|")
+        data = data |> replace("<", "^<")
+        data = data |> replace(">", "^>")
         data = data |> escape
     var cmd = build_string <| $ ( writer )
         writer |> write("curl -s -i -X {method} {uri}")
