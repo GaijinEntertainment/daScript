@@ -17,10 +17,7 @@ def public HTTP_REQ ( method:string; uri:string; header:string; var data:string;
     if ! data |> empty
         data = data |> replace("\n", "")    // todo: we need multi-replace?
         data = data |> replace("\t", "")
-        data = data |> replace("^", "^^")
-        data = data |> replace("|", "^|")
-        data = data |> replace("<", "^<")
-        data = data |> replace(">", "^>")
+        data = data |> sanitize_command_line
         data = data |> escape
     var cmd = build_string <| $ ( writer )
         writer |> write("curl -s -i -X {method} {uri}")
@@ -47,8 +44,12 @@ def public HTTP_REQ ( method:string; uri:string; header:string; var data:string;
             if lines[0] |> starts_with("HTTP/1.1 ")
                 resp.status_code = lines[0] |> slice(9) |> to_int
                 first_line ++
+            elif lines[0] |> starts_with("HTTP/2 ")
+                resp.status_code = lines[0] |> slice(7) |> to_int
+                first_line ++
             for i in first_line..lines |> length
-                if length(lines[i]) == 1
+                let llength = lines[i] |> length
+                if llength==1 || llength==2
                     first_line = i + 1
                     break
             resp.text = build_string <| $ ( writer )

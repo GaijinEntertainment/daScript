@@ -13,6 +13,8 @@
 #include "daScript/misc/performance_time.h"
 #include "daScript/misc/sysos.h"
 
+#include <sstream>
+
 MAKE_TYPE_FACTORY(clock, das::Time)// use MAKE_TYPE_FACTORY out of namespace. Some compilers not happy otherwise
 
 #if _WIN32
@@ -484,6 +486,27 @@ namespace das {
         return context->stringHeap->allocateString(res);
     }
 
+    char * sanitize_command_line ( const char * cmd, Context * context ) {
+        if ( !cmd ) return nullptr;
+        stringstream ss;
+        for ( const char * ch=cmd; *ch; ) {
+#if defined(_MSC_VER)
+            if ( *ch=='^' || *ch=='|' || *ch=='<' || *ch=='>' || *ch=='&' ||
+                    *ch=='%' || *ch=='$' || *ch=='`' || *ch=='\'' ) {
+                ss.put('^');
+                ss.put(*ch++);
+#else
+            if ( *ch=='$' || *ch=='`' ) {
+                ss.put('\\');
+                ss.put(*ch++);
+#endif
+            } else {
+                ss.put(*ch++);
+            }
+        }
+        return context->stringHeap->allocateString(ss.str());
+    }
+
     class Module_FIO : public Module {
     public:
         Module_FIO() : Module("fio") {
@@ -586,6 +609,9 @@ namespace das {
                     ->args({"path","context","at"});
             addExtern<DAS_BIND_FUN(get_env_variable)>(*this, lib, "get_env_variable",
                 SideEffects::accessExternal, "get_env_variable")
+                    ->args({"var","context"});
+            addExtern<DAS_BIND_FUN(sanitize_command_line)>(*this, lib, "sanitize_command_line",
+                SideEffects::none, "sanitize_command_line")
                     ->args({"var","context"});
             // add builtin module
             compileBuiltinModule("fio.das",fio_das, sizeof(fio_das));
