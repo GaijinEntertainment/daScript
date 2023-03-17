@@ -62,6 +62,10 @@ def private log_resp ( resp : HttpResponse? )
         else
             print("GET null\n")
 
+def public openai_key_is_set
+    //! return true if API key is set
+    return !empty(OPENAI_API_KEY)
+
 def public openai_api_key
     //! return API authentication key
     if empty(OPENAI_API_KEY)
