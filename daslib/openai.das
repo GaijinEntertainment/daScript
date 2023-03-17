@@ -58,7 +58,7 @@ struct public ModelPermission
 def private log_resp ( resp : HttpResponse? )
     if LOG_RESPONSES
         if resp!=null
-            print("GET {resp.status_code} {resp.body}\n")
+            print("GET {resp.status_code} {resp.text}\n")
         else
             print("GET null\n")
 
@@ -81,7 +81,7 @@ def public openai_list
         {{"Authorization" => "Bearer {OPENAI_API_KEY}"}}
     ) <| $ ( resp )
         log_resp(resp)
-        if resp != null && resp.status_code==200
+        if resp != null
             var JV = read_json(resp.text,LAST_ERROR)
             if is_valid_response(JV)
                 list <- from_JV(JV,type<ListEnginesResponse>)
@@ -120,7 +120,7 @@ def public openai_retrive_model ( model_id:string )
         {{"Authorization" => "Bearer {OPENAI_API_KEY}"}}
     ) <| $ ( resp )
         log_resp(resp)
-        if resp!=null && resp.status_code==200
+        if resp!=null
             var JV = read_json(resp.text,LAST_ERROR)
             if is_valid_response(JV)
                 model <- from_JV(JV,type<Model>)
