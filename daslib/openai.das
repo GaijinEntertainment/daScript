@@ -205,3 +205,80 @@ def public openai_create_completion ( completion:Completion )
         else
             LAST_ERROR = "HTTPS POST failed"
     return <- ccr
+
+struct public ChatCompletion
+    //! chat completion request
+    model:string
+    messages:array<ChatCompletionMessage>
+    temperature:float = 1.0             // 0..2
+    top_p:float = 1.0                   // 0..1
+    n:int = 1                           // how many completions to generate
+    stop:array<string>                  // stop sequence (up to 4)
+    max_tokens:int = 16
+    presence_penalty:float = 0.0        // Number between -2.0 and 2.0. Positive values penalize new tokens based on whether they appear in the text so far, increasing the model's likelihood to talk about new topics.
+    frequency_penalty:float = 0.0       // Number between -2.0 and 2.0. Positive values penalize new tokens based on their existing frequency in the text so far, decreasing the model's likelihood to repeat the same line verbatim.
+
+struct public ChatCompletionMessage
+    //! chat completion message
+    role:string
+    content:string
+    name:string
+
+struct public ChatCompletionResponse
+    //! chat completion response
+    id : string
+    object : string
+    created : int
+    model : string
+    choices : array<ChatCompletionResponseChoicesInner>
+    usage : ChatCompletionResponseUsage
+
+def public is_valid ( object:ChatCompletionResponse )
+    return object.object=="chat.completion"
+
+struct public ChatCompletionResponseUsage
+    //! chat completion response usage
+    prompt_tokens : int
+    completion_tokens : int
+    total_tokens : int
+
+struct public ChatCompletionResponseChoicesInner
+    //! chat completion response choices
+    message : ChatCompletionResponseChoicesInnerMessagesInner
+    finish_reason : string
+    index : int
+
+struct public ChatCompletionResponseChoicesInnerMessagesInner
+    //! chat completion response choices messages
+    role : string
+    content : string
+    name : string
+
+def public openai_create_chat_completion ( completion:ChatCompletion )
+    //! create a chat completion
+    var req_jv <- JV(completion)
+    for msg in (req_jv as _object)["messages"] as _array
+        if (msg as _object)["name"] as _string |> empty
+            (msg as _object) |> erase("name")
+    var req = write_request_json(req_jv)
+    unsafe
+        delete req_jv
+    var ccr : ChatCompletionResponse
+    LAST_ERROR = ""
+    POST("https://api.openai.com/v1/chat/completions", req,
+        {{"Authorization" => "Bearer {OPENAI_API_KEY}";
+          "Content-Type" => "application/json"}}
+    ) <| $ ( resp )
+        log_resp(resp)
+        if resp!=null
+            print("response:\n\n{resp.text}\n\n")
+            var JV <- read_json(resp.text,LAST_ERROR)
+            if is_valid_response(JV)
+                ccr <- from_JV(JV,type<ChatCompletionResponse>)
+            else
+                LAST_ERROR = collect_error(JV)
+            unsafe
+                delete JV
+        else
+            LAST_ERROR = "HTTPS POST failed"
+    return <- ccr
