@@ -5,12 +5,13 @@ require daslib/openai
 require daslib/base64
 require fio
 
-let TEST_LIST =             true
-let TEST_RETREIVE =         true
-let TEST_COMPLETION =       true
-let TEST_CHAT_COMPLETION =  true
-let TEST_EDIT_COMPLETION =  true
-let TEST_CREATE_IMAGE =     true
+let TEST_LIST =                     true
+let TEST_RETREIVE =                 true
+let TEST_COMPLETION =               true
+let TEST_CHAT_COMPLETION =          true
+let TEST_EDIT_COMPLETION =          true
+let TEST_CREATE_IMAGE =             true
+let TEST_CREATE_IMAGE_VARIATION =   true
 
 [export]
 def main
@@ -76,20 +77,48 @@ def main
             print("error: {openai_get_last_error()}\n")
     // test create image
     if TEST_CREATE_IMAGE
+        let old_timeout = openai_set_connection_timeout(60.)    // this may take time
         print("testing create image\n")
         var ccr <- openai_create_image([[Image()
             prompt = "Draw a cat",
             n = 1,
             size = 256,
             response_format = "b64_json"    // url
-        ]], 60.)    // 60 seconds timeout
+        ]])
         if ccr |> is_valid
             debug(ccr)
             print("ok - testing create image\n")
-
             fopen("image.png", "wb") <| $ ( f )
-                var inscope bytes : array<uint8>
-                let res = base64_decode(ccr.data[0].b64_json, bytes)
-                f |> fwrite(bytes)
+                if f != null
+                    var inscope bytes : array<uint8>
+                    let res = base64_decode(ccr.data[0].b64_json, bytes)
+                    f |> fwrite(bytes)
+                    print("written to image.png\n")
+                else
+                    print("failed to write to image.png\n")
         else
             print("error: {openai_get_last_error()}\n")
+        openai_set_connection_timeout(old_timeout)
+    if TEST_CREATE_IMAGE_VARIATION
+        let old_timeout = openai_set_connection_timeout(60.)    // this may take time
+        print("testing create image\n")
+        var ccr <- openai_create_image_variation([[ImageVariation()
+            image = "image.png",
+            n = 1,
+            size = 256,
+            response_format = "b64_json"    // url
+        ]])
+        if ccr |> is_valid
+            debug(ccr)
+            print("ok - testing create image variation\n")
+            fopen("image_variation.png", "wb") <| $ ( f )
+                if f != null
+                    var inscope bytes : array<uint8>
+                    let res = base64_decode(ccr.data[0].b64_json, bytes)
+                    f |> fwrite(bytes)
+                    print("written to image_vriation.png\n")
+                else
+                    print("failed to write to image_vriation.png\n")
+        else
+            print("error: {openai_get_last_error()}\n")
+        openai_set_connection_timeout(old_timeout)

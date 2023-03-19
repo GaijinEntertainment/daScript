@@ -4,11 +4,24 @@ options indenting = 4
 
 module base64 shared private
 
+// very much inspired by LIBHV implementation
+
 require daslib/strings
 
 let private BASE64_PAD = '='
 let private BASE64DE_FIRST = '+'
 let private BASE64DE_LAST = 'z'
+
+let base64en <- [[int
+    'A'; 'B'; 'C'; 'D'; 'E'; 'F'; 'G'; 'H';
+    'I'; 'J'; 'K'; 'L'; 'M'; 'N'; 'O'; 'P';
+    'Q'; 'R'; 'S'; 'T'; 'U'; 'V'; 'W'; 'X';
+    'Y'; 'Z'; 'a'; 'b'; 'c'; 'd'; 'e'; 'f';
+    'g'; 'h'; 'i'; 'j'; 'k'; 'l'; 'm'; 'n';
+    'o'; 'p'; 'q'; 'r'; 's'; 't'; 'u'; 'v';
+    'w'; 'x'; 'y'; 'z'; '0'; '1'; '2'; '3';
+    '4'; '5'; '6'; '7'; '8'; '9'; '+'; '/'
+]]
 
 /* ASCII order for BASE 64 decode, -1 in unused character */
 let base64de <- [[int
@@ -34,16 +47,19 @@ let base64de <- [[int
         44;  45;  46;  47;  48;  49;  50;  51
 ]]
 
-def BASE64_DECODE_OUT_SIZE(s:int)
+def public BASE64_DECODE_OUT_SIZE(s:int)
     return s / 4 * 3
 
+def public BASE64_ENCODE_OUT_SIZE(s:int)
+    return (s + 2) / 3 * 4
+
 def public base64_decode ( _in:string; var _out:array<uint8> ) : int
-    var inp : array<int>
+    var inscope inp : array<int>
     let inlen = _in |> length
     inp |> reserve(inlen)
     for ch in _in
         inp |> push(ch)
-    var out : array<int>
+    var inscope out : array<int>
     out |> resize(BASE64_DECODE_OUT_SIZE(inlen))
     var j = 0
     for i in range(inp |> length)
@@ -77,3 +93,37 @@ def public base64_decode ( _in:string; var _out:array<uint8> ) : int
     for d,b in out,_out
         b = uint8(d)
     return j
+
+
+def public base64_encode ( _inp:string )
+    var inlen = _inp |> length
+    var inscope inp : array<uint>
+    inp |> resize(inlen)
+    for c,ch in inp,_inp
+        c = uint(ch)
+    var j = 0
+    var out : array<uint8>
+    out |> resize(BASE64_ENCODE_OUT_SIZE(inlen))
+    for i in range(inlen)
+        var s = i % 3
+        if s==0
+            out[j++] = uint8(base64en[(inp[i] >> 2u) & 0x3F])
+            continue
+        elif s==1
+            out[j++] = uint8(base64en[((inp[i-1] & 0x3) << 4u) + ((inp[i] >> 4u) & 0xF)])
+            continue
+        elif s==2
+            out[j++] = uint8(base64en[((inp[i-1] & 0xF) << 2u) + ((inp[i] >> 6u) & 0x3)])
+            out[j++] = uint8(base64en[inp[i] & 0x3F])
+    // move back
+    var i = inlen - 1
+    // check the last and add padding
+    if (i % 3) == 0
+        out[j++] = uint8(base64en[(inp[i] & 0x3) << 4u])
+        out[j++] = uint8('=')
+        out[j++] = uint8('=')
+    elif (i % 3) == 1
+        out[j++] = uint8(base64en[(inp[i] & 0xF) << 2u])
+        out[j++] = uint8('=')
+    return string(out)
+

@@ -18,7 +18,9 @@ var private OPENAI_API_KEY = get_env_variable("OPENAI_API_KEY")
 var private LAST_ERROR = ""
 
 def public openai_set_connection_timeout ( timeout:float )
+    let old_timeout = CONNECTION_TIMEOUT
     CONNECTION_TIMEOUT = max(0.0,timeout)
+    return old_timeout
 
 struct public ListEnginesResponse
     //! list of models
@@ -59,7 +61,6 @@ struct public ModelPermission
     organization : string
     // group : null,
     is_blocking : bool
-
 
 def private log_resp ( resp : HttpResponse? )
     if LOG_RESPONSES
@@ -381,7 +382,7 @@ struct public ImageResponseChoicesInner
 def public is_valid ( object:ImageResponse )
     return true
 
-def public openai_create_image ( completion:Image; var timeout:float = -1.0 )
+def public openai_create_image ( completion:Image )
     //! create an edit
     var req_jv <- JV(completion)
     (req_jv as _object) |> erase("size")
@@ -391,10 +392,70 @@ def public openai_create_image ( completion:Image; var timeout:float = -1.0 )
         delete req_jv
     var ccr : ImageResponse
     LAST_ERROR = ""
-    POST("https://api.openai.com/v1/images/generations", timeout==-1.0 ? CONNECTION_TIMEOUT : timeout, req,
+    POST("https://api.openai.com/v1/images/generations", CONNECTION_TIMEOUT, req,
         {{"Authorization" => "Bearer {OPENAI_API_KEY}";
           "Content-Type" => "application/json"}}
     ) <| $ ( resp )
+        log_resp(resp)
+        if resp.status_code == HTTP_CURL_FAILED
+            LAST_ERROR = resp.error
+        elif resp.status_code != 200
+            LAST_ERROR = "HTTPS POST failed with status {resp.status_code}"
+        else
+            var JV <- read_json(resp.text,LAST_ERROR)
+            if is_valid_image_response(JV)
+                ccr <- from_JV(JV,type<ImageResponse>)
+            else
+                LAST_ERROR = collect_error(JV)
+            unsafe
+                delete JV
+    return <- ccr
+
+struct public ImageVariation
+    //! image request
+    image:string                        // image file name (PNG, up to 4mb)
+    n:int = 1                           // how many completions to generate
+    size:int = 256                      // 256,512,1024
+    response_format:string = "url"      // url or b64_json
+
+/*
+curl https://api.openai.com/v1/images/variations \
+  -H "Authorization: Bearer $OPENAI_API_KEY" \
+  -F image="@otter.png" \
+  -F n=2 \
+  -F size="1024x1024"
+*/
+
+def public openai_create_image_variation ( completion:ImageVariation )
+    //! create an edit
+    var ccr : ImageResponse
+    LAST_ERROR = ""
+    var header = build_string <| $ ( writer )
+        // authorization
+        writer |> write("-H \"Authorization: Bearer ")
+        writer |> write(OPENAI_API_KEY)
+        writer |> write("\" ")
+        // content type
+        writer |> write("-H \"Content-Type: multipart/form-data\" ")
+        // image
+        writer |> write("-F image=\"@")
+        writer |> write(completion.image)
+        writer |> write("\" ")
+        // n
+        writer |> write("-F n=")
+        writer |> write(completion.n)
+        writer |> write(" ")
+        // size
+        writer |> write("-F size=\"")
+        writer |> write(completion.size)
+        writer |> write("x")
+        writer |> write(completion.size)
+        writer |> write("\" ")
+        // response format
+        writer |> write("-F response_format=\"")
+        writer |> write(completion.response_format)
+        writer |> write("\" ")
+    POST("https://api.openai.com/v1/images/variations", CONNECTION_TIMEOUT, "", header) <| $ ( resp )
         log_resp(resp)
         if resp.status_code == HTTP_CURL_FAILED
             LAST_ERROR = resp.error

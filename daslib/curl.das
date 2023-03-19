@@ -92,3 +92,8 @@ def public POST ( uri:string; timeout:float; data:string; blk:block<(resp:HttpRe
 def public POST ( uri:string; timeout:float; data:string; header:table<string;string>; blk:block<(resp:HttpResponse?):void> )
     //! HTTP POST request with header
     HTTP_REQ("POST", uri, timeout, header_str(header), data, blk)
+
+def public POST ( uri:string; timeout:float; data:string; header:string; blk:block<(resp:HttpResponse?):void> )
+    //! HTTP POST request with header
+    HTTP_REQ("POST", uri, timeout, header, data, blk)
+
