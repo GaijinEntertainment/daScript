@@ -8,11 +8,17 @@ require strings
 require fio
 require daslib/curl
 require daslib/json_boost
+require math
+
+var private CONNECTION_TIMEOUT = 20.
 
 let private LOG_RESPONSES = false
 
 var private OPENAI_API_KEY = get_env_variable("OPENAI_API_KEY")
 var private LAST_ERROR = ""
+
+def public openai_set_connection_timeout ( timeout:float )
+    CONNECTION_TIMEOUT = max(0.0,timeout)
 
 struct public ListEnginesResponse
     //! list of models
@@ -77,11 +83,15 @@ def public openai_list
     var list : ListEnginesResponse
     var valid = false
     LAST_ERROR = ""
-    GET("https://api.openai.com/v1/models",
+    GET("https://api.openai.com/v1/models", CONNECTION_TIMEOUT,
         {{"Authorization" => "Bearer {OPENAI_API_KEY}"}}
     ) <| $ ( resp )
         log_resp(resp)
-        if resp != null
+        if resp.status_code == HTTP_CURL_FAILED
+            LAST_ERROR = resp.error
+        elif resp.status_code != 200
+            LAST_ERROR = "HTTPS GET failed with status {resp.status_code}"
+        else
             var JV = read_json(resp.text,LAST_ERROR)
             if is_valid_response(JV)
                 list <- from_JV(JV,type<ListEnginesResponse>)
@@ -89,8 +99,6 @@ def public openai_list
                 LAST_ERROR = collect_error(JV)
             unsafe
                 delete JV
-        else
-            LAST_ERROR = "HTTPS GET failed"
     return <- list
 
 def collect_error ( var json:JsonValue?; default_message:string = "invalid response" ) : string
@@ -116,11 +124,15 @@ def public openai_retrive_model ( model_id:string )
     var model : Model
     var valid = false
     LAST_ERROR = ""
-    GET("https://api.openai.com/v1/models/{model_id}",
+    GET("https://api.openai.com/v1/models/{model_id}", CONNECTION_TIMEOUT,
         {{"Authorization" => "Bearer {OPENAI_API_KEY}"}}
     ) <| $ ( resp )
         log_resp(resp)
-        if resp!=null
+        if resp.status_code == HTTP_CURL_FAILED
+            LAST_ERROR = resp.error
+        elif resp.status_code != 200
+            LAST_ERROR = "HTTPS GET failed with status {resp.status_code}"
+        else
             var JV = read_json(resp.text,LAST_ERROR)
             if is_valid_response(JV)
                 model <- from_JV(JV,type<Model>)
@@ -128,8 +140,6 @@ def public openai_retrive_model ( model_id:string )
                 LAST_ERROR = collect_error(JV)
             unsafe
                 delete JV
-        else
-            LAST_ERROR = "HTTPS GET failed"
     return <- model
 
 struct public Completion
@@ -189,12 +199,16 @@ def public openai_create_completion ( completion:Completion )
         delete req_jv
     var ccr : CreateCompletionResponse
     LAST_ERROR = ""
-    POST("https://api.openai.com/v1/completions", req,
+    POST("https://api.openai.com/v1/completions", CONNECTION_TIMEOUT, req,
         {{"Authorization" => "Bearer {OPENAI_API_KEY}";
           "Content-Type" => "application/json"}}
     ) <| $ ( resp )
         log_resp(resp)
-        if resp!=null
+        if resp.status_code == HTTP_CURL_FAILED
+            LAST_ERROR = resp.error
+        elif resp.status_code != 200
+            LAST_ERROR = "HTTPS POST failed with status {resp.status_code}"
+        else
             var JV <- read_json(resp.text,LAST_ERROR)
             if is_valid_response(JV)
                 ccr <- from_JV(JV,type<CreateCompletionResponse>)
@@ -202,8 +216,6 @@ def public openai_create_completion ( completion:Completion )
                 LAST_ERROR = collect_error(JV)
             unsafe
                 delete JV
-        else
-            LAST_ERROR = "HTTPS POST failed"
     return <- ccr
 
 struct public ChatCompletion
@@ -265,13 +277,16 @@ def public openai_create_chat_completion ( completion:ChatCompletion )
         delete req_jv
     var ccr : ChatCompletionResponse
     LAST_ERROR = ""
-    POST("https://api.openai.com/v1/chat/completions", req,
+    POST("https://api.openai.com/v1/chat/completions", CONNECTION_TIMEOUT, req,
         {{"Authorization" => "Bearer {OPENAI_API_KEY}";
           "Content-Type" => "application/json"}}
     ) <| $ ( resp )
         log_resp(resp)
-        if resp!=null
-            print("response:\n\n{resp.text}\n\n")
+        if resp.status_code == HTTP_CURL_FAILED
+            LAST_ERROR = resp.error
+        elif resp.status_code != 200
+            LAST_ERROR = "HTTPS POST failed with status {resp.status_code}"
+        else
             var JV <- read_json(resp.text,LAST_ERROR)
             if is_valid_response(JV)
                 ccr <- from_JV(JV,type<ChatCompletionResponse>)
@@ -279,6 +294,61 @@ def public openai_create_chat_completion ( completion:ChatCompletion )
                 LAST_ERROR = collect_error(JV)
             unsafe
                 delete JV
+    return <- ccr
+
+struct public Edit
+    //! edit request
+    model:string
+    input:string
+    instruction:string
+    n:int = 1                           // how many completions to generate
+    temperature:float = 1.0             // 0..2
+    top_p:float = 1.0                   // 0..1
+
+struct public EditResponse
+    //! edit response
+    object : string
+    created : int
+    choices : array<EditResponseChoicesInner>
+    usage : EditResponseUsage
+
+def public is_valid ( object:EditResponse )
+    return object.object=="edit"
+
+struct public EditResponseChoicesInner
+    //! edit response choices
+    text : string
+    index : int
+
+struct public EditResponseUsage
+    //! edit response usage
+    prompt_tokens : int
+    completion_tokens : int
+    total_tokens : int
+
+def public openai_create_edit ( completion:Edit )
+    //! create an edit
+    var req_jv <- JV(completion)
+    var req = write_request_json(req_jv)
+    unsafe
+        delete req_jv
+    var ccr : EditResponse
+    LAST_ERROR = ""
+    POST("https://api.openai.com/v1/edits", CONNECTION_TIMEOUT, req,
+        {{"Authorization" => "Bearer {OPENAI_API_KEY}";
+          "Content-Type" => "application/json"}}
+    ) <| $ ( resp )
+        log_resp(resp)
+        if resp.status_code == HTTP_CURL_FAILED
+            LAST_ERROR = resp.error
+        elif resp.status_code != 200
+            LAST_ERROR = "HTTPS POST failed with status {resp.status_code}"
         else
-            LAST_ERROR = "HTTPS POST failed"
+            var JV <- read_json(resp.text,LAST_ERROR)
+            if is_valid_response(JV)
+                ccr <- from_JV(JV,type<EditResponse>)
+            else
+                LAST_ERROR = collect_error(JV)
+            unsafe
+                delete JV
     return <- ccr

@@ -3,24 +3,35 @@ options gc
 
 require daslib/openai
 
+let TEST_LIST =             true
+let TEST_RETREIVE =         true
+let TEST_COMPLETION =       true
+let TEST_CHAT_COMPLETION =  true
+let TEST_EDIT_COMPLETION =  true
+
 [export]
 def main
     // test list
-    if true
+    if TEST_LIST
+        print("testing list\n")
         var list <- openai_list()
         if list |> is_valid
             debug(list)
+            print("ok - testing list\n")
         else
             print("error: {openai_get_last_error()}\n")
     // test retrive
-    if true
+    if TEST_RETREIVE
+        print("testing retrive\n")
         var model <- openai_retrive_model("text-davinci-001")
         if model |> is_valid
             debug(model)
+            print("ok - testing retrive\n")
         else
             print("error: {openai_get_last_error()}\n")
     // test completion
-    if true
+    if TEST_COMPLETION
+        print("testing completion\n")
         var ccr <- openai_create_completion([[Completion()
             model = "text-davinci-001",
             prompt = "Say this is a test",
@@ -29,9 +40,12 @@ def main
         ]])
         if ccr |> is_valid
             debug(ccr)
+            print("ok - testing completion\n")
         else
             print("error: {openai_get_last_error()}\n")
-    if true
+    // test chat completion
+    if TEST_CHAT_COMPLETION
+        print("testing chat completion\n")
         var ccr <- openai_create_chat_completion([[ChatCompletion()
             model = "gpt-3.5-turbo",
             messages <- [{ChatCompletionMessage
@@ -41,6 +55,19 @@ def main
         ]])
         if ccr |> is_valid
             debug(ccr)
+            print("ok - testing chat completion\n")
         else
             print("error: {openai_get_last_error()}\n")
-
+    // test edit completion
+    if TEST_EDIT_COMPLETION
+        print("testing edit\n")
+        var ccr <- openai_create_edit([[Edit()
+            model = "text-davinci-edit-001",
+            input = "What day of the wek is it?",
+            instruction = "Fix the spelling mistakes"
+        ]])
+        if ccr |> is_valid
+            debug(ccr)
+            print("ok - testing edit\n")
+        else
+            print("error: {openai_get_last_error()}\n")
