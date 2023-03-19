@@ -2,12 +2,15 @@ options persistent_heap
 options gc
 
 require daslib/openai
+require daslib/base64
+require fio
 
 let TEST_LIST =             true
 let TEST_RETREIVE =         true
 let TEST_COMPLETION =       true
 let TEST_CHAT_COMPLETION =  true
 let TEST_EDIT_COMPLETION =  true
+let TEST_CREATE_IMAGE =     true
 
 [export]
 def main
@@ -69,5 +72,24 @@ def main
         if ccr |> is_valid
             debug(ccr)
             print("ok - testing edit\n")
+        else
+            print("error: {openai_get_last_error()}\n")
+    // test create image
+    if TEST_CREATE_IMAGE
+        print("testing create image\n")
+        var ccr <- openai_create_image([[Image()
+            prompt = "Draw a cat",
+            n = 1,
+            size = 256,
+            response_format = "b64_json"    // url
+        ]], 60.)    // 60 seconds timeout
+        if ccr |> is_valid
+            debug(ccr)
+            print("ok - testing create image\n")
+
+            fopen("image.png", "wb") <| $ ( f )
+                var inscope bytes : array<uint8>
+                let res = base64_decode(ccr.data[0].b64_json, bytes)
+                f |> fwrite(bytes)
         else
             print("error: {openai_get_last_error()}\n")

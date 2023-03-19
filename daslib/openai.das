@@ -119,6 +119,14 @@ def is_valid_response ( json:JsonValue? ) : bool
                 return true
     return false
 
+def is_valid_image_response ( json:JsonValue? ) : bool
+    if json!=null
+        if json is _object
+            if (json as _object) |> key_exists("created")
+                return true
+    return false
+
+
 def public openai_retrive_model ( model_id:string )
     //! retrive a model by id
     var model : Model
@@ -347,6 +355,55 @@ def public openai_create_edit ( completion:Edit )
             var JV <- read_json(resp.text,LAST_ERROR)
             if is_valid_response(JV)
                 ccr <- from_JV(JV,type<EditResponse>)
+            else
+                LAST_ERROR = collect_error(JV)
+            unsafe
+                delete JV
+    return <- ccr
+
+struct public Image
+    //! image request
+    prompt:string
+    n:int = 1                           // how many completions to generate
+    size:int = 256                      // 256,512,1024
+    response_format:string = "url"      // url or b64_json
+
+struct public ImageResponse
+    //! image response
+    created : int
+    data : array<ImageResponseChoicesInner>
+
+struct public ImageResponseChoicesInner
+    //! image response choices
+    url : string
+    b64_json : string
+
+def public is_valid ( object:ImageResponse )
+    return true
+
+def public openai_create_image ( completion:Image; var timeout:float = -1.0 )
+    //! create an edit
+    var req_jv <- JV(completion)
+    (req_jv as _object) |> erase("size")
+    (req_jv as _object)["size"] = JV("{completion.size}x{completion.size}")
+    var req = write_request_json(req_jv)
+    unsafe
+        delete req_jv
+    var ccr : ImageResponse
+    LAST_ERROR = ""
+    POST("https://api.openai.com/v1/images/generations", timeout==-1.0 ? CONNECTION_TIMEOUT : timeout, req,
+        {{"Authorization" => "Bearer {OPENAI_API_KEY}";
+          "Content-Type" => "application/json"}}
+    ) <| $ ( resp )
+        log_resp(resp)
+        if resp.status_code == HTTP_CURL_FAILED
+            LAST_ERROR = resp.error
+        elif resp.status_code != 200
+            LAST_ERROR = "HTTPS POST failed with status {resp.status_code}"
+        else
+            var JV <- read_json(resp.text,LAST_ERROR)
+            if is_valid_image_response(JV)
+                ccr <- from_JV(JV,type<ImageResponse>)
             else
                 LAST_ERROR = collect_error(JV)
             unsafe
