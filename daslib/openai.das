@@ -418,14 +418,6 @@ struct public ImageVariation
     size:int = 256                      // 256,512,1024
     response_format:string = "url"      // url or b64_json
 
-/*
-curl https://api.openai.com/v1/images/variations \
-  -H "Authorization: Bearer $OPENAI_API_KEY" \
-  -F image="@otter.png" \
-  -F n=2 \
-  -F size="1024x1024"
-*/
-
 def public openai_create_image_variation ( completion:ImageVariation )
     //! create an edit
     var ccr : ImageResponse
@@ -456,6 +448,68 @@ def public openai_create_image_variation ( completion:ImageVariation )
         writer |> write(completion.response_format)
         writer |> write("\" ")
     POST("https://api.openai.com/v1/images/variations", CONNECTION_TIMEOUT, "", header) <| $ ( resp )
+        log_resp(resp)
+        if resp.status_code == HTTP_CURL_FAILED
+            LAST_ERROR = resp.error
+        elif resp.status_code != 200
+            LAST_ERROR = "HTTPS POST failed with status {resp.status_code}"
+        else
+            var JV <- read_json(resp.text,LAST_ERROR)
+            if is_valid_image_response(JV)
+                ccr <- from_JV(JV,type<ImageResponse>)
+            else
+                LAST_ERROR = collect_error(JV)
+            unsafe
+                delete JV
+    return <- ccr
+
+struct public ImageEdit
+    //! image request
+    image:string                        // image file name (PNG, up to 4mb)
+    mask:string                         // mask file name (PNG, up to 4mb)
+    prompt:string                       // prompt
+    n:int = 1                           // how many completions to generate
+    size:int = 256                      // 256,512,1024
+    response_format:string = "url"      // url or b64_json
+
+def public openai_create_image_edit ( completion:ImageEdit )
+    //! create an edit
+    var ccr : ImageResponse
+    LAST_ERROR = ""
+    var header = build_string <| $ ( writer )
+        // authorization
+        writer |> write("-H \"Authorization: Bearer ")
+        writer |> write(OPENAI_API_KEY)
+        writer |> write("\" ")
+        // content type
+        writer |> write("-H \"Content-Type: multipart/form-data\" ")
+        // image
+        writer |> write("-F image=\"@")
+        writer |> write(completion.image)
+        writer |> write("\" ")
+        // mask
+        writer |> write("-F mask=\"@")
+        writer |> write(completion.mask)
+        writer |> write("\" ")
+        // prompt
+        writer |> write("-F prompt=\"")
+        writer |> write(completion.prompt)
+        writer |> write("\" ")
+        // n
+        writer |> write("-F n=")
+        writer |> write(completion.n)
+        writer |> write(" ")
+        // size
+        writer |> write("-F size=\"")
+        writer |> write(completion.size)
+        writer |> write("x")
+        writer |> write(completion.size)
+        writer |> write("\" ")
+        // response format
+        writer |> write("-F response_format=\"")
+        writer |> write(completion.response_format)
+        writer |> write("\" ")
+    POST("https://api.openai.com/v1/images/edits", CONNECTION_TIMEOUT, "", header) <| $ ( resp )
         log_resp(resp)
         if resp.status_code == HTTP_CURL_FAILED
             LAST_ERROR = resp.error

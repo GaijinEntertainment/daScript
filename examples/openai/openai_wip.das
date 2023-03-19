@@ -5,13 +5,14 @@ require daslib/openai
 require daslib/base64
 require fio
 
-let TEST_LIST =                     true
-let TEST_RETREIVE =                 true
-let TEST_COMPLETION =               true
-let TEST_CHAT_COMPLETION =          true
-let TEST_EDIT_COMPLETION =          true
-let TEST_CREATE_IMAGE =             true
-let TEST_CREATE_IMAGE_VARIATION =   true
+let TEST_LIST =                     false
+let TEST_RETREIVE =                 false
+let TEST_COMPLETION =               false
+let TEST_CHAT_COMPLETION =          false
+let TEST_EDIT_COMPLETION =          false
+let TEST_CREATE_IMAGE =             false
+let TEST_CREATE_IMAGE_VARIATION =   false
+let TEST_CREATE_IMAGE_EDIT =        true
 
 [export]
 def main
@@ -101,7 +102,7 @@ def main
         openai_set_connection_timeout(old_timeout)
     if TEST_CREATE_IMAGE_VARIATION
         let old_timeout = openai_set_connection_timeout(60.)    // this may take time
-        print("testing create image\n")
+        print("testing image variation\n")
         var ccr <- openai_create_image_variation([[ImageVariation()
             image = "image.png",
             n = 1,
@@ -110,7 +111,7 @@ def main
         ]])
         if ccr |> is_valid
             debug(ccr)
-            print("ok - testing create image variation\n")
+            print("ok - testing image variation\n")
             fopen("image_variation.png", "wb") <| $ ( f )
                 if f != null
                     var inscope bytes : array<uint8>
@@ -119,6 +120,31 @@ def main
                     print("written to image_vriation.png\n")
                 else
                     print("failed to write to image_vriation.png\n")
+        else
+            print("error: {openai_get_last_error()}\n")
+        openai_set_connection_timeout(old_timeout)
+    if TEST_CREATE_IMAGE_EDIT
+        let old_timeout = openai_set_connection_timeout(60.)    // this may take time
+        print("testing image edit\n")
+        var ccr <- openai_create_image_edit([[ImageEdit()
+            image = "brick.png",
+            mask = "brick_alpha.png",
+            prompt = "large cast iron key hole",
+            n = 1,
+            size = 256,
+            response_format = "b64_json"    // url
+        ]])
+        if ccr |> is_valid
+            debug(ccr)
+            print("ok - testing create image edit\n")
+            fopen("image_edit.png", "wb") <| $ ( f )
+                if f != null
+                    var inscope bytes : array<uint8>
+                    let res = base64_decode(ccr.data[0].b64_json, bytes)
+                    f |> fwrite(bytes)
+                    print("written to image_edit.png\n")
+                else
+                    print("failed to write to image_edit.png\n")
         else
             print("error: {openai_get_last_error()}\n")
         openai_set_connection_timeout(old_timeout)
