@@ -1,0 +1,137 @@
+options persistent_heap = true
+options gc
+
+require dastest/testing_boost public
+
+require openai/openai
+require daslib/base64
+require fio
+
+[test]
+def test_openai_api( t: T?)
+    if !openai_key_is_set()
+        t |> failure("OpenAI key is not set. Please set the OPENAI_KEY environment variable.")
+        return
+    t |> run("list") <| @@ ( t:T? )
+        var inscope list <- openai_list()
+        t |> success ( is_valid(list), openai_get_last_error() )
+    t |> run("retrive") <| @@ ( t:T? )
+        var inscope model <- openai_retrive_model("text-davinci-001")
+        t |> success ( is_valid(model), openai_get_last_error() )
+    t |> run("completion") <| @@ ( t:T? )
+        var inscope completion <- openai_create_completion([[Completion()
+            model = "text-davinci-001",
+            prompt = "Say this is a test",
+            max_tokens = 7,
+            temperature = 0.
+        ]])
+        t |> success ( is_valid(completion), openai_get_last_error() )
+        if completion |> is_valid
+            t |> equal ( 1, completion.choices |> length )
+            to_log(LOG_INFO, "completion result: \"{completion.choices[0].text}\"\n")
+    t |> run("chat completion") <| @@ ( t:T? )
+        var inscope chat <- openai_create_chat_completion([[ChatCompletion()
+            model = "gpt-3.5-turbo",
+            messages <- [{ChatCompletionMessage
+                role = "user",
+                content = "Hello!"
+            }]
+        ]])
+        t |> success ( is_valid(chat), openai_get_last_error() )
+        if chat |> is_valid
+            t |> equal ( 1, chat.choices |> length )
+            to_log(LOG_INFO, "chat completion result: \"{chat.choices[0].message.content}\"\n")
+    t |> run("edit completion") <| @@ ( t:T? )
+        var inscope edit <- openai_create_edit([[Edit()
+            model = "text-davinci-edit-001",
+            input = "What day of the wek is it?",
+            instruction = "Fix the spelling mistakes"
+        ]])
+        t |> success ( is_valid(edit), openai_get_last_error() )
+        if edit |> is_valid
+            t |> equal ( 1, edit.choices |> length )
+            to_log(LOG_INFO, "edit completion result: \"{edit.choices[0].text}\"\n")
+
+def get_temp_file_name(name:string)
+    let temp_dir = "{get_das_root()}/temp"
+    mkdir(temp_dir)
+    return "{temp_dir}/{name}"
+
+var is_image_valid = false
+
+[test]
+def test_openai_image_api( t: T?)
+    if !openai_key_is_set()
+        return
+    t |> run("image completion") <| @@ ( t:T? )
+        var inscope image <- openai_create_image([[Image()
+            prompt = "Draw a cat",
+            n = 1,
+            size = 256,
+            response_format = "b64_json"    // url
+        ]])
+        t |> success ( is_valid(image), openai_get_last_error() )
+        if image |> is_valid
+            t |> equal ( 1, image.data |> length, "expecting image" )
+            if image.data |> length == 1
+                fopen(get_temp_file_name("image.png"), "wb") <| $ ( f )
+                    if f != null
+                        var inscope bytes : array<uint8>
+                        let res = base64_decode(image.data[0].b64_json, bytes)
+                        f |> fwrite(bytes)
+                        to_log(LOG_INFO, "image completion written to \"{get_temp_file_name("image.png")}\"\n")
+                        is_image_valid = true
+                    else
+                        t |> failure("failed to open image file {get_temp_file_name("image.png")} for writing")
+    if !is_image_valid
+        t |> failure("image completion failed, skipping the rest of the image tests")
+        return
+    t |> run("image variation") <| @@ ( t:T? )
+        var inscope image <- openai_create_image_variation([[ImageVariation()
+            image = get_temp_file_name("image.png"),
+            n = 1,
+            size = 256,
+            response_format = "b64_json"    // url
+        ]])
+        t |> success ( is_valid(image), openai_get_last_error() )
+        if image |> is_valid
+            t |> equal ( 1, image.data |> length, "expecting image" )
+            if image.data |> length == 1
+                fopen(get_temp_file_name("image_variation.png"), "wb") <| $ ( f )
+                    if f != null
+                        var inscope bytes : array<uint8>
+                        let res = base64_decode(image.data[0].b64_json, bytes)
+                        f |> fwrite(bytes)
+                        to_log(LOG_INFO, "image variation written to \"{get_temp_file_name("image_variation.png")}\"\n")
+                    else
+                        t |> failure("failed to open image file {get_temp_file_name("image_variation.png")} for writing")
+
+def get_test_file_name(name:string)
+    let test_dir = "{get_das_root()}/modules/dasOpenAI/tests"
+    return "{test_dir}/{name}"
+
+[test]
+def test_openai_image_edit_api( t: T?)
+    if !openai_key_is_set()
+        return
+    t |> run("image edit") <| @@ ( t:T? )
+        var inscope image <- openai_create_image_edit([[ImageEdit()
+            image = get_test_file_name("brick.png"),
+            mask = get_test_file_name("brick_alpha.png"),
+            prompt = "cast iron plate with keyhole",
+            n = 1,
+            size = 256,
+            response_format = "b64_json"    // url
+        ]])
+        t |> success ( is_valid(image), openai_get_last_error() )
+        if image |> is_valid
+            t |> equal ( 1, image.data |> length, "expecting image" )
+            if image.data |> length == 1
+                fopen(get_temp_file_name("image_edit.png"), "wb") <| $ ( f )
+                    if f != null
+                        var inscope bytes : array<uint8>
+                        let res = base64_decode(image.data[0].b64_json, bytes)
+                        f |> fwrite(bytes)
+                        to_log(LOG_INFO, "image edit written to \"{get_temp_file_name("image_edit.png")}\"\n")
+                    else
+                        t |> failure("failed to open image file {get_temp_file_name("image_edit.png")} for writing")

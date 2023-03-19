@@ -1,7 +1,7 @@
 options persistent_heap
 options gc
 
-require daslib/openai
+require openai/openai
 require daslib/stringify
 require daslib/strings_boost
 

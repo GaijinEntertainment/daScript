@@ -1,0 +1,5 @@
+IF(NOT DAS_OPENAI_INCLUDED)
+    SET(DAS_OPENAI_INCLUDED TRUE)
+    MESSAGE(STATUS "dasOpenAI module included.")
+    ADD_MODULE_DAS(openai openai openai)
+ENDIF()

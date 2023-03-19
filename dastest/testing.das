@@ -135,6 +135,9 @@ def success(t: T?; a; msg = ""): bool
     t->errorAt(!empty(msg) ? msg : "expected success, got failure", get_line_info(1))
     return false
 
+def failure(t: T?; msg = ""): bool
+    t->errorAt(!empty(msg) ? msg : "test failed", get_line_info(1))
+    return false
 
 typedef RunT = variant<lmd1: lambda<(t: T?): void>; func1: function<(t: T?): void>>
 

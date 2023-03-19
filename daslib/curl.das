@@ -47,6 +47,8 @@ def public HTTP_REQ ( method:string; uri:string; timeout:float; header:string; v
         resp.status_code = HTTP_CURL_FAILED
         if exit_code==28
             resp.error = "curl timeout (max {timeout} seconds)"
+        elif exit_code==26
+            resp.error = "file not found"
         else
             resp.error = "curl failed with exit code {exit_code}"
     if resp.status_code!=HTTP_CURL_FAILED

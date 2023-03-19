@@ -65,7 +65,10 @@ struct public ModelPermission
 def private log_resp ( resp : HttpResponse? )
     if LOG_RESPONSES
         if resp!=null
-            print("GET {resp.status_code} {resp.text}\n")
+            if resp.status_code != 200
+                print("GET {resp.status_code} error:\"{resp.error}\" {resp.text}\n")
+            else
+                print("GET {resp.status_code} {resp.text}\n")
         else
             print("GET null\n")
 
