@@ -57,9 +57,9 @@ namespace das {
     void builtin_resize_string(string & str, int32_t newLength);
     char * string_repeat ( const char * str, int count, Context * context );
     char * to_string_char(int ch, Context * context);
-    void write_string_char(StringBuilderWriter & writer, int32_t ch);
-    void write_string_chars(StringBuilderWriter & writer, int32_t ch, int32_t count);
-    void write_escape_string ( StringBuilderWriter & writer, char * str );
+    StringBuilderWriter & write_string_char(StringBuilderWriter & writer, int32_t ch);
+    StringBuilderWriter & write_string_chars(StringBuilderWriter & writer, int32_t ch, int32_t count);
+    StringBuilderWriter & write_escape_string ( StringBuilderWriter & writer, char * str );
     void builtin_string_split_by_char ( const char * str, const char * delim, const Block & sblk, Context * context, LineInfoArg * lineinfo );
     void builtin_string_split ( const char * str, const char * delim, const Block & sblk, Context * context, LineInfoArg * lineinfo );
     char * builtin_string_from_array ( const TArray<uint8_t> & bytes, Context * context );
@@ -77,10 +77,11 @@ namespace das {
     }
 
     template <typename TT>
-    void format_and_write ( StringBuilderWriter & writer, const char * fmt, TT value  ) {
+    StringBuilderWriter & format_and_write ( StringBuilderWriter & writer, const char * fmt, TT value  ) {
         char buf[256];
         snprintf(buf, 256, fmt ? fmt : "", value);
         writer.writeStr(buf, strlen(buf));
+        return writer;
     }
 
     template <typename TT>
