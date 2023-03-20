@@ -426,30 +426,14 @@ def public openai_create_image_variation ( completion:ImageVariation )
     var ccr : ImageResponse
     LAST_ERROR = ""
     var header = build_string <| $ ( writer )
-        // authorization
-        writer |> write("-H \"Authorization: Bearer ")
-        writer |> write(OPENAI_API_KEY)
-        writer |> write("\" ")
-        // content type
-        writer |> write("-H \"Content-Type: multipart/form-data\" ")
-        // image
-        writer |> write("-F image=\"@")
-        writer |> write(completion.image)
-        writer |> write("\" ")
-        // n
-        writer |> write("-F n=")
-        writer |> write(completion.n)
-        writer |> write(" ")
-        // size
-        writer |> write("-F size=\"")
-        writer |> write(completion.size)
-        writer |> write("x")
-        writer |> write(completion.size)
-        writer |> write("\" ")
-        // response format
-        writer |> write("-F response_format=\"")
-        writer |> write(completion.response_format)
-        writer |> write("\" ")
+        (writer
+            |> write("-H \"Authorization: Bearer ") |> write(OPENAI_API_KEY) |> write("\" ")
+            |> write("-H \"Content-Type: multipart/form-data\" ")
+            |> write("-F image=\"@") |> write(completion.image) |> write("\" ")
+            |> write("-F n=") |> write(completion.n) |> write(" ")
+            |> write("-F size=\"") |> write(completion.size) |> write("x") |> write(completion.size) |> write("\" ")
+            |> write("-F response_format=\"") |> write(completion.response_format) |> write("\" ")
+        )
     POST("https://api.openai.com/v1/images/variations", CONNECTION_TIMEOUT, "", header) <| $ ( resp )
         log_resp(resp)
         if resp.status_code == HTTP_CURL_FAILED
@@ -480,38 +464,16 @@ def public openai_create_image_edit ( completion:ImageEdit )
     var ccr : ImageResponse
     LAST_ERROR = ""
     var header = build_string <| $ ( writer )
-        // authorization
-        writer |> write("-H \"Authorization: Bearer ")
-        writer |> write(OPENAI_API_KEY)
-        writer |> write("\" ")
-        // content type
-        writer |> write("-H \"Content-Type: multipart/form-data\" ")
-        // image
-        writer |> write("-F image=\"@")
-        writer |> write(completion.image)
-        writer |> write("\" ")
-        // mask
-        writer |> write("-F mask=\"@")
-        writer |> write(completion.mask)
-        writer |> write("\" ")
-        // prompt
-        writer |> write("-F prompt=\"")
-        writer |> write(completion.prompt)
-        writer |> write("\" ")
-        // n
-        writer |> write("-F n=")
-        writer |> write(completion.n)
-        writer |> write(" ")
-        // size
-        writer |> write("-F size=\"")
-        writer |> write(completion.size)
-        writer |> write("x")
-        writer |> write(completion.size)
-        writer |> write("\" ")
-        // response format
-        writer |> write("-F response_format=\"")
-        writer |> write(completion.response_format)
-        writer |> write("\" ")
+        (writer
+            |> write("-H \"Authorization: Bearer ") |> write(OPENAI_API_KEY) |> write("\" ")
+            |> write("-H \"Content-Type: multipart/form-data\" ")
+            |> write("-F image=\"@") |> write(completion.image) |> write("\" ")
+            |> write("-F mask=\"@") |> write(completion.mask) |> write("\" ")
+            |> write("-F prompt=\"") |> write(completion.prompt) |> write("\" ")
+            |> write("-F n=") |> write(completion.n) |> write(" ")
+            |> write("-F size=\"") |> write(completion.size) |> write("x") |> write(completion.size) |> write("\" ")
+            |> write("-F response_format=\"") |> write(completion.response_format) |> write("\" ")
+        )
     POST("https://api.openai.com/v1/images/edits", CONNECTION_TIMEOUT, "", header) <| $ ( resp )
         log_resp(resp)
         if resp.status_code == HTTP_CURL_FAILED
@@ -544,36 +506,16 @@ def public openai_create_transcription ( completion:Transcription )
     //! create a transcription of an audio file
     var ccr : TranscriptionResult
     var header = build_string <| $ ( writer )
-        // authorization
-        writer |> write("-H \"Authorization: Bearer ")
-        writer |> write(OPENAI_API_KEY)
-        writer |> write("\" ")
-        // content type
-        writer |> write("-H \"Content-Type: multipart/form-data\" ")
-        // file
-        writer |> write("-F file=\"@")
-        writer |> write(completion.file)
-        writer |> write("\" ")
-        // model
-        writer |> write("-F model=\"")
-        writer |> write(completion.model)
-        writer |> write("\" ")
-        // prompt
-        writer |> write("-F prompt=\"")
-        writer |> write(completion.prompt)
-        writer |> write("\" ")
-        // temperature
-        writer |> write("-F temperature=")
-        writer |> write(completion.temperature)
-        writer |> write(" ")
-        // language
-        writer |> write("-F language=\"")
-        writer |> write(completion.language)
-        writer |> write("\" ")
-        // response format
-        writer |> write("-F response_format=\"")
-        writer |> write(completion.response_format)
-        writer |> write("\" ")
+        (writer
+            |> write("-H \"Authorization: Bearer ") |> write(OPENAI_API_KEY) |> write("\" ")
+            |> write("-H \"Content-Type: multipart/form-data\" ")
+            |> write("-F file=\"@") |> write(completion.file) |> write("\" ")
+            |> write("-F model=\"") |> write(completion.model) |> write("\" ")
+            |> write("-F prompt=\"") |> write(completion.prompt) |> write("\" ")
+            |> write("-F temperature=") |> write(completion.temperature) |> write(" ")
+            |> write("-F language=\"") |> write(completion.language) |> write("\" ")
+            |> write("-F response_format=\"") |> write(completion.response_format) |> write("\" ")
+        )
     POST("https://api.openai.com/v1/audio/transcriptions", CONNECTION_TIMEOUT, "", header) <| $ ( resp )
         log_resp(resp)
         if resp.status_code == HTTP_CURL_FAILED
@@ -596,35 +538,18 @@ struct public TranslationResult
     text : string
 
 def public openai_create_translation ( completion:Translation )
-    //! create a transcription of an audio file
+    //! create a translation of an audio file to english
     var ccr : TranslationResult
     var header = build_string <| $ ( writer )
-        // authorization
-        writer |> write("-H \"Authorization: Bearer ")
-        writer |> write(OPENAI_API_KEY)
-        writer |> write("\" ")
-        // content type
-        writer |> write("-H \"Content-Type: multipart/form-data\" ")
-        // file
-        writer |> write("-F file=\"@")
-        writer |> write(completion.file)
-        writer |> write("\" ")
-        // model
-        writer |> write("-F model=\"")
-        writer |> write(completion.model)
-        writer |> write("\" ")
-        // prompt
-        writer |> write("-F prompt=\"")
-        writer |> write(completion.prompt)
-        writer |> write("\" ")
-        // temperature
-        writer |> write("-F temperature=")
-        writer |> write(completion.temperature)
-        writer |> write(" ")
-        // response format
-        writer |> write("-F response_format=\"")
-        writer |> write(completion.response_format)
-        writer |> write("\" ")
+        (writer
+            |> write("-H \"Authorization: Bearer ") |> write(OPENAI_API_KEY) |> write("\" ")
+            |> write("-H \"Content-Type: multipart/form-data\" ")
+            |> write("-F file=\"@") |> write(completion.file) |> write("\" ")
+            |> write("-F model=\"") |> write(completion.model) |> write("\" ")
+            |> write("-F prompt=\"") |> write(completion.prompt) |> write("\" ")
+            |> write("-F temperature=") |> write(completion.temperature) |> write(" ")
+            |> write("-F response_format=\"") |> write(completion.response_format) |> write("\" ")
+        )
     POST("https://api.openai.com/v1/audio/translations", CONNECTION_TIMEOUT, "", header) <| $ ( resp )
         log_resp(resp)
         if resp.status_code == HTTP_CURL_FAILED

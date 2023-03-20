@@ -358,24 +358,27 @@ namespace das
         StringBuilderWriter * writer = cast<StringBuilderWriter *>::to(args[0]);
         DebugDataWalker<StringBuilderWriter> walker(*writer, PrintFlags::string_builder);
         walker.walk(args[1], call->types[1]);
-        return v_zero();
+        return cast<StringBuilderWriter *>::from(writer);
     }
 
-    void write_string_char ( StringBuilderWriter & writer, int32_t ch ) {
+    StringBuilderWriter & write_string_char ( StringBuilderWriter & writer, int32_t ch ) {
         char buf[2];
         buf[0] = char(ch);
         buf[1] = 0;
         writer.writeStr(buf, 1);
+        return writer;
     }
 
-    void write_string_chars ( StringBuilderWriter & writer, int32_t ch, int32_t count ) {
+    StringBuilderWriter & write_string_chars ( StringBuilderWriter & writer, int32_t ch, int32_t count ) {
         if ( count >0 ) writer.writeChars(char(ch), count);
+        return writer;
     }
 
-    void write_escape_string ( StringBuilderWriter & writer, char * str ) {
-        if ( !str ) return;
+    StringBuilderWriter & write_escape_string ( StringBuilderWriter & writer, char * str ) {
+        if ( !str ) return writer;
         auto estr = escapeString(str,false);
         writer.writeStr(estr.c_str(), estr.length());
+        return writer;
     }
 
     char * to_string_char ( int ch, Context * context ) {
@@ -701,25 +704,25 @@ namespace das
                 SideEffects::modifyExternal,"builtin_string_peek")->args({"str","block","context","lineinfo"});
             addExtern<DAS_BIND_FUN(builtin_string_peek_and_modify)>(*this, lib, "modify_data",
                 SideEffects::modifyExternal,"builtin_string_peek_and_modify")->args({"str","block","context","lineinfo"});
-            addInterop<builtin_write_string,void,StringBuilderWriter,vec4f> (*this, lib, "write",
+            addInterop<builtin_write_string,StringBuilderWriter &,StringBuilderWriter,vec4f> (*this, lib, "write",
                 SideEffects::modifyExternal, "builtin_write_string")->args({"writer","anything"});
-            addExtern<DAS_BIND_FUN(write_string_char)>(*this, lib, "write_char",
+            addExtern<DAS_BIND_FUN(write_string_char),SimNode_ExtFuncCallRef>(*this, lib, "write_char",
                 SideEffects::modifyExternal, "write_string_char")->args({"writer","ch"});
-            addExtern<DAS_BIND_FUN(write_string_chars)>(*this, lib, "write_chars",
+            addExtern<DAS_BIND_FUN(write_string_chars),SimNode_ExtFuncCallRef>(*this, lib, "write_chars",
                 SideEffects::modifyExternal, "write_string_chars")->args({"writer","ch","count"});
-            addExtern<DAS_BIND_FUN(write_escape_string)>(*this, lib, "write_escape_string",
+            addExtern<DAS_BIND_FUN(write_escape_string),SimNode_ExtFuncCallRef>(*this, lib, "write_escape_string",
                 SideEffects::modifyExternal, "write_escape_string")->args({"writer","str"});
-            addExtern<DAS_BIND_FUN(format_and_write<int32_t>)> (*this, lib, "format",
+            addExtern<DAS_BIND_FUN(format_and_write<int32_t>),SimNode_ExtFuncCallRef> (*this, lib, "format",
                 SideEffects::modifyExternal, "format_and_write<int32_t>")->args({"writer","format","value"});
-            addExtern<DAS_BIND_FUN(format_and_write<uint32_t>)>(*this, lib, "format",
+            addExtern<DAS_BIND_FUN(format_and_write<uint32_t>),SimNode_ExtFuncCallRef>(*this, lib, "format",
                 SideEffects::modifyExternal, "format_and_write<uint32_t>")->args({"writer","format","value"});
-            addExtern<DAS_BIND_FUN(format_and_write<int64_t>)> (*this, lib, "format",
+            addExtern<DAS_BIND_FUN(format_and_write<int64_t>),SimNode_ExtFuncCallRef> (*this, lib, "format",
                 SideEffects::modifyExternal, "format_and_write<int64_t>")->args({"writer","format","value"});
-            addExtern<DAS_BIND_FUN(format_and_write<uint64_t>)>(*this, lib, "format",
+            addExtern<DAS_BIND_FUN(format_and_write<uint64_t>),SimNode_ExtFuncCallRef>(*this, lib, "format",
                 SideEffects::modifyExternal, "format_and_write<uint64_t>")->args({"writer","format","value"});
-            addExtern<DAS_BIND_FUN(format_and_write<float>)>   (*this, lib, "format",
+            addExtern<DAS_BIND_FUN(format_and_write<float>),SimNode_ExtFuncCallRef>   (*this, lib, "format",
                 SideEffects::modifyExternal, "format_and_write<float>")->args({"writer","format","value"});
-            addExtern<DAS_BIND_FUN(format_and_write<double>)>  (*this, lib, "format",
+            addExtern<DAS_BIND_FUN(format_and_write<double>),SimNode_ExtFuncCallRef>  (*this, lib, "format",
                 SideEffects::modifyExternal, "format_and_write<double>")->args({"writer","format","value"});
             addExtern<DAS_BIND_FUN(builtin_string_from_array)>(*this, lib, "string",
                 SideEffects::none, "builtin_string_from_array")->args({"bytes","context"});

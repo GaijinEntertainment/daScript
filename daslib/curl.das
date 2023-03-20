@@ -25,10 +25,7 @@ def public HTTP_REQ ( method:string; uri:string; timeout:float; header:string; v
     var cmd = build_string <| $ ( writer )
         writer |> write("curl -s -i -X {method} {uri}")
         if timeout != 0.0
-            writer |> write(" --connect-timeout ")
-            writer |> format("%.1f", timeout)
-            writer |> write(" --max-time ")
-            writer |> format("%.1f", timeout)
+            writer |> write(" --connect-timeout ") |> format("%.1f", timeout) |> write(" --max-time ") |> format("%.1f", timeout)
         if !header|> empty
             writer |> write(" {header}")
         if !data |> empty
@@ -81,11 +78,7 @@ def public HTTP_REQ ( method:string; uri:string; timeout:float; header:string; v
 def private header_str ( header:table<string;string> ) : string
     return build_string <| $ ( writer )
         for k,v in keys(header),values(header)
-            writer |> write("-H \"")
-            writer |> write(k)
-            writer |> write(": ")
-            writer |> write(v)
-            writer |> write("\" ")
+            writer |> write("-H \"") |> write(k) |> write(": ") |> write(v) |> write("\" ")
 
 def public GET ( uri:string; timeout:float; blk:block<(resp:HttpResponse?):void> )
     //! HTTP GET request
