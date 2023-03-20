@@ -9,14 +9,14 @@ require daslib/strings_boost
 //  code-davinci-002 is always overloaded. it does better job though
 //  i wonder if trying one and then the other is the right thing to do
 
-// let unit_test_model = "code-davinci-002"
-let unit_test_model = "code-cushman-001"
+let unit_test_model = "code-davinci-002"
+// let unit_test_model = "code-cushman-001"
 
 let unit_test_prompt = %stringify~
 /*
 daScript is a strongly typed programming language, similar to Python, Ruby and Cotlin.
-daScript has built in test framework, which includes faker.
 
+daScript has built in test framework, which includes faker.
 faker has the following functions:
 
 def public long_string ( var faker:Faker ) : string         //! Generates a long string of random characters. The string is anywhere between 0 and faker.max_long_string characters long.
@@ -54,17 +54,15 @@ def public any_int ( var faker:Faker ) : string             //! Generates random
 def public any_hex ( var faker:Faker ) : string             //! Generates random integer hex string.
 def public any_float ( var faker:Faker ) : string           //! Generates random float string.
 def public any_uint ( var faker:Faker ) : string            //! Generates random unsigned integer string.
-
-here is example of the unit test for the functions add and sub:
 */
 
 def add(a,b)
     return a + b
 
-def sub(a,b)
-    return a - b
+def explain(a,b:int) : string
+    return "{a}=={b}=={a==b}"
 
-[test] // use random_int, random_float in add. use random_int in sub
+[test]
 def test_add_and_sub ( t:T? )
     t |> run("testing add") <| @@ ( t : T? )
         t |> equal(3, add(1,2))
@@ -78,14 +76,14 @@ def test_add_and_sub ( t:T? )
             let c = fake |> random_float
             t |> equal(c+d, add(c,d))
     t |> run("testing sub") <| @@ ( t : T? )
-        t |> equal(1, sub(3,2))
+        t |> equal("1==2==false", explain(1,2))
         var fake <- Faker()
         fuzz <|
             let a = fake |> random_int
             let b = fake |> random_int
-            t |> equal(a-b, sub(a,b))
+            t |> equal("{a}=={b}==" + "{a==b}", explain(a,b))
 
-// -----------------------------------
+// -------------------------------
 
 %%
 
