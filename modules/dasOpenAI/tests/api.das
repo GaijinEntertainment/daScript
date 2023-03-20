@@ -6,6 +6,16 @@ require dastest/testing_boost public
 require openai/openai
 require daslib/base64
 require fio
+require daslib/strings_boost
+
+def get_test_file_name(name:string)
+    let test_dir = "{get_das_root()}/modules/dasOpenAI/tests"
+    return "{test_dir}/{name}"
+
+def get_temp_file_name(name:string)
+    let temp_dir = "{get_das_root()}/temp"
+    mkdir(temp_dir)
+    return "{temp_dir}/{name}"
 
 [test]
 def test_openai_api( t: T?)
@@ -51,11 +61,6 @@ def test_openai_api( t: T?)
         if edit |> is_valid
             t |> equal ( 1, edit.choices |> length )
             to_log(LOG_INFO, "edit completion result: \"{edit.choices[0].text}\"\n")
-
-def get_temp_file_name(name:string)
-    let temp_dir = "{get_das_root()}/temp"
-    mkdir(temp_dir)
-    return "{temp_dir}/{name}"
 
 var is_image_valid = false
 
@@ -106,10 +111,6 @@ def test_openai_image_api( t: T?)
                     else
                         t |> failure("failed to open image file {get_temp_file_name("image_variation.png")} for writing")
 
-def get_test_file_name(name:string)
-    let test_dir = "{get_das_root()}/modules/dasOpenAI/tests"
-    return "{test_dir}/{name}"
-
 [test]
 def test_openai_image_edit_api( t: T?)
     if !openai_key_is_set()
@@ -135,3 +136,28 @@ def test_openai_image_edit_api( t: T?)
                         to_log(LOG_INFO, "image edit written to \"{get_temp_file_name("image_edit.png")}\"\n")
                     else
                         t |> failure("failed to open image file {get_temp_file_name("image_edit.png")} for writing")
+
+[test]
+def test_opeanai_audio_api( t: T?)
+    if !openai_key_is_set()
+        return
+    t |> run("transcription, english") <| @@ ( t:T? )
+        let en = openai_create_transcription([[Transcription()
+            file = get_test_file_name("english.wav")
+        ]])
+        t |> success ( empty(en.error), "transcription failed" )
+        t |> success ( en.text |> starts_with("Hello, my name is Boris."), "transcription mismatch" )
+    t |> run("transcription, russian") <| @@ ( t:T? )
+        let ru = openai_create_transcription([[Transcription()
+            file = get_test_file_name("russian.wav"),
+            language = "ru"
+        ]])
+        t |> success ( empty(ru.error), "transcription failed" )
+        t |> success ( ru.text |> starts_with("Здравствуйте, меня зовут Борис."), "transcription mismatch" )
+    t |> run("translation") <| @@ ( t:T? )
+        let en = openai_create_translation([[Translation()
+            file = get_test_file_name("russian.wav"),
+            prompt = "introduction in russian"
+        ]])
+        t |> success ( empty(en.error), "transcription failed" )
+        t |> success ( en.text |> starts_with("Hello, my name is Boris."), "translation mismatch" )

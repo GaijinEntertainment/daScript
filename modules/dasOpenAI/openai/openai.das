@@ -527,3 +527,110 @@ def public openai_create_image_edit ( completion:ImageEdit )
             unsafe
                 delete JV
     return <- ccr
+
+struct public Transcription
+    file : string
+    model : string = "whisper-1"
+    prompt : string = ""                // An optional text to guide the model's style or continue a previous audio segment. The prompt should match the audio language.
+    response_format : string = "text"   // json, text, srt, verbose_json, or vtt
+    temperature : float = 0.0           // 0 and 1. Higher values like 0.8 will make the output more random, while lower values like 0.2 will make it more focused and deterministic.
+    language : string = "en"            // https://en.wikipedia.org/wiki/List_of_ISO_639-1_codes
+
+struct public TranscriptionResult
+    error : string
+    text : string
+
+def public openai_create_transcription ( completion:Transcription )
+    //! create a transcription of an audio file
+    var ccr : TranscriptionResult
+    var header = build_string <| $ ( writer )
+        // authorization
+        writer |> write("-H \"Authorization: Bearer ")
+        writer |> write(OPENAI_API_KEY)
+        writer |> write("\" ")
+        // content type
+        writer |> write("-H \"Content-Type: multipart/form-data\" ")
+        // file
+        writer |> write("-F file=\"@")
+        writer |> write(completion.file)
+        writer |> write("\" ")
+        // model
+        writer |> write("-F model=\"")
+        writer |> write(completion.model)
+        writer |> write("\" ")
+        // prompt
+        writer |> write("-F prompt=\"")
+        writer |> write(completion.prompt)
+        writer |> write("\" ")
+        // temperature
+        writer |> write("-F temperature=")
+        writer |> write(completion.temperature)
+        writer |> write(" ")
+        // language
+        writer |> write("-F language=\"")
+        writer |> write(completion.language)
+        writer |> write("\" ")
+        // response format
+        writer |> write("-F response_format=\"")
+        writer |> write(completion.response_format)
+        writer |> write("\" ")
+    POST("https://api.openai.com/v1/audio/transcriptions", CONNECTION_TIMEOUT, "", header) <| $ ( resp )
+        log_resp(resp)
+        if resp.status_code == HTTP_CURL_FAILED
+            ccr.error = resp.error
+        elif resp.status_code != 200
+            ccr.error = "HTTPS POST failed with status {resp.status_code}"
+        else
+            ccr.text = resp.text
+    return <- ccr
+
+struct public Translation
+    file : string
+    model : string = "whisper-1"
+    prompt : string = ""                // An optional text to guide the model's style or continue a previous audio segment. The prompt should be in english.
+    response_format : string = "text"   // json, text, srt, verbose_json, or vtt
+    temperature : float = 0.0           // 0 and 1. Higher values like 0.8 will make the output more random, while lower values like 0.2 will make it more focused and deterministic.
+
+struct public TranslationResult
+    error : string
+    text : string
+
+def public openai_create_translation ( completion:Translation )
+    //! create a transcription of an audio file
+    var ccr : TranslationResult
+    var header = build_string <| $ ( writer )
+        // authorization
+        writer |> write("-H \"Authorization: Bearer ")
+        writer |> write(OPENAI_API_KEY)
+        writer |> write("\" ")
+        // content type
+        writer |> write("-H \"Content-Type: multipart/form-data\" ")
+        // file
+        writer |> write("-F file=\"@")
+        writer |> write(completion.file)
+        writer |> write("\" ")
+        // model
+        writer |> write("-F model=\"")
+        writer |> write(completion.model)
+        writer |> write("\" ")
+        // prompt
+        writer |> write("-F prompt=\"")
+        writer |> write(completion.prompt)
+        writer |> write("\" ")
+        // temperature
+        writer |> write("-F temperature=")
+        writer |> write(completion.temperature)
+        writer |> write(" ")
+        // response format
+        writer |> write("-F response_format=\"")
+        writer |> write(completion.response_format)
+        writer |> write("\" ")
+    POST("https://api.openai.com/v1/audio/translations", CONNECTION_TIMEOUT, "", header) <| $ ( resp )
+        log_resp(resp)
+        if resp.status_code == HTTP_CURL_FAILED
+            ccr.error = resp.error
+        elif resp.status_code != 200
+            ccr.error = "HTTPS POST failed with status {resp.status_code}"
+        else
+            ccr.text = resp.text
+    return <- ccr
