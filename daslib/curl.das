@@ -54,13 +54,21 @@ def public HTTP_REQ ( method:string; uri:string; timeout:float; header:string; v
     if resp.status_code!=HTTP_CURL_FAILED
         if !lines |> empty
             var first_line = 0
-            if lines[0] |> starts_with("HTTP/1.1 ")
-                resp.status_code = lines[0] |> slice(9) |> to_int
+            let linesl = lines |> length
+            for i in first_line..linesl-1
+                if lines[first_line] |> starts_with("HTTP/1.1 100 Continue")
+                    first_line += 2
+                elif lines[first_line] |> starts_with("HTTP/2 100 Continue")
+                    first_line += 2
+                else
+                    break
+            if lines[first_line] |> starts_with("HTTP/1.1 ")
+                resp.status_code = lines[first_line] |> slice(9) |> to_int
                 first_line ++
-            elif lines[0] |> starts_with("HTTP/2 ")
-                resp.status_code = lines[0] |> slice(7) |> to_int
+            elif lines[first_line] |> starts_with("HTTP/2 ")
+                resp.status_code = lines[first_line] |> slice(7) |> to_int
                 first_line ++
-            for i in first_line..lines |> length
+            for i in first_line..linesl
                 let llength = lines[i] |> length
                 if llength==1 || llength==2
                     first_line = i + 1
