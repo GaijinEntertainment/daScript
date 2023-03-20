@@ -501,7 +501,7 @@ class private DAStackWalker: DapiStackWalker
         // print("AOT {fileName}\n")
         let n = length(ctx.stack)
         if n > 0
-            ctx.stack[n - 1].name = "def {pp.info.name} [AOT]"
+            ctx.stack[n - 1].name = pp.info != null ? "def {pp.info.name} [AOT]" : "def [AOT]"
             ctx.stack[n - 1].path = "{fileName}"
 
             self->collectGlobals()
