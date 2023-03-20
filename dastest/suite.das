@@ -90,7 +90,6 @@ def test_file(file_name: string; ctx: SuiteCtx; file_ctx: FileCtx): SuiteResult
     using <| $(var mg:ModuleGroup)
         using <| $(var cop:CodeOfPolicies)
             cop.aot_module = true
-            cop.export_all = false
             compile_file(file_name, access, unsafe(addr(mg)), cop) <| $(ok, program, output)
                 var expectedErrors : table<CompilationError; int>
                 if program != null
@@ -244,6 +243,7 @@ def private sub_test_any_lambda(name: string; func: lambda; args_num: int; var c
 def private test_any(name: string; func; args_num: int; var context: FileCtx; var res: SuiteResult&)
     log::info("{context.indenting}=== RUN '{name}'")
     let beforeFailed = res.failed
+    let beforeErrors = res.errors
     res.total += 1
     var dt = 0
     var deliberateRecover = false
@@ -287,9 +287,9 @@ def private test_any(name: string; func; args_num: int; var context: FileCtx; va
                 *context.context |> invoke_in_context(func, testing)
             dt = get_time_usec(t0)
     recover
-        failed = true
         if !deliberateRecover
             dt = get_time_usec(t0)
+            failed = true
             res.errors += 1
             errorOrBlue(context.expectFailure, "{context.indenting}--- FAIL '{name}' {time_dt_hr(dt)}")
             if !empty(context.context.exception)
@@ -298,25 +298,23 @@ def private test_any(name: string; func; args_num: int; var context: FileCtx; va
                 errorOrBlue(context.expectFailure, "{file_info_hr(context.context.exceptionAt, context.uriPaths)}: {context.indenting}{context.context.last_exception}")
             if context.stackOnRecover
                 *context.context |> stackwalk(context.context.exceptionAt)
-            return
 
     var expectFailure = context.expectFailure
     if expectFailure && !failed
         expectFailure = false
         failed = true
         log::error("{context.indenting}--- expect test failure, but it's success '{name}' {time_dt_hr(dt)}")
-    elif !expectFailure && failed
-        failed = false
 
     if failed
-        res.failed += 1
+        if beforeErrors == res.errors
+            res.failed += 1
     elif skipped
         res.skipped += 1
         log::info("{context.indenting}--- SKIPPED '{name}' {time_dt_hr(dt)}")
     else
         res.passed += 1
 
-    if beforeFailed < res.failed
+    if beforeFailed < res.failed || beforeErrors < res.errors
         errorOrBlue(expectFailure, "{context.indenting}--- FAIL '{name}' {time_dt_hr(dt)}")
     else
         log::green("{context.indenting}--- PASS '{name}' {time_dt_hr(dt)}")
