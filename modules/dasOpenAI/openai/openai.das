@@ -88,7 +88,7 @@ def public openai_list
     var valid = false
     LAST_ERROR = ""
     GET("https://api.openai.com/v1/models", CONNECTION_TIMEOUT,
-        {{"Authorization" => "Bearer {OPENAI_API_KEY}"}}
+        [{auto "Authorization" => "Bearer {OPENAI_API_KEY}"}]
     ) <| $ ( resp )
         log_resp(resp)
         if resp.status_code == HTTP_CURL_FAILED
@@ -137,7 +137,7 @@ def public openai_retrive_model ( model_id:string )
     var valid = false
     LAST_ERROR = ""
     GET("https://api.openai.com/v1/models/{model_id}", CONNECTION_TIMEOUT,
-        {{"Authorization" => "Bearer {OPENAI_API_KEY}"}}
+        [{auto "Authorization" => "Bearer {OPENAI_API_KEY}"}]
     ) <| $ ( resp )
         log_resp(resp)
         if resp.status_code == HTTP_CURL_FAILED
@@ -212,8 +212,8 @@ def public openai_create_completion ( completion:Completion )
     var ccr : CreateCompletionResponse
     LAST_ERROR = ""
     POST("https://api.openai.com/v1/completions", CONNECTION_TIMEOUT, req,
-        {{"Authorization" => "Bearer {OPENAI_API_KEY}";
-          "Content-Type" => "application/json"}}
+        [{auto  "Authorization" => "Bearer {OPENAI_API_KEY}";
+                "Content-Type" => "application/json"}]
     ) <| $ ( resp )
         log_resp(resp)
         if resp.status_code == HTTP_CURL_FAILED
@@ -290,8 +290,8 @@ def public openai_create_chat_completion ( completion:ChatCompletion )
     var ccr : ChatCompletionResponse
     LAST_ERROR = ""
     POST("https://api.openai.com/v1/chat/completions", CONNECTION_TIMEOUT, req,
-        {{"Authorization" => "Bearer {OPENAI_API_KEY}";
-          "Content-Type" => "application/json"}}
+        [{auto  "Authorization" => "Bearer {OPENAI_API_KEY}";
+                "Content-Type" => "application/json"}]
     ) <| $ ( resp )
         log_resp(resp)
         if resp.status_code == HTTP_CURL_FAILED
@@ -347,8 +347,8 @@ def public openai_create_edit ( completion:Edit )
     var ccr : EditResponse
     LAST_ERROR = ""
     POST("https://api.openai.com/v1/edits", CONNECTION_TIMEOUT, req,
-        {{"Authorization" => "Bearer {OPENAI_API_KEY}";
-          "Content-Type" => "application/json"}}
+        [{auto  "Authorization" => "Bearer {OPENAI_API_KEY}";
+                "Content-Type" => "application/json"}]
     ) <| $ ( resp )
         log_resp(resp)
         if resp.status_code == HTTP_CURL_FAILED
@@ -396,8 +396,8 @@ def public openai_create_image ( completion:Image )
     var ccr : ImageResponse
     LAST_ERROR = ""
     POST("https://api.openai.com/v1/images/generations", CONNECTION_TIMEOUT, req,
-        {{"Authorization" => "Bearer {OPENAI_API_KEY}";
-          "Content-Type" => "application/json"}}
+        [{auto  "Authorization" => "Bearer {OPENAI_API_KEY}";
+                "Content-Type" => "application/json"}]
     ) <| $ ( resp )
         log_resp(resp)
         if resp.status_code == HTTP_CURL_FAILED
@@ -425,16 +425,14 @@ def public openai_create_image_variation ( completion:ImageVariation )
     //! create an edit
     var ccr : ImageResponse
     LAST_ERROR = ""
-    var header = build_string <| $ ( writer )
-        (writer
-            |> write("-H \"Authorization: Bearer ") |> write(OPENAI_API_KEY) |> write("\" ")
-            |> write("-H \"Content-Type: multipart/form-data\" ")
-            |> write("-F image=\"@") |> write(completion.image) |> write("\" ")
-            |> write("-F n=") |> write(completion.n) |> write(" ")
-            |> write("-F size=\"") |> write(completion.size) |> write("x") |> write(completion.size) |> write("\" ")
-            |> write("-F response_format=\"") |> write(completion.response_format) |> write("\" ")
-        )
-    POST("https://api.openai.com/v1/images/variations", CONNECTION_TIMEOUT, "", header) <| $ ( resp )
+    POST("https://api.openai.com/v1/images/variations", CONNECTION_TIMEOUT, "",
+        [{auto  "Authorization" => "Bearer {OPENAI_API_KEY}";
+                "Content-Type" => "multipart/form-data"}],
+        [{auto  "image" => "@{completion.image}";
+                "n" => "{completion.n}";
+                "size" => "{completion.size}x{completion.size}";
+                "response_format" => "\"{completion.response_format}\""}]
+    ) <| $ ( resp )
         log_resp(resp)
         if resp.status_code == HTTP_CURL_FAILED
             LAST_ERROR = resp.error
@@ -463,18 +461,16 @@ def public openai_create_image_edit ( completion:ImageEdit )
     //! create an edit
     var ccr : ImageResponse
     LAST_ERROR = ""
-    var header = build_string <| $ ( writer )
-        (writer
-            |> write("-H \"Authorization: Bearer ") |> write(OPENAI_API_KEY) |> write("\" ")
-            |> write("-H \"Content-Type: multipart/form-data\" ")
-            |> write("-F image=\"@") |> write(completion.image) |> write("\" ")
-            |> write("-F mask=\"@") |> write(completion.mask) |> write("\" ")
-            |> write("-F prompt=\"") |> write(completion.prompt) |> write("\" ")
-            |> write("-F n=") |> write(completion.n) |> write(" ")
-            |> write("-F size=\"") |> write(completion.size) |> write("x") |> write(completion.size) |> write("\" ")
-            |> write("-F response_format=\"") |> write(completion.response_format) |> write("\" ")
-        )
-    POST("https://api.openai.com/v1/images/edits", CONNECTION_TIMEOUT, "", header) <| $ ( resp )
+    POST("https://api.openai.com/v1/images/edits", CONNECTION_TIMEOUT, "",
+        [{auto  "Authorization" => "Bearer {OPENAI_API_KEY}";
+                "Content-Type" => "multipart/form-data"}],
+        [{auto  "image" => "@{completion.image}";
+                "mask" => "@{completion.mask}";
+                "prompt" => "\"{completion.prompt}\"";
+                "n" => "{completion.n}";
+                "size" => "{completion.size}x{completion.size}";
+                "response_format" => "\"{completion.response_format}\"" }]
+    ) <| $ ( resp )
         log_resp(resp)
         if resp.status_code == HTTP_CURL_FAILED
             LAST_ERROR = resp.error
@@ -505,18 +501,16 @@ struct public TranscriptionResult
 def public openai_create_transcription ( completion:Transcription )
     //! create a transcription of an audio file
     var ccr : TranscriptionResult
-    var header = build_string <| $ ( writer )
-        (writer
-            |> write("-H \"Authorization: Bearer ") |> write(OPENAI_API_KEY) |> write("\" ")
-            |> write("-H \"Content-Type: multipart/form-data\" ")
-            |> write("-F file=\"@") |> write(completion.file) |> write("\" ")
-            |> write("-F model=\"") |> write(completion.model) |> write("\" ")
-            |> write("-F prompt=\"") |> write(completion.prompt) |> write("\" ")
-            |> write("-F temperature=") |> write(completion.temperature) |> write(" ")
-            |> write("-F language=\"") |> write(completion.language) |> write("\" ")
-            |> write("-F response_format=\"") |> write(completion.response_format) |> write("\" ")
-        )
-    POST("https://api.openai.com/v1/audio/transcriptions", CONNECTION_TIMEOUT, "", header) <| $ ( resp )
+    POST("https://api.openai.com/v1/audio/transcriptions", CONNECTION_TIMEOUT, "",
+        [{auto  "Authorization" => "Bearer {OPENAI_API_KEY}";
+                "Content-Type" => "multipart/form-data"}],
+        [{auto  "file" => "@{completion.file}";
+                "model" => "\"{completion.model}\"";
+                "prompt" => "\"{completion.prompt}\"";
+                "temperature" => "{completion.temperature}";
+                "language" => "\"{completion.language}\"";
+                "response_format" => "\"{completion.response_format}\""}]
+    ) <| $ ( resp )
         log_resp(resp)
         if resp.status_code == HTTP_CURL_FAILED
             ccr.error = resp.error
@@ -540,17 +534,15 @@ struct public TranslationResult
 def public openai_create_translation ( completion:Translation )
     //! create a translation of an audio file to english
     var ccr : TranslationResult
-    var header = build_string <| $ ( writer )
-        (writer
-            |> write("-H \"Authorization: Bearer ") |> write(OPENAI_API_KEY) |> write("\" ")
-            |> write("-H \"Content-Type: multipart/form-data\" ")
-            |> write("-F file=\"@") |> write(completion.file) |> write("\" ")
-            |> write("-F model=\"") |> write(completion.model) |> write("\" ")
-            |> write("-F prompt=\"") |> write(completion.prompt) |> write("\" ")
-            |> write("-F temperature=") |> write(completion.temperature) |> write(" ")
-            |> write("-F response_format=\"") |> write(completion.response_format) |> write("\" ")
-        )
-    POST("https://api.openai.com/v1/audio/translations", CONNECTION_TIMEOUT, "", header) <| $ ( resp )
+    POST("https://api.openai.com/v1/audio/translations", CONNECTION_TIMEOUT, "",
+        [{auto  "Authorization" => "Bearer {OPENAI_API_KEY}";
+                "Content-Type" => "multipart/form-data"}],
+        [{auto  "file" => "@{completion.file}";
+                "model" => "\"{completion.model}\"";
+                "prompt" => "\"{completion.prompt}\"";
+                "temperature" => "{completion.temperature}";
+                "response_format" => "\"{completion.response_format}\""}]
+    ) <| $ ( resp )
         log_resp(resp)
         if resp.status_code == HTTP_CURL_FAILED
             ccr.error = resp.error

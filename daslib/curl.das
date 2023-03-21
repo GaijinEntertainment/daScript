@@ -9,6 +9,8 @@ require fio
 
 let public HTTP_CURL_FAILED = -100500
 
+let private LOG_REQUEST = false
+
 struct public HttpResponse
     //! HTTP request response
     status_code : int   //! HTTP status code
@@ -30,7 +32,8 @@ def public HTTP_REQ ( method:string; uri:string; timeout:float; header:string; v
             writer |> write(" {header}")
         if !data |> empty
             writer |> write(" -d \"{data}\"")
-    // print("request {cmd}\n")
+    static_if LOG_REQUEST
+        print("request {cmd}\n")
     var resp : HttpResponse
     var inscope lines : array<string>
     let exit_code = unsafe(popen(cmd)) <| $ ( f )
@@ -75,16 +78,21 @@ def public HTTP_REQ ( method:string; uri:string; timeout:float; header:string; v
                     writer |> write(lines[i])
     blk |> invoke(unsafe(addr(resp)))
 
-def private header_str ( header:table<string;string> ) : string
+def private header_str ( header:array<tuple<string;string>> ) : string
     return build_string <| $ ( writer )
-        for k,v in keys(header),values(header)
-            writer |> write("-H \"") |> write(k) |> write(": ") |> write(v) |> write("\" ")
+        for kv in header
+            writer |> write("-H \"") |> write(kv._0) |> write(": ") |> write(kv._1) |> write("\" ")
+
+def private fragment_str ( fragment:array<tuple<string;string>> ) : string
+    return build_string <| $ ( writer )
+        for kv in fragment
+            writer |> write("-F ") |> write(kv._0) |> write("=") |> write(kv._1) |> write(" ")
 
 def public GET ( uri:string; timeout:float; blk:block<(resp:HttpResponse?):void> )
     //! HTTP GET request
     HTTP_REQ("GET", uri, timeout, "", "", blk)
 
-def public GET ( uri:string; timeout:float; header:table<string;string>; blk:block<(resp:HttpResponse?):void> )
+def public GET ( uri:string; timeout:float; header:array<tuple<string;string>>; blk:block<(resp:HttpResponse?):void> )
     //! HTTP GET request with header
     HTTP_REQ("GET", uri, timeout, header_str(header), "", blk)
 
@@ -92,11 +100,13 @@ def public POST ( uri:string; timeout:float; data:string; blk:block<(resp:HttpRe
     //! HTTP POST request
     HTTP_REQ("POST", uri, timeout, "", data, blk)
 
-def public POST ( uri:string; timeout:float; data:string; header:table<string;string>; blk:block<(resp:HttpResponse?):void> )
+def public POST ( uri:string; timeout:float; data:string; header:array<tuple<string;string>>; blk:block<(resp:HttpResponse?):void> )
     //! HTTP POST request with header
     HTTP_REQ("POST", uri, timeout, header_str(header), data, blk)
 
-def public POST ( uri:string; timeout:float; data:string; header:string; blk:block<(resp:HttpResponse?):void> )
+def public POST ( uri:string; timeout:float; data:string; header:array<tuple<string;string>>; fragment:array<tuple<string;string>>; blk:block<(resp:HttpResponse?):void> )
     //! HTTP POST request with header
-    HTTP_REQ("POST", uri, timeout, header, data, blk)
+    HTTP_REQ("POST", uri, timeout, header_str(header)+fragment_str(fragment), data, blk)
+
+
 
