@@ -130,6 +130,9 @@ def LLVMInt3Type
 def LLVMInt2Type
     return LLVMVectorType(LLVMInt32Type(), 2u)
 
+def LLVMRange64Type
+    return LLVMVectorType(LLVMInt64Type(), 2u)
+
 def LLVMIntPtrType : LLVMOpaqueType?
     static_if typeinfo(sizeof type<void?>)==8
         return LLVMInt64Type()

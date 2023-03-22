@@ -224,7 +224,7 @@ def intrinsic_builtin_range(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCal
     var x, y : LLVMOpaqueValue?
     assume argType = expr.arguments[0]._type
     let outSigned = expr._type.baseType==Type tRange
-    if expr.arguments.length==1
+    if expr.arguments |> length==1
         if argType.isVectorType
             return any2int(g_builder, arguments[0], argType.vectorBaseType, type_to_llvm_type(expr._type), 4, outSigned)
         else

@@ -487,6 +487,7 @@ def public base_type_to_llvm_type ( t:Type )
     return LLVMInt2Type()       if t == Type tInt2 || t == Type tUInt2 || t == Type tRange || t == Type tURange
     return LLVMInt3Type()       if t == Type tInt3 || t == Type tUInt3
     return LLVMInt4Type()       if t == Type tInt4 || t == Type tUInt4
+    return LLVMRange64Type()    if t == Type tRange64 || t == Type tURange64
     return LLVMFloat2Type()     if t == Type tFloat2
     return LLVMFloat3Type()     if t == Type tFloat3
     return LLVMFloat4Type()     if t == Type tFloat4
@@ -529,7 +530,7 @@ def public type_to_llvm_abi_type ( t:TypeDeclPtr )
 
 def public type_to_llvm_type ( t:TypeDeclPtr )
     var res : LLVMOpaqueType?
-    if t.dim.length != 0
+    if t.dim |> length != 0
         var inscope ndt <- clone_type(t)
         ndt.dim |> clear()
         res = type_to_llvm_type(ndt)
@@ -603,7 +604,7 @@ def public type_to_llvm_type ( t:TypeDeclPtr )
     return res
 
 def public dim_element_type_to_llvm_type ( typ:TypeDeclPtr )
-    if typ.dim.length == 0
+    if typ.dim |> length == 0
         return type_to_llvm_type(typ)
     else
         var inscope ndt <- clone_type(typ)

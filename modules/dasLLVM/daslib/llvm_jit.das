@@ -624,7 +624,7 @@ class LlvmJitVisitor : AstVisitor
             failed_E(expr, "new handle is not supported yet")
             return
         else
-            if expr.typeexpr.dim.length > 0
+            if expr.typeexpr.dim |> length > 0
                 let count = expr.typeexpr.countOf
                 var arr : LLVMOpaqueValue?
                 at_function_entry <|
@@ -959,9 +959,9 @@ class LlvmJitVisitor : AstVisitor
                 setE(expr, at_r2v)
             else
                 setE(expr, ptr_idx)
-        elif subExprT.dim.length != 0
+        elif subExprT.dim |> length != 0
             var inscope etype <- clone_type(subExprT)
-            let maxIndex = etype.dim[etype.dim.length-1]
+            let maxIndex = etype.dim[etype.dim |> length-1]
             etype.dim |> pop()
             check_range(tidx, LLVMConstInt(LLVMInt32Type(), uint64(maxIndex), 0), "dim index out of range")
             var ptr_idx = build_array_index(tsrc, tidx, etype, "dim_at")
@@ -1001,12 +1001,12 @@ class LlvmJitVisitor : AstVisitor
         var tsrc = getE(expr.subexpr)
         var tidx = getE(expr.index)
         assume subExprT = expr.subexpr._type
-        if subExprT.dim.length != 0 || (subExprT.isPointer && subExprT.firstType.dim.length != 0)
+        if subExprT.dim |> length != 0 || (subExprT.isPointer && subExprT.firstType.dim |> length != 0)
             var inscope etype <- subExprT.isPointer ? clone_type(subExprT.firstType) : clone_type(subExprT)
-            let maxIndex = etype.dim[etype.dim.length-1]
+            let maxIndex = etype.dim[etype.dim |> length-1]
             etype.dim |> pop()
             var resType = LLVMPointerType(type_to_llvm_type(etype),0u)
-            var if_not_null = subExprT.dim.length==0 ? LLVMBuildIsNotNull(g_builder, tsrc, "") : LLVMConstInt(LLVMInt1Type(), 1ul, 0)
+            var if_not_null = subExprT.dim |> length==0 ? LLVMBuildIsNotNull(g_builder, tsrc, "") : LLVMConstInt(LLVMInt1Type(), 1ul, 0)
             var res = build_select(if_not_null, resType) <|
                 var maxIdx = LLVMConstInt(LLVMInt32Type(), uint64(maxIndex), 0)
                 var if_range = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntULT, tidx, maxIdx, "dim_range")
@@ -1737,12 +1737,12 @@ class LlvmJitVisitor : AstVisitor
                 LLVMPositionBuilderAtEnd(g_builder,okay)
                 range2[get_ptr(ssrc)] = sto
                 LLVMBuildStore(g_builder, sfrom, getV(svar))
-            elif ssrc._type.dim.length != 0  // []
+            elif ssrc._type.dim |> length != 0  // []
                 var element_type = type_to_llvm_type(svar._type)
                 var sdim = getE(ssrc)
                 var s0 = LLVMBuildGEP2(g_builder, element_type, sdim, LLVMConstInt(LLVMInt32Type(),0ul,0), "dim_0")
                 LLVMBuildStore(g_builder, s0, getV(svar))
-                let dimSize = ssrc._type.dim[ssrc._type.dim.length-1]
+                let dimSize = ssrc._type.dim[ssrc._type.dim |> length-1]
                 var sto = LLVMBuildGEP2(g_builder, element_type, sdim, LLVMConstInt(LLVMInt32Type(),uint64(dimSize),0), "")
                 sto = LLVMBuildPtrToInt(g_builder, sto, LLVMIntPtrType(), "dim_end")
                 range2[get_ptr(ssrc)] = sto
@@ -1783,7 +1783,7 @@ class LlvmJitVisitor : AstVisitor
                 var svar_v = LLVMBuildLoad(g_builder, getV(svar), "")
                 svar_v = LLVMBuildAdd(g_builder, svar_v, LLVMConstInt(LLVMInt32Type(), 1ul, 0), "")
                 LLVMBuildStore(g_builder, svar_v, getV(svar))
-            elif ssrc._type.dim.length != 0 // []
+            elif ssrc._type.dim |> length != 0 // []
                 var svar_v = LLVMBuildLoad(g_builder, getV(svar), "")
                 var svar_i = LLVMBuildGEP2(g_builder, type_to_llvm_type(svar._type), svar_v, LLVMConstInt(LLVMInt32Type(),1ul,0), "")
                 LLVMBuildStore(g_builder, svar_i, getV(svar))
@@ -1812,7 +1812,7 @@ class LlvmJitVisitor : AstVisitor
                 var okay = LLVMAppendBasicBlock(ffunc, "for_{svar.name}_okay")
                 LLVMBuildCondBr(g_builder, rcond, lblk.loop_end, okay)
                 LLVMPositionBuilderAtEnd(g_builder,okay)
-            elif ssrc._type.dim.length != 0             // []
+            elif ssrc._type.dim |> length != 0             // []
                 var sto = range2[get_ptr(ssrc)]
                 var svar_v = LLVMBuildLoad(g_builder, getV(svar), "")
                 var svar_i = LLVMBuildPtrToInt(g_builder, svar_v, LLVMIntPtrType(), "")
@@ -1862,7 +1862,7 @@ class LlvmJitVisitor : AstVisitor
                 mkv_ptr = LLVMBuildGEP(g_builder, mkv_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.extraOffset), 0), "mkv_local_sp_{expr.stackTop}_eo_{expr.extraOffset}")
         let stride = expr.makeType.stride
         if stride!=0 && length(expr.variants)==0
-            let total = int(expr.variants.length)
+            let total = int(expr.variants |> length)
             let bytes = max(total,1) * stride
             let align = uint(expr.makeType.alignOf)
             LLVMBuildMemSet(g_builder, mkv_ptr, LLVMConstInt(LLVMInt8Type(), 0ul, 0), LLVMConstInt(LLVMInt32Type(), uint64(bytes), 0), align)
@@ -1936,7 +1936,7 @@ class LlvmJitVisitor : AstVisitor
                 mks_ptr = LLVMBuildGEP(g_builder, mks_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.extraOffset), 0), "mks_local_sp_{expr.stackTop}_eo_{expr.extraOffset}")
         let stride = expr.makeType.stride
         if !expr.makeFlags.doesNotNeedInit && !expr.makeFlags.initAllFields && stride!=0
-            let total = int(expr.structs.length)
+            let total = int(expr.structs |> length)
             let bytes = max(total,1) * stride
             let align = uint(expr.makeType.alignOf)
             LLVMBuildMemSet(g_builder, mks_ptr, LLVMConstInt(LLVMInt8Type(), 0ul, 0), LLVMConstInt(LLVMInt32Type(), uint64(bytes), 0), align)
@@ -2006,7 +2006,7 @@ class LlvmJitVisitor : AstVisitor
                 mks_ptr = LLVMBuildGEP(g_builder, mks_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.extraOffset), 0), "mka_local_sp_{expr.stackTop}_eo_{expr.extraOffset}")
         let stride = expr.makeType.stride
         if !expr.makeFlags.doesNotNeedInit && !expr.makeFlags.initAllFields && stride!=0
-            let total = int(expr.values.length)
+            let total = int(expr.values |> length)
             let bytes = max(total,1) * stride
             let align = uint(expr.makeType.alignOf)
             LLVMBuildMemSet(g_builder, mks_ptr, LLVMConstInt(LLVMInt8Type(), 0ul, 0), LLVMConstInt(LLVMInt32Type(), uint64(bytes), 0), align)
@@ -2068,7 +2068,7 @@ class LlvmJitVisitor : AstVisitor
                 mks_ptr = LLVMBuildGEP(g_builder, mks_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.extraOffset), 0), "mkt_local_sp_{expr.stackTop}_eo_{expr.extraOffset}")
         let stride = expr.makeType.stride
         if !expr.makeFlags.doesNotNeedInit && !expr.makeFlags.initAllFields && stride!=0
-            let total = int(expr.values.length)
+            let total = int(expr.values |> length)
             let bytes = max(total,1) * stride
             let align = uint(expr.makeType.alignOf)
             LLVMBuildMemSet(g_builder, mks_ptr, LLVMConstInt(LLVMInt8Type(), 0ul, 0), LLVMConstInt(LLVMInt32Type(), uint64(bytes), 0), align)
@@ -2095,7 +2095,7 @@ class LlvmJitVisitor : AstVisitor
         if !t.isTuple
             failed_T(t, "not a tuple {describe(t)}")
             return "!!not_a_tuple!!"
-        return t.argNames.length!=0 ? "{t.argNames[index]}" : "{describe(t.argTypes[index])}"
+        return t.argNames |> length!=0 ? "{t.argNames[index]}" : "{describe(t.argTypes[index])}"
 
     def override visitExprMakeTupleIndex(expr:smart_ptr<ExprMakeTuple>;index:int;init:ExpressionPtr;last:bool) : ExpressionPtr
         let offset = get_tuple_field_offset(expr.makeType,index)
@@ -2524,7 +2524,7 @@ class LlvmJitVisitor : AstVisitor
         if !t.isVariant
             failed_T(t, "not a variant {describe(t)}")
             return "!!not_a_variant!!"
-        return t.argNames.length!=0 ? "{t.argNames[index]}" : "{describe(t.argTypes[index])}"
+        return t.argNames |> length!=0 ? "{t.argNames[index]}" : "{describe(t.argTypes[index])}"
 
     def override visitExprField(expr:smart_ptr<ExprField>) : ExpressionPtr
         if expr.value._type.isBitfield
@@ -2641,7 +2641,7 @@ class LlvmJitVisitor : AstVisitor
                 val_ptr = LLVMBuildPointerCast(g_builder, val_ptr, get_type_pointer(expr._type), "")
                 setE(expr, LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr._type), val_ptr, uint(expr.value._type.alignOf), "swizzle_{expr.fields}"))
             else
-                assert(expr.fields.length!=1)
+                assert(expr.fields |> length!=1)
                 var res = LLVMGetUndef(type_to_llvm_type(expr._type))
                 for i,fi in count(),expr.fields
                     var f = LLVMBuildExtractElement(g_builder, val, LLVMConstInt(LLVMInt32Type(), uint64(fi), 0), "")
@@ -3251,25 +3251,25 @@ class LlvmJitVisitor : AstVisitor
 
     def get_capture_param : LLVMOpaqueValue?
         if thisBlock!=null
-            return LLVMGetParam(ffunc,uint(thisBlock.arguments.length))
+            return LLVMGetParam(ffunc,uint(thisBlock.arguments |> length))
         else
             panic("not in block")
             return null
 
     def get_context_param : LLVMOpaqueValue?
         if thisBlock!=null
-            return LLVMGetParam(ffunc,uint(thisBlock.arguments.length+1))
+            return LLVMGetParam(ffunc,uint(thisBlock.arguments |> length+1))
         elif thisFunc!=null
-            return LLVMGetParam(ffunc,uint(thisFunc.arguments.length))
+            return LLVMGetParam(ffunc,uint(thisFunc.arguments |> length))
         else
             panic("not in block or function")
             return null
 
     def get_cmres_param : LLVMOpaqueValue?
         if thisBlock!=null
-            return LLVMGetParam(ffunc,uint(thisBlock.arguments.length+2))
+            return LLVMGetParam(ffunc,uint(thisBlock.arguments |> length+2))
         elif thisFunc!=null
-            return LLVMGetParam(ffunc,uint(thisFunc.arguments.length+1))
+            return LLVMGetParam(ffunc,uint(thisFunc.arguments |> length+1))
         else
             panic("not in block or function")
             return null
