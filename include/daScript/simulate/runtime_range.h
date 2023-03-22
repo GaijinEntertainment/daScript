@@ -148,7 +148,7 @@ namespace das
             }
         } }
     loopend:;
-        evalFinal(context);
+        this->evalFinal(context);
         context.stopFlags &= ~EvalFlags::stopForBreak;
         return v_zero();
     }
@@ -170,7 +170,7 @@ namespace das
             }
         } }
     loopend:;
-        evalFinal(context);
+        this->evalFinal(context);
         context.stopFlags &= ~(EvalFlags::stopForBreak | EvalFlags::stopForContinue);
         return v_zero();
     }
@@ -191,7 +191,7 @@ namespace das
             DAS_PROCESS_LOOP1_FLAGS(continue);
         } }
     loopend:;
-        evalFinal(context);
+        this->evalFinal(context);
         context.stopFlags &= ~(EvalFlags::stopForBreak | EvalFlags::stopForContinue);
         return v_zero();
     }
@@ -211,7 +211,7 @@ namespace das
             pbody->eval(context);
         } }
     loopend:;
-        evalFinal(context);
+        this->evalFinal(context);
         context.stopFlags &= ~(EvalFlags::stopForBreak | EvalFlags::stopForContinue);
         return v_zero();
     }
@@ -243,7 +243,7 @@ namespace das
             }
         } }
     loopend:;
-        evalFinal(context);
+        this->evalFinal(context);
         context.stopFlags &= ~EvalFlags::stopForBreak;
         return v_zero();
     }
@@ -266,7 +266,7 @@ namespace das
             }
         } }
     loopend:;
-        evalFinal(context);
+        this->evalFinal(context);
         context.stopFlags &= ~(EvalFlags::stopForBreak | EvalFlags::stopForContinue);
         return v_zero();
     }
@@ -289,7 +289,7 @@ namespace das
             DAS_PROCESS_LOOP1_FLAGS(continue);
         } }
     loopend:;
-        evalFinal(context);
+        this->evalFinal(context);
         context.stopFlags &= ~(EvalFlags::stopForBreak | EvalFlags::stopForContinue);
         return v_zero();
     }
@@ -311,7 +311,7 @@ namespace das
             pbody->eval(context);
         } }
     loopend:;
-        evalFinal(context);
+        this->evalFinal(context);
         context.stopFlags &= ~(EvalFlags::stopForBreak | EvalFlags::stopForContinue);
         return v_zero();
     }
