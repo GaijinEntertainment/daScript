@@ -97,5 +97,7 @@ def test
     test_vec4(uint4())
     test_vec2(range(),true)
     test_vec2(urange(),true)
+    test_vec2(range64(),true)
+    test_vec2(urange64(),true)
     test_cvt(1,2,3,4)
     return true

@@ -557,7 +557,7 @@ namespace das
             }
         }
         virtual void close ( Context & context, char * ) override {
-            context.heap->free((char *)this, sizeof(RangeIterator));
+            context.heap->free((char *)this, sizeof(EnumIterator<intT>));
         }
         EnumInfo *  info = nullptr;
         int32_t     count = 0;
@@ -763,9 +763,9 @@ namespace das
     }
 
     void builtin_make_range_iterator ( Sequence & result, range rng, Context * context ) {
-        char * iter = context->heap->allocate(sizeof(RangeIterator));
+        char * iter = context->heap->allocate(sizeof(RangeIterator<range>));
         context->heap->mark_comment(iter, "range iterator");
-        new (iter) RangeIterator(rng, true);
+        new (iter) RangeIterator<range>(rng);
         result = { (Iterator *) iter };
     }
 

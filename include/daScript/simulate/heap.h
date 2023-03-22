@@ -410,6 +410,8 @@ namespace das {
             case Type::tFloat4:         return makeNode<NodeType<float4>>(args...);
             case Type::tRange:          return makeNode<NodeType<range>>(args...);
             case Type::tURange:         return makeNode<NodeType<urange>>(args...);
+            case Type::tRange64:        return makeNode<NodeType<range64>>(args...);
+            case Type::tURange64:       return makeNode<NodeType<urange64>>(args...);
             case Type::tString:         return makeNode<NodeType<char *>>(args...);
             case Type::tPointer:        return makeNode<NodeType<void *>>(args...);
             case Type::tIterator:       return makeNode<NodeType<void *>>(args...);
@@ -419,6 +421,20 @@ namespace das {
             default:
                 DAS_ASSERTF(0, "we should not even be here. we are calling makeValueNode on an uspported baseType."
                               "likely new by-value builtin type been added.");
+                return nullptr;
+            }
+        }
+
+        template < template <typename TT> class NodeType, typename... Params>
+        SimNode * makeRangeNode(Type baseType, Params... args) {
+            switch (baseType) {
+            case Type::tRange:          return makeNode<NodeType<range>>(args...);
+            case Type::tURange:         return makeNode<NodeType<urange>>(args...);
+            case Type::tRange64:        return makeNode<NodeType<range64>>(args...);
+            case Type::tURange64:       return makeNode<NodeType<urange64>>(args...);
+            default:
+                DAS_ASSERTF(0, "we should not even be here. we are calling makeRangeNode on an uspported baseType."
+                              "likely new by-value builtin range type been added.");
                 return nullptr;
             }
         }

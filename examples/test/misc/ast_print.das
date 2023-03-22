@@ -588,6 +588,12 @@ class PrintVisitor : AstVisitor
 // const urnage
     def override preVisitExprConstURange(expr:smart_ptr<ExprConstURange>) : void
         print("urange({expr.value})")
+// const range
+    def override preVisitExprConstRange64(expr:smart_ptr<ExprConstRange64>) : void
+        print("range64({expr.value})")
+// const urnage
+    def override preVisitExprConstURange64(expr:smart_ptr<ExprConstURange64>) : void
+        print("urange64({expr.value})")
 // const bool
     def override preVisitExprConstBool(expr:smart_ptr<ExprConstBool>) : void
         print("{expr.value}")

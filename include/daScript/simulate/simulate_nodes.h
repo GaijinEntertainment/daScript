@@ -3759,6 +3759,7 @@ SIM_NODE_AT_VECTOR(Float, float)
     DEFINE_POLICY(SetMulScal);
 }
 
+#include "daScript/simulate/runtime_range.h"
 #include "daScript/simulate/simulate_visit.h"
 #include "daScript/simulate/simulate_visit_op_undef.h"
 

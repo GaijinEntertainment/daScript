@@ -516,6 +516,12 @@ class AstVisitor
 // const urnage
     def abstract preVisitExprConstURange(expr:smart_ptr<ExprConstURange>) : void
     def abstract visitExprConstURange(expr:smart_ptr<ExprConstURange>) : ExpressionPtr
+// const range64
+    def abstract preVisitExprConstRange64(expr:smart_ptr<ExprConstRange64>) : void
+    def abstract visitExprConstRange64(expr:smart_ptr<ExprConstRange64>) : ExpressionPtr
+// const urnage64
+    def abstract preVisitExprConstURange64(expr:smart_ptr<ExprConstURange64>) : void
+    def abstract visitExprConstURange64(expr:smart_ptr<ExprConstURange64>) : ExpressionPtr
 // const bool
     def abstract preVisitExprConstBool(expr:smart_ptr<ExprConstBool>) : void
     def abstract visitExprConstBool(expr:smart_ptr<ExprConstBool>) : ExpressionPtr

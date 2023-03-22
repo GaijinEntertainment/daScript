@@ -16,6 +16,8 @@ template <> struct WrapType<uint3> { enum { value = true }; typedef vec4f type; 
 template <> struct WrapType<uint4> { enum { value = true }; typedef vec4f type; };
 template <> struct WrapType<range> { enum { value = true }; typedef vec4f type; };
 template <> struct WrapType<urange> { enum { value = true }; typedef vec4f type; };
+template <> struct WrapType<range64> { enum { value = true }; typedef vec4f type; };
+template <> struct WrapType<urange64> { enum { value = true }; typedef vec4f type; };
 
 template <typename... Ts> struct AnyVectorType;
 template <> struct AnyVectorType<> { enum { value = false }; };

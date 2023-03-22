@@ -1,6 +1,64 @@
 #pragma once
 
 namespace das {
+
+    template <typename TRange>
+    SimNode * SimNode_ForRange<TRange>::visit ( SimVisitor & vis ) {
+        using TT = typename TRange::baseType;
+        V_BEGIN_CR();
+        V_OP_TT(ForRange);
+        V_SP(this->stackTop[0]);
+        V_SUB(this->sources[0]);
+        vis.sub(this->list,this->total,"list");
+        V_FINAL();
+        V_END();
+    }
+
+    template <typename TRange>
+    SimNode * SimNode_ForRangeNF<TRange>::visit ( SimVisitor & vis ) {
+        using TT = typename TRange::baseType;
+        V_BEGIN_CR();
+        V_OP_TT(ForRangeNF);
+        V_SP(this->stackTop[0]);
+        V_SUB(this->sources[0]);
+        vis.sub(this->list,this->total,"list");
+        V_FINAL();
+        V_END();
+    }
+
+    template <typename TRange>
+    SimNode * SimNode_ForRange1<TRange>::visit ( SimVisitor & vis ) {
+        using TT = typename TRange::baseType;
+        V_BEGIN_CR();
+        V_OP_TT(ForRange1);
+        V_SP(this->stackTop[0]);
+        V_SUB(this->sources[0]);
+        V_SUB(this->list[0]);
+        V_FINAL();
+        V_END();
+    }
+
+    template <typename TRange>
+    SimNode * SimNode_ForRangeNF1<TRange>::visit ( SimVisitor & vis ) {
+        using TT = typename TRange::baseType;
+        V_BEGIN_CR();
+        V_OP_TT(ForRangeNF1);
+        V_SP(this->stackTop[0]);
+        V_SUB(this->sources[0]);
+        V_SUB(this->list[0]);
+        V_FINAL();
+        V_END();
+    }
+
+    template <typename TRange>
+    SimNode * SimNode_RangeIterator<TRange>::visit ( SimVisitor & vis ) {
+        using TT = typename TRange::baseType;
+        V_BEGIN();
+        V_OP_TT(RangeIterator);
+        V_SUB(subexpr);
+        V_END();
+    }
+
     template <typename TT>
     SimNode * SimNode_NewHandle<TT,false>::visit ( SimVisitor & vis ) {
         V_BEGIN();

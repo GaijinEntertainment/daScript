@@ -1445,6 +1445,8 @@ namespace das
             case tFloat4:
             case tRange:
             case tURange:
+            case tRange64:
+            case tURange64:
                 return true;
             default:
                 return false;
@@ -1463,6 +1465,8 @@ namespace das
             case tFloat2:
             case tRange:
             case tURange:
+            case tRange64:
+            case tURange64:
                 return 2;
             case tInt3:
             case tUInt3:
@@ -1493,6 +1497,8 @@ namespace das
             case tFloat4:   return Type::tFloat;
             case tRange:    return Type::tInt;
             case tURange:   return Type::tUInt;
+            case tRange64:  return Type::tInt64;
+            case tURange64: return Type::tUInt64;
             default:
                 DAS_ASSERTF(0,
                        "we should not even be here. we are calling getVectorBaseType on an unsuppored baseType."
@@ -1895,6 +1901,8 @@ namespace das
             case Type::tEnumeration16:
             case Type::tRange:
             case Type::tURange:
+            case Type::tRange64:
+            case Type::tURange64:
                 return true;
             default:
                 return false;
@@ -1962,6 +1970,8 @@ namespace das
             case Type::tFloat4:
             case Type::tRange:
             case Type::tURange:
+            case Type::tRange64:
+            case Type::tURange64:
             case Type::tString:
             case Type::tDouble:
             // case Type::tPointer:
@@ -2000,6 +2010,8 @@ namespace das
             case Type::tFloat4:
             case Type::tRange:
             case Type::tURange:
+            case Type::tRange64:
+            case Type::tURange64:
             case Type::tString:
             case Type::tDouble:
                 return true;
@@ -2088,6 +2100,8 @@ namespace das
         switch ( baseType ) {
             case Type::tRange:  return Type::tInt;
             case Type::tURange: return Type::tUInt;
+            case Type::tRange64:  return Type::tInt64;
+            case Type::tURange64: return Type::tUInt64;
             default:
                 DAS_ASSERTF(0, "we should not even be here. we are calling getRangeBaseType on an unsuppored baseType."
                        "likely new range type been added.");
@@ -2096,7 +2110,8 @@ namespace das
     }
 
     bool TypeDecl::isRange() const {
-        return (baseType==Type::tRange || baseType==Type::tURange) && dim.size()==0;
+        return (baseType==Type::tRange || baseType==Type::tURange ||
+            baseType==Type::tRange64 || baseType==Type::tURange64) && dim.size()==0;
     }
 
     bool TypeDecl::isString() const {
@@ -2729,6 +2744,8 @@ namespace das
                 case Type::tFloat4:         ss << "f4"; break;
                 case Type::tRange:          ss << "r"; break;
                 case Type::tURange:         ss << "z"; break;
+                case Type::tRange64:        ss << "r64"; break;
+                case Type::tURange64:       ss << "z64"; break;
                 case Type::tDouble:         ss << "d"; break;
                 case Type::tString:         ss << "s"; break;
                 case Type::tVoid:           ss << "v"; break;
@@ -3043,8 +3060,14 @@ namespace das
             case 'U':   ch++; return make_smart<TypeDecl>(Type::tTuple);
             case 'V':   ch++; return make_smart<TypeDecl>(Type::tVariant);
             case 't':   ch++; return make_smart<TypeDecl>(Type::tBitfield);
-            case 'r':   ch++; return make_smart<TypeDecl>(Type::tRange);
-            case 'z':   ch++; return make_smart<TypeDecl>(Type::tURange);      // why z? dunno
+            case 'r':   {
+                        if ( ch[1]=='6' && ch[2]=='4' )     { ch+=3; return make_smart<TypeDecl>(Type::tRange64); }
+                else                                        { ch+=1; return make_smart<TypeDecl>(Type::tRange); }
+            }
+            case 'z':   {
+                        if ( ch[1]=='6' && ch[2]=='4' )     { ch+=3; return make_smart<TypeDecl>(Type::tURange64); }
+                else                                        { ch+=1; return make_smart<TypeDecl>(Type::tURange); }
+            }
             case 'd':   ch++; return make_smart<TypeDecl>(Type::tDouble);
             case 's':   ch++; return make_smart<TypeDecl>(Type::tString);
             case 'v':   ch++; return make_smart<TypeDecl>(Type::tVoid);

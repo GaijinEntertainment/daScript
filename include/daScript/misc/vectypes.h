@@ -28,6 +28,18 @@ namespace das
         static __forceinline uint32_t w ( vec4f t ) { return v_extract_wi(v_cast_vec4i(t)); }
     };
 
+    template <>
+    struct vec_extract<int64_t> {
+        static __forceinline int64_t x ( vec4f t ) { union { vec4f t; int64_t T[2]; } temp; temp.t = t; return temp.T[0]; }
+        static __forceinline int64_t y ( vec4f t ) { union { vec4f t; int64_t T[2]; } temp; temp.t = t; return temp.T[1]; }
+    };
+
+    template <>
+    struct vec_extract<uint64_t> {
+        static __forceinline uint64_t x ( vec4f t ) { union { vec4f t; uint64_t T[2]; } temp; temp.t = t; return temp.T[0]; }
+        static __forceinline uint64_t y ( vec4f t ) { union { vec4f t; uint64_t T[2]; } temp; temp.t = t; return temp.T[1]; }
+    };
+
     __forceinline vec4f vec_loadu_x(const float v) {return v_set_x(v);}
     __forceinline vec4f vec_loadu_x(const int v) {return v_cast_vec4f(v_seti_x(v));}
     __forceinline vec4f vec_loadu_x(const unsigned int v) {return v_cast_vec4f(v_seti_x(v));}

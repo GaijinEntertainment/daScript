@@ -43,7 +43,8 @@ def isVectorType ( typ:Type )
         typ==Type tInt2   || typ==Type tInt3   || typ==Type tInt4   ||
         typ==Type tUInt2  || typ==Type tUInt3  || typ==Type tUInt4  ||
         typ==Type tFloat2 || typ==Type tFloat3 || typ==Type tFloat4 ||
-        typ==Type tRange  || typ==Type tURange
+        typ==Type tRange  || typ==Type tURange || typ==Type tRange64||
+        typ==Type tURange64
     )
 
 def describe(list:AnnotationArgumentList)
@@ -555,6 +556,10 @@ def private walk_and_convert_basic ( data : uint8?; info:TypeDeclPtr; at:LineInf
             return new [[ExprConstRange() at=at, value=*reinterpret<range?> data]]
         elif info.baseType == Type tURange
             return new [[ExprConstURange() at=at, value=*reinterpret<urange?> data]]
+        elif info.baseType == Type tRange64
+            return new [[ExprConstRange64() at=at, value=*reinterpret<range64?> data]]
+        elif info.baseType == Type tURange64
+            return new [[ExprConstURange64() at=at, value=*reinterpret<urange64?> data]]
         elif info.baseType == Type tString
             return new [[ExprConstString() at=at, value:=*reinterpret<string?> data]]
         else
@@ -815,7 +820,8 @@ def public get_workhorse_types
         Type tInt3;             Type tInt4;             Type tUInt;             Type tBitfield;
         Type tUInt2;            Type tUInt3;            Type tUInt4;            Type tFloat;
         Type tFloat2;           Type tFloat3;           Type tFloat4;           Type tRange;
-        Type tURange;           Type tString;           Type tDouble;           Type tPointer
+        Type tURange;           Type tRange64;          Type tURange64;         Type tString;
+        Type tDouble;           Type tPointer
     ]]
 
 def public find_argument_index ( typ:TypeDeclPtr; name:string )

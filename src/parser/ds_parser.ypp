@@ -222,6 +222,8 @@
 %token  DAS_TFLOAT4         "float4"
 %token  DAS_TRANGE          "range"
 %token  DAS_TURANGE         "urange"
+%token  DAS_TRANGE64        "range64"
+%token  DAS_TURANGE64       "urange64"
 %token  DAS_TBLOCK          "block"
 %token  DAS_TINT64          "int64"
 %token  DAS_TUINT64         "uint64"
@@ -1045,6 +1047,8 @@ function_name
     |   DAS_TFLOAT4  { $$ = new string("float4"); }
     |   DAS_TRANGE   { $$ = new string("range"); }
     |   DAS_TURANGE  { $$ = new string("urange"); }
+    |   DAS_TRANGE64 { $$ = new string("range64"); }
+    |   DAS_TURANGE64{ $$ = new string("urange64"); }
     |   DAS_TINT64   { $$ = new string("int64"); }
     |   DAS_TUINT64  { $$ = new string("uint64"); }
     |   DAS_TDOUBLE  { $$ = new string("double"); }
@@ -2310,6 +2314,8 @@ basic_type_declaration
     |   DAS_TVOID       { $$ = Type::tVoid; }
     |   DAS_TRANGE      { $$ = Type::tRange; }
     |   DAS_TURANGE     { $$ = Type::tURange; }
+    |   DAS_TRANGE64    { $$ = Type::tRange64; }
+    |   DAS_TURANGE64   { $$ = Type::tURange64; }
     |   DAS_TDOUBLE     { $$ = Type::tDouble; }
     |   DAS_TBITFIELD   { $$ = Type::tBitfield; }
     ;

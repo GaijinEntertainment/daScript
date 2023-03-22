@@ -101,6 +101,8 @@ namespace das {
         virtual void Float4 ( float4 & ) {}
         virtual void Range ( range & ) {}
         virtual void URange ( urange & ) {}
+        virtual void Range64 ( range64 & ) {}
+        virtual void URange64 ( urange64 & ) {}
         virtual void VoidPtr ( void * & ) {}
         virtual void WalkBlock ( Block * ) {}
         virtual void WalkFunction ( Func * ) {}

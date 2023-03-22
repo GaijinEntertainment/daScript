@@ -608,6 +608,62 @@ namespace  das {
         }
     };
 
+    struct SimPolicy_Range64 {
+        enum { mask=1+2+4+8 };
+        static __forceinline void Set  ( char * a, vec4f b, Context &, LineInfo * ) {
+            range64 * pa = (range64 *) a;
+            *pa = cast<range64>::to ( b );
+        }
+        // setXYZW
+        static __forceinline vec4f setXY ( const float *__restrict X )    { int64_t x[2] = {int64_t(X[0]), int64_t(X[1])}; return setXY(x); }
+        static __forceinline vec4f setXY ( const double *__restrict X )   { int64_t x[2] = {int64_t(X[0]), int64_t(X[1])}; return setXY(x); }
+        static __forceinline vec4f setXY ( const int32_t  *__restrict X ) { int64_t x[2] = {int64_t(X[0]), int64_t(X[1])}; return setXY(x); }
+        static __forceinline vec4f setXY ( const uint32_t *__restrict X ) { int64_t x[2] = {int64_t(X[0]), int64_t(X[1])}; return setXY(x); }
+        static __forceinline vec4f setXY ( const int64_t  *__restrict x ) { return v_ldu((const float *)x); }
+        static __forceinline vec4f setXY ( const uint64_t *__restrict X ) { return setXY((int64_t *)X); }
+        static __forceinline vec4f splats ( float X )    { return splats((int64_t)X); }
+        static __forceinline vec4f splats ( double X )   { return splats((int64_t)X); }
+        static __forceinline vec4f splats ( int32_t  X ) { return splats((int64_t)X); }
+        static __forceinline vec4f splats ( uint32_t X ) { return splats((int64_t)X); }
+        static __forceinline vec4f splats ( int64_t X )  { int64_t x[2] = {X, X}; return v_ldu((const float *)x); }
+        static __forceinline vec4f splats ( uint64_t X ) { return splats((int64_t)X); }
+        // basic
+        static __forceinline bool Equ     ( vec4f a, vec4f b, Context &, LineInfo * ) {
+            return (v_signmask(v_cast_vec4f(v_cmp_eqi(v_cast_vec4i(a),v_cast_vec4i(b)))) & mask) == mask;
+        }
+        static __forceinline bool NotEqu  ( vec4f a, vec4f b, Context &, LineInfo * ) {
+            return (v_signmask(v_cast_vec4f(v_cmp_eqi(v_cast_vec4i(a), v_cast_vec4i(b)))) & mask) != mask;
+        }
+    };
+
+    struct SimPolicy_URange64 {
+        enum { mask=1+2+4+8 };
+        static __forceinline void Set  ( char * a, vec4f b, Context &, LineInfo * ) {
+            urange64 * pa = (urange64 *) a;
+            *pa = cast<urange64>::to ( b );
+        }
+        // setXYZW
+        static __forceinline vec4f setXY ( const float *__restrict X )    { uint64_t x[2] = {uint64_t(X[0]), uint64_t(X[1])}; return setXY(x); }
+        static __forceinline vec4f setXY ( const double *__restrict X )   { uint64_t x[2] = {uint64_t(X[0]), uint64_t(X[1])}; return setXY(x); }
+        static __forceinline vec4f setXY ( const int32_t  *__restrict X ) { uint64_t x[2] = {uint64_t(X[0]), uint64_t(X[1])}; return setXY(x); }
+        static __forceinline vec4f setXY ( const uint32_t *__restrict X ) { uint64_t x[2] = {uint64_t(X[0]), uint64_t(X[1])}; return setXY(x); }
+        static __forceinline vec4f setXY ( const int64_t  *__restrict X ) { return setXY((uint64_t *)X); }
+        static __forceinline vec4f setXY ( const uint64_t *__restrict x ) { return v_ldu((const float *)x); }
+        static __forceinline vec4f splats ( float X )    { return splats((uint64_t)X); }
+        static __forceinline vec4f splats ( double X )   { return splats((uint64_t)X); }
+        static __forceinline vec4f splats ( int32_t  X ) { return splats((uint64_t)X); }
+        static __forceinline vec4f splats ( uint32_t X ) { return splats((uint64_t)X); }
+        static __forceinline vec4f splats ( int64_t X ) { return splats((uint64_t)X); }
+        static __forceinline vec4f splats ( uint64_t X )  { uint64_t x[2] = {X, X}; return v_ldu((const float *)x); }
+        // basic
+        static __forceinline bool Equ     ( vec4f a, vec4f b, Context &, LineInfo * ) {
+            return (v_signmask(v_cast_vec4f(v_cmp_eqi(v_cast_vec4i(a),v_cast_vec4i(b)))) & mask) == mask;
+        }
+        static __forceinline bool NotEqu  ( vec4f a, vec4f b, Context &, LineInfo * ) {
+            return (v_signmask(v_cast_vec4f(v_cmp_eqi(v_cast_vec4i(a), v_cast_vec4i(b)))) & mask) != mask;
+        }
+    };
+
     struct SimPolicy_Range : SimPolicy_iVec<range,3> {};
     struct SimPolicy_URange : SimPolicy_uVec<urange,3> {};
 
@@ -663,6 +719,8 @@ namespace  das {
     template <> struct SimPolicy<uint4> : SimPolicy_uVec<uint4,1+2+4+8>, SimPolicy_MathVecU, SimPolicy_F2IVec {};
     template <> struct SimPolicy<range> : SimPolicy_Range {};
     template <> struct SimPolicy<urange> : SimPolicy_URange {};
+    template <> struct SimPolicy<range64> : SimPolicy_Range64 {};
+    template <> struct SimPolicy<urange64> : SimPolicy_URange64 {};
     template <> struct SimPolicy<char *> : SimPolicy_String {};
 
 }

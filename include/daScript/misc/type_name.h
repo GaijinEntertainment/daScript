@@ -46,6 +46,8 @@ namespace das {
     template <> struct typeName<float4>   { constexpr static const char * name() { return "float4"; } };
     template <> struct typeName<range>    { constexpr static const char * name() { return "range"; } };
     template <> struct typeName<urange>   { constexpr static const char * name() { return "urange"; } };
+    template <> struct typeName<range64>  { constexpr static const char * name() { return "range64"; } };
+    template <> struct typeName<urange64> { constexpr static const char * name() { return "urange64"; } };
     template <> struct typeName<char *>   { constexpr static const char * name() { return "string"; } };
     template <> struct typeName<const char *> { constexpr static const char * name() { return "string"; } };
     template <> struct typeName<void *>   { constexpr static const char * name() { return "pointer"; } };

@@ -61,25 +61,12 @@ namespace das
     template <typename R, typename ...Args>
     struct ImplCallStaticFunction<R (*)(Args...)> {
         static _msc_inline_bug vec4f call( R (*fn)(Args...), Context & ctx, SimNode ** args ) {
-#ifdef _MSC_VER
-#pragma warning(push)
-#pragma warning(disable:4984)    // 'if constexpr' is a C++17 language extension
-#endif
-            if constexpr (!has_cast<R>::value) {
-                static_assert(has_cast<R>::value,
-                    "The function is attempting to return result by value, "
-                    "which type is not compatible with the current binding (missing cast<>). "
-                    "To bind functions that return non-vec4f types by value on the stack, "
-                    "you need to use the SimNode_ExtFuncCallAndCopyOrMove template argument "
-                    "to copy or move the returned value."
-                );
-                return v_zero();
-            }
-            else
-                return cast_res<R>::from(CallStaticFunction<R,Args...>(fn,ctx,args),&ctx);
-#ifdef _MSC_VER
-#pragma warning(pop)
-#endif
+            // The function is attempting to return result by value,
+            // which type is not compatible with the current binding (missing cast<>).
+            // To bind functions that return non-vec4f types by value on the stack,
+            // you need to use the SimNode_ExtFuncCallAndCopyOrMove template argument
+            // to copy or move the returned value.
+            return cast_res<R>::from(CallStaticFunction<R,Args...>(fn,ctx,args),&ctx);
         }
     };
 

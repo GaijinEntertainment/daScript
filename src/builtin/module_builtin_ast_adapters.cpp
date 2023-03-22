@@ -265,6 +265,8 @@ namespace das {
         IMPL_ADAPT(ExprConstUInt4);
         IMPL_ADAPT(ExprConstRange);
         IMPL_ADAPT(ExprConstURange);
+        IMPL_ADAPT(ExprConstRange64);
+        IMPL_ADAPT(ExprConstURange64);
         IMPL_ADAPT(ExprConstBool);
         IMPL_ADAPT(ExprConstFloat);
         IMPL_ADAPT(ExprConstFloat2);
@@ -661,6 +663,8 @@ namespace das {
     IMPL_BIND_EXPR(ExprConstUInt4);
     IMPL_BIND_EXPR(ExprConstRange);
     IMPL_BIND_EXPR(ExprConstURange);
+    IMPL_BIND_EXPR(ExprConstRange64);
+    IMPL_BIND_EXPR(ExprConstURange64);
     IMPL_BIND_EXPR(ExprConstBool);
     IMPL_BIND_EXPR(ExprConstFloat);
     IMPL_BIND_EXPR(ExprConstFloat2);

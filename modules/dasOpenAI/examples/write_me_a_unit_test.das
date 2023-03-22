@@ -9,8 +9,8 @@ require daslib/strings_boost
 //  code-davinci-002 is always overloaded. it does better job though
 //  i wonder if trying one and then the other is the right thing to do
 
-let unit_test_model = "code-davinci-002"
-// let unit_test_model = "code-cushman-001"
+// let unit_test_model = "code-davinci-002"
+let unit_test_model = "code-cushman-001"
 
 let unit_test_prompt = %stringify~
 /*
@@ -102,8 +102,7 @@ def generate_test ( func, description : string ) : string
         stop <- [{string "// --"; "\}"}]
     ]])
     if ccr |> is_valid
-        var choice = ccr.choices[0].text |> replace("\\r","")
-        choice = safe_unescape(choice)
+        var choice = ccr.choices[0].text |> replace("\\r","") |> safe_unescape
         return build_string <| $(writer)
             writer |> write("[test] // ") |> write(description) |> write("\ndef test_") |> write(choice)
     else

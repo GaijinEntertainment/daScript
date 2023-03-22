@@ -758,6 +758,11 @@ namespace das {
             ss << "range(" << val.from << "," << val.to << ")";
             return Visitor::visit(c);
         }
+        virtual ExpressionPtr visit ( ExprConstRange64 * c ) override {
+            auto val = c->getValue();
+            ss << "range64(" << val.from << "," << val.to << ")";
+            return Visitor::visit(c);
+        }
         virtual ExpressionPtr visit ( ExprConstInt3 * c ) override {
             auto val = c->getValue();
             ss << "int3(" << val.x << "," << val.y << "," << val.z << ")";
@@ -776,6 +781,11 @@ namespace das {
         virtual ExpressionPtr visit ( ExprConstURange * c ) override {
             auto val = c->getValue();
             ss << "urange(" << val.from << "," << val.to << ")";
+            return Visitor::visit(c);
+        }
+        virtual ExpressionPtr visit ( ExprConstURange64 * c ) override {
+            auto val = c->getValue();
+            ss << "urange64(" << val.from << "," << val.to << ")";
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstUInt3 * c ) override {

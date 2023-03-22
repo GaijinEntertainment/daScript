@@ -389,6 +389,12 @@ namespace das {
         virtual void URange ( urange & ra ) override {
             ss << ra;
         }
+        virtual void Range64 ( range64 & ra ) override {
+            ss << ra;
+        }
+        virtual void URange64 ( urange64 & ra ) override {
+            ss << ra;
+        }
         virtual void FakeContext ( Context * ctx ) override {
             ss << "context 0x" << HEX << intptr_t(ctx) << DEC;
         }

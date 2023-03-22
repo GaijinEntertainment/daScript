@@ -2526,10 +2526,8 @@ namespace das
                         sources[t]->simulate(context),
                         sources[t]->type->firstType->getSizeOf());
                 } else if ( sources[t]->type->isRange() ) {
-                    result->source_iterators[t] = context.code->makeNode<SimNode_RangeIterator>(
-                        sources[t]->at,
-                        sources[t]->simulate(context),
-                        sources[t]->type->baseType==Type::tRange);
+                    result->source_iterators[t] = context.code->makeRangeNode<SimNode_RangeIterator>(
+                        sources[t]->type->baseType, sources[t]->at,sources[t]->simulate(context));
                 } else if ( sources[t]->type->isString() ) {
                     result->source_iterators[t] = context.code->makeNode<SimNode_StringIterator>(
                         sources[t]->at,
@@ -2584,18 +2582,17 @@ namespace das
                     }
                 } else if ( rangeBase ) {
                     DAS_ASSERT(total==1 && "simple range on 1 loop only");
-                    bool isSigned = sources[0]->type->baseType == Type::tRange;
                     if ( NF ) {
                         if (loop1) {
-                            result = context.code->makeNode<SimNodeDebug_ForRangeNF1>(at,isSigned);
+                            result = (SimNode_ForBase *)context.code->makeRangeNode<SimNodeDebug_ForRangeNF1>(sources[0]->type->baseType,at);
                         } else {
-                            result = context.code->makeNode<SimNodeDebug_ForRangeNF>(at,isSigned);
+                            result = (SimNode_ForBase *)context.code->makeRangeNode<SimNodeDebug_ForRangeNF>(sources[0]->type->baseType,at);
                         }
                     } else {
                         if (loop1) {
-                            result = context.code->makeNode<SimNodeDebug_ForRange1>(at,isSigned);
+                            result = (SimNode_ForBase *)context.code->makeRangeNode<SimNodeDebug_ForRange1>(sources[0]->type->baseType,at);
                         } else {
-                            result = context.code->makeNode<SimNodeDebug_ForRange>(at,isSigned);
+                            result = (SimNode_ForBase *)context.code->makeRangeNode<SimNodeDebug_ForRange>(sources[0]->type->baseType,at);
                         }
                     }
                 } else {
@@ -2620,18 +2617,17 @@ namespace das
                     }
                 } else if ( rangeBase ) {
                     DAS_ASSERT(total==1 && "simple range on 1 loop only");
-                    bool isSigned = sources[0]->type->baseType == Type::tRange;
                     if ( NF ) {
                         if (loop1) {
-                            result = context.code->makeNode<SimNode_ForRangeNF1>(at,isSigned);
+                            result = (SimNode_ForBase *)context.code->makeRangeNode<SimNode_ForRangeNF1>(sources[0]->type->baseType,at);
                         } else {
-                            result = context.code->makeNode<SimNode_ForRangeNF>(at,isSigned);
+                            result = (SimNode_ForBase *)context.code->makeRangeNode<SimNode_ForRangeNF>(sources[0]->type->baseType,at);
                         }
                     } else {
                         if (loop1) {
-                            result = context.code->makeNode<SimNode_ForRange1>(at,isSigned);
+                            result = (SimNode_ForBase *)context.code->makeRangeNode<SimNode_ForRange1>(sources[0]->type->baseType,at);
                         } else {
-                            result = context.code->makeNode<SimNode_ForRange>(at,isSigned);
+                            result = (SimNode_ForBase *)context.code->makeRangeNode<SimNode_ForRange>(sources[0]->type->baseType,at);
                         }
                     }
                 } else {

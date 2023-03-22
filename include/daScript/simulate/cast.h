@@ -398,6 +398,9 @@ namespace das
     template <> struct cast <range> : cast_iVec_half<range> {};
     template <> struct cast <urange> : cast_iVec_half<urange> {};
 
+    template <> struct cast <range64> : cast_iVec<range64> {};
+    template <> struct cast <urange64> : cast_iVec<urange64> {};
+
     template <typename TT>
     struct cast_enum {
       static __forceinline TT to ( vec4f x )            { return (TT) v_extract_xi(v_cast_vec4i(x)); }

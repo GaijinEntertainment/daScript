@@ -507,7 +507,6 @@ SET(SIMULATE_SRC
 ../src/simulate/runtime_string.cpp
 ../src/simulate/runtime_array.cpp
 ../src/simulate/runtime_table.cpp
-../src/simulate/runtime_range.cpp
 ../src/simulate/runtime_profile.cpp
 ../src/simulate/simulate.cpp
 ../src/simulate/simulate_gc.cpp
