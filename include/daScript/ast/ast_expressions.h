@@ -653,6 +653,14 @@ namespace das
             : ExprConstT(a,i,Type::tRange) { __rtti = "ExprConstRange"; }
     };
 
+    struct ExprConstRange64 : ExprConstT<range64,ExprConstRange64> {
+        ExprConstRange64(range64 i = range64())
+            : ExprConstT(i,Type::tRange64) { __rtti = "ExprConstRange64"; }
+        ExprConstRange64(const LineInfo & a, range64 i)
+            : ExprConstT(a,i,Type::tRange64) { __rtti = "ExprConstRange64"; }
+    };
+
+
     struct ExprConstInt3 : ExprConstT<int3,ExprConstInt3> {
         ExprConstInt3(int3 i = int3())
             : ExprConstT(i,Type::tInt3) { __rtti = "ExprConstInt3"; }
@@ -709,6 +717,13 @@ namespace das
             : ExprConstT(i,Type::tURange) { __rtti = "ExprConstURange"; }
         ExprConstURange(const LineInfo & a, urange i)
             : ExprConstT(a,i,Type::tURange) { __rtti = "ExprConstURange"; }
+    };
+
+    struct ExprConstURange64 : ExprConstT<urange64,ExprConstURange64> {
+        ExprConstURange64(urange64 i = urange64())
+            : ExprConstT(i,Type::tURange64) { __rtti = "ExprConstURange64"; }
+        ExprConstURange64(const LineInfo & a, urange64 i)
+            : ExprConstT(a,i,Type::tURange64) { __rtti = "ExprConstURange64"; }
     };
 
     struct ExprConstUInt3 : ExprConstT<uint3,ExprConstUInt3> {

@@ -47,6 +47,8 @@ namespace das
         {   Type::tDouble,      "double" },
         {   Type::tRange,       "range" },
         {   Type::tURange,      "urange"},
+        {   Type::tRange64,     "range64" },
+        {   Type::tURange64,    "urange64"},
         {   Type::tBlock,       "block"},
         {   Type::tFunction,    "function"},
         {   Type::tLambda,      "lambda"},
@@ -107,6 +109,8 @@ namespace das
             case tDouble:       return sizeof(double);
             case tRange:        return sizeof(range);
             case tURange:       return sizeof(urange);
+            case tRange64:      return sizeof(range64);
+            case tURange64:     return sizeof(urange64);
             case tArray:        return sizeof(Array);
             case tTable:        return sizeof(Table);
             case tVoid:         return 0;
@@ -158,6 +162,8 @@ namespace das
             case tDouble:       return alignof(double);
             case tRange:        return alignof(range);
             case tURange:       return alignof(urange);
+            case tRange64:      return alignof(range64);
+            case tURange64:     return alignof(urange64);
             case tArray:        return alignof(Array);
             case tTable:        return alignof(Table);
             case tVoid:         return 1;
@@ -586,6 +592,8 @@ namespace das
                 case Type::tFloat4:         ss << "f4"; break;
                 case Type::tRange:          ss << "r"; break;
                 case Type::tURange:         ss << "z"; break;
+                case Type::tRange64:        ss << "r64"; break;
+                case Type::tURange64:       ss << "z64"; break;
                 case Type::tDouble:         ss << "d"; break;
                 case Type::tString:         ss << "s"; break;
                 case Type::tVoid:           ss << "v"; break;

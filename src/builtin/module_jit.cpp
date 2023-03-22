@@ -193,6 +193,8 @@ namespace das {
         case Type::tFloat4:         return (void *) &TAB_FUN<float4>; \
         case Type::tRange:          return (void *) &TAB_FUN<range>; \
         case Type::tURange:         return (void *) &TAB_FUN<urange>; \
+        case Type::tRange64:        return (void *) &TAB_FUN<range64>; \
+        case Type::tURange64:       return (void *) &TAB_FUN<urange64>; \
         case Type::tString:         return (void *) &TAB_FUN<char *>; \
         case Type::tDouble:         return (void *) &TAB_FUN<double>; \
         case Type::tPointer:        return (void *) &TAB_FUN<void *>; \

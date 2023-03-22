@@ -318,6 +318,8 @@ namespace das {
         addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstUInt4 ,uint4>>   ("ExprConstUInt4",lib))->from("ExprConst");
         addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstRange ,range>> ("ExprConstRange",lib))->from("ExprConst");
         addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstURange,urange>>("ExprConstURange",lib))->from("ExprConst");
+        addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstRange64 ,range64>> ("ExprConstRange64",lib))->from("ExprConst");
+        addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstURange64,urange64>>("ExprConstURange64",lib))->from("ExprConst");
         addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstFloat  ,float>> ("ExprConstFloat",lib))->from("ExprConst");
         addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstFloat2 ,float2>>("ExprConstFloat2",lib))->from("ExprConst");
         addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstFloat3 ,float3>>("ExprConstFloat3",lib))->from("ExprConst");

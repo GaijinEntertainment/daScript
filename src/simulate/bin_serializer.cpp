@@ -209,6 +209,12 @@ namespace das {
         virtual void URange ( urange & data ) override {
             serialize(data);
         }
+        virtual void Range64 ( range64 & data ) override {
+            serialize(data);
+        }
+        virtual void URange64 ( urange64 & data ) override {
+            serialize(data);
+        }
         virtual void FakeContext ( Context * ) override {
             DAS_ASSERT(0 && "can't serialize context");
         }

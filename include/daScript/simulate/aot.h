@@ -614,9 +614,13 @@ namespace das {
 
     template<> struct das_index<range> : das_vec_index<int32_t, range, 2> {};
     template<> struct das_index<const range> : das_vec_index<int32_t, range, 2> {};
-
     template<> struct das_index<urange> : das_vec_index<uint32_t, urange, 2> {};
     template<> struct das_index<const urange> : das_vec_index<uint32_t, urange, 2> {};
+
+    template<> struct das_index<range64> : das_vec_index<int64_t, range64, 2> {};
+    template<> struct das_index<const range64> : das_vec_index<int64_t, range64, 2> {};
+    template<> struct das_index<urange64> : das_vec_index<uint64_t, urange64, 2> {};
+    template<> struct das_index<const urange64> : das_vec_index<uint64_t, urange64, 2> {};
 
     template <typename VecT, int size>
     struct das_index<Matrix<VecT,size>> {
@@ -840,6 +844,8 @@ namespace das {
                 ||  is_same<TT,Bitfield>::value
                 ||  is_same<TT,range>::value
                 ||  is_same<TT,urange>::value
+                ||  is_same<TT,range64>::value
+                ||  is_same<TT,urange64>::value
                 ||  is_same<TT,int2>::value
                 ||  is_same<TT,int3>::value
                 ||  is_same<TT,int4>::value

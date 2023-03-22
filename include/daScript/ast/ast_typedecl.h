@@ -305,6 +305,8 @@ namespace das {
     template<> struct ToBasicType<double>       { enum { type = Type::tDouble }; };
     template<> struct ToBasicType<range>        { enum { type = Type::tRange }; };
     template<> struct ToBasicType<urange>       { enum { type = Type::tURange }; };
+    template<> struct ToBasicType<range64>      { enum { type = Type::tRange64 }; };
+    template<> struct ToBasicType<urange64>     { enum { type = Type::tURange64 }; };
     template<> struct ToBasicType<Array *>      { enum { type = Type::tArray }; };
     template<> struct ToBasicType<Table *>      { enum { type = Type::tTable }; };
     template<> struct ToBasicType<Array>        { enum { type = Type::tArray }; };

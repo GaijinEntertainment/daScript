@@ -57,6 +57,8 @@ namespace das
         virtual void Float4 ( float4 & t ) override     { update(t); }
         virtual void Range ( range & t ) override       { update(t); }
         virtual void URange ( urange & t ) override     { update(t); }
+        virtual void Range64 ( range64 & t ) override   { update(t); }
+        virtual void URange64 ( urange64 & t ) override { update(t); }
         virtual void String ( char * & t ) override     { updateString(t); }
     // unsupported
         virtual void beforeIterator ( Sequence *, TypeInfo * ) override { error("HASH, not expecting iterator"); }

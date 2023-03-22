@@ -22,6 +22,8 @@ namespace das
 
     DEFINE_OP2_EVAL_BASIC_POLICY(range);
     DEFINE_OP2_EVAL_BASIC_POLICY(urange);
+    DEFINE_OP2_EVAL_BASIC_POLICY(range64);
+    DEFINE_OP2_EVAL_BASIC_POLICY(urange64);
 
 #define DEFINE_VECTOR_BIN_POLICY(CTYPE)                 \
     IMPLEMENT_OP2_EVAL_POLICY(BinAnd, CTYPE);           \
@@ -111,5 +113,9 @@ namespace das
         addFunctionBasic<range>(*this,lib);
         // urange
         addFunctionBasic<urange>(*this,lib);
+        // range64
+        addFunctionBasic<range64>(*this,lib);
+        // urange64
+        addFunctionBasic<urange64>(*this,lib);
     }
 }

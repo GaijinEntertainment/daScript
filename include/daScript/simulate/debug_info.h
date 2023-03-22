@@ -38,6 +38,8 @@ namespace das
         tDouble,
         tRange,
         tURange,
+        tRange64,
+        tURange64,
         tString,
         tStructure,
         tHandle,

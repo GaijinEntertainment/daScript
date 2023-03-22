@@ -170,6 +170,8 @@ namespace das {
         DECL_VISIT(ExprConstUInt4);
         DECL_VISIT(ExprConstRange);
         DECL_VISIT(ExprConstURange);
+        DECL_VISIT(ExprConstRange64);
+        DECL_VISIT(ExprConstURange64);
         DECL_VISIT(ExprConstBool);
         DECL_VISIT(ExprConstFloat);
         DECL_VISIT(ExprConstFloat2);
@@ -404,6 +406,8 @@ namespace das {
         IMPL_BIND_EXPR(ExprConstUInt4);
         IMPL_BIND_EXPR(ExprConstRange);
         IMPL_BIND_EXPR(ExprConstURange);
+        IMPL_BIND_EXPR(ExprConstRange64);
+        IMPL_BIND_EXPR(ExprConstURange64);
         IMPL_BIND_EXPR(ExprConstBool);
         IMPL_BIND_EXPR(ExprConstFloat);
         IMPL_BIND_EXPR(ExprConstFloat2);

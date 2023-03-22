@@ -64,15 +64,17 @@ protected:
     __fn_Float4 = 60,
     __fn_Range = 61,
     __fn_URange = 62,
-    __fn_WalkBlock = 63,
-    __fn_WalkFunction = 64,
-    __fn_WalkEnumeration = 65,
-    __fn_WalkEnumeration8 = 66,
-    __fn_WalkEnumeration16 = 67,
-    __fn_FakeContext = 68,
+    __fn_Range64 = 63,
+    __fn_URange64 = 64,
+    __fn_WalkBlock = 65,
+    __fn_WalkFunction = 66,
+    __fn_WalkEnumeration = 67,
+    __fn_WalkEnumeration8 = 68,
+    __fn_WalkEnumeration16 = 69,
+    __fn_FakeContext = 70,
   };
 protected:
-  int _das_class_method_offset[69];
+  int _das_class_method_offset[71];
 public:
   DapiDataWalker_Adapter ( const StructInfo * info ) {
       _das_class_method_offset[__fn_canVisitHandle] = adapt_field_offset("canVisitHandle",info);
@@ -138,6 +140,8 @@ public:
       _das_class_method_offset[__fn_Float4] = adapt_field_offset("Float4",info);
       _das_class_method_offset[__fn_Range] = adapt_field_offset("Range",info);
       _das_class_method_offset[__fn_URange] = adapt_field_offset("URange",info);
+      _das_class_method_offset[__fn_Range64] = adapt_field_offset("Range64",info);
+      _das_class_method_offset[__fn_URange64] = adapt_field_offset("URange64",info);
       _das_class_method_offset[__fn_WalkBlock] = adapt_field_offset("WalkBlock",info);
       _das_class_method_offset[__fn_WalkFunction] = adapt_field_offset("WalkFunction",info);
       _das_class_method_offset[__fn_WalkEnumeration] = adapt_field_offset("WalkEnumeration",info);
@@ -709,6 +713,24 @@ public:
   __forceinline void invoke_URange ( Context * __context__, Func __funcCall__, void * self, urange & value ) const {
     das_invoke_function<void>::invoke
       <void *,urange &>
+        (__context__,nullptr,__funcCall__,
+          self,value);
+  }
+  __forceinline Func get_Range64 ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_Range64]);
+  }
+  __forceinline void invoke_Range64 ( Context * __context__, Func __funcCall__, void * self, range64 & value ) const {
+    das_invoke_function<void>::invoke
+      <void *,range64 &>
+        (__context__,nullptr,__funcCall__,
+          self,value);
+  }
+  __forceinline Func get_URange64 ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_URange64]);
+  }
+  __forceinline void invoke_URange64 ( Context * __context__, Func __funcCall__, void * self, urange64 & value ) const {
+    das_invoke_function<void>::invoke
+      <void *,urange64 &>
         (__context__,nullptr,__funcCall__,
           self,value);
   }

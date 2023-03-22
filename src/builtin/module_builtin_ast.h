@@ -112,6 +112,8 @@ MAKE_EXTERNAL_TYPE_FACTORY(ExprConstUInt3,das::ExprConstUInt3);
 MAKE_EXTERNAL_TYPE_FACTORY(ExprConstUInt4,das::ExprConstUInt4);
 MAKE_EXTERNAL_TYPE_FACTORY(ExprConstRange,das::ExprConstRange);
 MAKE_EXTERNAL_TYPE_FACTORY(ExprConstURange,das::ExprConstURange);
+MAKE_EXTERNAL_TYPE_FACTORY(ExprConstRange64,das::ExprConstRange64);
+MAKE_EXTERNAL_TYPE_FACTORY(ExprConstURange64,das::ExprConstURange64);
 MAKE_EXTERNAL_TYPE_FACTORY(ExprConstBool,das::ExprConstBool);
 MAKE_EXTERNAL_TYPE_FACTORY(ExprConstFloat,das::ExprConstFloat);
 MAKE_EXTERNAL_TYPE_FACTORY(ExprConstFloat2,das::ExprConstFloat2);

@@ -194,6 +194,8 @@ namespace das
         // vector
         ADD_VECTOR_SORT(range);
         ADD_VECTOR_SORT(urange);
+        ADD_VECTOR_SORT(range64);
+        ADD_VECTOR_SORT(urange64);
         ADD_VECTOR_SORT(int2);
         ADD_VECTOR_SORT(int3);
         ADD_VECTOR_SORT(int4);

@@ -135,6 +135,8 @@ class DapiDataWalker
     def abstract Float4 ( var value:float4 & ) : void
     def abstract Range ( var value:range & ) : void
     def abstract URange ( var value:urange & ) : void
+    def abstract Range64 ( var value:range64 & ) : void
+    def abstract URange64 ( var value:urange64 & ) : void
     def abstract WalkBlock ( var value:DapiBlock ) : void
     def abstract WalkFunction ( var value:DapiFunc ) : void
     def abstract WalkEnumeration ( var value:int &; ei:EnumInfo ) : void

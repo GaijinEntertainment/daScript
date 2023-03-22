@@ -2872,6 +2872,8 @@ namespace das {
             case Type::tDouble:         return make_smart<ExprConstDouble>(at, cast<double>::to(value));
             case Type::tRange:          return make_smart<ExprConstRange>(at, cast<range>::to(value));
             case Type::tURange:         return make_smart<ExprConstURange>(at, cast<urange>::to(value));
+            case Type::tRange64:        return make_smart<ExprConstRange64>(at, cast<range64>::to(value));
+            case Type::tURange64:       return make_smart<ExprConstURange64>(at, cast<urange64>::to(value));
             default:                    DAS_ASSERTF(0, "we should not even be here"); return nullptr;
         }
     }

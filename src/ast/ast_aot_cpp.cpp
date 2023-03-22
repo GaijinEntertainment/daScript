@@ -48,6 +48,8 @@ namespace das {
         {   Type::tDouble,      "tDouble" },
         {   Type::tRange,       "tRange" },
         {   Type::tURange,      "tURange"},
+        {   Type::tRange64,     "tRange64" },
+        {   Type::tURange64,    "tURange64"},
         {   Type::tBlock,       "tBlock"},
         {   Type::tFunction,    "tFunction"},
         {   Type::tLambda,      "tLambda"},
@@ -83,6 +85,8 @@ namespace das {
         {   Type::tDouble,      "double"   },
         {   Type::tRange,       "range"    },
         {   Type::tURange,      "urange"   },
+        {   Type::tRange64,     "range64"  },
+        {   Type::tURange64,    "urange64" },
         {   Type::tBlock,       "Block"    },
         {   Type::tFunction,    "Func"     },
         {   Type::tLambda,      "Lambda"   },
@@ -2078,6 +2082,11 @@ namespace das {
             ss << "range(" << val.from << "," << val.to << ")";
             return Visitor::visit(c);
         }
+        virtual ExpressionPtr visit ( ExprConstRange64 * c ) override {
+            auto val = c->getValue();
+            ss << "range64(" << val.from << "," << val.to << ")";
+            return Visitor::visit(c);
+        }
         virtual ExpressionPtr visit ( ExprConstInt3 * c ) override {
             auto val = c->getValue();
             ss << "int3(" << val.x << "," << val.y << "," << val.z << ")";
@@ -2096,6 +2105,11 @@ namespace das {
         virtual ExpressionPtr visit ( ExprConstURange * c ) override {
             auto val = c->getValue();
             ss << "urange(" << val.from << "," << val.to << ")";
+            return Visitor::visit(c);
+        }
+        virtual ExpressionPtr visit ( ExprConstURange64 * c ) override {
+            auto val = c->getValue();
+            ss << "urange64(" << val.from << "," << val.to << ")";
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstUInt3 * c ) override {

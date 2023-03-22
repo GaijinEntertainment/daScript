@@ -488,6 +488,16 @@ namespace debugapi {
                 invoke_URange(context,fn_URange,classPtr,value);
             }
         }
+        virtual void Range64 ( range64 & value ) override {
+           if ( auto fn_Range = get_Range64(classPtr) ) {
+                invoke_Range64(context,fn_Range,classPtr,value);
+            }
+        }
+        virtual void URange64 ( urange64 & value ) override {
+           if ( auto fn_URange = get_URange64(classPtr) ) {
+                invoke_URange64(context,fn_URange,classPtr,value);
+            }
+        }
         virtual void WalkBlock ( Block * value ) override {
            if ( auto fn_WalkBlock = get_WalkBlock(classPtr) ) {
                 invoke_WalkBlock(context,fn_WalkBlock,classPtr,*value);

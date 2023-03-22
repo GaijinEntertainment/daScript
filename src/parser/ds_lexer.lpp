@@ -430,6 +430,8 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 <normal>"bool"                                          return DAS_TBOOL;
 <normal>"void"                                          return DAS_TVOID;
 <normal>"string"                                        return DAS_TSTRING;
+<normal>"range64"                                       return DAS_TRANGE64;
+<normal>"urange64"                                      return DAS_TURANGE64;
 <normal>"range"                                         return DAS_TRANGE;
 <normal>"urange"                                        return DAS_TURANGE;
 <normal>"int"                                           return DAS_TINT;

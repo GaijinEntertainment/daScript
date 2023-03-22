@@ -32,6 +32,21 @@ def test_from_gte_to
     for x in each(range(3,2))
         assert(false)
 
+def test_for64
+    if true
+        var t = 0l
+        for x,y in range64(100),count()
+            assert(t==x)
+            assert(t==int64(y))
+            t ++
+        assert(t==100l)
+    if true
+        var t = 0ul
+        for x in urange64(100)
+            assert(t==x)
+            t ++
+        assert(t==100ul)
+
 [export]
 def test:bool
     // 1 variable
@@ -128,6 +143,8 @@ def test:bool
         assert(u==3u)
     // reverse order
     test_from_gte_to()
+    // 64 bit for
+    test_for64()
     return true
 
 

@@ -160,11 +160,21 @@ addFunction ( make_smart<BuiltInFn<SimNode_Range1Ctor<double,  SimPolicy<VTYPE>>
 addFunction ( make_smart<BuiltInFn<SimNode_Range1Ctor<int32_t, SimPolicy<VTYPE>>,VTYPE,int32_t>> (#VTYPE,lib,"mk_" VNAME,false) ); \
 addFunction ( make_smart<BuiltInFn<SimNode_Range1Ctor<uint32_t,SimPolicy<VTYPE>>,VTYPE,uint32_t>>(#VTYPE,lib,"mk_" VNAME,false) );
 
+#define ADD_RANGE64_CTOR_1(VTYPE,VNAME) \
+ADD_RANGE_CTOR_1(VTYPE,VNAME) \
+addFunction ( make_smart<BuiltInFn<SimNode_Range1Ctor<int64_t, SimPolicy<VTYPE>>,VTYPE,int64_t>> (#VTYPE,lib,"mk_" VNAME,false) ); \
+addFunction ( make_smart<BuiltInFn<SimNode_Range1Ctor<uint64_t,SimPolicy<VTYPE>>,VTYPE,uint64_t>>(#VTYPE,lib,"mk_" VNAME,false) );
+
 #define ADD_VEC_CTOR_2(VTYPE,VNAME) \
 addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<float,   SimPolicy<VTYPE>,2>,VTYPE,float,float>>      (#VTYPE,lib,VNAME,false) ); \
 addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<double,  SimPolicy<VTYPE>,2>,VTYPE,double,double>>    (#VTYPE,lib,VNAME,false) ); \
 addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<int32_t, SimPolicy<VTYPE>,2>,VTYPE,int32_t,int32_t>>  (#VTYPE,lib,VNAME,false) ); \
 addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,2>,VTYPE,uint32_t,uint32_t>>(#VTYPE,lib,VNAME,false) );
+
+#define ADD_VEC64_CTOR_2(VTYPE,VNAME) \
+ADD_VEC_CTOR_2(VTYPE,VNAME) \
+addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<int64_t, SimPolicy<VTYPE>,2>,VTYPE,int64_t,int64_t>>  (#VTYPE,lib,VNAME,false) ); \
+addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<uint64_t,SimPolicy<VTYPE>,2>,VTYPE,uint64_t,uint64_t>>(#VTYPE,lib,VNAME,false) );
 
 #define ADD_VEC_CTOR_3(VTYPE,VNAME) \
 addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<float,   SimPolicy<VTYPE>,3>,VTYPE,float,float,float>>         (#VTYPE,lib,VNAME,false) ); \
@@ -341,6 +351,16 @@ addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<VTYPE>,4>,
         ADD_VEC_CTOR_2(urange,"urange");
         addFunction( make_smart<BuiltInFn<SimNode_VecPassThrough, urange, urange>>("urange",lib,"urange",false) );
         addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<uint32_t,SimPolicy<urange>,2>,urange,uint32_t,uint32_t>>("interval",lib,"urange",false) );
+        // range64
+        ADD_RANGE64_CTOR_1(range64,"range64");
+        ADD_VEC64_CTOR_2(range64,"range64");
+        addFunction( make_smart<BuiltInFn<SimNode_VecPassThrough, range64, range64>>("range64",lib,"range64",false) );
+        addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<int64_t,SimPolicy<range64>,2>,range64,int64_t,int64_t>>("interval",lib,"range64",false) );
+        // urange64
+        ADD_RANGE64_CTOR_1(urange64,"urange64");
+        ADD_VEC64_CTOR_2(urange64,"urange64");
+        addFunction( make_smart<BuiltInFn<SimNode_VecPassThrough, urange64, urange64>>("urange64",lib,"urange64",false) );
+        addFunction ( make_smart<BuiltInFn<SimNode_VecCtor<uint64_t,SimPolicy<urange64>,2>,urange64,uint64_t,uint64_t>>("interval",lib,"urange64",false) );
     }
 }
 
