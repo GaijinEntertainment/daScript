@@ -132,15 +132,15 @@ namespace das
     vec4f SimNode_ForRange<TRange>::eval ( Context & context ) {
         using baseType = typename TRange::baseType;
         DAS_PROFILE_NODE
-        vec4f ll = sources[0]->eval(context);
+        vec4f ll = this->sources[0]->eval(context);
         TRange r = cast<TRange>::to(ll);
-        baseType * pi = (baseType *)(context.stack.sp() + stackTop[0]);
+        baseType * pi = (baseType *)(context.stack.sp() + this->stackTop[0]);
         baseType r_to = r.to;
         if ( r.from >= r_to ) goto loopend;
-        { SimNode ** __restrict tail = list + total;
+        { SimNode ** __restrict tail = this->list + this->total;
         for (baseType i = r.from; i != r_to; ++i) {
             *pi = i;
-            SimNode ** __restrict body = list;
+            SimNode ** __restrict body = this->list;
         loopbegin:;
             for (; body!=tail; ++body) {
                 (*body)->eval(context);
@@ -157,15 +157,15 @@ namespace das
     vec4f SimNode_ForRangeNF<TRange>::eval ( Context & context ) {
         using baseType = typename TRange::baseType;
         DAS_PROFILE_NODE
-        vec4f ll = sources[0]->eval(context);
+        vec4f ll = this->sources[0]->eval(context);
         TRange r = cast<TRange>::to(ll);
-        baseType * pi = (baseType *)(context.stack.sp() + stackTop[0]);
+        baseType * pi = (baseType *)(context.stack.sp() + this->stackTop[0]);
         baseType r_to = r.to;
         if ( r.from >= r_to ) goto loopend;
-        { SimNode ** __restrict tail = list + total;
+        { SimNode ** __restrict tail = this->list + this->total;
         for (baseType i = r.from; i != r_to; ++i) {
             *pi = i;
-            for (SimNode ** __restrict body = list; body!=tail; ++body) {
+            for (SimNode ** __restrict body = this->list; body!=tail; ++body) {
                 (*body)->eval(context);
             }
         } }
@@ -179,12 +179,12 @@ namespace das
     vec4f SimNode_ForRange1<TRange>::eval ( Context & context ) {
         using baseType = typename TRange::baseType;
         DAS_PROFILE_NODE
-        vec4f ll = sources[0]->eval(context);
+        vec4f ll = this->sources[0]->eval(context);
         TRange r = cast<TRange>::to(ll);
-        baseType * pi = (baseType *)(context.stack.sp() + stackTop[0]);
+        baseType * pi = (baseType *)(context.stack.sp() + this->stackTop[0]);
         baseType r_to = r.to;
         if ( r.from >= r_to ) goto loopend;
-        { SimNode * __restrict pbody = list[0];
+        { SimNode * __restrict pbody = this->list[0];
         for (baseType i = r.from; i != r_to; ++i) {
             *pi = i;
             pbody->eval(context);
@@ -200,12 +200,12 @@ namespace das
     vec4f SimNode_ForRangeNF1<TRange>::eval ( Context & context ) {
         using baseType = typename TRange::baseType;
         DAS_PROFILE_NODE
-        vec4f ll = sources[0]->eval(context);
+        vec4f ll = this->sources[0]->eval(context);
         TRange r = cast<TRange>::to(ll);
-        baseType * pi = (baseType *)(context.stack.sp() + stackTop[0]);
+        baseType * pi = (baseType *)(context.stack.sp() + this->stackTop[0]);
         baseType r_to = r.to;
         if ( r.from >= r_to ) goto loopend;
-        { SimNode * __restrict pbody = list[0];
+        { SimNode * __restrict pbody = this->list[0];
         for (baseType i = r.from; i != r_to; ++i) {
             *pi = i;
             pbody->eval(context);
@@ -226,15 +226,15 @@ namespace das
     vec4f SimNodeDebug_ForRange<TRange>::eval ( Context & context ) {
         using baseType = typename TRange::baseType;
         DAS_PROFILE_NODE
-        vec4f ll = sources[0]->eval(context);
+        vec4f ll = this->sources[0]->eval(context);
         TRange r = cast<TRange>::to(ll);
-        baseType * pi = (baseType *)(context.stack.sp() + stackTop[0]);
+        baseType * pi = (baseType *)(context.stack.sp() + this->stackTop[0]);
         baseType r_to = r.to;
         if ( r.from >= r_to ) goto loopend;
-        { SimNode ** __restrict tail = list + total;
+        { SimNode ** __restrict tail = this->list + this->total;
         for (baseType i = r.from; i != r_to; ++i) {
             *pi = i;
-            SimNode ** __restrict body = list;
+            SimNode ** __restrict body = this->list;
         loopbegin:;
             for (; body!=tail; ++body) {
                 DAS_SINGLE_STEP(context,(*body)->debugInfo,true);
@@ -252,15 +252,15 @@ namespace das
     vec4f SimNodeDebug_ForRangeNF<TRange>::eval ( Context & context ) {
         using baseType = typename TRange::baseType;
         DAS_PROFILE_NODE
-        vec4f ll = sources[0]->eval(context);
+        vec4f ll = this->sources[0]->eval(context);
         TRange r = cast<TRange>::to(ll);
-        baseType * pi = (baseType *)(context.stack.sp() + stackTop[0]);
+        baseType * pi = (baseType *)(context.stack.sp() + this->stackTop[0]);
         baseType r_to = r.to;
         if ( r.from >= r_to ) goto loopend;
-        { SimNode ** __restrict tail = list + total;
+        { SimNode ** __restrict tail = this->list + this->total;
         for (baseType i = r.from; i != r_to; ++i) {
             *pi = i;
-            for (SimNode ** __restrict body = list; body!=tail; ++body) {
+            for (SimNode ** __restrict body = this->list; body!=tail; ++body) {
                 DAS_SINGLE_STEP(context,(*body)->debugInfo,true);
                 (*body)->eval(context);
             }
@@ -275,15 +275,15 @@ namespace das
     vec4f SimNodeDebug_ForRange1<TRange>::eval ( Context & context ) {
         using baseType = typename TRange::baseType;
         DAS_PROFILE_NODE
-        vec4f ll = sources[0]->eval(context);
+        vec4f ll = this->sources[0]->eval(context);
         TRange r = cast<TRange>::to(ll);
-        baseType * pi = (baseType *)(context.stack.sp() + stackTop[0]);
+        baseType * pi = (baseType *)(context.stack.sp() + this->stackTop[0]);
         baseType r_to = r.to;
         if ( r.from >= r_to ) goto loopend;
         {
         for (baseType i = r.from; i != r_to; ++i) {
             *pi = i;
-            SimNode * pbody = list[0];   // note: instruments
+            SimNode * pbody = this->list[0];   // note: instruments
             DAS_SINGLE_STEP(context,pbody->debugInfo,true);
             pbody->eval(context);
             DAS_PROCESS_LOOP1_FLAGS(continue);
@@ -298,15 +298,15 @@ namespace das
     vec4f SimNodeDebug_ForRangeNF1<TRange>::eval ( Context & context ) {
         using baseType = typename TRange::baseType;
         DAS_PROFILE_NODE
-        vec4f ll = sources[0]->eval(context);
+        vec4f ll = this->sources[0]->eval(context);
         TRange r = cast<TRange>::to(ll);
-        baseType * pi = (baseType *)(context.stack.sp() + stackTop[0]);
+        baseType * pi = (baseType *)(context.stack.sp() + this->stackTop[0]);
         baseType r_to = r.to;
         if ( r.from >= r_to ) goto loopend;
         {
         for (baseType i = r.from; i != r_to; ++i) {
             *pi = i;
-            SimNode * pbody = list[0];   // note: instruments
+            SimNode * pbody = this->list[0];   // note: instruments
             DAS_SINGLE_STEP(context,pbody->debugInfo,true);
             pbody->eval(context);
         } }

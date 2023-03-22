@@ -2526,24 +2526,8 @@ namespace das
                         sources[t]->simulate(context),
                         sources[t]->type->firstType->getSizeOf());
                 } else if ( sources[t]->type->isRange() ) {
-                    switch ( sources[t]->type->getVectorBaseType() ) {
-                        case Type::tInt:
-                            result->source_iterators[t] = context.code->makeNode<SimNode_RangeIterator<range>>(sources[t]->at,sources[t]->simulate(context));
-                            break;
-                        case Type::tUInt:
-                            result->source_iterators[t] = context.code->makeNode<SimNode_RangeIterator<urange>>(sources[t]->at,sources[t]->simulate(context));
-                            break;
-                        case Type::tInt64:
-                            result->source_iterators[t] = context.code->makeNode<SimNode_RangeIterator<range64>>(sources[t]->at,sources[t]->simulate(context));
-                            break;
-                        case Type::tUInt64:
-                            result->source_iterators[t] = context.code->makeNode<SimNode_RangeIterator<urange64>>(sources[t]->at,sources[t]->simulate(context));
-                            break;
-                        default:
-                            context.thisProgram->error("internal compiler error, unsupported range iterator " + sources[t]->type->describe(), "", "",
-                                                    at, CompilationError::missing_node );
-                            return nullptr;
-                    }
+                    result->source_iterators[t] = context.code->makeRangeNode<SimNode_RangeIterator>(
+                        sources[t]->type->baseType, sources[t]->at,sources[t]->simulate(context));
                 } else if ( sources[t]->type->isString() ) {
                     result->source_iterators[t] = context.code->makeNode<SimNode_StringIterator>(
                         sources[t]->at,
