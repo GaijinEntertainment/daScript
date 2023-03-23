@@ -187,6 +187,7 @@ namespace das {
         int getVectorDim() const;
         bool canInitWithZero() const;
         static Type getVectorType ( Type baseType, int dim );
+        static Type getRangeType ( Type baseType, int dim );
         static int getMaskFieldIndex ( char ch );
         static bool isSequencialMask ( const vector<uint8_t> & fields );
         static bool buildSwizzleMask ( const string & mask, int dim, vector<uint8_t> & fields );
