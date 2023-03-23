@@ -17,6 +17,8 @@ let g_intrin_lookup <- {{
     // vector type c-tors
         "$::range" => @@intrinsic_builtin_range;
         "$::urange" => @@intrinsic_builtin_range;
+        "$::range64" => @@intrinsic_builtin_range;
+        "$::urange64" => @@intrinsic_builtin_range;
         "$::interval" => @@intrinsic_builtin_range;
         "$::float2" => @@intrinsic_builtin_float_vec;
         "$::float3" => @@intrinsic_builtin_float_vec;

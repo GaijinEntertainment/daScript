@@ -3066,6 +3066,20 @@ class LlvmJitVisitor : AstVisitor
         setE(expr, LLVMBuildInt2_xy(g_builder, x, y, "urange"))
         return expr
 
+// ExprConstRange64
+    def override visitExprConstRange64(expr:smart_ptr<ExprConstRange64>) : ExpressionPtr
+        var x = LLVMConstInt(LLVMInt64Type(), uint64(expr.value.x), 0)
+        var y = LLVMConstInt(LLVMInt64Type(), uint64(expr.value.y), 0)
+        setE(expr, LLVMBuildAnyInt2_xy(g_builder, LLVMRange64Type(), x, y, "range64"))
+        return expr
+
+// ExprConstURange64
+    def override visitExprConstURange64(expr:smart_ptr<ExprConstURange64>) : ExpressionPtr
+        var x = LLVMConstInt(LLVMInt64Type(), uint64(expr.value.x), 0)
+        var y = LLVMConstInt(LLVMInt64Type(), uint64(expr.value.y), 0)
+        setE(expr, LLVMBuildAnyInt2_xy(g_builder, LLVMRange64Type(), x, y, "urange64"))
+        return expr
+
 // ExprConstBool
     def override visitExprConstBool(expr:smart_ptr<ExprConstBool>) : ExpressionPtr
         setE(expr, LLVMConstInt(LLVMInt1Type(), expr.value ? 1ul : 0ul, 0))
@@ -3219,7 +3233,7 @@ class LlvmJitVisitor : AstVisitor
             elif bt==Type tInt3 || bt==Type tUInt3
                 var tbit = LLVMBuildShuffleVector(g_builder, tsrc, tsrc, [{auto 0;1;2;-1}], "int3_vec")
                 tres = LLVMBuildBitCast(g_builder, tbit, LLVMFloat4Type(), "return_result")
-            elif bt==Type tInt4 || bt==Type tUInt4
+            elif bt==Type tInt4 || bt==Type tUInt4 || bt==Type tRange64 || bt==Type tURange64
                 tres = LLVMBuildBitCast(g_builder, tsrc, LLVMFloat4Type(), "return_result")
             elif bt==Type tFloat2
                 tres = LLVMBuildShuffleVector(g_builder, tsrc, tsrc, [{auto 0;1;-1;-1}], "return_result")

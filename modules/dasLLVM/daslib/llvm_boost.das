@@ -178,6 +178,11 @@ def LLVMCreateExecutionEngineForModule(var engine:LLVMExecutionEngineRef&; mod:L
         LLVMDisposeMessage(error)
         panic(msg)
 
+def LLVMBuildAnyInt2_xy ( builder:LLVMOpaqueBuilder?; int2type:LLVMOpaqueType?; x,y:LLVMOpaqueValue?; name:string )
+    var vres = LLVMGetUndef(int2type)
+    vres = LLVMBuildInsertElement(builder, vres, x, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
+    return LLVMBuildInsertElement(builder, vres, y, LLVMConstInt(LLVMInt32Type(), 1ul, 0), name)
+
 def LLVMBuildInt2_xy ( builder:LLVMOpaqueBuilder?; x,y:LLVMOpaqueValue?; name:string )
     var vres = LLVMGetUndef(LLVMInt2Type())
     vres = LLVMBuildInsertElement(builder, vres, x, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
