@@ -2,7 +2,6 @@
 // options logCpp = true
 // options log_nodes=true
 require llvm/llvm_jit
-require testProfile
 
 struct NObject
     position : float3
@@ -29,6 +28,4 @@ def main
     let total=20
     profile(total,"particles kinematics, inlined, jit") <|
         testSim2I(objects,100)
-    profile(total,"particles kinematics, inlined C++") <|
-        testProfile::testParticlesI(100)
 

@@ -9,7 +9,6 @@
 options persistent_heap = true
 
 require daslib/random
-require testProfile
 
 require llvm/llvm_jit
 require jit
@@ -124,6 +123,4 @@ def main
     verify(is_jit_function(@@testTreeJit))
     profile(10, "tree jit")  <|
         testTreeJit()
-    profile(10, "tree C++")  <|
-        testProfile::testTree()
 

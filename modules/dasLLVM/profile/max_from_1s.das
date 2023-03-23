@@ -1,5 +1,4 @@
 require llvm/llvm_jit
-require testProfile
 
 // from https://spiiin.github.io/blog/2385889062/
 
@@ -66,14 +65,10 @@ def maxFrom1s_popcnt_jit(x)
 
 [export]
 def main
-    verify(testMaxFrom1s(256u-1u)==0xff000000)
     verify(maxFrom1s(256u-1u)==0xff000000)
     verify(maxFrom1s_popcnt(256u-1u)==0xff000000)
     verify(maxFrom1s_jit(256u-1u)==0xff000000)
     verify(maxFrom1s_popcnt_jit(256u-1u)==0xff000000)
-    profile(10, "max from 1s, C++")  <|
-        for i in range(100000)
-            testMaxFrom1s(256u-1u)  //'0xff000000'
     profile(10, "max from 1s")  <|
         for i in range(100000)
             maxFrom1s(256u-1u)  //'0xff000000'

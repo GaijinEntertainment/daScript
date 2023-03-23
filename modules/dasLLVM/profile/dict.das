@@ -1,6 +1,5 @@
 require llvm/llvm_jit
 require math
-require testProfile
 
 def makeRandomSequence(var src:array<string>)
     let n = 500000
@@ -25,6 +24,4 @@ def main
     makeRandomSequence(src)
 	profile(20,"dictionary") <|
         dict(tab,src)
-    profile(20,"c++ dictionary") <|
-        testProfile::testDict(src)
 

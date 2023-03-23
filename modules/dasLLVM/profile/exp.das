@@ -2,7 +2,6 @@ require llvm/llvm_jit
 // options log=true, log_nodes=true, print_var_access=true, print_ref=true
 
 require math
-require testProfile
 
 [jit,sideeffects]
 def expLoop(n)
@@ -34,10 +33,6 @@ def verifyExp(f)
 
 [export]
 def main
-	var f4 = 0.
-    profile(20,"c++ exp loop") <|
-        f4 = testProfile::testExpLoop(1000000)
-	verifyExp(f4)
 	var f1 = 0.
     profile(20,"exp loop - jit") <|
         f1 = expLoop(1000000)

@@ -87,6 +87,6 @@ def main()
     offset_momentum(g_bodies)
     print("\ninitial energy {energy(g_bodies)}\n")
     profile(10, "n-bodies (scalar, double) - jit")  <|
-        nbodies(10000000)
+        nbodies(500000)
     print("\nresult energy {energy(g_bodies)}\n")
     return true

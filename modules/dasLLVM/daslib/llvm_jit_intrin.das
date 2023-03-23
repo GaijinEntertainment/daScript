@@ -116,7 +116,7 @@ def intrinsic_builtin_int(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallF
         failed_E(expr, "{expr.name}({describe(argType)}) is not supported (yet?)")
         return null
 
-def any2int ( g_builder:LLVMOpaqueBuilder?; val:LLVMOpaqueValue?; argType:Type; _outType:LLVMOpaqueType?; inbytes:int; outSigned:bool ) : LLVMOpaqueValue?
+def any2int ( g_builder:LLVMOpaqueBuilder?; val:LLVMOpaqueValue?; argType:Type; _outType:LLVMOpaqueType?; inbytes, outbytes:int; outSigned:bool ) : LLVMOpaqueValue?
     var outType = _outType!=null ? _outType : LLVMInt32Type()
     if argType==Type tFloat || argType==Type tDouble
         if outSigned
@@ -124,11 +124,11 @@ def any2int ( g_builder:LLVMOpaqueBuilder?; val:LLVMOpaqueValue?; argType:Type; 
         else
             return LLVMBuildFPToUI(g_builder, val, outType, "")
     else
-        return val  if argType==Type tInt
+        return val if inbytes==outbytes
         let baseSInt = argType==Type tInt8 || argType==Type tInt16 || argType==Type tInt || argType==Type tInt64
         let baseUInt = argType==Type tUInt8 || argType==Type tUInt16 || argType==Type tUInt || argType==Type tUInt64
         if baseSInt || baseUInt
-            if inbytes>=4
+            if inbytes>=outbytes
                 return LLVMBuildTruncOrBitCast(g_builder, val, outType, "")
             elif baseSInt
                 return LLVMBuildSExtOrBitCast(g_builder, val, outType, "")
@@ -148,9 +148,9 @@ def intrinsic_builtin_int_vec(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprC
     var isFloatToUintVec = argType.isVectorType && (argType.vectorBaseType==Type tFloat) && !outSigned
     if length(arguments) == 1 && !isFloatToUintVec
         if argType.isVectorType
-            return any2int(g_builder, arguments[0], argType.vectorBaseType, type_to_llvm_type(expr._type), 4, outSigned)
+            return any2int(g_builder, arguments[0], argType.vectorBaseType, type_to_llvm_type(expr._type), 4, 4, outSigned)
         else
-            var val = any2int(g_builder, arguments[0], argType.baseType, null, argType.sizeOf, outSigned)
+            var val = any2int(g_builder, arguments[0], argType.baseType, null, argType.sizeOf, 4, outSigned)
             return build_broadcast_vector (g_builder, resType, val)
     var vres = LLVMGetUndef(LLVMVectorType(LLVMInt32Type(), uint(expr._type.vectorDim)))
     var elemIndex = 0
@@ -158,10 +158,10 @@ def intrinsic_builtin_int_vec(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprC
         if earg._type.isVectorType
             for ei in range(earg._type.vectorDim)
                 var eval = LLVMBuildExtractElement(g_builder, arg, LLVMConstInt(LLVMInt32Type(), uint64(ei), 0), "")
-                var val = any2int(g_builder, eval, earg._type.vectorBaseType, null, 4, outSigned)
+                var val = any2int(g_builder, eval, earg._type.vectorBaseType, null, 4, 4, outSigned)
                 vres = LLVMBuildInsertElement(g_builder, vres, val, LLVMConstInt(LLVMInt32Type(), uint64(elemIndex++), 0), "")
         else
-            var val = any2int(g_builder, arg, earg._type.baseType, null, earg._type.sizeOf, outSigned)
+            var val = any2int(g_builder, arg, earg._type.baseType, null, earg._type.sizeOf, 4, outSigned)
             vres = LLVMBuildInsertElement(g_builder, vres, val, LLVMConstInt(LLVMInt32Type(), uint64(elemIndex++), 0), "")
     if elemIndex != resType.vectorDim
         failed_E(expr, "vector ctor {expr.name}({describe(expr._type)}) has {elemIndex} elements, but {resType.vectorDim} are expected")
@@ -225,17 +225,20 @@ def intrinsic_builtin_float(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCal
 def intrinsic_builtin_range(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
     var x, y : LLVMOpaqueValue?
     assume argType = expr.arguments[0]._type
-    let outSigned = expr._type.baseType==Type tRange
+    assume exprBaseType = expr._type.baseType
+    let outSigned = exprBaseType==Type tRange || exprBaseType==Type tRange64
+    let outBytes = (exprBaseType==Type tRange64 || exprBaseType==Type tURange64) ? 8 : 4
+    let intType = (exprBaseType==Type tRange64 || exprBaseType==Type tURange64) ? LLVMInt64Type() : LLVMInt32Type()
     if expr.arguments |> length==1
         if argType.isVectorType
-            return any2int(g_builder, arguments[0], argType.vectorBaseType, type_to_llvm_type(expr._type), 4, outSigned)
+            return any2int(g_builder, arguments[0], argType.vectorBaseType, type_to_llvm_type(expr._type), 4, outBytes, outSigned)
         else
-            x = LLVMConstInt(LLVMInt32Type(), 0ul, 0)
-            y = any2int(g_builder, arguments[0], argType.baseType, null, argType.sizeOf, outSigned)
+            x = LLVMConstInt(intType, 0ul, 0)
+            y = any2int(g_builder, arguments[0], argType.baseType, intType, argType.sizeOf, outBytes, outSigned)
     else
-        x = any2int(g_builder, arguments[0], argType.baseType, null, argType.sizeOf, outSigned)
-        y = any2int(g_builder, arguments[1], argType.baseType, null, argType.sizeOf, outSigned)
-    return LLVMBuildInt2_xy(g_builder, x, y, string(expr.name))
+        x = any2int(g_builder, arguments[0], argType.baseType, intType, argType.sizeOf, outBytes, outSigned)
+        y = any2int(g_builder, arguments[1], argType.baseType, intType, argType.sizeOf, outBytes, outSigned)
+    return LLVMBuildAnyInt2_xy(g_builder, type_to_llvm_type(expr._type), x, y, string(expr.name))
 
 let private bit_op1_name <- {{
     "clz" => "ctlz";

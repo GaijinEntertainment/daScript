@@ -1,7 +1,6 @@
 require llvm/llvm_jit
 
 require math
-require testProfile
 require daslib/unroll
 //ported from https://benchmarksgame-team.pages.debian.net/benchmarksgame/program/nbody-gcc-2.html
 
@@ -97,7 +96,4 @@ def main
         nbodies(500000)
     // print("\nresult energy {energy(g_bodies)}\n")
     energy(g_bodies)
-    testNBodiesInit()
-    profile(10, "n-bodies, C++")  <|
-        testNBodiesS(500000)
 

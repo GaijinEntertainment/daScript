@@ -1,5 +1,4 @@
 require llvm/llvm_jit
-require testProfile
 
 [jit,sideeffects]
 def isprime_jit(n:int)
@@ -29,10 +28,6 @@ def primesI_jit(n:int)
 
 [export]
 def main()
-	var f3 = 0
-    profile(20,"primes loop C++") <|
-        f3 = testProfile::testPrimes(14000)
-	assert(f3==1652)
     if true
         var f1j = 0
         profile(20,"primes loop - jit") <|
