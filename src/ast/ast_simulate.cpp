@@ -1832,15 +1832,19 @@ namespace das
         if ( !value->type->ref ) {
             return nullptr;
         }
-        uint32_t offset = fields[0] * sizeof(float);
-        if ( auto chain = value->trySimulate(context, extraOffset + offset, r2vType) ) {
+        int offset = value->type->getVectorFieldOffset(fields[0]);
+        if  (offset==-1 ) {
+            context.thisProgram->error("internal compilation error, swizzle field offset of unsupported type", "", "", at);
+            return nullptr;
+        }
+        if ( auto chain = value->trySimulate(context, uint32_t(offset) + extraOffset, r2vType) ) {
             return chain;
         }
         auto simV = value->simulate(context);
         if ( r2vType->baseType!=Type::none ) {
-            return context.code->makeValueNode<SimNode_FieldDerefR2V>(r2vType->baseType,at,simV,offset + extraOffset);
+            return context.code->makeValueNode<SimNode_FieldDerefR2V>(r2vType->baseType,at,simV,uint32_t(offset) + extraOffset);
         } else {
-            return context.code->makeNode<SimNode_FieldDeref>(at,simV,offset + extraOffset);
+            return context.code->makeNode<SimNode_FieldDeref>(at,simV,uint32_t(offset) + extraOffset);
         }
     }
 
@@ -1857,7 +1861,11 @@ namespace das
                 fs[2] = fsz >= 3 ? fields[2] : fields[0];
                 fs[3] = fsz >= 4 ? fields[3] : fields[0];
                 auto simV = value->simulate(context);
-                return context.code->makeNode<SimNode_Swizzle>(at, simV, fs);
+                if ( type->baseType==Type::tRange64 || type->baseType==Type::tURange64 ) {
+                    return context.code->makeNode<SimNode_Swizzle64>(at, simV, fs);
+                } else {
+                    return context.code->makeNode<SimNode_Swizzle>(at, simV, fs);
+                }
             }
         } else {
             return trySimulate(context, 0, r2v ? type : make_smart<TypeDecl>(Type::none));

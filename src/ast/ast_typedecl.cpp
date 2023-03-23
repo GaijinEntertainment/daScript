@@ -2492,6 +2492,28 @@ namespace das
         return align;
     }
 
+    int TypeDecl::getVectorFieldOffset ( int index ) const {
+        DAS_ASSERT(index>=0 && index<=3);
+        switch ( baseType ) {
+            case Type::tRange64:
+            case Type::tURange64:
+                return index * 8;
+            case Type::tInt2:
+            case Type::tUInt2:
+            case Type::tInt3:
+            case Type::tUInt3:
+            case Type::tInt4:
+            case Type::tUInt4:
+            case Type::tFloat2:
+            case Type::tFloat3:
+            case Type::tFloat4:
+            case Type::tRange:
+            case Type::tURange:
+                return index * 4;
+        }
+        return -1;
+    }
+
     int TypeDecl::getBaseSizeOf() const {
         uint64_t size = getBaseSizeOf64();
         DAS_ASSERTF(size<=0x7fffffff,"base size %" PRIu64 " is too big", size);

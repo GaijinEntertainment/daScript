@@ -383,6 +383,17 @@ namespace das {
         uint8_t     fields[4];
     };
 
+    struct SimNode_Swizzle64 : SimNode_Swizzle {
+        SimNode_Swizzle64 ( const LineInfo & at, SimNode * rv, uint8_t * fi )
+            : SimNode_Swizzle(at,rv,fi) {
+                fields[0] = fi[0];
+                fields[1] = fi[1];
+                fields[2] = fi[2];
+                fields[3] = fi[3];
+            }
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override;
+    };
+
     // FIELD .
     struct SimNode_FieldDeref : SimNode {
         DAS_PTR_NODE;
