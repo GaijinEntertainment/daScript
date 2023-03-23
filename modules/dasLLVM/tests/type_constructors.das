@@ -785,3 +785,88 @@ def test_intrin_urange ( t:T? )
         fuzz <|
             test_interval_2( t, fake |> random_uint, fake |> random_uint )
 
+// range64
+
+[jit]
+def jit_range64 ( x )
+    return range64(x)
+
+def test_range64( t:T?; a:auto(TT) )
+    t |> success ( is_jit_function(@@<(a:TT):void> jit_range64) )
+    t |> strictEqual ( range64(a), jit_range64(a), "range64(a)" )
+
+[jit,sideeffects]
+def jit_range64_0
+    return range64()
+
+[jit]
+def jit_range64_2(a,b)
+    return range64(a,b)
+
+def test_range64_2( t:T?; x,y:auto(TT) )
+    t |> success ( is_jit_function(@@<(x,y:TT):void> jit_range64_2) )
+    t |> strictEqual ( range64(x,y), jit_range64_2(x,y), "range64(x,y)" )
+
+[test]
+def test_intrin_range64 ( t:T? )
+    t |> run("range64()") <| @ ( t : T? )
+        t |> strictEqual ( range64(), jit_range64_0(), "range64()" )
+    t |> run("range64(x)") <| @ ( t : T? )
+        var fake <- Faker()
+        fuzz <|
+            test_range64( t, fake |> random_int )
+            test_range64( t, fake |> random_uint )
+            test_range64( t, fake |> random_float )
+            test_range64( t, fake |> random_double )
+            test_range64( t, fake |> random_range64 )
+    t |> run("range64(x,y)") <| @ ( t : T? )
+        var fake <- Faker()
+        fuzz <|
+            fuzz_numeric_op2(t,fake,"test_range64_2")
+    t |> run("x..y") <| @ ( t : T? )
+        var fake <- Faker()
+        fuzz <|
+            test_interval_2( t, fake |> random_int64, fake |> random_int64 )
+
+// urange64
+
+[jit]
+def jit_urange64 ( x )
+    return urange64(x)
+
+def test_urange64( t:T?; a:auto(TT) )
+    t |> success ( is_jit_function(@@<(a:TT):void> jit_urange64) )
+    t |> strictEqual ( urange64(a), jit_urange64(a), "urange64(a)" )
+
+[jit,sideeffects]
+def jit_urange64_0
+    return urange64()
+
+[jit]
+def jit_urange64_2(a,b)
+    return urange64(a,b)
+
+def test_urange64_2( t:T?; x,y:auto(TT) )
+    t |> success ( is_jit_function(@@<(x,y:TT):void> jit_urange64_2) )
+    t |> strictEqual ( urange64(x,y), jit_urange64_2(x,y), "urange64(x,y)" )
+
+[test]
+def test_intrin_urange64 ( t:T? )
+    t |> run("urange64()") <| @ ( t : T? )
+        t |> strictEqual ( urange64(), jit_urange64_0(), "urange64()" )
+    t |> run("urange64(x)") <| @ ( t : T? )
+        var fake <- Faker()
+        fuzz <|
+            test_urange64( t, fake |> random_int )
+            test_urange64( t, fake |> random_uint )
+            test_urange64( t, fake |> random_float )
+            test_urange64( t, fake |> random_double )
+            test_urange64( t, fake |> random_urange64 )
+    t |> run("urange64(x,y)") <| @ ( t : T? )
+        var fake <- Faker()
+        fuzz <|
+            fuzz_numeric_op2(t,fake,"test_urange64_2")
+    t |> run("x..y") <| @ ( t : T? )
+        var fake <- Faker()
+        fuzz <|
+            test_interval_2( t, fake |> random_uint64, fake |> random_uint64 )
