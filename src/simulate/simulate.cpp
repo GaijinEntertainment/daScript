@@ -176,13 +176,25 @@ namespace das
         DAS_PROFILE_NODE
         union {
             vec4f   res;
-            float   val[4];
+            int32_t val[4];
         } R, S;
         S.res = value->eval(context);
         R.val[0] = S.val[fields[0]];
         R.val[1] = S.val[fields[1]];
         R.val[2] = S.val[fields[2]];
         R.val[3] = S.val[fields[3]];
+        return R.res;
+    }
+
+    vec4f SimNode_Swizzle64::eval ( Context & context ) {
+        DAS_PROFILE_NODE
+        union {
+            vec4f   res;
+            int64_t val[4];
+        } R, S;
+        S.res = value->eval(context);
+        R.val[0] = S.val[fields[0]];
+        R.val[1] = S.val[fields[1]];
         return R.res;
     }
 
