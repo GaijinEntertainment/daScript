@@ -156,7 +156,7 @@ def public random_urange ( var faker:Faker ) : urange
 
 def public random_urange64 ( var faker:Faker ) : urange64
     //! Generates random urange64.
-    return urange64(faker |> random_uint, faker |> random_uint)
+    return urange64(faker |> random_uint64, faker |> random_uint64)
 
 def public random_uint3 ( var faker:Faker ) : uint3
     //! Generates random uint3.
