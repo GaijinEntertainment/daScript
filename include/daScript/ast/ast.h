@@ -477,6 +477,11 @@ namespace das
         virtual SimNode * simulateGetAtR2V ( Context &, const LineInfo &, const TypeDeclPtr &,
                                             const ExpressionPtr &, const ExpressionPtr &, uint32_t ) const { return nullptr; }
         virtual SimNode * simulateGetIterator ( Context &, const LineInfo &, const ExpressionPtr & ) const { return nullptr; }
+        // jit
+        virtual void * jitGetAt ( Context *, LineInfo *, const ExpressionPtr & /*rv*/, const ExpressionPtr & /*idx*/ ) const { return nullptr; }
+        virtual void * jitGetAtR2V ( Context * /*context*/, LineInfo * /*at*/,
+            const ExpressionPtr & /*rv*/, const ExpressionPtr & /*idx*/, const TypeDeclPtr & /*r2vType*/ ) const { return nullptr; }
+        // data walker
         virtual void walk ( DataWalker &, void * ) { }
         // familiar patterns
         virtual bool isYetAnotherVectorTemplate() const { return false; }   // has [], there is length(x), data is linear in memory
