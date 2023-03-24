@@ -27,6 +27,13 @@ def test_make_r64_from_2xfloat(a,b:float)
 def test_r64_yx ( r:range64 ) : range64
     return r.yx
 
+[jit,sideeffects]
+def test_for_range64
+    var t = 0ul
+    for x in 0ul .. 10ul
+        t ++
+    return t
+
 [test]
 def test_range64_urange64_intrinsics ( t:T? )
     t |> run("constants") <| @ ( t : T? )
@@ -46,3 +53,7 @@ def test_range64_urange64_intrinsics ( t:T? )
     t |> run("swizzle") <| @ ( t : T? )
         t |> success ( is_jit_function(@@test_r64_yx))
         t |> equal ( range64(2,1), test_r64_yx(range64(1,2)) )
+    t |> run("for") <| @ ( t : T? )
+        t |> success ( is_jit_function(@@test_for_range64))
+        t |> equal ( 10ul, test_for_range64() )
+

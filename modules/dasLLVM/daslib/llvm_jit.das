@@ -1781,7 +1781,8 @@ class LlvmJitVisitor : AstVisitor
         for svar,ssrc in expr.iteratorVariables,expr.sources
             if ssrc._type.isRange           // range()
                 var svar_v = LLVMBuildLoad(g_builder, getV(svar), "")
-                svar_v = LLVMBuildAdd(g_builder, svar_v, LLVMConstInt(LLVMInt32Type(), 1ul, 0), "")
+                var isRange64 = ssrc._type.baseType==Type tRange64 || ssrc._type.baseType==Type tURange64
+                svar_v = LLVMBuildAdd(g_builder, svar_v, LLVMConstInt(isRange64 ? LLVMInt64Type() : LLVMInt32Type(), 1ul, 0), "")
                 LLVMBuildStore(g_builder, svar_v, getV(svar))
             elif ssrc._type.dim |> length != 0 // []
                 var svar_v = LLVMBuildLoad(g_builder, getV(svar), "")
