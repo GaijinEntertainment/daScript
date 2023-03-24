@@ -134,6 +134,10 @@ def public random_range ( var faker:Faker ) : range
     //! Generates random range.
     return range(faker |> random_int, faker |> random_int)
 
+def public random_range64 ( var faker:Faker ) : range64
+    //! Generates random range64.
+    return range64(faker |> random_int64, faker |> random_int64)
+
 def public random_int3 ( var faker:Faker ) : int3
     //! Generates random int3.
     return int3(faker |> random_int, faker |> random_int, faker |> random_int)
@@ -149,6 +153,10 @@ def public random_uint2 ( var faker:Faker ) : uint2
 def public random_urange ( var faker:Faker ) : urange
     //! Generates random urange.
     return urange(faker |> random_uint, faker |> random_uint)
+
+def public random_urange64 ( var faker:Faker ) : urange64
+    //! Generates random urange64.
+    return urange64(faker |> random_uint64, faker |> random_uint64)
 
 def public random_uint3 ( var faker:Faker ) : uint3
     //! Generates random uint3.

@@ -1543,6 +1543,20 @@ namespace das
         }
     }
 
+    Type TypeDecl::getRangeType ( Type bt, int dim ) {
+        if ( dim==1 ) return bt;
+        switch ( bt ) {
+            case Type::tInt:    return Type::tRange;
+            case Type::tUInt:   return Type::tURange;
+            case Type::tInt64:  return Type::tRange64;
+            case Type::tUInt64: return Type::tURange64;
+
+        }
+        DAS_ASSERTF(0, "we should not be here. we are calling getRangeType on an unsuppored baseType."
+                "likely new range type been added.");
+        return Type::none;
+    }
+
     bool TypeDecl::isGoodIteratorType() const {
         return baseType==Type::tIterator && dim.size()==0 && firstType;
     }

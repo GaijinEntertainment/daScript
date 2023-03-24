@@ -4347,13 +4347,20 @@ namespace das {
         virtual ExpressionPtr visit ( ExprSwizzle * expr ) override {
             if ( !expr->value->type ) return Visitor::visit(expr);
             auto valT = expr->value->type;
+            if ( !valT->isVectorType() ) {
+                error("unsupported swizzle type " + valT->describe(),   "", "",
+                    expr->at, CompilationError::invalid_swizzle_mask);
+                return Visitor::visit(expr);
+            }
             int dim = valT->getVectorDim();
             if ( !TypeDecl::buildSwizzleMask(expr->mask, dim, expr->fields) ) {
                 error("invalid swizzle mask",   "", "",
                     expr->at, CompilationError::invalid_swizzle_mask);
             } else {
                 auto bt = valT->getVectorBaseType();
-                auto rt = TypeDecl::getVectorType(bt, int(expr->fields.size()));
+                auto rt = valT->isRange() ?
+                    TypeDecl::getRangeType(bt, int(expr->fields.size())) :
+                    TypeDecl::getVectorType(bt, int(expr->fields.size()));
                 expr->type = make_smart<TypeDecl>(rt);
                 expr->type->constant = valT->constant;
                 expr->type->ref = valT->ref;
