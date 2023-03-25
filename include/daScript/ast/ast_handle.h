@@ -539,7 +539,7 @@ namespace das
         static_assert(sizeof(OT)<=sizeof(vec4f), "value types have to fit in ABI");
         ManagedValueAnnotation(ModuleLibrary & mlib, const string & n, const string & cpn = string())
             : TypeAnnotation(n,cpn) {
-            using wrapType = WrapType<OT>::type;
+            using wrapType = typename WrapType<OT>::type;
             valueType = makeType<wrapType>(mlib);
         }
         virtual TypeDeclPtr makeValueType() const override {
