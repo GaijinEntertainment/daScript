@@ -537,7 +537,14 @@ namespace das
     template <typename OT>
     struct ManagedValueAnnotation : TypeAnnotation {
         static_assert(sizeof(OT)<=sizeof(vec4f), "value types have to fit in ABI");
-        ManagedValueAnnotation(const string & n, const string & cpn = string()) : TypeAnnotation(n,cpn) {}
+        ManagedValueAnnotation(ModuleLibrary & mlib, const string & n, const string & cpn = string())
+            : TypeAnnotation(n,cpn) {
+            using wrapType = typename WrapType<OT>::type;
+            valueType = makeType<wrapType>(mlib);
+        }
+        virtual TypeDeclPtr makeValueType() const override {
+            return valueType;
+        }
         virtual bool rtti_isHandledTypeAnnotation() const override { return true; }
         virtual bool canMove() const override { return true; }
         virtual bool canCopy() const override { return true; }
@@ -566,6 +573,7 @@ namespace das
         virtual SimNode * simulateNullCoalescing ( Context & context, const LineInfo & at, SimNode * s, SimNode * dv ) const override {
             return context.code->makeNode<SimNode_NullCoalescing<OT>>(at,s,dv);
         }
+        TypeDeclPtr valueType;
     };
 
     template <typename TT>

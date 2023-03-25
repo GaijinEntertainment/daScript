@@ -4,7 +4,6 @@
 
 namespace das {
 
-template <typename TT> struct WrapType { enum { value = false }; typedef TT type; };
 template <> struct WrapType<float2> { enum { value = true }; typedef vec4f type; };
 template <> struct WrapType<float3> { enum { value = true }; typedef vec4f type; };
 template <> struct WrapType<float4> { enum { value = true }; typedef vec4f type; };
@@ -57,5 +56,41 @@ struct ImplWrapCall<false,true,RetT(*)(Args...),fn> {   // no cmres, wrap
     };
     static void * get_builtin_address() { return (void *) &static_call; }
 };
+
+#define JIT_TABLE_FUNCTION(TAB_FUN) \
+    switch ( baseType ) { \
+        case Type::tBool:           return (void *) &TAB_FUN<bool>; \
+        case Type::tInt8:           return (void *) &TAB_FUN<int8_t>; \
+        case Type::tUInt8:          return (void *) &TAB_FUN<uint8_t>; \
+        case Type::tInt16:          return (void *) &TAB_FUN<int16_t>; \
+        case Type::tUInt16:         return (void *) &TAB_FUN<uint16_t>; \
+        case Type::tInt64:          return (void *) &TAB_FUN<int64_t>; \
+        case Type::tUInt64:         return (void *) &TAB_FUN<uint64_t>; \
+        case Type::tEnumeration:    return (void *) &TAB_FUN<int32_t>; \
+        case Type::tEnumeration8:   return (void *) &TAB_FUN<int8_t>; \
+        case Type::tEnumeration16:  return (void *) &TAB_FUN<int16_t>; \
+        case Type::tInt:            return (void *) &TAB_FUN<int32_t>; \
+        case Type::tInt2:           return (void *) &TAB_FUN<int2>; \
+        case Type::tInt3:           return (void *) &TAB_FUN<int3>; \
+        case Type::tInt4:           return (void *) &TAB_FUN<int4>; \
+        case Type::tUInt:           return (void *) &TAB_FUN<uint32_t>; \
+        case Type::tBitfield:       return (void *) &TAB_FUN<uint32_t>; \
+        case Type::tUInt2:          return (void *) &TAB_FUN<uint2>; \
+        case Type::tUInt3:          return (void *) &TAB_FUN<uint3>; \
+        case Type::tUInt4:          return (void *) &TAB_FUN<uint4>; \
+        case Type::tFloat:          return (void *) &TAB_FUN<float>; \
+        case Type::tFloat2:         return (void *) &TAB_FUN<float2>; \
+        case Type::tFloat3:         return (void *) &TAB_FUN<float3>; \
+        case Type::tFloat4:         return (void *) &TAB_FUN<float4>; \
+        case Type::tRange:          return (void *) &TAB_FUN<range>; \
+        case Type::tURange:         return (void *) &TAB_FUN<urange>; \
+        case Type::tRange64:        return (void *) &TAB_FUN<range64>; \
+        case Type::tURange64:       return (void *) &TAB_FUN<urange64>; \
+        case Type::tString:         return (void *) &TAB_FUN<char *>; \
+        case Type::tDouble:         return (void *) &TAB_FUN<double>; \
+        case Type::tPointer:        return (void *) &TAB_FUN<void *>; \
+    } \
+    context->throw_error_at(at, "unsupported key type %s", das_to_string(Type(baseType)).c_str() ); \
+    return nullptr;
 
 }
