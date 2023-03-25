@@ -2532,8 +2532,21 @@ class LlvmJitVisitor : AstVisitor
             setE(expr, LLVMGetUndef(LLVMInt32Type()))
             failed_E(expr, "bitfields are not supported yet")
         elif expr.field==null && expr.fieldIndex==-1
-            setE(expr, LLVMGetUndef(type_to_llvm_type(expr._type)))
-            failed_E(expr, "annotations are not supported yet")
+            let field_offset = expr.annotation |> get_handled_type_field_offset(string(expr.name))
+            if field_offset==-1U
+                setE(expr, LLVMGetUndef(type_to_llvm_type(expr._type)))
+                failed_E(expr, "field {expr.name} offset is -1")
+                return expr
+            var val_ptr = getE(expr.value)
+            if expr.value._type.isPointer && !expr.derefFlags.unsafeDeref
+                check_ptr_zero(val_ptr)
+            val_ptr = LLVMBuildPointerCast(g_builder, val_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
+            var field_ptr = LLVMBuildGEP(g_builder, val_ptr, LLVMConstInt(LLVMInt32Type(), uint64(field_offset), 0), "")
+            field_ptr = LLVMBuildPointerCast(g_builder, field_ptr, get_type_pointer(expr._type), "{describe(expr.value._type,false,false,false)}.{expr.name}")
+            if expr.fieldFlags.r2v
+                setE(expr, LLVMBuildLoadDataAligned(g_builder, field_ptr, uint(expr._type.alignOf), ""))
+            else
+                setE(expr, field_ptr)
         elif expr.value._type.isTuple
             assert(expr.fieldIndex!=-1)
             var val_ptr = getE(expr.value)
