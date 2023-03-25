@@ -1,5 +1,7 @@
 #pragma once
 
+#define PUGIXML_NO_EXCEPTIONS
+
 #include <pugixml.hpp>
 
 namespace das {
