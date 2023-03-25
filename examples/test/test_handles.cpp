@@ -391,7 +391,7 @@ public:
 MAKE_TYPE_FACTORY(EntityId,EntityId);
 
 struct EntityIdAnnotation final: das::ManagedValueAnnotation <EntityId> {
-    EntityIdAnnotation() : ManagedValueAnnotation  ("EntityId","EntityId") {}
+    EntityIdAnnotation(ModuleLibrary & mlib) : ManagedValueAnnotation  (mlib,"EntityId","EntityId") {}
     virtual void walk ( das::DataWalker & walker, void * data ) override {
         if ( !walker.reading ) {
             const EntityId * t = (EntityId *) data;
@@ -402,7 +402,6 @@ struct EntityIdAnnotation final: das::ManagedValueAnnotation <EntityId> {
     virtual bool isLocal() const override { return true; }
     virtual bool hasNonTrivialCtor() const override { return false; }
     virtual bool canBePlacedInContainer() const override { return true;}
-    virtual TypeDeclPtr makeValueType() const override { return make_smart<TypeDecl>(Type::tInt); }
 };
 
 void tempArrayAliasExample(const das::TArray<Point3> & arr,
@@ -556,7 +555,7 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     addExtern<DAS_BIND_FUN(tableMojo)>(*this, lib, "tableMojo",
         SideEffects::modifyExternal, "tableMojo");
     // EntityId
-    addAnnotation(make_smart<EntityIdAnnotation>());
+    addAnnotation(make_smart<EntityIdAnnotation>(lib));
     addExtern<DAS_BIND_FUN(make_invalid_id)>(*this, lib, "make_invalid_id",
         SideEffects::none, "make_invalid_id");
     addExtern<DAS_BIND_FUN(eidToInt)>(*this, lib, "int",

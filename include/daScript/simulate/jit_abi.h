@@ -4,7 +4,6 @@
 
 namespace das {
 
-template <typename TT> struct WrapType { enum { value = false }; typedef TT type; };
 template <> struct WrapType<float2> { enum { value = true }; typedef vec4f type; };
 template <> struct WrapType<float3> { enum { value = true }; typedef vec4f type; };
 template <> struct WrapType<float4> { enum { value = true }; typedef vec4f type; };

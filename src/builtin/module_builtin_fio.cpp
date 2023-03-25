@@ -43,7 +43,7 @@ namespace das {
     IMPLEMENT_OP2_EVAL_POLICY(Sub, Time);
 
     struct TimeAnnotation : ManagedValueAnnotation<Time> {
-        TimeAnnotation() : ManagedValueAnnotation<Time>("clock","das::Time") {}
+        TimeAnnotation(ModuleLibrary & mlib) : ManagedValueAnnotation<Time>(mlib, "clock","das::Time") {}
         virtual void walk ( DataWalker & walker, void * data ) override {
             if ( walker.reading ) {
                 // there shuld be a way to read time from the stream here
@@ -65,7 +65,7 @@ namespace das {
     }
 
     void Module_BuiltIn::addTime(ModuleLibrary & lib) {
-        addAnnotation(make_smart<TimeAnnotation>());
+        addAnnotation(make_smart<TimeAnnotation>(lib));
         addFunctionBasic<Time>(*this,lib);
         addFunctionOrdered<Time>(*this,lib);
         addFunction( make_smart<BuiltInFn<Sim_Sub<Time>,double,Time,Time>>("-",lib,"Sub"));
