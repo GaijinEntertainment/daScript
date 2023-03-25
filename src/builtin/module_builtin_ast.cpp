@@ -549,6 +549,12 @@ namespace das {
         return type->annotation->makeValueType();
     }
 
+    uint32_t getHandledTypeFieldOffset ( smart_ptr_raw<TypeAnnotation> annotation, char * name, Context * context, LineInfoArg * at ) {
+        if ( !name ) context->throw_error_at(at, "expecting field name");
+        if ( !annotation ) context->throw_error_at(at, "expecting type annotation");
+        return annotation->getFieldOffset(name);
+    }
+
     #include "ast.das.inc"
 
     Module_Ast::Module_Ast() : Module("ast") {
@@ -718,6 +724,9 @@ namespace das {
         addExtern<DAS_BIND_FUN(getUnderlyingValueType)>(*this, lib,  "get_underlying_value_type",
             SideEffects::none, "getUnderlyingValueType")
                 ->args({"type","context","line"});
+        addExtern<DAS_BIND_FUN(getHandledTypeFieldOffset)>(*this, lib,  "get_handled_type_field_offset",
+            SideEffects::none, "getHandledTypeFieldOffset")
+                ->args({"type","field","context","line"});
         // module
         addExtern<DAS_BIND_FUN(for_each_typedef)>(*this, lib,  "for_each_typedef",
             SideEffects::modifyExternal, "for_each_typedef")
