@@ -102,11 +102,12 @@ def generate_fromJV ( name:string; fields:array<tuple<field:string;_type:string>
     // from value
     g_FOUT |> fprint("def from_JV ( var v:JsonValue?; t:{name} ) : {name}\n")
     g_FOUT |> fprint("    var q : {name}\n")
+    g_FOUT |> fprint("    var vobj & = unsafe(v as _object)\n")
     for field in fields
         if field._type=="int64" || field._type=="float" || field._type=="string" || field._type=="bool" || field._type |> ends_with("?")
-            g_FOUT |> fprint("    q.{field.field} = _::from_JV((v as _object)[\"{field.field}\"], type<{field._type}>)\n")
+            g_FOUT |> fprint("    q.{field.field} = _::from_JV(vobj[\"{field.field}\"], type<{field._type}>)\n")
         else
-            g_FOUT |> fprint("    q.{field.field} <- _::from_JV((v as _object)[\"{field.field}\"], type<{field._type}>)\n")
+            g_FOUT |> fprint("    q.{field.field} <- _::from_JV(vobj[\"{field.field}\"], type<{field._type}>)\n")
     g_FOUT |> fprint("    return <- q\n\n")
     // from pointer
     g_FOUT |> fprint("def from_JV ( var v:JsonValue?; t:{name}? ) : {name}?\n")
