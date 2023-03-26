@@ -1,8 +1,19 @@
 require daslib/curl
 require daslib/json_boost
 require tbotapi
+require daslib/fio
+require strings
 
-var private BOT_TOKEN = "5991183368:AAGxwJ2ZMaVxH0Rq2__j8CE0UTUw4iyZ5cE"
+def read_bot_token
+    var token = ""
+    fopen("D:/Work/telegramm/GG19781978_bot/token.txt","r") <| $ (f)
+        if f != null
+            token = fgets(f) |> replace("\n","") |> replace("\r","")
+    if token |> empty
+        panic("bot token is empty")
+    return token
+
+var private BOT_TOKEN = read_bot_token()
 
 var private BOT_TIMEOUT = 10.0
 
@@ -57,5 +68,5 @@ def main
     ]])
     for r in res
         if r.message != null
-            print("{get_user_group_name(r.message.from)}: {r.message.text}\n")
-        debug(r)
+            print("<{r.message.message_id}> {get_user_group_name(r.message.from)}: {r.message.text}\n")
+        // debug(r)
