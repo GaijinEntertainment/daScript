@@ -107,6 +107,18 @@ def process_type ( node:xml_node; is_optional:bool=false )
         panic("unsupported type {value}")
         return value
 
+def generate_fromJV ( name:string; fields:array<string> )
+    g_FOUT |> fprint("def from_JV ( var v:JsonValue?; t:{name} ) : {name}\n")
+    g_FOUT |> fprint("    var q : {name}\n")
+    for field in fields
+        g_FOUT |> fprint("    move_to_ref(q.{field}, _::from_JV((v as _object)[\"{field}\"], decltype_noref(q.{field})) )\n")
+    g_FOUT |> fprint("    return <- q\n\n")
+    g_FOUT |> fprint("def from_JV ( var v:JsonValue?; t:{name}? ) : {name}?\n")
+    g_FOUT |> fprint("    return null if v==null\n")
+    g_FOUT |> fprint("    var q = new {name}\n")
+    g_FOUT |> fprint("    *q <- from_JV(v,type<{name}>)\n")
+    g_FOUT |> fprint("    return q\n\n")
+
 def process_section ( doc:xml_document; name:string )
     var node = doc |> find_section(name)
     var elem = node
@@ -119,7 +131,8 @@ def process_section ( doc:xml_document; name:string )
         // print("<{elem.name}> = {elem.value} // {elem._type}\n")
         if elem.name == "h4"
             if !any_fields && !api_call |> empty
-                g_FOUT |> fprint(" \{\} // {comment}\n\n")
+                g_FOUT |> fprint("\n    //! {comment}\n    object_{api_call}_has_no_fields:bool\n\n")
+                generate_fromJV(api_call,[[array<string>]])
             comment = ""
             api_call = elem |> child("a") |> attribute("id") |> as_string("") |> sanitize_name()
             g_FOUT |> fprint("struct {api_call}")
@@ -129,6 +142,7 @@ def process_section ( doc:xml_document; name:string )
         elif elem.name == "table"
             g_FOUT |> fprint("\n    //! {comment}\n")
             var tbody = elem |> child("tbody")
+            var fields : array<string>
             var tr = tbody.first_child
             while tr.ok
                 any_fields = true
@@ -147,13 +161,15 @@ def process_section ( doc:xml_document; name:string )
                 if is_optional
                     g_FOUT |> fprint("[[optional]] ")
                 g_FOUT |> fprint("{api_field} : {api_field_type}\t//! {api_field_comment}\n")
+                fields |> push(api_field)
                 tr = tr.next_sibling
             g_FOUT |> fprint("\n")
+            generate_fromJV(api_call,fields)
             api_call = ""
         elem = elem.next_sibling
     if !any_fields && !api_call |> empty
-        g_FOUT |> fprint(" \{\} // {comment}\n\n")
-
+        g_FOUT |> fprint("\n    //! {comment}\n    object_{api_call}_has_no_fields:bool\n\n")
+        generate_fromJV(api_call,[[array<string>]])
 
 [export]
 def main
@@ -171,6 +187,8 @@ def main
                 g_FOUT |> fprint("options no_unused_function_arguments = false\n")
                 g_FOUT |> fprint("\n")
                 g_FOUT |> fprint("module tbotapi public\n")
+                g_FOUT |> fprint("\n")
+                g_FOUT |> fprint("require daslib/json_boost\n")
                 g_FOUT |> fprint("\n")
                 doc |> process_section("getting-updates")
                 doc |> process_section("available-types")
