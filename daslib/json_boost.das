@@ -230,7 +230,7 @@ def from_JV ( var v:JsonValue?; anything : table< auto(KT);auto(VT) > )
     unsafe
         var tab & = v.value as _object
         for k,vv in keys(tab),values(tab)
-            move_to_ref ( ret[k], from_JV(vv, type<VT-&>) )
+            move_to_ref ( ret[k], _::from_JV(vv, type<VT-&>) )
     return <- ret
 
 def from_JV ( var v:JsonValue?; anything : auto(TT) )
@@ -243,12 +243,12 @@ def from_JV ( var v:JsonValue?; anything : auto(TT) )
 			if arr |> length != typeinfo(dim anything)
 				return <- ret
             for i in 0..typeinfo(dim anything)
-                move_to_ref ( ret[i], from_JV(arr[i], decltype_noref(anything[0])) )
+                move_to_ref ( ret[i], _::from_JV(arr[i], decltype_noref(anything[0])) )
 			return <- ret
 	static_elif typeinfo(is_struct anything) || typeinfo(is_tuple anything)
 		var ret : TT
 		apply(ret) <| $ ( name:string; var field )
-            move_to_ref ( field, from_JV((v as _object)[name], decltype_noref(field)) )
+            move_to_ref ( field, _::from_JV((v as _object)[name], decltype_noref(field)) )
 		return <- ret
     static_elif typeinfo(is_array anything)
         var ret : TT
@@ -258,9 +258,9 @@ def from_JV ( var v:JsonValue?; anything : auto(TT) )
 			var arr & = v.value as _array
             for i in range(arr |> length)
                 if typeinfo(can_copy anything[0])
-                    ret |> push <| from_JV(arr[i], decltype_noref(anything[0]))
+                    ret |> push_clone <| _::from_JV(arr[i], decltype_noref(anything[0]))
                 else
-                    ret |> emplace <| from_JV(arr[i], decltype_noref(anything[0]))
+                    ret |> emplace <| _::from_JV(arr[i], decltype_noref(anything[0]))
 			return <- ret
     static_elif typeinfo(is_variant anything)
         var ret : TT
@@ -272,7 +272,7 @@ def from_JV ( var v:JsonValue?; anything : auto(TT) )
         unsafe
             set_variant_index(ret, int(vv.value as _number))
 		apply(ret) <| $ ( name:string; var field )
-            move_to_ref ( field, from_JV((v as _object)[name], decltype_noref(field)) )
+            move_to_ref ( field, _::from_JV((v as _object)[name], decltype_noref(field)) )
         return <- ret
 	else
         concept_assert(false, "unsupported json serialization type. missing 'fromJV")
@@ -317,7 +317,7 @@ def JV(value): JsonValue?
     static_if typeinfo(is_dim value)
         var arr: array<JsonValue?>
         for t in value
-            arr |> push(JV(t))
+            arr |> push_clone(JV(t))
         return _::JV(arr)
     static_if typeinfo(typename value) == "json::JsonValue?" || typeinfo(typename value) == "json::JsonValue? const"
         return value
@@ -348,7 +348,7 @@ def JV(value): JsonValue?
     static_elif typeinfo(is_iterable value)
         var arr: array<JsonValue?>
         for x in value
-            arr |> push <| _::JV(x)
+            arr |> push_clone <| _::JV(x)
         return _::JV(arr)
     static_elif typeinfo(is_variant value)
         var map: table<string; JsonValue?>

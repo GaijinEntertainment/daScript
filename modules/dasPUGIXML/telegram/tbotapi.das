@@ -4,6 +4,8 @@ options no_unused_function_arguments = false
 
 module tbotapi public
 
+require daslib/json_boost
+
 struct update
     //!  This object represents an incoming update. At most one of the optional parameters can be present in any given update.
     update_id : int	//! The update's unique identifier. Update identifiers start from a certain positive number and increase sequentially. This ID becomes especially handy if you're using webhooks, since it allows you to ignore repeated updates or to restore the correct update sequence, should they get out of order. If there are no new updates for at least a week, then identifier of the next update will be chosen randomly instead of sequentially.
@@ -22,12 +24,51 @@ struct update
     [[optional]] chat_member : chatmemberupdated?	//! Optional. A chat member's status was updated in a chat. The bot must be an administrator in the chat and must explicitly specify “chat_member” in the list of allowed_updates to receive these updates.
     [[optional]] chat_join_request : chatjoinrequest?	//! Optional. A request to join the chat has been sent. The bot must have the can_invite_users administrator right in the chat to receive these updates.
 
+def from_JV ( var v:JsonValue?; t:update ) : update
+    var q : update
+    move_to_ref(q.update_id, _::from_JV((v as _object)["update_id"], decltype_noref(q.update_id)) )
+    move_to_ref(q.message, _::from_JV((v as _object)["message"], decltype_noref(q.message)) )
+    move_to_ref(q.edited_message, _::from_JV((v as _object)["edited_message"], decltype_noref(q.edited_message)) )
+    move_to_ref(q.channel_post, _::from_JV((v as _object)["channel_post"], decltype_noref(q.channel_post)) )
+    move_to_ref(q.edited_channel_post, _::from_JV((v as _object)["edited_channel_post"], decltype_noref(q.edited_channel_post)) )
+    move_to_ref(q.inline_query, _::from_JV((v as _object)["inline_query"], decltype_noref(q.inline_query)) )
+    move_to_ref(q.chosen_inline_result, _::from_JV((v as _object)["chosen_inline_result"], decltype_noref(q.chosen_inline_result)) )
+    move_to_ref(q.callback_query, _::from_JV((v as _object)["callback_query"], decltype_noref(q.callback_query)) )
+    move_to_ref(q.shipping_query, _::from_JV((v as _object)["shipping_query"], decltype_noref(q.shipping_query)) )
+    move_to_ref(q.pre_checkout_query, _::from_JV((v as _object)["pre_checkout_query"], decltype_noref(q.pre_checkout_query)) )
+    move_to_ref(q.poll, _::from_JV((v as _object)["poll"], decltype_noref(q.poll)) )
+    move_to_ref(q.poll_answer, _::from_JV((v as _object)["poll_answer"], decltype_noref(q.poll_answer)) )
+    move_to_ref(q.my_chat_member, _::from_JV((v as _object)["my_chat_member"], decltype_noref(q.my_chat_member)) )
+    move_to_ref(q.chat_member, _::from_JV((v as _object)["chat_member"], decltype_noref(q.chat_member)) )
+    move_to_ref(q.chat_join_request, _::from_JV((v as _object)["chat_join_request"], decltype_noref(q.chat_join_request)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:update? ) : update?
+    return null if v==null
+    var q = new update
+    *q <- from_JV(v,type<update>)
+    return q
+
 struct getupdates
     //!  Use this method to receive incoming updates using long polling (wiki). Returns an Array of Update objects.
     [[optional]] offset : int = INT_MIN	//! Optional. Identifier of the first update to be returned. Must be greater by one than the highest among the identifiers of previously received updates. By default, updates starting with the earliest unconfirmed update are returned. An update is considered confirmed as soon as getUpdates is called with an offset higher than its update_id. The negative offset can be specified to retrieve updates starting from -offset update from the end of the updates queue. All previous updates will forgotten.
     [[optional]] limit : int = INT_MIN	//! Optional. Limits the number of updates to be retrieved. Values between 1-100 are accepted. Defaults to 100.
     [[optional]] timeout : int = INT_MIN	//! Optional. Timeout in seconds for long polling. Defaults to 0, i.e. usual short polling. Should be positive, short polling should be used for testing purposes only.
     [[optional]] allowed_updates : array<string>	//! Optional. A JSON-serialized list of the update types you want your bot to receive. For example, specify [“message”, “edited_channel_post”, “callback_query”] to only receive updates of these types. See Update for a complete list of available update types. Specify an empty list to receive all update types except chat_member (default). If not specified, the previous setting will be used. Please note that this parameter doesn't affect updates created before the call to the getUpdates, so unwanted updates may be received for a short period of time.
+
+def from_JV ( var v:JsonValue?; t:getupdates ) : getupdates
+    var q : getupdates
+    move_to_ref(q.offset, _::from_JV((v as _object)["offset"], decltype_noref(q.offset)) )
+    move_to_ref(q.limit, _::from_JV((v as _object)["limit"], decltype_noref(q.limit)) )
+    move_to_ref(q.timeout, _::from_JV((v as _object)["timeout"], decltype_noref(q.timeout)) )
+    move_to_ref(q.allowed_updates, _::from_JV((v as _object)["allowed_updates"], decltype_noref(q.allowed_updates)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:getupdates? ) : getupdates?
+    return null if v==null
+    var q = new getupdates
+    *q <- from_JV(v,type<getupdates>)
+    return q
 
 struct setwebhook
     //!  Use this method to specify a URL and receive incoming updates via an outgoing webhook. Whenever there is an update for the bot, we will send an HTTPS POST request to the specified URL, containing a JSON-serialized Update. In case of an unsuccessful request, we will give up after a reasonable amount of attempts. Returns True on success. If you'd like to make sure that the webhook was set by you, you can specify secret data in the parameter secret_token. If specified, the request will contain a header “X-Telegram-Bot-Api-Secret-Token” with the secret token as content.
@@ -39,11 +80,51 @@ struct setwebhook
     [[optional]] drop_pending_updates : bool = false	//! Optional. Pass True to drop all pending updates
     [[optional]] secret_token : string = ""	//! Optional. A secret token to be sent in a header “X-Telegram-Bot-Api-Secret-Token” in every webhook request, 1-256 characters. Only characters A-Z, a-z, 0-9, _ and - are allowed. The header is useful to ensure that the request comes from a webhook set by you.
 
+def from_JV ( var v:JsonValue?; t:setwebhook ) : setwebhook
+    var q : setwebhook
+    move_to_ref(q.url, _::from_JV((v as _object)["url"], decltype_noref(q.url)) )
+    move_to_ref(q.certificate, _::from_JV((v as _object)["certificate"], decltype_noref(q.certificate)) )
+    move_to_ref(q.ip_address, _::from_JV((v as _object)["ip_address"], decltype_noref(q.ip_address)) )
+    move_to_ref(q.max_connections, _::from_JV((v as _object)["max_connections"], decltype_noref(q.max_connections)) )
+    move_to_ref(q.allowed_updates, _::from_JV((v as _object)["allowed_updates"], decltype_noref(q.allowed_updates)) )
+    move_to_ref(q.drop_pending_updates, _::from_JV((v as _object)["drop_pending_updates"], decltype_noref(q.drop_pending_updates)) )
+    move_to_ref(q.secret_token, _::from_JV((v as _object)["secret_token"], decltype_noref(q.secret_token)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:setwebhook? ) : setwebhook?
+    return null if v==null
+    var q = new setwebhook
+    *q <- from_JV(v,type<setwebhook>)
+    return q
+
 struct deletewebhook
     //!  Use this method to remove webhook integration if you decide to switch back to getUpdates. Returns True on success.
     [[optional]] drop_pending_updates : bool = false	//! Optional. Pass True to drop all pending updates
 
-struct getwebhookinfo {} //  Use this method to get current webhook status. Requires no parameters. On success, returns a WebhookInfo object. If the bot is using getUpdates, will return an object with the url field empty.
+def from_JV ( var v:JsonValue?; t:deletewebhook ) : deletewebhook
+    var q : deletewebhook
+    move_to_ref(q.drop_pending_updates, _::from_JV((v as _object)["drop_pending_updates"], decltype_noref(q.drop_pending_updates)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:deletewebhook? ) : deletewebhook?
+    return null if v==null
+    var q = new deletewebhook
+    *q <- from_JV(v,type<deletewebhook>)
+    return q
+
+struct getwebhookinfo
+    //!  Use this method to get current webhook status. Requires no parameters. On success, returns a WebhookInfo object. If the bot is using getUpdates, will return an object with the url field empty.
+    object_getwebhookinfo_has_no_fields:bool
+
+def from_JV ( var v:JsonValue?; t:getwebhookinfo ) : getwebhookinfo
+    var q : getwebhookinfo
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:getwebhookinfo? ) : getwebhookinfo?
+    return null if v==null
+    var q = new getwebhookinfo
+    *q <- from_JV(v,type<getwebhookinfo>)
+    return q
 
 struct webhookinfo
     //!  Describes the current status of a webhook.
@@ -56,6 +137,25 @@ struct webhookinfo
     [[optional]] last_synchronization_error_date : int = INT_MIN	//! Optional. Unix time of the most recent error that happened when trying to synchronize available updates with Telegram datacenters
     [[optional]] max_connections : int = INT_MIN	//! Optional. The maximum allowed number of simultaneous HTTPS connections to the webhook for update delivery
     [[optional]] allowed_updates : array<string>	//! Optional. A list of update types the bot is subscribed to. Defaults to all update types except chat_member
+
+def from_JV ( var v:JsonValue?; t:webhookinfo ) : webhookinfo
+    var q : webhookinfo
+    move_to_ref(q.url, _::from_JV((v as _object)["url"], decltype_noref(q.url)) )
+    move_to_ref(q.has_custom_certificate, _::from_JV((v as _object)["has_custom_certificate"], decltype_noref(q.has_custom_certificate)) )
+    move_to_ref(q.pending_update_count, _::from_JV((v as _object)["pending_update_count"], decltype_noref(q.pending_update_count)) )
+    move_to_ref(q.ip_address, _::from_JV((v as _object)["ip_address"], decltype_noref(q.ip_address)) )
+    move_to_ref(q.last_error_date, _::from_JV((v as _object)["last_error_date"], decltype_noref(q.last_error_date)) )
+    move_to_ref(q.last_error_message, _::from_JV((v as _object)["last_error_message"], decltype_noref(q.last_error_message)) )
+    move_to_ref(q.last_synchronization_error_date, _::from_JV((v as _object)["last_synchronization_error_date"], decltype_noref(q.last_synchronization_error_date)) )
+    move_to_ref(q.max_connections, _::from_JV((v as _object)["max_connections"], decltype_noref(q.max_connections)) )
+    move_to_ref(q.allowed_updates, _::from_JV((v as _object)["allowed_updates"], decltype_noref(q.allowed_updates)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:webhookinfo? ) : webhookinfo?
+    return null if v==null
+    var q = new webhookinfo
+    *q <- from_JV(v,type<webhookinfo>)
+    return q
 
 struct user
     //!  This object represents a Telegram user or bot.
@@ -70,6 +170,27 @@ struct user
     [[optional]] can_join_groups : bool = false	//! Optional. True, if the bot can be invited to groups. Returned only in getMe.
     [[optional]] can_read_all_group_messages : bool = false	//! Optional. True, if privacy mode is disabled for the bot. Returned only in getMe.
     [[optional]] supports_inline_queries : bool = false	//! Optional. True, if the bot supports inline queries. Returned only in getMe.
+
+def from_JV ( var v:JsonValue?; t:user ) : user
+    var q : user
+    move_to_ref(q.id, _::from_JV((v as _object)["id"], decltype_noref(q.id)) )
+    move_to_ref(q.is_bot, _::from_JV((v as _object)["is_bot"], decltype_noref(q.is_bot)) )
+    move_to_ref(q.first_name, _::from_JV((v as _object)["first_name"], decltype_noref(q.first_name)) )
+    move_to_ref(q.last_name, _::from_JV((v as _object)["last_name"], decltype_noref(q.last_name)) )
+    move_to_ref(q.username, _::from_JV((v as _object)["username"], decltype_noref(q.username)) )
+    move_to_ref(q.language_code, _::from_JV((v as _object)["language_code"], decltype_noref(q.language_code)) )
+    move_to_ref(q.is_premium, _::from_JV((v as _object)["is_premium"], decltype_noref(q.is_premium)) )
+    move_to_ref(q.added_to_attachment_menu, _::from_JV((v as _object)["added_to_attachment_menu"], decltype_noref(q.added_to_attachment_menu)) )
+    move_to_ref(q.can_join_groups, _::from_JV((v as _object)["can_join_groups"], decltype_noref(q.can_join_groups)) )
+    move_to_ref(q.can_read_all_group_messages, _::from_JV((v as _object)["can_read_all_group_messages"], decltype_noref(q.can_read_all_group_messages)) )
+    move_to_ref(q.supports_inline_queries, _::from_JV((v as _object)["supports_inline_queries"], decltype_noref(q.supports_inline_queries)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:user? ) : user?
+    return null if v==null
+    var q = new user
+    *q <- from_JV(v,type<user>)
+    return q
 
 struct chat
     //!  This object represents a chat.
@@ -101,6 +222,44 @@ struct chat
     [[optional]] can_set_sticker_set : bool = false	//! Optional. True, if the bot can change the group sticker set. Returned only in getChat.
     [[optional]] linked_chat_id : int = INT_MIN	//! Optional. Unique identifier for the linked chat, i.e. the discussion group identifier for a channel and vice versa; for supergroups and channel chats. This identifier may be greater than 32 bits and some programming languages may have difficulty/silent defects in interpreting it. But it is smaller than 52 bits, so a signed 64 bit integer or double-precision float type are safe for storing this identifier. Returned only in getChat.
     [[optional]] location : chatlocation?	//! Optional. For supergroups, the location to which the supergroup is connected. Returned only in getChat.
+
+def from_JV ( var v:JsonValue?; t:chat ) : chat
+    var q : chat
+    move_to_ref(q.id, _::from_JV((v as _object)["id"], decltype_noref(q.id)) )
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    move_to_ref(q.title, _::from_JV((v as _object)["title"], decltype_noref(q.title)) )
+    move_to_ref(q.username, _::from_JV((v as _object)["username"], decltype_noref(q.username)) )
+    move_to_ref(q.first_name, _::from_JV((v as _object)["first_name"], decltype_noref(q.first_name)) )
+    move_to_ref(q.last_name, _::from_JV((v as _object)["last_name"], decltype_noref(q.last_name)) )
+    move_to_ref(q.is_forum, _::from_JV((v as _object)["is_forum"], decltype_noref(q.is_forum)) )
+    move_to_ref(q.photo, _::from_JV((v as _object)["photo"], decltype_noref(q.photo)) )
+    move_to_ref(q.active_usernames, _::from_JV((v as _object)["active_usernames"], decltype_noref(q.active_usernames)) )
+    move_to_ref(q.emoji_status_custom_emoji_id, _::from_JV((v as _object)["emoji_status_custom_emoji_id"], decltype_noref(q.emoji_status_custom_emoji_id)) )
+    move_to_ref(q.bio, _::from_JV((v as _object)["bio"], decltype_noref(q.bio)) )
+    move_to_ref(q.has_private_forwards, _::from_JV((v as _object)["has_private_forwards"], decltype_noref(q.has_private_forwards)) )
+    move_to_ref(q.has_restricted_voice_and_video_messages, _::from_JV((v as _object)["has_restricted_voice_and_video_messages"], decltype_noref(q.has_restricted_voice_and_video_messages)) )
+    move_to_ref(q.join_to_send_messages, _::from_JV((v as _object)["join_to_send_messages"], decltype_noref(q.join_to_send_messages)) )
+    move_to_ref(q.join_by_request, _::from_JV((v as _object)["join_by_request"], decltype_noref(q.join_by_request)) )
+    move_to_ref(q.description, _::from_JV((v as _object)["description"], decltype_noref(q.description)) )
+    move_to_ref(q.invite_link, _::from_JV((v as _object)["invite_link"], decltype_noref(q.invite_link)) )
+    move_to_ref(q.pinned_message, _::from_JV((v as _object)["pinned_message"], decltype_noref(q.pinned_message)) )
+    move_to_ref(q.permissions, _::from_JV((v as _object)["permissions"], decltype_noref(q.permissions)) )
+    move_to_ref(q.slow_mode_delay, _::from_JV((v as _object)["slow_mode_delay"], decltype_noref(q.slow_mode_delay)) )
+    move_to_ref(q.message_auto_delete_time, _::from_JV((v as _object)["message_auto_delete_time"], decltype_noref(q.message_auto_delete_time)) )
+    move_to_ref(q.has_aggressive_anti_spam_enabled, _::from_JV((v as _object)["has_aggressive_anti_spam_enabled"], decltype_noref(q.has_aggressive_anti_spam_enabled)) )
+    move_to_ref(q.has_hidden_members, _::from_JV((v as _object)["has_hidden_members"], decltype_noref(q.has_hidden_members)) )
+    move_to_ref(q.has_protected_content, _::from_JV((v as _object)["has_protected_content"], decltype_noref(q.has_protected_content)) )
+    move_to_ref(q.sticker_set_name, _::from_JV((v as _object)["sticker_set_name"], decltype_noref(q.sticker_set_name)) )
+    move_to_ref(q.can_set_sticker_set, _::from_JV((v as _object)["can_set_sticker_set"], decltype_noref(q.can_set_sticker_set)) )
+    move_to_ref(q.linked_chat_id, _::from_JV((v as _object)["linked_chat_id"], decltype_noref(q.linked_chat_id)) )
+    move_to_ref(q.location, _::from_JV((v as _object)["location"], decltype_noref(q.location)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:chat? ) : chat?
+    return null if v==null
+    var q = new chat
+    *q <- from_JV(v,type<chat>)
+    return q
 
 struct message
     //!  This object represents a message.
@@ -176,9 +335,101 @@ struct message
     [[optional]] web_app_data : webappdata?	//! Optional. Service message: data sent by a Web App
     [[optional]] reply_markup : inlinekeyboardmarkup?	//! Optional. Inline keyboard attached to the message. login_url buttons are represented as ordinary url buttons.
 
+def from_JV ( var v:JsonValue?; t:message ) : message
+    var q : message
+    move_to_ref(q.message_id, _::from_JV((v as _object)["message_id"], decltype_noref(q.message_id)) )
+    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], decltype_noref(q.message_thread_id)) )
+    move_to_ref(q.from, _::from_JV((v as _object)["from"], decltype_noref(q.from)) )
+    move_to_ref(q.sender_chat, _::from_JV((v as _object)["sender_chat"], decltype_noref(q.sender_chat)) )
+    move_to_ref(q.date, _::from_JV((v as _object)["date"], decltype_noref(q.date)) )
+    move_to_ref(q.chat, _::from_JV((v as _object)["chat"], decltype_noref(q.chat)) )
+    move_to_ref(q.forward_from, _::from_JV((v as _object)["forward_from"], decltype_noref(q.forward_from)) )
+    move_to_ref(q.forward_from_chat, _::from_JV((v as _object)["forward_from_chat"], decltype_noref(q.forward_from_chat)) )
+    move_to_ref(q.forward_from_message_id, _::from_JV((v as _object)["forward_from_message_id"], decltype_noref(q.forward_from_message_id)) )
+    move_to_ref(q.forward_signature, _::from_JV((v as _object)["forward_signature"], decltype_noref(q.forward_signature)) )
+    move_to_ref(q.forward_sender_name, _::from_JV((v as _object)["forward_sender_name"], decltype_noref(q.forward_sender_name)) )
+    move_to_ref(q.forward_date, _::from_JV((v as _object)["forward_date"], decltype_noref(q.forward_date)) )
+    move_to_ref(q.is_topic_message, _::from_JV((v as _object)["is_topic_message"], decltype_noref(q.is_topic_message)) )
+    move_to_ref(q.is_automatic_forward, _::from_JV((v as _object)["is_automatic_forward"], decltype_noref(q.is_automatic_forward)) )
+    move_to_ref(q.reply_to_message, _::from_JV((v as _object)["reply_to_message"], decltype_noref(q.reply_to_message)) )
+    move_to_ref(q.via_bot, _::from_JV((v as _object)["via_bot"], decltype_noref(q.via_bot)) )
+    move_to_ref(q.edit_date, _::from_JV((v as _object)["edit_date"], decltype_noref(q.edit_date)) )
+    move_to_ref(q.has_protected_content, _::from_JV((v as _object)["has_protected_content"], decltype_noref(q.has_protected_content)) )
+    move_to_ref(q.media_group_id, _::from_JV((v as _object)["media_group_id"], decltype_noref(q.media_group_id)) )
+    move_to_ref(q.author_signature, _::from_JV((v as _object)["author_signature"], decltype_noref(q.author_signature)) )
+    move_to_ref(q.text, _::from_JV((v as _object)["text"], decltype_noref(q.text)) )
+    move_to_ref(q.entities, _::from_JV((v as _object)["entities"], decltype_noref(q.entities)) )
+    move_to_ref(q.animation, _::from_JV((v as _object)["animation"], decltype_noref(q.animation)) )
+    move_to_ref(q.audio, _::from_JV((v as _object)["audio"], decltype_noref(q.audio)) )
+    move_to_ref(q.document, _::from_JV((v as _object)["document"], decltype_noref(q.document)) )
+    move_to_ref(q.photo, _::from_JV((v as _object)["photo"], decltype_noref(q.photo)) )
+    move_to_ref(q.sticker, _::from_JV((v as _object)["sticker"], decltype_noref(q.sticker)) )
+    move_to_ref(q.video, _::from_JV((v as _object)["video"], decltype_noref(q.video)) )
+    move_to_ref(q.video_note, _::from_JV((v as _object)["video_note"], decltype_noref(q.video_note)) )
+    move_to_ref(q.voice, _::from_JV((v as _object)["voice"], decltype_noref(q.voice)) )
+    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], decltype_noref(q.caption)) )
+    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], decltype_noref(q.caption_entities)) )
+    move_to_ref(q.has_media_spoiler, _::from_JV((v as _object)["has_media_spoiler"], decltype_noref(q.has_media_spoiler)) )
+    move_to_ref(q.contact, _::from_JV((v as _object)["contact"], decltype_noref(q.contact)) )
+    move_to_ref(q.dice, _::from_JV((v as _object)["dice"], decltype_noref(q.dice)) )
+    move_to_ref(q.game, _::from_JV((v as _object)["game"], decltype_noref(q.game)) )
+    move_to_ref(q.poll, _::from_JV((v as _object)["poll"], decltype_noref(q.poll)) )
+    move_to_ref(q.venue, _::from_JV((v as _object)["venue"], decltype_noref(q.venue)) )
+    move_to_ref(q.location, _::from_JV((v as _object)["location"], decltype_noref(q.location)) )
+    move_to_ref(q.new_chat_members, _::from_JV((v as _object)["new_chat_members"], decltype_noref(q.new_chat_members)) )
+    move_to_ref(q.left_chat_member, _::from_JV((v as _object)["left_chat_member"], decltype_noref(q.left_chat_member)) )
+    move_to_ref(q.new_chat_title, _::from_JV((v as _object)["new_chat_title"], decltype_noref(q.new_chat_title)) )
+    move_to_ref(q.new_chat_photo, _::from_JV((v as _object)["new_chat_photo"], decltype_noref(q.new_chat_photo)) )
+    move_to_ref(q.delete_chat_photo, _::from_JV((v as _object)["delete_chat_photo"], decltype_noref(q.delete_chat_photo)) )
+    move_to_ref(q.group_chat_created, _::from_JV((v as _object)["group_chat_created"], decltype_noref(q.group_chat_created)) )
+    move_to_ref(q.supergroup_chat_created, _::from_JV((v as _object)["supergroup_chat_created"], decltype_noref(q.supergroup_chat_created)) )
+    move_to_ref(q.channel_chat_created, _::from_JV((v as _object)["channel_chat_created"], decltype_noref(q.channel_chat_created)) )
+    move_to_ref(q.message_auto_delete_timer_changed, _::from_JV((v as _object)["message_auto_delete_timer_changed"], decltype_noref(q.message_auto_delete_timer_changed)) )
+    move_to_ref(q.migrate_to_chat_id, _::from_JV((v as _object)["migrate_to_chat_id"], decltype_noref(q.migrate_to_chat_id)) )
+    move_to_ref(q.migrate_from_chat_id, _::from_JV((v as _object)["migrate_from_chat_id"], decltype_noref(q.migrate_from_chat_id)) )
+    move_to_ref(q.pinned_message, _::from_JV((v as _object)["pinned_message"], decltype_noref(q.pinned_message)) )
+    move_to_ref(q.invoice, _::from_JV((v as _object)["invoice"], decltype_noref(q.invoice)) )
+    move_to_ref(q.successful_payment, _::from_JV((v as _object)["successful_payment"], decltype_noref(q.successful_payment)) )
+    move_to_ref(q.user_shared, _::from_JV((v as _object)["user_shared"], decltype_noref(q.user_shared)) )
+    move_to_ref(q.chat_shared, _::from_JV((v as _object)["chat_shared"], decltype_noref(q.chat_shared)) )
+    move_to_ref(q.connected_website, _::from_JV((v as _object)["connected_website"], decltype_noref(q.connected_website)) )
+    move_to_ref(q.write_access_allowed, _::from_JV((v as _object)["write_access_allowed"], decltype_noref(q.write_access_allowed)) )
+    move_to_ref(q.passport_data, _::from_JV((v as _object)["passport_data"], decltype_noref(q.passport_data)) )
+    move_to_ref(q.proximity_alert_triggered, _::from_JV((v as _object)["proximity_alert_triggered"], decltype_noref(q.proximity_alert_triggered)) )
+    move_to_ref(q.forum_topic_created, _::from_JV((v as _object)["forum_topic_created"], decltype_noref(q.forum_topic_created)) )
+    move_to_ref(q.forum_topic_edited, _::from_JV((v as _object)["forum_topic_edited"], decltype_noref(q.forum_topic_edited)) )
+    move_to_ref(q.forum_topic_closed, _::from_JV((v as _object)["forum_topic_closed"], decltype_noref(q.forum_topic_closed)) )
+    move_to_ref(q.forum_topic_reopened, _::from_JV((v as _object)["forum_topic_reopened"], decltype_noref(q.forum_topic_reopened)) )
+    move_to_ref(q.general_forum_topic_hidden, _::from_JV((v as _object)["general_forum_topic_hidden"], decltype_noref(q.general_forum_topic_hidden)) )
+    move_to_ref(q.general_forum_topic_unhidden, _::from_JV((v as _object)["general_forum_topic_unhidden"], decltype_noref(q.general_forum_topic_unhidden)) )
+    move_to_ref(q.video_chat_scheduled, _::from_JV((v as _object)["video_chat_scheduled"], decltype_noref(q.video_chat_scheduled)) )
+    move_to_ref(q.video_chat_started, _::from_JV((v as _object)["video_chat_started"], decltype_noref(q.video_chat_started)) )
+    move_to_ref(q.video_chat_ended, _::from_JV((v as _object)["video_chat_ended"], decltype_noref(q.video_chat_ended)) )
+    move_to_ref(q.video_chat_participants_invited, _::from_JV((v as _object)["video_chat_participants_invited"], decltype_noref(q.video_chat_participants_invited)) )
+    move_to_ref(q.web_app_data, _::from_JV((v as _object)["web_app_data"], decltype_noref(q.web_app_data)) )
+    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], decltype_noref(q.reply_markup)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:message? ) : message?
+    return null if v==null
+    var q = new message
+    *q <- from_JV(v,type<message>)
+    return q
+
 struct messageid
     //!  This object represents a unique message identifier.
     message_id : int	//! Unique message identifier
+
+def from_JV ( var v:JsonValue?; t:messageid ) : messageid
+    var q : messageid
+    move_to_ref(q.message_id, _::from_JV((v as _object)["message_id"], decltype_noref(q.message_id)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:messageid? ) : messageid?
+    return null if v==null
+    var q = new messageid
+    *q <- from_JV(v,type<messageid>)
+    return q
 
 struct messageentity
     //!  This object represents one special entity in a text message. For example, hashtags, usernames, URLs, etc.
@@ -190,6 +441,23 @@ struct messageentity
     [[optional]] language : string = ""	//! Optional. For “pre” only, the programming language of the entity text
     [[optional]] custom_emoji_id : string = ""	//! Optional. For “custom_emoji” only, unique identifier of the custom emoji. Use getCustomEmojiStickers to get full information about the sticker
 
+def from_JV ( var v:JsonValue?; t:messageentity ) : messageentity
+    var q : messageentity
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    move_to_ref(q.offset, _::from_JV((v as _object)["offset"], decltype_noref(q.offset)) )
+    move_to_ref(q.length, _::from_JV((v as _object)["length"], decltype_noref(q.length)) )
+    move_to_ref(q.url, _::from_JV((v as _object)["url"], decltype_noref(q.url)) )
+    move_to_ref(q.user, _::from_JV((v as _object)["user"], decltype_noref(q.user)) )
+    move_to_ref(q.language, _::from_JV((v as _object)["language"], decltype_noref(q.language)) )
+    move_to_ref(q.custom_emoji_id, _::from_JV((v as _object)["custom_emoji_id"], decltype_noref(q.custom_emoji_id)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:messageentity? ) : messageentity?
+    return null if v==null
+    var q = new messageentity
+    *q <- from_JV(v,type<messageentity>)
+    return q
+
 struct photosize
     //!  This object represents one size of a photo or a file / sticker thumbnail.
     file_id : string	//! Identifier for this file, which can be used to download or reuse the file
@@ -197,6 +465,21 @@ struct photosize
     width : int	//! Photo width
     height : int	//! Photo height
     [[optional]] file_size : int = INT_MIN	//! Optional. File size in bytes
+
+def from_JV ( var v:JsonValue?; t:photosize ) : photosize
+    var q : photosize
+    move_to_ref(q.file_id, _::from_JV((v as _object)["file_id"], decltype_noref(q.file_id)) )
+    move_to_ref(q.file_unique_id, _::from_JV((v as _object)["file_unique_id"], decltype_noref(q.file_unique_id)) )
+    move_to_ref(q.width, _::from_JV((v as _object)["width"], decltype_noref(q.width)) )
+    move_to_ref(q.height, _::from_JV((v as _object)["height"], decltype_noref(q.height)) )
+    move_to_ref(q.file_size, _::from_JV((v as _object)["file_size"], decltype_noref(q.file_size)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:photosize? ) : photosize?
+    return null if v==null
+    var q = new photosize
+    *q <- from_JV(v,type<photosize>)
+    return q
 
 struct animation
     //!  This object represents an animation file (GIF or H.264/MPEG-4 AVC video without sound).
@@ -210,6 +493,25 @@ struct animation
     [[optional]] mime_type : string = ""	//! Optional. MIME type of the file as defined by sender
     [[optional]] file_size : int = INT_MIN	//! Optional. File size in bytes. It can be bigger than 2^31 and some programming languages may have difficulty/silent defects in interpreting it. But it has at most 52 significant bits, so a signed 64-bit integer or double-precision float type are safe for storing this value.
 
+def from_JV ( var v:JsonValue?; t:animation ) : animation
+    var q : animation
+    move_to_ref(q.file_id, _::from_JV((v as _object)["file_id"], decltype_noref(q.file_id)) )
+    move_to_ref(q.file_unique_id, _::from_JV((v as _object)["file_unique_id"], decltype_noref(q.file_unique_id)) )
+    move_to_ref(q.width, _::from_JV((v as _object)["width"], decltype_noref(q.width)) )
+    move_to_ref(q.height, _::from_JV((v as _object)["height"], decltype_noref(q.height)) )
+    move_to_ref(q.duration, _::from_JV((v as _object)["duration"], decltype_noref(q.duration)) )
+    move_to_ref(q.thumbnail, _::from_JV((v as _object)["thumbnail"], decltype_noref(q.thumbnail)) )
+    move_to_ref(q.file_name, _::from_JV((v as _object)["file_name"], decltype_noref(q.file_name)) )
+    move_to_ref(q.mime_type, _::from_JV((v as _object)["mime_type"], decltype_noref(q.mime_type)) )
+    move_to_ref(q.file_size, _::from_JV((v as _object)["file_size"], decltype_noref(q.file_size)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:animation? ) : animation?
+    return null if v==null
+    var q = new animation
+    *q <- from_JV(v,type<animation>)
+    return q
+
 struct audio
     //!  This object represents an audio file to be treated as music by the Telegram clients.
     file_id : string	//! Identifier for this file, which can be used to download or reuse the file
@@ -222,6 +524,25 @@ struct audio
     [[optional]] file_size : int = INT_MIN	//! Optional. File size in bytes. It can be bigger than 2^31 and some programming languages may have difficulty/silent defects in interpreting it. But it has at most 52 significant bits, so a signed 64-bit integer or double-precision float type are safe for storing this value.
     [[optional]] thumbnail : photosize?	//! Optional. Thumbnail of the album cover to which the music file belongs
 
+def from_JV ( var v:JsonValue?; t:audio ) : audio
+    var q : audio
+    move_to_ref(q.file_id, _::from_JV((v as _object)["file_id"], decltype_noref(q.file_id)) )
+    move_to_ref(q.file_unique_id, _::from_JV((v as _object)["file_unique_id"], decltype_noref(q.file_unique_id)) )
+    move_to_ref(q.duration, _::from_JV((v as _object)["duration"], decltype_noref(q.duration)) )
+    move_to_ref(q.performer, _::from_JV((v as _object)["performer"], decltype_noref(q.performer)) )
+    move_to_ref(q.title, _::from_JV((v as _object)["title"], decltype_noref(q.title)) )
+    move_to_ref(q.file_name, _::from_JV((v as _object)["file_name"], decltype_noref(q.file_name)) )
+    move_to_ref(q.mime_type, _::from_JV((v as _object)["mime_type"], decltype_noref(q.mime_type)) )
+    move_to_ref(q.file_size, _::from_JV((v as _object)["file_size"], decltype_noref(q.file_size)) )
+    move_to_ref(q.thumbnail, _::from_JV((v as _object)["thumbnail"], decltype_noref(q.thumbnail)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:audio? ) : audio?
+    return null if v==null
+    var q = new audio
+    *q <- from_JV(v,type<audio>)
+    return q
+
 struct document
     //!  This object represents a general file (as opposed to photos, voice messages and audio files).
     file_id : string	//! Identifier for this file, which can be used to download or reuse the file
@@ -230,6 +551,22 @@ struct document
     [[optional]] file_name : string = ""	//! Optional. Original filename as defined by sender
     [[optional]] mime_type : string = ""	//! Optional. MIME type of the file as defined by sender
     [[optional]] file_size : int = INT_MIN	//! Optional. File size in bytes. It can be bigger than 2^31 and some programming languages may have difficulty/silent defects in interpreting it. But it has at most 52 significant bits, so a signed 64-bit integer or double-precision float type are safe for storing this value.
+
+def from_JV ( var v:JsonValue?; t:document ) : document
+    var q : document
+    move_to_ref(q.file_id, _::from_JV((v as _object)["file_id"], decltype_noref(q.file_id)) )
+    move_to_ref(q.file_unique_id, _::from_JV((v as _object)["file_unique_id"], decltype_noref(q.file_unique_id)) )
+    move_to_ref(q.thumbnail, _::from_JV((v as _object)["thumbnail"], decltype_noref(q.thumbnail)) )
+    move_to_ref(q.file_name, _::from_JV((v as _object)["file_name"], decltype_noref(q.file_name)) )
+    move_to_ref(q.mime_type, _::from_JV((v as _object)["mime_type"], decltype_noref(q.mime_type)) )
+    move_to_ref(q.file_size, _::from_JV((v as _object)["file_size"], decltype_noref(q.file_size)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:document? ) : document?
+    return null if v==null
+    var q = new document
+    *q <- from_JV(v,type<document>)
+    return q
 
 struct video
     //!  This object represents a video file.
@@ -243,6 +580,25 @@ struct video
     [[optional]] mime_type : string = ""	//! Optional. MIME type of the file as defined by sender
     [[optional]] file_size : int = INT_MIN	//! Optional. File size in bytes. It can be bigger than 2^31 and some programming languages may have difficulty/silent defects in interpreting it. But it has at most 52 significant bits, so a signed 64-bit integer or double-precision float type are safe for storing this value.
 
+def from_JV ( var v:JsonValue?; t:video ) : video
+    var q : video
+    move_to_ref(q.file_id, _::from_JV((v as _object)["file_id"], decltype_noref(q.file_id)) )
+    move_to_ref(q.file_unique_id, _::from_JV((v as _object)["file_unique_id"], decltype_noref(q.file_unique_id)) )
+    move_to_ref(q.width, _::from_JV((v as _object)["width"], decltype_noref(q.width)) )
+    move_to_ref(q.height, _::from_JV((v as _object)["height"], decltype_noref(q.height)) )
+    move_to_ref(q.duration, _::from_JV((v as _object)["duration"], decltype_noref(q.duration)) )
+    move_to_ref(q.thumbnail, _::from_JV((v as _object)["thumbnail"], decltype_noref(q.thumbnail)) )
+    move_to_ref(q.file_name, _::from_JV((v as _object)["file_name"], decltype_noref(q.file_name)) )
+    move_to_ref(q.mime_type, _::from_JV((v as _object)["mime_type"], decltype_noref(q.mime_type)) )
+    move_to_ref(q.file_size, _::from_JV((v as _object)["file_size"], decltype_noref(q.file_size)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:video? ) : video?
+    return null if v==null
+    var q = new video
+    *q <- from_JV(v,type<video>)
+    return q
+
 struct videonote
     //!  This object represents a video message (available in Telegram apps as of v.4.0).
     file_id : string	//! Identifier for this file, which can be used to download or reuse the file
@@ -252,6 +608,22 @@ struct videonote
     [[optional]] thumbnail : photosize?	//! Optional. Video thumbnail
     [[optional]] file_size : int = INT_MIN	//! Optional. File size in bytes
 
+def from_JV ( var v:JsonValue?; t:videonote ) : videonote
+    var q : videonote
+    move_to_ref(q.file_id, _::from_JV((v as _object)["file_id"], decltype_noref(q.file_id)) )
+    move_to_ref(q.file_unique_id, _::from_JV((v as _object)["file_unique_id"], decltype_noref(q.file_unique_id)) )
+    move_to_ref(q.length, _::from_JV((v as _object)["length"], decltype_noref(q.length)) )
+    move_to_ref(q.duration, _::from_JV((v as _object)["duration"], decltype_noref(q.duration)) )
+    move_to_ref(q.thumbnail, _::from_JV((v as _object)["thumbnail"], decltype_noref(q.thumbnail)) )
+    move_to_ref(q.file_size, _::from_JV((v as _object)["file_size"], decltype_noref(q.file_size)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:videonote? ) : videonote?
+    return null if v==null
+    var q = new videonote
+    *q <- from_JV(v,type<videonote>)
+    return q
+
 struct voice
     //!  This object represents a voice note.
     file_id : string	//! Identifier for this file, which can be used to download or reuse the file
@@ -259,6 +631,21 @@ struct voice
     duration : int	//! Duration of the audio in seconds as defined by sender
     [[optional]] mime_type : string = ""	//! Optional. MIME type of the file as defined by sender
     [[optional]] file_size : int = INT_MIN	//! Optional. File size in bytes. It can be bigger than 2^31 and some programming languages may have difficulty/silent defects in interpreting it. But it has at most 52 significant bits, so a signed 64-bit integer or double-precision float type are safe for storing this value.
+
+def from_JV ( var v:JsonValue?; t:voice ) : voice
+    var q : voice
+    move_to_ref(q.file_id, _::from_JV((v as _object)["file_id"], decltype_noref(q.file_id)) )
+    move_to_ref(q.file_unique_id, _::from_JV((v as _object)["file_unique_id"], decltype_noref(q.file_unique_id)) )
+    move_to_ref(q.duration, _::from_JV((v as _object)["duration"], decltype_noref(q.duration)) )
+    move_to_ref(q.mime_type, _::from_JV((v as _object)["mime_type"], decltype_noref(q.mime_type)) )
+    move_to_ref(q.file_size, _::from_JV((v as _object)["file_size"], decltype_noref(q.file_size)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:voice? ) : voice?
+    return null if v==null
+    var q = new voice
+    *q <- from_JV(v,type<voice>)
+    return q
 
 struct contact
     //!  This object represents a phone contact.
@@ -268,21 +655,73 @@ struct contact
     [[optional]] user_id : int = INT_MIN	//! Optional. Contact's user identifier in Telegram. This number may have more than 32 significant bits and some programming languages may have difficulty/silent defects in interpreting it. But it has at most 52 significant bits, so a 64-bit integer or double-precision float type are safe for storing this identifier.
     [[optional]] vcard : string = ""	//! Optional. Additional data about the contact in the form of a vCard
 
+def from_JV ( var v:JsonValue?; t:contact ) : contact
+    var q : contact
+    move_to_ref(q.phone_number, _::from_JV((v as _object)["phone_number"], decltype_noref(q.phone_number)) )
+    move_to_ref(q.first_name, _::from_JV((v as _object)["first_name"], decltype_noref(q.first_name)) )
+    move_to_ref(q.last_name, _::from_JV((v as _object)["last_name"], decltype_noref(q.last_name)) )
+    move_to_ref(q.user_id, _::from_JV((v as _object)["user_id"], decltype_noref(q.user_id)) )
+    move_to_ref(q.vcard, _::from_JV((v as _object)["vcard"], decltype_noref(q.vcard)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:contact? ) : contact?
+    return null if v==null
+    var q = new contact
+    *q <- from_JV(v,type<contact>)
+    return q
+
 struct dice
     //!  This object represents an animated emoji that displays a random value.
     emoji : string	//! Emoji on which the dice throw animation is based
     value : int	//! Value of the dice, 1-6 for “”, “” and “” base emoji, 1-5 for “” and “” base emoji, 1-64 for “” base emoji
+
+def from_JV ( var v:JsonValue?; t:dice ) : dice
+    var q : dice
+    move_to_ref(q.emoji, _::from_JV((v as _object)["emoji"], decltype_noref(q.emoji)) )
+    move_to_ref(q.value, _::from_JV((v as _object)["value"], decltype_noref(q.value)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:dice? ) : dice?
+    return null if v==null
+    var q = new dice
+    *q <- from_JV(v,type<dice>)
+    return q
 
 struct polloption
     //!  This object contains information about one answer option in a poll.
     text : string	//! Option text, 1-100 characters
     voter_count : int	//! Number of users that voted for this option
 
+def from_JV ( var v:JsonValue?; t:polloption ) : polloption
+    var q : polloption
+    move_to_ref(q.text, _::from_JV((v as _object)["text"], decltype_noref(q.text)) )
+    move_to_ref(q.voter_count, _::from_JV((v as _object)["voter_count"], decltype_noref(q.voter_count)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:polloption? ) : polloption?
+    return null if v==null
+    var q = new polloption
+    *q <- from_JV(v,type<polloption>)
+    return q
+
 struct pollanswer
     //!  This object represents an answer of a user in a non-anonymous poll.
     poll_id : string	//! Unique poll identifier
     user : user	//! The user, who changed the answer to the poll
     option_ids : array<int>	//! 0-based identifiers of answer options, chosen by the user. May be empty if the user retracted their vote.
+
+def from_JV ( var v:JsonValue?; t:pollanswer ) : pollanswer
+    var q : pollanswer
+    move_to_ref(q.poll_id, _::from_JV((v as _object)["poll_id"], decltype_noref(q.poll_id)) )
+    move_to_ref(q.user, _::from_JV((v as _object)["user"], decltype_noref(q.user)) )
+    move_to_ref(q.option_ids, _::from_JV((v as _object)["option_ids"], decltype_noref(q.option_ids)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:pollanswer? ) : pollanswer?
+    return null if v==null
+    var q = new pollanswer
+    *q <- from_JV(v,type<pollanswer>)
+    return q
 
 struct poll
     //!  This object contains information about a poll.
@@ -300,6 +739,29 @@ struct poll
     [[optional]] open_period : int = INT_MIN	//! Optional. Amount of time in seconds the poll will be active after creation
     [[optional]] close_date : int = INT_MIN	//! Optional. Point in time (Unix timestamp) when the poll will be automatically closed
 
+def from_JV ( var v:JsonValue?; t:poll ) : poll
+    var q : poll
+    move_to_ref(q.id, _::from_JV((v as _object)["id"], decltype_noref(q.id)) )
+    move_to_ref(q.question, _::from_JV((v as _object)["question"], decltype_noref(q.question)) )
+    move_to_ref(q._options, _::from_JV((v as _object)["_options"], decltype_noref(q._options)) )
+    move_to_ref(q.total_voter_count, _::from_JV((v as _object)["total_voter_count"], decltype_noref(q.total_voter_count)) )
+    move_to_ref(q.is_closed, _::from_JV((v as _object)["is_closed"], decltype_noref(q.is_closed)) )
+    move_to_ref(q.is_anonymous, _::from_JV((v as _object)["is_anonymous"], decltype_noref(q.is_anonymous)) )
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    move_to_ref(q.allows_multiple_answers, _::from_JV((v as _object)["allows_multiple_answers"], decltype_noref(q.allows_multiple_answers)) )
+    move_to_ref(q.correct_option_id, _::from_JV((v as _object)["correct_option_id"], decltype_noref(q.correct_option_id)) )
+    move_to_ref(q.explanation, _::from_JV((v as _object)["explanation"], decltype_noref(q.explanation)) )
+    move_to_ref(q.explanation_entities, _::from_JV((v as _object)["explanation_entities"], decltype_noref(q.explanation_entities)) )
+    move_to_ref(q.open_period, _::from_JV((v as _object)["open_period"], decltype_noref(q.open_period)) )
+    move_to_ref(q.close_date, _::from_JV((v as _object)["close_date"], decltype_noref(q.close_date)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:poll? ) : poll?
+    return null if v==null
+    var q = new poll
+    *q <- from_JV(v,type<poll>)
+    return q
+
 struct location
     //!  This object represents a point on the map.
     longitude : float	//! Longitude as defined by sender
@@ -308,6 +770,22 @@ struct location
     [[optional]] live_period : int = INT_MIN	//! Optional. Time relative to the message sending date, during which the location can be updated; in seconds. For active live locations only.
     [[optional]] heading : int = INT_MIN	//! Optional. The direction in which user is moving, in degrees; 1-360. For active live locations only.
     [[optional]] proximity_alert_radius : int = INT_MIN	//! Optional. The maximum distance for proximity alerts about approaching another chat member, in meters. For sent live locations only.
+
+def from_JV ( var v:JsonValue?; t:location ) : location
+    var q : location
+    move_to_ref(q.longitude, _::from_JV((v as _object)["longitude"], decltype_noref(q.longitude)) )
+    move_to_ref(q.latitude, _::from_JV((v as _object)["latitude"], decltype_noref(q.latitude)) )
+    move_to_ref(q.horizontal_accuracy, _::from_JV((v as _object)["horizontal_accuracy"], decltype_noref(q.horizontal_accuracy)) )
+    move_to_ref(q.live_period, _::from_JV((v as _object)["live_period"], decltype_noref(q.live_period)) )
+    move_to_ref(q.heading, _::from_JV((v as _object)["heading"], decltype_noref(q.heading)) )
+    move_to_ref(q.proximity_alert_radius, _::from_JV((v as _object)["proximity_alert_radius"], decltype_noref(q.proximity_alert_radius)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:location? ) : location?
+    return null if v==null
+    var q = new location
+    *q <- from_JV(v,type<location>)
+    return q
 
 struct venue
     //!  This object represents a venue.
@@ -319,10 +797,39 @@ struct venue
     [[optional]] google_place_id : string = ""	//! Optional. Google Places identifier of the venue
     [[optional]] google_place_type : string = ""	//! Optional. Google Places type of the venue. (See supported types.)
 
+def from_JV ( var v:JsonValue?; t:venue ) : venue
+    var q : venue
+    move_to_ref(q.location, _::from_JV((v as _object)["location"], decltype_noref(q.location)) )
+    move_to_ref(q.title, _::from_JV((v as _object)["title"], decltype_noref(q.title)) )
+    move_to_ref(q.address, _::from_JV((v as _object)["address"], decltype_noref(q.address)) )
+    move_to_ref(q.foursquare_id, _::from_JV((v as _object)["foursquare_id"], decltype_noref(q.foursquare_id)) )
+    move_to_ref(q.foursquare_type, _::from_JV((v as _object)["foursquare_type"], decltype_noref(q.foursquare_type)) )
+    move_to_ref(q.google_place_id, _::from_JV((v as _object)["google_place_id"], decltype_noref(q.google_place_id)) )
+    move_to_ref(q.google_place_type, _::from_JV((v as _object)["google_place_type"], decltype_noref(q.google_place_type)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:venue? ) : venue?
+    return null if v==null
+    var q = new venue
+    *q <- from_JV(v,type<venue>)
+    return q
+
 struct webappdata
     //!  Describes data sent from a Web App to the bot.
     data : string	//! The data. Be aware that a bad client can send arbitrary data in this field.
     button_text : string	//! Text of the web_app keyboard button from which the Web App was opened. Be aware that a bad client can send arbitrary data in this field.
+
+def from_JV ( var v:JsonValue?; t:webappdata ) : webappdata
+    var q : webappdata
+    move_to_ref(q.data, _::from_JV((v as _object)["data"], decltype_noref(q.data)) )
+    move_to_ref(q.button_text, _::from_JV((v as _object)["button_text"], decltype_noref(q.button_text)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:webappdata? ) : webappdata?
+    return null if v==null
+    var q = new webappdata
+    *q <- from_JV(v,type<webappdata>)
+    return q
 
 struct proximityalerttriggered
     //!  This object represents the content of a service message, sent whenever a user in the chat triggers a proximity alert set by another user.
@@ -330,9 +837,33 @@ struct proximityalerttriggered
     watcher : user	//! User that set the alert
     distance : int	//! The distance between the users
 
+def from_JV ( var v:JsonValue?; t:proximityalerttriggered ) : proximityalerttriggered
+    var q : proximityalerttriggered
+    move_to_ref(q.traveler, _::from_JV((v as _object)["traveler"], decltype_noref(q.traveler)) )
+    move_to_ref(q.watcher, _::from_JV((v as _object)["watcher"], decltype_noref(q.watcher)) )
+    move_to_ref(q.distance, _::from_JV((v as _object)["distance"], decltype_noref(q.distance)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:proximityalerttriggered? ) : proximityalerttriggered?
+    return null if v==null
+    var q = new proximityalerttriggered
+    *q <- from_JV(v,type<proximityalerttriggered>)
+    return q
+
 struct messageautodeletetimerchanged
     //!  This object represents a service message about a change in auto-delete timer settings.
     message_auto_delete_time : int	//! New auto-delete time for messages in the chat; in seconds
+
+def from_JV ( var v:JsonValue?; t:messageautodeletetimerchanged ) : messageautodeletetimerchanged
+    var q : messageautodeletetimerchanged
+    move_to_ref(q.message_auto_delete_time, _::from_JV((v as _object)["message_auto_delete_time"], decltype_noref(q.message_auto_delete_time)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:messageautodeletetimerchanged? ) : messageautodeletetimerchanged?
+    return null if v==null
+    var q = new messageautodeletetimerchanged
+    *q <- from_JV(v,type<messageautodeletetimerchanged>)
+    return q
 
 struct forumtopiccreated
     //!  This object represents a service message about a new forum topic created in the chat.
@@ -340,49 +871,215 @@ struct forumtopiccreated
     icon_color : int	//! Color of the topic icon in RGB format
     [[optional]] icon_custom_emoji_id : string = ""	//! Optional. Unique identifier of the custom emoji shown as the topic icon
 
-struct forumtopicclosed {} //  This object represents a service message about a forum topic closed in the chat. Currently holds no information.
+def from_JV ( var v:JsonValue?; t:forumtopiccreated ) : forumtopiccreated
+    var q : forumtopiccreated
+    move_to_ref(q.name, _::from_JV((v as _object)["name"], decltype_noref(q.name)) )
+    move_to_ref(q.icon_color, _::from_JV((v as _object)["icon_color"], decltype_noref(q.icon_color)) )
+    move_to_ref(q.icon_custom_emoji_id, _::from_JV((v as _object)["icon_custom_emoji_id"], decltype_noref(q.icon_custom_emoji_id)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:forumtopiccreated? ) : forumtopiccreated?
+    return null if v==null
+    var q = new forumtopiccreated
+    *q <- from_JV(v,type<forumtopiccreated>)
+    return q
+
+struct forumtopicclosed
+    //!  This object represents a service message about a forum topic closed in the chat. Currently holds no information.
+    object_forumtopicclosed_has_no_fields:bool
+
+def from_JV ( var v:JsonValue?; t:forumtopicclosed ) : forumtopicclosed
+    var q : forumtopicclosed
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:forumtopicclosed? ) : forumtopicclosed?
+    return null if v==null
+    var q = new forumtopicclosed
+    *q <- from_JV(v,type<forumtopicclosed>)
+    return q
 
 struct forumtopicedited
     //!  This object represents a service message about an edited forum topic.
     [[optional]] name : string = ""	//! Optional. New name of the topic, if it was edited
     [[optional]] icon_custom_emoji_id : string = ""	//! Optional. New identifier of the custom emoji shown as the topic icon, if it was edited; an empty string if the icon was removed
 
-struct forumtopicreopened {} //  This object represents a service message about a forum topic reopened in the chat. Currently holds no information.
+def from_JV ( var v:JsonValue?; t:forumtopicedited ) : forumtopicedited
+    var q : forumtopicedited
+    move_to_ref(q.name, _::from_JV((v as _object)["name"], decltype_noref(q.name)) )
+    move_to_ref(q.icon_custom_emoji_id, _::from_JV((v as _object)["icon_custom_emoji_id"], decltype_noref(q.icon_custom_emoji_id)) )
+    return <- q
 
-struct generalforumtopichidden {} //  This object represents a service message about General forum topic hidden in the chat. Currently holds no information.
+def from_JV ( var v:JsonValue?; t:forumtopicedited? ) : forumtopicedited?
+    return null if v==null
+    var q = new forumtopicedited
+    *q <- from_JV(v,type<forumtopicedited>)
+    return q
 
-struct generalforumtopicunhidden {} //  This object represents a service message about General forum topic unhidden in the chat. Currently holds no information.
+struct forumtopicreopened
+    //!  This object represents a service message about a forum topic reopened in the chat. Currently holds no information.
+    object_forumtopicreopened_has_no_fields:bool
+
+def from_JV ( var v:JsonValue?; t:forumtopicreopened ) : forumtopicreopened
+    var q : forumtopicreopened
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:forumtopicreopened? ) : forumtopicreopened?
+    return null if v==null
+    var q = new forumtopicreopened
+    *q <- from_JV(v,type<forumtopicreopened>)
+    return q
+
+struct generalforumtopichidden
+    //!  This object represents a service message about General forum topic hidden in the chat. Currently holds no information.
+    object_generalforumtopichidden_has_no_fields:bool
+
+def from_JV ( var v:JsonValue?; t:generalforumtopichidden ) : generalforumtopichidden
+    var q : generalforumtopichidden
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:generalforumtopichidden? ) : generalforumtopichidden?
+    return null if v==null
+    var q = new generalforumtopichidden
+    *q <- from_JV(v,type<generalforumtopichidden>)
+    return q
+
+struct generalforumtopicunhidden
+    //!  This object represents a service message about General forum topic unhidden in the chat. Currently holds no information.
+    object_generalforumtopicunhidden_has_no_fields:bool
+
+def from_JV ( var v:JsonValue?; t:generalforumtopicunhidden ) : generalforumtopicunhidden
+    var q : generalforumtopicunhidden
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:generalforumtopicunhidden? ) : generalforumtopicunhidden?
+    return null if v==null
+    var q = new generalforumtopicunhidden
+    *q <- from_JV(v,type<generalforumtopicunhidden>)
+    return q
 
 struct usershared
     //!  This object contains information about the user whose identifier was shared with the bot using a KeyboardButtonRequestUser button.
     request_id : int	//! Identifier of the request
     user_id : int	//! Identifier of the shared user. This number may have more than 32 significant bits and some programming languages may have difficulty/silent defects in interpreting it. But it has at most 52 significant bits, so a 64-bit integer or double-precision float type are safe for storing this identifier. The bot may not have access to the user and could be unable to use this identifier, unless the user is already known to the bot by some other means.
 
+def from_JV ( var v:JsonValue?; t:usershared ) : usershared
+    var q : usershared
+    move_to_ref(q.request_id, _::from_JV((v as _object)["request_id"], decltype_noref(q.request_id)) )
+    move_to_ref(q.user_id, _::from_JV((v as _object)["user_id"], decltype_noref(q.user_id)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:usershared? ) : usershared?
+    return null if v==null
+    var q = new usershared
+    *q <- from_JV(v,type<usershared>)
+    return q
+
 struct chatshared
     //!  This object contains information about the chat whose identifier was shared with the bot using a KeyboardButtonRequestChat button.
     request_id : int	//! Identifier of the request
     chat_id : int	//! Identifier of the shared chat. This number may have more than 32 significant bits and some programming languages may have difficulty/silent defects in interpreting it. But it has at most 52 significant bits, so a 64-bit integer or double-precision float type are safe for storing this identifier. The bot may not have access to the chat and could be unable to use this identifier, unless the chat is already known to the bot by some other means.
 
-struct writeaccessallowed {} //  This object represents a service message about a user allowing a bot added to the attachment menu to write messages. Currently holds no information.
+def from_JV ( var v:JsonValue?; t:chatshared ) : chatshared
+    var q : chatshared
+    move_to_ref(q.request_id, _::from_JV((v as _object)["request_id"], decltype_noref(q.request_id)) )
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:chatshared? ) : chatshared?
+    return null if v==null
+    var q = new chatshared
+    *q <- from_JV(v,type<chatshared>)
+    return q
+
+struct writeaccessallowed
+    //!  This object represents a service message about a user allowing a bot added to the attachment menu to write messages. Currently holds no information.
+    object_writeaccessallowed_has_no_fields:bool
+
+def from_JV ( var v:JsonValue?; t:writeaccessallowed ) : writeaccessallowed
+    var q : writeaccessallowed
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:writeaccessallowed? ) : writeaccessallowed?
+    return null if v==null
+    var q = new writeaccessallowed
+    *q <- from_JV(v,type<writeaccessallowed>)
+    return q
 
 struct videochatscheduled
     //!  This object represents a service message about a video chat scheduled in the chat.
     start_date : int	//! Point in time (Unix timestamp) when the video chat is supposed to be started by a chat administrator
 
-struct videochatstarted {} //  This object represents a service message about a video chat started in the chat. Currently holds no information.
+def from_JV ( var v:JsonValue?; t:videochatscheduled ) : videochatscheduled
+    var q : videochatscheduled
+    move_to_ref(q.start_date, _::from_JV((v as _object)["start_date"], decltype_noref(q.start_date)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:videochatscheduled? ) : videochatscheduled?
+    return null if v==null
+    var q = new videochatscheduled
+    *q <- from_JV(v,type<videochatscheduled>)
+    return q
+
+struct videochatstarted
+    //!  This object represents a service message about a video chat started in the chat. Currently holds no information.
+    object_videochatstarted_has_no_fields:bool
+
+def from_JV ( var v:JsonValue?; t:videochatstarted ) : videochatstarted
+    var q : videochatstarted
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:videochatstarted? ) : videochatstarted?
+    return null if v==null
+    var q = new videochatstarted
+    *q <- from_JV(v,type<videochatstarted>)
+    return q
 
 struct videochatended
     //!  This object represents a service message about a video chat ended in the chat.
     duration : int	//! Video chat duration in seconds
 
+def from_JV ( var v:JsonValue?; t:videochatended ) : videochatended
+    var q : videochatended
+    move_to_ref(q.duration, _::from_JV((v as _object)["duration"], decltype_noref(q.duration)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:videochatended? ) : videochatended?
+    return null if v==null
+    var q = new videochatended
+    *q <- from_JV(v,type<videochatended>)
+    return q
+
 struct videochatparticipantsinvited
     //!  This object represents a service message about new members invited to a video chat.
     users : array<user>	//! New members that were invited to the video chat
+
+def from_JV ( var v:JsonValue?; t:videochatparticipantsinvited ) : videochatparticipantsinvited
+    var q : videochatparticipantsinvited
+    move_to_ref(q.users, _::from_JV((v as _object)["users"], decltype_noref(q.users)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:videochatparticipantsinvited? ) : videochatparticipantsinvited?
+    return null if v==null
+    var q = new videochatparticipantsinvited
+    *q <- from_JV(v,type<videochatparticipantsinvited>)
+    return q
 
 struct userprofilephotos
     //!  This object represent a user's profile pictures.
     total_count : int	//! Total number of profile pictures the target user has
     photos : array<array<photosize>>	//! Requested profile pictures (in up to 4 sizes each)
+
+def from_JV ( var v:JsonValue?; t:userprofilephotos ) : userprofilephotos
+    var q : userprofilephotos
+    move_to_ref(q.total_count, _::from_JV((v as _object)["total_count"], decltype_noref(q.total_count)) )
+    move_to_ref(q.photos, _::from_JV((v as _object)["photos"], decltype_noref(q.photos)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:userprofilephotos? ) : userprofilephotos?
+    return null if v==null
+    var q = new userprofilephotos
+    *q <- from_JV(v,type<userprofilephotos>)
+    return q
 
 struct file
     //!  This object represents a file ready to be downloaded. The file can be downloaded via the link https://api.telegram.org/file/bot<token>/<file_path>. It is guaranteed that the link will be valid for at least 1 hour. When the link expires, a new one can be requested by calling getFile.
@@ -391,9 +1088,34 @@ struct file
     [[optional]] file_size : int = INT_MIN	//! Optional. File size in bytes. It can be bigger than 2^31 and some programming languages may have difficulty/silent defects in interpreting it. But it has at most 52 significant bits, so a signed 64-bit integer or double-precision float type are safe for storing this value.
     [[optional]] file_path : string = ""	//! Optional. File path. Use https://api.telegram.org/file/bot<token>/<file_path> to get the file.
 
+def from_JV ( var v:JsonValue?; t:file ) : file
+    var q : file
+    move_to_ref(q.file_id, _::from_JV((v as _object)["file_id"], decltype_noref(q.file_id)) )
+    move_to_ref(q.file_unique_id, _::from_JV((v as _object)["file_unique_id"], decltype_noref(q.file_unique_id)) )
+    move_to_ref(q.file_size, _::from_JV((v as _object)["file_size"], decltype_noref(q.file_size)) )
+    move_to_ref(q.file_path, _::from_JV((v as _object)["file_path"], decltype_noref(q.file_path)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:file? ) : file?
+    return null if v==null
+    var q = new file
+    *q <- from_JV(v,type<file>)
+    return q
+
 struct webappinfo
     //!  Describes a Web App.
     url : string	//! An HTTPS URL of a Web App to be opened with additional data as specified in Initializing Web Apps
+
+def from_JV ( var v:JsonValue?; t:webappinfo ) : webappinfo
+    var q : webappinfo
+    move_to_ref(q.url, _::from_JV((v as _object)["url"], decltype_noref(q.url)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:webappinfo? ) : webappinfo?
+    return null if v==null
+    var q = new webappinfo
+    *q <- from_JV(v,type<webappinfo>)
+    return q
 
 struct replykeyboardmarkup
     //!  This object represents a custom keyboard with reply options (see Introduction to bots for details and examples).
@@ -403,6 +1125,22 @@ struct replykeyboardmarkup
     [[optional]] one_time_keyboard : bool = false	//! Optional. Requests clients to hide the keyboard as soon as it's been used. The keyboard will still be available, but clients will automatically display the usual letter-keyboard in the chat - the user can press a special button in the input field to see the custom keyboard again. Defaults to false.
     [[optional]] input_field_placeholder : string = ""	//! Optional. The placeholder to be shown in the input field when the keyboard is active; 1-64 characters
     [[optional]] selective : bool = false	//! Optional. Use this parameter if you want to show the keyboard to specific users only. Targets: 1) users that are @mentioned in the text of the Message object; 2) if the bot's message is a reply (has reply_to_message_id), sender of the original message.Example: A user requests to change the bot's language, bot replies to the request with a keyboard to select the new language. Other users in the group don't see the keyboard.
+
+def from_JV ( var v:JsonValue?; t:replykeyboardmarkup ) : replykeyboardmarkup
+    var q : replykeyboardmarkup
+    move_to_ref(q.keyboard, _::from_JV((v as _object)["keyboard"], decltype_noref(q.keyboard)) )
+    move_to_ref(q.is_persistent, _::from_JV((v as _object)["is_persistent"], decltype_noref(q.is_persistent)) )
+    move_to_ref(q.resize_keyboard, _::from_JV((v as _object)["resize_keyboard"], decltype_noref(q.resize_keyboard)) )
+    move_to_ref(q.one_time_keyboard, _::from_JV((v as _object)["one_time_keyboard"], decltype_noref(q.one_time_keyboard)) )
+    move_to_ref(q.input_field_placeholder, _::from_JV((v as _object)["input_field_placeholder"], decltype_noref(q.input_field_placeholder)) )
+    move_to_ref(q.selective, _::from_JV((v as _object)["selective"], decltype_noref(q.selective)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:replykeyboardmarkup? ) : replykeyboardmarkup?
+    return null if v==null
+    var q = new replykeyboardmarkup
+    *q <- from_JV(v,type<replykeyboardmarkup>)
+    return q
 
 struct keyboardbutton
     //!  This object represents one button of the reply keyboard. For simple text buttons, String can be used instead of this object to specify the button text. The optional fields web_app, request_user, request_chat, request_contact, request_location, and request_poll are mutually exclusive.
@@ -414,11 +1152,41 @@ struct keyboardbutton
     [[optional]] request_poll : keyboardbuttonpolltype?	//! Optional. If specified, the user will be asked to create a poll and send it to the bot when the button is pressed. Available in private chats only.
     [[optional]] web_app : webappinfo?	//! Optional. If specified, the described Web App will be launched when the button is pressed. The Web App will be able to send a “web_app_data” service message. Available in private chats only.
 
+def from_JV ( var v:JsonValue?; t:keyboardbutton ) : keyboardbutton
+    var q : keyboardbutton
+    move_to_ref(q.text, _::from_JV((v as _object)["text"], decltype_noref(q.text)) )
+    move_to_ref(q.request_user, _::from_JV((v as _object)["request_user"], decltype_noref(q.request_user)) )
+    move_to_ref(q.request_chat, _::from_JV((v as _object)["request_chat"], decltype_noref(q.request_chat)) )
+    move_to_ref(q.request_contact, _::from_JV((v as _object)["request_contact"], decltype_noref(q.request_contact)) )
+    move_to_ref(q.request_location, _::from_JV((v as _object)["request_location"], decltype_noref(q.request_location)) )
+    move_to_ref(q.request_poll, _::from_JV((v as _object)["request_poll"], decltype_noref(q.request_poll)) )
+    move_to_ref(q.web_app, _::from_JV((v as _object)["web_app"], decltype_noref(q.web_app)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:keyboardbutton? ) : keyboardbutton?
+    return null if v==null
+    var q = new keyboardbutton
+    *q <- from_JV(v,type<keyboardbutton>)
+    return q
+
 struct keyboardbuttonrequestuser
     //!  This object defines the criteria used to request a suitable user. The identifier of the selected user will be shared with the bot when the corresponding button is pressed. More about requesting users »
     request_id : int	//! Signed 32-bit identifier of the request, which will be received back in the UserShared object. Must be unique within the message
     [[optional]] user_is_bot : bool = false	//! Optional. Pass True to request a bot, pass False to request a regular user. If not specified, no additional restrictions are applied.
     [[optional]] user_is_premium : bool = false	//! Optional. Pass True to request a premium user, pass False to request a non-premium user. If not specified, no additional restrictions are applied.
+
+def from_JV ( var v:JsonValue?; t:keyboardbuttonrequestuser ) : keyboardbuttonrequestuser
+    var q : keyboardbuttonrequestuser
+    move_to_ref(q.request_id, _::from_JV((v as _object)["request_id"], decltype_noref(q.request_id)) )
+    move_to_ref(q.user_is_bot, _::from_JV((v as _object)["user_is_bot"], decltype_noref(q.user_is_bot)) )
+    move_to_ref(q.user_is_premium, _::from_JV((v as _object)["user_is_premium"], decltype_noref(q.user_is_premium)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:keyboardbuttonrequestuser? ) : keyboardbuttonrequestuser?
+    return null if v==null
+    var q = new keyboardbuttonrequestuser
+    *q <- from_JV(v,type<keyboardbuttonrequestuser>)
+    return q
 
 struct keyboardbuttonrequestchat
     //!  This object defines the criteria used to request a suitable chat. The identifier of the selected chat will be shared with the bot when the corresponding button is pressed. More about requesting chats »
@@ -431,18 +1199,70 @@ struct keyboardbuttonrequestchat
     [[optional]] bot_administrator_rights : chatadministratorrights?	//! Optional. A JSON-serialized object listing the required administrator rights of the bot in the chat. The rights must be a subset of user_administrator_rights. If not specified, no additional restrictions are applied.
     [[optional]] bot_is_member : bool = false	//! Optional. Pass True to request a chat with the bot as a member. Otherwise, no additional restrictions are applied.
 
+def from_JV ( var v:JsonValue?; t:keyboardbuttonrequestchat ) : keyboardbuttonrequestchat
+    var q : keyboardbuttonrequestchat
+    move_to_ref(q.request_id, _::from_JV((v as _object)["request_id"], decltype_noref(q.request_id)) )
+    move_to_ref(q.chat_is_channel, _::from_JV((v as _object)["chat_is_channel"], decltype_noref(q.chat_is_channel)) )
+    move_to_ref(q.chat_is_forum, _::from_JV((v as _object)["chat_is_forum"], decltype_noref(q.chat_is_forum)) )
+    move_to_ref(q.chat_has_username, _::from_JV((v as _object)["chat_has_username"], decltype_noref(q.chat_has_username)) )
+    move_to_ref(q.chat_is_created, _::from_JV((v as _object)["chat_is_created"], decltype_noref(q.chat_is_created)) )
+    move_to_ref(q.user_administrator_rights, _::from_JV((v as _object)["user_administrator_rights"], decltype_noref(q.user_administrator_rights)) )
+    move_to_ref(q.bot_administrator_rights, _::from_JV((v as _object)["bot_administrator_rights"], decltype_noref(q.bot_administrator_rights)) )
+    move_to_ref(q.bot_is_member, _::from_JV((v as _object)["bot_is_member"], decltype_noref(q.bot_is_member)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:keyboardbuttonrequestchat? ) : keyboardbuttonrequestchat?
+    return null if v==null
+    var q = new keyboardbuttonrequestchat
+    *q <- from_JV(v,type<keyboardbuttonrequestchat>)
+    return q
+
 struct keyboardbuttonpolltype
     //!  This object represents type of a poll, which is allowed to be created and sent when the corresponding button is pressed.
     [[optional]] _type : string = ""	//! Optional. If quiz is passed, the user will be allowed to create only polls in the quiz mode. If regular is passed, only regular polls will be allowed. Otherwise, the user will be allowed to create a poll of any type.
+
+def from_JV ( var v:JsonValue?; t:keyboardbuttonpolltype ) : keyboardbuttonpolltype
+    var q : keyboardbuttonpolltype
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:keyboardbuttonpolltype? ) : keyboardbuttonpolltype?
+    return null if v==null
+    var q = new keyboardbuttonpolltype
+    *q <- from_JV(v,type<keyboardbuttonpolltype>)
+    return q
 
 struct replykeyboardremove
     //!  Upon receiving a message with this object, Telegram clients will remove the current custom keyboard and display the default letter-keyboard. By default, custom keyboards are displayed until a new keyboard is sent by a bot. An exception is made for one-time keyboards that are hidden immediately after the user presses a button (see ReplyKeyboardMarkup).
     remove_keyboard : bool	//! Requests clients to remove the custom keyboard (user will not be able to summon this keyboard; if you want to hide the keyboard from sight but keep it accessible, use one_time_keyboard in ReplyKeyboardMarkup)
     [[optional]] selective : bool = false	//! Optional. Use this parameter if you want to remove the keyboard for specific users only. Targets: 1) users that are @mentioned in the text of the Message object; 2) if the bot's message is a reply (has reply_to_message_id), sender of the original message.Example: A user votes in a poll, bot returns confirmation message in reply to the vote and removes the keyboard for that user, while still showing the keyboard with poll options to users who haven't voted yet.
 
+def from_JV ( var v:JsonValue?; t:replykeyboardremove ) : replykeyboardremove
+    var q : replykeyboardremove
+    move_to_ref(q.remove_keyboard, _::from_JV((v as _object)["remove_keyboard"], decltype_noref(q.remove_keyboard)) )
+    move_to_ref(q.selective, _::from_JV((v as _object)["selective"], decltype_noref(q.selective)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:replykeyboardremove? ) : replykeyboardremove?
+    return null if v==null
+    var q = new replykeyboardremove
+    *q <- from_JV(v,type<replykeyboardremove>)
+    return q
+
 struct inlinekeyboardmarkup
     //!  This object represents an inline keyboard that appears right next to the message it belongs to.
     inline_keyboard : array<array<inlinekeyboardbutton>>	//! Array of button rows, each represented by an Array of InlineKeyboardButton objects
+
+def from_JV ( var v:JsonValue?; t:inlinekeyboardmarkup ) : inlinekeyboardmarkup
+    var q : inlinekeyboardmarkup
+    move_to_ref(q.inline_keyboard, _::from_JV((v as _object)["inline_keyboard"], decltype_noref(q.inline_keyboard)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:inlinekeyboardmarkup? ) : inlinekeyboardmarkup?
+    return null if v==null
+    var q = new inlinekeyboardmarkup
+    *q <- from_JV(v,type<inlinekeyboardmarkup>)
+    return q
 
 struct inlinekeyboardbutton
     //!  This object represents one button of an inline keyboard. You must use exactly one of the optional fields.
@@ -456,12 +1276,45 @@ struct inlinekeyboardbutton
     [[optional]] callback_game : callbackgame?	//! Optional. Description of the game that will be launched when the user presses the button.NOTE: This type of button must always be the first button in the first row.
     [[optional]] pay : bool = false	//! Optional. Specify True, to send a Pay button.NOTE: This type of button must always be the first button in the first row and can only be used in invoice messages.
 
+def from_JV ( var v:JsonValue?; t:inlinekeyboardbutton ) : inlinekeyboardbutton
+    var q : inlinekeyboardbutton
+    move_to_ref(q.text, _::from_JV((v as _object)["text"], decltype_noref(q.text)) )
+    move_to_ref(q.url, _::from_JV((v as _object)["url"], decltype_noref(q.url)) )
+    move_to_ref(q.callback_data, _::from_JV((v as _object)["callback_data"], decltype_noref(q.callback_data)) )
+    move_to_ref(q.web_app, _::from_JV((v as _object)["web_app"], decltype_noref(q.web_app)) )
+    move_to_ref(q.login_url, _::from_JV((v as _object)["login_url"], decltype_noref(q.login_url)) )
+    move_to_ref(q.switch_inline_query, _::from_JV((v as _object)["switch_inline_query"], decltype_noref(q.switch_inline_query)) )
+    move_to_ref(q.switch_inline_query_current_chat, _::from_JV((v as _object)["switch_inline_query_current_chat"], decltype_noref(q.switch_inline_query_current_chat)) )
+    move_to_ref(q.callback_game, _::from_JV((v as _object)["callback_game"], decltype_noref(q.callback_game)) )
+    move_to_ref(q.pay, _::from_JV((v as _object)["pay"], decltype_noref(q.pay)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:inlinekeyboardbutton? ) : inlinekeyboardbutton?
+    return null if v==null
+    var q = new inlinekeyboardbutton
+    *q <- from_JV(v,type<inlinekeyboardbutton>)
+    return q
+
 struct loginurl
     //!  This object represents a parameter of the inline keyboard button used to automatically authorize a user. Serves as a great replacement for the Telegram Login Widget when the user is coming from Telegram. All the user needs to do is tap/click a button and confirm that they want to log in: Telegram apps support these buttons as of version 5.7.
     url : string	//! An HTTPS URL to be opened with user authorization data added to the query string when the button is pressed. If the user refuses to provide authorization data, the original URL without information about the user will be opened. The data added is the same as described in Receiving authorization data.NOTE: You must always check the hash of the received data to verify the authentication and the integrity of the data as described in Checking authorization.
     [[optional]] forward_text : string = ""	//! Optional. New text of the button in forwarded messages.
     [[optional]] bot_username : string = ""	//! Optional. Username of a bot, which will be used for user authorization. See Setting up a bot for more details. If not specified, the current bot's username will be assumed. The url's domain must be the same as the domain linked with the bot. See Linking your domain to the bot for more details.
     [[optional]] request_write_access : bool = false	//! Optional. Pass True to request the permission for your bot to send messages to the user.
+
+def from_JV ( var v:JsonValue?; t:loginurl ) : loginurl
+    var q : loginurl
+    move_to_ref(q.url, _::from_JV((v as _object)["url"], decltype_noref(q.url)) )
+    move_to_ref(q.forward_text, _::from_JV((v as _object)["forward_text"], decltype_noref(q.forward_text)) )
+    move_to_ref(q.bot_username, _::from_JV((v as _object)["bot_username"], decltype_noref(q.bot_username)) )
+    move_to_ref(q.request_write_access, _::from_JV((v as _object)["request_write_access"], decltype_noref(q.request_write_access)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:loginurl? ) : loginurl?
+    return null if v==null
+    var q = new loginurl
+    *q <- from_JV(v,type<loginurl>)
+    return q
 
 struct callbackquery
     //!  This object represents an incoming callback query from a callback button in an inline keyboard. If the button that originated the query was attached to a message sent by the bot, the field message will be present. If the button was attached to a message sent via the bot (in inline mode), the field inline_message_id will be present. Exactly one of the fields data or game_short_name will be present.
@@ -473,11 +1326,41 @@ struct callbackquery
     [[optional]] data : string = ""	//! Optional. Data associated with the callback button. Be aware that the message originated the query can contain no callback buttons with this data.
     [[optional]] game_short_name : string = ""	//! Optional. Short name of a Game to be returned, serves as the unique identifier for the game
 
+def from_JV ( var v:JsonValue?; t:callbackquery ) : callbackquery
+    var q : callbackquery
+    move_to_ref(q.id, _::from_JV((v as _object)["id"], decltype_noref(q.id)) )
+    move_to_ref(q.from, _::from_JV((v as _object)["from"], decltype_noref(q.from)) )
+    move_to_ref(q.message, _::from_JV((v as _object)["message"], decltype_noref(q.message)) )
+    move_to_ref(q.inline_message_id, _::from_JV((v as _object)["inline_message_id"], decltype_noref(q.inline_message_id)) )
+    move_to_ref(q.chat_instance, _::from_JV((v as _object)["chat_instance"], decltype_noref(q.chat_instance)) )
+    move_to_ref(q.data, _::from_JV((v as _object)["data"], decltype_noref(q.data)) )
+    move_to_ref(q.game_short_name, _::from_JV((v as _object)["game_short_name"], decltype_noref(q.game_short_name)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:callbackquery? ) : callbackquery?
+    return null if v==null
+    var q = new callbackquery
+    *q <- from_JV(v,type<callbackquery>)
+    return q
+
 struct forcereply
     //!  Upon receiving a message with this object, Telegram clients will display a reply interface to the user (act as if the user has selected the bot's message and tapped 'Reply'). This can be extremely useful if you want to create user-friendly step-by-step interfaces without having to sacrifice privacy mode.
     force_reply : bool	//! Shows reply interface to the user, as if they manually selected the bot's message and tapped 'Reply'
     [[optional]] input_field_placeholder : string = ""	//! Optional. The placeholder to be shown in the input field when the reply is active; 1-64 characters
     [[optional]] selective : bool = false	//! Optional. Use this parameter if you want to force reply from specific users only. Targets: 1) users that are @mentioned in the text of the Message object; 2) if the bot's message is a reply (has reply_to_message_id), sender of the original message.
+
+def from_JV ( var v:JsonValue?; t:forcereply ) : forcereply
+    var q : forcereply
+    move_to_ref(q.force_reply, _::from_JV((v as _object)["force_reply"], decltype_noref(q.force_reply)) )
+    move_to_ref(q.input_field_placeholder, _::from_JV((v as _object)["input_field_placeholder"], decltype_noref(q.input_field_placeholder)) )
+    move_to_ref(q.selective, _::from_JV((v as _object)["selective"], decltype_noref(q.selective)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:forcereply? ) : forcereply?
+    return null if v==null
+    var q = new forcereply
+    *q <- from_JV(v,type<forcereply>)
+    return q
 
 struct chatphoto
     //!  This object represents a chat photo.
@@ -485,6 +1368,20 @@ struct chatphoto
     small_file_unique_id : string	//! Unique file identifier of small (160x160) chat photo, which is supposed to be the same over time and for different bots. Can't be used to download or reuse the file.
     big_file_id : string	//! File identifier of big (640x640) chat photo. This file_id can be used only for photo download and only for as long as the photo is not changed.
     big_file_unique_id : string	//! Unique file identifier of big (640x640) chat photo, which is supposed to be the same over time and for different bots. Can't be used to download or reuse the file.
+
+def from_JV ( var v:JsonValue?; t:chatphoto ) : chatphoto
+    var q : chatphoto
+    move_to_ref(q.small_file_id, _::from_JV((v as _object)["small_file_id"], decltype_noref(q.small_file_id)) )
+    move_to_ref(q.small_file_unique_id, _::from_JV((v as _object)["small_file_unique_id"], decltype_noref(q.small_file_unique_id)) )
+    move_to_ref(q.big_file_id, _::from_JV((v as _object)["big_file_id"], decltype_noref(q.big_file_id)) )
+    move_to_ref(q.big_file_unique_id, _::from_JV((v as _object)["big_file_unique_id"], decltype_noref(q.big_file_unique_id)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:chatphoto? ) : chatphoto?
+    return null if v==null
+    var q = new chatphoto
+    *q <- from_JV(v,type<chatphoto>)
+    return q
 
 struct chatinvitelink
     //!  Represents an invite link for a chat.
@@ -497,6 +1394,25 @@ struct chatinvitelink
     [[optional]] expire_date : int = INT_MIN	//! Optional. Point in time (Unix timestamp) when the link will expire or has been expired
     [[optional]] member_limit : int = INT_MIN	//! Optional. The maximum number of users that can be members of the chat simultaneously after joining the chat via this invite link; 1-99999
     [[optional]] pending_join_request_count : int = INT_MIN	//! Optional. Number of pending join requests created using this link
+
+def from_JV ( var v:JsonValue?; t:chatinvitelink ) : chatinvitelink
+    var q : chatinvitelink
+    move_to_ref(q.invite_link, _::from_JV((v as _object)["invite_link"], decltype_noref(q.invite_link)) )
+    move_to_ref(q.creator, _::from_JV((v as _object)["creator"], decltype_noref(q.creator)) )
+    move_to_ref(q.creates_join_request, _::from_JV((v as _object)["creates_join_request"], decltype_noref(q.creates_join_request)) )
+    move_to_ref(q.is_primary, _::from_JV((v as _object)["is_primary"], decltype_noref(q.is_primary)) )
+    move_to_ref(q.is_revoked, _::from_JV((v as _object)["is_revoked"], decltype_noref(q.is_revoked)) )
+    move_to_ref(q.name, _::from_JV((v as _object)["name"], decltype_noref(q.name)) )
+    move_to_ref(q.expire_date, _::from_JV((v as _object)["expire_date"], decltype_noref(q.expire_date)) )
+    move_to_ref(q.member_limit, _::from_JV((v as _object)["member_limit"], decltype_noref(q.member_limit)) )
+    move_to_ref(q.pending_join_request_count, _::from_JV((v as _object)["pending_join_request_count"], decltype_noref(q.pending_join_request_count)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:chatinvitelink? ) : chatinvitelink?
+    return null if v==null
+    var q = new chatinvitelink
+    *q <- from_JV(v,type<chatinvitelink>)
+    return q
 
 struct chatadministratorrights
     //!  Represents the rights of an administrator in a chat.
@@ -513,7 +1429,41 @@ struct chatadministratorrights
     [[optional]] can_pin_messages : bool = false	//! Optional. True, if the user is allowed to pin messages; groups and supergroups only
     [[optional]] can_manage_topics : bool = false	//! Optional. True, if the user is allowed to create, rename, close, and reopen forum topics; supergroups only
 
-struct chatmember {} //  This object contains information about one member of a chat. Currently, the following 6 types of chat members are supported:
+def from_JV ( var v:JsonValue?; t:chatadministratorrights ) : chatadministratorrights
+    var q : chatadministratorrights
+    move_to_ref(q.is_anonymous, _::from_JV((v as _object)["is_anonymous"], decltype_noref(q.is_anonymous)) )
+    move_to_ref(q.can_manage_chat, _::from_JV((v as _object)["can_manage_chat"], decltype_noref(q.can_manage_chat)) )
+    move_to_ref(q.can_delete_messages, _::from_JV((v as _object)["can_delete_messages"], decltype_noref(q.can_delete_messages)) )
+    move_to_ref(q.can_manage_video_chats, _::from_JV((v as _object)["can_manage_video_chats"], decltype_noref(q.can_manage_video_chats)) )
+    move_to_ref(q.can_restrict_members, _::from_JV((v as _object)["can_restrict_members"], decltype_noref(q.can_restrict_members)) )
+    move_to_ref(q.can_promote_members, _::from_JV((v as _object)["can_promote_members"], decltype_noref(q.can_promote_members)) )
+    move_to_ref(q.can_change_info, _::from_JV((v as _object)["can_change_info"], decltype_noref(q.can_change_info)) )
+    move_to_ref(q.can_invite_users, _::from_JV((v as _object)["can_invite_users"], decltype_noref(q.can_invite_users)) )
+    move_to_ref(q.can_post_messages, _::from_JV((v as _object)["can_post_messages"], decltype_noref(q.can_post_messages)) )
+    move_to_ref(q.can_edit_messages, _::from_JV((v as _object)["can_edit_messages"], decltype_noref(q.can_edit_messages)) )
+    move_to_ref(q.can_pin_messages, _::from_JV((v as _object)["can_pin_messages"], decltype_noref(q.can_pin_messages)) )
+    move_to_ref(q.can_manage_topics, _::from_JV((v as _object)["can_manage_topics"], decltype_noref(q.can_manage_topics)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:chatadministratorrights? ) : chatadministratorrights?
+    return null if v==null
+    var q = new chatadministratorrights
+    *q <- from_JV(v,type<chatadministratorrights>)
+    return q
+
+struct chatmember
+    //!  This object contains information about one member of a chat. Currently, the following 6 types of chat members are supported:
+    object_chatmember_has_no_fields:bool
+
+def from_JV ( var v:JsonValue?; t:chatmember ) : chatmember
+    var q : chatmember
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:chatmember? ) : chatmember?
+    return null if v==null
+    var q = new chatmember
+    *q <- from_JV(v,type<chatmember>)
+    return q
 
 struct chatmemberowner
     //!  Represents a chat member that owns the chat and has all administrator privileges.
@@ -521,6 +1471,20 @@ struct chatmemberowner
     user : user	//! Information about the user
     is_anonymous : bool	//! True, if the user's presence in the chat is hidden
     [[optional]] custom_title : string = ""	//! Optional. Custom title for this user
+
+def from_JV ( var v:JsonValue?; t:chatmemberowner ) : chatmemberowner
+    var q : chatmemberowner
+    move_to_ref(q.status, _::from_JV((v as _object)["status"], decltype_noref(q.status)) )
+    move_to_ref(q.user, _::from_JV((v as _object)["user"], decltype_noref(q.user)) )
+    move_to_ref(q.is_anonymous, _::from_JV((v as _object)["is_anonymous"], decltype_noref(q.is_anonymous)) )
+    move_to_ref(q.custom_title, _::from_JV((v as _object)["custom_title"], decltype_noref(q.custom_title)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:chatmemberowner? ) : chatmemberowner?
+    return null if v==null
+    var q = new chatmemberowner
+    *q <- from_JV(v,type<chatmemberowner>)
+    return q
 
 struct chatmemberadministrator
     //!  Represents a chat member that has some additional privileges.
@@ -541,10 +1505,48 @@ struct chatmemberadministrator
     [[optional]] can_manage_topics : bool = false	//! Optional. True, if the user is allowed to create, rename, close, and reopen forum topics; supergroups only
     [[optional]] custom_title : string = ""	//! Optional. Custom title for this user
 
+def from_JV ( var v:JsonValue?; t:chatmemberadministrator ) : chatmemberadministrator
+    var q : chatmemberadministrator
+    move_to_ref(q.status, _::from_JV((v as _object)["status"], decltype_noref(q.status)) )
+    move_to_ref(q.user, _::from_JV((v as _object)["user"], decltype_noref(q.user)) )
+    move_to_ref(q.can_be_edited, _::from_JV((v as _object)["can_be_edited"], decltype_noref(q.can_be_edited)) )
+    move_to_ref(q.is_anonymous, _::from_JV((v as _object)["is_anonymous"], decltype_noref(q.is_anonymous)) )
+    move_to_ref(q.can_manage_chat, _::from_JV((v as _object)["can_manage_chat"], decltype_noref(q.can_manage_chat)) )
+    move_to_ref(q.can_delete_messages, _::from_JV((v as _object)["can_delete_messages"], decltype_noref(q.can_delete_messages)) )
+    move_to_ref(q.can_manage_video_chats, _::from_JV((v as _object)["can_manage_video_chats"], decltype_noref(q.can_manage_video_chats)) )
+    move_to_ref(q.can_restrict_members, _::from_JV((v as _object)["can_restrict_members"], decltype_noref(q.can_restrict_members)) )
+    move_to_ref(q.can_promote_members, _::from_JV((v as _object)["can_promote_members"], decltype_noref(q.can_promote_members)) )
+    move_to_ref(q.can_change_info, _::from_JV((v as _object)["can_change_info"], decltype_noref(q.can_change_info)) )
+    move_to_ref(q.can_invite_users, _::from_JV((v as _object)["can_invite_users"], decltype_noref(q.can_invite_users)) )
+    move_to_ref(q.can_post_messages, _::from_JV((v as _object)["can_post_messages"], decltype_noref(q.can_post_messages)) )
+    move_to_ref(q.can_edit_messages, _::from_JV((v as _object)["can_edit_messages"], decltype_noref(q.can_edit_messages)) )
+    move_to_ref(q.can_pin_messages, _::from_JV((v as _object)["can_pin_messages"], decltype_noref(q.can_pin_messages)) )
+    move_to_ref(q.can_manage_topics, _::from_JV((v as _object)["can_manage_topics"], decltype_noref(q.can_manage_topics)) )
+    move_to_ref(q.custom_title, _::from_JV((v as _object)["custom_title"], decltype_noref(q.custom_title)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:chatmemberadministrator? ) : chatmemberadministrator?
+    return null if v==null
+    var q = new chatmemberadministrator
+    *q <- from_JV(v,type<chatmemberadministrator>)
+    return q
+
 struct chatmembermember
     //!  Represents a chat member that has no additional privileges or restrictions.
     status : string	//! The member's status in the chat, always “member”
     user : user	//! Information about the user
+
+def from_JV ( var v:JsonValue?; t:chatmembermember ) : chatmembermember
+    var q : chatmembermember
+    move_to_ref(q.status, _::from_JV((v as _object)["status"], decltype_noref(q.status)) )
+    move_to_ref(q.user, _::from_JV((v as _object)["user"], decltype_noref(q.user)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:chatmembermember? ) : chatmembermember?
+    return null if v==null
+    var q = new chatmembermember
+    *q <- from_JV(v,type<chatmembermember>)
+    return q
 
 struct chatmemberrestricted
     //!  Represents a chat member that is under certain restrictions in the chat. Supergroups only.
@@ -567,16 +1569,69 @@ struct chatmemberrestricted
     can_manage_topics : bool	//! True, if the user is allowed to create forum topics
     until_date : int	//! Date when restrictions will be lifted for this user; unix time. If 0, then the user is restricted forever
 
+def from_JV ( var v:JsonValue?; t:chatmemberrestricted ) : chatmemberrestricted
+    var q : chatmemberrestricted
+    move_to_ref(q.status, _::from_JV((v as _object)["status"], decltype_noref(q.status)) )
+    move_to_ref(q.user, _::from_JV((v as _object)["user"], decltype_noref(q.user)) )
+    move_to_ref(q.is_member, _::from_JV((v as _object)["is_member"], decltype_noref(q.is_member)) )
+    move_to_ref(q.can_send_messages, _::from_JV((v as _object)["can_send_messages"], decltype_noref(q.can_send_messages)) )
+    move_to_ref(q.can_send_audios, _::from_JV((v as _object)["can_send_audios"], decltype_noref(q.can_send_audios)) )
+    move_to_ref(q.can_send_documents, _::from_JV((v as _object)["can_send_documents"], decltype_noref(q.can_send_documents)) )
+    move_to_ref(q.can_send_photos, _::from_JV((v as _object)["can_send_photos"], decltype_noref(q.can_send_photos)) )
+    move_to_ref(q.can_send_videos, _::from_JV((v as _object)["can_send_videos"], decltype_noref(q.can_send_videos)) )
+    move_to_ref(q.can_send_video_notes, _::from_JV((v as _object)["can_send_video_notes"], decltype_noref(q.can_send_video_notes)) )
+    move_to_ref(q.can_send_voice_notes, _::from_JV((v as _object)["can_send_voice_notes"], decltype_noref(q.can_send_voice_notes)) )
+    move_to_ref(q.can_send_polls, _::from_JV((v as _object)["can_send_polls"], decltype_noref(q.can_send_polls)) )
+    move_to_ref(q.can_send_other_messages, _::from_JV((v as _object)["can_send_other_messages"], decltype_noref(q.can_send_other_messages)) )
+    move_to_ref(q.can_add_web_page_previews, _::from_JV((v as _object)["can_add_web_page_previews"], decltype_noref(q.can_add_web_page_previews)) )
+    move_to_ref(q.can_change_info, _::from_JV((v as _object)["can_change_info"], decltype_noref(q.can_change_info)) )
+    move_to_ref(q.can_invite_users, _::from_JV((v as _object)["can_invite_users"], decltype_noref(q.can_invite_users)) )
+    move_to_ref(q.can_pin_messages, _::from_JV((v as _object)["can_pin_messages"], decltype_noref(q.can_pin_messages)) )
+    move_to_ref(q.can_manage_topics, _::from_JV((v as _object)["can_manage_topics"], decltype_noref(q.can_manage_topics)) )
+    move_to_ref(q.until_date, _::from_JV((v as _object)["until_date"], decltype_noref(q.until_date)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:chatmemberrestricted? ) : chatmemberrestricted?
+    return null if v==null
+    var q = new chatmemberrestricted
+    *q <- from_JV(v,type<chatmemberrestricted>)
+    return q
+
 struct chatmemberleft
     //!  Represents a chat member that isn't currently a member of the chat, but may join it themselves.
     status : string	//! The member's status in the chat, always “left”
     user : user	//! Information about the user
+
+def from_JV ( var v:JsonValue?; t:chatmemberleft ) : chatmemberleft
+    var q : chatmemberleft
+    move_to_ref(q.status, _::from_JV((v as _object)["status"], decltype_noref(q.status)) )
+    move_to_ref(q.user, _::from_JV((v as _object)["user"], decltype_noref(q.user)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:chatmemberleft? ) : chatmemberleft?
+    return null if v==null
+    var q = new chatmemberleft
+    *q <- from_JV(v,type<chatmemberleft>)
+    return q
 
 struct chatmemberbanned
     //!  Represents a chat member that was banned in the chat and can't return to the chat or view chat messages.
     status : string	//! The member's status in the chat, always “kicked”
     user : user	//! Information about the user
     until_date : int	//! Date when restrictions will be lifted for this user; unix time. If 0, then the user is banned forever
+
+def from_JV ( var v:JsonValue?; t:chatmemberbanned ) : chatmemberbanned
+    var q : chatmemberbanned
+    move_to_ref(q.status, _::from_JV((v as _object)["status"], decltype_noref(q.status)) )
+    move_to_ref(q.user, _::from_JV((v as _object)["user"], decltype_noref(q.user)) )
+    move_to_ref(q.until_date, _::from_JV((v as _object)["until_date"], decltype_noref(q.until_date)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:chatmemberbanned? ) : chatmemberbanned?
+    return null if v==null
+    var q = new chatmemberbanned
+    *q <- from_JV(v,type<chatmemberbanned>)
+    return q
 
 struct chatmemberupdated
     //!  This object represents changes in the status of a chat member.
@@ -587,6 +1642,22 @@ struct chatmemberupdated
     new_chat_member : chatmember	//! New information about the chat member
     [[optional]] invite_link : chatinvitelink?	//! Optional. Chat invite link, which was used by the user to join the chat; for joining by invite link events only.
 
+def from_JV ( var v:JsonValue?; t:chatmemberupdated ) : chatmemberupdated
+    var q : chatmemberupdated
+    move_to_ref(q.chat, _::from_JV((v as _object)["chat"], decltype_noref(q.chat)) )
+    move_to_ref(q.from, _::from_JV((v as _object)["from"], decltype_noref(q.from)) )
+    move_to_ref(q.date, _::from_JV((v as _object)["date"], decltype_noref(q.date)) )
+    move_to_ref(q.old_chat_member, _::from_JV((v as _object)["old_chat_member"], decltype_noref(q.old_chat_member)) )
+    move_to_ref(q.new_chat_member, _::from_JV((v as _object)["new_chat_member"], decltype_noref(q.new_chat_member)) )
+    move_to_ref(q.invite_link, _::from_JV((v as _object)["invite_link"], decltype_noref(q.invite_link)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:chatmemberupdated? ) : chatmemberupdated?
+    return null if v==null
+    var q = new chatmemberupdated
+    *q <- from_JV(v,type<chatmemberupdated>)
+    return q
+
 struct chatjoinrequest
     //!  Represents a join request sent to a chat.
     chat : chat	//! Chat to which the request was sent
@@ -595,6 +1666,22 @@ struct chatjoinrequest
     date : int	//! Date the request was sent in Unix time
     [[optional]] bio : string = ""	//! Optional. Bio of the user.
     [[optional]] invite_link : chatinvitelink?	//! Optional. Chat invite link that was used by the user to send the join request
+
+def from_JV ( var v:JsonValue?; t:chatjoinrequest ) : chatjoinrequest
+    var q : chatjoinrequest
+    move_to_ref(q.chat, _::from_JV((v as _object)["chat"], decltype_noref(q.chat)) )
+    move_to_ref(q.from, _::from_JV((v as _object)["from"], decltype_noref(q.from)) )
+    move_to_ref(q.user_chat_id, _::from_JV((v as _object)["user_chat_id"], decltype_noref(q.user_chat_id)) )
+    move_to_ref(q.date, _::from_JV((v as _object)["date"], decltype_noref(q.date)) )
+    move_to_ref(q.bio, _::from_JV((v as _object)["bio"], decltype_noref(q.bio)) )
+    move_to_ref(q.invite_link, _::from_JV((v as _object)["invite_link"], decltype_noref(q.invite_link)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:chatjoinrequest? ) : chatjoinrequest?
+    return null if v==null
+    var q = new chatjoinrequest
+    *q <- from_JV(v,type<chatjoinrequest>)
+    return q
 
 struct chatpermissions
     //!  Describes actions that a non-administrator user is allowed to take in a chat.
@@ -613,10 +1700,46 @@ struct chatpermissions
     [[optional]] can_pin_messages : bool = false	//! Optional. True, if the user is allowed to pin messages. Ignored in public supergroups
     [[optional]] can_manage_topics : bool = false	//! Optional. True, if the user is allowed to create forum topics. If omitted defaults to the value of can_pin_messages
 
+def from_JV ( var v:JsonValue?; t:chatpermissions ) : chatpermissions
+    var q : chatpermissions
+    move_to_ref(q.can_send_messages, _::from_JV((v as _object)["can_send_messages"], decltype_noref(q.can_send_messages)) )
+    move_to_ref(q.can_send_audios, _::from_JV((v as _object)["can_send_audios"], decltype_noref(q.can_send_audios)) )
+    move_to_ref(q.can_send_documents, _::from_JV((v as _object)["can_send_documents"], decltype_noref(q.can_send_documents)) )
+    move_to_ref(q.can_send_photos, _::from_JV((v as _object)["can_send_photos"], decltype_noref(q.can_send_photos)) )
+    move_to_ref(q.can_send_videos, _::from_JV((v as _object)["can_send_videos"], decltype_noref(q.can_send_videos)) )
+    move_to_ref(q.can_send_video_notes, _::from_JV((v as _object)["can_send_video_notes"], decltype_noref(q.can_send_video_notes)) )
+    move_to_ref(q.can_send_voice_notes, _::from_JV((v as _object)["can_send_voice_notes"], decltype_noref(q.can_send_voice_notes)) )
+    move_to_ref(q.can_send_polls, _::from_JV((v as _object)["can_send_polls"], decltype_noref(q.can_send_polls)) )
+    move_to_ref(q.can_send_other_messages, _::from_JV((v as _object)["can_send_other_messages"], decltype_noref(q.can_send_other_messages)) )
+    move_to_ref(q.can_add_web_page_previews, _::from_JV((v as _object)["can_add_web_page_previews"], decltype_noref(q.can_add_web_page_previews)) )
+    move_to_ref(q.can_change_info, _::from_JV((v as _object)["can_change_info"], decltype_noref(q.can_change_info)) )
+    move_to_ref(q.can_invite_users, _::from_JV((v as _object)["can_invite_users"], decltype_noref(q.can_invite_users)) )
+    move_to_ref(q.can_pin_messages, _::from_JV((v as _object)["can_pin_messages"], decltype_noref(q.can_pin_messages)) )
+    move_to_ref(q.can_manage_topics, _::from_JV((v as _object)["can_manage_topics"], decltype_noref(q.can_manage_topics)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:chatpermissions? ) : chatpermissions?
+    return null if v==null
+    var q = new chatpermissions
+    *q <- from_JV(v,type<chatpermissions>)
+    return q
+
 struct chatlocation
     //!  Represents a location to which a chat is connected.
     location : location	//! The location to which the supergroup is connected. Can't be a live location.
     address : string	//! Location address; 1-64 characters, as defined by the chat owner
+
+def from_JV ( var v:JsonValue?; t:chatlocation ) : chatlocation
+    var q : chatlocation
+    move_to_ref(q.location, _::from_JV((v as _object)["location"], decltype_noref(q.location)) )
+    move_to_ref(q.address, _::from_JV((v as _object)["address"], decltype_noref(q.address)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:chatlocation? ) : chatlocation?
+    return null if v==null
+    var q = new chatlocation
+    *q <- from_JV(v,type<chatlocation>)
+    return q
 
 struct forumtopic
     //!  This object represents a forum topic.
@@ -625,40 +1748,158 @@ struct forumtopic
     icon_color : int	//! Color of the topic icon in RGB format
     [[optional]] icon_custom_emoji_id : string = ""	//! Optional. Unique identifier of the custom emoji shown as the topic icon
 
+def from_JV ( var v:JsonValue?; t:forumtopic ) : forumtopic
+    var q : forumtopic
+    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], decltype_noref(q.message_thread_id)) )
+    move_to_ref(q.name, _::from_JV((v as _object)["name"], decltype_noref(q.name)) )
+    move_to_ref(q.icon_color, _::from_JV((v as _object)["icon_color"], decltype_noref(q.icon_color)) )
+    move_to_ref(q.icon_custom_emoji_id, _::from_JV((v as _object)["icon_custom_emoji_id"], decltype_noref(q.icon_custom_emoji_id)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:forumtopic? ) : forumtopic?
+    return null if v==null
+    var q = new forumtopic
+    *q <- from_JV(v,type<forumtopic>)
+    return q
+
 struct botcommand
     //!  This object represents a bot command.
     command : string	//! Text of the command; 1-32 characters. Can contain only lowercase English letters, digits and underscores.
     description : string	//! Description of the command; 1-256 characters.
 
-struct botcommandscope {} //  This object represents the scope to which bot commands are applied. Currently, the following 7 scopes are supported:
+def from_JV ( var v:JsonValue?; t:botcommand ) : botcommand
+    var q : botcommand
+    move_to_ref(q.command, _::from_JV((v as _object)["command"], decltype_noref(q.command)) )
+    move_to_ref(q.description, _::from_JV((v as _object)["description"], decltype_noref(q.description)) )
+    return <- q
 
-struct determining_list_of_commands {} //  The following algorithm is used to determine the list of commands for a particular user viewing the bot menu. The first list of commands which is set is returned: Commands in the chat with the bot Commands in group and supergroup chats
+def from_JV ( var v:JsonValue?; t:botcommand? ) : botcommand?
+    return null if v==null
+    var q = new botcommand
+    *q <- from_JV(v,type<botcommand>)
+    return q
+
+struct botcommandscope
+    //!  This object represents the scope to which bot commands are applied. Currently, the following 7 scopes are supported:
+    object_botcommandscope_has_no_fields:bool
+
+def from_JV ( var v:JsonValue?; t:botcommandscope ) : botcommandscope
+    var q : botcommandscope
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:botcommandscope? ) : botcommandscope?
+    return null if v==null
+    var q = new botcommandscope
+    *q <- from_JV(v,type<botcommandscope>)
+    return q
+
+struct determining_list_of_commands
+    //!  The following algorithm is used to determine the list of commands for a particular user viewing the bot menu. The first list of commands which is set is returned: Commands in the chat with the bot Commands in group and supergroup chats
+    object_determining_list_of_commands_has_no_fields:bool
+
+def from_JV ( var v:JsonValue?; t:determining_list_of_commands ) : determining_list_of_commands
+    var q : determining_list_of_commands
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:determining_list_of_commands? ) : determining_list_of_commands?
+    return null if v==null
+    var q = new determining_list_of_commands
+    *q <- from_JV(v,type<determining_list_of_commands>)
+    return q
 
 struct botcommandscopedefault
     //!  Represents the default scope of bot commands. Default commands are used if no commands with a narrower scope are specified for the user.
     _type : string	//! Scope type, must be default
 
+def from_JV ( var v:JsonValue?; t:botcommandscopedefault ) : botcommandscopedefault
+    var q : botcommandscopedefault
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:botcommandscopedefault? ) : botcommandscopedefault?
+    return null if v==null
+    var q = new botcommandscopedefault
+    *q <- from_JV(v,type<botcommandscopedefault>)
+    return q
+
 struct botcommandscopeallprivatechats
     //!  Represents the scope of bot commands, covering all private chats.
     _type : string	//! Scope type, must be all_private_chats
+
+def from_JV ( var v:JsonValue?; t:botcommandscopeallprivatechats ) : botcommandscopeallprivatechats
+    var q : botcommandscopeallprivatechats
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:botcommandscopeallprivatechats? ) : botcommandscopeallprivatechats?
+    return null if v==null
+    var q = new botcommandscopeallprivatechats
+    *q <- from_JV(v,type<botcommandscopeallprivatechats>)
+    return q
 
 struct botcommandscopeallgroupchats
     //!  Represents the scope of bot commands, covering all group and supergroup chats.
     _type : string	//! Scope type, must be all_group_chats
 
+def from_JV ( var v:JsonValue?; t:botcommandscopeallgroupchats ) : botcommandscopeallgroupchats
+    var q : botcommandscopeallgroupchats
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:botcommandscopeallgroupchats? ) : botcommandscopeallgroupchats?
+    return null if v==null
+    var q = new botcommandscopeallgroupchats
+    *q <- from_JV(v,type<botcommandscopeallgroupchats>)
+    return q
+
 struct botcommandscopeallchatadministrators
     //!  Represents the scope of bot commands, covering all group and supergroup chat administrators.
     _type : string	//! Scope type, must be all_chat_administrators
+
+def from_JV ( var v:JsonValue?; t:botcommandscopeallchatadministrators ) : botcommandscopeallchatadministrators
+    var q : botcommandscopeallchatadministrators
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:botcommandscopeallchatadministrators? ) : botcommandscopeallchatadministrators?
+    return null if v==null
+    var q = new botcommandscopeallchatadministrators
+    *q <- from_JV(v,type<botcommandscopeallchatadministrators>)
+    return q
 
 struct botcommandscopechat
     //!  Represents the scope of bot commands, covering a specific chat.
     _type : string	//! Scope type, must be chat
     chat_id : string	//! Unique identifier for the target chat or username of the target supergroup (in the format @supergroupusername)
 
+def from_JV ( var v:JsonValue?; t:botcommandscopechat ) : botcommandscopechat
+    var q : botcommandscopechat
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:botcommandscopechat? ) : botcommandscopechat?
+    return null if v==null
+    var q = new botcommandscopechat
+    *q <- from_JV(v,type<botcommandscopechat>)
+    return q
+
 struct botcommandscopechatadministrators
     //!  Represents the scope of bot commands, covering all administrators of a specific group or supergroup chat.
     _type : string	//! Scope type, must be chat_administrators
     chat_id : string	//! Unique identifier for the target chat or username of the target supergroup (in the format @supergroupusername)
+
+def from_JV ( var v:JsonValue?; t:botcommandscopechatadministrators ) : botcommandscopechatadministrators
+    var q : botcommandscopechatadministrators
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:botcommandscopechatadministrators? ) : botcommandscopechatadministrators?
+    return null if v==null
+    var q = new botcommandscopechatadministrators
+    *q <- from_JV(v,type<botcommandscopechatadministrators>)
+    return q
 
 struct botcommandscopechatmember
     //!  Represents the scope of bot commands, covering a specific member of a group or supergroup chat.
@@ -666,19 +1907,77 @@ struct botcommandscopechatmember
     chat_id : string	//! Unique identifier for the target chat or username of the target supergroup (in the format @supergroupusername)
     user_id : int	//! Unique identifier of the target user
 
+def from_JV ( var v:JsonValue?; t:botcommandscopechatmember ) : botcommandscopechatmember
+    var q : botcommandscopechatmember
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.user_id, _::from_JV((v as _object)["user_id"], decltype_noref(q.user_id)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:botcommandscopechatmember? ) : botcommandscopechatmember?
+    return null if v==null
+    var q = new botcommandscopechatmember
+    *q <- from_JV(v,type<botcommandscopechatmember>)
+    return q
+
 struct botdescription
     //!  This object represents the bot's description.
     description : string	//! The bot's description
+
+def from_JV ( var v:JsonValue?; t:botdescription ) : botdescription
+    var q : botdescription
+    move_to_ref(q.description, _::from_JV((v as _object)["description"], decltype_noref(q.description)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:botdescription? ) : botdescription?
+    return null if v==null
+    var q = new botdescription
+    *q <- from_JV(v,type<botdescription>)
+    return q
 
 struct botshortdescription
     //!  This object represents the bot's short description.
     short_description : string	//! The bot's short description
 
-struct menubutton {} //  This object describes the bot's menu button in a private chat. It should be one of If a menu button other than MenuButtonDefault is set for a private chat, then it is applied in the chat. Otherwise the default menu button is applied. By default, the menu button opens the list of bot commands.
+def from_JV ( var v:JsonValue?; t:botshortdescription ) : botshortdescription
+    var q : botshortdescription
+    move_to_ref(q.short_description, _::from_JV((v as _object)["short_description"], decltype_noref(q.short_description)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:botshortdescription? ) : botshortdescription?
+    return null if v==null
+    var q = new botshortdescription
+    *q <- from_JV(v,type<botshortdescription>)
+    return q
+
+struct menubutton
+    //!  This object describes the bot's menu button in a private chat. It should be one of If a menu button other than MenuButtonDefault is set for a private chat, then it is applied in the chat. Otherwise the default menu button is applied. By default, the menu button opens the list of bot commands.
+    object_menubutton_has_no_fields:bool
+
+def from_JV ( var v:JsonValue?; t:menubutton ) : menubutton
+    var q : menubutton
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:menubutton? ) : menubutton?
+    return null if v==null
+    var q = new menubutton
+    *q <- from_JV(v,type<menubutton>)
+    return q
 
 struct menubuttoncommands
     //!  Represents a menu button, which opens the bot's list of commands.
     _type : string	//! Type of the button, must be commands
+
+def from_JV ( var v:JsonValue?; t:menubuttoncommands ) : menubuttoncommands
+    var q : menubuttoncommands
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:menubuttoncommands? ) : menubuttoncommands?
+    return null if v==null
+    var q = new menubuttoncommands
+    *q <- from_JV(v,type<menubuttoncommands>)
+    return q
 
 struct menubuttonwebapp
     //!  Represents a menu button, which launches a Web App.
@@ -686,16 +1985,64 @@ struct menubuttonwebapp
     text : string	//! Text on the button
     web_app : webappinfo	//! Description of the Web App that will be launched when the user presses the button. The Web App will be able to send an arbitrary message on behalf of the user using the method answerWebAppQuery.
 
+def from_JV ( var v:JsonValue?; t:menubuttonwebapp ) : menubuttonwebapp
+    var q : menubuttonwebapp
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    move_to_ref(q.text, _::from_JV((v as _object)["text"], decltype_noref(q.text)) )
+    move_to_ref(q.web_app, _::from_JV((v as _object)["web_app"], decltype_noref(q.web_app)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:menubuttonwebapp? ) : menubuttonwebapp?
+    return null if v==null
+    var q = new menubuttonwebapp
+    *q <- from_JV(v,type<menubuttonwebapp>)
+    return q
+
 struct menubuttondefault
     //!  Describes that no specific value for the menu button was set.
     _type : string	//! Type of the button, must be default
+
+def from_JV ( var v:JsonValue?; t:menubuttondefault ) : menubuttondefault
+    var q : menubuttondefault
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:menubuttondefault? ) : menubuttondefault?
+    return null if v==null
+    var q = new menubuttondefault
+    *q <- from_JV(v,type<menubuttondefault>)
+    return q
 
 struct responseparameters
     //!  Describes why a request was unsuccessful.
     [[optional]] migrate_to_chat_id : int = INT_MIN	//! Optional. The group has been migrated to a supergroup with the specified identifier. This number may have more than 32 significant bits and some programming languages may have difficulty/silent defects in interpreting it. But it has at most 52 significant bits, so a signed 64-bit integer or double-precision float type are safe for storing this identifier.
     [[optional]] retry_after : int = INT_MIN	//! Optional. In case of exceeding flood control, the number of seconds left to wait before the request can be repeated
 
-struct inputmedia {} //  This object represents the content of a media message to be sent. It should be one of
+def from_JV ( var v:JsonValue?; t:responseparameters ) : responseparameters
+    var q : responseparameters
+    move_to_ref(q.migrate_to_chat_id, _::from_JV((v as _object)["migrate_to_chat_id"], decltype_noref(q.migrate_to_chat_id)) )
+    move_to_ref(q.retry_after, _::from_JV((v as _object)["retry_after"], decltype_noref(q.retry_after)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:responseparameters? ) : responseparameters?
+    return null if v==null
+    var q = new responseparameters
+    *q <- from_JV(v,type<responseparameters>)
+    return q
+
+struct inputmedia
+    //!  This object represents the content of a media message to be sent. It should be one of
+    object_inputmedia_has_no_fields:bool
+
+def from_JV ( var v:JsonValue?; t:inputmedia ) : inputmedia
+    var q : inputmedia
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:inputmedia? ) : inputmedia?
+    return null if v==null
+    var q = new inputmedia
+    *q <- from_JV(v,type<inputmedia>)
+    return q
 
 struct inputmediaphoto
     //!  Represents a photo to be sent.
@@ -705,6 +2052,22 @@ struct inputmediaphoto
     [[optional]] parse_mode : string = ""	//! Optional. Mode for parsing entities in the photo caption. See formatting options for more details.
     [[optional]] caption_entities : array<messageentity>	//! Optional. List of special entities that appear in the caption, which can be specified instead of parse_mode
     [[optional]] has_spoiler : bool = false	//! Optional. Pass True if the photo needs to be covered with a spoiler animation
+
+def from_JV ( var v:JsonValue?; t:inputmediaphoto ) : inputmediaphoto
+    var q : inputmediaphoto
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    move_to_ref(q.media, _::from_JV((v as _object)["media"], decltype_noref(q.media)) )
+    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], decltype_noref(q.caption)) )
+    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], decltype_noref(q.parse_mode)) )
+    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], decltype_noref(q.caption_entities)) )
+    move_to_ref(q.has_spoiler, _::from_JV((v as _object)["has_spoiler"], decltype_noref(q.has_spoiler)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:inputmediaphoto? ) : inputmediaphoto?
+    return null if v==null
+    var q = new inputmediaphoto
+    *q <- from_JV(v,type<inputmediaphoto>)
+    return q
 
 struct inputmediavideo
     //!  Represents a video to be sent.
@@ -720,6 +2083,27 @@ struct inputmediavideo
     [[optional]] supports_streaming : bool = false	//! Optional. Pass True if the uploaded video is suitable for streaming
     [[optional]] has_spoiler : bool = false	//! Optional. Pass True if the video needs to be covered with a spoiler animation
 
+def from_JV ( var v:JsonValue?; t:inputmediavideo ) : inputmediavideo
+    var q : inputmediavideo
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    move_to_ref(q.media, _::from_JV((v as _object)["media"], decltype_noref(q.media)) )
+    move_to_ref(q.thumbnail, _::from_JV((v as _object)["thumbnail"], decltype_noref(q.thumbnail)) )
+    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], decltype_noref(q.caption)) )
+    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], decltype_noref(q.parse_mode)) )
+    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], decltype_noref(q.caption_entities)) )
+    move_to_ref(q.width, _::from_JV((v as _object)["width"], decltype_noref(q.width)) )
+    move_to_ref(q.height, _::from_JV((v as _object)["height"], decltype_noref(q.height)) )
+    move_to_ref(q.duration, _::from_JV((v as _object)["duration"], decltype_noref(q.duration)) )
+    move_to_ref(q.supports_streaming, _::from_JV((v as _object)["supports_streaming"], decltype_noref(q.supports_streaming)) )
+    move_to_ref(q.has_spoiler, _::from_JV((v as _object)["has_spoiler"], decltype_noref(q.has_spoiler)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:inputmediavideo? ) : inputmediavideo?
+    return null if v==null
+    var q = new inputmediavideo
+    *q <- from_JV(v,type<inputmediavideo>)
+    return q
+
 struct inputmediaanimation
     //!  Represents an animation file (GIF or H.264/MPEG-4 AVC video without sound) to be sent.
     _type : string	//! Type of the result, must be animation
@@ -733,6 +2117,26 @@ struct inputmediaanimation
     [[optional]] duration : int = INT_MIN	//! Optional. Animation duration in seconds
     [[optional]] has_spoiler : bool = false	//! Optional. Pass True if the animation needs to be covered with a spoiler animation
 
+def from_JV ( var v:JsonValue?; t:inputmediaanimation ) : inputmediaanimation
+    var q : inputmediaanimation
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    move_to_ref(q.media, _::from_JV((v as _object)["media"], decltype_noref(q.media)) )
+    move_to_ref(q.thumbnail, _::from_JV((v as _object)["thumbnail"], decltype_noref(q.thumbnail)) )
+    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], decltype_noref(q.caption)) )
+    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], decltype_noref(q.parse_mode)) )
+    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], decltype_noref(q.caption_entities)) )
+    move_to_ref(q.width, _::from_JV((v as _object)["width"], decltype_noref(q.width)) )
+    move_to_ref(q.height, _::from_JV((v as _object)["height"], decltype_noref(q.height)) )
+    move_to_ref(q.duration, _::from_JV((v as _object)["duration"], decltype_noref(q.duration)) )
+    move_to_ref(q.has_spoiler, _::from_JV((v as _object)["has_spoiler"], decltype_noref(q.has_spoiler)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:inputmediaanimation? ) : inputmediaanimation?
+    return null if v==null
+    var q = new inputmediaanimation
+    *q <- from_JV(v,type<inputmediaanimation>)
+    return q
+
 struct inputmediaaudio
     //!  Represents an audio file to be treated as music to be sent.
     _type : string	//! Type of the result, must be audio
@@ -745,6 +2149,25 @@ struct inputmediaaudio
     [[optional]] performer : string = ""	//! Optional. Performer of the audio
     [[optional]] title : string = ""	//! Optional. Title of the audio
 
+def from_JV ( var v:JsonValue?; t:inputmediaaudio ) : inputmediaaudio
+    var q : inputmediaaudio
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    move_to_ref(q.media, _::from_JV((v as _object)["media"], decltype_noref(q.media)) )
+    move_to_ref(q.thumbnail, _::from_JV((v as _object)["thumbnail"], decltype_noref(q.thumbnail)) )
+    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], decltype_noref(q.caption)) )
+    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], decltype_noref(q.parse_mode)) )
+    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], decltype_noref(q.caption_entities)) )
+    move_to_ref(q.duration, _::from_JV((v as _object)["duration"], decltype_noref(q.duration)) )
+    move_to_ref(q.performer, _::from_JV((v as _object)["performer"], decltype_noref(q.performer)) )
+    move_to_ref(q.title, _::from_JV((v as _object)["title"], decltype_noref(q.title)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:inputmediaaudio? ) : inputmediaaudio?
+    return null if v==null
+    var q = new inputmediaaudio
+    *q <- from_JV(v,type<inputmediaaudio>)
+    return q
+
 struct inputmediadocument
     //!  Represents a general file to be sent.
     _type : string	//! Type of the result, must be document
@@ -755,17 +2178,106 @@ struct inputmediadocument
     [[optional]] caption_entities : array<messageentity>	//! Optional. List of special entities that appear in the caption, which can be specified instead of parse_mode
     [[optional]] disable_content_type_detection : bool = false	//! Optional. Disables automatic server-side content type detection for files uploaded using multipart/form-data. Always True, if the document is sent as part of an album.
 
-struct inputfile {} //  This object represents the contents of a file to be uploaded. Must be posted using multipart/form-data in the usual way that files are uploaded via the browser.
+def from_JV ( var v:JsonValue?; t:inputmediadocument ) : inputmediadocument
+    var q : inputmediadocument
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    move_to_ref(q.media, _::from_JV((v as _object)["media"], decltype_noref(q.media)) )
+    move_to_ref(q.thumbnail, _::from_JV((v as _object)["thumbnail"], decltype_noref(q.thumbnail)) )
+    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], decltype_noref(q.caption)) )
+    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], decltype_noref(q.parse_mode)) )
+    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], decltype_noref(q.caption_entities)) )
+    move_to_ref(q.disable_content_type_detection, _::from_JV((v as _object)["disable_content_type_detection"], decltype_noref(q.disable_content_type_detection)) )
+    return <- q
 
-struct sending_files {} //  There are three ways to send files (photos, stickers, audio, media, etc.): Sending by file_id Sending by URL
+def from_JV ( var v:JsonValue?; t:inputmediadocument? ) : inputmediadocument?
+    return null if v==null
+    var q = new inputmediadocument
+    *q <- from_JV(v,type<inputmediadocument>)
+    return q
 
-struct inline_mode_objects {} //  Objects and methods used in the inline mode are described in the Inline mode section.
+struct inputfile
+    //!  This object represents the contents of a file to be uploaded. Must be posted using multipart/form-data in the usual way that files are uploaded via the browser.
+    object_inputfile_has_no_fields:bool
 
-struct getme {} //  A simple method for testing your bot's authentication token. Requires no parameters. Returns basic information about the bot in form of a User object.
+def from_JV ( var v:JsonValue?; t:inputfile ) : inputfile
+    var q : inputfile
+    return <- q
 
-struct logout {} //  Use this method to log out from the cloud Bot API server before launching the bot locally. You must log out the bot before running it locally, otherwise there is no guarantee that the bot will receive updates. After a successful call, you can immediately log in on a local server, but will not be able to log in back to the cloud Bot API server for 10 minutes. Returns True on success. Requires no parameters.
+def from_JV ( var v:JsonValue?; t:inputfile? ) : inputfile?
+    return null if v==null
+    var q = new inputfile
+    *q <- from_JV(v,type<inputfile>)
+    return q
 
-struct close {} //  Use this method to close the bot instance before moving it from one local server to another. You need to delete the webhook before calling this method to ensure that the bot isn't launched again after server restart. The method will return error 429 in the first 10 minutes after the bot is launched. Returns True on success. Requires no parameters.
+struct sending_files
+    //!  There are three ways to send files (photos, stickers, audio, media, etc.): Sending by file_id Sending by URL
+    object_sending_files_has_no_fields:bool
+
+def from_JV ( var v:JsonValue?; t:sending_files ) : sending_files
+    var q : sending_files
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:sending_files? ) : sending_files?
+    return null if v==null
+    var q = new sending_files
+    *q <- from_JV(v,type<sending_files>)
+    return q
+
+struct inline_mode_objects
+    //!  Objects and methods used in the inline mode are described in the Inline mode section.
+    object_inline_mode_objects_has_no_fields:bool
+
+def from_JV ( var v:JsonValue?; t:inline_mode_objects ) : inline_mode_objects
+    var q : inline_mode_objects
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:inline_mode_objects? ) : inline_mode_objects?
+    return null if v==null
+    var q = new inline_mode_objects
+    *q <- from_JV(v,type<inline_mode_objects>)
+    return q
+
+struct getme
+    //!  A simple method for testing your bot's authentication token. Requires no parameters. Returns basic information about the bot in form of a User object.
+    object_getme_has_no_fields:bool
+
+def from_JV ( var v:JsonValue?; t:getme ) : getme
+    var q : getme
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:getme? ) : getme?
+    return null if v==null
+    var q = new getme
+    *q <- from_JV(v,type<getme>)
+    return q
+
+struct logout
+    //!  Use this method to log out from the cloud Bot API server before launching the bot locally. You must log out the bot before running it locally, otherwise there is no guarantee that the bot will receive updates. After a successful call, you can immediately log in on a local server, but will not be able to log in back to the cloud Bot API server for 10 minutes. Returns True on success. Requires no parameters.
+    object_logout_has_no_fields:bool
+
+def from_JV ( var v:JsonValue?; t:logout ) : logout
+    var q : logout
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:logout? ) : logout?
+    return null if v==null
+    var q = new logout
+    *q <- from_JV(v,type<logout>)
+    return q
+
+struct close
+    //!  Use this method to close the bot instance before moving it from one local server to another. You need to delete the webhook before calling this method to ensure that the bot isn't launched again after server restart. The method will return error 429 in the first 10 minutes after the bot is launched. Returns True on success. Requires no parameters.
+    object_close_has_no_fields:bool
+
+def from_JV ( var v:JsonValue?; t:close ) : close
+    var q : close
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:close? ) : close?
+    return null if v==null
+    var q = new close
+    *q <- from_JV(v,type<close>)
+    return q
 
 struct sendmessage
     //!  Use this method to send text messages. On success, the sent Message is returned.
@@ -781,7 +2293,40 @@ struct sendmessage
     [[optional]] allow_sending_without_reply : bool = false	//! Optional. Pass True if the message should be sent even if the specified replied-to message is not found
     [[optional]] reply_markup : inlinekeyboardmarkup?	//! Optional. Additional interface options. A JSON-serialized object for an inline keyboard, custom reply keyboard, instructions to remove reply keyboard or to force a reply from the user.
 
-struct formatting_options {} //  The Bot API supports basic formatting for messages. You can use bold, italic, underlined, strikethrough, and spoiler text, as well as inline links and pre-formatted code in your bots' messages. Telegram clients will render them accordingly. You can specify text entities directly, or use markdown-style or HTML-style formatting. Note that Telegram clients will display an alert to the user before opening an inline link ('Open this link?' together with the full URL). Message entities can be nested, providing following restrictions are met: - If two entities have common characters, then one of them is fully contained inside another. - bold, italic, underline, strikethrough, and spoiler entities can contain and can be part of any other entities, except pre and code. - All other entities can't contain each other. Links tg://user?id=<user_id> can be used to mention a user by their ID without using a username. Please note: To use this mode, pass MarkdownV2 in the parse_mode field. Use the following syntax in your message: Please note: To use this mode, pass HTML in the parse_mode field. The following tags are currently supported: Please note: This is a legacy mode, retained for backward compatibility. To use this mode, pass Markdown in the parse_mode field. Use the following syntax in your message: Please note:
+def from_JV ( var v:JsonValue?; t:sendmessage ) : sendmessage
+    var q : sendmessage
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], decltype_noref(q.message_thread_id)) )
+    move_to_ref(q.text, _::from_JV((v as _object)["text"], decltype_noref(q.text)) )
+    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], decltype_noref(q.parse_mode)) )
+    move_to_ref(q.entities, _::from_JV((v as _object)["entities"], decltype_noref(q.entities)) )
+    move_to_ref(q.disable_web_page_preview, _::from_JV((v as _object)["disable_web_page_preview"], decltype_noref(q.disable_web_page_preview)) )
+    move_to_ref(q.disable_notification, _::from_JV((v as _object)["disable_notification"], decltype_noref(q.disable_notification)) )
+    move_to_ref(q.protect_content, _::from_JV((v as _object)["protect_content"], decltype_noref(q.protect_content)) )
+    move_to_ref(q.reply_to_message_id, _::from_JV((v as _object)["reply_to_message_id"], decltype_noref(q.reply_to_message_id)) )
+    move_to_ref(q.allow_sending_without_reply, _::from_JV((v as _object)["allow_sending_without_reply"], decltype_noref(q.allow_sending_without_reply)) )
+    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], decltype_noref(q.reply_markup)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:sendmessage? ) : sendmessage?
+    return null if v==null
+    var q = new sendmessage
+    *q <- from_JV(v,type<sendmessage>)
+    return q
+
+struct formatting_options
+    //!  The Bot API supports basic formatting for messages. You can use bold, italic, underlined, strikethrough, and spoiler text, as well as inline links and pre-formatted code in your bots' messages. Telegram clients will render them accordingly. You can specify text entities directly, or use markdown-style or HTML-style formatting. Note that Telegram clients will display an alert to the user before opening an inline link ('Open this link?' together with the full URL). Message entities can be nested, providing following restrictions are met: - If two entities have common characters, then one of them is fully contained inside another. - bold, italic, underline, strikethrough, and spoiler entities can contain and can be part of any other entities, except pre and code. - All other entities can't contain each other. Links tg://user?id=<user_id> can be used to mention a user by their ID without using a username. Please note: To use this mode, pass MarkdownV2 in the parse_mode field. Use the following syntax in your message: Please note: To use this mode, pass HTML in the parse_mode field. The following tags are currently supported: Please note: This is a legacy mode, retained for backward compatibility. To use this mode, pass Markdown in the parse_mode field. Use the following syntax in your message: Please note:
+    object_formatting_options_has_no_fields:bool
+
+def from_JV ( var v:JsonValue?; t:formatting_options ) : formatting_options
+    var q : formatting_options
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:formatting_options? ) : formatting_options?
+    return null if v==null
+    var q = new formatting_options
+    *q <- from_JV(v,type<formatting_options>)
+    return q
 
 struct forwardmessage
     //!  Use this method to forward messages of any kind. Service messages can't be forwarded. On success, the sent Message is returned.
@@ -791,6 +2336,22 @@ struct forwardmessage
     [[optional]] disable_notification : bool = false	//! Optional. Sends the message silently. Users will receive a notification with no sound.
     [[optional]] protect_content : bool = false	//! Optional. Protects the contents of the forwarded message from forwarding and saving
     message_id : int	//! Required. Message identifier in the chat specified in from_chat_id
+
+def from_JV ( var v:JsonValue?; t:forwardmessage ) : forwardmessage
+    var q : forwardmessage
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], decltype_noref(q.message_thread_id)) )
+    move_to_ref(q.from_chat_id, _::from_JV((v as _object)["from_chat_id"], decltype_noref(q.from_chat_id)) )
+    move_to_ref(q.disable_notification, _::from_JV((v as _object)["disable_notification"], decltype_noref(q.disable_notification)) )
+    move_to_ref(q.protect_content, _::from_JV((v as _object)["protect_content"], decltype_noref(q.protect_content)) )
+    move_to_ref(q.message_id, _::from_JV((v as _object)["message_id"], decltype_noref(q.message_id)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:forwardmessage? ) : forwardmessage?
+    return null if v==null
+    var q = new forwardmessage
+    *q <- from_JV(v,type<forwardmessage>)
+    return q
 
 struct copymessage
     //!  Use this method to copy messages of any kind. Service messages and invoice messages can't be copied. A quiz poll can be copied only if the value of the field correct_option_id is known to the bot. The method is analogous to the method forwardMessage, but the copied message doesn't have a link to the original message. Returns the MessageId of the sent message on success.
@@ -807,6 +2368,28 @@ struct copymessage
     [[optional]] allow_sending_without_reply : bool = false	//! Optional. Pass True if the message should be sent even if the specified replied-to message is not found
     [[optional]] reply_markup : inlinekeyboardmarkup?	//! Optional. Additional interface options. A JSON-serialized object for an inline keyboard, custom reply keyboard, instructions to remove reply keyboard or to force a reply from the user.
 
+def from_JV ( var v:JsonValue?; t:copymessage ) : copymessage
+    var q : copymessage
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], decltype_noref(q.message_thread_id)) )
+    move_to_ref(q.from_chat_id, _::from_JV((v as _object)["from_chat_id"], decltype_noref(q.from_chat_id)) )
+    move_to_ref(q.message_id, _::from_JV((v as _object)["message_id"], decltype_noref(q.message_id)) )
+    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], decltype_noref(q.caption)) )
+    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], decltype_noref(q.parse_mode)) )
+    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], decltype_noref(q.caption_entities)) )
+    move_to_ref(q.disable_notification, _::from_JV((v as _object)["disable_notification"], decltype_noref(q.disable_notification)) )
+    move_to_ref(q.protect_content, _::from_JV((v as _object)["protect_content"], decltype_noref(q.protect_content)) )
+    move_to_ref(q.reply_to_message_id, _::from_JV((v as _object)["reply_to_message_id"], decltype_noref(q.reply_to_message_id)) )
+    move_to_ref(q.allow_sending_without_reply, _::from_JV((v as _object)["allow_sending_without_reply"], decltype_noref(q.allow_sending_without_reply)) )
+    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], decltype_noref(q.reply_markup)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:copymessage? ) : copymessage?
+    return null if v==null
+    var q = new copymessage
+    *q <- from_JV(v,type<copymessage>)
+    return q
+
 struct sendphoto
     //!  Use this method to send photos. On success, the sent Message is returned.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target channel (in the format @channelusername)
@@ -821,6 +2404,28 @@ struct sendphoto
     [[optional]] reply_to_message_id : int = INT_MIN	//! Optional. If the message is a reply, ID of the original message
     [[optional]] allow_sending_without_reply : bool = false	//! Optional. Pass True if the message should be sent even if the specified replied-to message is not found
     [[optional]] reply_markup : inlinekeyboardmarkup?	//! Optional. Additional interface options. A JSON-serialized object for an inline keyboard, custom reply keyboard, instructions to remove reply keyboard or to force a reply from the user.
+
+def from_JV ( var v:JsonValue?; t:sendphoto ) : sendphoto
+    var q : sendphoto
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], decltype_noref(q.message_thread_id)) )
+    move_to_ref(q.photo, _::from_JV((v as _object)["photo"], decltype_noref(q.photo)) )
+    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], decltype_noref(q.caption)) )
+    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], decltype_noref(q.parse_mode)) )
+    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], decltype_noref(q.caption_entities)) )
+    move_to_ref(q.has_spoiler, _::from_JV((v as _object)["has_spoiler"], decltype_noref(q.has_spoiler)) )
+    move_to_ref(q.disable_notification, _::from_JV((v as _object)["disable_notification"], decltype_noref(q.disable_notification)) )
+    move_to_ref(q.protect_content, _::from_JV((v as _object)["protect_content"], decltype_noref(q.protect_content)) )
+    move_to_ref(q.reply_to_message_id, _::from_JV((v as _object)["reply_to_message_id"], decltype_noref(q.reply_to_message_id)) )
+    move_to_ref(q.allow_sending_without_reply, _::from_JV((v as _object)["allow_sending_without_reply"], decltype_noref(q.allow_sending_without_reply)) )
+    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], decltype_noref(q.reply_markup)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:sendphoto? ) : sendphoto?
+    return null if v==null
+    var q = new sendphoto
+    *q <- from_JV(v,type<sendphoto>)
+    return q
 
 struct sendaudio
     //!  Use this method to send audio files, if you want Telegram clients to display them in the music player. Your audio must be in the .MP3 or .M4A format. On success, the sent Message is returned. Bots can currently send audio files of up to 50 MB in size, this limit may be changed in the future. For sending voice messages, use the sendVoice method instead.
@@ -840,6 +2445,31 @@ struct sendaudio
     [[optional]] allow_sending_without_reply : bool = false	//! Optional. Pass True if the message should be sent even if the specified replied-to message is not found
     [[optional]] reply_markup : inlinekeyboardmarkup?	//! Optional. Additional interface options. A JSON-serialized object for an inline keyboard, custom reply keyboard, instructions to remove reply keyboard or to force a reply from the user.
 
+def from_JV ( var v:JsonValue?; t:sendaudio ) : sendaudio
+    var q : sendaudio
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], decltype_noref(q.message_thread_id)) )
+    move_to_ref(q.audio, _::from_JV((v as _object)["audio"], decltype_noref(q.audio)) )
+    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], decltype_noref(q.caption)) )
+    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], decltype_noref(q.parse_mode)) )
+    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], decltype_noref(q.caption_entities)) )
+    move_to_ref(q.duration, _::from_JV((v as _object)["duration"], decltype_noref(q.duration)) )
+    move_to_ref(q.performer, _::from_JV((v as _object)["performer"], decltype_noref(q.performer)) )
+    move_to_ref(q.title, _::from_JV((v as _object)["title"], decltype_noref(q.title)) )
+    move_to_ref(q.thumbnail, _::from_JV((v as _object)["thumbnail"], decltype_noref(q.thumbnail)) )
+    move_to_ref(q.disable_notification, _::from_JV((v as _object)["disable_notification"], decltype_noref(q.disable_notification)) )
+    move_to_ref(q.protect_content, _::from_JV((v as _object)["protect_content"], decltype_noref(q.protect_content)) )
+    move_to_ref(q.reply_to_message_id, _::from_JV((v as _object)["reply_to_message_id"], decltype_noref(q.reply_to_message_id)) )
+    move_to_ref(q.allow_sending_without_reply, _::from_JV((v as _object)["allow_sending_without_reply"], decltype_noref(q.allow_sending_without_reply)) )
+    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], decltype_noref(q.reply_markup)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:sendaudio? ) : sendaudio?
+    return null if v==null
+    var q = new sendaudio
+    *q <- from_JV(v,type<sendaudio>)
+    return q
+
 struct senddocument
     //!  Use this method to send general files. On success, the sent Message is returned. Bots can currently send files of any type of up to 50 MB in size, this limit may be changed in the future.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target channel (in the format @channelusername)
@@ -855,6 +2485,29 @@ struct senddocument
     [[optional]] reply_to_message_id : int = INT_MIN	//! Optional. If the message is a reply, ID of the original message
     [[optional]] allow_sending_without_reply : bool = false	//! Optional. Pass True if the message should be sent even if the specified replied-to message is not found
     [[optional]] reply_markup : inlinekeyboardmarkup?	//! Optional. Additional interface options. A JSON-serialized object for an inline keyboard, custom reply keyboard, instructions to remove reply keyboard or to force a reply from the user.
+
+def from_JV ( var v:JsonValue?; t:senddocument ) : senddocument
+    var q : senddocument
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], decltype_noref(q.message_thread_id)) )
+    move_to_ref(q.document, _::from_JV((v as _object)["document"], decltype_noref(q.document)) )
+    move_to_ref(q.thumbnail, _::from_JV((v as _object)["thumbnail"], decltype_noref(q.thumbnail)) )
+    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], decltype_noref(q.caption)) )
+    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], decltype_noref(q.parse_mode)) )
+    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], decltype_noref(q.caption_entities)) )
+    move_to_ref(q.disable_content_type_detection, _::from_JV((v as _object)["disable_content_type_detection"], decltype_noref(q.disable_content_type_detection)) )
+    move_to_ref(q.disable_notification, _::from_JV((v as _object)["disable_notification"], decltype_noref(q.disable_notification)) )
+    move_to_ref(q.protect_content, _::from_JV((v as _object)["protect_content"], decltype_noref(q.protect_content)) )
+    move_to_ref(q.reply_to_message_id, _::from_JV((v as _object)["reply_to_message_id"], decltype_noref(q.reply_to_message_id)) )
+    move_to_ref(q.allow_sending_without_reply, _::from_JV((v as _object)["allow_sending_without_reply"], decltype_noref(q.allow_sending_without_reply)) )
+    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], decltype_noref(q.reply_markup)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:senddocument? ) : senddocument?
+    return null if v==null
+    var q = new senddocument
+    *q <- from_JV(v,type<senddocument>)
+    return q
 
 struct sendvideo
     //!  Use this method to send video files, Telegram clients support MPEG4 videos (other formats may be sent as Document). On success, the sent Message is returned. Bots can currently send video files of up to 50 MB in size, this limit may be changed in the future.
@@ -876,6 +2529,33 @@ struct sendvideo
     [[optional]] allow_sending_without_reply : bool = false	//! Optional. Pass True if the message should be sent even if the specified replied-to message is not found
     [[optional]] reply_markup : inlinekeyboardmarkup?	//! Optional. Additional interface options. A JSON-serialized object for an inline keyboard, custom reply keyboard, instructions to remove reply keyboard or to force a reply from the user.
 
+def from_JV ( var v:JsonValue?; t:sendvideo ) : sendvideo
+    var q : sendvideo
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], decltype_noref(q.message_thread_id)) )
+    move_to_ref(q.video, _::from_JV((v as _object)["video"], decltype_noref(q.video)) )
+    move_to_ref(q.duration, _::from_JV((v as _object)["duration"], decltype_noref(q.duration)) )
+    move_to_ref(q.width, _::from_JV((v as _object)["width"], decltype_noref(q.width)) )
+    move_to_ref(q.height, _::from_JV((v as _object)["height"], decltype_noref(q.height)) )
+    move_to_ref(q.thumbnail, _::from_JV((v as _object)["thumbnail"], decltype_noref(q.thumbnail)) )
+    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], decltype_noref(q.caption)) )
+    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], decltype_noref(q.parse_mode)) )
+    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], decltype_noref(q.caption_entities)) )
+    move_to_ref(q.has_spoiler, _::from_JV((v as _object)["has_spoiler"], decltype_noref(q.has_spoiler)) )
+    move_to_ref(q.supports_streaming, _::from_JV((v as _object)["supports_streaming"], decltype_noref(q.supports_streaming)) )
+    move_to_ref(q.disable_notification, _::from_JV((v as _object)["disable_notification"], decltype_noref(q.disable_notification)) )
+    move_to_ref(q.protect_content, _::from_JV((v as _object)["protect_content"], decltype_noref(q.protect_content)) )
+    move_to_ref(q.reply_to_message_id, _::from_JV((v as _object)["reply_to_message_id"], decltype_noref(q.reply_to_message_id)) )
+    move_to_ref(q.allow_sending_without_reply, _::from_JV((v as _object)["allow_sending_without_reply"], decltype_noref(q.allow_sending_without_reply)) )
+    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], decltype_noref(q.reply_markup)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:sendvideo? ) : sendvideo?
+    return null if v==null
+    var q = new sendvideo
+    *q <- from_JV(v,type<sendvideo>)
+    return q
+
 struct sendanimation
     //!  Use this method to send animation files (GIF or H.264/MPEG-4 AVC video without sound). On success, the sent Message is returned. Bots can currently send animation files of up to 50 MB in size, this limit may be changed in the future.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target channel (in the format @channelusername)
@@ -895,6 +2575,32 @@ struct sendanimation
     [[optional]] allow_sending_without_reply : bool = false	//! Optional. Pass True if the message should be sent even if the specified replied-to message is not found
     [[optional]] reply_markup : inlinekeyboardmarkup?	//! Optional. Additional interface options. A JSON-serialized object for an inline keyboard, custom reply keyboard, instructions to remove reply keyboard or to force a reply from the user.
 
+def from_JV ( var v:JsonValue?; t:sendanimation ) : sendanimation
+    var q : sendanimation
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], decltype_noref(q.message_thread_id)) )
+    move_to_ref(q.animation, _::from_JV((v as _object)["animation"], decltype_noref(q.animation)) )
+    move_to_ref(q.duration, _::from_JV((v as _object)["duration"], decltype_noref(q.duration)) )
+    move_to_ref(q.width, _::from_JV((v as _object)["width"], decltype_noref(q.width)) )
+    move_to_ref(q.height, _::from_JV((v as _object)["height"], decltype_noref(q.height)) )
+    move_to_ref(q.thumbnail, _::from_JV((v as _object)["thumbnail"], decltype_noref(q.thumbnail)) )
+    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], decltype_noref(q.caption)) )
+    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], decltype_noref(q.parse_mode)) )
+    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], decltype_noref(q.caption_entities)) )
+    move_to_ref(q.has_spoiler, _::from_JV((v as _object)["has_spoiler"], decltype_noref(q.has_spoiler)) )
+    move_to_ref(q.disable_notification, _::from_JV((v as _object)["disable_notification"], decltype_noref(q.disable_notification)) )
+    move_to_ref(q.protect_content, _::from_JV((v as _object)["protect_content"], decltype_noref(q.protect_content)) )
+    move_to_ref(q.reply_to_message_id, _::from_JV((v as _object)["reply_to_message_id"], decltype_noref(q.reply_to_message_id)) )
+    move_to_ref(q.allow_sending_without_reply, _::from_JV((v as _object)["allow_sending_without_reply"], decltype_noref(q.allow_sending_without_reply)) )
+    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], decltype_noref(q.reply_markup)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:sendanimation? ) : sendanimation?
+    return null if v==null
+    var q = new sendanimation
+    *q <- from_JV(v,type<sendanimation>)
+    return q
+
 struct sendvoice
     //!  Use this method to send audio files, if you want Telegram clients to display the file as a playable voice message. For this to work, your audio must be in an .OGG file encoded with OPUS (other formats may be sent as Audio or Document). On success, the sent Message is returned. Bots can currently send voice messages of up to 50 MB in size, this limit may be changed in the future.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target channel (in the format @channelusername)
@@ -910,6 +2616,28 @@ struct sendvoice
     [[optional]] allow_sending_without_reply : bool = false	//! Optional. Pass True if the message should be sent even if the specified replied-to message is not found
     [[optional]] reply_markup : inlinekeyboardmarkup?	//! Optional. Additional interface options. A JSON-serialized object for an inline keyboard, custom reply keyboard, instructions to remove reply keyboard or to force a reply from the user.
 
+def from_JV ( var v:JsonValue?; t:sendvoice ) : sendvoice
+    var q : sendvoice
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], decltype_noref(q.message_thread_id)) )
+    move_to_ref(q.voice, _::from_JV((v as _object)["voice"], decltype_noref(q.voice)) )
+    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], decltype_noref(q.caption)) )
+    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], decltype_noref(q.parse_mode)) )
+    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], decltype_noref(q.caption_entities)) )
+    move_to_ref(q.duration, _::from_JV((v as _object)["duration"], decltype_noref(q.duration)) )
+    move_to_ref(q.disable_notification, _::from_JV((v as _object)["disable_notification"], decltype_noref(q.disable_notification)) )
+    move_to_ref(q.protect_content, _::from_JV((v as _object)["protect_content"], decltype_noref(q.protect_content)) )
+    move_to_ref(q.reply_to_message_id, _::from_JV((v as _object)["reply_to_message_id"], decltype_noref(q.reply_to_message_id)) )
+    move_to_ref(q.allow_sending_without_reply, _::from_JV((v as _object)["allow_sending_without_reply"], decltype_noref(q.allow_sending_without_reply)) )
+    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], decltype_noref(q.reply_markup)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:sendvoice? ) : sendvoice?
+    return null if v==null
+    var q = new sendvoice
+    *q <- from_JV(v,type<sendvoice>)
+    return q
+
 struct sendvideonote
     //!  As of v.4.0, Telegram clients support rounded square MPEG4 videos of up to 1 minute long. Use this method to send video messages. On success, the sent Message is returned.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target channel (in the format @channelusername)
@@ -924,6 +2652,27 @@ struct sendvideonote
     [[optional]] allow_sending_without_reply : bool = false	//! Optional. Pass True if the message should be sent even if the specified replied-to message is not found
     [[optional]] reply_markup : inlinekeyboardmarkup?	//! Optional. Additional interface options. A JSON-serialized object for an inline keyboard, custom reply keyboard, instructions to remove reply keyboard or to force a reply from the user.
 
+def from_JV ( var v:JsonValue?; t:sendvideonote ) : sendvideonote
+    var q : sendvideonote
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], decltype_noref(q.message_thread_id)) )
+    move_to_ref(q.video_note, _::from_JV((v as _object)["video_note"], decltype_noref(q.video_note)) )
+    move_to_ref(q.duration, _::from_JV((v as _object)["duration"], decltype_noref(q.duration)) )
+    move_to_ref(q.length, _::from_JV((v as _object)["length"], decltype_noref(q.length)) )
+    move_to_ref(q.thumbnail, _::from_JV((v as _object)["thumbnail"], decltype_noref(q.thumbnail)) )
+    move_to_ref(q.disable_notification, _::from_JV((v as _object)["disable_notification"], decltype_noref(q.disable_notification)) )
+    move_to_ref(q.protect_content, _::from_JV((v as _object)["protect_content"], decltype_noref(q.protect_content)) )
+    move_to_ref(q.reply_to_message_id, _::from_JV((v as _object)["reply_to_message_id"], decltype_noref(q.reply_to_message_id)) )
+    move_to_ref(q.allow_sending_without_reply, _::from_JV((v as _object)["allow_sending_without_reply"], decltype_noref(q.allow_sending_without_reply)) )
+    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], decltype_noref(q.reply_markup)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:sendvideonote? ) : sendvideonote?
+    return null if v==null
+    var q = new sendvideonote
+    *q <- from_JV(v,type<sendvideonote>)
+    return q
+
 struct sendmediagroup
     //!  Use this method to send a group of photos, videos, documents or audios as an album. Documents and audio files can be only grouped in an album with messages of the same type. On success, an array of Messages that were sent is returned.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target channel (in the format @channelusername)
@@ -933,6 +2682,23 @@ struct sendmediagroup
     [[optional]] protect_content : bool = false	//! Optional. Protects the contents of the sent messages from forwarding and saving
     [[optional]] reply_to_message_id : int = INT_MIN	//! Optional. If the messages are a reply, ID of the original message
     [[optional]] allow_sending_without_reply : bool = false	//! Optional. Pass True if the message should be sent even if the specified replied-to message is not found
+
+def from_JV ( var v:JsonValue?; t:sendmediagroup ) : sendmediagroup
+    var q : sendmediagroup
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], decltype_noref(q.message_thread_id)) )
+    move_to_ref(q.media, _::from_JV((v as _object)["media"], decltype_noref(q.media)) )
+    move_to_ref(q.disable_notification, _::from_JV((v as _object)["disable_notification"], decltype_noref(q.disable_notification)) )
+    move_to_ref(q.protect_content, _::from_JV((v as _object)["protect_content"], decltype_noref(q.protect_content)) )
+    move_to_ref(q.reply_to_message_id, _::from_JV((v as _object)["reply_to_message_id"], decltype_noref(q.reply_to_message_id)) )
+    move_to_ref(q.allow_sending_without_reply, _::from_JV((v as _object)["allow_sending_without_reply"], decltype_noref(q.allow_sending_without_reply)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:sendmediagroup? ) : sendmediagroup?
+    return null if v==null
+    var q = new sendmediagroup
+    *q <- from_JV(v,type<sendmediagroup>)
+    return q
 
 struct sendlocation
     //!  Use this method to send point on the map. On success, the sent Message is returned.
@@ -949,6 +2715,29 @@ struct sendlocation
     [[optional]] reply_to_message_id : int = INT_MIN	//! Optional. If the message is a reply, ID of the original message
     [[optional]] allow_sending_without_reply : bool = false	//! Optional. Pass True if the message should be sent even if the specified replied-to message is not found
     [[optional]] reply_markup : inlinekeyboardmarkup?	//! Optional. Additional interface options. A JSON-serialized object for an inline keyboard, custom reply keyboard, instructions to remove reply keyboard or to force a reply from the user.
+
+def from_JV ( var v:JsonValue?; t:sendlocation ) : sendlocation
+    var q : sendlocation
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], decltype_noref(q.message_thread_id)) )
+    move_to_ref(q.latitude, _::from_JV((v as _object)["latitude"], decltype_noref(q.latitude)) )
+    move_to_ref(q.longitude, _::from_JV((v as _object)["longitude"], decltype_noref(q.longitude)) )
+    move_to_ref(q.horizontal_accuracy, _::from_JV((v as _object)["horizontal_accuracy"], decltype_noref(q.horizontal_accuracy)) )
+    move_to_ref(q.live_period, _::from_JV((v as _object)["live_period"], decltype_noref(q.live_period)) )
+    move_to_ref(q.heading, _::from_JV((v as _object)["heading"], decltype_noref(q.heading)) )
+    move_to_ref(q.proximity_alert_radius, _::from_JV((v as _object)["proximity_alert_radius"], decltype_noref(q.proximity_alert_radius)) )
+    move_to_ref(q.disable_notification, _::from_JV((v as _object)["disable_notification"], decltype_noref(q.disable_notification)) )
+    move_to_ref(q.protect_content, _::from_JV((v as _object)["protect_content"], decltype_noref(q.protect_content)) )
+    move_to_ref(q.reply_to_message_id, _::from_JV((v as _object)["reply_to_message_id"], decltype_noref(q.reply_to_message_id)) )
+    move_to_ref(q.allow_sending_without_reply, _::from_JV((v as _object)["allow_sending_without_reply"], decltype_noref(q.allow_sending_without_reply)) )
+    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], decltype_noref(q.reply_markup)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:sendlocation? ) : sendlocation?
+    return null if v==null
+    var q = new sendlocation
+    *q <- from_JV(v,type<sendlocation>)
+    return q
 
 struct sendvenue
     //!  Use this method to send information about a venue. On success, the sent Message is returned.
@@ -968,6 +2757,31 @@ struct sendvenue
     [[optional]] allow_sending_without_reply : bool = false	//! Optional. Pass True if the message should be sent even if the specified replied-to message is not found
     [[optional]] reply_markup : inlinekeyboardmarkup?	//! Optional. Additional interface options. A JSON-serialized object for an inline keyboard, custom reply keyboard, instructions to remove reply keyboard or to force a reply from the user.
 
+def from_JV ( var v:JsonValue?; t:sendvenue ) : sendvenue
+    var q : sendvenue
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], decltype_noref(q.message_thread_id)) )
+    move_to_ref(q.latitude, _::from_JV((v as _object)["latitude"], decltype_noref(q.latitude)) )
+    move_to_ref(q.longitude, _::from_JV((v as _object)["longitude"], decltype_noref(q.longitude)) )
+    move_to_ref(q.title, _::from_JV((v as _object)["title"], decltype_noref(q.title)) )
+    move_to_ref(q.address, _::from_JV((v as _object)["address"], decltype_noref(q.address)) )
+    move_to_ref(q.foursquare_id, _::from_JV((v as _object)["foursquare_id"], decltype_noref(q.foursquare_id)) )
+    move_to_ref(q.foursquare_type, _::from_JV((v as _object)["foursquare_type"], decltype_noref(q.foursquare_type)) )
+    move_to_ref(q.google_place_id, _::from_JV((v as _object)["google_place_id"], decltype_noref(q.google_place_id)) )
+    move_to_ref(q.google_place_type, _::from_JV((v as _object)["google_place_type"], decltype_noref(q.google_place_type)) )
+    move_to_ref(q.disable_notification, _::from_JV((v as _object)["disable_notification"], decltype_noref(q.disable_notification)) )
+    move_to_ref(q.protect_content, _::from_JV((v as _object)["protect_content"], decltype_noref(q.protect_content)) )
+    move_to_ref(q.reply_to_message_id, _::from_JV((v as _object)["reply_to_message_id"], decltype_noref(q.reply_to_message_id)) )
+    move_to_ref(q.allow_sending_without_reply, _::from_JV((v as _object)["allow_sending_without_reply"], decltype_noref(q.allow_sending_without_reply)) )
+    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], decltype_noref(q.reply_markup)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:sendvenue? ) : sendvenue?
+    return null if v==null
+    var q = new sendvenue
+    *q <- from_JV(v,type<sendvenue>)
+    return q
+
 struct sendcontact
     //!  Use this method to send phone contacts. On success, the sent Message is returned.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target channel (in the format @channelusername)
@@ -981,6 +2795,27 @@ struct sendcontact
     [[optional]] reply_to_message_id : int = INT_MIN	//! Optional. If the message is a reply, ID of the original message
     [[optional]] allow_sending_without_reply : bool = false	//! Optional. Pass True if the message should be sent even if the specified replied-to message is not found
     [[optional]] reply_markup : inlinekeyboardmarkup?	//! Optional. Additional interface options. A JSON-serialized object for an inline keyboard, custom reply keyboard, instructions to remove reply keyboard or to force a reply from the user.
+
+def from_JV ( var v:JsonValue?; t:sendcontact ) : sendcontact
+    var q : sendcontact
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], decltype_noref(q.message_thread_id)) )
+    move_to_ref(q.phone_number, _::from_JV((v as _object)["phone_number"], decltype_noref(q.phone_number)) )
+    move_to_ref(q.first_name, _::from_JV((v as _object)["first_name"], decltype_noref(q.first_name)) )
+    move_to_ref(q.last_name, _::from_JV((v as _object)["last_name"], decltype_noref(q.last_name)) )
+    move_to_ref(q.vcard, _::from_JV((v as _object)["vcard"], decltype_noref(q.vcard)) )
+    move_to_ref(q.disable_notification, _::from_JV((v as _object)["disable_notification"], decltype_noref(q.disable_notification)) )
+    move_to_ref(q.protect_content, _::from_JV((v as _object)["protect_content"], decltype_noref(q.protect_content)) )
+    move_to_ref(q.reply_to_message_id, _::from_JV((v as _object)["reply_to_message_id"], decltype_noref(q.reply_to_message_id)) )
+    move_to_ref(q.allow_sending_without_reply, _::from_JV((v as _object)["allow_sending_without_reply"], decltype_noref(q.allow_sending_without_reply)) )
+    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], decltype_noref(q.reply_markup)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:sendcontact? ) : sendcontact?
+    return null if v==null
+    var q = new sendcontact
+    *q <- from_JV(v,type<sendcontact>)
+    return q
 
 struct sendpoll
     //!  Use this method to send a native poll. On success, the sent Message is returned.
@@ -1004,6 +2839,35 @@ struct sendpoll
     [[optional]] allow_sending_without_reply : bool = false	//! Optional. Pass True if the message should be sent even if the specified replied-to message is not found
     [[optional]] reply_markup : inlinekeyboardmarkup?	//! Optional. Additional interface options. A JSON-serialized object for an inline keyboard, custom reply keyboard, instructions to remove reply keyboard or to force a reply from the user.
 
+def from_JV ( var v:JsonValue?; t:sendpoll ) : sendpoll
+    var q : sendpoll
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], decltype_noref(q.message_thread_id)) )
+    move_to_ref(q.question, _::from_JV((v as _object)["question"], decltype_noref(q.question)) )
+    move_to_ref(q._options, _::from_JV((v as _object)["_options"], decltype_noref(q._options)) )
+    move_to_ref(q.is_anonymous, _::from_JV((v as _object)["is_anonymous"], decltype_noref(q.is_anonymous)) )
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    move_to_ref(q.allows_multiple_answers, _::from_JV((v as _object)["allows_multiple_answers"], decltype_noref(q.allows_multiple_answers)) )
+    move_to_ref(q.correct_option_id, _::from_JV((v as _object)["correct_option_id"], decltype_noref(q.correct_option_id)) )
+    move_to_ref(q.explanation, _::from_JV((v as _object)["explanation"], decltype_noref(q.explanation)) )
+    move_to_ref(q.explanation_parse_mode, _::from_JV((v as _object)["explanation_parse_mode"], decltype_noref(q.explanation_parse_mode)) )
+    move_to_ref(q.explanation_entities, _::from_JV((v as _object)["explanation_entities"], decltype_noref(q.explanation_entities)) )
+    move_to_ref(q.open_period, _::from_JV((v as _object)["open_period"], decltype_noref(q.open_period)) )
+    move_to_ref(q.close_date, _::from_JV((v as _object)["close_date"], decltype_noref(q.close_date)) )
+    move_to_ref(q.is_closed, _::from_JV((v as _object)["is_closed"], decltype_noref(q.is_closed)) )
+    move_to_ref(q.disable_notification, _::from_JV((v as _object)["disable_notification"], decltype_noref(q.disable_notification)) )
+    move_to_ref(q.protect_content, _::from_JV((v as _object)["protect_content"], decltype_noref(q.protect_content)) )
+    move_to_ref(q.reply_to_message_id, _::from_JV((v as _object)["reply_to_message_id"], decltype_noref(q.reply_to_message_id)) )
+    move_to_ref(q.allow_sending_without_reply, _::from_JV((v as _object)["allow_sending_without_reply"], decltype_noref(q.allow_sending_without_reply)) )
+    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], decltype_noref(q.reply_markup)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:sendpoll? ) : sendpoll?
+    return null if v==null
+    var q = new sendpoll
+    *q <- from_JV(v,type<sendpoll>)
+    return q
+
 struct senddice
     //!  Use this method to send an animated emoji that will display a random value. On success, the sent Message is returned.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target channel (in the format @channelusername)
@@ -1015,11 +2879,42 @@ struct senddice
     [[optional]] allow_sending_without_reply : bool = false	//! Optional. Pass True if the message should be sent even if the specified replied-to message is not found
     [[optional]] reply_markup : inlinekeyboardmarkup?	//! Optional. Additional interface options. A JSON-serialized object for an inline keyboard, custom reply keyboard, instructions to remove reply keyboard or to force a reply from the user.
 
+def from_JV ( var v:JsonValue?; t:senddice ) : senddice
+    var q : senddice
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], decltype_noref(q.message_thread_id)) )
+    move_to_ref(q.emoji, _::from_JV((v as _object)["emoji"], decltype_noref(q.emoji)) )
+    move_to_ref(q.disable_notification, _::from_JV((v as _object)["disable_notification"], decltype_noref(q.disable_notification)) )
+    move_to_ref(q.protect_content, _::from_JV((v as _object)["protect_content"], decltype_noref(q.protect_content)) )
+    move_to_ref(q.reply_to_message_id, _::from_JV((v as _object)["reply_to_message_id"], decltype_noref(q.reply_to_message_id)) )
+    move_to_ref(q.allow_sending_without_reply, _::from_JV((v as _object)["allow_sending_without_reply"], decltype_noref(q.allow_sending_without_reply)) )
+    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], decltype_noref(q.reply_markup)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:senddice? ) : senddice?
+    return null if v==null
+    var q = new senddice
+    *q <- from_JV(v,type<senddice>)
+    return q
+
 struct sendchataction
     //!  Use this method when you need to tell the user that something is happening on the bot's side. The status is set for 5 seconds or less (when a message arrives from your bot, Telegram clients clear its typing status). Returns True on success. We only recommend using this method when a response from the bot will take a noticeable amount of time to arrive.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target channel (in the format @channelusername)
     [[optional]] message_thread_id : int = INT_MIN	//! Optional. Unique identifier for the target message thread; supergroups only
     action : string	//! Required. Type of action to broadcast. Choose one, depending on what the user is about to receive: typing for text messages, upload_photo for photos, record_video or upload_video for videos, record_voice or upload_voice for voice notes, upload_document for general files, choose_sticker for stickers, find_location for location data, record_video_note or upload_video_note for video notes.
+
+def from_JV ( var v:JsonValue?; t:sendchataction ) : sendchataction
+    var q : sendchataction
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], decltype_noref(q.message_thread_id)) )
+    move_to_ref(q.action, _::from_JV((v as _object)["action"], decltype_noref(q.action)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:sendchataction? ) : sendchataction?
+    return null if v==null
+    var q = new sendchataction
+    *q <- from_JV(v,type<sendchataction>)
+    return q
 
 struct getuserprofilephotos
     //!  Use this method to get a list of profile pictures for a user. Returns a UserProfilePhotos object.
@@ -1027,9 +2922,33 @@ struct getuserprofilephotos
     [[optional]] offset : int = INT_MIN	//! Optional. Sequential number of the first photo to be returned. By default, all photos are returned.
     [[optional]] limit : int = INT_MIN	//! Optional. Limits the number of photos to be retrieved. Values between 1-100 are accepted. Defaults to 100.
 
+def from_JV ( var v:JsonValue?; t:getuserprofilephotos ) : getuserprofilephotos
+    var q : getuserprofilephotos
+    move_to_ref(q.user_id, _::from_JV((v as _object)["user_id"], decltype_noref(q.user_id)) )
+    move_to_ref(q.offset, _::from_JV((v as _object)["offset"], decltype_noref(q.offset)) )
+    move_to_ref(q.limit, _::from_JV((v as _object)["limit"], decltype_noref(q.limit)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:getuserprofilephotos? ) : getuserprofilephotos?
+    return null if v==null
+    var q = new getuserprofilephotos
+    *q <- from_JV(v,type<getuserprofilephotos>)
+    return q
+
 struct getfile
     //!  Use this method to get basic information about a file and prepare it for downloading. For the moment, bots can download files of up to 20MB in size. On success, a File object is returned. The file can then be downloaded via the link https://api.telegram.org/file/bot<token>/<file_path>, where <file_path> is taken from the response. It is guaranteed that the link will be valid for at least 1 hour. When the link expires, a new one can be requested by calling getFile again.
     file_id : string	//! Required. File identifier to get information about
+
+def from_JV ( var v:JsonValue?; t:getfile ) : getfile
+    var q : getfile
+    move_to_ref(q.file_id, _::from_JV((v as _object)["file_id"], decltype_noref(q.file_id)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:getfile? ) : getfile?
+    return null if v==null
+    var q = new getfile
+    *q <- from_JV(v,type<getfile>)
+    return q
 
 struct banchatmember
     //!  Use this method to ban a user in a group, a supergroup or a channel. In the case of supergroups and channels, the user will not be able to return to the chat on their own using invite links, etc., unless unbanned first. The bot must be an administrator in the chat for this to work and must have the appropriate administrator rights. Returns True on success.
@@ -1038,11 +2957,38 @@ struct banchatmember
     [[optional]] until_date : int = INT_MIN	//! Optional. Date when the user will be unbanned, unix time. If user is banned for more than 366 days or less than 30 seconds from the current time they are considered to be banned forever. Applied for supergroups and channels only.
     [[optional]] revoke_messages : bool = false	//! Optional. Pass True to delete all messages from the chat for the user that is being removed. If False, the user will be able to see messages in the group that were sent before the user was removed. Always True for supergroups and channels.
 
+def from_JV ( var v:JsonValue?; t:banchatmember ) : banchatmember
+    var q : banchatmember
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.user_id, _::from_JV((v as _object)["user_id"], decltype_noref(q.user_id)) )
+    move_to_ref(q.until_date, _::from_JV((v as _object)["until_date"], decltype_noref(q.until_date)) )
+    move_to_ref(q.revoke_messages, _::from_JV((v as _object)["revoke_messages"], decltype_noref(q.revoke_messages)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:banchatmember? ) : banchatmember?
+    return null if v==null
+    var q = new banchatmember
+    *q <- from_JV(v,type<banchatmember>)
+    return q
+
 struct unbanchatmember
     //!  Use this method to unban a previously banned user in a supergroup or channel. The user will not return to the group or channel automatically, but will be able to join via link, etc. The bot must be an administrator for this to work. By default, this method guarantees that after the call the user is not a member of the chat, but will be able to join it. So if the user is a member of the chat they will also be removed from the chat. If you don't want this, use the parameter only_if_banned. Returns True on success.
     chat_id : string	//! Required. Unique identifier for the target group or username of the target supergroup or channel (in the format @channelusername)
     user_id : int	//! Required. Unique identifier of the target user
     [[optional]] only_if_banned : bool = false	//! Optional. Do nothing if the user is not banned
+
+def from_JV ( var v:JsonValue?; t:unbanchatmember ) : unbanchatmember
+    var q : unbanchatmember
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.user_id, _::from_JV((v as _object)["user_id"], decltype_noref(q.user_id)) )
+    move_to_ref(q.only_if_banned, _::from_JV((v as _object)["only_if_banned"], decltype_noref(q.only_if_banned)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:unbanchatmember? ) : unbanchatmember?
+    return null if v==null
+    var q = new unbanchatmember
+    *q <- from_JV(v,type<unbanchatmember>)
+    return q
 
 struct restrictchatmember
     //!  Use this method to restrict a user in a supergroup. The bot must be an administrator in the supergroup for this to work and must have the appropriate administrator rights. Pass True for all permissions to lift restrictions from a user. Returns True on success.
@@ -1051,6 +2997,21 @@ struct restrictchatmember
     permissions : chatpermissions	//! Required. A JSON-serialized object for new user permissions
     [[optional]] use_independent_chat_permissions : bool = false	//! Optional. Pass True if chat permissions are set independently. Otherwise, the can_send_other_messages and can_add_web_page_previews permissions will imply the can_send_messages, can_send_audios, can_send_documents, can_send_photos, can_send_videos, can_send_video_notes, and can_send_voice_notes permissions; the can_send_polls permission will imply the can_send_messages permission.
     [[optional]] until_date : int = INT_MIN	//! Optional. Date when restrictions will be lifted for the user, unix time. If user is restricted for more than 366 days or less than 30 seconds from the current time, they are considered to be restricted forever
+
+def from_JV ( var v:JsonValue?; t:restrictchatmember ) : restrictchatmember
+    var q : restrictchatmember
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.user_id, _::from_JV((v as _object)["user_id"], decltype_noref(q.user_id)) )
+    move_to_ref(q.permissions, _::from_JV((v as _object)["permissions"], decltype_noref(q.permissions)) )
+    move_to_ref(q.use_independent_chat_permissions, _::from_JV((v as _object)["use_independent_chat_permissions"], decltype_noref(q.use_independent_chat_permissions)) )
+    move_to_ref(q.until_date, _::from_JV((v as _object)["until_date"], decltype_noref(q.until_date)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:restrictchatmember? ) : restrictchatmember?
+    return null if v==null
+    var q = new restrictchatmember
+    *q <- from_JV(v,type<restrictchatmember>)
+    return q
 
 struct promotechatmember
     //!  Use this method to promote or demote a user in a supergroup or a channel. The bot must be an administrator in the chat for this to work and must have the appropriate administrator rights. Pass False for all boolean parameters to demote a user. Returns True on success.
@@ -1069,21 +3030,82 @@ struct promotechatmember
     [[optional]] can_pin_messages : bool = false	//! Optional. Pass True if the administrator can pin messages, supergroups only
     [[optional]] can_manage_topics : bool = false	//! Optional. Pass True if the user is allowed to create, rename, close, and reopen forum topics, supergroups only
 
+def from_JV ( var v:JsonValue?; t:promotechatmember ) : promotechatmember
+    var q : promotechatmember
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.user_id, _::from_JV((v as _object)["user_id"], decltype_noref(q.user_id)) )
+    move_to_ref(q.is_anonymous, _::from_JV((v as _object)["is_anonymous"], decltype_noref(q.is_anonymous)) )
+    move_to_ref(q.can_manage_chat, _::from_JV((v as _object)["can_manage_chat"], decltype_noref(q.can_manage_chat)) )
+    move_to_ref(q.can_post_messages, _::from_JV((v as _object)["can_post_messages"], decltype_noref(q.can_post_messages)) )
+    move_to_ref(q.can_edit_messages, _::from_JV((v as _object)["can_edit_messages"], decltype_noref(q.can_edit_messages)) )
+    move_to_ref(q.can_delete_messages, _::from_JV((v as _object)["can_delete_messages"], decltype_noref(q.can_delete_messages)) )
+    move_to_ref(q.can_manage_video_chats, _::from_JV((v as _object)["can_manage_video_chats"], decltype_noref(q.can_manage_video_chats)) )
+    move_to_ref(q.can_restrict_members, _::from_JV((v as _object)["can_restrict_members"], decltype_noref(q.can_restrict_members)) )
+    move_to_ref(q.can_promote_members, _::from_JV((v as _object)["can_promote_members"], decltype_noref(q.can_promote_members)) )
+    move_to_ref(q.can_change_info, _::from_JV((v as _object)["can_change_info"], decltype_noref(q.can_change_info)) )
+    move_to_ref(q.can_invite_users, _::from_JV((v as _object)["can_invite_users"], decltype_noref(q.can_invite_users)) )
+    move_to_ref(q.can_pin_messages, _::from_JV((v as _object)["can_pin_messages"], decltype_noref(q.can_pin_messages)) )
+    move_to_ref(q.can_manage_topics, _::from_JV((v as _object)["can_manage_topics"], decltype_noref(q.can_manage_topics)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:promotechatmember? ) : promotechatmember?
+    return null if v==null
+    var q = new promotechatmember
+    *q <- from_JV(v,type<promotechatmember>)
+    return q
+
 struct setchatadministratorcustomtitle
     //!  Use this method to set a custom title for an administrator in a supergroup promoted by the bot. Returns True on success.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target supergroup (in the format @supergroupusername)
     user_id : int	//! Required. Unique identifier of the target user
     custom_title : string	//! Required. New custom title for the administrator; 0-16 characters, emoji are not allowed
 
+def from_JV ( var v:JsonValue?; t:setchatadministratorcustomtitle ) : setchatadministratorcustomtitle
+    var q : setchatadministratorcustomtitle
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.user_id, _::from_JV((v as _object)["user_id"], decltype_noref(q.user_id)) )
+    move_to_ref(q.custom_title, _::from_JV((v as _object)["custom_title"], decltype_noref(q.custom_title)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:setchatadministratorcustomtitle? ) : setchatadministratorcustomtitle?
+    return null if v==null
+    var q = new setchatadministratorcustomtitle
+    *q <- from_JV(v,type<setchatadministratorcustomtitle>)
+    return q
+
 struct banchatsenderchat
     //!  Use this method to ban a channel chat in a supergroup or a channel. Until the chat is unbanned, the owner of the banned chat won't be able to send messages on behalf of any of their channels. The bot must be an administrator in the supergroup or channel for this to work and must have the appropriate administrator rights. Returns True on success.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target channel (in the format @channelusername)
     sender_chat_id : int	//! Required. Unique identifier of the target sender chat
 
+def from_JV ( var v:JsonValue?; t:banchatsenderchat ) : banchatsenderchat
+    var q : banchatsenderchat
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.sender_chat_id, _::from_JV((v as _object)["sender_chat_id"], decltype_noref(q.sender_chat_id)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:banchatsenderchat? ) : banchatsenderchat?
+    return null if v==null
+    var q = new banchatsenderchat
+    *q <- from_JV(v,type<banchatsenderchat>)
+    return q
+
 struct unbanchatsenderchat
     //!  Use this method to unban a previously banned channel chat in a supergroup or channel. The bot must be an administrator for this to work and must have the appropriate administrator rights. Returns True on success.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target channel (in the format @channelusername)
     sender_chat_id : int	//! Required. Unique identifier of the target sender chat
+
+def from_JV ( var v:JsonValue?; t:unbanchatsenderchat ) : unbanchatsenderchat
+    var q : unbanchatsenderchat
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.sender_chat_id, _::from_JV((v as _object)["sender_chat_id"], decltype_noref(q.sender_chat_id)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:unbanchatsenderchat? ) : unbanchatsenderchat?
+    return null if v==null
+    var q = new unbanchatsenderchat
+    *q <- from_JV(v,type<unbanchatsenderchat>)
+    return q
 
 struct setchatpermissions
     //!  Use this method to set default chat permissions for all members. The bot must be an administrator in the group or a supergroup for this to work and must have the can_restrict_members administrator rights. Returns True on success.
@@ -1091,9 +3113,33 @@ struct setchatpermissions
     permissions : chatpermissions	//! Required. A JSON-serialized object for new default chat permissions
     [[optional]] use_independent_chat_permissions : bool = false	//! Optional. Pass True if chat permissions are set independently. Otherwise, the can_send_other_messages and can_add_web_page_previews permissions will imply the can_send_messages, can_send_audios, can_send_documents, can_send_photos, can_send_videos, can_send_video_notes, and can_send_voice_notes permissions; the can_send_polls permission will imply the can_send_messages permission.
 
+def from_JV ( var v:JsonValue?; t:setchatpermissions ) : setchatpermissions
+    var q : setchatpermissions
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.permissions, _::from_JV((v as _object)["permissions"], decltype_noref(q.permissions)) )
+    move_to_ref(q.use_independent_chat_permissions, _::from_JV((v as _object)["use_independent_chat_permissions"], decltype_noref(q.use_independent_chat_permissions)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:setchatpermissions? ) : setchatpermissions?
+    return null if v==null
+    var q = new setchatpermissions
+    *q <- from_JV(v,type<setchatpermissions>)
+    return q
+
 struct exportchatinvitelink
     //!  Use this method to generate a new primary invite link for a chat; any previously generated primary link is revoked. The bot must be an administrator in the chat for this to work and must have the appropriate administrator rights. Returns the new invite link as String on success.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target channel (in the format @channelusername)
+
+def from_JV ( var v:JsonValue?; t:exportchatinvitelink ) : exportchatinvitelink
+    var q : exportchatinvitelink
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:exportchatinvitelink? ) : exportchatinvitelink?
+    return null if v==null
+    var q = new exportchatinvitelink
+    *q <- from_JV(v,type<exportchatinvitelink>)
+    return q
 
 struct createchatinvitelink
     //!  Use this method to create an additional invite link for a chat. The bot must be an administrator in the chat for this to work and must have the appropriate administrator rights. The link can be revoked using the method revokeChatInviteLink. Returns the new invite link as ChatInviteLink object.
@@ -1102,6 +3148,21 @@ struct createchatinvitelink
     [[optional]] expire_date : int = INT_MIN	//! Optional. Point in time (Unix timestamp) when the link will expire
     [[optional]] member_limit : int = INT_MIN	//! Optional. The maximum number of users that can be members of the chat simultaneously after joining the chat via this invite link; 1-99999
     [[optional]] creates_join_request : bool = false	//! Optional. True, if users joining the chat via the link need to be approved by chat administrators. If True, member_limit can't be specified
+
+def from_JV ( var v:JsonValue?; t:createchatinvitelink ) : createchatinvitelink
+    var q : createchatinvitelink
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.name, _::from_JV((v as _object)["name"], decltype_noref(q.name)) )
+    move_to_ref(q.expire_date, _::from_JV((v as _object)["expire_date"], decltype_noref(q.expire_date)) )
+    move_to_ref(q.member_limit, _::from_JV((v as _object)["member_limit"], decltype_noref(q.member_limit)) )
+    move_to_ref(q.creates_join_request, _::from_JV((v as _object)["creates_join_request"], decltype_noref(q.creates_join_request)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:createchatinvitelink? ) : createchatinvitelink?
+    return null if v==null
+    var q = new createchatinvitelink
+    *q <- from_JV(v,type<createchatinvitelink>)
+    return q
 
 struct editchatinvitelink
     //!  Use this method to edit a non-primary invite link created by the bot. The bot must be an administrator in the chat for this to work and must have the appropriate administrator rights. Returns the edited invite link as a ChatInviteLink object.
@@ -1112,39 +3173,138 @@ struct editchatinvitelink
     [[optional]] member_limit : int = INT_MIN	//! Optional. The maximum number of users that can be members of the chat simultaneously after joining the chat via this invite link; 1-99999
     [[optional]] creates_join_request : bool = false	//! Optional. True, if users joining the chat via the link need to be approved by chat administrators. If True, member_limit can't be specified
 
+def from_JV ( var v:JsonValue?; t:editchatinvitelink ) : editchatinvitelink
+    var q : editchatinvitelink
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.invite_link, _::from_JV((v as _object)["invite_link"], decltype_noref(q.invite_link)) )
+    move_to_ref(q.name, _::from_JV((v as _object)["name"], decltype_noref(q.name)) )
+    move_to_ref(q.expire_date, _::from_JV((v as _object)["expire_date"], decltype_noref(q.expire_date)) )
+    move_to_ref(q.member_limit, _::from_JV((v as _object)["member_limit"], decltype_noref(q.member_limit)) )
+    move_to_ref(q.creates_join_request, _::from_JV((v as _object)["creates_join_request"], decltype_noref(q.creates_join_request)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:editchatinvitelink? ) : editchatinvitelink?
+    return null if v==null
+    var q = new editchatinvitelink
+    *q <- from_JV(v,type<editchatinvitelink>)
+    return q
+
 struct revokechatinvitelink
     //!  Use this method to revoke an invite link created by the bot. If the primary link is revoked, a new link is automatically generated. The bot must be an administrator in the chat for this to work and must have the appropriate administrator rights. Returns the revoked invite link as ChatInviteLink object.
     chat_id : string	//! Required. Unique identifier of the target chat or username of the target channel (in the format @channelusername)
     invite_link : string	//! Required. The invite link to revoke
+
+def from_JV ( var v:JsonValue?; t:revokechatinvitelink ) : revokechatinvitelink
+    var q : revokechatinvitelink
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.invite_link, _::from_JV((v as _object)["invite_link"], decltype_noref(q.invite_link)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:revokechatinvitelink? ) : revokechatinvitelink?
+    return null if v==null
+    var q = new revokechatinvitelink
+    *q <- from_JV(v,type<revokechatinvitelink>)
+    return q
 
 struct approvechatjoinrequest
     //!  Use this method to approve a chat join request. The bot must be an administrator in the chat for this to work and must have the can_invite_users administrator right. Returns True on success.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target channel (in the format @channelusername)
     user_id : int	//! Required. Unique identifier of the target user
 
+def from_JV ( var v:JsonValue?; t:approvechatjoinrequest ) : approvechatjoinrequest
+    var q : approvechatjoinrequest
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.user_id, _::from_JV((v as _object)["user_id"], decltype_noref(q.user_id)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:approvechatjoinrequest? ) : approvechatjoinrequest?
+    return null if v==null
+    var q = new approvechatjoinrequest
+    *q <- from_JV(v,type<approvechatjoinrequest>)
+    return q
+
 struct declinechatjoinrequest
     //!  Use this method to decline a chat join request. The bot must be an administrator in the chat for this to work and must have the can_invite_users administrator right. Returns True on success.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target channel (in the format @channelusername)
     user_id : int	//! Required. Unique identifier of the target user
+
+def from_JV ( var v:JsonValue?; t:declinechatjoinrequest ) : declinechatjoinrequest
+    var q : declinechatjoinrequest
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.user_id, _::from_JV((v as _object)["user_id"], decltype_noref(q.user_id)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:declinechatjoinrequest? ) : declinechatjoinrequest?
+    return null if v==null
+    var q = new declinechatjoinrequest
+    *q <- from_JV(v,type<declinechatjoinrequest>)
+    return q
 
 struct setchatphoto
     //!  Use this method to set a new profile photo for the chat. Photos can't be changed for private chats. The bot must be an administrator in the chat for this to work and must have the appropriate administrator rights. Returns True on success.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target channel (in the format @channelusername)
     photo : inputfile	//! Required. New chat photo, uploaded using multipart/form-data
 
+def from_JV ( var v:JsonValue?; t:setchatphoto ) : setchatphoto
+    var q : setchatphoto
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.photo, _::from_JV((v as _object)["photo"], decltype_noref(q.photo)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:setchatphoto? ) : setchatphoto?
+    return null if v==null
+    var q = new setchatphoto
+    *q <- from_JV(v,type<setchatphoto>)
+    return q
+
 struct deletechatphoto
     //!  Use this method to delete a chat photo. Photos can't be changed for private chats. The bot must be an administrator in the chat for this to work and must have the appropriate administrator rights. Returns True on success.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target channel (in the format @channelusername)
+
+def from_JV ( var v:JsonValue?; t:deletechatphoto ) : deletechatphoto
+    var q : deletechatphoto
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:deletechatphoto? ) : deletechatphoto?
+    return null if v==null
+    var q = new deletechatphoto
+    *q <- from_JV(v,type<deletechatphoto>)
+    return q
 
 struct setchattitle
     //!  Use this method to change the title of a chat. Titles can't be changed for private chats. The bot must be an administrator in the chat for this to work and must have the appropriate administrator rights. Returns True on success.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target channel (in the format @channelusername)
     title : string	//! Required. New chat title, 1-128 characters
 
+def from_JV ( var v:JsonValue?; t:setchattitle ) : setchattitle
+    var q : setchattitle
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.title, _::from_JV((v as _object)["title"], decltype_noref(q.title)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:setchattitle? ) : setchattitle?
+    return null if v==null
+    var q = new setchattitle
+    *q <- from_JV(v,type<setchattitle>)
+    return q
+
 struct setchatdescription
     //!  Use this method to change the description of a group, a supergroup or a channel. The bot must be an administrator in the chat for this to work and must have the appropriate administrator rights. Returns True on success.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target channel (in the format @channelusername)
     [[optional]] description : string = ""	//! Optional. New chat description, 0-255 characters
+
+def from_JV ( var v:JsonValue?; t:setchatdescription ) : setchatdescription
+    var q : setchatdescription
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.description, _::from_JV((v as _object)["description"], decltype_noref(q.description)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:setchatdescription? ) : setchatdescription?
+    return null if v==null
+    var q = new setchatdescription
+    *q <- from_JV(v,type<setchatdescription>)
+    return q
 
 struct pinchatmessage
     //!  Use this method to add a message to the list of pinned messages in a chat. If the chat is not a private chat, the bot must be an administrator in the chat for this to work and must have the 'can_pin_messages' administrator right in a supergroup or 'can_edit_messages' administrator right in a channel. Returns True on success.
@@ -1152,46 +3312,173 @@ struct pinchatmessage
     message_id : int	//! Required. Identifier of a message to pin
     [[optional]] disable_notification : bool = false	//! Optional. Pass True if it is not necessary to send a notification to all chat members about the new pinned message. Notifications are always disabled in channels and private chats.
 
+def from_JV ( var v:JsonValue?; t:pinchatmessage ) : pinchatmessage
+    var q : pinchatmessage
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.message_id, _::from_JV((v as _object)["message_id"], decltype_noref(q.message_id)) )
+    move_to_ref(q.disable_notification, _::from_JV((v as _object)["disable_notification"], decltype_noref(q.disable_notification)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:pinchatmessage? ) : pinchatmessage?
+    return null if v==null
+    var q = new pinchatmessage
+    *q <- from_JV(v,type<pinchatmessage>)
+    return q
+
 struct unpinchatmessage
     //!  Use this method to remove a message from the list of pinned messages in a chat. If the chat is not a private chat, the bot must be an administrator in the chat for this to work and must have the 'can_pin_messages' administrator right in a supergroup or 'can_edit_messages' administrator right in a channel. Returns True on success.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target channel (in the format @channelusername)
     [[optional]] message_id : int = INT_MIN	//! Optional. Identifier of a message to unpin. If not specified, the most recent pinned message (by sending date) will be unpinned.
 
+def from_JV ( var v:JsonValue?; t:unpinchatmessage ) : unpinchatmessage
+    var q : unpinchatmessage
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.message_id, _::from_JV((v as _object)["message_id"], decltype_noref(q.message_id)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:unpinchatmessage? ) : unpinchatmessage?
+    return null if v==null
+    var q = new unpinchatmessage
+    *q <- from_JV(v,type<unpinchatmessage>)
+    return q
+
 struct unpinallchatmessages
     //!  Use this method to clear the list of pinned messages in a chat. If the chat is not a private chat, the bot must be an administrator in the chat for this to work and must have the 'can_pin_messages' administrator right in a supergroup or 'can_edit_messages' administrator right in a channel. Returns True on success.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target channel (in the format @channelusername)
+
+def from_JV ( var v:JsonValue?; t:unpinallchatmessages ) : unpinallchatmessages
+    var q : unpinallchatmessages
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:unpinallchatmessages? ) : unpinallchatmessages?
+    return null if v==null
+    var q = new unpinallchatmessages
+    *q <- from_JV(v,type<unpinallchatmessages>)
+    return q
 
 struct leavechat
     //!  Use this method for your bot to leave a group, supergroup or channel. Returns True on success.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target supergroup or channel (in the format @channelusername)
 
+def from_JV ( var v:JsonValue?; t:leavechat ) : leavechat
+    var q : leavechat
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:leavechat? ) : leavechat?
+    return null if v==null
+    var q = new leavechat
+    *q <- from_JV(v,type<leavechat>)
+    return q
+
 struct getchat
     //!  Use this method to get up to date information about the chat (current name of the user for one-on-one conversations, current username of a user, group or channel, etc.). Returns a Chat object on success.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target supergroup or channel (in the format @channelusername)
+
+def from_JV ( var v:JsonValue?; t:getchat ) : getchat
+    var q : getchat
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:getchat? ) : getchat?
+    return null if v==null
+    var q = new getchat
+    *q <- from_JV(v,type<getchat>)
+    return q
 
 struct getchatadministrators
     //!  Use this method to get a list of administrators in a chat, which aren't bots. Returns an Array of ChatMember objects.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target supergroup or channel (in the format @channelusername)
 
+def from_JV ( var v:JsonValue?; t:getchatadministrators ) : getchatadministrators
+    var q : getchatadministrators
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:getchatadministrators? ) : getchatadministrators?
+    return null if v==null
+    var q = new getchatadministrators
+    *q <- from_JV(v,type<getchatadministrators>)
+    return q
+
 struct getchatmembercount
     //!  Use this method to get the number of members in a chat. Returns Int on success.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target supergroup or channel (in the format @channelusername)
+
+def from_JV ( var v:JsonValue?; t:getchatmembercount ) : getchatmembercount
+    var q : getchatmembercount
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:getchatmembercount? ) : getchatmembercount?
+    return null if v==null
+    var q = new getchatmembercount
+    *q <- from_JV(v,type<getchatmembercount>)
+    return q
 
 struct getchatmember
     //!  Use this method to get information about a member of a chat. The method is only guaranteed to work for other users if the bot is an administrator in the chat. Returns a ChatMember object on success.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target supergroup or channel (in the format @channelusername)
     user_id : int	//! Required. Unique identifier of the target user
 
+def from_JV ( var v:JsonValue?; t:getchatmember ) : getchatmember
+    var q : getchatmember
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.user_id, _::from_JV((v as _object)["user_id"], decltype_noref(q.user_id)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:getchatmember? ) : getchatmember?
+    return null if v==null
+    var q = new getchatmember
+    *q <- from_JV(v,type<getchatmember>)
+    return q
+
 struct setchatstickerset
     //!  Use this method to set a new group sticker set for a supergroup. The bot must be an administrator in the chat for this to work and must have the appropriate administrator rights. Use the field can_set_sticker_set optionally returned in getChat requests to check if the bot can use this method. Returns True on success.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target supergroup (in the format @supergroupusername)
     sticker_set_name : string	//! Required. Name of the sticker set to be set as the group sticker set
 
+def from_JV ( var v:JsonValue?; t:setchatstickerset ) : setchatstickerset
+    var q : setchatstickerset
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.sticker_set_name, _::from_JV((v as _object)["sticker_set_name"], decltype_noref(q.sticker_set_name)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:setchatstickerset? ) : setchatstickerset?
+    return null if v==null
+    var q = new setchatstickerset
+    *q <- from_JV(v,type<setchatstickerset>)
+    return q
+
 struct deletechatstickerset
     //!  Use this method to delete a group sticker set from a supergroup. The bot must be an administrator in the chat for this to work and must have the appropriate administrator rights. Use the field can_set_sticker_set optionally returned in getChat requests to check if the bot can use this method. Returns True on success.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target supergroup (in the format @supergroupusername)
 
-struct getforumtopiciconstickers {} //  Use this method to get custom emoji stickers, which can be used as a forum topic icon by any user. Requires no parameters. Returns an Array of Sticker objects.
+def from_JV ( var v:JsonValue?; t:deletechatstickerset ) : deletechatstickerset
+    var q : deletechatstickerset
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:deletechatstickerset? ) : deletechatstickerset?
+    return null if v==null
+    var q = new deletechatstickerset
+    *q <- from_JV(v,type<deletechatstickerset>)
+    return q
+
+struct getforumtopiciconstickers
+    //!  Use this method to get custom emoji stickers, which can be used as a forum topic icon by any user. Requires no parameters. Returns an Array of Sticker objects.
+    object_getforumtopiciconstickers_has_no_fields:bool
+
+def from_JV ( var v:JsonValue?; t:getforumtopiciconstickers ) : getforumtopiciconstickers
+    var q : getforumtopiciconstickers
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:getforumtopiciconstickers? ) : getforumtopiciconstickers?
+    return null if v==null
+    var q = new getforumtopiciconstickers
+    *q <- from_JV(v,type<getforumtopiciconstickers>)
+    return q
 
 struct createforumtopic
     //!  Use this method to create a topic in a forum supergroup chat. The bot must be an administrator in the chat for this to work and must have the can_manage_topics administrator rights. Returns information about the created topic as a ForumTopic object.
@@ -1200,6 +3487,20 @@ struct createforumtopic
     [[optional]] icon_color : int = INT_MIN	//! Optional. Color of the topic icon in RGB format. Currently, must be one of 7322096 (0x6FB9F0), 16766590 (0xFFD67E), 13338331 (0xCB86DB), 9367192 (0x8EEE98), 16749490 (0xFF93B2), or 16478047 (0xFB6F5F)
     [[optional]] icon_custom_emoji_id : string = ""	//! Optional. Unique identifier of the custom emoji shown as the topic icon. Use getForumTopicIconStickers to get all allowed custom emoji identifiers.
 
+def from_JV ( var v:JsonValue?; t:createforumtopic ) : createforumtopic
+    var q : createforumtopic
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.name, _::from_JV((v as _object)["name"], decltype_noref(q.name)) )
+    move_to_ref(q.icon_color, _::from_JV((v as _object)["icon_color"], decltype_noref(q.icon_color)) )
+    move_to_ref(q.icon_custom_emoji_id, _::from_JV((v as _object)["icon_custom_emoji_id"], decltype_noref(q.icon_custom_emoji_id)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:createforumtopic? ) : createforumtopic?
+    return null if v==null
+    var q = new createforumtopic
+    *q <- from_JV(v,type<createforumtopic>)
+    return q
+
 struct editforumtopic
     //!  Use this method to edit name and icon of a topic in a forum supergroup chat. The bot must be an administrator in the chat for this to work and must have can_manage_topics administrator rights, unless it is the creator of the topic. Returns True on success.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target supergroup (in the format @supergroupusername)
@@ -1207,46 +3508,164 @@ struct editforumtopic
     [[optional]] name : string = ""	//! Optional. New topic name, 0-128 characters. If not specified or empty, the current name of the topic will be kept
     [[optional]] icon_custom_emoji_id : string = ""	//! Optional. New unique identifier of the custom emoji shown as the topic icon. Use getForumTopicIconStickers to get all allowed custom emoji identifiers. Pass an empty string to remove the icon. If not specified, the current icon will be kept
 
+def from_JV ( var v:JsonValue?; t:editforumtopic ) : editforumtopic
+    var q : editforumtopic
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], decltype_noref(q.message_thread_id)) )
+    move_to_ref(q.name, _::from_JV((v as _object)["name"], decltype_noref(q.name)) )
+    move_to_ref(q.icon_custom_emoji_id, _::from_JV((v as _object)["icon_custom_emoji_id"], decltype_noref(q.icon_custom_emoji_id)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:editforumtopic? ) : editforumtopic?
+    return null if v==null
+    var q = new editforumtopic
+    *q <- from_JV(v,type<editforumtopic>)
+    return q
+
 struct closeforumtopic
     //!  Use this method to close an open topic in a forum supergroup chat. The bot must be an administrator in the chat for this to work and must have the can_manage_topics administrator rights, unless it is the creator of the topic. Returns True on success.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target supergroup (in the format @supergroupusername)
     message_thread_id : int	//! Required. Unique identifier for the target message thread of the forum topic
+
+def from_JV ( var v:JsonValue?; t:closeforumtopic ) : closeforumtopic
+    var q : closeforumtopic
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], decltype_noref(q.message_thread_id)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:closeforumtopic? ) : closeforumtopic?
+    return null if v==null
+    var q = new closeforumtopic
+    *q <- from_JV(v,type<closeforumtopic>)
+    return q
 
 struct reopenforumtopic
     //!  Use this method to reopen a closed topic in a forum supergroup chat. The bot must be an administrator in the chat for this to work and must have the can_manage_topics administrator rights, unless it is the creator of the topic. Returns True on success.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target supergroup (in the format @supergroupusername)
     message_thread_id : int	//! Required. Unique identifier for the target message thread of the forum topic
 
+def from_JV ( var v:JsonValue?; t:reopenforumtopic ) : reopenforumtopic
+    var q : reopenforumtopic
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], decltype_noref(q.message_thread_id)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:reopenforumtopic? ) : reopenforumtopic?
+    return null if v==null
+    var q = new reopenforumtopic
+    *q <- from_JV(v,type<reopenforumtopic>)
+    return q
+
 struct deleteforumtopic
     //!  Use this method to delete a forum topic along with all its messages in a forum supergroup chat. The bot must be an administrator in the chat for this to work and must have the can_delete_messages administrator rights. Returns True on success.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target supergroup (in the format @supergroupusername)
     message_thread_id : int	//! Required. Unique identifier for the target message thread of the forum topic
+
+def from_JV ( var v:JsonValue?; t:deleteforumtopic ) : deleteforumtopic
+    var q : deleteforumtopic
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], decltype_noref(q.message_thread_id)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:deleteforumtopic? ) : deleteforumtopic?
+    return null if v==null
+    var q = new deleteforumtopic
+    *q <- from_JV(v,type<deleteforumtopic>)
+    return q
 
 struct unpinallforumtopicmessages
     //!  Use this method to clear the list of pinned messages in a forum topic. The bot must be an administrator in the chat for this to work and must have the can_pin_messages administrator right in the supergroup. Returns True on success.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target supergroup (in the format @supergroupusername)
     message_thread_id : int	//! Required. Unique identifier for the target message thread of the forum topic
 
+def from_JV ( var v:JsonValue?; t:unpinallforumtopicmessages ) : unpinallforumtopicmessages
+    var q : unpinallforumtopicmessages
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], decltype_noref(q.message_thread_id)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:unpinallforumtopicmessages? ) : unpinallforumtopicmessages?
+    return null if v==null
+    var q = new unpinallforumtopicmessages
+    *q <- from_JV(v,type<unpinallforumtopicmessages>)
+    return q
+
 struct editgeneralforumtopic
     //!  Use this method to edit the name of the 'General' topic in a forum supergroup chat. The bot must be an administrator in the chat for this to work and must have can_manage_topics administrator rights. Returns True on success.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target supergroup (in the format @supergroupusername)
     name : string	//! Required. New topic name, 1-128 characters
 
+def from_JV ( var v:JsonValue?; t:editgeneralforumtopic ) : editgeneralforumtopic
+    var q : editgeneralforumtopic
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.name, _::from_JV((v as _object)["name"], decltype_noref(q.name)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:editgeneralforumtopic? ) : editgeneralforumtopic?
+    return null if v==null
+    var q = new editgeneralforumtopic
+    *q <- from_JV(v,type<editgeneralforumtopic>)
+    return q
+
 struct closegeneralforumtopic
     //!  Use this method to close an open 'General' topic in a forum supergroup chat. The bot must be an administrator in the chat for this to work and must have the can_manage_topics administrator rights. Returns True on success.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target supergroup (in the format @supergroupusername)
+
+def from_JV ( var v:JsonValue?; t:closegeneralforumtopic ) : closegeneralforumtopic
+    var q : closegeneralforumtopic
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:closegeneralforumtopic? ) : closegeneralforumtopic?
+    return null if v==null
+    var q = new closegeneralforumtopic
+    *q <- from_JV(v,type<closegeneralforumtopic>)
+    return q
 
 struct reopengeneralforumtopic
     //!  Use this method to reopen a closed 'General' topic in a forum supergroup chat. The bot must be an administrator in the chat for this to work and must have the can_manage_topics administrator rights. The topic will be automatically unhidden if it was hidden. Returns True on success.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target supergroup (in the format @supergroupusername)
 
+def from_JV ( var v:JsonValue?; t:reopengeneralforumtopic ) : reopengeneralforumtopic
+    var q : reopengeneralforumtopic
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:reopengeneralforumtopic? ) : reopengeneralforumtopic?
+    return null if v==null
+    var q = new reopengeneralforumtopic
+    *q <- from_JV(v,type<reopengeneralforumtopic>)
+    return q
+
 struct hidegeneralforumtopic
     //!  Use this method to hide the 'General' topic in a forum supergroup chat. The bot must be an administrator in the chat for this to work and must have the can_manage_topics administrator rights. The topic will be automatically closed if it was open. Returns True on success.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target supergroup (in the format @supergroupusername)
 
+def from_JV ( var v:JsonValue?; t:hidegeneralforumtopic ) : hidegeneralforumtopic
+    var q : hidegeneralforumtopic
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:hidegeneralforumtopic? ) : hidegeneralforumtopic?
+    return null if v==null
+    var q = new hidegeneralforumtopic
+    *q <- from_JV(v,type<hidegeneralforumtopic>)
+    return q
+
 struct unhidegeneralforumtopic
     //!  Use this method to unhide the 'General' topic in a forum supergroup chat. The bot must be an administrator in the chat for this to work and must have the can_manage_topics administrator rights. Returns True on success.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target supergroup (in the format @supergroupusername)
+
+def from_JV ( var v:JsonValue?; t:unhidegeneralforumtopic ) : unhidegeneralforumtopic
+    var q : unhidegeneralforumtopic
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:unhidegeneralforumtopic? ) : unhidegeneralforumtopic?
+    return null if v==null
+    var q = new unhidegeneralforumtopic
+    *q <- from_JV(v,type<unhidegeneralforumtopic>)
+    return q
 
 struct answercallbackquery
     //!  Use this method to send answers to callback queries sent from inline keyboards. The answer will be displayed to the user as a notification at the top of the chat screen or as an alert. On success, True is returned.
@@ -1256,59 +3675,215 @@ struct answercallbackquery
     [[optional]] url : string = ""	//! Optional. URL that will be opened by the user's client. If you have created a Game and accepted the conditions via @BotFather, specify the URL that opens your game - note that this will only work if the query comes from a callback_game button. Otherwise, you may use links like t.me/your_bot?start=XXXX that open your bot with a parameter.
     [[optional]] cache_time : int = INT_MIN	//! Optional. The maximum amount of time in seconds that the result of the callback query may be cached client-side. Telegram apps will support caching starting in version 3.14. Defaults to 0.
 
+def from_JV ( var v:JsonValue?; t:answercallbackquery ) : answercallbackquery
+    var q : answercallbackquery
+    move_to_ref(q.callback_query_id, _::from_JV((v as _object)["callback_query_id"], decltype_noref(q.callback_query_id)) )
+    move_to_ref(q.text, _::from_JV((v as _object)["text"], decltype_noref(q.text)) )
+    move_to_ref(q.show_alert, _::from_JV((v as _object)["show_alert"], decltype_noref(q.show_alert)) )
+    move_to_ref(q.url, _::from_JV((v as _object)["url"], decltype_noref(q.url)) )
+    move_to_ref(q.cache_time, _::from_JV((v as _object)["cache_time"], decltype_noref(q.cache_time)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:answercallbackquery? ) : answercallbackquery?
+    return null if v==null
+    var q = new answercallbackquery
+    *q <- from_JV(v,type<answercallbackquery>)
+    return q
+
 struct setmycommands
     //!  Use this method to change the list of the bot's commands. See this manual for more details about bot commands. Returns True on success.
     commands : array<botcommand>	//! Required. A JSON-serialized list of bot commands to be set as the list of the bot's commands. At most 100 commands can be specified.
     [[optional]] scope : botcommandscope?	//! Optional. A JSON-serialized object, describing scope of users for which the commands are relevant. Defaults to BotCommandScopeDefault.
     [[optional]] language_code : string = ""	//! Optional. A two-letter ISO 639-1 language code. If empty, commands will be applied to all users from the given scope, for whose language there are no dedicated commands
 
+def from_JV ( var v:JsonValue?; t:setmycommands ) : setmycommands
+    var q : setmycommands
+    move_to_ref(q.commands, _::from_JV((v as _object)["commands"], decltype_noref(q.commands)) )
+    move_to_ref(q.scope, _::from_JV((v as _object)["scope"], decltype_noref(q.scope)) )
+    move_to_ref(q.language_code, _::from_JV((v as _object)["language_code"], decltype_noref(q.language_code)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:setmycommands? ) : setmycommands?
+    return null if v==null
+    var q = new setmycommands
+    *q <- from_JV(v,type<setmycommands>)
+    return q
+
 struct deletemycommands
     //!  Use this method to delete the list of the bot's commands for the given scope and user language. After deletion, higher level commands will be shown to affected users. Returns True on success.
     [[optional]] scope : botcommandscope?	//! Optional. A JSON-serialized object, describing scope of users for which the commands are relevant. Defaults to BotCommandScopeDefault.
     [[optional]] language_code : string = ""	//! Optional. A two-letter ISO 639-1 language code. If empty, commands will be applied to all users from the given scope, for whose language there are no dedicated commands
+
+def from_JV ( var v:JsonValue?; t:deletemycommands ) : deletemycommands
+    var q : deletemycommands
+    move_to_ref(q.scope, _::from_JV((v as _object)["scope"], decltype_noref(q.scope)) )
+    move_to_ref(q.language_code, _::from_JV((v as _object)["language_code"], decltype_noref(q.language_code)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:deletemycommands? ) : deletemycommands?
+    return null if v==null
+    var q = new deletemycommands
+    *q <- from_JV(v,type<deletemycommands>)
+    return q
 
 struct getmycommands
     //!  Use this method to get the current list of the bot's commands for the given scope and user language. Returns an Array of BotCommand objects. If commands aren't set, an empty list is returned.
     [[optional]] scope : botcommandscope?	//! Optional. A JSON-serialized object, describing scope of users. Defaults to BotCommandScopeDefault.
     [[optional]] language_code : string = ""	//! Optional. A two-letter ISO 639-1 language code or an empty string
 
+def from_JV ( var v:JsonValue?; t:getmycommands ) : getmycommands
+    var q : getmycommands
+    move_to_ref(q.scope, _::from_JV((v as _object)["scope"], decltype_noref(q.scope)) )
+    move_to_ref(q.language_code, _::from_JV((v as _object)["language_code"], decltype_noref(q.language_code)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:getmycommands? ) : getmycommands?
+    return null if v==null
+    var q = new getmycommands
+    *q <- from_JV(v,type<getmycommands>)
+    return q
+
 struct setmydescription
     //!  Use this method to change the bot's description, which is shown in the chat with the bot if the chat is empty. Returns True on success.
     [[optional]] description : string = ""	//! Optional. New bot description; 0-512 characters. Pass an empty string to remove the dedicated description for the given language.
     [[optional]] language_code : string = ""	//! Optional. A two-letter ISO 639-1 language code. If empty, the description will be applied to all users for whose language there is no dedicated description.
 
+def from_JV ( var v:JsonValue?; t:setmydescription ) : setmydescription
+    var q : setmydescription
+    move_to_ref(q.description, _::from_JV((v as _object)["description"], decltype_noref(q.description)) )
+    move_to_ref(q.language_code, _::from_JV((v as _object)["language_code"], decltype_noref(q.language_code)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:setmydescription? ) : setmydescription?
+    return null if v==null
+    var q = new setmydescription
+    *q <- from_JV(v,type<setmydescription>)
+    return q
+
 struct getmydescription
     //!  Use this method to get the current bot description for the given user language. Returns BotDescription on success.
     [[optional]] language_code : string = ""	//! Optional. A two-letter ISO 639-1 language code or an empty string
+
+def from_JV ( var v:JsonValue?; t:getmydescription ) : getmydescription
+    var q : getmydescription
+    move_to_ref(q.language_code, _::from_JV((v as _object)["language_code"], decltype_noref(q.language_code)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:getmydescription? ) : getmydescription?
+    return null if v==null
+    var q = new getmydescription
+    *q <- from_JV(v,type<getmydescription>)
+    return q
 
 struct setmyshortdescription
     //!  Use this method to change the bot's short description, which is shown on the bot's profile page and is sent together with the link when users share the bot. Returns True on success.
     [[optional]] short_description : string = ""	//! Optional. New short description for the bot; 0-120 characters. Pass an empty string to remove the dedicated short description for the given language.
     [[optional]] language_code : string = ""	//! Optional. A two-letter ISO 639-1 language code. If empty, the short description will be applied to all users for whose language there is no dedicated short description.
 
+def from_JV ( var v:JsonValue?; t:setmyshortdescription ) : setmyshortdescription
+    var q : setmyshortdescription
+    move_to_ref(q.short_description, _::from_JV((v as _object)["short_description"], decltype_noref(q.short_description)) )
+    move_to_ref(q.language_code, _::from_JV((v as _object)["language_code"], decltype_noref(q.language_code)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:setmyshortdescription? ) : setmyshortdescription?
+    return null if v==null
+    var q = new setmyshortdescription
+    *q <- from_JV(v,type<setmyshortdescription>)
+    return q
+
 struct getmyshortdescription
     //!  Use this method to get the current bot short description for the given user language. Returns BotShortDescription on success.
     [[optional]] language_code : string = ""	//! Optional. A two-letter ISO 639-1 language code or an empty string
+
+def from_JV ( var v:JsonValue?; t:getmyshortdescription ) : getmyshortdescription
+    var q : getmyshortdescription
+    move_to_ref(q.language_code, _::from_JV((v as _object)["language_code"], decltype_noref(q.language_code)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:getmyshortdescription? ) : getmyshortdescription?
+    return null if v==null
+    var q = new getmyshortdescription
+    *q <- from_JV(v,type<getmyshortdescription>)
+    return q
 
 struct setchatmenubutton
     //!  Use this method to change the bot's menu button in a private chat, or the default menu button. Returns True on success.
     [[optional]] chat_id : int = INT_MIN	//! Optional. Unique identifier for the target private chat. If not specified, default bot's menu button will be changed
     [[optional]] menu_button : menubutton?	//! Optional. A JSON-serialized object for the bot's new menu button. Defaults to MenuButtonDefault
 
+def from_JV ( var v:JsonValue?; t:setchatmenubutton ) : setchatmenubutton
+    var q : setchatmenubutton
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.menu_button, _::from_JV((v as _object)["menu_button"], decltype_noref(q.menu_button)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:setchatmenubutton? ) : setchatmenubutton?
+    return null if v==null
+    var q = new setchatmenubutton
+    *q <- from_JV(v,type<setchatmenubutton>)
+    return q
+
 struct getchatmenubutton
     //!  Use this method to get the current value of the bot's menu button in a private chat, or the default menu button. Returns MenuButton on success.
     [[optional]] chat_id : int = INT_MIN	//! Optional. Unique identifier for the target private chat. If not specified, default bot's menu button will be returned
+
+def from_JV ( var v:JsonValue?; t:getchatmenubutton ) : getchatmenubutton
+    var q : getchatmenubutton
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:getchatmenubutton? ) : getchatmenubutton?
+    return null if v==null
+    var q = new getchatmenubutton
+    *q <- from_JV(v,type<getchatmenubutton>)
+    return q
 
 struct setmydefaultadministratorrights
     //!  Use this method to change the default administrator rights requested by the bot when it's added as an administrator to groups or channels. These rights will be suggested to users, but they are free to modify the list before adding the bot. Returns True on success.
     [[optional]] rights : chatadministratorrights?	//! Optional. A JSON-serialized object describing new default administrator rights. If not specified, the default administrator rights will be cleared.
     [[optional]] for_channels : bool = false	//! Optional. Pass True to change the default administrator rights of the bot in channels. Otherwise, the default administrator rights of the bot for groups and supergroups will be changed.
 
+def from_JV ( var v:JsonValue?; t:setmydefaultadministratorrights ) : setmydefaultadministratorrights
+    var q : setmydefaultadministratorrights
+    move_to_ref(q.rights, _::from_JV((v as _object)["rights"], decltype_noref(q.rights)) )
+    move_to_ref(q.for_channels, _::from_JV((v as _object)["for_channels"], decltype_noref(q.for_channels)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:setmydefaultadministratorrights? ) : setmydefaultadministratorrights?
+    return null if v==null
+    var q = new setmydefaultadministratorrights
+    *q <- from_JV(v,type<setmydefaultadministratorrights>)
+    return q
+
 struct getmydefaultadministratorrights
     //!  Use this method to get the current default administrator rights of the bot. Returns ChatAdministratorRights on success.
     [[optional]] for_channels : bool = false	//! Optional. Pass True to get default administrator rights of the bot in channels. Otherwise, default administrator rights of the bot for groups and supergroups will be returned.
 
-struct inline_mode_methods {} //  Methods and objects used in the inline mode are described in the Inline mode section.
+def from_JV ( var v:JsonValue?; t:getmydefaultadministratorrights ) : getmydefaultadministratorrights
+    var q : getmydefaultadministratorrights
+    move_to_ref(q.for_channels, _::from_JV((v as _object)["for_channels"], decltype_noref(q.for_channels)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:getmydefaultadministratorrights? ) : getmydefaultadministratorrights?
+    return null if v==null
+    var q = new getmydefaultadministratorrights
+    *q <- from_JV(v,type<getmydefaultadministratorrights>)
+    return q
+
+struct inline_mode_methods
+    //!  Methods and objects used in the inline mode are described in the Inline mode section.
+    object_inline_mode_methods_has_no_fields:bool
+
+def from_JV ( var v:JsonValue?; t:inline_mode_methods ) : inline_mode_methods
+    var q : inline_mode_methods
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:inline_mode_methods? ) : inline_mode_methods?
+    return null if v==null
+    var q = new inline_mode_methods
+    *q <- from_JV(v,type<inline_mode_methods>)
+    return q
 
 struct editmessagetext
     //!  Use this method to edit text and game messages. On success, if the edited message is not an inline message, the edited Message is returned, otherwise True is returned.
@@ -1321,6 +3896,24 @@ struct editmessagetext
     [[optional]] disable_web_page_preview : bool = false	//! Optional. Disables link previews for links in this message
     [[optional]] reply_markup : inlinekeyboardmarkup?	//! Optional. A JSON-serialized object for an inline keyboard.
 
+def from_JV ( var v:JsonValue?; t:editmessagetext ) : editmessagetext
+    var q : editmessagetext
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.message_id, _::from_JV((v as _object)["message_id"], decltype_noref(q.message_id)) )
+    move_to_ref(q.inline_message_id, _::from_JV((v as _object)["inline_message_id"], decltype_noref(q.inline_message_id)) )
+    move_to_ref(q.text, _::from_JV((v as _object)["text"], decltype_noref(q.text)) )
+    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], decltype_noref(q.parse_mode)) )
+    move_to_ref(q.entities, _::from_JV((v as _object)["entities"], decltype_noref(q.entities)) )
+    move_to_ref(q.disable_web_page_preview, _::from_JV((v as _object)["disable_web_page_preview"], decltype_noref(q.disable_web_page_preview)) )
+    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], decltype_noref(q.reply_markup)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:editmessagetext? ) : editmessagetext?
+    return null if v==null
+    var q = new editmessagetext
+    *q <- from_JV(v,type<editmessagetext>)
+    return q
+
 struct editmessagecaption
     //!  Use this method to edit captions of messages. On success, if the edited message is not an inline message, the edited Message is returned, otherwise True is returned.
     [[optional]] chat_id : string = ""	//! Optional. Required if inline_message_id is not specified. Unique identifier for the target chat or username of the target channel (in the format @channelusername)
@@ -1331,6 +3924,23 @@ struct editmessagecaption
     [[optional]] caption_entities : array<messageentity>	//! Optional. A JSON-serialized list of special entities that appear in the caption, which can be specified instead of parse_mode
     [[optional]] reply_markup : inlinekeyboardmarkup?	//! Optional. A JSON-serialized object for an inline keyboard.
 
+def from_JV ( var v:JsonValue?; t:editmessagecaption ) : editmessagecaption
+    var q : editmessagecaption
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.message_id, _::from_JV((v as _object)["message_id"], decltype_noref(q.message_id)) )
+    move_to_ref(q.inline_message_id, _::from_JV((v as _object)["inline_message_id"], decltype_noref(q.inline_message_id)) )
+    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], decltype_noref(q.caption)) )
+    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], decltype_noref(q.parse_mode)) )
+    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], decltype_noref(q.caption_entities)) )
+    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], decltype_noref(q.reply_markup)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:editmessagecaption? ) : editmessagecaption?
+    return null if v==null
+    var q = new editmessagecaption
+    *q <- from_JV(v,type<editmessagecaption>)
+    return q
+
 struct editmessagemedia
     //!  Use this method to edit animation, audio, document, photo, or video messages. If a message is part of a message album, then it can be edited only to an audio for audio albums, only to a document for document albums and to a photo or a video otherwise. When an inline message is edited, a new file can't be uploaded; use a previously uploaded file via its file_id or specify a URL. On success, if the edited message is not an inline message, the edited Message is returned, otherwise True is returned.
     [[optional]] chat_id : string = ""	//! Optional. Required if inline_message_id is not specified. Unique identifier for the target chat or username of the target channel (in the format @channelusername)
@@ -1338,6 +3948,21 @@ struct editmessagemedia
     [[optional]] inline_message_id : string = ""	//! Optional. Required if chat_id and message_id are not specified. Identifier of the inline message
     media : inputmedia	//! Required. A JSON-serialized object for a new media content of the message
     [[optional]] reply_markup : inlinekeyboardmarkup?	//! Optional. A JSON-serialized object for a new inline keyboard.
+
+def from_JV ( var v:JsonValue?; t:editmessagemedia ) : editmessagemedia
+    var q : editmessagemedia
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.message_id, _::from_JV((v as _object)["message_id"], decltype_noref(q.message_id)) )
+    move_to_ref(q.inline_message_id, _::from_JV((v as _object)["inline_message_id"], decltype_noref(q.inline_message_id)) )
+    move_to_ref(q.media, _::from_JV((v as _object)["media"], decltype_noref(q.media)) )
+    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], decltype_noref(q.reply_markup)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:editmessagemedia? ) : editmessagemedia?
+    return null if v==null
+    var q = new editmessagemedia
+    *q <- from_JV(v,type<editmessagemedia>)
+    return q
 
 struct editmessagelivelocation
     //!  Use this method to edit live location messages. A location can be edited until its live_period expires or editing is explicitly disabled by a call to stopMessageLiveLocation. On success, if the edited message is not an inline message, the edited Message is returned, otherwise True is returned.
@@ -1351,12 +3976,45 @@ struct editmessagelivelocation
     [[optional]] proximity_alert_radius : int = INT_MIN	//! Optional. The maximum distance for proximity alerts about approaching another chat member, in meters. Must be between 1 and 100000 if specified.
     [[optional]] reply_markup : inlinekeyboardmarkup?	//! Optional. A JSON-serialized object for a new inline keyboard.
 
+def from_JV ( var v:JsonValue?; t:editmessagelivelocation ) : editmessagelivelocation
+    var q : editmessagelivelocation
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.message_id, _::from_JV((v as _object)["message_id"], decltype_noref(q.message_id)) )
+    move_to_ref(q.inline_message_id, _::from_JV((v as _object)["inline_message_id"], decltype_noref(q.inline_message_id)) )
+    move_to_ref(q.latitude, _::from_JV((v as _object)["latitude"], decltype_noref(q.latitude)) )
+    move_to_ref(q.longitude, _::from_JV((v as _object)["longitude"], decltype_noref(q.longitude)) )
+    move_to_ref(q.horizontal_accuracy, _::from_JV((v as _object)["horizontal_accuracy"], decltype_noref(q.horizontal_accuracy)) )
+    move_to_ref(q.heading, _::from_JV((v as _object)["heading"], decltype_noref(q.heading)) )
+    move_to_ref(q.proximity_alert_radius, _::from_JV((v as _object)["proximity_alert_radius"], decltype_noref(q.proximity_alert_radius)) )
+    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], decltype_noref(q.reply_markup)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:editmessagelivelocation? ) : editmessagelivelocation?
+    return null if v==null
+    var q = new editmessagelivelocation
+    *q <- from_JV(v,type<editmessagelivelocation>)
+    return q
+
 struct stopmessagelivelocation
     //!  Use this method to stop updating a live location message before live_period expires. On success, if the message is not an inline message, the edited Message is returned, otherwise True is returned.
     [[optional]] chat_id : string = ""	//! Optional. Required if inline_message_id is not specified. Unique identifier for the target chat or username of the target channel (in the format @channelusername)
     [[optional]] message_id : int = INT_MIN	//! Optional. Required if inline_message_id is not specified. Identifier of the message with live location to stop
     [[optional]] inline_message_id : string = ""	//! Optional. Required if chat_id and message_id are not specified. Identifier of the inline message
     [[optional]] reply_markup : inlinekeyboardmarkup?	//! Optional. A JSON-serialized object for a new inline keyboard.
+
+def from_JV ( var v:JsonValue?; t:stopmessagelivelocation ) : stopmessagelivelocation
+    var q : stopmessagelivelocation
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.message_id, _::from_JV((v as _object)["message_id"], decltype_noref(q.message_id)) )
+    move_to_ref(q.inline_message_id, _::from_JV((v as _object)["inline_message_id"], decltype_noref(q.inline_message_id)) )
+    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], decltype_noref(q.reply_markup)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:stopmessagelivelocation? ) : stopmessagelivelocation?
+    return null if v==null
+    var q = new stopmessagelivelocation
+    *q <- from_JV(v,type<stopmessagelivelocation>)
+    return q
 
 struct editmessagereplymarkup
     //!  Use this method to edit only the reply markup of messages. On success, if the edited message is not an inline message, the edited Message is returned, otherwise True is returned.
@@ -1365,16 +4023,55 @@ struct editmessagereplymarkup
     [[optional]] inline_message_id : string = ""	//! Optional. Required if chat_id and message_id are not specified. Identifier of the inline message
     [[optional]] reply_markup : inlinekeyboardmarkup?	//! Optional. A JSON-serialized object for an inline keyboard.
 
+def from_JV ( var v:JsonValue?; t:editmessagereplymarkup ) : editmessagereplymarkup
+    var q : editmessagereplymarkup
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.message_id, _::from_JV((v as _object)["message_id"], decltype_noref(q.message_id)) )
+    move_to_ref(q.inline_message_id, _::from_JV((v as _object)["inline_message_id"], decltype_noref(q.inline_message_id)) )
+    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], decltype_noref(q.reply_markup)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:editmessagereplymarkup? ) : editmessagereplymarkup?
+    return null if v==null
+    var q = new editmessagereplymarkup
+    *q <- from_JV(v,type<editmessagereplymarkup>)
+    return q
+
 struct stoppoll
     //!  Use this method to stop a poll which was sent by the bot. On success, the stopped Poll is returned.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target channel (in the format @channelusername)
     message_id : int	//! Required. Identifier of the original message with the poll
     [[optional]] reply_markup : inlinekeyboardmarkup?	//! Optional. A JSON-serialized object for a new message inline keyboard.
 
+def from_JV ( var v:JsonValue?; t:stoppoll ) : stoppoll
+    var q : stoppoll
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.message_id, _::from_JV((v as _object)["message_id"], decltype_noref(q.message_id)) )
+    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], decltype_noref(q.reply_markup)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:stoppoll? ) : stoppoll?
+    return null if v==null
+    var q = new stoppoll
+    *q <- from_JV(v,type<stoppoll>)
+    return q
+
 struct deletemessage
     //!  Use this method to delete a message, including service messages, with the following limitations: - A message can only be deleted if it was sent less than 48 hours ago. - Service messages about a supergroup, channel, or forum topic creation can't be deleted. - A dice message in a private chat can only be deleted if it was sent more than 24 hours ago. - Bots can delete outgoing messages in private chats, groups, and supergroups. - Bots can delete incoming messages in private chats. - Bots granted can_post_messages permissions can delete outgoing messages in channels. - If the bot is an administrator of a group, it can delete any message there. - If the bot has can_delete_messages permission in a supergroup or a channel, it can delete any message there. Returns True on success.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target channel (in the format @channelusername)
     message_id : int	//! Required. Identifier of the message to delete
+
+def from_JV ( var v:JsonValue?; t:deletemessage ) : deletemessage
+    var q : deletemessage
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.message_id, _::from_JV((v as _object)["message_id"], decltype_noref(q.message_id)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:deletemessage? ) : deletemessage?
+    return null if v==null
+    var q = new deletemessage
+    *q <- from_JV(v,type<deletemessage>)
+    return q
 
 struct sticker
     //!  This object represents a sticker.
@@ -1394,6 +4091,31 @@ struct sticker
     [[optional]] needs_repainting : bool = false	//! Optional. True, if the sticker must be repainted to a text color in messages, the color of the Telegram Premium badge in emoji status, white color on chat photos, or another appropriate color in other places
     [[optional]] file_size : int = INT_MIN	//! Optional. File size in bytes
 
+def from_JV ( var v:JsonValue?; t:sticker ) : sticker
+    var q : sticker
+    move_to_ref(q.file_id, _::from_JV((v as _object)["file_id"], decltype_noref(q.file_id)) )
+    move_to_ref(q.file_unique_id, _::from_JV((v as _object)["file_unique_id"], decltype_noref(q.file_unique_id)) )
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    move_to_ref(q.width, _::from_JV((v as _object)["width"], decltype_noref(q.width)) )
+    move_to_ref(q.height, _::from_JV((v as _object)["height"], decltype_noref(q.height)) )
+    move_to_ref(q.is_animated, _::from_JV((v as _object)["is_animated"], decltype_noref(q.is_animated)) )
+    move_to_ref(q.is_video, _::from_JV((v as _object)["is_video"], decltype_noref(q.is_video)) )
+    move_to_ref(q.thumbnail, _::from_JV((v as _object)["thumbnail"], decltype_noref(q.thumbnail)) )
+    move_to_ref(q.emoji, _::from_JV((v as _object)["emoji"], decltype_noref(q.emoji)) )
+    move_to_ref(q.set_name, _::from_JV((v as _object)["set_name"], decltype_noref(q.set_name)) )
+    move_to_ref(q.premium_animation, _::from_JV((v as _object)["premium_animation"], decltype_noref(q.premium_animation)) )
+    move_to_ref(q.mask_position, _::from_JV((v as _object)["mask_position"], decltype_noref(q.mask_position)) )
+    move_to_ref(q.custom_emoji_id, _::from_JV((v as _object)["custom_emoji_id"], decltype_noref(q.custom_emoji_id)) )
+    move_to_ref(q.needs_repainting, _::from_JV((v as _object)["needs_repainting"], decltype_noref(q.needs_repainting)) )
+    move_to_ref(q.file_size, _::from_JV((v as _object)["file_size"], decltype_noref(q.file_size)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:sticker? ) : sticker?
+    return null if v==null
+    var q = new sticker
+    *q <- from_JV(v,type<sticker>)
+    return q
+
 struct stickerset
     //!  This object represents a sticker set.
     name : string	//! Sticker set name
@@ -1404,6 +4126,23 @@ struct stickerset
     stickers : array<sticker>	//! List of all set stickers
     [[optional]] thumbnail : photosize?	//! Optional. Sticker set thumbnail in the .WEBP, .TGS, or .WEBM format
 
+def from_JV ( var v:JsonValue?; t:stickerset ) : stickerset
+    var q : stickerset
+    move_to_ref(q.name, _::from_JV((v as _object)["name"], decltype_noref(q.name)) )
+    move_to_ref(q.title, _::from_JV((v as _object)["title"], decltype_noref(q.title)) )
+    move_to_ref(q.sticker_type, _::from_JV((v as _object)["sticker_type"], decltype_noref(q.sticker_type)) )
+    move_to_ref(q.is_animated, _::from_JV((v as _object)["is_animated"], decltype_noref(q.is_animated)) )
+    move_to_ref(q.is_video, _::from_JV((v as _object)["is_video"], decltype_noref(q.is_video)) )
+    move_to_ref(q.stickers, _::from_JV((v as _object)["stickers"], decltype_noref(q.stickers)) )
+    move_to_ref(q.thumbnail, _::from_JV((v as _object)["thumbnail"], decltype_noref(q.thumbnail)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:stickerset? ) : stickerset?
+    return null if v==null
+    var q = new stickerset
+    *q <- from_JV(v,type<stickerset>)
+    return q
+
 struct maskposition
     //!  This object describes the position on faces where a mask should be placed by default.
     point : string	//! The part of the face relative to which the mask should be placed. One of “forehead”, “eyes”, “mouth”, or “chin”.
@@ -1411,12 +4150,40 @@ struct maskposition
     y_shift : float	//! Shift by Y-axis measured in heights of the mask scaled to the face size, from top to bottom. For example, 1.0 will place the mask just below the default mask position.
     scale : float	//! Mask scaling coefficient. For example, 2.0 means double size.
 
+def from_JV ( var v:JsonValue?; t:maskposition ) : maskposition
+    var q : maskposition
+    move_to_ref(q.point, _::from_JV((v as _object)["point"], decltype_noref(q.point)) )
+    move_to_ref(q.x_shift, _::from_JV((v as _object)["x_shift"], decltype_noref(q.x_shift)) )
+    move_to_ref(q.y_shift, _::from_JV((v as _object)["y_shift"], decltype_noref(q.y_shift)) )
+    move_to_ref(q.scale, _::from_JV((v as _object)["scale"], decltype_noref(q.scale)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:maskposition? ) : maskposition?
+    return null if v==null
+    var q = new maskposition
+    *q <- from_JV(v,type<maskposition>)
+    return q
+
 struct inputsticker
     //!  This object describes a sticker to be added to a sticker set.
     sticker : inputfile	//! The added sticker. Pass a file_id as a String to send a file that already exists on the Telegram servers, pass an HTTP URL as a String for Telegram to get a file from the Internet, upload a new one using multipart/form-data, or pass “attach://<file_attach_name>” to upload a new one using multipart/form-data under <file_attach_name> name. Animated and video stickers can't be uploaded via HTTP URL. More information on Sending Files »
     emoji_list : array<string>	//! List of 1-20 emoji associated with the sticker
     [[optional]] mask_position : maskposition?	//! Optional. Position where the mask should be placed on faces. For “mask” stickers only.
     [[optional]] keywords : array<string>	//! Optional. List of 0-20 search keywords for the sticker with total length of up to 64 characters. For “regular” and “custom_emoji” stickers only.
+
+def from_JV ( var v:JsonValue?; t:inputsticker ) : inputsticker
+    var q : inputsticker
+    move_to_ref(q.sticker, _::from_JV((v as _object)["sticker"], decltype_noref(q.sticker)) )
+    move_to_ref(q.emoji_list, _::from_JV((v as _object)["emoji_list"], decltype_noref(q.emoji_list)) )
+    move_to_ref(q.mask_position, _::from_JV((v as _object)["mask_position"], decltype_noref(q.mask_position)) )
+    move_to_ref(q.keywords, _::from_JV((v as _object)["keywords"], decltype_noref(q.keywords)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:inputsticker? ) : inputsticker?
+    return null if v==null
+    var q = new inputsticker
+    *q <- from_JV(v,type<inputsticker>)
+    return q
 
 struct sendsticker
     //!  Use this method to send static .WEBP, animated .TGS, or video .WEBM stickers. On success, the sent Message is returned.
@@ -1430,19 +4197,73 @@ struct sendsticker
     [[optional]] allow_sending_without_reply : bool = false	//! Optional. Pass True if the message should be sent even if the specified replied-to message is not found
     [[optional]] reply_markup : inlinekeyboardmarkup?	//! Optional. Additional interface options. A JSON-serialized object for an inline keyboard, custom reply keyboard, instructions to remove reply keyboard or to force a reply from the user.
 
+def from_JV ( var v:JsonValue?; t:sendsticker ) : sendsticker
+    var q : sendsticker
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], decltype_noref(q.message_thread_id)) )
+    move_to_ref(q.sticker, _::from_JV((v as _object)["sticker"], decltype_noref(q.sticker)) )
+    move_to_ref(q.emoji, _::from_JV((v as _object)["emoji"], decltype_noref(q.emoji)) )
+    move_to_ref(q.disable_notification, _::from_JV((v as _object)["disable_notification"], decltype_noref(q.disable_notification)) )
+    move_to_ref(q.protect_content, _::from_JV((v as _object)["protect_content"], decltype_noref(q.protect_content)) )
+    move_to_ref(q.reply_to_message_id, _::from_JV((v as _object)["reply_to_message_id"], decltype_noref(q.reply_to_message_id)) )
+    move_to_ref(q.allow_sending_without_reply, _::from_JV((v as _object)["allow_sending_without_reply"], decltype_noref(q.allow_sending_without_reply)) )
+    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], decltype_noref(q.reply_markup)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:sendsticker? ) : sendsticker?
+    return null if v==null
+    var q = new sendsticker
+    *q <- from_JV(v,type<sendsticker>)
+    return q
+
 struct getstickerset
     //!  Use this method to get a sticker set. On success, a StickerSet object is returned.
     name : string	//! Required. Name of the sticker set
 
+def from_JV ( var v:JsonValue?; t:getstickerset ) : getstickerset
+    var q : getstickerset
+    move_to_ref(q.name, _::from_JV((v as _object)["name"], decltype_noref(q.name)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:getstickerset? ) : getstickerset?
+    return null if v==null
+    var q = new getstickerset
+    *q <- from_JV(v,type<getstickerset>)
+    return q
+
 struct getcustomemojistickers
     //!  Use this method to get information about custom emoji stickers by their identifiers. Returns an Array of Sticker objects.
     custom_emoji_ids : array<string>	//! Required. List of custom emoji identifiers. At most 200 custom emoji identifiers can be specified.
+
+def from_JV ( var v:JsonValue?; t:getcustomemojistickers ) : getcustomemojistickers
+    var q : getcustomemojistickers
+    move_to_ref(q.custom_emoji_ids, _::from_JV((v as _object)["custom_emoji_ids"], decltype_noref(q.custom_emoji_ids)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:getcustomemojistickers? ) : getcustomemojistickers?
+    return null if v==null
+    var q = new getcustomemojistickers
+    *q <- from_JV(v,type<getcustomemojistickers>)
+    return q
 
 struct uploadstickerfile
     //!  Use this method to upload a file with a sticker for later use in the createNewStickerSet and addStickerToSet methods (the file can be used multiple times). Returns the uploaded File on success.
     user_id : int	//! Required. User identifier of sticker file owner
     sticker : inputfile	//! Required. A file with the sticker in .WEBP, .PNG, .TGS, or .WEBM format. See https://core.telegram.org/stickers for technical requirements. More information on Sending Files »
     sticker_format : string	//! Required. Format of the sticker, must be one of “static”, “animated”, “video”
+
+def from_JV ( var v:JsonValue?; t:uploadstickerfile ) : uploadstickerfile
+    var q : uploadstickerfile
+    move_to_ref(q.user_id, _::from_JV((v as _object)["user_id"], decltype_noref(q.user_id)) )
+    move_to_ref(q.sticker, _::from_JV((v as _object)["sticker"], decltype_noref(q.sticker)) )
+    move_to_ref(q.sticker_format, _::from_JV((v as _object)["sticker_format"], decltype_noref(q.sticker_format)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:uploadstickerfile? ) : uploadstickerfile?
+    return null if v==null
+    var q = new uploadstickerfile
+    *q <- from_JV(v,type<uploadstickerfile>)
+    return q
 
 struct createnewstickerset
     //!  Use this method to create a new sticker set owned by a user. The bot will be able to edit the sticker set thus created. Returns True on success.
@@ -1454,40 +4275,141 @@ struct createnewstickerset
     [[optional]] sticker_type : string = ""	//! Optional. Type of stickers in the set, pass “regular”, “mask”, or “custom_emoji”. By default, a regular sticker set is created.
     [[optional]] needs_repainting : bool = false	//! Optional. Pass True if stickers in the sticker set must be repainted to the color of text when used in messages, the accent color if used as emoji status, white on chat photos, or another appropriate color based on context; for custom emoji sticker sets only
 
+def from_JV ( var v:JsonValue?; t:createnewstickerset ) : createnewstickerset
+    var q : createnewstickerset
+    move_to_ref(q.user_id, _::from_JV((v as _object)["user_id"], decltype_noref(q.user_id)) )
+    move_to_ref(q.name, _::from_JV((v as _object)["name"], decltype_noref(q.name)) )
+    move_to_ref(q.title, _::from_JV((v as _object)["title"], decltype_noref(q.title)) )
+    move_to_ref(q.stickers, _::from_JV((v as _object)["stickers"], decltype_noref(q.stickers)) )
+    move_to_ref(q.sticker_format, _::from_JV((v as _object)["sticker_format"], decltype_noref(q.sticker_format)) )
+    move_to_ref(q.sticker_type, _::from_JV((v as _object)["sticker_type"], decltype_noref(q.sticker_type)) )
+    move_to_ref(q.needs_repainting, _::from_JV((v as _object)["needs_repainting"], decltype_noref(q.needs_repainting)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:createnewstickerset? ) : createnewstickerset?
+    return null if v==null
+    var q = new createnewstickerset
+    *q <- from_JV(v,type<createnewstickerset>)
+    return q
+
 struct addstickertoset
     //!  Use this method to add a new sticker to a set created by the bot. The format of the added sticker must match the format of the other stickers in the set. Emoji sticker sets can have up to 200 stickers. Animated and video sticker sets can have up to 50 stickers. Static sticker sets can have up to 120 stickers. Returns True on success.
     user_id : int	//! Required. User identifier of sticker set owner
     name : string	//! Required. Sticker set name
     sticker : inputsticker	//! Required. A JSON-serialized object with information about the added sticker. If exactly the same sticker had already been added to the set, then the set isn't changed.
 
+def from_JV ( var v:JsonValue?; t:addstickertoset ) : addstickertoset
+    var q : addstickertoset
+    move_to_ref(q.user_id, _::from_JV((v as _object)["user_id"], decltype_noref(q.user_id)) )
+    move_to_ref(q.name, _::from_JV((v as _object)["name"], decltype_noref(q.name)) )
+    move_to_ref(q.sticker, _::from_JV((v as _object)["sticker"], decltype_noref(q.sticker)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:addstickertoset? ) : addstickertoset?
+    return null if v==null
+    var q = new addstickertoset
+    *q <- from_JV(v,type<addstickertoset>)
+    return q
+
 struct setstickerpositioninset
     //!  Use this method to move a sticker in a set created by the bot to a specific position. Returns True on success.
     sticker : string	//! Required. File identifier of the sticker
     position : int	//! Required. New sticker position in the set, zero-based
 
+def from_JV ( var v:JsonValue?; t:setstickerpositioninset ) : setstickerpositioninset
+    var q : setstickerpositioninset
+    move_to_ref(q.sticker, _::from_JV((v as _object)["sticker"], decltype_noref(q.sticker)) )
+    move_to_ref(q.position, _::from_JV((v as _object)["position"], decltype_noref(q.position)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:setstickerpositioninset? ) : setstickerpositioninset?
+    return null if v==null
+    var q = new setstickerpositioninset
+    *q <- from_JV(v,type<setstickerpositioninset>)
+    return q
+
 struct deletestickerfromset
     //!  Use this method to delete a sticker from a set created by the bot. Returns True on success.
     sticker : string	//! Required. File identifier of the sticker
+
+def from_JV ( var v:JsonValue?; t:deletestickerfromset ) : deletestickerfromset
+    var q : deletestickerfromset
+    move_to_ref(q.sticker, _::from_JV((v as _object)["sticker"], decltype_noref(q.sticker)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:deletestickerfromset? ) : deletestickerfromset?
+    return null if v==null
+    var q = new deletestickerfromset
+    *q <- from_JV(v,type<deletestickerfromset>)
+    return q
 
 struct setstickeremojilist
     //!  Use this method to change the list of emoji assigned to a regular or custom emoji sticker. The sticker must belong to a sticker set created by the bot. Returns True on success.
     sticker : string	//! Required. File identifier of the sticker
     emoji_list : array<string>	//! Required. A JSON-serialized list of 1-20 emoji associated with the sticker
 
+def from_JV ( var v:JsonValue?; t:setstickeremojilist ) : setstickeremojilist
+    var q : setstickeremojilist
+    move_to_ref(q.sticker, _::from_JV((v as _object)["sticker"], decltype_noref(q.sticker)) )
+    move_to_ref(q.emoji_list, _::from_JV((v as _object)["emoji_list"], decltype_noref(q.emoji_list)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:setstickeremojilist? ) : setstickeremojilist?
+    return null if v==null
+    var q = new setstickeremojilist
+    *q <- from_JV(v,type<setstickeremojilist>)
+    return q
+
 struct setstickerkeywords
     //!  Use this method to change search keywords assigned to a regular or custom emoji sticker. The sticker must belong to a sticker set created by the bot. Returns True on success.
     sticker : string	//! Required. File identifier of the sticker
     [[optional]] keywords : array<string>	//! Optional. A JSON-serialized list of 0-20 search keywords for the sticker with total length of up to 64 characters
+
+def from_JV ( var v:JsonValue?; t:setstickerkeywords ) : setstickerkeywords
+    var q : setstickerkeywords
+    move_to_ref(q.sticker, _::from_JV((v as _object)["sticker"], decltype_noref(q.sticker)) )
+    move_to_ref(q.keywords, _::from_JV((v as _object)["keywords"], decltype_noref(q.keywords)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:setstickerkeywords? ) : setstickerkeywords?
+    return null if v==null
+    var q = new setstickerkeywords
+    *q <- from_JV(v,type<setstickerkeywords>)
+    return q
 
 struct setstickermaskposition
     //!  Use this method to change the mask position of a mask sticker. The sticker must belong to a sticker set that was created by the bot. Returns True on success.
     sticker : string	//! Required. File identifier of the sticker
     [[optional]] mask_position : maskposition?	//! Optional. A JSON-serialized object with the position where the mask should be placed on faces. Omit the parameter to remove the mask position.
 
+def from_JV ( var v:JsonValue?; t:setstickermaskposition ) : setstickermaskposition
+    var q : setstickermaskposition
+    move_to_ref(q.sticker, _::from_JV((v as _object)["sticker"], decltype_noref(q.sticker)) )
+    move_to_ref(q.mask_position, _::from_JV((v as _object)["mask_position"], decltype_noref(q.mask_position)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:setstickermaskposition? ) : setstickermaskposition?
+    return null if v==null
+    var q = new setstickermaskposition
+    *q <- from_JV(v,type<setstickermaskposition>)
+    return q
+
 struct setstickersettitle
     //!  Use this method to set the title of a created sticker set. Returns True on success.
     name : string	//! Required. Sticker set name
     title : string	//! Required. Sticker set title, 1-64 characters
+
+def from_JV ( var v:JsonValue?; t:setstickersettitle ) : setstickersettitle
+    var q : setstickersettitle
+    move_to_ref(q.name, _::from_JV((v as _object)["name"], decltype_noref(q.name)) )
+    move_to_ref(q.title, _::from_JV((v as _object)["title"], decltype_noref(q.title)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:setstickersettitle? ) : setstickersettitle?
+    return null if v==null
+    var q = new setstickersettitle
+    *q <- from_JV(v,type<setstickersettitle>)
+    return q
 
 struct setstickersetthumbnail
     //!  Use this method to set the thumbnail of a regular or mask sticker set. The format of the thumbnail file must match the format of the stickers in the set. Returns True on success.
@@ -1495,14 +4417,50 @@ struct setstickersetthumbnail
     user_id : int	//! Required. User identifier of the sticker set owner
     [[optional]] thumbnail : inputfile?	//! Optional. A .WEBP or .PNG image with the thumbnail, must be up to 128 kilobytes in size and have a width and height of exactly 100px, or a .TGS animation with a thumbnail up to 32 kilobytes in size (see https://core.telegram.org/stickers#animated-sticker-requirements for animated sticker technical requirements), or a WEBM video with the thumbnail up to 32 kilobytes in size; see https://core.telegram.org/stickers#video-sticker-requirements for video sticker technical requirements. Pass a file_id as a String to send a file that already exists on the Telegram servers, pass an HTTP URL as a String for Telegram to get a file from the Internet, or upload a new one using multipart/form-data. More information on Sending Files ». Animated and video sticker set thumbnails can't be uploaded via HTTP URL. If omitted, then the thumbnail is dropped and the first sticker is used as the thumbnail.
 
+def from_JV ( var v:JsonValue?; t:setstickersetthumbnail ) : setstickersetthumbnail
+    var q : setstickersetthumbnail
+    move_to_ref(q.name, _::from_JV((v as _object)["name"], decltype_noref(q.name)) )
+    move_to_ref(q.user_id, _::from_JV((v as _object)["user_id"], decltype_noref(q.user_id)) )
+    move_to_ref(q.thumbnail, _::from_JV((v as _object)["thumbnail"], decltype_noref(q.thumbnail)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:setstickersetthumbnail? ) : setstickersetthumbnail?
+    return null if v==null
+    var q = new setstickersetthumbnail
+    *q <- from_JV(v,type<setstickersetthumbnail>)
+    return q
+
 struct setcustomemojistickersetthumbnail
     //!  Use this method to set the thumbnail of a custom emoji sticker set. Returns True on success.
     name : string	//! Required. Sticker set name
     [[optional]] custom_emoji_id : string = ""	//! Optional. Custom emoji identifier of a sticker from the sticker set; pass an empty string to drop the thumbnail and use the first sticker as the thumbnail.
 
+def from_JV ( var v:JsonValue?; t:setcustomemojistickersetthumbnail ) : setcustomemojistickersetthumbnail
+    var q : setcustomemojistickersetthumbnail
+    move_to_ref(q.name, _::from_JV((v as _object)["name"], decltype_noref(q.name)) )
+    move_to_ref(q.custom_emoji_id, _::from_JV((v as _object)["custom_emoji_id"], decltype_noref(q.custom_emoji_id)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:setcustomemojistickersetthumbnail? ) : setcustomemojistickersetthumbnail?
+    return null if v==null
+    var q = new setcustomemojistickersetthumbnail
+    *q <- from_JV(v,type<setcustomemojistickersetthumbnail>)
+    return q
+
 struct deletestickerset
     //!  Use this method to delete a sticker set that was created by the bot. Returns True on success.
     name : string	//! Required. Sticker set name
+
+def from_JV ( var v:JsonValue?; t:deletestickerset ) : deletestickerset
+    var q : deletestickerset
+    move_to_ref(q.name, _::from_JV((v as _object)["name"], decltype_noref(q.name)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:deletestickerset? ) : deletestickerset?
+    return null if v==null
+    var q = new deletestickerset
+    *q <- from_JV(v,type<deletestickerset>)
+    return q
 
 struct inlinequery
     //!  This object represents an incoming inline query. When the user sends an empty query, your bot could return some default or trending results.
@@ -1512,6 +4470,22 @@ struct inlinequery
     offset : string	//! Offset of the results to be returned, can be controlled by the bot
     [[optional]] chat_type : string = ""	//! Optional. Type of the chat from which the inline query was sent. Can be either “sender” for a private chat with the inline query sender, “private”, “group”, “supergroup”, or “channel”. The chat type should be always known for requests sent from official clients and most third-party clients, unless the request was sent from a secret chat
     [[optional]] location : location?	//! Optional. Sender location, only for bots that request user location
+
+def from_JV ( var v:JsonValue?; t:inlinequery ) : inlinequery
+    var q : inlinequery
+    move_to_ref(q.id, _::from_JV((v as _object)["id"], decltype_noref(q.id)) )
+    move_to_ref(q.from, _::from_JV((v as _object)["from"], decltype_noref(q.from)) )
+    move_to_ref(q.query, _::from_JV((v as _object)["query"], decltype_noref(q.query)) )
+    move_to_ref(q.offset, _::from_JV((v as _object)["offset"], decltype_noref(q.offset)) )
+    move_to_ref(q.chat_type, _::from_JV((v as _object)["chat_type"], decltype_noref(q.chat_type)) )
+    move_to_ref(q.location, _::from_JV((v as _object)["location"], decltype_noref(q.location)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:inlinequery? ) : inlinequery?
+    return null if v==null
+    var q = new inlinequery
+    *q <- from_JV(v,type<inlinequery>)
+    return q
 
 struct answerinlinequery
     //!  Use this method to send answers to an inline query. On success, True is returned. No more than 50 results per query are allowed.
@@ -1523,7 +4497,36 @@ struct answerinlinequery
     [[optional]] switch_pm_text : string = ""	//! Optional. If passed, clients will display a button with specified text that switches the user to a private chat with the bot and sends the bot a start message with the parameter switch_pm_parameter
     [[optional]] switch_pm_parameter : string = ""	//! Optional. Deep-linking parameter for the /start message sent to the bot when user presses the switch button. 1-64 characters, only A-Z, a-z, 0-9, _ and - are allowed.Example: An inline bot that sends YouTube videos can ask the user to connect the bot to their YouTube account to adapt search results accordingly. To do this, it displays a 'Connect your YouTube account' button above the results, or even before showing any. The user presses the button, switches to a private chat with the bot and, in doing so, passes a start parameter that instructs the bot to return an OAuth link. Once done, the bot can offer a switch_inline button so that the user can easily return to the chat where they wanted to use the bot's inline capabilities.
 
-struct inlinequeryresult {} //  This object represents one result of an inline query. Telegram clients currently support results of the following 20 types: Note: All URLs passed in inline query results will be available to end users and therefore must be assumed to be public.
+def from_JV ( var v:JsonValue?; t:answerinlinequery ) : answerinlinequery
+    var q : answerinlinequery
+    move_to_ref(q.inline_query_id, _::from_JV((v as _object)["inline_query_id"], decltype_noref(q.inline_query_id)) )
+    move_to_ref(q.results, _::from_JV((v as _object)["results"], decltype_noref(q.results)) )
+    move_to_ref(q.cache_time, _::from_JV((v as _object)["cache_time"], decltype_noref(q.cache_time)) )
+    move_to_ref(q.is_personal, _::from_JV((v as _object)["is_personal"], decltype_noref(q.is_personal)) )
+    move_to_ref(q.next_offset, _::from_JV((v as _object)["next_offset"], decltype_noref(q.next_offset)) )
+    move_to_ref(q.switch_pm_text, _::from_JV((v as _object)["switch_pm_text"], decltype_noref(q.switch_pm_text)) )
+    move_to_ref(q.switch_pm_parameter, _::from_JV((v as _object)["switch_pm_parameter"], decltype_noref(q.switch_pm_parameter)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:answerinlinequery? ) : answerinlinequery?
+    return null if v==null
+    var q = new answerinlinequery
+    *q <- from_JV(v,type<answerinlinequery>)
+    return q
+
+struct inlinequeryresult
+    //!  This object represents one result of an inline query. Telegram clients currently support results of the following 20 types: Note: All URLs passed in inline query results will be available to end users and therefore must be assumed to be public.
+    object_inlinequeryresult_has_no_fields:bool
+
+def from_JV ( var v:JsonValue?; t:inlinequeryresult ) : inlinequeryresult
+    var q : inlinequeryresult
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:inlinequeryresult? ) : inlinequeryresult?
+    return null if v==null
+    var q = new inlinequeryresult
+    *q <- from_JV(v,type<inlinequeryresult>)
+    return q
 
 struct inlinequeryresultarticle
     //!  Represents a link to an article or web page.
@@ -1538,6 +4541,27 @@ struct inlinequeryresultarticle
     [[optional]] thumbnail_url : string = ""	//! Optional. Url of the thumbnail for the result
     [[optional]] thumbnail_width : int = INT_MIN	//! Optional. Thumbnail width
     [[optional]] thumbnail_height : int = INT_MIN	//! Optional. Thumbnail height
+
+def from_JV ( var v:JsonValue?; t:inlinequeryresultarticle ) : inlinequeryresultarticle
+    var q : inlinequeryresultarticle
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    move_to_ref(q.id, _::from_JV((v as _object)["id"], decltype_noref(q.id)) )
+    move_to_ref(q.title, _::from_JV((v as _object)["title"], decltype_noref(q.title)) )
+    move_to_ref(q.input_message_content, _::from_JV((v as _object)["input_message_content"], decltype_noref(q.input_message_content)) )
+    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], decltype_noref(q.reply_markup)) )
+    move_to_ref(q.url, _::from_JV((v as _object)["url"], decltype_noref(q.url)) )
+    move_to_ref(q.hide_url, _::from_JV((v as _object)["hide_url"], decltype_noref(q.hide_url)) )
+    move_to_ref(q.description, _::from_JV((v as _object)["description"], decltype_noref(q.description)) )
+    move_to_ref(q.thumbnail_url, _::from_JV((v as _object)["thumbnail_url"], decltype_noref(q.thumbnail_url)) )
+    move_to_ref(q.thumbnail_width, _::from_JV((v as _object)["thumbnail_width"], decltype_noref(q.thumbnail_width)) )
+    move_to_ref(q.thumbnail_height, _::from_JV((v as _object)["thumbnail_height"], decltype_noref(q.thumbnail_height)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:inlinequeryresultarticle? ) : inlinequeryresultarticle?
+    return null if v==null
+    var q = new inlinequeryresultarticle
+    *q <- from_JV(v,type<inlinequeryresultarticle>)
+    return q
 
 struct inlinequeryresultphoto
     //!  Represents a link to a photo. By default, this photo will be sent by the user with optional caption. Alternatively, you can use input_message_content to send a message with the specified content instead of the photo.
@@ -1554,6 +4578,29 @@ struct inlinequeryresultphoto
     [[optional]] caption_entities : array<messageentity>	//! Optional. List of special entities that appear in the caption, which can be specified instead of parse_mode
     [[optional]] reply_markup : inlinekeyboardmarkup?	//! Optional. Inline keyboard attached to the message
     [[optional]] input_message_content : inputmessagecontent?	//! Optional. Content of the message to be sent instead of the photo
+
+def from_JV ( var v:JsonValue?; t:inlinequeryresultphoto ) : inlinequeryresultphoto
+    var q : inlinequeryresultphoto
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    move_to_ref(q.id, _::from_JV((v as _object)["id"], decltype_noref(q.id)) )
+    move_to_ref(q.photo_url, _::from_JV((v as _object)["photo_url"], decltype_noref(q.photo_url)) )
+    move_to_ref(q.thumbnail_url, _::from_JV((v as _object)["thumbnail_url"], decltype_noref(q.thumbnail_url)) )
+    move_to_ref(q.photo_width, _::from_JV((v as _object)["photo_width"], decltype_noref(q.photo_width)) )
+    move_to_ref(q.photo_height, _::from_JV((v as _object)["photo_height"], decltype_noref(q.photo_height)) )
+    move_to_ref(q.title, _::from_JV((v as _object)["title"], decltype_noref(q.title)) )
+    move_to_ref(q.description, _::from_JV((v as _object)["description"], decltype_noref(q.description)) )
+    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], decltype_noref(q.caption)) )
+    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], decltype_noref(q.parse_mode)) )
+    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], decltype_noref(q.caption_entities)) )
+    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], decltype_noref(q.reply_markup)) )
+    move_to_ref(q.input_message_content, _::from_JV((v as _object)["input_message_content"], decltype_noref(q.input_message_content)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:inlinequeryresultphoto? ) : inlinequeryresultphoto?
+    return null if v==null
+    var q = new inlinequeryresultphoto
+    *q <- from_JV(v,type<inlinequeryresultphoto>)
+    return q
 
 struct inlinequeryresultgif
     //!  Represents a link to an animated GIF file. By default, this animated GIF file will be sent by the user with optional caption. Alternatively, you can use input_message_content to send a message with the specified content instead of the animation.
@@ -1572,6 +4619,30 @@ struct inlinequeryresultgif
     [[optional]] reply_markup : inlinekeyboardmarkup?	//! Optional. Inline keyboard attached to the message
     [[optional]] input_message_content : inputmessagecontent?	//! Optional. Content of the message to be sent instead of the GIF animation
 
+def from_JV ( var v:JsonValue?; t:inlinequeryresultgif ) : inlinequeryresultgif
+    var q : inlinequeryresultgif
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    move_to_ref(q.id, _::from_JV((v as _object)["id"], decltype_noref(q.id)) )
+    move_to_ref(q.gif_url, _::from_JV((v as _object)["gif_url"], decltype_noref(q.gif_url)) )
+    move_to_ref(q.gif_width, _::from_JV((v as _object)["gif_width"], decltype_noref(q.gif_width)) )
+    move_to_ref(q.gif_height, _::from_JV((v as _object)["gif_height"], decltype_noref(q.gif_height)) )
+    move_to_ref(q.gif_duration, _::from_JV((v as _object)["gif_duration"], decltype_noref(q.gif_duration)) )
+    move_to_ref(q.thumbnail_url, _::from_JV((v as _object)["thumbnail_url"], decltype_noref(q.thumbnail_url)) )
+    move_to_ref(q.thumbnail_mime_type, _::from_JV((v as _object)["thumbnail_mime_type"], decltype_noref(q.thumbnail_mime_type)) )
+    move_to_ref(q.title, _::from_JV((v as _object)["title"], decltype_noref(q.title)) )
+    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], decltype_noref(q.caption)) )
+    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], decltype_noref(q.parse_mode)) )
+    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], decltype_noref(q.caption_entities)) )
+    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], decltype_noref(q.reply_markup)) )
+    move_to_ref(q.input_message_content, _::from_JV((v as _object)["input_message_content"], decltype_noref(q.input_message_content)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:inlinequeryresultgif? ) : inlinequeryresultgif?
+    return null if v==null
+    var q = new inlinequeryresultgif
+    *q <- from_JV(v,type<inlinequeryresultgif>)
+    return q
+
 struct inlinequeryresultmpeg4gif
     //!  Represents a link to a video animation (H.264/MPEG-4 AVC video without sound). By default, this animated MPEG-4 file will be sent by the user with optional caption. Alternatively, you can use input_message_content to send a message with the specified content instead of the animation.
     _type : string	//! Type of the result, must be mpeg4_gif
@@ -1588,6 +4659,30 @@ struct inlinequeryresultmpeg4gif
     [[optional]] caption_entities : array<messageentity>	//! Optional. List of special entities that appear in the caption, which can be specified instead of parse_mode
     [[optional]] reply_markup : inlinekeyboardmarkup?	//! Optional. Inline keyboard attached to the message
     [[optional]] input_message_content : inputmessagecontent?	//! Optional. Content of the message to be sent instead of the video animation
+
+def from_JV ( var v:JsonValue?; t:inlinequeryresultmpeg4gif ) : inlinequeryresultmpeg4gif
+    var q : inlinequeryresultmpeg4gif
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    move_to_ref(q.id, _::from_JV((v as _object)["id"], decltype_noref(q.id)) )
+    move_to_ref(q.mpeg4_url, _::from_JV((v as _object)["mpeg4_url"], decltype_noref(q.mpeg4_url)) )
+    move_to_ref(q.mpeg4_width, _::from_JV((v as _object)["mpeg4_width"], decltype_noref(q.mpeg4_width)) )
+    move_to_ref(q.mpeg4_height, _::from_JV((v as _object)["mpeg4_height"], decltype_noref(q.mpeg4_height)) )
+    move_to_ref(q.mpeg4_duration, _::from_JV((v as _object)["mpeg4_duration"], decltype_noref(q.mpeg4_duration)) )
+    move_to_ref(q.thumbnail_url, _::from_JV((v as _object)["thumbnail_url"], decltype_noref(q.thumbnail_url)) )
+    move_to_ref(q.thumbnail_mime_type, _::from_JV((v as _object)["thumbnail_mime_type"], decltype_noref(q.thumbnail_mime_type)) )
+    move_to_ref(q.title, _::from_JV((v as _object)["title"], decltype_noref(q.title)) )
+    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], decltype_noref(q.caption)) )
+    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], decltype_noref(q.parse_mode)) )
+    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], decltype_noref(q.caption_entities)) )
+    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], decltype_noref(q.reply_markup)) )
+    move_to_ref(q.input_message_content, _::from_JV((v as _object)["input_message_content"], decltype_noref(q.input_message_content)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:inlinequeryresultmpeg4gif? ) : inlinequeryresultmpeg4gif?
+    return null if v==null
+    var q = new inlinequeryresultmpeg4gif
+    *q <- from_JV(v,type<inlinequeryresultmpeg4gif>)
+    return q
 
 struct inlinequeryresultvideo
     //!  Represents a link to a page containing an embedded video player or a video file. By default, this video file will be sent by the user with an optional caption. Alternatively, you can use input_message_content to send a message with the specified content instead of the video.
@@ -1607,6 +4702,31 @@ struct inlinequeryresultvideo
     [[optional]] reply_markup : inlinekeyboardmarkup?	//! Optional. Inline keyboard attached to the message
     [[optional]] input_message_content : inputmessagecontent?	//! Optional. Content of the message to be sent instead of the video. This field is required if InlineQueryResultVideo is used to send an HTML-page as a result (e.g., a YouTube video).
 
+def from_JV ( var v:JsonValue?; t:inlinequeryresultvideo ) : inlinequeryresultvideo
+    var q : inlinequeryresultvideo
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    move_to_ref(q.id, _::from_JV((v as _object)["id"], decltype_noref(q.id)) )
+    move_to_ref(q.video_url, _::from_JV((v as _object)["video_url"], decltype_noref(q.video_url)) )
+    move_to_ref(q.mime_type, _::from_JV((v as _object)["mime_type"], decltype_noref(q.mime_type)) )
+    move_to_ref(q.thumbnail_url, _::from_JV((v as _object)["thumbnail_url"], decltype_noref(q.thumbnail_url)) )
+    move_to_ref(q.title, _::from_JV((v as _object)["title"], decltype_noref(q.title)) )
+    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], decltype_noref(q.caption)) )
+    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], decltype_noref(q.parse_mode)) )
+    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], decltype_noref(q.caption_entities)) )
+    move_to_ref(q.video_width, _::from_JV((v as _object)["video_width"], decltype_noref(q.video_width)) )
+    move_to_ref(q.video_height, _::from_JV((v as _object)["video_height"], decltype_noref(q.video_height)) )
+    move_to_ref(q.video_duration, _::from_JV((v as _object)["video_duration"], decltype_noref(q.video_duration)) )
+    move_to_ref(q.description, _::from_JV((v as _object)["description"], decltype_noref(q.description)) )
+    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], decltype_noref(q.reply_markup)) )
+    move_to_ref(q.input_message_content, _::from_JV((v as _object)["input_message_content"], decltype_noref(q.input_message_content)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:inlinequeryresultvideo? ) : inlinequeryresultvideo?
+    return null if v==null
+    var q = new inlinequeryresultvideo
+    *q <- from_JV(v,type<inlinequeryresultvideo>)
+    return q
+
 struct inlinequeryresultaudio
     //!  Represents a link to an MP3 audio file. By default, this audio file will be sent by the user. Alternatively, you can use input_message_content to send a message with the specified content instead of the audio.
     _type : string	//! Type of the result, must be audio
@@ -1621,6 +4741,27 @@ struct inlinequeryresultaudio
     [[optional]] reply_markup : inlinekeyboardmarkup?	//! Optional. Inline keyboard attached to the message
     [[optional]] input_message_content : inputmessagecontent?	//! Optional. Content of the message to be sent instead of the audio
 
+def from_JV ( var v:JsonValue?; t:inlinequeryresultaudio ) : inlinequeryresultaudio
+    var q : inlinequeryresultaudio
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    move_to_ref(q.id, _::from_JV((v as _object)["id"], decltype_noref(q.id)) )
+    move_to_ref(q.audio_url, _::from_JV((v as _object)["audio_url"], decltype_noref(q.audio_url)) )
+    move_to_ref(q.title, _::from_JV((v as _object)["title"], decltype_noref(q.title)) )
+    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], decltype_noref(q.caption)) )
+    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], decltype_noref(q.parse_mode)) )
+    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], decltype_noref(q.caption_entities)) )
+    move_to_ref(q.performer, _::from_JV((v as _object)["performer"], decltype_noref(q.performer)) )
+    move_to_ref(q.audio_duration, _::from_JV((v as _object)["audio_duration"], decltype_noref(q.audio_duration)) )
+    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], decltype_noref(q.reply_markup)) )
+    move_to_ref(q.input_message_content, _::from_JV((v as _object)["input_message_content"], decltype_noref(q.input_message_content)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:inlinequeryresultaudio? ) : inlinequeryresultaudio?
+    return null if v==null
+    var q = new inlinequeryresultaudio
+    *q <- from_JV(v,type<inlinequeryresultaudio>)
+    return q
+
 struct inlinequeryresultvoice
     //!  Represents a link to a voice recording in an .OGG container encoded with OPUS. By default, this voice recording will be sent by the user. Alternatively, you can use input_message_content to send a message with the specified content instead of the the voice message.
     _type : string	//! Type of the result, must be voice
@@ -1633,6 +4774,26 @@ struct inlinequeryresultvoice
     [[optional]] voice_duration : int = INT_MIN	//! Optional. Recording duration in seconds
     [[optional]] reply_markup : inlinekeyboardmarkup?	//! Optional. Inline keyboard attached to the message
     [[optional]] input_message_content : inputmessagecontent?	//! Optional. Content of the message to be sent instead of the voice recording
+
+def from_JV ( var v:JsonValue?; t:inlinequeryresultvoice ) : inlinequeryresultvoice
+    var q : inlinequeryresultvoice
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    move_to_ref(q.id, _::from_JV((v as _object)["id"], decltype_noref(q.id)) )
+    move_to_ref(q.voice_url, _::from_JV((v as _object)["voice_url"], decltype_noref(q.voice_url)) )
+    move_to_ref(q.title, _::from_JV((v as _object)["title"], decltype_noref(q.title)) )
+    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], decltype_noref(q.caption)) )
+    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], decltype_noref(q.parse_mode)) )
+    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], decltype_noref(q.caption_entities)) )
+    move_to_ref(q.voice_duration, _::from_JV((v as _object)["voice_duration"], decltype_noref(q.voice_duration)) )
+    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], decltype_noref(q.reply_markup)) )
+    move_to_ref(q.input_message_content, _::from_JV((v as _object)["input_message_content"], decltype_noref(q.input_message_content)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:inlinequeryresultvoice? ) : inlinequeryresultvoice?
+    return null if v==null
+    var q = new inlinequeryresultvoice
+    *q <- from_JV(v,type<inlinequeryresultvoice>)
+    return q
 
 struct inlinequeryresultdocument
     //!  Represents a link to a file. By default, this file will be sent by the user with an optional caption. Alternatively, you can use input_message_content to send a message with the specified content instead of the file. Currently, only .PDF and .ZIP files can be sent using this method.
@@ -1651,6 +4812,30 @@ struct inlinequeryresultdocument
     [[optional]] thumbnail_width : int = INT_MIN	//! Optional. Thumbnail width
     [[optional]] thumbnail_height : int = INT_MIN	//! Optional. Thumbnail height
 
+def from_JV ( var v:JsonValue?; t:inlinequeryresultdocument ) : inlinequeryresultdocument
+    var q : inlinequeryresultdocument
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    move_to_ref(q.id, _::from_JV((v as _object)["id"], decltype_noref(q.id)) )
+    move_to_ref(q.title, _::from_JV((v as _object)["title"], decltype_noref(q.title)) )
+    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], decltype_noref(q.caption)) )
+    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], decltype_noref(q.parse_mode)) )
+    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], decltype_noref(q.caption_entities)) )
+    move_to_ref(q.document_url, _::from_JV((v as _object)["document_url"], decltype_noref(q.document_url)) )
+    move_to_ref(q.mime_type, _::from_JV((v as _object)["mime_type"], decltype_noref(q.mime_type)) )
+    move_to_ref(q.description, _::from_JV((v as _object)["description"], decltype_noref(q.description)) )
+    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], decltype_noref(q.reply_markup)) )
+    move_to_ref(q.input_message_content, _::from_JV((v as _object)["input_message_content"], decltype_noref(q.input_message_content)) )
+    move_to_ref(q.thumbnail_url, _::from_JV((v as _object)["thumbnail_url"], decltype_noref(q.thumbnail_url)) )
+    move_to_ref(q.thumbnail_width, _::from_JV((v as _object)["thumbnail_width"], decltype_noref(q.thumbnail_width)) )
+    move_to_ref(q.thumbnail_height, _::from_JV((v as _object)["thumbnail_height"], decltype_noref(q.thumbnail_height)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:inlinequeryresultdocument? ) : inlinequeryresultdocument?
+    return null if v==null
+    var q = new inlinequeryresultdocument
+    *q <- from_JV(v,type<inlinequeryresultdocument>)
+    return q
+
 struct inlinequeryresultlocation
     //!  Represents a location on a map. By default, the location will be sent by the user. Alternatively, you can use input_message_content to send a message with the specified content instead of the location.
     _type : string	//! Type of the result, must be location
@@ -1667,6 +4852,30 @@ struct inlinequeryresultlocation
     [[optional]] thumbnail_url : string = ""	//! Optional. Url of the thumbnail for the result
     [[optional]] thumbnail_width : int = INT_MIN	//! Optional. Thumbnail width
     [[optional]] thumbnail_height : int = INT_MIN	//! Optional. Thumbnail height
+
+def from_JV ( var v:JsonValue?; t:inlinequeryresultlocation ) : inlinequeryresultlocation
+    var q : inlinequeryresultlocation
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    move_to_ref(q.id, _::from_JV((v as _object)["id"], decltype_noref(q.id)) )
+    move_to_ref(q.latitude, _::from_JV((v as _object)["latitude"], decltype_noref(q.latitude)) )
+    move_to_ref(q.longitude, _::from_JV((v as _object)["longitude"], decltype_noref(q.longitude)) )
+    move_to_ref(q.title, _::from_JV((v as _object)["title"], decltype_noref(q.title)) )
+    move_to_ref(q.horizontal_accuracy, _::from_JV((v as _object)["horizontal_accuracy"], decltype_noref(q.horizontal_accuracy)) )
+    move_to_ref(q.live_period, _::from_JV((v as _object)["live_period"], decltype_noref(q.live_period)) )
+    move_to_ref(q.heading, _::from_JV((v as _object)["heading"], decltype_noref(q.heading)) )
+    move_to_ref(q.proximity_alert_radius, _::from_JV((v as _object)["proximity_alert_radius"], decltype_noref(q.proximity_alert_radius)) )
+    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], decltype_noref(q.reply_markup)) )
+    move_to_ref(q.input_message_content, _::from_JV((v as _object)["input_message_content"], decltype_noref(q.input_message_content)) )
+    move_to_ref(q.thumbnail_url, _::from_JV((v as _object)["thumbnail_url"], decltype_noref(q.thumbnail_url)) )
+    move_to_ref(q.thumbnail_width, _::from_JV((v as _object)["thumbnail_width"], decltype_noref(q.thumbnail_width)) )
+    move_to_ref(q.thumbnail_height, _::from_JV((v as _object)["thumbnail_height"], decltype_noref(q.thumbnail_height)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:inlinequeryresultlocation? ) : inlinequeryresultlocation?
+    return null if v==null
+    var q = new inlinequeryresultlocation
+    *q <- from_JV(v,type<inlinequeryresultlocation>)
+    return q
 
 struct inlinequeryresultvenue
     //!  Represents a venue. By default, the venue will be sent by the user. Alternatively, you can use input_message_content to send a message with the specified content instead of the venue.
@@ -1686,6 +4895,31 @@ struct inlinequeryresultvenue
     [[optional]] thumbnail_width : int = INT_MIN	//! Optional. Thumbnail width
     [[optional]] thumbnail_height : int = INT_MIN	//! Optional. Thumbnail height
 
+def from_JV ( var v:JsonValue?; t:inlinequeryresultvenue ) : inlinequeryresultvenue
+    var q : inlinequeryresultvenue
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    move_to_ref(q.id, _::from_JV((v as _object)["id"], decltype_noref(q.id)) )
+    move_to_ref(q.latitude, _::from_JV((v as _object)["latitude"], decltype_noref(q.latitude)) )
+    move_to_ref(q.longitude, _::from_JV((v as _object)["longitude"], decltype_noref(q.longitude)) )
+    move_to_ref(q.title, _::from_JV((v as _object)["title"], decltype_noref(q.title)) )
+    move_to_ref(q.address, _::from_JV((v as _object)["address"], decltype_noref(q.address)) )
+    move_to_ref(q.foursquare_id, _::from_JV((v as _object)["foursquare_id"], decltype_noref(q.foursquare_id)) )
+    move_to_ref(q.foursquare_type, _::from_JV((v as _object)["foursquare_type"], decltype_noref(q.foursquare_type)) )
+    move_to_ref(q.google_place_id, _::from_JV((v as _object)["google_place_id"], decltype_noref(q.google_place_id)) )
+    move_to_ref(q.google_place_type, _::from_JV((v as _object)["google_place_type"], decltype_noref(q.google_place_type)) )
+    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], decltype_noref(q.reply_markup)) )
+    move_to_ref(q.input_message_content, _::from_JV((v as _object)["input_message_content"], decltype_noref(q.input_message_content)) )
+    move_to_ref(q.thumbnail_url, _::from_JV((v as _object)["thumbnail_url"], decltype_noref(q.thumbnail_url)) )
+    move_to_ref(q.thumbnail_width, _::from_JV((v as _object)["thumbnail_width"], decltype_noref(q.thumbnail_width)) )
+    move_to_ref(q.thumbnail_height, _::from_JV((v as _object)["thumbnail_height"], decltype_noref(q.thumbnail_height)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:inlinequeryresultvenue? ) : inlinequeryresultvenue?
+    return null if v==null
+    var q = new inlinequeryresultvenue
+    *q <- from_JV(v,type<inlinequeryresultvenue>)
+    return q
+
 struct inlinequeryresultcontact
     //!  Represents a contact with a phone number. By default, this contact will be sent by the user. Alternatively, you can use input_message_content to send a message with the specified content instead of the contact.
     _type : string	//! Type of the result, must be contact
@@ -1700,12 +4934,47 @@ struct inlinequeryresultcontact
     [[optional]] thumbnail_width : int = INT_MIN	//! Optional. Thumbnail width
     [[optional]] thumbnail_height : int = INT_MIN	//! Optional. Thumbnail height
 
+def from_JV ( var v:JsonValue?; t:inlinequeryresultcontact ) : inlinequeryresultcontact
+    var q : inlinequeryresultcontact
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    move_to_ref(q.id, _::from_JV((v as _object)["id"], decltype_noref(q.id)) )
+    move_to_ref(q.phone_number, _::from_JV((v as _object)["phone_number"], decltype_noref(q.phone_number)) )
+    move_to_ref(q.first_name, _::from_JV((v as _object)["first_name"], decltype_noref(q.first_name)) )
+    move_to_ref(q.last_name, _::from_JV((v as _object)["last_name"], decltype_noref(q.last_name)) )
+    move_to_ref(q.vcard, _::from_JV((v as _object)["vcard"], decltype_noref(q.vcard)) )
+    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], decltype_noref(q.reply_markup)) )
+    move_to_ref(q.input_message_content, _::from_JV((v as _object)["input_message_content"], decltype_noref(q.input_message_content)) )
+    move_to_ref(q.thumbnail_url, _::from_JV((v as _object)["thumbnail_url"], decltype_noref(q.thumbnail_url)) )
+    move_to_ref(q.thumbnail_width, _::from_JV((v as _object)["thumbnail_width"], decltype_noref(q.thumbnail_width)) )
+    move_to_ref(q.thumbnail_height, _::from_JV((v as _object)["thumbnail_height"], decltype_noref(q.thumbnail_height)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:inlinequeryresultcontact? ) : inlinequeryresultcontact?
+    return null if v==null
+    var q = new inlinequeryresultcontact
+    *q <- from_JV(v,type<inlinequeryresultcontact>)
+    return q
+
 struct inlinequeryresultgame
     //!  Represents a Game.
     _type : string	//! Type of the result, must be game
     id : string	//! Unique identifier for this result, 1-64 bytes
     game_short_name : string	//! Short name of the game
     [[optional]] reply_markup : inlinekeyboardmarkup?	//! Optional. Inline keyboard attached to the message
+
+def from_JV ( var v:JsonValue?; t:inlinequeryresultgame ) : inlinequeryresultgame
+    var q : inlinequeryresultgame
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    move_to_ref(q.id, _::from_JV((v as _object)["id"], decltype_noref(q.id)) )
+    move_to_ref(q.game_short_name, _::from_JV((v as _object)["game_short_name"], decltype_noref(q.game_short_name)) )
+    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], decltype_noref(q.reply_markup)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:inlinequeryresultgame? ) : inlinequeryresultgame?
+    return null if v==null
+    var q = new inlinequeryresultgame
+    *q <- from_JV(v,type<inlinequeryresultgame>)
+    return q
 
 struct inlinequeryresultcachedphoto
     //!  Represents a link to a photo stored on the Telegram servers. By default, this photo will be sent by the user with an optional caption. Alternatively, you can use input_message_content to send a message with the specified content instead of the photo.
@@ -1720,6 +4989,26 @@ struct inlinequeryresultcachedphoto
     [[optional]] reply_markup : inlinekeyboardmarkup?	//! Optional. Inline keyboard attached to the message
     [[optional]] input_message_content : inputmessagecontent?	//! Optional. Content of the message to be sent instead of the photo
 
+def from_JV ( var v:JsonValue?; t:inlinequeryresultcachedphoto ) : inlinequeryresultcachedphoto
+    var q : inlinequeryresultcachedphoto
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    move_to_ref(q.id, _::from_JV((v as _object)["id"], decltype_noref(q.id)) )
+    move_to_ref(q.photo_file_id, _::from_JV((v as _object)["photo_file_id"], decltype_noref(q.photo_file_id)) )
+    move_to_ref(q.title, _::from_JV((v as _object)["title"], decltype_noref(q.title)) )
+    move_to_ref(q.description, _::from_JV((v as _object)["description"], decltype_noref(q.description)) )
+    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], decltype_noref(q.caption)) )
+    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], decltype_noref(q.parse_mode)) )
+    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], decltype_noref(q.caption_entities)) )
+    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], decltype_noref(q.reply_markup)) )
+    move_to_ref(q.input_message_content, _::from_JV((v as _object)["input_message_content"], decltype_noref(q.input_message_content)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:inlinequeryresultcachedphoto? ) : inlinequeryresultcachedphoto?
+    return null if v==null
+    var q = new inlinequeryresultcachedphoto
+    *q <- from_JV(v,type<inlinequeryresultcachedphoto>)
+    return q
+
 struct inlinequeryresultcachedgif
     //!  Represents a link to an animated GIF file stored on the Telegram servers. By default, this animated GIF file will be sent by the user with an optional caption. Alternatively, you can use input_message_content to send a message with specified content instead of the animation.
     _type : string	//! Type of the result, must be gif
@@ -1731,6 +5020,25 @@ struct inlinequeryresultcachedgif
     [[optional]] caption_entities : array<messageentity>	//! Optional. List of special entities that appear in the caption, which can be specified instead of parse_mode
     [[optional]] reply_markup : inlinekeyboardmarkup?	//! Optional. Inline keyboard attached to the message
     [[optional]] input_message_content : inputmessagecontent?	//! Optional. Content of the message to be sent instead of the GIF animation
+
+def from_JV ( var v:JsonValue?; t:inlinequeryresultcachedgif ) : inlinequeryresultcachedgif
+    var q : inlinequeryresultcachedgif
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    move_to_ref(q.id, _::from_JV((v as _object)["id"], decltype_noref(q.id)) )
+    move_to_ref(q.gif_file_id, _::from_JV((v as _object)["gif_file_id"], decltype_noref(q.gif_file_id)) )
+    move_to_ref(q.title, _::from_JV((v as _object)["title"], decltype_noref(q.title)) )
+    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], decltype_noref(q.caption)) )
+    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], decltype_noref(q.parse_mode)) )
+    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], decltype_noref(q.caption_entities)) )
+    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], decltype_noref(q.reply_markup)) )
+    move_to_ref(q.input_message_content, _::from_JV((v as _object)["input_message_content"], decltype_noref(q.input_message_content)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:inlinequeryresultcachedgif? ) : inlinequeryresultcachedgif?
+    return null if v==null
+    var q = new inlinequeryresultcachedgif
+    *q <- from_JV(v,type<inlinequeryresultcachedgif>)
+    return q
 
 struct inlinequeryresultcachedmpeg4gif
     //!  Represents a link to a video animation (H.264/MPEG-4 AVC video without sound) stored on the Telegram servers. By default, this animated MPEG-4 file will be sent by the user with an optional caption. Alternatively, you can use input_message_content to send a message with the specified content instead of the animation.
@@ -1744,6 +5052,25 @@ struct inlinequeryresultcachedmpeg4gif
     [[optional]] reply_markup : inlinekeyboardmarkup?	//! Optional. Inline keyboard attached to the message
     [[optional]] input_message_content : inputmessagecontent?	//! Optional. Content of the message to be sent instead of the video animation
 
+def from_JV ( var v:JsonValue?; t:inlinequeryresultcachedmpeg4gif ) : inlinequeryresultcachedmpeg4gif
+    var q : inlinequeryresultcachedmpeg4gif
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    move_to_ref(q.id, _::from_JV((v as _object)["id"], decltype_noref(q.id)) )
+    move_to_ref(q.mpeg4_file_id, _::from_JV((v as _object)["mpeg4_file_id"], decltype_noref(q.mpeg4_file_id)) )
+    move_to_ref(q.title, _::from_JV((v as _object)["title"], decltype_noref(q.title)) )
+    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], decltype_noref(q.caption)) )
+    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], decltype_noref(q.parse_mode)) )
+    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], decltype_noref(q.caption_entities)) )
+    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], decltype_noref(q.reply_markup)) )
+    move_to_ref(q.input_message_content, _::from_JV((v as _object)["input_message_content"], decltype_noref(q.input_message_content)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:inlinequeryresultcachedmpeg4gif? ) : inlinequeryresultcachedmpeg4gif?
+    return null if v==null
+    var q = new inlinequeryresultcachedmpeg4gif
+    *q <- from_JV(v,type<inlinequeryresultcachedmpeg4gif>)
+    return q
+
 struct inlinequeryresultcachedsticker
     //!  Represents a link to a sticker stored on the Telegram servers. By default, this sticker will be sent by the user. Alternatively, you can use input_message_content to send a message with the specified content instead of the sticker.
     _type : string	//! Type of the result, must be sticker
@@ -1751,6 +5078,21 @@ struct inlinequeryresultcachedsticker
     sticker_file_id : string	//! A valid file identifier of the sticker
     [[optional]] reply_markup : inlinekeyboardmarkup?	//! Optional. Inline keyboard attached to the message
     [[optional]] input_message_content : inputmessagecontent?	//! Optional. Content of the message to be sent instead of the sticker
+
+def from_JV ( var v:JsonValue?; t:inlinequeryresultcachedsticker ) : inlinequeryresultcachedsticker
+    var q : inlinequeryresultcachedsticker
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    move_to_ref(q.id, _::from_JV((v as _object)["id"], decltype_noref(q.id)) )
+    move_to_ref(q.sticker_file_id, _::from_JV((v as _object)["sticker_file_id"], decltype_noref(q.sticker_file_id)) )
+    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], decltype_noref(q.reply_markup)) )
+    move_to_ref(q.input_message_content, _::from_JV((v as _object)["input_message_content"], decltype_noref(q.input_message_content)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:inlinequeryresultcachedsticker? ) : inlinequeryresultcachedsticker?
+    return null if v==null
+    var q = new inlinequeryresultcachedsticker
+    *q <- from_JV(v,type<inlinequeryresultcachedsticker>)
+    return q
 
 struct inlinequeryresultcacheddocument
     //!  Represents a link to a file stored on the Telegram servers. By default, this file will be sent by the user with an optional caption. Alternatively, you can use input_message_content to send a message with the specified content instead of the file.
@@ -1765,6 +5107,26 @@ struct inlinequeryresultcacheddocument
     [[optional]] reply_markup : inlinekeyboardmarkup?	//! Optional. Inline keyboard attached to the message
     [[optional]] input_message_content : inputmessagecontent?	//! Optional. Content of the message to be sent instead of the file
 
+def from_JV ( var v:JsonValue?; t:inlinequeryresultcacheddocument ) : inlinequeryresultcacheddocument
+    var q : inlinequeryresultcacheddocument
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    move_to_ref(q.id, _::from_JV((v as _object)["id"], decltype_noref(q.id)) )
+    move_to_ref(q.title, _::from_JV((v as _object)["title"], decltype_noref(q.title)) )
+    move_to_ref(q.document_file_id, _::from_JV((v as _object)["document_file_id"], decltype_noref(q.document_file_id)) )
+    move_to_ref(q.description, _::from_JV((v as _object)["description"], decltype_noref(q.description)) )
+    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], decltype_noref(q.caption)) )
+    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], decltype_noref(q.parse_mode)) )
+    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], decltype_noref(q.caption_entities)) )
+    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], decltype_noref(q.reply_markup)) )
+    move_to_ref(q.input_message_content, _::from_JV((v as _object)["input_message_content"], decltype_noref(q.input_message_content)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:inlinequeryresultcacheddocument? ) : inlinequeryresultcacheddocument?
+    return null if v==null
+    var q = new inlinequeryresultcacheddocument
+    *q <- from_JV(v,type<inlinequeryresultcacheddocument>)
+    return q
+
 struct inlinequeryresultcachedvideo
     //!  Represents a link to a video file stored on the Telegram servers. By default, this video file will be sent by the user with an optional caption. Alternatively, you can use input_message_content to send a message with the specified content instead of the video.
     _type : string	//! Type of the result, must be video
@@ -1778,6 +5140,26 @@ struct inlinequeryresultcachedvideo
     [[optional]] reply_markup : inlinekeyboardmarkup?	//! Optional. Inline keyboard attached to the message
     [[optional]] input_message_content : inputmessagecontent?	//! Optional. Content of the message to be sent instead of the video
 
+def from_JV ( var v:JsonValue?; t:inlinequeryresultcachedvideo ) : inlinequeryresultcachedvideo
+    var q : inlinequeryresultcachedvideo
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    move_to_ref(q.id, _::from_JV((v as _object)["id"], decltype_noref(q.id)) )
+    move_to_ref(q.video_file_id, _::from_JV((v as _object)["video_file_id"], decltype_noref(q.video_file_id)) )
+    move_to_ref(q.title, _::from_JV((v as _object)["title"], decltype_noref(q.title)) )
+    move_to_ref(q.description, _::from_JV((v as _object)["description"], decltype_noref(q.description)) )
+    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], decltype_noref(q.caption)) )
+    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], decltype_noref(q.parse_mode)) )
+    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], decltype_noref(q.caption_entities)) )
+    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], decltype_noref(q.reply_markup)) )
+    move_to_ref(q.input_message_content, _::from_JV((v as _object)["input_message_content"], decltype_noref(q.input_message_content)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:inlinequeryresultcachedvideo? ) : inlinequeryresultcachedvideo?
+    return null if v==null
+    var q = new inlinequeryresultcachedvideo
+    *q <- from_JV(v,type<inlinequeryresultcachedvideo>)
+    return q
+
 struct inlinequeryresultcachedvoice
     //!  Represents a link to a voice message stored on the Telegram servers. By default, this voice message will be sent by the user. Alternatively, you can use input_message_content to send a message with the specified content instead of the voice message.
     _type : string	//! Type of the result, must be voice
@@ -1790,6 +5172,25 @@ struct inlinequeryresultcachedvoice
     [[optional]] reply_markup : inlinekeyboardmarkup?	//! Optional. Inline keyboard attached to the message
     [[optional]] input_message_content : inputmessagecontent?	//! Optional. Content of the message to be sent instead of the voice message
 
+def from_JV ( var v:JsonValue?; t:inlinequeryresultcachedvoice ) : inlinequeryresultcachedvoice
+    var q : inlinequeryresultcachedvoice
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    move_to_ref(q.id, _::from_JV((v as _object)["id"], decltype_noref(q.id)) )
+    move_to_ref(q.voice_file_id, _::from_JV((v as _object)["voice_file_id"], decltype_noref(q.voice_file_id)) )
+    move_to_ref(q.title, _::from_JV((v as _object)["title"], decltype_noref(q.title)) )
+    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], decltype_noref(q.caption)) )
+    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], decltype_noref(q.parse_mode)) )
+    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], decltype_noref(q.caption_entities)) )
+    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], decltype_noref(q.reply_markup)) )
+    move_to_ref(q.input_message_content, _::from_JV((v as _object)["input_message_content"], decltype_noref(q.input_message_content)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:inlinequeryresultcachedvoice? ) : inlinequeryresultcachedvoice?
+    return null if v==null
+    var q = new inlinequeryresultcachedvoice
+    *q <- from_JV(v,type<inlinequeryresultcachedvoice>)
+    return q
+
 struct inlinequeryresultcachedaudio
     //!  Represents a link to an MP3 audio file stored on the Telegram servers. By default, this audio file will be sent by the user. Alternatively, you can use input_message_content to send a message with the specified content instead of the audio.
     _type : string	//! Type of the result, must be audio
@@ -1801,7 +5202,37 @@ struct inlinequeryresultcachedaudio
     [[optional]] reply_markup : inlinekeyboardmarkup?	//! Optional. Inline keyboard attached to the message
     [[optional]] input_message_content : inputmessagecontent?	//! Optional. Content of the message to be sent instead of the audio
 
-struct inputmessagecontent {} //  This object represents the content of a message to be sent as a result of an inline query. Telegram clients currently support the following 5 types:
+def from_JV ( var v:JsonValue?; t:inlinequeryresultcachedaudio ) : inlinequeryresultcachedaudio
+    var q : inlinequeryresultcachedaudio
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    move_to_ref(q.id, _::from_JV((v as _object)["id"], decltype_noref(q.id)) )
+    move_to_ref(q.audio_file_id, _::from_JV((v as _object)["audio_file_id"], decltype_noref(q.audio_file_id)) )
+    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], decltype_noref(q.caption)) )
+    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], decltype_noref(q.parse_mode)) )
+    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], decltype_noref(q.caption_entities)) )
+    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], decltype_noref(q.reply_markup)) )
+    move_to_ref(q.input_message_content, _::from_JV((v as _object)["input_message_content"], decltype_noref(q.input_message_content)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:inlinequeryresultcachedaudio? ) : inlinequeryresultcachedaudio?
+    return null if v==null
+    var q = new inlinequeryresultcachedaudio
+    *q <- from_JV(v,type<inlinequeryresultcachedaudio>)
+    return q
+
+struct inputmessagecontent
+    //!  This object represents the content of a message to be sent as a result of an inline query. Telegram clients currently support the following 5 types:
+    object_inputmessagecontent_has_no_fields:bool
+
+def from_JV ( var v:JsonValue?; t:inputmessagecontent ) : inputmessagecontent
+    var q : inputmessagecontent
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:inputmessagecontent? ) : inputmessagecontent?
+    return null if v==null
+    var q = new inputmessagecontent
+    *q <- from_JV(v,type<inputmessagecontent>)
+    return q
 
 struct inputtextmessagecontent
     //!  Represents the content of a text message to be sent as the result of an inline query.
@@ -1809,6 +5240,20 @@ struct inputtextmessagecontent
     [[optional]] parse_mode : string = ""	//! Optional. Mode for parsing entities in the message text. See formatting options for more details.
     [[optional]] entities : array<messageentity>	//! Optional. List of special entities that appear in message text, which can be specified instead of parse_mode
     [[optional]] disable_web_page_preview : bool = false	//! Optional. Disables link previews for links in the sent message
+
+def from_JV ( var v:JsonValue?; t:inputtextmessagecontent ) : inputtextmessagecontent
+    var q : inputtextmessagecontent
+    move_to_ref(q.message_text, _::from_JV((v as _object)["message_text"], decltype_noref(q.message_text)) )
+    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], decltype_noref(q.parse_mode)) )
+    move_to_ref(q.entities, _::from_JV((v as _object)["entities"], decltype_noref(q.entities)) )
+    move_to_ref(q.disable_web_page_preview, _::from_JV((v as _object)["disable_web_page_preview"], decltype_noref(q.disable_web_page_preview)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:inputtextmessagecontent? ) : inputtextmessagecontent?
+    return null if v==null
+    var q = new inputtextmessagecontent
+    *q <- from_JV(v,type<inputtextmessagecontent>)
+    return q
 
 struct inputlocationmessagecontent
     //!  Represents the content of a location message to be sent as the result of an inline query.
@@ -1818,6 +5263,22 @@ struct inputlocationmessagecontent
     [[optional]] live_period : int = INT_MIN	//! Optional. Period in seconds for which the location can be updated, should be between 60 and 86400.
     [[optional]] heading : int = INT_MIN	//! Optional. For live locations, a direction in which the user is moving, in degrees. Must be between 1 and 360 if specified.
     [[optional]] proximity_alert_radius : int = INT_MIN	//! Optional. For live locations, a maximum distance for proximity alerts about approaching another chat member, in meters. Must be between 1 and 100000 if specified.
+
+def from_JV ( var v:JsonValue?; t:inputlocationmessagecontent ) : inputlocationmessagecontent
+    var q : inputlocationmessagecontent
+    move_to_ref(q.latitude, _::from_JV((v as _object)["latitude"], decltype_noref(q.latitude)) )
+    move_to_ref(q.longitude, _::from_JV((v as _object)["longitude"], decltype_noref(q.longitude)) )
+    move_to_ref(q.horizontal_accuracy, _::from_JV((v as _object)["horizontal_accuracy"], decltype_noref(q.horizontal_accuracy)) )
+    move_to_ref(q.live_period, _::from_JV((v as _object)["live_period"], decltype_noref(q.live_period)) )
+    move_to_ref(q.heading, _::from_JV((v as _object)["heading"], decltype_noref(q.heading)) )
+    move_to_ref(q.proximity_alert_radius, _::from_JV((v as _object)["proximity_alert_radius"], decltype_noref(q.proximity_alert_radius)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:inputlocationmessagecontent? ) : inputlocationmessagecontent?
+    return null if v==null
+    var q = new inputlocationmessagecontent
+    *q <- from_JV(v,type<inputlocationmessagecontent>)
+    return q
 
 struct inputvenuemessagecontent
     //!  Represents the content of a venue message to be sent as the result of an inline query.
@@ -1830,12 +5291,44 @@ struct inputvenuemessagecontent
     [[optional]] google_place_id : string = ""	//! Optional. Google Places identifier of the venue
     [[optional]] google_place_type : string = ""	//! Optional. Google Places type of the venue. (See supported types.)
 
+def from_JV ( var v:JsonValue?; t:inputvenuemessagecontent ) : inputvenuemessagecontent
+    var q : inputvenuemessagecontent
+    move_to_ref(q.latitude, _::from_JV((v as _object)["latitude"], decltype_noref(q.latitude)) )
+    move_to_ref(q.longitude, _::from_JV((v as _object)["longitude"], decltype_noref(q.longitude)) )
+    move_to_ref(q.title, _::from_JV((v as _object)["title"], decltype_noref(q.title)) )
+    move_to_ref(q.address, _::from_JV((v as _object)["address"], decltype_noref(q.address)) )
+    move_to_ref(q.foursquare_id, _::from_JV((v as _object)["foursquare_id"], decltype_noref(q.foursquare_id)) )
+    move_to_ref(q.foursquare_type, _::from_JV((v as _object)["foursquare_type"], decltype_noref(q.foursquare_type)) )
+    move_to_ref(q.google_place_id, _::from_JV((v as _object)["google_place_id"], decltype_noref(q.google_place_id)) )
+    move_to_ref(q.google_place_type, _::from_JV((v as _object)["google_place_type"], decltype_noref(q.google_place_type)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:inputvenuemessagecontent? ) : inputvenuemessagecontent?
+    return null if v==null
+    var q = new inputvenuemessagecontent
+    *q <- from_JV(v,type<inputvenuemessagecontent>)
+    return q
+
 struct inputcontactmessagecontent
     //!  Represents the content of a contact message to be sent as the result of an inline query.
     phone_number : string	//! Contact's phone number
     first_name : string	//! Contact's first name
     [[optional]] last_name : string = ""	//! Optional. Contact's last name
     [[optional]] vcard : string = ""	//! Optional. Additional data about the contact in the form of a vCard, 0-2048 bytes
+
+def from_JV ( var v:JsonValue?; t:inputcontactmessagecontent ) : inputcontactmessagecontent
+    var q : inputcontactmessagecontent
+    move_to_ref(q.phone_number, _::from_JV((v as _object)["phone_number"], decltype_noref(q.phone_number)) )
+    move_to_ref(q.first_name, _::from_JV((v as _object)["first_name"], decltype_noref(q.first_name)) )
+    move_to_ref(q.last_name, _::from_JV((v as _object)["last_name"], decltype_noref(q.last_name)) )
+    move_to_ref(q.vcard, _::from_JV((v as _object)["vcard"], decltype_noref(q.vcard)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:inputcontactmessagecontent? ) : inputcontactmessagecontent?
+    return null if v==null
+    var q = new inputcontactmessagecontent
+    *q <- from_JV(v,type<inputcontactmessagecontent>)
+    return q
 
 struct inputinvoicemessagecontent
     //!  Represents the content of an invoice message to be sent as the result of an inline query.
@@ -1860,6 +5353,36 @@ struct inputinvoicemessagecontent
     [[optional]] send_email_to_provider : bool = false	//! Optional. Pass True if the user's email address should be sent to provider
     [[optional]] is_flexible : bool = false	//! Optional. Pass True if the final price depends on the shipping method
 
+def from_JV ( var v:JsonValue?; t:inputinvoicemessagecontent ) : inputinvoicemessagecontent
+    var q : inputinvoicemessagecontent
+    move_to_ref(q.title, _::from_JV((v as _object)["title"], decltype_noref(q.title)) )
+    move_to_ref(q.description, _::from_JV((v as _object)["description"], decltype_noref(q.description)) )
+    move_to_ref(q.payload, _::from_JV((v as _object)["payload"], decltype_noref(q.payload)) )
+    move_to_ref(q.provider_token, _::from_JV((v as _object)["provider_token"], decltype_noref(q.provider_token)) )
+    move_to_ref(q.currency, _::from_JV((v as _object)["currency"], decltype_noref(q.currency)) )
+    move_to_ref(q.prices, _::from_JV((v as _object)["prices"], decltype_noref(q.prices)) )
+    move_to_ref(q.max_tip_amount, _::from_JV((v as _object)["max_tip_amount"], decltype_noref(q.max_tip_amount)) )
+    move_to_ref(q.suggested_tip_amounts, _::from_JV((v as _object)["suggested_tip_amounts"], decltype_noref(q.suggested_tip_amounts)) )
+    move_to_ref(q.provider_data, _::from_JV((v as _object)["provider_data"], decltype_noref(q.provider_data)) )
+    move_to_ref(q.photo_url, _::from_JV((v as _object)["photo_url"], decltype_noref(q.photo_url)) )
+    move_to_ref(q.photo_size, _::from_JV((v as _object)["photo_size"], decltype_noref(q.photo_size)) )
+    move_to_ref(q.photo_width, _::from_JV((v as _object)["photo_width"], decltype_noref(q.photo_width)) )
+    move_to_ref(q.photo_height, _::from_JV((v as _object)["photo_height"], decltype_noref(q.photo_height)) )
+    move_to_ref(q.need_name, _::from_JV((v as _object)["need_name"], decltype_noref(q.need_name)) )
+    move_to_ref(q.need_phone_number, _::from_JV((v as _object)["need_phone_number"], decltype_noref(q.need_phone_number)) )
+    move_to_ref(q.need_email, _::from_JV((v as _object)["need_email"], decltype_noref(q.need_email)) )
+    move_to_ref(q.need_shipping_address, _::from_JV((v as _object)["need_shipping_address"], decltype_noref(q.need_shipping_address)) )
+    move_to_ref(q.send_phone_number_to_provider, _::from_JV((v as _object)["send_phone_number_to_provider"], decltype_noref(q.send_phone_number_to_provider)) )
+    move_to_ref(q.send_email_to_provider, _::from_JV((v as _object)["send_email_to_provider"], decltype_noref(q.send_email_to_provider)) )
+    move_to_ref(q.is_flexible, _::from_JV((v as _object)["is_flexible"], decltype_noref(q.is_flexible)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:inputinvoicemessagecontent? ) : inputinvoicemessagecontent?
+    return null if v==null
+    var q = new inputinvoicemessagecontent
+    *q <- from_JV(v,type<inputinvoicemessagecontent>)
+    return q
+
 struct choseninlineresult
     //!  Represents a result of an inline query that was chosen by the user and sent to their chat partner.
     result_id : string	//! The unique identifier for the result that was chosen
@@ -1868,14 +5391,52 @@ struct choseninlineresult
     [[optional]] inline_message_id : string = ""	//! Optional. Identifier of the sent inline message. Available only if there is an inline keyboard attached to the message. Will be also received in callback queries and can be used to edit the message.
     query : string	//! The query that was used to obtain the result
 
+def from_JV ( var v:JsonValue?; t:choseninlineresult ) : choseninlineresult
+    var q : choseninlineresult
+    move_to_ref(q.result_id, _::from_JV((v as _object)["result_id"], decltype_noref(q.result_id)) )
+    move_to_ref(q.from, _::from_JV((v as _object)["from"], decltype_noref(q.from)) )
+    move_to_ref(q.location, _::from_JV((v as _object)["location"], decltype_noref(q.location)) )
+    move_to_ref(q.inline_message_id, _::from_JV((v as _object)["inline_message_id"], decltype_noref(q.inline_message_id)) )
+    move_to_ref(q.query, _::from_JV((v as _object)["query"], decltype_noref(q.query)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:choseninlineresult? ) : choseninlineresult?
+    return null if v==null
+    var q = new choseninlineresult
+    *q <- from_JV(v,type<choseninlineresult>)
+    return q
+
 struct answerwebappquery
     //!  Use this method to set the result of an interaction with a Web App and send a corresponding message on behalf of the user to the chat from which the query originated. On success, a SentWebAppMessage object is returned.
     web_app_query_id : string	//! Required. Unique identifier for the query to be answered
     result : inlinequeryresult	//! Required. A JSON-serialized object describing the message to be sent
 
+def from_JV ( var v:JsonValue?; t:answerwebappquery ) : answerwebappquery
+    var q : answerwebappquery
+    move_to_ref(q.web_app_query_id, _::from_JV((v as _object)["web_app_query_id"], decltype_noref(q.web_app_query_id)) )
+    move_to_ref(q.result, _::from_JV((v as _object)["result"], decltype_noref(q.result)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:answerwebappquery? ) : answerwebappquery?
+    return null if v==null
+    var q = new answerwebappquery
+    *q <- from_JV(v,type<answerwebappquery>)
+    return q
+
 struct sentwebappmessage
     //!  Describes an inline message sent by a Web App on behalf of a user.
     [[optional]] inline_message_id : string = ""	//! Optional. Identifier of the sent inline message. Available only if there is an inline keyboard attached to the message.
+
+def from_JV ( var v:JsonValue?; t:sentwebappmessage ) : sentwebappmessage
+    var q : sentwebappmessage
+    move_to_ref(q.inline_message_id, _::from_JV((v as _object)["inline_message_id"], decltype_noref(q.inline_message_id)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:sentwebappmessage? ) : sentwebappmessage?
+    return null if v==null
+    var q = new sentwebappmessage
+    *q <- from_JV(v,type<sentwebappmessage>)
+    return q
 
 struct sendinvoice
     //!  Use this method to send invoices. On success, the sent Message is returned.
@@ -1908,6 +5469,44 @@ struct sendinvoice
     [[optional]] allow_sending_without_reply : bool = false	//! Optional. Pass True if the message should be sent even if the specified replied-to message is not found
     [[optional]] reply_markup : inlinekeyboardmarkup?	//! Optional. A JSON-serialized object for an inline keyboard. If empty, one 'Pay total price' button will be shown. If not empty, the first button must be a Pay button.
 
+def from_JV ( var v:JsonValue?; t:sendinvoice ) : sendinvoice
+    var q : sendinvoice
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], decltype_noref(q.message_thread_id)) )
+    move_to_ref(q.title, _::from_JV((v as _object)["title"], decltype_noref(q.title)) )
+    move_to_ref(q.description, _::from_JV((v as _object)["description"], decltype_noref(q.description)) )
+    move_to_ref(q.payload, _::from_JV((v as _object)["payload"], decltype_noref(q.payload)) )
+    move_to_ref(q.provider_token, _::from_JV((v as _object)["provider_token"], decltype_noref(q.provider_token)) )
+    move_to_ref(q.currency, _::from_JV((v as _object)["currency"], decltype_noref(q.currency)) )
+    move_to_ref(q.prices, _::from_JV((v as _object)["prices"], decltype_noref(q.prices)) )
+    move_to_ref(q.max_tip_amount, _::from_JV((v as _object)["max_tip_amount"], decltype_noref(q.max_tip_amount)) )
+    move_to_ref(q.suggested_tip_amounts, _::from_JV((v as _object)["suggested_tip_amounts"], decltype_noref(q.suggested_tip_amounts)) )
+    move_to_ref(q.start_parameter, _::from_JV((v as _object)["start_parameter"], decltype_noref(q.start_parameter)) )
+    move_to_ref(q.provider_data, _::from_JV((v as _object)["provider_data"], decltype_noref(q.provider_data)) )
+    move_to_ref(q.photo_url, _::from_JV((v as _object)["photo_url"], decltype_noref(q.photo_url)) )
+    move_to_ref(q.photo_size, _::from_JV((v as _object)["photo_size"], decltype_noref(q.photo_size)) )
+    move_to_ref(q.photo_width, _::from_JV((v as _object)["photo_width"], decltype_noref(q.photo_width)) )
+    move_to_ref(q.photo_height, _::from_JV((v as _object)["photo_height"], decltype_noref(q.photo_height)) )
+    move_to_ref(q.need_name, _::from_JV((v as _object)["need_name"], decltype_noref(q.need_name)) )
+    move_to_ref(q.need_phone_number, _::from_JV((v as _object)["need_phone_number"], decltype_noref(q.need_phone_number)) )
+    move_to_ref(q.need_email, _::from_JV((v as _object)["need_email"], decltype_noref(q.need_email)) )
+    move_to_ref(q.need_shipping_address, _::from_JV((v as _object)["need_shipping_address"], decltype_noref(q.need_shipping_address)) )
+    move_to_ref(q.send_phone_number_to_provider, _::from_JV((v as _object)["send_phone_number_to_provider"], decltype_noref(q.send_phone_number_to_provider)) )
+    move_to_ref(q.send_email_to_provider, _::from_JV((v as _object)["send_email_to_provider"], decltype_noref(q.send_email_to_provider)) )
+    move_to_ref(q.is_flexible, _::from_JV((v as _object)["is_flexible"], decltype_noref(q.is_flexible)) )
+    move_to_ref(q.disable_notification, _::from_JV((v as _object)["disable_notification"], decltype_noref(q.disable_notification)) )
+    move_to_ref(q.protect_content, _::from_JV((v as _object)["protect_content"], decltype_noref(q.protect_content)) )
+    move_to_ref(q.reply_to_message_id, _::from_JV((v as _object)["reply_to_message_id"], decltype_noref(q.reply_to_message_id)) )
+    move_to_ref(q.allow_sending_without_reply, _::from_JV((v as _object)["allow_sending_without_reply"], decltype_noref(q.allow_sending_without_reply)) )
+    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], decltype_noref(q.reply_markup)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:sendinvoice? ) : sendinvoice?
+    return null if v==null
+    var q = new sendinvoice
+    *q <- from_JV(v,type<sendinvoice>)
+    return q
+
 struct createinvoicelink
     //!  Use this method to create a link for an invoice. Returns the created invoice link as String on success.
     title : string	//! Required. Product name, 1-32 characters
@@ -1931,6 +5530,36 @@ struct createinvoicelink
     [[optional]] send_email_to_provider : bool = false	//! Optional. Pass True if the user's email address should be sent to the provider
     [[optional]] is_flexible : bool = false	//! Optional. Pass True if the final price depends on the shipping method
 
+def from_JV ( var v:JsonValue?; t:createinvoicelink ) : createinvoicelink
+    var q : createinvoicelink
+    move_to_ref(q.title, _::from_JV((v as _object)["title"], decltype_noref(q.title)) )
+    move_to_ref(q.description, _::from_JV((v as _object)["description"], decltype_noref(q.description)) )
+    move_to_ref(q.payload, _::from_JV((v as _object)["payload"], decltype_noref(q.payload)) )
+    move_to_ref(q.provider_token, _::from_JV((v as _object)["provider_token"], decltype_noref(q.provider_token)) )
+    move_to_ref(q.currency, _::from_JV((v as _object)["currency"], decltype_noref(q.currency)) )
+    move_to_ref(q.prices, _::from_JV((v as _object)["prices"], decltype_noref(q.prices)) )
+    move_to_ref(q.max_tip_amount, _::from_JV((v as _object)["max_tip_amount"], decltype_noref(q.max_tip_amount)) )
+    move_to_ref(q.suggested_tip_amounts, _::from_JV((v as _object)["suggested_tip_amounts"], decltype_noref(q.suggested_tip_amounts)) )
+    move_to_ref(q.provider_data, _::from_JV((v as _object)["provider_data"], decltype_noref(q.provider_data)) )
+    move_to_ref(q.photo_url, _::from_JV((v as _object)["photo_url"], decltype_noref(q.photo_url)) )
+    move_to_ref(q.photo_size, _::from_JV((v as _object)["photo_size"], decltype_noref(q.photo_size)) )
+    move_to_ref(q.photo_width, _::from_JV((v as _object)["photo_width"], decltype_noref(q.photo_width)) )
+    move_to_ref(q.photo_height, _::from_JV((v as _object)["photo_height"], decltype_noref(q.photo_height)) )
+    move_to_ref(q.need_name, _::from_JV((v as _object)["need_name"], decltype_noref(q.need_name)) )
+    move_to_ref(q.need_phone_number, _::from_JV((v as _object)["need_phone_number"], decltype_noref(q.need_phone_number)) )
+    move_to_ref(q.need_email, _::from_JV((v as _object)["need_email"], decltype_noref(q.need_email)) )
+    move_to_ref(q.need_shipping_address, _::from_JV((v as _object)["need_shipping_address"], decltype_noref(q.need_shipping_address)) )
+    move_to_ref(q.send_phone_number_to_provider, _::from_JV((v as _object)["send_phone_number_to_provider"], decltype_noref(q.send_phone_number_to_provider)) )
+    move_to_ref(q.send_email_to_provider, _::from_JV((v as _object)["send_email_to_provider"], decltype_noref(q.send_email_to_provider)) )
+    move_to_ref(q.is_flexible, _::from_JV((v as _object)["is_flexible"], decltype_noref(q.is_flexible)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:createinvoicelink? ) : createinvoicelink?
+    return null if v==null
+    var q = new createinvoicelink
+    *q <- from_JV(v,type<createinvoicelink>)
+    return q
+
 struct answershippingquery
     //!  If you sent an invoice requesting a shipping address and the parameter is_flexible was specified, the Bot API will send an Update with a shipping_query field to the bot. Use this method to reply to shipping queries. On success, True is returned.
     shipping_query_id : string	//! Required. Unique identifier for the query to be answered
@@ -1938,16 +5567,55 @@ struct answershippingquery
     [[optional]] shipping_options : array<shippingoption>	//! Optional. Required if ok is True. A JSON-serialized array of available shipping options.
     [[optional]] error_message : string = ""	//! Optional. Required if ok is False. Error message in human readable form that explains why it is impossible to complete the order (e.g. "Sorry, delivery to your desired address is unavailable'). Telegram will display this message to the user.
 
+def from_JV ( var v:JsonValue?; t:answershippingquery ) : answershippingquery
+    var q : answershippingquery
+    move_to_ref(q.shipping_query_id, _::from_JV((v as _object)["shipping_query_id"], decltype_noref(q.shipping_query_id)) )
+    move_to_ref(q.ok, _::from_JV((v as _object)["ok"], decltype_noref(q.ok)) )
+    move_to_ref(q.shipping_options, _::from_JV((v as _object)["shipping_options"], decltype_noref(q.shipping_options)) )
+    move_to_ref(q.error_message, _::from_JV((v as _object)["error_message"], decltype_noref(q.error_message)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:answershippingquery? ) : answershippingquery?
+    return null if v==null
+    var q = new answershippingquery
+    *q <- from_JV(v,type<answershippingquery>)
+    return q
+
 struct answerprecheckoutquery
     //!  Once the user has confirmed their payment and shipping details, the Bot API sends the final confirmation in the form of an Update with the field pre_checkout_query. Use this method to respond to such pre-checkout queries. On success, True is returned. Note: The Bot API must receive an answer within 10 seconds after the pre-checkout query was sent.
     pre_checkout_query_id : string	//! Required. Unique identifier for the query to be answered
     ok : bool	//! Required. Specify True if everything is alright (goods are available, etc.) and the bot is ready to proceed with the order. Use False if there are any problems.
     [[optional]] error_message : string = ""	//! Optional. Required if ok is False. Error message in human readable form that explains the reason for failure to proceed with the checkout (e.g. "Sorry, somebody just bought the last of our amazing black T-shirts while you were busy filling out your payment details. Please choose a different color or garment!"). Telegram will display this message to the user.
 
+def from_JV ( var v:JsonValue?; t:answerprecheckoutquery ) : answerprecheckoutquery
+    var q : answerprecheckoutquery
+    move_to_ref(q.pre_checkout_query_id, _::from_JV((v as _object)["pre_checkout_query_id"], decltype_noref(q.pre_checkout_query_id)) )
+    move_to_ref(q.ok, _::from_JV((v as _object)["ok"], decltype_noref(q.ok)) )
+    move_to_ref(q.error_message, _::from_JV((v as _object)["error_message"], decltype_noref(q.error_message)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:answerprecheckoutquery? ) : answerprecheckoutquery?
+    return null if v==null
+    var q = new answerprecheckoutquery
+    *q <- from_JV(v,type<answerprecheckoutquery>)
+    return q
+
 struct labeledprice
     //!  This object represents a portion of the price for goods or services.
     _label : string	//! Portion label
     amount : int	//! Price of the product in the smallest units of the currency (integer, not float/double). For example, for a price of US$ 1.45 pass amount = 145. See the exp parameter in currencies.json, it shows the number of digits past the decimal point for each currency (2 for the majority of currencies).
+
+def from_JV ( var v:JsonValue?; t:labeledprice ) : labeledprice
+    var q : labeledprice
+    move_to_ref(q._label, _::from_JV((v as _object)["_label"], decltype_noref(q._label)) )
+    move_to_ref(q.amount, _::from_JV((v as _object)["amount"], decltype_noref(q.amount)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:labeledprice? ) : labeledprice?
+    return null if v==null
+    var q = new labeledprice
+    *q <- from_JV(v,type<labeledprice>)
+    return q
 
 struct invoice
     //!  This object contains basic information about an invoice.
@@ -1956,6 +5624,21 @@ struct invoice
     start_parameter : string	//! Unique bot deep-linking parameter that can be used to generate this invoice
     currency : string	//! Three-letter ISO 4217 currency code
     total_amount : int	//! Total price in the smallest units of the currency (integer, not float/double). For example, for a price of US$ 1.45 pass amount = 145. See the exp parameter in currencies.json, it shows the number of digits past the decimal point for each currency (2 for the majority of currencies).
+
+def from_JV ( var v:JsonValue?; t:invoice ) : invoice
+    var q : invoice
+    move_to_ref(q.title, _::from_JV((v as _object)["title"], decltype_noref(q.title)) )
+    move_to_ref(q.description, _::from_JV((v as _object)["description"], decltype_noref(q.description)) )
+    move_to_ref(q.start_parameter, _::from_JV((v as _object)["start_parameter"], decltype_noref(q.start_parameter)) )
+    move_to_ref(q.currency, _::from_JV((v as _object)["currency"], decltype_noref(q.currency)) )
+    move_to_ref(q.total_amount, _::from_JV((v as _object)["total_amount"], decltype_noref(q.total_amount)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:invoice? ) : invoice?
+    return null if v==null
+    var q = new invoice
+    *q <- from_JV(v,type<invoice>)
+    return q
 
 struct shippingaddress
     //!  This object represents a shipping address.
@@ -1966,6 +5649,22 @@ struct shippingaddress
     street_line2 : string	//! Second line for the address
     post_code : string	//! Address post code
 
+def from_JV ( var v:JsonValue?; t:shippingaddress ) : shippingaddress
+    var q : shippingaddress
+    move_to_ref(q.country_code, _::from_JV((v as _object)["country_code"], decltype_noref(q.country_code)) )
+    move_to_ref(q.state, _::from_JV((v as _object)["state"], decltype_noref(q.state)) )
+    move_to_ref(q.city, _::from_JV((v as _object)["city"], decltype_noref(q.city)) )
+    move_to_ref(q.street_line1, _::from_JV((v as _object)["street_line1"], decltype_noref(q.street_line1)) )
+    move_to_ref(q.street_line2, _::from_JV((v as _object)["street_line2"], decltype_noref(q.street_line2)) )
+    move_to_ref(q.post_code, _::from_JV((v as _object)["post_code"], decltype_noref(q.post_code)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:shippingaddress? ) : shippingaddress?
+    return null if v==null
+    var q = new shippingaddress
+    *q <- from_JV(v,type<shippingaddress>)
+    return q
+
 struct orderinfo
     //!  This object represents information about an order.
     [[optional]] name : string = ""	//! Optional. User name
@@ -1973,11 +5672,38 @@ struct orderinfo
     [[optional]] email : string = ""	//! Optional. User email
     [[optional]] shipping_address : shippingaddress?	//! Optional. User shipping address
 
+def from_JV ( var v:JsonValue?; t:orderinfo ) : orderinfo
+    var q : orderinfo
+    move_to_ref(q.name, _::from_JV((v as _object)["name"], decltype_noref(q.name)) )
+    move_to_ref(q.phone_number, _::from_JV((v as _object)["phone_number"], decltype_noref(q.phone_number)) )
+    move_to_ref(q.email, _::from_JV((v as _object)["email"], decltype_noref(q.email)) )
+    move_to_ref(q.shipping_address, _::from_JV((v as _object)["shipping_address"], decltype_noref(q.shipping_address)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:orderinfo? ) : orderinfo?
+    return null if v==null
+    var q = new orderinfo
+    *q <- from_JV(v,type<orderinfo>)
+    return q
+
 struct shippingoption
     //!  This object represents one shipping option.
     id : string	//! Shipping option identifier
     title : string	//! Option title
     prices : array<labeledprice>	//! List of price portions
+
+def from_JV ( var v:JsonValue?; t:shippingoption ) : shippingoption
+    var q : shippingoption
+    move_to_ref(q.id, _::from_JV((v as _object)["id"], decltype_noref(q.id)) )
+    move_to_ref(q.title, _::from_JV((v as _object)["title"], decltype_noref(q.title)) )
+    move_to_ref(q.prices, _::from_JV((v as _object)["prices"], decltype_noref(q.prices)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:shippingoption? ) : shippingoption?
+    return null if v==null
+    var q = new shippingoption
+    *q <- from_JV(v,type<shippingoption>)
+    return q
 
 struct successfulpayment
     //!  This object contains basic information about a successful payment.
@@ -1989,12 +5715,43 @@ struct successfulpayment
     telegram_payment_charge_id : string	//! Telegram payment identifier
     provider_payment_charge_id : string	//! Provider payment identifier
 
+def from_JV ( var v:JsonValue?; t:successfulpayment ) : successfulpayment
+    var q : successfulpayment
+    move_to_ref(q.currency, _::from_JV((v as _object)["currency"], decltype_noref(q.currency)) )
+    move_to_ref(q.total_amount, _::from_JV((v as _object)["total_amount"], decltype_noref(q.total_amount)) )
+    move_to_ref(q.invoice_payload, _::from_JV((v as _object)["invoice_payload"], decltype_noref(q.invoice_payload)) )
+    move_to_ref(q.shipping_option_id, _::from_JV((v as _object)["shipping_option_id"], decltype_noref(q.shipping_option_id)) )
+    move_to_ref(q.order_info, _::from_JV((v as _object)["order_info"], decltype_noref(q.order_info)) )
+    move_to_ref(q.telegram_payment_charge_id, _::from_JV((v as _object)["telegram_payment_charge_id"], decltype_noref(q.telegram_payment_charge_id)) )
+    move_to_ref(q.provider_payment_charge_id, _::from_JV((v as _object)["provider_payment_charge_id"], decltype_noref(q.provider_payment_charge_id)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:successfulpayment? ) : successfulpayment?
+    return null if v==null
+    var q = new successfulpayment
+    *q <- from_JV(v,type<successfulpayment>)
+    return q
+
 struct shippingquery
     //!  This object contains information about an incoming shipping query.
     id : string	//! Unique query identifier
     from : user	//! User who sent the query
     invoice_payload : string	//! Bot specified invoice payload
     shipping_address : shippingaddress	//! User specified shipping address
+
+def from_JV ( var v:JsonValue?; t:shippingquery ) : shippingquery
+    var q : shippingquery
+    move_to_ref(q.id, _::from_JV((v as _object)["id"], decltype_noref(q.id)) )
+    move_to_ref(q.from, _::from_JV((v as _object)["from"], decltype_noref(q.from)) )
+    move_to_ref(q.invoice_payload, _::from_JV((v as _object)["invoice_payload"], decltype_noref(q.invoice_payload)) )
+    move_to_ref(q.shipping_address, _::from_JV((v as _object)["shipping_address"], decltype_noref(q.shipping_address)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:shippingquery? ) : shippingquery?
+    return null if v==null
+    var q = new shippingquery
+    *q <- from_JV(v,type<shippingquery>)
+    return q
 
 struct precheckoutquery
     //!  This object contains information about an incoming pre-checkout query.
@@ -2006,10 +5763,39 @@ struct precheckoutquery
     [[optional]] shipping_option_id : string = ""	//! Optional. Identifier of the shipping option chosen by the user
     [[optional]] order_info : orderinfo?	//! Optional. Order information provided by the user
 
+def from_JV ( var v:JsonValue?; t:precheckoutquery ) : precheckoutquery
+    var q : precheckoutquery
+    move_to_ref(q.id, _::from_JV((v as _object)["id"], decltype_noref(q.id)) )
+    move_to_ref(q.from, _::from_JV((v as _object)["from"], decltype_noref(q.from)) )
+    move_to_ref(q.currency, _::from_JV((v as _object)["currency"], decltype_noref(q.currency)) )
+    move_to_ref(q.total_amount, _::from_JV((v as _object)["total_amount"], decltype_noref(q.total_amount)) )
+    move_to_ref(q.invoice_payload, _::from_JV((v as _object)["invoice_payload"], decltype_noref(q.invoice_payload)) )
+    move_to_ref(q.shipping_option_id, _::from_JV((v as _object)["shipping_option_id"], decltype_noref(q.shipping_option_id)) )
+    move_to_ref(q.order_info, _::from_JV((v as _object)["order_info"], decltype_noref(q.order_info)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:precheckoutquery? ) : precheckoutquery?
+    return null if v==null
+    var q = new precheckoutquery
+    *q <- from_JV(v,type<precheckoutquery>)
+    return q
+
 struct passportdata
     //!  Describes Telegram Passport data shared with the bot by the user.
     data : array<encryptedpassportelement>	//! Array with information about documents and other Telegram Passport elements that was shared with the bot
     credentials : encryptedcredentials	//! Encrypted credentials required to decrypt the data
+
+def from_JV ( var v:JsonValue?; t:passportdata ) : passportdata
+    var q : passportdata
+    move_to_ref(q.data, _::from_JV((v as _object)["data"], decltype_noref(q.data)) )
+    move_to_ref(q.credentials, _::from_JV((v as _object)["credentials"], decltype_noref(q.credentials)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:passportdata? ) : passportdata?
+    return null if v==null
+    var q = new passportdata
+    *q <- from_JV(v,type<passportdata>)
+    return q
 
 struct passportfile
     //!  This object represents a file uploaded to Telegram Passport. Currently all Telegram Passport files are in JPEG format when decrypted and don't exceed 10MB.
@@ -2017,6 +5803,20 @@ struct passportfile
     file_unique_id : string	//! Unique identifier for this file, which is supposed to be the same over time and for different bots. Can't be used to download or reuse the file.
     file_size : int	//! File size in bytes
     file_date : int	//! Unix time when the file was uploaded
+
+def from_JV ( var v:JsonValue?; t:passportfile ) : passportfile
+    var q : passportfile
+    move_to_ref(q.file_id, _::from_JV((v as _object)["file_id"], decltype_noref(q.file_id)) )
+    move_to_ref(q.file_unique_id, _::from_JV((v as _object)["file_unique_id"], decltype_noref(q.file_unique_id)) )
+    move_to_ref(q.file_size, _::from_JV((v as _object)["file_size"], decltype_noref(q.file_size)) )
+    move_to_ref(q.file_date, _::from_JV((v as _object)["file_date"], decltype_noref(q.file_date)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:passportfile? ) : passportfile?
+    return null if v==null
+    var q = new passportfile
+    *q <- from_JV(v,type<passportfile>)
+    return q
 
 struct encryptedpassportelement
     //!  Describes documents or other Telegram Passport elements shared with the bot by the user.
@@ -2031,18 +5831,75 @@ struct encryptedpassportelement
     [[optional]] translation : array<passportfile>	//! Optional. Array of encrypted files with translated versions of documents provided by the user. Available if requested for “passport”, “driver_license”, “identity_card”, “internal_passport”, “utility_bill”, “bank_statement”, “rental_agreement”, “passport_registration” and “temporary_registration” types. Files can be decrypted and verified using the accompanying EncryptedCredentials.
     hash : string	//! Base64-encoded element hash for using in PassportElementErrorUnspecified
 
+def from_JV ( var v:JsonValue?; t:encryptedpassportelement ) : encryptedpassportelement
+    var q : encryptedpassportelement
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    move_to_ref(q.data, _::from_JV((v as _object)["data"], decltype_noref(q.data)) )
+    move_to_ref(q.phone_number, _::from_JV((v as _object)["phone_number"], decltype_noref(q.phone_number)) )
+    move_to_ref(q.email, _::from_JV((v as _object)["email"], decltype_noref(q.email)) )
+    move_to_ref(q.files, _::from_JV((v as _object)["files"], decltype_noref(q.files)) )
+    move_to_ref(q.front_side, _::from_JV((v as _object)["front_side"], decltype_noref(q.front_side)) )
+    move_to_ref(q.reverse_side, _::from_JV((v as _object)["reverse_side"], decltype_noref(q.reverse_side)) )
+    move_to_ref(q.selfie, _::from_JV((v as _object)["selfie"], decltype_noref(q.selfie)) )
+    move_to_ref(q.translation, _::from_JV((v as _object)["translation"], decltype_noref(q.translation)) )
+    move_to_ref(q.hash, _::from_JV((v as _object)["hash"], decltype_noref(q.hash)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:encryptedpassportelement? ) : encryptedpassportelement?
+    return null if v==null
+    var q = new encryptedpassportelement
+    *q <- from_JV(v,type<encryptedpassportelement>)
+    return q
+
 struct encryptedcredentials
     //!  Describes data required for decrypting and authenticating EncryptedPassportElement. See the Telegram Passport Documentation for a complete description of the data decryption and authentication processes.
     data : string	//! Base64-encoded encrypted JSON-serialized data with unique user's payload, data hashes and secrets required for EncryptedPassportElement decryption and authentication
     hash : string	//! Base64-encoded data hash for data authentication
     secret : string	//! Base64-encoded secret, encrypted with the bot's public RSA key, required for data decryption
 
+def from_JV ( var v:JsonValue?; t:encryptedcredentials ) : encryptedcredentials
+    var q : encryptedcredentials
+    move_to_ref(q.data, _::from_JV((v as _object)["data"], decltype_noref(q.data)) )
+    move_to_ref(q.hash, _::from_JV((v as _object)["hash"], decltype_noref(q.hash)) )
+    move_to_ref(q.secret, _::from_JV((v as _object)["secret"], decltype_noref(q.secret)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:encryptedcredentials? ) : encryptedcredentials?
+    return null if v==null
+    var q = new encryptedcredentials
+    *q <- from_JV(v,type<encryptedcredentials>)
+    return q
+
 struct setpassportdataerrors
     //!  Informs a user that some of the Telegram Passport elements they provided contains errors. The user will not be able to re-submit their Passport to you until the errors are fixed (the contents of the field for which you returned the error must change). Returns True on success. Use this if the data submitted by the user doesn't satisfy the standards your service requires for any reason. For example, if a birthday date seems invalid, a submitted document is blurry, a scan shows evidence of tampering, etc. Supply some details in the error message to make sure the user knows how to correct the issues.
     user_id : int	//! Required. User identifier
     errors : array<passportelementerror>	//! Required. A JSON-serialized array describing the errors
 
-struct passportelementerror {} //  This object represents an error in the Telegram Passport element which was submitted that should be resolved by the user. It should be one of:
+def from_JV ( var v:JsonValue?; t:setpassportdataerrors ) : setpassportdataerrors
+    var q : setpassportdataerrors
+    move_to_ref(q.user_id, _::from_JV((v as _object)["user_id"], decltype_noref(q.user_id)) )
+    move_to_ref(q.errors, _::from_JV((v as _object)["errors"], decltype_noref(q.errors)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:setpassportdataerrors? ) : setpassportdataerrors?
+    return null if v==null
+    var q = new setpassportdataerrors
+    *q <- from_JV(v,type<setpassportdataerrors>)
+    return q
+
+struct passportelementerror
+    //!  This object represents an error in the Telegram Passport element which was submitted that should be resolved by the user. It should be one of:
+    object_passportelementerror_has_no_fields:bool
+
+def from_JV ( var v:JsonValue?; t:passportelementerror ) : passportelementerror
+    var q : passportelementerror
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:passportelementerror? ) : passportelementerror?
+    return null if v==null
+    var q = new passportelementerror
+    *q <- from_JV(v,type<passportelementerror>)
+    return q
 
 struct passportelementerrordatafield
     //!  Represents an issue in one of the data fields that was provided by the user. The error is considered resolved when the field's value changes.
@@ -2052,12 +5909,41 @@ struct passportelementerrordatafield
     data_hash : string	//! Base64-encoded data hash
     message : string	//! Error message
 
+def from_JV ( var v:JsonValue?; t:passportelementerrordatafield ) : passportelementerrordatafield
+    var q : passportelementerrordatafield
+    move_to_ref(q.source, _::from_JV((v as _object)["source"], decltype_noref(q.source)) )
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    move_to_ref(q.field_name, _::from_JV((v as _object)["field_name"], decltype_noref(q.field_name)) )
+    move_to_ref(q.data_hash, _::from_JV((v as _object)["data_hash"], decltype_noref(q.data_hash)) )
+    move_to_ref(q.message, _::from_JV((v as _object)["message"], decltype_noref(q.message)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:passportelementerrordatafield? ) : passportelementerrordatafield?
+    return null if v==null
+    var q = new passportelementerrordatafield
+    *q <- from_JV(v,type<passportelementerrordatafield>)
+    return q
+
 struct passportelementerrorfrontside
     //!  Represents an issue with the front side of a document. The error is considered resolved when the file with the front side of the document changes.
     source : string	//! Error source, must be front_side
     _type : string	//! The section of the user's Telegram Passport which has the issue, one of “passport”, “driver_license”, “identity_card”, “internal_passport”
     file_hash : string	//! Base64-encoded hash of the file with the front side of the document
     message : string	//! Error message
+
+def from_JV ( var v:JsonValue?; t:passportelementerrorfrontside ) : passportelementerrorfrontside
+    var q : passportelementerrorfrontside
+    move_to_ref(q.source, _::from_JV((v as _object)["source"], decltype_noref(q.source)) )
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    move_to_ref(q.file_hash, _::from_JV((v as _object)["file_hash"], decltype_noref(q.file_hash)) )
+    move_to_ref(q.message, _::from_JV((v as _object)["message"], decltype_noref(q.message)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:passportelementerrorfrontside? ) : passportelementerrorfrontside?
+    return null if v==null
+    var q = new passportelementerrorfrontside
+    *q <- from_JV(v,type<passportelementerrorfrontside>)
+    return q
 
 struct passportelementerrorreverseside
     //!  Represents an issue with the reverse side of a document. The error is considered resolved when the file with reverse side of the document changes.
@@ -2066,12 +5952,40 @@ struct passportelementerrorreverseside
     file_hash : string	//! Base64-encoded hash of the file with the reverse side of the document
     message : string	//! Error message
 
+def from_JV ( var v:JsonValue?; t:passportelementerrorreverseside ) : passportelementerrorreverseside
+    var q : passportelementerrorreverseside
+    move_to_ref(q.source, _::from_JV((v as _object)["source"], decltype_noref(q.source)) )
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    move_to_ref(q.file_hash, _::from_JV((v as _object)["file_hash"], decltype_noref(q.file_hash)) )
+    move_to_ref(q.message, _::from_JV((v as _object)["message"], decltype_noref(q.message)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:passportelementerrorreverseside? ) : passportelementerrorreverseside?
+    return null if v==null
+    var q = new passportelementerrorreverseside
+    *q <- from_JV(v,type<passportelementerrorreverseside>)
+    return q
+
 struct passportelementerrorselfie
     //!  Represents an issue with the selfie with a document. The error is considered resolved when the file with the selfie changes.
     source : string	//! Error source, must be selfie
     _type : string	//! The section of the user's Telegram Passport which has the issue, one of “passport”, “driver_license”, “identity_card”, “internal_passport”
     file_hash : string	//! Base64-encoded hash of the file with the selfie
     message : string	//! Error message
+
+def from_JV ( var v:JsonValue?; t:passportelementerrorselfie ) : passportelementerrorselfie
+    var q : passportelementerrorselfie
+    move_to_ref(q.source, _::from_JV((v as _object)["source"], decltype_noref(q.source)) )
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    move_to_ref(q.file_hash, _::from_JV((v as _object)["file_hash"], decltype_noref(q.file_hash)) )
+    move_to_ref(q.message, _::from_JV((v as _object)["message"], decltype_noref(q.message)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:passportelementerrorselfie? ) : passportelementerrorselfie?
+    return null if v==null
+    var q = new passportelementerrorselfie
+    *q <- from_JV(v,type<passportelementerrorselfie>)
+    return q
 
 struct passportelementerrorfile
     //!  Represents an issue with a document scan. The error is considered resolved when the file with the document scan changes.
@@ -2080,12 +5994,40 @@ struct passportelementerrorfile
     file_hash : string	//! Base64-encoded file hash
     message : string	//! Error message
 
+def from_JV ( var v:JsonValue?; t:passportelementerrorfile ) : passportelementerrorfile
+    var q : passportelementerrorfile
+    move_to_ref(q.source, _::from_JV((v as _object)["source"], decltype_noref(q.source)) )
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    move_to_ref(q.file_hash, _::from_JV((v as _object)["file_hash"], decltype_noref(q.file_hash)) )
+    move_to_ref(q.message, _::from_JV((v as _object)["message"], decltype_noref(q.message)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:passportelementerrorfile? ) : passportelementerrorfile?
+    return null if v==null
+    var q = new passportelementerrorfile
+    *q <- from_JV(v,type<passportelementerrorfile>)
+    return q
+
 struct passportelementerrorfiles
     //!  Represents an issue with a list of scans. The error is considered resolved when the list of files containing the scans changes.
     source : string	//! Error source, must be files
     _type : string	//! The section of the user's Telegram Passport which has the issue, one of “utility_bill”, “bank_statement”, “rental_agreement”, “passport_registration”, “temporary_registration”
     file_hashes : array<string>	//! List of base64-encoded file hashes
     message : string	//! Error message
+
+def from_JV ( var v:JsonValue?; t:passportelementerrorfiles ) : passportelementerrorfiles
+    var q : passportelementerrorfiles
+    move_to_ref(q.source, _::from_JV((v as _object)["source"], decltype_noref(q.source)) )
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    move_to_ref(q.file_hashes, _::from_JV((v as _object)["file_hashes"], decltype_noref(q.file_hashes)) )
+    move_to_ref(q.message, _::from_JV((v as _object)["message"], decltype_noref(q.message)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:passportelementerrorfiles? ) : passportelementerrorfiles?
+    return null if v==null
+    var q = new passportelementerrorfiles
+    *q <- from_JV(v,type<passportelementerrorfiles>)
+    return q
 
 struct passportelementerrortranslationfile
     //!  Represents an issue with one of the files that constitute the translation of a document. The error is considered resolved when the file changes.
@@ -2094,6 +6036,20 @@ struct passportelementerrortranslationfile
     file_hash : string	//! Base64-encoded file hash
     message : string	//! Error message
 
+def from_JV ( var v:JsonValue?; t:passportelementerrortranslationfile ) : passportelementerrortranslationfile
+    var q : passportelementerrortranslationfile
+    move_to_ref(q.source, _::from_JV((v as _object)["source"], decltype_noref(q.source)) )
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    move_to_ref(q.file_hash, _::from_JV((v as _object)["file_hash"], decltype_noref(q.file_hash)) )
+    move_to_ref(q.message, _::from_JV((v as _object)["message"], decltype_noref(q.message)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:passportelementerrortranslationfile? ) : passportelementerrortranslationfile?
+    return null if v==null
+    var q = new passportelementerrortranslationfile
+    *q <- from_JV(v,type<passportelementerrortranslationfile>)
+    return q
+
 struct passportelementerrortranslationfiles
     //!  Represents an issue with the translated version of a document. The error is considered resolved when a file with the document translation change.
     source : string	//! Error source, must be translation_files
@@ -2101,12 +6057,40 @@ struct passportelementerrortranslationfiles
     file_hashes : array<string>	//! List of base64-encoded file hashes
     message : string	//! Error message
 
+def from_JV ( var v:JsonValue?; t:passportelementerrortranslationfiles ) : passportelementerrortranslationfiles
+    var q : passportelementerrortranslationfiles
+    move_to_ref(q.source, _::from_JV((v as _object)["source"], decltype_noref(q.source)) )
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    move_to_ref(q.file_hashes, _::from_JV((v as _object)["file_hashes"], decltype_noref(q.file_hashes)) )
+    move_to_ref(q.message, _::from_JV((v as _object)["message"], decltype_noref(q.message)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:passportelementerrortranslationfiles? ) : passportelementerrortranslationfiles?
+    return null if v==null
+    var q = new passportelementerrortranslationfiles
+    *q <- from_JV(v,type<passportelementerrortranslationfiles>)
+    return q
+
 struct passportelementerrorunspecified
     //!  Represents an issue in an unspecified place. The error is considered resolved when new data is added.
     source : string	//! Error source, must be unspecified
     _type : string	//! Type of element of the user's Telegram Passport which has the issue
     element_hash : string	//! Base64-encoded element hash
     message : string	//! Error message
+
+def from_JV ( var v:JsonValue?; t:passportelementerrorunspecified ) : passportelementerrorunspecified
+    var q : passportelementerrorunspecified
+    move_to_ref(q.source, _::from_JV((v as _object)["source"], decltype_noref(q.source)) )
+    move_to_ref(q._type, _::from_JV((v as _object)["_type"], decltype_noref(q._type)) )
+    move_to_ref(q.element_hash, _::from_JV((v as _object)["element_hash"], decltype_noref(q.element_hash)) )
+    move_to_ref(q.message, _::from_JV((v as _object)["message"], decltype_noref(q.message)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:passportelementerrorunspecified? ) : passportelementerrorunspecified?
+    return null if v==null
+    var q = new passportelementerrorunspecified
+    *q <- from_JV(v,type<passportelementerrorunspecified>)
+    return q
 
 struct sendgame
     //!  Use this method to send a game. On success, the sent Message is returned.
@@ -2119,6 +6103,24 @@ struct sendgame
     [[optional]] allow_sending_without_reply : bool = false	//! Optional. Pass True if the message should be sent even if the specified replied-to message is not found
     [[optional]] reply_markup : inlinekeyboardmarkup?	//! Optional. A JSON-serialized object for an inline keyboard. If empty, one 'Play game_title' button will be shown. If not empty, the first button must launch the game.
 
+def from_JV ( var v:JsonValue?; t:sendgame ) : sendgame
+    var q : sendgame
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], decltype_noref(q.message_thread_id)) )
+    move_to_ref(q.game_short_name, _::from_JV((v as _object)["game_short_name"], decltype_noref(q.game_short_name)) )
+    move_to_ref(q.disable_notification, _::from_JV((v as _object)["disable_notification"], decltype_noref(q.disable_notification)) )
+    move_to_ref(q.protect_content, _::from_JV((v as _object)["protect_content"], decltype_noref(q.protect_content)) )
+    move_to_ref(q.reply_to_message_id, _::from_JV((v as _object)["reply_to_message_id"], decltype_noref(q.reply_to_message_id)) )
+    move_to_ref(q.allow_sending_without_reply, _::from_JV((v as _object)["allow_sending_without_reply"], decltype_noref(q.allow_sending_without_reply)) )
+    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], decltype_noref(q.reply_markup)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:sendgame? ) : sendgame?
+    return null if v==null
+    var q = new sendgame
+    *q <- from_JV(v,type<sendgame>)
+    return q
+
 struct game
     //!  This object represents a game. Use BotFather to create and edit games, their short names will act as unique identifiers.
     title : string	//! Title of the game
@@ -2128,7 +6130,35 @@ struct game
     [[optional]] text_entities : array<messageentity>	//! Optional. Special entities that appear in text, such as usernames, URLs, bot commands, etc.
     [[optional]] animation : animation?	//! Optional. Animation that will be displayed in the game message in chats. Upload via BotFather
 
-struct callbackgame {} //  A placeholder, currently holds no information. Use BotFather to set up your game.
+def from_JV ( var v:JsonValue?; t:game ) : game
+    var q : game
+    move_to_ref(q.title, _::from_JV((v as _object)["title"], decltype_noref(q.title)) )
+    move_to_ref(q.description, _::from_JV((v as _object)["description"], decltype_noref(q.description)) )
+    move_to_ref(q.photo, _::from_JV((v as _object)["photo"], decltype_noref(q.photo)) )
+    move_to_ref(q.text, _::from_JV((v as _object)["text"], decltype_noref(q.text)) )
+    move_to_ref(q.text_entities, _::from_JV((v as _object)["text_entities"], decltype_noref(q.text_entities)) )
+    move_to_ref(q.animation, _::from_JV((v as _object)["animation"], decltype_noref(q.animation)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:game? ) : game?
+    return null if v==null
+    var q = new game
+    *q <- from_JV(v,type<game>)
+    return q
+
+struct callbackgame
+    //!  A placeholder, currently holds no information. Use BotFather to set up your game.
+    object_callbackgame_has_no_fields:bool
+
+def from_JV ( var v:JsonValue?; t:callbackgame ) : callbackgame
+    var q : callbackgame
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:callbackgame? ) : callbackgame?
+    return null if v==null
+    var q = new callbackgame
+    *q <- from_JV(v,type<callbackgame>)
+    return q
 
 struct setgamescore
     //!  Use this method to set the score of the specified user in a game message. On success, if the message is not an inline message, the Message is returned, otherwise True is returned. Returns an error, if the new score is not greater than the user's current score in the chat and force is False.
@@ -2140,6 +6170,23 @@ struct setgamescore
     [[optional]] message_id : int = INT_MIN	//! Optional. Required if inline_message_id is not specified. Identifier of the sent message
     [[optional]] inline_message_id : string = ""	//! Optional. Required if chat_id and message_id are not specified. Identifier of the inline message
 
+def from_JV ( var v:JsonValue?; t:setgamescore ) : setgamescore
+    var q : setgamescore
+    move_to_ref(q.user_id, _::from_JV((v as _object)["user_id"], decltype_noref(q.user_id)) )
+    move_to_ref(q.score, _::from_JV((v as _object)["score"], decltype_noref(q.score)) )
+    move_to_ref(q.force, _::from_JV((v as _object)["force"], decltype_noref(q.force)) )
+    move_to_ref(q.disable_edit_message, _::from_JV((v as _object)["disable_edit_message"], decltype_noref(q.disable_edit_message)) )
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.message_id, _::from_JV((v as _object)["message_id"], decltype_noref(q.message_id)) )
+    move_to_ref(q.inline_message_id, _::from_JV((v as _object)["inline_message_id"], decltype_noref(q.inline_message_id)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:setgamescore? ) : setgamescore?
+    return null if v==null
+    var q = new setgamescore
+    *q <- from_JV(v,type<setgamescore>)
+    return q
+
 struct getgamehighscores
     //!  Use this method to get data for high score tables. Will return the score of the specified user and several of their neighbors in a game. Returns an Array of GameHighScore objects.
     user_id : int	//! Required. Target user id
@@ -2147,9 +6194,36 @@ struct getgamehighscores
     [[optional]] message_id : int = INT_MIN	//! Optional. Required if inline_message_id is not specified. Identifier of the sent message
     [[optional]] inline_message_id : string = ""	//! Optional. Required if chat_id and message_id are not specified. Identifier of the inline message
 
+def from_JV ( var v:JsonValue?; t:getgamehighscores ) : getgamehighscores
+    var q : getgamehighscores
+    move_to_ref(q.user_id, _::from_JV((v as _object)["user_id"], decltype_noref(q.user_id)) )
+    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], decltype_noref(q.chat_id)) )
+    move_to_ref(q.message_id, _::from_JV((v as _object)["message_id"], decltype_noref(q.message_id)) )
+    move_to_ref(q.inline_message_id, _::from_JV((v as _object)["inline_message_id"], decltype_noref(q.inline_message_id)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:getgamehighscores? ) : getgamehighscores?
+    return null if v==null
+    var q = new getgamehighscores
+    *q <- from_JV(v,type<getgamehighscores>)
+    return q
+
 struct gamehighscore
     //!  This object represents one row of the high scores table for a game.
     position : int	//! Position in high score table for the game
     user : user	//! User
     score : int	//! Score
+
+def from_JV ( var v:JsonValue?; t:gamehighscore ) : gamehighscore
+    var q : gamehighscore
+    move_to_ref(q.position, _::from_JV((v as _object)["position"], decltype_noref(q.position)) )
+    move_to_ref(q.user, _::from_JV((v as _object)["user"], decltype_noref(q.user)) )
+    move_to_ref(q.score, _::from_JV((v as _object)["score"], decltype_noref(q.score)) )
+    return <- q
+
+def from_JV ( var v:JsonValue?; t:gamehighscore? ) : gamehighscore?
+    return null if v==null
+    var q = new gamehighscore
+    *q <- from_JV(v,type<gamehighscore>)
+    return q
 
