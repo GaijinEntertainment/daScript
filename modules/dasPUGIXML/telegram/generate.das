@@ -84,7 +84,7 @@ def process_type ( node:xml_node; is_optional:bool=false )
         return is_optional ? "{classname}?" : "{classname}"
     else
         let value = node.value
-        return "int"        if value=="Integer"
+        return "int64"      if value=="Integer"
         return "float"      if value=="Float"
         return "float"      if value=="Float number"
         return "string"     if value=="String"
@@ -92,23 +92,39 @@ def process_type ( node:xml_node; is_optional:bool=false )
         return "bool"       if value=="Boolean"
         return "bool"       if value=="True"       // sometimes there is an error in documentation
         return "array<string>"  if value=="Array of String"
-        return "array<int>"     if value=="Array of Integer"
+        return "array<int64>"     if value=="Array of Integer"
         return "array<{process_type(node.next_sibling)}>"           if value == "Array of "
         return "array<array<{process_type(node.next_sibling)}>>"    if value == "Array of Array of "
         panic("unsupported type {value}")
         return value
 
 def generate_fromJV ( name:string; fields:array<tuple<field:string;_type:string>> )
+    // from value
     g_FOUT |> fprint("def from_JV ( var v:JsonValue?; t:{name} ) : {name}\n")
     g_FOUT |> fprint("    var q : {name}\n")
+    g_FOUT |> fprint("    var vobj & = unsafe(v as _object)\n")
     for field in fields
-        g_FOUT |> fprint("    move_to_ref(q.{field.field}, _::from_JV((v as _object)[\"{field.field}\"], type<{field._type}>))\n")
+        if field._type=="int64" || field._type=="float" || field._type=="string" || field._type=="bool" || field._type |> ends_with("?")
+            g_FOUT |> fprint("    q.{field.field} = _::from_JV(vobj[\"{field.field}\"], type<{field._type}>)\n")
+        else
+            g_FOUT |> fprint("    q.{field.field} <- _::from_JV(vobj[\"{field.field}\"], type<{field._type}>)\n")
     g_FOUT |> fprint("    return <- q\n\n")
+    // from pointer
     g_FOUT |> fprint("def from_JV ( var v:JsonValue?; t:{name}? ) : {name}?\n")
     g_FOUT |> fprint("    return null if v==null\n")
     g_FOUT |> fprint("    var q = new {name}\n")
     g_FOUT |> fprint("    *q <- from_JV(v,type<{name}>)\n")
     g_FOUT |> fprint("    return q\n\n")
+    // to value
+    g_FOUT |> fprint("def JV ( v:{name} ) : JsonValue?\n")
+    g_FOUT |> fprint("    var map: table<string; JsonValue?>\n")
+    for field in fields
+        if field._type |> ends_with("?")
+            g_FOUT |> fprint("    if v.{field.field}!=null\n")
+            g_FOUT |> fprint("        map[\"{field.field}\"] = _::JV(v.{field.field})\n")
+        else
+            g_FOUT |> fprint("    map[\"{field.field}\"] = _::JV(v.{field.field})\n")
+    g_FOUT |> fprint("    return _::JV(map)\n\n")
 
 def process_section ( doc:xml_document; name:string )
     var node = doc |> find_section(name)
@@ -149,8 +165,6 @@ def process_section ( doc:xml_document; name:string )
                 let is_optional = api_field_comment |> starts_with("Optional")
                 let api_field_type = process_type(field_type_node,is_optional)
                 g_FOUT |> fprint("    ")
-                if is_optional
-                    g_FOUT |> fprint("[[optional]] ")
                 g_FOUT |> fprint("{api_field} : {api_field_type}\t//! {api_field_comment}\n")
                 fields |> push([[auto api_field,api_field_type]])
                 tr = tr.next_sibling
