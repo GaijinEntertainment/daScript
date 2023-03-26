@@ -26,21 +26,21 @@ struct update
 
 def from_JV ( var v:JsonValue?; t:update ) : update
     var q : update
-    move_to_ref(q.update_id, _::from_JV((v as _object)["update_id"], type<int64>))
-    move_to_ref(q.message, _::from_JV((v as _object)["message"], type<message?>))
-    move_to_ref(q.edited_message, _::from_JV((v as _object)["edited_message"], type<message?>))
-    move_to_ref(q.channel_post, _::from_JV((v as _object)["channel_post"], type<message?>))
-    move_to_ref(q.edited_channel_post, _::from_JV((v as _object)["edited_channel_post"], type<message?>))
-    move_to_ref(q.inline_query, _::from_JV((v as _object)["inline_query"], type<inlinequery?>))
-    move_to_ref(q.chosen_inline_result, _::from_JV((v as _object)["chosen_inline_result"], type<choseninlineresult?>))
-    move_to_ref(q.callback_query, _::from_JV((v as _object)["callback_query"], type<callbackquery?>))
-    move_to_ref(q.shipping_query, _::from_JV((v as _object)["shipping_query"], type<shippingquery?>))
-    move_to_ref(q.pre_checkout_query, _::from_JV((v as _object)["pre_checkout_query"], type<precheckoutquery?>))
-    move_to_ref(q.poll, _::from_JV((v as _object)["poll"], type<poll?>))
-    move_to_ref(q.poll_answer, _::from_JV((v as _object)["poll_answer"], type<pollanswer?>))
-    move_to_ref(q.my_chat_member, _::from_JV((v as _object)["my_chat_member"], type<chatmemberupdated?>))
-    move_to_ref(q.chat_member, _::from_JV((v as _object)["chat_member"], type<chatmemberupdated?>))
-    move_to_ref(q.chat_join_request, _::from_JV((v as _object)["chat_join_request"], type<chatjoinrequest?>))
+    q.update_id = _::from_JV((v as _object)["update_id"], type<int64>)
+    q.message = _::from_JV((v as _object)["message"], type<message?>)
+    q.edited_message = _::from_JV((v as _object)["edited_message"], type<message?>)
+    q.channel_post = _::from_JV((v as _object)["channel_post"], type<message?>)
+    q.edited_channel_post = _::from_JV((v as _object)["edited_channel_post"], type<message?>)
+    q.inline_query = _::from_JV((v as _object)["inline_query"], type<inlinequery?>)
+    q.chosen_inline_result = _::from_JV((v as _object)["chosen_inline_result"], type<choseninlineresult?>)
+    q.callback_query = _::from_JV((v as _object)["callback_query"], type<callbackquery?>)
+    q.shipping_query = _::from_JV((v as _object)["shipping_query"], type<shippingquery?>)
+    q.pre_checkout_query = _::from_JV((v as _object)["pre_checkout_query"], type<precheckoutquery?>)
+    q.poll = _::from_JV((v as _object)["poll"], type<poll?>)
+    q.poll_answer = _::from_JV((v as _object)["poll_answer"], type<pollanswer?>)
+    q.my_chat_member = _::from_JV((v as _object)["my_chat_member"], type<chatmemberupdated?>)
+    q.chat_member = _::from_JV((v as _object)["chat_member"], type<chatmemberupdated?>)
+    q.chat_join_request = _::from_JV((v as _object)["chat_join_request"], type<chatjoinrequest?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:update? ) : update?
@@ -91,10 +91,10 @@ struct getupdates
 
 def from_JV ( var v:JsonValue?; t:getupdates ) : getupdates
     var q : getupdates
-    move_to_ref(q.offset, _::from_JV((v as _object)["offset"], type<int64>))
-    move_to_ref(q.limit, _::from_JV((v as _object)["limit"], type<int64>))
-    move_to_ref(q.timeout, _::from_JV((v as _object)["timeout"], type<int64>))
-    move_to_ref(q.allowed_updates, _::from_JV((v as _object)["allowed_updates"], type<array<string>>))
+    q.offset = _::from_JV((v as _object)["offset"], type<int64>)
+    q.limit = _::from_JV((v as _object)["limit"], type<int64>)
+    q.timeout = _::from_JV((v as _object)["timeout"], type<int64>)
+    q.allowed_updates <- _::from_JV((v as _object)["allowed_updates"], type<array<string>>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:getupdates? ) : getupdates?
@@ -123,13 +123,13 @@ struct setwebhook
 
 def from_JV ( var v:JsonValue?; t:setwebhook ) : setwebhook
     var q : setwebhook
-    move_to_ref(q.url, _::from_JV((v as _object)["url"], type<string>))
-    move_to_ref(q.certificate, _::from_JV((v as _object)["certificate"], type<inputfile?>))
-    move_to_ref(q.ip_address, _::from_JV((v as _object)["ip_address"], type<string>))
-    move_to_ref(q.max_connections, _::from_JV((v as _object)["max_connections"], type<int64>))
-    move_to_ref(q.allowed_updates, _::from_JV((v as _object)["allowed_updates"], type<array<string>>))
-    move_to_ref(q.drop_pending_updates, _::from_JV((v as _object)["drop_pending_updates"], type<bool>))
-    move_to_ref(q.secret_token, _::from_JV((v as _object)["secret_token"], type<string>))
+    q.url = _::from_JV((v as _object)["url"], type<string>)
+    q.certificate = _::from_JV((v as _object)["certificate"], type<inputfile?>)
+    q.ip_address = _::from_JV((v as _object)["ip_address"], type<string>)
+    q.max_connections = _::from_JV((v as _object)["max_connections"], type<int64>)
+    q.allowed_updates <- _::from_JV((v as _object)["allowed_updates"], type<array<string>>)
+    q.drop_pending_updates = _::from_JV((v as _object)["drop_pending_updates"], type<bool>)
+    q.secret_token = _::from_JV((v as _object)["secret_token"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:setwebhook? ) : setwebhook?
@@ -156,7 +156,7 @@ struct deletewebhook
 
 def from_JV ( var v:JsonValue?; t:deletewebhook ) : deletewebhook
     var q : deletewebhook
-    move_to_ref(q.drop_pending_updates, _::from_JV((v as _object)["drop_pending_updates"], type<bool>))
+    q.drop_pending_updates = _::from_JV((v as _object)["drop_pending_updates"], type<bool>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:deletewebhook? ) : deletewebhook?
@@ -202,15 +202,15 @@ struct webhookinfo
 
 def from_JV ( var v:JsonValue?; t:webhookinfo ) : webhookinfo
     var q : webhookinfo
-    move_to_ref(q.url, _::from_JV((v as _object)["url"], type<string>))
-    move_to_ref(q.has_custom_certificate, _::from_JV((v as _object)["has_custom_certificate"], type<bool>))
-    move_to_ref(q.pending_update_count, _::from_JV((v as _object)["pending_update_count"], type<int64>))
-    move_to_ref(q.ip_address, _::from_JV((v as _object)["ip_address"], type<string>))
-    move_to_ref(q.last_error_date, _::from_JV((v as _object)["last_error_date"], type<int64>))
-    move_to_ref(q.last_error_message, _::from_JV((v as _object)["last_error_message"], type<string>))
-    move_to_ref(q.last_synchronization_error_date, _::from_JV((v as _object)["last_synchronization_error_date"], type<int64>))
-    move_to_ref(q.max_connections, _::from_JV((v as _object)["max_connections"], type<int64>))
-    move_to_ref(q.allowed_updates, _::from_JV((v as _object)["allowed_updates"], type<array<string>>))
+    q.url = _::from_JV((v as _object)["url"], type<string>)
+    q.has_custom_certificate = _::from_JV((v as _object)["has_custom_certificate"], type<bool>)
+    q.pending_update_count = _::from_JV((v as _object)["pending_update_count"], type<int64>)
+    q.ip_address = _::from_JV((v as _object)["ip_address"], type<string>)
+    q.last_error_date = _::from_JV((v as _object)["last_error_date"], type<int64>)
+    q.last_error_message = _::from_JV((v as _object)["last_error_message"], type<string>)
+    q.last_synchronization_error_date = _::from_JV((v as _object)["last_synchronization_error_date"], type<int64>)
+    q.max_connections = _::from_JV((v as _object)["max_connections"], type<int64>)
+    q.allowed_updates <- _::from_JV((v as _object)["allowed_updates"], type<array<string>>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:webhookinfo? ) : webhookinfo?
@@ -248,17 +248,17 @@ struct user
 
 def from_JV ( var v:JsonValue?; t:user ) : user
     var q : user
-    move_to_ref(q.id, _::from_JV((v as _object)["id"], type<int64>))
-    move_to_ref(q.is_bot, _::from_JV((v as _object)["is_bot"], type<bool>))
-    move_to_ref(q.first_name, _::from_JV((v as _object)["first_name"], type<string>))
-    move_to_ref(q.last_name, _::from_JV((v as _object)["last_name"], type<string>))
-    move_to_ref(q.username, _::from_JV((v as _object)["username"], type<string>))
-    move_to_ref(q.language_code, _::from_JV((v as _object)["language_code"], type<string>))
-    move_to_ref(q.is_premium, _::from_JV((v as _object)["is_premium"], type<bool>))
-    move_to_ref(q.added_to_attachment_menu, _::from_JV((v as _object)["added_to_attachment_menu"], type<bool>))
-    move_to_ref(q.can_join_groups, _::from_JV((v as _object)["can_join_groups"], type<bool>))
-    move_to_ref(q.can_read_all_group_messages, _::from_JV((v as _object)["can_read_all_group_messages"], type<bool>))
-    move_to_ref(q.supports_inline_queries, _::from_JV((v as _object)["supports_inline_queries"], type<bool>))
+    q.id = _::from_JV((v as _object)["id"], type<int64>)
+    q.is_bot = _::from_JV((v as _object)["is_bot"], type<bool>)
+    q.first_name = _::from_JV((v as _object)["first_name"], type<string>)
+    q.last_name = _::from_JV((v as _object)["last_name"], type<string>)
+    q.username = _::from_JV((v as _object)["username"], type<string>)
+    q.language_code = _::from_JV((v as _object)["language_code"], type<string>)
+    q.is_premium = _::from_JV((v as _object)["is_premium"], type<bool>)
+    q.added_to_attachment_menu = _::from_JV((v as _object)["added_to_attachment_menu"], type<bool>)
+    q.can_join_groups = _::from_JV((v as _object)["can_join_groups"], type<bool>)
+    q.can_read_all_group_messages = _::from_JV((v as _object)["can_read_all_group_messages"], type<bool>)
+    q.supports_inline_queries = _::from_JV((v as _object)["supports_inline_queries"], type<bool>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:user? ) : user?
@@ -315,34 +315,34 @@ struct chat
 
 def from_JV ( var v:JsonValue?; t:chat ) : chat
     var q : chat
-    move_to_ref(q.id, _::from_JV((v as _object)["id"], type<int64>))
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
-    move_to_ref(q.title, _::from_JV((v as _object)["title"], type<string>))
-    move_to_ref(q.username, _::from_JV((v as _object)["username"], type<string>))
-    move_to_ref(q.first_name, _::from_JV((v as _object)["first_name"], type<string>))
-    move_to_ref(q.last_name, _::from_JV((v as _object)["last_name"], type<string>))
-    move_to_ref(q.is_forum, _::from_JV((v as _object)["is_forum"], type<bool>))
-    move_to_ref(q.photo, _::from_JV((v as _object)["photo"], type<chatphoto?>))
-    move_to_ref(q.active_usernames, _::from_JV((v as _object)["active_usernames"], type<array<string>>))
-    move_to_ref(q.emoji_status_custom_emoji_id, _::from_JV((v as _object)["emoji_status_custom_emoji_id"], type<string>))
-    move_to_ref(q.bio, _::from_JV((v as _object)["bio"], type<string>))
-    move_to_ref(q.has_private_forwards, _::from_JV((v as _object)["has_private_forwards"], type<bool>))
-    move_to_ref(q.has_restricted_voice_and_video_messages, _::from_JV((v as _object)["has_restricted_voice_and_video_messages"], type<bool>))
-    move_to_ref(q.join_to_send_messages, _::from_JV((v as _object)["join_to_send_messages"], type<bool>))
-    move_to_ref(q.join_by_request, _::from_JV((v as _object)["join_by_request"], type<bool>))
-    move_to_ref(q.description, _::from_JV((v as _object)["description"], type<string>))
-    move_to_ref(q.invite_link, _::from_JV((v as _object)["invite_link"], type<string>))
-    move_to_ref(q.pinned_message, _::from_JV((v as _object)["pinned_message"], type<message?>))
-    move_to_ref(q.permissions, _::from_JV((v as _object)["permissions"], type<chatpermissions?>))
-    move_to_ref(q.slow_mode_delay, _::from_JV((v as _object)["slow_mode_delay"], type<int64>))
-    move_to_ref(q.message_auto_delete_time, _::from_JV((v as _object)["message_auto_delete_time"], type<int64>))
-    move_to_ref(q.has_aggressive_anti_spam_enabled, _::from_JV((v as _object)["has_aggressive_anti_spam_enabled"], type<bool>))
-    move_to_ref(q.has_hidden_members, _::from_JV((v as _object)["has_hidden_members"], type<bool>))
-    move_to_ref(q.has_protected_content, _::from_JV((v as _object)["has_protected_content"], type<bool>))
-    move_to_ref(q.sticker_set_name, _::from_JV((v as _object)["sticker_set_name"], type<string>))
-    move_to_ref(q.can_set_sticker_set, _::from_JV((v as _object)["can_set_sticker_set"], type<bool>))
-    move_to_ref(q.linked_chat_id, _::from_JV((v as _object)["linked_chat_id"], type<int64>))
-    move_to_ref(q.location, _::from_JV((v as _object)["location"], type<chatlocation?>))
+    q.id = _::from_JV((v as _object)["id"], type<int64>)
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
+    q.title = _::from_JV((v as _object)["title"], type<string>)
+    q.username = _::from_JV((v as _object)["username"], type<string>)
+    q.first_name = _::from_JV((v as _object)["first_name"], type<string>)
+    q.last_name = _::from_JV((v as _object)["last_name"], type<string>)
+    q.is_forum = _::from_JV((v as _object)["is_forum"], type<bool>)
+    q.photo = _::from_JV((v as _object)["photo"], type<chatphoto?>)
+    q.active_usernames <- _::from_JV((v as _object)["active_usernames"], type<array<string>>)
+    q.emoji_status_custom_emoji_id = _::from_JV((v as _object)["emoji_status_custom_emoji_id"], type<string>)
+    q.bio = _::from_JV((v as _object)["bio"], type<string>)
+    q.has_private_forwards = _::from_JV((v as _object)["has_private_forwards"], type<bool>)
+    q.has_restricted_voice_and_video_messages = _::from_JV((v as _object)["has_restricted_voice_and_video_messages"], type<bool>)
+    q.join_to_send_messages = _::from_JV((v as _object)["join_to_send_messages"], type<bool>)
+    q.join_by_request = _::from_JV((v as _object)["join_by_request"], type<bool>)
+    q.description = _::from_JV((v as _object)["description"], type<string>)
+    q.invite_link = _::from_JV((v as _object)["invite_link"], type<string>)
+    q.pinned_message = _::from_JV((v as _object)["pinned_message"], type<message?>)
+    q.permissions = _::from_JV((v as _object)["permissions"], type<chatpermissions?>)
+    q.slow_mode_delay = _::from_JV((v as _object)["slow_mode_delay"], type<int64>)
+    q.message_auto_delete_time = _::from_JV((v as _object)["message_auto_delete_time"], type<int64>)
+    q.has_aggressive_anti_spam_enabled = _::from_JV((v as _object)["has_aggressive_anti_spam_enabled"], type<bool>)
+    q.has_hidden_members = _::from_JV((v as _object)["has_hidden_members"], type<bool>)
+    q.has_protected_content = _::from_JV((v as _object)["has_protected_content"], type<bool>)
+    q.sticker_set_name = _::from_JV((v as _object)["sticker_set_name"], type<string>)
+    q.can_set_sticker_set = _::from_JV((v as _object)["can_set_sticker_set"], type<bool>)
+    q.linked_chat_id = _::from_JV((v as _object)["linked_chat_id"], type<int64>)
+    q.location = _::from_JV((v as _object)["location"], type<chatlocation?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:chat? ) : chat?
@@ -463,77 +463,77 @@ struct message
 
 def from_JV ( var v:JsonValue?; t:message ) : message
     var q : message
-    move_to_ref(q.message_id, _::from_JV((v as _object)["message_id"], type<int64>))
-    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], type<int64>))
-    move_to_ref(q.from, _::from_JV((v as _object)["from"], type<user?>))
-    move_to_ref(q.sender_chat, _::from_JV((v as _object)["sender_chat"], type<chat?>))
-    move_to_ref(q.date, _::from_JV((v as _object)["date"], type<int64>))
-    move_to_ref(q.chat, _::from_JV((v as _object)["chat"], type<chat>))
-    move_to_ref(q.forward_from, _::from_JV((v as _object)["forward_from"], type<user?>))
-    move_to_ref(q.forward_from_chat, _::from_JV((v as _object)["forward_from_chat"], type<chat?>))
-    move_to_ref(q.forward_from_message_id, _::from_JV((v as _object)["forward_from_message_id"], type<int64>))
-    move_to_ref(q.forward_signature, _::from_JV((v as _object)["forward_signature"], type<string>))
-    move_to_ref(q.forward_sender_name, _::from_JV((v as _object)["forward_sender_name"], type<string>))
-    move_to_ref(q.forward_date, _::from_JV((v as _object)["forward_date"], type<int64>))
-    move_to_ref(q.is_topic_message, _::from_JV((v as _object)["is_topic_message"], type<bool>))
-    move_to_ref(q.is_automatic_forward, _::from_JV((v as _object)["is_automatic_forward"], type<bool>))
-    move_to_ref(q.reply_to_message, _::from_JV((v as _object)["reply_to_message"], type<message?>))
-    move_to_ref(q.via_bot, _::from_JV((v as _object)["via_bot"], type<user?>))
-    move_to_ref(q.edit_date, _::from_JV((v as _object)["edit_date"], type<int64>))
-    move_to_ref(q.has_protected_content, _::from_JV((v as _object)["has_protected_content"], type<bool>))
-    move_to_ref(q.media_group_id, _::from_JV((v as _object)["media_group_id"], type<string>))
-    move_to_ref(q.author_signature, _::from_JV((v as _object)["author_signature"], type<string>))
-    move_to_ref(q.text, _::from_JV((v as _object)["text"], type<string>))
-    move_to_ref(q.entities, _::from_JV((v as _object)["entities"], type<array<messageentity>>))
-    move_to_ref(q.animation, _::from_JV((v as _object)["animation"], type<animation?>))
-    move_to_ref(q.audio, _::from_JV((v as _object)["audio"], type<audio?>))
-    move_to_ref(q.document, _::from_JV((v as _object)["document"], type<document?>))
-    move_to_ref(q.photo, _::from_JV((v as _object)["photo"], type<array<photosize>>))
-    move_to_ref(q.sticker, _::from_JV((v as _object)["sticker"], type<sticker?>))
-    move_to_ref(q.video, _::from_JV((v as _object)["video"], type<video?>))
-    move_to_ref(q.video_note, _::from_JV((v as _object)["video_note"], type<videonote?>))
-    move_to_ref(q.voice, _::from_JV((v as _object)["voice"], type<voice?>))
-    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], type<string>))
-    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>))
-    move_to_ref(q.has_media_spoiler, _::from_JV((v as _object)["has_media_spoiler"], type<bool>))
-    move_to_ref(q.contact, _::from_JV((v as _object)["contact"], type<contact?>))
-    move_to_ref(q.dice, _::from_JV((v as _object)["dice"], type<dice?>))
-    move_to_ref(q.game, _::from_JV((v as _object)["game"], type<game?>))
-    move_to_ref(q.poll, _::from_JV((v as _object)["poll"], type<poll?>))
-    move_to_ref(q.venue, _::from_JV((v as _object)["venue"], type<venue?>))
-    move_to_ref(q.location, _::from_JV((v as _object)["location"], type<location?>))
-    move_to_ref(q.new_chat_members, _::from_JV((v as _object)["new_chat_members"], type<array<user>>))
-    move_to_ref(q.left_chat_member, _::from_JV((v as _object)["left_chat_member"], type<user?>))
-    move_to_ref(q.new_chat_title, _::from_JV((v as _object)["new_chat_title"], type<string>))
-    move_to_ref(q.new_chat_photo, _::from_JV((v as _object)["new_chat_photo"], type<array<photosize>>))
-    move_to_ref(q.delete_chat_photo, _::from_JV((v as _object)["delete_chat_photo"], type<bool>))
-    move_to_ref(q.group_chat_created, _::from_JV((v as _object)["group_chat_created"], type<bool>))
-    move_to_ref(q.supergroup_chat_created, _::from_JV((v as _object)["supergroup_chat_created"], type<bool>))
-    move_to_ref(q.channel_chat_created, _::from_JV((v as _object)["channel_chat_created"], type<bool>))
-    move_to_ref(q.message_auto_delete_timer_changed, _::from_JV((v as _object)["message_auto_delete_timer_changed"], type<messageautodeletetimerchanged?>))
-    move_to_ref(q.migrate_to_chat_id, _::from_JV((v as _object)["migrate_to_chat_id"], type<int64>))
-    move_to_ref(q.migrate_from_chat_id, _::from_JV((v as _object)["migrate_from_chat_id"], type<int64>))
-    move_to_ref(q.pinned_message, _::from_JV((v as _object)["pinned_message"], type<message?>))
-    move_to_ref(q.invoice, _::from_JV((v as _object)["invoice"], type<invoice?>))
-    move_to_ref(q.successful_payment, _::from_JV((v as _object)["successful_payment"], type<successfulpayment?>))
-    move_to_ref(q.user_shared, _::from_JV((v as _object)["user_shared"], type<usershared?>))
-    move_to_ref(q.chat_shared, _::from_JV((v as _object)["chat_shared"], type<chatshared?>))
-    move_to_ref(q.connected_website, _::from_JV((v as _object)["connected_website"], type<string>))
-    move_to_ref(q.write_access_allowed, _::from_JV((v as _object)["write_access_allowed"], type<writeaccessallowed?>))
-    move_to_ref(q.passport_data, _::from_JV((v as _object)["passport_data"], type<passportdata?>))
-    move_to_ref(q.proximity_alert_triggered, _::from_JV((v as _object)["proximity_alert_triggered"], type<proximityalerttriggered?>))
-    move_to_ref(q.forum_topic_created, _::from_JV((v as _object)["forum_topic_created"], type<forumtopiccreated?>))
-    move_to_ref(q.forum_topic_edited, _::from_JV((v as _object)["forum_topic_edited"], type<forumtopicedited?>))
-    move_to_ref(q.forum_topic_closed, _::from_JV((v as _object)["forum_topic_closed"], type<forumtopicclosed?>))
-    move_to_ref(q.forum_topic_reopened, _::from_JV((v as _object)["forum_topic_reopened"], type<forumtopicreopened?>))
-    move_to_ref(q.general_forum_topic_hidden, _::from_JV((v as _object)["general_forum_topic_hidden"], type<generalforumtopichidden?>))
-    move_to_ref(q.general_forum_topic_unhidden, _::from_JV((v as _object)["general_forum_topic_unhidden"], type<generalforumtopicunhidden?>))
-    move_to_ref(q.video_chat_scheduled, _::from_JV((v as _object)["video_chat_scheduled"], type<videochatscheduled?>))
-    move_to_ref(q.video_chat_started, _::from_JV((v as _object)["video_chat_started"], type<videochatstarted?>))
-    move_to_ref(q.video_chat_ended, _::from_JV((v as _object)["video_chat_ended"], type<videochatended?>))
-    move_to_ref(q.video_chat_participants_invited, _::from_JV((v as _object)["video_chat_participants_invited"], type<videochatparticipantsinvited?>))
-    move_to_ref(q.web_app_data, _::from_JV((v as _object)["web_app_data"], type<webappdata?>))
-    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>))
+    q.message_id = _::from_JV((v as _object)["message_id"], type<int64>)
+    q.message_thread_id = _::from_JV((v as _object)["message_thread_id"], type<int64>)
+    q.from = _::from_JV((v as _object)["from"], type<user?>)
+    q.sender_chat = _::from_JV((v as _object)["sender_chat"], type<chat?>)
+    q.date = _::from_JV((v as _object)["date"], type<int64>)
+    q.chat <- _::from_JV((v as _object)["chat"], type<chat>)
+    q.forward_from = _::from_JV((v as _object)["forward_from"], type<user?>)
+    q.forward_from_chat = _::from_JV((v as _object)["forward_from_chat"], type<chat?>)
+    q.forward_from_message_id = _::from_JV((v as _object)["forward_from_message_id"], type<int64>)
+    q.forward_signature = _::from_JV((v as _object)["forward_signature"], type<string>)
+    q.forward_sender_name = _::from_JV((v as _object)["forward_sender_name"], type<string>)
+    q.forward_date = _::from_JV((v as _object)["forward_date"], type<int64>)
+    q.is_topic_message = _::from_JV((v as _object)["is_topic_message"], type<bool>)
+    q.is_automatic_forward = _::from_JV((v as _object)["is_automatic_forward"], type<bool>)
+    q.reply_to_message = _::from_JV((v as _object)["reply_to_message"], type<message?>)
+    q.via_bot = _::from_JV((v as _object)["via_bot"], type<user?>)
+    q.edit_date = _::from_JV((v as _object)["edit_date"], type<int64>)
+    q.has_protected_content = _::from_JV((v as _object)["has_protected_content"], type<bool>)
+    q.media_group_id = _::from_JV((v as _object)["media_group_id"], type<string>)
+    q.author_signature = _::from_JV((v as _object)["author_signature"], type<string>)
+    q.text = _::from_JV((v as _object)["text"], type<string>)
+    q.entities <- _::from_JV((v as _object)["entities"], type<array<messageentity>>)
+    q.animation = _::from_JV((v as _object)["animation"], type<animation?>)
+    q.audio = _::from_JV((v as _object)["audio"], type<audio?>)
+    q.document = _::from_JV((v as _object)["document"], type<document?>)
+    q.photo <- _::from_JV((v as _object)["photo"], type<array<photosize>>)
+    q.sticker = _::from_JV((v as _object)["sticker"], type<sticker?>)
+    q.video = _::from_JV((v as _object)["video"], type<video?>)
+    q.video_note = _::from_JV((v as _object)["video_note"], type<videonote?>)
+    q.voice = _::from_JV((v as _object)["voice"], type<voice?>)
+    q.caption = _::from_JV((v as _object)["caption"], type<string>)
+    q.caption_entities <- _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>)
+    q.has_media_spoiler = _::from_JV((v as _object)["has_media_spoiler"], type<bool>)
+    q.contact = _::from_JV((v as _object)["contact"], type<contact?>)
+    q.dice = _::from_JV((v as _object)["dice"], type<dice?>)
+    q.game = _::from_JV((v as _object)["game"], type<game?>)
+    q.poll = _::from_JV((v as _object)["poll"], type<poll?>)
+    q.venue = _::from_JV((v as _object)["venue"], type<venue?>)
+    q.location = _::from_JV((v as _object)["location"], type<location?>)
+    q.new_chat_members <- _::from_JV((v as _object)["new_chat_members"], type<array<user>>)
+    q.left_chat_member = _::from_JV((v as _object)["left_chat_member"], type<user?>)
+    q.new_chat_title = _::from_JV((v as _object)["new_chat_title"], type<string>)
+    q.new_chat_photo <- _::from_JV((v as _object)["new_chat_photo"], type<array<photosize>>)
+    q.delete_chat_photo = _::from_JV((v as _object)["delete_chat_photo"], type<bool>)
+    q.group_chat_created = _::from_JV((v as _object)["group_chat_created"], type<bool>)
+    q.supergroup_chat_created = _::from_JV((v as _object)["supergroup_chat_created"], type<bool>)
+    q.channel_chat_created = _::from_JV((v as _object)["channel_chat_created"], type<bool>)
+    q.message_auto_delete_timer_changed = _::from_JV((v as _object)["message_auto_delete_timer_changed"], type<messageautodeletetimerchanged?>)
+    q.migrate_to_chat_id = _::from_JV((v as _object)["migrate_to_chat_id"], type<int64>)
+    q.migrate_from_chat_id = _::from_JV((v as _object)["migrate_from_chat_id"], type<int64>)
+    q.pinned_message = _::from_JV((v as _object)["pinned_message"], type<message?>)
+    q.invoice = _::from_JV((v as _object)["invoice"], type<invoice?>)
+    q.successful_payment = _::from_JV((v as _object)["successful_payment"], type<successfulpayment?>)
+    q.user_shared = _::from_JV((v as _object)["user_shared"], type<usershared?>)
+    q.chat_shared = _::from_JV((v as _object)["chat_shared"], type<chatshared?>)
+    q.connected_website = _::from_JV((v as _object)["connected_website"], type<string>)
+    q.write_access_allowed = _::from_JV((v as _object)["write_access_allowed"], type<writeaccessallowed?>)
+    q.passport_data = _::from_JV((v as _object)["passport_data"], type<passportdata?>)
+    q.proximity_alert_triggered = _::from_JV((v as _object)["proximity_alert_triggered"], type<proximityalerttriggered?>)
+    q.forum_topic_created = _::from_JV((v as _object)["forum_topic_created"], type<forumtopiccreated?>)
+    q.forum_topic_edited = _::from_JV((v as _object)["forum_topic_edited"], type<forumtopicedited?>)
+    q.forum_topic_closed = _::from_JV((v as _object)["forum_topic_closed"], type<forumtopicclosed?>)
+    q.forum_topic_reopened = _::from_JV((v as _object)["forum_topic_reopened"], type<forumtopicreopened?>)
+    q.general_forum_topic_hidden = _::from_JV((v as _object)["general_forum_topic_hidden"], type<generalforumtopichidden?>)
+    q.general_forum_topic_unhidden = _::from_JV((v as _object)["general_forum_topic_unhidden"], type<generalforumtopicunhidden?>)
+    q.video_chat_scheduled = _::from_JV((v as _object)["video_chat_scheduled"], type<videochatscheduled?>)
+    q.video_chat_started = _::from_JV((v as _object)["video_chat_started"], type<videochatstarted?>)
+    q.video_chat_ended = _::from_JV((v as _object)["video_chat_ended"], type<videochatended?>)
+    q.video_chat_participants_invited = _::from_JV((v as _object)["video_chat_participants_invited"], type<videochatparticipantsinvited?>)
+    q.web_app_data = _::from_JV((v as _object)["web_app_data"], type<webappdata?>)
+    q.reply_markup = _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:message? ) : message?
@@ -664,7 +664,7 @@ struct messageid
 
 def from_JV ( var v:JsonValue?; t:messageid ) : messageid
     var q : messageid
-    move_to_ref(q.message_id, _::from_JV((v as _object)["message_id"], type<int64>))
+    q.message_id = _::from_JV((v as _object)["message_id"], type<int64>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:messageid? ) : messageid?
@@ -690,13 +690,13 @@ struct messageentity
 
 def from_JV ( var v:JsonValue?; t:messageentity ) : messageentity
     var q : messageentity
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
-    move_to_ref(q.offset, _::from_JV((v as _object)["offset"], type<int64>))
-    move_to_ref(q.length, _::from_JV((v as _object)["length"], type<int64>))
-    move_to_ref(q.url, _::from_JV((v as _object)["url"], type<string>))
-    move_to_ref(q.user, _::from_JV((v as _object)["user"], type<user?>))
-    move_to_ref(q.language, _::from_JV((v as _object)["language"], type<string>))
-    move_to_ref(q.custom_emoji_id, _::from_JV((v as _object)["custom_emoji_id"], type<string>))
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
+    q.offset = _::from_JV((v as _object)["offset"], type<int64>)
+    q.length = _::from_JV((v as _object)["length"], type<int64>)
+    q.url = _::from_JV((v as _object)["url"], type<string>)
+    q.user = _::from_JV((v as _object)["user"], type<user?>)
+    q.language = _::from_JV((v as _object)["language"], type<string>)
+    q.custom_emoji_id = _::from_JV((v as _object)["custom_emoji_id"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:messageentity? ) : messageentity?
@@ -727,11 +727,11 @@ struct photosize
 
 def from_JV ( var v:JsonValue?; t:photosize ) : photosize
     var q : photosize
-    move_to_ref(q.file_id, _::from_JV((v as _object)["file_id"], type<string>))
-    move_to_ref(q.file_unique_id, _::from_JV((v as _object)["file_unique_id"], type<string>))
-    move_to_ref(q.width, _::from_JV((v as _object)["width"], type<int64>))
-    move_to_ref(q.height, _::from_JV((v as _object)["height"], type<int64>))
-    move_to_ref(q.file_size, _::from_JV((v as _object)["file_size"], type<int64>))
+    q.file_id = _::from_JV((v as _object)["file_id"], type<string>)
+    q.file_unique_id = _::from_JV((v as _object)["file_unique_id"], type<string>)
+    q.width = _::from_JV((v as _object)["width"], type<int64>)
+    q.height = _::from_JV((v as _object)["height"], type<int64>)
+    q.file_size = _::from_JV((v as _object)["file_size"], type<int64>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:photosize? ) : photosize?
@@ -763,15 +763,15 @@ struct animation
 
 def from_JV ( var v:JsonValue?; t:animation ) : animation
     var q : animation
-    move_to_ref(q.file_id, _::from_JV((v as _object)["file_id"], type<string>))
-    move_to_ref(q.file_unique_id, _::from_JV((v as _object)["file_unique_id"], type<string>))
-    move_to_ref(q.width, _::from_JV((v as _object)["width"], type<int64>))
-    move_to_ref(q.height, _::from_JV((v as _object)["height"], type<int64>))
-    move_to_ref(q.duration, _::from_JV((v as _object)["duration"], type<int64>))
-    move_to_ref(q.thumbnail, _::from_JV((v as _object)["thumbnail"], type<photosize?>))
-    move_to_ref(q.file_name, _::from_JV((v as _object)["file_name"], type<string>))
-    move_to_ref(q.mime_type, _::from_JV((v as _object)["mime_type"], type<string>))
-    move_to_ref(q.file_size, _::from_JV((v as _object)["file_size"], type<int64>))
+    q.file_id = _::from_JV((v as _object)["file_id"], type<string>)
+    q.file_unique_id = _::from_JV((v as _object)["file_unique_id"], type<string>)
+    q.width = _::from_JV((v as _object)["width"], type<int64>)
+    q.height = _::from_JV((v as _object)["height"], type<int64>)
+    q.duration = _::from_JV((v as _object)["duration"], type<int64>)
+    q.thumbnail = _::from_JV((v as _object)["thumbnail"], type<photosize?>)
+    q.file_name = _::from_JV((v as _object)["file_name"], type<string>)
+    q.mime_type = _::from_JV((v as _object)["mime_type"], type<string>)
+    q.file_size = _::from_JV((v as _object)["file_size"], type<int64>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:animation? ) : animation?
@@ -808,15 +808,15 @@ struct audio
 
 def from_JV ( var v:JsonValue?; t:audio ) : audio
     var q : audio
-    move_to_ref(q.file_id, _::from_JV((v as _object)["file_id"], type<string>))
-    move_to_ref(q.file_unique_id, _::from_JV((v as _object)["file_unique_id"], type<string>))
-    move_to_ref(q.duration, _::from_JV((v as _object)["duration"], type<int64>))
-    move_to_ref(q.performer, _::from_JV((v as _object)["performer"], type<string>))
-    move_to_ref(q.title, _::from_JV((v as _object)["title"], type<string>))
-    move_to_ref(q.file_name, _::from_JV((v as _object)["file_name"], type<string>))
-    move_to_ref(q.mime_type, _::from_JV((v as _object)["mime_type"], type<string>))
-    move_to_ref(q.file_size, _::from_JV((v as _object)["file_size"], type<int64>))
-    move_to_ref(q.thumbnail, _::from_JV((v as _object)["thumbnail"], type<photosize?>))
+    q.file_id = _::from_JV((v as _object)["file_id"], type<string>)
+    q.file_unique_id = _::from_JV((v as _object)["file_unique_id"], type<string>)
+    q.duration = _::from_JV((v as _object)["duration"], type<int64>)
+    q.performer = _::from_JV((v as _object)["performer"], type<string>)
+    q.title = _::from_JV((v as _object)["title"], type<string>)
+    q.file_name = _::from_JV((v as _object)["file_name"], type<string>)
+    q.mime_type = _::from_JV((v as _object)["mime_type"], type<string>)
+    q.file_size = _::from_JV((v as _object)["file_size"], type<int64>)
+    q.thumbnail = _::from_JV((v as _object)["thumbnail"], type<photosize?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:audio? ) : audio?
@@ -850,12 +850,12 @@ struct document
 
 def from_JV ( var v:JsonValue?; t:document ) : document
     var q : document
-    move_to_ref(q.file_id, _::from_JV((v as _object)["file_id"], type<string>))
-    move_to_ref(q.file_unique_id, _::from_JV((v as _object)["file_unique_id"], type<string>))
-    move_to_ref(q.thumbnail, _::from_JV((v as _object)["thumbnail"], type<photosize?>))
-    move_to_ref(q.file_name, _::from_JV((v as _object)["file_name"], type<string>))
-    move_to_ref(q.mime_type, _::from_JV((v as _object)["mime_type"], type<string>))
-    move_to_ref(q.file_size, _::from_JV((v as _object)["file_size"], type<int64>))
+    q.file_id = _::from_JV((v as _object)["file_id"], type<string>)
+    q.file_unique_id = _::from_JV((v as _object)["file_unique_id"], type<string>)
+    q.thumbnail = _::from_JV((v as _object)["thumbnail"], type<photosize?>)
+    q.file_name = _::from_JV((v as _object)["file_name"], type<string>)
+    q.mime_type = _::from_JV((v as _object)["mime_type"], type<string>)
+    q.file_size = _::from_JV((v as _object)["file_size"], type<int64>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:document? ) : document?
@@ -889,15 +889,15 @@ struct video
 
 def from_JV ( var v:JsonValue?; t:video ) : video
     var q : video
-    move_to_ref(q.file_id, _::from_JV((v as _object)["file_id"], type<string>))
-    move_to_ref(q.file_unique_id, _::from_JV((v as _object)["file_unique_id"], type<string>))
-    move_to_ref(q.width, _::from_JV((v as _object)["width"], type<int64>))
-    move_to_ref(q.height, _::from_JV((v as _object)["height"], type<int64>))
-    move_to_ref(q.duration, _::from_JV((v as _object)["duration"], type<int64>))
-    move_to_ref(q.thumbnail, _::from_JV((v as _object)["thumbnail"], type<photosize?>))
-    move_to_ref(q.file_name, _::from_JV((v as _object)["file_name"], type<string>))
-    move_to_ref(q.mime_type, _::from_JV((v as _object)["mime_type"], type<string>))
-    move_to_ref(q.file_size, _::from_JV((v as _object)["file_size"], type<int64>))
+    q.file_id = _::from_JV((v as _object)["file_id"], type<string>)
+    q.file_unique_id = _::from_JV((v as _object)["file_unique_id"], type<string>)
+    q.width = _::from_JV((v as _object)["width"], type<int64>)
+    q.height = _::from_JV((v as _object)["height"], type<int64>)
+    q.duration = _::from_JV((v as _object)["duration"], type<int64>)
+    q.thumbnail = _::from_JV((v as _object)["thumbnail"], type<photosize?>)
+    q.file_name = _::from_JV((v as _object)["file_name"], type<string>)
+    q.mime_type = _::from_JV((v as _object)["mime_type"], type<string>)
+    q.file_size = _::from_JV((v as _object)["file_size"], type<int64>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:video? ) : video?
@@ -931,12 +931,12 @@ struct videonote
 
 def from_JV ( var v:JsonValue?; t:videonote ) : videonote
     var q : videonote
-    move_to_ref(q.file_id, _::from_JV((v as _object)["file_id"], type<string>))
-    move_to_ref(q.file_unique_id, _::from_JV((v as _object)["file_unique_id"], type<string>))
-    move_to_ref(q.length, _::from_JV((v as _object)["length"], type<int64>))
-    move_to_ref(q.duration, _::from_JV((v as _object)["duration"], type<int64>))
-    move_to_ref(q.thumbnail, _::from_JV((v as _object)["thumbnail"], type<photosize?>))
-    move_to_ref(q.file_size, _::from_JV((v as _object)["file_size"], type<int64>))
+    q.file_id = _::from_JV((v as _object)["file_id"], type<string>)
+    q.file_unique_id = _::from_JV((v as _object)["file_unique_id"], type<string>)
+    q.length = _::from_JV((v as _object)["length"], type<int64>)
+    q.duration = _::from_JV((v as _object)["duration"], type<int64>)
+    q.thumbnail = _::from_JV((v as _object)["thumbnail"], type<photosize?>)
+    q.file_size = _::from_JV((v as _object)["file_size"], type<int64>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:videonote? ) : videonote?
@@ -966,11 +966,11 @@ struct voice
 
 def from_JV ( var v:JsonValue?; t:voice ) : voice
     var q : voice
-    move_to_ref(q.file_id, _::from_JV((v as _object)["file_id"], type<string>))
-    move_to_ref(q.file_unique_id, _::from_JV((v as _object)["file_unique_id"], type<string>))
-    move_to_ref(q.duration, _::from_JV((v as _object)["duration"], type<int64>))
-    move_to_ref(q.mime_type, _::from_JV((v as _object)["mime_type"], type<string>))
-    move_to_ref(q.file_size, _::from_JV((v as _object)["file_size"], type<int64>))
+    q.file_id = _::from_JV((v as _object)["file_id"], type<string>)
+    q.file_unique_id = _::from_JV((v as _object)["file_unique_id"], type<string>)
+    q.duration = _::from_JV((v as _object)["duration"], type<int64>)
+    q.mime_type = _::from_JV((v as _object)["mime_type"], type<string>)
+    q.file_size = _::from_JV((v as _object)["file_size"], type<int64>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:voice? ) : voice?
@@ -998,11 +998,11 @@ struct contact
 
 def from_JV ( var v:JsonValue?; t:contact ) : contact
     var q : contact
-    move_to_ref(q.phone_number, _::from_JV((v as _object)["phone_number"], type<string>))
-    move_to_ref(q.first_name, _::from_JV((v as _object)["first_name"], type<string>))
-    move_to_ref(q.last_name, _::from_JV((v as _object)["last_name"], type<string>))
-    move_to_ref(q.user_id, _::from_JV((v as _object)["user_id"], type<int64>))
-    move_to_ref(q.vcard, _::from_JV((v as _object)["vcard"], type<string>))
+    q.phone_number = _::from_JV((v as _object)["phone_number"], type<string>)
+    q.first_name = _::from_JV((v as _object)["first_name"], type<string>)
+    q.last_name = _::from_JV((v as _object)["last_name"], type<string>)
+    q.user_id = _::from_JV((v as _object)["user_id"], type<int64>)
+    q.vcard = _::from_JV((v as _object)["vcard"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:contact? ) : contact?
@@ -1027,8 +1027,8 @@ struct dice
 
 def from_JV ( var v:JsonValue?; t:dice ) : dice
     var q : dice
-    move_to_ref(q.emoji, _::from_JV((v as _object)["emoji"], type<string>))
-    move_to_ref(q.value, _::from_JV((v as _object)["value"], type<int64>))
+    q.emoji = _::from_JV((v as _object)["emoji"], type<string>)
+    q.value = _::from_JV((v as _object)["value"], type<int64>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:dice? ) : dice?
@@ -1050,8 +1050,8 @@ struct polloption
 
 def from_JV ( var v:JsonValue?; t:polloption ) : polloption
     var q : polloption
-    move_to_ref(q.text, _::from_JV((v as _object)["text"], type<string>))
-    move_to_ref(q.voter_count, _::from_JV((v as _object)["voter_count"], type<int64>))
+    q.text = _::from_JV((v as _object)["text"], type<string>)
+    q.voter_count = _::from_JV((v as _object)["voter_count"], type<int64>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:polloption? ) : polloption?
@@ -1074,9 +1074,9 @@ struct pollanswer
 
 def from_JV ( var v:JsonValue?; t:pollanswer ) : pollanswer
     var q : pollanswer
-    move_to_ref(q.poll_id, _::from_JV((v as _object)["poll_id"], type<string>))
-    move_to_ref(q.user, _::from_JV((v as _object)["user"], type<user>))
-    move_to_ref(q.option_ids, _::from_JV((v as _object)["option_ids"], type<array<int64>>))
+    q.poll_id = _::from_JV((v as _object)["poll_id"], type<string>)
+    q.user <- _::from_JV((v as _object)["user"], type<user>)
+    q.option_ids <- _::from_JV((v as _object)["option_ids"], type<array<int64>>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:pollanswer? ) : pollanswer?
@@ -1110,19 +1110,19 @@ struct poll
 
 def from_JV ( var v:JsonValue?; t:poll ) : poll
     var q : poll
-    move_to_ref(q.id, _::from_JV((v as _object)["id"], type<string>))
-    move_to_ref(q.question, _::from_JV((v as _object)["question"], type<string>))
-    move_to_ref(q._options, _::from_JV((v as _object)["_options"], type<array<polloption>>))
-    move_to_ref(q.total_voter_count, _::from_JV((v as _object)["total_voter_count"], type<int64>))
-    move_to_ref(q.is_closed, _::from_JV((v as _object)["is_closed"], type<bool>))
-    move_to_ref(q.is_anonymous, _::from_JV((v as _object)["is_anonymous"], type<bool>))
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
-    move_to_ref(q.allows_multiple_answers, _::from_JV((v as _object)["allows_multiple_answers"], type<bool>))
-    move_to_ref(q.correct_option_id, _::from_JV((v as _object)["correct_option_id"], type<int64>))
-    move_to_ref(q.explanation, _::from_JV((v as _object)["explanation"], type<string>))
-    move_to_ref(q.explanation_entities, _::from_JV((v as _object)["explanation_entities"], type<array<messageentity>>))
-    move_to_ref(q.open_period, _::from_JV((v as _object)["open_period"], type<int64>))
-    move_to_ref(q.close_date, _::from_JV((v as _object)["close_date"], type<int64>))
+    q.id = _::from_JV((v as _object)["id"], type<string>)
+    q.question = _::from_JV((v as _object)["question"], type<string>)
+    q._options <- _::from_JV((v as _object)["_options"], type<array<polloption>>)
+    q.total_voter_count = _::from_JV((v as _object)["total_voter_count"], type<int64>)
+    q.is_closed = _::from_JV((v as _object)["is_closed"], type<bool>)
+    q.is_anonymous = _::from_JV((v as _object)["is_anonymous"], type<bool>)
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
+    q.allows_multiple_answers = _::from_JV((v as _object)["allows_multiple_answers"], type<bool>)
+    q.correct_option_id = _::from_JV((v as _object)["correct_option_id"], type<int64>)
+    q.explanation = _::from_JV((v as _object)["explanation"], type<string>)
+    q.explanation_entities <- _::from_JV((v as _object)["explanation_entities"], type<array<messageentity>>)
+    q.open_period = _::from_JV((v as _object)["open_period"], type<int64>)
+    q.close_date = _::from_JV((v as _object)["close_date"], type<int64>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:poll? ) : poll?
@@ -1159,12 +1159,12 @@ struct location
 
 def from_JV ( var v:JsonValue?; t:location ) : location
     var q : location
-    move_to_ref(q.longitude, _::from_JV((v as _object)["longitude"], type<float>))
-    move_to_ref(q.latitude, _::from_JV((v as _object)["latitude"], type<float>))
-    move_to_ref(q.horizontal_accuracy, _::from_JV((v as _object)["horizontal_accuracy"], type<float>))
-    move_to_ref(q.live_period, _::from_JV((v as _object)["live_period"], type<int64>))
-    move_to_ref(q.heading, _::from_JV((v as _object)["heading"], type<int64>))
-    move_to_ref(q.proximity_alert_radius, _::from_JV((v as _object)["proximity_alert_radius"], type<int64>))
+    q.longitude = _::from_JV((v as _object)["longitude"], type<float>)
+    q.latitude = _::from_JV((v as _object)["latitude"], type<float>)
+    q.horizontal_accuracy = _::from_JV((v as _object)["horizontal_accuracy"], type<float>)
+    q.live_period = _::from_JV((v as _object)["live_period"], type<int64>)
+    q.heading = _::from_JV((v as _object)["heading"], type<int64>)
+    q.proximity_alert_radius = _::from_JV((v as _object)["proximity_alert_radius"], type<int64>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:location? ) : location?
@@ -1195,13 +1195,13 @@ struct venue
 
 def from_JV ( var v:JsonValue?; t:venue ) : venue
     var q : venue
-    move_to_ref(q.location, _::from_JV((v as _object)["location"], type<location>))
-    move_to_ref(q.title, _::from_JV((v as _object)["title"], type<string>))
-    move_to_ref(q.address, _::from_JV((v as _object)["address"], type<string>))
-    move_to_ref(q.foursquare_id, _::from_JV((v as _object)["foursquare_id"], type<string>))
-    move_to_ref(q.foursquare_type, _::from_JV((v as _object)["foursquare_type"], type<string>))
-    move_to_ref(q.google_place_id, _::from_JV((v as _object)["google_place_id"], type<string>))
-    move_to_ref(q.google_place_type, _::from_JV((v as _object)["google_place_type"], type<string>))
+    q.location <- _::from_JV((v as _object)["location"], type<location>)
+    q.title = _::from_JV((v as _object)["title"], type<string>)
+    q.address = _::from_JV((v as _object)["address"], type<string>)
+    q.foursquare_id = _::from_JV((v as _object)["foursquare_id"], type<string>)
+    q.foursquare_type = _::from_JV((v as _object)["foursquare_type"], type<string>)
+    q.google_place_id = _::from_JV((v as _object)["google_place_id"], type<string>)
+    q.google_place_type = _::from_JV((v as _object)["google_place_type"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:venue? ) : venue?
@@ -1228,8 +1228,8 @@ struct webappdata
 
 def from_JV ( var v:JsonValue?; t:webappdata ) : webappdata
     var q : webappdata
-    move_to_ref(q.data, _::from_JV((v as _object)["data"], type<string>))
-    move_to_ref(q.button_text, _::from_JV((v as _object)["button_text"], type<string>))
+    q.data = _::from_JV((v as _object)["data"], type<string>)
+    q.button_text = _::from_JV((v as _object)["button_text"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:webappdata? ) : webappdata?
@@ -1252,9 +1252,9 @@ struct proximityalerttriggered
 
 def from_JV ( var v:JsonValue?; t:proximityalerttriggered ) : proximityalerttriggered
     var q : proximityalerttriggered
-    move_to_ref(q.traveler, _::from_JV((v as _object)["traveler"], type<user>))
-    move_to_ref(q.watcher, _::from_JV((v as _object)["watcher"], type<user>))
-    move_to_ref(q.distance, _::from_JV((v as _object)["distance"], type<int64>))
+    q.traveler <- _::from_JV((v as _object)["traveler"], type<user>)
+    q.watcher <- _::from_JV((v as _object)["watcher"], type<user>)
+    q.distance = _::from_JV((v as _object)["distance"], type<int64>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:proximityalerttriggered? ) : proximityalerttriggered?
@@ -1276,7 +1276,7 @@ struct messageautodeletetimerchanged
 
 def from_JV ( var v:JsonValue?; t:messageautodeletetimerchanged ) : messageautodeletetimerchanged
     var q : messageautodeletetimerchanged
-    move_to_ref(q.message_auto_delete_time, _::from_JV((v as _object)["message_auto_delete_time"], type<int64>))
+    q.message_auto_delete_time = _::from_JV((v as _object)["message_auto_delete_time"], type<int64>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:messageautodeletetimerchanged? ) : messageautodeletetimerchanged?
@@ -1298,9 +1298,9 @@ struct forumtopiccreated
 
 def from_JV ( var v:JsonValue?; t:forumtopiccreated ) : forumtopiccreated
     var q : forumtopiccreated
-    move_to_ref(q.name, _::from_JV((v as _object)["name"], type<string>))
-    move_to_ref(q.icon_color, _::from_JV((v as _object)["icon_color"], type<int64>))
-    move_to_ref(q.icon_custom_emoji_id, _::from_JV((v as _object)["icon_custom_emoji_id"], type<string>))
+    q.name = _::from_JV((v as _object)["name"], type<string>)
+    q.icon_color = _::from_JV((v as _object)["icon_color"], type<int64>)
+    q.icon_custom_emoji_id = _::from_JV((v as _object)["icon_custom_emoji_id"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:forumtopiccreated? ) : forumtopiccreated?
@@ -1341,8 +1341,8 @@ struct forumtopicedited
 
 def from_JV ( var v:JsonValue?; t:forumtopicedited ) : forumtopicedited
     var q : forumtopicedited
-    move_to_ref(q.name, _::from_JV((v as _object)["name"], type<string>))
-    move_to_ref(q.icon_custom_emoji_id, _::from_JV((v as _object)["icon_custom_emoji_id"], type<string>))
+    q.name = _::from_JV((v as _object)["name"], type<string>)
+    q.icon_custom_emoji_id = _::from_JV((v as _object)["icon_custom_emoji_id"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:forumtopicedited? ) : forumtopicedited?
@@ -1418,8 +1418,8 @@ struct usershared
 
 def from_JV ( var v:JsonValue?; t:usershared ) : usershared
     var q : usershared
-    move_to_ref(q.request_id, _::from_JV((v as _object)["request_id"], type<int64>))
-    move_to_ref(q.user_id, _::from_JV((v as _object)["user_id"], type<int64>))
+    q.request_id = _::from_JV((v as _object)["request_id"], type<int64>)
+    q.user_id = _::from_JV((v as _object)["user_id"], type<int64>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:usershared? ) : usershared?
@@ -1441,8 +1441,8 @@ struct chatshared
 
 def from_JV ( var v:JsonValue?; t:chatshared ) : chatshared
     var q : chatshared
-    move_to_ref(q.request_id, _::from_JV((v as _object)["request_id"], type<int64>))
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<int64>))
+    q.request_id = _::from_JV((v as _object)["request_id"], type<int64>)
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<int64>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:chatshared? ) : chatshared?
@@ -1481,7 +1481,7 @@ struct videochatscheduled
 
 def from_JV ( var v:JsonValue?; t:videochatscheduled ) : videochatscheduled
     var q : videochatscheduled
-    move_to_ref(q.start_date, _::from_JV((v as _object)["start_date"], type<int64>))
+    q.start_date = _::from_JV((v as _object)["start_date"], type<int64>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:videochatscheduled? ) : videochatscheduled?
@@ -1519,7 +1519,7 @@ struct videochatended
 
 def from_JV ( var v:JsonValue?; t:videochatended ) : videochatended
     var q : videochatended
-    move_to_ref(q.duration, _::from_JV((v as _object)["duration"], type<int64>))
+    q.duration = _::from_JV((v as _object)["duration"], type<int64>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:videochatended? ) : videochatended?
@@ -1539,7 +1539,7 @@ struct videochatparticipantsinvited
 
 def from_JV ( var v:JsonValue?; t:videochatparticipantsinvited ) : videochatparticipantsinvited
     var q : videochatparticipantsinvited
-    move_to_ref(q.users, _::from_JV((v as _object)["users"], type<array<user>>))
+    q.users <- _::from_JV((v as _object)["users"], type<array<user>>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:videochatparticipantsinvited? ) : videochatparticipantsinvited?
@@ -1560,8 +1560,8 @@ struct userprofilephotos
 
 def from_JV ( var v:JsonValue?; t:userprofilephotos ) : userprofilephotos
     var q : userprofilephotos
-    move_to_ref(q.total_count, _::from_JV((v as _object)["total_count"], type<int64>))
-    move_to_ref(q.photos, _::from_JV((v as _object)["photos"], type<array<array<photosize>>>))
+    q.total_count = _::from_JV((v as _object)["total_count"], type<int64>)
+    q.photos <- _::from_JV((v as _object)["photos"], type<array<array<photosize>>>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:userprofilephotos? ) : userprofilephotos?
@@ -1585,10 +1585,10 @@ struct file
 
 def from_JV ( var v:JsonValue?; t:file ) : file
     var q : file
-    move_to_ref(q.file_id, _::from_JV((v as _object)["file_id"], type<string>))
-    move_to_ref(q.file_unique_id, _::from_JV((v as _object)["file_unique_id"], type<string>))
-    move_to_ref(q.file_size, _::from_JV((v as _object)["file_size"], type<int64>))
-    move_to_ref(q.file_path, _::from_JV((v as _object)["file_path"], type<string>))
+    q.file_id = _::from_JV((v as _object)["file_id"], type<string>)
+    q.file_unique_id = _::from_JV((v as _object)["file_unique_id"], type<string>)
+    q.file_size = _::from_JV((v as _object)["file_size"], type<int64>)
+    q.file_path = _::from_JV((v as _object)["file_path"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:file? ) : file?
@@ -1611,7 +1611,7 @@ struct webappinfo
 
 def from_JV ( var v:JsonValue?; t:webappinfo ) : webappinfo
     var q : webappinfo
-    move_to_ref(q.url, _::from_JV((v as _object)["url"], type<string>))
+    q.url = _::from_JV((v as _object)["url"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:webappinfo? ) : webappinfo?
@@ -1636,12 +1636,12 @@ struct replykeyboardmarkup
 
 def from_JV ( var v:JsonValue?; t:replykeyboardmarkup ) : replykeyboardmarkup
     var q : replykeyboardmarkup
-    move_to_ref(q.keyboard, _::from_JV((v as _object)["keyboard"], type<array<array<keyboardbutton>>>))
-    move_to_ref(q.is_persistent, _::from_JV((v as _object)["is_persistent"], type<bool>))
-    move_to_ref(q.resize_keyboard, _::from_JV((v as _object)["resize_keyboard"], type<bool>))
-    move_to_ref(q.one_time_keyboard, _::from_JV((v as _object)["one_time_keyboard"], type<bool>))
-    move_to_ref(q.input_field_placeholder, _::from_JV((v as _object)["input_field_placeholder"], type<string>))
-    move_to_ref(q.selective, _::from_JV((v as _object)["selective"], type<bool>))
+    q.keyboard <- _::from_JV((v as _object)["keyboard"], type<array<array<keyboardbutton>>>)
+    q.is_persistent = _::from_JV((v as _object)["is_persistent"], type<bool>)
+    q.resize_keyboard = _::from_JV((v as _object)["resize_keyboard"], type<bool>)
+    q.one_time_keyboard = _::from_JV((v as _object)["one_time_keyboard"], type<bool>)
+    q.input_field_placeholder = _::from_JV((v as _object)["input_field_placeholder"], type<string>)
+    q.selective = _::from_JV((v as _object)["selective"], type<bool>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:replykeyboardmarkup? ) : replykeyboardmarkup?
@@ -1672,13 +1672,13 @@ struct keyboardbutton
 
 def from_JV ( var v:JsonValue?; t:keyboardbutton ) : keyboardbutton
     var q : keyboardbutton
-    move_to_ref(q.text, _::from_JV((v as _object)["text"], type<string>))
-    move_to_ref(q.request_user, _::from_JV((v as _object)["request_user"], type<keyboardbuttonrequestuser?>))
-    move_to_ref(q.request_chat, _::from_JV((v as _object)["request_chat"], type<keyboardbuttonrequestchat?>))
-    move_to_ref(q.request_contact, _::from_JV((v as _object)["request_contact"], type<bool>))
-    move_to_ref(q.request_location, _::from_JV((v as _object)["request_location"], type<bool>))
-    move_to_ref(q.request_poll, _::from_JV((v as _object)["request_poll"], type<keyboardbuttonpolltype?>))
-    move_to_ref(q.web_app, _::from_JV((v as _object)["web_app"], type<webappinfo?>))
+    q.text = _::from_JV((v as _object)["text"], type<string>)
+    q.request_user = _::from_JV((v as _object)["request_user"], type<keyboardbuttonrequestuser?>)
+    q.request_chat = _::from_JV((v as _object)["request_chat"], type<keyboardbuttonrequestchat?>)
+    q.request_contact = _::from_JV((v as _object)["request_contact"], type<bool>)
+    q.request_location = _::from_JV((v as _object)["request_location"], type<bool>)
+    q.request_poll = _::from_JV((v as _object)["request_poll"], type<keyboardbuttonpolltype?>)
+    q.web_app = _::from_JV((v as _object)["web_app"], type<webappinfo?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:keyboardbutton? ) : keyboardbutton?
@@ -1710,9 +1710,9 @@ struct keyboardbuttonrequestuser
 
 def from_JV ( var v:JsonValue?; t:keyboardbuttonrequestuser ) : keyboardbuttonrequestuser
     var q : keyboardbuttonrequestuser
-    move_to_ref(q.request_id, _::from_JV((v as _object)["request_id"], type<int64>))
-    move_to_ref(q.user_is_bot, _::from_JV((v as _object)["user_is_bot"], type<bool>))
-    move_to_ref(q.user_is_premium, _::from_JV((v as _object)["user_is_premium"], type<bool>))
+    q.request_id = _::from_JV((v as _object)["request_id"], type<int64>)
+    q.user_is_bot = _::from_JV((v as _object)["user_is_bot"], type<bool>)
+    q.user_is_premium = _::from_JV((v as _object)["user_is_premium"], type<bool>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:keyboardbuttonrequestuser? ) : keyboardbuttonrequestuser?
@@ -1741,14 +1741,14 @@ struct keyboardbuttonrequestchat
 
 def from_JV ( var v:JsonValue?; t:keyboardbuttonrequestchat ) : keyboardbuttonrequestchat
     var q : keyboardbuttonrequestchat
-    move_to_ref(q.request_id, _::from_JV((v as _object)["request_id"], type<int64>))
-    move_to_ref(q.chat_is_channel, _::from_JV((v as _object)["chat_is_channel"], type<bool>))
-    move_to_ref(q.chat_is_forum, _::from_JV((v as _object)["chat_is_forum"], type<bool>))
-    move_to_ref(q.chat_has_username, _::from_JV((v as _object)["chat_has_username"], type<bool>))
-    move_to_ref(q.chat_is_created, _::from_JV((v as _object)["chat_is_created"], type<bool>))
-    move_to_ref(q.user_administrator_rights, _::from_JV((v as _object)["user_administrator_rights"], type<chatadministratorrights?>))
-    move_to_ref(q.bot_administrator_rights, _::from_JV((v as _object)["bot_administrator_rights"], type<chatadministratorrights?>))
-    move_to_ref(q.bot_is_member, _::from_JV((v as _object)["bot_is_member"], type<bool>))
+    q.request_id = _::from_JV((v as _object)["request_id"], type<int64>)
+    q.chat_is_channel = _::from_JV((v as _object)["chat_is_channel"], type<bool>)
+    q.chat_is_forum = _::from_JV((v as _object)["chat_is_forum"], type<bool>)
+    q.chat_has_username = _::from_JV((v as _object)["chat_has_username"], type<bool>)
+    q.chat_is_created = _::from_JV((v as _object)["chat_is_created"], type<bool>)
+    q.user_administrator_rights = _::from_JV((v as _object)["user_administrator_rights"], type<chatadministratorrights?>)
+    q.bot_administrator_rights = _::from_JV((v as _object)["bot_administrator_rights"], type<chatadministratorrights?>)
+    q.bot_is_member = _::from_JV((v as _object)["bot_is_member"], type<bool>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:keyboardbuttonrequestchat? ) : keyboardbuttonrequestchat?
@@ -1777,7 +1777,7 @@ struct keyboardbuttonpolltype
 
 def from_JV ( var v:JsonValue?; t:keyboardbuttonpolltype ) : keyboardbuttonpolltype
     var q : keyboardbuttonpolltype
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:keyboardbuttonpolltype? ) : keyboardbuttonpolltype?
@@ -1798,8 +1798,8 @@ struct replykeyboardremove
 
 def from_JV ( var v:JsonValue?; t:replykeyboardremove ) : replykeyboardremove
     var q : replykeyboardremove
-    move_to_ref(q.remove_keyboard, _::from_JV((v as _object)["remove_keyboard"], type<bool>))
-    move_to_ref(q.selective, _::from_JV((v as _object)["selective"], type<bool>))
+    q.remove_keyboard = _::from_JV((v as _object)["remove_keyboard"], type<bool>)
+    q.selective = _::from_JV((v as _object)["selective"], type<bool>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:replykeyboardremove? ) : replykeyboardremove?
@@ -1820,7 +1820,7 @@ struct inlinekeyboardmarkup
 
 def from_JV ( var v:JsonValue?; t:inlinekeyboardmarkup ) : inlinekeyboardmarkup
     var q : inlinekeyboardmarkup
-    move_to_ref(q.inline_keyboard, _::from_JV((v as _object)["inline_keyboard"], type<array<array<inlinekeyboardbutton>>>))
+    q.inline_keyboard <- _::from_JV((v as _object)["inline_keyboard"], type<array<array<inlinekeyboardbutton>>>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:inlinekeyboardmarkup? ) : inlinekeyboardmarkup?
@@ -1848,15 +1848,15 @@ struct inlinekeyboardbutton
 
 def from_JV ( var v:JsonValue?; t:inlinekeyboardbutton ) : inlinekeyboardbutton
     var q : inlinekeyboardbutton
-    move_to_ref(q.text, _::from_JV((v as _object)["text"], type<string>))
-    move_to_ref(q.url, _::from_JV((v as _object)["url"], type<string>))
-    move_to_ref(q.callback_data, _::from_JV((v as _object)["callback_data"], type<string>))
-    move_to_ref(q.web_app, _::from_JV((v as _object)["web_app"], type<webappinfo?>))
-    move_to_ref(q.login_url, _::from_JV((v as _object)["login_url"], type<loginurl?>))
-    move_to_ref(q.switch_inline_query, _::from_JV((v as _object)["switch_inline_query"], type<string>))
-    move_to_ref(q.switch_inline_query_current_chat, _::from_JV((v as _object)["switch_inline_query_current_chat"], type<string>))
-    move_to_ref(q.callback_game, _::from_JV((v as _object)["callback_game"], type<callbackgame?>))
-    move_to_ref(q.pay, _::from_JV((v as _object)["pay"], type<bool>))
+    q.text = _::from_JV((v as _object)["text"], type<string>)
+    q.url = _::from_JV((v as _object)["url"], type<string>)
+    q.callback_data = _::from_JV((v as _object)["callback_data"], type<string>)
+    q.web_app = _::from_JV((v as _object)["web_app"], type<webappinfo?>)
+    q.login_url = _::from_JV((v as _object)["login_url"], type<loginurl?>)
+    q.switch_inline_query = _::from_JV((v as _object)["switch_inline_query"], type<string>)
+    q.switch_inline_query_current_chat = _::from_JV((v as _object)["switch_inline_query_current_chat"], type<string>)
+    q.callback_game = _::from_JV((v as _object)["callback_game"], type<callbackgame?>)
+    q.pay = _::from_JV((v as _object)["pay"], type<bool>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:inlinekeyboardbutton? ) : inlinekeyboardbutton?
@@ -1890,10 +1890,10 @@ struct loginurl
 
 def from_JV ( var v:JsonValue?; t:loginurl ) : loginurl
     var q : loginurl
-    move_to_ref(q.url, _::from_JV((v as _object)["url"], type<string>))
-    move_to_ref(q.forward_text, _::from_JV((v as _object)["forward_text"], type<string>))
-    move_to_ref(q.bot_username, _::from_JV((v as _object)["bot_username"], type<string>))
-    move_to_ref(q.request_write_access, _::from_JV((v as _object)["request_write_access"], type<bool>))
+    q.url = _::from_JV((v as _object)["url"], type<string>)
+    q.forward_text = _::from_JV((v as _object)["forward_text"], type<string>)
+    q.bot_username = _::from_JV((v as _object)["bot_username"], type<string>)
+    q.request_write_access = _::from_JV((v as _object)["request_write_access"], type<bool>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:loginurl? ) : loginurl?
@@ -1922,13 +1922,13 @@ struct callbackquery
 
 def from_JV ( var v:JsonValue?; t:callbackquery ) : callbackquery
     var q : callbackquery
-    move_to_ref(q.id, _::from_JV((v as _object)["id"], type<string>))
-    move_to_ref(q.from, _::from_JV((v as _object)["from"], type<user>))
-    move_to_ref(q.message, _::from_JV((v as _object)["message"], type<message?>))
-    move_to_ref(q.inline_message_id, _::from_JV((v as _object)["inline_message_id"], type<string>))
-    move_to_ref(q.chat_instance, _::from_JV((v as _object)["chat_instance"], type<string>))
-    move_to_ref(q.data, _::from_JV((v as _object)["data"], type<string>))
-    move_to_ref(q.game_short_name, _::from_JV((v as _object)["game_short_name"], type<string>))
+    q.id = _::from_JV((v as _object)["id"], type<string>)
+    q.from <- _::from_JV((v as _object)["from"], type<user>)
+    q.message = _::from_JV((v as _object)["message"], type<message?>)
+    q.inline_message_id = _::from_JV((v as _object)["inline_message_id"], type<string>)
+    q.chat_instance = _::from_JV((v as _object)["chat_instance"], type<string>)
+    q.data = _::from_JV((v as _object)["data"], type<string>)
+    q.game_short_name = _::from_JV((v as _object)["game_short_name"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:callbackquery? ) : callbackquery?
@@ -1957,9 +1957,9 @@ struct forcereply
 
 def from_JV ( var v:JsonValue?; t:forcereply ) : forcereply
     var q : forcereply
-    move_to_ref(q.force_reply, _::from_JV((v as _object)["force_reply"], type<bool>))
-    move_to_ref(q.input_field_placeholder, _::from_JV((v as _object)["input_field_placeholder"], type<string>))
-    move_to_ref(q.selective, _::from_JV((v as _object)["selective"], type<bool>))
+    q.force_reply = _::from_JV((v as _object)["force_reply"], type<bool>)
+    q.input_field_placeholder = _::from_JV((v as _object)["input_field_placeholder"], type<string>)
+    q.selective = _::from_JV((v as _object)["selective"], type<bool>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:forcereply? ) : forcereply?
@@ -1984,10 +1984,10 @@ struct chatphoto
 
 def from_JV ( var v:JsonValue?; t:chatphoto ) : chatphoto
     var q : chatphoto
-    move_to_ref(q.small_file_id, _::from_JV((v as _object)["small_file_id"], type<string>))
-    move_to_ref(q.small_file_unique_id, _::from_JV((v as _object)["small_file_unique_id"], type<string>))
-    move_to_ref(q.big_file_id, _::from_JV((v as _object)["big_file_id"], type<string>))
-    move_to_ref(q.big_file_unique_id, _::from_JV((v as _object)["big_file_unique_id"], type<string>))
+    q.small_file_id = _::from_JV((v as _object)["small_file_id"], type<string>)
+    q.small_file_unique_id = _::from_JV((v as _object)["small_file_unique_id"], type<string>)
+    q.big_file_id = _::from_JV((v as _object)["big_file_id"], type<string>)
+    q.big_file_unique_id = _::from_JV((v as _object)["big_file_unique_id"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:chatphoto? ) : chatphoto?
@@ -2018,15 +2018,15 @@ struct chatinvitelink
 
 def from_JV ( var v:JsonValue?; t:chatinvitelink ) : chatinvitelink
     var q : chatinvitelink
-    move_to_ref(q.invite_link, _::from_JV((v as _object)["invite_link"], type<string>))
-    move_to_ref(q.creator, _::from_JV((v as _object)["creator"], type<user>))
-    move_to_ref(q.creates_join_request, _::from_JV((v as _object)["creates_join_request"], type<bool>))
-    move_to_ref(q.is_primary, _::from_JV((v as _object)["is_primary"], type<bool>))
-    move_to_ref(q.is_revoked, _::from_JV((v as _object)["is_revoked"], type<bool>))
-    move_to_ref(q.name, _::from_JV((v as _object)["name"], type<string>))
-    move_to_ref(q.expire_date, _::from_JV((v as _object)["expire_date"], type<int64>))
-    move_to_ref(q.member_limit, _::from_JV((v as _object)["member_limit"], type<int64>))
-    move_to_ref(q.pending_join_request_count, _::from_JV((v as _object)["pending_join_request_count"], type<int64>))
+    q.invite_link = _::from_JV((v as _object)["invite_link"], type<string>)
+    q.creator <- _::from_JV((v as _object)["creator"], type<user>)
+    q.creates_join_request = _::from_JV((v as _object)["creates_join_request"], type<bool>)
+    q.is_primary = _::from_JV((v as _object)["is_primary"], type<bool>)
+    q.is_revoked = _::from_JV((v as _object)["is_revoked"], type<bool>)
+    q.name = _::from_JV((v as _object)["name"], type<string>)
+    q.expire_date = _::from_JV((v as _object)["expire_date"], type<int64>)
+    q.member_limit = _::from_JV((v as _object)["member_limit"], type<int64>)
+    q.pending_join_request_count = _::from_JV((v as _object)["pending_join_request_count"], type<int64>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:chatinvitelink? ) : chatinvitelink?
@@ -2065,18 +2065,18 @@ struct chatadministratorrights
 
 def from_JV ( var v:JsonValue?; t:chatadministratorrights ) : chatadministratorrights
     var q : chatadministratorrights
-    move_to_ref(q.is_anonymous, _::from_JV((v as _object)["is_anonymous"], type<bool>))
-    move_to_ref(q.can_manage_chat, _::from_JV((v as _object)["can_manage_chat"], type<bool>))
-    move_to_ref(q.can_delete_messages, _::from_JV((v as _object)["can_delete_messages"], type<bool>))
-    move_to_ref(q.can_manage_video_chats, _::from_JV((v as _object)["can_manage_video_chats"], type<bool>))
-    move_to_ref(q.can_restrict_members, _::from_JV((v as _object)["can_restrict_members"], type<bool>))
-    move_to_ref(q.can_promote_members, _::from_JV((v as _object)["can_promote_members"], type<bool>))
-    move_to_ref(q.can_change_info, _::from_JV((v as _object)["can_change_info"], type<bool>))
-    move_to_ref(q.can_invite_users, _::from_JV((v as _object)["can_invite_users"], type<bool>))
-    move_to_ref(q.can_post_messages, _::from_JV((v as _object)["can_post_messages"], type<bool>))
-    move_to_ref(q.can_edit_messages, _::from_JV((v as _object)["can_edit_messages"], type<bool>))
-    move_to_ref(q.can_pin_messages, _::from_JV((v as _object)["can_pin_messages"], type<bool>))
-    move_to_ref(q.can_manage_topics, _::from_JV((v as _object)["can_manage_topics"], type<bool>))
+    q.is_anonymous = _::from_JV((v as _object)["is_anonymous"], type<bool>)
+    q.can_manage_chat = _::from_JV((v as _object)["can_manage_chat"], type<bool>)
+    q.can_delete_messages = _::from_JV((v as _object)["can_delete_messages"], type<bool>)
+    q.can_manage_video_chats = _::from_JV((v as _object)["can_manage_video_chats"], type<bool>)
+    q.can_restrict_members = _::from_JV((v as _object)["can_restrict_members"], type<bool>)
+    q.can_promote_members = _::from_JV((v as _object)["can_promote_members"], type<bool>)
+    q.can_change_info = _::from_JV((v as _object)["can_change_info"], type<bool>)
+    q.can_invite_users = _::from_JV((v as _object)["can_invite_users"], type<bool>)
+    q.can_post_messages = _::from_JV((v as _object)["can_post_messages"], type<bool>)
+    q.can_edit_messages = _::from_JV((v as _object)["can_edit_messages"], type<bool>)
+    q.can_pin_messages = _::from_JV((v as _object)["can_pin_messages"], type<bool>)
+    q.can_manage_topics = _::from_JV((v as _object)["can_manage_topics"], type<bool>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:chatadministratorrights? ) : chatadministratorrights?
@@ -2128,10 +2128,10 @@ struct chatmemberowner
 
 def from_JV ( var v:JsonValue?; t:chatmemberowner ) : chatmemberowner
     var q : chatmemberowner
-    move_to_ref(q.status, _::from_JV((v as _object)["status"], type<string>))
-    move_to_ref(q.user, _::from_JV((v as _object)["user"], type<user>))
-    move_to_ref(q.is_anonymous, _::from_JV((v as _object)["is_anonymous"], type<bool>))
-    move_to_ref(q.custom_title, _::from_JV((v as _object)["custom_title"], type<string>))
+    q.status = _::from_JV((v as _object)["status"], type<string>)
+    q.user <- _::from_JV((v as _object)["user"], type<user>)
+    q.is_anonymous = _::from_JV((v as _object)["is_anonymous"], type<bool>)
+    q.custom_title = _::from_JV((v as _object)["custom_title"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:chatmemberowner? ) : chatmemberowner?
@@ -2169,22 +2169,22 @@ struct chatmemberadministrator
 
 def from_JV ( var v:JsonValue?; t:chatmemberadministrator ) : chatmemberadministrator
     var q : chatmemberadministrator
-    move_to_ref(q.status, _::from_JV((v as _object)["status"], type<string>))
-    move_to_ref(q.user, _::from_JV((v as _object)["user"], type<user>))
-    move_to_ref(q.can_be_edited, _::from_JV((v as _object)["can_be_edited"], type<bool>))
-    move_to_ref(q.is_anonymous, _::from_JV((v as _object)["is_anonymous"], type<bool>))
-    move_to_ref(q.can_manage_chat, _::from_JV((v as _object)["can_manage_chat"], type<bool>))
-    move_to_ref(q.can_delete_messages, _::from_JV((v as _object)["can_delete_messages"], type<bool>))
-    move_to_ref(q.can_manage_video_chats, _::from_JV((v as _object)["can_manage_video_chats"], type<bool>))
-    move_to_ref(q.can_restrict_members, _::from_JV((v as _object)["can_restrict_members"], type<bool>))
-    move_to_ref(q.can_promote_members, _::from_JV((v as _object)["can_promote_members"], type<bool>))
-    move_to_ref(q.can_change_info, _::from_JV((v as _object)["can_change_info"], type<bool>))
-    move_to_ref(q.can_invite_users, _::from_JV((v as _object)["can_invite_users"], type<bool>))
-    move_to_ref(q.can_post_messages, _::from_JV((v as _object)["can_post_messages"], type<bool>))
-    move_to_ref(q.can_edit_messages, _::from_JV((v as _object)["can_edit_messages"], type<bool>))
-    move_to_ref(q.can_pin_messages, _::from_JV((v as _object)["can_pin_messages"], type<bool>))
-    move_to_ref(q.can_manage_topics, _::from_JV((v as _object)["can_manage_topics"], type<bool>))
-    move_to_ref(q.custom_title, _::from_JV((v as _object)["custom_title"], type<string>))
+    q.status = _::from_JV((v as _object)["status"], type<string>)
+    q.user <- _::from_JV((v as _object)["user"], type<user>)
+    q.can_be_edited = _::from_JV((v as _object)["can_be_edited"], type<bool>)
+    q.is_anonymous = _::from_JV((v as _object)["is_anonymous"], type<bool>)
+    q.can_manage_chat = _::from_JV((v as _object)["can_manage_chat"], type<bool>)
+    q.can_delete_messages = _::from_JV((v as _object)["can_delete_messages"], type<bool>)
+    q.can_manage_video_chats = _::from_JV((v as _object)["can_manage_video_chats"], type<bool>)
+    q.can_restrict_members = _::from_JV((v as _object)["can_restrict_members"], type<bool>)
+    q.can_promote_members = _::from_JV((v as _object)["can_promote_members"], type<bool>)
+    q.can_change_info = _::from_JV((v as _object)["can_change_info"], type<bool>)
+    q.can_invite_users = _::from_JV((v as _object)["can_invite_users"], type<bool>)
+    q.can_post_messages = _::from_JV((v as _object)["can_post_messages"], type<bool>)
+    q.can_edit_messages = _::from_JV((v as _object)["can_edit_messages"], type<bool>)
+    q.can_pin_messages = _::from_JV((v as _object)["can_pin_messages"], type<bool>)
+    q.can_manage_topics = _::from_JV((v as _object)["can_manage_topics"], type<bool>)
+    q.custom_title = _::from_JV((v as _object)["custom_title"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:chatmemberadministrator? ) : chatmemberadministrator?
@@ -2220,8 +2220,8 @@ struct chatmembermember
 
 def from_JV ( var v:JsonValue?; t:chatmembermember ) : chatmembermember
     var q : chatmembermember
-    move_to_ref(q.status, _::from_JV((v as _object)["status"], type<string>))
-    move_to_ref(q.user, _::from_JV((v as _object)["user"], type<user>))
+    q.status = _::from_JV((v as _object)["status"], type<string>)
+    q.user <- _::from_JV((v as _object)["user"], type<user>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:chatmembermember? ) : chatmembermember?
@@ -2259,24 +2259,24 @@ struct chatmemberrestricted
 
 def from_JV ( var v:JsonValue?; t:chatmemberrestricted ) : chatmemberrestricted
     var q : chatmemberrestricted
-    move_to_ref(q.status, _::from_JV((v as _object)["status"], type<string>))
-    move_to_ref(q.user, _::from_JV((v as _object)["user"], type<user>))
-    move_to_ref(q.is_member, _::from_JV((v as _object)["is_member"], type<bool>))
-    move_to_ref(q.can_send_messages, _::from_JV((v as _object)["can_send_messages"], type<bool>))
-    move_to_ref(q.can_send_audios, _::from_JV((v as _object)["can_send_audios"], type<bool>))
-    move_to_ref(q.can_send_documents, _::from_JV((v as _object)["can_send_documents"], type<bool>))
-    move_to_ref(q.can_send_photos, _::from_JV((v as _object)["can_send_photos"], type<bool>))
-    move_to_ref(q.can_send_videos, _::from_JV((v as _object)["can_send_videos"], type<bool>))
-    move_to_ref(q.can_send_video_notes, _::from_JV((v as _object)["can_send_video_notes"], type<bool>))
-    move_to_ref(q.can_send_voice_notes, _::from_JV((v as _object)["can_send_voice_notes"], type<bool>))
-    move_to_ref(q.can_send_polls, _::from_JV((v as _object)["can_send_polls"], type<bool>))
-    move_to_ref(q.can_send_other_messages, _::from_JV((v as _object)["can_send_other_messages"], type<bool>))
-    move_to_ref(q.can_add_web_page_previews, _::from_JV((v as _object)["can_add_web_page_previews"], type<bool>))
-    move_to_ref(q.can_change_info, _::from_JV((v as _object)["can_change_info"], type<bool>))
-    move_to_ref(q.can_invite_users, _::from_JV((v as _object)["can_invite_users"], type<bool>))
-    move_to_ref(q.can_pin_messages, _::from_JV((v as _object)["can_pin_messages"], type<bool>))
-    move_to_ref(q.can_manage_topics, _::from_JV((v as _object)["can_manage_topics"], type<bool>))
-    move_to_ref(q.until_date, _::from_JV((v as _object)["until_date"], type<int64>))
+    q.status = _::from_JV((v as _object)["status"], type<string>)
+    q.user <- _::from_JV((v as _object)["user"], type<user>)
+    q.is_member = _::from_JV((v as _object)["is_member"], type<bool>)
+    q.can_send_messages = _::from_JV((v as _object)["can_send_messages"], type<bool>)
+    q.can_send_audios = _::from_JV((v as _object)["can_send_audios"], type<bool>)
+    q.can_send_documents = _::from_JV((v as _object)["can_send_documents"], type<bool>)
+    q.can_send_photos = _::from_JV((v as _object)["can_send_photos"], type<bool>)
+    q.can_send_videos = _::from_JV((v as _object)["can_send_videos"], type<bool>)
+    q.can_send_video_notes = _::from_JV((v as _object)["can_send_video_notes"], type<bool>)
+    q.can_send_voice_notes = _::from_JV((v as _object)["can_send_voice_notes"], type<bool>)
+    q.can_send_polls = _::from_JV((v as _object)["can_send_polls"], type<bool>)
+    q.can_send_other_messages = _::from_JV((v as _object)["can_send_other_messages"], type<bool>)
+    q.can_add_web_page_previews = _::from_JV((v as _object)["can_add_web_page_previews"], type<bool>)
+    q.can_change_info = _::from_JV((v as _object)["can_change_info"], type<bool>)
+    q.can_invite_users = _::from_JV((v as _object)["can_invite_users"], type<bool>)
+    q.can_pin_messages = _::from_JV((v as _object)["can_pin_messages"], type<bool>)
+    q.can_manage_topics = _::from_JV((v as _object)["can_manage_topics"], type<bool>)
+    q.until_date = _::from_JV((v as _object)["until_date"], type<int64>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:chatmemberrestricted? ) : chatmemberrestricted?
@@ -2314,8 +2314,8 @@ struct chatmemberleft
 
 def from_JV ( var v:JsonValue?; t:chatmemberleft ) : chatmemberleft
     var q : chatmemberleft
-    move_to_ref(q.status, _::from_JV((v as _object)["status"], type<string>))
-    move_to_ref(q.user, _::from_JV((v as _object)["user"], type<user>))
+    q.status = _::from_JV((v as _object)["status"], type<string>)
+    q.user <- _::from_JV((v as _object)["user"], type<user>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:chatmemberleft? ) : chatmemberleft?
@@ -2338,9 +2338,9 @@ struct chatmemberbanned
 
 def from_JV ( var v:JsonValue?; t:chatmemberbanned ) : chatmemberbanned
     var q : chatmemberbanned
-    move_to_ref(q.status, _::from_JV((v as _object)["status"], type<string>))
-    move_to_ref(q.user, _::from_JV((v as _object)["user"], type<user>))
-    move_to_ref(q.until_date, _::from_JV((v as _object)["until_date"], type<int64>))
+    q.status = _::from_JV((v as _object)["status"], type<string>)
+    q.user <- _::from_JV((v as _object)["user"], type<user>)
+    q.until_date = _::from_JV((v as _object)["until_date"], type<int64>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:chatmemberbanned? ) : chatmemberbanned?
@@ -2367,12 +2367,12 @@ struct chatmemberupdated
 
 def from_JV ( var v:JsonValue?; t:chatmemberupdated ) : chatmemberupdated
     var q : chatmemberupdated
-    move_to_ref(q.chat, _::from_JV((v as _object)["chat"], type<chat>))
-    move_to_ref(q.from, _::from_JV((v as _object)["from"], type<user>))
-    move_to_ref(q.date, _::from_JV((v as _object)["date"], type<int64>))
-    move_to_ref(q.old_chat_member, _::from_JV((v as _object)["old_chat_member"], type<chatmember>))
-    move_to_ref(q.new_chat_member, _::from_JV((v as _object)["new_chat_member"], type<chatmember>))
-    move_to_ref(q.invite_link, _::from_JV((v as _object)["invite_link"], type<chatinvitelink?>))
+    q.chat <- _::from_JV((v as _object)["chat"], type<chat>)
+    q.from <- _::from_JV((v as _object)["from"], type<user>)
+    q.date = _::from_JV((v as _object)["date"], type<int64>)
+    q.old_chat_member <- _::from_JV((v as _object)["old_chat_member"], type<chatmember>)
+    q.new_chat_member <- _::from_JV((v as _object)["new_chat_member"], type<chatmember>)
+    q.invite_link = _::from_JV((v as _object)["invite_link"], type<chatinvitelink?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:chatmemberupdated? ) : chatmemberupdated?
@@ -2403,12 +2403,12 @@ struct chatjoinrequest
 
 def from_JV ( var v:JsonValue?; t:chatjoinrequest ) : chatjoinrequest
     var q : chatjoinrequest
-    move_to_ref(q.chat, _::from_JV((v as _object)["chat"], type<chat>))
-    move_to_ref(q.from, _::from_JV((v as _object)["from"], type<user>))
-    move_to_ref(q.user_chat_id, _::from_JV((v as _object)["user_chat_id"], type<int64>))
-    move_to_ref(q.date, _::from_JV((v as _object)["date"], type<int64>))
-    move_to_ref(q.bio, _::from_JV((v as _object)["bio"], type<string>))
-    move_to_ref(q.invite_link, _::from_JV((v as _object)["invite_link"], type<chatinvitelink?>))
+    q.chat <- _::from_JV((v as _object)["chat"], type<chat>)
+    q.from <- _::from_JV((v as _object)["from"], type<user>)
+    q.user_chat_id = _::from_JV((v as _object)["user_chat_id"], type<int64>)
+    q.date = _::from_JV((v as _object)["date"], type<int64>)
+    q.bio = _::from_JV((v as _object)["bio"], type<string>)
+    q.invite_link = _::from_JV((v as _object)["invite_link"], type<chatinvitelink?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:chatjoinrequest? ) : chatjoinrequest?
@@ -2447,20 +2447,20 @@ struct chatpermissions
 
 def from_JV ( var v:JsonValue?; t:chatpermissions ) : chatpermissions
     var q : chatpermissions
-    move_to_ref(q.can_send_messages, _::from_JV((v as _object)["can_send_messages"], type<bool>))
-    move_to_ref(q.can_send_audios, _::from_JV((v as _object)["can_send_audios"], type<bool>))
-    move_to_ref(q.can_send_documents, _::from_JV((v as _object)["can_send_documents"], type<bool>))
-    move_to_ref(q.can_send_photos, _::from_JV((v as _object)["can_send_photos"], type<bool>))
-    move_to_ref(q.can_send_videos, _::from_JV((v as _object)["can_send_videos"], type<bool>))
-    move_to_ref(q.can_send_video_notes, _::from_JV((v as _object)["can_send_video_notes"], type<bool>))
-    move_to_ref(q.can_send_voice_notes, _::from_JV((v as _object)["can_send_voice_notes"], type<bool>))
-    move_to_ref(q.can_send_polls, _::from_JV((v as _object)["can_send_polls"], type<bool>))
-    move_to_ref(q.can_send_other_messages, _::from_JV((v as _object)["can_send_other_messages"], type<bool>))
-    move_to_ref(q.can_add_web_page_previews, _::from_JV((v as _object)["can_add_web_page_previews"], type<bool>))
-    move_to_ref(q.can_change_info, _::from_JV((v as _object)["can_change_info"], type<bool>))
-    move_to_ref(q.can_invite_users, _::from_JV((v as _object)["can_invite_users"], type<bool>))
-    move_to_ref(q.can_pin_messages, _::from_JV((v as _object)["can_pin_messages"], type<bool>))
-    move_to_ref(q.can_manage_topics, _::from_JV((v as _object)["can_manage_topics"], type<bool>))
+    q.can_send_messages = _::from_JV((v as _object)["can_send_messages"], type<bool>)
+    q.can_send_audios = _::from_JV((v as _object)["can_send_audios"], type<bool>)
+    q.can_send_documents = _::from_JV((v as _object)["can_send_documents"], type<bool>)
+    q.can_send_photos = _::from_JV((v as _object)["can_send_photos"], type<bool>)
+    q.can_send_videos = _::from_JV((v as _object)["can_send_videos"], type<bool>)
+    q.can_send_video_notes = _::from_JV((v as _object)["can_send_video_notes"], type<bool>)
+    q.can_send_voice_notes = _::from_JV((v as _object)["can_send_voice_notes"], type<bool>)
+    q.can_send_polls = _::from_JV((v as _object)["can_send_polls"], type<bool>)
+    q.can_send_other_messages = _::from_JV((v as _object)["can_send_other_messages"], type<bool>)
+    q.can_add_web_page_previews = _::from_JV((v as _object)["can_add_web_page_previews"], type<bool>)
+    q.can_change_info = _::from_JV((v as _object)["can_change_info"], type<bool>)
+    q.can_invite_users = _::from_JV((v as _object)["can_invite_users"], type<bool>)
+    q.can_pin_messages = _::from_JV((v as _object)["can_pin_messages"], type<bool>)
+    q.can_manage_topics = _::from_JV((v as _object)["can_manage_topics"], type<bool>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:chatpermissions? ) : chatpermissions?
@@ -2494,8 +2494,8 @@ struct chatlocation
 
 def from_JV ( var v:JsonValue?; t:chatlocation ) : chatlocation
     var q : chatlocation
-    move_to_ref(q.location, _::from_JV((v as _object)["location"], type<location>))
-    move_to_ref(q.address, _::from_JV((v as _object)["address"], type<string>))
+    q.location <- _::from_JV((v as _object)["location"], type<location>)
+    q.address = _::from_JV((v as _object)["address"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:chatlocation? ) : chatlocation?
@@ -2519,10 +2519,10 @@ struct forumtopic
 
 def from_JV ( var v:JsonValue?; t:forumtopic ) : forumtopic
     var q : forumtopic
-    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], type<int64>))
-    move_to_ref(q.name, _::from_JV((v as _object)["name"], type<string>))
-    move_to_ref(q.icon_color, _::from_JV((v as _object)["icon_color"], type<int64>))
-    move_to_ref(q.icon_custom_emoji_id, _::from_JV((v as _object)["icon_custom_emoji_id"], type<string>))
+    q.message_thread_id = _::from_JV((v as _object)["message_thread_id"], type<int64>)
+    q.name = _::from_JV((v as _object)["name"], type<string>)
+    q.icon_color = _::from_JV((v as _object)["icon_color"], type<int64>)
+    q.icon_custom_emoji_id = _::from_JV((v as _object)["icon_custom_emoji_id"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:forumtopic? ) : forumtopic?
@@ -2546,8 +2546,8 @@ struct botcommand
 
 def from_JV ( var v:JsonValue?; t:botcommand ) : botcommand
     var q : botcommand
-    move_to_ref(q.command, _::from_JV((v as _object)["command"], type<string>))
-    move_to_ref(q.description, _::from_JV((v as _object)["description"], type<string>))
+    q.command = _::from_JV((v as _object)["command"], type<string>)
+    q.description = _::from_JV((v as _object)["description"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:botcommand? ) : botcommand?
@@ -2604,7 +2604,7 @@ struct botcommandscopedefault
 
 def from_JV ( var v:JsonValue?; t:botcommandscopedefault ) : botcommandscopedefault
     var q : botcommandscopedefault
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:botcommandscopedefault? ) : botcommandscopedefault?
@@ -2624,7 +2624,7 @@ struct botcommandscopeallprivatechats
 
 def from_JV ( var v:JsonValue?; t:botcommandscopeallprivatechats ) : botcommandscopeallprivatechats
     var q : botcommandscopeallprivatechats
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:botcommandscopeallprivatechats? ) : botcommandscopeallprivatechats?
@@ -2644,7 +2644,7 @@ struct botcommandscopeallgroupchats
 
 def from_JV ( var v:JsonValue?; t:botcommandscopeallgroupchats ) : botcommandscopeallgroupchats
     var q : botcommandscopeallgroupchats
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:botcommandscopeallgroupchats? ) : botcommandscopeallgroupchats?
@@ -2664,7 +2664,7 @@ struct botcommandscopeallchatadministrators
 
 def from_JV ( var v:JsonValue?; t:botcommandscopeallchatadministrators ) : botcommandscopeallchatadministrators
     var q : botcommandscopeallchatadministrators
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:botcommandscopeallchatadministrators? ) : botcommandscopeallchatadministrators?
@@ -2685,8 +2685,8 @@ struct botcommandscopechat
 
 def from_JV ( var v:JsonValue?; t:botcommandscopechat ) : botcommandscopechat
     var q : botcommandscopechat
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:botcommandscopechat? ) : botcommandscopechat?
@@ -2708,8 +2708,8 @@ struct botcommandscopechatadministrators
 
 def from_JV ( var v:JsonValue?; t:botcommandscopechatadministrators ) : botcommandscopechatadministrators
     var q : botcommandscopechatadministrators
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:botcommandscopechatadministrators? ) : botcommandscopechatadministrators?
@@ -2732,9 +2732,9 @@ struct botcommandscopechatmember
 
 def from_JV ( var v:JsonValue?; t:botcommandscopechatmember ) : botcommandscopechatmember
     var q : botcommandscopechatmember
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.user_id, _::from_JV((v as _object)["user_id"], type<int64>))
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.user_id = _::from_JV((v as _object)["user_id"], type<int64>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:botcommandscopechatmember? ) : botcommandscopechatmember?
@@ -2756,7 +2756,7 @@ struct botdescription
 
 def from_JV ( var v:JsonValue?; t:botdescription ) : botdescription
     var q : botdescription
-    move_to_ref(q.description, _::from_JV((v as _object)["description"], type<string>))
+    q.description = _::from_JV((v as _object)["description"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:botdescription? ) : botdescription?
@@ -2776,7 +2776,7 @@ struct botshortdescription
 
 def from_JV ( var v:JsonValue?; t:botshortdescription ) : botshortdescription
     var q : botshortdescription
-    move_to_ref(q.short_description, _::from_JV((v as _object)["short_description"], type<string>))
+    q.short_description = _::from_JV((v as _object)["short_description"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:botshortdescription? ) : botshortdescription?
@@ -2814,7 +2814,7 @@ struct menubuttoncommands
 
 def from_JV ( var v:JsonValue?; t:menubuttoncommands ) : menubuttoncommands
     var q : menubuttoncommands
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:menubuttoncommands? ) : menubuttoncommands?
@@ -2836,9 +2836,9 @@ struct menubuttonwebapp
 
 def from_JV ( var v:JsonValue?; t:menubuttonwebapp ) : menubuttonwebapp
     var q : menubuttonwebapp
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
-    move_to_ref(q.text, _::from_JV((v as _object)["text"], type<string>))
-    move_to_ref(q.web_app, _::from_JV((v as _object)["web_app"], type<webappinfo>))
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
+    q.text = _::from_JV((v as _object)["text"], type<string>)
+    q.web_app <- _::from_JV((v as _object)["web_app"], type<webappinfo>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:menubuttonwebapp? ) : menubuttonwebapp?
@@ -2860,7 +2860,7 @@ struct menubuttondefault
 
 def from_JV ( var v:JsonValue?; t:menubuttondefault ) : menubuttondefault
     var q : menubuttondefault
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:menubuttondefault? ) : menubuttondefault?
@@ -2881,8 +2881,8 @@ struct responseparameters
 
 def from_JV ( var v:JsonValue?; t:responseparameters ) : responseparameters
     var q : responseparameters
-    move_to_ref(q.migrate_to_chat_id, _::from_JV((v as _object)["migrate_to_chat_id"], type<int64>))
-    move_to_ref(q.retry_after, _::from_JV((v as _object)["retry_after"], type<int64>))
+    q.migrate_to_chat_id = _::from_JV((v as _object)["migrate_to_chat_id"], type<int64>)
+    q.retry_after = _::from_JV((v as _object)["retry_after"], type<int64>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:responseparameters? ) : responseparameters?
@@ -2926,12 +2926,12 @@ struct inputmediaphoto
 
 def from_JV ( var v:JsonValue?; t:inputmediaphoto ) : inputmediaphoto
     var q : inputmediaphoto
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
-    move_to_ref(q.media, _::from_JV((v as _object)["media"], type<string>))
-    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], type<string>))
-    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], type<string>))
-    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>))
-    move_to_ref(q.has_spoiler, _::from_JV((v as _object)["has_spoiler"], type<bool>))
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
+    q.media = _::from_JV((v as _object)["media"], type<string>)
+    q.caption = _::from_JV((v as _object)["caption"], type<string>)
+    q.parse_mode = _::from_JV((v as _object)["parse_mode"], type<string>)
+    q.caption_entities <- _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>)
+    q.has_spoiler = _::from_JV((v as _object)["has_spoiler"], type<bool>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:inputmediaphoto? ) : inputmediaphoto?
@@ -2966,17 +2966,17 @@ struct inputmediavideo
 
 def from_JV ( var v:JsonValue?; t:inputmediavideo ) : inputmediavideo
     var q : inputmediavideo
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
-    move_to_ref(q.media, _::from_JV((v as _object)["media"], type<string>))
-    move_to_ref(q.thumbnail, _::from_JV((v as _object)["thumbnail"], type<inputfile?>))
-    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], type<string>))
-    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], type<string>))
-    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>))
-    move_to_ref(q.width, _::from_JV((v as _object)["width"], type<int64>))
-    move_to_ref(q.height, _::from_JV((v as _object)["height"], type<int64>))
-    move_to_ref(q.duration, _::from_JV((v as _object)["duration"], type<int64>))
-    move_to_ref(q.supports_streaming, _::from_JV((v as _object)["supports_streaming"], type<bool>))
-    move_to_ref(q.has_spoiler, _::from_JV((v as _object)["has_spoiler"], type<bool>))
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
+    q.media = _::from_JV((v as _object)["media"], type<string>)
+    q.thumbnail = _::from_JV((v as _object)["thumbnail"], type<inputfile?>)
+    q.caption = _::from_JV((v as _object)["caption"], type<string>)
+    q.parse_mode = _::from_JV((v as _object)["parse_mode"], type<string>)
+    q.caption_entities <- _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>)
+    q.width = _::from_JV((v as _object)["width"], type<int64>)
+    q.height = _::from_JV((v as _object)["height"], type<int64>)
+    q.duration = _::from_JV((v as _object)["duration"], type<int64>)
+    q.supports_streaming = _::from_JV((v as _object)["supports_streaming"], type<bool>)
+    q.has_spoiler = _::from_JV((v as _object)["has_spoiler"], type<bool>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:inputmediavideo? ) : inputmediavideo?
@@ -3016,16 +3016,16 @@ struct inputmediaanimation
 
 def from_JV ( var v:JsonValue?; t:inputmediaanimation ) : inputmediaanimation
     var q : inputmediaanimation
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
-    move_to_ref(q.media, _::from_JV((v as _object)["media"], type<string>))
-    move_to_ref(q.thumbnail, _::from_JV((v as _object)["thumbnail"], type<inputfile?>))
-    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], type<string>))
-    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], type<string>))
-    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>))
-    move_to_ref(q.width, _::from_JV((v as _object)["width"], type<int64>))
-    move_to_ref(q.height, _::from_JV((v as _object)["height"], type<int64>))
-    move_to_ref(q.duration, _::from_JV((v as _object)["duration"], type<int64>))
-    move_to_ref(q.has_spoiler, _::from_JV((v as _object)["has_spoiler"], type<bool>))
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
+    q.media = _::from_JV((v as _object)["media"], type<string>)
+    q.thumbnail = _::from_JV((v as _object)["thumbnail"], type<inputfile?>)
+    q.caption = _::from_JV((v as _object)["caption"], type<string>)
+    q.parse_mode = _::from_JV((v as _object)["parse_mode"], type<string>)
+    q.caption_entities <- _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>)
+    q.width = _::from_JV((v as _object)["width"], type<int64>)
+    q.height = _::from_JV((v as _object)["height"], type<int64>)
+    q.duration = _::from_JV((v as _object)["duration"], type<int64>)
+    q.has_spoiler = _::from_JV((v as _object)["has_spoiler"], type<bool>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:inputmediaanimation? ) : inputmediaanimation?
@@ -3063,15 +3063,15 @@ struct inputmediaaudio
 
 def from_JV ( var v:JsonValue?; t:inputmediaaudio ) : inputmediaaudio
     var q : inputmediaaudio
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
-    move_to_ref(q.media, _::from_JV((v as _object)["media"], type<string>))
-    move_to_ref(q.thumbnail, _::from_JV((v as _object)["thumbnail"], type<inputfile?>))
-    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], type<string>))
-    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], type<string>))
-    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>))
-    move_to_ref(q.duration, _::from_JV((v as _object)["duration"], type<int64>))
-    move_to_ref(q.performer, _::from_JV((v as _object)["performer"], type<string>))
-    move_to_ref(q.title, _::from_JV((v as _object)["title"], type<string>))
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
+    q.media = _::from_JV((v as _object)["media"], type<string>)
+    q.thumbnail = _::from_JV((v as _object)["thumbnail"], type<inputfile?>)
+    q.caption = _::from_JV((v as _object)["caption"], type<string>)
+    q.parse_mode = _::from_JV((v as _object)["parse_mode"], type<string>)
+    q.caption_entities <- _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>)
+    q.duration = _::from_JV((v as _object)["duration"], type<int64>)
+    q.performer = _::from_JV((v as _object)["performer"], type<string>)
+    q.title = _::from_JV((v as _object)["title"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:inputmediaaudio? ) : inputmediaaudio?
@@ -3106,13 +3106,13 @@ struct inputmediadocument
 
 def from_JV ( var v:JsonValue?; t:inputmediadocument ) : inputmediadocument
     var q : inputmediadocument
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
-    move_to_ref(q.media, _::from_JV((v as _object)["media"], type<string>))
-    move_to_ref(q.thumbnail, _::from_JV((v as _object)["thumbnail"], type<inputfile?>))
-    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], type<string>))
-    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], type<string>))
-    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>))
-    move_to_ref(q.disable_content_type_detection, _::from_JV((v as _object)["disable_content_type_detection"], type<bool>))
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
+    q.media = _::from_JV((v as _object)["media"], type<string>)
+    q.thumbnail = _::from_JV((v as _object)["thumbnail"], type<inputfile?>)
+    q.caption = _::from_JV((v as _object)["caption"], type<string>)
+    q.parse_mode = _::from_JV((v as _object)["parse_mode"], type<string>)
+    q.caption_entities <- _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>)
+    q.disable_content_type_detection = _::from_JV((v as _object)["disable_content_type_detection"], type<bool>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:inputmediadocument? ) : inputmediadocument?
@@ -3257,17 +3257,17 @@ struct sendmessage
 
 def from_JV ( var v:JsonValue?; t:sendmessage ) : sendmessage
     var q : sendmessage
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], type<int64>))
-    move_to_ref(q.text, _::from_JV((v as _object)["text"], type<string>))
-    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], type<string>))
-    move_to_ref(q.entities, _::from_JV((v as _object)["entities"], type<array<messageentity>>))
-    move_to_ref(q.disable_web_page_preview, _::from_JV((v as _object)["disable_web_page_preview"], type<bool>))
-    move_to_ref(q.disable_notification, _::from_JV((v as _object)["disable_notification"], type<bool>))
-    move_to_ref(q.protect_content, _::from_JV((v as _object)["protect_content"], type<bool>))
-    move_to_ref(q.reply_to_message_id, _::from_JV((v as _object)["reply_to_message_id"], type<int64>))
-    move_to_ref(q.allow_sending_without_reply, _::from_JV((v as _object)["allow_sending_without_reply"], type<bool>))
-    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.message_thread_id = _::from_JV((v as _object)["message_thread_id"], type<int64>)
+    q.text = _::from_JV((v as _object)["text"], type<string>)
+    q.parse_mode = _::from_JV((v as _object)["parse_mode"], type<string>)
+    q.entities <- _::from_JV((v as _object)["entities"], type<array<messageentity>>)
+    q.disable_web_page_preview = _::from_JV((v as _object)["disable_web_page_preview"], type<bool>)
+    q.disable_notification = _::from_JV((v as _object)["disable_notification"], type<bool>)
+    q.protect_content = _::from_JV((v as _object)["protect_content"], type<bool>)
+    q.reply_to_message_id = _::from_JV((v as _object)["reply_to_message_id"], type<int64>)
+    q.allow_sending_without_reply = _::from_JV((v as _object)["allow_sending_without_reply"], type<bool>)
+    q.reply_markup = _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:sendmessage? ) : sendmessage?
@@ -3321,12 +3321,12 @@ struct forwardmessage
 
 def from_JV ( var v:JsonValue?; t:forwardmessage ) : forwardmessage
     var q : forwardmessage
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], type<int64>))
-    move_to_ref(q.from_chat_id, _::from_JV((v as _object)["from_chat_id"], type<string>))
-    move_to_ref(q.disable_notification, _::from_JV((v as _object)["disable_notification"], type<bool>))
-    move_to_ref(q.protect_content, _::from_JV((v as _object)["protect_content"], type<bool>))
-    move_to_ref(q.message_id, _::from_JV((v as _object)["message_id"], type<int64>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.message_thread_id = _::from_JV((v as _object)["message_thread_id"], type<int64>)
+    q.from_chat_id = _::from_JV((v as _object)["from_chat_id"], type<string>)
+    q.disable_notification = _::from_JV((v as _object)["disable_notification"], type<bool>)
+    q.protect_content = _::from_JV((v as _object)["protect_content"], type<bool>)
+    q.message_id = _::from_JV((v as _object)["message_id"], type<int64>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:forwardmessage? ) : forwardmessage?
@@ -3362,18 +3362,18 @@ struct copymessage
 
 def from_JV ( var v:JsonValue?; t:copymessage ) : copymessage
     var q : copymessage
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], type<int64>))
-    move_to_ref(q.from_chat_id, _::from_JV((v as _object)["from_chat_id"], type<string>))
-    move_to_ref(q.message_id, _::from_JV((v as _object)["message_id"], type<int64>))
-    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], type<string>))
-    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], type<string>))
-    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>))
-    move_to_ref(q.disable_notification, _::from_JV((v as _object)["disable_notification"], type<bool>))
-    move_to_ref(q.protect_content, _::from_JV((v as _object)["protect_content"], type<bool>))
-    move_to_ref(q.reply_to_message_id, _::from_JV((v as _object)["reply_to_message_id"], type<int64>))
-    move_to_ref(q.allow_sending_without_reply, _::from_JV((v as _object)["allow_sending_without_reply"], type<bool>))
-    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.message_thread_id = _::from_JV((v as _object)["message_thread_id"], type<int64>)
+    q.from_chat_id = _::from_JV((v as _object)["from_chat_id"], type<string>)
+    q.message_id = _::from_JV((v as _object)["message_id"], type<int64>)
+    q.caption = _::from_JV((v as _object)["caption"], type<string>)
+    q.parse_mode = _::from_JV((v as _object)["parse_mode"], type<string>)
+    q.caption_entities <- _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>)
+    q.disable_notification = _::from_JV((v as _object)["disable_notification"], type<bool>)
+    q.protect_content = _::from_JV((v as _object)["protect_content"], type<bool>)
+    q.reply_to_message_id = _::from_JV((v as _object)["reply_to_message_id"], type<int64>)
+    q.allow_sending_without_reply = _::from_JV((v as _object)["allow_sending_without_reply"], type<bool>)
+    q.reply_markup = _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:copymessage? ) : copymessage?
@@ -3416,18 +3416,18 @@ struct sendphoto
 
 def from_JV ( var v:JsonValue?; t:sendphoto ) : sendphoto
     var q : sendphoto
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], type<int64>))
-    move_to_ref(q.photo, _::from_JV((v as _object)["photo"], type<inputfile>))
-    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], type<string>))
-    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], type<string>))
-    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>))
-    move_to_ref(q.has_spoiler, _::from_JV((v as _object)["has_spoiler"], type<bool>))
-    move_to_ref(q.disable_notification, _::from_JV((v as _object)["disable_notification"], type<bool>))
-    move_to_ref(q.protect_content, _::from_JV((v as _object)["protect_content"], type<bool>))
-    move_to_ref(q.reply_to_message_id, _::from_JV((v as _object)["reply_to_message_id"], type<int64>))
-    move_to_ref(q.allow_sending_without_reply, _::from_JV((v as _object)["allow_sending_without_reply"], type<bool>))
-    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.message_thread_id = _::from_JV((v as _object)["message_thread_id"], type<int64>)
+    q.photo <- _::from_JV((v as _object)["photo"], type<inputfile>)
+    q.caption = _::from_JV((v as _object)["caption"], type<string>)
+    q.parse_mode = _::from_JV((v as _object)["parse_mode"], type<string>)
+    q.caption_entities <- _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>)
+    q.has_spoiler = _::from_JV((v as _object)["has_spoiler"], type<bool>)
+    q.disable_notification = _::from_JV((v as _object)["disable_notification"], type<bool>)
+    q.protect_content = _::from_JV((v as _object)["protect_content"], type<bool>)
+    q.reply_to_message_id = _::from_JV((v as _object)["reply_to_message_id"], type<int64>)
+    q.allow_sending_without_reply = _::from_JV((v as _object)["allow_sending_without_reply"], type<bool>)
+    q.reply_markup = _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:sendphoto? ) : sendphoto?
@@ -3473,21 +3473,21 @@ struct sendaudio
 
 def from_JV ( var v:JsonValue?; t:sendaudio ) : sendaudio
     var q : sendaudio
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], type<int64>))
-    move_to_ref(q.audio, _::from_JV((v as _object)["audio"], type<inputfile>))
-    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], type<string>))
-    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], type<string>))
-    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>))
-    move_to_ref(q.duration, _::from_JV((v as _object)["duration"], type<int64>))
-    move_to_ref(q.performer, _::from_JV((v as _object)["performer"], type<string>))
-    move_to_ref(q.title, _::from_JV((v as _object)["title"], type<string>))
-    move_to_ref(q.thumbnail, _::from_JV((v as _object)["thumbnail"], type<inputfile?>))
-    move_to_ref(q.disable_notification, _::from_JV((v as _object)["disable_notification"], type<bool>))
-    move_to_ref(q.protect_content, _::from_JV((v as _object)["protect_content"], type<bool>))
-    move_to_ref(q.reply_to_message_id, _::from_JV((v as _object)["reply_to_message_id"], type<int64>))
-    move_to_ref(q.allow_sending_without_reply, _::from_JV((v as _object)["allow_sending_without_reply"], type<bool>))
-    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.message_thread_id = _::from_JV((v as _object)["message_thread_id"], type<int64>)
+    q.audio <- _::from_JV((v as _object)["audio"], type<inputfile>)
+    q.caption = _::from_JV((v as _object)["caption"], type<string>)
+    q.parse_mode = _::from_JV((v as _object)["parse_mode"], type<string>)
+    q.caption_entities <- _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>)
+    q.duration = _::from_JV((v as _object)["duration"], type<int64>)
+    q.performer = _::from_JV((v as _object)["performer"], type<string>)
+    q.title = _::from_JV((v as _object)["title"], type<string>)
+    q.thumbnail = _::from_JV((v as _object)["thumbnail"], type<inputfile?>)
+    q.disable_notification = _::from_JV((v as _object)["disable_notification"], type<bool>)
+    q.protect_content = _::from_JV((v as _object)["protect_content"], type<bool>)
+    q.reply_to_message_id = _::from_JV((v as _object)["reply_to_message_id"], type<int64>)
+    q.allow_sending_without_reply = _::from_JV((v as _object)["allow_sending_without_reply"], type<bool>)
+    q.reply_markup = _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:sendaudio? ) : sendaudio?
@@ -3535,19 +3535,19 @@ struct senddocument
 
 def from_JV ( var v:JsonValue?; t:senddocument ) : senddocument
     var q : senddocument
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], type<int64>))
-    move_to_ref(q.document, _::from_JV((v as _object)["document"], type<inputfile>))
-    move_to_ref(q.thumbnail, _::from_JV((v as _object)["thumbnail"], type<inputfile?>))
-    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], type<string>))
-    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], type<string>))
-    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>))
-    move_to_ref(q.disable_content_type_detection, _::from_JV((v as _object)["disable_content_type_detection"], type<bool>))
-    move_to_ref(q.disable_notification, _::from_JV((v as _object)["disable_notification"], type<bool>))
-    move_to_ref(q.protect_content, _::from_JV((v as _object)["protect_content"], type<bool>))
-    move_to_ref(q.reply_to_message_id, _::from_JV((v as _object)["reply_to_message_id"], type<int64>))
-    move_to_ref(q.allow_sending_without_reply, _::from_JV((v as _object)["allow_sending_without_reply"], type<bool>))
-    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.message_thread_id = _::from_JV((v as _object)["message_thread_id"], type<int64>)
+    q.document <- _::from_JV((v as _object)["document"], type<inputfile>)
+    q.thumbnail = _::from_JV((v as _object)["thumbnail"], type<inputfile?>)
+    q.caption = _::from_JV((v as _object)["caption"], type<string>)
+    q.parse_mode = _::from_JV((v as _object)["parse_mode"], type<string>)
+    q.caption_entities <- _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>)
+    q.disable_content_type_detection = _::from_JV((v as _object)["disable_content_type_detection"], type<bool>)
+    q.disable_notification = _::from_JV((v as _object)["disable_notification"], type<bool>)
+    q.protect_content = _::from_JV((v as _object)["protect_content"], type<bool>)
+    q.reply_to_message_id = _::from_JV((v as _object)["reply_to_message_id"], type<int64>)
+    q.allow_sending_without_reply = _::from_JV((v as _object)["allow_sending_without_reply"], type<bool>)
+    q.reply_markup = _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:senddocument? ) : senddocument?
@@ -3597,23 +3597,23 @@ struct sendvideo
 
 def from_JV ( var v:JsonValue?; t:sendvideo ) : sendvideo
     var q : sendvideo
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], type<int64>))
-    move_to_ref(q.video, _::from_JV((v as _object)["video"], type<inputfile>))
-    move_to_ref(q.duration, _::from_JV((v as _object)["duration"], type<int64>))
-    move_to_ref(q.width, _::from_JV((v as _object)["width"], type<int64>))
-    move_to_ref(q.height, _::from_JV((v as _object)["height"], type<int64>))
-    move_to_ref(q.thumbnail, _::from_JV((v as _object)["thumbnail"], type<inputfile?>))
-    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], type<string>))
-    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], type<string>))
-    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>))
-    move_to_ref(q.has_spoiler, _::from_JV((v as _object)["has_spoiler"], type<bool>))
-    move_to_ref(q.supports_streaming, _::from_JV((v as _object)["supports_streaming"], type<bool>))
-    move_to_ref(q.disable_notification, _::from_JV((v as _object)["disable_notification"], type<bool>))
-    move_to_ref(q.protect_content, _::from_JV((v as _object)["protect_content"], type<bool>))
-    move_to_ref(q.reply_to_message_id, _::from_JV((v as _object)["reply_to_message_id"], type<int64>))
-    move_to_ref(q.allow_sending_without_reply, _::from_JV((v as _object)["allow_sending_without_reply"], type<bool>))
-    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.message_thread_id = _::from_JV((v as _object)["message_thread_id"], type<int64>)
+    q.video <- _::from_JV((v as _object)["video"], type<inputfile>)
+    q.duration = _::from_JV((v as _object)["duration"], type<int64>)
+    q.width = _::from_JV((v as _object)["width"], type<int64>)
+    q.height = _::from_JV((v as _object)["height"], type<int64>)
+    q.thumbnail = _::from_JV((v as _object)["thumbnail"], type<inputfile?>)
+    q.caption = _::from_JV((v as _object)["caption"], type<string>)
+    q.parse_mode = _::from_JV((v as _object)["parse_mode"], type<string>)
+    q.caption_entities <- _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>)
+    q.has_spoiler = _::from_JV((v as _object)["has_spoiler"], type<bool>)
+    q.supports_streaming = _::from_JV((v as _object)["supports_streaming"], type<bool>)
+    q.disable_notification = _::from_JV((v as _object)["disable_notification"], type<bool>)
+    q.protect_content = _::from_JV((v as _object)["protect_content"], type<bool>)
+    q.reply_to_message_id = _::from_JV((v as _object)["reply_to_message_id"], type<int64>)
+    q.allow_sending_without_reply = _::from_JV((v as _object)["allow_sending_without_reply"], type<bool>)
+    q.reply_markup = _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:sendvideo? ) : sendvideo?
@@ -3666,22 +3666,22 @@ struct sendanimation
 
 def from_JV ( var v:JsonValue?; t:sendanimation ) : sendanimation
     var q : sendanimation
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], type<int64>))
-    move_to_ref(q.animation, _::from_JV((v as _object)["animation"], type<inputfile>))
-    move_to_ref(q.duration, _::from_JV((v as _object)["duration"], type<int64>))
-    move_to_ref(q.width, _::from_JV((v as _object)["width"], type<int64>))
-    move_to_ref(q.height, _::from_JV((v as _object)["height"], type<int64>))
-    move_to_ref(q.thumbnail, _::from_JV((v as _object)["thumbnail"], type<inputfile?>))
-    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], type<string>))
-    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], type<string>))
-    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>))
-    move_to_ref(q.has_spoiler, _::from_JV((v as _object)["has_spoiler"], type<bool>))
-    move_to_ref(q.disable_notification, _::from_JV((v as _object)["disable_notification"], type<bool>))
-    move_to_ref(q.protect_content, _::from_JV((v as _object)["protect_content"], type<bool>))
-    move_to_ref(q.reply_to_message_id, _::from_JV((v as _object)["reply_to_message_id"], type<int64>))
-    move_to_ref(q.allow_sending_without_reply, _::from_JV((v as _object)["allow_sending_without_reply"], type<bool>))
-    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.message_thread_id = _::from_JV((v as _object)["message_thread_id"], type<int64>)
+    q.animation <- _::from_JV((v as _object)["animation"], type<inputfile>)
+    q.duration = _::from_JV((v as _object)["duration"], type<int64>)
+    q.width = _::from_JV((v as _object)["width"], type<int64>)
+    q.height = _::from_JV((v as _object)["height"], type<int64>)
+    q.thumbnail = _::from_JV((v as _object)["thumbnail"], type<inputfile?>)
+    q.caption = _::from_JV((v as _object)["caption"], type<string>)
+    q.parse_mode = _::from_JV((v as _object)["parse_mode"], type<string>)
+    q.caption_entities <- _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>)
+    q.has_spoiler = _::from_JV((v as _object)["has_spoiler"], type<bool>)
+    q.disable_notification = _::from_JV((v as _object)["disable_notification"], type<bool>)
+    q.protect_content = _::from_JV((v as _object)["protect_content"], type<bool>)
+    q.reply_to_message_id = _::from_JV((v as _object)["reply_to_message_id"], type<int64>)
+    q.allow_sending_without_reply = _::from_JV((v as _object)["allow_sending_without_reply"], type<bool>)
+    q.reply_markup = _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:sendanimation? ) : sendanimation?
@@ -3729,18 +3729,18 @@ struct sendvoice
 
 def from_JV ( var v:JsonValue?; t:sendvoice ) : sendvoice
     var q : sendvoice
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], type<int64>))
-    move_to_ref(q.voice, _::from_JV((v as _object)["voice"], type<inputfile>))
-    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], type<string>))
-    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], type<string>))
-    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>))
-    move_to_ref(q.duration, _::from_JV((v as _object)["duration"], type<int64>))
-    move_to_ref(q.disable_notification, _::from_JV((v as _object)["disable_notification"], type<bool>))
-    move_to_ref(q.protect_content, _::from_JV((v as _object)["protect_content"], type<bool>))
-    move_to_ref(q.reply_to_message_id, _::from_JV((v as _object)["reply_to_message_id"], type<int64>))
-    move_to_ref(q.allow_sending_without_reply, _::from_JV((v as _object)["allow_sending_without_reply"], type<bool>))
-    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.message_thread_id = _::from_JV((v as _object)["message_thread_id"], type<int64>)
+    q.voice <- _::from_JV((v as _object)["voice"], type<inputfile>)
+    q.caption = _::from_JV((v as _object)["caption"], type<string>)
+    q.parse_mode = _::from_JV((v as _object)["parse_mode"], type<string>)
+    q.caption_entities <- _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>)
+    q.duration = _::from_JV((v as _object)["duration"], type<int64>)
+    q.disable_notification = _::from_JV((v as _object)["disable_notification"], type<bool>)
+    q.protect_content = _::from_JV((v as _object)["protect_content"], type<bool>)
+    q.reply_to_message_id = _::from_JV((v as _object)["reply_to_message_id"], type<int64>)
+    q.allow_sending_without_reply = _::from_JV((v as _object)["allow_sending_without_reply"], type<bool>)
+    q.reply_markup = _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:sendvoice? ) : sendvoice?
@@ -3782,17 +3782,17 @@ struct sendvideonote
 
 def from_JV ( var v:JsonValue?; t:sendvideonote ) : sendvideonote
     var q : sendvideonote
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], type<int64>))
-    move_to_ref(q.video_note, _::from_JV((v as _object)["video_note"], type<inputfile>))
-    move_to_ref(q.duration, _::from_JV((v as _object)["duration"], type<int64>))
-    move_to_ref(q.length, _::from_JV((v as _object)["length"], type<int64>))
-    move_to_ref(q.thumbnail, _::from_JV((v as _object)["thumbnail"], type<inputfile?>))
-    move_to_ref(q.disable_notification, _::from_JV((v as _object)["disable_notification"], type<bool>))
-    move_to_ref(q.protect_content, _::from_JV((v as _object)["protect_content"], type<bool>))
-    move_to_ref(q.reply_to_message_id, _::from_JV((v as _object)["reply_to_message_id"], type<int64>))
-    move_to_ref(q.allow_sending_without_reply, _::from_JV((v as _object)["allow_sending_without_reply"], type<bool>))
-    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.message_thread_id = _::from_JV((v as _object)["message_thread_id"], type<int64>)
+    q.video_note <- _::from_JV((v as _object)["video_note"], type<inputfile>)
+    q.duration = _::from_JV((v as _object)["duration"], type<int64>)
+    q.length = _::from_JV((v as _object)["length"], type<int64>)
+    q.thumbnail = _::from_JV((v as _object)["thumbnail"], type<inputfile?>)
+    q.disable_notification = _::from_JV((v as _object)["disable_notification"], type<bool>)
+    q.protect_content = _::from_JV((v as _object)["protect_content"], type<bool>)
+    q.reply_to_message_id = _::from_JV((v as _object)["reply_to_message_id"], type<int64>)
+    q.allow_sending_without_reply = _::from_JV((v as _object)["allow_sending_without_reply"], type<bool>)
+    q.reply_markup = _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:sendvideonote? ) : sendvideonote?
@@ -3830,13 +3830,13 @@ struct sendmediagroup
 
 def from_JV ( var v:JsonValue?; t:sendmediagroup ) : sendmediagroup
     var q : sendmediagroup
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], type<int64>))
-    move_to_ref(q.media, _::from_JV((v as _object)["media"], type<array<inputmediaaudio>>))
-    move_to_ref(q.disable_notification, _::from_JV((v as _object)["disable_notification"], type<bool>))
-    move_to_ref(q.protect_content, _::from_JV((v as _object)["protect_content"], type<bool>))
-    move_to_ref(q.reply_to_message_id, _::from_JV((v as _object)["reply_to_message_id"], type<int64>))
-    move_to_ref(q.allow_sending_without_reply, _::from_JV((v as _object)["allow_sending_without_reply"], type<bool>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.message_thread_id = _::from_JV((v as _object)["message_thread_id"], type<int64>)
+    q.media <- _::from_JV((v as _object)["media"], type<array<inputmediaaudio>>)
+    q.disable_notification = _::from_JV((v as _object)["disable_notification"], type<bool>)
+    q.protect_content = _::from_JV((v as _object)["protect_content"], type<bool>)
+    q.reply_to_message_id = _::from_JV((v as _object)["reply_to_message_id"], type<int64>)
+    q.allow_sending_without_reply = _::from_JV((v as _object)["allow_sending_without_reply"], type<bool>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:sendmediagroup? ) : sendmediagroup?
@@ -3874,19 +3874,19 @@ struct sendlocation
 
 def from_JV ( var v:JsonValue?; t:sendlocation ) : sendlocation
     var q : sendlocation
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], type<int64>))
-    move_to_ref(q.latitude, _::from_JV((v as _object)["latitude"], type<float>))
-    move_to_ref(q.longitude, _::from_JV((v as _object)["longitude"], type<float>))
-    move_to_ref(q.horizontal_accuracy, _::from_JV((v as _object)["horizontal_accuracy"], type<float>))
-    move_to_ref(q.live_period, _::from_JV((v as _object)["live_period"], type<int64>))
-    move_to_ref(q.heading, _::from_JV((v as _object)["heading"], type<int64>))
-    move_to_ref(q.proximity_alert_radius, _::from_JV((v as _object)["proximity_alert_radius"], type<int64>))
-    move_to_ref(q.disable_notification, _::from_JV((v as _object)["disable_notification"], type<bool>))
-    move_to_ref(q.protect_content, _::from_JV((v as _object)["protect_content"], type<bool>))
-    move_to_ref(q.reply_to_message_id, _::from_JV((v as _object)["reply_to_message_id"], type<int64>))
-    move_to_ref(q.allow_sending_without_reply, _::from_JV((v as _object)["allow_sending_without_reply"], type<bool>))
-    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.message_thread_id = _::from_JV((v as _object)["message_thread_id"], type<int64>)
+    q.latitude = _::from_JV((v as _object)["latitude"], type<float>)
+    q.longitude = _::from_JV((v as _object)["longitude"], type<float>)
+    q.horizontal_accuracy = _::from_JV((v as _object)["horizontal_accuracy"], type<float>)
+    q.live_period = _::from_JV((v as _object)["live_period"], type<int64>)
+    q.heading = _::from_JV((v as _object)["heading"], type<int64>)
+    q.proximity_alert_radius = _::from_JV((v as _object)["proximity_alert_radius"], type<int64>)
+    q.disable_notification = _::from_JV((v as _object)["disable_notification"], type<bool>)
+    q.protect_content = _::from_JV((v as _object)["protect_content"], type<bool>)
+    q.reply_to_message_id = _::from_JV((v as _object)["reply_to_message_id"], type<int64>)
+    q.allow_sending_without_reply = _::from_JV((v as _object)["allow_sending_without_reply"], type<bool>)
+    q.reply_markup = _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:sendlocation? ) : sendlocation?
@@ -3933,21 +3933,21 @@ struct sendvenue
 
 def from_JV ( var v:JsonValue?; t:sendvenue ) : sendvenue
     var q : sendvenue
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], type<int64>))
-    move_to_ref(q.latitude, _::from_JV((v as _object)["latitude"], type<float>))
-    move_to_ref(q.longitude, _::from_JV((v as _object)["longitude"], type<float>))
-    move_to_ref(q.title, _::from_JV((v as _object)["title"], type<string>))
-    move_to_ref(q.address, _::from_JV((v as _object)["address"], type<string>))
-    move_to_ref(q.foursquare_id, _::from_JV((v as _object)["foursquare_id"], type<string>))
-    move_to_ref(q.foursquare_type, _::from_JV((v as _object)["foursquare_type"], type<string>))
-    move_to_ref(q.google_place_id, _::from_JV((v as _object)["google_place_id"], type<string>))
-    move_to_ref(q.google_place_type, _::from_JV((v as _object)["google_place_type"], type<string>))
-    move_to_ref(q.disable_notification, _::from_JV((v as _object)["disable_notification"], type<bool>))
-    move_to_ref(q.protect_content, _::from_JV((v as _object)["protect_content"], type<bool>))
-    move_to_ref(q.reply_to_message_id, _::from_JV((v as _object)["reply_to_message_id"], type<int64>))
-    move_to_ref(q.allow_sending_without_reply, _::from_JV((v as _object)["allow_sending_without_reply"], type<bool>))
-    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.message_thread_id = _::from_JV((v as _object)["message_thread_id"], type<int64>)
+    q.latitude = _::from_JV((v as _object)["latitude"], type<float>)
+    q.longitude = _::from_JV((v as _object)["longitude"], type<float>)
+    q.title = _::from_JV((v as _object)["title"], type<string>)
+    q.address = _::from_JV((v as _object)["address"], type<string>)
+    q.foursquare_id = _::from_JV((v as _object)["foursquare_id"], type<string>)
+    q.foursquare_type = _::from_JV((v as _object)["foursquare_type"], type<string>)
+    q.google_place_id = _::from_JV((v as _object)["google_place_id"], type<string>)
+    q.google_place_type = _::from_JV((v as _object)["google_place_type"], type<string>)
+    q.disable_notification = _::from_JV((v as _object)["disable_notification"], type<bool>)
+    q.protect_content = _::from_JV((v as _object)["protect_content"], type<bool>)
+    q.reply_to_message_id = _::from_JV((v as _object)["reply_to_message_id"], type<int64>)
+    q.allow_sending_without_reply = _::from_JV((v as _object)["allow_sending_without_reply"], type<bool>)
+    q.reply_markup = _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:sendvenue? ) : sendvenue?
@@ -3992,17 +3992,17 @@ struct sendcontact
 
 def from_JV ( var v:JsonValue?; t:sendcontact ) : sendcontact
     var q : sendcontact
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], type<int64>))
-    move_to_ref(q.phone_number, _::from_JV((v as _object)["phone_number"], type<string>))
-    move_to_ref(q.first_name, _::from_JV((v as _object)["first_name"], type<string>))
-    move_to_ref(q.last_name, _::from_JV((v as _object)["last_name"], type<string>))
-    move_to_ref(q.vcard, _::from_JV((v as _object)["vcard"], type<string>))
-    move_to_ref(q.disable_notification, _::from_JV((v as _object)["disable_notification"], type<bool>))
-    move_to_ref(q.protect_content, _::from_JV((v as _object)["protect_content"], type<bool>))
-    move_to_ref(q.reply_to_message_id, _::from_JV((v as _object)["reply_to_message_id"], type<int64>))
-    move_to_ref(q.allow_sending_without_reply, _::from_JV((v as _object)["allow_sending_without_reply"], type<bool>))
-    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.message_thread_id = _::from_JV((v as _object)["message_thread_id"], type<int64>)
+    q.phone_number = _::from_JV((v as _object)["phone_number"], type<string>)
+    q.first_name = _::from_JV((v as _object)["first_name"], type<string>)
+    q.last_name = _::from_JV((v as _object)["last_name"], type<string>)
+    q.vcard = _::from_JV((v as _object)["vcard"], type<string>)
+    q.disable_notification = _::from_JV((v as _object)["disable_notification"], type<bool>)
+    q.protect_content = _::from_JV((v as _object)["protect_content"], type<bool>)
+    q.reply_to_message_id = _::from_JV((v as _object)["reply_to_message_id"], type<int64>)
+    q.allow_sending_without_reply = _::from_JV((v as _object)["allow_sending_without_reply"], type<bool>)
+    q.reply_markup = _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:sendcontact? ) : sendcontact?
@@ -4051,25 +4051,25 @@ struct sendpoll
 
 def from_JV ( var v:JsonValue?; t:sendpoll ) : sendpoll
     var q : sendpoll
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], type<int64>))
-    move_to_ref(q.question, _::from_JV((v as _object)["question"], type<string>))
-    move_to_ref(q._options, _::from_JV((v as _object)["_options"], type<array<string>>))
-    move_to_ref(q.is_anonymous, _::from_JV((v as _object)["is_anonymous"], type<bool>))
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
-    move_to_ref(q.allows_multiple_answers, _::from_JV((v as _object)["allows_multiple_answers"], type<bool>))
-    move_to_ref(q.correct_option_id, _::from_JV((v as _object)["correct_option_id"], type<int64>))
-    move_to_ref(q.explanation, _::from_JV((v as _object)["explanation"], type<string>))
-    move_to_ref(q.explanation_parse_mode, _::from_JV((v as _object)["explanation_parse_mode"], type<string>))
-    move_to_ref(q.explanation_entities, _::from_JV((v as _object)["explanation_entities"], type<array<messageentity>>))
-    move_to_ref(q.open_period, _::from_JV((v as _object)["open_period"], type<int64>))
-    move_to_ref(q.close_date, _::from_JV((v as _object)["close_date"], type<int64>))
-    move_to_ref(q.is_closed, _::from_JV((v as _object)["is_closed"], type<bool>))
-    move_to_ref(q.disable_notification, _::from_JV((v as _object)["disable_notification"], type<bool>))
-    move_to_ref(q.protect_content, _::from_JV((v as _object)["protect_content"], type<bool>))
-    move_to_ref(q.reply_to_message_id, _::from_JV((v as _object)["reply_to_message_id"], type<int64>))
-    move_to_ref(q.allow_sending_without_reply, _::from_JV((v as _object)["allow_sending_without_reply"], type<bool>))
-    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.message_thread_id = _::from_JV((v as _object)["message_thread_id"], type<int64>)
+    q.question = _::from_JV((v as _object)["question"], type<string>)
+    q._options <- _::from_JV((v as _object)["_options"], type<array<string>>)
+    q.is_anonymous = _::from_JV((v as _object)["is_anonymous"], type<bool>)
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
+    q.allows_multiple_answers = _::from_JV((v as _object)["allows_multiple_answers"], type<bool>)
+    q.correct_option_id = _::from_JV((v as _object)["correct_option_id"], type<int64>)
+    q.explanation = _::from_JV((v as _object)["explanation"], type<string>)
+    q.explanation_parse_mode = _::from_JV((v as _object)["explanation_parse_mode"], type<string>)
+    q.explanation_entities <- _::from_JV((v as _object)["explanation_entities"], type<array<messageentity>>)
+    q.open_period = _::from_JV((v as _object)["open_period"], type<int64>)
+    q.close_date = _::from_JV((v as _object)["close_date"], type<int64>)
+    q.is_closed = _::from_JV((v as _object)["is_closed"], type<bool>)
+    q.disable_notification = _::from_JV((v as _object)["disable_notification"], type<bool>)
+    q.protect_content = _::from_JV((v as _object)["protect_content"], type<bool>)
+    q.reply_to_message_id = _::from_JV((v as _object)["reply_to_message_id"], type<int64>)
+    q.allow_sending_without_reply = _::from_JV((v as _object)["allow_sending_without_reply"], type<bool>)
+    q.reply_markup = _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:sendpoll? ) : sendpoll?
@@ -4115,14 +4115,14 @@ struct senddice
 
 def from_JV ( var v:JsonValue?; t:senddice ) : senddice
     var q : senddice
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], type<int64>))
-    move_to_ref(q.emoji, _::from_JV((v as _object)["emoji"], type<string>))
-    move_to_ref(q.disable_notification, _::from_JV((v as _object)["disable_notification"], type<bool>))
-    move_to_ref(q.protect_content, _::from_JV((v as _object)["protect_content"], type<bool>))
-    move_to_ref(q.reply_to_message_id, _::from_JV((v as _object)["reply_to_message_id"], type<int64>))
-    move_to_ref(q.allow_sending_without_reply, _::from_JV((v as _object)["allow_sending_without_reply"], type<bool>))
-    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.message_thread_id = _::from_JV((v as _object)["message_thread_id"], type<int64>)
+    q.emoji = _::from_JV((v as _object)["emoji"], type<string>)
+    q.disable_notification = _::from_JV((v as _object)["disable_notification"], type<bool>)
+    q.protect_content = _::from_JV((v as _object)["protect_content"], type<bool>)
+    q.reply_to_message_id = _::from_JV((v as _object)["reply_to_message_id"], type<int64>)
+    q.allow_sending_without_reply = _::from_JV((v as _object)["allow_sending_without_reply"], type<bool>)
+    q.reply_markup = _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:senddice? ) : senddice?
@@ -4152,9 +4152,9 @@ struct sendchataction
 
 def from_JV ( var v:JsonValue?; t:sendchataction ) : sendchataction
     var q : sendchataction
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], type<int64>))
-    move_to_ref(q.action, _::from_JV((v as _object)["action"], type<string>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.message_thread_id = _::from_JV((v as _object)["message_thread_id"], type<int64>)
+    q.action = _::from_JV((v as _object)["action"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:sendchataction? ) : sendchataction?
@@ -4178,9 +4178,9 @@ struct getuserprofilephotos
 
 def from_JV ( var v:JsonValue?; t:getuserprofilephotos ) : getuserprofilephotos
     var q : getuserprofilephotos
-    move_to_ref(q.user_id, _::from_JV((v as _object)["user_id"], type<int64>))
-    move_to_ref(q.offset, _::from_JV((v as _object)["offset"], type<int64>))
-    move_to_ref(q.limit, _::from_JV((v as _object)["limit"], type<int64>))
+    q.user_id = _::from_JV((v as _object)["user_id"], type<int64>)
+    q.offset = _::from_JV((v as _object)["offset"], type<int64>)
+    q.limit = _::from_JV((v as _object)["limit"], type<int64>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:getuserprofilephotos? ) : getuserprofilephotos?
@@ -4202,7 +4202,7 @@ struct getfile
 
 def from_JV ( var v:JsonValue?; t:getfile ) : getfile
     var q : getfile
-    move_to_ref(q.file_id, _::from_JV((v as _object)["file_id"], type<string>))
+    q.file_id = _::from_JV((v as _object)["file_id"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:getfile? ) : getfile?
@@ -4225,10 +4225,10 @@ struct banchatmember
 
 def from_JV ( var v:JsonValue?; t:banchatmember ) : banchatmember
     var q : banchatmember
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.user_id, _::from_JV((v as _object)["user_id"], type<int64>))
-    move_to_ref(q.until_date, _::from_JV((v as _object)["until_date"], type<int64>))
-    move_to_ref(q.revoke_messages, _::from_JV((v as _object)["revoke_messages"], type<bool>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.user_id = _::from_JV((v as _object)["user_id"], type<int64>)
+    q.until_date = _::from_JV((v as _object)["until_date"], type<int64>)
+    q.revoke_messages = _::from_JV((v as _object)["revoke_messages"], type<bool>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:banchatmember? ) : banchatmember?
@@ -4253,9 +4253,9 @@ struct unbanchatmember
 
 def from_JV ( var v:JsonValue?; t:unbanchatmember ) : unbanchatmember
     var q : unbanchatmember
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.user_id, _::from_JV((v as _object)["user_id"], type<int64>))
-    move_to_ref(q.only_if_banned, _::from_JV((v as _object)["only_if_banned"], type<bool>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.user_id = _::from_JV((v as _object)["user_id"], type<int64>)
+    q.only_if_banned = _::from_JV((v as _object)["only_if_banned"], type<bool>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:unbanchatmember? ) : unbanchatmember?
@@ -4281,11 +4281,11 @@ struct restrictchatmember
 
 def from_JV ( var v:JsonValue?; t:restrictchatmember ) : restrictchatmember
     var q : restrictchatmember
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.user_id, _::from_JV((v as _object)["user_id"], type<int64>))
-    move_to_ref(q.permissions, _::from_JV((v as _object)["permissions"], type<chatpermissions>))
-    move_to_ref(q.use_independent_chat_permissions, _::from_JV((v as _object)["use_independent_chat_permissions"], type<bool>))
-    move_to_ref(q.until_date, _::from_JV((v as _object)["until_date"], type<int64>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.user_id = _::from_JV((v as _object)["user_id"], type<int64>)
+    q.permissions <- _::from_JV((v as _object)["permissions"], type<chatpermissions>)
+    q.use_independent_chat_permissions = _::from_JV((v as _object)["use_independent_chat_permissions"], type<bool>)
+    q.until_date = _::from_JV((v as _object)["until_date"], type<int64>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:restrictchatmember? ) : restrictchatmember?
@@ -4322,20 +4322,20 @@ struct promotechatmember
 
 def from_JV ( var v:JsonValue?; t:promotechatmember ) : promotechatmember
     var q : promotechatmember
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.user_id, _::from_JV((v as _object)["user_id"], type<int64>))
-    move_to_ref(q.is_anonymous, _::from_JV((v as _object)["is_anonymous"], type<bool>))
-    move_to_ref(q.can_manage_chat, _::from_JV((v as _object)["can_manage_chat"], type<bool>))
-    move_to_ref(q.can_post_messages, _::from_JV((v as _object)["can_post_messages"], type<bool>))
-    move_to_ref(q.can_edit_messages, _::from_JV((v as _object)["can_edit_messages"], type<bool>))
-    move_to_ref(q.can_delete_messages, _::from_JV((v as _object)["can_delete_messages"], type<bool>))
-    move_to_ref(q.can_manage_video_chats, _::from_JV((v as _object)["can_manage_video_chats"], type<bool>))
-    move_to_ref(q.can_restrict_members, _::from_JV((v as _object)["can_restrict_members"], type<bool>))
-    move_to_ref(q.can_promote_members, _::from_JV((v as _object)["can_promote_members"], type<bool>))
-    move_to_ref(q.can_change_info, _::from_JV((v as _object)["can_change_info"], type<bool>))
-    move_to_ref(q.can_invite_users, _::from_JV((v as _object)["can_invite_users"], type<bool>))
-    move_to_ref(q.can_pin_messages, _::from_JV((v as _object)["can_pin_messages"], type<bool>))
-    move_to_ref(q.can_manage_topics, _::from_JV((v as _object)["can_manage_topics"], type<bool>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.user_id = _::from_JV((v as _object)["user_id"], type<int64>)
+    q.is_anonymous = _::from_JV((v as _object)["is_anonymous"], type<bool>)
+    q.can_manage_chat = _::from_JV((v as _object)["can_manage_chat"], type<bool>)
+    q.can_post_messages = _::from_JV((v as _object)["can_post_messages"], type<bool>)
+    q.can_edit_messages = _::from_JV((v as _object)["can_edit_messages"], type<bool>)
+    q.can_delete_messages = _::from_JV((v as _object)["can_delete_messages"], type<bool>)
+    q.can_manage_video_chats = _::from_JV((v as _object)["can_manage_video_chats"], type<bool>)
+    q.can_restrict_members = _::from_JV((v as _object)["can_restrict_members"], type<bool>)
+    q.can_promote_members = _::from_JV((v as _object)["can_promote_members"], type<bool>)
+    q.can_change_info = _::from_JV((v as _object)["can_change_info"], type<bool>)
+    q.can_invite_users = _::from_JV((v as _object)["can_invite_users"], type<bool>)
+    q.can_pin_messages = _::from_JV((v as _object)["can_pin_messages"], type<bool>)
+    q.can_manage_topics = _::from_JV((v as _object)["can_manage_topics"], type<bool>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:promotechatmember? ) : promotechatmember?
@@ -4370,9 +4370,9 @@ struct setchatadministratorcustomtitle
 
 def from_JV ( var v:JsonValue?; t:setchatadministratorcustomtitle ) : setchatadministratorcustomtitle
     var q : setchatadministratorcustomtitle
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.user_id, _::from_JV((v as _object)["user_id"], type<int64>))
-    move_to_ref(q.custom_title, _::from_JV((v as _object)["custom_title"], type<string>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.user_id = _::from_JV((v as _object)["user_id"], type<int64>)
+    q.custom_title = _::from_JV((v as _object)["custom_title"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:setchatadministratorcustomtitle? ) : setchatadministratorcustomtitle?
@@ -4395,8 +4395,8 @@ struct banchatsenderchat
 
 def from_JV ( var v:JsonValue?; t:banchatsenderchat ) : banchatsenderchat
     var q : banchatsenderchat
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.sender_chat_id, _::from_JV((v as _object)["sender_chat_id"], type<int64>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.sender_chat_id = _::from_JV((v as _object)["sender_chat_id"], type<int64>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:banchatsenderchat? ) : banchatsenderchat?
@@ -4418,8 +4418,8 @@ struct unbanchatsenderchat
 
 def from_JV ( var v:JsonValue?; t:unbanchatsenderchat ) : unbanchatsenderchat
     var q : unbanchatsenderchat
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.sender_chat_id, _::from_JV((v as _object)["sender_chat_id"], type<int64>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.sender_chat_id = _::from_JV((v as _object)["sender_chat_id"], type<int64>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:unbanchatsenderchat? ) : unbanchatsenderchat?
@@ -4442,9 +4442,9 @@ struct setchatpermissions
 
 def from_JV ( var v:JsonValue?; t:setchatpermissions ) : setchatpermissions
     var q : setchatpermissions
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.permissions, _::from_JV((v as _object)["permissions"], type<chatpermissions>))
-    move_to_ref(q.use_independent_chat_permissions, _::from_JV((v as _object)["use_independent_chat_permissions"], type<bool>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.permissions <- _::from_JV((v as _object)["permissions"], type<chatpermissions>)
+    q.use_independent_chat_permissions = _::from_JV((v as _object)["use_independent_chat_permissions"], type<bool>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:setchatpermissions? ) : setchatpermissions?
@@ -4466,7 +4466,7 @@ struct exportchatinvitelink
 
 def from_JV ( var v:JsonValue?; t:exportchatinvitelink ) : exportchatinvitelink
     var q : exportchatinvitelink
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:exportchatinvitelink? ) : exportchatinvitelink?
@@ -4490,11 +4490,11 @@ struct createchatinvitelink
 
 def from_JV ( var v:JsonValue?; t:createchatinvitelink ) : createchatinvitelink
     var q : createchatinvitelink
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.name, _::from_JV((v as _object)["name"], type<string>))
-    move_to_ref(q.expire_date, _::from_JV((v as _object)["expire_date"], type<int64>))
-    move_to_ref(q.member_limit, _::from_JV((v as _object)["member_limit"], type<int64>))
-    move_to_ref(q.creates_join_request, _::from_JV((v as _object)["creates_join_request"], type<bool>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.name = _::from_JV((v as _object)["name"], type<string>)
+    q.expire_date = _::from_JV((v as _object)["expire_date"], type<int64>)
+    q.member_limit = _::from_JV((v as _object)["member_limit"], type<int64>)
+    q.creates_join_request = _::from_JV((v as _object)["creates_join_request"], type<bool>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:createchatinvitelink? ) : createchatinvitelink?
@@ -4523,12 +4523,12 @@ struct editchatinvitelink
 
 def from_JV ( var v:JsonValue?; t:editchatinvitelink ) : editchatinvitelink
     var q : editchatinvitelink
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.invite_link, _::from_JV((v as _object)["invite_link"], type<string>))
-    move_to_ref(q.name, _::from_JV((v as _object)["name"], type<string>))
-    move_to_ref(q.expire_date, _::from_JV((v as _object)["expire_date"], type<int64>))
-    move_to_ref(q.member_limit, _::from_JV((v as _object)["member_limit"], type<int64>))
-    move_to_ref(q.creates_join_request, _::from_JV((v as _object)["creates_join_request"], type<bool>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.invite_link = _::from_JV((v as _object)["invite_link"], type<string>)
+    q.name = _::from_JV((v as _object)["name"], type<string>)
+    q.expire_date = _::from_JV((v as _object)["expire_date"], type<int64>)
+    q.member_limit = _::from_JV((v as _object)["member_limit"], type<int64>)
+    q.creates_join_request = _::from_JV((v as _object)["creates_join_request"], type<bool>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:editchatinvitelink? ) : editchatinvitelink?
@@ -4554,8 +4554,8 @@ struct revokechatinvitelink
 
 def from_JV ( var v:JsonValue?; t:revokechatinvitelink ) : revokechatinvitelink
     var q : revokechatinvitelink
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.invite_link, _::from_JV((v as _object)["invite_link"], type<string>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.invite_link = _::from_JV((v as _object)["invite_link"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:revokechatinvitelink? ) : revokechatinvitelink?
@@ -4577,8 +4577,8 @@ struct approvechatjoinrequest
 
 def from_JV ( var v:JsonValue?; t:approvechatjoinrequest ) : approvechatjoinrequest
     var q : approvechatjoinrequest
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.user_id, _::from_JV((v as _object)["user_id"], type<int64>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.user_id = _::from_JV((v as _object)["user_id"], type<int64>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:approvechatjoinrequest? ) : approvechatjoinrequest?
@@ -4600,8 +4600,8 @@ struct declinechatjoinrequest
 
 def from_JV ( var v:JsonValue?; t:declinechatjoinrequest ) : declinechatjoinrequest
     var q : declinechatjoinrequest
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.user_id, _::from_JV((v as _object)["user_id"], type<int64>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.user_id = _::from_JV((v as _object)["user_id"], type<int64>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:declinechatjoinrequest? ) : declinechatjoinrequest?
@@ -4623,8 +4623,8 @@ struct setchatphoto
 
 def from_JV ( var v:JsonValue?; t:setchatphoto ) : setchatphoto
     var q : setchatphoto
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.photo, _::from_JV((v as _object)["photo"], type<inputfile>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.photo <- _::from_JV((v as _object)["photo"], type<inputfile>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:setchatphoto? ) : setchatphoto?
@@ -4645,7 +4645,7 @@ struct deletechatphoto
 
 def from_JV ( var v:JsonValue?; t:deletechatphoto ) : deletechatphoto
     var q : deletechatphoto
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:deletechatphoto? ) : deletechatphoto?
@@ -4666,8 +4666,8 @@ struct setchattitle
 
 def from_JV ( var v:JsonValue?; t:setchattitle ) : setchattitle
     var q : setchattitle
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.title, _::from_JV((v as _object)["title"], type<string>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.title = _::from_JV((v as _object)["title"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:setchattitle? ) : setchattitle?
@@ -4689,8 +4689,8 @@ struct setchatdescription
 
 def from_JV ( var v:JsonValue?; t:setchatdescription ) : setchatdescription
     var q : setchatdescription
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.description, _::from_JV((v as _object)["description"], type<string>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.description = _::from_JV((v as _object)["description"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:setchatdescription? ) : setchatdescription?
@@ -4713,9 +4713,9 @@ struct pinchatmessage
 
 def from_JV ( var v:JsonValue?; t:pinchatmessage ) : pinchatmessage
     var q : pinchatmessage
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.message_id, _::from_JV((v as _object)["message_id"], type<int64>))
-    move_to_ref(q.disable_notification, _::from_JV((v as _object)["disable_notification"], type<bool>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.message_id = _::from_JV((v as _object)["message_id"], type<int64>)
+    q.disable_notification = _::from_JV((v as _object)["disable_notification"], type<bool>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:pinchatmessage? ) : pinchatmessage?
@@ -4738,8 +4738,8 @@ struct unpinchatmessage
 
 def from_JV ( var v:JsonValue?; t:unpinchatmessage ) : unpinchatmessage
     var q : unpinchatmessage
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.message_id, _::from_JV((v as _object)["message_id"], type<int64>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.message_id = _::from_JV((v as _object)["message_id"], type<int64>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:unpinchatmessage? ) : unpinchatmessage?
@@ -4760,7 +4760,7 @@ struct unpinallchatmessages
 
 def from_JV ( var v:JsonValue?; t:unpinallchatmessages ) : unpinallchatmessages
     var q : unpinallchatmessages
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:unpinallchatmessages? ) : unpinallchatmessages?
@@ -4780,7 +4780,7 @@ struct leavechat
 
 def from_JV ( var v:JsonValue?; t:leavechat ) : leavechat
     var q : leavechat
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:leavechat? ) : leavechat?
@@ -4800,7 +4800,7 @@ struct getchat
 
 def from_JV ( var v:JsonValue?; t:getchat ) : getchat
     var q : getchat
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:getchat? ) : getchat?
@@ -4820,7 +4820,7 @@ struct getchatadministrators
 
 def from_JV ( var v:JsonValue?; t:getchatadministrators ) : getchatadministrators
     var q : getchatadministrators
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:getchatadministrators? ) : getchatadministrators?
@@ -4840,7 +4840,7 @@ struct getchatmembercount
 
 def from_JV ( var v:JsonValue?; t:getchatmembercount ) : getchatmembercount
     var q : getchatmembercount
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:getchatmembercount? ) : getchatmembercount?
@@ -4861,8 +4861,8 @@ struct getchatmember
 
 def from_JV ( var v:JsonValue?; t:getchatmember ) : getchatmember
     var q : getchatmember
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.user_id, _::from_JV((v as _object)["user_id"], type<int64>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.user_id = _::from_JV((v as _object)["user_id"], type<int64>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:getchatmember? ) : getchatmember?
@@ -4884,8 +4884,8 @@ struct setchatstickerset
 
 def from_JV ( var v:JsonValue?; t:setchatstickerset ) : setchatstickerset
     var q : setchatstickerset
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.sticker_set_name, _::from_JV((v as _object)["sticker_set_name"], type<string>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.sticker_set_name = _::from_JV((v as _object)["sticker_set_name"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:setchatstickerset? ) : setchatstickerset?
@@ -4906,7 +4906,7 @@ struct deletechatstickerset
 
 def from_JV ( var v:JsonValue?; t:deletechatstickerset ) : deletechatstickerset
     var q : deletechatstickerset
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:deletechatstickerset? ) : deletechatstickerset?
@@ -4947,10 +4947,10 @@ struct createforumtopic
 
 def from_JV ( var v:JsonValue?; t:createforumtopic ) : createforumtopic
     var q : createforumtopic
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.name, _::from_JV((v as _object)["name"], type<string>))
-    move_to_ref(q.icon_color, _::from_JV((v as _object)["icon_color"], type<int64>))
-    move_to_ref(q.icon_custom_emoji_id, _::from_JV((v as _object)["icon_custom_emoji_id"], type<string>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.name = _::from_JV((v as _object)["name"], type<string>)
+    q.icon_color = _::from_JV((v as _object)["icon_color"], type<int64>)
+    q.icon_custom_emoji_id = _::from_JV((v as _object)["icon_custom_emoji_id"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:createforumtopic? ) : createforumtopic?
@@ -4976,10 +4976,10 @@ struct editforumtopic
 
 def from_JV ( var v:JsonValue?; t:editforumtopic ) : editforumtopic
     var q : editforumtopic
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], type<int64>))
-    move_to_ref(q.name, _::from_JV((v as _object)["name"], type<string>))
-    move_to_ref(q.icon_custom_emoji_id, _::from_JV((v as _object)["icon_custom_emoji_id"], type<string>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.message_thread_id = _::from_JV((v as _object)["message_thread_id"], type<int64>)
+    q.name = _::from_JV((v as _object)["name"], type<string>)
+    q.icon_custom_emoji_id = _::from_JV((v as _object)["icon_custom_emoji_id"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:editforumtopic? ) : editforumtopic?
@@ -5003,8 +5003,8 @@ struct closeforumtopic
 
 def from_JV ( var v:JsonValue?; t:closeforumtopic ) : closeforumtopic
     var q : closeforumtopic
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], type<int64>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.message_thread_id = _::from_JV((v as _object)["message_thread_id"], type<int64>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:closeforumtopic? ) : closeforumtopic?
@@ -5026,8 +5026,8 @@ struct reopenforumtopic
 
 def from_JV ( var v:JsonValue?; t:reopenforumtopic ) : reopenforumtopic
     var q : reopenforumtopic
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], type<int64>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.message_thread_id = _::from_JV((v as _object)["message_thread_id"], type<int64>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:reopenforumtopic? ) : reopenforumtopic?
@@ -5049,8 +5049,8 @@ struct deleteforumtopic
 
 def from_JV ( var v:JsonValue?; t:deleteforumtopic ) : deleteforumtopic
     var q : deleteforumtopic
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], type<int64>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.message_thread_id = _::from_JV((v as _object)["message_thread_id"], type<int64>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:deleteforumtopic? ) : deleteforumtopic?
@@ -5072,8 +5072,8 @@ struct unpinallforumtopicmessages
 
 def from_JV ( var v:JsonValue?; t:unpinallforumtopicmessages ) : unpinallforumtopicmessages
     var q : unpinallforumtopicmessages
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], type<int64>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.message_thread_id = _::from_JV((v as _object)["message_thread_id"], type<int64>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:unpinallforumtopicmessages? ) : unpinallforumtopicmessages?
@@ -5095,8 +5095,8 @@ struct editgeneralforumtopic
 
 def from_JV ( var v:JsonValue?; t:editgeneralforumtopic ) : editgeneralforumtopic
     var q : editgeneralforumtopic
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.name, _::from_JV((v as _object)["name"], type<string>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.name = _::from_JV((v as _object)["name"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:editgeneralforumtopic? ) : editgeneralforumtopic?
@@ -5117,7 +5117,7 @@ struct closegeneralforumtopic
 
 def from_JV ( var v:JsonValue?; t:closegeneralforumtopic ) : closegeneralforumtopic
     var q : closegeneralforumtopic
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:closegeneralforumtopic? ) : closegeneralforumtopic?
@@ -5137,7 +5137,7 @@ struct reopengeneralforumtopic
 
 def from_JV ( var v:JsonValue?; t:reopengeneralforumtopic ) : reopengeneralforumtopic
     var q : reopengeneralforumtopic
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:reopengeneralforumtopic? ) : reopengeneralforumtopic?
@@ -5157,7 +5157,7 @@ struct hidegeneralforumtopic
 
 def from_JV ( var v:JsonValue?; t:hidegeneralforumtopic ) : hidegeneralforumtopic
     var q : hidegeneralforumtopic
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:hidegeneralforumtopic? ) : hidegeneralforumtopic?
@@ -5177,7 +5177,7 @@ struct unhidegeneralforumtopic
 
 def from_JV ( var v:JsonValue?; t:unhidegeneralforumtopic ) : unhidegeneralforumtopic
     var q : unhidegeneralforumtopic
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:unhidegeneralforumtopic? ) : unhidegeneralforumtopic?
@@ -5201,11 +5201,11 @@ struct answercallbackquery
 
 def from_JV ( var v:JsonValue?; t:answercallbackquery ) : answercallbackquery
     var q : answercallbackquery
-    move_to_ref(q.callback_query_id, _::from_JV((v as _object)["callback_query_id"], type<string>))
-    move_to_ref(q.text, _::from_JV((v as _object)["text"], type<string>))
-    move_to_ref(q.show_alert, _::from_JV((v as _object)["show_alert"], type<bool>))
-    move_to_ref(q.url, _::from_JV((v as _object)["url"], type<string>))
-    move_to_ref(q.cache_time, _::from_JV((v as _object)["cache_time"], type<int64>))
+    q.callback_query_id = _::from_JV((v as _object)["callback_query_id"], type<string>)
+    q.text = _::from_JV((v as _object)["text"], type<string>)
+    q.show_alert = _::from_JV((v as _object)["show_alert"], type<bool>)
+    q.url = _::from_JV((v as _object)["url"], type<string>)
+    q.cache_time = _::from_JV((v as _object)["cache_time"], type<int64>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:answercallbackquery? ) : answercallbackquery?
@@ -5231,9 +5231,9 @@ struct setmycommands
 
 def from_JV ( var v:JsonValue?; t:setmycommands ) : setmycommands
     var q : setmycommands
-    move_to_ref(q.commands, _::from_JV((v as _object)["commands"], type<array<botcommand>>))
-    move_to_ref(q.scope, _::from_JV((v as _object)["scope"], type<botcommandscope?>))
-    move_to_ref(q.language_code, _::from_JV((v as _object)["language_code"], type<string>))
+    q.commands <- _::from_JV((v as _object)["commands"], type<array<botcommand>>)
+    q.scope = _::from_JV((v as _object)["scope"], type<botcommandscope?>)
+    q.language_code = _::from_JV((v as _object)["language_code"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:setmycommands? ) : setmycommands?
@@ -5257,8 +5257,8 @@ struct deletemycommands
 
 def from_JV ( var v:JsonValue?; t:deletemycommands ) : deletemycommands
     var q : deletemycommands
-    move_to_ref(q.scope, _::from_JV((v as _object)["scope"], type<botcommandscope?>))
-    move_to_ref(q.language_code, _::from_JV((v as _object)["language_code"], type<string>))
+    q.scope = _::from_JV((v as _object)["scope"], type<botcommandscope?>)
+    q.language_code = _::from_JV((v as _object)["language_code"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:deletemycommands? ) : deletemycommands?
@@ -5281,8 +5281,8 @@ struct getmycommands
 
 def from_JV ( var v:JsonValue?; t:getmycommands ) : getmycommands
     var q : getmycommands
-    move_to_ref(q.scope, _::from_JV((v as _object)["scope"], type<botcommandscope?>))
-    move_to_ref(q.language_code, _::from_JV((v as _object)["language_code"], type<string>))
+    q.scope = _::from_JV((v as _object)["scope"], type<botcommandscope?>)
+    q.language_code = _::from_JV((v as _object)["language_code"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:getmycommands? ) : getmycommands?
@@ -5305,8 +5305,8 @@ struct setmydescription
 
 def from_JV ( var v:JsonValue?; t:setmydescription ) : setmydescription
     var q : setmydescription
-    move_to_ref(q.description, _::from_JV((v as _object)["description"], type<string>))
-    move_to_ref(q.language_code, _::from_JV((v as _object)["language_code"], type<string>))
+    q.description = _::from_JV((v as _object)["description"], type<string>)
+    q.language_code = _::from_JV((v as _object)["language_code"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:setmydescription? ) : setmydescription?
@@ -5327,7 +5327,7 @@ struct getmydescription
 
 def from_JV ( var v:JsonValue?; t:getmydescription ) : getmydescription
     var q : getmydescription
-    move_to_ref(q.language_code, _::from_JV((v as _object)["language_code"], type<string>))
+    q.language_code = _::from_JV((v as _object)["language_code"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:getmydescription? ) : getmydescription?
@@ -5348,8 +5348,8 @@ struct setmyshortdescription
 
 def from_JV ( var v:JsonValue?; t:setmyshortdescription ) : setmyshortdescription
     var q : setmyshortdescription
-    move_to_ref(q.short_description, _::from_JV((v as _object)["short_description"], type<string>))
-    move_to_ref(q.language_code, _::from_JV((v as _object)["language_code"], type<string>))
+    q.short_description = _::from_JV((v as _object)["short_description"], type<string>)
+    q.language_code = _::from_JV((v as _object)["language_code"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:setmyshortdescription? ) : setmyshortdescription?
@@ -5370,7 +5370,7 @@ struct getmyshortdescription
 
 def from_JV ( var v:JsonValue?; t:getmyshortdescription ) : getmyshortdescription
     var q : getmyshortdescription
-    move_to_ref(q.language_code, _::from_JV((v as _object)["language_code"], type<string>))
+    q.language_code = _::from_JV((v as _object)["language_code"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:getmyshortdescription? ) : getmyshortdescription?
@@ -5391,8 +5391,8 @@ struct setchatmenubutton
 
 def from_JV ( var v:JsonValue?; t:setchatmenubutton ) : setchatmenubutton
     var q : setchatmenubutton
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<int64>))
-    move_to_ref(q.menu_button, _::from_JV((v as _object)["menu_button"], type<menubutton?>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<int64>)
+    q.menu_button = _::from_JV((v as _object)["menu_button"], type<menubutton?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:setchatmenubutton? ) : setchatmenubutton?
@@ -5414,7 +5414,7 @@ struct getchatmenubutton
 
 def from_JV ( var v:JsonValue?; t:getchatmenubutton ) : getchatmenubutton
     var q : getchatmenubutton
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<int64>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<int64>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:getchatmenubutton? ) : getchatmenubutton?
@@ -5435,8 +5435,8 @@ struct setmydefaultadministratorrights
 
 def from_JV ( var v:JsonValue?; t:setmydefaultadministratorrights ) : setmydefaultadministratorrights
     var q : setmydefaultadministratorrights
-    move_to_ref(q.rights, _::from_JV((v as _object)["rights"], type<chatadministratorrights?>))
-    move_to_ref(q.for_channels, _::from_JV((v as _object)["for_channels"], type<bool>))
+    q.rights = _::from_JV((v as _object)["rights"], type<chatadministratorrights?>)
+    q.for_channels = _::from_JV((v as _object)["for_channels"], type<bool>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:setmydefaultadministratorrights? ) : setmydefaultadministratorrights?
@@ -5458,7 +5458,7 @@ struct getmydefaultadministratorrights
 
 def from_JV ( var v:JsonValue?; t:getmydefaultadministratorrights ) : getmydefaultadministratorrights
     var q : getmydefaultadministratorrights
-    move_to_ref(q.for_channels, _::from_JV((v as _object)["for_channels"], type<bool>))
+    q.for_channels = _::from_JV((v as _object)["for_channels"], type<bool>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:getmydefaultadministratorrights? ) : getmydefaultadministratorrights?
@@ -5503,14 +5503,14 @@ struct editmessagetext
 
 def from_JV ( var v:JsonValue?; t:editmessagetext ) : editmessagetext
     var q : editmessagetext
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.message_id, _::from_JV((v as _object)["message_id"], type<int64>))
-    move_to_ref(q.inline_message_id, _::from_JV((v as _object)["inline_message_id"], type<string>))
-    move_to_ref(q.text, _::from_JV((v as _object)["text"], type<string>))
-    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], type<string>))
-    move_to_ref(q.entities, _::from_JV((v as _object)["entities"], type<array<messageentity>>))
-    move_to_ref(q.disable_web_page_preview, _::from_JV((v as _object)["disable_web_page_preview"], type<bool>))
-    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.message_id = _::from_JV((v as _object)["message_id"], type<int64>)
+    q.inline_message_id = _::from_JV((v as _object)["inline_message_id"], type<string>)
+    q.text = _::from_JV((v as _object)["text"], type<string>)
+    q.parse_mode = _::from_JV((v as _object)["parse_mode"], type<string>)
+    q.entities <- _::from_JV((v as _object)["entities"], type<array<messageentity>>)
+    q.disable_web_page_preview = _::from_JV((v as _object)["disable_web_page_preview"], type<bool>)
+    q.reply_markup = _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:editmessagetext? ) : editmessagetext?
@@ -5544,13 +5544,13 @@ struct editmessagecaption
 
 def from_JV ( var v:JsonValue?; t:editmessagecaption ) : editmessagecaption
     var q : editmessagecaption
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.message_id, _::from_JV((v as _object)["message_id"], type<int64>))
-    move_to_ref(q.inline_message_id, _::from_JV((v as _object)["inline_message_id"], type<string>))
-    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], type<string>))
-    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], type<string>))
-    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>))
-    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.message_id = _::from_JV((v as _object)["message_id"], type<int64>)
+    q.inline_message_id = _::from_JV((v as _object)["inline_message_id"], type<string>)
+    q.caption = _::from_JV((v as _object)["caption"], type<string>)
+    q.parse_mode = _::from_JV((v as _object)["parse_mode"], type<string>)
+    q.caption_entities <- _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>)
+    q.reply_markup = _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:editmessagecaption? ) : editmessagecaption?
@@ -5581,11 +5581,11 @@ struct editmessagemedia
 
 def from_JV ( var v:JsonValue?; t:editmessagemedia ) : editmessagemedia
     var q : editmessagemedia
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.message_id, _::from_JV((v as _object)["message_id"], type<int64>))
-    move_to_ref(q.inline_message_id, _::from_JV((v as _object)["inline_message_id"], type<string>))
-    move_to_ref(q.media, _::from_JV((v as _object)["media"], type<inputmedia>))
-    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.message_id = _::from_JV((v as _object)["message_id"], type<int64>)
+    q.inline_message_id = _::from_JV((v as _object)["inline_message_id"], type<string>)
+    q.media <- _::from_JV((v as _object)["media"], type<inputmedia>)
+    q.reply_markup = _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:editmessagemedia? ) : editmessagemedia?
@@ -5618,15 +5618,15 @@ struct editmessagelivelocation
 
 def from_JV ( var v:JsonValue?; t:editmessagelivelocation ) : editmessagelivelocation
     var q : editmessagelivelocation
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.message_id, _::from_JV((v as _object)["message_id"], type<int64>))
-    move_to_ref(q.inline_message_id, _::from_JV((v as _object)["inline_message_id"], type<string>))
-    move_to_ref(q.latitude, _::from_JV((v as _object)["latitude"], type<float>))
-    move_to_ref(q.longitude, _::from_JV((v as _object)["longitude"], type<float>))
-    move_to_ref(q.horizontal_accuracy, _::from_JV((v as _object)["horizontal_accuracy"], type<float>))
-    move_to_ref(q.heading, _::from_JV((v as _object)["heading"], type<int64>))
-    move_to_ref(q.proximity_alert_radius, _::from_JV((v as _object)["proximity_alert_radius"], type<int64>))
-    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.message_id = _::from_JV((v as _object)["message_id"], type<int64>)
+    q.inline_message_id = _::from_JV((v as _object)["inline_message_id"], type<string>)
+    q.latitude = _::from_JV((v as _object)["latitude"], type<float>)
+    q.longitude = _::from_JV((v as _object)["longitude"], type<float>)
+    q.horizontal_accuracy = _::from_JV((v as _object)["horizontal_accuracy"], type<float>)
+    q.heading = _::from_JV((v as _object)["heading"], type<int64>)
+    q.proximity_alert_radius = _::from_JV((v as _object)["proximity_alert_radius"], type<int64>)
+    q.reply_markup = _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:editmessagelivelocation? ) : editmessagelivelocation?
@@ -5658,10 +5658,10 @@ struct stopmessagelivelocation
 
 def from_JV ( var v:JsonValue?; t:stopmessagelivelocation ) : stopmessagelivelocation
     var q : stopmessagelivelocation
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.message_id, _::from_JV((v as _object)["message_id"], type<int64>))
-    move_to_ref(q.inline_message_id, _::from_JV((v as _object)["inline_message_id"], type<string>))
-    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.message_id = _::from_JV((v as _object)["message_id"], type<int64>)
+    q.inline_message_id = _::from_JV((v as _object)["inline_message_id"], type<string>)
+    q.reply_markup = _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:stopmessagelivelocation? ) : stopmessagelivelocation?
@@ -5688,10 +5688,10 @@ struct editmessagereplymarkup
 
 def from_JV ( var v:JsonValue?; t:editmessagereplymarkup ) : editmessagereplymarkup
     var q : editmessagereplymarkup
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.message_id, _::from_JV((v as _object)["message_id"], type<int64>))
-    move_to_ref(q.inline_message_id, _::from_JV((v as _object)["inline_message_id"], type<string>))
-    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.message_id = _::from_JV((v as _object)["message_id"], type<int64>)
+    q.inline_message_id = _::from_JV((v as _object)["inline_message_id"], type<string>)
+    q.reply_markup = _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:editmessagereplymarkup? ) : editmessagereplymarkup?
@@ -5717,9 +5717,9 @@ struct stoppoll
 
 def from_JV ( var v:JsonValue?; t:stoppoll ) : stoppoll
     var q : stoppoll
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.message_id, _::from_JV((v as _object)["message_id"], type<int64>))
-    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.message_id = _::from_JV((v as _object)["message_id"], type<int64>)
+    q.reply_markup = _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:stoppoll? ) : stoppoll?
@@ -5743,8 +5743,8 @@ struct deletemessage
 
 def from_JV ( var v:JsonValue?; t:deletemessage ) : deletemessage
     var q : deletemessage
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.message_id, _::from_JV((v as _object)["message_id"], type<int64>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.message_id = _::from_JV((v as _object)["message_id"], type<int64>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:deletemessage? ) : deletemessage?
@@ -5779,21 +5779,21 @@ struct sticker
 
 def from_JV ( var v:JsonValue?; t:sticker ) : sticker
     var q : sticker
-    move_to_ref(q.file_id, _::from_JV((v as _object)["file_id"], type<string>))
-    move_to_ref(q.file_unique_id, _::from_JV((v as _object)["file_unique_id"], type<string>))
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
-    move_to_ref(q.width, _::from_JV((v as _object)["width"], type<int64>))
-    move_to_ref(q.height, _::from_JV((v as _object)["height"], type<int64>))
-    move_to_ref(q.is_animated, _::from_JV((v as _object)["is_animated"], type<bool>))
-    move_to_ref(q.is_video, _::from_JV((v as _object)["is_video"], type<bool>))
-    move_to_ref(q.thumbnail, _::from_JV((v as _object)["thumbnail"], type<photosize?>))
-    move_to_ref(q.emoji, _::from_JV((v as _object)["emoji"], type<string>))
-    move_to_ref(q.set_name, _::from_JV((v as _object)["set_name"], type<string>))
-    move_to_ref(q.premium_animation, _::from_JV((v as _object)["premium_animation"], type<file?>))
-    move_to_ref(q.mask_position, _::from_JV((v as _object)["mask_position"], type<maskposition?>))
-    move_to_ref(q.custom_emoji_id, _::from_JV((v as _object)["custom_emoji_id"], type<string>))
-    move_to_ref(q.needs_repainting, _::from_JV((v as _object)["needs_repainting"], type<bool>))
-    move_to_ref(q.file_size, _::from_JV((v as _object)["file_size"], type<int64>))
+    q.file_id = _::from_JV((v as _object)["file_id"], type<string>)
+    q.file_unique_id = _::from_JV((v as _object)["file_unique_id"], type<string>)
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
+    q.width = _::from_JV((v as _object)["width"], type<int64>)
+    q.height = _::from_JV((v as _object)["height"], type<int64>)
+    q.is_animated = _::from_JV((v as _object)["is_animated"], type<bool>)
+    q.is_video = _::from_JV((v as _object)["is_video"], type<bool>)
+    q.thumbnail = _::from_JV((v as _object)["thumbnail"], type<photosize?>)
+    q.emoji = _::from_JV((v as _object)["emoji"], type<string>)
+    q.set_name = _::from_JV((v as _object)["set_name"], type<string>)
+    q.premium_animation = _::from_JV((v as _object)["premium_animation"], type<file?>)
+    q.mask_position = _::from_JV((v as _object)["mask_position"], type<maskposition?>)
+    q.custom_emoji_id = _::from_JV((v as _object)["custom_emoji_id"], type<string>)
+    q.needs_repainting = _::from_JV((v as _object)["needs_repainting"], type<bool>)
+    q.file_size = _::from_JV((v as _object)["file_size"], type<int64>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:sticker? ) : sticker?
@@ -5836,13 +5836,13 @@ struct stickerset
 
 def from_JV ( var v:JsonValue?; t:stickerset ) : stickerset
     var q : stickerset
-    move_to_ref(q.name, _::from_JV((v as _object)["name"], type<string>))
-    move_to_ref(q.title, _::from_JV((v as _object)["title"], type<string>))
-    move_to_ref(q.sticker_type, _::from_JV((v as _object)["sticker_type"], type<string>))
-    move_to_ref(q.is_animated, _::from_JV((v as _object)["is_animated"], type<bool>))
-    move_to_ref(q.is_video, _::from_JV((v as _object)["is_video"], type<bool>))
-    move_to_ref(q.stickers, _::from_JV((v as _object)["stickers"], type<array<sticker>>))
-    move_to_ref(q.thumbnail, _::from_JV((v as _object)["thumbnail"], type<photosize?>))
+    q.name = _::from_JV((v as _object)["name"], type<string>)
+    q.title = _::from_JV((v as _object)["title"], type<string>)
+    q.sticker_type = _::from_JV((v as _object)["sticker_type"], type<string>)
+    q.is_animated = _::from_JV((v as _object)["is_animated"], type<bool>)
+    q.is_video = _::from_JV((v as _object)["is_video"], type<bool>)
+    q.stickers <- _::from_JV((v as _object)["stickers"], type<array<sticker>>)
+    q.thumbnail = _::from_JV((v as _object)["thumbnail"], type<photosize?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:stickerset? ) : stickerset?
@@ -5872,10 +5872,10 @@ struct maskposition
 
 def from_JV ( var v:JsonValue?; t:maskposition ) : maskposition
     var q : maskposition
-    move_to_ref(q.point, _::from_JV((v as _object)["point"], type<string>))
-    move_to_ref(q.x_shift, _::from_JV((v as _object)["x_shift"], type<float>))
-    move_to_ref(q.y_shift, _::from_JV((v as _object)["y_shift"], type<float>))
-    move_to_ref(q.scale, _::from_JV((v as _object)["scale"], type<float>))
+    q.point = _::from_JV((v as _object)["point"], type<string>)
+    q.x_shift = _::from_JV((v as _object)["x_shift"], type<float>)
+    q.y_shift = _::from_JV((v as _object)["y_shift"], type<float>)
+    q.scale = _::from_JV((v as _object)["scale"], type<float>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:maskposition? ) : maskposition?
@@ -5901,10 +5901,10 @@ struct inputsticker
 
 def from_JV ( var v:JsonValue?; t:inputsticker ) : inputsticker
     var q : inputsticker
-    move_to_ref(q.sticker, _::from_JV((v as _object)["sticker"], type<inputfile>))
-    move_to_ref(q.emoji_list, _::from_JV((v as _object)["emoji_list"], type<array<string>>))
-    move_to_ref(q.mask_position, _::from_JV((v as _object)["mask_position"], type<maskposition?>))
-    move_to_ref(q.keywords, _::from_JV((v as _object)["keywords"], type<array<string>>))
+    q.sticker <- _::from_JV((v as _object)["sticker"], type<inputfile>)
+    q.emoji_list <- _::from_JV((v as _object)["emoji_list"], type<array<string>>)
+    q.mask_position = _::from_JV((v as _object)["mask_position"], type<maskposition?>)
+    q.keywords <- _::from_JV((v as _object)["keywords"], type<array<string>>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:inputsticker? ) : inputsticker?
@@ -5936,15 +5936,15 @@ struct sendsticker
 
 def from_JV ( var v:JsonValue?; t:sendsticker ) : sendsticker
     var q : sendsticker
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], type<int64>))
-    move_to_ref(q.sticker, _::from_JV((v as _object)["sticker"], type<inputfile>))
-    move_to_ref(q.emoji, _::from_JV((v as _object)["emoji"], type<string>))
-    move_to_ref(q.disable_notification, _::from_JV((v as _object)["disable_notification"], type<bool>))
-    move_to_ref(q.protect_content, _::from_JV((v as _object)["protect_content"], type<bool>))
-    move_to_ref(q.reply_to_message_id, _::from_JV((v as _object)["reply_to_message_id"], type<int64>))
-    move_to_ref(q.allow_sending_without_reply, _::from_JV((v as _object)["allow_sending_without_reply"], type<bool>))
-    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.message_thread_id = _::from_JV((v as _object)["message_thread_id"], type<int64>)
+    q.sticker <- _::from_JV((v as _object)["sticker"], type<inputfile>)
+    q.emoji = _::from_JV((v as _object)["emoji"], type<string>)
+    q.disable_notification = _::from_JV((v as _object)["disable_notification"], type<bool>)
+    q.protect_content = _::from_JV((v as _object)["protect_content"], type<bool>)
+    q.reply_to_message_id = _::from_JV((v as _object)["reply_to_message_id"], type<int64>)
+    q.allow_sending_without_reply = _::from_JV((v as _object)["allow_sending_without_reply"], type<bool>)
+    q.reply_markup = _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:sendsticker? ) : sendsticker?
@@ -5973,7 +5973,7 @@ struct getstickerset
 
 def from_JV ( var v:JsonValue?; t:getstickerset ) : getstickerset
     var q : getstickerset
-    move_to_ref(q.name, _::from_JV((v as _object)["name"], type<string>))
+    q.name = _::from_JV((v as _object)["name"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:getstickerset? ) : getstickerset?
@@ -5993,7 +5993,7 @@ struct getcustomemojistickers
 
 def from_JV ( var v:JsonValue?; t:getcustomemojistickers ) : getcustomemojistickers
     var q : getcustomemojistickers
-    move_to_ref(q.custom_emoji_ids, _::from_JV((v as _object)["custom_emoji_ids"], type<array<string>>))
+    q.custom_emoji_ids <- _::from_JV((v as _object)["custom_emoji_ids"], type<array<string>>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:getcustomemojistickers? ) : getcustomemojistickers?
@@ -6015,9 +6015,9 @@ struct uploadstickerfile
 
 def from_JV ( var v:JsonValue?; t:uploadstickerfile ) : uploadstickerfile
     var q : uploadstickerfile
-    move_to_ref(q.user_id, _::from_JV((v as _object)["user_id"], type<int64>))
-    move_to_ref(q.sticker, _::from_JV((v as _object)["sticker"], type<inputfile>))
-    move_to_ref(q.sticker_format, _::from_JV((v as _object)["sticker_format"], type<string>))
+    q.user_id = _::from_JV((v as _object)["user_id"], type<int64>)
+    q.sticker <- _::from_JV((v as _object)["sticker"], type<inputfile>)
+    q.sticker_format = _::from_JV((v as _object)["sticker_format"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:uploadstickerfile? ) : uploadstickerfile?
@@ -6045,13 +6045,13 @@ struct createnewstickerset
 
 def from_JV ( var v:JsonValue?; t:createnewstickerset ) : createnewstickerset
     var q : createnewstickerset
-    move_to_ref(q.user_id, _::from_JV((v as _object)["user_id"], type<int64>))
-    move_to_ref(q.name, _::from_JV((v as _object)["name"], type<string>))
-    move_to_ref(q.title, _::from_JV((v as _object)["title"], type<string>))
-    move_to_ref(q.stickers, _::from_JV((v as _object)["stickers"], type<array<inputsticker>>))
-    move_to_ref(q.sticker_format, _::from_JV((v as _object)["sticker_format"], type<string>))
-    move_to_ref(q.sticker_type, _::from_JV((v as _object)["sticker_type"], type<string>))
-    move_to_ref(q.needs_repainting, _::from_JV((v as _object)["needs_repainting"], type<bool>))
+    q.user_id = _::from_JV((v as _object)["user_id"], type<int64>)
+    q.name = _::from_JV((v as _object)["name"], type<string>)
+    q.title = _::from_JV((v as _object)["title"], type<string>)
+    q.stickers <- _::from_JV((v as _object)["stickers"], type<array<inputsticker>>)
+    q.sticker_format = _::from_JV((v as _object)["sticker_format"], type<string>)
+    q.sticker_type = _::from_JV((v as _object)["sticker_type"], type<string>)
+    q.needs_repainting = _::from_JV((v as _object)["needs_repainting"], type<bool>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:createnewstickerset? ) : createnewstickerset?
@@ -6079,9 +6079,9 @@ struct addstickertoset
 
 def from_JV ( var v:JsonValue?; t:addstickertoset ) : addstickertoset
     var q : addstickertoset
-    move_to_ref(q.user_id, _::from_JV((v as _object)["user_id"], type<int64>))
-    move_to_ref(q.name, _::from_JV((v as _object)["name"], type<string>))
-    move_to_ref(q.sticker, _::from_JV((v as _object)["sticker"], type<inputsticker>))
+    q.user_id = _::from_JV((v as _object)["user_id"], type<int64>)
+    q.name = _::from_JV((v as _object)["name"], type<string>)
+    q.sticker <- _::from_JV((v as _object)["sticker"], type<inputsticker>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:addstickertoset? ) : addstickertoset?
@@ -6104,8 +6104,8 @@ struct setstickerpositioninset
 
 def from_JV ( var v:JsonValue?; t:setstickerpositioninset ) : setstickerpositioninset
     var q : setstickerpositioninset
-    move_to_ref(q.sticker, _::from_JV((v as _object)["sticker"], type<string>))
-    move_to_ref(q.position, _::from_JV((v as _object)["position"], type<int64>))
+    q.sticker = _::from_JV((v as _object)["sticker"], type<string>)
+    q.position = _::from_JV((v as _object)["position"], type<int64>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:setstickerpositioninset? ) : setstickerpositioninset?
@@ -6126,7 +6126,7 @@ struct deletestickerfromset
 
 def from_JV ( var v:JsonValue?; t:deletestickerfromset ) : deletestickerfromset
     var q : deletestickerfromset
-    move_to_ref(q.sticker, _::from_JV((v as _object)["sticker"], type<string>))
+    q.sticker = _::from_JV((v as _object)["sticker"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:deletestickerfromset? ) : deletestickerfromset?
@@ -6147,8 +6147,8 @@ struct setstickeremojilist
 
 def from_JV ( var v:JsonValue?; t:setstickeremojilist ) : setstickeremojilist
     var q : setstickeremojilist
-    move_to_ref(q.sticker, _::from_JV((v as _object)["sticker"], type<string>))
-    move_to_ref(q.emoji_list, _::from_JV((v as _object)["emoji_list"], type<array<string>>))
+    q.sticker = _::from_JV((v as _object)["sticker"], type<string>)
+    q.emoji_list <- _::from_JV((v as _object)["emoji_list"], type<array<string>>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:setstickeremojilist? ) : setstickeremojilist?
@@ -6170,8 +6170,8 @@ struct setstickerkeywords
 
 def from_JV ( var v:JsonValue?; t:setstickerkeywords ) : setstickerkeywords
     var q : setstickerkeywords
-    move_to_ref(q.sticker, _::from_JV((v as _object)["sticker"], type<string>))
-    move_to_ref(q.keywords, _::from_JV((v as _object)["keywords"], type<array<string>>))
+    q.sticker = _::from_JV((v as _object)["sticker"], type<string>)
+    q.keywords <- _::from_JV((v as _object)["keywords"], type<array<string>>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:setstickerkeywords? ) : setstickerkeywords?
@@ -6193,8 +6193,8 @@ struct setstickermaskposition
 
 def from_JV ( var v:JsonValue?; t:setstickermaskposition ) : setstickermaskposition
     var q : setstickermaskposition
-    move_to_ref(q.sticker, _::from_JV((v as _object)["sticker"], type<string>))
-    move_to_ref(q.mask_position, _::from_JV((v as _object)["mask_position"], type<maskposition?>))
+    q.sticker = _::from_JV((v as _object)["sticker"], type<string>)
+    q.mask_position = _::from_JV((v as _object)["mask_position"], type<maskposition?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:setstickermaskposition? ) : setstickermaskposition?
@@ -6217,8 +6217,8 @@ struct setstickersettitle
 
 def from_JV ( var v:JsonValue?; t:setstickersettitle ) : setstickersettitle
     var q : setstickersettitle
-    move_to_ref(q.name, _::from_JV((v as _object)["name"], type<string>))
-    move_to_ref(q.title, _::from_JV((v as _object)["title"], type<string>))
+    q.name = _::from_JV((v as _object)["name"], type<string>)
+    q.title = _::from_JV((v as _object)["title"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:setstickersettitle? ) : setstickersettitle?
@@ -6241,9 +6241,9 @@ struct setstickersetthumbnail
 
 def from_JV ( var v:JsonValue?; t:setstickersetthumbnail ) : setstickersetthumbnail
     var q : setstickersetthumbnail
-    move_to_ref(q.name, _::from_JV((v as _object)["name"], type<string>))
-    move_to_ref(q.user_id, _::from_JV((v as _object)["user_id"], type<int64>))
-    move_to_ref(q.thumbnail, _::from_JV((v as _object)["thumbnail"], type<inputfile?>))
+    q.name = _::from_JV((v as _object)["name"], type<string>)
+    q.user_id = _::from_JV((v as _object)["user_id"], type<int64>)
+    q.thumbnail = _::from_JV((v as _object)["thumbnail"], type<inputfile?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:setstickersetthumbnail? ) : setstickersetthumbnail?
@@ -6267,8 +6267,8 @@ struct setcustomemojistickersetthumbnail
 
 def from_JV ( var v:JsonValue?; t:setcustomemojistickersetthumbnail ) : setcustomemojistickersetthumbnail
     var q : setcustomemojistickersetthumbnail
-    move_to_ref(q.name, _::from_JV((v as _object)["name"], type<string>))
-    move_to_ref(q.custom_emoji_id, _::from_JV((v as _object)["custom_emoji_id"], type<string>))
+    q.name = _::from_JV((v as _object)["name"], type<string>)
+    q.custom_emoji_id = _::from_JV((v as _object)["custom_emoji_id"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:setcustomemojistickersetthumbnail? ) : setcustomemojistickersetthumbnail?
@@ -6289,7 +6289,7 @@ struct deletestickerset
 
 def from_JV ( var v:JsonValue?; t:deletestickerset ) : deletestickerset
     var q : deletestickerset
-    move_to_ref(q.name, _::from_JV((v as _object)["name"], type<string>))
+    q.name = _::from_JV((v as _object)["name"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:deletestickerset? ) : deletestickerset?
@@ -6314,12 +6314,12 @@ struct inlinequery
 
 def from_JV ( var v:JsonValue?; t:inlinequery ) : inlinequery
     var q : inlinequery
-    move_to_ref(q.id, _::from_JV((v as _object)["id"], type<string>))
-    move_to_ref(q.from, _::from_JV((v as _object)["from"], type<user>))
-    move_to_ref(q.query, _::from_JV((v as _object)["query"], type<string>))
-    move_to_ref(q.offset, _::from_JV((v as _object)["offset"], type<string>))
-    move_to_ref(q.chat_type, _::from_JV((v as _object)["chat_type"], type<string>))
-    move_to_ref(q.location, _::from_JV((v as _object)["location"], type<location?>))
+    q.id = _::from_JV((v as _object)["id"], type<string>)
+    q.from <- _::from_JV((v as _object)["from"], type<user>)
+    q.query = _::from_JV((v as _object)["query"], type<string>)
+    q.offset = _::from_JV((v as _object)["offset"], type<string>)
+    q.chat_type = _::from_JV((v as _object)["chat_type"], type<string>)
+    q.location = _::from_JV((v as _object)["location"], type<location?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:inlinequery? ) : inlinequery?
@@ -6351,13 +6351,13 @@ struct answerinlinequery
 
 def from_JV ( var v:JsonValue?; t:answerinlinequery ) : answerinlinequery
     var q : answerinlinequery
-    move_to_ref(q.inline_query_id, _::from_JV((v as _object)["inline_query_id"], type<string>))
-    move_to_ref(q.results, _::from_JV((v as _object)["results"], type<array<inlinequeryresult>>))
-    move_to_ref(q.cache_time, _::from_JV((v as _object)["cache_time"], type<int64>))
-    move_to_ref(q.is_personal, _::from_JV((v as _object)["is_personal"], type<bool>))
-    move_to_ref(q.next_offset, _::from_JV((v as _object)["next_offset"], type<string>))
-    move_to_ref(q.switch_pm_text, _::from_JV((v as _object)["switch_pm_text"], type<string>))
-    move_to_ref(q.switch_pm_parameter, _::from_JV((v as _object)["switch_pm_parameter"], type<string>))
+    q.inline_query_id = _::from_JV((v as _object)["inline_query_id"], type<string>)
+    q.results <- _::from_JV((v as _object)["results"], type<array<inlinequeryresult>>)
+    q.cache_time = _::from_JV((v as _object)["cache_time"], type<int64>)
+    q.is_personal = _::from_JV((v as _object)["is_personal"], type<bool>)
+    q.next_offset = _::from_JV((v as _object)["next_offset"], type<string>)
+    q.switch_pm_text = _::from_JV((v as _object)["switch_pm_text"], type<string>)
+    q.switch_pm_parameter = _::from_JV((v as _object)["switch_pm_parameter"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:answerinlinequery? ) : answerinlinequery?
@@ -6411,17 +6411,17 @@ struct inlinequeryresultarticle
 
 def from_JV ( var v:JsonValue?; t:inlinequeryresultarticle ) : inlinequeryresultarticle
     var q : inlinequeryresultarticle
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
-    move_to_ref(q.id, _::from_JV((v as _object)["id"], type<string>))
-    move_to_ref(q.title, _::from_JV((v as _object)["title"], type<string>))
-    move_to_ref(q.input_message_content, _::from_JV((v as _object)["input_message_content"], type<inputmessagecontent>))
-    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>))
-    move_to_ref(q.url, _::from_JV((v as _object)["url"], type<string>))
-    move_to_ref(q.hide_url, _::from_JV((v as _object)["hide_url"], type<bool>))
-    move_to_ref(q.description, _::from_JV((v as _object)["description"], type<string>))
-    move_to_ref(q.thumbnail_url, _::from_JV((v as _object)["thumbnail_url"], type<string>))
-    move_to_ref(q.thumbnail_width, _::from_JV((v as _object)["thumbnail_width"], type<int64>))
-    move_to_ref(q.thumbnail_height, _::from_JV((v as _object)["thumbnail_height"], type<int64>))
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
+    q.id = _::from_JV((v as _object)["id"], type<string>)
+    q.title = _::from_JV((v as _object)["title"], type<string>)
+    q.input_message_content <- _::from_JV((v as _object)["input_message_content"], type<inputmessagecontent>)
+    q.reply_markup = _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>)
+    q.url = _::from_JV((v as _object)["url"], type<string>)
+    q.hide_url = _::from_JV((v as _object)["hide_url"], type<bool>)
+    q.description = _::from_JV((v as _object)["description"], type<string>)
+    q.thumbnail_url = _::from_JV((v as _object)["thumbnail_url"], type<string>)
+    q.thumbnail_width = _::from_JV((v as _object)["thumbnail_width"], type<int64>)
+    q.thumbnail_height = _::from_JV((v as _object)["thumbnail_height"], type<int64>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:inlinequeryresultarticle? ) : inlinequeryresultarticle?
@@ -6464,19 +6464,19 @@ struct inlinequeryresultphoto
 
 def from_JV ( var v:JsonValue?; t:inlinequeryresultphoto ) : inlinequeryresultphoto
     var q : inlinequeryresultphoto
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
-    move_to_ref(q.id, _::from_JV((v as _object)["id"], type<string>))
-    move_to_ref(q.photo_url, _::from_JV((v as _object)["photo_url"], type<string>))
-    move_to_ref(q.thumbnail_url, _::from_JV((v as _object)["thumbnail_url"], type<string>))
-    move_to_ref(q.photo_width, _::from_JV((v as _object)["photo_width"], type<int64>))
-    move_to_ref(q.photo_height, _::from_JV((v as _object)["photo_height"], type<int64>))
-    move_to_ref(q.title, _::from_JV((v as _object)["title"], type<string>))
-    move_to_ref(q.description, _::from_JV((v as _object)["description"], type<string>))
-    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], type<string>))
-    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], type<string>))
-    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>))
-    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>))
-    move_to_ref(q.input_message_content, _::from_JV((v as _object)["input_message_content"], type<inputmessagecontent?>))
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
+    q.id = _::from_JV((v as _object)["id"], type<string>)
+    q.photo_url = _::from_JV((v as _object)["photo_url"], type<string>)
+    q.thumbnail_url = _::from_JV((v as _object)["thumbnail_url"], type<string>)
+    q.photo_width = _::from_JV((v as _object)["photo_width"], type<int64>)
+    q.photo_height = _::from_JV((v as _object)["photo_height"], type<int64>)
+    q.title = _::from_JV((v as _object)["title"], type<string>)
+    q.description = _::from_JV((v as _object)["description"], type<string>)
+    q.caption = _::from_JV((v as _object)["caption"], type<string>)
+    q.parse_mode = _::from_JV((v as _object)["parse_mode"], type<string>)
+    q.caption_entities <- _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>)
+    q.reply_markup = _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>)
+    q.input_message_content = _::from_JV((v as _object)["input_message_content"], type<inputmessagecontent?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:inlinequeryresultphoto? ) : inlinequeryresultphoto?
@@ -6523,20 +6523,20 @@ struct inlinequeryresultgif
 
 def from_JV ( var v:JsonValue?; t:inlinequeryresultgif ) : inlinequeryresultgif
     var q : inlinequeryresultgif
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
-    move_to_ref(q.id, _::from_JV((v as _object)["id"], type<string>))
-    move_to_ref(q.gif_url, _::from_JV((v as _object)["gif_url"], type<string>))
-    move_to_ref(q.gif_width, _::from_JV((v as _object)["gif_width"], type<int64>))
-    move_to_ref(q.gif_height, _::from_JV((v as _object)["gif_height"], type<int64>))
-    move_to_ref(q.gif_duration, _::from_JV((v as _object)["gif_duration"], type<int64>))
-    move_to_ref(q.thumbnail_url, _::from_JV((v as _object)["thumbnail_url"], type<string>))
-    move_to_ref(q.thumbnail_mime_type, _::from_JV((v as _object)["thumbnail_mime_type"], type<string>))
-    move_to_ref(q.title, _::from_JV((v as _object)["title"], type<string>))
-    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], type<string>))
-    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], type<string>))
-    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>))
-    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>))
-    move_to_ref(q.input_message_content, _::from_JV((v as _object)["input_message_content"], type<inputmessagecontent?>))
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
+    q.id = _::from_JV((v as _object)["id"], type<string>)
+    q.gif_url = _::from_JV((v as _object)["gif_url"], type<string>)
+    q.gif_width = _::from_JV((v as _object)["gif_width"], type<int64>)
+    q.gif_height = _::from_JV((v as _object)["gif_height"], type<int64>)
+    q.gif_duration = _::from_JV((v as _object)["gif_duration"], type<int64>)
+    q.thumbnail_url = _::from_JV((v as _object)["thumbnail_url"], type<string>)
+    q.thumbnail_mime_type = _::from_JV((v as _object)["thumbnail_mime_type"], type<string>)
+    q.title = _::from_JV((v as _object)["title"], type<string>)
+    q.caption = _::from_JV((v as _object)["caption"], type<string>)
+    q.parse_mode = _::from_JV((v as _object)["parse_mode"], type<string>)
+    q.caption_entities <- _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>)
+    q.reply_markup = _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>)
+    q.input_message_content = _::from_JV((v as _object)["input_message_content"], type<inputmessagecontent?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:inlinequeryresultgif? ) : inlinequeryresultgif?
@@ -6584,20 +6584,20 @@ struct inlinequeryresultmpeg4gif
 
 def from_JV ( var v:JsonValue?; t:inlinequeryresultmpeg4gif ) : inlinequeryresultmpeg4gif
     var q : inlinequeryresultmpeg4gif
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
-    move_to_ref(q.id, _::from_JV((v as _object)["id"], type<string>))
-    move_to_ref(q.mpeg4_url, _::from_JV((v as _object)["mpeg4_url"], type<string>))
-    move_to_ref(q.mpeg4_width, _::from_JV((v as _object)["mpeg4_width"], type<int64>))
-    move_to_ref(q.mpeg4_height, _::from_JV((v as _object)["mpeg4_height"], type<int64>))
-    move_to_ref(q.mpeg4_duration, _::from_JV((v as _object)["mpeg4_duration"], type<int64>))
-    move_to_ref(q.thumbnail_url, _::from_JV((v as _object)["thumbnail_url"], type<string>))
-    move_to_ref(q.thumbnail_mime_type, _::from_JV((v as _object)["thumbnail_mime_type"], type<string>))
-    move_to_ref(q.title, _::from_JV((v as _object)["title"], type<string>))
-    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], type<string>))
-    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], type<string>))
-    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>))
-    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>))
-    move_to_ref(q.input_message_content, _::from_JV((v as _object)["input_message_content"], type<inputmessagecontent?>))
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
+    q.id = _::from_JV((v as _object)["id"], type<string>)
+    q.mpeg4_url = _::from_JV((v as _object)["mpeg4_url"], type<string>)
+    q.mpeg4_width = _::from_JV((v as _object)["mpeg4_width"], type<int64>)
+    q.mpeg4_height = _::from_JV((v as _object)["mpeg4_height"], type<int64>)
+    q.mpeg4_duration = _::from_JV((v as _object)["mpeg4_duration"], type<int64>)
+    q.thumbnail_url = _::from_JV((v as _object)["thumbnail_url"], type<string>)
+    q.thumbnail_mime_type = _::from_JV((v as _object)["thumbnail_mime_type"], type<string>)
+    q.title = _::from_JV((v as _object)["title"], type<string>)
+    q.caption = _::from_JV((v as _object)["caption"], type<string>)
+    q.parse_mode = _::from_JV((v as _object)["parse_mode"], type<string>)
+    q.caption_entities <- _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>)
+    q.reply_markup = _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>)
+    q.input_message_content = _::from_JV((v as _object)["input_message_content"], type<inputmessagecontent?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:inlinequeryresultmpeg4gif? ) : inlinequeryresultmpeg4gif?
@@ -6646,21 +6646,21 @@ struct inlinequeryresultvideo
 
 def from_JV ( var v:JsonValue?; t:inlinequeryresultvideo ) : inlinequeryresultvideo
     var q : inlinequeryresultvideo
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
-    move_to_ref(q.id, _::from_JV((v as _object)["id"], type<string>))
-    move_to_ref(q.video_url, _::from_JV((v as _object)["video_url"], type<string>))
-    move_to_ref(q.mime_type, _::from_JV((v as _object)["mime_type"], type<string>))
-    move_to_ref(q.thumbnail_url, _::from_JV((v as _object)["thumbnail_url"], type<string>))
-    move_to_ref(q.title, _::from_JV((v as _object)["title"], type<string>))
-    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], type<string>))
-    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], type<string>))
-    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>))
-    move_to_ref(q.video_width, _::from_JV((v as _object)["video_width"], type<int64>))
-    move_to_ref(q.video_height, _::from_JV((v as _object)["video_height"], type<int64>))
-    move_to_ref(q.video_duration, _::from_JV((v as _object)["video_duration"], type<int64>))
-    move_to_ref(q.description, _::from_JV((v as _object)["description"], type<string>))
-    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>))
-    move_to_ref(q.input_message_content, _::from_JV((v as _object)["input_message_content"], type<inputmessagecontent?>))
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
+    q.id = _::from_JV((v as _object)["id"], type<string>)
+    q.video_url = _::from_JV((v as _object)["video_url"], type<string>)
+    q.mime_type = _::from_JV((v as _object)["mime_type"], type<string>)
+    q.thumbnail_url = _::from_JV((v as _object)["thumbnail_url"], type<string>)
+    q.title = _::from_JV((v as _object)["title"], type<string>)
+    q.caption = _::from_JV((v as _object)["caption"], type<string>)
+    q.parse_mode = _::from_JV((v as _object)["parse_mode"], type<string>)
+    q.caption_entities <- _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>)
+    q.video_width = _::from_JV((v as _object)["video_width"], type<int64>)
+    q.video_height = _::from_JV((v as _object)["video_height"], type<int64>)
+    q.video_duration = _::from_JV((v as _object)["video_duration"], type<int64>)
+    q.description = _::from_JV((v as _object)["description"], type<string>)
+    q.reply_markup = _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>)
+    q.input_message_content = _::from_JV((v as _object)["input_message_content"], type<inputmessagecontent?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:inlinequeryresultvideo? ) : inlinequeryresultvideo?
@@ -6706,17 +6706,17 @@ struct inlinequeryresultaudio
 
 def from_JV ( var v:JsonValue?; t:inlinequeryresultaudio ) : inlinequeryresultaudio
     var q : inlinequeryresultaudio
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
-    move_to_ref(q.id, _::from_JV((v as _object)["id"], type<string>))
-    move_to_ref(q.audio_url, _::from_JV((v as _object)["audio_url"], type<string>))
-    move_to_ref(q.title, _::from_JV((v as _object)["title"], type<string>))
-    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], type<string>))
-    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], type<string>))
-    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>))
-    move_to_ref(q.performer, _::from_JV((v as _object)["performer"], type<string>))
-    move_to_ref(q.audio_duration, _::from_JV((v as _object)["audio_duration"], type<int64>))
-    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>))
-    move_to_ref(q.input_message_content, _::from_JV((v as _object)["input_message_content"], type<inputmessagecontent?>))
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
+    q.id = _::from_JV((v as _object)["id"], type<string>)
+    q.audio_url = _::from_JV((v as _object)["audio_url"], type<string>)
+    q.title = _::from_JV((v as _object)["title"], type<string>)
+    q.caption = _::from_JV((v as _object)["caption"], type<string>)
+    q.parse_mode = _::from_JV((v as _object)["parse_mode"], type<string>)
+    q.caption_entities <- _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>)
+    q.performer = _::from_JV((v as _object)["performer"], type<string>)
+    q.audio_duration = _::from_JV((v as _object)["audio_duration"], type<int64>)
+    q.reply_markup = _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>)
+    q.input_message_content = _::from_JV((v as _object)["input_message_content"], type<inputmessagecontent?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:inlinequeryresultaudio? ) : inlinequeryresultaudio?
@@ -6757,16 +6757,16 @@ struct inlinequeryresultvoice
 
 def from_JV ( var v:JsonValue?; t:inlinequeryresultvoice ) : inlinequeryresultvoice
     var q : inlinequeryresultvoice
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
-    move_to_ref(q.id, _::from_JV((v as _object)["id"], type<string>))
-    move_to_ref(q.voice_url, _::from_JV((v as _object)["voice_url"], type<string>))
-    move_to_ref(q.title, _::from_JV((v as _object)["title"], type<string>))
-    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], type<string>))
-    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], type<string>))
-    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>))
-    move_to_ref(q.voice_duration, _::from_JV((v as _object)["voice_duration"], type<int64>))
-    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>))
-    move_to_ref(q.input_message_content, _::from_JV((v as _object)["input_message_content"], type<inputmessagecontent?>))
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
+    q.id = _::from_JV((v as _object)["id"], type<string>)
+    q.voice_url = _::from_JV((v as _object)["voice_url"], type<string>)
+    q.title = _::from_JV((v as _object)["title"], type<string>)
+    q.caption = _::from_JV((v as _object)["caption"], type<string>)
+    q.parse_mode = _::from_JV((v as _object)["parse_mode"], type<string>)
+    q.caption_entities <- _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>)
+    q.voice_duration = _::from_JV((v as _object)["voice_duration"], type<int64>)
+    q.reply_markup = _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>)
+    q.input_message_content = _::from_JV((v as _object)["input_message_content"], type<inputmessagecontent?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:inlinequeryresultvoice? ) : inlinequeryresultvoice?
@@ -6810,20 +6810,20 @@ struct inlinequeryresultdocument
 
 def from_JV ( var v:JsonValue?; t:inlinequeryresultdocument ) : inlinequeryresultdocument
     var q : inlinequeryresultdocument
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
-    move_to_ref(q.id, _::from_JV((v as _object)["id"], type<string>))
-    move_to_ref(q.title, _::from_JV((v as _object)["title"], type<string>))
-    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], type<string>))
-    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], type<string>))
-    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>))
-    move_to_ref(q.document_url, _::from_JV((v as _object)["document_url"], type<string>))
-    move_to_ref(q.mime_type, _::from_JV((v as _object)["mime_type"], type<string>))
-    move_to_ref(q.description, _::from_JV((v as _object)["description"], type<string>))
-    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>))
-    move_to_ref(q.input_message_content, _::from_JV((v as _object)["input_message_content"], type<inputmessagecontent?>))
-    move_to_ref(q.thumbnail_url, _::from_JV((v as _object)["thumbnail_url"], type<string>))
-    move_to_ref(q.thumbnail_width, _::from_JV((v as _object)["thumbnail_width"], type<int64>))
-    move_to_ref(q.thumbnail_height, _::from_JV((v as _object)["thumbnail_height"], type<int64>))
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
+    q.id = _::from_JV((v as _object)["id"], type<string>)
+    q.title = _::from_JV((v as _object)["title"], type<string>)
+    q.caption = _::from_JV((v as _object)["caption"], type<string>)
+    q.parse_mode = _::from_JV((v as _object)["parse_mode"], type<string>)
+    q.caption_entities <- _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>)
+    q.document_url = _::from_JV((v as _object)["document_url"], type<string>)
+    q.mime_type = _::from_JV((v as _object)["mime_type"], type<string>)
+    q.description = _::from_JV((v as _object)["description"], type<string>)
+    q.reply_markup = _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>)
+    q.input_message_content = _::from_JV((v as _object)["input_message_content"], type<inputmessagecontent?>)
+    q.thumbnail_url = _::from_JV((v as _object)["thumbnail_url"], type<string>)
+    q.thumbnail_width = _::from_JV((v as _object)["thumbnail_width"], type<int64>)
+    q.thumbnail_height = _::from_JV((v as _object)["thumbnail_height"], type<int64>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:inlinequeryresultdocument? ) : inlinequeryresultdocument?
@@ -6871,20 +6871,20 @@ struct inlinequeryresultlocation
 
 def from_JV ( var v:JsonValue?; t:inlinequeryresultlocation ) : inlinequeryresultlocation
     var q : inlinequeryresultlocation
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
-    move_to_ref(q.id, _::from_JV((v as _object)["id"], type<string>))
-    move_to_ref(q.latitude, _::from_JV((v as _object)["latitude"], type<float>))
-    move_to_ref(q.longitude, _::from_JV((v as _object)["longitude"], type<float>))
-    move_to_ref(q.title, _::from_JV((v as _object)["title"], type<string>))
-    move_to_ref(q.horizontal_accuracy, _::from_JV((v as _object)["horizontal_accuracy"], type<float>))
-    move_to_ref(q.live_period, _::from_JV((v as _object)["live_period"], type<int64>))
-    move_to_ref(q.heading, _::from_JV((v as _object)["heading"], type<int64>))
-    move_to_ref(q.proximity_alert_radius, _::from_JV((v as _object)["proximity_alert_radius"], type<int64>))
-    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>))
-    move_to_ref(q.input_message_content, _::from_JV((v as _object)["input_message_content"], type<inputmessagecontent?>))
-    move_to_ref(q.thumbnail_url, _::from_JV((v as _object)["thumbnail_url"], type<string>))
-    move_to_ref(q.thumbnail_width, _::from_JV((v as _object)["thumbnail_width"], type<int64>))
-    move_to_ref(q.thumbnail_height, _::from_JV((v as _object)["thumbnail_height"], type<int64>))
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
+    q.id = _::from_JV((v as _object)["id"], type<string>)
+    q.latitude = _::from_JV((v as _object)["latitude"], type<float>)
+    q.longitude = _::from_JV((v as _object)["longitude"], type<float>)
+    q.title = _::from_JV((v as _object)["title"], type<string>)
+    q.horizontal_accuracy = _::from_JV((v as _object)["horizontal_accuracy"], type<float>)
+    q.live_period = _::from_JV((v as _object)["live_period"], type<int64>)
+    q.heading = _::from_JV((v as _object)["heading"], type<int64>)
+    q.proximity_alert_radius = _::from_JV((v as _object)["proximity_alert_radius"], type<int64>)
+    q.reply_markup = _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>)
+    q.input_message_content = _::from_JV((v as _object)["input_message_content"], type<inputmessagecontent?>)
+    q.thumbnail_url = _::from_JV((v as _object)["thumbnail_url"], type<string>)
+    q.thumbnail_width = _::from_JV((v as _object)["thumbnail_width"], type<int64>)
+    q.thumbnail_height = _::from_JV((v as _object)["thumbnail_height"], type<int64>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:inlinequeryresultlocation? ) : inlinequeryresultlocation?
@@ -6933,21 +6933,21 @@ struct inlinequeryresultvenue
 
 def from_JV ( var v:JsonValue?; t:inlinequeryresultvenue ) : inlinequeryresultvenue
     var q : inlinequeryresultvenue
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
-    move_to_ref(q.id, _::from_JV((v as _object)["id"], type<string>))
-    move_to_ref(q.latitude, _::from_JV((v as _object)["latitude"], type<float>))
-    move_to_ref(q.longitude, _::from_JV((v as _object)["longitude"], type<float>))
-    move_to_ref(q.title, _::from_JV((v as _object)["title"], type<string>))
-    move_to_ref(q.address, _::from_JV((v as _object)["address"], type<string>))
-    move_to_ref(q.foursquare_id, _::from_JV((v as _object)["foursquare_id"], type<string>))
-    move_to_ref(q.foursquare_type, _::from_JV((v as _object)["foursquare_type"], type<string>))
-    move_to_ref(q.google_place_id, _::from_JV((v as _object)["google_place_id"], type<string>))
-    move_to_ref(q.google_place_type, _::from_JV((v as _object)["google_place_type"], type<string>))
-    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>))
-    move_to_ref(q.input_message_content, _::from_JV((v as _object)["input_message_content"], type<inputmessagecontent?>))
-    move_to_ref(q.thumbnail_url, _::from_JV((v as _object)["thumbnail_url"], type<string>))
-    move_to_ref(q.thumbnail_width, _::from_JV((v as _object)["thumbnail_width"], type<int64>))
-    move_to_ref(q.thumbnail_height, _::from_JV((v as _object)["thumbnail_height"], type<int64>))
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
+    q.id = _::from_JV((v as _object)["id"], type<string>)
+    q.latitude = _::from_JV((v as _object)["latitude"], type<float>)
+    q.longitude = _::from_JV((v as _object)["longitude"], type<float>)
+    q.title = _::from_JV((v as _object)["title"], type<string>)
+    q.address = _::from_JV((v as _object)["address"], type<string>)
+    q.foursquare_id = _::from_JV((v as _object)["foursquare_id"], type<string>)
+    q.foursquare_type = _::from_JV((v as _object)["foursquare_type"], type<string>)
+    q.google_place_id = _::from_JV((v as _object)["google_place_id"], type<string>)
+    q.google_place_type = _::from_JV((v as _object)["google_place_type"], type<string>)
+    q.reply_markup = _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>)
+    q.input_message_content = _::from_JV((v as _object)["input_message_content"], type<inputmessagecontent?>)
+    q.thumbnail_url = _::from_JV((v as _object)["thumbnail_url"], type<string>)
+    q.thumbnail_width = _::from_JV((v as _object)["thumbnail_width"], type<int64>)
+    q.thumbnail_height = _::from_JV((v as _object)["thumbnail_height"], type<int64>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:inlinequeryresultvenue? ) : inlinequeryresultvenue?
@@ -6993,17 +6993,17 @@ struct inlinequeryresultcontact
 
 def from_JV ( var v:JsonValue?; t:inlinequeryresultcontact ) : inlinequeryresultcontact
     var q : inlinequeryresultcontact
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
-    move_to_ref(q.id, _::from_JV((v as _object)["id"], type<string>))
-    move_to_ref(q.phone_number, _::from_JV((v as _object)["phone_number"], type<string>))
-    move_to_ref(q.first_name, _::from_JV((v as _object)["first_name"], type<string>))
-    move_to_ref(q.last_name, _::from_JV((v as _object)["last_name"], type<string>))
-    move_to_ref(q.vcard, _::from_JV((v as _object)["vcard"], type<string>))
-    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>))
-    move_to_ref(q.input_message_content, _::from_JV((v as _object)["input_message_content"], type<inputmessagecontent?>))
-    move_to_ref(q.thumbnail_url, _::from_JV((v as _object)["thumbnail_url"], type<string>))
-    move_to_ref(q.thumbnail_width, _::from_JV((v as _object)["thumbnail_width"], type<int64>))
-    move_to_ref(q.thumbnail_height, _::from_JV((v as _object)["thumbnail_height"], type<int64>))
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
+    q.id = _::from_JV((v as _object)["id"], type<string>)
+    q.phone_number = _::from_JV((v as _object)["phone_number"], type<string>)
+    q.first_name = _::from_JV((v as _object)["first_name"], type<string>)
+    q.last_name = _::from_JV((v as _object)["last_name"], type<string>)
+    q.vcard = _::from_JV((v as _object)["vcard"], type<string>)
+    q.reply_markup = _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>)
+    q.input_message_content = _::from_JV((v as _object)["input_message_content"], type<inputmessagecontent?>)
+    q.thumbnail_url = _::from_JV((v as _object)["thumbnail_url"], type<string>)
+    q.thumbnail_width = _::from_JV((v as _object)["thumbnail_width"], type<int64>)
+    q.thumbnail_height = _::from_JV((v as _object)["thumbnail_height"], type<int64>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:inlinequeryresultcontact? ) : inlinequeryresultcontact?
@@ -7038,10 +7038,10 @@ struct inlinequeryresultgame
 
 def from_JV ( var v:JsonValue?; t:inlinequeryresultgame ) : inlinequeryresultgame
     var q : inlinequeryresultgame
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
-    move_to_ref(q.id, _::from_JV((v as _object)["id"], type<string>))
-    move_to_ref(q.game_short_name, _::from_JV((v as _object)["game_short_name"], type<string>))
-    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>))
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
+    q.id = _::from_JV((v as _object)["id"], type<string>)
+    q.game_short_name = _::from_JV((v as _object)["game_short_name"], type<string>)
+    q.reply_markup = _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:inlinequeryresultgame? ) : inlinequeryresultgame?
@@ -7074,16 +7074,16 @@ struct inlinequeryresultcachedphoto
 
 def from_JV ( var v:JsonValue?; t:inlinequeryresultcachedphoto ) : inlinequeryresultcachedphoto
     var q : inlinequeryresultcachedphoto
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
-    move_to_ref(q.id, _::from_JV((v as _object)["id"], type<string>))
-    move_to_ref(q.photo_file_id, _::from_JV((v as _object)["photo_file_id"], type<string>))
-    move_to_ref(q.title, _::from_JV((v as _object)["title"], type<string>))
-    move_to_ref(q.description, _::from_JV((v as _object)["description"], type<string>))
-    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], type<string>))
-    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], type<string>))
-    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>))
-    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>))
-    move_to_ref(q.input_message_content, _::from_JV((v as _object)["input_message_content"], type<inputmessagecontent?>))
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
+    q.id = _::from_JV((v as _object)["id"], type<string>)
+    q.photo_file_id = _::from_JV((v as _object)["photo_file_id"], type<string>)
+    q.title = _::from_JV((v as _object)["title"], type<string>)
+    q.description = _::from_JV((v as _object)["description"], type<string>)
+    q.caption = _::from_JV((v as _object)["caption"], type<string>)
+    q.parse_mode = _::from_JV((v as _object)["parse_mode"], type<string>)
+    q.caption_entities <- _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>)
+    q.reply_markup = _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>)
+    q.input_message_content = _::from_JV((v as _object)["input_message_content"], type<inputmessagecontent?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:inlinequeryresultcachedphoto? ) : inlinequeryresultcachedphoto?
@@ -7122,15 +7122,15 @@ struct inlinequeryresultcachedgif
 
 def from_JV ( var v:JsonValue?; t:inlinequeryresultcachedgif ) : inlinequeryresultcachedgif
     var q : inlinequeryresultcachedgif
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
-    move_to_ref(q.id, _::from_JV((v as _object)["id"], type<string>))
-    move_to_ref(q.gif_file_id, _::from_JV((v as _object)["gif_file_id"], type<string>))
-    move_to_ref(q.title, _::from_JV((v as _object)["title"], type<string>))
-    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], type<string>))
-    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], type<string>))
-    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>))
-    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>))
-    move_to_ref(q.input_message_content, _::from_JV((v as _object)["input_message_content"], type<inputmessagecontent?>))
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
+    q.id = _::from_JV((v as _object)["id"], type<string>)
+    q.gif_file_id = _::from_JV((v as _object)["gif_file_id"], type<string>)
+    q.title = _::from_JV((v as _object)["title"], type<string>)
+    q.caption = _::from_JV((v as _object)["caption"], type<string>)
+    q.parse_mode = _::from_JV((v as _object)["parse_mode"], type<string>)
+    q.caption_entities <- _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>)
+    q.reply_markup = _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>)
+    q.input_message_content = _::from_JV((v as _object)["input_message_content"], type<inputmessagecontent?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:inlinequeryresultcachedgif? ) : inlinequeryresultcachedgif?
@@ -7168,15 +7168,15 @@ struct inlinequeryresultcachedmpeg4gif
 
 def from_JV ( var v:JsonValue?; t:inlinequeryresultcachedmpeg4gif ) : inlinequeryresultcachedmpeg4gif
     var q : inlinequeryresultcachedmpeg4gif
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
-    move_to_ref(q.id, _::from_JV((v as _object)["id"], type<string>))
-    move_to_ref(q.mpeg4_file_id, _::from_JV((v as _object)["mpeg4_file_id"], type<string>))
-    move_to_ref(q.title, _::from_JV((v as _object)["title"], type<string>))
-    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], type<string>))
-    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], type<string>))
-    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>))
-    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>))
-    move_to_ref(q.input_message_content, _::from_JV((v as _object)["input_message_content"], type<inputmessagecontent?>))
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
+    q.id = _::from_JV((v as _object)["id"], type<string>)
+    q.mpeg4_file_id = _::from_JV((v as _object)["mpeg4_file_id"], type<string>)
+    q.title = _::from_JV((v as _object)["title"], type<string>)
+    q.caption = _::from_JV((v as _object)["caption"], type<string>)
+    q.parse_mode = _::from_JV((v as _object)["parse_mode"], type<string>)
+    q.caption_entities <- _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>)
+    q.reply_markup = _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>)
+    q.input_message_content = _::from_JV((v as _object)["input_message_content"], type<inputmessagecontent?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:inlinequeryresultcachedmpeg4gif? ) : inlinequeryresultcachedmpeg4gif?
@@ -7210,11 +7210,11 @@ struct inlinequeryresultcachedsticker
 
 def from_JV ( var v:JsonValue?; t:inlinequeryresultcachedsticker ) : inlinequeryresultcachedsticker
     var q : inlinequeryresultcachedsticker
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
-    move_to_ref(q.id, _::from_JV((v as _object)["id"], type<string>))
-    move_to_ref(q.sticker_file_id, _::from_JV((v as _object)["sticker_file_id"], type<string>))
-    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>))
-    move_to_ref(q.input_message_content, _::from_JV((v as _object)["input_message_content"], type<inputmessagecontent?>))
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
+    q.id = _::from_JV((v as _object)["id"], type<string>)
+    q.sticker_file_id = _::from_JV((v as _object)["sticker_file_id"], type<string>)
+    q.reply_markup = _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>)
+    q.input_message_content = _::from_JV((v as _object)["input_message_content"], type<inputmessagecontent?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:inlinequeryresultcachedsticker? ) : inlinequeryresultcachedsticker?
@@ -7249,16 +7249,16 @@ struct inlinequeryresultcacheddocument
 
 def from_JV ( var v:JsonValue?; t:inlinequeryresultcacheddocument ) : inlinequeryresultcacheddocument
     var q : inlinequeryresultcacheddocument
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
-    move_to_ref(q.id, _::from_JV((v as _object)["id"], type<string>))
-    move_to_ref(q.title, _::from_JV((v as _object)["title"], type<string>))
-    move_to_ref(q.document_file_id, _::from_JV((v as _object)["document_file_id"], type<string>))
-    move_to_ref(q.description, _::from_JV((v as _object)["description"], type<string>))
-    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], type<string>))
-    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], type<string>))
-    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>))
-    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>))
-    move_to_ref(q.input_message_content, _::from_JV((v as _object)["input_message_content"], type<inputmessagecontent?>))
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
+    q.id = _::from_JV((v as _object)["id"], type<string>)
+    q.title = _::from_JV((v as _object)["title"], type<string>)
+    q.document_file_id = _::from_JV((v as _object)["document_file_id"], type<string>)
+    q.description = _::from_JV((v as _object)["description"], type<string>)
+    q.caption = _::from_JV((v as _object)["caption"], type<string>)
+    q.parse_mode = _::from_JV((v as _object)["parse_mode"], type<string>)
+    q.caption_entities <- _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>)
+    q.reply_markup = _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>)
+    q.input_message_content = _::from_JV((v as _object)["input_message_content"], type<inputmessagecontent?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:inlinequeryresultcacheddocument? ) : inlinequeryresultcacheddocument?
@@ -7298,16 +7298,16 @@ struct inlinequeryresultcachedvideo
 
 def from_JV ( var v:JsonValue?; t:inlinequeryresultcachedvideo ) : inlinequeryresultcachedvideo
     var q : inlinequeryresultcachedvideo
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
-    move_to_ref(q.id, _::from_JV((v as _object)["id"], type<string>))
-    move_to_ref(q.video_file_id, _::from_JV((v as _object)["video_file_id"], type<string>))
-    move_to_ref(q.title, _::from_JV((v as _object)["title"], type<string>))
-    move_to_ref(q.description, _::from_JV((v as _object)["description"], type<string>))
-    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], type<string>))
-    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], type<string>))
-    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>))
-    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>))
-    move_to_ref(q.input_message_content, _::from_JV((v as _object)["input_message_content"], type<inputmessagecontent?>))
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
+    q.id = _::from_JV((v as _object)["id"], type<string>)
+    q.video_file_id = _::from_JV((v as _object)["video_file_id"], type<string>)
+    q.title = _::from_JV((v as _object)["title"], type<string>)
+    q.description = _::from_JV((v as _object)["description"], type<string>)
+    q.caption = _::from_JV((v as _object)["caption"], type<string>)
+    q.parse_mode = _::from_JV((v as _object)["parse_mode"], type<string>)
+    q.caption_entities <- _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>)
+    q.reply_markup = _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>)
+    q.input_message_content = _::from_JV((v as _object)["input_message_content"], type<inputmessagecontent?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:inlinequeryresultcachedvideo? ) : inlinequeryresultcachedvideo?
@@ -7346,15 +7346,15 @@ struct inlinequeryresultcachedvoice
 
 def from_JV ( var v:JsonValue?; t:inlinequeryresultcachedvoice ) : inlinequeryresultcachedvoice
     var q : inlinequeryresultcachedvoice
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
-    move_to_ref(q.id, _::from_JV((v as _object)["id"], type<string>))
-    move_to_ref(q.voice_file_id, _::from_JV((v as _object)["voice_file_id"], type<string>))
-    move_to_ref(q.title, _::from_JV((v as _object)["title"], type<string>))
-    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], type<string>))
-    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], type<string>))
-    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>))
-    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>))
-    move_to_ref(q.input_message_content, _::from_JV((v as _object)["input_message_content"], type<inputmessagecontent?>))
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
+    q.id = _::from_JV((v as _object)["id"], type<string>)
+    q.voice_file_id = _::from_JV((v as _object)["voice_file_id"], type<string>)
+    q.title = _::from_JV((v as _object)["title"], type<string>)
+    q.caption = _::from_JV((v as _object)["caption"], type<string>)
+    q.parse_mode = _::from_JV((v as _object)["parse_mode"], type<string>)
+    q.caption_entities <- _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>)
+    q.reply_markup = _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>)
+    q.input_message_content = _::from_JV((v as _object)["input_message_content"], type<inputmessagecontent?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:inlinequeryresultcachedvoice? ) : inlinequeryresultcachedvoice?
@@ -7391,14 +7391,14 @@ struct inlinequeryresultcachedaudio
 
 def from_JV ( var v:JsonValue?; t:inlinequeryresultcachedaudio ) : inlinequeryresultcachedaudio
     var q : inlinequeryresultcachedaudio
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
-    move_to_ref(q.id, _::from_JV((v as _object)["id"], type<string>))
-    move_to_ref(q.audio_file_id, _::from_JV((v as _object)["audio_file_id"], type<string>))
-    move_to_ref(q.caption, _::from_JV((v as _object)["caption"], type<string>))
-    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], type<string>))
-    move_to_ref(q.caption_entities, _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>))
-    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>))
-    move_to_ref(q.input_message_content, _::from_JV((v as _object)["input_message_content"], type<inputmessagecontent?>))
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
+    q.id = _::from_JV((v as _object)["id"], type<string>)
+    q.audio_file_id = _::from_JV((v as _object)["audio_file_id"], type<string>)
+    q.caption = _::from_JV((v as _object)["caption"], type<string>)
+    q.parse_mode = _::from_JV((v as _object)["parse_mode"], type<string>)
+    q.caption_entities <- _::from_JV((v as _object)["caption_entities"], type<array<messageentity>>)
+    q.reply_markup = _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>)
+    q.input_message_content = _::from_JV((v as _object)["input_message_content"], type<inputmessagecontent?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:inlinequeryresultcachedaudio? ) : inlinequeryresultcachedaudio?
@@ -7448,10 +7448,10 @@ struct inputtextmessagecontent
 
 def from_JV ( var v:JsonValue?; t:inputtextmessagecontent ) : inputtextmessagecontent
     var q : inputtextmessagecontent
-    move_to_ref(q.message_text, _::from_JV((v as _object)["message_text"], type<string>))
-    move_to_ref(q.parse_mode, _::from_JV((v as _object)["parse_mode"], type<string>))
-    move_to_ref(q.entities, _::from_JV((v as _object)["entities"], type<array<messageentity>>))
-    move_to_ref(q.disable_web_page_preview, _::from_JV((v as _object)["disable_web_page_preview"], type<bool>))
+    q.message_text = _::from_JV((v as _object)["message_text"], type<string>)
+    q.parse_mode = _::from_JV((v as _object)["parse_mode"], type<string>)
+    q.entities <- _::from_JV((v as _object)["entities"], type<array<messageentity>>)
+    q.disable_web_page_preview = _::from_JV((v as _object)["disable_web_page_preview"], type<bool>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:inputtextmessagecontent? ) : inputtextmessagecontent?
@@ -7479,12 +7479,12 @@ struct inputlocationmessagecontent
 
 def from_JV ( var v:JsonValue?; t:inputlocationmessagecontent ) : inputlocationmessagecontent
     var q : inputlocationmessagecontent
-    move_to_ref(q.latitude, _::from_JV((v as _object)["latitude"], type<float>))
-    move_to_ref(q.longitude, _::from_JV((v as _object)["longitude"], type<float>))
-    move_to_ref(q.horizontal_accuracy, _::from_JV((v as _object)["horizontal_accuracy"], type<float>))
-    move_to_ref(q.live_period, _::from_JV((v as _object)["live_period"], type<int64>))
-    move_to_ref(q.heading, _::from_JV((v as _object)["heading"], type<int64>))
-    move_to_ref(q.proximity_alert_radius, _::from_JV((v as _object)["proximity_alert_radius"], type<int64>))
+    q.latitude = _::from_JV((v as _object)["latitude"], type<float>)
+    q.longitude = _::from_JV((v as _object)["longitude"], type<float>)
+    q.horizontal_accuracy = _::from_JV((v as _object)["horizontal_accuracy"], type<float>)
+    q.live_period = _::from_JV((v as _object)["live_period"], type<int64>)
+    q.heading = _::from_JV((v as _object)["heading"], type<int64>)
+    q.proximity_alert_radius = _::from_JV((v as _object)["proximity_alert_radius"], type<int64>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:inputlocationmessagecontent? ) : inputlocationmessagecontent?
@@ -7516,14 +7516,14 @@ struct inputvenuemessagecontent
 
 def from_JV ( var v:JsonValue?; t:inputvenuemessagecontent ) : inputvenuemessagecontent
     var q : inputvenuemessagecontent
-    move_to_ref(q.latitude, _::from_JV((v as _object)["latitude"], type<float>))
-    move_to_ref(q.longitude, _::from_JV((v as _object)["longitude"], type<float>))
-    move_to_ref(q.title, _::from_JV((v as _object)["title"], type<string>))
-    move_to_ref(q.address, _::from_JV((v as _object)["address"], type<string>))
-    move_to_ref(q.foursquare_id, _::from_JV((v as _object)["foursquare_id"], type<string>))
-    move_to_ref(q.foursquare_type, _::from_JV((v as _object)["foursquare_type"], type<string>))
-    move_to_ref(q.google_place_id, _::from_JV((v as _object)["google_place_id"], type<string>))
-    move_to_ref(q.google_place_type, _::from_JV((v as _object)["google_place_type"], type<string>))
+    q.latitude = _::from_JV((v as _object)["latitude"], type<float>)
+    q.longitude = _::from_JV((v as _object)["longitude"], type<float>)
+    q.title = _::from_JV((v as _object)["title"], type<string>)
+    q.address = _::from_JV((v as _object)["address"], type<string>)
+    q.foursquare_id = _::from_JV((v as _object)["foursquare_id"], type<string>)
+    q.foursquare_type = _::from_JV((v as _object)["foursquare_type"], type<string>)
+    q.google_place_id = _::from_JV((v as _object)["google_place_id"], type<string>)
+    q.google_place_type = _::from_JV((v as _object)["google_place_type"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:inputvenuemessagecontent? ) : inputvenuemessagecontent?
@@ -7553,10 +7553,10 @@ struct inputcontactmessagecontent
 
 def from_JV ( var v:JsonValue?; t:inputcontactmessagecontent ) : inputcontactmessagecontent
     var q : inputcontactmessagecontent
-    move_to_ref(q.phone_number, _::from_JV((v as _object)["phone_number"], type<string>))
-    move_to_ref(q.first_name, _::from_JV((v as _object)["first_name"], type<string>))
-    move_to_ref(q.last_name, _::from_JV((v as _object)["last_name"], type<string>))
-    move_to_ref(q.vcard, _::from_JV((v as _object)["vcard"], type<string>))
+    q.phone_number = _::from_JV((v as _object)["phone_number"], type<string>)
+    q.first_name = _::from_JV((v as _object)["first_name"], type<string>)
+    q.last_name = _::from_JV((v as _object)["last_name"], type<string>)
+    q.vcard = _::from_JV((v as _object)["vcard"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:inputcontactmessagecontent? ) : inputcontactmessagecontent?
@@ -7598,26 +7598,26 @@ struct inputinvoicemessagecontent
 
 def from_JV ( var v:JsonValue?; t:inputinvoicemessagecontent ) : inputinvoicemessagecontent
     var q : inputinvoicemessagecontent
-    move_to_ref(q.title, _::from_JV((v as _object)["title"], type<string>))
-    move_to_ref(q.description, _::from_JV((v as _object)["description"], type<string>))
-    move_to_ref(q.payload, _::from_JV((v as _object)["payload"], type<string>))
-    move_to_ref(q.provider_token, _::from_JV((v as _object)["provider_token"], type<string>))
-    move_to_ref(q.currency, _::from_JV((v as _object)["currency"], type<string>))
-    move_to_ref(q.prices, _::from_JV((v as _object)["prices"], type<array<labeledprice>>))
-    move_to_ref(q.max_tip_amount, _::from_JV((v as _object)["max_tip_amount"], type<int64>))
-    move_to_ref(q.suggested_tip_amounts, _::from_JV((v as _object)["suggested_tip_amounts"], type<array<int64>>))
-    move_to_ref(q.provider_data, _::from_JV((v as _object)["provider_data"], type<string>))
-    move_to_ref(q.photo_url, _::from_JV((v as _object)["photo_url"], type<string>))
-    move_to_ref(q.photo_size, _::from_JV((v as _object)["photo_size"], type<int64>))
-    move_to_ref(q.photo_width, _::from_JV((v as _object)["photo_width"], type<int64>))
-    move_to_ref(q.photo_height, _::from_JV((v as _object)["photo_height"], type<int64>))
-    move_to_ref(q.need_name, _::from_JV((v as _object)["need_name"], type<bool>))
-    move_to_ref(q.need_phone_number, _::from_JV((v as _object)["need_phone_number"], type<bool>))
-    move_to_ref(q.need_email, _::from_JV((v as _object)["need_email"], type<bool>))
-    move_to_ref(q.need_shipping_address, _::from_JV((v as _object)["need_shipping_address"], type<bool>))
-    move_to_ref(q.send_phone_number_to_provider, _::from_JV((v as _object)["send_phone_number_to_provider"], type<bool>))
-    move_to_ref(q.send_email_to_provider, _::from_JV((v as _object)["send_email_to_provider"], type<bool>))
-    move_to_ref(q.is_flexible, _::from_JV((v as _object)["is_flexible"], type<bool>))
+    q.title = _::from_JV((v as _object)["title"], type<string>)
+    q.description = _::from_JV((v as _object)["description"], type<string>)
+    q.payload = _::from_JV((v as _object)["payload"], type<string>)
+    q.provider_token = _::from_JV((v as _object)["provider_token"], type<string>)
+    q.currency = _::from_JV((v as _object)["currency"], type<string>)
+    q.prices <- _::from_JV((v as _object)["prices"], type<array<labeledprice>>)
+    q.max_tip_amount = _::from_JV((v as _object)["max_tip_amount"], type<int64>)
+    q.suggested_tip_amounts <- _::from_JV((v as _object)["suggested_tip_amounts"], type<array<int64>>)
+    q.provider_data = _::from_JV((v as _object)["provider_data"], type<string>)
+    q.photo_url = _::from_JV((v as _object)["photo_url"], type<string>)
+    q.photo_size = _::from_JV((v as _object)["photo_size"], type<int64>)
+    q.photo_width = _::from_JV((v as _object)["photo_width"], type<int64>)
+    q.photo_height = _::from_JV((v as _object)["photo_height"], type<int64>)
+    q.need_name = _::from_JV((v as _object)["need_name"], type<bool>)
+    q.need_phone_number = _::from_JV((v as _object)["need_phone_number"], type<bool>)
+    q.need_email = _::from_JV((v as _object)["need_email"], type<bool>)
+    q.need_shipping_address = _::from_JV((v as _object)["need_shipping_address"], type<bool>)
+    q.send_phone_number_to_provider = _::from_JV((v as _object)["send_phone_number_to_provider"], type<bool>)
+    q.send_email_to_provider = _::from_JV((v as _object)["send_email_to_provider"], type<bool>)
+    q.is_flexible = _::from_JV((v as _object)["is_flexible"], type<bool>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:inputinvoicemessagecontent? ) : inputinvoicemessagecontent?
@@ -7660,11 +7660,11 @@ struct choseninlineresult
 
 def from_JV ( var v:JsonValue?; t:choseninlineresult ) : choseninlineresult
     var q : choseninlineresult
-    move_to_ref(q.result_id, _::from_JV((v as _object)["result_id"], type<string>))
-    move_to_ref(q.from, _::from_JV((v as _object)["from"], type<user>))
-    move_to_ref(q.location, _::from_JV((v as _object)["location"], type<location?>))
-    move_to_ref(q.inline_message_id, _::from_JV((v as _object)["inline_message_id"], type<string>))
-    move_to_ref(q.query, _::from_JV((v as _object)["query"], type<string>))
+    q.result_id = _::from_JV((v as _object)["result_id"], type<string>)
+    q.from <- _::from_JV((v as _object)["from"], type<user>)
+    q.location = _::from_JV((v as _object)["location"], type<location?>)
+    q.inline_message_id = _::from_JV((v as _object)["inline_message_id"], type<string>)
+    q.query = _::from_JV((v as _object)["query"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:choseninlineresult? ) : choseninlineresult?
@@ -7690,8 +7690,8 @@ struct answerwebappquery
 
 def from_JV ( var v:JsonValue?; t:answerwebappquery ) : answerwebappquery
     var q : answerwebappquery
-    move_to_ref(q.web_app_query_id, _::from_JV((v as _object)["web_app_query_id"], type<string>))
-    move_to_ref(q.result, _::from_JV((v as _object)["result"], type<inlinequeryresult>))
+    q.web_app_query_id = _::from_JV((v as _object)["web_app_query_id"], type<string>)
+    q.result <- _::from_JV((v as _object)["result"], type<inlinequeryresult>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:answerwebappquery? ) : answerwebappquery?
@@ -7712,7 +7712,7 @@ struct sentwebappmessage
 
 def from_JV ( var v:JsonValue?; t:sentwebappmessage ) : sentwebappmessage
     var q : sentwebappmessage
-    move_to_ref(q.inline_message_id, _::from_JV((v as _object)["inline_message_id"], type<string>))
+    q.inline_message_id = _::from_JV((v as _object)["inline_message_id"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:sentwebappmessage? ) : sentwebappmessage?
@@ -7759,34 +7759,34 @@ struct sendinvoice
 
 def from_JV ( var v:JsonValue?; t:sendinvoice ) : sendinvoice
     var q : sendinvoice
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<string>))
-    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], type<int64>))
-    move_to_ref(q.title, _::from_JV((v as _object)["title"], type<string>))
-    move_to_ref(q.description, _::from_JV((v as _object)["description"], type<string>))
-    move_to_ref(q.payload, _::from_JV((v as _object)["payload"], type<string>))
-    move_to_ref(q.provider_token, _::from_JV((v as _object)["provider_token"], type<string>))
-    move_to_ref(q.currency, _::from_JV((v as _object)["currency"], type<string>))
-    move_to_ref(q.prices, _::from_JV((v as _object)["prices"], type<array<labeledprice>>))
-    move_to_ref(q.max_tip_amount, _::from_JV((v as _object)["max_tip_amount"], type<int64>))
-    move_to_ref(q.suggested_tip_amounts, _::from_JV((v as _object)["suggested_tip_amounts"], type<array<int64>>))
-    move_to_ref(q.start_parameter, _::from_JV((v as _object)["start_parameter"], type<string>))
-    move_to_ref(q.provider_data, _::from_JV((v as _object)["provider_data"], type<string>))
-    move_to_ref(q.photo_url, _::from_JV((v as _object)["photo_url"], type<string>))
-    move_to_ref(q.photo_size, _::from_JV((v as _object)["photo_size"], type<int64>))
-    move_to_ref(q.photo_width, _::from_JV((v as _object)["photo_width"], type<int64>))
-    move_to_ref(q.photo_height, _::from_JV((v as _object)["photo_height"], type<int64>))
-    move_to_ref(q.need_name, _::from_JV((v as _object)["need_name"], type<bool>))
-    move_to_ref(q.need_phone_number, _::from_JV((v as _object)["need_phone_number"], type<bool>))
-    move_to_ref(q.need_email, _::from_JV((v as _object)["need_email"], type<bool>))
-    move_to_ref(q.need_shipping_address, _::from_JV((v as _object)["need_shipping_address"], type<bool>))
-    move_to_ref(q.send_phone_number_to_provider, _::from_JV((v as _object)["send_phone_number_to_provider"], type<bool>))
-    move_to_ref(q.send_email_to_provider, _::from_JV((v as _object)["send_email_to_provider"], type<bool>))
-    move_to_ref(q.is_flexible, _::from_JV((v as _object)["is_flexible"], type<bool>))
-    move_to_ref(q.disable_notification, _::from_JV((v as _object)["disable_notification"], type<bool>))
-    move_to_ref(q.protect_content, _::from_JV((v as _object)["protect_content"], type<bool>))
-    move_to_ref(q.reply_to_message_id, _::from_JV((v as _object)["reply_to_message_id"], type<int64>))
-    move_to_ref(q.allow_sending_without_reply, _::from_JV((v as _object)["allow_sending_without_reply"], type<bool>))
-    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<string>)
+    q.message_thread_id = _::from_JV((v as _object)["message_thread_id"], type<int64>)
+    q.title = _::from_JV((v as _object)["title"], type<string>)
+    q.description = _::from_JV((v as _object)["description"], type<string>)
+    q.payload = _::from_JV((v as _object)["payload"], type<string>)
+    q.provider_token = _::from_JV((v as _object)["provider_token"], type<string>)
+    q.currency = _::from_JV((v as _object)["currency"], type<string>)
+    q.prices <- _::from_JV((v as _object)["prices"], type<array<labeledprice>>)
+    q.max_tip_amount = _::from_JV((v as _object)["max_tip_amount"], type<int64>)
+    q.suggested_tip_amounts <- _::from_JV((v as _object)["suggested_tip_amounts"], type<array<int64>>)
+    q.start_parameter = _::from_JV((v as _object)["start_parameter"], type<string>)
+    q.provider_data = _::from_JV((v as _object)["provider_data"], type<string>)
+    q.photo_url = _::from_JV((v as _object)["photo_url"], type<string>)
+    q.photo_size = _::from_JV((v as _object)["photo_size"], type<int64>)
+    q.photo_width = _::from_JV((v as _object)["photo_width"], type<int64>)
+    q.photo_height = _::from_JV((v as _object)["photo_height"], type<int64>)
+    q.need_name = _::from_JV((v as _object)["need_name"], type<bool>)
+    q.need_phone_number = _::from_JV((v as _object)["need_phone_number"], type<bool>)
+    q.need_email = _::from_JV((v as _object)["need_email"], type<bool>)
+    q.need_shipping_address = _::from_JV((v as _object)["need_shipping_address"], type<bool>)
+    q.send_phone_number_to_provider = _::from_JV((v as _object)["send_phone_number_to_provider"], type<bool>)
+    q.send_email_to_provider = _::from_JV((v as _object)["send_email_to_provider"], type<bool>)
+    q.is_flexible = _::from_JV((v as _object)["is_flexible"], type<bool>)
+    q.disable_notification = _::from_JV((v as _object)["disable_notification"], type<bool>)
+    q.protect_content = _::from_JV((v as _object)["protect_content"], type<bool>)
+    q.reply_to_message_id = _::from_JV((v as _object)["reply_to_message_id"], type<int64>)
+    q.allow_sending_without_reply = _::from_JV((v as _object)["allow_sending_without_reply"], type<bool>)
+    q.reply_markup = _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:sendinvoice? ) : sendinvoice?
@@ -7853,26 +7853,26 @@ struct createinvoicelink
 
 def from_JV ( var v:JsonValue?; t:createinvoicelink ) : createinvoicelink
     var q : createinvoicelink
-    move_to_ref(q.title, _::from_JV((v as _object)["title"], type<string>))
-    move_to_ref(q.description, _::from_JV((v as _object)["description"], type<string>))
-    move_to_ref(q.payload, _::from_JV((v as _object)["payload"], type<string>))
-    move_to_ref(q.provider_token, _::from_JV((v as _object)["provider_token"], type<string>))
-    move_to_ref(q.currency, _::from_JV((v as _object)["currency"], type<string>))
-    move_to_ref(q.prices, _::from_JV((v as _object)["prices"], type<array<labeledprice>>))
-    move_to_ref(q.max_tip_amount, _::from_JV((v as _object)["max_tip_amount"], type<int64>))
-    move_to_ref(q.suggested_tip_amounts, _::from_JV((v as _object)["suggested_tip_amounts"], type<array<int64>>))
-    move_to_ref(q.provider_data, _::from_JV((v as _object)["provider_data"], type<string>))
-    move_to_ref(q.photo_url, _::from_JV((v as _object)["photo_url"], type<string>))
-    move_to_ref(q.photo_size, _::from_JV((v as _object)["photo_size"], type<int64>))
-    move_to_ref(q.photo_width, _::from_JV((v as _object)["photo_width"], type<int64>))
-    move_to_ref(q.photo_height, _::from_JV((v as _object)["photo_height"], type<int64>))
-    move_to_ref(q.need_name, _::from_JV((v as _object)["need_name"], type<bool>))
-    move_to_ref(q.need_phone_number, _::from_JV((v as _object)["need_phone_number"], type<bool>))
-    move_to_ref(q.need_email, _::from_JV((v as _object)["need_email"], type<bool>))
-    move_to_ref(q.need_shipping_address, _::from_JV((v as _object)["need_shipping_address"], type<bool>))
-    move_to_ref(q.send_phone_number_to_provider, _::from_JV((v as _object)["send_phone_number_to_provider"], type<bool>))
-    move_to_ref(q.send_email_to_provider, _::from_JV((v as _object)["send_email_to_provider"], type<bool>))
-    move_to_ref(q.is_flexible, _::from_JV((v as _object)["is_flexible"], type<bool>))
+    q.title = _::from_JV((v as _object)["title"], type<string>)
+    q.description = _::from_JV((v as _object)["description"], type<string>)
+    q.payload = _::from_JV((v as _object)["payload"], type<string>)
+    q.provider_token = _::from_JV((v as _object)["provider_token"], type<string>)
+    q.currency = _::from_JV((v as _object)["currency"], type<string>)
+    q.prices <- _::from_JV((v as _object)["prices"], type<array<labeledprice>>)
+    q.max_tip_amount = _::from_JV((v as _object)["max_tip_amount"], type<int64>)
+    q.suggested_tip_amounts <- _::from_JV((v as _object)["suggested_tip_amounts"], type<array<int64>>)
+    q.provider_data = _::from_JV((v as _object)["provider_data"], type<string>)
+    q.photo_url = _::from_JV((v as _object)["photo_url"], type<string>)
+    q.photo_size = _::from_JV((v as _object)["photo_size"], type<int64>)
+    q.photo_width = _::from_JV((v as _object)["photo_width"], type<int64>)
+    q.photo_height = _::from_JV((v as _object)["photo_height"], type<int64>)
+    q.need_name = _::from_JV((v as _object)["need_name"], type<bool>)
+    q.need_phone_number = _::from_JV((v as _object)["need_phone_number"], type<bool>)
+    q.need_email = _::from_JV((v as _object)["need_email"], type<bool>)
+    q.need_shipping_address = _::from_JV((v as _object)["need_shipping_address"], type<bool>)
+    q.send_phone_number_to_provider = _::from_JV((v as _object)["send_phone_number_to_provider"], type<bool>)
+    q.send_email_to_provider = _::from_JV((v as _object)["send_email_to_provider"], type<bool>)
+    q.is_flexible = _::from_JV((v as _object)["is_flexible"], type<bool>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:createinvoicelink? ) : createinvoicelink?
@@ -7914,10 +7914,10 @@ struct answershippingquery
 
 def from_JV ( var v:JsonValue?; t:answershippingquery ) : answershippingquery
     var q : answershippingquery
-    move_to_ref(q.shipping_query_id, _::from_JV((v as _object)["shipping_query_id"], type<string>))
-    move_to_ref(q.ok, _::from_JV((v as _object)["ok"], type<bool>))
-    move_to_ref(q.shipping_options, _::from_JV((v as _object)["shipping_options"], type<array<shippingoption>>))
-    move_to_ref(q.error_message, _::from_JV((v as _object)["error_message"], type<string>))
+    q.shipping_query_id = _::from_JV((v as _object)["shipping_query_id"], type<string>)
+    q.ok = _::from_JV((v as _object)["ok"], type<bool>)
+    q.shipping_options <- _::from_JV((v as _object)["shipping_options"], type<array<shippingoption>>)
+    q.error_message = _::from_JV((v as _object)["error_message"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:answershippingquery? ) : answershippingquery?
@@ -7942,9 +7942,9 @@ struct answerprecheckoutquery
 
 def from_JV ( var v:JsonValue?; t:answerprecheckoutquery ) : answerprecheckoutquery
     var q : answerprecheckoutquery
-    move_to_ref(q.pre_checkout_query_id, _::from_JV((v as _object)["pre_checkout_query_id"], type<string>))
-    move_to_ref(q.ok, _::from_JV((v as _object)["ok"], type<bool>))
-    move_to_ref(q.error_message, _::from_JV((v as _object)["error_message"], type<string>))
+    q.pre_checkout_query_id = _::from_JV((v as _object)["pre_checkout_query_id"], type<string>)
+    q.ok = _::from_JV((v as _object)["ok"], type<bool>)
+    q.error_message = _::from_JV((v as _object)["error_message"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:answerprecheckoutquery? ) : answerprecheckoutquery?
@@ -7967,8 +7967,8 @@ struct labeledprice
 
 def from_JV ( var v:JsonValue?; t:labeledprice ) : labeledprice
     var q : labeledprice
-    move_to_ref(q._label, _::from_JV((v as _object)["_label"], type<string>))
-    move_to_ref(q.amount, _::from_JV((v as _object)["amount"], type<int64>))
+    q._label = _::from_JV((v as _object)["_label"], type<string>)
+    q.amount = _::from_JV((v as _object)["amount"], type<int64>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:labeledprice? ) : labeledprice?
@@ -7993,11 +7993,11 @@ struct invoice
 
 def from_JV ( var v:JsonValue?; t:invoice ) : invoice
     var q : invoice
-    move_to_ref(q.title, _::from_JV((v as _object)["title"], type<string>))
-    move_to_ref(q.description, _::from_JV((v as _object)["description"], type<string>))
-    move_to_ref(q.start_parameter, _::from_JV((v as _object)["start_parameter"], type<string>))
-    move_to_ref(q.currency, _::from_JV((v as _object)["currency"], type<string>))
-    move_to_ref(q.total_amount, _::from_JV((v as _object)["total_amount"], type<int64>))
+    q.title = _::from_JV((v as _object)["title"], type<string>)
+    q.description = _::from_JV((v as _object)["description"], type<string>)
+    q.start_parameter = _::from_JV((v as _object)["start_parameter"], type<string>)
+    q.currency = _::from_JV((v as _object)["currency"], type<string>)
+    q.total_amount = _::from_JV((v as _object)["total_amount"], type<int64>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:invoice? ) : invoice?
@@ -8026,12 +8026,12 @@ struct shippingaddress
 
 def from_JV ( var v:JsonValue?; t:shippingaddress ) : shippingaddress
     var q : shippingaddress
-    move_to_ref(q.country_code, _::from_JV((v as _object)["country_code"], type<string>))
-    move_to_ref(q.state, _::from_JV((v as _object)["state"], type<string>))
-    move_to_ref(q.city, _::from_JV((v as _object)["city"], type<string>))
-    move_to_ref(q.street_line1, _::from_JV((v as _object)["street_line1"], type<string>))
-    move_to_ref(q.street_line2, _::from_JV((v as _object)["street_line2"], type<string>))
-    move_to_ref(q.post_code, _::from_JV((v as _object)["post_code"], type<string>))
+    q.country_code = _::from_JV((v as _object)["country_code"], type<string>)
+    q.state = _::from_JV((v as _object)["state"], type<string>)
+    q.city = _::from_JV((v as _object)["city"], type<string>)
+    q.street_line1 = _::from_JV((v as _object)["street_line1"], type<string>)
+    q.street_line2 = _::from_JV((v as _object)["street_line2"], type<string>)
+    q.post_code = _::from_JV((v as _object)["post_code"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:shippingaddress? ) : shippingaddress?
@@ -8059,10 +8059,10 @@ struct orderinfo
 
 def from_JV ( var v:JsonValue?; t:orderinfo ) : orderinfo
     var q : orderinfo
-    move_to_ref(q.name, _::from_JV((v as _object)["name"], type<string>))
-    move_to_ref(q.phone_number, _::from_JV((v as _object)["phone_number"], type<string>))
-    move_to_ref(q.email, _::from_JV((v as _object)["email"], type<string>))
-    move_to_ref(q.shipping_address, _::from_JV((v as _object)["shipping_address"], type<shippingaddress?>))
+    q.name = _::from_JV((v as _object)["name"], type<string>)
+    q.phone_number = _::from_JV((v as _object)["phone_number"], type<string>)
+    q.email = _::from_JV((v as _object)["email"], type<string>)
+    q.shipping_address = _::from_JV((v as _object)["shipping_address"], type<shippingaddress?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:orderinfo? ) : orderinfo?
@@ -8088,9 +8088,9 @@ struct shippingoption
 
 def from_JV ( var v:JsonValue?; t:shippingoption ) : shippingoption
     var q : shippingoption
-    move_to_ref(q.id, _::from_JV((v as _object)["id"], type<string>))
-    move_to_ref(q.title, _::from_JV((v as _object)["title"], type<string>))
-    move_to_ref(q.prices, _::from_JV((v as _object)["prices"], type<array<labeledprice>>))
+    q.id = _::from_JV((v as _object)["id"], type<string>)
+    q.title = _::from_JV((v as _object)["title"], type<string>)
+    q.prices <- _::from_JV((v as _object)["prices"], type<array<labeledprice>>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:shippingoption? ) : shippingoption?
@@ -8118,13 +8118,13 @@ struct successfulpayment
 
 def from_JV ( var v:JsonValue?; t:successfulpayment ) : successfulpayment
     var q : successfulpayment
-    move_to_ref(q.currency, _::from_JV((v as _object)["currency"], type<string>))
-    move_to_ref(q.total_amount, _::from_JV((v as _object)["total_amount"], type<int64>))
-    move_to_ref(q.invoice_payload, _::from_JV((v as _object)["invoice_payload"], type<string>))
-    move_to_ref(q.shipping_option_id, _::from_JV((v as _object)["shipping_option_id"], type<string>))
-    move_to_ref(q.order_info, _::from_JV((v as _object)["order_info"], type<orderinfo?>))
-    move_to_ref(q.telegram_payment_charge_id, _::from_JV((v as _object)["telegram_payment_charge_id"], type<string>))
-    move_to_ref(q.provider_payment_charge_id, _::from_JV((v as _object)["provider_payment_charge_id"], type<string>))
+    q.currency = _::from_JV((v as _object)["currency"], type<string>)
+    q.total_amount = _::from_JV((v as _object)["total_amount"], type<int64>)
+    q.invoice_payload = _::from_JV((v as _object)["invoice_payload"], type<string>)
+    q.shipping_option_id = _::from_JV((v as _object)["shipping_option_id"], type<string>)
+    q.order_info = _::from_JV((v as _object)["order_info"], type<orderinfo?>)
+    q.telegram_payment_charge_id = _::from_JV((v as _object)["telegram_payment_charge_id"], type<string>)
+    q.provider_payment_charge_id = _::from_JV((v as _object)["provider_payment_charge_id"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:successfulpayment? ) : successfulpayment?
@@ -8154,10 +8154,10 @@ struct shippingquery
 
 def from_JV ( var v:JsonValue?; t:shippingquery ) : shippingquery
     var q : shippingquery
-    move_to_ref(q.id, _::from_JV((v as _object)["id"], type<string>))
-    move_to_ref(q.from, _::from_JV((v as _object)["from"], type<user>))
-    move_to_ref(q.invoice_payload, _::from_JV((v as _object)["invoice_payload"], type<string>))
-    move_to_ref(q.shipping_address, _::from_JV((v as _object)["shipping_address"], type<shippingaddress>))
+    q.id = _::from_JV((v as _object)["id"], type<string>)
+    q.from <- _::from_JV((v as _object)["from"], type<user>)
+    q.invoice_payload = _::from_JV((v as _object)["invoice_payload"], type<string>)
+    q.shipping_address <- _::from_JV((v as _object)["shipping_address"], type<shippingaddress>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:shippingquery? ) : shippingquery?
@@ -8186,13 +8186,13 @@ struct precheckoutquery
 
 def from_JV ( var v:JsonValue?; t:precheckoutquery ) : precheckoutquery
     var q : precheckoutquery
-    move_to_ref(q.id, _::from_JV((v as _object)["id"], type<string>))
-    move_to_ref(q.from, _::from_JV((v as _object)["from"], type<user>))
-    move_to_ref(q.currency, _::from_JV((v as _object)["currency"], type<string>))
-    move_to_ref(q.total_amount, _::from_JV((v as _object)["total_amount"], type<int64>))
-    move_to_ref(q.invoice_payload, _::from_JV((v as _object)["invoice_payload"], type<string>))
-    move_to_ref(q.shipping_option_id, _::from_JV((v as _object)["shipping_option_id"], type<string>))
-    move_to_ref(q.order_info, _::from_JV((v as _object)["order_info"], type<orderinfo?>))
+    q.id = _::from_JV((v as _object)["id"], type<string>)
+    q.from <- _::from_JV((v as _object)["from"], type<user>)
+    q.currency = _::from_JV((v as _object)["currency"], type<string>)
+    q.total_amount = _::from_JV((v as _object)["total_amount"], type<int64>)
+    q.invoice_payload = _::from_JV((v as _object)["invoice_payload"], type<string>)
+    q.shipping_option_id = _::from_JV((v as _object)["shipping_option_id"], type<string>)
+    q.order_info = _::from_JV((v as _object)["order_info"], type<orderinfo?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:precheckoutquery? ) : precheckoutquery?
@@ -8220,8 +8220,8 @@ struct passportdata
 
 def from_JV ( var v:JsonValue?; t:passportdata ) : passportdata
     var q : passportdata
-    move_to_ref(q.data, _::from_JV((v as _object)["data"], type<array<encryptedpassportelement>>))
-    move_to_ref(q.credentials, _::from_JV((v as _object)["credentials"], type<encryptedcredentials>))
+    q.data <- _::from_JV((v as _object)["data"], type<array<encryptedpassportelement>>)
+    q.credentials <- _::from_JV((v as _object)["credentials"], type<encryptedcredentials>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:passportdata? ) : passportdata?
@@ -8245,10 +8245,10 @@ struct passportfile
 
 def from_JV ( var v:JsonValue?; t:passportfile ) : passportfile
     var q : passportfile
-    move_to_ref(q.file_id, _::from_JV((v as _object)["file_id"], type<string>))
-    move_to_ref(q.file_unique_id, _::from_JV((v as _object)["file_unique_id"], type<string>))
-    move_to_ref(q.file_size, _::from_JV((v as _object)["file_size"], type<int64>))
-    move_to_ref(q.file_date, _::from_JV((v as _object)["file_date"], type<int64>))
+    q.file_id = _::from_JV((v as _object)["file_id"], type<string>)
+    q.file_unique_id = _::from_JV((v as _object)["file_unique_id"], type<string>)
+    q.file_size = _::from_JV((v as _object)["file_size"], type<int64>)
+    q.file_date = _::from_JV((v as _object)["file_date"], type<int64>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:passportfile? ) : passportfile?
@@ -8280,16 +8280,16 @@ struct encryptedpassportelement
 
 def from_JV ( var v:JsonValue?; t:encryptedpassportelement ) : encryptedpassportelement
     var q : encryptedpassportelement
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
-    move_to_ref(q.data, _::from_JV((v as _object)["data"], type<string>))
-    move_to_ref(q.phone_number, _::from_JV((v as _object)["phone_number"], type<string>))
-    move_to_ref(q.email, _::from_JV((v as _object)["email"], type<string>))
-    move_to_ref(q.files, _::from_JV((v as _object)["files"], type<array<passportfile>>))
-    move_to_ref(q.front_side, _::from_JV((v as _object)["front_side"], type<passportfile?>))
-    move_to_ref(q.reverse_side, _::from_JV((v as _object)["reverse_side"], type<passportfile?>))
-    move_to_ref(q.selfie, _::from_JV((v as _object)["selfie"], type<passportfile?>))
-    move_to_ref(q.translation, _::from_JV((v as _object)["translation"], type<array<passportfile>>))
-    move_to_ref(q.hash, _::from_JV((v as _object)["hash"], type<string>))
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
+    q.data = _::from_JV((v as _object)["data"], type<string>)
+    q.phone_number = _::from_JV((v as _object)["phone_number"], type<string>)
+    q.email = _::from_JV((v as _object)["email"], type<string>)
+    q.files <- _::from_JV((v as _object)["files"], type<array<passportfile>>)
+    q.front_side = _::from_JV((v as _object)["front_side"], type<passportfile?>)
+    q.reverse_side = _::from_JV((v as _object)["reverse_side"], type<passportfile?>)
+    q.selfie = _::from_JV((v as _object)["selfie"], type<passportfile?>)
+    q.translation <- _::from_JV((v as _object)["translation"], type<array<passportfile>>)
+    q.hash = _::from_JV((v as _object)["hash"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:encryptedpassportelement? ) : encryptedpassportelement?
@@ -8323,9 +8323,9 @@ struct encryptedcredentials
 
 def from_JV ( var v:JsonValue?; t:encryptedcredentials ) : encryptedcredentials
     var q : encryptedcredentials
-    move_to_ref(q.data, _::from_JV((v as _object)["data"], type<string>))
-    move_to_ref(q.hash, _::from_JV((v as _object)["hash"], type<string>))
-    move_to_ref(q.secret, _::from_JV((v as _object)["secret"], type<string>))
+    q.data = _::from_JV((v as _object)["data"], type<string>)
+    q.hash = _::from_JV((v as _object)["hash"], type<string>)
+    q.secret = _::from_JV((v as _object)["secret"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:encryptedcredentials? ) : encryptedcredentials?
@@ -8348,8 +8348,8 @@ struct setpassportdataerrors
 
 def from_JV ( var v:JsonValue?; t:setpassportdataerrors ) : setpassportdataerrors
     var q : setpassportdataerrors
-    move_to_ref(q.user_id, _::from_JV((v as _object)["user_id"], type<int64>))
-    move_to_ref(q.errors, _::from_JV((v as _object)["errors"], type<array<passportelementerror>>))
+    q.user_id = _::from_JV((v as _object)["user_id"], type<int64>)
+    q.errors <- _::from_JV((v as _object)["errors"], type<array<passportelementerror>>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:setpassportdataerrors? ) : setpassportdataerrors?
@@ -8392,11 +8392,11 @@ struct passportelementerrordatafield
 
 def from_JV ( var v:JsonValue?; t:passportelementerrordatafield ) : passportelementerrordatafield
     var q : passportelementerrordatafield
-    move_to_ref(q.source, _::from_JV((v as _object)["source"], type<string>))
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
-    move_to_ref(q.field_name, _::from_JV((v as _object)["field_name"], type<string>))
-    move_to_ref(q.data_hash, _::from_JV((v as _object)["data_hash"], type<string>))
-    move_to_ref(q.message, _::from_JV((v as _object)["message"], type<string>))
+    q.source = _::from_JV((v as _object)["source"], type<string>)
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
+    q.field_name = _::from_JV((v as _object)["field_name"], type<string>)
+    q.data_hash = _::from_JV((v as _object)["data_hash"], type<string>)
+    q.message = _::from_JV((v as _object)["message"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:passportelementerrordatafield? ) : passportelementerrordatafield?
@@ -8423,10 +8423,10 @@ struct passportelementerrorfrontside
 
 def from_JV ( var v:JsonValue?; t:passportelementerrorfrontside ) : passportelementerrorfrontside
     var q : passportelementerrorfrontside
-    move_to_ref(q.source, _::from_JV((v as _object)["source"], type<string>))
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
-    move_to_ref(q.file_hash, _::from_JV((v as _object)["file_hash"], type<string>))
-    move_to_ref(q.message, _::from_JV((v as _object)["message"], type<string>))
+    q.source = _::from_JV((v as _object)["source"], type<string>)
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
+    q.file_hash = _::from_JV((v as _object)["file_hash"], type<string>)
+    q.message = _::from_JV((v as _object)["message"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:passportelementerrorfrontside? ) : passportelementerrorfrontside?
@@ -8452,10 +8452,10 @@ struct passportelementerrorreverseside
 
 def from_JV ( var v:JsonValue?; t:passportelementerrorreverseside ) : passportelementerrorreverseside
     var q : passportelementerrorreverseside
-    move_to_ref(q.source, _::from_JV((v as _object)["source"], type<string>))
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
-    move_to_ref(q.file_hash, _::from_JV((v as _object)["file_hash"], type<string>))
-    move_to_ref(q.message, _::from_JV((v as _object)["message"], type<string>))
+    q.source = _::from_JV((v as _object)["source"], type<string>)
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
+    q.file_hash = _::from_JV((v as _object)["file_hash"], type<string>)
+    q.message = _::from_JV((v as _object)["message"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:passportelementerrorreverseside? ) : passportelementerrorreverseside?
@@ -8481,10 +8481,10 @@ struct passportelementerrorselfie
 
 def from_JV ( var v:JsonValue?; t:passportelementerrorselfie ) : passportelementerrorselfie
     var q : passportelementerrorselfie
-    move_to_ref(q.source, _::from_JV((v as _object)["source"], type<string>))
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
-    move_to_ref(q.file_hash, _::from_JV((v as _object)["file_hash"], type<string>))
-    move_to_ref(q.message, _::from_JV((v as _object)["message"], type<string>))
+    q.source = _::from_JV((v as _object)["source"], type<string>)
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
+    q.file_hash = _::from_JV((v as _object)["file_hash"], type<string>)
+    q.message = _::from_JV((v as _object)["message"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:passportelementerrorselfie? ) : passportelementerrorselfie?
@@ -8510,10 +8510,10 @@ struct passportelementerrorfile
 
 def from_JV ( var v:JsonValue?; t:passportelementerrorfile ) : passportelementerrorfile
     var q : passportelementerrorfile
-    move_to_ref(q.source, _::from_JV((v as _object)["source"], type<string>))
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
-    move_to_ref(q.file_hash, _::from_JV((v as _object)["file_hash"], type<string>))
-    move_to_ref(q.message, _::from_JV((v as _object)["message"], type<string>))
+    q.source = _::from_JV((v as _object)["source"], type<string>)
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
+    q.file_hash = _::from_JV((v as _object)["file_hash"], type<string>)
+    q.message = _::from_JV((v as _object)["message"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:passportelementerrorfile? ) : passportelementerrorfile?
@@ -8539,10 +8539,10 @@ struct passportelementerrorfiles
 
 def from_JV ( var v:JsonValue?; t:passportelementerrorfiles ) : passportelementerrorfiles
     var q : passportelementerrorfiles
-    move_to_ref(q.source, _::from_JV((v as _object)["source"], type<string>))
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
-    move_to_ref(q.file_hashes, _::from_JV((v as _object)["file_hashes"], type<array<string>>))
-    move_to_ref(q.message, _::from_JV((v as _object)["message"], type<string>))
+    q.source = _::from_JV((v as _object)["source"], type<string>)
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
+    q.file_hashes <- _::from_JV((v as _object)["file_hashes"], type<array<string>>)
+    q.message = _::from_JV((v as _object)["message"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:passportelementerrorfiles? ) : passportelementerrorfiles?
@@ -8568,10 +8568,10 @@ struct passportelementerrortranslationfile
 
 def from_JV ( var v:JsonValue?; t:passportelementerrortranslationfile ) : passportelementerrortranslationfile
     var q : passportelementerrortranslationfile
-    move_to_ref(q.source, _::from_JV((v as _object)["source"], type<string>))
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
-    move_to_ref(q.file_hash, _::from_JV((v as _object)["file_hash"], type<string>))
-    move_to_ref(q.message, _::from_JV((v as _object)["message"], type<string>))
+    q.source = _::from_JV((v as _object)["source"], type<string>)
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
+    q.file_hash = _::from_JV((v as _object)["file_hash"], type<string>)
+    q.message = _::from_JV((v as _object)["message"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:passportelementerrortranslationfile? ) : passportelementerrortranslationfile?
@@ -8597,10 +8597,10 @@ struct passportelementerrortranslationfiles
 
 def from_JV ( var v:JsonValue?; t:passportelementerrortranslationfiles ) : passportelementerrortranslationfiles
     var q : passportelementerrortranslationfiles
-    move_to_ref(q.source, _::from_JV((v as _object)["source"], type<string>))
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
-    move_to_ref(q.file_hashes, _::from_JV((v as _object)["file_hashes"], type<array<string>>))
-    move_to_ref(q.message, _::from_JV((v as _object)["message"], type<string>))
+    q.source = _::from_JV((v as _object)["source"], type<string>)
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
+    q.file_hashes <- _::from_JV((v as _object)["file_hashes"], type<array<string>>)
+    q.message = _::from_JV((v as _object)["message"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:passportelementerrortranslationfiles? ) : passportelementerrortranslationfiles?
@@ -8626,10 +8626,10 @@ struct passportelementerrorunspecified
 
 def from_JV ( var v:JsonValue?; t:passportelementerrorunspecified ) : passportelementerrorunspecified
     var q : passportelementerrorunspecified
-    move_to_ref(q.source, _::from_JV((v as _object)["source"], type<string>))
-    move_to_ref(q._type, _::from_JV((v as _object)["_type"], type<string>))
-    move_to_ref(q.element_hash, _::from_JV((v as _object)["element_hash"], type<string>))
-    move_to_ref(q.message, _::from_JV((v as _object)["message"], type<string>))
+    q.source = _::from_JV((v as _object)["source"], type<string>)
+    q._type = _::from_JV((v as _object)["_type"], type<string>)
+    q.element_hash = _::from_JV((v as _object)["element_hash"], type<string>)
+    q.message = _::from_JV((v as _object)["message"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:passportelementerrorunspecified? ) : passportelementerrorunspecified?
@@ -8659,14 +8659,14 @@ struct sendgame
 
 def from_JV ( var v:JsonValue?; t:sendgame ) : sendgame
     var q : sendgame
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<int64>))
-    move_to_ref(q.message_thread_id, _::from_JV((v as _object)["message_thread_id"], type<int64>))
-    move_to_ref(q.game_short_name, _::from_JV((v as _object)["game_short_name"], type<string>))
-    move_to_ref(q.disable_notification, _::from_JV((v as _object)["disable_notification"], type<bool>))
-    move_to_ref(q.protect_content, _::from_JV((v as _object)["protect_content"], type<bool>))
-    move_to_ref(q.reply_to_message_id, _::from_JV((v as _object)["reply_to_message_id"], type<int64>))
-    move_to_ref(q.allow_sending_without_reply, _::from_JV((v as _object)["allow_sending_without_reply"], type<bool>))
-    move_to_ref(q.reply_markup, _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>))
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<int64>)
+    q.message_thread_id = _::from_JV((v as _object)["message_thread_id"], type<int64>)
+    q.game_short_name = _::from_JV((v as _object)["game_short_name"], type<string>)
+    q.disable_notification = _::from_JV((v as _object)["disable_notification"], type<bool>)
+    q.protect_content = _::from_JV((v as _object)["protect_content"], type<bool>)
+    q.reply_to_message_id = _::from_JV((v as _object)["reply_to_message_id"], type<int64>)
+    q.allow_sending_without_reply = _::from_JV((v as _object)["allow_sending_without_reply"], type<bool>)
+    q.reply_markup = _::from_JV((v as _object)["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:sendgame? ) : sendgame?
@@ -8699,12 +8699,12 @@ struct game
 
 def from_JV ( var v:JsonValue?; t:game ) : game
     var q : game
-    move_to_ref(q.title, _::from_JV((v as _object)["title"], type<string>))
-    move_to_ref(q.description, _::from_JV((v as _object)["description"], type<string>))
-    move_to_ref(q.photo, _::from_JV((v as _object)["photo"], type<array<photosize>>))
-    move_to_ref(q.text, _::from_JV((v as _object)["text"], type<string>))
-    move_to_ref(q.text_entities, _::from_JV((v as _object)["text_entities"], type<array<messageentity>>))
-    move_to_ref(q.animation, _::from_JV((v as _object)["animation"], type<animation?>))
+    q.title = _::from_JV((v as _object)["title"], type<string>)
+    q.description = _::from_JV((v as _object)["description"], type<string>)
+    q.photo <- _::from_JV((v as _object)["photo"], type<array<photosize>>)
+    q.text = _::from_JV((v as _object)["text"], type<string>)
+    q.text_entities <- _::from_JV((v as _object)["text_entities"], type<array<messageentity>>)
+    q.animation = _::from_JV((v as _object)["animation"], type<animation?>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:game? ) : game?
@@ -8754,13 +8754,13 @@ struct setgamescore
 
 def from_JV ( var v:JsonValue?; t:setgamescore ) : setgamescore
     var q : setgamescore
-    move_to_ref(q.user_id, _::from_JV((v as _object)["user_id"], type<int64>))
-    move_to_ref(q.score, _::from_JV((v as _object)["score"], type<int64>))
-    move_to_ref(q.force, _::from_JV((v as _object)["force"], type<bool>))
-    move_to_ref(q.disable_edit_message, _::from_JV((v as _object)["disable_edit_message"], type<bool>))
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<int64>))
-    move_to_ref(q.message_id, _::from_JV((v as _object)["message_id"], type<int64>))
-    move_to_ref(q.inline_message_id, _::from_JV((v as _object)["inline_message_id"], type<string>))
+    q.user_id = _::from_JV((v as _object)["user_id"], type<int64>)
+    q.score = _::from_JV((v as _object)["score"], type<int64>)
+    q.force = _::from_JV((v as _object)["force"], type<bool>)
+    q.disable_edit_message = _::from_JV((v as _object)["disable_edit_message"], type<bool>)
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<int64>)
+    q.message_id = _::from_JV((v as _object)["message_id"], type<int64>)
+    q.inline_message_id = _::from_JV((v as _object)["inline_message_id"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:setgamescore? ) : setgamescore?
@@ -8789,10 +8789,10 @@ struct getgamehighscores
 
 def from_JV ( var v:JsonValue?; t:getgamehighscores ) : getgamehighscores
     var q : getgamehighscores
-    move_to_ref(q.user_id, _::from_JV((v as _object)["user_id"], type<int64>))
-    move_to_ref(q.chat_id, _::from_JV((v as _object)["chat_id"], type<int64>))
-    move_to_ref(q.message_id, _::from_JV((v as _object)["message_id"], type<int64>))
-    move_to_ref(q.inline_message_id, _::from_JV((v as _object)["inline_message_id"], type<string>))
+    q.user_id = _::from_JV((v as _object)["user_id"], type<int64>)
+    q.chat_id = _::from_JV((v as _object)["chat_id"], type<int64>)
+    q.message_id = _::from_JV((v as _object)["message_id"], type<int64>)
+    q.inline_message_id = _::from_JV((v as _object)["inline_message_id"], type<string>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:getgamehighscores? ) : getgamehighscores?
@@ -8817,9 +8817,9 @@ struct gamehighscore
 
 def from_JV ( var v:JsonValue?; t:gamehighscore ) : gamehighscore
     var q : gamehighscore
-    move_to_ref(q.position, _::from_JV((v as _object)["position"], type<int64>))
-    move_to_ref(q.user, _::from_JV((v as _object)["user"], type<user>))
-    move_to_ref(q.score, _::from_JV((v as _object)["score"], type<int64>))
+    q.position = _::from_JV((v as _object)["position"], type<int64>)
+    q.user <- _::from_JV((v as _object)["user"], type<user>)
+    q.score = _::from_JV((v as _object)["score"], type<int64>)
     return <- q
 
 def from_JV ( var v:JsonValue?; t:gamehighscore? ) : gamehighscore?

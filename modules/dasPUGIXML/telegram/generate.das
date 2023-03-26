@@ -103,7 +103,10 @@ def generate_fromJV ( name:string; fields:array<tuple<field:string;_type:string>
     g_FOUT |> fprint("def from_JV ( var v:JsonValue?; t:{name} ) : {name}\n")
     g_FOUT |> fprint("    var q : {name}\n")
     for field in fields
-        g_FOUT |> fprint("    move_to_ref(q.{field.field}, _::from_JV((v as _object)[\"{field.field}\"], type<{field._type}>))\n")
+        if field._type=="int64" || field._type=="float" || field._type=="string" || field._type=="bool" || field._type |> ends_with("?")
+            g_FOUT |> fprint("    q.{field.field} = _::from_JV((v as _object)[\"{field.field}\"], type<{field._type}>)\n")
+        else
+            g_FOUT |> fprint("    q.{field.field} <- _::from_JV((v as _object)[\"{field.field}\"], type<{field._type}>)\n")
     g_FOUT |> fprint("    return <- q\n\n")
     // from pointer
     g_FOUT |> fprint("def from_JV ( var v:JsonValue?; t:{name}? ) : {name}?\n")
@@ -121,23 +124,6 @@ def generate_fromJV ( name:string; fields:array<tuple<field:string;_type:string>
         else
             g_FOUT |> fprint("    map[\"{field.field}\"] = _::JV(v.{field.field})\n")
     g_FOUT |> fprint("    return _::JV(map)\n\n")
-
-
-    /*
-            var map: table<string; JsonValue?>
-        apply(value) <| $(name: string; field)
-            static_if typeinfo(is_function field)
-                pass // skip functions
-            static_elif typeinfo(is_void_pointer field)
-                pass // skip void?
-            static_elif typeinfo(is_pointer field)
-                if field != null
-                    map[name] = _::JV(field)
-            else
-                map[name] = _::JV(field)
-        return _::JV(map)
-    */
-
 
 def process_section ( doc:xml_document; name:string )
     var node = doc |> find_section(name)
