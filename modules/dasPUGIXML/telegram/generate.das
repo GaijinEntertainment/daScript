@@ -73,15 +73,6 @@ def sanitize_name ( name:string )
             else
                 writer |> write_char(Ch)
 
-def opt_name ( name:string; is_optional:bool=false )
-    if !is_optional
-        return name
-    return "int = INT_MIN"      if name=="int"
-    return "float = -FLT_MAX"   if name=="float"
-    return "string = \"\""      if name=="string"
-    return "bool = false"       if name=="bool"
-    return name
-
 def process_type ( node:xml_node; is_optional:bool=false )
     if node.name == "a"
         var href = node |> attribute("href") |> as_string("")
@@ -93,13 +84,13 @@ def process_type ( node:xml_node; is_optional:bool=false )
         return is_optional ? "{classname}?" : "{classname}"
     else
         let value = node.value
-        return opt_name("int",is_optional)            if value=="Integer"
-        return opt_name("float",is_optional)          if value=="Float"
-        return opt_name("float",is_optional)          if value=="Float number"
-        return opt_name("string",is_optional)         if value=="String"
-        return opt_name("string",is_optional)         if value=="Integer or String"
-        return opt_name("bool",is_optional)           if value=="Boolean"
-        return opt_name("bool",is_optional)           if value=="True"       // sometimes there is an error in documentation
+        return "int"        if value=="Integer"
+        return "float"      if value=="Float"
+        return "float"      if value=="Float number"
+        return "string"     if value=="String"
+        return "string"     if value=="Integer or String"
+        return "bool"       if value=="Boolean"
+        return "bool"       if value=="True"       // sometimes there is an error in documentation
         return "array<string>"  if value=="Array of String"
         return "array<int>"     if value=="Array of Integer"
         return "array<{process_type(node.next_sibling)}>"           if value == "Array of "
@@ -107,11 +98,11 @@ def process_type ( node:xml_node; is_optional:bool=false )
         panic("unsupported type {value}")
         return value
 
-def generate_fromJV ( name:string; fields:array<string> )
+def generate_fromJV ( name:string; fields:array<tuple<field:string;_type:string>> )
     g_FOUT |> fprint("def from_JV ( var v:JsonValue?; t:{name} ) : {name}\n")
     g_FOUT |> fprint("    var q : {name}\n")
     for field in fields
-        g_FOUT |> fprint("    move_to_ref(q.{field}, _::from_JV((v as _object)[\"{field}\"], decltype_noref(q.{field})) )\n")
+        g_FOUT |> fprint("    move_to_ref(q.{field.field}, _::from_JV((v as _object)[\"{field.field}\"], type<{field._type}>))\n")
     g_FOUT |> fprint("    return <- q\n\n")
     g_FOUT |> fprint("def from_JV ( var v:JsonValue?; t:{name}? ) : {name}?\n")
     g_FOUT |> fprint("    return null if v==null\n")
@@ -132,7 +123,7 @@ def process_section ( doc:xml_document; name:string )
         if elem.name == "h4"
             if !any_fields && !api_call |> empty
                 g_FOUT |> fprint("\n    //! {comment}\n    object_{api_call}_has_no_fields:bool\n\n")
-                generate_fromJV(api_call,[[array<string>]])
+                generate_fromJV(api_call,[[array<tuple<string;string>>]])
             comment = ""
             api_call = elem |> child("a") |> attribute("id") |> as_string("") |> sanitize_name()
             g_FOUT |> fprint("struct {api_call}")
@@ -142,7 +133,7 @@ def process_section ( doc:xml_document; name:string )
         elif elem.name == "table"
             g_FOUT |> fprint("\n    //! {comment}\n")
             var tbody = elem |> child("tbody")
-            var fields : array<string>
+            var fields : array<tuple<string;string>>
             var tr = tbody.first_child
             while tr.ok
                 any_fields = true
@@ -161,7 +152,7 @@ def process_section ( doc:xml_document; name:string )
                 if is_optional
                     g_FOUT |> fprint("[[optional]] ")
                 g_FOUT |> fprint("{api_field} : {api_field_type}\t//! {api_field_comment}\n")
-                fields |> push(api_field)
+                fields |> push([[auto api_field,api_field_type]])
                 tr = tr.next_sibling
             g_FOUT |> fprint("\n")
             generate_fromJV(api_call,fields)
@@ -169,7 +160,7 @@ def process_section ( doc:xml_document; name:string )
         elem = elem.next_sibling
     if !any_fields && !api_call |> empty
         g_FOUT |> fprint("\n    //! {comment}\n    object_{api_call}_has_no_fields:bool\n\n")
-        generate_fromJV(api_call,[[array<string>]])
+        generate_fromJV(api_call,[[array<tuple<string;string>>]])
 
 [export]
 def main
