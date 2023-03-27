@@ -99,6 +99,7 @@ struct TestObjectFooAnnotation : ManagedStructureAnnotation <TestObjectFoo> {
             bool (TestObjectFoo::*)() const, &TestObjectFoo::isReadOnly
         >("isReadOnly","isReadOnly");
         addField<DAS_BIND_MANAGED_FIELD(fooArray)>("fooArray");
+        addProperty<DAS_BIND_MANAGED_PROP(getWordFoo)>("wordFoo");
     }
     void init() {
         addField<DAS_BIND_MANAGED_FIELD(foo_loop)>("foo_loop");

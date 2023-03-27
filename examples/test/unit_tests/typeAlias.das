@@ -56,6 +56,7 @@ def test:bool
     hitDir = normalize(-foo.hit)
     let nhdh = normalize(-float3(0,1,2))
     assert(hitDir.x==nhdh.x && hitDir.y==nhdh.y && hitDir.z==nhdh.z)
+    assert(foo.wordFoo == "foo")
 
     testPoint3Array() <| $(arr)
         assert(arr |> length==10)
