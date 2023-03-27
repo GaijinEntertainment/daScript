@@ -3016,6 +3016,9 @@ namespace das {
                 if ( call->func->result->aotAlias ) {
                     ss << "das_alias<" << call->func->result->alias << ">::from(";
                 }
+                if ( call->func->result->isString() ) {
+                    ss << "((" << describeCppType(call->func->result) << ")(";  // c-cast const char * etc string casts to char * or char * const
+                }
                 ss << "((";
                 return;
             }
@@ -3193,6 +3196,9 @@ namespace das {
                 } else {
                     DAS_ASSERT(call->func->name[0]=='.' && call->func->name[1]=='`');
                     ss << ")." << (call->func->name.c_str()+2) << "())";    // we skip .` part of the deal
+                }
+                if ( call->func->result->isString() ) {
+                    ss << "))";  // c-cast const char * etc string casts to char * or char * const
                 }
                 if ( call->func->result->aotAlias ) {
                     ss << ")";
