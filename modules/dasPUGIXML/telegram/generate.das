@@ -191,7 +191,7 @@ def main
                 g_FOUT |> fprint("options no_unused_block_arguments = false\n")
                 g_FOUT |> fprint("options no_unused_function_arguments = false\n")
                 g_FOUT |> fprint("\n")
-                g_FOUT |> fprint("module tbotapi public\n")
+                g_FOUT |> fprint("module tbotapi shared public\n")
                 g_FOUT |> fprint("\n")
                 g_FOUT |> fprint("require daslib/json_boost\n")
                 g_FOUT |> fprint("\n")
