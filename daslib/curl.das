@@ -12,6 +12,69 @@ let public HTTP_CURL_FAILED = -100500
 let private LOG_REQUEST = false
 let private LOG_RESPONSE = false
 
+struct public DownloadResponse
+    status_code : int       //! HTTP status code
+    error : string          //! misc error message
+    bytes : array<uint8>    //! data
+
+def public DOWNLOAD ( uri:string;  timeout:float = 0.0 )
+    var cmd = build_string <| $ ( writer )
+        writer |> write("curl -s -i {uri}")
+        if timeout != 0.0
+            writer |> write(" --connect-timeout ") |> format("%.1f", timeout) |> write(" --max-time ") |> format("%.1f", timeout)
+    static_if LOG_REQUEST
+        print("request {cmd}\n")
+    var resp : DownloadResponse
+    let exit_code = unsafe(popen_binary(cmd)) <| $ ( f )
+        if f!=null
+            var content_length = 0ul
+            while !feof(f)
+                let line = fgets(f)
+                static_if LOG_RESPONSE
+                    print("{line}")
+                if line |> starts_with("HTTP/1.1 100 Continue")
+                    fgets(f)
+                elif line |> starts_with("HTTP/2 100 Continue")
+                    fgets(f)
+                elif line |> starts_with("HTTP/1.1 ")
+                    resp.status_code = line |> slice(9) |> to_int
+                elif line |> starts_with("HTTP/2 ")
+                    resp.status_code = line |> slice(7) |> to_int
+                elif line |> starts_with("Content-Length:")
+                    content_length = uint64(line |> slice(16))
+                elif length(line)==1 || length(line)==2
+                    break
+            if content_length>=uint64(INT_MAX)
+                resp.status_code = HTTP_CURL_FAILED
+                resp.error = "content length is too big"
+                return
+            if content_length != 0ul
+                resp.bytes |> reserve ( int(content_length) )
+            var rbytes = 0
+            var buf : uint8[1024]
+            while !feof(f)
+                let r = f |> fread(buf)
+                if r==0
+                    break
+                resp.bytes |> resize ( rbytes + r )
+                unsafe
+                    memcpy(addr(resp.bytes[rbytes]), addr(buf[0]), r)
+                rbytes += r
+        else
+            resp.status_code = HTTP_CURL_FAILED
+            resp.error = "curl failed to start"
+    static_if LOG_RESPONSE
+        print("exit code: {exit_code}\n")
+    if exit_code != 0
+        resp.status_code = HTTP_CURL_FAILED
+        if exit_code==28
+            resp.error = "curl timeout (max {timeout} seconds)"
+        elif exit_code==26
+            resp.error = "file not found"
+        else
+            resp.error = "curl failed with exit code {exit_code}"
+    return <- resp
+
 struct public HttpResponse
     //! HTTP request response
     status_code : int   //! HTTP status code
@@ -47,6 +110,7 @@ def public HTTP_REQ ( method:string; uri:string; timeout:float; header:string; v
     static_if LOG_RESPONSE
         for l in lines
             print("{l}\n")
+        print("exit code: {exit_code}\n")
     if exit_code != 0
         resp.status_code = HTTP_CURL_FAILED
         if exit_code==28
