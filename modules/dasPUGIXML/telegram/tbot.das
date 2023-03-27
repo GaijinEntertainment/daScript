@@ -8,7 +8,7 @@ require tbotapi public
 
 require daslib/curl
 require daslib/json_boost
-require daslib/fio
+require fio
 require strings
 
 struct public configuration
