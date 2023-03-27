@@ -429,13 +429,13 @@ namespace das {
         exit(ec);
     }
 
-    int builtin_popen ( const char * cmd, const TBlock<void,const FILE *> & blk, Context * context, LineInfoArg * at ) {
+    int builtin_popen_impl ( const char * cmd, bool bin, const TBlock<void,const FILE *> & blk, Context * context, LineInfoArg * at ) {
         if ( !cmd ) {
             context->throw_error_at(at, "popen of null");
             return -1;
         }
 #ifdef _MSC_VER
-        FILE * f = _popen(cmd, "rt");
+        FILE * f = _popen(cmd, bin ? "rb" : "rt");
 #elif defined(__linux__)
         FILE * f = popen(cmd, "r");
 #elif defined(__APPLE__)
@@ -465,6 +465,14 @@ namespace das {
         auto t = pclose(f);
         return WIFEXITED(t) ? WEXITSTATUS(t) : WIFSIGNALED(t) ? WTERMSIG(t) : t;
 #endif
+    }
+
+    int builtin_popen_binary ( const char * cmd, const TBlock<void,const FILE *> & blk, Context * context, LineInfoArg * at ) {
+        return builtin_popen_impl(cmd, true, blk, context, at);
+    }
+
+    int builtin_popen ( const char * cmd, const TBlock<void,const FILE *> & blk, Context * context, LineInfoArg * at ) {
+        return builtin_popen_impl(cmd, false, blk, context, at);
     }
 
     char * get_full_file_name ( const char * path, Context * context, LineInfoArg * ) {
@@ -603,6 +611,9 @@ namespace das {
                     ->arg("exitCode")->unsafeOperation = true;
             addExtern<DAS_BIND_FUN(builtin_popen)>(*this, lib, "popen",
                 SideEffects::modifyExternal, "builtin_popen")
+                    ->args({"command","scope","context","at"})->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(builtin_popen_binary)>(*this, lib, "popen_binary",
+                SideEffects::modifyExternal, "builtin_popen_binary")
                     ->args({"command","scope","context","at"})->unsafeOperation = true;
             addExtern<DAS_BIND_FUN(get_full_file_name)>(*this, lib, "get_full_file_name",
                 SideEffects::accessExternal, "get_full_file_name")
