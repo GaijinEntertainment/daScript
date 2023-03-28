@@ -13,6 +13,7 @@ struct BotConfig : tbot::configuration
     update_timeout : float = 5.0
     retry_timeout : float = 20.0
     max_chat_messages : int = 10
+    chat_completion_attempts : int = 3
     chat_prompt : string
 
 var g_botConfig : BotConfig
@@ -167,13 +168,21 @@ def generate_chat_reply ( chat_id : string; message:tbotapi::message )
             role = role,
             content = content]])
     to_log(LOG_INFO,"generating chat completion\n")
-    var inscope chat <- openai_create_chat_completion([[ChatCompletion()
-        model = "gpt-3.5-turbo",
-        max_tokens = 512,
-        temperature = 1.0,
-        top_p = 1.0,
-        messages <- messages
-    ]])
+    var inscope chat : ChatCompletionResponse
+    for i in 0..g_botConfig.chat_completion_attempts
+        chat <- openai_create_chat_completion([[ChatCompletion()
+            model = "gpt-3.5-turbo",
+            max_tokens = 512,
+            temperature = 1.0,
+            top_p = 1.0,
+            messages <- messages
+        ]])
+        if chat |> is_valid
+            break
+        if !openai_get_last_error() |> starts_with("curl timeout")
+            break
+        to_log(LOG_ERROR, "retrying, reason: {openai_get_last_error()}\n")
+        delete chat
     if !chat|> is_valid
         to_log(LOG_ERROR, "openai_create_completion failed: {openai_get_last_error()}\n")
         return [[GodfatherMessage result = "error", message = openai_get_last_error()]]
@@ -242,7 +251,8 @@ def process_chat_reply ( message:tbotapi::message; whatGodfatherSaid:GodfatherMe
         telegram_sendPhoto([[tbot::sendphoto
             chat_id = "{message.chat.id}",
             reply_to_message_id = message.message_id,
-            file = photo_file_name
+            file = photo_file_name,
+            caption = "Godfather: {whatGodfatherSaid.draw}"
         ]])
         if !telegram_get_last_error() |> empty
             to_log(LOG_ERROR, "telegram_sendMessage failed: {telegram_get_last_error()}\n")
