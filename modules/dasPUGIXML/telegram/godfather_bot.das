@@ -88,7 +88,15 @@ def decode_voice_message(message:tbotapi::message)
     if !convert_to_mp3(temp_file_name,temp_mp3_file_name)
         return ""
     to_log(LOG_INFO, "creating transcription for {temp_mp3_file_name}\n")
-    var inscope ru = openai_create_transcription([[Transcription() file = temp_mp3_file_name, language = "ru"]])
+    var inscope ru : TranscriptionResult
+    for i in 0..g_botConfig.chat_completion_attempts
+        ru <- openai_create_transcription([[Transcription() file = temp_mp3_file_name, language = ""]])
+        if empty(ru.error)
+            break
+        if ! ru.error |> starts_with("curl timeout")
+            break
+        to_log(LOG_ERROR, "retrying, reason: {ru.error}\n")
+        delete ru
     if !empty(ru.error)
         to_log(LOG_ERROR,"transcription failed {ru.error}\n")
         return ""
@@ -155,6 +163,38 @@ def sanitize_chat_message ( message : string )
 def sanitize_json_reply ( reply : string )
     return reply |> replace("\\n"," ") |> replace("\\r"," ") |> replace("\\t"," ") |> replace("\\n", " ") |> strip()
 
+def flatten_json_reply ( var writer:StringBuilderWriter; var reply : JsonValue? )
+    if reply is _object
+        for key in (reply as _object) |> keys
+            flatten_json_reply(writer, (reply as _object)[key])
+    elif reply is _array
+        for item in reply as _array
+            flatten_json_reply(writer, item)
+    elif reply is _string
+        writer |> write(reply as _string)
+        writer |> write(" ")
+    elif reply is _number
+        writer |> write("{reply as _number}")
+        writer |> write(" ")
+    elif reply is _bool
+        writer |> write("{reply as _bool}")
+        writer |> write(" ")
+
+def adjust_completion ( var json : JsonValue? )
+    //! here is collection of workarounds for the mallformed output
+    if json == null
+        return
+    // this workaround is when it starts providing object after the draw, instead of description
+    assume obj = json as _object
+    if obj |> key_exists("draw")
+        if obj["draw"] is _object
+            assume draw = obj["draw"] as _object
+            var req = build_string <| $ ( writer )
+                flatten_json_reply(writer, obj["draw"])
+            obj |> erase("draw")
+            obj["draw"] = JV(req)
+            to_log(LOG_INFO, "adjusting draw to {req}\n")
+
 def generate_chat_reply ( chat_id : string; message:tbotapi::message )
     to_log(LOG_INFO, "generate_chat_reply {chat_id} {message.text}\n")
     var messages : array<ChatCompletionMessage>
@@ -193,12 +233,15 @@ def generate_chat_reply ( chat_id : string; message:tbotapi::message )
         return [[GodfatherMessage result = "error", message = "there is no JSON there", raw = chat.choices[0].message.content]]
     let json_str = chat.choices[0].message.content |> slice(fnd) |> sanitize_json_reply
     var error : string
+    let old_adc = set_allow_duplicate_keys(true)
     var json <- read_json(json_str,error)
+    set_allow_duplicate_keys(old_adc)
     if !empty(error)
         unsafe
             delete json
         to_log(LOG_ERROR, "read_json failed: {error}\n")
         return [[GodfatherMessage result = "error", message = error, raw = chat.choices[0].message.content]]
+    adjust_completion(json)
     var res <- from_JV(json,type<GodfatherMessage>)
     (g_chat_messages[chat_id].messages |> back).answered = true
     res.raw = write_json(json) // save raw JSON for chat completion
@@ -206,13 +249,23 @@ def generate_chat_reply ( chat_id : string; message:tbotapi::message )
         delete json
     return <- res
 
+def process_error_message ( message:tbotapi::message; whatGodfatherSaid:GodfatherMessage )
+    to_log(LOG_ERROR, "generate_chat_reply failed: {whatGodfatherSaid.message}\n{whatGodfatherSaid.raw}\n")
+    telegram_sendMessage([[sendmessage
+        chat_id = "{message.chat.id}",
+        reply_to_message_id = message.message_id,
+        text = "Godfather (debug message): {whatGodfatherSaid.message}\n{whatGodfatherSaid.raw}"
+    ]])
+    if !telegram_get_last_error() |> empty
+        to_log(LOG_ERROR, "telegram_sendMessage failed: {telegram_get_last_error()}\n")
+
 def process_chat_reply ( message:tbotapi::message; whatGodfatherSaid:GodfatherMessage )
     to_log(LOG_INFO, "Godfather: {whatGodfatherSaid}\n")
     let reply = sanitize_translation(whatGodfatherSaid.message)
     telegram_sendMessage([[sendmessage
         chat_id = "{message.chat.id}",
         reply_to_message_id = message.message_id,
-        text = "Godfather: {reply}"
+        text = "Godfather: {reply} {whatGodfatherSaid.mood}"
     ]])
     if !telegram_get_last_error() |> empty
         to_log(LOG_ERROR, "telegram_sendMessage failed: {telegram_get_last_error()}\n")
@@ -321,5 +374,5 @@ def main
                         if reply.result != "error"
                             process_chat_reply(*r.message,reply)
                         else
-                            to_log(LOG_ERROR, "generate_chat_reply failed: {reply.message}\n{reply.raw}\n")
+                            process_error_message(*r.message,reply)
 
