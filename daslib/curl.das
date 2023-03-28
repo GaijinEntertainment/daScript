@@ -83,6 +83,7 @@ struct public HttpResponse
 
 def public HTTP_REQ ( method:string; uri:string; timeout:float; header:string; var data:string; blk:block<(resp:HttpResponse?):void> )
     //! HTTP request
+    let old_data = data
     if ! data |> empty
         data = data |> replace("\n", "")    // todo: we need multi-replace?
         data = data |> replace("\t", "")
@@ -95,7 +96,22 @@ def public HTTP_REQ ( method:string; uri:string; timeout:float; header:string; v
         if !header|> empty
             writer |> write(" {header}")
         if !data |> empty
-            writer |> write(" -d \"{data}\"")
+            if length(data)>=1024
+                let temp_dir = "{get_das_root()}/temp"
+                mkdir(temp_dir)
+                let temp_file = "{temp_dir}/{hash(data)}.curl"
+                var ok = false
+                fopen(temp_file, "w") <| $ ( f )
+                    if f!=null
+                        f |> fprint(old_data)
+                        f |> fprint("\n")
+                        ok = true
+                if ok
+                    writer |> write(" -d  @{temp_file}")
+                else
+                    writer |> write(" -d \"{data}\"")
+            else
+                writer |> write(" -d \"{data}\"")
     static_if LOG_REQUEST
         print("request {cmd}\n")
     var resp : HttpResponse

@@ -215,7 +215,7 @@ def private parse_value ( var itv : iterator<Token>; var error : string & ) : Js
                 let value = parse_value(itv, error)
                 if value == null
                     return null
-                if key_exists(tab,key)
+                if !allow_duplicate_keys && key_exists(tab,key)
                     error = "duplicate key {key}"
                     return null
                 tab[key] = value
@@ -273,6 +273,13 @@ def set_no_empty_arrays ( value : bool )
     var old_nea = no_empty_arrays
     no_empty_arrays = value
     return old_nea
+
+var private allow_duplicate_keys = false
+
+def set_allow_duplicate_keys ( value : bool )
+    var old_adc = allow_duplicate_keys
+    allow_duplicate_keys = value
+    return old_adc
 
 // note - we use StringBuilderWriter for performance reasons here
 def private write_value ( var writer : StringBuilderWriter; jsv : JsonValue?; depth : int )
