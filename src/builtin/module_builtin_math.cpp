@@ -104,6 +104,7 @@ namespace das {
     //common
     MATH_FUN_OP1(Floor)
     MATH_FUN_OP1(Ceil)
+    MATH_FUN_OP1(Fract)
     MATH_FUN_OP1(Sqrt)
     MATH_FUN_OP1(RSqrt)
     MATH_FUN_OP1(RSqrtEst)
@@ -176,6 +177,7 @@ namespace das {
         //                                     policy            ret   arg1     name
         mod.addFunction( make_smart<BuiltInFn<Sim_Floor<TT>,    TT,   TT>   >("floor",       lib, "Floor")->arg("x") );
         mod.addFunction( make_smart<BuiltInFn<Sim_Ceil<TT>,     TT,   TT>   >("ceil",        lib, "Ceil")->arg("x") );
+        mod.addFunction( make_smart<BuiltInFn<Sim_Fract<TT>,    TT,   TT>   >("fract",       lib, "Fract")->arg("x") );
         mod.addFunction( make_smart<BuiltInFn<Sim_Sqrt<TT>,     TT,   TT>   >("sqrt",        lib, "Sqrt")->arg("x") );
         mod.addFunction( make_smart<BuiltInFn<Sim_RSqrt<TT>,    TT,   TT>   >("rsqrt",       lib, "RSqrt")->arg("x") );
         mod.addFunction( make_smart<BuiltInFn<Sim_RSqrtEst<TT>, TT,   TT>   >("rsqrt_est",   lib, "RSqrtEst")->arg("x") );
