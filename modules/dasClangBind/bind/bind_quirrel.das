@@ -1,5 +1,5 @@
 require cbind/cbind_boost
-require daslib/fio
+require fio
 require daslib/defer
 require daslib/strings_boost
 require daslib/functional

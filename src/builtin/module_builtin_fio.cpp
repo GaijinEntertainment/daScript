@@ -500,7 +500,7 @@ namespace das {
         for ( const char * ch=cmd; *ch; ) {
 #if defined(_MSC_VER)
             if ( *ch=='^' || *ch=='|' || *ch=='<' || *ch=='>' || *ch=='&' ||
-                    *ch=='%' || *ch=='$' || *ch=='`' || *ch=='\'' ) {
+                    *ch=='%' || *ch=='$' || *ch=='`' || *ch=='\'' || *ch=='@' ) {
                 ss.put('^');
                 ss.put(*ch++);
 #else

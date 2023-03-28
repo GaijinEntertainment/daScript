@@ -8,20 +8,22 @@ require tbotapi public
 
 require daslib/curl
 require daslib/json_boost
-require daslib/fio
+require fio
 require strings
 
 struct public configuration
     token : string
     api_timeout : float = 10.0
+    send_timeout : float = 60.0
 
 def public telegram_set_configuration ( conf:configuration )
     BOT_TOKEN = conf.token
     BOT_TIMEOUT = conf.api_timeout
+    BOT_SEND_TIMEOUT = conf.send_timeout
 
 var private BOT_TOKEN : string
-
 var private BOT_TIMEOUT = 10.0
+var private BOT_SEND_TIMEOUT = 60.0
 
 var private LAST_ERROR = ""
 
@@ -89,3 +91,33 @@ def public telegram_download ( file:tbotapi::file )
         LAST_ERROR = "DOWNLOAD failed with status {resp.status_code}"
         return <- resp.bytes
     return <- resp.bytes
+
+def public telegram_getMe
+    //! get information about bot
+    var res : user
+    telegram_call("getMe",[[getme]],res)
+    return <- res
+
+/*
+curl -F chat_id=@your_chat_id -F photo=@/path/to/your/photo.jpg https://api.telegram.org/bot<your_bot_token>/sendPhoto
+*/
+
+struct public sendphoto
+    chat_id : string
+    file : string
+    reply_to_message_id : int64
+
+def public telegram_sendPhoto ( photo : tbot::sendphoto )
+    //! create a translation of an audio file to english
+    var settings <-[{auto "photo" => "@{photo.file}";
+        "chat_id" => "\"{photo.chat_id}\""}]
+    if photo.reply_to_message_id != 0l
+        settings |> push([[auto "reply_to_message_id" => "\"{photo.reply_to_message_id}\""]])
+    LAST_ERROR = ""
+    POST("https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto", BOT_SEND_TIMEOUT, "",
+        [{auto  "Content-Type" => "multipart/form-data"}], settings
+    ) <| $ ( resp )
+        if resp.status_code == HTTP_CURL_FAILED
+            LAST_ERROR = resp.error
+        elif resp.status_code != 200
+            LAST_ERROR = "HTTPS POST failed with status {resp.status_code}"
