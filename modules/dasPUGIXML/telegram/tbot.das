@@ -106,6 +106,7 @@ struct public sendphoto
     chat_id : string
     file : string
     reply_to_message_id : int64
+    caption : string
 
 def public telegram_sendPhoto ( photo : tbot::sendphoto )
     //! create a translation of an audio file to english
@@ -113,6 +114,8 @@ def public telegram_sendPhoto ( photo : tbot::sendphoto )
         "chat_id" => "\"{photo.chat_id}\""}]
     if photo.reply_to_message_id != 0l
         settings |> push([[auto "reply_to_message_id" => "\"{photo.reply_to_message_id}\""]])
+    if !empty(photo.caption)
+        settings |> push([[auto "caption" => "\"{photo.caption}\""]])
     LAST_ERROR = ""
     POST("https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto", BOT_SEND_TIMEOUT, "",
         [{auto  "Content-Type" => "multipart/form-data"}], settings
