@@ -584,6 +584,7 @@ namespace das
         virtual bool rtti_isMakeStruct() const { return false; }
         virtual bool rtti_isMakeTuple() const { return false; }
         virtual bool rtti_isMakeVariant() const { return false; }
+        virtual bool rtti_isMakeArray() const { return false; }
         virtual bool rtti_isIfThenElse() const { return false; }
         virtual bool rtti_isFor() const { return false; }
         virtual bool rtti_isWhile() const { return false; }

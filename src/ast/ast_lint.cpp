@@ -7,6 +7,33 @@
 
 namespace das {
 
+    struct hash_vec4f {
+        uint64_t operator () ( vec4f v ) const {
+            uint64_t a[2];
+            memcpy(a,&v,sizeof(vec4f));
+            return a[0] ^ a[1];
+        }
+    };
+
+    struct equalto_vec4f {
+        bool operator () ( vec4f a, vec4f b ) const {
+            return memcmp(&a,&b,sizeof(vec4f))==0;
+        }
+    };
+
+    struct hash_ccs {
+        uint64_t operator () ( const char * str ) const {
+            return hash64z(str);
+        }
+    };
+
+    struct equalto_ccs {
+        bool operator () ( const char * a, const char * b ) const {
+            return strcmp(a,b)==0;
+        }
+    };
+
+
     das::unordered_set<string> g_cpp_keywords = {
         /* reserved C++ names*/
         "alignas","alignof","and","and_eq","asm","atomic_cancel","atomic_commit","atomic_noexcept","auto"
@@ -359,6 +386,79 @@ namespace das {
                     expr->subexpr->at, CompilationError::cant_be_null);
             }
         }
+        void verifyToTableMove ( ExprCall * expr ) {
+            if ( expr->arguments[0]->rtti_isMakeArray() ) {
+                auto ma = static_cast<ExprMakeArray *>(expr->arguments[0].get());
+                if ( ma->values.size()==0 ) return;
+                if ( ma->recordType->isTuple() ) {
+                    if ( ma->recordType->argTypes[0]->isString() ) {
+                        das_set<const char *,hash_ccs,equalto_ccs> seen;
+                        for ( const auto & arg : ma->values ) {
+                            if ( arg->rtti_isMakeTuple() ) {
+                                auto mt = static_cast<ExprMakeTuple *>(arg.get());
+                                if ( mt->values.size()==2 ) {   // its redundant
+                                    if ( mt->values[0]->rtti_isStringConstant() ) {
+                                        auto mc = static_cast<ExprConstString *>(mt->values[0].get());
+                                        if ( seen.find(mc->text.c_str())==seen.end() ) {
+                                            seen.insert(mc->text.c_str());
+                                        } else {
+                                            program->error("duplicate key in string=> table initialization", "", "",
+                                                mt->values[0]->at, CompilationError::duplicate_key);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        das_set<vec4f,hash_vec4f,equalto_vec4f> seen;
+                        for ( const auto & arg : ma->values ) {
+                            if ( arg->rtti_isMakeTuple() ) {
+                                auto mt = static_cast<ExprMakeTuple *>(arg.get());
+                                if ( mt->values.size()==2 ) {   // its redundant
+                                    if ( mt->values[0]->rtti_isConstant() ) {
+                                        auto mc = static_cast<ExprConst *>(mt->values[0].get());
+                                        if ( seen.find(mc->value)==seen.end() ) {
+                                            seen.insert(mc->value);
+                                        } else {
+                                            program->error("duplicate key in table initialization", "", "",
+                                                mt->values[0]->at, CompilationError::duplicate_key);
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    if ( ma->recordType->isString() ) {
+                        das_set<const char *,hash_ccs,equalto_ccs> seen;
+                        for ( const auto & arg : ma->values ) {
+                            if ( arg->rtti_isStringConstant() ) {
+                                auto mc = static_cast<ExprConstString *>(arg.get());
+                                if ( seen.find(mc->text.c_str())==seen.end() ) {
+                                    seen.insert(mc->text.c_str());
+                                } else {
+                                    program->error("duplicate key in string=> set initialization", "", "",
+                                        arg->at, CompilationError::duplicate_key);
+                                }
+                            }
+                        }
+                    } else {
+                        das_set<vec4f,hash_vec4f,equalto_vec4f> seen;
+                        for ( const auto & arg : ma->values ) {
+                            if ( arg->rtti_isConstant() ) {
+                                auto mc = static_cast<ExprConst *>(arg.get());
+                                if ( seen.find(mc->value)==seen.end() ) {
+                                    seen.insert(mc->value);
+                                } else {
+                                    program->error("duplicate key in set initialization", "", "",
+                                        arg->at, CompilationError::duplicate_key);
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
         virtual void preVisit ( ExprCall * expr ) override {
             Visitor::preVisit(expr);
             verifyOnlyFastAot(expr->func, expr->at);
@@ -396,6 +496,9 @@ namespace das {
                     program->error("can't pass null to function " + expr->func->describeName() + " argument " + funArg->name , "", "",
                         arg->at, CompilationError::cant_be_null);
                 }
+            }
+            if ( expr->func->name=="builtin`to_table_move" && expr->func->fromGeneric && expr->func->fromGeneric->module->name=="$" ) {
+                verifyToTableMove(expr);
             }
         }
         virtual void preVisit ( ExprOp1 * expr ) override {

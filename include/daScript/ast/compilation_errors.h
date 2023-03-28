@@ -158,6 +158,8 @@ namespace das
     ,   in_scope_in_the_loop                    =   40213       // for ( a in b ) { let in scope ... ; }
     ,   no_init                                 =   40214       // [init] disabled via options or CodeOfPolicies
 
+    ,   duplicate_key                           =   40300       // { 1:1, ..., 1:* }
+
     ,   too_many_infer_passes                   =   41000
 
 // integration errors
