@@ -875,13 +875,13 @@ namespace das
             return cppName.empty() ? name : cppName;
         }
         FunctionPtr arg ( const char * argName ) {
-            DAS_VERIFY(arguments.size()==1);
+            DAS_VERIFYF(arguments.size() == 1, "during a processing of the '%s' function\n", cppName.c_str());
             arguments[0]->name = argName;
             return this;
         }
         FunctionPtr args ( std::initializer_list<const char *> argList ) {
             if ( argList.size()==0 ) return this;
-            DAS_VERIFY(argList.size()==arguments.size());
+            DAS_VERIFYF(argList.size() == arguments.size(), "during a processing of the '%s' function\n", cppName.c_str());
             int argIndex = 0;
             for ( const char * arg : argList ) {
                 arguments[argIndex++]->name = arg;
