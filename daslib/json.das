@@ -104,12 +104,15 @@ def private _lexer ( var stext : string implicit )
                 next(tin, ahead)
             elif ahead=='+' || ahead=='-' || is_number(ahead)
                 push(str,uint8(ahead))
+                var anyNumbers = is_number(ahead)
                 while next(tin,ahead) && is_number(ahead)
                     push(str,uint8(ahead))
+                    anyNumbers = true
                 if !empty(tin) && ahead=='.'
                     push(str,uint8(ahead))
                     while next(tin,ahead) && is_number(ahead)
                         push(str,uint8(ahead))
+                        anyNumbers = true
                 if !empty(tin) && (ahead=='e' || ahead=='E')
                     push(str,uint8(ahead))
                     next(tin,ahead)
@@ -117,7 +120,11 @@ def private _lexer ( var stext : string implicit )
                         push(str,uint8(ahead))
                     while next(tin,ahead) && is_number(ahead)
                         push(str,uint8(ahead))
+                        anyNumbers = true
                 var num = string(str)
+                if !anyNumbers
+                    yield [[Token _error = "invalid number {num}"]]
+                    return false
                 yield [[Token _number = double(num)]]
                 clear(str)
                 unsafe
@@ -348,3 +355,64 @@ def write_json ( val : JsonValue? ) : string
     let st = build_string() <| $ (var writer)
         write_value(writer, val, 0)
     return st
+
+def try_fixing_broken_json ( var bad:string )
+	return build_string <| $ ( writer )
+		peek_data(bad) <| $ ( str )
+			var i = 0
+			var lstr = length(str)
+			while i < lstr
+				// write until begining of string or end
+				while i < lstr && int(str[i]) != '"'
+					writer |> write_char(int(str[i]))
+					i ++
+				if i >= lstr	// if eof we done
+					break
+				// write the first quote
+				writer |> write_char('"')
+				i ++
+				// write until end of string or end of file
+				label 0:
+				while i < lstr && int(str[i]) != '"'
+					writer |> write_char(int(str[i]))
+					i ++
+				if i >= lstr	// if eof we done, we fix close quote and we are done
+					writer |> write_char('"')
+					break
+				// skipping whitespace
+				var nested = i
+				var j = i + 1
+				while j < lstr && is_white_space(int(str[j]))
+					j ++
+				if j >= lstr	// if eof we done, we fix close quote and we are done
+					writer |> write_char('"')
+					break
+				// valid JSON things after string are :, }, ], or , if its one of those, we close the string and we are done
+				let strj = int(str[j])
+				if strj==':' || strj=='}' || strj==']' || strj==','
+					writer |> write_char('"')
+					i ++
+					continue
+				// now, if its a + - it could be a string concatenation
+				if strj=='+'
+					j ++
+					while j < lstr && is_white_space(int(str[j]))
+						j ++
+					if j < lstr && int(str[j]) == '"'	// if it is indeed new string, we go back to string writing, and add a separator
+						writer |> write_char(' ')
+						i = j + 1
+						goto label 0
+				// ok, its not a string concatination, or a valid character. we assume its nested quotes and we replace with ``
+				writer |> write_char('`')
+				i = nested + 1
+				while i < lstr && int(str[i]) != '"'
+					writer |> write_char(int(str[i]))
+					i ++
+				if i >= lstr	// if eof we done, we fix nested quote and and closing quote and we are done
+					writer |> write_char('`')
+					writer |> write_char('"')
+					break
+				// write the second replaced quote
+				writer |> write_char('`')
+				i ++
+				goto label 0

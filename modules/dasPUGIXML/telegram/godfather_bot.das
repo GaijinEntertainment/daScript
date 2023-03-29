@@ -15,6 +15,7 @@ struct BotConfig : tbot::configuration
     max_chat_messages : int = 10
     chat_completion_attempts : int = 3
     chat_prompt : string
+    chat_extra_prompt : string
 
 var g_botConfig : BotConfig
 var g_userGodfather : user
@@ -93,7 +94,7 @@ def decode_voice_message(message:tbotapi::message)
         ru <- openai_create_transcription([[Transcription() file = temp_mp3_file_name, language = ""]])
         if empty(ru.error)
             break
-        if ! ru.error |> starts_with("curl timeout")
+        if ! (ru.error |> starts_with("curl timeout") || ru.error |> starts_with("HTTPS post failed"))
             break
         to_log(LOG_ERROR, "retrying, reason: {ru.error}\n")
         delete ru
@@ -150,10 +151,7 @@ struct GodfatherMessage
     result : string
     message : string
     summary : string
-    question : string
-    search : string
     draw : string
-    order : string
     mood : string
     raw : string
 
@@ -206,7 +204,11 @@ def generate_chat_reply ( chat_id : string; message:tbotapi::message )
         to_log(LOG_INFO,"{role}: {content}\n")
         messages |> push([[ChatCompletionMessage
             role = role,
+            // name = cm.author,    // we are skipping this, because it goes bonkers otherwise
             content = content]])
+    messages |> push([[ChatCompletionMessage
+        role = "system",
+        content = g_botConfig.chat_extra_prompt]])
     to_log(LOG_INFO,"generating chat completion\n")
     var inscope chat : ChatCompletionResponse
     for i in 0..g_botConfig.chat_completion_attempts
@@ -219,7 +221,7 @@ def generate_chat_reply ( chat_id : string; message:tbotapi::message )
         ]])
         if chat |> is_valid
             break
-        if !openai_get_last_error() |> starts_with("curl timeout")
+        if !(openai_get_last_error() |> starts_with("curl timeout") || openai_get_last_error() |> starts_with("HTTPS POST failed"))
             break
         to_log(LOG_ERROR, "retrying, reason: {openai_get_last_error()}\n")
         delete chat
@@ -235,6 +237,16 @@ def generate_chat_reply ( chat_id : string; message:tbotapi::message )
     var error : string
     let old_adc = set_allow_duplicate_keys(true)
     var json <- read_json(json_str,error)
+    if json == null
+        to_log(LOG_ERROR, "read_json failed: {error}; trying to fix\n")
+        let fixed_json = try_fixing_broken_json(json_str)
+        to_log(LOG_ERROR, "fixed_json: {fixed_json}\n")
+        var fixed_error : string
+        var new_json <- read_json(fixed_json,error)
+        if new_json != null
+            to_log(LOG_ERROR, "that fixed it\n")
+            json <- new_json
+            error = fixed_error
     set_allow_duplicate_keys(old_adc)
     if !empty(error)
         unsafe
