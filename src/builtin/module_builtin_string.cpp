@@ -202,104 +202,91 @@ namespace das
         return str;
     }
 
-
-    unsigned string_to_uint ( const char *str, Context * context ) {
+    uint32_t string_to_uint ( const char *str, Context * context, LineInfoArg * at ) {
         const uint32_t strLen = stringLengthSafe(*context, str);
-        if (strLen == 0)
-        {
-            context->throw_error("string-to-uint conversion failed. String is not an uint number");
+        if (strLen == 0) {
+            context->throw_error_at(at, "empty string is not an uint");
             return 0;
         }
         char *endptr;
         unsigned long int ret = strtoul(str, &endptr, 10);
-        if (endptr == str)
-        {
-            context->throw_error("string-to-uint conversion failed. String is not an uint number");
+        if (endptr == str) {
+            context->throw_error_at(at, "`%s` is not an uint", str);
             return 0;
         }
-        return ret;
+        return (uint32_t) ret;
     }
 
-    int string_to_int ( const char *str, Context * context ) {
+    int32_t string_to_int ( const char *str, Context * context, LineInfoArg * at ) {
         const uint32_t strLen = stringLengthSafe(*context, str);
-        if (strLen == 0)
-        {
-            context->throw_error("string-to-int conversion failed. String is not an integer number");
+        if (strLen == 0) {
+            context->throw_error_at(at, "empty string is not an int");
             return 0;
         }
         char *endptr;
         long int ret = strtol(str, &endptr, 10);
-        if (endptr == str)
-        {
-            context->throw_error("string-to-int conversion failed. String is not an integer number");
+        if (endptr == str) {
+            context->throw_error_at(at, "`%s` is not an int", str);
             return 0;
         }
-        return ret;
+        return (int32_t) ret;
     }
 
-    uint64_t string_to_uint64 ( const char *str, Context * context ) {
+    uint64_t string_to_uint64 ( const char *str, Context * context, LineInfoArg * at ) {
         const uint32_t strLen = stringLengthSafe(*context, str);
-        if (strLen == 0)
-        {
-            context->throw_error("string-to-uint64 conversion failed. String is not an uint number");
+        if (strLen == 0) {
+            context->throw_error_at(at, "empty string is not an uint64");
             return 0;
         }
         char *endptr;
         unsigned long long ret = strtoull(str, &endptr, 10);
-        if (endptr == str)
-        {
-            context->throw_error("string-to-uint64 conversion failed. String is not an uint number");
+        if (endptr == str) {
+            context->throw_error_at(at, "`%s` is not an uint64", str);
             return 0;
         }
         return (uint64_t) ret;
     }
 
-    int64_t string_to_int64 ( const char *str, Context * context ) {
+    int64_t string_to_int64 ( const char *str, Context * context, LineInfoArg * at ) {
         const uint32_t strLen = stringLengthSafe(*context, str);
-        if (strLen == 0)
-        {
-            context->throw_error("string-to-int64 conversion failed. String is not an integer number");
+        if (strLen == 0) {
+            context->throw_error_at(at, "empty string is not an int64");
             return 0;
         }
         char *endptr;
         long long ret = strtoll(str, &endptr, 10);
-        if (endptr == str)
-        {
-            context->throw_error("string-to-int64 conversion failed. String is not an integer number");
+        if (endptr == str) {
+            context->throw_error_at(at, "`%s` is not an int64", str);
             return 0;
         }
         return (int64_t) ret;
     }
 
-    float string_to_float ( const char *str, Context * context ) {
+    float string_to_float ( const char *str, Context * context, LineInfoArg * at ) {
         const uint32_t strLen = stringLengthSafe(*context, str);
-        if (strLen == 0)
-        {
-            context->throw_error("string-to-float conversion failed. String is not a float number");
+        if (strLen == 0) {
+            context->throw_error_at(at, "empty string is not a float");
             return 0.f;
         }
         char *endptr;
         float ret = strtof(str, &endptr);
-        if (endptr == str)
-        {
-            context->throw_error("string-to-float conversion failed. String is not a float number");
+        if (endptr == str) {
+            context->throw_error_at(at, "`%s` is not a float number", str);
             return 0.f;
         }
-        return ret;
+        return (float) ret;
     }
 
-    double string_to_double ( const char *str, Context * context ) {
+    double string_to_double ( const char *str, Context * context, LineInfoArg * at ) {
         const uint32_t strLen = stringLengthSafe(*context, str);
-        if (strLen == 0)
-        {
-            context->throw_error("string-to-float conversion failed. String is not a double number");
+        if (strLen == 0) {
+            context->throw_error_at(at, "empty string is not a double");
             return 0.0;
         }
         char *endptr;
         double ret = strtod(str, &endptr);
-        if (endptr == str)
-        {
-            context->throw_error("string-to-dobule conversion failed. String is not a double number");
+        if (endptr == str) {
+            context->throw_error_at(at, "`%s` is not a double", str);
             return 0.0;
         }
         return ret;
@@ -789,17 +776,17 @@ namespace das
             addExtern<DAS_BIND_FUN(builtin_string_split)>(*this, lib, "builtin_string_split",
                 SideEffects::modifyExternal, "builtin_string_split")->args({"str","delimiter","block","context","lineinfo"});
             addExtern<DAS_BIND_FUN(string_to_int)>(*this, lib, "int",
-                SideEffects::none, "string_to_int")->args({"str","context"});
+                SideEffects::none, "string_to_int")->args({"str","context","at"});
             addExtern<DAS_BIND_FUN(string_to_uint)>(*this, lib, "uint",
-                SideEffects::none, "string_to_uint")->args({"str","context"});
+                SideEffects::none, "string_to_uint")->args({"str","context","at"});
             addExtern<DAS_BIND_FUN(string_to_int64)>(*this, lib, "int64",
-                SideEffects::none, "string_to_int64")->args({"str","context"});
+                SideEffects::none, "string_to_int64")->args({"str","context","at"});
             addExtern<DAS_BIND_FUN(string_to_uint64)>(*this, lib, "uint64",
-                SideEffects::none, "string_to_uint64")->args({"str","context"});
+                SideEffects::none, "string_to_uint64")->args({"str","context","at"});
             addExtern<DAS_BIND_FUN(string_to_float)>(*this, lib, "float",
-                SideEffects::none, "string_to_float")->args({"str","context"});
+                SideEffects::none, "string_to_float")->args({"str","context","at"});
             addExtern<DAS_BIND_FUN(string_to_double)>(*this, lib, "double",
-                SideEffects::none, "string_to_double")->args({"str","context"});
+                SideEffects::none, "string_to_double")->args({"str","context","at"});
             auto toi = addExtern<DAS_BIND_FUN(fast_to_int)>(*this, lib, "to_int",
                 SideEffects::none, "fast_to_int")->args({"value","hex"});
             toi->arguments[1]->init = make_smart<ExprConstBool>(false);
