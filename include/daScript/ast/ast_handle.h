@@ -133,7 +133,8 @@ namespace das
 
     template <typename RetT, typename ThisT, RetT(ThisT::*fn)()>
     struct CallProperty<RetT(ThisT::*)(),fn> {
-        enum { ref = is_reference<RetT>::value };
+        using RetType = RetT;
+        enum { ref = is_reference<RetT>::value, isConst = false, };
         static RetT static_call ( ThisT & this_ ) {
             return (this_.*fn)();
         };
@@ -141,7 +142,46 @@ namespace das
 
     template <typename RetT, typename ThisT, RetT(ThisT::*fn)() const>
     struct CallProperty<RetT(ThisT::*)() const,fn> {
-        enum { ref = is_reference<RetT>::value };
+        using RetType = RetT;
+        enum { ref = is_reference<RetT>::value, isConst = true, };
+        static RetT static_call ( const ThisT & this_ ) {
+            return (this_.*fn)();
+        };
+    };
+
+    template <typename RetT, typename ThisT, RetT(ThisT::*fn)() const noexcept>
+    struct CallProperty<RetT(ThisT::*)() const noexcept,fn> {
+        using RetType = RetT;
+        enum { ref = is_reference<RetT>::value, isConst = true, };
+        static RetT static_call ( const ThisT & this_ ) {
+            return (this_.*fn)();
+        };
+    };
+
+    template <typename ThisT, typename FuncT, FuncT fn> struct CallPropertyForType;
+
+    template <typename ThisT, typename RetT, typename ClassT, RetT(ClassT::*fn)()>
+    struct CallPropertyForType<ThisT,RetT(ClassT::*)(),fn> {
+        using RetType = RetT;
+        enum { ref = is_reference<RetT>::value, isConst = false, };
+        static RetT static_call ( ThisT & this_ ) {
+            return (this_.*fn)();
+        };
+    };
+
+    template <typename ThisT, typename RetT, typename ClassT, RetT(ClassT::*fn)() const>
+    struct CallPropertyForType<ThisT,RetT(ClassT::*)() const,fn> {
+        using RetType = RetT;
+        enum { ref = is_reference<RetT>::value, isConst = true, };
+        static RetT static_call ( const ThisT & this_ ) {
+            return (this_.*fn)();
+        };
+    };
+
+    template <typename ThisT, typename RetT, typename ClassT, RetT(ClassT::*fn)() const noexcept>
+    struct CallPropertyForType<ThisT,RetT(ClassT::*)() const noexcept,fn> {
+        using RetType = RetT;
+        enum { ref = is_reference<RetT>::value, isConst = true, };
         static RetT static_call ( const ThisT & this_ ) {
             return (this_.*fn)();
         };
@@ -150,16 +190,36 @@ namespace das
     template <int isRef, typename callT> struct RegisterProperty;
 
     template <typename callT> struct RegisterProperty <true,callT> {
-        __forceinline static void reg ( ModuleLibrary * mlib, const string & dotName, const string & cppPropName, bool explicitConst=false ) {
+        __forceinline static void reg ( ModuleLibrary * mlib, const string & dotName, const string & cppPropName,
+                                        bool explicitConst=false, SideEffects sideEffects = SideEffects::none ) {
             addExternProperty<decltype(&callT::static_call),callT::static_call,SimNode_ExtFuncCallRef>(
-                *(mlib->getThisModule()), *mlib, dotName.c_str(), cppPropName.c_str(), explicitConst)->args({"this"});
+                *(mlib->getThisModule()), *mlib, dotName.c_str(), cppPropName.c_str(), explicitConst, sideEffects)->args({"this"});
         }
     };
 
     template <typename callT> struct RegisterProperty <false,callT> {
-        __forceinline static void reg ( ModuleLibrary * mlib, const string & dotName, const string & cppPropName, bool explicitConst=false ) {
+        __forceinline static void reg ( ModuleLibrary * mlib, const string & dotName, const string & cppPropName,
+                                        bool explicitConst=false, SideEffects sideEffects = SideEffects::none ) {
             addExternProperty<decltype(&callT::static_call),callT::static_call>(
-                *(mlib->getThisModule()), *mlib, dotName.c_str(), cppPropName.c_str(), explicitConst)->args({"this"});
+                *(mlib->getThisModule()), *mlib, dotName.c_str(), cppPropName.c_str(), explicitConst, sideEffects)->args({"this"});
+        }
+    };
+
+    template <typename ArgType, int ArgConst, typename RetType, int isRef, typename callT> struct RegisterPropertyForType;
+
+    template <typename ArgType, int ArgConst, typename RetType, typename callT> struct RegisterPropertyForType <ArgType,ArgConst,RetType,true,callT> {
+        __forceinline static void reg ( ModuleLibrary * mlib, const string & dotName, const string & cppPropName,
+                                        bool explicitConst=false, SideEffects sideEffects = SideEffects::none) {
+            addExternPropertyForType<ArgType, ArgConst, RetType, decltype(&callT::static_call),callT::static_call,SimNode_ExtFuncCallRef>(
+                *(mlib->getThisModule()), *mlib, dotName.c_str(), cppPropName.c_str(), explicitConst, sideEffects)->args({"this"});
+        }
+    };
+
+    template <typename ArgType, int ArgConst, typename RetType, typename callT> struct RegisterPropertyForType <ArgType,ArgConst,RetType,false,callT> {
+        __forceinline static void reg ( ModuleLibrary * mlib, const string & dotName, const string & cppPropName,
+                                        bool explicitConst=false, SideEffects sideEffects = SideEffects::none ) {
+            addExternPropertyForType<ArgType, ArgConst, RetType, decltype(&callT::static_call),callT::static_call>(
+                *(mlib->getThisModule()), *mlib, dotName.c_str(), cppPropName.c_str(), explicitConst, sideEffects)->args({"this"});
         }
     };
 
@@ -193,19 +253,35 @@ namespace das
         }
         template <typename FunT, FunT PROP>
         void addProperty ( const string & na, const string & cppNa="" ) {
-            string dotName = ".`" + na;\
+            string dotName = ".`" + na;
             string cppPropName = (cppNa.empty() ? na : cppNa);
             using callT = CallProperty<FunT,PROP>;
             RegisterProperty<callT::ref,callT>::reg(mlib, dotName, cppPropName);
         }
+        template <typename FunT, FunT PROP>
+        void addPropertyForManagedType ( const string & na, const string & cppNa="" ) {
+            string dotName = ".`" + na;
+            string cppPropName = (cppNa.empty() ? na : cppNa);
+            using callT = CallPropertyForType<ManagedType,FunT,PROP>;
+            RegisterPropertyForType<ManagedType,callT::isConst,typename callT::RetType,callT::ref,callT>::reg(mlib, dotName, cppPropName, false, SideEffects::none);
+        }
         template <typename FunT, FunT PROP, typename FunTConst, FunTConst PROP_CONST>
         void addPropertyExtConst ( const string & na, const string & cppNa="" ) {
-            string dotName = ".`" + na;\
+            string dotName = ".`" + na;
             string cppPropName = (cppNa.empty() ? na : cppNa);
             using callT = CallProperty<FunT,PROP>;
-            RegisterProperty<callT::ref,callT>::reg(mlib, dotName, cppPropName, true);
+            RegisterProperty<callT::ref,callT>::reg(mlib, dotName, cppPropName, true, SideEffects::modifyArgument);
             using callTConst = CallProperty<FunTConst,PROP_CONST>;
             RegisterProperty<callTConst::ref,callTConst>::reg(mlib, dotName, cppPropName, true);
+        }
+      template <typename FunT, FunT PROP, typename FunTConst, FunTConst PROP_CONST>
+        void addPropertyExtConstForManagedType ( const string & na, const string & cppNa="" ) {
+            string dotName = ".`" + na;
+            string cppPropName = (cppNa.empty() ? na : cppNa);
+            using callT = CallPropertyForType<ManagedType,FunT,PROP>;
+            RegisterPropertyForType<ManagedType,callT::isConst,typename callT::RetType,callT::ref,callT>::reg(mlib, dotName, cppPropName, true, SideEffects::modifyArgument);
+            using callTConst = CallPropertyForType<ManagedType,FunTConst,PROP_CONST>;
+            RegisterPropertyForType<ManagedType,callTConst::isConst,typename callTConst::RetType,callTConst::ref,callTConst>::reg(mlib, dotName, cppPropName, true);
         }
         template <typename TT, off_t off>
         __forceinline StructureField & addField ( const string & na, const string & cppNa = "" ) {
