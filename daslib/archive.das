@@ -88,7 +88,7 @@ def public write_raw ( var arch:Archive; var value : auto(TT)& )
     assert(!arch.reading)
     arch.stream->write(unsafe(addr(value)), typeinfo(sizeof value))
 
-[expect_any_enum(value)]
+[expect_any_enum(value) || expect_any_workhorse_raw(value) || expect_value_handle(value)]
 def public serialize ( var arch:Archive; var value : auto(TT)& )
     //! Serializes structured data, based on the `value` type.
     arch |> serialize_raw(value)
@@ -104,10 +104,6 @@ def public serialize ( var arch:Archive; var value:auto(TT)& )
     else
         var mnh = get_function_mangled_name_hash(value)
         arch |> write_raw(mnh)
-
-[expect_any_workhorse_raw(value)]
-def public serialize ( var arch:Archive; var value : auto(TT)& )
-    arch |> serialize_raw(value)
 
 def public serialize ( var arch:Archive; var value : float3x3 )
     arch |> serialize_raw(value)
