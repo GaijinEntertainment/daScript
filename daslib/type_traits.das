@@ -20,3 +20,29 @@ class TypeInfoGetFieldsNum : AstTypeInfoMacro
             return <- new [[ExprConstInt() at=expr.at, value=fieldsNum]]
         errors := "type is missing or not inferred"
         return <- [[ExpressionPtr]]
+
+
+[typeinfo_macro(name="safe_has_property")]
+class TypeInfoHasProperty : AstTypeInfoMacro
+    //! this macro implements "has_property" type trait, which returns true when structure has a property
+    def override getAstChange(expr : smart_ptr<ExprTypeInfo>; var errors : das_string) : ExpressionPtr
+        if expr.typeexpr != null
+            if !expr.typeexpr.isHandle && !expr.typeexpr.isStructure
+                errors := "expecting handle type or structure. typeinfo(safe_has_property<propName> v)"
+                return <- [[ExpressionPtr]]
+            if empty(expr.subtrait)
+                errors := "expecting trait string. typeinfo(safe_has_property<propName> v)"
+                return <- [[ExpressionPtr]]
+
+            let propName = ".`{expr.subtrait}"
+            var res = false
+            get_ptr(compiling_program()) |> for_each_module() <| $(mod)
+                if res
+                    return
+                mod |> for_each_function(propName) <| $(fn)
+                    if fn.moreFlags.propertyFunction && expr.typeexpr |> is_same_type(fn.arguments[0]._type, RefMatters yes, ConstMatters no, TemporaryMatters no)
+                        res = true
+
+            return <- new [[ExprConstBool() at=expr.at, value=res]]
+        errors := "type is missing or not inferred"
+        return <- [[ExpressionPtr]]

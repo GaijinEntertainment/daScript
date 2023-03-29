@@ -40,7 +40,7 @@ def generateApplyVisitStruct ( stype:TypeDeclPtr; fnname:string; at:LineInfo )
             move_new(argT.firstType) <| new [[TypeDecl() baseType=Type tVoid,at=at]]
             argT.flags = TypeDeclFlags constant
             func_args |> emplace_new <| new [[Variable() name := "__arg_{fld.name}", _type <- argT]]
-    var inscope fn <- qmacro_function(fnname) <| $ ( _`_self:$t(selfT); $a(func_args) )
+    var inscope fn <- qmacro_function(fnname) <| $ [unused_argument( _`_self)] ( _`_self:$t(selfT); $a(func_args) )
         $b(blkList)
     fn.flags |= FunctionFlags privateFunction
     compiling_module() |> add_function(fn)
@@ -74,7 +74,7 @@ def generateApplyVisitTuple ( stype:TypeDeclPtr; fnname:string; at:LineInfo )
             move_new(argT.firstType) <| new [[TypeDecl() baseType=Type tVoid,at=at]]
             argT.flags = TypeDeclFlags constant
             func_args |> emplace_new <| new [[Variable() name := "__arg_{fldname}", _type <- argT]]
-    var inscope fn <- qmacro_function(fnname) <| $ ( _`_self:$t(selfT); $a(func_args) )
+    var inscope fn <- qmacro_function(fnname) <| $ [unused_argument( _`_self)] ( _`_self:$t(selfT); $a(func_args) )
         $b(blkList)
     fn.flags |= FunctionFlags privateFunction
     compiling_module() |> add_function(fn)
@@ -116,7 +116,7 @@ def generateApplyVisitVariant ( stype:TypeDeclPtr; fnname:string; at:LineInfo )
             move_new(argT.firstType) <| new [[TypeDecl() baseType=Type tVoid,at=at]]
             argT.flags = TypeDeclFlags constant
             func_args |> emplace_new <| new [[Variable() name:="__arg_{fldname}", _type <- argT]]
-    var inscope fn <- qmacro_function(fnname) <| $ ( _`_self:$t(selfT); $a(func_args) )
+    var inscope fn <- qmacro_function(fnname) <| $ [unused_argument( _`_self)] ( _`_self:$t(selfT); $a(func_args) )
         $b(blkList)
     fn.flags |= FunctionFlags privateFunction
     compiling_module() |> add_function(fn)

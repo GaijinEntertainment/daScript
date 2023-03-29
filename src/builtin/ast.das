@@ -1,5 +1,6 @@
 options indenting=4
 options no_aot=true
+options no_global_variables = false
 options remove_unused_symbols=false
 options strict_smart_pointers
 
