@@ -84,8 +84,12 @@ class LintVisitor : AstVisitor
         if !v.access_flags.access_ref && !v.access_flags.access_pass && !v.access_flags.access_get && (v.init == null || v.init.flags.noSideEffects)
             self->lint_error("unused variable {v.name}: {describe(v._type)} (add an underscore prefix if you really need it)", v.at)
             return
-        if !v.access_flags.access_get && !v.access_flags.access_ref && (v.init == null || v.init.flags.noSideEffects)
-            self->lint_error("variable {v.name}: {describe(v._type)} was written, but never read", v.at)
+        if !v.access_flags.access_get && !v.access_flags.access_ref
+            let sideEffects = (v.init != null && !v.init.flags.noSideEffects)
+            if !sideEffects
+                self->lint_error("variable {v.name}: {describe(v._type)} is never used", v.at)
+            else
+                self->lint_error("variable {v.name}: {describe(v._type)} is never used (be careful, initializer has side effects)", v.at)
             return
         if can_make_const && v._type.baseType != Type tPointer && !v._type.flags.constant && !v._type.flags.removeConstant && !v.access_flags.access_ref// && !v._type.flags.smartPtr
             self->lint_error("variable {v.name}: {describe(v._type)} can be made const (declare with 'let')", v.at)
