@@ -693,19 +693,19 @@ namespace das {
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstInt8 * c ) override {
-            ss << int32_t(c->getValue());
+            ss << int32_t(c->getValue()) << "/*i8*/";
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstUInt8 * c ) override {
-            ss << "0x" << HEX << uint32_t(c->getValue()) << DEC;
+            ss << "0x" << HEX << uint32_t(c->getValue()) << DEC << "u8";
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstInt16 * c ) override {
-            ss << int32_t(c->getValue());
+            ss << int32_t(c->getValue()) << "/*i16*/";
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstUInt16 * c ) override {
-            ss << "0x" << HEX << uint32_t(c->getValue()) << DEC;
+            ss << "0x" << HEX << uint32_t(c->getValue()) << DEC <<  "/*u16*/";
             return Visitor::visit(c);
         }
         virtual ExpressionPtr visit ( ExprConstInt64 * c ) override {

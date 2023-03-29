@@ -364,7 +364,7 @@ def try_fixing_broken_json ( var bad:string )
 			var lstr = length(str)
 			while i < lstr
 				// write until begining of string or end
-				while i < lstr && int(str[i]) != '"'
+				while i < lstr && str[i]!='"'u8
 					writer |> write_char(int(str[i]))
 					i ++
 				if i >= lstr	// if eof we done
@@ -374,7 +374,7 @@ def try_fixing_broken_json ( var bad:string )
 				i ++
 				// write until end of string or end of file
 				label 0:
-				while i < lstr && int(str[i]) != '"'
+				while i < lstr && str[i]!='"'u8
 					writer |> write_char(int(str[i]))
 					i ++
 				if i >= lstr	// if eof we done, we fix close quote and we are done
@@ -399,21 +399,21 @@ def try_fixing_broken_json ( var bad:string )
 					j ++
 					while j < lstr && is_white_space(int(str[j]))
 						j ++
-					if j < lstr && int(str[j]) == '"'	// if it is indeed new string, we go back to string writing, and add a separator
+					if j < lstr && str[j]=='"'u8	// if it is indeed new string, we go back to string writing, and add a separator
 						writer |> write_char(' ')
 						i = j + 1
 						goto label 0
-				// ok, its not a string concatination, or a valid character. we assume its nested quotes and we replace with ``
-				writer |> write_char('`')
+				// ok, its not a string concatination, or a valid character. we assume its nested quotes and we replace with \"
+				writer |> write("\\\"")
 				i = nested + 1
-				while i < lstr && int(str[i]) != '"'
+				while i < lstr && str[i]!='"'u8
 					writer |> write_char(int(str[i]))
 					i ++
 				if i >= lstr	// if eof we done, we fix nested quote and and closing quote and we are done
-					writer |> write_char('`')
+					writer |> write("\\\"")
 					writer |> write_char('"')
 					break
 				// write the second replaced quote
-				writer |> write_char('`')
+				writer |> write("\\\"")
 				i ++
 				goto label 0
