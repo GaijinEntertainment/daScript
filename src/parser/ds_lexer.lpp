@@ -468,12 +468,29 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
         BEGIN(strb);
         return BEGIN_STRING;
     }
+<normal>\'\\b\'(u8|U8)                  yylval_param->ui = 8; return UNSIGNED_INT8;
+<normal>\'\\t\'(u8|U8)                  yylval_param->ui = 9; return UNSIGNED_INT8;
+<normal>\'\\n\'(u8|U8)                  yylval_param->ui = 10; return UNSIGNED_INT8;
+<normal>\'\\f\'(u8|U8)                  yylval_param->ui = 12; return UNSIGNED_INT8;
+<normal>\'\\r\'(u8|U8)                  yylval_param->ui = 13; return UNSIGNED_INT8;
+<normal>\'\\\\'(u8|U8)                  yylval_param->ui = '\\'; return UNSIGNED_INT8;
+<normal>\'.\'(u8|U8)                    yylval_param->ui = uint32_t(yytext[1]); return UNSIGNED_INT8;
+
+<normal>\'\\b\'(u|U)                    yylval_param->ui = 8; return UNSIGNED_INTEGER;
+<normal>\'\\t\'(u|U)                    yylval_param->ui = 9; return UNSIGNED_INTEGER;
+<normal>\'\\n\'(u|U)                    yylval_param->ui = 10; return UNSIGNED_INTEGER;
+<normal>\'\\f\'(u|U)                    yylval_param->ui = 12; return UNSIGNED_INTEGER;
+<normal>\'\\r\'(u|U)                    yylval_param->ui = 13; return UNSIGNED_INTEGER;
+<normal>\'\\\\'(u|U)                    yylval_param->ui = '\\'; return UNSIGNED_INTEGER;
+<normal>\'.\'(u|U)                      yylval_param->ui = uint32_t(yytext[1]); return UNSIGNED_INTEGER;
+
 <normal>\'\\b\'                         yylval_param->i = 8; return INTEGER;
 <normal>\'\\t\'                         yylval_param->i = 9; return INTEGER;
 <normal>\'\\n\'                         yylval_param->i = 10; return INTEGER;
 <normal>\'\\f\'                         yylval_param->i = 12; return INTEGER;
 <normal>\'\\r\'                         yylval_param->i = 13; return INTEGER;
 <normal>\'\\\\'                         yylval_param->i = '\\'; return INTEGER;
+
 <normal>\'.\'                           yylval_param->i = int32_t(yytext[1]); return INTEGER;
 <normal>[0-9][0-9\_]*(u|U)(l|L) {
         char temptext[128];
@@ -489,6 +506,21 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
         yylval_param->i64 = strtoll(temptext,&endtext,10);
         return ( endtext!=(temptext+templength-1) ) ? LEXER_ERROR : LONG_INTEGER;
     }
+<normal>[0-9][0-9\_]*(u8|U8) {
+        char temptext[128];
+        int templength = skip_underscode(yytext,temptext,temptext+sizeof(temptext));
+        char * endtext = nullptr;
+        uint64_t uint_const = strtoull(temptext,&endtext,10);
+        if ( endtext!=(temptext+templength-2) ) {
+            return LEXER_ERROR;
+        } else {
+            if ( uint_const>UINT8_MAX ) {
+                das_yyfatalerror(yylloc_param,yyscanner,"uint8 constant out of range", CompilationError::integer_constant_out_of_range);
+            }
+            yylval_param->ui = uint8_t(uint_const);
+            return UNSIGNED_INT8;
+        }
+    }
 <normal>[0-9][0-9\_]*(u|U) {
         char temptext[128];
         int templength = skip_underscode(yytext,temptext,temptext+sizeof(temptext));
@@ -498,7 +530,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
             return LEXER_ERROR;
         } else {
             if ( uint_const>UINT32_MAX ) {
-                das_yyfatalerror(yylloc_param,yyscanner,"integer constant out of range", CompilationError::integer_constant_out_of_range);
+                das_yyfatalerror(yylloc_param,yyscanner,"uint constant out of range", CompilationError::integer_constant_out_of_range);
             }
             yylval_param->ui = uint32_t(uint_const);
             return UNSIGNED_INTEGER;
@@ -513,7 +545,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
             return LEXER_ERROR;
         } else {
             if ( int_const<INT32_MIN || int_const>INT32_MAX ) {
-                das_yyfatalerror(yylloc_param,yyscanner,"integer constant out of range", CompilationError::integer_constant_out_of_range);
+                das_yyfatalerror(yylloc_param,yyscanner,"int constant out of range", CompilationError::integer_constant_out_of_range);
             }
             yylval_param->i = int32_t(int_const);
             unput('.');
@@ -532,7 +564,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
             return LEXER_ERROR;
         } else {
             if ( int_const<INT32_MIN || int_const>INT32_MAX ) {
-                das_yyfatalerror(yylloc_param,yyscanner,"integer constant out of range", CompilationError::integer_constant_out_of_range);
+                das_yyfatalerror(yylloc_param,yyscanner,"int constant out of range", CompilationError::integer_constant_out_of_range);
             }
             yylval_param->i = int32_t(int_const);
             return INTEGER;
@@ -548,18 +580,27 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
         skip_underscode(yytext,temptext,temptext+sizeof(temptext));
         return sscanf(temptext, "%" SCNx64, &yylval_param->ui64)!=1 ? LEXER_ERROR : UNSIGNED_LONG_INTEGER;
     }
-<normal>0[xX][0-9a-fA-F][0-9a-fA-F\_]*(u|U) {
+<normal>0[xX][0-9a-fA-F][0-9a-fA-F\_]*(u8|U8|u|U) {
         char temptext[128];
-        skip_underscode(yytext,temptext,temptext+sizeof(temptext));
-        uint64_t int_const;
-        if ( sscanf(temptext, "%" SCNx64,  &int_const)!=1 ) {
+        int templength = skip_underscode(yytext,temptext,temptext+sizeof(temptext));
+        uint64_t uint_const;
+        if ( sscanf(temptext, "%" SCNx64,  &uint_const)!=1 ) {
             return LEXER_ERROR;
         } else {
-            if ( int_const>UINT32_MAX ) {
-                das_yyfatalerror(yylloc_param,yyscanner,"integer constant out of range", CompilationError::integer_constant_out_of_range);
+            if ( templength>2 &&
+                (temptext[templength-2]=='u' || temptext[templength-2]=='U') && temptext[templength-1]=='8' ) {
+                if ( uint_const>UINT8_MAX ) {
+                    das_yyfatalerror(yylloc_param,yyscanner,"uint8 constant out of range", CompilationError::integer_constant_out_of_range);
+                }
+                yylval_param->ui = uint8_t(uint_const);
+                return UNSIGNED_INT8;
+            } else {
+                if ( uint_const>UINT32_MAX ) {
+                    das_yyfatalerror(yylloc_param,yyscanner,"uint constant out of range", CompilationError::integer_constant_out_of_range);
+                }
+                yylval_param->ui = uint32_t(uint_const);
+                return UNSIGNED_INTEGER;
             }
-            yylval_param->ui = uint32_t(int_const);
-            return UNSIGNED_INTEGER;
         }
     }
 <normal>0[xX][0-9a-fA-F][0-9a-fA-F\_]* {
@@ -570,7 +611,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
             return LEXER_ERROR;
         } else {
             if ( int_const>UINT32_MAX ) {
-                das_yyfatalerror(yylloc_param,yyscanner,"integer constant out of range", CompilationError::integer_constant_out_of_range);
+                das_yyfatalerror(yylloc_param,yyscanner,"int constant out of range", CompilationError::integer_constant_out_of_range);
             }
             yylval_param->ui = uint32_t(int_const);
             return UNSIGNED_INTEGER;
