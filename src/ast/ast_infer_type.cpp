@@ -6056,7 +6056,7 @@ namespace das {
             if ( !var->type->isLocal() && !var->type->ref && !safeExpression(expr) )
                 error("local variable of type " + describeType(var->type) + " requires unsafe", "", "",
                       var->at, CompilationError::invalid_variable_type);
-            if ( var->type->hasClasses() && !safeExpression(expr) ) {
+            if ( !var->type->ref && var->type->hasClasses() && !safeExpression(expr) ) {
                 error("local class requires unsafe " + describeType(var->type), "", "",
                       var->at, CompilationError::unsafe);
             }
