@@ -666,6 +666,11 @@ namespace das {
 
     // MODULE LIBRARY
 
+    ModuleLibrary::ModuleLibrary( Module * this_module )
+    {
+        addModule(this_module);
+    }
+
     void ModuleLibrary::addBuiltInModule () {
         Module * module = Module::require("$");
         DAS_ASSERTF(module, "builtin module not found? or you have forgotten to NEED_MODULE(Module_BuiltIn) be called first");

@@ -1126,6 +1126,8 @@ namespace das
         friend class Module;
         friend class Program;
     public:
+        ModuleLibrary() = default;
+        ModuleLibrary( Module * this_module );
         virtual ~ModuleLibrary() {};
         void addBuiltInModule ();
         bool addModule ( Module * module );
