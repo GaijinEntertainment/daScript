@@ -1,5 +1,6 @@
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
+options no_global_variables = false
 options indenting = 4
 options strict_smart_pointers = true
 
@@ -270,21 +271,21 @@ def read_json ( text : array<uint8>; var error : string& ) : JsonValue?
 var private no_trailing_zeros = false
 
 def set_no_trailing_zeros ( value : bool )
-    var old_ntz = no_trailing_zeros
+    let old_ntz = no_trailing_zeros
     no_trailing_zeros = value
     return old_ntz
 
 var private no_empty_arrays = false
 
 def set_no_empty_arrays ( value : bool )
-    var old_nea = no_empty_arrays
+    let old_nea = no_empty_arrays
     no_empty_arrays = value
     return old_nea
 
 var private allow_duplicate_keys = false
 
 def set_allow_duplicate_keys ( value : bool )
-    var old_adc = allow_duplicate_keys
+    let old_adc = allow_duplicate_keys
     allow_duplicate_keys = value
     return old_adc
 
