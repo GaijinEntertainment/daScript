@@ -194,6 +194,17 @@ def prune_chat ( var log:ChatLog )
     return true
 
 def accept_chat_message ( chat_id:string; message_text:string; author:string )
+    var text = message_text
+    while !empty(text)
+        if length(text) > 4096
+            let part = text |> slice(0,4096)
+            accept_single_chat_message(chat_id,part,author)
+            text = text |> slice(4096)
+        else
+            accept_single_chat_message(chat_id,text,author)
+            text = ""
+
+def accept_single_chat_message ( chat_id:string; message_text:string; author:string )
     to_log(LOG_INFO, "accept_chat_message {chat_id} {message_text} {author}\n")
     assume chat = g_chat_messages[chat_id]
     while length(chat.messages) > g_botConfig.max_chat_messages

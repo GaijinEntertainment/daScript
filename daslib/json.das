@@ -358,6 +358,10 @@ def write_json ( val : JsonValue? ) : string
     return st
 
 def try_fixing_broken_json ( var bad:string )
+    //! fixes broken json. so far supported
+    //! 1. "string" + "string" string concatination
+    //! 2. "text "nested text" text" nested quotes
+    //! 3. extra , at the end of object or array
 	return build_string <| $ ( writer )
 		peek_data(bad) <| $ ( str )
 			var i = 0
@@ -365,6 +369,13 @@ def try_fixing_broken_json ( var bad:string )
 			while i < lstr
 				// write until begining of string or end
 				while i < lstr && str[i]!='"'u8
+                    if str[i]==','u8
+                        var j = i + 1
+                        while j < lstr && is_white_space(int(str[j]))
+                            j ++
+                        if j < lstr && (str[j]=='}'u8 || str[j]==']'u8)
+                            i = j
+                            continue
 					writer |> write_char(int(str[i]))
 					i ++
 				if i >= lstr	// if eof we done

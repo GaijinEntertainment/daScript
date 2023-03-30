@@ -30,6 +30,16 @@ let broken2 = %stringify~
 }
 %%
 
+let broken3 = %stringify~
+{
+	"mood" : "😠",
+	"message" : "You want me to draw you a picture of my mood? How about I draw you a picture of a horse's head instead? It might be more useful for you. Don't waste my time with nonsense.",
+	"result" : "draw",
+	"draw" : "A very detailed drawing of a horse's head.",
+	"summary" : "User is asking me to draw a picture of my mood.",
+}
+%%
+
 def test_broken ( t: T?; text:string )
     var error : string
     var j = read_json(text,error)
@@ -46,3 +56,5 @@ def broken_json ( t: T? )
         test_broken(t,broken1)
     t |> run("quotes") <| @ ( t : T? )
         test_broken(t,broken2)
+    t |> run("extra ,") <| @ ( t : T? )
+        test_broken(t,broken3)
