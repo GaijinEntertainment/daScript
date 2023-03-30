@@ -89,10 +89,12 @@ Random values
   *  :ref:`random_float (faker:faker::Faker -const) : float <function-_at_faker_c__c_random_float_S_ls_Faker_gr_>` 
   *  :ref:`random_int2 (faker:faker::Faker -const) : int2 <function-_at_faker_c__c_random_int2_S_ls_Faker_gr_>` 
   *  :ref:`random_range (faker:faker::Faker -const) : range <function-_at_faker_c__c_random_range_S_ls_Faker_gr_>` 
+  *  :ref:`random_range64 (faker:faker::Faker -const) : range64 <function-_at_faker_c__c_random_range64_S_ls_Faker_gr_>` 
   *  :ref:`random_int3 (faker:faker::Faker -const) : int3 <function-_at_faker_c__c_random_int3_S_ls_Faker_gr_>` 
   *  :ref:`random_int4 (faker:faker::Faker -const) : int4 <function-_at_faker_c__c_random_int4_S_ls_Faker_gr_>` 
   *  :ref:`random_uint2 (faker:faker::Faker -const) : uint2 <function-_at_faker_c__c_random_uint2_S_ls_Faker_gr_>` 
   *  :ref:`random_urange (faker:faker::Faker -const) : urange <function-_at_faker_c__c_random_urange_S_ls_Faker_gr_>` 
+  *  :ref:`random_urange64 (faker:faker::Faker -const) : urange64 <function-_at_faker_c__c_random_urange64_S_ls_Faker_gr_>` 
   *  :ref:`random_uint3 (faker:faker::Faker -const) : uint3 <function-_at_faker_c__c_random_uint3_S_ls_Faker_gr_>` 
   *  :ref:`random_uint4 (faker:faker::Faker -const) : uint4 <function-_at_faker_c__c_random_uint4_S_ls_Faker_gr_>` 
   *  :ref:`random_float2 (faker:faker::Faker -const) : float2 <function-_at_faker_c__c_random_float2_S_ls_Faker_gr_>` 
@@ -240,6 +242,21 @@ random_range returns range
 
 Generates random range.
 
+.. _function-_at_faker_c__c_random_range64_S_ls_Faker_gr_:
+
+.. das:function:: random_range64(faker: Faker)
+
+random_range64 returns range64
+
++--------+------------------------------------------+
++argument+argument type                             +
++========+==========================================+
++faker   + :ref:`faker::Faker <struct-faker-Faker>` +
++--------+------------------------------------------+
+
+
+Generates random range64.
+
 .. _function-_at_faker_c__c_random_int3_S_ls_Faker_gr_:
 
 .. das:function:: random_int3(faker: Faker)
@@ -299,6 +316,21 @@ random_urange returns urange
 
 
 Generates random urange.
+
+.. _function-_at_faker_c__c_random_urange64_S_ls_Faker_gr_:
+
+.. das:function:: random_urange64(faker: Faker)
+
+random_urange64 returns urange64
+
++--------+------------------------------------------+
++argument+argument type                             +
++========+==========================================+
++faker   + :ref:`faker::Faker <struct-faker-Faker>` +
++--------+------------------------------------------+
+
+
+Generates random urange64.
 
 .. _function-_at_faker_c__c_random_uint3_S_ls_Faker_gr_:
 

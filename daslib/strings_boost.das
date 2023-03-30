@@ -134,3 +134,21 @@ def levenshtein_distance_fast(s, t: string implicit): int
 finally
     delete v0
     delete v1
+
+def replace_multiple ( source:string; replaces:array<tuple<text:string;replacement:string>> )
+    //! replaces occurances of multiple strings in a string. does not support overlap
+    return build_string <| $ ( writer )
+        var index = 0
+        let len = source |> length
+        while index < len
+            var found = false
+            for replace in replaces
+                if source |> starts_with(index,replace.text)
+                    writer |> write(replace.replacement)
+                    index += replace.text |> length
+                    found = true
+                    break
+            if !found
+                writer |> write_char(unsafe(source |> character_uat(index)))
+                index ++
+

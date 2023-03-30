@@ -202,6 +202,8 @@ String properties
   *  :ref:`ends_with (str:$::das_string const implicit;cmp:string const implicit;context:__context const) : bool <function-_at_strings_c__c_ends_with_CIH_ls__builtin__c__c_das_string_gr__CIs_C_c>` 
   *  :ref:`starts_with (str:string const implicit;cmp:string const implicit;context:__context const) : bool <function-_at_strings_c__c_starts_with_CIs_CIs_C_c>` 
   *  :ref:`starts_with (str:string const implicit;cmp:string const implicit;cmpLen:uint const;context:__context const) : bool <function-_at_strings_c__c_starts_with_CIs_CIs_Cu_C_c>` 
+  *  :ref:`starts_with (str:string const implicit;offset:int const;cmp:string const implicit;context:__context const) : bool <function-_at_strings_c__c_starts_with_CIs_Ci_CIs_C_c>` 
+  *  :ref:`starts_with (str:string const implicit;offset:int const;cmp:string const implicit;cmpLen:uint const;context:__context const) : bool <function-_at_strings_c__c_starts_with_CIs_Ci_CIs_Cu_C_c>` 
   *  :ref:`length (str:string const implicit;context:__context const) : int <function-_at_strings_c__c_length_CIs_C_c>` 
   *  :ref:`length (str:$::das_string const implicit) : int <function-_at_strings_c__c_length_CIH_ls__builtin__c__c_das_string_gr_>` 
 
@@ -275,6 +277,46 @@ starts_with returns bool
 
 |function-strings-starts_with|
 
+.. _function-_at_strings_c__c_starts_with_CIs_Ci_CIs_C_c:
+
+.. das:function:: starts_with(str: string const implicit; offset: int const; cmp: string const implicit)
+
+starts_with returns bool
+
++--------+---------------------+
++argument+argument type        +
++========+=====================+
++str     +string const implicit+
++--------+---------------------+
++offset  +int const            +
++--------+---------------------+
++cmp     +string const implicit+
++--------+---------------------+
+
+
+|function-strings-starts_with|
+
+.. _function-_at_strings_c__c_starts_with_CIs_Ci_CIs_Cu_C_c:
+
+.. das:function:: starts_with(str: string const implicit; offset: int const; cmp: string const implicit; cmpLen: uint const)
+
+starts_with returns bool
+
++--------+---------------------+
++argument+argument type        +
++========+=====================+
++str     +string const implicit+
++--------+---------------------+
++offset  +int const            +
++--------+---------------------+
++cmp     +string const implicit+
++--------+---------------------+
++cmpLen  +uint const           +
++--------+---------------------+
+
+
+|function-strings-starts_with|
+
 .. _function-_at_strings_c__c_length_CIs_C_c:
 
 .. das:function:: length(str: string const implicit)
@@ -310,16 +352,16 @@ String builder
 ++++++++++++++
 
   *  :ref:`build_string (block:block\<(var arg0:strings::StringBuilderWriter):void\> const implicit;context:__context const;lineinfo:__lineInfo const) : string <function-_at_strings_c__c_build_string_CI0_ls_H_ls_strings_c__c_StringBuilderWriter_gr__gr_1_ls_v_gr__builtin__C_c_C_l>` 
-  *  :ref:`write (writer:strings::StringBuilderWriter;anything:any const) : void <function-_at_strings_c__c_write_H_ls_strings_c__c_StringBuilderWriter_gr__C*>` 
-  *  :ref:`write_char (writer:strings::StringBuilderWriter implicit;ch:int const) : void <function-_at_strings_c__c_write_char_IH_ls_strings_c__c_StringBuilderWriter_gr__Ci>` 
-  *  :ref:`write_chars (writer:strings::StringBuilderWriter implicit;ch:int const;count:int const) : void <function-_at_strings_c__c_write_chars_IH_ls_strings_c__c_StringBuilderWriter_gr__Ci_Ci>` 
-  *  :ref:`write_escape_string (writer:strings::StringBuilderWriter implicit;str:string const implicit) : void <function-_at_strings_c__c_write_escape_string_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs>` 
-  *  :ref:`format (writer:strings::StringBuilderWriter implicit;format:string const implicit;value:int const) : void <function-_at_strings_c__c_format_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs_Ci>` 
-  *  :ref:`format (writer:strings::StringBuilderWriter implicit;format:string const implicit;value:uint const) : void <function-_at_strings_c__c_format_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs_Cu>` 
-  *  :ref:`format (writer:strings::StringBuilderWriter implicit;format:string const implicit;value:int64 const) : void <function-_at_strings_c__c_format_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs_Ci64>` 
-  *  :ref:`format (writer:strings::StringBuilderWriter implicit;format:string const implicit;value:uint64 const) : void <function-_at_strings_c__c_format_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs_Cu64>` 
-  *  :ref:`format (writer:strings::StringBuilderWriter implicit;format:string const implicit;value:float const) : void <function-_at_strings_c__c_format_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs_Cf>` 
-  *  :ref:`format (writer:strings::StringBuilderWriter implicit;format:string const implicit;value:double const) : void <function-_at_strings_c__c_format_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs_Cd>` 
+  *  :ref:`write (writer:strings::StringBuilderWriter;anything:any const) : strings::StringBuilderWriter& <function-_at_strings_c__c_write_H_ls_strings_c__c_StringBuilderWriter_gr__C*>` 
+  *  :ref:`write_char (writer:strings::StringBuilderWriter implicit;ch:int const) : strings::StringBuilderWriter& <function-_at_strings_c__c_write_char_IH_ls_strings_c__c_StringBuilderWriter_gr__Ci>` 
+  *  :ref:`write_chars (writer:strings::StringBuilderWriter implicit;ch:int const;count:int const) : strings::StringBuilderWriter& <function-_at_strings_c__c_write_chars_IH_ls_strings_c__c_StringBuilderWriter_gr__Ci_Ci>` 
+  *  :ref:`write_escape_string (writer:strings::StringBuilderWriter implicit;str:string const implicit) : strings::StringBuilderWriter& <function-_at_strings_c__c_write_escape_string_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs>` 
+  *  :ref:`format (writer:strings::StringBuilderWriter implicit;format:string const implicit;value:int const) : strings::StringBuilderWriter& <function-_at_strings_c__c_format_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs_Ci>` 
+  *  :ref:`format (writer:strings::StringBuilderWriter implicit;format:string const implicit;value:uint const) : strings::StringBuilderWriter& <function-_at_strings_c__c_format_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs_Cu>` 
+  *  :ref:`format (writer:strings::StringBuilderWriter implicit;format:string const implicit;value:int64 const) : strings::StringBuilderWriter& <function-_at_strings_c__c_format_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs_Ci64>` 
+  *  :ref:`format (writer:strings::StringBuilderWriter implicit;format:string const implicit;value:uint64 const) : strings::StringBuilderWriter& <function-_at_strings_c__c_format_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs_Cu64>` 
+  *  :ref:`format (writer:strings::StringBuilderWriter implicit;format:string const implicit;value:float const) : strings::StringBuilderWriter& <function-_at_strings_c__c_format_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs_Cf>` 
+  *  :ref:`format (writer:strings::StringBuilderWriter implicit;format:string const implicit;value:double const) : strings::StringBuilderWriter& <function-_at_strings_c__c_format_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs_Cd>` 
   *  :ref:`format (format:string const implicit;value:int const;context:__context const) : string <function-_at_strings_c__c_format_CIs_Ci_C_c>` 
   *  :ref:`format (format:string const implicit;value:uint const;context:__context const) : string <function-_at_strings_c__c_format_CIs_Cu_C_c>` 
   *  :ref:`format (format:string const implicit;value:int64 const;context:__context const) : string <function-_at_strings_c__c_format_CIs_Ci64_C_c>` 
@@ -346,6 +388,8 @@ build_string returns string
 
 .. das:function:: write(writer: StringBuilderWriter; anything: any const)
 
+write returns  :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>` &
+
 +--------+--------------------------------------------------------------------------+
 +argument+argument type                                                             +
 +========+==========================================================================+
@@ -361,6 +405,8 @@ build_string returns string
 
 .. das:function:: write_char(writer: StringBuilderWriter implicit; ch: int const)
 
+write_char returns  :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>` &
+
 +--------+-----------------------------------------------------------------------------------+
 +argument+argument type                                                                      +
 +========+===================================================================================+
@@ -375,6 +421,8 @@ build_string returns string
 .. _function-_at_strings_c__c_write_chars_IH_ls_strings_c__c_StringBuilderWriter_gr__Ci_Ci:
 
 .. das:function:: write_chars(writer: StringBuilderWriter implicit; ch: int const; count: int const)
+
+write_chars returns  :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>` &
 
 +--------+-----------------------------------------------------------------------------------+
 +argument+argument type                                                                      +
@@ -393,6 +441,8 @@ build_string returns string
 
 .. das:function:: write_escape_string(writer: StringBuilderWriter implicit; str: string const implicit)
 
+write_escape_string returns  :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>` &
+
 +--------+-----------------------------------------------------------------------------------+
 +argument+argument type                                                                      +
 +========+===================================================================================+
@@ -407,6 +457,8 @@ build_string returns string
 .. _function-_at_strings_c__c_format_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs_Ci:
 
 .. das:function:: format(writer: StringBuilderWriter implicit; format: string const implicit; value: int const)
+
+format returns  :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>` &
 
 +--------+-----------------------------------------------------------------------------------+
 +argument+argument type                                                                      +
@@ -425,6 +477,8 @@ build_string returns string
 
 .. das:function:: format(writer: StringBuilderWriter implicit; format: string const implicit; value: uint const)
 
+format returns  :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>` &
+
 +--------+-----------------------------------------------------------------------------------+
 +argument+argument type                                                                      +
 +========+===================================================================================+
@@ -441,6 +495,8 @@ build_string returns string
 .. _function-_at_strings_c__c_format_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs_Ci64:
 
 .. das:function:: format(writer: StringBuilderWriter implicit; format: string const implicit; value: int64 const)
+
+format returns  :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>` &
 
 +--------+-----------------------------------------------------------------------------------+
 +argument+argument type                                                                      +
@@ -459,6 +515,8 @@ build_string returns string
 
 .. das:function:: format(writer: StringBuilderWriter implicit; format: string const implicit; value: uint64 const)
 
+format returns  :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>` &
+
 +--------+-----------------------------------------------------------------------------------+
 +argument+argument type                                                                      +
 +========+===================================================================================+
@@ -476,6 +534,8 @@ build_string returns string
 
 .. das:function:: format(writer: StringBuilderWriter implicit; format: string const implicit; value: float const)
 
+format returns  :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>` &
+
 +--------+-----------------------------------------------------------------------------------+
 +argument+argument type                                                                      +
 +========+===================================================================================+
@@ -492,6 +552,8 @@ build_string returns string
 .. _function-_at_strings_c__c_format_IH_ls_strings_c__c_StringBuilderWriter_gr__CIs_Cd:
 
 .. das:function:: format(writer: StringBuilderWriter implicit; format: string const implicit; value: double const)
+
+format returns  :ref:`strings::StringBuilderWriter <handle-strings-StringBuilderWriter>` &
 
 +--------+-----------------------------------------------------------------------------------+
 +argument+argument type                                                                      +
@@ -665,6 +727,7 @@ String modifications
   *  :ref:`unescape (str:string const implicit;context:__context const) : string <function-_at_strings_c__c_unescape_CIs_C_c>` 
   *  :ref:`replace (str:string const implicit;toSearch:string const implicit;replace:string const implicit;context:__context const) : string <function-_at_strings_c__c_replace_CIs_CIs_CIs_C_c>` 
   *  :ref:`rtrim (str:string const implicit;context:__context const) : string <function-_at_strings_c__c_rtrim_CIs_C_c>` 
+  *  :ref:`rtrim (str:string const implicit;chars:string const implicit;context:__context const) : string <function-_at_strings_c__c_rtrim_CIs_CIs_C_c>` 
 
 .. _function-_at_strings_c__c_repeat_CIs_Ci_C_c:
 
@@ -928,6 +991,23 @@ rtrim returns string
 
 |function-strings-rtrim|
 
+.. _function-_at_strings_c__c_rtrim_CIs_CIs_C_c:
+
+.. das:function:: rtrim(str: string const implicit; chars: string const implicit)
+
+rtrim returns string
+
++--------+---------------------+
++argument+argument type        +
++========+=====================+
++str     +string const implicit+
++--------+---------------------+
++chars   +string const implicit+
++--------+---------------------+
+
+
+|function-strings-rtrim|
+
 +++++++++++++++++
 Search substrings
 +++++++++++++++++
@@ -1015,12 +1095,12 @@ String conversion routines
 
   *  :ref:`string (bytes:array\<uint8\> const implicit;context:__context const) : string <function-_at_strings_c__c_string_CI1_ls_u8_gr_A_C_c>` 
   *  :ref:`to_char (char:int const;context:__context const) : string <function-_at_strings_c__c_to_char_Ci_C_c>` 
-  *  :ref:`int (str:string const implicit;context:__context const) : int <function-_at_strings_c__c_int_CIs_C_c>` 
-  *  :ref:`uint (str:string const implicit;context:__context const) : uint <function-_at_strings_c__c_uint_CIs_C_c>` 
-  *  :ref:`int64 (str:string const implicit;context:__context const) : int64 <function-_at_strings_c__c_int64_CIs_C_c>` 
-  *  :ref:`uint64 (str:string const implicit;context:__context const) : uint64 <function-_at_strings_c__c_uint64_CIs_C_c>` 
-  *  :ref:`float (str:string const implicit;context:__context const) : float <function-_at_strings_c__c_float_CIs_C_c>` 
-  *  :ref:`double (str:string const implicit;context:__context const) : double <function-_at_strings_c__c_double_CIs_C_c>` 
+  *  :ref:`int (str:string const implicit;context:__context const;at:__lineInfo const) : int <function-_at_strings_c__c_int_CIs_C_c_C_l>` 
+  *  :ref:`uint (str:string const implicit;context:__context const;at:__lineInfo const) : uint <function-_at_strings_c__c_uint_CIs_C_c_C_l>` 
+  *  :ref:`int64 (str:string const implicit;context:__context const;at:__lineInfo const) : int64 <function-_at_strings_c__c_int64_CIs_C_c_C_l>` 
+  *  :ref:`uint64 (str:string const implicit;context:__context const;at:__lineInfo const) : uint64 <function-_at_strings_c__c_uint64_CIs_C_c_C_l>` 
+  *  :ref:`float (str:string const implicit;context:__context const;at:__lineInfo const) : float <function-_at_strings_c__c_float_CIs_C_c_C_l>` 
+  *  :ref:`double (str:string const implicit;context:__context const;at:__lineInfo const) : double <function-_at_strings_c__c_double_CIs_C_c_C_l>` 
   *  :ref:`to_int (value:string const implicit;hex:bool const) : int <function-_at_strings_c__c_to_int_CIs_Cb>` 
   *  :ref:`to_uint (value:string const implicit;hex:bool const) : uint <function-_at_strings_c__c_to_uint_CIs_Cb>` 
   *  :ref:`to_int64 (value:string const implicit;hex:bool const) : int64 <function-_at_strings_c__c_to_int64_CIs_Cb>` 
@@ -1058,7 +1138,7 @@ to_char returns string
 
 |function-strings-to_char|
 
-.. _function-_at_strings_c__c_int_CIs_C_c:
+.. _function-_at_strings_c__c_int_CIs_C_c_C_l:
 
 .. das:function:: int(str: string const implicit)
 
@@ -1073,7 +1153,7 @@ int returns int
 
 |function-strings-int|
 
-.. _function-_at_strings_c__c_uint_CIs_C_c:
+.. _function-_at_strings_c__c_uint_CIs_C_c_C_l:
 
 .. das:function:: uint(str: string const implicit)
 
@@ -1088,7 +1168,7 @@ uint returns uint
 
 |function-strings-uint|
 
-.. _function-_at_strings_c__c_int64_CIs_C_c:
+.. _function-_at_strings_c__c_int64_CIs_C_c_C_l:
 
 .. das:function:: int64(str: string const implicit)
 
@@ -1103,7 +1183,7 @@ int64 returns int64
 
 |function-strings-int64|
 
-.. _function-_at_strings_c__c_uint64_CIs_C_c:
+.. _function-_at_strings_c__c_uint64_CIs_C_c_C_l:
 
 .. das:function:: uint64(str: string const implicit)
 
@@ -1118,7 +1198,7 @@ uint64 returns uint64
 
 |function-strings-uint64|
 
-.. _function-_at_strings_c__c_float_CIs_C_c:
+.. _function-_at_strings_c__c_float_CIs_C_c_C_l:
 
 .. das:function:: float(str: string const implicit)
 
@@ -1133,7 +1213,7 @@ float returns float
 
 |function-strings-float|
 
-.. _function-_at_strings_c__c_double_CIs_C_c:
+.. _function-_at_strings_c__c_double_CIs_C_c_C_l:
 
 .. das:function:: double(str: string const implicit)
 
@@ -1324,5 +1404,24 @@ reserve_string_buffer returns string
 
 
 |function-strings-reserve_string_buffer|
+
++++++++++++++
+Uncategorized
++++++++++++++
+
+.. _function-_at_strings_c__c_safe_unescape_CIs_C_c:
+
+.. das:function:: safe_unescape(str: string const implicit)
+
+safe_unescape returns string
+
++--------+---------------------+
++argument+argument type        +
++========+=====================+
++str     +string const implicit+
++--------+---------------------+
+
+
+|function-strings-safe_unescape|
 
 

@@ -82,7 +82,7 @@ Type aliases
 +----------------+---+-----+
 +privateField    +6  +64   +
 +----------------+---+-----+
-+sealed          +7  +128  +
++_sealed         +7  +128  +
 +----------------+---+-----+
 +implemented     +8  +256  +
 +----------------+---+-----+
@@ -115,7 +115,7 @@ Type aliases
 +----------------+---+-----+
 +macroInterface  +8  +256  +
 +----------------+---+-----+
-+sealed          +9  +512  +
++_sealed         +9  +512  +
 +----------------+---+-----+
 +skipLockCheck   +10 +1024 +
 +----------------+---+-----+
@@ -3949,6 +3949,60 @@ ExprConstURange fields are
 
 
 |structure_annotation-ast-ExprConstURange|
+
+.. _handle-ast-ExprConstRange64:
+
+.. das:attribute:: ExprConstRange64
+
+ExprConstRange64 fields are
+
++----------+-------------------------------------------------------+
++value     +range64                                                +
++----------+-------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
++----------+-------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
++----------+-------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
++----------+-------------------------------------------------------+
++baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
++----------+-------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
++----------+-------------------------------------------------------+
++__rtti    +string const                                           +
++----------+-------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
++----------+-------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprConstRange64|
+
+.. _handle-ast-ExprConstURange64:
+
+.. das:attribute:: ExprConstURange64
+
+ExprConstURange64 fields are
+
++----------+-------------------------------------------------------+
++value     +urange64                                               +
++----------+-------------------------------------------------------+
++at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
++----------+-------------------------------------------------------+
++printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
++----------+-------------------------------------------------------+
++genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
++----------+-------------------------------------------------------+
++baseType  + :ref:`rtti::Type <enum-rtti-Type>`                    +
++----------+-------------------------------------------------------+
++_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
++----------+-------------------------------------------------------+
++__rtti    +string const                                           +
++----------+-------------------------------------------------------+
++flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
++----------+-------------------------------------------------------+
+
+
+|structure_annotation-ast-ExprConstURange64|
 
 .. _handle-ast-ExprConstFloat:
 
@@ -9703,6 +9757,62 @@ visitExprConstURange returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprConstURange|
 
+.. das:function:: AstVisitor.preVisitExprConstRange64(self: AstVisitor; expr: smart_ptr<ast::ExprConstRange64> const)
+
++--------+-----------------------------------------------------------------------------+
++argument+argument type                                                                +
++========+=============================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                              +
++--------+-----------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstRange64 <handle-ast-ExprConstRange64>` > const+
++--------+-----------------------------------------------------------------------------+
+
+
+|method-ast-AstVisitor.preVisitExprConstRange64|
+
+.. das:function:: AstVisitor.visitExprConstRange64(self: AstVisitor; expr: smart_ptr<ast::ExprConstRange64> const)
+
+visitExprConstRange64 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+
++--------+-----------------------------------------------------------------------------+
++argument+argument type                                                                +
++========+=============================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                              +
++--------+-----------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstRange64 <handle-ast-ExprConstRange64>` > const+
++--------+-----------------------------------------------------------------------------+
+
+
+|method-ast-AstVisitor.visitExprConstRange64|
+
+.. das:function:: AstVisitor.preVisitExprConstURange64(self: AstVisitor; expr: smart_ptr<ast::ExprConstURange64> const)
+
++--------+-------------------------------------------------------------------------------+
++argument+argument type                                                                  +
++========+===============================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                                +
++--------+-------------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstURange64 <handle-ast-ExprConstURange64>` > const+
++--------+-------------------------------------------------------------------------------+
+
+
+|method-ast-AstVisitor.preVisitExprConstURange64|
+
+.. das:function:: AstVisitor.visitExprConstURange64(self: AstVisitor; expr: smart_ptr<ast::ExprConstURange64> const)
+
+visitExprConstURange64 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+
++--------+-------------------------------------------------------------------------------+
++argument+argument type                                                                  +
++========+===============================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                                +
++--------+-------------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprConstURange64 <handle-ast-ExprConstURange64>` > const+
++--------+-------------------------------------------------------------------------------+
+
+
+|method-ast-AstVisitor.visitExprConstURange64|
+
 .. das:function:: AstVisitor.preVisitExprConstBool(self: AstVisitor; expr: smart_ptr<ast::ExprConstBool> const)
 
 +--------+-----------------------------------------------------------------------+
@@ -12435,6 +12545,7 @@ Size and offset
   *  :ref:`get_tuple_field_offset (typle:smart_ptr\<ast::TypeDecl\> const implicit;index:int const;context:__context const;at:__lineInfo const) : int <function-_at_ast_c__c_get_tuple_field_offset_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Ci_C_c_C_l>` 
   *  :ref:`any_array_size (array:void? const implicit) : int <function-_at_ast_c__c_any_array_size_CI?>` 
   *  :ref:`any_table_size (table:void? const implicit) : int <function-_at_ast_c__c_any_table_size_CI?>` 
+  *  :ref:`get_handled_type_field_offset (type:smart_ptr\<rtti::TypeAnnotation\> const implicit;field:string const implicit;context:__context const;line:__lineInfo const) : uint <function-_at_ast_c__c_get_handled_type_field_offset_CI1_ls_H_ls_rtti_c__c_TypeAnnotation_gr__gr_?M_CIs_C_c_C_l>` 
 
 .. _function-_at_ast_c__c_get_variant_field_offset_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Ci_C_c_C_l:
 
@@ -12499,6 +12610,23 @@ any_table_size returns int
 
 
 |function-ast-any_table_size|
+
+.. _function-_at_ast_c__c_get_handled_type_field_offset_CI1_ls_H_ls_rtti_c__c_TypeAnnotation_gr__gr_?M_CIs_C_c_C_l:
+
+.. das:function:: get_handled_type_field_offset(type: smart_ptr<rtti::TypeAnnotation> const implicit; field: string const implicit)
+
+get_handled_type_field_offset returns uint
+
++--------+------------------------------------------------------------------------------------+
++argument+argument type                                                                       +
++========+====================================================================================+
++type    +smart_ptr< :ref:`rtti::TypeAnnotation <handle-rtti-TypeAnnotation>` > const implicit+
++--------+------------------------------------------------------------------------------------+
++field   +string const implicit                                                               +
++--------+------------------------------------------------------------------------------------+
+
+
+|function-ast-get_handled_type_field_offset|
 
 ++++++++++++++++++
 Pointer conversion

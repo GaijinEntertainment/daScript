@@ -22,6 +22,8 @@ namespace das {
     bool builtin_string_endswith ( const char * str, const char * cmp, Context * context );
     bool builtin_string_startswith ( const char * str, const char * cmp, Context * context );
     bool builtin_string_startswith2 ( const char * str, const char * cmp, uint32_t cmpLen, Context * context );
+    bool builtin_string_startswith3 ( const char * str, int32_t offset, const char * cmp, Context * context );
+    bool builtin_string_startswith4 ( const char * str, int32_t offset, const char * cmp, uint32_t cmpLen, Context * context );
     char* builtin_string_strip ( const char *str, Context * context );
     char* builtin_string_strip_left ( const char *str, Context * context );
     char* builtin_string_strip_right ( const char *str, Context * context );

@@ -868,7 +868,7 @@ Queries
   *  :ref:`isCMRES (fun:smart_ptr\<ast::Function\> const) : bool <function-_at_ast_boost_c__c_isCMRES_CY_ls_FunctionPtr_gr_1_ls_H_ls_ast_c__c_Function_gr__gr_?M>` 
   *  :ref:`isCMRES (fun:ast::Function? const) : bool <function-_at_ast_boost_c__c_isCMRES_C1_ls_H_ls_ast_c__c_Function_gr__gr_?>` 
   *  :ref:`isMakeLocal (expr:smart_ptr\<ast::Expression\> const) : bool <function-_at_ast_boost_c__c_isMakeLocal_CY_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr_?M>` 
-  *  :ref:`get_workhorse_types () : rtti::Type[28] <function-_at_ast_boost_c__c_get_workhorse_types>` 
+  *  :ref:`get_workhorse_types () : rtti::Type[30] <function-_at_ast_boost_c__c_get_workhorse_types>` 
   *  :ref:`find_argument_index (typ:smart_ptr\<ast::TypeDecl\> const;name:string const) : int <function-_at_ast_boost_c__c_find_argument_index_CY_ls_TypeDeclPtr_gr_1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Cs>` 
   *  :ref:`isCMRESType (blockT:smart_ptr\<ast::TypeDecl\> const) : bool <function-_at_ast_boost_c__c_isCMRESType_CY_ls_TypeDeclPtr_gr_1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M>` 
 
@@ -1113,7 +1113,7 @@ isMakeLocal returns bool
 
 .. das:function:: get_workhorse_types()
 
-get_workhorse_types returns  :ref:`rtti::Type <enum-rtti-Type>` [28]
+get_workhorse_types returns  :ref:`rtti::Type <enum-rtti-Type>` [30]
 
 |function-ast_boost-get_workhorse_types|
 

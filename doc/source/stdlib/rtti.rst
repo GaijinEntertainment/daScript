@@ -158,6 +158,19 @@ Type aliases
 
 |typedef-rtti-ModuleFlags|
 
+.. _alias-AnnotationDeclarationFlags:
+
+.. das:attribute:: AnnotationDeclarationFlags is a bitfield
+
++---------+---+-----+
++field    +bit+value+
++=========+===+=====+
++inherited+0  +1    +
++---------+---+-----+
+
+
+|typedef-rtti-AnnotationDeclarationFlags|
+
 .. _alias-RttiValue:
 
 .. das:attribute:: RttiValue is a variant type
@@ -507,27 +520,31 @@ Enumerations
 +--------------+--+
 +tURange       +29+
 +--------------+--+
-+tString       +30+
++tRange64      +30+
 +--------------+--+
-+tStructure    +31+
++tURange64     +31+
 +--------------+--+
-+tHandle       +32+
++tString       +32+
 +--------------+--+
-+tEnumeration  +33+
++tStructure    +33+
 +--------------+--+
-+tPointer      +37+
++tHandle       +34+
 +--------------+--+
-+tFunction     +38+
++tEnumeration  +35+
 +--------------+--+
-+tLambda       +39+
++tPointer      +39+
 +--------------+--+
-+tIterator     +40+
++tFunction     +40+
 +--------------+--+
-+tArray        +41+
++tLambda       +41+
 +--------------+--+
-+tTable        +42+
++tIterator     +42+
 +--------------+--+
-+tBlock        +43+
++tArray        +43+
++--------------+--+
++tTable        +44+
++--------------+--+
++tBlock        +45+
 +--------------+--+
 +tInt8         +9 +
 +--------------+--+
@@ -537,15 +554,15 @@ Enumerations
 +--------------+--+
 +tUInt16       +12+
 +--------------+--+
-+tTuple        +44+
++tTuple        +46+
 +--------------+--+
-+tEnumeration8 +34+
++tEnumeration8 +36+
 +--------------+--+
-+tEnumeration16+35+
++tEnumeration16+37+
 +--------------+--+
-+tVariant      +45+
++tVariant      +47+
 +--------------+--+
-+tBitfield     +36+
++tBitfield     +38+
 +--------------+--+
 
 
@@ -806,6 +823,8 @@ AnnotationDeclaration fields are
 +arguments + :ref:`rtti::AnnotationArgumentList <handle-rtti-AnnotationArgumentList>` +
 +----------+--------------------------------------------------------------------------+
 +at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`                             +
++----------+--------------------------------------------------------------------------+
++flags     + :ref:`AnnotationDeclarationFlags <alias-AnnotationDeclarationFlags>`     +
 +----------+--------------------------------------------------------------------------+
 
 

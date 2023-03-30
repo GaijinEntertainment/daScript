@@ -203,9 +203,8 @@ Serialization
   *  :ref:`serialize_raw (arch:archive::Archive -const;value:auto(TT)& -const) : auto <function-_at_archive_c__c_serialize_raw_S_ls_Archive_gr__&Y_ls_TT_gr_.>` 
   *  :ref:`read_raw (arch:archive::Archive -const;value:auto(TT)& -const) : auto <function-_at_archive_c__c_read_raw_S_ls_Archive_gr__&Y_ls_TT_gr_.>` 
   *  :ref:`write_raw (arch:archive::Archive -const;value:auto(TT)& -const) : auto <function-_at_archive_c__c_write_raw_S_ls_Archive_gr__&Y_ls_TT_gr_.>` 
-  *  :ref:`serialize (arch:archive::Archive -const;value:auto(TT)& -const) : auto <function-_at_archive_c__c_serialize_S_ls_Archive_gr__&Y_ls_TT_gr_._%_ls_IsAnyEnumMacro_c_expect_any_enum(value_eq_true)_gr_>` 
+  *  :ref:`serialize (arch:archive::Archive -const;value:auto(TT)& -const) : auto <function-_at_archive_c__c_serialize_S_ls_Archive_gr__&Y_ls_TT_gr_._%_ls_((IsAnyEnumMacro_c_expect_any_enum(value_eq_true)||IsAnyWorkhorseNonPtrMacro_c_expect_any_workhorse_raw(value_eq_true))||IsValueHandle_c_expect_value_handle(value_eq_true))_gr_>` 
   *  :ref:`serialize (arch:archive::Archive -const;value:auto(TT)& -const) : auto <function-_at_archive_c__c_serialize_S_ls_Archive_gr__&Y_ls_TT_gr_._%_ls_IsAnyFunctionNonPtrMacro_c_expect_any_function(value_eq_true)_gr_>` 
-  *  :ref:`serialize (arch:archive::Archive -const;value:auto(TT)& -const) : auto <function-_at_archive_c__c_serialize_S_ls_Archive_gr__&Y_ls_TT_gr_._%_ls_IsAnyWorkhorseNonPtrMacro_c_expect_any_workhorse_raw(value_eq_true)_gr_>` 
   *  :ref:`serialize (arch:archive::Archive -const;value:auto(TT)& -const) : auto <function-_at_archive_c__c_serialize_S_ls_Archive_gr__&Y_ls_TT_gr_._%_ls_IsAnyStructMacro_c_expect_any_struct(value_eq_true)_gr_>` 
   *  :ref:`serialize (arch:archive::Archive -const;value:auto(TT)& -const) : auto <function-_at_archive_c__c_serialize_S_ls_Archive_gr__&Y_ls_TT_gr_._%_ls_IsAnyTupleNonPtrMacro_c_expect_any_tuple(value_eq_true)_gr_>` 
   *  :ref:`serialize (arch:archive::Archive -const;value:auto(TT)& -const) : auto <function-_at_archive_c__c_serialize_S_ls_Archive_gr__&Y_ls_TT_gr_._%_ls_IsAnyVariantNonPtrMacro_c_expect_any_variant(value_eq_true)_gr_>` 
@@ -325,7 +324,7 @@ write_raw returns auto
 
 Write raw data (straight up bytes for raw pod)
 
-.. _function-_at_archive_c__c_serialize_S_ls_Archive_gr__&Y_ls_TT_gr_._%_ls_IsAnyEnumMacro_c_expect_any_enum(value_eq_true)_gr_:
+.. _function-_at_archive_c__c_serialize_S_ls_Archive_gr__&Y_ls_TT_gr_._%_ls_((IsAnyEnumMacro_c_expect_any_enum(value_eq_true)||IsAnyWorkhorseNonPtrMacro_c_expect_any_workhorse_raw(value_eq_true))||IsValueHandle_c_expect_value_handle(value_eq_true))_gr_:
 
 .. das:function:: serialize(arch: Archive; value: auto(TT)&)
 
@@ -343,23 +342,6 @@ serialize returns auto
 Serializes structured data, based on the `value` type.
 
 .. _function-_at_archive_c__c_serialize_S_ls_Archive_gr__&Y_ls_TT_gr_._%_ls_IsAnyFunctionNonPtrMacro_c_expect_any_function(value_eq_true)_gr_:
-
-.. das:function:: serialize(arch: Archive; value: auto(TT)&)
-
-serialize returns auto
-
-+--------+--------------------------------------------------+
-+argument+argument type                                     +
-+========+==================================================+
-+arch    + :ref:`archive::Archive <struct-archive-Archive>` +
-+--------+--------------------------------------------------+
-+value   +auto(TT)&                                         +
-+--------+--------------------------------------------------+
-
-
-Serializes structured data, based on the `value` type.
-
-.. _function-_at_archive_c__c_serialize_S_ls_Archive_gr__&Y_ls_TT_gr_._%_ls_IsAnyWorkhorseNonPtrMacro_c_expect_any_workhorse_raw(value_eq_true)_gr_:
 
 .. das:function:: serialize(arch: Archive; value: auto(TT)&)
 

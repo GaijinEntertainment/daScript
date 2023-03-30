@@ -229,4 +229,71 @@ write_json returns string
 
 returns JSON (textual) representation of JsonValue as a string.
 
++++++++++++++
+Uncategorized
++++++++++++++
+
+.. _function-_at_json_c__c_set_no_trailing_zeros_Cb:
+
+.. das:function:: set_no_trailing_zeros(value: bool const)
+
+set_no_trailing_zeros returns bool const
+
++--------+-------------+
++argument+argument type+
++========+=============+
++value   +bool const   +
++--------+-------------+
+
+
+|function-json-set_no_trailing_zeros|
+
+.. _function-_at_json_c__c_set_no_empty_arrays_Cb:
+
+.. das:function:: set_no_empty_arrays(value: bool const)
+
+set_no_empty_arrays returns bool const
+
++--------+-------------+
++argument+argument type+
++========+=============+
++value   +bool const   +
++--------+-------------+
+
+
+|function-json-set_no_empty_arrays|
+
+.. _function-_at_json_c__c_set_allow_duplicate_keys_Cb:
+
+.. das:function:: set_allow_duplicate_keys(value: bool const)
+
+set_allow_duplicate_keys returns bool const
+
++--------+-------------+
++argument+argument type+
++========+=============+
++value   +bool const   +
++--------+-------------+
+
+
+|function-json-set_allow_duplicate_keys|
+
+.. _function-_at_json_c__c_try_fixing_broken_json_s:
+
+.. das:function:: try_fixing_broken_json(bad: string)
+
+try_fixing_broken_json returns string
+
++--------+-------------+
++argument+argument type+
++========+=============+
++bad     +string       +
++--------+-------------+
+
+
+fixes broken json. so far supported
+1. "string" + "string" string concatination
+2. "text "nested text" text" nested quotes
+3. extra , at the end of object or array
+
 

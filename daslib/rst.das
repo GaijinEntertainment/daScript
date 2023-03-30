@@ -56,17 +56,18 @@ def call_macro_label_name(mod,value)
 
 def function_label_name(value:FunctionPtr)
     var mn = get_mangled_name(value)
-    // TODO: add replace_characters
-    mn = replace(mn," ","_")
-    mn = replace(mn,"$","_builtin_")
-    mn = replace(mn,"#","_hh_")
-    mn = replace(mn,":","_c_")
-    mn = replace(mn,"@","_at_")
-    mn = replace(mn,"<","_ls_")
-    mn = replace(mn,">","_gr_")
-    mn = replace(mn,"`","_rq_")
-    mn = replace(mn,"!","_ex_")
-    mn = replace(mn,"=","_eq_")
+    mn = mn |> replace_multiple([{auto
+        " " => "_";
+        "$" => "_builtin_";
+        "#" => "_hh_";
+        ":" => "_c_";
+        "@" => "_at_";
+        "<" => "_ls_";
+        ">" => "_gr_";
+        "`" => "_rq_";
+        "!" => "_ex_";
+        "=" => "_eq_"
+    }])
     return "function-{mn}"
 
 def describe_type_short(td:TypeDecl?)
@@ -235,9 +236,11 @@ def make_label(name:string)
     return ".. _{name}:\n\n"
 
 def make_ref(name,text:string)
-    var t = replace(text,"<","\\<")
-    t = replace(t,">","\\>")
-    t = replace(t,"!","\\!")
+    let t = text |> replace_multiple([{auto
+        "<" => "\\<";
+        ">" => "\\>";
+        "!" => "\\!"
+    }])
     return " :ref:`{t} <{name}>` "
 
 def make_group(name:string; plus:string="+")
