@@ -128,8 +128,13 @@ struct ChatMessage
 struct ChatLog
     messages : array<ChatMessage>
     summary : string
+    total_tokens : int
 
 var g_chat_messages : table<string; ChatLog>
+
+def reset_chat_log ( chat_id:string )
+    delete g_chat_messages[chat_id]
+    g_chat_messages[chat_id] <- ChatLog()
 
 def get_chat_summary( var log:ChatLog; nmessages:int=INT_MAX )
     // now, the fallback
@@ -145,7 +150,6 @@ def get_chat_summary( var log:ChatLog; nmessages:int=INT_MAX )
             writer |> write("\n")
         writer |> write("---\nSummary of the entire conversation:")
     // now, we make a summary
-    to_log(LOG_INFO, "pruning chat, creating summary\n")
     to_log(LOG_INFO, "summary prompt:\n{summary_prompt}\n")
     var inscope completion : CreateCompletionResponse
     for i in 0..g_botConfig.chat_completion_attempts
@@ -164,10 +168,7 @@ def get_chat_summary( var log:ChatLog; nmessages:int=INT_MAX )
     if !completion|> is_valid
         to_log(LOG_ERROR, "openai_create_completion failed: {openai_get_last_error()}\n")
         return ""
-    to_log(LOG_INFO, "pruning chat, removing first message\n")
-    to_log(LOG_INFO, "message was:\n{log.messages[0].message_text}\n")
-    to_log(LOG_INFO, "new summary is:\n{completion.choices[0].text}\n")
-    return completion.choices[0].text |> replace("\\n","")
+    return completion.choices[0].text |> replace("\\n","") |> replace("\n","")
 
 def prune_chat ( var log:ChatLog )
     // first lets try to get rid of message, that is not answered (i.e. was not addressed to bot)
@@ -185,6 +186,9 @@ def prune_chat ( var log:ChatLog )
     let new_summary = get_chat_summary(log,1)
     if new_summary |> empty
         return false
+    to_log(LOG_INFO, "pruning chat, removing first message from {log.messages[0].author}\n")
+    to_log(LOG_INFO, "message was:\n{log.messages[0].message_text}\n")
+    to_log(LOG_INFO, "new summary is:\n{new_summary}\n")
     log.summary = new_summary
     log.messages |> erase(0)
     return true
@@ -257,8 +261,9 @@ def adjust_completion ( var json : JsonValue? )
             obj["draw"] = JV(req)
             to_log(LOG_INFO, "adjusting draw to {req}\n")
 
-def generate_chat_reply ( chat_id : string; message:tbotapi::message )
+def generate_chat_reply ( chat_id : string; message:tbotapi::message; var tokens:int& )
     to_log(LOG_INFO, "generate_chat_reply {chat_id} {message.text}\n")
+    tokens = 0
     var messages : array<ChatCompletionMessage>
     to_log(LOG_INFO, "system: {g_botConfig.chat_prompt}\n")
     messages |> push([[ChatCompletionMessage role="system", content=g_botConfig.chat_prompt, name=g_botConfig.name]])
@@ -297,6 +302,11 @@ def generate_chat_reply ( chat_id : string; message:tbotapi::message )
         to_log(LOG_ERROR, "openai_create_chat_completion failed: {openai_get_last_error()}\n")
         return [[GodfatherMessage result = "error", message = openai_get_last_error()]]
     to_log(LOG_INFO, "chat completion: {chat.choices[0].message.content}\n")
+    to_log(LOG_INFO, "usage:\n")
+    to_log(LOG_INFO, "- prompt tokens {chat.usage.prompt_tokens}\n")
+    to_log(LOG_INFO, "- completion tokens {chat.usage.completion_tokens}\n")
+    to_log(LOG_INFO, "- total tokens {chat.usage.total_tokens}\n")
+    tokens = chat.usage.total_tokens
     let fnd = chat.choices[0].message.content |> find("\{")
     if fnd == -1
         to_log(LOG_ERROR, "there is no JSON there\n")
@@ -403,13 +413,28 @@ def setup_bot_commands
     telegram_setMyCommands([[setmycommands
         commands <- [{botcommand
             command="test", description="verify one of the internal bot features";
+            command="reset", description="reset conversation in this chat";
             command="summary", description="get a summary of the chat";
-            command="completion_summary", description="show completion summary"
+            command="completion_summary", description="show completion summary";
+            command="status", description="show current chat status"
         }]
     ]])
     if !telegram_get_last_error() |> empty
         to_log(LOG_ERROR, "telegram_setMyCommands failed: {telegram_get_last_error()}\n")
         return
+
+def dump_chat_status ( chat:ChatLog )
+    return build_string <| $ ( writer )
+        writer |> write("```\n")
+        writer |> write(chat.summary)
+        writer |> write("\n")
+        for msg in chat.messages
+            writer |> write(msg.author)
+            writer |> write(": ")
+            writer |> write(msg.message_text)
+            writer |> write("\n")
+        writer |> write("```\n")
+        writer |> write("in {chat.total_tokens} tokens\n")
 
 def process_bot_commands ( message:message )
     var response : string
@@ -419,6 +444,13 @@ def process_bot_commands ( message:message )
         response = get_chat_summary(g_chat_messages["{message.chat.id}"])
     elif message.text == "/completion_summary@{g_botConfig.id}"
         response = g_chat_messages["{message.chat.id}"].summary
+        if response |> empty
+            response = "no completion summary available"
+    elif message.text == "/status@{g_botConfig.id}"
+        response = dump_chat_status(g_chat_messages["{message.chat.id}"])
+    elif message.text == "/reset@{g_botConfig.id}"
+        reset_chat_log("{message.chat.id}")
+        response = "conversation history has been reset"
     if !empty(response)
         telegram_sendLongMessage([[sendmessage
             chat_id = "{message.chat.id}",
@@ -484,9 +516,12 @@ def main
                         accept_chat_message("{r.message.chat.id}","{r.message.text}",get_user_name(r.message.from))
                     if is_someone_asking_bot_to_say_something(*r.message)
                         to_log(LOG_INFO, "someone is asking me to say something\n")
-                        let reply = generate_chat_reply("{r.message.chat.id}",*r.message)
+                        var tokens = 0
+                        let reply = generate_chat_reply("{r.message.chat.id}",*r.message, tokens)
                         if reply.result != "error"
+                            g_chat_messages["{r.message.chat.id}"].total_tokens = tokens
                             process_chat_reply(*r.message,reply)
                         else
                             process_error_message(*r.message,reply)
+
 
