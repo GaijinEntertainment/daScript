@@ -51,7 +51,10 @@ def private telegram_call ( METHOD:string; updates:auto; var res:auto(RES_TYPE) 
             var JV = read_json(resp.text,LAST_ERROR)
             if JV != null
                 if  (JV as _object)["ok"] as _bool
-                    res <- from_JV((JV as _object)["result"],type<RES_TYPE>)
+                    static_if typeinfo(can_copy type<RES_TYPE>)
+                        res = from_JV((JV as _object)["result"],type<RES_TYPE>)
+                    else
+                        res <- from_JV((JV as _object)["result"],type<RES_TYPE>)
                 else
                     LAST_ERROR = "API returned not OK\n{resp.text}"
             else
@@ -142,3 +145,8 @@ def public telegram_sendPhoto ( photo : tbot::sendphoto )
             LAST_ERROR = resp.error
         elif resp.status_code != 200
             LAST_ERROR = "HTTPS POST failed with status {resp.status_code}"
+
+def public telegram_setMyCommands ( commands : setmycommands )
+    var res : bool
+    telegram_call("setMyCommands",commands,res)
+    return res

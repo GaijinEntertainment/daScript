@@ -127,20 +127,82 @@ struct ChatMessage
 [skip_lock_check]
 struct ChatLog
     messages : array<ChatMessage>
+    summary : string
 
 var g_chat_messages : table<string; ChatLog>
+
+def get_chat_summary( var log:ChatLog; nmessages:int=INT_MAX )
+    // now, the fallback
+    let summary_prompt = build_string <| $ ( writer )
+        if !empty(log.summary)
+            writer |> write("Conversation so far:\n")
+            writer |> write(log.summary)
+        for msg,i in log.messages,range(nmessages)
+            writer |> write("\n")
+            writer |> write(msg.author==g_botConfig.name ? "assistant" : "user")
+            writer |> write(": ")
+            writer |> write(msg.message_text)
+            writer |> write("\n")
+        writer |> write("---\nSummary of the entire conversation:")
+    // now, we make a summary
+    to_log(LOG_INFO, "pruning chat, creating summary\n")
+    to_log(LOG_INFO, "summary prompt:\n{summary_prompt}\n")
+    var inscope completion : CreateCompletionResponse
+    for i in 0..g_botConfig.chat_completion_attempts
+        completion <- openai_create_completion([[Completion()
+            model = "text-davinci-003",
+            prompt = summary_prompt,
+            max_tokens = 512,
+            temperature = 0.
+        ]])
+        if completion |> is_valid
+            break
+        if !(openai_get_last_error() |> starts_with("curl timeout") || openai_get_last_error() |> starts_with("HTTPS POST failed"))
+            break
+        to_log(LOG_ERROR, "retrying, reason: {openai_get_last_error()}\n")
+        delete completion
+    if !completion|> is_valid
+        to_log(LOG_ERROR, "openai_create_completion failed: {openai_get_last_error()}\n")
+        return ""
+    to_log(LOG_INFO, "pruning chat, removing first message\n")
+    to_log(LOG_INFO, "message was:\n{log.messages[0].message_text}\n")
+    to_log(LOG_INFO, "new summary is:\n{completion.choices[0].text}\n")
+    return completion.choices[0].text |> replace("\\n","")
+
+def prune_chat ( var log:ChatLog )
+    // first lets try to get rid of message, that is not answered (i.e. was not addressed to bot)
+    // and not written by bot
+    var index = -1
+    for msg,i in log.messages,count()
+        if !msg.answered && msg.author!=g_botConfig.name
+            index = i
+            break
+    if index != -1
+        to_log(LOG_INFO, "pruning chat, removing unansered message {index} from {log.messages[index].author}\n")
+        to_log(LOG_INFO, "message was:\n{log.messages[index].message_text}\n")
+        log.messages |> erase(index)
+        return true
+    let new_summary = get_chat_summary(log,1)
+    if new_summary |> empty
+        return false
+    log.summary = new_summary
+    log.messages |> erase(0)
+    return true
 
 def accept_chat_message ( chat_id:string; message_text:string; author:string )
     to_log(LOG_INFO, "accept_chat_message {chat_id} {message_text} {author}\n")
     assume chat = g_chat_messages[chat_id]
+    while length(chat.messages) > g_botConfig.max_chat_messages
+        if !prune_chat ( chat )
+            break
     if !chat.messages |> empty
         var last_message & = unsafe(chat.messages |> back)
         if !last_message.answered && last_message.author == author
-            last_message.message_text = "{last_message.message_text}\n{message_text}"
+            let combined_text = "{last_message.message_text}\n{message_text}"
+            if length(combined_text) < 4096
+                last_message.message_text = combined_text
             return
     chat.messages |> push([[ChatMessage message_text=message_text, author=author]])
-    if length(chat.messages) > g_botConfig.max_chat_messages
-        chat.messages |> erase(0)
 
 def is_someone_asking_bot_to_say_something ( message:tbotapi::message  )
     if message.text |> find("@{g_botConfig.id}") != -1
@@ -200,6 +262,10 @@ def generate_chat_reply ( chat_id : string; message:tbotapi::message )
     var messages : array<ChatCompletionMessage>
     to_log(LOG_INFO, "system: {g_botConfig.chat_prompt}\n")
     messages |> push([[ChatCompletionMessage role="system", content=g_botConfig.chat_prompt, name=g_botConfig.name]])
+    let summary = g_chat_messages[chat_id].summary
+    if !empty(summary)
+        to_log(LOG_INFO, "system: {summary}\n")
+        messages |> push([[ChatCompletionMessage role="system", content="Summary of the conversation so far: {summary}", name=g_botConfig.name]])
     for cm in g_chat_messages[chat_id].messages
         let role = cm.author==g_botConfig.name ? "assistant" : "user"
         let content = sanitize_chat_message(cm.message_text)
@@ -228,7 +294,7 @@ def generate_chat_reply ( chat_id : string; message:tbotapi::message )
         to_log(LOG_ERROR, "retrying, reason: {openai_get_last_error()}\n")
         delete chat
     if !chat|> is_valid
-        to_log(LOG_ERROR, "openai_create_completion failed: {openai_get_last_error()}\n")
+        to_log(LOG_ERROR, "openai_create_chat_completion failed: {openai_get_last_error()}\n")
         return [[GodfatherMessage result = "error", message = openai_get_last_error()]]
     to_log(LOG_INFO, "chat completion: {chat.choices[0].message.content}\n")
     let fnd = chat.choices[0].message.content |> find("\{")
@@ -333,6 +399,37 @@ def accept_godfather_message ( chat_id:string; message_text:string )
         delete json
     accept_chat_message(chat_id,json_str,g_botConfig.name)
 
+def setup_bot_commands
+    telegram_setMyCommands([[setmycommands
+        commands <- [{botcommand
+            command="test", description="verify one of the internal bot features";
+            command="summary", description="get a summary of the chat";
+            command="completion_summary", description="show completion summary"
+        }]
+    ]])
+    if !telegram_get_last_error() |> empty
+        to_log(LOG_ERROR, "telegram_setMyCommands failed: {telegram_get_last_error()}\n")
+        return
+
+def process_bot_commands ( message:message )
+    var response : string
+    if message.text == "/test@{g_botConfig.id}"
+        response = "this is a test message from {g_botConfig.name}"
+    elif message.text == "/summary@{g_botConfig.id}"
+        response = get_chat_summary(g_chat_messages["{message.chat.id}"])
+    elif message.text == "/completion_summary@{g_botConfig.id}"
+        response = g_chat_messages["{message.chat.id}"].summary
+    if !empty(response)
+        telegram_sendLongMessage([[sendmessage
+            chat_id = "{message.chat.id}",
+            reply_to_message_id = message.message_id,
+            text = response
+        ]])
+        if !telegram_get_last_error() |> empty
+            to_log(LOG_ERROR, "telegram_sendLongMessage failed: {telegram_get_last_error()}\n")
+        return true
+    return false
+
 [export]
 def main
     var args <- get_command_line_arguments()
@@ -355,6 +452,7 @@ def main
     if !telegram_get_last_error() |> empty
         panic("telegram_getMe failed: {telegram_get_last_error()}")
     print("{g_botConfig.name} {g_userGodfather.username} ({g_userGodfather.id}) is listening...\n")
+    setup_bot_commands()
     while true
         unsafe(heap_collect(true,true))
         if true
@@ -373,6 +471,8 @@ def main
                 last_update = max(last_update, r.update_id+1l)
                 if r.message != null
                     to_log(LOG_INFO, "message from {get_user_name(r.message.from)}: {r.message.text}\n")
+                    if process_bot_commands(*r.message)
+                        continue
                     if r.message.reply_to_message != null
                         to_log(LOG_INFO, "reply to {get_user_name(r.message.reply_to_message.from)}: {r.message.reply_to_message.text}\n")
                     if r.message.voice!=null
