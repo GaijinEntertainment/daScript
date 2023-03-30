@@ -1,0 +1,7 @@
+IF(NOT DAS_TELEGRAM_INCLUDED)
+    SET(DAS_TELEGRAM_INCLUDED TRUE)
+    MESSAGE(STATUS "dasTELEGRAM module included.")
+    ADD_MODULE_DAS(telegram telegram tbotapi)
+    ADD_MODULE_DAS(telegram telegram tbotlog)
+    ADD_MODULE_DAS(telegram telegram tbot)
+ENDIF()

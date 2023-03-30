@@ -1,14 +1,16 @@
-require tbot
 require fio
 require strings
 require math
 require openai/openai
 require daslib/json_boost
 require daslib/base64
-require tbot_log
+
+require telegram/tbot
+require telegram/tbotlog
 
 struct BotConfig : tbot::configuration
     id : string
+    name : string
     openai_timeout : float = 30.0
     update_timeout : float = 5.0
     retry_timeout : float = 20.0
@@ -197,14 +199,14 @@ def generate_chat_reply ( chat_id : string; message:tbotapi::message )
     to_log(LOG_INFO, "generate_chat_reply {chat_id} {message.text}\n")
     var messages : array<ChatCompletionMessage>
     to_log(LOG_INFO, "system: {g_botConfig.chat_prompt}\n")
-    messages |> push([[ChatCompletionMessage role = "system", content = g_botConfig.chat_prompt, name = "Godfather"]])
+    messages |> push([[ChatCompletionMessage role="system", content=g_botConfig.chat_prompt, name=g_botConfig.name]])
     for cm in g_chat_messages[chat_id].messages
-        let role = cm.author=="Godfather" ? "assistant" : "user"
+        let role = cm.author==g_botConfig.name ? "assistant" : "user"
         let content = sanitize_chat_message(cm.message_text)
         to_log(LOG_INFO,"{role}: {content}\n")
         messages |> push([[ChatCompletionMessage
             role = role,
-            // name = cm.author,    // we are skipping this, because it goes bonkers otherwise
+            name = cm.author==g_botConfig.name ? "" : cm.author,    // we are skipping this, because it goes bonkers otherwise
             content = content]])
     messages |> push([[ChatCompletionMessage
         role = "system",
@@ -266,18 +268,18 @@ def process_error_message ( message:tbotapi::message; whatGodfatherSaid:Godfathe
     telegram_sendMessage([[sendmessage
         chat_id = "{message.chat.id}",
         reply_to_message_id = message.message_id,
-        text = "Godfather (debug message): {whatGodfatherSaid.message}\n{whatGodfatherSaid.raw}"
+        text = "{g_botConfig.name} (debug message): {whatGodfatherSaid.message}\n{whatGodfatherSaid.raw}"
     ]])
     if !telegram_get_last_error() |> empty
         to_log(LOG_ERROR, "telegram_sendMessage failed: {telegram_get_last_error()}\n")
 
 def process_chat_reply ( message:tbotapi::message; whatGodfatherSaid:GodfatherMessage )
-    to_log(LOG_INFO, "Godfather: {whatGodfatherSaid}\n")
+    to_log(LOG_INFO, "{g_botConfig.name}: {whatGodfatherSaid}\n")
     let reply = sanitize_translation(whatGodfatherSaid.message)
     telegram_sendMessage([[sendmessage
         chat_id = "{message.chat.id}",
         reply_to_message_id = message.message_id,
-        text = "Godfather: {reply} {whatGodfatherSaid.mood}"
+        text = "{g_botConfig.name}: {reply} {whatGodfatherSaid.mood}"
     ]])
     if !telegram_get_last_error() |> empty
         to_log(LOG_ERROR, "telegram_sendMessage failed: {telegram_get_last_error()}\n")
@@ -317,7 +319,7 @@ def process_chat_reply ( message:tbotapi::message; whatGodfatherSaid:GodfatherMe
             chat_id = "{message.chat.id}",
             reply_to_message_id = message.message_id,
             file = photo_file_name,
-            caption = "Godfather: {whatGodfatherSaid.draw}"
+            caption = "{g_botConfig.name}: {whatGodfatherSaid.draw}"
         ]])
         if !telegram_get_last_error() |> empty
             to_log(LOG_ERROR, "telegram_sendMessage failed: {telegram_get_last_error()}\n")
@@ -329,7 +331,7 @@ def accept_godfather_message ( chat_id:string; message_text:string )
     var json_str = write_json(json)
     unsafe
         delete json
-    accept_chat_message(chat_id,json_str,"Godfather")
+    accept_chat_message(chat_id,json_str,g_botConfig.name)
 
 [export]
 def main
@@ -352,7 +354,7 @@ def main
     g_userGodfather = telegram_getMe()
     if !telegram_get_last_error() |> empty
         panic("telegram_getMe failed: {telegram_get_last_error()}")
-    print("Godfather {g_userGodfather.username} ({g_userGodfather.id}) is listening...\n")
+    print("{g_botConfig.name} {g_userGodfather.username} ({g_userGodfather.id}) is listening...\n")
     while true
         unsafe(heap_collect(true,true))
         if true

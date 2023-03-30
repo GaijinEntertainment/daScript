@@ -2,7 +2,7 @@ options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 
-module tbot_log shared private
+module tbotlog shared private
 
 require debugapi
 require fio
