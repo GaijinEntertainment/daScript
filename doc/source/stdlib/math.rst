@@ -36,27 +36,64 @@ Constants
 
 |variable-math-DBL_EPSILON|
 
-+++++++++++++
-Handled types
-+++++++++++++
+++++++++++++++++++
+Handled structures
+++++++++++++++++++
 
 .. _handle-math-float4x4:
 
 .. das:attribute:: float4x4
 
-|any_annotation-math-float4x4|
+float4x4 fields are
+
++-+------+
++z+float4+
++-+------+
++w+float4+
++-+------+
++y+float4+
++-+------+
++x+float4+
++-+------+
+
+
+|structure_annotation-math-float4x4|
 
 .. _handle-math-float3x4:
 
 .. das:attribute:: float3x4
 
-|any_annotation-math-float3x4|
+float3x4 fields are
+
++-+------+
++z+float3+
++-+------+
++w+float3+
++-+------+
++y+float3+
++-+------+
++x+float3+
++-+------+
+
+
+|structure_annotation-math-float3x4|
 
 .. _handle-math-float3x3:
 
 .. das:attribute:: float3x3
 
-|any_annotation-math-float3x3|
+float3x3 fields are
+
++-+------+
++z+float3+
++-+------+
++y+float3+
++-+------+
++x+float3+
++-+------+
+
+
+|structure_annotation-math-float3x3|
 
 ++++++++++++++++++++++++++++++++++++++++++
 all numerics (uint*, int*, float*, double)
@@ -5161,6 +5198,66 @@ unpack_byte_to_float returns float4
 +++++++++++++
 Uncategorized
 +++++++++++++
+
+.. _function-_at_math_c__c_fract_Cf:
+
+.. das:function:: fract(x: float const)
+
+fract returns float
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float const  +
++--------+-------------+
+
+
+|function-math-fract|
+
+.. _function-_at_math_c__c_fract_Cf2:
+
+.. das:function:: fract(x: float2 const)
+
+fract returns float2
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float2 const +
++--------+-------------+
+
+
+|function-math-fract|
+
+.. _function-_at_math_c__c_fract_Cf3:
+
+.. das:function:: fract(x: float3 const)
+
+fract returns float3
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float3 const +
++--------+-------------+
+
+
+|function-math-fract|
+
+.. _function-_at_math_c__c_fract_Cf4:
+
+.. das:function:: fract(x: float4 const)
+
+fract returns float4
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float4 const +
++--------+-------------+
+
+
+|function-math-fract|
 
 .. _function-_at_math_c__c_-_CIH_ls_math_c__c_float4x4_gr_:
 

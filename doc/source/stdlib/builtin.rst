@@ -3440,6 +3440,8 @@ Intervals
 
   *  :ref:`interval (arg0:int const;arg1:int const) : range <function-_at__builtin__c__c_interval_Ci_Ci>` 
   *  :ref:`interval (arg0:uint const;arg1:uint const) : urange <function-_at__builtin__c__c_interval_Cu_Cu>` 
+  *  :ref:`interval (arg0:int64 const;arg1:int64 const) : range64 <function-_at__builtin__c__c_interval_Ci64_Ci64>` 
+  *  :ref:`interval (arg0:uint64 const;arg1:uint64 const) : urange64 <function-_at__builtin__c__c_interval_Cu64_Cu64>` 
 
 .. _function-_at__builtin__c__c_interval_Ci_Ci:
 
@@ -3470,6 +3472,40 @@ interval returns urange
 +arg0    +uint const   +
 +--------+-------------+
 +arg1    +uint const   +
++--------+-------------+
+
+
+|function-builtin-interval|
+
+.. _function-_at__builtin__c__c_interval_Ci64_Ci64:
+
+.. das:function:: interval(arg0: int64 const; arg1: int64 const)
+
+interval returns range64
+
++--------+-------------+
++argument+argument type+
++========+=============+
++arg0    +int64 const  +
++--------+-------------+
++arg1    +int64 const  +
++--------+-------------+
+
+
+|function-builtin-interval|
+
+.. _function-_at__builtin__c__c_interval_Cu64_Cu64:
+
+.. das:function:: interval(arg0: uint64 const; arg1: uint64 const)
+
+interval returns urange64
+
++--------+-------------+
++argument+argument type+
++========+=============+
++arg0    +uint64 const +
++--------+-------------+
++arg1    +uint64 const +
 +--------+-------------+
 
 

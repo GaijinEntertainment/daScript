@@ -301,4 +301,21 @@ levenshtein_distance_fast returns int
 
 |function-strings_boost-levenshtein_distance_fast|
 
+.. _function-_at_strings_boost_c__c_replace_multiple_Cs_C1_ls_N_ls_text;replacement_gr_0_ls_s;s_gr_U_gr_A:
+
+.. das:function:: replace_multiple(source: string const; replaces: array<tuple<text:string;replacement:string>> const)
+
+replace_multiple returns string
+
++--------+--------------------------------------------------+
++argument+argument type                                     +
++========+==================================================+
++source  +string const                                      +
++--------+--------------------------------------------------+
++replaces+array<tuple<text:string;replacement:string>> const+
++--------+--------------------------------------------------+
+
+
+|function-strings_boost-replace_multiple|
+
 

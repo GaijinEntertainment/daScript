@@ -327,6 +327,8 @@ Access (get/set/clone)
   *  :ref:`clone (cv:decs::ComponentValue -const;val:bool const) : void <function-_at_decs_c__c_clone_S_ls_ComponentValue_gr__Cb>` 
   *  :ref:`clone (cv:decs::ComponentValue -const;val:range const) : void <function-_at_decs_c__c_clone_S_ls_ComponentValue_gr__Cr>` 
   *  :ref:`clone (cv:decs::ComponentValue -const;val:urange const) : void <function-_at_decs_c__c_clone_S_ls_ComponentValue_gr__Cz>` 
+  *  :ref:`clone (cv:decs::ComponentValue -const;val:range64 const) : void <function-_at_decs_c__c_clone_S_ls_ComponentValue_gr__Cr64>` 
+  *  :ref:`clone (cv:decs::ComponentValue -const;val:urange64 const) : void <function-_at_decs_c__c_clone_S_ls_ComponentValue_gr__Cz64>` 
   *  :ref:`clone (cv:decs::ComponentValue -const;val:string const) : void <function-_at_decs_c__c_clone_S_ls_ComponentValue_gr__Cs>` 
   *  :ref:`clone (cv:decs::ComponentValue -const;val:int const) : void <function-_at_decs_c__c_clone_S_ls_ComponentValue_gr__Ci>` 
   *  :ref:`clone (cv:decs::ComponentValue -const;val:int8 const) : void <function-_at_decs_c__c_clone_S_ls_ComponentValue_gr__Ci8>` 
@@ -414,6 +416,36 @@ Clones component value.
 +cv      + :ref:`decs::ComponentValue <struct-decs-ComponentValue>` +
 +--------+----------------------------------------------------------+
 +val     +urange const                                              +
++--------+----------------------------------------------------------+
+
+
+Clones component value.
+
+.. _function-_at_decs_c__c_clone_S_ls_ComponentValue_gr__Cr64:
+
+.. das:function:: clone(cv: ComponentValue; val: range64 const)
+
++--------+----------------------------------------------------------+
++argument+argument type                                             +
++========+==========================================================+
++cv      + :ref:`decs::ComponentValue <struct-decs-ComponentValue>` +
++--------+----------------------------------------------------------+
++val     +range64 const                                             +
++--------+----------------------------------------------------------+
+
+
+Clones component value.
+
+.. _function-_at_decs_c__c_clone_S_ls_ComponentValue_gr__Cz64:
+
+.. das:function:: clone(cv: ComponentValue; val: urange64 const)
+
++--------+----------------------------------------------------------+
++argument+argument type                                             +
++========+==========================================================+
++cv      + :ref:`decs::ComponentValue <struct-decs-ComponentValue>` +
++--------+----------------------------------------------------------+
++val     +urange64 const                                            +
 +--------+----------------------------------------------------------+
 
 

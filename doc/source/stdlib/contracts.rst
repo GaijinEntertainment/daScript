@@ -59,7 +59,7 @@ Function annotations
 .. das:attribute:: expect_any_workhorse
 
 [expect_any_workhorse(argname)] contract, which only accepts workhorse types (int, float, etc)
-Workhorse types are: bool,int*,uint*,float*,double,range and urange,string,enumeration,and non-smart pointers
+Workhorse types are: bool,int*,uint*,float*,double,range and urange, range64 and urange64, string,enumeration,and non-smart pointers
 
 .. _handle-contracts-expect_any_workhorse_raw:
 

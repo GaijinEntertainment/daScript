@@ -47,6 +47,20 @@ namespace das
         return (cmpLen > strLen) ? false : memcmp(str, cmp, cmpLen) == 0;
     }
 
+    bool builtin_string_startswith3 ( const char * str, int32_t offset, const char * cmp, Context * context ) {
+        const uint32_t strLen = stringLengthSafe ( *context, str );
+        if ( offset<0 || uint32_t(offset)>=strLen ) return  false;
+        const uint32_t cmpLen = stringLengthSafe ( *context, cmp );
+        return (cmpLen > strLen) ? false : memcmp(str + offset, cmp, cmpLen) == 0;
+    }
+
+    bool builtin_string_startswith4 ( const char * str, int32_t offset, const char * cmp, uint32_t cmpLen, Context * context ) {
+        const uint32_t strLen = stringLengthSafe ( *context, str );
+        if ( offset<0 || uint32_t(offset)>=strLen ) return  false;
+        cmpLen = min(cmpLen, stringLengthSafe ( *context, cmp ));
+        return (cmpLen > strLen) ? false : memcmp(str + offset, cmp, cmpLen) == 0;
+    }
+
     __forceinline bool is_space ( char c ) {
         return c==' ' || c=='\t' || c=='\r' || c=='\n' || c=='\f' || c=='\v';
     }
@@ -733,6 +747,10 @@ namespace das
                 SideEffects::none, "builtin_string_startswith")->args({"str","cmp","context"});
             addExtern<DAS_BIND_FUN(builtin_string_startswith2)>(*this, lib, "starts_with",
                 SideEffects::none, "builtin_string_startswith2")->args({"str","cmp","cmpLen","context"});
+            addExtern<DAS_BIND_FUN(builtin_string_startswith3)>(*this, lib, "starts_with",
+                SideEffects::none, "builtin_string_startswith3")->args({"str","offset","cmp","context"});
+            addExtern<DAS_BIND_FUN(builtin_string_startswith4)>(*this, lib, "starts_with",
+                SideEffects::none, "builtin_string_startswith4")->args({"str","offset","cmp","cmpLen","context"});
             addExtern<DAS_BIND_FUN(builtin_string_strip)>(*this, lib, "strip",
                 SideEffects::none, "builtin_string_strip")->args({"str","context"});
             addExtern<DAS_BIND_FUN(builtin_string_strip_right)>(*this, lib, "strip_right",

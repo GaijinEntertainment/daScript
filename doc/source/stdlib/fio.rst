@@ -729,4 +729,58 @@ popen returns int
 
 |function-fio-popen|
 
++++++++++++++
+Uncategorized
++++++++++++++
+
+.. _function-_at_fio_c__c_popen_binary_CIs_CI0_ls_C1_ls_CH_ls_fio_c__c_FILE_gr__gr_?_gr_1_ls_v_gr__builtin__C_c_C_l:
+
+.. das:function:: popen_binary(command: string const implicit; scope: block<(arg0:fio::FILE const? const):void> const implicit)
+
+popen_binary returns int
+
+.. warning:: 
+  This is unsafe operation.
+
++--------+------------------------------------------------------------------------------+
++argument+argument type                                                                 +
++========+==============================================================================+
++command +string const implicit                                                         +
++--------+------------------------------------------------------------------------------+
++scope   +block<( :ref:`fio::FILE <handle-fio-FILE>`  const? const):void> const implicit+
++--------+------------------------------------------------------------------------------+
+
+
+|function-fio-popen_binary|
+
+.. _function-_at_fio_c__c_get_env_variable_CIs_C_c:
+
+.. das:function:: get_env_variable(var: string const implicit)
+
+get_env_variable returns string
+
++--------+---------------------+
++argument+argument type        +
++========+=====================+
++var     +string const implicit+
++--------+---------------------+
+
+
+|function-fio-get_env_variable|
+
+.. _function-_at_fio_c__c_sanitize_command_line_CIs_C_c:
+
+.. das:function:: sanitize_command_line(var: string const implicit)
+
+sanitize_command_line returns string
+
++--------+---------------------+
++argument+argument type        +
++========+=====================+
++var     +string const implicit+
++--------+---------------------+
+
+
+|function-fio-sanitize_command_line|
+
 
