@@ -935,6 +935,10 @@ annotation_declaration
     |   '(' annotation_declaration[ann] ')' {
         $$ = $ann;
     }
+    |   RPIPE annotation_declaration[ann] {
+        $$ = $ann;
+        $ann->inherited = true;
+    }
     ;
 
 annotation_list

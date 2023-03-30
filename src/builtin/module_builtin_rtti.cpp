@@ -357,12 +357,20 @@ namespace das {
         }
     };
 
+    TypeDeclPtr makeAnnotationDeclarationFlags() {
+        auto ft = make_smart<TypeDecl>(Type::tBitfield);
+        ft->alias = "AnnotationDeclarationFlags";
+        ft->argNames = { "inherited" };
+        return ft;
+    }
+
     struct AnnotationDeclarationAnnotation : ManagedStructureAnnotation <AnnotationDeclaration,true> {
         AnnotationDeclarationAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("AnnotationDeclaration", ml) {
                 addField<DAS_BIND_MANAGED_FIELD(annotation)>("annotation");
                 addField<DAS_BIND_MANAGED_FIELD(arguments)>("arguments");
                 addField<DAS_BIND_MANAGED_FIELD(at)>("at");
+                addFieldEx ( "flags", "flags", offsetof(Program, flags), makeAnnotationDeclarationFlags() );
                 // TODO: function?
                 // addProperty<DAS_BIND_MANAGED_PROP(getMangledName)>("getMangledName","getMangledName");
         }
@@ -1235,6 +1243,7 @@ namespace das {
             addAlias(makeTypeInfoFlags());
             addAlias(makeStructInfoFlags());
             addAlias(makeModuleFlags());
+            addAlias(makeAnnotationDeclarationFlags());
             // enums
             addEnumeration(make_smart<EnumerationCompilationError>());
             // type annotations
