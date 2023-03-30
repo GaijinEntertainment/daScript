@@ -73,6 +73,24 @@ def public telegram_sendMessage ( msg:sendmessage )
     telegram_call("sendMessage",msg,res)
     return <- res
 
+def public telegram_sendLongMessage ( _msg:sendmessage )
+    //! send long message to telegram char or user
+    var msg := _msg
+    var res : array<message>
+    var text = msg.text
+    LAST_ERROR = ""
+    while !empty(text)
+        if length(text) > 4096
+            msg.text = text |> slice(0, 4096)
+            text = text |> slice(4096)
+        else
+            msg.text = text
+            text = ""
+        res |> emplace <| telegram_sendMessage(msg)
+        if !telegram_get_last_error() |> empty
+            break
+    return <- res
+
 def public telegram_getFile ( msg:getfile )
     //! get file information from telegram
     var res : tbotapi::file

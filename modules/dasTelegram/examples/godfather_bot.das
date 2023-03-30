@@ -109,13 +109,13 @@ def decode_voice_message(message:tbotapi::message)
         return ""
     to_log(LOG_INFO, "transcription: {transcription_text}\n")
     to_log(LOG_INFO, "sending transcription to {message.chat.id}, replying to {message.message_id}\n")
-    telegram_sendMessage([[sendmessage
+    telegram_sendLongMessage([[sendmessage
         chat_id = "{message.chat.id}",
         reply_to_message_id = message.message_id,
         text = transcription_text
     ]])
     if !telegram_get_last_error() |> empty
-        to_log(LOG_ERROR, "telegram_sendMessage failed: {telegram_get_last_error()}\n")
+        to_log(LOG_ERROR, "telegram_sendLongMessage failed: {telegram_get_last_error()}\n")
         return ""
     return transcription_text
 
@@ -265,24 +265,24 @@ def generate_chat_reply ( chat_id : string; message:tbotapi::message )
 
 def process_error_message ( message:tbotapi::message; whatGodfatherSaid:GodfatherMessage )
     to_log(LOG_ERROR, "generate_chat_reply failed: {whatGodfatherSaid.message}\n{whatGodfatherSaid.raw}\n")
-    telegram_sendMessage([[sendmessage
+    telegram_sendLongMessage([[sendmessage
         chat_id = "{message.chat.id}",
         reply_to_message_id = message.message_id,
         text = "{g_botConfig.name} (debug message): {whatGodfatherSaid.message}\n{whatGodfatherSaid.raw}"
     ]])
     if !telegram_get_last_error() |> empty
-        to_log(LOG_ERROR, "telegram_sendMessage failed: {telegram_get_last_error()}\n")
+        to_log(LOG_ERROR, "telegram_sendLongMessage failed: {telegram_get_last_error()}\n")
 
 def process_chat_reply ( message:tbotapi::message; whatGodfatherSaid:GodfatherMessage )
     to_log(LOG_INFO, "{g_botConfig.name}: {whatGodfatherSaid}\n")
     let reply = sanitize_translation(whatGodfatherSaid.message)
-    telegram_sendMessage([[sendmessage
+    telegram_sendLongMessage([[sendmessage
         chat_id = "{message.chat.id}",
         reply_to_message_id = message.message_id,
         text = "{g_botConfig.name}: {reply} {whatGodfatherSaid.mood}"
     ]])
     if !telegram_get_last_error() |> empty
-        to_log(LOG_ERROR, "telegram_sendMessage failed: {telegram_get_last_error()}\n")
+        to_log(LOG_ERROR, "telegram_sendLongMessage failed: {telegram_get_last_error()}\n")
         return
     if whatGodfatherSaid.raw != ""
         accept_chat_message("{message.chat.id}",whatGodfatherSaid.raw,"Godfather")
@@ -322,7 +322,7 @@ def process_chat_reply ( message:tbotapi::message; whatGodfatherSaid:GodfatherMe
             caption = "{g_botConfig.name}: {whatGodfatherSaid.draw}"
         ]])
         if !telegram_get_last_error() |> empty
-            to_log(LOG_ERROR, "telegram_sendMessage failed: {telegram_get_last_error()}\n")
+            to_log(LOG_ERROR, "telegram_sendLongMessage failed: {telegram_get_last_error()}\n")
             return
 
 def accept_godfather_message ( chat_id:string; message_text:string )
