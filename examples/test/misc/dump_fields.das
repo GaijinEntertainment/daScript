@@ -2,6 +2,7 @@ module dump_fields
 
 require ast
 require daslib/ast_boost
+require fio
 
 [structure_macro(name=dump_fields)]
 class DumpFields : AstStructureAnnotation
@@ -12,7 +13,8 @@ class DumpFields : AstStructureAnnotation
             if field.init != null
                 print(" = {describe(field.init)}")
             print(";\n")
-        print("\}\n")
+        print("\}\n\n")
+        fflush(fstdout())
         return true
 
 

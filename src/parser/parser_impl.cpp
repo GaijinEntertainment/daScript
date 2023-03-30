@@ -273,6 +273,27 @@ namespace das {
                     }
                 }
             }
+            auto pparent = pStruct->parent;
+            while ( pparent ) {
+                for ( auto & ad : pparent->annotations ) {
+                    if ( ad->inherited ) {
+                        if ( ad->annotation->rtti_isStructureAnnotation() ) {
+                            auto adCopy = make_smart<AnnotationDeclaration>(*ad);
+                            auto ann = static_pointer_cast<StructureAnnotation>(adCopy->annotation);
+                            string err;
+                            if ( !ann->touch(pStruct, *yyextra->g_Program->thisModuleGroup, adCopy->arguments, err) ) {
+                                das_yyerror(scanner,"inherited macro [" +adCopy->annotation->name + "] failed to apply to the structure " + pStruct->name + "\n" + err,
+                                    loc, CompilationError::invalid_annotation);
+                            }
+                            pStruct->annotations.push_back(adCopy);
+                        } else {
+                            das_yyerror(scanner,"handled structure annotation can't be inherited "+pStruct->name, loc,
+                                CompilationError::invalid_annotation);
+                        }
+                    }
+                }
+                pparent = pparent->parent;
+            }
             if ( annL ) {
                 for ( auto pA : *annL ) {
                     if ( pA->annotation ) {
@@ -300,9 +321,6 @@ namespace das {
                     }
                 }
                 swap ( pStruct->annotations, *annL );
-                for ( const auto & pA : *annL ) {
-                    pStruct->annotations.push_back(pA);
-                }
                 delete annL;
             }
         }

@@ -124,6 +124,12 @@ namespace das
         AnnotationPtr           annotation;
         AnnotationArgumentList  arguments;
         LineInfo                at;
+        union {
+            struct {
+                bool inherited : 1;
+            };
+            uint32_t            flags;
+        };
         string getMangledName() const;
     };
     typedef smart_ptr<AnnotationDeclaration> AnnotationDeclarationPtr;
