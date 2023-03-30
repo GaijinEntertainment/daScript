@@ -136,6 +136,8 @@ finally
     delete v1
 
 def replace_multiple ( source:string; replaces:array<tuple<text:string;replacement:string>> )
+    if empty(source) || empty(replaces)
+        return source
     //! replaces occurances of multiple strings in a string. does not support overlap
     return build_string <| $ ( writer )
         var index = 0
