@@ -5,8 +5,8 @@ require openai/openai
 require daslib/json_boost
 require daslib/base64
 
-require telegram/tbot
 require telegram/tbotlog
+require telegram/tbot
 
 struct BotConfig : tbot::configuration
     id : string

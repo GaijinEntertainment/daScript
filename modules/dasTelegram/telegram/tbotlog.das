@@ -35,7 +35,7 @@ def state_agent ( ctx : Context )
 
 [_macro]
 def private auto_start_state()
-    if is_compiling_macros_in_module("tbot_log") && !is_in_completion()
+    if is_compiling_macros_in_module("tbotlog") && !is_in_completion()
         if !is_in_debug_agent_creation()
             if !has_debug_agent_context("tbot_log")
                 fork_debug_agent_context(@@state_agent)
