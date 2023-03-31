@@ -281,6 +281,12 @@ namespace das
         static __forceinline unsigned long long int to ( vec4f x )           { return v_extract_xi64(v_cast_vec4i(x)); }
         static __forceinline vec4f from ( unsigned long long int x )         { return v_cast_vec4f(v_ldui_half(&x)); }
     };
+
+    template <>
+    struct cast <char> {
+        static __forceinline char to ( vec4f x )            { return char(v_extract_xi(v_cast_vec4i(x))); }
+        static __forceinline vec4f from ( char x )          { return v_cast_vec4f(v_seti_x(x)); }
+    };
 #endif
 
 #ifdef _EMSCRIPTEN_VER
