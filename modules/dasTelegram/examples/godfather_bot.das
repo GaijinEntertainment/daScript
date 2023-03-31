@@ -446,7 +446,7 @@ def process_error_message ( message:tbotapi::message; whatGodfatherSaid:Godfathe
     telegram_sendLongMessage([[sendmessage
         chat_id = "{message.chat.id}",
         reply_to_message_id = message.message_id,
-        text = "{g_botConfig.name} (debug message):```\n{whatGodfatherSaid.message}\n{whatGodfatherSaid.raw}\n```",
+        text = "{g_botConfig.name} (debug message):```\n{whatGodfatherSaid.message}\n{whatGodfatherSaid.raw}\n```" |> telegram_escapeMarkdownV2,
         parse_mode = "MarkdownV2"
     ]])
     if !telegram_get_last_error() |> empty
@@ -481,7 +481,7 @@ def process_char_reply_code ( message:tbotapi::message; whatGodfatherSaid:Godfat
         telegram_sendLongMessage([[sendmessage
             chat_id = "{message.chat.id}",
             reply_to_message_id = message.message_id,
-            text = "{whatGodfatherSaid.code}",
+            text = whatGodfatherSaid.code,
             parse_mode = "MarkdownV2"
         ]], 4096-10,"```\n","\n```")
 
@@ -580,7 +580,7 @@ def process_bot_commands ( message:message )
         telegram_sendLongMessage([[sendmessage
             chat_id = "{message.chat.id}",
             reply_to_message_id = message.message_id,
-            text = response,
+            text = response |> telegram_escapeMarkdownV2,
             parse_mode = "MarkdownV2"
         ]])
         if !telegram_get_last_error() |> empty

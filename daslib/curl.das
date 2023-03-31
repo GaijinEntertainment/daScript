@@ -12,6 +12,7 @@ let public HTTP_CURL_FAILED = -100500
 let private LOG_REQUEST = false
 let private LOG_RESPONSE = false
 var private ALWAYS_USE_TEMP_FILE = false
+var private ALWAYS_REMOVE_TEMP_FILE = true
 
 struct public DownloadResponse
     status_code : int       //! HTTP status code
@@ -131,8 +132,9 @@ def public HTTP_REQ ( method:string; uri:string; timeout:float; header:string; v
         else
             resp.status_code = HTTP_CURL_FAILED
             resp.error = "curl failed to start"
-    if !empty(temp_file)
-        remove(temp_file)
+    if ALWAYS_REMOVE_TEMP_FILE && !empty(temp_file)
+        if !remove(temp_file)
+            to_log(LOG_ERROR,"curl failed to remove {temp_file}\n")
     static_if LOG_RESPONSE
         for l in lines
             print("{l}\n")

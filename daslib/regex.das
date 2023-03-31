@@ -291,8 +291,13 @@ def private re_set_items(expr:string; offset:int) : MaybeReNode
                 if next_range
                     note("syntax error, expecting range, got meta", iofs)
                     return nada()
-                set_meta(cset,che)
-                note("set - meta",iofs)
+                if is_set_character(che)
+                    next_char = -1
+                    set_meta(cset,che)
+                    note("set - meta {to_char(che)}",iofs)
+                else
+                    next_char = che
+                    note("set - {to_char(che)}",iofs)
                 iofs += 2
         elif ch=='-'
             if prev_char == -1
