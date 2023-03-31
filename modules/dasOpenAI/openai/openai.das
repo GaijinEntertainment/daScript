@@ -94,7 +94,7 @@ def public openai_list
         if resp.status_code == HTTP_CURL_FAILED
             LAST_ERROR = resp.error
         elif resp.status_code != 200
-            LAST_ERROR = "HTTPS GET failed with status {resp.status_code}"
+            LAST_ERROR = "HTTPS GET failed with status {resp.status_code}\n{resp.text}"
         else
             var JV = read_json(resp.text,LAST_ERROR)
             if is_valid_response(JV)
