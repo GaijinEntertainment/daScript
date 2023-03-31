@@ -75,4 +75,6 @@ IF ((NOT DAS_SQLITE_INCLUDED) AND ((NOT ${DAS_SQLITE_DISABLED}) OR (NOT DEFINED 
 	SETUP_CPP11(sqlite_shell)
 	SETUP_LTO(sqlite_shell)
 
+    ADD_MODULE_DAS(sqlite daslib sqlite_boost)
+
 ENDIF()

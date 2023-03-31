@@ -1,4 +1,4 @@
-require sqlite
+require sqlite/sqlite_boost
 
 [export]
 def main
@@ -17,6 +17,6 @@ def main
         return
     rc = sqlite3_step(res)
     if rc == SQLITE_ROW
-        print("sqlite3_column_text(res, 0) = {sqlite3_column_text(res, 0)}\n")
+        print("sqlite3_column_text(res, 0) = {sqlite3_column_text_(res, 0)}\n")
     sqlite3_finalize(res)
     sqlite3_close(db)
