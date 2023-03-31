@@ -11,11 +11,17 @@ let public HTTP_CURL_FAILED = -100500
 
 let private LOG_REQUEST = false
 let private LOG_RESPONSE = false
+var private ALWAYS_USE_TEMP_FILE = false
 
 struct public DownloadResponse
     status_code : int       //! HTTP status code
     error : string          //! misc error message
     bytes : array<uint8>    //! data
+
+def public set_use_temp_file ( use_temp_file:bool )
+    let atf = ALWAYS_USE_TEMP_FILE
+    ALWAYS_USE_TEMP_FILE = use_temp_file
+    return atf
 
 def public DOWNLOAD ( uri:string;  timeout:float = 0.0 )
     var cmd = build_string <| $ ( writer )
@@ -89,6 +95,7 @@ def public HTTP_REQ ( method:string; uri:string; timeout:float; header:string; v
         data = data |> replace("\t", "")
         data = data |> sanitize_command_line
         data = data |> escape
+    var temp_file = ""
     var cmd = build_string <| $ ( writer )
         writer |> write("curl -s -i -X {method} {uri}")
         if timeout != 0.0
@@ -96,17 +103,18 @@ def public HTTP_REQ ( method:string; uri:string; timeout:float; header:string; v
         if !header|> empty
             writer |> write(" {header}")
         if !data |> empty
-            if length(data)>=1024
+            if ALWAYS_USE_TEMP_FILE || length(data)>=1024
                 let temp_dir = "{get_das_root()}/temp"
                 mkdir(temp_dir)
-                let temp_file = "{temp_dir}/{hash(data)}.curl"
+                let ttemp_file = "{temp_dir}/{hash(data)}.curl"
                 var ok = false
-                fopen(temp_file, "w") <| $ ( f )
+                fopen(ttemp_file, "w") <| $ ( f )
                     if f!=null
                         f |> fprint(old_data)
                         f |> fprint("\n")
                         ok = true
                 if ok
+                    temp_file = ttemp_file
                     writer |> write(" -d  @{temp_file}")
                 else
                     writer |> write(" -d \"{data}\"")
@@ -123,6 +131,8 @@ def public HTTP_REQ ( method:string; uri:string; timeout:float; header:string; v
         else
             resp.status_code = HTTP_CURL_FAILED
             resp.error = "curl failed to start"
+    if !empty(temp_file)
+        remove(temp_file)
     static_if LOG_RESPONSE
         for l in lines
             print("{l}\n")
