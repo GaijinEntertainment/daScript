@@ -183,6 +183,28 @@ def private is_meta_character(ch:int) : bool
 def private is_set_character(ch:int) : bool
     return find(meta_set,ch) != -1
 
+def private is_hex ( ch : int ) : bool
+    return (ch>='0' && ch<='9') || (ch>='a' && ch<='f') || (ch>='A' && ch<='F')
+
+def private from_hex ( ch : int )
+    if ch>='0' && ch<='9'
+        return ch-'0'
+    if ch>='a' && ch<='f'
+        return ch-'a'+10
+    if ch>='A' && ch<='F'
+        return ch-'A'+10
+    panic("from_hex")
+    return 0
+
+def private from_hex ( ch1, ch2 )
+    return from_hex(ch1)*16+from_hex(ch2)
+
+def private string_from_hex ( ch1 : int )
+    return to_char(from_hex(ch1))
+
+def private string_from_hex ( ch1,ch2 : int )
+    return to_char(from_hex(ch1,ch2))
+
 // <char>	::=	any non metacharacter | "\" metacharacter
 def private re_char (expr : string; offset:int) : MaybeReNode
     trace("re_char",offset)
@@ -194,6 +216,22 @@ def private re_char (expr : string; offset:int) : MaybeReNode
         if ech==0
             note("syntax error, expecting meta", offset+1)
             return nada()
+        if ech=='x'
+            let len = length(expr)
+            if offset+2 >= len
+                note("syntax error, expecting hex on hex1, too long {offset+1} vs {len}", offset+2)
+                return nada()
+            let hex1 = at(expr,offset+2)
+            if !is_hex(hex1)
+                note("syntax error, expecting hex on hex1, {to_char(hex1)} is not a hex", offset+2)
+                return nada()
+            if offset+2<len
+                let hex2 = at(expr,offset+3)
+                if is_hex(hex2)
+                    note("hex \\{to_char(hex1)}{to_char(hex2)} {uint(from_hex(hex1,hex2))}", offset)
+                    return maybe(new [[ReNode op=ReOp Char, text=string_from_hex(hex1,hex2), textLen=1, at=range(offset,offset+3)]])
+            note("hex \\{to_char(hex1)} {uint(from_hex(hex1))}", offset)
+            return maybe(new [[ReNode op=ReOp Char, text=string_from_hex(hex1), textLen=1, at=range(offset,offset+2)]])
         if is_set_character(ech)
             var cset : CharSet
             set_meta(cset,ech)
@@ -213,8 +251,11 @@ def private re_set_items(expr:string; offset:int) : MaybeReNode
         return nada()
     var cset : CharSet
     var iofs = offset
+    var prev_char = -1
+    var next_range = false
     while !eos(expr,iofs)
         let ch = at(expr,iofs)
+        var next_char = -1
         if ch == ']'
             note("set - break - ]",iofs)
             break
@@ -223,24 +264,65 @@ def private re_set_items(expr:string; offset:int) : MaybeReNode
             if che==0
                 note("syntax error, expecting meta", iofs)
                 return nada()
-            set_meta(cset,che)
-            note("set - meta",iofs)
-            iofs += 2
-        elif at(expr,iofs+1)=='-' && at(expr,iofs+2)!=']'
-            let che = at(expr,iofs+2)
-            if che==0
-                note("syntax error, expecting range", iofs+1)
+            if che=='x'
+                let len = length(expr)
+                if iofs+2 >= len
+                    note("syntax error, expecting hex on hex1, too long {iofs+1} vs {len}", iofs+2)
+                    return nada()
+                let hex1 = at(expr,iofs+2)
+                if !is_hex(hex1)
+                    note("syntax error, expecting hex on hex1, {to_char(hex1)} is not a hex", iofs+2)
+                    return nada()
+                if iofs+2<len
+                    let hex2 = at(expr,iofs+3)
+                    if is_hex(hex2)
+                        next_char = from_hex(hex1,hex2)
+                        note("set hex \\{to_char(hex1)}{to_char(hex2)} {uint(from_hex(hex1,hex2))}", iofs)
+                        iofs += 4
+                    else
+                        next_char = from_hex(hex1)
+                        note("set hex \\{to_char(hex1)} {uint(from_hex(hex1))}", iofs)
+                        iofs += 3
+                else
+                    next_char = from_hex(hex1)
+                    note("set hex \\{to_char(hex1)} {uint(from_hex(hex1))}", offset)
+                    iofs += 3
+            else
+                if next_range
+                    note("syntax error, expecting range, got meta", iofs)
+                    return nada()
+                if is_set_character(che)
+                    next_char = -1
+                    set_meta(cset,che)
+                    note("set - meta {to_char(che)}",iofs)
+                else
+                    next_char = che
+                    note("set - {to_char(che)}",iofs)
+                iofs += 2
+        elif ch=='-'
+            if prev_char == -1
+                note("syntax error, expecting range, got -", iofs)
                 return nada()
-            elif ch > che
-                note("syntax error, character range out of order", iofs)
-                return nada()
-            set_or_range(cset,range(ch,che))
-            note("set - range",iofs)
-            iofs += 3
-        else
-            set_or_char(cset,ch)
-            note("set - character",iofs)
+            next_range = true
             iofs += 1
+        else
+            next_char = ch
+            note("set - character {uint(ch)} {ch} {uint(ch)}",iofs)
+            iofs += 1
+        note("next_char {uint(next_char)} prev_char {uint(prev_char)} next_range {next_range}", iofs)
+        if next_char != -1
+            if next_range
+                note("set - range {uint(prev_char)} {uint(next_char)}",iofs)
+                set_or_range(cset,range(prev_char,next_char))
+                next_range = false
+                prev_char = -1
+            else
+                note("set - char {uint(next_char)}",iofs)
+                set_or_char(cset,next_char)
+                prev_char = next_char
+        elif !next_range
+            note("syntax error???",iofs)
+            return nada()
     return maybe(new [[ReNode op=ReOp Set, cset=cset, at=range(offset,iofs)]])
 
 // <negative-set>	::=	"[^" <set-items> "]"
@@ -830,6 +912,46 @@ def regex_foreach ( var regex:Regex; str:string; blk : block<(at:range):bool> )
                     cstr = om
                 else
                     cstr ++
+
+[unsafe_deref]
+def regex_replace ( var regex:Regex; str:string; blk : block<(at:string):string> )
+    //! Iterates through all matches for the given regular expression in `str`.
+    if empty(str)
+        return ""
+    unsafe
+        return build_string <| $ ( writer )
+            regex.match = reinterpret<uint8?> str
+            var root = regex.root
+            var pstr = reinterpret<uint8?> str
+            var cstr = pstr
+            if regex.canEarlyOut
+                // lets try if it helps
+                while true
+                    let Ch = int(*cstr)
+                    if Ch==0
+                        break
+                    if is_char_in_set(Ch,regex.earlyOut)
+                        let om = invoke(root.fun2,regex,root,cstr)
+                        if om != null
+                            let repl = invoke(blk,slice(str,int(cstr-pstr),int(om-pstr)))
+                            writer |> write(repl)
+                            cstr = om
+                        else
+                            writer |> write_char(Ch)
+                            cstr++
+                    else
+                        writer |> write_char(Ch)
+                        cstr++
+            else
+                while int(*cstr) != 0
+                    let om = invoke(root.fun2,regex,root,cstr)
+                    if om != null
+                        let repl = invoke(blk,slice(str,int(cstr-pstr),int(om-pstr)))
+                        writer |> write(repl)
+                        cstr = om
+                    else
+                        writer |> write_char(int(*cstr))
+                        cstr ++
 
 /*
     printer

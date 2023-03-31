@@ -1,12 +1,74 @@
+require daslib/curl
+
 require fio
-require strings
+require daslib/strings_boost
 require math
 require openai/openai
 require daslib/json_boost
 require daslib/base64
+require daslib/regex_boost
+require daslib/utf8_utils
 
 require telegram/tbotlog
 require telegram/tbot
+
+let replacing_emoji <- [{auto
+// regular smiles
+    ":)" => "🙂";
+    ":)" => "🙂";
+    ":(" => "☹️";
+    ":D" => "😀";
+    ";)" => "😉";
+    ":-|" => "😐";
+// :foo: format
+    ":smirk" => "😏";
+    ":smile" => "😊";
+    ":wink" => "😉";
+    ":angry:" => "😠";
+    ":neutral_face:" => "😐";
+    ":grin:" => "😁";
+    ":innocent:" => "😇";
+    ":heart_eyes:" => "😍";
+    ":kissing_heart:" => "😘";
+// bad unicode?
+    "ðŸ˜" => "😃";
+    "ðŸ˜Ž" => "😄";
+    "ðŸ§" => "👀";
+    "ðŸ¤‘" => "😂";
+    "ðŸ•¶ï¸" => "👍";
+    "ðŸ˜’" => "😀"
+}]
+
+var broken_utf16 <- %regex~ud[89ab][0-9a-fA-F][0-9a-fA-F]ud[c-f][0-9a-fA-F][0-9a-fA-F]?%%
+
+def fix_broken_utf16 ( str:string )
+	return broken_utf16 |> regex_replace(str) <| $ ( codePoint )
+		let hs = "0x{codePoint |> slice(1, 5)}"
+		let ls = "0x{codePoint |> slice(6, 10)}"
+		let utf32 = utf16_to_utf32(to_uint(hs, true), to_uint(ls, true))
+		return string(utf8_encode(utf32))
+
+var broken_utf32 <- %regex~u[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]u[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]u[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]%%
+
+def fix_broken_utf32 ( str:string )
+	return broken_utf32 |> regex_replace(str) <| $ ( codePoint )
+		let l1 = "0x{codePoint |> slice(1, 5)}"
+		let l2 = "0x{codePoint |> slice(6, 10)}"
+		let l3 = "0x{codePoint |> slice(11, 15)}"
+		let enc <- [{uint
+			to_uint(l1, true);
+			to_uint(l2, true);
+			to_uint(l3, true)
+		}]
+		return string(utf8_encode(enc))
+
+var broken_html_hex <- %regex~&#x[0-9a-fA-F]+;%%
+
+def fix_broken_html_hex ( str:string )
+	return broken_html_hex |> regex_replace(str) <| $ ( codePoint )
+		let code = "0x{codePoint |> slice(3, -1)}"
+		let utf32 = to_uint(code, true)
+		return string(utf8_encode(utf32))
 
 struct BotConfig : tbot::configuration
     id : string
@@ -231,14 +293,42 @@ struct GodfatherMessage
     message : string
     summary : string
     draw : string
+    code : string
     mood : string
     raw : string
 
 def sanitize_chat_message ( message : string )
-    return message |> replace("@{g_userGodfather.username}","") |> strip()
+    return (message
+        |> replace("@{g_userGodfather.username}","")
+        |> replace_multiple([{auto
+            "\\n" => " ";
+            "\\r" => " ";
+            "\\t" => " "}])
+        |> strip())
 
 def sanitize_json_reply ( reply : string )
-    return reply |> replace("\\n"," ") |> replace("\\r"," ") |> replace("\\t"," ") |> replace("\\n", " ") |> strip()
+    return build_string <| $ ( writer )
+        peek_data(reply) <| $ ( str )
+            var i = 0
+            let len = length(str)
+            var instring = false
+            while i < len
+                if str[i] == '"'u8
+                    instring = !instring
+                elif str[i] == '\\'u8
+                    if i+1 < len
+                        let nc = str[i+1]
+                        if instring // we stay in string if we have escaped quote
+                            writer |> write_char('\\')
+                            writer |> write_char(int(nc))
+                            i += 2
+                            continue
+                        if nc=='n'u8 || nc=='r'u8 || nc=='t'u8  // we replace \n,\r,\t with ' '
+                            writer |> write_char(' ')
+                            i += 2
+                            continue
+                writer |> write_char(int(str[i]))   // we write everything else
+                i ++
 
 def flatten_json_reply ( var writer:StringBuilderWriter; var reply : JsonValue? )
     if reply is _object
@@ -323,6 +413,7 @@ def generate_chat_reply ( chat_id : string; message:tbotapi::message; var tokens
         to_log(LOG_ERROR, "there is no JSON there\n")
         return [[GodfatherMessage result = "error", message = "there is no JSON there", raw = chat.choices[0].message.content]]
     let json_str = chat.choices[0].message.content |> slice(fnd) |> sanitize_json_reply
+    to_log(LOG_INFO, "json_str: {json_str}\n")
     var error : string
     let old_adc = set_allow_duplicate_keys(true)
     var json <- read_json(json_str,error)
@@ -355,24 +446,46 @@ def process_error_message ( message:tbotapi::message; whatGodfatherSaid:Godfathe
     telegram_sendLongMessage([[sendmessage
         chat_id = "{message.chat.id}",
         reply_to_message_id = message.message_id,
-        text = "{g_botConfig.name} (debug message): {whatGodfatherSaid.message}\n{whatGodfatherSaid.raw}"
+        text = "{g_botConfig.name} (debug message):```\n{whatGodfatherSaid.message}\n{whatGodfatherSaid.raw}\n```" |> telegram_escapeMarkdownV2,
+        parse_mode = "MarkdownV2"
     ]])
     if !telegram_get_last_error() |> empty
         to_log(LOG_ERROR, "telegram_sendLongMessage failed: {telegram_get_last_error()}\n")
 
+def fix_mood ( mood:string )
+    return mood |> replace_multiple(replacing_emoji) |> fix_broken_utf16 |> fix_broken_utf32 |> fix_broken_html_hex
+
+def fix_message ( text:string )
+    return text |> replace_multiple(replacing_emoji) |> fix_broken_utf16 |> fix_broken_utf32 |> fix_broken_html_hex
+
 def process_chat_reply ( message:tbotapi::message; whatGodfatherSaid:GodfatherMessage )
     to_log(LOG_INFO, "{g_botConfig.name}: {whatGodfatherSaid}\n")
-    let reply = sanitize_translation(whatGodfatherSaid.message)
+    let reply = whatGodfatherSaid.message |> sanitize_translation |> fix_message
+    let mood = whatGodfatherSaid.mood |> fix_mood
     telegram_sendLongMessage([[sendmessage
         chat_id = "{message.chat.id}",
         reply_to_message_id = message.message_id,
-        text = "{g_botConfig.name}: {reply} {whatGodfatherSaid.mood}"
+        text = "{g_botConfig.name}: {reply} {mood}"
     ]])
     if !telegram_get_last_error() |> empty
         to_log(LOG_ERROR, "telegram_sendLongMessage failed: {telegram_get_last_error()}\n")
         return
     if whatGodfatherSaid.raw != ""
         accept_chat_message("{message.chat.id}",whatGodfatherSaid.raw,"Godfather")
+    process_chat_reply_draw ( message, whatGodfatherSaid )
+    process_char_reply_code ( message, whatGodfatherSaid )
+
+def process_char_reply_code ( message:tbotapi::message; whatGodfatherSaid:GodfatherMessage )
+    if whatGodfatherSaid.result=="code" && !empty(whatGodfatherSaid.code)
+        to_log(LOG_INFO, "writing code:\n{whatGodfatherSaid.code}\n")
+        telegram_sendLongMessage([[sendmessage
+            chat_id = "{message.chat.id}",
+            reply_to_message_id = message.message_id,
+            text = whatGodfatherSaid.code,
+            parse_mode = "MarkdownV2"
+        ]], 4096-10,"```\n","\n```")
+
+def process_chat_reply_draw ( message:tbotapi::message; whatGodfatherSaid:GodfatherMessage )
     if whatGodfatherSaid.result=="draw" && !empty(whatGodfatherSaid.draw)
         to_log(LOG_INFO, "drawing image {whatGodfatherSaid.draw}\n")
         var inscope image <- openai_create_image([[Image()
@@ -450,7 +563,8 @@ def dump_chat_status ( chat:ChatLog )
 def process_bot_commands ( message:message )
     var response : string
     if message.text == "/test@{g_botConfig.id}"
-        response = "this is a test message from {g_botConfig.name}"
+        response = build_string <| $ ( writer )
+            writer |> write("```\n\n code block \n\n line 2 \n\n line 3 \n\n```")
     elif message.text == "/summary@{g_botConfig.id}"
         response = get_chat_summary(g_chat_messages["{message.chat.id}"])
     elif message.text == "/completion_summary@{g_botConfig.id}"
@@ -466,7 +580,8 @@ def process_bot_commands ( message:message )
         telegram_sendLongMessage([[sendmessage
             chat_id = "{message.chat.id}",
             reply_to_message_id = message.message_id,
-            text = response
+            text = response |> telegram_escapeMarkdownV2,
+            parse_mode = "MarkdownV2"
         ]])
         if !telegram_get_last_error() |> empty
             to_log(LOG_ERROR, "telegram_sendLongMessage failed: {telegram_get_last_error()}\n")
@@ -487,6 +602,7 @@ def main
         panic("bot config file name is not set. use -bot-config <config file name> command line argument")
     if !openai_key_is_set()
         panic("openai key is not set")
+    set_use_temp_file(true) // sometimes curl removes \n from the command line input. don't know why. for now this is a workaround
     g_botConfig <- read_bot_config(configPath)
     telegram_set_configuration(g_botConfig)
     openai_set_connection_timeout(g_botConfig.openai_timeout)

@@ -5,6 +5,11 @@ module utf8_utils shared
 
 require strings
 
+def public utf16_to_utf32 ( high,low:uint )
+	if high >= 0xD800 && high <= 0xDBFF
+		return ((high - 0xD800) << 10u) + (low - 0xDC00) + 0x10000
+	else
+		return high
 
 def public utf8_encode(var dest_array: array<uint8> &; ch: uint)
     //! Converts a codepoint (UTF-32 symbol) to UTF-8 and appends it to the UTF-8 byte array

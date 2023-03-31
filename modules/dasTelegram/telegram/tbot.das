@@ -24,8 +24,8 @@ def public telegram_set_configuration ( conf:configuration )
 var private BOT_TOKEN : string
 var private BOT_TIMEOUT = 10.0
 var private BOT_SEND_TIMEOUT = 60.0
-
 var private LAST_ERROR = ""
+var private LOG_API_CALLS = false
 
 def private write_request_json ( JV:JsonValue? )
     var ontz = set_no_trailing_zeros(true)
@@ -46,6 +46,8 @@ def private telegram_call ( METHOD:string; updates:auto; var res:auto(RES_TYPE) 
         delete req_jv
     let url = "https://api.telegram.org/bot{BOT_TOKEN}/{METHOD}"
     LAST_ERROR = ""
+    if LOG_API_CALLS
+        to_log(LOG_INFO, "API CALL: {url}\n{headers}\n")
     POST(url,BOT_TIMEOUT,headers,[{auto "Content-Type" => "application/json"}]) <| $ (resp)
         if resp.status_code == 200
             var JV = read_json(resp.text,LAST_ERROR)
@@ -58,11 +60,11 @@ def private telegram_call ( METHOD:string; updates:auto; var res:auto(RES_TYPE) 
                 else
                     LAST_ERROR = "API returned not OK\n{resp.text}"
             else
-                LAST_ERROR = "FAILED\n{resp.status_code}\n{resp.error}\n"
+                LAST_ERROR = "FAILED\n{resp.status_code}\n{resp.error}\n{resp.text}\n"
             unsafe
                 delete JV
         else
-            LAST_ERROR = "FAILED\n{resp.status_code}\n{resp.error}\n"
+            LAST_ERROR = "FAILED\n{resp.status_code}\n{resp.error}\n{resp.text}\n"
 
 def public telegram_getupdates ( updates:getupdates )
     //! get updates from telegram
@@ -76,19 +78,20 @@ def public telegram_sendMessage ( msg:sendmessage )
     telegram_call("sendMessage",msg,res)
     return <- res
 
-def public telegram_sendLongMessage ( _msg:sendmessage )
+def public telegram_sendLongMessage ( _msg:sendmessage; maxlength:int=4096; prefix:string=""; suffix:string="" )
     //! send long message to telegram char or user
     var msg := _msg
     var res : array<message>
     var text = msg.text
     LAST_ERROR = ""
     while !empty(text)
-        if length(text) > 4096
+        if length(text) > maxlength
             msg.text = text |> slice(0, 4096)
             text = text |> slice(4096)
         else
             msg.text = text
             text = ""
+        msg.text = "{prefix}{msg.text}{suffix}"
         res |> emplace <| telegram_sendMessage(msg)
         if !telegram_get_last_error() |> empty
             break
@@ -150,3 +153,17 @@ def public telegram_setMyCommands ( commands : setmycommands )
     var res : bool
     telegram_call("setMyCommands",commands,res)
     return res
+
+/*
+Underscore (_)  Asterisk (*)    Backtick (`)    Left square bracket ([)
+Right square bracket (])    Left parenthesis (()    Right parenthesis ())
+Tilde (~)   Greater than sign (>)   Hash (#)    Plus sign (+)   Minus sign (-)
+Equals sign (=) Vertical bar (|)    Left curly brace ({)    Right curly brace (})
+Period (.)  Exclamation mark (!)
+*/
+def public telegram_escapeMarkdownV2 ( text:string )
+    return build_string <| $ ( writer )
+        for Ch in text
+            if Ch=='_' || Ch=='*' || Ch=='`' || Ch=='[' || Ch==']' || Ch=='(' || Ch==')' || Ch=='~' || Ch=='>' || Ch=='#' || Ch=='+' || Ch=='-' || Ch=='=' || Ch=='|' || Ch=='{' || Ch=='}' || Ch=='.' || Ch=='!'
+                writer |> write_char('\\')
+            writer |> write_char(Ch)
