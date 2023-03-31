@@ -26,6 +26,10 @@ let replacing_emoji <- [{auto
     ":wink" => "😉";
     ":angry:" => "😠";
     ":neutral_face:" => "😐";
+    ":grin:" => "😁";
+    ":innocent:" => "😇";
+    ":heart_eyes:" => "😍";
+    ":kissing_heart:" => "😘";
 // bad unicode?
     "ðŸ˜" => "😃";
     "ðŸ˜Ž" => "😄";
