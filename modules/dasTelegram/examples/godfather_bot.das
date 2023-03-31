@@ -6,69 +6,11 @@ require math
 require openai/openai
 require daslib/json_boost
 require daslib/base64
-require daslib/regex_boost
-require daslib/utf8_utils
 
 require telegram/tbotlog
 require telegram/tbot
 
-let replacing_emoji <- [{auto
-// regular smiles
-    ":)" => "🙂";
-    ":)" => "🙂";
-    ":(" => "☹️";
-    ":D" => "😀";
-    ";)" => "😉";
-    ":-|" => "😐";
-// :foo: format
-    ":smirk" => "😏";
-    ":smile" => "😊";
-    ":wink" => "😉";
-    ":angry:" => "😠";
-    ":neutral_face:" => "😐";
-    ":grin:" => "😁";
-    ":innocent:" => "😇";
-    ":heart_eyes:" => "😍";
-    ":kissing_heart:" => "😘";
-// bad unicode?
-    "ðŸ˜" => "😃";
-    "ðŸ˜Ž" => "😄";
-    "ðŸ§" => "👀";
-    "ðŸ¤‘" => "😂";
-    "ðŸ•¶ï¸" => "👍";
-    "ðŸ˜’" => "😀"
-}]
-
-var broken_utf16 <- %regex~ud[89ab][0-9a-fA-F][0-9a-fA-F]ud[c-f][0-9a-fA-F][0-9a-fA-F]?%%
-
-def fix_broken_utf16 ( str:string )
-	return broken_utf16 |> regex_replace(str) <| $ ( codePoint )
-		let hs = "0x{codePoint |> slice(1, 5)}"
-		let ls = "0x{codePoint |> slice(6, 10)}"
-		let utf32 = utf16_to_utf32(to_uint(hs, true), to_uint(ls, true))
-		return string(utf8_encode(utf32))
-
-var broken_utf32 <- %regex~u[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]u[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]u[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]%%
-
-def fix_broken_utf32 ( str:string )
-	return broken_utf32 |> regex_replace(str) <| $ ( codePoint )
-		let l1 = "0x{codePoint |> slice(1, 5)}"
-		let l2 = "0x{codePoint |> slice(6, 10)}"
-		let l3 = "0x{codePoint |> slice(11, 15)}"
-		let enc <- [{uint
-			to_uint(l1, true);
-			to_uint(l2, true);
-			to_uint(l3, true)
-		}]
-		return string(utf8_encode(enc))
-
-var broken_html_hex <- %regex~&#x[0-9a-fA-F]+;%%
-
-def fix_broken_html_hex ( str:string )
-	return broken_html_hex |> regex_replace(str) <| $ ( codePoint )
-		let code = "0x{codePoint |> slice(3, -1)}"
-		let utf32 = to_uint(code, true)
-		return string(utf8_encode(utf32))
+require emoji
 
 struct BotConfig : tbot::configuration
     id : string
@@ -453,10 +395,10 @@ def process_error_message ( message:tbotapi::message; whatGodfatherSaid:Godfathe
         to_log(LOG_ERROR, "telegram_sendLongMessage failed: {telegram_get_last_error()}\n")
 
 def fix_mood ( mood:string )
-    return mood |> replace_multiple(replacing_emoji) |> fix_broken_utf16 |> fix_broken_utf32 |> fix_broken_html_hex
+    return mood |> fix_emoji |> fix_broken_utf16 |> fix_broken_utf32 |> fix_broken_html_hex
 
 def fix_message ( text:string )
-    return text |> replace_multiple(replacing_emoji) |> fix_broken_utf16 |> fix_broken_utf32 |> fix_broken_html_hex
+    return text |> fix_emoji |> fix_broken_utf16 |> fix_broken_utf32 |> fix_broken_html_hex
 
 def process_chat_reply ( message:tbotapi::message; whatGodfatherSaid:GodfatherMessage )
     to_log(LOG_INFO, "{g_botConfig.name}: {whatGodfatherSaid}\n")
@@ -476,7 +418,7 @@ def process_chat_reply ( message:tbotapi::message; whatGodfatherSaid:GodfatherMe
     process_char_reply_code ( message, whatGodfatherSaid )
 
 def process_char_reply_code ( message:tbotapi::message; whatGodfatherSaid:GodfatherMessage )
-    if whatGodfatherSaid.result=="code" && !empty(whatGodfatherSaid.code)
+    if !empty(whatGodfatherSaid.code)
         to_log(LOG_INFO, "writing code:\n{whatGodfatherSaid.code}\n")
         telegram_sendLongMessage([[sendmessage
             chat_id = "{message.chat.id}",
@@ -486,7 +428,7 @@ def process_char_reply_code ( message:tbotapi::message; whatGodfatherSaid:Godfat
         ]], 4096-10,"```\n","\n```")
 
 def process_chat_reply_draw ( message:tbotapi::message; whatGodfatherSaid:GodfatherMessage )
-    if whatGodfatherSaid.result=="draw" && !empty(whatGodfatherSaid.draw)
+    if !empty(whatGodfatherSaid.draw)
         to_log(LOG_INFO, "drawing image {whatGodfatherSaid.draw}\n")
         var inscope image <- openai_create_image([[Image()
             prompt = whatGodfatherSaid.draw,
