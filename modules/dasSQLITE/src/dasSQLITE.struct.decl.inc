@@ -1,0 +1,37 @@
+// this file is generated via daScript automatic C++ binder
+// all user modifications will be lost after this file is re-generated
+
+MAKE_EXTERNAL_TYPE_FACTORY(sqlite3,sqlite3);
+MAKE_EXTERNAL_TYPE_FACTORY(sqlite3_file,sqlite3_file);
+MAKE_EXTERNAL_TYPE_FACTORY(sqlite3_io_methods,sqlite3_io_methods);
+MAKE_EXTERNAL_TYPE_FACTORY(sqlite3_mutex,sqlite3_mutex);
+MAKE_EXTERNAL_TYPE_FACTORY(sqlite3_api_routines,sqlite3_api_routines);
+MAKE_EXTERNAL_TYPE_FACTORY(sqlite3_vfs,sqlite3_vfs);
+MAKE_EXTERNAL_TYPE_FACTORY(sqlite3_mem_methods,sqlite3_mem_methods);
+MAKE_EXTERNAL_TYPE_FACTORY(sqlite3_stmt,sqlite3_stmt);
+MAKE_EXTERNAL_TYPE_FACTORY(sqlite3_value,sqlite3_value);
+MAKE_EXTERNAL_TYPE_FACTORY(sqlite3_context,sqlite3_context);
+MAKE_EXTERNAL_TYPE_FACTORY(sqlite3_module,sqlite3_module);
+MAKE_EXTERNAL_TYPE_FACTORY(sqlite3_index_info,sqlite3_index_info);
+MAKE_EXTERNAL_TYPE_FACTORY(sqlite3_index_constraint,sqlite3_index_info::sqlite3_index_constraint);
+MAKE_EXTERNAL_TYPE_FACTORY(sqlite3_index_orderby,sqlite3_index_info::sqlite3_index_orderby);
+MAKE_EXTERNAL_TYPE_FACTORY(sqlite3_index_constraint_usage,sqlite3_index_info::sqlite3_index_constraint_usage);
+MAKE_EXTERNAL_TYPE_FACTORY(sqlite3_vtab,sqlite3_vtab);
+MAKE_EXTERNAL_TYPE_FACTORY(sqlite3_vtab_cursor,sqlite3_vtab_cursor);
+MAKE_EXTERNAL_TYPE_FACTORY(sqlite3_blob,sqlite3_blob);
+MAKE_EXTERNAL_TYPE_FACTORY(sqlite3_mutex_methods,sqlite3_mutex_methods);
+MAKE_EXTERNAL_TYPE_FACTORY(sqlite3_str,sqlite3_str);
+MAKE_EXTERNAL_TYPE_FACTORY(sqlite3_pcache,sqlite3_pcache);
+MAKE_EXTERNAL_TYPE_FACTORY(sqlite3_pcache_page,sqlite3_pcache_page);
+MAKE_EXTERNAL_TYPE_FACTORY(sqlite3_pcache_methods2,sqlite3_pcache_methods2);
+MAKE_EXTERNAL_TYPE_FACTORY(sqlite3_pcache_methods,sqlite3_pcache_methods);
+MAKE_EXTERNAL_TYPE_FACTORY(sqlite3_backup,sqlite3_backup);
+MAKE_EXTERNAL_TYPE_FACTORY(sqlite3_snapshot,sqlite3_snapshot);
+MAKE_EXTERNAL_TYPE_FACTORY(sqlite3_rtree_geometry,sqlite3_rtree_geometry);
+MAKE_EXTERNAL_TYPE_FACTORY(sqlite3_rtree_query_info,sqlite3_rtree_query_info);
+MAKE_EXTERNAL_TYPE_FACTORY(Fts5Context,Fts5Context);
+MAKE_EXTERNAL_TYPE_FACTORY(Fts5PhraseIter,Fts5PhraseIter);
+MAKE_EXTERNAL_TYPE_FACTORY(Fts5ExtensionApi,Fts5ExtensionApi);
+MAKE_EXTERNAL_TYPE_FACTORY(Fts5Tokenizer,Fts5Tokenizer);
+MAKE_EXTERNAL_TYPE_FACTORY(fts5_tokenizer,fts5_tokenizer);
+MAKE_EXTERNAL_TYPE_FACTORY(fts5_api,fts5_api);

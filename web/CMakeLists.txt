@@ -16,6 +16,7 @@ option(DAS_STDDLG_DISABLED "Disable dasStdDlg (File new,open,save etc dialogs)" 
 option(DAS_STBIMAGE_DISABLED "Disable dasStbImage (StbImage bindings, image loading and saving)" ON)
 option(DAS_STBTRUETYPE_DISABLED "Disable dasStbTrueType (StbTrueType bindings, ttf rasterization)" ON)
 option(DAS_SFML_DISABLED "Disable dasSFML (SFML multimedia library)" ON)
+option(DAS_PUGIXML_DISABLED "Disable dasPUGIXML (xml parsing library)" ON)
 
 add_compile_options(-msimd128)
 add_compile_options(-msse2)

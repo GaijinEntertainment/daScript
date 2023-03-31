@@ -1,0 +1,47 @@
+// this file is generated via daScript automatic C++ binder
+// all user modifications will be lost after this file is re-generated
+
+auto ann_sqlite3_file = make_smart<sqlite3_file_GeneratedAnnotation>(lib);
+addAnnotation(ann_sqlite3_file);
+auto ann_sqlite3_io_methods = make_smart<sqlite3_io_methods_GeneratedAnnotation>(lib);
+addAnnotation(ann_sqlite3_io_methods);
+auto ann_sqlite3_vfs = make_smart<sqlite3_vfs_GeneratedAnnotation>(lib);
+addAnnotation(ann_sqlite3_vfs);
+auto ann_sqlite3_mem_methods = make_smart<sqlite3_mem_methods_GeneratedAnnotation>(lib);
+addAnnotation(ann_sqlite3_mem_methods);
+auto ann_sqlite3_module = make_smart<sqlite3_module_GeneratedAnnotation>(lib);
+addAnnotation(ann_sqlite3_module);
+auto ann_sqlite3_index_constraint = make_smart<sqlite3_index_info_sqlite3_index_constraint_GeneratedAnnotation>(lib);
+addAnnotation(ann_sqlite3_index_constraint);
+auto ann_sqlite3_index_orderby = make_smart<sqlite3_index_info_sqlite3_index_orderby_GeneratedAnnotation>(lib);
+addAnnotation(ann_sqlite3_index_orderby);
+auto ann_sqlite3_index_constraint_usage = make_smart<sqlite3_index_info_sqlite3_index_constraint_usage_GeneratedAnnotation>(lib);
+addAnnotation(ann_sqlite3_index_constraint_usage);
+auto ann_sqlite3_index_info = make_smart<sqlite3_index_info_GeneratedAnnotation>(lib);
+addAnnotation(ann_sqlite3_index_info);
+auto ann_sqlite3_vtab = make_smart<sqlite3_vtab_GeneratedAnnotation>(lib);
+addAnnotation(ann_sqlite3_vtab);
+auto ann_sqlite3_vtab_cursor = make_smart<sqlite3_vtab_cursor_GeneratedAnnotation>(lib);
+addAnnotation(ann_sqlite3_vtab_cursor);
+auto ann_sqlite3_mutex_methods = make_smart<sqlite3_mutex_methods_GeneratedAnnotation>(lib);
+addAnnotation(ann_sqlite3_mutex_methods);
+auto ann_sqlite3_pcache_page = make_smart<sqlite3_pcache_page_GeneratedAnnotation>(lib);
+addAnnotation(ann_sqlite3_pcache_page);
+auto ann_sqlite3_pcache_methods2 = make_smart<sqlite3_pcache_methods2_GeneratedAnnotation>(lib);
+addAnnotation(ann_sqlite3_pcache_methods2);
+auto ann_sqlite3_pcache_methods = make_smart<sqlite3_pcache_methods_GeneratedAnnotation>(lib);
+addAnnotation(ann_sqlite3_pcache_methods);
+auto ann_sqlite3_snapshot = make_smart<sqlite3_snapshot_GeneratedAnnotation>(lib);
+addAnnotation(ann_sqlite3_snapshot);
+auto ann_sqlite3_rtree_geometry = make_smart<sqlite3_rtree_geometry_GeneratedAnnotation>(lib);
+addAnnotation(ann_sqlite3_rtree_geometry);
+auto ann_sqlite3_rtree_query_info = make_smart<sqlite3_rtree_query_info_GeneratedAnnotation>(lib);
+addAnnotation(ann_sqlite3_rtree_query_info);
+auto ann_Fts5PhraseIter = make_smart<Fts5PhraseIter_GeneratedAnnotation>(lib);
+addAnnotation(ann_Fts5PhraseIter);
+auto ann_Fts5ExtensionApi = make_smart<Fts5ExtensionApi_GeneratedAnnotation>(lib);
+addAnnotation(ann_Fts5ExtensionApi);
+auto ann_fts5_tokenizer = make_smart<fts5_tokenizer_GeneratedAnnotation>(lib);
+addAnnotation(ann_fts5_tokenizer);
+auto ann_fts5_api = make_smart<fts5_api_GeneratedAnnotation>(lib);
+addAnnotation(ann_fts5_api);
