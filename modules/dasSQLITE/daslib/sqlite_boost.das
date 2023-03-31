@@ -7,6 +7,8 @@ module sqlite_boost shared public
 
 require sqlite public
 
+require daslib/contracts
+
 def sqlite3_column_text_ ( stmt : sqlite3_stmt?; col : int ) : string
     //! Returns the text value of a column in the current row of a result set of a SELECT statement.
     unsafe
@@ -15,3 +17,8 @@ def sqlite3_column_text_ ( stmt : sqlite3_stmt?; col : int ) : string
 def sqlite3_free ( std:string )
     //! Frees memory previously allocated by SQLite.
     sqlite3_free(unsafe(reinterpret<void?> std))
+
+[expect_any_array(data)]
+def sqlite3_bind_blob ( stmt : sqlite3_stmt?; index : int; data )
+    unsafe
+        return sqlite3_bind_blob(stmt, 1, unsafe(addr(data[0])), data |> length)

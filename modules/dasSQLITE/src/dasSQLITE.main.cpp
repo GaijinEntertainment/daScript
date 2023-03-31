@@ -61,15 +61,20 @@ int sqlite3_exec_cb(sqlite3 * db, const char * sql, char ** errmsg,
     return sqlite3_exec(db, sql, exec_callback, &cb, errmsg);
 }
 
+int sqlite3_bind_blob_ ( sqlite3_stmt * stmt, int index, void * data, int size ) {
+    return sqlite3_bind_blob(stmt, index, data, size, SQLITE_TRANSIENT);
+}
 void Module_dasSQLITE::initMain() {
 
     addExtern<DAS_BIND_FUN(sqlite3_exec)>(*this,lib,"sqlite3_exec",
         SideEffects::worstDefault, "sqlite3_exec")
             ->args({"db","sql","errmsg"});
-
     addExtern<DAS_BIND_FUN(sqlite3_exec_cb)>(*this,lib,"sqlite3_exec",
         SideEffects::worstDefault, "sqlite3_exec_cb")
             ->args({"db","sql","errmsg","block","context","at"});
+    addExtern<DAS_BIND_FUN(sqlite3_bind_blob_)>(*this,lib,"sqlite3_bind_blob",
+        SideEffects::worstDefault, "sqlite3_bind_blob_")
+            ->args({"stmt","index","data","size"});
 
     for ( auto & pfn : this->functions.each() ) {
         // ok, lets fix up everything returning uint8? into returning string# and make it unsafe operation
