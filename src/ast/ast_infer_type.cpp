@@ -7105,14 +7105,14 @@ namespace das {
                     expr->at, CompilationError::invalid_type);
             }
             if ( expr->makeType->dim.size()>1 ) {
-                error("[[" + describeType(expr->makeType) + "]] can only initialize single dimension arrays", "", "",
+                error("[[" + describeType(expr->makeType) + "]] variant can only initialize single dimension arrays", "", "",
                     expr->at, CompilationError::invalid_type);
             } else if ( expr->makeType->dim.size()==1 && expr->makeType->dim[0]!=int32_t(expr->variants.size()) ) {
-                error("[[" + describeType(expr->makeType) + "]] dimension mismatch, provided " +
-                    to_string(expr->variants.size()) + " elements", "", "",
+                error("[[" + describeType(expr->makeType) + "]] variant dimension mismatch, provided " +
+                    to_string(expr->variants.size()) + " elements, expecting " + to_string(expr->makeType->dim[0]), "", "",
                     expr->at, CompilationError::invalid_type);
             } else if ( expr->makeType->ref ) {
-                error("[[" + describeType(expr->makeType) + "]] can't be reference", "", "",
+                error("[[" + describeType(expr->makeType) + "]] variant can't be reference", "", "",
                     expr->at, CompilationError::invalid_type);
             }
         }
@@ -7177,20 +7177,20 @@ namespace das {
                 }
             }
             if ( expr->makeType->dim.size()>1 ) {
-                error("[[" + describeType(expr->makeType) + "]] can only initialize single dimension arrays", "", "",
+                error("[[" + describeType(expr->makeType) + "]] struct can only initialize single dimension arrays", "", "",
                     expr->at, CompilationError::invalid_type);
             } else if ( expr->makeType->dim.size()==1 && expr->makeType->dim[0]!=int32_t(expr->structs.size()) ) {
-                error("[[" + describeType(expr->makeType) + "]] dimension mismatch, provided " +
-                      to_string(expr->structs.size()) + " elements", "", "",
+                error("[[" + describeType(expr->makeType) + "]] struct dimension mismatch, provided " +
+                      to_string(expr->structs.size()) + " elements, expecting " + to_string(expr->makeType->dim[0]), "", "",
                     expr->at, CompilationError::invalid_type);
             } else if ( expr->makeType->ref ) {
-                error("[[" + describeType(expr->makeType) + "]] can't be reference", "", "",
+                error("[[" + describeType(expr->makeType) + "]] struct can't be reference", "", "",
                     expr->at, CompilationError::invalid_type);
             } else if ( !expr->makeType->isLocal() && !expr->isNewHandle ) {
-                error("[[" + describeType(expr->makeType) + "]] can`t be allocated locally (on the stack), since Handled type isLocal() returned false. Allocate it on the heap (new [[...]]) or modify your C++ bindings.", "", "",
+                error("[[" + describeType(expr->makeType) + "]] struct can`t be allocated locally (on the stack), since Handled type isLocal() returned false. Allocate it on the heap (new [[...]]) or modify your C++ bindings.", "", "",
                     expr->at, CompilationError::invalid_type);
             } else if ( expr->makeType->baseType==Type::tHandle && expr->isNewHandle && !expr->useInitializer ) {
-                error("new [[" + describeType(expr->makeType) + "]] requires initializer syntax", "",
+                error("new [[" + describeType(expr->makeType) + "]] struct requires initializer syntax", "",
                         "use new [[" + describeType(expr->makeType) + "()]] instead",
                     expr->at, CompilationError::invalid_type);
             }
@@ -7423,6 +7423,11 @@ namespace das {
             } else {
                 if ( expr->makeType->dim.size()==1 && expr->makeType->dim[0]==1 ) {
                     // do nothing
+                } else if ( expr->makeType->dim.size()==1 && expr->makeType->dim[0]==TypeDecl::dimAuto ) {
+                    resT->dim.resize(1);
+                    resT->dim[0] = 1;
+                    expr->makeType->dim[0] = 1;
+                    reportAstChanged();
                 } else {
                     resT->dim.clear();
                 }
@@ -7570,14 +7575,14 @@ namespace das {
             }
             verifyType(expr->makeType);
             if ( expr->makeType->dim.size()>1 ) {
-                error("[[" + describeType(expr->makeType) + "]] can only initialize single dimension arrays", "", "",
+                error("[[" + describeType(expr->makeType) + "]] array can only initialize single dimension arrays", "", "",
                       expr->at, CompilationError::invalid_type);
             } else if ( expr->makeType->dim.size()==1 && expr->makeType->dim[0]!=int32_t(expr->values.size()) ) {
-                error("[[" + describeType(expr->makeType) + "]] dimension mismatch, provided " +
-                      to_string(expr->values.size()) + " elements", "", "",
+                error("[[" + describeType(expr->makeType) + "]] array dimension mismatch, provided " +
+                      to_string(expr->values.size()) + " elements, expecting " + to_string(expr->makeType->dim[0]), "", "",
                     expr->at, CompilationError::invalid_type);
             } else if ( expr->makeType->ref ) {
-                error("[[" + describeType(expr->makeType) + "]] can't be reference", "", "",
+                error("[[" + describeType(expr->makeType) + "]] array can't be reference", "", "",
                     expr->at, CompilationError::invalid_type);
             }
             expr->recordType = make_smart<TypeDecl>(*expr->makeType);
