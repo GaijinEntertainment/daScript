@@ -1,5 +1,6 @@
+// based on https://zetcode.com/db/sqlitec/
+
 require sqlite/sqlite_boost
-require daslib/stringify
 
 [export]
 def main
@@ -9,11 +10,8 @@ def main
         to_log(LOG_ERROR, "Cannot open database: sqlite3_errmsg(db)\n")
         sqlite3_close(db)
         return
-    let sql = %stringify~
-        SELECT * FROM Cars;
-    %%
     var err_msg : string
-    rc = sqlite3_exec(db, sql, unsafe(addr(err_msg))) <| $ ( values, columns )
+    rc = sqlite3_exec(db, "SELECT * FROM Cars", unsafe(addr(err_msg))) <| $ ( values, columns )
         for v,c in values,columns
             print("{c} = {v}; ")
         print("\n")

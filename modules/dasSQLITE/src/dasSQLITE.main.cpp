@@ -35,12 +35,12 @@ int exec_callback ( void * arg, int argc, char ** argv, char ** colName ) {
     ExecCallback * cb = (ExecCallback *) arg;
     Array arrFields;
     arrFields.data = (char *) argv;
-    arrFields.capacity = arrFields.size = argc;
+    arrFields.capacity = arrFields.size = argv ? argc : 0;
     arrFields.lock = 1;
     arrFields.flags = 0;
     Array arrColumns;
     arrColumns.data = (char *) colName;
-    arrColumns.capacity = arrColumns.size = argc;
+    arrColumns.capacity = arrColumns.size = colName ? argc : 0;
     arrColumns.lock = 1;
     arrColumns.flags = 0;
     vec4f args[2] = {
@@ -61,15 +61,20 @@ int sqlite3_exec_cb(sqlite3 * db, const char * sql, char ** errmsg,
     return sqlite3_exec(db, sql, exec_callback, &cb, errmsg);
 }
 
+int sqlite3_bind_blob_ ( sqlite3_stmt * stmt, int index, void * data, int size ) {
+    return sqlite3_bind_blob(stmt, index, data, size, SQLITE_TRANSIENT);
+}
 void Module_dasSQLITE::initMain() {
 
     addExtern<DAS_BIND_FUN(sqlite3_exec)>(*this,lib,"sqlite3_exec",
         SideEffects::worstDefault, "sqlite3_exec")
             ->args({"db","sql","errmsg"});
-
     addExtern<DAS_BIND_FUN(sqlite3_exec_cb)>(*this,lib,"sqlite3_exec",
         SideEffects::worstDefault, "sqlite3_exec_cb")
             ->args({"db","sql","errmsg","block","context","at"});
+    addExtern<DAS_BIND_FUN(sqlite3_bind_blob_)>(*this,lib,"sqlite3_bind_blob",
+        SideEffects::worstDefault, "sqlite3_bind_blob_")
+            ->args({"stmt","index","data","size"});
 
     for ( auto & pfn : this->functions.each() ) {
         // ok, lets fix up everything returning uint8? into returning string# and make it unsafe operation

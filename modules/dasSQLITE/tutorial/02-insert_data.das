@@ -1,3 +1,5 @@
+// based on https://zetcode.com/db/sqlitec/
+
 require sqlite/sqlite_boost
 require daslib/stringify
 
