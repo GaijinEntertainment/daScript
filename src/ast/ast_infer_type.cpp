@@ -7421,7 +7421,11 @@ namespace das {
                 resT->dim.resize(1);
                 resT->dim[0] = resDim;
             } else {
-                resT->dim.clear();
+                if ( expr->makeType->dim.size()==1 && expr->makeType->dim[0]==1 ) {
+                    // do nothing
+                } else {
+                    resT->dim.clear();
+                }
             }
             expr->type = resT;
             if ( expr->type->isString() ) {
