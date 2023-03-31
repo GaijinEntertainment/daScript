@@ -73,6 +73,8 @@ class SqliteGen : CppGenBind
         let fname = string(clang_getCursorSpelling(c))
         if fname=="sqlite3_mutex_held" || fname=="sqlite3_mutex_notheld"
             return true
+        if fname |> starts_with("sqlite3_win32_set_directory")
+            return true
         let funf = to_upper(clang_getCursorLocationFileName(c))
         if !any <| [[for h in sqlite_c_headers; funf |> ends_with(h)]]
             return true

@@ -12,15 +12,6 @@
 namespace das {
 #include "dasSQLITE.func.aot.decl.inc"
 void Module_dasSQLITE::initFunctions_11() {
-// from D:\Work\daScript\Modules\dasSQLITE\sqlite\sqlite3.h:9079:28
-	addExtern< struct sqlite3_backup * (*)(struct sqlite3 *,const char *,struct sqlite3 *,const char *) , sqlite3_backup_init >(*this,lib,"sqlite3_backup_init",SideEffects::worstDefault,"sqlite3_backup_init")
-		->args({"pDest","zDestName","pSource","zSourceName"});
-// from D:\Work\daScript\Modules\dasSQLITE\sqlite\sqlite3.h:9085:16
-	addExtern< int (*)(struct sqlite3_backup *,int) , sqlite3_backup_step >(*this,lib,"sqlite3_backup_step",SideEffects::worstDefault,"sqlite3_backup_step")
-		->args({"p","nPage"});
-// from D:\Work\daScript\Modules\dasSQLITE\sqlite\sqlite3.h:9086:16
-	addExtern< int (*)(struct sqlite3_backup *) , sqlite3_backup_finish >(*this,lib,"sqlite3_backup_finish",SideEffects::worstDefault,"sqlite3_backup_finish")
-		->args({"p"});
 // from D:\Work\daScript\Modules\dasSQLITE\sqlite\sqlite3.h:9087:16
 	addExtern< int (*)(struct sqlite3_backup *) , sqlite3_backup_remaining >(*this,lib,"sqlite3_backup_remaining",SideEffects::worstDefault,"sqlite3_backup_remaining")
 		->args({"p"});
@@ -72,6 +63,15 @@ void Module_dasSQLITE::initFunctions_11() {
 // from D:\Work\daScript\Modules\dasSQLITE\sqlite\sqlite3.h:9887:16
 	addExtern< int (*)(struct sqlite3_index_info *,int,struct sqlite3_value **) , sqlite3_vtab_rhs_value >(*this,lib,"sqlite3_vtab_rhs_value",SideEffects::worstDefault,"sqlite3_vtab_rhs_value")
 		->args({"","","ppVal"});
+// from D:\Work\daScript\Modules\dasSQLITE\sqlite\sqlite3.h:10016:16
+	addExtern< int (*)(struct sqlite3_stmt *,int,int,void *) , sqlite3_stmt_scanstatus >(*this,lib,"sqlite3_stmt_scanstatus",SideEffects::worstDefault,"sqlite3_stmt_scanstatus")
+		->args({"pStmt","idx","iScanStatusOp","pOut"});
+// from D:\Work\daScript\Modules\dasSQLITE\sqlite\sqlite3.h:10022:16
+	addExtern< int (*)(struct sqlite3_stmt *,int,int,int,void *) , sqlite3_stmt_scanstatus_v2 >(*this,lib,"sqlite3_stmt_scanstatus_v2",SideEffects::worstDefault,"sqlite3_stmt_scanstatus_v2")
+		->args({"pStmt","idx","iScanStatusOp","flags","pOut"});
+// from D:\Work\daScript\Modules\dasSQLITE\sqlite\sqlite3.h:10045:17
+	addExtern< void (*)(struct sqlite3_stmt *) , sqlite3_stmt_scanstatus_reset >(*this,lib,"sqlite3_stmt_scanstatus_reset",SideEffects::worstDefault,"sqlite3_stmt_scanstatus_reset")
+		->args({""});
 }
 }
 

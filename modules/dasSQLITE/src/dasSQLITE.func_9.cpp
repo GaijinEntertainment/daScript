@@ -12,15 +12,6 @@
 namespace das {
 #include "dasSQLITE.func.aot.decl.inc"
 void Module_dasSQLITE::initFunctions_9() {
-// from D:\Work\daScript\Modules\dasSQLITE\sqlite\sqlite3.h:6900:16
-	addExtern< int (*)(struct sqlite3 *,const char *,const char *,const char *,const char **,const char **,int *,int *,int *) , sqlite3_table_column_metadata >(*this,lib,"sqlite3_table_column_metadata",SideEffects::worstDefault,"sqlite3_table_column_metadata")
-		->args({"db","zDbName","zTableName","zColumnName","pzDataType","pzCollSeq","pNotNull","pPrimaryKey","pAutoinc"});
-// from D:\Work\daScript\Modules\dasSQLITE\sqlite\sqlite3.h:6956:16
-	addExtern< int (*)(struct sqlite3 *,const char *,const char *,char **) , sqlite3_load_extension >(*this,lib,"sqlite3_load_extension",SideEffects::worstDefault,"sqlite3_load_extension")
-		->args({"db","zFile","zProc","pzErrMsg"});
-// from D:\Work\daScript\Modules\dasSQLITE\sqlite\sqlite3.h:6988:16
-	addExtern< int (*)(struct sqlite3 *,int) , sqlite3_enable_load_extension >(*this,lib,"sqlite3_enable_load_extension",SideEffects::worstDefault,"sqlite3_enable_load_extension")
-		->args({"db","onoff"});
 // from D:\Work\daScript\Modules\dasSQLITE\sqlite\sqlite3.h:7046:17
 	addExtern< void (*)() , sqlite3_reset_auto_extension >(*this,lib,"sqlite3_reset_auto_extension",SideEffects::worstDefault,"sqlite3_reset_auto_extension");
 // from D:\Work\daScript\Modules\dasSQLITE\sqlite\sqlite3.h:7341:16
@@ -70,6 +61,15 @@ void Module_dasSQLITE::initFunctions_9() {
 		->args({""});
 // from D:\Work\daScript\Modules\dasSQLITE\sqlite\sqlite3.h:7839:17
 	addExtern< void (*)(struct sqlite3_mutex *) , sqlite3_mutex_enter >(*this,lib,"sqlite3_mutex_enter",SideEffects::worstDefault,"sqlite3_mutex_enter")
+		->args({""});
+// from D:\Work\daScript\Modules\dasSQLITE\sqlite\sqlite3.h:7840:16
+	addExtern< int (*)(struct sqlite3_mutex *) , sqlite3_mutex_try >(*this,lib,"sqlite3_mutex_try",SideEffects::worstDefault,"sqlite3_mutex_try")
+		->args({""});
+// from D:\Work\daScript\Modules\dasSQLITE\sqlite\sqlite3.h:7841:17
+	addExtern< void (*)(struct sqlite3_mutex *) , sqlite3_mutex_leave >(*this,lib,"sqlite3_mutex_leave",SideEffects::worstDefault,"sqlite3_mutex_leave")
+		->args({""});
+// from D:\Work\daScript\Modules\dasSQLITE\sqlite\sqlite3.h:7996:27
+	addExtern< struct sqlite3_mutex * (*)(struct sqlite3 *) , sqlite3_db_mutex >(*this,lib,"sqlite3_db_mutex",SideEffects::worstDefault,"sqlite3_db_mutex")
 		->args({""});
 }
 }

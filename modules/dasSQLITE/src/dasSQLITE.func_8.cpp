@@ -24,15 +24,6 @@ void Module_dasSQLITE::initFunctions_8() {
 // from D:\Work\daScript\Modules\dasSQLITE\sqlite\sqlite3.h:6205:16
 	addExtern< int (*)(int) , sqlite3_sleep >(*this,lib,"sqlite3_sleep",SideEffects::worstDefault,"sqlite3_sleep")
 		->args({""});
-// from D:\Work\daScript\Modules\dasSQLITE\sqlite\sqlite3.h:6321:16
-	addExtern< int (*)(unsigned long,void *) , sqlite3_win32_set_directory >(*this,lib,"sqlite3_win32_set_directory",SideEffects::worstDefault,"sqlite3_win32_set_directory")
-		->args({"type","zValue"});
-// from D:\Work\daScript\Modules\dasSQLITE\sqlite\sqlite3.h:6325:16
-	addExtern< int (*)(unsigned long,const char *) , sqlite3_win32_set_directory8 >(*this,lib,"sqlite3_win32_set_directory8",SideEffects::worstDefault,"sqlite3_win32_set_directory8")
-		->args({"type","zValue"});
-// from D:\Work\daScript\Modules\dasSQLITE\sqlite\sqlite3.h:6326:16
-	addExtern< int (*)(unsigned long,const void *) , sqlite3_win32_set_directory16 >(*this,lib,"sqlite3_win32_set_directory16",SideEffects::worstDefault,"sqlite3_win32_set_directory16")
-		->args({"type","zValue"});
 // from D:\Work\daScript\Modules\dasSQLITE\sqlite\sqlite3.h:6359:16
 	addExtern< int (*)(struct sqlite3 *) , sqlite3_get_autocommit >(*this,lib,"sqlite3_get_autocommit",SideEffects::worstDefault,"sqlite3_get_autocommit")
 		->args({""});
@@ -72,6 +63,15 @@ void Module_dasSQLITE::initFunctions_8() {
 // from D:\Work\daScript\Modules\dasSQLITE\sqlite\sqlite3.h:6828:35
 	addExtern< void (*)(int) , sqlite3_soft_heap_limit >(*this,lib,"sqlite3_soft_heap_limit",SideEffects::worstDefault,"sqlite3_soft_heap_limit")
 		->args({"N"});
+// from D:\Work\daScript\Modules\dasSQLITE\sqlite\sqlite3.h:6900:16
+	addExtern< int (*)(struct sqlite3 *,const char *,const char *,const char *,const char **,const char **,int *,int *,int *) , sqlite3_table_column_metadata >(*this,lib,"sqlite3_table_column_metadata",SideEffects::worstDefault,"sqlite3_table_column_metadata")
+		->args({"db","zDbName","zTableName","zColumnName","pzDataType","pzCollSeq","pNotNull","pPrimaryKey","pAutoinc"});
+// from D:\Work\daScript\Modules\dasSQLITE\sqlite\sqlite3.h:6956:16
+	addExtern< int (*)(struct sqlite3 *,const char *,const char *,char **) , sqlite3_load_extension >(*this,lib,"sqlite3_load_extension",SideEffects::worstDefault,"sqlite3_load_extension")
+		->args({"db","zFile","zProc","pzErrMsg"});
+// from D:\Work\daScript\Modules\dasSQLITE\sqlite\sqlite3.h:6988:16
+	addExtern< int (*)(struct sqlite3 *,int) , sqlite3_enable_load_extension >(*this,lib,"sqlite3_enable_load_extension",SideEffects::worstDefault,"sqlite3_enable_load_extension")
+		->args({"db","onoff"});
 }
 }
 

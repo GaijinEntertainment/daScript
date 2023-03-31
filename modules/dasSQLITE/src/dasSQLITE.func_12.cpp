@@ -12,15 +12,6 @@
 namespace das {
 #include "dasSQLITE.func.aot.decl.inc"
 void Module_dasSQLITE::initFunctions_12() {
-// from D:\Work\daScript\Modules\dasSQLITE\sqlite\sqlite3.h:10016:16
-	addExtern< int (*)(struct sqlite3_stmt *,int,int,void *) , sqlite3_stmt_scanstatus >(*this,lib,"sqlite3_stmt_scanstatus",SideEffects::worstDefault,"sqlite3_stmt_scanstatus")
-		->args({"pStmt","idx","iScanStatusOp","pOut"});
-// from D:\Work\daScript\Modules\dasSQLITE\sqlite\sqlite3.h:10022:16
-	addExtern< int (*)(struct sqlite3_stmt *,int,int,int,void *) , sqlite3_stmt_scanstatus_v2 >(*this,lib,"sqlite3_stmt_scanstatus_v2",SideEffects::worstDefault,"sqlite3_stmt_scanstatus_v2")
-		->args({"pStmt","idx","iScanStatusOp","flags","pOut"});
-// from D:\Work\daScript\Modules\dasSQLITE\sqlite\sqlite3.h:10045:17
-	addExtern< void (*)(struct sqlite3_stmt *) , sqlite3_stmt_scanstatus_reset >(*this,lib,"sqlite3_stmt_scanstatus_reset",SideEffects::worstDefault,"sqlite3_stmt_scanstatus_reset")
-		->args({""});
 // from D:\Work\daScript\Modules\dasSQLITE\sqlite\sqlite3.h:10078:16
 	addExtern< int (*)(struct sqlite3 *) , sqlite3_db_cacheflush >(*this,lib,"sqlite3_db_cacheflush",SideEffects::worstDefault,"sqlite3_db_cacheflush")
 		->args({""});

@@ -12,15 +12,6 @@
 namespace das {
 #include "dasSQLITE.func.aot.decl.inc"
 void Module_dasSQLITE::initFunctions_10() {
-// from D:\Work\daScript\Modules\dasSQLITE\sqlite\sqlite3.h:7840:16
-	addExtern< int (*)(struct sqlite3_mutex *) , sqlite3_mutex_try >(*this,lib,"sqlite3_mutex_try",SideEffects::worstDefault,"sqlite3_mutex_try")
-		->args({""});
-// from D:\Work\daScript\Modules\dasSQLITE\sqlite\sqlite3.h:7841:17
-	addExtern< void (*)(struct sqlite3_mutex *) , sqlite3_mutex_leave >(*this,lib,"sqlite3_mutex_leave",SideEffects::worstDefault,"sqlite3_mutex_leave")
-		->args({""});
-// from D:\Work\daScript\Modules\dasSQLITE\sqlite\sqlite3.h:7996:27
-	addExtern< struct sqlite3_mutex * (*)(struct sqlite3 *) , sqlite3_db_mutex >(*this,lib,"sqlite3_db_mutex",SideEffects::worstDefault,"sqlite3_db_mutex")
-		->args({""});
 // from D:\Work\daScript\Modules\dasSQLITE\sqlite\sqlite3.h:8039:16
 	addExtern< int (*)(struct sqlite3 *,const char *,int,void *) , sqlite3_file_control >(*this,lib,"sqlite3_file_control",SideEffects::worstDefault,"sqlite3_file_control")
 		->args({"","zDbName","op",""});
@@ -71,6 +62,15 @@ void Module_dasSQLITE::initFunctions_10() {
 // from D:\Work\daScript\Modules\dasSQLITE\sqlite\sqlite3.h:8577:16
 	addExtern< int (*)(struct sqlite3_stmt *,int,int) , sqlite3_stmt_status >(*this,lib,"sqlite3_stmt_status",SideEffects::worstDefault,"sqlite3_stmt_status")
 		->args({"","op","resetFlg"});
+// from D:\Work\daScript\Modules\dasSQLITE\sqlite\sqlite3.h:9079:28
+	addExtern< struct sqlite3_backup * (*)(struct sqlite3 *,const char *,struct sqlite3 *,const char *) , sqlite3_backup_init >(*this,lib,"sqlite3_backup_init",SideEffects::worstDefault,"sqlite3_backup_init")
+		->args({"pDest","zDestName","pSource","zSourceName"});
+// from D:\Work\daScript\Modules\dasSQLITE\sqlite\sqlite3.h:9085:16
+	addExtern< int (*)(struct sqlite3_backup *,int) , sqlite3_backup_step >(*this,lib,"sqlite3_backup_step",SideEffects::worstDefault,"sqlite3_backup_step")
+		->args({"p","nPage"});
+// from D:\Work\daScript\Modules\dasSQLITE\sqlite\sqlite3.h:9086:16
+	addExtern< int (*)(struct sqlite3_backup *) , sqlite3_backup_finish >(*this,lib,"sqlite3_backup_finish",SideEffects::worstDefault,"sqlite3_backup_finish")
+		->args({"p"});
 }
 }
 
