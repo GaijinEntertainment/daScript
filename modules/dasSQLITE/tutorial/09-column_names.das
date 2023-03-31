@@ -11,7 +11,7 @@ def main
         sqlite3_close(db)
         return
     var err_msg : string
-    rc = sqlite3_exec(db, "SELECT * FROM Cars", unsafe(addr(err_msg))) <| $ ( values, columns )
+    rc = sqlite3_exec(db, "PRAGMA table_info(Cars)", unsafe(addr(err_msg))) <| $ ( values, columns )
         for v,c in values,columns
             print("{c} = {v}; ")
         print("\n")

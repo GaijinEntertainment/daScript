@@ -12,12 +12,14 @@ def main
         sqlite3_close(db)
         return
     let sql = %stringify~
+        DROP TABLE IF EXISTS Friends;
+        BEGIN TRANSACTION;
         CREATE TABLE Friends(Id INTEGER PRIMARY KEY, Name TEXT);
         INSERT INTO Friends(Name) VALUES ('Tom');
         INSERT INTO Friends(Name) VALUES ('Rebecca');
         INSERT INTO Friends(Name) VALUES ('Jim');
-        INSERT INTO Friends(Name) VALUES ('Roger');
-        INSERT INTO Friends(Name) VALUES ('Robert');
+        INSERT INTO Friend(Name) VALUES ('Robert');
+        COMMIT;
     %%
     var err_msg : string
     rc = sqlite3_exec(db, sql, unsafe(addr(err_msg)))

@@ -22,3 +22,6 @@ def sqlite3_free ( std:string )
 def sqlite3_bind_blob ( stmt : sqlite3_stmt?; index : int; data )
     unsafe
         return sqlite3_bind_blob(stmt, 1, unsafe(addr(data[0])), data |> length)
+
+def sqlite3_get_autocommit_ ( db : sqlite3? ) : bool
+    return sqlite3_get_autocommit(db) != 0
