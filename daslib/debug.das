@@ -1090,17 +1090,25 @@ class private DAgent: DapiDebugAgent
             let aid = uint(a.ctx.category)
             let bid = uint(b.ctx.category)
             return aid > bid
-        // TODO: send `threads` event
+
+        if server.threadsDone
+            server->sendEvent("thread", JV([[ThreadEvent
+                reason="started",
+                threadId=double(contextId)
+            ]]))
+
         return true
 
     def removeContext(var ctx: Context): void
         let idx = self->getContextIdx(ctx)
         if idx >= 0
-            self->removeContextIdx(idx)
-
-    def removeContextIdx(idx: int)
-        delete contexts[idx]
-        contexts |> erase(idx)
+            if server.threadsDone
+                server->sendEvent("thread", JV([[ThreadEvent
+                    reason="exited",
+                    threadId=double(contexts[idx].id)
+                ]]))
+            delete contexts[idx]
+            contexts |> erase(idx)
 
 class private DAServer: Server
     port: int
