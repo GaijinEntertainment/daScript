@@ -23,6 +23,7 @@ struct BotConfig : tbot::configuration
     max_chat_messages : int = 20
     summary_size : int = 8192
     chat_completion_attempts : int = 3
+    chat_completion_delay : float = 10.
     chat_prompt : string
     chat_extra_prompt : string
     path_to_ffmpeg : string
@@ -72,7 +73,7 @@ def convert_to_mp3 ( fin,fout:string )
     return exit_code==0
 
 def sanitize_translation ( text : string )
-    return text |> replace("\n"," ") |> replace("\r"," ") |> replace("\t"," ") |> replace("\\n", " ") |> strip()
+    return text |> replace_multiple([{auto "\n"=>" "; "\r"=>" "; "\t"=>" "; "\\n"=>" "}]) |> strip()
 
 def decode_voice_message(message:tbotapi::message ) : string
     to_log(LOG_INFO, "decoding voice message {message.voice.file_id}\n")
@@ -110,6 +111,7 @@ def decode_voice_message(message:tbotapi::message ) : string
             break
         to_log(LOG_ERROR, "retrying, reason: {ru.error}\n")
         delete ru
+        sleep(uint(g_botConfig.chat_completion_delay))
     if !empty(ru.error)
         to_log(LOG_ERROR,"transcription failed {ru.error}\n")
         return ""
@@ -154,7 +156,7 @@ def get_chat_summary( var log:ChatLog; nmessages:int=INT_MAX )
             writer |> write(log.summary)
         for msg,i in log.messages,range(nmessages)
             writer |> write("\n")
-            writer |> write(msg.author==g_botConfig.name ? "assistant" : "user")
+            writer |> write(msg.author)
             writer |> write(": ")
             writer |> write(msg.message_text)
             writer |> write("\n")
@@ -163,12 +165,20 @@ def get_chat_summary( var log:ChatLog; nmessages:int=INT_MAX )
     to_log(LOG_INFO, "summary prompt:\n{summary_prompt}\n")
     return generate_completion(summary_prompt)
 
+def sanitize_completion_prompt ( prompt:string )
+    return build_string <| $ ( writer )
+        for Ch in prompt
+            if Ch<=31
+                writer |> write("\\u00{(Ch>>4)+'0'}{(Ch&15)+'0'}")
+            else
+                writer |> write(Ch)
+
 def generate_completion ( summary_prompt:string )
     var inscope completion : CreateCompletionResponse
     for i in 0..g_botConfig.chat_completion_attempts
         completion <- openai_create_completion([[Completion()
             model = "text-davinci-003",
-            prompt = summary_prompt,
+            prompt = summary_prompt |> sanitize_completion_prompt,
             max_tokens = 1024,
             temperature = 0.
         ]])
@@ -178,6 +188,7 @@ def generate_completion ( summary_prompt:string )
             break
         to_log(LOG_ERROR, "retrying, reason: {openai_get_last_error()}\n")
         delete completion
+        sleep(uint(g_botConfig.chat_completion_delay))
     if !completion|> is_valid
         to_log(LOG_ERROR, "openai_create_completion failed: {openai_get_last_error()}\n")
         return ""
@@ -246,7 +257,6 @@ def is_someone_asking_bot_to_say_something ( message:tbotapi::message  )
 struct GodfatherMessage
     result : string
     message : string
-    summary : string
     draw : string
     code : string
     mood : string
@@ -335,10 +345,15 @@ def generate_chat_reply ( _chat_id : int64; message:tbotapi::message; var tokens
         let role = cm.author==g_botConfig.name ? "assistant" : "user"
         let content = sanitize_chat_message(cm.message_text)
         to_log(LOG_INFO,"{role}: {content}\n")
-        messages |> push([[ChatCompletionMessage
-            role = role,
-            name = cm.author==g_botConfig.name ? "" : cm.author,    // we are skipping this, because it goes bonkers otherwise
-            content = content]])
+        if cm.author==g_botConfig.name
+            messages |> push([[ChatCompletionMessage
+                role = role,
+                content = content]])
+        else
+            messages |> push([[ChatCompletionMessage
+                role = role,
+                name = cm.author,
+                content = "{cm.author}: {content}"]])
     messages |> push([[ChatCompletionMessage
         role = "system",
         content = "It is {get_clock()}. {g_botConfig.chat_extra_prompt}"]])
@@ -358,6 +373,7 @@ def generate_chat_reply ( _chat_id : int64; message:tbotapi::message; var tokens
             break
         to_log(LOG_ERROR, "retrying, reason: {openai_get_last_error()}\n")
         delete chat
+        sleep(uint(g_botConfig.chat_completion_delay))
     if !chat|> is_valid
         to_log(LOG_ERROR, "openai_create_chat_completion failed: {openai_get_last_error()}\n")
         return [[GodfatherMessage result = "error", message = openai_get_last_error()]]
@@ -449,7 +465,7 @@ def process_chat_reply ( message:tbotapi::message; whatGodfatherSaid:GodfatherMe
     var inscope messages <- telegram_sendLongMessage([[sendmessage
         chat_id = "{message.chat.id}",
         reply_to_message_id = message.message_id,
-        text = "{g_botConfig.name}: {reply} {mood}"
+        text = "{reply} {mood}"
     ]])
     if !telegram_get_last_error() |> empty
         to_log(LOG_ERROR, "telegram_sendLongMessage failed: {telegram_get_last_error()}\n")
@@ -505,14 +521,14 @@ def process_chat_reply_draw ( message:tbotapi::message; whatGodfatherSaid:Godfat
             chat_id = "{message.chat.id}",
             reply_to_message_id = message.message_id,
             file = photo_file_name,
-            caption = "{g_botConfig.name}: {whatGodfatherSaid.draw}"
+            caption = "{whatGodfatherSaid.draw}"
         ]])
         if !telegram_get_last_error() |> empty
             to_log(LOG_ERROR, "telegram_sendLongMessage failed: {telegram_get_last_error()}\n")
             return
 
 def accept_godfather_message ( chat_id:string; message_text:string )
-    var msg = [[GodfatherMessage result="nothing", summary="i should say something", message=message_text, mood="sarcastic"]]
+    var msg = [[GodfatherMessage result="nothing", message=message_text, mood="sarcastic"]]
     var json <- JV(msg)
     var json_str = write_json(json)
     unsafe

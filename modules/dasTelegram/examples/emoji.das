@@ -38,7 +38,7 @@ let replacing_emoji <- [{auto
 def public fix_emoji ( str:string )
     return str |> replace_multiple(replacing_emoji)
 
-var broken_utf16 <- %regex~ud[89ab][0-9a-fA-F][0-9a-fA-F]ud[c-f][0-9a-fA-F][0-9a-fA-F]?%%
+var broken_utf16 <- %regex~[uU][dD][89ab][0-9a-fA-F][0-9a-fA-F][uU][dD][c-f][0-9a-fA-F][0-9a-fA-F]?%%
 
 def public fix_broken_utf16 ( str:string )
 	return broken_utf16 |> regex_replace(str) <| $ ( codePoint )
@@ -47,7 +47,7 @@ def public fix_broken_utf16 ( str:string )
 		let utf32 = utf16_to_utf32(to_uint(hs, true), to_uint(ls, true))
 		return string(utf8_encode(utf32))
 
-var broken_utf32 <- %regex~u[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]%%
+var broken_utf32 <- %regex~[uU][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]%%
 
 def public fix_broken_utf32 ( str:string )
 	return broken_utf32 |> regex_replace(str) <| $ ( codePoint )
