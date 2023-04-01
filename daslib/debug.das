@@ -569,16 +569,19 @@ enum DABreakpointState
     Initialized
     Instrumented
 
+typedef
+    DAContextAt = uint64
+
 struct private DABreakpoint
     id: uint64
     line: uint
 
     prevState: DABreakpointState
     state: DABreakpointState
+    ctxAt : DAContextAt
 
 typedef
     DABreakpoints = table<string; array<DABreakpoint>>
-    DAContextAt = uint64
 
 struct private DAContext
     id: uint64
@@ -994,7 +997,7 @@ class private DAgent: DapiDebugAgent
             for br in brs
                 br.prevState = br.state
 
-        self->getContextDataFor(ctx) <| $(var ctxData: DAContext) // TODO: speedup getContextDataFor
+        let found = self->getContextDataFor(ctx) <| $(var ctxData: DAContext) // TODO: speedup getContextDataFor
             *ctxData.ctx |> clear_instruments()
             *ctxData.ctx |> instrument_node(true) <| $(ati)
                 if ati.fileInfo == null
@@ -1003,6 +1006,7 @@ class private DAgent: DapiDebugAgent
                 for fileBr, brs in keys(breakpoints), values(breakpoints)
                     if compare_path(fileBr, file)
                         for br in brs
+                            br.ctxAt = ctxData.at
                             if br.state == DABreakpointState Uninitialized
                                 br.state = DABreakpointState Initialized
                         for br in brs
@@ -1013,7 +1017,17 @@ class private DAgent: DapiDebugAgent
                         break
                 return false
 
+        if !found
+            // removed context, uninitialize related breakpoints
+            let ctxAt = ctx_at(ctx)
+            for brs in values(breakpoints)
+                for br in brs
+                    if br.ctxAt == ctxAt
+                        br.state = DABreakpointState Uninitialized
+                        br.ctxAt = 0ul
+
         for fileBr, brs in keys(breakpoints), values(breakpoints)
+            let baseName = fileBr |> base_name()
             for br in brs
                 let wasVerified = br.prevState == DABreakpointState Instrumented
                 let isVerified = br.state == DABreakpointState Instrumented
@@ -1023,7 +1037,7 @@ class private DAgent: DapiDebugAgent
                         breakpoint=[[Breakpoint
                             id=double(br.id),
                             verified=br.state == DABreakpointState Instrumented,
-                            source=[[ Source path=fileBr, name=fileBr |> base_name()]],
+                            source=[[ Source path=fileBr, name=baseName]],
                             line=double(br.line),
                             message=br.state == DABreakpointState Uninitialized ? "{fileBr}: instrumentation wasn't initined" : br.state == DABreakpointState Initialized ? "{fileBr}: instumentation is inited, but this line is without instructions" : ""
                         ]]
@@ -1039,6 +1053,7 @@ class private DAgent: DapiDebugAgent
         // unsafe
         //     print("dap: context destroyed {intptr(addr(ctx))} {ctx.category} `{ctx.name}`\n")
         self->removeContext(ctx)
+        invalidateBreakpoints(ctx)
 
     def getContextDataFor(var ctx: Context; cb: block<(var ctx: DAContext): void>): bool
         let at = ctx_at(ctx)
