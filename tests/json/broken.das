@@ -40,6 +40,17 @@ let broken3 = %stringify~
 }
 %%
 
+let broken4 = %stringify~
+    {
+    "result" : "nothing",
+    "summary" : "User asked for the difference between the words: limit, border, and frontier",
+    "message" : "Ah, Greg, you come to me on the day of my daughter's wedding and ask me about the difference between limit, border, and frontier. I will give you the definitions of each word so that you can understand the differences: n- A limit is a point beyond which something does not or may not extend or pass. n- A border is the outer part or edge of something. It can also mean the line or frontier area separating political or geographical regions. n- A frontier is a line or zone of contact between two adjoining countries, political systems, or groups, where either one or both are expanding or could expand."
+    "draw" : null,
+    "mood" : "🤨",
+    "code" : null,
+    }
+%%
+
 def test_broken ( t: T?; text:string )
     var error : string
     var j = read_json(text,error)
@@ -58,3 +69,6 @@ def broken_json ( t: T? )
         test_broken(t,broken2)
     t |> run("extra ,") <| @ ( t : T? )
         test_broken(t,broken3)
+	t |> run("missing ,") <| @ ( t : T? )
+		test_broken(t,broken4)
+

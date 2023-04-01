@@ -169,7 +169,7 @@ def generate_completion ( summary_prompt:string )
         completion <- openai_create_completion([[Completion()
             model = "text-davinci-003",
             prompt = summary_prompt,
-            max_tokens = 512,
+            max_tokens = 1024,
             temperature = 0.
         ]])
         if completion |> is_valid
@@ -317,7 +317,11 @@ def adjust_completion ( var json : JsonValue? )
             obj["draw"] = JV(req)
             to_log(LOG_INFO, "adjusting draw to {req}\n")
 
-def generate_chat_reply ( chat_id : string; message:tbotapi::message; var tokens:int& )
+def generate_chat_reply ( _chat_id : int64; message:tbotapi::message; var tokens:int& )
+    let chat_id = "{_chat_id}"
+    if length(g_chat_messages[chat_id].messages)==1 && empty(g_chat_messages[chat_id].summary)
+        to_log(LOG_INFO, "generate_chat_reply {chat_id} {message.text} - empty chat, getting summary\n")
+        g_chat_messages[chat_id].summary = generate_chat_summary(_chat_id, 50, "in english language")
     to_log(LOG_INFO, "generate_chat_reply {chat_id} {message.text}\n")
     tokens = 0
     var messages : array<ChatCompletionMessage>
@@ -528,7 +532,7 @@ def collect_chat_log ( chat_id:int64; last_n_messages:int )
     log |> reverse
     return <- log
 
-def generate_chat_summary ( chat_id:int64; last_n_messages:int )
+def generate_chat_summary ( chat_id:int64; last_n_messages:int; extp:string)
     to_log(LOG_INFO, "Generating chat summary for {chat_id} last {last_n_messages} messages\n\n\n")
     var inscope log <- collect_chat_log(chat_id, last_n_messages)
     var i = 0
@@ -541,7 +545,7 @@ def generate_chat_summary ( chat_id:int64; last_n_messages:int )
             text = "{text}\n{log[i]}"
             i ++
         if !empty(text)
-            let summary_prompt = "Previous section summary:\n{prev_summary}\n---\nText:\n{text}\n---\nSummary of the text above in russian language:"
+            let summary_prompt = "Previous section summary:\n{prev_summary}\n---\nText:\n{text}\n---\nSummary of the text above {extp}:"
             to_log(LOG_INFO, "Generating summary for {length(summary_prompt)} bytes\n{summary_prompt}\n\n\n")
             let summary = generate_completion(summary_prompt)
             to_log(LOG_INFO, "Summary: {summary}\n\n")
@@ -599,7 +603,8 @@ def setup_bot_commands
             command="status", description="show current chat status";
             command="users", description="show users in this chat";
             command="chatlog", description="show chat log summary for the last n messages";
-            command="summary", description="show chat log summary for the last n messages"
+            command="summary", description="show chat log summary for the last n messages";
+            command="samara", description="сводка по логу чата за последние n сообщений"
         }]
     ]])
     if !telegram_get_last_error() |> empty
@@ -638,7 +643,14 @@ def process_bot_commands ( message:message )
         var max_messages = 100
         if !empty(num_substr)
             max_messages = int(num_substr)
-        response = generate_chat_summary(message.chat.id, max_messages)
+        response = generate_chat_summary(message.chat.id, max_messages, "in english language")
+    elif message.text |> starts_with("/samara@{g_botConfig.id}")
+        let len_cmd = length("/samara@{g_botConfig.id}")
+        let num_substr = message.text |> slice(len_cmd+1)
+        var max_messages = 100
+        if !empty(num_substr)
+            max_messages = int(num_substr)
+        response = generate_chat_summary(message.chat.id, max_messages, "in russian language")
     if !empty(response)
         telegram_sendLongMessage([[sendmessage
             chat_id = "{message.chat.id}",
@@ -711,7 +723,7 @@ def main
                     if is_someone_asking_bot_to_say_something(*r.message)
                         to_log(LOG_INFO, "someone is asking me to say something\n")
                         var tokens = 0
-                        let reply = generate_chat_reply("{r.message.chat.id}",*r.message, tokens)
+                        let reply = generate_chat_reply(r.message.chat.id,*r.message, tokens)
                         if reply.result != "error"
                             g_chat_messages["{r.message.chat.id}"].total_tokens = tokens
                             process_chat_reply(*r.message,reply)
