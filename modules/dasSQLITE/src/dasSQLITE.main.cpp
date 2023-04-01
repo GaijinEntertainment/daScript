@@ -64,6 +64,11 @@ int sqlite3_exec_cb(sqlite3 * db, const char * sql, char ** errmsg,
 int sqlite3_bind_blob_ ( sqlite3_stmt * stmt, int index, void * data, int size ) {
     return sqlite3_bind_blob(stmt, index, data, size, SQLITE_TRANSIENT);
 }
+
+int sqlite3_bind_text_ ( sqlite3_stmt * stmt, int index, const char * data ) {
+    return sqlite3_bind_text(stmt, index, data, -1, SQLITE_TRANSIENT);
+}
+
 void Module_dasSQLITE::initMain() {
 
     addExtern<DAS_BIND_FUN(sqlite3_exec)>(*this,lib,"sqlite3_exec",
@@ -74,7 +79,10 @@ void Module_dasSQLITE::initMain() {
             ->args({"db","sql","errmsg","block","context","at"});
     addExtern<DAS_BIND_FUN(sqlite3_bind_blob_)>(*this,lib,"sqlite3_bind_blob",
         SideEffects::worstDefault, "sqlite3_bind_blob_")
-            ->args({"stmt","index","data","size"});
+            ->args({"stmt","sqlite3_bind_text_","data","size"});
+    addExtern<DAS_BIND_FUN(sqlite3_bind_text_)>(*this,lib,"sqlite3_bind_text",
+        SideEffects::worstDefault, "sqlite3_bind_text_")
+            ->args({"stmt","index","data"});
 
     for ( auto & pfn : this->functions.each() ) {
         // ok, lets fix up everything returning uint8? into returning string# and make it unsafe operation

@@ -20,8 +20,14 @@ def sqlite3_free ( std:string )
 
 [expect_any_array(data)]
 def sqlite3_bind_blob ( stmt : sqlite3_stmt?; index : int; data )
+    //! Binds a blob value to a prepared statement.
     unsafe
         return sqlite3_bind_blob(stmt, 1, unsafe(addr(data[0])), data |> length)
 
 def sqlite3_get_autocommit_ ( db : sqlite3? ) : bool
+    //! Returns true if the database connection is in autocommit mode.
     return sqlite3_get_autocommit(db) != 0
+
+def sqlite3_open ( filename : string; var db : sqlite3?& ) : int
+    //! Opens a new database connection to a SQLite database file.
+    return sqlite3_open(filename, unsafe(addr(db)))

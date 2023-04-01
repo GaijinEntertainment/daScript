@@ -47,18 +47,12 @@ def public fix_broken_utf16 ( str:string )
 		let utf32 = utf16_to_utf32(to_uint(hs, true), to_uint(ls, true))
 		return string(utf8_encode(utf32))
 
-var broken_utf32 <- %regex~u[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]u[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]u[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]%%
+var broken_utf32 <- %regex~u[0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]%%
 
 def public fix_broken_utf32 ( str:string )
 	return broken_utf32 |> regex_replace(str) <| $ ( codePoint )
 		let l1 = "0x{codePoint |> slice(1, 5)}"
-		let l2 = "0x{codePoint |> slice(6, 10)}"
-		let l3 = "0x{codePoint |> slice(11, 15)}"
-		let enc <- [{uint
-			to_uint(l1, true);
-			to_uint(l2, true);
-			to_uint(l3, true)
-		}]
+		let enc <- [{uint to_uint(l1, true)}]
 		return string(utf8_encode(enc))
 
 var broken_html_hex <- %regex~&#x[0-9a-fA-F]+;%%

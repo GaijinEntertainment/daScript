@@ -17,6 +17,7 @@ option(DAS_STBIMAGE_DISABLED "Disable dasStbImage (StbImage bindings, image load
 option(DAS_STBTRUETYPE_DISABLED "Disable dasStbTrueType (StbTrueType bindings, ttf rasterization)" OFF)
 option(DAS_SFML_DISABLED "Disable dasSFML (SFML multimedia library)" ON)
 option(DAS_PUGIXML_DISABLED "Disable dasPUGIXML (xml parsing library)" ON)
+option(DAS_SQLITE_DISABLED "Disable dasSQLITE (sqlite3 library)" ON)
 
 INCLUDE(./CMakeCommon.txt)
 
