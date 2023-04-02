@@ -49,6 +49,8 @@ JSON: {"result":"nothing","message":"you answer followed by emoji of your mood"}
 %%
 let BOT_CHAT_PROMPT_SUFFIX = "Answer in character as the Godfather in JSON:"
 
+let BOT_SUMMARY_PROMPT = "Give detailed combined summary. Focus on facts, names, dates. Answer with summary only."
+
 def public sanitize_content ( text : string )
     return text |> fix_broken_utf32 |> strip
 
@@ -58,7 +60,7 @@ struct public GodfatherMessage
     draw : string
     code : string
 
-def generate_chat_completion_result  ( messages : array<ChatCompletionMessage> ) : GodfatherMessage
+def generate_chat_completion_result  ( messages : array<ChatCompletionMessage>; temperature:float = 1.0; top_p : float = 1.0 ) : GodfatherMessage
     //! generate completion result given chat completion messages
     to_log(LOG_INFO,"\n\n\ngenerating chat completion:\n")
     for msg in messages
@@ -68,8 +70,8 @@ def generate_chat_completion_result  ( messages : array<ChatCompletionMessage> )
         chat <- openai_create_chat_completion([[ChatCompletion()
             model = "gpt-3.5-turbo",
             max_tokens = 512,
-            temperature = 1.0,
-            top_p = 1.0,
+            temperature = temperature,
+            top_p = top_p,
             messages := messages
         ]])
         if chat |> is_valid
@@ -263,7 +265,7 @@ def public generate_completion_reply ( chat_id : int64 )
     //! given chat_id generate bot reply
     var messags <- generate_completion_request(chat_id)
     let summary <- convert_completion(messags)
-    let completion = generate_completion(summary)
+    let completion = generate_completion(summary,1.0)
     var result = [[GodfatherMessage result="ok", message="{completion}"]]
     if result.result == "error"
         return result
@@ -385,15 +387,24 @@ def public generate_previous_conversation_summary ( chat_id:int64; extra_prompt:
     to_log(LOG_INFO, "Overall summary:\n{prev_summary}\n\n\n")
     return prev_summary
 
-def public generate_completion ( summary_prompt:string )
+def public generate_summary ( text : string )
+    var inscope messages <- [{ChatCompletionMessage
+        role="system", content=BOT_SUMMARY_PROMPT;
+        role="user", content=text}]
+    var res = generate_chat_completion_result(messages,0.,0.)
+    if res.result=="error"
+        return ""
+    return res.message
+
+def public generate_completion ( summary_prompt:string; temperature:float = 0. )
     to_log(LOG_INFO, "generate_completion for prompt:\n{summary_prompt}\n\n")
     var completion : CreateCompletionResponse
     for i in range(BOT_RETRY_ATTEMPTS)
         completion <- openai_create_completion([[Completion()
-            model = "text-davinci-003",
+            model = "text-davinci-003", // "text-curie-001", // "text-davinci-003",
             prompt = summary_prompt |> fix_broken_escaping,
             max_tokens = 1024,
-            temperature = 0.
+            temperature = temperature
         ]])
         if completion |> is_valid
             break

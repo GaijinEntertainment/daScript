@@ -292,7 +292,7 @@ def generate_chat_summary ( chat_id:int64; last_n_messages:int; extp:string)
         if !empty(text)
             let summary_prompt = "Previous section summary:\n{prev_summary}\n---\nText:\n{text}\n---\nSummary of the text above {extp}:"
             to_log(LOG_INFO, "Generating summary for {length(summary_prompt)} bytes\n{summary_prompt}\n\n\n")
-            let summary = generate_completion(summary_prompt)
+            let summary = generate_summary(summary_prompt)
             to_log(LOG_INFO, "Summary: {summary}\n\n")
             total_summary = "{total_summary}\n{summary}"
             prev_summary = summary
@@ -439,7 +439,7 @@ def main
                         write_message_to_log(*r.message)
                     if is_someone_asking_bot_to_say_something(*r.message)
                         if BOT_DOES_NOT_ANSWER
-                            send_system_message(r.message.chat.id, "[THE GODFATHER IS SLEEPING]")
+                            send_system_message(*r.message, "[THE GODFATHER IS SLEEPING]")
                         else
                             to_log(LOG_INFO, "someone is asking me to say something\n")
                             let reply = generate_bot_reply(r.message.chat.id)

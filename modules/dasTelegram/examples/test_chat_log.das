@@ -12,7 +12,8 @@ require emoji
 
 require godfather_chat
 
-let chat_id = -1001849665593l
+// let chat_id = -1001849665593l // in bots we trust
+let chat_id = -1001666598976l; // remote work
 
 [export]
 def main
@@ -27,6 +28,3 @@ def main
 
     let summary_so_far = generate_previous_conversation_summary(chat_id,"in english")
     print("{summary_so_far}\n")
-
-
-
