@@ -5966,7 +5966,7 @@ namespace das {
             auto scope = scopes.back();
             expr->visibility.fileInfo = expr->at.fileInfo;
             expr->visibility.column = expr->atInit.last_column;
-            expr->visibility.line = expr->atInit.last_line-1;       // next is last_line-1, not last_line
+            expr->visibility.line = expr->atInit.last_line;
             expr->visibility.last_column = scope->at.last_column;
             expr->visibility.last_line = scope->at.last_line;
             DAS_ASSERT(expr->visibility.line);
