@@ -18,7 +18,6 @@ require openai/openai
 require chat_log
 require emoji
 
-let BOT_USE_CHAT = true
 
 var BOT_ID = 5991183368l
 var BOT_NAME = "GG19781978_bot"
@@ -261,21 +260,8 @@ def public convert_completion ( messages : array<ChatCompletionMessage> )
                 writer |> write("\n")
             writer |> write("\n")
 
-def public generate_completion_reply ( chat_id : int64 )
-    //! given chat_id generate bot reply
-    var messags <- generate_completion_request(chat_id)
-    let summary <- convert_completion(messags)
-    let completion = generate_completion(summary,1.0)
-    var result = [[GodfatherMessage result="ok", message="{completion}"]]
-    if result.result == "error"
-        return result
-    return parse_chat_reply(result)
-
 def public generate_bot_reply ( chat_id : int64 )
-    if BOT_USE_CHAT
-        return generate_chat_reply(chat_id)
-    else
-        return generate_completion_reply(chat_id)
+    return generate_chat_reply(chat_id)
 
 def public setup_chat ( botid : int64; botname, botNickName : string )
     //! setup chat
@@ -374,7 +360,7 @@ def public generate_previous_conversation_summary ( chat_id:int64; extra_prompt:
                 else
                     to_log(LOG_INFO, "Shortcut summary is too long ({shortcut |> length} bytes), will use full summary\n")
             var summary_prompt = "Previous conversation:\n\n{prev_summary}\n\n---\n\n{text}\n\n---\nFocus on facts, names, events. Combined summary of both conversations {extra_prompt}:"
-            let summary = generate_completion(summary_prompt)
+            let summary = generate_summary(summary_prompt)
             if !empty(summary) && all_perfect
                 write_summary([[SummaryEntry
                     chat_id = chat_id,
@@ -395,31 +381,3 @@ def public generate_summary ( text : string )
     if res.result=="error"
         return ""
     return res.message
-
-def public generate_completion ( summary_prompt:string; temperature:float = 0. )
-    to_log(LOG_INFO, "generate_completion for prompt:\n{summary_prompt}\n\n")
-    var completion : CreateCompletionResponse
-    for i in range(BOT_RETRY_ATTEMPTS)
-        completion <- openai_create_completion([[Completion()
-            model = "text-davinci-003", // "text-curie-001", // "text-davinci-003",
-            prompt = summary_prompt |> fix_broken_escaping,
-            max_tokens = 1024,
-            temperature = temperature
-        ]])
-        if completion |> is_valid
-            break
-        if !(openai_get_last_error() |> starts_with("curl timeout") || openai_get_last_error() |> starts_with("HTTPS POST failed"))
-            break
-        to_log(LOG_ERROR, "retrying, reason: {openai_get_last_error()}\n")
-        delete completion
-        sleep(uint(BOT_RETRY_DELAY)*1000u)
-    if !completion|> is_valid
-        to_log(LOG_ERROR, "openai_create_completion failed: {openai_get_last_error()}\n")
-        return ""
-    let completion_text = completion.choices[0].text |> replace_multiple([{auto"\r" => ""; "\n" => " "}]) |> strip
-    to_log(LOG_INFO, "completion:\n{completion_text}\n")
-    to_log(LOG_INFO, "usage:\n")
-    to_log(LOG_INFO, "      prompt_tokens={completion.usage.prompt_tokens}\n")
-    to_log(LOG_INFO, "      completion_tokens={completion.usage.completion_tokens}\n")
-    to_log(LOG_INFO, "      total_tokens={completion.usage.total_tokens}\n\n")
-    return completion_text
