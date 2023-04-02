@@ -5808,7 +5808,8 @@ namespace das {
     // ExprFor
         virtual void preVisit ( ExprFor * expr ) override {
             Visitor::preVisit(expr);
-            DAS_ASSERT(expr->visibility.line);
+            // macro generated invisible variables
+            // DAS_ASSERT(expr->visibility.line);
             loop.push_back(expr);
             pushVarStack();
         }
@@ -5966,10 +5967,11 @@ namespace das {
             auto scope = scopes.back();
             expr->visibility.fileInfo = expr->at.fileInfo;
             expr->visibility.column = expr->atInit.last_column;
-            expr->visibility.line = expr->atInit.last_line-1;       // next is last_line-1, not last_line
+            expr->visibility.line = expr->atInit.last_line;
             expr->visibility.last_column = scope->at.last_column;
             expr->visibility.last_line = scope->at.last_line;
-            DAS_ASSERT(expr->visibility.line);
+            // macro generated invisible variable
+            // DAS_ASSERTF(expr->visibility.line,"visiblity failed at %s",expr->at.describe().c_str());
             if ( expr->inScope && scopes.back()->inTheLoop ) {
                 error("in scope let is not allowed in the loop",
                     "you can always create scope with 'if true'", "", expr->at, CompilationError::in_scope_in_the_loop);
