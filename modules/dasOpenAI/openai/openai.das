@@ -143,7 +143,7 @@ def public openai_retrive_model ( model_id:string )
         if resp.status_code == HTTP_CURL_FAILED
             LAST_ERROR = resp.error
         elif resp.status_code != 200
-            LAST_ERROR = "HTTPS GET failed with status {resp.status_code}"
+            LAST_ERROR = "HTTPS GET failed with status {resp.status_code}\n{resp.text}"
         else
             var JV = read_json(resp.text,LAST_ERROR)
             if is_valid_response(JV)
@@ -169,7 +169,7 @@ struct public Completion
     best_of:int = 1                     // Number of completions to consider when averaging logprobs or returning samples
     user:string = ""                    // User ID for logged metrics
 
-def private write_request_json ( JV:JsonValue? )
+def public write_request_json ( JV:JsonValue? )
     var ontz = set_no_trailing_zeros(true)
     var nea = set_no_empty_arrays(true)
     var text = write_json(JV)
@@ -219,7 +219,7 @@ def public openai_create_completion ( completion:Completion )
         if resp.status_code == HTTP_CURL_FAILED
             LAST_ERROR = resp.error
         elif resp.status_code != 200
-            LAST_ERROR = "HTTPS POST failed with status {resp.status_code}"
+            LAST_ERROR = "HTTPS POST failed with status {resp.status_code}\n{resp.text}"
         else
             var JV <- read_json(resp.text,LAST_ERROR)
             if is_valid_response(JV)
@@ -297,7 +297,7 @@ def public openai_create_chat_completion ( completion:ChatCompletion )
         if resp.status_code == HTTP_CURL_FAILED
             LAST_ERROR = resp.error
         elif resp.status_code != 200
-            LAST_ERROR = "HTTPS POST failed with status {resp.status_code}"
+            LAST_ERROR = "HTTPS POST failed with status {resp.status_code}\n{resp.text}"
         else
             var JV <- read_json(resp.text,LAST_ERROR)
             if is_valid_response(JV)
@@ -354,7 +354,7 @@ def public openai_create_edit ( completion:Edit )
         if resp.status_code == HTTP_CURL_FAILED
             LAST_ERROR = resp.error
         elif resp.status_code != 200
-            LAST_ERROR = "HTTPS POST failed with status {resp.status_code}"
+            LAST_ERROR = "HTTPS POST failed with status {resp.status_code}\n{resp.text}"
         else
             var JV <- read_json(resp.text,LAST_ERROR)
             if is_valid_response(JV)
@@ -403,7 +403,7 @@ def public openai_create_image ( completion:Image )
         if resp.status_code == HTTP_CURL_FAILED
             LAST_ERROR = resp.error
         elif resp.status_code != 200
-            LAST_ERROR = "HTTPS POST failed with status {resp.status_code}"
+            LAST_ERROR = "HTTPS POST failed with status {resp.status_code}\n{resp.text}"
         else
             var JV <- read_json(resp.text,LAST_ERROR)
             if is_valid_image_response(JV)
@@ -437,7 +437,7 @@ def public openai_create_image_variation ( completion:ImageVariation )
         if resp.status_code == HTTP_CURL_FAILED
             LAST_ERROR = resp.error
         elif resp.status_code != 200
-            LAST_ERROR = "HTTPS POST failed with status {resp.status_code}"
+            LAST_ERROR = "HTTPS POST failed with status {resp.status_code}\n{resp.text}"
         else
             var JV <- read_json(resp.text,LAST_ERROR)
             if is_valid_image_response(JV)
@@ -475,7 +475,7 @@ def public openai_create_image_edit ( completion:ImageEdit )
         if resp.status_code == HTTP_CURL_FAILED
             LAST_ERROR = resp.error
         elif resp.status_code != 200
-            LAST_ERROR = "HTTPS POST failed with status {resp.status_code}"
+            LAST_ERROR = "HTTPS POST failed with status {resp.status_code}\n{resp.text}"
         else
             var JV <- read_json(resp.text,LAST_ERROR)
             if is_valid_image_response(JV)
@@ -515,7 +515,7 @@ def public openai_create_transcription ( completion:Transcription )
         if resp.status_code == HTTP_CURL_FAILED
             ccr.error = resp.error
         elif resp.status_code != 200
-            ccr.error = "HTTPS POST failed with status {resp.status_code}"
+            ccr.error = "HTTPS POST failed with status {resp.status_code}\n{resp.text}"
         else
             ccr.text = resp.text
     return <- ccr
@@ -547,7 +547,7 @@ def public openai_create_translation ( completion:Translation )
         if resp.status_code == HTTP_CURL_FAILED
             ccr.error = resp.error
         elif resp.status_code != 200
-            ccr.error = "HTTPS POST failed with status {resp.status_code}"
+            ccr.error = "HTTPS POST failed with status {resp.status_code}\n{resp.text}"
         else
             ccr.text = resp.text
     return <- ccr

@@ -11,6 +11,7 @@ require daslib/algorithm
 require telegram/tbotlog
 require telegram/tbot
 
+require godfather_chat
 require chat_log
 require emoji
 
@@ -21,10 +22,9 @@ struct BotConfig : tbot::configuration
     update_timeout : float = 5.0
     retry_timeout : float = 20.0
     max_chat_messages : int = 20
-    summary_size : int = 8192
+    summary_size : int = 4096
     chat_completion_attempts : int = 3
-    chat_prompt : string
-    chat_extra_prompt : string
+    chat_completion_delay : float = 10.
     path_to_ffmpeg : string
     path_to_chatlog : string
 
@@ -72,7 +72,7 @@ def convert_to_mp3 ( fin,fout:string )
     return exit_code==0
 
 def sanitize_translation ( text : string )
-    return text |> replace("\n"," ") |> replace("\r"," ") |> replace("\t"," ") |> replace("\\n", " ") |> strip()
+    return text |> replace_multiple([{auto "\n"=>" "; "\r"=>" "; "\t"=>" "; "\\n"=>" "}]) |> strip()
 
 def decode_voice_message(message:tbotapi::message ) : string
     to_log(LOG_INFO, "decoding voice message {message.voice.file_id}\n")
@@ -110,6 +110,7 @@ def decode_voice_message(message:tbotapi::message ) : string
             break
         to_log(LOG_ERROR, "retrying, reason: {ru.error}\n")
         delete ru
+        sleep(uint(g_botConfig.chat_completion_delay*1000.))
     if !empty(ru.error)
         to_log(LOG_ERROR,"transcription failed {ru.error}\n")
         return ""
@@ -129,113 +130,6 @@ def decode_voice_message(message:tbotapi::message ) : string
         return ""
     return transcription_text
 
-struct ChatMessage
-    message_text : string
-    author : string
-    answered : bool = false
-
-[skip_lock_check]
-struct ChatLog
-    messages : array<ChatMessage>
-    summary : string
-    total_tokens : int
-
-var g_chat_messages : table<string; ChatLog>
-
-def reset_chat_log ( chat_id:string )
-    delete g_chat_messages[chat_id]
-    g_chat_messages[chat_id] <- ChatLog()
-
-def get_chat_summary( var log:ChatLog; nmessages:int=INT_MAX )
-    // now, the fallback
-    let summary_prompt = build_string <| $ ( writer )
-        if !empty(log.summary)
-            writer |> write("Conversation so far:\n")
-            writer |> write(log.summary)
-        for msg,i in log.messages,range(nmessages)
-            writer |> write("\n")
-            writer |> write(msg.author==g_botConfig.name ? "assistant" : "user")
-            writer |> write(": ")
-            writer |> write(msg.message_text)
-            writer |> write("\n")
-        writer |> write("---\nSummary of the entire conversation:")
-    // now, we make a summary
-    to_log(LOG_INFO, "summary prompt:\n{summary_prompt}\n")
-    return generate_completion(summary_prompt)
-
-def generate_completion ( summary_prompt:string )
-    var inscope completion : CreateCompletionResponse
-    for i in 0..g_botConfig.chat_completion_attempts
-        completion <- openai_create_completion([[Completion()
-            model = "text-davinci-003",
-            prompt = summary_prompt,
-            max_tokens = 512,
-            temperature = 0.
-        ]])
-        if completion |> is_valid
-            break
-        if !(openai_get_last_error() |> starts_with("curl timeout") || openai_get_last_error() |> starts_with("HTTPS POST failed"))
-            break
-        to_log(LOG_ERROR, "retrying, reason: {openai_get_last_error()}\n")
-        delete completion
-    if !completion|> is_valid
-        to_log(LOG_ERROR, "openai_create_completion failed: {openai_get_last_error()}\n")
-        return ""
-    to_log(LOG_INFO, "completion:\n")
-    to_log(LOG_INFO, "      prompt_tokens={completion.usage.prompt_tokens}\n")
-    to_log(LOG_INFO, "      completion_tokens={completion.usage.completion_tokens}\n")
-    to_log(LOG_INFO, "      total_tokens={completion.usage.total_tokens}\n")
-    return completion.choices[0].text |> replace("\\n","") |> replace("\n","")
-
-def prune_chat ( var log:ChatLog )
-    // first lets try to get rid of message, that is not answered (i.e. was not addressed to bot)
-    // and not written by bot
-    var index = -1
-    for msg,i in log.messages,count()
-        if !msg.answered && msg.author!=g_botConfig.name
-            index = i
-            break
-    if index != -1
-        to_log(LOG_INFO, "pruning chat, removing unansered message {index} from {log.messages[index].author}\n")
-        to_log(LOG_INFO, "message was:\n{log.messages[index].message_text}\n")
-        log.messages |> erase(index)
-        return true
-    let new_summary = get_chat_summary(log,1)
-    if new_summary |> empty
-        return false
-    to_log(LOG_INFO, "pruning chat, removing first message from {log.messages[0].author}\n")
-    to_log(LOG_INFO, "message was:\n{log.messages[0].message_text}\n")
-    to_log(LOG_INFO, "new summary is:\n{new_summary}\n")
-    log.summary = new_summary
-    log.messages |> erase(0)
-    return true
-
-def accept_chat_message ( chat_id:string; message_text:string; author:string )
-    var text = message_text
-    while !empty(text)
-        if length(text) > 4096
-            let part = text |> slice(0,4096)
-            accept_single_chat_message(chat_id,part,author)
-            text = text |> slice(4096)
-        else
-            accept_single_chat_message(chat_id,text,author)
-            text = ""
-
-def accept_single_chat_message ( chat_id:string; message_text:string; author:string )
-    to_log(LOG_INFO, "accept_chat_message {chat_id} {message_text} {author}\n")
-    assume chat = g_chat_messages[chat_id]
-    while length(chat.messages) > g_botConfig.max_chat_messages
-        if !prune_chat ( chat )
-            break
-    if !chat.messages |> empty
-        var last_message & = unsafe(chat.messages |> back)
-        if !last_message.answered && last_message.author == author
-            let combined_text = "{last_message.message_text}\n{message_text}"
-            if length(combined_text) < 4096
-                last_message.message_text = combined_text
-            return
-    chat.messages |> push([[ChatMessage message_text=message_text, author=author]])
-
 def is_someone_asking_bot_to_say_something ( message:tbotapi::message  )
     if message.text |> find("@{g_botConfig.id}") != -1
         return true
@@ -243,172 +137,16 @@ def is_someone_asking_bot_to_say_something ( message:tbotapi::message  )
         return true
     return false
 
-struct GodfatherMessage
-    result : string
-    message : string
-    summary : string
-    draw : string
-    code : string
-    mood : string
-    raw : string
-
-def sanitize_chat_message ( message : string )
-    return (message
-        |> replace("@{g_userGodfather.username}","")
-        |> replace_multiple([{auto
-            "\\n" => " ";
-            "\\r" => " ";
-            "\\t" => " "}])
-        |> strip())
-
-def sanitize_json_reply ( reply : string )
-    return build_string <| $ ( writer )
-        peek_data(reply) <| $ ( str )
-            var i = 0
-            let len = length(str)
-            var instring = false
-            while i < len
-                if str[i] == '"'u8
-                    instring = !instring
-                elif str[i] == '\\'u8
-                    if i+1 < len
-                        let nc = str[i+1]
-                        if instring // we stay in string if we have escaped quote
-                            writer |> write_char('\\')
-                            writer |> write_char(int(nc))
-                            i += 2
-                            continue
-                        if nc=='n'u8 || nc=='r'u8 || nc=='t'u8  // we replace \n,\r,\t with ' '
-                            writer |> write_char(' ')
-                            i += 2
-                            continue
-                writer |> write_char(int(str[i]))   // we write everything else
-                i ++
-
-def flatten_json_reply ( var writer:StringBuilderWriter; var reply : JsonValue? )
-    if reply is _object
-        for key in (reply as _object) |> keys
-            flatten_json_reply(writer, (reply as _object)[key])
-    elif reply is _array
-        for item in reply as _array
-            flatten_json_reply(writer, item)
-    elif reply is _string
-        writer |> write(reply as _string)
-        writer |> write(" ")
-    elif reply is _number
-        writer |> write("{reply as _number}")
-        writer |> write(" ")
-    elif reply is _bool
-        writer |> write("{reply as _bool}")
-        writer |> write(" ")
-
-def adjust_completion ( var json : JsonValue? )
-    //! here is collection of workarounds for the mallformed output
-    if json == null
-        return
-    // this workaround is when it starts providing object after the draw, instead of description
-    assume obj = json as _object
-    if obj |> key_exists("draw")
-        if obj["draw"] is _object
-            assume draw = obj["draw"] as _object
-            var req = build_string <| $ ( writer )
-                flatten_json_reply(writer, obj["draw"])
-            obj |> erase("draw")
-            obj["draw"] = JV(req)
-            to_log(LOG_INFO, "adjusting draw to {req}\n")
-
-def generate_chat_reply ( chat_id : string; message:tbotapi::message; var tokens:int& )
-    to_log(LOG_INFO, "generate_chat_reply {chat_id} {message.text}\n")
-    tokens = 0
-    var messages : array<ChatCompletionMessage>
-    to_log(LOG_INFO, "system: {g_botConfig.chat_prompt}\n")
-    messages |> push([[ChatCompletionMessage role="system", content=g_botConfig.chat_prompt, name=g_botConfig.name]])
-    let summary = g_chat_messages[chat_id].summary
-    if !empty(summary)
-        to_log(LOG_INFO, "system: {summary}\n")
-        messages |> push([[ChatCompletionMessage role="system", content="Summary of the conversation so far: {summary}", name=g_botConfig.name]])
-    for cm in g_chat_messages[chat_id].messages
-        let role = cm.author==g_botConfig.name ? "assistant" : "user"
-        let content = sanitize_chat_message(cm.message_text)
-        to_log(LOG_INFO,"{role}: {content}\n")
-        messages |> push([[ChatCompletionMessage
-            role = role,
-            name = cm.author==g_botConfig.name ? "" : cm.author,    // we are skipping this, because it goes bonkers otherwise
-            content = content]])
-    messages |> push([[ChatCompletionMessage
-        role = "system",
-        content = "It is {get_clock()}. {g_botConfig.chat_extra_prompt}"]])
-    to_log(LOG_INFO,"generating chat completion\n")
-    var inscope chat : ChatCompletionResponse
-    for i in 0..g_botConfig.chat_completion_attempts
-        chat <- openai_create_chat_completion([[ChatCompletion()
-            model = "gpt-3.5-turbo",
-            max_tokens = 512,
-            temperature = 1.0,
-            top_p = 1.0,
-            messages <- messages
-        ]])
-        if chat |> is_valid
-            break
-        if !(openai_get_last_error() |> starts_with("curl timeout") || openai_get_last_error() |> starts_with("HTTPS POST failed"))
-            break
-        to_log(LOG_ERROR, "retrying, reason: {openai_get_last_error()}\n")
-        delete chat
-    if !chat|> is_valid
-        to_log(LOG_ERROR, "openai_create_chat_completion failed: {openai_get_last_error()}\n")
-        return [[GodfatherMessage result = "error", message = openai_get_last_error()]]
-    to_log(LOG_INFO, "chat completion: {chat.choices[0].message.content}\n")
-    to_log(LOG_INFO, "usage:\n")
-    to_log(LOG_INFO, "- prompt tokens {chat.usage.prompt_tokens}\n")
-    to_log(LOG_INFO, "- completion tokens {chat.usage.completion_tokens}\n")
-    to_log(LOG_INFO, "- total tokens {chat.usage.total_tokens}\n")
-    tokens = chat.usage.total_tokens
-    let fnd = chat.choices[0].message.content |> find("\{")
-    if fnd == -1
-        to_log(LOG_ERROR, "there is no JSON there\n")
-        return [[GodfatherMessage result = "error", message = "there is no JSON there", raw = chat.choices[0].message.content]]
-    let json_str = chat.choices[0].message.content |> slice(fnd) |> sanitize_json_reply
-    to_log(LOG_INFO, "json_str: {json_str}\n")
-    var error : string
-    let old_adc = set_allow_duplicate_keys(true)
-    var json <- read_json(json_str,error)
-    if json == null
-        to_log(LOG_ERROR, "read_json failed: {error}; trying to fix\n")
-        let fixed_json = try_fixing_broken_json(json_str)
-        to_log(LOG_ERROR, "fixed_json: {fixed_json}\n")
-        var fixed_error : string
-        var new_json <- read_json(fixed_json,error)
-        if new_json != null
-            to_log(LOG_ERROR, "that fixed it\n")
-            json <- new_json
-            error = fixed_error
-    set_allow_duplicate_keys(old_adc)
-    if !empty(error)
-        unsafe
-            delete json
-        to_log(LOG_ERROR, "read_json failed: {error}\n")
-        return [[GodfatherMessage result = "error", message = error, raw = chat.choices[0].message.content]]
-    adjust_completion(json)
-    var res <- from_JV(json,type<GodfatherMessage>)
-    (g_chat_messages[chat_id].messages |> back).answered = true
-    res.raw = write_json(json) // save raw JSON for chat completion
-    unsafe
-        delete json
-    return <- res
-
 def process_error_message ( message:tbotapi::message; whatGodfatherSaid:GodfatherMessage )
-    to_log(LOG_ERROR, "generate_chat_reply failed: {whatGodfatherSaid.message}\n{whatGodfatherSaid.raw}\n")
+    to_log(LOG_ERROR, "generate_chat_reply failed: {whatGodfatherSaid.message}\n{whatGodfatherSaid}\n")
     telegram_sendLongMessage([[sendmessage
         chat_id = "{message.chat.id}",
         reply_to_message_id = message.message_id,
-        text = "{g_botConfig.name} (debug message):```\n{whatGodfatherSaid.message}\n{whatGodfatherSaid.raw}\n```" |> telegram_escapeMarkdownV2,
+        text = "{g_botConfig.name} (debug message):```\n{whatGodfatherSaid.message}\n{whatGodfatherSaid}\n```" |> telegram_escapeMarkdownV2,
         parse_mode = "MarkdownV2"
     ]])
     if !telegram_get_last_error() |> empty
         to_log(LOG_ERROR, "telegram_sendLongMessage failed: {telegram_get_last_error()}\n")
-
-def fix_mood ( mood:string )
-    return mood |> fix_emoji |> fix_broken_utf16 |> fix_broken_utf32 |> fix_broken_html_hex
 
 def fix_message ( text:string )
     return text |> fix_emoji |> fix_broken_utf16 |> fix_broken_utf32 |> fix_broken_html_hex
@@ -440,20 +178,29 @@ def write_message_to_log ( message:tbotapi::message )
 
 def process_chat_reply ( message:tbotapi::message; whatGodfatherSaid:GodfatherMessage )
     to_log(LOG_INFO, "{g_botConfig.name}: {whatGodfatherSaid}\n")
-    let reply = whatGodfatherSaid.message |> sanitize_translation |> fix_message
-    let mood = whatGodfatherSaid.mood |> fix_mood
     var inscope messages <- telegram_sendLongMessage([[sendmessage
         chat_id = "{message.chat.id}",
         reply_to_message_id = message.message_id,
-        text = "{g_botConfig.name}: {reply} {mood}"
+        text = whatGodfatherSaid.message |> sanitize_translation |> fix_message
     ]])
     if !telegram_get_last_error() |> empty
         to_log(LOG_ERROR, "telegram_sendLongMessage failed: {telegram_get_last_error()}\n")
         return
-    for rm in messages
-        write_message_to_log(rm)
-    if whatGodfatherSaid.raw != ""
-        accept_chat_message("{message.chat.id}",whatGodfatherSaid.raw,"Godfather")
+    if !empty(messages)
+        // we save what godfather said to the log as a raw JSON
+        var json = JV(whatGodfatherSaid)
+        var reply_json = write_json(json)
+        unsafe
+            delete json
+        write_to_log([[ChatLogEntry
+            chat_id = message.chat.id,
+            message_id = messages[0].message_id,
+            date = messages[0].date,
+            from_id = g_userGodfather.id,
+            reply_to_message = message.from?.id ?? 0l,
+            text = reply_json,
+            transcription = ""
+        ]])
     process_chat_reply_draw ( message, whatGodfatherSaid )
     process_char_reply_code ( message, whatGodfatherSaid )
 
@@ -501,19 +248,11 @@ def process_chat_reply_draw ( message:tbotapi::message; whatGodfatherSaid:Godfat
             chat_id = "{message.chat.id}",
             reply_to_message_id = message.message_id,
             file = photo_file_name,
-            caption = "{g_botConfig.name}: {whatGodfatherSaid.draw}"
+            caption = whatGodfatherSaid.draw |> fix_message
         ]])
         if !telegram_get_last_error() |> empty
             to_log(LOG_ERROR, "telegram_sendLongMessage failed: {telegram_get_last_error()}\n")
             return
-
-def accept_godfather_message ( chat_id:string; message_text:string )
-    var msg = [[GodfatherMessage result="nothing", summary="i should say something", message=message_text, mood="sarcastic"]]
-    var json <- JV(msg)
-    var json_str = write_json(json)
-    unsafe
-        delete json
-    accept_chat_message(chat_id,json_str,g_botConfig.name)
 
 def collect_chat_log ( chat_id:int64; last_n_messages:int )
     var users : table<int64; UserEntry>
@@ -528,7 +267,7 @@ def collect_chat_log ( chat_id:int64; last_n_messages:int )
     log |> reverse
     return <- log
 
-def generate_chat_summary ( chat_id:int64; last_n_messages:int )
+def generate_chat_summary ( chat_id:int64; last_n_messages:int; extp:string)
     to_log(LOG_INFO, "Generating chat summary for {chat_id} last {last_n_messages} messages\n\n\n")
     var inscope log <- collect_chat_log(chat_id, last_n_messages)
     var i = 0
@@ -541,7 +280,7 @@ def generate_chat_summary ( chat_id:int64; last_n_messages:int )
             text = "{text}\n{log[i]}"
             i ++
         if !empty(text)
-            let summary_prompt = "Previous section summary:\n{prev_summary}\n---\nText:\n{text}\n---\nSummary of the text above in russian language:"
+            let summary_prompt = "Previous section summary:\n{prev_summary}\n---\nText:\n{text}\n---\nSummary of the text above {extp}:"
             to_log(LOG_INFO, "Generating summary for {length(summary_prompt)} bytes\n{summary_prompt}\n\n\n")
             let summary = generate_completion(summary_prompt)
             to_log(LOG_INFO, "Summary: {summary}\n\n")
@@ -549,20 +288,6 @@ def generate_chat_summary ( chat_id:int64; last_n_messages:int )
             prev_summary = summary
     to_log(LOG_INFO, "Overall summary: {total_summary}\n\n\n")
     return total_summary
-
-
-def dump_chat_status ( chat:ChatLog )
-    return build_string <| $ ( writer )
-        writer |> write("```\n")
-        writer |> write(chat.summary)
-        writer |> write("\n")
-        for msg in chat.messages
-            writer |> write(msg.author)
-            writer |> write(": ")
-            writer |> write(msg.message_text)
-            writer |> write("\n")
-        writer |> write("```\n")
-        writer |> write("in {chat.total_tokens} tokens\n")
 
 def dump_chat_users ( chat_id:int64 )
     return build_string <| $ ( writer )
@@ -593,13 +318,10 @@ def setup_bot_commands
     telegram_setMyCommands([[setmycommands
         commands <- [{botcommand
             command="test", description="verify one of the internal bot features";
-            command="reset", description="reset conversation in this chat";
-            command="bot_summary", description="get a summary of the chat";
-            command="completion_summary", description="show completion summary";
-            command="status", description="show current chat status";
             command="users", description="show users in this chat";
             command="chatlog", description="show chat log summary for the last n messages";
-            command="summary", description="show chat log summary for the last n messages"
+            command="summary", description="show chat log summary for the last n messages";
+            command="samara", description="сводка по логу чата за последние n сообщений"
         }]
     ]])
     if !telegram_get_last_error() |> empty
@@ -611,17 +333,6 @@ def process_bot_commands ( message:message )
     if message.text == "/test@{g_botConfig.id}"
         response = build_string <| $ ( writer )
             writer |> write("```\n\n code block \n\n line 2 \n\n line 3 \n\n```")
-    elif message.text == "/bot_summary@{g_botConfig.id}"
-        response = get_chat_summary(g_chat_messages["{message.chat.id}"])
-    elif message.text == "/completion_summary@{g_botConfig.id}"
-        response = g_chat_messages["{message.chat.id}"].summary
-        if response |> empty
-            response = "no completion summary available"
-    elif message.text == "/status@{g_botConfig.id}"
-        response = dump_chat_status(g_chat_messages["{message.chat.id}"])
-    elif message.text == "/reset@{g_botConfig.id}"
-        reset_chat_log("{message.chat.id}")
-        response = "conversation history has been reset"
     elif message.text == "/users@{g_botConfig.id}"
         response = dump_chat_users(message.chat.id)
     elif message.text |> starts_with("/chatlog@{g_botConfig.id}")
@@ -638,7 +349,14 @@ def process_bot_commands ( message:message )
         var max_messages = 100
         if !empty(num_substr)
             max_messages = int(num_substr)
-        response = generate_chat_summary(message.chat.id, max_messages)
+        response = generate_chat_summary(message.chat.id, max_messages, "in english language")
+    elif message.text |> starts_with("/samara@{g_botConfig.id}")
+        let len_cmd = length("/samara@{g_botConfig.id}")
+        let num_substr = message.text |> slice(len_cmd+1)
+        var max_messages = 100
+        if !empty(num_substr)
+            max_messages = int(num_substr)
+        response = generate_chat_summary(message.chat.id, max_messages, "in russian language")
     if !empty(response)
         telegram_sendLongMessage([[sendmessage
             chat_id = "{message.chat.id}",
@@ -675,10 +393,10 @@ def main
     g_userGodfather = telegram_getMe()
     if !telegram_get_last_error() |> empty
         panic("telegram_getMe failed: {telegram_get_last_error()}")
+    setup_chat(g_userGodfather.id, g_botConfig.name)
     print("{g_botConfig.name} {g_userGodfather.username} ({g_userGodfather.id}) is listening...\n")
-    setup_bot_commands()
     while true
-        unsafe(heap_collect(true,true))
+        // unsafe(heap_collect(true,true))
         if true
             var inscope res <- telegram_getupdates([[getupdates
                 offset = last_update,
@@ -701,21 +419,17 @@ def main
                         to_log(LOG_INFO, "reply to {get_user_name(r.message.reply_to_message.from)}: {r.message.reply_to_message.text}\n")
                     if r.message.voice!=null
                         to_log(LOG_INFO, "contains voice message\n")
-                        let voiceMessageText = decode_voice_message(*r.message)
-                        write_message_to_log(*r.message, voiceMessageText)
-                        if !empty(voiceMessageText)
-                            accept_chat_message("{r.message.chat.id}",voiceMessageText,get_user_name(r.message.from))
+                        write_message_to_log(*r.message, decode_voice_message(*r.message))
                     else
                         write_message_to_log(*r.message)
-                        accept_chat_message("{r.message.chat.id}","{r.message.text}",get_user_name(r.message.from))
                     if is_someone_asking_bot_to_say_something(*r.message)
                         to_log(LOG_INFO, "someone is asking me to say something\n")
-                        var tokens = 0
-                        let reply = generate_chat_reply("{r.message.chat.id}",*r.message, tokens)
+                        let reply = generate_chat_reply(r.message.chat.id)
                         if reply.result != "error"
-                            g_chat_messages["{r.message.chat.id}"].total_tokens = tokens
                             process_chat_reply(*r.message,reply)
                         else
                             process_error_message(*r.message,reply)
 
 
+options debugger
+require daslib/debug

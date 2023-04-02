@@ -201,7 +201,8 @@ namespace das
         string result;
         result.reserve(input.size());
         for( ; str < strEnd; ++str ) {
-            switch ( *str ) {
+            auto ch = uint8_t(*str);
+            switch ( ch ) {
                 case '\"':  result.append("\\\"");  break;
                 case '\\':  result.append("\\\\");  break;
                 case '\b':  result.append("\\b");   break;
@@ -212,7 +213,15 @@ namespace das
                 case '\t':  result.append("\\t");   break;
                 case '{':   if (das_escape) result.append("\\{"); else result.append("{");  break;
                 case '}':   if (das_escape) result.append("\\}"); else result.append("}");  break;
-                default:    result.append(1, *str); break;
+                default:
+                    if ( ch <= 0x1f ) {
+                        result.append("\\u00");
+                        result.append(1,(ch>>4)+'0');
+                        result.append(1,(ch&15)+'0');
+                    } else {
+                        result.append(1, ch);
+                    }
+                    break;
             }
         }
         return result;
