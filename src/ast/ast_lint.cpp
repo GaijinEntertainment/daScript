@@ -344,7 +344,8 @@ namespace das {
 
         virtual void preVisit(ExprFor * expr) override {
             Visitor::preVisit(expr);
-            DAS_ASSERT(expr->visibility.line);
+            // macro generated invisible variable
+            // DAS_ASSERT(expr->visibility.line);
         }
         virtual void preVisit(ExprDelete * expr) override {
             Visitor::preVisit(expr);
@@ -356,7 +357,8 @@ namespace das {
         }
         virtual void preVisit(ExprLet * expr) override {
             Visitor::preVisit(expr);
-            DAS_ASSERT(expr->visibility.line);
+            // macro genearted invisible variable
+            // DAS_ASSERT(expr->visibility.line);
             for (const auto & var : expr->variables) {
                 if (!isValidVarName(var->name)) {
                     program->error("invalid variable name " + var->name, "", "",
