@@ -27,16 +27,16 @@ var BOT_NICKNAME = "Godfather"
 let BOT_TOTAL_CONTEXT_MESSAGES = 100
 let BOT_TOTAL_MESSAGES = 20
 
-let BOT_RETRY_ATTEMPTS = 3
-let BOT_RETRY_DELAY = 20        // in seconds
+let public BOT_RETRY_ATTEMPTS = 3
+let public BOT_RETRY_DELAY = 20        // in seconds
 
-let BOT_SUMMARY_SIZE = 4096
-let BOT_SHORTCUT_SUMMARY_SIZE = 1024+512
+let public BOT_SUMMARY_SIZE = 4096
+let public BOT_SHORTCUT_SUMMARY_SIZE = 1024+512
 
 let BOT_TEST_SKIP_LAST_N_MESSAGES = 0
 
 let BOT_CHAT_PROMPT_PREFIX = %stringify~
-You are Don Carleone - the Godfather. You do not mention AI or language models.
+You are Don Corleone - the Godfather. You do not mention AI or language models.
 You are sarcastic. You are highly intelligent with exceptional intuition.
 You stay in character. You do not break the 4th wall.
 You reply in well formed JPEG encoded in utf8. Examples:

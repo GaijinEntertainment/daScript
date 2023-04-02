@@ -19,16 +19,13 @@ require emoji
 let BOT_DEBUG_MODE = false
 let BOT_DOES_NOT_ANSWER = false
 
+let BOT_OPENAI_TIMEOUT = 30.0
+let BOT_UPDATE_TIMEOUT = 5.0
+let BOT_UPDATE_RETRY_TIMEOUT = 20.0
+
 struct BotConfig : tbot::configuration
     id : string
     name : string
-    openai_timeout : float = 30.0
-    update_timeout : float = 5.0
-    retry_timeout : float = 20.0
-    max_chat_messages : int = 20
-    summary_size : int = 4096
-    chat_completion_attempts : int = 3
-    chat_completion_delay : float = 10.
     path_to_ffmpeg : string
     path_to_chatlog : string
 
@@ -103,7 +100,7 @@ def decode_voice_message(message:tbotapi::message ) : string
         return ""
     to_log(LOG_INFO, "creating transcription for {temp_mp3_file_name}\n")
     var inscope ru : TranscriptionResult
-    for i in 0..g_botConfig.chat_completion_attempts
+    for i in range(BOT_RETRY_ATTEMPTS)
         ru <- openai_create_transcription([[Transcription() file = temp_mp3_file_name, language = ""]])
         if empty(ru.error)
             break
@@ -111,7 +108,7 @@ def decode_voice_message(message:tbotapi::message ) : string
             break
         to_log(LOG_ERROR, "retrying, reason: {ru.error}\n")
         delete ru
-        sleep(uint(g_botConfig.chat_completion_delay*1000.))
+        sleep(uint(BOT_RETRY_DELAY)*1000u)
     if !empty(ru.error)
         to_log(LOG_ERROR,"transcription failed {ru.error}\n")
         return ""
@@ -289,7 +286,7 @@ def generate_chat_summary ( chat_id:int64; last_n_messages:int; extp:string)
     var prev_summary = ""
     while i < llen
         var text = log[i]
-        while i<llen && length(text)<g_botConfig.summary_size
+        while i<llen && length(text)<BOT_SUMMARY_SIZE
             text = "{text}\n{log[i]}"
             i ++
         if !empty(text)
@@ -402,7 +399,7 @@ def main
     set_use_temp_file(true) // sometimes curl removes \n from the command line input. don't know why. for now this is a workaround
     g_botConfig <- read_bot_config(configPath)
     telegram_set_configuration(g_botConfig)
-    openai_set_connection_timeout(g_botConfig.openai_timeout)
+    openai_set_connection_timeout(BOT_OPENAI_TIMEOUT)
     if !create_chat_log(g_botConfig.path_to_chatlog)
         panic("failed to create chat log at {g_botConfig.path_to_chatlog}")
     var last_update = 0l
@@ -412,18 +409,17 @@ def main
     setup_chat(g_userGodfather.id, g_botConfig.id, g_botConfig.name)
     print("{g_botConfig.name} {g_userGodfather.username} ({g_userGodfather.id}) is listening...\n")
     while true
-        // unsafe(heap_collect(true,true))
+        unsafe(heap_collect(true,true))
         if true
             var inscope res <- telegram_getupdates([[getupdates
                 offset = last_update,
                 limit = 100l,
-                timeout = int64(g_botConfig.update_timeout),
+                timeout = int64(BOT_UPDATE_TIMEOUT),
                 allowed_updates <- [{auto "message"; "edited_message"}]
             ]])
             if !telegram_get_last_error() |> empty
-                let waitSeconds = uint(max(5.0,g_botConfig.retry_timeout*1000.0))
-                to_log(LOG_ERROR, "telegram_getupdates failed: {telegram_get_last_error()}\nwaiting {waitSeconds} seconds...")
-                sleep(waitSeconds)
+                to_log(LOG_ERROR, "telegram_getupdates failed: {telegram_get_last_error()}\nwaiting {BOT_UPDATE_RETRY_TIMEOUT} seconds...")
+                sleep(uint(BOT_UPDATE_RETRY_TIMEOUT))
                 continue
             for r in res
                 last_update = max(last_update, r.update_id+1l)
