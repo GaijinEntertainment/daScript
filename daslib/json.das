@@ -6,7 +6,7 @@ options strict_smart_pointers = true
 
 module json shared public
 
-require strings
+require daslib/strings_boost
 
 variant JsValue
     //! Single JSON element.
@@ -364,6 +364,7 @@ def try_fixing_broken_json ( var bad:string )
     //! 1. "string" + "string" string concatination
     //! 2. "text "nested text" text" nested quotes
     //! 3. extra , at the end of object or array
+    //! 4. /uXXXXXX sequences in the middle of white space
 	return build_string <| $ ( writer )
 		peek_data(bad) <| $ ( str )
 			var i = 0
@@ -378,6 +379,11 @@ def try_fixing_broken_json ( var bad:string )
                         if j < lstr && (str[j]=='}'u8 || str[j]==']'u8)
                             i = j
                             continue
+                    if str[i]=='\\'u8 && str[i+1]=='u'u8
+                        i +=2
+                        while i < lstr && is_hex(int(str[i]))
+                            i ++
+                        continue
 					writer |> write_char(int(str[i]))
 					i ++
 				if i >= lstr	// if eof we done

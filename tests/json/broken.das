@@ -51,6 +51,8 @@ let broken4 = %stringify~
     }
 %%
 
+let broken5 = %stringify~ {\u004857"code" : "",\u004857"message" : "I'm doing well, thank you for asking. How can I help you?",\u004857"result" : "nothing",\u004857"draw" : ""}\u004858 %%
+
 def test_broken ( t: T?; text:string )
     var error : string
     var j = read_json(text,error)
@@ -71,4 +73,6 @@ def broken_json ( t: T? )
         test_broken(t,broken3)
 	t |> run("missing ,") <| @ ( t : T? )
 		test_broken(t,broken4)
+	t |> run("extra \u004857") <| @ ( t : T? )
+		test_broken(t,broken5)
 
