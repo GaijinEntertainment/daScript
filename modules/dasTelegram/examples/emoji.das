@@ -63,4 +63,11 @@ def public fix_broken_html_hex ( str:string )
 		let utf32 = to_uint(code, true)
 		return string(utf8_encode(utf32))
 
+def public fix_broken_escaping ( prompt:string )
+    return build_string <| $ ( writer )
+        for Ch in prompt
+            if Ch<=31
+                writer |> write("\\u00{(Ch>>4)+'0'}{(Ch&15)+'0'}")
+            else
+                writer |> write_char(Ch)
 

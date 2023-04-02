@@ -15,9 +15,11 @@ class LoggerAgent : DapiDebugAgent
         mkdir(temp_dir)
         let date_time = "{get_clock()}" |> replace(":","_") |> replace(" ","_")
         let log_file = "{temp_dir}/bot.{date_time}.log"
-        flog = fopen(log_file,"w")
+        flog = fopen(log_file,"wb")
         if flog == null
             panic("Cannot open log file {log_file}")
+        let bang = [[uint8 0xefu8; 0xbbu8; 0xbfu8]]
+        fwrite(flog, bang)
         print("Telegram bot log file at {log_file}\n")
     def operator delete
         fclose(flog)

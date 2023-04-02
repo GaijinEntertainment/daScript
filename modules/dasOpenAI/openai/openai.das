@@ -169,7 +169,7 @@ struct public Completion
     best_of:int = 1                     // Number of completions to consider when averaging logprobs or returning samples
     user:string = ""                    // User ID for logged metrics
 
-def private write_request_json ( JV:JsonValue? )
+def public write_request_json ( JV:JsonValue? )
     var ontz = set_no_trailing_zeros(true)
     var nea = set_no_empty_arrays(true)
     var text = write_json(JV)

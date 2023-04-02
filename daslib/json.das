@@ -257,12 +257,14 @@ def private parse_value ( var itv : iterator<Token>; var error : string & ) : Js
 def read_json ( text : string implicit; var error : string& ) : JsonValue?
     //! reads JSON from the `text` string.
     //! if `error` is not empty, it contains the parsing error message.
+    error = ""
     var lex <- lexer(text)
     let res = parse_value(lex,error)
     delete lex
     return res
 
 def read_json ( text : array<uint8>; var error : string& ) : JsonValue?
+    error = ""
     var lex <- lexer(text)
     let res = parse_value(lex,error)
     delete lex
@@ -423,16 +425,16 @@ def try_fixing_broken_json ( var bad:string )
                     i = nested + 1
                     continue
                 // . we assume its nested quotes and we replace with \"
-				writer |> write("\\\"")
+				writer |> write("`")
 				i = nested + 1
 				while i < lstr && str[i]!='"'u8
 					writer |> write_char(int(str[i]))
 					i ++
 				if i >= lstr	// if eof we done, we fix nested quote and and closing quote and we are done
-					writer |> write("\\\"")
+					writer |> write("`")
 					writer |> write_char('"')
 					break
 				// write the second replaced quote
-				writer |> write("\\\"")
+				writer |> write("`")
 				i ++
 				goto label 0
