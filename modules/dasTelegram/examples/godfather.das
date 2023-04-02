@@ -227,10 +227,11 @@ def process_char_reply_code ( message:tbotapi::message; whatGodfatherSaid:Godfat
         ]], 4096-10,"```\n","\n```")
 
 def process_chat_reply_draw ( message:tbotapi::message; whatGodfatherSaid:GodfatherMessage )
-    if !empty(whatGodfatherSaid.draw)
+    let draw_prompt = whatGodfatherSaid.draw |> strip
+    if !empty(draw_prompt)
         to_log(LOG_INFO, "drawing image {whatGodfatherSaid.draw}\n")
         var inscope image <- openai_create_image([[Image()
-            prompt = whatGodfatherSaid.draw,
+            prompt = draw_prompt,
             n = 1,
             size = 256,
             response_format = "b64_json"    // url

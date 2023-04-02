@@ -18,7 +18,7 @@ require openai/openai
 require chat_log
 require emoji
 
-let BOT_USE_CHAT = false
+let BOT_USE_CHAT = true
 
 var BOT_ID = 5991183368l
 var BOT_NAME = "GG19781978_bot"
@@ -36,19 +36,18 @@ let BOT_SHORTCUT_SUMMARY_SIZE = 1024+512
 let BOT_TEST_SKIP_LAST_N_MESSAGES = 0
 
 let BOT_CHAT_PROMPT_PREFIX = %stringify~
-Pretend to be Vito Carleone aka Godfather from the movie The Godfather.
-You can draw pictures and write code.
-Answer in detail in the same language as the question.
+You are Don Carleone - the Godfather. You do not mention AI or language models.
+You are sarcastic. You are highly intelligent with exceptional intuition.
+You stay in character. You do not break the 4th wall.
 You reply in well formed JPEG encoded in utf8. Examples:
 Q. when u need to draw
-JSON: {"result":"draw","draw":"very detailed description of whatever user asked to draw","message":"you answer followed by emoji"}
+JSON: {"result":"draw","draw":"very detailed description of whatever user asked to draw","message":"you answer followed by emoji of your mood"}
 Q. when u need to write code
-JSON: {"result":"code","code":"text of the code goes here","message":"you answer followed by emoji"}
+JSON: {"result":"code","code":"text of the code goes here","message":"you answer followed by emoji of your mood"}
 Q. general questions
-JSON: {"result":"nothing","message":"you answer followed by emoji"}
+JSON: {"result":"nothing","message":"you answer followed by emoji of your mood"}
 %%
-
-let BOT_CHAT_PROMPT_SUFFIX = "JSON:"
+let BOT_CHAT_PROMPT_SUFFIX = "Answer in character as the Godfather in JSON:"
 
 def public sanitize_content ( text : string )
     return text |> fix_broken_utf32 |> strip
@@ -351,6 +350,8 @@ def public generate_previous_conversation_summary ( chat_id:int64; extra_prompt:
     var i = 0
     var all_perfect = true
     var last_id = 0l
+    if !empty(prev_summary)
+        to_log(LOG_INFO, "Previous summary ({prev_summary |> length}) bytes:\n{prev_summary}\n\n\n")
     while i < llen
         if entries[i].id <= dayZ
             i ++
@@ -368,7 +369,9 @@ def public generate_previous_conversation_summary ( chat_id:int64; extra_prompt:
                 if length(shortcut) < BOT_SHORTCUT_SUMMARY_SIZE
                     to_log(LOG_INFO, "Shortcut summary:\n{shortcut}\n\n\n")
                     return shortcut
-            var summary_prompt = "Previous conversation:\n\n{prev_summary}\n\n---\n\n{text}\n\n---\nCombined detailed summary of both conversations {extra_prompt}:"
+                else
+                    to_log(LOG_INFO, "Shortcut summary is too long ({shortcut |> length} bytes), will use full summary\n")
+            var summary_prompt = "Previous conversation:\n\n{prev_summary}\n\n---\n\n{text}\n\n---\nFocus on facts, names, events. Combined summary of both conversations {extra_prompt}:"
             let summary = generate_completion(summary_prompt)
             if !empty(summary) && all_perfect
                 write_summary([[SummaryEntry
