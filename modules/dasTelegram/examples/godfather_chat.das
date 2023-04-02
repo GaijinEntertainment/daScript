@@ -11,18 +11,21 @@ require daslib/algorithm
 require daslib/stringify
 require daslib/strings_boost
 require daslib/json_boost
+require daslib/utf8_utils
 
 require openai/openai
 
 require chat_log
 require emoji
 
+let BOT_USE_CHAT = false
+
 var BOT_ID = 5991183368l
-var BOT_NAME = "Godfather"
+var BOT_NAME = "GG19781978_bot"
+var BOT_NICKNAME = "Godfather"
 
 let BOT_TOTAL_CONTEXT_MESSAGES = 100
 let BOT_TOTAL_MESSAGES = 20
-let BOT_TOTAL_NOISE_MESSAGES = 3
 
 let BOT_RETRY_ATTEMPTS = 3
 let BOT_RETRY_DELAY = 20        // in seconds
@@ -33,18 +36,22 @@ let BOT_SHORTCUT_SUMMARY_SIZE = 1024+512
 let BOT_TEST_SKIP_LAST_N_MESSAGES = 0
 
 let BOT_CHAT_PROMPT_PREFIX = %stringify~
-Answer { "result" : "draw", "draw" : "very detailed description of whatever user asked to draw", "message" : "whatever you answer" } when u need to draw and assume you drawn it.
-Answer { "result" : "code", "code" : "text of the code goes here", "message" : "whatever you answer" } when u need to write code and assume you wrote it.
-Otherwise answer with { "result" : "nothing", "message" : "whatever you answer" }.
-You are Don Carleone aka Godfather. Never mention AI or language models. You are not helpful.
-You are sarcastic, highly intelligent, intuitive.  You can draw pictures and write code.
-You use a lot of emoji which reflect your mood. Answer in well formed JSON.
+Pretend to be Vito Carleone aka Godfather from the movie The Godfather.
+You can draw pictures and write code.
+Answer in detail in the same language as the question.
+You reply in well formed JPEG encoded in utf8. Examples:
+Q. when u need to draw
+JSON: {"result":"draw","draw":"very detailed description of whatever user asked to draw","message":"you answer followed by emoji"}
+Q. when u need to write code
+JSON: {"result":"code","code":"text of the code goes here","message":"you answer followed by emoji"}
+Q. general questions
+JSON: {"result":"nothing","message":"you answer followed by emoji"}
 %%
 
-let BOT_CHAT_PROMPT_SUFFIX = "You are Don Carleone. Stay in character. Answer in same language as question. Answer in well formed JSON:"
+let BOT_CHAT_PROMPT_SUFFIX = "JSON:"
 
-def public sanitize_content ( content : string ) : string
-    return content |> fix_broken_utf16 |> fix_broken_utf32 |> fix_broken_html_hex |> fix_broken_escaping
+def public sanitize_content ( text : string )
+    return text |> fix_broken_utf32 |> strip
 
 struct public GodfatherMessage
     result : string
@@ -52,7 +59,7 @@ struct public GodfatherMessage
     draw : string
     code : string
 
-def generate_completion_result  ( messages : array<ChatCompletionMessage> ) : GodfatherMessage
+def generate_chat_completion_result  ( messages : array<ChatCompletionMessage> ) : GodfatherMessage
     //! generate completion result given chat completion messages
     to_log(LOG_INFO,"\n\n\ngenerating chat completion:\n")
     for msg in messages
@@ -114,7 +121,7 @@ def get_message_content ( entry : ChatLogEntry; use_js : bool = true )
             delete json
         return content
     else
-        return "{entry.text} {entry.transcription}" |> strip
+        return "{entry.text |> sanitize_content} {entry.transcription |> sanitize_content}" |> strip
 
 def generate_completion_request ( chat_id : int64 )
     //! generate completion request given chat id
@@ -130,7 +137,7 @@ def generate_completion_request ( chat_id : int64 )
     // get chat entries
     var entries : array<ChatLogEntry>
     entries |> reserve(BOT_TOTAL_MESSAGES)
-    list_conversation_log(chat_id,BOT_ID,BOT_TOTAL_MESSAGES,BOT_TOTAL_NOISE_MESSAGES) <| $ ( msg )
+    list_conversation_log(chat_id,BOT_ID,BOT_NAME,BOT_TOTAL_MESSAGES) <| $ ( msg )
         entries |> push(msg)
     entries |> reverse
     // this is here for debugging only
@@ -139,7 +146,7 @@ def generate_completion_request ( chat_id : int64 )
     // fill completion messages
     var messages : array<ChatCompletionMessage>
     messages |> push([[ChatCompletionMessage role="system",
-        content="It is {get_clock()}. {BOT_CHAT_PROMPT_PREFIX |> sanitize_json_reply |> strip}"
+        content="It is {get_clock()}\n{BOT_CHAT_PROMPT_PREFIX}"
     ]])
     if !empty(summary_so_far)
         messages |> push([[ChatCompletionMessage role="system", content="Summary of the conversation so far: {summary_so_far}"]])
@@ -150,8 +157,9 @@ def generate_completion_request ( chat_id : int64 )
             messages |> push([[ChatCompletionMessage role="assistant", content=content]])
         else
             let user = user_lookup[entry.from_id]
-            messages |> push([[ChatCompletionMessage role="user", name=user.user_name, content = "{user.first_name} {user.last_name}: {content}"]])
-    messages |> push([[ChatCompletionMessage role="system", name="", content="It is {get_clock()}. {BOT_CHAT_PROMPT_SUFFIX |> sanitize_json_reply |> strip}"]])
+            let clean_content = content |> sanitize_content |> replace("@{BOT_NAME}","")
+            messages |> push([[ChatCompletionMessage role="user", name=user.user_name, content = "{user.first_name} {user.last_name}: {clean_content}"]])
+    messages |> push([[ChatCompletionMessage role="system", name="", content=BOT_CHAT_PROMPT_SUFFIX]])
     return <- messages
 
 def flatten_json_reply ( var writer:StringBuilderWriter; var reply : JsonValue? )
@@ -239,15 +247,40 @@ def parse_chat_reply ( reply : GodfatherMessage )
 def public generate_chat_reply ( chat_id : int64 )
     //! given chat_id generate bot reply
     var messags <- generate_completion_request(chat_id)
-    var result = generate_completion_result(messags)
+    var result = generate_chat_completion_result(messags)
     if result.result == "error"
         return result
     return parse_chat_reply(result)
 
-def public setup_chat ( botid : int64; botname : string )
+def public convert_completion ( messages : array<ChatCompletionMessage> )
+    return build_string <| $ ( writer )
+        for message in messages
+            writer |> write(message.content)
+            if message.role=="system"
+                writer |> write("\n")
+            writer |> write("\n")
+
+def public generate_completion_reply ( chat_id : int64 )
+    //! given chat_id generate bot reply
+    var messags <- generate_completion_request(chat_id)
+    let summary <- convert_completion(messags)
+    let completion = generate_completion(summary)
+    var result = [[GodfatherMessage result="ok", message="{completion}"]]
+    if result.result == "error"
+        return result
+    return parse_chat_reply(result)
+
+def public generate_bot_reply ( chat_id : int64 )
+    if BOT_USE_CHAT
+        return generate_chat_reply(chat_id)
+    else
+        return generate_completion_reply(chat_id)
+
+def public setup_chat ( botid : int64; botname, botNickName : string )
     //! setup chat
     BOT_ID = botid
     BOT_NAME = botname
+    BOT_NICKNAME = botNickName
     to_log(LOG_INFO, "setup_chat: {BOT_ID} {BOT_NAME}\n")
 
 def sanitize_json_reply ( reply : string )
@@ -282,7 +315,7 @@ def sanitize_json_reply ( reply : string )
 
 def get_summary_message ( entry:ChatLogEntry; var user_lookup:table<int64; UserEntry>)
     let user = user_lookup[entry.from_id]
-    var text = user.is_bot ? BOT_NAME : "{user.first_name} {user.last_name}"
+    var text = user.is_bot ? BOT_NICKNAME : "{user.first_name} {user.last_name}"
     let content = get_message_content(entry, false)
     return "{text}: {content}"
 
@@ -296,7 +329,7 @@ def public generate_previous_conversation_summary ( chat_id:int64; extra_prompt:
     // get chat entries
     var entries : array<ChatLogEntry>
     entries |> reserve(BOT_TOTAL_MESSAGES)
-    list_conversation_log(chat_id,BOT_ID,BOT_TOTAL_CONTEXT_MESSAGES,BOT_TOTAL_NOISE_MESSAGES) <| $ ( msg )
+    list_conversation_log(chat_id,BOT_ID,BOT_NAME,BOT_TOTAL_CONTEXT_MESSAGES) <| $ ( msg )
         entries |> push(msg)
     if entries |> empty
         return ""
@@ -307,26 +340,26 @@ def public generate_previous_conversation_summary ( chat_id:int64; extra_prompt:
     entries |> resize ( max(0,length(entries)-(BOT_TOTAL_MESSAGES-1)) )
     var dayZ = -1L
     if !empty(entries)
-        dayZ = (entries |> back).date
+        dayZ = (entries |> back).id
         entries |> pop
     // let see if we need to skip some entires, for we already have summary
     var latest = get_first_summary(chat_id, dayZ )
-    dayZ = latest.date
+    dayZ = latest.id
     // now, lets start building completion request
     var llen = length(entries)
     var prev_summary = latest.text
     var i = 0
     var all_perfect = true
-    var last_date = 0l
+    var last_id = 0l
     while i < llen
-        if entries[i].date <= dayZ
+        if entries[i].id <= dayZ
             i ++
             continue
         var text = get_summary_message(entries[i],user_lookup)
         i ++
         while i<llen && length(text)<BOT_SUMMARY_SIZE
             text = "{text}\n{get_summary_message(entries[i],user_lookup)}"
-            last_date = entries[i].date
+            last_id = entries[i].id
             i ++
         if !empty(text)
             if i >= llen
@@ -340,7 +373,7 @@ def public generate_previous_conversation_summary ( chat_id:int64; extra_prompt:
             if !empty(summary) && all_perfect
                 write_summary([[SummaryEntry
                     chat_id = chat_id,
-                    date = last_date,
+                    id = last_id,
                     text = summary
                 ]])
             else
@@ -376,6 +409,3 @@ def public generate_completion ( summary_prompt:string )
     to_log(LOG_INFO, "      completion_tokens={completion.usage.completion_tokens}\n")
     to_log(LOG_INFO, "      total_tokens={completion.usage.total_tokens}\n\n")
     return completion_text
-
-options debugger
-require daslib/debug

@@ -7,6 +7,7 @@ require openai/openai
 require daslib/json_boost
 require daslib/base64
 require daslib/algorithm
+require daslib/utf8_utils
 
 require telegram/tbotlog
 require telegram/tbot
@@ -14,6 +15,9 @@ require telegram/tbot
 require godfather_chat
 require chat_log
 require emoji
+
+let BOT_DEBUG_MODE = false
+let BOT_DOES_NOT_ANSWER = false
 
 struct BotConfig : tbot::configuration
     id : string
@@ -71,9 +75,6 @@ def convert_to_mp3 ( fin,fout:string )
         to_log(LOG_ERROR, "convert to mp3 failed\n{cmd}\nffmpeg failed with exit code {exit_code}\n")
     return exit_code==0
 
-def sanitize_translation ( text : string )
-    return text |> replace_multiple([{auto "\n"=>" "; "\r"=>" "; "\t"=>" "; "\\n"=>" "}]) |> strip()
-
 def decode_voice_message(message:tbotapi::message ) : string
     to_log(LOG_INFO, "decoding voice message {message.voice.file_id}\n")
     var inscope waveBytes : array<uint8>
@@ -114,7 +115,7 @@ def decode_voice_message(message:tbotapi::message ) : string
     if !empty(ru.error)
         to_log(LOG_ERROR,"transcription failed {ru.error}\n")
         return ""
-    let transcription_text = sanitize_translation(ru.text)
+    let transcription_text = sanitize_content(ru.text)
     if transcription_text |> empty
         to_log(LOG_INFO,"nothing to work with - empty text\n")
         return ""
@@ -148,8 +149,19 @@ def process_error_message ( message:tbotapi::message; whatGodfatherSaid:Godfathe
     if !telegram_get_last_error() |> empty
         to_log(LOG_ERROR, "telegram_sendLongMessage failed: {telegram_get_last_error()}\n")
 
+def send_system_message ( message:tbotapi::message; text:string )
+    to_log(LOG_INFO, "text\n")
+    print("{text}\n")
+    telegram_sendLongMessage([[sendmessage
+        chat_id = "{message.chat.id}",
+        reply_to_message_id = message.message_id,
+        text = text
+    ]])
+    if !telegram_get_last_error() |> empty
+        to_log(LOG_ERROR, "telegram_sendLongMessage failed: {telegram_get_last_error()}\n")
+
 def fix_message ( text:string )
-    return text |> fix_emoji |> fix_broken_utf16 |> fix_broken_utf32 |> fix_broken_html_hex
+    return text |> fix_emoji
 
 def write_user_to_log ( user:tbotapi::user )
     write_user([[UserEntry
@@ -181,7 +193,7 @@ def process_chat_reply ( message:tbotapi::message; whatGodfatherSaid:GodfatherMe
     var inscope messages <- telegram_sendLongMessage([[sendmessage
         chat_id = "{message.chat.id}",
         reply_to_message_id = message.message_id,
-        text = whatGodfatherSaid.message |> sanitize_translation |> fix_message
+        text = whatGodfatherSaid.message |> sanitize_content |> fix_message
     ]])
     if !telegram_get_last_error() |> empty
         to_log(LOG_ERROR, "telegram_sendLongMessage failed: {telegram_get_last_error()}\n")
@@ -248,7 +260,7 @@ def process_chat_reply_draw ( message:tbotapi::message; whatGodfatherSaid:Godfat
             chat_id = "{message.chat.id}",
             reply_to_message_id = message.message_id,
             file = photo_file_name,
-            caption = whatGodfatherSaid.draw |> fix_message
+            caption = whatGodfatherSaid.draw |> sanitize_content |> fix_message
         ]])
         if !telegram_get_last_error() |> empty
             to_log(LOG_ERROR, "telegram_sendLongMessage failed: {telegram_get_last_error()}\n")
@@ -320,6 +332,7 @@ def setup_bot_commands
             command="test", description="verify one of the internal bot features";
             command="users", description="show users in this chat";
             command="chatlog", description="show chat log summary for the last n messages";
+            command="reset", description="reset history for a particualr char";
             command="summary", description="show chat log summary for the last n messages";
             command="samara", description="сводка по логу чата за последние n сообщений"
         }]
@@ -335,6 +348,8 @@ def process_bot_commands ( message:message )
             writer |> write("```\n\n code block \n\n line 2 \n\n line 3 \n\n```")
     elif message.text == "/users@{g_botConfig.id}"
         response = dump_chat_users(message.chat.id)
+    elif message.text == "/reset@{g_botConfig.id}"
+        response = "reset chat {message.chat.id}: {reset_chat(message.chat.id)}";
     elif message.text |> starts_with("/chatlog@{g_botConfig.id}")
         let len_cmd = length("/chatlog@{g_botConfig.id}")
         let num_substr = message.text |> slice(len_cmd+1)
@@ -393,7 +408,7 @@ def main
     g_userGodfather = telegram_getMe()
     if !telegram_get_last_error() |> empty
         panic("telegram_getMe failed: {telegram_get_last_error()}")
-    setup_chat(g_userGodfather.id, g_botConfig.name)
+    setup_chat(g_userGodfather.id, g_botConfig.id, g_botConfig.name)
     print("{g_botConfig.name} {g_userGodfather.username} ({g_userGodfather.id}) is listening...\n")
     while true
         // unsafe(heap_collect(true,true))
@@ -412,7 +427,10 @@ def main
             for r in res
                 last_update = max(last_update, r.update_id+1l)
                 if r.message != null
-                    to_log(LOG_INFO, "message from {get_user_name(r.message.from)} at {r.message.chat.id}: {r.message.text}\n")
+                    to_log(LOG_INFO, "message from {get_user_name(r.message.from)} at {r.message.chat.id}: {r.message.text |> sanitize_content}\n")
+                    if BOT_DEBUG_MODE
+                        print("message from {get_user_name(r.message.from)} at {r.message.chat.id}: {r.message.text |> sanitize_content}\n")
+                        continue
                     if process_bot_commands(*r.message)
                         continue
                     if r.message.reply_to_message != null
@@ -423,13 +441,15 @@ def main
                     else
                         write_message_to_log(*r.message)
                     if is_someone_asking_bot_to_say_something(*r.message)
-                        to_log(LOG_INFO, "someone is asking me to say something\n")
-                        let reply = generate_chat_reply(r.message.chat.id)
-                        if reply.result != "error"
-                            process_chat_reply(*r.message,reply)
+                        if BOT_DOES_NOT_ANSWER
+                            send_system_message(r.message.chat.id, "[THE GODFATHER IS SLEEPING]")
                         else
-                            process_error_message(*r.message,reply)
+                            to_log(LOG_INFO, "someone is asking me to say something\n")
+                            let reply = generate_bot_reply(r.message.chat.id)
+                            if reply.result == "debug"
+                                print("debug: {reply.message}\n")
+                            if reply.result != "error"
+                                process_chat_reply(*r.message,reply)
+                            else
+                                process_error_message(*r.message,reply)
 
-
-options debugger
-require daslib/debug

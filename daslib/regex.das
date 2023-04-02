@@ -5,7 +5,7 @@ options strict_smart_pointers = true
 
 module regex shared public
 
-require strings
+require daslib/strings_boost
 
 enum ReOp
     //! Type of regular expression operation.
@@ -182,9 +182,6 @@ def private is_meta_character(ch:int) : bool
 
 def private is_set_character(ch:int) : bool
     return find(meta_set,ch) != -1
-
-def private is_hex ( ch : int ) : bool
-    return (ch>='0' && ch<='9') || (ch>='a' && ch<='f') || (ch>='A' && ch<='F')
 
 def private from_hex ( ch : int )
     if ch>='0' && ch<='9'

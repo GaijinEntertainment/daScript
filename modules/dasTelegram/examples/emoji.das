@@ -16,6 +16,16 @@ let replacing_emoji <- [{auto
     ":D" => "😀";
     ";)" => "😉";
     ":-|" => "😐";
+// *foo* format
+    "*smirk*" => "😏";
+    "*smile*" => "😊";
+    "*wink*" => "😉";
+    "*angry*" => "😠";
+    "*neutral_face*" => "😐";
+    "*grin*" => "😁";
+    "*innocent*" => "😇";
+    "*heart_eyes*" => "😍";
+    "*kissing_heart*" => "😘";
 // :foo: format
     ":smirk" => "😏";
     ":smile" => "😊";
@@ -47,13 +57,27 @@ def public fix_broken_utf16 ( str:string )
 		let utf32 = utf16_to_utf32(to_uint(hs, true), to_uint(ls, true))
 		return string(utf8_encode(utf32))
 
-var broken_utf32 <- %regex~[uU][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F][0-9a-fA-F]%%
-
 def public fix_broken_utf32 ( str:string )
-	return broken_utf32 |> regex_replace(str) <| $ ( codePoint )
-		let l1 = "0x{codePoint |> slice(1, 5)}"
-		let enc <- [{uint to_uint(l1, true)}]
-		return string(utf8_encode(enc))
+    //! fix all instances of uXXXX into the correct utf8
+    return build_string <| $ ( writer )
+        peek_data(str) <| $ ( p )
+            var i = 0
+            let llen = p |> length
+            var bang : array<uint8>
+            bang |> resize(4)
+            while i < llen
+                if p[i]=='u'u8 && (i+5<=llen)
+                    if is_hex(int(p[i+1])) && is_hex(int(p[i+2])) && is_hex(int(p[i+3])) && is_hex(int(p[i+4]))
+                        bang[0] = p[i+1]
+                        bang[1] = p[i+2]
+                        bang[2] = p[i+3]
+                        bang[3] = p[i+4]
+                        let utf32 = to_uint(string(bang), true)
+                        writer |> write(string(utf8_encode(utf32)))
+                        i += 5
+                        continue
+                writer |> write_char(int(p[i]))
+                i += 1
 
 var broken_html_hex <- %regex~&#x[0-9a-fA-F]+;%%
 
