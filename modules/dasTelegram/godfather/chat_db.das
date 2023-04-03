@@ -6,6 +6,44 @@ module chat_db shared private
 
 require sqlite/sqlite_boost
 
+struct public UserEntry
+    user_id : int64
+    is_bot : bool
+    first_name : string
+    last_name : string
+    user_name : string
+
+struct public ChatLogEntry
+    id : int64
+    chat_id : int64
+    message_id : int64
+    date : int64
+    from_id : int64
+    reply_to_message : int64
+    text : string
+    transcription : string
+
+struct public SummaryEntry
+    chat_id : int64
+    id : int64
+    text : string
+
+struct public ChannelRights
+    chat_id : int64
+    description : string
+    decode_voice : bool
+    draw_pictures : bool
+    bot_answers : bool
+    summary : bool
+
+struct public ApiUseEntry
+    user_id : int64
+    server_time : int64
+    chat_id : int64
+    message_id : int64
+    tokens : int64
+    voice_bytes : int64
+
 var private g_db : sqlite3? = null
 
 [finalize]
@@ -57,6 +95,17 @@ def private create_chat_table
     if rc != SQLITE_OK
         to_log(LOG_ERROR, "Error creating table summary_log: {sqlite3_errmsg(g_db)}\n")
         return false
+    sql = "CREATE TABLE IF NOT EXISTS api_use (
+                user_id INTEGER,
+                server_time INTEGER,
+                chat_id INTEGER,
+                message_id INTEGER,
+                tokens INTEGER,
+                voice_bytes INTEGER);"
+    rc = sqlite3_exec(g_db, sql, null)
+    if rc != SQLITE_OK
+        to_log(LOG_ERROR, "Error creating table api_use: {sqlite3_errmsg(g_db)}\n")
+        return false
     return true
 
 def public reset_chat ( chat_id : int64 )
@@ -90,36 +139,6 @@ def public create_chat_log ( dbname:string )
         g_db = null
         return false
     return true
-
-struct public UserEntry
-    user_id : int64
-    is_bot : bool
-    first_name : string
-    last_name : string
-    user_name : string
-
-struct public ChatLogEntry
-    id : int64
-    chat_id : int64
-    message_id : int64
-    date : int64
-    from_id : int64
-    reply_to_message : int64
-    text : string
-    transcription : string
-
-struct public SummaryEntry
-    chat_id : int64
-    id : int64
-    text : string
-
-struct public ChannelRights
-    chat_id : int64
-    description : string
-    decode_voice : bool
-    draw_pictures : bool
-    bot_answers : bool
-    summary : bool
 
 def public write_to_log ( entry:ChatLogEntry )
     var sql = "INSERT INTO chat_log (chat_id, message_id, date, from_id, reply_to_message, text, transcription) VALUES (?, ?, ?, ?, ?, ?, ?)"
@@ -181,6 +200,27 @@ def public write_summary ( summary:SummaryEntry )
 finally
     sqlite3_finalize(stmt)
 
+def public write_api_use ( api_use : ApiUseEntry )
+    var sql = "INSERT INTO api_use (user_id, server_time, chat_id, message_id, tokens, voice_bytes) VALUES (?, ?, ?, ?, ?, ?)"
+    var stmt : sqlite3_stmt?
+    var rc = sqlite3_prepare_v2(g_db, sql, -1, unsafe(addr(stmt)), null)
+    if rc != SQLITE_OK
+        to_log(LOG_ERROR, "Error preparing statement: {sqlite3_errmsg(g_db)}\n")
+        return false
+    sqlite3_bind_int64(stmt, 1, api_use.user_id)
+    sqlite3_bind_int64(stmt, 2, api_use.server_time)
+    sqlite3_bind_int64(stmt, 3, api_use.chat_id)
+    sqlite3_bind_int64(stmt, 4, api_use.message_id)
+    sqlite3_bind_int64(stmt, 5, api_use.tokens)
+    sqlite3_bind_int64(stmt, 6, api_use.voice_bytes)
+    rc = sqlite3_step(stmt)
+    if rc != SQLITE_DONE
+        to_log(LOG_ERROR, "Error inserting data: {sqlite3_errmsg(g_db)}\n")
+        return false
+    return true
+finally
+    sqlite3_finalize(stmt)
+
 def public list_unique_users ( chat_id:int64 ) : array<int64>
     var sql = "SELECT DISTINCT from_id FROM chat_log WHERE chat_id = ?"
     var stmt : sqlite3_stmt?
@@ -232,6 +272,32 @@ def public list_chat_users ( chat_id:int64; blk:block<(entry:UserEntry):void>)
                 user_name = sqlite3_column_text_(stmt, 4)
             ]]
             invoke(blk,entry)
+    return true
+finally
+    sqlite3_finalize(stmt)
+
+def public list_all_users ( blk : block<(entry:chat_db::UserEntry const):void> )
+    var sql = "SELECT user_id, is_bot, first_name, last_name, user_name FROM users"
+    var stmt : sqlite3_stmt?
+    var rc = sqlite3_prepare_v2(g_db, sql, -1, unsafe(addr(stmt)), null)
+    if rc != SQLITE_OK
+        to_log(LOG_ERROR, "Error preparing statement: {sqlite3_errmsg(g_db)}\n")
+        return false
+    while true
+        rc = sqlite3_step(stmt)
+        if rc == SQLITE_DONE
+            break
+        if rc != SQLITE_ROW
+            to_log(LOG_ERROR, "Error reading data: {sqlite3_errmsg(g_db)}\n")
+            return false
+        var entry = [[UserEntry
+            user_id = sqlite3_column_int64(stmt, 0),
+            is_bot = sqlite3_column_int(stmt, 1) != 0,
+            first_name = sqlite3_column_text_(stmt, 2),
+            last_name = sqlite3_column_text_(stmt, 3),
+            user_name = sqlite3_column_text_(stmt, 4)
+        ]]
+        invoke(blk,entry)
     return true
 finally
     sqlite3_finalize(stmt)
@@ -426,3 +492,30 @@ def public delete_channel_rights ( chat_id : int64 )
     return true
 finally
     sqlite3_finalize(stmt)
+
+def public get_all_api_use ( blk:block<(use:ApiUseEntry):void>)
+    let sql = "SELECT user_id, SUM(tokens) AS total_tokens, SUM(voice_bytes) AS total_voice_bytes
+                FROM api_use
+                GROUP BY user_id ORDER BY total_tokens DESC"
+    var stmt : sqlite3_stmt?
+    var rc = sqlite3_prepare_v2(g_db, sql, -1, unsafe(addr(stmt)), null)
+    if rc != SQLITE_OK
+        to_log(LOG_ERROR, "Error preparing statement: {sqlite3_errmsg(g_db)}\n")
+        return false
+    while true
+        rc = sqlite3_step(stmt)
+        if rc == SQLITE_DONE
+            break
+        if rc != SQLITE_ROW
+            to_log(LOG_ERROR, "Error reading data: {sqlite3_errmsg(g_db)}\n")
+            return false
+        var use <- [[ApiUseEntry
+            user_id = sqlite3_column_int64(stmt, 0),
+            tokens = sqlite3_column_int64(stmt, 1),
+            voice_bytes = sqlite3_column_int64(stmt, 2)
+        ]]
+        invoke(blk,use)
+    return true
+finally
+    sqlite3_finalize(stmt)
+
