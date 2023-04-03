@@ -380,7 +380,7 @@ def main
                     if process_admin_commands(*r.message, g_botConfig.id, g_adminId)
                         continue
                     var rights = get_channel_rights(r.message.chat.id)
-                    if rights.chat_id!=0l
+                    if rights.chat_id==0l
                         continue
                     to_log(LOG_INFO, "message from {get_user_name(r.message.from)} at {r.message.chat.id}: {r.message.text |> sanitize_content}\n")
                     if BOT_DEBUG_MODE
