@@ -36,7 +36,7 @@ let BOT_TEST_SKIP_LAST_N_MESSAGES = 0
 
 let BOT_CHAT_PROMPT_PREFIX = %stringify~
 You are Don Corleone - the Godfather. You do not mention AI or language models.
-You are sarcastic. You are highly intelligent with exceptional intuition.
+You are sarcastic. You like to teell jokes. You are highly intelligent with exceptional intuition.
 You stay in character. You do not break the 4th wall.
 You reply in well formed JPEG encoded in utf8. Examples:
 Q. when u need to draw
@@ -51,7 +51,29 @@ let BOT_CHAT_PROMPT_SUFFIX = "Answer in character as the Godfather in JSON:"
 let BOT_SUMMARY_PROMPT = "Give detailed combined summary. Focus on facts, names, dates. Answer with summary only."
 
 def public sanitize_content ( text : string )
-    return text |> fix_broken_utf32 |> strip
+    return text |> fix_broken_utf16 |> fix_broken_utf32 |> fix_emoji |> strip
+
+struct public UserMessage
+    user_id : int64
+    chat_id : int64
+    message_id : int64
+
+def get_server_time : int64
+    let t = get_clock()
+    unsafe
+        return * reinterpret<int64?>(addr(t))
+
+def public write_ussage ( message:UserMessage; tokens:int64; voice_bytes:int64 )
+    //! write usage to db
+    to_log(LOG_INFO,"chat {message.chat_id}, user {message.user_id}: {tokens} tokens, {voice_bytes} bytes\n")
+    write_api_use([[ApiUseEntry
+        user_id = message.user_id,
+        server_time = get_server_time(),
+        chat_id = message.chat_id,
+        message_id = message.message_id,
+        tokens = tokens,
+        voice_bytes = voice_bytes
+    ]])
 
 struct public GodfatherMessage
     result : string
@@ -59,7 +81,7 @@ struct public GodfatherMessage
     draw : string
     code : string
 
-def generate_chat_completion_result  ( messages : array<ChatCompletionMessage>; temperature:float = 1.0; top_p : float = 1.0 ) : GodfatherMessage
+def generate_chat_completion_result  ( message:UserMessage; messages:array<ChatCompletionMessage>; temperature:float=1.0; top_p:float=1.0 ) : GodfatherMessage
     //! generate completion result given chat completion messages
     to_log(LOG_INFO,"\n\n\ngenerating chat completion:\n")
     for msg in messages
@@ -88,6 +110,7 @@ def generate_chat_completion_result  ( messages : array<ChatCompletionMessage>; 
     to_log(LOG_INFO, "- prompt tokens {chat.usage.prompt_tokens}\n")
     to_log(LOG_INFO, "- completion tokens {chat.usage.completion_tokens}\n")
     to_log(LOG_INFO, "- total tokens {chat.usage.total_tokens}\n")
+    write_ussage(message, int64(chat.usage.total_tokens), 0l)
     return [[GodfatherMessage result="ok", message=chat.choices[0].message.content]]
 
 def get_message_content ( entry : ChatLogEntry; use_js : bool = true )
@@ -123,13 +146,13 @@ def get_message_content ( entry : ChatLogEntry; use_js : bool = true )
     else
         return "{entry.text |> sanitize_content} {entry.transcription |> sanitize_content}" |> strip
 
-def generate_completion_request ( chat_id : int64 )
+def generate_completion_request ( message:UserMessage )
     //! generate completion request given chat id
     // lets get previous conversation summary first
-    let summary_so_far = generate_previous_conversation_summary(chat_id,"in english")
+    let summary_so_far = generate_previous_conversation_summary(message,"in english")
     // build user lookup
     var users : array<UserEntry>
-    list_chat_users(chat_id) <| $ ( user )
+    list_chat_users(message.chat_id) <| $ ( user )
         users |> push(user)
     var user_lookup : table<int64; UserEntry>
     for user in users
@@ -137,7 +160,7 @@ def generate_completion_request ( chat_id : int64 )
     // get chat entries
     var entries : array<ChatLogEntry>
     entries |> reserve(BOT_TOTAL_MESSAGES)
-    list_conversation_log(chat_id,BOT_ID,BOT_NAME,BOT_TOTAL_MESSAGES) <| $ ( msg )
+    list_conversation_log(message.chat_id,BOT_ID,BOT_NAME,BOT_TOTAL_MESSAGES) <| $ ( msg )
         entries |> push(msg)
     entries |> reverse
     // this is here for debugging only
@@ -244,10 +267,10 @@ def parse_chat_reply ( reply : GodfatherMessage )
         delete json
     return res
 
-def public generate_chat_reply ( chat_id : int64 )
+def public generate_bot_reply ( message:UserMessage )
     //! given chat_id generate bot reply
-    var messags <- generate_completion_request(chat_id)
-    var result = generate_chat_completion_result(messags)
+    var messags <- generate_completion_request(message)
+    var result = generate_chat_completion_result(message,messags)
     if result.result == "error"
         return result
     return parse_chat_reply(result)
@@ -259,9 +282,6 @@ def public convert_completion ( messages : array<ChatCompletionMessage> )
             if message.role=="system"
                 writer |> write("\n")
             writer |> write("\n")
-
-def public generate_bot_reply ( chat_id : int64 )
-    return generate_chat_reply(chat_id)
 
 def public setup_chat ( botid : int64; botname, botNickName : string )
     //! setup chat
@@ -306,9 +326,9 @@ def get_summary_message ( entry:ChatLogEntry; var user_lookup:table<int64; UserE
     let content = get_message_content(entry, false)
     return "{text}: {content}"
 
-def public generate_previous_conversation_summary ( chat_id:int64; extra_prompt:string )
+def public generate_previous_conversation_summary ( message:UserMessage; extra_prompt:string )
     var users : array<UserEntry>
-    list_chat_users(chat_id) <| $ ( user )
+    list_chat_users(message.chat_id) <| $ ( user )
         users |> push(user)
     var user_lookup : table<int64; UserEntry>
     for user in users
@@ -316,7 +336,7 @@ def public generate_previous_conversation_summary ( chat_id:int64; extra_prompt:
     // get chat entries
     var entries : array<ChatLogEntry>
     entries |> reserve(BOT_TOTAL_MESSAGES)
-    list_conversation_log(chat_id,BOT_ID,BOT_NAME,BOT_TOTAL_CONTEXT_MESSAGES) <| $ ( msg )
+    list_conversation_log(message.chat_id,BOT_ID,BOT_NAME,BOT_TOTAL_CONTEXT_MESSAGES) <| $ ( msg )
         entries |> push(msg)
     if entries |> empty
         return ""
@@ -330,7 +350,7 @@ def public generate_previous_conversation_summary ( chat_id:int64; extra_prompt:
         dayZ = (entries |> back).id
         entries |> pop
     // let see if we need to skip some entires, for we already have summary
-    var latest = get_first_summary(chat_id, dayZ )
+    var latest = get_first_summary(message.chat_id, dayZ )
     dayZ = latest.id
     // now, lets start building completion request
     var llen = length(entries)
@@ -360,10 +380,10 @@ def public generate_previous_conversation_summary ( chat_id:int64; extra_prompt:
                 else
                     to_log(LOG_INFO, "Shortcut summary is too long ({shortcut |> length} bytes), will use full summary\n")
             var summary_prompt = "Previous conversation:\n\n{prev_summary}\n\n---\n\n{text}\n\n---\nFocus on facts, names, events. Combined summary of both conversations {extra_prompt}:"
-            let summary = generate_summary(summary_prompt)
+            let summary = generate_summary(message, summary_prompt)
             if !empty(summary) && all_perfect
                 write_summary([[SummaryEntry
-                    chat_id = chat_id,
+                    chat_id = message.chat_id,
                     id = last_id,
                     text = summary
                 ]])
@@ -373,11 +393,29 @@ def public generate_previous_conversation_summary ( chat_id:int64; extra_prompt:
     to_log(LOG_INFO, "Overall summary:\n{prev_summary}\n\n\n")
     return prev_summary
 
-def public generate_summary ( text : string )
+def public generate_summary ( message:UserMessage; text : string )
     var inscope messages <- [{ChatCompletionMessage
         role="system", content=BOT_SUMMARY_PROMPT;
         role="user", content=text}]
-    var res = generate_chat_completion_result(messages,0.,0.)
+    var res = generate_chat_completion_result(message,messages,0.,0.)
     if res.result=="error"
         return ""
     return res.message
+
+def public decode_voice ( message:UserMessage; temp_mp3_file_name:string )
+    to_log(LOG_INFO, "creating transcription for {temp_mp3_file_name}\n")
+    var inscope ru : TranscriptionResult
+    for i in range(BOT_RETRY_ATTEMPTS)
+        ru <- openai_create_transcription([[Transcription() file = temp_mp3_file_name, language = ""]])
+        if empty(ru.error)
+            break
+        if ! (ru.error |> starts_with("curl timeout") || ru.error |> starts_with("HTTPS post failed"))
+            break
+        to_log(LOG_ERROR, "retrying, reason: {ru.error}\n")
+        delete ru
+        sleep(uint(BOT_RETRY_DELAY)*1000u)
+    if !empty(ru.error)
+        to_log(LOG_ERROR,"transcription failed {ru.error}\n")
+        return ""
+    write_ussage(message, 0l, int64(ru.text |> length))
+    return ru.text

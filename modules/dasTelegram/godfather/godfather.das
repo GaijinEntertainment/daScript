@@ -57,9 +57,11 @@ def get_user_name ( user:user? )
     else
         return user.username
 
-def convert_time ( t:int64 )
-    unsafe
-        return "{*reinterpret<clock?> addr(t)}"
+def UserMessage ( message:tbotapi::message )
+    return [[UserMessage
+        user_id = message.from.id,
+        chat_id = message.chat.id,
+        message_id = message.message_id]]
 
 def get_temp_file_name(name:string)
     let temp_dir = "{get_das_root()}/temp"
@@ -75,7 +77,7 @@ def convert_to_mp3 ( fin,fout:string )
         to_log(LOG_ERROR, "convert to mp3 failed\n{cmd}\nffmpeg failed with exit code {exit_code}\n")
     return exit_code==0
 
-def decode_voice_message(message:tbotapi::message ) : string
+def decode_voice_message ( message:tbotapi::message ) : string
     to_log(LOG_INFO, "decoding voice message {message.voice.file_id}\n")
     var inscope waveBytes : array<uint8>
     var inscope file <- telegram_getFile([[getfile
@@ -101,21 +103,10 @@ def decode_voice_message(message:tbotapi::message ) : string
     let temp_mp3_file_name = "{temp_file_name}.mp3"
     if !convert_to_mp3(temp_file_name,temp_mp3_file_name)
         return ""
-    to_log(LOG_INFO, "creating transcription for {temp_mp3_file_name}\n")
-    var inscope ru : TranscriptionResult
-    for i in range(BOT_RETRY_ATTEMPTS)
-        ru <- openai_create_transcription([[Transcription() file = temp_mp3_file_name, language = ""]])
-        if empty(ru.error)
-            break
-        if ! (ru.error |> starts_with("curl timeout") || ru.error |> starts_with("HTTPS post failed"))
-            break
-        to_log(LOG_ERROR, "retrying, reason: {ru.error}\n")
-        delete ru
-        sleep(uint(BOT_RETRY_DELAY)*1000u)
-    if !empty(ru.error)
-        to_log(LOG_ERROR,"transcription failed {ru.error}\n")
+    let voice_text = decode_voice(UserMessage(message),temp_mp3_file_name)
+    if empty(voice_text)
         return ""
-    let transcription_text = sanitize_content(ru.text)
+    let transcription_text = sanitize_content(voice_text)
     if transcription_text |> empty
         to_log(LOG_INFO,"nothing to work with - empty text\n")
         return ""
@@ -270,9 +261,9 @@ def process_chat_reply_draw ( message:tbotapi::message; whatGodfatherSaid:Godfat
             to_log(LOG_ERROR, "telegram_sendLongMessage failed: {telegram_get_last_error()}\n")
             return
 
-def generate_chat_summary ( chat_id:int64; last_n_messages:int; extp:string)
-    to_log(LOG_INFO, "Generating chat summary for {chat_id} last {last_n_messages} messages\n\n\n")
-    var inscope log <- collect_chat_log(chat_id, last_n_messages)
+def generate_chat_summary ( message:tbotapi::message; last_n_messages:int; extp:string)
+    to_log(LOG_INFO, "Generating chat summary for {message.chat.id} last {last_n_messages} messages\n\n\n")
+    var inscope log <- collect_chat_log(message.chat.id, last_n_messages)
     var i = 0
     var llen = length(log)
     var total_summary = ""
@@ -285,13 +276,12 @@ def generate_chat_summary ( chat_id:int64; last_n_messages:int; extp:string)
         if !empty(text)
             let summary_prompt = "Previous section summary:\n{prev_summary}\n---\nText:\n{text}\n---\nSummary of the text above {extp}:"
             to_log(LOG_INFO, "Generating summary for {length(summary_prompt)} bytes\n{summary_prompt}\n\n\n")
-            let summary = generate_summary(summary_prompt)
+            let summary = generate_summary(UserMessage(message),summary_prompt)
             to_log(LOG_INFO, "Summary: {summary}\n\n")
             total_summary = "{total_summary}\n{summary}"
             prev_summary = summary
     to_log(LOG_INFO, "Overall summary: {total_summary}\n\n\n")
     return total_summary
-
 
 def setup_bot_commands
     telegram_setMyCommands([[setmycommands
@@ -318,7 +308,7 @@ def process_bot_commands ( message:message; rights:ChannelRights )
             var max_messages = 100
             if !empty(num_substr)
                 max_messages = int(num_substr)
-            response = generate_chat_summary(message.chat.id, max_messages,
+            response = generate_chat_summary(message, max_messages,
                 summary ? "in english language" : "in russian language")
         else
             response = "Sorry, you don't have permission to generate chat summary"
@@ -407,11 +397,10 @@ def main
                             to_log(LOG_INFO, "ignore bot conversation request\n")
                             continue
                         to_log(LOG_INFO, "someone is asking me to say something\n")
-                        let reply = generate_bot_reply(r.message.chat.id)
+                        let reply = generate_bot_reply(UserMessage(*r.message))
                         if reply.result == "debug"
                             print("debug: {reply.message}\n")
                         if reply.result != "error"
                             process_chat_reply(*r.message,reply,rights)
                         else
                             process_error_message(*r.message,reply)
-

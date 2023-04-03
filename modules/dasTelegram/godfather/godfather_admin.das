@@ -13,6 +13,8 @@ require godfather_chat
 require chat_db
 require emoji
 
+var public BOT_SHUTDOWN = false
+
 def public collect_chat_log ( chat_id:int64; last_n_messages:int )
     var users : table<int64; UserEntry>
     list_chat_users(chat_id) <| $ ( userEntry )
@@ -49,6 +51,27 @@ def dump_chat_log ( chat_id:int64; last_n_messages:int )
         for l in log
             writer |> write(l)
             writer |> write("\n")
+        writer |> write("```")
+
+def dump_api_usage ( chat_id : int64 )
+    var users : table<int64; UserEntry>
+    if chat_id==0l
+        list_all_users <| $ ( userEntry )
+            users[userEntry.user_id] := userEntry
+    else
+        list_chat_users(chat_id) <| $ ( userEntry )
+            users[userEntry.user_id] := userEntry
+    return build_string <| $ ( writer)
+        writer |> write("```\n")
+        get_all_api_use <| $ ( use )
+            if chat_id==0l || users |> key_exists(use.user_id)
+                let user_name = "{users[use.user_id].first_name} {users[use.user_id].last_name}"
+                writer |> write(user_name)
+                writer |> write(": tokens=")
+                writer |> write(use.tokens)
+                writer |> write(" voice_bytes=")
+                writer |> write(use.voice_bytes)
+                writer |> write("\n")
         writer |> write("```")
 
 def modify_right ( var rights:ChannelRights; which:string; value:bool )
@@ -127,6 +150,13 @@ def public process_admin_commands ( message:message; botId:string; adminId:int64
                 writer |> write("```")
         else
             response = "no rights for channel {message.chat.id}"
+    elif message.text == "/api@{botId}"
+        response = dump_api_usage(message.chat.id)
+    elif message.text == "/apiall@{botId}"
+        response = dump_api_usage(0l)
+    elif message.text == "/shutdown@{botId}"
+        response = "shutdown"
+        BOT_SHUTDOWN = true
     elif message.text == "/help@{botId}"
         response = build_string <| $ ( writer )
             writer |> write("```\n")
@@ -139,6 +169,9 @@ def public process_admin_commands ( message:message; botId:string; adminId:int64
             writer |> write("/allow@{botId} <right> - allow right\n")
             writer |> write("/disallow@{botId} <right> - disallow right\n")
             writer |> write("/status@{botId} - show channel status\n")
+            writer |> write("/api@{botId} - show api usage in this chat\n")
+            writer |> write("/apiall@{botId} - show api usage for all chats\n")
+            writer |> write("/shutdown@{botId} - shutdown bot\n")
             writer |> write("/help@{botId} - this help\n")
             writer |> write("```")
     else

@@ -4,6 +4,8 @@ options no_unused_function_arguments = false
 
 module emoji shared private
 
+require math
+
 require daslib/regex_boost
 require daslib/strings_boost
 require daslib/utf8_utils
@@ -64,17 +66,19 @@ def public fix_broken_utf32 ( str:string )
             var i = 0
             let llen = p |> length
             var bang : array<uint8>
-            bang |> resize(4)
+            bang |> reserve(8)
             while i < llen
-                if p[i]=='u'u8 && (i+5<=llen)
-                    if is_hex(int(p[i+1])) && is_hex(int(p[i+2])) && is_hex(int(p[i+3])) && is_hex(int(p[i+4]))
-                        bang[0] = p[i+1]
-                        bang[1] = p[i+2]
-                        bang[2] = p[i+3]
-                        bang[3] = p[i+4]
+                if (p[i]=='u'u8 || p[i]=='U'u8)
+                    var j = i + 1
+                    var jlen = min(llen, j+8)
+                    bang |> resize(0)
+                    while j<jlen && is_hex(int(p[j]))
+                        bang |> push(p[j])
+                        j ++
+                    if length(bang) >= 4
                         let utf32 = to_uint(string(bang), true)
                         writer |> write(string(utf8_encode(utf32)))
-                        i += 5
+                        i = j
                         continue
                 writer |> write_char(int(p[i]))
                 i += 1
