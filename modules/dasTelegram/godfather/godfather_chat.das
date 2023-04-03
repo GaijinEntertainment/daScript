@@ -15,7 +15,7 @@ require daslib/utf8_utils
 
 require openai/openai
 
-require chat_log
+require chat_db
 require emoji
 
 
