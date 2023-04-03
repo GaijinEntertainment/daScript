@@ -157,6 +157,8 @@ def public process_admin_commands ( message:message; botId:string; adminId:int64
     elif message.text == "/shutdown@{botId}"
         response = "shutdown"
         BOT_SHUTDOWN = true
+    elif message.text == "/hethinks@{botId}"
+        response = get_first_summary(message.chat.id, LONG_MAX).text
     elif message.text == "/help@{botId}"
         response = build_string <| $ ( writer )
             writer |> write("```\n")
@@ -172,6 +174,7 @@ def public process_admin_commands ( message:message; botId:string; adminId:int64
             writer |> write("/api@{botId} - show api usage in this chat\n")
             writer |> write("/apiall@{botId} - show api usage for all chats\n")
             writer |> write("/shutdown@{botId} - shutdown bot\n")
+            writer |> write("/hethinks@{botId} - show first summary of what is on bot's mind\n")
             writer |> write("/help@{botId} - this help\n")
             writer |> write("```")
     else
