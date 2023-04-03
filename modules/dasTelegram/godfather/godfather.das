@@ -13,7 +13,8 @@ require telegram/tbotlog
 require telegram/tbot
 
 require godfather_chat
-require chat_log
+require godfather_admin
+require chat_db
 require emoji
 
 let BOT_DEBUG_MODE = false
@@ -28,9 +29,11 @@ struct BotConfig : tbot::configuration
     name : string
     path_to_ffmpeg : string
     path_to_chatlog : string
+    admin : string
 
 var g_botConfig : BotConfig
 var g_userGodfather : user
+var g_adminId : int64
 
 def read_bot_config(configfile:string)
     var config : BotConfig
@@ -185,7 +188,7 @@ def write_message_to_log ( message:tbotapi::message; transcription:string )
 def write_message_to_log ( message:tbotapi::message )
     write_message_to_log(message,"")
 
-def process_chat_reply ( message:tbotapi::message; whatGodfatherSaid:GodfatherMessage )
+def process_chat_reply ( message:tbotapi::message; whatGodfatherSaid:GodfatherMessage; rights:ChannelRights )
     to_log(LOG_INFO, "{g_botConfig.name}: {whatGodfatherSaid}\n")
     var inscope messages <- telegram_sendLongMessage([[sendmessage
         chat_id = "{message.chat.id}",
@@ -210,10 +213,10 @@ def process_chat_reply ( message:tbotapi::message; whatGodfatherSaid:GodfatherMe
             text = reply_json,
             transcription = ""
         ]])
-    process_chat_reply_draw ( message, whatGodfatherSaid )
-    process_char_reply_code ( message, whatGodfatherSaid )
+    process_chat_reply_draw ( message, whatGodfatherSaid, rights )
+    process_char_reply_code ( message, whatGodfatherSaid, rights )
 
-def process_char_reply_code ( message:tbotapi::message; whatGodfatherSaid:GodfatherMessage )
+def process_char_reply_code ( message:tbotapi::message; whatGodfatherSaid:GodfatherMessage; rights:ChannelRights )
     if !empty(whatGodfatherSaid.code)
         to_log(LOG_INFO, "writing code:\n{whatGodfatherSaid.code}\n")
         telegram_sendLongMessage([[sendmessage
@@ -223,9 +226,12 @@ def process_char_reply_code ( message:tbotapi::message; whatGodfatherSaid:Godfat
             parse_mode = "MarkdownV2"
         ]], 4096-10,"```\n","\n```")
 
-def process_chat_reply_draw ( message:tbotapi::message; whatGodfatherSaid:GodfatherMessage )
+def process_chat_reply_draw ( message:tbotapi::message; whatGodfatherSaid:GodfatherMessage; rights:ChannelRights )
     let draw_prompt = whatGodfatherSaid.draw |> strip
     if !empty(draw_prompt)
+        if !rights.draw_pictures
+            to_log(LOG_INFO, "drawing image denied\n")
+            return
         to_log(LOG_INFO, "drawing image {whatGodfatherSaid.draw}\n")
         var inscope image <- openai_create_image([[Image()
             prompt = draw_prompt,
@@ -264,19 +270,6 @@ def process_chat_reply_draw ( message:tbotapi::message; whatGodfatherSaid:Godfat
             to_log(LOG_ERROR, "telegram_sendLongMessage failed: {telegram_get_last_error()}\n")
             return
 
-def collect_chat_log ( chat_id:int64; last_n_messages:int )
-    var users : table<int64; UserEntry>
-    list_chat_users(chat_id) <| $ ( userEntry )
-        users[userEntry.user_id] := userEntry
-    var log : array<string>
-    list_chat_log(chat_id, last_n_messages) <| $ ( msg )
-        let user_name = "{users[msg.from_id].first_name} {users[msg.from_id].last_name}"
-        if !empty(msg.transcription)
-            log |> push ("{user_name}: {msg.transcription}")
-        log |> push ("{user_name}: {msg.text |> fix_broken_utf16 |> fix_broken_utf32}")
-    log |> reverse
-    return <- log
-
 def generate_chat_summary ( chat_id:int64; last_n_messages:int; extp:string)
     to_log(LOG_INFO, "Generating chat summary for {chat_id} last {last_n_messages} messages\n\n\n")
     var inscope log <- collect_chat_log(chat_id, last_n_messages)
@@ -299,38 +292,10 @@ def generate_chat_summary ( chat_id:int64; last_n_messages:int; extp:string)
     to_log(LOG_INFO, "Overall summary: {total_summary}\n\n\n")
     return total_summary
 
-def dump_chat_users ( chat_id:int64 )
-    return build_string <| $ ( writer )
-        writer |> write("```\n")
-        list_chat_users(chat_id) <| $ ( userEntry )
-            writer |> write(userEntry.user_id)
-            if userEntry.is_bot
-                writer |> write("<bot>")
-            writer |> write(": ")
-            writer |> write(userEntry.user_name)
-            writer |> write(" aka ")
-            writer |> write(userEntry.first_name)
-            writer |> write(" ")
-            writer |> write(userEntry.last_name)
-            writer |> write("\n")
-        writer |> write("```")
-
-def dump_chat_log ( chat_id:int64; last_n_messages:int )
-    var inscope log <- collect_chat_log(chat_id, last_n_messages)
-    return build_string <| $ ( writer )
-        writer |> write("```\n")
-        for l in log
-            writer |> write(l)
-            writer |> write("\n")
-        writer |> write("```")
 
 def setup_bot_commands
     telegram_setMyCommands([[setmycommands
         commands <- [{botcommand
-            command="test", description="verify one of the internal bot features";
-            command="users", description="show users in this chat";
-            command="chatlog", description="show chat log summary for the last n messages";
-            command="reset", description="reset history for a particualr char";
             command="summary", description="show chat log summary for the last n messages";
             command="samara", description="сводка по логу чата за последние n сообщений"
         }]
@@ -339,37 +304,24 @@ def setup_bot_commands
         to_log(LOG_ERROR, "telegram_setMyCommands failed: {telegram_get_last_error()}\n")
         return
 
-def process_bot_commands ( message:message )
+def process_bot_commands ( message:message; rights:ChannelRights )
+    //! process bot commands. currently supported
+    //! /summary - generate summary for the last n messages
+    //! /samara - сгенерировать сводку по последним n сообщениям
     var response : string
-    if message.text == "/test@{g_botConfig.id}"
-        response = build_string <| $ ( writer )
-            writer |> write("```\n\n code block \n\n line 2 \n\n line 3 \n\n```")
-    elif message.text == "/users@{g_botConfig.id}"
-        response = dump_chat_users(message.chat.id)
-    elif message.text == "/reset@{g_botConfig.id}"
-        response = "reset chat {message.chat.id}: {reset_chat(message.chat.id)}";
-    elif message.text |> starts_with("/chatlog@{g_botConfig.id}")
-        let len_cmd = length("/chatlog@{g_botConfig.id}")
-        let num_substr = message.text |> slice(len_cmd+1)
-        var max_messages = 100
-        if !empty(num_substr)
-            max_messages = int(num_substr)
-        response = dump_chat_log(message.chat.id, max_messages)
-        response = "last {max_messages} messages in {message.chat.id}\n{response}"
-    elif message.text |> starts_with("/summary@{g_botConfig.id}")
-        let len_cmd = length("/summary@{g_botConfig.id}")
-        let num_substr = message.text |> slice(len_cmd+1)
-        var max_messages = 100
-        if !empty(num_substr)
-            max_messages = int(num_substr)
-        response = generate_chat_summary(message.chat.id, max_messages, "in english language")
-    elif message.text |> starts_with("/samara@{g_botConfig.id}")
-        let len_cmd = length("/samara@{g_botConfig.id}")
-        let num_substr = message.text |> slice(len_cmd+1)
-        var max_messages = 100
-        if !empty(num_substr)
-            max_messages = int(num_substr)
-        response = generate_chat_summary(message.chat.id, max_messages, "in russian language")
+    let summary = message.text |> starts_with("/summary@{g_botConfig.id}")
+    let samara = message.text |> starts_with("/samara@{g_botConfig.id}")
+    if summary || samara
+        if rights.summary
+            let len_cmd = length("/summary@{g_botConfig.id}")
+            let num_substr = message.text |> slice(len_cmd+1)
+            var max_messages = 100
+            if !empty(num_substr)
+                max_messages = int(num_substr)
+            response = generate_chat_summary(message.chat.id, max_messages,
+                summary ? "in english language" : "in russian language")
+        else
+            response = "Sorry, you don't have permission to generate chat summary"
     if !empty(response)
         telegram_sendLongMessage([[sendmessage
             chat_id = "{message.chat.id}",
@@ -398,6 +350,7 @@ def main
         panic("openai key is not set")
     set_use_temp_file(true) // sometimes curl removes \n from the command line input. don't know why. for now this is a workaround
     g_botConfig <- read_bot_config(configPath)
+    g_adminId = int64(g_botConfig.admin)
     telegram_set_configuration(g_botConfig)
     openai_set_connection_timeout(BOT_OPENAI_TIMEOUT)
     if !create_chat_log(g_botConfig.path_to_chatlog)
@@ -424,29 +377,41 @@ def main
             for r in res
                 last_update = max(last_update, r.update_id+1l)
                 if r.message != null
+                    if process_admin_commands(*r.message, g_botConfig.id, g_adminId)
+                        continue
+                    var rights = get_channel_rights(r.message.chat.id)
+                    if rights.chat_id!=0l
+                        continue
                     to_log(LOG_INFO, "message from {get_user_name(r.message.from)} at {r.message.chat.id}: {r.message.text |> sanitize_content}\n")
                     if BOT_DEBUG_MODE
                         print("message from {get_user_name(r.message.from)} at {r.message.chat.id}: {r.message.text |> sanitize_content}\n")
                         continue
-                    if process_bot_commands(*r.message)
+                    if process_bot_commands(*r.message, rights)
                         continue
                     if r.message.reply_to_message != null
                         to_log(LOG_INFO, "reply to {get_user_name(r.message.reply_to_message.from)}: {r.message.reply_to_message.text}\n")
                     if r.message.voice!=null
-                        to_log(LOG_INFO, "contains voice message\n")
-                        write_message_to_log(*r.message, decode_voice_message(*r.message))
+                        if rights.decode_voice
+                            to_log(LOG_INFO, "contains voice message\n")
+                            write_message_to_log(*r.message, decode_voice_message(*r.message))
+                        else
+                            to_log(LOG_INFO, "ignore voice message\n")
+                            write_message_to_log(*r.message)
                     else
                         write_message_to_log(*r.message)
                     if is_someone_asking_bot_to_say_something(*r.message)
                         if BOT_DOES_NOT_ANSWER
                             send_system_message(*r.message, "[THE GODFATHER IS SLEEPING]")
+                            continue
+                        if !rights.bot_answers
+                            to_log(LOG_INFO, "ignore bot conversation request\n")
+                            continue
+                        to_log(LOG_INFO, "someone is asking me to say something\n")
+                        let reply = generate_bot_reply(r.message.chat.id)
+                        if reply.result == "debug"
+                            print("debug: {reply.message}\n")
+                        if reply.result != "error"
+                            process_chat_reply(*r.message,reply,rights)
                         else
-                            to_log(LOG_INFO, "someone is asking me to say something\n")
-                            let reply = generate_bot_reply(r.message.chat.id)
-                            if reply.result == "debug"
-                                print("debug: {reply.message}\n")
-                            if reply.result != "error"
-                                process_chat_reply(*r.message,reply)
-                            else
-                                process_error_message(*r.message,reply)
+                            process_error_message(*r.message,reply)
 

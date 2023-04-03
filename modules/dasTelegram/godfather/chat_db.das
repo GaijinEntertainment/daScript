@@ -2,7 +2,7 @@ options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 
-module chat_log shared private
+module chat_db shared private
 
 require sqlite/sqlite_boost
 
@@ -42,6 +42,17 @@ def private create_chat_table
                 chat_id INTEGER,
                 id INTEGER,
                 text TEXT);"
+    rc = sqlite3_exec(g_db, sql, null)
+    if rc != SQLITE_OK
+        to_log(LOG_ERROR, "Error creating table summary_log: {sqlite3_errmsg(g_db)}\n")
+        return false
+    sql = "CREATE TABLE IF NOT EXISTS channel_rights (
+                chat_id INTEGER PRIMARY KEY,
+                description TEXT,
+                decode_voice INTEGER,
+                draw_pictures INTEGER,
+                bot_answers INTEGER,
+                summary INTEGER);"
     rc = sqlite3_exec(g_db, sql, null)
     if rc != SQLITE_OK
         to_log(LOG_ERROR, "Error creating table summary_log: {sqlite3_errmsg(g_db)}\n")
@@ -101,6 +112,14 @@ struct public SummaryEntry
     chat_id : int64
     id : int64
     text : string
+
+struct public ChannelRights
+    chat_id : int64
+    description : string
+    decode_voice : bool
+    draw_pictures : bool
+    bot_answers : bool
+    summary : bool
 
 def public write_to_log ( entry:ChatLogEntry )
     var sql = "INSERT INTO chat_log (chat_id, message_id, date, from_id, reply_to_message, text, transcription) VALUES (?, ?, ?, ?, ?, ?, ?)"
@@ -312,5 +331,98 @@ def public get_first_summary ( chat_id:int64; dayZ:int64 ) : tuple<id:int64;text
         to_log(LOG_ERROR, "Error reading data: {sqlite3_errmsg(g_db)}\n")
         return [[auto -1l, ""]]
     return [[auto sqlite3_column_int64(stmt,0), sqlite3_column_text_(stmt, 1)]]
+finally
+    sqlite3_finalize(stmt)
+
+def public list_channel_rights ( blk:block<(rights:ChannelRights):void> )
+    var sql = "SELECT chat_id, description, decode_voice, draw_pictures, bot_answers, summary
+                FROM channel_rights
+                ORDER BY chat_id"
+    var stmt : sqlite3_stmt?
+    var rc = sqlite3_prepare_v2(g_db, sql, -1, unsafe(addr(stmt)), null)
+    if rc != SQLITE_OK
+        to_log(LOG_ERROR, "Error preparing statement: {sqlite3_errmsg(g_db)}\n")
+        return false
+    while true
+        rc = sqlite3_step(stmt)
+        if rc == SQLITE_DONE
+            break
+        if rc != SQLITE_ROW
+            to_log(LOG_ERROR, "Error reading data: {sqlite3_errmsg(g_db)}\n")
+            return false
+        var rights <- [[ChannelRights
+            chat_id = sqlite3_column_int64(stmt, 0),
+            description = sqlite3_column_text_(stmt, 1),
+            decode_voice = sqlite3_column_int(stmt, 2) != 0,
+            draw_pictures = sqlite3_column_int(stmt, 3) != 0,
+            bot_answers = sqlite3_column_int(stmt, 4) != 0,
+            summary = sqlite3_column_int(stmt, 5) != 0
+        ]]
+        invoke(blk,rights)
+    return true
+finally
+    sqlite3_finalize(stmt)
+
+def public get_channel_rights ( chat_id:int64 )
+    var sql = "SELECT description, decode_voice, draw_pictures, bot_answers, summary
+                FROM channel_rights
+                WHERE chat_id = ?"
+    var stmt : sqlite3_stmt?
+    var rc = sqlite3_prepare_v2(g_db, sql, -1, unsafe(addr(stmt)), null)
+    if rc != SQLITE_OK
+        to_log(LOG_ERROR, "Error preparing statement: {sqlite3_errmsg(g_db)}\n")
+        return [[ChannelRights]]
+    sqlite3_bind_int64(stmt, 1, chat_id)
+    rc = sqlite3_step(stmt)
+    if rc == SQLITE_DONE
+        return [[ChannelRights]]
+    if rc != SQLITE_ROW
+        to_log(LOG_ERROR, "Error reading data: {sqlite3_errmsg(g_db)}\n")
+        return [[ChannelRights]]
+    return [[ChannelRights
+        chat_id = chat_id,
+        description = sqlite3_column_text_(stmt, 0),
+        decode_voice = sqlite3_column_int(stmt, 1) != 0,
+        draw_pictures = sqlite3_column_int(stmt, 2) != 0,
+        bot_answers = sqlite3_column_int(stmt, 3) != 0,
+        summary = sqlite3_column_int(stmt, 4) != 0
+    ]]
+finally
+    sqlite3_finalize(stmt)
+
+def public set_channel_rights ( rights : ChannelRights )
+    var sql = "INSERT OR REPLACE INTO channel_rights (chat_id, description, decode_voice, draw_pictures, bot_answers, summary) VALUES (?, ?, ?, ?, ?, ?)"
+    var stmt : sqlite3_stmt?
+    var rc = sqlite3_prepare_v2(g_db, sql, -1, unsafe(addr(stmt)), null)
+    if rc != SQLITE_OK
+        to_log(LOG_ERROR, "Error preparing statement: {sqlite3_errmsg(g_db)}\n")
+        return false
+    sqlite3_bind_int64(stmt, 1, rights.chat_id)
+    sqlite3_bind_text(stmt, 2, rights.description)
+    sqlite3_bind_int(stmt, 3, rights.decode_voice ? 1 : 0)
+    sqlite3_bind_int(stmt, 4, rights.draw_pictures ? 1 : 0)
+    sqlite3_bind_int(stmt, 5, rights.bot_answers ? 1 : 0)
+    sqlite3_bind_int(stmt, 6, rights.summary ? 1 : 0)
+    rc = sqlite3_step(stmt)
+    if rc != SQLITE_DONE
+        to_log(LOG_ERROR, "Error inserting data: {sqlite3_errmsg(g_db)}\n")
+        return false
+    return true
+finally
+    sqlite3_finalize(stmt)
+
+def public delete_channel_rights ( chat_id : int64 )
+    var sql = "DELETE FROM channel_rights WHERE chat_id=?"
+    var stmt : sqlite3_stmt?
+    var rc = sqlite3_prepare_v2(g_db, sql, -1, unsafe(addr(stmt)), null)
+    if rc != SQLITE_OK
+        to_log(LOG_ERROR, "Error preparing statement: {sqlite3_errmsg(g_db)}\n")
+        return false
+    sqlite3_bind_int64(stmt, 1, chat_id)
+    rc = sqlite3_step(stmt)
+    if rc != SQLITE_DONE
+        to_log(LOG_ERROR, "Error deleting data: {sqlite3_errmsg(g_db)}\n")
+        return false
+    return true
 finally
     sqlite3_finalize(stmt)

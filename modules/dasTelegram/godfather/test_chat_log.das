@@ -7,7 +7,7 @@ require daslib/json_boost
 
 require openai/openai
 
-require chat_log
+require chat_db
 require emoji
 
 require godfather_chat
