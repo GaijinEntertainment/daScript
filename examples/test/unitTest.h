@@ -223,28 +223,36 @@ __forceinline int32_t testCallLine ( das::LineInfoArg * arg ) { return arg ? arg
 void tableMojo ( das::TTable<char *,int> & in, const das::TBlock<void,das::TTable<char *,int>> & block, das::Context * context, das::LineInfoArg * lineinfo );
 
 struct EntityId {
-    int32_t value;
+    int32_t value = 0;
     EntityId() : value(0) {}
     EntityId( const EntityId & t ) : value(t.value) {}
-    EntityId( int32_t t ) : value(t) {}
     EntityId & operator = ( const EntityId & t ) { value = t.value; return * this; }
     operator int32_t () const { return value; }
 };
 
+struct EntityId_WrapArg : EntityId {
+    EntityId_WrapArg ( int32_t t ) { value = t; }
+};
+
+__forceinline EntityId make_EntityId(int32_t value) {
+    EntityId t; t.value = value; return t;
+}
+
 namespace das {
     template <>
     struct cast<EntityId> {
-        static __forceinline EntityId to ( vec4f x )            { return EntityId(v_extract_xi(v_cast_vec4i(x))); }
+        static __forceinline EntityId to ( vec4f x )            { return make_EntityId(v_extract_xi(v_cast_vec4i(x))); }
         static __forceinline vec4f from ( EntityId x )          { return v_cast_vec4f(v_seti_x(x.value)); }
     };
     template <> struct WrapType<EntityId> { enum { value = true }; typedef int32_t type; };
+    template <> struct WrapArgType<EntityId> { typedef EntityId_WrapArg type; };
 }
 __forceinline EntityId make_invalid_id() {
-    return EntityId(-1);
+    return make_EntityId(-1);
 }
 
 __forceinline EntityId intToEid(int value) {
-    return EntityId(value);
+    return make_EntityId(value);
 }
 
 __forceinline int32_t eidToInt(EntityId id) {

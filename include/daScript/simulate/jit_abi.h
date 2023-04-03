@@ -43,16 +43,19 @@ struct ImplWrapCall<false,false,FuncT,fn> {
 template <int wrap, typename RetT, typename ...Args, RetT(*fn)(Args...)>    // cmres
 struct ImplWrapCall<true,wrap,RetT(*)(Args...),fn> {                        // when cmres, we always wrap
     static void static_call (typename remove_cv<RetT>::type * result, typename WrapType<Args>::type... args ) {
-        *result = fn(args...);
+        typedef RetT (* FuncType)(typename WrapArgType<Args>::type...);
+        auto fnPtr = (FuncType)fn;
+        *result = fnPtr(args...);
     };
     static void * get_builtin_address() { return (void *) &static_call; }
 };
 
-
 template <typename RetT, typename ...Args, RetT(*fn)(Args...)>
 struct ImplWrapCall<false,true,RetT(*)(Args...),fn> {   // no cmres, wrap
-    static typename WrapType<RetT>::type static_call ( typename WrapType<Args>::type... args ) {
-        return fn(args...);
+    static typename WrapType<RetT>::type static_call (typename WrapType<Args>::type... args ) {
+        typedef typename WrapArgType<RetT>::type (* FuncType)(typename WrapArgType<Args>::type...);
+        auto fnPtr = (FuncType)fn;
+        return fnPtr(args...);
     };
     static void * get_builtin_address() { return (void *) &static_call; }
 };
