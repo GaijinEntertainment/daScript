@@ -696,6 +696,8 @@ def to_table_move(var a:tuple<auto(keyT);auto(valT)>[]) : table<keyT -const;valT
     return <- tab
 
 def sort ( var a : auto(TT)[]|# )
+    if length(a) <= 1
+        return
     static_if typeinfo(is_numeric_comparable type<TT>)
         unsafe
             __builtin_sort ( addr(a[0]), length(a) )    // there is numeric specialization
@@ -714,6 +716,8 @@ def sort ( var a : auto(TT)[]|# )
                     return x < y
 
 def sort ( var a : array<auto(TT)>|# )
+    if length(a) <= 1
+        return
     static_if typeinfo(is_numeric_comparable type<TT>)
         __builtin_array_lock(a)
         unsafe
