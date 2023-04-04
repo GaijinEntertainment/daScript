@@ -25,7 +25,7 @@ namespace das
     {
     }
 
-    bool TypeDecl::isClass() const {
+    bool TypeDecl::isClass() const { // CANT BE INLINED DUE TO STRUCT TYPE
         return isStructure() && structType && structType->isClass;
     }
 
@@ -93,7 +93,7 @@ namespace das
         return this;
     }
 
-    void TypeDecl::applyRefToRef ( TypeDeclPtr TT, bool topLevel ) {
+    void TypeDecl::applyRefToRef ( const TypeDeclPtr & TT, bool topLevel ) {
         if ( topLevel && TT->ref && TT->isRefType() ) {
             TT->ref = false;
         }
@@ -122,7 +122,7 @@ namespace das
         }
     }
 
-    void TypeDecl::applyAutoContracts ( TypeDeclPtr TT, TypeDeclPtr autoT ) {
+    void TypeDecl::applyAutoContracts ( const TypeDeclPtr & TT, const TypeDeclPtr & autoT ) {
         if ( !autoT->isAuto() ) return;
         TT->ref = (TT->ref | autoT->ref) && !autoT->removeRef && !TT->removeRef;
         TT->constant = (TT->constant | autoT->constant) && !autoT->removeConstant && !TT->removeConstant;
@@ -190,7 +190,7 @@ namespace das
         }
     }
 
-    TypeDeclPtr TypeDecl::inferGenericInitType ( TypeDeclPtr autoT, TypeDeclPtr initT ) {
+    TypeDeclPtr TypeDecl::inferGenericInitType ( const TypeDeclPtr & autoT, const TypeDeclPtr & initT ) {
         if ( autoT->ref ) {
             autoT->ref = false;
             auto resT = inferGenericType(autoT, initT, true, false, nullptr);
@@ -202,7 +202,7 @@ namespace das
         }
     }
 
-    TypeDeclPtr TypeDecl::inferGenericType ( TypeDeclPtr autoT, TypeDeclPtr initT, bool topLevel, bool passType, OptionsMap * options ) {
+    TypeDeclPtr TypeDecl::inferGenericType ( const TypeDeclPtr & autoT, const TypeDeclPtr & initT, bool topLevel, bool passType, OptionsMap * options ) {
         // for option type, we go through all the options in order. first matching is good
         if ( autoT->baseType==Type::option ) {
             for ( size_t i=0, is=autoT->argTypes.size(); i!=is; ++i ) {
@@ -1144,10 +1144,6 @@ namespace das
         return true;
     }
 
-    bool TypeDecl::isConst() const {
-        return constant;
-    }
-
     void TypeDecl::sanitize ( ) {
         isExplicit = false;
         if ( firstType ) firstType->sanitize();
@@ -1210,6 +1206,24 @@ namespace das
         }
         if ( topLevel && !isTempType() ) {
             temporaryMatters = TemporaryMatters::no;
+        }
+        if ( refMatters == RefMatters::yes ) {
+            if ( ref!=decl.ref ) {
+                return false;
+            }
+        }
+        if ( constMatters == ConstMatters::yes ) {
+            if ( constant!=decl.constant ) {
+                return false;
+            }
+        }
+        if ( temporaryMatters == TemporaryMatters::yes ) {
+            if ( temporary != decl.temporary ) {
+                return false;
+            }
+        }
+        if ( dim!=decl.dim ) {
+            return false;
         }
         if ( baseType==Type::tHandle && annotation!=decl.annotation ) {
             if ( !isExplicit && (allowSubstitute == AllowSubstitute::yes) ) {
@@ -1361,24 +1375,6 @@ namespace das
                         return false;
                     }
                 }
-            }
-        }
-        if ( dim!=decl.dim ) {
-            return false;
-        }
-        if ( refMatters == RefMatters::yes ) {
-            if ( ref!=decl.ref ) {
-                return false;
-            }
-        }
-        if ( constMatters == ConstMatters::yes ) {
-            if ( constant!=decl.constant ) {
-                return false;
-            }
-        }
-        if ( temporaryMatters == TemporaryMatters::yes ) {
-            if ( temporary != decl.temporary ) {
-                return false;
             }
         }
         return true;

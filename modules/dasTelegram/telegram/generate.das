@@ -100,7 +100,8 @@ def process_type ( node:xml_node; is_optional:bool=false )
 
 def generate_fromJV ( name:string; fields:array<tuple<field:string;_type:string>> )
     // from value
-    g_FOUT |> fprint("def from_JV ( var v:JsonValue?; t:{name} ) : {name}\n")
+    g_FOUT |> fprint("[generic]\n")
+    g_FOUT |> fprint("def from_JV ( var v:JsonValue explicit?; t:{name} explicit ) : {name}\n")
     g_FOUT |> fprint("    var q : {name}\n")
     g_FOUT |> fprint("    var vobj & = unsafe(v as _object)\n")
     for field in fields
@@ -110,13 +111,15 @@ def generate_fromJV ( name:string; fields:array<tuple<field:string;_type:string>
             g_FOUT |> fprint("    q.{field.field} <- _::from_JV(vobj[\"{field.field}\"], type<{field._type}>)\n")
     g_FOUT |> fprint("    return <- q\n\n")
     // from pointer
-    g_FOUT |> fprint("def from_JV ( var v:JsonValue?; t:{name}? ) : {name}?\n")
+    g_FOUT |> fprint("[generic]\n")
+    g_FOUT |> fprint("def from_JV ( var v:JsonValue explicit?; t:{name} explicit? ) : {name}?\n")
     g_FOUT |> fprint("    return null if v==null\n")
     g_FOUT |> fprint("    var q = new {name}\n")
     g_FOUT |> fprint("    *q <- from_JV(v,type<{name}>)\n")
     g_FOUT |> fprint("    return q\n\n")
     // to value
-    g_FOUT |> fprint("def JV ( v:{name} ) : JsonValue?\n")
+    g_FOUT |> fprint("[generic]\n")
+    g_FOUT |> fprint("def JV ( v:{name} explicit ) : JsonValue?\n")
     g_FOUT |> fprint("    var map: table<string; JsonValue?>\n")
     for field in fields
         if field._type |> ends_with("?")
@@ -180,10 +183,10 @@ def process_section ( doc:xml_document; name:string )
 def main
     using <| $ ( var doc : xml_document )
         using <| $ ( var status : xml_parse_result# )
-            let res = doc |> load_document("{get_das_root()}/modules/dasPUGIXML/telegram/tbotapi.xhtml",status)
+            let res = doc |> load_document("{get_das_root()}/modules/dasTelegram/telegram/tbotapi.xhtml",status)
             if status.status != xml_parse_status status_ok
                 panic("failed to load document\n{status.description}\n")
-            fopen("{get_das_root()}/modules/dasPUGIXML/telegram/tbotapi.das","w") <| $ ( ff )
+            fopen("{get_das_root()}/modules/dasTelegram/telegram/tbotapi.das","w") <| $ ( ff )
                 if ff==null
                     panic("failed to open output file\n")
                 g_FOUT = ff

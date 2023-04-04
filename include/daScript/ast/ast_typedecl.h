@@ -151,7 +151,7 @@ namespace das {
         bool isCtorType() const;
         __forceinline bool isRange() const;
         __forceinline bool isString() const;
-        bool isConst() const;
+        __forceinline bool isConst() const;
         bool isFoldable() const;
         void collectAliasList(vector<string> & aliases) const;
         bool isAutoArrayResolved() const;
@@ -191,10 +191,10 @@ namespace das {
         static int getMaskFieldIndex ( char ch );
         static bool isSequencialMask ( const vector<uint8_t> & fields );
         static bool buildSwizzleMask ( const string & mask, int dim, vector<uint8_t> & fields );
-        static TypeDeclPtr inferGenericType ( TypeDeclPtr autoT, TypeDeclPtr initT, bool topLevel, bool isPassType, OptionsMap * options );
-        static TypeDeclPtr inferGenericInitType ( TypeDeclPtr autoT, TypeDeclPtr initT );
-        static void applyAutoContracts ( TypeDeclPtr TT, TypeDeclPtr autoT );
-        static void applyRefToRef ( TypeDeclPtr TT, bool topLevel = false );
+        static TypeDeclPtr inferGenericType ( const TypeDeclPtr & autoT, const TypeDeclPtr & initT, bool topLevel, bool isPassType, OptionsMap * options );
+        static TypeDeclPtr inferGenericInitType ( const TypeDeclPtr & autoT, const TypeDeclPtr & initT );
+        static void applyAutoContracts ( const TypeDeclPtr & TT, const TypeDeclPtr & autoT );
+        static void applyRefToRef ( const TypeDeclPtr & TT, bool topLevel = false );
         static void updateAliasMap ( const TypeDeclPtr & decl, const TypeDeclPtr & pass, AliasMap & aliases, OptionsMap & options );
         Type getRangeBaseType() const;
         TypeDecl * findAlias ( const string & name, bool allowAuto = false );
@@ -776,5 +776,9 @@ namespace das {
     __forceinline bool TypeDecl::isVectorType() const {
         if ( dim.size() ) return false;
         return isBaseVectorType();
+    }
+
+    __forceinline bool TypeDecl::isConst() const {
+        return constant;
     }
 }

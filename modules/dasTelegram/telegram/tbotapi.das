@@ -24,7 +24,8 @@ struct update
     chat_member : chatmemberupdated?	//! Optional. A chat member's status was updated in a chat. The bot must be an administrator in the chat and must explicitly specify “chat_member” in the list of allowed_updates to receive these updates.
     chat_join_request : chatjoinrequest?	//! Optional. A request to join the chat has been sent. The bot must have the can_invite_users administrator right in the chat to receive these updates.
 
-def from_JV ( var v:JsonValue?; t:update ) : update
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:update explicit ) : update
     var q : update
     var vobj & = unsafe(v as _object)
     q.update_id = _::from_JV(vobj["update_id"], type<int64>)
@@ -44,13 +45,15 @@ def from_JV ( var v:JsonValue?; t:update ) : update
     q.chat_join_request = _::from_JV(vobj["chat_join_request"], type<chatjoinrequest?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:update? ) : update?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:update explicit? ) : update?
     return null if v==null
     var q = new update
     *q <- from_JV(v,type<update>)
     return q
 
-def JV ( v:update ) : JsonValue?
+[generic]
+def JV ( v:update explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["update_id"] = _::JV(v.update_id)
     if v.message!=null
@@ -90,7 +93,8 @@ struct getupdates
     timeout : int64	//! Optional. Timeout in seconds for long polling. Defaults to 0, i.e. usual short polling. Should be positive, short polling should be used for testing purposes only.
     allowed_updates : array<string>	//! Optional. A JSON-serialized list of the update types you want your bot to receive. For example, specify [“message”, “edited_channel_post”, “callback_query”] to only receive updates of these types. See Update for a complete list of available update types. Specify an empty list to receive all update types except chat_member (default). If not specified, the previous setting will be used. Please note that this parameter doesn't affect updates created before the call to the getUpdates, so unwanted updates may be received for a short period of time.
 
-def from_JV ( var v:JsonValue?; t:getupdates ) : getupdates
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:getupdates explicit ) : getupdates
     var q : getupdates
     var vobj & = unsafe(v as _object)
     q.offset = _::from_JV(vobj["offset"], type<int64>)
@@ -99,13 +103,15 @@ def from_JV ( var v:JsonValue?; t:getupdates ) : getupdates
     q.allowed_updates <- _::from_JV(vobj["allowed_updates"], type<array<string>>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:getupdates? ) : getupdates?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:getupdates explicit? ) : getupdates?
     return null if v==null
     var q = new getupdates
     *q <- from_JV(v,type<getupdates>)
     return q
 
-def JV ( v:getupdates ) : JsonValue?
+[generic]
+def JV ( v:getupdates explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["offset"] = _::JV(v.offset)
     map["limit"] = _::JV(v.limit)
@@ -123,7 +129,8 @@ struct setwebhook
     drop_pending_updates : bool	//! Optional. Pass True to drop all pending updates
     secret_token : string	//! Optional. A secret token to be sent in a header “X-Telegram-Bot-Api-Secret-Token” in every webhook request, 1-256 characters. Only characters A-Z, a-z, 0-9, _ and - are allowed. The header is useful to ensure that the request comes from a webhook set by you.
 
-def from_JV ( var v:JsonValue?; t:setwebhook ) : setwebhook
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:setwebhook explicit ) : setwebhook
     var q : setwebhook
     var vobj & = unsafe(v as _object)
     q.url = _::from_JV(vobj["url"], type<string>)
@@ -135,13 +142,15 @@ def from_JV ( var v:JsonValue?; t:setwebhook ) : setwebhook
     q.secret_token = _::from_JV(vobj["secret_token"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:setwebhook? ) : setwebhook?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:setwebhook explicit? ) : setwebhook?
     return null if v==null
     var q = new setwebhook
     *q <- from_JV(v,type<setwebhook>)
     return q
 
-def JV ( v:setwebhook ) : JsonValue?
+[generic]
+def JV ( v:setwebhook explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["url"] = _::JV(v.url)
     if v.certificate!=null
@@ -157,19 +166,22 @@ struct deletewebhook
     //!  Use this method to remove webhook integration if you decide to switch back to getUpdates. Returns True on success.
     drop_pending_updates : bool	//! Optional. Pass True to drop all pending updates
 
-def from_JV ( var v:JsonValue?; t:deletewebhook ) : deletewebhook
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:deletewebhook explicit ) : deletewebhook
     var q : deletewebhook
     var vobj & = unsafe(v as _object)
     q.drop_pending_updates = _::from_JV(vobj["drop_pending_updates"], type<bool>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:deletewebhook? ) : deletewebhook?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:deletewebhook explicit? ) : deletewebhook?
     return null if v==null
     var q = new deletewebhook
     *q <- from_JV(v,type<deletewebhook>)
     return q
 
-def JV ( v:deletewebhook ) : JsonValue?
+[generic]
+def JV ( v:deletewebhook explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["drop_pending_updates"] = _::JV(v.drop_pending_updates)
     return _::JV(map)
@@ -178,18 +190,21 @@ struct getwebhookinfo
     //!  Use this method to get current webhook status. Requires no parameters. On success, returns a WebhookInfo object. If the bot is using getUpdates, will return an object with the url field empty.
     object_getwebhookinfo_has_no_fields:bool
 
-def from_JV ( var v:JsonValue?; t:getwebhookinfo ) : getwebhookinfo
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:getwebhookinfo explicit ) : getwebhookinfo
     var q : getwebhookinfo
     var vobj & = unsafe(v as _object)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:getwebhookinfo? ) : getwebhookinfo?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:getwebhookinfo explicit? ) : getwebhookinfo?
     return null if v==null
     var q = new getwebhookinfo
     *q <- from_JV(v,type<getwebhookinfo>)
     return q
 
-def JV ( v:getwebhookinfo ) : JsonValue?
+[generic]
+def JV ( v:getwebhookinfo explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     return _::JV(map)
 
@@ -205,7 +220,8 @@ struct webhookinfo
     max_connections : int64	//! Optional. The maximum allowed number of simultaneous HTTPS connections to the webhook for update delivery
     allowed_updates : array<string>	//! Optional. A list of update types the bot is subscribed to. Defaults to all update types except chat_member
 
-def from_JV ( var v:JsonValue?; t:webhookinfo ) : webhookinfo
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:webhookinfo explicit ) : webhookinfo
     var q : webhookinfo
     var vobj & = unsafe(v as _object)
     q.url = _::from_JV(vobj["url"], type<string>)
@@ -219,13 +235,15 @@ def from_JV ( var v:JsonValue?; t:webhookinfo ) : webhookinfo
     q.allowed_updates <- _::from_JV(vobj["allowed_updates"], type<array<string>>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:webhookinfo? ) : webhookinfo?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:webhookinfo explicit? ) : webhookinfo?
     return null if v==null
     var q = new webhookinfo
     *q <- from_JV(v,type<webhookinfo>)
     return q
 
-def JV ( v:webhookinfo ) : JsonValue?
+[generic]
+def JV ( v:webhookinfo explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["url"] = _::JV(v.url)
     map["has_custom_certificate"] = _::JV(v.has_custom_certificate)
@@ -252,7 +270,8 @@ struct user
     can_read_all_group_messages : bool	//! Optional. True, if privacy mode is disabled for the bot. Returned only in getMe.
     supports_inline_queries : bool	//! Optional. True, if the bot supports inline queries. Returned only in getMe.
 
-def from_JV ( var v:JsonValue?; t:user ) : user
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:user explicit ) : user
     var q : user
     var vobj & = unsafe(v as _object)
     q.id = _::from_JV(vobj["id"], type<int64>)
@@ -268,13 +287,15 @@ def from_JV ( var v:JsonValue?; t:user ) : user
     q.supports_inline_queries = _::from_JV(vobj["supports_inline_queries"], type<bool>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:user? ) : user?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:user explicit? ) : user?
     return null if v==null
     var q = new user
     *q <- from_JV(v,type<user>)
     return q
 
-def JV ( v:user ) : JsonValue?
+[generic]
+def JV ( v:user explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["id"] = _::JV(v.id)
     map["is_bot"] = _::JV(v.is_bot)
@@ -320,7 +341,8 @@ struct chat
     linked_chat_id : int64	//! Optional. Unique identifier for the linked chat, i.e. the discussion group identifier for a channel and vice versa; for supergroups and channel chats. This identifier may be greater than 32 bits and some programming languages may have difficulty/silent defects in interpreting it. But it is smaller than 52 bits, so a signed 64 bit integer or double-precision float type are safe for storing this identifier. Returned only in getChat.
     location : chatlocation?	//! Optional. For supergroups, the location to which the supergroup is connected. Returned only in getChat.
 
-def from_JV ( var v:JsonValue?; t:chat ) : chat
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:chat explicit ) : chat
     var q : chat
     var vobj & = unsafe(v as _object)
     q.id = _::from_JV(vobj["id"], type<int64>)
@@ -353,13 +375,15 @@ def from_JV ( var v:JsonValue?; t:chat ) : chat
     q.location = _::from_JV(vobj["location"], type<chatlocation?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:chat? ) : chat?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:chat explicit? ) : chat?
     return null if v==null
     var q = new chat
     *q <- from_JV(v,type<chat>)
     return q
 
-def JV ( v:chat ) : JsonValue?
+[generic]
+def JV ( v:chat explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["id"] = _::JV(v.id)
     map["_type"] = _::JV(v._type)
@@ -469,7 +493,8 @@ struct message
     web_app_data : webappdata?	//! Optional. Service message: data sent by a Web App
     reply_markup : inlinekeyboardmarkup?	//! Optional. Inline keyboard attached to the message. login_url buttons are represented as ordinary url buttons.
 
-def from_JV ( var v:JsonValue?; t:message ) : message
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:message explicit ) : message
     var q : message
     var vobj & = unsafe(v as _object)
     q.message_id = _::from_JV(vobj["message_id"], type<int64>)
@@ -545,13 +570,15 @@ def from_JV ( var v:JsonValue?; t:message ) : message
     q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:message? ) : message?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:message explicit? ) : message?
     return null if v==null
     var q = new message
     *q <- from_JV(v,type<message>)
     return q
 
-def JV ( v:message ) : JsonValue?
+[generic]
+def JV ( v:message explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["message_id"] = _::JV(v.message_id)
     map["message_thread_id"] = _::JV(v.message_thread_id)
@@ -671,19 +698,22 @@ struct messageid
     //!  This object represents a unique message identifier.
     message_id : int64	//! Unique message identifier
 
-def from_JV ( var v:JsonValue?; t:messageid ) : messageid
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:messageid explicit ) : messageid
     var q : messageid
     var vobj & = unsafe(v as _object)
     q.message_id = _::from_JV(vobj["message_id"], type<int64>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:messageid? ) : messageid?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:messageid explicit? ) : messageid?
     return null if v==null
     var q = new messageid
     *q <- from_JV(v,type<messageid>)
     return q
 
-def JV ( v:messageid ) : JsonValue?
+[generic]
+def JV ( v:messageid explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["message_id"] = _::JV(v.message_id)
     return _::JV(map)
@@ -698,7 +728,8 @@ struct messageentity
     language : string	//! Optional. For “pre” only, the programming language of the entity text
     custom_emoji_id : string	//! Optional. For “custom_emoji” only, unique identifier of the custom emoji. Use getCustomEmojiStickers to get full information about the sticker
 
-def from_JV ( var v:JsonValue?; t:messageentity ) : messageentity
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:messageentity explicit ) : messageentity
     var q : messageentity
     var vobj & = unsafe(v as _object)
     q._type = _::from_JV(vobj["_type"], type<string>)
@@ -710,13 +741,15 @@ def from_JV ( var v:JsonValue?; t:messageentity ) : messageentity
     q.custom_emoji_id = _::from_JV(vobj["custom_emoji_id"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:messageentity? ) : messageentity?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:messageentity explicit? ) : messageentity?
     return null if v==null
     var q = new messageentity
     *q <- from_JV(v,type<messageentity>)
     return q
 
-def JV ( v:messageentity ) : JsonValue?
+[generic]
+def JV ( v:messageentity explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["_type"] = _::JV(v._type)
     map["offset"] = _::JV(v.offset)
@@ -736,7 +769,8 @@ struct photosize
     height : int64	//! Photo height
     file_size : int64	//! Optional. File size in bytes
 
-def from_JV ( var v:JsonValue?; t:photosize ) : photosize
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:photosize explicit ) : photosize
     var q : photosize
     var vobj & = unsafe(v as _object)
     q.file_id = _::from_JV(vobj["file_id"], type<string>)
@@ -746,13 +780,15 @@ def from_JV ( var v:JsonValue?; t:photosize ) : photosize
     q.file_size = _::from_JV(vobj["file_size"], type<int64>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:photosize? ) : photosize?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:photosize explicit? ) : photosize?
     return null if v==null
     var q = new photosize
     *q <- from_JV(v,type<photosize>)
     return q
 
-def JV ( v:photosize ) : JsonValue?
+[generic]
+def JV ( v:photosize explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["file_id"] = _::JV(v.file_id)
     map["file_unique_id"] = _::JV(v.file_unique_id)
@@ -773,7 +809,8 @@ struct animation
     mime_type : string	//! Optional. MIME type of the file as defined by sender
     file_size : int64	//! Optional. File size in bytes. It can be bigger than 2^31 and some programming languages may have difficulty/silent defects in interpreting it. But it has at most 52 significant bits, so a signed 64-bit integer or double-precision float type are safe for storing this value.
 
-def from_JV ( var v:JsonValue?; t:animation ) : animation
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:animation explicit ) : animation
     var q : animation
     var vobj & = unsafe(v as _object)
     q.file_id = _::from_JV(vobj["file_id"], type<string>)
@@ -787,13 +824,15 @@ def from_JV ( var v:JsonValue?; t:animation ) : animation
     q.file_size = _::from_JV(vobj["file_size"], type<int64>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:animation? ) : animation?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:animation explicit? ) : animation?
     return null if v==null
     var q = new animation
     *q <- from_JV(v,type<animation>)
     return q
 
-def JV ( v:animation ) : JsonValue?
+[generic]
+def JV ( v:animation explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["file_id"] = _::JV(v.file_id)
     map["file_unique_id"] = _::JV(v.file_unique_id)
@@ -819,7 +858,8 @@ struct audio
     file_size : int64	//! Optional. File size in bytes. It can be bigger than 2^31 and some programming languages may have difficulty/silent defects in interpreting it. But it has at most 52 significant bits, so a signed 64-bit integer or double-precision float type are safe for storing this value.
     thumbnail : photosize?	//! Optional. Thumbnail of the album cover to which the music file belongs
 
-def from_JV ( var v:JsonValue?; t:audio ) : audio
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:audio explicit ) : audio
     var q : audio
     var vobj & = unsafe(v as _object)
     q.file_id = _::from_JV(vobj["file_id"], type<string>)
@@ -833,13 +873,15 @@ def from_JV ( var v:JsonValue?; t:audio ) : audio
     q.thumbnail = _::from_JV(vobj["thumbnail"], type<photosize?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:audio? ) : audio?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:audio explicit? ) : audio?
     return null if v==null
     var q = new audio
     *q <- from_JV(v,type<audio>)
     return q
 
-def JV ( v:audio ) : JsonValue?
+[generic]
+def JV ( v:audio explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["file_id"] = _::JV(v.file_id)
     map["file_unique_id"] = _::JV(v.file_unique_id)
@@ -862,7 +904,8 @@ struct document
     mime_type : string	//! Optional. MIME type of the file as defined by sender
     file_size : int64	//! Optional. File size in bytes. It can be bigger than 2^31 and some programming languages may have difficulty/silent defects in interpreting it. But it has at most 52 significant bits, so a signed 64-bit integer or double-precision float type are safe for storing this value.
 
-def from_JV ( var v:JsonValue?; t:document ) : document
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:document explicit ) : document
     var q : document
     var vobj & = unsafe(v as _object)
     q.file_id = _::from_JV(vobj["file_id"], type<string>)
@@ -873,13 +916,15 @@ def from_JV ( var v:JsonValue?; t:document ) : document
     q.file_size = _::from_JV(vobj["file_size"], type<int64>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:document? ) : document?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:document explicit? ) : document?
     return null if v==null
     var q = new document
     *q <- from_JV(v,type<document>)
     return q
 
-def JV ( v:document ) : JsonValue?
+[generic]
+def JV ( v:document explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["file_id"] = _::JV(v.file_id)
     map["file_unique_id"] = _::JV(v.file_unique_id)
@@ -902,7 +947,8 @@ struct video
     mime_type : string	//! Optional. MIME type of the file as defined by sender
     file_size : int64	//! Optional. File size in bytes. It can be bigger than 2^31 and some programming languages may have difficulty/silent defects in interpreting it. But it has at most 52 significant bits, so a signed 64-bit integer or double-precision float type are safe for storing this value.
 
-def from_JV ( var v:JsonValue?; t:video ) : video
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:video explicit ) : video
     var q : video
     var vobj & = unsafe(v as _object)
     q.file_id = _::from_JV(vobj["file_id"], type<string>)
@@ -916,13 +962,15 @@ def from_JV ( var v:JsonValue?; t:video ) : video
     q.file_size = _::from_JV(vobj["file_size"], type<int64>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:video? ) : video?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:video explicit? ) : video?
     return null if v==null
     var q = new video
     *q <- from_JV(v,type<video>)
     return q
 
-def JV ( v:video ) : JsonValue?
+[generic]
+def JV ( v:video explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["file_id"] = _::JV(v.file_id)
     map["file_unique_id"] = _::JV(v.file_unique_id)
@@ -945,7 +993,8 @@ struct videonote
     thumbnail : photosize?	//! Optional. Video thumbnail
     file_size : int64	//! Optional. File size in bytes
 
-def from_JV ( var v:JsonValue?; t:videonote ) : videonote
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:videonote explicit ) : videonote
     var q : videonote
     var vobj & = unsafe(v as _object)
     q.file_id = _::from_JV(vobj["file_id"], type<string>)
@@ -956,13 +1005,15 @@ def from_JV ( var v:JsonValue?; t:videonote ) : videonote
     q.file_size = _::from_JV(vobj["file_size"], type<int64>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:videonote? ) : videonote?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:videonote explicit? ) : videonote?
     return null if v==null
     var q = new videonote
     *q <- from_JV(v,type<videonote>)
     return q
 
-def JV ( v:videonote ) : JsonValue?
+[generic]
+def JV ( v:videonote explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["file_id"] = _::JV(v.file_id)
     map["file_unique_id"] = _::JV(v.file_unique_id)
@@ -981,7 +1032,8 @@ struct voice
     mime_type : string	//! Optional. MIME type of the file as defined by sender
     file_size : int64	//! Optional. File size in bytes. It can be bigger than 2^31 and some programming languages may have difficulty/silent defects in interpreting it. But it has at most 52 significant bits, so a signed 64-bit integer or double-precision float type are safe for storing this value.
 
-def from_JV ( var v:JsonValue?; t:voice ) : voice
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:voice explicit ) : voice
     var q : voice
     var vobj & = unsafe(v as _object)
     q.file_id = _::from_JV(vobj["file_id"], type<string>)
@@ -991,13 +1043,15 @@ def from_JV ( var v:JsonValue?; t:voice ) : voice
     q.file_size = _::from_JV(vobj["file_size"], type<int64>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:voice? ) : voice?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:voice explicit? ) : voice?
     return null if v==null
     var q = new voice
     *q <- from_JV(v,type<voice>)
     return q
 
-def JV ( v:voice ) : JsonValue?
+[generic]
+def JV ( v:voice explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["file_id"] = _::JV(v.file_id)
     map["file_unique_id"] = _::JV(v.file_unique_id)
@@ -1014,7 +1068,8 @@ struct contact
     user_id : int64	//! Optional. Contact's user identifier in Telegram. This number may have more than 32 significant bits and some programming languages may have difficulty/silent defects in interpreting it. But it has at most 52 significant bits, so a 64-bit integer or double-precision float type are safe for storing this identifier.
     vcard : string	//! Optional. Additional data about the contact in the form of a vCard
 
-def from_JV ( var v:JsonValue?; t:contact ) : contact
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:contact explicit ) : contact
     var q : contact
     var vobj & = unsafe(v as _object)
     q.phone_number = _::from_JV(vobj["phone_number"], type<string>)
@@ -1024,13 +1079,15 @@ def from_JV ( var v:JsonValue?; t:contact ) : contact
     q.vcard = _::from_JV(vobj["vcard"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:contact? ) : contact?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:contact explicit? ) : contact?
     return null if v==null
     var q = new contact
     *q <- from_JV(v,type<contact>)
     return q
 
-def JV ( v:contact ) : JsonValue?
+[generic]
+def JV ( v:contact explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["phone_number"] = _::JV(v.phone_number)
     map["first_name"] = _::JV(v.first_name)
@@ -1044,20 +1101,23 @@ struct dice
     emoji : string	//! Emoji on which the dice throw animation is based
     value : int64	//! Value of the dice, 1-6 for “”, “” and “” base emoji, 1-5 for “” and “” base emoji, 1-64 for “” base emoji
 
-def from_JV ( var v:JsonValue?; t:dice ) : dice
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:dice explicit ) : dice
     var q : dice
     var vobj & = unsafe(v as _object)
     q.emoji = _::from_JV(vobj["emoji"], type<string>)
     q.value = _::from_JV(vobj["value"], type<int64>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:dice? ) : dice?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:dice explicit? ) : dice?
     return null if v==null
     var q = new dice
     *q <- from_JV(v,type<dice>)
     return q
 
-def JV ( v:dice ) : JsonValue?
+[generic]
+def JV ( v:dice explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["emoji"] = _::JV(v.emoji)
     map["value"] = _::JV(v.value)
@@ -1068,20 +1128,23 @@ struct polloption
     text : string	//! Option text, 1-100 characters
     voter_count : int64	//! Number of users that voted for this option
 
-def from_JV ( var v:JsonValue?; t:polloption ) : polloption
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:polloption explicit ) : polloption
     var q : polloption
     var vobj & = unsafe(v as _object)
     q.text = _::from_JV(vobj["text"], type<string>)
     q.voter_count = _::from_JV(vobj["voter_count"], type<int64>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:polloption? ) : polloption?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:polloption explicit? ) : polloption?
     return null if v==null
     var q = new polloption
     *q <- from_JV(v,type<polloption>)
     return q
 
-def JV ( v:polloption ) : JsonValue?
+[generic]
+def JV ( v:polloption explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["text"] = _::JV(v.text)
     map["voter_count"] = _::JV(v.voter_count)
@@ -1093,7 +1156,8 @@ struct pollanswer
     user : user	//! The user, who changed the answer to the poll
     option_ids : array<int64>	//! 0-based identifiers of answer options, chosen by the user. May be empty if the user retracted their vote.
 
-def from_JV ( var v:JsonValue?; t:pollanswer ) : pollanswer
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:pollanswer explicit ) : pollanswer
     var q : pollanswer
     var vobj & = unsafe(v as _object)
     q.poll_id = _::from_JV(vobj["poll_id"], type<string>)
@@ -1101,13 +1165,15 @@ def from_JV ( var v:JsonValue?; t:pollanswer ) : pollanswer
     q.option_ids <- _::from_JV(vobj["option_ids"], type<array<int64>>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:pollanswer? ) : pollanswer?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:pollanswer explicit? ) : pollanswer?
     return null if v==null
     var q = new pollanswer
     *q <- from_JV(v,type<pollanswer>)
     return q
 
-def JV ( v:pollanswer ) : JsonValue?
+[generic]
+def JV ( v:pollanswer explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["poll_id"] = _::JV(v.poll_id)
     map["user"] = _::JV(v.user)
@@ -1130,7 +1196,8 @@ struct poll
     open_period : int64	//! Optional. Amount of time in seconds the poll will be active after creation
     close_date : int64	//! Optional. Point in time (Unix timestamp) when the poll will be automatically closed
 
-def from_JV ( var v:JsonValue?; t:poll ) : poll
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:poll explicit ) : poll
     var q : poll
     var vobj & = unsafe(v as _object)
     q.id = _::from_JV(vobj["id"], type<string>)
@@ -1148,13 +1215,15 @@ def from_JV ( var v:JsonValue?; t:poll ) : poll
     q.close_date = _::from_JV(vobj["close_date"], type<int64>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:poll? ) : poll?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:poll explicit? ) : poll?
     return null if v==null
     var q = new poll
     *q <- from_JV(v,type<poll>)
     return q
 
-def JV ( v:poll ) : JsonValue?
+[generic]
+def JV ( v:poll explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["id"] = _::JV(v.id)
     map["question"] = _::JV(v.question)
@@ -1180,7 +1249,8 @@ struct location
     heading : int64	//! Optional. The direction in which user is moving, in degrees; 1-360. For active live locations only.
     proximity_alert_radius : int64	//! Optional. The maximum distance for proximity alerts about approaching another chat member, in meters. For sent live locations only.
 
-def from_JV ( var v:JsonValue?; t:location ) : location
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:location explicit ) : location
     var q : location
     var vobj & = unsafe(v as _object)
     q.longitude = _::from_JV(vobj["longitude"], type<float>)
@@ -1191,13 +1261,15 @@ def from_JV ( var v:JsonValue?; t:location ) : location
     q.proximity_alert_radius = _::from_JV(vobj["proximity_alert_radius"], type<int64>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:location? ) : location?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:location explicit? ) : location?
     return null if v==null
     var q = new location
     *q <- from_JV(v,type<location>)
     return q
 
-def JV ( v:location ) : JsonValue?
+[generic]
+def JV ( v:location explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["longitude"] = _::JV(v.longitude)
     map["latitude"] = _::JV(v.latitude)
@@ -1217,7 +1289,8 @@ struct venue
     google_place_id : string	//! Optional. Google Places identifier of the venue
     google_place_type : string	//! Optional. Google Places type of the venue. (See supported types.)
 
-def from_JV ( var v:JsonValue?; t:venue ) : venue
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:venue explicit ) : venue
     var q : venue
     var vobj & = unsafe(v as _object)
     q.location <- _::from_JV(vobj["location"], type<location>)
@@ -1229,13 +1302,15 @@ def from_JV ( var v:JsonValue?; t:venue ) : venue
     q.google_place_type = _::from_JV(vobj["google_place_type"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:venue? ) : venue?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:venue explicit? ) : venue?
     return null if v==null
     var q = new venue
     *q <- from_JV(v,type<venue>)
     return q
 
-def JV ( v:venue ) : JsonValue?
+[generic]
+def JV ( v:venue explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["location"] = _::JV(v.location)
     map["title"] = _::JV(v.title)
@@ -1251,20 +1326,23 @@ struct webappdata
     data : string	//! The data. Be aware that a bad client can send arbitrary data in this field.
     button_text : string	//! Text of the web_app keyboard button from which the Web App was opened. Be aware that a bad client can send arbitrary data in this field.
 
-def from_JV ( var v:JsonValue?; t:webappdata ) : webappdata
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:webappdata explicit ) : webappdata
     var q : webappdata
     var vobj & = unsafe(v as _object)
     q.data = _::from_JV(vobj["data"], type<string>)
     q.button_text = _::from_JV(vobj["button_text"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:webappdata? ) : webappdata?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:webappdata explicit? ) : webappdata?
     return null if v==null
     var q = new webappdata
     *q <- from_JV(v,type<webappdata>)
     return q
 
-def JV ( v:webappdata ) : JsonValue?
+[generic]
+def JV ( v:webappdata explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["data"] = _::JV(v.data)
     map["button_text"] = _::JV(v.button_text)
@@ -1276,7 +1354,8 @@ struct proximityalerttriggered
     watcher : user	//! User that set the alert
     distance : int64	//! The distance between the users
 
-def from_JV ( var v:JsonValue?; t:proximityalerttriggered ) : proximityalerttriggered
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:proximityalerttriggered explicit ) : proximityalerttriggered
     var q : proximityalerttriggered
     var vobj & = unsafe(v as _object)
     q.traveler <- _::from_JV(vobj["traveler"], type<user>)
@@ -1284,13 +1363,15 @@ def from_JV ( var v:JsonValue?; t:proximityalerttriggered ) : proximityalerttrig
     q.distance = _::from_JV(vobj["distance"], type<int64>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:proximityalerttriggered? ) : proximityalerttriggered?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:proximityalerttriggered explicit? ) : proximityalerttriggered?
     return null if v==null
     var q = new proximityalerttriggered
     *q <- from_JV(v,type<proximityalerttriggered>)
     return q
 
-def JV ( v:proximityalerttriggered ) : JsonValue?
+[generic]
+def JV ( v:proximityalerttriggered explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["traveler"] = _::JV(v.traveler)
     map["watcher"] = _::JV(v.watcher)
@@ -1301,19 +1382,22 @@ struct messageautodeletetimerchanged
     //!  This object represents a service message about a change in auto-delete timer settings.
     message_auto_delete_time : int64	//! New auto-delete time for messages in the chat; in seconds
 
-def from_JV ( var v:JsonValue?; t:messageautodeletetimerchanged ) : messageautodeletetimerchanged
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:messageautodeletetimerchanged explicit ) : messageautodeletetimerchanged
     var q : messageautodeletetimerchanged
     var vobj & = unsafe(v as _object)
     q.message_auto_delete_time = _::from_JV(vobj["message_auto_delete_time"], type<int64>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:messageautodeletetimerchanged? ) : messageautodeletetimerchanged?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:messageautodeletetimerchanged explicit? ) : messageautodeletetimerchanged?
     return null if v==null
     var q = new messageautodeletetimerchanged
     *q <- from_JV(v,type<messageautodeletetimerchanged>)
     return q
 
-def JV ( v:messageautodeletetimerchanged ) : JsonValue?
+[generic]
+def JV ( v:messageautodeletetimerchanged explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["message_auto_delete_time"] = _::JV(v.message_auto_delete_time)
     return _::JV(map)
@@ -1324,7 +1408,8 @@ struct forumtopiccreated
     icon_color : int64	//! Color of the topic icon in RGB format
     icon_custom_emoji_id : string	//! Optional. Unique identifier of the custom emoji shown as the topic icon
 
-def from_JV ( var v:JsonValue?; t:forumtopiccreated ) : forumtopiccreated
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:forumtopiccreated explicit ) : forumtopiccreated
     var q : forumtopiccreated
     var vobj & = unsafe(v as _object)
     q.name = _::from_JV(vobj["name"], type<string>)
@@ -1332,13 +1417,15 @@ def from_JV ( var v:JsonValue?; t:forumtopiccreated ) : forumtopiccreated
     q.icon_custom_emoji_id = _::from_JV(vobj["icon_custom_emoji_id"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:forumtopiccreated? ) : forumtopiccreated?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:forumtopiccreated explicit? ) : forumtopiccreated?
     return null if v==null
     var q = new forumtopiccreated
     *q <- from_JV(v,type<forumtopiccreated>)
     return q
 
-def JV ( v:forumtopiccreated ) : JsonValue?
+[generic]
+def JV ( v:forumtopiccreated explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["name"] = _::JV(v.name)
     map["icon_color"] = _::JV(v.icon_color)
@@ -1349,18 +1436,21 @@ struct forumtopicclosed
     //!  This object represents a service message about a forum topic closed in the chat. Currently holds no information.
     object_forumtopicclosed_has_no_fields:bool
 
-def from_JV ( var v:JsonValue?; t:forumtopicclosed ) : forumtopicclosed
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:forumtopicclosed explicit ) : forumtopicclosed
     var q : forumtopicclosed
     var vobj & = unsafe(v as _object)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:forumtopicclosed? ) : forumtopicclosed?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:forumtopicclosed explicit? ) : forumtopicclosed?
     return null if v==null
     var q = new forumtopicclosed
     *q <- from_JV(v,type<forumtopicclosed>)
     return q
 
-def JV ( v:forumtopicclosed ) : JsonValue?
+[generic]
+def JV ( v:forumtopicclosed explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     return _::JV(map)
 
@@ -1369,20 +1459,23 @@ struct forumtopicedited
     name : string	//! Optional. New name of the topic, if it was edited
     icon_custom_emoji_id : string	//! Optional. New identifier of the custom emoji shown as the topic icon, if it was edited; an empty string if the icon was removed
 
-def from_JV ( var v:JsonValue?; t:forumtopicedited ) : forumtopicedited
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:forumtopicedited explicit ) : forumtopicedited
     var q : forumtopicedited
     var vobj & = unsafe(v as _object)
     q.name = _::from_JV(vobj["name"], type<string>)
     q.icon_custom_emoji_id = _::from_JV(vobj["icon_custom_emoji_id"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:forumtopicedited? ) : forumtopicedited?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:forumtopicedited explicit? ) : forumtopicedited?
     return null if v==null
     var q = new forumtopicedited
     *q <- from_JV(v,type<forumtopicedited>)
     return q
 
-def JV ( v:forumtopicedited ) : JsonValue?
+[generic]
+def JV ( v:forumtopicedited explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["name"] = _::JV(v.name)
     map["icon_custom_emoji_id"] = _::JV(v.icon_custom_emoji_id)
@@ -1392,18 +1485,21 @@ struct forumtopicreopened
     //!  This object represents a service message about a forum topic reopened in the chat. Currently holds no information.
     object_forumtopicreopened_has_no_fields:bool
 
-def from_JV ( var v:JsonValue?; t:forumtopicreopened ) : forumtopicreopened
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:forumtopicreopened explicit ) : forumtopicreopened
     var q : forumtopicreopened
     var vobj & = unsafe(v as _object)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:forumtopicreopened? ) : forumtopicreopened?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:forumtopicreopened explicit? ) : forumtopicreopened?
     return null if v==null
     var q = new forumtopicreopened
     *q <- from_JV(v,type<forumtopicreopened>)
     return q
 
-def JV ( v:forumtopicreopened ) : JsonValue?
+[generic]
+def JV ( v:forumtopicreopened explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     return _::JV(map)
 
@@ -1411,18 +1507,21 @@ struct generalforumtopichidden
     //!  This object represents a service message about General forum topic hidden in the chat. Currently holds no information.
     object_generalforumtopichidden_has_no_fields:bool
 
-def from_JV ( var v:JsonValue?; t:generalforumtopichidden ) : generalforumtopichidden
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:generalforumtopichidden explicit ) : generalforumtopichidden
     var q : generalforumtopichidden
     var vobj & = unsafe(v as _object)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:generalforumtopichidden? ) : generalforumtopichidden?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:generalforumtopichidden explicit? ) : generalforumtopichidden?
     return null if v==null
     var q = new generalforumtopichidden
     *q <- from_JV(v,type<generalforumtopichidden>)
     return q
 
-def JV ( v:generalforumtopichidden ) : JsonValue?
+[generic]
+def JV ( v:generalforumtopichidden explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     return _::JV(map)
 
@@ -1430,18 +1529,21 @@ struct generalforumtopicunhidden
     //!  This object represents a service message about General forum topic unhidden in the chat. Currently holds no information.
     object_generalforumtopicunhidden_has_no_fields:bool
 
-def from_JV ( var v:JsonValue?; t:generalforumtopicunhidden ) : generalforumtopicunhidden
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:generalforumtopicunhidden explicit ) : generalforumtopicunhidden
     var q : generalforumtopicunhidden
     var vobj & = unsafe(v as _object)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:generalforumtopicunhidden? ) : generalforumtopicunhidden?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:generalforumtopicunhidden explicit? ) : generalforumtopicunhidden?
     return null if v==null
     var q = new generalforumtopicunhidden
     *q <- from_JV(v,type<generalforumtopicunhidden>)
     return q
 
-def JV ( v:generalforumtopicunhidden ) : JsonValue?
+[generic]
+def JV ( v:generalforumtopicunhidden explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     return _::JV(map)
 
@@ -1450,20 +1552,23 @@ struct usershared
     request_id : int64	//! Identifier of the request
     user_id : int64	//! Identifier of the shared user. This number may have more than 32 significant bits and some programming languages may have difficulty/silent defects in interpreting it. But it has at most 52 significant bits, so a 64-bit integer or double-precision float type are safe for storing this identifier. The bot may not have access to the user and could be unable to use this identifier, unless the user is already known to the bot by some other means.
 
-def from_JV ( var v:JsonValue?; t:usershared ) : usershared
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:usershared explicit ) : usershared
     var q : usershared
     var vobj & = unsafe(v as _object)
     q.request_id = _::from_JV(vobj["request_id"], type<int64>)
     q.user_id = _::from_JV(vobj["user_id"], type<int64>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:usershared? ) : usershared?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:usershared explicit? ) : usershared?
     return null if v==null
     var q = new usershared
     *q <- from_JV(v,type<usershared>)
     return q
 
-def JV ( v:usershared ) : JsonValue?
+[generic]
+def JV ( v:usershared explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["request_id"] = _::JV(v.request_id)
     map["user_id"] = _::JV(v.user_id)
@@ -1474,20 +1579,23 @@ struct chatshared
     request_id : int64	//! Identifier of the request
     chat_id : int64	//! Identifier of the shared chat. This number may have more than 32 significant bits and some programming languages may have difficulty/silent defects in interpreting it. But it has at most 52 significant bits, so a 64-bit integer or double-precision float type are safe for storing this identifier. The bot may not have access to the chat and could be unable to use this identifier, unless the chat is already known to the bot by some other means.
 
-def from_JV ( var v:JsonValue?; t:chatshared ) : chatshared
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:chatshared explicit ) : chatshared
     var q : chatshared
     var vobj & = unsafe(v as _object)
     q.request_id = _::from_JV(vobj["request_id"], type<int64>)
     q.chat_id = _::from_JV(vobj["chat_id"], type<int64>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:chatshared? ) : chatshared?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:chatshared explicit? ) : chatshared?
     return null if v==null
     var q = new chatshared
     *q <- from_JV(v,type<chatshared>)
     return q
 
-def JV ( v:chatshared ) : JsonValue?
+[generic]
+def JV ( v:chatshared explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["request_id"] = _::JV(v.request_id)
     map["chat_id"] = _::JV(v.chat_id)
@@ -1497,18 +1605,21 @@ struct writeaccessallowed
     //!  This object represents a service message about a user allowing a bot added to the attachment menu to write messages. Currently holds no information.
     object_writeaccessallowed_has_no_fields:bool
 
-def from_JV ( var v:JsonValue?; t:writeaccessallowed ) : writeaccessallowed
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:writeaccessallowed explicit ) : writeaccessallowed
     var q : writeaccessallowed
     var vobj & = unsafe(v as _object)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:writeaccessallowed? ) : writeaccessallowed?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:writeaccessallowed explicit? ) : writeaccessallowed?
     return null if v==null
     var q = new writeaccessallowed
     *q <- from_JV(v,type<writeaccessallowed>)
     return q
 
-def JV ( v:writeaccessallowed ) : JsonValue?
+[generic]
+def JV ( v:writeaccessallowed explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     return _::JV(map)
 
@@ -1516,19 +1627,22 @@ struct videochatscheduled
     //!  This object represents a service message about a video chat scheduled in the chat.
     start_date : int64	//! Point in time (Unix timestamp) when the video chat is supposed to be started by a chat administrator
 
-def from_JV ( var v:JsonValue?; t:videochatscheduled ) : videochatscheduled
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:videochatscheduled explicit ) : videochatscheduled
     var q : videochatscheduled
     var vobj & = unsafe(v as _object)
     q.start_date = _::from_JV(vobj["start_date"], type<int64>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:videochatscheduled? ) : videochatscheduled?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:videochatscheduled explicit? ) : videochatscheduled?
     return null if v==null
     var q = new videochatscheduled
     *q <- from_JV(v,type<videochatscheduled>)
     return q
 
-def JV ( v:videochatscheduled ) : JsonValue?
+[generic]
+def JV ( v:videochatscheduled explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["start_date"] = _::JV(v.start_date)
     return _::JV(map)
@@ -1537,18 +1651,21 @@ struct videochatstarted
     //!  This object represents a service message about a video chat started in the chat. Currently holds no information.
     object_videochatstarted_has_no_fields:bool
 
-def from_JV ( var v:JsonValue?; t:videochatstarted ) : videochatstarted
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:videochatstarted explicit ) : videochatstarted
     var q : videochatstarted
     var vobj & = unsafe(v as _object)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:videochatstarted? ) : videochatstarted?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:videochatstarted explicit? ) : videochatstarted?
     return null if v==null
     var q = new videochatstarted
     *q <- from_JV(v,type<videochatstarted>)
     return q
 
-def JV ( v:videochatstarted ) : JsonValue?
+[generic]
+def JV ( v:videochatstarted explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     return _::JV(map)
 
@@ -1556,19 +1673,22 @@ struct videochatended
     //!  This object represents a service message about a video chat ended in the chat.
     duration : int64	//! Video chat duration in seconds
 
-def from_JV ( var v:JsonValue?; t:videochatended ) : videochatended
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:videochatended explicit ) : videochatended
     var q : videochatended
     var vobj & = unsafe(v as _object)
     q.duration = _::from_JV(vobj["duration"], type<int64>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:videochatended? ) : videochatended?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:videochatended explicit? ) : videochatended?
     return null if v==null
     var q = new videochatended
     *q <- from_JV(v,type<videochatended>)
     return q
 
-def JV ( v:videochatended ) : JsonValue?
+[generic]
+def JV ( v:videochatended explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["duration"] = _::JV(v.duration)
     return _::JV(map)
@@ -1577,19 +1697,22 @@ struct videochatparticipantsinvited
     //!  This object represents a service message about new members invited to a video chat.
     users : array<user>	//! New members that were invited to the video chat
 
-def from_JV ( var v:JsonValue?; t:videochatparticipantsinvited ) : videochatparticipantsinvited
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:videochatparticipantsinvited explicit ) : videochatparticipantsinvited
     var q : videochatparticipantsinvited
     var vobj & = unsafe(v as _object)
     q.users <- _::from_JV(vobj["users"], type<array<user>>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:videochatparticipantsinvited? ) : videochatparticipantsinvited?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:videochatparticipantsinvited explicit? ) : videochatparticipantsinvited?
     return null if v==null
     var q = new videochatparticipantsinvited
     *q <- from_JV(v,type<videochatparticipantsinvited>)
     return q
 
-def JV ( v:videochatparticipantsinvited ) : JsonValue?
+[generic]
+def JV ( v:videochatparticipantsinvited explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["users"] = _::JV(v.users)
     return _::JV(map)
@@ -1599,20 +1722,23 @@ struct userprofilephotos
     total_count : int64	//! Total number of profile pictures the target user has
     photos : array<array<photosize>>	//! Requested profile pictures (in up to 4 sizes each)
 
-def from_JV ( var v:JsonValue?; t:userprofilephotos ) : userprofilephotos
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:userprofilephotos explicit ) : userprofilephotos
     var q : userprofilephotos
     var vobj & = unsafe(v as _object)
     q.total_count = _::from_JV(vobj["total_count"], type<int64>)
     q.photos <- _::from_JV(vobj["photos"], type<array<array<photosize>>>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:userprofilephotos? ) : userprofilephotos?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:userprofilephotos explicit? ) : userprofilephotos?
     return null if v==null
     var q = new userprofilephotos
     *q <- from_JV(v,type<userprofilephotos>)
     return q
 
-def JV ( v:userprofilephotos ) : JsonValue?
+[generic]
+def JV ( v:userprofilephotos explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["total_count"] = _::JV(v.total_count)
     map["photos"] = _::JV(v.photos)
@@ -1625,7 +1751,8 @@ struct file
     file_size : int64	//! Optional. File size in bytes. It can be bigger than 2^31 and some programming languages may have difficulty/silent defects in interpreting it. But it has at most 52 significant bits, so a signed 64-bit integer or double-precision float type are safe for storing this value.
     file_path : string	//! Optional. File path. Use https://api.telegram.org/file/bot<token>/<file_path> to get the file.
 
-def from_JV ( var v:JsonValue?; t:file ) : file
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:file explicit ) : file
     var q : file
     var vobj & = unsafe(v as _object)
     q.file_id = _::from_JV(vobj["file_id"], type<string>)
@@ -1634,13 +1761,15 @@ def from_JV ( var v:JsonValue?; t:file ) : file
     q.file_path = _::from_JV(vobj["file_path"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:file? ) : file?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:file explicit? ) : file?
     return null if v==null
     var q = new file
     *q <- from_JV(v,type<file>)
     return q
 
-def JV ( v:file ) : JsonValue?
+[generic]
+def JV ( v:file explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["file_id"] = _::JV(v.file_id)
     map["file_unique_id"] = _::JV(v.file_unique_id)
@@ -1652,19 +1781,22 @@ struct webappinfo
     //!  Describes a Web App.
     url : string	//! An HTTPS URL of a Web App to be opened with additional data as specified in Initializing Web Apps
 
-def from_JV ( var v:JsonValue?; t:webappinfo ) : webappinfo
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:webappinfo explicit ) : webappinfo
     var q : webappinfo
     var vobj & = unsafe(v as _object)
     q.url = _::from_JV(vobj["url"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:webappinfo? ) : webappinfo?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:webappinfo explicit? ) : webappinfo?
     return null if v==null
     var q = new webappinfo
     *q <- from_JV(v,type<webappinfo>)
     return q
 
-def JV ( v:webappinfo ) : JsonValue?
+[generic]
+def JV ( v:webappinfo explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["url"] = _::JV(v.url)
     return _::JV(map)
@@ -1678,7 +1810,8 @@ struct replykeyboardmarkup
     input_field_placeholder : string	//! Optional. The placeholder to be shown in the input field when the keyboard is active; 1-64 characters
     selective : bool	//! Optional. Use this parameter if you want to show the keyboard to specific users only. Targets: 1) users that are @mentioned in the text of the Message object; 2) if the bot's message is a reply (has reply_to_message_id), sender of the original message.Example: A user requests to change the bot's language, bot replies to the request with a keyboard to select the new language. Other users in the group don't see the keyboard.
 
-def from_JV ( var v:JsonValue?; t:replykeyboardmarkup ) : replykeyboardmarkup
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:replykeyboardmarkup explicit ) : replykeyboardmarkup
     var q : replykeyboardmarkup
     var vobj & = unsafe(v as _object)
     q.keyboard <- _::from_JV(vobj["keyboard"], type<array<array<keyboardbutton>>>)
@@ -1689,13 +1822,15 @@ def from_JV ( var v:JsonValue?; t:replykeyboardmarkup ) : replykeyboardmarkup
     q.selective = _::from_JV(vobj["selective"], type<bool>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:replykeyboardmarkup? ) : replykeyboardmarkup?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:replykeyboardmarkup explicit? ) : replykeyboardmarkup?
     return null if v==null
     var q = new replykeyboardmarkup
     *q <- from_JV(v,type<replykeyboardmarkup>)
     return q
 
-def JV ( v:replykeyboardmarkup ) : JsonValue?
+[generic]
+def JV ( v:replykeyboardmarkup explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["keyboard"] = _::JV(v.keyboard)
     map["is_persistent"] = _::JV(v.is_persistent)
@@ -1715,7 +1850,8 @@ struct keyboardbutton
     request_poll : keyboardbuttonpolltype?	//! Optional. If specified, the user will be asked to create a poll and send it to the bot when the button is pressed. Available in private chats only.
     web_app : webappinfo?	//! Optional. If specified, the described Web App will be launched when the button is pressed. The Web App will be able to send a “web_app_data” service message. Available in private chats only.
 
-def from_JV ( var v:JsonValue?; t:keyboardbutton ) : keyboardbutton
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:keyboardbutton explicit ) : keyboardbutton
     var q : keyboardbutton
     var vobj & = unsafe(v as _object)
     q.text = _::from_JV(vobj["text"], type<string>)
@@ -1727,13 +1863,15 @@ def from_JV ( var v:JsonValue?; t:keyboardbutton ) : keyboardbutton
     q.web_app = _::from_JV(vobj["web_app"], type<webappinfo?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:keyboardbutton? ) : keyboardbutton?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:keyboardbutton explicit? ) : keyboardbutton?
     return null if v==null
     var q = new keyboardbutton
     *q <- from_JV(v,type<keyboardbutton>)
     return q
 
-def JV ( v:keyboardbutton ) : JsonValue?
+[generic]
+def JV ( v:keyboardbutton explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["text"] = _::JV(v.text)
     if v.request_user!=null
@@ -1754,7 +1892,8 @@ struct keyboardbuttonrequestuser
     user_is_bot : bool	//! Optional. Pass True to request a bot, pass False to request a regular user. If not specified, no additional restrictions are applied.
     user_is_premium : bool	//! Optional. Pass True to request a premium user, pass False to request a non-premium user. If not specified, no additional restrictions are applied.
 
-def from_JV ( var v:JsonValue?; t:keyboardbuttonrequestuser ) : keyboardbuttonrequestuser
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:keyboardbuttonrequestuser explicit ) : keyboardbuttonrequestuser
     var q : keyboardbuttonrequestuser
     var vobj & = unsafe(v as _object)
     q.request_id = _::from_JV(vobj["request_id"], type<int64>)
@@ -1762,13 +1901,15 @@ def from_JV ( var v:JsonValue?; t:keyboardbuttonrequestuser ) : keyboardbuttonre
     q.user_is_premium = _::from_JV(vobj["user_is_premium"], type<bool>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:keyboardbuttonrequestuser? ) : keyboardbuttonrequestuser?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:keyboardbuttonrequestuser explicit? ) : keyboardbuttonrequestuser?
     return null if v==null
     var q = new keyboardbuttonrequestuser
     *q <- from_JV(v,type<keyboardbuttonrequestuser>)
     return q
 
-def JV ( v:keyboardbuttonrequestuser ) : JsonValue?
+[generic]
+def JV ( v:keyboardbuttonrequestuser explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["request_id"] = _::JV(v.request_id)
     map["user_is_bot"] = _::JV(v.user_is_bot)
@@ -1786,7 +1927,8 @@ struct keyboardbuttonrequestchat
     bot_administrator_rights : chatadministratorrights?	//! Optional. A JSON-serialized object listing the required administrator rights of the bot in the chat. The rights must be a subset of user_administrator_rights. If not specified, no additional restrictions are applied.
     bot_is_member : bool	//! Optional. Pass True to request a chat with the bot as a member. Otherwise, no additional restrictions are applied.
 
-def from_JV ( var v:JsonValue?; t:keyboardbuttonrequestchat ) : keyboardbuttonrequestchat
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:keyboardbuttonrequestchat explicit ) : keyboardbuttonrequestchat
     var q : keyboardbuttonrequestchat
     var vobj & = unsafe(v as _object)
     q.request_id = _::from_JV(vobj["request_id"], type<int64>)
@@ -1799,13 +1941,15 @@ def from_JV ( var v:JsonValue?; t:keyboardbuttonrequestchat ) : keyboardbuttonre
     q.bot_is_member = _::from_JV(vobj["bot_is_member"], type<bool>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:keyboardbuttonrequestchat? ) : keyboardbuttonrequestchat?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:keyboardbuttonrequestchat explicit? ) : keyboardbuttonrequestchat?
     return null if v==null
     var q = new keyboardbuttonrequestchat
     *q <- from_JV(v,type<keyboardbuttonrequestchat>)
     return q
 
-def JV ( v:keyboardbuttonrequestchat ) : JsonValue?
+[generic]
+def JV ( v:keyboardbuttonrequestchat explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["request_id"] = _::JV(v.request_id)
     map["chat_is_channel"] = _::JV(v.chat_is_channel)
@@ -1823,19 +1967,22 @@ struct keyboardbuttonpolltype
     //!  This object represents type of a poll, which is allowed to be created and sent when the corresponding button is pressed.
     _type : string	//! Optional. If quiz is passed, the user will be allowed to create only polls in the quiz mode. If regular is passed, only regular polls will be allowed. Otherwise, the user will be allowed to create a poll of any type.
 
-def from_JV ( var v:JsonValue?; t:keyboardbuttonpolltype ) : keyboardbuttonpolltype
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:keyboardbuttonpolltype explicit ) : keyboardbuttonpolltype
     var q : keyboardbuttonpolltype
     var vobj & = unsafe(v as _object)
     q._type = _::from_JV(vobj["_type"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:keyboardbuttonpolltype? ) : keyboardbuttonpolltype?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:keyboardbuttonpolltype explicit? ) : keyboardbuttonpolltype?
     return null if v==null
     var q = new keyboardbuttonpolltype
     *q <- from_JV(v,type<keyboardbuttonpolltype>)
     return q
 
-def JV ( v:keyboardbuttonpolltype ) : JsonValue?
+[generic]
+def JV ( v:keyboardbuttonpolltype explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["_type"] = _::JV(v._type)
     return _::JV(map)
@@ -1845,20 +1992,23 @@ struct replykeyboardremove
     remove_keyboard : bool	//! Requests clients to remove the custom keyboard (user will not be able to summon this keyboard; if you want to hide the keyboard from sight but keep it accessible, use one_time_keyboard in ReplyKeyboardMarkup)
     selective : bool	//! Optional. Use this parameter if you want to remove the keyboard for specific users only. Targets: 1) users that are @mentioned in the text of the Message object; 2) if the bot's message is a reply (has reply_to_message_id), sender of the original message.Example: A user votes in a poll, bot returns confirmation message in reply to the vote and removes the keyboard for that user, while still showing the keyboard with poll options to users who haven't voted yet.
 
-def from_JV ( var v:JsonValue?; t:replykeyboardremove ) : replykeyboardremove
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:replykeyboardremove explicit ) : replykeyboardremove
     var q : replykeyboardremove
     var vobj & = unsafe(v as _object)
     q.remove_keyboard = _::from_JV(vobj["remove_keyboard"], type<bool>)
     q.selective = _::from_JV(vobj["selective"], type<bool>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:replykeyboardremove? ) : replykeyboardremove?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:replykeyboardremove explicit? ) : replykeyboardremove?
     return null if v==null
     var q = new replykeyboardremove
     *q <- from_JV(v,type<replykeyboardremove>)
     return q
 
-def JV ( v:replykeyboardremove ) : JsonValue?
+[generic]
+def JV ( v:replykeyboardremove explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["remove_keyboard"] = _::JV(v.remove_keyboard)
     map["selective"] = _::JV(v.selective)
@@ -1868,19 +2018,22 @@ struct inlinekeyboardmarkup
     //!  This object represents an inline keyboard that appears right next to the message it belongs to.
     inline_keyboard : array<array<inlinekeyboardbutton>>	//! Array of button rows, each represented by an Array of InlineKeyboardButton objects
 
-def from_JV ( var v:JsonValue?; t:inlinekeyboardmarkup ) : inlinekeyboardmarkup
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inlinekeyboardmarkup explicit ) : inlinekeyboardmarkup
     var q : inlinekeyboardmarkup
     var vobj & = unsafe(v as _object)
     q.inline_keyboard <- _::from_JV(vobj["inline_keyboard"], type<array<array<inlinekeyboardbutton>>>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:inlinekeyboardmarkup? ) : inlinekeyboardmarkup?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inlinekeyboardmarkup explicit? ) : inlinekeyboardmarkup?
     return null if v==null
     var q = new inlinekeyboardmarkup
     *q <- from_JV(v,type<inlinekeyboardmarkup>)
     return q
 
-def JV ( v:inlinekeyboardmarkup ) : JsonValue?
+[generic]
+def JV ( v:inlinekeyboardmarkup explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["inline_keyboard"] = _::JV(v.inline_keyboard)
     return _::JV(map)
@@ -1897,7 +2050,8 @@ struct inlinekeyboardbutton
     callback_game : callbackgame?	//! Optional. Description of the game that will be launched when the user presses the button.NOTE: This type of button must always be the first button in the first row.
     pay : bool	//! Optional. Specify True, to send a Pay button.NOTE: This type of button must always be the first button in the first row and can only be used in invoice messages.
 
-def from_JV ( var v:JsonValue?; t:inlinekeyboardbutton ) : inlinekeyboardbutton
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inlinekeyboardbutton explicit ) : inlinekeyboardbutton
     var q : inlinekeyboardbutton
     var vobj & = unsafe(v as _object)
     q.text = _::from_JV(vobj["text"], type<string>)
@@ -1911,13 +2065,15 @@ def from_JV ( var v:JsonValue?; t:inlinekeyboardbutton ) : inlinekeyboardbutton
     q.pay = _::from_JV(vobj["pay"], type<bool>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:inlinekeyboardbutton? ) : inlinekeyboardbutton?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inlinekeyboardbutton explicit? ) : inlinekeyboardbutton?
     return null if v==null
     var q = new inlinekeyboardbutton
     *q <- from_JV(v,type<inlinekeyboardbutton>)
     return q
 
-def JV ( v:inlinekeyboardbutton ) : JsonValue?
+[generic]
+def JV ( v:inlinekeyboardbutton explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["text"] = _::JV(v.text)
     map["url"] = _::JV(v.url)
@@ -1940,7 +2096,8 @@ struct loginurl
     bot_username : string	//! Optional. Username of a bot, which will be used for user authorization. See Setting up a bot for more details. If not specified, the current bot's username will be assumed. The url's domain must be the same as the domain linked with the bot. See Linking your domain to the bot for more details.
     request_write_access : bool	//! Optional. Pass True to request the permission for your bot to send messages to the user.
 
-def from_JV ( var v:JsonValue?; t:loginurl ) : loginurl
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:loginurl explicit ) : loginurl
     var q : loginurl
     var vobj & = unsafe(v as _object)
     q.url = _::from_JV(vobj["url"], type<string>)
@@ -1949,13 +2106,15 @@ def from_JV ( var v:JsonValue?; t:loginurl ) : loginurl
     q.request_write_access = _::from_JV(vobj["request_write_access"], type<bool>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:loginurl? ) : loginurl?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:loginurl explicit? ) : loginurl?
     return null if v==null
     var q = new loginurl
     *q <- from_JV(v,type<loginurl>)
     return q
 
-def JV ( v:loginurl ) : JsonValue?
+[generic]
+def JV ( v:loginurl explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["url"] = _::JV(v.url)
     map["forward_text"] = _::JV(v.forward_text)
@@ -1973,7 +2132,8 @@ struct callbackquery
     data : string	//! Optional. Data associated with the callback button. Be aware that the message originated the query can contain no callback buttons with this data.
     game_short_name : string	//! Optional. Short name of a Game to be returned, serves as the unique identifier for the game
 
-def from_JV ( var v:JsonValue?; t:callbackquery ) : callbackquery
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:callbackquery explicit ) : callbackquery
     var q : callbackquery
     var vobj & = unsafe(v as _object)
     q.id = _::from_JV(vobj["id"], type<string>)
@@ -1985,13 +2145,15 @@ def from_JV ( var v:JsonValue?; t:callbackquery ) : callbackquery
     q.game_short_name = _::from_JV(vobj["game_short_name"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:callbackquery? ) : callbackquery?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:callbackquery explicit? ) : callbackquery?
     return null if v==null
     var q = new callbackquery
     *q <- from_JV(v,type<callbackquery>)
     return q
 
-def JV ( v:callbackquery ) : JsonValue?
+[generic]
+def JV ( v:callbackquery explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["id"] = _::JV(v.id)
     map["from"] = _::JV(v.from)
@@ -2009,7 +2171,8 @@ struct forcereply
     input_field_placeholder : string	//! Optional. The placeholder to be shown in the input field when the reply is active; 1-64 characters
     selective : bool	//! Optional. Use this parameter if you want to force reply from specific users only. Targets: 1) users that are @mentioned in the text of the Message object; 2) if the bot's message is a reply (has reply_to_message_id), sender of the original message.
 
-def from_JV ( var v:JsonValue?; t:forcereply ) : forcereply
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:forcereply explicit ) : forcereply
     var q : forcereply
     var vobj & = unsafe(v as _object)
     q.force_reply = _::from_JV(vobj["force_reply"], type<bool>)
@@ -2017,13 +2180,15 @@ def from_JV ( var v:JsonValue?; t:forcereply ) : forcereply
     q.selective = _::from_JV(vobj["selective"], type<bool>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:forcereply? ) : forcereply?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:forcereply explicit? ) : forcereply?
     return null if v==null
     var q = new forcereply
     *q <- from_JV(v,type<forcereply>)
     return q
 
-def JV ( v:forcereply ) : JsonValue?
+[generic]
+def JV ( v:forcereply explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["force_reply"] = _::JV(v.force_reply)
     map["input_field_placeholder"] = _::JV(v.input_field_placeholder)
@@ -2037,7 +2202,8 @@ struct chatphoto
     big_file_id : string	//! File identifier of big (640x640) chat photo. This file_id can be used only for photo download and only for as long as the photo is not changed.
     big_file_unique_id : string	//! Unique file identifier of big (640x640) chat photo, which is supposed to be the same over time and for different bots. Can't be used to download or reuse the file.
 
-def from_JV ( var v:JsonValue?; t:chatphoto ) : chatphoto
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:chatphoto explicit ) : chatphoto
     var q : chatphoto
     var vobj & = unsafe(v as _object)
     q.small_file_id = _::from_JV(vobj["small_file_id"], type<string>)
@@ -2046,13 +2212,15 @@ def from_JV ( var v:JsonValue?; t:chatphoto ) : chatphoto
     q.big_file_unique_id = _::from_JV(vobj["big_file_unique_id"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:chatphoto? ) : chatphoto?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:chatphoto explicit? ) : chatphoto?
     return null if v==null
     var q = new chatphoto
     *q <- from_JV(v,type<chatphoto>)
     return q
 
-def JV ( v:chatphoto ) : JsonValue?
+[generic]
+def JV ( v:chatphoto explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["small_file_id"] = _::JV(v.small_file_id)
     map["small_file_unique_id"] = _::JV(v.small_file_unique_id)
@@ -2072,7 +2240,8 @@ struct chatinvitelink
     member_limit : int64	//! Optional. The maximum number of users that can be members of the chat simultaneously after joining the chat via this invite link; 1-99999
     pending_join_request_count : int64	//! Optional. Number of pending join requests created using this link
 
-def from_JV ( var v:JsonValue?; t:chatinvitelink ) : chatinvitelink
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:chatinvitelink explicit ) : chatinvitelink
     var q : chatinvitelink
     var vobj & = unsafe(v as _object)
     q.invite_link = _::from_JV(vobj["invite_link"], type<string>)
@@ -2086,13 +2255,15 @@ def from_JV ( var v:JsonValue?; t:chatinvitelink ) : chatinvitelink
     q.pending_join_request_count = _::from_JV(vobj["pending_join_request_count"], type<int64>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:chatinvitelink? ) : chatinvitelink?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:chatinvitelink explicit? ) : chatinvitelink?
     return null if v==null
     var q = new chatinvitelink
     *q <- from_JV(v,type<chatinvitelink>)
     return q
 
-def JV ( v:chatinvitelink ) : JsonValue?
+[generic]
+def JV ( v:chatinvitelink explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["invite_link"] = _::JV(v.invite_link)
     map["creator"] = _::JV(v.creator)
@@ -2120,7 +2291,8 @@ struct chatadministratorrights
     can_pin_messages : bool	//! Optional. True, if the user is allowed to pin messages; groups and supergroups only
     can_manage_topics : bool	//! Optional. True, if the user is allowed to create, rename, close, and reopen forum topics; supergroups only
 
-def from_JV ( var v:JsonValue?; t:chatadministratorrights ) : chatadministratorrights
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:chatadministratorrights explicit ) : chatadministratorrights
     var q : chatadministratorrights
     var vobj & = unsafe(v as _object)
     q.is_anonymous = _::from_JV(vobj["is_anonymous"], type<bool>)
@@ -2137,13 +2309,15 @@ def from_JV ( var v:JsonValue?; t:chatadministratorrights ) : chatadministratorr
     q.can_manage_topics = _::from_JV(vobj["can_manage_topics"], type<bool>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:chatadministratorrights? ) : chatadministratorrights?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:chatadministratorrights explicit? ) : chatadministratorrights?
     return null if v==null
     var q = new chatadministratorrights
     *q <- from_JV(v,type<chatadministratorrights>)
     return q
 
-def JV ( v:chatadministratorrights ) : JsonValue?
+[generic]
+def JV ( v:chatadministratorrights explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["is_anonymous"] = _::JV(v.is_anonymous)
     map["can_manage_chat"] = _::JV(v.can_manage_chat)
@@ -2163,18 +2337,21 @@ struct chatmember
     //!  This object contains information about one member of a chat. Currently, the following 6 types of chat members are supported:
     object_chatmember_has_no_fields:bool
 
-def from_JV ( var v:JsonValue?; t:chatmember ) : chatmember
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:chatmember explicit ) : chatmember
     var q : chatmember
     var vobj & = unsafe(v as _object)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:chatmember? ) : chatmember?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:chatmember explicit? ) : chatmember?
     return null if v==null
     var q = new chatmember
     *q <- from_JV(v,type<chatmember>)
     return q
 
-def JV ( v:chatmember ) : JsonValue?
+[generic]
+def JV ( v:chatmember explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     return _::JV(map)
 
@@ -2185,7 +2362,8 @@ struct chatmemberowner
     is_anonymous : bool	//! True, if the user's presence in the chat is hidden
     custom_title : string	//! Optional. Custom title for this user
 
-def from_JV ( var v:JsonValue?; t:chatmemberowner ) : chatmemberowner
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:chatmemberowner explicit ) : chatmemberowner
     var q : chatmemberowner
     var vobj & = unsafe(v as _object)
     q.status = _::from_JV(vobj["status"], type<string>)
@@ -2194,13 +2372,15 @@ def from_JV ( var v:JsonValue?; t:chatmemberowner ) : chatmemberowner
     q.custom_title = _::from_JV(vobj["custom_title"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:chatmemberowner? ) : chatmemberowner?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:chatmemberowner explicit? ) : chatmemberowner?
     return null if v==null
     var q = new chatmemberowner
     *q <- from_JV(v,type<chatmemberowner>)
     return q
 
-def JV ( v:chatmemberowner ) : JsonValue?
+[generic]
+def JV ( v:chatmemberowner explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["status"] = _::JV(v.status)
     map["user"] = _::JV(v.user)
@@ -2227,7 +2407,8 @@ struct chatmemberadministrator
     can_manage_topics : bool	//! Optional. True, if the user is allowed to create, rename, close, and reopen forum topics; supergroups only
     custom_title : string	//! Optional. Custom title for this user
 
-def from_JV ( var v:JsonValue?; t:chatmemberadministrator ) : chatmemberadministrator
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:chatmemberadministrator explicit ) : chatmemberadministrator
     var q : chatmemberadministrator
     var vobj & = unsafe(v as _object)
     q.status = _::from_JV(vobj["status"], type<string>)
@@ -2248,13 +2429,15 @@ def from_JV ( var v:JsonValue?; t:chatmemberadministrator ) : chatmemberadminist
     q.custom_title = _::from_JV(vobj["custom_title"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:chatmemberadministrator? ) : chatmemberadministrator?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:chatmemberadministrator explicit? ) : chatmemberadministrator?
     return null if v==null
     var q = new chatmemberadministrator
     *q <- from_JV(v,type<chatmemberadministrator>)
     return q
 
-def JV ( v:chatmemberadministrator ) : JsonValue?
+[generic]
+def JV ( v:chatmemberadministrator explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["status"] = _::JV(v.status)
     map["user"] = _::JV(v.user)
@@ -2279,20 +2462,23 @@ struct chatmembermember
     status : string	//! The member's status in the chat, always “member”
     user : user	//! Information about the user
 
-def from_JV ( var v:JsonValue?; t:chatmembermember ) : chatmembermember
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:chatmembermember explicit ) : chatmembermember
     var q : chatmembermember
     var vobj & = unsafe(v as _object)
     q.status = _::from_JV(vobj["status"], type<string>)
     q.user <- _::from_JV(vobj["user"], type<user>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:chatmembermember? ) : chatmembermember?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:chatmembermember explicit? ) : chatmembermember?
     return null if v==null
     var q = new chatmembermember
     *q <- from_JV(v,type<chatmembermember>)
     return q
 
-def JV ( v:chatmembermember ) : JsonValue?
+[generic]
+def JV ( v:chatmembermember explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["status"] = _::JV(v.status)
     map["user"] = _::JV(v.user)
@@ -2319,7 +2505,8 @@ struct chatmemberrestricted
     can_manage_topics : bool	//! True, if the user is allowed to create forum topics
     until_date : int64	//! Date when restrictions will be lifted for this user; unix time. If 0, then the user is restricted forever
 
-def from_JV ( var v:JsonValue?; t:chatmemberrestricted ) : chatmemberrestricted
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:chatmemberrestricted explicit ) : chatmemberrestricted
     var q : chatmemberrestricted
     var vobj & = unsafe(v as _object)
     q.status = _::from_JV(vobj["status"], type<string>)
@@ -2342,13 +2529,15 @@ def from_JV ( var v:JsonValue?; t:chatmemberrestricted ) : chatmemberrestricted
     q.until_date = _::from_JV(vobj["until_date"], type<int64>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:chatmemberrestricted? ) : chatmemberrestricted?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:chatmemberrestricted explicit? ) : chatmemberrestricted?
     return null if v==null
     var q = new chatmemberrestricted
     *q <- from_JV(v,type<chatmemberrestricted>)
     return q
 
-def JV ( v:chatmemberrestricted ) : JsonValue?
+[generic]
+def JV ( v:chatmemberrestricted explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["status"] = _::JV(v.status)
     map["user"] = _::JV(v.user)
@@ -2375,20 +2564,23 @@ struct chatmemberleft
     status : string	//! The member's status in the chat, always “left”
     user : user	//! Information about the user
 
-def from_JV ( var v:JsonValue?; t:chatmemberleft ) : chatmemberleft
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:chatmemberleft explicit ) : chatmemberleft
     var q : chatmemberleft
     var vobj & = unsafe(v as _object)
     q.status = _::from_JV(vobj["status"], type<string>)
     q.user <- _::from_JV(vobj["user"], type<user>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:chatmemberleft? ) : chatmemberleft?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:chatmemberleft explicit? ) : chatmemberleft?
     return null if v==null
     var q = new chatmemberleft
     *q <- from_JV(v,type<chatmemberleft>)
     return q
 
-def JV ( v:chatmemberleft ) : JsonValue?
+[generic]
+def JV ( v:chatmemberleft explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["status"] = _::JV(v.status)
     map["user"] = _::JV(v.user)
@@ -2400,7 +2592,8 @@ struct chatmemberbanned
     user : user	//! Information about the user
     until_date : int64	//! Date when restrictions will be lifted for this user; unix time. If 0, then the user is banned forever
 
-def from_JV ( var v:JsonValue?; t:chatmemberbanned ) : chatmemberbanned
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:chatmemberbanned explicit ) : chatmemberbanned
     var q : chatmemberbanned
     var vobj & = unsafe(v as _object)
     q.status = _::from_JV(vobj["status"], type<string>)
@@ -2408,13 +2601,15 @@ def from_JV ( var v:JsonValue?; t:chatmemberbanned ) : chatmemberbanned
     q.until_date = _::from_JV(vobj["until_date"], type<int64>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:chatmemberbanned? ) : chatmemberbanned?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:chatmemberbanned explicit? ) : chatmemberbanned?
     return null if v==null
     var q = new chatmemberbanned
     *q <- from_JV(v,type<chatmemberbanned>)
     return q
 
-def JV ( v:chatmemberbanned ) : JsonValue?
+[generic]
+def JV ( v:chatmemberbanned explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["status"] = _::JV(v.status)
     map["user"] = _::JV(v.user)
@@ -2430,7 +2625,8 @@ struct chatmemberupdated
     new_chat_member : chatmember	//! New information about the chat member
     invite_link : chatinvitelink?	//! Optional. Chat invite link, which was used by the user to join the chat; for joining by invite link events only.
 
-def from_JV ( var v:JsonValue?; t:chatmemberupdated ) : chatmemberupdated
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:chatmemberupdated explicit ) : chatmemberupdated
     var q : chatmemberupdated
     var vobj & = unsafe(v as _object)
     q.chat <- _::from_JV(vobj["chat"], type<chat>)
@@ -2441,13 +2637,15 @@ def from_JV ( var v:JsonValue?; t:chatmemberupdated ) : chatmemberupdated
     q.invite_link = _::from_JV(vobj["invite_link"], type<chatinvitelink?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:chatmemberupdated? ) : chatmemberupdated?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:chatmemberupdated explicit? ) : chatmemberupdated?
     return null if v==null
     var q = new chatmemberupdated
     *q <- from_JV(v,type<chatmemberupdated>)
     return q
 
-def JV ( v:chatmemberupdated ) : JsonValue?
+[generic]
+def JV ( v:chatmemberupdated explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat"] = _::JV(v.chat)
     map["from"] = _::JV(v.from)
@@ -2467,7 +2665,8 @@ struct chatjoinrequest
     bio : string	//! Optional. Bio of the user.
     invite_link : chatinvitelink?	//! Optional. Chat invite link that was used by the user to send the join request
 
-def from_JV ( var v:JsonValue?; t:chatjoinrequest ) : chatjoinrequest
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:chatjoinrequest explicit ) : chatjoinrequest
     var q : chatjoinrequest
     var vobj & = unsafe(v as _object)
     q.chat <- _::from_JV(vobj["chat"], type<chat>)
@@ -2478,13 +2677,15 @@ def from_JV ( var v:JsonValue?; t:chatjoinrequest ) : chatjoinrequest
     q.invite_link = _::from_JV(vobj["invite_link"], type<chatinvitelink?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:chatjoinrequest? ) : chatjoinrequest?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:chatjoinrequest explicit? ) : chatjoinrequest?
     return null if v==null
     var q = new chatjoinrequest
     *q <- from_JV(v,type<chatjoinrequest>)
     return q
 
-def JV ( v:chatjoinrequest ) : JsonValue?
+[generic]
+def JV ( v:chatjoinrequest explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat"] = _::JV(v.chat)
     map["from"] = _::JV(v.from)
@@ -2512,7 +2713,8 @@ struct chatpermissions
     can_pin_messages : bool	//! Optional. True, if the user is allowed to pin messages. Ignored in public supergroups
     can_manage_topics : bool	//! Optional. True, if the user is allowed to create forum topics. If omitted defaults to the value of can_pin_messages
 
-def from_JV ( var v:JsonValue?; t:chatpermissions ) : chatpermissions
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:chatpermissions explicit ) : chatpermissions
     var q : chatpermissions
     var vobj & = unsafe(v as _object)
     q.can_send_messages = _::from_JV(vobj["can_send_messages"], type<bool>)
@@ -2531,13 +2733,15 @@ def from_JV ( var v:JsonValue?; t:chatpermissions ) : chatpermissions
     q.can_manage_topics = _::from_JV(vobj["can_manage_topics"], type<bool>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:chatpermissions? ) : chatpermissions?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:chatpermissions explicit? ) : chatpermissions?
     return null if v==null
     var q = new chatpermissions
     *q <- from_JV(v,type<chatpermissions>)
     return q
 
-def JV ( v:chatpermissions ) : JsonValue?
+[generic]
+def JV ( v:chatpermissions explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["can_send_messages"] = _::JV(v.can_send_messages)
     map["can_send_audios"] = _::JV(v.can_send_audios)
@@ -2560,20 +2764,23 @@ struct chatlocation
     location : location	//! The location to which the supergroup is connected. Can't be a live location.
     address : string	//! Location address; 1-64 characters, as defined by the chat owner
 
-def from_JV ( var v:JsonValue?; t:chatlocation ) : chatlocation
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:chatlocation explicit ) : chatlocation
     var q : chatlocation
     var vobj & = unsafe(v as _object)
     q.location <- _::from_JV(vobj["location"], type<location>)
     q.address = _::from_JV(vobj["address"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:chatlocation? ) : chatlocation?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:chatlocation explicit? ) : chatlocation?
     return null if v==null
     var q = new chatlocation
     *q <- from_JV(v,type<chatlocation>)
     return q
 
-def JV ( v:chatlocation ) : JsonValue?
+[generic]
+def JV ( v:chatlocation explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["location"] = _::JV(v.location)
     map["address"] = _::JV(v.address)
@@ -2586,7 +2793,8 @@ struct forumtopic
     icon_color : int64	//! Color of the topic icon in RGB format
     icon_custom_emoji_id : string	//! Optional. Unique identifier of the custom emoji shown as the topic icon
 
-def from_JV ( var v:JsonValue?; t:forumtopic ) : forumtopic
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:forumtopic explicit ) : forumtopic
     var q : forumtopic
     var vobj & = unsafe(v as _object)
     q.message_thread_id = _::from_JV(vobj["message_thread_id"], type<int64>)
@@ -2595,13 +2803,15 @@ def from_JV ( var v:JsonValue?; t:forumtopic ) : forumtopic
     q.icon_custom_emoji_id = _::from_JV(vobj["icon_custom_emoji_id"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:forumtopic? ) : forumtopic?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:forumtopic explicit? ) : forumtopic?
     return null if v==null
     var q = new forumtopic
     *q <- from_JV(v,type<forumtopic>)
     return q
 
-def JV ( v:forumtopic ) : JsonValue?
+[generic]
+def JV ( v:forumtopic explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["message_thread_id"] = _::JV(v.message_thread_id)
     map["name"] = _::JV(v.name)
@@ -2614,20 +2824,23 @@ struct botcommand
     command : string	//! Text of the command; 1-32 characters. Can contain only lowercase English letters, digits and underscores.
     description : string	//! Description of the command; 1-256 characters.
 
-def from_JV ( var v:JsonValue?; t:botcommand ) : botcommand
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:botcommand explicit ) : botcommand
     var q : botcommand
     var vobj & = unsafe(v as _object)
     q.command = _::from_JV(vobj["command"], type<string>)
     q.description = _::from_JV(vobj["description"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:botcommand? ) : botcommand?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:botcommand explicit? ) : botcommand?
     return null if v==null
     var q = new botcommand
     *q <- from_JV(v,type<botcommand>)
     return q
 
-def JV ( v:botcommand ) : JsonValue?
+[generic]
+def JV ( v:botcommand explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["command"] = _::JV(v.command)
     map["description"] = _::JV(v.description)
@@ -2637,18 +2850,21 @@ struct botcommandscope
     //!  This object represents the scope to which bot commands are applied. Currently, the following 7 scopes are supported:
     object_botcommandscope_has_no_fields:bool
 
-def from_JV ( var v:JsonValue?; t:botcommandscope ) : botcommandscope
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:botcommandscope explicit ) : botcommandscope
     var q : botcommandscope
     var vobj & = unsafe(v as _object)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:botcommandscope? ) : botcommandscope?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:botcommandscope explicit? ) : botcommandscope?
     return null if v==null
     var q = new botcommandscope
     *q <- from_JV(v,type<botcommandscope>)
     return q
 
-def JV ( v:botcommandscope ) : JsonValue?
+[generic]
+def JV ( v:botcommandscope explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     return _::JV(map)
 
@@ -2656,18 +2872,21 @@ struct determining_list_of_commands
     //!  The following algorithm is used to determine the list of commands for a particular user viewing the bot menu. The first list of commands which is set is returned: Commands in the chat with the bot Commands in group and supergroup chats
     object_determining_list_of_commands_has_no_fields:bool
 
-def from_JV ( var v:JsonValue?; t:determining_list_of_commands ) : determining_list_of_commands
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:determining_list_of_commands explicit ) : determining_list_of_commands
     var q : determining_list_of_commands
     var vobj & = unsafe(v as _object)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:determining_list_of_commands? ) : determining_list_of_commands?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:determining_list_of_commands explicit? ) : determining_list_of_commands?
     return null if v==null
     var q = new determining_list_of_commands
     *q <- from_JV(v,type<determining_list_of_commands>)
     return q
 
-def JV ( v:determining_list_of_commands ) : JsonValue?
+[generic]
+def JV ( v:determining_list_of_commands explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     return _::JV(map)
 
@@ -2675,19 +2894,22 @@ struct botcommandscopedefault
     //!  Represents the default scope of bot commands. Default commands are used if no commands with a narrower scope are specified for the user.
     _type : string	//! Scope type, must be default
 
-def from_JV ( var v:JsonValue?; t:botcommandscopedefault ) : botcommandscopedefault
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:botcommandscopedefault explicit ) : botcommandscopedefault
     var q : botcommandscopedefault
     var vobj & = unsafe(v as _object)
     q._type = _::from_JV(vobj["_type"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:botcommandscopedefault? ) : botcommandscopedefault?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:botcommandscopedefault explicit? ) : botcommandscopedefault?
     return null if v==null
     var q = new botcommandscopedefault
     *q <- from_JV(v,type<botcommandscopedefault>)
     return q
 
-def JV ( v:botcommandscopedefault ) : JsonValue?
+[generic]
+def JV ( v:botcommandscopedefault explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["_type"] = _::JV(v._type)
     return _::JV(map)
@@ -2696,19 +2918,22 @@ struct botcommandscopeallprivatechats
     //!  Represents the scope of bot commands, covering all private chats.
     _type : string	//! Scope type, must be all_private_chats
 
-def from_JV ( var v:JsonValue?; t:botcommandscopeallprivatechats ) : botcommandscopeallprivatechats
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:botcommandscopeallprivatechats explicit ) : botcommandscopeallprivatechats
     var q : botcommandscopeallprivatechats
     var vobj & = unsafe(v as _object)
     q._type = _::from_JV(vobj["_type"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:botcommandscopeallprivatechats? ) : botcommandscopeallprivatechats?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:botcommandscopeallprivatechats explicit? ) : botcommandscopeallprivatechats?
     return null if v==null
     var q = new botcommandscopeallprivatechats
     *q <- from_JV(v,type<botcommandscopeallprivatechats>)
     return q
 
-def JV ( v:botcommandscopeallprivatechats ) : JsonValue?
+[generic]
+def JV ( v:botcommandscopeallprivatechats explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["_type"] = _::JV(v._type)
     return _::JV(map)
@@ -2717,19 +2942,22 @@ struct botcommandscopeallgroupchats
     //!  Represents the scope of bot commands, covering all group and supergroup chats.
     _type : string	//! Scope type, must be all_group_chats
 
-def from_JV ( var v:JsonValue?; t:botcommandscopeallgroupchats ) : botcommandscopeallgroupchats
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:botcommandscopeallgroupchats explicit ) : botcommandscopeallgroupchats
     var q : botcommandscopeallgroupchats
     var vobj & = unsafe(v as _object)
     q._type = _::from_JV(vobj["_type"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:botcommandscopeallgroupchats? ) : botcommandscopeallgroupchats?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:botcommandscopeallgroupchats explicit? ) : botcommandscopeallgroupchats?
     return null if v==null
     var q = new botcommandscopeallgroupchats
     *q <- from_JV(v,type<botcommandscopeallgroupchats>)
     return q
 
-def JV ( v:botcommandscopeallgroupchats ) : JsonValue?
+[generic]
+def JV ( v:botcommandscopeallgroupchats explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["_type"] = _::JV(v._type)
     return _::JV(map)
@@ -2738,19 +2966,22 @@ struct botcommandscopeallchatadministrators
     //!  Represents the scope of bot commands, covering all group and supergroup chat administrators.
     _type : string	//! Scope type, must be all_chat_administrators
 
-def from_JV ( var v:JsonValue?; t:botcommandscopeallchatadministrators ) : botcommandscopeallchatadministrators
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:botcommandscopeallchatadministrators explicit ) : botcommandscopeallchatadministrators
     var q : botcommandscopeallchatadministrators
     var vobj & = unsafe(v as _object)
     q._type = _::from_JV(vobj["_type"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:botcommandscopeallchatadministrators? ) : botcommandscopeallchatadministrators?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:botcommandscopeallchatadministrators explicit? ) : botcommandscopeallchatadministrators?
     return null if v==null
     var q = new botcommandscopeallchatadministrators
     *q <- from_JV(v,type<botcommandscopeallchatadministrators>)
     return q
 
-def JV ( v:botcommandscopeallchatadministrators ) : JsonValue?
+[generic]
+def JV ( v:botcommandscopeallchatadministrators explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["_type"] = _::JV(v._type)
     return _::JV(map)
@@ -2760,20 +2991,23 @@ struct botcommandscopechat
     _type : string	//! Scope type, must be chat
     chat_id : string	//! Unique identifier for the target chat or username of the target supergroup (in the format @supergroupusername)
 
-def from_JV ( var v:JsonValue?; t:botcommandscopechat ) : botcommandscopechat
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:botcommandscopechat explicit ) : botcommandscopechat
     var q : botcommandscopechat
     var vobj & = unsafe(v as _object)
     q._type = _::from_JV(vobj["_type"], type<string>)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:botcommandscopechat? ) : botcommandscopechat?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:botcommandscopechat explicit? ) : botcommandscopechat?
     return null if v==null
     var q = new botcommandscopechat
     *q <- from_JV(v,type<botcommandscopechat>)
     return q
 
-def JV ( v:botcommandscopechat ) : JsonValue?
+[generic]
+def JV ( v:botcommandscopechat explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["_type"] = _::JV(v._type)
     map["chat_id"] = _::JV(v.chat_id)
@@ -2784,20 +3018,23 @@ struct botcommandscopechatadministrators
     _type : string	//! Scope type, must be chat_administrators
     chat_id : string	//! Unique identifier for the target chat or username of the target supergroup (in the format @supergroupusername)
 
-def from_JV ( var v:JsonValue?; t:botcommandscopechatadministrators ) : botcommandscopechatadministrators
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:botcommandscopechatadministrators explicit ) : botcommandscopechatadministrators
     var q : botcommandscopechatadministrators
     var vobj & = unsafe(v as _object)
     q._type = _::from_JV(vobj["_type"], type<string>)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:botcommandscopechatadministrators? ) : botcommandscopechatadministrators?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:botcommandscopechatadministrators explicit? ) : botcommandscopechatadministrators?
     return null if v==null
     var q = new botcommandscopechatadministrators
     *q <- from_JV(v,type<botcommandscopechatadministrators>)
     return q
 
-def JV ( v:botcommandscopechatadministrators ) : JsonValue?
+[generic]
+def JV ( v:botcommandscopechatadministrators explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["_type"] = _::JV(v._type)
     map["chat_id"] = _::JV(v.chat_id)
@@ -2809,7 +3046,8 @@ struct botcommandscopechatmember
     chat_id : string	//! Unique identifier for the target chat or username of the target supergroup (in the format @supergroupusername)
     user_id : int64	//! Unique identifier of the target user
 
-def from_JV ( var v:JsonValue?; t:botcommandscopechatmember ) : botcommandscopechatmember
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:botcommandscopechatmember explicit ) : botcommandscopechatmember
     var q : botcommandscopechatmember
     var vobj & = unsafe(v as _object)
     q._type = _::from_JV(vobj["_type"], type<string>)
@@ -2817,13 +3055,15 @@ def from_JV ( var v:JsonValue?; t:botcommandscopechatmember ) : botcommandscopec
     q.user_id = _::from_JV(vobj["user_id"], type<int64>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:botcommandscopechatmember? ) : botcommandscopechatmember?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:botcommandscopechatmember explicit? ) : botcommandscopechatmember?
     return null if v==null
     var q = new botcommandscopechatmember
     *q <- from_JV(v,type<botcommandscopechatmember>)
     return q
 
-def JV ( v:botcommandscopechatmember ) : JsonValue?
+[generic]
+def JV ( v:botcommandscopechatmember explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["_type"] = _::JV(v._type)
     map["chat_id"] = _::JV(v.chat_id)
@@ -2834,19 +3074,22 @@ struct botdescription
     //!  This object represents the bot's description.
     description : string	//! The bot's description
 
-def from_JV ( var v:JsonValue?; t:botdescription ) : botdescription
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:botdescription explicit ) : botdescription
     var q : botdescription
     var vobj & = unsafe(v as _object)
     q.description = _::from_JV(vobj["description"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:botdescription? ) : botdescription?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:botdescription explicit? ) : botdescription?
     return null if v==null
     var q = new botdescription
     *q <- from_JV(v,type<botdescription>)
     return q
 
-def JV ( v:botdescription ) : JsonValue?
+[generic]
+def JV ( v:botdescription explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["description"] = _::JV(v.description)
     return _::JV(map)
@@ -2855,19 +3098,22 @@ struct botshortdescription
     //!  This object represents the bot's short description.
     short_description : string	//! The bot's short description
 
-def from_JV ( var v:JsonValue?; t:botshortdescription ) : botshortdescription
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:botshortdescription explicit ) : botshortdescription
     var q : botshortdescription
     var vobj & = unsafe(v as _object)
     q.short_description = _::from_JV(vobj["short_description"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:botshortdescription? ) : botshortdescription?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:botshortdescription explicit? ) : botshortdescription?
     return null if v==null
     var q = new botshortdescription
     *q <- from_JV(v,type<botshortdescription>)
     return q
 
-def JV ( v:botshortdescription ) : JsonValue?
+[generic]
+def JV ( v:botshortdescription explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["short_description"] = _::JV(v.short_description)
     return _::JV(map)
@@ -2876,18 +3122,21 @@ struct menubutton
     //!  This object describes the bot's menu button in a private chat. It should be one of If a menu button other than MenuButtonDefault is set for a private chat, then it is applied in the chat. Otherwise the default menu button is applied. By default, the menu button opens the list of bot commands.
     object_menubutton_has_no_fields:bool
 
-def from_JV ( var v:JsonValue?; t:menubutton ) : menubutton
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:menubutton explicit ) : menubutton
     var q : menubutton
     var vobj & = unsafe(v as _object)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:menubutton? ) : menubutton?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:menubutton explicit? ) : menubutton?
     return null if v==null
     var q = new menubutton
     *q <- from_JV(v,type<menubutton>)
     return q
 
-def JV ( v:menubutton ) : JsonValue?
+[generic]
+def JV ( v:menubutton explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     return _::JV(map)
 
@@ -2895,19 +3144,22 @@ struct menubuttoncommands
     //!  Represents a menu button, which opens the bot's list of commands.
     _type : string	//! Type of the button, must be commands
 
-def from_JV ( var v:JsonValue?; t:menubuttoncommands ) : menubuttoncommands
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:menubuttoncommands explicit ) : menubuttoncommands
     var q : menubuttoncommands
     var vobj & = unsafe(v as _object)
     q._type = _::from_JV(vobj["_type"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:menubuttoncommands? ) : menubuttoncommands?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:menubuttoncommands explicit? ) : menubuttoncommands?
     return null if v==null
     var q = new menubuttoncommands
     *q <- from_JV(v,type<menubuttoncommands>)
     return q
 
-def JV ( v:menubuttoncommands ) : JsonValue?
+[generic]
+def JV ( v:menubuttoncommands explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["_type"] = _::JV(v._type)
     return _::JV(map)
@@ -2918,7 +3170,8 @@ struct menubuttonwebapp
     text : string	//! Text on the button
     web_app : webappinfo	//! Description of the Web App that will be launched when the user presses the button. The Web App will be able to send an arbitrary message on behalf of the user using the method answerWebAppQuery.
 
-def from_JV ( var v:JsonValue?; t:menubuttonwebapp ) : menubuttonwebapp
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:menubuttonwebapp explicit ) : menubuttonwebapp
     var q : menubuttonwebapp
     var vobj & = unsafe(v as _object)
     q._type = _::from_JV(vobj["_type"], type<string>)
@@ -2926,13 +3179,15 @@ def from_JV ( var v:JsonValue?; t:menubuttonwebapp ) : menubuttonwebapp
     q.web_app <- _::from_JV(vobj["web_app"], type<webappinfo>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:menubuttonwebapp? ) : menubuttonwebapp?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:menubuttonwebapp explicit? ) : menubuttonwebapp?
     return null if v==null
     var q = new menubuttonwebapp
     *q <- from_JV(v,type<menubuttonwebapp>)
     return q
 
-def JV ( v:menubuttonwebapp ) : JsonValue?
+[generic]
+def JV ( v:menubuttonwebapp explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["_type"] = _::JV(v._type)
     map["text"] = _::JV(v.text)
@@ -2943,19 +3198,22 @@ struct menubuttondefault
     //!  Describes that no specific value for the menu button was set.
     _type : string	//! Type of the button, must be default
 
-def from_JV ( var v:JsonValue?; t:menubuttondefault ) : menubuttondefault
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:menubuttondefault explicit ) : menubuttondefault
     var q : menubuttondefault
     var vobj & = unsafe(v as _object)
     q._type = _::from_JV(vobj["_type"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:menubuttondefault? ) : menubuttondefault?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:menubuttondefault explicit? ) : menubuttondefault?
     return null if v==null
     var q = new menubuttondefault
     *q <- from_JV(v,type<menubuttondefault>)
     return q
 
-def JV ( v:menubuttondefault ) : JsonValue?
+[generic]
+def JV ( v:menubuttondefault explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["_type"] = _::JV(v._type)
     return _::JV(map)
@@ -2965,20 +3223,23 @@ struct responseparameters
     migrate_to_chat_id : int64	//! Optional. The group has been migrated to a supergroup with the specified identifier. This number may have more than 32 significant bits and some programming languages may have difficulty/silent defects in interpreting it. But it has at most 52 significant bits, so a signed 64-bit integer or double-precision float type are safe for storing this identifier.
     retry_after : int64	//! Optional. In case of exceeding flood control, the number of seconds left to wait before the request can be repeated
 
-def from_JV ( var v:JsonValue?; t:responseparameters ) : responseparameters
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:responseparameters explicit ) : responseparameters
     var q : responseparameters
     var vobj & = unsafe(v as _object)
     q.migrate_to_chat_id = _::from_JV(vobj["migrate_to_chat_id"], type<int64>)
     q.retry_after = _::from_JV(vobj["retry_after"], type<int64>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:responseparameters? ) : responseparameters?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:responseparameters explicit? ) : responseparameters?
     return null if v==null
     var q = new responseparameters
     *q <- from_JV(v,type<responseparameters>)
     return q
 
-def JV ( v:responseparameters ) : JsonValue?
+[generic]
+def JV ( v:responseparameters explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["migrate_to_chat_id"] = _::JV(v.migrate_to_chat_id)
     map["retry_after"] = _::JV(v.retry_after)
@@ -2988,18 +3249,21 @@ struct inputmedia
     //!  This object represents the content of a media message to be sent. It should be one of
     object_inputmedia_has_no_fields:bool
 
-def from_JV ( var v:JsonValue?; t:inputmedia ) : inputmedia
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inputmedia explicit ) : inputmedia
     var q : inputmedia
     var vobj & = unsafe(v as _object)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:inputmedia? ) : inputmedia?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inputmedia explicit? ) : inputmedia?
     return null if v==null
     var q = new inputmedia
     *q <- from_JV(v,type<inputmedia>)
     return q
 
-def JV ( v:inputmedia ) : JsonValue?
+[generic]
+def JV ( v:inputmedia explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     return _::JV(map)
 
@@ -3012,7 +3276,8 @@ struct inputmediaphoto
     caption_entities : array<messageentity>	//! Optional. List of special entities that appear in the caption, which can be specified instead of parse_mode
     has_spoiler : bool	//! Optional. Pass True if the photo needs to be covered with a spoiler animation
 
-def from_JV ( var v:JsonValue?; t:inputmediaphoto ) : inputmediaphoto
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inputmediaphoto explicit ) : inputmediaphoto
     var q : inputmediaphoto
     var vobj & = unsafe(v as _object)
     q._type = _::from_JV(vobj["_type"], type<string>)
@@ -3023,13 +3288,15 @@ def from_JV ( var v:JsonValue?; t:inputmediaphoto ) : inputmediaphoto
     q.has_spoiler = _::from_JV(vobj["has_spoiler"], type<bool>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:inputmediaphoto? ) : inputmediaphoto?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inputmediaphoto explicit? ) : inputmediaphoto?
     return null if v==null
     var q = new inputmediaphoto
     *q <- from_JV(v,type<inputmediaphoto>)
     return q
 
-def JV ( v:inputmediaphoto ) : JsonValue?
+[generic]
+def JV ( v:inputmediaphoto explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["_type"] = _::JV(v._type)
     map["media"] = _::JV(v.media)
@@ -3053,7 +3320,8 @@ struct inputmediavideo
     supports_streaming : bool	//! Optional. Pass True if the uploaded video is suitable for streaming
     has_spoiler : bool	//! Optional. Pass True if the video needs to be covered with a spoiler animation
 
-def from_JV ( var v:JsonValue?; t:inputmediavideo ) : inputmediavideo
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inputmediavideo explicit ) : inputmediavideo
     var q : inputmediavideo
     var vobj & = unsafe(v as _object)
     q._type = _::from_JV(vobj["_type"], type<string>)
@@ -3069,13 +3337,15 @@ def from_JV ( var v:JsonValue?; t:inputmediavideo ) : inputmediavideo
     q.has_spoiler = _::from_JV(vobj["has_spoiler"], type<bool>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:inputmediavideo? ) : inputmediavideo?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inputmediavideo explicit? ) : inputmediavideo?
     return null if v==null
     var q = new inputmediavideo
     *q <- from_JV(v,type<inputmediavideo>)
     return q
 
-def JV ( v:inputmediavideo ) : JsonValue?
+[generic]
+def JV ( v:inputmediavideo explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["_type"] = _::JV(v._type)
     map["media"] = _::JV(v.media)
@@ -3104,7 +3374,8 @@ struct inputmediaanimation
     duration : int64	//! Optional. Animation duration in seconds
     has_spoiler : bool	//! Optional. Pass True if the animation needs to be covered with a spoiler animation
 
-def from_JV ( var v:JsonValue?; t:inputmediaanimation ) : inputmediaanimation
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inputmediaanimation explicit ) : inputmediaanimation
     var q : inputmediaanimation
     var vobj & = unsafe(v as _object)
     q._type = _::from_JV(vobj["_type"], type<string>)
@@ -3119,13 +3390,15 @@ def from_JV ( var v:JsonValue?; t:inputmediaanimation ) : inputmediaanimation
     q.has_spoiler = _::from_JV(vobj["has_spoiler"], type<bool>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:inputmediaanimation? ) : inputmediaanimation?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inputmediaanimation explicit? ) : inputmediaanimation?
     return null if v==null
     var q = new inputmediaanimation
     *q <- from_JV(v,type<inputmediaanimation>)
     return q
 
-def JV ( v:inputmediaanimation ) : JsonValue?
+[generic]
+def JV ( v:inputmediaanimation explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["_type"] = _::JV(v._type)
     map["media"] = _::JV(v.media)
@@ -3152,7 +3425,8 @@ struct inputmediaaudio
     performer : string	//! Optional. Performer of the audio
     title : string	//! Optional. Title of the audio
 
-def from_JV ( var v:JsonValue?; t:inputmediaaudio ) : inputmediaaudio
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inputmediaaudio explicit ) : inputmediaaudio
     var q : inputmediaaudio
     var vobj & = unsafe(v as _object)
     q._type = _::from_JV(vobj["_type"], type<string>)
@@ -3166,13 +3440,15 @@ def from_JV ( var v:JsonValue?; t:inputmediaaudio ) : inputmediaaudio
     q.title = _::from_JV(vobj["title"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:inputmediaaudio? ) : inputmediaaudio?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inputmediaaudio explicit? ) : inputmediaaudio?
     return null if v==null
     var q = new inputmediaaudio
     *q <- from_JV(v,type<inputmediaaudio>)
     return q
 
-def JV ( v:inputmediaaudio ) : JsonValue?
+[generic]
+def JV ( v:inputmediaaudio explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["_type"] = _::JV(v._type)
     map["media"] = _::JV(v.media)
@@ -3196,7 +3472,8 @@ struct inputmediadocument
     caption_entities : array<messageentity>	//! Optional. List of special entities that appear in the caption, which can be specified instead of parse_mode
     disable_content_type_detection : bool	//! Optional. Disables automatic server-side content type detection for files uploaded using multipart/form-data. Always True, if the document is sent as part of an album.
 
-def from_JV ( var v:JsonValue?; t:inputmediadocument ) : inputmediadocument
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inputmediadocument explicit ) : inputmediadocument
     var q : inputmediadocument
     var vobj & = unsafe(v as _object)
     q._type = _::from_JV(vobj["_type"], type<string>)
@@ -3208,13 +3485,15 @@ def from_JV ( var v:JsonValue?; t:inputmediadocument ) : inputmediadocument
     q.disable_content_type_detection = _::from_JV(vobj["disable_content_type_detection"], type<bool>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:inputmediadocument? ) : inputmediadocument?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inputmediadocument explicit? ) : inputmediadocument?
     return null if v==null
     var q = new inputmediadocument
     *q <- from_JV(v,type<inputmediadocument>)
     return q
 
-def JV ( v:inputmediadocument ) : JsonValue?
+[generic]
+def JV ( v:inputmediadocument explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["_type"] = _::JV(v._type)
     map["media"] = _::JV(v.media)
@@ -3230,18 +3509,21 @@ struct inputfile
     //!  This object represents the contents of a file to be uploaded. Must be posted using multipart/form-data in the usual way that files are uploaded via the browser.
     object_inputfile_has_no_fields:bool
 
-def from_JV ( var v:JsonValue?; t:inputfile ) : inputfile
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inputfile explicit ) : inputfile
     var q : inputfile
     var vobj & = unsafe(v as _object)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:inputfile? ) : inputfile?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inputfile explicit? ) : inputfile?
     return null if v==null
     var q = new inputfile
     *q <- from_JV(v,type<inputfile>)
     return q
 
-def JV ( v:inputfile ) : JsonValue?
+[generic]
+def JV ( v:inputfile explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     return _::JV(map)
 
@@ -3249,18 +3531,21 @@ struct sending_files
     //!  There are three ways to send files (photos, stickers, audio, media, etc.): Sending by file_id Sending by URL
     object_sending_files_has_no_fields:bool
 
-def from_JV ( var v:JsonValue?; t:sending_files ) : sending_files
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:sending_files explicit ) : sending_files
     var q : sending_files
     var vobj & = unsafe(v as _object)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:sending_files? ) : sending_files?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:sending_files explicit? ) : sending_files?
     return null if v==null
     var q = new sending_files
     *q <- from_JV(v,type<sending_files>)
     return q
 
-def JV ( v:sending_files ) : JsonValue?
+[generic]
+def JV ( v:sending_files explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     return _::JV(map)
 
@@ -3268,18 +3553,21 @@ struct inline_mode_objects
     //!  Objects and methods used in the inline mode are described in the Inline mode section.
     object_inline_mode_objects_has_no_fields:bool
 
-def from_JV ( var v:JsonValue?; t:inline_mode_objects ) : inline_mode_objects
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inline_mode_objects explicit ) : inline_mode_objects
     var q : inline_mode_objects
     var vobj & = unsafe(v as _object)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:inline_mode_objects? ) : inline_mode_objects?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inline_mode_objects explicit? ) : inline_mode_objects?
     return null if v==null
     var q = new inline_mode_objects
     *q <- from_JV(v,type<inline_mode_objects>)
     return q
 
-def JV ( v:inline_mode_objects ) : JsonValue?
+[generic]
+def JV ( v:inline_mode_objects explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     return _::JV(map)
 
@@ -3287,18 +3575,21 @@ struct getme
     //!  A simple method for testing your bot's authentication token. Requires no parameters. Returns basic information about the bot in form of a User object.
     object_getme_has_no_fields:bool
 
-def from_JV ( var v:JsonValue?; t:getme ) : getme
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:getme explicit ) : getme
     var q : getme
     var vobj & = unsafe(v as _object)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:getme? ) : getme?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:getme explicit? ) : getme?
     return null if v==null
     var q = new getme
     *q <- from_JV(v,type<getme>)
     return q
 
-def JV ( v:getme ) : JsonValue?
+[generic]
+def JV ( v:getme explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     return _::JV(map)
 
@@ -3306,18 +3597,21 @@ struct logout
     //!  Use this method to log out from the cloud Bot API server before launching the bot locally. You must log out the bot before running it locally, otherwise there is no guarantee that the bot will receive updates. After a successful call, you can immediately log in on a local server, but will not be able to log in back to the cloud Bot API server for 10 minutes. Returns True on success. Requires no parameters.
     object_logout_has_no_fields:bool
 
-def from_JV ( var v:JsonValue?; t:logout ) : logout
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:logout explicit ) : logout
     var q : logout
     var vobj & = unsafe(v as _object)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:logout? ) : logout?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:logout explicit? ) : logout?
     return null if v==null
     var q = new logout
     *q <- from_JV(v,type<logout>)
     return q
 
-def JV ( v:logout ) : JsonValue?
+[generic]
+def JV ( v:logout explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     return _::JV(map)
 
@@ -3325,18 +3619,21 @@ struct close
     //!  Use this method to close the bot instance before moving it from one local server to another. You need to delete the webhook before calling this method to ensure that the bot isn't launched again after server restart. The method will return error 429 in the first 10 minutes after the bot is launched. Returns True on success. Requires no parameters.
     object_close_has_no_fields:bool
 
-def from_JV ( var v:JsonValue?; t:close ) : close
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:close explicit ) : close
     var q : close
     var vobj & = unsafe(v as _object)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:close? ) : close?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:close explicit? ) : close?
     return null if v==null
     var q = new close
     *q <- from_JV(v,type<close>)
     return q
 
-def JV ( v:close ) : JsonValue?
+[generic]
+def JV ( v:close explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     return _::JV(map)
 
@@ -3354,7 +3651,8 @@ struct sendmessage
     allow_sending_without_reply : bool	//! Optional. Pass True if the message should be sent even if the specified replied-to message is not found
     reply_markup : inlinekeyboardmarkup?	//! Optional. Additional interface options. A JSON-serialized object for an inline keyboard, custom reply keyboard, instructions to remove reply keyboard or to force a reply from the user.
 
-def from_JV ( var v:JsonValue?; t:sendmessage ) : sendmessage
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:sendmessage explicit ) : sendmessage
     var q : sendmessage
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
@@ -3370,13 +3668,15 @@ def from_JV ( var v:JsonValue?; t:sendmessage ) : sendmessage
     q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:sendmessage? ) : sendmessage?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:sendmessage explicit? ) : sendmessage?
     return null if v==null
     var q = new sendmessage
     *q <- from_JV(v,type<sendmessage>)
     return q
 
-def JV ( v:sendmessage ) : JsonValue?
+[generic]
+def JV ( v:sendmessage explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["message_thread_id"] = _::JV(v.message_thread_id)
@@ -3396,18 +3696,21 @@ struct formatting_options
     //!  The Bot API supports basic formatting for messages. You can use bold, italic, underlined, strikethrough, and spoiler text, as well as inline links and pre-formatted code in your bots' messages. Telegram clients will render them accordingly. You can specify text entities directly, or use markdown-style or HTML-style formatting. Note that Telegram clients will display an alert to the user before opening an inline link ('Open this link?' together with the full URL). Message entities can be nested, providing following restrictions are met: - If two entities have common characters, then one of them is fully contained inside another. - bold, italic, underline, strikethrough, and spoiler entities can contain and can be part of any other entities, except pre and code. - All other entities can't contain each other. Links tg://user?id=<user_id> can be used to mention a user by their ID without using a username. Please note: To use this mode, pass MarkdownV2 in the parse_mode field. Use the following syntax in your message: Please note: To use this mode, pass HTML in the parse_mode field. The following tags are currently supported: Please note: This is a legacy mode, retained for backward compatibility. To use this mode, pass Markdown in the parse_mode field. Use the following syntax in your message: Please note:
     object_formatting_options_has_no_fields:bool
 
-def from_JV ( var v:JsonValue?; t:formatting_options ) : formatting_options
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:formatting_options explicit ) : formatting_options
     var q : formatting_options
     var vobj & = unsafe(v as _object)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:formatting_options? ) : formatting_options?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:formatting_options explicit? ) : formatting_options?
     return null if v==null
     var q = new formatting_options
     *q <- from_JV(v,type<formatting_options>)
     return q
 
-def JV ( v:formatting_options ) : JsonValue?
+[generic]
+def JV ( v:formatting_options explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     return _::JV(map)
 
@@ -3420,7 +3723,8 @@ struct forwardmessage
     protect_content : bool	//! Optional. Protects the contents of the forwarded message from forwarding and saving
     message_id : int64	//! Required. Message identifier in the chat specified in from_chat_id
 
-def from_JV ( var v:JsonValue?; t:forwardmessage ) : forwardmessage
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:forwardmessage explicit ) : forwardmessage
     var q : forwardmessage
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
@@ -3431,13 +3735,15 @@ def from_JV ( var v:JsonValue?; t:forwardmessage ) : forwardmessage
     q.message_id = _::from_JV(vobj["message_id"], type<int64>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:forwardmessage? ) : forwardmessage?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:forwardmessage explicit? ) : forwardmessage?
     return null if v==null
     var q = new forwardmessage
     *q <- from_JV(v,type<forwardmessage>)
     return q
 
-def JV ( v:forwardmessage ) : JsonValue?
+[generic]
+def JV ( v:forwardmessage explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["message_thread_id"] = _::JV(v.message_thread_id)
@@ -3462,7 +3768,8 @@ struct copymessage
     allow_sending_without_reply : bool	//! Optional. Pass True if the message should be sent even if the specified replied-to message is not found
     reply_markup : inlinekeyboardmarkup?	//! Optional. Additional interface options. A JSON-serialized object for an inline keyboard, custom reply keyboard, instructions to remove reply keyboard or to force a reply from the user.
 
-def from_JV ( var v:JsonValue?; t:copymessage ) : copymessage
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:copymessage explicit ) : copymessage
     var q : copymessage
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
@@ -3479,13 +3786,15 @@ def from_JV ( var v:JsonValue?; t:copymessage ) : copymessage
     q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:copymessage? ) : copymessage?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:copymessage explicit? ) : copymessage?
     return null if v==null
     var q = new copymessage
     *q <- from_JV(v,type<copymessage>)
     return q
 
-def JV ( v:copymessage ) : JsonValue?
+[generic]
+def JV ( v:copymessage explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["message_thread_id"] = _::JV(v.message_thread_id)
@@ -3517,7 +3826,8 @@ struct sendphoto
     allow_sending_without_reply : bool	//! Optional. Pass True if the message should be sent even if the specified replied-to message is not found
     reply_markup : inlinekeyboardmarkup?	//! Optional. Additional interface options. A JSON-serialized object for an inline keyboard, custom reply keyboard, instructions to remove reply keyboard or to force a reply from the user.
 
-def from_JV ( var v:JsonValue?; t:sendphoto ) : sendphoto
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:sendphoto explicit ) : sendphoto
     var q : sendphoto
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
@@ -3534,13 +3844,15 @@ def from_JV ( var v:JsonValue?; t:sendphoto ) : sendphoto
     q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:sendphoto? ) : sendphoto?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:sendphoto explicit? ) : sendphoto?
     return null if v==null
     var q = new sendphoto
     *q <- from_JV(v,type<sendphoto>)
     return q
 
-def JV ( v:sendphoto ) : JsonValue?
+[generic]
+def JV ( v:sendphoto explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["message_thread_id"] = _::JV(v.message_thread_id)
@@ -3575,7 +3887,8 @@ struct sendaudio
     allow_sending_without_reply : bool	//! Optional. Pass True if the message should be sent even if the specified replied-to message is not found
     reply_markup : inlinekeyboardmarkup?	//! Optional. Additional interface options. A JSON-serialized object for an inline keyboard, custom reply keyboard, instructions to remove reply keyboard or to force a reply from the user.
 
-def from_JV ( var v:JsonValue?; t:sendaudio ) : sendaudio
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:sendaudio explicit ) : sendaudio
     var q : sendaudio
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
@@ -3595,13 +3908,15 @@ def from_JV ( var v:JsonValue?; t:sendaudio ) : sendaudio
     q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:sendaudio? ) : sendaudio?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:sendaudio explicit? ) : sendaudio?
     return null if v==null
     var q = new sendaudio
     *q <- from_JV(v,type<sendaudio>)
     return q
 
-def JV ( v:sendaudio ) : JsonValue?
+[generic]
+def JV ( v:sendaudio explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["message_thread_id"] = _::JV(v.message_thread_id)
@@ -3638,7 +3953,8 @@ struct senddocument
     allow_sending_without_reply : bool	//! Optional. Pass True if the message should be sent even if the specified replied-to message is not found
     reply_markup : inlinekeyboardmarkup?	//! Optional. Additional interface options. A JSON-serialized object for an inline keyboard, custom reply keyboard, instructions to remove reply keyboard or to force a reply from the user.
 
-def from_JV ( var v:JsonValue?; t:senddocument ) : senddocument
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:senddocument explicit ) : senddocument
     var q : senddocument
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
@@ -3656,13 +3972,15 @@ def from_JV ( var v:JsonValue?; t:senddocument ) : senddocument
     q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:senddocument? ) : senddocument?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:senddocument explicit? ) : senddocument?
     return null if v==null
     var q = new senddocument
     *q <- from_JV(v,type<senddocument>)
     return q
 
-def JV ( v:senddocument ) : JsonValue?
+[generic]
+def JV ( v:senddocument explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["message_thread_id"] = _::JV(v.message_thread_id)
@@ -3701,7 +4019,8 @@ struct sendvideo
     allow_sending_without_reply : bool	//! Optional. Pass True if the message should be sent even if the specified replied-to message is not found
     reply_markup : inlinekeyboardmarkup?	//! Optional. Additional interface options. A JSON-serialized object for an inline keyboard, custom reply keyboard, instructions to remove reply keyboard or to force a reply from the user.
 
-def from_JV ( var v:JsonValue?; t:sendvideo ) : sendvideo
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:sendvideo explicit ) : sendvideo
     var q : sendvideo
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
@@ -3723,13 +4042,15 @@ def from_JV ( var v:JsonValue?; t:sendvideo ) : sendvideo
     q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:sendvideo? ) : sendvideo?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:sendvideo explicit? ) : sendvideo?
     return null if v==null
     var q = new sendvideo
     *q <- from_JV(v,type<sendvideo>)
     return q
 
-def JV ( v:sendvideo ) : JsonValue?
+[generic]
+def JV ( v:sendvideo explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["message_thread_id"] = _::JV(v.message_thread_id)
@@ -3771,7 +4092,8 @@ struct sendanimation
     allow_sending_without_reply : bool	//! Optional. Pass True if the message should be sent even if the specified replied-to message is not found
     reply_markup : inlinekeyboardmarkup?	//! Optional. Additional interface options. A JSON-serialized object for an inline keyboard, custom reply keyboard, instructions to remove reply keyboard or to force a reply from the user.
 
-def from_JV ( var v:JsonValue?; t:sendanimation ) : sendanimation
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:sendanimation explicit ) : sendanimation
     var q : sendanimation
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
@@ -3792,13 +4114,15 @@ def from_JV ( var v:JsonValue?; t:sendanimation ) : sendanimation
     q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:sendanimation? ) : sendanimation?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:sendanimation explicit? ) : sendanimation?
     return null if v==null
     var q = new sendanimation
     *q <- from_JV(v,type<sendanimation>)
     return q
 
-def JV ( v:sendanimation ) : JsonValue?
+[generic]
+def JV ( v:sendanimation explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["message_thread_id"] = _::JV(v.message_thread_id)
@@ -3835,7 +4159,8 @@ struct sendvoice
     allow_sending_without_reply : bool	//! Optional. Pass True if the message should be sent even if the specified replied-to message is not found
     reply_markup : inlinekeyboardmarkup?	//! Optional. Additional interface options. A JSON-serialized object for an inline keyboard, custom reply keyboard, instructions to remove reply keyboard or to force a reply from the user.
 
-def from_JV ( var v:JsonValue?; t:sendvoice ) : sendvoice
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:sendvoice explicit ) : sendvoice
     var q : sendvoice
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
@@ -3852,13 +4177,15 @@ def from_JV ( var v:JsonValue?; t:sendvoice ) : sendvoice
     q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:sendvoice? ) : sendvoice?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:sendvoice explicit? ) : sendvoice?
     return null if v==null
     var q = new sendvoice
     *q <- from_JV(v,type<sendvoice>)
     return q
 
-def JV ( v:sendvoice ) : JsonValue?
+[generic]
+def JV ( v:sendvoice explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["message_thread_id"] = _::JV(v.message_thread_id)
@@ -3889,7 +4216,8 @@ struct sendvideonote
     allow_sending_without_reply : bool	//! Optional. Pass True if the message should be sent even if the specified replied-to message is not found
     reply_markup : inlinekeyboardmarkup?	//! Optional. Additional interface options. A JSON-serialized object for an inline keyboard, custom reply keyboard, instructions to remove reply keyboard or to force a reply from the user.
 
-def from_JV ( var v:JsonValue?; t:sendvideonote ) : sendvideonote
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:sendvideonote explicit ) : sendvideonote
     var q : sendvideonote
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
@@ -3905,13 +4233,15 @@ def from_JV ( var v:JsonValue?; t:sendvideonote ) : sendvideonote
     q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:sendvideonote? ) : sendvideonote?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:sendvideonote explicit? ) : sendvideonote?
     return null if v==null
     var q = new sendvideonote
     *q <- from_JV(v,type<sendvideonote>)
     return q
 
-def JV ( v:sendvideonote ) : JsonValue?
+[generic]
+def JV ( v:sendvideonote explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["message_thread_id"] = _::JV(v.message_thread_id)
@@ -3938,7 +4268,8 @@ struct sendmediagroup
     reply_to_message_id : int64	//! Optional. If the messages are a reply, ID of the original message
     allow_sending_without_reply : bool	//! Optional. Pass True if the message should be sent even if the specified replied-to message is not found
 
-def from_JV ( var v:JsonValue?; t:sendmediagroup ) : sendmediagroup
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:sendmediagroup explicit ) : sendmediagroup
     var q : sendmediagroup
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
@@ -3950,13 +4281,15 @@ def from_JV ( var v:JsonValue?; t:sendmediagroup ) : sendmediagroup
     q.allow_sending_without_reply = _::from_JV(vobj["allow_sending_without_reply"], type<bool>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:sendmediagroup? ) : sendmediagroup?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:sendmediagroup explicit? ) : sendmediagroup?
     return null if v==null
     var q = new sendmediagroup
     *q <- from_JV(v,type<sendmediagroup>)
     return q
 
-def JV ( v:sendmediagroup ) : JsonValue?
+[generic]
+def JV ( v:sendmediagroup explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["message_thread_id"] = _::JV(v.message_thread_id)
@@ -3983,7 +4316,8 @@ struct sendlocation
     allow_sending_without_reply : bool	//! Optional. Pass True if the message should be sent even if the specified replied-to message is not found
     reply_markup : inlinekeyboardmarkup?	//! Optional. Additional interface options. A JSON-serialized object for an inline keyboard, custom reply keyboard, instructions to remove reply keyboard or to force a reply from the user.
 
-def from_JV ( var v:JsonValue?; t:sendlocation ) : sendlocation
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:sendlocation explicit ) : sendlocation
     var q : sendlocation
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
@@ -4001,13 +4335,15 @@ def from_JV ( var v:JsonValue?; t:sendlocation ) : sendlocation
     q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:sendlocation? ) : sendlocation?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:sendlocation explicit? ) : sendlocation?
     return null if v==null
     var q = new sendlocation
     *q <- from_JV(v,type<sendlocation>)
     return q
 
-def JV ( v:sendlocation ) : JsonValue?
+[generic]
+def JV ( v:sendlocation explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["message_thread_id"] = _::JV(v.message_thread_id)
@@ -4043,7 +4379,8 @@ struct sendvenue
     allow_sending_without_reply : bool	//! Optional. Pass True if the message should be sent even if the specified replied-to message is not found
     reply_markup : inlinekeyboardmarkup?	//! Optional. Additional interface options. A JSON-serialized object for an inline keyboard, custom reply keyboard, instructions to remove reply keyboard or to force a reply from the user.
 
-def from_JV ( var v:JsonValue?; t:sendvenue ) : sendvenue
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:sendvenue explicit ) : sendvenue
     var q : sendvenue
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
@@ -4063,13 +4400,15 @@ def from_JV ( var v:JsonValue?; t:sendvenue ) : sendvenue
     q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:sendvenue? ) : sendvenue?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:sendvenue explicit? ) : sendvenue?
     return null if v==null
     var q = new sendvenue
     *q <- from_JV(v,type<sendvenue>)
     return q
 
-def JV ( v:sendvenue ) : JsonValue?
+[generic]
+def JV ( v:sendvenue explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["message_thread_id"] = _::JV(v.message_thread_id)
@@ -4103,7 +4442,8 @@ struct sendcontact
     allow_sending_without_reply : bool	//! Optional. Pass True if the message should be sent even if the specified replied-to message is not found
     reply_markup : inlinekeyboardmarkup?	//! Optional. Additional interface options. A JSON-serialized object for an inline keyboard, custom reply keyboard, instructions to remove reply keyboard or to force a reply from the user.
 
-def from_JV ( var v:JsonValue?; t:sendcontact ) : sendcontact
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:sendcontact explicit ) : sendcontact
     var q : sendcontact
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
@@ -4119,13 +4459,15 @@ def from_JV ( var v:JsonValue?; t:sendcontact ) : sendcontact
     q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:sendcontact? ) : sendcontact?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:sendcontact explicit? ) : sendcontact?
     return null if v==null
     var q = new sendcontact
     *q <- from_JV(v,type<sendcontact>)
     return q
 
-def JV ( v:sendcontact ) : JsonValue?
+[generic]
+def JV ( v:sendcontact explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["message_thread_id"] = _::JV(v.message_thread_id)
@@ -4163,7 +4505,8 @@ struct sendpoll
     allow_sending_without_reply : bool	//! Optional. Pass True if the message should be sent even if the specified replied-to message is not found
     reply_markup : inlinekeyboardmarkup?	//! Optional. Additional interface options. A JSON-serialized object for an inline keyboard, custom reply keyboard, instructions to remove reply keyboard or to force a reply from the user.
 
-def from_JV ( var v:JsonValue?; t:sendpoll ) : sendpoll
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:sendpoll explicit ) : sendpoll
     var q : sendpoll
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
@@ -4187,13 +4530,15 @@ def from_JV ( var v:JsonValue?; t:sendpoll ) : sendpoll
     q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:sendpoll? ) : sendpoll?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:sendpoll explicit? ) : sendpoll?
     return null if v==null
     var q = new sendpoll
     *q <- from_JV(v,type<sendpoll>)
     return q
 
-def JV ( v:sendpoll ) : JsonValue?
+[generic]
+def JV ( v:sendpoll explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["message_thread_id"] = _::JV(v.message_thread_id)
@@ -4228,7 +4573,8 @@ struct senddice
     allow_sending_without_reply : bool	//! Optional. Pass True if the message should be sent even if the specified replied-to message is not found
     reply_markup : inlinekeyboardmarkup?	//! Optional. Additional interface options. A JSON-serialized object for an inline keyboard, custom reply keyboard, instructions to remove reply keyboard or to force a reply from the user.
 
-def from_JV ( var v:JsonValue?; t:senddice ) : senddice
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:senddice explicit ) : senddice
     var q : senddice
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
@@ -4241,13 +4587,15 @@ def from_JV ( var v:JsonValue?; t:senddice ) : senddice
     q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:senddice? ) : senddice?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:senddice explicit? ) : senddice?
     return null if v==null
     var q = new senddice
     *q <- from_JV(v,type<senddice>)
     return q
 
-def JV ( v:senddice ) : JsonValue?
+[generic]
+def JV ( v:senddice explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["message_thread_id"] = _::JV(v.message_thread_id)
@@ -4266,7 +4614,8 @@ struct sendchataction
     message_thread_id : int64	//! Optional. Unique identifier for the target message thread; supergroups only
     action : string	//! Required. Type of action to broadcast. Choose one, depending on what the user is about to receive: typing for text messages, upload_photo for photos, record_video or upload_video for videos, record_voice or upload_voice for voice notes, upload_document for general files, choose_sticker for stickers, find_location for location data, record_video_note or upload_video_note for video notes.
 
-def from_JV ( var v:JsonValue?; t:sendchataction ) : sendchataction
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:sendchataction explicit ) : sendchataction
     var q : sendchataction
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
@@ -4274,13 +4623,15 @@ def from_JV ( var v:JsonValue?; t:sendchataction ) : sendchataction
     q.action = _::from_JV(vobj["action"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:sendchataction? ) : sendchataction?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:sendchataction explicit? ) : sendchataction?
     return null if v==null
     var q = new sendchataction
     *q <- from_JV(v,type<sendchataction>)
     return q
 
-def JV ( v:sendchataction ) : JsonValue?
+[generic]
+def JV ( v:sendchataction explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["message_thread_id"] = _::JV(v.message_thread_id)
@@ -4293,7 +4644,8 @@ struct getuserprofilephotos
     offset : int64	//! Optional. Sequential number of the first photo to be returned. By default, all photos are returned.
     limit : int64	//! Optional. Limits the number of photos to be retrieved. Values between 1-100 are accepted. Defaults to 100.
 
-def from_JV ( var v:JsonValue?; t:getuserprofilephotos ) : getuserprofilephotos
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:getuserprofilephotos explicit ) : getuserprofilephotos
     var q : getuserprofilephotos
     var vobj & = unsafe(v as _object)
     q.user_id = _::from_JV(vobj["user_id"], type<int64>)
@@ -4301,13 +4653,15 @@ def from_JV ( var v:JsonValue?; t:getuserprofilephotos ) : getuserprofilephotos
     q.limit = _::from_JV(vobj["limit"], type<int64>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:getuserprofilephotos? ) : getuserprofilephotos?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:getuserprofilephotos explicit? ) : getuserprofilephotos?
     return null if v==null
     var q = new getuserprofilephotos
     *q <- from_JV(v,type<getuserprofilephotos>)
     return q
 
-def JV ( v:getuserprofilephotos ) : JsonValue?
+[generic]
+def JV ( v:getuserprofilephotos explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["user_id"] = _::JV(v.user_id)
     map["offset"] = _::JV(v.offset)
@@ -4318,19 +4672,22 @@ struct getfile
     //!  Use this method to get basic information about a file and prepare it for downloading. For the moment, bots can download files of up to 20MB in size. On success, a File object is returned. The file can then be downloaded via the link https://api.telegram.org/file/bot<token>/<file_path>, where <file_path> is taken from the response. It is guaranteed that the link will be valid for at least 1 hour. When the link expires, a new one can be requested by calling getFile again.
     file_id : string	//! Required. File identifier to get information about
 
-def from_JV ( var v:JsonValue?; t:getfile ) : getfile
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:getfile explicit ) : getfile
     var q : getfile
     var vobj & = unsafe(v as _object)
     q.file_id = _::from_JV(vobj["file_id"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:getfile? ) : getfile?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:getfile explicit? ) : getfile?
     return null if v==null
     var q = new getfile
     *q <- from_JV(v,type<getfile>)
     return q
 
-def JV ( v:getfile ) : JsonValue?
+[generic]
+def JV ( v:getfile explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["file_id"] = _::JV(v.file_id)
     return _::JV(map)
@@ -4342,7 +4699,8 @@ struct banchatmember
     until_date : int64	//! Optional. Date when the user will be unbanned, unix time. If user is banned for more than 366 days or less than 30 seconds from the current time they are considered to be banned forever. Applied for supergroups and channels only.
     revoke_messages : bool	//! Optional. Pass True to delete all messages from the chat for the user that is being removed. If False, the user will be able to see messages in the group that were sent before the user was removed. Always True for supergroups and channels.
 
-def from_JV ( var v:JsonValue?; t:banchatmember ) : banchatmember
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:banchatmember explicit ) : banchatmember
     var q : banchatmember
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
@@ -4351,13 +4709,15 @@ def from_JV ( var v:JsonValue?; t:banchatmember ) : banchatmember
     q.revoke_messages = _::from_JV(vobj["revoke_messages"], type<bool>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:banchatmember? ) : banchatmember?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:banchatmember explicit? ) : banchatmember?
     return null if v==null
     var q = new banchatmember
     *q <- from_JV(v,type<banchatmember>)
     return q
 
-def JV ( v:banchatmember ) : JsonValue?
+[generic]
+def JV ( v:banchatmember explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["user_id"] = _::JV(v.user_id)
@@ -4371,7 +4731,8 @@ struct unbanchatmember
     user_id : int64	//! Required. Unique identifier of the target user
     only_if_banned : bool	//! Optional. Do nothing if the user is not banned
 
-def from_JV ( var v:JsonValue?; t:unbanchatmember ) : unbanchatmember
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:unbanchatmember explicit ) : unbanchatmember
     var q : unbanchatmember
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
@@ -4379,13 +4740,15 @@ def from_JV ( var v:JsonValue?; t:unbanchatmember ) : unbanchatmember
     q.only_if_banned = _::from_JV(vobj["only_if_banned"], type<bool>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:unbanchatmember? ) : unbanchatmember?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:unbanchatmember explicit? ) : unbanchatmember?
     return null if v==null
     var q = new unbanchatmember
     *q <- from_JV(v,type<unbanchatmember>)
     return q
 
-def JV ( v:unbanchatmember ) : JsonValue?
+[generic]
+def JV ( v:unbanchatmember explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["user_id"] = _::JV(v.user_id)
@@ -4400,7 +4763,8 @@ struct restrictchatmember
     use_independent_chat_permissions : bool	//! Optional. Pass True if chat permissions are set independently. Otherwise, the can_send_other_messages and can_add_web_page_previews permissions will imply the can_send_messages, can_send_audios, can_send_documents, can_send_photos, can_send_videos, can_send_video_notes, and can_send_voice_notes permissions; the can_send_polls permission will imply the can_send_messages permission.
     until_date : int64	//! Optional. Date when restrictions will be lifted for the user, unix time. If user is restricted for more than 366 days or less than 30 seconds from the current time, they are considered to be restricted forever
 
-def from_JV ( var v:JsonValue?; t:restrictchatmember ) : restrictchatmember
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:restrictchatmember explicit ) : restrictchatmember
     var q : restrictchatmember
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
@@ -4410,13 +4774,15 @@ def from_JV ( var v:JsonValue?; t:restrictchatmember ) : restrictchatmember
     q.until_date = _::from_JV(vobj["until_date"], type<int64>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:restrictchatmember? ) : restrictchatmember?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:restrictchatmember explicit? ) : restrictchatmember?
     return null if v==null
     var q = new restrictchatmember
     *q <- from_JV(v,type<restrictchatmember>)
     return q
 
-def JV ( v:restrictchatmember ) : JsonValue?
+[generic]
+def JV ( v:restrictchatmember explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["user_id"] = _::JV(v.user_id)
@@ -4442,7 +4808,8 @@ struct promotechatmember
     can_pin_messages : bool	//! Optional. Pass True if the administrator can pin messages, supergroups only
     can_manage_topics : bool	//! Optional. Pass True if the user is allowed to create, rename, close, and reopen forum topics, supergroups only
 
-def from_JV ( var v:JsonValue?; t:promotechatmember ) : promotechatmember
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:promotechatmember explicit ) : promotechatmember
     var q : promotechatmember
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
@@ -4461,13 +4828,15 @@ def from_JV ( var v:JsonValue?; t:promotechatmember ) : promotechatmember
     q.can_manage_topics = _::from_JV(vobj["can_manage_topics"], type<bool>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:promotechatmember? ) : promotechatmember?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:promotechatmember explicit? ) : promotechatmember?
     return null if v==null
     var q = new promotechatmember
     *q <- from_JV(v,type<promotechatmember>)
     return q
 
-def JV ( v:promotechatmember ) : JsonValue?
+[generic]
+def JV ( v:promotechatmember explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["user_id"] = _::JV(v.user_id)
@@ -4491,7 +4860,8 @@ struct setchatadministratorcustomtitle
     user_id : int64	//! Required. Unique identifier of the target user
     custom_title : string	//! Required. New custom title for the administrator; 0-16 characters, emoji are not allowed
 
-def from_JV ( var v:JsonValue?; t:setchatadministratorcustomtitle ) : setchatadministratorcustomtitle
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:setchatadministratorcustomtitle explicit ) : setchatadministratorcustomtitle
     var q : setchatadministratorcustomtitle
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
@@ -4499,13 +4869,15 @@ def from_JV ( var v:JsonValue?; t:setchatadministratorcustomtitle ) : setchatadm
     q.custom_title = _::from_JV(vobj["custom_title"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:setchatadministratorcustomtitle? ) : setchatadministratorcustomtitle?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:setchatadministratorcustomtitle explicit? ) : setchatadministratorcustomtitle?
     return null if v==null
     var q = new setchatadministratorcustomtitle
     *q <- from_JV(v,type<setchatadministratorcustomtitle>)
     return q
 
-def JV ( v:setchatadministratorcustomtitle ) : JsonValue?
+[generic]
+def JV ( v:setchatadministratorcustomtitle explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["user_id"] = _::JV(v.user_id)
@@ -4517,20 +4889,23 @@ struct banchatsenderchat
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target channel (in the format @channelusername)
     sender_chat_id : int64	//! Required. Unique identifier of the target sender chat
 
-def from_JV ( var v:JsonValue?; t:banchatsenderchat ) : banchatsenderchat
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:banchatsenderchat explicit ) : banchatsenderchat
     var q : banchatsenderchat
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
     q.sender_chat_id = _::from_JV(vobj["sender_chat_id"], type<int64>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:banchatsenderchat? ) : banchatsenderchat?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:banchatsenderchat explicit? ) : banchatsenderchat?
     return null if v==null
     var q = new banchatsenderchat
     *q <- from_JV(v,type<banchatsenderchat>)
     return q
 
-def JV ( v:banchatsenderchat ) : JsonValue?
+[generic]
+def JV ( v:banchatsenderchat explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["sender_chat_id"] = _::JV(v.sender_chat_id)
@@ -4541,20 +4916,23 @@ struct unbanchatsenderchat
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target channel (in the format @channelusername)
     sender_chat_id : int64	//! Required. Unique identifier of the target sender chat
 
-def from_JV ( var v:JsonValue?; t:unbanchatsenderchat ) : unbanchatsenderchat
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:unbanchatsenderchat explicit ) : unbanchatsenderchat
     var q : unbanchatsenderchat
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
     q.sender_chat_id = _::from_JV(vobj["sender_chat_id"], type<int64>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:unbanchatsenderchat? ) : unbanchatsenderchat?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:unbanchatsenderchat explicit? ) : unbanchatsenderchat?
     return null if v==null
     var q = new unbanchatsenderchat
     *q <- from_JV(v,type<unbanchatsenderchat>)
     return q
 
-def JV ( v:unbanchatsenderchat ) : JsonValue?
+[generic]
+def JV ( v:unbanchatsenderchat explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["sender_chat_id"] = _::JV(v.sender_chat_id)
@@ -4566,7 +4944,8 @@ struct setchatpermissions
     permissions : chatpermissions	//! Required. A JSON-serialized object for new default chat permissions
     use_independent_chat_permissions : bool	//! Optional. Pass True if chat permissions are set independently. Otherwise, the can_send_other_messages and can_add_web_page_previews permissions will imply the can_send_messages, can_send_audios, can_send_documents, can_send_photos, can_send_videos, can_send_video_notes, and can_send_voice_notes permissions; the can_send_polls permission will imply the can_send_messages permission.
 
-def from_JV ( var v:JsonValue?; t:setchatpermissions ) : setchatpermissions
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:setchatpermissions explicit ) : setchatpermissions
     var q : setchatpermissions
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
@@ -4574,13 +4953,15 @@ def from_JV ( var v:JsonValue?; t:setchatpermissions ) : setchatpermissions
     q.use_independent_chat_permissions = _::from_JV(vobj["use_independent_chat_permissions"], type<bool>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:setchatpermissions? ) : setchatpermissions?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:setchatpermissions explicit? ) : setchatpermissions?
     return null if v==null
     var q = new setchatpermissions
     *q <- from_JV(v,type<setchatpermissions>)
     return q
 
-def JV ( v:setchatpermissions ) : JsonValue?
+[generic]
+def JV ( v:setchatpermissions explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["permissions"] = _::JV(v.permissions)
@@ -4591,19 +4972,22 @@ struct exportchatinvitelink
     //!  Use this method to generate a new primary invite link for a chat; any previously generated primary link is revoked. The bot must be an administrator in the chat for this to work and must have the appropriate administrator rights. Returns the new invite link as String on success.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target channel (in the format @channelusername)
 
-def from_JV ( var v:JsonValue?; t:exportchatinvitelink ) : exportchatinvitelink
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:exportchatinvitelink explicit ) : exportchatinvitelink
     var q : exportchatinvitelink
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:exportchatinvitelink? ) : exportchatinvitelink?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:exportchatinvitelink explicit? ) : exportchatinvitelink?
     return null if v==null
     var q = new exportchatinvitelink
     *q <- from_JV(v,type<exportchatinvitelink>)
     return q
 
-def JV ( v:exportchatinvitelink ) : JsonValue?
+[generic]
+def JV ( v:exportchatinvitelink explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     return _::JV(map)
@@ -4616,7 +5000,8 @@ struct createchatinvitelink
     member_limit : int64	//! Optional. The maximum number of users that can be members of the chat simultaneously after joining the chat via this invite link; 1-99999
     creates_join_request : bool	//! Optional. True, if users joining the chat via the link need to be approved by chat administrators. If True, member_limit can't be specified
 
-def from_JV ( var v:JsonValue?; t:createchatinvitelink ) : createchatinvitelink
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:createchatinvitelink explicit ) : createchatinvitelink
     var q : createchatinvitelink
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
@@ -4626,13 +5011,15 @@ def from_JV ( var v:JsonValue?; t:createchatinvitelink ) : createchatinvitelink
     q.creates_join_request = _::from_JV(vobj["creates_join_request"], type<bool>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:createchatinvitelink? ) : createchatinvitelink?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:createchatinvitelink explicit? ) : createchatinvitelink?
     return null if v==null
     var q = new createchatinvitelink
     *q <- from_JV(v,type<createchatinvitelink>)
     return q
 
-def JV ( v:createchatinvitelink ) : JsonValue?
+[generic]
+def JV ( v:createchatinvitelink explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["name"] = _::JV(v.name)
@@ -4650,7 +5037,8 @@ struct editchatinvitelink
     member_limit : int64	//! Optional. The maximum number of users that can be members of the chat simultaneously after joining the chat via this invite link; 1-99999
     creates_join_request : bool	//! Optional. True, if users joining the chat via the link need to be approved by chat administrators. If True, member_limit can't be specified
 
-def from_JV ( var v:JsonValue?; t:editchatinvitelink ) : editchatinvitelink
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:editchatinvitelink explicit ) : editchatinvitelink
     var q : editchatinvitelink
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
@@ -4661,13 +5049,15 @@ def from_JV ( var v:JsonValue?; t:editchatinvitelink ) : editchatinvitelink
     q.creates_join_request = _::from_JV(vobj["creates_join_request"], type<bool>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:editchatinvitelink? ) : editchatinvitelink?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:editchatinvitelink explicit? ) : editchatinvitelink?
     return null if v==null
     var q = new editchatinvitelink
     *q <- from_JV(v,type<editchatinvitelink>)
     return q
 
-def JV ( v:editchatinvitelink ) : JsonValue?
+[generic]
+def JV ( v:editchatinvitelink explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["invite_link"] = _::JV(v.invite_link)
@@ -4682,20 +5072,23 @@ struct revokechatinvitelink
     chat_id : string	//! Required. Unique identifier of the target chat or username of the target channel (in the format @channelusername)
     invite_link : string	//! Required. The invite link to revoke
 
-def from_JV ( var v:JsonValue?; t:revokechatinvitelink ) : revokechatinvitelink
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:revokechatinvitelink explicit ) : revokechatinvitelink
     var q : revokechatinvitelink
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
     q.invite_link = _::from_JV(vobj["invite_link"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:revokechatinvitelink? ) : revokechatinvitelink?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:revokechatinvitelink explicit? ) : revokechatinvitelink?
     return null if v==null
     var q = new revokechatinvitelink
     *q <- from_JV(v,type<revokechatinvitelink>)
     return q
 
-def JV ( v:revokechatinvitelink ) : JsonValue?
+[generic]
+def JV ( v:revokechatinvitelink explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["invite_link"] = _::JV(v.invite_link)
@@ -4706,20 +5099,23 @@ struct approvechatjoinrequest
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target channel (in the format @channelusername)
     user_id : int64	//! Required. Unique identifier of the target user
 
-def from_JV ( var v:JsonValue?; t:approvechatjoinrequest ) : approvechatjoinrequest
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:approvechatjoinrequest explicit ) : approvechatjoinrequest
     var q : approvechatjoinrequest
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
     q.user_id = _::from_JV(vobj["user_id"], type<int64>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:approvechatjoinrequest? ) : approvechatjoinrequest?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:approvechatjoinrequest explicit? ) : approvechatjoinrequest?
     return null if v==null
     var q = new approvechatjoinrequest
     *q <- from_JV(v,type<approvechatjoinrequest>)
     return q
 
-def JV ( v:approvechatjoinrequest ) : JsonValue?
+[generic]
+def JV ( v:approvechatjoinrequest explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["user_id"] = _::JV(v.user_id)
@@ -4730,20 +5126,23 @@ struct declinechatjoinrequest
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target channel (in the format @channelusername)
     user_id : int64	//! Required. Unique identifier of the target user
 
-def from_JV ( var v:JsonValue?; t:declinechatjoinrequest ) : declinechatjoinrequest
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:declinechatjoinrequest explicit ) : declinechatjoinrequest
     var q : declinechatjoinrequest
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
     q.user_id = _::from_JV(vobj["user_id"], type<int64>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:declinechatjoinrequest? ) : declinechatjoinrequest?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:declinechatjoinrequest explicit? ) : declinechatjoinrequest?
     return null if v==null
     var q = new declinechatjoinrequest
     *q <- from_JV(v,type<declinechatjoinrequest>)
     return q
 
-def JV ( v:declinechatjoinrequest ) : JsonValue?
+[generic]
+def JV ( v:declinechatjoinrequest explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["user_id"] = _::JV(v.user_id)
@@ -4754,20 +5153,23 @@ struct setchatphoto
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target channel (in the format @channelusername)
     photo : inputfile	//! Required. New chat photo, uploaded using multipart/form-data
 
-def from_JV ( var v:JsonValue?; t:setchatphoto ) : setchatphoto
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:setchatphoto explicit ) : setchatphoto
     var q : setchatphoto
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
     q.photo <- _::from_JV(vobj["photo"], type<inputfile>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:setchatphoto? ) : setchatphoto?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:setchatphoto explicit? ) : setchatphoto?
     return null if v==null
     var q = new setchatphoto
     *q <- from_JV(v,type<setchatphoto>)
     return q
 
-def JV ( v:setchatphoto ) : JsonValue?
+[generic]
+def JV ( v:setchatphoto explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["photo"] = _::JV(v.photo)
@@ -4777,19 +5179,22 @@ struct deletechatphoto
     //!  Use this method to delete a chat photo. Photos can't be changed for private chats. The bot must be an administrator in the chat for this to work and must have the appropriate administrator rights. Returns True on success.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target channel (in the format @channelusername)
 
-def from_JV ( var v:JsonValue?; t:deletechatphoto ) : deletechatphoto
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:deletechatphoto explicit ) : deletechatphoto
     var q : deletechatphoto
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:deletechatphoto? ) : deletechatphoto?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:deletechatphoto explicit? ) : deletechatphoto?
     return null if v==null
     var q = new deletechatphoto
     *q <- from_JV(v,type<deletechatphoto>)
     return q
 
-def JV ( v:deletechatphoto ) : JsonValue?
+[generic]
+def JV ( v:deletechatphoto explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     return _::JV(map)
@@ -4799,20 +5204,23 @@ struct setchattitle
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target channel (in the format @channelusername)
     title : string	//! Required. New chat title, 1-128 characters
 
-def from_JV ( var v:JsonValue?; t:setchattitle ) : setchattitle
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:setchattitle explicit ) : setchattitle
     var q : setchattitle
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
     q.title = _::from_JV(vobj["title"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:setchattitle? ) : setchattitle?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:setchattitle explicit? ) : setchattitle?
     return null if v==null
     var q = new setchattitle
     *q <- from_JV(v,type<setchattitle>)
     return q
 
-def JV ( v:setchattitle ) : JsonValue?
+[generic]
+def JV ( v:setchattitle explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["title"] = _::JV(v.title)
@@ -4823,20 +5231,23 @@ struct setchatdescription
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target channel (in the format @channelusername)
     description : string	//! Optional. New chat description, 0-255 characters
 
-def from_JV ( var v:JsonValue?; t:setchatdescription ) : setchatdescription
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:setchatdescription explicit ) : setchatdescription
     var q : setchatdescription
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
     q.description = _::from_JV(vobj["description"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:setchatdescription? ) : setchatdescription?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:setchatdescription explicit? ) : setchatdescription?
     return null if v==null
     var q = new setchatdescription
     *q <- from_JV(v,type<setchatdescription>)
     return q
 
-def JV ( v:setchatdescription ) : JsonValue?
+[generic]
+def JV ( v:setchatdescription explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["description"] = _::JV(v.description)
@@ -4848,7 +5259,8 @@ struct pinchatmessage
     message_id : int64	//! Required. Identifier of a message to pin
     disable_notification : bool	//! Optional. Pass True if it is not necessary to send a notification to all chat members about the new pinned message. Notifications are always disabled in channels and private chats.
 
-def from_JV ( var v:JsonValue?; t:pinchatmessage ) : pinchatmessage
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:pinchatmessage explicit ) : pinchatmessage
     var q : pinchatmessage
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
@@ -4856,13 +5268,15 @@ def from_JV ( var v:JsonValue?; t:pinchatmessage ) : pinchatmessage
     q.disable_notification = _::from_JV(vobj["disable_notification"], type<bool>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:pinchatmessage? ) : pinchatmessage?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:pinchatmessage explicit? ) : pinchatmessage?
     return null if v==null
     var q = new pinchatmessage
     *q <- from_JV(v,type<pinchatmessage>)
     return q
 
-def JV ( v:pinchatmessage ) : JsonValue?
+[generic]
+def JV ( v:pinchatmessage explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["message_id"] = _::JV(v.message_id)
@@ -4874,20 +5288,23 @@ struct unpinchatmessage
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target channel (in the format @channelusername)
     message_id : int64	//! Optional. Identifier of a message to unpin. If not specified, the most recent pinned message (by sending date) will be unpinned.
 
-def from_JV ( var v:JsonValue?; t:unpinchatmessage ) : unpinchatmessage
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:unpinchatmessage explicit ) : unpinchatmessage
     var q : unpinchatmessage
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
     q.message_id = _::from_JV(vobj["message_id"], type<int64>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:unpinchatmessage? ) : unpinchatmessage?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:unpinchatmessage explicit? ) : unpinchatmessage?
     return null if v==null
     var q = new unpinchatmessage
     *q <- from_JV(v,type<unpinchatmessage>)
     return q
 
-def JV ( v:unpinchatmessage ) : JsonValue?
+[generic]
+def JV ( v:unpinchatmessage explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["message_id"] = _::JV(v.message_id)
@@ -4897,19 +5314,22 @@ struct unpinallchatmessages
     //!  Use this method to clear the list of pinned messages in a chat. If the chat is not a private chat, the bot must be an administrator in the chat for this to work and must have the 'can_pin_messages' administrator right in a supergroup or 'can_edit_messages' administrator right in a channel. Returns True on success.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target channel (in the format @channelusername)
 
-def from_JV ( var v:JsonValue?; t:unpinallchatmessages ) : unpinallchatmessages
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:unpinallchatmessages explicit ) : unpinallchatmessages
     var q : unpinallchatmessages
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:unpinallchatmessages? ) : unpinallchatmessages?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:unpinallchatmessages explicit? ) : unpinallchatmessages?
     return null if v==null
     var q = new unpinallchatmessages
     *q <- from_JV(v,type<unpinallchatmessages>)
     return q
 
-def JV ( v:unpinallchatmessages ) : JsonValue?
+[generic]
+def JV ( v:unpinallchatmessages explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     return _::JV(map)
@@ -4918,19 +5338,22 @@ struct leavechat
     //!  Use this method for your bot to leave a group, supergroup or channel. Returns True on success.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target supergroup or channel (in the format @channelusername)
 
-def from_JV ( var v:JsonValue?; t:leavechat ) : leavechat
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:leavechat explicit ) : leavechat
     var q : leavechat
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:leavechat? ) : leavechat?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:leavechat explicit? ) : leavechat?
     return null if v==null
     var q = new leavechat
     *q <- from_JV(v,type<leavechat>)
     return q
 
-def JV ( v:leavechat ) : JsonValue?
+[generic]
+def JV ( v:leavechat explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     return _::JV(map)
@@ -4939,19 +5362,22 @@ struct getchat
     //!  Use this method to get up to date information about the chat (current name of the user for one-on-one conversations, current username of a user, group or channel, etc.). Returns a Chat object on success.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target supergroup or channel (in the format @channelusername)
 
-def from_JV ( var v:JsonValue?; t:getchat ) : getchat
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:getchat explicit ) : getchat
     var q : getchat
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:getchat? ) : getchat?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:getchat explicit? ) : getchat?
     return null if v==null
     var q = new getchat
     *q <- from_JV(v,type<getchat>)
     return q
 
-def JV ( v:getchat ) : JsonValue?
+[generic]
+def JV ( v:getchat explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     return _::JV(map)
@@ -4960,19 +5386,22 @@ struct getchatadministrators
     //!  Use this method to get a list of administrators in a chat, which aren't bots. Returns an Array of ChatMember objects.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target supergroup or channel (in the format @channelusername)
 
-def from_JV ( var v:JsonValue?; t:getchatadministrators ) : getchatadministrators
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:getchatadministrators explicit ) : getchatadministrators
     var q : getchatadministrators
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:getchatadministrators? ) : getchatadministrators?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:getchatadministrators explicit? ) : getchatadministrators?
     return null if v==null
     var q = new getchatadministrators
     *q <- from_JV(v,type<getchatadministrators>)
     return q
 
-def JV ( v:getchatadministrators ) : JsonValue?
+[generic]
+def JV ( v:getchatadministrators explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     return _::JV(map)
@@ -4981,19 +5410,22 @@ struct getchatmembercount
     //!  Use this method to get the number of members in a chat. Returns Int on success.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target supergroup or channel (in the format @channelusername)
 
-def from_JV ( var v:JsonValue?; t:getchatmembercount ) : getchatmembercount
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:getchatmembercount explicit ) : getchatmembercount
     var q : getchatmembercount
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:getchatmembercount? ) : getchatmembercount?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:getchatmembercount explicit? ) : getchatmembercount?
     return null if v==null
     var q = new getchatmembercount
     *q <- from_JV(v,type<getchatmembercount>)
     return q
 
-def JV ( v:getchatmembercount ) : JsonValue?
+[generic]
+def JV ( v:getchatmembercount explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     return _::JV(map)
@@ -5003,20 +5435,23 @@ struct getchatmember
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target supergroup or channel (in the format @channelusername)
     user_id : int64	//! Required. Unique identifier of the target user
 
-def from_JV ( var v:JsonValue?; t:getchatmember ) : getchatmember
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:getchatmember explicit ) : getchatmember
     var q : getchatmember
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
     q.user_id = _::from_JV(vobj["user_id"], type<int64>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:getchatmember? ) : getchatmember?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:getchatmember explicit? ) : getchatmember?
     return null if v==null
     var q = new getchatmember
     *q <- from_JV(v,type<getchatmember>)
     return q
 
-def JV ( v:getchatmember ) : JsonValue?
+[generic]
+def JV ( v:getchatmember explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["user_id"] = _::JV(v.user_id)
@@ -5027,20 +5462,23 @@ struct setchatstickerset
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target supergroup (in the format @supergroupusername)
     sticker_set_name : string	//! Required. Name of the sticker set to be set as the group sticker set
 
-def from_JV ( var v:JsonValue?; t:setchatstickerset ) : setchatstickerset
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:setchatstickerset explicit ) : setchatstickerset
     var q : setchatstickerset
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
     q.sticker_set_name = _::from_JV(vobj["sticker_set_name"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:setchatstickerset? ) : setchatstickerset?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:setchatstickerset explicit? ) : setchatstickerset?
     return null if v==null
     var q = new setchatstickerset
     *q <- from_JV(v,type<setchatstickerset>)
     return q
 
-def JV ( v:setchatstickerset ) : JsonValue?
+[generic]
+def JV ( v:setchatstickerset explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["sticker_set_name"] = _::JV(v.sticker_set_name)
@@ -5050,19 +5488,22 @@ struct deletechatstickerset
     //!  Use this method to delete a group sticker set from a supergroup. The bot must be an administrator in the chat for this to work and must have the appropriate administrator rights. Use the field can_set_sticker_set optionally returned in getChat requests to check if the bot can use this method. Returns True on success.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target supergroup (in the format @supergroupusername)
 
-def from_JV ( var v:JsonValue?; t:deletechatstickerset ) : deletechatstickerset
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:deletechatstickerset explicit ) : deletechatstickerset
     var q : deletechatstickerset
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:deletechatstickerset? ) : deletechatstickerset?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:deletechatstickerset explicit? ) : deletechatstickerset?
     return null if v==null
     var q = new deletechatstickerset
     *q <- from_JV(v,type<deletechatstickerset>)
     return q
 
-def JV ( v:deletechatstickerset ) : JsonValue?
+[generic]
+def JV ( v:deletechatstickerset explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     return _::JV(map)
@@ -5071,18 +5512,21 @@ struct getforumtopiciconstickers
     //!  Use this method to get custom emoji stickers, which can be used as a forum topic icon by any user. Requires no parameters. Returns an Array of Sticker objects.
     object_getforumtopiciconstickers_has_no_fields:bool
 
-def from_JV ( var v:JsonValue?; t:getforumtopiciconstickers ) : getforumtopiciconstickers
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:getforumtopiciconstickers explicit ) : getforumtopiciconstickers
     var q : getforumtopiciconstickers
     var vobj & = unsafe(v as _object)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:getforumtopiciconstickers? ) : getforumtopiciconstickers?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:getforumtopiciconstickers explicit? ) : getforumtopiciconstickers?
     return null if v==null
     var q = new getforumtopiciconstickers
     *q <- from_JV(v,type<getforumtopiciconstickers>)
     return q
 
-def JV ( v:getforumtopiciconstickers ) : JsonValue?
+[generic]
+def JV ( v:getforumtopiciconstickers explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     return _::JV(map)
 
@@ -5093,7 +5537,8 @@ struct createforumtopic
     icon_color : int64	//! Optional. Color of the topic icon in RGB format. Currently, must be one of 7322096 (0x6FB9F0), 16766590 (0xFFD67E), 13338331 (0xCB86DB), 9367192 (0x8EEE98), 16749490 (0xFF93B2), or 16478047 (0xFB6F5F)
     icon_custom_emoji_id : string	//! Optional. Unique identifier of the custom emoji shown as the topic icon. Use getForumTopicIconStickers to get all allowed custom emoji identifiers.
 
-def from_JV ( var v:JsonValue?; t:createforumtopic ) : createforumtopic
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:createforumtopic explicit ) : createforumtopic
     var q : createforumtopic
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
@@ -5102,13 +5547,15 @@ def from_JV ( var v:JsonValue?; t:createforumtopic ) : createforumtopic
     q.icon_custom_emoji_id = _::from_JV(vobj["icon_custom_emoji_id"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:createforumtopic? ) : createforumtopic?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:createforumtopic explicit? ) : createforumtopic?
     return null if v==null
     var q = new createforumtopic
     *q <- from_JV(v,type<createforumtopic>)
     return q
 
-def JV ( v:createforumtopic ) : JsonValue?
+[generic]
+def JV ( v:createforumtopic explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["name"] = _::JV(v.name)
@@ -5123,7 +5570,8 @@ struct editforumtopic
     name : string	//! Optional. New topic name, 0-128 characters. If not specified or empty, the current name of the topic will be kept
     icon_custom_emoji_id : string	//! Optional. New unique identifier of the custom emoji shown as the topic icon. Use getForumTopicIconStickers to get all allowed custom emoji identifiers. Pass an empty string to remove the icon. If not specified, the current icon will be kept
 
-def from_JV ( var v:JsonValue?; t:editforumtopic ) : editforumtopic
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:editforumtopic explicit ) : editforumtopic
     var q : editforumtopic
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
@@ -5132,13 +5580,15 @@ def from_JV ( var v:JsonValue?; t:editforumtopic ) : editforumtopic
     q.icon_custom_emoji_id = _::from_JV(vobj["icon_custom_emoji_id"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:editforumtopic? ) : editforumtopic?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:editforumtopic explicit? ) : editforumtopic?
     return null if v==null
     var q = new editforumtopic
     *q <- from_JV(v,type<editforumtopic>)
     return q
 
-def JV ( v:editforumtopic ) : JsonValue?
+[generic]
+def JV ( v:editforumtopic explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["message_thread_id"] = _::JV(v.message_thread_id)
@@ -5151,20 +5601,23 @@ struct closeforumtopic
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target supergroup (in the format @supergroupusername)
     message_thread_id : int64	//! Required. Unique identifier for the target message thread of the forum topic
 
-def from_JV ( var v:JsonValue?; t:closeforumtopic ) : closeforumtopic
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:closeforumtopic explicit ) : closeforumtopic
     var q : closeforumtopic
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
     q.message_thread_id = _::from_JV(vobj["message_thread_id"], type<int64>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:closeforumtopic? ) : closeforumtopic?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:closeforumtopic explicit? ) : closeforumtopic?
     return null if v==null
     var q = new closeforumtopic
     *q <- from_JV(v,type<closeforumtopic>)
     return q
 
-def JV ( v:closeforumtopic ) : JsonValue?
+[generic]
+def JV ( v:closeforumtopic explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["message_thread_id"] = _::JV(v.message_thread_id)
@@ -5175,20 +5628,23 @@ struct reopenforumtopic
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target supergroup (in the format @supergroupusername)
     message_thread_id : int64	//! Required. Unique identifier for the target message thread of the forum topic
 
-def from_JV ( var v:JsonValue?; t:reopenforumtopic ) : reopenforumtopic
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:reopenforumtopic explicit ) : reopenforumtopic
     var q : reopenforumtopic
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
     q.message_thread_id = _::from_JV(vobj["message_thread_id"], type<int64>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:reopenforumtopic? ) : reopenforumtopic?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:reopenforumtopic explicit? ) : reopenforumtopic?
     return null if v==null
     var q = new reopenforumtopic
     *q <- from_JV(v,type<reopenforumtopic>)
     return q
 
-def JV ( v:reopenforumtopic ) : JsonValue?
+[generic]
+def JV ( v:reopenforumtopic explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["message_thread_id"] = _::JV(v.message_thread_id)
@@ -5199,20 +5655,23 @@ struct deleteforumtopic
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target supergroup (in the format @supergroupusername)
     message_thread_id : int64	//! Required. Unique identifier for the target message thread of the forum topic
 
-def from_JV ( var v:JsonValue?; t:deleteforumtopic ) : deleteforumtopic
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:deleteforumtopic explicit ) : deleteforumtopic
     var q : deleteforumtopic
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
     q.message_thread_id = _::from_JV(vobj["message_thread_id"], type<int64>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:deleteforumtopic? ) : deleteforumtopic?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:deleteforumtopic explicit? ) : deleteforumtopic?
     return null if v==null
     var q = new deleteforumtopic
     *q <- from_JV(v,type<deleteforumtopic>)
     return q
 
-def JV ( v:deleteforumtopic ) : JsonValue?
+[generic]
+def JV ( v:deleteforumtopic explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["message_thread_id"] = _::JV(v.message_thread_id)
@@ -5223,20 +5682,23 @@ struct unpinallforumtopicmessages
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target supergroup (in the format @supergroupusername)
     message_thread_id : int64	//! Required. Unique identifier for the target message thread of the forum topic
 
-def from_JV ( var v:JsonValue?; t:unpinallforumtopicmessages ) : unpinallforumtopicmessages
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:unpinallforumtopicmessages explicit ) : unpinallforumtopicmessages
     var q : unpinallforumtopicmessages
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
     q.message_thread_id = _::from_JV(vobj["message_thread_id"], type<int64>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:unpinallforumtopicmessages? ) : unpinallforumtopicmessages?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:unpinallforumtopicmessages explicit? ) : unpinallforumtopicmessages?
     return null if v==null
     var q = new unpinallforumtopicmessages
     *q <- from_JV(v,type<unpinallforumtopicmessages>)
     return q
 
-def JV ( v:unpinallforumtopicmessages ) : JsonValue?
+[generic]
+def JV ( v:unpinallforumtopicmessages explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["message_thread_id"] = _::JV(v.message_thread_id)
@@ -5247,20 +5709,23 @@ struct editgeneralforumtopic
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target supergroup (in the format @supergroupusername)
     name : string	//! Required. New topic name, 1-128 characters
 
-def from_JV ( var v:JsonValue?; t:editgeneralforumtopic ) : editgeneralforumtopic
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:editgeneralforumtopic explicit ) : editgeneralforumtopic
     var q : editgeneralforumtopic
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
     q.name = _::from_JV(vobj["name"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:editgeneralforumtopic? ) : editgeneralforumtopic?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:editgeneralforumtopic explicit? ) : editgeneralforumtopic?
     return null if v==null
     var q = new editgeneralforumtopic
     *q <- from_JV(v,type<editgeneralforumtopic>)
     return q
 
-def JV ( v:editgeneralforumtopic ) : JsonValue?
+[generic]
+def JV ( v:editgeneralforumtopic explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["name"] = _::JV(v.name)
@@ -5270,19 +5735,22 @@ struct closegeneralforumtopic
     //!  Use this method to close an open 'General' topic in a forum supergroup chat. The bot must be an administrator in the chat for this to work and must have the can_manage_topics administrator rights. Returns True on success.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target supergroup (in the format @supergroupusername)
 
-def from_JV ( var v:JsonValue?; t:closegeneralforumtopic ) : closegeneralforumtopic
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:closegeneralforumtopic explicit ) : closegeneralforumtopic
     var q : closegeneralforumtopic
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:closegeneralforumtopic? ) : closegeneralforumtopic?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:closegeneralforumtopic explicit? ) : closegeneralforumtopic?
     return null if v==null
     var q = new closegeneralforumtopic
     *q <- from_JV(v,type<closegeneralforumtopic>)
     return q
 
-def JV ( v:closegeneralforumtopic ) : JsonValue?
+[generic]
+def JV ( v:closegeneralforumtopic explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     return _::JV(map)
@@ -5291,19 +5759,22 @@ struct reopengeneralforumtopic
     //!  Use this method to reopen a closed 'General' topic in a forum supergroup chat. The bot must be an administrator in the chat for this to work and must have the can_manage_topics administrator rights. The topic will be automatically unhidden if it was hidden. Returns True on success.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target supergroup (in the format @supergroupusername)
 
-def from_JV ( var v:JsonValue?; t:reopengeneralforumtopic ) : reopengeneralforumtopic
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:reopengeneralforumtopic explicit ) : reopengeneralforumtopic
     var q : reopengeneralforumtopic
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:reopengeneralforumtopic? ) : reopengeneralforumtopic?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:reopengeneralforumtopic explicit? ) : reopengeneralforumtopic?
     return null if v==null
     var q = new reopengeneralforumtopic
     *q <- from_JV(v,type<reopengeneralforumtopic>)
     return q
 
-def JV ( v:reopengeneralforumtopic ) : JsonValue?
+[generic]
+def JV ( v:reopengeneralforumtopic explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     return _::JV(map)
@@ -5312,19 +5783,22 @@ struct hidegeneralforumtopic
     //!  Use this method to hide the 'General' topic in a forum supergroup chat. The bot must be an administrator in the chat for this to work and must have the can_manage_topics administrator rights. The topic will be automatically closed if it was open. Returns True on success.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target supergroup (in the format @supergroupusername)
 
-def from_JV ( var v:JsonValue?; t:hidegeneralforumtopic ) : hidegeneralforumtopic
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:hidegeneralforumtopic explicit ) : hidegeneralforumtopic
     var q : hidegeneralforumtopic
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:hidegeneralforumtopic? ) : hidegeneralforumtopic?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:hidegeneralforumtopic explicit? ) : hidegeneralforumtopic?
     return null if v==null
     var q = new hidegeneralforumtopic
     *q <- from_JV(v,type<hidegeneralforumtopic>)
     return q
 
-def JV ( v:hidegeneralforumtopic ) : JsonValue?
+[generic]
+def JV ( v:hidegeneralforumtopic explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     return _::JV(map)
@@ -5333,19 +5807,22 @@ struct unhidegeneralforumtopic
     //!  Use this method to unhide the 'General' topic in a forum supergroup chat. The bot must be an administrator in the chat for this to work and must have the can_manage_topics administrator rights. Returns True on success.
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target supergroup (in the format @supergroupusername)
 
-def from_JV ( var v:JsonValue?; t:unhidegeneralforumtopic ) : unhidegeneralforumtopic
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:unhidegeneralforumtopic explicit ) : unhidegeneralforumtopic
     var q : unhidegeneralforumtopic
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:unhidegeneralforumtopic? ) : unhidegeneralforumtopic?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:unhidegeneralforumtopic explicit? ) : unhidegeneralforumtopic?
     return null if v==null
     var q = new unhidegeneralforumtopic
     *q <- from_JV(v,type<unhidegeneralforumtopic>)
     return q
 
-def JV ( v:unhidegeneralforumtopic ) : JsonValue?
+[generic]
+def JV ( v:unhidegeneralforumtopic explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     return _::JV(map)
@@ -5358,7 +5835,8 @@ struct answercallbackquery
     url : string	//! Optional. URL that will be opened by the user's client. If you have created a Game and accepted the conditions via @BotFather, specify the URL that opens your game - note that this will only work if the query comes from a callback_game button. Otherwise, you may use links like t.me/your_bot?start=XXXX that open your bot with a parameter.
     cache_time : int64	//! Optional. The maximum amount of time in seconds that the result of the callback query may be cached client-side. Telegram apps will support caching starting in version 3.14. Defaults to 0.
 
-def from_JV ( var v:JsonValue?; t:answercallbackquery ) : answercallbackquery
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:answercallbackquery explicit ) : answercallbackquery
     var q : answercallbackquery
     var vobj & = unsafe(v as _object)
     q.callback_query_id = _::from_JV(vobj["callback_query_id"], type<string>)
@@ -5368,13 +5846,15 @@ def from_JV ( var v:JsonValue?; t:answercallbackquery ) : answercallbackquery
     q.cache_time = _::from_JV(vobj["cache_time"], type<int64>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:answercallbackquery? ) : answercallbackquery?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:answercallbackquery explicit? ) : answercallbackquery?
     return null if v==null
     var q = new answercallbackquery
     *q <- from_JV(v,type<answercallbackquery>)
     return q
 
-def JV ( v:answercallbackquery ) : JsonValue?
+[generic]
+def JV ( v:answercallbackquery explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["callback_query_id"] = _::JV(v.callback_query_id)
     map["text"] = _::JV(v.text)
@@ -5389,7 +5869,8 @@ struct setmycommands
     scope : botcommandscope?	//! Optional. A JSON-serialized object, describing scope of users for which the commands are relevant. Defaults to BotCommandScopeDefault.
     language_code : string	//! Optional. A two-letter ISO 639-1 language code. If empty, commands will be applied to all users from the given scope, for whose language there are no dedicated commands
 
-def from_JV ( var v:JsonValue?; t:setmycommands ) : setmycommands
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:setmycommands explicit ) : setmycommands
     var q : setmycommands
     var vobj & = unsafe(v as _object)
     q.commands <- _::from_JV(vobj["commands"], type<array<botcommand>>)
@@ -5397,13 +5878,15 @@ def from_JV ( var v:JsonValue?; t:setmycommands ) : setmycommands
     q.language_code = _::from_JV(vobj["language_code"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:setmycommands? ) : setmycommands?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:setmycommands explicit? ) : setmycommands?
     return null if v==null
     var q = new setmycommands
     *q <- from_JV(v,type<setmycommands>)
     return q
 
-def JV ( v:setmycommands ) : JsonValue?
+[generic]
+def JV ( v:setmycommands explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["commands"] = _::JV(v.commands)
     if v.scope!=null
@@ -5416,20 +5899,23 @@ struct deletemycommands
     scope : botcommandscope?	//! Optional. A JSON-serialized object, describing scope of users for which the commands are relevant. Defaults to BotCommandScopeDefault.
     language_code : string	//! Optional. A two-letter ISO 639-1 language code. If empty, commands will be applied to all users from the given scope, for whose language there are no dedicated commands
 
-def from_JV ( var v:JsonValue?; t:deletemycommands ) : deletemycommands
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:deletemycommands explicit ) : deletemycommands
     var q : deletemycommands
     var vobj & = unsafe(v as _object)
     q.scope = _::from_JV(vobj["scope"], type<botcommandscope?>)
     q.language_code = _::from_JV(vobj["language_code"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:deletemycommands? ) : deletemycommands?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:deletemycommands explicit? ) : deletemycommands?
     return null if v==null
     var q = new deletemycommands
     *q <- from_JV(v,type<deletemycommands>)
     return q
 
-def JV ( v:deletemycommands ) : JsonValue?
+[generic]
+def JV ( v:deletemycommands explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     if v.scope!=null
         map["scope"] = _::JV(v.scope)
@@ -5441,20 +5927,23 @@ struct getmycommands
     scope : botcommandscope?	//! Optional. A JSON-serialized object, describing scope of users. Defaults to BotCommandScopeDefault.
     language_code : string	//! Optional. A two-letter ISO 639-1 language code or an empty string
 
-def from_JV ( var v:JsonValue?; t:getmycommands ) : getmycommands
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:getmycommands explicit ) : getmycommands
     var q : getmycommands
     var vobj & = unsafe(v as _object)
     q.scope = _::from_JV(vobj["scope"], type<botcommandscope?>)
     q.language_code = _::from_JV(vobj["language_code"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:getmycommands? ) : getmycommands?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:getmycommands explicit? ) : getmycommands?
     return null if v==null
     var q = new getmycommands
     *q <- from_JV(v,type<getmycommands>)
     return q
 
-def JV ( v:getmycommands ) : JsonValue?
+[generic]
+def JV ( v:getmycommands explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     if v.scope!=null
         map["scope"] = _::JV(v.scope)
@@ -5466,20 +5955,23 @@ struct setmydescription
     description : string	//! Optional. New bot description; 0-512 characters. Pass an empty string to remove the dedicated description for the given language.
     language_code : string	//! Optional. A two-letter ISO 639-1 language code. If empty, the description will be applied to all users for whose language there is no dedicated description.
 
-def from_JV ( var v:JsonValue?; t:setmydescription ) : setmydescription
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:setmydescription explicit ) : setmydescription
     var q : setmydescription
     var vobj & = unsafe(v as _object)
     q.description = _::from_JV(vobj["description"], type<string>)
     q.language_code = _::from_JV(vobj["language_code"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:setmydescription? ) : setmydescription?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:setmydescription explicit? ) : setmydescription?
     return null if v==null
     var q = new setmydescription
     *q <- from_JV(v,type<setmydescription>)
     return q
 
-def JV ( v:setmydescription ) : JsonValue?
+[generic]
+def JV ( v:setmydescription explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["description"] = _::JV(v.description)
     map["language_code"] = _::JV(v.language_code)
@@ -5489,19 +5981,22 @@ struct getmydescription
     //!  Use this method to get the current bot description for the given user language. Returns BotDescription on success.
     language_code : string	//! Optional. A two-letter ISO 639-1 language code or an empty string
 
-def from_JV ( var v:JsonValue?; t:getmydescription ) : getmydescription
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:getmydescription explicit ) : getmydescription
     var q : getmydescription
     var vobj & = unsafe(v as _object)
     q.language_code = _::from_JV(vobj["language_code"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:getmydescription? ) : getmydescription?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:getmydescription explicit? ) : getmydescription?
     return null if v==null
     var q = new getmydescription
     *q <- from_JV(v,type<getmydescription>)
     return q
 
-def JV ( v:getmydescription ) : JsonValue?
+[generic]
+def JV ( v:getmydescription explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["language_code"] = _::JV(v.language_code)
     return _::JV(map)
@@ -5511,20 +6006,23 @@ struct setmyshortdescription
     short_description : string	//! Optional. New short description for the bot; 0-120 characters. Pass an empty string to remove the dedicated short description for the given language.
     language_code : string	//! Optional. A two-letter ISO 639-1 language code. If empty, the short description will be applied to all users for whose language there is no dedicated short description.
 
-def from_JV ( var v:JsonValue?; t:setmyshortdescription ) : setmyshortdescription
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:setmyshortdescription explicit ) : setmyshortdescription
     var q : setmyshortdescription
     var vobj & = unsafe(v as _object)
     q.short_description = _::from_JV(vobj["short_description"], type<string>)
     q.language_code = _::from_JV(vobj["language_code"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:setmyshortdescription? ) : setmyshortdescription?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:setmyshortdescription explicit? ) : setmyshortdescription?
     return null if v==null
     var q = new setmyshortdescription
     *q <- from_JV(v,type<setmyshortdescription>)
     return q
 
-def JV ( v:setmyshortdescription ) : JsonValue?
+[generic]
+def JV ( v:setmyshortdescription explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["short_description"] = _::JV(v.short_description)
     map["language_code"] = _::JV(v.language_code)
@@ -5534,19 +6032,22 @@ struct getmyshortdescription
     //!  Use this method to get the current bot short description for the given user language. Returns BotShortDescription on success.
     language_code : string	//! Optional. A two-letter ISO 639-1 language code or an empty string
 
-def from_JV ( var v:JsonValue?; t:getmyshortdescription ) : getmyshortdescription
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:getmyshortdescription explicit ) : getmyshortdescription
     var q : getmyshortdescription
     var vobj & = unsafe(v as _object)
     q.language_code = _::from_JV(vobj["language_code"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:getmyshortdescription? ) : getmyshortdescription?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:getmyshortdescription explicit? ) : getmyshortdescription?
     return null if v==null
     var q = new getmyshortdescription
     *q <- from_JV(v,type<getmyshortdescription>)
     return q
 
-def JV ( v:getmyshortdescription ) : JsonValue?
+[generic]
+def JV ( v:getmyshortdescription explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["language_code"] = _::JV(v.language_code)
     return _::JV(map)
@@ -5556,20 +6057,23 @@ struct setchatmenubutton
     chat_id : int64	//! Optional. Unique identifier for the target private chat. If not specified, default bot's menu button will be changed
     menu_button : menubutton?	//! Optional. A JSON-serialized object for the bot's new menu button. Defaults to MenuButtonDefault
 
-def from_JV ( var v:JsonValue?; t:setchatmenubutton ) : setchatmenubutton
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:setchatmenubutton explicit ) : setchatmenubutton
     var q : setchatmenubutton
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<int64>)
     q.menu_button = _::from_JV(vobj["menu_button"], type<menubutton?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:setchatmenubutton? ) : setchatmenubutton?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:setchatmenubutton explicit? ) : setchatmenubutton?
     return null if v==null
     var q = new setchatmenubutton
     *q <- from_JV(v,type<setchatmenubutton>)
     return q
 
-def JV ( v:setchatmenubutton ) : JsonValue?
+[generic]
+def JV ( v:setchatmenubutton explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     if v.menu_button!=null
@@ -5580,19 +6084,22 @@ struct getchatmenubutton
     //!  Use this method to get the current value of the bot's menu button in a private chat, or the default menu button. Returns MenuButton on success.
     chat_id : int64	//! Optional. Unique identifier for the target private chat. If not specified, default bot's menu button will be returned
 
-def from_JV ( var v:JsonValue?; t:getchatmenubutton ) : getchatmenubutton
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:getchatmenubutton explicit ) : getchatmenubutton
     var q : getchatmenubutton
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<int64>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:getchatmenubutton? ) : getchatmenubutton?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:getchatmenubutton explicit? ) : getchatmenubutton?
     return null if v==null
     var q = new getchatmenubutton
     *q <- from_JV(v,type<getchatmenubutton>)
     return q
 
-def JV ( v:getchatmenubutton ) : JsonValue?
+[generic]
+def JV ( v:getchatmenubutton explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     return _::JV(map)
@@ -5602,20 +6109,23 @@ struct setmydefaultadministratorrights
     rights : chatadministratorrights?	//! Optional. A JSON-serialized object describing new default administrator rights. If not specified, the default administrator rights will be cleared.
     for_channels : bool	//! Optional. Pass True to change the default administrator rights of the bot in channels. Otherwise, the default administrator rights of the bot for groups and supergroups will be changed.
 
-def from_JV ( var v:JsonValue?; t:setmydefaultadministratorrights ) : setmydefaultadministratorrights
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:setmydefaultadministratorrights explicit ) : setmydefaultadministratorrights
     var q : setmydefaultadministratorrights
     var vobj & = unsafe(v as _object)
     q.rights = _::from_JV(vobj["rights"], type<chatadministratorrights?>)
     q.for_channels = _::from_JV(vobj["for_channels"], type<bool>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:setmydefaultadministratorrights? ) : setmydefaultadministratorrights?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:setmydefaultadministratorrights explicit? ) : setmydefaultadministratorrights?
     return null if v==null
     var q = new setmydefaultadministratorrights
     *q <- from_JV(v,type<setmydefaultadministratorrights>)
     return q
 
-def JV ( v:setmydefaultadministratorrights ) : JsonValue?
+[generic]
+def JV ( v:setmydefaultadministratorrights explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     if v.rights!=null
         map["rights"] = _::JV(v.rights)
@@ -5626,19 +6136,22 @@ struct getmydefaultadministratorrights
     //!  Use this method to get the current default administrator rights of the bot. Returns ChatAdministratorRights on success.
     for_channels : bool	//! Optional. Pass True to get default administrator rights of the bot in channels. Otherwise, default administrator rights of the bot for groups and supergroups will be returned.
 
-def from_JV ( var v:JsonValue?; t:getmydefaultadministratorrights ) : getmydefaultadministratorrights
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:getmydefaultadministratorrights explicit ) : getmydefaultadministratorrights
     var q : getmydefaultadministratorrights
     var vobj & = unsafe(v as _object)
     q.for_channels = _::from_JV(vobj["for_channels"], type<bool>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:getmydefaultadministratorrights? ) : getmydefaultadministratorrights?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:getmydefaultadministratorrights explicit? ) : getmydefaultadministratorrights?
     return null if v==null
     var q = new getmydefaultadministratorrights
     *q <- from_JV(v,type<getmydefaultadministratorrights>)
     return q
 
-def JV ( v:getmydefaultadministratorrights ) : JsonValue?
+[generic]
+def JV ( v:getmydefaultadministratorrights explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["for_channels"] = _::JV(v.for_channels)
     return _::JV(map)
@@ -5647,18 +6160,21 @@ struct inline_mode_methods
     //!  Methods and objects used in the inline mode are described in the Inline mode section.
     object_inline_mode_methods_has_no_fields:bool
 
-def from_JV ( var v:JsonValue?; t:inline_mode_methods ) : inline_mode_methods
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inline_mode_methods explicit ) : inline_mode_methods
     var q : inline_mode_methods
     var vobj & = unsafe(v as _object)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:inline_mode_methods? ) : inline_mode_methods?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inline_mode_methods explicit? ) : inline_mode_methods?
     return null if v==null
     var q = new inline_mode_methods
     *q <- from_JV(v,type<inline_mode_methods>)
     return q
 
-def JV ( v:inline_mode_methods ) : JsonValue?
+[generic]
+def JV ( v:inline_mode_methods explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     return _::JV(map)
 
@@ -5673,7 +6189,8 @@ struct editmessagetext
     disable_web_page_preview : bool	//! Optional. Disables link previews for links in this message
     reply_markup : inlinekeyboardmarkup?	//! Optional. A JSON-serialized object for an inline keyboard.
 
-def from_JV ( var v:JsonValue?; t:editmessagetext ) : editmessagetext
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:editmessagetext explicit ) : editmessagetext
     var q : editmessagetext
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
@@ -5686,13 +6203,15 @@ def from_JV ( var v:JsonValue?; t:editmessagetext ) : editmessagetext
     q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:editmessagetext? ) : editmessagetext?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:editmessagetext explicit? ) : editmessagetext?
     return null if v==null
     var q = new editmessagetext
     *q <- from_JV(v,type<editmessagetext>)
     return q
 
-def JV ( v:editmessagetext ) : JsonValue?
+[generic]
+def JV ( v:editmessagetext explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["message_id"] = _::JV(v.message_id)
@@ -5715,7 +6234,8 @@ struct editmessagecaption
     caption_entities : array<messageentity>	//! Optional. A JSON-serialized list of special entities that appear in the caption, which can be specified instead of parse_mode
     reply_markup : inlinekeyboardmarkup?	//! Optional. A JSON-serialized object for an inline keyboard.
 
-def from_JV ( var v:JsonValue?; t:editmessagecaption ) : editmessagecaption
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:editmessagecaption explicit ) : editmessagecaption
     var q : editmessagecaption
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
@@ -5727,13 +6247,15 @@ def from_JV ( var v:JsonValue?; t:editmessagecaption ) : editmessagecaption
     q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:editmessagecaption? ) : editmessagecaption?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:editmessagecaption explicit? ) : editmessagecaption?
     return null if v==null
     var q = new editmessagecaption
     *q <- from_JV(v,type<editmessagecaption>)
     return q
 
-def JV ( v:editmessagecaption ) : JsonValue?
+[generic]
+def JV ( v:editmessagecaption explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["message_id"] = _::JV(v.message_id)
@@ -5753,7 +6275,8 @@ struct editmessagemedia
     media : inputmedia	//! Required. A JSON-serialized object for a new media content of the message
     reply_markup : inlinekeyboardmarkup?	//! Optional. A JSON-serialized object for a new inline keyboard.
 
-def from_JV ( var v:JsonValue?; t:editmessagemedia ) : editmessagemedia
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:editmessagemedia explicit ) : editmessagemedia
     var q : editmessagemedia
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
@@ -5763,13 +6286,15 @@ def from_JV ( var v:JsonValue?; t:editmessagemedia ) : editmessagemedia
     q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:editmessagemedia? ) : editmessagemedia?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:editmessagemedia explicit? ) : editmessagemedia?
     return null if v==null
     var q = new editmessagemedia
     *q <- from_JV(v,type<editmessagemedia>)
     return q
 
-def JV ( v:editmessagemedia ) : JsonValue?
+[generic]
+def JV ( v:editmessagemedia explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["message_id"] = _::JV(v.message_id)
@@ -5791,7 +6316,8 @@ struct editmessagelivelocation
     proximity_alert_radius : int64	//! Optional. The maximum distance for proximity alerts about approaching another chat member, in meters. Must be between 1 and 100000 if specified.
     reply_markup : inlinekeyboardmarkup?	//! Optional. A JSON-serialized object for a new inline keyboard.
 
-def from_JV ( var v:JsonValue?; t:editmessagelivelocation ) : editmessagelivelocation
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:editmessagelivelocation explicit ) : editmessagelivelocation
     var q : editmessagelivelocation
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
@@ -5805,13 +6331,15 @@ def from_JV ( var v:JsonValue?; t:editmessagelivelocation ) : editmessageliveloc
     q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:editmessagelivelocation? ) : editmessagelivelocation?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:editmessagelivelocation explicit? ) : editmessagelivelocation?
     return null if v==null
     var q = new editmessagelivelocation
     *q <- from_JV(v,type<editmessagelivelocation>)
     return q
 
-def JV ( v:editmessagelivelocation ) : JsonValue?
+[generic]
+def JV ( v:editmessagelivelocation explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["message_id"] = _::JV(v.message_id)
@@ -5832,7 +6360,8 @@ struct stopmessagelivelocation
     inline_message_id : string	//! Optional. Required if chat_id and message_id are not specified. Identifier of the inline message
     reply_markup : inlinekeyboardmarkup?	//! Optional. A JSON-serialized object for a new inline keyboard.
 
-def from_JV ( var v:JsonValue?; t:stopmessagelivelocation ) : stopmessagelivelocation
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:stopmessagelivelocation explicit ) : stopmessagelivelocation
     var q : stopmessagelivelocation
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
@@ -5841,13 +6370,15 @@ def from_JV ( var v:JsonValue?; t:stopmessagelivelocation ) : stopmessageliveloc
     q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:stopmessagelivelocation? ) : stopmessagelivelocation?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:stopmessagelivelocation explicit? ) : stopmessagelivelocation?
     return null if v==null
     var q = new stopmessagelivelocation
     *q <- from_JV(v,type<stopmessagelivelocation>)
     return q
 
-def JV ( v:stopmessagelivelocation ) : JsonValue?
+[generic]
+def JV ( v:stopmessagelivelocation explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["message_id"] = _::JV(v.message_id)
@@ -5863,7 +6394,8 @@ struct editmessagereplymarkup
     inline_message_id : string	//! Optional. Required if chat_id and message_id are not specified. Identifier of the inline message
     reply_markup : inlinekeyboardmarkup?	//! Optional. A JSON-serialized object for an inline keyboard.
 
-def from_JV ( var v:JsonValue?; t:editmessagereplymarkup ) : editmessagereplymarkup
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:editmessagereplymarkup explicit ) : editmessagereplymarkup
     var q : editmessagereplymarkup
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
@@ -5872,13 +6404,15 @@ def from_JV ( var v:JsonValue?; t:editmessagereplymarkup ) : editmessagereplymar
     q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:editmessagereplymarkup? ) : editmessagereplymarkup?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:editmessagereplymarkup explicit? ) : editmessagereplymarkup?
     return null if v==null
     var q = new editmessagereplymarkup
     *q <- from_JV(v,type<editmessagereplymarkup>)
     return q
 
-def JV ( v:editmessagereplymarkup ) : JsonValue?
+[generic]
+def JV ( v:editmessagereplymarkup explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["message_id"] = _::JV(v.message_id)
@@ -5893,7 +6427,8 @@ struct stoppoll
     message_id : int64	//! Required. Identifier of the original message with the poll
     reply_markup : inlinekeyboardmarkup?	//! Optional. A JSON-serialized object for a new message inline keyboard.
 
-def from_JV ( var v:JsonValue?; t:stoppoll ) : stoppoll
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:stoppoll explicit ) : stoppoll
     var q : stoppoll
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
@@ -5901,13 +6436,15 @@ def from_JV ( var v:JsonValue?; t:stoppoll ) : stoppoll
     q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:stoppoll? ) : stoppoll?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:stoppoll explicit? ) : stoppoll?
     return null if v==null
     var q = new stoppoll
     *q <- from_JV(v,type<stoppoll>)
     return q
 
-def JV ( v:stoppoll ) : JsonValue?
+[generic]
+def JV ( v:stoppoll explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["message_id"] = _::JV(v.message_id)
@@ -5920,20 +6457,23 @@ struct deletemessage
     chat_id : string	//! Required. Unique identifier for the target chat or username of the target channel (in the format @channelusername)
     message_id : int64	//! Required. Identifier of the message to delete
 
-def from_JV ( var v:JsonValue?; t:deletemessage ) : deletemessage
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:deletemessage explicit ) : deletemessage
     var q : deletemessage
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
     q.message_id = _::from_JV(vobj["message_id"], type<int64>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:deletemessage? ) : deletemessage?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:deletemessage explicit? ) : deletemessage?
     return null if v==null
     var q = new deletemessage
     *q <- from_JV(v,type<deletemessage>)
     return q
 
-def JV ( v:deletemessage ) : JsonValue?
+[generic]
+def JV ( v:deletemessage explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["message_id"] = _::JV(v.message_id)
@@ -5957,7 +6497,8 @@ struct sticker
     needs_repainting : bool	//! Optional. True, if the sticker must be repainted to a text color in messages, the color of the Telegram Premium badge in emoji status, white color on chat photos, or another appropriate color in other places
     file_size : int64	//! Optional. File size in bytes
 
-def from_JV ( var v:JsonValue?; t:sticker ) : sticker
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:sticker explicit ) : sticker
     var q : sticker
     var vobj & = unsafe(v as _object)
     q.file_id = _::from_JV(vobj["file_id"], type<string>)
@@ -5977,13 +6518,15 @@ def from_JV ( var v:JsonValue?; t:sticker ) : sticker
     q.file_size = _::from_JV(vobj["file_size"], type<int64>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:sticker? ) : sticker?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:sticker explicit? ) : sticker?
     return null if v==null
     var q = new sticker
     *q <- from_JV(v,type<sticker>)
     return q
 
-def JV ( v:sticker ) : JsonValue?
+[generic]
+def JV ( v:sticker explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["file_id"] = _::JV(v.file_id)
     map["file_unique_id"] = _::JV(v.file_unique_id)
@@ -6015,7 +6558,8 @@ struct stickerset
     stickers : array<sticker>	//! List of all set stickers
     thumbnail : photosize?	//! Optional. Sticker set thumbnail in the .WEBP, .TGS, or .WEBM format
 
-def from_JV ( var v:JsonValue?; t:stickerset ) : stickerset
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:stickerset explicit ) : stickerset
     var q : stickerset
     var vobj & = unsafe(v as _object)
     q.name = _::from_JV(vobj["name"], type<string>)
@@ -6027,13 +6571,15 @@ def from_JV ( var v:JsonValue?; t:stickerset ) : stickerset
     q.thumbnail = _::from_JV(vobj["thumbnail"], type<photosize?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:stickerset? ) : stickerset?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:stickerset explicit? ) : stickerset?
     return null if v==null
     var q = new stickerset
     *q <- from_JV(v,type<stickerset>)
     return q
 
-def JV ( v:stickerset ) : JsonValue?
+[generic]
+def JV ( v:stickerset explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["name"] = _::JV(v.name)
     map["title"] = _::JV(v.title)
@@ -6052,7 +6598,8 @@ struct maskposition
     y_shift : float	//! Shift by Y-axis measured in heights of the mask scaled to the face size, from top to bottom. For example, 1.0 will place the mask just below the default mask position.
     scale : float	//! Mask scaling coefficient. For example, 2.0 means double size.
 
-def from_JV ( var v:JsonValue?; t:maskposition ) : maskposition
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:maskposition explicit ) : maskposition
     var q : maskposition
     var vobj & = unsafe(v as _object)
     q.point = _::from_JV(vobj["point"], type<string>)
@@ -6061,13 +6608,15 @@ def from_JV ( var v:JsonValue?; t:maskposition ) : maskposition
     q.scale = _::from_JV(vobj["scale"], type<float>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:maskposition? ) : maskposition?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:maskposition explicit? ) : maskposition?
     return null if v==null
     var q = new maskposition
     *q <- from_JV(v,type<maskposition>)
     return q
 
-def JV ( v:maskposition ) : JsonValue?
+[generic]
+def JV ( v:maskposition explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["point"] = _::JV(v.point)
     map["x_shift"] = _::JV(v.x_shift)
@@ -6082,7 +6631,8 @@ struct inputsticker
     mask_position : maskposition?	//! Optional. Position where the mask should be placed on faces. For “mask” stickers only.
     keywords : array<string>	//! Optional. List of 0-20 search keywords for the sticker with total length of up to 64 characters. For “regular” and “custom_emoji” stickers only.
 
-def from_JV ( var v:JsonValue?; t:inputsticker ) : inputsticker
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inputsticker explicit ) : inputsticker
     var q : inputsticker
     var vobj & = unsafe(v as _object)
     q.sticker <- _::from_JV(vobj["sticker"], type<inputfile>)
@@ -6091,13 +6641,15 @@ def from_JV ( var v:JsonValue?; t:inputsticker ) : inputsticker
     q.keywords <- _::from_JV(vobj["keywords"], type<array<string>>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:inputsticker? ) : inputsticker?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inputsticker explicit? ) : inputsticker?
     return null if v==null
     var q = new inputsticker
     *q <- from_JV(v,type<inputsticker>)
     return q
 
-def JV ( v:inputsticker ) : JsonValue?
+[generic]
+def JV ( v:inputsticker explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["sticker"] = _::JV(v.sticker)
     map["emoji_list"] = _::JV(v.emoji_list)
@@ -6118,7 +6670,8 @@ struct sendsticker
     allow_sending_without_reply : bool	//! Optional. Pass True if the message should be sent even if the specified replied-to message is not found
     reply_markup : inlinekeyboardmarkup?	//! Optional. Additional interface options. A JSON-serialized object for an inline keyboard, custom reply keyboard, instructions to remove reply keyboard or to force a reply from the user.
 
-def from_JV ( var v:JsonValue?; t:sendsticker ) : sendsticker
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:sendsticker explicit ) : sendsticker
     var q : sendsticker
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
@@ -6132,13 +6685,15 @@ def from_JV ( var v:JsonValue?; t:sendsticker ) : sendsticker
     q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:sendsticker? ) : sendsticker?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:sendsticker explicit? ) : sendsticker?
     return null if v==null
     var q = new sendsticker
     *q <- from_JV(v,type<sendsticker>)
     return q
 
-def JV ( v:sendsticker ) : JsonValue?
+[generic]
+def JV ( v:sendsticker explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["message_thread_id"] = _::JV(v.message_thread_id)
@@ -6156,19 +6711,22 @@ struct getstickerset
     //!  Use this method to get a sticker set. On success, a StickerSet object is returned.
     name : string	//! Required. Name of the sticker set
 
-def from_JV ( var v:JsonValue?; t:getstickerset ) : getstickerset
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:getstickerset explicit ) : getstickerset
     var q : getstickerset
     var vobj & = unsafe(v as _object)
     q.name = _::from_JV(vobj["name"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:getstickerset? ) : getstickerset?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:getstickerset explicit? ) : getstickerset?
     return null if v==null
     var q = new getstickerset
     *q <- from_JV(v,type<getstickerset>)
     return q
 
-def JV ( v:getstickerset ) : JsonValue?
+[generic]
+def JV ( v:getstickerset explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["name"] = _::JV(v.name)
     return _::JV(map)
@@ -6177,19 +6735,22 @@ struct getcustomemojistickers
     //!  Use this method to get information about custom emoji stickers by their identifiers. Returns an Array of Sticker objects.
     custom_emoji_ids : array<string>	//! Required. List of custom emoji identifiers. At most 200 custom emoji identifiers can be specified.
 
-def from_JV ( var v:JsonValue?; t:getcustomemojistickers ) : getcustomemojistickers
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:getcustomemojistickers explicit ) : getcustomemojistickers
     var q : getcustomemojistickers
     var vobj & = unsafe(v as _object)
     q.custom_emoji_ids <- _::from_JV(vobj["custom_emoji_ids"], type<array<string>>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:getcustomemojistickers? ) : getcustomemojistickers?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:getcustomemojistickers explicit? ) : getcustomemojistickers?
     return null if v==null
     var q = new getcustomemojistickers
     *q <- from_JV(v,type<getcustomemojistickers>)
     return q
 
-def JV ( v:getcustomemojistickers ) : JsonValue?
+[generic]
+def JV ( v:getcustomemojistickers explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["custom_emoji_ids"] = _::JV(v.custom_emoji_ids)
     return _::JV(map)
@@ -6200,7 +6761,8 @@ struct uploadstickerfile
     sticker : inputfile	//! Required. A file with the sticker in .WEBP, .PNG, .TGS, or .WEBM format. See https://core.telegram.org/stickers for technical requirements. More information on Sending Files »
     sticker_format : string	//! Required. Format of the sticker, must be one of “static”, “animated”, “video”
 
-def from_JV ( var v:JsonValue?; t:uploadstickerfile ) : uploadstickerfile
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:uploadstickerfile explicit ) : uploadstickerfile
     var q : uploadstickerfile
     var vobj & = unsafe(v as _object)
     q.user_id = _::from_JV(vobj["user_id"], type<int64>)
@@ -6208,13 +6770,15 @@ def from_JV ( var v:JsonValue?; t:uploadstickerfile ) : uploadstickerfile
     q.sticker_format = _::from_JV(vobj["sticker_format"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:uploadstickerfile? ) : uploadstickerfile?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:uploadstickerfile explicit? ) : uploadstickerfile?
     return null if v==null
     var q = new uploadstickerfile
     *q <- from_JV(v,type<uploadstickerfile>)
     return q
 
-def JV ( v:uploadstickerfile ) : JsonValue?
+[generic]
+def JV ( v:uploadstickerfile explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["user_id"] = _::JV(v.user_id)
     map["sticker"] = _::JV(v.sticker)
@@ -6231,7 +6795,8 @@ struct createnewstickerset
     sticker_type : string	//! Optional. Type of stickers in the set, pass “regular”, “mask”, or “custom_emoji”. By default, a regular sticker set is created.
     needs_repainting : bool	//! Optional. Pass True if stickers in the sticker set must be repainted to the color of text when used in messages, the accent color if used as emoji status, white on chat photos, or another appropriate color based on context; for custom emoji sticker sets only
 
-def from_JV ( var v:JsonValue?; t:createnewstickerset ) : createnewstickerset
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:createnewstickerset explicit ) : createnewstickerset
     var q : createnewstickerset
     var vobj & = unsafe(v as _object)
     q.user_id = _::from_JV(vobj["user_id"], type<int64>)
@@ -6243,13 +6808,15 @@ def from_JV ( var v:JsonValue?; t:createnewstickerset ) : createnewstickerset
     q.needs_repainting = _::from_JV(vobj["needs_repainting"], type<bool>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:createnewstickerset? ) : createnewstickerset?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:createnewstickerset explicit? ) : createnewstickerset?
     return null if v==null
     var q = new createnewstickerset
     *q <- from_JV(v,type<createnewstickerset>)
     return q
 
-def JV ( v:createnewstickerset ) : JsonValue?
+[generic]
+def JV ( v:createnewstickerset explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["user_id"] = _::JV(v.user_id)
     map["name"] = _::JV(v.name)
@@ -6266,7 +6833,8 @@ struct addstickertoset
     name : string	//! Required. Sticker set name
     sticker : inputsticker	//! Required. A JSON-serialized object with information about the added sticker. If exactly the same sticker had already been added to the set, then the set isn't changed.
 
-def from_JV ( var v:JsonValue?; t:addstickertoset ) : addstickertoset
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:addstickertoset explicit ) : addstickertoset
     var q : addstickertoset
     var vobj & = unsafe(v as _object)
     q.user_id = _::from_JV(vobj["user_id"], type<int64>)
@@ -6274,13 +6842,15 @@ def from_JV ( var v:JsonValue?; t:addstickertoset ) : addstickertoset
     q.sticker <- _::from_JV(vobj["sticker"], type<inputsticker>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:addstickertoset? ) : addstickertoset?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:addstickertoset explicit? ) : addstickertoset?
     return null if v==null
     var q = new addstickertoset
     *q <- from_JV(v,type<addstickertoset>)
     return q
 
-def JV ( v:addstickertoset ) : JsonValue?
+[generic]
+def JV ( v:addstickertoset explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["user_id"] = _::JV(v.user_id)
     map["name"] = _::JV(v.name)
@@ -6292,20 +6862,23 @@ struct setstickerpositioninset
     sticker : string	//! Required. File identifier of the sticker
     position : int64	//! Required. New sticker position in the set, zero-based
 
-def from_JV ( var v:JsonValue?; t:setstickerpositioninset ) : setstickerpositioninset
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:setstickerpositioninset explicit ) : setstickerpositioninset
     var q : setstickerpositioninset
     var vobj & = unsafe(v as _object)
     q.sticker = _::from_JV(vobj["sticker"], type<string>)
     q.position = _::from_JV(vobj["position"], type<int64>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:setstickerpositioninset? ) : setstickerpositioninset?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:setstickerpositioninset explicit? ) : setstickerpositioninset?
     return null if v==null
     var q = new setstickerpositioninset
     *q <- from_JV(v,type<setstickerpositioninset>)
     return q
 
-def JV ( v:setstickerpositioninset ) : JsonValue?
+[generic]
+def JV ( v:setstickerpositioninset explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["sticker"] = _::JV(v.sticker)
     map["position"] = _::JV(v.position)
@@ -6315,19 +6888,22 @@ struct deletestickerfromset
     //!  Use this method to delete a sticker from a set created by the bot. Returns True on success.
     sticker : string	//! Required. File identifier of the sticker
 
-def from_JV ( var v:JsonValue?; t:deletestickerfromset ) : deletestickerfromset
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:deletestickerfromset explicit ) : deletestickerfromset
     var q : deletestickerfromset
     var vobj & = unsafe(v as _object)
     q.sticker = _::from_JV(vobj["sticker"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:deletestickerfromset? ) : deletestickerfromset?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:deletestickerfromset explicit? ) : deletestickerfromset?
     return null if v==null
     var q = new deletestickerfromset
     *q <- from_JV(v,type<deletestickerfromset>)
     return q
 
-def JV ( v:deletestickerfromset ) : JsonValue?
+[generic]
+def JV ( v:deletestickerfromset explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["sticker"] = _::JV(v.sticker)
     return _::JV(map)
@@ -6337,20 +6913,23 @@ struct setstickeremojilist
     sticker : string	//! Required. File identifier of the sticker
     emoji_list : array<string>	//! Required. A JSON-serialized list of 1-20 emoji associated with the sticker
 
-def from_JV ( var v:JsonValue?; t:setstickeremojilist ) : setstickeremojilist
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:setstickeremojilist explicit ) : setstickeremojilist
     var q : setstickeremojilist
     var vobj & = unsafe(v as _object)
     q.sticker = _::from_JV(vobj["sticker"], type<string>)
     q.emoji_list <- _::from_JV(vobj["emoji_list"], type<array<string>>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:setstickeremojilist? ) : setstickeremojilist?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:setstickeremojilist explicit? ) : setstickeremojilist?
     return null if v==null
     var q = new setstickeremojilist
     *q <- from_JV(v,type<setstickeremojilist>)
     return q
 
-def JV ( v:setstickeremojilist ) : JsonValue?
+[generic]
+def JV ( v:setstickeremojilist explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["sticker"] = _::JV(v.sticker)
     map["emoji_list"] = _::JV(v.emoji_list)
@@ -6361,20 +6940,23 @@ struct setstickerkeywords
     sticker : string	//! Required. File identifier of the sticker
     keywords : array<string>	//! Optional. A JSON-serialized list of 0-20 search keywords for the sticker with total length of up to 64 characters
 
-def from_JV ( var v:JsonValue?; t:setstickerkeywords ) : setstickerkeywords
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:setstickerkeywords explicit ) : setstickerkeywords
     var q : setstickerkeywords
     var vobj & = unsafe(v as _object)
     q.sticker = _::from_JV(vobj["sticker"], type<string>)
     q.keywords <- _::from_JV(vobj["keywords"], type<array<string>>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:setstickerkeywords? ) : setstickerkeywords?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:setstickerkeywords explicit? ) : setstickerkeywords?
     return null if v==null
     var q = new setstickerkeywords
     *q <- from_JV(v,type<setstickerkeywords>)
     return q
 
-def JV ( v:setstickerkeywords ) : JsonValue?
+[generic]
+def JV ( v:setstickerkeywords explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["sticker"] = _::JV(v.sticker)
     map["keywords"] = _::JV(v.keywords)
@@ -6385,20 +6967,23 @@ struct setstickermaskposition
     sticker : string	//! Required. File identifier of the sticker
     mask_position : maskposition?	//! Optional. A JSON-serialized object with the position where the mask should be placed on faces. Omit the parameter to remove the mask position.
 
-def from_JV ( var v:JsonValue?; t:setstickermaskposition ) : setstickermaskposition
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:setstickermaskposition explicit ) : setstickermaskposition
     var q : setstickermaskposition
     var vobj & = unsafe(v as _object)
     q.sticker = _::from_JV(vobj["sticker"], type<string>)
     q.mask_position = _::from_JV(vobj["mask_position"], type<maskposition?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:setstickermaskposition? ) : setstickermaskposition?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:setstickermaskposition explicit? ) : setstickermaskposition?
     return null if v==null
     var q = new setstickermaskposition
     *q <- from_JV(v,type<setstickermaskposition>)
     return q
 
-def JV ( v:setstickermaskposition ) : JsonValue?
+[generic]
+def JV ( v:setstickermaskposition explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["sticker"] = _::JV(v.sticker)
     if v.mask_position!=null
@@ -6410,20 +6995,23 @@ struct setstickersettitle
     name : string	//! Required. Sticker set name
     title : string	//! Required. Sticker set title, 1-64 characters
 
-def from_JV ( var v:JsonValue?; t:setstickersettitle ) : setstickersettitle
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:setstickersettitle explicit ) : setstickersettitle
     var q : setstickersettitle
     var vobj & = unsafe(v as _object)
     q.name = _::from_JV(vobj["name"], type<string>)
     q.title = _::from_JV(vobj["title"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:setstickersettitle? ) : setstickersettitle?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:setstickersettitle explicit? ) : setstickersettitle?
     return null if v==null
     var q = new setstickersettitle
     *q <- from_JV(v,type<setstickersettitle>)
     return q
 
-def JV ( v:setstickersettitle ) : JsonValue?
+[generic]
+def JV ( v:setstickersettitle explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["name"] = _::JV(v.name)
     map["title"] = _::JV(v.title)
@@ -6435,7 +7023,8 @@ struct setstickersetthumbnail
     user_id : int64	//! Required. User identifier of the sticker set owner
     thumbnail : inputfile?	//! Optional. A .WEBP or .PNG image with the thumbnail, must be up to 128 kilobytes in size and have a width and height of exactly 100px, or a .TGS animation with a thumbnail up to 32 kilobytes in size (see https://core.telegram.org/stickers#animated-sticker-requirements for animated sticker technical requirements), or a WEBM video with the thumbnail up to 32 kilobytes in size; see https://core.telegram.org/stickers#video-sticker-requirements for video sticker technical requirements. Pass a file_id as a String to send a file that already exists on the Telegram servers, pass an HTTP URL as a String for Telegram to get a file from the Internet, or upload a new one using multipart/form-data. More information on Sending Files ». Animated and video sticker set thumbnails can't be uploaded via HTTP URL. If omitted, then the thumbnail is dropped and the first sticker is used as the thumbnail.
 
-def from_JV ( var v:JsonValue?; t:setstickersetthumbnail ) : setstickersetthumbnail
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:setstickersetthumbnail explicit ) : setstickersetthumbnail
     var q : setstickersetthumbnail
     var vobj & = unsafe(v as _object)
     q.name = _::from_JV(vobj["name"], type<string>)
@@ -6443,13 +7032,15 @@ def from_JV ( var v:JsonValue?; t:setstickersetthumbnail ) : setstickersetthumbn
     q.thumbnail = _::from_JV(vobj["thumbnail"], type<inputfile?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:setstickersetthumbnail? ) : setstickersetthumbnail?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:setstickersetthumbnail explicit? ) : setstickersetthumbnail?
     return null if v==null
     var q = new setstickersetthumbnail
     *q <- from_JV(v,type<setstickersetthumbnail>)
     return q
 
-def JV ( v:setstickersetthumbnail ) : JsonValue?
+[generic]
+def JV ( v:setstickersetthumbnail explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["name"] = _::JV(v.name)
     map["user_id"] = _::JV(v.user_id)
@@ -6462,20 +7053,23 @@ struct setcustomemojistickersetthumbnail
     name : string	//! Required. Sticker set name
     custom_emoji_id : string	//! Optional. Custom emoji identifier of a sticker from the sticker set; pass an empty string to drop the thumbnail and use the first sticker as the thumbnail.
 
-def from_JV ( var v:JsonValue?; t:setcustomemojistickersetthumbnail ) : setcustomemojistickersetthumbnail
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:setcustomemojistickersetthumbnail explicit ) : setcustomemojistickersetthumbnail
     var q : setcustomemojistickersetthumbnail
     var vobj & = unsafe(v as _object)
     q.name = _::from_JV(vobj["name"], type<string>)
     q.custom_emoji_id = _::from_JV(vobj["custom_emoji_id"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:setcustomemojistickersetthumbnail? ) : setcustomemojistickersetthumbnail?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:setcustomemojistickersetthumbnail explicit? ) : setcustomemojistickersetthumbnail?
     return null if v==null
     var q = new setcustomemojistickersetthumbnail
     *q <- from_JV(v,type<setcustomemojistickersetthumbnail>)
     return q
 
-def JV ( v:setcustomemojistickersetthumbnail ) : JsonValue?
+[generic]
+def JV ( v:setcustomemojistickersetthumbnail explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["name"] = _::JV(v.name)
     map["custom_emoji_id"] = _::JV(v.custom_emoji_id)
@@ -6485,19 +7079,22 @@ struct deletestickerset
     //!  Use this method to delete a sticker set that was created by the bot. Returns True on success.
     name : string	//! Required. Sticker set name
 
-def from_JV ( var v:JsonValue?; t:deletestickerset ) : deletestickerset
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:deletestickerset explicit ) : deletestickerset
     var q : deletestickerset
     var vobj & = unsafe(v as _object)
     q.name = _::from_JV(vobj["name"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:deletestickerset? ) : deletestickerset?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:deletestickerset explicit? ) : deletestickerset?
     return null if v==null
     var q = new deletestickerset
     *q <- from_JV(v,type<deletestickerset>)
     return q
 
-def JV ( v:deletestickerset ) : JsonValue?
+[generic]
+def JV ( v:deletestickerset explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["name"] = _::JV(v.name)
     return _::JV(map)
@@ -6511,7 +7108,8 @@ struct inlinequery
     chat_type : string	//! Optional. Type of the chat from which the inline query was sent. Can be either “sender” for a private chat with the inline query sender, “private”, “group”, “supergroup”, or “channel”. The chat type should be always known for requests sent from official clients and most third-party clients, unless the request was sent from a secret chat
     location : location?	//! Optional. Sender location, only for bots that request user location
 
-def from_JV ( var v:JsonValue?; t:inlinequery ) : inlinequery
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inlinequery explicit ) : inlinequery
     var q : inlinequery
     var vobj & = unsafe(v as _object)
     q.id = _::from_JV(vobj["id"], type<string>)
@@ -6522,13 +7120,15 @@ def from_JV ( var v:JsonValue?; t:inlinequery ) : inlinequery
     q.location = _::from_JV(vobj["location"], type<location?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:inlinequery? ) : inlinequery?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inlinequery explicit? ) : inlinequery?
     return null if v==null
     var q = new inlinequery
     *q <- from_JV(v,type<inlinequery>)
     return q
 
-def JV ( v:inlinequery ) : JsonValue?
+[generic]
+def JV ( v:inlinequery explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["id"] = _::JV(v.id)
     map["from"] = _::JV(v.from)
@@ -6549,7 +7149,8 @@ struct answerinlinequery
     switch_pm_text : string	//! Optional. If passed, clients will display a button with specified text that switches the user to a private chat with the bot and sends the bot a start message with the parameter switch_pm_parameter
     switch_pm_parameter : string	//! Optional. Deep-linking parameter for the /start message sent to the bot when user presses the switch button. 1-64 characters, only A-Z, a-z, 0-9, _ and - are allowed.Example: An inline bot that sends YouTube videos can ask the user to connect the bot to their YouTube account to adapt search results accordingly. To do this, it displays a 'Connect your YouTube account' button above the results, or even before showing any. The user presses the button, switches to a private chat with the bot and, in doing so, passes a start parameter that instructs the bot to return an OAuth link. Once done, the bot can offer a switch_inline button so that the user can easily return to the chat where they wanted to use the bot's inline capabilities.
 
-def from_JV ( var v:JsonValue?; t:answerinlinequery ) : answerinlinequery
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:answerinlinequery explicit ) : answerinlinequery
     var q : answerinlinequery
     var vobj & = unsafe(v as _object)
     q.inline_query_id = _::from_JV(vobj["inline_query_id"], type<string>)
@@ -6561,13 +7162,15 @@ def from_JV ( var v:JsonValue?; t:answerinlinequery ) : answerinlinequery
     q.switch_pm_parameter = _::from_JV(vobj["switch_pm_parameter"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:answerinlinequery? ) : answerinlinequery?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:answerinlinequery explicit? ) : answerinlinequery?
     return null if v==null
     var q = new answerinlinequery
     *q <- from_JV(v,type<answerinlinequery>)
     return q
 
-def JV ( v:answerinlinequery ) : JsonValue?
+[generic]
+def JV ( v:answerinlinequery explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["inline_query_id"] = _::JV(v.inline_query_id)
     map["results"] = _::JV(v.results)
@@ -6582,18 +7185,21 @@ struct inlinequeryresult
     //!  This object represents one result of an inline query. Telegram clients currently support results of the following 20 types: Note: All URLs passed in inline query results will be available to end users and therefore must be assumed to be public.
     object_inlinequeryresult_has_no_fields:bool
 
-def from_JV ( var v:JsonValue?; t:inlinequeryresult ) : inlinequeryresult
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inlinequeryresult explicit ) : inlinequeryresult
     var q : inlinequeryresult
     var vobj & = unsafe(v as _object)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:inlinequeryresult? ) : inlinequeryresult?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inlinequeryresult explicit? ) : inlinequeryresult?
     return null if v==null
     var q = new inlinequeryresult
     *q <- from_JV(v,type<inlinequeryresult>)
     return q
 
-def JV ( v:inlinequeryresult ) : JsonValue?
+[generic]
+def JV ( v:inlinequeryresult explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     return _::JV(map)
 
@@ -6611,7 +7217,8 @@ struct inlinequeryresultarticle
     thumbnail_width : int64	//! Optional. Thumbnail width
     thumbnail_height : int64	//! Optional. Thumbnail height
 
-def from_JV ( var v:JsonValue?; t:inlinequeryresultarticle ) : inlinequeryresultarticle
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inlinequeryresultarticle explicit ) : inlinequeryresultarticle
     var q : inlinequeryresultarticle
     var vobj & = unsafe(v as _object)
     q._type = _::from_JV(vobj["_type"], type<string>)
@@ -6627,13 +7234,15 @@ def from_JV ( var v:JsonValue?; t:inlinequeryresultarticle ) : inlinequeryresult
     q.thumbnail_height = _::from_JV(vobj["thumbnail_height"], type<int64>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:inlinequeryresultarticle? ) : inlinequeryresultarticle?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inlinequeryresultarticle explicit? ) : inlinequeryresultarticle?
     return null if v==null
     var q = new inlinequeryresultarticle
     *q <- from_JV(v,type<inlinequeryresultarticle>)
     return q
 
-def JV ( v:inlinequeryresultarticle ) : JsonValue?
+[generic]
+def JV ( v:inlinequeryresultarticle explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["_type"] = _::JV(v._type)
     map["id"] = _::JV(v.id)
@@ -6665,7 +7274,8 @@ struct inlinequeryresultphoto
     reply_markup : inlinekeyboardmarkup?	//! Optional. Inline keyboard attached to the message
     input_message_content : inputmessagecontent?	//! Optional. Content of the message to be sent instead of the photo
 
-def from_JV ( var v:JsonValue?; t:inlinequeryresultphoto ) : inlinequeryresultphoto
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inlinequeryresultphoto explicit ) : inlinequeryresultphoto
     var q : inlinequeryresultphoto
     var vobj & = unsafe(v as _object)
     q._type = _::from_JV(vobj["_type"], type<string>)
@@ -6683,13 +7293,15 @@ def from_JV ( var v:JsonValue?; t:inlinequeryresultphoto ) : inlinequeryresultph
     q.input_message_content = _::from_JV(vobj["input_message_content"], type<inputmessagecontent?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:inlinequeryresultphoto? ) : inlinequeryresultphoto?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inlinequeryresultphoto explicit? ) : inlinequeryresultphoto?
     return null if v==null
     var q = new inlinequeryresultphoto
     *q <- from_JV(v,type<inlinequeryresultphoto>)
     return q
 
-def JV ( v:inlinequeryresultphoto ) : JsonValue?
+[generic]
+def JV ( v:inlinequeryresultphoto explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["_type"] = _::JV(v._type)
     map["id"] = _::JV(v.id)
@@ -6725,7 +7337,8 @@ struct inlinequeryresultgif
     reply_markup : inlinekeyboardmarkup?	//! Optional. Inline keyboard attached to the message
     input_message_content : inputmessagecontent?	//! Optional. Content of the message to be sent instead of the GIF animation
 
-def from_JV ( var v:JsonValue?; t:inlinequeryresultgif ) : inlinequeryresultgif
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inlinequeryresultgif explicit ) : inlinequeryresultgif
     var q : inlinequeryresultgif
     var vobj & = unsafe(v as _object)
     q._type = _::from_JV(vobj["_type"], type<string>)
@@ -6744,13 +7357,15 @@ def from_JV ( var v:JsonValue?; t:inlinequeryresultgif ) : inlinequeryresultgif
     q.input_message_content = _::from_JV(vobj["input_message_content"], type<inputmessagecontent?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:inlinequeryresultgif? ) : inlinequeryresultgif?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inlinequeryresultgif explicit? ) : inlinequeryresultgif?
     return null if v==null
     var q = new inlinequeryresultgif
     *q <- from_JV(v,type<inlinequeryresultgif>)
     return q
 
-def JV ( v:inlinequeryresultgif ) : JsonValue?
+[generic]
+def JV ( v:inlinequeryresultgif explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["_type"] = _::JV(v._type)
     map["id"] = _::JV(v.id)
@@ -6787,7 +7402,8 @@ struct inlinequeryresultmpeg4gif
     reply_markup : inlinekeyboardmarkup?	//! Optional. Inline keyboard attached to the message
     input_message_content : inputmessagecontent?	//! Optional. Content of the message to be sent instead of the video animation
 
-def from_JV ( var v:JsonValue?; t:inlinequeryresultmpeg4gif ) : inlinequeryresultmpeg4gif
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inlinequeryresultmpeg4gif explicit ) : inlinequeryresultmpeg4gif
     var q : inlinequeryresultmpeg4gif
     var vobj & = unsafe(v as _object)
     q._type = _::from_JV(vobj["_type"], type<string>)
@@ -6806,13 +7422,15 @@ def from_JV ( var v:JsonValue?; t:inlinequeryresultmpeg4gif ) : inlinequeryresul
     q.input_message_content = _::from_JV(vobj["input_message_content"], type<inputmessagecontent?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:inlinequeryresultmpeg4gif? ) : inlinequeryresultmpeg4gif?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inlinequeryresultmpeg4gif explicit? ) : inlinequeryresultmpeg4gif?
     return null if v==null
     var q = new inlinequeryresultmpeg4gif
     *q <- from_JV(v,type<inlinequeryresultmpeg4gif>)
     return q
 
-def JV ( v:inlinequeryresultmpeg4gif ) : JsonValue?
+[generic]
+def JV ( v:inlinequeryresultmpeg4gif explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["_type"] = _::JV(v._type)
     map["id"] = _::JV(v.id)
@@ -6850,7 +7468,8 @@ struct inlinequeryresultvideo
     reply_markup : inlinekeyboardmarkup?	//! Optional. Inline keyboard attached to the message
     input_message_content : inputmessagecontent?	//! Optional. Content of the message to be sent instead of the video. This field is required if InlineQueryResultVideo is used to send an HTML-page as a result (e.g., a YouTube video).
 
-def from_JV ( var v:JsonValue?; t:inlinequeryresultvideo ) : inlinequeryresultvideo
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inlinequeryresultvideo explicit ) : inlinequeryresultvideo
     var q : inlinequeryresultvideo
     var vobj & = unsafe(v as _object)
     q._type = _::from_JV(vobj["_type"], type<string>)
@@ -6870,13 +7489,15 @@ def from_JV ( var v:JsonValue?; t:inlinequeryresultvideo ) : inlinequeryresultvi
     q.input_message_content = _::from_JV(vobj["input_message_content"], type<inputmessagecontent?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:inlinequeryresultvideo? ) : inlinequeryresultvideo?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inlinequeryresultvideo explicit? ) : inlinequeryresultvideo?
     return null if v==null
     var q = new inlinequeryresultvideo
     *q <- from_JV(v,type<inlinequeryresultvideo>)
     return q
 
-def JV ( v:inlinequeryresultvideo ) : JsonValue?
+[generic]
+def JV ( v:inlinequeryresultvideo explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["_type"] = _::JV(v._type)
     map["id"] = _::JV(v.id)
@@ -6911,7 +7532,8 @@ struct inlinequeryresultaudio
     reply_markup : inlinekeyboardmarkup?	//! Optional. Inline keyboard attached to the message
     input_message_content : inputmessagecontent?	//! Optional. Content of the message to be sent instead of the audio
 
-def from_JV ( var v:JsonValue?; t:inlinequeryresultaudio ) : inlinequeryresultaudio
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inlinequeryresultaudio explicit ) : inlinequeryresultaudio
     var q : inlinequeryresultaudio
     var vobj & = unsafe(v as _object)
     q._type = _::from_JV(vobj["_type"], type<string>)
@@ -6927,13 +7549,15 @@ def from_JV ( var v:JsonValue?; t:inlinequeryresultaudio ) : inlinequeryresultau
     q.input_message_content = _::from_JV(vobj["input_message_content"], type<inputmessagecontent?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:inlinequeryresultaudio? ) : inlinequeryresultaudio?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inlinequeryresultaudio explicit? ) : inlinequeryresultaudio?
     return null if v==null
     var q = new inlinequeryresultaudio
     *q <- from_JV(v,type<inlinequeryresultaudio>)
     return q
 
-def JV ( v:inlinequeryresultaudio ) : JsonValue?
+[generic]
+def JV ( v:inlinequeryresultaudio explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["_type"] = _::JV(v._type)
     map["id"] = _::JV(v.id)
@@ -6963,7 +7587,8 @@ struct inlinequeryresultvoice
     reply_markup : inlinekeyboardmarkup?	//! Optional. Inline keyboard attached to the message
     input_message_content : inputmessagecontent?	//! Optional. Content of the message to be sent instead of the voice recording
 
-def from_JV ( var v:JsonValue?; t:inlinequeryresultvoice ) : inlinequeryresultvoice
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inlinequeryresultvoice explicit ) : inlinequeryresultvoice
     var q : inlinequeryresultvoice
     var vobj & = unsafe(v as _object)
     q._type = _::from_JV(vobj["_type"], type<string>)
@@ -6978,13 +7603,15 @@ def from_JV ( var v:JsonValue?; t:inlinequeryresultvoice ) : inlinequeryresultvo
     q.input_message_content = _::from_JV(vobj["input_message_content"], type<inputmessagecontent?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:inlinequeryresultvoice? ) : inlinequeryresultvoice?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inlinequeryresultvoice explicit? ) : inlinequeryresultvoice?
     return null if v==null
     var q = new inlinequeryresultvoice
     *q <- from_JV(v,type<inlinequeryresultvoice>)
     return q
 
-def JV ( v:inlinequeryresultvoice ) : JsonValue?
+[generic]
+def JV ( v:inlinequeryresultvoice explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["_type"] = _::JV(v._type)
     map["id"] = _::JV(v.id)
@@ -7017,7 +7644,8 @@ struct inlinequeryresultdocument
     thumbnail_width : int64	//! Optional. Thumbnail width
     thumbnail_height : int64	//! Optional. Thumbnail height
 
-def from_JV ( var v:JsonValue?; t:inlinequeryresultdocument ) : inlinequeryresultdocument
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inlinequeryresultdocument explicit ) : inlinequeryresultdocument
     var q : inlinequeryresultdocument
     var vobj & = unsafe(v as _object)
     q._type = _::from_JV(vobj["_type"], type<string>)
@@ -7036,13 +7664,15 @@ def from_JV ( var v:JsonValue?; t:inlinequeryresultdocument ) : inlinequeryresul
     q.thumbnail_height = _::from_JV(vobj["thumbnail_height"], type<int64>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:inlinequeryresultdocument? ) : inlinequeryresultdocument?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inlinequeryresultdocument explicit? ) : inlinequeryresultdocument?
     return null if v==null
     var q = new inlinequeryresultdocument
     *q <- from_JV(v,type<inlinequeryresultdocument>)
     return q
 
-def JV ( v:inlinequeryresultdocument ) : JsonValue?
+[generic]
+def JV ( v:inlinequeryresultdocument explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["_type"] = _::JV(v._type)
     map["id"] = _::JV(v.id)
@@ -7079,7 +7709,8 @@ struct inlinequeryresultlocation
     thumbnail_width : int64	//! Optional. Thumbnail width
     thumbnail_height : int64	//! Optional. Thumbnail height
 
-def from_JV ( var v:JsonValue?; t:inlinequeryresultlocation ) : inlinequeryresultlocation
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inlinequeryresultlocation explicit ) : inlinequeryresultlocation
     var q : inlinequeryresultlocation
     var vobj & = unsafe(v as _object)
     q._type = _::from_JV(vobj["_type"], type<string>)
@@ -7098,13 +7729,15 @@ def from_JV ( var v:JsonValue?; t:inlinequeryresultlocation ) : inlinequeryresul
     q.thumbnail_height = _::from_JV(vobj["thumbnail_height"], type<int64>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:inlinequeryresultlocation? ) : inlinequeryresultlocation?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inlinequeryresultlocation explicit? ) : inlinequeryresultlocation?
     return null if v==null
     var q = new inlinequeryresultlocation
     *q <- from_JV(v,type<inlinequeryresultlocation>)
     return q
 
-def JV ( v:inlinequeryresultlocation ) : JsonValue?
+[generic]
+def JV ( v:inlinequeryresultlocation explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["_type"] = _::JV(v._type)
     map["id"] = _::JV(v.id)
@@ -7142,7 +7775,8 @@ struct inlinequeryresultvenue
     thumbnail_width : int64	//! Optional. Thumbnail width
     thumbnail_height : int64	//! Optional. Thumbnail height
 
-def from_JV ( var v:JsonValue?; t:inlinequeryresultvenue ) : inlinequeryresultvenue
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inlinequeryresultvenue explicit ) : inlinequeryresultvenue
     var q : inlinequeryresultvenue
     var vobj & = unsafe(v as _object)
     q._type = _::from_JV(vobj["_type"], type<string>)
@@ -7162,13 +7796,15 @@ def from_JV ( var v:JsonValue?; t:inlinequeryresultvenue ) : inlinequeryresultve
     q.thumbnail_height = _::from_JV(vobj["thumbnail_height"], type<int64>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:inlinequeryresultvenue? ) : inlinequeryresultvenue?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inlinequeryresultvenue explicit? ) : inlinequeryresultvenue?
     return null if v==null
     var q = new inlinequeryresultvenue
     *q <- from_JV(v,type<inlinequeryresultvenue>)
     return q
 
-def JV ( v:inlinequeryresultvenue ) : JsonValue?
+[generic]
+def JV ( v:inlinequeryresultvenue explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["_type"] = _::JV(v._type)
     map["id"] = _::JV(v.id)
@@ -7203,7 +7839,8 @@ struct inlinequeryresultcontact
     thumbnail_width : int64	//! Optional. Thumbnail width
     thumbnail_height : int64	//! Optional. Thumbnail height
 
-def from_JV ( var v:JsonValue?; t:inlinequeryresultcontact ) : inlinequeryresultcontact
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inlinequeryresultcontact explicit ) : inlinequeryresultcontact
     var q : inlinequeryresultcontact
     var vobj & = unsafe(v as _object)
     q._type = _::from_JV(vobj["_type"], type<string>)
@@ -7219,13 +7856,15 @@ def from_JV ( var v:JsonValue?; t:inlinequeryresultcontact ) : inlinequeryresult
     q.thumbnail_height = _::from_JV(vobj["thumbnail_height"], type<int64>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:inlinequeryresultcontact? ) : inlinequeryresultcontact?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inlinequeryresultcontact explicit? ) : inlinequeryresultcontact?
     return null if v==null
     var q = new inlinequeryresultcontact
     *q <- from_JV(v,type<inlinequeryresultcontact>)
     return q
 
-def JV ( v:inlinequeryresultcontact ) : JsonValue?
+[generic]
+def JV ( v:inlinequeryresultcontact explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["_type"] = _::JV(v._type)
     map["id"] = _::JV(v.id)
@@ -7249,7 +7888,8 @@ struct inlinequeryresultgame
     game_short_name : string	//! Short name of the game
     reply_markup : inlinekeyboardmarkup?	//! Optional. Inline keyboard attached to the message
 
-def from_JV ( var v:JsonValue?; t:inlinequeryresultgame ) : inlinequeryresultgame
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inlinequeryresultgame explicit ) : inlinequeryresultgame
     var q : inlinequeryresultgame
     var vobj & = unsafe(v as _object)
     q._type = _::from_JV(vobj["_type"], type<string>)
@@ -7258,13 +7898,15 @@ def from_JV ( var v:JsonValue?; t:inlinequeryresultgame ) : inlinequeryresultgam
     q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:inlinequeryresultgame? ) : inlinequeryresultgame?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inlinequeryresultgame explicit? ) : inlinequeryresultgame?
     return null if v==null
     var q = new inlinequeryresultgame
     *q <- from_JV(v,type<inlinequeryresultgame>)
     return q
 
-def JV ( v:inlinequeryresultgame ) : JsonValue?
+[generic]
+def JV ( v:inlinequeryresultgame explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["_type"] = _::JV(v._type)
     map["id"] = _::JV(v.id)
@@ -7286,7 +7928,8 @@ struct inlinequeryresultcachedphoto
     reply_markup : inlinekeyboardmarkup?	//! Optional. Inline keyboard attached to the message
     input_message_content : inputmessagecontent?	//! Optional. Content of the message to be sent instead of the photo
 
-def from_JV ( var v:JsonValue?; t:inlinequeryresultcachedphoto ) : inlinequeryresultcachedphoto
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inlinequeryresultcachedphoto explicit ) : inlinequeryresultcachedphoto
     var q : inlinequeryresultcachedphoto
     var vobj & = unsafe(v as _object)
     q._type = _::from_JV(vobj["_type"], type<string>)
@@ -7301,13 +7944,15 @@ def from_JV ( var v:JsonValue?; t:inlinequeryresultcachedphoto ) : inlinequeryre
     q.input_message_content = _::from_JV(vobj["input_message_content"], type<inputmessagecontent?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:inlinequeryresultcachedphoto? ) : inlinequeryresultcachedphoto?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inlinequeryresultcachedphoto explicit? ) : inlinequeryresultcachedphoto?
     return null if v==null
     var q = new inlinequeryresultcachedphoto
     *q <- from_JV(v,type<inlinequeryresultcachedphoto>)
     return q
 
-def JV ( v:inlinequeryresultcachedphoto ) : JsonValue?
+[generic]
+def JV ( v:inlinequeryresultcachedphoto explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["_type"] = _::JV(v._type)
     map["id"] = _::JV(v.id)
@@ -7335,7 +7980,8 @@ struct inlinequeryresultcachedgif
     reply_markup : inlinekeyboardmarkup?	//! Optional. Inline keyboard attached to the message
     input_message_content : inputmessagecontent?	//! Optional. Content of the message to be sent instead of the GIF animation
 
-def from_JV ( var v:JsonValue?; t:inlinequeryresultcachedgif ) : inlinequeryresultcachedgif
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inlinequeryresultcachedgif explicit ) : inlinequeryresultcachedgif
     var q : inlinequeryresultcachedgif
     var vobj & = unsafe(v as _object)
     q._type = _::from_JV(vobj["_type"], type<string>)
@@ -7349,13 +7995,15 @@ def from_JV ( var v:JsonValue?; t:inlinequeryresultcachedgif ) : inlinequeryresu
     q.input_message_content = _::from_JV(vobj["input_message_content"], type<inputmessagecontent?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:inlinequeryresultcachedgif? ) : inlinequeryresultcachedgif?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inlinequeryresultcachedgif explicit? ) : inlinequeryresultcachedgif?
     return null if v==null
     var q = new inlinequeryresultcachedgif
     *q <- from_JV(v,type<inlinequeryresultcachedgif>)
     return q
 
-def JV ( v:inlinequeryresultcachedgif ) : JsonValue?
+[generic]
+def JV ( v:inlinequeryresultcachedgif explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["_type"] = _::JV(v._type)
     map["id"] = _::JV(v.id)
@@ -7382,7 +8030,8 @@ struct inlinequeryresultcachedmpeg4gif
     reply_markup : inlinekeyboardmarkup?	//! Optional. Inline keyboard attached to the message
     input_message_content : inputmessagecontent?	//! Optional. Content of the message to be sent instead of the video animation
 
-def from_JV ( var v:JsonValue?; t:inlinequeryresultcachedmpeg4gif ) : inlinequeryresultcachedmpeg4gif
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inlinequeryresultcachedmpeg4gif explicit ) : inlinequeryresultcachedmpeg4gif
     var q : inlinequeryresultcachedmpeg4gif
     var vobj & = unsafe(v as _object)
     q._type = _::from_JV(vobj["_type"], type<string>)
@@ -7396,13 +8045,15 @@ def from_JV ( var v:JsonValue?; t:inlinequeryresultcachedmpeg4gif ) : inlinequer
     q.input_message_content = _::from_JV(vobj["input_message_content"], type<inputmessagecontent?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:inlinequeryresultcachedmpeg4gif? ) : inlinequeryresultcachedmpeg4gif?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inlinequeryresultcachedmpeg4gif explicit? ) : inlinequeryresultcachedmpeg4gif?
     return null if v==null
     var q = new inlinequeryresultcachedmpeg4gif
     *q <- from_JV(v,type<inlinequeryresultcachedmpeg4gif>)
     return q
 
-def JV ( v:inlinequeryresultcachedmpeg4gif ) : JsonValue?
+[generic]
+def JV ( v:inlinequeryresultcachedmpeg4gif explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["_type"] = _::JV(v._type)
     map["id"] = _::JV(v.id)
@@ -7425,7 +8076,8 @@ struct inlinequeryresultcachedsticker
     reply_markup : inlinekeyboardmarkup?	//! Optional. Inline keyboard attached to the message
     input_message_content : inputmessagecontent?	//! Optional. Content of the message to be sent instead of the sticker
 
-def from_JV ( var v:JsonValue?; t:inlinequeryresultcachedsticker ) : inlinequeryresultcachedsticker
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inlinequeryresultcachedsticker explicit ) : inlinequeryresultcachedsticker
     var q : inlinequeryresultcachedsticker
     var vobj & = unsafe(v as _object)
     q._type = _::from_JV(vobj["_type"], type<string>)
@@ -7435,13 +8087,15 @@ def from_JV ( var v:JsonValue?; t:inlinequeryresultcachedsticker ) : inlinequery
     q.input_message_content = _::from_JV(vobj["input_message_content"], type<inputmessagecontent?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:inlinequeryresultcachedsticker? ) : inlinequeryresultcachedsticker?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inlinequeryresultcachedsticker explicit? ) : inlinequeryresultcachedsticker?
     return null if v==null
     var q = new inlinequeryresultcachedsticker
     *q <- from_JV(v,type<inlinequeryresultcachedsticker>)
     return q
 
-def JV ( v:inlinequeryresultcachedsticker ) : JsonValue?
+[generic]
+def JV ( v:inlinequeryresultcachedsticker explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["_type"] = _::JV(v._type)
     map["id"] = _::JV(v.id)
@@ -7465,7 +8119,8 @@ struct inlinequeryresultcacheddocument
     reply_markup : inlinekeyboardmarkup?	//! Optional. Inline keyboard attached to the message
     input_message_content : inputmessagecontent?	//! Optional. Content of the message to be sent instead of the file
 
-def from_JV ( var v:JsonValue?; t:inlinequeryresultcacheddocument ) : inlinequeryresultcacheddocument
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inlinequeryresultcacheddocument explicit ) : inlinequeryresultcacheddocument
     var q : inlinequeryresultcacheddocument
     var vobj & = unsafe(v as _object)
     q._type = _::from_JV(vobj["_type"], type<string>)
@@ -7480,13 +8135,15 @@ def from_JV ( var v:JsonValue?; t:inlinequeryresultcacheddocument ) : inlinequer
     q.input_message_content = _::from_JV(vobj["input_message_content"], type<inputmessagecontent?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:inlinequeryresultcacheddocument? ) : inlinequeryresultcacheddocument?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inlinequeryresultcacheddocument explicit? ) : inlinequeryresultcacheddocument?
     return null if v==null
     var q = new inlinequeryresultcacheddocument
     *q <- from_JV(v,type<inlinequeryresultcacheddocument>)
     return q
 
-def JV ( v:inlinequeryresultcacheddocument ) : JsonValue?
+[generic]
+def JV ( v:inlinequeryresultcacheddocument explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["_type"] = _::JV(v._type)
     map["id"] = _::JV(v.id)
@@ -7515,7 +8172,8 @@ struct inlinequeryresultcachedvideo
     reply_markup : inlinekeyboardmarkup?	//! Optional. Inline keyboard attached to the message
     input_message_content : inputmessagecontent?	//! Optional. Content of the message to be sent instead of the video
 
-def from_JV ( var v:JsonValue?; t:inlinequeryresultcachedvideo ) : inlinequeryresultcachedvideo
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inlinequeryresultcachedvideo explicit ) : inlinequeryresultcachedvideo
     var q : inlinequeryresultcachedvideo
     var vobj & = unsafe(v as _object)
     q._type = _::from_JV(vobj["_type"], type<string>)
@@ -7530,13 +8188,15 @@ def from_JV ( var v:JsonValue?; t:inlinequeryresultcachedvideo ) : inlinequeryre
     q.input_message_content = _::from_JV(vobj["input_message_content"], type<inputmessagecontent?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:inlinequeryresultcachedvideo? ) : inlinequeryresultcachedvideo?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inlinequeryresultcachedvideo explicit? ) : inlinequeryresultcachedvideo?
     return null if v==null
     var q = new inlinequeryresultcachedvideo
     *q <- from_JV(v,type<inlinequeryresultcachedvideo>)
     return q
 
-def JV ( v:inlinequeryresultcachedvideo ) : JsonValue?
+[generic]
+def JV ( v:inlinequeryresultcachedvideo explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["_type"] = _::JV(v._type)
     map["id"] = _::JV(v.id)
@@ -7564,7 +8224,8 @@ struct inlinequeryresultcachedvoice
     reply_markup : inlinekeyboardmarkup?	//! Optional. Inline keyboard attached to the message
     input_message_content : inputmessagecontent?	//! Optional. Content of the message to be sent instead of the voice message
 
-def from_JV ( var v:JsonValue?; t:inlinequeryresultcachedvoice ) : inlinequeryresultcachedvoice
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inlinequeryresultcachedvoice explicit ) : inlinequeryresultcachedvoice
     var q : inlinequeryresultcachedvoice
     var vobj & = unsafe(v as _object)
     q._type = _::from_JV(vobj["_type"], type<string>)
@@ -7578,13 +8239,15 @@ def from_JV ( var v:JsonValue?; t:inlinequeryresultcachedvoice ) : inlinequeryre
     q.input_message_content = _::from_JV(vobj["input_message_content"], type<inputmessagecontent?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:inlinequeryresultcachedvoice? ) : inlinequeryresultcachedvoice?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inlinequeryresultcachedvoice explicit? ) : inlinequeryresultcachedvoice?
     return null if v==null
     var q = new inlinequeryresultcachedvoice
     *q <- from_JV(v,type<inlinequeryresultcachedvoice>)
     return q
 
-def JV ( v:inlinequeryresultcachedvoice ) : JsonValue?
+[generic]
+def JV ( v:inlinequeryresultcachedvoice explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["_type"] = _::JV(v._type)
     map["id"] = _::JV(v.id)
@@ -7610,7 +8273,8 @@ struct inlinequeryresultcachedaudio
     reply_markup : inlinekeyboardmarkup?	//! Optional. Inline keyboard attached to the message
     input_message_content : inputmessagecontent?	//! Optional. Content of the message to be sent instead of the audio
 
-def from_JV ( var v:JsonValue?; t:inlinequeryresultcachedaudio ) : inlinequeryresultcachedaudio
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inlinequeryresultcachedaudio explicit ) : inlinequeryresultcachedaudio
     var q : inlinequeryresultcachedaudio
     var vobj & = unsafe(v as _object)
     q._type = _::from_JV(vobj["_type"], type<string>)
@@ -7623,13 +8287,15 @@ def from_JV ( var v:JsonValue?; t:inlinequeryresultcachedaudio ) : inlinequeryre
     q.input_message_content = _::from_JV(vobj["input_message_content"], type<inputmessagecontent?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:inlinequeryresultcachedaudio? ) : inlinequeryresultcachedaudio?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inlinequeryresultcachedaudio explicit? ) : inlinequeryresultcachedaudio?
     return null if v==null
     var q = new inlinequeryresultcachedaudio
     *q <- from_JV(v,type<inlinequeryresultcachedaudio>)
     return q
 
-def JV ( v:inlinequeryresultcachedaudio ) : JsonValue?
+[generic]
+def JV ( v:inlinequeryresultcachedaudio explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["_type"] = _::JV(v._type)
     map["id"] = _::JV(v.id)
@@ -7647,18 +8313,21 @@ struct inputmessagecontent
     //!  This object represents the content of a message to be sent as a result of an inline query. Telegram clients currently support the following 5 types:
     object_inputmessagecontent_has_no_fields:bool
 
-def from_JV ( var v:JsonValue?; t:inputmessagecontent ) : inputmessagecontent
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inputmessagecontent explicit ) : inputmessagecontent
     var q : inputmessagecontent
     var vobj & = unsafe(v as _object)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:inputmessagecontent? ) : inputmessagecontent?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inputmessagecontent explicit? ) : inputmessagecontent?
     return null if v==null
     var q = new inputmessagecontent
     *q <- from_JV(v,type<inputmessagecontent>)
     return q
 
-def JV ( v:inputmessagecontent ) : JsonValue?
+[generic]
+def JV ( v:inputmessagecontent explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     return _::JV(map)
 
@@ -7669,7 +8338,8 @@ struct inputtextmessagecontent
     entities : array<messageentity>	//! Optional. List of special entities that appear in message text, which can be specified instead of parse_mode
     disable_web_page_preview : bool	//! Optional. Disables link previews for links in the sent message
 
-def from_JV ( var v:JsonValue?; t:inputtextmessagecontent ) : inputtextmessagecontent
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inputtextmessagecontent explicit ) : inputtextmessagecontent
     var q : inputtextmessagecontent
     var vobj & = unsafe(v as _object)
     q.message_text = _::from_JV(vobj["message_text"], type<string>)
@@ -7678,13 +8348,15 @@ def from_JV ( var v:JsonValue?; t:inputtextmessagecontent ) : inputtextmessageco
     q.disable_web_page_preview = _::from_JV(vobj["disable_web_page_preview"], type<bool>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:inputtextmessagecontent? ) : inputtextmessagecontent?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inputtextmessagecontent explicit? ) : inputtextmessagecontent?
     return null if v==null
     var q = new inputtextmessagecontent
     *q <- from_JV(v,type<inputtextmessagecontent>)
     return q
 
-def JV ( v:inputtextmessagecontent ) : JsonValue?
+[generic]
+def JV ( v:inputtextmessagecontent explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["message_text"] = _::JV(v.message_text)
     map["parse_mode"] = _::JV(v.parse_mode)
@@ -7701,7 +8373,8 @@ struct inputlocationmessagecontent
     heading : int64	//! Optional. For live locations, a direction in which the user is moving, in degrees. Must be between 1 and 360 if specified.
     proximity_alert_radius : int64	//! Optional. For live locations, a maximum distance for proximity alerts about approaching another chat member, in meters. Must be between 1 and 100000 if specified.
 
-def from_JV ( var v:JsonValue?; t:inputlocationmessagecontent ) : inputlocationmessagecontent
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inputlocationmessagecontent explicit ) : inputlocationmessagecontent
     var q : inputlocationmessagecontent
     var vobj & = unsafe(v as _object)
     q.latitude = _::from_JV(vobj["latitude"], type<float>)
@@ -7712,13 +8385,15 @@ def from_JV ( var v:JsonValue?; t:inputlocationmessagecontent ) : inputlocationm
     q.proximity_alert_radius = _::from_JV(vobj["proximity_alert_radius"], type<int64>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:inputlocationmessagecontent? ) : inputlocationmessagecontent?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inputlocationmessagecontent explicit? ) : inputlocationmessagecontent?
     return null if v==null
     var q = new inputlocationmessagecontent
     *q <- from_JV(v,type<inputlocationmessagecontent>)
     return q
 
-def JV ( v:inputlocationmessagecontent ) : JsonValue?
+[generic]
+def JV ( v:inputlocationmessagecontent explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["latitude"] = _::JV(v.latitude)
     map["longitude"] = _::JV(v.longitude)
@@ -7739,7 +8414,8 @@ struct inputvenuemessagecontent
     google_place_id : string	//! Optional. Google Places identifier of the venue
     google_place_type : string	//! Optional. Google Places type of the venue. (See supported types.)
 
-def from_JV ( var v:JsonValue?; t:inputvenuemessagecontent ) : inputvenuemessagecontent
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inputvenuemessagecontent explicit ) : inputvenuemessagecontent
     var q : inputvenuemessagecontent
     var vobj & = unsafe(v as _object)
     q.latitude = _::from_JV(vobj["latitude"], type<float>)
@@ -7752,13 +8428,15 @@ def from_JV ( var v:JsonValue?; t:inputvenuemessagecontent ) : inputvenuemessage
     q.google_place_type = _::from_JV(vobj["google_place_type"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:inputvenuemessagecontent? ) : inputvenuemessagecontent?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inputvenuemessagecontent explicit? ) : inputvenuemessagecontent?
     return null if v==null
     var q = new inputvenuemessagecontent
     *q <- from_JV(v,type<inputvenuemessagecontent>)
     return q
 
-def JV ( v:inputvenuemessagecontent ) : JsonValue?
+[generic]
+def JV ( v:inputvenuemessagecontent explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["latitude"] = _::JV(v.latitude)
     map["longitude"] = _::JV(v.longitude)
@@ -7777,7 +8455,8 @@ struct inputcontactmessagecontent
     last_name : string	//! Optional. Contact's last name
     vcard : string	//! Optional. Additional data about the contact in the form of a vCard, 0-2048 bytes
 
-def from_JV ( var v:JsonValue?; t:inputcontactmessagecontent ) : inputcontactmessagecontent
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inputcontactmessagecontent explicit ) : inputcontactmessagecontent
     var q : inputcontactmessagecontent
     var vobj & = unsafe(v as _object)
     q.phone_number = _::from_JV(vobj["phone_number"], type<string>)
@@ -7786,13 +8465,15 @@ def from_JV ( var v:JsonValue?; t:inputcontactmessagecontent ) : inputcontactmes
     q.vcard = _::from_JV(vobj["vcard"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:inputcontactmessagecontent? ) : inputcontactmessagecontent?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inputcontactmessagecontent explicit? ) : inputcontactmessagecontent?
     return null if v==null
     var q = new inputcontactmessagecontent
     *q <- from_JV(v,type<inputcontactmessagecontent>)
     return q
 
-def JV ( v:inputcontactmessagecontent ) : JsonValue?
+[generic]
+def JV ( v:inputcontactmessagecontent explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["phone_number"] = _::JV(v.phone_number)
     map["first_name"] = _::JV(v.first_name)
@@ -7823,7 +8504,8 @@ struct inputinvoicemessagecontent
     send_email_to_provider : bool	//! Optional. Pass True if the user's email address should be sent to provider
     is_flexible : bool	//! Optional. Pass True if the final price depends on the shipping method
 
-def from_JV ( var v:JsonValue?; t:inputinvoicemessagecontent ) : inputinvoicemessagecontent
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inputinvoicemessagecontent explicit ) : inputinvoicemessagecontent
     var q : inputinvoicemessagecontent
     var vobj & = unsafe(v as _object)
     q.title = _::from_JV(vobj["title"], type<string>)
@@ -7848,13 +8530,15 @@ def from_JV ( var v:JsonValue?; t:inputinvoicemessagecontent ) : inputinvoicemes
     q.is_flexible = _::from_JV(vobj["is_flexible"], type<bool>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:inputinvoicemessagecontent? ) : inputinvoicemessagecontent?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:inputinvoicemessagecontent explicit? ) : inputinvoicemessagecontent?
     return null if v==null
     var q = new inputinvoicemessagecontent
     *q <- from_JV(v,type<inputinvoicemessagecontent>)
     return q
 
-def JV ( v:inputinvoicemessagecontent ) : JsonValue?
+[generic]
+def JV ( v:inputinvoicemessagecontent explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["title"] = _::JV(v.title)
     map["description"] = _::JV(v.description)
@@ -7886,7 +8570,8 @@ struct choseninlineresult
     inline_message_id : string	//! Optional. Identifier of the sent inline message. Available only if there is an inline keyboard attached to the message. Will be also received in callback queries and can be used to edit the message.
     query : string	//! The query that was used to obtain the result
 
-def from_JV ( var v:JsonValue?; t:choseninlineresult ) : choseninlineresult
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:choseninlineresult explicit ) : choseninlineresult
     var q : choseninlineresult
     var vobj & = unsafe(v as _object)
     q.result_id = _::from_JV(vobj["result_id"], type<string>)
@@ -7896,13 +8581,15 @@ def from_JV ( var v:JsonValue?; t:choseninlineresult ) : choseninlineresult
     q.query = _::from_JV(vobj["query"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:choseninlineresult? ) : choseninlineresult?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:choseninlineresult explicit? ) : choseninlineresult?
     return null if v==null
     var q = new choseninlineresult
     *q <- from_JV(v,type<choseninlineresult>)
     return q
 
-def JV ( v:choseninlineresult ) : JsonValue?
+[generic]
+def JV ( v:choseninlineresult explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["result_id"] = _::JV(v.result_id)
     map["from"] = _::JV(v.from)
@@ -7917,20 +8604,23 @@ struct answerwebappquery
     web_app_query_id : string	//! Required. Unique identifier for the query to be answered
     result : inlinequeryresult	//! Required. A JSON-serialized object describing the message to be sent
 
-def from_JV ( var v:JsonValue?; t:answerwebappquery ) : answerwebappquery
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:answerwebappquery explicit ) : answerwebappquery
     var q : answerwebappquery
     var vobj & = unsafe(v as _object)
     q.web_app_query_id = _::from_JV(vobj["web_app_query_id"], type<string>)
     q.result <- _::from_JV(vobj["result"], type<inlinequeryresult>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:answerwebappquery? ) : answerwebappquery?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:answerwebappquery explicit? ) : answerwebappquery?
     return null if v==null
     var q = new answerwebappquery
     *q <- from_JV(v,type<answerwebappquery>)
     return q
 
-def JV ( v:answerwebappquery ) : JsonValue?
+[generic]
+def JV ( v:answerwebappquery explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["web_app_query_id"] = _::JV(v.web_app_query_id)
     map["result"] = _::JV(v.result)
@@ -7940,19 +8630,22 @@ struct sentwebappmessage
     //!  Describes an inline message sent by a Web App on behalf of a user.
     inline_message_id : string	//! Optional. Identifier of the sent inline message. Available only if there is an inline keyboard attached to the message.
 
-def from_JV ( var v:JsonValue?; t:sentwebappmessage ) : sentwebappmessage
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:sentwebappmessage explicit ) : sentwebappmessage
     var q : sentwebappmessage
     var vobj & = unsafe(v as _object)
     q.inline_message_id = _::from_JV(vobj["inline_message_id"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:sentwebappmessage? ) : sentwebappmessage?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:sentwebappmessage explicit? ) : sentwebappmessage?
     return null if v==null
     var q = new sentwebappmessage
     *q <- from_JV(v,type<sentwebappmessage>)
     return q
 
-def JV ( v:sentwebappmessage ) : JsonValue?
+[generic]
+def JV ( v:sentwebappmessage explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["inline_message_id"] = _::JV(v.inline_message_id)
     return _::JV(map)
@@ -7988,7 +8681,8 @@ struct sendinvoice
     allow_sending_without_reply : bool	//! Optional. Pass True if the message should be sent even if the specified replied-to message is not found
     reply_markup : inlinekeyboardmarkup?	//! Optional. A JSON-serialized object for an inline keyboard. If empty, one 'Pay total price' button will be shown. If not empty, the first button must be a Pay button.
 
-def from_JV ( var v:JsonValue?; t:sendinvoice ) : sendinvoice
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:sendinvoice explicit ) : sendinvoice
     var q : sendinvoice
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<string>)
@@ -8021,13 +8715,15 @@ def from_JV ( var v:JsonValue?; t:sendinvoice ) : sendinvoice
     q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:sendinvoice? ) : sendinvoice?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:sendinvoice explicit? ) : sendinvoice?
     return null if v==null
     var q = new sendinvoice
     *q <- from_JV(v,type<sendinvoice>)
     return q
 
-def JV ( v:sendinvoice ) : JsonValue?
+[generic]
+def JV ( v:sendinvoice explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["message_thread_id"] = _::JV(v.message_thread_id)
@@ -8083,7 +8779,8 @@ struct createinvoicelink
     send_email_to_provider : bool	//! Optional. Pass True if the user's email address should be sent to the provider
     is_flexible : bool	//! Optional. Pass True if the final price depends on the shipping method
 
-def from_JV ( var v:JsonValue?; t:createinvoicelink ) : createinvoicelink
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:createinvoicelink explicit ) : createinvoicelink
     var q : createinvoicelink
     var vobj & = unsafe(v as _object)
     q.title = _::from_JV(vobj["title"], type<string>)
@@ -8108,13 +8805,15 @@ def from_JV ( var v:JsonValue?; t:createinvoicelink ) : createinvoicelink
     q.is_flexible = _::from_JV(vobj["is_flexible"], type<bool>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:createinvoicelink? ) : createinvoicelink?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:createinvoicelink explicit? ) : createinvoicelink?
     return null if v==null
     var q = new createinvoicelink
     *q <- from_JV(v,type<createinvoicelink>)
     return q
 
-def JV ( v:createinvoicelink ) : JsonValue?
+[generic]
+def JV ( v:createinvoicelink explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["title"] = _::JV(v.title)
     map["description"] = _::JV(v.description)
@@ -8145,7 +8844,8 @@ struct answershippingquery
     shipping_options : array<shippingoption>	//! Optional. Required if ok is True. A JSON-serialized array of available shipping options.
     error_message : string	//! Optional. Required if ok is False. Error message in human readable form that explains why it is impossible to complete the order (e.g. "Sorry, delivery to your desired address is unavailable'). Telegram will display this message to the user.
 
-def from_JV ( var v:JsonValue?; t:answershippingquery ) : answershippingquery
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:answershippingquery explicit ) : answershippingquery
     var q : answershippingquery
     var vobj & = unsafe(v as _object)
     q.shipping_query_id = _::from_JV(vobj["shipping_query_id"], type<string>)
@@ -8154,13 +8854,15 @@ def from_JV ( var v:JsonValue?; t:answershippingquery ) : answershippingquery
     q.error_message = _::from_JV(vobj["error_message"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:answershippingquery? ) : answershippingquery?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:answershippingquery explicit? ) : answershippingquery?
     return null if v==null
     var q = new answershippingquery
     *q <- from_JV(v,type<answershippingquery>)
     return q
 
-def JV ( v:answershippingquery ) : JsonValue?
+[generic]
+def JV ( v:answershippingquery explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["shipping_query_id"] = _::JV(v.shipping_query_id)
     map["ok"] = _::JV(v.ok)
@@ -8174,7 +8876,8 @@ struct answerprecheckoutquery
     ok : bool	//! Required. Specify True if everything is alright (goods are available, etc.) and the bot is ready to proceed with the order. Use False if there are any problems.
     error_message : string	//! Optional. Required if ok is False. Error message in human readable form that explains the reason for failure to proceed with the checkout (e.g. "Sorry, somebody just bought the last of our amazing black T-shirts while you were busy filling out your payment details. Please choose a different color or garment!"). Telegram will display this message to the user.
 
-def from_JV ( var v:JsonValue?; t:answerprecheckoutquery ) : answerprecheckoutquery
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:answerprecheckoutquery explicit ) : answerprecheckoutquery
     var q : answerprecheckoutquery
     var vobj & = unsafe(v as _object)
     q.pre_checkout_query_id = _::from_JV(vobj["pre_checkout_query_id"], type<string>)
@@ -8182,13 +8885,15 @@ def from_JV ( var v:JsonValue?; t:answerprecheckoutquery ) : answerprecheckoutqu
     q.error_message = _::from_JV(vobj["error_message"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:answerprecheckoutquery? ) : answerprecheckoutquery?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:answerprecheckoutquery explicit? ) : answerprecheckoutquery?
     return null if v==null
     var q = new answerprecheckoutquery
     *q <- from_JV(v,type<answerprecheckoutquery>)
     return q
 
-def JV ( v:answerprecheckoutquery ) : JsonValue?
+[generic]
+def JV ( v:answerprecheckoutquery explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["pre_checkout_query_id"] = _::JV(v.pre_checkout_query_id)
     map["ok"] = _::JV(v.ok)
@@ -8200,20 +8905,23 @@ struct labeledprice
     _label : string	//! Portion label
     amount : int64	//! Price of the product in the smallest units of the currency (integer, not float/double). For example, for a price of US$ 1.45 pass amount = 145. See the exp parameter in currencies.json, it shows the number of digits past the decimal point for each currency (2 for the majority of currencies).
 
-def from_JV ( var v:JsonValue?; t:labeledprice ) : labeledprice
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:labeledprice explicit ) : labeledprice
     var q : labeledprice
     var vobj & = unsafe(v as _object)
     q._label = _::from_JV(vobj["_label"], type<string>)
     q.amount = _::from_JV(vobj["amount"], type<int64>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:labeledprice? ) : labeledprice?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:labeledprice explicit? ) : labeledprice?
     return null if v==null
     var q = new labeledprice
     *q <- from_JV(v,type<labeledprice>)
     return q
 
-def JV ( v:labeledprice ) : JsonValue?
+[generic]
+def JV ( v:labeledprice explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["_label"] = _::JV(v._label)
     map["amount"] = _::JV(v.amount)
@@ -8227,7 +8935,8 @@ struct invoice
     currency : string	//! Three-letter ISO 4217 currency code
     total_amount : int64	//! Total price in the smallest units of the currency (integer, not float/double). For example, for a price of US$ 1.45 pass amount = 145. See the exp parameter in currencies.json, it shows the number of digits past the decimal point for each currency (2 for the majority of currencies).
 
-def from_JV ( var v:JsonValue?; t:invoice ) : invoice
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:invoice explicit ) : invoice
     var q : invoice
     var vobj & = unsafe(v as _object)
     q.title = _::from_JV(vobj["title"], type<string>)
@@ -8237,13 +8946,15 @@ def from_JV ( var v:JsonValue?; t:invoice ) : invoice
     q.total_amount = _::from_JV(vobj["total_amount"], type<int64>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:invoice? ) : invoice?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:invoice explicit? ) : invoice?
     return null if v==null
     var q = new invoice
     *q <- from_JV(v,type<invoice>)
     return q
 
-def JV ( v:invoice ) : JsonValue?
+[generic]
+def JV ( v:invoice explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["title"] = _::JV(v.title)
     map["description"] = _::JV(v.description)
@@ -8261,7 +8972,8 @@ struct shippingaddress
     street_line2 : string	//! Second line for the address
     post_code : string	//! Address post code
 
-def from_JV ( var v:JsonValue?; t:shippingaddress ) : shippingaddress
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:shippingaddress explicit ) : shippingaddress
     var q : shippingaddress
     var vobj & = unsafe(v as _object)
     q.country_code = _::from_JV(vobj["country_code"], type<string>)
@@ -8272,13 +8984,15 @@ def from_JV ( var v:JsonValue?; t:shippingaddress ) : shippingaddress
     q.post_code = _::from_JV(vobj["post_code"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:shippingaddress? ) : shippingaddress?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:shippingaddress explicit? ) : shippingaddress?
     return null if v==null
     var q = new shippingaddress
     *q <- from_JV(v,type<shippingaddress>)
     return q
 
-def JV ( v:shippingaddress ) : JsonValue?
+[generic]
+def JV ( v:shippingaddress explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["country_code"] = _::JV(v.country_code)
     map["state"] = _::JV(v.state)
@@ -8295,7 +9009,8 @@ struct orderinfo
     email : string	//! Optional. User email
     shipping_address : shippingaddress?	//! Optional. User shipping address
 
-def from_JV ( var v:JsonValue?; t:orderinfo ) : orderinfo
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:orderinfo explicit ) : orderinfo
     var q : orderinfo
     var vobj & = unsafe(v as _object)
     q.name = _::from_JV(vobj["name"], type<string>)
@@ -8304,13 +9019,15 @@ def from_JV ( var v:JsonValue?; t:orderinfo ) : orderinfo
     q.shipping_address = _::from_JV(vobj["shipping_address"], type<shippingaddress?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:orderinfo? ) : orderinfo?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:orderinfo explicit? ) : orderinfo?
     return null if v==null
     var q = new orderinfo
     *q <- from_JV(v,type<orderinfo>)
     return q
 
-def JV ( v:orderinfo ) : JsonValue?
+[generic]
+def JV ( v:orderinfo explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["name"] = _::JV(v.name)
     map["phone_number"] = _::JV(v.phone_number)
@@ -8325,7 +9042,8 @@ struct shippingoption
     title : string	//! Option title
     prices : array<labeledprice>	//! List of price portions
 
-def from_JV ( var v:JsonValue?; t:shippingoption ) : shippingoption
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:shippingoption explicit ) : shippingoption
     var q : shippingoption
     var vobj & = unsafe(v as _object)
     q.id = _::from_JV(vobj["id"], type<string>)
@@ -8333,13 +9051,15 @@ def from_JV ( var v:JsonValue?; t:shippingoption ) : shippingoption
     q.prices <- _::from_JV(vobj["prices"], type<array<labeledprice>>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:shippingoption? ) : shippingoption?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:shippingoption explicit? ) : shippingoption?
     return null if v==null
     var q = new shippingoption
     *q <- from_JV(v,type<shippingoption>)
     return q
 
-def JV ( v:shippingoption ) : JsonValue?
+[generic]
+def JV ( v:shippingoption explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["id"] = _::JV(v.id)
     map["title"] = _::JV(v.title)
@@ -8356,7 +9076,8 @@ struct successfulpayment
     telegram_payment_charge_id : string	//! Telegram payment identifier
     provider_payment_charge_id : string	//! Provider payment identifier
 
-def from_JV ( var v:JsonValue?; t:successfulpayment ) : successfulpayment
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:successfulpayment explicit ) : successfulpayment
     var q : successfulpayment
     var vobj & = unsafe(v as _object)
     q.currency = _::from_JV(vobj["currency"], type<string>)
@@ -8368,13 +9089,15 @@ def from_JV ( var v:JsonValue?; t:successfulpayment ) : successfulpayment
     q.provider_payment_charge_id = _::from_JV(vobj["provider_payment_charge_id"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:successfulpayment? ) : successfulpayment?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:successfulpayment explicit? ) : successfulpayment?
     return null if v==null
     var q = new successfulpayment
     *q <- from_JV(v,type<successfulpayment>)
     return q
 
-def JV ( v:successfulpayment ) : JsonValue?
+[generic]
+def JV ( v:successfulpayment explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["currency"] = _::JV(v.currency)
     map["total_amount"] = _::JV(v.total_amount)
@@ -8393,7 +9116,8 @@ struct shippingquery
     invoice_payload : string	//! Bot specified invoice payload
     shipping_address : shippingaddress	//! User specified shipping address
 
-def from_JV ( var v:JsonValue?; t:shippingquery ) : shippingquery
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:shippingquery explicit ) : shippingquery
     var q : shippingquery
     var vobj & = unsafe(v as _object)
     q.id = _::from_JV(vobj["id"], type<string>)
@@ -8402,13 +9126,15 @@ def from_JV ( var v:JsonValue?; t:shippingquery ) : shippingquery
     q.shipping_address <- _::from_JV(vobj["shipping_address"], type<shippingaddress>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:shippingquery? ) : shippingquery?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:shippingquery explicit? ) : shippingquery?
     return null if v==null
     var q = new shippingquery
     *q <- from_JV(v,type<shippingquery>)
     return q
 
-def JV ( v:shippingquery ) : JsonValue?
+[generic]
+def JV ( v:shippingquery explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["id"] = _::JV(v.id)
     map["from"] = _::JV(v.from)
@@ -8426,7 +9152,8 @@ struct precheckoutquery
     shipping_option_id : string	//! Optional. Identifier of the shipping option chosen by the user
     order_info : orderinfo?	//! Optional. Order information provided by the user
 
-def from_JV ( var v:JsonValue?; t:precheckoutquery ) : precheckoutquery
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:precheckoutquery explicit ) : precheckoutquery
     var q : precheckoutquery
     var vobj & = unsafe(v as _object)
     q.id = _::from_JV(vobj["id"], type<string>)
@@ -8438,13 +9165,15 @@ def from_JV ( var v:JsonValue?; t:precheckoutquery ) : precheckoutquery
     q.order_info = _::from_JV(vobj["order_info"], type<orderinfo?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:precheckoutquery? ) : precheckoutquery?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:precheckoutquery explicit? ) : precheckoutquery?
     return null if v==null
     var q = new precheckoutquery
     *q <- from_JV(v,type<precheckoutquery>)
     return q
 
-def JV ( v:precheckoutquery ) : JsonValue?
+[generic]
+def JV ( v:precheckoutquery explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["id"] = _::JV(v.id)
     map["from"] = _::JV(v.from)
@@ -8461,20 +9190,23 @@ struct passportdata
     data : array<encryptedpassportelement>	//! Array with information about documents and other Telegram Passport elements that was shared with the bot
     credentials : encryptedcredentials	//! Encrypted credentials required to decrypt the data
 
-def from_JV ( var v:JsonValue?; t:passportdata ) : passportdata
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:passportdata explicit ) : passportdata
     var q : passportdata
     var vobj & = unsafe(v as _object)
     q.data <- _::from_JV(vobj["data"], type<array<encryptedpassportelement>>)
     q.credentials <- _::from_JV(vobj["credentials"], type<encryptedcredentials>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:passportdata? ) : passportdata?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:passportdata explicit? ) : passportdata?
     return null if v==null
     var q = new passportdata
     *q <- from_JV(v,type<passportdata>)
     return q
 
-def JV ( v:passportdata ) : JsonValue?
+[generic]
+def JV ( v:passportdata explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["data"] = _::JV(v.data)
     map["credentials"] = _::JV(v.credentials)
@@ -8487,7 +9219,8 @@ struct passportfile
     file_size : int64	//! File size in bytes
     file_date : int64	//! Unix time when the file was uploaded
 
-def from_JV ( var v:JsonValue?; t:passportfile ) : passportfile
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:passportfile explicit ) : passportfile
     var q : passportfile
     var vobj & = unsafe(v as _object)
     q.file_id = _::from_JV(vobj["file_id"], type<string>)
@@ -8496,13 +9229,15 @@ def from_JV ( var v:JsonValue?; t:passportfile ) : passportfile
     q.file_date = _::from_JV(vobj["file_date"], type<int64>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:passportfile? ) : passportfile?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:passportfile explicit? ) : passportfile?
     return null if v==null
     var q = new passportfile
     *q <- from_JV(v,type<passportfile>)
     return q
 
-def JV ( v:passportfile ) : JsonValue?
+[generic]
+def JV ( v:passportfile explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["file_id"] = _::JV(v.file_id)
     map["file_unique_id"] = _::JV(v.file_unique_id)
@@ -8523,7 +9258,8 @@ struct encryptedpassportelement
     translation : array<passportfile>	//! Optional. Array of encrypted files with translated versions of documents provided by the user. Available if requested for “passport”, “driver_license”, “identity_card”, “internal_passport”, “utility_bill”, “bank_statement”, “rental_agreement”, “passport_registration” and “temporary_registration” types. Files can be decrypted and verified using the accompanying EncryptedCredentials.
     hash : string	//! Base64-encoded element hash for using in PassportElementErrorUnspecified
 
-def from_JV ( var v:JsonValue?; t:encryptedpassportelement ) : encryptedpassportelement
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:encryptedpassportelement explicit ) : encryptedpassportelement
     var q : encryptedpassportelement
     var vobj & = unsafe(v as _object)
     q._type = _::from_JV(vobj["_type"], type<string>)
@@ -8538,13 +9274,15 @@ def from_JV ( var v:JsonValue?; t:encryptedpassportelement ) : encryptedpassport
     q.hash = _::from_JV(vobj["hash"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:encryptedpassportelement? ) : encryptedpassportelement?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:encryptedpassportelement explicit? ) : encryptedpassportelement?
     return null if v==null
     var q = new encryptedpassportelement
     *q <- from_JV(v,type<encryptedpassportelement>)
     return q
 
-def JV ( v:encryptedpassportelement ) : JsonValue?
+[generic]
+def JV ( v:encryptedpassportelement explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["_type"] = _::JV(v._type)
     map["data"] = _::JV(v.data)
@@ -8567,7 +9305,8 @@ struct encryptedcredentials
     hash : string	//! Base64-encoded data hash for data authentication
     secret : string	//! Base64-encoded secret, encrypted with the bot's public RSA key, required for data decryption
 
-def from_JV ( var v:JsonValue?; t:encryptedcredentials ) : encryptedcredentials
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:encryptedcredentials explicit ) : encryptedcredentials
     var q : encryptedcredentials
     var vobj & = unsafe(v as _object)
     q.data = _::from_JV(vobj["data"], type<string>)
@@ -8575,13 +9314,15 @@ def from_JV ( var v:JsonValue?; t:encryptedcredentials ) : encryptedcredentials
     q.secret = _::from_JV(vobj["secret"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:encryptedcredentials? ) : encryptedcredentials?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:encryptedcredentials explicit? ) : encryptedcredentials?
     return null if v==null
     var q = new encryptedcredentials
     *q <- from_JV(v,type<encryptedcredentials>)
     return q
 
-def JV ( v:encryptedcredentials ) : JsonValue?
+[generic]
+def JV ( v:encryptedcredentials explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["data"] = _::JV(v.data)
     map["hash"] = _::JV(v.hash)
@@ -8593,20 +9334,23 @@ struct setpassportdataerrors
     user_id : int64	//! Required. User identifier
     errors : array<passportelementerror>	//! Required. A JSON-serialized array describing the errors
 
-def from_JV ( var v:JsonValue?; t:setpassportdataerrors ) : setpassportdataerrors
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:setpassportdataerrors explicit ) : setpassportdataerrors
     var q : setpassportdataerrors
     var vobj & = unsafe(v as _object)
     q.user_id = _::from_JV(vobj["user_id"], type<int64>)
     q.errors <- _::from_JV(vobj["errors"], type<array<passportelementerror>>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:setpassportdataerrors? ) : setpassportdataerrors?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:setpassportdataerrors explicit? ) : setpassportdataerrors?
     return null if v==null
     var q = new setpassportdataerrors
     *q <- from_JV(v,type<setpassportdataerrors>)
     return q
 
-def JV ( v:setpassportdataerrors ) : JsonValue?
+[generic]
+def JV ( v:setpassportdataerrors explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["user_id"] = _::JV(v.user_id)
     map["errors"] = _::JV(v.errors)
@@ -8616,18 +9360,21 @@ struct passportelementerror
     //!  This object represents an error in the Telegram Passport element which was submitted that should be resolved by the user. It should be one of:
     object_passportelementerror_has_no_fields:bool
 
-def from_JV ( var v:JsonValue?; t:passportelementerror ) : passportelementerror
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:passportelementerror explicit ) : passportelementerror
     var q : passportelementerror
     var vobj & = unsafe(v as _object)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:passportelementerror? ) : passportelementerror?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:passportelementerror explicit? ) : passportelementerror?
     return null if v==null
     var q = new passportelementerror
     *q <- from_JV(v,type<passportelementerror>)
     return q
 
-def JV ( v:passportelementerror ) : JsonValue?
+[generic]
+def JV ( v:passportelementerror explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     return _::JV(map)
 
@@ -8639,7 +9386,8 @@ struct passportelementerrordatafield
     data_hash : string	//! Base64-encoded data hash
     message : string	//! Error message
 
-def from_JV ( var v:JsonValue?; t:passportelementerrordatafield ) : passportelementerrordatafield
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:passportelementerrordatafield explicit ) : passportelementerrordatafield
     var q : passportelementerrordatafield
     var vobj & = unsafe(v as _object)
     q.source = _::from_JV(vobj["source"], type<string>)
@@ -8649,13 +9397,15 @@ def from_JV ( var v:JsonValue?; t:passportelementerrordatafield ) : passportelem
     q.message = _::from_JV(vobj["message"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:passportelementerrordatafield? ) : passportelementerrordatafield?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:passportelementerrordatafield explicit? ) : passportelementerrordatafield?
     return null if v==null
     var q = new passportelementerrordatafield
     *q <- from_JV(v,type<passportelementerrordatafield>)
     return q
 
-def JV ( v:passportelementerrordatafield ) : JsonValue?
+[generic]
+def JV ( v:passportelementerrordatafield explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["source"] = _::JV(v.source)
     map["_type"] = _::JV(v._type)
@@ -8671,7 +9421,8 @@ struct passportelementerrorfrontside
     file_hash : string	//! Base64-encoded hash of the file with the front side of the document
     message : string	//! Error message
 
-def from_JV ( var v:JsonValue?; t:passportelementerrorfrontside ) : passportelementerrorfrontside
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:passportelementerrorfrontside explicit ) : passportelementerrorfrontside
     var q : passportelementerrorfrontside
     var vobj & = unsafe(v as _object)
     q.source = _::from_JV(vobj["source"], type<string>)
@@ -8680,13 +9431,15 @@ def from_JV ( var v:JsonValue?; t:passportelementerrorfrontside ) : passportelem
     q.message = _::from_JV(vobj["message"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:passportelementerrorfrontside? ) : passportelementerrorfrontside?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:passportelementerrorfrontside explicit? ) : passportelementerrorfrontside?
     return null if v==null
     var q = new passportelementerrorfrontside
     *q <- from_JV(v,type<passportelementerrorfrontside>)
     return q
 
-def JV ( v:passportelementerrorfrontside ) : JsonValue?
+[generic]
+def JV ( v:passportelementerrorfrontside explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["source"] = _::JV(v.source)
     map["_type"] = _::JV(v._type)
@@ -8701,7 +9454,8 @@ struct passportelementerrorreverseside
     file_hash : string	//! Base64-encoded hash of the file with the reverse side of the document
     message : string	//! Error message
 
-def from_JV ( var v:JsonValue?; t:passportelementerrorreverseside ) : passportelementerrorreverseside
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:passportelementerrorreverseside explicit ) : passportelementerrorreverseside
     var q : passportelementerrorreverseside
     var vobj & = unsafe(v as _object)
     q.source = _::from_JV(vobj["source"], type<string>)
@@ -8710,13 +9464,15 @@ def from_JV ( var v:JsonValue?; t:passportelementerrorreverseside ) : passportel
     q.message = _::from_JV(vobj["message"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:passportelementerrorreverseside? ) : passportelementerrorreverseside?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:passportelementerrorreverseside explicit? ) : passportelementerrorreverseside?
     return null if v==null
     var q = new passportelementerrorreverseside
     *q <- from_JV(v,type<passportelementerrorreverseside>)
     return q
 
-def JV ( v:passportelementerrorreverseside ) : JsonValue?
+[generic]
+def JV ( v:passportelementerrorreverseside explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["source"] = _::JV(v.source)
     map["_type"] = _::JV(v._type)
@@ -8731,7 +9487,8 @@ struct passportelementerrorselfie
     file_hash : string	//! Base64-encoded hash of the file with the selfie
     message : string	//! Error message
 
-def from_JV ( var v:JsonValue?; t:passportelementerrorselfie ) : passportelementerrorselfie
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:passportelementerrorselfie explicit ) : passportelementerrorselfie
     var q : passportelementerrorselfie
     var vobj & = unsafe(v as _object)
     q.source = _::from_JV(vobj["source"], type<string>)
@@ -8740,13 +9497,15 @@ def from_JV ( var v:JsonValue?; t:passportelementerrorselfie ) : passportelement
     q.message = _::from_JV(vobj["message"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:passportelementerrorselfie? ) : passportelementerrorselfie?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:passportelementerrorselfie explicit? ) : passportelementerrorselfie?
     return null if v==null
     var q = new passportelementerrorselfie
     *q <- from_JV(v,type<passportelementerrorselfie>)
     return q
 
-def JV ( v:passportelementerrorselfie ) : JsonValue?
+[generic]
+def JV ( v:passportelementerrorselfie explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["source"] = _::JV(v.source)
     map["_type"] = _::JV(v._type)
@@ -8761,7 +9520,8 @@ struct passportelementerrorfile
     file_hash : string	//! Base64-encoded file hash
     message : string	//! Error message
 
-def from_JV ( var v:JsonValue?; t:passportelementerrorfile ) : passportelementerrorfile
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:passportelementerrorfile explicit ) : passportelementerrorfile
     var q : passportelementerrorfile
     var vobj & = unsafe(v as _object)
     q.source = _::from_JV(vobj["source"], type<string>)
@@ -8770,13 +9530,15 @@ def from_JV ( var v:JsonValue?; t:passportelementerrorfile ) : passportelementer
     q.message = _::from_JV(vobj["message"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:passportelementerrorfile? ) : passportelementerrorfile?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:passportelementerrorfile explicit? ) : passportelementerrorfile?
     return null if v==null
     var q = new passportelementerrorfile
     *q <- from_JV(v,type<passportelementerrorfile>)
     return q
 
-def JV ( v:passportelementerrorfile ) : JsonValue?
+[generic]
+def JV ( v:passportelementerrorfile explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["source"] = _::JV(v.source)
     map["_type"] = _::JV(v._type)
@@ -8791,7 +9553,8 @@ struct passportelementerrorfiles
     file_hashes : array<string>	//! List of base64-encoded file hashes
     message : string	//! Error message
 
-def from_JV ( var v:JsonValue?; t:passportelementerrorfiles ) : passportelementerrorfiles
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:passportelementerrorfiles explicit ) : passportelementerrorfiles
     var q : passportelementerrorfiles
     var vobj & = unsafe(v as _object)
     q.source = _::from_JV(vobj["source"], type<string>)
@@ -8800,13 +9563,15 @@ def from_JV ( var v:JsonValue?; t:passportelementerrorfiles ) : passportelemente
     q.message = _::from_JV(vobj["message"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:passportelementerrorfiles? ) : passportelementerrorfiles?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:passportelementerrorfiles explicit? ) : passportelementerrorfiles?
     return null if v==null
     var q = new passportelementerrorfiles
     *q <- from_JV(v,type<passportelementerrorfiles>)
     return q
 
-def JV ( v:passportelementerrorfiles ) : JsonValue?
+[generic]
+def JV ( v:passportelementerrorfiles explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["source"] = _::JV(v.source)
     map["_type"] = _::JV(v._type)
@@ -8821,7 +9586,8 @@ struct passportelementerrortranslationfile
     file_hash : string	//! Base64-encoded file hash
     message : string	//! Error message
 
-def from_JV ( var v:JsonValue?; t:passportelementerrortranslationfile ) : passportelementerrortranslationfile
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:passportelementerrortranslationfile explicit ) : passportelementerrortranslationfile
     var q : passportelementerrortranslationfile
     var vobj & = unsafe(v as _object)
     q.source = _::from_JV(vobj["source"], type<string>)
@@ -8830,13 +9596,15 @@ def from_JV ( var v:JsonValue?; t:passportelementerrortranslationfile ) : passpo
     q.message = _::from_JV(vobj["message"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:passportelementerrortranslationfile? ) : passportelementerrortranslationfile?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:passportelementerrortranslationfile explicit? ) : passportelementerrortranslationfile?
     return null if v==null
     var q = new passportelementerrortranslationfile
     *q <- from_JV(v,type<passportelementerrortranslationfile>)
     return q
 
-def JV ( v:passportelementerrortranslationfile ) : JsonValue?
+[generic]
+def JV ( v:passportelementerrortranslationfile explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["source"] = _::JV(v.source)
     map["_type"] = _::JV(v._type)
@@ -8851,7 +9619,8 @@ struct passportelementerrortranslationfiles
     file_hashes : array<string>	//! List of base64-encoded file hashes
     message : string	//! Error message
 
-def from_JV ( var v:JsonValue?; t:passportelementerrortranslationfiles ) : passportelementerrortranslationfiles
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:passportelementerrortranslationfiles explicit ) : passportelementerrortranslationfiles
     var q : passportelementerrortranslationfiles
     var vobj & = unsafe(v as _object)
     q.source = _::from_JV(vobj["source"], type<string>)
@@ -8860,13 +9629,15 @@ def from_JV ( var v:JsonValue?; t:passportelementerrortranslationfiles ) : passp
     q.message = _::from_JV(vobj["message"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:passportelementerrortranslationfiles? ) : passportelementerrortranslationfiles?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:passportelementerrortranslationfiles explicit? ) : passportelementerrortranslationfiles?
     return null if v==null
     var q = new passportelementerrortranslationfiles
     *q <- from_JV(v,type<passportelementerrortranslationfiles>)
     return q
 
-def JV ( v:passportelementerrortranslationfiles ) : JsonValue?
+[generic]
+def JV ( v:passportelementerrortranslationfiles explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["source"] = _::JV(v.source)
     map["_type"] = _::JV(v._type)
@@ -8881,7 +9652,8 @@ struct passportelementerrorunspecified
     element_hash : string	//! Base64-encoded element hash
     message : string	//! Error message
 
-def from_JV ( var v:JsonValue?; t:passportelementerrorunspecified ) : passportelementerrorunspecified
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:passportelementerrorunspecified explicit ) : passportelementerrorunspecified
     var q : passportelementerrorunspecified
     var vobj & = unsafe(v as _object)
     q.source = _::from_JV(vobj["source"], type<string>)
@@ -8890,13 +9662,15 @@ def from_JV ( var v:JsonValue?; t:passportelementerrorunspecified ) : passportel
     q.message = _::from_JV(vobj["message"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:passportelementerrorunspecified? ) : passportelementerrorunspecified?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:passportelementerrorunspecified explicit? ) : passportelementerrorunspecified?
     return null if v==null
     var q = new passportelementerrorunspecified
     *q <- from_JV(v,type<passportelementerrorunspecified>)
     return q
 
-def JV ( v:passportelementerrorunspecified ) : JsonValue?
+[generic]
+def JV ( v:passportelementerrorunspecified explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["source"] = _::JV(v.source)
     map["_type"] = _::JV(v._type)
@@ -8915,7 +9689,8 @@ struct sendgame
     allow_sending_without_reply : bool	//! Optional. Pass True if the message should be sent even if the specified replied-to message is not found
     reply_markup : inlinekeyboardmarkup?	//! Optional. A JSON-serialized object for an inline keyboard. If empty, one 'Play game_title' button will be shown. If not empty, the first button must launch the game.
 
-def from_JV ( var v:JsonValue?; t:sendgame ) : sendgame
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:sendgame explicit ) : sendgame
     var q : sendgame
     var vobj & = unsafe(v as _object)
     q.chat_id = _::from_JV(vobj["chat_id"], type<int64>)
@@ -8928,13 +9703,15 @@ def from_JV ( var v:JsonValue?; t:sendgame ) : sendgame
     q.reply_markup = _::from_JV(vobj["reply_markup"], type<inlinekeyboardmarkup?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:sendgame? ) : sendgame?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:sendgame explicit? ) : sendgame?
     return null if v==null
     var q = new sendgame
     *q <- from_JV(v,type<sendgame>)
     return q
 
-def JV ( v:sendgame ) : JsonValue?
+[generic]
+def JV ( v:sendgame explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["chat_id"] = _::JV(v.chat_id)
     map["message_thread_id"] = _::JV(v.message_thread_id)
@@ -8956,7 +9733,8 @@ struct game
     text_entities : array<messageentity>	//! Optional. Special entities that appear in text, such as usernames, URLs, bot commands, etc.
     animation : animation?	//! Optional. Animation that will be displayed in the game message in chats. Upload via BotFather
 
-def from_JV ( var v:JsonValue?; t:game ) : game
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:game explicit ) : game
     var q : game
     var vobj & = unsafe(v as _object)
     q.title = _::from_JV(vobj["title"], type<string>)
@@ -8967,13 +9745,15 @@ def from_JV ( var v:JsonValue?; t:game ) : game
     q.animation = _::from_JV(vobj["animation"], type<animation?>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:game? ) : game?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:game explicit? ) : game?
     return null if v==null
     var q = new game
     *q <- from_JV(v,type<game>)
     return q
 
-def JV ( v:game ) : JsonValue?
+[generic]
+def JV ( v:game explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["title"] = _::JV(v.title)
     map["description"] = _::JV(v.description)
@@ -8988,18 +9768,21 @@ struct callbackgame
     //!  A placeholder, currently holds no information. Use BotFather to set up your game.
     object_callbackgame_has_no_fields:bool
 
-def from_JV ( var v:JsonValue?; t:callbackgame ) : callbackgame
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:callbackgame explicit ) : callbackgame
     var q : callbackgame
     var vobj & = unsafe(v as _object)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:callbackgame? ) : callbackgame?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:callbackgame explicit? ) : callbackgame?
     return null if v==null
     var q = new callbackgame
     *q <- from_JV(v,type<callbackgame>)
     return q
 
-def JV ( v:callbackgame ) : JsonValue?
+[generic]
+def JV ( v:callbackgame explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     return _::JV(map)
 
@@ -9013,7 +9796,8 @@ struct setgamescore
     message_id : int64	//! Optional. Required if inline_message_id is not specified. Identifier of the sent message
     inline_message_id : string	//! Optional. Required if chat_id and message_id are not specified. Identifier of the inline message
 
-def from_JV ( var v:JsonValue?; t:setgamescore ) : setgamescore
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:setgamescore explicit ) : setgamescore
     var q : setgamescore
     var vobj & = unsafe(v as _object)
     q.user_id = _::from_JV(vobj["user_id"], type<int64>)
@@ -9025,13 +9809,15 @@ def from_JV ( var v:JsonValue?; t:setgamescore ) : setgamescore
     q.inline_message_id = _::from_JV(vobj["inline_message_id"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:setgamescore? ) : setgamescore?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:setgamescore explicit? ) : setgamescore?
     return null if v==null
     var q = new setgamescore
     *q <- from_JV(v,type<setgamescore>)
     return q
 
-def JV ( v:setgamescore ) : JsonValue?
+[generic]
+def JV ( v:setgamescore explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["user_id"] = _::JV(v.user_id)
     map["score"] = _::JV(v.score)
@@ -9049,7 +9835,8 @@ struct getgamehighscores
     message_id : int64	//! Optional. Required if inline_message_id is not specified. Identifier of the sent message
     inline_message_id : string	//! Optional. Required if chat_id and message_id are not specified. Identifier of the inline message
 
-def from_JV ( var v:JsonValue?; t:getgamehighscores ) : getgamehighscores
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:getgamehighscores explicit ) : getgamehighscores
     var q : getgamehighscores
     var vobj & = unsafe(v as _object)
     q.user_id = _::from_JV(vobj["user_id"], type<int64>)
@@ -9058,13 +9845,15 @@ def from_JV ( var v:JsonValue?; t:getgamehighscores ) : getgamehighscores
     q.inline_message_id = _::from_JV(vobj["inline_message_id"], type<string>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:getgamehighscores? ) : getgamehighscores?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:getgamehighscores explicit? ) : getgamehighscores?
     return null if v==null
     var q = new getgamehighscores
     *q <- from_JV(v,type<getgamehighscores>)
     return q
 
-def JV ( v:getgamehighscores ) : JsonValue?
+[generic]
+def JV ( v:getgamehighscores explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["user_id"] = _::JV(v.user_id)
     map["chat_id"] = _::JV(v.chat_id)
@@ -9078,7 +9867,8 @@ struct gamehighscore
     user : user	//! User
     score : int64	//! Score
 
-def from_JV ( var v:JsonValue?; t:gamehighscore ) : gamehighscore
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:gamehighscore explicit ) : gamehighscore
     var q : gamehighscore
     var vobj & = unsafe(v as _object)
     q.position = _::from_JV(vobj["position"], type<int64>)
@@ -9086,13 +9876,15 @@ def from_JV ( var v:JsonValue?; t:gamehighscore ) : gamehighscore
     q.score = _::from_JV(vobj["score"], type<int64>)
     return <- q
 
-def from_JV ( var v:JsonValue?; t:gamehighscore? ) : gamehighscore?
+[generic]
+def from_JV ( var v:JsonValue explicit?; t:gamehighscore explicit? ) : gamehighscore?
     return null if v==null
     var q = new gamehighscore
     *q <- from_JV(v,type<gamehighscore>)
     return q
 
-def JV ( v:gamehighscore ) : JsonValue?
+[generic]
+def JV ( v:gamehighscore explicit ) : JsonValue?
     var map: table<string; JsonValue?>
     map["position"] = _::JV(v.position)
     map["user"] = _::JV(v.user)
