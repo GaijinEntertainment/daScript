@@ -10,6 +10,14 @@ namespace das
         return library.makeHandleType(typeName);
     }
 
+    Annotation * TypeDecl::isPointerToAnnotation() const {
+        if ( baseType!=Type::tPointer || !firstType || firstType->baseType!=Type::tHandle ) {
+            return nullptr;
+        } else {
+            return firstType->annotation;
+        }
+    }
+
     // auto or generic type conversion
 
     TypeDecl::TypeDecl(const EnumerationPtr & ep)
@@ -17,12 +25,8 @@ namespace das
     {
     }
 
-    Annotation * TypeDecl::isPointerToAnnotation() const {
-        if ( baseType!=Type::tPointer || !firstType || firstType->baseType!=Type::tHandle ) {
-            return nullptr;
-        } else {
-            return firstType->annotation;
-        }
+    bool TypeDecl::isClass() const {
+        return isStructure() && structType && structType->isClass;
     }
 
     bool TypeDecl::isExprTypeAnywhere() const {
@@ -1198,14 +1202,14 @@ namespace das
              AllowSubstitute allowSubstitute,
              bool topLevel,
              bool isPassType ) const {
+        if ( baseType!=decl.baseType ) {
+            return false;
+        }
         if ( topLevel && !isPointer() && !isRef()  ) {
             constMatters = ConstMatters::no;
         }
         if ( topLevel && !isTempType() ) {
             temporaryMatters = TemporaryMatters::no;
-        }
-        if ( baseType!=decl.baseType ) {
-            return false;
         }
         if ( baseType==Type::tHandle && annotation!=decl.annotation ) {
             if ( !isExplicit && (allowSubstitute == AllowSubstitute::yes) ) {
@@ -1453,11 +1457,6 @@ namespace das
         }
     }
 
-    bool TypeDecl::isVectorType() const {
-        if ( dim.size() ) return false;
-        return isBaseVectorType();
-    }
-
     int TypeDecl::getVectorDim() const {
         switch (baseType) {
             case tInt2:
@@ -1555,71 +1554,6 @@ namespace das
         DAS_ASSERTF(0, "we should not be here. we are calling getRangeType on an unsuppored baseType."
                 "likely new range type been added.");
         return Type::none;
-    }
-
-    bool TypeDecl::isGoodIteratorType() const {
-        return baseType==Type::tIterator && dim.size()==0 && firstType;
-    }
-
-    bool TypeDecl::isGoodBlockType() const {
-        return baseType==Type::tBlock && dim.size()==0;
-    }
-
-    bool TypeDecl::isGoodFunctionType() const {
-        return baseType==Type::tFunction && dim.size()==0;
-    }
-
-    bool TypeDecl::isGoodLambdaType() const {
-        return baseType==Type::tLambda && dim.size()==0;
-    }
-
-    bool TypeDecl::isGoodArrayType() const {
-        return baseType==Type::tArray && dim.size()==0 && firstType;
-    }
-
-    bool TypeDecl::isGoodTupleType() const {
-        return baseType==Type::tTuple && dim.size()==0;
-    }
-
-    bool TypeDecl::isGoodVariantType() const {
-        return baseType==Type::tVariant && dim.size()==0;
-    }
-
-    bool TypeDecl::isGoodTableType() const {
-        return baseType==Type::tTable && dim.size()==0 && firstType && secondType;
-    }
-
-    bool TypeDecl::isVoid() const {
-        return (baseType==Type::tVoid) && (dim.size()==0);
-    }
-
-    bool TypeDecl::isPointer() const {
-        return (baseType==Type::tPointer) && (dim.size()==0);
-    }
-
-    bool TypeDecl::isVoidPointer() const {
-        return isPointer() && (!firstType || firstType->isVoid());
-    }
-
-    bool TypeDecl::isBitfield() const {
-        return (baseType==Type::tBitfield) && (dim.size()==0);
-    }
-
-    bool TypeDecl::isIterator() const {
-        return (baseType==Type::tIterator) && (dim.size()==0);
-    }
-
-    bool TypeDecl::isLambda() const {
-        return (baseType==Type::tLambda) && (dim.size()==0);
-    }
-
-    bool TypeDecl::isEnumT() const {
-        return (baseType==Type::tEnumeration) || (baseType==Type::tEnumeration8)
-            || (baseType==Type::tEnumeration16);
-    }
-
-    bool TypeDecl::isEnum() const {
-        return isEnumT() && (dim.size()==0);
     }
 
     void TypeDecl::collectAliasList(vector<string> & aliases) const {
@@ -1923,41 +1857,6 @@ namespace das
         }
     }
 
-    bool TypeDecl::isHandle() const {
-        return (baseType==Type::tHandle) && (dim.size()==0);
-    }
-
-    bool TypeDecl::isStructure() const {
-        return (baseType==Type::tStructure) && (dim.size()==0);
-    }
-
-    bool TypeDecl::isClass() const {
-        return isStructure() && structType && structType->isClass;
-    }
-
-    bool TypeDecl::isTuple() const {
-        return (baseType==Type::tTuple) && (dim.size()==0);
-    }
-
-    bool TypeDecl::isFunction() const {
-        return (baseType==Type::tFunction) && (dim.size()==0);
-    }
-
-    bool TypeDecl::isVariant() const {
-        return (baseType==Type::tVariant) && (dim.size()==0);
-    }
-
-    bool TypeDecl::isMoveableValue() const {
-        return (isPointer() && smartPtr) || isLambda() || isIterator();
-    }
-
-    bool TypeDecl::isSimpleType() const {
-        if ( baseType==Type::none || baseType==Type::tVoid
-            || baseType==Type::autoinfer || baseType==Type::alias || baseType==Type::option
-            || baseType==Type::anyArgument ) return false;
-        return !isRefType();
-    }
-
     bool TypeDecl::isCtorType() const {
         if ( dim.size() )
             return false;
@@ -2123,27 +2022,6 @@ namespace das
         }
     }
 
-    bool TypeDecl::isRange() const {
-        return (baseType==Type::tRange || baseType==Type::tURange ||
-            baseType==Type::tRange64 || baseType==Type::tURange64) && dim.size()==0;
-    }
-
-    bool TypeDecl::isString() const {
-        return (baseType==Type::tString) && dim.size()==0;
-    }
-
-    bool TypeDecl::isSimpleType(Type typ) const {
-        return baseType==typ && isSimpleType();
-    }
-
-    bool TypeDecl::isArray() const {
-        return (bool) dim.size();
-    }
-
-    bool TypeDecl::isRef() const {
-        return ref || isRefType();
-    }
-
     bool TypeDecl::isRefType() const {
         if ( dim.size() ) return true;
         if ( baseType==Type::tHandle ) return annotation->isRefType();
@@ -2151,10 +2029,6 @@ namespace das
                 baseType==Type::tStructure || baseType==Type::tArray ||
                 baseType==Type::tTable || baseType==Type::tBlock ||
                 baseType==Type::tIterator;
-    }
-
-    bool TypeDecl::isTempType(bool refMatters) const {
-        return (ref && refMatters) || isRefType() || isPointer() || isString() || baseType==Type::tIterator;
     }
 
     bool TypeDecl::isTemp( bool topLevel, bool refMatters ) const {
@@ -2892,10 +2766,6 @@ namespace das
         auto vT = isPointer() ? firstType.get() : this;
         if (!vT) return -1;
         return vT->findArgumentIndex(name);
-    }
-
-    int TypeDecl::bitFieldIndex ( const string & name ) const {
-        return findArgumentIndex(name);
     }
 
     // Mangled name parser
