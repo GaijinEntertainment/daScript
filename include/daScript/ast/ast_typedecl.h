@@ -66,25 +66,25 @@ namespace das {
         bool isExprType() const;
         bool isExprTypeAnywhere() const;
         bool isExprTypeAnywhere(das_set<Structure*> & dep) const;
-        bool isSimpleType () const;
-        bool isSimpleType ( Type typ ) const;
-        bool isArray() const;
-        bool isGoodIteratorType() const;
-        bool isGoodArrayType() const;
-        bool isGoodTableType() const;
-        bool isGoodBlockType() const;
-        bool isGoodFunctionType() const;
-        bool isGoodLambdaType() const;
-        bool isGoodTupleType() const;
-        bool isGoodVariantType() const;
-        bool isVoid() const;
-        bool isRef() const;
+        __forceinline bool isSimpleType () const;
+        __forceinline bool isSimpleType ( Type typ ) const;
+        __forceinline bool isArray() const;
+        __forceinline bool isGoodIteratorType() const;
+        __forceinline bool isGoodArrayType() const;
+        __forceinline bool isGoodTableType() const;
+        __forceinline bool isGoodBlockType() const;
+        __forceinline bool isGoodFunctionType() const;
+        __forceinline bool isGoodLambdaType() const;
+        __forceinline bool isGoodTupleType() const;
+        __forceinline bool isGoodVariantType() const;
+        __forceinline bool isVoid() const;
+        __forceinline bool isRef() const;
         bool isRefType() const;
         bool isRefOrPointer() const { return isRef() || isPointer(); }
         bool canWrite() const;
         bool isTemp( bool topLevel = true, bool refMatters = true) const;
         bool isTemp(bool topLevel, bool refMatters, das_set<Structure*> & dep) const;
-        bool isTempType(bool refMatters = true) const;
+        __forceinline bool isTempType(bool refMatters = true) const;
         bool isFullyInferred(das_set<Structure*> & dep) const;
         bool isFullyInferred() const;
         bool isShareable(das_set<Structure*> & dep) const;
@@ -100,19 +100,19 @@ namespace das {
         bool isNumeric() const;
         bool isNumericStorage() const;
         bool isNumericComparable() const;
-        bool isPointer() const;
-        bool isVoidPointer() const;
-        bool isIterator() const;
-        bool isLambda() const;
-        bool isEnum() const;
-        bool isEnumT() const;
-        bool isHandle() const;
-        bool isStructure() const;
+        __forceinline bool isPointer() const;
+        __forceinline bool isVoidPointer() const;
+        __forceinline bool isIterator() const;
+        __forceinline bool isLambda() const;
+        __forceinline bool isEnum() const;
+        __forceinline bool isEnumT() const;
+        __forceinline bool isHandle() const;
+        __forceinline bool isStructure() const;
         bool isClass() const;
-        bool isFunction() const;
-        bool isTuple() const;
-        bool isVariant() const;
-        bool isMoveableValue() const;
+        __forceinline bool isFunction() const;
+        __forceinline bool isTuple() const;
+        __forceinline bool isVariant() const;
+        __forceinline bool isMoveableValue() const;
         int getSizeOf() const;
         uint64_t getSizeOf64() const;
         int getCountOf() const;
@@ -149,9 +149,9 @@ namespace das {
         bool isVecPolicyType() const;
         bool isReturnType() const;
         bool isCtorType() const;
-        bool isRange() const;
-        bool isString() const;
-        bool isConst() const;
+        __forceinline bool isRange() const;
+        __forceinline bool isString() const;
+        __forceinline bool isConst() const;
         bool isFoldable() const;
         void collectAliasList(vector<string> & aliases) const;
         bool isAutoArrayResolved() const;
@@ -161,9 +161,9 @@ namespace das {
         bool isAotAlias () const;
         bool isAlias() const;
         bool isAliasOrExpr() const;
-        bool isVectorType() const;
+        __forceinline bool isVectorType() const;
         bool isBaseVectorType() const;
-        bool isBitfield() const;
+        __forceinline bool isBitfield() const;
         bool isLocal() const;
         bool isLocal( das_set<Structure*> & dep ) const;
         bool hasClasses() const;
@@ -191,17 +191,17 @@ namespace das {
         static int getMaskFieldIndex ( char ch );
         static bool isSequencialMask ( const vector<uint8_t> & fields );
         static bool buildSwizzleMask ( const string & mask, int dim, vector<uint8_t> & fields );
-        static TypeDeclPtr inferGenericType ( TypeDeclPtr autoT, TypeDeclPtr initT, bool topLevel, bool isPassType, OptionsMap * options );
-        static TypeDeclPtr inferGenericInitType ( TypeDeclPtr autoT, TypeDeclPtr initT );
-        static void applyAutoContracts ( TypeDeclPtr TT, TypeDeclPtr autoT );
-        static void applyRefToRef ( TypeDeclPtr TT, bool topLevel = false );
+        static TypeDeclPtr inferGenericType ( const TypeDeclPtr & autoT, const TypeDeclPtr & initT, bool topLevel, bool isPassType, OptionsMap * options );
+        static TypeDeclPtr inferGenericInitType ( const TypeDeclPtr & autoT, const TypeDeclPtr & initT );
+        static void applyAutoContracts ( const TypeDeclPtr & TT, const TypeDeclPtr & autoT );
+        static void applyRefToRef ( const TypeDeclPtr & TT, bool topLevel = false );
         static void updateAliasMap ( const TypeDeclPtr & decl, const TypeDeclPtr & pass, AliasMap & aliases, OptionsMap & options );
         Type getRangeBaseType() const;
         TypeDecl * findAlias ( const string & name, bool allowAuto = false );
         int findArgumentIndex(const string & name) const;
         int tupleFieldIndex( const string & name ) const;
         int variantFieldIndex( const string & name ) const;
-        int bitFieldIndex( const string & name ) const;
+        __forceinline int bitFieldIndex( const string & name ) const;
         void addVariant(const string & name, const TypeDeclPtr & tt);
         string findBitfieldName ( uint32_t value ) const;
         void collectAliasing ( TypeAliasMap & aliases, das_set<Structure *> & dep, bool viaPointer ) const;
@@ -646,3 +646,139 @@ namespace das {
     };
 }
 
+// TypeDecl inlines
+namespace das {
+    __forceinline int TypeDecl::bitFieldIndex ( const string & name ) const {
+        return findArgumentIndex(name);
+    }
+
+    __forceinline bool TypeDecl::isRange() const {
+        return (baseType==Type::tRange || baseType==Type::tURange ||
+            baseType==Type::tRange64 || baseType==Type::tURange64) && dim.size()==0;
+    }
+
+    __forceinline bool TypeDecl::isString() const {
+        return (baseType==Type::tString) && dim.size()==0;
+    }
+
+    __forceinline bool TypeDecl::isSimpleType(Type typ) const {
+        return baseType==typ && isSimpleType();
+    }
+
+    __forceinline bool TypeDecl::isArray() const {
+        return (bool) dim.size();
+    }
+
+    __forceinline bool TypeDecl::isRef() const {
+        return ref || isRefType();
+    }
+
+    __forceinline bool TypeDecl::isTempType(bool refMatters) const {
+        return (ref && refMatters) || isRefType() || isPointer() || isString() || baseType==Type::tIterator;
+    }
+
+    __forceinline bool TypeDecl::isHandle() const {
+        return (baseType==Type::tHandle) && (dim.size()==0);
+    }
+
+    __forceinline bool TypeDecl::isStructure() const {
+        return (baseType==Type::tStructure) && (dim.size()==0);
+    }
+
+    __forceinline bool TypeDecl::isTuple() const {
+        return (baseType==Type::tTuple) && (dim.size()==0);
+    }
+
+    __forceinline bool TypeDecl::isFunction() const {
+        return (baseType==Type::tFunction) && (dim.size()==0);
+    }
+
+    __forceinline bool TypeDecl::isVariant() const {
+        return (baseType==Type::tVariant) && (dim.size()==0);
+    }
+
+    __forceinline bool TypeDecl::isMoveableValue() const {
+        return (isPointer() && smartPtr) || isLambda() || isIterator();
+    }
+
+    __forceinline bool TypeDecl::isSimpleType() const {
+        if ( baseType==Type::none || baseType==Type::tVoid
+            || baseType==Type::autoinfer || baseType==Type::alias || baseType==Type::option
+            || baseType==Type::anyArgument ) return false;
+        return !isRefType();
+    }
+
+    __forceinline bool TypeDecl::isGoodIteratorType() const {
+        return baseType==Type::tIterator && dim.size()==0 && firstType;
+    }
+
+    __forceinline bool TypeDecl::isGoodBlockType() const {
+        return baseType==Type::tBlock && dim.size()==0;
+    }
+
+    __forceinline bool TypeDecl::isGoodFunctionType() const {
+        return baseType==Type::tFunction && dim.size()==0;
+    }
+
+    __forceinline bool TypeDecl::isGoodLambdaType() const {
+        return baseType==Type::tLambda && dim.size()==0;
+    }
+
+    __forceinline bool TypeDecl::isGoodArrayType() const {
+        return baseType==Type::tArray && dim.size()==0 && firstType;
+    }
+
+    __forceinline bool TypeDecl::isGoodTupleType() const {
+        return baseType==Type::tTuple && dim.size()==0;
+    }
+
+    __forceinline bool TypeDecl::isGoodVariantType() const {
+        return baseType==Type::tVariant && dim.size()==0;
+    }
+
+    __forceinline bool TypeDecl::isGoodTableType() const {
+        return baseType==Type::tTable && dim.size()==0 && firstType && secondType;
+    }
+
+    __forceinline bool TypeDecl::isVoid() const {
+        return (baseType==Type::tVoid) && (dim.size()==0);
+    }
+
+    __forceinline bool TypeDecl::isPointer() const {
+        return (baseType==Type::tPointer) && (dim.size()==0);
+    }
+
+    __forceinline bool TypeDecl::isVoidPointer() const {
+        return isPointer() && (!firstType || firstType->isVoid());
+    }
+
+    __forceinline bool TypeDecl::isBitfield() const {
+        return (baseType==Type::tBitfield) && (dim.size()==0);
+    }
+
+    __forceinline bool TypeDecl::isIterator() const {
+        return (baseType==Type::tIterator) && (dim.size()==0);
+    }
+
+    __forceinline bool TypeDecl::isLambda() const {
+        return (baseType==Type::tLambda) && (dim.size()==0);
+    }
+
+    __forceinline bool TypeDecl::isEnumT() const {
+        return (baseType==Type::tEnumeration) || (baseType==Type::tEnumeration8)
+            || (baseType==Type::tEnumeration16);
+    }
+
+    __forceinline bool TypeDecl::isEnum() const {
+        return isEnumT() && (dim.size()==0);
+    }
+
+    __forceinline bool TypeDecl::isVectorType() const {
+        if ( dim.size() ) return false;
+        return isBaseVectorType();
+    }
+
+    __forceinline bool TypeDecl::isConst() const {
+        return constant;
+    }
+}
