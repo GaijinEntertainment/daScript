@@ -962,6 +962,7 @@ public:
         addAnnotation(make_smart<ObjectStructureTypeAnnotation>(lib));
         addAnnotation(make_smart<ManagedVectorAnnotation<ObjectArray>>("ObjectArray",lib));
         addFunctionBasic<Object>(*this, lib);
+        registerVectorFunctions<ObjectArray>::init(this, lib, true, true);
         // register functions
         addExtern<DAS_BIND_FUN(AddOne)>(*this,lib,"AddOne",SideEffects::none, "AddOne");
         addExtern<DAS_BIND_FUN(updateObject)>(*this,lib,"interopUpdate",SideEffects::modifyExternal,"updateObject");

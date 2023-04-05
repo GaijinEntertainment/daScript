@@ -1,7 +1,5 @@
 #include "daScript/daScript.h"
 
-using namespace das;
-
 const char * tutorial_text = R""""(
 [export]
 def test
@@ -15,6 +13,8 @@ hello 士大夫
 #if defined(_WIN32)
 #include <Windows.h>
 #endif
+
+using namespace das;
 
 int main( int, char * [] ) {
 #if defined(_WIN32)

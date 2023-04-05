@@ -55,8 +55,10 @@ def main
     glfwMakeContextCurrent(window)
     var program = create_shader_program(@@vs_preview,@@fs_preview)
     // var mesh <- gen_sphere(32,16,false) |> create_geometry_fragment
-    let mesh_file_name = "{get_das_root()}/modules/dasBGFX/bgfx/bgfx/examples/assets/meshes/orb.obj"
-    var mesh <- load_obj_mesh(mesh_file_name) |> create_geometry_fragment
+    var mesh <- load_obj_mesh("orb.obj",
+            "{get_das_root()}/modules/dasBGFX/bgfx/bgfx/examples/assets/meshes",
+            "{get_das_root()}/examples/media"
+        ) |> create_geometry_fragment
     let checkerboard_texture = gen_image_checkerboard(16,16, 0xff404040 , 0xff808080) |> create_texture
     glBindTexture(GL_TEXTURE_2D, checkerboard_texture)
     glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)

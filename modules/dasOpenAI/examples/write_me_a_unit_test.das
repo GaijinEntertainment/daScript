@@ -9,8 +9,7 @@ require daslib/strings_boost
 //  code-davinci-002 is always overloaded. it does better job though
 //  i wonder if trying one and then the other is the right thing to do
 
-// let unit_test_model = "code-davinci-002"
-let unit_test_model = "code-cushman-001"
+let unit_test_model = "text-davinci-003"
 
 let unit_test_prompt = %stringify~
 /*
