@@ -1,8 +1,6 @@
 options persistent_heap = true
 options gc
 
-require dastest/testing_boost public
-
 require openai/openai
 require daslib/base64
 require fio
