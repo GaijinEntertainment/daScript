@@ -1,6 +1,8 @@
 #pragma once
 
+#ifndef DAS_FREE_LIST
 #define DAS_FREE_LIST   0
+#endif
 
 #if DAS_FREE_LIST
 
