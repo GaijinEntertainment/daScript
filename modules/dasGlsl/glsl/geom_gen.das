@@ -274,7 +274,16 @@ def private split_sptn ( sptn:string ) : tuple<p:int;t:int;n:int>
     else
         return [[auto s_to_int(ptn[0]), s_to_int(ptn[1]), s_to_int(ptn[2])]]
 
-def load_obj_mesh ( fname:string )
+def load_obj_mesh ( fname:string; path1,path2:string; canfail:bool=true )
+    var frag <- load_obj_mesh("{path1}/{fname}",false)
+    if empty(frag.vertices)
+        frag <- load_obj_mesh("{path2}/{fname}",false)
+    if empty(frag.vertices)
+        if canfail
+            panic("failed to open file: "+fname)
+    return <- frag
+
+def load_obj_mesh ( fname:string; canfail:bool=true )
     var frag : GeometryFragment
     frag.prim = GeometryFragmentType triangles
     var v : array<float3>
@@ -282,6 +291,10 @@ def load_obj_mesh ( fname:string )
     var vn : array<float3>
     var uvtx : table<string; int>
     fopen(fname,"rb") <| $ ( f )
+        if f==null
+            if canfail
+                panic("failed to open file: "+fname)
+            return
         while !feof(f)
             let st = strip(fgets(f))
             if st |> starts_with("#")
@@ -333,5 +346,5 @@ def load_obj_mesh ( fname:string )
                 delete i012
                 delete v012
                 delete f012
-    gen_bbox(frag)
+        gen_bbox(frag)
     return <- frag

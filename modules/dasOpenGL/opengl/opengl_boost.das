@@ -223,3 +223,15 @@ def load_image_from_file ( fname:string implicit; canfail:bool=false )
         stbi_image_free(data)
         return texture_id
 
+def load_image_from_file ( fname:string implicit; dir1,dir2:string; can_fail:bool=false )
+    var img = load_image_from_file("{dir1}/{fname}", true)
+    if img==0u
+        img = load_image_from_file("{dir2}/{fname}", true)
+    if !can_fail && img==0u
+        let reason = stbi_failure_reason();
+        panic(reason)
+    return img
+
+
+
+

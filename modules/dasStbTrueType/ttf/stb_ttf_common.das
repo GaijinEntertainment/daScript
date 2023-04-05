@@ -53,6 +53,14 @@ def public finalize ( var self:Font )
     delete self.cdata
     g_apiAdapter->destroy_font_texture(self.tex)
 
+def public load_ttf(fname:string; path1,path2:string; dim:int2 = int2(512,512); pixel_height:float=32.0; pwh:int2 = int2(32,96); canfail:bool=false)
+    var font <- load_ttf("{path1}/{fname}", dim, pixel_height, pwh, false)
+    if empty(font.ttf_buffer)
+        font <- load_ttf("{path2}/{fname}", dim, pixel_height, pwh, false)
+    if empty(font.ttf_buffer) && canfail
+        panic("can't open {fname}")
+    return <- font
+
 def public load_ttf(fname:string; dim:int2 = int2(512,512); pixel_height:float=32.0; pwh:int2 = int2(32,96); canfail:bool=false)
     check_api_adapter()
     var font : Font
