@@ -77,4 +77,21 @@ IF ((NOT DAS_SQLITE_INCLUDED) AND ((NOT ${DAS_SQLITE_DISABLED}) OR (NOT DEFINED 
 
     ADD_MODULE_DAS(sqlite daslib sqlite_boost)
 
+    INSTALL(TARGETS sqlite_shell
+        RUNTIME DESTINATION bin
+    )
+
+    install(DIRECTORY ${PROJECT_SOURCE_DIR}/modules/dasSQLITE/daslib
+        DESTINATION modules/dasSQLITE
+        FILES_MATCHING
+        PATTERN "*.das"
+    )
+    file(GLOB DAS_SQLITE_EXAMPLES
+        ${PROJECT_SOURCE_DIR}/modules/dasSQLITE/tutorial/*.das
+    )
+
+    install(FILES ${DAS_SQLITE_EXAMPLES}
+        DESTINATION examples/sqlite
+    )
+
 ENDIF()
