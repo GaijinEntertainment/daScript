@@ -22,7 +22,7 @@ def main
         return
     if true
         var inscope image <- openai_create_image([[Image()
-            prompt = "A large stone wall with a wooden door in the center. The door is made of oak and has a simple iron handle. Above the door, there is a small carving of a dragon chiseled into the stone wall.",
+            prompt = "Cartoony. A large stone wall with a wooden door in the center. The door is made of oak and has a simple iron handle. Above the door, there is a small carving of a dragon chiseled into the stone wall.",
             n = 1,
             size = 512,
             response_format = "b64_json"    // url
@@ -37,6 +37,8 @@ def main
                         to_log(LOG_INFO, "image completion written to \"{get_temp_file_name("image.png")}\"\n")
                     else
                         to_log(LOG_ERROR, "failed to open image file {get_temp_file_name("image.png")} for writing")
+        else
+            to_log(LOG_ERROR, "image completion failed\n{openai_get_last_error()}\n")
     if true
         var inscope image <- openai_create_image_variation([[ImageVariation()
             image = get_temp_file_name("image.png"),
@@ -54,5 +56,7 @@ def main
                         to_log(LOG_INFO, "image variation written to \"{get_temp_file_name("image_variation.png")}\"\n")
                     else
                         to_log(LOG_INFO, "failed to open image file {get_temp_file_name("image_variation.png")} for writing")
+            else
+                to_log(LOG_ERROR, "image variation data is empty\n{openai_get_last_error()}\n")
 
 
