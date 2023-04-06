@@ -6,21 +6,14 @@ module openai shared private
 
 require strings
 require fio
-require daslib/curl
+require dashv/dashv_boost
 require daslib/json_boost
 require math
-
-var private CONNECTION_TIMEOUT = 20.
 
 let private LOG_RESPONSES = false
 
 var private OPENAI_API_KEY = get_env_variable("OPENAI_API_KEY")
 var private LAST_ERROR = ""
-
-def public openai_set_connection_timeout ( timeout:float )
-    let old_timeout = CONNECTION_TIMEOUT
-    CONNECTION_TIMEOUT = max(0.0,timeout)
-    return old_timeout
 
 struct public ListEnginesResponse
     //! list of models
@@ -63,7 +56,7 @@ struct public ModelPermission
     is_blocking : bool
 
 def private log_resp ( resp : HttpResponse? )
-    if LOG_RESPONSES
+    static_if LOG_RESPONSES
         if resp!=null
             if resp.status_code != 200
                 print("GET {resp.status_code} error:\"{resp.error}\" {resp.text}\n")
@@ -87,22 +80,19 @@ def public openai_list
     var list : ListEnginesResponse
     var valid = false
     LAST_ERROR = ""
-    GET("https://api.openai.com/v1/models", CONNECTION_TIMEOUT,
-        [{auto "Authorization" => "Bearer {OPENAI_API_KEY}"}]
-    ) <| $ ( resp )
+    GET("https://api.openai.com/v1/models", {{"Authorization" => "Bearer {OPENAI_API_KEY}"}}) <| $ ( resp )
         log_resp(resp)
-        if resp.status_code == HTTP_CURL_FAILED
-            LAST_ERROR = resp.error
-        elif resp.status_code != 200
-            LAST_ERROR = "HTTPS GET failed with status {resp.status_code}\n{resp.text}"
+        if resp.status_code != http_status OK
+            LAST_ERROR = "HTTPS GET failed with status {resp.status_code}\n{resp.body}"
         else
-            var JV = read_json(resp.text,LAST_ERROR)
-            if is_valid_response(JV)
-                list <- from_JV(JV,type<ListEnginesResponse>)
-            else
-                LAST_ERROR = collect_error(JV)
-            unsafe
-                delete JV
+            peek(resp.body) <| $ ( text )
+                var JV = read_json(text,LAST_ERROR)
+                if is_valid_response(JV)
+                    list <- from_JV(JV,type<ListEnginesResponse>)
+                else
+                    LAST_ERROR = collect_error(JV)
+                unsafe
+                    delete JV
     return <- list
 
 def collect_error ( var json:JsonValue?; default_message:string = "invalid response" ) : string
@@ -136,22 +126,19 @@ def public openai_retrive_model ( model_id:string )
     var model : Model
     var valid = false
     LAST_ERROR = ""
-    GET("https://api.openai.com/v1/models/{model_id}", CONNECTION_TIMEOUT,
-        [{auto "Authorization" => "Bearer {OPENAI_API_KEY}"}]
-    ) <| $ ( resp )
+    GET("https://api.openai.com/v1/models/{model_id}", {{"Authorization" => "Bearer {OPENAI_API_KEY}"}}) <| $ ( resp )
         log_resp(resp)
-        if resp.status_code == HTTP_CURL_FAILED
-            LAST_ERROR = resp.error
-        elif resp.status_code != 200
-            LAST_ERROR = "HTTPS GET failed with status {resp.status_code}\n{resp.text}"
+        if resp.status_code != http_status OK
+            LAST_ERROR = "HTTPS GET failed with status {resp.status_code}\n{resp.body}"
         else
-            var JV = read_json(resp.text,LAST_ERROR)
-            if is_valid_response(JV)
-                model <- from_JV(JV,type<Model>)
-            else
-                LAST_ERROR = collect_error(JV)
-            unsafe
-                delete JV
+            peek(resp.body) <| $ ( text )
+                var JV = read_json(text,LAST_ERROR)
+                if is_valid_response(JV)
+                    model <- from_JV(JV,type<Model>)
+                else
+                    LAST_ERROR = collect_error(JV)
+                unsafe
+                    delete JV
     return <- model
 
 struct public Completion
@@ -211,23 +198,19 @@ def public openai_create_completion ( completion:Completion )
         delete req_jv
     var ccr : CreateCompletionResponse
     LAST_ERROR = ""
-    POST("https://api.openai.com/v1/completions", CONNECTION_TIMEOUT, req,
-        [{auto  "Authorization" => "Bearer {OPENAI_API_KEY}";
-                "Content-Type" => "application/json"}]
-    ) <| $ ( resp )
+    POST("https://api.openai.com/v1/completions", req, {{"Authorization" => "Bearer {OPENAI_API_KEY}";"Content-Type" => "application/json"}} ) <| $ ( resp )
         log_resp(resp)
-        if resp.status_code == HTTP_CURL_FAILED
-            LAST_ERROR = resp.error
-        elif resp.status_code != 200
-            LAST_ERROR = "HTTPS POST failed with status {resp.status_code}\n{resp.text}"
+        if resp.status_code != http_status OK
+            LAST_ERROR = "HTTPS POST failed with status {resp.status_code}\n{resp.body}"
         else
-            var JV <- read_json(resp.text,LAST_ERROR)
-            if is_valid_response(JV)
-                ccr <- from_JV(JV,type<CreateCompletionResponse>)
-            else
-                LAST_ERROR = collect_error(JV)
-            unsafe
-                delete JV
+            peek(resp.body) <| $ ( text )
+                var JV <- read_json(text,LAST_ERROR)
+                if is_valid_response(JV)
+                    ccr <- from_JV(JV,type<CreateCompletionResponse>)
+                else
+                    LAST_ERROR = collect_error(JV)
+                unsafe
+                    delete JV
     return <- ccr
 
 struct public ChatCompletion
@@ -289,23 +272,19 @@ def public openai_create_chat_completion ( completion:ChatCompletion )
         delete req_jv
     var ccr : ChatCompletionResponse
     LAST_ERROR = ""
-    POST("https://api.openai.com/v1/chat/completions", CONNECTION_TIMEOUT, req,
-        [{auto  "Authorization" => "Bearer {OPENAI_API_KEY}";
-                "Content-Type" => "application/json"}]
-    ) <| $ ( resp )
+    POST("https://api.openai.com/v1/chat/completions", req, {{"Authorization" => "Bearer {OPENAI_API_KEY}"; "Content-Type" => "application/json"}}) <| $ ( resp )
         log_resp(resp)
-        if resp.status_code == HTTP_CURL_FAILED
-            LAST_ERROR = resp.error
-        elif resp.status_code != 200
-            LAST_ERROR = "HTTPS POST failed with status {resp.status_code}\n{resp.text}"
+        if resp.status_code != http_status OK
+            LAST_ERROR = "HTTPS POST failed with status {resp.status_code}\n{resp.body}"
         else
-            var JV <- read_json(resp.text,LAST_ERROR)
-            if is_valid_response(JV)
-                ccr <- from_JV(JV,type<ChatCompletionResponse>)
-            else
-                LAST_ERROR = collect_error(JV)
-            unsafe
-                delete JV
+            peek(resp.body) <| $ ( text )
+                var JV <- read_json(text,LAST_ERROR)
+                if is_valid_response(JV)
+                    ccr <- from_JV(JV,type<ChatCompletionResponse>)
+                else
+                    LAST_ERROR = collect_error(JV)
+                unsafe
+                    delete JV
     return <- ccr
 
 struct public Edit
@@ -346,17 +325,12 @@ def public openai_create_edit ( completion:Edit )
         delete req_jv
     var ccr : EditResponse
     LAST_ERROR = ""
-    POST("https://api.openai.com/v1/edits", CONNECTION_TIMEOUT, req,
-        [{auto  "Authorization" => "Bearer {OPENAI_API_KEY}";
-                "Content-Type" => "application/json"}]
-    ) <| $ ( resp )
+    POST("https://api.openai.com/v1/edits", req, {{"Authorization" => "Bearer {OPENAI_API_KEY}"; "Content-Type" => "application/json"}}) <| $ ( resp )
         log_resp(resp)
-        if resp.status_code == HTTP_CURL_FAILED
-            LAST_ERROR = resp.error
-        elif resp.status_code != 200
-            LAST_ERROR = "HTTPS POST failed with status {resp.status_code}\n{resp.text}"
+        if resp.status_code != http_status OK
+            LAST_ERROR = "HTTPS POST failed with status {resp.status_code}\n{resp.body}"
         else
-            var JV <- read_json(resp.text,LAST_ERROR)
+            var JV <- read_json(string(resp.body),LAST_ERROR)
             if is_valid_response(JV)
                 ccr <- from_JV(JV,type<EditResponse>)
             else
@@ -370,7 +344,7 @@ struct public Image
     prompt:string
     n:int = 1                           // how many completions to generate
     size:int = 256                      // 256,512,1024
-    response_format:string = "url"      // url or b64_json
+    response_format:string = "b64_json" // url or b64_json
 
 struct public ImageResponse
     //! image response
@@ -386,7 +360,7 @@ def public is_valid ( object:ImageResponse )
     return true
 
 def public openai_create_image ( completion:Image )
-    //! create an edit
+    //! create an editimage
     var req_jv <- JV(completion)
     (req_jv as _object) |> erase("size")
     (req_jv as _object)["size"] = JV("{completion.size}x{completion.size}")
@@ -395,23 +369,18 @@ def public openai_create_image ( completion:Image )
         delete req_jv
     var ccr : ImageResponse
     LAST_ERROR = ""
-    POST("https://api.openai.com/v1/images/generations", CONNECTION_TIMEOUT, req,
-        [{auto  "Authorization" => "Bearer {OPENAI_API_KEY}";
-                "Content-Type" => "application/json"}]
-    ) <| $ ( resp )
-        log_resp(resp)
-        if resp.status_code == HTTP_CURL_FAILED
-            LAST_ERROR = resp.error
-        elif resp.status_code != 200
-            LAST_ERROR = "HTTPS POST failed with status {resp.status_code}\n{resp.text}"
+    POST("https://api.openai.com/v1/images/generations", req, {{"Authorization" => "Bearer {OPENAI_API_KEY}"; "Content-Type" => "application/json"}}) <| $ ( resp )
+        if resp.status_code != http_status OK
+            LAST_ERROR = "HTTPS POST failed with status {resp.status_code}\n{resp.body}"
         else
-            var JV <- read_json(resp.text,LAST_ERROR)
-            if is_valid_image_response(JV)
-                ccr <- from_JV(JV,type<ImageResponse>)
-            else
-                LAST_ERROR = collect_error(JV)
-            unsafe
-                delete JV
+            peek(resp.body) <| $ ( text )
+                var JV <- read_json(text,LAST_ERROR)
+                if is_valid_image_response(JV)
+                    ccr <- from_JV(JV,type<ImageResponse>)
+                else
+                    LAST_ERROR = collect_error(JV)
+                unsafe
+                    delete JV
     return <- ccr
 
 struct public ImageVariation
@@ -419,33 +388,31 @@ struct public ImageVariation
     image:string                        // image file name (PNG, up to 4mb)
     n:int = 1                           // how many completions to generate
     size:int = 256                      // 256,512,1024
-    response_format:string = "url"      // url or b64_json
+    response_format:string = "b64_json" // url or b64_json
 
 def public openai_create_image_variation ( completion:ImageVariation )
-    //! create an edit
+    //! create an image variation
+    let from <- {{
+        "image" => "@{completion.image}";
+        "n" => "{completion.n}";
+        "size" => "{completion.size}x{completion.size}";
+        "response_format" => "{completion.response_format}"
+    }}
     var ccr : ImageResponse
     LAST_ERROR = ""
-    POST("https://api.openai.com/v1/images/variations", CONNECTION_TIMEOUT, "",
-        [{auto  "Authorization" => "Bearer {OPENAI_API_KEY}";
-                "Content-Type" => "multipart/form-data"}],
-        [{auto  "image" => "@{completion.image}";
-                "n" => "{completion.n}";
-                "size" => "{completion.size}x{completion.size}";
-                "response_format" => "\"{completion.response_format}\""}]
-    ) <| $ ( resp )
+    POST("https://api.openai.com/v1/images/variations", "",{{"Authorization" => "Bearer {OPENAI_API_KEY}"; "Content-Type" => "multipart/form-data"}},from) <| $ ( resp )
         log_resp(resp)
-        if resp.status_code == HTTP_CURL_FAILED
-            LAST_ERROR = resp.error
-        elif resp.status_code != 200
-            LAST_ERROR = "HTTPS POST failed with status {resp.status_code}\n{resp.text}"
+        if resp.status_code != http_status OK
+            LAST_ERROR = "HTTPS POST failed with status {resp.status_code}\n{resp.body}"
         else
-            var JV <- read_json(resp.text,LAST_ERROR)
-            if is_valid_image_response(JV)
-                ccr <- from_JV(JV,type<ImageResponse>)
-            else
-                LAST_ERROR = collect_error(JV)
-            unsafe
-                delete JV
+            peek(resp.body) <| $ ( text )
+                var JV <- read_json(text,LAST_ERROR)
+                if is_valid_image_response(JV)
+                    ccr <- from_JV(JV,type<ImageResponse>)
+                else
+                    LAST_ERROR = collect_error(JV)
+                unsafe
+                    delete JV
     return <- ccr
 
 struct public ImageEdit
@@ -455,35 +422,33 @@ struct public ImageEdit
     prompt:string                       // prompt
     n:int = 1                           // how many completions to generate
     size:int = 256                      // 256,512,1024
-    response_format:string = "url"      // url or b64_json
+    response_format:string = "b64_json" // url or b64_json
 
 def public openai_create_image_edit ( completion:ImageEdit )
-    //! create an edit
+    //! create an image edit
+    let from <- {{
+        "image" => "@{completion.image}";
+        "mask" => "@{completion.mask}";
+        "prompt" => "{completion.prompt}";
+        "n" => "{completion.n}";
+        "size" => "{completion.size}x{completion.size}";
+        "response_format" => "{completion.response_format}"
+    }}
     var ccr : ImageResponse
     LAST_ERROR = ""
-    POST("https://api.openai.com/v1/images/edits", CONNECTION_TIMEOUT, "",
-        [{auto  "Authorization" => "Bearer {OPENAI_API_KEY}";
-                "Content-Type" => "multipart/form-data"}],
-        [{auto  "image" => "@{completion.image}";
-                "mask" => "@{completion.mask}";
-                "prompt" => "\"{completion.prompt}\"";
-                "n" => "{completion.n}";
-                "size" => "{completion.size}x{completion.size}";
-                "response_format" => "\"{completion.response_format}\"" }]
-    ) <| $ ( resp )
+    POST("https://api.openai.com/v1/images/edits", "", {{"Authorization" => "Bearer {OPENAI_API_KEY}"; "Content-Type" => "multipart/form-data"}}, from) <| $ ( resp )
         log_resp(resp)
-        if resp.status_code == HTTP_CURL_FAILED
-            LAST_ERROR = resp.error
-        elif resp.status_code != 200
-            LAST_ERROR = "HTTPS POST failed with status {resp.status_code}\n{resp.text}"
+        if resp.status_code != http_status OK
+            LAST_ERROR = "HTTPS POST failed with status {resp.status_code}\n{resp.body}"
         else
-            var JV <- read_json(resp.text,LAST_ERROR)
-            if is_valid_image_response(JV)
-                ccr <- from_JV(JV,type<ImageResponse>)
-            else
-                LAST_ERROR = collect_error(JV)
-            unsafe
-                delete JV
+            peek(resp.body) <| $ ( text )
+                var JV <- read_json(text,LAST_ERROR)
+                if is_valid_image_response(JV)
+                    ccr <- from_JV(JV,type<ImageResponse>)
+                else
+                    LAST_ERROR = collect_error(JV)
+                unsafe
+                    delete JV
     return <- ccr
 
 struct public Transcription
@@ -500,24 +465,20 @@ struct public TranscriptionResult
 
 def public openai_create_transcription ( completion:Transcription )
     //! create a transcription of an audio file
+    let from <- {{
+        "file" => "@{completion.file}";
+        "model" => "{completion.model}";
+        "prompt" => "{completion.prompt}";
+        "response_format" => "{completion.response_format}";
+        "temperature" => "{completion.temperature}";
+        "language" => "{completion.language}"
+    }}
     var ccr : TranscriptionResult
-    POST("https://api.openai.com/v1/audio/transcriptions", CONNECTION_TIMEOUT, "",
-        [{auto  "Authorization" => "Bearer {OPENAI_API_KEY}";
-                "Content-Type" => "multipart/form-data"}],
-        [{auto  "file" => "@{completion.file}";
-                "model" => "\"{completion.model}\"";
-                "prompt" => "\"{completion.prompt}\"";
-                "temperature" => "{completion.temperature}";
-                "language" => "\"{completion.language}\"";
-                "response_format" => "\"{completion.response_format}\""}]
-    ) <| $ ( resp )
-        log_resp(resp)
-        if resp.status_code == HTTP_CURL_FAILED
-            ccr.error = resp.error
-        elif resp.status_code != 200
-            ccr.error = "HTTPS POST failed with status {resp.status_code}\n{resp.text}"
+    POST("https://api.openai.com/v1/audio/transcriptions", "", {{"Authorization" => "Bearer {OPENAI_API_KEY}"; "Content-Type" => "multipart/form-data"}}, from) <| $ ( resp )
+        if resp.status_code != http_status OK
+            ccr.error = "HTTPS POST failed with status {resp.status_code}\n{resp.body}"
         else
-            ccr.text = resp.text
+            ccr.text = string(resp.body)
     return <- ccr
 
 struct public Translation
@@ -533,21 +494,18 @@ struct public TranslationResult
 
 def public openai_create_translation ( completion:Translation )
     //! create a translation of an audio file to english
+    let from <- {{
+        "file" => "@{completion.file}";
+        "model" => "{completion.model}";
+        "prompt" => "{completion.prompt}";
+        "response_format" => "{completion.response_format}";
+        "temperature" => "{completion.temperature}"
+    }}
     var ccr : TranslationResult
-    POST("https://api.openai.com/v1/audio/translations", CONNECTION_TIMEOUT, "",
-        [{auto  "Authorization" => "Bearer {OPENAI_API_KEY}";
-                "Content-Type" => "multipart/form-data"}],
-        [{auto  "file" => "@{completion.file}";
-                "model" => "\"{completion.model}\"";
-                "prompt" => "\"{completion.prompt}\"";
-                "temperature" => "{completion.temperature}";
-                "response_format" => "\"{completion.response_format}\""}]
-    ) <| $ ( resp )
+    POST("https://api.openai.com/v1/audio/translations", "", {{"Authorization" => "Bearer {OPENAI_API_KEY}"; "Content-Type" => "multipart/form-data"}}, from) <| $ ( resp )
         log_resp(resp)
-        if resp.status_code == HTTP_CURL_FAILED
-            ccr.error = resp.error
-        elif resp.status_code != 200
-            ccr.error = "HTTPS POST failed with status {resp.status_code}\n{resp.text}"
+        if resp.status_code != http_status OK
+            ccr.error = "HTTPS POST failed with status {resp.status_code}\n{resp.body}"
         else
-            ccr.text = resp.text
+            ccr.text = string(resp.body)
     return <- ccr

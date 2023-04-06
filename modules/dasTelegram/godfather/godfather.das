@@ -20,7 +20,6 @@ require emoji
 let BOT_DEBUG_MODE = false
 let BOT_DOES_NOT_ANSWER = false
 
-let BOT_OPENAI_TIMEOUT = 30.0
 let BOT_UPDATE_TIMEOUT = 5.0
 let BOT_UPDATE_RETRY_TIMEOUT = 20.0
 
@@ -342,7 +341,6 @@ def main
     g_botConfig <- read_bot_config(configPath)
     g_adminId = int64(g_botConfig.admin)
     telegram_set_configuration(g_botConfig)
-    openai_set_connection_timeout(BOT_OPENAI_TIMEOUT)
     if !create_chat_log(g_botConfig.path_to_chatlog)
         panic("failed to create chat log at {g_botConfig.path_to_chatlog}")
     var last_update = 0l
