@@ -54,6 +54,9 @@ namespace das {
     }
 
     TypeAnnotation * Module::resolveAnnotation ( const TypeInfo * info ) {
+        if ( info->type != Type::tHandle ) {
+            return nullptr;
+        }
         intptr_t ann = (intptr_t) (info->annotation_or_name);
         if ( ann & 1 ) {
             DAS_VERIFYF(daScriptEnvironment::bound && daScriptEnvironment::bound->modules,"missing bound environment");

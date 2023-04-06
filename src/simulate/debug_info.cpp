@@ -59,7 +59,23 @@ namespace das
     };
 
     TypeAnnotation * TypeInfo::getAnnotation() const {
+        if ( type != Type::tHandle ) {
+            return nullptr;
+        }
         return Module::resolveAnnotation(this);
+    }
+
+    StructInfo * TypeInfo::getStructType() const {
+        if ( type != Type::tStructure ) {
+            return nullptr;
+        }
+        return structType;
+    }
+    EnumInfo * TypeInfo::getEnumType() const {
+        if ( type != Type::tEnumeration && type != Type::tEnumeration8 && type != Type::tEnumeration16 ) {
+            return nullptr;
+        }
+        return enumType;
     }
 
     void TypeInfo::resolveAnnotation() const {
@@ -538,7 +554,7 @@ namespace das
             ss << "S<";
             // TODO: add module name to struct info
             /*
-            if ( info->structType->module && info->structType->module->name.empty() ) {
+            if ( info->structType->module && !info->structType->module->name.empty() ) {
                 ss << info->structType->module->name << "::";
             }
             */
