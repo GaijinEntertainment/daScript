@@ -557,7 +557,7 @@ namespace das {
             : ManagedStructureAnnotation<TT,false> (st, ml) {
             using ManagedType = TT;
             this->addFieldEx ( "basicType", "type", offsetof(TypeInfo, type), makeType<Type>(ml) );
-            this->template addField<DAS_BIND_MANAGED_FIELD(enumType)>("enumType");
+            this->template addProperty<DAS_BIND_MANAGED_PROP(getEnumType)>("enumType", "getEnumType");
             this->template addField<DAS_BIND_MANAGED_FIELD(dimSize)>("dimSize");
             this->template addField<DAS_BIND_MANAGED_FIELD(argCount)>("argCount");
             this->addFieldEx ( "flags", "flags", offsetof(TT, flags), makeTypeInfoFlags());
@@ -579,7 +579,7 @@ namespace das {
             // this needs to be initialized separately
             // reason is recursive type
             using ManagedType = TT;
-            this->template addField<DAS_BIND_MANAGED_FIELD(structType)>("structType");
+            this->template addProperty<DAS_BIND_MANAGED_PROP(getStructType)>("structType", "getStructType");
             this->template addField<DAS_BIND_MANAGED_FIELD(firstType)>("firstType");
             this->template addField<DAS_BIND_MANAGED_FIELD(secondType)>("secondType");
             this->template addField<DAS_BIND_MANAGED_FIELD(argTypes)>("argTypes");

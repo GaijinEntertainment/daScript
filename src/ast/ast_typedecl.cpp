@@ -2394,8 +2394,9 @@ namespace das
             case Type::tRange:
             case Type::tURange:
                 return index * 4;
+            default:
+                return -1;
         }
-        return -1;
     }
 
     int TypeDecl::getBaseSizeOf() const {
@@ -2597,7 +2598,7 @@ namespace das
              ss << annotation->name << ">";
         } else if ( baseType==Type::tStructure ) {
             ss << "S<";
-            if ( structType->module && structType->module->name.empty() ) {
+            if ( structType->module && !structType->module->name.empty() ) {
                 ss << structType->module->name << "::";
             }
             ss << structType->name << ">";

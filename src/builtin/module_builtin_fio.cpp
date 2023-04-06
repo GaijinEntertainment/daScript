@@ -512,7 +512,7 @@ namespace das {
                 ss.put(*ch++);
             }
         }
-        return context->stringHeap->allocateString(ss.str());
+        return context->stringHeap->allocateString(ss.str().data(), ss.str().size());
     }
 
     class Module_FIO : public Module {

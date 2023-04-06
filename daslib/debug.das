@@ -1091,7 +1091,7 @@ class private DAgent: DapiDebugAgent
             let bid = uint(b.ctx.category)
             return aid > bid
 
-        if server.threadsDone
+        if server != null && server.threadsDone
             server->sendEvent("thread", JV([[ThreadEvent
                 reason="started",
                 threadId=double(contextId)
@@ -1102,7 +1102,7 @@ class private DAgent: DapiDebugAgent
     def removeContext(var ctx: Context): void
         let idx = self->getContextIdx(ctx)
         if idx >= 0
-            if server.threadsDone
+            if server != null && server.threadsDone
                 server->sendEvent("thread", JV([[ThreadEvent
                     reason="exited",
                     threadId=double(contexts[idx].id)
