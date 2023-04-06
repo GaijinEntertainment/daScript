@@ -6,24 +6,18 @@ module tbot shared private
 
 require tbotapi public
 
-require daslib/curl
+require dashv/dashv_boost
 require daslib/json_boost
 require fio
 require strings
 
 struct public configuration
     token : string
-    api_timeout : float = 10.0
-    send_timeout : float = 60.0
 
 def public telegram_set_configuration ( conf:configuration )
     BOT_TOKEN = conf.token
-    BOT_TIMEOUT = conf.api_timeout
-    BOT_SEND_TIMEOUT = conf.send_timeout
 
 var private BOT_TOKEN : string
-var private BOT_TIMEOUT = 10.0
-var private BOT_SEND_TIMEOUT = 60.0
 var private LAST_ERROR = ""
 var private LOG_API_CALLS = false
 
@@ -48,23 +42,24 @@ def private telegram_call ( METHOD:string; updates:auto; var res:auto(RES_TYPE) 
     LAST_ERROR = ""
     if LOG_API_CALLS
         to_log(LOG_INFO, "API CALL: {url}\n{headers}\n")
-    POST(url,BOT_TIMEOUT,headers,[{auto "Content-Type" => "application/json"}]) <| $ (resp)
-        if resp.status_code == 200
-            var JV = read_json(resp.text,LAST_ERROR)
-            if JV != null
-                if  (JV as _object)["ok"] as _bool
-                    static_if typeinfo(can_copy type<RES_TYPE>)
-                        res = from_JV((JV as _object)["result"],type<RES_TYPE>)
+    POST(url,headers,{{"Content-Type" => "application/json"}}) <| $ (resp)
+        if resp.status_code == http_status OK
+            peek(resp.body) <| $ ( text )
+                var JV = read_json(text,LAST_ERROR)
+                if JV != null
+                    if  (JV as _object)["ok"] as _bool
+                        static_if typeinfo(can_copy type<RES_TYPE>)
+                            res = from_JV((JV as _object)["result"],type<RES_TYPE>)
+                        else
+                            res <- from_JV((JV as _object)["result"],type<RES_TYPE>)
                     else
-                        res <- from_JV((JV as _object)["result"],type<RES_TYPE>)
+                        LAST_ERROR = "API returned not OK\n{resp.body}"
                 else
-                    LAST_ERROR = "API returned not OK\n{resp.text}"
-            else
-                LAST_ERROR = "FAILED\n{resp.status_code}\n{resp.error}\n{resp.text}\n"
-            unsafe
-                delete JV
+                    LAST_ERROR = "FAILED\n{resp.status_code}\n{resp.body}\n"
+                unsafe
+                    delete JV
         else
-            LAST_ERROR = "FAILED\n{resp.status_code}\n{resp.error}\n{resp.text}\n"
+            LAST_ERROR = "FAILED\n{resp.status_code}\n{resp.body}\n"
 
 def public telegram_getupdates ( updates:getupdates )
     //! get updates from telegram
@@ -107,14 +102,13 @@ def public telegram_download ( file:tbotapi::file )
     //! download file from telegram
     LAST_ERROR = ""
     let url = "https://api.telegram.org/file/bot{BOT_TOKEN}/{file.file_path}"
-    var resp <- DOWNLOAD(url)
-    if resp.status_code == HTTP_CURL_FAILED
-        LAST_ERROR = resp.error
-        return <- resp.bytes
-    elif resp.status_code != 200
-        LAST_ERROR = "DOWNLOAD failed with status {resp.status_code}"
-        return <- resp.bytes
-    return <- resp.bytes
+    var bytes : array<uint8>
+    GET(url) <| $ ( resp )
+        if resp.status_code != http_status OK
+            LAST_ERROR = "GET failed with status {resp.status_code}"
+            return
+        bytes <- get_body_bytes(resp)
+    return <- bytes
 
 def public telegram_getMe
     //! get information about bot
@@ -133,20 +127,15 @@ struct public sendphoto
     caption : string
 
 def public telegram_sendPhoto ( photo : tbot::sendphoto )
-    //! create a translation of an audio file to english
-    var settings <-[{auto "photo" => "@{photo.file}";
-        "chat_id" => "\"{photo.chat_id}\""}]
+    //! send photo to telegram char or user
+    var settings <-{{"photo" => "@{photo.file}"; "chat_id" => "\"{photo.chat_id}\""}}
     if photo.reply_to_message_id != 0l
-        settings |> push([[auto "reply_to_message_id" => "\"{photo.reply_to_message_id}\""]])
+        settings["reply_to_message_id"] ="\"{photo.reply_to_message_id}\""
     if !empty(photo.caption)
-        settings |> push([[auto "caption" => "\"{photo.caption}\""]])
+        settings["caption"] = "\"{photo.caption}\""
     LAST_ERROR = ""
-    POST("https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto", BOT_SEND_TIMEOUT, "",
-        [{auto  "Content-Type" => "multipart/form-data"}], settings
-    ) <| $ ( resp )
-        if resp.status_code == HTTP_CURL_FAILED
-            LAST_ERROR = resp.error
-        elif resp.status_code != 200
+    POST("https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto", "", {{"Content-Type" => "multipart/form-data"}}, settings ) <| $ ( resp )
+        if resp.status_code != http_status OK
             LAST_ERROR = "HTTPS POST failed with status {resp.status_code}"
 
 def public telegram_setMyCommands ( commands : setmycommands )

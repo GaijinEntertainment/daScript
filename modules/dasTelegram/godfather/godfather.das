@@ -1,5 +1,3 @@
-require daslib/curl
-
 require fio
 require daslib/strings_boost
 require math
@@ -337,7 +335,6 @@ def main
         panic("bot config file name is not set. use -bot-config <config file name> command line argument")
     if !openai_key_is_set()
         panic("openai key is not set")
-    set_use_temp_file(true) // sometimes curl removes \n from the command line input. don't know why. for now this is a workaround
     g_botConfig <- read_bot_config(configPath)
     g_adminId = int64(g_botConfig.admin)
     telegram_set_configuration(g_botConfig)
