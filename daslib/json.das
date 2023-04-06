@@ -368,7 +368,7 @@ def try_fixing_broken_json ( var bad:string )
 	return build_string <| $ ( writer )
 		peek_data(bad) <| $ ( str )
 			var i = 0
-			var lstr = length(str)
+			let lstr = length(str)
 			while i < lstr
 				// write until begining of string or end
 				while i < lstr && str[i]!='"'u8
@@ -400,9 +400,9 @@ def try_fixing_broken_json ( var bad:string )
 					writer |> write_char('"')
 					break
 				// skipping whitespace
-				var nested = i
+				let nested = i
 				var j = i + 1
-                var any_white_space = j < lstr && is_white_space(int(str[j]))
+                let any_white_space = j < lstr && is_white_space(int(str[j]))
 				while j < lstr && is_white_space(int(str[j]))
 					j ++
 				if j >= lstr	// if eof we done, we fix close quote and we are done
