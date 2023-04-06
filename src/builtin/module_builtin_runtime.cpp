@@ -1582,6 +1582,24 @@ namespace das
         addExtern<DAS_BIND_FUN(das_memcmp)>(*this, lib, "memcmp",
             SideEffects::none, "das_memcmp")
                 ->args({"left","right","size"})->unsafeOperation = true;
+        addExtern<DAS_BIND_FUN(das_memset8)>(*this, lib, "memset8",
+            SideEffects::modifyArgumentAndExternal, "das_memset8")
+                ->args({"left","value","count"})->unsafeOperation = true;
+        addExtern<DAS_BIND_FUN(das_memset16)>(*this, lib, "memset16",
+            SideEffects::modifyArgumentAndExternal, "das_memset16")
+                ->args({"left","value","count"})->unsafeOperation = true;
+        addExtern<DAS_BIND_FUN(das_memset32)>(*this, lib, "memset32",
+            SideEffects::modifyArgumentAndExternal, "das_memset32")
+                ->args({"left","value","count"})->unsafeOperation = true;
+        addExtern<DAS_BIND_FUN(das_memset64)>(*this, lib, "memset64",
+            SideEffects::modifyArgumentAndExternal, "das_memset64")
+                ->args({"left","value","count"})->unsafeOperation = true;
+        addExtern<DAS_BIND_FUN(das_memset128a)>(*this, lib, "memset128_aligned",
+            SideEffects::modifyArgumentAndExternal, "das_memset128a")
+                ->args({"left","value","count"})->unsafeOperation = true;
+        addExtern<DAS_BIND_FUN(das_memset128u)>(*this, lib, "memset128_unaligned",
+            SideEffects::modifyArgumentAndExternal, "das_memset128u")
+                ->args({"left","value","count"})->unsafeOperation = true;
         auto idpi = addExtern<DAS_BIND_FUN(i_das_ptr_inc)>(*this, lib, "i_das_ptr_inc", SideEffects::modifyArgument, "das_ptr_inc");
         idpi->unsafeOperation = true;
         idpi->firstArgReturnType = true;
