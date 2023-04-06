@@ -40,11 +40,16 @@ struct ImplWrapCall<false,false,FuncT,fn> {
     static void * get_builtin_address() { return (void *) fn; }
 };
 
+#if defined(_MSC_VER)
+#pragma warning(push)
+#pragma warning(disable:4191)
+#endif
+
 template <int wrap, typename RetT, typename ...Args, RetT(*fn)(Args...)>    // cmres
 struct ImplWrapCall<true,wrap,RetT(*)(Args...),fn> {                        // when cmres, we always wrap
     static void static_call (typename remove_cv<RetT>::type * result, typename WrapType<Args>::type... args ) {
         typedef RetT (* FuncType)(typename WrapArgType<Args>::type...);
-        auto fnPtr = (FuncType)fn;
+        auto fnPtr = reinterpret_cast<FuncType>(fn);
         *result = fnPtr(args...);
     };
     static void * get_builtin_address() { return (void *) &static_call; }
@@ -53,12 +58,16 @@ struct ImplWrapCall<true,wrap,RetT(*)(Args...),fn> {                        // w
 template <typename RetT, typename ...Args, RetT(*fn)(Args...)>
 struct ImplWrapCall<false,true,RetT(*)(Args...),fn> {   // no cmres, wrap
     static typename WrapType<RetT>::type static_call (typename WrapType<Args>::type... args ) {
-        typedef typename WrapArgType<RetT>::type (* FuncType)(typename WrapArgType<Args>::type...);
-        auto fnPtr = (FuncType)fn;
+        typedef typename WrapType<RetT>::type (* FuncType)(typename WrapArgType<Args>::type...);
+        auto fnPtr = reinterpret_cast<FuncType>(fn);
         return fnPtr(args...);
     };
     static void * get_builtin_address() { return (void *) &static_call; }
 };
+
+#if defined(_MSC_VER)
+#pragma warning(pop)
+#endif
 
 #define JIT_TABLE_FUNCTION(TAB_FUN) \
     switch ( baseType ) { \
@@ -92,8 +101,8 @@ struct ImplWrapCall<false,true,RetT(*)(Args...),fn> {   // no cmres, wrap
         case Type::tString:         return (void *) &TAB_FUN<char *>; \
         case Type::tDouble:         return (void *) &TAB_FUN<double>; \
         case Type::tPointer:        return (void *) &TAB_FUN<void *>; \
+        default:                    context->throw_error_at(at, "unsupported key type %s", das_to_string(Type(baseType)).c_str() ); \
     } \
-    context->throw_error_at(at, "unsupported key type %s", das_to_string(Type(baseType)).c_str() ); \
     return nullptr;
 
 }

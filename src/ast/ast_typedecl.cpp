@@ -2394,8 +2394,9 @@ namespace das
             case Type::tRange:
             case Type::tURange:
                 return index * 4;
+            default:
+                return -1;
         }
-        return -1;
     }
 
     int TypeDecl::getBaseSizeOf() const {

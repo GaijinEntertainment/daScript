@@ -290,9 +290,15 @@ namespace das {
         virtual void * jitGetAt ( Context *, LineInfo *, const ExpressionPtr & /*rv*/, const ExpressionPtr & /*idx*/ ) const override {
             return (void *) jit_impl_at;
         }
-        virtual void * jitGetAtR2V ( Context * context, LineInfo * at, const ExpressionPtr & /*rv*/, const ExpressionPtr & /*idx*/, const TypeDeclPtr & r2vType ) const {
+        virtual void * jitGetAtR2V ( Context * context, LineInfo * at, const ExpressionPtr & /*rv*/, const ExpressionPtr & /*idx*/, const TypeDeclPtr & r2vType ) const override {
             auto baseType = r2vType->baseType;
             JIT_TABLE_FUNCTION(jit_impl_at_r2v);
+        }
+        virtual bool isRawPod() const override {
+            return true;
+        }
+        virtual bool isPod() const override {
+            return true;
         }
     };
 
