@@ -664,7 +664,7 @@ namespace das {
     // program
 
     void Program::buildAccessFlags(TextWriter &) {
-        markSymbolUse(true,false,true);
+        markSymbolUse(true,false,true,nullptr);
         // determine function side-effects
         TrackFieldAndAtFlags faf;
         faf.MarkSideEffects(*thisModule);

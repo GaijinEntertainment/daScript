@@ -82,8 +82,9 @@ namespace das {
                 return true;
             }, "*");
         }
-        void markUsedFunctions( ModuleLibrary & lib, bool forceAll, bool initThis ){
+        void markUsedFunctions( ModuleLibrary & lib, bool forceAll, bool initThis, Module * macroModule ) {
             lib.foreach([&](Module * pm) {
+                if ( initThis && macroModule && pm!=macroModule ) return true;
                 for ( auto & fn : pm->functions.each() ) {
                     if ( (forceAll && !fn->macroInit) || fn->exports || fn->init || fn->shutdown || (fn->macroInit && initThis) ) {
                         propagateFunctionUse(fn);
@@ -277,7 +278,7 @@ namespace das {
         MarkSymbolUse vis(false);
         vis.tw = logs;
         visit(vis);
-        vis.markUsedFunctions(library, false, true);
+        vis.markUsedFunctions(library, false, true, thisModule.get());
         vis.markVarsUsed(library, false);
     }
 
@@ -286,7 +287,7 @@ namespace das {
         MarkSymbolUse vis(false);
         vis.tw = logs;
         visit(vis);
-        vis.markUsedFunctions(library, false, false);
+        vis.markUsedFunctions(library, false, false, nullptr);
         vis.markVarsUsed(library, false);
     }
 
@@ -295,16 +296,16 @@ namespace das {
         MarkSymbolUse vis(false);
         vis.tw = logs;
         visit(vis);
-        vis.markUsedFunctions(library, true, true);
+        vis.markUsedFunctions(library, true, true, nullptr);
         vis.markVarsUsed(library, true);
     }
 
-    void Program::markSymbolUse(bool builtInSym, bool forceAll, bool initThis, TextWriter * logs) {
+    void Program::markSymbolUse(bool builtInSym, bool forceAll, bool initThis, Module * macroModule, TextWriter * logs) {
         clearSymbolUse();
         MarkSymbolUse vis(builtInSym);
         vis.tw = logs;
         visit(vis);
-        vis.markUsedFunctions(library, forceAll, initThis);
+        vis.markUsedFunctions(library, forceAll, initThis, macroModule);
         vis.markVarsUsed(library, forceAll);
     }
 
