@@ -532,13 +532,13 @@ namespace das {
             auto res = parseDaScript(fileName, access, logs, libGroup, exportAll, false, policies);
             if ( !res->failed() ) {
                 if ( res->options.getBoolOption("log_symbol_use") ) {
-                    res->markSymbolUse(false, false, false, &logs);
+                    res->markSymbolUse(false, false, false, nullptr, &logs);
                 }
             }
             if ( policies.aot_module && (res->promoteToBuiltin || res->thisModule->isModule || exportAll) ) {
                 if (!res->failed()) {
                     if(exportAll)
-                        res->markSymbolUse(false,true,true);
+                        res->markSymbolUse(false,true,true,nullptr);
                     else
                         res->markModuleSymbolUse();
                 }

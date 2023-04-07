@@ -8,6 +8,7 @@ namespace das
 {
     template <typename TT> struct WrapType { enum { value = false }; typedef TT type; };
     template <typename TT> struct WrapArgType { typedef TT type; };
+    template <typename TT> struct WrapRetType { typedef TT type; };
 
     template <typename TT>
     struct das_alias;

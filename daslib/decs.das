@@ -10,7 +10,7 @@ require daslib/templates
 
 require daslib/rtti public
 require daslib/algorithm
-require daslib/sort_boost
+// require daslib/sort_boost
 require daslib/functional
 require daslib/archive public
 require daslib/contracts

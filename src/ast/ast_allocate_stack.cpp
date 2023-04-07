@@ -83,7 +83,7 @@ namespace das {
             log_var_scope = prog->options.getBoolOption("log_var_scope");
             optimize = prog->getOptimize();
             if( log ) {
-                logs << "\nSTACK INFORMATION:\n";
+                logs << "\nSTACK INFORMATION in " << prog->thisModule->name << ":\n";
             }
         }
     protected:

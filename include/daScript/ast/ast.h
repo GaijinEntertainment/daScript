@@ -1376,7 +1376,7 @@ namespace das
         void buildAccessFlags(TextWriter & logs);
         bool verifyAndFoldContracts();
         void optimize(TextWriter & logs, ModuleGroup & libGroup);
-        void markSymbolUse(bool builtInSym, bool forceAll, bool initThis, TextWriter * logs = nullptr);
+        void markSymbolUse(bool builtInSym, bool forceAll, bool initThis, Module * macroModule, TextWriter * logs = nullptr);
         void markModuleSymbolUse(TextWriter * logs = nullptr);
         void markMacroSymbolUse(TextWriter * logs = nullptr);
         void markExecutableSymbolUse(TextWriter * logs = nullptr);
