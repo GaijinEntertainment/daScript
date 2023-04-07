@@ -165,6 +165,45 @@ namespace das {
         memcpy(left, right, size);
     }
 
+    __forceinline void das_memset8 ( void * left, uint8_t value, int size ) {
+        memset(left, value, size);
+    }
+
+    __forceinline void das_memset16 ( void * left, uint16_t value, int size ) {
+        uint16_t * ptr = (uint16_t *) left;
+        for ( int i=0; i!=size; ++i ) {
+            ptr[i] = value;
+        }
+    }
+
+    __forceinline void das_memset32 ( void * left, uint32_t value, int size ) {
+        uint32_t * ptr = (uint32_t *) left;
+        for ( int i=0; i!=size; ++i ) {
+            ptr[i] = value;
+        }
+    }
+
+    __forceinline void das_memset64 ( void * left, uint64_t value, int size ) {
+        uint64_t * ptr = (uint64_t *) left;
+        for ( int i=0; i!=size; ++i ) {
+            ptr[i] = value;
+        }
+    }
+
+    __forceinline void das_memset128a ( void * left, vec4f value, int size ) {
+        vec4f * ptr = (vec4f *) left;
+        for ( int i=0; i!=size; ++i ) {
+            v_st(ptr + i, value);
+        }
+    }
+
+    __forceinline void das_memset128u ( void * left, vec4f value, int size ) {
+        vec4f * ptr = (vec4f *) left;
+        for ( int i=0; i!=size; ++i ) {
+            v_stu(ptr + i, value);
+        }
+    }
+
     template <typename TT>
     __forceinline void das_ptr_inc ( TT * & ptr, int ) {
         ++ ptr;
