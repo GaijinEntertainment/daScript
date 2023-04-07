@@ -105,7 +105,7 @@ def public telegram_download ( file:tbotapi::file )
     var bytes : array<uint8>
     GET(url) <| $ ( resp )
         if resp.status_code != http_status OK
-            LAST_ERROR = "GET failed with status {resp.status_code}"
+            LAST_ERROR = "GET failed with status {resp.status_code}\n{resp.body}"
             return
         bytes <- get_body_bytes(resp)
     return <- bytes
@@ -116,27 +116,26 @@ def public telegram_getMe
     telegram_call("getMe",[[getme]],res)
     return <- res
 
-/*
-curl -F chat_id=@your_chat_id -F photo=@/path/to/your/photo.jpg https://api.telegram.org/bot<your_bot_token>/sendPhoto
-*/
-
 struct public sendphoto
     chat_id : string
     file : string
     reply_to_message_id : int64
     caption : string
+    parse_mode : string
 
 def public telegram_sendPhoto ( photo : tbot::sendphoto )
     //! send photo to telegram char or user
-    var settings <-{{"photo" => "@{photo.file}"; "chat_id" => "\"{photo.chat_id}\""}}
+    var settings <-{{"photo" => "@{photo.file}"; "chat_id" => "{photo.chat_id}"}}
     if photo.reply_to_message_id != 0l
-        settings["reply_to_message_id"] ="\"{photo.reply_to_message_id}\""
+        settings["reply_to_message_id"] ="{photo.reply_to_message_id}"
     if !empty(photo.caption)
-        settings["caption"] = "\"{photo.caption}\""
+        settings["caption"] = "{photo.caption}"
+        if !empty(photo.parse_mode)
+            settings["parse_mode"] = "{photo.parse_mode}"
     LAST_ERROR = ""
     POST("https://api.telegram.org/bot{BOT_TOKEN}/sendPhoto", "", {{"Content-Type" => "multipart/form-data"}}, settings ) <| $ ( resp )
         if resp.status_code != http_status OK
-            LAST_ERROR = "HTTPS POST failed with status {resp.status_code}"
+            LAST_ERROR = "HTTPS POST failed with status {resp.status_code}\n{resp.body}"
 
 def public telegram_setMyCommands ( commands : setmycommands )
     var res : bool
