@@ -19,9 +19,11 @@ option(DAS_SFML_DISABLED "Disable dasSFML (SFML multimedia library)" ON)
 option(DAS_PUGIXML_DISABLED "Disable dasPUGIXML (xml parsing library)" ON)
 option(DAS_SQLITE_DISABLED "Disable dasSQLITE (sqlite3 library)" ON)
 
-IF(DAS_LLVM_DISABLED)
-    # FOR NOW DISABLE EXCEPTIONS AND USE SETJMP/LONGJUMP, IF JIT IS ENABLED
-    add_compile_definitions(DAS_ENABLE_EXCEPTIONS=1)
+IF(WIN32)
+    IF(DAS_LLVM_DISABLED)
+        # FOR NOW DISABLE EXCEPTIONS AND USE SETJMP/LONGJUMP, IF JIT IS ENABLED
+        add_compile_definitions(DAS_ENABLE_EXCEPTIONS=1)
+    ENDIF()
 ENDIF()
 
 INCLUDE(./CMakeCommon.txt)
