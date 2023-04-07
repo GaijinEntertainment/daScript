@@ -170,7 +170,7 @@ namespace das
     } }
 
 #if DAS_ENABLE_EXCEPTIONS
-    class dasException : public runtime_error {
+    class dasException : public std::runtime_error {
     public:
         dasException ( const char * why, const LineInfo & at ) : runtime_error(why), exceptionAt(at) {}
     public:
