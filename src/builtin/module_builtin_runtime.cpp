@@ -1236,52 +1236,6 @@ namespace das
         return false;
     }
 
-
-#if defined(_MSC_VER)
-#pragma warning(push)
-#pragma warning(disable:4611)   // interaction between '_setjmp' and C++ object destruction is non-portable
-#endif
-
-    void builtin_try_recover ( const Block & try_block, const Block & catch_block, Context * context, LineInfoArg * at ) {
-        auto aa = context->abiArg; auto acm = context->abiCMRES;
-        char * EP, * SP;
-        context->stack.watermark(EP,SP);
-        #if DAS_ENABLE_EXCEPTIONS
-            try {
-                das_invoke<void>::invoke(context, at, try_block);
-            } catch ( const dasException & ) {
-                context->abiArg = aa;
-                context->abiCMRES = acm;
-                context->stack.pop(EP,SP);
-                context->stopFlags = 0;
-                context->last_exception = context->exception;
-                context->exception = nullptr;
-                das_invoke<void>::invoke(context, at, catch_block);
-            }
-        #else
-            jmp_buf ev;
-            jmp_buf * JB = context->throwBuf;
-            context->throwBuf = &ev;
-            if ( !setjmp(ev) ) {
-                das_invoke<void>::invoke(context, at, try_block);
-            } else {
-                context->throwBuf = JB;
-                context->abiArg = aa;
-                context->abiCMRES = acm;
-                context->stack.pop(EP,SP);
-                context->stopFlags = 0;
-                context->last_exception = context->exception;
-                context->exception = nullptr;
-                das_invoke<void>::invoke(context, at, catch_block);
-            }
-            context->throwBuf = JB;
-        #endif
-    }
-
-#if defined(_MSC_VER)
-#pragma warning(pop)
-#endif
-
 #define STR_DSTR_REG(OPNAME,EXPR) \
     addExtern<DAS_BIND_FUN(OPNAME##_str_dstr)>(*this, lib, #EXPR, SideEffects::none, DAS_TOSTRING(OPNAME##_str_dstr)); \
     addExtern<DAS_BIND_FUN(OPNAME##_dstr_str)>(*this, lib, #EXPR, SideEffects::none, DAS_TOSTRING(OPNAME##_dstr_str));

@@ -2297,51 +2297,7 @@ namespace das {
         }
     };
 
-#if defined(_MSC_VER)
-#pragma warning(push)
-#pragma warning(disable:4611)   // interaction between '_setjmp' and C++ object destruction is non-portable
-#endif
-
-    template <typename TA, typename TB>
-    inline void das_try_recover ( Context * __context__, TA && try_block, TB && catch_block ) {
-        auto aa = __context__->abiArg; auto acm = __context__->abiCMRES;
-        char * EP, * SP;
-        __context__->stack.watermark(EP,SP);
-#if DAS_ENABLE_EXCEPTIONS
-        try {
-            try_block();
-        } catch ( const dasException & ) {
-            catch_block();
-            __context__->abiArg = aa;
-            __context__->abiCMRES = acm;
-            __context__->stack.pop(EP,SP);
-            __context__->stopFlags = 0;
-            __context__->last_exception = __context__->exception;
-            __context__->exception = nullptr;
-        }
-#else
-        jmp_buf ev;
-        jmp_buf * JB = __context__->throwBuf;
-        __context__->throwBuf = &ev;
-        if ( !setjmp(ev) ) {
-            try_block();
-        } else {
-            catch_block();
-            __context__->throwBuf = JB;
-            __context__->abiArg = aa;
-            __context__->abiCMRES = acm;
-            __context__->stack.pop(EP,SP);
-            __context__->stopFlags = 0;
-            __context__->last_exception = __context__->exception;
-            __context__->exception = nullptr;
-        }
-        __context__->throwBuf = JB;
-#endif
-    }
-
-#if defined(_MSC_VER)
-#pragma warning(pop)
-#endif
+    void das_try_recover ( Context * __context__, const callable<void()> & try_block, const callable<void()> & catch_block );
 
     template <typename TT>
     struct das_call_interop {

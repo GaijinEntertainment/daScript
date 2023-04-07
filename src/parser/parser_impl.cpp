@@ -284,6 +284,9 @@ namespace das {
                     }
                 }
                 if ( !annLextra.empty() ) {
+                    if ( annL==nullptr ) {
+                        annL = new AnnotationList();
+                    }
                     annL->insert(annL->begin(), annLextra.begin(), annLextra.end());
                 }
                 pparent = pparent->parent;
