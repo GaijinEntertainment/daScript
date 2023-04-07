@@ -19,6 +19,13 @@ option(DAS_SFML_DISABLED "Disable dasSFML (SFML multimedia library)" ON)
 option(DAS_PUGIXML_DISABLED "Disable dasPUGIXML (xml parsing library)" ON)
 option(DAS_SQLITE_DISABLED "Disable dasSQLITE (sqlite3 library)" ON)
 
+IF(WIN32)
+    IF(DAS_LLVM_DISABLED)
+        # FOR NOW DISABLE EXCEPTIONS AND USE SETJMP/LONGJUMP, IF JIT IS ENABLED
+        add_compile_definitions(DAS_ENABLE_EXCEPTIONS=1)
+    ENDIF()
+ENDIF()
+
 INCLUDE(./CMakeCommon.txt)
 
 IF(DEFINED DAS_CONFIG_INCLUDE_DIR)
@@ -499,6 +506,7 @@ src/simulate/runtime_array.cpp
 src/simulate/runtime_table.cpp
 src/simulate/runtime_profile.cpp
 src/simulate/simulate.cpp
+src/simulate/simulate_exceptions.cpp
 src/simulate/simulate_gc.cpp
 src/simulate/simulate_tracking.cpp
 src/simulate/simulate_visit.cpp

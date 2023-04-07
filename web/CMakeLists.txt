@@ -511,6 +511,7 @@ SET(SIMULATE_SRC
 ../src/simulate/runtime_table.cpp
 ../src/simulate/runtime_profile.cpp
 ../src/simulate/simulate.cpp
+../src/simulate/simulate_exceptions.cpp
 ../src/simulate/simulate_gc.cpp
 ../src/simulate/simulate_tracking.cpp
 ../src/simulate/simulate_visit.cpp
