@@ -91,6 +91,8 @@ def private _lexer ( var stext : string implicit )
                                 ahead = '\r'
                             elif ahead=='t'
                                 ahead = '\t'
+                            elif ahead=='u'
+                                ahead = int(0x5c)
                             push(str,uint8(ahead))
                         else
                             yield [[Token _error = "string escape sequence exceeds text"]]
