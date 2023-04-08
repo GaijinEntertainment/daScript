@@ -3,6 +3,8 @@
 
 using namespace das;
 
+void use_utf8();
+
 void require_project_specific_modules();//link time resolved dependencies
 das::FileAccessPtr get_file_access( char * pak );//link time resolved dependencies
 
@@ -366,6 +368,7 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     if ( argc>2 && strcmp(argv[1],"-aot")==0 ) {
         return das_aot_main(argc, argv);
     }
+    use_utf8();
     if ( argc<=1 ) {
         print_help();
         return -1;
@@ -523,4 +526,18 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
     }
 #endif
     return failedFiles;
+}
+
+#if defined(_WIN32)
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+#endif
+
+void use_utf8() {
+#if defined(_WIN32)
+    // you man need to set console output to utf-8 on windows. call
+    //  CHCP 65001
+    // from the command line. make sure appropriate font is selected
+    SetConsoleOutputCP(CP_UTF8);
+#endif
 }
