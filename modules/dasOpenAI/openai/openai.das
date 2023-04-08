@@ -509,3 +509,52 @@ def public openai_create_translation ( completion:Translation )
         else
             ccr.text = string(resp.body)
     return <- ccr
+
+struct public Moderation
+    input : string
+    model : string = "text-moderation-latest"
+
+struct public ModerationResponse
+    error : string
+    id : string
+    model : string
+    results : array<ModerationResultItem>
+
+def public is_valid ( mod:ModerationResponse )
+    return mod.error == "" && mod.id != "" && mod.model != "" && !empty(mod.results)
+
+def is_valid_moderation_response ( json:JsonValue? ) : bool
+    if json!=null
+        if json is _object
+            if (json as _object) |> key_exists("id")
+                return true
+    return false
+
+struct public ModerationResultItem
+    categories : table<string;bool>
+    category_scores : table<string;float>
+    flagged : bool
+
+def public openai_create_moderation ( moderation:Moderation )
+    //! create a chat completion
+    var req_jv <- JV(moderation)
+    var req = write_request_json(req_jv)
+    unsafe
+        delete req_jv
+    var ccr : ModerationResponse
+    LAST_ERROR = ""
+    POST("https://api.openai.com/v1/moderations", req, {{"Authorization" => "Bearer {OPENAI_API_KEY}"; "Content-Type" => "application/json"}}) <| $ ( resp )
+        log_resp(resp)
+        if resp.status_code != http_status OK
+            LAST_ERROR = "HTTPS POST failed with status {resp.status_code}\n{resp.body}"
+        else
+            peek(resp.body) <| $ ( text )
+                var JV <- read_json(text,LAST_ERROR)
+                if is_valid_moderation_response(JV)
+                    ccr <- from_JV(JV,type<ModerationResponse>)
+                else
+                    LAST_ERROR = collect_error(JV)
+                unsafe
+                    delete JV
+    return <- ccr
+
