@@ -31,3 +31,7 @@ def sqlite3_get_autocommit_ ( db : sqlite3? ) : bool
 def sqlite3_open ( filename : string; var db : sqlite3?& ) : int
     //! Opens a new database connection to a SQLite database file.
     return sqlite3_open(filename, unsafe(addr(db)))
+
+def sqlite3_prepare_v2(db:sqlite3?; sql:string; var stmt:sqlite3_stmt?&; var pzTail:string?=[[string?]]  )
+    //! Prepares a SQL statement for execution.
+    return sqlite3_prepare_v2(db, sql, -1, unsafe(addr(stmt)), pzTail)
