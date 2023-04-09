@@ -118,14 +118,14 @@ def public serialize ( var arch:Archive; var value : float4x4 )
 def public serialize ( var arch:Archive; var value : auto(TT)& )
     if arch.reading
         delete value
-    apply(value) <| $ ( name:string; field )
+    apply(value) <| $ [unused_argument(name)] ( name:string; field )
         arch |> _::serialize(field)
 
 [expect_any_tuple(value)]
 def public serialize ( var arch:Archive; var value : auto(TT)& )
     if arch.reading
         delete value
-    apply(value) <| $ ( name:string; field )
+    apply(value) <| $ [unused_argument(name)] ( name:string; field )
         arch |> _::serialize(field)
 
 [expect_any_variant(value)]
@@ -139,7 +139,7 @@ def public serialize ( var arch:Archive; var value : auto(TT)& )
     else
         var index = variant_index(value)
         arch |> write_raw(index)
-    apply(value) <| $ ( name:string; field )
+    apply(value) <| $ [unused_argument(name)] ( name:string; field )
         arch |> _::serialize(field)
 
 def public serialize ( var arch:Archive; var value : auto(TT)[] )
@@ -165,7 +165,7 @@ def public serialize ( var arch:Archive; var value : table<auto(KT);auto(VT)> )
         var len : int
         arch |> read_raw(len)
         delete value
-        for i in range(len)
+        for _ in range(len)
             var k : KT-const-&-#
             arch |> _::serialize(k)
             arch |> _::serialize(value[k])
@@ -184,14 +184,14 @@ def public serialize ( var arch:Archive; var value : string& )
             var tbuf: array<uint8>
             arch |> read_raw(len)
             tbuf |> resize(len+1)                           // todo: implement preallocat string with raii
-            arch.stream->read(addr(tbuf[0]), len+1)
+            arch.stream->read(addr(tbuf[0]), len)
             let tstr = reinterpret<string#> addr(tbuf[0])
             value := tstr
             delete tbuf
         else
             var len = length(value)
             arch |> write_raw(len)
-            arch.stream->write(reinterpret<void?> value, len+1)
+            arch.stream->write(reinterpret<void?> value, len)
 
 def public serialize ( var arch:Archive; var value:auto(TT)? )
     if arch.reading
