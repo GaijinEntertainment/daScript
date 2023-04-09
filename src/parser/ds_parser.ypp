@@ -266,6 +266,7 @@
 %token  QBRA                "?["
 %token  LPIPE               "<|"
 %token  LBPIPE              " <|"
+%token  LLPIPE              "$ <|"
 %token  LAPIPE              "@ <|"
 %token  LFPIPE              "@@ <|"
 %token  RPIPE               "|>"
@@ -477,7 +478,7 @@
 %right      QQ
 %right      UNARY_MINUS UNARY_PLUS '~' '!' PRE_INC PRE_DEC ADDADD SUBSUB
 %left       DAS_IS DAS_AS
-%left       LPIPE RPIPE LBPIPE LAPIPE LFPIPE
+%left       LPIPE RPIPE LBPIPE LAPIPE LFPIPE LLPIPE
 %left       POST_INC POST_DEC RARROW DEREF
 %left       '.'
 %nonassoc  '[' ']' '(' ')' QDOT QBRA BRABRAB BRACBRB CBRCBRB
@@ -1234,6 +1235,9 @@ expr_pipe
     |   LFPIPE expr_block[arg] {
         $$ = $arg;
     }
+    |   LLPIPE expr_block[arg] {
+        $$ = $arg;
+    }
     ;
 
 name_in_namespace
@@ -1535,8 +1539,10 @@ expr_assign
 expr_assign_pipe
     :   expr[left] '='[loc]    LAPIPE expr_block[right]   { $$ = new ExprCopy(tokAt(scanner,@loc),ExpressionPtr($left),ExpressionPtr($right)); }
     |   expr[left] '='[loc]    LFPIPE expr_block[right]   { $$ = new ExprCopy(tokAt(scanner,@loc),ExpressionPtr($left),ExpressionPtr($right)); }
+    |   expr[left] '='[loc]    LLPIPE expr_block[right]   { $$ = new ExprCopy(tokAt(scanner,@loc),ExpressionPtr($left),ExpressionPtr($right)); }
     |   expr[left] LARROW[loc] LAPIPE expr_block[right]   { $$ = new ExprMove(tokAt(scanner,@loc),ExpressionPtr($left), ExpressionPtr($right)); }
     |   expr[left] LARROW[loc] LFPIPE expr_block[right]   { $$ = new ExprMove(tokAt(scanner,@loc),ExpressionPtr($left), ExpressionPtr($right)); }
+    |   expr[left] LARROW[loc] LLPIPE expr_block[right]   { $$ = new ExprMove(tokAt(scanner,@loc),ExpressionPtr($left), ExpressionPtr($right)); }
     ;
 
 expr_named_call

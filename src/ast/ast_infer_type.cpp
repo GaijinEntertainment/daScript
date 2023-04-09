@@ -6055,9 +6055,17 @@ namespace das {
             if ( var->type->isVoid() )
                 error("local variable can't be declared void", "", "",
                       var->at, CompilationError::invalid_variable_type);
-            if ( !var->type->isLocal() && !var->type->ref && !safeExpression(expr) )
-                error("local variable of type " + describeType(var->type) + " requires unsafe", "", "",
-                      var->at, CompilationError::invalid_variable_type);
+            if ( !var->type->isLocal() && !var->type->ref && !safeExpression(expr) ) {
+                if ( var->type->isGoodBlockType() ) {
+                    if ( !var->init ) {
+                        error("local block variable needs to be initialized", "", "",
+                            var->at, CompilationError::invalid_variable_type);
+                    }
+                } else {
+                    error("local variable of type " + describeType(var->type) + " requires unsafe", "", "",
+                        var->at, CompilationError::invalid_variable_type);
+                }
+            }
             if ( !var->type->ref && var->type->hasClasses() && !safeExpression(expr) ) {
                 error("local class requires unsafe " + describeType(var->type), "", "",
                       var->at, CompilationError::unsafe);
@@ -6140,6 +6148,12 @@ namespace das {
                 error("local variable " + var->name + " initialization type mismatch. const matters, "
                       + describeType(var->type) + " = " + describeType(var->init->type), "", "",
                     var->at, CompilationError::invalid_initialization_type);
+
+            } else if ( !var->type->ref && var->type->isGoodBlockType() ) {
+                if ( !var->init->rtti_isMakeBlock() ) {
+                    error("local variable " + var->name + " can only be initialized with make block expression", "", "",
+                        var->at, CompilationError::invalid_initialization_type);
+                }
             } else if ( !var->type->ref && !var->init->type->canCopy() && !var->init->type->canMove()
                         && var->type->hasNonTrivialCtor() && !var->isCtorInitialized() ) {
                 error("local variable " + var->name + " can only be initialized with type constructor", "", "",

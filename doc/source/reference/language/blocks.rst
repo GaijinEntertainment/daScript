@@ -82,3 +82,12 @@ Blocks can have annotations::
             pos += vel * dt
 
 Block annotations can be implemented via appropriate macros (see :ref:`Macro <macros>`).
+
+Local block variables are allowed::
+
+    var blk = $ <| ( a, b : int )
+        return a + b
+    verify ( 3 == invoke(blk,1,2) )
+    verify ( 7 == invoke(blk,3,4) )
+
+They can't be copied, or moved.

@@ -332,7 +332,7 @@ namespace das
 
     SimNode * makeCopy(const LineInfo & at, Context & context, const ExpressionPtr & lE, const ExpressionPtr & rE ) {
         const auto & rightType = *rE->type;
-        DAS_ASSERT ( rightType.canCopy() &&
+        DAS_ASSERT ( (rightType.canCopy() || rightType.isGoodBlockType()) &&
                 "we are calling makeCopy on a type, which can't be copied."
                 "we should not be here, script compiler should have caught this during compilation."
                 "compiler later will likely report internal compilation error.");
@@ -2713,7 +2713,7 @@ namespace das
         if ( var->type->ref ) {
             return context.code->makeNode<SimNode_CopyReference>(var->init->at, get,
                                                                  var->init->simulate(context));
-        } else if ( var->init_via_move && var->type->canMove() ) {
+        } else if ( var->init_via_move && (var->type->canMove() || var->type->isGoodBlockType()) ) {
             auto varExpr = make_smart<ExprVar>(var->at, var->name);
             varExpr->variable = var;
             varExpr->local = local;
@@ -2723,7 +2723,7 @@ namespace das
                 context.thisProgram->error("internal compilation error, can't generate move", "", "", var->at);
             }
             return retN;
-        } else if ( !var->init_via_move && var->type->canCopy() ) {
+        } else if ( !var->init_via_move && (var->type->canCopy() || var->type->isGoodBlockType()) ) {
             auto varExpr = make_smart<ExprVar>(var->at, var->name);
             varExpr->variable = var;
             varExpr->local = local;
