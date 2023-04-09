@@ -112,7 +112,7 @@ def test_save_and_load_string ( t:T? )
     var reference = "13ul"
     var data <- mem_archive_save(reference)
     t |> equal( reference, "13ul")
-    t |> equal( length(data), typeinfo(sizeof type<int>) + 5)
+    t |> equal( length(data), typeinfo(sizeof type<int>) + 4)
     // load
     var test : string
     data |> mem_archive_load(test)
