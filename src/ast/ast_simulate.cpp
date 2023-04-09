@@ -2713,7 +2713,7 @@ namespace das
         if ( var->type->ref ) {
             return context.code->makeNode<SimNode_CopyReference>(var->init->at, get,
                                                                  var->init->simulate(context));
-        } else if ( var->init_via_move && var->type->canMove() ) {
+        } else if ( var->init_via_move && (var->type->canMove() || var->type->isGoodBlockType()) ) {
             auto varExpr = make_smart<ExprVar>(var->at, var->name);
             varExpr->variable = var;
             varExpr->local = local;
@@ -2723,7 +2723,7 @@ namespace das
                 context.thisProgram->error("internal compilation error, can't generate move", "", "", var->at);
             }
             return retN;
-        } else if ( !var->init_via_move && var->type->canCopy() ) {
+        } else if ( !var->init_via_move && (var->type->canCopy() || var->type->isGoodBlockType()) ) {
             auto varExpr = make_smart<ExprVar>(var->at, var->name);
             varExpr->variable = var;
             varExpr->local = local;

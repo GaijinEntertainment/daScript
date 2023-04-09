@@ -43,8 +43,19 @@ def badd(ext:int;b:block<(arg:int):int>) : int
 def radd(var ext:int&;b:block<(var arg:int&):int>):int
     return invoke(b,ext)
 
+require dastest/testing_boost public
+
+def block_var
+    var blk = $ <| ( a, b : int )
+        return a + b
+    verify ( 3 == invoke(blk,1,2) )
+    verify ( 7 == invoke(blk,3,4) )
+
+
 [export]
 def test:bool
+    if true
+        block_var()
     if true
         var a = 0
         var b = 0

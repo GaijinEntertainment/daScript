@@ -686,7 +686,11 @@ namespace das {
     }
 
     void describeVarLocalCppType ( TextWriter & ss, const TypeDeclPtr & vtype, CpptSubstitureRef substituteRef = CpptSubstitureRef::yes ) {
-        ss << describeCppType(vtype,substituteRef,CpptSkipRef::no,CpptSkipConst::yes);
+        if ( vtype->isGoodBlockType() ) {
+            ss << "auto";
+        } else {
+            ss << describeCppType(vtype,substituteRef,CpptSkipRef::no,CpptSkipConst::yes);
+        }
     }
 
     string aotSuffixNameEx ( const string & funcName, const char * suffix ) {
@@ -2991,7 +2995,7 @@ namespace das {
             return true;
         }
         bool needsArgPass ( const TypeDeclPtr & argType ) const {
-            return !argType->constant;
+            return !argType->constant && !argType->isGoodBlockType();
         }
         bool needsArgPass ( Expression * expr ) const {
             if ( expr->rtti_isMakeBlock() ) {
