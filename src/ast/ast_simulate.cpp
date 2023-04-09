@@ -332,7 +332,7 @@ namespace das
 
     SimNode * makeCopy(const LineInfo & at, Context & context, const ExpressionPtr & lE, const ExpressionPtr & rE ) {
         const auto & rightType = *rE->type;
-        DAS_ASSERT ( rightType.canCopy() &&
+        DAS_ASSERT ( (rightType.canCopy() || rightType.isGoodBlockType()) &&
                 "we are calling makeCopy on a type, which can't be copied."
                 "we should not be here, script compiler should have caught this during compilation."
                 "compiler later will likely report internal compilation error.");
