@@ -19,7 +19,7 @@ def private array_helper ( var arr : auto implicit ==const; a : auto(TT) ) : arr
     return <- res
 
 [unsafe_operation, template (a), unused_argument(a)]
-def private array_helper ( arr : auto implicit ==const; a : auto(TT) ) : array<TT -const-#>
+def private array_helper ( arr : auto implicit ==const; a : auto(TT) ) : array<TT -const-#> const
     var res : array<TT -const-#>
     let lenA = _::length(arr)
     if lenA>=1
@@ -46,3 +46,19 @@ def public temp_array ( arr : auto implicit ==const)
 def empty(v:auto(VecT))
     //! returns true if 'v' has 0 elements. this also implies that `length(v)` is defined.
     return _::length(v)==0
+
+[unsafe_operation, template (a), unused_argument(a)]
+def public temp_array ( var data : auto? ==const; lenA : int; a : auto(TT) ) : array<TT -const-#>
+    var res : array<TT -const-#>
+    if lenA>=1
+        unsafe
+            _builtin_make_temp_array(res, data, lenA)
+    return <- res
+
+[unsafe_operation, template (a), unused_argument(a)]
+def public temp_array ( data : auto? ==const; lenA : int; a : auto(TT) ) : array<TT -const-#> const
+    var res : array<TT -const-#>
+    if lenA>=1
+        unsafe
+            _builtin_make_temp_array(res, data, lenA)
+    return <- res
