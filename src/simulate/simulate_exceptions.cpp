@@ -19,6 +19,7 @@ namespace das {
         exception = exceptionMessage.c_str();
         exceptionAt = at;
 #if DAS_ENABLE_EXCEPTIONS
+        if ( alwaysStackWalkOnException ) stackWalk(nullptr, false, false);
         if ( breakOnException ) breakPoint(at, "exception", message);
         throw dasException(message ? message : "", at);
 #else
