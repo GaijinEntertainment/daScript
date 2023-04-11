@@ -109,8 +109,11 @@ namespace das {
     MATH_FUN_OP1(RSqrt)
     MATH_FUN_OP1(RSqrtEst)
     MATH_FUN_OP1(Sat)
-    MATH_FUN_OP3(Mad)
     MATH_FUN_OP3(Lerp)
+    IMPLEMENT_OP3_FUNCTION_POLICY(Lerp,Double,double);
+
+    // mad
+    MATH_FUN_OP3A(Mad)
 
     MATH_FUN_OP1_INT(Trunci)
     MATH_FUN_OP1_INT(Floori)
@@ -147,11 +150,17 @@ namespace das {
     IMPLEMENT_OP3_EVAL_FUNCTION_POLICY(MadS,float2);
     IMPLEMENT_OP3_EVAL_FUNCTION_POLICY(MadS,float3);
     IMPLEMENT_OP3_EVAL_FUNCTION_POLICY(MadS,float4);
+    IMPLEMENT_OP3_EVAL_FUNCTION_POLICY(MadS,int2);
+    IMPLEMENT_OP3_EVAL_FUNCTION_POLICY(MadS,int3);
+    IMPLEMENT_OP3_EVAL_FUNCTION_POLICY(MadS,int4);
+    IMPLEMENT_OP3_EVAL_FUNCTION_POLICY(MadS,uint2);
+    IMPLEMENT_OP3_EVAL_FUNCTION_POLICY(MadS,uint3);
+    IMPLEMENT_OP3_EVAL_FUNCTION_POLICY(MadS,uint4);
 
     // trig types
     template <typename TT>
     void addFunctionTrig(Module & mod, const ModuleLibrary & lib) {
-        //                                     policy              ret   arg1 arg2     name
+        //                                    policy              ret   arg1 arg2     name
         mod.addFunction( make_smart<BuiltInFn<Sim_Sin<TT>,        TT,   TT>        >("sin",       lib, "Sin")->arg("x") );
         mod.addFunction( make_smart<BuiltInFn<Sim_Cos<TT>,        TT,   TT>        >("cos",       lib, "Cos")->arg("x") );
         mod.addFunction( make_smart<BuiltInFn<Sim_Tan<TT>,        TT,   TT>        >("tan",       lib, "Tan")->arg("x") );
@@ -165,6 +174,7 @@ namespace das {
 
     template <typename TT>
     void addFunctionCommonTyped(Module & mod, const ModuleLibrary & lib) {
+        //                                    policy              ret   arg1 arg2   name
         mod.addFunction( make_smart<BuiltInFn<Sim_Min <TT>, TT,   TT,   TT>      >("min",   lib, "Min")->args({"x","y"}) );
         mod.addFunction( make_smart<BuiltInFn<Sim_Max <TT>, TT,   TT,   TT>      >("max",   lib, "Max")->args({"x","y"}) );
         mod.addFunction( make_smart<BuiltInFn<Sim_Clamp<TT>,TT,   TT,   TT,  TT> >("clamp", lib, "Clamp")->args({"t","a","b"}) );
@@ -174,7 +184,7 @@ namespace das {
 
     template <typename TT>
     void addFunctionCommon(Module & mod, const ModuleLibrary & lib) {
-        //                                     policy            ret   arg1     name
+        //                                    policy            ret   arg1     name
         mod.addFunction( make_smart<BuiltInFn<Sim_Floor<TT>,    TT,   TT>   >("floor",       lib, "Floor")->arg("x") );
         mod.addFunction( make_smart<BuiltInFn<Sim_Ceil<TT>,     TT,   TT>   >("ceil",        lib, "Ceil")->arg("x") );
         mod.addFunction( make_smart<BuiltInFn<Sim_Fract<TT>,    TT,   TT>   >("fract",       lib, "Fract")->arg("x") );
@@ -185,7 +195,7 @@ namespace das {
     }
     template <typename Ret, typename TT>
     void addFunctionCommonConversion(Module & mod, const ModuleLibrary & lib) {
-        //                                     policy          ret    arg1     name
+        //                                    policy          ret    arg1     name
         mod.addFunction( make_smart<BuiltInFn<Sim_Floori<TT>, Ret,   TT>   >("floori",  lib, "Floori")->arg("x") );
         mod.addFunction( make_smart<BuiltInFn<Sim_Ceili <TT>, Ret,   TT>   >("ceili",   lib, "Ceili")->arg("x") );
         mod.addFunction( make_smart<BuiltInFn<Sim_Roundi<TT>, Ret,   TT>   >("roundi",  lib, "Roundi")->arg("x") );
@@ -194,7 +204,7 @@ namespace das {
 
     template <typename TT>
     void addFunctionPow(Module & mod, const ModuleLibrary & lib) {
-        //                                     policy           ret   arg1   name
+        //                                    policy           ret   arg1   name
         mod.addFunction( make_smart<BuiltInFn<Sim_Exp<TT>,     TT,   TT> >("exp",      lib, "Exp")->arg("x") );
         mod.addFunction( make_smart<BuiltInFn<Sim_Log<TT>,     TT,   TT> >("log",      lib, "Log")->arg("x") );
         mod.addFunction( make_smart<BuiltInFn<Sim_Exp2<TT>,    TT,   TT> >("exp2",     lib, "Exp2")->arg("x") );
@@ -205,9 +215,15 @@ namespace das {
     }
 
     template <typename TT>
-    void addFunctionOp3(Module & mod, const ModuleLibrary & lib) {
-        //                                     policy         ret arg1 arg2 arg3   name
+    void addFunctionOp3i(Module & mod, const ModuleLibrary & lib) {
+        //                                    policy         ret arg1 arg2 arg3   name
         mod.addFunction( make_smart<BuiltInFn<Sim_Mad<TT>,   TT, TT,  TT,  TT> >("mad",   lib, "Mad")->args({"a","b","c"}) );
+    }
+
+    template <typename TT>
+    void addFunctionOp3(Module & mod, const ModuleLibrary & lib) {
+        addFunctionOp3i<TT>(mod, lib);
+        //                                    policy         ret arg1 arg2 arg3   name
         mod.addFunction( make_smart<BuiltInFn<Sim_Lerp<TT>,  TT, TT,  TT,  TT> >("lerp",  lib, "Lerp")->args({"a","b","t"}) );
     }
 
@@ -564,6 +580,24 @@ namespace das {
             addFunction( make_smart<BuiltInFn<Sim_MadS<float2>,   float2, float2,  float,  float2> >("mad", lib, "MadS")->args({"a","b","c"}) );
             addFunction( make_smart<BuiltInFn<Sim_MadS<float3>,   float3, float3,  float,  float3> >("mad", lib, "MadS")->args({"a","b","c"}) );
             addFunction( make_smart<BuiltInFn<Sim_MadS<float4>,   float4, float4,  float,  float4> >("mad", lib, "MadS")->args({"a","b","c"}) );
+            // op3i - int
+            addFunctionOp3i<int32_t >(*this,lib);
+            addFunctionOp3i<int2>(*this,lib);
+            addFunctionOp3i<int3>(*this,lib);
+            addFunctionOp3i<int4>(*this,lib);
+            addFunction( make_smart<BuiltInFn<Sim_MadS<int2>,   int2, int2,  int,  int2> >("mad", lib, "MadS")->args({"a","b","c"}) );
+            addFunction( make_smart<BuiltInFn<Sim_MadS<int3>,   int3, int3,  int,  int3> >("mad", lib, "MadS")->args({"a","b","c"}) );
+            addFunction( make_smart<BuiltInFn<Sim_MadS<int4>,   int4, int4,  int,  int4> >("mad", lib, "MadS")->args({"a","b","c"}) );
+            // op3i - uint
+            addFunctionOp3i<uint32_t>(*this,lib);
+            addFunctionOp3i<uint2>(*this,lib);
+            addFunctionOp3i<uint3>(*this,lib);
+            addFunctionOp3i<uint4>(*this,lib);
+            addFunction( make_smart<BuiltInFn<Sim_MadS<uint2>,   uint2, uint2,  uint32_t,  uint2> >("mad", lib, "MadS")->args({"a","b","c"}) );
+            addFunction( make_smart<BuiltInFn<Sim_MadS<uint3>,   uint3, uint3,  uint32_t,  uint3> >("mad", lib, "MadS")->args({"a","b","c"}) );
+            addFunction( make_smart<BuiltInFn<Sim_MadS<uint4>,   uint4, uint4,  uint32_t,  uint4> >("mad", lib, "MadS")->args({"a","b","c"}) );
+            // and double
+            addFunctionOp3<double>(*this,lib);
             //common
             addFunctionCommon<float>(*this, lib);
             addFunctionCommon<float2>(*this,lib);

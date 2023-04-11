@@ -281,21 +281,43 @@ def public fuzz_numeric_op3 ( t:T?; var fake:Faker; funcname:string )
     invoke ( funcname, t, fake |> random_double, fake |> random_double, fake |> random_double )
 
 [constant_expression(funcname)]
-def public fuzz_float_or_float_vec_op3 ( t:T?; var fake:Faker; funcname:string )
+def public fuzz_vec_op3 ( t:T?; var fake:Faker; funcname:string )
     //! fuzzes generic function that takes three numeric or vector arguments.
-    //! arguments are: float2, float3, float4
-    invoke ( funcname, t, fake |> random_float,  fake |> random_float,  fake |> random_float  )
+    //! arguments are: float2, float3, float4, int2, int3, int4, uint2, uint3, uint4
+    invoke ( funcname, t, fake |> random_float2, fake |> random_float2, fake |> random_float2 )
+    invoke ( funcname, t, fake |> random_float3, fake |> random_float3, fake |> random_float3 )
+    invoke ( funcname, t, fake |> random_float4, fake |> random_float4, fake |> random_float4 )
+    invoke ( funcname, t, fake |> random_int2, fake |> random_int2, fake |> random_int2 )
+    invoke ( funcname, t, fake |> random_int3, fake |> random_int3, fake |> random_int3 )
+    invoke ( funcname, t, fake |> random_int4, fake |> random_int4, fake |> random_int4 )
+    invoke ( funcname, t, fake |> random_uint2, fake |> random_uint2, fake |> random_uint2 )
+    invoke ( funcname, t, fake |> random_uint3, fake |> random_uint3, fake |> random_uint3 )
+    invoke ( funcname, t, fake |> random_uint4, fake |> random_uint4, fake |> random_uint4 )
+
+[constant_expression(funcname)]
+def public fuzz_vec_mad_op3 ( t:T?; var fake:Faker; funcname:string )
+    //! fuzzes generic function that takes three numeric or vector arguments.
+    //! arguments are: float2, float3, float4, int2, int3, int4, uint2, uint3, uint4 second argument is float, int, uint accordingly
+    invoke ( funcname, t, fake |> random_float2, fake |> random_float, fake |> random_float2 )
+    invoke ( funcname, t, fake |> random_float3, fake |> random_float, fake |> random_float3 )
+    invoke ( funcname, t, fake |> random_float4, fake |> random_float, fake |> random_float4 )
+    invoke ( funcname, t, fake |> random_int2, fake |> random_int, fake |> random_int2 )
+    invoke ( funcname, t, fake |> random_int3, fake |> random_int, fake |> random_int3 )
+    invoke ( funcname, t, fake |> random_int4, fake |> random_int, fake |> random_int4 )
+    invoke ( funcname, t, fake |> random_uint2, fake |> random_uint, fake |> random_uint2 )
+    invoke ( funcname, t, fake |> random_uint3, fake |> random_uint, fake |> random_uint3 )
+    invoke ( funcname, t, fake |> random_uint4, fake |> random_uint, fake |> random_uint4 )
+
+[constant_expression(funcname)]
+def public fuzz_float_double_or_float_vec_op3 ( t:T?; var fake:Faker; funcname:string )
+    //! fuzzes generic function that takes three numeric or vector arguments.
+    //! arguments are: float, double, float2, float3, float4
+    invoke ( funcname, t, fake |> random_float, fake |> random_float, fake |> random_float )
+    invoke ( funcname, t, fake |> random_double, fake |> random_double, fake |> random_double )
     invoke ( funcname, t, fake |> random_float2, fake |> random_float2, fake |> random_float2 )
     invoke ( funcname, t, fake |> random_float3, fake |> random_float3, fake |> random_float3 )
     invoke ( funcname, t, fake |> random_float4, fake |> random_float4, fake |> random_float4 )
 
-[constant_expression(funcname)]
-def public fuzz_float_or_float_vec_mad_op3 ( t:T?; var fake:Faker; funcname:string )
-    //! fuzzes generic function that takes three numeric or vector arguments.
-    //! arguments are: float2, float3, float4. second argument is float.
-    invoke ( funcname, t, fake |> random_float2, fake |> random_float, fake |> random_float2 )
-    invoke ( funcname, t, fake |> random_float3, fake |> random_float, fake |> random_float3 )
-    invoke ( funcname, t, fake |> random_float4, fake |> random_float, fake |> random_float4 )
 
 [constant_expression(funcname)]
 def public fuzz_numeric_op4 ( t:T?; var fake:Faker; funcname:string )
