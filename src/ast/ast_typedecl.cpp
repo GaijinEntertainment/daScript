@@ -1545,11 +1545,10 @@ namespace das
             case Type::tUInt:   return Type::tURange;
             case Type::tInt64:  return Type::tRange64;
             case Type::tUInt64: return Type::tURange64;
-
-        }
-        DAS_ASSERTF(0, "we should not be here. we are calling getRangeType on an unsuppored baseType."
+            default: DAS_ASSERTF(0, "we should not be here. we are calling getRangeType on an unsuppored baseType."
                 "likely new range type been added.");
-        return Type::none;
+                return Type::none;
+        }
     }
 
     void TypeDecl::collectAliasList(vector<string> & aliases) const {
