@@ -18,6 +18,7 @@ option(DAS_STBTRUETYPE_DISABLED "Disable dasStbTrueType (StbTrueType bindings, t
 option(DAS_SFML_DISABLED "Disable dasSFML (SFML multimedia library)" ON)
 option(DAS_PUGIXML_DISABLED "Disable dasPUGIXML (xml parsing library)" ON)
 option(DAS_SQLITE_DISABLED "Disable dasSQLITE (sqlite3 library)" ON)
+option(DAS_TORCH_DISABLED "Disable dasTORCH (torch library)" ON)
 
 IF(WIN32)
     IF(DAS_LLVM_DISABLED)
