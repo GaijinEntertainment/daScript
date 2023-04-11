@@ -675,9 +675,7 @@ namespace das
         const char *    exception = nullptr;
         const char *    last_exception = nullptr;
         LineInfo        exceptionAt;
-#if !DAS_ENABLE_EXCEPTIONS
         jmp_buf *       throwBuf = nullptr;
-#endif
     protected:
         GlobalVariable * globalVariables = nullptr;
         bool     globalsOwner = true;
