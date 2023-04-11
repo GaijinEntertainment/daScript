@@ -113,6 +113,7 @@ namespace  das {
         static __forceinline TT Clamp ( TT t, TT a, TT b, Context &, LineInfo * ) { return t>a ? (t<b ? t : b) : a; }
         static __forceinline TT Sign  ( TT a, Context &, LineInfo * )    { return a == 0 ? 0 : (a > 0 ? 1 : -1); }
         static __forceinline TT Abs   ( TT a, Context &, LineInfo * )    { return a >= 0 ? a : -a; }
+        static __forceinline TT Mad   ( TT a, TT b, TT c, Context &, LineInfo * ) { return a*b + c; }
     };
 
     struct SimPolicy_Int : SimPolicy_Bin<int32_t,uint32_t>, SimPolicy_MathTT<int32_t> {};
@@ -136,6 +137,7 @@ namespace  das {
         static __forceinline int Roundi ( double a, Context &, LineInfo * )          { return int(round(a)); }
         static __forceinline int Floori ( double a, Context &, LineInfo * )          { return int(floor(a)); }
         static __forceinline int Ceili  ( double a, Context &, LineInfo * )          { return int(ceil(a)); }
+        static __forceinline double Lerp ( double a, double b, double t, Context &, LineInfo * ) { return (b-a)*t +a; }
     };
 
     struct SimPolicy_Pointer : SimPolicy_CoreType<void *> {
@@ -404,6 +406,12 @@ namespace  das {
             else    if ( mask==3 )  return v_cast_vec4f(v_modi2(v_cast_vec4i(a),v_cast_vec4i(b)));
             else                    return v_cast_vec4f(v_modi4(v_cast_vec4i(a),v_cast_vec4i(b)));
         }
+        static __forceinline vec4f Mad      ( vec4f a, vec4f b, vec4f c, Context &, LineInfo * ) {
+            return v_cast_vec4f(v_addi(v_muli(v_cast_vec4i(a),v_cast_vec4i(b)),v_cast_vec4i(c)));
+        }
+        static __forceinline vec4f MadS     ( vec4f a, vec4f b, vec4f c, Context &, LineInfo * ) {
+            return v_cast_vec4f(v_addi(v_muli(v_cast_vec4i(a),v_cast_vec4i(v_perm_xxxx(b))),v_cast_vec4i(c)));
+        }
         static __forceinline vec4f Mul ( vec4f a, vec4f b, Context &, LineInfo * ) {
             return v_cast_vec4f(v_muli(v_cast_vec4i(a),v_cast_vec4i(b)));
         }
@@ -528,6 +536,12 @@ namespace  das {
         static __forceinline vec4f splats ( int32_t  x ) { return v_cast_vec4f(v_splatsi(x)); }
         static __forceinline vec4f splats ( uint32_t x ) { return v_cast_vec4f(v_splatsi(x)); }
         // swapping some numeric operations
+        static __forceinline vec4f Mad      ( vec4f a, vec4f b, vec4f c, Context &, LineInfo * ) {
+            return v_cast_vec4f(v_addi(v_mulu(v_cast_vec4i(a),v_cast_vec4i(b)),v_cast_vec4i(c)));
+        }
+        static __forceinline vec4f MadS     ( vec4f a, vec4f b, vec4f c, Context &, LineInfo * ) {
+            return v_cast_vec4f(v_addi(v_mulu(v_cast_vec4i(a),v_cast_vec4i(v_perm_xxxx(b))),v_cast_vec4i(c)));
+        }
         static __forceinline vec4f Mul ( vec4f a, vec4f b, Context &, LineInfo * ) {
             return v_cast_vec4f(v_mulu(v_cast_vec4i(a), v_cast_vec4i(b)));
         }
