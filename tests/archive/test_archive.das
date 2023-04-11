@@ -1,3 +1,4 @@
+require strings
 require daslib/archive
 require dastest/testing_boost public
 
@@ -106,19 +107,27 @@ def test_save_and_load_mem_archive ( t:T? )
     t |> equal( reference, 13ul)
     t |> equal( test, 13ul)
 
-[test]
-def test_save_and_load_string ( t:T? )
+
+def test_save_and_load_string ( t:T?; ref : string )
     // save
-    var reference = "13ul"
+    var reference = ref
     var data <- mem_archive_save(reference)
-    t |> equal( reference, "13ul")
-    t |> equal( length(data), typeinfo(sizeof type<int>) + 4)
+    t |> equal( reference, ref)
+    t |> equal( length(data), typeinfo(sizeof type<int>) + length(ref))
     // load
     var test : string
     data |> mem_archive_load(test)
     delete data
-    t |> equal( reference, "13ul")
-    t |> equal( test, "13ul")
+    t |> equal( reference, ref)
+    t |> equal( test, ref)
+
+[test]
+def test_save_and_load_string ( t:T? )
+    test_save_and_load_string(t, "13ul")
+
+[test]
+def test_save_and_load_empty_string ( t:T? )
+    test_save_and_load_string(t, "")
 
 [test]
 def test_save_and_load_manual ( t:T? )
