@@ -405,11 +405,16 @@ def intrinsic_math_lerp_op3(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCal
 def intrinsic_math_mad_op3(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
     var a = arguments[0]
     var b = arguments[1]
-    if expr.arguments[0]._type.isVectorType && expr.arguments[1]._type.isFloatOrDouble
+    if expr.arguments[0]._type.isVectorType && !expr.arguments[1]._type.isVectorType
         b = expand_scalar(g_builder, b, expr.arguments[0]._type)
     var c = arguments[2]
-    var a_mul_b = LLVMBuildFMul(g_builder, a, b, "")
-    return LLVMBuildFAdd(g_builder, a_mul_b, c, "mad")
+    let bt = expr._type.baseType
+    if bt==Type tFloat || bt==Type tDouble || bt==Type tFloat2 || bt==Type tFloat3 || bt==Type tFloat4
+        var a_mul_b = LLVMBuildFMul(g_builder, a, b, "")
+        return LLVMBuildFAdd(g_builder, a_mul_b, c, "mad")
+    else
+        var a_mul_b = LLVMBuildMul(g_builder, a, b, "")
+        return LLVMBuildAdd(g_builder, a_mul_b, c, "mad")
 
 def intrinsic_math_abs(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
     assume opType = expr.arguments[0]._type

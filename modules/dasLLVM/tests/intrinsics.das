@@ -164,6 +164,22 @@ def test_mad( t:T?; a:auto(TT); b:auto(QQ); c:TT )
 def test_mad ( t:T? )
     var fake <- Faker()
     fuzz <|
-        fuzz_float_or_float_vec_op3(t,fake,"test_mad")
+        fuzz_numeric_op3(t,fake,"test_mad")
     fuzz <|
-        fuzz_float_or_float_vec_mad_op3(t,fake,"test_mad")
+        fuzz_vec_op3(t,fake,"test_mad")
+    fuzz <|
+        fuzz_vec_mad_op3(t,fake,"test_mad")
+
+[jit]
+def jit_lerp(a,b,c)
+    return lerp(a,b,c)
+
+def test_lerp( t:T?; a:auto(TT); b:auto(QQ); c:TT )
+    t |> success ( is_jit_function(@@<(a:TT;b:QQ;c:TT):TT> jit_mad) )
+    t |> strictEqual ( lerp(a,b,c), jit_lerp(a,b,c), "lerp({a},{b},{c})" )
+
+[test]
+def test_lerp ( t:T? )
+    var fake <- Faker()
+    fuzz <|
+        fuzz_float_double_or_float_vec_op3(t,fake,"test_lerp")

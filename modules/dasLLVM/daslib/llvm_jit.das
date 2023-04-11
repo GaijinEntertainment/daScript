@@ -13,7 +13,6 @@ require daslib/macro_boost
 require daslib/safe_addr
 require daslib/strings_boost
 require daslib/defer
-require daslib/fio
 require daslib/lpipe
 require math
 require jit
