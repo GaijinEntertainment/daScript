@@ -788,6 +788,55 @@ namespace das {
                 SideEffects::none,"pack_float_to_byte")->arg("x");
             addExtern<DAS_BIND_FUN(unpack_byte_to_float)>(*this, lib, "unpack_byte_to_float",
                 SideEffects::none,"unpack_byte_to_float")->arg("x");
+            // gather
+            addExternEx<float4(const float *,uint4),DAS_BIND_FUN(v_gather)>(*this, lib, "gather",
+                SideEffects::none,"v_gather")->args({"from","index4"});
+            addExternEx<int4(const int32_t *,uint4),DAS_BIND_FUN(v_gather)>(*this, lib, "gather",
+                SideEffects::none,"v_gather")->args({"from","index4"});
+            addExternEx<uint4(const uint32_t *,uint4),DAS_BIND_FUN(v_gather)>(*this, lib, "gather",
+                SideEffects::none,"v_gather")->args({"from","index4"});
+            // scatter
+            addExternEx<void(float *,uint4,float4),DAS_BIND_FUN(v_scatter)>(*this, lib, "scatter",
+                SideEffects::modifyArgument,"v_scatter")->args({"to","index4","from"});
+            addExternEx<void(int32_t *,uint4,int4),DAS_BIND_FUN(v_scatter)>(*this, lib, "scatter",
+                SideEffects::modifyArgument,"v_scatter")->args({"to","index4","from"});
+            addExternEx<void(uint32_t *,uint4,uint4),DAS_BIND_FUN(v_scatter)>(*this, lib, "scatter",
+                SideEffects::modifyArgument,"v_scatter")->args({"to","index4","from"});
+            // scatter mask
+            addExternEx<void(float *,uint4,float4,float4),DAS_BIND_FUN(v_scatter_mask)>(*this, lib, "scatter_neq_mask",
+                SideEffects::modifyArgument,"v_scatter_mask")->args({"to","index4","from","mask"});
+            addExternEx<void(int32_t *,uint4,int4,int4),DAS_BIND_FUN(v_scatter_mask)>(*this, lib, "scatter_neq_mask",
+                SideEffects::modifyArgument,"v_scatter_mask")->args({"to","index4","from","mask"});
+            addExternEx<void(uint32_t *,uint4,uint4,uint4),DAS_BIND_FUN(v_scatter_mask)>(*this, lib, "scatter_neq_mask",
+                SideEffects::modifyArgument,"v_scatter_mask")->args({"to","index4","from","mask"});
+            // store mask
+            addExternEx<void(float4 *,float4,float4),DAS_BIND_FUN(v_store_mask)>(*this, lib, "store_neq_mask",
+                SideEffects::modifyArgument,"v_store_mask")->args({"to","from","mask"});
+            addExternEx<void(int4 *,int4,int4),DAS_BIND_FUN(v_store_mask)>(*this, lib, "store_neq_mask",
+                SideEffects::modifyArgument,"v_store_mask")->args({"to","from","mask"});
+            addExternEx<void(uint4 *,uint4,uint4),DAS_BIND_FUN(v_store_mask)>(*this, lib, "store_neq_mask",
+                SideEffects::modifyArgument,"v_store_mask")->args({"to","from","mask"});
+            // gather-scatter
+            addExternEx<void(float *,uint4,const float *,uint4),DAS_BIND_FUN(v_gather_scatter)>(*this, lib, "gather_scatter",
+                SideEffects::modifyArgument,"v_gather_scatter")->args({"to","to_index4","from","from_index4"});
+            addExternEx<void(int32_t *,uint4,const int32_t *,uint4),DAS_BIND_FUN(v_gather_scatter)>(*this, lib, "gather_scatter",
+                SideEffects::modifyArgument,"v_gather_scatter")->args({"to","to_index4","from","from_index4"});
+            addExternEx<void(uint32_t *,uint4,const uint32_t *,uint4),DAS_BIND_FUN(v_gather_scatter)>(*this, lib, "gather_scatter",
+                SideEffects::modifyArgument,"v_gather_scatter")->args({"to","to_index4","from","from_index4"});
+            // gather-scatter mask
+            addExternEx<void(float *,uint4,const float *,uint4,float4),DAS_BIND_FUN(v_gather_scatter_mask)>(*this, lib, "gather_scatter_neq_mask",
+                SideEffects::modifyArgument,"v_gather_scatter_mask")->args({"to","to_index4","from","from_index4","mask"});
+            addExternEx<void(int32_t *,uint4,const int32_t *,uint4,int4),DAS_BIND_FUN(v_gather_scatter_mask)>(*this, lib, "gather_scatter_neq_mask",
+                SideEffects::modifyArgument,"v_gather_scatter_mask")->args({"to","to_index4","from","from_index4","mask"});
+            addExternEx<void(uint32_t *,uint4,const uint32_t *,uint4,uint4),DAS_BIND_FUN(v_gather_scatter_mask)>(*this, lib, "gather_scatter_neq_mask",
+                SideEffects::modifyArgument,"v_gather_scatter_mask")->args({"to","to_index4","from","from_index4","mask"});
+            // gather-store-mask
+            addExternEx<void(float4 *,const float *,uint4,float4),DAS_BIND_FUN(v_gather_store_mask)>(*this, lib, "gather_store_neq_mask",
+                SideEffects::modifyArgument,"v_gather_store_mask")->args({"to","from","from_index4","mask"});
+            addExternEx<void(int4 *,const int32_t *,uint4,int4),DAS_BIND_FUN(v_gather_store_mask)>(*this, lib, "gather_store_neq_mask",
+                SideEffects::modifyArgument,"v_gather_store_mask")->args({"to","from","from_index4","mask"});
+            addExternEx<void(uint4 *,const uint32_t *,uint4,uint4),DAS_BIND_FUN(v_gather_store_mask)>(*this, lib, "gather_store_neq_mask",
+                SideEffects::modifyArgument,"v_gather_store_mask")->args({"to","from","from_index4","mask"});
             // lets make sure its all aot ready
             verifyAotReady();
         }
