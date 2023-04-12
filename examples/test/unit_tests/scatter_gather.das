@@ -90,6 +90,22 @@ def test_store_mask
         assert(float4(1.,13.,17.,4.)==resf)
 
 [sideeffects]
+def test_store_aligned_mask
+    // int
+    var res = int4(-1,-2,-3,-4)
+    store_aligned_neq_mask(unsafe(addr(res)), int4(11,13,17,18), int4(1,13,2,3))
+    print("res = {res}\n")
+    assert(int4(11,-2,17,18)==res)
+    // uint
+    var resu = uint4(1u,2u,3u,4u)
+    store_aligned_neq_mask(unsafe(addr(resu)), uint4(11,13,17,18), uint4(1,3,17,3))
+    assert(uint4(11,13,3,18)==resu)
+    // float
+    var resf = float4(1.,2.,3.,4.)
+    store_aligned_neq_mask(unsafe(addr(resf)), float4(11,13,17,18), float4(11,1,2,18))
+    assert(float4(1.,13.,17.,4.)==resf)
+
+[sideeffects]
 def test_gather_scatter_mask
     unsafe
         let idx = uint4(1,3,7,8)
@@ -130,14 +146,36 @@ def test_gather_store_mask
         gather_store_neq_mask(addr(rresf),addr(arrf[0]),idx,float4(11,1,2,18))
         assert(float4(1.,13.,17.,4.)==rresf)
 
+[sideeffects]
+def test_gather_store_aligned_mask
+    unsafe
+        let idx = uint4(1,3,7,8)
+        // int
+        var arr <- [{int 10;11;12;13;14;15;16;17;18;19}]
+        var rres = int4(-1,-2,-3,-4)
+        gather_store_aligned_neq_mask(addr(rres),addr(arr[0]),idx,int4(1,13,2,3))
+        assert(int4(11,-2,17,18)==rres)
+        // uint
+        var arru <- [{uint 10u;11u;12u;13u;14u;15u;16u;17u;18u;19u}]
+        var rresu = uint4(1u,2u,3u,4u)
+        gather_store_aligned_neq_mask(addr(rresu),addr(arru[0]),idx,uint4(1,3,17,3))
+        assert(uint4(11,13,3,18)==rresu)
+        // float
+        var arrf <- [{float 10.;11.;12.;13.;14.;15.;16.;17.;18.;19.}]
+        var rresf = float4(1.,2.,3.,4.)
+        gather_store_aligned_neq_mask(addr(rresf),addr(arrf[0]),idx,float4(11,1,2,18))
+        assert(float4(1.,13.,17.,4.)==rresf)
+
 [export]
 def test
     test_gather()
     test_scatter()
     test_scatter_mask()
     test_store_mask()
+    test_store_aligned_mask()
     test_gather_scatter()
     test_gather_scatter_mask()
     test_gather_store_mask()
+    test_gather_store_aligned_mask()
     return true
 
