@@ -837,6 +837,13 @@ namespace das {
                 SideEffects::modifyArgument,"v_store_mask")->args({"to","from","mask"});
             addExternEx<void(uint4 *,uint4,uint4),DAS_BIND_FUN(v_store_mask)>(*this, lib, "store_neq_mask",
                 SideEffects::modifyArgument,"v_store_mask")->args({"to","from","mask"});
+            // store aligned mask
+            addExternEx<void(float4 *,float4,float4),DAS_BIND_FUN(v_store_aligned_mask)>(*this, lib, "store_aligned_neq_mask",
+                SideEffects::modifyArgument,"v_store_aligned_mask")->args({"to","from","mask"});
+            addExternEx<void(int4 *,int4,int4),DAS_BIND_FUN(v_store_aligned_mask)>(*this, lib, "store_aligned_neq_mask",
+                SideEffects::modifyArgument,"v_store_aligned_mask")->args({"to","from","mask"});
+            addExternEx<void(uint4 *,uint4,uint4),DAS_BIND_FUN(v_store_aligned_mask)>(*this, lib, "store_aligned_neq_mask",
+                SideEffects::modifyArgument,"v_store_aligned_mask")->args({"to","from","mask"});
             // gather-scatter
             addExternEx<void(float *,uint4,const float *,uint4),DAS_BIND_FUN(v_gather_scatter)>(*this, lib, "gather_scatter",
                 SideEffects::modifyArgument,"v_gather_scatter")->args({"to","to_index4","from","from_index4"})->unsafeOperation = true;
@@ -879,6 +886,21 @@ namespace das {
                 SideEffects::modifyArgument,"v_gather_store_mask")->args({"to","from","from_index4","mask"})->unsafeOperation = true;
             addExternEx<void(uint4 *,const uint32_t *,int4,uint4),DAS_BIND_FUN(v_gather_store_mask)>(*this, lib, "gather_store_neq_mask",
                 SideEffects::modifyArgument,"v_gather_store_mask")->args({"to","from","from_index4","mask"})->unsafeOperation = true;            // lets make sure its all aot ready
+            verifyAotReady();
+            // gather-store-aligned-mask
+            addExternEx<void(float4 *,const float *,uint4,float4),DAS_BIND_FUN(v_gather_store_aligned_mask)>(*this, lib, "gather_store_aligned_neq_mask",
+                SideEffects::modifyArgument,"v_gather_store_aligned_mask")->args({"to","from","from_index4","mask"})->unsafeOperation = true;
+            addExternEx<void(int4 *,const int32_t *,uint4,int4),DAS_BIND_FUN(v_gather_store_aligned_mask)>(*this, lib, "gather_store_aligned_neq_mask",
+                SideEffects::modifyArgument,"v_gather_store_aligned_mask")->args({"to","from","from_index4","mask"})->unsafeOperation = true;
+            addExternEx<void(uint4 *,const uint32_t *,uint4,uint4),DAS_BIND_FUN(v_gather_store_aligned_mask)>(*this, lib, "gather_store_aligned_neq_mask",
+                SideEffects::modifyArgument,"v_gather_store_aligned_mask")->args({"to","from","from_index4","mask"})->unsafeOperation = true;
+
+            addExternEx<void(float4 *,const float *,int4,float4),DAS_BIND_FUN(v_gather_store_aligned_mask)>(*this, lib, "gather_store_aligned_neq_mask",
+                SideEffects::modifyArgument,"v_gather_store_aligned_mask")->args({"to","from","from_index4","mask"})->unsafeOperation = true;
+            addExternEx<void(int4 *,const int32_t *,int4,int4),DAS_BIND_FUN(v_gather_store_aligned_mask)>(*this, lib, "gather_store_aligned_neq_mask",
+                SideEffects::modifyArgument,"v_gather_store_aligned_mask")->args({"to","from","from_index4","mask"})->unsafeOperation = true;
+            addExternEx<void(uint4 *,const uint32_t *,int4,uint4),DAS_BIND_FUN(v_gather_store_aligned_mask)>(*this, lib, "gather_store_aligned_neq_mask",
+                SideEffects::modifyArgument,"v_gather_store_aligned_mask")->args({"to","from","from_index4","mask"})->unsafeOperation = true;            // lets make sure its all aot ready
             verifyAotReady();
         }
         virtual ModuleAotType aotRequire ( TextWriter & tw ) const override {

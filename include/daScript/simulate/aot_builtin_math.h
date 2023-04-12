@@ -198,8 +198,28 @@ namespace das {
         // write 4 floats to memory, using 4 uint32_t indices, but only for floats, where value[i]!=mask_v[i]
         // _mm_maskstoreu_epi32
         auto ptr = (float *) _ptr;
+    #if 0 // defined(DAS_AVX_512)
+        // BBATKIN: i have no hardware to test this on. at some point we should
+        auto mask_epi = v_cmp_eqi(v_cast_vec4i(mask_v), v_cast_vec4i(value));
+        __mmask8 mask = _mm_movemask_epi8 ( mask_epi ) ^ 0xff;
+        _mm_mask_storeu_ps(ptr, mask, value);
+    #else
         auto mask = v_cast_vec4f(v_cmp_eqi(v_cast_vec4i(mask_v), v_cast_vec4i(value)));
         v_stu(ptr, v_or(v_and(mask,v_ldu(ptr)),v_andnot(mask, value)));
+    #endif
+    }
+
+    __forceinline void v_store_aligned_mask ( void * _ptr, vec4f value, vec4f mask_v ) {
+        // write 4 floats to memory, using 4 uint32_t indices, but only for floats, where value[i]!=mask_v[i]
+        // _mm_maskstoreu_epi32
+        auto ptr = (float *) _ptr;
+    #if defined(__AVX__)
+        auto mask = v_xori(v_cmp_eqi(v_cast_vec4i(mask_v), v_cast_vec4i(value)), v_splatsi(0xffffffff));
+        _mm_maskstore_ps(ptr, mask, value);
+    #else
+        auto mask = v_cast_vec4f(v_cmp_eqi(v_cast_vec4i(mask_v), v_cast_vec4i(value)));
+        v_st(ptr, v_or(v_and(mask,v_ld(ptr)),v_andnot(mask, value)));
+    #endif
     }
 
     __forceinline vec4f v_gather_scatter ( void * _to, vec4f to_index, const void * _from, vec4f from_index ) {
@@ -227,6 +247,15 @@ namespace das {
         auto to =  (float *) _to;
         auto value = v_gather(from, from_index);
         v_store_mask ( to, value, mask_v );
+        return value;
+    }
+
+    __forceinline vec4f v_gather_store_aligned_mask ( void * _to, const void * _from, vec4f from_index, vec4f mask_v ) {
+        // read 4 floats from memory, using 4 uint32_t indices and then write them to memory, but only for floats, where value[i]!=mask_v[i]
+        auto from = (const float *) _from;
+        auto to =  (float *) _to;
+        auto value = v_gather(from, from_index);
+        v_store_aligned_mask ( to, value, mask_v );
         return value;
     }
 }
