@@ -161,20 +161,22 @@ namespace das {
 
     __forceinline vec4f v_gather ( const void * _ptr, vec4f index ) {
         // read 4 floats from memory, using 4 uint32_t indices
-        // vgatherdps
-        auto ptr = (const float *) _ptr;
-        auto i = v_cast_vec4i(index);
-        return v_make_vec4f(
-            ptr[uint32_t(v_extract_xi(i))],
-            ptr[uint32_t(v_extract_yi(i))],
-            ptr[uint32_t(v_extract_zi(i))],
-            ptr[uint32_t(v_extract_wi(i))]
-        );
+        #if defined(__AVX2__)
+            return (_mm_i32gather_ps((const float *) _ptr, v_cast_vec4i(index), 4));
+        #else
+            auto ptr = (const float *) _ptr;
+            auto i = v_cast_vec4i(index);
+            return v_make_vec4f(
+                ptr[uint32_t(v_extract_xi(i))],
+                ptr[uint32_t(v_extract_yi(i))],
+                ptr[uint32_t(v_extract_zi(i))],
+                ptr[uint32_t(v_extract_wi(i))]
+            );
+        #endif
     }
 
     __forceinline void v_scatter ( void * _ptr, vec4f index, vec4f value ) {
         // write 4 floats to memory, using 4 uint32_t indices
-        // vscatterdps
         auto ptr = (float *) _ptr;
         auto i = v_cast_vec4i(index);
         ptr[uint32_t(v_extract_xi(i))] = v_extract_x(value);
@@ -196,30 +198,9 @@ namespace das {
 
     __forceinline void v_store_mask ( void * _ptr, vec4f value, vec4f mask_v ) {
         // write 4 floats to memory, using 4 uint32_t indices, but only for floats, where value[i]!=mask_v[i]
-        // _mm_maskstoreu_epi32
         auto ptr = (float *) _ptr;
-    #if 0 // defined(DAS_AVX_512)
-        // BBATKIN: i have no hardware to test this on. at some point we should
-        auto mask_epi = v_cmp_eqi(v_cast_vec4i(mask_v), v_cast_vec4i(value));
-        __mmask8 mask = _mm_movemask_epi8 ( mask_epi ) ^ 0xff;
-        _mm_mask_storeu_ps(ptr, mask, value);
-    #else
         auto mask = v_cast_vec4f(v_cmp_eqi(v_cast_vec4i(mask_v), v_cast_vec4i(value)));
         v_stu(ptr, v_or(v_and(mask,v_ldu(ptr)),v_andnot(mask, value)));
-    #endif
-    }
-
-    __forceinline void v_store_aligned_mask ( void * _ptr, vec4f value, vec4f mask_v ) {
-        // write 4 floats to memory, using 4 uint32_t indices, but only for floats, where value[i]!=mask_v[i]
-        // _mm_maskstoreu_epi32
-        auto ptr = (float *) _ptr;
-    #if defined(__AVX__)
-        auto mask = v_xori(v_cmp_eqi(v_cast_vec4i(mask_v), v_cast_vec4i(value)), v_splatsi(0xffffffff));
-        _mm_maskstore_ps(ptr, mask, value);
-    #else
-        auto mask = v_cast_vec4f(v_cmp_eqi(v_cast_vec4i(mask_v), v_cast_vec4i(value)));
-        v_st(ptr, v_or(v_and(mask,v_ld(ptr)),v_andnot(mask, value)));
-    #endif
     }
 
     __forceinline vec4f v_gather_scatter ( void * _to, vec4f to_index, const void * _from, vec4f from_index ) {
@@ -250,12 +231,15 @@ namespace das {
         return value;
     }
 
-    __forceinline vec4f v_gather_store_aligned_mask ( void * _to, const void * _from, vec4f from_index, vec4f mask_v ) {
+    __forceinline vec4f v_gather_store_stride ( void * _to, int stride, const void * _from, vec4f from_index ) {
         // read 4 floats from memory, using 4 uint32_t indices and then write them to memory, but only for floats, where value[i]!=mask_v[i]
         auto from = (const float *) _from;
         auto to =  (float *) _to;
         auto value = v_gather(from, from_index);
-        v_store_aligned_mask ( to, value, mask_v );
+        to[       0] = v_extract_x(value);
+        to[  stride] = v_extract_y(value);
+        to[2*stride] = v_extract_z(value);
+        to[3*stride] = v_extract_w(value);
         return value;
     }
 }
