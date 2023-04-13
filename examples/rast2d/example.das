@@ -26,6 +26,12 @@ def draw ( var backbuffer : Bitmap )
         for x in -4..4
             let color = ((x^y)&1)!=0 ? 0xFF3D300D : 0xFFE6C5A4
             backbuffer |> fill_rect( xc + x * 64, yc + y * 64, xc + (x+1)*64, yc + (y+1)*64, color)
+    var w = 1
+    var x = 0
+    for t in range(20)
+        backbuffer |> fill_rect ( x, 0, x+w, backbuffer.h, (t&1)!=0 ? 0xFF000000 : 0xFFFFFFFF)
+        x += w
+        w ++
 
 [export]
 def main
