@@ -1474,6 +1474,9 @@ class LlvmJitVisitor : AstVisitor
             if right is ExprConstPtr
                 let null_ptr = LLVMConstPointerNull(LLVMPointerType(LLVMVoidType(),0u))
                 LLVMBuildStore2Aligned(g_builder, LLVMPointerType(LLVMVoidType(),0u), null_ptr, tdst, ralign)
+            elif right._type.isPointer
+                var compDst = LLVMBuildPointerCast(g_builder, tdst, LLVMPointerType(LLVMTypeOf(tsrc),0u), "")
+                LLVMBuildStoreAligned(g_builder, tsrc, compDst, ralign)
             else
                 LLVMBuildStoreAligned(g_builder, tsrc, tdst, ralign)
 
@@ -3503,3 +3506,4 @@ class JIT_LLVM : AstSimulateMacro
 //          - lexical scopes?
 //  Expressions:
 //      * ExprTryCatch
+
