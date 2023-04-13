@@ -13,6 +13,11 @@ let g_intrin_lookup <- {{
 // $, aka builtin
     // misc
         "$::length" => @@intrinsic_builtin_length;
+    // pointer math
+        "$::i_das_ptr_set_add" => @@intrinsic_das_ptr_set_add;
+        "$::i_das_ptr_add" => @@intrinsic_das_ptr_add;
+    // memset
+        "$::memset32" => @@intrinsic_memset32;
     // type c-tors
     // vector type c-tors
         "$::range" => @@intrinsic_builtin_range;
@@ -541,3 +546,84 @@ def intrinsic_math_inv_length(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprC
     let len_sq = build_fadd(g_builder, opType, v2, "")
     let len = build_fsqrt(g_builder, len_sq, "")
     return build_frcp(g_builder, len, "inv_length")
+
+def intrinsic_das_ptr_set_add(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+    assume opType = expr.arguments[0]._type
+    assert(opType.isPointer)
+    var value_stride = LLVMBuildMul(g_builder, arguments[1], arguments[2], "")
+    var ptr_value = LLVMBuildLoad(g_builder, arguments[0], "")
+    var ptr_value_i8 = LLVMBuildPointerCast(g_builder, ptr_value, LLVMPointerType(LLVMInt8Type(), 0u), "")
+    var ptr_value_stride = LLVMBuildGEP(g_builder, ptr_value_i8, value_stride, "")
+    var vptr_value_stride = LLVMBuildPointerCast(g_builder, ptr_value_stride, type_to_llvm_type(expr.arguments[0]._type), "")
+    return LLVMBuildStore(g_builder, vptr_value_stride, arguments[0])
+
+def intrinsic_das_ptr_add(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+    assume opType = expr.arguments[0]._type
+    assert(opType.isPointer)
+    var value_stride = LLVMBuildMul(g_builder, arguments[1], arguments[2], "")
+    var ptr_value = arguments[0]
+    var ptr_value_i8 = LLVMBuildPointerCast(g_builder, ptr_value, LLVMPointerType(LLVMInt8Type(), 0u), "")
+    var ptr_value_stride = LLVMBuildGEP(g_builder, ptr_value_i8, value_stride, "")
+    return LLVMBuildPointerCast(g_builder, ptr_value_stride, type_to_llvm_type(expr.arguments[0]._type), "")
+
+def build_memset(g_builder:LLVMOpaqueBuilder?; i,imax:LLVMOpaqueValue?; step:int; ptr,value:LLVMOpaqueValue?; one:bool = false ) : LLVMOpaqueValue?
+    let cb = LLVMGetInsertBlock(g_builder)
+    var loop = LLVMInsertBasicBlock(cb, "loop")
+    var loop_cont = LLVMInsertBasicBlock(cb, "loop_cont")
+    var exit = LLVMInsertBasicBlock(loop, "exit")
+// loop:
+    LLVMBuildBr(g_builder, loop)
+    LLVMPositionBuilderAtEnd(g_builder, loop)
+// if i!=imax, goto exit
+    var ival = LLVMBuildLoad(g_builder, i, "i")
+    var cond = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntNE, ival, imax, "")
+    LLVMBuildCondBr(g_builder, cond, loop_cont, exit)
+    LLVMPositionBuilderAtEnd(g_builder, loop_cont)
+// ptr[i] = values
+    var lptr = LLVMBuildGEP(g_builder, ptr, ival, "")
+    if step==1
+        LLVMBuildStore(g_builder, value, lptr)
+    else
+        lptr = LLVMBuildPointerCast(g_builder, lptr, LLVMPointerType(LLVMTypeOf(value), 0u), "")
+        LLVMSetAlignment(LLVMBuildStore(g_builder, value, lptr), 4u)
+// i ++
+    ival = LLVMBuildAdd(g_builder, ival, LLVMConstInt(LLVMInt64Type(), uint64(step), 0), "")
+    LLVMBuildStore(g_builder, ival, i)
+// goto loop
+    if !one
+        LLVMBuildBr(g_builder, loop)
+    else
+        LLVMBuildBr(g_builder, exit)
+// end:
+    LLVMPositionBuilderAtEnd(g_builder, exit)
+    return ival
+
+def intrinsic_memset32(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+    assume opType = expr.arguments[0]._type
+    assert(opType.isPointer)
+    var imax = LLVMBuildZExtOrBitCast(g_builder, arguments[2], LLVMInt64Type(), "")
+    var i = LLVMBuildAlloca(g_builder, LLVMInt64Type(), "i")
+    var ptr = LLVMBuildPointerCast(g_builder, arguments[0], LLVMPointerType(LLVMInt32Type(), 0u), "")
+    LLVMSetAlignment(i, 16u)
+    LLVMBuildStore(g_builder, LLVMConstInt(LLVMInt64Type(), 0ul, 0), i)
+    // 4 bytes
+    var imax_32 = LLVMBuildAnd(g_builder, imax, LLVMConstInt(LLVMInt64Type(), 1ul, 0), "")
+    build_memset(g_builder, i, imax_32, 1, ptr, arguments[1], true)
+    // 8 bytes
+    var v_vec_64 = LLVMGetUndef(LLVMInt2Type())
+    v_vec_64 = LLVMBuildInsertElement(g_builder, v_vec_64, arguments[1], LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
+    v_vec_64 = LLVMBuildInsertElement(g_builder, v_vec_64, arguments[1], LLVMConstInt(LLVMInt32Type(), 1ul, 0), "")
+    var imax_64 = LLVMBuildAnd(g_builder, imax, LLVMConstInt(LLVMInt64Type(), 3ul, 0), "")
+    build_memset(g_builder, i, imax_64, 2, ptr, v_vec_64, true)
+    // 16 bytes
+    var v_vec = LLVMGetUndef(LLVMInt4Type())
+    for t in 0..4
+        v_vec = LLVMBuildInsertElement(g_builder, v_vec, arguments[1], LLVMConstInt(LLVMInt32Type(), uint64(t), 0), "")
+    var imax_128 = LLVMBuildAnd(g_builder, imax, LLVMConstInt(LLVMInt64Type(), 15ul, 0), "")
+    build_memset(g_builder, i, imax_128, 4, ptr, v_vec)
+    // 64 bytes tails
+    var v_vec16 = LLVMGetUndef(LLVMVectorType(LLVMInt32Type(), 16u))
+    for t in 0..16
+        v_vec16 = LLVMBuildInsertElement(g_builder, v_vec16, arguments[1], LLVMConstInt(LLVMInt32Type(), uint64(t), 0), "")
+    return build_memset(g_builder, i, imax, 16, ptr, v_vec16)
+

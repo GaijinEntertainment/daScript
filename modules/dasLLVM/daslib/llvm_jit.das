@@ -3451,6 +3451,8 @@ def private optimize_llvm_module
     LLVMPassManagerBuilderUseInlinerWithThreshold(pmb, LLVM_INLINE_THRESHOLD)
     var pm = LLVMCreatePassManager()
     LLVMPassManagerBuilderPopulateModulePassManager(pmb, pm)
+    // LLVMAddLoopVectorizePass(pm)
+    // LLVMAddSLPVectorizePass(pm)
     // LLVMPassManagerBuilderPopulateLTOPassManager(pmb, pm, 1, 1)
     LLVMRunPassManager(pm,g_mod)
     LLVMDisposePassManager(pm)

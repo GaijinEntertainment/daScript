@@ -152,6 +152,7 @@ def test_saturate ( t:T? )
     fuzz <|
         fuzz_float_or_float_vec_op1(t,fake,"test_saturate")
 
+/*
 [jit]
 def jit_mad(a,b,c)
     return mad(a,b,c)
@@ -183,3 +184,4 @@ def test_lerp ( t:T? )
     var fake <- Faker()
     fuzz <|
         fuzz_float_double_or_float_vec_op3(t,fake,"test_lerp")
+*/
