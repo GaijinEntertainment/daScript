@@ -56,6 +56,11 @@ let g_intrin_lookup <- {{
     // variant
         "$::set_variant_index" => @@intrinsic_builtin_set_variant_index;
         "$::variant_index" => @@intrinsic_builtin_variant_index;
+// math - scatter gather
+    "math::gather" => @@intrinsic_math_gather;
+    "math::store_neq_mask" => @@intrinsic_math_store_neq_mask;
+    "math::gather_store_neq_mask" => @@intrinsic_math_gather_store_mask;
+    "math::gather_store_stride" => @@intrinsic_math_gather_store_stride;
 // math
     "math::saturate" => @@intrinsic_math_saturate;
     "math::abs" => @@intrinsic_math_abs;
@@ -71,6 +76,8 @@ let g_intrin_lookup <- {{
     "math::pow" => @@intrinsic_op2;
     "math::min" => @@intrinsic_math_minmax;
     "math::max" => @@intrinsic_math_minmax;
+    "math::floor" => @@intrinsic_math_float_op1;
+    "math::ceil" => @@intrinsic_math_float_op1;
     "math::length_sq" => @@intrinsic_math_length_sq;
     "math::dot" => @@intrinsic_math_dot;
     "math::cross" => @@intrinsic_math_cross;
@@ -717,3 +724,107 @@ def intrinsic_memset16(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc
     var size = LLVMBuildZExtOrBitCast(g_builder, arguments[2], LLVMInt64Type(), "")
     var ptr = LLVMBuildPointerCast(g_builder, arguments[0], LLVMPointerType(LLVMInt16Type(),0u), "")
     return build_memset_16(g_builder, ptr, arguments[1], size)
+
+def intrinsic_math_gather(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+    var ptr = LLVMBuildPointerCast(g_builder, arguments[0], LLVMPointerType(LLVMInt32Type(),0u), "")
+    var ix = LLVMBuildExtractElement(g_builder, arguments[1], LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
+    var iy = LLVMBuildExtractElement(g_builder, arguments[1], LLVMConstInt(LLVMInt32Type(), 1ul, 0), "")
+    var iz = LLVMBuildExtractElement(g_builder, arguments[1], LLVMConstInt(LLVMInt32Type(), 2ul, 0), "")
+    var iw = LLVMBuildExtractElement(g_builder, arguments[1], LLVMConstInt(LLVMInt32Type(), 3ul, 0), "")
+    var res = LLVMGetUndef(LLVMInt4Type())
+    res = LLVMBuildInsertElement(g_builder, res, LLVMBuildLoad(g_builder, LLVMBuildGEP(g_builder, ptr, ix, ""), ""), LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
+    res = LLVMBuildInsertElement(g_builder, res, LLVMBuildLoad(g_builder, LLVMBuildGEP(g_builder, ptr, iy, ""), ""), LLVMConstInt(LLVMInt32Type(), 1ul, 0), "")
+    res = LLVMBuildInsertElement(g_builder, res, LLVMBuildLoad(g_builder, LLVMBuildGEP(g_builder, ptr, iz, ""), ""), LLVMConstInt(LLVMInt32Type(), 2ul, 0), "")
+    res = LLVMBuildInsertElement(g_builder, res, LLVMBuildLoad(g_builder, LLVMBuildGEP(g_builder, ptr, iw, ""), ""), LLVMConstInt(LLVMInt32Type(), 3ul, 0), "")
+    return res
+
+def intrinsic_math_store_neq_mask(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+    var ptr = LLVMBuildPointerCast(g_builder, arguments[0], LLVMPointerType(LLVMInt4Type(),0u), "")
+    var value = arguments[1]
+    var mask_v = arguments[2]
+    var mask = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntEQ, value, mask_v, "")
+    var dest = LLVMBuildLoad(g_builder, ptr, "")
+    LLVMSetAlignment(dest, 4u)
+    var res = LLVMBuildSelect(g_builder, mask, dest, value, "")
+    var wrt = LLVMBuildStore(g_builder, res, ptr)
+    LLVMSetAlignment(wrt, 4u)
+    return res
+
+// __forceinline vec4f v_gather_store_mask ( void * _to, const void * _from, vec4f from_index, vec4f mask_v ) {
+
+def intrinsic_math_gather_store_mask(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+    var arg_gather <- [{auto arguments[1]; arguments[2]}]
+    var gather = intrinsic_math_gather(g_builder, expr, arg_gather)
+    var arg_store_mask <- [{auto arguments[0]; gather; arguments[3]}]
+    return intrinsic_math_store_neq_mask(g_builder, expr, arg_store_mask)
+
+/*
+    __forceinline vec4f v_gather_store_stride ( void * _to, int stride, const void * _from, vec4f from_index ) {
+        // read 4 floats from memory, using 4 uint32_t indices and then write them to memory, but only for floats, where value[i]!=mask_v[i]
+        auto from = (const float *) _from;
+        auto to =  (float *) _to;
+        auto value = v_gather(from, from_index);
+        to[       0] = v_extract_x(value);
+        to[  stride] = v_extract_y(value);
+        to[2*stride] = v_extract_z(value);
+        to[3*stride] = v_extract_w(value);
+        return value;
+    }
+*/
+
+def intrinsic_math_gather_store_stride(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+    // gather
+    var ptr = LLVMBuildPointerCast(g_builder, arguments[2], LLVMPointerType(LLVMInt32Type(),0u), "")
+    var ix = LLVMBuildExtractElement(g_builder, arguments[3], LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
+    var iy = LLVMBuildExtractElement(g_builder, arguments[3], LLVMConstInt(LLVMInt32Type(), 1ul, 0), "")
+    var iz = LLVMBuildExtractElement(g_builder, arguments[3], LLVMConstInt(LLVMInt32Type(), 2ul, 0), "")
+    var iw = LLVMBuildExtractElement(g_builder, arguments[3], LLVMConstInt(LLVMInt32Type(), 3ul, 0), "")
+    var X = LLVMBuildLoad(g_builder, LLVMBuildGEP(g_builder, ptr, ix, ""), "")
+    var Y = LLVMBuildLoad(g_builder, LLVMBuildGEP(g_builder, ptr, iy, ""), "")
+    var Z = LLVMBuildLoad(g_builder, LLVMBuildGEP(g_builder, ptr, iz, ""), "")
+    var W = LLVMBuildLoad(g_builder, LLVMBuildGEP(g_builder, ptr, iw, ""), "")
+    // write it out
+    var stride = arguments[1]
+    var out = LLVMBuildPointerCast(g_builder, arguments[0], LLVMPointerType(LLVMInt32Type(),0u), "")
+    LLVMBuildStore(g_builder, X, out)
+    out = LLVMBuildGEP(g_builder, out, stride, "")
+    LLVMBuildStore(g_builder, Y, out)
+    out = LLVMBuildGEP(g_builder, out, stride, "")
+    LLVMBuildStore(g_builder, Z, out)
+    out = LLVMBuildGEP(g_builder, out, stride, "")
+    LLVMBuildStore(g_builder, W, out)
+    return out
+
+
+/*
+    __forceinline void v_scatter ( void * _ptr, vec4f index, vec4f value ) {
+        // write 4 floats to memory, using 4 uint32_t indices
+        auto ptr = (float *) _ptr;
+        auto i = v_cast_vec4i(index);
+        ptr[uint32_t(v_extract_xi(i))] = v_extract_x(value);
+        ptr[uint32_t(v_extract_yi(i))] = v_extract_y(value);
+        ptr[uint32_t(v_extract_zi(i))] = v_extract_z(value);
+        ptr[uint32_t(v_extract_wi(i))] = v_extract_w(value);
+    }
+*/
+
+/*
+    __forceinline void v_scatter_mask ( void * _ptr, vec4f index, vec4f value, vec4f mask_v ) {
+        // write 4 floats to memory, using 4 uint32_t indices, but only for floats, where value[i]!=mask_v[i]
+        auto ptr = (float *) _ptr;
+        auto mask = v_cmp_eqi(v_cast_vec4i(mask_v), v_cast_vec4i(value));
+        auto i = v_cast_vec4i(index);
+        if ( !v_extract_xi(mask) ) ptr[uint32_t(v_extract_xi(i))] = v_extract_x(value);
+        if ( !v_extract_yi(mask) ) ptr[uint32_t(v_extract_yi(i))] = v_extract_y(value);
+        if ( !v_extract_zi(mask) ) ptr[uint32_t(v_extract_zi(i))] = v_extract_z(value);
+        if ( !v_extract_wi(mask) ) ptr[uint32_t(v_extract_wi(i))] = v_extract_w(value);
+    }
+*/
+
+
+
+
+
+
+// gather_store_neq_mask
+// def intrinsic_gather_store_neq_mask
