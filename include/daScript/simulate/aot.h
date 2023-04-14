@@ -169,39 +169,35 @@ namespace das {
         memset(left, value, size);
     }
 
-    __forceinline void das_memset16 ( void * left, uint16_t value, int size ) {
-        uint16_t * ptr = (uint16_t *) left;
-        for ( int i=0; i!=size; ++i ) {
-            ptr[i] = value;
-        }
-    }
-
-    __forceinline void das_memset32 ( void * left, uint32_t value, int size ) {
-        uint32_t * ptr = (uint32_t *) left;
-        for ( int i=0; i!=size; ++i ) {
-            ptr[i] = value;
+    __forceinline void das_memset128u ( void * left, vec4f value, int size ) {
+        vec4f * ptr = (vec4f *) left;
+        if ( size&1 ) { v_stu(ptr, value); ptr ++; size --; }
+        if ( size&3 ) { v_stu(ptr+0, value); v_stu(ptr+1, value); ptr += 2; size -= 2; }
+        if ( size&7 ) { v_stu(ptr+0, value); v_stu(ptr+1, value); v_stu(ptr+2, value); v_stu(ptr+3, value); ptr += 4; size -= 4; }
+        while ( size ) {
+            v_stu(ptr+0, value); v_stu(ptr+1, value); v_stu(ptr+2, value); v_stu(ptr+3, value);
+            v_stu(ptr+4, value); v_stu(ptr+5, value); v_stu(ptr+6, value); v_stu(ptr+7, value);
+            ptr += 8; size -= 8;
         }
     }
 
     __forceinline void das_memset64 ( void * left, uint64_t value, int size ) {
         uint64_t * ptr = (uint64_t *) left;
-        for ( int i=0; i!=size; ++i ) {
-            ptr[i] = value;
-        }
+        if ( size&1 ) { ptr[0] = value; ptr ++; size --; }
+        uint64_t tv[2] = { value, value };
+        das_memset128u(ptr, v_ldu((const float *)tv), size>>1);
     }
 
-    __forceinline void das_memset128a ( void * left, vec4f value, int size ) {
-        vec4f * ptr = (vec4f *) left;
-        for ( int i=0; i!=size; ++i ) {
-            v_st(ptr + i, value);
-        }
+    __forceinline void das_memset32 ( void * left, uint32_t value, int size ) {
+        uint32_t * ptr = (uint32_t *) left;
+        if ( size&1 ) { ptr[0] = value; ptr ++; size --; }
+        das_memset64(ptr, value | (uint64_t(value)<<32), size>>1);
     }
 
-    __forceinline void das_memset128u ( void * left, vec4f value, int size ) {
-        vec4f * ptr = (vec4f *) left;
-        for ( int i=0; i!=size; ++i ) {
-            v_stu(ptr + i, value);
-        }
+    __forceinline void das_memset16 ( void * left, uint16_t value, int size ) {
+        uint16_t * ptr = (uint16_t *) left;
+        if ( size&1 ) { ptr[0] = value; ptr ++; size --; }
+        das_memset32(ptr, value | (uint32_t(value)<<16), size>>1);
     }
 
     template <typename TT>
