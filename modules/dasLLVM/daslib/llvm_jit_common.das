@@ -28,7 +28,7 @@ let public LLVM_OPT_LEVEL = LLVM_DEBUG_EVERYTHING ? 0u : 2u
 let public LLVM_SIZE_LEVEL = LLVM_DEBUG_EVERYTHING ? 0u : 0u
 let public LLVM_JIT_OPT_LEVEL = LLVM_DEBUG_EVERYTHING ? 0u : 2u
 let public LLVM_LOG_RESULT = LLVM_DEBUG_EVERYTHING || LLVM_DEBUG_RESULT
-let public LLVM_INLINE_THRESHOLD = 225u
+let public LLVM_INLINE_THRESHOLD = 1024u // 225u
 
 let public FN_JIT_EXCEPTION = "`jit`exception`"
 let public FN_JIT_CALL_OR_FASTCALL = "`jit`call_or_fastcall`"
