@@ -49,6 +49,9 @@ var bb_width = 0
 var bb_height = 0
 var bb_data : array<uint>
 
+def public get_screen_size
+    return int2(bb_width,bb_height)
+
 def update_bb ( var w, h : int )
     w = (w+3) & ~3
     h = (h+3) & ~3
@@ -77,13 +80,45 @@ def create_gl_objects(w,h : int)
     // texture
     update_bb(w,h)
 
+var window : GLFWwindow?
+
+let public VK_LSHIFT = GLFW_KEY_LEFT_SHIFT
+let public VK_RSHIFT = GLFW_KEY_RIGHT_SHIFT
+let public VK_LALT = GLFW_KEY_LEFT_ALT
+let public VK_RALT = GLFW_KEY_RIGHT_ALT
+let public VK_LCONTROL = GLFW_KEY_LEFT_CONTROL
+let public VK_RCONTROL = GLFW_KEY_RIGHT_CONTROL
+let public VK_LEFT = GLFW_KEY_LEFT
+let public VK_RIGHT = GLFW_KEY_RIGHT
+let public VK_UP = GLFW_KEY_UP
+let public VK_DOWN = GLFW_KEY_DOWN
+let public VK_1 = GLFW_KEY_1
+let public VK_2 = GLFW_KEY_2
+let public VK_3 = GLFW_KEY_3
+let public VK_4 = GLFW_KEY_4
+let public VK_5 = GLFW_KEY_5
+let public VK_6 = GLFW_KEY_6
+let public VK_7 = GLFW_KEY_7
+let public VK_8 = GLFW_KEY_8
+let public VK_9 = GLFW_KEY_9
+let public VK_0 = GLFW_KEY_0
+let public VK_SPACE = GLFW_KEY_SPACE
+
+def public is_key_pressed ( key:int )
+    return glfwGetKey(window, key)!=0
+
+var dt_sec = 0.0lf
+
+def public get_delta_time_sec
+    return float(dt_sec)
+
 def public raster_app_main ( blk: block<(var back_buffer:Bitmap):void> )
     if glfwInit()==0
 		panic("can't init glfw")
     defer <|
         glfwTerminate()
     glfwInitOpenGL(3,3)
-    var window = glfwCreateWindow(1280, 720, "RASTER2D", null, null)
+    window = glfwCreateWindow(1920, 1080, "RASTER2D", null, null)
     if window==null
 		panic("can't create window")
     defer <|
@@ -93,7 +128,12 @@ def public raster_app_main ( blk: block<(var back_buffer:Bitmap):void> )
     glfwGetFramebufferSize(window, display_w, display_h)
     create_gl_objects(display_w, display_h)
     var tframe = ref_time_ticks()
+    var prev_sec = glfwGetTime()
+    var msecs = 12.
     while glfwWindowShouldClose(window)==0
+        var tsec = glfwGetTime()
+        dt_sec = tsec - prev_sec
+        prev_sec = tsec
         var dt_frame = get_time_usec(tframe)
         tframe = ref_time_ticks()
         unsafe
@@ -102,15 +142,17 @@ def public raster_app_main ( blk: block<(var back_buffer:Bitmap):void> )
         glfwGetFramebufferSize(window, display_w, display_h)
         update_bb(display_w, display_h)
         // callbakc
-        var bmp = [[Bitmap w=bb_width, h=bb_height, pixels=unsafe(addr(bb_data[0]))]]
+        var bmp = [[Bitmap size=int2(bb_width,bb_height), data=unsafe(addr(bb_data[0]))]]
         let t0 = ref_time_ticks()
         invoke(blk, bmp)
         let dt = get_time_usec(t0)
-        glfwSetWindowTitle(window, "RASTER2D {bb_width}x{bb_height} frame:{dt_frame/1000}ms rast:{dt/1000}ms")
+        msecs = msecs*0.95 + float(dt/100)*0.05
+        let it  = int(msecs)
+        glfwSetWindowTitle(window, "RASTER2D {bb_width}x{bb_height} frame:{dt_frame/1000}ms rast:{it/10}.{it%10}ms")
         // make a texture
         glGenTextures(1, safe_addr(texture))
         glBindTexture(GL_TEXTURE_2D, texture)
-        glTexImage2D(GL_TEXTURE_2D, 0, int(GL_RGBA), bb_width, bb_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, unsafe(addr(bb_data[0])))
+        glTexImage2D(GL_TEXTURE_2D, 0, int(GL_RGBA), bb_width, bb_height, 0, GL_BGRA, GL_UNSIGNED_BYTE, unsafe(addr(bb_data[0])))
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)

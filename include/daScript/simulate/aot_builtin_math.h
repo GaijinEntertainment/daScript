@@ -161,7 +161,8 @@ namespace das {
 
     __forceinline vec4f v_gather ( const void * _ptr, vec4f index ) {
         // read 4 floats from memory, using 4 uint32_t indices
-        #if defined(__AVX2__)
+        #if 0 // defined(__AVX2__)
+            // note: this is not faster than the scalar version
             return (_mm_i32gather_ps((const float *) _ptr, v_cast_vec4i(index), 4));
         #else
             auto ptr = (const float *) _ptr;
@@ -231,15 +232,14 @@ namespace das {
         return value;
     }
 
-    __forceinline vec4f v_gather_store_stride ( void * _to, int stride, const void * _from, vec4f from_index ) {
+    __forceinline void v_gather_store_stride ( void * _to, int stride, const void * _from, vec4f from_index ) {
         // read 4 floats from memory, using 4 uint32_t indices and then write them to memory, but only for floats, where value[i]!=mask_v[i]
-        auto from = (const float *) _from;
-        auto to =  (float *) _to;
-        auto value = v_gather(from, from_index);
-        to[       0] = v_extract_x(value);
-        to[  stride] = v_extract_y(value);
-        to[2*stride] = v_extract_z(value);
-        to[3*stride] = v_extract_w(value);
-        return value;
+        auto ptr = (uint32_t *) _from;
+        auto to =  (uint32_t *) _to;
+        auto i = v_cast_vec4i(from_index);
+        to[       0] = ptr[uint32_t(v_extract_xi(i))];
+        to[  stride] = ptr[uint32_t(v_extract_yi(i))];
+        to[2*stride] = ptr[uint32_t(v_extract_zi(i))];
+        to[3*stride] = ptr[uint32_t(v_extract_wi(i))];
     }
 }
