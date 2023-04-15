@@ -161,7 +161,7 @@ namespace das {
 
     __forceinline vec4f v_gather ( const void * _ptr, vec4f index ) {
         // read 4 floats from memory, using 4 uint32_t indices
-        #if 0 // defined(__AVX2__)
+        #if defined(__AVX2__)
             // note: this is not faster than the scalar version
             return (_mm_i32gather_ps((const float *) _ptr, v_cast_vec4i(index), 4));
         #else
@@ -204,23 +204,29 @@ namespace das {
         v_stu(ptr, v_or(v_and(mask,v_ldu(ptr)),v_andnot(mask, value)));
     }
 
-    __forceinline vec4f v_gather_scatter ( void * _to, vec4f to_index, const void * _from, vec4f from_index ) {
+    __forceinline void v_gather_scatter ( void * _to, vec4f to_index, const void * _from, vec4f from_index ) {
         // read 4 floats from memory, using 4 uint32_t indices and then write them to memory
-        // vgatherdps + vscatterdps
-        auto from = (const float *) _from;
-        auto to =  (float *) _to;
-        auto value = v_gather(from, from_index);
-        v_scatter ( to, to_index, value );
-        return value;
+        auto ptr = (uint32_t *) _from;
+        auto to =  (uint32_t *) _to;
+        auto i = v_cast_vec4i(from_index);
+        auto j = v_cast_vec4i(to_index);
+        to[uint32_t(v_extract_xi(j))] = ptr[uint32_t(v_extract_xi(i))];
+        to[uint32_t(v_extract_yi(j))] = ptr[uint32_t(v_extract_yi(i))];
+        to[uint32_t(v_extract_zi(j))] = ptr[uint32_t(v_extract_zi(i))];
+        to[uint32_t(v_extract_wi(j))] = ptr[uint32_t(v_extract_wi(i))];
     }
 
-    __forceinline vec4f v_gather_scatter_mask ( void * _to, vec4f to_index, const void * _from, vec4f from_index, vec4f mask_v ) {
+    __forceinline void v_gather_scatter_mask ( void * _to, vec4f to_index, const void * _from, vec4f from_index, vec4f mask_v ) {
         // read 4 floats from memory, using 4 uint32_t indices and then write them to memory, but only for floats, where value[i]!=mask_v[i]
-        auto from = (const float *) _from;
-        auto to =  (float *) _to;
-        auto value = v_gather(from, from_index);
-        v_scatter_mask ( to, to_index, value, mask_v );
-        return value;
+        auto ptr = (uint32_t *) _from;
+        auto to =  (uint32_t *) _to;
+        auto i = v_cast_vec4i(from_index);
+        auto j = v_cast_vec4i(to_index);
+        auto m = v_cast_vec4i(mask_v);
+        auto X = ptr[uint32_t(v_extract_xi(i))];    if ( X != uint32_t(v_extract_xi(m)) ) to[uint32_t(v_extract_xi(j))] = X;
+        auto Y = ptr[uint32_t(v_extract_yi(i))];    if ( Y != uint32_t(v_extract_yi(m)) ) to[uint32_t(v_extract_yi(j))] = Y;
+        auto Z = ptr[uint32_t(v_extract_zi(i))];    if ( Z != uint32_t(v_extract_zi(m)) ) to[uint32_t(v_extract_zi(j))] = Z;
+        auto W = ptr[uint32_t(v_extract_wi(i))];    if ( W != uint32_t(v_extract_wi(m)) ) to[uint32_t(v_extract_wi(j))] = W;
     }
 
     __forceinline vec4f v_gather_store_mask ( void * _to, const void * _from, vec4f from_index, vec4f mask_v ) {

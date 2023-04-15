@@ -1826,12 +1826,16 @@ namespace das
             case Type::tInt2:
             case Type::tInt3:
             case Type::tInt4:
+            case Type::tInt8:
+            case Type::tInt16:
             case Type::tInt64:
             case Type::tUInt:
             case Type::tBitfield:
             case Type::tUInt2:
             case Type::tUInt3:
             case Type::tUInt4:
+            case Type::tUInt8:
+            case Type::tUInt16:
             case Type::tUInt64:
             case Type::tFloat:
             case Type::tFloat2:
