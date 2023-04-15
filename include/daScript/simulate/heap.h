@@ -366,6 +366,10 @@ namespace das {
         template < template <typename TT> class NodeType, typename... Params>
         SimNode * makeNumericValueNode(Type baseType, Params... args) {
             switch (baseType) {
+                case Type::tInt8:       return makeNode<NodeType<int8_t>>(args...);
+                case Type::tUInt8:      return makeNode<NodeType<uint8_t>>(args...);
+                case Type::tInt16:      return makeNode<NodeType<int16_t>>(args...);
+                case Type::tUInt16:     return makeNode<NodeType<uint16_t>>(args...);
                 case Type::tInt64:      return makeNode<NodeType<int64_t>>(args...);
                 case Type::tUInt64:     return makeNode<NodeType<uint64_t>>(args...);
                 case Type::tInt:        return makeNode<NodeType<int32_t>>(args...);
@@ -373,7 +377,6 @@ namespace das {
                 case Type::tFloat:      return makeNode<NodeType<float>>(args...);
                 case Type::tDouble:     return makeNode<NodeType<double>>(args...);
                 case Type::tPointer:    return makeNode<NodeType<void *>>(args...);
-                case Type::tLambda:     return makeNode<NodeType<Lambda>>(args...);
                 case Type::tBitfield:   return makeNode<NodeType<uint32_t>>(args...);
                 default:
                     DAS_ASSERTF(0, "we should not even be here. we are calling makeNumericValueNode on an uspported baseType."

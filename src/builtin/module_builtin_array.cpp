@@ -27,6 +27,11 @@ namespace das {
         array_resize ( *context, pArray, newSize, stride, true );
     }
 
+    void builtin_array_resize_no_init ( Array & pArray, int newSize, int stride, Context * context ) {
+        if ( newSize<0 ) context->throw_error_ex("resizing array to negative size %i", newSize);
+        array_resize ( *context, pArray, newSize, stride, false );
+    }
+
     void builtin_array_reserve ( Array & pArray, int newSize, int stride, Context * context ) {
         if ( newSize<0 ) context->throw_error_ex("reserving array to negative size %i", newSize);
         array_reserve( *context, pArray, newSize, stride );
@@ -83,6 +88,9 @@ namespace das {
         // array built-in functions
         addExtern<DAS_BIND_FUN(builtin_array_resize)>(*this, lib, "__builtin_array_resize",
             SideEffects::modifyArgument, "builtin_array_resize")
+                ->args({"array","newSize","stride","context"});
+        addExtern<DAS_BIND_FUN(builtin_array_resize_no_init)>(*this, lib, "__builtin_array_resize_no_init",
+            SideEffects::modifyArgument, "builtin_array_resize_no_init")
                 ->args({"array","newSize","stride","context"});
         addExtern<DAS_BIND_FUN(builtin_array_reserve)>(*this, lib, "__builtin_array_reserve",
             SideEffects::modifyArgument, "builtin_array_reserve")

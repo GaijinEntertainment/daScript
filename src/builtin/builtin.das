@@ -53,6 +53,14 @@ def resize(var Arr:array<auto(numT)>;newSize:int)
         _builtin_verify_locks(Arr)
     __builtin_array_resize(Arr,newSize,typeinfo(sizeof Arr[0]))
 
+def resize_no_init(var Arr:array<auto(numT)>;newSize:int)
+    static_if typeinfo(is_raw type<numT>)
+        static_if typeinfo(need_lock_check type<numT>)
+            concept_assert(false,"internal error: raw array with lock check")
+        __builtin_array_resize_no_init(Arr,newSize,typeinfo(sizeof Arr[0]))
+    else
+        concept_assert(false,"can't resize_no_init non-raw array")
+
 def reserve(var Arr:array<auto(numT)>;newSize:int)
     static_if typeinfo(need_lock_check type<numT>)
         _builtin_verify_locks(Arr)

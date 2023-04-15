@@ -42,7 +42,7 @@ class public MemSerializer : Serializer
     def override write ( bytes:void? implicit; size:int ) : bool
         //! Appends bytes at the end of the data.
         let pos = length(data)
-        data |> resize(pos + size)
+        data |> resize_no_init(pos + size)
         unsafe
             memcpy ( addr(data[pos]), bytes, size)
         return true
@@ -184,8 +184,9 @@ def public serialize ( var arch:Archive; var value : string& )
             arch |> read_raw(len)
             if len > 0
                 var tbuf: array<uint8>
-                tbuf |> resize(len+1)                           // todo: implement preallocat string with raii
+                tbuf |> resize_no_init(len+1)                           // todo: implement preallocat string with raii
                 arch.stream->read(addr(tbuf[0]), len)
+                tbuf[len] = 0u8
                 let tstr = reinterpret<string#> addr(tbuf[0])
                 value := tstr
                 delete tbuf

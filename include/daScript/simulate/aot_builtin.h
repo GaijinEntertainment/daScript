@@ -42,6 +42,7 @@ namespace das {
     int builtin_array_capacity ( const Array & arr );
     int builtin_array_lock_count ( const Array & arr );
     void builtin_array_resize ( Array & pArray, int newSize, int stride, Context * context );
+    void builtin_array_resize_no_init ( Array & pArray, int newSize, int stride, Context * context );
     void builtin_array_reserve ( Array & pArray, int newSize, int stride, Context * context );
     void builtin_array_erase ( Array & pArray, int index, int stride, Context * context ) ;
     void builtin_array_erase_range ( Array & pArray, int index, int count, int stride, Context * context ) ;
