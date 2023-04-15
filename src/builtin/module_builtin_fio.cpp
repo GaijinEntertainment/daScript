@@ -494,7 +494,7 @@ namespace das {
         return context->stringHeap->allocateString(res);
     }
 
-    char * sanitize_command_line ( const char * cmd, Context * context ) {
+    char * sanitize_command_line ( const char * cmd, Context * context, LineInfoArg * at ) {
         if ( !cmd ) return nullptr;
         stringstream ss;
         for ( const char * ch=cmd; *ch; ) {
@@ -512,7 +512,8 @@ namespace das {
                 ss.put(*ch++);
             }
         }
-        return context->stringHeap->allocateString(ss.str().data(), ss.str().size());
+        if ( ss.str().size() > UINT_MAX ) context->throw_error_at(at, "string too long");
+        return context->stringHeap->allocateString(ss.str().data(), uint32_t(ss.str().size()));
     }
 
     class Module_FIO : public Module {
@@ -623,7 +624,7 @@ namespace das {
                     ->args({"var","context"});
             addExtern<DAS_BIND_FUN(sanitize_command_line)>(*this, lib, "sanitize_command_line",
                 SideEffects::none, "sanitize_command_line")
-                    ->args({"var","context"});
+                    ->args({"var","context","at"});
             // add builtin module
             compileBuiltinModule("fio.das",fio_das, sizeof(fio_das));
             // lets verify all names
