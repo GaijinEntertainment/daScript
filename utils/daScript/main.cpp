@@ -324,7 +324,11 @@ bool compile_and_run ( const string & fn, const string & mainFnName, bool output
                     success = true;
                     auto fnTest = fnMVec.back();
                     pctx->restart();
-                    pctx->evalWithCatch(fnTest, nullptr);
+                    if ( debuggerRequired ) {
+                        pctx->eval(fnTest, nullptr);
+                    } else {
+                        pctx->evalWithCatch(fnTest, nullptr);
+                    }
                     if ( auto ex = pctx->getException() ) {
                         tout << "EXCEPTION: " << ex << " at " << pctx->exceptionAt.describe() << "\n";
                         success = false;
