@@ -103,6 +103,8 @@ let public VK_8 = GLFW_KEY_8
 let public VK_9 = GLFW_KEY_9
 let public VK_0 = GLFW_KEY_0
 let public VK_SPACE = GLFW_KEY_SPACE
+let public VK_A = GLFW_KEY_A
+let public VK_D = GLFW_KEY_D
 
 def public is_key_pressed ( key:int )
     return glfwGetKey(window, key)!=0
@@ -152,7 +154,7 @@ def public raster_app_main ( blk: block<(var back_buffer:Bitmap):void> )
         // make a texture
         glGenTextures(1, safe_addr(texture))
         glBindTexture(GL_TEXTURE_2D, texture)
-        glTexImage2D(GL_TEXTURE_2D, 0, int(GL_RGBA), bb_width, bb_height, 0, GL_BGRA, GL_UNSIGNED_BYTE, unsafe(addr(bb_data[0])))
+        glTexImage2D(GL_TEXTURE_2D, 0, int(GL_RGBA), bb_width, bb_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, unsafe(addr(bb_data[0])))
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)

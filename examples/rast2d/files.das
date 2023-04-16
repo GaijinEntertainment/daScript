@@ -1,18 +1,20 @@
-//module files private
+module files private
 
 require daslib/array_boost
 
 require fio
 require strings
 
-let files_root = "{get_das_root()}/examples/rast2d"
+let public WL6_FILES_ROOT = "{get_das_root()}/examples/rast2d"
 
-let TOTAL_LEVELS = 60
+let public SOUND_SAMPLE_RATE = 7000
+
+let public TOTAL_LEVELS = 60
 
 var rlewTag : uint16
-var mapHead : uint[100]
+var mapHead : uint[TOTAL_LEVELS]
 
-let GamePalette = [[uint
+let public GamePalette = [[uint
     0xff000000; 0xffa80000; 0xff00a800; 0xffa8a800; 0xff0000a8; 0xffa800a8; 0xff0054a8; 0xffa8a8a8;
     0xff545454; 0xfffc5454; 0xff54fc54; 0xfffcfc54; 0xff5454fc; 0xfffc54fc; 0xff54fcfc; 0xfffcfcfc;
     0xffececec; 0xffdcdcdc; 0xffd0d0d0; 0xffc0c0c0; 0xffb4b4b4; 0xffa8a8a8; 0xff989898; 0xff8c8c8c;
@@ -48,35 +50,35 @@ let GamePalette = [[uint
 
 def LoadBytes ( filename : string )
     var bytes : array<uint8>
-    fopen("{files_root}/{filename}", "rb") <| $ ( fr )
+    fopen("{WL6_FILES_ROOT}/{filename}", "rb") <| $ ( fr )
         fmap(fr) <| $ ( data )
             bytes := data
     if empty(bytes)
         panic("failed to load file: {filename}")
     return <- bytes
 
-def getUInt8 ( bytes : array<uint8>; offset : int ) : uint8
+def public getUInt8 ( bytes : array<uint8>; offset : int ) : uint8
     return bytes[offset]
 
-def getUInt8 ( bytes : array<uint8>#; offset : int ) : uint8
+def public getUInt8 ( bytes : array<uint8>#; offset : int ) : uint8
     return bytes[offset]
 
-def getUInt16 ( bytes : array<uint8>; offset : int ) : uint16
+def public getUInt16 ( bytes : array<uint8>; offset : int ) : uint16
     return uint16(uint(bytes[offset]) + (uint(bytes[offset+1]) << 8u))
 
-def getUInt16 ( bytes : array<uint8>#; offset : int ) : uint16
+def public getUInt16 ( bytes : array<uint8>#; offset : int ) : uint16
     return uint16(uint(bytes[offset]) + (uint(bytes[offset+1]) << 8u))
 
-def getUInt32 ( bytes : array<uint8>; offset : int ) : uint
+def public getUInt32 ( bytes : array<uint8>; offset : int ) : uint
     return uint(bytes[offset]) + (uint(bytes[offset+1]) << 8u) + (uint(bytes[offset+2]) << 16u) + (uint(bytes[offset+3]) << 24u)
 
-def getUInt32 ( bytes : array<uint8>#; offset : int ) : uint
+def public getUInt32 ( bytes : array<uint8>#; offset : int ) : uint
     return uint(bytes[offset]) + (uint(bytes[offset+1]) << 8u) + (uint(bytes[offset+2]) << 16u) + (uint(bytes[offset+3]) << 24u)
 
-def setUInt8 ( var bytes : array<uint8>; offset : int; value : uint8 )
+def public setUInt8 ( var bytes : array<uint8>; offset : int; value : uint8 )
     bytes[offset] = value
 
-def setUInt16 ( var bytes : array<uint8>; offset : int; value : uint16 )
+def public setUInt16 ( var bytes : array<uint8>; offset : int; value : uint16 )
     bytes[offset] = uint8(uint(value) & 0xFFu)
     bytes[offset+1] = uint8((uint(value) >> 8u) & 0xFFu)
 
@@ -145,9 +147,9 @@ def InitMapHead()
     var bytes <- LoadBytes("MAPHEAD.WL6")
     rlewTag = bytes |> getUInt16(0)
     assert(uint(rlewTag) == 0xABCD, "invalid rlew tag")
-    for i in range(100)
+    for i in range(TOTAL_LEVELS)
         mapHead[i] = bytes |> getUInt32(2 + i*4)
-    print("Loaded MAPHEAD.WL6\n")
+    to_log(LOG_INFO,"Loaded MAPHEAD.WL6\n")
 
 struct public Level
     plane0 : array<uint16>
@@ -170,7 +172,9 @@ def InitGameMap()
             array_view(bytes, int(plane1Offset), int(plane1Size)) <| $ ( plane1View )
                 var cdec <- carmackDecode(plane1View)
                 Levels[level].plane1 <- rlewDecode(cdec)
-    print("Loaded GAMEMAPS.WL6\n")
+            assert(Levels[level].plane0 |> length == 64*64, "invalid plane0 size")
+            assert(Levels[level].plane1 |> length == 64*64, "invalid plane1 size")
+    to_log(LOG_INFO,"Loaded GAMEMAPS.WL6\n")
 
 struct public WallTexture
     data : uint8[64*64]
@@ -194,14 +198,6 @@ def prepareSprite ( var sprite : SpriteTexture )
     sprite.firstCol = int(sprite.data |> getUInt16(0))
     sprite.lastCol = int(sprite.data |> getUInt16(2))
 
-/*
-UInt16LE	Total number of chunks (wall textures + sprites + sounds) in the file
-UInt16LE	Index of the first sprite chunk (= number of wall chunks)
-UInt16LE	Index of the first sound chunk (= number of wall + sprite chunks)
-UInt32LE[n]	Address at which each chunk starts (n = number of chunks)
-UInt16LE[n]	Byte length of each chunk (n = number of chunks)
-*/
-
 def InitResources()
     var bytes <- LoadBytes("VSWAP.WL6")
     let totalChunks = int(getUInt16(bytes, 0))
@@ -210,15 +206,15 @@ def InitResources()
     let firstSoundChunk = int(getUInt16(bytes, 4))
     let spriteChunks = firstSoundChunk - firstSpriteChunk
     let soundChunks = totalChunks - firstSoundChunk
-    print("total {totalChunks} chunks\n")
-    print("total {wallChunks} wall chunks, at 0\n")
-    print("total {spriteChunks} sprites, at {firstSpriteChunk}\n")
-    print("total {soundChunks} sounds, at {firstSoundChunk}\n")
+    to_log(LOG_INFO,"total {totalChunks} chunks\n")
+    to_log(LOG_INFO,"total {wallChunks} wall chunks, at 0\n")
+    to_log(LOG_INFO,"total {spriteChunks} sprites, at {firstSpriteChunk}\n")
+    to_log(LOG_INFO,"total {soundChunks} sounds, at {firstSoundChunk}\n")
     WallPics |> resize(wallChunks)
     let wallsOffset = getUInt32(bytes, 6)
     for i in range(wallChunks)
         let wallSize = int(bytes |> getUInt16(6 + totalChunks*4 + i*2))
-        //print("wall {i} offset {int(wallsOffset) + i*4096} of {wallSize} bytes\n")
+        //to_log(LOG_INFO,"wall {i} offset {int(wallsOffset) + i*4096} of {wallSize} bytes\n")
         array_view(bytes, int(wallsOffset) + i*4096, 4096) <| $ ( view )
             for s,d in view, WallPics[i].data
                 d = s
@@ -226,7 +222,7 @@ def InitResources()
     for i in range(spriteChunks)
         let spriteOffset = getUInt32(bytes, 6 + (firstSpriteChunk + i)*4)
         let spriteSize = int(bytes |> getUInt16(6 + totalChunks*4 + (firstSpriteChunk + i)*2))
-        // print("sprite {s} offset {spriteOffset} of size {spriteSize}\n")
+        // to_log(LOG_INFO,"sprite {s} offset {spriteOffset} of size {spriteSize}\n")
         array_view(bytes, int(spriteOffset), spriteSize) <| $ ( view )
             Sprites[i].data := view
             prepareSprite(Sprites[i])
@@ -235,12 +231,10 @@ def InitResources()
     for i in range(soundChunks)
         let soundOffset = getUInt32(bytes, 6 + (firstSoundChunk + i)*4)
         let soundSize = int(bytes |> getUInt16(6 + totalChunks*4 + (firstSoundChunk + i)*2))
-        // print("sound {i} offset {soundOffset} of size {soundSize}\n")
+        // to_log(LOG_INFO,"sound {i} offset {soundOffset} of size {soundSize}\n")
         array_view(bytes, int(soundOffset), soundSize) <| $ ( view )
             Sounds[i].data := view
-    print("Loaded VSWAP.WL6\n")
-
-let SOUND_SAMPLE_RATE = 7000
+    to_log(LOG_INFO,"Loaded VSWAP.WL6\n")
 
 let NUMSOUNDS = 87
 let STARTPCSOUNDS = 0
@@ -273,14 +267,14 @@ def convertPcSoundToWave ( src:array<uint8>#; hertz:int )
 def public InitAudio()
     var audioHeader <- LoadBytes("AUDIOHED.WL6")
     var audioData <- LoadBytes("AUDIOT.WL6")
-    print("total {NUMSOUNDS} sounds\n")
+    to_log(LOG_INFO,"total {NUMSOUNDS} sounds\n")
     for i in range(NUMSOUNDS)
         let offset = getUInt32(audioHeader, (i+STARTPCSOUNDS)*4)
         let size = getUInt32(audioHeader, (i+1+STARTPCSOUNDS)*4) - offset
         array_view(audioData, int(offset), int(size)) <| $ ( view )
             var snd <- [[Sound data <- convertPcSoundToWave(view, SOUND_SAMPLE_RATE)]]
             Audio |> emplace(snd)
-    print("Loaded AUDIOHED.WL6 and AUDIOT.WL6\n")
+    to_log(LOG_INFO,"Loaded AUDIOHED.WL6 and AUDIOT.WL6\n")
 
 def public InitFiles
     InitMapHead()
@@ -288,122 +282,3 @@ def public InitFiles
     InitResources()
     InitAudio()
 
-// -------------------------------------------------------------
-// save resources bellow, for debug purposes only
-
-require stbimage
-
-def save_wall_pic ( index:int )
-    let folder = "{files_root}/WALLS"
-    mkdir(folder)
-    let filename = "{folder}/wall_{index}.png"
-    var data : array<uint>
-    data |> resize(64*64)
-    for s,d in WallPics[index].data,data
-        d = GamePalette[int(s)]
-    stbi_write_png(filename, 64, 64, 4, unsafe(addr(data[0])), 64*4)
-
-def spriteDecode ( bytes : array<uint8> )
-    let firstCol = int(bytes |> getUInt16(0))
-    let lastCol = int(bytes |> getUInt16(2))
-    let nbCol = lastCol - firstCol + 1
-    var pixelPoolOffset = 4 + 2 * nbCol
-    var outView : array<uint>
-    outView |> resize(64*64)
-    for col in range(firstCol, lastCol + 1)
-        var colOffset = int(bytes |> getUInt16(4 + 2 * (col - firstCol)))
-        while true
-            let endRow = int(bytes |> getUInt16(colOffset)) / 2
-            if endRow == 0
-                break
-            let startRow = int(bytes |> getUInt16(colOffset + 4)) / 2
-            colOffset += 6
-            var outOffset = col * 64 + startRow
-            for row in range(startRow, endRow)
-                outView[outOffset] = GamePalette[int(bytes[pixelPoolOffset])]
-                outOffset ++
-                pixelPoolOffset ++
-    return <- outView
-
-def save_sprite_pic ( index:int )
-    let folder = "{files_root}/SPRITES"
-    mkdir(folder)
-    let filename = "{folder}/sprite_{index}.png"
-    var pixels <- spriteDecode(Sprites[index].data)
-    stbi_write_png(filename, 64, 64, 4, unsafe(addr(pixels[0])), 64*4)
-
-def save_level ( level:int )
-    let folder = "{files_root}/LEVELS"
-    mkdir(folder)
-    let filename = "{folder}/LEVEL_{level}.txt"
-    fopen(filename, "w") <| $ ( file )
-        if file == null
-            return
-        let txt = build_string <| $ ( writer )
-            for y in 0..64
-                for x in 0..64
-                    writer |> format("%02x", int(Levels[level].plane0[y*64+x]))
-                writer |> write("\n")
-            writer |> write("\n")
-            for y in 0..64
-                for x in 0..64
-                    writer |> format("%02x", int(Levels[level].plane1[y*64+x]))
-                writer |> write("\n")
-            writer |> write("\n")
-        file |> fwrite(txt)
-
-struct WavHeader
-    riff : uint8[4]             //  4(0)
-    totalLength : uint          //  4(4)
-    wave : uint8[8]             //  8(8)
-    lengthFormat : uint         //  4(16)
-    dataType : uint16           //  2(20)
-    channelNumbers : uint16     //  2(22)
-    sampleRate : uint           //  4(24)
-    bytesPerSecond : uint       //  4(28)
-    bytesPerSample : uint16     //  2(32)
-    bitsPerSample : uint16      //  2(34)
-    data : uint8[4]             //  4(36)
-    lengthData : uint           //  4(40)
-
-def save_sound ( snd:Sound; prefix:string; index:int )
-    static_assert(typeinfo(sizeof type<WavHeader>) == 44)
-    let folder = "{files_root}/SOUNDS"
-    mkdir(folder)
-    let filename = "{folder}/{prefix}_{index}.wav"
-    fopen(filename, "wb") <| $ ( file )
-        if file == null
-            return
-        let header = [[WavHeader
-            riff = [[uint8 'R'u8; 'I'u8; 'F'u8; 'F'u8]],
-            totalLength = uint(32 + length(snd.data)),
-            wave = [[uint8 'W'u8; 'A'u8; 'V'u8; 'E'u8; 'f'u8; 'm'u8; 't'u8; ' 'u8]],
-            lengthFormat = 16u,
-            dataType = uint16(1),
-            channelNumbers = uint16(1),
-            sampleRate = uint(SOUND_SAMPLE_RATE),
-            bytesPerSecond = uint(SOUND_SAMPLE_RATE),
-            bytesPerSample = uint16(1),
-            bitsPerSample = uint16(8),
-            data = [[uint8 'd'u8; 'a'u8; 't'u8; 'a'u8]],
-            lengthData = uint(length(snd.data))
-        ]]
-        file |> fwrite(header)
-        file |> fwrite(snd.data)
-
-def public DumpFiles
-    for i in range(WallPics |> length)
-        save_wall_pic(i)
-    for i in range(Sprites |> length)
-        save_sprite_pic(i)
-    for l in range(TOTAL_LEVELS)
-        save_level(l)
-    for i in range(Sounds |> length)
-        save_sound(Sounds[i],"sound",i)
-    for i in range(Audio |> length)
-        save_sound(Audio[i],"audio",i)
-
-[export]
-def main
-    InitFiles()
-    DumpFiles()
