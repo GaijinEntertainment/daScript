@@ -99,7 +99,7 @@ namespace das {
     }
 
     void DataWalker::walk_array ( char * pa, uint32_t stride, uint32_t count, TypeInfo * ti ) {
-        if ( !canVisitArrayData(ti) ) return;
+        if ( !canVisitArrayData(ti,count) ) return;
         char * pe = pa;
         beforeArrayData(pa, stride, count, ti);
         if ( cancel ) return;

@@ -3,82 +3,100 @@ protected:
   enum {
     __fn_canVisitHandle = 0,
     __fn_canVisitStructure = 1,
-    __fn_beforeStructure = 2,
-    __fn_afterStructure = 3,
-    __fn_afterStructureCancel = 4,
-    __fn_beforeStructureField = 5,
-    __fn_afterStructureField = 6,
-    __fn_beforeTuple = 7,
-    __fn_afterTuple = 8,
-    __fn_beforeTupleEntry = 9,
-    __fn_afterTupleEntry = 10,
-    __fn_beforeVariant = 11,
-    __fn_afterVariant = 12,
-    __fn_beforeArrayData = 13,
-    __fn_afterArrayData = 14,
-    __fn_beforeArrayElement = 15,
-    __fn_afterArrayElement = 16,
-    __fn_beforeDim = 17,
-    __fn_afterDim = 18,
-    __fn_beforeArray = 19,
-    __fn_afterArray = 20,
-    __fn_beforeTable = 21,
-    __fn_beforeTableKey = 22,
-    __fn_afterTableKey = 23,
-    __fn_beforeTableValue = 24,
-    __fn_afterTableValue = 25,
-    __fn_afterTable = 26,
-    __fn_beforeRef = 27,
-    __fn_afterRef = 28,
-    __fn_beforePtr = 29,
-    __fn_afterPtr = 30,
-    __fn_beforeHandle = 31,
-    __fn_afterHandle = 32,
-    __fn_beforeLambda = 33,
-    __fn_afterLambda = 34,
-    __fn_beforeIterator = 35,
-    __fn_afterIterator = 36,
-    __fn_Null = 37,
-    __fn_VoidPtr = 38,
-    __fn_Bool = 39,
-    __fn_Int8 = 40,
-    __fn_UInt8 = 41,
-    __fn_Int16 = 42,
-    __fn_UInt16 = 43,
-    __fn_Int64 = 44,
-    __fn_UInt64 = 45,
-    __fn_String = 46,
-    __fn_Double = 47,
-    __fn_Float = 48,
-    __fn_Int = 49,
-    __fn_UInt = 50,
-    __fn_Bitfield = 51,
-    __fn_Int2 = 52,
-    __fn_Int3 = 53,
-    __fn_Int4 = 54,
-    __fn_UInt2 = 55,
-    __fn_UInt3 = 56,
-    __fn_UInt4 = 57,
-    __fn_Float2 = 58,
-    __fn_Float3 = 59,
-    __fn_Float4 = 60,
-    __fn_Range = 61,
-    __fn_URange = 62,
-    __fn_Range64 = 63,
-    __fn_URange64 = 64,
-    __fn_WalkBlock = 65,
-    __fn_WalkFunction = 66,
-    __fn_WalkEnumeration = 67,
-    __fn_WalkEnumeration8 = 68,
-    __fn_WalkEnumeration16 = 69,
-    __fn_FakeContext = 70,
+    __fn_canVisitArray = 2,
+    __fn_canVisitArrayData = 3,
+    __fn_canVisitTuple = 4,
+    __fn_canVisitVariant = 5,
+    __fn_canVisitTable = 6,
+    __fn_canVisitTableData = 7,
+    __fn_canVisitPointer = 8,
+    __fn_canVisitLambda = 9,
+    __fn_canVisitIterator = 10,
+    __fn_beforeStructure = 11,
+    __fn_afterStructure = 12,
+    __fn_afterStructureCancel = 13,
+    __fn_beforeStructureField = 14,
+    __fn_afterStructureField = 15,
+    __fn_beforeTuple = 16,
+    __fn_afterTuple = 17,
+    __fn_beforeTupleEntry = 18,
+    __fn_afterTupleEntry = 19,
+    __fn_beforeVariant = 20,
+    __fn_afterVariant = 21,
+    __fn_beforeArrayData = 22,
+    __fn_afterArrayData = 23,
+    __fn_beforeArrayElement = 24,
+    __fn_afterArrayElement = 25,
+    __fn_beforeDim = 26,
+    __fn_afterDim = 27,
+    __fn_beforeArray = 28,
+    __fn_afterArray = 29,
+    __fn_beforeTable = 30,
+    __fn_beforeTableKey = 31,
+    __fn_afterTableKey = 32,
+    __fn_beforeTableValue = 33,
+    __fn_afterTableValue = 34,
+    __fn_afterTable = 35,
+    __fn_beforeRef = 36,
+    __fn_afterRef = 37,
+    __fn_beforePtr = 38,
+    __fn_afterPtr = 39,
+    __fn_beforeHandle = 40,
+    __fn_afterHandle = 41,
+    __fn_beforeLambda = 42,
+    __fn_afterLambda = 43,
+    __fn_beforeIterator = 44,
+    __fn_afterIterator = 45,
+    __fn_Null = 46,
+    __fn_VoidPtr = 47,
+    __fn_Bool = 48,
+    __fn_Int8 = 49,
+    __fn_UInt8 = 50,
+    __fn_Int16 = 51,
+    __fn_UInt16 = 52,
+    __fn_Int64 = 53,
+    __fn_UInt64 = 54,
+    __fn_String = 55,
+    __fn_Double = 56,
+    __fn_Float = 57,
+    __fn_Int = 58,
+    __fn_UInt = 59,
+    __fn_Bitfield = 60,
+    __fn_Int2 = 61,
+    __fn_Int3 = 62,
+    __fn_Int4 = 63,
+    __fn_UInt2 = 64,
+    __fn_UInt3 = 65,
+    __fn_UInt4 = 66,
+    __fn_Float2 = 67,
+    __fn_Float3 = 68,
+    __fn_Float4 = 69,
+    __fn_Range = 70,
+    __fn_URange = 71,
+    __fn_Range64 = 72,
+    __fn_URange64 = 73,
+    __fn_WalkBlock = 74,
+    __fn_WalkFunction = 75,
+    __fn_WalkEnumeration = 76,
+    __fn_WalkEnumeration8 = 77,
+    __fn_WalkEnumeration16 = 78,
+    __fn_FakeContext = 79,
   };
 protected:
-  int _das_class_method_offset[71];
+  int _das_class_method_offset[80];
 public:
   DapiDataWalker_Adapter ( const StructInfo * info ) {
       _das_class_method_offset[__fn_canVisitHandle] = adapt_field_offset("canVisitHandle",info);
       _das_class_method_offset[__fn_canVisitStructure] = adapt_field_offset("canVisitStructure",info);
+      _das_class_method_offset[__fn_canVisitArray] = adapt_field_offset("canVisitArray",info);
+      _das_class_method_offset[__fn_canVisitArrayData] = adapt_field_offset("canVisitArrayData",info);
+      _das_class_method_offset[__fn_canVisitTuple] = adapt_field_offset("canVisitTuple",info);
+      _das_class_method_offset[__fn_canVisitVariant] = adapt_field_offset("canVisitVariant",info);
+      _das_class_method_offset[__fn_canVisitTable] = adapt_field_offset("canVisitTable",info);
+      _das_class_method_offset[__fn_canVisitTableData] = adapt_field_offset("canVisitTableData",info);
+      _das_class_method_offset[__fn_canVisitPointer] = adapt_field_offset("canVisitPointer",info);
+      _das_class_method_offset[__fn_canVisitLambda] = adapt_field_offset("canVisitLambda",info);
+      _das_class_method_offset[__fn_canVisitIterator] = adapt_field_offset("canVisitIterator",info);
       _das_class_method_offset[__fn_beforeStructure] = adapt_field_offset("beforeStructure",info);
       _das_class_method_offset[__fn_afterStructure] = adapt_field_offset("afterStructure",info);
       _das_class_method_offset[__fn_afterStructureCancel] = adapt_field_offset("afterStructureCancel",info);
@@ -166,6 +184,87 @@ public:
       <void *,void * const ,StructInfo const  &>
         (__context__,nullptr,__funcCall__,
           self,ps,si);
+  }
+  __forceinline Func get_canVisitArray ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_canVisitArray]);
+  }
+  __forceinline bool invoke_canVisitArray ( Context * __context__, Func __funcCall__, void * self, void * const  pa, TypeInfo const  & ti ) const {
+    return das_invoke_function<bool>::invoke
+      <void *,void * const ,TypeInfo const  &>
+        (__context__,nullptr,__funcCall__,
+          self,pa,ti);
+  }
+  __forceinline Func get_canVisitArrayData ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_canVisitArrayData]);
+  }
+  __forceinline bool invoke_canVisitArrayData ( Context * __context__, Func __funcCall__, void * self, TypeInfo const  & ti, uint32_t count ) const {
+    return das_invoke_function<bool>::invoke
+      <void *,TypeInfo const  &>
+        (__context__,nullptr,__funcCall__,
+          self,ti,count);
+  }
+  __forceinline Func get_canVisitTuple ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_canVisitTuple]);
+  }
+  __forceinline bool invoke_canVisitTuple ( Context * __context__, Func __funcCall__, void * self, void * const  ps, TypeInfo const  & ti ) const {
+    return das_invoke_function<bool>::invoke
+      <void *,void * const ,TypeInfo const  &>
+        (__context__,nullptr,__funcCall__,
+          self,ps,ti);
+  }
+  __forceinline Func get_canVisitVariant ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_canVisitVariant]);
+  }
+  __forceinline bool invoke_canVisitVariant ( Context * __context__, Func __funcCall__, void * self, void * const  ps, TypeInfo const  & ti ) const {
+    return das_invoke_function<bool>::invoke
+      <void *,void * const ,TypeInfo const  &>
+        (__context__,nullptr,__funcCall__,
+          self,ps,ti);
+  }
+  __forceinline Func get_canVisitTable ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_canVisitTable]);
+  }
+  __forceinline bool invoke_canVisitTable ( Context * __context__, Func __funcCall__, void * self, void * const  ps, TypeInfo const  & ti ) const {
+    return das_invoke_function<bool>::invoke
+      <void *,void * const ,TypeInfo const  &>
+        (__context__,nullptr,__funcCall__,
+          self,ps,ti);
+  }
+  __forceinline Func get_canVisitTableData ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_canVisitTableData]);
+  }
+  __forceinline bool invoke_canVisitTableData ( Context * __context__, Func __funcCall__, void * self, TypeInfo const  & ti ) const {
+    return das_invoke_function<bool>::invoke
+      <void *,TypeInfo const  &>
+        (__context__,nullptr,__funcCall__,
+          self,ti);
+  }
+  __forceinline Func get_canVisitPointer ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_canVisitPointer]);
+  }
+  __forceinline bool invoke_canVisitPointer ( Context * __context__, Func __funcCall__, void * self, TypeInfo const  & ti ) const {
+    return das_invoke_function<bool>::invoke
+      <void *,TypeInfo const  &>
+        (__context__,nullptr,__funcCall__,
+          self,ti);
+  }
+  __forceinline Func get_canVisitLambda ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_canVisitLambda]);
+  }
+  __forceinline bool invoke_canVisitLambda ( Context * __context__, Func __funcCall__, void * self, TypeInfo const  & ti ) const {
+    return das_invoke_function<bool>::invoke
+      <void *,TypeInfo const  &>
+        (__context__,nullptr,__funcCall__,
+          self,ti);
+  }
+  __forceinline Func get_canVisitIterator ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_canVisitIterator]);
+  }
+  __forceinline bool invoke_canVisitIterator ( Context * __context__, Func __funcCall__, void * self, TypeInfo const  & ti ) const {
+    return das_invoke_function<bool>::invoke
+      <void *,TypeInfo const  &>
+        (__context__,nullptr,__funcCall__,
+          self,ti);
   }
   __forceinline Func get_beforeStructure ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_beforeStructure]);

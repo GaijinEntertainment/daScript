@@ -161,7 +161,7 @@ namespace das
             popRange();
             DataWalker::afterDim(pa,ti);
         }
-        virtual bool canVisitArrayData ( TypeInfo * ti ) override {
+        virtual bool canVisitArrayData ( TypeInfo * ti, uint32_t ) override {
             return (ti->flags | gcAlways) & gcFlags;
         }
         virtual void beforeArray ( Array * PA, TypeInfo * ti ) override {
@@ -496,7 +496,7 @@ namespace das
         virtual void afterHandle ( char *, TypeInfo * ) override {
             visited_handles.pop_back();
         }
-        virtual bool canVisitArrayData ( TypeInfo * ti ) override {
+        virtual bool canVisitArrayData ( TypeInfo * ti, uint32_t ) override {
             return (ti->flags & TypeInfo::flag_stringHeapGC);
         }
         virtual void String ( char * & st ) override {
@@ -661,7 +661,7 @@ namespace das
             popRange();
             DataWalker::afterDim(pa,ti);
         }
-        virtual bool canVisitArrayData ( TypeInfo * ti ) override {
+        virtual bool canVisitArrayData ( TypeInfo * ti, uint32_t ) override {
             return ti->flags & gcFlags;
         }
         virtual void beforeArray ( Array * PA, TypeInfo * ti ) override {

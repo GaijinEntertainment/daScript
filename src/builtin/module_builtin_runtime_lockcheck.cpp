@@ -13,7 +13,7 @@ namespace das
         virtual bool canVisitArray ( Array * ar, TypeInfo * ) override {
             return !ar->forego_lock_check;
         }
-        virtual bool canVisitArrayData ( TypeInfo * ti ) override {
+        virtual bool canVisitArrayData ( TypeInfo * ti, uint32_t ) override {
             return (ti->flags & TypeInfo::flag_lockCheck) == TypeInfo::flag_lockCheck;
         }
         virtual bool canVisitTable ( char * pa, TypeInfo * ) override {
