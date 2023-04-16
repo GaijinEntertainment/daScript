@@ -1,6 +1,7 @@
 module game
 
 require files
+require app
 
 require daslib/algorithm
 require math
@@ -14,6 +15,76 @@ struct public Score
     totalSecrets : int
 
 var public score : Score
+
+struct public Animation
+    sprites : array<int>
+    spriteIndex : int
+    timer : int
+    loop : bool
+    active : bool
+
+struct public Thing
+    x, y : float
+    rx, ry : float
+    spriteIndex : int
+    collectible : bool
+    orientable : bool
+    blocking : bool
+    animation : Animation
+// enemy
+    direction : int
+    alive : bool = true
+
+def update ( var self:Thing )
+    self.rx = self.x - player.x
+    self.ry = self.y - player.y
+    let rx = self.rx * player.dx + self.ry * player.dy
+    self.ry = -self.rx * player.dy + self.ry * player.dx
+    self.rx = rx
+    if self.animation.active
+        self.animation.timer += 1
+        if self.animation.timer >= 8
+            self.animation.timer = 0
+            if self.animation.spriteIndex >= self.animation.sprites |> length - 1
+                if self.animation.loop
+                    // animation loops
+                    self.animation.spriteIndex = 0
+                else
+                    // animation ended
+                    self.animation.active = false
+            else
+                self.animation.spriteIndex += 1
+            self.spriteIndex = self.animation.sprites[self.animation.spriteIndex]
+
+
+/*
+       this.rx = this.x - player.x;
+        this.ry = this.y - player.y;
+        let rx = this.rx * player.dx + this.ry * player.dy;
+        this.ry = -this.rx * player.dy + this.ry * player.dx;
+        this.rx = rx;
+
+        if (this.animation !== undefined) {
+            let a = this.animation;
+            a.timer += 1;
+            if (a.timer >= 8) {
+                a.timer = 0;
+                if (a.spriteIndex >= a.sprites.length - 1) {
+                    if (a.loop) {
+                        // animation loops
+                        a.spriteIndex = 0;
+                    } else {
+                        // animation ended
+                        this.animation = undefined;
+                    }
+                } else {
+                    a.spriteIndex += 1;
+                }
+                this.spriteIndex = a.sprites[a.spriteIndex];
+            }
+        }
+    }
+*/
 
 struct public Player
     x, y : float
@@ -52,7 +123,6 @@ struct public DoorTimer
     x, y : int
     opening : bool
     t : float
-    steps : int
     active : bool
 
 var public doorTimers : array<DoorTimer>
@@ -244,8 +314,6 @@ def turn ( var self:Player; alpha:float )
     self.dy = self.dx * sin(alpha) + self.dy * cos(alpha)
     self.dx = dx
 
-require app_opengl_glfw
-
 def update ( var self:Player )
     var changed = false
     if is_key_pressed(VK_RIGHT)
@@ -331,11 +399,9 @@ def activate
                     (dx<0 && player.x-float(x)-1.<=player.radius) ||
                     (dy>0 && float(y)-player.y<=player.radius) ||
                     (dy<0 && player.y-float(y)-1.<=player.radius))
-                    print("player too close\n")
                     return
                 else
                     plane2[y*64+x] = true
-            print("adding door timer\n")
             doorTimers |> push <| [[DoorTimer
                 x = x,
                 y = y,
@@ -373,10 +439,9 @@ def updateDoorTimers
     for timer,i in doorTimers,count()
         timer.t += 1.
         if timer.t >= 64.
-            rem |> push(i)
-            timer.active = false
             if timer.opening
                 plane2[timer.y*64+timer.x] = false
+            rem |> push(i)
     rem |> reverse
     for i in rem
         doorTimers |> erase(i)

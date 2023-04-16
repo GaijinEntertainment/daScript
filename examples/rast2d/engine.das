@@ -9,7 +9,7 @@ require math
 
 let fov = 1.
 
-def drawWalls ( level:Level; var bmp:Bitmap )
+def drawWalls ( level:Level; var bmp:Bitmap8 )
     let pixelWidth = float(bmp.size.x)
     for i in range(bmp.size.x)
         // cast a ray for each screen column
@@ -215,7 +215,7 @@ def drawWalls ( level:Level; var bmp:Bitmap )
 var zIndex : array<float>
 
 [jit,hint(unsafe_range_check,noalias=tex,noalias=bmp)]
-def drawWallPixels ( i:int; t,tx:float; tex:WallTexture; var bmp:Bitmap )
+def drawWallPixels ( i:int; t,tx:float; tex:WallTexture; var bmp:Bitmap8 )
     let pixelWidth = float(bmp.size.x)
     let pixelHeight = float(bmp.size.y)
     let wallHeight = float(pixelWidth) / (2. * fov)
@@ -232,7 +232,7 @@ def drawWallPixels ( i:int; t,tx:float; tex:WallTexture; var bmp:Bitmap )
             bmp.data[(bmp.size.y-1-j)*bmp.size.x + i] = GamePalette[25]
         */
         for j in range(texelOffset,texelOffset+64)
-            let col = GamePalette[int(tex.data[j])]
+            let col = tex.data[j]
             yf += stepf
             if yf >= 1.
                 for k in range(max(yi,0),min(yi+stepi+1,bmp.size.y))
@@ -244,15 +244,15 @@ def drawWallPixels ( i:int; t,tx:float; tex:WallTexture; var bmp:Bitmap )
                     bmp.data[(k             )*bmp.size.x + i] = col
                 yi += stepi
 
-def drawBackground ( var bmp:Bitmap )
+def drawBackground ( var bmp:Bitmap8 )
     var ScreenWidth = bmp.size.x
     var ScreenHeight = bmp.size.y
     var CenterX = ScreenWidth / 2
     var CenterY = ScreenHeight / 2
-    fill_rect(bmp, 0, 0, ScreenWidth, CenterY, GamePalette[29])
-    fill_rect(bmp, 0, CenterY, ScreenWidth, ScreenHeight - CenterY, GamePalette[25])
+    fill_rect(bmp, 0, 0, ScreenWidth, CenterY, 29u8) // darker grey
+    fill_rect(bmp, 0, CenterY, ScreenWidth, ScreenHeight - CenterY, 25u8) // lighter grey
 
-def public draw ( level:Level; var bmp:Bitmap )
+def public draw ( level:Level; var bmp:Bitmap8 )
     zIndex |> resize(bmp.size.x)
     drawBackground(bmp)
     drawWalls(level, bmp)

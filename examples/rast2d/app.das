@@ -1,4 +1,4 @@
-module app_opengl_glfw private
+module app private
 
 require rast2d public
 
@@ -13,6 +13,7 @@ var [[in, location=0]] v_position : float2
 var [[in, location=2]] v_texcoord : float2
 var [[inout]] f_texcoord : float2
 var [[uniform]] f_tex : sampler2D
+var [[uniform]] f_palette : float4[256]
 var [[out]] f_FragColor : float4
 
 [vertex_program]
@@ -22,7 +23,9 @@ def vs_main
 
 [fragment_program]
 def fs_main
-    f_FragColor = texture(f_tex,f_texcoord)
+    let index = int(texture(f_tex,f_texcoord).x*255.0)
+    let color = f_palette[index]
+    f_FragColor = color
 
 var program : uint
 var vao : uint
@@ -47,7 +50,7 @@ let indices = [[int 0; 1; 2; 2; 3; 0]]
 
 var bb_width = 0
 var bb_height = 0
-var bb_data : array<uint>
+var bb_data : array<uint8>
 
 def public get_screen_size
     return int2(bb_width,bb_height)
@@ -114,7 +117,11 @@ var dt_sec = 0.0lf
 def public get_delta_time_sec
     return float(dt_sec)
 
-def public raster_app_main ( blk: block<(var back_buffer:Bitmap):void> )
+def public set_palette ( pal : uint[256 ])
+    for d,s in f_palette, pal
+        d = unpack_byte_to_float(s) / float4(255.)
+
+def public raster_app_main ( blk: block<(var back_buffer:Bitmap8):void> )
     if glfwInit()==0
 		panic("can't init glfw")
     defer <|
@@ -144,17 +151,17 @@ def public raster_app_main ( blk: block<(var back_buffer:Bitmap):void> )
         glfwGetFramebufferSize(window, display_w, display_h)
         update_bb(display_w, display_h)
         // callbakc
-        var bmp = [[Bitmap size=int2(bb_width,bb_height), data=unsafe(addr(bb_data[0]))]]
+        var bmp = [[Bitmap8 size=int2(bb_width,bb_height), data=unsafe(addr(bb_data[0]))]]
         let t0 = ref_time_ticks()
         invoke(blk, bmp)
         let dt = get_time_usec(t0)
         msecs = msecs*0.95 + float(dt/100)*0.05
         let it  = int(msecs)
-        glfwSetWindowTitle(window, "RASTER2D {bb_width}x{bb_height} frame:{dt_frame/1000}ms rast:{it/10}.{it%10}ms")
+        glfwSetWindowTitle(window, "{bb_width}x{bb_height} frame:{dt_frame/1000}ms rast:{it/10}.{it%10}ms")
         // make a texture
         glGenTextures(1, safe_addr(texture))
         glBindTexture(GL_TEXTURE_2D, texture)
-        glTexImage2D(GL_TEXTURE_2D, 0, int(GL_RGBA), bb_width, bb_height, 0, GL_RGBA, GL_UNSIGNED_BYTE, unsafe(addr(bb_data[0])))
+        glTexImage2D(GL_TEXTURE_2D, 0, int(GL_R8), bb_width, bb_height, 0, GL_RED, GL_UNSIGNED_BYTE, unsafe(addr(bb_data[0])))
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
