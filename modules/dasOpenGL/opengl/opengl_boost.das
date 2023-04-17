@@ -94,6 +94,9 @@ def glUniformAny ( location:int; value:float3 )
 def glUniformAny ( location:int; value:float4 )
     glUniform4fv(location, 1, unsafe(addr(value.x)))
 
+def glUniformAny ( location:int; value:float4[] )
+    glUniform4fv(location, length(value), unsafe(addr(value[0].x)))
+
 def glUniformAny ( location:int; value:float4x4 )
     glUniformMatrix4fv(location, value)
 

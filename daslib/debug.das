@@ -133,6 +133,9 @@ def private bytes_hr(value : uint64)
 
 
 class DAWalker: DapiDataWalker
+
+    childrenMax: uint = 500u
+
     varsStack: array<DAVariable?>
     [[do_not_delete]] frame: DAStackFrame?
     visited: array<tuple<ps: void?; hash: uint64>>
@@ -189,8 +192,8 @@ class DAWalker: DapiDataWalker
             var v & = unsafe(varsStack[n - 1])
             if v.children == null
                 var ti = type_info(vi)
-                v.value = sprint_data(pv, ti, print_flags_debug)
-            elif empty(v.value)
+                v.value = sprint_data_fast(pv, ti, print_flags_debug)
+            if empty(v.value)
                 v.value = v._type
         self->popStack()
 
@@ -216,6 +219,17 @@ class DAWalker: DapiDataWalker
             if empty(v.value)
                 v.value = v._type
 
+    def override canVisitArray(ps: void?; ti: TypeInfo): bool
+        let arr = unsafe(reinterpret<DapiArray?> ps)
+        if arr.size > childrenMax
+            return false
+        return true
+
+    def override canVisitArrayData(ti: TypeInfo; count:uint): bool
+        if count > childrenMax
+            return false
+        return true
+
     def override beforeArrayData(ps: void?; stride: uint; count: uint; ti:TypeInfo): void
         let n = length(varsStack)
         if n > 0
@@ -237,8 +251,8 @@ class DAWalker: DapiDataWalker
             var v & = unsafe(varsStack[n - 1])
             if v.children == null
                 unsafe
-                    v.value = sprint_data(pe, addr(ti), print_flags_debug)
-            elif empty(v.value)
+                    v.value = sprint_data_fast(pe, addr(ti), print_flags_debug)
+            if empty(v.value)
                 v.value = v._type
         self->popStack()
 
@@ -246,6 +260,10 @@ class DAWalker: DapiDataWalker
         let n = length(varsStack)
         if n > 0
             var v & = unsafe(varsStack[n - 1])
+            if count > 500u
+                print("IN VARIABLE {v.name} TOO MANY ELEMENTS {int64(count)}\n")
+                assert(false)
+
             if v.children != null
                 let preview = join(*v.children, inlinePreviewLimit - 5)
                 if !empty(preview)
@@ -258,6 +276,12 @@ class DAWalker: DapiDataWalker
         if n > 0
             var v & = unsafe(varsStack[n - 1])
             v.indexedVariables = pa.size
+
+    def override canVisitTable (ps: void?; ti: TypeInfo): bool
+        let pa = unsafe(reinterpret<DapiTable?> ps)
+        if pa.size > childrenMax
+            return false
+        return true
 
     def override beforeTableKey(pa: DapiTable; ti: TypeInfo; pk: void?; ki: TypeInfo; index: uint; last: bool): void
         self->startCont()
@@ -280,8 +304,8 @@ class DAWalker: DapiDataWalker
             var v & = unsafe(varsStack[n - 1])
             if v.children == null
                 unsafe
-                    v.value = sprint_data(pv, addr(kv), print_flags_debug)
-            elif empty(v.value)
+                    v.value = sprint_data_fast(pv, addr(kv), print_flags_debug)
+            if empty(v.value)
                 v.value = v._type
         self->popStack()
 
@@ -316,8 +340,8 @@ class DAWalker: DapiDataWalker
             var v & = unsafe(varsStack[n - 1])
             if v.children == null
                 unsafe
-                    v.value = sprint_data(pv, addr(vi), print_flags_debug)
-            elif empty(v.value)
+                    v.value = sprint_data_fast(pv, addr(vi), print_flags_debug)
+            if empty(v.value)
                 v.value = v._type
         self->popStack()
 
@@ -491,8 +515,8 @@ class private DAStackWalker: DapiStackWalker
                     dataWalkerAdapter |> walk_data(value, *ti)
 
             if global.children == null
-                global.value = sprint_data(value, ti, print_flags_debug)
-            elif empty(global.value)
+                global.value = sprint_data_fast(value, ti, print_flags_debug)
+            if empty(global.value)
                 global.value = global._type
 
             frame.globals |> emplace(global)
@@ -540,7 +564,7 @@ class private DAStackWalker: DapiStackWalker
                     dataWalkerAdapter |> walk_data(arg, *ti)
 
             if variable.children == null
-                let value = !inScope ? "<uninitialized>" : arg != null ? sprint_data(arg, ti, print_flags_debug): "<optimized>"
+                let value = !inScope ? "<uninitialized>" : arg != null ? sprint_data_fast(arg, ti, print_flags_debug): "<optimized>"
                 variable.value = value
             elif empty(variable.value)
                 variable.value = variable._type
@@ -558,8 +582,8 @@ class private DAStackWalker: DapiStackWalker
                     dataWalkerAdapter |> walk_data(arg, *ti)
 
             if variable.children == null
-                variable.value = sprint_data(arg, ti, print_flags_debug)
-            elif empty(variable.value)
+                variable.value = sprint_data_fast(arg, ti, print_flags_debug)
+            if empty(variable.value)
                 variable.value = variable._type
 
             frame.arguments |> emplace(variable)
@@ -938,7 +962,7 @@ class private DAgent: DapiDebugAgent
                     walker.dataWalkerAdapter |> walk_data(data, info)
                 if variable.children == null
                     unsafe
-                        variable.value = sprint_data(data, addr(info), print_flags_debug)
+                        variable.value = sprint_data_fast(data, addr(info), print_flags_debug)
                 if empty(variable.value)
                     variable.value = variable._type
 
@@ -1855,3 +1879,8 @@ def private loads_itself(): bool
         if args[i] |> ends_with("daslib\\debug.das") || args[i] |> ends_with("daslib/debug.das")
             return true
     return false
+
+def private sprint_data_fast(data:void?|float4; info:TypeInfo const?; flags:print_flags): string
+    if info.basicType==Type tArray || info.basicType==Type tTable
+        return ""
+    return sprint_data(data, info, flags)

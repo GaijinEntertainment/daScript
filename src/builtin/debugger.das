@@ -74,6 +74,15 @@ struct DapiSequence
 class DapiDataWalker
     def abstract canVisitHandle ( ps:void?; ti:TypeInfo ) : bool
     def abstract canVisitStructure ( ps:void?; si:StructInfo ) : bool
+    def abstract canVisitArray ( pa:void?; ti:TypeInfo ) : bool
+    def abstract canVisitArrayData ( ti:TypeInfo; count:uint ) : bool
+    def abstract canVisitTuple ( ps:void?; ti:TypeInfo ) : bool
+    def abstract canVisitVariant ( ps:void?; ti:TypeInfo ) : bool
+    def abstract canVisitTable ( ps:void?; ti:TypeInfo ) : bool
+    def abstract canVisitTableData ( ti:TypeInfo ) : bool
+    def abstract canVisitPointer ( ti:TypeInfo ) : bool
+    def abstract canVisitLambda ( ti:TypeInfo ) : bool
+    def abstract canVisitIterator ( ti:TypeInfo ) : bool
     def abstract beforeStructure ( ps:void?; si:StructInfo ) : void
     def abstract afterStructure ( ps:void?; si:StructInfo ) : void
     def abstract afterStructureCancel ( ps:void?; si:StructInfo ) : void

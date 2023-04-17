@@ -207,6 +207,13 @@ namespace debugapi {
                 invoke_afterStructureField(context,fn_afterStructureField,classPtr,ps,*si,pv,*vi,last);
             }
         }
+        virtual bool canVisitTuple ( char * ps, TypeInfo * ti ) override {
+            if ( auto fn_canVisitTuple = get_canVisitTuple(classPtr) ) {
+                return invoke_canVisitTuple(context,fn_canVisitTuple,classPtr,ps,*ti);
+            } else {
+                return true;
+            }
+        }
         virtual void beforeTuple ( char * ps, TypeInfo * ti ) override {
             if ( auto fn_beforeTuple = get_beforeTuple(classPtr) ) {
                 invoke_beforeTuple(context,fn_beforeTuple,classPtr,ps,*ti);
@@ -227,6 +234,13 @@ namespace debugapi {
                 invoke_afterTupleEntry(context,fn_afterTupleEntry,classPtr,ps,*ti,pv,*vi,last);
             }
         }
+        virtual bool canVisitVariant ( char * ps, TypeInfo * ti ) override {
+            if ( auto fn_canVisitVariant = get_canVisitVariant(classPtr) ) {
+                return invoke_canVisitVariant(context,fn_canVisitVariant,classPtr,ps,*ti);
+            } else {
+                return true;
+            }
+        }
         virtual void beforeVariant ( char * ps, TypeInfo * ti ) override {
             if ( auto fn_beforeVariant = get_beforeVariant(classPtr) ) {
                 invoke_beforeVariant(context,fn_beforeVariant,classPtr,ps,*ti);
@@ -235,6 +249,20 @@ namespace debugapi {
         virtual void afterVariant ( char * ps, TypeInfo * ti ) override {
             if ( auto fn_afterVariant = get_afterVariant(classPtr) ) {
                 invoke_afterVariant(context,fn_afterVariant,classPtr,ps,*ti);
+            }
+        }
+        virtual bool canVisitArray ( Array * pa, TypeInfo * ti ) override {
+            if ( auto fn_canVisitArray = get_canVisitArray(classPtr) ) {
+                return invoke_canVisitArray(context,fn_canVisitArray,classPtr,pa,*ti);
+            } else {
+                return true;
+            }
+        }
+        virtual bool canVisitArrayData ( TypeInfo * ti, uint32_t count ) override {
+            if ( auto fn_canVisitArrayData = get_canVisitArrayData(classPtr) ) {
+                return invoke_canVisitArrayData(context,fn_canVisitArrayData,classPtr,*ti,count);
+            } else {
+                return true;
             }
         }
         virtual void beforeArrayData ( char * pa, uint32_t stride, uint32_t count, TypeInfo * ti ) override {
@@ -277,6 +305,20 @@ namespace debugapi {
                 invoke_afterArray(context,fn_afterArray,classPtr,*pa,*ti);
             }
         }
+        virtual bool canVisitTable ( char * pa, TypeInfo * ti ) override {
+            if ( auto fn_canVisitTable = get_canVisitTable(classPtr) ) {
+                return invoke_canVisitTable(context,fn_canVisitTable,classPtr,pa,*ti);
+            } else {
+                return true;
+            }
+        }
+        virtual bool canVisitTableData ( TypeInfo * ti ) override {
+            if ( auto fn_canVisitTableData = get_canVisitTableData(classPtr) ) {
+                return invoke_canVisitTableData(context,fn_canVisitTableData,classPtr,*ti);
+            } else {
+                return true;
+            }
+        }
         virtual void beforeTable ( Table * pa, TypeInfo * ti ) override {
            if ( auto fn_beforeTable = get_beforeTable(classPtr) ) {
                 invoke_beforeTable(context,fn_beforeTable,classPtr,*pa,*ti);
@@ -317,6 +359,13 @@ namespace debugapi {
                 invoke_afterRef(context,fn_afterRef,classPtr,pa,*ti);
             }
         }
+        virtual bool canVisitPointer ( TypeInfo * ti ) override {
+           if ( auto fn_canVisitPointer = get_canVisitPointer(classPtr) ) {
+                return invoke_canVisitPointer(context,fn_canVisitPointer,classPtr,*ti);
+            } else {
+                return true;
+            }
+        }
         virtual void beforePtr ( char * pa, TypeInfo * ti ) override {
            if ( auto fn_beforePtr = get_beforePtr(classPtr) ) {
                 invoke_beforePtr(context,fn_beforePtr,classPtr,pa,*ti);
@@ -337,6 +386,13 @@ namespace debugapi {
                 invoke_afterHandle(context,fn_afterHandle,classPtr,pa,*ti);
             }
         }
+        virtual bool canVisitLambda ( TypeInfo * ti ) override {
+           if ( auto fn_canVisitLambda = get_canVisitLambda(classPtr) ) {
+                return invoke_canVisitLambda(context,fn_canVisitLambda,classPtr,*ti);
+            } else {
+                return true;
+            }
+        }
         virtual void beforeLambda ( Lambda * pa, TypeInfo * ti ) override {
            if ( auto fn_beforeLambda = get_beforeLambda(classPtr) ) {
                 invoke_beforeLambda(context,fn_beforeLambda,classPtr,*pa,*ti);
@@ -345,6 +401,13 @@ namespace debugapi {
         virtual void afterLambda ( Lambda * pa, TypeInfo * ti ) override {
            if ( auto fn_afterLambda = get_afterLambda(classPtr) ) {
                 invoke_afterLambda(context,fn_afterLambda,classPtr,*pa,*ti);
+            }
+        }
+        virtual bool canVisitIterator ( TypeInfo * ti ) override {
+           if ( auto fn_canVisitIterator = get_canVisitIterator(classPtr) ) {
+                return invoke_canVisitIterator(context,fn_canVisitIterator,classPtr,*ti);
+            } else {
+                return true;
             }
         }
         virtual void beforeIterator ( Sequence * pa, TypeInfo * ti ) override {

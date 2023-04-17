@@ -1,6 +1,7 @@
 module game
 
 require files
+require app
 
 require daslib/algorithm
 require math
@@ -15,7 +16,135 @@ struct public Score
 
 var public score : Score
 
-struct public Player
+def updateScore
+    pass
+
+class public Animation
+    sprites : array<int>
+    spriteIndex : int
+    timer : int
+    loop : bool
+
+    def Animation ( SPRITES:array<int>; LOOP:bool = false )
+        sprites := SPRITES
+        spriteIndex = 0
+        timer = 0
+        loop = LOOP
+
+class public Thing
+    x, y : float                // starting x,y-coordinate on map
+    rx, ry : float              // relative to player x,y-coordinate on map
+    spriteIndex : int
+    collectible : bool          // can be picked up
+    orientable : bool           // different sprites based on orientation
+    blocking : bool             // blocks movement
+    animation : Animation?      // sprite animation ar regular intervals
+    direction : int
+
+    def Thing(X,Y:int; SPRITEINDEX:int; COLLECTIBLE:bool = false; ORIENTABLE:bool = false; BLOCKING:bool = false)
+        x = float(X) + 0.5
+        y = float(Y) + 0.5
+        spriteIndex = SPRITEINDEX
+        collectible = COLLECTIBLE
+        orientable = ORIENTABLE
+        blocking = BLOCKING
+
+    def startAnimation ( ANIMATION:Animation? )
+        animation = ANIMATION
+        spriteIndex = animation.sprites[0]
+
+    def update
+        rx = x - player.x
+        ry = y - player.y
+        let RX = rx * player.dx + ry * player.dy
+        ry = -rx * player.dy + ry * player.dx
+        rx = RX
+        if animation != null
+            animation.timer ++
+            if animation.timer >= 8
+                animation.timer = 0
+                if animation.spriteIndex >= animation.sprites |> length - 1
+                    if animation.loop
+                        // animation loops
+                        animation.spriteIndex = 0
+                    else
+                        // animation ended (delete?)
+                        unsafe
+                            delete animation
+                        animation = null
+
+                else
+                    animation.spriteIndex += 1
+                spriteIndex = animation.sprites[animation.spriteIndex]
+
+var things : array<Thing?>
+
+class public Enemy : Thing
+    deathSprites : array<int>   // sprites to show when enemy dies
+    alive : bool
+
+    def Enemy ( X,Y:int; SPRITEINDEX:int; var DEATHSPRITES:array<int>; ORIENTABLE:bool = false; DIRECTION:int = 0 )
+        Thing`Thing(self,X,Y,SPRITEINDEX,false,ORIENTABLE)
+        deathSprites <- DEATHSPRITES
+        direction = DIRECTION
+        alive = true
+        score.totalKills ++
+
+    def die
+        alive = false
+        orientable = false
+        startAnimation(new Animation(deathSprites))
+        score.kills ++
+
+class public GuardEnemy : Enemy
+    def GuardEnemy(X,Y:int; DIRECTION:int)
+        Enemy`Enemy(self, X, Y, 50, [{auto 90; 91; 92; 93; 95}], true, DIRECTION)
+
+class public DogEnemy : Enemy
+    def DogEnemy(X,Y:int; DIRECTION:int)
+        Enemy`Enemy(self, X, Y, 99, [{auto 131; 132; 133; 134}], true, DIRECTION)
+
+class public SSEnemy : Enemy
+    def SSEnemy(X,Y:int; DIRECTION:int)
+        Enemy`Enemy(self, X, Y, 138, [{auto 179; 180; 181; 183}], true, DIRECTION)
+
+class public ZombieEnemy : Enemy
+    def ZombieEnemy(X,Y:int; DIRECTION:int)
+        Enemy`Enemy(self, X, Y, 187, [{auto 228; 229; 230; 232; 233}], true, DIRECTION)
+
+class public OfficerEnemy : Enemy
+    def OfficerEnemy(X,Y:int; DIRECTION:int)
+        Enemy`Enemy(self, X, Y, 238, [{auto 279; 280; 281; 283; 284}], true, DIRECTION)
+
+class public HansEnemy : Enemy
+    def HansEnemy(X,Y:int)
+        Enemy`Enemy(self, X, Y, 300, [{auto 304; 305; 306; 303}], true)
+
+class public SchabbsEnemy : Enemy
+    def SchabbsEnemy(X,Y:int)
+        Enemy`Enemy(self, X, Y, 312, [{auto 313; 314; 315; 316}], true)
+
+class public FakeHitlerEnemy : Enemy
+    def FakeHitlerEnemy(X,Y:int)
+        Enemy`Enemy(self, X, Y, 321, [{auto 328; 329; 330; 331; 332; 333}], true)
+
+class public HitlerEnemy : Enemy
+    def HitlerEnemy(X,Y:int)
+        Enemy`Enemy(self, X, Y, 349, [{auto 353; 354; 355; 356; 357; 358; 359; 352}], true)
+
+class public OttoEnemy : Enemy
+    def OttoEnemy(X,Y:int)
+        Enemy`Enemy(self, X, Y, 364, [{auto 366; 367; 368; 369}], true)
+
+class public GretelEnemy : Enemy
+    def GretelEnemy(X,Y:int)
+        Enemy`Enemy(self, X, Y, 389, [{auto 393; 394; 395; 392}], true)
+
+class public FettgesichtEnemy : Enemy
+    def FettgesichtEnemy(X,Y:int)
+        Enemy`Enemy(self, X, Y, 400, [{auto 404; 405; 406; 407}], true)
+
+class public Player
     x, y : float
     dx, dy : float
     silverKey : bool
@@ -31,7 +160,166 @@ struct public Player
     turnRight : bool = false
     turnAngle : float = 0.0
 
-var public player : Player
+    def canMoveTo ( X,Y:float )
+        let r = radius
+        let fx = X % 1.
+        let ix = floori(X)
+        let fy = Y % 1.
+        let iy = floori(Y)
+        if plane2[iy*64+ix]
+            return false
+        if fx < r
+            if plane2[iy*64+ix-1]
+                return false
+            if fy < r && plane2[(iy-1)*64+ix-1]
+                return false
+            if fy > 1.-r && plane2[(iy+1)*64+ix-1]
+                return false
+        if fx > 1.-r
+            if plane2[iy*64+ix+1]
+                return false
+            if fy < r && plane2[(iy-1)*64+ix+1]
+                return false
+            if fy > 1.-r && plane2[(iy+1)*64+ix+1]
+                return false
+        if fy < r && plane2[(iy-1)*64+ix]
+            return false
+        if fy > 1.-r && plane2[(iy+1)*64+ix]
+            return false
+        return true
+
+    def move ( length,sideways:float )
+        let oldx = floori(x)
+        let oldy = floori(y)
+        let X = x + dx * length - dy * sideways
+        let Y = y + dy * length + dx * sideways
+        if canMoveTo(X, y)
+            x = X
+        if canMoveTo(x, Y)
+            y = Y
+        let newx = floori(x)
+        let newy = floori(y)
+        if newx != oldx || newy != oldy
+            //player.collect(newx, newy)
+            // shouldDrawMap = true
+            pass
+
+    def turn ( alpha:float )
+        let DX = dx * cos(alpha) - dy * sin(alpha)
+        dy = dx * sin(alpha) + dy * cos(alpha)
+        dx = DX
+
+    def update
+        var changed = false
+        if is_key_pressed(VK_RIGHT)
+            turnAngle += 1.
+        if is_key_pressed(VK_LEFT)
+            turnAngle -= 1.
+        if turnAngle != 0.
+            turn(turnAngle * speed_a)
+            turnAngle = 0.
+            changed = true
+        var forward = 0.
+        var sideways = 0.
+        if is_key_pressed(VK_UP)
+            forward += speed
+        if is_key_pressed(VK_DOWN)
+            forward -= speed
+        if is_key_pressed(VK_A)
+            sideways -= speed
+        if is_key_pressed(VK_D)
+            sideways += speed
+        if forward != 0.
+            if sideways != 0.
+                move(forward / sqrt(2.), sideways / sqrt(2.))
+            else
+                move(forward, 0.)
+            changed = true
+        elif sideways != 0.
+            move(0., sideways)
+            changed = true
+    /*
+            if (this.weaponAnimation !== undefined) {
+                let a = this.weaponAnimation;
+                a.timer += 1;
+                if (a.timer >= 6) {
+                    a.timer = 0;
+                    if (a.spriteIndex >= a.sprites.length - 1) {
+                        this.weaponAnimation = undefined;
+                        this.weaponSprite = 421;
+                    } else {
+                        a.spriteIndex += 1;
+                        this.weaponSprite = a.sprites[a.spriteIndex];
+                    }
+                }
+            }
+        }
+    }
+    */
+
+    def activate
+        var X = floori(x)
+        var Y = floori(y)
+        var DX = 0
+        var DY = 0
+        if abs(dx) >= abs(dy)
+            DX = dx >= 0. ? 1 : -1
+            X += DX
+        else
+            DY = dy >= 0. ? 1 : -1
+            Y += DY
+        let m0 = int(level.plane0[Y*64+X])
+        let m1 = int(level.plane1[Y*64+X])
+        if m0==21 && DX!=0
+            // elevator
+            loadNextLevel()
+        elif m0>=90 && m0<=101
+            // door
+            if m0==92 || m0==93 && !goldKey
+                // gold-locked door
+                print("gold-locked door\n")
+                return
+            if m0==94 || m0==95 && !silverKey
+                // silver-locked door
+                print("silver-locked door\n")
+                return
+            var timer = getDoorTimer(X,Y)
+            if !timer.active
+                let opening = plane2[Y*64+X]
+                if !opening
+                    if ((DX>0 && float(X)-x<=radius) ||
+                        (DX<0 && x-float(x)-1.<=radius) ||
+                        (DY>0 && float(Y)-y<=radius) ||
+                        (DY<0 && y-float(Y)-1.<=radius))
+                        return
+                    else
+                        plane2[Y*64+X] = true
+                doorTimers |> push <| [[DoorTimer
+                    x = X,
+                    y = Y,
+                    t = 0.,
+                    opening = opening,
+                    active = true
+                ]]
+    /*
+            } else if (m1 === 98) {
+                // pushwall
+                let timer = wallTimers.find(function (obj) {
+                    return obj.x === x && obj.y === y;
+                });
+                if (!timer && map0(x + dx, y + dy) >= 106) {
+                    // there is no active timer for this wall, and it can move backwards
+                    wallTimers.push({x: x, y: y, t: 0, dx: dx, dy: dy, steps: 2});
+                    score.secrets += 1;
+                    updateScore();
+                }
+            }
+        };
+    */
+
+
+
+var public player = new Player()
 
 struct public WallTimer
     x, y : int
@@ -52,7 +340,6 @@ struct public DoorTimer
     x, y : int
     opening : bool
     t : float
-    steps : int
     active : bool
 
 var public doorTimers : array<DoorTimer>
@@ -72,8 +359,9 @@ def setupLevel ( index:int )
     // things = []
     doorTimers |> clear
     wallTimers |> clear
-    player = Player()
+    player = new Player()
     score = Score()
+    things |> clear
     for y in range(64)
         for x in range(64)
             // structual
@@ -102,281 +390,87 @@ def setupLevel ( index:int )
                 elif m1==22
                     player.dx = -1.
                     player.dy = 0.
+            elif m1>=23 && m1<=70
+                // props
+                var collectible = false
+                if [{auto 29; 43; 44; 47; 48; 49; 50; 51; 52; 53; 54; 55; 56}] |> find_index(m1) >=0
+                    // collectible
+                    collectible = true
+                    if m1>=52 && m1<=56
+                        score.totalTreasures += 1
+                if [{auto 24; 25; 26; 28; 30; 31; 33; 34; 35; 36; 39; 40; 41; 45; 58; 59; 60; 62; 63; 68; 69}] |> find_index(m1) >=0
+                    // blocking prop
+                    things |> push <| new Thing(x,y,m1-21,collectible,false,true)
+                    plane2[x + y * 64] = true
+                else
+                    things |> push <| new Thing(x,y,m1-21,collectible,false,false)
             elif m1==98
                 // pushwall
                 score.totalSecrets ++
-
-
-/*
-function setupLevel() {
-    // setup things
-    things = [];
-    spriteTextures = [];
-
-            } else if (23 <= m1 && m1 <= 70) {
-                // props
-                let collectible = false;
-                if ([29, 43, 44, 47, 48, 49, 50, 51, 52, 53, 54, 55, 56].indexOf(m1) >= 0) {
-                    // collectible
-                    collectible = true;
-                    if (52 <= m1 && m1 <= 56) {
-                        score.totalTreasures += 1;
-                    }
-                }
-                if ([24, 25, 26, 28, 30, 31, 33, 34, 35, 36, 39, 40, 41, 45, 58, 59, 60, 62, 63, 68,
-                    69].indexOf(m1) >= 0) {
-                    // blocking prop
-                    things.push(new Thing(x, y, m1 - 21, collectible, false, true));
-                    plane2[x][y] = true;
-                } else {
-                    things.push(new Thing(x, y, m1 - 21, collectible, false, false));
-                }
-            } else if (m1 === 98) {
-                // pushwall
-                score.totalSecrets += 1;
-            } else if (m1 === 124) {
+            elif m1==124
                 // dead guard
-                things.push(new Thing(x, y, 95));
-            } else if (m1 >= 108) {
+                things |> push <| new Thing(x,y,95)
+            elif m1 >= 108
                 // enemy
-                if ((108 <= m1 && m1 < 116)) {
-                    things.push(new GuardEnemy(x, y, (m1 - 108) % 4));
-                } else if ((144 <= m1 && m1 < 152)) {
-                    things.push(new GuardEnemy(x, y, (m1 - 144) % 4));
-                } else if ((116 <= m1 && m1 < 124)) {
-                    things.push(new OfficerEnemy(x, y, (m1 - 116) % 4));
-                } else if ((152 <= m1 && m1 < 160)) {
-                    things.push(new OfficerEnemy(x, y, (m1 - 152) % 4));
-                } else if ((126 <= m1 && m1 < 134)) {
-                    things.push(new SSEnemy(x, y, (m1 - 126) % 4));
-                } else if ((162 <= m1 && m1 < 170)) {
-                    things.push(new SSEnemy(x, y, (m1 - 162) % 4));
-                } else if ((134 <= m1 && m1 < 142)) {
-                    things.push(new DogEnemy(x, y, (m1 - 134) % 4));
-                } else if ((170 <= m1 && m1 < 178)) {
-                    things.push(new DogEnemy(x, y, (m1 - 170) % 4));
-                } else if ((216 <= m1 && m1 < 224)) {
-                    things.push(new ZombieEnemy(x, y, (m1 - 116) % 4));
-                } else if ((234 <= m1 && m1 < 242)) {
-                    things.push(new ZombieEnemy(x, y, (m1 - 144) % 4));
-                } else if (m1 === 160) {
-                    things.push(new FakeHitlerEnemy(x, y));
-                } else if (m1 === 178) {
-                    things.push(new HitlerEnemy(x, y));
-                } else if (m1 === 179) {
-                    things.push(new FettgesichtEnemy(x, y));
-                } else if (m1 === 196) {
-                    things.push(new SchabbsEnemy(x, y));
-                } else if (m1 === 197) {
-                    things.push(new GretelEnemy(x, y));
-                } else if (m1 === 214) {
-                    things.push(new HansEnemy(x, y));
-                } else if (m1 === 215) {
-                    things.push(new OttoEnemy(x, y));
-                } else if (224 <= m1 && m1 < 228) {
-                    // Ghost
-                    let ghost = new Thing(x, y, 0);
-                    let spriteIndex = 288 + 2 * (m1 - 224);
-                    ghost.startAnimation(new Animation([spriteIndex, spriteIndex + 1], true));
-                    things.push(ghost);
-                }
-            }
-        }
-    }
-
-    // if the draw loop hasn't started yet, start it
-    if (!isDrawing) {
-        isDrawing = true;
-        window.requestAnimationFrame(update);
-    }
-
-    shouldDrawMap = true;
-    updateScore();
-}
-*/
-
-def canMoveTo ( var self:Player; x,y:float )
-    let r = self.radius
-    let fx = x % 1.
-    let ix = int(floor(x))
-    let fy = y % 1.
-    let iy = int(floor(y))
-    if plane2[iy*64+ix]
-        return false
-    if fx < r
-        if plane2[iy*64+ix-1]
-            return false
-        if fy < r && plane2[(iy-1)*64+ix-1]
-            return false
-        if fy > 1.-r && plane2[(iy+1)*64+ix-1]
-            return false
-    if fx > 1.-r
-        if plane2[iy*64+ix+1]
-            return false
-        if fy < r && plane2[(iy-1)*64+ix+1]
-            return false
-        if fy > 1.-r && plane2[(iy+1)*64+ix+1]
-            return false
-    if fy < r && plane2[(iy-1)*64+ix]
-        return false
-    if fy > 1.-r && plane2[(iy+1)*64+ix]
-        return false
-    return true
-
-def move ( var self:Player; length,sideways:float )
-    let oldx = int(floor(self.x))
-    let oldy = int(floor(self.y))
-    let x = self.x + self.dx * length - self.dy * sideways
-    let y = self.y + self.dy * length + self.dx * sideways
-    if self |> canMoveTo(x, self.y)
-        self.x = x
-    if self |> canMoveTo(self.x, y)
-        self.y = y
-    let newx = int(floor(self.x))
-    let newy = int(floor(self.y))
-    if newx != oldx || newy != oldy
-        //player.collect(newx, newy)
-        // shouldDrawMap = true
-        pass
-
-def turn ( var self:Player; alpha:float )
-    let dx = self.dx * cos(alpha) - self.dy * sin(alpha)
-    self.dy = self.dx * sin(alpha) + self.dy * cos(alpha)
-    self.dx = dx
-
-require app_opengl_glfw
-
-def update ( var self:Player )
-    var changed = false
-    if is_key_pressed(VK_RIGHT)
-        self.turnAngle += 1.
-    if is_key_pressed(VK_LEFT)
-        self.turnAngle -= 1.
-    if self.turnAngle != 0.
-        self |> turn(self.turnAngle * self.speed_a)
-        self.turnAngle = 0.
-        changed = true
-    var forward = 0.
-    var sideways = 0.
-    if is_key_pressed(VK_UP)
-        forward += self.speed
-    if is_key_pressed(VK_DOWN)
-        forward -= self.speed
-    if is_key_pressed(VK_A)
-        sideways -= self.speed
-    if is_key_pressed(VK_D)
-        sideways += self.speed
-    if forward != 0.
-        if sideways != 0.
-            self |> move(forward / sqrt(2.), sideways / sqrt(2.))
-        else
-            self |> move(forward, 0.)
-        changed = true
-    elif sideways != 0.
-        self |> move(0., sideways)
-        changed = true
-/*
-        if (this.weaponAnimation !== undefined) {
-            let a = this.weaponAnimation;
-            a.timer += 1;
-            if (a.timer >= 6) {
-                a.timer = 0;
-                if (a.spriteIndex >= a.sprites.length - 1) {
-                    this.weaponAnimation = undefined;
-                    this.weaponSprite = 421;
-                } else {
-                    a.spriteIndex += 1;
-                    this.weaponSprite = a.sprites[a.spriteIndex];
-                }
-            }
-        }
-    }
-}
-*/
+                if m1>=108 && m1<116
+                    things |> push <| new GuardEnemy(x,y,(m1-108)%4)
+                elif m1>=144 && m1<152
+                    things |> push <| new GuardEnemy(x,y,(m1-144)%4)
+                elif m1>=116 && m1<124
+                    things |> push <| new OfficerEnemy(x,y,(m1-116)%4)
+                elif m1>=152 && m1<160
+                    things |> push <| new OfficerEnemy(x,y,(m1-152)%4)
+                elif m1>=126 && m1<134
+                    things |> push <| new SSEnemy(x,y,(m1-126)%4)
+                elif m1>=162 && m1<170
+                    things |> push <| new SSEnemy(x,y,(m1-162)%4)
+                elif m1>=134 && m1<142
+                    things |> push <| new DogEnemy(x,y,(m1-134)%4)
+                elif m1>=170 && m1<178
+                    things |> push <| new DogEnemy(x,y,(m1-170)%4)
+                elif m1>=216 && m1<224
+                    things |> push <| new ZombieEnemy(x,y,(m1-116)%4)
+                elif m1>=234 && m1<242
+                    things |> push <| new ZombieEnemy(x,y,(m1-144)%4)
+                elif m1==160
+                    things |> push <| new FakeHitlerEnemy(x,y)
+                elif m1==178
+                    things |> push <| new HitlerEnemy(x,y)
+                elif m1==179
+                    things |> push <| new FettgesichtEnemy(x,y)
+                elif m1==196
+                    things |> push <| new SchabbsEnemy(x,y)
+                elif m1==197
+                    things |> push <| new GretelEnemy(x,y)
+                elif m1==198
+                    things |> push <| new HansEnemy(x,y)
+                elif m1==199
+                    things |> push <| new OttoEnemy(x,y)
+                elif m1>=224 && m1<228
+                    // ghost
+                    var ghost = new Thing(x,y,0)
+                    let spriteIndex = 288 + 2 * (m1-224)
+                    ghost->startAnimation ( new Animation([{int spriteIndex; spriteIndex + 1}], true) )
+                    things |> push <| ghost
+    updateScore()
 
 def loadNextLevel
     print("LOAD NEXT LEVEL\n")
 
-def activate
-    var x = int(floor(player.x))
-    var y = int(floor(player.y))
-    var dx = 0
-    var dy = 0
-    if abs(player.dx) >= abs(player.dy)
-        dx = player.dx >= 0. ? 1 : -1
-        x += dx
-    else
-        dy = player.dy >= 0. ? 1 : -1
-        y += dy
-    let m0 = int(level.plane0[y*64+x])
-    let m1 = int(level.plane1[y*64+x])
-    if m0==21 && dx!=0
-        // elevator
-        loadNextLevel()
-    elif m0>=90 && m0<=101
-        // door
-        if m0==92 || m0==93 && !player.goldKey
-            // gold-locked door
-            print("gold-locked door\n")
-            return
-        if m0==94 || m0==95 && !player.silverKey
-            // silver-locked door
-            print("silver-locked door\n")
-            return
-        var timer = getDoorTimer(x,y)
-        if !timer.active
-            let opening = plane2[y*64+x]
-            if !opening
-                if ((dx>0 && float(x)-player.x<=player.radius) ||
-                    (dx<0 && player.x-float(x)-1.<=player.radius) ||
-                    (dy>0 && float(y)-player.y<=player.radius) ||
-                    (dy<0 && player.y-float(y)-1.<=player.radius))
-                    print("player too close\n")
-                    return
-                else
-                    plane2[y*64+x] = true
-            print("adding door timer\n")
-            doorTimers |> push <| [[DoorTimer
-                x = x,
-                y = y,
-                t = 0.,
-                opening = opening,
-                active = true
-            ]]
-/*
-        } else if (m1 === 98) {
-            // pushwall
-            let timer = wallTimers.find(function (obj) {
-                return obj.x === x && obj.y === y;
-            });
-            if (!timer && map0(x + dx, y + dy) >= 106) {
-                // there is no active timer for this wall, and it can move backwards
-                wallTimers.push({x: x, y: y, t: 0, dx: dx, dy: dy, steps: 2});
-                score.secrets += 1;
-                updateScore();
-            }
-        }
-    };
-*/
-
 def updateThings
-    pass
-/*
-    for (let i = 0; i < things.length; i++) {
-        things[i].update();
-    }
-    things.sort((a, b) => b.rx - a.rx);
-*/
+    for thing in things
+        thing->update()
+    things |> sort <| $ ( a,b )
+        return b.rx < a.rx
 
 def updateDoorTimers
     var rem : array<int>
     for timer,i in doorTimers,count()
         timer.t += 1.
         if timer.t >= 64.
-            rem |> push(i)
-            timer.active = false
             if timer.opening
                 plane2[timer.y*64+timer.x] = false
+            rem |> push(i)
     rem |> reverse
     for i in rem
         doorTimers |> erase(i)
@@ -418,10 +512,9 @@ def updateWallTimers
 */
 
 def updatePlayer
-    updateDoorTimers()
-    player |> update
+    player->update()
     if is_key_pressed(VK_SPACE)
-        activate()
+        player->activate()
 
 /*
     // update flashing palette
@@ -454,3 +547,6 @@ def updatePlayer
 
 def public updateGame
     updatePlayer()
+    updateDoorTimers()
+    updateWallTimers()
+    updateThings()
