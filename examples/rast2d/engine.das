@@ -26,8 +26,8 @@ def drawWalls ( level:Level; var bmp:Bitmap8 )
         dx = float(stepx) * dx
         dy = float(stepy) * dy
         // cell position of the ray on the map (starting from the player position)
-        var cx = int(floor(player.x))
-        var cy = int(floor(player.y))
+        var cx = floori(player.x)
+        var cy = floori(player.y)
         // remaining fractional distance from the ray position to the next cell (0 < rfx, rfy <= 1)
         var rfx = stepx > 0 ? 1. - (player.x % 1.) : player.x % 1.
         if rfx == 0.
@@ -210,6 +210,7 @@ def drawWalls ( level:Level; var bmp:Bitmap8 )
                 cy += stepy
                 rfx -= dt * dx
         // draw
+        zIndex[i] = t
         drawWallPixels(i,t,tx,WallPics[textureIndex],bmp)
 
 var zIndex : array<float>
@@ -220,11 +221,11 @@ def drawWallPixels ( i:int; t,tx:float; tex:WallTexture; var bmp:Bitmap8 )
     let pixelHeight = float(bmp.size.y)
     let wallHeight = float(pixelWidth) / (2. * fov)
     var h = wallHeight / (2. * t)
-    var yi = int(floor(pixelHeight / 2. - h))
+    var yi = floori(pixelHeight / 2. - h)
     var yf = (pixelHeight / 2. - h) % 1.
-    var stepi = int(floor(h / 32.))
+    var stepi = floori(h / 32.)
     var stepf = (h / 32.) % 1.
-    var texelOffset = min(64 * int(floor(64. * tx)),4096-64)
+    var texelOffset = min(64 * floori(64. * tx),4096-64)
     unsafe
         /*
         for j in range(0, yi)
@@ -244,6 +245,62 @@ def drawWallPixels ( i:int; t,tx:float; tex:WallTexture; var bmp:Bitmap8 )
                     bmp.data[(k             )*bmp.size.x + i] = col
                 yi += stepi
 
+
+def drawThings ( var bmp:Bitmap8 )
+    let pixelWidth = float(bmp.size.x)
+    let pixelHeight = float(bmp.size.y)
+    let wallHeight = float(pixelWidth) / (2. * fov)
+    for t in things
+        if t.rx < player.radius
+            // thing is behind the screen
+            continue
+        elif abs(t.ry) > t.rx + 1.
+            // thing is out of field of view
+            continue
+        let th = wallHeight / t.rx
+        let tx = floori((t.ry / t.rx + fov) * wallHeight - th / 2.)
+        let ty = floori((pixelHeight - th) / 2.)
+        var index = t.spriteIndex
+        if t.orientable
+            index += (int(4. * atan2(t.x - player.x, t.y - player.y) / PI - float(t.direction)) + 16) % 8
+        drawSprite(tx, ty, int(th), t.rx, Sprites[index], bmp)
+
+[jit,hint(unsafe_range_check,noalias=tex,noalias=bmp)]
+def drawSprite ( x,y, height:int; dist:float; sprite:SpriteTexture; var bmp:Bitmap8 )
+    let scale = ceili(float(height)/64.)
+    let firstCol = sprite.firstCol
+    let lastCol = sprite.lastCol
+    let nbCol = lastCol - firstCol + 1
+    var pixelPoolOffset = 4 + 2 * nbCol
+    for col in range(firstCol,lastCol+1)
+        var colOffset = int(sprite.data |> getUInt16(4 + 2 * (col - firstCol)))
+        while true
+            let endRow = int(sprite.data |> getUInt16(colOffset)) / 2
+            if endRow == 0
+                break
+            let startRow = int(sprite.data |> getUInt16(colOffset + 4)) / 2
+            colOffset += 6
+            for row in range(startRow,endRow)
+                drawScaledPixel(
+                    x + floori(float(col*height)/64.),
+                    y + floori(float(row*height)/64.),
+                    sprite.data |> getUInt8(pixelPoolOffset),
+                    scale,
+                    dist,
+                    bmp
+                )
+                pixelPoolOffset ++
+
+[jit,hint(unsafe_range_check,noalias=tex,noalias=bmp)]
+def drawScaledPixel(x,y:int; color:uint8; scale:int; dist:float; var bmp:Bitmap8 )
+    for col in range(max(x,0),min(x+scale,bmp.size.x))
+        if dist >= zIndex[col]
+            // sprite is hidden on this column
+            continue
+        for row in range(max(y,0),min(y+scale,bmp.size.y))
+            unsafe
+                bmp.data[row*bmp.size.x + col] = color
+
 def drawBackground ( var bmp:Bitmap8 )
     var ScreenWidth = bmp.size.x
     var ScreenHeight = bmp.size.y
@@ -256,3 +313,5 @@ def public draw ( level:Level; var bmp:Bitmap8 )
     zIndex |> resize(bmp.size.x)
     drawBackground(bmp)
     drawWalls(level, bmp)
+    drawThings(bmp)
+

@@ -1,6 +1,5 @@
 require app_opengl_glfw
 require rast2d
-require files
 
 require daslib/match
 require daslib/safe_addr
@@ -181,15 +180,6 @@ def UncompressMap()
 
             Count = Count + Step
 
-    var txt = build_string <| $ ( writer )
-        for y in 0..64
-            for x in 0..64
-                var ID = Map[y*64 + x].ID
-                writer |> format("%02x", ID)
-            writer |> write("\n")
-    print("{txt}\n")
-
-
 def InitPlayer()
     Player.Position = float2(29.5f, 57.5f)
     Player.Direction = 0.0f
@@ -287,13 +277,6 @@ def InitObjects()
                     push(Enemies, Enemy)
 
             push(Objects, Object)
-
-    let txt = build_string <| $ ( writer )
-        for y in 0..64
-            for x in 0..64
-                writer |> format("%02x ", Objects[y*64+x].ID)
-            writer |> write("\n")
-    print("Objects:\n{txt}\n")
 
 def GetIdleFrame(Enemy : SEnemy) : int
     if Enemy.Type == EEnemyType Invalid
@@ -715,7 +698,7 @@ def IsVisible(PositionA : float2; PositionB : float2) : bool
 
 def GetPlayerAngle(Position : float2) : int
     var Direction = Position - Player.Position
-    var PlayerAngle = int(floor((8.0f * atan2(Direction.y, Direction.x) / (2.0f * PI)) + 0.5f))
+    var PlayerAngle = floori((8.0f * atan2(Direction.y, Direction.x) / (2.0f * PI)) + 0.5f)
     if PlayerAngle < 0
         PlayerAngle = 8 - ((-PlayerAngle) % 8)
     PlayerAngle = PlayerAngle % 8
@@ -768,10 +751,10 @@ def UpdatePlayer(Time : float)
     var Min = Position - Size
     var Max = Position + Size
 
-    var X1 = int(floor(Min.x))
-    var Y1 = int(floor(Min.y))
-    var X2 = int(ceil(Max.x))
-    var Y2 = int(ceil(Max.y))
+    var X1 = floori(Min.x)
+    var Y1 = floori(Min.y)
+    var X2 = ceili(Max.x)
+    var Y2 = ceili(Max.y)
 
     var FlagX = false
     var FlagY = false
@@ -850,10 +833,10 @@ def UpdatePlayer(Time : float)
         else
             Max.y = Max.y + Velocity.y
 
-        X1 = int(floor(Min.x))
-        Y1 = int(floor(Min.y))
-        X2 = int(ceil(Max.x))
-        Y2 = int(ceil(Max.y))
+        X1 = floori(Min.x)
+        Y1 = floori(Min.y)
+        X2 = ceili(Max.x)
+        Y2 = ceili(Max.y)
 
         if X1 < 0
             X1 = 0
@@ -1604,7 +1587,7 @@ def DrawFlash(var bmp : Bitmap)
 def LoadTexture
     var x, y : int
     var comp : int
-    let name = "{get_das_root()}/examples/rast2d/Texture.png"
+    let name = "{get_das_root()}/examples/w3dold/Texture.png"
     let data = stbi_load(name, safe_addr(x), safe_addr(y), safe_addr(comp), 4)
     if data == null
         panic("no texture {name}\n")
@@ -1619,7 +1602,6 @@ def LoadTexture
 def on_initialize()
     set_debug_status_string("arrows - move, ctrl - attack, space - action, alt - strafe, 1,2,3,4 - select weapon")
     LoadTexture()
-    InitFiles()
     UncompressMap()
     InitPlayer()
     InitWeapon()
