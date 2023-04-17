@@ -224,7 +224,7 @@ def drawWallPixels ( i:int; t,tx:float; index:int; var bmp:Bitmap8 )
     let y = floori(pixelHeight / 2. - h)
     let ymin = max(0, y)
     let ymax = min(floori(pixelHeight / 2. + h), bmp.size.x-1)
-    let dh = 0.5 /  h
+    let dh = 0.5 /  (h+1.)
     var uvY = (float(ymin - y) * dh) * 64.0
     let dUVY = dh * 64.0
     let texelOffset = 64 * floori(63. * tx)
@@ -273,7 +273,7 @@ def drawSprite ( x,y: int; h:float; dist:float; sprite:SpriteTexture; var bmp:Bi
         let xmax = min(x+height, bmp.size.x-1)
         if xmin > xmax
             return
-        let dh = 1. /  h
+        let dh = 1. /  (h+1.)
         var uvX = (float(xmin - x) * dh) * 64.0
         let dUVX = dh * 64.0
         for X in range(xmin,xmax)
@@ -289,7 +289,8 @@ def drawSprite ( x,y: int; h:float; dist:float; sprite:SpriteTexture; var bmp:Bi
                             break
                         let startRow = int(sprite.data |> getUInt16(colOffset + 4)) / 2
                         colOffset += 6
-                        let ymin = max(y + floori(float(startRow) * h / 64.), 0)
+                        let ystart = y + floori(float(startRow) * h / 64.)
+                        let ymin = max(ystart, 0)
                         let ymax = min(y + floori(float(endRow) * h / 64.), bmp.size.y-1)
                         if ymin < ymax
                             let tspan = addr(sprite.data[pixelOffset])
@@ -297,7 +298,8 @@ def drawSprite ( x,y: int; h:float; dist:float; sprite:SpriteTexture; var bmp:Bi
                             let count4 = count / 4
                             count &= 3
                             var PSP = pspan + ymin
-                            var uv4 = float4(0.,1.,2.,3.) * float4(dUVX)
+                            var uv0 = float(ymin - ystart) * dUVX
+                            var uv4 = float4(uv0) + float4(0.,1.,2.,3.) * float4(dUVX)
                             var duv4 = float4(dUVX) * 4.
                             for P in range(count4)
                                 u8x4_gather_store(PSP,tspan,int4(uv4))
@@ -320,6 +322,7 @@ def drawBackground ( var bmp:Bitmap8 )
 def public draw ( level:Level; var bmp:Bitmap8 )
     pixelWidth = float(bmp.size.x)
     pixelHeight = float(bmp.size.y)
+    zIndex |> clear
     zIndex |> resize(bmp.size.x)
     drawBackground(bmp)
     drawWalls(level, bmp)
