@@ -61,6 +61,7 @@ let g_intrin_lookup <- {{
     "math::store_neq_mask" => @@intrinsic_math_store_neq_mask;
     "math::gather_store_neq_mask" => @@intrinsic_math_gather_store_mask;
     "math::gather_store_stride" => @@intrinsic_math_gather_store_stride;
+    "math::u8x4_gather_store" => @@intrinsic_math_u8x4_gather_store;
 // math
     "math::saturate" => @@intrinsic_math_saturate;
     "math::abs" => @@intrinsic_math_abs;
@@ -78,6 +79,8 @@ let g_intrin_lookup <- {{
     "math::max" => @@intrinsic_math_minmax;
     "math::floor" => @@intrinsic_math_float_op1;
     "math::ceil" => @@intrinsic_math_float_op1;
+    "math::floori" => @@intrinsic_math_float_op1_to_int;
+    "math::ceili" => @@intrinsic_math_float_op1_to_int;
     "math::length_sq" => @@intrinsic_math_length_sq;
     "math::dot" => @@intrinsic_math_dot;
     "math::cross" => @@intrinsic_math_cross;
@@ -404,6 +407,10 @@ def intrinsic_math_any_float_op1(expr_name:string; g_builder:LLVMOpaqueBuilder?;
 
 def intrinsic_math_float_op1(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
     return intrinsic_math_any_float_op1(string(expr.name), g_builder, expr, arguments)
+
+def intrinsic_math_float_op1_to_int(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+    var res = intrinsic_math_any_float_op1(string(expr.name) |> slice(0,-1), g_builder, expr, arguments)
+    return LLVMBuildFPToSI(g_builder, res, type_to_llvm_abi_type(expr._type), "")
 
 def intrinsic_math_tan(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
     var sin_a = intrinsic_math_any_float_op1("sin", g_builder, expr, arguments)
@@ -750,27 +757,11 @@ def intrinsic_math_store_neq_mask(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<E
     LLVMSetAlignment(wrt, 4u)
     return res
 
-// __forceinline vec4f v_gather_store_mask ( void * _to, const void * _from, vec4f from_index, vec4f mask_v ) {
-
 def intrinsic_math_gather_store_mask(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
     var arg_gather <- [{auto arguments[1]; arguments[2]}]
     var gather = intrinsic_math_gather(g_builder, expr, arg_gather)
     var arg_store_mask <- [{auto arguments[0]; gather; arguments[3]}]
     return intrinsic_math_store_neq_mask(g_builder, expr, arg_store_mask)
-
-/*
-    __forceinline vec4f v_gather_store_stride ( void * _to, int stride, const void * _from, vec4f from_index ) {
-        // read 4 floats from memory, using 4 uint32_t indices and then write them to memory, but only for floats, where value[i]!=mask_v[i]
-        auto from = (const float *) _from;
-        auto to =  (float *) _to;
-        auto value = v_gather(from, from_index);
-        to[       0] = v_extract_x(value);
-        to[  stride] = v_extract_y(value);
-        to[2*stride] = v_extract_z(value);
-        to[3*stride] = v_extract_w(value);
-        return value;
-    }
-*/
 
 def intrinsic_math_gather_store_stride(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
     // gather
@@ -821,10 +812,28 @@ def intrinsic_math_gather_store_stride(g_builder:LLVMOpaqueBuilder?; expr:smart_
     }
 */
 
-
-
-
-
-
 // gather_store_neq_mask
 // def intrinsic_gather_store_neq_mask
+
+def intrinsic_math_u8x4_gather_store(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+    // gather
+    var ptr = LLVMBuildPointerCast(g_builder, arguments[1], LLVMPointerType(LLVMInt8Type(),0u), "")
+    var ix = LLVMBuildExtractElement(g_builder, arguments[2], LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
+    var iy = LLVMBuildExtractElement(g_builder, arguments[2], LLVMConstInt(LLVMInt32Type(), 1ul, 0), "")
+    var iz = LLVMBuildExtractElement(g_builder, arguments[2], LLVMConstInt(LLVMInt32Type(), 2ul, 0), "")
+    var iw = LLVMBuildExtractElement(g_builder, arguments[2], LLVMConstInt(LLVMInt32Type(), 3ul, 0), "")
+    var X = LLVMBuildLoad(g_builder, LLVMBuildGEP(g_builder, ptr, ix, ""), "")
+    var Y = LLVMBuildLoad(g_builder, LLVMBuildGEP(g_builder, ptr, iy, ""), "")
+    var Z = LLVMBuildLoad(g_builder, LLVMBuildGEP(g_builder, ptr, iz, ""), "")
+    var W = LLVMBuildLoad(g_builder, LLVMBuildGEP(g_builder, ptr, iw, ""), "")
+    // write it out
+    var stride = LLVMConstInt(LLVMInt32Type(), 1ul, 0)
+    var out = LLVMBuildPointerCast(g_builder, arguments[0], LLVMPointerType(LLVMInt8Type(),0u), "")
+    LLVMBuildStore(g_builder, X, out)
+    out = LLVMBuildGEP(g_builder, out, stride, "")
+    LLVMBuildStore(g_builder, Y, out)
+    out = LLVMBuildGEP(g_builder, out, stride, "")
+    LLVMBuildStore(g_builder, Z, out)
+    out = LLVMBuildGEP(g_builder, out, stride, "")
+    LLVMBuildStore(g_builder, W, out)
+    return out
