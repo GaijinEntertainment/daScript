@@ -233,7 +233,7 @@ def drawWallPixels ( i:int; t,tx:float; index:int; var bmp:Bitmap8 )
         // memset8(span,29u8,ymin)
         var tspan = addr(WallPics[index].data[texelOffset])
         var count = ymax - ymin + 1
-        var count4 = count / 4
+        var count4 = count >> 2
         count &= 3
         var PSP = span + ymin
         var uv4 = float4(uvY) + float4(0.,1.,2.,3.) * float4(dUVY)
@@ -281,21 +281,21 @@ def drawSprite ( x,y: int; h:float; dist:float; sprite:SpriteTexture; var bmp:Bi
                 let col = int(uvX)
                 if col >= sprite.firstCol && col <= sprite.lastCol
                     var pspan = addr(bmp.data[X*bmp.size.y])
-                    var colOffset = sprite.colOffset[col]
                     var pixelOffset = sprite.pixelOffset[col]
+                    var colOffsetData = reinterpret<uint16?> addr(sprite.data[sprite.colOffset[col]])
                     while true
-                        let endRow = int(sprite.data |> getUInt16(colOffset)) / 2
+                        let endRow = int(*colOffsetData) / 2
                         if endRow == 0
                             break
-                        let startRow = int(sprite.data |> getUInt16(colOffset + 4)) / 2
-                        colOffset += 6
+                        let startRow = int(colOffsetData[2]) / 2
+                        colOffsetData += 3
                         let ystart = y + floori(float(startRow) * h / 64.)
                         let ymin = max(ystart, 0)
                         let ymax = min(y + floori(float(endRow) * h / 64.), bmp.size.y-1)
                         if ymin < ymax
                             let tspan = addr(sprite.data[pixelOffset])
                             var count = ymax - ymin
-                            let count4 = count / 4
+                            let count4 = count >> 2
                             count &= 3
                             var PSP = pspan + ymin
                             var uv0 = float(ymin - ystart) * dUVX
