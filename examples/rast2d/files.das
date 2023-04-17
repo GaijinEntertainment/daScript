@@ -184,6 +184,8 @@ var public WallPics : array<WallTexture>
 struct public SpriteTexture
     data : array<uint8>
     firstCol, lastCol : int
+    colOffset : int[64]
+    pixelOffset : int[64]
 
 var public Sprites : array<SpriteTexture>
 
@@ -197,6 +199,20 @@ var public Audio : array<Sound>
 def prepareSprite ( var sprite : SpriteTexture )
     sprite.firstCol = int(sprite.data |> getUInt16(0))
     sprite.lastCol = int(sprite.data |> getUInt16(2))
+    let nbCol = sprite.lastCol - sprite.firstCol + 1
+    var pixelOffset = 4 + 2 * nbCol
+    for col in range(sprite.firstCol, sprite.lastCol + 1)
+        var colOffset = int(sprite.data |> getUInt16(4 + 2 * (col - sprite.firstCol)))
+        sprite.colOffset[col] = colOffset
+        sprite.pixelOffset[col] = pixelOffset
+        while true
+            let endRow = int(sprite.data |> getUInt16(colOffset)) / 2
+            if endRow == 0
+                break
+            let startRow = int(sprite.data |> getUInt16(colOffset + 4)) / 2
+            colOffset += 6
+            for row in range(startRow, endRow)
+                pixelOffset ++
 
 def InitResources()
     var bytes <- LoadBytes("VSWAP.WL6")

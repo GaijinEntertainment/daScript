@@ -894,6 +894,13 @@ namespace das {
                 SideEffects::modifyArgument,"v_gather_store_stride")->args({"to","stride","from","from_index4"})->unsafeOperation = true;
             addExternEx<void(uint32_t *,int32_t,const uint32_t *,int4),DAS_BIND_FUN(v_gather_store_stride)>(*this, lib, "gather_store_stride",
                 SideEffects::modifyArgument,"v_gather_store_stride")->args({"to","stride","from","from_index4"})->unsafeOperation = true;            // lets make sure its all aot ready
+            // gather-store u8x4
+            addExternEx<void(uint8_t *,const uint8_t *,uint4),DAS_BIND_FUN(u8x4_gather_store)>(*this, lib, "u8x4_gather_store",
+                SideEffects::modifyArgument,"u8x4_gather_store")->args({"to","from","from_index4"})->unsafeOperation = true;
+
+            addExternEx<void(uint8_t *,const uint8_t *,int4),DAS_BIND_FUN(u8x4_gather_store)>(*this, lib, "u8x4_gather_store",
+                SideEffects::modifyArgument,"u8x4_gather_store")->args({"to","from","from_index4"})->unsafeOperation = true;
+            // and check everything
             verifyAotReady();
         }
         virtual ModuleAotType aotRequire ( TextWriter & tw ) const override {

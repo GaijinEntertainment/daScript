@@ -248,4 +248,21 @@ namespace das {
         to[2*stride] = ptr[uint32_t(v_extract_zi(i))];
         to[3*stride] = ptr[uint32_t(v_extract_wi(i))];
     }
+
+    __forceinline void u8x4_gather_store ( void * _to, const void * _from, vec4f from_index ) {
+        // read 4 floats from memory, using 4 uint32_t indices and then write them to memory, but only for floats, where value[i]!=mask_v[i]
+        auto from = (uint8_t *) _from;
+        auto i = v_cast_vec4i(from_index);
+        auto b0 = from[uint32_t(v_extract_xi(i))];
+        auto b1 = from[uint32_t(v_extract_yi(i))];
+        auto b2 = from[uint32_t(v_extract_zi(i))];
+        auto b3 = from[uint32_t(v_extract_wi(i))];
+    #if 1
+        auto to = (uint32_t *) _to;
+        *to = uint32_t(b0) + (uint32_t(b1) << 8u) + (uint32_t(b2) << 16u) + (uint32_t(b3) << 24u);
+    #else
+        auto to = (uint8_t *) _to;
+        to[0] = b0; to[1] = b1; to[2] = b2; to[3] = b3;
+    #endif
+    }
 }
