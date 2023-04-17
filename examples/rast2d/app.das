@@ -19,7 +19,7 @@ var [[out]] f_FragColor : float4
 [vertex_program]
 def vs_main
     f_texcoord = v_texcoord
-    gl_Position = float4(v_position, 0.0, 1.0)
+    gl_Position = float4(-v_position.yx, 0.0, 1.0)
 
 [fragment_program]
 def fs_main
@@ -161,11 +161,11 @@ def public raster_app_main ( blk: block<(var back_buffer:Bitmap8):void> )
         // make a texture
         glGenTextures(1, safe_addr(texture))
         glBindTexture(GL_TEXTURE_2D, texture)
-        glTexImage2D(GL_TEXTURE_2D, 0, int(GL_R8), bb_width, bb_height, 0, GL_RED, GL_UNSIGNED_BYTE, unsafe(addr(bb_data[0])))
+        glTexImage2D(GL_TEXTURE_2D, 0, int(GL_R8), bb_height, bb_width, 0, GL_RED, GL_UNSIGNED_BYTE, unsafe(addr(bb_data[0])))
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT)
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT)
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR)
-        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_NEAREST)
+        glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST)
         glBindTexture(GL_TEXTURE_2D, GL_INVALID_VALUE)
         // render
         glViewport(0, 0, display_w, display_h)
