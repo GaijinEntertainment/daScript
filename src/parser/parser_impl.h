@@ -63,9 +63,7 @@ namespace das {
     void ast_globalLetList (  yyscan_t scanner, bool kwd_let, bool glob_shar, bool pub_var, vector<VariableDeclaration*> * list );
     void ast_globalLet (  yyscan_t scanner, bool kwd_let, bool glob_shar, bool pub_var, AnnotationArgumentList * ann, VariableDeclaration * decl );
     vector<VariableDeclaration*> * ast_structVarDefAbstract ( yyscan_t scanner, vector<VariableDeclaration*> * list,
-        AnnotationList * annL, bool isPrivate, Function * func );
-    vector<VariableDeclaration*> * ast_structVarDefAbstract ( yyscan_t scanner, vector<VariableDeclaration*> * list,
-        AnnotationList * annL, bool isPrivate, Function * func );
+        AnnotationList * annL, bool isPrivate, bool cnst, Function * func );
     vector<VariableDeclaration*> * ast_structVarDef ( yyscan_t scanner, vector<VariableDeclaration*> * list,
         AnnotationList * annL, bool isPrivate, int ovr, bool cnst, Function * func, Expression * block,
             const LineInfo & fromBlock, const LineInfo & annLAt );

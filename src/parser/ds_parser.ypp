@@ -1865,7 +1865,7 @@ struct_variable_declaration_list
         }
     }
     |   struct_variable_declaration_list[list] optional_annotation_list[annL]
-            DAS_DEF[from] optional_public_or_private_member_variable[isPrivate] DAS_ABSTRACT {
+            DAS_DEF[from] optional_public_or_private_member_variable[isPrivate] DAS_ABSTRACT optional_constant[cnst] {
                 yyextra->das_force_oxford_comma=true;
                 if ( !yyextra->g_CommentReaders.empty() ) {
                     auto tak = tokAt(scanner,@isPrivate);
@@ -1876,7 +1876,7 @@ struct_variable_declaration_list
                     auto tak = tokAt(scanner,@func);
                     for ( auto & crd : yyextra->g_CommentReaders ) crd->afterFunction($func,tak);
                 }
-                $$ = ast_structVarDefAbstract(scanner,$list,$annL,$isPrivate,$func);
+                $$ = ast_structVarDefAbstract(scanner,$list,$annL,$isPrivate,$cnst, $func);
             }
     |   struct_variable_declaration_list[list] optional_annotation_list[annL]
             DAS_DEF[from] optional_public_or_private_member_variable[isPrivate] optional_override[ovr] optional_constant[cnst] {
