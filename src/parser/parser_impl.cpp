@@ -441,7 +441,7 @@ namespace das {
     }
 
     vector<VariableDeclaration*> * ast_structVarDefAbstract ( yyscan_t scanner, vector<VariableDeclaration*> * list,
-        AnnotationList * annL, bool isPrivate, Function * func ) {
+        AnnotationList * annL, bool isPrivate, bool cnst, Function * func ) {
         if ( !yyextra->g_thisStructure->isClass ) {
             das_yyerror(scanner,"structure can't have a member function",
                 func->at, CompilationError::invalid_member_function);
@@ -468,7 +468,9 @@ namespace das {
             swap ( funcType->firstType, func->result );
             funcType->argTypes.reserve ( func->arguments.size() );
             if ( yyextra->g_thisStructure->isClass ) {
-                funcType->argTypes.push_back(make_smart<TypeDecl>(yyextra->g_thisStructure));
+                auto selfType = make_smart<TypeDecl>(yyextra->g_thisStructure);
+                selfType->constant = cnst;
+                funcType->argTypes.push_back(selfType);
                 funcType->argNames.push_back("self");
             }
             for ( auto & arg : func->arguments ) {
