@@ -216,7 +216,6 @@ def drawWalls ( level:Level; var bmp:Bitmap8 )
         zIndex[i] = t
         drawWallPixels(i,t,tx,WallPics[textureIndex],bmp) // causes bug in jit. why?
 
-
 [jit,hint(unsafe_range_check,noalias=tex,noalias=bmp)]
 def drawWallPixels ( i:int; t,tx:float; tex:WallTexture; var bmp:Bitmap8 )
     let wallHeight = float(pixelWidth) / (2. * fov)
@@ -248,7 +247,8 @@ def drawWallPixels ( i:int; t,tx:float; tex:WallTexture; var bmp:Bitmap8 )
             uvY += dUVY
         // memset8(PSP+count,25u8,bmp.size.y - ymax - 1)
 
-
+// TODO: missing atan2 for jit
+// [jit,hint(unsafe_range_check,noalias=bmp)]
 def drawThings ( var bmp:Bitmap8 )
     let wallHeight = float(pixelWidth) / (2. * fov)
     for t in things
