@@ -12,6 +12,8 @@ var fov = 1.
 var pixelWidth = 320.
 var pixelHeight = 200.
 
+var zIndex : array<float>
+
 [jit,hint(unsafe_range_check,noalias=level,noalias=bmp)]
 def drawWalls ( level:Level; var bmp:Bitmap8 )
     for i in range(bmp.size.x)
@@ -214,7 +216,6 @@ def drawWalls ( level:Level; var bmp:Bitmap8 )
         zIndex[i] = t
         drawWallPixels(i,t,tx,WallPics[textureIndex],bmp) // causes bug in jit. why?
 
-var zIndex : array<float>
 
 [jit,hint(unsafe_range_check,noalias=tex,noalias=bmp)]
 def drawWallPixels ( i:int; t,tx:float; tex:WallTexture; var bmp:Bitmap8 )
@@ -226,7 +227,7 @@ def drawWallPixels ( i:int; t,tx:float; tex:WallTexture; var bmp:Bitmap8 )
     let dh = 0.5 /  (h+1.)
     var uvY = (float(ymin - y) * dh) * 64.0
     let dUVY = dh * 64.0
-    let texelOffset = 64 * floori(63. * tx)
+    let texelOffset = 64 * floori(63. * clamp(tx,0.,1.))
     unsafe
         var span = addr(bmp.data[i*bmp.size.y])
         // memset8(span,29u8,ymin)
@@ -319,12 +320,23 @@ def drawBackground ( var bmp:Bitmap8 )
             memset8(addr(bmp.data[x*bmp.size.y]),29u8,h)
             memset8(addr(bmp.data[x*bmp.size.y+h]),25u8,h)
 
+def drawWeapon ( var bmp:Bitmap8 )
+    let height = bmp.size.y
+    drawSprite(
+            bmp.size.x / 2 - height / 2,
+            0,
+            float(height),
+            0.,
+            Sprites[player.weaponSprite],
+            bmp)
+
+
 def public draw ( level:Level; var bmp:Bitmap8 )
     pixelWidth = float(bmp.size.x)
     pixelHeight = float(bmp.size.y)
-    zIndex |> clear
     zIndex |> resize(bmp.size.x)
     drawBackground(bmp)
     drawWalls(level, bmp)
     drawThings(bmp)
+    drawWeapon(bmp)
 

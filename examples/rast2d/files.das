@@ -230,27 +230,27 @@ def InitResources()
     let wallsOffset = getUInt32(bytes, 6)
     for i in range(wallChunks)
         let wallSize = int(bytes |> getUInt16(6 + totalChunks*4 + i*2))
-        //to_log(LOG_INFO,"wall {i} offset {int(wallsOffset) + i*4096} of {wallSize} bytes\n")
+        // to_log(LOG_INFO,"wall {i} offset {int(wallsOffset) + i*4096} of {wallSize} bytes\n")
         array_view(bytes, int(wallsOffset) + i*4096, 4096) <| $ ( view )
             for s,d in view, WallPics[i].data
                 d = s
     Sprites |> resize(spriteChunks)
     for i in range(spriteChunks)
-        let spriteOffset = getUInt32(bytes, 6 + (firstSpriteChunk + i)*4)
+        let spriteOffset = int(getUInt32(bytes, 6 + (firstSpriteChunk + i)*4))
         let spriteSize = int(bytes |> getUInt16(6 + totalChunks*4 + (firstSpriteChunk + i)*2))
-        // to_log(LOG_INFO,"sprite {s} offset {spriteOffset} of size {spriteSize}\n")
-        array_view(bytes, int(spriteOffset), spriteSize) <| $ ( view )
+        // to_log(LOG_INFO,"sprite {i} offset {spriteOffset} of size {spriteSize}\n")
+        array_view(bytes, spriteOffset, spriteSize) <| $ ( view )
             Sprites[i].data := view
             prepareSprite(Sprites[i])
     // extra sounds
     Sounds |> resize(soundChunks)
     for i in range(soundChunks)
-        let soundOffset = getUInt32(bytes, 6 + (firstSoundChunk + i)*4)
+        let soundOffset = int(getUInt32(bytes, 6 + (firstSoundChunk + i)*4))
         let soundSize = int(bytes |> getUInt16(6 + totalChunks*4 + (firstSoundChunk + i)*2))
         // to_log(LOG_INFO,"sound {i} offset {soundOffset} of size {soundSize}\n")
-        array_view(bytes, int(soundOffset), soundSize) <| $ ( view )
+        array_view(bytes, soundOffset, soundSize) <| $ ( view )
             Sounds[i].data := view
-    to_log(LOG_INFO,"Loaded VSWAP.WL6\n")
+    to_log(LOG_INFO,"Loaded VSWAP.WL6 ({bytes |> length})\n")
 
 let NUMSOUNDS = 87
 let STARTPCSOUNDS = 0
@@ -292,9 +292,133 @@ def public InitAudio()
             Audio |> emplace(snd)
     to_log(LOG_INFO,"Loaded AUDIOHED.WL6 and AUDIOT.WL6\n")
 
+let HUFFMAN_TREE_NODE_COUNT = 255
+let HUFFMAN_TREE_ROOT = 254
+
+struct HuffmanNode
+    node_0, node_1 : int
+
+var HuffmanTree : HuffmanNode[HUFFMAN_TREE_NODE_COUNT]
+
+def InitHuffmanTree
+    var bytes <- LoadBytes("VGADICT.WL6")
+    for n in range(HUFFMAN_TREE_NODE_COUNT)
+        HuffmanTree[n].node_0 = int(bytes |> getUInt16(n*4))
+        HuffmanTree[n].node_1 = int(bytes |> getUInt16(n*4+2))
+    to_log(LOG_INFO,"Loaded VGADICT.WL6\n")
+
+let NUMBER_OF_PIC_CHUNKS = 149
+
+var PicOffsets : int[NUMBER_OF_PIC_CHUNKS]
+
+def InitPicOffsets
+    var bytes <- LoadBytes("VGAHEAD.WL6")
+    for n in range(NUMBER_OF_PIC_CHUNKS)
+        let b0 = int(bytes |> getUInt8(n*3))
+        let b1 = int(bytes |> getUInt8(n*3+1))
+        let b2 = int(bytes |> getUInt8(n*3+2))
+        let ofs = b0 + (b1 << 8) + (b2 << 16)
+        PicOffsets[n] = ofs!=int(0x00ffffff) ? ofs : -1
+        // to_log(LOG_INFO,"Pic {n} offset {ofs}\n")
+    to_log(LOG_INFO,"Loaded VGAHEAD.WL6\n")
+
+def huffman_expand ( src:array<uint8>#; length:int )
+    var dst : array<uint8>
+    dst |> resize(length)
+    var read = 0
+    var write = 0
+    var mask = 0x01
+    var input = src[read++]
+    var node_value = 0
+    var node = HUFFMAN_TREE_ROOT
+    while true
+        if (uint(input) & mask) == 0u
+            node_value = HuffmanTree[node].node_0
+        else
+            node_value = HuffmanTree[node].node_1
+        if mask == 0x80
+            mask = 0x01
+            input = src[read++]
+        else
+            mask <<= 1u
+        if node_value <= int(0xff)
+            dst[write++] = uint8(node_value)
+            node = HUFFMAN_TREE_ROOT
+            if write == length
+                break
+        else
+            node = node_value - 256
+    return <- dst
+
+let PIC_COUNT = 132
+let PIC_STARTS = 3
+let PIC_ENDS = 134
+
+struct public Picture
+    width, height : int
+    texels : array<uint8>
+
+var public Pictures : array<Picture>
+
+def ExtractPic ( bytes:array<uint8>; magic_number:int )
+    var next_index = magic_number + 1
+    while PicOffsets[next_index] == -1 && next_index < PIC_COUNT
+        next_index += 1
+    var compressed_length = PicOffsets[next_index] - PicOffsets[magic_number]
+    var expand_length = int(bytes |> getUInt32(PicOffsets[magic_number]))
+    var texels : array<uint8>
+    array_view(bytes, PicOffsets[magic_number]+4, compressed_length) <| $ ( view )
+        // to_log(LOG_INFO,"Pic {magic_number} compressed {compressed_length} expanded {expand_length}\n")
+        texels <- huffman_expand(view, expand_length)
+    return <- texels
+
+/*
+int compose_woven(uint16_t width, uint16_t height, int i, int j) {
+	return (j*(width>>2)+(i>>2))+(i&3)*(width>>2)*height; // don't ask, I just copy-pasted this
+}
+*/
+
+def ExtractTexels ( bytes:array<uint8>; w,h:int )
+    var texels : array<uint8>
+    texels |> resize(w*h)
+    for y in range(h)
+        for x in range(w)
+            let ofs = (y*(w>>2)+(x>>2))+(x&3)*(w>>2)*h
+            let b = bytes[ofs]
+            texels[y*w+x] = b
+    return <- texels
+
+def InitPics
+    InitHuffmanTree()
+    InitPicOffsets()
+    var bytes <- LoadBytes("VGAGRAPH.WL6")
+    var compressed_length = PicOffsets[1] - PicOffsets[0]
+    var expand_length = int(bytes |> getUInt32(0))
+    // to_log(LOG_INFO,"compressed length of pic table is {compressed_length} bytes, {expand_length} bytes expanded\n")
+    var exp_buf : array<uint8>
+    array_view(bytes, 4, compressed_length) <| $ ( cbuf )
+        exp_buf <- huffman_expand(cbuf, expand_length)
+    Pictures |> resize(PIC_COUNT)
+    for picture,i in Pictures,count()
+        picture.width = int(exp_buf[4*i  ]) | int(exp_buf[4*i+1])
+        picture.height = int(exp_buf[4*i+2]) | int(exp_buf[4*i+3])
+        var vtexels <- ExtractPic(bytes, i+PIC_STARTS)
+        picture.texels <- ExtractTexels(vtexels, picture.width, picture.height)
+        // to_log(LOG_INFO,"pic {i} is {picture.width}x{picture.height}\n")
+    to_log(LOG_INFO,"Loaded VGAGRAPH.WL6")
+    for i in range(PIC_ENDS, NUMBER_OF_PIC_CHUNKS-1)
+        var cl = PicOffsets[i+1] - PicOffsets[i]
+        var el = int(bytes |> getUInt32(PicOffsets[i]))
+        // to_log(LOG_INFO,"compressed length of pic chunk {i} is {cl} bytes, {el} bytes expanded\n")
+    for i in range(0,PIC_STARTS)
+        var cl = PicOffsets[i+1] - PicOffsets[i]
+        var el = int(bytes |> getUInt32(PicOffsets[i]))
+        to_log(LOG_INFO,"compressed length of pic chunk {i} is {cl} bytes, {el} bytes expanded\n")
+
 def public InitFiles
     InitMapHead()
     InitGameMap()
     InitResources()
     InitAudio()
+    InitPics()
 

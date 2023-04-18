@@ -102,6 +102,16 @@ def save_sound ( snd:Sound; prefix:string; index:int )
         file |> fwrite(header)
         file |> fwrite(snd.data)
 
+def public save_pic ( pic:Picture; prefix:string; index:int )
+    let folder = "{WL6_FILES_ROOT}/PICTURES"
+    mkdir(folder)
+    let filename = "{folder}/{prefix}_{index}.png"
+    var data : array<uint>
+    data |> resize(pic.width * pic.height)
+    for d,s in data,pic.texels
+        d = GamePalette[int(s)]
+    stbi_write_png(filename, pic.width, pic.height, 4, unsafe(addr(data[0])), pic.width*4)
+
 def public DumpFiles
     for i in range(WallPics |> length)
         save_wall_pic(i)
@@ -113,6 +123,8 @@ def public DumpFiles
         save_sound(Sounds[i],"sound",i)
     for i in range(Audio |> length)
         save_sound(Audio[i],"audio",i)
+    for i in range(Pictures |> length)
+        save_pic(Pictures[i],"pic",i)
 
 [export]
 def main

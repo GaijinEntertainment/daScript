@@ -33,16 +33,21 @@ def updateScore
 class public Animation
     sprites : array<int>
     spriteIndex : int
-    timer : int
+    timer : float
     loop : bool
 
     def Animation ( SPRITES:array<int>; LOOP:bool = false )
         sprites := SPRITES
         spriteIndex = 0
-        timer = 0
+        timer = 0.
         loop = LOOP
 
+enum Category
+    anything
+    enemy
+
 class public Thing
+    category : Category
     x, y : float                // starting x,y-coordinate on map
     rx, ry : float              // relative to player x,y-coordinate on map
     spriteIndex : int
@@ -59,6 +64,7 @@ class public Thing
         collectible = COLLECTIBLE
         orientable = ORIENTABLE
         blocking = BLOCKING
+        category = Category anything
 
     def startAnimation ( ANIMATION:Animation? )
         animation = ANIMATION
@@ -71,19 +77,17 @@ class public Thing
         ry = -rx * player.dy + ry * player.dx
         rx = RX
         if animation != null
-            animation.timer ++
-            if animation.timer >= 8
-                animation.timer = 0
+            animation.timer += 1. / 6. * frame_time
+            if animation.timer >= 1.0
+                animation.timer = 0.
                 if animation.spriteIndex >= animation.sprites |> length - 1
                     if animation.loop
                         // animation loops
                         animation.spriteIndex = 0
                     else
                         // animation ended (delete?)
-                        unsafe
-                            delete animation
                         animation = null
-
+                        return
                 else
                     animation.spriteIndex += 1
                 spriteIndex = animation.sprites[animation.spriteIndex]
@@ -100,6 +104,7 @@ class public Enemy : Thing
         direction = DIRECTION
         alive = true
         score.totalKills ++
+        category = Category enemy
 
     def die
         alive = false
@@ -170,6 +175,8 @@ class public Player
     turnLeft : bool = false
     turnRight : bool = false
     turnAngle : float = 0.0
+    weaponSprite : int = 421
+    weaponAnimation : Animation?
 
     def canMoveTo ( X,Y:float )
         let r = radius
@@ -249,24 +256,38 @@ class public Player
         elif sideways != 0.
             move(0., frame_time * sideways)
             changed = true
-    /*
-            if (this.weaponAnimation !== undefined) {
-                let a = this.weaponAnimation;
-                a.timer += 1;
-                if (a.timer >= 6) {
-                    a.timer = 0;
-                    if (a.spriteIndex >= a.sprites.length - 1) {
-                        this.weaponAnimation = undefined;
-                        this.weaponSprite = 421;
-                    } else {
-                        a.spriteIndex += 1;
-                        this.weaponSprite = a.sprites[a.spriteIndex];
-                    }
-                }
-            }
-        }
-    }
-    */
+        if weaponAnimation != null
+            assume a = weaponAnimation
+            a.timer += 1. / 6. * frame_time
+            if a.timer >= 1.
+                a.timer = 0.
+                if a.spriteIndex >= a.sprites |> length - 1
+                    weaponAnimation = null
+                    weaponSprite = 421
+                else
+                    a.spriteIndex += 1
+                    weaponSprite = a.sprites[a.spriteIndex]
+
+    def shoot
+        if weaponAnimation == null
+            play_game_sound(SoundName ATKPISTOLSND)
+            weaponAnimation = new Animation([{int 422; 423; 424; 425}])
+            let d = 100500. // zIndex[int(pixelWidth) / 2]
+            let tl = things |> length
+            for I in range(tl)
+                let i = tl - I - 1
+                var T = things[i]
+                if T.category != Category enemy
+                    continue
+                var t = unsafe(upcast<Enemy?> T)   // TODO: how to do this legally?
+                if t.rx < 0.
+                    continue
+                if t.rx >= d
+                    break
+                if abs(t.ry) <= .3 && t.alive
+                    // flash = new Flash(.5, 0, 0)
+                    t->die()
+                    return
 
     def isTooCloseToDoor(X,Y:int)
         let ix = floori(x)
@@ -529,6 +550,8 @@ def updatePlayer
     player->update()
     if is_key_pressed(VK_SPACE)
         player->activate()
+    if is_key_pressed(VK_LCONTROL) || is_key_pressed(VK_RCONTROL)
+        player->shoot()
     if is_key_pressed(VK_F2)
         fopen("{get_das_root()}/temp/player.json","wb") <| $ ( f )
             if f != null
