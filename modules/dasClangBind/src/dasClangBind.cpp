@@ -13,6 +13,7 @@
 namespace das {
 #include "dasClangBind.enum.class.inc"
 #include "dasClangBind.struct.class.inc"
+#include "dasClangBind.func.aot.inc"
 Module_dasClangBind::Module_dasClangBind() : Module("cbind") {
 }
 bool Module_dasClangBind::initDependencies() {

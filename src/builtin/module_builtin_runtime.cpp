@@ -1236,6 +1236,14 @@ namespace das
         return false;
     }
 
+    bool is_folding ( ) {
+        if ( daScriptEnvironment::bound && daScriptEnvironment::bound->g_Program ) {
+            return daScriptEnvironment::bound->g_Program->folding;
+        }
+        return false;
+    }
+
+
 #define STR_DSTR_REG(OPNAME,EXPR) \
     addExtern<DAS_BIND_FUN(OPNAME##_str_dstr)>(*this, lib, #EXPR, SideEffects::none, DAS_TOSTRING(OPNAME##_str_dstr)); \
     addExtern<DAS_BIND_FUN(OPNAME##_dstr_str)>(*this, lib, #EXPR, SideEffects::none, DAS_TOSTRING(OPNAME##_dstr_str));
@@ -1635,6 +1643,9 @@ namespace das
         // completion
         addExtern<DAS_BIND_FUN(is_in_completion)>(*this, lib, "is_in_completion",
             SideEffects::worstDefault, "is_in_completion");
+        // folding
+        addExtern<DAS_BIND_FUN(is_folding)>(*this, lib, "is_folding",
+            SideEffects::worstDefault, "is_folding");
         // logger
         addExtern<DAS_BIND_FUN(toLog)>(*this, lib, "to_log",
             SideEffects::modifyExternal, "toLog")->args({"level", "text"});

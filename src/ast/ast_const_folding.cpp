@@ -274,7 +274,9 @@ namespace das {
         ctx.thisProgram = program;
         auto node = expr->simulate(ctx);
         ctx.restart();
+        auto fb = program->folding;
         vec4f result = ctx.evalWithCatch(node);
+        program->folding = fb;
         if ( ctx.getException() ) {
             failed = true;
             return v_zero();
