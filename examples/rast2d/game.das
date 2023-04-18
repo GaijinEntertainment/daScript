@@ -6,12 +6,15 @@ require sound_names
 
 require daslib/algorithm
 require math
+require daslib/json_boost
+require fio
 
 var frame_time = 1.0
 
+let DOOR_SOUND_PLAYBACK_RATE = 18000
 let DOOR_SOUND_RADIUS = 10.0     // how far away door sound can be heard (in tiles)
-let DOOR_OPEN_SPEED = 0.5        // how fast door opens (in tiles per second)
-let DOOR_CLOSE_SPPED = 1.0       // how fast door closes (in tiles per second)
+let DOOR_OPEN_SPEED = 2.0        // how fast door opens (in tiles per second)
+let DOOR_CLOSE_SPPED = 2.0       // how fast door closes (in tiles per second)
 let DOOR_STAYS_CLOSED = 2.0      // how long door stays closed (in seconds)
 
 struct public Score
@@ -305,35 +308,46 @@ class public Player
                 timer = [[Timer
                     t = 0.,
                     opening = true,
+                    active = true,
+                    isDoor = true
+                ]]
+                play_game_sound_2d(SoundName OPENDOORSND, float2(X,Y)+float2(0.5), DOOR_SOUND_RADIUS, DOOR_SOUND_PLAYBACK_RATE)
+        elif m1 == 98
+            // pushwall
+            assume timer = timers[Y*64+X]
+            if !timer.active && int(level.plane0[(Y+DY)*64+X+DX]) >= 106
+                // there is no active timer for this wall, and it can move backwards
+                timer = [[Timer
+                    t = 0.,
+                    dx = DX,
+                    dy = DY,
+                    steps = 2,
+                    opening = true,
+                    active = true,
+                    isWall = true
+                ]]
+                score.secrets += 1
+                updateScore()
+                play_game_sound_2d(SoundName OPENDOORSND, float2(X,Y)+float2(0.5), DOOR_SOUND_RADIUS)
+        else
+            assume timer = timers[Y*64+X]
+            if !timer.active
+                timer = [[Timer
+                    t = 0.5,
                     active = true
                 ]]
-                play_game_sound_2d(SoundName OPENDOORSND, float2(X,Y)+float2(0.5), DOOR_SOUND_RADIUS)
-    /*
-            } else if (m1 === 98) {
-                // pushwall
-                let timer = wallTimers.find(function (obj) {
-                    return obj.x === x && obj.y === y;
-                });
-                if (!timer && map0(x + dx, y + dy) >= 106) {
-                    // there is no active timer for this wall, and it can move backwards
-                    wallTimers.push({x: x, y: y, t: 0, dx: dx, dy: dy, steps: 2});
-                    score.secrets += 1;
-                    updateScore();
-                }
-            }
-        };
-    */
-
-
+                play_game_sound_2d(SoundName PUSHWALLSND, float2(X,Y)+float2(0.5), DOOR_SOUND_RADIUS)
 
 var public player = new Player()
 
 struct Timer
     t : float
-    dx, dy : float
+    dx, dy : int
     steps : int
     opening : bool
     active : bool
+    isDoor : bool
+    isWall : bool
 
 var timers : Timer[64*64]
 
@@ -450,79 +464,96 @@ def updateThings
     things |> sort <| $ ( a,b )
         return b.rx < a.rx
 
-def updateDoorTimers
+def updateTimers
     for timer,index in timers,count()
         if !timer.active
             continue
-        if timer.opening
-            if timer.t < 1.
-                timer.t += DOOR_OPEN_SPEED / 64. * frame_time
+        let X = index & 63
+        let Y = index >> 6
+        if timer.isDoor
+            if timer.opening
+                if timer.t < 1.
+                    timer.t += DOOR_OPEN_SPEED / 64. * frame_time
+                else
+                    timer.t += 1. / 60. * frame_time
+                if timer.t >= 1.
+                    plane2[index] = false
+                if timer.t >= DOOR_STAYS_CLOSED
+                    timer.t = DOOR_STAYS_CLOSED
+                    timer.opening = false
             else
-                timer.t += 1. / 60. * frame_time
+                if timer.t < 1.
+                    timer.t -= DOOR_CLOSE_SPPED / 64. * frame_time
+                else
+                    timer.t -= 1./ 60. * frame_time
+                if timer.t <= 1.
+                    if !plane2[index]
+                        if player->isTooCloseToDoor(X, Y)
+                            timer.t = DOOR_STAYS_CLOSED
+                            // print("TOO CLOSE TO DOOR {player.x} {player.y} \n")
+                        else
+                            play_game_sound_2d(SoundName CLOSEDOORSND, float2(X,Y)+float2(0.5), DOOR_SOUND_RADIUS, DOOR_SOUND_PLAYBACK_RATE)
+                            plane2[index] = true
+                if timer.t <= 0.
+                    timer.t = 0.
+                    timer.active = false
+        elif timer.isWall
+            timer.t += 1. / 60. * frame_time
             if timer.t >= 1.
+                let DX = timer.dx
+                let DY = timer.dy
+                let wallValue = level.plane0[index]
+                level.plane0[index] = level.plane0[(X-DX) + (Y-DY) * 64]
+                level.plane0[(X+DX) + (Y+DY) * 64] = wallValue
+                level.plane1[index] = uint16(0)
                 plane2[index] = false
-            if timer.t >= DOOR_STAYS_CLOSED
-                timer.t = DOOR_STAYS_CLOSED
-                timer.opening = false
+                plane2[(X+DX) + (Y+DY) * 64] = true
+                timer.steps -= 1
+                if timer.steps>0 && !plane2[(X+2*DX) + (Y+2*DY) * 64]
+                    // wall moves one more step
+                    level.plane1[(X+DX) + (Y+DY) * 64] = uint16(98)
+                    timer.t = 0.
+                    timers[(X+DX) + (Y+DY) * 64] = timer
+                timer.active = false
         else
-            if timer.t < 1.
-                timer.t -= DOOR_CLOSE_SPPED / 64. * frame_time
-            else
-                timer.t -= 1./ 60. * frame_time
-            if timer.t <= 1.
-                if !plane2[index]
-                    let X = index%64
-                    let Y = index/64
-                    if player->isTooCloseToDoor(X, Y)
-                        timer.t = DOOR_STAYS_CLOSED
-                        // print("TOO CLOSE TO DOOR {player.x} {player.y} \n")
-                    else
-                        play_game_sound_2d(SoundName CLOSEDOORSND, float2(X,Y)+float2(0.5), DOOR_SOUND_RADIUS)
-                        plane2[index] = true
+            // any random timer
+            timer.t -= 1. / 60. * frame_time
             if timer.t <= 0.
                 timer.t = 0.
                 timer.active = false
 
-def updateWallTimers
-    pass
-
-/*
-    // update wall timers
-    for (let i = 0; i < wallTimers.length; i++) {
-        let timer = wallTimers[i];
-        timer.t += 1;
-        if (timer.t === 64) {
-            let x = timer.x;
-            let y = timer.y;
-            let dx = timer.dx;
-            let dy = timer.dy;
-            let wallValue = map0(x, y);
-            setMap0(x, y, map0(x - dx, y - dy));
-            setMap0(x + dx, y + dy, wallValue);
-            setMap1(x, y, 0);
-            plane2[x][y] = false;
-            plane2[x + dx][y + dy] = true;
-            timer.steps -= 1;
-            if (timer.steps > 0 && !plane2[x + 2 * dx][y + 2 * dy]) {
-                // wall moves one more step
-                setMap1(x + dx, y + dy, 98);
-                timer.t = 0;
-                timer.x += dx;
-                timer.y += dy;
-            } else {
-                // wall finished moving
-                doorTimers.splice(i, 1);
-                i -= 1;
-            }
-            shouldDrawMap = true;
-        }
-    }
-*/
+struct Location
+    x, y, dx, dy : float
 
 def updatePlayer
     player->update()
     if is_key_pressed(VK_SPACE)
         player->activate()
+    if is_key_pressed(VK_F2)
+        fopen("{get_das_root()}/temp/player.json","wb") <| $ ( f )
+            if f != null
+                to_log(LOG_INFO,"player at {player.x} {player.y} {player.dx} {player.dy}\n")
+                let loc = JV([[Location x=player.x, y=player.y, dx=player.dx, dy=player.dy]])
+                let txt = write_json(loc)
+                f |> fwrite(txt)
+                to_log(LOG_INFO, "saved\n")
+    if is_key_pressed(VK_F3)
+        fopen("{get_das_root()}/temp/player.json","rb") <| $ ( f )
+            if f != null
+                let txt = fread(f)
+                var error = ""
+                var jv = read_json(txt, error)
+                if jv != null
+                    to_log(LOG_INFO, "loaded\n")
+                    var loc = from_JV(jv, type<Location>)
+                    player.x = loc.x
+                    player.y = loc.y
+                    player.dx = loc.dx
+                    player.dy = loc.dy
+                    to_log(LOG_INFO,"player at {player.x} {player.y} {player.dx} {player.dy}\n")
+
+
+
 
 /*
     // update flashing palette
@@ -556,7 +587,6 @@ def updatePlayer
 def public updateGame(dt:float)
     frame_time = dt / 16.0
     updatePlayer()
-    updateDoorTimers()
-    updateWallTimers()
+    updateTimers()
     updateThings()
 

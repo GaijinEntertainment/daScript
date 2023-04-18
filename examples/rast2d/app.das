@@ -110,6 +110,8 @@ let public VK_0 = GLFW_KEY_0
 let public VK_SPACE = GLFW_KEY_SPACE
 let public VK_A = GLFW_KEY_A
 let public VK_D = GLFW_KEY_D
+let public VK_F2 = GLFW_KEY_F2
+let public VK_F3 = GLFW_KEY_F3
 
 def public is_key_pressed ( key:int )
     return glfwGetKey(window, key)!=0

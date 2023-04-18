@@ -6,6 +6,8 @@ require rast2d
 
 require math
 
+let HINT_SECRET_WALLS = false
+
 var fov = 1.
 var pixelWidth = 320.
 var pixelHeight = 200.
@@ -59,7 +61,7 @@ def drawWalls ( level:Level; var bmp:Bitmap8 )
                     assume timer = timers[cx+cy*64]
                     if timer.active
                         wallShift = timer.t
-                        if timer.dx == 0.
+                        if timer.dx != 0
                             // wall moves horizontally
                             if dx * rfy >= dy * wallShift
                                 // ray hits wall
@@ -103,6 +105,9 @@ def drawWalls ( level:Level; var bmp:Bitmap8 )
                     textureIndex = 2 * m0 - 2
                     // fix texture orientation depending on ray direction
                     tx = stepx * stepy < 0 ? 1. - rfx : rfx
+                if HINT_SECRET_WALLS
+                    if isPushwall
+                        textureIndex = 49 // some purple goo texture, to hint
                 break
             elif m0 <= 101
                 // hit a door

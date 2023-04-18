@@ -250,7 +250,7 @@ enum SoundName
 [I] sound 120 offset 0x179400 of size 184
 */
 
-def get_sound_data ( name:SoundName )
+def get_sound_data ( name:SoundName; max_seq:int=INT_MAX )
     var index = int(name)
     var data : array<float>
     while index < length(Sounds)
@@ -264,8 +264,8 @@ def get_sound_data ( name:SoundName )
         index ++
     return <- data
 
-def public play_game_sound_2d ( name:SoundName; xy:float2; r:float )
-    play_app_sound_2d(xy, r, get_sound_data(name), SOUND_SAMPLE_RATE)
+def public play_game_sound_2d ( name:SoundName; xy:float2; r:float; rate:int=SOUND_SAMPLE_RATE )
+    play_app_sound_2d(xy, r, get_sound_data(name), rate)
 
-def public play_game_sound ( name:SoundName )
-    play_app_sound(get_sound_data(name), SOUND_SAMPLE_RATE)
+def public play_game_sound ( name:SoundName; rate:int=SOUND_SAMPLE_RATE )
+    play_app_sound(get_sound_data(name), rate)
