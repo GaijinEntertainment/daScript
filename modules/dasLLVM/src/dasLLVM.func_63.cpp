@@ -12,60 +12,65 @@
 namespace das {
 #include "dasLLVM.func.aot.decl.inc"
 void Module_dasLLVM::initFunctions_63() {
-// from D:\Work\libclang\include\llvm-c/Transforms/Scalar.h:126:6
-	addExtern< void (*)(LLVMOpaquePassManager *) , LLVMAddSimplifyLibCallsPass >(*this,lib,"LLVMAddSimplifyLibCallsPass",SideEffects::worstDefault,"LLVMAddSimplifyLibCallsPass")
-		->args({"PM"});
-// from D:\Work\libclang\include\llvm-c/Transforms/Scalar.h:129:6
-	addExtern< void (*)(LLVMOpaquePassManager *) , LLVMAddTailCallEliminationPass >(*this,lib,"LLVMAddTailCallEliminationPass",SideEffects::worstDefault,"LLVMAddTailCallEliminationPass")
-		->args({"PM"});
-// from D:\Work\libclang\include\llvm-c/Transforms/Scalar.h:132:6
-	addExtern< void (*)(LLVMOpaquePassManager *) , LLVMAddDemoteMemoryToRegisterPass >(*this,lib,"LLVMAddDemoteMemoryToRegisterPass",SideEffects::worstDefault,"LLVMAddDemoteMemoryToRegisterPass")
-		->args({"PM"});
-// from D:\Work\libclang\include\llvm-c/Transforms/Scalar.h:135:6
-	addExtern< void (*)(LLVMOpaquePassManager *) , LLVMAddVerifierPass >(*this,lib,"LLVMAddVerifierPass",SideEffects::worstDefault,"LLVMAddVerifierPass")
-		->args({"PM"});
-// from D:\Work\libclang\include\llvm-c/Transforms/Scalar.h:138:6
-	addExtern< void (*)(LLVMOpaquePassManager *) , LLVMAddCorrelatedValuePropagationPass >(*this,lib,"LLVMAddCorrelatedValuePropagationPass",SideEffects::worstDefault,"LLVMAddCorrelatedValuePropagationPass")
-		->args({"PM"});
-// from D:\Work\libclang\include\llvm-c/Transforms/Scalar.h:141:6
-	addExtern< void (*)(LLVMOpaquePassManager *) , LLVMAddEarlyCSEPass >(*this,lib,"LLVMAddEarlyCSEPass",SideEffects::worstDefault,"LLVMAddEarlyCSEPass")
-		->args({"PM"});
-// from D:\Work\libclang\include\llvm-c/Transforms/Scalar.h:144:6
-	addExtern< void (*)(LLVMOpaquePassManager *) , LLVMAddEarlyCSEMemSSAPass >(*this,lib,"LLVMAddEarlyCSEMemSSAPass",SideEffects::worstDefault,"LLVMAddEarlyCSEMemSSAPass")
-		->args({"PM"});
-// from D:\Work\libclang\include\llvm-c/Transforms/Scalar.h:147:6
-	addExtern< void (*)(LLVMOpaquePassManager *) , LLVMAddLowerExpectIntrinsicPass >(*this,lib,"LLVMAddLowerExpectIntrinsicPass",SideEffects::worstDefault,"LLVMAddLowerExpectIntrinsicPass")
-		->args({"PM"});
-// from D:\Work\libclang\include\llvm-c/Transforms/Scalar.h:150:6
-	addExtern< void (*)(LLVMOpaquePassManager *) , LLVMAddLowerConstantIntrinsicsPass >(*this,lib,"LLVMAddLowerConstantIntrinsicsPass",SideEffects::worstDefault,"LLVMAddLowerConstantIntrinsicsPass")
-		->args({"PM"});
-// from D:\Work\libclang\include\llvm-c/Transforms/Scalar.h:153:6
-	addExtern< void (*)(LLVMOpaquePassManager *) , LLVMAddTypeBasedAliasAnalysisPass >(*this,lib,"LLVMAddTypeBasedAliasAnalysisPass",SideEffects::worstDefault,"LLVMAddTypeBasedAliasAnalysisPass")
-		->args({"PM"});
-// from D:\Work\libclang\include\llvm-c/Transforms/Scalar.h:156:6
-	addExtern< void (*)(LLVMOpaquePassManager *) , LLVMAddScopedNoAliasAAPass >(*this,lib,"LLVMAddScopedNoAliasAAPass",SideEffects::worstDefault,"LLVMAddScopedNoAliasAAPass")
-		->args({"PM"});
-// from D:\Work\libclang\include\llvm-c/Transforms/Scalar.h:159:6
-	addExtern< void (*)(LLVMOpaquePassManager *) , LLVMAddBasicAliasAnalysisPass >(*this,lib,"LLVMAddBasicAliasAnalysisPass",SideEffects::worstDefault,"LLVMAddBasicAliasAnalysisPass")
-		->args({"PM"});
-// from D:\Work\libclang\include\llvm-c/Transforms/Scalar.h:162:6
-	addExtern< void (*)(LLVMOpaquePassManager *) , LLVMAddUnifyFunctionExitNodesPass >(*this,lib,"LLVMAddUnifyFunctionExitNodesPass",SideEffects::worstDefault,"LLVMAddUnifyFunctionExitNodesPass")
-		->args({"PM"});
-// from D:\Work\libclang\include\llvm-c/Transforms/Utils.h:35:6
-	addExtern< void (*)(LLVMOpaquePassManager *) , LLVMAddLowerSwitchPass >(*this,lib,"LLVMAddLowerSwitchPass",SideEffects::worstDefault,"LLVMAddLowerSwitchPass")
-		->args({"PM"});
-// from D:\Work\libclang\include\llvm-c/Transforms/Utils.h:38:6
-	addExtern< void (*)(LLVMOpaquePassManager *) , LLVMAddPromoteMemoryToRegisterPass >(*this,lib,"LLVMAddPromoteMemoryToRegisterPass",SideEffects::worstDefault,"LLVMAddPromoteMemoryToRegisterPass")
-		->args({"PM"});
-// from D:\Work\libclang\include\llvm-c/Transforms/Utils.h:41:6
-	addExtern< void (*)(LLVMOpaquePassManager *) , LLVMAddAddDiscriminatorsPass >(*this,lib,"LLVMAddAddDiscriminatorsPass",SideEffects::worstDefault,"LLVMAddAddDiscriminatorsPass")
-		->args({"PM"});
-// from D:\Work\libclang\include\llvm-c/Transforms/Vectorize.h:36:6
-	addExtern< void (*)(LLVMOpaquePassManager *) , LLVMAddLoopVectorizePass >(*this,lib,"LLVMAddLoopVectorizePass",SideEffects::worstDefault,"LLVMAddLoopVectorizePass")
-		->args({"PM"});
-// from D:\Work\libclang\include\llvm-c/Transforms/Vectorize.h:39:6
-	addExtern< void (*)(LLVMOpaquePassManager *) , LLVMAddSLPVectorizePass >(*this,lib,"LLVMAddSLPVectorizePass",SideEffects::worstDefault,"LLVMAddSLPVectorizePass")
-		->args({"PM"});
+// from D:\Work\libclang\include\llvm-c/Remarks.h:124:28
+	addExtern< LLVMRemarkOpaqueString * (*)(LLVMRemarkOpaqueArg *) , LLVMRemarkArgGetValue >(*this,lib,"LLVMRemarkArgGetValue",SideEffects::worstDefault,"LLVMRemarkArgGetValue")
+		->args({"Arg"});
+// from D:\Work\libclang\include\llvm-c/Remarks.h:133:30
+	addExtern< LLVMRemarkOpaqueDebugLoc * (*)(LLVMRemarkOpaqueArg *) , LLVMRemarkArgGetDebugLoc >(*this,lib,"LLVMRemarkArgGetDebugLoc",SideEffects::worstDefault,"LLVMRemarkArgGetDebugLoc")
+		->args({"Arg"});
+// from D:\Work\libclang\include\llvm-c/Remarks.h:147:13
+	addExtern< void (*)(LLVMRemarkOpaqueEntry *) , LLVMRemarkEntryDispose >(*this,lib,"LLVMRemarkEntryDispose",SideEffects::worstDefault,"LLVMRemarkEntryDispose")
+		->args({"Remark"});
+// from D:\Work\libclang\include\llvm-c/Remarks.h:155:28
+	addExtern< LLVMRemarkType (*)(LLVMRemarkOpaqueEntry *) , LLVMRemarkEntryGetType >(*this,lib,"LLVMRemarkEntryGetType",SideEffects::worstDefault,"LLVMRemarkEntryGetType")
+		->args({"Remark"});
+// from D:\Work\libclang\include\llvm-c/Remarks.h:163:1
+	addExtern< LLVMRemarkOpaqueString * (*)(LLVMRemarkOpaqueEntry *) , LLVMRemarkEntryGetPassName >(*this,lib,"LLVMRemarkEntryGetPassName",SideEffects::worstDefault,"LLVMRemarkEntryGetPassName")
+		->args({"Remark"});
+// from D:\Work\libclang\include\llvm-c/Remarks.h:171:1
+	addExtern< LLVMRemarkOpaqueString * (*)(LLVMRemarkOpaqueEntry *) , LLVMRemarkEntryGetRemarkName >(*this,lib,"LLVMRemarkEntryGetRemarkName",SideEffects::worstDefault,"LLVMRemarkEntryGetRemarkName")
+		->args({"Remark"});
+// from D:\Work\libclang\include\llvm-c/Remarks.h:179:1
+	addExtern< LLVMRemarkOpaqueString * (*)(LLVMRemarkOpaqueEntry *) , LLVMRemarkEntryGetFunctionName >(*this,lib,"LLVMRemarkEntryGetFunctionName",SideEffects::worstDefault,"LLVMRemarkEntryGetFunctionName")
+		->args({"Remark"});
+// from D:\Work\libclang\include\llvm-c/Remarks.h:189:1
+	addExtern< LLVMRemarkOpaqueDebugLoc * (*)(LLVMRemarkOpaqueEntry *) , LLVMRemarkEntryGetDebugLoc >(*this,lib,"LLVMRemarkEntryGetDebugLoc",SideEffects::worstDefault,"LLVMRemarkEntryGetDebugLoc")
+		->args({"Remark"});
+// from D:\Work\libclang\include\llvm-c/Remarks.h:198:17
+	addExtern< uint64_t (*)(LLVMRemarkOpaqueEntry *) , LLVMRemarkEntryGetHotness >(*this,lib,"LLVMRemarkEntryGetHotness",SideEffects::worstDefault,"LLVMRemarkEntryGetHotness")
+		->args({"Remark"});
+// from D:\Work\libclang\include\llvm-c/Remarks.h:205:17
+	addExtern< unsigned int (*)(LLVMRemarkOpaqueEntry *) , LLVMRemarkEntryGetNumArgs >(*this,lib,"LLVMRemarkEntryGetNumArgs",SideEffects::worstDefault,"LLVMRemarkEntryGetNumArgs")
+		->args({"Remark"});
+// from D:\Work\libclang\include\llvm-c/Remarks.h:216:25
+	addExtern< LLVMRemarkOpaqueArg * (*)(LLVMRemarkOpaqueEntry *) , LLVMRemarkEntryGetFirstArg >(*this,lib,"LLVMRemarkEntryGetFirstArg",SideEffects::worstDefault,"LLVMRemarkEntryGetFirstArg")
+		->args({"Remark"});
+// from D:\Work\libclang\include\llvm-c/Remarks.h:227:25
+	addExtern< LLVMRemarkOpaqueArg * (*)(LLVMRemarkOpaqueArg *,LLVMRemarkOpaqueEntry *) , LLVMRemarkEntryGetNextArg >(*this,lib,"LLVMRemarkEntryGetNextArg",SideEffects::worstDefault,"LLVMRemarkEntryGetNextArg")
+		->args({"It","Remark"});
+// from D:\Work\libclang\include\llvm-c/Remarks.h:243:28
+	addExtern< LLVMRemarkOpaqueParser * (*)(const void *,uint64_t) , LLVMRemarkParserCreateYAML >(*this,lib,"LLVMRemarkParserCreateYAML",SideEffects::worstDefault,"LLVMRemarkParserCreateYAML")
+		->args({"Buf","Size"});
+// from D:\Work\libclang\include\llvm-c/Remarks.h:257:28
+	addExtern< LLVMRemarkOpaqueParser * (*)(const void *,uint64_t) , LLVMRemarkParserCreateBitstream >(*this,lib,"LLVMRemarkParserCreateBitstream",SideEffects::worstDefault,"LLVMRemarkParserCreateBitstream")
+		->args({"Buf","Size"});
+// from D:\Work\libclang\include\llvm-c/Remarks.h:302:27
+	addExtern< LLVMRemarkOpaqueEntry * (*)(LLVMRemarkOpaqueParser *) , LLVMRemarkParserGetNext >(*this,lib,"LLVMRemarkParserGetNext",SideEffects::worstDefault,"LLVMRemarkParserGetNext")
+		->args({"Parser"});
+// from D:\Work\libclang\include\llvm-c/Remarks.h:309:17
+	addExtern< int (*)(LLVMRemarkOpaqueParser *) , LLVMRemarkParserHasError >(*this,lib,"LLVMRemarkParserHasError",SideEffects::worstDefault,"LLVMRemarkParserHasError")
+		->args({"Parser"});
+// from D:\Work\libclang\include\llvm-c/Remarks.h:322:20
+	addExtern< const char * (*)(LLVMRemarkOpaqueParser *) , LLVMRemarkParserGetErrorMessage >(*this,lib,"LLVMRemarkParserGetErrorMessage",SideEffects::worstDefault,"LLVMRemarkParserGetErrorMessage")
+		->args({"Parser"});
+// from D:\Work\libclang\include\llvm-c/Remarks.h:329:13
+	addExtern< void (*)(LLVMRemarkOpaqueParser *) , LLVMRemarkParserDispose >(*this,lib,"LLVMRemarkParserDispose",SideEffects::worstDefault,"LLVMRemarkParserDispose")
+		->args({"Parser"});
+// from D:\Work\libclang\include\llvm-c/Remarks.h:336:17
+	addExtern< unsigned int (*)() , LLVMRemarkVersion >(*this,lib,"LLVMRemarkVersion",SideEffects::worstDefault,"LLVMRemarkVersion");
+// from D:\Work\libclang\include\llvm-c/Support.h:35:10
+	addExtern< int (*)(const char *) , LLVMLoadLibraryPermanently >(*this,lib,"LLVMLoadLibraryPermanently",SideEffects::worstDefault,"LLVMLoadLibraryPermanently")
+		->args({"Filename"});
 }
 }
 

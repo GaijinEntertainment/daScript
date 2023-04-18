@@ -12,66 +12,66 @@
 namespace das {
 #include "dasLLVM.func.aot.decl.inc"
 void Module_dasLLVM::initFunctions_55() {
-// from D:\Work\libclang\include\llvm-c/lto.h:783:6
-	addExtern< void (*)(LLVMOpaqueThinLTOCodeGenerator *,const char *) , thinlto_set_generated_objects_dir >(*this,lib,"thinlto_set_generated_objects_dir",SideEffects::worstDefault,"thinlto_set_generated_objects_dir")
-		->args({"cg","save_temps_dir"});
-// from D:\Work\libclang\include\llvm-c/lto.h:791:13
-	addExtern< void (*)(LLVMOpaqueThinLTOCodeGenerator *,const char *) , thinlto_codegen_set_cpu >(*this,lib,"thinlto_codegen_set_cpu",SideEffects::worstDefault,"thinlto_codegen_set_cpu")
-		->args({"cg","cpu"});
-// from D:\Work\libclang\include\llvm-c/lto.h:799:13
-	addExtern< void (*)(LLVMOpaqueThinLTOCodeGenerator *,bool) , thinlto_codegen_disable_codegen >(*this,lib,"thinlto_codegen_disable_codegen",SideEffects::worstDefault,"thinlto_codegen_disable_codegen")
-		->args({"cg","disable"});
-// from D:\Work\libclang\include\llvm-c/lto.h:807:13
-	addExtern< void (*)(LLVMOpaqueThinLTOCodeGenerator *,bool) , thinlto_codegen_set_codegen_only >(*this,lib,"thinlto_codegen_set_codegen_only",SideEffects::worstDefault,"thinlto_codegen_set_codegen_only")
-		->args({"cg","codegen_only"});
-// from D:\Work\libclang\include\llvm-c/lto.h:815:13
-	addExtern< void (*)(const char *const *,int) , thinlto_debug_options >(*this,lib,"thinlto_debug_options",SideEffects::worstDefault,"thinlto_debug_options")
-		->args({"options","number"});
-// from D:\Work\libclang\include\llvm-c/lto.h:822:19
-	addExtern< bool (*)(LLVMOpaqueLTOModule *) , lto_module_is_thinlto >(*this,lib,"lto_module_is_thinlto",SideEffects::worstDefault,"lto_module_is_thinlto")
-		->args({"mod"});
-// from D:\Work\libclang\include\llvm-c/lto.h:832:13
-	addExtern< void (*)(LLVMOpaqueThinLTOCodeGenerator *,const char *,int) , thinlto_codegen_add_must_preserve_symbol >(*this,lib,"thinlto_codegen_add_must_preserve_symbol",SideEffects::worstDefault,"thinlto_codegen_add_must_preserve_symbol")
-		->args({"cg","name","length"});
-// from D:\Work\libclang\include\llvm-c/lto.h:844:13
-	addExtern< void (*)(LLVMOpaqueThinLTOCodeGenerator *,const char *,int) , thinlto_codegen_add_cross_referenced_symbol >(*this,lib,"thinlto_codegen_add_cross_referenced_symbol",SideEffects::worstDefault,"thinlto_codegen_add_cross_referenced_symbol")
-		->args({"cg","name","length"});
-// from D:\Work\libclang\include\llvm-c/lto.h:875:13
-	addExtern< void (*)(LLVMOpaqueThinLTOCodeGenerator *,const char *) , thinlto_codegen_set_cache_dir >(*this,lib,"thinlto_codegen_set_cache_dir",SideEffects::worstDefault,"thinlto_codegen_set_cache_dir")
-		->args({"cg","cache_dir"});
-// from D:\Work\libclang\include\llvm-c/lto.h:885:13
-	addExtern< void (*)(LLVMOpaqueThinLTOCodeGenerator *,int) , thinlto_codegen_set_cache_pruning_interval >(*this,lib,"thinlto_codegen_set_cache_pruning_interval",SideEffects::worstDefault,"thinlto_codegen_set_cache_pruning_interval")
-		->args({"cg","interval"});
-// from D:\Work\libclang\include\llvm-c/lto.h:901:13
-	addExtern< void (*)(LLVMOpaqueThinLTOCodeGenerator *,unsigned int) , thinlto_codegen_set_final_cache_size_relative_to_available_space >(*this,lib,"thinlto_codegen_set_final_cache_size_relative_to_available_space",SideEffects::worstDefault,"thinlto_codegen_set_final_cache_size_relative_to_available_space")
-		->args({"cg","percentage"});
-// from D:\Work\libclang\include\llvm-c/lto.h:910:13
-	addExtern< void (*)(LLVMOpaqueThinLTOCodeGenerator *,unsigned int) , thinlto_codegen_set_cache_entry_expiration >(*this,lib,"thinlto_codegen_set_cache_entry_expiration",SideEffects::worstDefault,"thinlto_codegen_set_cache_entry_expiration")
-		->args({"cg","expiration"});
-// from D:\Work\libclang\include\llvm-c/lto.h:921:13
-	addExtern< void (*)(LLVMOpaqueThinLTOCodeGenerator *,unsigned int) , thinlto_codegen_set_cache_size_bytes >(*this,lib,"thinlto_codegen_set_cache_size_bytes",SideEffects::worstDefault,"thinlto_codegen_set_cache_size_bytes")
-		->args({"cg","max_size_bytes"});
-// from D:\Work\libclang\include\llvm-c/lto.h:931:1
-	addExtern< void (*)(LLVMOpaqueThinLTOCodeGenerator *,unsigned int) , thinlto_codegen_set_cache_size_megabytes >(*this,lib,"thinlto_codegen_set_cache_size_megabytes",SideEffects::worstDefault,"thinlto_codegen_set_cache_size_megabytes")
-		->args({"cg","max_size_megabytes"});
-// from D:\Work\libclang\include\llvm-c/lto.h:940:13
-	addExtern< void (*)(LLVMOpaqueThinLTOCodeGenerator *,unsigned int) , thinlto_codegen_set_cache_size_files >(*this,lib,"thinlto_codegen_set_cache_size_files",SideEffects::worstDefault,"thinlto_codegen_set_cache_size_files")
-		->args({"cg","max_size_files"});
-// from D:\Work\libclang\include\llvm-c/Object.h:74:15
-	addExtern< LLVMOpaqueBinary * (*)(LLVMOpaqueMemoryBuffer *,LLVMOpaqueContext *,char **) , LLVMCreateBinary >(*this,lib,"LLVMCreateBinary",SideEffects::worstDefault,"LLVMCreateBinary")
-		->args({"MemBuf","Context","ErrorMessage"});
-// from D:\Work\libclang\include\llvm-c/Object.h:84:6
-	addExtern< void (*)(LLVMOpaqueBinary *) , LLVMDisposeBinary >(*this,lib,"LLVMDisposeBinary",SideEffects::worstDefault,"LLVMDisposeBinary")
-		->args({"BR"});
-// from D:\Work\libclang\include\llvm-c/Object.h:95:21
-	addExtern< LLVMOpaqueMemoryBuffer * (*)(LLVMOpaqueBinary *) , LLVMBinaryCopyMemoryBuffer >(*this,lib,"LLVMBinaryCopyMemoryBuffer",SideEffects::worstDefault,"LLVMBinaryCopyMemoryBuffer")
-		->args({"BR"});
-// from D:\Work\libclang\include\llvm-c/Object.h:102:16
-	addExtern< LLVMBinaryType (*)(LLVMOpaqueBinary *) , LLVMBinaryGetType >(*this,lib,"LLVMBinaryGetType",SideEffects::worstDefault,"LLVMBinaryGetType")
-		->args({"BR"});
-// from D:\Work\libclang\include\llvm-c/Object.h:115:15
-	addExtern< LLVMOpaqueBinary * (*)(LLVMOpaqueBinary *,const char *,size_t,char **) , LLVMMachOUniversalBinaryCopyObjectForArch >(*this,lib,"LLVMMachOUniversalBinaryCopyObjectForArch",SideEffects::worstDefault,"LLVMMachOUniversalBinaryCopyObjectForArch")
-		->args({"BR","Arch","ArchLen","ErrorMessage"});
+// from D:\Work\libclang\include\llvm-c/Orc.h:1087:1
+	addExtern< LLVMOpaqueContext * (*)(LLVMOrcOpaqueThreadSafeContext *) , LLVMOrcThreadSafeContextGetContext >(*this,lib,"LLVMOrcThreadSafeContextGetContext",SideEffects::worstDefault,"LLVMOrcThreadSafeContextGetContext")
+		->args({"TSCtx"});
+// from D:\Work\libclang\include\llvm-c/Orc.h:1092:6
+	addExtern< void (*)(LLVMOrcOpaqueThreadSafeContext *) , LLVMOrcDisposeThreadSafeContext >(*this,lib,"LLVMOrcDisposeThreadSafeContext",SideEffects::worstDefault,"LLVMOrcDisposeThreadSafeContext")
+		->args({"TSCtx"});
+// from D:\Work\libclang\include\llvm-c/Orc.h:1105:1
+	addExtern< LLVMOrcOpaqueThreadSafeModule * (*)(LLVMOpaqueModule *,LLVMOrcOpaqueThreadSafeContext *) , LLVMOrcCreateNewThreadSafeModule >(*this,lib,"LLVMOrcCreateNewThreadSafeModule",SideEffects::worstDefault,"LLVMOrcCreateNewThreadSafeModule")
+		->args({"M","TSCtx"});
+// from D:\Work\libclang\include\llvm-c/Orc.h:1113:6
+	addExtern< void (*)(LLVMOrcOpaqueThreadSafeModule *) , LLVMOrcDisposeThreadSafeModule >(*this,lib,"LLVMOrcDisposeThreadSafeModule",SideEffects::worstDefault,"LLVMOrcDisposeThreadSafeModule")
+		->args({"TSM"});
+// from D:\Work\libclang\include\llvm-c/Orc.h:1131:14
+	addExtern< LLVMOpaqueError * (*)(LLVMOrcOpaqueJITTargetMachineBuilder **) , LLVMOrcJITTargetMachineBuilderDetectHost >(*this,lib,"LLVMOrcJITTargetMachineBuilderDetectHost",SideEffects::worstDefault,"LLVMOrcJITTargetMachineBuilderDetectHost")
+		->args({"Result"});
+// from D:\Work\libclang\include\llvm-c/Orc.h:1144:1
+	addExtern< LLVMOrcOpaqueJITTargetMachineBuilder * (*)(LLVMOpaqueTargetMachine *) , LLVMOrcJITTargetMachineBuilderCreateFromTargetMachine >(*this,lib,"LLVMOrcJITTargetMachineBuilderCreateFromTargetMachine",SideEffects::worstDefault,"LLVMOrcJITTargetMachineBuilderCreateFromTargetMachine")
+		->args({"TM"});
+// from D:\Work\libclang\include\llvm-c/Orc.h:1149:6
+	addExtern< void (*)(LLVMOrcOpaqueJITTargetMachineBuilder *) , LLVMOrcDisposeJITTargetMachineBuilder >(*this,lib,"LLVMOrcDisposeJITTargetMachineBuilder",SideEffects::worstDefault,"LLVMOrcDisposeJITTargetMachineBuilder")
+		->args({"JTMB"});
+// from D:\Work\libclang\include\llvm-c/Orc.h:1158:7
+	addExtern< char * (*)(LLVMOrcOpaqueJITTargetMachineBuilder *) , LLVMOrcJITTargetMachineBuilderGetTargetTriple >(*this,lib,"LLVMOrcJITTargetMachineBuilderGetTargetTriple",SideEffects::worstDefault,"LLVMOrcJITTargetMachineBuilderGetTargetTriple")
+		->args({"JTMB"});
+// from D:\Work\libclang\include\llvm-c/Orc.h:1165:6
+	addExtern< void (*)(LLVMOrcOpaqueJITTargetMachineBuilder *,const char *) , LLVMOrcJITTargetMachineBuilderSetTargetTriple >(*this,lib,"LLVMOrcJITTargetMachineBuilderSetTargetTriple",SideEffects::worstDefault,"LLVMOrcJITTargetMachineBuilderSetTargetTriple")
+		->args({"JTMB","TargetTriple"});
+// from D:\Work\libclang\include\llvm-c/Orc.h:1179:14
+	addExtern< LLVMOpaqueError * (*)(LLVMOrcOpaqueObjectLayer *,LLVMOrcOpaqueJITDylib *,LLVMOpaqueMemoryBuffer *) , LLVMOrcObjectLayerAddObjectFile >(*this,lib,"LLVMOrcObjectLayerAddObjectFile",SideEffects::worstDefault,"LLVMOrcObjectLayerAddObjectFile")
+		->args({"ObjLayer","JD","ObjBuffer"});
+// from D:\Work\libclang\include\llvm-c/Orc.h:1205:6
+	addExtern< void (*)(LLVMOrcOpaqueObjectLayer *,LLVMOrcOpaqueMaterializationResponsibility *,LLVMOpaqueMemoryBuffer *) , LLVMOrcObjectLayerEmit >(*this,lib,"LLVMOrcObjectLayerEmit",SideEffects::worstDefault,"LLVMOrcObjectLayerEmit")
+		->args({"ObjLayer","R","ObjBuffer"});
+// from D:\Work\libclang\include\llvm-c/Orc.h:1212:6
+	addExtern< void (*)(LLVMOrcOpaqueObjectLayer *) , LLVMOrcDisposeObjectLayer >(*this,lib,"LLVMOrcDisposeObjectLayer",SideEffects::worstDefault,"LLVMOrcDisposeObjectLayer")
+		->args({"ObjLayer"});
+// from D:\Work\libclang\include\llvm-c/Orc.h:1214:6
+	addExtern< void (*)(LLVMOrcOpaqueIRTransformLayer *,LLVMOrcOpaqueMaterializationResponsibility *,LLVMOrcOpaqueThreadSafeModule *) , LLVMOrcIRTransformLayerEmit >(*this,lib,"LLVMOrcIRTransformLayerEmit",SideEffects::worstDefault,"LLVMOrcIRTransformLayerEmit")
+		->args({"IRTransformLayer","MR","TSM"});
+// from D:\Work\libclang\include\llvm-c/Orc.h:1240:1
+	addExtern< LLVMOrcOpaqueIndirectStubsManager * (*)(const char *) , LLVMOrcCreateLocalIndirectStubsManager >(*this,lib,"LLVMOrcCreateLocalIndirectStubsManager",SideEffects::worstDefault,"LLVMOrcCreateLocalIndirectStubsManager")
+		->args({"TargetTriple"});
+// from D:\Work\libclang\include\llvm-c/Orc.h:1245:6
+	addExtern< void (*)(LLVMOrcOpaqueIndirectStubsManager *) , LLVMOrcDisposeIndirectStubsManager >(*this,lib,"LLVMOrcDisposeIndirectStubsManager",SideEffects::worstDefault,"LLVMOrcDisposeIndirectStubsManager")
+		->args({"ISM"});
+// from D:\Work\libclang\include\llvm-c/Orc.h:1247:14
+	addExtern< LLVMOpaqueError * (*)(const char *,LLVMOrcOpaqueExecutionSession *,LLVMOrcJITTargetAddress,LLVMOrcOpaqueLazyCallThroughManager **) , LLVMOrcCreateLocalLazyCallThroughManager >(*this,lib,"LLVMOrcCreateLocalLazyCallThroughManager",SideEffects::worstDefault,"LLVMOrcCreateLocalLazyCallThroughManager")
+		->args({"TargetTriple","ES","ErrorHandlerAddr","LCTM"});
+// from D:\Work\libclang\include\llvm-c/Orc.h:1255:6
+	addExtern< void (*)(LLVMOrcOpaqueLazyCallThroughManager *) , LLVMOrcDisposeLazyCallThroughManager >(*this,lib,"LLVMOrcDisposeLazyCallThroughManager",SideEffects::worstDefault,"LLVMOrcDisposeLazyCallThroughManager")
+		->args({"LCTM"});
+// from D:\Work\libclang\include\llvm-c/Orc.h:1272:23
+	addExtern< LLVMOrcOpaqueDumpObjects * (*)(const char *,const char *) , LLVMOrcCreateDumpObjects >(*this,lib,"LLVMOrcCreateDumpObjects",SideEffects::worstDefault,"LLVMOrcCreateDumpObjects")
+		->args({"DumpDir","IdentifierOverride"});
+// from D:\Work\libclang\include\llvm-c/Orc.h:1278:6
+	addExtern< void (*)(LLVMOrcOpaqueDumpObjects *) , LLVMOrcDisposeDumpObjects >(*this,lib,"LLVMOrcDisposeDumpObjects",SideEffects::worstDefault,"LLVMOrcDisposeDumpObjects")
+		->args({"DumpObjects"});
+// from D:\Work\libclang\include\llvm-c/Orc.h:1283:14
+	addExtern< LLVMOpaqueError * (*)(LLVMOrcOpaqueDumpObjects *,LLVMOpaqueMemoryBuffer **) , LLVMOrcDumpObjects_CallOperator >(*this,lib,"LLVMOrcDumpObjects_CallOperator",SideEffects::worstDefault,"LLVMOrcDumpObjects_CallOperator")
+		->args({"DumpObjects","ObjBuffer"});
 }
 }
 

@@ -12,55 +12,53 @@
 namespace das {
 #include "dasLLVM.func.aot.decl.inc"
 void Module_dasLLVM::initFunctions_42() {
-// from D:\Work\libclang\include\llvm-c/DebugInfo.h:1361:18
-	addExtern< unsigned int (*)(LLVMOpaqueMetadata *) , LLVMGetMetadataKind >(*this,lib,"LLVMGetMetadataKind",SideEffects::worstDefault,"LLVMGetMetadataKind")
-		->args({"Metadata"});
-// from D:\Work\libclang\include\llvm-c/Disassembler.h:72:5
-	addExtern< int (*)(void *,uint64_t) , LLVMSetDisasmOptions >(*this,lib,"LLVMSetDisasmOptions",SideEffects::worstDefault,"LLVMSetDisasmOptions")
-		->args({"DC","Options"});
 // from D:\Work\libclang\include\llvm-c/Disassembler.h:88:6
 	addExtern< void (*)(void *) , LLVMDisasmDispose >(*this,lib,"LLVMDisasmDispose",SideEffects::worstDefault,"LLVMDisasmDispose")
 		->args({"DC"});
 // from D:\Work\libclang\include\llvm-c/Disassembler.h:100:8
 	addExtern< size_t (*)(void *,unsigned char *,uint64_t,uint64_t,char *,size_t) , LLVMDisasmInstruction >(*this,lib,"LLVMDisasmInstruction",SideEffects::worstDefault,"LLVMDisasmInstruction")
 		->args({"DC","Bytes","BytesSize","PC","OutString","OutStringSize"});
-// from D:\Work\libclang\include\llvm-c/Error.h:37:17
+// from D:\Work\libclang\include\llvm-c/Error.h:44:17
 	addExtern< const void * (*)(LLVMOpaqueError *) , LLVMGetErrorTypeId >(*this,lib,"LLVMGetErrorTypeId",SideEffects::worstDefault,"LLVMGetErrorTypeId")
 		->args({"Err"});
-// from D:\Work\libclang\include\llvm-c/Error.h:45:6
+// from D:\Work\libclang\include\llvm-c/Error.h:52:6
 	addExtern< void (*)(LLVMOpaqueError *) , LLVMConsumeError >(*this,lib,"LLVMConsumeError",SideEffects::worstDefault,"LLVMConsumeError")
 		->args({"Err"});
-// from D:\Work\libclang\include\llvm-c/Error.h:53:7
+// from D:\Work\libclang\include\llvm-c/Error.h:60:7
 	addExtern< char * (*)(LLVMOpaqueError *) , LLVMGetErrorMessage >(*this,lib,"LLVMGetErrorMessage",SideEffects::worstDefault,"LLVMGetErrorMessage")
 		->args({"Err"});
-// from D:\Work\libclang\include\llvm-c/Error.h:58:6
+// from D:\Work\libclang\include\llvm-c/Error.h:65:6
 	addExtern< void (*)(char *) , LLVMDisposeErrorMessage >(*this,lib,"LLVMDisposeErrorMessage",SideEffects::worstDefault,"LLVMDisposeErrorMessage")
 		->args({"ErrMsg"});
-// from D:\Work\libclang\include\llvm-c/Error.h:63:17
+// from D:\Work\libclang\include\llvm-c/Error.h:70:17
 	addExtern< const void * (*)() , LLVMGetStringErrorTypeId >(*this,lib,"LLVMGetStringErrorTypeId",SideEffects::worstDefault,"LLVMGetStringErrorTypeId");
-// from D:\Work\libclang\include\llvm-c/Error.h:68:14
+// from D:\Work\libclang\include\llvm-c/Error.h:75:14
 	addExtern< LLVMOpaqueError * (*)(const char *) , LLVMCreateStringError >(*this,lib,"LLVMCreateStringError",SideEffects::worstDefault,"LLVMCreateStringError")
 		->args({"ErrMsg"});
 // from D:\Work\libclang\include\llvm/Config/Targets.def:26:1
-	addExtern< void (*)() , LLVMInitializeX86TargetInfo >(*this,lib,"LLVMInitializeX86TargetInfo",SideEffects::worstDefault,"LLVMInitializeX86TargetInfo");
-// from D:\Work\libclang\include\llvm/Config/Targets.def:26:1
-	addExtern< void (*)() , LLVMInitializeX86Target >(*this,lib,"LLVMInitializeX86Target",SideEffects::worstDefault,"LLVMInitializeX86Target");
-// from D:\Work\libclang\include\llvm/Config/Targets.def:26:1
-	addExtern< void (*)() , LLVMInitializeX86TargetMC >(*this,lib,"LLVMInitializeX86TargetMC",SideEffects::worstDefault,"LLVMInitializeX86TargetMC");
-// from D:\Work\libclang\include\llvm/Config/AsmPrinters.def:27:1
-	addExtern< void (*)() , LLVMInitializeX86AsmPrinter >(*this,lib,"LLVMInitializeX86AsmPrinter",SideEffects::worstDefault,"LLVMInitializeX86AsmPrinter");
-// from D:\Work\libclang\include\llvm/Config/AsmParsers.def:27:1
-	addExtern< void (*)() , LLVMInitializeX86AsmParser >(*this,lib,"LLVMInitializeX86AsmParser",SideEffects::worstDefault,"LLVMInitializeX86AsmParser");
-// from D:\Work\libclang\include\llvm/Config/Disassemblers.def:27:1
-	addExtern< void (*)() , LLVMInitializeX86Disassembler >(*this,lib,"LLVMInitializeX86Disassembler",SideEffects::worstDefault,"LLVMInitializeX86Disassembler");
-// from D:\Work\libclang\include\llvm-c/Target.h:76:20
-	addExtern< void (*)() , LLVMInitializeAllTargetInfos >(*this,lib,"LLVMInitializeAllTargetInfos",SideEffects::worstDefault,"LLVMInitializeAllTargetInfos");
-// from D:\Work\libclang\include\llvm-c/Target.h:85:20
-	addExtern< void (*)() , LLVMInitializeAllTargets >(*this,lib,"LLVMInitializeAllTargets",SideEffects::worstDefault,"LLVMInitializeAllTargets");
-// from D:\Work\libclang\include\llvm-c/Target.h:94:20
-	addExtern< void (*)() , LLVMInitializeAllTargetMCs >(*this,lib,"LLVMInitializeAllTargetMCs",SideEffects::worstDefault,"LLVMInitializeAllTargetMCs");
-// from D:\Work\libclang\include\llvm-c/Target.h:103:20
-	addExtern< void (*)() , LLVMInitializeAllAsmPrinters >(*this,lib,"LLVMInitializeAllAsmPrinters",SideEffects::worstDefault,"LLVMInitializeAllAsmPrinters");
+	addExtern< void (*)() , LLVMInitializeAArch64TargetInfo >(*this,lib,"LLVMInitializeAArch64TargetInfo",SideEffects::worstDefault,"LLVMInitializeAArch64TargetInfo");
+// from D:\Work\libclang\include\llvm/Config/Targets.def:27:1
+	addExtern< void (*)() , LLVMInitializeAMDGPUTargetInfo >(*this,lib,"LLVMInitializeAMDGPUTargetInfo",SideEffects::worstDefault,"LLVMInitializeAMDGPUTargetInfo");
+// from D:\Work\libclang\include\llvm/Config/Targets.def:28:1
+	addExtern< void (*)() , LLVMInitializeARMTargetInfo >(*this,lib,"LLVMInitializeARMTargetInfo",SideEffects::worstDefault,"LLVMInitializeARMTargetInfo");
+// from D:\Work\libclang\include\llvm/Config/Targets.def:29:1
+	addExtern< void (*)() , LLVMInitializeAVRTargetInfo >(*this,lib,"LLVMInitializeAVRTargetInfo",SideEffects::worstDefault,"LLVMInitializeAVRTargetInfo");
+// from D:\Work\libclang\include\llvm/Config/Targets.def:30:1
+	addExtern< void (*)() , LLVMInitializeBPFTargetInfo >(*this,lib,"LLVMInitializeBPFTargetInfo",SideEffects::worstDefault,"LLVMInitializeBPFTargetInfo");
+// from D:\Work\libclang\include\llvm/Config/Targets.def:31:1
+	addExtern< void (*)() , LLVMInitializeHexagonTargetInfo >(*this,lib,"LLVMInitializeHexagonTargetInfo",SideEffects::worstDefault,"LLVMInitializeHexagonTargetInfo");
+// from D:\Work\libclang\include\llvm/Config/Targets.def:32:1
+	addExtern< void (*)() , LLVMInitializeLanaiTargetInfo >(*this,lib,"LLVMInitializeLanaiTargetInfo",SideEffects::worstDefault,"LLVMInitializeLanaiTargetInfo");
+// from D:\Work\libclang\include\llvm/Config/Targets.def:33:1
+	addExtern< void (*)() , LLVMInitializeMipsTargetInfo >(*this,lib,"LLVMInitializeMipsTargetInfo",SideEffects::worstDefault,"LLVMInitializeMipsTargetInfo");
+// from D:\Work\libclang\include\llvm/Config/Targets.def:34:1
+	addExtern< void (*)() , LLVMInitializeMSP430TargetInfo >(*this,lib,"LLVMInitializeMSP430TargetInfo",SideEffects::worstDefault,"LLVMInitializeMSP430TargetInfo");
+// from D:\Work\libclang\include\llvm/Config/Targets.def:35:1
+	addExtern< void (*)() , LLVMInitializeNVPTXTargetInfo >(*this,lib,"LLVMInitializeNVPTXTargetInfo",SideEffects::worstDefault,"LLVMInitializeNVPTXTargetInfo");
+// from D:\Work\libclang\include\llvm/Config/Targets.def:36:1
+	addExtern< void (*)() , LLVMInitializePowerPCTargetInfo >(*this,lib,"LLVMInitializePowerPCTargetInfo",SideEffects::worstDefault,"LLVMInitializePowerPCTargetInfo");
+// from D:\Work\libclang\include\llvm/Config/Targets.def:37:1
+	addExtern< void (*)() , LLVMInitializeRISCVTargetInfo >(*this,lib,"LLVMInitializeRISCVTargetInfo",SideEffects::worstDefault,"LLVMInitializeRISCVTargetInfo");
 }
 }
 

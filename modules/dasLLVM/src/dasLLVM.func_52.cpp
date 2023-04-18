@@ -12,64 +12,62 @@
 namespace das {
 #include "dasLLVM.func.aot.decl.inc"
 void Module_dasLLVM::initFunctions_52() {
-// from D:\Work\libclang\include\llvm-c/lto.h:111:1
-	addExtern< const char * (*)() , lto_get_version >(*this,lib,"lto_get_version",SideEffects::worstDefault,"lto_get_version");
-// from D:\Work\libclang\include\llvm-c/lto.h:119:1
-	addExtern< const char * (*)() , lto_get_error_message >(*this,lib,"lto_get_error_message",SideEffects::worstDefault,"lto_get_error_message");
-// from D:\Work\libclang\include\llvm-c/lto.h:127:1
-	addExtern< bool (*)(const char *) , lto_module_is_object_file >(*this,lib,"lto_module_is_object_file",SideEffects::worstDefault,"lto_module_is_object_file")
-		->args({"path"});
-// from D:\Work\libclang\include\llvm-c/lto.h:135:1
-	addExtern< bool (*)(const char *,const char *) , lto_module_is_object_file_for_target >(*this,lib,"lto_module_is_object_file_for_target",SideEffects::worstDefault,"lto_module_is_object_file_for_target")
-		->args({"path","target_triple_prefix"});
-// from D:\Work\libclang\include\llvm-c/lto.h:145:1
-	addExtern< bool (*)(const void *,size_t) , lto_module_has_objc_category >(*this,lib,"lto_module_has_objc_category",SideEffects::worstDefault,"lto_module_has_objc_category")
-		->args({"mem","length"});
-// from D:\Work\libclang\include\llvm-c/lto.h:152:19
-	addExtern< bool (*)(const void *,size_t) , lto_module_is_object_file_in_memory >(*this,lib,"lto_module_is_object_file_in_memory",SideEffects::worstDefault,"lto_module_is_object_file_in_memory")
-		->args({"mem","length"});
-// from D:\Work\libclang\include\llvm-c/lto.h:161:1
-	addExtern< bool (*)(const void *,size_t,const char *) , lto_module_is_object_file_in_memory_for_target >(*this,lib,"lto_module_is_object_file_in_memory_for_target",SideEffects::worstDefault,"lto_module_is_object_file_in_memory_for_target")
-		->args({"mem","length","target_triple_prefix"});
-// from D:\Work\libclang\include\llvm-c/lto.h:171:1
-	addExtern< LLVMOpaqueLTOModule * (*)(const char *) , lto_module_create >(*this,lib,"lto_module_create",SideEffects::worstDefault,"lto_module_create")
-		->args({"path"});
-// from D:\Work\libclang\include\llvm-c/lto.h:180:1
-	addExtern< LLVMOpaqueLTOModule * (*)(const void *,size_t) , lto_module_create_from_memory >(*this,lib,"lto_module_create_from_memory",SideEffects::worstDefault,"lto_module_create_from_memory")
-		->args({"mem","length"});
-// from D:\Work\libclang\include\llvm-c/lto.h:189:1
-	addExtern< LLVMOpaqueLTOModule * (*)(const void *,size_t,const char *) , lto_module_create_from_memory_with_path >(*this,lib,"lto_module_create_from_memory_with_path",SideEffects::worstDefault,"lto_module_create_from_memory_with_path")
-		->args({"mem","length","path"});
-// from D:\Work\libclang\include\llvm-c/lto.h:204:1
-	addExtern< LLVMOpaqueLTOModule * (*)(const void *,size_t,const char *) , lto_module_create_in_local_context >(*this,lib,"lto_module_create_in_local_context",SideEffects::worstDefault,"lto_module_create_in_local_context")
-		->args({"mem","length","path"});
-// from D:\Work\libclang\include\llvm-c/lto.h:218:1
-	addExtern< LLVMOpaqueLTOModule * (*)(const void *,size_t,const char *,LLVMOpaqueLTOCodeGenerator *) , lto_module_create_in_codegen_context >(*this,lib,"lto_module_create_in_codegen_context",SideEffects::worstDefault,"lto_module_create_in_codegen_context")
-		->args({"mem","length","path","cg"});
-// from D:\Work\libclang\include\llvm-c/lto.h:228:1
-	addExtern< LLVMOpaqueLTOModule * (*)(int,const char *,size_t) , lto_module_create_from_fd >(*this,lib,"lto_module_create_from_fd",SideEffects::worstDefault,"lto_module_create_from_fd")
-		->args({"fd","path","file_size"});
-// from D:\Work\libclang\include\llvm-c/lto.h:237:1
-	addExtern< LLVMOpaqueLTOModule * (*)(int,const char *,size_t,size_t,off_t) , lto_module_create_from_fd_at_offset >(*this,lib,"lto_module_create_from_fd_at_offset",SideEffects::worstDefault,"lto_module_create_from_fd_at_offset")
-		->args({"fd","path","file_size","map_size","offset"});
-// from D:\Work\libclang\include\llvm-c/lto.h:247:1
-	addExtern< void (*)(LLVMOpaqueLTOModule *) , lto_module_dispose >(*this,lib,"lto_module_dispose",SideEffects::worstDefault,"lto_module_dispose")
-		->args({"mod"});
-// from D:\Work\libclang\include\llvm-c/lto.h:255:1
-	addExtern< const char * (*)(LLVMOpaqueLTOModule *) , lto_module_get_target_triple >(*this,lib,"lto_module_get_target_triple",SideEffects::worstDefault,"lto_module_get_target_triple")
-		->args({"mod"});
-// from D:\Work\libclang\include\llvm-c/lto.h:263:1
-	addExtern< void (*)(LLVMOpaqueLTOModule *,const char *) , lto_module_set_target_triple >(*this,lib,"lto_module_set_target_triple",SideEffects::worstDefault,"lto_module_set_target_triple")
-		->args({"mod","triple"});
-// from D:\Work\libclang\include\llvm-c/lto.h:271:1
-	addExtern< unsigned int (*)(LLVMOpaqueLTOModule *) , lto_module_get_num_symbols >(*this,lib,"lto_module_get_num_symbols",SideEffects::worstDefault,"lto_module_get_num_symbols")
-		->args({"mod"});
-// from D:\Work\libclang\include\llvm-c/lto.h:279:1
-	addExtern< const char * (*)(LLVMOpaqueLTOModule *,unsigned int) , lto_module_get_symbol_name >(*this,lib,"lto_module_get_symbol_name",SideEffects::worstDefault,"lto_module_get_symbol_name")
-		->args({"mod","index"});
-// from D:\Work\libclang\include\llvm-c/lto.h:287:1
-	addExtern< lto_symbol_attributes (*)(LLVMOpaqueLTOModule *,unsigned int) , lto_module_get_symbol_attribute >(*this,lib,"lto_module_get_symbol_attribute",SideEffects::worstDefault,"lto_module_get_symbol_attribute")
-		->args({"mod","index"});
+// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:154:10
+	addExtern< int (*)(LLVMOpaqueExecutionEngine *,char **) , LLVMExecutionEngineGetErrMsg >(*this,lib,"LLVMExecutionEngineGetErrMsg",SideEffects::worstDefault,"LLVMExecutionEngineGetErrMsg")
+		->args({"EE","OutError"});
+// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:187:6
+	addExtern< void (*)(LLVMOpaqueMCJITMemoryManager *) , LLVMDisposeMCJITMemoryManager >(*this,lib,"LLVMDisposeMCJITMemoryManager",SideEffects::worstDefault,"LLVMDisposeMCJITMemoryManager")
+		->args({"MM"});
+// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:191:25
+	addExtern< LLVMOpaqueJITEventListener * (*)() , LLVMCreateGDBRegistrationListener >(*this,lib,"LLVMCreateGDBRegistrationListener",SideEffects::worstDefault,"LLVMCreateGDBRegistrationListener");
+// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:192:25
+	addExtern< LLVMOpaqueJITEventListener * (*)() , LLVMCreateIntelJITEventListener >(*this,lib,"LLVMCreateIntelJITEventListener",SideEffects::worstDefault,"LLVMCreateIntelJITEventListener");
+// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:193:25
+	addExtern< LLVMOpaqueJITEventListener * (*)() , LLVMCreateOProfileJITEventListener >(*this,lib,"LLVMCreateOProfileJITEventListener",SideEffects::worstDefault,"LLVMCreateOProfileJITEventListener");
+// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:194:25
+	addExtern< LLVMOpaqueJITEventListener * (*)() , LLVMCreatePerfJITEventListener >(*this,lib,"LLVMCreatePerfJITEventListener",SideEffects::worstDefault,"LLVMCreatePerfJITEventListener");
+// from D:\Work\libclang\include\llvm-c/Initialization.h:34:6
+	addExtern< void (*)(LLVMOpaquePassRegistry *) , LLVMInitializeTransformUtils >(*this,lib,"LLVMInitializeTransformUtils",SideEffects::worstDefault,"LLVMInitializeTransformUtils")
+		->args({"R"});
+// from D:\Work\libclang\include\llvm-c/Initialization.h:35:6
+	addExtern< void (*)(LLVMOpaquePassRegistry *) , LLVMInitializeScalarOpts >(*this,lib,"LLVMInitializeScalarOpts",SideEffects::worstDefault,"LLVMInitializeScalarOpts")
+		->args({"R"});
+// from D:\Work\libclang\include\llvm-c/Initialization.h:36:6
+	addExtern< void (*)(LLVMOpaquePassRegistry *) , LLVMInitializeObjCARCOpts >(*this,lib,"LLVMInitializeObjCARCOpts",SideEffects::worstDefault,"LLVMInitializeObjCARCOpts")
+		->args({"R"});
+// from D:\Work\libclang\include\llvm-c/Initialization.h:37:6
+	addExtern< void (*)(LLVMOpaquePassRegistry *) , LLVMInitializeVectorization >(*this,lib,"LLVMInitializeVectorization",SideEffects::worstDefault,"LLVMInitializeVectorization")
+		->args({"R"});
+// from D:\Work\libclang\include\llvm-c/Initialization.h:38:6
+	addExtern< void (*)(LLVMOpaquePassRegistry *) , LLVMInitializeInstCombine >(*this,lib,"LLVMInitializeInstCombine",SideEffects::worstDefault,"LLVMInitializeInstCombine")
+		->args({"R"});
+// from D:\Work\libclang\include\llvm-c/Initialization.h:39:6
+	addExtern< void (*)(LLVMOpaquePassRegistry *) , LLVMInitializeAggressiveInstCombiner >(*this,lib,"LLVMInitializeAggressiveInstCombiner",SideEffects::worstDefault,"LLVMInitializeAggressiveInstCombiner")
+		->args({"R"});
+// from D:\Work\libclang\include\llvm-c/Initialization.h:40:6
+	addExtern< void (*)(LLVMOpaquePassRegistry *) , LLVMInitializeIPO >(*this,lib,"LLVMInitializeIPO",SideEffects::worstDefault,"LLVMInitializeIPO")
+		->args({"R"});
+// from D:\Work\libclang\include\llvm-c/Initialization.h:41:6
+	addExtern< void (*)(LLVMOpaquePassRegistry *) , LLVMInitializeInstrumentation >(*this,lib,"LLVMInitializeInstrumentation",SideEffects::worstDefault,"LLVMInitializeInstrumentation")
+		->args({"R"});
+// from D:\Work\libclang\include\llvm-c/Initialization.h:42:6
+	addExtern< void (*)(LLVMOpaquePassRegistry *) , LLVMInitializeAnalysis >(*this,lib,"LLVMInitializeAnalysis",SideEffects::worstDefault,"LLVMInitializeAnalysis")
+		->args({"R"});
+// from D:\Work\libclang\include\llvm-c/Initialization.h:43:6
+	addExtern< void (*)(LLVMOpaquePassRegistry *) , LLVMInitializeIPA >(*this,lib,"LLVMInitializeIPA",SideEffects::worstDefault,"LLVMInitializeIPA")
+		->args({"R"});
+// from D:\Work\libclang\include\llvm-c/Initialization.h:44:6
+	addExtern< void (*)(LLVMOpaquePassRegistry *) , LLVMInitializeCodeGen >(*this,lib,"LLVMInitializeCodeGen",SideEffects::worstDefault,"LLVMInitializeCodeGen")
+		->args({"R"});
+// from D:\Work\libclang\include\llvm-c/Initialization.h:45:6
+	addExtern< void (*)(LLVMOpaquePassRegistry *) , LLVMInitializeTarget >(*this,lib,"LLVMInitializeTarget",SideEffects::worstDefault,"LLVMInitializeTarget")
+		->args({"R"});
+// from D:\Work\libclang\include\llvm-c/IRReader.h:38:10
+	addExtern< int (*)(LLVMOpaqueContext *,LLVMOpaqueMemoryBuffer *,LLVMOpaqueModule **,char **) , LLVMParseIRInContext >(*this,lib,"LLVMParseIRInContext",SideEffects::worstDefault,"LLVMParseIRInContext")
+		->args({"ContextRef","MemBuf","OutM","OutMessage"});
+// from D:\Work\libclang\include\llvm-c/Linker.h:41:10
+	addExtern< int (*)(LLVMOpaqueModule *,LLVMOpaqueModule *) , LLVMLinkModules2 >(*this,lib,"LLVMLinkModules2",SideEffects::worstDefault,"LLVMLinkModules2")
+		->args({"Dest","Src"});
 }
 }
 

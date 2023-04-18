@@ -12,66 +12,63 @@
 namespace das {
 #include "dasLLVM.func.aot.decl.inc"
 void Module_dasLLVM::initFunctions_48() {
-// from D:\Work\libclang\include\llvm-c/Initialization.h:45:6
-	addExtern< void (*)(LLVMOpaquePassRegistry *) , LLVMInitializeTarget >(*this,lib,"LLVMInitializeTarget",SideEffects::worstDefault,"LLVMInitializeTarget")
-		->args({"R"});
-// from D:\Work\libclang\include\llvm-c/IRReader.h:31:10
-	addExtern< int (*)(LLVMOpaqueContext *,LLVMOpaqueMemoryBuffer *,LLVMOpaqueModule **,char **) , LLVMParseIRInContext >(*this,lib,"LLVMParseIRInContext",SideEffects::worstDefault,"LLVMParseIRInContext")
-		->args({"ContextRef","MemBuf","OutM","OutMessage"});
-// from D:\Work\libclang\include\llvm-c/Linker.h:34:10
-	addExtern< int (*)(LLVMOpaqueModule *,LLVMOpaqueModule *) , LLVMLinkModules2 >(*this,lib,"LLVMLinkModules2",SideEffects::worstDefault,"LLVMLinkModules2")
-		->args({"Dest","Src"});
-// from D:\Work\libclang\include\llvm-c/Orc.h:461:1
-	addExtern< LLVMOrcOpaqueSymbolStringPool * (*)(LLVMOrcOpaqueExecutionSession *) , LLVMOrcExecutionSessionGetSymbolStringPool >(*this,lib,"LLVMOrcExecutionSessionGetSymbolStringPool",SideEffects::worstDefault,"LLVMOrcExecutionSessionGetSymbolStringPool")
-		->args({"ES"});
-// from D:\Work\libclang\include\llvm-c/Orc.h:473:6
-	addExtern< void (*)(LLVMOrcOpaqueSymbolStringPool *) , LLVMOrcSymbolStringPoolClearDeadEntries >(*this,lib,"LLVMOrcSymbolStringPoolClearDeadEntries",SideEffects::worstDefault,"LLVMOrcSymbolStringPoolClearDeadEntries")
-		->args({"SSP"});
-// from D:\Work\libclang\include\llvm-c/Orc.h:488:1
-	addExtern< LLVMOrcOpaqueSymbolStringPoolEntry * (*)(LLVMOrcOpaqueExecutionSession *,const char *) , LLVMOrcExecutionSessionIntern >(*this,lib,"LLVMOrcExecutionSessionIntern",SideEffects::worstDefault,"LLVMOrcExecutionSessionIntern")
-		->args({"ES","Name"});
-// from D:\Work\libclang\include\llvm-c/Orc.h:493:6
-	addExtern< void (*)(LLVMOrcOpaqueSymbolStringPoolEntry *) , LLVMOrcRetainSymbolStringPoolEntry >(*this,lib,"LLVMOrcRetainSymbolStringPoolEntry",SideEffects::worstDefault,"LLVMOrcRetainSymbolStringPoolEntry")
-		->args({"S"});
-// from D:\Work\libclang\include\llvm-c/Orc.h:498:6
-	addExtern< void (*)(LLVMOrcOpaqueSymbolStringPoolEntry *) , LLVMOrcReleaseSymbolStringPoolEntry >(*this,lib,"LLVMOrcReleaseSymbolStringPoolEntry",SideEffects::worstDefault,"LLVMOrcReleaseSymbolStringPoolEntry")
-		->args({"S"});
-// from D:\Work\libclang\include\llvm-c/Orc.h:500:13
-	addExtern< const char * (*)(LLVMOrcOpaqueSymbolStringPoolEntry *) , LLVMOrcSymbolStringPoolEntryStr >(*this,lib,"LLVMOrcSymbolStringPoolEntryStr",SideEffects::worstDefault,"LLVMOrcSymbolStringPoolEntryStr")
-		->args({"S"});
-// from D:\Work\libclang\include\llvm-c/Orc.h:505:6
-	addExtern< void (*)(LLVMOrcOpaqueResourceTracker *) , LLVMOrcReleaseResourceTracker >(*this,lib,"LLVMOrcReleaseResourceTracker",SideEffects::worstDefault,"LLVMOrcReleaseResourceTracker")
-		->args({"RT"});
-// from D:\Work\libclang\include\llvm-c/Orc.h:511:6
-	addExtern< void (*)(LLVMOrcOpaqueResourceTracker *,LLVMOrcOpaqueResourceTracker *) , LLVMOrcResourceTrackerTransferTo >(*this,lib,"LLVMOrcResourceTrackerTransferTo",SideEffects::worstDefault,"LLVMOrcResourceTrackerTransferTo")
-		->args({"SrcRT","DstRT"});
-// from D:\Work\libclang\include\llvm-c/Orc.h:518:14
-	addExtern< LLVMOpaqueError * (*)(LLVMOrcOpaqueResourceTracker *) , LLVMOrcResourceTrackerRemove >(*this,lib,"LLVMOrcResourceTrackerRemove",SideEffects::worstDefault,"LLVMOrcResourceTrackerRemove")
-		->args({"RT"});
-// from D:\Work\libclang\include\llvm-c/Orc.h:525:6
-	addExtern< void (*)(LLVMOrcOpaqueDefinitionGenerator *) , LLVMOrcDisposeDefinitionGenerator >(*this,lib,"LLVMOrcDisposeDefinitionGenerator",SideEffects::worstDefault,"LLVMOrcDisposeDefinitionGenerator")
-		->args({"DG"});
-// from D:\Work\libclang\include\llvm-c/Orc.h:530:6
-	addExtern< void (*)(LLVMOrcOpaqueMaterializationUnit *) , LLVMOrcDisposeMaterializationUnit >(*this,lib,"LLVMOrcDisposeMaterializationUnit",SideEffects::worstDefault,"LLVMOrcDisposeMaterializationUnit")
-		->args({"MU"});
-// from D:\Work\libclang\include\llvm-c/Orc.h:594:1
-	addExtern< LLVMOrcOpaqueMaterializationUnit * (*)(LLVMJITCSymbolMapPair *,size_t) , LLVMOrcAbsoluteSymbols >(*this,lib,"LLVMOrcAbsoluteSymbols",SideEffects::worstDefault,"LLVMOrcAbsoluteSymbols")
-		->args({"Syms","NumPairs"});
-// from D:\Work\libclang\include\llvm-c/Orc.h:617:31
-	addExtern< LLVMOrcOpaqueMaterializationUnit * (*)(LLVMOrcOpaqueLazyCallThroughManager *,LLVMOrcOpaqueIndirectStubsManager *,LLVMOrcOpaqueJITDylib *,LLVMOrcCSymbolAliasMapPair *,size_t) , LLVMOrcLazyReexports >(*this,lib,"LLVMOrcLazyReexports",SideEffects::worstDefault,"LLVMOrcLazyReexports")
-		->args({"LCTM","ISM","SourceRef","CallableAliases","NumPairs"});
-// from D:\Work\libclang\include\llvm-c/Orc.h:632:6
-	addExtern< void (*)(LLVMOrcOpaqueMaterializationResponsibility *) , LLVMOrcDisposeMaterializationResponsibility >(*this,lib,"LLVMOrcDisposeMaterializationResponsibility",SideEffects::worstDefault,"LLVMOrcDisposeMaterializationResponsibility")
-		->args({"MR"});
-// from D:\Work\libclang\include\llvm-c/Orc.h:638:20
-	addExtern< LLVMOrcOpaqueJITDylib * (*)(LLVMOrcOpaqueMaterializationResponsibility *) , LLVMOrcMaterializationResponsibilityGetTargetDylib >(*this,lib,"LLVMOrcMaterializationResponsibilityGetTargetDylib",SideEffects::worstDefault,"LLVMOrcMaterializationResponsibilityGetTargetDylib")
-		->args({"MR"});
-// from D:\Work\libclang\include\llvm-c/Orc.h:645:1
-	addExtern< LLVMOrcOpaqueExecutionSession * (*)(LLVMOrcOpaqueMaterializationResponsibility *) , LLVMOrcMaterializationResponsibilityGetExecutionSession >(*this,lib,"LLVMOrcMaterializationResponsibilityGetExecutionSession",SideEffects::worstDefault,"LLVMOrcMaterializationResponsibilityGetExecutionSession")
-		->args({"MR"});
-// from D:\Work\libclang\include\llvm-c/Orc.h:658:29
-	addExtern< LLVMOrcCSymbolFlagsMapPair * (*)(LLVMOrcOpaqueMaterializationResponsibility *,size_t *) , LLVMOrcMaterializationResponsibilityGetSymbols >(*this,lib,"LLVMOrcMaterializationResponsibilityGetSymbols",SideEffects::worstDefault,"LLVMOrcMaterializationResponsibilityGetSymbols")
-		->args({"MR","NumPairs"});
+// from D:\Work\libclang\include\llvm-c/Target.h:146:24
+	addExtern< int (*)() , LLVMInitializeNativeAsmParser >(*this,lib,"LLVMInitializeNativeAsmParser",SideEffects::worstDefault,"LLVMInitializeNativeAsmParser");
+// from D:\Work\libclang\include\llvm-c/Target.h:158:24
+	addExtern< int (*)() , LLVMInitializeNativeAsmPrinter >(*this,lib,"LLVMInitializeNativeAsmPrinter",SideEffects::worstDefault,"LLVMInitializeNativeAsmPrinter");
+// from D:\Work\libclang\include\llvm-c/Target.h:170:24
+	addExtern< int (*)() , LLVMInitializeNativeDisassembler >(*this,lib,"LLVMInitializeNativeDisassembler",SideEffects::worstDefault,"LLVMInitializeNativeDisassembler");
+// from D:\Work\libclang\include\llvm-c/Target.h:186:19
+	addExtern< LLVMOpaqueTargetData * (*)(LLVMOpaqueModule *) , LLVMGetModuleDataLayout >(*this,lib,"LLVMGetModuleDataLayout",SideEffects::worstDefault,"LLVMGetModuleDataLayout")
+		->args({"M"});
+// from D:\Work\libclang\include\llvm-c/Target.h:193:6
+	addExtern< void (*)(LLVMOpaqueModule *,LLVMOpaqueTargetData *) , LLVMSetModuleDataLayout >(*this,lib,"LLVMSetModuleDataLayout",SideEffects::worstDefault,"LLVMSetModuleDataLayout")
+		->args({"M","DL"});
+// from D:\Work\libclang\include\llvm-c/Target.h:197:19
+	addExtern< LLVMOpaqueTargetData * (*)(const char *) , LLVMCreateTargetData >(*this,lib,"LLVMCreateTargetData",SideEffects::worstDefault,"LLVMCreateTargetData")
+		->args({"StringRep"});
+// from D:\Work\libclang\include\llvm-c/Target.h:201:6
+	addExtern< void (*)(LLVMOpaqueTargetData *) , LLVMDisposeTargetData >(*this,lib,"LLVMDisposeTargetData",SideEffects::worstDefault,"LLVMDisposeTargetData")
+		->args({"TD"});
+// from D:\Work\libclang\include\llvm-c/Target.h:206:6
+	addExtern< void (*)(LLVMOpaqueTargetLibraryInfotData *,LLVMOpaquePassManager *) , LLVMAddTargetLibraryInfo >(*this,lib,"LLVMAddTargetLibraryInfo",SideEffects::worstDefault,"LLVMAddTargetLibraryInfo")
+		->args({"TLI","PM"});
+// from D:\Work\libclang\include\llvm-c/Target.h:212:7
+	addExtern< char * (*)(LLVMOpaqueTargetData *) , LLVMCopyStringRepOfTargetData >(*this,lib,"LLVMCopyStringRepOfTargetData",SideEffects::worstDefault,"LLVMCopyStringRepOfTargetData")
+		->args({"TD"});
+// from D:\Work\libclang\include\llvm-c/Target.h:217:23
+	addExtern< LLVMByteOrdering (*)(LLVMOpaqueTargetData *) , LLVMByteOrder >(*this,lib,"LLVMByteOrder",SideEffects::worstDefault,"LLVMByteOrder")
+		->args({"TD"});
+// from D:\Work\libclang\include\llvm-c/Target.h:221:10
+	addExtern< unsigned int (*)(LLVMOpaqueTargetData *) , LLVMPointerSize >(*this,lib,"LLVMPointerSize",SideEffects::worstDefault,"LLVMPointerSize")
+		->args({"TD"});
+// from D:\Work\libclang\include\llvm-c/Target.h:226:10
+	addExtern< unsigned int (*)(LLVMOpaqueTargetData *,unsigned int) , LLVMPointerSizeForAS >(*this,lib,"LLVMPointerSizeForAS",SideEffects::worstDefault,"LLVMPointerSizeForAS")
+		->args({"TD","AS"});
+// from D:\Work\libclang\include\llvm-c/Target.h:230:13
+	addExtern< LLVMOpaqueType * (*)(LLVMOpaqueTargetData *) , LLVMIntPtrType >(*this,lib,"LLVMIntPtrType",SideEffects::worstDefault,"LLVMIntPtrType")
+		->args({"TD"});
+// from D:\Work\libclang\include\llvm-c/Target.h:235:13
+	addExtern< LLVMOpaqueType * (*)(LLVMOpaqueTargetData *,unsigned int) , LLVMIntPtrTypeForAS >(*this,lib,"LLVMIntPtrTypeForAS",SideEffects::worstDefault,"LLVMIntPtrTypeForAS")
+		->args({"TD","AS"});
+// from D:\Work\libclang\include\llvm-c/Target.h:239:13
+	addExtern< LLVMOpaqueType * (*)(LLVMOpaqueContext *,LLVMOpaqueTargetData *) , LLVMIntPtrTypeInContext >(*this,lib,"LLVMIntPtrTypeInContext",SideEffects::worstDefault,"LLVMIntPtrTypeInContext")
+		->args({"C","TD"});
+// from D:\Work\libclang\include\llvm-c/Target.h:244:13
+	addExtern< LLVMOpaqueType * (*)(LLVMOpaqueContext *,LLVMOpaqueTargetData *,unsigned int) , LLVMIntPtrTypeForASInContext >(*this,lib,"LLVMIntPtrTypeForASInContext",SideEffects::worstDefault,"LLVMIntPtrTypeForASInContext")
+		->args({"C","TD","AS"});
+// from D:\Work\libclang\include\llvm-c/Target.h:249:20
+	addExtern< unsigned long long (*)(LLVMOpaqueTargetData *,LLVMOpaqueType *) , LLVMSizeOfTypeInBits >(*this,lib,"LLVMSizeOfTypeInBits",SideEffects::worstDefault,"LLVMSizeOfTypeInBits")
+		->args({"TD","Ty"});
+// from D:\Work\libclang\include\llvm-c/Target.h:253:20
+	addExtern< unsigned long long (*)(LLVMOpaqueTargetData *,LLVMOpaqueType *) , LLVMStoreSizeOfType >(*this,lib,"LLVMStoreSizeOfType",SideEffects::worstDefault,"LLVMStoreSizeOfType")
+		->args({"TD","Ty"});
+// from D:\Work\libclang\include\llvm-c/Target.h:257:20
+	addExtern< unsigned long long (*)(LLVMOpaqueTargetData *,LLVMOpaqueType *) , LLVMABISizeOfType >(*this,lib,"LLVMABISizeOfType",SideEffects::worstDefault,"LLVMABISizeOfType")
+		->args({"TD","Ty"});
+// from D:\Work\libclang\include\llvm-c/Target.h:261:10
+	addExtern< unsigned int (*)(LLVMOpaqueTargetData *,LLVMOpaqueType *) , LLVMABIAlignmentOfType >(*this,lib,"LLVMABIAlignmentOfType",SideEffects::worstDefault,"LLVMABIAlignmentOfType")
+		->args({"TD","Ty"});
 }
 }
 

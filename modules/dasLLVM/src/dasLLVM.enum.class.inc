@@ -14,7 +14,7 @@ public:
 	}
 };
 
-// from D:\Work\libclang\include\llvm-c/Comdat.h:22:9
+// from D:\Work\libclang\include\llvm-c/Comdat.h:29:9
 class Enumeration_LLVMComdatSelectionKind : public das::Enumeration{
 public:
 	Enumeration_LLVMComdatSelectionKind() : das::Enumeration("LLVMComdatSelectionKind") {
@@ -29,7 +29,7 @@ public:
 	}
 };
 
-// from D:\Work\libclang\include\llvm-c/Core.h:58:9
+// from D:\Work\libclang\include\llvm-c/Core.h:60:9
 class Enumeration_LLVMOpcode : public das::Enumeration{
 public:
 	Enumeration_LLVMOpcode() : das::Enumeration("LLVMOpcode") {
@@ -106,7 +106,7 @@ public:
 	}
 };
 
-// from D:\Work\libclang\include\llvm-c/Core.h:146:9
+// from D:\Work\libclang\include\llvm-c/Core.h:148:9
 class Enumeration_LLVMTypeKind : public das::Enumeration{
 public:
 	Enumeration_LLVMTypeKind() : das::Enumeration("LLVMTypeKind") {
@@ -136,7 +136,7 @@ public:
 	}
 };
 
-// from D:\Work\libclang\include\llvm-c/Core.h:169:9
+// from D:\Work\libclang\include\llvm-c/Core.h:171:9
 class Enumeration_LLVMLinkage : public das::Enumeration{
 public:
 	Enumeration_LLVMLinkage() : das::Enumeration("LLVMLinkage") {
@@ -163,7 +163,7 @@ public:
 	}
 };
 
-// from D:\Work\libclang\include\llvm-c/Core.h:192:9
+// from D:\Work\libclang\include\llvm-c/Core.h:194:9
 class Enumeration_LLVMVisibility : public das::Enumeration{
 public:
 	Enumeration_LLVMVisibility() : das::Enumeration("LLVMVisibility") {
@@ -176,7 +176,7 @@ public:
 	}
 };
 
-// from D:\Work\libclang\include\llvm-c/Core.h:198:9
+// from D:\Work\libclang\include\llvm-c/Core.h:200:9
 class Enumeration_LLVMUnnamedAddr : public das::Enumeration{
 public:
 	Enumeration_LLVMUnnamedAddr() : das::Enumeration("LLVMUnnamedAddr") {
@@ -189,7 +189,7 @@ public:
 	}
 };
 
-// from D:\Work\libclang\include\llvm-c/Core.h:204:9
+// from D:\Work\libclang\include\llvm-c/Core.h:206:9
 class Enumeration_LLVMDLLStorageClass : public das::Enumeration{
 public:
 	Enumeration_LLVMDLLStorageClass() : das::Enumeration("LLVMDLLStorageClass") {
@@ -202,7 +202,7 @@ public:
 	}
 };
 
-// from D:\Work\libclang\include\llvm-c/Core.h:210:9
+// from D:\Work\libclang\include\llvm-c/Core.h:212:9
 class Enumeration_LLVMCallConv : public das::Enumeration{
 public:
 	Enumeration_LLVMCallConv() : das::Enumeration("LLVMCallConv") {
@@ -254,7 +254,7 @@ public:
 	}
 };
 
-// from D:\Work\libclang\include\llvm-c/Core.h:255:9
+// from D:\Work\libclang\include\llvm-c/Core.h:257:9
 class Enumeration_LLVMValueKind : public das::Enumeration{
 public:
 	Enumeration_LLVMValueKind() : das::Enumeration("LLVMValueKind") {
@@ -290,7 +290,7 @@ public:
 	}
 };
 
-// from D:\Work\libclang\include\llvm-c/Core.h:288:9
+// from D:\Work\libclang\include\llvm-c/Core.h:290:9
 class Enumeration_LLVMIntPredicate : public das::Enumeration{
 public:
 	Enumeration_LLVMIntPredicate() : das::Enumeration("LLVMIntPredicate") {
@@ -310,7 +310,7 @@ public:
 	}
 };
 
-// from D:\Work\libclang\include\llvm-c/Core.h:301:9
+// from D:\Work\libclang\include\llvm-c/Core.h:303:9
 class Enumeration_LLVMRealPredicate : public das::Enumeration{
 public:
 	Enumeration_LLVMRealPredicate() : das::Enumeration("LLVMRealPredicate") {
@@ -336,7 +336,7 @@ public:
 	}
 };
 
-// from D:\Work\libclang\include\llvm-c/Core.h:320:9
+// from D:\Work\libclang\include\llvm-c/Core.h:322:9
 class Enumeration_LLVMLandingPadClauseTy : public das::Enumeration{
 public:
 	Enumeration_LLVMLandingPadClauseTy() : das::Enumeration("LLVMLandingPadClauseTy") {
@@ -348,7 +348,7 @@ public:
 	}
 };
 
-// from D:\Work\libclang\include\llvm-c/Core.h:325:9
+// from D:\Work\libclang\include\llvm-c/Core.h:327:9
 class Enumeration_LLVMThreadLocalMode : public das::Enumeration{
 public:
 	Enumeration_LLVMThreadLocalMode() : das::Enumeration("LLVMThreadLocalMode") {
@@ -363,7 +363,7 @@ public:
 	}
 };
 
-// from D:\Work\libclang\include\llvm-c/Core.h:333:9
+// from D:\Work\libclang\include\llvm-c/Core.h:335:9
 class Enumeration_LLVMAtomicOrdering : public das::Enumeration{
 public:
 	Enumeration_LLVMAtomicOrdering() : das::Enumeration("LLVMAtomicOrdering") {
@@ -380,7 +380,7 @@ public:
 	}
 };
 
-// from D:\Work\libclang\include\llvm-c/Core.h:360:9
+// from D:\Work\libclang\include\llvm-c/Core.h:362:9
 class Enumeration_LLVMAtomicRMWBinOp : public das::Enumeration{
 public:
 	Enumeration_LLVMAtomicRMWBinOp() : das::Enumeration("LLVMAtomicRMWBinOp") {
@@ -400,10 +400,12 @@ public:
 		addIEx("UMin", "LLVMAtomicRMWBinOpUMin", int64_t(LLVMAtomicRMWBinOp::LLVMAtomicRMWBinOpUMin), das::LineInfo());
 		addIEx("FAdd", "LLVMAtomicRMWBinOpFAdd", int64_t(LLVMAtomicRMWBinOp::LLVMAtomicRMWBinOpFAdd), das::LineInfo());
 		addIEx("FSub", "LLVMAtomicRMWBinOpFSub", int64_t(LLVMAtomicRMWBinOp::LLVMAtomicRMWBinOpFSub), das::LineInfo());
+		addIEx("FMax", "LLVMAtomicRMWBinOpFMax", int64_t(LLVMAtomicRMWBinOp::LLVMAtomicRMWBinOpFMax), das::LineInfo());
+		addIEx("FMin", "LLVMAtomicRMWBinOpFMin", int64_t(LLVMAtomicRMWBinOp::LLVMAtomicRMWBinOpFMin), das::LineInfo());
 	}
 };
 
-// from D:\Work\libclang\include\llvm-c/Core.h:386:9
+// from D:\Work\libclang\include\llvm-c/Core.h:394:9
 class Enumeration_LLVMDiagnosticSeverity : public das::Enumeration{
 public:
 	Enumeration_LLVMDiagnosticSeverity() : das::Enumeration("LLVMDiagnosticSeverity") {
@@ -417,7 +419,7 @@ public:
 	}
 };
 
-// from D:\Work\libclang\include\llvm-c/Core.h:393:9
+// from D:\Work\libclang\include\llvm-c/Core.h:401:9
 class Enumeration_LLVMInlineAsmDialect : public das::Enumeration{
 public:
 	Enumeration_LLVMInlineAsmDialect() : das::Enumeration("LLVMInlineAsmDialect") {
@@ -429,7 +431,7 @@ public:
 	}
 };
 
-// from D:\Work\libclang\include\llvm-c/Core.h:398:9
+// from D:\Work\libclang\include\llvm-c/Core.h:406:9
 class Enumeration_LLVMModuleFlagBehavior : public das::Enumeration{
 public:
 	Enumeration_LLVMModuleFlagBehavior() : das::Enumeration("LLVMModuleFlagBehavior") {
@@ -445,7 +447,7 @@ public:
 	}
 };
 
-// from D:\Work\libclang\include\llvm-c/DebugInfo.h:27:9
+// from D:\Work\libclang\include\llvm-c/DebugInfo.h:34:9
 class Enumeration_LLVMDIFlags : public das::Enumeration{
 public:
 	Enumeration_LLVMDIFlags() : das::Enumeration("LLVMDIFlags") {
@@ -490,7 +492,7 @@ public:
 	}
 };
 
-// from D:\Work\libclang\include\llvm-c/DebugInfo.h:71:9
+// from D:\Work\libclang\include\llvm-c/DebugInfo.h:78:9
 class Enumeration_LLVMDWARFSourceLanguage : public das::Enumeration{
 public:
 	Enumeration_LLVMDWARFSourceLanguage() : das::Enumeration("LLVMDWARFSourceLanguage") {
@@ -540,7 +542,7 @@ public:
 	}
 };
 
-// from D:\Work\libclang\include\llvm-c/DebugInfo.h:121:9
+// from D:\Work\libclang\include\llvm-c/DebugInfo.h:128:9
 class Enumeration_LLVMDWARFEmissionKind : public das::Enumeration{
 public:
 	Enumeration_LLVMDWARFEmissionKind() : das::Enumeration("LLVMDWARFEmissionKind") {
@@ -553,7 +555,7 @@ public:
 	}
 };
 
-// from D:\Work\libclang\include\llvm-c/DebugInfo.h:179:9
+// from D:\Work\libclang\include\llvm-c/DebugInfo.h:186:9
 class Enumeration_LLVMDWARFMacinfoRecordType : public das::Enumeration{
 public:
 	Enumeration_LLVMDWARFMacinfoRecordType() : das::Enumeration("LLVMDWARFMacinfoRecordType") {
@@ -580,7 +582,7 @@ public:
 	}
 };
 
-// from D:\Work\libclang\include\llvm-c/TargetMachine.h:31:9
+// from D:\Work\libclang\include\llvm-c/TargetMachine.h:37:9
 class Enumeration_LLVMCodeGenOptLevel : public das::Enumeration{
 public:
 	Enumeration_LLVMCodeGenOptLevel() : das::Enumeration("LLVMCodeGenOptLevel") {
@@ -594,7 +596,7 @@ public:
 	}
 };
 
-// from D:\Work\libclang\include\llvm-c/TargetMachine.h:38:9
+// from D:\Work\libclang\include\llvm-c/TargetMachine.h:44:9
 class Enumeration_LLVMRelocMode : public das::Enumeration{
 public:
 	Enumeration_LLVMRelocMode() : das::Enumeration("LLVMRelocMode") {
@@ -611,7 +613,7 @@ public:
 	}
 };
 
-// from D:\Work\libclang\include\llvm-c/TargetMachine.h:48:9
+// from D:\Work\libclang\include\llvm-c/TargetMachine.h:54:9
 class Enumeration_LLVMCodeModel : public das::Enumeration{
 public:
 	Enumeration_LLVMCodeModel() : das::Enumeration("LLVMCodeModel") {
@@ -628,7 +630,7 @@ public:
 	}
 };
 
-// from D:\Work\libclang\include\llvm-c/TargetMachine.h:58:9
+// from D:\Work\libclang\include\llvm-c/TargetMachine.h:64:9
 class Enumeration_LLVMCodeGenFileType : public das::Enumeration{
 public:
 	Enumeration_LLVMCodeGenFileType() : das::Enumeration("LLVMCodeGenFileType") {
@@ -640,7 +642,7 @@ public:
 	}
 };
 
-// from D:\Work\libclang\include\llvm-c/Linker.h:23:9
+// from D:\Work\libclang\include\llvm-c/Linker.h:30:9
 class Enumeration_LLVMLinkerMode : public das::Enumeration{
 public:
 	Enumeration_LLVMLinkerMode() : das::Enumeration("LLVMLinkerMode") {
@@ -652,13 +654,14 @@ public:
 	}
 };
 
-// from D:\Work\libclang\include\llvm-c/Orc.h:49:9
+// from D:\Work\libclang\include\llvm-c/Orc.h:56:9
 class Enumeration_LLVMJITSymbolGenericFlags : public das::Enumeration{
 public:
 	Enumeration_LLVMJITSymbolGenericFlags() : das::Enumeration("LLVMJITSymbolGenericFlags") {
 		external = true;
 		cppName = "LLVMJITSymbolGenericFlags";
 		baseType = (das::Type) das::ToBasicType<int>::type;
+		addIEx("None", "LLVMJITSymbolGenericFlagsNone", int64_t(LLVMJITSymbolGenericFlags::LLVMJITSymbolGenericFlagsNone), das::LineInfo());
 		addIEx("Exported", "LLVMJITSymbolGenericFlagsExported", int64_t(LLVMJITSymbolGenericFlags::LLVMJITSymbolGenericFlagsExported), das::LineInfo());
 		addIEx("Weak", "LLVMJITSymbolGenericFlagsWeak", int64_t(LLVMJITSymbolGenericFlags::LLVMJITSymbolGenericFlagsWeak), das::LineInfo());
 		addIEx("Callable", "LLVMJITSymbolGenericFlagsCallable", int64_t(LLVMJITSymbolGenericFlags::LLVMJITSymbolGenericFlagsCallable), das::LineInfo());
@@ -666,7 +669,7 @@ public:
 	}
 };
 
-// from D:\Work\libclang\include\llvm-c/Orc.h:182:9
+// from D:\Work\libclang\include\llvm-c/Orc.h:190:9
 class Enumeration_LLVMOrcLookupKind : public das::Enumeration{
 public:
 	Enumeration_LLVMOrcLookupKind() : das::Enumeration("LLVMOrcLookupKind") {
@@ -678,7 +681,7 @@ public:
 	}
 };
 
-// from D:\Work\libclang\include\llvm-c/Orc.h:193:9
+// from D:\Work\libclang\include\llvm-c/Orc.h:201:9
 class Enumeration_LLVMOrcJITDylibLookupFlags : public das::Enumeration{
 public:
 	Enumeration_LLVMOrcJITDylibLookupFlags() : das::Enumeration("LLVMOrcJITDylibLookupFlags") {
@@ -690,7 +693,7 @@ public:
 	}
 };
 
-// from D:\Work\libclang\include\llvm-c/Orc.h:202:9
+// from D:\Work\libclang\include\llvm-c/Orc.h:226:9
 class Enumeration_LLVMOrcSymbolLookupFlags : public das::Enumeration{
 public:
 	Enumeration_LLVMOrcSymbolLookupFlags() : das::Enumeration("LLVMOrcSymbolLookupFlags") {
@@ -757,7 +760,7 @@ public:
 	}
 };
 
-// from D:\Work\libclang\include\llvm-c/lto.h:320:9
+// from D:\Work\libclang\include\llvm-c/lto.h:330:9
 class Enumeration_lto_codegen_diagnostic_severity_t : public das::Enumeration{
 public:
 	Enumeration_lto_codegen_diagnostic_severity_t() : das::Enumeration("lto_codegen_diagnostic_severity_t") {
@@ -793,6 +796,7 @@ public:
 		addIEx("MachO64L", "LLVMBinaryTypeMachO64L", int64_t(LLVMBinaryType::LLVMBinaryTypeMachO64L), das::LineInfo());
 		addIEx("MachO64B", "LLVMBinaryTypeMachO64B", int64_t(LLVMBinaryType::LLVMBinaryTypeMachO64B), das::LineInfo());
 		addIEx("Wasm", "LLVMBinaryTypeWasm", int64_t(LLVMBinaryType::LLVMBinaryTypeWasm), das::LineInfo());
+		addIEx("Offload", "LLVMBinaryTypeOffload", int64_t(LLVMBinaryType::LLVMBinaryTypeOffload), das::LineInfo());
 	}
 };
 

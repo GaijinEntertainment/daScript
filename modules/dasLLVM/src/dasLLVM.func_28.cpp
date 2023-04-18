@@ -12,65 +12,65 @@
 namespace das {
 #include "dasLLVM.func.aot.decl.inc"
 void Module_dasLLVM::initFunctions_28() {
-// from D:\Work\libclang\include\llvm-c/Core.h:3405:10
-	addExtern< unsigned int (*)(LLVMOpaqueValue *) , LLVMGetNumSuccessors >(*this,lib,"LLVMGetNumSuccessors",SideEffects::worstDefault,"LLVMGetNumSuccessors")
-		->args({"Term"});
-// from D:\Work\libclang\include\llvm-c/Core.h:3412:19
-	addExtern< LLVMOpaqueBasicBlock * (*)(LLVMOpaqueValue *,unsigned int) , LLVMGetSuccessor >(*this,lib,"LLVMGetSuccessor",SideEffects::worstDefault,"LLVMGetSuccessor")
-		->args({"Term","i"});
-// from D:\Work\libclang\include\llvm-c/Core.h:3419:6
-	addExtern< void (*)(LLVMOpaqueValue *,unsigned int,LLVMOpaqueBasicBlock *) , LLVMSetSuccessor >(*this,lib,"LLVMSetSuccessor",SideEffects::worstDefault,"LLVMSetSuccessor")
-		->args({"Term","i","block"});
-// from D:\Work\libclang\include\llvm-c/Core.h:3428:10
-	addExtern< int (*)(LLVMOpaqueValue *) , LLVMIsConditional >(*this,lib,"LLVMIsConditional",SideEffects::worstDefault,"LLVMIsConditional")
-		->args({"Branch"});
-// from D:\Work\libclang\include\llvm-c/Core.h:3437:14
-	addExtern< LLVMOpaqueValue * (*)(LLVMOpaqueValue *) , LLVMGetCondition >(*this,lib,"LLVMGetCondition",SideEffects::worstDefault,"LLVMGetCondition")
-		->args({"Branch"});
-// from D:\Work\libclang\include\llvm-c/Core.h:3446:6
-	addExtern< void (*)(LLVMOpaqueValue *,LLVMOpaqueValue *) , LLVMSetCondition >(*this,lib,"LLVMSetCondition",SideEffects::worstDefault,"LLVMSetCondition")
-		->args({"Branch","Cond"});
-// from D:\Work\libclang\include\llvm-c/Core.h:3455:19
-	addExtern< LLVMOpaqueBasicBlock * (*)(LLVMOpaqueValue *) , LLVMGetSwitchDefaultDest >(*this,lib,"LLVMGetSwitchDefaultDest",SideEffects::worstDefault,"LLVMGetSwitchDefaultDest")
-		->args({"SwitchInstr"});
-// from D:\Work\libclang\include\llvm-c/Core.h:3473:13
+// from D:\Work\libclang\include\llvm-c/Core.h:3527:13
 	addExtern< LLVMOpaqueType * (*)(LLVMOpaqueValue *) , LLVMGetAllocatedType >(*this,lib,"LLVMGetAllocatedType",SideEffects::worstDefault,"LLVMGetAllocatedType")
 		->args({"Alloca"});
-// from D:\Work\libclang\include\llvm-c/Core.h:3491:10
+// from D:\Work\libclang\include\llvm-c/Core.h:3545:10
 	addExtern< int (*)(LLVMOpaqueValue *) , LLVMIsInBounds >(*this,lib,"LLVMIsInBounds",SideEffects::worstDefault,"LLVMIsInBounds")
 		->args({"GEP"});
-// from D:\Work\libclang\include\llvm-c/Core.h:3496:6
+// from D:\Work\libclang\include\llvm-c/Core.h:3550:6
 	addExtern< void (*)(LLVMOpaqueValue *,int) , LLVMSetIsInBounds >(*this,lib,"LLVMSetIsInBounds",SideEffects::worstDefault,"LLVMSetIsInBounds")
 		->args({"GEP","InBounds"});
-// from D:\Work\libclang\include\llvm-c/Core.h:3514:6
+// from D:\Work\libclang\include\llvm-c/Core.h:3555:13
+	addExtern< LLVMOpaqueType * (*)(LLVMOpaqueValue *) , LLVMGetGEPSourceElementType >(*this,lib,"LLVMGetGEPSourceElementType",SideEffects::worstDefault,"LLVMGetGEPSourceElementType")
+		->args({"GEP"});
+// from D:\Work\libclang\include\llvm-c/Core.h:3573:6
 	addExtern< void (*)(LLVMOpaqueValue *,LLVMOpaqueValue **,LLVMOpaqueBasicBlock **,unsigned int) , LLVMAddIncoming >(*this,lib,"LLVMAddIncoming",SideEffects::worstDefault,"LLVMAddIncoming")
 		->args({"PhiNode","IncomingValues","IncomingBlocks","Count"});
-// from D:\Work\libclang\include\llvm-c/Core.h:3520:10
+// from D:\Work\libclang\include\llvm-c/Core.h:3579:10
 	addExtern< unsigned int (*)(LLVMOpaqueValue *) , LLVMCountIncoming >(*this,lib,"LLVMCountIncoming",SideEffects::worstDefault,"LLVMCountIncoming")
 		->args({"PhiNode"});
-// from D:\Work\libclang\include\llvm-c/Core.h:3525:14
+// from D:\Work\libclang\include\llvm-c/Core.h:3584:14
 	addExtern< LLVMOpaqueValue * (*)(LLVMOpaqueValue *,unsigned int) , LLVMGetIncomingValue >(*this,lib,"LLVMGetIncomingValue",SideEffects::worstDefault,"LLVMGetIncomingValue")
 		->args({"PhiNode","Index"});
-// from D:\Work\libclang\include\llvm-c/Core.h:3530:19
+// from D:\Work\libclang\include\llvm-c/Core.h:3589:19
 	addExtern< LLVMOpaqueBasicBlock * (*)(LLVMOpaqueValue *,unsigned int) , LLVMGetIncomingBlock >(*this,lib,"LLVMGetIncomingBlock",SideEffects::worstDefault,"LLVMGetIncomingBlock")
 		->args({"PhiNode","Index"});
-// from D:\Work\libclang\include\llvm-c/Core.h:3550:10
+// from D:\Work\libclang\include\llvm-c/Core.h:3609:10
 	addExtern< unsigned int (*)(LLVMOpaqueValue *) , LLVMGetNumIndices >(*this,lib,"LLVMGetNumIndices",SideEffects::worstDefault,"LLVMGetNumIndices")
 		->args({"Inst"});
-// from D:\Work\libclang\include\llvm-c/Core.h:3555:17
+// from D:\Work\libclang\include\llvm-c/Core.h:3614:17
 	addExtern< const unsigned int * (*)(LLVMOpaqueValue *) , LLVMGetIndices >(*this,lib,"LLVMGetIndices",SideEffects::worstDefault,"LLVMGetIndices")
 		->args({"Inst"});
-// from D:\Work\libclang\include\llvm-c/Core.h:3578:16
+// from D:\Work\libclang\include\llvm-c/Core.h:3637:16
 	addExtern< LLVMOpaqueBuilder * (*)(LLVMOpaqueContext *) , LLVMCreateBuilderInContext >(*this,lib,"LLVMCreateBuilderInContext",SideEffects::worstDefault,"LLVMCreateBuilderInContext")
 		->args({"C"});
-// from D:\Work\libclang\include\llvm-c/Core.h:3579:16
+// from D:\Work\libclang\include\llvm-c/Core.h:3638:16
 	addExtern< LLVMOpaqueBuilder * (*)() , LLVMCreateBuilder >(*this,lib,"LLVMCreateBuilder",SideEffects::worstDefault,"LLVMCreateBuilder");
-// from D:\Work\libclang\include\llvm-c/Core.h:3580:6
+// from D:\Work\libclang\include\llvm-c/Core.h:3639:6
 	addExtern< void (*)(LLVMOpaqueBuilder *,LLVMOpaqueBasicBlock *,LLVMOpaqueValue *) , LLVMPositionBuilder >(*this,lib,"LLVMPositionBuilder",SideEffects::worstDefault,"LLVMPositionBuilder")
 		->args({"Builder","Block","Instr"});
-// from D:\Work\libclang\include\llvm-c/Core.h:3582:6
+// from D:\Work\libclang\include\llvm-c/Core.h:3641:6
 	addExtern< void (*)(LLVMOpaqueBuilder *,LLVMOpaqueValue *) , LLVMPositionBuilderBefore >(*this,lib,"LLVMPositionBuilderBefore",SideEffects::worstDefault,"LLVMPositionBuilderBefore")
 		->args({"Builder","Instr"});
+// from D:\Work\libclang\include\llvm-c/Core.h:3642:6
+	addExtern< void (*)(LLVMOpaqueBuilder *,LLVMOpaqueBasicBlock *) , LLVMPositionBuilderAtEnd >(*this,lib,"LLVMPositionBuilderAtEnd",SideEffects::worstDefault,"LLVMPositionBuilderAtEnd")
+		->args({"Builder","Block"});
+// from D:\Work\libclang\include\llvm-c/Core.h:3643:19
+	addExtern< LLVMOpaqueBasicBlock * (*)(LLVMOpaqueBuilder *) , LLVMGetInsertBlock >(*this,lib,"LLVMGetInsertBlock",SideEffects::worstDefault,"LLVMGetInsertBlock")
+		->args({"Builder"});
+// from D:\Work\libclang\include\llvm-c/Core.h:3644:6
+	addExtern< void (*)(LLVMOpaqueBuilder *) , LLVMClearInsertionPosition >(*this,lib,"LLVMClearInsertionPosition",SideEffects::worstDefault,"LLVMClearInsertionPosition")
+		->args({"Builder"});
+// from D:\Work\libclang\include\llvm-c/Core.h:3645:6
+	addExtern< void (*)(LLVMOpaqueBuilder *,LLVMOpaqueValue *) , LLVMInsertIntoBuilder >(*this,lib,"LLVMInsertIntoBuilder",SideEffects::worstDefault,"LLVMInsertIntoBuilder")
+		->args({"Builder","Instr"});
+// from D:\Work\libclang\include\llvm-c/Core.h:3646:6
+	addExtern< void (*)(LLVMOpaqueBuilder *,LLVMOpaqueValue *,const char *) , LLVMInsertIntoBuilderWithName >(*this,lib,"LLVMInsertIntoBuilderWithName",SideEffects::worstDefault,"LLVMInsertIntoBuilderWithName")
+		->args({"Builder","Instr","Name"});
+// from D:\Work\libclang\include\llvm-c/Core.h:3648:6
+	addExtern< void (*)(LLVMOpaqueBuilder *) , LLVMDisposeBuilder >(*this,lib,"LLVMDisposeBuilder",SideEffects::worstDefault,"LLVMDisposeBuilder")
+		->args({"Builder"});
 }
 }
 

@@ -12,66 +12,66 @@
 namespace das {
 #include "dasLLVM.func.aot.decl.inc"
 void Module_dasLLVM::initFunctions_19() {
-// from D:\Work\libclang\include\llvm-c/Core.h:2174:14
-	addExtern< LLVMOpaqueValue * (*)(LLVMOpaqueValue *,LLVMOpaqueType *) , LLVMConstIntToPtr >(*this,lib,"LLVMConstIntToPtr",SideEffects::worstDefault,"LLVMConstIntToPtr")
-		->args({"ConstantVal","ToType"});
-// from D:\Work\libclang\include\llvm-c/Core.h:2175:14
-	addExtern< LLVMOpaqueValue * (*)(LLVMOpaqueValue *,LLVMOpaqueType *) , LLVMConstBitCast >(*this,lib,"LLVMConstBitCast",SideEffects::worstDefault,"LLVMConstBitCast")
-		->args({"ConstantVal","ToType"});
-// from D:\Work\libclang\include\llvm-c/Core.h:2176:14
-	addExtern< LLVMOpaqueValue * (*)(LLVMOpaqueValue *,LLVMOpaqueType *) , LLVMConstAddrSpaceCast >(*this,lib,"LLVMConstAddrSpaceCast",SideEffects::worstDefault,"LLVMConstAddrSpaceCast")
-		->args({"ConstantVal","ToType"});
-// from D:\Work\libclang\include\llvm-c/Core.h:2177:14
-	addExtern< LLVMOpaqueValue * (*)(LLVMOpaqueValue *,LLVMOpaqueType *) , LLVMConstZExtOrBitCast >(*this,lib,"LLVMConstZExtOrBitCast",SideEffects::worstDefault,"LLVMConstZExtOrBitCast")
-		->args({"ConstantVal","ToType"});
-// from D:\Work\libclang\include\llvm-c/Core.h:2179:14
-	addExtern< LLVMOpaqueValue * (*)(LLVMOpaqueValue *,LLVMOpaqueType *) , LLVMConstSExtOrBitCast >(*this,lib,"LLVMConstSExtOrBitCast",SideEffects::worstDefault,"LLVMConstSExtOrBitCast")
-		->args({"ConstantVal","ToType"});
-// from D:\Work\libclang\include\llvm-c/Core.h:2181:14
-	addExtern< LLVMOpaqueValue * (*)(LLVMOpaqueValue *,LLVMOpaqueType *) , LLVMConstTruncOrBitCast >(*this,lib,"LLVMConstTruncOrBitCast",SideEffects::worstDefault,"LLVMConstTruncOrBitCast")
-		->args({"ConstantVal","ToType"});
-// from D:\Work\libclang\include\llvm-c/Core.h:2183:14
-	addExtern< LLVMOpaqueValue * (*)(LLVMOpaqueValue *,LLVMOpaqueType *) , LLVMConstPointerCast >(*this,lib,"LLVMConstPointerCast",SideEffects::worstDefault,"LLVMConstPointerCast")
-		->args({"ConstantVal","ToType"});
-// from D:\Work\libclang\include\llvm-c/Core.h:2185:14
+// from D:\Work\libclang\include\llvm-c/Core.h:2222:14
 	addExtern< LLVMOpaqueValue * (*)(LLVMOpaqueValue *,LLVMOpaqueType *,int) , LLVMConstIntCast >(*this,lib,"LLVMConstIntCast",SideEffects::worstDefault,"LLVMConstIntCast")
 		->args({"ConstantVal","ToType","isSigned"});
-// from D:\Work\libclang\include\llvm-c/Core.h:2187:14
+// from D:\Work\libclang\include\llvm-c/Core.h:2224:14
 	addExtern< LLVMOpaqueValue * (*)(LLVMOpaqueValue *,LLVMOpaqueType *) , LLVMConstFPCast >(*this,lib,"LLVMConstFPCast",SideEffects::worstDefault,"LLVMConstFPCast")
 		->args({"ConstantVal","ToType"});
-// from D:\Work\libclang\include\llvm-c/Core.h:2188:14
+// from D:\Work\libclang\include\llvm-c/Core.h:2225:14
 	addExtern< LLVMOpaqueValue * (*)(LLVMOpaqueValue *,LLVMOpaqueValue *,LLVMOpaqueValue *) , LLVMConstSelect >(*this,lib,"LLVMConstSelect",SideEffects::worstDefault,"LLVMConstSelect")
 		->args({"ConstantCondition","ConstantIfTrue","ConstantIfFalse"});
-// from D:\Work\libclang\include\llvm-c/Core.h:2191:14
+// from D:\Work\libclang\include\llvm-c/Core.h:2228:14
 	addExtern< LLVMOpaqueValue * (*)(LLVMOpaqueValue *,LLVMOpaqueValue *) , LLVMConstExtractElement >(*this,lib,"LLVMConstExtractElement",SideEffects::worstDefault,"LLVMConstExtractElement")
 		->args({"VectorConstant","IndexConstant"});
-// from D:\Work\libclang\include\llvm-c/Core.h:2193:14
+// from D:\Work\libclang\include\llvm-c/Core.h:2230:14
 	addExtern< LLVMOpaqueValue * (*)(LLVMOpaqueValue *,LLVMOpaqueValue *,LLVMOpaqueValue *) , LLVMConstInsertElement >(*this,lib,"LLVMConstInsertElement",SideEffects::worstDefault,"LLVMConstInsertElement")
 		->args({"VectorConstant","ElementValueConstant","IndexConstant"});
-// from D:\Work\libclang\include\llvm-c/Core.h:2196:14
+// from D:\Work\libclang\include\llvm-c/Core.h:2233:14
 	addExtern< LLVMOpaqueValue * (*)(LLVMOpaqueValue *,LLVMOpaqueValue *,LLVMOpaqueValue *) , LLVMConstShuffleVector >(*this,lib,"LLVMConstShuffleVector",SideEffects::worstDefault,"LLVMConstShuffleVector")
 		->args({"VectorAConstant","VectorBConstant","MaskConstant"});
-// from D:\Work\libclang\include\llvm-c/Core.h:2199:14
-	addExtern< LLVMOpaqueValue * (*)(LLVMOpaqueValue *,unsigned int *,unsigned int) , LLVMConstExtractValue >(*this,lib,"LLVMConstExtractValue",SideEffects::worstDefault,"LLVMConstExtractValue")
-		->args({"AggConstant","IdxList","NumIdx"});
-// from D:\Work\libclang\include\llvm-c/Core.h:2201:14
-	addExtern< LLVMOpaqueValue * (*)(LLVMOpaqueValue *,LLVMOpaqueValue *,unsigned int *,unsigned int) , LLVMConstInsertValue >(*this,lib,"LLVMConstInsertValue",SideEffects::worstDefault,"LLVMConstInsertValue")
-		->args({"AggConstant","ElementValueConstant","IdxList","NumIdx"});
-// from D:\Work\libclang\include\llvm-c/Core.h:2204:14
+// from D:\Work\libclang\include\llvm-c/Core.h:2236:14
 	addExtern< LLVMOpaqueValue * (*)(LLVMOpaqueValue *,LLVMOpaqueBasicBlock *) , LLVMBlockAddress >(*this,lib,"LLVMBlockAddress",SideEffects::worstDefault,"LLVMBlockAddress")
 		->args({"F","BB"});
-// from D:\Work\libclang\include\llvm-c/Core.h:2207:14
+// from D:\Work\libclang\include\llvm-c/Core.h:2239:14
 	addExtern< LLVMOpaqueValue * (*)(LLVMOpaqueType *,const char *,const char *,int,int) , LLVMConstInlineAsm >(*this,lib,"LLVMConstInlineAsm",SideEffects::worstDefault,"LLVMConstInlineAsm")
 		->args({"Ty","AsmString","Constraints","HasSideEffects","IsAlignStack"});
-// from D:\Work\libclang\include\llvm-c/Core.h:2226:15
+// from D:\Work\libclang\include\llvm-c/Core.h:2258:15
 	addExtern< LLVMOpaqueModule * (*)(LLVMOpaqueValue *) , LLVMGetGlobalParent >(*this,lib,"LLVMGetGlobalParent",SideEffects::worstDefault,"LLVMGetGlobalParent")
 		->args({"Global"});
-// from D:\Work\libclang\include\llvm-c/Core.h:2227:10
+// from D:\Work\libclang\include\llvm-c/Core.h:2259:10
 	addExtern< int (*)(LLVMOpaqueValue *) , LLVMIsDeclaration >(*this,lib,"LLVMIsDeclaration",SideEffects::worstDefault,"LLVMIsDeclaration")
 		->args({"Global"});
-// from D:\Work\libclang\include\llvm-c/Core.h:2228:13
+// from D:\Work\libclang\include\llvm-c/Core.h:2260:13
 	addExtern< LLVMLinkage (*)(LLVMOpaqueValue *) , LLVMGetLinkage >(*this,lib,"LLVMGetLinkage",SideEffects::worstDefault,"LLVMGetLinkage")
 		->args({"Global"});
+// from D:\Work\libclang\include\llvm-c/Core.h:2261:6
+	addExtern< void (*)(LLVMOpaqueValue *,LLVMLinkage) , LLVMSetLinkage >(*this,lib,"LLVMSetLinkage",SideEffects::worstDefault,"LLVMSetLinkage")
+		->args({"Global","Linkage"});
+// from D:\Work\libclang\include\llvm-c/Core.h:2262:13
+	addExtern< const char * (*)(LLVMOpaqueValue *) , LLVMGetSection >(*this,lib,"LLVMGetSection",SideEffects::worstDefault,"LLVMGetSection")
+		->args({"Global"});
+// from D:\Work\libclang\include\llvm-c/Core.h:2263:6
+	addExtern< void (*)(LLVMOpaqueValue *,const char *) , LLVMSetSection >(*this,lib,"LLVMSetSection",SideEffects::worstDefault,"LLVMSetSection")
+		->args({"Global","Section"});
+// from D:\Work\libclang\include\llvm-c/Core.h:2264:16
+	addExtern< LLVMVisibility (*)(LLVMOpaqueValue *) , LLVMGetVisibility >(*this,lib,"LLVMGetVisibility",SideEffects::worstDefault,"LLVMGetVisibility")
+		->args({"Global"});
+// from D:\Work\libclang\include\llvm-c/Core.h:2265:6
+	addExtern< void (*)(LLVMOpaqueValue *,LLVMVisibility) , LLVMSetVisibility >(*this,lib,"LLVMSetVisibility",SideEffects::worstDefault,"LLVMSetVisibility")
+		->args({"Global","Viz"});
+// from D:\Work\libclang\include\llvm-c/Core.h:2266:21
+	addExtern< LLVMDLLStorageClass (*)(LLVMOpaqueValue *) , LLVMGetDLLStorageClass >(*this,lib,"LLVMGetDLLStorageClass",SideEffects::worstDefault,"LLVMGetDLLStorageClass")
+		->args({"Global"});
+// from D:\Work\libclang\include\llvm-c/Core.h:2267:6
+	addExtern< void (*)(LLVMOpaqueValue *,LLVMDLLStorageClass) , LLVMSetDLLStorageClass >(*this,lib,"LLVMSetDLLStorageClass",SideEffects::worstDefault,"LLVMSetDLLStorageClass")
+		->args({"Global","Class"});
+// from D:\Work\libclang\include\llvm-c/Core.h:2268:17
+	addExtern< LLVMUnnamedAddr (*)(LLVMOpaqueValue *) , LLVMGetUnnamedAddress >(*this,lib,"LLVMGetUnnamedAddress",SideEffects::worstDefault,"LLVMGetUnnamedAddress")
+		->args({"Global"});
+// from D:\Work\libclang\include\llvm-c/Core.h:2269:6
+	addExtern< void (*)(LLVMOpaqueValue *,LLVMUnnamedAddr) , LLVMSetUnnamedAddress >(*this,lib,"LLVMSetUnnamedAddress",SideEffects::worstDefault,"LLVMSetUnnamedAddress")
+		->args({"Global","UnnamedAddr"});
 }
 }
 

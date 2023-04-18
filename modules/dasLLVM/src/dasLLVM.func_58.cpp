@@ -12,65 +12,63 @@
 namespace das {
 #include "dasLLVM.func.aot.decl.inc"
 void Module_dasLLVM::initFunctions_58() {
-// from D:\Work\libclang\include\llvm-c/Remarks.h:124:28
-	addExtern< LLVMRemarkOpaqueString * (*)(LLVMRemarkOpaqueArg *) , LLVMRemarkArgGetValue >(*this,lib,"LLVMRemarkArgGetValue",SideEffects::worstDefault,"LLVMRemarkArgGetValue")
-		->args({"Arg"});
-// from D:\Work\libclang\include\llvm-c/Remarks.h:133:30
-	addExtern< LLVMRemarkOpaqueDebugLoc * (*)(LLVMRemarkOpaqueArg *) , LLVMRemarkArgGetDebugLoc >(*this,lib,"LLVMRemarkArgGetDebugLoc",SideEffects::worstDefault,"LLVMRemarkArgGetDebugLoc")
-		->args({"Arg"});
-// from D:\Work\libclang\include\llvm-c/Remarks.h:147:13
-	addExtern< void (*)(LLVMRemarkOpaqueEntry *) , LLVMRemarkEntryDispose >(*this,lib,"LLVMRemarkEntryDispose",SideEffects::worstDefault,"LLVMRemarkEntryDispose")
-		->args({"Remark"});
-// from D:\Work\libclang\include\llvm-c/Remarks.h:155:28
-	addExtern< LLVMRemarkType (*)(LLVMRemarkOpaqueEntry *) , LLVMRemarkEntryGetType >(*this,lib,"LLVMRemarkEntryGetType",SideEffects::worstDefault,"LLVMRemarkEntryGetType")
-		->args({"Remark"});
-// from D:\Work\libclang\include\llvm-c/Remarks.h:163:1
-	addExtern< LLVMRemarkOpaqueString * (*)(LLVMRemarkOpaqueEntry *) , LLVMRemarkEntryGetPassName >(*this,lib,"LLVMRemarkEntryGetPassName",SideEffects::worstDefault,"LLVMRemarkEntryGetPassName")
-		->args({"Remark"});
-// from D:\Work\libclang\include\llvm-c/Remarks.h:171:1
-	addExtern< LLVMRemarkOpaqueString * (*)(LLVMRemarkOpaqueEntry *) , LLVMRemarkEntryGetRemarkName >(*this,lib,"LLVMRemarkEntryGetRemarkName",SideEffects::worstDefault,"LLVMRemarkEntryGetRemarkName")
-		->args({"Remark"});
-// from D:\Work\libclang\include\llvm-c/Remarks.h:179:1
-	addExtern< LLVMRemarkOpaqueString * (*)(LLVMRemarkOpaqueEntry *) , LLVMRemarkEntryGetFunctionName >(*this,lib,"LLVMRemarkEntryGetFunctionName",SideEffects::worstDefault,"LLVMRemarkEntryGetFunctionName")
-		->args({"Remark"});
-// from D:\Work\libclang\include\llvm-c/Remarks.h:189:1
-	addExtern< LLVMRemarkOpaqueDebugLoc * (*)(LLVMRemarkOpaqueEntry *) , LLVMRemarkEntryGetDebugLoc >(*this,lib,"LLVMRemarkEntryGetDebugLoc",SideEffects::worstDefault,"LLVMRemarkEntryGetDebugLoc")
-		->args({"Remark"});
-// from D:\Work\libclang\include\llvm-c/Remarks.h:198:17
-	addExtern< uint64_t (*)(LLVMRemarkOpaqueEntry *) , LLVMRemarkEntryGetHotness >(*this,lib,"LLVMRemarkEntryGetHotness",SideEffects::worstDefault,"LLVMRemarkEntryGetHotness")
-		->args({"Remark"});
-// from D:\Work\libclang\include\llvm-c/Remarks.h:205:17
-	addExtern< unsigned int (*)(LLVMRemarkOpaqueEntry *) , LLVMRemarkEntryGetNumArgs >(*this,lib,"LLVMRemarkEntryGetNumArgs",SideEffects::worstDefault,"LLVMRemarkEntryGetNumArgs")
-		->args({"Remark"});
-// from D:\Work\libclang\include\llvm-c/Remarks.h:216:25
-	addExtern< LLVMRemarkOpaqueArg * (*)(LLVMRemarkOpaqueEntry *) , LLVMRemarkEntryGetFirstArg >(*this,lib,"LLVMRemarkEntryGetFirstArg",SideEffects::worstDefault,"LLVMRemarkEntryGetFirstArg")
-		->args({"Remark"});
-// from D:\Work\libclang\include\llvm-c/Remarks.h:227:25
-	addExtern< LLVMRemarkOpaqueArg * (*)(LLVMRemarkOpaqueArg *,LLVMRemarkOpaqueEntry *) , LLVMRemarkEntryGetNextArg >(*this,lib,"LLVMRemarkEntryGetNextArg",SideEffects::worstDefault,"LLVMRemarkEntryGetNextArg")
-		->args({"It","Remark"});
-// from D:\Work\libclang\include\llvm-c/Remarks.h:243:28
-	addExtern< LLVMRemarkOpaqueParser * (*)(const void *,uint64_t) , LLVMRemarkParserCreateYAML >(*this,lib,"LLVMRemarkParserCreateYAML",SideEffects::worstDefault,"LLVMRemarkParserCreateYAML")
-		->args({"Buf","Size"});
-// from D:\Work\libclang\include\llvm-c/Remarks.h:257:28
-	addExtern< LLVMRemarkOpaqueParser * (*)(const void *,uint64_t) , LLVMRemarkParserCreateBitstream >(*this,lib,"LLVMRemarkParserCreateBitstream",SideEffects::worstDefault,"LLVMRemarkParserCreateBitstream")
-		->args({"Buf","Size"});
-// from D:\Work\libclang\include\llvm-c/Remarks.h:302:27
-	addExtern< LLVMRemarkOpaqueEntry * (*)(LLVMRemarkOpaqueParser *) , LLVMRemarkParserGetNext >(*this,lib,"LLVMRemarkParserGetNext",SideEffects::worstDefault,"LLVMRemarkParserGetNext")
-		->args({"Parser"});
-// from D:\Work\libclang\include\llvm-c/Remarks.h:309:17
-	addExtern< int (*)(LLVMRemarkOpaqueParser *) , LLVMRemarkParserHasError >(*this,lib,"LLVMRemarkParserHasError",SideEffects::worstDefault,"LLVMRemarkParserHasError")
-		->args({"Parser"});
-// from D:\Work\libclang\include\llvm-c/Remarks.h:322:20
-	addExtern< const char * (*)(LLVMRemarkOpaqueParser *) , LLVMRemarkParserGetErrorMessage >(*this,lib,"LLVMRemarkParserGetErrorMessage",SideEffects::worstDefault,"LLVMRemarkParserGetErrorMessage")
-		->args({"Parser"});
-// from D:\Work\libclang\include\llvm-c/Remarks.h:329:13
-	addExtern< void (*)(LLVMRemarkOpaqueParser *) , LLVMRemarkParserDispose >(*this,lib,"LLVMRemarkParserDispose",SideEffects::worstDefault,"LLVMRemarkParserDispose")
-		->args({"Parser"});
-// from D:\Work\libclang\include\llvm-c/Remarks.h:336:17
-	addExtern< unsigned int (*)() , LLVMRemarkVersion >(*this,lib,"LLVMRemarkVersion",SideEffects::worstDefault,"LLVMRemarkVersion");
-// from D:\Work\libclang\include\llvm-c/Support.h:29:10
-	addExtern< int (*)(const char *) , LLVMLoadLibraryPermanently >(*this,lib,"LLVMLoadLibraryPermanently",SideEffects::worstDefault,"LLVMLoadLibraryPermanently")
-		->args({"Filename"});
+// from D:\Work\libclang\include\llvm-c/lto.h:311:19
+	addExtern< bool (*)(LLVMOpaqueLTOModule *,unsigned int *,unsigned int *) , lto_module_get_macho_cputype >(*this,lib,"lto_module_get_macho_cputype",SideEffects::worstDefault,"lto_module_get_macho_cputype")
+		->args({"mod","out_cputype","out_cpusubtype"});
+// from D:\Work\libclang\include\llvm-c/lto.h:324:19
+	addExtern< bool (*)(LLVMOpaqueLTOModule *) , lto_module_has_ctor_dtor >(*this,lib,"lto_module_has_ctor_dtor",SideEffects::worstDefault,"lto_module_has_ctor_dtor")
+		->args({"mod"});
+// from D:\Work\libclang\include\llvm-c/lto.h:370:1
+	addExtern< LLVMOpaqueLTOCodeGenerator * (*)() , lto_codegen_create >(*this,lib,"lto_codegen_create",SideEffects::worstDefault,"lto_codegen_create");
+// from D:\Work\libclang\include\llvm-c/lto.h:382:1
+	addExtern< LLVMOpaqueLTOCodeGenerator * (*)() , lto_codegen_create_in_local_context >(*this,lib,"lto_codegen_create_in_local_context",SideEffects::worstDefault,"lto_codegen_create_in_local_context");
+// from D:\Work\libclang\include\llvm-c/lto.h:391:1
+	addExtern< void (*)(LLVMOpaqueLTOCodeGenerator *) , lto_codegen_dispose >(*this,lib,"lto_codegen_dispose",SideEffects::worstDefault,"lto_codegen_dispose")
+		->args({""});
+// from D:\Work\libclang\include\llvm-c/lto.h:404:1
+	addExtern< bool (*)(LLVMOpaqueLTOCodeGenerator *,LLVMOpaqueLTOModule *) , lto_codegen_add_module >(*this,lib,"lto_codegen_add_module",SideEffects::worstDefault,"lto_codegen_add_module")
+		->args({"cg","mod"});
+// from D:\Work\libclang\include\llvm-c/lto.h:415:1
+	addExtern< void (*)(LLVMOpaqueLTOCodeGenerator *,LLVMOpaqueLTOModule *) , lto_codegen_set_module >(*this,lib,"lto_codegen_set_module",SideEffects::worstDefault,"lto_codegen_set_module")
+		->args({"cg","mod"});
+// from D:\Work\libclang\include\llvm-c/lto.h:424:1
+	addExtern< bool (*)(LLVMOpaqueLTOCodeGenerator *,lto_debug_model) , lto_codegen_set_debug_model >(*this,lib,"lto_codegen_set_debug_model",SideEffects::worstDefault,"lto_codegen_set_debug_model")
+		->args({"cg",""});
+// from D:\Work\libclang\include\llvm-c/lto.h:433:1
+	addExtern< bool (*)(LLVMOpaqueLTOCodeGenerator *,lto_codegen_model) , lto_codegen_set_pic_model >(*this,lib,"lto_codegen_set_pic_model",SideEffects::worstDefault,"lto_codegen_set_pic_model")
+		->args({"cg",""});
+// from D:\Work\libclang\include\llvm-c/lto.h:441:1
+	addExtern< void (*)(LLVMOpaqueLTOCodeGenerator *,const char *) , lto_codegen_set_cpu >(*this,lib,"lto_codegen_set_cpu",SideEffects::worstDefault,"lto_codegen_set_cpu")
+		->args({"cg","cpu"});
+// from D:\Work\libclang\include\llvm-c/lto.h:450:1
+	addExtern< void (*)(LLVMOpaqueLTOCodeGenerator *,const char *) , lto_codegen_set_assembler_path >(*this,lib,"lto_codegen_set_assembler_path",SideEffects::worstDefault,"lto_codegen_set_assembler_path")
+		->args({"cg","path"});
+// from D:\Work\libclang\include\llvm-c/lto.h:458:1
+	addExtern< void (*)(LLVMOpaqueLTOCodeGenerator *,const char **,int) , lto_codegen_set_assembler_args >(*this,lib,"lto_codegen_set_assembler_args",SideEffects::worstDefault,"lto_codegen_set_assembler_args")
+		->args({"cg","args","nargs"});
+// from D:\Work\libclang\include\llvm-c/lto.h:469:1
+	addExtern< void (*)(LLVMOpaqueLTOCodeGenerator *,const char *) , lto_codegen_add_must_preserve_symbol >(*this,lib,"lto_codegen_add_must_preserve_symbol",SideEffects::worstDefault,"lto_codegen_add_must_preserve_symbol")
+		->args({"cg","symbol"});
+// from D:\Work\libclang\include\llvm-c/lto.h:479:1
+	addExtern< bool (*)(LLVMOpaqueLTOCodeGenerator *,const char *) , lto_codegen_write_merged_modules >(*this,lib,"lto_codegen_write_merged_modules",SideEffects::worstDefault,"lto_codegen_write_merged_modules")
+		->args({"cg","path"});
+// from D:\Work\libclang\include\llvm-c/lto.h:494:1
+	addExtern< const void * (*)(LLVMOpaqueLTOCodeGenerator *,size_t *) , lto_codegen_compile >(*this,lib,"lto_codegen_compile",SideEffects::worstDefault,"lto_codegen_compile")
+		->args({"cg","length"});
+// from D:\Work\libclang\include\llvm-c/lto.h:506:1
+	addExtern< bool (*)(LLVMOpaqueLTOCodeGenerator *,const char **) , lto_codegen_compile_to_file >(*this,lib,"lto_codegen_compile_to_file",SideEffects::worstDefault,"lto_codegen_compile_to_file")
+		->args({"cg","name"});
+// from D:\Work\libclang\include\llvm-c/lto.h:514:1
+	addExtern< bool (*)(LLVMOpaqueLTOCodeGenerator *) , lto_codegen_optimize >(*this,lib,"lto_codegen_optimize",SideEffects::worstDefault,"lto_codegen_optimize")
+		->args({"cg"});
+// from D:\Work\libclang\include\llvm-c/lto.h:529:1
+	addExtern< const void * (*)(LLVMOpaqueLTOCodeGenerator *,size_t *) , lto_codegen_compile_optimized >(*this,lib,"lto_codegen_compile_optimized",SideEffects::worstDefault,"lto_codegen_compile_optimized")
+		->args({"cg","length"});
+// from D:\Work\libclang\include\llvm-c/lto.h:537:1
+	addExtern< unsigned int (*)() , lto_api_version >(*this,lib,"lto_api_version",SideEffects::worstDefault,"lto_api_version");
+// from D:\Work\libclang\include\llvm-c/lto.h:551:13
+	addExtern< void (*)(const char *const *,int) , lto_set_debug_options >(*this,lib,"lto_set_debug_options",SideEffects::worstDefault,"lto_set_debug_options")
+		->args({"options","number"});
 }
 }
 

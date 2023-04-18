@@ -12,6 +12,24 @@
 namespace das {
 #include "dasLLVM.func.aot.decl.inc"
 void Module_dasLLVM::initFunctions_1() {
+// from C:\Program Files (x86)\Windows Kits\10\Include\10.0.19041.0\ucrt\inttypes.h:45:27
+	addExtern< intmax_t (*)(intmax_t) , imaxabs >(*this,lib,"imaxabs",SideEffects::worstDefault,"imaxabs")
+		->args({"_Number"});
+// from C:\Program Files (x86)\Windows Kits\10\Include\10.0.19041.0\ucrt\inttypes.h:50:28
+	addExtern< _Lldiv_t (*)(intmax_t,intmax_t) , imaxdiv ,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"imaxdiv",SideEffects::worstDefault,"imaxdiv")
+		->args({"_Numerator","_Denominator"});
+// from C:\Program Files (x86)\Windows Kits\10\Include\10.0.19041.0\ucrt\inttypes.h:55:27
+	addExtern< intmax_t (*)(const char *,char **,int) , strtoimax >(*this,lib,"strtoimax",SideEffects::worstDefault,"strtoimax")
+		->args({"_String","_EndPtr","_Radix"});
+// from C:\Program Files (x86)\Windows Kits\10\Include\10.0.19041.0\ucrt\inttypes.h:68:28
+	addExtern< uintmax_t (*)(const char *,char **,int) , strtoumax >(*this,lib,"strtoumax",SideEffects::worstDefault,"strtoumax")
+		->args({"_String","_EndPtr","_Radix"});
+// from C:\Program Files (x86)\Windows Kits\10\Include\10.0.19041.0\ucrt\inttypes.h:81:27
+	addExtern< intmax_t (*)(const wchar_t *,wchar_t **,int) , wcstoimax >(*this,lib,"wcstoimax",SideEffects::worstDefault,"wcstoimax")
+		->args({"_String","_EndPtr","_Radix"});
+// from C:\Program Files (x86)\Windows Kits\10\Include\10.0.19041.0\ucrt\inttypes.h:94:28
+	addExtern< uintmax_t (*)(const wchar_t *,wchar_t **,int) , wcstoumax >(*this,lib,"wcstoumax",SideEffects::worstDefault,"wcstoumax")
+		->args({"_String","_EndPtr","_Radix"});
 // from D:\Work\libclang\include\llvm-c/Analysis.h:44:10
 	addExtern< int (*)(LLVMOpaqueModule *,LLVMVerifierFailureAction,char **) , LLVMVerifyModule >(*this,lib,"LLVMVerifyModule",SideEffects::worstDefault,"LLVMVerifyModule")
 		->args({"M","Action","OutMessage"});
@@ -39,13 +57,13 @@ void Module_dasLLVM::initFunctions_1() {
 // from D:\Work\libclang\include\llvm-c/BitReader.h:60:10
 	addExtern< int (*)(LLVMOpaqueContext *,LLVMOpaqueMemoryBuffer *,LLVMOpaqueModule **,char **) , LLVMGetBitcodeModuleInContext >(*this,lib,"LLVMGetBitcodeModuleInContext",SideEffects::worstDefault,"LLVMGetBitcodeModuleInContext")
 		->args({"ContextRef","MemBuf","OutM","OutMessage"});
-// from D:\Work\libclang\include\llvm-c/BitReader.h:66:10
+// from D:\Work\libclang\include\llvm-c/BitReader.h:71:10
 	addExtern< int (*)(LLVMOpaqueContext *,LLVMOpaqueMemoryBuffer *,LLVMOpaqueModule **) , LLVMGetBitcodeModuleInContext2 >(*this,lib,"LLVMGetBitcodeModuleInContext2",SideEffects::worstDefault,"LLVMGetBitcodeModuleInContext2")
 		->args({"ContextRef","MemBuf","OutM"});
-// from D:\Work\libclang\include\llvm-c/BitReader.h:71:10
+// from D:\Work\libclang\include\llvm-c/BitReader.h:76:10
 	addExtern< int (*)(LLVMOpaqueMemoryBuffer *,LLVMOpaqueModule **,char **) , LLVMGetBitcodeModule >(*this,lib,"LLVMGetBitcodeModule",SideEffects::worstDefault,"LLVMGetBitcodeModule")
 		->args({"MemBuf","OutM","OutMessage"});
-// from D:\Work\libclang\include\llvm-c/BitReader.h:74:10
+// from D:\Work\libclang\include\llvm-c/BitReader.h:79:10
 	addExtern< int (*)(LLVMOpaqueMemoryBuffer *,LLVMOpaqueModule **) , LLVMGetBitcodeModule2 >(*this,lib,"LLVMGetBitcodeModule2",SideEffects::worstDefault,"LLVMGetBitcodeModule2")
 		->args({"MemBuf","OutM"});
 // from D:\Work\libclang\include\llvm-c/BitWriter.h:37:5

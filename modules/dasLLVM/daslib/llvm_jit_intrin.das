@@ -77,6 +77,7 @@ let g_intrin_lookup <- {{
     "math::pow" => @@intrinsic_op2;
     "math::min" => @@intrinsic_math_minmax;
     "math::max" => @@intrinsic_math_minmax;
+    "math::clamp" => @@intrinsic_math_clamp;
     "math::floor" => @@intrinsic_math_float_op1;
     "math::ceil" => @@intrinsic_math_float_op1;
     "math::floori" => @@intrinsic_math_float_op1_to_int;
@@ -349,32 +350,38 @@ def intrinsic_op2(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; ar
         return null
     return LLVMBuildCall(g_builder, decl, args, string(expr.name))
 
-def intrinsic_math_minmax(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+def build_math_minmax(g_builder:LLVMOpaqueBuilder?; exprName:string; expr:smart_ptr<ExprCallFunc>; arg0,arg1:LLVMOpaqueValue?) : LLVMOpaqueValue?
     assume opType = expr.arguments[0]._type
     var op_name : string
     if opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType==Type tFloat)
-        var pred = expr.name=="min" ? LLVMRealPredicate LLVMRealOLT : LLVMRealPredicate LLVMRealOGT
-        var cond = LLVMBuildFCmp(g_builder, pred, arguments[0], arguments[1], "")
-        return LLVMBuildSelect( g_builder, cond, arguments[0], arguments[1], "{expr.name}")
+        var pred = exprName=="min" ? LLVMRealPredicate LLVMRealOLT : LLVMRealPredicate LLVMRealOGT
+        var cond = LLVMBuildFCmp(g_builder, pred, arg0, arg1, "")
+        return LLVMBuildSelect( g_builder, cond, arg0, arg1, "{exprName}")
     elif opType.isInteger || (opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
-        op_name = expr.name=="min" ? "min" : "max"
+        op_name = exprName=="min" ? "min" : "max"
         if opType.isSignedIntegerOrIntVec
             op_name = "s{op_name}"
         else
             op_name = "u{op_name}"
     else
-        failed_E(expr, "{expr.name} {describe(expr._type)} is not supported (yet?)")
+        failed_E(expr, "{exprName} {describe(expr._type)} is not supported (yet?)")
         return null
     let sqrt_name = build_op_name(op_name, opType)
-    var args <- [{auto[] arguments[0]; arguments[1]}]
+    var args <- [{auto[] arg0; arg1}]
     var argTypes <- [{auto type_to_llvm_abi_type(expr.arguments[0]._type)}]
     var id = LLVMLookupIntrinsicID(sqrt_name)
     var decl = LLVMGetIntrinsicDeclaration(g_mod, id, argTypes)
     if decl==null
         failed_E(expr, "missing intrinsic {sqrt_name}")
         return null
-    return LLVMBuildCall(g_builder, decl, args, string(expr.name))
+    return LLVMBuildCall(g_builder, decl, args, string(exprName))
 
+def intrinsic_math_minmax(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+    return build_math_minmax(g_builder, string(expr.name), expr, arguments[0], arguments[1])
+
+def intrinsic_math_clamp(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+    var mini = build_math_minmax(g_builder, "max", expr, arguments[0], arguments[1])
+    return build_math_minmax(g_builder, "min", expr, mini, arguments[2])
 
 // intrinsics, math
 

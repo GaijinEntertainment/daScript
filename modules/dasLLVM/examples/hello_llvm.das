@@ -3,6 +3,7 @@ require llvm/llvm_boost
 
 [export]
 def main
+    LLVMContextSetOpaquePointers(LLVMGetGlobalContext(), 0)
     var mod = LLVMModuleCreateWithName("my_module")
     var ret_type = LLVMFunctionType(LLVMInt32Type(), [[LLVMTypeRef LLVMInt32Type(); LLVMInt32Type() ]])
     var sum = LLVMAddFunction(mod, "sum", ret_type)

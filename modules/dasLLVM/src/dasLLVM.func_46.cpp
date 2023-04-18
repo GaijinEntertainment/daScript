@@ -12,66 +12,46 @@
 namespace das {
 #include "dasLLVM.func.aot.decl.inc"
 void Module_dasLLVM::initFunctions_46() {
-// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:68:8
-	addExtern< double (*)(LLVMOpaqueType *,LLVMOpaqueGenericValue *) , LLVMGenericValueToFloat >(*this,lib,"LLVMGenericValueToFloat",SideEffects::worstDefault,"LLVMGenericValueToFloat")
-		->args({"TyRef","GenVal"});
-// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:70:6
-	addExtern< void (*)(LLVMOpaqueGenericValue *) , LLVMDisposeGenericValue >(*this,lib,"LLVMDisposeGenericValue",SideEffects::worstDefault,"LLVMDisposeGenericValue")
-		->args({"GenVal"});
-// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:74:10
-	addExtern< int (*)(LLVMOpaqueExecutionEngine **,LLVMOpaqueModule *,char **) , LLVMCreateExecutionEngineForModule >(*this,lib,"LLVMCreateExecutionEngineForModule",SideEffects::worstDefault,"LLVMCreateExecutionEngineForModule")
-		->args({"OutEE","M","OutError"});
-// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:78:10
-	addExtern< int (*)(LLVMOpaqueExecutionEngine **,LLVMOpaqueModule *,char **) , LLVMCreateInterpreterForModule >(*this,lib,"LLVMCreateInterpreterForModule",SideEffects::worstDefault,"LLVMCreateInterpreterForModule")
-		->args({"OutInterp","M","OutError"});
-// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:82:10
-	addExtern< int (*)(LLVMOpaqueExecutionEngine **,LLVMOpaqueModule *,unsigned int,char **) , LLVMCreateJITCompilerForModule >(*this,lib,"LLVMCreateJITCompilerForModule",SideEffects::worstDefault,"LLVMCreateJITCompilerForModule")
-		->args({"OutJIT","M","OptLevel","OutError"});
-// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:87:6
-	addExtern< void (*)(LLVMMCJITCompilerOptions *,size_t) , LLVMInitializeMCJITCompilerOptions >(*this,lib,"LLVMInitializeMCJITCompilerOptions",SideEffects::worstDefault,"LLVMInitializeMCJITCompilerOptions")
-		->args({"Options","SizeOfOptions"});
-// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:107:10
-	addExtern< int (*)(LLVMOpaqueExecutionEngine **,LLVMOpaqueModule *,LLVMMCJITCompilerOptions *,size_t,char **) , LLVMCreateMCJITCompilerForModule >(*this,lib,"LLVMCreateMCJITCompilerForModule",SideEffects::worstDefault,"LLVMCreateMCJITCompilerForModule")
-		->args({"OutJIT","M","Options","SizeOfOptions","OutError"});
-// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:112:6
-	addExtern< void (*)(LLVMOpaqueExecutionEngine *) , LLVMDisposeExecutionEngine >(*this,lib,"LLVMDisposeExecutionEngine",SideEffects::worstDefault,"LLVMDisposeExecutionEngine")
-		->args({"EE"});
-// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:114:6
-	addExtern< void (*)(LLVMOpaqueExecutionEngine *) , LLVMRunStaticConstructors >(*this,lib,"LLVMRunStaticConstructors",SideEffects::worstDefault,"LLVMRunStaticConstructors")
-		->args({"EE"});
-// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:116:6
-	addExtern< void (*)(LLVMOpaqueExecutionEngine *) , LLVMRunStaticDestructors >(*this,lib,"LLVMRunStaticDestructors",SideEffects::worstDefault,"LLVMRunStaticDestructors")
-		->args({"EE"});
-// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:118:5
-	addExtern< int (*)(LLVMOpaqueExecutionEngine *,LLVMOpaqueValue *,unsigned int,const char *const *,const char *const *) , LLVMRunFunctionAsMain >(*this,lib,"LLVMRunFunctionAsMain",SideEffects::worstDefault,"LLVMRunFunctionAsMain")
-		->args({"EE","F","ArgC","ArgV","EnvP"});
-// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:122:21
-	addExtern< LLVMOpaqueGenericValue * (*)(LLVMOpaqueExecutionEngine *,LLVMOpaqueValue *,unsigned int,LLVMOpaqueGenericValue **) , LLVMRunFunction >(*this,lib,"LLVMRunFunction",SideEffects::worstDefault,"LLVMRunFunction")
-		->args({"EE","F","NumArgs","Args"});
-// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:126:6
-	addExtern< void (*)(LLVMOpaqueExecutionEngine *,LLVMOpaqueValue *) , LLVMFreeMachineCodeForFunction >(*this,lib,"LLVMFreeMachineCodeForFunction",SideEffects::worstDefault,"LLVMFreeMachineCodeForFunction")
-		->args({"EE","F"});
-// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:128:6
-	addExtern< void (*)(LLVMOpaqueExecutionEngine *,LLVMOpaqueModule *) , LLVMAddModule >(*this,lib,"LLVMAddModule",SideEffects::worstDefault,"LLVMAddModule")
-		->args({"EE","M"});
-// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:130:10
-	addExtern< int (*)(LLVMOpaqueExecutionEngine *,LLVMOpaqueModule *,LLVMOpaqueModule **,char **) , LLVMRemoveModule >(*this,lib,"LLVMRemoveModule",SideEffects::worstDefault,"LLVMRemoveModule")
-		->args({"EE","M","OutMod","OutError"});
-// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:133:10
-	addExtern< int (*)(LLVMOpaqueExecutionEngine *,const char *,LLVMOpaqueValue **) , LLVMFindFunction >(*this,lib,"LLVMFindFunction",SideEffects::worstDefault,"LLVMFindFunction")
-		->args({"EE","Name","OutFn"});
-// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:136:7
-	addExtern< void * (*)(LLVMOpaqueExecutionEngine *,LLVMOpaqueValue *) , LLVMRecompileAndRelinkFunction >(*this,lib,"LLVMRecompileAndRelinkFunction",SideEffects::worstDefault,"LLVMRecompileAndRelinkFunction")
-		->args({"EE","Fn"});
-// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:139:19
-	addExtern< LLVMOpaqueTargetData * (*)(LLVMOpaqueExecutionEngine *) , LLVMGetExecutionEngineTargetData >(*this,lib,"LLVMGetExecutionEngineTargetData",SideEffects::worstDefault,"LLVMGetExecutionEngineTargetData")
-		->args({"EE"});
-// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:141:1
-	addExtern< LLVMOpaqueTargetMachine * (*)(LLVMOpaqueExecutionEngine *) , LLVMGetExecutionEngineTargetMachine >(*this,lib,"LLVMGetExecutionEngineTargetMachine",SideEffects::worstDefault,"LLVMGetExecutionEngineTargetMachine")
-		->args({"EE"});
-// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:143:6
-	addExtern< void (*)(LLVMOpaqueExecutionEngine *,LLVMOpaqueValue *,void *) , LLVMAddGlobalMapping >(*this,lib,"LLVMAddGlobalMapping",SideEffects::worstDefault,"LLVMAddGlobalMapping")
-		->args({"EE","Global","Addr"});
+// from D:\Work\libclang\include\llvm/Config/AsmParsers.def:27:1
+	addExtern< void (*)() , LLVMInitializeAArch64AsmParser >(*this,lib,"LLVMInitializeAArch64AsmParser",SideEffects::worstDefault,"LLVMInitializeAArch64AsmParser");
+// from D:\Work\libclang\include\llvm/Config/AsmParsers.def:28:1
+	addExtern< void (*)() , LLVMInitializeAMDGPUAsmParser >(*this,lib,"LLVMInitializeAMDGPUAsmParser",SideEffects::worstDefault,"LLVMInitializeAMDGPUAsmParser");
+// from D:\Work\libclang\include\llvm/Config/AsmParsers.def:29:1
+	addExtern< void (*)() , LLVMInitializeARMAsmParser >(*this,lib,"LLVMInitializeARMAsmParser",SideEffects::worstDefault,"LLVMInitializeARMAsmParser");
+// from D:\Work\libclang\include\llvm/Config/AsmParsers.def:30:1
+	addExtern< void (*)() , LLVMInitializeAVRAsmParser >(*this,lib,"LLVMInitializeAVRAsmParser",SideEffects::worstDefault,"LLVMInitializeAVRAsmParser");
+// from D:\Work\libclang\include\llvm/Config/AsmParsers.def:31:1
+	addExtern< void (*)() , LLVMInitializeBPFAsmParser >(*this,lib,"LLVMInitializeBPFAsmParser",SideEffects::worstDefault,"LLVMInitializeBPFAsmParser");
+// from D:\Work\libclang\include\llvm/Config/AsmParsers.def:32:1
+	addExtern< void (*)() , LLVMInitializeHexagonAsmParser >(*this,lib,"LLVMInitializeHexagonAsmParser",SideEffects::worstDefault,"LLVMInitializeHexagonAsmParser");
+// from D:\Work\libclang\include\llvm/Config/AsmParsers.def:33:1
+	addExtern< void (*)() , LLVMInitializeLanaiAsmParser >(*this,lib,"LLVMInitializeLanaiAsmParser",SideEffects::worstDefault,"LLVMInitializeLanaiAsmParser");
+// from D:\Work\libclang\include\llvm/Config/AsmParsers.def:34:1
+	addExtern< void (*)() , LLVMInitializeMipsAsmParser >(*this,lib,"LLVMInitializeMipsAsmParser",SideEffects::worstDefault,"LLVMInitializeMipsAsmParser");
+// from D:\Work\libclang\include\llvm/Config/AsmParsers.def:35:1
+	addExtern< void (*)() , LLVMInitializeMSP430AsmParser >(*this,lib,"LLVMInitializeMSP430AsmParser",SideEffects::worstDefault,"LLVMInitializeMSP430AsmParser");
+// from D:\Work\libclang\include\llvm/Config/AsmParsers.def:36:1
+	addExtern< void (*)() , LLVMInitializePowerPCAsmParser >(*this,lib,"LLVMInitializePowerPCAsmParser",SideEffects::worstDefault,"LLVMInitializePowerPCAsmParser");
+// from D:\Work\libclang\include\llvm/Config/AsmParsers.def:37:1
+	addExtern< void (*)() , LLVMInitializeRISCVAsmParser >(*this,lib,"LLVMInitializeRISCVAsmParser",SideEffects::worstDefault,"LLVMInitializeRISCVAsmParser");
+// from D:\Work\libclang\include\llvm/Config/AsmParsers.def:38:1
+	addExtern< void (*)() , LLVMInitializeSparcAsmParser >(*this,lib,"LLVMInitializeSparcAsmParser",SideEffects::worstDefault,"LLVMInitializeSparcAsmParser");
+// from D:\Work\libclang\include\llvm/Config/AsmParsers.def:39:1
+	addExtern< void (*)() , LLVMInitializeSystemZAsmParser >(*this,lib,"LLVMInitializeSystemZAsmParser",SideEffects::worstDefault,"LLVMInitializeSystemZAsmParser");
+// from D:\Work\libclang\include\llvm/Config/AsmParsers.def:40:1
+	addExtern< void (*)() , LLVMInitializeVEAsmParser >(*this,lib,"LLVMInitializeVEAsmParser",SideEffects::worstDefault,"LLVMInitializeVEAsmParser");
+// from D:\Work\libclang\include\llvm/Config/AsmParsers.def:41:1
+	addExtern< void (*)() , LLVMInitializeWebAssemblyAsmParser >(*this,lib,"LLVMInitializeWebAssemblyAsmParser",SideEffects::worstDefault,"LLVMInitializeWebAssemblyAsmParser");
+// from D:\Work\libclang\include\llvm/Config/AsmParsers.def:42:1
+	addExtern< void (*)() , LLVMInitializeX86AsmParser >(*this,lib,"LLVMInitializeX86AsmParser",SideEffects::worstDefault,"LLVMInitializeX86AsmParser");
+// from D:\Work\libclang\include\llvm/Config/Disassemblers.def:27:1
+	addExtern< void (*)() , LLVMInitializeAArch64Disassembler >(*this,lib,"LLVMInitializeAArch64Disassembler",SideEffects::worstDefault,"LLVMInitializeAArch64Disassembler");
+// from D:\Work\libclang\include\llvm/Config/Disassemblers.def:28:1
+	addExtern< void (*)() , LLVMInitializeAMDGPUDisassembler >(*this,lib,"LLVMInitializeAMDGPUDisassembler",SideEffects::worstDefault,"LLVMInitializeAMDGPUDisassembler");
+// from D:\Work\libclang\include\llvm/Config/Disassemblers.def:29:1
+	addExtern< void (*)() , LLVMInitializeARMDisassembler >(*this,lib,"LLVMInitializeARMDisassembler",SideEffects::worstDefault,"LLVMInitializeARMDisassembler");
+// from D:\Work\libclang\include\llvm/Config/Disassemblers.def:30:1
+	addExtern< void (*)() , LLVMInitializeAVRDisassembler >(*this,lib,"LLVMInitializeAVRDisassembler",SideEffects::worstDefault,"LLVMInitializeAVRDisassembler");
 }
 }
 

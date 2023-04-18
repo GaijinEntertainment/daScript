@@ -1,6 +1,41 @@
 // this file is generated via daScript automatic C++ binder
 // all user modifications will be lost after this file is re-generated
 
+// from C:\Program Files (x86)\Windows Kits\10\Include\10.0.19041.0\ucrt\inttypes.h:35:18
+auto alias_imaxdiv_t = typeFactory<_Lldiv_t>::make(lib);
+alias_imaxdiv_t->alias = "imaxdiv_t";
+addAlias(alias_imaxdiv_t);
+
+// from C:\Program Files (x86)\Windows Kits\10\Include\10.0.19041.0\ucrt\sys/types.h:19:28
+auto alias__ino_t = typeFactory<unsigned short>::make(lib);
+alias__ino_t->alias = "_ino_t";
+addAlias(alias__ino_t);
+
+// from C:\Program Files (x86)\Windows Kits\10\Include\10.0.19041.0\ucrt\sys/types.h:22:24
+auto alias_ino_t = typeFactory<unsigned short>::make(lib);
+alias_ino_t->alias = "ino_t";
+addAlias(alias_ino_t);
+
+// from C:\Program Files (x86)\Windows Kits\10\Include\10.0.19041.0\ucrt\sys/types.h:31:26
+auto alias__dev_t = typeFactory<unsigned int>::make(lib);
+alias__dev_t->alias = "_dev_t";
+addAlias(alias__dev_t);
+
+// from C:\Program Files (x86)\Windows Kits\10\Include\10.0.19041.0\ucrt\sys/types.h:34:24
+auto alias_dev_t = typeFactory<unsigned int>::make(lib);
+alias_dev_t->alias = "dev_t";
+addAlias(alias_dev_t);
+
+// from C:\Program Files (x86)\Windows Kits\10\Include\10.0.19041.0\ucrt\sys/types.h:43:18
+auto alias__off_t = typeFactory<long>::make(lib);
+alias__off_t->alias = "_off_t";
+addAlias(alias__off_t);
+
+// from C:\Program Files (x86)\Windows Kits\10\Include\10.0.19041.0\ucrt\sys/types.h:46:24
+auto alias_off_t = typeFactory<long>::make(lib);
+alias_off_t->alias = "off_t";
+addAlias(alias_off_t);
+
 // from D:\Work\libclang\include\llvm-c/DataTypes.h:62:24
 auto alias_ssize_t = typeFactory<long long>::make(lib);
 alias_ssize_t->alias = "ssize_t";
@@ -116,57 +151,57 @@ auto alias_LLVMBinaryRef = typeFactory<LLVMOpaqueBinary *>::make(lib);
 alias_LLVMBinaryRef->alias = "LLVMBinaryRef";
 addAlias(alias_LLVMBinaryRef);
 
-// from D:\Work\libclang\include\llvm-c/ErrorHandling.h:21:16
+// from D:\Work\libclang\include\llvm-c/ErrorHandling.h:27:16
 auto alias_LLVMFatalErrorHandler = typeFactory<void (*)(const char *)>::make(lib);
 alias_LLVMFatalErrorHandler->alias = "LLVMFatalErrorHandler";
 addAlias(alias_LLVMFatalErrorHandler);
 
-// from D:\Work\libclang\include\llvm-c/Core.h:461:18
+// from D:\Work\libclang\include\llvm-c/Core.h:469:18
 auto alias_LLVMAttributeIndex = typeFactory<unsigned int>::make(lib);
 alias_LLVMAttributeIndex->alias = "LLVMAttributeIndex";
 addAlias(alias_LLVMAttributeIndex);
 
-// from D:\Work\libclang\include\llvm-c/Core.h:491:16
+// from D:\Work\libclang\include\llvm-c/Core.h:499:16
 auto alias_LLVMDiagnosticHandler = typeFactory<void (*)(LLVMOpaqueDiagnosticInfo *, void *)>::make(lib);
 alias_LLVMDiagnosticHandler->alias = "LLVMDiagnosticHandler";
 addAlias(alias_LLVMDiagnosticHandler);
 
-// from D:\Work\libclang\include\llvm-c/Core.h:492:16
+// from D:\Work\libclang\include\llvm-c/Core.h:500:16
 auto alias_LLVMYieldCallback = typeFactory<void (*)(LLVMOpaqueContext *, void *)>::make(lib);
 alias_LLVMYieldCallback->alias = "LLVMYieldCallback";
 addAlias(alias_LLVMYieldCallback);
 
-// from D:\Work\libclang\include\llvm-c/DebugInfo.h:167:18
+// from D:\Work\libclang\include\llvm-c/DebugInfo.h:174:18
 auto alias_LLVMMetadataKind = typeFactory<unsigned int>::make(lib);
 alias_LLVMMetadataKind->alias = "LLVMMetadataKind";
 addAlias(alias_LLVMMetadataKind);
 
-// from D:\Work\libclang\include\llvm-c/DebugInfo.h:172:18
+// from D:\Work\libclang\include\llvm-c/DebugInfo.h:179:18
 auto alias_LLVMDWARFTypeEncoding = typeFactory<unsigned int>::make(lib);
 alias_LLVMDWARFTypeEncoding->alias = "LLVMDWARFTypeEncoding";
 addAlias(alias_LLVMDWARFTypeEncoding);
 
-// from D:\Work\libclang\include\llvm-c/DisassemblerTypes.h:23:15
+// from D:\Work\libclang\include\llvm-c/DisassemblerTypes.h:29:15
 auto alias_LLVMDisasmContextRef = typeFactory<void *>::make(lib);
 alias_LLVMDisasmContextRef->alias = "LLVMDisasmContextRef";
 addAlias(alias_LLVMDisasmContextRef);
 
-// from D:\Work\libclang\include\llvm-c/DisassemblerTypes.h:42:15
-auto alias_LLVMOpInfoCallback = typeFactory<int (*)(void *, unsigned long long, unsigned long long, unsigned long long, int, void *)>::make(lib);
+// from D:\Work\libclang\include\llvm-c/DisassemblerTypes.h:48:15
+auto alias_LLVMOpInfoCallback = typeFactory<int (*)(void *, unsigned long long, unsigned long long, unsigned long long, unsigned long long, int, void *)>::make(lib);
 alias_LLVMOpInfoCallback->alias = "LLVMOpInfoCallback";
 addAlias(alias_LLVMOpInfoCallback);
 
-// from D:\Work\libclang\include\llvm-c/DisassemblerTypes.h:112:23
+// from D:\Work\libclang\include\llvm-c/DisassemblerTypes.h:118:23
 auto alias_LLVMSymbolLookupCallback = typeFactory<const char *(*)(void *, unsigned long long, unsigned long long *, unsigned long long, const char **)>::make(lib);
 alias_LLVMSymbolLookupCallback->alias = "LLVMSymbolLookupCallback";
 addAlias(alias_LLVMSymbolLookupCallback);
 
-// from D:\Work\libclang\include\llvm-c/Error.h:26:33
+// from D:\Work\libclang\include\llvm-c/Error.h:33:33
 auto alias_LLVMErrorRef = typeFactory<LLVMOpaqueError *>::make(lib);
 alias_LLVMErrorRef->alias = "LLVMErrorRef";
 addAlias(alias_LLVMErrorRef);
 
-// from D:\Work\libclang\include\llvm-c/Error.h:31:21
+// from D:\Work\libclang\include\llvm-c/Error.h:38:21
 auto alias_LLVMErrorTypeId = typeFactory<const void *>::make(lib);
 alias_LLVMErrorTypeId->alias = "LLVMErrorTypeId";
 addAlias(alias_LLVMErrorTypeId);
@@ -181,12 +216,12 @@ auto alias_LLVMTargetLibraryInfoRef = typeFactory<LLVMOpaqueTargetLibraryInfotDa
 alias_LLVMTargetLibraryInfoRef->alias = "LLVMTargetLibraryInfoRef";
 addAlias(alias_LLVMTargetLibraryInfoRef);
 
-// from D:\Work\libclang\include\llvm-c/TargetMachine.h:28:41
+// from D:\Work\libclang\include\llvm-c/TargetMachine.h:34:41
 auto alias_LLVMTargetMachineRef = typeFactory<LLVMOpaqueTargetMachine *>::make(lib);
 alias_LLVMTargetMachineRef->alias = "LLVMTargetMachineRef";
 addAlias(alias_LLVMTargetMachineRef);
 
-// from D:\Work\libclang\include\llvm-c/TargetMachine.h:29:28
+// from D:\Work\libclang\include\llvm-c/TargetMachine.h:35:28
 auto alias_LLVMTargetRef = typeFactory<LLVMTarget *>::make(lib);
 alias_LLVMTargetRef->alias = "LLVMTargetRef";
 addAlias(alias_LLVMTargetRef);
@@ -226,197 +261,212 @@ auto alias_LLVMMemoryManagerDestroyCallback = typeFactory<void (*)(void *)>::mak
 alias_LLVMMemoryManagerDestroyCallback->alias = "LLVMMemoryManagerDestroyCallback";
 addAlias(alias_LLVMMemoryManagerDestroyCallback);
 
-// from D:\Work\libclang\include\llvm-c/Orc.h:39:18
+// from D:\Work\libclang\include\llvm-c/Orc.h:46:18
 auto alias_LLVMOrcJITTargetAddress = typeFactory<unsigned long long>::make(lib);
 alias_LLVMOrcJITTargetAddress->alias = "LLVMOrcJITTargetAddress";
 addAlias(alias_LLVMOrcJITTargetAddress);
 
-// from D:\Work\libclang\include\llvm-c/Orc.h:44:18
+// from D:\Work\libclang\include\llvm-c/Orc.h:51:18
 auto alias_LLVMOrcExecutorAddress = typeFactory<unsigned long long>::make(lib);
 alias_LLVMOrcExecutorAddress->alias = "LLVMOrcExecutorAddress";
 addAlias(alias_LLVMOrcExecutorAddress);
 
-// from D:\Work\libclang\include\llvm-c/Orc.h:59:17
+// from D:\Work\libclang\include\llvm-c/Orc.h:67:17
 auto alias_LLVMJITSymbolTargetFlags = typeFactory<unsigned char>::make(lib);
 alias_LLVMJITSymbolTargetFlags->alias = "LLVMJITSymbolTargetFlags";
 addAlias(alias_LLVMJITSymbolTargetFlags);
 
-// from D:\Work\libclang\include\llvm-c/Orc.h:80:47
+// from D:\Work\libclang\include\llvm-c/Orc.h:88:47
 auto alias_LLVMOrcExecutionSessionRef = typeFactory<LLVMOrcOpaqueExecutionSession *>::make(lib);
 alias_LLVMOrcExecutionSessionRef->alias = "LLVMOrcExecutionSessionRef";
 addAlias(alias_LLVMOrcExecutionSessionRef);
 
-// from D:\Work\libclang\include\llvm-c/Orc.h:85:16
+// from D:\Work\libclang\include\llvm-c/Orc.h:93:16
 auto alias_LLVMOrcErrorReporterFunction = typeFactory<void (*)(void *, LLVMOpaqueError *)>::make(lib);
 alias_LLVMOrcErrorReporterFunction->alias = "LLVMOrcErrorReporterFunction";
 addAlias(alias_LLVMOrcErrorReporterFunction);
 
-// from D:\Work\libclang\include\llvm-c/Orc.h:90:47
+// from D:\Work\libclang\include\llvm-c/Orc.h:98:47
 auto alias_LLVMOrcSymbolStringPoolRef = typeFactory<LLVMOrcOpaqueSymbolStringPool *>::make(lib);
 alias_LLVMOrcSymbolStringPoolRef->alias = "LLVMOrcSymbolStringPoolRef";
 addAlias(alias_LLVMOrcSymbolStringPoolRef);
 
-// from D:\Work\libclang\include\llvm-c/Orc.h:96:6
+// from D:\Work\libclang\include\llvm-c/Orc.h:104:6
 auto alias_LLVMOrcSymbolStringPoolEntryRef = typeFactory<LLVMOrcOpaqueSymbolStringPoolEntry *>::make(lib);
 alias_LLVMOrcSymbolStringPoolEntryRef->alias = "LLVMOrcSymbolStringPoolEntryRef";
 addAlias(alias_LLVMOrcSymbolStringPoolEntryRef);
 
-// from D:\Work\libclang\include\llvm-c/Orc.h:110:37
+// from D:\Work\libclang\include\llvm-c/Orc.h:118:37
 auto alias_LLVMOrcCSymbolFlagsMapPairs = typeFactory<LLVMOrcCSymbolFlagsMapPair *>::make(lib);
 alias_LLVMOrcCSymbolFlagsMapPairs->alias = "LLVMOrcCSymbolFlagsMapPairs";
 addAlias(alias_LLVMOrcCSymbolFlagsMapPairs);
 
-// from D:\Work\libclang\include\llvm-c/Orc.h:124:32
-auto alias_LLVMOrcCSymbolMapPairs = typeFactory<LLVMJITCSymbolMapPair *>::make(lib);
+// from D:\Work\libclang\include\llvm-c/Orc.h:132:32
+auto alias_LLVMOrcCSymbolMapPairs = typeFactory<LLVMOrcCSymbolMapPair *>::make(lib);
 alias_LLVMOrcCSymbolMapPairs->alias = "LLVMOrcCSymbolMapPairs";
 addAlias(alias_LLVMOrcCSymbolMapPairs);
 
-// from D:\Work\libclang\include\llvm-c/Orc.h:146:37
+// from D:\Work\libclang\include\llvm-c/Orc.h:154:37
 auto alias_LLVMOrcCSymbolAliasMapPairs = typeFactory<LLVMOrcCSymbolAliasMapPair *>::make(lib);
 alias_LLVMOrcCSymbolAliasMapPairs->alias = "LLVMOrcCSymbolAliasMapPairs";
 addAlias(alias_LLVMOrcCSymbolAliasMapPairs);
 
-// from D:\Work\libclang\include\llvm-c/Orc.h:151:39
+// from D:\Work\libclang\include\llvm-c/Orc.h:159:39
 auto alias_LLVMOrcJITDylibRef = typeFactory<LLVMOrcOpaqueJITDylib *>::make(lib);
 alias_LLVMOrcJITDylibRef->alias = "LLVMOrcJITDylibRef";
 addAlias(alias_LLVMOrcJITDylibRef);
 
-// from D:\Work\libclang\include\llvm-c/Orc.h:174:36
+// from D:\Work\libclang\include\llvm-c/Orc.h:182:36
 auto alias_LLVMOrcCDependenceMapPairs = typeFactory<LLVMOrcCDependenceMapPair *>::make(lib);
 alias_LLVMOrcCDependenceMapPairs->alias = "LLVMOrcCDependenceMapPairs";
 addAlias(alias_LLVMOrcCDependenceMapPairs);
 
-// from D:\Work\libclang\include\llvm-c/Orc.h:226:35
+// from D:\Work\libclang\include\llvm-c/Orc.h:220:45
+auto alias_LLVMOrcCJITDylibSearchOrder = typeFactory<LLVMOrcCJITDylibSearchOrderElement *>::make(lib);
+alias_LLVMOrcCJITDylibSearchOrder->alias = "LLVMOrcCJITDylibSearchOrder";
+addAlias(alias_LLVMOrcCJITDylibSearchOrder);
+
+// from D:\Work\libclang\include\llvm-c/Orc.h:250:35
 auto alias_LLVMOrcCLookupSet = typeFactory<LLVMOrcCLookupSetElement *>::make(lib);
 alias_LLVMOrcCLookupSet->alias = "LLVMOrcCLookupSet";
 addAlias(alias_LLVMOrcCLookupSet);
 
-// from D:\Work\libclang\include\llvm-c/Orc.h:231:50
+// from D:\Work\libclang\include\llvm-c/Orc.h:255:50
 auto alias_LLVMOrcMaterializationUnitRef = typeFactory<LLVMOrcOpaqueMaterializationUnit *>::make(lib);
 alias_LLVMOrcMaterializationUnitRef->alias = "LLVMOrcMaterializationUnitRef";
 addAlias(alias_LLVMOrcMaterializationUnitRef);
 
-// from D:\Work\libclang\include\llvm-c/Orc.h:239:6
+// from D:\Work\libclang\include\llvm-c/Orc.h:263:6
 auto alias_LLVMOrcMaterializationResponsibilityRef = typeFactory<LLVMOrcOpaqueMaterializationResponsibility *>::make(lib);
 alias_LLVMOrcMaterializationResponsibilityRef->alias = "LLVMOrcMaterializationResponsibilityRef";
 addAlias(alias_LLVMOrcMaterializationResponsibilityRef);
 
-// from D:\Work\libclang\include\llvm-c/Orc.h:251:16
+// from D:\Work\libclang\include\llvm-c/Orc.h:275:16
 auto alias_LLVMOrcMaterializationUnitMaterializeFunction = typeFactory<void (*)(void *, LLVMOrcOpaqueMaterializationResponsibility *)>::make(lib);
 alias_LLVMOrcMaterializationUnitMaterializeFunction->alias = "LLVMOrcMaterializationUnitMaterializeFunction";
 addAlias(alias_LLVMOrcMaterializationUnitMaterializeFunction);
 
-// from D:\Work\libclang\include\llvm-c/Orc.h:260:16
+// from D:\Work\libclang\include\llvm-c/Orc.h:284:16
 auto alias_LLVMOrcMaterializationUnitDiscardFunction = typeFactory<void (*)(void *, LLVMOrcOpaqueJITDylib *, LLVMOrcOpaqueSymbolStringPoolEntry *)>::make(lib);
 alias_LLVMOrcMaterializationUnitDiscardFunction->alias = "LLVMOrcMaterializationUnitDiscardFunction";
 addAlias(alias_LLVMOrcMaterializationUnitDiscardFunction);
 
-// from D:\Work\libclang\include\llvm-c/Orc.h:270:16
+// from D:\Work\libclang\include\llvm-c/Orc.h:294:16
 auto alias_LLVMOrcMaterializationUnitDestroyFunction = typeFactory<void (*)(void *)>::make(lib);
 alias_LLVMOrcMaterializationUnitDestroyFunction->alias = "LLVMOrcMaterializationUnitDestroyFunction";
 addAlias(alias_LLVMOrcMaterializationUnitDestroyFunction);
 
-// from D:\Work\libclang\include\llvm-c/Orc.h:275:46
+// from D:\Work\libclang\include\llvm-c/Orc.h:299:46
 auto alias_LLVMOrcResourceTrackerRef = typeFactory<LLVMOrcOpaqueResourceTracker *>::make(lib);
 alias_LLVMOrcResourceTrackerRef->alias = "LLVMOrcResourceTrackerRef";
 addAlias(alias_LLVMOrcResourceTrackerRef);
 
-// from D:\Work\libclang\include\llvm-c/Orc.h:281:6
+// from D:\Work\libclang\include\llvm-c/Orc.h:305:6
 auto alias_LLVMOrcDefinitionGeneratorRef = typeFactory<LLVMOrcOpaqueDefinitionGenerator *>::make(lib);
 alias_LLVMOrcDefinitionGeneratorRef->alias = "LLVMOrcDefinitionGeneratorRef";
 addAlias(alias_LLVMOrcDefinitionGeneratorRef);
 
-// from D:\Work\libclang\include\llvm-c/Orc.h:295:42
+// from D:\Work\libclang\include\llvm-c/Orc.h:319:42
 auto alias_LLVMOrcLookupStateRef = typeFactory<LLVMOrcOpaqueLookupState *>::make(lib);
 alias_LLVMOrcLookupStateRef->alias = "LLVMOrcLookupStateRef";
 addAlias(alias_LLVMOrcLookupStateRef);
 
-// from D:\Work\libclang\include\llvm-c/Orc.h:330:24
+// from D:\Work\libclang\include\llvm-c/Orc.h:354:24
 auto alias_LLVMOrcCAPIDefinitionGeneratorTryToGenerateFunction = typeFactory<LLVMOpaqueError *(*)(LLVMOrcOpaqueDefinitionGenerator *, void *, LLVMOrcOpaqueLookupState **, LLVMOrcLookupKind, LLVMOrcOpaqueJITDylib *, LLVMOrcJITDylibLookupFlags, LLVMOrcCLookupSetElement *, unsigned long long)>::make(lib);
 alias_LLVMOrcCAPIDefinitionGeneratorTryToGenerateFunction->alias = "LLVMOrcCAPIDefinitionGeneratorTryToGenerateFunction";
 addAlias(alias_LLVMOrcCAPIDefinitionGeneratorTryToGenerateFunction);
 
-// from D:\Work\libclang\include\llvm-c/Orc.h:339:15
+// from D:\Work\libclang\include\llvm-c/Orc.h:366:16
+auto alias_LLVMOrcDisposeCAPIDefinitionGeneratorFunction = typeFactory<void (*)(void *)>::make(lib);
+alias_LLVMOrcDisposeCAPIDefinitionGeneratorFunction->alias = "LLVMOrcDisposeCAPIDefinitionGeneratorFunction";
+addAlias(alias_LLVMOrcDisposeCAPIDefinitionGeneratorFunction);
+
+// from D:\Work\libclang\include\llvm-c/Orc.h:371:15
 auto alias_LLVMOrcSymbolPredicate = typeFactory<int (*)(void *, LLVMOrcOpaqueSymbolStringPoolEntry *)>::make(lib);
 alias_LLVMOrcSymbolPredicate->alias = "LLVMOrcSymbolPredicate";
 addAlias(alias_LLVMOrcSymbolPredicate);
 
-// from D:\Work\libclang\include\llvm-c/Orc.h:345:48
+// from D:\Work\libclang\include\llvm-c/Orc.h:377:48
 auto alias_LLVMOrcThreadSafeContextRef = typeFactory<LLVMOrcOpaqueThreadSafeContext *>::make(lib);
 alias_LLVMOrcThreadSafeContextRef->alias = "LLVMOrcThreadSafeContextRef";
 addAlias(alias_LLVMOrcThreadSafeContextRef);
 
-// from D:\Work\libclang\include\llvm-c/Orc.h:350:47
+// from D:\Work\libclang\include\llvm-c/Orc.h:382:47
 auto alias_LLVMOrcThreadSafeModuleRef = typeFactory<LLVMOrcOpaqueThreadSafeModule *>::make(lib);
 alias_LLVMOrcThreadSafeModuleRef->alias = "LLVMOrcThreadSafeModuleRef";
 addAlias(alias_LLVMOrcThreadSafeModuleRef);
 
-// from D:\Work\libclang\include\llvm-c/Orc.h:356:24
+// from D:\Work\libclang\include\llvm-c/Orc.h:388:24
 auto alias_LLVMOrcGenericIRModuleOperationFunction = typeFactory<LLVMOpaqueError *(*)(void *, LLVMOpaqueModule *)>::make(lib);
 alias_LLVMOrcGenericIRModuleOperationFunction->alias = "LLVMOrcGenericIRModuleOperationFunction";
 addAlias(alias_LLVMOrcGenericIRModuleOperationFunction);
 
-// from D:\Work\libclang\include\llvm-c/Orc.h:363:6
+// from D:\Work\libclang\include\llvm-c/Orc.h:395:6
 auto alias_LLVMOrcJITTargetMachineBuilderRef = typeFactory<LLVMOrcOpaqueJITTargetMachineBuilder *>::make(lib);
 alias_LLVMOrcJITTargetMachineBuilderRef->alias = "LLVMOrcJITTargetMachineBuilderRef";
 addAlias(alias_LLVMOrcJITTargetMachineBuilderRef);
 
-// from D:\Work\libclang\include\llvm-c/Orc.h:368:42
+// from D:\Work\libclang\include\llvm-c/Orc.h:400:42
 auto alias_LLVMOrcObjectLayerRef = typeFactory<LLVMOrcOpaqueObjectLayer *>::make(lib);
 alias_LLVMOrcObjectLayerRef->alias = "LLVMOrcObjectLayerRef";
 addAlias(alias_LLVMOrcObjectLayerRef);
 
-// from D:\Work\libclang\include\llvm-c/Orc.h:373:49
+// from D:\Work\libclang\include\llvm-c/Orc.h:405:49
 auto alias_LLVMOrcObjectLinkingLayerRef = typeFactory<LLVMOrcOpaqueObjectLinkingLayer *>::make(lib);
 alias_LLVMOrcObjectLinkingLayerRef->alias = "LLVMOrcObjectLinkingLayerRef";
 addAlias(alias_LLVMOrcObjectLinkingLayerRef);
 
-// from D:\Work\libclang\include\llvm-c/Orc.h:378:47
+// from D:\Work\libclang\include\llvm-c/Orc.h:410:47
 auto alias_LLVMOrcIRTransformLayerRef = typeFactory<LLVMOrcOpaqueIRTransformLayer *>::make(lib);
 alias_LLVMOrcIRTransformLayerRef->alias = "LLVMOrcIRTransformLayerRef";
 addAlias(alias_LLVMOrcIRTransformLayerRef);
 
-// from D:\Work\libclang\include\llvm-c/Orc.h:395:24
+// from D:\Work\libclang\include\llvm-c/Orc.h:427:24
 auto alias_LLVMOrcIRTransformLayerTransformFunction = typeFactory<LLVMOpaqueError *(*)(void *, LLVMOrcOpaqueThreadSafeModule **, LLVMOrcOpaqueMaterializationResponsibility *)>::make(lib);
 alias_LLVMOrcIRTransformLayerTransformFunction->alias = "LLVMOrcIRTransformLayerTransformFunction";
 addAlias(alias_LLVMOrcIRTransformLayerTransformFunction);
 
-// from D:\Work\libclang\include\llvm-c/Orc.h:403:6
+// from D:\Work\libclang\include\llvm-c/Orc.h:435:6
 auto alias_LLVMOrcObjectTransformLayerRef = typeFactory<LLVMOrcOpaqueObjectTransformLayer *>::make(lib);
 alias_LLVMOrcObjectTransformLayerRef->alias = "LLVMOrcObjectTransformLayerRef";
 addAlias(alias_LLVMOrcObjectTransformLayerRef);
 
-// from D:\Work\libclang\include\llvm-c/Orc.h:418:24
+// from D:\Work\libclang\include\llvm-c/Orc.h:450:24
 auto alias_LLVMOrcObjectTransformLayerTransformFunction = typeFactory<LLVMOpaqueError *(*)(void *, LLVMOpaqueMemoryBuffer **)>::make(lib);
 alias_LLVMOrcObjectTransformLayerTransformFunction->alias = "LLVMOrcObjectTransformLayerTransformFunction";
 addAlias(alias_LLVMOrcObjectTransformLayerTransformFunction);
 
-// from D:\Work\libclang\include\llvm-c/Orc.h:425:6
+// from D:\Work\libclang\include\llvm-c/Orc.h:457:6
 auto alias_LLVMOrcIndirectStubsManagerRef = typeFactory<LLVMOrcOpaqueIndirectStubsManager *>::make(lib);
 alias_LLVMOrcIndirectStubsManagerRef->alias = "LLVMOrcIndirectStubsManagerRef";
 addAlias(alias_LLVMOrcIndirectStubsManagerRef);
 
-// from D:\Work\libclang\include\llvm-c/Orc.h:431:6
+// from D:\Work\libclang\include\llvm-c/Orc.h:463:6
 auto alias_LLVMOrcLazyCallThroughManagerRef = typeFactory<LLVMOrcOpaqueLazyCallThroughManager *>::make(lib);
 alias_LLVMOrcLazyCallThroughManagerRef->alias = "LLVMOrcLazyCallThroughManagerRef";
 addAlias(alias_LLVMOrcLazyCallThroughManagerRef);
 
-// from D:\Work\libclang\include\llvm-c/Orc.h:439:42
+// from D:\Work\libclang\include\llvm-c/Orc.h:471:42
 auto alias_LLVMOrcDumpObjectsRef = typeFactory<LLVMOrcOpaqueDumpObjects *>::make(lib);
 alias_LLVMOrcDumpObjectsRef->alias = "LLVMOrcDumpObjectsRef";
 addAlias(alias_LLVMOrcDumpObjectsRef);
 
-// from D:\Work\libclang\include\llvm-c/LLJIT.h:48:6
+// from D:\Work\libclang\include\llvm-c/Orc.h:536:16
+auto alias_LLVMOrcExecutionSessionLookupHandleResultFunction = typeFactory<void (*)(LLVMOpaqueError *, LLVMOrcCSymbolMapPair *, unsigned long long, void *)>::make(lib);
+alias_LLVMOrcExecutionSessionLookupHandleResultFunction->alias = "LLVMOrcExecutionSessionLookupHandleResultFunction";
+addAlias(alias_LLVMOrcExecutionSessionLookupHandleResultFunction);
+
+// from D:\Work\libclang\include\llvm-c/LLJIT.h:55:6
 auto alias_LLVMOrcLLJITBuilderObjectLinkingLayerCreatorFunction = typeFactory<LLVMOrcOpaqueObjectLayer *(*)(void *, LLVMOrcOpaqueExecutionSession *, const char *)>::make(lib);
 alias_LLVMOrcLLJITBuilderObjectLinkingLayerCreatorFunction->alias = "LLVMOrcLLJITBuilderObjectLinkingLayerCreatorFunction";
 addAlias(alias_LLVMOrcLLJITBuilderObjectLinkingLayerCreatorFunction);
 
-// from D:\Work\libclang\include\llvm-c/LLJIT.h:54:43
+// from D:\Work\libclang\include\llvm-c/LLJIT.h:61:43
 auto alias_LLVMOrcLLJITBuilderRef = typeFactory<LLVMOrcOpaqueLLJITBuilder *>::make(lib);
 alias_LLVMOrcLLJITBuilderRef->alias = "LLVMOrcLLJITBuilderRef";
 addAlias(alias_LLVMOrcLLJITBuilderRef);
 
-// from D:\Work\libclang\include\llvm-c/LLJIT.h:59:36
+// from D:\Work\libclang\include\llvm-c/LLJIT.h:66:36
 auto alias_LLVMOrcLLJITRef = typeFactory<LLVMOrcOpaqueLLJIT *>::make(lib);
 alias_LLVMOrcLLJITRef->alias = "LLVMOrcLLJITRef";
 addAlias(alias_LLVMOrcLLJITRef);
@@ -441,12 +491,12 @@ auto alias_thinlto_code_gen_t = typeFactory<LLVMOpaqueThinLTOCodeGenerator *>::m
 alias_thinlto_code_gen_t->alias = "thinlto_code_gen_t";
 addAlias(alias_thinlto_code_gen_t);
 
-// from D:\Work\libclang\include\llvm-c/lto.h:336:16
+// from D:\Work\libclang\include\llvm-c/lto.h:346:16
 auto alias_lto_diagnostic_handler_t = typeFactory<void (*)(lto_codegen_diagnostic_severity_t, const char *, void *)>::make(lib);
 alias_lto_diagnostic_handler_t->alias = "lto_diagnostic_handler_t";
 addAlias(alias_lto_diagnostic_handler_t);
 
-// from D:\Work\libclang\include\llvm-c/lto.h:598:36
+// from D:\Work\libclang\include\llvm-c/lto.h:608:36
 auto alias_lto_input_t = typeFactory<LLVMOpaqueLTOInput *>::make(lib);
 alias_lto_input_t->alias = "lto_input_t";
 addAlias(alias_lto_input_t);
@@ -466,7 +516,7 @@ auto alias_LLVMRelocationIteratorRef = typeFactory<LLVMOpaqueRelocationIterator 
 alias_LLVMRelocationIteratorRef->alias = "LLVMRelocationIteratorRef";
 addAlias(alias_LLVMRelocationIteratorRef);
 
-// from D:\Work\libclang\include\llvm-c/Object.h:203:38
+// from D:\Work\libclang\include\llvm-c/Object.h:205:38
 auto alias_LLVMObjectFileRef = typeFactory<LLVMOpaqueObjectFile *>::make(lib);
 alias_LLVMObjectFileRef->alias = "LLVMObjectFileRef";
 addAlias(alias_LLVMObjectFileRef);
@@ -496,13 +546,13 @@ auto alias_LLVMRemarkParserRef = typeFactory<LLVMRemarkOpaqueParser *>::make(lib
 alias_LLVMRemarkParserRef->alias = "LLVMRemarkParserRef";
 addAlias(alias_LLVMRemarkParserRef);
 
+// from D:\Work\libclang\include\llvm-c/Transforms/PassBuilder.h:38:46
+auto alias_LLVMPassBuilderOptionsRef = typeFactory<LLVMOpaquePassBuilderOptions *>::make(lib);
+alias_LLVMPassBuilderOptionsRef->alias = "LLVMPassBuilderOptionsRef";
+addAlias(alias_LLVMPassBuilderOptionsRef);
+
 // from D:\Work\libclang\include\llvm-c/Transforms/PassManagerBuilder.h:20:46
 auto alias_LLVMPassManagerBuilderRef = typeFactory<LLVMOpaquePassManagerBuilder *>::make(lib);
 alias_LLVMPassManagerBuilderRef->alias = "LLVMPassManagerBuilderRef";
 addAlias(alias_LLVMPassManagerBuilderRef);
-
-// from D:\Work\libclang\include\llvm-c/Transforms/PassBuilder.h:31:46
-auto alias_LLVMPassBuilderOptionsRef = typeFactory<LLVMOpaquePassBuilderOptions *>::make(lib);
-alias_LLVMPassBuilderOptionsRef->alias = "LLVMPassBuilderOptionsRef";
-addAlias(alias_LLVMPassBuilderOptionsRef);
 

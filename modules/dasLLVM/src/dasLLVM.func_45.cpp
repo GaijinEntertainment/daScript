@@ -12,61 +12,46 @@
 namespace das {
 #include "dasLLVM.func.aot.decl.inc"
 void Module_dasLLVM::initFunctions_45() {
-// from D:\Work\libclang\include\llvm-c/TargetMachine.h:110:7
-	addExtern< char * (*)(LLVMOpaqueTargetMachine *) , LLVMGetTargetMachineTriple >(*this,lib,"LLVMGetTargetMachineTriple",SideEffects::worstDefault,"LLVMGetTargetMachineTriple")
-		->args({"T"});
-// from D:\Work\libclang\include\llvm-c/TargetMachine.h:115:7
-	addExtern< char * (*)(LLVMOpaqueTargetMachine *) , LLVMGetTargetMachineCPU >(*this,lib,"LLVMGetTargetMachineCPU",SideEffects::worstDefault,"LLVMGetTargetMachineCPU")
-		->args({"T"});
-// from D:\Work\libclang\include\llvm-c/TargetMachine.h:120:7
-	addExtern< char * (*)(LLVMOpaqueTargetMachine *) , LLVMGetTargetMachineFeatureString >(*this,lib,"LLVMGetTargetMachineFeatureString",SideEffects::worstDefault,"LLVMGetTargetMachineFeatureString")
-		->args({"T"});
-// from D:\Work\libclang\include\llvm-c/TargetMachine.h:123:19
-	addExtern< LLVMOpaqueTargetData * (*)(LLVMOpaqueTargetMachine *) , LLVMCreateTargetDataLayout >(*this,lib,"LLVMCreateTargetDataLayout",SideEffects::worstDefault,"LLVMCreateTargetDataLayout")
-		->args({"T"});
-// from D:\Work\libclang\include\llvm-c/TargetMachine.h:126:6
-	addExtern< void (*)(LLVMOpaqueTargetMachine *,int) , LLVMSetTargetMachineAsmVerbosity >(*this,lib,"LLVMSetTargetMachineAsmVerbosity",SideEffects::worstDefault,"LLVMSetTargetMachineAsmVerbosity")
-		->args({"T","VerboseAsm"});
-// from D:\Work\libclang\include\llvm-c/TargetMachine.h:132:10
-	addExtern< int (*)(LLVMOpaqueTargetMachine *,LLVMOpaqueModule *,char *,LLVMCodeGenFileType,char **) , LLVMTargetMachineEmitToFile >(*this,lib,"LLVMTargetMachineEmitToFile",SideEffects::worstDefault,"LLVMTargetMachineEmitToFile")
-		->args({"T","M","Filename","codegen","ErrorMessage"});
-// from D:\Work\libclang\include\llvm-c/TargetMachine.h:136:10
-	addExtern< int (*)(LLVMOpaqueTargetMachine *,LLVMOpaqueModule *,LLVMCodeGenFileType,char **,LLVMOpaqueMemoryBuffer **) , LLVMTargetMachineEmitToMemoryBuffer >(*this,lib,"LLVMTargetMachineEmitToMemoryBuffer",SideEffects::worstDefault,"LLVMTargetMachineEmitToMemoryBuffer")
-		->args({"T","M","codegen","ErrorMessage","OutMemBuf"});
-// from D:\Work\libclang\include\llvm-c/TargetMachine.h:142:7
-	addExtern< char * (*)() , LLVMGetDefaultTargetTriple >(*this,lib,"LLVMGetDefaultTargetTriple",SideEffects::worstDefault,"LLVMGetDefaultTargetTriple");
-// from D:\Work\libclang\include\llvm-c/TargetMachine.h:146:7
-	addExtern< char * (*)(const char *) , LLVMNormalizeTargetTriple >(*this,lib,"LLVMNormalizeTargetTriple",SideEffects::worstDefault,"LLVMNormalizeTargetTriple")
-		->args({"triple"});
-// from D:\Work\libclang\include\llvm-c/TargetMachine.h:150:7
-	addExtern< char * (*)() , LLVMGetHostCPUName >(*this,lib,"LLVMGetHostCPUName",SideEffects::worstDefault,"LLVMGetHostCPUName");
-// from D:\Work\libclang\include\llvm-c/TargetMachine.h:154:7
-	addExtern< char * (*)() , LLVMGetHostCPUFeatures >(*this,lib,"LLVMGetHostCPUFeatures",SideEffects::worstDefault,"LLVMGetHostCPUFeatures");
-// from D:\Work\libclang\include\llvm-c/TargetMachine.h:157:6
-	addExtern< void (*)(LLVMOpaqueTargetMachine *,LLVMOpaquePassManager *) , LLVMAddAnalysisPasses >(*this,lib,"LLVMAddAnalysisPasses",SideEffects::worstDefault,"LLVMAddAnalysisPasses")
-		->args({"T","PM"});
-// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:36:6
-	addExtern< void (*)() , LLVMLinkInMCJIT >(*this,lib,"LLVMLinkInMCJIT",SideEffects::worstDefault,"LLVMLinkInMCJIT");
-// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:37:6
-	addExtern< void (*)() , LLVMLinkInInterpreter >(*this,lib,"LLVMLinkInInterpreter",SideEffects::worstDefault,"LLVMLinkInInterpreter");
-// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:53:21
-	addExtern< LLVMOpaqueGenericValue * (*)(LLVMOpaqueType *,unsigned long long,int) , LLVMCreateGenericValueOfInt >(*this,lib,"LLVMCreateGenericValueOfInt",SideEffects::worstDefault,"LLVMCreateGenericValueOfInt")
-		->args({"Ty","N","IsSigned"});
-// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:57:21
-	addExtern< LLVMOpaqueGenericValue * (*)(void *) , LLVMCreateGenericValueOfPointer >(*this,lib,"LLVMCreateGenericValueOfPointer",SideEffects::worstDefault,"LLVMCreateGenericValueOfPointer")
-		->args({"P"});
-// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:59:21
-	addExtern< LLVMOpaqueGenericValue * (*)(LLVMOpaqueType *,double) , LLVMCreateGenericValueOfFloat >(*this,lib,"LLVMCreateGenericValueOfFloat",SideEffects::worstDefault,"LLVMCreateGenericValueOfFloat")
-		->args({"Ty","N"});
-// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:61:10
-	addExtern< unsigned int (*)(LLVMOpaqueGenericValue *) , LLVMGenericValueIntWidth >(*this,lib,"LLVMGenericValueIntWidth",SideEffects::worstDefault,"LLVMGenericValueIntWidth")
-		->args({"GenValRef"});
-// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:63:20
-	addExtern< unsigned long long (*)(LLVMOpaqueGenericValue *,int) , LLVMGenericValueToInt >(*this,lib,"LLVMGenericValueToInt",SideEffects::worstDefault,"LLVMGenericValueToInt")
-		->args({"GenVal","IsSigned"});
-// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:66:7
-	addExtern< void * (*)(LLVMOpaqueGenericValue *) , LLVMGenericValueToPointer >(*this,lib,"LLVMGenericValueToPointer",SideEffects::worstDefault,"LLVMGenericValueToPointer")
-		->args({"GenVal"});
+// from D:\Work\libclang\include\llvm/Config/Targets.def:42:1
+	addExtern< void (*)() , LLVMInitializeX86TargetMC >(*this,lib,"LLVMInitializeX86TargetMC",SideEffects::worstDefault,"LLVMInitializeX86TargetMC");
+// from D:\Work\libclang\include\llvm/Config/Targets.def:43:1
+	addExtern< void (*)() , LLVMInitializeXCoreTargetMC >(*this,lib,"LLVMInitializeXCoreTargetMC",SideEffects::worstDefault,"LLVMInitializeXCoreTargetMC");
+// from D:\Work\libclang\include\llvm/Config/AsmPrinters.def:27:1
+	addExtern< void (*)() , LLVMInitializeAArch64AsmPrinter >(*this,lib,"LLVMInitializeAArch64AsmPrinter",SideEffects::worstDefault,"LLVMInitializeAArch64AsmPrinter");
+// from D:\Work\libclang\include\llvm/Config/AsmPrinters.def:28:1
+	addExtern< void (*)() , LLVMInitializeAMDGPUAsmPrinter >(*this,lib,"LLVMInitializeAMDGPUAsmPrinter",SideEffects::worstDefault,"LLVMInitializeAMDGPUAsmPrinter");
+// from D:\Work\libclang\include\llvm/Config/AsmPrinters.def:29:1
+	addExtern< void (*)() , LLVMInitializeARMAsmPrinter >(*this,lib,"LLVMInitializeARMAsmPrinter",SideEffects::worstDefault,"LLVMInitializeARMAsmPrinter");
+// from D:\Work\libclang\include\llvm/Config/AsmPrinters.def:30:1
+	addExtern< void (*)() , LLVMInitializeAVRAsmPrinter >(*this,lib,"LLVMInitializeAVRAsmPrinter",SideEffects::worstDefault,"LLVMInitializeAVRAsmPrinter");
+// from D:\Work\libclang\include\llvm/Config/AsmPrinters.def:31:1
+	addExtern< void (*)() , LLVMInitializeBPFAsmPrinter >(*this,lib,"LLVMInitializeBPFAsmPrinter",SideEffects::worstDefault,"LLVMInitializeBPFAsmPrinter");
+// from D:\Work\libclang\include\llvm/Config/AsmPrinters.def:32:1
+	addExtern< void (*)() , LLVMInitializeHexagonAsmPrinter >(*this,lib,"LLVMInitializeHexagonAsmPrinter",SideEffects::worstDefault,"LLVMInitializeHexagonAsmPrinter");
+// from D:\Work\libclang\include\llvm/Config/AsmPrinters.def:33:1
+	addExtern< void (*)() , LLVMInitializeLanaiAsmPrinter >(*this,lib,"LLVMInitializeLanaiAsmPrinter",SideEffects::worstDefault,"LLVMInitializeLanaiAsmPrinter");
+// from D:\Work\libclang\include\llvm/Config/AsmPrinters.def:34:1
+	addExtern< void (*)() , LLVMInitializeMipsAsmPrinter >(*this,lib,"LLVMInitializeMipsAsmPrinter",SideEffects::worstDefault,"LLVMInitializeMipsAsmPrinter");
+// from D:\Work\libclang\include\llvm/Config/AsmPrinters.def:35:1
+	addExtern< void (*)() , LLVMInitializeMSP430AsmPrinter >(*this,lib,"LLVMInitializeMSP430AsmPrinter",SideEffects::worstDefault,"LLVMInitializeMSP430AsmPrinter");
+// from D:\Work\libclang\include\llvm/Config/AsmPrinters.def:36:1
+	addExtern< void (*)() , LLVMInitializeNVPTXAsmPrinter >(*this,lib,"LLVMInitializeNVPTXAsmPrinter",SideEffects::worstDefault,"LLVMInitializeNVPTXAsmPrinter");
+// from D:\Work\libclang\include\llvm/Config/AsmPrinters.def:37:1
+	addExtern< void (*)() , LLVMInitializePowerPCAsmPrinter >(*this,lib,"LLVMInitializePowerPCAsmPrinter",SideEffects::worstDefault,"LLVMInitializePowerPCAsmPrinter");
+// from D:\Work\libclang\include\llvm/Config/AsmPrinters.def:38:1
+	addExtern< void (*)() , LLVMInitializeRISCVAsmPrinter >(*this,lib,"LLVMInitializeRISCVAsmPrinter",SideEffects::worstDefault,"LLVMInitializeRISCVAsmPrinter");
+// from D:\Work\libclang\include\llvm/Config/AsmPrinters.def:39:1
+	addExtern< void (*)() , LLVMInitializeSparcAsmPrinter >(*this,lib,"LLVMInitializeSparcAsmPrinter",SideEffects::worstDefault,"LLVMInitializeSparcAsmPrinter");
+// from D:\Work\libclang\include\llvm/Config/AsmPrinters.def:40:1
+	addExtern< void (*)() , LLVMInitializeSystemZAsmPrinter >(*this,lib,"LLVMInitializeSystemZAsmPrinter",SideEffects::worstDefault,"LLVMInitializeSystemZAsmPrinter");
+// from D:\Work\libclang\include\llvm/Config/AsmPrinters.def:41:1
+	addExtern< void (*)() , LLVMInitializeVEAsmPrinter >(*this,lib,"LLVMInitializeVEAsmPrinter",SideEffects::worstDefault,"LLVMInitializeVEAsmPrinter");
+// from D:\Work\libclang\include\llvm/Config/AsmPrinters.def:42:1
+	addExtern< void (*)() , LLVMInitializeWebAssemblyAsmPrinter >(*this,lib,"LLVMInitializeWebAssemblyAsmPrinter",SideEffects::worstDefault,"LLVMInitializeWebAssemblyAsmPrinter");
+// from D:\Work\libclang\include\llvm/Config/AsmPrinters.def:43:1
+	addExtern< void (*)() , LLVMInitializeX86AsmPrinter >(*this,lib,"LLVMInitializeX86AsmPrinter",SideEffects::worstDefault,"LLVMInitializeX86AsmPrinter");
+// from D:\Work\libclang\include\llvm/Config/AsmPrinters.def:44:1
+	addExtern< void (*)() , LLVMInitializeXCoreAsmPrinter >(*this,lib,"LLVMInitializeXCoreAsmPrinter",SideEffects::worstDefault,"LLVMInitializeXCoreAsmPrinter");
 }
 }
 

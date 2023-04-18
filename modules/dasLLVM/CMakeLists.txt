@@ -1,3 +1,7 @@
+IF(NOT WIN32)
+	SET(DAS_LLVM_DISABLED TRUE)
+	MESSAGE("LLVM 15 disabled for now on anything but WIN32")
+ENDIF()
 
 SET(PATH_TO_LIBCLANG ${PROJECT_SOURCE_DIR}/../libclang)
 IF(NOT IS_DIRECTORY ${PATH_TO_LIBCLANG})
@@ -116,6 +120,11 @@ IF ((NOT DAS_LLVM_INCLUDED) AND DAS_LIBCLANG_DETECTED AND ((NOT ${DAS_LLVM_DISAB
 		${DAS_LLVM_DIR}/src/dasLLVM.func_61.cpp
 		${DAS_LLVM_DIR}/src/dasLLVM.func_62.cpp
 		${DAS_LLVM_DIR}/src/dasLLVM.func_63.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_64.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_65.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_66.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_67.cpp
+		${DAS_LLVM_DIR}/src/dasLLVM.func_68.cpp
 	)
 
 	ADD_MODULE_LIB(libDasModuleLlvm)

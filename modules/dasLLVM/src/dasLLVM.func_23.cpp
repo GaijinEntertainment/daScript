@@ -12,66 +12,66 @@
 namespace das {
 #include "dasLLVM.func.aot.decl.inc"
 void Module_dasLLVM::initFunctions_23() {
-// from D:\Work\libclang\include\llvm-c/Core.h:2563:6
-	addExtern< void (*)(LLVMOpaqueValue *,unsigned int) , LLVMSetFunctionCallConv >(*this,lib,"LLVMSetFunctionCallConv",SideEffects::worstDefault,"LLVMSetFunctionCallConv")
-		->args({"Fn","CC"});
-// from D:\Work\libclang\include\llvm-c/Core.h:2571:13
-	addExtern< const char * (*)(LLVMOpaqueValue *) , LLVMGetGC >(*this,lib,"LLVMGetGC",SideEffects::worstDefault,"LLVMGetGC")
-		->args({"Fn"});
-// from D:\Work\libclang\include\llvm-c/Core.h:2578:6
-	addExtern< void (*)(LLVMOpaqueValue *,const char *) , LLVMSetGC >(*this,lib,"LLVMSetGC",SideEffects::worstDefault,"LLVMSetGC")
-		->args({"Fn","Name"});
-// from D:\Work\libclang\include\llvm-c/Core.h:2585:6
-	addExtern< void (*)(LLVMOpaqueValue *,unsigned int,LLVMOpaqueAttributeRef *) , LLVMAddAttributeAtIndex >(*this,lib,"LLVMAddAttributeAtIndex",SideEffects::worstDefault,"LLVMAddAttributeAtIndex")
-		->args({"F","Idx","A"});
-// from D:\Work\libclang\include\llvm-c/Core.h:2587:10
-	addExtern< unsigned int (*)(LLVMOpaqueValue *,unsigned int) , LLVMGetAttributeCountAtIndex >(*this,lib,"LLVMGetAttributeCountAtIndex",SideEffects::worstDefault,"LLVMGetAttributeCountAtIndex")
-		->args({"F","Idx"});
-// from D:\Work\libclang\include\llvm-c/Core.h:2588:6
-	addExtern< void (*)(LLVMOpaqueValue *,unsigned int,LLVMOpaqueAttributeRef **) , LLVMGetAttributesAtIndex >(*this,lib,"LLVMGetAttributesAtIndex",SideEffects::worstDefault,"LLVMGetAttributesAtIndex")
-		->args({"F","Idx","Attrs"});
-// from D:\Work\libclang\include\llvm-c/Core.h:2590:18
-	addExtern< LLVMOpaqueAttributeRef * (*)(LLVMOpaqueValue *,unsigned int,unsigned int) , LLVMGetEnumAttributeAtIndex >(*this,lib,"LLVMGetEnumAttributeAtIndex",SideEffects::worstDefault,"LLVMGetEnumAttributeAtIndex")
-		->args({"F","Idx","KindID"});
-// from D:\Work\libclang\include\llvm-c/Core.h:2593:18
-	addExtern< LLVMOpaqueAttributeRef * (*)(LLVMOpaqueValue *,unsigned int,const char *,unsigned int) , LLVMGetStringAttributeAtIndex >(*this,lib,"LLVMGetStringAttributeAtIndex",SideEffects::worstDefault,"LLVMGetStringAttributeAtIndex")
-		->args({"F","Idx","K","KLen"});
-// from D:\Work\libclang\include\llvm-c/Core.h:2596:6
+// from D:\Work\libclang\include\llvm-c/Core.h:2640:6
 	addExtern< void (*)(LLVMOpaqueValue *,unsigned int,unsigned int) , LLVMRemoveEnumAttributeAtIndex >(*this,lib,"LLVMRemoveEnumAttributeAtIndex",SideEffects::worstDefault,"LLVMRemoveEnumAttributeAtIndex")
 		->args({"F","Idx","KindID"});
-// from D:\Work\libclang\include\llvm-c/Core.h:2598:6
+// from D:\Work\libclang\include\llvm-c/Core.h:2642:6
 	addExtern< void (*)(LLVMOpaqueValue *,unsigned int,const char *,unsigned int) , LLVMRemoveStringAttributeAtIndex >(*this,lib,"LLVMRemoveStringAttributeAtIndex",SideEffects::worstDefault,"LLVMRemoveStringAttributeAtIndex")
 		->args({"F","Idx","K","KLen"});
-// from D:\Work\libclang\include\llvm-c/Core.h:2605:6
+// from D:\Work\libclang\include\llvm-c/Core.h:2649:6
 	addExtern< void (*)(LLVMOpaqueValue *,const char *,const char *) , LLVMAddTargetDependentFunctionAttr >(*this,lib,"LLVMAddTargetDependentFunctionAttr",SideEffects::worstDefault,"LLVMAddTargetDependentFunctionAttr")
 		->args({"Fn","A","V"});
-// from D:\Work\libclang\include\llvm-c/Core.h:2624:10
+// from D:\Work\libclang\include\llvm-c/Core.h:2668:10
 	addExtern< unsigned int (*)(LLVMOpaqueValue *) , LLVMCountParams >(*this,lib,"LLVMCountParams",SideEffects::worstDefault,"LLVMCountParams")
 		->args({"Fn"});
-// from D:\Work\libclang\include\llvm-c/Core.h:2637:6
+// from D:\Work\libclang\include\llvm-c/Core.h:2681:6
 	addExtern< void (*)(LLVMOpaqueValue *,LLVMOpaqueValue **) , LLVMGetParams >(*this,lib,"LLVMGetParams",SideEffects::worstDefault,"LLVMGetParams")
 		->args({"Fn","Params"});
-// from D:\Work\libclang\include\llvm-c/Core.h:2646:14
+// from D:\Work\libclang\include\llvm-c/Core.h:2690:14
 	addExtern< LLVMOpaqueValue * (*)(LLVMOpaqueValue *,unsigned int) , LLVMGetParam >(*this,lib,"LLVMGetParam",SideEffects::worstDefault,"LLVMGetParam")
 		->args({"Fn","Index"});
-// from D:\Work\libclang\include\llvm-c/Core.h:2657:14
+// from D:\Work\libclang\include\llvm-c/Core.h:2701:14
 	addExtern< LLVMOpaqueValue * (*)(LLVMOpaqueValue *) , LLVMGetParamParent >(*this,lib,"LLVMGetParamParent",SideEffects::worstDefault,"LLVMGetParamParent")
 		->args({"Inst"});
-// from D:\Work\libclang\include\llvm-c/Core.h:2664:14
+// from D:\Work\libclang\include\llvm-c/Core.h:2708:14
 	addExtern< LLVMOpaqueValue * (*)(LLVMOpaqueValue *) , LLVMGetFirstParam >(*this,lib,"LLVMGetFirstParam",SideEffects::worstDefault,"LLVMGetFirstParam")
 		->args({"Fn"});
-// from D:\Work\libclang\include\llvm-c/Core.h:2671:14
+// from D:\Work\libclang\include\llvm-c/Core.h:2715:14
 	addExtern< LLVMOpaqueValue * (*)(LLVMOpaqueValue *) , LLVMGetLastParam >(*this,lib,"LLVMGetLastParam",SideEffects::worstDefault,"LLVMGetLastParam")
 		->args({"Fn"});
-// from D:\Work\libclang\include\llvm-c/Core.h:2680:14
+// from D:\Work\libclang\include\llvm-c/Core.h:2724:14
 	addExtern< LLVMOpaqueValue * (*)(LLVMOpaqueValue *) , LLVMGetNextParam >(*this,lib,"LLVMGetNextParam",SideEffects::worstDefault,"LLVMGetNextParam")
 		->args({"Arg"});
-// from D:\Work\libclang\include\llvm-c/Core.h:2687:14
+// from D:\Work\libclang\include\llvm-c/Core.h:2731:14
 	addExtern< LLVMOpaqueValue * (*)(LLVMOpaqueValue *) , LLVMGetPreviousParam >(*this,lib,"LLVMGetPreviousParam",SideEffects::worstDefault,"LLVMGetPreviousParam")
 		->args({"Arg"});
-// from D:\Work\libclang\include\llvm-c/Core.h:2695:6
+// from D:\Work\libclang\include\llvm-c/Core.h:2739:6
 	addExtern< void (*)(LLVMOpaqueValue *,unsigned int) , LLVMSetParamAlignment >(*this,lib,"LLVMSetParamAlignment",SideEffects::worstDefault,"LLVMSetParamAlignment")
 		->args({"Arg","Align"});
+// from D:\Work\libclang\include\llvm-c/Core.h:2761:14
+	addExtern< LLVMOpaqueValue * (*)(LLVMOpaqueModule *,const char *,size_t,LLVMOpaqueType *,unsigned int,LLVMOpaqueValue *) , LLVMAddGlobalIFunc >(*this,lib,"LLVMAddGlobalIFunc",SideEffects::worstDefault,"LLVMAddGlobalIFunc")
+		->args({"M","Name","NameLen","Ty","AddrSpace","Resolver"});
+// from D:\Work\libclang\include\llvm-c/Core.h:2773:14
+	addExtern< LLVMOpaqueValue * (*)(LLVMOpaqueModule *,const char *,size_t) , LLVMGetNamedGlobalIFunc >(*this,lib,"LLVMGetNamedGlobalIFunc",SideEffects::worstDefault,"LLVMGetNamedGlobalIFunc")
+		->args({"M","Name","NameLen"});
+// from D:\Work\libclang\include\llvm-c/Core.h:2781:14
+	addExtern< LLVMOpaqueValue * (*)(LLVMOpaqueModule *) , LLVMGetFirstGlobalIFunc >(*this,lib,"LLVMGetFirstGlobalIFunc",SideEffects::worstDefault,"LLVMGetFirstGlobalIFunc")
+		->args({"M"});
+// from D:\Work\libclang\include\llvm-c/Core.h:2788:14
+	addExtern< LLVMOpaqueValue * (*)(LLVMOpaqueModule *) , LLVMGetLastGlobalIFunc >(*this,lib,"LLVMGetLastGlobalIFunc",SideEffects::worstDefault,"LLVMGetLastGlobalIFunc")
+		->args({"M"});
+// from D:\Work\libclang\include\llvm-c/Core.h:2796:14
+	addExtern< LLVMOpaqueValue * (*)(LLVMOpaqueValue *) , LLVMGetNextGlobalIFunc >(*this,lib,"LLVMGetNextGlobalIFunc",SideEffects::worstDefault,"LLVMGetNextGlobalIFunc")
+		->args({"IFunc"});
+// from D:\Work\libclang\include\llvm-c/Core.h:2804:14
+	addExtern< LLVMOpaqueValue * (*)(LLVMOpaqueValue *) , LLVMGetPreviousGlobalIFunc >(*this,lib,"LLVMGetPreviousGlobalIFunc",SideEffects::worstDefault,"LLVMGetPreviousGlobalIFunc")
+		->args({"IFunc"});
+// from D:\Work\libclang\include\llvm-c/Core.h:2812:14
+	addExtern< LLVMOpaqueValue * (*)(LLVMOpaqueValue *) , LLVMGetGlobalIFuncResolver >(*this,lib,"LLVMGetGlobalIFuncResolver",SideEffects::worstDefault,"LLVMGetGlobalIFuncResolver")
+		->args({"IFunc"});
+// from D:\Work\libclang\include\llvm-c/Core.h:2819:6
+	addExtern< void (*)(LLVMOpaqueValue *,LLVMOpaqueValue *) , LLVMSetGlobalIFuncResolver >(*this,lib,"LLVMSetGlobalIFuncResolver",SideEffects::worstDefault,"LLVMSetGlobalIFuncResolver")
+		->args({"IFunc","Resolver"});
 }
 }
 

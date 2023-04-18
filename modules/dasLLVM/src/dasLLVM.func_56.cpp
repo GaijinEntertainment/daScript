@@ -12,66 +12,64 @@
 namespace das {
 #include "dasLLVM.func.aot.decl.inc"
 void Module_dasLLVM::initFunctions_56() {
-// from D:\Work\libclang\include\llvm-c/Object.h:131:24
-	addExtern< LLVMOpaqueSectionIterator * (*)(LLVMOpaqueBinary *) , LLVMObjectFileCopySectionIterator >(*this,lib,"LLVMObjectFileCopySectionIterator",SideEffects::worstDefault,"LLVMObjectFileCopySectionIterator")
-		->args({"BR"});
-// from D:\Work\libclang\include\llvm-c/Object.h:138:10
-	addExtern< int (*)(LLVMOpaqueBinary *,LLVMOpaqueSectionIterator *) , LLVMObjectFileIsSectionIteratorAtEnd >(*this,lib,"LLVMObjectFileIsSectionIteratorAtEnd",SideEffects::worstDefault,"LLVMObjectFileIsSectionIteratorAtEnd")
-		->args({"BR","SI"});
-// from D:\Work\libclang\include\llvm-c/Object.h:152:23
-	addExtern< LLVMOpaqueSymbolIterator * (*)(LLVMOpaqueBinary *) , LLVMObjectFileCopySymbolIterator >(*this,lib,"LLVMObjectFileCopySymbolIterator",SideEffects::worstDefault,"LLVMObjectFileCopySymbolIterator")
-		->args({"BR"});
-// from D:\Work\libclang\include\llvm-c/Object.h:159:10
-	addExtern< int (*)(LLVMOpaqueBinary *,LLVMOpaqueSymbolIterator *) , LLVMObjectFileIsSymbolIteratorAtEnd >(*this,lib,"LLVMObjectFileIsSymbolIteratorAtEnd",SideEffects::worstDefault,"LLVMObjectFileIsSymbolIteratorAtEnd")
-		->args({"BR","SI"});
-// from D:\Work\libclang\include\llvm-c/Object.h:162:6
-	addExtern< void (*)(LLVMOpaqueSectionIterator *) , LLVMDisposeSectionIterator >(*this,lib,"LLVMDisposeSectionIterator",SideEffects::worstDefault,"LLVMDisposeSectionIterator")
-		->args({"SI"});
-// from D:\Work\libclang\include\llvm-c/Object.h:164:6
-	addExtern< void (*)(LLVMOpaqueSectionIterator *) , LLVMMoveToNextSection >(*this,lib,"LLVMMoveToNextSection",SideEffects::worstDefault,"LLVMMoveToNextSection")
-		->args({"SI"});
-// from D:\Work\libclang\include\llvm-c/Object.h:165:6
-	addExtern< void (*)(LLVMOpaqueSectionIterator *,LLVMOpaqueSymbolIterator *) , LLVMMoveToContainingSection >(*this,lib,"LLVMMoveToContainingSection",SideEffects::worstDefault,"LLVMMoveToContainingSection")
-		->args({"Sect","Sym"});
-// from D:\Work\libclang\include\llvm-c/Object.h:169:6
-	addExtern< void (*)(LLVMOpaqueSymbolIterator *) , LLVMDisposeSymbolIterator >(*this,lib,"LLVMDisposeSymbolIterator",SideEffects::worstDefault,"LLVMDisposeSymbolIterator")
-		->args({"SI"});
-// from D:\Work\libclang\include\llvm-c/Object.h:170:6
-	addExtern< void (*)(LLVMOpaqueSymbolIterator *) , LLVMMoveToNextSymbol >(*this,lib,"LLVMMoveToNextSymbol",SideEffects::worstDefault,"LLVMMoveToNextSymbol")
-		->args({"SI"});
-// from D:\Work\libclang\include\llvm-c/Object.h:173:13
-	addExtern< const char * (*)(LLVMOpaqueSectionIterator *) , LLVMGetSectionName >(*this,lib,"LLVMGetSectionName",SideEffects::worstDefault,"LLVMGetSectionName")
-		->args({"SI"});
-// from D:\Work\libclang\include\llvm-c/Object.h:174:10
-	addExtern< uint64_t (*)(LLVMOpaqueSectionIterator *) , LLVMGetSectionSize >(*this,lib,"LLVMGetSectionSize",SideEffects::worstDefault,"LLVMGetSectionSize")
-		->args({"SI"});
-// from D:\Work\libclang\include\llvm-c/Object.h:175:13
-	addExtern< const char * (*)(LLVMOpaqueSectionIterator *) , LLVMGetSectionContents >(*this,lib,"LLVMGetSectionContents",SideEffects::worstDefault,"LLVMGetSectionContents")
-		->args({"SI"});
-// from D:\Work\libclang\include\llvm-c/Object.h:176:10
-	addExtern< uint64_t (*)(LLVMOpaqueSectionIterator *) , LLVMGetSectionAddress >(*this,lib,"LLVMGetSectionAddress",SideEffects::worstDefault,"LLVMGetSectionAddress")
-		->args({"SI"});
-// from D:\Work\libclang\include\llvm-c/Object.h:177:10
-	addExtern< int (*)(LLVMOpaqueSectionIterator *,LLVMOpaqueSymbolIterator *) , LLVMGetSectionContainsSymbol >(*this,lib,"LLVMGetSectionContainsSymbol",SideEffects::worstDefault,"LLVMGetSectionContainsSymbol")
-		->args({"SI","Sym"});
-// from D:\Work\libclang\include\llvm-c/Object.h:181:27
-	addExtern< LLVMOpaqueRelocationIterator * (*)(LLVMOpaqueSectionIterator *) , LLVMGetRelocations >(*this,lib,"LLVMGetRelocations",SideEffects::worstDefault,"LLVMGetRelocations")
-		->args({"Section"});
-// from D:\Work\libclang\include\llvm-c/Object.h:182:6
-	addExtern< void (*)(LLVMOpaqueRelocationIterator *) , LLVMDisposeRelocationIterator >(*this,lib,"LLVMDisposeRelocationIterator",SideEffects::worstDefault,"LLVMDisposeRelocationIterator")
-		->args({"RI"});
-// from D:\Work\libclang\include\llvm-c/Object.h:183:10
-	addExtern< int (*)(LLVMOpaqueSectionIterator *,LLVMOpaqueRelocationIterator *) , LLVMIsRelocationIteratorAtEnd >(*this,lib,"LLVMIsRelocationIteratorAtEnd",SideEffects::worstDefault,"LLVMIsRelocationIteratorAtEnd")
-		->args({"Section","RI"});
-// from D:\Work\libclang\include\llvm-c/Object.h:185:6
-	addExtern< void (*)(LLVMOpaqueRelocationIterator *) , LLVMMoveToNextRelocation >(*this,lib,"LLVMMoveToNextRelocation",SideEffects::worstDefault,"LLVMMoveToNextRelocation")
-		->args({"RI"});
-// from D:\Work\libclang\include\llvm-c/Object.h:189:13
-	addExtern< const char * (*)(LLVMOpaqueSymbolIterator *) , LLVMGetSymbolName >(*this,lib,"LLVMGetSymbolName",SideEffects::worstDefault,"LLVMGetSymbolName")
-		->args({"SI"});
-// from D:\Work\libclang\include\llvm-c/Object.h:190:10
-	addExtern< uint64_t (*)(LLVMOpaqueSymbolIterator *) , LLVMGetSymbolAddress >(*this,lib,"LLVMGetSymbolAddress",SideEffects::worstDefault,"LLVMGetSymbolAddress")
-		->args({"SI"});
+// from D:\Work\libclang\include\llvm-c/LLJIT.h:74:24
+	addExtern< LLVMOrcOpaqueLLJITBuilder * (*)() , LLVMOrcCreateLLJITBuilder >(*this,lib,"LLVMOrcCreateLLJITBuilder",SideEffects::worstDefault,"LLVMOrcCreateLLJITBuilder");
+// from D:\Work\libclang\include\llvm-c/LLJIT.h:81:6
+	addExtern< void (*)(LLVMOrcOpaqueLLJITBuilder *) , LLVMOrcDisposeLLJITBuilder >(*this,lib,"LLVMOrcDisposeLLJITBuilder",SideEffects::worstDefault,"LLVMOrcDisposeLLJITBuilder")
+		->args({"Builder"});
+// from D:\Work\libclang\include\llvm-c/LLJIT.h:92:6
+	addExtern< void (*)(LLVMOrcOpaqueLLJITBuilder *,LLVMOrcOpaqueJITTargetMachineBuilder *) , LLVMOrcLLJITBuilderSetJITTargetMachineBuilder >(*this,lib,"LLVMOrcLLJITBuilderSetJITTargetMachineBuilder",SideEffects::worstDefault,"LLVMOrcLLJITBuilderSetJITTargetMachineBuilder")
+		->args({"Builder","JTMB"});
+// from D:\Work\libclang\include\llvm-c/LLJIT.h:116:14
+	addExtern< LLVMOpaqueError * (*)(LLVMOrcOpaqueLLJIT **,LLVMOrcOpaqueLLJITBuilder *) , LLVMOrcCreateLLJIT >(*this,lib,"LLVMOrcCreateLLJIT",SideEffects::worstDefault,"LLVMOrcCreateLLJIT")
+		->args({"Result","Builder"});
+// from D:\Work\libclang\include\llvm-c/LLJIT.h:122:14
+	addExtern< LLVMOpaqueError * (*)(LLVMOrcOpaqueLLJIT *) , LLVMOrcDisposeLLJIT >(*this,lib,"LLVMOrcDisposeLLJIT",SideEffects::worstDefault,"LLVMOrcDisposeLLJIT")
+		->args({"J"});
+// from D:\Work\libclang\include\llvm-c/LLJIT.h:130:28
+	addExtern< LLVMOrcOpaqueExecutionSession * (*)(LLVMOrcOpaqueLLJIT *) , LLVMOrcLLJITGetExecutionSession >(*this,lib,"LLVMOrcLLJITGetExecutionSession",SideEffects::worstDefault,"LLVMOrcLLJITGetExecutionSession")
+		->args({"J"});
+// from D:\Work\libclang\include\llvm-c/LLJIT.h:138:20
+	addExtern< LLVMOrcOpaqueJITDylib * (*)(LLVMOrcOpaqueLLJIT *) , LLVMOrcLLJITGetMainJITDylib >(*this,lib,"LLVMOrcLLJITGetMainJITDylib",SideEffects::worstDefault,"LLVMOrcLLJITGetMainJITDylib")
+		->args({"J"});
+// from D:\Work\libclang\include\llvm-c/LLJIT.h:144:13
+	addExtern< const char * (*)(LLVMOrcOpaqueLLJIT *) , LLVMOrcLLJITGetTripleString >(*this,lib,"LLVMOrcLLJITGetTripleString",SideEffects::worstDefault,"LLVMOrcLLJITGetTripleString")
+		->args({"J"});
+// from D:\Work\libclang\include\llvm-c/LLJIT.h:149:6
+	addExtern< char (*)(LLVMOrcOpaqueLLJIT *) , LLVMOrcLLJITGetGlobalPrefix >(*this,lib,"LLVMOrcLLJITGetGlobalPrefix",SideEffects::worstDefault,"LLVMOrcLLJITGetGlobalPrefix")
+		->args({"J"});
+// from D:\Work\libclang\include\llvm-c/LLJIT.h:159:1
+	addExtern< LLVMOrcOpaqueSymbolStringPoolEntry * (*)(LLVMOrcOpaqueLLJIT *,const char *) , LLVMOrcLLJITMangleAndIntern >(*this,lib,"LLVMOrcLLJITMangleAndIntern",SideEffects::worstDefault,"LLVMOrcLLJITMangleAndIntern")
+		->args({"J","UnmangledName"});
+// from D:\Work\libclang\include\llvm-c/LLJIT.h:170:14
+	addExtern< LLVMOpaqueError * (*)(LLVMOrcOpaqueLLJIT *,LLVMOrcOpaqueJITDylib *,LLVMOpaqueMemoryBuffer *) , LLVMOrcLLJITAddObjectFile >(*this,lib,"LLVMOrcLLJITAddObjectFile",SideEffects::worstDefault,"LLVMOrcLLJITAddObjectFile")
+		->args({"J","JD","ObjBuffer"});
+// from D:\Work\libclang\include\llvm-c/LLJIT.h:182:14
+	addExtern< LLVMOpaqueError * (*)(LLVMOrcOpaqueLLJIT *,LLVMOrcOpaqueResourceTracker *,LLVMOpaqueMemoryBuffer *) , LLVMOrcLLJITAddObjectFileWithRT >(*this,lib,"LLVMOrcLLJITAddObjectFileWithRT",SideEffects::worstDefault,"LLVMOrcLLJITAddObjectFileWithRT")
+		->args({"J","RT","ObjBuffer"});
+// from D:\Work\libclang\include\llvm-c/LLJIT.h:195:14
+	addExtern< LLVMOpaqueError * (*)(LLVMOrcOpaqueLLJIT *,LLVMOrcOpaqueJITDylib *,LLVMOrcOpaqueThreadSafeModule *) , LLVMOrcLLJITAddLLVMIRModule >(*this,lib,"LLVMOrcLLJITAddLLVMIRModule",SideEffects::worstDefault,"LLVMOrcLLJITAddLLVMIRModule")
+		->args({"J","JD","TSM"});
+// from D:\Work\libclang\include\llvm-c/LLJIT.h:208:14
+	addExtern< LLVMOpaqueError * (*)(LLVMOrcOpaqueLLJIT *,LLVMOrcOpaqueResourceTracker *,LLVMOrcOpaqueThreadSafeModule *) , LLVMOrcLLJITAddLLVMIRModuleWithRT >(*this,lib,"LLVMOrcLLJITAddLLVMIRModuleWithRT",SideEffects::worstDefault,"LLVMOrcLLJITAddLLVMIRModuleWithRT")
+		->args({"J","JD","TSM"});
+// from D:\Work\libclang\include\llvm-c/LLJIT.h:217:14
+	addExtern< LLVMOpaqueError * (*)(LLVMOrcOpaqueLLJIT *,unsigned long long *,const char *) , LLVMOrcLLJITLookup >(*this,lib,"LLVMOrcLLJITLookup",SideEffects::worstDefault,"LLVMOrcLLJITLookup")
+		->args({"J","Result","Name"});
+// from D:\Work\libclang\include\llvm-c/LLJIT.h:224:23
+	addExtern< LLVMOrcOpaqueObjectLayer * (*)(LLVMOrcOpaqueLLJIT *) , LLVMOrcLLJITGetObjLinkingLayer >(*this,lib,"LLVMOrcLLJITGetObjLinkingLayer",SideEffects::worstDefault,"LLVMOrcLLJITGetObjLinkingLayer")
+		->args({"J"});
+// from D:\Work\libclang\include\llvm-c/LLJIT.h:230:1
+	addExtern< LLVMOrcOpaqueObjectTransformLayer * (*)(LLVMOrcOpaqueLLJIT *) , LLVMOrcLLJITGetObjTransformLayer >(*this,lib,"LLVMOrcLLJITGetObjTransformLayer",SideEffects::worstDefault,"LLVMOrcLLJITGetObjTransformLayer")
+		->args({"J"});
+// from D:\Work\libclang\include\llvm-c/LLJIT.h:235:28
+	addExtern< LLVMOrcOpaqueIRTransformLayer * (*)(LLVMOrcOpaqueLLJIT *) , LLVMOrcLLJITGetIRTransformLayer >(*this,lib,"LLVMOrcLLJITGetIRTransformLayer",SideEffects::worstDefault,"LLVMOrcLLJITGetIRTransformLayer")
+		->args({"J"});
+// from D:\Work\libclang\include\llvm-c/LLJIT.h:243:13
+	addExtern< const char * (*)(LLVMOrcOpaqueLLJIT *) , LLVMOrcLLJITGetDataLayoutStr >(*this,lib,"LLVMOrcLLJITGetDataLayoutStr",SideEffects::worstDefault,"LLVMOrcLLJITGetDataLayoutStr")
+		->args({"J"});
+// from D:\Work\libclang\include\llvm-c/lto.h:111:1
+	addExtern< const char * (*)() , lto_get_version >(*this,lib,"lto_get_version",SideEffects::worstDefault,"lto_get_version");
 }
 }
 

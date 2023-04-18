@@ -3427,7 +3427,7 @@ class LlvmJitVisitor : AstVisitor
 
 [macro_function]
 def private generate_llvm ( ctx:Context?; fn : FunctionPtr )
-    return if is_in_completion() || is_compiling_macros()
+    return if is_in_completion() || is_compiling_macros() || is_folding()
     var astVisitor = new LlvmJitVisitor(fn.at, ctx, true, null, null)
     unsafe
         astVisitor.adapter <- make_visitor(*astVisitor)
@@ -3443,7 +3443,7 @@ def private generate_llvm ( ctx:Context?; fn : FunctionPtr )
 
 [macro_function]
 def private generate_llvm_code ( fmna:string )
-    return null if is_in_completion() || is_compiling_macros()
+    return null if is_in_completion() || is_compiling_macros() || is_folding()
     return null if g_failed
     var code = LLVMGetFunctionAddress(g_engine, fmna)
     to_log(LOG_ERROR, "LLVM JIT FAILED: {fmna}\n")  if code==0ul
@@ -3451,7 +3451,7 @@ def private generate_llvm_code ( fmna:string )
 
 [macro_function]
 def private optimize_llvm_module
-    return if is_in_completion() || is_compiling_macros()
+    return if is_in_completion() || is_compiling_macros() || is_folding()
     return if g_failed || !LLVM_ENABLE_OPT_PASS
     var pmb = LLVMPassManagerBuilderCreate()
     LLVMPassManagerBuilderSetOptLevel(pmb, LLVM_OPT_LEVEL)
@@ -3469,7 +3469,7 @@ def private optimize_llvm_module
 [simulate_macro(name="jit_llvm")]
 class JIT_LLVM : AstSimulateMacro
     def override simulate ( prog:Program?; var ctx:Context? ) : bool
-        return true if is_in_completion() || is_compiling_macros()
+        return true if is_in_completion() || is_compiling_macros() || is_folding()
         if !LLVM_JIT_ENABLED
             return true
         var funcs : array<FunctionPtr>

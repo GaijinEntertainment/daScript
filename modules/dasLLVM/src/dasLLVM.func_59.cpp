@@ -12,65 +12,64 @@
 namespace das {
 #include "dasLLVM.func.aot.decl.inc"
 void Module_dasLLVM::initFunctions_59() {
-// from D:\Work\libclang\include\llvm-c/Support.h:39:6
-	addExtern< void (*)(int,const char *const *,const char *) , LLVMParseCommandLineOptions >(*this,lib,"LLVMParseCommandLineOptions",SideEffects::worstDefault,"LLVMParseCommandLineOptions")
-		->args({"argc","argv","Overview"});
-// from D:\Work\libclang\include\llvm-c/Support.h:49:7
-	addExtern< void * (*)(const char *) , LLVMSearchForAddressOfSymbol >(*this,lib,"LLVMSearchForAddressOfSymbol",SideEffects::worstDefault,"LLVMSearchForAddressOfSymbol")
-		->args({"symbolName"});
-// from D:\Work\libclang\include\llvm-c/Support.h:58:6
-	addExtern< void (*)(const char *,void *) , LLVMAddSymbol >(*this,lib,"LLVMAddSymbol",SideEffects::worstDefault,"LLVMAddSymbol")
-		->args({"symbolName","symbolValue"});
-// from D:\Work\libclang\include\llvm-c/Transforms/AggressiveInstCombine.h:31:6
-	addExtern< void (*)(LLVMOpaquePassManager *) , LLVMAddAggressiveInstCombinerPass >(*this,lib,"LLVMAddAggressiveInstCombinerPass",SideEffects::worstDefault,"LLVMAddAggressiveInstCombinerPass")
-		->args({"PM"});
-// from D:\Work\libclang\include\llvm-c/Transforms/PassManagerBuilder.h:32:27
-	addExtern< LLVMOpaquePassManagerBuilder * (*)() , LLVMPassManagerBuilderCreate >(*this,lib,"LLVMPassManagerBuilderCreate",SideEffects::worstDefault,"LLVMPassManagerBuilderCreate");
-// from D:\Work\libclang\include\llvm-c/Transforms/PassManagerBuilder.h:33:6
-	addExtern< void (*)(LLVMOpaquePassManagerBuilder *) , LLVMPassManagerBuilderDispose >(*this,lib,"LLVMPassManagerBuilderDispose",SideEffects::worstDefault,"LLVMPassManagerBuilderDispose")
-		->args({"PMB"});
-// from D:\Work\libclang\include\llvm-c/Transforms/PassManagerBuilder.h:37:1
-	addExtern< void (*)(LLVMOpaquePassManagerBuilder *,unsigned int) , LLVMPassManagerBuilderSetOptLevel >(*this,lib,"LLVMPassManagerBuilderSetOptLevel",SideEffects::worstDefault,"LLVMPassManagerBuilderSetOptLevel")
-		->args({"PMB","OptLevel"});
-// from D:\Work\libclang\include\llvm-c/Transforms/PassManagerBuilder.h:42:1
-	addExtern< void (*)(LLVMOpaquePassManagerBuilder *,unsigned int) , LLVMPassManagerBuilderSetSizeLevel >(*this,lib,"LLVMPassManagerBuilderSetSizeLevel",SideEffects::worstDefault,"LLVMPassManagerBuilderSetSizeLevel")
-		->args({"PMB","SizeLevel"});
-// from D:\Work\libclang\include\llvm-c/Transforms/PassManagerBuilder.h:47:1
-	addExtern< void (*)(LLVMOpaquePassManagerBuilder *,int) , LLVMPassManagerBuilderSetDisableUnitAtATime >(*this,lib,"LLVMPassManagerBuilderSetDisableUnitAtATime",SideEffects::worstDefault,"LLVMPassManagerBuilderSetDisableUnitAtATime")
-		->args({"PMB","Value"});
-// from D:\Work\libclang\include\llvm-c/Transforms/PassManagerBuilder.h:52:1
-	addExtern< void (*)(LLVMOpaquePassManagerBuilder *,int) , LLVMPassManagerBuilderSetDisableUnrollLoops >(*this,lib,"LLVMPassManagerBuilderSetDisableUnrollLoops",SideEffects::worstDefault,"LLVMPassManagerBuilderSetDisableUnrollLoops")
-		->args({"PMB","Value"});
-// from D:\Work\libclang\include\llvm-c/Transforms/PassManagerBuilder.h:57:1
-	addExtern< void (*)(LLVMOpaquePassManagerBuilder *,int) , LLVMPassManagerBuilderSetDisableSimplifyLibCalls >(*this,lib,"LLVMPassManagerBuilderSetDisableSimplifyLibCalls",SideEffects::worstDefault,"LLVMPassManagerBuilderSetDisableSimplifyLibCalls")
-		->args({"PMB","Value"});
-// from D:\Work\libclang\include\llvm-c/Transforms/PassManagerBuilder.h:62:1
-	addExtern< void (*)(LLVMOpaquePassManagerBuilder *,unsigned int) , LLVMPassManagerBuilderUseInlinerWithThreshold >(*this,lib,"LLVMPassManagerBuilderUseInlinerWithThreshold",SideEffects::worstDefault,"LLVMPassManagerBuilderUseInlinerWithThreshold")
-		->args({"PMB","Threshold"});
-// from D:\Work\libclang\include\llvm-c/Transforms/PassManagerBuilder.h:67:1
-	addExtern< void (*)(LLVMOpaquePassManagerBuilder *,LLVMOpaquePassManager *) , LLVMPassManagerBuilderPopulateFunctionPassManager >(*this,lib,"LLVMPassManagerBuilderPopulateFunctionPassManager",SideEffects::worstDefault,"LLVMPassManagerBuilderPopulateFunctionPassManager")
-		->args({"PMB","PM"});
-// from D:\Work\libclang\include\llvm-c/Transforms/PassManagerBuilder.h:72:1
-	addExtern< void (*)(LLVMOpaquePassManagerBuilder *,LLVMOpaquePassManager *) , LLVMPassManagerBuilderPopulateModulePassManager >(*this,lib,"LLVMPassManagerBuilderPopulateModulePassManager",SideEffects::worstDefault,"LLVMPassManagerBuilderPopulateModulePassManager")
-		->args({"PMB","PM"});
-// from D:\Work\libclang\include\llvm-c/Transforms/PassManagerBuilder.h:76:6
-	addExtern< void (*)(LLVMOpaquePassManagerBuilder *,LLVMOpaquePassManager *,int,int) , LLVMPassManagerBuilderPopulateLTOPassManager >(*this,lib,"LLVMPassManagerBuilderPopulateLTOPassManager",SideEffects::worstDefault,"LLVMPassManagerBuilderPopulateLTOPassManager")
-		->args({"PMB","PM","Internalize","RunInliner"});
-// from D:\Work\libclang\include\llvm-c/Transforms/Coroutines.h:36:6
-	addExtern< void (*)(LLVMOpaquePassManager *) , LLVMAddCoroEarlyPass >(*this,lib,"LLVMAddCoroEarlyPass",SideEffects::worstDefault,"LLVMAddCoroEarlyPass")
-		->args({"PM"});
-// from D:\Work\libclang\include\llvm-c/Transforms/Coroutines.h:39:6
-	addExtern< void (*)(LLVMOpaquePassManager *) , LLVMAddCoroSplitPass >(*this,lib,"LLVMAddCoroSplitPass",SideEffects::worstDefault,"LLVMAddCoroSplitPass")
-		->args({"PM"});
-// from D:\Work\libclang\include\llvm-c/Transforms/Coroutines.h:42:6
-	addExtern< void (*)(LLVMOpaquePassManager *) , LLVMAddCoroElidePass >(*this,lib,"LLVMAddCoroElidePass",SideEffects::worstDefault,"LLVMAddCoroElidePass")
-		->args({"PM"});
-// from D:\Work\libclang\include\llvm-c/Transforms/Coroutines.h:45:6
-	addExtern< void (*)(LLVMOpaquePassManager *) , LLVMAddCoroCleanupPass >(*this,lib,"LLVMAddCoroCleanupPass",SideEffects::worstDefault,"LLVMAddCoroCleanupPass")
-		->args({"PM"});
-// from D:\Work\libclang\include\llvm-c/Transforms/Coroutines.h:48:6
-	addExtern< void (*)(LLVMOpaquePassManagerBuilder *) , LLVMPassManagerBuilderAddCoroutinePassesToExtensionPoints >(*this,lib,"LLVMPassManagerBuilderAddCoroutinePassesToExtensionPoints",SideEffects::worstDefault,"LLVMPassManagerBuilderAddCoroutinePassesToExtensionPoints")
-		->args({"PMB"});
+// from D:\Work\libclang\include\llvm-c/lto.h:565:1
+	addExtern< void (*)(LLVMOpaqueLTOCodeGenerator *,const char *) , lto_codegen_debug_options >(*this,lib,"lto_codegen_debug_options",SideEffects::worstDefault,"lto_codegen_debug_options")
+		->args({"cg",""});
+// from D:\Work\libclang\include\llvm-c/lto.h:573:13
+	addExtern< void (*)(LLVMOpaqueLTOCodeGenerator *,const char *const *,int) , lto_codegen_debug_options_array >(*this,lib,"lto_codegen_debug_options_array",SideEffects::worstDefault,"lto_codegen_debug_options_array")
+		->args({"cg","","number"});
+// from D:\Work\libclang\include\llvm-c/lto.h:583:1
+	addExtern< void (*)() , lto_initialize_disassembler >(*this,lib,"lto_initialize_disassembler",SideEffects::worstDefault,"lto_initialize_disassembler");
+// from D:\Work\libclang\include\llvm-c/lto.h:592:1
+	addExtern< void (*)(LLVMOpaqueLTOCodeGenerator *,bool) , lto_codegen_set_should_internalize >(*this,lib,"lto_codegen_set_should_internalize",SideEffects::worstDefault,"lto_codegen_set_should_internalize")
+		->args({"cg","ShouldInternalize"});
+// from D:\Work\libclang\include\llvm-c/lto.h:604:1
+	addExtern< void (*)(LLVMOpaqueLTOCodeGenerator *,bool) , lto_codegen_set_should_embed_uselists >(*this,lib,"lto_codegen_set_should_embed_uselists",SideEffects::worstDefault,"lto_codegen_set_should_embed_uselists")
+		->args({"cg","ShouldEmbedUselists"});
+// from D:\Work\libclang\include\llvm-c/lto.h:618:20
+	addExtern< LLVMOpaqueLTOInput * (*)(const void *,size_t,const char *) , lto_input_create >(*this,lib,"lto_input_create",SideEffects::worstDefault,"lto_input_create")
+		->args({"buffer","buffer_size","path"});
+// from D:\Work\libclang\include\llvm-c/lto.h:628:13
+	addExtern< void (*)(LLVMOpaqueLTOInput *) , lto_input_dispose >(*this,lib,"lto_input_dispose",SideEffects::worstDefault,"lto_input_dispose")
+		->args({"input"});
+// from D:\Work\libclang\include\llvm-c/lto.h:636:17
+	addExtern< unsigned int (*)(LLVMOpaqueLTOInput *) , lto_input_get_num_dependent_libraries >(*this,lib,"lto_input_get_num_dependent_libraries",SideEffects::worstDefault,"lto_input_get_num_dependent_libraries")
+		->args({"input"});
+// from D:\Work\libclang\include\llvm-c/lto.h:645:21
+	addExtern< const char * (*)(LLVMOpaqueLTOInput *,size_t,size_t *) , lto_input_get_dependent_library >(*this,lib,"lto_input_get_dependent_library",SideEffects::worstDefault,"lto_input_get_dependent_library")
+		->args({"input","index","size"});
+// from D:\Work\libclang\include\llvm-c/lto.h:655:27
+	addExtern< const char *const * (*)(size_t *) , lto_runtime_lib_symbols_list >(*this,lib,"lto_runtime_lib_symbols_list",SideEffects::worstDefault,"lto_runtime_lib_symbols_list")
+		->args({"size"});
+// from D:\Work\libclang\include\llvm-c/lto.h:687:27
+	addExtern< LLVMOpaqueThinLTOCodeGenerator * (*)() , thinlto_create_codegen >(*this,lib,"thinlto_create_codegen",SideEffects::worstDefault,"thinlto_create_codegen");
+// from D:\Work\libclang\include\llvm-c/lto.h:695:13
+	addExtern< void (*)(LLVMOpaqueThinLTOCodeGenerator *) , thinlto_codegen_dispose >(*this,lib,"thinlto_codegen_dispose",SideEffects::worstDefault,"thinlto_codegen_dispose")
+		->args({"cg"});
+// from D:\Work\libclang\include\llvm-c/lto.h:708:13
+	addExtern< void (*)(LLVMOpaqueThinLTOCodeGenerator *,const char *,const char *,int) , thinlto_codegen_add_module >(*this,lib,"thinlto_codegen_add_module",SideEffects::worstDefault,"thinlto_codegen_add_module")
+		->args({"cg","identifier","data","length"});
+// from D:\Work\libclang\include\llvm-c/lto.h:718:13
+	addExtern< void (*)(LLVMOpaqueThinLTOCodeGenerator *) , thinlto_codegen_process >(*this,lib,"thinlto_codegen_process",SideEffects::worstDefault,"thinlto_codegen_process")
+		->args({"cg"});
+// from D:\Work\libclang\include\llvm-c/lto.h:729:21
+	addExtern< unsigned int (*)(LLVMOpaqueThinLTOCodeGenerator *) , thinlto_module_get_num_objects >(*this,lib,"thinlto_module_get_num_objects",SideEffects::worstDefault,"thinlto_module_get_num_objects")
+		->args({"cg"});
+// from D:\Work\libclang\include\llvm-c/lto.h:740:24
+	addExtern< LTOObjectBuffer (*)(LLVMOpaqueThinLTOCodeGenerator *,unsigned int) , thinlto_module_get_object ,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"thinlto_module_get_object",SideEffects::worstDefault,"thinlto_module_get_object")
+		->args({"cg","index"});
+// from D:\Work\libclang\include\llvm-c/lto.h:752:14
+	addExtern< unsigned int (*)(LLVMOpaqueThinLTOCodeGenerator *) , thinlto_module_get_num_object_files >(*this,lib,"thinlto_module_get_num_object_files",SideEffects::worstDefault,"thinlto_module_get_num_object_files")
+		->args({"cg"});
+// from D:\Work\libclang\include\llvm-c/lto.h:763:13
+	addExtern< const char * (*)(LLVMOpaqueThinLTOCodeGenerator *,unsigned int) , thinlto_module_get_object_file >(*this,lib,"thinlto_module_get_object_file",SideEffects::worstDefault,"thinlto_module_get_object_file")
+		->args({"cg","index"});
+// from D:\Work\libclang\include\llvm-c/lto.h:772:19
+	addExtern< bool (*)(LLVMOpaqueThinLTOCodeGenerator *,lto_codegen_model) , thinlto_codegen_set_pic_model >(*this,lib,"thinlto_codegen_set_pic_model",SideEffects::worstDefault,"thinlto_codegen_set_pic_model")
+		->args({"cg",""});
+// from D:\Work\libclang\include\llvm-c/lto.h:782:13
+	addExtern< void (*)(LLVMOpaqueThinLTOCodeGenerator *,const char *) , thinlto_codegen_set_savetemps_dir >(*this,lib,"thinlto_codegen_set_savetemps_dir",SideEffects::worstDefault,"thinlto_codegen_set_savetemps_dir")
+		->args({"cg","save_temps_dir"});
 }
 }
 

@@ -134,6 +134,7 @@ def public FN_JIT_TABLE_FIND(t:Type)
 def public init_jit
     return if is_in_completion() || is_compiling_macros()
     return if g_mod != null    // prevent double init
+    LLVMContextSetOpaquePointers(LLVMGetGlobalContext(), 0)
     if LLVM_DEBUG_INFO
         set_context_diagnostics_to_log(LLVMGetGlobalContext())
     g_failed = false

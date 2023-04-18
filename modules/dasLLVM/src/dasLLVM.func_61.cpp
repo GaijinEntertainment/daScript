@@ -12,66 +12,66 @@
 namespace das {
 #include "dasLLVM.func.aot.decl.inc"
 void Module_dasLLVM::initFunctions_61() {
-// from D:\Work\libclang\include\llvm-c/Transforms/PassBuilder.h:68:6
-	addExtern< void (*)(LLVMOpaquePassBuilderOptions *,int) , LLVMPassBuilderOptionsSetLoopInterleaving >(*this,lib,"LLVMPassBuilderOptionsSetLoopInterleaving",SideEffects::worstDefault,"LLVMPassBuilderOptionsSetLoopInterleaving")
-		->args({"Options","LoopInterleaving"});
-// from D:\Work\libclang\include\llvm-c/Transforms/PassBuilder.h:71:6
-	addExtern< void (*)(LLVMOpaquePassBuilderOptions *,int) , LLVMPassBuilderOptionsSetLoopVectorization >(*this,lib,"LLVMPassBuilderOptionsSetLoopVectorization",SideEffects::worstDefault,"LLVMPassBuilderOptionsSetLoopVectorization")
-		->args({"Options","LoopVectorization"});
-// from D:\Work\libclang\include\llvm-c/Transforms/PassBuilder.h:74:6
-	addExtern< void (*)(LLVMOpaquePassBuilderOptions *,int) , LLVMPassBuilderOptionsSetSLPVectorization >(*this,lib,"LLVMPassBuilderOptionsSetSLPVectorization",SideEffects::worstDefault,"LLVMPassBuilderOptionsSetSLPVectorization")
-		->args({"Options","SLPVectorization"});
-// from D:\Work\libclang\include\llvm-c/Transforms/PassBuilder.h:77:6
-	addExtern< void (*)(LLVMOpaquePassBuilderOptions *,int) , LLVMPassBuilderOptionsSetLoopUnrolling >(*this,lib,"LLVMPassBuilderOptionsSetLoopUnrolling",SideEffects::worstDefault,"LLVMPassBuilderOptionsSetLoopUnrolling")
-		->args({"Options","LoopUnrolling"});
-// from D:\Work\libclang\include\llvm-c/Transforms/PassBuilder.h:80:6
-	addExtern< void (*)(LLVMOpaquePassBuilderOptions *,int) , LLVMPassBuilderOptionsSetForgetAllSCEVInLoopUnroll >(*this,lib,"LLVMPassBuilderOptionsSetForgetAllSCEVInLoopUnroll",SideEffects::worstDefault,"LLVMPassBuilderOptionsSetForgetAllSCEVInLoopUnroll")
-		->args({"Options","ForgetAllSCEVInLoopUnroll"});
-// from D:\Work\libclang\include\llvm-c/Transforms/PassBuilder.h:83:6
-	addExtern< void (*)(LLVMOpaquePassBuilderOptions *,unsigned int) , LLVMPassBuilderOptionsSetLicmMssaOptCap >(*this,lib,"LLVMPassBuilderOptionsSetLicmMssaOptCap",SideEffects::worstDefault,"LLVMPassBuilderOptionsSetLicmMssaOptCap")
-		->args({"Options","LicmMssaOptCap"});
-// from D:\Work\libclang\include\llvm-c/Transforms/PassBuilder.h:86:6
-	addExtern< void (*)(LLVMOpaquePassBuilderOptions *,unsigned int) , LLVMPassBuilderOptionsSetLicmMssaNoAccForPromotionCap >(*this,lib,"LLVMPassBuilderOptionsSetLicmMssaNoAccForPromotionCap",SideEffects::worstDefault,"LLVMPassBuilderOptionsSetLicmMssaNoAccForPromotionCap")
-		->args({"Options","LicmMssaNoAccForPromotionCap"});
-// from D:\Work\libclang\include\llvm-c/Transforms/PassBuilder.h:89:6
-	addExtern< void (*)(LLVMOpaquePassBuilderOptions *,int) , LLVMPassBuilderOptionsSetCallGraphProfile >(*this,lib,"LLVMPassBuilderOptionsSetCallGraphProfile",SideEffects::worstDefault,"LLVMPassBuilderOptionsSetCallGraphProfile")
-		->args({"Options","CallGraphProfile"});
-// from D:\Work\libclang\include\llvm-c/Transforms/PassBuilder.h:92:6
-	addExtern< void (*)(LLVMOpaquePassBuilderOptions *,int) , LLVMPassBuilderOptionsSetMergeFunctions >(*this,lib,"LLVMPassBuilderOptionsSetMergeFunctions",SideEffects::worstDefault,"LLVMPassBuilderOptionsSetMergeFunctions")
-		->args({"Options","MergeFunctions"});
-// from D:\Work\libclang\include\llvm-c/Transforms/PassBuilder.h:98:6
-	addExtern< void (*)(LLVMOpaquePassBuilderOptions *) , LLVMDisposePassBuilderOptions >(*this,lib,"LLVMDisposePassBuilderOptions",SideEffects::worstDefault,"LLVMDisposePassBuilderOptions")
-		->args({"Options"});
-// from D:\Work\libclang\include\llvm-c/Transforms/Scalar.h:35:6
-	addExtern< void (*)(LLVMOpaquePassManager *) , LLVMAddAggressiveDCEPass >(*this,lib,"LLVMAddAggressiveDCEPass",SideEffects::worstDefault,"LLVMAddAggressiveDCEPass")
-		->args({"PM"});
-// from D:\Work\libclang\include\llvm-c/Transforms/Scalar.h:38:6
-	addExtern< void (*)(LLVMOpaquePassManager *) , LLVMAddDCEPass >(*this,lib,"LLVMAddDCEPass",SideEffects::worstDefault,"LLVMAddDCEPass")
-		->args({"PM"});
-// from D:\Work\libclang\include\llvm-c/Transforms/Scalar.h:41:6
-	addExtern< void (*)(LLVMOpaquePassManager *) , LLVMAddBitTrackingDCEPass >(*this,lib,"LLVMAddBitTrackingDCEPass",SideEffects::worstDefault,"LLVMAddBitTrackingDCEPass")
-		->args({"PM"});
-// from D:\Work\libclang\include\llvm-c/Transforms/Scalar.h:44:6
-	addExtern< void (*)(LLVMOpaquePassManager *) , LLVMAddAlignmentFromAssumptionsPass >(*this,lib,"LLVMAddAlignmentFromAssumptionsPass",SideEffects::worstDefault,"LLVMAddAlignmentFromAssumptionsPass")
-		->args({"PM"});
-// from D:\Work\libclang\include\llvm-c/Transforms/Scalar.h:47:6
-	addExtern< void (*)(LLVMOpaquePassManager *) , LLVMAddCFGSimplificationPass >(*this,lib,"LLVMAddCFGSimplificationPass",SideEffects::worstDefault,"LLVMAddCFGSimplificationPass")
-		->args({"PM"});
-// from D:\Work\libclang\include\llvm-c/Transforms/Scalar.h:50:6
-	addExtern< void (*)(LLVMOpaquePassManager *) , LLVMAddDeadStoreEliminationPass >(*this,lib,"LLVMAddDeadStoreEliminationPass",SideEffects::worstDefault,"LLVMAddDeadStoreEliminationPass")
-		->args({"PM"});
-// from D:\Work\libclang\include\llvm-c/Transforms/Scalar.h:53:6
-	addExtern< void (*)(LLVMOpaquePassManager *) , LLVMAddScalarizerPass >(*this,lib,"LLVMAddScalarizerPass",SideEffects::worstDefault,"LLVMAddScalarizerPass")
-		->args({"PM"});
-// from D:\Work\libclang\include\llvm-c/Transforms/Scalar.h:56:6
-	addExtern< void (*)(LLVMOpaquePassManager *) , LLVMAddMergedLoadStoreMotionPass >(*this,lib,"LLVMAddMergedLoadStoreMotionPass",SideEffects::worstDefault,"LLVMAddMergedLoadStoreMotionPass")
-		->args({"PM"});
-// from D:\Work\libclang\include\llvm-c/Transforms/Scalar.h:59:6
-	addExtern< void (*)(LLVMOpaquePassManager *) , LLVMAddGVNPass >(*this,lib,"LLVMAddGVNPass",SideEffects::worstDefault,"LLVMAddGVNPass")
-		->args({"PM"});
-// from D:\Work\libclang\include\llvm-c/Transforms/Scalar.h:62:6
-	addExtern< void (*)(LLVMOpaquePassManager *) , LLVMAddNewGVNPass >(*this,lib,"LLVMAddNewGVNPass",SideEffects::worstDefault,"LLVMAddNewGVNPass")
-		->args({"PM"});
+// from D:\Work\libclang\include\llvm-c/Object.h:133:24
+	addExtern< LLVMOpaqueSectionIterator * (*)(LLVMOpaqueBinary *) , LLVMObjectFileCopySectionIterator >(*this,lib,"LLVMObjectFileCopySectionIterator",SideEffects::worstDefault,"LLVMObjectFileCopySectionIterator")
+		->args({"BR"});
+// from D:\Work\libclang\include\llvm-c/Object.h:140:10
+	addExtern< int (*)(LLVMOpaqueBinary *,LLVMOpaqueSectionIterator *) , LLVMObjectFileIsSectionIteratorAtEnd >(*this,lib,"LLVMObjectFileIsSectionIteratorAtEnd",SideEffects::worstDefault,"LLVMObjectFileIsSectionIteratorAtEnd")
+		->args({"BR","SI"});
+// from D:\Work\libclang\include\llvm-c/Object.h:154:23
+	addExtern< LLVMOpaqueSymbolIterator * (*)(LLVMOpaqueBinary *) , LLVMObjectFileCopySymbolIterator >(*this,lib,"LLVMObjectFileCopySymbolIterator",SideEffects::worstDefault,"LLVMObjectFileCopySymbolIterator")
+		->args({"BR"});
+// from D:\Work\libclang\include\llvm-c/Object.h:161:10
+	addExtern< int (*)(LLVMOpaqueBinary *,LLVMOpaqueSymbolIterator *) , LLVMObjectFileIsSymbolIteratorAtEnd >(*this,lib,"LLVMObjectFileIsSymbolIteratorAtEnd",SideEffects::worstDefault,"LLVMObjectFileIsSymbolIteratorAtEnd")
+		->args({"BR","SI"});
+// from D:\Work\libclang\include\llvm-c/Object.h:164:6
+	addExtern< void (*)(LLVMOpaqueSectionIterator *) , LLVMDisposeSectionIterator >(*this,lib,"LLVMDisposeSectionIterator",SideEffects::worstDefault,"LLVMDisposeSectionIterator")
+		->args({"SI"});
+// from D:\Work\libclang\include\llvm-c/Object.h:166:6
+	addExtern< void (*)(LLVMOpaqueSectionIterator *) , LLVMMoveToNextSection >(*this,lib,"LLVMMoveToNextSection",SideEffects::worstDefault,"LLVMMoveToNextSection")
+		->args({"SI"});
+// from D:\Work\libclang\include\llvm-c/Object.h:167:6
+	addExtern< void (*)(LLVMOpaqueSectionIterator *,LLVMOpaqueSymbolIterator *) , LLVMMoveToContainingSection >(*this,lib,"LLVMMoveToContainingSection",SideEffects::worstDefault,"LLVMMoveToContainingSection")
+		->args({"Sect","Sym"});
+// from D:\Work\libclang\include\llvm-c/Object.h:171:6
+	addExtern< void (*)(LLVMOpaqueSymbolIterator *) , LLVMDisposeSymbolIterator >(*this,lib,"LLVMDisposeSymbolIterator",SideEffects::worstDefault,"LLVMDisposeSymbolIterator")
+		->args({"SI"});
+// from D:\Work\libclang\include\llvm-c/Object.h:172:6
+	addExtern< void (*)(LLVMOpaqueSymbolIterator *) , LLVMMoveToNextSymbol >(*this,lib,"LLVMMoveToNextSymbol",SideEffects::worstDefault,"LLVMMoveToNextSymbol")
+		->args({"SI"});
+// from D:\Work\libclang\include\llvm-c/Object.h:175:13
+	addExtern< const char * (*)(LLVMOpaqueSectionIterator *) , LLVMGetSectionName >(*this,lib,"LLVMGetSectionName",SideEffects::worstDefault,"LLVMGetSectionName")
+		->args({"SI"});
+// from D:\Work\libclang\include\llvm-c/Object.h:176:10
+	addExtern< uint64_t (*)(LLVMOpaqueSectionIterator *) , LLVMGetSectionSize >(*this,lib,"LLVMGetSectionSize",SideEffects::worstDefault,"LLVMGetSectionSize")
+		->args({"SI"});
+// from D:\Work\libclang\include\llvm-c/Object.h:177:13
+	addExtern< const char * (*)(LLVMOpaqueSectionIterator *) , LLVMGetSectionContents >(*this,lib,"LLVMGetSectionContents",SideEffects::worstDefault,"LLVMGetSectionContents")
+		->args({"SI"});
+// from D:\Work\libclang\include\llvm-c/Object.h:178:10
+	addExtern< uint64_t (*)(LLVMOpaqueSectionIterator *) , LLVMGetSectionAddress >(*this,lib,"LLVMGetSectionAddress",SideEffects::worstDefault,"LLVMGetSectionAddress")
+		->args({"SI"});
+// from D:\Work\libclang\include\llvm-c/Object.h:179:10
+	addExtern< int (*)(LLVMOpaqueSectionIterator *,LLVMOpaqueSymbolIterator *) , LLVMGetSectionContainsSymbol >(*this,lib,"LLVMGetSectionContainsSymbol",SideEffects::worstDefault,"LLVMGetSectionContainsSymbol")
+		->args({"SI","Sym"});
+// from D:\Work\libclang\include\llvm-c/Object.h:183:27
+	addExtern< LLVMOpaqueRelocationIterator * (*)(LLVMOpaqueSectionIterator *) , LLVMGetRelocations >(*this,lib,"LLVMGetRelocations",SideEffects::worstDefault,"LLVMGetRelocations")
+		->args({"Section"});
+// from D:\Work\libclang\include\llvm-c/Object.h:184:6
+	addExtern< void (*)(LLVMOpaqueRelocationIterator *) , LLVMDisposeRelocationIterator >(*this,lib,"LLVMDisposeRelocationIterator",SideEffects::worstDefault,"LLVMDisposeRelocationIterator")
+		->args({"RI"});
+// from D:\Work\libclang\include\llvm-c/Object.h:185:10
+	addExtern< int (*)(LLVMOpaqueSectionIterator *,LLVMOpaqueRelocationIterator *) , LLVMIsRelocationIteratorAtEnd >(*this,lib,"LLVMIsRelocationIteratorAtEnd",SideEffects::worstDefault,"LLVMIsRelocationIteratorAtEnd")
+		->args({"Section","RI"});
+// from D:\Work\libclang\include\llvm-c/Object.h:187:6
+	addExtern< void (*)(LLVMOpaqueRelocationIterator *) , LLVMMoveToNextRelocation >(*this,lib,"LLVMMoveToNextRelocation",SideEffects::worstDefault,"LLVMMoveToNextRelocation")
+		->args({"RI"});
+// from D:\Work\libclang\include\llvm-c/Object.h:191:13
+	addExtern< const char * (*)(LLVMOpaqueSymbolIterator *) , LLVMGetSymbolName >(*this,lib,"LLVMGetSymbolName",SideEffects::worstDefault,"LLVMGetSymbolName")
+		->args({"SI"});
+// from D:\Work\libclang\include\llvm-c/Object.h:192:10
+	addExtern< uint64_t (*)(LLVMOpaqueSymbolIterator *) , LLVMGetSymbolAddress >(*this,lib,"LLVMGetSymbolAddress",SideEffects::worstDefault,"LLVMGetSymbolAddress")
+		->args({"SI"});
 }
 }
 

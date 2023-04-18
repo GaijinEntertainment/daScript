@@ -1,7 +1,17 @@
 // this file is generated via daScript automatic C++ binder
 // all user modifications will be lost after this file is re-generated
 
-// from D:\Work\libclang\include\llvm-c/DisassemblerTypes.h:66:8
+// from C:\Program Files (x86)\Windows Kits\10\Include\10.0.19041.0\ucrt\inttypes.h:29:9
+struct _Lldiv_t_GeneratedAnnotation : ManagedStructureAnnotation<_Lldiv_t> {
+	_Lldiv_t_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("_Lldiv_t", ml, "_Lldiv_t") {
+	}
+	void init () {
+		addField<DAS_BIND_MANAGED_FIELD(quot)>("quot","quot");
+		addField<DAS_BIND_MANAGED_FIELD(rem)>("rem","rem");
+	}
+};
+
+// from D:\Work\libclang\include\llvm-c/DisassemblerTypes.h:72:8
 struct LLVMOpInfoSymbol1_GeneratedAnnotation : ManagedStructureAnnotation<LLVMOpInfoSymbol1> {
 	LLVMOpInfoSymbol1_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("LLVMOpInfoSymbol1", ml, "LLVMOpInfoSymbol1") {
 	}
@@ -12,7 +22,7 @@ struct LLVMOpInfoSymbol1_GeneratedAnnotation : ManagedStructureAnnotation<LLVMOp
 	}
 };
 
-// from D:\Work\libclang\include\llvm-c/DisassemblerTypes.h:72:8
+// from D:\Work\libclang\include\llvm-c/DisassemblerTypes.h:78:8
 struct LLVMOpInfo1_GeneratedAnnotation : ManagedStructureAnnotation<LLVMOpInfo1> {
 	LLVMOpInfo1_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("LLVMOpInfo1", ml, "LLVMOpInfo1") {
 	}
@@ -37,7 +47,7 @@ struct LLVMMCJITCompilerOptions_GeneratedAnnotation : ManagedStructureAnnotation
 	}
 };
 
-// from D:\Work\libclang\include\llvm-c/Orc.h:64:9
+// from D:\Work\libclang\include\llvm-c/Orc.h:72:9
 struct LLVMJITSymbolFlags_GeneratedAnnotation : ManagedStructureAnnotation<LLVMJITSymbolFlags> {
 	LLVMJITSymbolFlags_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("LLVMJITSymbolFlags", ml, "LLVMJITSymbolFlags") {
 	}
@@ -47,7 +57,7 @@ struct LLVMJITSymbolFlags_GeneratedAnnotation : ManagedStructureAnnotation<LLVMJ
 	}
 };
 
-// from D:\Work\libclang\include\llvm-c/Orc.h:72:9
+// from D:\Work\libclang\include\llvm-c/Orc.h:80:9
 struct LLVMJITEvaluatedSymbol_GeneratedAnnotation : ManagedStructureAnnotation<LLVMJITEvaluatedSymbol> {
 	LLVMJITEvaluatedSymbol_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("LLVMJITEvaluatedSymbol", ml, "LLVMJITEvaluatedSymbol") {
 	}
@@ -57,7 +67,7 @@ struct LLVMJITEvaluatedSymbol_GeneratedAnnotation : ManagedStructureAnnotation<L
 	}
 };
 
-// from D:\Work\libclang\include\llvm-c/Orc.h:101:9
+// from D:\Work\libclang\include\llvm-c/Orc.h:109:9
 struct LLVMOrcCSymbolFlagsMapPair_GeneratedAnnotation : ManagedStructureAnnotation<LLVMOrcCSymbolFlagsMapPair> {
 	LLVMOrcCSymbolFlagsMapPair_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("LLVMOrcCSymbolFlagsMapPair", ml, "LLVMOrcCSymbolFlagsMapPair") {
 	}
@@ -67,9 +77,9 @@ struct LLVMOrcCSymbolFlagsMapPair_GeneratedAnnotation : ManagedStructureAnnotati
 	}
 };
 
-// from D:\Work\libclang\include\llvm-c/Orc.h:115:9
-struct LLVMJITCSymbolMapPair_GeneratedAnnotation : ManagedStructureAnnotation<LLVMJITCSymbolMapPair> {
-	LLVMJITCSymbolMapPair_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("LLVMJITCSymbolMapPair", ml, "LLVMJITCSymbolMapPair") {
+// from D:\Work\libclang\include\llvm-c/Orc.h:123:9
+struct LLVMOrcCSymbolMapPair_GeneratedAnnotation : ManagedStructureAnnotation<LLVMOrcCSymbolMapPair> {
+	LLVMOrcCSymbolMapPair_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("LLVMOrcCSymbolMapPair", ml, "LLVMOrcCSymbolMapPair") {
 	}
 	void init () {
 		addField<DAS_BIND_MANAGED_FIELD(Name)>("Name","Name");
@@ -77,7 +87,7 @@ struct LLVMJITCSymbolMapPair_GeneratedAnnotation : ManagedStructureAnnotation<LL
 	}
 };
 
-// from D:\Work\libclang\include\llvm-c/Orc.h:129:9
+// from D:\Work\libclang\include\llvm-c/Orc.h:137:9
 struct LLVMOrcCSymbolAliasMapEntry_GeneratedAnnotation : ManagedStructureAnnotation<LLVMOrcCSymbolAliasMapEntry> {
 	LLVMOrcCSymbolAliasMapEntry_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("LLVMOrcCSymbolAliasMapEntry", ml, "LLVMOrcCSymbolAliasMapEntry") {
 	}
@@ -87,7 +97,7 @@ struct LLVMOrcCSymbolAliasMapEntry_GeneratedAnnotation : ManagedStructureAnnotat
 	}
 };
 
-// from D:\Work\libclang\include\llvm-c/Orc.h:137:9
+// from D:\Work\libclang\include\llvm-c/Orc.h:145:9
 struct LLVMOrcCSymbolAliasMapPair_GeneratedAnnotation : ManagedStructureAnnotation<LLVMOrcCSymbolAliasMapPair> {
 	LLVMOrcCSymbolAliasMapPair_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("LLVMOrcCSymbolAliasMapPair", ml, "LLVMOrcCSymbolAliasMapPair") {
 	}
@@ -97,7 +107,7 @@ struct LLVMOrcCSymbolAliasMapPair_GeneratedAnnotation : ManagedStructureAnnotati
 	}
 };
 
-// from D:\Work\libclang\include\llvm-c/Orc.h:157:9
+// from D:\Work\libclang\include\llvm-c/Orc.h:165:9
 struct LLVMOrcCSymbolsList_GeneratedAnnotation : ManagedStructureAnnotation<LLVMOrcCSymbolsList> {
 	LLVMOrcCSymbolsList_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("LLVMOrcCSymbolsList", ml, "LLVMOrcCSymbolsList") {
 	}
@@ -107,7 +117,7 @@ struct LLVMOrcCSymbolsList_GeneratedAnnotation : ManagedStructureAnnotation<LLVM
 	}
 };
 
-// from D:\Work\libclang\include\llvm-c/Orc.h:165:9
+// from D:\Work\libclang\include\llvm-c/Orc.h:173:9
 struct LLVMOrcCDependenceMapPair_GeneratedAnnotation : ManagedStructureAnnotation<LLVMOrcCDependenceMapPair> {
 	LLVMOrcCDependenceMapPair_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("LLVMOrcCDependenceMapPair", ml, "LLVMOrcCDependenceMapPair") {
 	}
@@ -117,7 +127,17 @@ struct LLVMOrcCDependenceMapPair_GeneratedAnnotation : ManagedStructureAnnotatio
 	}
 };
 
-// from D:\Work\libclang\include\llvm-c/Orc.h:210:9
+// from D:\Work\libclang\include\llvm-c/Orc.h:209:9
+struct LLVMOrcCJITDylibSearchOrderElement_GeneratedAnnotation : ManagedStructureAnnotation<LLVMOrcCJITDylibSearchOrderElement> {
+	LLVMOrcCJITDylibSearchOrderElement_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("LLVMOrcCJITDylibSearchOrderElement", ml, "LLVMOrcCJITDylibSearchOrderElement") {
+	}
+	void init () {
+		addField<DAS_BIND_MANAGED_FIELD(JD)>("JD","JD");
+		addField<DAS_BIND_MANAGED_FIELD(JDLookupFlags)>("JDLookupFlags","JDLookupFlags");
+	}
+};
+
+// from D:\Work\libclang\include\llvm-c/Orc.h:234:9
 struct LLVMOrcCLookupSetElement_GeneratedAnnotation : ManagedStructureAnnotation<LLVMOrcCLookupSetElement> {
 	LLVMOrcCLookupSetElement_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("LLVMOrcCLookupSetElement", ml, "LLVMOrcCLookupSetElement") {
 	}
@@ -127,7 +147,7 @@ struct LLVMOrcCLookupSetElement_GeneratedAnnotation : ManagedStructureAnnotation
 	}
 };
 
-// from D:\Work\libclang\include\llvm-c/lto.h:660:9
+// from D:\Work\libclang\include\llvm-c/lto.h:670:9
 struct LTOObjectBuffer_GeneratedAnnotation : ManagedStructureAnnotation<LTOObjectBuffer> {
 	LTOObjectBuffer_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("LTOObjectBuffer", ml, "LTOObjectBuffer") {
 	}

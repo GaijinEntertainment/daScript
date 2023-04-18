@@ -12,67 +12,66 @@
 namespace das {
 #include "dasLLVM.func.aot.decl.inc"
 void Module_dasLLVM::initFunctions_51() {
-// from D:\Work\libclang\include\llvm-c/Orc.h:1133:14
-	addExtern< LLVMOpaqueError * (*)(LLVMOrcOpaqueDumpObjects *,LLVMOpaqueMemoryBuffer **) , LLVMOrcDumpObjects_CallOperator >(*this,lib,"LLVMOrcDumpObjects_CallOperator",SideEffects::worstDefault,"LLVMOrcDumpObjects_CallOperator")
-		->args({"DumpObjects","ObjBuffer"});
-// from D:\Work\libclang\include\llvm-c/LLJIT.h:67:24
-	addExtern< LLVMOrcOpaqueLLJITBuilder * (*)() , LLVMOrcCreateLLJITBuilder >(*this,lib,"LLVMOrcCreateLLJITBuilder",SideEffects::worstDefault,"LLVMOrcCreateLLJITBuilder");
-// from D:\Work\libclang\include\llvm-c/LLJIT.h:74:6
-	addExtern< void (*)(LLVMOrcOpaqueLLJITBuilder *) , LLVMOrcDisposeLLJITBuilder >(*this,lib,"LLVMOrcDisposeLLJITBuilder",SideEffects::worstDefault,"LLVMOrcDisposeLLJITBuilder")
-		->args({"Builder"});
-// from D:\Work\libclang\include\llvm-c/LLJIT.h:85:6
-	addExtern< void (*)(LLVMOrcOpaqueLLJITBuilder *,LLVMOrcOpaqueJITTargetMachineBuilder *) , LLVMOrcLLJITBuilderSetJITTargetMachineBuilder >(*this,lib,"LLVMOrcLLJITBuilderSetJITTargetMachineBuilder",SideEffects::worstDefault,"LLVMOrcLLJITBuilderSetJITTargetMachineBuilder")
-		->args({"Builder","JTMB"});
-// from D:\Work\libclang\include\llvm-c/LLJIT.h:109:14
-	addExtern< LLVMOpaqueError * (*)(LLVMOrcOpaqueLLJIT **,LLVMOrcOpaqueLLJITBuilder *) , LLVMOrcCreateLLJIT >(*this,lib,"LLVMOrcCreateLLJIT",SideEffects::worstDefault,"LLVMOrcCreateLLJIT")
-		->args({"Result","Builder"});
-// from D:\Work\libclang\include\llvm-c/LLJIT.h:115:14
-	addExtern< LLVMOpaqueError * (*)(LLVMOrcOpaqueLLJIT *) , LLVMOrcDisposeLLJIT >(*this,lib,"LLVMOrcDisposeLLJIT",SideEffects::worstDefault,"LLVMOrcDisposeLLJIT")
-		->args({"J"});
-// from D:\Work\libclang\include\llvm-c/LLJIT.h:123:28
-	addExtern< LLVMOrcOpaqueExecutionSession * (*)(LLVMOrcOpaqueLLJIT *) , LLVMOrcLLJITGetExecutionSession >(*this,lib,"LLVMOrcLLJITGetExecutionSession",SideEffects::worstDefault,"LLVMOrcLLJITGetExecutionSession")
-		->args({"J"});
-// from D:\Work\libclang\include\llvm-c/LLJIT.h:131:20
-	addExtern< LLVMOrcOpaqueJITDylib * (*)(LLVMOrcOpaqueLLJIT *) , LLVMOrcLLJITGetMainJITDylib >(*this,lib,"LLVMOrcLLJITGetMainJITDylib",SideEffects::worstDefault,"LLVMOrcLLJITGetMainJITDylib")
-		->args({"J"});
-// from D:\Work\libclang\include\llvm-c/LLJIT.h:137:13
-	addExtern< const char * (*)(LLVMOrcOpaqueLLJIT *) , LLVMOrcLLJITGetTripleString >(*this,lib,"LLVMOrcLLJITGetTripleString",SideEffects::worstDefault,"LLVMOrcLLJITGetTripleString")
-		->args({"J"});
-// from D:\Work\libclang\include\llvm-c/LLJIT.h:142:6
-#ifndef __APPLE__
-	addExtern< char (*)(LLVMOrcOpaqueLLJIT *) , LLVMOrcLLJITGetGlobalPrefix >(*this,lib,"LLVMOrcLLJITGetGlobalPrefix",SideEffects::worstDefault,"LLVMOrcLLJITGetGlobalPrefix")
-		->args({"J"});
-#endif
-// from D:\Work\libclang\include\llvm-c/LLJIT.h:152:1
-	addExtern< LLVMOrcOpaqueSymbolStringPoolEntry * (*)(LLVMOrcOpaqueLLJIT *,const char *) , LLVMOrcLLJITMangleAndIntern >(*this,lib,"LLVMOrcLLJITMangleAndIntern",SideEffects::worstDefault,"LLVMOrcLLJITMangleAndIntern")
-		->args({"J","UnmangledName"});
-// from D:\Work\libclang\include\llvm-c/LLJIT.h:163:14
-	addExtern< LLVMOpaqueError * (*)(LLVMOrcOpaqueLLJIT *,LLVMOrcOpaqueJITDylib *,LLVMOpaqueMemoryBuffer *) , LLVMOrcLLJITAddObjectFile >(*this,lib,"LLVMOrcLLJITAddObjectFile",SideEffects::worstDefault,"LLVMOrcLLJITAddObjectFile")
-		->args({"J","JD","ObjBuffer"});
-// from D:\Work\libclang\include\llvm-c/LLJIT.h:175:14
-	addExtern< LLVMOpaqueError * (*)(LLVMOrcOpaqueLLJIT *,LLVMOrcOpaqueResourceTracker *,LLVMOpaqueMemoryBuffer *) , LLVMOrcLLJITAddObjectFileWithRT >(*this,lib,"LLVMOrcLLJITAddObjectFileWithRT",SideEffects::worstDefault,"LLVMOrcLLJITAddObjectFileWithRT")
-		->args({"J","RT","ObjBuffer"});
-// from D:\Work\libclang\include\llvm-c/LLJIT.h:188:14
-	addExtern< LLVMOpaqueError * (*)(LLVMOrcOpaqueLLJIT *,LLVMOrcOpaqueJITDylib *,LLVMOrcOpaqueThreadSafeModule *) , LLVMOrcLLJITAddLLVMIRModule >(*this,lib,"LLVMOrcLLJITAddLLVMIRModule",SideEffects::worstDefault,"LLVMOrcLLJITAddLLVMIRModule")
-		->args({"J","JD","TSM"});
-// from D:\Work\libclang\include\llvm-c/LLJIT.h:201:14
-	addExtern< LLVMOpaqueError * (*)(LLVMOrcOpaqueLLJIT *,LLVMOrcOpaqueResourceTracker *,LLVMOrcOpaqueThreadSafeModule *) , LLVMOrcLLJITAddLLVMIRModuleWithRT >(*this,lib,"LLVMOrcLLJITAddLLVMIRModuleWithRT",SideEffects::worstDefault,"LLVMOrcLLJITAddLLVMIRModuleWithRT")
-		->args({"J","JD","TSM"});
-// from D:\Work\libclang\include\llvm-c/LLJIT.h:210:14
-	addExtern< LLVMOpaqueError * (*)(LLVMOrcOpaqueLLJIT *,unsigned long long *,const char *) , LLVMOrcLLJITLookup >(*this,lib,"LLVMOrcLLJITLookup",SideEffects::worstDefault,"LLVMOrcLLJITLookup")
-		->args({"J","Result","Name"});
-// from D:\Work\libclang\include\llvm-c/LLJIT.h:217:23
-	addExtern< LLVMOrcOpaqueObjectLayer * (*)(LLVMOrcOpaqueLLJIT *) , LLVMOrcLLJITGetObjLinkingLayer >(*this,lib,"LLVMOrcLLJITGetObjLinkingLayer",SideEffects::worstDefault,"LLVMOrcLLJITGetObjLinkingLayer")
-		->args({"J"});
-// from D:\Work\libclang\include\llvm-c/LLJIT.h:223:1
-	addExtern< LLVMOrcOpaqueObjectTransformLayer * (*)(LLVMOrcOpaqueLLJIT *) , LLVMOrcLLJITGetObjTransformLayer >(*this,lib,"LLVMOrcLLJITGetObjTransformLayer",SideEffects::worstDefault,"LLVMOrcLLJITGetObjTransformLayer")
-		->args({"J"});
-// from D:\Work\libclang\include\llvm-c/LLJIT.h:228:28
-	addExtern< LLVMOrcOpaqueIRTransformLayer * (*)(LLVMOrcOpaqueLLJIT *) , LLVMOrcLLJITGetIRTransformLayer >(*this,lib,"LLVMOrcLLJITGetIRTransformLayer",SideEffects::worstDefault,"LLVMOrcLLJITGetIRTransformLayer")
-		->args({"J"});
-// from D:\Work\libclang\include\llvm-c/LLJIT.h:236:13
-	addExtern< const char * (*)(LLVMOrcOpaqueLLJIT *) , LLVMOrcLLJITGetDataLayoutStr >(*this,lib,"LLVMOrcLLJITGetDataLayoutStr",SideEffects::worstDefault,"LLVMOrcLLJITGetDataLayoutStr")
-		->args({"J"});
+// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:78:10
+	addExtern< int (*)(LLVMOpaqueExecutionEngine **,LLVMOpaqueModule *,char **) , LLVMCreateInterpreterForModule >(*this,lib,"LLVMCreateInterpreterForModule",SideEffects::worstDefault,"LLVMCreateInterpreterForModule")
+		->args({"OutInterp","M","OutError"});
+// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:82:10
+	addExtern< int (*)(LLVMOpaqueExecutionEngine **,LLVMOpaqueModule *,unsigned int,char **) , LLVMCreateJITCompilerForModule >(*this,lib,"LLVMCreateJITCompilerForModule",SideEffects::worstDefault,"LLVMCreateJITCompilerForModule")
+		->args({"OutJIT","M","OptLevel","OutError"});
+// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:87:6
+	addExtern< void (*)(LLVMMCJITCompilerOptions *,size_t) , LLVMInitializeMCJITCompilerOptions >(*this,lib,"LLVMInitializeMCJITCompilerOptions",SideEffects::worstDefault,"LLVMInitializeMCJITCompilerOptions")
+		->args({"Options","SizeOfOptions"});
+// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:107:10
+	addExtern< int (*)(LLVMOpaqueExecutionEngine **,LLVMOpaqueModule *,LLVMMCJITCompilerOptions *,size_t,char **) , LLVMCreateMCJITCompilerForModule >(*this,lib,"LLVMCreateMCJITCompilerForModule",SideEffects::worstDefault,"LLVMCreateMCJITCompilerForModule")
+		->args({"OutJIT","M","Options","SizeOfOptions","OutError"});
+// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:112:6
+	addExtern< void (*)(LLVMOpaqueExecutionEngine *) , LLVMDisposeExecutionEngine >(*this,lib,"LLVMDisposeExecutionEngine",SideEffects::worstDefault,"LLVMDisposeExecutionEngine")
+		->args({"EE"});
+// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:114:6
+	addExtern< void (*)(LLVMOpaqueExecutionEngine *) , LLVMRunStaticConstructors >(*this,lib,"LLVMRunStaticConstructors",SideEffects::worstDefault,"LLVMRunStaticConstructors")
+		->args({"EE"});
+// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:116:6
+	addExtern< void (*)(LLVMOpaqueExecutionEngine *) , LLVMRunStaticDestructors >(*this,lib,"LLVMRunStaticDestructors",SideEffects::worstDefault,"LLVMRunStaticDestructors")
+		->args({"EE"});
+// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:118:5
+	addExtern< int (*)(LLVMOpaqueExecutionEngine *,LLVMOpaqueValue *,unsigned int,const char *const *,const char *const *) , LLVMRunFunctionAsMain >(*this,lib,"LLVMRunFunctionAsMain",SideEffects::worstDefault,"LLVMRunFunctionAsMain")
+		->args({"EE","F","ArgC","ArgV","EnvP"});
+// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:122:21
+	addExtern< LLVMOpaqueGenericValue * (*)(LLVMOpaqueExecutionEngine *,LLVMOpaqueValue *,unsigned int,LLVMOpaqueGenericValue **) , LLVMRunFunction >(*this,lib,"LLVMRunFunction",SideEffects::worstDefault,"LLVMRunFunction")
+		->args({"EE","F","NumArgs","Args"});
+// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:126:6
+	addExtern< void (*)(LLVMOpaqueExecutionEngine *,LLVMOpaqueValue *) , LLVMFreeMachineCodeForFunction >(*this,lib,"LLVMFreeMachineCodeForFunction",SideEffects::worstDefault,"LLVMFreeMachineCodeForFunction")
+		->args({"EE","F"});
+// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:128:6
+	addExtern< void (*)(LLVMOpaqueExecutionEngine *,LLVMOpaqueModule *) , LLVMAddModule >(*this,lib,"LLVMAddModule",SideEffects::worstDefault,"LLVMAddModule")
+		->args({"EE","M"});
+// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:130:10
+	addExtern< int (*)(LLVMOpaqueExecutionEngine *,LLVMOpaqueModule *,LLVMOpaqueModule **,char **) , LLVMRemoveModule >(*this,lib,"LLVMRemoveModule",SideEffects::worstDefault,"LLVMRemoveModule")
+		->args({"EE","M","OutMod","OutError"});
+// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:133:10
+	addExtern< int (*)(LLVMOpaqueExecutionEngine *,const char *,LLVMOpaqueValue **) , LLVMFindFunction >(*this,lib,"LLVMFindFunction",SideEffects::worstDefault,"LLVMFindFunction")
+		->args({"EE","Name","OutFn"});
+// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:136:7
+	addExtern< void * (*)(LLVMOpaqueExecutionEngine *,LLVMOpaqueValue *) , LLVMRecompileAndRelinkFunction >(*this,lib,"LLVMRecompileAndRelinkFunction",SideEffects::worstDefault,"LLVMRecompileAndRelinkFunction")
+		->args({"EE","Fn"});
+// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:139:19
+	addExtern< LLVMOpaqueTargetData * (*)(LLVMOpaqueExecutionEngine *) , LLVMGetExecutionEngineTargetData >(*this,lib,"LLVMGetExecutionEngineTargetData",SideEffects::worstDefault,"LLVMGetExecutionEngineTargetData")
+		->args({"EE"});
+// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:141:1
+	addExtern< LLVMOpaqueTargetMachine * (*)(LLVMOpaqueExecutionEngine *) , LLVMGetExecutionEngineTargetMachine >(*this,lib,"LLVMGetExecutionEngineTargetMachine",SideEffects::worstDefault,"LLVMGetExecutionEngineTargetMachine")
+		->args({"EE"});
+// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:143:6
+	addExtern< void (*)(LLVMOpaqueExecutionEngine *,LLVMOpaqueValue *,void *) , LLVMAddGlobalMapping >(*this,lib,"LLVMAddGlobalMapping",SideEffects::worstDefault,"LLVMAddGlobalMapping")
+		->args({"EE","Global","Addr"});
+// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:146:7
+	addExtern< void * (*)(LLVMOpaqueExecutionEngine *,LLVMOpaqueValue *) , LLVMGetPointerToGlobal >(*this,lib,"LLVMGetPointerToGlobal",SideEffects::worstDefault,"LLVMGetPointerToGlobal")
+		->args({"EE","Global"});
+// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:148:10
+	addExtern< uint64_t (*)(LLVMOpaqueExecutionEngine *,const char *) , LLVMGetGlobalValueAddress >(*this,lib,"LLVMGetGlobalValueAddress",SideEffects::worstDefault,"LLVMGetGlobalValueAddress")
+		->args({"EE","Name"});
+// from D:\Work\libclang\include\llvm-c/ExecutionEngine.h:150:10
+	addExtern< uint64_t (*)(LLVMOpaqueExecutionEngine *,const char *) , LLVMGetFunctionAddress >(*this,lib,"LLVMGetFunctionAddress",SideEffects::worstDefault,"LLVMGetFunctionAddress")
+		->args({"EE","Name"});
 }
 }
 

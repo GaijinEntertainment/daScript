@@ -12,65 +12,46 @@
 namespace das {
 #include "dasLLVM.func.aot.decl.inc"
 void Module_dasLLVM::initFunctions_44() {
-// from D:\Work\libclang\include\llvm-c/Target.h:253:20
-	addExtern< unsigned long long (*)(LLVMOpaqueTargetData *,LLVMOpaqueType *) , LLVMStoreSizeOfType >(*this,lib,"LLVMStoreSizeOfType",SideEffects::worstDefault,"LLVMStoreSizeOfType")
-		->args({"TD","Ty"});
-// from D:\Work\libclang\include\llvm-c/Target.h:257:20
-	addExtern< unsigned long long (*)(LLVMOpaqueTargetData *,LLVMOpaqueType *) , LLVMABISizeOfType >(*this,lib,"LLVMABISizeOfType",SideEffects::worstDefault,"LLVMABISizeOfType")
-		->args({"TD","Ty"});
-// from D:\Work\libclang\include\llvm-c/Target.h:261:10
-	addExtern< unsigned int (*)(LLVMOpaqueTargetData *,LLVMOpaqueType *) , LLVMABIAlignmentOfType >(*this,lib,"LLVMABIAlignmentOfType",SideEffects::worstDefault,"LLVMABIAlignmentOfType")
-		->args({"TD","Ty"});
-// from D:\Work\libclang\include\llvm-c/Target.h:265:10
-	addExtern< unsigned int (*)(LLVMOpaqueTargetData *,LLVMOpaqueType *) , LLVMCallFrameAlignmentOfType >(*this,lib,"LLVMCallFrameAlignmentOfType",SideEffects::worstDefault,"LLVMCallFrameAlignmentOfType")
-		->args({"TD","Ty"});
-// from D:\Work\libclang\include\llvm-c/Target.h:269:10
-	addExtern< unsigned int (*)(LLVMOpaqueTargetData *,LLVMOpaqueType *) , LLVMPreferredAlignmentOfType >(*this,lib,"LLVMPreferredAlignmentOfType",SideEffects::worstDefault,"LLVMPreferredAlignmentOfType")
-		->args({"TD","Ty"});
-// from D:\Work\libclang\include\llvm-c/Target.h:273:10
-	addExtern< unsigned int (*)(LLVMOpaqueTargetData *,LLVMOpaqueValue *) , LLVMPreferredAlignmentOfGlobal >(*this,lib,"LLVMPreferredAlignmentOfGlobal",SideEffects::worstDefault,"LLVMPreferredAlignmentOfGlobal")
-		->args({"TD","GlobalVar"});
-// from D:\Work\libclang\include\llvm-c/Target.h:278:10
-	addExtern< unsigned int (*)(LLVMOpaqueTargetData *,LLVMOpaqueType *,unsigned long long) , LLVMElementAtOffset >(*this,lib,"LLVMElementAtOffset",SideEffects::worstDefault,"LLVMElementAtOffset")
-		->args({"TD","StructTy","Offset"});
-// from D:\Work\libclang\include\llvm-c/Target.h:283:20
-	addExtern< unsigned long long (*)(LLVMOpaqueTargetData *,LLVMOpaqueType *,unsigned int) , LLVMOffsetOfElement >(*this,lib,"LLVMOffsetOfElement",SideEffects::worstDefault,"LLVMOffsetOfElement")
-		->args({"TD","StructTy","Element"});
-// from D:\Work\libclang\include\llvm-c/TargetMachine.h:64:15
-	addExtern< LLVMTarget * (*)() , LLVMGetFirstTarget >(*this,lib,"LLVMGetFirstTarget",SideEffects::worstDefault,"LLVMGetFirstTarget");
-// from D:\Work\libclang\include\llvm-c/TargetMachine.h:66:15
-	addExtern< LLVMTarget * (*)(LLVMTarget *) , LLVMGetNextTarget >(*this,lib,"LLVMGetNextTarget",SideEffects::worstDefault,"LLVMGetNextTarget")
-		->args({"T"});
-// from D:\Work\libclang\include\llvm-c/TargetMachine.h:71:15
-	addExtern< LLVMTarget * (*)(const char *) , LLVMGetTargetFromName >(*this,lib,"LLVMGetTargetFromName",SideEffects::worstDefault,"LLVMGetTargetFromName")
-		->args({"Name"});
-// from D:\Work\libclang\include\llvm-c/TargetMachine.h:76:10
-	addExtern< int (*)(const char *,LLVMTarget **,char **) , LLVMGetTargetFromTriple >(*this,lib,"LLVMGetTargetFromTriple",SideEffects::worstDefault,"LLVMGetTargetFromTriple")
-		->args({"Triple","T","ErrorMessage"});
-// from D:\Work\libclang\include\llvm-c/TargetMachine.h:80:13
-	addExtern< const char * (*)(LLVMTarget *) , LLVMGetTargetName >(*this,lib,"LLVMGetTargetName",SideEffects::worstDefault,"LLVMGetTargetName")
-		->args({"T"});
-// from D:\Work\libclang\include\llvm-c/TargetMachine.h:83:13
-	addExtern< const char * (*)(LLVMTarget *) , LLVMGetTargetDescription >(*this,lib,"LLVMGetTargetDescription",SideEffects::worstDefault,"LLVMGetTargetDescription")
-		->args({"T"});
-// from D:\Work\libclang\include\llvm-c/TargetMachine.h:86:10
-	addExtern< int (*)(LLVMTarget *) , LLVMTargetHasJIT >(*this,lib,"LLVMTargetHasJIT",SideEffects::worstDefault,"LLVMTargetHasJIT")
-		->args({"T"});
-// from D:\Work\libclang\include\llvm-c/TargetMachine.h:89:10
-	addExtern< int (*)(LLVMTarget *) , LLVMTargetHasTargetMachine >(*this,lib,"LLVMTargetHasTargetMachine",SideEffects::worstDefault,"LLVMTargetHasTargetMachine")
-		->args({"T"});
-// from D:\Work\libclang\include\llvm-c/TargetMachine.h:92:10
-	addExtern< int (*)(LLVMTarget *) , LLVMTargetHasAsmBackend >(*this,lib,"LLVMTargetHasAsmBackend",SideEffects::worstDefault,"LLVMTargetHasAsmBackend")
-		->args({"T"});
-// from D:\Work\libclang\include\llvm-c/TargetMachine.h:96:22
-	addExtern< LLVMOpaqueTargetMachine * (*)(LLVMTarget *,const char *,const char *,const char *,LLVMCodeGenOptLevel,LLVMRelocMode,LLVMCodeModel) , LLVMCreateTargetMachine >(*this,lib,"LLVMCreateTargetMachine",SideEffects::worstDefault,"LLVMCreateTargetMachine")
-		->args({"T","Triple","CPU","Features","Level","Reloc","CodeModel"});
-// from D:\Work\libclang\include\llvm-c/TargetMachine.h:102:6
-	addExtern< void (*)(LLVMOpaqueTargetMachine *) , LLVMDisposeTargetMachine >(*this,lib,"LLVMDisposeTargetMachine",SideEffects::worstDefault,"LLVMDisposeTargetMachine")
-		->args({"T"});
-// from D:\Work\libclang\include\llvm-c/TargetMachine.h:105:15
-	addExtern< LLVMTarget * (*)(LLVMOpaqueTargetMachine *) , LLVMGetTargetMachineTarget >(*this,lib,"LLVMGetTargetMachineTarget",SideEffects::worstDefault,"LLVMGetTargetMachineTarget")
-		->args({"T"});
+// from D:\Work\libclang\include\llvm/Config/Targets.def:40:1
+	addExtern< void (*)() , LLVMInitializeVETarget >(*this,lib,"LLVMInitializeVETarget",SideEffects::worstDefault,"LLVMInitializeVETarget");
+// from D:\Work\libclang\include\llvm/Config/Targets.def:41:1
+	addExtern< void (*)() , LLVMInitializeWebAssemblyTarget >(*this,lib,"LLVMInitializeWebAssemblyTarget",SideEffects::worstDefault,"LLVMInitializeWebAssemblyTarget");
+// from D:\Work\libclang\include\llvm/Config/Targets.def:42:1
+	addExtern< void (*)() , LLVMInitializeX86Target >(*this,lib,"LLVMInitializeX86Target",SideEffects::worstDefault,"LLVMInitializeX86Target");
+// from D:\Work\libclang\include\llvm/Config/Targets.def:43:1
+	addExtern< void (*)() , LLVMInitializeXCoreTarget >(*this,lib,"LLVMInitializeXCoreTarget",SideEffects::worstDefault,"LLVMInitializeXCoreTarget");
+// from D:\Work\libclang\include\llvm/Config/Targets.def:26:1
+	addExtern< void (*)() , LLVMInitializeAArch64TargetMC >(*this,lib,"LLVMInitializeAArch64TargetMC",SideEffects::worstDefault,"LLVMInitializeAArch64TargetMC");
+// from D:\Work\libclang\include\llvm/Config/Targets.def:27:1
+	addExtern< void (*)() , LLVMInitializeAMDGPUTargetMC >(*this,lib,"LLVMInitializeAMDGPUTargetMC",SideEffects::worstDefault,"LLVMInitializeAMDGPUTargetMC");
+// from D:\Work\libclang\include\llvm/Config/Targets.def:28:1
+	addExtern< void (*)() , LLVMInitializeARMTargetMC >(*this,lib,"LLVMInitializeARMTargetMC",SideEffects::worstDefault,"LLVMInitializeARMTargetMC");
+// from D:\Work\libclang\include\llvm/Config/Targets.def:29:1
+	addExtern< void (*)() , LLVMInitializeAVRTargetMC >(*this,lib,"LLVMInitializeAVRTargetMC",SideEffects::worstDefault,"LLVMInitializeAVRTargetMC");
+// from D:\Work\libclang\include\llvm/Config/Targets.def:30:1
+	addExtern< void (*)() , LLVMInitializeBPFTargetMC >(*this,lib,"LLVMInitializeBPFTargetMC",SideEffects::worstDefault,"LLVMInitializeBPFTargetMC");
+// from D:\Work\libclang\include\llvm/Config/Targets.def:31:1
+	addExtern< void (*)() , LLVMInitializeHexagonTargetMC >(*this,lib,"LLVMInitializeHexagonTargetMC",SideEffects::worstDefault,"LLVMInitializeHexagonTargetMC");
+// from D:\Work\libclang\include\llvm/Config/Targets.def:32:1
+	addExtern< void (*)() , LLVMInitializeLanaiTargetMC >(*this,lib,"LLVMInitializeLanaiTargetMC",SideEffects::worstDefault,"LLVMInitializeLanaiTargetMC");
+// from D:\Work\libclang\include\llvm/Config/Targets.def:33:1
+	addExtern< void (*)() , LLVMInitializeMipsTargetMC >(*this,lib,"LLVMInitializeMipsTargetMC",SideEffects::worstDefault,"LLVMInitializeMipsTargetMC");
+// from D:\Work\libclang\include\llvm/Config/Targets.def:34:1
+	addExtern< void (*)() , LLVMInitializeMSP430TargetMC >(*this,lib,"LLVMInitializeMSP430TargetMC",SideEffects::worstDefault,"LLVMInitializeMSP430TargetMC");
+// from D:\Work\libclang\include\llvm/Config/Targets.def:35:1
+	addExtern< void (*)() , LLVMInitializeNVPTXTargetMC >(*this,lib,"LLVMInitializeNVPTXTargetMC",SideEffects::worstDefault,"LLVMInitializeNVPTXTargetMC");
+// from D:\Work\libclang\include\llvm/Config/Targets.def:36:1
+	addExtern< void (*)() , LLVMInitializePowerPCTargetMC >(*this,lib,"LLVMInitializePowerPCTargetMC",SideEffects::worstDefault,"LLVMInitializePowerPCTargetMC");
+// from D:\Work\libclang\include\llvm/Config/Targets.def:37:1
+	addExtern< void (*)() , LLVMInitializeRISCVTargetMC >(*this,lib,"LLVMInitializeRISCVTargetMC",SideEffects::worstDefault,"LLVMInitializeRISCVTargetMC");
+// from D:\Work\libclang\include\llvm/Config/Targets.def:38:1
+	addExtern< void (*)() , LLVMInitializeSparcTargetMC >(*this,lib,"LLVMInitializeSparcTargetMC",SideEffects::worstDefault,"LLVMInitializeSparcTargetMC");
+// from D:\Work\libclang\include\llvm/Config/Targets.def:39:1
+	addExtern< void (*)() , LLVMInitializeSystemZTargetMC >(*this,lib,"LLVMInitializeSystemZTargetMC",SideEffects::worstDefault,"LLVMInitializeSystemZTargetMC");
+// from D:\Work\libclang\include\llvm/Config/Targets.def:40:1
+	addExtern< void (*)() , LLVMInitializeVETargetMC >(*this,lib,"LLVMInitializeVETargetMC",SideEffects::worstDefault,"LLVMInitializeVETargetMC");
+// from D:\Work\libclang\include\llvm/Config/Targets.def:41:1
+	addExtern< void (*)() , LLVMInitializeWebAssemblyTargetMC >(*this,lib,"LLVMInitializeWebAssemblyTargetMC",SideEffects::worstDefault,"LLVMInitializeWebAssemblyTargetMC");
 }
 }
 

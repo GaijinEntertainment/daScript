@@ -12,63 +12,66 @@
 namespace das {
 #include "dasLLVM.func.aot.decl.inc"
 void Module_dasLLVM::initFunctions_53() {
-// from D:\Work\libclang\include\llvm-c/lto.h:298:1
-	addExtern< const char * (*)(LLVMOpaqueLTOModule *) , lto_module_get_linkeropts >(*this,lib,"lto_module_get_linkeropts",SideEffects::worstDefault,"lto_module_get_linkeropts")
-		->args({"mod"});
-// from D:\Work\libclang\include\llvm-c/lto.h:311:19
-	addExtern< bool (*)(LLVMOpaqueLTOModule *,unsigned int *,unsigned int *) , lto_module_get_macho_cputype >(*this,lib,"lto_module_get_macho_cputype",SideEffects::worstDefault,"lto_module_get_macho_cputype")
-		->args({"mod","out_cputype","out_cpusubtype"});
-// from D:\Work\libclang\include\llvm-c/lto.h:360:1
-	addExtern< LLVMOpaqueLTOCodeGenerator * (*)() , lto_codegen_create >(*this,lib,"lto_codegen_create",SideEffects::worstDefault,"lto_codegen_create");
-// from D:\Work\libclang\include\llvm-c/lto.h:372:1
-	addExtern< LLVMOpaqueLTOCodeGenerator * (*)() , lto_codegen_create_in_local_context >(*this,lib,"lto_codegen_create_in_local_context",SideEffects::worstDefault,"lto_codegen_create_in_local_context");
-// from D:\Work\libclang\include\llvm-c/lto.h:381:1
-	addExtern< void (*)(LLVMOpaqueLTOCodeGenerator *) , lto_codegen_dispose >(*this,lib,"lto_codegen_dispose",SideEffects::worstDefault,"lto_codegen_dispose")
-		->args({""});
-// from D:\Work\libclang\include\llvm-c/lto.h:394:1
-	addExtern< bool (*)(LLVMOpaqueLTOCodeGenerator *,LLVMOpaqueLTOModule *) , lto_codegen_add_module >(*this,lib,"lto_codegen_add_module",SideEffects::worstDefault,"lto_codegen_add_module")
-		->args({"cg","mod"});
-// from D:\Work\libclang\include\llvm-c/lto.h:405:1
-	addExtern< void (*)(LLVMOpaqueLTOCodeGenerator *,LLVMOpaqueLTOModule *) , lto_codegen_set_module >(*this,lib,"lto_codegen_set_module",SideEffects::worstDefault,"lto_codegen_set_module")
-		->args({"cg","mod"});
-// from D:\Work\libclang\include\llvm-c/lto.h:414:1
-	addExtern< bool (*)(LLVMOpaqueLTOCodeGenerator *,lto_debug_model) , lto_codegen_set_debug_model >(*this,lib,"lto_codegen_set_debug_model",SideEffects::worstDefault,"lto_codegen_set_debug_model")
-		->args({"cg",""});
-// from D:\Work\libclang\include\llvm-c/lto.h:423:1
-	addExtern< bool (*)(LLVMOpaqueLTOCodeGenerator *,lto_codegen_model) , lto_codegen_set_pic_model >(*this,lib,"lto_codegen_set_pic_model",SideEffects::worstDefault,"lto_codegen_set_pic_model")
-		->args({"cg",""});
-// from D:\Work\libclang\include\llvm-c/lto.h:431:1
-	addExtern< void (*)(LLVMOpaqueLTOCodeGenerator *,const char *) , lto_codegen_set_cpu >(*this,lib,"lto_codegen_set_cpu",SideEffects::worstDefault,"lto_codegen_set_cpu")
-		->args({"cg","cpu"});
-// from D:\Work\libclang\include\llvm-c/lto.h:440:1
-	addExtern< void (*)(LLVMOpaqueLTOCodeGenerator *,const char *) , lto_codegen_set_assembler_path >(*this,lib,"lto_codegen_set_assembler_path",SideEffects::worstDefault,"lto_codegen_set_assembler_path")
-		->args({"cg","path"});
-// from D:\Work\libclang\include\llvm-c/lto.h:448:1
-	addExtern< void (*)(LLVMOpaqueLTOCodeGenerator *,const char **,int) , lto_codegen_set_assembler_args >(*this,lib,"lto_codegen_set_assembler_args",SideEffects::worstDefault,"lto_codegen_set_assembler_args")
-		->args({"cg","args","nargs"});
-// from D:\Work\libclang\include\llvm-c/lto.h:459:1
-	addExtern< void (*)(LLVMOpaqueLTOCodeGenerator *,const char *) , lto_codegen_add_must_preserve_symbol >(*this,lib,"lto_codegen_add_must_preserve_symbol",SideEffects::worstDefault,"lto_codegen_add_must_preserve_symbol")
-		->args({"cg","symbol"});
-// from D:\Work\libclang\include\llvm-c/lto.h:469:1
-	addExtern< bool (*)(LLVMOpaqueLTOCodeGenerator *,const char *) , lto_codegen_write_merged_modules >(*this,lib,"lto_codegen_write_merged_modules",SideEffects::worstDefault,"lto_codegen_write_merged_modules")
-		->args({"cg","path"});
-// from D:\Work\libclang\include\llvm-c/lto.h:484:1
-	addExtern< const void * (*)(LLVMOpaqueLTOCodeGenerator *,size_t *) , lto_codegen_compile >(*this,lib,"lto_codegen_compile",SideEffects::worstDefault,"lto_codegen_compile")
-		->args({"cg","length"});
-// from D:\Work\libclang\include\llvm-c/lto.h:496:1
-	addExtern< bool (*)(LLVMOpaqueLTOCodeGenerator *,const char **) , lto_codegen_compile_to_file >(*this,lib,"lto_codegen_compile_to_file",SideEffects::worstDefault,"lto_codegen_compile_to_file")
-		->args({"cg","name"});
-// from D:\Work\libclang\include\llvm-c/lto.h:504:1
-	addExtern< bool (*)(LLVMOpaqueLTOCodeGenerator *) , lto_codegen_optimize >(*this,lib,"lto_codegen_optimize",SideEffects::worstDefault,"lto_codegen_optimize")
-		->args({"cg"});
-// from D:\Work\libclang\include\llvm-c/lto.h:519:1
-	addExtern< const void * (*)(LLVMOpaqueLTOCodeGenerator *,size_t *) , lto_codegen_compile_optimized >(*this,lib,"lto_codegen_compile_optimized",SideEffects::worstDefault,"lto_codegen_compile_optimized")
-		->args({"cg","length"});
-// from D:\Work\libclang\include\llvm-c/lto.h:527:1
-	addExtern< unsigned int (*)() , lto_api_version >(*this,lib,"lto_api_version",SideEffects::worstDefault,"lto_api_version");
-// from D:\Work\libclang\include\llvm-c/lto.h:541:13
-	addExtern< void (*)(const char *const *,int) , lto_set_debug_options >(*this,lib,"lto_set_debug_options",SideEffects::worstDefault,"lto_set_debug_options")
-		->args({"options","number"});
+// from D:\Work\libclang\include\llvm-c/Orc.h:493:1
+	addExtern< LLVMOrcOpaqueSymbolStringPool * (*)(LLVMOrcOpaqueExecutionSession *) , LLVMOrcExecutionSessionGetSymbolStringPool >(*this,lib,"LLVMOrcExecutionSessionGetSymbolStringPool",SideEffects::worstDefault,"LLVMOrcExecutionSessionGetSymbolStringPool")
+		->args({"ES"});
+// from D:\Work\libclang\include\llvm-c/Orc.h:505:6
+	addExtern< void (*)(LLVMOrcOpaqueSymbolStringPool *) , LLVMOrcSymbolStringPoolClearDeadEntries >(*this,lib,"LLVMOrcSymbolStringPoolClearDeadEntries",SideEffects::worstDefault,"LLVMOrcSymbolStringPoolClearDeadEntries")
+		->args({"SSP"});
+// from D:\Work\libclang\include\llvm-c/Orc.h:520:1
+	addExtern< LLVMOrcOpaqueSymbolStringPoolEntry * (*)(LLVMOrcOpaqueExecutionSession *,const char *) , LLVMOrcExecutionSessionIntern >(*this,lib,"LLVMOrcExecutionSessionIntern",SideEffects::worstDefault,"LLVMOrcExecutionSessionIntern")
+		->args({"ES","Name"});
+// from D:\Work\libclang\include\llvm-c/Orc.h:577:6
+	addExtern< void (*)(LLVMOrcOpaqueSymbolStringPoolEntry *) , LLVMOrcRetainSymbolStringPoolEntry >(*this,lib,"LLVMOrcRetainSymbolStringPoolEntry",SideEffects::worstDefault,"LLVMOrcRetainSymbolStringPoolEntry")
+		->args({"S"});
+// from D:\Work\libclang\include\llvm-c/Orc.h:582:6
+	addExtern< void (*)(LLVMOrcOpaqueSymbolStringPoolEntry *) , LLVMOrcReleaseSymbolStringPoolEntry >(*this,lib,"LLVMOrcReleaseSymbolStringPoolEntry",SideEffects::worstDefault,"LLVMOrcReleaseSymbolStringPoolEntry")
+		->args({"S"});
+// from D:\Work\libclang\include\llvm-c/Orc.h:589:13
+	addExtern< const char * (*)(LLVMOrcOpaqueSymbolStringPoolEntry *) , LLVMOrcSymbolStringPoolEntryStr >(*this,lib,"LLVMOrcSymbolStringPoolEntryStr",SideEffects::worstDefault,"LLVMOrcSymbolStringPoolEntryStr")
+		->args({"S"});
+// from D:\Work\libclang\include\llvm-c/Orc.h:594:6
+	addExtern< void (*)(LLVMOrcOpaqueResourceTracker *) , LLVMOrcReleaseResourceTracker >(*this,lib,"LLVMOrcReleaseResourceTracker",SideEffects::worstDefault,"LLVMOrcReleaseResourceTracker")
+		->args({"RT"});
+// from D:\Work\libclang\include\llvm-c/Orc.h:600:6
+	addExtern< void (*)(LLVMOrcOpaqueResourceTracker *,LLVMOrcOpaqueResourceTracker *) , LLVMOrcResourceTrackerTransferTo >(*this,lib,"LLVMOrcResourceTrackerTransferTo",SideEffects::worstDefault,"LLVMOrcResourceTrackerTransferTo")
+		->args({"SrcRT","DstRT"});
+// from D:\Work\libclang\include\llvm-c/Orc.h:607:14
+	addExtern< LLVMOpaqueError * (*)(LLVMOrcOpaqueResourceTracker *) , LLVMOrcResourceTrackerRemove >(*this,lib,"LLVMOrcResourceTrackerRemove",SideEffects::worstDefault,"LLVMOrcResourceTrackerRemove")
+		->args({"RT"});
+// from D:\Work\libclang\include\llvm-c/Orc.h:614:6
+	addExtern< void (*)(LLVMOrcOpaqueDefinitionGenerator *) , LLVMOrcDisposeDefinitionGenerator >(*this,lib,"LLVMOrcDisposeDefinitionGenerator",SideEffects::worstDefault,"LLVMOrcDisposeDefinitionGenerator")
+		->args({"DG"});
+// from D:\Work\libclang\include\llvm-c/Orc.h:619:6
+	addExtern< void (*)(LLVMOrcOpaqueMaterializationUnit *) , LLVMOrcDisposeMaterializationUnit >(*this,lib,"LLVMOrcDisposeMaterializationUnit",SideEffects::worstDefault,"LLVMOrcDisposeMaterializationUnit")
+		->args({"MU"});
+// from D:\Work\libclang\include\llvm-c/Orc.h:683:1
+	addExtern< LLVMOrcOpaqueMaterializationUnit * (*)(LLVMOrcCSymbolMapPair *,size_t) , LLVMOrcAbsoluteSymbols >(*this,lib,"LLVMOrcAbsoluteSymbols",SideEffects::worstDefault,"LLVMOrcAbsoluteSymbols")
+		->args({"Syms","NumPairs"});
+// from D:\Work\libclang\include\llvm-c/Orc.h:706:31
+	addExtern< LLVMOrcOpaqueMaterializationUnit * (*)(LLVMOrcOpaqueLazyCallThroughManager *,LLVMOrcOpaqueIndirectStubsManager *,LLVMOrcOpaqueJITDylib *,LLVMOrcCSymbolAliasMapPair *,size_t) , LLVMOrcLazyReexports >(*this,lib,"LLVMOrcLazyReexports",SideEffects::worstDefault,"LLVMOrcLazyReexports")
+		->args({"LCTM","ISM","SourceRef","CallableAliases","NumPairs"});
+// from D:\Work\libclang\include\llvm-c/Orc.h:721:6
+	addExtern< void (*)(LLVMOrcOpaqueMaterializationResponsibility *) , LLVMOrcDisposeMaterializationResponsibility >(*this,lib,"LLVMOrcDisposeMaterializationResponsibility",SideEffects::worstDefault,"LLVMOrcDisposeMaterializationResponsibility")
+		->args({"MR"});
+// from D:\Work\libclang\include\llvm-c/Orc.h:727:20
+	addExtern< LLVMOrcOpaqueJITDylib * (*)(LLVMOrcOpaqueMaterializationResponsibility *) , LLVMOrcMaterializationResponsibilityGetTargetDylib >(*this,lib,"LLVMOrcMaterializationResponsibilityGetTargetDylib",SideEffects::worstDefault,"LLVMOrcMaterializationResponsibilityGetTargetDylib")
+		->args({"MR"});
+// from D:\Work\libclang\include\llvm-c/Orc.h:734:1
+	addExtern< LLVMOrcOpaqueExecutionSession * (*)(LLVMOrcOpaqueMaterializationResponsibility *) , LLVMOrcMaterializationResponsibilityGetExecutionSession >(*this,lib,"LLVMOrcMaterializationResponsibilityGetExecutionSession",SideEffects::worstDefault,"LLVMOrcMaterializationResponsibilityGetExecutionSession")
+		->args({"MR"});
+// from D:\Work\libclang\include\llvm-c/Orc.h:747:29
+	addExtern< LLVMOrcCSymbolFlagsMapPair * (*)(LLVMOrcOpaqueMaterializationResponsibility *,size_t *) , LLVMOrcMaterializationResponsibilityGetSymbols >(*this,lib,"LLVMOrcMaterializationResponsibilityGetSymbols",SideEffects::worstDefault,"LLVMOrcMaterializationResponsibilityGetSymbols")
+		->args({"MR","NumPairs"});
+// from D:\Work\libclang\include\llvm-c/Orc.h:755:6
+	addExtern< void (*)(LLVMOrcCSymbolFlagsMapPair *) , LLVMOrcDisposeCSymbolFlagsMap >(*this,lib,"LLVMOrcDisposeCSymbolFlagsMap",SideEffects::worstDefault,"LLVMOrcDisposeCSymbolFlagsMap")
+		->args({"Pairs"});
+// from D:\Work\libclang\include\llvm-c/Orc.h:766:1
+	addExtern< LLVMOrcOpaqueSymbolStringPoolEntry * (*)(LLVMOrcOpaqueMaterializationResponsibility *) , LLVMOrcMaterializationResponsibilityGetInitializerSymbol >(*this,lib,"LLVMOrcMaterializationResponsibilityGetInitializerSymbol",SideEffects::worstDefault,"LLVMOrcMaterializationResponsibilityGetInitializerSymbol")
+		->args({"MR"});
+// from D:\Work\libclang\include\llvm-c/Orc.h:776:1
+	addExtern< LLVMOrcOpaqueSymbolStringPoolEntry ** (*)(LLVMOrcOpaqueMaterializationResponsibility *,size_t *) , LLVMOrcMaterializationResponsibilityGetRequestedSymbols >(*this,lib,"LLVMOrcMaterializationResponsibilityGetRequestedSymbols",SideEffects::worstDefault,"LLVMOrcMaterializationResponsibilityGetRequestedSymbols")
+		->args({"MR","NumSymbols"});
 }
 }
 
