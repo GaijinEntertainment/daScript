@@ -10,7 +10,7 @@ var fov = 1.
 var pixelWidth = 320.
 var pixelHeight = 200.
 
-[jit]
+[jit,hint(unsafe_range_check,noalias=level,noalias=bmp)]
 def drawWalls ( level:Level; var bmp:Bitmap8 )
     for i in range(bmp.size.x)
         // cast a ray for each screen column
@@ -56,9 +56,9 @@ def drawWalls ( level:Level; var bmp:Bitmap8 )
                 if m1 == 98
                     isPushwall = true
                     // pushwall
-                    let timer = getWallTimer(cx,cy)
+                    assume timer = timers[cx+cy*64]
                     if timer.active
-                        wallShift = timer.t / 64.
+                        wallShift = timer.t
                         if timer.dx == 0.
                             // wall moves horizontally
                             if dx * rfy >= dy * wallShift
@@ -107,14 +107,9 @@ def drawWalls ( level:Level; var bmp:Bitmap8 )
             elif m0 <= 101
                 // hit a door
                 var doorShfit = 0.
-                let timer = getDoorTimer(cx,cy)
+                assume timer = timers[cx+cy*64]
                 if timer.active
-                    if timer.opening
-                        doorShfit = timer.t / 64.
-                    else
-                        doorShfit = 1. - timer.t / 64.
-                if !plane2[cx+cy*64]
-                    doorShfit = 1.
+                    doorShfit = timer.t
                 if m0 % 2 == 0
                     // NS door
                     if rfx >= .5 && (rfx - .5) * dy < rfy * dx
@@ -212,13 +207,12 @@ def drawWalls ( level:Level; var bmp:Bitmap8 )
                 rfx -= dt * dx
         // draw
         zIndex[i] = t
-        drawWallPixels(i,t,tx,textureIndex,bmp)
-        // drawWallPixels(i,t,tx,WallPics[textureIndex],bmp) // causes bug in jit. why?
+        drawWallPixels(i,t,tx,WallPics[textureIndex],bmp) // causes bug in jit. why?
 
 var zIndex : array<float>
 
 [jit,hint(unsafe_range_check,noalias=tex,noalias=bmp)]
-def drawWallPixels ( i:int; t,tx:float; index:int; var bmp:Bitmap8 )
+def drawWallPixels ( i:int; t,tx:float; tex:WallTexture; var bmp:Bitmap8 )
     let wallHeight = float(pixelWidth) / (2. * fov)
     var h = wallHeight / (2. * t)
     let y = floori(pixelHeight / 2. - h)
@@ -231,7 +225,7 @@ def drawWallPixels ( i:int; t,tx:float; index:int; var bmp:Bitmap8 )
     unsafe
         var span = addr(bmp.data[i*bmp.size.y])
         // memset8(span,29u8,ymin)
-        var tspan = addr(WallPics[index].data[texelOffset])
+        var tspan = addr(tex.data[texelOffset])
         var count = ymax - ymin + 1
         var count4 = count >> 2
         count &= 3
@@ -247,6 +241,7 @@ def drawWallPixels ( i:int; t,tx:float; index:int; var bmp:Bitmap8 )
             PSP[P] = tspan[int(uvY)]
             uvY += dUVY
         // memset8(PSP+count,25u8,bmp.size.y - ymax - 1)
+
 
 def drawThings ( var bmp:Bitmap8 )
     let wallHeight = float(pixelWidth) / (2. * fov)

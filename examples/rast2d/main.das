@@ -1,6 +1,6 @@
 options persistent_heap
 
-// require llvm/llvm_jit
+require llvm/llvm_jit
 
 require app
 require files
@@ -14,8 +14,10 @@ def main
     InitFiles()
     setupLevel(0)
     set_palette(GamePalette)
-    raster_app_main <| $ ( backbuffer )
-        updateGame()
+    raster_app_main <| $ ( dt, backbuffer )
+        updateGame(dt)
         draw(level, backbuffer)
+        set_app_sound_position(float2(player.x, player.y), float2(player.dx, player.dy))
+
 
 

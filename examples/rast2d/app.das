@@ -8,6 +8,8 @@ require glsl/glsl_opengl
 require daslib/defer
 require daslib/safe_addr
 require math
+require strings
+require sound
 
 var [[in, location=0]] v_position : float2
 var [[in, location=2]] v_texcoord : float2
@@ -121,11 +123,83 @@ def public set_palette ( pal : uint[256 ])
     for d,s in f_palette, pal
         d = unpack_byte_to_float(s) / float4(255.)
 
-def public raster_app_main ( blk: block<(var back_buffer:Bitmap8):void> )
+def fmt_msec ( msecs : float )
+    let flt = build_string <| $ ( writer )
+        writer |> format("%.1f",msecs)
+    return "{flt}ms"
+
+struct PlayingSound
+    snd : PcmSound
+    handle : PlayingSoundHandle
+    busy : bool
+    is3d : bool
+    xy   : float2
+    radius : float
+
+let MAX_SOUNDS = 32
+
+var playing_sounds : PlayingSound[MAX_SOUNDS]
+var sound_head_position : float2
+var sound_head_direction : float2
+
+def allocate_app_sound
+    for snd,i in playing_sounds,count()
+        if !snd.busy
+            snd.busy = true
+            return i
+    return -1
+
+def public set_app_sound_position ( xy:float2; dxy:float2 )
+    sound_head_position = xy
+    sound_head_direction = dxy
+
+def public play_app_sound ( wave:array<float>; freq:int )
+    let i = allocate_app_sound()
+    if i<0
+        return
+    playing_sounds[i].snd <- create_sound(freq, wave)
+    playing_sounds[i].handle = play_sound(playing_sounds[i].snd)
+    playing_sounds[i].busy = true
+    playing_sounds[i].is3d = false
+
+def public play_app_sound_2d ( pos:float2; radius:float; wave:array<float>; freq:int )
+    let i = allocate_app_sound()
+    if i<0
+        return
+    playing_sounds[i].snd <- create_sound(freq, wave)
+    playing_sounds[i].handle = play_sound(playing_sounds[i].snd)
+    playing_sounds[i].busy = true
+    playing_sounds[i].is3d = true
+    playing_sounds[i].xy = pos
+    playing_sounds[i].radius = radius
+
+
+def update_sounds
+    for snd in playing_sounds
+        if snd.busy
+            if !is_playing(snd.handle)
+                delete snd.snd
+                snd.busy = false
+                continue
+        if snd.is3d
+            var rxy = snd.xy - sound_head_position
+            rxy = float2(rxy.x * sound_head_direction.x + rxy.y * sound_head_direction.y,
+                        -rxy.x * sound_head_direction.y + rxy.y * sound_head_direction.x)
+            // linear volume attenuation???
+            let attn = max(0.0f, 1.0f - length(rxy) / snd.radius)
+            set_sound_volume(snd.handle, attn)
+            // panning
+            let nrxy = normalize(rxy)
+            set_sound_pan(snd.handle, -nrxy.y )
+
+def public raster_app_main ( blk: block<(dt:float; var back_buffer:Bitmap8):void> )
     if glfwInit()==0
 		panic("can't init glfw")
     defer <|
         glfwTerminate()
+    sound_initialize()
+    defer <|
+        sound_finalize()
     glfwInitOpenGL(3,3)
     window = glfwCreateWindow(1920, 1080, "RASTER2D", null, null)
     if window==null
@@ -139,12 +213,15 @@ def public raster_app_main ( blk: block<(var back_buffer:Bitmap8):void> )
     var tframe = ref_time_ticks()
     var prev_sec = glfwGetTime()
     var msecs = 12.
+    var fmsec = 16.
     while glfwWindowShouldClose(window)==0
         var tsec = glfwGetTime()
         dt_sec = tsec - prev_sec
         prev_sec = tsec
         var dt_frame = get_time_usec(tframe)
         tframe = ref_time_ticks()
+        fmsec = fmsec*0.95 + float(dt_frame/1000)*0.05
+        update_sounds()
         unsafe
             heap_collect(true,true)
         glfwPollEvents()
@@ -153,11 +230,10 @@ def public raster_app_main ( blk: block<(var back_buffer:Bitmap8):void> )
         // callbakc
         var bmp = [[Bitmap8 size=int2(bb_width,bb_height), data=unsafe(addr(bb_data[0]))]]
         let t0 = ref_time_ticks()
-        invoke(blk, bmp)
+        invoke(blk, fmsec, bmp)
         let dt = get_time_usec(t0)
-        msecs = msecs*0.95 + float(dt/100)*0.05
-        let it  = int(msecs)
-        glfwSetWindowTitle(window, "{bb_width}x{bb_height} frame:{dt_frame/1000}ms rast:{it/10}.{it%10}ms")
+        msecs = msecs*0.95 + float(dt/1000)*0.05
+        glfwSetWindowTitle(window, "{bb_width}x{bb_height} frame:{fmt_msec(fmsec)} rast:{fmt_msec(msecs)}")
         // make a texture
         glGenTextures(1, safe_addr(texture))
         glBindTexture(GL_TEXTURE_2D, texture)

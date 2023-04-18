@@ -2,9 +2,17 @@ module game
 
 require files
 require app
+require sound_names
 
 require daslib/algorithm
 require math
+
+var frame_time = 1.0
+
+let DOOR_SOUND_RADIUS = 10.0     // how far away door sound can be heard (in tiles)
+let DOOR_OPEN_SPEED = 0.5        // how fast door opens (in tiles per second)
+let DOOR_CLOSE_SPPED = 1.0       // how fast door closes (in tiles per second)
+let DOOR_STAYS_CLOSED = 2.0      // how long door stays closed (in seconds)
 
 struct public Score
     kills : int
@@ -216,7 +224,7 @@ class public Player
         if is_key_pressed(VK_LEFT)
             turnAngle -= 1.
         if turnAngle != 0.
-            turn(turnAngle * speed_a)
+            turn(turnAngle * speed_a * frame_time)
             turnAngle = 0.
             changed = true
         var forward = 0.
@@ -231,12 +239,12 @@ class public Player
             sideways += speed
         if forward != 0.
             if sideways != 0.
-                move(forward / sqrt(2.), sideways / sqrt(2.))
+                move(frame_time * forward / sqrt(2.), frame_time * sideways / sqrt(2.))
             else
-                move(forward, 0.)
+                move(frame_time * forward, 0.)
             changed = true
         elif sideways != 0.
-            move(0., sideways)
+            move(0., frame_time * sideways)
             changed = true
     /*
             if (this.weaponAnimation !== undefined) {
@@ -256,6 +264,15 @@ class public Player
         }
     }
     */
+
+    def isTooCloseToDoor(X,Y:int)
+        let ix = floori(x)
+        let iy = floori(y)
+        if (X==ix) && (Y==iy)
+            return true
+        if abs(float(X)+0.5-x)<=radius+0.5 && abs(float(Y)+0.5-y)<=radius+0.5
+            return true
+        return false
 
     def activate
         var X = floori(x)
@@ -283,24 +300,14 @@ class public Player
                 // silver-locked door
                 print("silver-locked door\n")
                 return
-            var timer = getDoorTimer(X,Y)
+            assume timer = timers[Y*64+X]
             if !timer.active
-                let opening = plane2[Y*64+X]
-                if !opening
-                    if ((DX>0 && float(X)-x<=radius) ||
-                        (DX<0 && x-float(x)-1.<=radius) ||
-                        (DY>0 && float(Y)-y<=radius) ||
-                        (DY<0 && y-float(Y)-1.<=radius))
-                        return
-                    else
-                        plane2[Y*64+X] = true
-                doorTimers |> push <| [[DoorTimer
-                    x = X,
-                    y = Y,
+                timer = [[Timer
                     t = 0.,
-                    opening = opening,
+                    opening = true,
                     active = true
                 ]]
+                play_game_sound_2d(SoundName OPENDOORSND, float2(X,Y)+float2(0.5), DOOR_SOUND_RADIUS)
     /*
             } else if (m1 === 98) {
                 // pushwall
@@ -321,34 +328,14 @@ class public Player
 
 var public player = new Player()
 
-struct public WallTimer
-    x, y : int
+struct Timer
+    t : float
     dx, dy : float
-    t : float
     steps : int
-    active : bool
-
-var public wallTimers : array<WallTimer>
-
-def getWallTimer ( cx,cy : int )
-    for timer in wallTimers
-        if timer.x == cx && timer.y == cy
-            return timer
-    return [[WallTimer]]
-
-struct public DoorTimer
-    x, y : int
     opening : bool
-    t : float
     active : bool
 
-var public doorTimers : array<DoorTimer>
-
-def public getDoorTimer ( cx,cy : int )
-    for timer in doorTimers
-        if timer.x == cx && timer.y == cy
-            return timer
-    return [[DoorTimer]]
+var timers : Timer[64*64]
 
 var plane2 : bool[64*64]
 
@@ -357,8 +344,8 @@ var public level : Level
 def setupLevel ( index:int )
     level := Levels[index]
     // things = []
-    doorTimers |> clear
-    wallTimers |> clear
+    for t in timers
+        t.active = false
     player = new Player()
     score = Score()
     things |> clear
@@ -464,16 +451,37 @@ def updateThings
         return b.rx < a.rx
 
 def updateDoorTimers
-    var rem : array<int>
-    for timer,i in doorTimers,count()
-        timer.t += 1.
-        if timer.t >= 64.
-            if timer.opening
-                plane2[timer.y*64+timer.x] = false
-            rem |> push(i)
-    rem |> reverse
-    for i in rem
-        doorTimers |> erase(i)
+    for timer,index in timers,count()
+        if !timer.active
+            continue
+        if timer.opening
+            if timer.t < 1.
+                timer.t += DOOR_OPEN_SPEED / 64. * frame_time
+            else
+                timer.t += 1. / 60. * frame_time
+            if timer.t >= 1.
+                plane2[index] = false
+            if timer.t >= DOOR_STAYS_CLOSED
+                timer.t = DOOR_STAYS_CLOSED
+                timer.opening = false
+        else
+            if timer.t < 1.
+                timer.t -= DOOR_CLOSE_SPPED / 64. * frame_time
+            else
+                timer.t -= 1./ 60. * frame_time
+            if timer.t <= 1.
+                if !plane2[index]
+                    let X = index%64
+                    let Y = index/64
+                    if player->isTooCloseToDoor(X, Y)
+                        timer.t = DOOR_STAYS_CLOSED
+                        // print("TOO CLOSE TO DOOR {player.x} {player.y} \n")
+                    else
+                        play_game_sound_2d(SoundName CLOSEDOORSND, float2(X,Y)+float2(0.5), DOOR_SOUND_RADIUS)
+                        plane2[index] = true
+            if timer.t <= 0.
+                timer.t = 0.
+                timer.active = false
 
 def updateWallTimers
     pass
@@ -545,8 +553,10 @@ def updatePlayer
 }
 */
 
-def public updateGame
+def public updateGame(dt:float)
+    frame_time = dt / 16.0
     updatePlayer()
     updateDoorTimers()
     updateWallTimers()
     updateThings()
+

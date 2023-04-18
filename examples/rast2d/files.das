@@ -189,13 +189,6 @@ struct public SpriteTexture
 
 var public Sprites : array<SpriteTexture>
 
-struct public Sound
-    data : array<uint8>
-
-var public Sounds : array<Sound>
-
-var public Audio : array<Sound>
-
 def prepareSprite ( var sprite : SpriteTexture )
     sprite.firstCol = int(sprite.data |> getUInt16(0))
     sprite.lastCol = int(sprite.data |> getUInt16(2))
@@ -213,6 +206,13 @@ def prepareSprite ( var sprite : SpriteTexture )
             colOffset += 6
             for row in range(startRow, endRow)
                 pixelOffset ++
+
+struct public Sound
+    data : array<uint8>
+
+var public Sounds : array<Sound>
+
+var public Audio : array<Sound>
 
 def InitResources()
     var bytes <- LoadBytes("VSWAP.WL6")
