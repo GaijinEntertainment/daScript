@@ -1,8 +1,3 @@
-IF(NOT WIN32)
-	SET(DAS_LLVM_DISABLED TRUE)
-	MESSAGE("LLVM 15 disabled for now on anything but WIN32")
-ENDIF()
-
 SET(PATH_TO_LIBCLANG ${PROJECT_SOURCE_DIR}/../libclang)
 IF(NOT IS_DIRECTORY ${PATH_TO_LIBCLANG})
 	SET(DAS_LIBCLANG_DETECTED FALSE)
@@ -136,87 +131,15 @@ IF ((NOT DAS_LLVM_INCLUDED) AND DAS_LIBCLANG_DETECTED AND ((NOT ${DAS_LLVM_DISAB
 	ADD_MODULE_DAS(llvm daslib llvm_jit_common)
 	ADD_LIBRARY(libDasModuleLlvm ${DAS_LLVM_MODULE_SRC} ${DAS_LLVM_MODULE_PLATFORM_SRC})
 	IF(APPLE)
+		file(GLOB LLVM_LIB_SRC_A
+			${LIBCLANG_LIB}/*.a
+		)
+
 		TARGET_LINK_LIBRARIES(libDasModuleLlvm ${LLVM_LIBRARIES}
 			${LIBCLANG_LIB}/libLTO.dylib
 			${LIBCLANG_LIB}/libRemarks.dylib
-
-			${LIBCLANG_LIB}/libLLVMAggressiveInstCombine.a
-			${LIBCLANG_LIB}/libLLVMAnalysis.a
-			${LIBCLANG_LIB}/libLLVMAsmParser.a
-			${LIBCLANG_LIB}/libLLVMAsmPrinter.a
-			${LIBCLANG_LIB}/libLLVMBinaryFormat.a
-			${LIBCLANG_LIB}/libLLVMBitReader.a
-			${LIBCLANG_LIB}/libLLVMBitWriter.a
-			${LIBCLANG_LIB}/libLLVMBitstreamReader.a
-			${LIBCLANG_LIB}/libLLVMCFGuard.a
-			${LIBCLANG_LIB}/libLLVMCFIVerify.a
-			${LIBCLANG_LIB}/libLLVMCodeGen.a
-			${LIBCLANG_LIB}/libLLVMCore.a
-			${LIBCLANG_LIB}/libLLVMCoroutines.a
-			${LIBCLANG_LIB}/libLLVMCoverage.a
-			${LIBCLANG_LIB}/libLLVMDWARFLinker.a
-			${LIBCLANG_LIB}/libLLVMDWP.a
-			${LIBCLANG_LIB}/libLLVMDebugInfoCodeView.a
-			${LIBCLANG_LIB}/libLLVMDebugInfoDWARF.a
-			${LIBCLANG_LIB}/libLLVMDebugInfoGSYM.a
-			${LIBCLANG_LIB}/libLLVMDebugInfoMSF.a
-			${LIBCLANG_LIB}/libLLVMDebugInfoPDB.a
-			${LIBCLANG_LIB}/libLLVMDemangle.a
-			${LIBCLANG_LIB}/libLLVMDlltoolDriver.a
-			${LIBCLANG_LIB}/libLLVMExecutionEngine.a
-			${LIBCLANG_LIB}/libLLVMExegesis.a
-			${LIBCLANG_LIB}/libLLVMExegesisX86.a
-			${LIBCLANG_LIB}/libLLVMExtensions.a
-			${LIBCLANG_LIB}/libLLVMFileCheck.a
-			${LIBCLANG_LIB}/libLLVMFrontendOpenACC.a
-			${LIBCLANG_LIB}/libLLVMFrontendOpenMP.a
-			${LIBCLANG_LIB}/libLLVMFuzzMutate.a
-			${LIBCLANG_LIB}/libLLVMGlobalISel.a
-			${LIBCLANG_LIB}/libLLVMIRReader.a
-			${LIBCLANG_LIB}/libLLVMInstCombine.a
-			${LIBCLANG_LIB}/libLLVMInstrumentation.a
-			${LIBCLANG_LIB}/libLLVMInterfaceStub.a
-			${LIBCLANG_LIB}/libLLVMInterpreter.a
-			${LIBCLANG_LIB}/libLLVMJITLink.a
-			${LIBCLANG_LIB}/libLLVMLTO.a
-			${LIBCLANG_LIB}/libLLVMLibDriver.a
-			${LIBCLANG_LIB}/libLLVMLineEditor.a
-			${LIBCLANG_LIB}/libLLVMLinker.a
-			${LIBCLANG_LIB}/libLLVMMC.a
-			${LIBCLANG_LIB}/libLLVMMCA.a
-			${LIBCLANG_LIB}/libLLVMMCDisassembler.a
-			${LIBCLANG_LIB}/libLLVMMCJIT.a
-			${LIBCLANG_LIB}/libLLVMMCParser.a
-			${LIBCLANG_LIB}/libLLVMMIRParser.a
-			${LIBCLANG_LIB}/libLLVMObjCARCOpts.a
-			${LIBCLANG_LIB}/libLLVMObject.a
-			${LIBCLANG_LIB}/libLLVMObjectYAML.a
-			${LIBCLANG_LIB}/libLLVMOption.a
-			${LIBCLANG_LIB}/libLLVMOrcJIT.a
-			${LIBCLANG_LIB}/libLLVMOrcShared.a
-			${LIBCLANG_LIB}/libLLVMOrcTargetProcess.a
-			${LIBCLANG_LIB}/libLLVMPasses.a
-			${LIBCLANG_LIB}/libLLVMProfileData.a
-			${LIBCLANG_LIB}/libLLVMRemarks.a
-			${LIBCLANG_LIB}/libLLVMRuntimeDyld.a
-			${LIBCLANG_LIB}/libLLVMScalarOpts.a
-			${LIBCLANG_LIB}/libLLVMSelectionDAG.a
-			${LIBCLANG_LIB}/libLLVMSupport.a
-			${LIBCLANG_LIB}/libLLVMSymbolize.a
-			${LIBCLANG_LIB}/libLLVMTableGen.a
-			${LIBCLANG_LIB}/libLLVMTableGenGlobalISel.a
-			${LIBCLANG_LIB}/libLLVMTarget.a
-			${LIBCLANG_LIB}/libLLVMTextAPI.a
-			${LIBCLANG_LIB}/libLLVMTransformUtils.a
-			${LIBCLANG_LIB}/libLLVMVectorize.a
-			${LIBCLANG_LIB}/libLLVMWindowsManifest.a
-			${LIBCLANG_LIB}/libLLVMX86AsmParser.a
-			${LIBCLANG_LIB}/libLLVMX86CodeGen.a
-			${LIBCLANG_LIB}/libLLVMX86Desc.a
-			${LIBCLANG_LIB}/libLLVMX86Disassembler.a
-			${LIBCLANG_LIB}/libLLVMX86Info.a
-			${LIBCLANG_LIB}/libLLVMXRay.a
-			${LIBCLANG_LIB}/libLLVMipo.a
+			${LIBCLANG_LIB}/libclang-cpp.dylib
+			${LLVM_LIB_SRC_A}
 		)
 	ELSEIF(WIN32)
 		TARGET_LINK_LIBRARIES(libDasModuleLlvm ${LLVM_LIBRARIES}
