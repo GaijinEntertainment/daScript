@@ -124,9 +124,9 @@ namespace das
 
     void TypeDecl::applyAutoContracts ( const TypeDeclPtr & TT, const TypeDeclPtr & autoT ) {
         if ( !autoT->isAuto() ) return;
-        TT->ref = (TT->ref | autoT->ref) && !autoT->removeRef && !TT->removeRef;
-        TT->constant = (TT->constant | autoT->constant) && !autoT->removeConstant && !TT->removeConstant;
-        TT->temporary = (TT->temporary | autoT->temporary) && !autoT->removeTemporary && !TT->removeTemporary;
+        TT->ref = (TT->ref || autoT->ref) && !autoT->removeRef && !TT->removeRef;
+        TT->constant = (TT->constant || autoT->constant) && !autoT->removeConstant && !TT->removeConstant;
+        TT->temporary = (TT->temporary || autoT->temporary) && !autoT->removeTemporary && !TT->removeTemporary;
         if ( (autoT->removeDim || TT->removeDim) && TT->dim.size() ) TT->dim.erase(TT->dim.begin());
         TT->removeConstant = false;
         TT->removeDim = false;
@@ -208,15 +208,15 @@ namespace das
             for ( size_t i=0, is=autoT->argTypes.size(); i!=is; ++i ) {
                 // we copy type qualifiers for each option
                 auto & TT = autoT->argTypes[i];
-                TT->ref = TT->ref | autoT->ref;
-                TT->constant = TT->constant | autoT->constant;
-                TT->temporary = TT->temporary | autoT->temporary;
-                TT->removeConstant = TT->removeConstant | autoT->removeConstant;
-                TT->removeDim = TT->removeDim | autoT->removeDim;
-                TT->removeRef = TT->removeRef | autoT->removeRef;
-                TT->explicitConst = TT->explicitConst | autoT->explicitConst;
-                TT->explicitRef = TT->explicitRef | autoT->explicitRef;
-                TT->implicit = TT->implicit | autoT->implicit;
+                TT->ref = TT->ref || autoT->ref;
+                TT->constant = TT->constant || autoT->constant;
+                TT->temporary = TT->temporary || autoT->temporary;
+                TT->removeConstant = TT->removeConstant || autoT->removeConstant;
+                TT->removeDim = TT->removeDim || autoT->removeDim;
+                TT->removeRef = TT->removeRef || autoT->removeRef;
+                TT->explicitConst = TT->explicitConst || autoT->explicitConst;
+                TT->explicitRef = TT->explicitRef || autoT->explicitRef;
+                TT->implicit = TT->implicit || autoT->implicit;
                 // now we infer type
                 if ( auto resT = inferGenericType(TT,initT,topLevel,passType,options) ) {
                     if ( options!=nullptr ) (*options)[autoT.get()] = int(i);
