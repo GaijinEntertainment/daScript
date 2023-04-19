@@ -356,7 +356,7 @@ namespace das
             if ( context.stopFlags ) goto loopend;
         }
         if ( !needLoop ) goto loopend;
-        for ( int i=0; !context.stopFlags; ++i ) {
+        while ( !context.stopFlags ) {
             SimNode ** __restrict body = list;
         loopbegin:;
             for (; body!=tail; ++body) {
@@ -399,7 +399,7 @@ namespace das
             if ( context.stopFlags ) goto loopend;
         }
         if ( !needLoop ) goto loopend;
-        for ( int i=0; !context.stopFlags; ++i ) {
+        while ( !context.stopFlags ) {
             SimNode ** __restrict body = this->list;
         loopbegin:;
             for (; body!=tail; ++body) {

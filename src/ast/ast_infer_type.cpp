@@ -404,9 +404,9 @@ namespace das {
                 if ( aT ) {
                     auto resT = make_smart<TypeDecl>(*aT);
                     resT->at = decl->at;
-                    resT->ref = (resT->ref | decl->ref) & !decl->removeRef;
-                    resT->constant = (resT->constant | decl->constant) & !decl->removeConstant;
-                    resT->temporary = (resT->temporary | decl->temporary) & !decl->removeTemporary;
+                    resT->ref = (resT->ref || decl->ref) && !decl->removeRef;
+                    resT->constant = (resT->constant || decl->constant) && !decl->removeConstant;
+                    resT->temporary = (resT->temporary || decl->temporary) && !decl->removeTemporary;
                     resT->dim = decl->dim;
                     resT->alias.clear();
                     return resT;
@@ -546,10 +546,10 @@ namespace das {
                 if ( aT ) {
                     auto resT = make_smart<TypeDecl>(*aT);
                     resT->at = decl->at;
-                    resT->ref = (resT->ref | decl->ref) & !decl->removeRef;
-                    resT->constant = (resT->constant | decl->constant) & !decl->removeConstant;
-                    resT->temporary = (resT->temporary | decl->temporary) & !decl->removeTemporary;
-                    resT->implicit = (resT->implicit | decl->implicit);
+                    resT->ref = (resT->ref || decl->ref) && !decl->removeRef;
+                    resT->constant = (resT->constant || decl->constant) && !decl->removeConstant;
+                    resT->temporary = (resT->temporary || decl->temporary) && !decl->removeTemporary;
+                    resT->implicit = (resT->implicit || decl->implicit);
                     resT->dim = decl->dim;
                     resT->alias.clear();
                     return resT;
@@ -4492,7 +4492,7 @@ namespace das {
                 expr->type = make_smart<TypeDecl>(Type::tPointer);
                 expr->type->firstType = fieldType;
             }
-            expr->type->constant |= valT->constant | expr->value->type->constant;
+            expr->type->constant |= valT->constant || expr->value->type->constant;
             propagateTempType(expr->value->type, expr->type); // a# ?as foo = foo?#
             return Visitor::visit(expr);
         }
@@ -4588,9 +4588,9 @@ namespace das {
                     expr->field = valT->firstType->structType->findField(expr->name);
                 } else if ( valT->firstType->isHandle() ) {
                     expr->annotation = valT->firstType->annotation;
-                    expr->type = expr->annotation->makeFieldType(expr->name, valT->constant | valT->firstType->constant);
+                    expr->type = expr->annotation->makeFieldType(expr->name, valT->constant || valT->firstType->constant);
                     if ( expr->type )
-                        expr->type->constant |= valT->constant | valT->firstType->constant;
+                        expr->type->constant |= valT->constant || valT->firstType->constant;
                 } else if ( valT->firstType->isGoodTupleType() ) {
                     int index = valT->tupleFieldIndex(expr->name);
                     if ( index==-1 || index>=int(valT->firstType->argTypes.size()) ) {

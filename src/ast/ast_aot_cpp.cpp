@@ -2841,7 +2841,7 @@ namespace das {
                 ss << "das_debug(__context__,&" << helper.typeInfoName(info) << ",__FILE__,__LINE__,";
                 ss << "cast<"
                    << describeCppType(argType)
-                   << ((argType->isRefType() & !argType->ref) ? "&" : "")
+                   << ((argType->isRefType() && !argType->ref) ? "&" : "")
                    << ">::from(";
             } else if (call->name == "assert" || call->name=="verify") {
                 auto ea = static_cast<ExprAssert *>(call);
