@@ -228,6 +228,36 @@ IF ((NOT DAS_LLVM_INCLUDED) AND DAS_LIBCLANG_DETECTED AND ((NOT ${DAS_LLVM_DISAB
 	# ADD_DEPENDENCIES(libDasModuleLlvm)
 	TARGET_INCLUDE_DIRECTORIES(libDasModuleLlvm PUBLIC ${LLVM_INCLUDE_DIR} ${LIBCLANG_INCLUDE})
 
+
+IF(WIN32)
+	add_custom_command(TARGET libDasModuleLlvm POST_BUILD
+    	COMMAND ${CMAKE_COMMAND} -E copy_if_different
+	        "${PROJECT_SOURCE_DIR}/../libclang/bin/LLVM-C.dll"
+    	    "${PROJECT_SOURCE_DIR}/bin/$<CONFIG>/LLVM-C.dll")
+	add_custom_command(TARGET libDasModuleLlvm POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different
+		"${PROJECT_SOURCE_DIR}/../libclang/bin/LTO.dll"
+		"${PROJECT_SOURCE_DIR}/bin/$<CONFIG>/LTO.dll")
+	add_custom_command(TARGET libDasModuleLlvm POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different
+		"${PROJECT_SOURCE_DIR}/../libclang/bin/Remarks.dll"
+		"${PROJECT_SOURCE_DIR}/bin/$<CONFIG>/Remarks.dll")
+		add_custom_command(TARGET libDasModuleLlvm POST_BUILD
+		COMMAND ${CMAKE_COMMAND} -E copy_if_different
+		"${PROJECT_SOURCE_DIR}/../libclang/bin/libclang.dll"
+		"${PROJECT_SOURCE_DIR}/bin/$<CONFIG>/libclang.dll")
+	set(DAS_CLANG_DLLS
+		${PROJECT_SOURCE_DIR}/../libclang/bin/LLVM-C.dll
+		${PROJECT_SOURCE_DIR}/../libclang/bin/LTO.dll
+		${PROJECT_SOURCE_DIR}/../libclang/bin/Remarks.dll
+		${PROJECT_SOURCE_DIR}/../libclang/bin/libclang.dll
+	)
+	install(FILES ${DAS_CLANG_DLLS}
+        DESTINATION bin
+    )
+	install(FILES ${PROJECT_SOURCE_DIR}/modules/dasLLVM/LICENSE.TXT DESTINATION . RENAME LLVM.LICENSE)
+ENDIF()
+
     #ADD_MODULE_DAS(cbind cbind cbind_boost)
 
 	SETUP_CPP11(libDasModuleLlvm)
