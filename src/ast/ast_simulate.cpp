@@ -2957,7 +2957,7 @@ namespace das
                 pm->functions.foreach([&](auto pfun){
                     if (pfun->index < 0 || !pfun->used)
                         return;
-                    if ( (pfun->init | pfun->shutdown) && disableInit ) {
+                    if ( (pfun->init || pfun->shutdown) && disableInit ) {
                         error("[init] is disabled in the options or CodeOfPolicies",
                             "internal compiler error. [init] function made it all the way to simulate somehow", "",
                                 pfun->at, CompilationError::no_init);
