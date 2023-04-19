@@ -3038,7 +3038,7 @@ SIM_NODE_AT_VECTOR(Float, float)
                 if ( context.stopFlags ) goto loopend;
             }
             if ( !needLoop ) goto loopend;
-            for ( int i=0; !context.stopFlags; ++i ) {
+            while ( !context.stopFlags ) {
                 SimNode ** __restrict body = list;
             loopbegin:;
                 for (; body!=tail; ++body) {
@@ -3095,7 +3095,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             sources->isOpen = true;
             needLoop = sources->first(context, pi) && needLoop;
             if ( context.stopFlags || !needLoop) goto loopend;
-            for ( int i=0; !context.stopFlags; ++i ) {
+            while ( !context.stopFlags ) {
                 SimNode ** __restrict body = list;
             loopbegin:;
                 for (; body!=tail; ++body) {
@@ -3148,7 +3148,7 @@ SIM_NODE_AT_VECTOR(Float, float)
                 if ( context.stopFlags ) goto loopend;
             }
             if ( !needLoop ) goto loopend;
-            for ( int i=0; !context.stopFlags; ++i ) {
+            while ( context.stopFlags ) {
                 SimNode ** __restrict body = this->list;
             loopbegin:;
                 for (; body!=tail; ++body) {
@@ -3192,7 +3192,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             sources->isOpen = true;
             needLoop = sources->first(context, pi) && needLoop;
             if ( context.stopFlags || !needLoop) goto loopend;
-            for ( int i=0; !context.stopFlags; ++i ) {
+            while ( !context.stopFlags ) {
                 SimNode ** __restrict body = list;
             loopbegin:;
                 for (; body!=tail; ++body) {
