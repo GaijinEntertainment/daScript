@@ -3148,7 +3148,7 @@ SIM_NODE_AT_VECTOR(Float, float)
                 if ( context.stopFlags ) goto loopend;
             }
             if ( !needLoop ) goto loopend;
-            while ( context.stopFlags ) {
+            while ( !context.stopFlags ) {
                 SimNode ** __restrict body = this->list;
             loopbegin:;
                 for (; body!=tail; ++body) {
