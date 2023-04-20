@@ -291,7 +291,7 @@ def drawThing(rx,ry,orx,ory:float; OBJ:Entity; var bmp:Bitmap8 )
     let tx = floori((ry / rx + fov) * wallHeight - th / 2.)
     let ty = floori((pixelHeight - th) / 2.)
     var index = OBJ.spriteIndex
-    if OBJ.orientable
+    if OBJ.orientable && (OBJ.animation==null || OBJ.animation.orientable)
         index += (int(4. * atan2(orx,ory) / PI - float(OBJ.direction)) + 16) % 8
     drawSprite(tx, ty, th, rx, Sprites[index], bmp)
 

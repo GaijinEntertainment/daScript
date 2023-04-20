@@ -6,11 +6,17 @@ require sound_names
 require entities
 
 require daslib/algorithm
-require math
 require daslib/json_boost
+require daslib/random
+require math
 require fio
 
-var frame_time = 1.0
+var frame_time = 0.66
+
+let LEVEL_FADE_TIME = 1.
+let LEVEL_FADE_FACTOR = 1.0 / LEVEL_FADE_TIME / 60.
+
+let PAIN_SOUND_RADIUS = 10.
 
 let DOOR_SOUND_PLAYBACK_RATE = 18000
 let DOOR_SOUND_RADIUS = 10.0     // how far away door sound can be heard (in tiles)
@@ -23,20 +29,23 @@ struct Animation
     spriteIndex : int
     timer : float
     loop : bool
+    orientable : bool
 
-def Animation ( SPRITES:array<int>; LOOP:bool = false )
+def Animation ( SPRITES:array<int>; LOOP:bool=false; ORIENTABLE:bool=false )
     var self : Animation
     with self
         sprites := SPRITES
         spriteIndex = 0
         timer = 0.
         loop = LOOP
+        orientable = ORIENTABLE
     return <- self
 
 enum Category
     nothing
     prop
     enemy
+    deadBody
 
 struct public Entity
     category : Category
@@ -58,30 +67,42 @@ struct public EnemyClass
     enemyCategory : EnemyCategory
     spriteIndex : int
     deathSprites : array<int>
+    damageSprites : array<int>
     orientable : bool
+    hp : float
 
 let enemyClasses <- [[EnemyClass
 // guard
+    hp = 25.,
     spriteIndex = 50,
-    deathSprites <- [{auto 90; 91; 92; 93; 95}];
+    deathSprites <- [{auto 90; 91; 92; 93; 95}],
+    damageSprites <- [{auto 90; 94; 50}];
 // dog
+    hp = 1.,
     spriteIndex = 99,
-    deathSprites <- [{auto 131; 132; 133; 134}];
+    deathSprites <- [{auto 131; 132; 133; 134}],
+    damageSprites <- [{auto 131; 99}];
 // officer
+    hp = 50.,
     spriteIndex = 238,
-    deathSprites <- [{auto 279; 280; 281; 283; 284}];
+    deathSprites <- [{auto 279; 280; 281; 283; 284}],
+    damageSprites <- [{auto 279; 282; 238}];
 // ss
+    hp = 50.,
     spriteIndex = 138,
-    deathSprites <- [{auto 179; 180; 181; 183}];
+    deathSprites <- [{auto 179; 180; 181; 183}],
+    damageSprites <- [{auto 179; 182; 138}];
 // mutant
+    hp = 45.,
     spriteIndex = 187,
-    deathSprites <- [{auto 228; 229; 230; 232; 233}]
+    deathSprites <- [{auto 228; 229; 230; 232; 233}],
+    damageSprites <- [{auto 228; 231; 187}]
 ]]
 
 struct public Enemy : Entity
     enemyCategory : EnemyCategory
     patrolling : bool
-    alive : bool
+    health : float = 100.
 
 var public enemy_plane : Enemy[64*64]
 
@@ -89,8 +110,31 @@ def startAnimation ( var entity:Entity; ANIMATION:Animation? )
     entity.animation = ANIMATION
     entity.spriteIndex = entity.animation.sprites[0]
 
+var seed = random_seed(13)
+
+let random_take_damage_snd = [[SoundName
+    SoundName DEATHSCREAM1SND;
+    SoundName DEATHSCREAM2SND;
+    SoundName DEATHSCREAM3SND]]
+
+let random_death_snd = [[SoundName
+    SoundName DEATHSCREAM7SND;
+    SoundName DEATHSCREAM8SND;
+	SoundName DEATHSCREAM9SND]]
+
+def takeDamage ( var enemy:Enemy; X,Y:int; DAMAGE:float )
+    enemy.health -= DAMAGE
+    if enemy.health <= 0.
+        enemy.category = Category deadBody
+        die(enemy)
+        play_game_sound_2d(random_death_snd[ random_int(seed) % 3], float2(X,Y)+float2(0.5), PAIN_SOUND_RADIUS)
+    else
+        if enemy.animation == null
+            enemy |> startAnimation(new Animation(enemyClasses[int(enemy.enemyCategory)].damageSprites,false,false))
+        play_game_sound_2d(random_take_damage_snd[ random_int(seed) % 3], float2(X,Y)+float2(0.5), PAIN_SOUND_RADIUS)
+
 def die ( var enemy:Enemy)
-    enemy.alive = false
+    enemy.health = -100.0
     enemy.orientable = false
     enemy |> startAnimation(new Animation(enemyClasses[int(enemy.enemyCategory)].deathSprites))
 
@@ -103,11 +147,18 @@ def getPlayerRelativeCoordinates ( X,Y : int ) : tuple<rx:float;ry:float;orx:flo
     let ry = -orx * player.dy + ory * player.dx
     return [[auto rx,ry,orx,ory]]
 
+enum WeaponType
+    knife = 0
+    pistol = 1
+    machineGun = 2
+    chainGun = 3
+
 struct public Player
     x, y : float
     dx, dy : float
     silverKey : bool
     goldKey : bool
+    ammo : int = 8
     speed : float = 0.065
     speed_a : float = 0.05
     radius : float = 0.25
@@ -120,6 +171,22 @@ struct public Player
     turnAngle : float = 0.0
     weaponSprite : int = 421
     weaponAnimation : Animation?
+    weaponType : WeaponType = WeaponType pistol
+    hasWeapon : bool[4] = [[bool true; true; false; false ]]
+    weaponSounds : SoundName[4] = [[SoundName
+        SoundName ATKMACHINEGUNSND;
+        SoundName ATKPISTOLSND;
+        SoundName ATKMACHINEGUNSND;
+        SoundName ATKGATLINGSND]]
+    weaponFireRate : float[4] = [[float 2.5; 2.5; 7.1; 14.2]]
+    weaponDamage : float[4] = [[float 16.; 18.; 18.; 18.]]
+
+def switchWeapon ( var self:Player; WEAPON_TYPE:WeaponType )
+    with self
+        if !hasWeapon[int(WEAPON_TYPE)]
+            return
+        weaponType = WEAPON_TYPE
+        weaponSprite = 416 + int(weaponType) * 5
 
 def canMoveTo ( self:Player; X,Y:float )
     with self
@@ -179,6 +246,15 @@ def turn ( var self:Player; alpha:float )
 def update ( var self:Player )
     with self
         var changed = false
+        if weaponAnimation == null
+            if is_key_pressed(VK_1)
+                self |> switchWeapon(WeaponType knife)
+            elif is_key_pressed(VK_2)
+                self |> switchWeapon(WeaponType pistol)
+            elif is_key_pressed(VK_3)
+                self |> switchWeapon(WeaponType machineGun)
+            elif is_key_pressed(VK_4)
+                self |> switchWeapon(WeaponType chainGun)
         if is_key_pressed(VK_RIGHT)
             turnAngle += 1.
         if is_key_pressed(VK_LEFT)
@@ -208,12 +284,12 @@ def update ( var self:Player )
             changed = true
         if weaponAnimation != null
             assume a = weaponAnimation
-            a.timer += 1. / 6. * frame_time
+            a.timer += weaponFireRate[int(weaponType)] / 16. * frame_time
             if a.timer >= 1.
                 a.timer = 0.
                 if a.spriteIndex >= a.sprites |> length - 1
                     weaponAnimation = null
-                    weaponSprite = 421
+                    weaponSprite = 416 + int(weaponType) * 5
                 else
                     a.spriteIndex += 1
                     weaponSprite = a.sprites[a.spriteIndex]
@@ -225,25 +301,25 @@ def update ( var self:Player )
 def shoot ( var self:Player )
     with self
         if weaponAnimation == null
-            play_game_sound(SoundName ATKPISTOLSND)
-            weaponAnimation = new Animation([{int 422; 423; 424; 425}])
-            let d = zIndex[int(pixelWidth) / 2]
+            play_game_sound(weaponSounds[int(weaponType)])
+            weaponAnimation = new Animation([{for frame in range(4); frame+416+int(weaponType)*5}])
+            var d = zIndex[int(pixelWidth) / 2]
+            if weaponType == WeaponType knife
+                d = min(d,1.) // one meter?
             for Y in range(64)
                 for X in range(64)
                     let ofs = X + Y*64
                     if !visibility_plane[ofs]
                         continue
-                    if enemy_plane[ofs].category == Category nothing
+                    if enemy_plane[ofs].category != Category enemy
                         continue
                     var prc = getPlayerRelativeCoordinates(X, Y)
                     if prc.rx < 0.
                         continue
                     if prc.rx >= d
                         continue
-                    if abs(prc.ry) <= .3 && enemy_plane[ofs].alive
-                        // flash = new Flash(.5, 0, 0)
-                        enemy_plane[ofs] |> die()
-                        return
+                    if abs(prc.ry) <= .3
+                        enemy_plane[ofs] |> takeDamage(X,Y,weaponDamage[int(weaponType)])
 
 def isTooCloseToDoor(var self:Player; X,Y:int)
     with self
@@ -271,7 +347,7 @@ def activate ( var self:Player)
         let m1 = int(level.plane1[Y*64+X])
         if m0==21 && DX!=0
             // elevator
-            loadNextLevel()
+            switchLevel(levelIndex+1)
         elif m0>=90 && m0<=101
             // door
             if m0==92 || m0==93 && !goldKey
@@ -315,6 +391,11 @@ def activate ( var self:Player)
                 ]]
                 play_game_sound_2d(SoundName PUSHWALLSND, float2(X,Y)+float2(0.5), DOOR_SOUND_RADIUS)
 
+def clearKeys ( var self:Player )
+    with self
+        goldKey = false
+        silverKey = false
+
 var public player = Player()
 
 struct Timer
@@ -341,9 +422,37 @@ var wallHeight = float(pixelWidth) / (2. * fov)
 
 var public level : Level
 var public levelIndex = 0
+var public nextLevelIndex = 0
+var public levelFade = 1.
+var public dLevelFade = 0.
+
+def switchLevel ( index:int )
+    play_game_sound(SoundName LEVELDONESND)
+    levelFade = 1.
+    dLevelFade = - LEVEL_FADE_FACTOR
+    nextLevelIndex = index
+
+def updatePalette
+    if dLevelFade != 0.
+        var pal : uint[256]
+        for p,d in GamePalette, pal
+            d = pack_float_to_byte ( unpack_byte_to_float(p) * levelFade )
+        set_palette(pal)
+        levelFade += dLevelFade * frame_time
+        if dLevelFade > 0. && levelFade >= 1.
+            dLevelFade = 0.
+            levelFade = 1.
+        elif dLevelFade < 0. && levelFade <= 0.
+            if nextLevelIndex != levelIndex
+                levelIndex = nextLevelIndex
+                setupLevel(nextLevelIndex)
+                levelFade = 0.
+                dLevelFade = LEVEL_FADE_FACTOR
+    else
+        set_palette(GamePalette)
 
 def setupLevel ( index:int )
-    print("LOADING LEVEL {index}\n}")
+    to_log(LOG_INFO, "LOADING LEVEL {index}\n}")
     level := Levels[index]
     delete object_plane
     delete enemy_plane
@@ -351,7 +460,7 @@ def setupLevel ( index:int )
         b = false
     for t in timer_plane
         t.active = false
-    player = Player()
+    player |> clearKeys()
     for y in range(64)
         for x in range(64)
             // structual
@@ -410,13 +519,14 @@ def setupLevel ( index:int )
                 elif isPatrollingMutant(m1)
                     category = EnemyCategory mutant
                     patrolling = true
+                // to_log(LOG_INFO, "{x} {y} {m1} {category} {patrolling} {orientable}\n")
                 // todo: add bosses
                 enemy_plane[x + y * 64] = [[Enemy
                     category = Category enemy,
                     enemyCategory = category,
                     patrolling = patrolling,
                     spriteIndex = enemyClasses[int(category)].spriteIndex,
-                    alive = true,
+                    health = enemyClasses[int(category)].hp,
                     orientable = orientable,
                     direction = m1 & 3
                 ]]
@@ -445,10 +555,6 @@ def setupLevel ( index:int )
                     things |> push <| ghost
             */
 
-def loadNextLevel
-    levelIndex ++
-    setupLevel(levelIndex)
-
 def updateThings
     for enemy in enemy_plane
         if enemy.category == Category nothing
@@ -463,13 +569,14 @@ def updateThings
                         enemy.animation.spriteIndex = 0
                     else
                         // animation ended (delete?)
+                        enemy.spriteIndex = enemy.animation.sprites |> back
                         enemy.animation = null
                         return
                 else
                     enemy.animation.spriteIndex += 1
                 enemy.spriteIndex = enemy.animation.sprites[enemy.animation.spriteIndex]
 
-def updatetimer_plane
+def updateTimers
     for timer,index in timer_plane,count()
         if !timer.active
             continue
@@ -537,6 +644,13 @@ def updatePlayer
     // note: the section bellow is for debugging only. It allows to save and load player position
     if !ENABLE_CHEAT_CODEDS
         return
+    if is_key_pressed(VK_F1)
+        to_log(LOG_INFO, "player was given everything\n")
+        player.goldKey = true
+        player.silverKey = true
+        player.hasWeapon[int(WeaponType machineGun)] = true
+        player.hasWeapon[int(WeaponType chainGun)] = true
+        player.ammo = 199
     if is_key_pressed(VK_F2)
         fopen("{get_das_root()}/temp/player.json","wb") <| $ ( f )
             if f != null
@@ -559,42 +673,16 @@ def updatePlayer
                     player.dx = loc.dx
                     player.dy = loc.dy
                     to_log(LOG_INFO,"player at {player.x} {player.y} {player.dx} {player.dy}\n")
+
     if is_key_pressed(VK_F10)
-        loadNextLevel()
-
-
-/*
-    // update flashing palette
-    if (flash !== undefined) {
-        flash.timer += 1;
-        if (flash.timer <= flash.duration / 3) {
-            flashPalette(flash.red / 2, flash.green / 2, flash.blue / 2);
-        } else if (flash.timer <= 2 * flash.duration / 3) {
-            flashPalette(flash.red, flash.green, flash.blue);
-        } else if (flash.timer <= flash.duration) {
-            flashPalette(flash.red / 2, flash.green / 2, flash.blue / 2);
-        } else {
-            flashPalette(0, 0, 0);
-            flash = undefined
-        }
-    }
-
-    if (fps60) {
-        // run at 60fps
-        draw();
-    } else if (drawNextFrame = !drawNextFrame) {
-        // run at 30 fps
-        draw();
-    }
-
-    // call the function again on next frame
-    requestAnimationFrame(update);
-}
-*/
+        switchLevel(levelIndex+1)
 
 def public updateGame(dt:float)
     frame_time = dt / 16.0
+    updatePalette()
+    if dLevelFade != 0.
+        return
     updatePlayer()
-    updatetimer_plane()
+    updateTimers()
     updateThings()
 

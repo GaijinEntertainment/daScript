@@ -13,7 +13,8 @@ require math
 def main
     InitFiles()
     setupLevel(0)
-    set_palette(GamePalette)
+    levelFade = 0.
+    dLevelFade = LEVEL_FADE_FACTOR
     raster_app_main <| $ ( dt, backbuffer )
         updateGame(dt)
         draw(level, backbuffer)
