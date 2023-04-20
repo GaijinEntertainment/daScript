@@ -350,13 +350,14 @@ def huffman_expand ( src:array<uint8>#; length:int )
             node = node_value - 256
     return <- dst
 
-let PIC_COUNT = 132
+let PIC_COUNT = 140
 let PIC_STARTS = 3
 let PIC_ENDS = 134
 
 struct public Picture
     width, height : int
     texels : array<uint8>
+    data : array<uint8>
 
 var public Pictures : array<Picture>
 
@@ -372,12 +373,6 @@ def ExtractPic ( bytes:array<uint8>; magic_number:int )
         texels <- huffman_expand(view, expand_length)
     return <- texels
 
-/*
-int compose_woven(uint16_t width, uint16_t height, int i, int j) {
-	return (j*(width>>2)+(i>>2))+(i&3)*(width>>2)*height; // don't ask, I just copy-pasted this
-}
-*/
-
 def ExtractTexels ( bytes:array<uint8>; w,h:int )
     var texels : array<uint8>
     texels |> resize(w*h)
@@ -386,6 +381,14 @@ def ExtractTexels ( bytes:array<uint8>; w,h:int )
             let ofs = (y*(w>>2)+(x>>2))+(x&3)*(w>>2)*h
             let b = bytes[ofs]
             texels[y*w+x] = b
+    return <- texels
+
+def FlipTexels ( bytes:array<uint8>; w,h:int )
+    var texels : array<uint8>
+    texels |> resize(w*h)
+    for y in range(h)
+        for x in range(w)
+            texels[x*h+y] = bytes[x+y*w]
     return <- texels
 
 def InitPics
@@ -402,10 +405,10 @@ def InitPics
     for picture,i in Pictures,count()
         picture.width = int(exp_buf[4*i  ]) | int(exp_buf[4*i+1])
         picture.height = int(exp_buf[4*i+2]) | int(exp_buf[4*i+3])
-        var vtexels <- ExtractPic(bytes, i+PIC_STARTS)
-        picture.texels <- ExtractTexels(vtexels, picture.width, picture.height)
+        // if i==14 || i==17 || i==92 || i==93 || i==95
+        picture.texels <- ExtractPic(bytes, i+PIC_STARTS) |> ExtractTexels(picture.width,picture.height)
+        picture.data <- FlipTexels(picture.texels, picture.width, picture.height)
         // to_log(LOG_INFO,"pic {i} is {picture.width}x{picture.height}\n")
-    to_log(LOG_INFO,"Loaded VGAGRAPH.WL6")
     for i in range(PIC_ENDS, NUMBER_OF_PIC_CHUNKS-1)
         var cl = PicOffsets[i+1] - PicOffsets[i]
         var el = int(bytes |> getUInt32(PicOffsets[i]))
@@ -413,7 +416,9 @@ def InitPics
     for i in range(0,PIC_STARTS)
         var cl = PicOffsets[i+1] - PicOffsets[i]
         var el = int(bytes |> getUInt32(PicOffsets[i]))
-        to_log(LOG_INFO,"compressed length of pic chunk {i} is {cl} bytes, {el} bytes expanded\n")
+        // to_log(LOG_INFO,"compressed length of pic chunk {i} is {cl} bytes, {el} bytes expanded\n")
+    to_log(LOG_INFO,"total {PIC_COUNT} pictures\n")
+    to_log(LOG_INFO,"Loaded VGAGRAPH.WL6")
 
 def public InitFiles
     InitMapHead()

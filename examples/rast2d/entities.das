@@ -1,6 +1,6 @@
 module entities
 
-enum Collecitbles
+enum Collectible
     DogFood = 29
     KeySilver = 43
     KeyGold = 44
@@ -37,6 +37,12 @@ enum Props
     CallApogee = 63
     Stove = 68
     Spears = 69
+
+def isKey ( m1:int )
+    return m1==43 || m1==44
+
+def isHpRestore ( m1:int )
+    return m1==29 || m1==47 || m1==48
 
 def getEntityDirection(dm:int; var dx,dy:float& )
     if dm==0
@@ -136,26 +142,6 @@ def isBluePacManGhost(m1:int)
     return (m1==227)
 
 /*
-class public GuardEnemy : Enemy
-    def GuardEnemy(X,Y:int; DIRECTION:int)
-        Enemy`Enemy(self, X, Y, 50, [{auto 90; 91; 92; 93; 95}], true, DIRECTION)
-
-class public DogEnemy : Enemy
-    def DogEnemy(X,Y:int; DIRECTION:int)
-        Enemy`Enemy(self, X, Y, 99, [{auto 131; 132; 133; 134}], true, DIRECTION)
-
-class public SSEnemy : Enemy
-    def SSEnemy(X,Y:int; DIRECTION:int)
-        Enemy`Enemy(self, X, Y, 138, [{auto 179; 180; 181; 183}], true, DIRECTION)
-
-class public ZombieEnemy : Enemy
-    def ZombieEnemy(X,Y:int; DIRECTION:int)
-        Enemy`Enemy(self, X, Y, 187, [{auto 228; 229; 230; 232; 233}], true, DIRECTION)
-
-class public OfficerEnemy : Enemy
-    def OfficerEnemy(X,Y:int; DIRECTION:int)
-        Enemy`Enemy(self, X, Y, 238, [{auto 279; 280; 281; 283; 284}], true, DIRECTION)
-
 class public HansEnemy : Enemy
     def HansEnemy(X,Y:int)
         Enemy`Enemy(self, X, Y, 300, [{auto 304; 305; 306; 303}], true)

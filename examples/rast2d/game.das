@@ -24,6 +24,13 @@ let DOOR_OPEN_SPEED = 2.0        // how fast door opens (in tiles per second)
 let DOOR_CLOSE_SPPED = 2.0       // how fast door closes (in tiles per second)
 let DOOR_STAYS_CLOSED = 2.0      // how long door stays closed (in seconds)
 
+// hud
+
+var hudTime = 0.
+var playerHealth = 1.
+
+//
+
 struct Animation
     sprites : array<int>
     spriteIndex : int
@@ -156,6 +163,7 @@ enum WeaponType
 struct public Player
     x, y : float
     dx, dy : float
+    health : int = 50 // 100
     silverKey : bool
     goldKey : bool
     ammo : int = 8
@@ -230,9 +238,66 @@ def move ( var self:Player; length,sideways:float )
         let newx = floori(x)
         let newy = floori(y)
         if newx != oldx || newy != oldy
-            //player.collect(newx, newy)
-            // shouldDrawMap = true
-            pass
+            player |> collect(newx, newy)
+
+let treasureAudio = [[AudioName
+    AudioName BONUS1SND;
+    AudioName BONUS2SND;
+    AudioName BONUS3SND;
+    AudioName BONUS3SND]]
+
+def collect ( var self:Player; X,Y:int )
+    with self
+        if object_plane[Y*64+X].category == Category nothing
+            return
+        var m1 = int(level.plane1[Y*64+X])
+        if isCollectible(m1)
+            var col : Collectible
+            for c in each_enum(type<Collectible>)
+                if int(c)==m1
+                    col = c
+                    break
+            if isHpRestore(m1)
+                if health < 100
+                    object_plane[Y*64+X].category = Category nothing
+                    if col==Collectible DogFood
+                        health += 4
+                        play_game_sound(SoundName FART)
+                    elif col==Collectible Food
+                        play_game_audio(AudioName HEALTH1SND)
+                        health += 10
+                    elif col==Collectible Medkit
+                        play_game_audio(AudioName HEALTH2SND)
+                        health += 24
+                    health = min(health, 100)
+            elif col==Collectible LifeUp
+                health = 200
+                object_plane[Y*64+X].category = Category nothing
+                play_game_audio(AudioName BONUS1UPSND)
+            elif isKey(m1)
+                if col==Collectible KeySilver
+                    silverKey = true
+                elif col==Collectible KeyGold
+                    goldKey = true
+                object_plane[Y*64+X].category = Category nothing
+                play_game_audio(AudioName GETKEYSND)
+            elif col==Collectible AmmoClip
+                if ammo < 199
+                    object_plane[Y*64+X].category = Category nothing
+                    ammo = min(199,ammo+8)
+                    play_game_audio(AudioName GETAMMOSND)
+            elif isTreasure(m1)
+                object_plane[Y*64+X].category = Category nothing
+                play_game_audio(treasureAudio[m1-52])
+            elif col == Collectible MachineGun || col == Collectible Chaingun
+                let wep = (col==Collectible MachineGun) ? WeaponType machineGun : WeaponType chainGun
+                if !hasWeapon[int(wep)] || ammo<199
+                    object_plane[Y*64+X].category = Category nothing
+                    ammo = min(199,ammo+25)
+                    if !hasWeapon[int(wep)]
+                        play_game_audio((col==Collectible MachineGun) ? AudioName GETMACHINESND : AudioName GETGATLINGSND)
+                        hasWeapon[int(wep)] = true
+                        self |> switchWeapon(wep)
 
 def turn ( var self:Player; alpha:float )
     with self
@@ -301,7 +366,13 @@ def update ( var self:Player )
 def shoot ( var self:Player )
     with self
         if weaponAnimation == null
-            play_game_sound(weaponSounds[int(weaponType)])
+            if weaponType!=WeaponType knife && ammo==0
+                return
+            if weaponType == WeaponType knife
+                play_game_audio(AudioName ATKKNIFESND)
+            else
+                ammo --
+                play_game_sound(weaponSounds[int(weaponType)])
             weaponAnimation = new Animation([{for frame in range(4); frame+416+int(weaponType)*5}])
             var d = zIndex[int(pixelWidth) / 2]
             if weaponType == WeaponType knife
@@ -389,7 +460,7 @@ def activate ( var self:Player)
                     t = 0.5,
                     active = true
                 ]]
-                play_game_sound_2d(SoundName PUSHWALLSND, float2(X,Y)+float2(0.5), DOOR_SOUND_RADIUS)
+                play_game_audio_2d(AudioName DONOTHINGSND, float2(X,Y)+float2(0.5), DOOR_SOUND_RADIUS)
 
 def clearKeys ( var self:Player )
     with self
@@ -641,6 +712,11 @@ var ENABLE_CHEAT_CODEDS = true
 
 def updatePlayer
     player |> update()
+    // update hud
+    hudTime += 1./60./10. * frame_time
+    if hudTime > 1.
+        hudTime -= 1.
+    playerHealth = clamp(float(player.health) / 100., 0., 1.0)
     // note: the section bellow is for debugging only. It allows to save and load player position
     if !ENABLE_CHEAT_CODEDS
         return

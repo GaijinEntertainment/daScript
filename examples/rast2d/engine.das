@@ -342,6 +342,32 @@ def drawSprite ( x,y: int; h:float; dist:float; sprite:SpriteTexture; var bmp:Bi
                         pixelOffset += endRow - startRow
             uvX += dUVX
 
+def draw2DElement ( x,y,w,h:int; var pic:Picture; var bmp:Bitmap8 )
+    unsafe
+        var u = 0.
+        let du = 1. / float(w+1)
+        let dv = 1. / float(h+1)
+        var pspan = addr(bmp.data[y])
+        let count = h & 3
+        let count4 = h >> 2
+        var V4 = float4(0.,1.,2.,3.) * float4(dv)  * float(pic.height)
+        var dv4 = float4(dv) * 4. * float(pic.height)
+        var DV = dv * float(pic.height)
+        for X in range(x,x+w)
+            let px = floori(u * float(pic.width))
+            var PSP = pspan + X*bmp.size.y
+            var tspan = addr(pic.data[px*pic.height])
+            var v4 = V4
+            for P in range(count4)
+                u8x4_gather_store(PSP,tspan,int4(v4))
+                PSP += 4
+                v4 += dv4
+            var v = v4.x
+            for P in range(count)
+                PSP[P] = tspan[floori(v)]
+                v += DV
+            u += du
+
 def drawBackground ( var bmp:Bitmap8 )
     let h = bmp.size.y / 2
     unsafe
@@ -359,8 +385,43 @@ def drawWeapon ( var bmp:Bitmap8 )
             Sprites[player.weaponSprite],
             bmp)
 
+var hudFactor = 1.
+
+def drawHUDElement(x,y,w,h:int; var pic:Picture; var bmp:Bitmap8 )
+    var minx = max(floori(float(x)*hudFactor), 0)
+    var maxx = min(floori(float(x+w)*hudFactor), bmp.size.x)
+    var miny = max(floori(float(y)*hudFactor), 0)
+    var maxy = min(floori(float(y+h)*hudFactor), bmp.size.y)
+    if minx>maxx || miny>maxy
+        return
+    draw2DElement(minx,miny,maxx-minx,maxy-miny,pic,bmp)
+
+def drawHUDNum(x,y:int; num:int; var bmp:Bitmap8 )
+    let txt = "{num}"
+    for Ch,i in txt,count()
+        drawHUDElement(x+i*8,y,8,16,Pictures[Ch-'0'+105],bmp)
+
+def drawHUD ( var bmp:Bitmap8 )
+    // health head (24x32)
+    var frame = 0
+    if playerHealth <= 0.
+        frame = 136  // dead
+    elif playerHealth > 1.
+        frame = 137 // >100%
+    else
+        let hpIndex = floori(6.*clamp(1.-playerHealth,0.,1.))
+        frame = floori(hudTime * 3.) + hpIndex*3 + 115
+    drawHUDElement(1,200-33,24,32,Pictures[frame],bmp)
+    // gold and silver keys (8x16)
+    if player.goldKey
+        drawHUDElement(1+24,200-33,8,16,Pictures[102],bmp)
+    if player.silverKey
+        drawHUDElement(1+24+8,200-33,8,16,Pictures[103],bmp)
+    // ammo
+    drawHUDNum(1+24,200-17,player.ammo,bmp)
 
 def public draw ( level:Level; var bmp:Bitmap8 )
+    hudFactor = max(float(bmp.size.y)/200.,1.)
     pixelWidth = float(bmp.size.x)
     pixelHeight = float(bmp.size.y)
     wallHeight = float(pixelWidth) / (2. * fov)
@@ -370,5 +431,9 @@ def public draw ( level:Level; var bmp:Bitmap8 )
     drawBackground(bmp)
     drawWalls(level, bmp)
     drawThings(bmp)
-    drawWeapon(bmp)
+    if dLevelFade == 0.
+        drawWeapon(bmp)
+        drawHUD(bmp)
+
+
 
