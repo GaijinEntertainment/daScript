@@ -2256,10 +2256,12 @@ structure_declaration
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeStructure(tak);
         }
     } structure_name[ps] { if ( $ps ) { $ps->isClass = $loc; $ps->privateStructure = !$pub_str; } } '{' struct_variable_declaration_list[list] '}' {
-        ast_structureDeclaration ( scanner, $annL, tokAt(scanner,@loc), $ps, tokAt(scanner,@ps), $list );
-        if ( !yyextra->g_CommentReaders.empty() ) {
-            auto tak = tokAt(scanner,@loc);
-            for ( auto & crd : yyextra->g_CommentReaders ) crd->afterStructure($ps,tak);
+        if ( $ps ) {
+            ast_structureDeclaration ( scanner, $annL, tokAt(scanner,@loc), $ps, tokAt(scanner,@ps), $list );
+            if ( !yyextra->g_CommentReaders.empty() ) {
+                auto tak = tokAt(scanner,@loc);
+                for ( auto & crd : yyextra->g_CommentReaders ) crd->afterStructure($ps,tak);
+            }
         }
     }
     ;
