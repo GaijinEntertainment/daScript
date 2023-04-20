@@ -1,6 +1,6 @@
 options persistent_heap
 
-require llvm/llvm_jit
+// require llvm/llvm_jit
 
 require app
 require files

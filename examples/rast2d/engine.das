@@ -8,12 +8,6 @@ require math
 
 let HINT_SECRET_WALLS = false
 
-var fov = 1.
-var pixelWidth = 320.
-var pixelHeight = 200.
-
-var zIndex : array<float>
-
 [jit,hint(unsafe_range_check,noalias=level,noalias=bmp)]
 def drawWalls ( level:Level; var bmp:Bitmap8 )
     for i in range(bmp.size.x)
@@ -52,6 +46,7 @@ def drawWalls ( level:Level; var bmp:Bitmap8 )
         var textureIndex : int
         // ray casting loop
         while true
+            visibility_plane[cx+cy*64] = true
             m0 = int(level.plane0[cx+cy*64])
             if m0 <= 63
                 // hit a wall
@@ -60,7 +55,7 @@ def drawWalls ( level:Level; var bmp:Bitmap8 )
                 if m1 == 98
                     isPushwall = true
                     // pushwall
-                    assume timer = timers[cx+cy*64]
+                    assume timer = timer_plane[cx+cy*64]
                     if timer.active
                         wallShift = timer.t
                         if timer.dx != 0
@@ -114,10 +109,10 @@ def drawWalls ( level:Level; var bmp:Bitmap8 )
             elif m0 <= 101
                 // hit a door
                 var doorShfit = 0.
-                assume timer = timers[cx+cy*64]
+                assume timer = timer_plane[cx+cy*64]
                 if timer.active
                     doorShfit = timer.t
-                if m0 % 2 == 0
+                if (m0 & 1) == 0
                     // NS door
                     if rfx >= .5 && (rfx - .5) * dy < rfy * dx
                         // ray hits the central door line
@@ -218,7 +213,6 @@ def drawWalls ( level:Level; var bmp:Bitmap8 )
 
 [jit,hint(unsafe_range_check,noalias=tex,noalias=bmp)]
 def drawWallPixels ( i:int; t,tx:float; tex:WallTexture; var bmp:Bitmap8 )
-    let wallHeight = float(pixelWidth) / (2. * fov)
     var h = wallHeight / (2. * t)
     let y = floori(pixelHeight / 2. - h)
     let ymin = max(0, y)
@@ -247,24 +241,59 @@ def drawWallPixels ( i:int; t,tx:float; tex:WallTexture; var bmp:Bitmap8 )
             uvY += dUVY
         // memset8(PSP+count,25u8,bmp.size.y - ymax - 1)
 
-// TODO: missing atan2 for jit
-// [jit,hint(unsafe_range_check,noalias=bmp)]
+[jit,hint(unsafe_range_check,noalias=bmp)]
 def drawThings ( var bmp:Bitmap8 )
-    let wallHeight = float(pixelWidth) / (2. * fov)
-    for t in things
-        if t.rx < player.radius
-            // thing is behind the screen
-            continue
-        elif abs(t.ry) > t.rx + 1.
-            // thing is out of field of view
-            continue
-        let th = wallHeight / t.rx
-        let tx = floori((t.ry / t.rx + fov) * wallHeight - th / 2.)
-        let ty = floori((pixelHeight - th) / 2.)
-        var index = t.spriteIndex
-        if t.orientable
-            index += (int(4. * atan2(t.x - player.x, t.y - player.y) / PI - float(t.direction)) + 16) % 8
-        drawSprite(tx, ty, th, t.rx, Sprites[index], bmp)
+    let dir = float2(player.dx,player.dy)
+    var M11 = 0
+    var M21 = 0
+    var M12 = 0
+    var M22 = 0
+    var StartX = 0
+    var StartY = 0
+    if abs(dir.x) >= abs(dir.y)
+        M21 = dir.x > 0. ? -1 : 1
+        M12 = dir.y > 0. ? -1 : 1
+    else
+        M11 = dir.x > 0. ? -1 : 1
+        M22 = dir.y > 0. ? -1 : 1
+    if M11 < 0 || M21 < 0
+        StartX = 63
+    if M12 < 0 || M22 < 0
+        StartY = 63
+    for MY in range(0, 64)
+        for MX in range(0, 64)
+            var X = MX * M11 + MY * M21 + StartX
+            var Y = MX * M12 + MY * M22 + StartY
+            let ofs = Y * 64 + X
+            if !visibility_plane[ofs]
+                continue
+            if object_plane[ofs].category==Category nothing && enemy_plane[ofs].category==Category nothing
+                continue
+            // player relative coordinates
+            let prc = getPlayerRelativeCoordinates(X,Y)
+            // extra clipping
+            if prc.rx < player.radius
+                // thing is behind the screen
+                continue
+            elif abs(prc.ry) > prc.rx + 1.
+                // thing is out of field of view
+                continue
+            if object_plane[ofs].category != Category nothing
+                drawThing(prc.rx,prc.ry,prc.orx,prc.ory,object_plane[ofs],bmp)
+            if enemy_plane[ofs].category != Category nothing
+                drawThing(prc.rx,prc.ry,prc.orx,prc.ory,enemy_plane[ofs],bmp)
+
+// [jit,hint(unsafe_range_check,noalias=OBJ,noalias=bmp)]
+// TODO: atan2
+def drawThing(rx,ry,orx,ory:float; OBJ:Entity; var bmp:Bitmap8 )
+    // draw
+    let th = wallHeight / rx
+    let tx = floori((ry / rx + fov) * wallHeight - th / 2.)
+    let ty = floori((pixelHeight - th) / 2.)
+    var index = OBJ.spriteIndex
+    if OBJ.orientable
+        index += (int(4. * atan2(orx,ory) / PI - float(OBJ.direction)) + 16) % 8
+    drawSprite(tx, ty, th, rx, Sprites[index], bmp)
 
 [jit,hint(unsafe_range_check,noalias=tex,noalias=bmp)]
 def drawSprite ( x,y: int; h:float; dist:float; sprite:SpriteTexture; var bmp:Bitmap8 )
@@ -334,7 +363,10 @@ def drawWeapon ( var bmp:Bitmap8 )
 def public draw ( level:Level; var bmp:Bitmap8 )
     pixelWidth = float(bmp.size.x)
     pixelHeight = float(bmp.size.y)
+    wallHeight = float(pixelWidth) / (2. * fov)
     zIndex |> resize(bmp.size.x)
+    for v in visibility_plane
+        v = false
     drawBackground(bmp)
     drawWalls(level, bmp)
     drawThings(bmp)

@@ -112,6 +112,15 @@ let public VK_A = GLFW_KEY_A
 let public VK_D = GLFW_KEY_D
 let public VK_F2 = GLFW_KEY_F2
 let public VK_F3 = GLFW_KEY_F3
+let public VK_F4 = GLFW_KEY_F4
+let public VK_F5 = GLFW_KEY_F5
+let public VK_F6 = GLFW_KEY_F6
+let public VK_F7 = GLFW_KEY_F7
+let public VK_F8 = GLFW_KEY_F8
+let public VK_F9 = GLFW_KEY_F9
+let public VK_F10 = GLFW_KEY_F10
+let public VK_F11 = GLFW_KEY_F11
+let public VK_F12 = GLFW_KEY_F12
 
 def public is_key_pressed ( key:int )
     return glfwGetKey(window, key)!=0

@@ -3,6 +3,7 @@ module game
 require files
 require app
 require sound_names
+require entities
 
 require daslib/algorithm
 require math
@@ -17,150 +18,92 @@ let DOOR_OPEN_SPEED = 2.0        // how fast door opens (in tiles per second)
 let DOOR_CLOSE_SPPED = 2.0       // how fast door closes (in tiles per second)
 let DOOR_STAYS_CLOSED = 2.0      // how long door stays closed (in seconds)
 
-struct public Score
-    kills : int
-    totalKills : int
-    treasures : int
-    totalTreasures : int
-    secrets : int
-    totalSecrets : int
-
-var public score : Score
-
-def updateScore
-    pass
-
-class public Animation
+struct Animation
     sprites : array<int>
     spriteIndex : int
     timer : float
     loop : bool
 
-    def Animation ( SPRITES:array<int>; LOOP:bool = false )
+def Animation ( SPRITES:array<int>; LOOP:bool = false )
+    var self : Animation
+    with self
         sprites := SPRITES
         spriteIndex = 0
         timer = 0.
         loop = LOOP
+    return <- self
 
 enum Category
-    anything
+    nothing
+    prop
     enemy
 
-class public Thing
+struct public Entity
     category : Category
-    x, y : float                // starting x,y-coordinate on map
-    rx, ry : float              // relative to player x,y-coordinate on map
     spriteIndex : int
-    collectible : bool          // can be picked up
-    orientable : bool           // different sprites based on orientation
-    blocking : bool             // blocks movement
-    animation : Animation?      // sprite animation ar regular intervals
-    direction : int
+    animation   : Animation?
+    direction   : int
+    orientable  : bool
 
-    def Thing(X,Y:int; SPRITEINDEX:int; COLLECTIBLE:bool = false; ORIENTABLE:bool = false; BLOCKING:bool = false)
-        x = float(X) + 0.5
-        y = float(Y) + 0.5
-        spriteIndex = SPRITEINDEX
-        collectible = COLLECTIBLE
-        orientable = ORIENTABLE
-        blocking = BLOCKING
-        category = Category anything
+var public object_plane : Entity[64*64]
 
-    def startAnimation ( ANIMATION:Animation? )
-        animation = ANIMATION
-        spriteIndex = animation.sprites[0]
+enum EnemyCategory
+    guard
+    dog
+    officer
+    ss
+    mutant
 
-    def update
-        rx = x - player.x
-        ry = y - player.y
-        let RX = rx * player.dx + ry * player.dy
-        ry = -rx * player.dy + ry * player.dx
-        rx = RX
-        if animation != null
-            animation.timer += 1. / 6. * frame_time
-            if animation.timer >= 1.0
-                animation.timer = 0.
-                if animation.spriteIndex >= animation.sprites |> length - 1
-                    if animation.loop
-                        // animation loops
-                        animation.spriteIndex = 0
-                    else
-                        // animation ended (delete?)
-                        animation = null
-                        return
-                else
-                    animation.spriteIndex += 1
-                spriteIndex = animation.sprites[animation.spriteIndex]
+struct public EnemyClass
+    enemyCategory : EnemyCategory
+    spriteIndex : int
+    deathSprites : array<int>
+    orientable : bool
 
-var things : array<Thing?>
+let enemyClasses <- [[EnemyClass
+// guard
+    spriteIndex = 50,
+    deathSprites <- [{auto 90; 91; 92; 93; 95}];
+// dog
+    spriteIndex = 99,
+    deathSprites <- [{auto 131; 132; 133; 134}];
+// officer
+    spriteIndex = 238,
+    deathSprites <- [{auto 279; 280; 281; 283; 284}];
+// ss
+    spriteIndex = 138,
+    deathSprites <- [{auto 179; 180; 181; 183}];
+// mutant
+    spriteIndex = 187,
+    deathSprites <- [{auto 228; 229; 230; 232; 233}]
+]]
 
-class public Enemy : Thing
-    deathSprites : array<int>   // sprites to show when enemy dies
+struct public Enemy : Entity
+    enemyCategory : EnemyCategory
+    patrolling : bool
     alive : bool
 
-    def Enemy ( X,Y:int; SPRITEINDEX:int; var DEATHSPRITES:array<int>; ORIENTABLE:bool = false; DIRECTION:int = 0 )
-        Thing`Thing(self,X,Y,SPRITEINDEX,false,ORIENTABLE)
-        deathSprites <- DEATHSPRITES
-        direction = DIRECTION
-        alive = true
-        score.totalKills ++
-        category = Category enemy
+var public enemy_plane : Enemy[64*64]
 
-    def die
-        alive = false
-        orientable = false
-        startAnimation(new Animation(deathSprites))
-        score.kills ++
+def startAnimation ( var entity:Entity; ANIMATION:Animation? )
+    entity.animation = ANIMATION
+    entity.spriteIndex = entity.animation.sprites[0]
 
-class public GuardEnemy : Enemy
-    def GuardEnemy(X,Y:int; DIRECTION:int)
-        Enemy`Enemy(self, X, Y, 50, [{auto 90; 91; 92; 93; 95}], true, DIRECTION)
+def die ( var enemy:Enemy)
+    enemy.alive = false
+    enemy.orientable = false
+    enemy |> startAnimation(new Animation(enemyClasses[int(enemy.enemyCategory)].deathSprites))
 
-class public DogEnemy : Enemy
-    def DogEnemy(X,Y:int; DIRECTION:int)
-        Enemy`Enemy(self, X, Y, 99, [{auto 131; 132; 133; 134}], true, DIRECTION)
+def getPlayerRelativeCoordinates ( X,Y : int ) : tuple<rx:float;ry:float;orx:float;ory:float>
+    let ox = float(X) + 0.5
+    let oy = float(Y) + 0.5
+    let orx = ox - player.x
+    let ory = oy - player.y
+    let rx =  orx * player.dx + ory * player.dy
+    let ry = -orx * player.dy + ory * player.dx
+    return [[auto rx,ry,orx,ory]]
 
-class public SSEnemy : Enemy
-    def SSEnemy(X,Y:int; DIRECTION:int)
-        Enemy`Enemy(self, X, Y, 138, [{auto 179; 180; 181; 183}], true, DIRECTION)
-
-class public ZombieEnemy : Enemy
-    def ZombieEnemy(X,Y:int; DIRECTION:int)
-        Enemy`Enemy(self, X, Y, 187, [{auto 228; 229; 230; 232; 233}], true, DIRECTION)
-
-class public OfficerEnemy : Enemy
-    def OfficerEnemy(X,Y:int; DIRECTION:int)
-        Enemy`Enemy(self, X, Y, 238, [{auto 279; 280; 281; 283; 284}], true, DIRECTION)
-
-class public HansEnemy : Enemy
-    def HansEnemy(X,Y:int)
-        Enemy`Enemy(self, X, Y, 300, [{auto 304; 305; 306; 303}], true)
-
-class public SchabbsEnemy : Enemy
-    def SchabbsEnemy(X,Y:int)
-        Enemy`Enemy(self, X, Y, 312, [{auto 313; 314; 315; 316}], true)
-
-class public FakeHitlerEnemy : Enemy
-    def FakeHitlerEnemy(X,Y:int)
-        Enemy`Enemy(self, X, Y, 321, [{auto 328; 329; 330; 331; 332; 333}], true)
-
-class public HitlerEnemy : Enemy
-    def HitlerEnemy(X,Y:int)
-        Enemy`Enemy(self, X, Y, 349, [{auto 353; 354; 355; 356; 357; 358; 359; 352}], true)
-
-class public OttoEnemy : Enemy
-    def OttoEnemy(X,Y:int)
-        Enemy`Enemy(self, X, Y, 364, [{auto 366; 367; 368; 369}], true)
-
-class public GretelEnemy : Enemy
-    def GretelEnemy(X,Y:int)
-        Enemy`Enemy(self, X, Y, 389, [{auto 393; 394; 395; 392}], true)
-
-class public FettgesichtEnemy : Enemy
-    def FettgesichtEnemy(X,Y:int)
-        Enemy`Enemy(self, X, Y, 400, [{auto 404; 405; 406; 407}], true)
-
-class public Player
+struct public Player
     x, y : float
     dx, dy : float
     silverKey : bool
@@ -178,42 +121,44 @@ class public Player
     weaponSprite : int = 421
     weaponAnimation : Animation?
 
-    def canMoveTo ( X,Y:float )
+def canMoveTo ( self:Player; X,Y:float )
+    with self
         let r = radius
         let fx = X % 1.
         let ix = floori(X)
         let fy = Y % 1.
         let iy = floori(Y)
-        if plane2[iy*64+ix]
+        if collision_plane[iy*64+ix]
             return false
         if fx < r
-            if plane2[iy*64+ix-1]
+            if collision_plane[iy*64+ix-1]
                 return false
-            if fy < r && plane2[(iy-1)*64+ix-1]
+            if fy < r && collision_plane[(iy-1)*64+ix-1]
                 return false
-            if fy > 1.-r && plane2[(iy+1)*64+ix-1]
+            if fy > 1.-r && collision_plane[(iy+1)*64+ix-1]
                 return false
         if fx > 1.-r
-            if plane2[iy*64+ix+1]
+            if collision_plane[iy*64+ix+1]
                 return false
-            if fy < r && plane2[(iy-1)*64+ix+1]
+            if fy < r && collision_plane[(iy-1)*64+ix+1]
                 return false
-            if fy > 1.-r && plane2[(iy+1)*64+ix+1]
+            if fy > 1.-r && collision_plane[(iy+1)*64+ix+1]
                 return false
-        if fy < r && plane2[(iy-1)*64+ix]
+        if fy < r && collision_plane[(iy-1)*64+ix]
             return false
-        if fy > 1.-r && plane2[(iy+1)*64+ix]
+        if fy > 1.-r && collision_plane[(iy+1)*64+ix]
             return false
         return true
 
-    def move ( length,sideways:float )
+def move ( var self:Player; length,sideways:float )
+    with self
         let oldx = floori(x)
         let oldy = floori(y)
         let X = x + dx * length - dy * sideways
         let Y = y + dy * length + dx * sideways
-        if canMoveTo(X, y)
+        if self |> canMoveTo(X, y)
             x = X
-        if canMoveTo(x, Y)
+        if self |> canMoveTo(x, Y)
             y = Y
         let newx = floori(x)
         let newy = floori(y)
@@ -222,19 +167,24 @@ class public Player
             // shouldDrawMap = true
             pass
 
-    def turn ( alpha:float )
+def turn ( var self:Player; alpha:float )
+    with self
         let DX = dx * cos(alpha) - dy * sin(alpha)
         dy = dx * sin(alpha) + dy * cos(alpha)
         dx = DX
+        let len = sqrt(dx*dx + dy*dy)
+        dx /= len
+        dy /= len
 
-    def update
+def update ( var self:Player )
+    with self
         var changed = false
         if is_key_pressed(VK_RIGHT)
             turnAngle += 1.
         if is_key_pressed(VK_LEFT)
             turnAngle -= 1.
         if turnAngle != 0.
-            turn(turnAngle * speed_a * frame_time)
+            self |> turn(turnAngle * speed_a * frame_time)
             turnAngle = 0.
             changed = true
         var forward = 0.
@@ -249,12 +199,12 @@ class public Player
             sideways += speed
         if forward != 0.
             if sideways != 0.
-                move(frame_time * forward / sqrt(2.), frame_time * sideways / sqrt(2.))
+                self |> move(frame_time * forward / sqrt(2.), frame_time * sideways / sqrt(2.))
             else
-                move(frame_time * forward, 0.)
+                self |> move(frame_time * forward, 0.)
             changed = true
         elif sideways != 0.
-            move(0., frame_time * sideways)
+            self |> move(0., frame_time * sideways)
             changed = true
         if weaponAnimation != null
             assume a = weaponAnimation
@@ -267,29 +217,36 @@ class public Player
                 else
                     a.spriteIndex += 1
                     weaponSprite = a.sprites[a.spriteIndex]
+        if is_key_pressed(VK_SPACE)
+            player |> activate()
+        if is_key_pressed(VK_LCONTROL) || is_key_pressed(VK_RCONTROL)
+            player |> shoot()
 
-    def shoot
+def shoot ( var self:Player )
+    with self
         if weaponAnimation == null
             play_game_sound(SoundName ATKPISTOLSND)
             weaponAnimation = new Animation([{int 422; 423; 424; 425}])
-            let d = 100500. // zIndex[int(pixelWidth) / 2]
-            let tl = things |> length
-            for I in range(tl)
-                let i = tl - I - 1
-                var T = things[i]
-                if T.category != Category enemy
-                    continue
-                var t = unsafe(upcast<Enemy?> T)   // TODO: how to do this legally?
-                if t.rx < 0.
-                    continue
-                if t.rx >= d
-                    break
-                if abs(t.ry) <= .3 && t.alive
-                    // flash = new Flash(.5, 0, 0)
-                    t->die()
-                    return
+            let d = zIndex[int(pixelWidth) / 2]
+            for Y in range(64)
+                for X in range(64)
+                    let ofs = X + Y*64
+                    if !visibility_plane[ofs]
+                        continue
+                    if enemy_plane[ofs].category == Category nothing
+                        continue
+                    var prc = getPlayerRelativeCoordinates(X, Y)
+                    if prc.rx < 0.
+                        continue
+                    if prc.rx >= d
+                        continue
+                    if abs(prc.ry) <= .3 && enemy_plane[ofs].alive
+                        // flash = new Flash(.5, 0, 0)
+                        enemy_plane[ofs] |> die()
+                        return
 
-    def isTooCloseToDoor(X,Y:int)
+def isTooCloseToDoor(var self:Player; X,Y:int)
+    with self
         let ix = floori(x)
         let iy = floori(y)
         if (X==ix) && (Y==iy)
@@ -298,7 +255,8 @@ class public Player
             return true
         return false
 
-    def activate
+def activate ( var self:Player)
+    with self
         var X = floori(x)
         var Y = floori(y)
         var DX = 0
@@ -324,7 +282,7 @@ class public Player
                 // silver-locked door
                 print("silver-locked door\n")
                 return
-            assume timer = timers[Y*64+X]
+            assume timer = timer_plane[Y*64+X]
             if !timer.active
                 timer = [[Timer
                     t = 0.,
@@ -335,7 +293,7 @@ class public Player
                 play_game_sound_2d(SoundName OPENDOORSND, float2(X,Y)+float2(0.5), DOOR_SOUND_RADIUS, DOOR_SOUND_PLAYBACK_RATE)
         elif m1 == 98
             // pushwall
-            assume timer = timers[Y*64+X]
+            assume timer = timer_plane[Y*64+X]
             if !timer.active && int(level.plane0[(Y+DY)*64+X+DX]) >= 106
                 // there is no active timer for this wall, and it can move backwards
                 timer = [[Timer
@@ -347,11 +305,9 @@ class public Player
                     active = true,
                     isWall = true
                 ]]
-                score.secrets += 1
-                updateScore()
                 play_game_sound_2d(SoundName OPENDOORSND, float2(X,Y)+float2(0.5), DOOR_SOUND_RADIUS)
         else
-            assume timer = timers[Y*64+X]
+            assume timer = timer_plane[Y*64+X]
             if !timer.active
                 timer = [[Timer
                     t = 0.5,
@@ -359,7 +315,7 @@ class public Player
                 ]]
                 play_game_sound_2d(SoundName PUSHWALLSND, float2(X,Y)+float2(0.5), DOOR_SOUND_RADIUS)
 
-var public player = new Player()
+var public player = Player()
 
 struct Timer
     t : float
@@ -370,90 +326,103 @@ struct Timer
     isDoor : bool
     isWall : bool
 
-var timers : Timer[64*64]
+var timer_plane : Timer[64*64]
 
-var plane2 : bool[64*64]
+var collision_plane : bool[64*64]
+
+var visibility_plane : bool[64*64]
+
+var public zIndex : array<float>
+
+var fov = 1.
+var pixelWidth = 320.
+var pixelHeight = 200.
+var wallHeight = float(pixelWidth) / (2. * fov)
 
 var public level : Level
+var public levelIndex = 0
 
 def setupLevel ( index:int )
+    print("LOADING LEVEL {index}\n}")
     level := Levels[index]
-    // things = []
-    for t in timers
+    delete object_plane
+    delete enemy_plane
+    for b in collision_plane
+        b = false
+    for t in timer_plane
         t.active = false
-    player = new Player()
-    score = Score()
-    things |> clear
+    player = Player()
     for y in range(64)
         for x in range(64)
             // structual
             let m0 = int(level.plane0[x + y * 64])
             if m0 <= 63
                 // wall
-                plane2[x + y * 64] = true
+                collision_plane[x + y * 64] = true
             elif 90 <= m0 && m0 <= 101
                 // door
-                plane2[x + y * 64] = true
+                collision_plane[x + y * 64] = true
             // entities
             let m1 = int(level.plane1[x + y * 64])
-            if m1>=19 && m1<=22
+            if isPlayer(m1)
                 // player
                 player.x = float(x) + 0.5
                 player.y = float(y) + 0.5
-                if m1==19
-                    player.dx = 0.
-                    player.dy = -1.
-                elif m1==20
-                    player.dx = 1.
-                    player.dy = 0.
-                elif m1==21
-                    player.dx = 0.
-                    player.dy = 1.
-                elif m1==22
-                    player.dx = -1.
-                    player.dy = 0.
-            elif m1>=23 && m1<=70
-                // props
-                var collectible = false
-                if [{auto 29; 43; 44; 47; 48; 49; 50; 51; 52; 53; 54; 55; 56}] |> find_index(m1) >=0
-                    // collectible
-                    collectible = true
-                    if m1>=52 && m1<=56
-                        score.totalTreasures += 1
-                if [{auto 24; 25; 26; 28; 30; 31; 33; 34; 35; 36; 39; 40; 41; 45; 58; 59; 60; 62; 63; 68; 69}] |> find_index(m1) >=0
-                    // blocking prop
-                    things |> push <| new Thing(x,y,m1-21,collectible,false,true)
-                    plane2[x + y * 64] = true
-                else
-                    things |> push <| new Thing(x,y,m1-21,collectible,false,false)
-            elif m1==98
+                getEntityDirection(m1-19,player.dx,player.dy)
+            elif isProp(m1)
+                object_plane[x + y * 64] = [[Entity
+                    category = Category prop,
+                    spriteIndex = m1-21
+                ]]
+                if isBlocking(m1)
+                    collision_plane[x + y * 64] = true
+            elif isPushWall(m1)
+                pass
                 // pushwall
-                score.totalSecrets ++
-            elif m1==124
+                // score.totalSecrets ++
+            elif isDeadGuard(m1)
                 // dead guard
-                things |> push <| new Thing(x,y,95)
+                object_plane[x + y * 64] = [[Entity
+                    category = Category prop,
+                    spriteIndex = 95
+                ]]
+            elif isEnemy(m1)
+                var category : EnemyCategory
+                var patrolling = false
+                var orientable = true
+                if isStandingGuard(m1)
+                    category = EnemyCategory guard
+                elif isPatrollingGuard(m1)
+                    category = EnemyCategory guard
+                    patrolling = true
+                elif isStandingDog(m1)
+                    category = EnemyCategory dog
+                elif isPatrollingDog(m1)
+                    category = EnemyCategory dog
+                    patrolling = true
+                elif isStandingSS(m1)
+                    category = EnemyCategory ss
+                elif isPatrollingSS(m1)
+                    category = EnemyCategory ss
+                    patrolling = true
+                elif isStandingMutant(m1)
+                    category = EnemyCategory mutant
+                elif isPatrollingMutant(m1)
+                    category = EnemyCategory mutant
+                    patrolling = true
+                // todo: add bosses
+                enemy_plane[x + y * 64] = [[Enemy
+                    category = Category enemy,
+                    enemyCategory = category,
+                    patrolling = patrolling,
+                    spriteIndex = enemyClasses[int(category)].spriteIndex,
+                    alive = true,
+                    orientable = orientable,
+                    direction = m1 & 3
+                ]]
+            /*
             elif m1 >= 108
-                // enemy
-                if m1>=108 && m1<116
-                    things |> push <| new GuardEnemy(x,y,(m1-108)%4)
-                elif m1>=144 && m1<152
-                    things |> push <| new GuardEnemy(x,y,(m1-144)%4)
-                elif m1>=116 && m1<124
-                    things |> push <| new OfficerEnemy(x,y,(m1-116)%4)
-                elif m1>=152 && m1<160
-                    things |> push <| new OfficerEnemy(x,y,(m1-152)%4)
-                elif m1>=126 && m1<134
-                    things |> push <| new SSEnemy(x,y,(m1-126)%4)
-                elif m1>=162 && m1<170
-                    things |> push <| new SSEnemy(x,y,(m1-162)%4)
-                elif m1>=134 && m1<142
-                    things |> push <| new DogEnemy(x,y,(m1-134)%4)
-                elif m1>=170 && m1<178
-                    things |> push <| new DogEnemy(x,y,(m1-170)%4)
-                elif m1>=216 && m1<224
-                    things |> push <| new ZombieEnemy(x,y,(m1-116)%4)
-                elif m1>=234 && m1<242
-                    things |> push <| new ZombieEnemy(x,y,(m1-144)%4)
+
                 elif m1==160
                     things |> push <| new FakeHitlerEnemy(x,y)
                 elif m1==178
@@ -474,19 +443,34 @@ def setupLevel ( index:int )
                     let spriteIndex = 288 + 2 * (m1-224)
                     ghost->startAnimation ( new Animation([{int spriteIndex; spriteIndex + 1}], true) )
                     things |> push <| ghost
-    updateScore()
+            */
 
 def loadNextLevel
-    print("LOAD NEXT LEVEL\n")
+    levelIndex ++
+    setupLevel(levelIndex)
 
 def updateThings
-    for thing in things
-        thing->update()
-    things |> sort <| $ ( a,b )
-        return b.rx < a.rx
+    for enemy in enemy_plane
+        if enemy.category == Category nothing
+            continue
+        if enemy.animation != null
+            enemy.animation.timer += 1. / 6. * frame_time
+            if enemy.animation.timer >= 1.0
+                enemy.animation.timer = 0.
+                if enemy.animation.spriteIndex >= enemy.animation.sprites |> length - 1
+                    if enemy.animation.loop
+                        // animation loops
+                        enemy.animation.spriteIndex = 0
+                    else
+                        // animation ended (delete?)
+                        enemy.animation = null
+                        return
+                else
+                    enemy.animation.spriteIndex += 1
+                enemy.spriteIndex = enemy.animation.sprites[enemy.animation.spriteIndex]
 
-def updateTimers
-    for timer,index in timers,count()
+def updatetimer_plane
+    for timer,index in timer_plane,count()
         if !timer.active
             continue
         let X = index & 63
@@ -498,7 +482,7 @@ def updateTimers
                 else
                     timer.t += 1. / 60. * frame_time
                 if timer.t >= 1.
-                    plane2[index] = false
+                    collision_plane[index] = false
                 if timer.t >= DOOR_STAYS_CLOSED
                     timer.t = DOOR_STAYS_CLOSED
                     timer.opening = false
@@ -508,13 +492,13 @@ def updateTimers
                 else
                     timer.t -= 1./ 60. * frame_time
                 if timer.t <= 1.
-                    if !plane2[index]
-                        if player->isTooCloseToDoor(X, Y)
+                    if !collision_plane[index]
+                        if player |> isTooCloseToDoor(X, Y)
                             timer.t = DOOR_STAYS_CLOSED
                             // print("TOO CLOSE TO DOOR {player.x} {player.y} \n")
                         else
                             play_game_sound_2d(SoundName CLOSEDOORSND, float2(X,Y)+float2(0.5), DOOR_SOUND_RADIUS, DOOR_SOUND_PLAYBACK_RATE)
-                            plane2[index] = true
+                            collision_plane[index] = true
                 if timer.t <= 0.
                     timer.t = 0.
                     timer.active = false
@@ -527,14 +511,14 @@ def updateTimers
                 level.plane0[index] = level.plane0[(X-DX) + (Y-DY) * 64]
                 level.plane0[(X+DX) + (Y+DY) * 64] = wallValue
                 level.plane1[index] = uint16(0)
-                plane2[index] = false
-                plane2[(X+DX) + (Y+DY) * 64] = true
+                collision_plane[index] = false
+                collision_plane[(X+DX) + (Y+DY) * 64] = true
                 timer.steps -= 1
-                if timer.steps>0 && !plane2[(X+2*DX) + (Y+2*DY) * 64]
+                if timer.steps>0 && !collision_plane[(X+2*DX) + (Y+2*DY) * 64]
                     // wall moves one more step
                     level.plane1[(X+DX) + (Y+DY) * 64] = uint16(98)
                     timer.t = 0.
-                    timers[(X+DX) + (Y+DY) * 64] = timer
+                    timer_plane[(X+DX) + (Y+DY) * 64] = timer
                 timer.active = false
         else
             // any random timer
@@ -546,12 +530,13 @@ def updateTimers
 struct Location
     x, y, dx, dy : float
 
+var ENABLE_CHEAT_CODEDS = true
+
 def updatePlayer
-    player->update()
-    if is_key_pressed(VK_SPACE)
-        player->activate()
-    if is_key_pressed(VK_LCONTROL) || is_key_pressed(VK_RCONTROL)
-        player->shoot()
+    player |> update()
+    // note: the section bellow is for debugging only. It allows to save and load player position
+    if !ENABLE_CHEAT_CODEDS
+        return
     if is_key_pressed(VK_F2)
         fopen("{get_das_root()}/temp/player.json","wb") <| $ ( f )
             if f != null
@@ -574,8 +559,8 @@ def updatePlayer
                     player.dx = loc.dx
                     player.dy = loc.dy
                     to_log(LOG_INFO,"player at {player.x} {player.y} {player.dx} {player.dy}\n")
-
-
+    if is_key_pressed(VK_F10)
+        loadNextLevel()
 
 
 /*
@@ -610,6 +595,6 @@ def updatePlayer
 def public updateGame(dt:float)
     frame_time = dt / 16.0
     updatePlayer()
-    updateTimers()
+    updatetimer_plane()
     updateThings()
 

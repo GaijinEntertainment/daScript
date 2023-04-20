@@ -219,6 +219,9 @@ namespace das {
                     das_yyerror(scanner,"structure can only derive from a structure", pStruct->at,
                         CompilationError::invalid_override);
                 }
+                delete annL;
+                deleteVariableDeclarationList(list);
+                return;
             }
             if ( pStruct->isClass ) {
                 makeClassRtti(pStruct);
