@@ -15,7 +15,7 @@ def drawWalls ( level:Level; var bmp:Bitmap8 )
         // direction of the ray
         var dx = player.dx - shift * player.dy
         var dy = player.dy + shift * player.dx
-        var tres = trace(player.x,player.y,dx,dy,FLT_MAX)
+        var tres = trace(player.x,player.y,dx,dy,FLT_MAX,true)
         zIndex[i] = tres.t
         drawWallPixels(i,tres.t,tres.tx,WallPics[tres.textureIndex],bmp) // causes bug in jit. why?
 

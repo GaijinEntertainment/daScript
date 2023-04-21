@@ -39,8 +39,9 @@ struct Animation
     timer : float
     loop : bool
     orientable : bool
+    rate : float
 
-def Animation ( SPRITES:array<int>; LOOP:bool=false; ORIENTABLE:bool=false )
+def Animation ( SPRITES:array<int>; LOOP:bool=false; ORIENTABLE:bool=false; RATE:float=1.0/6.0 )
     var self : Animation
     with self
         sprites := SPRITES
@@ -48,6 +49,7 @@ def Animation ( SPRITES:array<int>; LOOP:bool=false; ORIENTABLE:bool=false )
         timer = 0.
         loop = LOOP
         orientable = ORIENTABLE
+        rate = RATE
     return <- self
 
 enum Category
@@ -81,17 +83,23 @@ struct public EnemyClass
     orientable : bool
     radius : float
 // everything hp
-    hp : float
+    hp : int
 // everything attack
+    attackDamage : int
+    attackFireRate : float
     attackDistance : float
     attackDelay : float2    // min, max
     attackSound : SoundName
 
+// weaponFireRate : float[4] = [[float 2.5; 2.5; 7.1; 14.2]]
+
 let enemyClasses <- [[EnemyClass
 // guard
-    hp = 25.,
+    hp = 25,
     radius = .25,
+    attackDamage = 15,
     attackDistance = 5.,
+    attackFireRate = 2.5,
     attackDelay = float2(1., 2.),
     attackSound = SoundName ATKPISTOLSND,
     spriteIndex = 50,
@@ -99,33 +107,49 @@ let enemyClasses <- [[EnemyClass
     damageSprites <- [{auto 90; 94; 50}],
     attackSprites <- [{auto 96; 97; 98; 97; 50}];
 // dog
-    hp = 1.,
+    hp = 1,
     radius = .3,
+    attackDamage = 10,
     attackDistance = 1.5,
+    attackFireRate = 3.5,
+    attackDelay = float2(0.2, 0.5),
+    attackSound = SoundName DOGBARK,
     spriteIndex = 99,
     deathSprites <- [{auto 131; 132; 133; 134}],
     damageSprites <- [{auto 131; 99}],
     attackSprites <- [{auto 135; 136; 137; 136; 99}];
 // officer
-    hp = 50.,
+    hp = 50,
     radius = .3,
+    attackDamage = 45,
     attackDistance = 7.,
+    attackFireRate = 2.5,
+    attackDelay = float2(0.5, 1.),
+    attackSound = SoundName ATKPISTOLSND,
     spriteIndex = 238,
     deathSprites <- [{auto 279; 280; 281; 283; 284}],
     damageSprites <- [{auto 279; 282; 238}],
     attackSprites <- [{auto 285; 286; 287; 286; 238}];
 // ss
-    hp = 50.,
+    hp = 50,
     radius = .3,
+    attackDamage = 45,
     attackDistance = 7.,
+    attackFireRate = 7.1,
+    attackDelay = float2(0.2, 0.5),
+    attackSound = SoundName ATKMACHINEGUNSND,
     spriteIndex = 138,
     deathSprites <- [{auto 179; 180; 181; 183}],
     damageSprites <- [{auto 179; 182; 138}],
     attackSprites <- [{auto 184; 185; 186; 186; 138}];
 // mutant
-    hp = 45.,
+    hp = 45,
     radius = .4,
+    attackDamage = 45,
     attackDistance = 7.,
+    attackFireRate = 2.5,
+    attackDelay = float2(0.5, 1.),
+    attackSound = SoundName ATKGATLINGSND,
     spriteIndex = 187,
     deathSprites <- [{auto 228; 229; 230; 232; 233}],
     damageSprites <- [{auto 228; 231; 187}],
@@ -136,7 +160,7 @@ struct public Enemy : Entity
     cx, cy : int
     enemyCategory : EnemyCategory
     patrolling : bool
-    health : float = 100.
+    health : int = 100
     attackTimer : float = 0.
 
 var public enemy_plane : Enemy[64*64]
@@ -157,9 +181,9 @@ let random_death_snd = [[SoundName
     SoundName DEATHSCREAM8SND;
 	SoundName DEATHSCREAM9SND]]
 
-def takeDamage ( var enemy:Enemy; X,Y:int; DAMAGE:float )
+def takeDamage ( var enemy:Enemy; X,Y:int; DAMAGE:int )
     enemy.health -= DAMAGE
-    if enemy.health <= 0.
+    if enemy.health <= 0
         enemy.category = Category deadBody
         die(enemy)
         play_game_sound_2d(random_death_snd[ random_int(seed) % 3], float2(X,Y)+float2(0.5), PAIN_SOUND_RADIUS)
@@ -169,8 +193,8 @@ def takeDamage ( var enemy:Enemy; X,Y:int; DAMAGE:float )
         play_game_sound_2d(random_take_damage_snd[ random_int(seed) % 3], float2(X,Y)+float2(0.5), PAIN_SOUND_RADIUS)
         rotateTowardsPlayer(enemy)
 
-def die ( var enemy:Enemy)
-    enemy.health = -100.0
+def die ( var enemy:Enemy )
+    enemy.health = -100
     enemy.orientable = false
     enemy |> startAnimation(new Animation(enemyClasses[int(enemy.enemyCategory)].deathSprites))
 
@@ -192,7 +216,7 @@ enum WeaponType
 struct public Player
     x, y : float
     dx, dy : float
-    health : int = 50 // 100
+    health : int = 100
     silverKey : bool
     goldKey : bool
     ammo : int = 8
@@ -216,7 +240,7 @@ struct public Player
         SoundName ATKMACHINEGUNSND;
         SoundName ATKGATLINGSND]]
     weaponFireRate : float[4] = [[float 2.5; 2.5; 7.1; 14.2]]
-    weaponDamage : float[4] = [[float 16.; 18.; 18.; 18.]]
+    weaponDamage : int[4] = [[int 16; 18; 18; 18]]
 
 def switchWeapon ( var self:Player; WEAPON_TYPE:WeaponType )
     with self
@@ -347,6 +371,10 @@ def turn ( var self:Player; alpha:float )
 
 def update ( var self:Player )
     with self
+        if health <= 0
+            if is_key_pressed(VK_SPACE) || is_key_pressed(VK_ENTER)
+                switchLevel(levelIndex, true)
+            return
         var changed = false
         if weaponAnimation == null
             if is_key_pressed(VK_1)
@@ -504,6 +532,22 @@ def clearKeys ( var self:Player )
         goldKey = false
         silverKey = false
 
+def die ( var self:Player )
+    with self
+        print("YOU DIE!")
+        health = 0
+
+def takeDamage ( var self:Player; DAMAGE:int )
+    print("TOOK {DAMAGE} DAMAGE\n")
+    with self
+        flashScreen(float4(0.,1.,1.,1.),float4(255.,0.,0.,0.), 3. / 60.)
+        health -= DAMAGE
+        if health <= 0
+            self |> die()
+            play_game_sound_2d(random_death_snd[ random_int(seed) % 3], float2(x,y), PAIN_SOUND_RADIUS)
+        else
+            play_game_sound_2d(random_take_damage_snd[ random_int(seed) % 3], float2(x,y), PAIN_SOUND_RADIUS)
+
 var public player = Player()
 
 struct Timer
@@ -533,29 +577,63 @@ var public levelIndex = 0
 var public nextLevelIndex = 0
 var public levelFade = 1.
 var public dLevelFade = 0.
+var public becauseOfDeath = false
 
-def switchLevel ( index:int )
+var flashFactor = float4(1.,1.,1.,1.)
+var flashBase = float4(0.,0.,0.,0.)
+var flashTime = 0.
+
+def switchLevel ( index:int; reasonBecauseOfDeath = false )
+    becauseOfDeath = reasonBecauseOfDeath
     play_game_sound(SoundName LEVELDONESND)
     levelFade = 1.
     dLevelFade = - LEVEL_FADE_FACTOR
     nextLevelIndex = index
 
+def flashScreen ( ff,fb:float4; ft:float )
+    flashFactor = ff
+    flashBase = fb
+    flashTime = ft
+
 def updatePalette
+    // udpate flash
+    if flashTime > 0.
+        flashTime -= 1./60. * frame_time
+        if flashTime < 0.
+            flashFactor = float4(1.,1.,1.,1.)
+            flashBase = float4(0.,0.,0.,0.)
+            flashTime = 0.
     if dLevelFade != 0.
+        // fade between levels
         var pal : uint[256]
-        for p,d in GamePalette, pal
-            d = pack_float_to_byte ( unpack_byte_to_float(p) * levelFade )
+        if becauseOfDeath && dLevelFade < 0.
+            for p,d in GamePalette, pal
+                d = pack_float_to_byte ( float4(255.,0.,0.,255.0) * levelFade )
+        else
+            for p,d in GamePalette, pal
+                d = pack_float_to_byte ( unpack_byte_to_float(p) * levelFade )
         set_palette(pal)
         levelFade += dLevelFade * frame_time
         if dLevelFade > 0. && levelFade >= 1.
             dLevelFade = 0.
             levelFade = 1.
         elif dLevelFade < 0. && levelFade <= 0.
-            if nextLevelIndex != levelIndex
-                levelIndex = nextLevelIndex
-                setupLevel(nextLevelIndex)
-                levelFade = 0.
-                dLevelFade = LEVEL_FADE_FACTOR
+            levelIndex = nextLevelIndex
+            setupLevel(nextLevelIndex)
+            levelFade = 0.
+            dLevelFade = LEVEL_FADE_FACTOR
+    elif player.health <= 25 || flashTime > 0.
+        // health fading to red + flash
+        var factor = max(0., 1. - float(player.health) / 25.)
+        factor = sqrt(factor)
+        let ifactor = 1. - factor
+        var pal : uint[256]
+        for p,d in GamePalette,pal
+            let fc = unpack_byte_to_float(p) * flashFactor + flashBase
+            let tc = float4(255.,fc.y*ifactor,fc.z*ifactor,fc.w)
+            let rc = lerp(fc, tc, float4(factor))
+            d = pack_float_to_byte ( clamp(rc, float4(0.), float4(255.)) )
+        set_palette(pal)
     else
         set_palette(GamePalette)
 
@@ -568,7 +646,10 @@ def setupLevel ( index:int )
         b = false
     for t in timer_plane
         t.active = false
-    player |> clearKeys()
+    if becauseOfDeath
+        player = Player()
+    else
+        player |> clearKeys()
     for y in range(64)
         for x in range(64)
             // structual
@@ -677,18 +758,32 @@ def rotateTowardsPlayer ( var self:Enemy )
     self.dox = dxy.x
     self.doy = dxy.y
 
-def tryAttack ( var self:Enemy )
+def shoot ( var self:Enemy )
     with self
-        if animation != null
-            return
-        if attackTimer > 0.
-            return
+        let xy = float2(cx,cy) + float2(0.5)
+        var dxy = float2(player.x,player.y) - xy
+        let dist = length(dxy)
+        dxy /= dist
+        let tres = trace(xy.x,xy.y,dxy.x,dxy.y,dist,false)
+        if tres.t >= dist
+            let attackDamage = enemyClasses[int(enemyCategory)].attackDamage
+            let attackDistance = enemyClasses[int(enemyCategory)].attackDistance
+            let distanceFactor = clamp(1. -  dist / attackDistance, 0., 1.)
+            let randomFactor = random_float(seed) * 0.3 // todo: tune?
+            let damage = float(attackDamage) * (distanceFactor + randomFactor)
+            let finalDamage = clamp ( int(damage), 3, attackDamage )
+            player |> takeDamage(finalDamage)
+
+def attack ( var self:Enemy )
+    with self
         assume eclass = enemyClasses[int(enemyCategory)]
         let delay = eclass.attackDelay
         attackTimer = delay.x + random_float(seed)*(delay.y-delay.x)
-        self |> startAnimation(new Animation(eclass.attackSprites,false,false))
+        let fireRate = eclass.attackFireRate / 16.
+        self |> startAnimation(new Animation(eclass.attackSprites,false,false,fireRate))
         play_game_sound_2d(eclass.attackSound, float2(cx,cy)+float2(0.5), PAIN_SOUND_RADIUS)
         rotateTowardsPlayer(self)
+        self |> shoot()
 
 def updateThings
     for enemy in enemy_plane
@@ -697,16 +792,17 @@ def updateThings
         // very basic AI
         if enemy.category == Category enemy
             enemy.attackTimer = max ( enemy.attackTimer - 1. / 60. * frame_time, 0. )
-            if visibility_plane[enemy.cx + enemy.cy * 64]   // player sees us, so we may (or may not) be able to see them
-                let xy = float2(enemy.cx,enemy.cy) + float2(0.5)
-                let dxy = float2(player.x,player.y) - xy
-                let dist = length(dxy)
-                let attackDistance = enemyClasses[int(enemy.enemyCategory)].attackDistance
-                if dist <= attackDistance
-                    enemy |> tryAttack()
+            if enemy.animation == null && enemy.attackTimer == 0. && player.health > 0
+                if visibility_plane[enemy.cx + enemy.cy * 64]   // player sees us, so we may (or may not) be able to see them
+                    let xy = float2(enemy.cx,enemy.cy) + float2(0.5)
+                    var dxy = float2(player.x,player.y) - xy
+                    let dist = length(dxy)
+                    let attackDistance = enemyClasses[int(enemy.enemyCategory)].attackDistance
+                    if dist>0. && dist<=attackDistance
+                        enemy |> attack()
         // animation
         if enemy.animation != null
-            enemy.animation.timer += 1. / 6. * frame_time
+            enemy.animation.timer += enemy.animation.rate * frame_time
             if enemy.animation.timer >= 1.0
                 enemy.animation.timer = 0.
                 if enemy.animation.spriteIndex >= enemy.animation.sprites |> length - 1
@@ -837,7 +933,7 @@ def public updateGame(dt:float)
     updateTimers()
     updateThings()
 
-def trace ( px,py,pdx,pdy,maxDist:float ) : tuple<t:float; tx:float; textureIndex:int>
+def trace ( px,py,pdx,pdy,maxDist:float; writeVis:bool ) : tuple<t:float; tx:float; textureIndex:int>
     // direction of the ray
     var dx = pdx
     var dy = pdy
@@ -869,7 +965,8 @@ def trace ( px,py,pdx,pdy,maxDist:float ) : tuple<t:float; tx:float; textureInde
     var textureIndex : int
     // ray casting loop
     while t < maxDist
-        visibility_plane[cx+cy*64] = true
+        if writeVis
+            visibility_plane[cx+cy*64] = true
         m0 = int(level.plane0[cx+cy*64])
         if m0 <= 63
             // hit a wall
