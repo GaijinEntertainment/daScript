@@ -3,213 +3,21 @@ module engine private
 require files
 require game
 require rast2d
+require entities
 
 require math
-
-let HINT_SECRET_WALLS = false
 
 [jit,hint(unsafe_range_check,noalias=level,noalias=bmp)]
 def drawWalls ( level:Level; var bmp:Bitmap8 )
     for i in range(bmp.size.x)
-        // cast a ray for each screen column
-        var isPushwall = false
         // current column position on the camera plane
         let shift = fov * (float(i << 1) - pixelWidth) / (pixelWidth)
         // direction of the ray
         var dx = player.dx - shift * player.dy
         var dy = player.dy + shift * player.dx
-        // direction in which the ray moves along each axis
-        let stepx = dx >= 0. ? 1 : -1
-        let stepy = dy >= 0. ? 1 : -1
-        // take absolute values of ray direction
-        dx = float(stepx) * dx
-        dy = float(stepy) * dy
-        // cell position of the ray on the map (starting from the player position)
-        var cx = floori(player.x)
-        var cy = floori(player.y)
-        // remaining fractional distance from the ray position to the next cell (0 < rfx, rfy <= 1)
-        var rfx = stepx > 0 ? 1. - (player.x % 1.) : player.x % 1.
-        if rfx == 0.
-            rfx = 1.
-            cx += stepx
-        var rfy = stepy > 0 ? 1. - (player.y % 1.) : player.y % 1.
-        if rfy == 0.
-            rfy = 1.
-            cy += stepy
-        // total time traveled by the ray
-        var t = 0.
-        // plane0 value of the cell visited by the ray
-        var m0 : int
-        // coordinate on the wall tile where the ray hit (0 <= tx <= 1)
-        var tx : float
-        // index of tile to display
-        var textureIndex : int
-        // ray casting loop
-        while true
-            visibility_plane[cx+cy*64] = true
-            m0 = int(level.plane0[cx+cy*64])
-            if m0 <= 63
-                // hit a wall
-                var wallShift = 0.
-                let m1 = int(level.plane1[cx+cy*64])
-                if m1 == 98
-                    isPushwall = true
-                    // pushwall
-                    assume timer = timer_plane[cx+cy*64]
-                    if timer.active
-                        wallShift = timer.t
-                        if timer.dx != 0
-                            // wall moves horizontally
-                            if dx * rfy >= dy * wallShift
-                                // ray hits wall
-                                let dt = wallShift / dx
-                                t += dt
-                                rfy -= dt * dy
-                                rfx -= wallShift
-                            else
-                                // ray moves to next cell
-                                isPushwall = false
-                                let dt = rfy / dy
-                                t += dt
-                                rfy = 1.
-                                cy += stepy
-                                rfx -= dt * dx
-                                continue
-                        else
-                            // wall moves vertically
-                            if dy * rfx >= dx * wallShift
-                                // ray hits wall
-                                let dt = wallShift / dy
-                                t += dt
-                                rfx -= dt * dx
-                                rfy -= wallShift
-                            else
-                                // ray moves to next cell
-                                isPushwall = false
-                                let dt = rfx / dx
-                                t += dt
-                                rfx = 1.
-                                cx += stepx
-                                rfy -= dt * dy
-                                continue
-                if rfx == 1. - wallShift
-                    // NS wall
-                    textureIndex = 2 * m0 - 1
-                    // fix texture orientation depending on ray direction
-                    tx = stepx * stepy > 0 ? 1. - rfy : rfy
-                else
-                    // EW wall
-                    textureIndex = 2 * m0 - 2
-                    // fix texture orientation depending on ray direction
-                    tx = stepx * stepy < 0 ? 1. - rfx : rfx
-                if HINT_SECRET_WALLS
-                    if isPushwall
-                        textureIndex = 49 // some purple goo texture, to hint
-                break
-            elif m0 <= 101
-                // hit a door
-                var doorShfit = 0.
-                assume timer = timer_plane[cx+cy*64]
-                if timer.active
-                    doorShfit = timer.t
-                if (m0 & 1) == 0
-                    // NS door
-                    if rfx >= .5 && (rfx - .5) * dy < rfy * dx
-                        // ray hits the central door line
-                        let dt = (rfx - .5) / dx
-                        t += dt
-                        rfy -= dt * dy
-                        rfx = .5
-                        tx = stepy > 0 ? 1. - rfy : rfy
-                        tx -= doorShfit
-                        if tx >= 0.
-                            // ray hits the door
-                            if m0 == 90
-                                textureIndex = 99
-                            elif m0 == 92
-                                textureIndex = 105
-                            elif m0 == 94
-                                textureIndex = 105
-                            elif m0 == 100
-                                textureIndex = 103
-                            else
-                                assert(false,"we should not be here?")
-                            break
-                    if rfx * dy >= rfy * dx
-                        // hit the side wall
-                        let dt = rfy / dy
-                        t += dt
-                        rfx -= dt * dx
-                        rfy = 1.
-                        cy += stepy
-                        textureIndex = 100
-                        tx = stepx > 0 ? 1. - rfx : rfx
-                        break
-                    else
-                        // pass through
-                        let dt = rfx / dx
-                        t += dt
-                        rfy -= dt * dy
-                        rfx = 1.
-                        cx += stepx
-                else
-                    // EW door
-                    if rfy >= .5 && (rfy - .5) * dx < rfx * dy
-                        // ray hits the central door line
-                        let dt = (rfy - .5) / dy
-                        t += dt
-                        rfx -= dt * dx
-                        rfy = .5
-                        tx = stepx > 0 ? 1. - rfx : rfx
-                        tx -= doorShfit
-                        if tx >= 0.
-                            // ray hits the door
-                            if m0 == 91
-                                textureIndex = 98
-                            elif m0 == 93
-                                textureIndex = 104
-                            elif m0 == 95
-                                textureIndex = 104
-                            elif m0 == 101
-                                textureIndex = 102
-                            else
-                                assert(false,"we should not be here?")
-                            break
-                    if rfy * dx >= rfx * dy
-                        // hit the side wall
-                        let dt = rfx / dx
-                        t += dt
-                        rfy -= dt * dy
-                        rfx = 1.
-                        cx += stepx
-                        textureIndex = 101
-                        tx = stepy > 0 ? 1. - rfy : rfy
-                        break
-                    else
-                        // pass through
-                        let dt = rfy / dy
-                        t += dt
-                        rfx -= dt * dx
-                        rfy = 1.
-                        cy += stepy
-            // move to the next cell
-            if rfx * dy <= rfy * dx
-                // move to next cell horizontally
-                let dt = rfx / dx
-                t += dt
-                rfx = 1.
-                cx += stepx
-                rfy -= dt * dy
-            else
-                // move to next cell vertically
-                let dt = rfy / dy
-                t += dt
-                rfy = 1.
-                cy += stepy
-                rfx -= dt * dx
-        // draw
-        zIndex[i] = t
-        drawWallPixels(i,t,tx,WallPics[textureIndex],bmp) // causes bug in jit. why?
+        var tres = trace(player.x,player.y,dx,dy,FLT_MAX)
+        zIndex[i] = tres.t
+        drawWallPixels(i,tres.t,tres.tx,WallPics[tres.textureIndex],bmp) // causes bug in jit. why?
 
 [jit,hint(unsafe_range_check,noalias=tex,noalias=bmp)]
 def drawWallPixels ( i:int; t,tx:float; tex:WallTexture; var bmp:Bitmap8 )
@@ -283,8 +91,14 @@ def drawThings ( var bmp:Bitmap8 )
             if enemy_plane[ofs].category != Category nothing
                 drawThing(prc.rx,prc.ry,prc.orx,prc.ory,enemy_plane[ofs],bmp)
 
+def getEntityAngle( Direction : float2 ) : int
+    // var Direction = Position - Player.Position
+    var EntityAngle = floori((8.0f * atan2(Direction.y, Direction.x) / (2.0f * PI)) + 0.5f)
+    if EntityAngle < 0
+        EntityAngle = 8 - ((-EntityAngle) & 7)
+    return EntityAngle & 7
+
 // [jit,hint(unsafe_range_check,noalias=OBJ,noalias=bmp)]
-// TODO: atan2
 def drawThing(rx,ry,orx,ory:float; OBJ:Entity; var bmp:Bitmap8 )
     // draw
     let th = wallHeight / rx
@@ -292,7 +106,9 @@ def drawThing(rx,ry,orx,ory:float; OBJ:Entity; var bmp:Bitmap8 )
     let ty = floori((pixelHeight - th) / 2.)
     var index = OBJ.spriteIndex
     if OBJ.orientable && (OBJ.animation==null || OBJ.animation.orientable)
-        index += (int(4. * atan2(orx,ory) / PI - float(OBJ.direction)) + 16) % 8
+        let PlayerAngle = getEntityAngle(float2(orx,ory))
+        var Angle = getEntityAngle(float2(OBJ.dox, OBJ.doy))
+        index = OBJ.spriteIndex + (Angle - PlayerAngle + 8) % 8
     drawSprite(tx, ty, th, rx, Sprites[index], bmp)
 
 [jit,hint(unsafe_range_check,noalias=tex,noalias=bmp)]

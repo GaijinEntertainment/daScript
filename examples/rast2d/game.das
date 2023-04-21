@@ -24,6 +24,8 @@ let DOOR_OPEN_SPEED = 2.0        // how fast door opens (in tiles per second)
 let DOOR_CLOSE_SPPED = 2.0       // how fast door closes (in tiles per second)
 let DOOR_STAYS_CLOSED = 2.0      // how long door stays closed (in seconds)
 
+let SHOT_SOUND_RADIUS = 20.
+
 // hud
 
 var hudTime = 0.
@@ -58,8 +60,8 @@ struct public Entity
     category : Category
     spriteIndex : int
     animation   : Animation?
-    direction   : int
     orientable  : bool
+    dox, doy    : float
 
 var public object_plane : Entity[64*64]
 
@@ -75,41 +77,67 @@ struct public EnemyClass
     spriteIndex : int
     deathSprites : array<int>
     damageSprites : array<int>
+    attackSprites : array<int>
     orientable : bool
+    radius : float
+// everything hp
     hp : float
+// everything attack
+    attackDistance : float
+    attackDelay : float2    // min, max
+    attackSound : SoundName
 
 let enemyClasses <- [[EnemyClass
 // guard
     hp = 25.,
+    radius = .25,
+    attackDistance = 5.,
+    attackDelay = float2(1., 2.),
+    attackSound = SoundName ATKPISTOLSND,
     spriteIndex = 50,
     deathSprites <- [{auto 90; 91; 92; 93; 95}],
-    damageSprites <- [{auto 90; 94; 50}];
+    damageSprites <- [{auto 90; 94; 50}],
+    attackSprites <- [{auto 96; 97; 98; 97; 50}];
 // dog
     hp = 1.,
+    radius = .3,
+    attackDistance = 1.5,
     spriteIndex = 99,
     deathSprites <- [{auto 131; 132; 133; 134}],
-    damageSprites <- [{auto 131; 99}];
+    damageSprites <- [{auto 131; 99}],
+    attackSprites <- [{auto 135; 136; 137; 136; 99}];
 // officer
     hp = 50.,
+    radius = .3,
+    attackDistance = 7.,
     spriteIndex = 238,
     deathSprites <- [{auto 279; 280; 281; 283; 284}],
-    damageSprites <- [{auto 279; 282; 238}];
+    damageSprites <- [{auto 279; 282; 238}],
+    attackSprites <- [{auto 285; 286; 287; 286; 238}];
 // ss
     hp = 50.,
+    radius = .3,
+    attackDistance = 7.,
     spriteIndex = 138,
     deathSprites <- [{auto 179; 180; 181; 183}],
-    damageSprites <- [{auto 179; 182; 138}];
+    damageSprites <- [{auto 179; 182; 138}],
+    attackSprites <- [{auto 184; 185; 186; 186; 138}];
 // mutant
     hp = 45.,
+    radius = .4,
+    attackDistance = 7.,
     spriteIndex = 187,
     deathSprites <- [{auto 228; 229; 230; 232; 233}],
-    damageSprites <- [{auto 228; 231; 187}]
+    damageSprites <- [{auto 228; 231; 187}],
+    attackSprites <- [{auto 234; 235; 236; 237; 236; 187}]
 ]]
 
 struct public Enemy : Entity
+    cx, cy : int
     enemyCategory : EnemyCategory
     patrolling : bool
     health : float = 100.
+    attackTimer : float = 0.
 
 var public enemy_plane : Enemy[64*64]
 
@@ -139,6 +167,7 @@ def takeDamage ( var enemy:Enemy; X,Y:int; DAMAGE:float )
         if enemy.animation == null
             enemy |> startAnimation(new Animation(enemyClasses[int(enemy.enemyCategory)].damageSprites,false,false))
         play_game_sound_2d(random_take_damage_snd[ random_int(seed) % 3], float2(X,Y)+float2(0.5), PAIN_SOUND_RADIUS)
+        rotateTowardsPlayer(enemy)
 
 def die ( var enemy:Enemy)
     enemy.health = -100.0
@@ -196,6 +225,9 @@ def switchWeapon ( var self:Player; WEAPON_TYPE:WeaponType )
         weaponType = WEAPON_TYPE
         weaponSprite = 416 + int(weaponType) * 5
 
+def getEnemyPosition ( x,y:int )
+    return float2(x,y) + float2(0.5)
+
 def canMoveTo ( self:Player; X,Y:float )
     with self
         let r = radius
@@ -205,6 +237,11 @@ def canMoveTo ( self:Player; X,Y:float )
         let iy = floori(Y)
         if collision_plane[iy*64+ix]
             return false
+        if enemy_plane[iy*64+ix].category == Category enemy
+            let erad = enemyClasses[int(enemy_plane[iy*64+ix].enemyCategory)].radius
+            let dist = length(getEnemyPosition(ix,iy) - float2(X,Y))
+            if dist < radius + erad
+                return false
         if fx < r
             if collision_plane[iy*64+ix-1]
                 return false
@@ -548,7 +585,7 @@ def setupLevel ( index:int )
                 // player
                 player.x = float(x) + 0.5
                 player.y = float(y) + 0.5
-                getEntityDirection(m1-19,player.dx,player.dy)
+                getEntityDirection(m1-19,player.dx,player.dy)   // note. why is it dx,dy?
             elif isProp(m1)
                 object_plane[x + y * 64] = [[Entity
                     category = Category prop,
@@ -592,14 +629,17 @@ def setupLevel ( index:int )
                     patrolling = true
                 // to_log(LOG_INFO, "{x} {y} {m1} {category} {patrolling} {orientable}\n")
                 // todo: add bosses
+                var edx, edy : float
+                getEntityDirection(m1 & 3,edy,edx)
                 enemy_plane[x + y * 64] = [[Enemy
+                    cx = x, cy = y,
+                    dox = edx, doy = edy,
                     category = Category enemy,
                     enemyCategory = category,
                     patrolling = patrolling,
                     spriteIndex = enemyClasses[int(category)].spriteIndex,
                     health = enemyClasses[int(category)].hp,
-                    orientable = orientable,
-                    direction = m1 & 3
+                    orientable = orientable
                 ]]
             /*
             elif m1 >= 108
@@ -626,10 +666,45 @@ def setupLevel ( index:int )
                     things |> push <| ghost
             */
 
+def getEntityOrientation(dx,dy:float)
+    if abs(dx) > abs(dy)
+        return dx > 0. ? 1 : 3
+    else
+        return dy > 0. ? 2 : 0
+
+def rotateTowardsPlayer ( var self:Enemy )
+    let dxy = normalize((float2(self.cx,self.cy)+float2(0.5)) - float2(player.x,player.y))
+    self.dox = dxy.x
+    self.doy = dxy.y
+
+def tryAttack ( var self:Enemy )
+    with self
+        if animation != null
+            return
+        if attackTimer > 0.
+            return
+        assume eclass = enemyClasses[int(enemyCategory)]
+        let delay = eclass.attackDelay
+        attackTimer = delay.x + random_float(seed)*(delay.y-delay.x)
+        self |> startAnimation(new Animation(eclass.attackSprites,false,false))
+        play_game_sound_2d(eclass.attackSound, float2(cx,cy)+float2(0.5), PAIN_SOUND_RADIUS)
+        rotateTowardsPlayer(self)
+
 def updateThings
     for enemy in enemy_plane
         if enemy.category == Category nothing
             continue
+        // very basic AI
+        if enemy.category == Category enemy
+            enemy.attackTimer = max ( enemy.attackTimer - 1. / 60. * frame_time, 0. )
+            if visibility_plane[enemy.cx + enemy.cy * 64]   // player sees us, so we may (or may not) be able to see them
+                let xy = float2(enemy.cx,enemy.cy) + float2(0.5)
+                let dxy = float2(player.x,player.y) - xy
+                let dist = length(dxy)
+                let attackDistance = enemyClasses[int(enemy.enemyCategory)].attackDistance
+                if dist <= attackDistance
+                    enemy |> tryAttack()
+        // animation
         if enemy.animation != null
             enemy.animation.timer += 1. / 6. * frame_time
             if enemy.animation.timer >= 1.0
@@ -762,3 +837,191 @@ def public updateGame(dt:float)
     updateTimers()
     updateThings()
 
+def trace ( px,py,pdx,pdy,maxDist:float ) : tuple<t:float; tx:float; textureIndex:int>
+    // direction of the ray
+    var dx = pdx
+    var dy = pdy
+    // direction in which the ray moves along each axis
+    let stepx = dx >= 0. ? 1 : -1
+    let stepy = dy >= 0. ? 1 : -1
+    // take absolute values of ray direction
+    dx = float(stepx) * dx
+    dy = float(stepy) * dy
+    // cell position of the ray on the map (starting from the player position)
+    var cx = floori(px)
+    var cy = floori(py)
+    // remaining fractional distance from the ray position to the next cell (0 < rfx, rfy <= 1)
+    var rfx = stepx > 0 ? 1. - (px % 1.) : px % 1.
+    if rfx == 0.
+        rfx = 1.
+        cx += stepx
+    var rfy = stepy > 0 ? 1. - (py % 1.) : py % 1.
+    if rfy == 0.
+        rfy = 1.
+        cy += stepy
+    // total time traveled by the ray
+    var t = 0.
+    // plane0 value of the cell visited by the ray
+    var m0 : int
+    // coordinate on the wall tile where the ray hit (0 <= tx <= 1)
+    var tx : float
+    // index of tile to display
+    var textureIndex : int
+    // ray casting loop
+    while t < maxDist
+        visibility_plane[cx+cy*64] = true
+        m0 = int(level.plane0[cx+cy*64])
+        if m0 <= 63
+            // hit a wall
+            var wallShift = 0.
+            let m1 = int(level.plane1[cx+cy*64])
+            if m1 == 98
+                // pushwall
+                assume timer = timer_plane[cx+cy*64]
+                if timer.active
+                    wallShift = timer.t
+                    if timer.dx != 0
+                        // wall moves horizontally
+                        if dx * rfy >= dy * wallShift
+                            // ray hits wall
+                            let dt = wallShift / dx
+                            t += dt
+                            rfy -= dt * dy
+                            rfx -= wallShift
+                        else
+                            // ray moves to next cell
+                            let dt = rfy / dy
+                            t += dt
+                            rfy = 1.
+                            cy += stepy
+                            rfx -= dt * dx
+                            continue
+                    else
+                        // wall moves vertically
+                        if dy * rfx >= dx * wallShift
+                            // ray hits wall
+                            let dt = wallShift / dy
+                            t += dt
+                            rfx -= dt * dx
+                            rfy -= wallShift
+                        else
+                            // ray moves to next cell
+                            let dt = rfx / dx
+                            t += dt
+                            rfx = 1.
+                            cx += stepx
+                            rfy -= dt * dy
+                            continue
+            if rfx == 1. - wallShift
+                // NS wall
+                textureIndex = 2 * m0 - 1
+                // fix texture orientation depending on ray direction
+                tx = stepx * stepy > 0 ? 1. - rfy : rfy
+            else
+                // EW wall
+                textureIndex = 2 * m0 - 2
+                // fix texture orientation depending on ray direction
+                tx = stepx * stepy < 0 ? 1. - rfx : rfx
+            break
+        elif m0 <= 101
+            // hit a door
+            var doorShfit = 0.
+            assume timer = timer_plane[cx+cy*64]
+            if timer.active
+                doorShfit = timer.t
+            if (m0 & 1) == 0
+                // NS door
+                if rfx >= .5 && (rfx - .5) * dy < rfy * dx
+                    // ray hits the central door line
+                    let dt = (rfx - .5) / dx
+                    t += dt
+                    rfy -= dt * dy
+                    rfx = .5
+                    tx = stepy > 0 ? 1. - rfy : rfy
+                    tx -= doorShfit
+                    if tx >= 0.
+                        // ray hits the door
+                        if m0 == 90
+                            textureIndex = 99
+                        elif m0 == 92
+                            textureIndex = 105
+                        elif m0 == 94
+                            textureIndex = 105
+                        elif m0 == 100
+                            textureIndex = 103
+                        else
+                            assert(false,"we should not be here?")
+                        break
+                if rfx * dy >= rfy * dx
+                    // hit the side wall
+                    let dt = rfy / dy
+                    t += dt
+                    rfx -= dt * dx
+                    rfy = 1.
+                    cy += stepy
+                    textureIndex = 100
+                    tx = stepx > 0 ? 1. - rfx : rfx
+                    break
+                else
+                    // pass through
+                    let dt = rfx / dx
+                    t += dt
+                    rfy -= dt * dy
+                    rfx = 1.
+                    cx += stepx
+            else
+                // EW door
+                if rfy >= .5 && (rfy - .5) * dx < rfx * dy
+                    // ray hits the central door line
+                    let dt = (rfy - .5) / dy
+                    t += dt
+                    rfx -= dt * dx
+                    rfy = .5
+                    tx = stepx > 0 ? 1. - rfx : rfx
+                    tx -= doorShfit
+                    if tx >= 0.
+                        // ray hits the door
+                        if m0 == 91
+                            textureIndex = 98
+                        elif m0 == 93
+                            textureIndex = 104
+                        elif m0 == 95
+                            textureIndex = 104
+                        elif m0 == 101
+                            textureIndex = 102
+                        else
+                            assert(false,"we should not be here?")
+                        break
+                if rfy * dx >= rfx * dy
+                    // hit the side wall
+                    let dt = rfx / dx
+                    t += dt
+                    rfy -= dt * dy
+                    rfx = 1.
+                    cx += stepx
+                    textureIndex = 101
+                    tx = stepy > 0 ? 1. - rfy : rfy
+                    break
+                else
+                    // pass through
+                    let dt = rfy / dy
+                    t += dt
+                    rfx -= dt * dx
+                    rfy = 1.
+                    cy += stepy
+        // move to the next cell
+        if rfx * dy <= rfy * dx
+            // move to next cell horizontally
+            let dt = rfx / dx
+            t += dt
+            rfx = 1.
+            cx += stepx
+            rfy -= dt * dy
+        else
+            // move to next cell vertically
+            let dt = rfy / dy
+            t += dt
+            rfy = 1.
+            cy += stepy
+            rfx -= dt * dx
+    return [[auto t, tx, textureIndex]]
