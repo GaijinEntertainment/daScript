@@ -495,15 +495,13 @@ class private DAStackWalker: DapiStackWalker
             delete dataWalkerAdapter
             delete dataWalker
 
-    def collectGlobal(vinfo:VarInfo)
-        let stackLen = length(ctx.stack)
+    def collectGlobalAt(vinfo:VarInfo; var frame : DAStackFrame&)
 
         var value: void?
         unsafe
             value = get_context_global_variable(ctx.ctx, vinfo.name)
         let ti = type_info(vinfo)
 
-        var frame & = unsafe(ctx.stack[stackLen - 1])
         var global = [[DAVariable uid=frame.varId++, name=vinfo.name, _type=describe(ti), address=intptr(value), size=ti.size]]
 
         if ti != null
@@ -521,29 +519,15 @@ class private DAStackWalker: DapiStackWalker
         let stackLen = length(ctx.stack)
         if stackLen == 0
             return
-        // TODO: make this a setting?
-        /*
-        for i in range(get_total_variables(*ctx.ctx))
-            let vinfo & = unsafe(get_variable_info(ctx.ctx, i))
-            if vinfo.name |> starts_with("g```") || vinfo.name == "__rtti_require"
-                continue
-            collectGlobal(vinfo)
-        */
-        var shown : table<VarInfo?>
-        for sp in range(stackLen)   // TODO: do not go through all stack frames, only currently selected one
-            let frame & = unsafe(ctx.stack[stackLen-sp-1])
-            if frame.func == null
-                continue
+
+        var frame & = unsafe(ctx.stack[stackLen-1])
+        if frame.func != null
             for i in range(frame.func.globalCount)
                 let vinfo = unsafe(frame.func.globals[i])
                 if vinfo.name |> starts_with("g```") || vinfo.name == "__rtti_require"
                     continue
-                if key_exists(shown, vinfo)
-                    continue
-                shown |> insert(vinfo)
                 // if vinfo.scope == frame.func
-                collectGlobal(*vinfo)
-        delete shown
+                collectGlobalAt(*vinfo, frame)
 
 
     def override onCallAOT(pp:Prologue; fileName:string#): void
@@ -1600,36 +1584,50 @@ class private DAServer: Server
 
     def reqEvaluate(seq: double; command: string; data: JsonValue?)
         var inscope ini <- EvaluateArguments(data)
-        var inscope res: EvaluateResponse
+
         var found = false
-        agent.evalFrame |> find_child_var() <| $(child, idx)
-            if child.name == ini.expression
-                found = true
-                res._type = child._type
-                res.result = child.value
-                res.indexedVariables = double(child.indexedVariables)
-                if child.children != null
-                    res.variablesReference = double(child.uid)
-                return true
-            return false
+        let ctxId = uint64(ini.frameId / double(MAX_STACK))
+        agent->getContextData(ctxId) <| $(var ctxData: DAContext)
+            let frameId = int(ini.frameId % double(MAX_STACK))
+            if frameId >= 0 && frameId < length(ctxData.stack)
+                var spAddr = ctxData.stack[frameId].spAddr
+                var idx = frameId
+                var first = true
+                while !found && idx < length(ctxData.stack)
+                    let line & = unsafe(ctxData.stack[idx])
+                    if first || line.spAddr == spAddr
+                        found = line |> find_child_var() <| $[unused_argument(varIdx)](child, varIdx)
+                            if child.name == ini.expression
+                                var inscope res = [[EvaluateResponse
+                                    result=child.value,
+                                    _type=child._type,
+                                    indexedVariables=double(child.indexedVariables),
+                                    variablesReference=child.children != null ? double((ctxId * MAX_STACK + uint64(idx)) * MAX_VARIABLES + child.uid) : 0lf]]
+                                self->sendSuccessResponse(seq, command, JV(res))
+                                return true
+                            return false
+                        first = false
+                    idx ++
+                if !found
+                    for i in range(get_total_variables(*ctxData.ctx))
+                        let vinfo & = unsafe(get_variable_info(ctxData.ctx, i))
+                        if vinfo.name == ini.expression
+                            unsafe
+                                agent.walker.ctx = addr(ctxData)
+                            agent.walker->collectGlobalAt(vinfo, ctxData.stack[frameId])
+                            found = ctxData.stack[frameId] |> find_child_var() <| $[unused_argument(varIdx)](child, varIdx)
+                                if child.name == ini.expression
+                                    var inscope res = [[EvaluateResponse
+                                        result=child.value,
+                                        _type=child._type,
+                                        indexedVariables=double(child.indexedVariables),
+                                        variablesReference=child.children != null ? double((ctxId * MAX_STACK + uint64(frameId)) * MAX_VARIABLES + child.uid) : 0lf]]
+                                    self->sendSuccessResponse(seq, command, JV(res))
+                                    return true
+                                return false
+                            break
         if !found
-            var ctx = self.agent.pauseCtx
-            let at = self.agent.pauseAt
-            if ctx != null && at != null
-                let evalRes = eval(ini.expression, *ctx, *at)
-                if evalRes.ok && length(agent.evalFrame.variables) > 0
-                    var evalValue & = unsafe(agent.evalFrame.variables[length(agent.evalFrame.variables) - 1])
-                    evalValue.name = clone_string(ini.expression)
-                    res._type = evalValue._type
-                    res.result = evalValue.value
-                    res.indexedVariables = double(evalValue.indexedVariables)
-                    if evalValue.children != null
-                        res.variablesReference = double(evalValue.uid)
-                else
-                    res.result = evalRes.result
-            else
-                res.result = "<n/a>"
-        self->sendSuccessResponse(seq, command, JV(res))
+            self->sendSuccessResponse(seq, command, null)
 
     def log(msg: string)
         // print("{msg}\n")
