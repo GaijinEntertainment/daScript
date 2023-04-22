@@ -1248,6 +1248,7 @@ namespace das
         EnumInfo * makeEnumDebugInfo ( const Enumeration & en );
         FuncInfo * makeInvokeableTypeDebugInfo ( const TypeDeclPtr & blk, const LineInfo & at );
         void appendLocalVariables ( FuncInfo * info, const ExpressionPtr & body );
+         void appendGlobalVariables ( FuncInfo * info, const FunctionPtr & body );
         void logMemInfo ( TextWriter & tw );
     public:
         shared_ptr<DebugInfoAllocator>  debugInfo;
