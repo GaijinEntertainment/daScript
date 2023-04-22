@@ -432,6 +432,7 @@ def find_child_var(val: DAVariable; cb: block<(res:DAVariable): bool>)
 struct private DAStackFrame
     name: string
     path: string
+    func: FuncInfo?
     isBlock: bool = false
     spAddr: uint64 = 0ul
     line: uint = 1u
@@ -494,32 +495,56 @@ class private DAStackWalker: DapiStackWalker
             delete dataWalkerAdapter
             delete dataWalker
 
+    def collectGlobal(vinfo:VarInfo)
+        let stackLen = length(ctx.stack)
+
+        var value: void?
+        unsafe
+            value = get_context_global_variable(ctx.ctx, vinfo.name)
+        let ti = type_info(vinfo)
+
+        var frame & = unsafe(ctx.stack[stackLen - 1])
+        var global = [[DAVariable uid=frame.varId++, name=vinfo.name, _type=describe(ti), address=intptr(value), size=ti.size]]
+
+        if ti != null
+            dataWalker->startWalk(frame, global) <| $
+                dataWalkerAdapter |> walk_data(value, *ti)
+
+        if global.children == null
+            global.value = sprint_data_fast(value, ti, print_flags_debug)
+        if empty(global.value)
+            global.value = global._type
+
+        frame.globals |> emplace(global)
+
     def collectGlobals()
         let stackLen = length(ctx.stack)
         if stackLen == 0
             return
+        // TODO: make this a setting?
+        /*
         for i in range(get_total_variables(*ctx.ctx))
             let vinfo & = unsafe(get_variable_info(ctx.ctx, i))
             if vinfo.name |> starts_with("g```") || vinfo.name == "__rtti_require"
                 continue
-            var value: void?
-            unsafe
-                value = get_context_global_variable(ctx.ctx, vinfo.name)
-            let ti = type_info(vinfo)
+            collectGlobal(vinfo)
+        */
+        var shown : table<VarInfo?>
+        for sp in range(stackLen)   // TODO: do not go through all stack frames, only currently selected one
+            let frame & = unsafe(ctx.stack[stackLen-sp-1])
+            if frame.func == null
+                continue
+            for i in range(frame.func.globalCount)
+                let vinfo = unsafe(frame.func.globals[i])
+                if vinfo.name |> starts_with("g```") || vinfo.name == "__rtti_require"
+                    continue
+                if key_exists(shown, vinfo)
+                    continue
+                shown |> insert(vinfo)
+                // if vinfo.scope == frame.func
+                collectGlobal(*vinfo)
+        delete shown
 
-            var frame & = unsafe(ctx.stack[stackLen - 1])
-            var global = [[DAVariable uid=frame.varId++, name=vinfo.name, _type=describe(ti), address=intptr(value), size=ti.size]]
-
-            if ti != null
-                dataWalker->startWalk(frame, global) <| $
-                    dataWalkerAdapter |> walk_data(value, *ti)
-
-            if global.children == null
-                global.value = sprint_data_fast(value, ti, print_flags_debug)
-            if empty(global.value)
-                global.value = global._type
-
-            frame.globals |> emplace(global)
 
     def override onCallAOT(pp:Prologue; fileName:string#): void
         // print("AOT {fileName}\n")
@@ -549,7 +574,8 @@ class private DAStackWalker: DapiStackWalker
     def override onBeforeCall(pp: Prologue; sp: void?): void
         let iblock = intptr(pp._block)
         let isBlock = (iblock & 1ul) != 0ul
-        ctx.stack |> emplace([[DAStackFrame() isBlock=isBlock, spAddr=intptr(sp) ]])
+        let funcInfo = isBlock ? null : pp.info
+        ctx.stack |> emplace([[DAStackFrame() func=funcInfo, isBlock=isBlock, spAddr=intptr(sp) ]])
 
     def override onVariable(inf: FuncInfo; vinfo: LocalVariableInfo; arg: void?; inScope: bool): void
         if !inScope

@@ -2979,6 +2979,7 @@ namespace das
                     }
                     if ( debuggerOrGC ) {
                         helper.appendLocalVariables(gfun.debugInfo, pfun->body);
+                        helper.appendGlobalVariables(gfun.debugInfo, pfun);
                     }
                     gfun.stackSize = pfun->totalStackSize;
                     gfun.mangledNameHash = MNH;
