@@ -47,7 +47,7 @@ There are intentionally no member functions. There are only data members, since 
 Structures can handle members with a function type as data (meaning it's a function pointer that can be changed during execution).
 There are initializers that simplify writing complex structure initialization.
 Basically, a function with same name as the structure itself works as an initializer.
-The compiler will generates a 'default' initializer if there are any members with an initializer::
+The compiler will generate a 'default' initializer if there are any members with an initializer::
 
     struct Foo
         x: int = 1
