@@ -5,7 +5,7 @@ tutorial.
 
 ## Prerequisites
 
-We are going to need git, cmake, vscode and a compiler for your platform.
+We are going to need git, cmake, vscode and a C++ compiler for your platform.
 
 ## Build the compiler
 
@@ -23,7 +23,7 @@ to the compiler.
 sudo ln -s /home/andrew/daScript/bin/daScript /bin/das
 ```
 
-## Wire up the VSCode
+## Set up VSCode
 
 Currently, the best supported editor is VSCode.
 
@@ -44,7 +44,7 @@ Now let's test what we've got:
 # Run: das hello_world.das
 
 [export]
-def main {
+def main
     print("Hello world\n")
 ```
 

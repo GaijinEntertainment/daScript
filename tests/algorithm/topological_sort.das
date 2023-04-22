@@ -7,7 +7,7 @@ struct Node
     before : table<int>
 
 [test]
-def test_topological_sort ( t:T? )
+def test_topological_sort ( t: T? )
     // 0 -> 1 -> 3
     // 0 -> 2 -> 3
     var nodes <- [{Node

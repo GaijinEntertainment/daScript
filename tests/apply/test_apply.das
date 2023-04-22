@@ -11,7 +11,7 @@ def test_apply_variant ( t:T? )
         apply([[FooBar foo=1]]) <| $ ( name, field )
             if name!="foo"
                 t->fatal("unknown field")
-            static_if typeinfo(stripped_typename field)=="int"
+            static_if typeinfo(stripped_typename field) == "int"
                 t |> equal( field, 1)
             else
                 t->fatal("we got unsupported field here")
