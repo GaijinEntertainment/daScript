@@ -359,11 +359,13 @@ namespace das
         VarInfo **              fields;
         TypeInfo *              result;
         LocalVariableInfo **    locals;
+        VarInfo **              globals;
         uint64_t                hash;
         uint32_t                flags;
         uint32_t                count;
         uint32_t                stackSize;
         uint32_t                localCount;
+        uint32_t                globalCount;
         FuncInfo() = default;
         FuncInfo( const char * _name, const char * _cppName, VarInfo ** _fields, uint32_t _count, uint32_t _stackSize,
                 TypeInfo * _result, LocalVariableInfo ** _locals, uint32_t _localCount, uint64_t _hash, uint32_t _flags ) {
@@ -377,6 +379,8 @@ namespace das
             localCount = _localCount;
             hash =       _hash;
             flags =      _flags;
+            globals =    nullptr;
+            globalCount = 0;
         }
     };
 

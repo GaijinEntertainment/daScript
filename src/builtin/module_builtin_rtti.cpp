@@ -631,6 +631,8 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(result)>("result");
             addField<DAS_BIND_MANAGED_FIELD(locals)>("locals");
             addField<DAS_BIND_MANAGED_FIELD(localCount)>("localCount");
+            addField<DAS_BIND_MANAGED_FIELD(globals)>("globals");
+            addField<DAS_BIND_MANAGED_FIELD(globalCount)>("globalCount");
             addField<DAS_BIND_MANAGED_FIELD(hash)>("hash");
             addField<DAS_BIND_MANAGED_FIELD(flags)>("flags");
             fieldType = makeType<VarInfo>(*mlib);

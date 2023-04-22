@@ -32,6 +32,16 @@ namespace das {
         tw << "TOTAL " << debugInfo->bytesAllocated() << "\n";
     }
 
+    void DebugInfoHelper::appendGlobalVariables ( FuncInfo * info, const FunctionPtr & body ) {
+        info->globalCount = body->useGlobalVariables.size();
+        info->globals = (VarInfo **) debugInfo->allocate(sizeof(VarInfo *) * info->globalCount);
+        uint32_t i = 0;
+        for ( auto var : body->useGlobalVariables ) {
+            info->globals[i] = makeVariableDebugInfo(*var);
+            i ++;
+        }
+    }
+
     void DebugInfoHelper::appendLocalVariables ( FuncInfo * info, const ExpressionPtr & body ) {
         CollectLocalVariables lv;
         body->visit(lv);
