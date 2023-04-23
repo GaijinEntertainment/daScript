@@ -1,4 +1,5 @@
 require math
+require raster
 
 [sideeffects]
 def test_gather_scatter

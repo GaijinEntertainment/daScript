@@ -1,6 +1,7 @@
 module rast2d private
 
 require math
+require raster
 
 struct public Texture
     //! texture surface

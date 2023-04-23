@@ -381,6 +381,7 @@ SET(BUILTIN_SRC
 ../src/builtin/module_builtin_array.cpp
 ../src/builtin/module_builtin_das.cpp
 ../src/builtin/module_builtin_math.cpp
+../src/builtin/module_builtin_raster.cpp
 ../src/builtin/module_builtin_string.cpp
 ../src/builtin/module_builtin_rtti.h
 ../src/builtin/module_builtin_rtti.cpp
@@ -550,6 +551,7 @@ SET(SIMULATE_SRC
 ../include/daScript/simulate/aot_library.h
 ../include/daScript/simulate/aot_builtin.h
 ../include/daScript/simulate/aot_builtin_math.h
+../include/daScript/simulate/aot_builtin_raster.h
 ../include/daScript/simulate/aot_builtin_matrix.h
 ../include/daScript/simulate/aot_builtin_time.h
 ../include/daScript/simulate/aot_builtin_string.h

@@ -14,6 +14,7 @@ namespace das
 #define NEED_ALL_DEFAULT_MODULES \
     NEED_MODULE(Module_BuiltIn); \
     NEED_MODULE(Module_Math); \
+    NEED_MODULE(Module_Raster); \
     NEED_MODULE(Module_Strings); \
     NEED_MODULE(Module_Rtti); \
     NEED_MODULE(Module_Ast); \
