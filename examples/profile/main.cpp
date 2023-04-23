@@ -132,6 +132,7 @@ int main( int argc, char * argv[] ) {
     // register modules
     NEED_MODULE(Module_BuiltIn);
     NEED_MODULE(Module_Math);
+    NEED_MODULE(Module_Raster);
     NEED_MODULE(Module_Strings);
     NEED_MODULE(Module_TestProfile);
     Module::Initialize();

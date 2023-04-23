@@ -113,6 +113,7 @@ void test_thread(bool useAot) {
     // register modules
     NEED_MODULE(Module_BuiltIn);
     NEED_MODULE(Module_Math);
+    NEED_MODULE(Module_Raster);
     NEED_MODULE(Module_Strings);
     NEED_MODULE(Module_Rtti);
     NEED_MODULE(Module_Ast);

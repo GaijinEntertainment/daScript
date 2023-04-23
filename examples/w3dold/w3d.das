@@ -5,11 +5,12 @@ require daslib/match
 require daslib/safe_addr
 
 require math
+require raster
 require fio
 require stbimage
 require strings
 
-require llvm/llvm_jit
+// require llvm/llvm_jit
 
 def set_debug_status_string(str)
     print("status: {str}\n")

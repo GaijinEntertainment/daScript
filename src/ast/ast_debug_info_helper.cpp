@@ -33,7 +33,7 @@ namespace das {
     }
 
     void DebugInfoHelper::appendGlobalVariables ( FuncInfo * info, const FunctionPtr & body ) {
-        info->globalCount = body->useGlobalVariables.size();
+        info->globalCount = uint32_t(body->useGlobalVariables.size());
         info->globals = (VarInfo **) debugInfo->allocate(sizeof(VarInfo *) * info->globalCount);
         uint32_t i = 0;
         for ( auto var : body->useGlobalVariables ) {
