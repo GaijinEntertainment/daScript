@@ -12,6 +12,7 @@ namespace das {
     void builtin_print ( char * text, Context * context );
     void builtin_error ( char * text, Context * context );
     vec4f builtin_sprint ( Context & context, SimNode_CallBase * call, vec4f * args );
+    vec4f builtin_json_sprint ( Context & context, SimNode_CallBase * call, vec4f * args );
     char * builtin_print_data ( void * data, const TypeInfo * typeInfo, Bitfield flags, Context * context );
     char * builtin_print_data_v ( float4 data, const TypeInfo * typeInfo, Bitfield flags, Context * context );
     char * builtin_debug_type ( const TypeInfo * typeInfo, Context * context );

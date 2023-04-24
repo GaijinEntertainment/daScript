@@ -542,6 +542,7 @@ SET(SIMULATE_SRC
 ../src/simulate/data_walker.cpp
 ../include/daScript/simulate/data_walker.h
 ../src/simulate/debug_print.cpp
+../src/simulate/json_print.cpp
 ../include/daScript/simulate/debug_print.h
 ../include/daScript/simulate/for_each.h
 ../include/daScript/simulate/bind_enum.h
