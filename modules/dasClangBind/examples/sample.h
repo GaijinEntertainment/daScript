@@ -1,7 +1,13 @@
 #pragma once
 
-struct B {
-  struct A *a;
+class B {
+private:
+    struct Foo {
+        int a;
+        float b;
+    };
+public:
+    Foo f;
 };
 
 /*

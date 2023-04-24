@@ -116,7 +116,7 @@ def clang_typeToDasType ( var t:CXType; rules:TypeRules )
     var err : string
     let result = clang_typeToDasTypeEx(t,true,rules,err)
     if err!=""
-        to_log(LOG_ERROR, "\nTYPE ERROR:\n{err}")
+        to_log(LOG_ERROR, "\nTYPE ERROR:\n{err}\n")
     return result
 
 def clang_getCursorLocationDescription ( var c:CXCursor )
@@ -172,6 +172,7 @@ class AnyGenBind
     prevFileName : string
     nspaces : array<string>
     lsp : table<string; string>
+    skip_struct_by_access : table<string>
     interfaces : table<string; array<string>>
     emptyStruct : CXCursor
     hasEmptyStruct : bool
@@ -237,27 +238,27 @@ class AnyGenBind
         let function_name = string(clang_getCursorSpelling(c))
         if isMethod
             if clang_CXXMethod_isPureVirtual(c)!=0u
-                to_log(LOG_INFO,"skipping pure virtual {function_name} at {clang_getCursorLocationDescription(c)}")
+                to_log(LOG_INFO,"skipping pure virtual {function_name} at {clang_getCursorLocationDescription(c)}\n")
                 return true
         var semP = clang_getCursorSemanticParent(c)
         var lexP = clang_getCursorLexicalParent(c)
         if clang_equalCursors(semP,lexP)==0u
             let sT = string(clang_getCursorSpelling(semP))
             let lT = string(clang_getCursorSpelling(lexP))
-            to_log(LOG_INFO,"skipping implementation {function_name} at {clang_getCursorLocationDescription(c)} {sT}!={lT}")
+            to_log(LOG_INFO,"skipping implementation {function_name} at {clang_getCursorLocationDescription(c)} {sT}!={lT}\n")
             return true
         if function_name |> starts_with("operator")
             let Ch = character_at(function_name,8)
             if !(is_alpha(Ch) || is_number(Ch) || Ch=='_')
                 if !isMethod
-                    to_log(LOG_INFO,"skipping global operator {function_name} at {clang_getCursorLocationDescription(c)}")
+                    to_log(LOG_INFO,"skipping global operator {function_name} at {clang_getCursorLocationDescription(c)}\n")
                     return true
                 let op_name = function_name |> slice(8)
                 if op_name == "="
                     return true
         var fun_type = clang_getCursorType(c)
         if clang_isFunctionTypeVariadic(fun_type)!=0u
-            to_log(LOG_INFO,"skipping function {function_name} due variadic arguments at {clang_getCursorLocationDescription(c)}")
+            to_log(LOG_INFO,"skipping function {function_name} due variadic arguments at {clang_getCursorLocationDescription(c)}\n")
             return true
         let narg = clang_Cursor_getNumArguments(c)
         for ai in urange(narg)
@@ -266,12 +267,12 @@ class AnyGenBind
             if skip_type(arg_type)
                 let arg_type_name = string(clang_getTypeSpelling(arg_type))
                 let arg_name = string(clang_getCursorSpelling(carg))
-                to_log(LOG_INFO,"skipping function {function_name} due to argument {arg_name} type {arg_type_name} at {clang_getCursorLocationDescription(c)}")
+                to_log(LOG_INFO,"skipping function {function_name} due to argument {arg_name} type {arg_type_name} at {clang_getCursorLocationDescription(c)}\n")
                 return true
         var res_type = clang_getResultType(fun_type)
         if skip_type(res_type)
             let res_type_name = string(clang_getTypeSpelling(res_type))
-            to_log(LOG_INFO,"skipping function {function_name} due to result type {res_type_name} at {clang_getCursorLocationDescription(c)}")
+            to_log(LOG_INFO,"skipping function {function_name} due to result type {res_type_name} at {clang_getCursorLocationDescription(c)}\n")
             return true
         return false
     def skip_struct ( name : string )
@@ -292,6 +293,8 @@ class AnyGenBind
                 rname = rname |> slice(7)
             elif rname |> starts_with("class ")
                 rname = rname |> slice(6)
+            if skip_struct_by_access |> key_exists(rname)
+                return true
             if skip_struct(rname)
                 return true
         return false
@@ -330,7 +333,7 @@ class AnyGenBind
                 if prevFileName != fn
                     prevFileName := fn
                     if skip_file(prevFileName) && verbose_file_skipping
-                        to_log(LOG_INFO, "skipping {prevFileName}")
+                        to_log(LOG_INFO, "skipping {prevFileName}\n")
             if !skip_file(prevFileName)
                 if parent.kind == CXCursorKind ClassTemplate    // skipping just about everything from template body
                     return CXChildVisitResult Continue
@@ -343,38 +346,38 @@ class AnyGenBind
                             if !skip_struct(tdn)
                                 let acs = clang_getCXXAccessSpecifier(c)
                                 if acs != CX_CXXAccessSpecifier Public && acs != CX_CXXAccessSpecifier InvalidAccessSpecifier
-                                    to_log(LOG_INFO, "skipping nameless structure {tdn} due to access specifier {acs}")
+                                    to_log(LOG_INFO, "skipping nameless structure {tdn} due to access specifier {acs}\n")
                                 else
                                     parse_Struct(emptyStruct, tdn)
                             hasEmptyStruct = false
                             return CXChildVisitResult Continue
                         else
-                            to_log(LOG_ERROR, "typedef of type {tdt.kind} with nameless structure at {clang_getCursorLocationDescription(c)}")
+                            to_log(LOG_ERROR, "typedef of type {tdt.kind} with nameless structure at {clang_getCursorLocationDescription(c)}\n")
                             hasEmptyStruct = false
                     elif hasEmptyEnum
                         if tdt.kind == CXTypeKind Enum
                             let acs = clang_getCXXAccessSpecifier(c)
                             if acs != CX_CXXAccessSpecifier Public && acs != CX_CXXAccessSpecifier InvalidAccessSpecifier
-                                to_log(LOG_INFO, "skipping nameless enumeration {tdn} due to access specifier {acs}")
+                                to_log(LOG_INFO, "skipping nameless enumeration {tdn} due to access specifier {acs}\n")
                             else
                                 parse_Enum(emptyEnum, tdn)
                             hasEmptyEnum = false
                             return CXChildVisitResult Continue
                         else
-                            to_log(LOG_ERROR, "typedef of type {tdt.kind} with nameless enumeration at {clang_getCursorLocationDescription(c)}")
+                            to_log(LOG_ERROR, "typedef of type {tdt.kind} with nameless enumeration at {clang_getCursorLocationDescription(c)}\n")
                             hasEmptyEnum = false
                     elif tdt.kind == CXTypeKind Record
                         let sn = string(clang_getTypeSpelling(tdt))
                         if sn == tdn
-                            to_log(LOG_INFO, "skipping typedef struct {sn} {tdn};")
+                            to_log(LOG_INFO, "skipping typedef struct {sn} {tdn};\n")
                             return CXChildVisitResult Continue
                         if skip_struct(sn) || skip_struct(tdn)
-                            to_log(LOG_INFO, "skipping typedef struct {sn} {tdn};")
+                            to_log(LOG_INFO, "skipping typedef struct {sn} {tdn};\n")
                             return CXChildVisitResult Continue
                     elif tdt.kind == CXTypeKind Enum
                         let sn = string(clang_getTypeSpelling(tdt))
                         if sn == tdn
-                            to_log(LOG_INFO, "skipping typedef enum {sn} {tdn};")
+                            to_log(LOG_INFO, "skipping typedef enum {sn} {tdn};\n")
                             return CXChildVisitResult Continue
                         else
                             enum2enum[namespace_name(sn)] = tdn
@@ -391,7 +394,7 @@ class AnyGenBind
                     let acs = clang_getCXXAccessSpecifier(c)
                     if acs != CX_CXXAccessSpecifier Public
                         let method_name = string(clang_getCursorSpelling(c))
-                        to_log(LOG_INFO, "skipping {namespace_name(method_name)} due to access specifier {acs}")
+                        to_log(LOG_INFO, "skipping {namespace_name(method_name)} due to access specifier {acs}\n")
                     else
                         if !skip_method(c)
                             parse_Method(c)
@@ -400,7 +403,7 @@ class AnyGenBind
                     let acs = clang_getCXXAccessSpecifier(c)
                     if acs != CX_CXXAccessSpecifier Public
                         let ctor_name = string(clang_getCursorSpelling(c))
-                        to_log(LOG_INFO, "skipping {namespace_name(ctor_name)} constructor due to access specifier {acs}")
+                        to_log(LOG_INFO, "skipping {namespace_name(ctor_name)} constructor due to access specifier {acs}\n")
                     else
                         if !skip_constructor(c)
                             parse_Constructor(c)
@@ -416,18 +419,22 @@ class AnyGenBind
                     let struct_name = string(clang_getCursorSpelling(c))
                     let nta = clang_Type_getNumTemplateArguments(clang_getCursorType(c))
                     if nta != -1
-                        to_log(LOG_INFO, "skipping structure {struct_name} due to being template instance")
+                        to_log(LOG_INFO, "skipping structure {struct_name} due to being template instance\n")
                         return CXChildVisitResult Continue
                     if empty(struct_name)
                         if hasEmptyStruct
-                            to_log(LOG_ERROR, "already in empty struct mode from {clang_getCursorLocationDescription(emptyStruct)}, at {clang_getCursorLocationDescription(c)}")
+                            to_log(LOG_ERROR, "already in empty struct mode from {clang_getCursorLocationDescription(emptyStruct)}, at {clang_getCursorLocationDescription(c)}\n")
                         emptyStruct = c
                         hasEmptyStruct = true
                     else
                         if !skip_struct(struct_name)
                             let acs = clang_getCXXAccessSpecifier(c)
                             if acs != CX_CXXAccessSpecifier Public && acs != CX_CXXAccessSpecifier InvalidAccessSpecifier
-                                to_log(LOG_INFO, "skipping structure {struct_name} due to access specifier {acs}")
+                                var canonical = clang_getCanonicalType(clang_getCursorType(c))
+                                let sname = string(clang_getTypeSpelling(clang_getCursorType(c)))
+                                to_log(LOG_INFO, "skipping structure {struct_name} aka {sname} due to access specifier {acs}\n")
+                                skip_struct_by_access |> insert(sname)
+                                return CXChildVisitResult Continue
                             else
                                 parse_Struct(c, struct_name)
                     return CXChildVisitResult Continue
@@ -438,30 +445,34 @@ class AnyGenBind
                     let enum_name = string(clang_getCursorSpelling(c))
                     let acs = clang_getCXXAccessSpecifier(c)
                     if acs != CX_CXXAccessSpecifier Public && acs != CX_CXXAccessSpecifier InvalidAccessSpecifier
-                        to_log(LOG_INFO, "skipping enumeration {enum_name} due to access specifier {acs}")
+                        to_log(LOG_INFO, "skipping enumeration {enum_name} due to access specifier {acs}\n")
                     elif empty(enum_name)
                         if hasEmptyEnum
-                            to_log(LOG_ERROR, "already in empty enum mode from {clang_getCursorLocationDescription(emptyEnum)}, at {clang_getCursorLocationDescription(c)}")
+                            to_log(LOG_ERROR, "already in empty enum mode from {clang_getCursorLocationDescription(emptyEnum)}, at {clang_getCursorLocationDescription(c)}\n")
                         emptyEnum = c
                         hasEmptyEnum = true
                     else
                         parse_Enum(c, enum_name)
                     return CXChildVisitResult Continue
                 elif kind == CXCursorKind FieldDecl
+                    if skip_type(clang_getCursorType(c))
+                        let field_name = string(clang_getCursorSpelling(c))
+                        to_log(LOG_INFO, "skipping {namespace_name(field_name)} becuase its type is skipped\n")
+                        return CXChildVisitResult Continue
                     if clang_Cursor_isBitField(c)!=0u
                         let field_name = string(clang_getCursorSpelling(c))
-                        to_log(LOG_INFO, "skipping {namespace_name(field_name)} because its a bitfield")
+                        to_log(LOG_INFO, "skipping {namespace_name(field_name)} because its a bitfield\n")
                         return CXChildVisitResult Continue
                     let acs = clang_getCXXAccessSpecifier(c)
                     if acs != CX_CXXAccessSpecifier Public
                         let field_name = string(clang_getCursorSpelling(c))
-                        to_log(LOG_INFO, "skipping {namespace_name(field_name)} due to access specifier {acs}")
+                        to_log(LOG_INFO, "skipping {namespace_name(field_name)} due to access specifier {acs}\n")
                         return CXChildVisitResult Continue
                     var field_type = clang_getCursorType(c)
                     if skip_type(field_type)
                         let field_name = string(clang_getCursorSpelling(c))
                         let field_type_name = string(clang_getTypeSpelling(field_type))
-                        to_log(LOG_INFO, "skipping {namespace_name(field_name)} due to type {field_type_name}")
+                        to_log(LOG_INFO, "skipping {namespace_name(field_name)} due to type {field_type_name}\n")
                     else
                         parse_Field(c)
                     return CXChildVisitResult Continue
@@ -470,7 +481,7 @@ class AnyGenBind
                     let var_decl_name = string(clang_getCursorSpelling(c))
                     var var_decl_type = clang_getCanonicalType(clang_getCursorType(c))
                     let var_decl_type_name = string(clang_getTypeSpelling(var_decl_type))
-                    to_log(LOG_WARNING, "VarDecl {var_decl_name}:{var_decl_type_name} at {clang_getCursorLocationDescription(c)}")
+                    to_log(LOG_WARNING, "VarDecl {var_decl_name}:{var_decl_type_name} at {clang_getCursorLocationDescription(c)}\n")
                     */
                     return CXChildVisitResult Continue
                 elif kind == CXCursorKind CXXAccessSpecifier
@@ -503,14 +514,14 @@ class AnyGenBind
                         if acs == CX_CXXAccessSpecifier Public
                             interfaces[class_name] |> push(base_name)
                         else
-                            to_log(LOG_WARNING, "skipping interface {base_name} due to access specifier {acs} at {clang_getCursorLocationDescription(c)}")
+                            to_log(LOG_WARNING, "skipping interface {base_name} due to access specifier {acs} at {clang_getCursorLocationDescription(c)}\n")
                     CXChildVisitResult Recurse
                 elif kind == CXCursorKind ClassTemplate
                     let template_name = string(clang_getCursorSpelling(c))
-                    to_log(LOG_WARNING, "skipping template {template_name} at {clang_getCursorLocationDescription(c)}")
+                    to_log(LOG_WARNING, "skipping template {template_name} at {clang_getCursorLocationDescription(c)}\n")
                     CXChildVisitResult Continue
                 else
-                    to_log(LOG_WARNING, "unsupported {describe(c)} <- {describe(parent)} at {clang_getCursorLocationDescription(c)}")
+                    to_log(LOG_WARNING, "unsupported {describe(c)} <- {describe(parent)} at {clang_getCursorLocationDescription(c)}\n")
                 return CXChildVisitResult Recurse
             else
                 return CXChildVisitResult Recurse
@@ -524,13 +535,13 @@ class AnyGenBind
                 let DEF = regex_group(regex_def,1,data)
                 let VAL = regex_group(regex_def,2,data)
                 if DEF |> starts_with("__")
-                    to_log(LOG_WARNING, "skipping {DEF} due to name limitations")
+                    to_log(LOG_WARNING, "skipping {DEF} due to name limitations\n")
                     return true
                 var suf = suffix
                 if hex && suffix=="u"
                     let v = to_uint64(VAL,true)
                     if v > 0xfffffffful
-                        to_log(LOG_INFO, "{DEF} promoted to ul")
+                        to_log(LOG_INFO, "{DEF} promoted to ul\n")
                         suf = "ul"
                 if !skip_const(DEF)
                     let ctt = getGenConstType(DEF,defTName)
@@ -700,7 +711,7 @@ class CppGenBind : AnyGenBind
     def openFile ( path:string )
         var f = fopen(path,"wb")
         if f == null
-            to_log(LOG_ERROR, "can't open CppGenBind output at {path}, defaulting to stdout")
+            to_log(LOG_ERROR, "can't open CppGenBind output at {path}, defaulting to stdout\n")
             f = fstdout()
         f |> fwrite("// this file is generated via daScript automatic C++ binder\n")
         f |> fwrite("// all user modifications will be lost after this file is re-generated\n\n")
@@ -1040,7 +1051,7 @@ class CppGenBind : AnyGenBind
     def override parse_Constructor ( var c : CXCursor )
         let ctor_name = string(clang_getCursorSpelling(c))
         if abstract_class |> back
-            to_log(LOG_WARNING, "skipping abstract class constructor {ctor_name} at {clang_getCursorLocationDescription(c)}")
+            to_log(LOG_WARNING, "skipping abstract class constructor {ctor_name} at {clang_getCursorLocationDescription(c)}\n")
             return
         step_Function()
         let function_cpp_name = namespace_struct_name()
@@ -1111,13 +1122,13 @@ class CppGenBind : AnyGenBind
                     let value = clang_EvalResult_getAsStr(res)
                     result = "make_smart<ExprConstString>(\"{value}\")"
                 else
-                    to_log(LOG_WARNING, "unsupported default value of pointer type {string(clang_getTypeSpelling(t))} at {clang_getCursorLocationDescription(c)}")
+                    to_log(LOG_WARNING, "unsupported default value of pointer type {string(clang_getTypeSpelling(t))} at {clang_getCursorLocationDescription(c)}\n")
             elif t.kind == CXTypeKind Enum
                 let value = clang_EvalResult_getAsInt(res)
                 let thisArgEnum = string(clang_getTypeSpelling(t))
                 result = "make_smart<ExprConstEnumeration>({value},makeType<{thisArgEnum}>(lib))"
             else
-                to_log(LOG_WARNING, "unsupported default value of type {string(clang_getTypeSpelling(t))} : {t.kind} at {clang_getCursorLocationDescription(c)}")
+                to_log(LOG_WARNING, "unsupported default value of type {string(clang_getTypeSpelling(t))} : {t.kind} at {clang_getCursorLocationDescription(c)}\n")
         else
             // this feels hacky, whoever regular eval results returns nada for foo ( bool * a = NULL )
             //    for the pointer (and pointer only) we walk everything under
@@ -1378,8 +1389,8 @@ class CppGenBind : AnyGenBind
                 fprint(func_file, "(*this,lib,\"interface\",SideEffects::invoke,\"with_interface<{ct},{it}>\");\n")
 
 def clang_reportAst(PARSE_FILE_NAME, PARSE_FILE_PREFIX:string; ARGV:array<string>)
-    to_log(LOG_INFO,"--------------------------------------------------------------------------------------------------------")
-    to_log(LOG_INFO,"// {PARSE_FILE_PREFIX}{PARSE_FILE_NAME} {ARGV}")
+    to_log(LOG_INFO,"--------------------------------------------------------------------------------------------------------\n")
+    to_log(LOG_INFO,"// {PARSE_FILE_PREFIX}{PARSE_FILE_NAME} {ARGV}\n")
     var index = clang_createIndex(1,1)
     var unit = clang_parseTranslationUnit(
         index,
@@ -1397,9 +1408,9 @@ def clang_reportAst(PARSE_FILE_NAME, PARSE_FILE_PREFIX:string; ARGV:array<string
         clang_getSpellingLocation(clang_getCursorLocation(c), safe_addr(file), safe_addr(line), safe_addr(column), safe_addr(offset))
         var fname = string(clang_getFileName(file))
         if fname |> ends_with(PARSE_FILE_NAME)
-            to_log(LOG_INFO, "{describe(c)} <- {describe(parent)} at {clang_getCursorLocationDescription(c)}")
+            to_log(LOG_INFO, "{describe(c)} <- {describe(parent)} at {clang_getCursorLocationDescription(c)}\n")
         return CXChildVisitResult Recurse
-    to_log(LOG_INFO,"--------------------------------------------------------------------------------------------------------")
+    to_log(LOG_INFO,"--------------------------------------------------------------------------------------------------------\n")
     let ndiag = clang_getNumDiagnostics(unit)
     for i in urange(ndiag)
         var diag = clang_getDiagnostic(unit, i)
@@ -1408,4 +1419,4 @@ def clang_reportAst(PARSE_FILE_NAME, PARSE_FILE_PREFIX:string; ARGV:array<string
     clang_disposeTranslationUnit(unit)
     clang_disposeIndex(index)
     if ndiag != 0u
-        to_log(LOG_INFO,"--------------------------------------------------------------------------------------------------------")
+        to_log(LOG_INFO,"--------------------------------------------------------------------------------------------------------\n")
