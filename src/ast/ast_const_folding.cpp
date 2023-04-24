@@ -316,7 +316,10 @@ namespace das {
                 reportFolding();
                 return sim;
             } else {
+                auto wasRef = expr->type->ref;
+                expr->type->ref = false;
                 auto sim = Program::makeConst(expr->at, expr->type, value);
+                expr->type->ref = wasRef;
                 sim->type = make_smart<TypeDecl>(*expr->type);
                 sim->constexpression = true;
                 sim->at = encloseAt(expr);
