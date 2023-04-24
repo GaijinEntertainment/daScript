@@ -1,3 +1,4 @@
+options rtti
 options no_aot
 options indenting = 4
 options no_global_variables = false
@@ -521,6 +522,17 @@ class private DAStackWalker: DapiStackWalker
             return
 
         var frame & = unsafe(ctx.stack[stackLen-1])
+
+        // TODO: make this a setting?
+         /*
+         for i in range(get_total_variables(*ctx.ctx))
+             let vinfo & = unsafe(get_variable_info(ctx.ctx, i))
+             if vinfo.name |> starts_with("g```") || vinfo.name == "__rtti_require"
+                 continue
+             collectGlobalAt(vinfo, frame)
+        return
+         */
+
         if frame.func != null
             for i in range(frame.func.globalCount)
                 let vinfo = unsafe(frame.func.globals[i])
@@ -1423,7 +1435,7 @@ class private DAServer: Server
         threadsDone = true
         for ctx in agent.contexts
             res.threads |> emplace([[Thread id=double(ctx.id), name=ctx |> to_string() ]])
-        self->sendSuccessResponse(seq, command, JV(res))
+        self->sendSuccessResponseStr(seq, command, sprint_json(res, false))
 
     def reqStackTrace(seq: double; command: string; data: JsonValue?)
         var inscope ini <- StackTraceArguments(data)
@@ -1438,7 +1450,7 @@ class private DAServer: Server
                     source=[[Source name=line.path, path=line.path]]
                 ]])
             res.totalFrames = double(length(ctxData.stack))
-        self->sendSuccessResponse(seq, command, JV(res))
+        self->sendSuccessResponseStr(seq, command, sprint_json(res, false))
 
     def reqScopes(seq: double; command: string; data: JsonValue?)
         var inscope ini <- ScopesArguments(data)
@@ -1478,7 +1490,7 @@ class private DAServer: Server
                         name="Globals",
                         variablesReference=double(uint64(ini.frameId) * MAX_VARIABLES + GLOBAL_VARS)
                     ]])
-        self->sendSuccessResponse(seq, command, JV(res))
+        self->sendSuccessResponseStr(seq, command, sprint_json(res, false))
 
     def reqVariables(seq: double; command: string; data: JsonValue?)
         var inscope ini <- VariablesArguments(data)
@@ -1544,7 +1556,7 @@ class private DAServer: Server
                                         indexedVariables=double(v.indexedVariables),
                                         variablesReference=double(ref)
                                     ]])
-        self->sendSuccessResponse(seq, command, JV(res))
+        self->sendSuccessResponseStr(seq, command, sprint_json(res, false)) // TODO: , false
 
     def reqContinue(seq: double; command: string; data: JsonValue?)
         var inscope ini <- ContinueArguments(data)
@@ -1603,7 +1615,7 @@ class private DAServer: Server
                                     _type=child._type,
                                     indexedVariables=double(child.indexedVariables),
                                     variablesReference=child.children != null ? double((ctxId * MAX_STACK + uint64(idx)) * MAX_VARIABLES + child.uid) : 0lf]]
-                                self->sendSuccessResponse(seq, command, JV(res))
+                                self->sendSuccessResponseStr(seq, command, sprint_json(res, false))
                                 return true
                             return false
                         first = false
@@ -1622,7 +1634,7 @@ class private DAServer: Server
                                         _type=child._type,
                                         indexedVariables=double(child.indexedVariables),
                                         variablesReference=child.children != null ? double((ctxId * MAX_STACK + uint64(frameId)) * MAX_VARIABLES + child.uid) : 0lf]]
-                                    self->sendSuccessResponse(seq, command, JV(res))
+                                    self->sendSuccessResponseStr(seq, command, sprint_json(res, false))
                                     return true
                                 return false
                             break
@@ -1645,6 +1657,11 @@ class private DAServer: Server
         self->sendRawData(JV({{"request_seq"=>JV(id); "type"=>JV("response");
                                 "body"=>body; "command"=>JV(command); "success"=>JV(true)}}), /*log*/true)
 
+    def sendSuccessResponseStr(id: double; command: string; body: string)
+        // self->sendRawData(JV({{"request_seq"=>JV(id); "type"=>JV("response");
+        //                         "body"=>body; "command"=>JV(command); "success"=>JV(true)}}), /*log*/true)
+        self->sendRawDataStr("\{\"request_seq\":{id}, \"type\":\"response\", \"body\":{body}, \"command\":\"{command}\", \"success\":true\}", /*log*/true)
+
     // https://microsoft.github.io/language-server-protocol/specifications/specification-current/#responseMessage
     def sendRawData(var data : JsonValue?; logData: bool)
         let msg = write_json(data)
@@ -1656,6 +1673,15 @@ class private DAServer: Server
         unsafe
             self->send(reinterpret<uint8?> packStr, length(packStr))
             delete data
+
+    def sendRawDataStr(msg : string; logData: bool)
+        var packStr = "Content-Length: {length(msg)}\r\n\r\n{msg}"
+        if logData
+            self->log("<------\n{packStr}")
+        // else
+        //     print("<------\n{packStr}\n")
+        unsafe
+            self->send(reinterpret<uint8?> packStr, length(packStr))
 
     def sendStopped(ctx: DAContext; reason, text: string; brId: uint64)
         self->sendEvent("stopped", JV({{

@@ -7,12 +7,15 @@
 #include "daScript/ast/ast.h"
 
 #include <sstream>
+#include <iomanip>
 
 
 namespace das {
 
     struct JsonWriter : DataWalker {
-        JsonWriter () {}
+        JsonWriter () {
+            ss << setprecision(9);
+        }
         stringstream ss;
         bool enumAsInt = false;
         bool unescape = false;
@@ -171,10 +174,10 @@ namespace das {
             }
         }
         virtual void Double ( double & value ) override {
-            ss << value;
+            ss << setprecision(17) << value << setprecision(9);
         }
         virtual void Float ( float & value ) override {
-            ss << value;
+            ss << setprecision(9) << value;
         }
         virtual void Int ( int32_t & value ) override {
             ss << value;
@@ -243,13 +246,13 @@ namespace das {
                 }
             }
         }
-        virtual void WalkEnumeration ( int32_t & value, EnumInfo * info ) {
+        virtual void WalkEnumeration ( int32_t & value, EnumInfo * info ) override {
             Enum(value,info);
         }
-        virtual void WalkEnumeration8  ( int8_t & value, EnumInfo * info ) {
+        virtual void WalkEnumeration8  ( int8_t & value, EnumInfo * info ) override {
             Enum(value,info);
         }
-        virtual void WalkEnumeration16 ( int16_t & value, EnumInfo * info ) {
+        virtual void WalkEnumeration16 ( int16_t & value, EnumInfo * info ) override {
             Enum(value,info);
         }
     };
