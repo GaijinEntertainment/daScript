@@ -477,6 +477,8 @@ class private DAStackWalker: DapiStackWalker
 
     collectAllGlobals : bool = false
 
+    wasGlobalsCollected : bool = false
+
     [[do_not_delete]] ctx: DAContext?
     [[do_not_delete]] workingPaths: array<string>?
     [[do_not_delete]] pathAliases: table<string; string>?
@@ -513,6 +515,9 @@ class private DAStackWalker: DapiStackWalker
         frame.globals |> emplace(global)
 
     def collectGlobals()
+        if wasGlobalsCollected
+            return
+        wasGlobalsCollected = true
         let stackLen = length(ctx.stack)
         if stackLen == 0
             return
@@ -951,6 +956,7 @@ class private DAgent: DapiDebugAgent
 
     def nextStep(var ctx: Context; var ctxData:DAContext; path: string; at:LineInfo)
         delete ctxData.stack
+        walker.wasGlobalsCollected = false
         unsafe
             walker.ctx = addr(ctxData)
         walkerAdapter |> walk_stack(ctx, at)
