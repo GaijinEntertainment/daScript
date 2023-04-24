@@ -1146,6 +1146,15 @@ namespace das
         return cast<char *>::from(sres);
     }
 
+    vec4f builtin_json_sprint ( Context & context, SimNode_CallBase * call, vec4f * args ) {
+        auto typeInfo = call->types[0];
+        auto res = args[0];
+        auto humanReadable = cast<bool>::to(args[1]);
+        auto ssw = debug_json_value(res, typeInfo, humanReadable);
+        auto sres = context.stringHeap->allocateString(ssw);
+        return cast<char *>::from(sres);
+    }
+
     Array  g_CommandLineArguments;
 
     void setCommandLineArguments ( int argc, char * argv[] ) {
@@ -1369,6 +1378,9 @@ namespace das
         addInterop<builtin_sprint,char *,vec4f,PrintFlags>(*this, lib, "sprint",
             SideEffects::modifyExternal, "builtin_sprint")
                 ->args({"value","flags"});
+        addInterop<builtin_json_sprint,char *,vec4f,bool>(*this, lib, "sprint_json",
+            SideEffects::modifyExternal, "builtin_json_sprint")
+                ->args({"value","humanReadable"});
         addExtern<DAS_BIND_FUN(builtin_terminate)>(*this, lib, "terminate",
             SideEffects::modifyExternal, "terminate")
                 ->arg("context");
