@@ -135,7 +135,7 @@ def private bytes_hr(value : uint64)
 
 class DAWalker: DapiDataWalker
 
-    childrenMax: uint = 500u
+    maxChildrenCount: uint = 500u
 
     varsStack: array<DAVariable?>
     [[do_not_delete]] frame: DAStackFrame?
@@ -222,14 +222,10 @@ class DAWalker: DapiDataWalker
 
     def override canVisitArray(ps: void?; ti: TypeInfo): bool
         let arr = unsafe(reinterpret<DapiArray?> ps)
-        if arr.size > childrenMax
-            return false
-        return true
+        return maxChildrenCount < 0u || arr.size <= maxChildrenCount
 
     def override canVisitArrayData(ti: TypeInfo; count:uint): bool
-        if count > childrenMax
-            return false
-        return true
+        return maxChildrenCount < 0u || count <= maxChildrenCount
 
     def override beforeArrayData(ps: void?; stride: uint; count: uint; ti:TypeInfo): void
         let n = length(varsStack)
@@ -280,9 +276,7 @@ class DAWalker: DapiDataWalker
 
     def override canVisitTable (ps: void?; ti: TypeInfo): bool
         let pa = unsafe(reinterpret<DapiTable?> ps)
-        if pa.size > childrenMax
-            return false
-        return true
+        return maxChildrenCount < 0u || pa.size <= maxChildrenCount
 
     def override beforeTableKey(pa: DapiTable; ti: TypeInfo; pk: void?; ki: TypeInfo; index: uint; last: bool): void
         self->startCont()
@@ -481,6 +475,8 @@ class private DAStackWalker: DapiStackWalker
     dataWalkerAdapter: smart_ptr<DataWalker>
     dataWalker: DAWalker?
 
+    collectAllGlobals : bool = false
+
     [[do_not_delete]] ctx: DAContext?
     [[do_not_delete]] workingPaths: array<string>?
     [[do_not_delete]] pathAliases: table<string; string>?
@@ -523,15 +519,13 @@ class private DAStackWalker: DapiStackWalker
 
         var frame & = unsafe(ctx.stack[stackLen-1])
 
-        // TODO: make this a setting?
-         /*
-         for i in range(get_total_variables(*ctx.ctx))
-             let vinfo & = unsafe(get_variable_info(ctx.ctx, i))
-             if vinfo.name |> starts_with("g```") || vinfo.name == "__rtti_require"
-                 continue
-             collectGlobalAt(vinfo, frame)
-        return
-         */
+        if collectAllGlobals
+            for i in range(get_total_variables(*ctx.ctx))
+                let vinfo & = unsafe(get_variable_info(ctx.ctx, i))
+                if vinfo.name |> starts_with("g```") || vinfo.name == "__rtti_require"
+                    continue
+                collectGlobalAt(vinfo, frame)
+            return
 
         if frame.func != null
             for i in range(frame.func.globalCount)
@@ -1322,18 +1316,24 @@ class private DAServer: Server
                         pathAliases[k] = v as _string
         agent->setPaths(resPaths, pathAliases)
 
-    def setInlinePreviewLimit(data: JsonValue?)
+    def setDebuggerSettings(data: JsonValue?)
         let limit = data |> jon("inlinePreviewLimit", double(agent.walker.dataWalker.inlinePreviewLimit))
         agent.walker.dataWalker.inlinePreviewLimit = int(limit)
 
+        let maxChildrenCount = data |> jon("maxChildrenCount", double(agent.walker.dataWalker.maxChildrenCount))
+        agent.walker.dataWalker.maxChildrenCount = uint(maxChildrenCount)
+
+        let collectAllGlobals = data |> job("collectAllGlobals", agent.walker.collectAllGlobals)
+        agent.walker.collectAllGlobals = collectAllGlobals
+
     def reqLaunch(seq: double; command: string; data: JsonValue?)
         self->setPaths(data)
-        self->setInlinePreviewLimit(data)
+        self->setDebuggerSettings(data)
         self->sendSuccessResponse(seq, command, null)
 
     def reqAttach(seq: double; command: string; data: JsonValue?)
         self->setPaths(data)
-        self->setInlinePreviewLimit(data)
+        self->setDebuggerSettings(data)
         self->sendSuccessResponse(seq, command, null)
 
     def reqDisconnect(seq: double; command: string; data: JsonValue?)
