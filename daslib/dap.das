@@ -1,3 +1,4 @@
+options rtti
 options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
@@ -208,7 +209,7 @@ struct Variable
     name: string
     value: string
     variablesReference: double
-    _type: string
+    [[rename="type"]] _type: string
     indexedVariables: double
 
 def JV(data: Variable)
@@ -279,7 +280,7 @@ def EvaluateArguments(data: JsonValue?)
 
 struct EvaluateResponse
     result: string
-    _type: string
+    [[rename="type"]] _type: string
     variablesReference: double
     indexedVariables: double
 
