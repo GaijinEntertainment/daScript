@@ -25,8 +25,9 @@ struct Foo
     tup : tuple<int;float>
     v_var : Moo
     ptr : void?
-
-
+    [[optional]] empty_str : string
+    [[optional]] empty_arr : array<int>
+    [[optional]] empty_tab : table<string;int>
 
 [export]
 def main

@@ -17,19 +17,21 @@ namespace das {
         bool enumAsInt = false;
         bool unescape = false;
         bool embed = false;
-
-
+        bool optional = false;
+        bool skipName = false;
     // data structures
-       virtual void beforeStructure ( char *, StructInfo * ) override {
+        virtual void beforeStructure ( char *, StructInfo * ) override {
             ss << "{";
         }
-       virtual void afterStructure ( char *, StructInfo * ) override {
+        virtual void afterStructure ( char *, StructInfo * ) override {
             ss << "}";
         }
-       virtual void beforeStructureField ( char *, StructInfo *, char *, VarInfo * vi, bool ) override {
+        virtual void beforeStructureField ( char * ps, StructInfo *, char * pf, VarInfo * vi, bool ) override {
             enumAsInt = false;
             unescape = false;
             embed = false;
+            optional = false;
+            skipName = false;
             string name = vi->name ? vi->name : "";
             if ( vi->annotation_arguments ) {
                 auto aa = (AnnotationArguments *) vi->annotation_arguments;
@@ -40,26 +42,55 @@ namespace das {
                         unescape = arg.bValue;
                     } else if ( arg.name=="embed" && arg.type==Type::tBool ) {
                         embed = arg.bValue;
+                    } else if ( arg.name=="optional" && arg.type==Type::tBool ) {
+                        optional = arg.bValue;
                     } else if ( arg.name=="rename" && arg.type==Type::tString ) {
                         name = arg.sValue;
                     }
                 }
             }
-            ss << "\"" << name << "\":";
+            if ( optional ) {
+                if ( vi->type==Type::tString && vi->dimSize==0 ) {
+                    auto st = *((char **) pf);
+                    skipName =st==nullptr || strlen(st)==0;
+                } else if ( vi->type==Type::tArray && vi->dimSize==0 ) {
+                    auto arr = (Array *) pf;
+                    skipName = arr->size==0;
+                } else if ( vi->type==Type::tTable && vi->dimSize==0 ) {
+                    auto tab = (Table *) pf;
+                    skipName = tab->size==0;
+                }
+            }
+            if ( !skipName ) {
+                if ( ps!=pf ) ss << ",";
+                ss << "\"" << name << "\":";
+            }
         }
-       virtual void afterStructureField ( char *, StructInfo *, char *, VarInfo *, bool last ) override {
-            if ( !last ) ss << ",";
+        virtual bool canVisitArray ( Array * ar, TypeInfo * ) override {
+            if ( optional && ar->size==0 ) return false;
+            return true;
+        }
+        virtual bool canVisitTable ( char * ps, TypeInfo * ) override {
+            if ( optional ) {
+                Table * tab = (Table *)ps;
+                if ( tab->size==0 ) return false;
+            }
+            return true;
+        }
+        virtual void afterStructureField ( char *, StructInfo *, char *, VarInfo *, bool ) override {
             enumAsInt = false;
             unescape = false;
             embed = false;
+            optional = false;
+            skipName = true;
         }
-       virtual void beforeTuple ( char *, TypeInfo * ) override {
+        virtual void beforeTuple ( char *, TypeInfo * ) override {
             ss << "{";
         }
-       virtual void afterTuple ( char *, TypeInfo * ) override {
+        virtual void afterTuple ( char *, TypeInfo * ) override {
             ss << "}";
         }
-       virtual void beforeTupleEntry ( char *, TypeInfo * ti, char *, TypeInfo * vi, bool ) override {
+        virtual void beforeTupleEntry ( char *, TypeInfo * ti, char *, TypeInfo * vi, bool ) override {
             // TODO: we can actuallyss this, right?
             uint32_t idx = -1u;
             for ( uint32_t i=0, is=ti->argCount; i!=is; ++i ) {
@@ -70,129 +101,130 @@ namespace das {
             }
             ss << "\"_" << idx << "\":";
         }
-       virtual void afterTupleEntry ( char *, TypeInfo *, char *, TypeInfo *, bool last ) override {
+        virtual void afterTupleEntry ( char *, TypeInfo *, char *, TypeInfo *, bool last ) override {
             if ( !last ) ss << ",";
         }
-       virtual void beforeVariant ( char * ps, TypeInfo * ti ) override {
+        virtual void beforeVariant ( char * ps, TypeInfo * ti ) override {
             int32_t fidx = *((int32_t *)ps);
             ss << "{\"" << ti->argNames[fidx] << "\":";
         }
-       virtual void afterVariant ( char *, TypeInfo * ) override {
+        virtual void afterVariant ( char *, TypeInfo * ) override {
             ss << "}";
         }
-       virtual void beforeArrayData ( char *, uint32_t, uint32_t, TypeInfo * ) override {
+        virtual void beforeArrayData ( char *, uint32_t, uint32_t, TypeInfo * ) override {
             ss << "[";
         }
-       virtual void afterArrayData ( char *, uint32_t, uint32_t, TypeInfo * ) override {
+        virtual void afterArrayData ( char *, uint32_t, uint32_t, TypeInfo * ) override {
             ss << "]";
         }
-       virtual void afterArrayElement ( char *, TypeInfo *, char *, uint32_t, bool last ) override {
+        virtual void afterArrayElement ( char *, TypeInfo *, char *, uint32_t, bool last ) override {
             if ( !last ) ss << ",";
         }
-       virtual void beforeTable ( Table *, TypeInfo * ) override {
+        virtual void beforeTable ( Table *, TypeInfo * ) override {
             ss << "{";
         }
-       virtual void beforeTableKey ( Table *, TypeInfo *, char *, TypeInfo * ki, uint32_t, bool ) override {
+        virtual void beforeTableKey ( Table *, TypeInfo *, char *, TypeInfo * ki, uint32_t, bool ) override {
             if ( ki->type!=Type::tString ) ss << "\"";
         }
-       virtual void afterTableKey ( Table *, TypeInfo *, char *, TypeInfo * ki, uint32_t, bool ) override {
+        virtual void afterTableKey ( Table *, TypeInfo *, char *, TypeInfo * ki, uint32_t, bool ) override {
             if ( ki->type!=Type::tString ) ss << "\":"; else ss << ":";
         }
-       virtual void afterTableValue ( Table *, TypeInfo *, char *, TypeInfo *, uint32_t, bool last ) override {
+        virtual void afterTableValue ( Table *, TypeInfo *, char *, TypeInfo *, uint32_t, bool last ) override {
             if ( !last ) ss << ",";
         }
-       virtual void afterTable ( Table *, TypeInfo * ) override {
+        virtual void afterTable ( Table *, TypeInfo * ) override {
             ss << "}";
         }
     // types
-       virtual void Null ( TypeInfo * ) override {
+        virtual void Null ( TypeInfo * ) override {
             ss << "null";
         }
-       virtual void Bool ( bool & value ) override {
+        virtual void Bool ( bool & value ) override {
             ss << (value ? "true" : "false");
         }
-       virtual void Int8 ( int8_t & value ) override {
+        virtual void Int8 ( int8_t & value ) override {
             ss << value;
         }
-       virtual void UInt8 ( uint8_t & value ) override {
+        virtual void UInt8 ( uint8_t & value ) override {
             ss << value;
         }
-       virtual void Int16 ( int16_t & value ) override {
+        virtual void Int16 ( int16_t & value ) override {
             ss << value;
         }
-       virtual void UInt16 ( uint16_t & value ) override {
+        virtual void UInt16 ( uint16_t & value ) override {
             ss << value;
         }
-       virtual void Int64 ( int64_t & value ) override {
+        virtual void Int64 ( int64_t & value ) override {
             ss << value;
         }
-       virtual void UInt64 ( uint64_t & value ) override {
+        virtual void UInt64 ( uint64_t & value ) override {
             ss << value;
         }
-       virtual void String ( char * & value ) override {
+        virtual void String ( char * & value ) override {
+            if ( optional && (value==nullptr || strlen(value)==0) ) return;
             if ( unescape ) {
                 ss << "\"" << value << "\"";
             } else if ( embed ) {
                 ss << value;
             } else {
-                ss << "\"" << escapeString(value,false) << "\"";
+                ss << "\"" << escapeString(value ? value : "",false) << "\"";
             }
-       }
-       virtual void Double ( double & value ) override {
+        }
+        virtual void Double ( double & value ) override {
             ss << value;
         }
-       virtual void Float ( float & value ) override {
+        virtual void Float ( float & value ) override {
             ss << value;
         }
-       virtual void Int ( int32_t & value ) override {
+        virtual void Int ( int32_t & value ) override {
             ss << value;
         }
-       virtual void UInt ( uint32_t & value ) override {
+        virtual void UInt ( uint32_t & value ) override {
             ss << value;
         }
-       virtual void Bitfield ( uint32_t & value, TypeInfo * ) override {
+        virtual void Bitfield ( uint32_t & value, TypeInfo * ) override {
             ss << value;
         }
-       virtual void Int2 ( int2 & value ) override {
+        virtual void Int2 ( int2 & value ) override {
             ss << "[" << value.x << "," << value.y << "]";
         }
-       virtual void Int3 ( int3 & value ) override {
+        virtual void Int3 ( int3 & value ) override {
             ss << "[" << value.x << "," << value.y << "," << value.z << "]";
         }
-       virtual void Int4 ( int4 & value ) override {
+        virtual void Int4 ( int4 & value ) override {
             ss << "[" << value.x << "," << value.y << "," << value.z << "," << value.w << "]";
         }
-       virtual void UInt2 ( uint2 & value ) override {
+        virtual void UInt2 ( uint2 & value ) override {
             ss << "[" << value.x << "," << value.y << "]";
         }
-       virtual void UInt3 ( uint3 & value ) override {
+        virtual void UInt3 ( uint3 & value ) override {
             ss << "[" << value.x << "," << value.y << "," << value.z << "]";
         }
-       virtual void UInt4 ( uint4 & value ) override {
+        virtual void UInt4 ( uint4 & value ) override {
             ss << "[" << value.x << "," << value.y << "," << value.z << "," << value.w << "]";
         }
-       virtual void Float2 ( float2 & value ) override {
+        virtual void Float2 ( float2 & value ) override {
             ss << "[" << value.x << "," << value.y << "]";
         }
-       virtual void Float3 ( float3 & value ) override {
+        virtual void Float3 ( float3 & value ) override {
             ss << "[" << value.x << "," << value.y << "," << value.z << "]";
         }
-       virtual void Float4 ( float4 & value ) override {
+        virtual void Float4 ( float4 & value ) override {
             ss << "[" << value.x << "," << value.y << "," << value.z << "," << value.w << "]";
         }
-       virtual void Range ( range & value ) override {
+        virtual void Range ( range & value ) override {
             ss << "[" << value.x << "," << value.y << "]";
         }
-       virtual void URange ( urange & value ) override {
+        virtual void URange ( urange & value ) override {
             ss << "[" << value.x << "," << value.y << "]";
         }
-       virtual void Range64 ( range64 & value ) override {
+        virtual void Range64 ( range64 & value ) override {
             ss << "[" << value.x << "," << value.y << "]";
         }
-       virtual void URange64 ( urange64 & value ) override {
+        virtual void URange64 ( urange64 & value ) override {
             ss << "[" << value.x << "," << value.y << "]";
         }
-       virtual void VoidPtr ( void * & ) override {
+        virtual void VoidPtr ( void * & ) override {
             ss << "null";
         }
         void Enum ( int64_t value, EnumInfo * info ) {
@@ -211,13 +243,13 @@ namespace das {
                 }
             }
         }
-       virtual void WalkEnumeration ( int32_t & value, EnumInfo * info ) {
+        virtual void WalkEnumeration ( int32_t & value, EnumInfo * info ) {
             Enum(value,info);
         }
-       virtual void WalkEnumeration8  ( int8_t & value, EnumInfo * info ) {
+        virtual void WalkEnumeration8  ( int8_t & value, EnumInfo * info ) {
             Enum(value,info);
         }
-       virtual void WalkEnumeration16 ( int16_t & value, EnumInfo * info ) {
+        virtual void WalkEnumeration16 ( int16_t & value, EnumInfo * info ) {
             Enum(value,info);
         }
     };
