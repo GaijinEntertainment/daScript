@@ -822,6 +822,43 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 <normal>\t {
     YYTAB();
 }
+
+<normal>","([ \t\n\r]*|"/*".*"*/"|\/\/.*\n)*"]" { 
+    if ( !yyextra->das_nested_square_braces ) {
+        das_yyfatalerror(yylloc_param,yyscanner,"mismatching square braces", CompilationError::mismatching_parentheses);
+        return LEXER_ERROR;
+    }
+    yyextra->das_nested_square_braces --;
+    return COMMA_SQR_BR;
+}
+
+<normal>","([ \t\n\r]*|"/*".*"*/"|\/\/.*\n)*"}" { 
+    if ( !yyextra->das_nested_square_braces ) {
+        das_yyfatalerror(yylloc_param,yyscanner,"mismatching curly braces", CompilationError::mismatching_parentheses);
+        return LEXER_ERROR;
+    }
+    yyextra->das_nested_square_braces --;
+    return COMMA_CUR_BR;
+}
+
+<normal>";"([ \t\n\r]*|"/*".*"*/"|\/\/.*\n)*"]" { 
+    if ( !yyextra->das_nested_square_braces ) {
+        das_yyfatalerror(yylloc_param,yyscanner,"mismatching square braces", CompilationError::mismatching_parentheses);
+        return LEXER_ERROR;
+    }
+    yyextra->das_nested_square_braces --;
+    return SEMICOLON_SQR_BR;
+}
+
+<normal>";"([ \t\n\r]*|"/*".*"*/"|\/\/.*\n)*"}" { 
+    if ( !yyextra->das_nested_curly_braces ) {
+        das_yyfatalerror(yylloc_param,yyscanner,"mismatching curly braces", CompilationError::mismatching_parentheses);
+        return LEXER_ERROR;
+    }
+    yyextra->das_nested_curly_braces --;
+    return SEMICOLON_CUR_BR;
+}
+
 <normal>(\/\/.*)*\n {
     YYCOLUMN(yyextra->das_yycolumn = 0, "NEW LINE");
     das_accept_cpp_comment(yyextra->g_CommentReaders, yyscanner, *yylloc_param, yytext);
