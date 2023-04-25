@@ -318,10 +318,13 @@
 %token      END_STRING_EXPR         "}"
 %token      END_OF_READ             "end of failed eader macro"
 
-%token  COMMA_SQR_BR        ",]"
-%token  COMMA_CUR_BR        ",}"
-%token  SEMICOLON_SQR_BR    ";]"
-%token  SEMICOLON_CUR_BR    ";}"
+
+%token      SEMICOLON_CUR_CUR       ";}}"
+%token      SEMICOLON_CUR_SQR       ";}]"
+%token      SEMICOLON_SQR_SQR       ";]]"
+%token      COMMA_SQR_SQR           ",]]"
+%token      COMMA_CUR_SQR           ",}]"
+
 
 %type <pEnum>           enum_name
 %type <pNameList>       bitfield_bits
@@ -2725,44 +2728,50 @@ optional_block
     |   DAS_WHERE expr_block[blk] { $$ = $blk; }
     ;
 
-optional_trailing_semicolon_sqr_br
-    : ']'
-    | SEMICOLON_SQR_BR
+
+optional_trailing_semicolon_cur_cur
+    : '}' '}'
+    | SEMICOLON_CUR_CUR
     ;
 
-optional_trailing_semicolon_cur_br
-    : '}'
-    | SEMICOLON_CUR_BR
+optional_trailing_semicolon_cur_sqr
+    : '}' ']'
+    | SEMICOLON_CUR_SQR
     ;
 
-optional_trailing_delim_sqr_br
-    : ']'
-    | SEMICOLON_SQR_BR
-    | COMMA_SQR_BR
+optional_trailing_semicolon_sqr_sqr
+    : ']' ']'
+    | SEMICOLON_SQR_SQR
     ;
 
-optional_trailing_delim_cur_br
-    : '}'
-    | SEMICOLON_CUR_BR
-    | COMMA_CUR_BR
+optional_trailing_delim_sqr_sqr
+    : ']' ']'
+    | SEMICOLON_SQR_SQR
+    | COMMA_SQR_SQR
+    ;
+
+optional_trailing_delim_cur_sqr
+    : '}' ']'
+    | SEMICOLON_CUR_SQR
+    | COMMA_CUR_SQR
     ;
 
 
 make_struct_decl
-    :   BRABRAB [loc] type_declaration_no_options[mkt] make_struct_dim[msd] optional_block[blk] optional_trailing_delim_sqr_br ']' {
+    :   BRABRAB [loc] type_declaration_no_options[mkt] make_struct_dim[msd] optional_block[blk] optional_trailing_delim_sqr_sqr {
         ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
         ((ExprMakeStruct *)$msd)->block = $blk;
         $msd->at = tokAt(scanner,@loc);
         $$ = $msd;
     }
-    |   BRABRAB [loc] type_declaration_no_options[mkt] optional_block[blk] optional_trailing_delim_sqr_br ']' {
+    |   BRABRAB [loc] type_declaration_no_options[mkt] optional_block[blk] optional_trailing_delim_sqr_sqr {
         auto msd = new ExprMakeStruct();
         msd->makeType = TypeDeclPtr($mkt);
         msd->block = $blk;
         msd->at = tokAt(scanner,@loc);
         $$ = msd;
     }
-    |   BRABRAB [loc] type_declaration_no_options[mkt] '(' ')' optional_block[blk] optional_trailing_delim_sqr_br ']' {
+    |   BRABRAB [loc] type_declaration_no_options[mkt] '(' ')' optional_block[blk] optional_trailing_delim_sqr_sqr {
         auto msd = new ExprMakeStruct();
         msd->makeType = TypeDeclPtr($mkt);
         msd->useInitializer = true;
@@ -2770,14 +2779,14 @@ make_struct_decl
         msd->at = tokAt(scanner,@loc);
         $$ = msd;
     }
-    |   BRABRAB [loc] type_declaration_no_options[mkt] '(' ')' make_struct_dim[msd] optional_block[blk] optional_trailing_delim_sqr_br ']' {
+    |   BRABRAB [loc] type_declaration_no_options[mkt] '(' ')' make_struct_dim[msd] optional_block[blk] optional_trailing_delim_sqr_sqr {
         ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
         ((ExprMakeStruct *)$msd)->useInitializer = true;
         ((ExprMakeStruct *)$msd)->block = $blk;
         $msd->at = tokAt(scanner,@loc);
         $$ = $msd;
     }
-    |   BRACBRB [loc] type_declaration_no_options[mkt] make_struct_dim[msd] optional_block[blk] optional_trailing_delim_cur_br ']' {
+    |   BRACBRB [loc] type_declaration_no_options[mkt] make_struct_dim[msd] optional_block[blk] optional_trailing_delim_cur_sqr {
         ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
         ((ExprMakeStruct *)$msd)->block = $blk;
         $msd->at = tokAt(scanner,@loc);
@@ -2785,7 +2794,7 @@ make_struct_decl
         tam->arguments.push_back(ExpressionPtr($msd));
         $$ = tam;
     }
-    |   BRACBRB [loc] type_declaration_no_options[mkt] '(' ')' make_struct_dim[msd] optional_block[blk] optional_trailing_delim_cur_br ']' {
+    |   BRACBRB [loc] type_declaration_no_options[mkt] '(' ')' make_struct_dim[msd] optional_block[blk] optional_trailing_delim_cur_sqr {
         ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
         ((ExprMakeStruct *)$msd)->useInitializer = true;
         ((ExprMakeStruct *)$msd)->block = $blk;
@@ -2844,12 +2853,12 @@ make_dim
     ;
 
 make_dim_decl
-    :   BRABRAB [loc] type_declaration_no_options[mkt] make_dim[mka] optional_trailing_semicolon_sqr_br ']' {
+    :   BRABRAB [loc] type_declaration_no_options[mkt] make_dim[mka] optional_trailing_semicolon_sqr_sqr {
        ((ExprMakeArray *)$mka)->makeType = TypeDeclPtr($mkt);
        $mka->at = tokAt(scanner,@loc);
        $$ = $mka;
     }
-    |   BRACBRB [loc] type_declaration_no_options[mkt] make_dim[mka] optional_trailing_semicolon_cur_br ']' {
+    |   BRACBRB [loc] type_declaration_no_options[mkt] make_dim[mka] optional_trailing_semicolon_cur_sqr {
        ((ExprMakeArray *)$mka)->makeType = TypeDeclPtr($mkt);
        $mka->at = tokAt(scanner,@loc);
        auto tam = yyextra->g_Program->makeCall(tokAt(scanner,@loc),"to_array_move");
@@ -2871,7 +2880,7 @@ make_table
     ;
 
 make_table_decl
-    :   CBRCBRB [loc] make_table[mka] optional_trailing_semicolon_cur_br '}' {
+    :   CBRCBRB [loc] make_table[mka] optional_trailing_semicolon_cur_cur {
         auto mkt = make_smart<TypeDecl>(Type::autoinfer);
         mkt->dim.push_back(TypeDecl::dimAuto);
         ((ExprMakeArray *)$mka)->makeType = mkt;
