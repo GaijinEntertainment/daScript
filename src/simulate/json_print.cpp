@@ -6,17 +6,12 @@
 
 #include "daScript/ast/ast.h"
 
-#include <sstream>
-#include <iomanip>
-
 
 namespace das {
 
     struct JsonWriter : DataWalker {
-        JsonWriter () {
-            ss << setprecision(9);
-        }
-        stringstream ss;
+        JsonWriter () { ss << FIXEDFP; }
+        TextWriter ss;
         bool enumAsInt = false;
         bool unescape = false;
         bool embed = false;
@@ -95,8 +90,8 @@ namespace das {
         }
         virtual void beforeTupleEntry ( char *, TypeInfo * ti, char *, TypeInfo * vi, bool ) override {
             // TODO: we can actuallyss this, right?
-            uint32_t idx = -1u;
-            for ( uint32_t i=0, is=ti->argCount; i!=is; ++i ) {
+            int32_t idx = -1u;
+            for ( int32_t i=0, is=ti->argCount; i!=is; ++i ) {
                 if ( ti->argTypes[i]==vi ) {
                     idx = i;
                     break;
@@ -149,19 +144,19 @@ namespace das {
             ss << value;
         }
         virtual void UInt8 ( uint8_t & value ) override {
-            ss << value;
+            ss << int32_t(value);
         }
         virtual void Int16 ( int16_t & value ) override {
             ss << value;
         }
         virtual void UInt16 ( uint16_t & value ) override {
-            ss << value;
+            ss << int32_t(value);
         }
         virtual void Int64 ( int64_t & value ) override {
             ss << value;
         }
         virtual void UInt64 ( uint64_t & value ) override {
-            ss << value;
+            ss << int64_t(value);
         }
         virtual void String ( char * & value ) override {
             if ( optional && (value==nullptr || strlen(value)==0) ) return;
@@ -174,16 +169,16 @@ namespace das {
             }
         }
         virtual void Double ( double & value ) override {
-            ss << setprecision(17) << value << setprecision(9);
+            ss << value;
         }
         virtual void Float ( float & value ) override {
-            ss << setprecision(9) << value;
+            ss << value;
         }
         virtual void Int ( int32_t & value ) override {
             ss << value;
         }
         virtual void UInt ( uint32_t & value ) override {
-            ss << value;
+            ss << int64_t(value);
         }
         virtual void Bitfield ( uint32_t & value, TypeInfo * ) override {
             ss << value;
@@ -198,13 +193,13 @@ namespace das {
             ss << "[" << value.x << "," << value.y << "," << value.z << "," << value.w << "]";
         }
         virtual void UInt2 ( uint2 & value ) override {
-            ss << "[" << value.x << "," << value.y << "]";
+            ss << "[" << int64_t(value.x) << "," << int64_t(value.y) << "]";
         }
         virtual void UInt3 ( uint3 & value ) override {
-            ss << "[" << value.x << "," << value.y << "," << value.z << "]";
+            ss << "[" << int64_t(value.x) << "," << int64_t(value.y) << "," << int64_t(value.z) << "]";
         }
         virtual void UInt4 ( uint4 & value ) override {
-            ss << "[" << value.x << "," << value.y << "," << value.z << "," << value.w << "]";
+            ss << "[" << int64_t(value.x) << "," << int64_t(value.y) << "," << int64_t(value.z) << "," << int64_t(value.w) << "]";
         }
         virtual void Float2 ( float2 & value ) override {
             ss << "[" << value.x << "," << value.y << "]";
@@ -219,13 +214,13 @@ namespace das {
             ss << "[" << value.x << "," << value.y << "]";
         }
         virtual void URange ( urange & value ) override {
-            ss << "[" << value.x << "," << value.y << "]";
+            ss << "[" << int64_t(value.x) << "," << int64_t(value.y) << "]";
         }
         virtual void Range64 ( range64 & value ) override {
             ss << "[" << value.x << "," << value.y << "]";
         }
         virtual void URange64 ( urange64 & value ) override {
-            ss << "[" << value.x << "," << value.y << "]";
+            ss << "[" << int64_t(value.x) << "," << int64_t(value.y) << "]";
         }
         virtual void VoidPtr ( void * & ) override {
             ss << "null";
