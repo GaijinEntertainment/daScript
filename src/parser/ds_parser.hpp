@@ -264,13 +264,18 @@ extern int das_yydebug;
     BEGIN_STRING_EXPR = 424,       /* "{"  */
     END_STRING_EXPR = 425,         /* "}"  */
     END_OF_READ = 426,             /* "end of failed eader macro"  */
-    UNARY_MINUS = 427,             /* UNARY_MINUS  */
-    UNARY_PLUS = 428,              /* UNARY_PLUS  */
-    PRE_INC = 429,                 /* PRE_INC  */
-    PRE_DEC = 430,                 /* PRE_DEC  */
-    POST_INC = 431,                /* POST_INC  */
-    POST_DEC = 432,                /* POST_DEC  */
-    DEREF = 433                    /* DEREF  */
+    SEMICOLON_CUR_CUR = 427,       /* ";}}"  */
+    SEMICOLON_CUR_SQR = 428,       /* ";}]"  */
+    SEMICOLON_SQR_SQR = 429,       /* ";]]"  */
+    COMMA_SQR_SQR = 430,           /* ",]]"  */
+    COMMA_CUR_SQR = 431,           /* ",}]"  */
+    UNARY_MINUS = 432,             /* UNARY_MINUS  */
+    UNARY_PLUS = 433,              /* UNARY_PLUS  */
+    PRE_INC = 434,                 /* PRE_INC  */
+    PRE_DEC = 435,                 /* PRE_DEC  */
+    POST_INC = 436,                /* POST_INC  */
+    POST_DEC = 437,                /* POST_DEC  */
+    DEREF = 438                    /* DEREF  */
   };
   typedef enum das_yytokentype das_yytoken_kind_t;
 #endif
