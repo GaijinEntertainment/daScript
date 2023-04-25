@@ -115,15 +115,15 @@ def test_string_interpolation()
     print("{ @(a : string) { print(a);} }\n")
     // print("{@(a : string) { print(a);}}\n") <<< broken :(
 
-[test]
-def test_trailing_delimiters()
+[export]
+def test
     test_int_array()
     test_structure_init()
     test_table_init()
     test_blocks()
     test_mixed_blocks()
     test_string_interpolation()
-
+    return true
 
 
 
