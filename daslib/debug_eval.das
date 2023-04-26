@@ -30,7 +30,8 @@ def each_token ( st:string )
                 pass
             if empty(chars)
                 break
-            if ahead=='+' || ahead=='-' || ahead=='*' || ahead=='/' || ahead=='[' || ahead==']' || ahead=='(' || ahead==')' || ahead=='.'
+            if (ahead=='+' || ahead=='-' || ahead=='*' || ahead=='/' || ahead=='[' || ahead==']' || ahead=='(' || ahead==')' || ahead=='.' ||
+                ahead=='!' || ahead=='~' || ahead=='&' || ahead=='|' || ahead=='^' || ahead=='<' || ahead=='>' || ahead=='=')
                 yield [[Token punkt=ahead]]
                 next(chars,ahead)
             elif is_number(ahead)
@@ -93,6 +94,12 @@ def Result ( value:int64 )
     self.value = cast_to_vec4f(value)
     return self
 
+def Result ( value:bool )
+    var self : Result
+    self.tinfo.basicType = Type tBool
+    self.value = cast_to_vec4f(value)
+    return self
+
 def InvalidResult
     var self : Result
     self.tinfo.basicType = Type tVoid
@@ -133,8 +140,17 @@ def getI ( var st:TokenStream; result:Result ) : int64
     return int64(loadI(data,type<int>)) if bt==Type tInt || bt==Type tUInt
     return int64(loadI(data,type<int16>)) if bt==Type tInt16 || bt==Type tUInt16
     return int64(loadI(data,type<int8>)) if bt==Type tInt8 || bt==Type tUInt8
+    return int64(loadI(data,type<bool>) ? 1l : 0l) if bt==Type tBool
     st |> error("can't get value of {result.tinfo.basicType}")
     return INVALID_VALUE
+
+def getT ( var st:TokenStream; result:Result ) : string
+    if !empty(result.error)
+        return ""
+    if result.data != null
+        return sprint_data(result.data, unsafe(addr(result.tinfo)), print_flags singleLine)
+    else
+        return sprint_data(result.value, unsafe(addr(result.tinfo)), print_flags singleLine)
 
 def expr_value ( var st : TokenStream ) : Result
     let token = token(st)
@@ -146,6 +162,10 @@ def expr_value ( var st : TokenStream ) : Result
         if [[Token number=$v(value)]]                           // number
             return <- Result(value)
         if [[Token ident=$v(name)]]                             // identifier
+            if name=="true"
+                return <- Result(true)
+            elif name=="false"
+                return <- Result(false)
             if st.names |> key_exists(name)
                 return st.names[name]
             return st |> error("unknown variable {name}")
@@ -283,9 +303,13 @@ def expr_unary ( var st:TokenStream ) : Result
     let token = token(st)
     match token
         if [[Token punkt='+']]
-            return Result(st|>getI(expr_at(st)))
+            return Result(st|>getI(expr_unary(st)))
         if [[Token punkt='-']]
-            return Result(-st|>getI(expr_at(st)))
+            return Result(-st|>getI(expr_unary(st)))
+        if [[Token punkt='~']]
+            return Result(~st|>getI(expr_unary(st)))
+        if [[Token punkt='!']]
+            return Result(st|>getI(expr_unary(st))==0l)
     unput(st, token)
     return expr_at(st)
 
@@ -316,8 +340,66 @@ def expr_add_sub ( var st:TokenStream ) : Result
             unput(st, token)
     return <- leftValue
 
+def try_accept_punkt ( var st:TokenStream; punkt:int )
+    let token = token(st)
+    if token ?as punkt ?? 0 != punkt
+        unput(st, token)
+        return false
+    return true
+
+def expr_and ( var st:TokenStream ) : Result
+    var leftValue = expr_add_sub(st)
+    if try_accept_punkt(st, '&')
+        if try_accept_punkt(st, '&')
+            return Result((st|>getI(leftValue) & st|>getI(expr_and(st))) != 0l)
+        else
+            return Result(st|>getI(leftValue) & st|>getI(expr_and(st)))
+    return <- leftValue
+
+def expr_xor ( var st:TokenStream ) : Result
+    var leftValue = expr_and(st)
+    if try_accept_punkt(st, '^')
+        if try_accept_punkt(st, '^')
+            return Result((st|>getI(leftValue) ^ st|>getI(expr_xor(st))) != 0l)
+        else
+            return Result(st|>getI(leftValue) ^ st|>getI(expr_xor(st)))
+    return <- leftValue
+
+def expr_or ( var st:TokenStream ) : Result
+    var leftValue = expr_xor(st)
+    if try_accept_punkt(st, '|')
+        if try_accept_punkt(st, '|')
+            return Result((st|>getI(leftValue) | st|>getI(expr_or(st))) != 0l)
+        else
+            return Result(st|>getI(leftValue) | st|>getI(expr_or(st)))
+    return <- leftValue
+
+def expr_bool_op ( var st:TokenStream ) : Result
+    var leftValue = expr_or(st)
+    let token = token(st)
+    let subtoken = token(st)
+    match token
+        if [[Token punkt='!']] && (subtoken ?as punkt ?? 0 == '=')
+            return Result(st|>getT(leftValue) != st|>getT(expr_bool_op(st)))
+        if [[Token punkt='=']] && (subtoken ?as punkt ?? 0 == '=')
+            return Result(st|>getT(leftValue) == st|>getT(expr_bool_op(st)))
+        if [[Token punkt='<']] && (subtoken ?as punkt ?? 0 == '=')
+            return Result(st|>getI(leftValue) <= st|>getI(expr_bool_op(st)))
+        if [[Token punkt='<']]
+            unput(st, subtoken)
+            return Result(st|>getI(leftValue) < st|>getI(expr_bool_op(st)))
+        if [[Token punkt='>']] && (subtoken ?as punkt ?? 0 == '=')
+            return Result(st|>getI(leftValue) >= st|>getI(expr_bool_op(st)))
+        if [[Token punkt='>']]
+            unput(st, subtoken)
+            return Result(st|>getI(leftValue) > st|>getI(expr_bool_op(st)))
+        if _
+            unput(st, subtoken)
+            unput(st, token)
+    return <- leftValue
+
 def expr ( var st:TokenStream ) : Result
-    return expr_add_sub(st)
+    return expr_bool_op(st)
 
 def public debug_eval ( context:table<string;Result>; expr:string ) : Result
     var st <- TokenStream(expr)
@@ -329,3 +411,4 @@ def public debug_eval ( context:table<string;Result>; expr:string ) : Result
     if !empty(st.errors)
         return [[Result error=st.errors[0]]]
     return <- result
+
