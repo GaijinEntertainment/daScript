@@ -344,10 +344,10 @@ namespace das {
             totalNodesAllocated ++;
             if ( prefixWithHeader ) {
                 char * data = allocate(sizeof(TT) + sizeof(NodePrefix));
-                new (data) NodePrefix(sizeof(TT));
-                return new (data + sizeof(NodePrefix)) TT(args...);
+                new ((void *)data) NodePrefix(sizeof(TT));
+                return new ((void *)(data + sizeof(NodePrefix))) TT(args...);
             } else {
-                return new (allocate(sizeof(TT))) TT(args...);
+                return new ((void *)allocate(sizeof(TT))) TT(args...);
             }
         }
 #else
@@ -356,10 +356,10 @@ namespace das {
             totalNodesAllocated++;
             char * data = allocate(prefixWithHeader ? (sizeof(TT)+sizeof(NodePrefix)) : sizeof(TT));
             if ( prefixWithHeader ) {
-                new (data) NodePrefix(sizeof(TT));
+                new ((void *)data) NodePrefix(sizeof(TT));
                 data += sizeof(NodePrefix);
             }
-            return new (data) TT(args...);
+            return new ((void *)data) TT(args...);
         }
 #endif
 
