@@ -72,6 +72,23 @@ def test_structure_init()
     print("{d}\n")
 
 
+    var e <- [[ AAA x=111, y=222; /* */ x=333, y=444;  /* */ ]]  /*
+    */
+    print("{e}\n")
+    assert(e[1].y == 444)
+
+
+    var f <- [[ AAA x=111, y=222 /*
+      new line
+    */; x=333, y=444;  /*
+      new line
+    */ ]]  /*
+    */
+    print("{f}\n")
+    assert(f[1].y == 444)
+
+
+
 def test_table_init()
     var t0 <- {{
       1 => 111;
