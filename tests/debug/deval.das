@@ -45,6 +45,7 @@ def test_debug_eval ( t:T? )
         t |> equal("invalid token invalid character ~, expecting number or (",context|>eval_test("1+~"))
         t |> equal("unexpected token 41",context|>eval_test("123)))"))
         t |> equal("unknown variable foo",context|>eval_test("foo+1"))
+        t |> equal("49",context|>eval_test("0x12+0x1f"))
     t |> run("variable operations") <| @@ ( t : T? )
         var context : table<string; Result>
         var temp_int : int = 13

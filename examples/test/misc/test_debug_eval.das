@@ -95,6 +95,7 @@ def main
     verify(context|>eval_test("1+~")=="invalid token invalid character ~, expecting number or (")
     verify(context|>eval_test("123)))")=="unexpected token 41")
     verify(context|>eval_test("foo+1")=="unknown variable foo")
+    verify(context|>eval_test("0x12+0x1f")=="49")
 
 
 

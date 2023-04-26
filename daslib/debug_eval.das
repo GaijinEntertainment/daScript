@@ -38,7 +38,13 @@ def each_token ( st:string )
                 str |> push(uint8(ahead))
                 while next(chars,ahead) && is_number(ahead)
                     str |> push(uint8(ahead))
-                yield [[Token number=int64(string(str))]]
+                if length(str)==1 && str[0]=='0'u8 && (ahead=='x' || ahead=='X')
+                    str |> push(uint8(ahead))
+                    while next(chars,ahead) && (is_number(ahead) || (ahead>='a' && ahead<='f') || (ahead>='A' && ahead<='F'))
+                        str |> push(uint8(ahead))
+                    yield [[Token number=to_int64(string(str),true)]]
+                else
+                    yield [[Token number=to_int64(string(str))]]
             elif is_alpha(ahead) || ahead=='_' || ahead=='`'
                 var str : array<uint8>
                 str |> push(uint8(ahead))
