@@ -1,0 +1,298 @@
+options no_unused_block_arguments = false
+options no_unused_function_arguments = false
+options indenting = 4
+
+module debug_eval shared private
+
+require daslib/strings_boost
+require daslib/match
+require daslib/math_bits
+
+require rtti public
+require debugapi
+
+variant Token
+    number : int64
+    punkt : int
+    ident : string
+    invalid : string
+    eos : string
+
+def each_token ( st:string )
+    return <- generator<Token> () <|
+        var tst := st
+        var chars <- unsafe(each(tst))
+        var ahead = ' '
+        while !empty(chars)
+            while is_white_space(ahead) && next(chars,ahead)
+                pass
+            if empty(chars)
+                break
+            if ahead=='+' || ahead=='-' || ahead=='*' || ahead=='/' || ahead=='[' || ahead==']' || ahead=='(' || ahead==')' || ahead=='.'
+                yield [[Token punkt=ahead]]
+                next(chars,ahead)
+            elif is_number(ahead)
+                var str : array<uint8>
+                str |> push(uint8(ahead))
+                while next(chars,ahead) && is_number(ahead)
+                    str |> push(uint8(ahead))
+                yield [[Token number=int64(string(str))]]
+            elif is_alpha(ahead) || ahead=='_' || ahead=='`'
+                var str : array<uint8>
+                str |> push(uint8(ahead))
+                while next(chars,ahead) && (is_alpha(ahead) || is_number(ahead) || ahead=='_' || ahead=='`')
+                    str |> push(uint8(ahead))
+                yield [[Token ident=string(str)]]
+            else
+                yield [[Token invalid="invalid character {to_char(ahead)}"]]
+                return false
+        yield [[Token eos="eos"]]
+        return false
+
+let INVALID_VALUE = LONG_MIN
+
+struct public Result
+    tinfo : TypeInfo
+    value : float4
+    data  : void?
+    error : string
+
+struct TokenStream
+    tokens : iterator<Token>
+    stream : array<Token>
+    errors : array<string>
+    names  : table<string; Result>
+
+def TokenStream ( st:string )
+    return <- [[TokenStream tokens<-each_token(st)]]
+
+def token ( var st:TokenStream )
+    var token : Token
+    if st.stream |> empty
+        if !next(st.tokens, token)
+            token = [[Token eos="eos"]]
+    else
+        token = st.stream |> back
+        st.stream |> pop
+    return token
+
+def unput ( var st:TokenStream; token:Token )
+    st.stream |> push(token)
+
+def Result ( value:int64 )
+    var self : Result
+    self.tinfo.basicType = Type tInt64
+    self.value = cast_to_vec4f(value)
+    return self
+
+def InvalidResult
+    var self : Result
+    self.tinfo.basicType = Type tVoid
+    return self
+
+def error ( var st:TokenStream; error:string )
+    st.errors |> push(error)
+    return InvalidResult()
+
+def loadI ( data:void?; t:auto(TT) )
+    unsafe
+        return *(reinterpret<TT?> data)
+
+def getP ( var st:TokenStream; result:Result ) : void?
+    if result.data!=null
+        return result.data
+    else
+        return cast_to_pointer(result.value)
+
+def getP ( var st:TokenStream; result:Result; offset:int ) : void?
+    unsafe
+        var ptr = reinterpret<uint8?> getP(st,result)
+        if ptr==null
+            return null
+        return ptr + offset
+
+def getI ( var st:TokenStream; result:Result ) : int64
+    if result.tinfo.dimSize != 0u
+        st |> error("can't get value of [{result.tinfo.dimSize}]")
+        return INVALID_VALUE
+    let bt = result.tinfo.basicType
+    let data = result.data
+    if data!=null
+        return loadI(data,type<int64>) if bt==Type tInt64 || bt==Type tUInt64
+        return int64(loadI(data,type<int>)) if bt==Type tInt || bt==Type tUInt
+        return int64(loadI(data,type<int16>)) if bt==Type tInt16 || bt==Type tUInt16
+        return int64(loadI(data,type<int8>)) if bt==Type tInt8 || bt==Type tUInt8
+    else
+        return cast_to_int64(result.value) if bt==Type tInt64 || bt==Type tUInt64
+        return int64(cast_to_int32(result.value)) if bt==Type tInt || bt==Type tUInt
+        return int64(cast_to_int16(result.value)) if bt==Type tInt16 || bt==Type tUInt16
+        return int64(cast_to_int8(result.value)) if bt==Type tInt8 || bt==Type tUInt8
+    st |> error("can't get value of {result.tinfo.basicType}")
+    return INVALID_VALUE
+
+def expr_value ( var st : TokenStream ) : Result
+    var token = token(st)
+    match token
+        if [[Token invalid=_]]
+            return st |> error("invalid token {token}, expecting number or (")
+        if [[Token eos=_]]
+            return st |> error("unexpected end of stream")
+        if [[Token number=$v(value)]]                           // number
+            return Result(value)
+        if [[Token ident=$v(name)]]                             // identifier
+            if st.names |> key_exists(name)
+                return st.names[name]
+            return st |> error("unknown variable {name}")
+        if [[Token punkt='(']]                                  // '(' expr ')
+            var res = expr(st)
+            if token(st) ?as punkt ?? 0 != ')'
+                return st |> error("expecting )")
+            return res
+        if [[Token punkt=$v(any)]]
+            return st |> error("unexpected character {to_char(any)}, expecting number or (")
+    return st |> error("unexpected token {token}, expecting number or (")
+
+def getFieldOffset ( var st:TokenStream; ident:string; var result:Result ) : tuple<int;TypeInfo?>
+    var size = 0
+    for field in *result.tinfo.structType
+        var tinfo : TypeInfo?
+        unsafe
+            tinfo = reinterpret<TypeInfo?>(unsafe(addr(field)))
+        if field.name==ident
+            return [[auto size, tinfo]]
+        let al = get_type_align(tinfo) - 1
+        size = (size + al) & ~al
+        size += get_type_size(tinfo)
+    return [[auto -1,null]]
+
+def expr_field ( var st:TokenStream ) : Result
+    var result = expr_value(st)
+    var token = token(st)
+    if token ?as punkt ?? 0 == '.'
+        var field = token(st)
+        if field is ident
+            if result.tinfo.dimSize!=0u
+                return st |> error("can't access field of array")
+            var oti : tuple<offset:int; tinfo:TypeInfo?>
+            if result.tinfo.basicType == Type tStructure
+                oti = getFieldOffset(st, field as ident, result)
+            if oti.offset < 0
+                return st |> error("unknown field {field} in type {result.tinfo.basicType}")
+            let newData = getP(st, result,oti.offset)
+            result.data = newData
+            result.tinfo = *oti.tinfo
+            return result
+        else
+            return st |> error("expecting field name")
+    else
+        unput(st, token)
+    return result
+
+def opDim ( var st:TokenStream; index:int64; var result:Result )
+    let dim = result.tinfo |> get_dim(int(result.tinfo.dimSize-1u))
+    if index < 0l || index >= int64(dim)
+        return st |> error("index out of range")
+    result.tinfo.dimSize--
+    let elemSize = get_type_size(unsafe(addr(result.tinfo)))
+    result.data = st |> getP(result, int(index)*elemSize)
+    return result
+
+def opDimString ( var st:TokenStream; index:int64; var result:Result )
+    var str : string
+    unsafe
+        if result.data!=null
+            str = *(reinterpret<string?>(result.data))
+        else
+            str = cast_to_string(result.value)
+    let len = length(str)
+    if index >= int64(len)
+        return st |> error("index out of range {index} of {len} (string too short)")
+    return Result(int64(character_at(str, int(index))))
+
+def opArray ( var st:TokenStream; index:int64; var result:Result )
+    unsafe
+        let pArray = reinterpret<DapiArray?> getP(st, result)
+        if pArray==null
+            return st |> error("null pointer")
+        let dim = pArray.size
+        if index < 0l || index >= int64(dim)
+            return st |> error("index out of range")
+        let pData = reinterpret<int8?> pArray.data
+        let elemSize = get_type_size(result.tinfo.firstType)
+        let offset = int(index) * elemSize
+        result.data = pData + offset
+        result.tinfo = *result.tinfo.firstType
+        return result
+
+def expr_at ( var st:TokenStream ) : Result
+    var result = expr_field(st)
+    var token = token(st)
+    while token ?as punkt ?? 0 == '['
+        var index = st|>getI(expr(st))
+        if token(st) ?as punkt ?? 0 != ']'
+            return st |> error("expecting ]")
+        var nresult : Result
+        match result.tinfo
+            if [[TypeInfo basicType=Type tString, dimSize=0u]]
+                nresult = opDimString(st, index, result)
+            if [[TypeInfo basicType=Type tArray, dimSize=0u]]
+                nresult = opArray(st, index, result)
+            if [[TypeInfo dimSize=0u]]
+                return st |> error("can't index non-array")
+            if _
+                nresult = opDim(st, index, result)
+        result = nresult
+        token = token(st)
+    unput(st, token)
+    return result
+
+def expr_unary ( var st:TokenStream ) : Result
+    var token = token(st)
+    match token
+        if [[Token punkt='+']]
+            return Result(st|>getI(expr_at(st)))
+        if [[Token punkt='-']]
+            return Result(-st|>getI(expr_at(st)))
+    unput(st, token)
+    return expr_at(st)
+
+def expr_mul_div ( var st:TokenStream ) : Result
+    var leftValue = expr_unary(st)
+    var token = token(st)
+    match token
+        if [[Token punkt='*']]
+            return Result(st|>getI(leftValue) * st|>getI(expr_mul_div(st)))
+        if [[Token punkt='/']]
+            var rightValue = st|>getI(expr_mul_div(st))
+            if rightValue==0l
+                return st |> error("runtime error, division by 0")
+            return Result(st|>getI(leftValue) * rightValue)
+        if _
+            unput(st, token)
+    return leftValue
+
+def expr_add_sub ( var st:TokenStream ) : Result
+    var leftValue = expr_mul_div(st)
+    var token = token(st)
+    match token
+        if [[Token punkt='+']]
+            return Result(st|>getI(leftValue) + st|>getI(expr_add_sub(st)))
+        if [[Token punkt='-']]
+            return Result(st|>getI(leftValue) - st|>getI(expr_add_sub(st)))
+        if _
+            unput(st, token)
+    return leftValue
+
+def expr ( var st:TokenStream ) : Result
+    return expr_add_sub(st)
+
+def public debug_eval ( context:table<string;Result>; expr:string ) : Result
+    var st <- TokenStream(expr)
+    st.names := context
+    var result = expr(st)
+    var token = token(st)
+    if !(token is eos)
+        return [[Result error="unexpected token {token}"]]
+    if !empty(st.errors)
+        return [[Result error=st.errors[0]]]
+    return result

@@ -1394,6 +1394,12 @@ namespace das {
             addExtern<DAS_BIND_FUN(isSameType)>(*this, lib, "builtin_is_same_type",
                 SideEffects::modifyExternal, "isSameType")
                     ->args({"a","b","refMatters","cosntMatters","tempMatters","topLevel"});
+            addExtern<DAS_BIND_FUN(getTypeSize)>(*this, lib, "get_type_size",
+                SideEffects::none, "getTypeSize")
+                    ->args({"type"});
+            addExtern<DAS_BIND_FUN(getTypeAlign)>(*this, lib, "get_type_align",
+                SideEffects::none, "getTypeAlign")
+                    ->args({"type"});
             addExtern<DAS_BIND_FUN(isCompatibleCast)>(*this, lib, "is_compatible_cast",
                 SideEffects::modifyExternal, "isCompatibleCast")
                     ->args({"from","to"});
