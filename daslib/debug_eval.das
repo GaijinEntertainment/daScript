@@ -1,12 +1,14 @@
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 options indenting = 4
+options no_aot = true
 
 module debug_eval shared private
 
 require daslib/strings_boost
 require daslib/match
 require daslib/math_bits
+require daslib/ast_boost
 
 require rtti public
 require debugapi
@@ -98,35 +100,33 @@ def loadI ( data:void?; t:auto(TT) )
     unsafe
         return *(reinterpret<TT?> data)
 
-def getP ( var st:TokenStream; result:Result ) : void?
-    if result.data!=null
-        return result.data
-    else
-        return cast_to_pointer(result.value)
-
-def getP ( var st:TokenStream; result:Result; offset:int ) : void?
+def getPD ( var st:TokenStream; result:Result; offset:int = 0 ) : void?
     unsafe
-        var ptr = reinterpret<uint8?> getP(st,result)
-        if ptr==null
-            return null
-        return ptr + offset
+        var data : void?
+        if result.data != null
+            data = result.data
+        else
+            data = addr(result.value)
+        if result.tinfo.flags.ref
+            let pdata = reinterpret<void??>data
+            if pdata == null
+                return null
+            data = *pdata
+        return (reinterpret<uint8?>data) + offset
 
 def getI ( var st:TokenStream; result:Result ) : int64
     if result.tinfo.dimSize != 0u
         st |> error("can't get value of [{result.tinfo.dimSize}]")
         return INVALID_VALUE
     let bt = result.tinfo.basicType
-    let data = result.data
-    if data!=null
-        return loadI(data,type<int64>) if bt==Type tInt64 || bt==Type tUInt64
-        return int64(loadI(data,type<int>)) if bt==Type tInt || bt==Type tUInt
-        return int64(loadI(data,type<int16>)) if bt==Type tInt16 || bt==Type tUInt16
-        return int64(loadI(data,type<int8>)) if bt==Type tInt8 || bt==Type tUInt8
-    else
-        return cast_to_int64(result.value) if bt==Type tInt64 || bt==Type tUInt64
-        return int64(cast_to_int32(result.value)) if bt==Type tInt || bt==Type tUInt
-        return int64(cast_to_int16(result.value)) if bt==Type tInt16 || bt==Type tUInt16
-        return int64(cast_to_int8(result.value)) if bt==Type tInt8 || bt==Type tUInt8
+    let data = st |> getPD(result)
+    if data==null
+        st |> error("null pointer dereference for {result.tinfo.basicType}")
+        return INVALID_VALUE
+    return loadI(data,type<int64>) if bt==Type tInt64 || bt==Type tUInt64
+    return int64(loadI(data,type<int>)) if bt==Type tInt || bt==Type tUInt
+    return int64(loadI(data,type<int16>)) if bt==Type tInt16 || bt==Type tUInt16
+    return int64(loadI(data,type<int8>)) if bt==Type tInt8 || bt==Type tUInt8
     st |> error("can't get value of {result.tinfo.basicType}")
     return INVALID_VALUE
 
@@ -152,18 +152,28 @@ def expr_value ( var st : TokenStream ) : Result
             return st |> error("unexpected character {to_char(any)}, expecting number or (")
     return st |> error("unexpected token {token}, expecting number or (")
 
-def getFieldOffset ( var st:TokenStream; ident:string; var result:Result ) : tuple<int;TypeInfo?>
+def getFieldOffset ( var st:TokenStream; ident:string; var result:Result ) : tuple<int;TypeInfo>
     var size = 0
     for field in *result.tinfo.structType
         var tinfo : TypeInfo?
         unsafe
             tinfo = reinterpret<TypeInfo?>(unsafe(addr(field)))
         if field.name==ident
-            return [[auto size, tinfo]]
+            return [[auto size, *tinfo]]
         let al = get_type_align(tinfo) - 1
         size = (size + al) & ~al
         size += get_type_size(tinfo)
-    return [[auto -1,null]]
+    return [[auto -1,[[TypeInfo]]]]
+
+def getVectorOffset ( var st:TokenStream; ident:string; var result:Result ) : tuple<int;TypeInfo>
+    var ofs = getVectorOffset(result.tinfo.basicType, ident)
+    return [[auto -1,[[TypeInfo]]]] if ofs < 0
+    let fieldSize = getVectorElementSize(result.tinfo.basicType)
+    var tinfo = [[TypeInfo
+        basicType = getVectorElementType(result.tinfo.basicType),
+        size = uint(fieldSize)
+    ]]
+    return [[auto ofs*fieldSize,tinfo]]
 
 def expr_field ( var st:TokenStream ) : Result
     var result = expr_value(st)
@@ -171,16 +181,20 @@ def expr_field ( var st:TokenStream ) : Result
     if token ?as punkt ?? 0 == '.'
         let field = token(st)
         if field is ident
-            if result.tinfo.dimSize!=0u
-                return st |> error("can't access field of array")
-            var oti : tuple<offset:int; tinfo:TypeInfo?>
-            if result.tinfo.basicType == Type tStructure
-                oti = getFieldOffset(st, field as ident, result)
+            var oti : tuple<offset:int; tinfo:TypeInfo>
+            oti.offset = -1
+            match result.tinfo
+                if [[TypeInfo dimSize=$v(dimSize)]] && (dimSize!=0u)
+                    return st |> error("can't access field of array")
+                if [[TypeInfo basicType=Type tStructure]]
+                    oti = getFieldOffset(st, field as ident, result)
+                if [[TypeInfo basicType=$v(bt)]] && (getVectorElementCount(bt)!=0)
+                    oti = getVectorOffset(st, field as ident, result)
             if oti.offset < 0
                 return st |> error("unknown field {field} in type {result.tinfo.basicType}")
-            let newData = getP(st, result,oti.offset)
+            let newData = getPD(st, result,oti.offset)
             result.data = newData
-            result.tinfo = *oti.tinfo
+            result.tinfo = oti.tinfo
             return result
         else
             return st |> error("expecting field name")
@@ -194,7 +208,7 @@ def opDim ( var st:TokenStream; index:int64; var result:Result )
         return st |> error("index out of range")
     result.tinfo.dimSize--
     let elemSize = get_type_size(unsafe(addr(result.tinfo)))
-    result.data = st |> getP(result, int(index)*elemSize)
+    result.data = st |> getPD(result, int(index)*elemSize)
     return result
 
 def opDimString ( var st:TokenStream; index:int64; var result:Result )
@@ -211,7 +225,7 @@ def opDimString ( var st:TokenStream; index:int64; var result:Result )
 
 def opArray ( var st:TokenStream; index:int64; var result:Result )
     unsafe
-        let pArray = reinterpret<DapiArray?> getP(st, result)
+        let pArray = reinterpret<DapiArray?> getPD(st, result)
         if pArray==null
             return st |> error("null pointer")
         let dim = pArray.size

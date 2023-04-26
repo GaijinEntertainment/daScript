@@ -52,12 +52,16 @@ def test_debug_eval ( t:T? )
         var temp_dim_int = [[auto 1;2;3;4;5]]
         var temp_arr_string <- [{auto "a";"b";"c";"d";"e"}]
         var temp_struct =  [[Foo a=1, b=2.23f]]
+        var temp_float3 = float3(1,2,3)
+        var temp_float3_2 & = unsafe(temp_float3)
         unsafe
             context["temp_int"] = [[Result data = addr(temp_int), tinfo = typeinfo(rtti_typeinfo temp_int)]]
             context["temp_str"] = [[Result data = addr(temp_str), tinfo = typeinfo(rtti_typeinfo temp_str)]]
             context["temp_dim_int"] = [[Result data = addr(temp_dim_int), tinfo = typeinfo(rtti_typeinfo temp_dim_int)]]
             context["temp_arr_string"] = [[Result data = addr(temp_arr_string), tinfo = typeinfo(rtti_typeinfo temp_arr_string)]]
             context["temp_struct"] = [[Result data = addr(temp_struct), tinfo = typeinfo(rtti_typeinfo temp_struct)]]
+            context["temp_float3"] = [[Result data = addr(temp_float3), tinfo = typeinfo(rtti_typeinfo temp_float3)]]
+            context["temp_float3_2"] = [[Result data = addr(temp_float3_2), tinfo = typeinfo(rtti_typeinfo temp_float3_2)]]
         t |> equal("16",context|>eval_test("temp_int+3"))
         t |> equal("\"hello, world\"",context|>eval_test("temp_str"))
         t |> equal("{'l'}",context|>eval_test("temp_str[2]"))
@@ -69,4 +73,9 @@ def test_debug_eval ( t:T? )
         t |> equal("[[Foo a = 1; b = 2.23]]",context|>eval_test("temp_struct"))
         t |> equal("{temp_struct.a}",context|>eval_test("temp_struct.a"))
         t |> equal("2.23",context|>eval_test("temp_struct.b"))
+        t |> equal("1,2,3",context|>eval_test("temp_float3"))
+        t |> equal("2",context|>eval_test("temp_float3.y"))
+        t |> equal("1,2,3",context|>eval_test("temp_float3_2"))
+        t |> equal("2",context|>eval_test("temp_float3_2.y"))
+
 
