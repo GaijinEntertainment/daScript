@@ -932,3 +932,34 @@ def public debug_expression ( expr:Expression? )
 def public describe ( expr:Expression? )
     unsafe
         return describe(reinterpret<ExpressionPtr> expr)
+
+def getVectorElementCount ( bt:Type )
+    return 2 if bt==Type tFloat2 || bt==Type tInt2 || bt==Type tUInt2 || bt==Type tRange || bt==Type tURange || bt==Type tRange64 || bt==Type tURange64
+    return 3 if bt==Type tFloat3 || bt==Type tInt3 || bt==Type tUInt3
+    return 4 if bt==Type tFloat4 || bt==Type tInt4 || bt==Type tUInt4
+    return 0
+
+def getVectorElementSize ( bt:Type )
+    return 8 if bt==Type tRange64 || bt==Type tURange64
+    return 4
+
+def getVectorElementType ( bt:Type )
+    return Type tFloat if bt==Type tFloat2 || bt==Type tFloat3 || bt==Type tFloat4
+    return Type tInt if bt==Type tInt2 || bt==Type tInt3 || bt==Type tInt4 || bt==Type tRange
+    return Type tUInt if bt==Type tUInt2 || bt==Type tUInt3 || bt==Type tUInt4 || bt==Type tURange
+    return Type tInt64 if bt==Type tRange64
+    return Type tUInt64 if bt==Type tURange64
+    return Type tVoid
+
+def getVectorOffset ( bt:Type; ident:string )
+    var ofs = -1
+    if ident=="x" || ident=="X"
+        ofs = 0
+    elif ident=="y" || ident=="Y"
+        ofs = 1
+    elif ident=="z" || ident=="Z"
+        ofs = 2
+    elif ident=="w" || ident=="W"
+        ofs = 3
+    let count = getVectorElementCount(bt)
+    return ofs>=count ? -1 : ofs
