@@ -25,6 +25,7 @@ require daslib/jobque_boost
 require daslib/strings_boost
 require daslib/dap
 require daslib/algorithm
+require daslib/debug_eval
 
 
 let private
@@ -355,6 +356,8 @@ struct private DAVariable
     name: string
     value: string
     _type: string
+    typeInfo : TypeInfo const?
+    rawValue : float4
     indexedVariables: uint
     address: uint64
     size: uint
@@ -471,6 +474,18 @@ def find_child_var(stack: DAStackFrame; cb: block<(res:DAVariable; idx: uint64):
                 return true
     return false
 
+
+def iter_top_child_var(stack: DAStackFrame; cb: block<(res:DAVariable): void>)
+    for c in stack.variables
+        cb |> invoke(c)
+    for c in stack.arguments
+        cb |> invoke(c)
+    for c in stack.globals
+        cb |> invoke(c)
+    // for c in stack.state
+    //     cb |> invoke(c)
+
+
 class private DAStackWalker: DapiStackWalker
     dataWalkerAdapter: smart_ptr<DataWalker>
     dataWalker: DAWalker?
@@ -501,7 +516,7 @@ class private DAStackWalker: DapiStackWalker
             value = get_context_global_variable(ctx.ctx, vinfo.name)
         let ti = type_info(vinfo)
 
-        var global = [[DAVariable uid=frame.varId++, name=vinfo.name, _type=describe(ti), address=intptr(value), size=ti.size]]
+        var global = [[DAVariable uid=frame.varId++, name=vinfo.name, _type=describe(ti), address=intptr(value), size=ti.size, typeInfo=ti]]
 
         if ti != null
             dataWalker->startWalk(frame, global) <| $
@@ -579,7 +594,7 @@ class private DAStackWalker: DapiStackWalker
         if stackLen > 0
             var frame & = unsafe(ctx.stack[stackLen - 1])
             var ti = type_info(vinfo)
-            var variable = [[DAVariable uid=frame.varId++, name=vinfo.name, _type=describe(ti), address=intptr(arg), size=ti.size]]
+            var variable = [[DAVariable uid=frame.varId++, name=vinfo.name, _type=describe(ti), address=intptr(arg), size=ti.size, typeInfo=ti]]
             if ti != null
                 dataWalker->startWalk(frame, variable) <| $
                     dataWalkerAdapter |> walk_data(arg, *ti)
@@ -597,7 +612,7 @@ class private DAStackWalker: DapiStackWalker
         if  stackLen > 0
             var frame & = unsafe(ctx.stack[stackLen-1])
             let ti = type_info(vinfo)
-            var variable = [[DAVariable uid=frame.varId++, name=vinfo.name, _type=describe(ti), address=ti.isRef ? intptr(unsafe(reinterpret<void?>arg)) : 0ul, size=ti.size]]
+            var variable = [[DAVariable uid=frame.varId++, name=vinfo.name, _type=describe(ti), address=ti.isRef ? intptr(unsafe(reinterpret<void?>arg)) : 0ul, size=ti.size, typeInfo=ti, rawValue=arg]]
             if ti != null
                 dataWalker->startWalk(frame, variable) <| $
                     dataWalkerAdapter |> walk_data(arg, *ti)
@@ -1644,6 +1659,26 @@ class private DAServer: Server
                                     return true
                                 return false
                             break
+                if !found
+                    var inscope vars : table<string; Result>
+                    ctxData.stack[frameId] |> iter_top_child_var() <| $(child)
+                        if child.typeInfo != null
+                            vars[child.name] = [[Result tinfo=*child.typeInfo, value=child.rawValue, data=unsafe(reinterpret<void?>child.address)]]
+
+                    var result = debug_eval(vars, ini.expression)
+                    var resStr = ""
+                    if !empty(result.error)
+                        resStr = result.error
+                    elif result.data != null
+                        resStr = sprint_data(result.data, unsafe(addr(result.tinfo)), print_flags_debug)
+                    else
+                        resStr = sprint_data(result.value, unsafe(addr(result.tinfo)), print_flags_debug)
+                    var inscope res = [[EvaluateResponse
+                        result=resStr,
+                        _type=!empty(result.error) ? describe(result.tinfo) : "",
+                        indexedVariables=0lf,
+                        variablesReference=0lf]]
+                    self->sendSuccessResponseStr(seq, command, sprint_json(res, false))
         if !found
             self->sendSuccessResponse(seq, command, null)
 
@@ -1736,140 +1771,6 @@ class private EvalWalker : DapiStackWalker
                     *W |> write("\t\tlet {vinfo.name} : {describe(type_info(vinfo))} = * reinterpret<{describe(type_info(vinfo))}?> {arg}ul\n")
                 else
                     *W |> write("\t\tlet {vinfo.name} : {describe(type_info(vinfo))} & = * reinterpret<{describe(type_info(vinfo))}?> {arg}ul\n")
-
-
-def private getStackVariableDefinitions(var ctx:Context; at: LineInfo)
-    let text = build_string <| $ ( st )
-        var walker = new EvalWalker(st)
-        var inscope walker_adapter <- make_stack_walker(walker)
-        walk_stack(walker_adapter,ctx,at)
-        unsafe
-            delete walker
-    var lines <- split(text,"\n")
-    lines |> pop
-    lines |> reverse()
-    let res = join(lines,"\n")
-    delete lines
-    return res
-
-
-def private getGlobalVariableDefinitions(var ctx: Context)
-    let text = build_string <| $(st)
-        let tot = get_total_variables(ctx)
-        for vi in range(tot)
-            let vinfo = unsafe(addr(get_variable_info(ctx, vi)))
-            if vinfo.name |> starts_with("__") || vinfo.name |> starts_with("g```")
-                continue
-            var arg = unsafe(get_context_global_variable(ctx, vinfo.name))
-            if arg != null
-                if vinfo.flags.ref
-                    unsafe
-                        let pref = unsafe(reinterpret<void??> arg)
-                        var cvinfo = *vinfo
-                        cvinfo.flags &= ~TypeInfoFlags ref
-                        st |> write("\t\tlet {vinfo.name} : {describe(type_info(*vinfo))} = * reinterpret<{describe(type_info(cvinfo))}?> {*pref}ul // already ref\n")
-                elif vinfo.dimSize > 0u
-                    st |> write("\t\tlet {vinfo.name} : {describe(type_info(*vinfo))} = * reinterpret<{describe(type_info(*vinfo))}?> {arg}ul\n")
-                else
-                    st |> write("\t\tlet {vinfo.name} : {describe(type_info(*vinfo))} & = * reinterpret<{describe(type_info(*vinfo))}?> {arg}ul\n")
-    return text
-
-
-def getRequire ( var ctx:Context; var self_text:string& )
-    let prr = unsafe(get_context_global_variable(ctx,"__rtti_require"))
-    if prr != null
-        let arq = * unsafe(reinterpret<string?> prr)
-        var mrq <- split(arq," ")
-        self_text := mrq[length(mrq)-1]
-        mrq |> pop
-        let text = build_string <| $ ( st )
-            for q in mrq
-                st |> write("require {q}\n")
-        return text
-    else
-        return "// __rtti_require is missing. module needs to be compiled with `options debugger`\n"
-
-
-def compileAndRun ( text, self_text:string ) : tuple<ok:bool;result:string>
-    var failed = true
-    var result = ""
-    var inscope access <- make_file_access("")
-    access |> set_file_source("__project", text)
-    fopen(self_text, "rb") <| $(fr)
-        if fr != null
-            fmap(fr) <| $(data)
-                access |> set_file_source("__current.das", string(data))
-        else
-            to_log(LOG_ERROR, "failed to open `{self_text}`\n")
-    using <| $(var mg:ModuleGroup)
-        using <| $(var cop:CodeOfPolicies)
-            cop.allow_local_variable_shadowing = true
-            cop.export_all = true
-            compile_file("__project",access,unsafe(addr(mg)),cop) <| $(ok,program,errors)
-                if ok
-                    simulate(program) <| $ ( sok; context; serrors )
-                        if sok
-                            failed = false
-                            try
-                                unsafe
-                                    context |> invoke_in_context("eval``call_eval", this_context())
-                            recover
-                                result = "{context.last_exception}\n{describe(context.exceptionAt)}\nexception during eval\n\n{text}"
-                                failed = true
-                        else
-                            result = "{serrors}\nfailed to simulate\n\n{text}"
-                else
-                    if program != null && length(program.errors) > 0
-                        let err & = unsafe(program.errors[0])
-                        result = "{err.what}\n{errors}\nfailed to compile\n\n{text}"
-                    else
-                        result = "{errors}\nfailed to compile\n\n{text}"
-    return [[auto !failed, result]]
-
-
-def sanitize_var(var val: DAVariable)
-    val.name = clone_string(val.name)
-    val.value = clone_string(val.value)
-    val._type = clone_string(val._type)
-    if val.children != null
-        for c in *val.children
-            sanitize_var(c)
-
-[export]
-def accept_eval_results ( value:void?; info:TypeInfo? )
-    var evalValue <- [[DAVariable uid=g```dAgent.evalFrame.varId++, name="eval", _type=describe(info), size=info.size]]
-    g```dAgent.walker.dataWalker->startWalk(g```dAgent.evalFrame, evalValue) <| $
-        g```dAgent.walker.dataWalkerAdapter |> walk_data(value, *info)
-    if evalValue.children == null
-        unsafe
-            evalValue.value = sprint_data(value, info, print_flags_debug)
-    if empty(evalValue.value)
-        evalValue.value = evalValue._type
-
-    evalValue |> sanitize_var()
-    g```dAgent.evalFrame.variables |> emplace <| evalValue
-
-
-def private eval(expr:string; var ctx: Context; at: LineInfo): tuple<ok:bool; result:string>
-    let vars = getStackVariableDefinitions(ctx, at)
-    let gvars = getGlobalVariableDefinitions(ctx)
-    var self_text : string
-    let greq = getRequire(this_context(), self_text)
-    let text = build_string <| $ ( st )
-        st |> write("require debugapi\nrequire rtti\nrequire strings\nrequire __current\n")
-        st |> write(greq)
-        st |> write("[export] def eval``call_eval(var DEBUG_CONTEXT:Context)\n")
-        st |> write("\tunsafe\n")
-        st |> write("// globals:\n")
-        st |> write(gvars)
-        st |> write("// locals:\n")
-        st |> write(vars)
-        st |> write("// EVAL:\n")
-        st |> write("\t\tlet EVAL = {expr}\n")
-        st |> write("\t\tlet tinfo = typeinfo(rtti_typeinfo EVAL)\n")
-        st |> write("\t\tlet peval = addr(EVAL)\n")
-        st |> write("\t\tDEBUG_CONTEXT |> invoke_in_context(\"accept_eval_results\",peval,tinfo)\n")
-    return compileAndRun(text, self_text)
 
 
 def private tick_debugger()
