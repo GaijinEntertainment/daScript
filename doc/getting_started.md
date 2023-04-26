@@ -48,6 +48,4 @@ def main
     print("Hello world\n")
 ```
 
-In case you are wondering `[export]` annotation here ensures that [...] 
-
-XXX: what exactly? Investigate
+In case you are wondering `[export]` annotation here ensures that function can be called externally given context.
