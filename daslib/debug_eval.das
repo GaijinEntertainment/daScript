@@ -131,14 +131,14 @@ def getI ( var st:TokenStream; result:Result ) : int64
     return INVALID_VALUE
 
 def expr_value ( var st : TokenStream ) : Result
-    var token = token(st)
+    let token = token(st)
     match token
         if [[Token invalid=_]]
             return st |> error("invalid token {token}, expecting number or (")
         if [[Token eos=_]]
             return st |> error("unexpected end of stream")
         if [[Token number=$v(value)]]                           // number
-            return Result(value)
+            return <- Result(value)
         if [[Token ident=$v(name)]]                             // identifier
             if st.names |> key_exists(name)
                 return st.names[name]
@@ -147,7 +147,7 @@ def expr_value ( var st : TokenStream ) : Result
             var res = expr(st)
             if token(st) ?as punkt ?? 0 != ')'
                 return st |> error("expecting )")
-            return res
+            return <- res
         if [[Token punkt=$v(any)]]
             return st |> error("unexpected character {to_char(any)}, expecting number or (")
     return st |> error("unexpected token {token}, expecting number or (")
@@ -167,9 +167,9 @@ def getFieldOffset ( var st:TokenStream; ident:string; var result:Result ) : tup
 
 def expr_field ( var st:TokenStream ) : Result
     var result = expr_value(st)
-    var token = token(st)
+    let token = token(st)
     if token ?as punkt ?? 0 == '.'
-        var field = token(st)
+        let field = token(st)
         if field is ident
             if result.tinfo.dimSize!=0u
                 return st |> error("can't access field of array")
@@ -228,7 +228,7 @@ def expr_at ( var st:TokenStream ) : Result
     var result = expr_field(st)
     var token = token(st)
     while token ?as punkt ?? 0 == '['
-        var index = st|>getI(expr(st))
+        let index = st|>getI(expr(st))
         if token(st) ?as punkt ?? 0 != ']'
             return st |> error("expecting ]")
         var nresult : Result
@@ -247,7 +247,7 @@ def expr_at ( var st:TokenStream ) : Result
     return result
 
 def expr_unary ( var st:TokenStream ) : Result
-    var token = token(st)
+    let token = token(st)
     match token
         if [[Token punkt='+']]
             return Result(st|>getI(expr_at(st)))
@@ -258,22 +258,22 @@ def expr_unary ( var st:TokenStream ) : Result
 
 def expr_mul_div ( var st:TokenStream ) : Result
     var leftValue = expr_unary(st)
-    var token = token(st)
+    let token = token(st)
     match token
         if [[Token punkt='*']]
             return Result(st|>getI(leftValue) * st|>getI(expr_mul_div(st)))
         if [[Token punkt='/']]
-            var rightValue = st|>getI(expr_mul_div(st))
+            let rightValue = st|>getI(expr_mul_div(st))
             if rightValue==0l
                 return st |> error("runtime error, division by 0")
             return Result(st|>getI(leftValue) * rightValue)
         if _
             unput(st, token)
-    return leftValue
+    return <- leftValue
 
 def expr_add_sub ( var st:TokenStream ) : Result
     var leftValue = expr_mul_div(st)
-    var token = token(st)
+    let token = token(st)
     match token
         if [[Token punkt='+']]
             return Result(st|>getI(leftValue) + st|>getI(expr_add_sub(st)))
@@ -281,7 +281,7 @@ def expr_add_sub ( var st:TokenStream ) : Result
             return Result(st|>getI(leftValue) - st|>getI(expr_add_sub(st)))
         if _
             unput(st, token)
-    return leftValue
+    return <- leftValue
 
 def expr ( var st:TokenStream ) : Result
     return expr_add_sub(st)
@@ -290,9 +290,9 @@ def public debug_eval ( context:table<string;Result>; expr:string ) : Result
     var st <- TokenStream(expr)
     st.names := context
     var result = expr(st)
-    var token = token(st)
+    let token = token(st)
     if !(token is eos)
         return [[Result error="unexpected token {token}"]]
     if !empty(st.errors)
         return [[Result error=st.errors[0]]]
-    return result
+    return <- result

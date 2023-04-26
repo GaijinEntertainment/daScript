@@ -171,7 +171,7 @@ def match_tuple ( what:TypeDeclPtr; wths:ExprMakeTuple?; access:ExpressionPtr; v
     for i in range(wthsLength)
         if i == tagIndex    // skip ...
             continue
-        var ei = i<= tagIndex ? i : whatDim - (wthsLength - i)
+        let ei = i<= tagIndex ? i : whatDim - (wthsLength - i)
         if true // to create scope for defer delete
             var inscope new_access <- qmacro($e(access).$f("_{ei}")); new_access |> force_at(wths.at)
             if !match_any(what.argTypes[ei], get_ptr(wths.values[i]), new_access, to)
@@ -226,7 +226,7 @@ def match_array ( what:TypeDeclPtr; wths:ExprMakeArray?; dynamic:bool; access:Ex
     log_m("\tarray match passed\n")
     for i in range(wthsLength)
         if i != tagIndex
-            var ei = i<=tagIndex ? i : wthsLength-i
+            let ei = i<=tagIndex ? i : wthsLength-i
             var inscope new_access <- i<tagIndex ? qmacro($e(access)[$v(ei)]) : qmacro($e(access)[length($e(access)) - $v(ei)])
             new_access |> force_at(wths.at)
             if !match_any(recT, get_ptr(wths.values[i]), new_access, to)

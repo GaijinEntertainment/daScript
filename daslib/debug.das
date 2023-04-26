@@ -1623,7 +1623,7 @@ class private DAServer: Server
         agent->getContextData(ctxId) <| $(var ctxData: DAContext)
             let frameId = int(ini.frameId % double(MAX_STACK))
             if frameId >= 0 && frameId < length(ctxData.stack)
-                var spAddr = ctxData.stack[frameId].spAddr
+                let spAddr = ctxData.stack[frameId].spAddr
                 var idx = frameId
                 var first = true
                 while !found && idx < length(ctxData.stack)
@@ -1663,7 +1663,8 @@ class private DAServer: Server
                     var inscope vars : table<string; Result>
                     ctxData.stack[frameId] |> iter_top_child_var() <| $(child)
                         if child.typeInfo != null
-                            vars[child.name] = [[Result tinfo=*child.typeInfo, value=child.rawValue, data=unsafe(reinterpret<void?>child.address)]]
+                            let tInfo & = unsafe(*child.typeInfo)
+                            vars[child.name] <- [[Result tinfo=tInfo, value=child.rawValue, data=unsafe(reinterpret<void?>child.address)]]
 
                     var result = debug_eval(vars, ini.expression)
                     var resStr = ""
