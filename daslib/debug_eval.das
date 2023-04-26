@@ -152,13 +152,24 @@ def expr_value ( var st : TokenStream ) : Result
             return st |> error("unexpected character {to_char(any)}, expecting number or (")
     return st |> error("unexpected token {token}, expecting number or (")
 
-def getFieldOffset ( var st:TokenStream; ident:string; var result:Result ) : tuple<int;TypeInfo>
+def getStructFieldOffset ( var st:TokenStream; ident:string; var result:Result ) : tuple<int;TypeInfo>
     var size = 0
     for field in *result.tinfo.structType
         var tinfo : TypeInfo?
         unsafe
             tinfo = reinterpret<TypeInfo?>(unsafe(addr(field)))
         if field.name==ident
+            return [[auto size, *tinfo]]
+        let al = get_type_align(tinfo) - 1
+        size = (size + al) & ~al
+        size += get_type_size(tinfo)
+    return [[auto -1,[[TypeInfo]]]]
+
+def getTupleFieldOffset ( var st:TokenStream; ident:string; var result:Result ) : tuple<int;TypeInfo>
+    var size = 0
+    for cnt in range(result.tinfo.argCount)
+        let tinfo = unsafe(result.tinfo.argTypes[cnt])
+        if ident=="_{cnt}"
             return [[auto size, *tinfo]]
         let al = get_type_align(tinfo) - 1
         size = (size + al) & ~al
@@ -187,7 +198,9 @@ def expr_field ( var st:TokenStream ) : Result
                 if [[TypeInfo dimSize=$v(dimSize)]] && (dimSize!=0u)
                     return st |> error("can't access field of array")
                 if [[TypeInfo basicType=Type tStructure]]
-                    oti = getFieldOffset(st, field as ident, result)
+                    oti = getStructFieldOffset(st, field as ident, result)
+                if [[TypeInfo basicType=Type tTuple]]
+                    oti = getTupleFieldOffset(st, field as ident, result)
                 if [[TypeInfo basicType=$v(bt)]] && (getVectorElementCount(bt)!=0)
                     oti = getVectorOffset(st, field as ident, result)
             if oti.offset < 0
