@@ -63,12 +63,13 @@ def test_debug_eval ( t:T? )
         var context : table<string; Result>
         var temp_int : int = 13
         var temp_str = "hello, world"
-        var temp_dim_int = [[auto 1;2;3;4;5]]
+        var temp_dim_int = [[auto 1;2;3;4;5;6]]
         var temp_arr_string <- [{auto "a";"b";"c";"d";"e"}]
         var temp_struct =  [[Foo a=1, b=2.23f]]
         var temp_float3 = float3(1,2,3)
         var temp_float3_2 & = unsafe(temp_float3)
         var temp_tuple = [[auto 3, 0.14f]]
+        var temp_tab <- {{1 => "one"; 2 => "two"; 3 => "three"}}
         unsafe
             context["temp_int"] = [[Result data = addr(temp_int), tinfo = typeinfo(rtti_typeinfo temp_int)]]
             context["temp_str"] = [[Result data = addr(temp_str), tinfo = typeinfo(rtti_typeinfo temp_str)]]
@@ -78,10 +79,11 @@ def test_debug_eval ( t:T? )
             context["temp_float3"] = [[Result data = addr(temp_float3), tinfo = typeinfo(rtti_typeinfo temp_float3)]]
             context["temp_float3_2"] = [[Result data = addr(temp_float3_2), tinfo = typeinfo(rtti_typeinfo temp_float3_2)]]
             context["temp_tuple"] = [[Result data = addr(temp_tuple), tinfo = typeinfo(rtti_typeinfo temp_tuple)]]
+            context["temp_tab"] = [[Result data = addr(temp_tab), tinfo = typeinfo(rtti_typeinfo temp_tab)]]
         t |> equal("16",context|>eval_test("temp_int+3"))
         t |> equal("\"hello, world\"",context|>eval_test("temp_str"))
         t |> equal("{'l'}",context|>eval_test("temp_str[2]"))
-        t |> equal("[[int[5] 1; 2; 3; 4; 5]]",context|>eval_test("temp_dim_int"))
+        t |> equal("[[int[6] 1; 2; 3; 4; 5; 6]]",context|>eval_test("temp_dim_int"))
         t |> equal("{temp_dim_int[2]}",context|>eval_test("temp_dim_int[2]"))
         t |> equal("[[array<string> \"a\"; \"b\"; \"c\"; \"d\"; \"e\"]]",context|>eval_test("temp_arr_string"))
         t |> equal("\"{temp_arr_string[1]}\"",context|>eval_test("temp_arr_string[1]"))
@@ -97,6 +99,14 @@ def test_debug_eval ( t:T? )
         t |> equal("3",context|>eval_test("temp_tuple._0"))
         t |> equal("0.14",context|>eval_test("temp_tuple._1"))
         t |> equal("true",context|>eval_test("temp_tuple==temp_tuple"))
+        t |> equal("12",context|>eval_test("length(temp_str)"))
+        t |> equal("6",context|>eval_test("length(temp_dim_int)"))
+        t |> equal("5",context|>eval_test("length(temp_arr_string)"))
+        t |> equal("[[table<int,string> 2 : \"two\"; 1 : \"one\"; 3 : \"three\"]]",context|>eval_test("temp_tab"))
+        t |> equal("\"one\"",context|>eval_test("temp_tab[1]"))
+        t |> equal("\"two\"",context|>eval_test("temp_tab[2]"))
+        t |> equal("key not found",context|>eval_test("temp_tab[-1]"))
+        t |> equal("3",context|>eval_test("length(temp_tab)"))
 
 
 
