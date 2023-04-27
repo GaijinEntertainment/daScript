@@ -152,6 +152,23 @@ def getT ( var st:TokenStream; result:Result ) : string
     else
         return sprint_data(result.value, unsafe(addr(result.tinfo)), print_flags singleLine)
 
+def func_call_length ( var st : TokenStream; result:Result ) : Result
+    match result.tinfo
+        if [[TypeInfo dimSize=$v(dim)]] && (dim!=0u)
+            let idim = result.tinfo |> get_dim(int(result.tinfo.dimSize-1u))
+            return <- Result(int64(idim))
+        if [[TypeInfo basicType=Type tString]]
+            let pstr = unsafe(reinterpret<string?> getPD(st,result))
+            return <- Result(int64(length(*pstr)))
+        if [[TypeInfo basicType=Type tArray]]
+            let parr = unsafe(reinterpret<DapiArray?> getPD(st,result))
+            return <- Result(int64(parr.size))
+    return st |> error("unsupported length for type {result.tinfo.basicType}")
+
+def func_call ( var st : TokenStream; name:string; arg:Result ) : Result
+    return func_call_length(st,arg)    if name == "length"
+    return st |> error("unknown function {name}")
+
 def expr_value ( var st : TokenStream ) : Result
     let token = token(st)
     match token
@@ -162,6 +179,14 @@ def expr_value ( var st : TokenStream ) : Result
         if [[Token number=$v(value)]]                           // number
             return <- Result(value)
         if [[Token ident=$v(name)]]                             // identifier
+            var ntoken = token(st)
+            if ntoken ?as punkt ?? 0 == '('
+                let arg = expr(st)
+                ntoken = token(st)
+                if ntoken ?as punkt ?? 0 != ')'
+                    return st |> error("expecting )")
+                return func_call(st, name, arg)
+            unput(st, ntoken)
             if name=="true"
                 return <- Result(true)
             elif name=="false"

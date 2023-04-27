@@ -39,7 +39,7 @@ def main
 
     var temp_int : int = 13
     var temp_str = "hello, world"
-    var temp_dim_int = [[auto 1;2;3;4;5]]
+    var temp_dim_int = [[auto 1;2;3;4;5;6]]
     var temp_arr_string <- [{auto "a";"b";"c";"d";"e"}]
     var temp_struct =  [[Foo a=1, b=2.23f]]
     var temp_float4 = float4(1,2,3,4)
@@ -56,8 +56,6 @@ def main
     context|>debug_eval("temp_tuple") |> print
     context|>debug_eval("temp_tuple._0") |> print
     context|>debug_eval("temp_tuple._1") |> print
-
-
 
     context|>debug_eval("temp_float4") |> print
     context|>debug_eval("temp_float4.x") |> print
@@ -77,8 +75,7 @@ def main
     context|>debug_eval("temp_struct.a") |> print
     context|>debug_eval("temp_struct.b") |> print
 
-    print("compare big values\n")
-    context|>debug_eval("temp_tuple==temp_tuple") |> print
+    context|>debug_eval("length(temp_str)") |> print
 
     verify("true"==context|>eval_test("true"))
     verify("false"==context|>eval_test("false"))
