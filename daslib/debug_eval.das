@@ -163,6 +163,9 @@ def func_call_length ( var st : TokenStream; result:Result ) : Result
         if [[TypeInfo basicType=Type tArray]]
             let parr = unsafe(reinterpret<DapiArray?> getPD(st,result))
             return <- Result(int64(parr.size))
+        if [[TypeInfo basicType=Type tTable]]
+            let ptab = unsafe(reinterpret<DapiTable?> getPD(st,result))
+            return <- Result(int64(ptab.size))
     return st |> error("unsupported length for type {result.tinfo.basicType}")
 
 def func_call ( var st : TokenStream; name:string; arg:Result ) : Result
@@ -302,23 +305,44 @@ def opArray ( var st:TokenStream; index:int64; var result:Result )
         result.tinfo = *result.tinfo.firstType
         return result
 
+def opTable ( var st:TokenStream; index:Result; var result:Result )
+    unsafe
+        let pTable = reinterpret<DapiTable?> getPD(st, result)
+        if pTable==null
+            return st |> error("table - null pointer")
+        let pKey = reinterpret<float4?>(getPD(st, index))
+        if pKey==null
+            return st |> error("key - null pointer")
+        let key = *pKey
+        let keyBaseType = result.tinfo.firstType.basicType
+        let valueTypeSize = get_type_size(result.tinfo.secondType)
+        let elementIndex = get_table_key_index(pTable, key, keyBaseType, valueTypeSize)
+        if elementIndex == -1
+            return st |> error("key not found")
+        let pValue = (reinterpret<uint8?>pTable.data) + elementIndex * valueTypeSize
+        result.data = pValue
+        result.tinfo = *result.tinfo.secondType
+        return result
+
 def expr_at ( var st:TokenStream ) : Result
     var result = expr_field(st)
     var token = token(st)
     while token ?as punkt ?? 0 == '['
-        let index = st|>getI(expr(st))
+        let eindex = expr(st)
         if token(st) ?as punkt ?? 0 != ']'
             return st |> error("expecting ]")
         var nresult : Result
         match result.tinfo
             if [[TypeInfo basicType=Type tString, dimSize=0u]]
-                nresult = opDimString(st, index, result)
+                nresult = opDimString(st, st|>getI(eindex), result)
             if [[TypeInfo basicType=Type tArray, dimSize=0u]]
-                nresult = opArray(st, index, result)
+                nresult = opArray(st, st|>getI(eindex), result)
+            if [[TypeInfo basicType=Type tTable, dimSize=0u]]
+                nresult = opTable(st, eindex, result)
             if [[TypeInfo dimSize=0u]]
                 return st |> error("can't index non-array")
             if _
-                nresult = opDim(st, index, result)
+                nresult = opDim(st, st|>getI(eindex), result)
         result = nresult
         token = token(st)
     unput(st, token)

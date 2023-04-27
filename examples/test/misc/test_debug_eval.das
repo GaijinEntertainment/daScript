@@ -44,6 +44,7 @@ def main
     var temp_struct =  [[Foo a=1, b=2.23f]]
     var temp_float4 = float4(1,2,3,4)
     var temp_tuple = [[auto 3, 0.14f]]
+    var temp_tab <- {{1 => "one"; 2 => "two"; 3 => "three"}}
     unsafe
         context["temp_int"] = [[Result data = addr(temp_int), tinfo = typeinfo(rtti_typeinfo temp_int)]]
         context["temp_str"] = [[Result data = addr(temp_str), tinfo = typeinfo(rtti_typeinfo temp_str)]]
@@ -52,6 +53,12 @@ def main
         context["temp_struct"] = [[Result data = addr(temp_struct), tinfo = typeinfo(rtti_typeinfo temp_struct)]]
         context["temp_float4"] = [[Result data = addr(temp_float4), tinfo = typeinfo(rtti_typeinfo temp_float4)]]
         context["temp_tuple"] = [[Result data = addr(temp_tuple), tinfo = typeinfo(rtti_typeinfo temp_tuple)]]
+        context["temp_tab"] = [[Result data = addr(temp_tab), tinfo = typeinfo(rtti_typeinfo temp_tab)]]
+
+    context |> debug_eval("temp_tab") |> print
+    context |> debug_eval("temp_tab[1]") |> print
+    context |> debug_eval("temp_tab[2]") |> print
+    context |> debug_eval("temp_tab[-1]") |> print
 
     context|>debug_eval("temp_tuple") |> print
     context|>debug_eval("temp_tuple._0") |> print

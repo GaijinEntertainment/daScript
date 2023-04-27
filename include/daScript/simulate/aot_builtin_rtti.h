@@ -169,6 +169,7 @@ namespace das {
     Func builtin_getFunctionByMnh_inContext ( uint64_t MNH, Context & context );
     uint64_t builtin_getFunctionMnh ( Func func, Context * context );
     uint64_t das_get_SimFunction_by_MNH ( uint64_t MNH, Context & context );
+    int32_t rtti_getTablePtr ( void * _table, vec4f key, Type baseType, int valueTypeSize, Context * context, LineInfoArg * at );
 
     void lockThisContext ( const TBlock<void> & block, Context * context, LineInfoArg * lineInfo );
     void lockAnyContext ( Context & ctx, const TBlock<void> & block, Context * context, LineInfoArg * lineInfo );

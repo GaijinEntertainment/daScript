@@ -1226,6 +1226,50 @@ namespace das {
         return (uint64_t) context.fnByMangledName(MNH);
     }
 
+    template <typename KeyType>
+    int32_t tableFindValue ( Table * tab, vec4f _key, int32_t valueTypeSize, Context * context ) {
+        auto key = cast<KeyType>::to(_key);
+        TableHash<KeyType> thh(context,valueTypeSize);
+        auto hfn = hash_function(*context, key);
+        return thh.find(*tab, key, hfn);
+    }
+
+    int32_t rtti_getTablePtr ( void * _table, vec4f key, Type baseType, int valueTypeSize, Context * context, LineInfoArg * at ) {
+        Table * tab = (Table *) _table;
+        switch ( baseType ) {
+            case Type::tBool:           return tableFindValue<bool>        (tab,key,valueTypeSize,context);
+            case Type::tInt8:           return tableFindValue<int8_t>      (tab,key,valueTypeSize,context);
+            case Type::tUInt8:          return tableFindValue<uint8_t>     (tab,key,valueTypeSize,context);
+            case Type::tInt16:          return tableFindValue<int16_t>     (tab,key,valueTypeSize,context);
+            case Type::tUInt16:         return tableFindValue<uint16_t>    (tab,key,valueTypeSize,context);
+            case Type::tInt64:          return tableFindValue<int64_t>     (tab,key,valueTypeSize,context);
+            case Type::tUInt64:         return tableFindValue<uint64_t>    (tab,key,valueTypeSize,context);
+            case Type::tEnumeration:    return tableFindValue<int32_t>     (tab,key,valueTypeSize,context);
+            case Type::tEnumeration8:   return tableFindValue<int8_t>      (tab,key,valueTypeSize,context);
+            case Type::tEnumeration16:  return tableFindValue<int16_t>     (tab,key,valueTypeSize,context);
+            case Type::tBitfield:       return tableFindValue<Bitfield>    (tab,key,valueTypeSize,context);
+            case Type::tInt:            return tableFindValue<int32_t>     (tab,key,valueTypeSize,context);
+            case Type::tInt2:           return tableFindValue<int2>        (tab,key,valueTypeSize,context);
+            case Type::tInt3:           return tableFindValue<int3>        (tab,key,valueTypeSize,context);
+            case Type::tInt4:           return tableFindValue<int4>        (tab,key,valueTypeSize,context);
+            case Type::tUInt:           return tableFindValue<uint32_t>    (tab,key,valueTypeSize,context);
+            case Type::tUInt2:          return tableFindValue<uint2>       (tab,key,valueTypeSize,context);
+            case Type::tUInt3:          return tableFindValue<uint3>       (tab,key,valueTypeSize,context);
+            case Type::tUInt4:          return tableFindValue<uint4>       (tab,key,valueTypeSize,context);
+            case Type::tFloat:          return tableFindValue<float>       (tab,key,valueTypeSize,context);
+            case Type::tFloat2:         return tableFindValue<float2>      (tab,key,valueTypeSize,context);
+            case Type::tFloat3:         return tableFindValue<float3>      (tab,key,valueTypeSize,context);
+            case Type::tFloat4:         return tableFindValue<float4>      (tab,key,valueTypeSize,context);
+            case Type::tRange:          return tableFindValue<range>       (tab,key,valueTypeSize,context);
+            case Type::tURange:         return tableFindValue<urange>      (tab,key,valueTypeSize,context);
+            case Type::tRange64:        return tableFindValue<range64>     (tab,key,valueTypeSize,context);
+            case Type::tURange64:       return tableFindValue<urange64>    (tab,key,valueTypeSize,context);
+            case Type::tString:         return tableFindValue<char *>      (tab,key,valueTypeSize,context);
+            case Type::tPointer:        return tableFindValue<void *>      (tab,key,valueTypeSize,context);
+        }
+        context->throw_error_at(at,"rtti.getTablePtr: unsupported type '%s'", das_to_string(baseType).c_str());
+    }
+
     class Module_Rtti : public Module {
     public:
         template <typename RecAnn>
@@ -1467,6 +1511,10 @@ namespace das {
             addExtern<DAS_BIND_FUN(das_get_SimFunction_by_MNH)>(*this, lib, "get_function_address",
                 SideEffects::none, "das_get_SimFunction_by_MNH")
                     ->args({"MNH","at"});
+            // table key index
+            addExtern<DAS_BIND_FUN(rtti_getTablePtr)>(*this, lib, "get_table_key_index",
+                SideEffects::none, "rtti_getTablePtr")
+                    ->args({"table","key","baseType","valueTypeSize","context","at"});
             // add builtin module
             compileBuiltinModule("rtti.das",rtti_das, sizeof(rtti_das));
             // lets make sure its all aot ready
