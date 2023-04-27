@@ -104,6 +104,13 @@ variant Vec4f
     i8   : int8
     str  : string
     ptr  : void?
+    b    : bool
+
+def public cast_to_vec4f ( x : bool )
+    var v : Vec4f
+    unsafe
+        v.b = x
+        return v.data
 
 def public cast_to_vec4f ( x : int64 )
     var v : Vec4f

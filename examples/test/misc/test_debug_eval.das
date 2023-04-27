@@ -77,6 +77,20 @@ def main
     context|>debug_eval("temp_struct.a") |> print
     context|>debug_eval("temp_struct.b") |> print
 
+    print("compare big values\n")
+    context|>debug_eval("temp_tuple==temp_tuple") |> print
+
+    verify("true"==context|>eval_test("true"))
+    verify("false"==context|>eval_test("false"))
+    verify("false"==context|>eval_test("1==2"))
+    verify("true"==context|>eval_test("1==2-1"))
+    verify("true"==context|>eval_test("!(1+1!=2)"))
+    verify("true"==context|>eval_test("1<=2"))
+    verify("true"==context|>eval_test("1!=2"))
+    verify("false"==context|>eval_test("1>=2"))
+    verify("false"==context|>eval_test("1>2"))
+    verify("true"==context|>eval_test("1<2"))
+
     verify(context|>eval_test("-2+2")=="0")
     verify(context|>eval_test("-2*2")=="-4")
     verify(context|>eval_test("1+2+3")=="6")
@@ -92,7 +106,7 @@ def main
     verify(context|>eval_test("2+")=="unexpected end of stream")
     verify(context|>eval_test("2/0")=="runtime error, division by 0")
     verify(context|>eval_test("2+()")=="unexpected character ), expecting number or (")
-    verify(context|>eval_test("1+~")=="invalid token invalid character ~, expecting number or (")
+    verify(context|>eval_test("1+#")=="invalid token invalid character #, expecting number or (")
     verify(context|>eval_test("123)))")=="unexpected token 41")
     verify(context|>eval_test("foo+1")=="unknown variable foo")
     verify(context|>eval_test("0x12+0x1f")=="49")
