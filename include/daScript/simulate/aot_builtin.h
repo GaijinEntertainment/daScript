@@ -6,8 +6,8 @@ namespace das {
     bool is_folding();
     void setCommandLineArguments ( int argc, char * argv[] );
     void getCommandLineArguments( Array & arr );
-    bool is_compiling ( Context * ctx );
-    bool is_compiling_macros ( Context * ctx );
+    bool is_compiling ( );
+    bool is_compiling_macros ( );
     void builtin_throw ( char * text, Context * context, LineInfoArg * at );
     void builtin_print ( char * text, Context * context );
     void builtin_error ( char * text, Context * context );
