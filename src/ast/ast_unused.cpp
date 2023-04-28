@@ -147,6 +147,7 @@ namespace das {
                 auto field = (ExprField *) expr;
                 field->r2cr = true;
                 propagateRead(field->value.get());
+                if ( func && field->value->type->isPointer() ) func->sideEffectFlags |= uint32_t(SideEffects::accessExternal);
             } else if ( expr->rtti_isSwizzle() ) {
                 auto swiz = (ExprSwizzle *) expr;
                 swiz->r2cr = true;
@@ -181,6 +182,7 @@ namespace das {
             } else if ( expr->rtti_isPtr2Ref() ) {
                 auto rr = (ExprPtr2Ref *)expr;
                 propagateRead(rr->subexpr.get());
+                if ( func ) func->sideEffectFlags |= uint32_t(SideEffects::accessExternal);
             } else if ( expr->rtti_isR2V() ) {
                 auto rr = (ExprRef2Value *)expr;
                 propagateRead(rr->subexpr.get());
@@ -205,6 +207,7 @@ namespace das {
                 //} else {
                 //    propagateRead(field->value.get());
                 //}
+                if ( func && field->value->type->isPointer() ) func->sideEffectFlags |= uint32_t(SideEffects::modifyExternal);
             } else if ( expr->rtti_isSwizzle() ) {
                 auto swiz = (ExprSwizzle *) expr;
                 swiz->write = true;
@@ -230,6 +233,7 @@ namespace das {
             } else if ( expr->rtti_isPtr2Ref() ) {
                 auto rr = (ExprPtr2Ref *)expr;
                 propagateWrite(rr->subexpr.get());
+                if ( func ) func->sideEffectFlags |= uint32_t(SideEffects::modifyExternal);
             } else if ( expr->rtti_isR2V() ) {
                 auto rr = (ExprRef2Value *)expr;
                 propagateWrite(rr->subexpr.get());
