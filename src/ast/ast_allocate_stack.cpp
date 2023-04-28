@@ -634,6 +634,7 @@ namespace das {
                             if (func->lateInit ) logs << "(late)";
                             logs << "]";
                         }
+                        logs << " // " << HEX << func->getMangledNameHash() << DEC;
                         logs << "\n";
                     }
                 }

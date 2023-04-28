@@ -1012,21 +1012,28 @@ namespace das
         }
     };
 
-    bool is_compiling ( Context * ctx ) {
-        if ( !ctx->thisProgram ) return false;
-        return ctx->thisProgram->isCompiling || ctx->thisProgram->isSimulating;
+    bool is_compiling (  ) {
+        if ( daScriptEnvironment::bound && daScriptEnvironment::bound->g_Program ) {
+            return daScriptEnvironment::bound->g_Program->isCompiling || daScriptEnvironment::bound->g_Program->isSimulating;
+        }
+        return false;
+
     }
 
-    bool is_compiling_macros ( Context * ctx ) {
-        if ( !ctx->thisProgram ) return false;
-        return ctx->thisProgram->isCompilingMacros;
+    bool is_compiling_macros ( ) {
+        if ( daScriptEnvironment::bound && daScriptEnvironment::bound->g_Program ) {
+            return daScriptEnvironment::bound->g_Program->isCompilingMacros;
+        }
+        return false;
     }
 
-    bool is_compiling_macros_in_module ( char * name, Context * ctx ) {
-        if ( !ctx->thisProgram ) return false;
-        if ( !ctx->thisProgram->isCompilingMacros ) return false;
-        if ( ctx->thisProgram->thisModule->name != to_rts(name) ) return false;
-        if ( isInDebugAgentCreation() ) return false;
+    bool is_compiling_macros_in_module ( char * name ) {
+        if ( daScriptEnvironment::bound && daScriptEnvironment::bound->g_Program ) {
+            if ( !daScriptEnvironment::bound->g_Program->isCompilingMacros ) return false;
+            if ( daScriptEnvironment::bound->g_Program->thisModule->name != to_rts(name) ) return false;
+            if ( isInDebugAgentCreation() ) return false;
+            return true;
+        }
         return true;
     }
 
@@ -1303,14 +1310,12 @@ namespace das
                 ->arg("arguments");
         // compile-time functions
         addExtern<DAS_BIND_FUN(is_compiling)>(*this, lib, "is_compiling",
-            SideEffects::accessExternal, "is_compiling")
-                ->arg("context");
+            SideEffects::accessExternal, "is_compiling");
         addExtern<DAS_BIND_FUN(is_compiling_macros)>(*this, lib, "is_compiling_macros",
-            SideEffects::accessExternal, "is_compiling_macros")
-                ->arg("context");;
+            SideEffects::accessExternal, "is_compiling_macros");
         addExtern<DAS_BIND_FUN(is_compiling_macros_in_module)>(*this, lib, "is_compiling_macros_in_module",
             SideEffects::accessExternal, "is_compiling_macros_in_module")
-                ->args({"name","context"});
+                ->args({"name"});
         addExtern<DAS_BIND_FUN(is_reporting_compilation_errors)>(*this, lib, "is_reporting_compilation_errors",
             SideEffects::accessExternal, "is_reporting_compilation_errors");
         // iterator functions

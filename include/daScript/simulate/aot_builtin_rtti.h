@@ -152,7 +152,7 @@ namespace das {
     void rtti_builtin_structure_for_each_annotation(const StructInfo & info, const Block & block, Context * context, LineInfoArg * lineinfo);
 
     // if we are in the module, compiling macros
-    bool is_compiling_macros_in_module ( char * name, Context * ctx );
+    bool is_compiling_macros_in_module ( char * name );
 
     struct BasicStructureAnnotation;
     void rtti_builtin_basic_struct_for_each_field(const BasicStructureAnnotation & ann,
