@@ -239,6 +239,8 @@ namespace das
         string          name;
     };
 
+    struct ExprClone;
+
     struct ExprField : Expression {
         ExprField () { __rtti = "ExprField"; };
         ExprField ( const LineInfo & a, const ExpressionPtr & val, const string & n, bool no_promo=false )
@@ -256,6 +258,7 @@ namespace das
         const Structure::FieldDeclaration * field = nullptr;
         int             fieldIndex = -1;
         TypeAnnotationPtr annotation;
+        ExprClone *     underClone = nullptr;
         union {
             struct {
                 bool        unsafeDeref : 1;
@@ -461,6 +464,7 @@ namespace das
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
+        ExpressionPtr cloneSet;
     };
 
     // this only exists during parsing, and can't be

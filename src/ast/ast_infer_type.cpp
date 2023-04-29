@@ -4562,6 +4562,13 @@ namespace das {
         }
         virtual ExpressionPtr visit ( ExprField * expr ) override {
             if ( !expr->value->type || expr->value->type->isAliasOrExpr() ) return Visitor::visit(expr);    // failed to infer
+            if ( expr->underClone ) { // we wait for the 'right' type to be infered
+                if ( !expr->underClone->right->type || expr->underClone->right->type->isAliasOrExpr() ) {
+                    error("under clone field type not infered yet", "", "",
+                            expr->at, CompilationError::cant_get_field);
+                    return Visitor::visit(expr);
+                }
+            }
             if ( expr->name.empty() ) {
                 error("syntax error, expecting field after .", "", "",
                         expr->at, CompilationError::cant_get_field);
@@ -4575,6 +4582,11 @@ namespace das {
                     TypeDecl::applyAutoContracts(derefV->type,valT->firstType);
                     derefV->type->ref = true;
                     derefV->type->constant |= valT->constant;
+                    if ( expr->underClone ) {
+                        if ( expr->underClone->cloneSet = inferGenericOperator(".`"+expr->name+"`clone",expr->at,derefV,expr->underClone->right) ) {
+                            return Visitor::visit(expr);
+                        }
+                    }
                     if ( auto opE = inferGenericOperator(".`"+expr->name,expr->at,derefV,nullptr) ) return opE;
                     if ( auto opE = inferGenericOperatorWithName(".",expr->at,derefV,expr->name) ) return opE;
                 }
@@ -4615,6 +4627,11 @@ namespace das {
                 }
             } else {
                 if ( !expr->no_promotion ) {
+                    if ( expr->underClone ) {
+                        if ( expr->underClone->cloneSet = inferGenericOperator(".`"+expr->name+"`clone",expr->at,expr->value,expr->underClone->right) ) {
+                            return Visitor::visit(expr);
+                        }
+                    }
                     if ( auto opE = inferGenericOperator(".`"+expr->name,expr->at,expr->value,nullptr) ) return opE;
                     if ( auto opE = inferGenericOperatorWithName(".",expr->at,expr->value,expr->name) ) return opE;
                 }
@@ -5283,7 +5300,16 @@ namespace das {
             return Visitor::visit(expr);
         }
     // ExprClone
+        virtual void preVisit ( ExprClone * expr ) override {
+            Visitor::preVisit(expr);
+            if ( expr->left->rtti_isField() ) {
+                auto field = static_pointer_cast<ExprField>(expr->left);
+                field->underClone = expr;
+            }
+            expr->cloneSet.reset();
+        }
         virtual ExpressionPtr visit ( ExprClone * expr ) override {
+            if ( expr->cloneSet ) return expr->cloneSet;   // we've been promoted from underneath
             if ( !expr->left->type || !expr->right->type ) return Visitor::visit(expr);
             // lets see if there is clone operator already (a user operator can ignore all the rules bellow)
             auto fnList = getCloneFunc(expr->left->type, expr->right->type);
