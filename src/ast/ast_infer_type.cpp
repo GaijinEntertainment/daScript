@@ -4583,7 +4583,8 @@ namespace das {
                     derefV->type->ref = true;
                     derefV->type->constant |= valT->constant;
                     if ( expr->underClone ) {
-                        if ( expr->underClone->cloneSet = inferGenericOperator(".`"+expr->name+"`clone",expr->at,derefV,expr->underClone->right) ) {
+                        expr->underClone->cloneSet = inferGenericOperator(".`"+expr->name+"`clone",expr->at,derefV,expr->underClone->right);
+                        if ( expr->underClone->cloneSet ) {
                             return Visitor::visit(expr);
                         }
                     }
