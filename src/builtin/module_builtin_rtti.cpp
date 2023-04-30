@@ -1266,8 +1266,9 @@ namespace das {
             case Type::tURange64:       return tableFindValue<urange64>    (tab,key,valueTypeSize,context);
             case Type::tString:         return tableFindValue<char *>      (tab,key,valueTypeSize,context);
             case Type::tPointer:        return tableFindValue<void *>      (tab,key,valueTypeSize,context);
+            default:
+                context->throw_error_at(at,"rtti.getTablePtr: unsupported type '%s'", das_to_string(baseType).c_str());
         }
-        context->throw_error_at(at,"rtti.getTablePtr: unsupported type '%s'", das_to_string(baseType).c_str());
     }
 
     class Module_Rtti : public Module {

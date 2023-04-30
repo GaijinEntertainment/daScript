@@ -231,10 +231,10 @@ def getTupleFieldOffset ( var st:TokenStream; ident:string; var result:Result ) 
     return [[auto -1,[[TypeInfo]]]]
 
 def getVectorOffset ( var st:TokenStream; ident:string; var result:Result ) : tuple<int;TypeInfo>
-    var ofs = getVectorOffset(result.tinfo.basicType, ident)
+    let ofs = getVectorOffset(result.tinfo.basicType, ident)
     return [[auto -1,[[TypeInfo]]]] if ofs < 0
     let fieldSize = getVectorElementSize(result.tinfo.basicType)
-    var tinfo = [[TypeInfo
+    let tinfo = [[TypeInfo
         basicType = getVectorElementType(result.tinfo.basicType),
         size = uint(fieldSize)
     ]]
