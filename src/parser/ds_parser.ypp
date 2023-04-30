@@ -2146,6 +2146,9 @@ enum_list
     :   {
         $$ = new Enumeration();
     }
+    |   enum_list[pE] ';' {
+        $$ = $pE;
+    }
     |   enum_list[pE] NAME[name] ';' {
         das_checkName(scanner,*$name,tokAt(scanner,@name));
         if ( !$pE->add(*$name,nullptr,tokAt(scanner,@name)) ) {
