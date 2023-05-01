@@ -1,7 +1,7 @@
 .. _stdlib:
 
 #################################
-  daScript Standard Library 0.3
+  daScript Standard Library 0.4
 #################################
 
 Copyright (c) 2018-2022 Gaijin Entertainment

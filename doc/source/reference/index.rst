@@ -1,7 +1,7 @@
 .. _reference:
 
 #################################
-  daScript 0.3 Reference Manual
+  daScript 0.4 Reference Manual
 #################################
 
 Copyright (c) 2018-2022 Gaijin Entertainment

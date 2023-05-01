@@ -687,8 +687,8 @@ if (NOT ${DAS_BUILD_TOOLS} MATCHES NO)
     #  SETUP_LTO(daScriptOsx)
     #  set_target_properties(daScriptOsx PROPERTIES MACOSX_BUNDLE_BUNDLE_NAME "daScript")
     #  set_target_properties(daScriptOsx PROPERTIES
-    #      MACOSX_BUNDLE_SHORT_VERSION_STRING "0.3"
-    #      MACOSX_BUNDLE_LONG_VERSION_STRING  "daScript 0.3"
+    #      MACOSX_BUNDLE_SHORT_VERSION_STRING "0.4"
+    #      MACOSX_BUNDLE_LONG_VERSION_STRING  "daScript 0.4"
     #      MACOSX_BUNDLE_INFO_PLIST ${CMAKE_SOURCE_DIR}/utils/daScript/MacOSXBundleInfo.plist.in)
     #ENDIF()
 

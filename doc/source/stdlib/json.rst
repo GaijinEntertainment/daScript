@@ -84,8 +84,8 @@ Value conversion
   *  :ref:`JV (v:double const) : json::JsonValue? <function-_at_json_c__c_JV_Cd>` 
   *  :ref:`JV (v:bool const) : json::JsonValue? <function-_at_json_c__c_JV_Cb>` 
   *  :ref:`JVNull () : json::JsonValue? <function-_at_json_c__c_JVNull>` 
-  *  :ref:`JV (v:table\<string;json::JsonValue?\> -const) : json::JsonValue? <function-_at_json_c__c_JV_1_ls_s_gr_2_ls_1_ls_S_ls_JsonValue_gr__gr_?_gr_T>` 
-  *  :ref:`JV (v:array\<json::JsonValue?\> -const) : json::JsonValue? <function-_at_json_c__c_JV_1_ls_1_ls_S_ls_JsonValue_gr__gr_?_gr_A>` 
+  *  :ref:`JV (v:table\<string;json::JsonValue?\> -const) : json::JsonValue? <function-_at_json_c__c_JV_1_ls_s_gr_2_ls_1_ls_S_ls_json_c__c_JsonValue_gr__gr_?_gr_T>` 
+  *  :ref:`JV (v:array\<json::JsonValue?\> -const) : json::JsonValue? <function-_at_json_c__c_JV_1_ls_1_ls_S_ls_json_c__c_JsonValue_gr__gr_?_gr_A>` 
 
 .. _function-_at_json_c__c_JV_Cs:
 
@@ -140,7 +140,7 @@ JVNull returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
 
 Creates `JsonValue` representing `null`.
 
-.. _function-_at_json_c__c_JV_1_ls_s_gr_2_ls_1_ls_S_ls_JsonValue_gr__gr_?_gr_T:
+.. _function-_at_json_c__c_JV_1_ls_s_gr_2_ls_1_ls_S_ls_json_c__c_JsonValue_gr__gr_?_gr_T:
 
 .. das:function:: JV(v: table<string;json::JsonValue?>)
 
@@ -155,7 +155,7 @@ JV returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
 
 Creates `JsonValue` out of value.
 
-.. _function-_at_json_c__c_JV_1_ls_1_ls_S_ls_JsonValue_gr__gr_?_gr_A:
+.. _function-_at_json_c__c_JV_1_ls_1_ls_S_ls_json_c__c_JsonValue_gr__gr_?_gr_A:
 
 .. das:function:: JV(v: array<json::JsonValue?>)
 
@@ -176,7 +176,7 @@ Read and write
 
   *  :ref:`read_json (text:string const implicit;error:string& -const) : json::JsonValue? <function-_at_json_c__c_read_json_CIs_&s>` 
   *  :ref:`read_json (text:array\<uint8\> const;error:string& -const) : json::JsonValue? <function-_at_json_c__c_read_json_C1_ls_u8_gr_A_&s>` 
-  *  :ref:`write_json (val:json::JsonValue? const) : string <function-_at_json_c__c_write_json_C1_ls_S_ls_JsonValue_gr__gr_?>` 
+  *  :ref:`write_json (val:json::JsonValue? const) : string <function-_at_json_c__c_write_json_C1_ls_S_ls_json_c__c_JsonValue_gr__gr_?>` 
 
 .. _function-_at_json_c__c_read_json_CIs_&s:
 
@@ -214,7 +214,7 @@ read_json returns  :ref:`json::JsonValue <struct-json-JsonValue>` ?
 reads JSON from the `text` string.
 if `error` is not empty, it contains the parsing error message.
 
-.. _function-_at_json_c__c_write_json_C1_ls_S_ls_JsonValue_gr__gr_?:
+.. _function-_at_json_c__c_write_json_C1_ls_S_ls_json_c__c_JsonValue_gr__gr_?:
 
 .. das:function:: write_json(val: json::JsonValue? const)
 
@@ -295,5 +295,6 @@ fixes broken json. so far supported
 1. "string" + "string" string concatination
 2. "text "nested text" text" nested quotes
 3. extra , at the end of object or array
+4. /uXXXXXX sequences in the middle of white space
 
 

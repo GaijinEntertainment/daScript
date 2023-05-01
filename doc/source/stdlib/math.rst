@@ -2573,12 +2573,16 @@ float* only
   *  :ref:`rcp_est (x:float2 const) : float2 <function-_at_math_c__c_rcp_est_Cf2>` 
   *  :ref:`rcp_est (x:float3 const) : float3 <function-_at_math_c__c_rcp_est_Cf3>` 
   *  :ref:`rcp_est (x:float4 const) : float4 <function-_at_math_c__c_rcp_est_Cf4>` 
+  *  :ref:`fract (x:float const) : float <function-_at_math_c__c_fract_Cf>` 
   *  :ref:`rsqrt (x:float const) : float <function-_at_math_c__c_rsqrt_Cf>` 
   *  :ref:`rsqrt_est (x:float const) : float <function-_at_math_c__c_rsqrt_est_Cf>` 
+  *  :ref:`fract (x:float2 const) : float2 <function-_at_math_c__c_fract_Cf2>` 
   *  :ref:`rsqrt (x:float2 const) : float2 <function-_at_math_c__c_rsqrt_Cf2>` 
   *  :ref:`rsqrt_est (x:float2 const) : float2 <function-_at_math_c__c_rsqrt_est_Cf2>` 
+  *  :ref:`fract (x:float3 const) : float3 <function-_at_math_c__c_fract_Cf3>` 
   *  :ref:`rsqrt (x:float3 const) : float3 <function-_at_math_c__c_rsqrt_Cf3>` 
   *  :ref:`rsqrt_est (x:float3 const) : float3 <function-_at_math_c__c_rsqrt_est_Cf3>` 
+  *  :ref:`fract (x:float4 const) : float4 <function-_at_math_c__c_fract_Cf4>` 
   *  :ref:`rsqrt (x:float4 const) : float4 <function-_at_math_c__c_rsqrt_Cf4>` 
   *  :ref:`rsqrt_est (x:float4 const) : float4 <function-_at_math_c__c_rsqrt_est_Cf4>` 
   *  :ref:`floori (x:float const) : int <function-_at_math_c__c_floori_Cf>` 
@@ -2601,6 +2605,9 @@ float* only
   *  :ref:`ceili (x:float4 const) : int4 <function-_at_math_c__c_ceili_Cf4>` 
   *  :ref:`roundi (x:float4 const) : int4 <function-_at_math_c__c_roundi_Cf4>` 
   *  :ref:`trunci (x:float4 const) : int4 <function-_at_math_c__c_trunci_Cf4>` 
+  *  :ref:`- (x:math::float4x4 const implicit) : math::float4x4 <function-_at_math_c__c_-_CIH_ls_math_c__c_float4x4_gr_>` 
+  *  :ref:`- (x:math::float3x4 const implicit) : math::float3x4 <function-_at_math_c__c_-_CIH_ls_math_c__c_float3x4_gr_>` 
+  *  :ref:`- (x:math::float3x3 const implicit) : math::float3x3 <function-_at_math_c__c_-_CIH_ls_math_c__c_float3x3_gr_>` 
 
 .. _function-_at_math_c__c_atan_est_Cf:
 
@@ -2790,6 +2797,21 @@ rcp_est returns float4
 
 |function-math-rcp_est|
 
+.. _function-_at_math_c__c_fract_Cf:
+
+.. das:function:: fract(x: float const)
+
+fract returns float
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float const  +
++--------+-------------+
+
+
+|function-math-fract|
+
 .. _function-_at_math_c__c_rsqrt_Cf:
 
 .. das:function:: rsqrt(x: float const)
@@ -2819,6 +2841,21 @@ rsqrt_est returns float
 
 
 |function-math-rsqrt_est|
+
+.. _function-_at_math_c__c_fract_Cf2:
+
+.. das:function:: fract(x: float2 const)
+
+fract returns float2
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float2 const +
++--------+-------------+
+
+
+|function-math-fract|
 
 .. _function-_at_math_c__c_rsqrt_Cf2:
 
@@ -2850,6 +2887,21 @@ rsqrt_est returns float2
 
 |function-math-rsqrt_est|
 
+.. _function-_at_math_c__c_fract_Cf3:
+
+.. das:function:: fract(x: float3 const)
+
+fract returns float3
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float3 const +
++--------+-------------+
+
+
+|function-math-fract|
+
 .. _function-_at_math_c__c_rsqrt_Cf3:
 
 .. das:function:: rsqrt(x: float3 const)
@@ -2879,6 +2931,21 @@ rsqrt_est returns float3
 
 
 |function-math-rsqrt_est|
+
+.. _function-_at_math_c__c_fract_Cf4:
+
+.. das:function:: fract(x: float4 const)
+
+fract returns float4
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float4 const +
++--------+-------------+
+
+
+|function-math-fract|
 
 .. _function-_at_math_c__c_rsqrt_Cf4:
 
@@ -3209,6 +3276,51 @@ trunci returns int4
 
 
 |function-math-trunci|
+
+.. _function-_at_math_c__c_-_CIH_ls_math_c__c_float4x4_gr_:
+
+.. das:function:: operator -(x: float4x4 const implicit)
+
+- returns  :ref:`math::float4x4 <handle-math-float4x4>` 
+
++--------+-------------------------------------------------------------+
++argument+argument type                                                +
++========+=============================================================+
++x       + :ref:`math::float4x4 <handle-math-float4x4>`  const implicit+
++--------+-------------------------------------------------------------+
+
+
+|function-math--|
+
+.. _function-_at_math_c__c_-_CIH_ls_math_c__c_float3x4_gr_:
+
+.. das:function:: operator -(x: float3x4 const implicit)
+
+- returns  :ref:`math::float3x4 <handle-math-float3x4>` 
+
++--------+-------------------------------------------------------------+
++argument+argument type                                                +
++========+=============================================================+
++x       + :ref:`math::float3x4 <handle-math-float3x4>`  const implicit+
++--------+-------------------------------------------------------------+
+
+
+|function-math--|
+
+.. _function-_at_math_c__c_-_CIH_ls_math_c__c_float3x3_gr_:
+
+.. das:function:: operator -(x: float3x3 const implicit)
+
+- returns  :ref:`math::float3x3 <handle-math-float3x3>` 
+
++--------+-------------------------------------------------------------+
++argument+argument type                                                +
++========+=============================================================+
++x       + :ref:`math::float3x3 <handle-math-float3x3>`  const implicit+
++--------+-------------------------------------------------------------+
+
+
+|function-math--|
 
 +++++++++++
 float3 only
@@ -3935,6 +4047,22 @@ lerp/mad/clamp
   *  :ref:`mad (a:float2 const;b:float const;c:float2 const) : float2 <function-_at_math_c__c_mad_Cf2_Cf_Cf2>` 
   *  :ref:`mad (a:float3 const;b:float const;c:float3 const) : float3 <function-_at_math_c__c_mad_Cf3_Cf_Cf3>` 
   *  :ref:`mad (a:float4 const;b:float const;c:float4 const) : float4 <function-_at_math_c__c_mad_Cf4_Cf_Cf4>` 
+  *  :ref:`mad (a:int const;b:int const;c:int const) : int <function-_at_math_c__c_mad_Ci_Ci_Ci>` 
+  *  :ref:`mad (a:int2 const;b:int2 const;c:int2 const) : int2 <function-_at_math_c__c_mad_Ci2_Ci2_Ci2>` 
+  *  :ref:`mad (a:int3 const;b:int3 const;c:int3 const) : int3 <function-_at_math_c__c_mad_Ci3_Ci3_Ci3>` 
+  *  :ref:`mad (a:int4 const;b:int4 const;c:int4 const) : int4 <function-_at_math_c__c_mad_Ci4_Ci4_Ci4>` 
+  *  :ref:`mad (a:int2 const;b:int const;c:int2 const) : int2 <function-_at_math_c__c_mad_Ci2_Ci_Ci2>` 
+  *  :ref:`mad (a:int3 const;b:int const;c:int3 const) : int3 <function-_at_math_c__c_mad_Ci3_Ci_Ci3>` 
+  *  :ref:`mad (a:int4 const;b:int const;c:int4 const) : int4 <function-_at_math_c__c_mad_Ci4_Ci_Ci4>` 
+  *  :ref:`mad (a:uint const;b:uint const;c:uint const) : uint <function-_at_math_c__c_mad_Cu_Cu_Cu>` 
+  *  :ref:`mad (a:uint2 const;b:uint2 const;c:uint2 const) : uint2 <function-_at_math_c__c_mad_Cu2_Cu2_Cu2>` 
+  *  :ref:`mad (a:uint3 const;b:uint3 const;c:uint3 const) : uint3 <function-_at_math_c__c_mad_Cu3_Cu3_Cu3>` 
+  *  :ref:`mad (a:uint4 const;b:uint4 const;c:uint4 const) : uint4 <function-_at_math_c__c_mad_Cu4_Cu4_Cu4>` 
+  *  :ref:`mad (a:uint2 const;b:uint const;c:uint2 const) : uint2 <function-_at_math_c__c_mad_Cu2_Cu_Cu2>` 
+  *  :ref:`mad (a:uint3 const;b:uint const;c:uint3 const) : uint3 <function-_at_math_c__c_mad_Cu3_Cu_Cu3>` 
+  *  :ref:`mad (a:uint4 const;b:uint const;c:uint4 const) : uint4 <function-_at_math_c__c_mad_Cu4_Cu_Cu4>` 
+  *  :ref:`mad (a:double const;b:double const;c:double const) : double <function-_at_math_c__c_mad_Cd_Cd_Cd>` 
+  *  :ref:`lerp (a:double const;b:double const;t:double const) : double <function-_at_math_c__c_lerp_Cd_Cd_Cd>` 
   *  :ref:`clamp (t:int const;a:int const;b:int const) : int <function-_at_math_c__c_clamp_Ci_Ci_Ci>` 
   *  :ref:`clamp (t:int2 const;a:int2 const;b:int2 const) : int2 <function-_at_math_c__c_clamp_Ci2_Ci2_Ci2>` 
   *  :ref:`clamp (t:int3 const;a:int3 const;b:int3 const) : int3 <function-_at_math_c__c_clamp_Ci3_Ci3_Ci3>` 
@@ -4159,6 +4287,310 @@ mad returns float4
 
 
 |function-math-mad|
+
+.. _function-_at_math_c__c_mad_Ci_Ci_Ci:
+
+.. das:function:: mad(a: int const; b: int const; c: int const)
+
+mad returns int
+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +int const    +
++--------+-------------+
++b       +int const    +
++--------+-------------+
++c       +int const    +
++--------+-------------+
+
+
+|function-math-mad|
+
+.. _function-_at_math_c__c_mad_Ci2_Ci2_Ci2:
+
+.. das:function:: mad(a: int2 const; b: int2 const; c: int2 const)
+
+mad returns int2
+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +int2 const   +
++--------+-------------+
++b       +int2 const   +
++--------+-------------+
++c       +int2 const   +
++--------+-------------+
+
+
+|function-math-mad|
+
+.. _function-_at_math_c__c_mad_Ci3_Ci3_Ci3:
+
+.. das:function:: mad(a: int3 const; b: int3 const; c: int3 const)
+
+mad returns int3
+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +int3 const   +
++--------+-------------+
++b       +int3 const   +
++--------+-------------+
++c       +int3 const   +
++--------+-------------+
+
+
+|function-math-mad|
+
+.. _function-_at_math_c__c_mad_Ci4_Ci4_Ci4:
+
+.. das:function:: mad(a: int4 const; b: int4 const; c: int4 const)
+
+mad returns int4
+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +int4 const   +
++--------+-------------+
++b       +int4 const   +
++--------+-------------+
++c       +int4 const   +
++--------+-------------+
+
+
+|function-math-mad|
+
+.. _function-_at_math_c__c_mad_Ci2_Ci_Ci2:
+
+.. das:function:: mad(a: int2 const; b: int const; c: int2 const)
+
+mad returns int2
+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +int2 const   +
++--------+-------------+
++b       +int const    +
++--------+-------------+
++c       +int2 const   +
++--------+-------------+
+
+
+|function-math-mad|
+
+.. _function-_at_math_c__c_mad_Ci3_Ci_Ci3:
+
+.. das:function:: mad(a: int3 const; b: int const; c: int3 const)
+
+mad returns int3
+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +int3 const   +
++--------+-------------+
++b       +int const    +
++--------+-------------+
++c       +int3 const   +
++--------+-------------+
+
+
+|function-math-mad|
+
+.. _function-_at_math_c__c_mad_Ci4_Ci_Ci4:
+
+.. das:function:: mad(a: int4 const; b: int const; c: int4 const)
+
+mad returns int4
+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +int4 const   +
++--------+-------------+
++b       +int const    +
++--------+-------------+
++c       +int4 const   +
++--------+-------------+
+
+
+|function-math-mad|
+
+.. _function-_at_math_c__c_mad_Cu_Cu_Cu:
+
+.. das:function:: mad(a: uint const; b: uint const; c: uint const)
+
+mad returns uint
+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +uint const   +
++--------+-------------+
++b       +uint const   +
++--------+-------------+
++c       +uint const   +
++--------+-------------+
+
+
+|function-math-mad|
+
+.. _function-_at_math_c__c_mad_Cu2_Cu2_Cu2:
+
+.. das:function:: mad(a: uint2 const; b: uint2 const; c: uint2 const)
+
+mad returns uint2
+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +uint2 const  +
++--------+-------------+
++b       +uint2 const  +
++--------+-------------+
++c       +uint2 const  +
++--------+-------------+
+
+
+|function-math-mad|
+
+.. _function-_at_math_c__c_mad_Cu3_Cu3_Cu3:
+
+.. das:function:: mad(a: uint3 const; b: uint3 const; c: uint3 const)
+
+mad returns uint3
+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +uint3 const  +
++--------+-------------+
++b       +uint3 const  +
++--------+-------------+
++c       +uint3 const  +
++--------+-------------+
+
+
+|function-math-mad|
+
+.. _function-_at_math_c__c_mad_Cu4_Cu4_Cu4:
+
+.. das:function:: mad(a: uint4 const; b: uint4 const; c: uint4 const)
+
+mad returns uint4
+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +uint4 const  +
++--------+-------------+
++b       +uint4 const  +
++--------+-------------+
++c       +uint4 const  +
++--------+-------------+
+
+
+|function-math-mad|
+
+.. _function-_at_math_c__c_mad_Cu2_Cu_Cu2:
+
+.. das:function:: mad(a: uint2 const; b: uint const; c: uint2 const)
+
+mad returns uint2
+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +uint2 const  +
++--------+-------------+
++b       +uint const   +
++--------+-------------+
++c       +uint2 const  +
++--------+-------------+
+
+
+|function-math-mad|
+
+.. _function-_at_math_c__c_mad_Cu3_Cu_Cu3:
+
+.. das:function:: mad(a: uint3 const; b: uint const; c: uint3 const)
+
+mad returns uint3
+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +uint3 const  +
++--------+-------------+
++b       +uint const   +
++--------+-------------+
++c       +uint3 const  +
++--------+-------------+
+
+
+|function-math-mad|
+
+.. _function-_at_math_c__c_mad_Cu4_Cu_Cu4:
+
+.. das:function:: mad(a: uint4 const; b: uint const; c: uint4 const)
+
+mad returns uint4
+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +uint4 const  +
++--------+-------------+
++b       +uint const   +
++--------+-------------+
++c       +uint4 const  +
++--------+-------------+
+
+
+|function-math-mad|
+
+.. _function-_at_math_c__c_mad_Cd_Cd_Cd:
+
+.. das:function:: mad(a: double const; b: double const; c: double const)
+
+mad returns double
+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +double const +
++--------+-------------+
++b       +double const +
++--------+-------------+
++c       +double const +
++--------+-------------+
+
+
+|function-math-mad|
+
+.. _function-_at_math_c__c_lerp_Cd_Cd_Cd:
+
+.. das:function:: lerp(a: double const; b: double const; t: double const)
+
+lerp returns double
+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +double const +
++--------+-------------+
++b       +double const +
++--------+-------------+
++t       +double const +
++--------+-------------+
+
+
+|function-math-lerp|
 
 .. _function-_at_math_c__c_clamp_Ci_Ci_Ci:
 
@@ -5194,114 +5626,5 @@ unpack_byte_to_float returns float4
 
 
 |function-math-unpack_byte_to_float|
-
-+++++++++++++
-Uncategorized
-+++++++++++++
-
-.. _function-_at_math_c__c_fract_Cf:
-
-.. das:function:: fract(x: float const)
-
-fract returns float
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+x       +float const  +
-+--------+-------------+
-
-
-|function-math-fract|
-
-.. _function-_at_math_c__c_fract_Cf2:
-
-.. das:function:: fract(x: float2 const)
-
-fract returns float2
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+x       +float2 const +
-+--------+-------------+
-
-
-|function-math-fract|
-
-.. _function-_at_math_c__c_fract_Cf3:
-
-.. das:function:: fract(x: float3 const)
-
-fract returns float3
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+x       +float3 const +
-+--------+-------------+
-
-
-|function-math-fract|
-
-.. _function-_at_math_c__c_fract_Cf4:
-
-.. das:function:: fract(x: float4 const)
-
-fract returns float4
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+x       +float4 const +
-+--------+-------------+
-
-
-|function-math-fract|
-
-.. _function-_at_math_c__c_-_CIH_ls_math_c__c_float4x4_gr_:
-
-.. das:function:: operator -(x: float4x4 const implicit)
-
-- returns  :ref:`math::float4x4 <handle-math-float4x4>` 
-
-+--------+-------------------------------------------------------------+
-+argument+argument type                                                +
-+========+=============================================================+
-+x       + :ref:`math::float4x4 <handle-math-float4x4>`  const implicit+
-+--------+-------------------------------------------------------------+
-
-
-|function-math--|
-
-.. _function-_at_math_c__c_-_CIH_ls_math_c__c_float3x4_gr_:
-
-.. das:function:: operator -(x: float3x4 const implicit)
-
-- returns  :ref:`math::float3x4 <handle-math-float3x4>` 
-
-+--------+-------------------------------------------------------------+
-+argument+argument type                                                +
-+========+=============================================================+
-+x       + :ref:`math::float3x4 <handle-math-float3x4>`  const implicit+
-+--------+-------------------------------------------------------------+
-
-
-|function-math--|
-
-.. _function-_at_math_c__c_-_CIH_ls_math_c__c_float3x3_gr_:
-
-.. das:function:: operator -(x: float3x3 const implicit)
-
-- returns  :ref:`math::float3x3 <handle-math-float3x3>` 
-
-+--------+-------------------------------------------------------------+
-+argument+argument type                                                +
-+========+=============================================================+
-+x       + :ref:`math::float3x3 <handle-math-float3x3>`  const implicit+
-+--------+-------------------------------------------------------------+
-
-
-|function-math--|
 
 

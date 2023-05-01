@@ -37,9 +37,9 @@ Group of functions with shared category.
 Document writers
 ++++++++++++++++
 
-  *  :ref:`document (name:string const;mod:rtti::Module? const;fname:string const;substname:string const;groups:array\<rst::DocGroup\> const) : void <function-_at_rst_c__c_document_Cs_C1_ls_H_ls_rtti_c__c_Module_gr__gr_?_Cs_Cs_C1_ls_S_ls_DocGroup_gr__gr_A>` 
+  *  :ref:`document (name:string const;mod:rtti::Module? const;fname:string const;substname:string const;groups:array\<rst::DocGroup\> const) : void <function-_at_rst_c__c_document_Cs_C1_ls_H_ls_rtti_c__c_Module_gr__gr_?_Cs_Cs_C1_ls_S_ls_rst_c__c_DocGroup_gr__gr_A>` 
 
-.. _function-_at_rst_c__c_document_Cs_C1_ls_H_ls_rtti_c__c_Module_gr__gr_?_Cs_Cs_C1_ls_S_ls_DocGroup_gr__gr_A:
+.. _function-_at_rst_c__c_document_Cs_C1_ls_H_ls_rtti_c__c_Module_gr__gr_?_Cs_Cs_C1_ls_S_ls_rst_c__c_DocGroup_gr__gr_A:
 
 .. das:function:: document(name: string const; mod: rtti::Module? const; fname: string const; substname: string const; groups: array<rst::DocGroup> const)
 
@@ -66,10 +66,10 @@ Functions which do not match any `DocGroup` will be placed in the `Uncategorized
 Group operations
 ++++++++++++++++
 
-  *  :ref:`group_by_regex (name:string const;mod:rtti::Module? const;reg:regex::Regex -const) : rst::DocGroup <function-_at_rst_c__c_group_by_regex_Cs_C1_ls_H_ls_rtti_c__c_Module_gr__gr_?_S_ls_Regex_gr_>` 
-  *  :ref:`hide_group (group:rst::DocGroup -const) : rst::DocGroup <function-_at_rst_c__c_hide_group_S_ls_DocGroup_gr_>` 
+  *  :ref:`group_by_regex (name:string const;mod:rtti::Module? const;reg:regex::Regex -const) : rst::DocGroup <function-_at_rst_c__c_group_by_regex_Cs_C1_ls_H_ls_rtti_c__c_Module_gr__gr_?_S_ls_regex_c__c_Regex_gr_>` 
+  *  :ref:`hide_group (group:rst::DocGroup -const) : rst::DocGroup <function-_at_rst_c__c_hide_group_S_ls_rst_c__c_DocGroup_gr_>` 
 
-.. _function-_at_rst_c__c_group_by_regex_Cs_C1_ls_H_ls_rtti_c__c_Module_gr__gr_?_S_ls_Regex_gr_:
+.. _function-_at_rst_c__c_group_by_regex_Cs_C1_ls_H_ls_rtti_c__c_Module_gr__gr_?_S_ls_regex_c__c_Regex_gr_:
 
 .. das:function:: group_by_regex(name: string const; mod: rtti::Module? const; reg: Regex)
 
@@ -89,7 +89,7 @@ group_by_regex returns  :ref:`rst::DocGroup <struct-rst-DocGroup>`
 Creates a group of functions with shared category.
 Functions will be added to the group if they match the regular expression.
 
-.. _function-_at_rst_c__c_hide_group_S_ls_DocGroup_gr_:
+.. _function-_at_rst_c__c_hide_group_S_ls_rst_c__c_DocGroup_gr_:
 
 .. das:function:: hide_group(group: DocGroup)
 

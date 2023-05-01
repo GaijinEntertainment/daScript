@@ -764,6 +764,14 @@
 
 .. |method-ast-AstVisitor.visitExprConstURange| replace:: after `ExprConstURange`
 
+.. |method-ast-AstVisitor.preVisitExprConstRange64| replace:: before `ExprConstRange64`
+
+.. |method-ast-AstVisitor.visitExprConstRange64| replace:: after `ExprConstRange64`
+
+.. |method-ast-AstVisitor.preVisitExprConstURange64| replace:: before `ExprConstURange64`
+
+.. |method-ast-AstVisitor.visitExprConstURange64| replace:: after `ExprConstURange64`
+
 .. |method-ast-AstVisitor.preVisitExprConstBool| replace:: before `ExprConstBool`
 
 .. |method-ast-AstVisitor.visitExprConstBool| replace:: after `ExprConstBool`
@@ -1244,6 +1252,10 @@
 
 .. |structure_annotation-ast-ExprConstURange| replace:: Holds urange constant.
 
+.. |structure_annotation-ast-ExprConstRange64| replace:: Holds range64 constant.
+
+.. |structure_annotation-ast-ExprConstURange64| replace:: Holds urange64 constant.
+
 .. |structure_annotation-ast-ExprConstFloat| replace:: Holds float constant.
 
 .. |structure_annotation-ast-ExprConstFloat2| replace:: Holds float2 constant.
@@ -1362,3 +1374,12 @@
 .. |function-ast-get_expression_annotation| replace:: Get 'Annotation' for the 'ast::Expression' and its inherited types.
 
 .. |function-ast-to_compilation_log| replace:: Writes to compilation log from macro during compilation.
+
+.. |function-ast-add_module_option| replace:: Add module-specific option, which is accessible via "options" keyword.
+
+.. |function-ast-get_handled_type_field_offset| replace:: Returns offset of the field in the ManagedStructure handled type.
+
+.. |function-ast-get_underlying_value_type| replace:: Returns daScript type which is aliased with ManagedValue handled type.
+
+
+

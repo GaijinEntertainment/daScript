@@ -60,6 +60,8 @@
 
 .. |function-builtin-is_compiling| replace:: returns true if context is being compiled
 
+.. |function-builtin-is_folding| replace:: returns true if context is beeing folded, i.e during constant folding pass
+
 .. |function-builtin-is_compiling_macros| replace:: returns true if context is being compiled and the compiler is currently executing macro pass
 
 .. |function-builtin-is_compiling_macros_in_module| replace:: returns true if context is being compiled, its macro pass, and its in the specific module
@@ -89,6 +91,8 @@
 .. |function-builtin-smart_ptr_use_count| replace:: returns internal use-count for the smart_ptr
 
 .. |function-builtin-sprint| replace:: similar to 'print' but returns string instead of printing it
+
+.. |function-builtin-sprint_json| replace:: similar to 'write_json' but skips intermediate representation. this is faster but less flexible
 
 .. |function-builtin-stackwalk| replace:: stackwalk prints call stack and local variables values
 
@@ -167,6 +171,8 @@
 .. |function-builtin-reserve| replace:: makes sure array has sufficient amount of memory to hold specified number of elements. reserving arrays will speed up pushing to it
 
 .. |function-builtin-resize| replace:: Resize will resize `array_arg` array to a new size of `new_size`. If new_size is bigger than current, new elements will be zeroed.
+
+.. |function-builtin-resize_no_init| replace:: Resize will resize `array_arg` array to a new size of `new_size`. If new_size is bigger than current, new elements will be left uninitialized.
 
 .. |function-builtin-sort| replace:: sorts an array in ascending order.
 
@@ -433,3 +439,17 @@
 .. |function-builtin-move_new| replace:: Moves the new [[...]] value into smart_ptr.
 
 .. |function-builtin-move| replace:: Moves one smart_ptr into another. Semantic equivalent of move(a,b) => a := null, a <- b
+
+.. |function-builtin-to_compiler_log| replace:: Output text to compiler log, usually from the macro.
+
+.. |function-builtin-memset8| replace:: Effecitvely C memset.
+
+.. |function-builtin-memset16| replace:: Similar to memset, but fills values with 16 bit words.
+
+.. |function-builtin-memset32| replace:: Similar to memset, but fills values with 32 bit words.
+
+.. |function-builtin-memset64| replace:: Similar to memset, but fills values with 64 bit words.
+
+.. |function-builtin-memset128| replace:: Similar to memset, but fills values with 128 bit vector type values.
+
+

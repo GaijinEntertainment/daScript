@@ -305,7 +305,7 @@ levenshtein_distance_fast returns int
 
 .. das:function:: replace_multiple(source: string const; replaces: array<tuple<text:string;replacement:string>> const)
 
-replace_multiple returns string
+replace_multiple returns string const
 
 +--------+--------------------------------------------------+
 +argument+argument type                                     +
@@ -317,5 +317,20 @@ replace_multiple returns string
 
 
 |function-strings_boost-replace_multiple|
+
+.. _function-_at_strings_boost_c__c_is_hex_Ci:
+
+.. das:function:: is_hex(ch: int const)
+
+is_hex returns bool
+
++--------+-------------+
++argument+argument type+
++========+=============+
++ch      +int const    +
++--------+-------------+
+
+
+|function-strings_boost-is_hex|
 
 

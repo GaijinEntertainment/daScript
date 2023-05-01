@@ -106,11 +106,11 @@ convert degrees to radians
 Intersections
 +++++++++++++
 
-  *  :ref:`is_intersecting (a:math_boost::AABR const;b:math_boost::AABR const) : bool <function-_at_math_boost_c__c_is_intersecting_CS_ls_AABR_gr__CS_ls_AABR_gr_>` 
-  *  :ref:`is_intersecting (a:math_boost::AABB const;b:math_boost::AABB const) : bool <function-_at_math_boost_c__c_is_intersecting_CS_ls_AABB_gr__CS_ls_AABB_gr_>` 
-  *  :ref:`is_intersecting (ray:math_boost::Ray const;aabb:math_boost::AABB const;Tmin:float const;Tmax:float const) : bool <function-_at_math_boost_c__c_is_intersecting_CS_ls_Ray_gr__CS_ls_AABB_gr__Cf_Cf>` 
+  *  :ref:`is_intersecting (a:math_boost::AABR const;b:math_boost::AABR const) : bool <function-_at_math_boost_c__c_is_intersecting_CS_ls_math_boost_c__c_AABR_gr__CS_ls_math_boost_c__c_AABR_gr_>` 
+  *  :ref:`is_intersecting (a:math_boost::AABB const;b:math_boost::AABB const) : bool <function-_at_math_boost_c__c_is_intersecting_CS_ls_math_boost_c__c_AABB_gr__CS_ls_math_boost_c__c_AABB_gr_>` 
+  *  :ref:`is_intersecting (ray:math_boost::Ray const;aabb:math_boost::AABB const;Tmin:float const;Tmax:float const) : bool <function-_at_math_boost_c__c_is_intersecting_CS_ls_math_boost_c__c_Ray_gr__CS_ls_math_boost_c__c_AABB_gr__Cf_Cf>` 
 
-.. _function-_at_math_boost_c__c_is_intersecting_CS_ls_AABR_gr__CS_ls_AABR_gr_:
+.. _function-_at_math_boost_c__c_is_intersecting_CS_ls_math_boost_c__c_AABR_gr__CS_ls_math_boost_c__c_AABR_gr_:
 
 .. das:function:: is_intersecting(a: AABR const; b: AABR const)
 
@@ -127,7 +127,7 @@ is_intersecting returns bool
 
 returns true if inputs intersect
 
-.. _function-_at_math_boost_c__c_is_intersecting_CS_ls_AABB_gr__CS_ls_AABB_gr_:
+.. _function-_at_math_boost_c__c_is_intersecting_CS_ls_math_boost_c__c_AABB_gr__CS_ls_math_boost_c__c_AABB_gr_:
 
 .. das:function:: is_intersecting(a: AABB const; b: AABB const)
 
@@ -144,7 +144,7 @@ is_intersecting returns bool
 
 returns true if inputs intersect
 
-.. _function-_at_math_boost_c__c_is_intersecting_CS_ls_Ray_gr__CS_ls_AABB_gr__Cf_Cf:
+.. _function-_at_math_boost_c__c_is_intersecting_CS_ls_math_boost_c__c_Ray_gr__CS_ls_math_boost_c__c_AABB_gr__Cf_Cf:
 
 .. das:function:: is_intersecting(ray: Ray const; aabb: AABB const; Tmin: float const; Tmax: float const)
 

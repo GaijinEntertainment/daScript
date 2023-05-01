@@ -456,6 +456,7 @@ Containers
   *  :ref:`empty (str:string const implicit) : bool <function-_at__builtin__c__c_empty_CIs>` 
   *  :ref:`empty (str:$::das_string const implicit) : bool <function-_at__builtin__c__c_empty_CIH_ls__builtin__c__c_das_string_gr_>` 
   *  :ref:`resize (Arr:array\<auto(numT)\> -const;newSize:int const) : auto <function-_at__builtin__c__c_resize_1_ls_Y_ls_numT_gr_._gr_A_Ci>` 
+  *  :ref:`resize_no_init (Arr:array\<auto(numT)\> -const;newSize:int const) : auto <function-_at__builtin__c__c_resize_no_init_1_ls_Y_ls_numT_gr_._gr_A_Ci>` 
   *  :ref:`reserve (Arr:array\<auto(numT)\> -const;newSize:int const) : auto <function-_at__builtin__c__c_reserve_1_ls_Y_ls_numT_gr_._gr_A_Ci>` 
   *  :ref:`pop (Arr:array\<auto(numT)\> -const) : auto <function-_at__builtin__c__c_pop_1_ls_Y_ls_numT_gr_._gr_A>` 
   *  :ref:`push (Arr:array\<auto(numT)\> -const;value:numT const -#;at:int const) : auto <function-_at__builtin__c__c_push_1_ls_Y_ls_numT_gr_._gr_A_CY_ls_numT_gr_L_Ci>` 
@@ -684,6 +685,23 @@ resize returns auto
 
 
 |function-builtin-resize|
+
+.. _function-_at__builtin__c__c_resize_no_init_1_ls_Y_ls_numT_gr_._gr_A_Ci:
+
+.. das:function:: resize_no_init(Arr: array<auto(numT)>; newSize: int const)
+
+resize_no_init returns auto
+
++--------+-----------------+
++argument+argument type    +
++========+=================+
++Arr     +array<auto(numT)>+
++--------+-----------------+
++newSize +int const        +
++--------+-----------------+
+
+
+|function-builtin-resize_no_init|
 
 .. _function-_at__builtin__c__c_reserve_1_ls_Y_ls_numT_gr_._gr_A_Ci:
 
@@ -2629,13 +2647,14 @@ add_ptr_ref returns smart_ptr<TT>
 Macro infrastructure
 ++++++++++++++++++++
 
-  *  :ref:`is_compiling (context:__context const) : bool <function-_at__builtin__c__c_is_compiling_C_c>` 
-  *  :ref:`is_compiling_macros (context:__context const) : bool <function-_at__builtin__c__c_is_compiling_macros_C_c>` 
-  *  :ref:`is_compiling_macros_in_module (name:string const implicit;context:__context const) : bool <function-_at__builtin__c__c_is_compiling_macros_in_module_CIs_C_c>` 
+  *  :ref:`is_compiling () : bool <function-_at__builtin__c__c_is_compiling>` 
+  *  :ref:`is_compiling_macros () : bool <function-_at__builtin__c__c_is_compiling_macros>` 
+  *  :ref:`is_compiling_macros_in_module (name:string const implicit) : bool <function-_at__builtin__c__c_is_compiling_macros_in_module_CIs>` 
   *  :ref:`is_reporting_compilation_errors () : bool <function-_at__builtin__c__c_is_reporting_compilation_errors>` 
   *  :ref:`is_in_completion () : bool <function-_at__builtin__c__c_is_in_completion>` 
+  *  :ref:`is_folding () : bool <function-_at__builtin__c__c_is_folding>` 
 
-.. _function-_at__builtin__c__c_is_compiling_C_c:
+.. _function-_at__builtin__c__c_is_compiling:
 
 .. das:function:: is_compiling()
 
@@ -2643,7 +2662,7 @@ is_compiling returns bool
 
 |function-builtin-is_compiling|
 
-.. _function-_at__builtin__c__c_is_compiling_macros_C_c:
+.. _function-_at__builtin__c__c_is_compiling_macros:
 
 .. das:function:: is_compiling_macros()
 
@@ -2651,7 +2670,7 @@ is_compiling_macros returns bool
 
 |function-builtin-is_compiling_macros|
 
-.. _function-_at__builtin__c__c_is_compiling_macros_in_module_CIs_C_c:
+.. _function-_at__builtin__c__c_is_compiling_macros_in_module_CIs:
 
 .. das:function:: is_compiling_macros_in_module(name: string const implicit)
 
@@ -2681,6 +2700,14 @@ is_reporting_compilation_errors returns bool
 is_in_completion returns bool
 
 |function-builtin-is_in_completion|
+
+.. _function-_at__builtin__c__c_is_folding:
+
+.. das:function:: is_folding()
+
+is_folding returns bool
+
+|function-builtin-is_folding|
 
 ++++++++
 Profiler
@@ -2739,6 +2766,7 @@ System infastructure
   *  :ref:`print (text:string const implicit;context:__context const) : void <function-_at__builtin__c__c_print_CIs_C_c>` 
   *  :ref:`error (text:string const implicit;context:__context const) : void <function-_at__builtin__c__c_error_CIs_C_c>` 
   *  :ref:`sprint (value:any const;flags:bitfield\<escapeString;namesAndDimensions;typeQualifiers;refAddresses;humanReadable;singleLine\> const) : string <function-_at__builtin__c__c_sprint_C*_CY_ls_print_flags_gr_N_ls_escapeString;namesAndDimensions;typeQualifiers;refAddresses;humanReadable;singleLine_gr_t>` 
+  *  :ref:`sprint_json (value:any const;humanReadable:bool const) : string <function-_at__builtin__c__c_sprint_json_C*_Cb>` 
   *  :ref:`terminate (context:__context const) : void <function-_at__builtin__c__c_terminate_C_c>` 
   *  :ref:`breakpoint () : void <function-_at__builtin__c__c_breakpoint>` 
   *  :ref:`stackwalk (args:bool const;vars:bool const;context:__context const;lineinfo:__lineInfo const) : void <function-_at__builtin__c__c_stackwalk_Cb_Cb_C_c_C_l>` 
@@ -2809,6 +2837,23 @@ sprint returns string
 
 
 |function-builtin-sprint|
+
+.. _function-_at__builtin__c__c_sprint_json_C*_Cb:
+
+.. das:function:: sprint_json(value: any const; humanReadable: bool const)
+
+sprint_json returns string
+
++-------------+-------------+
++argument     +argument type+
++=============+=============+
++value        +any const    +
++-------------+-------------+
++humanReadable+bool const   +
++-------------+-------------+
+
+
+|function-builtin-sprint_json|
 
 .. _function-_at__builtin__c__c_terminate_C_c:
 
@@ -3649,5 +3694,115 @@ swap returns auto
 
 
 |function-builtin-swap|
+
+++++++
+Memset
+++++++
+
+  *  :ref:`memset8 (left:void? const implicit;value:uint8 const;count:int const) : void <function-_at__builtin__c__c_memset8_CI?_Cu8_Ci>` 
+  *  :ref:`memset16 (left:void? const implicit;value:uint16 const;count:int const) : void <function-_at__builtin__c__c_memset16_CI?_Cu16_Ci>` 
+  *  :ref:`memset32 (left:void? const implicit;value:uint const;count:int const) : void <function-_at__builtin__c__c_memset32_CI?_Cu_Ci>` 
+  *  :ref:`memset64 (left:void? const implicit;value:uint64 const;count:int const) : void <function-_at__builtin__c__c_memset64_CI?_Cu64_Ci>` 
+  *  :ref:`memset128 (left:void? const implicit;value:uint4 const;count:int const) : void <function-_at__builtin__c__c_memset128_CI?_Cu4_Ci>` 
+
+.. _function-_at__builtin__c__c_memset8_CI?_Cu8_Ci:
+
+.. das:function:: memset8(left: void? const implicit; value: uint8 const; count: int const)
+
+.. warning:: 
+  This is unsafe operation.
+
++--------+--------------------+
++argument+argument type       +
++========+====================+
++left    +void? const implicit+
++--------+--------------------+
++value   +uint8 const         +
++--------+--------------------+
++count   +int const           +
++--------+--------------------+
+
+
+|function-builtin-memset8|
+
+.. _function-_at__builtin__c__c_memset16_CI?_Cu16_Ci:
+
+.. das:function:: memset16(left: void? const implicit; value: uint16 const; count: int const)
+
+.. warning:: 
+  This is unsafe operation.
+
++--------+--------------------+
++argument+argument type       +
++========+====================+
++left    +void? const implicit+
++--------+--------------------+
++value   +uint16 const        +
++--------+--------------------+
++count   +int const           +
++--------+--------------------+
+
+
+|function-builtin-memset16|
+
+.. _function-_at__builtin__c__c_memset32_CI?_Cu_Ci:
+
+.. das:function:: memset32(left: void? const implicit; value: uint const; count: int const)
+
+.. warning:: 
+  This is unsafe operation.
+
++--------+--------------------+
++argument+argument type       +
++========+====================+
++left    +void? const implicit+
++--------+--------------------+
++value   +uint const          +
++--------+--------------------+
++count   +int const           +
++--------+--------------------+
+
+
+|function-builtin-memset32|
+
+.. _function-_at__builtin__c__c_memset64_CI?_Cu64_Ci:
+
+.. das:function:: memset64(left: void? const implicit; value: uint64 const; count: int const)
+
+.. warning:: 
+  This is unsafe operation.
+
++--------+--------------------+
++argument+argument type       +
++========+====================+
++left    +void? const implicit+
++--------+--------------------+
++value   +uint64 const        +
++--------+--------------------+
++count   +int const           +
++--------+--------------------+
+
+
+|function-builtin-memset64|
+
+.. _function-_at__builtin__c__c_memset128_CI?_Cu4_Ci:
+
+.. das:function:: memset128(left: void? const implicit; value: uint4 const; count: int const)
+
+.. warning:: 
+  This is unsafe operation.
+
++--------+--------------------+
++argument+argument type       +
++========+====================+
++left    +void? const implicit+
++--------+--------------------+
++value   +uint4 const         +
++--------+--------------------+
++count   +int const           +
++--------+--------------------+
+
+
+|function-builtin-memset128|
 
 

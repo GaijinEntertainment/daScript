@@ -148,15 +148,15 @@ Regular expression.
 Compilation and validation
 ++++++++++++++++++++++++++
 
-  *  :ref:`visit_top_down (node:regex::ReNode? -const;blk:block\<(var n:regex::ReNode? -const):void\> const) : void <function-_at_regex_c__c_visit_top_down_1_ls_S_ls_ReNode_gr__gr_?_CN_ls_n_gr_0_ls_1_ls_S_ls_ReNode_gr__gr_?_gr_1_ls_v_gr__builtin_>` 
-  *  :ref:`is_valid (re:regex::Regex -const) : bool <function-_at_regex_c__c_is_valid_S_ls_Regex_gr_>` 
-  *  :ref:`regex_compile (re:regex::Regex -const;expr:string const) : bool <function-_at_regex_c__c_regex_compile_S_ls_Regex_gr__Cs>` 
+  *  :ref:`visit_top_down (node:regex::ReNode? -const;blk:block\<(var n:regex::ReNode? -const):void\> const) : void <function-_at_regex_c__c_visit_top_down_1_ls_S_ls_regex_c__c_ReNode_gr__gr_?_CN_ls_n_gr_0_ls_1_ls_S_ls_regex_c__c_ReNode_gr__gr_?_gr_1_ls_v_gr__builtin_>` 
+  *  :ref:`is_valid (re:regex::Regex -const) : bool <function-_at_regex_c__c_is_valid_S_ls_regex_c__c_Regex_gr_>` 
+  *  :ref:`regex_compile (re:regex::Regex -const;expr:string const) : bool <function-_at_regex_c__c_regex_compile_S_ls_regex_c__c_Regex_gr__Cs>` 
   *  :ref:`regex_compile (expr:string const) : regex::Regex <function-_at_regex_c__c_regex_compile_Cs>` 
-  *  :ref:`regex_compile (re:regex::Regex -const) : regex::Regex <function-_at_regex_c__c_regex_compile_S_ls_Regex_gr_>` 
-  *  :ref:`regex_debug (regex:regex::Regex const) : void <function-_at_regex_c__c_regex_debug_CS_ls_Regex_gr_>` 
+  *  :ref:`regex_compile (re:regex::Regex -const) : regex::Regex <function-_at_regex_c__c_regex_compile_S_ls_regex_c__c_Regex_gr_>` 
+  *  :ref:`regex_debug (regex:regex::Regex const) : void <function-_at_regex_c__c_regex_debug_CS_ls_regex_c__c_Regex_gr_>` 
   *  :ref:`debug_set (cset:uint const[8]) : void <function-_at_regex_c__c_debug_set_C[8]Y_ls_CharSet_gr_u>` 
 
-.. _function-_at_regex_c__c_visit_top_down_1_ls_S_ls_ReNode_gr__gr_?_CN_ls_n_gr_0_ls_1_ls_S_ls_ReNode_gr__gr_?_gr_1_ls_v_gr__builtin_:
+.. _function-_at_regex_c__c_visit_top_down_1_ls_S_ls_regex_c__c_ReNode_gr__gr_?_CN_ls_n_gr_0_ls_1_ls_S_ls_regex_c__c_ReNode_gr__gr_?_gr_1_ls_v_gr__builtin_:
 
 .. das:function:: visit_top_down(node: regex::ReNode?; blk: block<(var n:regex::ReNode? -const):void> const)
 
@@ -171,7 +171,7 @@ Compilation and validation
 
 |function-regex-visit_top_down|
 
-.. _function-_at_regex_c__c_is_valid_S_ls_Regex_gr_:
+.. _function-_at_regex_c__c_is_valid_S_ls_regex_c__c_Regex_gr_:
 
 .. das:function:: is_valid(re: Regex)
 
@@ -186,7 +186,7 @@ is_valid returns bool
 
 returns `true` if enumeration compiled correctly
 
-.. _function-_at_regex_c__c_regex_compile_S_ls_Regex_gr__Cs:
+.. _function-_at_regex_c__c_regex_compile_S_ls_regex_c__c_Regex_gr__Cs:
 
 .. das:function:: regex_compile(re: Regex; expr: string const)
 
@@ -220,7 +220,7 @@ regex_compile returns  :ref:`regex::Regex <struct-regex-Regex>`
 Compile regular expression.
 Validity of the compiled expression is checked by `is_valid`.
 
-.. _function-_at_regex_c__c_regex_compile_S_ls_Regex_gr_:
+.. _function-_at_regex_c__c_regex_compile_S_ls_regex_c__c_Regex_gr_:
 
 .. das:function:: regex_compile(re: Regex)
 
@@ -236,7 +236,7 @@ regex_compile returns  :ref:`regex::Regex <struct-regex-Regex>`
 Compile regular expression.
 Validity of the compiled expression is checked by `is_valid`.
 
-.. _function-_at_regex_c__c_regex_debug_CS_ls_Regex_gr_:
+.. _function-_at_regex_c__c_regex_debug_CS_ls_regex_c__c_Regex_gr_:
 
 .. das:function:: regex_debug(regex: Regex const)
 
@@ -266,10 +266,10 @@ Prints character set in human readable form.
 Access
 ++++++
 
-  *  :ref:`regex_group (regex:regex::Regex const;index:int const;match:string const) : string <function-_at_regex_c__c_regex_group_CS_ls_Regex_gr__Ci_Cs>` 
-  *  :ref:`regex_foreach (regex:regex::Regex -const;str:string const;blk:block\<(at:range const):bool\> const) : void <function-_at_regex_c__c_regex_foreach_S_ls_Regex_gr__Cs_CN_ls_at_gr_0_ls_Cr_gr_1_ls_b_gr__builtin_>` 
+  *  :ref:`regex_group (regex:regex::Regex const;index:int const;match:string const) : string <function-_at_regex_c__c_regex_group_CS_ls_regex_c__c_Regex_gr__Ci_Cs>` 
+  *  :ref:`regex_foreach (regex:regex::Regex -const;str:string const;blk:block\<(at:range const):bool\> const) : void <function-_at_regex_c__c_regex_foreach_S_ls_regex_c__c_Regex_gr__Cs_CN_ls_at_gr_0_ls_Cr_gr_1_ls_b_gr__builtin_>` 
 
-.. _function-_at_regex_c__c_regex_group_CS_ls_Regex_gr__Ci_Cs:
+.. _function-_at_regex_c__c_regex_group_CS_ls_regex_c__c_Regex_gr__Ci_Cs:
 
 .. das:function:: regex_group(regex: Regex const; index: int const; match: string const)
 
@@ -288,7 +288,7 @@ regex_group returns string
 
 Returns string for the given group index and match result.
 
-.. _function-_at_regex_c__c_regex_foreach_S_ls_Regex_gr__Cs_CN_ls_at_gr_0_ls_Cr_gr_1_ls_b_gr__builtin_:
+.. _function-_at_regex_c__c_regex_foreach_S_ls_regex_c__c_Regex_gr__Cs_CN_ls_at_gr_0_ls_Cr_gr_1_ls_b_gr__builtin_:
 
 .. das:function:: regex_foreach(regex: Regex; str: string const; blk: block<(at:range const):bool> const)
 
@@ -309,9 +309,9 @@ Iterates through all matches for the given regular expression in `str`.
 Match
 +++++
 
-  *  :ref:`regex_match (regex:regex::Regex -const;str:string const;offset:int const) : int <function-_at_regex_c__c_regex_match_S_ls_Regex_gr__Cs_Ci>` 
+  *  :ref:`regex_match (regex:regex::Regex -const;str:string const;offset:int const) : int <function-_at_regex_c__c_regex_match_S_ls_regex_c__c_Regex_gr__Cs_Ci>` 
 
-.. _function-_at_regex_c__c_regex_match_S_ls_Regex_gr__Cs_Ci:
+.. _function-_at_regex_c__c_regex_match_S_ls_regex_c__c_Regex_gr__Cs_Ci:
 
 .. das:function:: regex_match(regex: Regex; str: string const; offset: int const)
 
@@ -336,7 +336,7 @@ Generation
 ++++++++++
 
   *  :ref:`re_gen_get_rep_limit () : uint <function-_at_regex_c__c_re_gen_get_rep_limit>` 
-  *  :ref:`re_gen (re:regex::Regex -const;rnd:iterator\<uint\> -const) : string <function-_at_regex_c__c_re_gen_S_ls_Regex_gr__Y_ls_ReGenRandom_gr_1_ls_u_gr_G>` 
+  *  :ref:`re_gen (re:regex::Regex -const;rnd:iterator\<uint\> -const) : string <function-_at_regex_c__c_re_gen_S_ls_regex_c__c_Regex_gr__Y_ls_ReGenRandom_gr_1_ls_u_gr_G>` 
 
 .. _function-_at_regex_c__c_re_gen_get_rep_limit:
 
@@ -346,7 +346,7 @@ re_gen_get_rep_limit returns uint
 
 |function-regex-re_gen_get_rep_limit|
 
-.. _function-_at_regex_c__c_re_gen_S_ls_Regex_gr__Y_ls_ReGenRandom_gr_1_ls_u_gr_G:
+.. _function-_at_regex_c__c_re_gen_S_ls_regex_c__c_Regex_gr__Y_ls_ReGenRandom_gr_1_ls_u_gr_G:
 
 .. das:function:: re_gen(re: Regex; rnd: ReGenRandom)
 
@@ -362,5 +362,28 @@ re_gen returns string
 
 
 |function-regex-re_gen|
+
++++++++++++++
+Uncategorized
++++++++++++++
+
+.. _function-_at_regex_c__c_regex_replace_S_ls_regex_c__c_Regex_gr__Cs_CN_ls_at_gr_0_ls_Cs_gr_1_ls_s_gr__builtin_:
+
+.. das:function:: regex_replace(regex: Regex; str: string const; blk: block<(at:string const):string> const)
+
+regex_replace returns string const
+
++--------+------------------------------------------+
++argument+argument type                             +
++========+==========================================+
++regex   + :ref:`regex::Regex <struct-regex-Regex>` +
++--------+------------------------------------------+
++str     +string const                              +
++--------+------------------------------------------+
++blk     +block<(at:string const):string> const     +
++--------+------------------------------------------+
+
+
+Iterates through all matches for the given regular expression in `str`.
 
 
