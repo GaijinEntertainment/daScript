@@ -443,6 +443,10 @@ namespace das {
         delete pDecl;
     }
 
+    bool isOpName ( const string & name ) {
+        return !(isalpha(name[0]) || name[0]=='_' || name[0]=='`');
+    }
+
     vector<VariableDeclaration*> * ast_structVarDefAbstract ( yyscan_t scanner, vector<VariableDeclaration*> * list,
         AnnotationList * annL, bool isPrivate, bool cnst, Function * func ) {
         if ( !yyextra->g_thisStructure->isClass ) {
@@ -460,6 +464,9 @@ namespace das {
             delete annL;
         } else if ( func->result->baseType==Type::autoinfer ) {
             das_yyerror(scanner,"abstract functions must specify return type explicitly " + func->getMangledName(),
+                func->at, CompilationError::invalid_member_function);
+        } else if ( isOpName(func->name) ) {
+            das_yyerror(scanner,"abstract functions can't be operators " + func->getMangledName(),
                 func->at, CompilationError::invalid_member_function);
         } else {
             auto varName = func->name;
@@ -506,6 +513,23 @@ namespace das {
         } else if ( func->isGeneric() ) {
             das_yyerror(scanner,"generic function can't be a member of a class " + func->getMangledName(),
                 func->at, CompilationError::invalid_member_function);
+        } else if ( isOpName(func->name) ) {
+            if ( ovr ) {
+                das_yyerror(scanner,"can't override an operator " + func->getMangledName(),
+                    func->at, CompilationError::invalid_member_function);
+            }
+            if ( cnst ) {
+                das_yyerror(scanner,"can't have a constant operator " + func->getMangledName(),
+                    func->at, CompilationError::invalid_member_function);
+            }
+            modifyToClassMember(func, yyextra->g_thisStructure, false, false);
+            assignDefaultArguments(func);
+            runFunctionAnnotations(scanner, func, annL, annLAt);
+            if ( !yyextra->g_Program->addFunction(func) ) {
+                das_yyerror(scanner,"function is already defined " + func->getMangledName(),
+                    func->at, CompilationError::function_already_declared);
+            }
+            func->delRef();
         } else {
             func->privateFunction = yyextra->g_thisStructure->privateStructure;
             if ( func->name != yyextra->g_thisStructure->name && func->name != "finalize") {
