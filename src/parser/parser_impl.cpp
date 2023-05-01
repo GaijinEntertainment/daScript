@@ -518,11 +518,7 @@ namespace das {
                 das_yyerror(scanner,"can't override an operator " + func->getMangledName(),
                     func->at, CompilationError::invalid_member_function);
             }
-            if ( cnst ) {
-                das_yyerror(scanner,"can't have a constant operator " + func->getMangledName(),
-                    func->at, CompilationError::invalid_member_function);
-            }
-            modifyToClassMember(func, yyextra->g_thisStructure, false, false);
+            modifyToClassMember(func, yyextra->g_thisStructure, false, cnst);
             assignDefaultArguments(func);
             runFunctionAnnotations(scanner, func, annL, annLAt);
             if ( !yyextra->g_Program->addFunction(func) ) {
