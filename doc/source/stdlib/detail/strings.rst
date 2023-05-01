@@ -24,6 +24,8 @@
 
 .. |function-strings-escape| replace:: Escape string so that escape sequences are printable, for example converting "\n" into "\\n".
 
+.. |function-strings-safe_unescape| replace:: Unescape string i.e reverse effects of `escape`. For example "\\n" is converted to "\n".
+
 .. |function-strings-find| replace:: Return index where substr can be found within str (starting from optional 'start' at), or -1 if not found
 
 .. |function-strings-float| replace:: Converts string to float. In case of error panic.

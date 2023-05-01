@@ -229,9 +229,13 @@ write_json returns string
 
 returns JSON (textual) representation of JsonValue as a string.
 
-+++++++++++++
-Uncategorized
-+++++++++++++
++++++++++++++++
+JSON properties
++++++++++++++++
+
+  *  :ref:`set_no_trailing_zeros (value:bool const) : bool const <function-_at_json_c__c_set_no_trailing_zeros_Cb>` 
+  *  :ref:`set_no_empty_arrays (value:bool const) : bool const <function-_at_json_c__c_set_no_empty_arrays_Cb>` 
+  *  :ref:`set_allow_duplicate_keys (value:bool const) : bool const <function-_at_json_c__c_set_allow_duplicate_keys_Cb>` 
 
 .. _function-_at_json_c__c_set_no_trailing_zeros_Cb:
 
@@ -246,7 +250,7 @@ set_no_trailing_zeros returns bool const
 +--------+-------------+
 
 
-|function-json-set_no_trailing_zeros|
+if `value` is true, then numbers are written without trailing zeros.
 
 .. _function-_at_json_c__c_set_no_empty_arrays_Cb:
 
@@ -261,7 +265,7 @@ set_no_empty_arrays returns bool const
 +--------+-------------+
 
 
-|function-json-set_no_empty_arrays|
+if `value` is true, then empty arrays are not written at all
 
 .. _function-_at_json_c__c_set_allow_duplicate_keys_Cb:
 
@@ -276,7 +280,13 @@ set_allow_duplicate_keys returns bool const
 +--------+-------------+
 
 
-|function-json-set_allow_duplicate_keys|
+if `value` is true, then duplicate keys are allowed in objects. the later key overwrites the earlier one.
+
++++++++++++
+Broken JSON
++++++++++++
+
+  *  :ref:`try_fixing_broken_json (bad:string -const) : string <function-_at_json_c__c_try_fixing_broken_json_s>` 
 
 .. _function-_at_json_c__c_try_fixing_broken_json_s:
 

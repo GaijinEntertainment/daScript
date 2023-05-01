@@ -13,3 +13,7 @@
 .. |function-strings_boost-levenshtein_distance| replace:: Returns Levenshtein distance between two strings.
 
 .. |function-strings_boost-levenshtein_distance_fast| replace:: Returns Levenshtein distance between two strings, fast implementation.
+
+.. |function-strings_boost-replace_multiple| replace:: Replace multiple substrings in string.
+
+.. |function-strings_boost-is_hex| replace:: Returns true if character is hex digit.

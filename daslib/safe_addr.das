@@ -54,6 +54,7 @@ def public shared_addr ( val:auto(VALUE)& )
 [tag_function_macro(tag="shared_addr_tag")]
 class SharedAddrMacro : AstFunctionAnnotation
     //! This macro reports an error if shared_addr is attempted on anything other that shared global variables.
+    //! I.e. only global variables are safe to use with shared_addr.
     def override verifyCall ( var call : smart_ptr<ExprCallFunc>; args,progArgs:AnnotationArgumentList; var errors : das_string ) : bool
         if is_shared_expr(ExpressionPtr(call.arguments[0]))
             return true

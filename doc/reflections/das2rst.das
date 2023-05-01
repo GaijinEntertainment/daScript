@@ -225,7 +225,7 @@ def document_module_strings(root:string)
         group_by_regex("String builder", mod, %regex~(build_string|format|write|write_char|write_chars|write_escape_string)$%%);
         group_by_regex("das::string manipulation", mod, %regex~(append|resize)$%%);
         group_by_regex("String modifications", mod, %regex~(chop|escape|unescape|repeat|replace|reverse|slice|
-strip|strip_left|strip_right|to_lower|to_lower_in_place|to_upper|to_upper_in_place|rtrim)$%%);
+strip|strip_left|strip_right|to_lower|to_lower_in_place|to_upper|to_upper_in_place|rtrim|safe_unescape)$%%);
         group_by_regex("Search substrings", mod, %regex~find.*%%);
         group_by_regex("String conversion routines", mod, %regex~(double|float|int|uint|int64|uint64|to_double|to_float|to_int|to_uint|to_int64|to_uint64|string|to_char)$%%);
         group_by_regex("String as array", mod, %regex~(modify_data|peek_data)$%%);
@@ -239,7 +239,9 @@ def document_module_strings_boost(root:string)
         group_by_regex("Split and join", mod, %regex~(split|split_by_chars|join)$%%);
         group_by_regex("Formatting", mod, %regex~(wide)$%%);
         group_by_regex("Queries and comparisons", mod, %regex~(is_character_at|eq)$%%);
-        group_by_regex("Levenshtein distance", mod, %regex~(levenshtein_distance)$%%)
+        group_by_regex("Replace", mod, %regex~(replace_multiple)$%%);
+        group_by_regex("Levenshtein distance", mod, %regex~(levenshtein_distance|levenshtein_distance_fast)$%%);
+        group_by_regex("Character traits", mod, %regex~(is_hex)$%%);
     }]
     document("Boost package for string manipulation library",mod,"{root}/strings_boost.rst","{root}/detail/strings_boost.rst",groups)
 
@@ -256,7 +258,9 @@ def document_module_json(root:string)
     var mod = find_module("json")
     var groups <- [{DocGroup
         group_by_regex("Value conversion", mod, %regex~(JV|JVNull)$%%);
-        group_by_regex("Read and write", mod, %regex~(read_json|write_json)$%%)
+        group_by_regex("Read and write", mod, %regex~(read_json|write_json)$%%);
+        group_by_regex("JSON properties", mod, %regex~(set_no_trailing_zeros|set_no_empty_arrays|set_allow_duplicate_keys)$%%);
+        group_by_regex("Broken JSON", mod, %regex~(try_fixing_broken_json)$%%)
     }]
     document("JSON manipulation library",mod,"{root}/json.rst","{root}/detail/json.rst",groups)
 
