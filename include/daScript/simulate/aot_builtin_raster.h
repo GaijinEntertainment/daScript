@@ -2,8 +2,12 @@
 
 namespace das {
 
-    void rast_hspan_u8 ( TArray<uint8_t> & Span, int32_t spanOffset, const TArray<uint8_t> & Tspan, int32_t tspanOffset, float uvY, float dUVY, int32_t _count, LineInfoArg * at, Context * context );
-    void rast_hspan_masked_u8 ( TArray<uint8_t> & Span, int32_t spanOffset, const TArray<uint8_t> & Tspan, int32_t tspanOffset, float uvY, float dUVY, int32_t _count, LineInfoArg * at, Context * context );
+    void rast_hspan_u8 ( TArray<uint8_t> & Span, int32_t spanOffset, const TArray<uint8_t> & Tspan, int32_t tspanOffset,
+        float uvY, float dUVY, int32_t _count, LineInfoArg * at, Context * context );
+    void rast_hspan_masked_u8 ( TArray<uint8_t> & Span, int32_t spanOffset, const TArray<uint8_t> & Tspan, int32_t tspanOffset,
+        float uvY, float dUVY, int32_t _count, LineInfoArg * at, Context * context );
+    void rast_hspan_masked_solid_u8 ( uint8_t solid, TArray<uint8_t> & Span, int32_t spanOffset, const TArray<uint8_t> & Tspan, int32_t tspanOffset,
+        float uvY, float dUVY, int32_t _count, LineInfoArg * at, Context * context );
 
     __forceinline vec4f v_gather ( const void * _ptr, vec4f index ) {
         // read 4 floats from memory, using 4 uint32_t indices
