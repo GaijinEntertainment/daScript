@@ -983,35 +983,33 @@ StructInfo fields are
 
 TypeInfo fields are
 
-+----------+---------------------------------------------------+
-+argTypes  + :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>` ??   +
-+----------+---------------------------------------------------+
-+size      +uint                                               +
-+----------+---------------------------------------------------+
-+secondType+ :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>` ?    +
-+----------+---------------------------------------------------+
-+dimSize   +uint                                               +
-+----------+---------------------------------------------------+
-+enumType  + :ref:`rtti::EnumInfo <handle-rtti-EnumInfo>` ?    +
-+----------+---------------------------------------------------+
-+hash      +uint64                                             +
-+----------+---------------------------------------------------+
-+argNames  +string const?                                      +
-+----------+---------------------------------------------------+
-+argCount  +uint                                               +
-+----------+---------------------------------------------------+
-+basicType + :ref:`rtti::Type <enum-rtti-Type>`                +
-+----------+---------------------------------------------------+
-+firstType + :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>` ?    +
-+----------+---------------------------------------------------+
-+structType+ :ref:`rtti::StructInfo <handle-rtti-StructInfo>` ?+
-+----------+---------------------------------------------------+
-+flags     + :ref:`TypeInfoFlags <alias-TypeInfoFlags>`        +
-+----------+---------------------------------------------------+
++----------+------------------------------------------------+
++argTypes  + :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>` ??+
++----------+------------------------------------------------+
++size      +uint                                            +
++----------+------------------------------------------------+
++secondType+ :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>` ? +
++----------+------------------------------------------------+
++dimSize   +uint                                            +
++----------+------------------------------------------------+
++hash      +uint64                                          +
++----------+------------------------------------------------+
++argNames  +string const?                                   +
++----------+------------------------------------------------+
++argCount  +uint                                            +
++----------+------------------------------------------------+
++basicType + :ref:`rtti::Type <enum-rtti-Type>`             +
++----------+------------------------------------------------+
++firstType + :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>` ? +
++----------+------------------------------------------------+
++flags     + :ref:`TypeInfoFlags <alias-TypeInfoFlags>`     +
++----------+------------------------------------------------+
 
 
 TypeInfo property operators are
 
++----------+-----------------------------------------------------------+
++enumType  + :ref:`rtti::EnumInfo <handle-rtti-EnumInfo>` ?            +
 +----------+-----------------------------------------------------------+
 +isRef     +bool                                                       +
 +----------+-----------------------------------------------------------+
@@ -1032,6 +1030,8 @@ TypeInfo property operators are
 +isImplicit+bool                                                       +
 +----------+-----------------------------------------------------------+
 +annotation+ :ref:`rtti::TypeAnnotation <handle-rtti-TypeAnnotation>` ?+
++----------+-----------------------------------------------------------+
++structType+ :ref:`rtti::StructInfo <handle-rtti-StructInfo>` ?        +
 +----------+-----------------------------------------------------------+
 
 
@@ -1054,8 +1054,6 @@ VarInfo fields are
 +--------------------+---------------------------------------------------------------------------------+
 +dimSize             +uint                                                                             +
 +--------------------+---------------------------------------------------------------------------------+
-+enumType            + :ref:`rtti::EnumInfo <handle-rtti-EnumInfo>` ?                                  +
-+--------------------+---------------------------------------------------------------------------------+
 +name                +string const                                                                     +
 +--------------------+---------------------------------------------------------------------------------+
 +hash                +uint64                                                                           +
@@ -1070,11 +1068,9 @@ VarInfo fields are
 +--------------------+---------------------------------------------------------------------------------+
 +basicType           + :ref:`rtti::Type <enum-rtti-Type>`                                              +
 +--------------------+---------------------------------------------------------------------------------+
-+firstType           + :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>` ?                                  +
-+--------------------+---------------------------------------------------------------------------------+
 +annotation_arguments+ :ref:`rtti::AnnotationArguments <handle-rtti-AnnotationArguments>`  const? const+
 +--------------------+---------------------------------------------------------------------------------+
-+structType          + :ref:`rtti::StructInfo <handle-rtti-StructInfo>` ?                              +
++firstType           + :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>` ?                                  +
 +--------------------+---------------------------------------------------------------------------------+
 +flags               + :ref:`TypeInfoFlags <alias-TypeInfoFlags>`                                      +
 +--------------------+---------------------------------------------------------------------------------+
@@ -1101,8 +1097,6 @@ LocalVariableInfo fields are
 +----------+--------------------------------------------------------------+
 +localFlags+ :ref:`LocalVariableInfoFlags <alias-LocalVariableInfoFlags>` +
 +----------+--------------------------------------------------------------+
-+enumType  + :ref:`rtti::EnumInfo <handle-rtti-EnumInfo>` ?               +
-+----------+--------------------------------------------------------------+
 +stackTop  +uint                                                          +
 +----------+--------------------------------------------------------------+
 +name      +string const                                                  +
@@ -1117,8 +1111,6 @@ LocalVariableInfo fields are
 +----------+--------------------------------------------------------------+
 +firstType + :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>` ?               +
 +----------+--------------------------------------------------------------+
-+structType+ :ref:`rtti::StructInfo <handle-rtti-StructInfo>` ?           +
-+----------+--------------------------------------------------------------+
 +flags     + :ref:`TypeInfoFlags <alias-TypeInfoFlags>`                   +
 +----------+--------------------------------------------------------------+
 
@@ -1131,25 +1123,29 @@ LocalVariableInfo fields are
 
 FuncInfo fields are
 
-+----------+------------------------------------------------------------------+
-+locals    + :ref:`rtti::LocalVariableInfo <handle-rtti-LocalVariableInfo>` ??+
-+----------+------------------------------------------------------------------+
-+stackSize +uint                                                              +
-+----------+------------------------------------------------------------------+
-+result    + :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>` ?                   +
-+----------+------------------------------------------------------------------+
-+count     +uint                                                              +
-+----------+------------------------------------------------------------------+
-+cppName   +string const                                                      +
-+----------+------------------------------------------------------------------+
-+name      +string const                                                      +
-+----------+------------------------------------------------------------------+
-+hash      +uint64                                                            +
-+----------+------------------------------------------------------------------+
-+localCount+uint                                                              +
-+----------+------------------------------------------------------------------+
-+flags     +uint                                                              +
-+----------+------------------------------------------------------------------+
++-----------+------------------------------------------------------------------+
++locals     + :ref:`rtti::LocalVariableInfo <handle-rtti-LocalVariableInfo>` ??+
++-----------+------------------------------------------------------------------+
++stackSize  +uint                                                              +
++-----------+------------------------------------------------------------------+
++result     + :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>` ?                   +
++-----------+------------------------------------------------------------------+
++count      +uint                                                              +
++-----------+------------------------------------------------------------------+
++globals    + :ref:`rtti::VarInfo <handle-rtti-VarInfo>` ??                    +
++-----------+------------------------------------------------------------------+
++cppName    +string const                                                      +
++-----------+------------------------------------------------------------------+
++name       +string const                                                      +
++-----------+------------------------------------------------------------------+
++globalCount+uint                                                              +
++-----------+------------------------------------------------------------------+
++hash       +uint64                                                            +
++-----------+------------------------------------------------------------------+
++localCount +uint                                                              +
++-----------+------------------------------------------------------------------+
++flags      +uint                                                              +
++-----------+------------------------------------------------------------------+
 
 
 |structure_annotation-rtti-FuncInfo|
@@ -1420,6 +1416,8 @@ Type access
   *  :ref:`get_dim (typeinfo:rtti::TypeInfo const implicit;index:int const;context:__context const) : int <function-_at_rtti_c__c_get_dim_CIH_ls_rtti_c__c_TypeInfo_gr__Ci_C_c>` 
   *  :ref:`get_dim (typeinfo:rtti::VarInfo const implicit;index:int const;context:__context const) : int <function-_at_rtti_c__c_get_dim_CIH_ls_rtti_c__c_VarInfo_gr__Ci_C_c>` 
   *  :ref:`builtin_is_same_type (a:rtti::TypeInfo const? const implicit;b:rtti::TypeInfo const? const implicit;refMatters:rtti::RefMatters const;cosntMatters:rtti::ConstMatters const;tempMatters:rtti::TemporaryMatters const;topLevel:bool const) : bool <function-_at_rtti_c__c_builtin_is_same_type_CI1_ls_CH_ls_rtti_c__c_TypeInfo_gr__gr_?_CI1_ls_CH_ls_rtti_c__c_TypeInfo_gr__gr_?_CE_ls_rtti_c__c_RefMatters_gr__CE_ls_rtti_c__c_ConstMatters_gr__CE_ls_rtti_c__c_TemporaryMatters_gr__Cb>` 
+  *  :ref:`get_type_size (type:rtti::TypeInfo? const implicit) : int <function-_at_rtti_c__c_get_type_size_CI1_ls_H_ls_rtti_c__c_TypeInfo_gr__gr_?>` 
+  *  :ref:`get_type_align (type:rtti::TypeInfo? const implicit) : int <function-_at_rtti_c__c_get_type_align_CI1_ls_H_ls_rtti_c__c_TypeInfo_gr__gr_?>` 
   *  :ref:`is_compatible_cast (from:rtti::StructInfo const? const implicit;to:rtti::StructInfo const? const implicit) : bool <function-_at_rtti_c__c_is_compatible_cast_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?>` 
   *  :ref:`get_das_type_name (type:rtti::Type const;context:__context const) : string <function-_at_rtti_c__c_get_das_type_name_CE_ls_rtti_c__c_Type_gr__C_c>` 
   *  :ref:`is_same_type (a:rtti::TypeInfo const;b:rtti::TypeInfo const;refMatters:rtti::RefMatters const;constMatters:rtti::ConstMatters const;temporaryMatters:rtti::TemporaryMatters const;topLevel:bool const) : auto <function-_at_rtti_c__c_is_same_type_CH_ls_rtti_c__c_TypeInfo_gr__CH_ls_rtti_c__c_TypeInfo_gr__CE_ls_rtti_c__c_RefMatters_gr__CE_ls_rtti_c__c_ConstMatters_gr__CE_ls_rtti_c__c_TemporaryMatters_gr__Cb>` 
@@ -1489,6 +1487,36 @@ builtin_is_same_type returns bool
 
 
 |function-rtti-builtin_is_same_type|
+
+.. _function-_at_rtti_c__c_get_type_size_CI1_ls_H_ls_rtti_c__c_TypeInfo_gr__gr_?:
+
+.. das:function:: get_type_size(type: rtti::TypeInfo? const implicit)
+
+get_type_size returns int
+
++--------+--------------------------------------------------------------+
++argument+argument type                                                 +
++========+==============================================================+
++type    + :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>` ? const implicit+
++--------+--------------------------------------------------------------+
+
+
+|function-rtti-get_type_size|
+
+.. _function-_at_rtti_c__c_get_type_align_CI1_ls_H_ls_rtti_c__c_TypeInfo_gr__gr_?:
+
+.. das:function:: get_type_align(type: rtti::TypeInfo? const implicit)
+
+get_type_align returns int
+
++--------+--------------------------------------------------------------+
++argument+argument type                                                 +
++========+==============================================================+
++type    + :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>` ? const implicit+
++--------+--------------------------------------------------------------+
+
+
+|function-rtti-get_type_align|
 
 .. _function-_at_rtti_c__c_is_compatible_cast_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?:
 
@@ -2567,5 +2595,32 @@ Context and mutex locking
 
 
 |function-rtti-lock_mutex|
+
++++++++++++++++++++
+Runtime data access
++++++++++++++++++++
+
+  *  :ref:`get_table_key_index (table:void? const implicit;key:any const;baseType:rtti::Type const;valueTypeSize:int const;context:__context const;at:__lineInfo const) : int <function-_at_rtti_c__c_get_table_key_index_CI?_C*_CE_ls_rtti_c__c_Type_gr__Ci_C_c_C_l>` 
+
+.. _function-_at_rtti_c__c_get_table_key_index_CI?_C*_CE_ls_rtti_c__c_Type_gr__Ci_C_c_C_l:
+
+.. das:function:: get_table_key_index(table: void? const implicit; key: any const; baseType: Type const; valueTypeSize: int const)
+
+get_table_key_index returns int
+
++-------------+------------------------------------------+
++argument     +argument type                             +
++=============+==========================================+
++table        +void? const implicit                      +
++-------------+------------------------------------------+
++key          +any const                                 +
++-------------+------------------------------------------+
++baseType     + :ref:`rtti::Type <enum-rtti-Type>`  const+
++-------------+------------------------------------------+
++valueTypeSize+int const                                 +
++-------------+------------------------------------------+
+
+
+|function-rtti-get_table_key_index|
 
 

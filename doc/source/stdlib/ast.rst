@@ -10887,6 +10887,7 @@ Adapter application
   *  :ref:`add_for_loop_macro (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::ForLoopMacro\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_for_loop_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_ForLoopMacro_gr__gr_?W_C_c>` 
   *  :ref:`add_capture_macro (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::CaptureMacro\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_capture_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_CaptureMacro_gr__gr_?W_C_c>` 
   *  :ref:`add_simulate_macro (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::SimulateMacro\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_simulate_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_SimulateMacro_gr__gr_?W_C_c>` 
+  *  :ref:`add_module_option (module:rtti::Module? const implicit;option:string const implicit;type:rtti::Type const;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_add_module_option_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CIs_CE_ls_rtti_c__c_Type_gr__C_c_C_l>` 
   *  :ref:`add_new_block_annotation (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_block_annotation_Cs_C.>` 
   *  :ref:`add_new_function_annotation (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_function_annotation_Cs_C.>` 
   *  :ref:`add_new_contract_annotation (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_contract_annotation_Cs_C.>` 
@@ -11236,6 +11237,23 @@ Adapter application
 
 |function-ast-add_simulate_macro|
 
+.. _function-_at_ast_c__c_add_module_option_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CIs_CE_ls_rtti_c__c_Type_gr__C_c_C_l:
+
+.. das:function:: add_module_option(module: rtti::Module? const implicit; option: string const implicit; type: Type const)
+
++--------+----------------------------------------------------------+
++argument+argument type                                             +
++========+==========================================================+
++module  + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit+
++--------+----------------------------------------------------------+
++option  +string const implicit                                     +
++--------+----------------------------------------------------------+
++type    + :ref:`rtti::Type <enum-rtti-Type>`  const                +
++--------+----------------------------------------------------------+
+
+
+|function-ast-add_module_option|
+
 .. _function-_at_ast_c__c_add_new_block_annotation_Cs_C.:
 
 .. das:function:: add_new_block_annotation(name: string const; someClassPtr: auto const)
@@ -11553,7 +11571,6 @@ Adding objects to objects
   *  :ref:`add_keyword (module:rtti::Module? const implicit;keyword:string const implicit;needOxfordComma:bool const;context:__context const;line:__lineInfo const) : bool <function-_at_ast_c__c_add_keyword_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CIs_Cb_C_c_C_l>` 
   *  :ref:`add_structure (module:rtti::Module? const implicit;structure:smart_ptr\<ast::Structure\>& implicit) : bool <function-_at_ast_c__c_add_structure_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_Structure_gr__gr_?W>` 
   *  :ref:`add_alias (module:rtti::Module? const implicit;structure:smart_ptr\<ast::TypeDecl\>& implicit) : bool <function-_at_ast_c__c_add_alias_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W>` 
-  *  :ref:`add_module_option (module:rtti::Module? const implicit;option:string const implicit;type:rtti::Type const;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_add_module_option_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CIs_CE_ls_rtti_c__c_Type_gr__C_c_C_l>` 
 
 .. _function-_at_ast_c__c_add_enumeration_entry_CI1_ls_H_ls_ast_c__c_Enumeration_gr__gr_?W_CIs:
 
@@ -11675,23 +11692,6 @@ add_alias returns bool
 
 
 |function-ast-add_alias|
-
-.. _function-_at_ast_c__c_add_module_option_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CIs_CE_ls_rtti_c__c_Type_gr__C_c_C_l:
-
-.. das:function:: add_module_option(module: rtti::Module? const implicit; option: string const implicit; type: Type const)
-
-+--------+----------------------------------------------------------+
-+argument+argument type                                             +
-+========+==========================================================+
-+module  + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit+
-+--------+----------------------------------------------------------+
-+option  +string const implicit                                     +
-+--------+----------------------------------------------------------+
-+type    + :ref:`rtti::Type <enum-rtti-Type>`  const                +
-+--------+----------------------------------------------------------+
-
-
-|function-ast-add_module_option|
 
 +++++++++++++++++++++++++
 Program and module access

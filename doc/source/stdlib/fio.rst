@@ -679,6 +679,9 @@ OS specific routines
   *  :ref:`sleep (msec:uint const) : void <function-_at_fio_c__c_sleep_Cu>` 
   *  :ref:`exit (exitCode:int const) : void <function-_at_fio_c__c_exit_Ci>` 
   *  :ref:`popen (command:string const implicit;scope:block\<(arg0:fio::FILE const? const):void\> const implicit;context:__context const;at:__lineInfo const) : int <function-_at_fio_c__c_popen_CIs_CI0_ls_C1_ls_CH_ls_fio_c__c_FILE_gr__gr_?_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`popen_binary (command:string const implicit;scope:block\<(arg0:fio::FILE const? const):void\> const implicit;context:__context const;at:__lineInfo const) : int <function-_at_fio_c__c_popen_binary_CIs_CI0_ls_C1_ls_CH_ls_fio_c__c_FILE_gr__gr_?_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`get_env_variable (var:string const implicit;context:__context const) : string <function-_at_fio_c__c_get_env_variable_CIs_C_c>` 
+  *  :ref:`sanitize_command_line (var:string const implicit;context:__context const;at:__lineInfo const) : string <function-_at_fio_c__c_sanitize_command_line_CIs_C_c_C_l>` 
 
 .. _function-_at_fio_c__c_sleep_Cu:
 
@@ -729,10 +732,6 @@ popen returns int
 
 |function-fio-popen|
 
-+++++++++++++
-Uncategorized
-+++++++++++++
-
 .. _function-_at_fio_c__c_popen_binary_CIs_CI0_ls_C1_ls_CH_ls_fio_c__c_FILE_gr__gr_?_gr_1_ls_v_gr__builtin__C_c_C_l:
 
 .. das:function:: popen_binary(command: string const implicit; scope: block<(arg0:fio::FILE const? const):void> const implicit)
@@ -768,7 +767,7 @@ get_env_variable returns string
 
 |function-fio-get_env_variable|
 
-.. _function-_at_fio_c__c_sanitize_command_line_CIs_C_c:
+.. _function-_at_fio_c__c_sanitize_command_line_CIs_C_c_C_l:
 
 .. das:function:: sanitize_command_line(var: string const implicit)
 

@@ -275,6 +275,7 @@ def read_json ( text : array<uint8>; var error : string& ) : JsonValue?
 var private no_trailing_zeros = false
 
 def set_no_trailing_zeros ( value : bool )
+    //! if `value` is true, then numbers are written without trailing zeros.
     let old_ntz = no_trailing_zeros
     no_trailing_zeros = value
     return old_ntz
@@ -282,6 +283,7 @@ def set_no_trailing_zeros ( value : bool )
 var private no_empty_arrays = false
 
 def set_no_empty_arrays ( value : bool )
+    //! if `value` is true, then empty arrays are not written at all
     let old_nea = no_empty_arrays
     no_empty_arrays = value
     return old_nea
@@ -289,6 +291,7 @@ def set_no_empty_arrays ( value : bool )
 var private allow_duplicate_keys = false
 
 def set_allow_duplicate_keys ( value : bool )
+    //! if `value` is true, then duplicate keys are allowed in objects. the later key overwrites the earlier one.
     let old_adc = allow_duplicate_keys
     allow_duplicate_keys = value
     return old_adc

@@ -414,3 +414,33 @@ The overloaded operator. length function is called and returns the length of the
 
 The . . syntax is used to access the fields of a structure or a class while bypassing overloaded operations.
 
+---------------------------------------------
+Overloading accessors
+---------------------------------------------
+
+daScript allows you to overload accessors, which means that you can define custom behavior for accessing fields of your own data types.
+Here is an example of how to overload the accessor for a custom struct called Foo::
+
+    struct Foo
+        dir : float3
+    def operator . length ( foo : Foo )
+        return length(foo.dir)
+    def operator . length := ( var foo:Foo; value:float )
+        foo.dir = normalize(foo.dir) * value
+    [export]
+    def main
+        var f = [[Foo dir=float3(1,2,3)]]
+        print("length = {f.length} // {f}\n")
+        f.length := 10.
+        print("length = {f.length} // {f}\n")
+
+It now has accessor `length` which can be used to get and set the length of the `dir` field.
+
+Classes allow to overload accessors for properties as well::
+
+    class Foo
+        dir : float3
+        def const operator . length
+            return length(dir)
+        def operator . length := ( value:float )
+            dir = normalize(dir) * value

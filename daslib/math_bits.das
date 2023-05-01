@@ -97,6 +97,7 @@ def public float_bits_to_uint ( x:float4 )
         return reinterpret<uint4> x
 
 variant Vec4f
+    //! bit-castable float4
     data : float4
     i64  : int64
     i32  : int
@@ -107,48 +108,56 @@ variant Vec4f
     b    : bool
 
 def public cast_to_vec4f ( x : bool )
+    //! return a float4 which stores bit-cast version of x
     var v : Vec4f
     unsafe
         v.b = x
         return v.data
 
 def public cast_to_vec4f ( x : int64 )
+    //! return a float4 which stores bit-cast version of x
     var v : Vec4f
     unsafe
         v.i64 = x
         return v.data
 
 def public cast_to_int64 ( data : float4 )
+    //! return an int64 which was bit-cast from x
     var v : Vec4f
     unsafe
         v.data  = data
         return v.i64
 
 def public cast_to_int32 ( data : float4 )
+    //! return an int32 which was bit-cast from x
     var v : Vec4f
     unsafe
         v.data  = data
         return v.i32
 
 def public cast_to_int16 ( data : float4 )
+    //! return an int16 which was bit-cast from x
     var v : Vec4f
     unsafe
         v.data  = data
         return v.i16
 
 def public cast_to_int8 ( data : float4 )
+    //! return an int8 which was bit-cast from x
     var v : Vec4f
     unsafe
         v.data  = data
         return v.i8
 
 def public cast_to_string ( data : float4 )
+    //! return a string which pointer was bit-cast from x
     var v : Vec4f
     unsafe
         v.data  = data
         return v.str
 
 def public cast_to_pointer ( data : float4 )
+    //! return a pointer which was bit-cast from x
     var v : Vec4f
     unsafe
         v.data  = data

@@ -202,4 +202,10 @@
 
 .. |function-rtti-basic_struct_for_each_parent| replace:: Iterates through each parent type of the `BasicStructureAnnotation` object.
 
+.. |typedef-rtti-AnnotationDeclarationFlags| replace:: Flags which represent properties of the `AnnotationDeclaration` object.
 
+.. |function-rtti-get_type_size| replace:: Returns size of the type in bytes.
+
+.. |function-rtti-get_type_align| replace:: Returns alignment of the type in bytes.
+
+.. |function-rtti-get_table_key_index| replace:: Returns index of the key in the table.

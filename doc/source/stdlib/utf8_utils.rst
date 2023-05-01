@@ -23,6 +23,23 @@ Constants
 Uncategorized
 +++++++++++++
 
+.. _function-_at_utf8_utils_c__c_utf16_to_utf32_Cu_Cu:
+
+.. das:function:: utf16_to_utf32(high: uint const; low: uint const)
+
+utf16_to_utf32 returns uint
+
++--------+-------------+
++argument+argument type+
++========+=============+
++high    +uint const   +
++--------+-------------+
++low     +uint const   +
++--------+-------------+
+
+
+|function-utf8_utils-utf16_to_utf32|
+
 .. _function-_at_utf8_utils_c__c_utf8_encode_1_ls_u8_gr_A_Cu:
 
 .. das:function:: utf8_encode(dest_array: array<uint8>; ch: uint const)
@@ -247,5 +264,20 @@ Converts UTF-8 string to UTF-32 and appends it to the array of codepoints (UTF-3
 
 
 Converts UTF-8 string to UTF-32 and appends it to the array of codepoints (UTF-32 string)
+
+.. _function-_at_utf8_utils_c__c_decode_unicode_escape_Cs:
+
+.. das:function:: decode_unicode_escape(str: string const)
+
+decode_unicode_escape returns string
+
++--------+-------------+
++argument+argument type+
++========+=============+
++str     +string const +
++--------+-------------+
+
+
+|function-utf8_utils-decode_unicode_escape|
 
 

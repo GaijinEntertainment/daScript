@@ -88,6 +88,28 @@ A specific version of the method can also be called explicitly::
 
     Foo`set(*f,1,2)
 
+Class methods can be constant::
+
+    class Foo
+        dir : float3
+        def const length
+            return length(dir)  // dir is const float3 here
+
+Class methods can be operators::
+
+    class Foo
+        dir : float3
+        def Foo ( x,y,z:float )
+            dir = float3(x,y,z)
+        def Foo ( d:float3 )
+            dir = d
+        def const operator . length
+            return length(dir)
+        def operator . length := ( value:float )
+            dir = normalize(dir) * value
+        def const operator + ( other:Foo )
+            return Foo(dir + other.dir)
+
 ----------------------
 Implementation details
 ----------------------

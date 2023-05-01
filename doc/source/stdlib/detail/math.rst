@@ -92,6 +92,8 @@
 
 .. |function-math-trunci| replace:: returns a integer value representing the float without fraction part of x
 
+.. |function-math-fract| replace:: returns a fraction part of x
+
 .. |function-math-uint32_hash| replace:: returns hashed value of seed
 
 .. |function-math-uint_noise_1D| replace:: returns noise value of position in the seeded sequence
@@ -99,6 +101,9 @@
 .. |function-math-uint_noise_2D| replace:: returns noise value of position in the seeded sequence
 
 .. |function-math-uint_noise_3D| replace:: returns noise value of position in the seeded sequence
+
+.. |function-math--| replace:: returns -x
+
 
 .. |variable-math-FLT_EPSILON| replace:: the difference between 1 and the smallest floating point number of type float that is greater than 1.
 
@@ -171,3 +176,9 @@
 .. |function-math-orthonormal_inverse| replace:: Fast `inverse` for the orthonormal matrix.
 
 .. |function-math-atan_est| replace:: Fast estimation for the `atan`.
+
+.. |structure_annotation-math-float4x4| replace:: floating point matrix with 4 rows and 4 columns
+
+.. |structure_annotation-math-float3x4| replace:: floating point matrix with 4 rows and 3 columns
+
+.. |structure_annotation-math-float3x3| replace:: floating point matrix with 3 rows and 3 columns

@@ -20,6 +20,8 @@
 
 .. |function-fio-fopen| replace:: equivalent to C `fopen`. Opens file in different modes.
 
+.. |function-fio-popen_binary| replace:: opens pipe to command and returns FILE pointer to it, in binary mode.
+
 .. |function-fio-fprint| replace:: same as `print` but outputs to file.
 
 .. |function-fio-fread| replace:: reads data from file.
@@ -74,3 +76,6 @@
 
 .. |function-fio-fflush| replace:: equivalent to C `fflush`. Flushes FILE buffers.
 
+.. |function-fio-get_env_variable| replace:: returns value of the environment variable.
+
+.. |function-fio-sanitize_command_line| replace:: sanitizes command line arguments.

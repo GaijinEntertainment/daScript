@@ -60,7 +60,7 @@ def document_module_math(root:string)
         group_by_regex("all numerics (uint*, int*, float*, double)", mod, %regex~(min|max)$%%);
         group_by_regex("float* and double", mod, %regex~(sign|abs|acos|asin|atan|atan2|cos|sin|tan|exp|log|exp2|
 log2|pow|sqrt|rcp|ceil|floor|abs|saturate|sincos|is_finite|is_nan)$%%);
-        group_by_regex("float* only", mod, %regex~(atan_est|atan2_est|rcp_est|ceili|floori|roundi|trunci|rsqrt|rsqrt_est)$%%);
+        group_by_regex("float* only", mod, %regex~(atan_est|atan2_est|rcp_est|ceili|floori|roundi|trunci|rsqrt|rsqrt_est|fract|\-)$%%);
         group_by_regex("float3 only", mod, %regex~(cross|reflect|refract|distance|distance_sq|
 inv_distance|inv_distance_sq)$%%);
         group_by_regex("float2, float3, float4", mod, %regex~(length|length_sq|inv_length|inv_length_sq|
@@ -82,7 +82,7 @@ def document_module_builtin(root:string)
         hide_group(group_by_regex("Internal pointer arithmetics", mod, %regex~i_das_%%));
         hide_group(group_by_regex("Internal clone infrastructure", mod, %regex~clone%%));
         hide_group(group_by_regex("Internal finalize infrastructure", mod, %regex~finalize%%));
-        group_by_regex("Containers", mod, %regex~(capacity|clear|length|resize|reserve|each|emplace|erase|find|
+        group_by_regex("Containers", mod, %regex~(capacity|clear|length|resize|resize_no_init|reserve|each|emplace|erase|find|
 find_for_edit|find_if_exists|find_index|find_index_if|has_value|key_exists|keys|values|lock|each_enum|each_ref|
 find_for_edit_if_exists|lock_forever|next|nothing|pop|push|push_clone|back|sort|to_array|to_table|to_array_move|
 to_table_move|empty|subarray|insert|move_to_ref|copy_to_local|move_to_local|get)$%%);
@@ -93,9 +93,9 @@ to_table_move|empty|subarray|insert|move_to_ref|copy_to_local|move_to_local|get)
         group_by_regex("Vector and matrix math", mod, %regex~(float3x4|float4x4|identity|inverse|rotate|translation|transpose)$%%);
         group_by_regex("GC0 infrastructure", mod, %regex~gc0%%);
         group_by_regex("Smart ptr infrastructure", mod, %regex~(add_ptr_ref|smart_ptr|get_const_ptr|move|move_new|get_ptr$)%%);
-        group_by_regex("Macro infrastructure", mod, %regex~(is_compiling|is_in_completion|is_reporting_compilation_errors)%%);
+        group_by_regex("Macro infrastructure", mod, %regex~(is_folding|is_compiling|is_in_completion|is_reporting_compilation_errors)%%);
         group_by_regex("Profiler", mod, %regex~(profile|reset_profiler|dump_profile_info|collect_profile_info)$%%);
-        group_by_regex("System infastructure", mod, %regex~(panic|print|sprint|to_log|to_compiler_log|error|terminate|breakpoint|stackwalk|get_das_root|is_in_aot)$%%);
+        group_by_regex("System infastructure", mod, %regex~(panic|print|sprint|sprint_json|to_log|to_compiler_log|error|terminate|breakpoint|stackwalk|get_das_root|is_in_aot)$%%);
         group_by_regex("Memory manipulation", mod, %regex~(intptr|memcmp|variant_index|set_variant_index|hash|memcpy|lock_data|map_to_array|map_to_ro_array)$%%);
         group_by_regex("Binary serializer", mod, %regex~(binary_load|binary_save)$%%);
         group_by_regex("Path and command line", mod, %regex~(get_command_line_arguments)$%%);
@@ -108,7 +108,8 @@ to_table_move|empty|subarray|insert|move_to_ref|copy_to_local|move_to_local|get)
         hide_group(group_by_regex("Jit",mod,%regex~(invoke_code|.*jit.*)$%%));
         group_by_regex("Lock verification", mod, %regex~(set_verify_context_locks)$%%);
         group_by_regex("Initialization and finalization", mod, %regex~(using|clone|finalize)$%%);
-        group_by_regex("Algorithms", mod, %regex~(swap|iter_range|count|ucount)$%%)
+        group_by_regex("Algorithms", mod, %regex~(swap|iter_range|count|ucount)$%%);
+        group_by_regex("Memset", mod, %regex~(memset.*)$%%);
     }]
     document("Built-in runtime",mod,"{root}/builtin.rst","{root}/detail/builtin.rst",groups)
 
@@ -119,7 +120,7 @@ def document_module_fio(root:string)
         group_by_regex("File manipulation", mod, %regex~(f|stat$|getchar|remove)%%);
         group_by_regex("Path manipulation", mod, %regex~(base_name|dir_name|get_full_file_name)$%%);
         group_by_regex("Directory manipulation", mod, %regex~(dir|mkdir)$%%);
-        group_by_regex("OS specific routines", mod, %regex~(sleep|exit|popen)$%%)
+        group_by_regex("OS specific routines", mod, %regex~(sleep|exit|popen|popen_binary|get_env_variable|sanitize_command_line)$%%)
     }]
     document("File input output library",mod,"{root}/fio.rst","{root}/detail/fio.rst",groups)
 
@@ -154,7 +155,7 @@ def document_module_rtti(root:string)
     var mod = get_module("rtti")
     var groups <- [{DocGroup
         group_by_regex("Initialization and finalization", mod, %regex~(using|LineInfo|CodeOfPolicies|RttiValue_nothing)$%%);
-        group_by_regex("Type access", mod, %regex~(get_dim|builtin_is_same_type|is_compatible_cast|get_das_type_name|is_same_type|each_dim|arg_types|arg_names)$%%);
+        group_by_regex("Type access", mod, %regex~(get_dim|builtin_is_same_type|is_compatible_cast|get_das_type_name|is_same_type|each_dim|arg_types|arg_names|get_type_size|get_type_align)$%%);
         group_by_regex("Rtti context access", mod, %regex~(get_total_functions|get_total_variables|get_function_info|get_variable_info|get_variable_value|get_function_by_mnh|get_line_info|this_context|context_for_each_function|context_for_each_variable|class_info|type_info)$%%);
         group_by_regex("Program access", mod, %regex~(program_for_each_module|program_for_each_registered_module|get_this_module|get_module)$%%);
         group_by_regex("Module access", mod, %regex~(module_for_each_structure|module_for_each_enumeration|module_for_each_function|module_for_each_generic|module_for_each_global|module_for_each_annotation)$%%);
@@ -164,7 +165,8 @@ def document_module_rtti(root:string)
         group_by_regex("Structure access", mod, %regex~(rtti_builtin_structure_for_each_annotation|basic_struct_for_each_field|structure_for_each_annotation|basic_struct_for_each_parent)$%%);
         group_by_regex("Data walking and printing", mod, %regex~(sprint_data|describe|get_mangled_name)$%%);
         group_by_regex("Function and mangled name hash", mod, %regex~(get_function_by_mangled_name_hash|get_function_mangled_name_hash|get_function_address)$%%);
-        group_by_regex("Context and mutex locking", mod, %regex~(lock_this_context|lock_context|lock_mutex)$%%)
+        group_by_regex("Context and mutex locking", mod, %regex~(lock_this_context|lock_context|lock_mutex)$%%);
+        group_by_regex("Runtime data access", mod, %regex~(get_table_key_index)$%%);
     }]
     document("Runtime type information library",mod,"{root}/rtti.rst","{root}/detail/rtti.rst",groups)
 
@@ -175,7 +177,7 @@ def document_module_ast(root:string)
         group_by_regex("Visitor pattern", mod, %regex~visit.*%%);
         group_by_regex("Expression generation", mod, %regex~(force_generated|get_expression_annotation|make_type_info_structure)%%);
         group_by_regex("Adapter generation", mod, %regex~make_.*%%);
-        group_by_regex("Adapter application", mod, %regex~(add_.*_(annotation|macro)|add_new_comment_reader|add_comment_reader)%%);
+        group_by_regex("Adapter application", mod, %regex~(add_.*_(annotation|macro)|add_new_comment_reader|add_comment_reader|add_module_option)%%);
         group_by_regex("Adding objects to objects", mod, %regex~add_.*%%);
         group_by_regex("Program and module access", mod, %regex~(this_program|this_module|compiling_program|compiling_module)$%%);
         group_by_regex("Textual descriptions of the objects", mod, %regex~(describe.*|das_to_string)%%);
@@ -223,7 +225,7 @@ def document_module_strings(root:string)
         group_by_regex("String builder", mod, %regex~(build_string|format|write|write_char|write_chars|write_escape_string)$%%);
         group_by_regex("das::string manipulation", mod, %regex~(append|resize)$%%);
         group_by_regex("String modifications", mod, %regex~(chop|escape|unescape|repeat|replace|reverse|slice|
-strip|strip_left|strip_right|to_lower|to_lower_in_place|to_upper|to_upper_in_place|rtrim)$%%);
+strip|strip_left|strip_right|to_lower|to_lower_in_place|to_upper|to_upper_in_place|rtrim|safe_unescape)$%%);
         group_by_regex("Search substrings", mod, %regex~find.*%%);
         group_by_regex("String conversion routines", mod, %regex~(double|float|int|uint|int64|uint64|to_double|to_float|to_int|to_uint|to_int64|to_uint64|string|to_char)$%%);
         group_by_regex("String as array", mod, %regex~(modify_data|peek_data)$%%);
@@ -237,7 +239,9 @@ def document_module_strings_boost(root:string)
         group_by_regex("Split and join", mod, %regex~(split|split_by_chars|join)$%%);
         group_by_regex("Formatting", mod, %regex~(wide)$%%);
         group_by_regex("Queries and comparisons", mod, %regex~(is_character_at|eq)$%%);
-        group_by_regex("Levenshtein distance", mod, %regex~(levenshtein_distance)$%%)
+        group_by_regex("Replace", mod, %regex~(replace_multiple)$%%);
+        group_by_regex("Levenshtein distance", mod, %regex~(levenshtein_distance|levenshtein_distance_fast)$%%);
+        group_by_regex("Character traits", mod, %regex~(is_hex)$%%);
     }]
     document("Boost package for string manipulation library",mod,"{root}/strings_boost.rst","{root}/detail/strings_boost.rst",groups)
 
@@ -254,7 +258,9 @@ def document_module_json(root:string)
     var mod = find_module("json")
     var groups <- [{DocGroup
         group_by_regex("Value conversion", mod, %regex~(JV|JVNull)$%%);
-        group_by_regex("Read and write", mod, %regex~(read_json|write_json)$%%)
+        group_by_regex("Read and write", mod, %regex~(read_json|write_json)$%%);
+        group_by_regex("JSON properties", mod, %regex~(set_no_trailing_zeros|set_no_empty_arrays|set_allow_duplicate_keys)$%%);
+        group_by_regex("Broken JSON", mod, %regex~(try_fixing_broken_json)$%%)
     }]
     document("JSON manipulation library",mod,"{root}/json.rst","{root}/detail/json.rst",groups)
 
@@ -428,7 +434,8 @@ def document_module_math_bits(root:string)
     var groups <- [{DocGroup
         group_by_regex("float in int,uint", mod, %regex~(int_bits_to_float|uint_bits_to_float)$%%);
         group_by_regex("int,uint in float", mod, %regex~(float_bits_to_int|float_bits_to_uint)$%%);
-        group_by_regex("int64,uint64 in double", mod, %regex~(int64_bits_to_double|uint64_bits_to_double|double_bits_to_int64|double_bits_to_uint64)$%%)
+        group_by_regex("int64,uint64 in double", mod, %regex~(int64_bits_to_double|uint64_bits_to_double|double_bits_to_int64|double_bits_to_uint64)$%%);
+        group_by_regex("bit-cast vec4f", mod, %regex~(cast_to.*)$%%);
     }]
     document("Math bit helpers",mod,"{root}/math_bits.rst","{root}/detail/math_bits.rst",groups)
 

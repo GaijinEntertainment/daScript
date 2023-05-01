@@ -871,6 +871,10 @@ Queries
   *  :ref:`get_workhorse_types () : rtti::Type[30] <function-_at_ast_boost_c__c_get_workhorse_types>` 
   *  :ref:`find_argument_index (typ:smart_ptr\<ast::TypeDecl\> const;name:string const) : int <function-_at_ast_boost_c__c_find_argument_index_CY_ls_TypeDeclPtr_gr_1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Cs>` 
   *  :ref:`isCMRESType (blockT:smart_ptr\<ast::TypeDecl\> const) : bool <function-_at_ast_boost_c__c_isCMRESType_CY_ls_TypeDeclPtr_gr_1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M>` 
+  *  :ref:`getVectorElementCount (bt:rtti::Type const) : int const <function-_at_ast_boost_c__c_getVectorElementCount_CE_ls_rtti_c__c_Type_gr_>` 
+  *  :ref:`getVectorElementSize (bt:rtti::Type const) : int const <function-_at_ast_boost_c__c_getVectorElementSize_CE_ls_rtti_c__c_Type_gr_>` 
+  *  :ref:`getVectorElementType (bt:rtti::Type const) : rtti::Type const <function-_at_ast_boost_c__c_getVectorElementType_CE_ls_rtti_c__c_Type_gr_>` 
+  *  :ref:`getVectorOffset (bt:rtti::Type const;ident:string const) : int <function-_at_ast_boost_c__c_getVectorOffset_CE_ls_rtti_c__c_Type_gr__Cs>` 
 
 .. _function-_at_ast_boost_c__c_isVectorType_CE_ls_rtti_c__c_Type_gr_:
 
@@ -1148,6 +1152,68 @@ isCMRESType returns bool
 
 
 |function-ast_boost-isCMRESType|
+
+.. _function-_at_ast_boost_c__c_getVectorElementCount_CE_ls_rtti_c__c_Type_gr_:
+
+.. das:function:: getVectorElementCount(bt: Type const)
+
+getVectorElementCount returns int const
+
++--------+------------------------------------------+
++argument+argument type                             +
++========+==========================================+
++bt      + :ref:`rtti::Type <enum-rtti-Type>`  const+
++--------+------------------------------------------+
+
+
+|function-ast_boost-getVectorElementCount|
+
+.. _function-_at_ast_boost_c__c_getVectorElementSize_CE_ls_rtti_c__c_Type_gr_:
+
+.. das:function:: getVectorElementSize(bt: Type const)
+
+getVectorElementSize returns int const
+
++--------+------------------------------------------+
++argument+argument type                             +
++========+==========================================+
++bt      + :ref:`rtti::Type <enum-rtti-Type>`  const+
++--------+------------------------------------------+
+
+
+|function-ast_boost-getVectorElementSize|
+
+.. _function-_at_ast_boost_c__c_getVectorElementType_CE_ls_rtti_c__c_Type_gr_:
+
+.. das:function:: getVectorElementType(bt: Type const)
+
+getVectorElementType returns  :ref:`rtti::Type <enum-rtti-Type>`  const
+
++--------+------------------------------------------+
++argument+argument type                             +
++========+==========================================+
++bt      + :ref:`rtti::Type <enum-rtti-Type>`  const+
++--------+------------------------------------------+
+
+
+|function-ast_boost-getVectorElementType|
+
+.. _function-_at_ast_boost_c__c_getVectorOffset_CE_ls_rtti_c__c_Type_gr__Cs:
+
+.. das:function:: getVectorOffset(bt: Type const; ident: string const)
+
+getVectorOffset returns int
+
++--------+------------------------------------------+
++argument+argument type                             +
++========+==========================================+
++bt      + :ref:`rtti::Type <enum-rtti-Type>`  const+
++--------+------------------------------------------+
++ident   +string const                              +
++--------+------------------------------------------+
+
+
+|function-ast_boost-getVectorOffset|
 
 +++++++++++
 Annotations

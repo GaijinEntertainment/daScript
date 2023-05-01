@@ -189,3 +189,12 @@
 .. |function-ast_boost-debug_expression| replace:: Gives hierarchical lisp-like textual representation of `expression` with all its subexpressions.
 
 .. |typedef-ast_boost-DebugExpressionFlags| replace:: Which things to print in debug_expression.
+
+.. |function-ast_boost-getVectorElementCount| replace:: Number of elements in the vector type, for example 3 for float3.
+
+.. |function-ast_boost-getVectorElementSize| replace:: Size of individual element in the vector type, for example 4 in float2 and 8 in range64.
+
+.. |function-ast_boost-getVectorElementType| replace:: Type of individual element in the vector type, for example float in float2.
+
+.. |function-ast_boost-getVectorOffset| replace:: Offset of the element in the vector type, for example 4 for "y" in float2.
+

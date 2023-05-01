@@ -16,6 +16,35 @@ All functions and symbols are in "math_bits" module, or publicly available via "
 
 
 
+++++++++++++
+Type aliases
+++++++++++++
+
+.. _alias-Vec4f:
+
+.. das:attribute:: Vec4f is a variant type
+
++----+------+
++data+float4+
++----+------+
++i64 +int64 +
++----+------+
++i32 +int   +
++----+------+
++i16 +int16 +
++----+------+
++i8  +int8  +
++----+------+
++str +string+
++----+------+
++ptr +void? +
++----+------+
++b   +bool  +
++----+------+
+
+
+bit-castable float4
+
 +++++++++++++++++
 float in int,uint
 +++++++++++++++++
@@ -350,5 +379,138 @@ double_bits_to_uint64 returns uint64
 
 
 bit representation of x is interpreted as a uint64
+
+++++++++++++++
+bit-cast vec4f
+++++++++++++++
+
+  *  :ref:`cast_to_vec4f (x:bool const) : float4 <function-_at_math_bits_c__c_cast_to_vec4f_Cb>` 
+  *  :ref:`cast_to_vec4f (x:int64 const) : float4 <function-_at_math_bits_c__c_cast_to_vec4f_Ci64>` 
+  *  :ref:`cast_to_int64 (data:float4 const) : int64 <function-_at_math_bits_c__c_cast_to_int64_Cf4>` 
+  *  :ref:`cast_to_int32 (data:float4 const) : int <function-_at_math_bits_c__c_cast_to_int32_Cf4>` 
+  *  :ref:`cast_to_int16 (data:float4 const) : int16 <function-_at_math_bits_c__c_cast_to_int16_Cf4>` 
+  *  :ref:`cast_to_int8 (data:float4 const) : int8 <function-_at_math_bits_c__c_cast_to_int8_Cf4>` 
+  *  :ref:`cast_to_string (data:float4 const) : string <function-_at_math_bits_c__c_cast_to_string_Cf4>` 
+  *  :ref:`cast_to_pointer (data:float4 const) : void? <function-_at_math_bits_c__c_cast_to_pointer_Cf4>` 
+
+.. _function-_at_math_bits_c__c_cast_to_vec4f_Cb:
+
+.. das:function:: cast_to_vec4f(x: bool const)
+
+cast_to_vec4f returns float4
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +bool const   +
++--------+-------------+
+
+
+return a float4 which stores bit-cast version of x
+
+.. _function-_at_math_bits_c__c_cast_to_vec4f_Ci64:
+
+.. das:function:: cast_to_vec4f(x: int64 const)
+
+cast_to_vec4f returns float4
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +int64 const  +
++--------+-------------+
+
+
+return a float4 which stores bit-cast version of x
+
+.. _function-_at_math_bits_c__c_cast_to_int64_Cf4:
+
+.. das:function:: cast_to_int64(data: float4 const)
+
+cast_to_int64 returns int64
+
++--------+-------------+
++argument+argument type+
++========+=============+
++data    +float4 const +
++--------+-------------+
+
+
+return an int64 which was bit-cast from x
+
+.. _function-_at_math_bits_c__c_cast_to_int32_Cf4:
+
+.. das:function:: cast_to_int32(data: float4 const)
+
+cast_to_int32 returns int
+
++--------+-------------+
++argument+argument type+
++========+=============+
++data    +float4 const +
++--------+-------------+
+
+
+return an int32 which was bit-cast from x
+
+.. _function-_at_math_bits_c__c_cast_to_int16_Cf4:
+
+.. das:function:: cast_to_int16(data: float4 const)
+
+cast_to_int16 returns int16
+
++--------+-------------+
++argument+argument type+
++========+=============+
++data    +float4 const +
++--------+-------------+
+
+
+return an int16 which was bit-cast from x
+
+.. _function-_at_math_bits_c__c_cast_to_int8_Cf4:
+
+.. das:function:: cast_to_int8(data: float4 const)
+
+cast_to_int8 returns int8
+
++--------+-------------+
++argument+argument type+
++========+=============+
++data    +float4 const +
++--------+-------------+
+
+
+return an int8 which was bit-cast from x
+
+.. _function-_at_math_bits_c__c_cast_to_string_Cf4:
+
+.. das:function:: cast_to_string(data: float4 const)
+
+cast_to_string returns string
+
++--------+-------------+
++argument+argument type+
++========+=============+
++data    +float4 const +
++--------+-------------+
+
+
+return a string which pointer was bit-cast from x
+
+.. _function-_at_math_bits_c__c_cast_to_pointer_Cf4:
+
+.. das:function:: cast_to_pointer(data: float4 const)
+
+cast_to_pointer returns void?
+
++--------+-------------+
++argument+argument type+
++========+=============+
++data    +float4 const +
++--------+-------------+
+
+
+return a pointer which was bit-cast from x
 
 

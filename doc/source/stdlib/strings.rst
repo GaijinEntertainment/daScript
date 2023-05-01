@@ -725,6 +725,7 @@ String modifications
   *  :ref:`to_upper_in_place (str:string const implicit) : string <function-_at_strings_c__c_to_upper_in_place_CIs>` 
   *  :ref:`escape (str:string const implicit;context:__context const) : string <function-_at_strings_c__c_escape_CIs_C_c>` 
   *  :ref:`unescape (str:string const implicit;context:__context const) : string <function-_at_strings_c__c_unescape_CIs_C_c>` 
+  *  :ref:`safe_unescape (str:string const implicit;context:__context const) : string <function-_at_strings_c__c_safe_unescape_CIs_C_c>` 
   *  :ref:`replace (str:string const implicit;toSearch:string const implicit;replace:string const implicit;context:__context const) : string <function-_at_strings_c__c_replace_CIs_CIs_CIs_C_c>` 
   *  :ref:`rtrim (str:string const implicit;context:__context const) : string <function-_at_strings_c__c_rtrim_CIs_C_c>` 
   *  :ref:`rtrim (str:string const implicit;chars:string const implicit;context:__context const) : string <function-_at_strings_c__c_rtrim_CIs_CIs_C_c>` 
@@ -956,6 +957,21 @@ unescape returns string
 
 
 |function-strings-unescape|
+
+.. _function-_at_strings_c__c_safe_unescape_CIs_C_c:
+
+.. das:function:: safe_unescape(str: string const implicit)
+
+safe_unescape returns string
+
++--------+---------------------+
++argument+argument type        +
++========+=====================+
++str     +string const implicit+
++--------+---------------------+
+
+
+|function-strings-safe_unescape|
 
 .. _function-_at_strings_c__c_replace_CIs_CIs_CIs_C_c:
 
@@ -1404,24 +1420,5 @@ reserve_string_buffer returns string
 
 
 |function-strings-reserve_string_buffer|
-
-+++++++++++++
-Uncategorized
-+++++++++++++
-
-.. _function-_at_strings_c__c_safe_unescape_CIs_C_c:
-
-.. das:function:: safe_unescape(str: string const implicit)
-
-safe_unescape returns string
-
-+--------+---------------------+
-+argument+argument type        +
-+========+=====================+
-+str     +string const implicit+
-+--------+---------------------+
-
-
-|function-strings-safe_unescape|
 
 

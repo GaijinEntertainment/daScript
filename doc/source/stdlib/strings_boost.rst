@@ -257,11 +257,35 @@ eq returns auto
 
 |function-strings_boost-eq|
 
++++++++
+Replace
++++++++
+
+  *  :ref:`replace_multiple (source:string const;replaces:array\<tuple\<text:string;replacement:string\>\> const) : string const <function-_at_strings_boost_c__c_replace_multiple_Cs_C1_ls_N_ls_text;replacement_gr_0_ls_s;s_gr_U_gr_A>` 
+
+.. _function-_at_strings_boost_c__c_replace_multiple_Cs_C1_ls_N_ls_text;replacement_gr_0_ls_s;s_gr_U_gr_A:
+
+.. das:function:: replace_multiple(source: string const; replaces: array<tuple<text:string;replacement:string>> const)
+
+replace_multiple returns string const
+
++--------+--------------------------------------------------+
++argument+argument type                                     +
++========+==================================================+
++source  +string const                                      +
++--------+--------------------------------------------------+
++replaces+array<tuple<text:string;replacement:string>> const+
++--------+--------------------------------------------------+
+
+
+|function-strings_boost-replace_multiple|
+
 ++++++++++++++++++++
 Levenshtein distance
 ++++++++++++++++++++
 
   *  :ref:`levenshtein_distance (s:string const implicit;t:string const implicit) : int <function-_at_strings_boost_c__c_levenshtein_distance_CIs_CIs>` 
+  *  :ref:`levenshtein_distance_fast (s:string const implicit;t:string const implicit) : int <function-_at_strings_boost_c__c_levenshtein_distance_fast_CIs_CIs>` 
 
 .. _function-_at_strings_boost_c__c_levenshtein_distance_CIs_CIs:
 
@@ -280,10 +304,6 @@ levenshtein_distance returns int
 
 |function-strings_boost-levenshtein_distance|
 
-+++++++++++++
-Uncategorized
-+++++++++++++
-
 .. _function-_at_strings_boost_c__c_levenshtein_distance_fast_CIs_CIs:
 
 .. das:function:: levenshtein_distance_fast(s: string const implicit; t: string const implicit)
@@ -301,21 +321,25 @@ levenshtein_distance_fast returns int
 
 |function-strings_boost-levenshtein_distance_fast|
 
-.. _function-_at_strings_boost_c__c_replace_multiple_Cs_C1_ls_N_ls_text;replacement_gr_0_ls_s;s_gr_U_gr_A:
+++++++++++++++++
+Character traits
+++++++++++++++++
 
-.. das:function:: replace_multiple(source: string const; replaces: array<tuple<text:string;replacement:string>> const)
+  *  :ref:`is_hex (ch:int const) : bool <function-_at_strings_boost_c__c_is_hex_Ci>` 
 
-replace_multiple returns string
+.. _function-_at_strings_boost_c__c_is_hex_Ci:
 
-+--------+--------------------------------------------------+
-+argument+argument type                                     +
-+========+==================================================+
-+source  +string const                                      +
-+--------+--------------------------------------------------+
-+replaces+array<tuple<text:string;replacement:string>> const+
-+--------+--------------------------------------------------+
+.. das:function:: is_hex(ch: int const)
+
+is_hex returns bool
+
++--------+-------------+
++argument+argument type+
++========+=============+
++ch      +int const    +
++--------+-------------+
 
 
-|function-strings_boost-replace_multiple|
+|function-strings_boost-is_hex|
 
 
