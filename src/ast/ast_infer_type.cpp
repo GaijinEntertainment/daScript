@@ -6258,7 +6258,7 @@ namespace das {
             canFoldResult = expr->macro->canFoldReturnResult(expr) && canFoldResult;
             expr->macro->preVisit(ctx.thisProgram, thisModule, expr);
             if ( errc==ctx.thisProgram->errors.size() ) {
-                error("unsupported call macro " + expr->macro->name,  "", "",
+                error("unsupported call macro " + expr->macro->name + "", "potentially missing require", "",
                     expr->at, CompilationError::unsupported_call_macro);
             }
             return Visitor::preVisit(expr);
