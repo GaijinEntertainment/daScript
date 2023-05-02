@@ -295,7 +295,7 @@ def match_type ( what:TypeDeclPtr; wthmt:ExprCall?; access:ExpressionPtr; var to
     assume value = wthmt.arguments[1]
     assume mtype = wthmt.arguments[0]._type
     if mtype==null
-        to.errors |> match_error("unresolved type", mtype.at)
+        to.errors |> match_error("unresolved type", wthmt.arguments[0].at)
         to.failed = true
         return false
     if is_same_type(what, mtype, RefMatters no, ConstMatters no, TemporaryMatters no)
