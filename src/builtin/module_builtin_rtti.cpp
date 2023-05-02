@@ -370,7 +370,7 @@ namespace das {
                 addField<DAS_BIND_MANAGED_FIELD(annotation)>("annotation");
                 addField<DAS_BIND_MANAGED_FIELD(arguments)>("arguments");
                 addField<DAS_BIND_MANAGED_FIELD(at)>("at");
-                addFieldEx ( "flags", "flags", offsetof(Program, flags), makeAnnotationDeclarationFlags() );
+                addFieldEx ( "flags", "flags", offsetof(AnnotationDeclaration, flags), makeAnnotationDeclarationFlags() );
                 // TODO: function?
                 // addProperty<DAS_BIND_MANAGED_PROP(getMangledName)>("getMangledName","getMangledName");
         }
