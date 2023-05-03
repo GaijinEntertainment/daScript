@@ -4629,7 +4629,8 @@ namespace das {
             } else {
                 if ( !expr->no_promotion ) {
                     if ( expr->underClone ) {
-                        if ( expr->underClone->cloneSet = inferGenericOperator(".`"+expr->name+"`clone",expr->at,expr->value,expr->underClone->right) ) {
+                        expr->underClone->cloneSet = inferGenericOperator(".`"+expr->name+"`clone",expr->at,expr->value,expr->underClone->right);
+                        if ( expr->underClone->cloneSet ) {
                             return Visitor::visit(expr);
                         }
                     }

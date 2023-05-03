@@ -19,7 +19,7 @@ def private array_helper ( var arr : auto implicit ==const; a : auto(TT) ) : arr
     return <- res
 
 [unsafe_operation, template (a), unused_argument(a)]
-def private array_helper ( arr : auto implicit ==const; a : auto(TT) ) : array<TT -const-#> const
+def private array_helper ( arr : auto implicit ==const; a : auto(TT) ) : array<TT -const-#>
     var res : array<TT -const-#>
     let lenA = _::length(arr)
     if lenA>=1
