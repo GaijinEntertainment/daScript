@@ -306,7 +306,7 @@ namespace das {
         makeT->makeType = make_smart<TypeDecl>(str);
         makeT->structs.push_back(make_smart<MakeStruct>());
         auto returnDecl = make_smart<ExprReturn>(str->at,makeT);
-        returnDecl->moveSemantics = !str->canCopy();
+        returnDecl->moveSemantics = true;
         block->list.push_back(returnDecl);
         fn->body = block;
         verifyGenerated(fn->body);
