@@ -154,11 +154,14 @@ namespace das {
 #if DAS_ENABLE_EXCEPTIONS
         try {
             vres = callWithCopyOnReturn(fnPtr, args, res, 0);
-        } catch ( const dasException & ) {
+        } catch ( const dasException & ex ) {
             abiArg = aa;
             abiCMRES = acm;
             abiThisBlockArg = atba;
             stack.pop(EP,SP);
+            exceptionMessage = ex.what();
+            exception = exceptionMessage.c_str();
+            exceptionAt = ex.exceptionAt;
         }
 #else
         jmp_buf ev;

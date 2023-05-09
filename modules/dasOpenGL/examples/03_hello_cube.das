@@ -111,7 +111,9 @@ def main
     glfwMakeContextCurrent(window)
     create_gl_objects()
     v_view = look_at_rh(float3(0,0,10),float3(0,0,0),float3(0,1,0))
-    while glfwWindowShouldClose(window)==0
+    eval_main_loop <|
+        if glfwWindowShouldClose(window)!=0
+            return false
         glfwPollEvents()
         var display_w, display_h : int
         glfwGetFramebufferSize(window, display_w, display_h)
@@ -143,3 +145,5 @@ def main
         // swap buffers
         glfwMakeContextCurrent(window)
         glfwSwapBuffers(window)
+        return true
+

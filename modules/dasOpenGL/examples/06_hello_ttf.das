@@ -33,7 +33,9 @@ def main
     // make a translate-scale matrix, so that text is in the middle, and 1.0 wide
     let dim = quads_dim(hw_text)
     let model = quads_view(hw_text, float2(3./(dim.vmax.x-dim.vmin.x)))
-    while glfwWindowShouldClose(window)==0
+    eval_main_loop <|
+        if glfwWindowShouldClose(window)!=0
+            return false
         glfwPollEvents()
         var display_w, display_h : int
         glfwGetFramebufferSize(window, display_w, display_h)
@@ -52,3 +54,5 @@ def main
         // swap buffers
         glfwMakeContextCurrent(window)
         glfwSwapBuffers(window)
+        return true
+
