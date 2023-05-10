@@ -337,9 +337,9 @@ namespace das
             unlock();
         }
 
-        vec4f DAS_EVAL_ABI evalWithCatch ( SimFunction * fnPtr, vec4f * args = nullptr, void * res = nullptr );
-        vec4f DAS_EVAL_ABI evalWithCatch ( SimNode * node );
-        bool  runWithCatch ( const callable<void()> & subexpr );
+        vec4f DAS_EVAL_ABI ___noinline evalWithCatch ( SimFunction * fnPtr, vec4f * args = nullptr, void * res = nullptr );
+        vec4f DAS_EVAL_ABI ___noinline evalWithCatch ( SimNode * node );
+        bool ___noinline runWithCatch ( const callable<void()> & subexpr );
         DAS_NORETURN_PREFIX void throw_error ( const char * message ) DAS_NORETURN_SUFFIX;
         DAS_NORETURN_PREFIX void throw_error_ex ( DAS_FORMAT_STRING_PREFIX const char * message, ... ) DAS_NORETURN_SUFFIX DAS_FORMAT_PRINT_ATTRIBUTE(2,3);
         DAS_NORETURN_PREFIX void throw_error_at ( const LineInfo & at, DAS_FORMAT_STRING_PREFIX const char * message, ... ) DAS_NORETURN_SUFFIX DAS_FORMAT_PRINT_ATTRIBUTE(3,4);
