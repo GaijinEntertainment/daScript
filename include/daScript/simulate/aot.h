@@ -2293,7 +2293,7 @@ namespace das {
         }
     };
 
-    void das_try_recover ( Context * __context__, const callable<void()> & try_block, const callable<void()> & catch_block );
+    void ___noinline das_try_recover ( Context * __context__, const callable<void()> & try_block, const callable<void()> & catch_block );
 
     template <typename TT>
     struct das_call_interop {
@@ -2985,7 +2985,7 @@ namespace das {
         return -1;
     }
 
-    void builtin_try_recover ( const Block & try_block, const Block & catch_block, Context * context, LineInfoArg * at );
+    void ___noinline builtin_try_recover ( const Block & try_block, const Block & catch_block, Context * context, LineInfoArg * at );
 }
 
 #if defined(_MSC_VER)
