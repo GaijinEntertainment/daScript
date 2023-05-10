@@ -59,7 +59,9 @@ def main
         glfwDestroyWindow(window)
     glfwMakeContextCurrent(window)
     create_gl_objects()
-    while glfwWindowShouldClose(window)==0
+    eval_main_loop <|
+        if glfwWindowShouldClose(window)!=0
+            return false
         glfwPollEvents()
         var display_w, display_h : int
         glfwGetFramebufferSize(window, display_w, display_h)
@@ -77,3 +79,4 @@ def main
         // swap buffers
         glfwMakeContextCurrent(window)
         glfwSwapBuffers(window)
+        return true

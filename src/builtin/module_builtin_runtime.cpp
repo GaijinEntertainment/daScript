@@ -1259,6 +1259,47 @@ namespace das
         return false;
     }
 
+// remove define to enable emscripten version
+#define TRY_MAIN_LOOP   0
+
+#ifdef _EMSCRIPTEN_
+#if TRY_MAIN_LOOP
+    struct MainLoopArg {
+        Context * context;
+        LineInfoArg * at;
+        Block * block;
+    };
+
+    void main_loop_arg ( void * arg ) {
+        auto mla = (MainLoopArg *) arg;
+        vec4f args[1];
+        args[0] = v_zero();
+        if ( !cast<bool>::to(mla->context->invoke(*mla->block, args, nullptr, mla->at)) ) {
+            emscripten_cancel_main_loop();
+        }
+    }
+#endif TRY_MAIN_LOOP
+#endif
+
+    void builtin_main_loop ( const TBlock<bool> & block, Context * context, LineInfoArg * at ) {
+#ifndef _EMSCRIPTEN_
+        vec4f args[1];
+        args[0] = v_zero();
+        while ( true ) {
+            auto res = context->invoke(block, args, nullptr, at);
+            if ( !cast<bool>::to(res) ) break;
+        }
+#else
+#if TRY_MAIN_LOOP
+    MainLoopArg arg;
+    arg.context = context;
+    arg.at = at;
+    arg.block = &block;
+    emscripten_set_main_loop_arg(main_loop_arg, &arg, 60, true);
+#endif
+#endif
+    }
+
 
 #define STR_DSTR_REG(OPNAME,EXPR) \
     addExtern<DAS_BIND_FUN(OPNAME##_str_dstr)>(*this, lib, #EXPR, SideEffects::none, DAS_TOSTRING(OPNAME##_str_dstr)); \
@@ -1689,5 +1730,10 @@ namespace das
         addExtern<DAS_BIND_FUN(builtin_try_recover)>(*this, lib, "builtin_try_recover",
             SideEffects::invoke, "builtin_try_recover")
                 ->args({"try_block","catch_block","context","at"});
+        // main-loop
+        addExtern<DAS_BIND_FUN(builtin_main_loop)>(*this, lib, "eval_main_loop",
+            SideEffects::invoke, "builtin_main_loop")
+                ->args({"block","context","at"});
+
     }
 }

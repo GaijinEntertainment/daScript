@@ -53,6 +53,7 @@ namespace das
     ,   debugger_attached = (1<<6)
     ,   macro_context     = (1<<7)
     ,   folding_context =   (1<<8)
+    ,   audio_context =     (1<<9)
     };
 
     struct GlobalVariable {

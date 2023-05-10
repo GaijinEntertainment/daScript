@@ -98,7 +98,9 @@ def main
                 else
                     glfwSetInputMode(window, int(GLFW_CURSOR), int(GLFW_CURSOR_NORMAL))
                     glfwSetInputMode(window, int(GLFW_RAW_MOUSE_MOTION), int(GLFW_FALSE))
-    while glfwWindowShouldClose(window)==0
+    eval_main_loop <|
+        if glfwWindowShouldClose(window)!=0
+            return false
         glfwPollEvents()
         var display_w, display_h : int
         glfwGetFramebufferSize(window, display_w, display_h)
@@ -125,3 +127,5 @@ def main
         glUseProgram(0u)
         glfwMakeContextCurrent(window)
         glfwSwapBuffers(window)
+        return true
+
