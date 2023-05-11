@@ -999,6 +999,8 @@ namespace das
         tabMnLookup = ctx.tabMnLookup;
         tabGMnLookup = ctx.tabGMnLookup;
         tabAdLookup = ctx.tabAdLookup;
+        // lockcheck
+        skipLockChecks = ctx.skipLockChecks;
     }
 
     uint64_t Context::getSharedMemorySize() const {
