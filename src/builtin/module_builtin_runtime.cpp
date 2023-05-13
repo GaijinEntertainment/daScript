@@ -1595,7 +1595,7 @@ namespace das
                 ->args({"name","context"});
         addExtern<DAS_BIND_FUN(gc0_reset)>(*this, lib, "gc0_reset",
             SideEffects::modifyExternal, "gc0_reset");
-        // pointer ari
+        // memops
         addExtern<DAS_BIND_FUN(das_memcpy)>(*this, lib, "memcpy",
             SideEffects::modifyArgumentAndExternal, "das_memcpy")
                 ->args({"left","right","size"})->unsafeOperation = true;
@@ -1617,6 +1617,16 @@ namespace das
         addExternEx<void(*)(void *,uint4,int32_t),DAS_BIND_FUN(das_memset128u)>(*this, lib, "memset128",
             SideEffects::modifyArgumentAndExternal, "das_memset128u")
                 ->args({"left","value","count"})->unsafeOperation = true;
+        addExtern<DAS_BIND_FUN(das_aligned_alloc16)> (*this, lib, "malloc",
+            SideEffects::modifyExternal, "das_aligned_alloc16")
+                ->args({"size"})->unsafeOperation = true;
+        addExtern<DAS_BIND_FUN(das_aligned_free16)> (*this, lib, "free",
+            SideEffects::modifyExternal, "das_aligned_free16")
+                ->args({"ptr"})->unsafeOperation = true;
+        addExtern<DAS_BIND_FUN(das_aligned_memsize)> (*this, lib, "malloc_usable_size",
+            SideEffects::none, "das_aligned_memsize")
+                ->args({"ptr"})->unsafeOperation = true;
+        // pointer ari
         auto idpi = addExtern<DAS_BIND_FUN(i_das_ptr_inc)>(*this, lib, "i_das_ptr_inc", SideEffects::modifyArgument, "das_ptr_inc");
         idpi->unsafeOperation = true;
         idpi->firstArgReturnType = true;
