@@ -465,7 +465,21 @@ namespace das {
             Visitor::preVisit(expr);
             verifyOnlyFastAot(expr->func, expr->at);
             if ( checkDeprecated && expr->func->deprecated ) {
-                program->error("function " + expr->func->getMangledName() + " is deprecated.","deprecated functions are prohibited by CodeOfPolicies", "",
+                string message = "";
+                for ( auto & ann : expr->func->annotations ) {
+                    if ( ann->annotation->rtti_isFunctionAnnotation() ) {
+                        auto fnAnn = static_pointer_cast<FunctionAnnotation>(ann->annotation);
+                        if ( fnAnn->name=="deprecated" ) {
+                            for ( auto & arg : ann->arguments ) {
+                                if ( arg.name=="message" && arg.type==Type::tString ) {
+                                    message = arg.sValue;
+                                }
+                            }
+                            break;
+                        }
+                    }
+                }
+                program->error("function " + expr->func->getMangledName() + " is deprecated.","deprecated functions are prohibited by CodeOfPolicies", message,
                     expr->at, CompilationError::deprecated_function);
             }
             for ( const auto & annDecl : expr->func->annotations ) {
