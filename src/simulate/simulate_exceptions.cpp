@@ -19,12 +19,24 @@ namespace das {
         exception = exceptionMessage.c_str();
         exceptionAt = at;
 #if DAS_ENABLE_EXCEPTIONS
-        if ( alwaysStackWalkOnException ) stackWalk(nullptr, false, false);
+        if ( alwaysStackWalkOnException ) {
+            if (message) {
+                to_err(message);
+                to_err("\n");
+            }
+            stackWalk(&at, false, false);
+        }
         if ( breakOnException ) breakPoint(at, "exception", message);
         throw dasException(message ? message : "", at);
 #else
         if ( throwBuf ) {
-            if ( alwaysStackWalkOnException ) stackWalk(nullptr, false, false);
+            if ( alwaysStackWalkOnException ) {
+                if (message) {
+                    to_err(message);
+                    to_err("\n");
+                }
+                stackWalk(&at, false, false);
+            }
             if ( breakOnException ) breakPoint(at, "exception", message);
 #if defined(WIN64) || defined(_WIN64)
             //  "An invalid or unaligned stack was encountered during an unwind operation." exception is issued via longjmp
@@ -39,7 +51,7 @@ namespace das {
                 to_err(msg.c_str());
                 to_err("\n");
             }
-            stackWalk(nullptr, false, false);
+            stackWalk(&at, false, false);
             breakPoint(at, "exception", message);
         }
 #endif
