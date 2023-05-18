@@ -63,7 +63,18 @@ def public temp_array ( data : auto? ==const; lenA : int; a : auto(TT) ) : array
             _builtin_make_temp_array(res, data, lenA)
     return <- res
 
-def array_view ( bytes:array<auto(TT)>; offset,length:int; blk:block<(view:array<TT>#):void> )
+def array_view ( bytes:array<auto(TT)> == const; offset,length:int; blk:block<(view:array<TT>#):void> )
+    //! creates a view of the array, which is a temporary array that is valid only within the block
+    unsafe
+        if offset<0 || (offset+length)>length(bytes)
+            panic("array_view: out of range")
+        __builtin_array_lock(bytes)
+        var res : array<TT>#
+        _builtin_make_temp_array(res, addr(bytes[offset]), length)
+        invoke(blk, res)
+        __builtin_array_unlock(bytes)
+
+def array_view ( var bytes:array<auto(TT)> == const; offset,length:int; blk:block<(var view:array<TT>#):void> )
     //! creates a view of the array, which is a temporary array that is valid only within the block
     unsafe
         if offset<0 || (offset+length)>length(bytes)
