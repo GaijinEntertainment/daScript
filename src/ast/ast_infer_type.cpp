@@ -6419,6 +6419,9 @@ namespace das {
         typedef vector<pair<Function *,int>> RankedMatchingFunctions;
 
         int sortCandidates ( RankedMatchingFunctions & ranked, MatchingFunctions & candidates, int nArgs ) {
+            if ( candidates.size()==1 ) {
+                return 0;
+            }
             sort(ranked.begin(), ranked.end(), [](const pair<Function *,int> & a, const pair<Function *,int> & b) {
                 return a.second < b.second;
             });
