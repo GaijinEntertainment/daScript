@@ -6447,7 +6447,7 @@ namespace das {
             for ( auto & r : ranked ) {
                 candidates.push_back(r.first);
             }
-            return nTotal - nOnes;
+            return nTotal - int(ranked.size());
         }
 
         int prepareCandidates( MatchingFunctions & candidates, const vector<TypeDeclPtr>& nonNamedArguments,  const vector<MakeFieldDeclPtr> & arguments, bool inferAuto, bool inferBlocks ) {
