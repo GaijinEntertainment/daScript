@@ -941,6 +941,65 @@ namespace das {
             return ss.str();
         }
 
+        int getMismatchingFunctionRank(const FunctionPtr & pFn, const vector<TypeDeclPtr>& nonNamedTypes, const vector<MakeFieldDeclPtr> & arguments, bool inferAuto, bool inferBlock) const {
+            int rank = 0;
+            size_t fnArgIndex = 0;
+            for ( size_t ai=0, ais=arguments.size(); ai!=ais; ++ai ) {
+                auto & arg = arguments[ai];
+                for ( ;; ) {
+                    if ( fnArgIndex >= pFn->arguments.size() ) {
+                        return rank + 1000;
+                    }
+                    auto & fnArg = pFn->arguments[fnArgIndex];
+                    if ( fnArg->name == arg->name ) {
+                        break;
+                    }
+                    if ( !fnArg->init && fnArgIndex >= nonNamedTypes.size()) {
+                        return rank + 1000;
+                    }
+                    fnArgIndex ++;
+                }
+                auto & passType = arg->value->type;
+                auto & argType = pFn->arguments[fnArgIndex]->type;
+                if (!isMatchingArgument(pFn, argType, passType,inferAuto,inferBlock)) {
+                    rank += 1000;
+                }
+                fnArgIndex ++;
+            }
+            while ( fnArgIndex < pFn->arguments.size() ) {
+                if ( !pFn->arguments[fnArgIndex]->init ) {
+                    rank += 1000;
+                }
+                fnArgIndex ++;
+            }
+            return rank;
+        }
+
+        int getMismatchingFunctionRank(const FunctionPtr & pFn, const vector<TypeDeclPtr> & types, bool inferAuto, bool inferBlock) const {
+            TextWriter ss;
+            size_t tot = das::min ( types.size(), pFn->arguments.size() );
+            size_t ai;
+            int rank = 0;
+            for (ai = 0; ai != tot; ++ai) {
+                auto & arg = pFn->arguments[ai];
+                auto & passType = types[ai];
+                if (!isMatchingArgument(pFn, arg->type, passType, inferAuto, inferBlock)) {
+                    rank += 1000;
+                }
+            }
+            rank += int(pFn->arguments.size() - types.size()) * 1000;
+            for ( const auto & ann : pFn->annotations ) {
+                auto fnAnn = static_pointer_cast<FunctionAnnotation>(ann->annotation);
+                if ( fnAnn->isSpecialized() ) {
+                    string err;
+                    if ( !fnAnn->isCompatible(pFn, types, *ann, err) ) {
+                        rank += 1000;
+                    }
+                }
+            }
+            return rank;
+        }
+
         string describeMismatchingFunction(const FunctionPtr & pFn, const vector<TypeDeclPtr>& nonNamedTypes, const vector<MakeFieldDeclPtr> & arguments, bool inferAuto, bool inferBlock) const {
             if ( pFn->arguments.size() < arguments.size() ) {
                 return "\t\ttoo many arguments\n";
@@ -974,7 +1033,7 @@ namespace das {
                 }
                 auto & passType = arg->value->type;
                 auto & argType = pFn->arguments[fnArgIndex]->type;
-                if (!isMatchingArgument(pFn, pFn->arguments[fnArgIndex]->type, passType,inferAuto,inferBlock)) {
+                if (!isMatchingArgument(pFn, argType, passType,inferAuto,inferBlock)) {
                     ss << describeMismatchingArgument(arg->name, passType, argType, (int)ai);
                 }
                 fnArgIndex ++;
@@ -1129,13 +1188,15 @@ namespace das {
         void reportFunctionNotFound( const string & name, const string & extra,
                                     const LineInfo & at, const MatchingFunctions & candidateFunctions,
             const vector<TypeDeclPtr> & types, bool inferAuto, bool inferBlocks, bool reportDetails,
-                                    CompilationError cerror = CompilationError::function_not_found) {
+                                    CompilationError cerror, int nExtra ) {
             if ( verbose ) {
                 TextWriter ss;
-                if ( candidateFunctions.size() > 1 ) {
+                if ( candidateFunctions.size()==0 ) {
+                    ss << "there are no good matching candidates out of " << nExtra << " total functions with the same name\n";
+                } else if ( candidateFunctions.size() > 1 ) {
                     ss << "candidates:\n";
                 } else if ( candidateFunctions.size()==1 ) {
-                    ss << "\ncandidate function:\n";
+                    ss << (nExtra ? "\nmost likely candidate:\n" : "\ncandidate function:\n");
                 }
                 string moduleName, funcName;
                 splitTypeName(name, moduleName, funcName);
@@ -1171,6 +1232,9 @@ namespace das {
                         ss << "\n";
                     }
                 }
+                if ( nExtra>0 && candidateFunctions.size()!=0 ) {
+                    ss << "also " << nExtra << " more candidates\n";
+                }
                 error(extra, ss.str(), "", at, cerror);
             } else {
                 error(extra, "", "", at, cerror);
@@ -1181,13 +1245,15 @@ namespace das {
                                     const LineInfo & at, const MatchingFunctions & candidateFunctions,
                                     const vector<TypeDeclPtr>& nonNamedTypes, const vector<MakeFieldDeclPtr> & arguments,
                                     bool inferAuto, bool inferBlocks, bool reportDetails ,
-                                    CompilationError cerror = CompilationError::function_not_found) {
+                                    CompilationError cerror, int nExtra) {
             if ( verbose ) {
                 TextWriter ss;
-                if ( candidateFunctions.size() > 1 ) {
+                if ( candidateFunctions.size()==0 ) {
+                    ss << "there are no good matching candidates out of " << nExtra << " total functions with the same name\n";
+                } else if ( candidateFunctions.size() > 1 ) {
                     ss << "candidates:\n";
                 } else if ( candidateFunctions.size()==1 ) {
-                    ss << "\ncandidate function:\n";
+                    ss << (nExtra ? "\nmost likely candidate:\n" : "\ncandidate function:\n");
                 }
                 string moduleName, funcName;
                 splitTypeName(name, moduleName, funcName);
@@ -1221,6 +1287,9 @@ namespace das {
                             ss << " to module " << missFn->module->name;
                         }
                         ss << "\n";
+                    }
+                    if ( nExtra>0 && candidateFunctions.size()!=0 ) {
+                        ss << "also " << nExtra << " more candidates\n";
                     }
                 }
                 error(extra, ss.str(), "", at, cerror);
@@ -3478,12 +3547,16 @@ namespace das {
         }
     // ExprDelete
         void reportMissingFinalizer ( const string & message, const LineInfo & at, const TypeDeclPtr & ftype ) {
-            auto fakeCall = make_smart<ExprCall>(at, "_::finalize");
-            auto fakeVar = make_smart<ExprVar>(at, "this");
-            fakeVar->type = make_smart<TypeDecl>(*ftype);
-            fakeCall->arguments.push_back(fakeVar);
-            vector<TypeDeclPtr> fakeTypes = { ftype };
-            reportMissing(fakeCall.get(), fakeTypes, message, true, CompilationError::function_already_declared);
+            if ( verbose ) {
+                auto fakeCall = make_smart<ExprCall>(at, "_::finalize");
+                auto fakeVar = make_smart<ExprVar>(at, "this");
+                fakeVar->type = make_smart<TypeDecl>(*ftype);
+                fakeCall->arguments.push_back(fakeVar);
+                vector<TypeDeclPtr> fakeTypes = { ftype };
+                reportMissing(fakeCall.get(), fakeTypes, message, true, CompilationError::function_already_declared);
+            } else {
+                error(message, "", "", at, CompilationError::function_already_declared);
+            }
         }
         virtual ExpressionPtr visit ( ExprDelete * expr ) override {
             if ( !expr->subexpr->type ) return Visitor::visit(expr);
@@ -6342,35 +6415,109 @@ namespace das {
             }
             return Visitor::visitNamedCallArg(call, arg, last);
         }
+
+        typedef vector<pair<Function *,int>> RankedMatchingFunctions;
+
+        int sortCandidates ( RankedMatchingFunctions & ranked, MatchingFunctions & candidates, int nArgs ) {
+            if ( candidates.size()==1 ) {
+                return 0;
+            }
+            sort(ranked.begin(), ranked.end(), [](const pair<Function *,int> & a, const pair<Function *,int> & b) {
+                return a.second < b.second;
+            });
+            // if there is one or more 'one-off's' - we only leave them
+            int nTotal = int(ranked.size());
+            int nOnes = 0;
+            for ( auto & r : ranked ) {
+                if ( r.second>1000 ) break;
+                nOnes ++;
+            }
+            if ( nOnes>0 ) {
+                ranked.resize(nOnes);
+            } else {
+                // now we remove all the ones where rank exceeds number of arguments
+                int nOkay = nTotal;
+                int notOkayRank = nArgs * 1000;
+                while ( nOkay>0 && ranked[nOkay-1].second>=notOkayRank ) {
+                    nOkay --;
+                }
+                ranked.resize(nOkay);
+            }
+            candidates.clear();
+            for ( auto & r : ranked ) {
+                candidates.push_back(r.first);
+            }
+            return nTotal - nOnes;
+        }
+
+        int prepareCandidates( MatchingFunctions & candidates, const vector<TypeDeclPtr>& nonNamedArguments,  const vector<MakeFieldDeclPtr> & arguments, bool inferAuto, bool inferBlocks ) {
+            RankedMatchingFunctions ranked;
+            ranked.reserve(candidates.size());
+            for ( auto can : candidates ) {
+                int rank = getMismatchingFunctionRank(can, nonNamedArguments, arguments, inferAuto, inferBlocks);
+                ranked.push_back(make_pair(can,rank));
+            }
+            return sortCandidates(ranked, candidates, int(arguments.size()+nonNamedArguments.size()));
+        }
+
         void reportMissing ( ExprNamedCall * expr, const vector<TypeDeclPtr>& nonNamedArguments, const string & msg, bool reportDetails,
                                     CompilationError cerror = CompilationError::function_not_found) {
-            auto can1 = findCandidates(expr->name, expr->arguments);
-            auto can2 = findGenericCandidates(expr->name, expr->arguments);
-            can1.reserve(can1.size()+can2.size());
-            can1.insert(can1.end(), can2.begin(), can2.end());
-            reportFunctionNotFound(expr->name, msg + expr->name, expr->at, can1, nonNamedArguments, expr->arguments, false, true, reportDetails, cerror);
+            if ( verbose ) {
+                auto can1 = findCandidates(expr->name, expr->arguments);
+                auto can2 = findGenericCandidates(expr->name, expr->arguments);
+                can1.reserve(can1.size()+can2.size());
+                can1.insert(can1.end(), can2.begin(), can2.end());
+                auto nExtra = prepareCandidates(can1, nonNamedArguments, expr->arguments, true, true);
+                reportFunctionNotFound(expr->name, msg + expr->name, expr->at, can1, nonNamedArguments, expr->arguments, false, true, reportDetails, cerror, nExtra);
+            } else {
+                error("no matching functions or generics " + expr->name, "", "", expr->at, cerror);
+            }
         }
         void reportExcess ( ExprNamedCall * expr, const vector<TypeDeclPtr>& nonNamedArguments, const string & msg, MatchingFunctions can1, const MatchingFunctions & can2,
                                     CompilationError cerror = CompilationError::function_not_found) {
-            can1.reserve(can1.size()+can2.size());
-            can1.insert(can1.end(), can2.begin(), can2.end());
-            reportFunctionNotFound(expr->name, msg + expr->name, expr->at, can1, nonNamedArguments,expr->arguments, false, true, false, cerror);
+            if ( verbose ) {
+                can1.reserve(can1.size()+can2.size());
+                can1.insert(can1.end(), can2.begin(), can2.end());
+                reportFunctionNotFound(expr->name, msg + expr->name, expr->at, can1, nonNamedArguments,expr->arguments, false, true, false, cerror, 0);
+            } else {
+                error("too many matching functions or generics " + expr->name, "", "", expr->at, cerror);
+            }
         }
+
+        int prepareCandidates ( MatchingFunctions & candidates, const vector<TypeDeclPtr>& nonNamedArguments,  bool inferAuto, bool inferBlocks ) {
+            RankedMatchingFunctions ranked;
+            ranked.reserve(candidates.size());
+            for ( auto can : candidates ) {
+                int rank = getMismatchingFunctionRank(can, nonNamedArguments, inferAuto, inferBlocks);
+                ranked.push_back(make_pair(can,rank));
+            }
+            return sortCandidates(ranked, candidates, int(nonNamedArguments.size()));
+        }
+
         void reportMissing ( ExprLooksLikeCall * expr, const vector<TypeDeclPtr> & types,
                                     const string & msg, bool reportDetails,
                                     CompilationError cerror = CompilationError::function_not_found) {
-            auto can1 = findCandidates(expr->name, types);
-            auto can2 = findGenericCandidates(expr->name, types);
-            can1.reserve(can1.size()+can2.size());
-            can1.insert(can1.end(), can2.begin(), can2.end());
-            reportFunctionNotFound(expr->name, msg + (verbose ? expr->describe() : ""), expr->at, can1, types, true, true, reportDetails, cerror);
+            if ( verbose ) {
+                auto can1 = findCandidates(expr->name, types);
+                auto can2 = findGenericCandidates(expr->name, types);
+                can1.reserve(can1.size()+can2.size());
+                can1.insert(can1.end(), can2.begin(), can2.end());
+                auto nExtra = prepareCandidates(can1, types, true, true);
+                reportFunctionNotFound(expr->name, msg + (verbose ? expr->describe() : ""), expr->at, can1, types, true, true, reportDetails, cerror, nExtra);
+            } else {
+                error("no matching functions or generics " + expr->name, "", "", expr->at, cerror);
+            }
         }
         void reportExcess ( ExprLooksLikeCall * expr, const vector<TypeDeclPtr> & types,
                                    const string & msg, MatchingFunctions can1, const MatchingFunctions & can2,
                                     CompilationError cerror = CompilationError::function_not_found) {
-            can1.reserve(can1.size()+can2.size());
-            can1.insert(can1.end(), can2.begin(), can2.end());
-            reportFunctionNotFound(expr->name, msg + expr->name, expr->at, can1, types, false, true, false, cerror);
+            if ( verbose ) {
+                can1.reserve(can1.size()+can2.size());
+                can1.insert(can1.end(), can2.begin(), can2.end());
+                reportFunctionNotFound(expr->name, msg + expr->name, expr->at, can1, types, false, true, false, cerror, 0);
+            } else {
+                error("too many matching functions or generics " + expr->name, "", "", expr->at, cerror);
+            }
         }
         virtual ExpressionPtr visit ( ExprNamedCall * expr ) override {
             if ( expr->argumentsFailedToInfer ) return Visitor::visit(expr);
