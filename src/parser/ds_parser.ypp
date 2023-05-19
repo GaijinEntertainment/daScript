@@ -2274,6 +2274,8 @@ structure_declaration
                 auto tak = tokAt(scanner,@loc);
                 for ( auto & crd : yyextra->g_CommentReaders ) crd->afterStructure($ps,tak);
             }
+        } else {
+            deleteVariableDeclarationList($list);
         }
     }
     ;

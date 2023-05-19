@@ -348,14 +348,17 @@ namespace das {
         __forceinline ptr_ref_count () {
             DAS_NEW_SMART_PTR_ID
             DAS_SMART_PTR_NEW
+            DAS_TRACK_SMART_PTR_ID
         }
         __forceinline ptr_ref_count ( const ptr_ref_count &  ) {
             DAS_NEW_SMART_PTR_ID
             DAS_SMART_PTR_NEW
+            DAS_TRACK_SMART_PTR_ID
         }
         __forceinline ptr_ref_count ( const ptr_ref_count && ) {
             DAS_NEW_SMART_PTR_ID
             DAS_SMART_PTR_NEW
+            DAS_TRACK_SMART_PTR_ID
         }
         __forceinline ptr_ref_count & operator = ( const ptr_ref_count & ) { return *this;}
         __forceinline ptr_ref_count & operator = ( ptr_ref_count && ) { return *this; }
