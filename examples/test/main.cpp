@@ -18,6 +18,7 @@ using namespace das;
 
 bool g_reportCompilationFailErrors = false;
 bool g_collectSharedModules = true;
+bool g_failOnSmartPtrLeaks = true;
 
 TextPrinter tout;
 
@@ -281,6 +282,9 @@ bool isolated_unit_test ( const string & fn, bool useAot ) {
     Module::Shutdown();
 #if DAS_SMART_PTR_TRACKER
     if ( g_smart_ptr_total ) {
+        if ( g_failOnSmartPtrLeaks ) {
+            result = false;
+        }
         TextPrinter tp;
         tp << "smart pointers leaked: " << uint64_t(g_smart_ptr_total) << "\n";
     }
@@ -490,6 +494,9 @@ int main( int argc, char * argv[] ) {
     // shutdown
     Module::Shutdown();
 #if DAS_SMART_PTR_TRACKER
+    if ( g_failOnSmartPtrLeaks ) {
+        ok = ok && (g_smart_ptr_total==0);
+    }
     TextPrinter tp;
     tp << "smart pointers leaked: " << uint64_t(g_smart_ptr_total) << "\n";
 #endif
