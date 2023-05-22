@@ -24,13 +24,15 @@ class DapiDebugAgent
     def abstract onLog ( level:int; text:string# ) : bool
     [[do_not_delete]] thisAgent:DebugAgent?
 
-def install_new_debug_agent ( var agentPtr; category:string )
+def install_new_debug_agent ( var agentPtr; category:string; isProfiler:bool = false )
     static_if typeinfo(is_class *agentPtr)
         let agentInfo = class_info(*agentPtr)
         var inscope agentAdapter <- make_debug_agent(agentPtr,agentInfo)
         unsafe
             agentPtr.thisAgent = reinterpret<DebugAgent?>(agentAdapter)
         install_debug_agent(agentAdapter,category)
+        if isProfiler
+            install_profiler_agent(agentAdapter)
         this_context().name := "debug agent {category}"
     else
         concept_assert(false,"can't make debug agent of non-class")

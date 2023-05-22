@@ -190,7 +190,7 @@ class ProfilerDebugAgent : DapiDebugAgent
 
 def debug_agent ( ctx : Context )
     assert(this_context().category.debug_context)
-    install_new_debug_agent(new ProfilerDebugAgent(), "profiler")
+    install_new_debug_agent(new ProfilerDebugAgent(), "profiler", true)
 
 [_macro]
 def installing

@@ -722,11 +722,14 @@ namespace das
         ContextPtr      debugAgentContext;
     };
 
+    typedef std::recursive_mutex DebugAgentMutex;
+
     void tickDebugAgent ( );
     void collectDebugAgentState ( Context & ctx, const LineInfo & at );
     void onBreakpointsReset ( const char * file, int breakpointsNum );
     void tickSpecificDebugAgent ( const char * name );
     void installDebugAgent ( DebugAgentPtr newAgent, const char * category, LineInfoArg * at, Context * context );
+    void installProfilerAgent ( DebugAgentPtr newAgent, LineInfoArg * at, Context * context );
     void shutdownDebugAgent();
     void forkDebugAgentContext ( Func exFn, Context * context, LineInfoArg * lineinfo );
     bool isInDebugAgentCreation();

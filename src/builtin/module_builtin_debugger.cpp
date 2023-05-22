@@ -911,7 +911,7 @@ namespace debugapi {
 
     // invoke_debug_agent_method("category","function",....)
 
-    extern std::recursive_mutex g_DebugAgentMutex;
+    extern DebugAgentMutex g_DebugAgentMutex;
     extern das_safe_map<string, DebugAgentInstance>   g_DebugAgents;
 
 #define MAX_DEBUG_AGENT_ARGS 16
@@ -1106,6 +1106,9 @@ namespace debugapi {
             addExtern<DAS_BIND_FUN(installDebugAgent)>(*this, lib,  "install_debug_agent",
                 SideEffects::modifyExternal, "installDebugAgent")
                     ->args({"agent","category","line","context"});
+            addExtern<DAS_BIND_FUN(installProfilerAgent)>(*this, lib,  "install_profiler_agent",
+                SideEffects::modifyExternal, "installProfilerAgent")
+                    ->args({"agent","line","context"});
             addExtern<DAS_BIND_FUN(getDebugAgentContext), SimNode_ExtFuncCallRef>(*this, lib,  "get_debug_agent_context",
                 SideEffects::modifyExternal, "getDebugAgentContext")
                     ->args({"category","line","context"});

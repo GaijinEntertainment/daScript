@@ -822,19 +822,21 @@ namespace das
     }
 
     // Context
-    std::recursive_mutex g_DebugAgentMutex;
+    DebugAgentMutex g_DebugAgentMutex;
     das_safe_map<string, DebugAgentInstance>   g_DebugAgents;
+    DebugAgentInstance g_ProfilerAgent;
     static DAS_THREAD_LOCAL bool g_isInDebugAgentCreation = false;
+
 
     template <typename TT>
     void on_debug_agent_mutex ( const TT & lmbd ) {
-        std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
+        std::lock_guard<DebugAgentMutex> guard(g_DebugAgentMutex);
         lmbd ();
     }
 
     template <typename TT>
     void for_each_debug_agent ( const TT & lmbd ) {
-        std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
+        std::lock_guard<DebugAgentMutex> guard(g_DebugAgentMutex);
         for ( auto & it : g_DebugAgents ) {
             lmbd ( it.second.debugAgent );
         }
@@ -842,7 +844,7 @@ namespace das
 
     template <typename TT>
     void for_each_debug_agent_pair ( const TT & lmbd ) {
-        std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
+        std::lock_guard<DebugAgentMutex> guard(g_DebugAgentMutex);
         for ( auto & it : g_DebugAgents ) {
             lmbd ( it.first, it.second.debugAgent );
         }
@@ -1083,13 +1085,11 @@ namespace das
     }
 
     Context::~Context() {
-        on_debug_agent_mutex([&](){
-            // unregister
-            category.value |= uint32_t(ContextCategory::dead);
-            // register
-            for_each_debug_agent([&](const DebugAgentPtr & pAgent){
-                pAgent->onDestroyContext(this);
-            });
+        // unregister
+        category.value |= uint32_t(ContextCategory::dead);
+        // register
+        for_each_debug_agent([&](const DebugAgentPtr & pAgent){
+            pAgent->onDestroyContext(this);
         });
         // shutdown
         runShutdownScript();
@@ -1429,7 +1429,7 @@ namespace das
     }
 
     void tickSpecificDebugAgent ( const char * name ) {
-        std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
+        std::lock_guard<DebugAgentMutex> guard(g_DebugAgentMutex);
         auto it = g_DebugAgents.find(name);
         if ( it != g_DebugAgents.end() ) {
             it->second.debugAgent->onTick();
@@ -1466,7 +1466,7 @@ namespace das
 
     template <typename TT>
     void onCppDebugAgent ( const char * category, TT && lmb ) {
-        std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
+        std::lock_guard<DebugAgentMutex> guard(g_DebugAgentMutex);
         auto it = g_DebugAgents.find(category);
         CppOnlyDebugAgent * agent = nullptr;
         if ( it != g_DebugAgents.end() ) {
@@ -1497,7 +1497,7 @@ namespace das
     }
 
     void uninstallCppDebugAgent ( const char * category ) {
-        std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
+        std::lock_guard<DebugAgentMutex> guard(g_DebugAgentMutex);
         auto it = g_DebugAgents.find(category);
         if ( it != g_DebugAgents.end() ) {
             g_DebugAgents.erase(it);
@@ -1532,7 +1532,7 @@ namespace das
 
     void installDebugAgent ( DebugAgentPtr newAgent, const char * category, LineInfoArg * at, Context * context ) {
         if ( !category ) context->throw_error_at(at, "need to specify category");
-        std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
+        std::lock_guard<DebugAgentMutex> guard(g_DebugAgentMutex);
         auto it = g_DebugAgents.find(category);
         if ( it != g_DebugAgents.end() ) {
             DebugAgent * oldAgentPtr = it->second.debugAgent.get();
@@ -1552,7 +1552,7 @@ namespace das
 
     Context & getDebugAgentContext ( const char * category, LineInfoArg * at, Context * context ) {
         if ( !category ) context->throw_error_at(at, "need to specify category");
-        std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
+        std::lock_guard<DebugAgentMutex> guard(g_DebugAgentMutex);
         auto it = g_DebugAgents.find(category);
         if ( it == g_DebugAgents.end() ) context->throw_error_at(at, "can't get debug agent '%s'", category);
         if ( !it->second.debugAgentContext ) context->throw_error_at(at, "debug agent '%s' is a CPP-only agent", category);
@@ -1561,13 +1561,13 @@ namespace das
 
     bool hasDebugAgentContext ( const char * category, LineInfoArg * at, Context * context ) {
         if ( !category ) context->throw_error_at(at, "need to specify category");
-        std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
+        std::lock_guard<DebugAgentMutex> guard(g_DebugAgentMutex);
         auto it = g_DebugAgents.find(category);
         return it != g_DebugAgents.end();
     }
 
     void lockDebugAgent ( const TBlock<void> & blk, Context * context, LineInfoArg * line ) {
-        std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
+        std::lock_guard<DebugAgentMutex> guard(g_DebugAgentMutex);
         context->invoke(blk, nullptr, nullptr, line);
     }
 }
@@ -1576,6 +1576,16 @@ das::Context* get_clone_context( das::Context * ctx, uint32_t category );//link 
 
 namespace das
 {
+    void installProfilerAgent ( DebugAgentPtr newAgent, LineInfoArg * at, Context * context ) {
+        std::lock_guard<DebugAgentMutex> guard(g_DebugAgentMutex);
+        if ( g_ProfilerAgent.debugAgentContext!=nullptr ) {
+            context->throw_error_at(at, "Profiler agent already installed");
+        }
+        g_ProfilerAgent = {
+            newAgent,
+            context->shared_from_this()
+        };
+    }
 
     void forkDebugAgentContext ( Func exFn, Context * context, LineInfoArg * lineinfo ) {
         g_isInDebugAgentCreation = true;
@@ -1603,9 +1613,11 @@ namespace das
         });
         das_safe_map<string,DebugAgentInstance> agents;
         {
-            std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
+            std::lock_guard<DebugAgentMutex> guard(g_DebugAgentMutex);
             swap(agents, g_DebugAgents);
         }
+        g_ProfilerAgent.debugAgent.reset();
+        g_ProfilerAgent.debugAgentContext = nullptr;
     }
 
     void Context::triggerHwBreakpoint ( void * addr, int index ) {
@@ -1795,9 +1807,10 @@ namespace das
     }
 
     void Context::instrumentFunctionCallback ( SimFunction * sim, bool entering, uint64_t userData ) {
-        for_each_debug_agent([&](const DebugAgentPtr & pAgent){
-            pAgent->onInstrumentFunction(this, sim, entering, userData);
-        });
+        std::lock_guard<DebugAgentMutex> guard(g_DebugAgentMutex);
+        if ( auto agent = g_ProfilerAgent.debugAgent ) {
+            agent->onInstrumentFunction(this, sim, entering, userData);
+        }
     }
 
     void Context::bpcallback( const LineInfo & at ) {
