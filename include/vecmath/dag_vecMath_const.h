@@ -1,12 +1,8 @@
-/*
- * Dagor Engine 5
- * Copyright (C) 2003-2021  Gaijin Entertainment.  All rights reserved
- *
- * (for conditions of distribution and use, see License)
-*/
-
-#ifndef _DAGOR_PUBLIC_MATH_DAG_VECMATH_CONST_H_
-#define _DAGOR_PUBLIC_MATH_DAG_VECMATH_CONST_H_
+//
+// Dagor Engine 6.5
+// Copyright (C) 2023  Gaijin Games KFT.  All rights reserved
+// (for conditions of use see prog/license.txt)
+//
 #pragma once
 
 #include "dag_vecMathDecl.h"
@@ -44,7 +40,12 @@
   DECL_VEC_CONST vec4f_const V_C_MAX_VAL = { REPLICATE(1e32f) };
   DECL_VEC_CONST vec4f_const V_C_MIN_VAL = { REPLICATE(-1e32f) };
   DECL_VEC_CONST vec4f_const V_C_EPS_VAL = { REPLICATE(1.192092896e-07f) };
-  DECL_VEC_CONST vec4f_const V_C_VERY_SMALL_VAL = { REPLICATE(4e-19) };          // ~sqrt(FLT_MIN), safe threshold for passing argument to rcp(x)
+  DECL_VEC_CONST vec4f_const V_C_VERY_SMALL_VAL = { REPLICATE(4e-19f) };          // ~sqrt(FLT_MIN), safe threshold for passing argument to rcp(x)
+#if defined(__clang__) || defined(__GNUC__)
+  DECL_VEC_CONST vec4f_const V_C_INF = { REPLICATE(__builtin_inff()) };
+#else
+  DECL_VEC_CONST vec4f_const V_C_INF = { REPLICATE(INFINITY) };
+#endif
 
   DECL_VEC_CONST vec4i_const V_CI_SIGN_MASK = { REPLICATE(0x80000000) };
   DECL_VEC_CONST vec4i_const V_CI_INV_SIGN_MASK = { REPLICATE(0x7FFFFFFF) };
@@ -97,6 +98,7 @@
   #define V_C_MIN_VAL         vdupq_n_f32(-1e32f)
   #define V_C_EPS_VAL         vdupq_n_f32(1.192092896e-07f)
   #define V_C_VERY_SMALL_VAL  vdupq_n_f32(4e-19f)              // ~sqrt(FLT_MIN), safe threshold for passing argument to rcp(x)
+  #define V_C_INF             vdupq_n_f32(__builtin_inff())
 
   #define V_CI_SIGN_MASK      vdupq_n_s32(0x80000000)
   #define V_CI_INV_SIGN_MASK  vdupq_n_s32(0x7FFFFFFF)
@@ -144,5 +146,3 @@
 
 #undef REPLICATE
 #undef DECL_VEC_CONST
-
-#endif
