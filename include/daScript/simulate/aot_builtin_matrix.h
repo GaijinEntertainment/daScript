@@ -49,6 +49,8 @@ namespace das {
 
     float4 un_quat_from_unit_arc(float3 v0, float3 v1);
     float4 un_quat_from_unit_vec_ang(float3 v, float ang);
+    float4 un_quat_from_euler_vec(float3 v);
+    float4 un_quat_from_euler(float x, float y, float z);
     float4 un_quat(const float4x4 & m);
 
     float4 quat_mul(float4 q1, float4 q2);
