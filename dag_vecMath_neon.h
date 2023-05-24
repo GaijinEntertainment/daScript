@@ -1,18 +1,16 @@
-/*
- * Dagor Engine 5
- * Copyright (C) 2003-2021  Gaijin Entertainment.  All rights reserved
- *
- * (for conditions of distribution and use, see License)
-*/
-
-#ifndef _DAGOR_PUBLIC_MATH_DAG_VECMATH_NEON_H_
-#define _DAGOR_PUBLIC_MATH_DAG_VECMATH_NEON_H_
+//
+// Dagor Engine 6.5
+// Copyright (C) 2023  Gaijin Games KFT.  All rights reserved
+// (for conditions of use see prog/license.txt)
+//
 #pragma once
 
 #define VECMATH_NEON_SQRT_MIN_THRESHOLD_VALUE 1e-16
 
 VECMATH_FINLINE vec4f VECTORCALL v_zero() { return vdupq_n_f32(0); }
 VECMATH_FINLINE vec4i VECTORCALL v_zeroi() { return vdupq_n_u32(0); }
+VECMATH_FINLINE vec4f VECTORCALL v_set_all_bits() { vec4f u = v_zero(); return v_cmp_eq(u, u); }
+VECMATH_FINLINE vec4i VECTORCALL v_set_all_bitsi() { vec4i u = v_zeroi(); return v_cmp_eqi(u, u); }
 VECMATH_FINLINE vec4f VECTORCALL v_msbit() { return (vec4f)vdupq_n_u32(0x80000000); }
 VECMATH_FINLINE vec4f VECTORCALL v_splat4(const float *a) { return vld1q_dup_f32(a); }
 VECMATH_FINLINE vec4f VECTORCALL v_ld(const float *m) { return vld1q_f32(m); }
@@ -60,22 +58,51 @@ VECMATH_FINLINE vec4f VECTORCALL v_merge_lw(vec4f a, vec4f b)
   return vzipq_f32(a, b).val[1];
 }
 
-VECMATH_FINLINE int VECTORCALL v_signmask(vec4f V)
+VECMATH_FINLINE int VECTORCALL v_signmask(vec4f a)
 {
-  #if 1 //ifndef __AARCH64_SIMD__  //== since vtbl1q_u8 is not availale!
-  static const uint32x4_t movemask = { 1, 2, 4, 8 };
-  static const uint32x4_t highbit = { 0x80000000, 0x80000000, 0x80000000, 0x80000000 };
-  uint32x4_t t0 = vreinterpretq_u32_f32(V);
-  uint32x4_t t1 = vtstq_u32(t0, highbit);
-  uint32x4_t t2 = vandq_u32(t1, movemask);
-  uint32x2_t t3 = vorr_u32(vget_low_u32(t2), vget_high_u32(t2));
-  return vget_lane_u32(t3, 0) | vget_lane_u32(t3, 1);
-  #else
-  const uint8x16_t tbl = vcombine_u8((uint8x8_t)vget_low_f32(V), (uint8x8_t)vget_high_f32(V));
-  const uint8x8_t idx_sign = { 3, 7, 11, 15 }; // MSB -> LSB = W -> X (0xWWZZYYXX)
-  const uint8x8_t sign_bytes = vtbl1q_u8(tbl, idx_sign);
-  return vget_lane_u32((uint32x2_t)sign_bytes, 0);
-  #endif
+  static const vec4i movemask = { 1, 2, 4, 8 };
+  vec4i t0 = v_cast_vec4i(a);
+  vec4i t1 = v_cmp_lti(t0, v_zeroi());
+  vec4i t2 = v_andi(t1, movemask);
+  return vaddvq_s32(t2);
+}
+
+VECMATH_FINLINE bool VECTORCALL v_test_all_bits_zeros(vec4f a)
+{
+  uint64x2_t v64 = vreinterpretq_u64_f32(a);
+  uint32x2_t v32 = vqmovn_u64(v64); // saturate uint32x4 to uint16x4 packed in uint64 (1 => 1; 0x12345 => 0xffff)
+  uint64x1_t result = vreinterpret_u64_u32(v32);
+  return result[0] == 0u;
+}
+
+VECMATH_FINLINE bool VECTORCALL v_test_all_bits_ones(vec4f a)
+{
+  return v_test_any_bit_set(v_not(a));
+}
+
+VECMATH_FINLINE bool VECTORCALL v_test_any_bit_set(vec4f a)
+{
+  return !v_test_all_bits_zeros(a);
+}
+
+VECMATH_FINLINE bool VECTORCALL v_check_xyzw_all_not_zeroi(vec4f a)
+{
+  return v_test_all_bits_zeros(v_cmp_eq(a, v_zero()));
+}
+
+VECMATH_FINLINE bool VECTORCALL v_check_xyz_all_zeroi(vec4f a)
+{
+  return v_test_all_bits_zeros(v_perm_xyzz(a));
+}
+
+VECMATH_FINLINE bool VECTORCALL v_check_xyz_all_not_zeroi(vec4f a)
+{
+  return v_check_xyzw_all_not_zeroi(v_perm_xyzz(a));
+}
+
+VECMATH_FINLINE bool VECTORCALL v_check_xyz_any_not_zeroi(vec4f a)
+{
+  return v_test_any_bit_set(v_perm_xyzz(a));
 }
 
 VECMATH_FINLINE vec4f VECTORCALL v_cmp_eq(vec4f a, vec4f b) { return (vec4f)vceqq_f32(a, b); }
@@ -91,6 +118,7 @@ VECMATH_FINLINE vec4f VECTORCALL v_and(vec4f a, vec4f b) { return (vec4f)vandq_s
 VECMATH_FINLINE vec4f VECTORCALL v_andnot(vec4f a, vec4f b) { return (vec4f)vandq_s32(vmvnq_s32((vec4i)a), (vec4i)b); }
 VECMATH_FINLINE vec4f VECTORCALL v_or(vec4f a, vec4f b) { return (vec4f)vorrq_s32((vec4i)a, (vec4i)b); }
 VECMATH_FINLINE vec4f VECTORCALL v_xor(vec4f a, vec4f b) { return (vec4f)veorq_s32((vec4i)a, (vec4i)b); }
+VECMATH_FINLINE vec4f VECTORCALL v_not(vec4f a) { return (vec4f)vmvnq_u32((vec4i)a); }
 VECMATH_FINLINE vec4f VECTORCALL v_sel(vec4f a, vec4f b, vec4f c)
 {
   return vbslq_f32((uint32x4_t)vshrq_n_s32(vreinterpretq_s32_f32(c), 31), b, a);
@@ -98,15 +126,6 @@ VECMATH_FINLINE vec4f VECTORCALL v_sel(vec4f a, vec4f b, vec4f c)
 VECMATH_FINLINE vec4i VECTORCALL v_seli(vec4i a, vec4i b, vec4i c) { return vbslq_s32((uint32x4_t)vshrq_n_s32(c, 31), b, a); }
 VECMATH_FINLINE vec4f VECTORCALL v_btsel(vec4f a, vec4f b, vec4f c) { return vbslq_f32((uint32x4_t)c, b, a); }
 VECMATH_FINLINE vec4i VECTORCALL v_btseli(vec4i a, vec4i b, vec4i c) { return vbslq_s32((uint32x4_t)c, b, a); }
-
-VECMATH_FINLINE int VECTORCALL v_check_xyz_non_zero(vec4f a)
-{
-  const uint32x2_t xy = vget_low_u32((uint32x4_t)a);
-  const uint32x2_t zz = vdup_lane_u32(vget_high_u32((uint32x4_t)a), 0);
-  uint32x2_t m_and = vand_u32(xy, zz);
-  m_and = vand_u32(m_and, vdup_lane_u32(xy, 1));
-  return vget_lane_u32(m_and, 0);
-}
 
 VECMATH_FINLINE vec4i VECTORCALL v_cvti_vec4i(vec4f a) { return vcvtq_s32_f32(a); }
 VECMATH_FINLINE vec4i VECTORCALL v_cvtu_vec4i_ieee(vec4f a) { return vcvtq_u32_f32(a); }
@@ -193,6 +212,16 @@ VECMATH_FINLINE vec4f VECTORCALL v_nmsub_x(vec4f a, vec4f b, vec4f c) { return v
 VECMATH_FINLINE vec4i VECTORCALL v_addi(vec4i a, vec4i b) { return vaddq_s32(a, b); }
 VECMATH_FINLINE vec4i VECTORCALL v_subi(vec4i a, vec4i b) { return vsubq_s32(a, b); }
 VECMATH_FINLINE vec4i VECTORCALL v_muli(vec4i a, vec4i b) { return vmulq_s32(a, b); }
+
+VECMATH_FINLINE vec4f VECTORCALL v_hadd4_x(vec4f a)
+{
+  return v_set_x(vaddvq_s32(a));
+}
+VECMATH_FINLINE vec4f VECTORCALL v_hadd3_x(vec4f a)
+{
+  vec4f s = v_add_x(a, v_splat_y(a));
+  return v_add_x(s, v_splat_z(a));
+}
 
 VECMATH_FINLINE vec4f VECTORCALL v_rcp_est(vec4f a) { return vrecpeq_f32(a); }
 VECMATH_FINLINE vec4f VECTORCALL v_rcp_iter(vec4f a, vec4f est)
@@ -612,17 +641,6 @@ VECMATH_FINLINE vec4f VECTORCALL v_distance3p(plane3f a, vec3f b) { return v_spl
 
 VECMATH_FINLINE vec4f VECTORCALL v_perm_yzxz(vec4f a) { return __builtin_shufflevector(a, a, 1, 2, 0, 2); }
 
-VECMATH_FINLINE vec3f VECTORCALL v_cross3(vec3f a, vec3f b)
-{
-  vec4f tmp0, tmp1, tmp2, tmp3, result;
-  tmp0 = v_perm_yzxz(a);
-  tmp1 = v_perm_zxyz(b);
-  tmp2 = v_perm_zxyz(a);
-  tmp3 = v_perm_yzxz(b);
-  result = v_mul(tmp0, tmp1);
-  return v_nmsub(tmp2, tmp3, result);
-}
-
 VECMATH_FINLINE void VECTORCALL v_mat44_ident(mat44f &dest)
 {
   dest.col3 = V_C_UNIT_0001;
@@ -905,68 +923,6 @@ VECMATH_FINLINE vec4f VECTORCALL v_mat44_det(mat44f_cref m)
   return v_dot4(t0, cof0);
 }
 
-VECMATH_FINLINE vec3f VECTORCALL v_bbox3_center(bbox3f b)
-{
-  return v_mul(v_add(b.bmin, b.bmax), V_C_HALF);
-}
-VECMATH_FINLINE vec4f VECTORCALL v_bbox3_outer_rad(vec3f bmin, vec3f bmax)
-{
-  return v_mul(V_C_HALF, v_length3(v_sub(bmax, bmin)));
-}
-VECMATH_FINLINE vec4f VECTORCALL v_bbox3_inner_diameter(vec3f bmin, vec3f bmax)
-{
-  vec4f s = v_sub(bmax, bmin);
-  return v_min(s, v_min(v_rot_1(s), v_rot_2(s)));
-}
-VECMATH_FINLINE vec4f VECTORCALL v_bbox3_inner_rad(vec3f bmin, vec3f bmax)
-{
-  return v_mul(V_C_HALF, v_bbox3_inner_diameter(bmin, bmax));
-}
-
-VECMATH_FINLINE int VECTORCALL v_check_xz_non_zero(vec4f a)
-{
-  const uint32x2_t xy = vget_low_u32((uint32x4_t)a);
-  const uint32x2_t zw = vget_high_u32((uint32x4_t)a);
-  uint32x2_t m_and = vand_u32(xy, zw);
-  return vget_lane_u32(m_and, 0);
-}
-
-VECMATH_FINLINE int VECTORCALL v_bbox3_test_pt_inside_b_xz(bbox3f b, vec3f p)
-{
-  vec3f m = v_and(v_cmp_ge(p, b.bmin), v_cmp_ge(b.bmax, p));
-  return v_check_xz_non_zero(m);
-}
-VECMATH_FINLINE int VECTORCALL v_bbox3_test_pt_inside_b(bbox3f b, vec3f p)
-{
-  vec3f m = v_and(v_cmp_ge(p, b.bmin), v_cmp_ge(b.bmax, p));
-  return v_check_xyz_non_zero(m);
-}
-VECMATH_FINLINE int VECTORCALL v_bbox3_test_box_inside_b(bbox3f b, bbox3f b2)
-{
-  vec3f m1 = v_and(v_cmp_ge(b2.bmin, b.bmin), v_cmp_ge(b.bmax, b2.bmin));
-  vec3f m2 = v_and(v_cmp_ge(b2.bmax, b.bmin), v_cmp_ge(b.bmax, b2.bmax));
-  vec3f m = v_and(m1, m2);
-  return v_check_xyz_non_zero(m);
-}
-VECMATH_FINLINE int VECTORCALL v_bbox3_test_box_intersect_b(bbox3f b1, bbox3f b2)
-{
-  vec3f m = v_and(v_cmp_ge(b2.bmax, b1.bmin), v_cmp_ge(b1.bmax, b2.bmin));
-  return v_check_xyz_non_zero(m);
-}
-VECMATH_FINLINE int VECTORCALL v_bbox3_test_box_intersect_b_safe(bbox3f b1, bbox3f b2)
-{
-  vec3f m = v_and(v_and(v_cmp_ge(b1.bmax, b1.bmin), v_cmp_ge(b2.bmax, b2.bmin)),
-                  v_and(v_cmp_ge(b2.bmax, b1.bmin), v_cmp_ge(b1.bmax, b2.bmin)));
-  return v_check_xyz_non_zero(m);
-}
-
-VECMATH_FINLINE vec4f VECTORCALL v_bbox3_pt001(bbox3f b){ return v_perm_xycc(b.bmin, b.bmax); }
-VECMATH_FINLINE vec4f VECTORCALL v_bbox3_pt010(bbox3f b){ return v_perm_xbzz(b.bmin, b.bmax); }
-VECMATH_FINLINE vec4f VECTORCALL v_bbox3_pt011(bbox3f b){ return v_perm_xbcc(b.bmin, b.bmax); }
-VECMATH_FINLINE vec4f VECTORCALL v_bbox3_pt100(bbox3f b){ return v_perm_xbcc(b.bmax, b.bmin); }
-VECMATH_FINLINE vec4f VECTORCALL v_bbox3_pt101(bbox3f b){ return v_perm_xbzz(b.bmax, b.bmin); }
-VECMATH_FINLINE vec4f VECTORCALL v_bbox3_pt110(bbox3f b){ return v_perm_xycc(b.bmax, b.bmin); }
-
 VECMATH_FINLINE vec4f VECTORCALL v_insert(float s, vec4f v, int i)
 {
   if (i == 0)
@@ -1161,5 +1117,3 @@ VECMATH_FINLINE vec4i VECTORCALL v_packus16(vec4i a)
   uint8x8_t t = vqmovun_s16(vreinterpretq_s16_s32(a));
   return vreinterpretq_s32_u8(vcombine_u8(t,t));
 }
-
-#endif
