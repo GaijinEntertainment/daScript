@@ -1,12 +1,8 @@
-/*
- * Dagor Engine 5
- * Copyright (C) 2003-2021  Gaijin Entertainment.  All rights reserved
- *
- * (for conditions of distribution and use, see License)
-*/
-
-#ifndef _DAGOR_PUBLIC_MATH_DAG_VECMATHDECL_H_
-#define _DAGOR_PUBLIC_MATH_DAG_VECMATHDECL_H_
+//
+// Dagor Engine 6.5
+// Copyright (C) 2023  Gaijin Games KFT.  All rights reserved
+// (for conditions of use see prog/license.txt)
+//
 #pragma once
 
 typedef const struct mat44f& mat44f_cref;
@@ -181,5 +177,3 @@ namespace eastl
   template <typename Count> inline void uninitialized_default_fill_n(mat43f*, Count){}
   template <typename Count> inline void uninitialized_default_fill_n(mat44f*, Count){}
 }
-
-#endif

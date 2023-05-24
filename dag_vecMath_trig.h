@@ -1,9 +1,8 @@
-/*
- * Dagor Engine 5
- * Copyright (C) 2003-2021  Gaijin Entertainment.  All rights reserved
- *
- * (for conditions of distribution and use, see License)
-*/
+//
+// Dagor Engine 6.5
+// Copyright (C) 2023  Gaijin Games KFT.  All rights reserved
+// (for conditions of use see prog/license.txt)
+//
 #pragma once
 
 #include <vecmath/dag_vecMath.h>
