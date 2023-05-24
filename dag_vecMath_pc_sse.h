@@ -20,7 +20,9 @@
 #endif
 
 #include <math.h> //for fabsf, which is used once, and not wise
-#if _TARGET_PC_LINUX
+#if defined(_EMSCRIPTEN_VER)
+#include <immintrin.h>
+#elif _TARGET_PC_LINUX
 #include <x86intrin.h> // MAC doesn't have it in GCC frontend, but it exist in CLANG one
 #elif _TARGET_SIMD_SSE >= 4 || defined(_DAGOR_PROJECT_OPTIONAL_SSE4)
 #include <smmintrin.h>
