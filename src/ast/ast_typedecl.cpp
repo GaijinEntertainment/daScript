@@ -1083,6 +1083,7 @@ namespace das
                 if (dep.find(structType) != dep.end()) return 0;
                 dep.insert(structType);
                 if ( structType->isLambda ) gcf |= gcFlag_heap;
+                if ( structType->isClass ) gcf |= gcFlag_heap | gcFlag_stringHeap;
                 for ( auto fld : structType->fields ) {
                     gcf |= fld.type->gcFlags(dep,depA);
                 }
