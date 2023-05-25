@@ -187,8 +187,7 @@ def public serialize ( var arch:Archive; var value : string& )
                 tbuf |> resize_no_init(len+1)                           // todo: implement preallocat string with raii
                 arch.stream->read(addr(tbuf[0]), len)
                 tbuf[len] = 0u8
-                let tstr = reinterpret<string#> addr(tbuf[0])
-                value := tstr
+                value = clone_string(reinterpret<string#> addr(tbuf[0]))
                 delete tbuf
             else
                 value = ""
