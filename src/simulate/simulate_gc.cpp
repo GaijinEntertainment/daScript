@@ -661,7 +661,7 @@ namespace das
             popRange();
         }
         virtual bool canVisitTableData ( TypeInfo * ti ) override {
-            return ti->flags & gcFlags;
+            return ti->firstType->flags & gcFlags || ti->secondType->flags & gcFlags;
         }
         virtual void beforeTable ( Table * PT, TypeInfo * ti ) override {
             PtrRange rdata(PT->data, (ti->firstType->size+ti->secondType->size+sizeof(uint64_t))*size_t(PT->capacity));
@@ -881,22 +881,26 @@ namespace das
                 afterRef(pa,info);
             } else if ( info->dimSize ) {
                 walk_dim(pa, info);
-            } else if ( info->type==Type::tArray ) {
-                auto arr = (Array *) pa;
-                if ( canVisitArray(arr,info) ) {
-                    beforeArray(arr, info);
-                    walk_array(arr->data, info->firstType->size, arr->size, info->firstType);
-                    afterArray(arr, info);
-                }
-            } else if ( info->type==Type::tTable ) {
-                auto tab = (Table *) pa;
-                if ( canVisitTable(pa,info) ) {
-                    beforeTable(tab, info);
-                    walk_table(tab, info);
-                    afterTable(tab, info);
-                }
             } else {
                 switch ( info->type ) {
+                    case Type::tArray: {
+                            auto arr = (Array *) pa;
+                            if ( canVisitArray(arr,info) ) {
+                                beforeArray(arr, info);
+                                walk_array(arr->data, info->firstType->size, arr->size, info->firstType);
+                                afterArray(arr, info);
+                            }
+                        }
+                        break;
+                    case Type::tTable: {
+                            auto tab = (Table *) pa;
+                            if ( canVisitTable(pa,info) ) {
+                                beforeTable(tab, info);
+                                walk_table(tab, info);
+                                afterTable(tab, info);
+                            }
+                        }
+                        break;
                     case Type::tString:     String(*((char **)pa)); break;          // TODO: verify!!!
                     case Type::tPointer:
                         if ( canVisitPointer(info) ) {
