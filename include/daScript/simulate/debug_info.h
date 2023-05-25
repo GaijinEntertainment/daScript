@@ -274,16 +274,18 @@ namespace das
         const char *                name;
         void *                      annotation_arguments = nullptr;
         uint32_t                    offset;
+        uint32_t                    nextGcField;
         VarInfo() = default;
         VarInfo(Type _type, StructInfo * _structType, EnumInfo * _enumType, TypeAnnotation * _annotation_or_name,
                 TypeInfo * _firstType, TypeInfo * _secondType, TypeInfo ** _argTypes, const char ** _argNames, uint32_t _argCount,
                 uint32_t _dimSize, uint32_t * _dim, uint32_t _flags, uint32_t _size,
-                uint64_t _hash, const char * _name, uint32_t _offset ) :
+                uint64_t _hash, const char * _name, uint32_t _offset, uint32_t _nextGcField ) :
             TypeInfo(_type,_structType,_enumType,_annotation_or_name,
                     _firstType,_secondType,_argTypes,_argNames,_argCount,
                      _dimSize,_dim,_flags,_size,_hash) {
                 name               = _name;
                 offset             = _offset;
+                nextGcField        = _nextGcField;
                 value = v_zero();
         }
     };
@@ -301,14 +303,15 @@ namespace das
         VarInfo **  fields;
         void *      annotation_list;
         uint64_t    hash;
-        uint32_t    flags;
         uint64_t    init_mnh;
+        uint32_t    flags;
         uint32_t    count;
         uint32_t    size;
+        uint32_t    firstGcField;
         StructInfo() = default;
         StructInfo(
             const char * _name, const char * _module_name, uint32_t _flags, VarInfo ** _fields, uint32_t _count,
-            uint32_t _size, uint64_t _init_mnh, void * _annotation_list, uint64_t _hash ) {
+            uint32_t _size, uint64_t _init_mnh, void * _annotation_list, uint64_t _hash, uint32_t _firstGcField ) {
                 name =            _name;
                 module_name =     _module_name;
                 flags =           _flags;
@@ -318,6 +321,7 @@ namespace das
                 init_mnh =        _init_mnh;
                 annotation_list = _annotation_list;
                 hash =            _hash;
+                firstGcField =    _firstGcField;
         }
     };
 

@@ -37,14 +37,13 @@ namespace das {
     }
 
     void PersistentHeapAllocator::mark ( char * ptr, uint32_t len ) {
-        auto it = model.bigStuff.find(ptr);                  // not a big allocation
-        if ( it != model.bigStuff.end() ) {
-            it->second |= DAS_PAGE_GC_MASK;
-            return;
-        }
-        if ( len <= DAS_MAX_SHOE_ALLOCATION ) {              // not a small allocation
-            if ( model.shoe.mark(ptr,len) ) {
-                return;
+        auto size = (len + 15) & ~15; // model.alignMask
+        if ( size <= DAS_MAX_SHOE_ALLOCATION ) {
+            model.shoe.mark(ptr,size);
+        } else {
+            auto it = model.bigStuff.find(ptr);
+            if ( it != model.bigStuff.end() ) {
+                it->second |= DAS_PAGE_GC_MASK;
             }
         }
     }
@@ -237,14 +236,13 @@ namespace das {
     }
 
     void PersistentStringAllocator::mark ( char * ptr, uint32_t len ) {
-        auto it = model.bigStuff.find(ptr);                  // not a big allocation
-        if ( it != model.bigStuff.end() ) {
-            it->second |= DAS_PAGE_GC_MASK;
-            return;
-        }
-        if ( len <= DAS_MAX_SHOE_ALLOCATION ) {              // not a small allocation
-            if ( model.shoe.mark(ptr,len) ) {
-                return;
+        auto size = (len + 15) & ~15; // model.alignMask
+        if (size <= DAS_MAX_SHOE_ALLOCATION) {
+            model.shoe.mark(ptr,len);
+        } else {
+            auto it = model.bigStuff.find(ptr);
+            if ( it != model.bigStuff.end() ) {
+                it->second |= DAS_PAGE_GC_MASK;
             }
         }
     }
