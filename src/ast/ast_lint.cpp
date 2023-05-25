@@ -798,7 +798,9 @@ namespace das {
     // profiler
         "profiler",                     Type::tBool,
     // runtime checks
-        "skip_lock_checks",             Type::tBool
+        "skip_lock_checks",             Type::tBool,
+    // pinvoke
+        "threadlock_context",           Type::tBool
     };
 
     void verifyOptions() {

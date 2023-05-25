@@ -819,6 +819,7 @@ namespace debugapi {
         if ( !invCtx ) context.throw_error_at(call->debugInfo, "pinvoke with null context");
         auto fn = cast<const char *>::to(args[1]);
         if ( !fn ) context.throw_error_at(call->debugInfo, "can't pinvoke empty string");
+        if ( !invCtx->contextMutex ) context.throw_error_at(call->debugInfo,"threadlock_context is not set");
         vec4f res = v_zero();
         LineInfo exAt;
         string exText;
@@ -855,6 +856,7 @@ namespace debugapi {
         if ( !fn.PTR ) context.throw_error_at(call->debugInfo, "pnvoke can't invoke null function");
         auto simFn = fn.PTR;
         if ( !simFn ) context.throw_error_at(call->debugInfo, "pinvoke can't find function #%p", (void *)simFn);
+        if ( !invCtx->contextMutex ) context.throw_error_at(call->debugInfo,"threadlock_context is not set");
         vec4f res = v_zero();
         LineInfo exAt;
         string exText;
@@ -886,6 +888,7 @@ namespace debugapi {
         if (!fnMnh) context.throw_error_at(call->debugInfo, "invoke null lambda");
         SimFunction * simFn = *fnMnh;
         if ( !simFn ) context.throw_error_at(call->debugInfo, "pinvoke can't find function #%p", (void*)simFn);
+        if ( !invCtx->contextMutex ) context.throw_error_at(call->debugInfo,"threadlock_context is not set");
         vec4f res = v_zero();
         LineInfo exAt;
         string exText;

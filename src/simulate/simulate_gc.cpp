@@ -639,7 +639,7 @@ namespace das
             PtrRange rdata(pa, ti->size);
             markAndPushRange(rdata);
         }
-        virtual void afterHandle ( char * pa, TypeInfo * ti ) override {
+        virtual void afterHandle ( char *, TypeInfo * ) override {
             popRange();
             visited_handles.pop_back();
         }
@@ -647,7 +647,7 @@ namespace das
             PtrRange rdata(pa, ti->size);
             markAndPushRange(rdata);
         }
-        virtual void afterDim ( char * pa, TypeInfo * ti ) override {
+        virtual void afterDim ( char *, TypeInfo * ) override {
             popRange();
         }
         virtual bool canVisitArrayData ( TypeInfo * ti, uint32_t ) override {
@@ -657,7 +657,7 @@ namespace das
             PtrRange rdata(PA->data, size_t(ti->firstType->size) * size_t(PA->capacity));
             markAndPushRange(rdata);
         }
-        virtual void afterArray ( Array * pa, TypeInfo * ti ) override {
+        virtual void afterArray ( Array *, TypeInfo * ) override {
             popRange();
         }
         virtual bool canVisitTableData ( TypeInfo * ti ) override {
@@ -667,14 +667,14 @@ namespace das
             PtrRange rdata(PT->data, (ti->firstType->size+ti->secondType->size+sizeof(uint64_t))*size_t(PT->capacity));
             markAndPushRange(rdata);
         }
-        virtual void afterTable ( Table * pa, TypeInfo * ti ) override {
+        virtual void afterTable ( Table *, TypeInfo * ) override {
             popRange();
         }
         virtual void beforeRef ( char * pa, TypeInfo * ti ) override {
             PtrRange rdata(pa, ti->size);
             markAndPushRange(rdata);
         }
-        virtual void afterRef ( char * pa, TypeInfo * ti ) override {
+        virtual void afterRef ( char *, TypeInfo * ) override {
             popRange();
         }
         virtual void beforePtr ( char * pa, TypeInfo * ti ) override {
@@ -698,7 +698,7 @@ namespace das
             PtrRange rdata(pa, tsize);
             markAndPushRange(rdata);
         }
-        virtual void afterStructure ( char * ps, StructInfo * si ) override {
+        virtual void afterStructure ( char *, StructInfo * ) override {
             popRange();
             visited.pop_back();
         }
@@ -707,14 +707,14 @@ namespace das
             PtrRange rdata(pa, ti->size);
             markAndPushRange(rdata);
         }
-        virtual void afterVariant ( char * ps, TypeInfo * ti ) override {
+        virtual void afterVariant ( char *, TypeInfo * ) override {
             popRange();
         }
         virtual void beforeTuple ( char * pa, TypeInfo * ti ) override {
             PtrRange rdata(pa, ti->size);
             markAndPushRange(rdata);
         }
-        virtual void afterTuple ( char * ps, TypeInfo * si ) override {
+        virtual void afterTuple ( char *, TypeInfo * ) override {
             popRange();
         }
         virtual bool canVisitStructure ( char * ps, StructInfo * info ) override {

@@ -192,7 +192,7 @@ namespace das {
         ft->argNames = {
             "macroFunction", "needStringCast", "aotHashDeppendsOnArguments", "lateInit", "requestJit",
             "unsafeOutsideOfFor", "skipLockCheck", "safeImplicit", "deprecated", "aliasCMRES", "neverAliasCMRES",
-            "addressTaken", "propertyFunction"
+            "addressTaken", "propertyFunction", "pinvoke"
         };
         return ft;
     }

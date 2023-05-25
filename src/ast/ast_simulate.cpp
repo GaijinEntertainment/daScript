@@ -2952,6 +2952,7 @@ namespace das
         auto debuggerOrGC = getDebugger()  || context.thisProgram->options.getBoolOption("gc",false);
         vector<FunctionPtr> lookupFunctionTable;
         das_hash_map<uint64_t,Function *> fnByMnh;
+        bool anyPInvoke = false;
         if ( totalFunctions ) {
             for (auto & pm : library.modules) {
                 pm->functions.foreach([&](auto pfun){
@@ -2994,6 +2995,10 @@ namespace das
                         gfun.builtin = true;
                     }
                     gfun.code = pfun->simulate(context);
+                    if ( pfun->pinvoke ) {
+                        anyPInvoke = true;
+                        gfun.pinvoke = true;
+                    }
                     lookupFunctionTable.push_back(pfun);
                 });
             }
@@ -3030,6 +3035,10 @@ namespace das
                     }
                 });
             }
+        }
+        // if there is anything pinvoke or the option is set
+        if ( anyPInvoke || policies.threadlock_context || policies.debugger ) {
+            context.contextMutex = new recursive_mutex;
         }
         //
         context.globalInitStackSize = globalInitStackSize;

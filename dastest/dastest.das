@@ -181,7 +181,7 @@ def main()
     finish_tests(res, startTime)
 
 
-[export]
+[export, pinvoke]
 def timeout_tests(var res: SuiteResult; start_time: int64; timeout_sec: float)
     res.errors += 1
     res.total += 1

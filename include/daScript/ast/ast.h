@@ -842,6 +842,7 @@ namespace das
                 bool    neverAliasCMRES : 1;
                 bool    addressTaken : 1;
                 bool    propertyFunction : 1;
+                bool    pinvoke : 1;
             };
             uint32_t moreFlags = 0;
 
@@ -1307,6 +1308,7 @@ namespace das
         //  when enabled
         //      1. disables [fastcall]
         //      2. invoke of blocks will have extra prologue overhead
+        //      3. context always has context mutex
         bool debugger = false;
         string debug_module;
     // profiler
@@ -1317,6 +1319,8 @@ namespace das
         string profile_module;
     // jit
         bool jit = true;
+    // pinvoke
+        bool threadlock_context = false;               // has context mutex
     };
 
     struct CommentReader : public ptr_ref_count {
