@@ -1067,6 +1067,8 @@ namespace das
         tabAdLookup = ctx.tabAdLookup;
         // lockcheck
         skipLockChecks = ctx.skipLockChecks;
+        // threadlock_context
+        if ( ctx.contextMutex ) contextMutex = new recursive_mutex;
         // register
         announceCreation();
         // now, make it good to go
@@ -1099,6 +1101,11 @@ namespace das
         }
         if ( shared && sharedOwner ) {
             das_aligned_free16(shared);
+        }
+        // and lock
+        if ( contextMutex ) {
+            delete contextMutex;
+            contextMutex = nullptr;
         }
     }
 

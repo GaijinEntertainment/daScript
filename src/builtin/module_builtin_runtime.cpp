@@ -174,6 +174,14 @@ namespace das
         };
     };
 
+    struct PInvokeFunctionAnnotation : MarkFunctionAnnotation {
+        PInvokeFunctionAnnotation() : MarkFunctionAnnotation("pinvoke") { }
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+            func->pinvoke = true;
+            return true;
+        };
+    };
+
     struct SideEffectsFunctionAnnotation : MarkFunctionAnnotation {
         SideEffectsFunctionAnnotation() : MarkFunctionAnnotation("sideeffects") { }
         virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
@@ -1325,6 +1333,7 @@ namespace das
         addAnnotation(make_smart<AliasCMRESFunctionAnnotation>());
         addAnnotation(make_smart<NeverAliasCMRESFunctionAnnotation>());
         addAnnotation(make_smart<ExportFunctionAnnotation>());
+        addAnnotation(make_smart<PInvokeFunctionAnnotation>());
         addAnnotation(make_smart<NoLintFunctionAnnotation>());
         addAnnotation(make_smart<SideEffectsFunctionAnnotation>());
         addAnnotation(make_smart<RunAtCompileTimeFunctionAnnotation>());

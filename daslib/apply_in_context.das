@@ -78,6 +78,7 @@ class AppendCondAnnotation : AstFunctionAnnotation
         verify(has_debug_agent_context($v(contextName)),"debug agent is not installed")
         verify(addr(get_debug_agent_context($v(contextName))) == addr(this_context()),"agent context mismatch")
         $b(ctxFnBlockList)
+    ctxFn.moreFlags |= MoreFunctionFlags pinvoke
     compiling_module() |> add_function(ctxFn)
 
     var inscope fn <- clone_function(func)

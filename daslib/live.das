@@ -191,6 +191,7 @@ def public recompile(full_restart:bool=false)
     var inscope access <- make_file_access("")
     using <| $(var mg:ModuleGroup)
         using <| $(var cop:CodeOfPolicies)
+            cop.threadlock_context = true
             compile_file("{appDir}/{appFile}",access,unsafe(addr(mg)),cop) <| $(ok,program,issues)
                 if ok
                     simulate(program) <| $ ( sok; context; serrors )

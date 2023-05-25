@@ -487,6 +487,7 @@ namespace das {
             for ( auto & mod : req ) {
                 if ( !libGroup.findModule(mod.moduleName) ) {
                     auto program = parseDaScript(mod.fileName, access, logs, libGroup, true, true, policies);
+                    policies.threadlock_context |= program->options.getBoolOption("threadlock_context",false);
                     if ( program->failed() ) {
                         return program;
                     }
@@ -530,6 +531,7 @@ namespace das {
                 }
             }
             auto res = parseDaScript(fileName, access, logs, libGroup, exportAll, false, policies);
+            policies.threadlock_context |= res->options.getBoolOption("threadlock_context",false);
             if ( !res->failed() ) {
                 if ( res->options.getBoolOption("log_symbol_use") ) {
                     res->markSymbolUse(false, false, false, nullptr, &logs);

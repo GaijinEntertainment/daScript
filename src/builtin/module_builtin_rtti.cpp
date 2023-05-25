@@ -300,7 +300,7 @@ namespace das {
     TypeDeclPtr makeSimFunctionFlags() {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
         ft->alias = "SimFunctionFlags";
-        ft->argNames = { "aot", "fastcall", "builtin", "jit", "unsafe", "cmres" };
+        ft->argNames = { "aot", "fastcall", "builtin", "jit", "unsafe", "cmres", "pinvoke" };
         return ft;
     }
 
@@ -691,6 +691,8 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(profile_module)>("profile_module");
         // jit
             addField<DAS_BIND_MANAGED_FIELD(jit)>("jit");
+        // threadlock context
+            addField<DAS_BIND_MANAGED_FIELD(threadlock_context)>("threadlock_context");
         }
         virtual bool isLocal() const override { return true; }
     };
@@ -1206,12 +1208,14 @@ namespace das {
     }
 
     void lockThisContext ( const TBlock<void> & block, Context * context, LineInfoArg * lineInfo ) {
+        if ( !context->contextMutex ) context->throw_error_at(lineInfo,"threadlock_context is not set");
         context->threadlock_context([&](){
             context->invoke(block, nullptr, nullptr, lineInfo);
         });
     }
 
     void lockAnyContext ( Context & ctx, const TBlock<void> & block, Context * context, LineInfoArg * lineInfo ) {
+        if ( !context->contextMutex ) context->throw_error_at(lineInfo,"threadlock_context is not set");
         ctx.threadlock_context([&](){
             context->invoke(block, nullptr, nullptr, lineInfo);
         });

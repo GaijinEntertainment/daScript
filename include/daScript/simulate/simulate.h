@@ -88,6 +88,7 @@ namespace das
                 bool    jit : 1;
                 bool    unsafe : 1;
                 bool    cmres : 1;
+                bool    pinvoke : 1;
             };
         };
         const LineInfo * getLineInfo() const;
@@ -331,7 +332,8 @@ namespace das
 
         template <typename TT>
         __forceinline void threadlock_context ( TT && subexpr ) {
-            lock_guard<recursive_mutex> guard(contextMutex);
+            DAS_ASSERTF(contextMutex,"context mutex is not set");
+            lock_guard<recursive_mutex> guard(*contextMutex);
             lock();
             subexpr();
             unlock();
@@ -710,7 +712,7 @@ namespace das
         uint32_t gotoLabel = 0;
         vec4f result;
     public:
-        recursive_mutex contextMutex;
+        recursive_mutex * contextMutex = nullptr;
     public:
 #if DAS_ENABLE_SMART_PTR_TRACKING
         static vector<smart_ptr<ptr_ref_count>> sptrAllocations;

@@ -9,7 +9,7 @@ def debug_agent ( ctx : Context )
     print("from debugger\n")
     install_new_debug_agent(new DapiDebugAgent(), "sample") // note - no install = no category
 
-[export]
+[export, pinvoke]
 def debug_agent_fn ( ctx:Context; fun:function )
     print("debug agent call {fun} from context {ctx}\n")
     unsafe
@@ -20,7 +20,7 @@ def debug_agent_fn ( ctx:Context; fun:function )
 var
     wait_for_it = true
 
-[export]
+[export, pinvoke]
 def stop_waiting(msg:string#)
     print("we stop waiting {msg}\n")
     wait_for_it = false
