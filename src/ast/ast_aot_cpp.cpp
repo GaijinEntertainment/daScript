@@ -525,7 +525,7 @@ namespace das {
         void describeCppVarInfo ( TextWriter & ss, VarInfo * info, const string & suffix ) const {
             describeCppTypeInfo(ss, info, suffix);
             ss << ", \"" << info->name << "\", ";
-            ss << info->offset;
+            ss << info->offset << ", " << info->nextGcField;
 
         }
         void describeCppStructInfoFields ( TextWriter & ss, StructInfo * info ) const {
@@ -557,7 +557,8 @@ namespace das {
             ss << info->size << ", ";
             ss << "UINT64_C(0x" << HEX << info->init_mnh << DEC << "), ";
             ss << "nullptr, ";  // annotation list
-            ss << "UINT64_C(0x" << HEX << info->hash << DEC << ")";
+            ss << "UINT64_C(0x" << HEX << info->hash << DEC << "), ";
+            ss << info->firstGcField;
         }
         void describeCppFuncInfoFields ( TextWriter & ss, FuncInfo * info ) const {
             if ( !info->fields ) return;

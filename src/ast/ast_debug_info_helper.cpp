@@ -156,6 +156,23 @@ namespace das {
             VarInfo * vi = makeVariableDebugInfo(st, var);
             sti->fields[i] = vi;
         }
+        sti->firstGcField = sti->count;
+        if ( sti->count && (sti->flags & (StructInfo::flag_heapGC | StructInfo::flag_stringHeapGC))) {
+            int32_t prev = -1;
+            for ( uint32_t i=0, is=sti->count; i!=is; ++i ) {
+                das::VarInfo * var = sti->fields[i];
+                if (var->flags & (TypeInfo::flag_heapGC | TypeInfo::flag_stringHeapGC)) {
+                    if ( prev == -1 ) {
+                        sti->firstGcField = i;
+                    } else {
+                        sti->fields[prev]->nextGcField = i;
+                    }
+                    prev = i;
+                }
+            }
+            if (prev != -1)
+                sti->fields[prev]->nextGcField = sti->count;
+        }
         sti->init_mnh = 0;
         if ( st.module ) {
             sti->module_name = debugInfo->allocateCachedName(st.module->name);

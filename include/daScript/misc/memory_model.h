@@ -120,6 +120,7 @@ namespace das {
 
     struct Shoe {
         Shoe () {
+            lastChunk = nullptr;
             for ( int i=0; i!= DAS_MAX_SHOE_CUNKS; ++i ) {
                 chunks[i] = nullptr;
             }
@@ -167,9 +168,14 @@ namespace das {
         bool mark ( char * ptr, uint32_t size ) {
             size = (size + 15) & ~15;
             DAS_ASSERT(size && size<=DAS_MAX_SHOE_ALLOCATION);
+            if ( lastChunk && lastChunk->isOwnPtr(ptr) ) {
+                lastChunk->mark(ptr);
+                return true;
+            }
             uint32_t si = (size >> 4) - 1;
             for ( auto ch = chunks[si]; ch; ch=ch->next ) {
-                if ( ch->isOwnPtr(ptr) ) {
+                if ( ch != lastChunk && ch->isOwnPtr(ptr) ) {
+                    lastChunk = ch;
                     ch->mark(ptr);
                     return true;
                 }
@@ -183,9 +189,13 @@ namespace das {
         }
         bool isOwnPtr ( char * ptr, uint32_t size ) const {
             DAS_ASSERT(size && size<=DAS_MAX_SHOE_ALLOCATION);
+            if ( lastChunk && lastChunk->isOwnPtr(ptr) ) {
+                return true;
+            }
             uint32_t si = (size >> 4) - 1;
             for ( auto ch = chunks[si]; ch; ch=ch->next ) {
-                if ( ch->isOwnPtr(ptr) ) {
+                if ( ch != lastChunk && ch->isOwnPtr(ptr) ) {
+                    lastChunk = ch;
                     return true;
                 }
             }
@@ -193,9 +203,13 @@ namespace das {
         }
         bool isAllocatedPtr ( char * ptr, uint32_t size ) const {
             DAS_ASSERT(size && size<=DAS_MAX_SHOE_ALLOCATION);
+            if ( lastChunk && lastChunk->isOwnPtr(ptr) ) {
+                return lastChunk->isAllocatedPtr(ptr);
+            }
             uint32_t si = (size >> 4) - 1;
             for ( auto ch = chunks[si]; ch; ch=ch->next ) {
-                if ( ch->isOwnPtr(ptr) ) {
+                if ( ch != lastChunk && ch->isOwnPtr(ptr) ) {
+                    lastChunk = ch;
                     return ch->isAllocatedPtr(ptr);
                 }
             }
@@ -238,6 +252,7 @@ namespace das {
             return d;
         }
         Deck *  chunks[DAS_MAX_SHOE_CUNKS];
+        mutable Deck *  lastChunk;
     };
 
     typedef function<int(int)> CustomGrowFunction;
