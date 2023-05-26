@@ -24,7 +24,7 @@ namespace das {
     void DataWalker::walk_struct ( char * ps, StructInfo * si ) {
         if ( ps && (si->flags & StructInfo::flag_class) ) {
             auto ti = *(TypeInfo **) ps;
-            if ( !ti ) return;
+            DAS_ASSERT(ti);
             si = ti->structType;
         }
         if ( canVisitStructure(ps, si) ) {
@@ -210,7 +210,7 @@ namespace das {
                 case Type::tUInt16:     UInt16(*((uint16_t *)pa)); break;
                 case Type::tInt64:      Int64(*((int64_t *)pa)); break;
                 case Type::tUInt64:     UInt64(*((uint64_t *)pa)); break;
-                case Type::tString:     String(*((char **)pa)); break;          // TODO: verify!!!
+                case Type::tString:     String(*((char **)pa)); break;
                 case Type::tInt:        Int(*((int32_t *)pa)); break;
                 case Type::tInt2:       Int2(*((int2 *)pa)); break;
                 case Type::tInt3:       Int3(*((int3 *)pa)); break;
