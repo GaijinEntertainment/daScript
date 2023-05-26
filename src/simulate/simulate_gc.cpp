@@ -19,24 +19,228 @@ namespace das
         __forceinline bool contains ( const PtrRange & r ) { return !empty() && !r.empty() && from<=r.from && to>=r.to; }
     };
 
-    struct HeapReporter : DataWalker {
+    using loop_point = pair<void *,uint64_t>;
+
+    struct BaseGcDataWalker : DataWalker {
+
+        int32_t            gcFlags = TypeInfo::flag_stringHeapGC | TypeInfo::flag_heapGC;
+        int32_t            gcStructFlags = StructInfo::flag_stringHeapGC | StructInfo::flag_heapGC;
+        vector<loop_point> visited;
+        vector<loop_point> visited_handles;
+
+        virtual bool canVisitStructure ( char * ps, StructInfo * info ) override {
+            if ( !(info->flags & gcStructFlags) ) return false;
+            return find_if(visited.begin(),visited.end(),[&]( const loop_point & t ){
+                    return t.first==ps && t.second==info->hash;
+                }) == visited.end();
+        }
+        virtual bool canVisitHandle ( char * ps, TypeInfo * info ) override {
+            if ( !(info->flags & gcFlags) ) return false;
+            return find_if(visited_handles.begin(),visited_handles.end(),[&]( const loop_point & t ){
+                    return t.first==ps && t.second==info->hash;
+                }) == visited_handles.end();
+        }
+
+        virtual bool canVisitArrayData ( TypeInfo * ti, uint32_t ) override {
+            return ti->flags & gcFlags;
+        }
+        virtual bool canVisitTableData ( TypeInfo * ti ) override {
+            return (ti->firstType->flags & gcFlags) || (ti->secondType->flags & gcFlags);
+        }
+
+        virtual void walk_struct ( char * ps, StructInfo * si ) override {
+            if ( ps && (si->flags & StructInfo::flag_class) ) {
+                auto ti = *(TypeInfo **) ps;
+                DAS_ASSERT(ti);
+                si = ti->structType;
+            }
+            if ( canVisitStructure(ps, si) ) {
+                beforeStructure(ps, si);
+                for ( uint32_t i=si->firstGcField, is=si->count; i!=is; ) {
+                    VarInfo * vi = si->fields[i];
+                    char * pf = ps + vi->offset;
+                    walk(pf, vi);
+                    i = vi->nextGcField;
+                }
+                afterStructure(ps, si);
+            }
+        }
+
+        virtual void walk_tuple ( char * ps, TypeInfo * ti ) override {
+            beforeTuple(ps, ti);
+            int fieldOffset = 0;
+            for ( uint32_t i=0, is=ti->argCount; i!=is; ++i ) {
+                TypeInfo * vi = ti->argTypes[i];
+                auto fa = getTypeAlign(vi) - 1;
+                fieldOffset = (fieldOffset + fa) & ~fa;
+                char * pf = ps + fieldOffset;
+                walk(pf, vi);
+                fieldOffset += vi->size;
+            }
+            afterTuple(ps, ti);
+        }
+
+        virtual void walk_variant ( char * ps, TypeInfo * ti ) override {
+            beforeVariant(ps, ti);
+            int32_t fidx = *((int32_t *)ps);
+            DAS_ASSERTF(uint32_t(fidx)<ti->argCount,"invalid variant index");
+            int fieldOffset = getTypeBaseSize(Type::tInt);
+            TypeInfo * vi = ti->argTypes[fidx];
+            auto fa = getTypeAlign(ti) - 1;
+            fieldOffset = (fieldOffset + fa) & ~fa;
+            char * pf = ps + fieldOffset;
+            walk(pf, vi);
+            afterVariant(ps, ti);
+        }
+
+        virtual void walk_array ( char * pa, uint32_t stride, uint32_t count, TypeInfo * ti ) override {
+            if ( !canVisitArrayData(ti,count) ) return;
+            char * pe = pa;
+            for ( uint32_t i=0; i!=count; ++i ) {
+                walk(pe, ti);
+                pe += stride;
+            }
+        }
+
+        virtual void walk_dim ( char * pa, TypeInfo * ti ) override {
+            beforeDim(pa, ti);
+            TypeInfo copyInfo = *ti;
+            DAS_ASSERT(copyInfo.dimSize);
+            copyInfo.size = ti->dim[0] ? copyInfo.size / ti->dim[0] : copyInfo.size;
+            copyInfo.dimSize --;
+            vector<uint32_t> udim;
+            if ( copyInfo.dimSize ) {
+                for ( uint32_t i=0, is=copyInfo.dimSize; i!=is; ++i) {
+                    udim.push_back(ti->dim[i+1]);
+                }
+                copyInfo.dim = udim.data();
+            } else {
+                copyInfo.dim = nullptr;
+            }
+            uint32_t stride = copyInfo.size;
+            uint32_t count = ti->dim[0];
+            walk_array(pa, stride, count, &copyInfo);
+            afterDim(pa, ti);
+        }
+
+        virtual void walk_table ( Table * tab, TypeInfo * info ) override {
+            if ( !canVisitTableData(info) ) return;
+            int keySize = info->firstType->size;
+            int valueSize = info->secondType->size;
+            if (info->firstType->flags & gcFlags) {
+                if (info->secondType->flags & gcFlags) {
+                    for ( uint32_t i=0, is=tab->capacity; i!=is; ++i ) {
+                        if ( tab->hashes[i] > HASH_KILLED64 ) {
+                            // key
+                            char * key = tab->keys + i*keySize;
+                            walk ( key, info->firstType );
+                            // value
+                            char * value = tab->data + i*valueSize;
+                            walk ( value, info->secondType );
+                        }
+                    }
+                } else {
+                    for ( uint32_t i=0, is=tab->capacity; i!=is; ++i ) {
+                        if ( tab->hashes[i] > HASH_KILLED64 ) {
+                            // key
+                            char * key = tab->keys + i*keySize;
+                            walk ( key, info->firstType );
+                        }
+                    }
+                }
+            } else {
+                for ( uint32_t i=0, is=tab->capacity; i!=is; ++i ) {
+                    if ( tab->hashes[i] > HASH_KILLED64 ) {
+                        // value
+                        char * value = tab->data + i*valueSize;
+                        walk ( value, info->secondType );
+                    }
+                }
+            }
+        }
+
+        using DataWalker::walk;
+
+        virtual void walk ( char * pa, TypeInfo * info ) override {
+            if ( pa == nullptr ) {
+            } else if ( info->flags & TypeInfo::flag_ref ) {
+                beforeRef(pa,info);
+                TypeInfo ti = *info;
+                ti.flags &= ~TypeInfo::flag_ref;
+                walk(*(char **)pa, &ti);
+                ti.flags |= TypeInfo::flag_ref;
+                afterRef(pa,info);
+            } else if ( info->dimSize ) {
+                walk_dim(pa, info);
+            } else {
+                switch ( info->type ) {
+                    case Type::tArray: {
+                            auto arr = (Array *) pa;
+                            beforeArray(arr, info);
+                            walk_array(arr->data, info->firstType->size, arr->size, info->firstType);
+                            afterArray(arr, info);
+                        }
+                        break;
+                    case Type::tTable: {
+                            auto tab = (Table *) pa;
+                            beforeTable(tab, info);
+                            walk_table(tab, info);
+                            afterTable(tab, info);
+                        }
+                        break;
+                    case Type::tString:     String(*((char **)pa)); break;
+                    case Type::tPointer: {
+                            beforePtr(pa, info);
+                            if ( info->firstType && info->firstType->type!=Type::tVoid ) {
+                                walk(*(char**)pa, info->firstType);
+                            }
+                            afterPtr(pa, info);
+                        }
+                        break;
+                    case Type::tStructure:  walk_struct(pa, info->structType); break;
+                    case Type::tTuple:      walk_tuple(pa, info); break;
+                    case Type::tVariant:    walk_variant(pa, info); break;
+                    case Type::tLambda: {
+                            auto ll = (Lambda *) pa;
+                            walk ( ll->capture, ll->getTypeInfo() );
+                        }
+                        break;
+                    case Type::tIterator: {
+                            auto ll = (Sequence *) pa;
+                            if ( ll->iter ) {
+                                ll->iter->walk(*this);
+                            }
+                        }
+                        break;
+                    case Type::tHandle:
+                        if ( canVisitHandle(pa, info) ) {
+                            beforeHandle(pa, info);
+                            info->getAnnotation()->walk(*this, pa);
+                            afterHandle(pa, info);
+                        }
+                        break;
+                    default: break;
+                }
+            }
+        }
+    };
+
+    struct HeapReporter final : BaseGcDataWalker {
         bool reportStringHeap = true;
         bool reportHeap = true;
         bool heapOnly = false;
         bool errorsOnly = false;
-        using loop_point = pair<void *,uint64_t>;
-        vector<loop_point> visited;
-        vector<loop_point> visited_handles;
         vector<string>      history;
         vector<string>      keys;
         vector<PtrRange>    ptrRangeStack;
         PtrRange            currentRange;
         LOG                 tp;
-        int32_t             gcFlags = TypeInfo::flag_stringHeapGC | TypeInfo::flag_heapGC;
         int32_t             gcAlways = TypeInfo::flag_stringHeapGC | TypeInfo::flag_heapGC;
         void prepare ( const string & walk_from ) {
             DAS_ASSERT(keys.size()==0);
             DAS_ASSERT(ptrRangeStack.size()==0);
+            gcFlags = TypeInfo::flag_stringHeapGC | TypeInfo::flag_heapGC;
+            gcStructFlags = StructInfo::flag_stringHeapGC | StructInfo::flag_heapGC;
             history.clear();
             history.push_back(walk_from);
             currentRange.clear();
@@ -122,7 +326,6 @@ namespace das
             if ( ti->flags & StructInfo::flag_heapGC ) tp << "<H>";
         }
         virtual void beforeHandle ( char * pa, TypeInfo * ti ) override {
-            DataWalker::beforeHandle(pa, ti);
             visited_handles.emplace_back(make_pair(pa,ti->hash));
             auto tsize = ti->size;
             DAS_ASSERT(tsize==uint32_t(getTypeSize(ti)));
@@ -139,10 +342,8 @@ namespace das
         virtual void afterHandle ( char * pa, TypeInfo * ti ) override {
             popRange();
             visited_handles.pop_back();
-            DataWalker::afterHandle(pa, ti);
         }
         virtual void beforeDim ( char * pa, TypeInfo * ti ) override {
-            DataWalker::beforeDim(pa,ti);
             auto tsize = ti->size;
             DAS_ASSERT(tsize==uint32_t(getTypeSize(ti)));
             PtrRange rdata(pa, tsize );
@@ -157,13 +358,14 @@ namespace das
         }
         virtual void afterDim ( char * pa, TypeInfo * ti ) override {
             popRange();
-            DataWalker::afterDim(pa,ti);
         }
         virtual bool canVisitArrayData ( TypeInfo * ti, uint32_t ) override {
             return (ti->flags | gcAlways) & gcFlags;
         }
+        virtual bool canVisitTableData ( TypeInfo * ti ) override {
+            return ((ti->firstType->flags | gcAlways) & gcFlags) || ((ti->secondType->flags | gcAlways) & gcFlags);
+        }
         virtual void beforeArray ( Array * PA, TypeInfo * ti ) override {
-            DataWalker::beforeArray(PA,ti);
             auto tsize = ti->firstType->size * PA->capacity;
             DAS_ASSERT(tsize==getTypeSize(ti->firstType)*PA->capacity);
             char * pa = PA->data;
@@ -179,10 +381,8 @@ namespace das
         }
         virtual void afterArray ( Array * pa, TypeInfo * ti ) override {
             popRange();
-            DataWalker::afterArray(pa,ti);
         }
         virtual void beforeTable ( Table * PT, TypeInfo * ti ) override {
-            DataWalker::beforeTable(PT, ti);
             auto tsize = (ti->firstType->size + ti->secondType->size + sizeof(uint64_t)) * PT->capacity;
             DAS_ASSERT(tsize==(getTypeSize(ti->firstType)+getTypeSize(ti->secondType)+sizeof(uint64_t))*PT->capacity);
             char * pa = PT->data;
@@ -198,10 +398,8 @@ namespace das
         }
         virtual void afterTable ( Table * pa, TypeInfo * ti ) override {
             popRange();
-            DataWalker::afterTable(pa, ti);
         }
         virtual void beforeRef ( char * pa, TypeInfo * ti ) override {
-            DataWalker::beforeRef(pa, ti);
             auto tsize = ti->size;
             DAS_ASSERT(tsize==uint32_t(getTypeSize(ti)));
             PtrRange rdata(pa, tsize );
@@ -216,10 +414,8 @@ namespace das
         }
         virtual void afterRef ( char * pa, TypeInfo * ti ) override {
             popRange();
-            DataWalker::afterRef(pa, ti);
         }
         virtual void beforeStructure ( char * ps, StructInfo * si ) override {
-            DataWalker::beforeStructure(ps, si);
             visited.emplace_back(make_pair(ps,si->hash));
             char * pa = ps;
             auto tsize = si->size;
@@ -240,18 +436,14 @@ namespace das
         virtual void afterStructure ( char * ps, StructInfo * si ) override {
             popRange();
             visited.pop_back();
-            DataWalker::afterStructure(ps,si);
         }
         virtual void beforeStructureField ( char * ps, StructInfo * si, char * pv, VarInfo * vi, bool last ) override {
-            DataWalker::beforeStructureField(ps,si,pv,vi,last);
             history.push_back(vi->name);
         }
         virtual void afterStructureField ( char * ps, StructInfo * si, char * pv, VarInfo * vi, bool last ) override {
             history.pop_back();
-            DataWalker::afterStructureField(ps,si,pv,vi,last);
         }
         virtual void beforeVariant ( char * ps, TypeInfo * ti ) override {
-            DataWalker::beforeVariant(ps, ti);
             char * pa = ps;
             auto tsize = ti->size;
             DAS_ASSERT(tsize==uint32_t(getTypeSize(ti)));
@@ -267,10 +459,8 @@ namespace das
         }
         virtual void afterVariant ( char * ps, TypeInfo * ti ) override {
             popRange();
-            DataWalker::afterVariant(ps,ti);
         }
         virtual void beforeTuple ( char * ps, TypeInfo * si ) override {
-            DataWalker::beforeTuple(ps, si);
             char * pa = ps;
             auto tsize = si->size;
             DAS_ASSERT(tsize==uint32_t(getTypeSize(si)));
@@ -286,10 +476,8 @@ namespace das
         }
         virtual void afterTuple ( char * ps, TypeInfo * si ) override {
             popRange();
-            DataWalker::afterTuple(ps,si);
         }
         virtual void beforeTupleEntry ( char * ps, TypeInfo * ti, char * pv, TypeInfo * vi, bool last ) override {
-            DataWalker::beforeTupleEntry(ps,ti,pv,vi,last);
             uint32_t VI = -1u;
             for ( uint32_t i=0, is=ti->argCount; i!=is; ++i ) {
                 if ( ti->argTypes[i]==vi ) {
@@ -301,49 +489,42 @@ namespace das
         }
         virtual void afterTupleEntry ( char * ps, TypeInfo * ti, char * pv, TypeInfo * vi, bool last ) override {
             history.pop_back();
-            DataWalker::afterTupleEntry(ps,ti,pv,vi,last);
         }
         virtual void beforeArrayElement ( char * pa, TypeInfo * ti, char * pe, uint32_t index, bool last ) override {
-            DataWalker::beforeArrayElement(pa,ti,pe,index,last);
             history.push_back("["+to_string(index)+"]");
         }
         virtual void afterArrayElement ( char * pa, TypeInfo * ti, char * pe, uint32_t index, bool last ) override {
             history.pop_back();
-            DataWalker::afterArrayElement(pa,ti,pe,index,last);
         }
         virtual void beforeTableKey ( Table * pa, TypeInfo * ti, char * pk, TypeInfo * ki, uint32_t index, bool last ) override {
-            DataWalker::beforeTableKey(pa,ti,pk,ki,index,last);
             string keyText = debug_value ( pk, ki, PrintFlags::none );
             keys.push_back(keyText);
             history.push_back("=>key=>");
         }
         virtual void afterTableKey ( Table * pa, TypeInfo * ti, char * pk, TypeInfo * ki, uint32_t index, bool last ) override {
             history.pop_back();
-            DataWalker::afterTableKey(pa,ti,pk,ki,index,last);
         }
         virtual void beforeTableValue ( Table * pa, TypeInfo * ti, char * pv, TypeInfo * kv, uint32_t index, bool last ) override {
-            DataWalker::beforeTableValue(pa,ti,pv,kv,index,last);
             string keyText = keys.back();
             history.push_back("[\""+escapeString(keyText)+"\"]");
         }
         virtual void afterTableValue ( Table * pa, TypeInfo * ti, char * pv, TypeInfo * kv, uint32_t index, bool last ) override {
             keys.pop_back();
             history.pop_back();
-            DataWalker::afterTableValue(pa,ti,pv,kv,index,last);
         }
         virtual bool canVisitStructure ( char * ps, StructInfo * info ) override {
+            if ( !((info->flags | gcAlways) & gcStructFlags) ) return false;
             return find_if(visited.begin(),visited.end(),[&]( const loop_point & t ){
                     return t.first==ps && t.second==info->hash;
                 }) == visited.end();
         }
         virtual bool canVisitHandle ( char * ps, TypeInfo * info ) override {
             if ( !((info->flags | gcAlways) & gcFlags) ) return false;
-            return find_if(visited.begin(),visited.end(),[&]( const loop_point & t ){
+            return find_if(visited_handles.begin(),visited_handles.end(),[&]( const loop_point & t ){
                     return t.first==ps && t.second==info->hash;
-                }) == visited.end();
+                }) == visited_handles.end();
         }
         virtual void String ( char * & st ) override {
-            DataWalker::String(st);
             if ( !reportStringHeap ) return;
             if ( !st ) return;
             if ( context->constStringHeap->isOwnPtr(st) ) return;
@@ -373,6 +554,70 @@ namespace das
                 tp << history[i];
             }
             tp << " : ";
+        }
+
+        // extended version, with entry callbacks
+        virtual void walk_tuple ( char * ps, TypeInfo * ti ) override {
+            if ( canVisitTuple(ps,ti) ) {
+                beforeTuple(ps, ti);
+                int fieldOffset = 0;
+                for ( uint32_t i=0, is=ti->argCount; i!=is; ++i ) {
+                    bool last = i==(ti->argCount-1);
+                    TypeInfo * vi = ti->argTypes[i];
+                    auto fa = getTypeAlign(vi) - 1;
+                    fieldOffset = (fieldOffset + fa) & ~fa;
+                    char * pf = ps + fieldOffset;
+                    beforeTupleEntry(ps, ti, pf, vi, last);
+                    walk(pf, vi);
+                    afterTupleEntry(ps, ti, pf, vi, last);
+                    fieldOffset += vi->size;
+                }
+                afterTuple(ps, ti);
+            }
+        }
+
+        virtual void walk_struct ( char * ps, StructInfo * si ) override {
+            if ( ps && (si->flags & StructInfo::flag_class) ) {
+                auto ti = *(TypeInfo **) ps;
+                DAS_ASSERT(ti);
+                si = ti->structType;
+            }
+            if ( canVisitStructure(ps, si) ) {
+                beforeStructure(ps, si);
+                for ( uint32_t i=0, is=si->count; i!=is; ++i ) {
+                    bool last = i==(si->count-1);
+                    VarInfo * vi = si->fields[i];
+                    char * pf = ps + vi->offset;
+                    beforeStructureField(ps, si, pf, vi, last);
+                    walk(pf, vi);
+                    afterStructureField(ps, si, pf, vi, last);
+                }
+                afterStructure(ps, si);
+            }
+        }
+
+        virtual void walk_table ( Table * tab, TypeInfo * info ) override {
+            if ( !canVisitTableData(info) ) return;
+            int keySize = info->firstType->size;
+            int valueSize = info->secondType->size;
+            uint32_t count = 0;
+            for ( uint32_t i=0, is=tab->capacity; i!=is; ++i ) {
+                if ( tab->hashes[i] > HASH_KILLED64 ) {
+                    bool last = (count == (tab->size-1));
+                    // key
+                    char * key = tab->keys + i*keySize;
+                    beforeTableKey(tab, info, key, info->firstType, count, last);
+                    walk ( key, info->firstType );
+                    afterTableKey(tab, info, key, info->firstType, count, last);
+                    // value
+                    char * value = tab->data + i*valueSize;
+                    beforeTableValue(tab, info, value, info->secondType, count, last);
+                    walk ( value, info->secondType );
+                    afterTableValue(tab, info, value, info->secondType, count, last);
+                    // next
+                    count ++;
+                }
+            }
         }
     };
 
@@ -461,24 +706,15 @@ namespace das
         }
     }
 
-    struct GcMarkStringHeap : DataWalker {
-        using loop_point = pair<void *,uint64_t>;
-        vector<loop_point> visited;
-        vector<loop_point> visited_handles;
-        das_set<char *> failed;
+    struct GcMarkStringHeap final : BaseGcDataWalker {
         bool validate = false;
-        virtual bool canVisitStructure ( char * ps, StructInfo * info ) override {
-            if ( !(info->flags & StructInfo::flag_stringHeapGC) ) return false;
-            return find_if(visited.begin(),visited.end(),[&]( const loop_point & t ){
-                    return t.first==ps && t.second==info->hash;
-                }) == visited.end();
+        GcMarkStringHeap () {
+            gcFlags = TypeInfo::flag_stringHeapGC;
+            gcStructFlags = StructInfo::flag_stringHeapGC;
         }
-        virtual bool canVisitHandle ( char * ps, TypeInfo * info ) override {
-            if ( !(info->flags & TypeInfo::flag_stringHeapGC) ) return false;
-            return find_if(visited.begin(),visited.end(),[&]( const loop_point & t ){
-                    return t.first==ps && t.second==info->hash;
-                }) == visited.end();
-        }
+        using loop_point = pair<void *,uint64_t>;
+        das_set<char *> failed;
+
         virtual void beforeStructure ( char * ps, StructInfo * info ) override {
             visited.emplace_back(make_pair(ps,info->hash));
         }
@@ -491,24 +727,125 @@ namespace das
         virtual void afterHandle ( char *, TypeInfo * ) override {
             visited_handles.pop_back();
         }
-        virtual bool canVisitArrayData ( TypeInfo * ti, uint32_t ) override {
-            return (ti->flags & TypeInfo::flag_stringHeapGC);
-        }
         virtual void String ( char * & st ) override {
             DataWalker::String(st);
             if ( !st ) return;
             if ( context->constStringHeap->isOwnPtr(st) ) return;
             uint32_t len = uint32_t(strlen(st)) + 1;
             len = (len + 15) & ~15;
-            if ( !context->stringHeap->isOwnPtr(st, len) ) return;
             if ( validate ) {
-                if ( context->stringHeap->isValidPtr(st, len) ) {
-                    context->stringHeap->mark(st, len);
-                } else {
-                    failed.insert(st);
+                if ( context->stringHeap->isOwnPtr(st, len) ) {
+                    if ( context->stringHeap->isValidPtr(st, len) ) {
+                        context->stringHeap->mark(st, len);
+                    } else {
+                        failed.insert(st);
+                    }
                 }
             } else {
                 context->stringHeap->mark(st, len);
+            }
+        }
+
+        // fastest versions, without any before/after
+
+        virtual void walk_tuple ( char * ps, TypeInfo * ti ) override {
+            int fieldOffset = 0;
+            for ( uint32_t i=0, is=ti->argCount; i!=is; ++i ) {
+                TypeInfo * vi = ti->argTypes[i];
+                auto fa = getTypeAlign(vi) - 1;
+                fieldOffset = (fieldOffset + fa) & ~fa;
+                char * pf = ps + fieldOffset;
+                walk(pf, vi);
+                fieldOffset += vi->size;
+            }
+        }
+
+        virtual void walk_variant ( char * ps, TypeInfo * ti ) override {
+            int32_t fidx = *((int32_t *)ps);
+            DAS_ASSERTF(uint32_t(fidx)<ti->argCount,"invalid variant index");
+            int fieldOffset = getTypeBaseSize(Type::tInt);
+            TypeInfo * vi = ti->argTypes[fidx];
+            auto fa = getTypeAlign(ti) - 1;
+            fieldOffset = (fieldOffset + fa) & ~fa;
+            char * pf = ps + fieldOffset;
+            walk(pf, vi);
+        }
+
+        virtual void walk_dim ( char * pa, TypeInfo * ti ) override {
+            TypeInfo copyInfo = *ti;
+            DAS_ASSERT(copyInfo.dimSize);
+            copyInfo.size = ti->dim[0] ? copyInfo.size / ti->dim[0] : copyInfo.size;
+            copyInfo.dimSize --;
+            vector<uint32_t> udim;
+            if ( copyInfo.dimSize ) {
+                for ( uint32_t i=0, is=copyInfo.dimSize; i!=is; ++i) {
+                    udim.push_back(ti->dim[i+1]);
+                }
+                copyInfo.dim = udim.data();
+            } else {
+                copyInfo.dim = nullptr;
+            }
+            uint32_t stride = copyInfo.size;
+            uint32_t count = ti->dim[0];
+            walk_array(pa, stride, count, &copyInfo);
+        }
+
+        using DataWalker::walk;
+
+        virtual void walk ( char * pa, TypeInfo * info ) override {
+            if ( pa == nullptr ) {
+            } else if ( info->flags & TypeInfo::flag_ref ) {
+                beforeRef(pa,info);
+                TypeInfo ti = *info;
+                ti.flags &= ~TypeInfo::flag_ref;
+                walk(*(char **)pa, &ti);
+                ti.flags |= TypeInfo::flag_ref;
+                afterRef(pa,info);
+            } else if ( info->dimSize ) {
+                walk_dim(pa, info);
+            } else {
+                switch ( info->type ) {
+                    case Type::tArray: {
+                            auto arr = (Array *) pa;
+                            walk_array(arr->data, info->firstType->size, arr->size, info->firstType);
+                        }
+                        break;
+                    case Type::tTable: {
+                            auto tab = (Table *) pa;
+                            walk_table(tab, info);
+                        }
+                        break;
+                    case Type::tString:     String(*((char **)pa)); break;
+                    case Type::tPointer: {
+                            if ( info->firstType && info->firstType->type!=Type::tVoid ) {
+                                walk(*(char**)pa, info->firstType);
+                            }
+                        }
+                        break;
+                    case Type::tStructure:  walk_struct(pa, info->structType); break;
+                    case Type::tTuple:      walk_tuple(pa, info); break;
+                    case Type::tVariant:    walk_variant(pa, info); break;
+                    case Type::tLambda: {
+                            auto ll = (Lambda *) pa;
+                            walk ( ll->capture, ll->getTypeInfo() );
+                        }
+                        break;
+                    case Type::tIterator: {
+                            auto ll = (Sequence *) pa;
+                            if ( ll->iter ) {
+                                ll->iter->walk(*this);
+                            }
+                        }
+                        break;
+                    case Type::tHandle:
+                        if ( canVisitHandle(pa, info) ) {
+                            beforeHandle(pa, info);
+                            info->getAnnotation()->walk(*this, pa);
+                            afterHandle(pa, info);
+                        }
+                        break;
+                    default: break;
+                }
             }
         }
     };
@@ -590,18 +927,12 @@ namespace das
         }
     }
 
-    struct GcMarkAnyHeap final : DataWalker {
-        bool markStringHeap = true;
-        Context * context = nullptr;
-        using loop_point = pair<void *,uint64_t>;
-        vector<loop_point> visited;
-        vector<loop_point> visited_handles;
+    struct GcMarkAnyHeap final : BaseGcDataWalker {
         vector<PtrRange>    ptrRangeStack;
         PtrRange            currentRange;
         das_set<char *>     failed;
+        bool                markStringHeap = true;
         bool                validate = false;
-        int32_t             gcFlags = TypeInfo::flag_stringHeapGC | TypeInfo::flag_heapGC;
-        int32_t             gcStructFlags = StructInfo::flag_stringHeapGC | StructInfo::flag_heapGC;
         void prepare() {
             currentRange.clear();
             gcFlags = TypeInfo::flag_heapGC;
@@ -650,18 +981,12 @@ namespace das
         virtual void afterDim ( char *, TypeInfo * ) override {
             popRange();
         }
-        virtual bool canVisitArrayData ( TypeInfo * ti, uint32_t ) override {
-            return ti->flags & gcFlags;
-        }
         virtual void beforeArray ( Array * PA, TypeInfo * ti ) override {
             PtrRange rdata(PA->data, size_t(ti->firstType->size) * size_t(PA->capacity));
             markAndPushRange(rdata);
         }
         virtual void afterArray ( Array *, TypeInfo * ) override {
             popRange();
-        }
-        virtual bool canVisitTableData ( TypeInfo * ti ) override {
-            return ti->firstType->flags & gcFlags || ti->secondType->flags & gcFlags;
         }
         virtual void beforeTable ( Table * PT, TypeInfo * ti ) override {
             PtrRange rdata(PT->data, (ti->firstType->size+ti->secondType->size+sizeof(uint64_t))*size_t(PT->capacity));
@@ -717,18 +1042,6 @@ namespace das
         virtual void afterTuple ( char *, TypeInfo * ) override {
             popRange();
         }
-        virtual bool canVisitStructure ( char * ps, StructInfo * info ) override {
-            if ( !(info->flags & gcStructFlags) ) return false;
-            return find_if(visited.begin(),visited.end(),[&]( const loop_point & t ){
-                    return t.first==ps && t.second==info->hash;
-                }) == visited.end();
-        }
-        virtual bool canVisitHandle ( char * ps, TypeInfo * info ) override {
-            if ( !(info->flags & gcFlags) ) return false;
-            return find_if(visited_handles.begin(),visited_handles.end(),[&]( const loop_point & t ){
-                    return t.first==ps && t.second==info->hash;
-                }) == visited_handles.end();
-        }
         virtual void String ( char * & st ) override {
             if ( !markStringHeap ) return;
             if ( !st ) return;
@@ -747,198 +1060,6 @@ namespace das
                 context->stringHeap->mark(st, len);
             }
         }
-
-        virtual void walk ( vec4f x, TypeInfo * info ) override {
-            if ( info->flags & TypeInfo::flag_refType ) {
-                walk(cast<char *>::to(x), info );
-            } else {
-                walk((char *)&x, info );
-            }
-        }
-
-        virtual void walk_struct ( char * ps, StructInfo * si ) override {
-            if ( ps && (si->flags & StructInfo::flag_class) ) {
-                auto ti = *(TypeInfo **) ps;
-                // if ( !ti ) return;
-                si = ti->structType;
-            }
-            if ( canVisitStructure(ps, si) ) {
-                beforeStructure(ps, si);
-                for ( uint32_t i=si->firstGcField, is=si->count; i!=is; ) {
-                    VarInfo * vi = si->fields[i];
-                    char * pf = ps + vi->offset;
-                    walk(pf, vi);
-                    i = vi->nextGcField;
-                }
-                afterStructure(ps, si);
-            }
-        }
-
-        virtual void walk_tuple ( char * ps, TypeInfo * ti ) override {
-            beforeTuple(ps, ti);
-            int fieldOffset = 0;
-            for ( uint32_t i=0, is=ti->argCount; i!=is; ++i ) {
-                TypeInfo * vi = ti->argTypes[i];
-                auto fa = getTypeAlign(vi) - 1;
-                fieldOffset = (fieldOffset + fa) & ~fa;
-                char * pf = ps + fieldOffset;
-                walk(pf, vi);
-                fieldOffset += vi->size;
-            }
-            afterTuple(ps, ti);
-        }
-
-        virtual void walk_variant ( char * ps, TypeInfo * ti ) override {
-            beforeVariant(ps, ti);
-            int32_t fidx = *((int32_t *)ps);
-            DAS_ASSERTF(uint32_t(fidx)<ti->argCount,"invalid variant index");
-            int fieldOffset = getTypeBaseSize(Type::tInt);
-            TypeInfo * vi = ti->argTypes[fidx];
-            auto fa = getTypeAlign(ti) - 1;
-            fieldOffset = (fieldOffset + fa) & ~fa;
-            char * pf = ps + fieldOffset;
-            walk(pf, vi);
-            afterVariant(ps, ti);
-        }
-
-        virtual void walk_array ( char * pa, uint32_t stride, uint32_t count, TypeInfo * ti ) override {
-            if ( !canVisitArrayData(ti,count) ) return;
-            char * pe = pa;
-            for ( uint32_t i=0; i!=count; ++i ) {
-                walk(pe, ti);
-                pe += stride;
-            }
-        }
-
-        virtual void walk_dim ( char * pa, TypeInfo * ti ) override {
-            beforeDim(pa, ti);
-            TypeInfo copyInfo = *ti;
-            DAS_ASSERT(copyInfo.dimSize);
-            copyInfo.size = ti->dim[0] ? copyInfo.size / ti->dim[0] : copyInfo.size;
-            copyInfo.dimSize --;
-            vector<uint32_t> udim;
-            if ( copyInfo.dimSize ) {
-                for ( uint32_t i=0, is=copyInfo.dimSize; i!=is; ++i) {
-                    udim.push_back(ti->dim[i+1]);
-                }
-                copyInfo.dim = udim.data();
-            } else {
-                copyInfo.dim = nullptr;
-            }
-            uint32_t stride = copyInfo.size;
-            uint32_t count = ti->dim[0];
-            walk_array(pa, stride, count, &copyInfo);
-            afterDim(pa, ti);
-        }
-
-        virtual void walk_table ( Table * tab, TypeInfo * info ) override {
-            if ( !canVisitTableData(info) ) return;
-            int keySize = info->firstType->size;
-            int valueSize = info->secondType->size;
-            if (info->firstType->flags & gcFlags) {
-                if (info->secondType->flags & gcFlags) {
-                    for ( uint32_t i=0, is=tab->capacity; i!=is; ++i ) {
-                        if ( tab->hashes[i] > HASH_KILLED64 ) {
-                            // key
-                            char * key = tab->keys + i*keySize;
-                            walk ( key, info->firstType );
-                            // value
-                            char * value = tab->data + i*valueSize;
-                            walk ( value, info->secondType );
-                            // next
-                        }
-                    }
-                } else {
-                    for ( uint32_t i=0, is=tab->capacity; i!=is; ++i ) {
-                        if ( tab->hashes[i] > HASH_KILLED64 ) {
-                            // key
-                            char * key = tab->keys + i*keySize;
-                            walk ( key, info->firstType );
-                            // next
-                        }
-                    }
-                }
-            } else {
-                for ( uint32_t i=0, is=tab->capacity; i!=is; ++i ) {
-                    if ( tab->hashes[i] > HASH_KILLED64 ) {
-                        // value
-                        char * value = tab->data + i*valueSize;
-                        walk ( value, info->secondType );
-                        // next
-                    }
-                }
-            }
-        }
-
-        virtual void walk ( char * pa, TypeInfo * info ) override {
-            if ( pa == nullptr ) {
-            } else if ( info->flags & TypeInfo::flag_ref ) {
-                beforeRef(pa,info);
-                TypeInfo ti = *info;
-                ti.flags &= ~TypeInfo::flag_ref;
-                walk(*(char **)pa, &ti);
-                ti.flags |= TypeInfo::flag_ref;
-                afterRef(pa,info);
-            } else if ( info->dimSize ) {
-                walk_dim(pa, info);
-            } else {
-                switch ( info->type ) {
-                    case Type::tArray: {
-                            auto arr = (Array *) pa;
-                            if ( canVisitArray(arr,info) ) {
-                                beforeArray(arr, info);
-                                walk_array(arr->data, info->firstType->size, arr->size, info->firstType);
-                                afterArray(arr, info);
-                            }
-                        }
-                        break;
-                    case Type::tTable: {
-                            auto tab = (Table *) pa;
-                            if ( canVisitTable(pa,info) ) {
-                                beforeTable(tab, info);
-                                walk_table(tab, info);
-                                afterTable(tab, info);
-                            }
-                        }
-                        break;
-                    case Type::tString:     String(*((char **)pa)); break;          // TODO: verify!!!
-                    case Type::tPointer:
-                        if ( canVisitPointer(info) ) {
-                            beforePtr(pa, info);
-                            if ( info->firstType && info->firstType->type!=Type::tVoid ) {
-                                walk(*(char**)pa, info->firstType);
-                            } else {
-                            }
-                            afterPtr(pa, info);
-                        }
-                        break;
-                    case Type::tStructure:  walk_struct(pa, info->structType); break;
-                    case Type::tTuple:      walk_tuple(pa, info); break;
-                    case Type::tVariant:    walk_variant(pa, info); break;
-                    case Type::tLambda: {
-                            auto ll = (Lambda *) pa;
-                            walk ( ll->capture, ll->getTypeInfo() );
-                        }
-                        break;
-                    case Type::tIterator: {
-                            auto ll = (Sequence *) pa;
-                            if ( ll->iter ) {
-                                ll->iter->walk(*this);
-                            }
-                        }
-                        break;
-                    case Type::tHandle:
-                        if ( canVisitHandle(pa, info) ) {
-                            beforeHandle(pa, info);
-                            info->getAnnotation()->walk(*this, pa);
-                            afterHandle(pa, info);
-                        }
-                        break;
-                    default: break;
-                }
-            }
-        }
-
     };
 
     void Context::collectHeap ( LineInfo * at, bool sheap, bool validate ) {
