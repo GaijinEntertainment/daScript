@@ -79,7 +79,7 @@ class ProfilerDebugAgent : DapiDebugAgent
             return
         instrumented |> insert(ctx.getCodeAllocatorId)
         events[intptr(unsafe(addr(ctx)))].enabled = !manual
-        instrument_all_functions(ctx)
+        instrument_all_functions_thread_local(ctx)
     def enable_profiler ( ctxId:uint64; enabled:bool ) : void
         events[ctxId].enabled = enabled
     def override onDestroyContext ( var ctx:Context ) : void
@@ -190,7 +190,7 @@ class ProfilerDebugAgent : DapiDebugAgent
 
 def debug_agent ( ctx : Context )
     assert(this_context().category.debug_context)
-    install_new_debug_agent(new ProfilerDebugAgent(), "profiler")
+    install_new_thread_local_debug_agent(new ProfilerDebugAgent())
 
 [_macro]
 def installing

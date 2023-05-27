@@ -35,6 +35,17 @@ def install_new_debug_agent ( var agentPtr; category:string )
     else
         concept_assert(false,"can't make debug agent of non-class")
 
+def install_new_thread_local_debug_agent ( var agentPtr )
+    static_if typeinfo(is_class *agentPtr)
+        let agentInfo = class_info(*agentPtr)
+        var inscope agentAdapter <- make_debug_agent(agentPtr,agentInfo)
+        unsafe
+            agentPtr.thisAgent = reinterpret<DebugAgent?>(agentAdapter)
+        install_debug_agent_thread_local(agentAdapter)
+        this_context().name := "thread local debug agent"
+    else
+        concept_assert(false,"can't make debug agent of non-class")
+
 // das::Array. should we bind C++ structure?
 struct DapiArray
     data : void?

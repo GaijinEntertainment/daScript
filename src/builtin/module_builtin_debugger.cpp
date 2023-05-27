@@ -159,6 +159,7 @@ namespace debugapi {
     struct AstDebugAgentAnnotation : ManagedStructureAnnotation<DebugAgent,false,true> {
         AstDebugAgentAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("DebugAgent", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(isThreadLocal)>("isThreadLocal");
         }
     };
 
@@ -1020,11 +1021,15 @@ namespace debugapi {
 
     void instrument_function ( Context & ctx, Func fn, bool isInstrumenting, uint64_t userData, Context * context, LineInfoArg * arg ) {
         if ( !fn ) context->throw_error_at(arg, "expecting function");
-        ctx.instrumentFunction(fn.PTR, isInstrumenting, userData);
+        ctx.instrumentFunction(fn.PTR, isInstrumenting, userData, false);
     }
 
     void instrument_all_functions ( Context & ctx ) {
-        ctx.instrumentFunction(0, true, 0ul);
+        ctx.instrumentFunction(0, true, 0ul, false);
+    }
+
+    void instrument_all_functions_thread_local ( Context & ctx ) {
+        ctx.instrumentFunction(0, true, 0ul, true);
     }
 
     void instrument_all_functions_ex ( Context & ctx, const TBlock<uint64_t,Func,const SimFunction *> & blk, Context * context, LineInfoArg * arg ) {
@@ -1032,7 +1037,7 @@ namespace debugapi {
             Func fn;
             fn.PTR = ctx.getFunction(fni);
             uint64_t userData = das_invoke<uint64_t>::invoke(context,arg,blk,fn,fn.PTR);
-            ctx.instrumentFunction(fn.PTR, true, userData);
+            ctx.instrumentFunction(fn.PTR, true, userData, false);
         }
     }
 
@@ -1106,6 +1111,9 @@ namespace debugapi {
             addExtern<DAS_BIND_FUN(onBreakpointsReset)>(*this, lib,  "on_breakpoints_reset",
                 SideEffects::modifyExternal, "onBreakpointsReset")
                 ->args({"file", "breakpointsNum"});
+            addExtern<DAS_BIND_FUN(installThreadLocalDebugAgent)>(*this, lib,  "install_debug_agent_thread_local",
+                SideEffects::modifyExternal, "installThreadLocalDebugAgent")
+                    ->args({"agent","line","context"});
             addExtern<DAS_BIND_FUN(installDebugAgent)>(*this, lib,  "install_debug_agent",
                 SideEffects::modifyExternal, "installDebugAgent")
                     ->args({"agent","category","line","context"});
@@ -1138,6 +1146,9 @@ namespace debugapi {
                     ->args({"context","function","isInstrumenting","userData","context","line"});;
             addExtern<DAS_BIND_FUN(instrument_all_functions)>(*this, lib,  "instrument_all_functions",
                 SideEffects::modifyExternal, "instrument_all_functions")
+                    ->arg("context");
+            addExtern<DAS_BIND_FUN(instrument_all_functions_thread_local)>(*this, lib,  "instrument_all_functions_thread_local",
+                SideEffects::modifyExternal, "instrument_all_functions_thread_local")
                     ->arg("context");
             addExtern<DAS_BIND_FUN(instrument_all_functions_ex)>(*this, lib,  "instrument_all_functions",
                 SideEffects::modifyExternal|SideEffects::invoke, "instrument_all_functions_ex")
