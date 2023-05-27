@@ -223,6 +223,7 @@ namespace das
         virtual bool onLog ( int /*level*/, const char * /*text*/ ) { return false; }
         virtual void onBreakpointsReset ( const char * /*file*/, int /*breakpointsNum*/ ) {}
         virtual bool isCppOnlyAgent() const { return false; }
+        bool isThreadLocal = false;
     };
     typedef smart_ptr<DebugAgent> DebugAgentPtr;
 
@@ -607,7 +608,7 @@ namespace das
         void collectStringHeap(LineInfo * at, bool validate);
         void collectHeap(LineInfo * at, bool stringHeap, bool validate);
         void reportAnyHeap(LineInfo * at, bool sth, bool rgh, bool rghOnly, bool errorsOnly);
-        void instrumentFunction ( SimFunction * , bool isInstrumenting, uint64_t userData );
+        void instrumentFunction ( SimFunction * , bool isInstrumenting, uint64_t userData, bool threadLocal );
         void instrumentContextNode ( const Block & blk, bool isInstrumenting, Context * context, LineInfo * line );
         void clearInstruments();
         void runVisitor ( SimVisitor * vis ) const;
@@ -624,6 +625,7 @@ namespace das
 
         void bpcallback ( const LineInfo & at );
         void instrumentFunctionCallback ( SimFunction * sim, bool entering, uint64_t userData );
+        void instrumentFunctionCallbackThreadLocal ( SimFunction * sim, bool entering, uint64_t userData );
         void instrumentCallback ( const LineInfo & at );
 
         uint64_t getCodeAllocatorId() { return (uint64_t) code.get(); }
@@ -729,6 +731,7 @@ namespace das
     void onBreakpointsReset ( const char * file, int breakpointsNum );
     void tickSpecificDebugAgent ( const char * name );
     void installDebugAgent ( DebugAgentPtr newAgent, const char * category, LineInfoArg * at, Context * context );
+    void installThreadLocalDebugAgent ( DebugAgentPtr newAgent, LineInfoArg * at, Context * context );
     void shutdownDebugAgent();
     void forkDebugAgentContext ( Func exFn, Context * context, LineInfoArg * lineinfo );
     bool isInDebugAgentCreation();

@@ -6,6 +6,7 @@
 #include "daScript/simulate/debug_print.h"
 #include "daScript/misc/fpe.h"
 #include "daScript/misc/debug_break.h"
+#include "daScript/ast/ast.h"
 
 #include <stdarg.h>
 
@@ -834,6 +835,9 @@ namespace das
 
     template <typename TT>
     void for_each_debug_agent ( const TT & lmbd ) {
+        if ( daScriptEnvironment::bound && daScriptEnvironment::bound->g_threadLocalDebugAgent.debugAgent ) {
+            lmbd ( daScriptEnvironment::bound->g_threadLocalDebugAgent.debugAgent );
+        }
         std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
         for ( auto & it : g_DebugAgents ) {
             lmbd ( it.second.debugAgent );
@@ -842,6 +846,9 @@ namespace das
 
     template <typename TT>
     void for_each_debug_agent_pair ( const TT & lmbd ) {
+        if ( daScriptEnvironment::bound && daScriptEnvironment::bound->g_threadLocalDebugAgent.debugAgent ) {
+            lmbd ( "", daScriptEnvironment::bound->g_threadLocalDebugAgent.debugAgent );
+        }
         std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
         for ( auto & it : g_DebugAgents ) {
             lmbd ( it.first, it.second.debugAgent );
@@ -1537,6 +1544,24 @@ namespace das
         }
     }
 
+    void installThreadLocalDebugAgent ( DebugAgentPtr newAgent, LineInfoArg * at, Context * context ) {
+        if ( !daScriptEnvironment::bound ) {
+            context->throw_error_at(at, "expecting bound environment");
+        }
+        if ( daScriptEnvironment::bound->g_threadLocalDebugAgent.debugAgent ) {
+            context->throw_error_at(at, "thread local debug agent already installed");
+        }
+        std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
+        daScriptEnvironment::bound->g_threadLocalDebugAgent = {
+            newAgent,
+            context->shared_from_this()
+        };
+        DebugAgent * newAgentPtr = newAgent.get();
+        for ( auto & ap : g_DebugAgents ) {
+            ap.second.debugAgent->onInstall(newAgentPtr);
+        }
+    }
+
     void installDebugAgent ( DebugAgentPtr newAgent, const char * category, LineInfoArg * at, Context * context ) {
         if ( !category ) context->throw_error_at(at, "need to specify category");
         std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
@@ -1799,6 +1824,12 @@ namespace das
         for_each_debug_agent([&](const DebugAgentPtr & pAgent){
             pAgent->onInstrument(this, at);
         });
+    }
+
+    void Context::instrumentFunctionCallbackThreadLocal ( SimFunction * sim, bool entering, uint64_t userData ) {
+        if ( daScriptEnvironment::bound && daScriptEnvironment::bound->g_threadLocalDebugAgent.debugAgent ) {
+            daScriptEnvironment::bound->g_threadLocalDebugAgent.debugAgent->onInstrumentFunction(this, sim, entering, userData);
+        }
     }
 
     void Context::instrumentFunctionCallback ( SimFunction * sim, bool entering, uint64_t userData ) {

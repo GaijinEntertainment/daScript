@@ -23,6 +23,7 @@ namespace das {
     void instrument_context_node ( Context & ctx, bool isInstrumenting, const TBlock<bool,LineInfo> & blk );
     void instrument_function ( Context & ctx, Func fn, bool isInstrumenting, uint64_t userData, Context * context, LineInfoArg * arg );
     void instrument_all_functions ( Context & ctx );
+    void instrument_all_functions_thread_local ( Context & ctx );
     void instrument_all_functions_ex ( Context & ctx, const TBlock<uint64_t,Func,const SimFunction *> & blk, Context * context, LineInfoArg * arg );
     void clear_instruments ( Context & ctx );
 

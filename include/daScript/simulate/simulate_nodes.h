@@ -2697,6 +2697,28 @@ SIM_NODE_AT_VECTOR(Float, float)
         uint64_t        userData;
     };
 
+    struct SimNodeDebug_InstrumentFunctionThreadLocal : SimNodeDebug_InstrumentFunction {
+        SimNodeDebug_InstrumentFunctionThreadLocal ( const LineInfo & at, SimFunction * simF, int64_t mnh, SimNode * se, uint64_t ud )
+            : SimNodeDebug_InstrumentFunction(at,simF,mnh,se,ud) {}
+        virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override {
+            DAS_PROFILE_NODE
+            context.instrumentFunctionCallbackThreadLocal(func, true, userData);
+            auto res = subexpr->eval(context);
+            context.instrumentFunctionCallbackThreadLocal(func, false, userData);
+            return res;
+        }
+#define EVAL_NODE(TYPE,CTYPE) \
+        virtual CTYPE eval##TYPE ( Context & context ) override { \
+                DAS_PROFILE_NODE \
+                context.instrumentFunctionCallbackThreadLocal(func, true, userData); \
+                auto res = subexpr->eval##TYPE(context); \
+                context.instrumentFunctionCallbackThreadLocal(func, false, userData); \
+                return res; \
+            }
+        DAS_EVAL_NODE
+#undef EVAL_NODE
+    };
+
     // IF-THEN-ELSE (also Cond)
     struct SimNodeDebug_IfThenElse : SimNode_IfThenElse {
         SimNodeDebug_IfThenElse ( const LineInfo & at, SimNode * c, SimNode * t, SimNode * f )
