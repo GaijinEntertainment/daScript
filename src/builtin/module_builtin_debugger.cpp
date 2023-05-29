@@ -1041,6 +1041,15 @@ namespace debugapi {
         }
     }
 
+    void instrument_all_functions_thread_local_ex ( Context & ctx, const TBlock<uint64_t,Func,const SimFunction *> & blk, Context * context, LineInfoArg * arg ) {
+        for ( int fni=0, fnis=ctx.getTotalFunctions(); fni!=fnis; ++fni ) {
+            Func fn;
+            fn.PTR = ctx.getFunction(fni);
+            uint64_t userData = das_invoke<uint64_t>::invoke(context,arg,blk,fn,fn.PTR);
+            ctx.instrumentFunction(fn.PTR, true, userData, true);
+        }
+    }
+
     void clear_instruments ( Context & ctx ) {
         ctx.clearInstruments();
     }
@@ -1152,6 +1161,9 @@ namespace debugapi {
                     ->arg("context");
             addExtern<DAS_BIND_FUN(instrument_all_functions_ex)>(*this, lib,  "instrument_all_functions",
                 SideEffects::modifyExternal|SideEffects::invoke, "instrument_all_functions_ex")
+                    ->args({"ctx","block","context","line"});
+            addExtern<DAS_BIND_FUN(instrument_all_functions_thread_local_ex)>(*this, lib,  "instrument_all_functions_thread_local",
+                SideEffects::modifyExternal|SideEffects::invoke, "instrument_all_functions_thread_local_ex")
                     ->args({"ctx","block","context","line"});
             addExtern<DAS_BIND_FUN(clear_instruments)>(*this, lib,  "clear_instruments",
                 SideEffects::modifyExternal, "clear_instruments")
