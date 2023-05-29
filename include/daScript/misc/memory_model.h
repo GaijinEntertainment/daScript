@@ -249,7 +249,7 @@ namespace das {
         uint64_t totalBytesAllocated ( ) const {
             uint32_t d, p; uint64_t b, t;
             getStats(d, p, b, t);
-            return d;
+            return t;
         }
         Deck *  chunks[DAS_MAX_SHOE_CUNKS];
         mutable Deck *  lastChunk;
