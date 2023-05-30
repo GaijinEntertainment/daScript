@@ -36,16 +36,19 @@ namespace das {
         return true;
     }
 
-    void PersistentHeapAllocator::mark ( char * ptr, uint32_t len ) {
+    bool PersistentHeapAllocator::mark ( char * ptr, uint32_t len ) {
         auto size = (len + 15) & ~15; // model.alignMask
         if ( size <= DAS_MAX_SHOE_ALLOCATION ) {
-            model.shoe.mark(ptr,size);
+            return model.shoe.mark(ptr,size);
         } else {
             auto it = model.bigStuff.find(ptr);
             if ( it != model.bigStuff.end() ) {
+                bool marked = it->second & DAS_PAGE_GC_MASK;
                 it->second |= DAS_PAGE_GC_MASK;
+                return !marked;
             }
         }
+        return false;
     }
 
     void PersistentHeapAllocator::report() {
@@ -235,16 +238,19 @@ namespace das {
         return buf;
     }
 
-    void PersistentStringAllocator::mark ( char * ptr, uint32_t len ) {
+    bool PersistentStringAllocator::mark ( char * ptr, uint32_t len ) {
         auto size = (len + 15) & ~15; // model.alignMask
         if (size <= DAS_MAX_SHOE_ALLOCATION) {
-            model.shoe.mark(ptr,len);
+            return model.shoe.mark(ptr,len);
         } else {
             auto it = model.bigStuff.find(ptr);
             if ( it != model.bigStuff.end() ) {
+                bool marked = it->second & DAS_PAGE_GC_MASK;
                 it->second |= DAS_PAGE_GC_MASK;
+                return !marked;
             }
         }
+        return false;
     }
 
     bool PersistentStringAllocator::mark() {

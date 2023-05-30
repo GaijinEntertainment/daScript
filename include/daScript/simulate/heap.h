@@ -135,7 +135,7 @@ namespace das {
         virtual void reset() = 0;
         virtual void report() = 0;
         virtual bool mark() = 0;
-        virtual void mark ( char * ptr, uint32_t size ) = 0;
+        virtual bool mark ( char * ptr, uint32_t size ) = 0;
         virtual void sweep() = 0;
         virtual bool isOwnPtr ( char * ptr, uint32_t size ) = 0;
         virtual bool isValidPtr ( char * ptr, uint32_t size ) = 0;  // only if isOwnPtr
@@ -194,7 +194,7 @@ namespace das {
         bool needIntern = false;
     };
 
-    class PersistentHeapAllocator : public AnyHeapAllocator {
+    class PersistentHeapAllocator final : public AnyHeapAllocator {
     public:
         PersistentHeapAllocator() {}
         virtual char * allocate ( uint32_t size ) override { return model.allocate(size); }
@@ -206,7 +206,7 @@ namespace das {
         virtual void reset() override { model.reset(); }
         virtual void report() override;
         virtual bool mark() override;
-        virtual void mark ( char * ptr, uint32_t size ) override;
+        virtual bool mark ( char * ptr, uint32_t size ) override;
         virtual void sweep() override { model.sweep(); }
         virtual bool isOwnPtr ( char * ptr, uint32_t size ) override { return model.isOwnPtr(ptr,size); }
         virtual bool isValidPtr ( char * ptr, uint32_t size ) override { return model.isAllocatedPtr(ptr,size); }
@@ -221,7 +221,7 @@ namespace das {
         MemoryModel model;
     };
 
-    class LinearHeapAllocator : public AnyHeapAllocator {
+    class LinearHeapAllocator final : public AnyHeapAllocator {
     public:
         LinearHeapAllocator() {}
         virtual char * allocate ( uint32_t size ) override { return model.allocate(size); }
@@ -233,7 +233,7 @@ namespace das {
         virtual void reset() override { model.reset(); }
         virtual void report() override;
         virtual bool mark() override { return false; }
-        virtual void mark ( char *, uint32_t ) override { DAS_ASSERT(0 && "not supported"); }
+        virtual bool mark ( char *, uint32_t ) override { DAS_ASSERT(0 && "not supported"); return false; }
         virtual void sweep() override { DAS_ASSERT(0 && "not supported"); }
         virtual bool isOwnPtr ( char * ptr, uint32_t ) override { return model.isOwnPtr(ptr); }
         virtual bool isValidPtr ( char *, uint32_t ) override { return true; }
@@ -263,7 +263,7 @@ namespace das {
         das_string_set internMap;
     };
 
-    class PersistentStringAllocator : public StringHeapAllocator {
+    class PersistentStringAllocator final : public StringHeapAllocator {
     public:
         PersistentStringAllocator() { model.alignMask = 3; }
         virtual char * allocate ( uint32_t size ) override { return model.allocate(size); }
@@ -276,7 +276,7 @@ namespace das {
         virtual void forEachString ( const callable<void (const char *)> & fn ) override ;
         virtual void report() override;
         virtual bool mark() override;
-        virtual void mark ( char * ptr, uint32_t size ) override;
+        virtual bool mark ( char * ptr, uint32_t size ) override;
         virtual void sweep() override;
         virtual bool isOwnPtr ( char * ptr, uint32_t size ) override { return model.isOwnPtr(ptr,size); }
         virtual bool isValidPtr ( char * ptr, uint32_t size ) override { return model.isAllocatedPtr(ptr,size); }
@@ -291,7 +291,7 @@ namespace das {
         MemoryModel model;
     };
 
-    class LinearStringAllocator : public StringHeapAllocator {
+    class LinearStringAllocator final : public StringHeapAllocator {
     public:
         LinearStringAllocator() { model.alignMask = 3; }
         virtual char * allocate ( uint32_t size ) override { return model.allocate(size); }
@@ -304,7 +304,7 @@ namespace das {
         virtual void forEachString ( const callable<void (const char *)> & fn ) override;
         virtual void report() override;
         virtual bool mark() override { return false; }
-        virtual void mark ( char *, uint32_t ) override { DAS_ASSERT(0 && "not supported"); }
+        virtual bool mark ( char *, uint32_t ) override { DAS_ASSERT(0 && "not supported"); return false; }
         virtual void sweep() override { DAS_ASSERT(0 && "not supported"); }
         virtual bool isOwnPtr ( char * ptr, uint32_t ) override { return model.isOwnPtr(ptr); }
         virtual bool isValidPtr ( char *, uint32_t ) override { return true; }
@@ -590,7 +590,7 @@ namespace das {
         }
     };
 
-    class DebugInfoAllocator : public NodeAllocator {
+    class DebugInfoAllocator final : public NodeAllocator {
     public:
         DebugInfoAllocator() {
             prefixWithHeader = false;
