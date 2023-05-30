@@ -91,7 +91,7 @@ namespace das {
             look = i;
             allocated --;
         }
-        __forceinline void mark ( char * ptr ) {
+        __forceinline bool mark ( char * ptr ) {
             ptrdiff_t idx = (ptr - data) / size;
             DAS_ASSERT ( idx>=0 && idx<ptrdiff_t(total) );
             uint32_t uidx = uint32_t(idx);
@@ -101,7 +101,9 @@ namespace das {
             if ( !(b & (1u<<j)) ) {
                 gc_bits[i] = b | (1u<<j);
                 gc_allocated ++;
+                return true;
             }
+            return false;
         }
         char *      data = nullptr;
         uint32_t *  bits = nullptr;
@@ -169,15 +171,13 @@ namespace das {
             size = (size + 15) & ~15;
             DAS_ASSERT(size && size<=DAS_MAX_SHOE_ALLOCATION);
             if ( lastChunk && lastChunk->isOwnPtr(ptr) ) {
-                lastChunk->mark(ptr);
-                return true;
+                return lastChunk->mark(ptr);
             }
             uint32_t si = (size >> 4) - 1;
             for ( auto ch = chunks[si]; ch; ch=ch->next ) {
                 if ( ch != lastChunk && ch->isOwnPtr(ptr) ) {
                     lastChunk = ch;
-                    ch->mark(ptr);
-                    return true;
+                    return ch->mark(ptr);
                 }
             }
             return false;
@@ -272,10 +272,10 @@ namespace das {
         char * reallocate ( char * ptr, uint32_t size, uint32_t nsize );
         __forceinline int depth() const { return shoe.depth(); }
         __forceinline bool isOwnPtr( char * ptr, uint32_t size ) const {
-            return ((size<=DAS_MAX_SHOE_ALLOCATION) && shoe.isOwnPtr(ptr,size)) || (bigStuff.find(ptr)!=bigStuff.end());
+            return (size<=DAS_MAX_SHOE_ALLOCATION) ? shoe.isOwnPtr(ptr,size) : (bigStuff.find(ptr)!=bigStuff.end());
         }
         __forceinline bool isAllocatedPtr( char * ptr, uint32_t size ) const {
-            return ((size<=DAS_MAX_SHOE_ALLOCATION) && shoe.isAllocatedPtr(ptr,size)) || (bigStuff.find(ptr)!=bigStuff.end());
+            return (size<=DAS_MAX_SHOE_ALLOCATION) ? shoe.isAllocatedPtr(ptr,size) : (bigStuff.find(ptr)!=bigStuff.end());
         }
         uint32_t bytesAllocated() const { return totalAllocated; }
         uint32_t maxBytesAllocated() const { return maxAllocated; }

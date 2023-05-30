@@ -190,11 +190,11 @@ namespace das
                         break;
                     case Type::tString:     String(*((char **)pa)); break;
                     case Type::tPointer: {
-                            beforePtr(pa, info);
                             if ( info->firstType && info->firstType->type!=Type::tVoid ) {
+                                beforePtr(pa, info);
                                 walk(*(char**)pa, info->firstType);
+                                afterPtr(pa, info);
                             }
-                            afterPtr(pa, info);
                         }
                         break;
                     case Type::tStructure:  walk_struct(pa, info->structType); break;
@@ -942,24 +942,26 @@ namespace das
                 gcStructFlags |= StructInfo::flag_stringHeapGC;
             }
         }
-        void markAndPushRange ( const PtrRange & r ) {
+        bool markAndPushRange ( const PtrRange & r ) {
+            bool result = true;
+            ptrRangeStack.push_back(currentRange);
             if ( !r.empty() && !currentRange.contains(r) ) {
                 int ssize = int(r.to-r.from);
                 ssize = (ssize + 15) & ~15;
                 if ( validate ) {
                     if ( context->heap->isOwnPtr(r.from, ssize) ) {
                         if ( context->heap->isValidPtr(r.from, ssize) ) {
-                            context->heap->mark(r.from, ssize);
+                            result = context->heap->mark(r.from, ssize);
                         } else {
                             failed.insert(r.from);
                         }
                     }
                 } else {
-                    context->heap->mark(r.from, ssize);
+                    result = context->heap->mark(r.from, ssize);
                 }
+                currentRange = r;
             }
-            ptrRangeStack.push_back(currentRange);
-            currentRange = r;
+            return result;
         }
         void popRange() {
             currentRange = ptrRangeStack.back();
@@ -1003,15 +1005,13 @@ namespace das
             popRange();
         }
         virtual void beforePtr ( char * pa, TypeInfo * ti ) override {
-            if ( ti->firstType ) {
-                if ( auto ptr = *(char**)pa ) {
-                    PtrRange rdata(ptr, ti->firstType->size);
-                    markAndPushRange(rdata);
-                }
+            if ( auto ptr = *(char**)pa ) {
+                PtrRange rdata(ptr, ti->firstType->size);
+                markAndPushRange(rdata);
             }
         }
         virtual void afterPtr ( char * pa, TypeInfo * ti ) override {
-            if ( ti->firstType && *(char**)pa ) popRange();
+            if ( *(char**)pa ) popRange();
         }
         virtual void beforeStructure ( char * pa, StructInfo * ti ) override {
             visited.emplace_back(make_pair(pa,ti->hash));
@@ -1058,6 +1058,98 @@ namespace das
                 }
             } else {
                 context->stringHeap->mark(st, len);
+            }
+        }
+
+        using DataWalker::walk;
+
+        virtual void walk ( char * pa, TypeInfo * info ) override {
+            if ( pa == nullptr ) {
+            } else if ( info->flags & TypeInfo::flag_ref ) {
+                beforeRef(pa,info);
+                TypeInfo ti = *info;
+                ti.flags &= ~TypeInfo::flag_ref;
+                walk(*(char **)pa, &ti);
+                ti.flags |= TypeInfo::flag_ref;
+                afterRef(pa,info);
+            } else if ( info->dimSize ) {
+                walk_dim(pa, info);
+            } else {
+                switch ( info->type ) {
+                    case Type::tArray: {
+                            auto arr = (Array *) pa;
+                            beforeArray(arr, info);
+                            walk_array(arr->data, info->firstType->size, arr->size, info->firstType);
+                            afterArray(arr, info);
+                        }
+                        break;
+                    case Type::tTable: {
+                            auto tab = (Table *) pa;
+                            beforeTable(tab, info);
+                            walk_table(tab, info);
+                            afterTable(tab, info);
+                        }
+                        break;
+                    case Type::tString:     String(*((char **)pa)); break;
+                    case Type::tPointer: if ( *(char**)pa && info->firstType ) {
+                            if ( info->firstType->type==Type::tStructure ) {
+                                auto *si = info->firstType->structType;
+                                auto tsize = info->firstType->size;
+                                auto *ps = *(char**)pa;
+                                if ( si->flags & StructInfo::flag_lambda ) {
+                                    ps -= 16;
+                                    tsize += 16;
+                                }
+                                else if ( si->flags & StructInfo::flag_class ) {
+                                    si = (*(TypeInfo **) ps)->structType;
+                                    tsize = si->size;
+                                }
+                                if (markAndPushRange(PtrRange(ps, tsize))) {
+                                    // walk_struct(*(char**)pa, info->firstType->structType);
+                                    ps = *(char**)pa;
+                                    if ( canVisitStructure(ps, si) ) {
+                                        visited.emplace_back(make_pair(pa,si->hash));
+                                        for ( uint32_t i=si->firstGcField, is=si->count; i!=is; ) {
+                                            VarInfo * vi = si->fields[i];
+                                            char * pf = ps + vi->offset;
+                                            walk(pf, vi);
+                                            i = vi->nextGcField;
+                                        }
+                                        visited.pop_back();
+                                    }
+                                }
+                                popRange();
+                            } else {
+                                beforePtr(pa, info);
+                                walk(*(char**)pa, info->firstType);
+                                afterPtr(pa, info);
+                            }
+                        }
+                        break;
+                    case Type::tStructure:  walk_struct(pa, info->structType); break;
+                    case Type::tTuple:      walk_tuple(pa, info); break;
+                    case Type::tVariant:    walk_variant(pa, info); break;
+                    case Type::tLambda: {
+                            auto ll = (Lambda *) pa;
+                            walk ( ll->capture, ll->getTypeInfo() );
+                        }
+                        break;
+                    case Type::tIterator: {
+                            auto ll = (Sequence *) pa;
+                            if ( ll->iter ) {
+                                ll->iter->walk(*this);
+                            }
+                        }
+                        break;
+                    case Type::tHandle:
+                        if ( canVisitHandle(pa, info) ) {
+                            beforeHandle(pa, info);
+                            info->getAnnotation()->walk(*this, pa);
+                            afterHandle(pa, info);
+                        }
+                        break;
+                    default: break;
+                }
             }
         }
     };
