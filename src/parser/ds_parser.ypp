@@ -497,17 +497,21 @@
 
 program
     :
-    |   program module_declaration
-    |   program structure_declaration
-    |   program enum_declaration
-    |   program global_let
-    |   program global_function_declaration
+    |   program module_declaration {
+            if ( yyextra->das_has_type_declarations ) {
+                das_yyerror(scanner,"module name has to be first declaration",tokAt(scanner,@module_declaration), CompilationError::syntax_error);
+            }
+        }
+    |   program structure_declaration           { yyextra->das_has_type_declarations = true; }
+    |   program enum_declaration                { yyextra->das_has_type_declarations = true; }
+    |   program global_let                      { yyextra->das_has_type_declarations = true; }
+    |   program global_function_declaration     { yyextra->das_has_type_declarations = true; }
     |   program expect_declaration
     |   program require_declaration
     |   program options_declaration
-    |   program alias_declaration
-    |   program variant_alias_declaration
-    |   program bitfield_alias_declaration
+    |   program alias_declaration               { yyextra->das_has_type_declarations = true; }
+    |   program variant_alias_declaration       { yyextra->das_has_type_declarations = true; }
+    |   program bitfield_alias_declaration      { yyextra->das_has_type_declarations = true; }
     |   program ';'
     ;
 
