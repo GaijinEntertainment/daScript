@@ -578,7 +578,7 @@ namespace das {
             DAS_PROFILE_NODE
             auto pValue = value->evalPtr(context);
             uint32_t idx = uint32_t(index->evalInt(context));
-            if (idx >= range) context.throw_error_at(debugInfo,"index out of range");
+            if (idx >= range) context.throw_error_at(debugInfo,"index out of range, %u of %u", idx, range);
             return pValue + idx*stride + offset;
         }
         SimNode * value, * index;
