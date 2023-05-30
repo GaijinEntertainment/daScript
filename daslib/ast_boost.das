@@ -194,9 +194,13 @@ def find_arg(args:AnnotationArgumentList; argn:string) : RttiValue
     return RttiValue_nothing()
 
 def private apply_tag_annotation(tag:string; ann:FunctionAnnotationPtr)
+    var inscope funcs : array<FunctionPtr>
     for_each_tag_function(this_module(), tag) <| $ ( func )
-        var inscope tagAnn := ann
-        add_function_annotation(func, tagAnn)
+        funcs |> push_clone(func)
+    for func in funcs
+        if true
+            var inscope tagAnn := ann
+            add_function_annotation(func, tagAnn)
 
 def setup_tag_annotation(name,tag:string; classPtr)
     var inscope ann <- make_function_annotation(name, classPtr)
