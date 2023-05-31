@@ -1252,49 +1252,51 @@ namespace das {
     template <typename TT>
     struct das_iterator<vector<TT>> {
         __forceinline das_iterator(vector<TT> & r) {
-            array_start = r.data();
-            array_end = array_start + r.size();
+            vec = &r;
+            index = 0;
         }
         template <typename QQ>
         __forceinline bool first ( Context *, QQ * & i ) {
-            i = (QQ *)array_start;
-            return i!=(QQ *)array_end;
+            i = (QQ *) vec->data();
+            return index < vec->size();
         }
         template <typename QQ>
         __forceinline bool next  ( Context *, QQ * & i ) {
-            i++;
-            return i!=(QQ *)array_end;
+            index ++;
+            i = ((QQ *) vec->data()) + index;
+            return index < vec->size();
         }
         template <typename QQ>
         __forceinline void close ( Context *, QQ * & i ) {
             i = nullptr;
         }
-        TT *            array_start;
-        TT *            array_end;
+        vector<TT> * vec;
+        size_t index;
     };
 
     template <typename TT>
     struct das_iterator<const vector<TT>> {
         __forceinline das_iterator(const vector<TT> & r) {
-            array_start = r.data();
-            array_end = array_start + r.size();
+            vec = &r;
+            index = 0;
         }
         template <typename QQ>
         __forceinline bool first ( Context *, const QQ * & i ) {
-            i = (const QQ *)array_start;
-            return i!=(const QQ *)array_end;
+            i = (QQ *) vec->data();
+            return index < vec->size();
         }
         template <typename QQ>
         __forceinline bool next  ( Context *, const QQ * & i ) {
-            i++;
-            return i!=(const QQ *)array_end;
+            index ++;
+            i = ((QQ *) vec->data()) + index;
+            return index < vec->size();
         }
         template <typename QQ>
         __forceinline void close ( Context *, const QQ * & i ) {
             i = nullptr;
         }
-        const TT *      array_start;
-        const TT *      array_end;
+        const vector<TT> * vec;
+        size_t index;
     };
 
     template <typename TT>
@@ -2398,17 +2400,16 @@ namespace das {
         StdVectorIterator  ( VectorType * ar ) : array(ar) {}
         virtual bool first ( Context &, char * _value ) override {
             char ** value = (char **) _value;
-            char * data     = (char *) array->data();
-            uint32_t size   = (uint32_t) array->size();
-            *value          = data;
-            array_end       = data + size * sizeof(OT);
-            return (bool) size;
+            *value = (char *) array->data();
+            index         = 0;
+            return array->size() != 0;
         }
         virtual bool next  ( Context &, char * _value ) override {
+            index ++;
+            if ( index >= size_t(array->size()) ) return false;
             char ** value = (char **) _value;
-            char * data = *value + sizeof(OT);
-            *value = data;
-            return data != array_end;
+            *value = ((char *)array->data()) + index * sizeof(OT);
+            return true;
         }
         virtual void close ( Context & context, char * _value ) override {
             if ( _value ) {
@@ -2418,7 +2419,7 @@ namespace das {
             context.heap->free((char *)this, sizeof(StdVectorIterator));
         }
         VectorType * array;
-        char * array_end = nullptr;
+        size_t index;
     };
 
     template <typename TT>
