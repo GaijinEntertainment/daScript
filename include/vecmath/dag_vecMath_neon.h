@@ -13,11 +13,11 @@ VECMATH_FINLINE vec4f VECTORCALL v_set_all_bits() { vec4f u = v_zero(); return v
 VECMATH_FINLINE vec4i VECTORCALL v_set_all_bitsi() { vec4i u = v_zeroi(); return v_cmp_eqi(u, u); }
 VECMATH_FINLINE vec4f VECTORCALL v_msbit() { return (vec4f)vdupq_n_u32(0x80000000); }
 VECMATH_FINLINE vec4f VECTORCALL v_splat4(const float *a) { return vld1q_dup_f32(a); }
-VECMATH_FINLINE vec4f VECTORCALL v_ld(const float *m) { return vld1q_f32(m); }
-VECMATH_FINLINE vec4f VECTORCALL v_ldu(const float *m) { return vld1q_f32(m); }
-VECMATH_FINLINE vec4f VECTORCALL v_ldu_x(const float *m) { return vsetq_lane_f32(*m, v_zero(), 0); } // load x, zero others
-VECMATH_FINLINE vec4i VECTORCALL v_ldi(const int *m) { return vld1q_s32(m); }
-VECMATH_FINLINE vec4i VECTORCALL v_ldui(const int *m) { return vld1q_s32(m); }
+NO_ASAN_INLINE vec4f VECTORCALL v_ld(const float *m) { return vld1q_f32(m); }
+NO_ASAN_INLINE vec4f VECTORCALL v_ldu(const float *m) { return vld1q_f32(m); }
+NO_ASAN_INLINE vec4f VECTORCALL v_ldu_x(const float *m) { return vsetq_lane_f32(*m, v_zero(), 0); } // load x, zero others
+NO_ASAN_INLINE vec4i VECTORCALL v_ldi(const int *m) { return vld1q_s32(m); }
+NO_ASAN_INLINE vec4i VECTORCALL v_ldui(const int *m) { return vld1q_s32(m); }
 VECMATH_FINLINE vec4i VECTORCALL v_ldush(const signed short *m) { return vmovl_s16(vld1_s16(m)); }
 VECMATH_FINLINE vec4i VECTORCALL v_lduush(const unsigned short *m) { return (vec4i)vmovl_u16(vld1_u16(m)); }
 VECMATH_FINLINE vec4f VECTORCALL v_splat_x(vec4f a) { return vdupq_lane_f32(vget_low_f32(a), 0); }
