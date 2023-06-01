@@ -482,16 +482,32 @@ namespace das
         virtual void appendToMangledName( const FunctionPtr & fun, const AnnotationDeclaration &, string & mangledName ) const override {
             if ( !left || !right ) return;
             string mna1, mna2;
-            ((FunctionAnnotation *)(left->annotation.get()))->appendToMangledName(fun, *left, mna1);
-            ((FunctionAnnotation *)(right->annotation.get()))->appendToMangledName(fun, *right, mna2);
+            if ( left->annotation ) {
+                ((FunctionAnnotation *)(left->annotation.get()))->appendToMangledName(fun, *left, mna1);
+            } else {
+                mna1 = "NULL";
+            }
+            if ( right->annotation ) {
+                ((FunctionAnnotation *)(right->annotation.get()))->appendToMangledName(fun, *right, mna2);
+            } else {
+                mna2 = "NULL";
+            }
             mangledName = "(" + mna1 + name + mna2 + ")";
         }
         virtual void log ( TextWriter & ss, const AnnotationDeclaration & ) const override  {
             if ( !left || !right ) return;
             ss << "(";
-            left->annotation->log(ss, *left);
+            if ( left->annotation ) {
+                left->annotation->log(ss, *left);
+            } else {
+                ss << "NULL";
+            }
             ss << " " << name << " ";
-            right->annotation->log(ss, *right);
+            if ( right->annotation ) {
+                right->annotation->log(ss, *right);
+            } else {
+                ss << "NULL";
+            }
             ss << ")";
         }
         AnnotationDeclarationPtr left, right;
