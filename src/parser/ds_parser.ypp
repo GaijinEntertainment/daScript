@@ -924,10 +924,10 @@ annotation_declaration
         $$->annotation = newLogicAnnotation(LogicAnnotationOp::And,$ann,$ann2);
     }
     |   annotation_declaration[ann] OROR[andd] annotation_declaration[ann2] {
-        if ( !$ann->annotation->rtti_isFunctionAnnotation() || !((FunctionAnnotation *)($ann->annotation.get()))->isSpecialized() ) {
+        if ( !$ann->annotation || !$ann->annotation->rtti_isFunctionAnnotation() || !((FunctionAnnotation *)($ann->annotation.get()))->isSpecialized() ) {
             das_yyerror(scanner,"can only run logical operations on contracts", tokAt(scanner, @ann),
                 CompilationError::invalid_annotation); }
-        if ( !$ann2->annotation->rtti_isFunctionAnnotation() || !((FunctionAnnotation *)($ann2->annotation.get()))->isSpecialized() ) {
+        if ( !$ann2->annotation || !$ann2->annotation->rtti_isFunctionAnnotation() || !((FunctionAnnotation *)($ann2->annotation.get()))->isSpecialized() ) {
             das_yyerror(scanner,"can only run logical operations on contracts", tokAt(scanner, @ann2),
                 CompilationError::invalid_annotation); }
         $$ = new AnnotationDeclaration();

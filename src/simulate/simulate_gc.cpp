@@ -339,7 +339,7 @@ namespace das
             }
             pushRange(rdata);
         }
-        virtual void afterHandle ( char * pa, TypeInfo * ti ) override {
+        virtual void afterHandle ( char *, TypeInfo * ) override {
             popRange();
             visited_handles.pop_back();
         }
@@ -356,7 +356,7 @@ namespace das
             }
             pushRange(rdata);
         }
-        virtual void afterDim ( char * pa, TypeInfo * ti ) override {
+        virtual void afterDim ( char *, TypeInfo * ) override {
             popRange();
         }
         virtual bool canVisitArrayData ( TypeInfo * ti, uint32_t ) override {
@@ -379,7 +379,7 @@ namespace das
             }
             pushRange(rdata);
         }
-        virtual void afterArray ( Array * pa, TypeInfo * ti ) override {
+        virtual void afterArray ( Array *, TypeInfo * ) override {
             popRange();
         }
         virtual void beforeTable ( Table * PT, TypeInfo * ti ) override {
@@ -396,7 +396,7 @@ namespace das
             }
             pushRange(rdata);
         }
-        virtual void afterTable ( Table * pa, TypeInfo * ti ) override {
+        virtual void afterTable ( Table *, TypeInfo * ) override {
             popRange();
         }
         virtual void beforeRef ( char * pa, TypeInfo * ti ) override {
@@ -412,7 +412,7 @@ namespace das
             }
             pushRange(rdata);
         }
-        virtual void afterRef ( char * pa, TypeInfo * ti ) override {
+        virtual void afterRef ( char *, TypeInfo * ) override {
             popRange();
         }
         virtual void beforeStructure ( char * ps, StructInfo * si ) override {
@@ -433,14 +433,14 @@ namespace das
             }
             pushRange(rdata);
         }
-        virtual void afterStructure ( char * ps, StructInfo * si ) override {
+        virtual void afterStructure ( char *, StructInfo * ) override {
             popRange();
             visited.pop_back();
         }
-        virtual void beforeStructureField ( char * ps, StructInfo * si, char * pv, VarInfo * vi, bool last ) override {
+        virtual void beforeStructureField ( char *, StructInfo *, char *, VarInfo * vi, bool ) override {
             history.push_back(vi->name);
         }
-        virtual void afterStructureField ( char * ps, StructInfo * si, char * pv, VarInfo * vi, bool last ) override {
+        virtual void afterStructureField ( char *, StructInfo *, char *, VarInfo *, bool ) override {
             history.pop_back();
         }
         virtual void beforeVariant ( char * ps, TypeInfo * ti ) override {
@@ -457,7 +457,7 @@ namespace das
             }
             pushRange(rdata);
         }
-        virtual void afterVariant ( char * ps, TypeInfo * ti ) override {
+        virtual void afterVariant ( char *, TypeInfo * ) override {
             popRange();
         }
         virtual void beforeTuple ( char * ps, TypeInfo * si ) override {
@@ -474,10 +474,10 @@ namespace das
             }
             pushRange(rdata);
         }
-        virtual void afterTuple ( char * ps, TypeInfo * si ) override {
+        virtual void afterTuple ( char *, TypeInfo * ) override {
             popRange();
         }
-        virtual void beforeTupleEntry ( char * ps, TypeInfo * ti, char * pv, TypeInfo * vi, bool last ) override {
+        virtual void beforeTupleEntry ( char *, TypeInfo * ti, char *, TypeInfo * vi, bool ) override {
             uint32_t VI = -1u;
             for ( uint32_t i=0, is=ti->argCount; i!=is; ++i ) {
                 if ( ti->argTypes[i]==vi ) {
@@ -487,28 +487,28 @@ namespace das
             }
             history.push_back(to_string(VI));
         }
-        virtual void afterTupleEntry ( char * ps, TypeInfo * ti, char * pv, TypeInfo * vi, bool last ) override {
+        virtual void afterTupleEntry ( char *, TypeInfo *, char *, TypeInfo *, bool ) override {
             history.pop_back();
         }
-        virtual void beforeArrayElement ( char * pa, TypeInfo * ti, char * pe, uint32_t index, bool last ) override {
+        virtual void beforeArrayElement ( char *, TypeInfo *, char *, uint32_t index, bool ) override {
             history.push_back("["+to_string(index)+"]");
         }
-        virtual void afterArrayElement ( char * pa, TypeInfo * ti, char * pe, uint32_t index, bool last ) override {
+        virtual void afterArrayElement ( char *, TypeInfo *, char *, uint32_t, bool ) override {
             history.pop_back();
         }
-        virtual void beforeTableKey ( Table * pa, TypeInfo * ti, char * pk, TypeInfo * ki, uint32_t index, bool last ) override {
+        virtual void beforeTableKey ( Table *, TypeInfo *, char * pk, TypeInfo * ki, uint32_t, bool ) override {
             string keyText = debug_value ( pk, ki, PrintFlags::none );
             keys.push_back(keyText);
             history.push_back("=>key=>");
         }
-        virtual void afterTableKey ( Table * pa, TypeInfo * ti, char * pk, TypeInfo * ki, uint32_t index, bool last ) override {
+        virtual void afterTableKey ( Table *, TypeInfo *, char *, TypeInfo *, uint32_t, bool ) override {
             history.pop_back();
         }
-        virtual void beforeTableValue ( Table * pa, TypeInfo * ti, char * pv, TypeInfo * kv, uint32_t index, bool last ) override {
+        virtual void beforeTableValue ( Table *, TypeInfo *, char *, TypeInfo *, uint32_t, bool ) override {
             string keyText = keys.back();
             history.push_back("[\""+escapeString(keyText)+"\"]");
         }
-        virtual void afterTableValue ( Table * pa, TypeInfo * ti, char * pv, TypeInfo * kv, uint32_t index, bool last ) override {
+        virtual void afterTableValue ( Table *, TypeInfo *, char *, TypeInfo *, uint32_t, bool ) override {
             keys.pop_back();
             history.pop_back();
         }
@@ -1010,7 +1010,7 @@ namespace das
                 markAndPushRange(rdata);
             }
         }
-        virtual void afterPtr ( char * pa, TypeInfo * ti ) override {
+        virtual void afterPtr ( char * pa, TypeInfo * ) override {
             if ( *(char**)pa ) popRange();
         }
         virtual void beforeStructure ( char * pa, StructInfo * ti ) override {
