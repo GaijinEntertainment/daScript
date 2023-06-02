@@ -83,7 +83,7 @@ namespace das {
 
     void FsFileAccess::createFileSystems() {
 #if !defined(DAS_NO_FILEIO)
-        addFileSystem(new FsFileSystem(),true, true);
+        addFileSystem(new FsFileSystem(),true, false);
 #endif
     }
 
