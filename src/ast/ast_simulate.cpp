@@ -1390,10 +1390,11 @@ namespace das
             return context.code->makeNode<SimNode_DeleteTable>(at, sube, total, vts_add_kts);
         } else if ( subexpr->type->baseType==Type::tPointer ) {
             if ( subexpr->type->firstType->baseType==Type::tStructure ) {
+                bool persistent = subexpr->type->firstType->structType->persistent;
                 if ( subexpr->type->firstType->structType->isClass ) {
                     if ( sizeexpr ) {
                         auto sze = sizeexpr->simulate(context);
-                        return context.code->makeNode<SimNode_DeleteClassPtr>(at, sube, total, sze);
+                        return context.code->makeNode<SimNode_DeleteClassPtr>(at, sube, total, sze, persistent);
                     } else {
                         context.thisProgram->error("internal compiler error, SimNode_DeleteClassPtr needs size expression", "", "",
                                                 at, CompilationError::missing_node );
@@ -1401,7 +1402,6 @@ namespace das
                     }
                 } else {
                     auto structSize = subexpr->type->firstType->getSizeOf();
-                    bool persistent = subexpr->type->firstType->structType->persistent;
                     bool isLambda = subexpr->type->firstType->structType->isLambda;
                     return context.code->makeNode<SimNode_DeleteStructPtr>(at, sube, total, structSize, persistent, isLambda);
                 }

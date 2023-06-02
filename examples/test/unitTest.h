@@ -265,3 +265,5 @@ struct FancyClass {
     FancyClass () : value(13) {}
     FancyClass ( int32_t a, int32_t b ) : value(a+b) {}
 };
+
+inline void deleteFancyClass(FancyClass& fclass) { fclass.~FancyClass(); }

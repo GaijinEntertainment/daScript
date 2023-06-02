@@ -249,11 +249,12 @@ namespace das {
     };
 
     struct SimNode_DeleteClassPtr : SimNode_Delete {
-        SimNode_DeleteClassPtr ( const LineInfo & a, SimNode * s, uint32_t t, SimNode * se )
-            : SimNode_Delete(a,s,t), sizeexpr(se) {}
+        SimNode_DeleteClassPtr ( const LineInfo & a, SimNode * s, uint32_t t, SimNode * se, bool ps )
+            : SimNode_Delete(a,s,t), sizeexpr(se), persistent(ps) {}
         virtual vec4f DAS_EVAL_ABI eval ( Context & context ) override;
         virtual SimNode * visit ( SimVisitor & vis ) override;
         SimNode * sizeexpr;
+        bool persistent;
     };
 
     // Delete lambda

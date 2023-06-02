@@ -147,7 +147,11 @@ namespace das
         auto sizeOf = sizeexpr->evalInt(context);
         for ( uint32_t i=0, is=total; i!=is; ++i, pStruct-- ) {
             if ( *pStruct ) {
-                context.heap->free(*pStruct, sizeOf);
+                if (persistent) {
+                    das_aligned_free16(*pStruct);
+                } else {
+                    context.heap->free(*pStruct, sizeOf);
+                }
                 *pStruct = nullptr;
             }
         }

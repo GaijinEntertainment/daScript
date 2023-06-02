@@ -83,6 +83,9 @@ def test_fancy
         assert(f.value==13)
     using(1,3) <| $( var f : FancyClass )
         assert(f.value==4)
+    // otherwise we leak hidden std::string inside fancy class
+    deleteFancyClass(fc0)
+    deleteFancyClass(fc)
 
 def test_nc_alias
     var lookingAt = new TestObjectFoo
