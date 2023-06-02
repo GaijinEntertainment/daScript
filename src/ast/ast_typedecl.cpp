@@ -1403,20 +1403,11 @@ namespace das
 
     int TypeDecl::getMaskFieldIndex ( char ch ) {
         switch ( ch ) {
-            case 'x':
-            case 'X':
-                return 0;
-            case 'y':
-            case 'Y':
-                return 1;
-            case 'z':
-            case 'Z':
-                return 2;
-            case 'w':
-            case 'W':
-                return 3;
-            default:
-                return -1;
+            case 'x':   case 'X':   case 'r':   case 'R':   return 0;
+            case 'y':   case 'Y':   case 'g':   case 'G':   return 1;
+            case 'z':   case 'Z':   case 'b':   case 'B':   return 2;
+            case 'w':   case 'W':   case 'a':   case 'A':   return 3;
+            default:    return -1;
         }
     }
 

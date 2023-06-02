@@ -957,13 +957,13 @@ def getVectorElementType ( bt:Type )
 
 def getVectorOffset ( bt:Type; ident:string )
     var ofs = -1
-    if ident=="x" || ident=="X"
+    if ident=="x" || ident=="X" || ident=="r" || ident=="R"
         ofs = 0
-    elif ident=="y" || ident=="Y"
+    elif ident=="y" || ident=="Y" || ident=="g" || ident=="G"
         ofs = 1
-    elif ident=="z" || ident=="Z"
+    elif ident=="z" || ident=="Z" || ident=="b" || ident=="B"
         ofs = 2
-    elif ident=="w" || ident=="W"
+    elif ident=="w" || ident=="W" || ident=="a" || ident=="A"
         ofs = 3
     let count = getVectorElementCount(bt)
     return ofs>=count ? -1 : ofs
