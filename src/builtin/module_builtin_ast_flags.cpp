@@ -210,8 +210,8 @@ namespace das {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
         ft->alias = "VariableFlags";
         ft->argNames = { "init_via_move", "init_via_clone", "used", "aliasCMRES",
-            "marked_used", "global_shared", "do_not_delete", "generated",
-            "capture_as_ref", "can_shadow", "private_variable", "tag", "global", "inScope" };
+            "marked_used", "global_shared", "do_not_delete", "generated", "capture_as_ref",
+            "can_shadow", "private_variable", "tag", "global", "inScope", "no_capture" };
         return ft;
     }
 

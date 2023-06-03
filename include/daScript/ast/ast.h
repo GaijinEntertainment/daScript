@@ -315,6 +315,7 @@ namespace das
                 bool    tag : 1;
                 bool    global : 1;
                 bool    inScope : 1;
+                bool    no_capture : 1;
             };
             uint32_t flags = 0;
         };

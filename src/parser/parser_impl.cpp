@@ -564,6 +564,7 @@ namespace das {
                     }
                     func->name = yyextra->g_thisStructure->name + "`" + yyextra->g_thisStructure->name;
                     modifyToClassMember(func, yyextra->g_thisStructure, false, false);
+                    func->arguments[0]->no_capture = true;  // we can't capture self in the class c-tor
                 } else {
                     modifyToClassMember(func, yyextra->g_thisStructure, true, false);
                 }
