@@ -158,7 +158,7 @@ namespace das {
         if (lastOp != URI_SUCCESS) return "";
         charsRequired++;
         vector<char> result;
-        result.reserve(charsRequired);
+        result.resize(charsRequired);
         lastOp = uriToStringA(result.data(), &uri, charsRequired, nullptr);
         return result.data();
     }
@@ -166,7 +166,7 @@ namespace das {
     string Uri::toUnixFileName() const {
         auto uriS = str();
         vector<char> result;
-        result.reserve(uriS.length()+1);
+        result.resize(uriS.length()+1);
         lastOp = uriUriStringToUnixFilenameA(uriS.c_str(), result.data());
         return result.data();
     }
@@ -174,7 +174,7 @@ namespace das {
     string Uri::toWindowsFileName() const {
         auto uriS = str();
         vector<char> result;
-        result.reserve(uriS.length()+1);
+        result.resize(uriS.length()+1);
         lastOp = uriUriStringToWindowsFilenameA(uriS.c_str(), result.data());
         return result.data();
     }
@@ -190,7 +190,7 @@ namespace das {
     bool Uri::fromUnixFileNameStr ( const char * fileName, int len ) {
         vector<char> result;
         if ( len==-1 ) len = int(strlen(fileName));
-        result.reserve(3*len + 1);
+        result.resize(3*len + 1);
         lastOp = uriUnixFilenameToUriStringA(fileName, result.data());
         if ( lastOp != URI_SUCCESS) return false;
         return parse(result.data());
@@ -199,7 +199,7 @@ namespace das {
     bool Uri::fromWindowsFileNameStr ( const char * fileName, int len ) {
         vector<char> result;
         if ( len==-1 ) len = int(strlen(fileName));
-        result.reserve(8 + 3*len + 1);
+        result.resize(8 + 3*len + 1);
         lastOp = uriWindowsFilenameToUriStringA(fileName, result.data());
         if ( lastOp != URI_SUCCESS) return false;
         return parse(result.data());

@@ -214,7 +214,7 @@ namespace das {
 #if DAS_TRACK_ALLOCATIONS
                 if ( g_tracker_string==g_breakpoint_string ) os_debug_break();
 #endif
-                if ( text ) memcpy(str, text, length);
+                if ( text ) memmove(str, text, length);
                 str[length] = 0;
                 if ( needIntern && text ) internMap.insert(StrHashEntry(str,length));
                 return str;
