@@ -811,6 +811,7 @@ namespace das {
                 CompilationError::module_not_found);
         }
         delete name;
+        if ( modalias) delete modalias;
     }
 
     Expression * ast_forLoop ( yyscan_t,  vector<VariableNameAndPosition> * iters, Expression * srcs,
