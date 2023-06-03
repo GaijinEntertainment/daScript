@@ -831,6 +831,12 @@ namespace debugapi {
                 exText = string("pinvoke can't find ") + fn + " function";
                 return;
             }
+            if ( simFn->debugInfo->count!=call->nArguments-2 ) {
+                exAt = call->debugInfo;
+                exText = string("pinvoke ") + fn + " function expects " + to_string(simFn->debugInfo->count)
+                    + " arguments, but " + to_string(call->nArguments-2) + " provided";
+                return;
+            }
             invCtx->exception = nullptr;
             invCtx->runWithCatch([&](){
                 if ( !invCtx->ownStack ) {
@@ -858,6 +864,8 @@ namespace debugapi {
         auto simFn = fn.PTR;
         if ( !simFn ) context.throw_error_at(call->debugInfo, "pinvoke can't find function #%p", (void *)simFn);
         if ( !invCtx->contextMutex ) context.throw_error_at(call->debugInfo,"threadlock_context is not set");
+        if ( simFn->debugInfo->count!=call->nArguments-2 ) context.throw_error_at(call->debugInfo,
+            "pinvoke function expects %u arguments, but %u provided", simFn->debugInfo->count, call->nArguments-2);
         vec4f res = v_zero();
         LineInfo exAt;
         string exText;
@@ -889,6 +897,8 @@ namespace debugapi {
         if (!fnMnh) context.throw_error_at(call->debugInfo, "invoke null lambda");
         SimFunction * simFn = *fnMnh;
         if ( !simFn ) context.throw_error_at(call->debugInfo, "pinvoke can't find function #%p", (void*)simFn);
+        if ( simFn->debugInfo->count!=call->nArguments-1 ) context.throw_error_at(call->debugInfo,
+            "pinvoke function expects %u arguments, but %u provided", simFn->debugInfo->count, call->nArguments-2);
         if ( !invCtx->contextMutex ) context.throw_error_at(call->debugInfo,"threadlock_context is not set");
         vec4f res = v_zero();
         LineInfo exAt;
@@ -1341,3 +1351,4 @@ namespace debugapi {
 }
 
 REGISTER_MODULE_IN_NAMESPACE(Module_Debugger,das);
+

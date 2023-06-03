@@ -86,7 +86,7 @@ def public invoke_live ( fn:string )
             unsafe
                 invoke_in_context(appPtr, fn)
         recover
-            to_log(LOG_ERROR, "exception during '{fn}'\n{appPtr.last_exception}\n{describe(appPtr.exceptionAt)}\n")
+            to_log(LOG_ERROR, "exception during '{fn}()'\n{appPtr.last_exception}\n{describe(appPtr.exceptionAt)}\n")
             appPtr := null
 
 def public invoke_live ( fn:string; a1 )
@@ -95,7 +95,7 @@ def public invoke_live ( fn:string; a1 )
             unsafe
                 invoke_in_context(appPtr, fn, a1)
         recover
-            to_log(LOG_ERROR, "exception during '{fn}'\n{appPtr.last_exception}\n{describe(appPtr.exceptionAt)}\n")
+            to_log(LOG_ERROR, "exception during '{fn}({a1})'\n{appPtr.last_exception}\n{describe(appPtr.exceptionAt)}\n")
             appPtr := null
 
 def public invoke_live ( fn:string; a1; a2 )
@@ -104,7 +104,7 @@ def public invoke_live ( fn:string; a1; a2 )
             unsafe
                 invoke_in_context(appPtr, fn, a1, a2)
         recover
-            to_log(LOG_ERROR, "exception during '{fn}'\n{appPtr.last_exception}\n{describe(appPtr.exceptionAt)}\n")
+            to_log(LOG_ERROR, "exception during '{fn}({a1},{a2})'\n{appPtr.last_exception}\n{describe(appPtr.exceptionAt)}\n")
             appPtr := null
 
 def public invoke_live ( fn:string; a1; a2; a3 )
@@ -113,7 +113,7 @@ def public invoke_live ( fn:string; a1; a2; a3 )
             unsafe
                 invoke_in_context(appPtr, fn, a1, a2, a3)
         recover
-            to_log(LOG_ERROR, "exception during '{fn}'\n{appPtr.last_exception}\n{describe(appPtr.exceptionAt)}\n")
+            to_log(LOG_ERROR, "exception during '{fn}({a1},{a2},{a3})'\n{appPtr.last_exception}\n{describe(appPtr.exceptionAt)}\n")
             appPtr := null
 
 def public invoke_live ( fn:string; a1; a2; a3; a4 )
@@ -122,7 +122,7 @@ def public invoke_live ( fn:string; a1; a2; a3; a4 )
             unsafe
                 invoke_in_context(appPtr, fn, a1, a2, a3, a4)
         recover
-            to_log(LOG_ERROR, "exception during '{fn}'\n{appPtr.last_exception}\n{describe(appPtr.exceptionAt)}\n")
+            to_log(LOG_ERROR, "exception during '{fn}({a1},{a2},{a3},{a4})'\n{appPtr.last_exception}\n{describe(appPtr.exceptionAt)}\n")
             appPtr := null
 
 def public watch_files
