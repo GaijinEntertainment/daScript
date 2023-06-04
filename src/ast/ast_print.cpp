@@ -318,6 +318,7 @@ namespace das {
             }
             if ( !arg->type->isConst() ) ss << "var ";
             if ( arg->isAccessUnused() ) ss << " /*unused*/ ";
+            if ( arg->no_capture ) ss << " /*no_capture*/ ";
             if ( printVarAccess && !arg->access_ref ) ss << "$";
             if ( printVarAccess && !arg->access_pass ) ss << "%";
             ss << arg->name;

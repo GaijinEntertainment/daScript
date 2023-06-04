@@ -2561,6 +2561,12 @@ namespace das {
                         return false;
                     }
                 }
+                if ( cV->no_capture ) {
+                    error("can't capture variable " + cV->name,
+                        cV->name=="self" ? "can't capture `self` in the class initializer" :  "it is marked as no_capture",
+                            "", at, CompilationError::invalid_capture);
+                    return false;
+                }
             }
             return true;
         }
