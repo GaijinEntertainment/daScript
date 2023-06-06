@@ -225,6 +225,23 @@ namespace das {
         return cs;
     }
 
+    bool Structure::isSameType ( const Structure & castS, RefMatters refMatters, ConstMatters constMatters, TemporaryMatters temporaryMatters, AllowSubstitute allowSubstitute) const {
+        if ( castS.fields.size() < fields.size() ) {
+            return false;
+        }
+        for ( size_t i=0; i!=fields.size(); ++i ) {
+            auto & fd = fields[i];
+            auto & cfd = castS.fields[i];
+            if ( fd.name != cfd.name ) {
+                return false;
+            }
+            if ( !fd.type->isSameType(*cfd.type, refMatters, constMatters, temporaryMatters, allowSubstitute) ) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     bool Structure::isCompatibleCast ( const Structure & castS ) const {
         if ( castS.fields.size() < fields.size() ) {
             return false;

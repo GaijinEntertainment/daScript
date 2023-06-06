@@ -220,6 +220,7 @@ namespace das
         Structure() {}
         Structure ( const string & n ) : name(n) {}
         StructurePtr clone() const;
+        bool isSameType ( const Structure & castS, RefMatters refMatters, ConstMatters constMatters, TemporaryMatters temporaryMatters, AllowSubstitute allowSubstitute) const;
         bool isCompatibleCast ( const Structure & castS ) const;
         const FieldDeclaration * findField ( const string & name ) const;
         const Structure * findFieldParent ( const string & name ) const;

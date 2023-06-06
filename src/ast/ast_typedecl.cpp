@@ -1237,7 +1237,7 @@ namespace das
         }
         if ( baseType==Type::tStructure && structType!=decl.structType ) {
             if ( !isExplicit && (allowSubstitute == AllowSubstitute::yes) ) {
-                if ( structType && decl.structType && structType->isCompatibleCast(*(decl.structType)) ){
+                if ( structType && decl.structType && structType->isSameType(*(decl.structType), refMatters, constMatters, temporaryMatters, allowSubstitute) ){
                     return true;
                 }
             }
