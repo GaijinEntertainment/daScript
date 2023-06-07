@@ -624,6 +624,7 @@ namespace das {
 
     bool isCircularType ( const TypeDeclPtr & type );
     bool hasImplicit ( const TypeDeclPtr & type );
+    bool isMatchingArgumentType (TypeDeclPtr argType, TypeDeclPtr passType);
 
     enum class CpptSubstitureRef { no, yes };
     enum class CpptSkipRef { no, yes };
