@@ -3094,4 +3094,38 @@ namespace das
         }
         return false;
     }
+
+    bool isMatchingArgumentType (TypeDeclPtr argType, TypeDeclPtr passType) {
+        if (!passType) {
+            return false;
+        }
+        if ( argType->explicitConst && (argType->constant != passType->constant) ) {    // explicit const mast match
+            return false;
+        }
+        if ( argType->explicitRef && (argType->ref != passType->ref) ) {                // explicit ref match
+            return false;
+        }
+        if ( argType->baseType==Type::anyArgument ) {
+            return true;
+        }
+        // compare types which don't need inference
+        auto tempMatters = argType->implicit ? TemporaryMatters::no : TemporaryMatters::yes;
+        if ( !argType->isSameType(*passType, RefMatters::no, ConstMatters::no, tempMatters, AllowSubstitute::yes, true, true) ) {
+            return false;
+        }
+        // can't pass non-ref to ref
+        if ( argType->isRef() && !passType->isRef() ) {
+            return false;
+        }
+        // ref types can only add constness
+        if (argType->isRef() && !argType->constant && passType->constant) {
+            return false;
+        }
+        // pointer types can only add constant
+        if (argType->isPointer() && !argType->constant && passType->constant) {
+            return false;
+        }
+        // all good
+        return true;
+    }
 }
