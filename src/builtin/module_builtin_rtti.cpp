@@ -647,6 +647,8 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(aot_module)>("aot_module");
             addField<DAS_BIND_MANAGED_FIELD(completion)>("completion");
             addField<DAS_BIND_MANAGED_FIELD(export_all)>("export_all");
+        // reporting
+            addField<DAS_BIND_MANAGED_FIELD(always_report_candidates_threshold)>("always_report_candidates_threshold");
         // memory
             addField<DAS_BIND_MANAGED_FIELD(stack)>("stack");
             addField<DAS_BIND_MANAGED_FIELD(intern_strings)>("intern_strings");
