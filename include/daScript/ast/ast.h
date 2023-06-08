@@ -1268,6 +1268,8 @@ namespace das
         bool        aot_module = false;                 // this is how AOT tool knows module is module, and not an entry point
         bool        completion = false;                 // this code is being compiled for 'completion' mode
         bool        export_all = false;                 // when user compiles, export all (public?) functions
+    // error reporting
+        int32_t     always_report_candidates_threshold = 6; // always report candidates if there are less than this number
     // memory
         uint32_t    stack = 16*1024;                    // 0 for unique stack
         bool        intern_strings = false;             // use string interning lookup for regular string heap
