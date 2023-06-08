@@ -73,6 +73,19 @@ class IsAnyEnumMacro : IsAnyType
                         return false
         return true
 
+[contract(name="expect_any_bitfield")]
+class IsAnyBitfieldMacro : IsAnyType
+    //! [expect_any_bitfield(argname)] contract, which only accepts bitfields
+    def override isCompatible ( var func:FunctionPtr; var types:VectorTypeDeclPtr; decl:AnnotationDeclaration; var errors:das_string ) : bool
+        for fna,typ in func.arguments,types // note: N^2
+            for argv in decl.arguments
+                if fna.name==argv.name
+                    if length(typ.dim)!=0 || typ.baseType!=Type tBitfield
+                        errors := "argument {argv.name} is not a bitfield"
+                        return false
+        return true
+
+
 [contract(name="expect_any_vector_type")]
 class IsAnyVectorType : IsAnyType
     //! [expect_any_vector_type(argname)] contract, which only accepts vector types, i.e. int2, float3, range, etc
