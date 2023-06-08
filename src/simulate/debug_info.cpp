@@ -295,6 +295,10 @@ namespace das
         return (THIS->type==Type::tVoid) && (THIS->dimSize==0);
     }
 
+    bool isPointer ( const TypeInfo * THIS ) {
+        return (THIS->type==Type::tPointer) && (THIS->dimSize==0);
+    }
+
     bool isValidArgumentType ( TypeInfo * argType, TypeInfo * passType ) {
         // passing non-ref to ref, or passing not the same type
         if ( (argType->isRef() && !passType->isRef()) || !isSameType(argType,passType,RefMatters::no, ConstMatters::no, TemporaryMatters::no,false) ) {
@@ -308,14 +312,42 @@ namespace das
         return true;
     }
 
+    bool isMatchingArgumentType ( TypeInfo * argType, TypeInfo * passType) {
+        if (!passType) {
+            return false;
+        }
+        if ( argType->type==Type::anyArgument ) {
+            return true;
+        }
+        // compare types which don't need inference
+        auto tempMatters = argType->isImplicit() ? TemporaryMatters::no : TemporaryMatters::yes;
+        if ( !isSameType(argType, passType, RefMatters::no, ConstMatters::no, tempMatters, true) ) {
+            return false;
+        }
+        // can't pass non-ref to ref
+        if ( argType->isRef() && !passType->isRef() ) {
+            return false;
+        }
+        // ref types can only add constness
+        if (argType->isRef() && !argType->isConst() && passType->isConst()) {
+            return false;
+        }
+        // pointer types can only add constant
+        if (isPointer(argType) && !argType->isConst() && passType->isConst()) {
+            return false;
+        }
+        // all good
+        return true;
+    }
+
     bool isSameType ( const TypeInfo * THIS,
                      const TypeInfo * decl,
                      RefMatters refMatters,
                      ConstMatters constMatters,
                      TemporaryMatters temporaryMatters,
                      bool topLevel ) {
-        if ( topLevel && THIS->isRef() ) {
-            constMatters = ConstMatters::yes;
+        if ( topLevel && !isPointer(THIS) && !THIS->isRef() ) {
+            constMatters = ConstMatters::no;
         }
         if ( THIS->type != decl->type ) {
             return false;
