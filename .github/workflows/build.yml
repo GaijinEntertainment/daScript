@@ -164,11 +164,7 @@ jobs:
             ;;
            *)
             cd bin
-            case "${{ matrix.cmake_preset }}" in
-              Debug)
-                ./daScriptTest
-                ;;
-            esac
+            ./daScriptTest
             ./daScript _dasroot_/dastest/dastest.das -- --color --test ../tests || ./daScript _dasroot_/dastest/dastest.das -- --color --isolated-mode --timeout 1200 --test ../tests
             ;;
         esac
