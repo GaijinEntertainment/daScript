@@ -18,14 +18,13 @@ def public each ( argT )
     pass
 
 [tag_function_macro(tag="each_bitfield_tag")]
-class AssertOnceMacro : AstFunctionAnnotation
+class EachBitfieldMacro : AstFunctionAnnotation
     //! This macro converts each(bitfield) to the following code::
     //!     generator<string>() <|
     //!         yield "field1"
     //!         yield "field2"
     //!         ...
     //!         return false
-
     def override transform ( var call : smart_ptr<ExprCallFunc>; var errors : das_string ) : ExpressionPtr
         var inscope yields : array<ExpressionPtr>
         let field_names = build_string <| $(wr)
