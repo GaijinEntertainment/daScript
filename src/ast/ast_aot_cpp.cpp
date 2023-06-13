@@ -1310,9 +1310,13 @@ namespace das {
                 ss << " = ";
             }
             if ( var->type->constant ) {
-                ss << "((";
-                describeVarLocalCppType(ss, var->type);
-                ss << ")";
+                if ( !var->type->isGoodBlockType() ) {
+                    ss << "((";
+                    describeVarLocalCppType(ss, var->type);
+                    ss << ")";
+                } else {
+                    ss << "(";
+                }
             }
             if ( !expr->type->isPointer() && !var->type->ref && expr->type->isAotAlias() && !var->type->isAotAlias() ) {
                 if ( expr->type->alias.empty() ) {

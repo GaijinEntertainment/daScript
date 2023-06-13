@@ -243,7 +243,7 @@ namespace das
                 ||  !is_trivially_copy_constructible<OT>::value;
         }
         virtual bool isPod() const override {
-            return is_pod<OT>::value;
+            return is_standard_layout<OT>::value && is_trivial<OT>::value;
         }
         virtual bool isRawPod() const override {
             return false;   // can we detect this?
