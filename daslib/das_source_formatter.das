@@ -22,7 +22,7 @@ let dont_need_space_around <- [[auto "("; ")"; "["; "]"; "\{"; "\}";
     "."; ";"; ","; "`"; "::"; "++"; "--"; "?."; "?["; "@@"; "!"; "~"; "#"; "->"
     ]]
 
-let type_after_keyword <- [[auto "generator"; "cast"; "upcast"; "smart_ptr";
+let type_after_keyword <- [[auto "generator"; "cast"; "upcast"; "smart_ptr"; "match_type";
     "type"; "reinterpret"; "variant"; "variant_index"; "function"
     ]]
 
