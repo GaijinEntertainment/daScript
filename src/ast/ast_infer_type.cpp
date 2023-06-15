@@ -46,6 +46,7 @@ namespace das {
             checkNoGlobalVariablesAtAll = prog->options.getBoolOption("no_global_variables_at_all", prog->policies.no_global_variables_at_all);
             strictSmartPointers = prog->options.getBoolOption("strict_smart_pointers", prog->policies.strict_smart_pointers);
             disableInit = prog->options.getBoolOption("no_init", prog->policies.no_init);
+            skipModuleLockChecks = prog->options.getBoolOption("skip_module_lock_checks", false);
         }
         bool finished() const { return !needRestart; }
         bool verbose = true;
@@ -76,6 +77,7 @@ namespace das {
         bool                    checkNoGlobalVariablesAtAll = false;
         bool                    strictSmartPointers = false;
         bool                    disableInit = false;
+        bool                    skipModuleLockChecks;
     public:
         vector<FunctionPtr>     extraFunctions;
     protected:
@@ -3329,7 +3331,7 @@ namespace das {
                     return make_smart<ExprConstBool>(expr->at, expr->typeexpr->hasNonTrivialCopy());
                 } else if ( expr->trait=="need_lock_check" ) {
                     reportAstChanged();
-                    return make_smart<ExprConstBool>(expr->at, expr->typeexpr->lockCheck());
+                    return make_smart<ExprConstBool>(expr->at,((func && func->skipLockCheck) || skipModuleLockChecks) ? false : expr->typeexpr->lockCheck());
                 } else if ( expr->trait=="has_field" || expr->trait=="safe_has_field" ) {
                     auto etype = expr->typeexpr;
                     if ( etype->isPointer() && etype->firstType ) etype = etype->firstType;
@@ -4022,7 +4024,7 @@ namespace das {
                     return Visitor::visit(expr);
                 }
                 if ( seT->secondType && seT->secondType->lockCheck() ) {
-                    if ( !(expr->at.fileInfo && expr->at.fileInfo->name=="builtin.das") && !(func && func->skipLockCheck)) {
+                    if ( !(expr->at.fileInfo && expr->at.fileInfo->name=="builtin.das") && !(func && func->skipLockCheck) && !skipModuleLockChecks ) {
                         reportAstChanged(); // we promote tab[index] into _at_with_lockcheck(tab,index)
                         auto pCall = make_smart<ExprCall>(expr->at, "_at_with_lockcheck");
                         pCall->arguments.push_back(expr->subexpr->clone());
@@ -5335,7 +5337,7 @@ namespace das {
                 error("moving classes requires unsafe"+moveErrorInfo(expr), "", "",
                     expr->at, CompilationError::unsafe);
             } else if ( expr->left->type->lockCheck() || expr->right->type->lockCheck()) {
-                if ( !expr->skipLockCheck && !(expr->at.fileInfo && expr->at.fileInfo->name=="builtin.das") && !(func && func->skipLockCheck) ) {
+                if ( !expr->skipLockCheck && !(expr->at.fileInfo && expr->at.fileInfo->name=="builtin.das") && !(func && func->skipLockCheck) && !skipModuleLockChecks ) {
                     reportAstChanged();
                     auto pCall = make_smart<ExprCall>(expr->at,"_move_with_lockcheck");
                     pCall->arguments.push_back(expr->left->clone());
@@ -5675,7 +5677,7 @@ namespace das {
                         auto ccall = static_pointer_cast<ExprCall>(expr->subexpr);
                         if ( ccall->name=="_return_with_lockcheck" || ccall->name=="__::builtin`_return_with_lockcheck" ) checkIt = false;
                     }
-                    if ( checkIt && !expr->skipLockCheck && !(func && func->skipLockCheck) ) {
+                    if ( checkIt && !expr->skipLockCheck && !(func && func->skipLockCheck) && !skipModuleLockChecks ) {
                         reportAstChanged();
                         auto pCall = make_smart<ExprCall>(expr->at,"_return_with_lockcheck");
                         pCall->arguments.push_back(expr->subexpr->clone());
