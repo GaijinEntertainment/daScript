@@ -622,10 +622,10 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 <normal>[0-9]+(f|F)                                     return sscanf(yytext, "%lf", &yylval_param->fd)!=1 ? LEXER_ERROR : FLOAT;
 <normal>[0-9]+[eE][+\-]?[0-9]+(f|F)?                    return sscanf(yytext, "%lf", &yylval_param->fd)!=1 ? LEXER_ERROR : FLOAT;
 
-<normal>([0-9]*)?\.[0-9]+([eE][+\-]?[0-9]+)?lf          return sscanf(yytext, "%lf", &yylval_param->d)!=1 ? LEXER_ERROR : DOUBLE;
-<normal>[0-9][0-9]*\.[0-9]+?([eE][+\-]?[0-9]+)?lf       return sscanf(yytext, "%lf", &yylval_param->d)!=1 ? LEXER_ERROR : DOUBLE;
-<normal>[0-9]+lf                                        return sscanf(yytext, "%lf", &yylval_param->d)!=1 ? LEXER_ERROR : DOUBLE;
-<normal>[0-9]+[eE][+\-]?[0-9]+lf                        return sscanf(yytext, "%lf", &yylval_param->d)!=1 ? LEXER_ERROR : DOUBLE;
+<normal>([0-9]*)?\.[0-9]+([eE][+\-]?[0-9]+)?(lf|d)      return sscanf(yytext, "%lf", &yylval_param->d)!=1 ? LEXER_ERROR : DOUBLE;
+<normal>[0-9][0-9]*\.[0-9]+?([eE][+\-]?[0-9]+)?(lf|d)   return sscanf(yytext, "%lf", &yylval_param->d)!=1 ? LEXER_ERROR : DOUBLE;
+<normal>[0-9]+(lf|d)                                    return sscanf(yytext, "%lf", &yylval_param->d)!=1 ? LEXER_ERROR : DOUBLE;
+<normal>[0-9]+[eE][+\-]?[0-9]+(lf|d)                    return sscanf(yytext, "%lf", &yylval_param->d)!=1 ? LEXER_ERROR : DOUBLE;
 <normal>\)                                  {
     if ( !yyextra->das_nested_parentheses ) {
         das_yyfatalerror(yylloc_param,yyscanner,"mismatching parentheses", CompilationError::mismatching_parentheses);
@@ -823,7 +823,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
     YYTAB();
 }
 
-<normal>";"([ \t\n\r]*|[\/][*][^*]*[*]+([^*\/][^*]*[*]+)*[\/]|\/\/.*\n)*"}}" { 
+<normal>";"([ \t\n\r]*|[\/][*][^*]*[*]+([^*\/][^*]*[*]+)*[\/]|\/\/.*\n)*"}}" {
     if ( yyextra->das_nested_curly_braces < 2 ) {
         das_yyfatalerror(yylloc_param,yyscanner,"mismatching curly braces", CompilationError::mismatching_parentheses);
         return LEXER_ERROR;
@@ -832,7 +832,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
     return SEMICOLON_CUR_CUR;
 }
 
-<normal>";"([ \t\n\r]*|[\/][*][^*]*[*]+([^*\/][^*]*[*]+)*[\/]|\/\/.*\n)*"}]" { 
+<normal>";"([ \t\n\r]*|[\/][*][^*]*[*]+([^*\/][^*]*[*]+)*[\/]|\/\/.*\n)*"}]" {
     if ( !yyextra->das_nested_curly_braces ) {
         das_yyfatalerror(yylloc_param,yyscanner,"mismatching curly braces", CompilationError::mismatching_parentheses);
         return LEXER_ERROR;
@@ -846,7 +846,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
     return SEMICOLON_CUR_SQR;
 }
 
-<normal>","([ \t\n\r]*|[\/][*][^*]*[*]+([^*\/][^*]*[*]+)*[\/]|\/\/.*\n)*"}]" { 
+<normal>","([ \t\n\r]*|[\/][*][^*]*[*]+([^*\/][^*]*[*]+)*[\/]|\/\/.*\n)*"}]" {
     if ( !yyextra->das_nested_curly_braces ) {
         das_yyfatalerror(yylloc_param,yyscanner,"mismatching curly braces", CompilationError::mismatching_parentheses);
         return LEXER_ERROR;
@@ -860,7 +860,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
     return COMMA_CUR_SQR;
 }
 
-<normal>";"([ \t\n\r]*|[\/][*][^*]*[*]+([^*\/][^*]*[*]+)*[\/]|\/\/.*\n)*"]]" { 
+<normal>";"([ \t\n\r]*|[\/][*][^*]*[*]+([^*\/][^*]*[*]+)*[\/]|\/\/.*\n)*"]]" {
     if ( yyextra->das_nested_square_braces < 2) {
         das_yyfatalerror(yylloc_param,yyscanner,"mismatching square braces", CompilationError::mismatching_parentheses);
         return LEXER_ERROR;
@@ -869,7 +869,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
     return SEMICOLON_SQR_SQR;
 }
 
-<normal>","([ \t\n\r]*|[\/][*][^*]*[*]+([^*\/][^*]*[*]+)*[\/]|\/\/.*\n)*"]]" { 
+<normal>","([ \t\n\r]*|[\/][*][^*]*[*]+([^*\/][^*]*[*]+)*[\/]|\/\/.*\n)*"]]" {
     if ( yyextra->das_nested_square_braces < 2) {
         das_yyfatalerror(yylloc_param,yyscanner,"mismatching square braces", CompilationError::mismatching_parentheses);
         return LEXER_ERROR;
