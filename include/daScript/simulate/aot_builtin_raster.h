@@ -15,36 +15,38 @@ namespace das {
             // note: this is not faster than the scalar version
             return (_mm_i32gather_ps((const float *) _ptr, v_cast_vec4i(index), 4));
         #else
-            auto ptr = (const float *) _ptr;
+            auto ptr = (const int32_t *) _ptr;
             auto i = v_cast_vec4i(index);
-            return v_make_vec4f(
+            return v_cast_vec4f(v_make_vec4i(
                 ptr[uint32_t(v_extract_xi(i))],
                 ptr[uint32_t(v_extract_yi(i))],
                 ptr[uint32_t(v_extract_zi(i))],
                 ptr[uint32_t(v_extract_wi(i))]
-            );
+            ));
         #endif
     }
 
-    __forceinline void v_scatter ( void * _ptr, vec4f index, vec4f value ) {
+    __forceinline void v_scatter ( void * _ptr, vec4f index, vec4f _value ) {
         // write 4 floats to memory, using 4 uint32_t indices
-        auto ptr = (float *) _ptr;
+        vec4i value = v_cast_vec4i(_value);
+        auto ptr = (int32_t *) _ptr;
         auto i = v_cast_vec4i(index);
-        ptr[uint32_t(v_extract_xi(i))] = v_extract_x(value);
-        ptr[uint32_t(v_extract_yi(i))] = v_extract_y(value);
-        ptr[uint32_t(v_extract_zi(i))] = v_extract_z(value);
-        ptr[uint32_t(v_extract_wi(i))] = v_extract_w(value);
+        ptr[uint32_t(v_extract_xi(i))] = v_extract_xi(value);
+        ptr[uint32_t(v_extract_yi(i))] = v_extract_yi(value);
+        ptr[uint32_t(v_extract_zi(i))] = v_extract_zi(value);
+        ptr[uint32_t(v_extract_wi(i))] = v_extract_wi(value);
     }
 
-    __forceinline void v_scatter_mask ( void * _ptr, vec4f index, vec4f value, vec4f mask_v ) {
+    __forceinline void v_scatter_mask ( void * _ptr, vec4f index, vec4f _value, vec4f mask_v ) {
         // write 4 floats to memory, using 4 uint32_t indices, but only for floats, where value[i]!=mask_v[i]
-        auto ptr = (float *) _ptr;
-        auto mask = v_cmp_eqi(v_cast_vec4i(mask_v), v_cast_vec4i(value));
+        vec4i value = v_cast_vec4i(_value);
+        auto ptr = (int32_t *) _ptr;
+        auto mask = v_cmp_eqi(v_cast_vec4i(mask_v), value);
         auto i = v_cast_vec4i(index);
-        if ( !v_extract_xi(mask) ) ptr[uint32_t(v_extract_xi(i))] = v_extract_x(value);
-        if ( !v_extract_yi(mask) ) ptr[uint32_t(v_extract_yi(i))] = v_extract_y(value);
-        if ( !v_extract_zi(mask) ) ptr[uint32_t(v_extract_zi(i))] = v_extract_z(value);
-        if ( !v_extract_wi(mask) ) ptr[uint32_t(v_extract_wi(i))] = v_extract_w(value);
+        if ( !v_extract_xi(mask) ) ptr[uint32_t(v_extract_xi(i))] = v_extract_xi(value);
+        if ( !v_extract_yi(mask) ) ptr[uint32_t(v_extract_yi(i))] = v_extract_yi(value);
+        if ( !v_extract_zi(mask) ) ptr[uint32_t(v_extract_zi(i))] = v_extract_zi(value);
+        if ( !v_extract_wi(mask) ) ptr[uint32_t(v_extract_wi(i))] = v_extract_wi(value);
     }
 
     __forceinline void v_store_mask ( void * _ptr, vec4f value, vec4f mask_v ) {
