@@ -50,9 +50,14 @@ namespace das {
         return pipe.empty();
     }
 
-    int Channel::size() const {
+    uint32_t Channel::size() const {
         lock_guard<mutex> guard(lock);
         return remaining;
+    }
+
+    uint32_t Channel::total() const {
+        lock_guard<mutex> guard(lock);
+        return (uint32_t) pipe.size();
     }
 
     void Channel::notify() {
@@ -170,6 +175,7 @@ namespace das {
             addProperty<DAS_BIND_MANAGED_PROP(isEmpty)>("isEmpty");
             addProperty<DAS_BIND_MANAGED_PROP(isReady)>("isReady");
             addProperty<DAS_BIND_MANAGED_PROP(size)>("size");
+            addProperty<DAS_BIND_MANAGED_PROP(total)>("total");
         }
     };
 
