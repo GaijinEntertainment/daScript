@@ -79,6 +79,16 @@ def for_each ( channel:Channel?; blk:block<(res:auto(TT)#):void> )
             let typed_data = reinterpret<TT?#> void_data
             invoke ( blk, *typed_data )
 
+def pop_one ( channel:Channel?; blk:block<(res:auto(TT)#):void> )
+    //! reads one command from channel
+    let void_data = _builtin_channel_pop(channel)
+    if void_data==null
+        return false
+    unsafe
+        let typed_data = reinterpret<TT?#> void_data
+        invoke ( blk, *typed_data )
+        return true
+
 def push_clone ( channel:Channel?; data : auto(TT) )
     //! clones data and pushed value to the channel (at the end)
     var heap_data = new TT
