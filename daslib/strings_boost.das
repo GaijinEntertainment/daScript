@@ -156,3 +156,7 @@ def replace_multiple ( source:string; replaces:array<tuple<text:string;replaceme
 
 def is_hex ( ch : int ) : bool
     return (ch>='0' && ch<='9') || (ch>='a' && ch<='f') || (ch>='A' && ch<='F')
+
+def is_digit( ch : int ) : bool
+    return ch >= '0' && ch <= '9'
+
