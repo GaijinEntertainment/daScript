@@ -31,8 +31,10 @@ NO_ASAN_INLINE vec4i v_ldui(const int *m);
 NO_ASAN_INLINE vec4f v_ldu_x(const float *m);
 //! load 3x32 bit elements fast by one 4x32 bit load, but safe for thread sanitizer
 NO_ASAN_INLINE vec3f v_ldu_p3(const float *m);
+NO_ASAN_INLINE vec4i v_ldui_p3(const int *m);
 //! load 3x32 bit elements safe, use it only when v_ldu_p3 can cause memory access crashes
 NO_ASAN_INLINE vec3f v_ldu_p3_safe(const float *m);
+NO_ASAN_INLINE vec4i v_ldui_p3_safe(const int *m);
 //! load unaligned memory and unpacks vector from 4 signed short ints
 VECMATH_FINLINE vec4i VECTORCALL v_ldush(const signed short *m);
 //! load unaligned memory and unpacks vector from 4 unsigned short ints
@@ -364,6 +366,9 @@ VECMATH_FINLINE vec4f VECTORCALL v_sqrt_x(vec4f a);
 VECMATH_FINLINE vec4f VECTORCALL v_rot_1(vec4f a);
 VECMATH_FINLINE vec4f VECTORCALL v_rot_2(vec4f a);
 VECMATH_FINLINE vec4f VECTORCALL v_rot_3(vec4f a);
+VECMATH_FINLINE vec4i VECTORCALL v_roti_1(vec4i a);
+VECMATH_FINLINE vec4i VECTORCALL v_roti_2(vec4i a);
+VECMATH_FINLINE vec4i VECTORCALL v_roti_3(vec4i a);
 
 //! permutations (mostly used in common implementation)
 VECMATH_FINLINE vec4f VECTORCALL v_perm_yzwx(vec4f a); //< alias for v_rot_1()
@@ -393,6 +398,15 @@ VECMATH_FINLINE vec4f VECTORCALL v_perm_ayzw(vec4f xyzw, vec4f abcd);
 VECMATH_FINLINE vec4f VECTORCALL v_perm_xbzw(vec4f xyzw, vec4f abcd);
 VECMATH_FINLINE vec4f VECTORCALL v_perm_xycw(vec4f xyzw, vec4f abcd);
 VECMATH_FINLINE vec4f VECTORCALL v_perm_xyzd(vec4f xyzw, vec4f abcd);
+
+VECMATH_FINLINE vec4i VECTORCALL v_permi_xzac(vec4i xyzw, vec4i abcd);
+VECMATH_FINLINE vec4i VECTORCALL v_permi_xyab(vec4i xyzw, vec4i abcd);
+VECMATH_FINLINE vec4i VECTORCALL v_permi_xycd(vec4i xyzw, vec4i abcd);
+VECMATH_FINLINE vec4i VECTORCALL v_permi_xbzd(vec4i xyzw, vec4i abcd);
+VECMATH_FINLINE vec4i VECTORCALL v_permi_xzxz(vec4i xyzw);
+VECMATH_FINLINE vec4i VECTORCALL v_permi_ywyw(vec4i xyzw);
+VECMATH_FINLINE vec4i VECTORCALL v_permi_xyxy(vec4i xyzw);
+VECMATH_FINLINE vec4i VECTORCALL v_permi_zwzw(vec4i xyzw);
 
 #define v_perm_xyXY v_perm_xyab
 #define v_perm_zwZW v_perm_zwcd
@@ -945,7 +959,9 @@ VECMATH_FINLINE float VECTORCALL v_extract_w(vec4f v);
 VECMATH_FINLINE short VECTORCALL v_extract_xi16(vec4i v);
 
 //! extracts i64 x-component of i64[2]
-VECMATH_FINLINE int64_t VECTORCALL v_extract_xi64 ( vec4i a );
+VECMATH_FINLINE int64_t VECTORCALL v_extract_xi64(vec4i a);
+//! extracts i64 y-component of i64[2]
+VECMATH_FINLINE int64_t VECTORCALL v_extract_yi64(vec4i a);
 
 //! extracts ith-component of short[8]
 VECMATH_FINLINE short VECTORCALL v_extract_i16(vec4i v, int i);
