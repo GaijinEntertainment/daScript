@@ -33,8 +33,17 @@ NO_ASAN_INLINE vec3f v_ldu_p3(const float *m)
   return v_ldu(m);
 #endif
 }
+NO_ASAN_INLINE vec4i v_ldui_p3(const int *m)
+{
+#if __SANITIZE_THREAD__
+  return v_ldui_p3_safe(m);
+#else
+  return v_ldui(m);
+#endif
+}
 // Always safe loading of float[3], but it uses one more register and one more memory read (slower)
 NO_ASAN_INLINE vec3f v_ldu_p3_safe(const float *m) { return v_perm_xyab(v_ldu_half(m), v_ldu_x(m + 2)); }
+NO_ASAN_INLINE vec4i v_ldui_p3_safe(const int *m) { return v_permi_xyab(v_ldui_half(m), v_seti_x(m[2])); }
 
 VECMATH_FINLINE vec4f VECTORCALL v_make_vec4f_mask(uint8_t bitmask)
 {
@@ -2850,6 +2859,15 @@ VECMATH_INLINE int VECTORCALL vec_float_to_int(float x)
 }
 
 VECMATH_INLINE float invsqrt(float x) { return v_extract_x(v_rsqrt_x(v_set_x(x))); }
+
+VECMATH_FINLINE vec4i VECTORCALL v_permi_xzac(vec4i xyzw, vec4i abcd) { return v_cast_vec4i(v_perm_xzac(v_cast_vec4f(xyzw), v_cast_vec4f(abcd))); }
+VECMATH_FINLINE vec4i VECTORCALL v_permi_xyab(vec4i xyzw, vec4i abcd) { return v_cast_vec4i(v_perm_xyab(v_cast_vec4f(xyzw), v_cast_vec4f(abcd))); }
+VECMATH_FINLINE vec4i VECTORCALL v_permi_xycd(vec4i xyzw, vec4i abcd) { return v_cast_vec4i(v_perm_xycd(v_cast_vec4f(xyzw), v_cast_vec4f(abcd))); }
+VECMATH_FINLINE vec4i VECTORCALL v_permi_xbzd(vec4i xyzw, vec4i abcd) { return v_cast_vec4i(v_perm_xayb(v_perm_xzxz(v_cast_vec4f(xyzw)), v_perm_ywyw(v_cast_vec4f(abcd)))); }
+VECMATH_FINLINE vec4i VECTORCALL v_permi_xzxz(vec4i xyzw) { return v_cast_vec4i(v_perm_xzxz(v_cast_vec4f(xyzw))); }
+VECMATH_FINLINE vec4i VECTORCALL v_permi_ywyw(vec4i xyzw) { return v_cast_vec4i(v_perm_ywyw(v_cast_vec4f(xyzw))); }
+VECMATH_FINLINE vec4i VECTORCALL v_permi_xyxy(vec4i xyzw) { return v_cast_vec4i(v_perm_xyxy(v_cast_vec4f(xyzw))); }
+VECMATH_FINLINE vec4i VECTORCALL v_permi_zwzw(vec4i xyzw) { return v_cast_vec4i(v_perm_zwzw(v_cast_vec4f(xyzw))); }
 
 #ifdef _MSC_VER
 #pragma warning(pop)
