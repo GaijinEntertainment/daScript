@@ -30,8 +30,8 @@ namespace das {
         void push ( void * data, Context * context );
         void * pop();
         bool isEmpty() const;
-        uint32_t size() const;
-        uint32_t total() const;
+        int size() const;
+        int total() const;
         bool isReady() const;
         void notify();
         void notifyAndRelease();

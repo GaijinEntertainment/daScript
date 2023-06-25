@@ -50,14 +50,14 @@ namespace das {
         return pipe.empty();
     }
 
-    uint32_t Channel::size() const {
+    int32_t Channel::size() const {
         lock_guard<mutex> guard(lock);
-        return remaining;
+        return (int32_t) remaining;
     }
 
-    uint32_t Channel::total() const {
+    int32_t Channel::total() const {
         lock_guard<mutex> guard(lock);
-        return (uint32_t) pipe.size();
+        return (int32_t) pipe.size();
     }
 
     void Channel::notify() {
