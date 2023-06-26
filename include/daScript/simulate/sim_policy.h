@@ -105,6 +105,25 @@ namespace  das {
         }
     };
 
+    template <typename TT, typename UTT, TT INTMIN>
+    struct SimPolicy_IntBin : SimPolicy_Bin<TT,UTT> {
+        static __forceinline TT Div ( TT a, TT b, Context & context, LineInfo * at ) {
+            if ( b==0 ) context.throw_error_at(at, "division by zero");
+            else if ( a==INTMIN && b==-1 ) context.throw_error_at(at, "division overflow");
+            return a / b;
+        }
+        static __forceinline void SetDiv  ( TT & a, TT b, Context & context, LineInfo * at ) {
+            if ( b==0 ) context.throw_error_at(at, "division by zero");
+            else if ( a==INTMIN && b==-1 ) context.throw_error_at(at, "division overflow");
+            a /= b;
+        }
+        static __forceinline TT Mod ( TT a, TT b, Context & context, LineInfo * at ) {
+            if ( b==0 ) context.throw_error_at(at, "division by zero in modulo");
+            else if ( a==INTMIN && b==-1 ) return 0;
+            return a % b;
+        }
+    };
+
     template <typename TT>
     struct SimPolicy_MathTT {
         static __forceinline TT Min   ( TT a, TT b, Context &, LineInfo * ) { return a < b ? a : b; }
@@ -116,9 +135,9 @@ namespace  das {
         static __forceinline TT Mad   ( TT a, TT b, TT c, Context &, LineInfo * ) { return a*b + c; }
     };
 
-    struct SimPolicy_Int : SimPolicy_Bin<int32_t,uint32_t>, SimPolicy_MathTT<int32_t> {};
+    struct SimPolicy_Int : SimPolicy_IntBin<int32_t,uint32_t,INT32_MIN>, SimPolicy_MathTT<int32_t> {};
     struct SimPolicy_UInt : SimPolicy_Bin<uint32_t,uint32_t>, SimPolicy_MathTT<uint32_t> {};
-    struct SimPolicy_Int64 : SimPolicy_Bin<int64_t,uint64_t>, SimPolicy_MathTT<int64_t> {};
+    struct SimPolicy_Int64 : SimPolicy_IntBin<int64_t,uint64_t,INT64_MIN>, SimPolicy_MathTT<int64_t> {};
     struct SimPolicy_UInt64 : SimPolicy_Bin<uint64_t,uint64_t>, SimPolicy_MathTT<uint64_t> {};
 
     struct SimPolicy_Float : SimPolicy_Type<float> {
