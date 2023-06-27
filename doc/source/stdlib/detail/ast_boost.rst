@@ -80,7 +80,7 @@
 
 .. |function-ast_boost-isVectorType| replace:: Returns true if type is vector type, i.e. int2, float3, and such, including range and urange.
 
-.. |function-ast_boost-describe| replace:: Returns textuan description of the object.
+.. |function-ast_boost-describe| replace:: Returns textual description of the object.
 
 .. |function-ast_boost-describe_function_short| replace:: Gives short (name, arguments with types, result type) description of the function.
 
