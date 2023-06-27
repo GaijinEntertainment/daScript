@@ -9,6 +9,7 @@
 #include "daScript/ast/ast.h"
 
 #include <stdarg.h>
+#include <atomic>
 
 namespace das
 {
@@ -832,6 +833,7 @@ namespace das
     std::recursive_mutex g_DebugAgentMutex;
     das_safe_map<string, DebugAgentInstance>   g_DebugAgents;
     static DAS_THREAD_LOCAL bool g_isInDebugAgentCreation = false;
+    extern atomic<int> g_envTotal;
 
     template <typename TT>
     void on_debug_agent_mutex ( const TT & lmbd ) {
@@ -841,23 +843,12 @@ namespace das
 
     template <typename TT>
     void for_each_debug_agent ( const TT & lmbd ) {
-        if ( daScriptEnvironment::bound && daScriptEnvironment::bound->g_threadLocalDebugAgent.debugAgent ) {
+        if ( g_envTotal > 0 && daScriptEnvironment::bound && daScriptEnvironment::bound->g_threadLocalDebugAgent.debugAgent ) {
             lmbd ( daScriptEnvironment::bound->g_threadLocalDebugAgent.debugAgent );
         }
         std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
         for ( auto & it : g_DebugAgents ) {
             lmbd ( it.second.debugAgent );
-        }
-    }
-
-    template <typename TT>
-    void for_each_debug_agent_pair ( const TT & lmbd ) {
-        if ( daScriptEnvironment::bound && daScriptEnvironment::bound->g_threadLocalDebugAgent.debugAgent ) {
-            lmbd ( "", daScriptEnvironment::bound->g_threadLocalDebugAgent.debugAgent );
-        }
-        std::lock_guard<std::recursive_mutex> guard(g_DebugAgentMutex);
-        for ( auto & it : g_DebugAgents ) {
-            lmbd ( it.first, it.second.debugAgent );
         }
     }
 
