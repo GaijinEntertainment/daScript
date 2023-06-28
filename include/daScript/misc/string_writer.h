@@ -50,7 +50,6 @@ namespace das {
         }
     protected:
         __forceinline void append(const char * s, int l) {
-            data.reserve(data.size() + l);
             data.insert(data.end(), s, s + l);
         }
         __forceinline char * allocate (int l) {
