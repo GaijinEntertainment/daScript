@@ -207,6 +207,18 @@ class IsPointer : IsAnyType
                         return false
         return true
 
+[contract(name="expect_class")]
+class IsClass : IsAnyType
+    //! [expect_class(argname)] contract, which only accepts class instances
+    def override isCompatible ( var func:FunctionPtr; var types:VectorTypeDeclPtr; decl:AnnotationDeclaration; var errors:das_string ) : bool
+        for fna,typ in func.arguments,types // note: N^2
+            for argv in decl.arguments
+                if fna.name==argv.name
+                    if typ.baseType!=Type tPointer || typ.firstType.baseType != Type tStructure || !typ.firstType.structType.flags.isClass
+                        errors := "argument {argv.name} is not a class pointer, it is {describe(typ)}"
+                        return false
+        return true
+
 [contract(name="expect_value_handle")]
 class IsValueHandle : IsAnyType
     //! [expect_value_handle(argname)] contract, which only accepts value handles

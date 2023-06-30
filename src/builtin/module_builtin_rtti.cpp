@@ -1451,6 +1451,9 @@ namespace das {
             addExtern<DAS_BIND_FUN(getTypeAlign)>(*this, lib, "get_type_align",
                 SideEffects::none, "getTypeAlign")
                     ->args({"type"});
+            addExtern<DAS_BIND_FUN(getTupleFieldOffset)>(*this, lib, "get_tuple_field_offset",
+                SideEffects::none, "getTupleFieldOffset")
+                    ->args({"type", "index"});
             addExtern<DAS_BIND_FUN(isCompatibleCast)>(*this, lib, "is_compatible_cast",
                 SideEffects::modifyExternal, "isCompatibleCast")
                     ->args({"from","to"});

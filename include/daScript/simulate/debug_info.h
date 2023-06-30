@@ -397,6 +397,7 @@ namespace das
     int getDimSize ( TypeInfo * info );
     int getTypeSize ( TypeInfo * info );
     int getTypeAlign ( TypeInfo * info );
+    int getTupleFieldOffset ( TypeInfo * info, int index );
 
     bool isSameType ( const TypeInfo * THIS, const TypeInfo * decl, RefMatters refMatters, ConstMatters constMatters, TemporaryMatters temporaryMatters, bool topLevel );
     bool isCompatibleCast ( const StructInfo * THIS, const StructInfo * castS );

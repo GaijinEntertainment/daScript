@@ -162,7 +162,11 @@ namespace das {
             logAnnotations(that->annotations);
             if ( that->macroInterface ) ss << "[macro_interface]\n";
             ss << (that->isClass ? "class " : "struct ");
-            ss << (that->privateStructure ? "private " : "public ") << that->name << "\n";
+            ss << (that->privateStructure ? "private " : "public ") << that->name;
+            if ( that->parent ) {
+                ss << " : " << that->parent->name;
+            }
+            ss << "\n";
         }
         void outputVariableAnnotation ( const AnnotationArgumentList & annotation ) {
             if ( annotation.size() ) {

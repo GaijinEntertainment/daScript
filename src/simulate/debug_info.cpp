@@ -291,6 +291,24 @@ namespace das
         return getTypeBaseAlign(info);
     }
 
+    int getTupleFieldOffset ( TypeInfo * info, int index ) {
+        DAS_ASSERT(info->type==Type::tTuple);
+        DAS_ASSERT(uint32_t(index)<info->argCount);
+        int size = 0, idx = 0;
+        for (int i = 0, n = (int)info->argCount; i != n; ++i) {
+            TypeInfo * argT = info->argTypes[i];
+            int al = getTypeAlign(argT) - 1;
+            size = (size + al) & ~al;
+            if ( idx==index ) {
+                return size;
+            }
+            size += getTypeSize(argT);
+            idx ++;
+        }
+        DAS_ASSERT(0 && "we should not even be here. field index out of range somehow???");
+        return -1;
+    }
+
     bool isVoid ( const TypeInfo * THIS ) {
         return (THIS->type==Type::tVoid) && (THIS->dimSize==0);
     }
