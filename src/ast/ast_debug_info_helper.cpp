@@ -265,25 +265,21 @@ namespace das {
             info->secondType = nullptr;
         }
         info->argTypes = nullptr;
-        if ( type->baseType==Type::tTuple || type->baseType==Type::tVariant ||
-                type->baseType==Type::tFunction || type->baseType==Type::tLambda ||
-                    type->baseType==Type::tBlock ) {
-            info->argCount = uint32_t(type->argTypes.size());
-            if ( info->argCount ) {
-                info->argTypes = (TypeInfo **) debugInfo->allocate(sizeof(TypeInfo *) * info->argCount );
-                for ( uint32_t i=0, is=info->argCount; i!=is; ++i ) {
-                    info->argTypes[i] = makeTypeInfo(nullptr, type->argTypes[i]);
-                }
+        info->argCount = uint32_t(type->argTypes.size());
+        if ( info->argCount ) {
+            info->argTypes = (TypeInfo **) debugInfo->allocate(sizeof(TypeInfo *) * info->argCount );
+            for ( uint32_t i=0, is=info->argCount; i!=is; ++i ) {
+                info->argTypes[i] = makeTypeInfo(nullptr, type->argTypes[i]);
             }
         }
         info->argNames = nullptr;
-        if ( type->baseType==Type::tVariant || type->baseType==Type::tBitfield ) {
-            info->argCount = uint32_t(type->argNames.size());
-            if ( info->argCount ) {
-                info->argNames = (const char **) debugInfo->allocate(sizeof(char *) * info->argCount );
-                for ( uint32_t i=0, is=info->argCount; i!=is; ++i ) {
-                    info->argNames[i] = debugInfo->allocateCachedName(type->argNames[i]);
-                }
+        auto argNamesCount = uint32_t(type->argNames.size());
+        if ( argNamesCount ) {
+            assert(info->argCount == 0 || info->argCount == argNamesCount);
+            info->argCount = argNamesCount;
+            info->argNames = (const char **) debugInfo->allocate(sizeof(char *) * info->argCount );
+            for ( uint32_t i=0, is=info->argCount; i!=is; ++i ) {
+                info->argNames[i] = debugInfo->allocateCachedName(type->argNames[i]);
             }
         }
         auto mangledName = type->getMangledName();
