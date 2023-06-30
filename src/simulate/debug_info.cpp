@@ -225,6 +225,24 @@ namespace das
         return size;
     }
 
+    int getTupleFieldOffset ( TypeInfo * info, int index ) {
+        DAS_ASSERT(info->type==Type::tTuple);
+        DAS_ASSERT(uint32_t(index)<info->argCount);
+        int size = 0, idx = 0;
+        for (int i = 0, n = (int)info->argCount; i != n; ++i) {
+            TypeInfo * argT = info->argTypes[i];
+            int al = getTypeAlign(argT) - 1;
+            size = (size + al) & ~al;
+            if ( idx==index ) {
+                return size;
+            }
+            size += getTypeSize(argT);
+            idx ++;
+        }
+        DAS_ASSERT(0 && "we should not even be here. field index out of range somehow???");
+        return -1;
+    }
+
     int getVariantAlign ( TypeInfo * info ) {
         int al = getTypeBaseAlign(Type::tInt);
         for ( uint32_t i=0, is=info->argCount; i!=is; ++i ) {
@@ -243,6 +261,14 @@ namespace das
         }
         maxSize = (maxSize + al) & ~al;
         return maxSize;
+    }
+
+    int getVariantFieldOffset ( TypeInfo * info, int index ) {
+        DAS_ASSERT(info->type==Type::tVariant);
+        DAS_ASSERT(uint32_t(index)<info->argCount);
+        int al = getVariantAlign(info) - 1;
+        int offset = (getTypeBaseSize(Type::tInt) + al) & ~al;
+        return offset;
     }
 
     int getTypeBaseSize ( TypeInfo * info ) {
@@ -289,24 +315,6 @@ namespace das
 
     int getTypeAlign ( TypeInfo * info ) {
         return getTypeBaseAlign(info);
-    }
-
-    int getTupleFieldOffset ( TypeInfo * info, int index ) {
-        DAS_ASSERT(info->type==Type::tTuple);
-        DAS_ASSERT(uint32_t(index)<info->argCount);
-        int size = 0, idx = 0;
-        for (int i = 0, n = (int)info->argCount; i != n; ++i) {
-            TypeInfo * argT = info->argTypes[i];
-            int al = getTypeAlign(argT) - 1;
-            size = (size + al) & ~al;
-            if ( idx==index ) {
-                return size;
-            }
-            size += getTypeSize(argT);
-            idx ++;
-        }
-        DAS_ASSERT(0 && "we should not even be here. field index out of range somehow???");
-        return -1;
     }
 
     bool isVoid ( const TypeInfo * THIS ) {
