@@ -7611,6 +7611,8 @@ namespace das {
                 } else {
                     expr->initAllFields = false;
                 }
+            } else {
+                expr->initAllFields = true; // its an empty [[sometype]] thing. we always init with 0
             }
             // result type
             auto resT = make_smart<TypeDecl>(*expr->makeType);
