@@ -46,3 +46,35 @@ class TypeInfoHasProperty : AstTypeInfoMacro
             return <- new [[ExprConstBool() at=expr.at, value=res]]
         errors := "type is missing or not inferred"
         return <- [[ExpressionPtr]]
+
+
+[typeinfo_macro(name="has_method")]
+class TypeInfoHasMethod: AstTypeInfoMacro
+    //! this macro implements "has_method" type trait
+    //! a method is defined as a function with its first argument being the type in question
+    def override getAstChange(expr : smart_ptr<ExprTypeInfo>; var errors : das_string) : ExpressionPtr
+        if expr.typeexpr == null
+            errors := "type is missing or not inferred"
+            return <- [[ExpressionPtr]]
+
+        if !expr.typeexpr.isHandle && !expr.typeexpr.isStructure
+            errors := "expecting handle type or structure. typeinfo(has_method<method> v)"
+            return <- [[ExpressionPtr]]
+
+        if expr.subtrait |> empty
+            errors := "expecting trait string. typeinfo(has_method<method> v)"
+            return <- [[ExpressionPtr]]
+
+        var done = false
+
+        get_ptr(compiling_program()) |> for_each_module() <| $(mod)
+            return if done
+
+            mod |> for_each_function("") <| $(fn)
+                return if fn.arguments |> length == 0
+                assume first = fn.arguments[0]
+                
+                if expr.typeexpr |> is_same_type(first._type, RefMatters yes, ConstMatters no, TemporaryMatters no)
+                    done = true
+
+        return <- new [[ExprConstBool() at=expr.at, value=done]]
