@@ -2659,7 +2659,7 @@ namespace das {
                     ss << string(tab,'\t') << describeCppType(expr->type,CpptSubstitureRef::no,CpptSkipRef::yes)
                         << " " << mksName(expr) << ";\n";
                 }
-                if ( !expr->initAllFields ) {
+                if ( !expr->initAllFields || expr->makeType->baseType!=Type::tStructure ) {
                     ss << string(tab,'\t') << "das_zero(" << mksName(expr) << ");\n";
                 }
             }
