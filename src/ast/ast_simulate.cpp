@@ -662,9 +662,9 @@ namespace das
         int total = int(structs.size());
         int stride = makeType->getStride();
         // note: if its an empty tuple init, like [[tuple<int;float>]] and its embedded - we need to zero it out
-        bool emptyEmbeddedSomething = ( makeType->baseType!=Type::tStructure && total==0);
+        bool emptyEmbeddedTuple = ( makeType->baseType==Type::tTuple && total==0 && !doesNotNeedInit);
         bool partialyInitStruct = !doesNotNeedInit && !initAllFields;
-        if ( (emptyEmbeddedSomething || partialyInitStruct) && stride ) {
+        if ( (emptyEmbeddedTuple || partialyInitStruct) && stride ) {
             int bytes = das::max(total,1) * stride;
             SimNode * init0;
             if ( useCMRES ) {

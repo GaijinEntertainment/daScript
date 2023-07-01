@@ -7612,7 +7612,9 @@ namespace das {
                     expr->initAllFields = false;
                 }
             } else {
-                expr->initAllFields = true; // its an empty [[sometype]] thing. we always init with 0
+                if ( expr->makeType->baseType==Type::tTuple && expr->structs.size()==0 ) {
+                    expr->initAllFields = true;
+                }
             }
             // result type
             auto resT = make_smart<TypeDecl>(*expr->makeType);
