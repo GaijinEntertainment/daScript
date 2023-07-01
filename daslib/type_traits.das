@@ -65,12 +65,13 @@ class TypeInfoHasMethod: AstTypeInfoMacro
             errors := "expecting trait string. typeinfo(has_method<method> v)"
             return <- [[ExpressionPtr]]
 
+        var name = expr.subtrait |> string()
         var done = false
 
         get_ptr(compiling_program()) |> for_each_module() <| $(mod)
             return if done
 
-            mod |> for_each_function("") <| $(fn)
+            mod |> for_each_function(name) <| $(fn)
                 return if fn.arguments |> length == 0
                 assume first = fn.arguments[0]
                 
