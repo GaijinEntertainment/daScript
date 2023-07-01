@@ -7611,6 +7611,10 @@ namespace das {
                 } else {
                     expr->initAllFields = false;
                 }
+            } else {
+                if ( expr->makeType->baseType==Type::tTuple && expr->structs.size()==0 ) {
+                    expr->initAllFields = true;
+                }
             }
             // result type
             auto resT = make_smart<TypeDecl>(*expr->makeType);
