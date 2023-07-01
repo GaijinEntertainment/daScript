@@ -908,7 +908,7 @@
 
 .. |function-ast-compiling_module| replace:: Currently compiling module.
 
-.. |function-ast-for_each_function| replace:: Iterates through each function in the given `Module`.
+.. |function-ast-for_each_function| replace:: Iterates through each function in the given `Module`. If the `name` is empty matches all functions.
 
 .. |function-ast-for_each_generic| replace:: Iterates through each generic function in the given `Module`.
 
