@@ -230,6 +230,22 @@ def back ( a : array<auto(TT)> const ==const # ) : TT # const &
     unsafe
         return a[l-1]
 
+[expect_any_vector(arr)]
+def back ( var arr : auto(TT) ==const ) : auto &
+    let n = length(arr)
+    if n == 0
+        panic("vector is empty")
+    unsafe
+        return arr[n-1]
+
+[expect_any_vector(arr)]
+def back ( arr : auto(TT) ==const ) : auto & const
+    let n = length(arr)
+    if n == 0
+        panic("vector is empty")
+    unsafe
+        return arr[n-1]
+
 def erase(var Arr:array<auto(numT)>;at:int)
     static_if typeinfo(need_lock_check type<numT>)
         _builtin_verify_locks(Arr)
