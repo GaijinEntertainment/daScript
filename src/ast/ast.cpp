@@ -2414,7 +2414,8 @@ namespace das {
         md->at = at;
         md->flags = flags;
         md->name = name;
-        md->value = value->clone();
+        md->value = value ? value->clone() : nullptr;
+        md->tag = tag ? tag->clone() : nullptr;
         return md;
     }
 

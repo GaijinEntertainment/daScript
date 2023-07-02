@@ -29,6 +29,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(at)>("at");
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
             addField<DAS_BIND_MANAGED_FIELD(value)>("value");
+            addField<DAS_BIND_MANAGED_FIELD(tag)>("tag");
             addFieldEx ( "flags", "flags", offsetof(MakeFieldDecl, flags), makeMakeFieldDeclFlags() );
         }
     };
