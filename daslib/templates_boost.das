@@ -106,6 +106,10 @@ class private TemplateVisitor : AstVisitor
                     rexpr.at = expr.at
                     return <- rexpr
         return <- expr
+    def override preVisitExprMakeStructField(expr:smart_ptr<ExprMakeStruct>;index:int;var decl:MakeFieldDeclPtr;last:bool) : void
+        let fname = string(decl.name)
+        if rules.field2name |> key_exists(fname)
+            decl.name := rules.field2name[fname]
     def override visitExprIsVariant(var expr:smart_ptr<ExprIsVariant>) : ExpressionPtr
         let fname = string(expr.name)
         if rules.field2name |> key_exists(fname)
@@ -513,6 +517,17 @@ class private QRulesVisitor : AstVisitor
                 // rblock.list[length(rblock.list) - 1].flags |= VariableFlags generated
                 itn := new_tag_name
                 tag := null
+    def override preVisitExprMakeStructField(expr:smart_ptr<ExprMakeStruct>;index:int;var decl:MakeFieldDeclPtr;last:bool) : void
+        if decl.tag != null
+            var new_tag_name = "temp`make`field`{tag_index++}`{expr.at.line}`{expr.at.column}"
+            decl.name := new_tag_name
+            rblock.list |> emplace_new <| new [[ExprCall() at=expr.at,
+                name:="renameField",
+                arguments:=[{ExpressionPtr
+                    new [[ExprVar() at=expr.at, name:="rules"]];
+                    new [[ExprConstString() at=expr.at, value:=new_tag_name]] |> generatedExpr();
+                    clone_expression(decl.tag) |> generatedExpr()
+                }]]]
     def override visitExprTag ( var expr:smart_ptr<ExprTag> ) : ExpressionPtr
         var new_tag_name = ""
         if expr.name=="c"

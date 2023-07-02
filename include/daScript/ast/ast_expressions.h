@@ -1234,6 +1234,7 @@ namespace das
         LineInfo        at;
         string          name;
         ExpressionPtr   value;
+        ExpressionPtr   tag;
         union {
             struct {
                 bool    moveSemantics : 1;

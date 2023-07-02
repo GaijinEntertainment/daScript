@@ -2719,6 +2719,33 @@ make_struct_fields
         ((MakeStruct *)$msd)->push_back(mfd);
         $$ = $msd;
     }
+    |   MTAG_F '(' expr[subexpr] ')' copy_or_move[com] expr[value] {
+        auto mfd = make_smart<MakeFieldDecl>(tokAt(scanner,@subexpr),"``MACRO``TAG``FIELD``",ExpressionPtr($value),$com,false);
+        mfd->tag = ExpressionPtr($subexpr);
+        auto msd = new MakeStruct();
+        msd->push_back(mfd);
+        $$ = msd;
+    }
+    |   MTAG_F '(' expr[subexpr] ')' CLONEEQU expr[value] {
+        auto mfd = make_smart<MakeFieldDecl>(tokAt(scanner,@subexpr),"``MACRO``TAG``FIELD``",ExpressionPtr($value),false,true);
+        mfd->tag = ExpressionPtr($subexpr);
+        auto msd = new MakeStruct();
+        msd->push_back(mfd);
+        $$ = msd;
+    }
+    |   make_struct_fields[msd] ',' MTAG_F '(' expr[subexpr] ')' copy_or_move[com] expr[value] {
+        auto mfd = make_smart<MakeFieldDecl>(tokAt(scanner,@subexpr),"``MACRO``TAG``FIELD``",ExpressionPtr($value),$com,false);
+        mfd->tag = ExpressionPtr($subexpr);
+        ((MakeStruct *)$msd)->push_back(mfd);
+        $$ = $msd;
+    }
+    |   make_struct_fields[msd] ',' MTAG_F '(' expr[subexpr] ')' CLONEEQU expr[value] {
+        auto mfd = make_smart<MakeFieldDecl>(tokAt(scanner,@subexpr),"``MACRO``TAG``FIELD``",ExpressionPtr($value),false,true);
+        mfd->tag = ExpressionPtr($subexpr);
+        ((MakeStruct *)$msd)->push_back(mfd);
+        $$ = $msd;
+    }
+
     ;
 
 make_struct_dim

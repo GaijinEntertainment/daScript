@@ -90,8 +90,14 @@ def test_regular
     print(describe(blk))
     delete blk
 
+def test_make_struct
+    let foobar = "FOO_BAR"
+    var inscope mks <- qmacro([[Foo $f(foobar)=13]])
+    print("\nADDR IS:\n{describe(mks)}\n")
+
 [export]
 def main
+    test_make_struct()
     test_block_to_array()
     test_addr()
     test_regular()
