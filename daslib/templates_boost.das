@@ -519,7 +519,7 @@ class private QRulesVisitor : AstVisitor
                 tag := null
     def override preVisitExprMakeStructField(expr:smart_ptr<ExprMakeStruct>;index:int;var decl:MakeFieldDeclPtr;last:bool) : void
         if decl.tag != null
-            var new_tag_name = "temp`make`field`{tag_index++}`{expr.at.line}`{expr.at.column}"
+            let new_tag_name = "temp`make`field`{tag_index++}`{expr.at.line}`{expr.at.column}"
             decl.name := new_tag_name
             rblock.list |> emplace_new <| new [[ExprCall() at=expr.at,
                 name:="renameField",
