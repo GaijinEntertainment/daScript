@@ -174,7 +174,7 @@ namespace das {
         capture_field_2
      */
     StructurePtr generateLambdaStruct ( const string & lambdaName, ExprBlock * block,
-                                       const safe_var_set & capt, const vector<CaptureEntry> & capture, bool needYield = false );
+                                       const safe_var_set & capt, const vector<CaptureEntry> & capture, bool needYield = false, bool needRtti = false );
 
     /*
         lambda function, i.e.
@@ -213,7 +213,7 @@ namespace das {
      */
     ExpressionPtr generateLambdaMakeStruct ( const StructurePtr & ls, const FunctionPtr & lf, const FunctionPtr & lff,
                                             const safe_var_set & capt, const vector<CaptureEntry> & capture, const LineInfo & at,
-                                            Program * thisProgram );
+                                            Program * thisProgram, bool needRtti );
 
     /*
          array comprehension [{ for x in src; x_expr; where x_expr }]
