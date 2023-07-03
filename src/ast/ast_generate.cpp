@@ -665,6 +665,7 @@ namespace das {
         pStruct->fields.emplace_back("__finalize", finFunc, nullptr, AnnotationArgumentList(), false, block->at);
         pStruct->fields.back().generated = true;
         pStruct->fields.back().type->sanitize();
+        makeClassRtti(pStruct.get()); // we add RTTI. its always 2nd field
         if ( needYield ) {
             auto yt = make_smart<TypeDecl>(Type::tInt);
             pStruct->fields.emplace_back("__yield", yt, nullptr, AnnotationArgumentList(), false, block->at);
@@ -713,7 +714,7 @@ namespace das {
         asc->at = at;
         asc->needTypeInfo = true;
         auto makeS = make_smart<ExprMakeStruct>();
-        // makeS->useInitializer = true;
+        makeS->useInitializer = true;
         makeS->at = at;
         makeS->makeType = make_smart<TypeDecl>(ls);
         auto ms = make_smart<MakeStruct>();

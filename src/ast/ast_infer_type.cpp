@@ -3208,6 +3208,9 @@ namespace das {
                 } else if ( expr->trait=="is_class" ) {
                     reportAstChanged();
                     return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isClass());
+                } else if ( expr->trait=="is_lambda" ) {
+                    reportAstChanged();
+                    return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isLambda());
                 } else if ( expr->trait=="is_enum" ) {
                     reportAstChanged();
                     return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isEnum());
