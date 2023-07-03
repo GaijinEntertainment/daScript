@@ -959,6 +959,12 @@ namespace das
         }
     }
 
+    __forceinline bool smart_ptr_is_valid (const smart_ptr_raw<void> dest, Context * context, LineInfoArg * at ) {
+        if (!dest.get()) return true;
+        ptr_ref_count * t = (ptr_ref_count *) dest.get();
+        return t->is_valid();
+    }
+
     __forceinline void validate_smart_ptr ( void * ptr, Context * context, LineInfoArg * at ) {
         if ( !ptr ) return;
         ptr_ref_count * t = (ptr_ref_count *) ptr;
@@ -1599,6 +1605,9 @@ namespace das
         addExtern<DAS_BIND_FUN(builtin_smart_ptr_use_count)>(*this, lib, "smart_ptr_use_count",
             SideEffects::none, "builtin_smart_ptr_use_count")
                 ->args({"ptr","context","at"});
+        addExtern<DAS_BIND_FUN(smart_ptr_is_valid)>(*this, lib, "smart_ptr_is_valid",
+            SideEffects::none, "smart_ptr_is_valid")
+                ->args({"dest","context","at"});
         addExtern<DAS_BIND_FUN(equ_sptr_sptr)>(*this, lib, "==", SideEffects::none, "equ_sptr_sptr");
         addExtern<DAS_BIND_FUN(nequ_sptr_sptr)>(*this, lib, "!=", SideEffects::none, "nequ_sptr_sptr");
         addExtern<DAS_BIND_FUN(equ_ptr_sptr)>(*this, lib, "==", SideEffects::none, "equ_ptr_sptr");
