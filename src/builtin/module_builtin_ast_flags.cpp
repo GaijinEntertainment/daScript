@@ -170,7 +170,7 @@ namespace das {
         ft->alias = "StructureFlags";
         ft->argNames = { "isClass", "genCtor", "cppLayout", "cppLayoutNotPod",
             "generated", "persistent", "isLambda", "privateStructure",
-            "macroInterface", "_sealed", "skipLockCheck" };
+            "macroInterface", "_sealed", "skipLockCheck", "circular" };
         return ft;
     }
 

@@ -753,7 +753,7 @@ namespace das
         } else if (baseType == Type::tBlock) {
             return false;
         } else if (baseType == Type::tStructure && structType) {
-            return structType->canMove();
+            return !structType->circular ? structType->canMove() : false;
         } else if (baseType == Type::tTuple || baseType == Type::tVariant || baseType == Type::option ) {
             for (const auto & arg : argTypes) {
                 if (!arg->canMove()) return false;
@@ -768,7 +768,7 @@ namespace das
         if (baseType == Type::tHandle) {
             return annotation->canClone();
         } else if (baseType == Type::tStructure && structType) {
-            return structType->canClone();
+            return !structType->circular ? structType->canClone() : false;
         } else if (baseType == Type::tTuple || baseType == Type::tVariant  || baseType == Type::option) {
             for (const auto & arg : argTypes) {
                 if (!arg->canClone()) return false;
@@ -791,7 +791,7 @@ namespace das
         } else if (baseType == Type::tArray || baseType == Type::tTable || baseType == Type::tBlock || baseType == Type::tIterator) {
             return false;
         } else if (baseType == Type::tStructure && structType) {
-            return structType->canCopy(tempMatters);
+            return !structType->circular ? structType->canCopy(tempMatters) : false;
         } else if (baseType == Type::tTuple || baseType == Type::tVariant || baseType == Type::option) {
             for (const auto & arg : argTypes) {
                 if (!arg->canCopy(tempMatters)) return false;
@@ -813,7 +813,7 @@ namespace das
                     || baseType==Type::tBlock || baseType==Type::tLambda )
                 return false;
             if ( baseType==Type::tStructure && structType )
-                return structType->isNoHeapType();
+                return !structType->circular ? structType->isNoHeapType() : false;
             if ( baseType==Type::tHandle )
                 return annotation->isPod();
             if ( baseType==Type::tTuple || baseType==Type::tVariant || baseType == Type::option ) {
@@ -832,7 +832,7 @@ namespace das
                 || baseType==Type::tBlock || baseType==Type::tLambda )
             return false;
         if ( baseType==Type::tStructure && structType )
-            return structType->isPod();
+            return !structType->circular ? structType->isPod() : false;
         if ( baseType==Type::tHandle )
             return annotation->isPod();
         if ( baseType==Type::tPointer )
@@ -852,7 +852,7 @@ namespace das
             || baseType==Type::tBlock || baseType==Type::tLambda || baseType==Type::tFunction )
             return false;
         if ( baseType==Type::tStructure && structType )
-            return structType->isRawPod();
+            return !structType->circular ? structType->isRawPod() : false;
         if ( baseType==Type::tHandle )
             return annotation->isRawPod();
         if ( baseType==Type::tPointer )
@@ -2403,7 +2403,7 @@ namespace das
         if ( baseType==Type::tHandle ) {
             return annotation->getSizeOf();
         } else if ( baseType==Type::tStructure ) {
-            return structType->getSizeOf64();
+            return !structType->circular ? structType->getSizeOf64() : 0;
         } else if ( baseType==Type::tTuple ) {
             return getTupleSize64();
         } else if ( baseType==Type::tVariant ) {
@@ -2419,7 +2419,7 @@ namespace das
         if ( baseType==Type::tHandle ) {
             return int(annotation->getAlignOf());
         } else if ( baseType==Type::tStructure ) {
-            return structType->getAlignOf();
+            return !structType->circular ? structType->getAlignOf() : 0;
         } else if ( baseType==Type::tTuple ) {
             return getTupleAlign();
         } else if ( baseType==Type::tVariant ) {
