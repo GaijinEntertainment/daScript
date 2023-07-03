@@ -269,6 +269,7 @@ namespace das
                 bool    macroInterface : 1;
                 bool    sealed : 1;
                 bool    skipLockCheck : 1;
+                bool    circular : 1;
             };
             uint32_t    flags = 0;
         };

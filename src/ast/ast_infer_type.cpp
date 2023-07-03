@@ -1685,6 +1685,7 @@ namespace das {
             auto tt = make_smart<TypeDecl>(Type::tStructure);
             tt->structType = var;
             if ( isCircularType(tt) ) {
+                var->circular = true;
                 error("type creates circular dependency",  "", "",
                     var->at,CompilationError::invalid_type);
             }
