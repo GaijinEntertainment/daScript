@@ -270,6 +270,7 @@ namespace das
                 bool    sealed : 1;
                 bool    skipLockCheck : 1;
                 bool    circular : 1;
+                bool    generator : 1;
             };
             uint32_t    flags = 0;
         };

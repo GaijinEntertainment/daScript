@@ -2478,6 +2478,7 @@ namespace das {
                             if ( verifyCapture(expr->capture, cl, isUnsafe, expr->at) ) {
                                 string lname = generateNewLambdaName(block->at);
                                 auto ls = generateLambdaStruct(lname, block.get(), cl.capt, expr->capture, true);
+                                ls->generator = true;
                                 if ( program->addStructure(ls) ) {
                                     auto jitFlags = (func && func->requestJit) ? generator_jit : 0;
                                     auto pFn = generateLambdaFunction(lname, block.get(), ls, cl.capt, expr->capture, generator_needYield | jitFlags, program);
