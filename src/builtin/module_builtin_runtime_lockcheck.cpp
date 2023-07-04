@@ -73,9 +73,9 @@ namespace das
         return v_zero();
     }
 
-    bool builtin_set_verify_context ( bool slc, Context * context ) {
+    bool builtin_set_verify_context ( bool check, Context * context ) {
         bool result = context->skipLockChecks;
-        context->skipLockChecks = slc;
+        context->skipLockChecks = !check;
         return result;
     }
 
