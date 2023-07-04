@@ -183,6 +183,18 @@ class IsAnyFunctionNonPtrMacro : IsAnyType
                         return false
         return true
 
+[contract(name="expect_any_lambda")]
+class IsAnyLambdaMacro : IsAnyType
+    //! [expect_any_lambda(argname)] contract, which only accepts lambdas
+    def override isCompatible ( var func:FunctionPtr; var types:VectorTypeDeclPtr; decl:AnnotationDeclaration; var errors:das_string ) : bool
+        for fna,typ in func.arguments,types // note: N^2
+            for argv in decl.arguments
+                if fna.name==argv.name
+                    if typ.baseType!=Type tLambda
+                        errors := "argument {argv.name} is not a lambda, it is {describe(typ)}"
+                        return false
+        return true
+
 [contract(name="expect_ref")]
 class IsRefMacro : IsAnyType
     //! [expect_ref(argname)] contract, which only accepts references
