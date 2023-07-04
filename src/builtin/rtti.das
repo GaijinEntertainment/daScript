@@ -96,13 +96,13 @@ def public class_info ( cl ) : StructInfo const?
     static_elif typeinfo(is_class cl)
         unsafe
             return reinterpret<StructInfo const?>((reinterpret<TypeInfo const?>(cl.__rtti)).structType)
-    static_elif typeinfo(is_lambda_rtti cl)
+    static_elif typeinfo(is_lambda cl)
         unsafe
-            var l = reinterpret<void???> addr(cl)
+            var l = reinterpret<int8??> addr(cl)
             if l == null
                 return null
-            let ti = reinterpret<TypeInfo const?> (*l)[2]
-            return ti.structType
+            var pti = reinterpret<TypeInfo const??> (l[0] - 16)
+            return (*pti).structType
     else
         concept_assert(false,"this type does not have class info. its not a class or a lambda with options rtti")
         return null
