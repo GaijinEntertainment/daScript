@@ -639,7 +639,7 @@ namespace das {
 
     StructurePtr generateLambdaStruct ( const string & lambdaName, ExprBlock * block,
                                        const safe_var_set & capt,
-                                       const vector<CaptureEntry> & capture, bool needYield, bool needRtti ) {
+                                       const vector<CaptureEntry> & capture, bool needYield ) {
         auto lsn = lambdaName;
         auto pStruct = make_smart<Structure>(lsn);
         pStruct->generated = true;
@@ -665,7 +665,6 @@ namespace das {
         pStruct->fields.emplace_back("__finalize", finFunc, nullptr, AnnotationArgumentList(), false, block->at);
         pStruct->fields.back().generated = true;
         pStruct->fields.back().type->sanitize();
-        if ( needRtti ) makeClassRtti(pStruct.get()); // we add RTTI. its always 2nd field
         if ( needYield ) {
             auto yt = make_smart<TypeDecl>(Type::tInt);
             pStruct->fields.emplace_back("__yield", yt, nullptr, AnnotationArgumentList(), false, block->at);
@@ -709,12 +708,12 @@ namespace das {
 
     ExpressionPtr generateLambdaMakeStruct ( const StructurePtr & ls, const FunctionPtr & lf, const FunctionPtr & lff,
                                             const safe_var_set & capt, const vector<CaptureEntry> & capture, const LineInfo & at,
-                                            Program * thisProgram, bool needRtti ) {
+                                            Program * thisProgram ) {
         auto asc = new ExprAscend();
         asc->at = at;
         asc->needTypeInfo = true;
         auto makeS = make_smart<ExprMakeStruct>();
-        makeS->useInitializer = needRtti;
+        // makeS->useInitializer = true;
         makeS->at = at;
         makeS->makeType = make_smart<TypeDecl>(ls);
         auto ms = make_smart<MakeStruct>();

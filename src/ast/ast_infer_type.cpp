@@ -47,7 +47,6 @@ namespace das {
             strictSmartPointers = prog->options.getBoolOption("strict_smart_pointers", prog->policies.strict_smart_pointers);
             disableInit = prog->options.getBoolOption("no_init", prog->policies.no_init);
             skipModuleLockChecks = prog->options.getBoolOption("skip_module_lock_checks", false);
-            needRtti = prog->options.getBoolOption("rtti", prog->policies.rtti);
         }
         bool finished() const { return !needRestart; }
         bool verbose = true;
@@ -79,7 +78,6 @@ namespace das {
         bool                    strictSmartPointers = false;
         bool                    disableInit = false;
         bool                    skipModuleLockChecks = false;
-        bool                    needRtti = false;
     public:
         vector<FunctionPtr>     extraFunctions;
     protected:
@@ -2479,7 +2477,7 @@ namespace das {
                             bool isUnsafe = !safeExpression(expr);
                             if ( verifyCapture(expr->capture, cl, isUnsafe, expr->at) ) {
                                 string lname = generateNewLambdaName(block->at);
-                                auto ls = generateLambdaStruct(lname, block.get(), cl.capt, expr->capture, true, needRtti);
+                                auto ls = generateLambdaStruct(lname, block.get(), cl.capt, expr->capture, true);
                                 if ( program->addStructure(ls) ) {
                                     auto jitFlags = (func && func->requestJit) ? generator_jit : 0;
                                     auto pFn = generateLambdaFunction(lname, block.get(), ls, cl.capt, expr->capture, generator_needYield | jitFlags, program);
@@ -2496,7 +2494,7 @@ namespace das {
                                                 DAS_ASSERT(pFnFin->classParent);
                                             }
                                             reportAstChanged();
-                                            auto ms = generateLambdaMakeStruct ( ls, pFn, pFnFin, cl.capt, expr->capture, expr->at, program, needRtti );
+                                            auto ms = generateLambdaMakeStruct ( ls, pFn, pFnFin, cl.capt, expr->capture, expr->at, program );
                                             // each ( [[ ]]] )
                                             auto cEach = make_smart<ExprCall>(block->at, makeRef ? "each_ref" : "each");
                                             cEach->generated = true;
@@ -2602,7 +2600,7 @@ namespace das {
                         bool isUnsafe = !safeExpression(expr);
                         if ( verifyCapture(expr->capture, cl, isUnsafe, expr->at) ) {
                             string lname = generateNewLambdaName(block->at);
-                            auto ls = generateLambdaStruct(lname, block.get(), cl.capt, expr->capture, false, needRtti);
+                            auto ls = generateLambdaStruct(lname, block.get(), cl.capt, expr->capture, false);
                             if ( program->addStructure(ls) ) {
                                 auto jitFlags = (func && func->requestJit) ? generator_jit : 0;
                                 auto pFn = generateLambdaFunction(lname, block.get(), ls, cl.capt, expr->capture, jitFlags, program);
@@ -2619,7 +2617,7 @@ namespace das {
                                             DAS_ASSERT(pFnFin->classParent);
                                         }
                                         reportAstChanged();
-                                        auto ms = generateLambdaMakeStruct ( ls, pFn, pFnFin, cl.capt, expr->capture, expr->at, program, needRtti );
+                                        auto ms = generateLambdaMakeStruct ( ls, pFn, pFnFin, cl.capt, expr->capture, expr->at, program );
                                         return ms;
                                     } else {
                                         error("lambda finalizer name mismatch",  "", "",
@@ -3213,9 +3211,6 @@ namespace das {
                 } else if ( expr->trait=="is_lambda" ) {
                     reportAstChanged();
                     return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isLambda());
-                } else if ( expr->trait=="is_lambda_rtti" ) {
-                    reportAstChanged();
-                    return make_smart<ExprConstBool>(expr->at, needRtti && expr->typeexpr->isLambda());
                 } else if ( expr->trait=="is_enum" ) {
                     reportAstChanged();
                     return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isEnum());
