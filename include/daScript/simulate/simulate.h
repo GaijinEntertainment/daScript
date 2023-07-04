@@ -891,23 +891,27 @@ __forceinline void profileNode ( SimNode * node ) {
         __forceinline void evalFinal ( Context & context ) {
             if ( totalFinal ) {
                 auto SF = context.stopFlags;
+                auto RE = context.abiResult();
                 context.stopFlags = 0;
                 for ( uint32_t i=0, is=totalFinal; i!=is; ++i ) {
                     finalList[i]->eval(context);
                 }
                 context.stopFlags = SF;
+                context.abiResult() = RE;
             }
         }
 #if DAS_DEBUGGER
         __forceinline void evalFinalSingleStep ( Context & context ) {
             if ( totalFinal ) {
                 auto SF = context.stopFlags;
+                auto RE = context.abiResult();
                 context.stopFlags = 0;
                 for ( uint32_t i=0, is=totalFinal; i!=is; ++i ) {
                     DAS_SINGLE_STEP(context,finalList[i]->debugInfo,false);
                     finalList[i]->eval(context);
                 }
                 context.stopFlags = SF;
+                context.abiResult() = RE;
             }
         }
 #endif
