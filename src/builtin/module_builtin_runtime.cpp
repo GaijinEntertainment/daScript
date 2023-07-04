@@ -959,7 +959,7 @@ namespace das
         }
     }
 
-    __forceinline bool smart_ptr_is_valid (const smart_ptr_raw<void> dest, Context * context, LineInfoArg * at ) {
+    __forceinline bool smart_ptr_is_valid (const smart_ptr_raw<void> dest ) {
         if (!dest.get()) return true;
         ptr_ref_count * t = (ptr_ref_count *) dest.get();
         return t->is_valid();
@@ -1534,6 +1534,9 @@ namespace das
         addInterop<_builtin_hash,uint64_t,vec4f>(*this, lib, "hash",
             SideEffects::none, "_builtin_hash")
                 ->arg("data");
+        addExtern<DAS_BIND_FUN(hash64z)>(*this, lib, "hash",
+            SideEffects::none, "hash64z")
+                ->arg("data");
         // locks
         addInterop<builtin_verify_locks,void,vec4f>(*this, lib, "_builtin_verify_locks",
             SideEffects::modifyArgumentAndExternal, "builtin_verify_locks")
@@ -1607,7 +1610,7 @@ namespace das
                 ->args({"ptr","context","at"});
         addExtern<DAS_BIND_FUN(smart_ptr_is_valid)>(*this, lib, "smart_ptr_is_valid",
             SideEffects::none, "smart_ptr_is_valid")
-                ->args({"dest","context","at"});
+                ->arg("dest");
         addExtern<DAS_BIND_FUN(equ_sptr_sptr)>(*this, lib, "==", SideEffects::none, "equ_sptr_sptr");
         addExtern<DAS_BIND_FUN(nequ_sptr_sptr)>(*this, lib, "!=", SideEffects::none, "nequ_sptr_sptr");
         addExtern<DAS_BIND_FUN(equ_ptr_sptr)>(*this, lib, "==", SideEffects::none, "equ_ptr_sptr");
