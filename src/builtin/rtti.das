@@ -93,10 +93,10 @@ def public class_info ( cl ) : StructInfo const?
         else
             concept_assert(false,"not a pointer to a class")
             return null
-    static_if typeinfo(is_class cl)
+    static_elif typeinfo(is_class cl)
         unsafe
             return reinterpret<StructInfo const?>((reinterpret<TypeInfo const?>(cl.__rtti)).structType)
-    static_if typeinfo(is_lambda_rtti cl)
+    static_elif typeinfo(is_lambda_rtti cl)
         unsafe
             var l = reinterpret<void???> addr(cl)
             if l == null
