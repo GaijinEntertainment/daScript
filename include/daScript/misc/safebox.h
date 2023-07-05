@@ -11,7 +11,7 @@ namespace das {
     };
 
     __forceinline uint64_t hash64z ( const char * str ) {
-        return hash_blockz64((const uint8_t *) str);
+        return hash_blockz64((const uint8_t *) (str ? str : ""));
     }
 
     template <typename V>
