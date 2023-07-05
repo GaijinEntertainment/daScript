@@ -74,19 +74,19 @@ namespace das
     }
 
     bool builtin_set_verify_context ( bool check, Context * context ) {
-        bool result = context->skipLockChecks;
+        bool result = !context->skipLockChecks;
         context->skipLockChecks = !check;
         return result;
     }
 
     bool builtin_set_verify_array_locks ( Array & arr, bool value ) {
-        auto result = arr.forego_lock_check;
+        auto result = !arr.forego_lock_check;
         arr.forego_lock_check = !value;
         return result;
     }
 
     bool builtin_set_verify_table_locks ( Table & tab, bool value ) {
-        auto result = tab.forego_lock_check;
+        auto result = !tab.forego_lock_check;
         tab.forego_lock_check = !value;
         return result;
     }
