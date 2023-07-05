@@ -4,6 +4,47 @@
 #include "daScript/misc/fnv.h"
 
 namespace das {
+
+    class HashBuilder {
+        const uint64_t fnv_prime = 1099511628211ul;
+        uint64_t fnv_bias = 14695981039346656037ul;
+    public:
+        HashBuilder() { }
+
+        uint64_t getHash() {
+            if (fnv_bias <= HASH_KILLED64) {
+                return fnv_prime;
+            }
+            return fnv_bias;
+        }
+
+        void writeStr(char *str) {
+            if ( !str ) {
+                fnv_bias *= fnv_prime;
+                return;
+            }
+            uint8_t * block = (uint8_t *) str;
+            while ( *block ) {
+                fnv_bias = ( fnv_bias ^ *block++ ) * fnv_prime;
+            }
+        }
+    };
+
+    __forceinline uint64_t builtin_build_hash ( const TBlock<void,HashBuilder> & block, Context * context, LineInfoArg * at ) {
+        HashBuilder writer;
+        vec4f args[1];
+        args[0] = cast<HashBuilder *>::from(&writer);
+        context->invoke(block, args, nullptr, at);
+        return writer.getHash();
+    }
+
+    template <typename TT>
+    uint64_t builtin_build_hash_T ( TT && block, Context * context, LineInfoArg * ) {
+        HashBuilder writer;
+        block(writer);
+        return writer.getHash();
+    }
+
     __forceinline uint64_t hash_function ( Context &, const void * x, size_t size ) {
         return hash_block64((uint8_t *)x, size);
     }

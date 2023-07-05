@@ -19,6 +19,8 @@
 #include "daScript/simulate/debug_print.h"
 #include "../parser/parser_impl.h"
 
+MAKE_TYPE_FACTORY(HashBuilder, HashBuilder)
+
 namespace das
 {
 #if defined(__clang__)
@@ -657,6 +659,12 @@ namespace das
     void builtin_table_clear ( Table & arr, Context * context ) {
         table_clear(*context, arr);
     }
+
+    struct HashBuilderAnnotation : ManagedStructureAnnotation <HashBuilder,false> {
+        HashBuilderAnnotation(ModuleLibrary & ml)
+            : ManagedStructureAnnotation ("HashBuilder", ml) {
+        }
+    };
 
     vec4f _builtin_hash ( Context & context, SimNode_CallBase * call, vec4f * args ) {
         auto uhash = hash_value(context, args[0], call->types[0]);
@@ -1371,6 +1379,7 @@ namespace das
         addAnnotation(make_smart<LocalOnlyFunctionAnnotation>());
         addAnnotation(make_smart<PersistentStructureAnnotation>());
         addAnnotation(make_smart<IsYetAnotherVectorTemplateAnnotation>());
+        addAnnotation(make_smart<HashBuilderAnnotation>(lib));
         // typeinfo macros
         addTypeInfoMacro(make_smart<ClassInfoMacro>());
         // command line arguments
@@ -1537,6 +1546,12 @@ namespace das
         addExtern<DAS_BIND_FUN(hash64z)>(*this, lib, "hash",
             SideEffects::none, "hash64z")
                 ->arg("data");
+        // hash builder
+        addExtern<DAS_BIND_FUN(builtin_build_hash)>(*this, lib, "build_hash",
+                SideEffects::modifyExternal,"builtin_build_hash_T")->args({"block","context","lineinfo"})->setAotTemplate();
+        using method_hashBuilder_writeStr = DAS_CALL_MEMBER(HashBuilder::writeStr);
+        addExtern< DAS_CALL_METHOD(method_hashBuilder_writeStr) >(*this, lib, "write", SideEffects::modifyArgument,
+            DAS_CALL_MEMBER_CPP(HashBuilder::writeStr));
         // locks
         addInterop<builtin_verify_locks,void,vec4f>(*this, lib, "_builtin_verify_locks",
             SideEffects::modifyArgumentAndExternal, "builtin_verify_locks")
