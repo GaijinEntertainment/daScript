@@ -555,6 +555,10 @@ namespace das {
         return annotation->getFieldOffset(name);
     }
 
+    void addModuleRequire ( Module * module, Module * reqModule, bool publ ) {
+        module->requireModule[reqModule] |= publ;
+    }
+
     #include "ast.das.inc"
 
     Module_Ast::Module_Ast() : Module("ast") {
@@ -767,6 +771,9 @@ namespace das {
         addExtern<DAS_BIND_FUN(builtin_fieldType)>(*this, lib, "get_field_type",
             SideEffects::modifyExternal, "builtin_fieldType")
                 ->args({"type","fieldName","constant"});
+        addExtern<DAS_BIND_FUN(addModuleRequire)>(*this, lib, "add_module_require",
+                SideEffects::modifyExternal, "addModuleRequire")
+                    ->args({"module","publicModule","pub"});
         // type
         addExtern<DAS_BIND_FUN(builtin_isVisibleDirectly)>(*this, lib, "is_visible_directly",
             SideEffects::modifyExternal, "builtin_isVisibleDirectly")

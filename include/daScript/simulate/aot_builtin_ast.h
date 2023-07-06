@@ -562,6 +562,7 @@ namespace das {
     void addModuleOption ( Module * mod, char * option, Type type, Context * context, LineInfoArg * at );
     TypeDeclPtr getUnderlyingValueType ( smart_ptr_raw<TypeDecl> type, Context * context, LineInfoArg * at );
     uint32_t getHandledTypeFieldOffset ( smart_ptr_raw<TypeAnnotation> type, char * name, Context * context, LineInfoArg * at );
+    void addModuleRequrie ( Module * module, Module * reqModule, bool publ );
 
     template <>
     struct das_iterator <AnnotationArgumentList> : das_iterator<vector<AnnotationArgument>> {
