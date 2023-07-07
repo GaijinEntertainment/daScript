@@ -273,7 +273,7 @@ namespace das {
                     if ( lr->moveSemantics != rr->moveSemantics ) {
                         lr.reset(); // move semantics must match
                         rr.reset();
-                    } else if ( lr->subexpr->type->isRef() || rr->subexpr->type->isRef() ) {
+                    } else if ( lr->subexpr && rr->subexpr && (lr->subexpr->type->isRef() || rr->subexpr->type->isRef()) ) {
                         lr.reset(); // ref types must match
                         rr.reset();
                     }
