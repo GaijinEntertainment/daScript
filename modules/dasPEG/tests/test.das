@@ -4,7 +4,11 @@ require peg/peg
 [test]
 def test_calc(t: T?)
     var parser <- [[calcParser]]
-    parser.input = "1+2*2+1---(3*2+1*2)-1-1-1*2"
+
+    let input = "1+2*2+1---(3*2+1*2)-1-1-1*2"
+
+    for char in input
+        parser.input |> push(char |> uint8())
 
     parse calc
         var add: int
@@ -19,24 +23,24 @@ def test_calc(t: T?)
         var mul: int
 
         rule(mul as m, "*", unary as u) <|
-            return m * u 
+            return m * u
         rule(mul as m, "/", unary as u) <|
-            return m / u 
+            return m / u
         rule(unary as u) <|
-            return u 
+            return u
 
         var unary: int
-        
+
         rule("-", unary as u) <|
-            return u 
+            return u
         rule(prim as p) <|
-            return p 
+            return p
 
         var prim: int
-        
+
         rule("(", add as a, ")") <|
             return a
-        rule(number as n) <| 
+        rule(number as n) <|
             return n
 
     var res <- parser |> parse_add

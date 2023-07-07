@@ -6,29 +6,10 @@ options strict_smart_pointers = true
 
 require strings
 require daslib/strings_boost
+require daslib/utf8_utils
 require daslib/json
 
 require peg/peg
-
-// Taken from daslib/json
-
-
-// struct JsonValue
-//     //! JSON value, wraps any JSON element.
-//     value : JsValue
-
-
-
-// variant JsValue
-//     //! Single JSON element.
-//     _object : table<string; JsonValue?>
-//     _array  : array<JsonValue?>
-//     _string : string
-//     _number : double
-//     _bool   : bool
-//     _null   : void?
-
-
 
 // Grammar:
 //
@@ -57,30 +38,6 @@ require peg/peg
 //
 
 
-// Creation helpers
-
-
-// def JV ( v : string )
-//     //! Creates `JsonValue` out of value.
-//     return new [[JsonValue value <- [[JsValue _string = v]]]]
-
-// def JV ( v : double )
-//     return new [[JsonValue value <- [[JsValue _number = v]]]]
-
-// def JV ( v : bool )
-//     return new [[JsonValue value <- [[JsValue _bool = v]]]]
-
-// def JVNull
-//     //! Creates `JsonValue` representing `null`.
-//     return new [[JsonValue value <- [[JsValue _null = null]]]]
-
-// def JV ( var v : table<string;JsonValue?> )
-//     return new [[JsonValue value <- [[JsValue _object <- v]]]]
-
-// def JV ( var v : array<JsonValue?> )
-//     return new [[JsonValue value <- [[JsValue _array <- v]]]]
-
-
 def into_table(var src: array<tuple<auto(K); auto(V)>>): table<K; V>
     var result: table<K; V>
     for elem in src
@@ -105,11 +62,10 @@ def main
         var Element: JsonValue?
             
         rule(Array as a) <|
-            print("Parsed element\n")
             return <- JV(a)
 
-        // rule(Object as o) <|
-        //     return <- JV(o)
+        rule(Object as o) <|
+            return <- JV(o)
 
         rule(Value as v) <|
             return <- v
@@ -124,9 +80,7 @@ def main
         // If items are present (not []), then no trailing comma is allowed
 
         rule("[", WS, MB(ElementList) as list, "]", WS) <|
-            print("Parsed Array\n")
             return <- [[array<JsonValue?>]] if list |> empty
-            print("List non empty\n")
             return <- list[0] // Take the value from optional
 
 
@@ -136,7 +90,6 @@ def main
         // If the list is not empty, there must always be a final one
 
         rule(*CommaSeparatedElements as els, Element as last) <|
-            print("Parsed element list\n")
             els |> push <| last
             return <- els
 
@@ -146,37 +99,36 @@ def main
         // Helper to shave off commas
 
         rule(Element as e, ",", WS) <|
-            print("Parsed comma sep\n")
             return <- e
 
 
 
 
-        // var Object: table<string; JsonValue?>
+        var Object: table<string; JsonValue?>
 
-        // rule("\{", WS, MB(MappingList) as list, "\}", WS) <|
-        //     var empty: table<string; JsonValue?>
-        //     return <- empty if list |> empty
-        //     return <- list[0] |> into_table
+        rule("\{", WS, MB(MappingList) as list, "\}", WS) <|
+            var empty: table<string; JsonValue?>
+            return <- empty if list |> empty
+            return <- list[0] |> into_table
         
 
-        // var MappingList: array<tuple<string; JsonValue?>>
+        var MappingList: array<tuple<string; JsonValue?>>
 
-        // rule(*CommaSeparatedMappings as els, Mapping as last) <|
-        //     els |> push <| last
-        //     return <- els
-
-
-        // var CommaSeparatedMappings: tuple<string; JsonValue?>
-
-        // rule(Mapping as m, ",", WS) <|
-        //     return <- m
+        rule(*CommaSeparatedMappings as els, Mapping as last) <|
+            els |> push <| last
+            return <- els
 
 
-        // var Mapping: tuple<string; JsonValue?>
+        var CommaSeparatedMappings: tuple<string; JsonValue?>
 
-        // rule(string_ as s, WS, ":", WS, Element as e) <|
-        //     return <- [[tuple<string; JsonValue?> s, e]]
+        rule(Mapping as m, ",", WS) <|
+            return <- m
+
+
+        var Mapping: tuple<string; JsonValue?>
+
+        rule(string_ as s, WS, ":", WS, Element as e) <|
+            return <- [[auto s, e]]
 
 
 
@@ -186,7 +138,6 @@ def main
         var Value: JsonValue?
 
         rule("true", WS) <|
-            print("Parsed true\n")
             return <- JV(true)
 
         rule("false", WS) <|
@@ -195,21 +146,28 @@ def main
         rule("null", WS) <|
             return <- JVNull()
             
-        // rule(double_ as d, WS) <|  // <- builtin double_ rule
-        //     return <- JV(d)
+        rule(double_ as d, WS) <|  // <- builtin double_ rule
+            return <- JV(d)
 
         rule(string_ as s, WS) <|  // <- builtin string_ rule
-            print("Parsed sring\n")
             return <- JV(s)
 
 
 
     var parser <- [[jsonParser]] 
-    parser.input = "[\"123\", true,[], [[true]], \"123\"]"
+
+
+    // let input = "\{\"a\" : 123.53, \"b\": true \}"
+    let input = "[\"123\", true,[], \{\}, \{\"hello\" : true, \"less\": \"more\"\}, [[true]], \"123\"]"
+
+    if !is_utf8_string_valid(input)
+        print("Invalid utf-8 in the parsed string")
+        return
+
+    for char in input
+        parser.input |> push(char |> uint8())
 
     var result <- parser |> parse_JsonValue()
-
-    var r <- parser |> parse_JsonValue()
 
     print ("{result.value |> write_json}\n")
 
