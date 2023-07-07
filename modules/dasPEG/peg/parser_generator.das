@@ -41,10 +41,10 @@ struct ParserGenerator
 def abort(message: string)
     print("{message}\n")
     unsafe { exit(1); }
-      
+
 
 def iota
-    return <- generator<int>() <| 
+    return <- generator<int>() <|
         var i: int = 0
         while true
             i += 1
@@ -53,16 +53,16 @@ def iota
 
 def rule_left_recursive(name: string; rule: Rule): bool
     match rule
-        if [[Rule alt = $v(alts)]] 
+        if [[Rule alt = $v(alts)]]
             for a in alts
                 return true if rule_left_recursive(name, a.rule.rule)
-        
+
         if [[Rule seq = $v(seq)]]
             return true if rule_left_recursive(name, seq[0].rule)
-                    
+
         if [[Rule maybe_repeat = $v(rule_)]]
             return true if rule_left_recursive(name, rule_.rule)
-            
+
         if [[Rule nonterminal = $v(name_)]]
             return true if name == name_
 
@@ -72,7 +72,7 @@ def rule_left_recursive(name: string; rule: Rule): bool
         if [[Rule terminal = _]]
             return false
 
-        if _ 
+        if _
             abort("TODO: rule_left_recursive")
 
     return false
@@ -89,8 +89,8 @@ def generate_wrapper(var gen: ParserGenerator)
 
     var inscope wrapper_fun <- qmacro_function("parse_{rule_name}") <| $ (var parser: $t(gen.parser_type)): $t(return_type)
         var mark = parser |> mark
-        
-        with parser 
+
+        with parser
             if $i(cache_table) |> key_exists(index)
                 var result := $i(cache_table)[index]
                 parser |> reset(result.endpos)
@@ -101,7 +101,7 @@ def generate_wrapper(var gen: ParserGenerator)
 
             return <- result
 
-    return <- wrapper_fun    
+    return <- wrapper_fun
 
 
 def generate_wrapper_leftrec(var gen: ParserGenerator)
@@ -113,8 +113,8 @@ def generate_wrapper_leftrec(var gen: ParserGenerator)
 
     var inscope wrapper_fun <- qmacro_function("parse_{rule_name}") <| $ (var parser: $t(gen.parser_type)): $t(return_type)
         var mark = parser |> mark
-        
-        with parser 
+
+        with parser
             if $i(cache_table) |> key_exists(index)
                 var result = $i(cache_table)[index]
 
@@ -122,7 +122,7 @@ def generate_wrapper_leftrec(var gen: ParserGenerator)
                 return result
 
             // Build new cache entry from scratch
-            
+
             var res = [[$t(return_type)]]
             $i(cache_table)[mark] = res
 
@@ -138,7 +138,7 @@ def generate_wrapper_leftrec(var gen: ParserGenerator)
 
                 res = newres
                 $i(cache_table)[mark] = res
-            
+
 
             parser |> reset(res.endpos)
             return res
@@ -147,7 +147,7 @@ def generate_wrapper_leftrec(var gen: ParserGenerator)
 
 
 def generate_parser_class(var gen: ParserGenerator; parser_name: string)
-    var inscope s: StructurePtr := new [[Structure()]]
+    var inscope s: StructurePtr <- new [[Structure()]]
 
     // jsonParser, expressionParser, dasParser
     s.name := "{parser_name}Parser"
@@ -157,22 +157,22 @@ def generate_parser_class(var gen: ParserGenerator; parser_name: string)
 
     // Add a field for every type of cache
 
-    for rule_name, type_ in keys(gen.rule_types), values(gen.rule_types)
+    for rule_name in keys(gen.rule_types)
         if true
             // Make cache table type: table<int; <result-type-for-rule>>
-            var inscope t2 <- typeinfo(ast_typedecl type<table<int; int>>) |> clone_type
-            t2.secondType := gen.return_types[rule_name]
-            
-            s |> add_structure_field("{rule_name}_cache", t2 |> clone_type)
+            var inscope t2 <- qmacro_type(type<table<int; int>>)
+            t2.secondType |> move_new <| clone_type(gen.return_types[rule_name])
+
+            s |> add_structure_field("{rule_name}_cache", t2)
 
     // Add input and index fields
 
-    s |> add_structure_field("input", typeinfo(ast_typedecl type<string>))
-    s |> add_structure_field("index", typeinfo(ast_typedecl type<int>))
+    s |> add_structure_field_new("input", qmacro_type(type<string>))
+    s |> add_structure_field_new("index", qmacro_type(type<int>))
 
     // Save constructed parser type for later
 
-    var inscope parser_type := typeinfo(ast_typedecl type<ParserGenerator>)
+    var inscope parser_type <- qmacro_type(type<ParserGenerator>)
     parser_type.structType := s |> get_ptr
 
     gen.parser_type := parser_type
@@ -180,19 +180,22 @@ def generate_parser_class(var gen: ParserGenerator; parser_name: string)
     compiling_module() |> add_structure(s)
 
 
-def add_structure_field(var struct_: StructurePtr; name: string; var t: TypeDeclPtr)
+def add_structure_field_new(var struct_: StructurePtr; name: string; var t: TypeDeclPtr)
+    add_structure_field(struct_, name, t)
+
+def add_structure_field(var struct_: StructurePtr; name: string; var t: TypeDeclPtr&)
     //! Adds a field to the structure.
-    
+
     let fi = length(struct_.fields)
     struct_.fields |> resize(fi + 1)
-    
+
     struct_.fields[fi].name := name
     struct_.fields[fi]._type |> move <| t
 
 
 def make_default_type_decl: TypeDeclPtr
     //! Make default result (field value to be replaced later)
-    return <- typeinfo(ast_typedecl type<tuple<success:bool; value:int; endpos:int>>) |> clone_type
+    return <- qmacro_type(type<tuple<success:bool; value:int; endpos:int>>)
 
 
 def generate_result_types(var gen: ParserGenerator)
@@ -205,11 +208,11 @@ def generate_result_types(var gen: ParserGenerator)
 
     for rule, type_ in keys(gen.rule_types), values(gen.rule_types)
         if true
-            var inscope rule_res_type := make_default_type_decl()
-            rule_res_type.argTypes[1] := type_ // <--- emplace `value` field in a tuple
+            var inscope rule_res_type <- make_default_type_decl()
+            rule_res_type.argTypes[1] |> move_new <| clone_type(type_)
 
             // Map name of the rule to its 'result' type
-            gen.return_types[rule] := rule_res_type
+            gen.return_types[rule] |> move <| rule_res_type
 
 
 def generate(var gen: ParserGenerator; var def_: Definition)
@@ -217,12 +220,12 @@ def generate(var gen: ParserGenerator; var def_: Definition)
 
     var inscope function_body <- gen |> generate(def_.rule)
     var inscope return_type := gen.return_types[def_.name]
-    
+
     var inscope fun <- qmacro_function("parse_{def_.name}_inner") <| $ (var parser: $t(gen.parser_type)): $t(return_type)
         $b(function_body)
         return <- [[$t(return_type)]]
 
-    //fun |> describe |> print 
+    //fun |> describe |> print
     compiling_module() |> add_function(fun)
 
     if rule_left_recursive(def_.name, def_.rule)
@@ -236,19 +239,19 @@ def generate(var gen: ParserGenerator; var def_: Definition)
 def generate_grammar(var gen: ParserGenerator; var gram: array<Definition>; name: string)
     for rule in gram
         gen |> set_rule_type(rule.name |> string(), rule.type_)
-    
+
     // In this order: class depends on types, methods depend on class
     gen |> generate_result_types
-    
+
     gen |> generate_parser_class(name)
-    
+
     gen |> generate_parser_methods
 
     for def_ in gram
         gen |> generate(def_)
 
 
-def generate_parser_methods(var gen: ParserGenerator) 
+def generate_parser_methods(var gen: ParserGenerator)
     var inscope mark <- qmacro_function("mark") <| $(parser: $t(gen.parser_type)): int
         return parser.index
 
@@ -282,8 +285,8 @@ def generate_parser_methods(var gen: ParserGenerator)
 
         if !parser |> get_current_char |> is_number
             // Can't use typedef in this context, sadly
-            return [[tuple<success:bool;value:int;endpos:int>]]         
-        
+            return [[tuple<success:bool;value:int;endpos:int>]]
+
         var result = 0
 
         while parser |> get_current_char |> is_number()
@@ -303,7 +306,7 @@ def generate_parser_methods(var gen: ParserGenerator)
 
         // If the current character is not a double quote, the rule is not a string
         return [[auto false, ""]] if current_char != '"'
-        
+
         parser |> move(1)
         current_char = parser |> get_current_char
 
@@ -351,14 +354,14 @@ def set_rule_handle(var subrule_: Rule_?; handle: string)
     //!
     //! Here the name 'els' is bound to the repetition (*)
     //! In order to get the contents of the repetition in the resulting vector
-    //! we need to bind the name of the subrule 
+    //! we need to bind the name of the subrule
 
     assume subrule_variant = subrule_.rule
 
     match subrule_variant
-        if [[Rule nonterminal = $v(nonterm)]]       
+        if [[Rule nonterminal = $v(nonterm)]]
             unsafe // Moving values that contain smart pointers is generally unsafe
-                   // But here we know that the contained variant is nonterminal (string) and cannot 
+                   // But here we know that the contained variant is nonterminal (string) and cannot
                    // possibly contain valid smart pointer. Thereforу it should be safe to overwrite it.
                 subrule_.rule <- [[Rule bound_nonterminal = [[auto nonterm, handle]]]]
                 return
@@ -368,26 +371,26 @@ def set_rule_handle(var subrule_: Rule_?; handle: string)
                 if [[Terminal lit = $v(l) ]]
                     // Something like (*"123" as foo)
                     abort("Matchint repeated literals is not allowed")
-                
+
                 if [[Terminal range_ = $v(r) ]]
                     // *[1-9] as numbers -- should be possible
                     abort("Matchint repeated literals is not allowed")
-                 
+
                 if [[Terminal number = $v(name)]]
                     name = handle
-                 
+
                 if [[Terminal whitespace = _]]
                     abort("Matchint repeated whitespace is not allowed")
 
                 if [[Terminal EOF = _]]
                     abort("Matchint repeated EOF is not allowed")
-                        
+
                 if [[Terminal string_ = $v(name)]]
                     name = handle
 
                 if [[Terminal double_ = $v(name)]]
                     name = handle
-            
+
             return
 
         if [[Rule bound_nonterminal = $v(nonterm)]]
@@ -397,7 +400,7 @@ def set_rule_handle(var subrule_: Rule_?; handle: string)
         if [[Rule seq = $v(rules)]]
             abort("Unreachable")
 
-        if [[Rule alt = $v(alts)]] 
+        if [[Rule alt = $v(alts)]]
             abort("Unreachable")
 
         if [[Rule maybe_repeat = $v(rule_)]]
@@ -429,7 +432,8 @@ def flatten_block(var blk: ExprBlock?)
 def generate(var gen: ParserGenerator; var rule_: Rule): array<ExpressionPtr>
     match rule_
         if [[Rule terminal = $v(term)]]
-            return <- flatten_block(gen |> generate_terminal(term) as ExprBlock)
+            var inscope termb <- gen |> generate_terminal(term)
+            return <- flatten_block(termb as ExprBlock)
 
         if [[Rule nonterminal = $v(nonterm)]]
             let name = nonterm
@@ -448,12 +452,12 @@ def generate(var gen: ParserGenerator; var rule_: Rule): array<ExpressionPtr>
                 return <- [[$t(return_type)]] if !$i(varname).success
 
             return <- flatten_block(t as ExprBlock)
-            
+
 
         if [[Rule bound_nonterminal = $v(nonterm)]]
             let name = nonterm._0
             let result_name = nonterm._1
-            
+
             var inscope return_type := gen.return_types[gen.current_rule]
 
             let count = "{gen.rule_counter[name]}"
@@ -466,7 +470,7 @@ def generate(var gen: ParserGenerator; var rule_: Rule): array<ExpressionPtr>
                 var $i(result_name) <- $i(varname).value
 
             return <- flatten_block(t as ExprBlock)
-            
+
         if [[Rule seq = $v(rules)]]
 
             var inscope result: array<ExpressionPtr>
@@ -474,16 +478,16 @@ def generate(var gen: ParserGenerator; var rule_: Rule): array<ExpressionPtr>
             for rule in rules
                 for expr in gen |> generate(rule.rule)
                     result |> emplace <| expr
-            
+
             return <- result
 
-        if [[Rule alt = $v(alts)]] 
+        if [[Rule alt = $v(alts)]]
 
             var inscope results: array<ExpressionPtr>
 
-            for alt, i in alts, iota() 
-                results |> emplace_new <| generate_one_alternative(gen, alt, i) 
-            
+            for alt, i in alts, iota()
+                results |> emplace_new <| generate_one_alternative(gen, alt, i)
+
             return <- results
 
         if [[Rule maybe_repeat = $v(rule_)]]
@@ -501,7 +505,7 @@ def generate(var gen: ParserGenerator; var rule_: Rule): array<ExpressionPtr>
 
                 return <- flatten_block(t as ExprBlock)
 
-	        // Bind result to the provided name 
+	        // Bind result to the provided name
 
             set_rule_handle(rule_, "temp_name")
             var inscope rule_code <- gen |> generate(rule_.rule)
@@ -533,7 +537,7 @@ def generate(var gen: ParserGenerator; var rule_: Rule): array<ExpressionPtr>
             var inscope type_decl <- gen |> get_rule_type(rule_.rule)
             var inscope return_type := gen.return_types[gen.current_rule]
 
-            if rule_.name == "" // Rule not bound by name, discard result   
+            if rule_.name == "" // Rule not bound by name, discard result
                 var inscope t <- qmacro_block <|
 
                     var res <- invoke($b(rule_code))
@@ -544,7 +548,7 @@ def generate(var gen: ParserGenerator; var rule_: Rule): array<ExpressionPtr>
                         break if !res.success
 
                 return <- flatten_block(t as ExprBlock)
-            
+
             abort("TODO: Rule repeat bound")
 
         if [[Rule subrule = $v(subrule)]]
@@ -560,7 +564,7 @@ def generate(var gen: ParserGenerator; var rule_: Rule): array<ExpressionPtr>
 
         if [[Rule option = $v(rule_)]]
             var result_handle = rule_.name
-            
+
             var inscope type_decl <- gen |> get_rule_type(rule_.rule)
             var inscope result_type := gen.return_types[gen.current_rule]
 
@@ -638,27 +642,27 @@ def alternative_add_epilogue(var block_contents: array<ExpressionPtr>; var gen: 
 
     for e in flatten_block(t as ExprBlock)
         block_contents |> emplace <| e
-    
+
 
 def generate_terminal(var gen: ParserGenerator; terminal: Terminal): ExpressionPtr
     var inscope return_type := gen.return_types[gen.current_rule]
 
-    match terminal 
+    match terminal
         if [[Terminal lit = $v(l) ]]
 
             return <- qmacro_block <|
                 return <- [[$t(return_type)]] if !parser |> matches($v(l))
 
         if [[Terminal range_ = $v(r) ]]
-            
+
             return <- qmacro_block <|
                 return [[$t(return_type)]] if !parser |> in_range($v(r))
 
         if [[Terminal number = $v(handle)]]
-             
+
             return <- qmacro_block <|
                 var res : tuple<bool;int;int> = parser |> lex_number
-                return [[$t(return_type)]] if !res._0 
+                return [[$t(return_type)]] if !res._0
                 var $i(handle) = res._1
 
         if [[Terminal whitespace = _]]
@@ -671,19 +675,19 @@ def generate_terminal(var gen: ParserGenerator; terminal: Terminal): ExpressionP
             return <- qmacro_block <|
                 return [[$t(return_type)]] if !parser |> reached_EOF
 
-                
+
         if [[Terminal string_ = $v(handle)]]
 
             return <- qmacro_block <|
                 var res <- parser |> match_string_literal
-                return [[$t(return_type)]] if !res.success 
+                return [[$t(return_type)]] if !res.success
                 var $i(handle) : string = res._1
 
         if [[Terminal double_ = $v(handle)]]
 
             return <- qmacro_block <|
                 var res <- parser |> match_double_literal
-                return [[$t(return_type)]] if !res.success 
+                return [[$t(return_type)]] if !res.success
                 var $i(handle) = res.value
 
 

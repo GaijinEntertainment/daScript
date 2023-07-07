@@ -26,10 +26,10 @@ def add_alternative(var rules: array<MacroRule>; var expr: ExprCall?; prog: Prog
     // macro_verify(expr.name |> string() == "rule", prog, expr.at, "parsing rules alternatives should be called with `rule` name")
     (rules |> back).alternatives |> emplace <| expr
 
-    
+
 [macro_function]
 def add_name(var rule: Rule; var name: string)
-    match rule 
+    match rule
         if [[Rule repeat = $v(rep)]]
             rep.name <- name
         if [[Rule option = $v(opt)]]
@@ -58,10 +58,10 @@ def into_rule_(var expr: ExpressionPtr): Rule_?
 
         return <- new [[Rule_ rule <- [[Rule bound_nonterminal = [[auto bound_rule, bound_name]]]]]]
 
-    
+
     elif expr is ExprAsVariant && (expr as ExprAsVariant).value is ExprCall
         // Optional rule (MB) -- zero or one
-        var as_expr <- expr as ExprAsVariant 
+        var as_expr <- expr as ExprAsVariant
         var subrule = ((expr as ExprAsVariant).value as ExprCall).arguments[0] |> into_rule_
         subrule.name := as_expr.name
         var inscope t <- [[Rule option <- subrule]]
@@ -69,7 +69,7 @@ def into_rule_(var expr: ExpressionPtr): Rule_?
 
     elif expr is ExprAsVariant && ((expr as ExprAsVariant).value is ExprPtr2Ref)
         // Optional rule (MB) -- zero or one
-        var as_expr <- expr as ExprAsVariant 
+        var as_expr <- expr as ExprAsVariant
 
         var subrule = (as_expr.value as ExprPtr2Ref).subexpr |> into_rule_
         subrule.name := as_expr.name
@@ -81,7 +81,7 @@ def into_rule_(var expr: ExpressionPtr): Rule_?
         //               <rule>? as <name>,
         //               +<rule> as <name>, etc...
 
-        var as_expr <- expr as ExprAsVariant 
+        var as_expr <- expr as ExprAsVariant
 
         var rule: Rule_? <- into_rule_(as_expr.value)
         rule.name = as_expr.name |> string()
@@ -99,15 +99,15 @@ def into_rule_(var expr: ExpressionPtr): Rule_?
             return <- new [[Rule_ rule <- [[Rule terminal <- [[Terminal whitespace = null]]]]]]
         elif name == "EOF"
             return <- new [[Rule_ rule <- [[Rule terminal <- [[Terminal EOF = null]]]]]]
-        else 
+        else
             return <- new [[Rule_ rule <- [[Rule nonterminal <- name]]]]
-    
+
     elif expr is ExprConstString
         var const_string <- expr as ExprConstString
-        return <- new [[Rule_ rule <- 
-                        [[Rule terminal <- 
+        return <- new [[Rule_ rule <-
+                        [[Rule terminal <-
                           [[Terminal lit = const_string.value |> string()]]]]]]
-    
+
     elif expr is ExprPtr2Ref
         // Repetition (*) -- zero or more
 
@@ -142,23 +142,23 @@ def transform(var rule: MacroRule): Definition
     // Transform array<ExprCall?> into an array of Rules
 
     var inscope alternatives: array<Alternative>
-    
+
     for alt in rule.alternatives                 // alt: ExprCall?
         if true // creates scope for inscope
             var inscope blk: ExpressionPtr <- alt.arguments |> back
             alt.arguments |> pop
-            
+
             var sequence: array<Rule_?>
 
             for sequence_elem in alt.arguments
                 sequence |> push <| into_rule_(sequence_elem)
-    
-            alternatives |> emplace <| [[Alternative 
-                                      rule <- new [[Rule_ rule <- [[Rule seq <- sequence]]]], 
+
+            alternatives |> emplace <| [[Alternative
+                                      rule <- new [[Rule_ rule <- [[Rule seq <- sequence]]]],
                                       action <- (blk as ExprMakeBlock)._block]]
-    
-    return <- [[Definition name = "{name}", 
-                type_ <- type_, 
+
+    return <- [[Definition name = "{name}",
+                type_ <- type_,
                 rule <- [[Rule alt <- alternatives]]]]
 
 
@@ -168,13 +168,13 @@ class ParseMacro : AstCallMacro
     //! Usage:
     //!    parse expression
     //!        var add : int
-    //!    
+    //!
     //!        rule(add as a, "+", mul as m) <|
     //!            return a + m
-    //!    
+    //!
     //!        rule(add as a, "-", mul as m) <|
     //!            return a - m
-    //!    
+    //!
     //!        rule(mul as m) <|
     //!            return m
     //!
@@ -186,10 +186,10 @@ class ParseMacro : AstCallMacro
     //! - The pattern is var <rule_name>: <type> followed by a series of calls to `rule` function
     //! - The typing in `var add: int` is significant and will not work otherwise.
     //! - The last argument of the rule function is a semantic action that will be exeuted
-    //!     upon the matching of the rule. Names used in actions are defined with 
+    //!     upon the matching of the rule. Names used in actions are defined with
     //!     `<rule> as <name>` syntax. Actions must return the type as defined in let expression.
     //! - By the nature of PEG parsers, in the general case actions are executed nondeterministically.
-    //!     THEREFORE, DO NOT PUT STATEFUL ACTIONS in the parser generator. Thank you for your attention. 
+    //!     THEREFORE, DO NOT PUT STATEFUL ACTIONS in the parser generator. Thank you for your attention.
 
 
     def override canVisitArgument ( expr:smart_ptr<ExprCallMacro>; argIndex:int ) : bool
@@ -200,33 +200,33 @@ class ParseMacro : AstCallMacro
         return false
 
     def override visit ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr
-        
+
         // Verify
-        
+
         macro_verify(length(expr.arguments) == 2, prog, expr.at, "expecting parse(what) <| block")
         macro_verify(expr.arguments[0] is ExprVar, prog, expr.at, "the first argument to parse should be ExprVar")
         macro_verify(expr.arguments[1] is ExprMakeBlock, prog, expr.at, "parse `block` argument must be immediate block declaration")
-        
+
         let name = (expr.arguments[0] as ExprVar).name |> string()
         var expression_block = (expr.arguments[1] as ExprMakeBlock)._block as ExprBlock
 
         macro_verify(length(expression_block.finalList) == 0, prog, expr.at, "parse `block` argument can't have finally section")
         macro_verify(expression_block.list[0] is ExprLet, prog, expr.at, "parse `block` argument should begin with let expression")
-        
+
         // Collect
-        
+
         var rules_: array<MacroRule>
-        
+
         for list_expr in expression_block.list
             if list_expr is ExprLet
                 rules_ |> emplace <| [[MacroRule rule = list_expr as ExprLet]]
             elif list_expr is ExprCall
                 rules_ |> add_alternative(list_expr as ExprCall, prog)
-            else 
+            else
                 macro_verify(false, prog, list_expr.at, "expressions in the parse block should be either let or call")
 
         // Transform
-        
+
         var inscope gram: array<Definition>
 
         for mrule in rules_

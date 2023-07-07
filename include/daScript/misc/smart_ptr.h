@@ -1,7 +1,7 @@
 #pragma once
 
 #ifndef DAS_SMART_PTR_ID
-#define DAS_SMART_PTR_ID    0
+#define DAS_SMART_PTR_ID    1
 #endif
 
 #if DAS_SMART_PTR_TRACKER

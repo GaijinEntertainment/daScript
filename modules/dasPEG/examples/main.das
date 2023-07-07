@@ -22,7 +22,7 @@ require peg/peg
 
 //     // If the current character is not a double quote, the rule is not a string
 //     return [[auto false, ""]] if current_char != '"'
-    
+
 //     parser |> move(1)
 //     current_char = parser |> get_current_char
 
@@ -55,7 +55,7 @@ require peg/peg
 //         buffer |> append(current_char)
 //         parser |> move(1)
 //         current_char = parser |> get_current_char
-    
+
 
 //     // Match exponent part
 //     if current_char == 'e' || current_char == 'E'
@@ -74,12 +74,11 @@ require peg/peg
 //             buffer |> append(current_char)
 //             parser |> move(1)
 //             current_char = parser |> get_current_char
- 
+
 //     return [[auto true, buffer |> string() |> double()]]
 
 [export]
 def main
-
     var parser <- [[calcParser]]
     parser.input = "1+2*2+1---(3*2+1*2)-1-1-1*2"
 
@@ -92,30 +91,28 @@ def main
             return a - m
         rule(mul as m) <|
             return m
-
         var mul: int
 
         rule(mul as m, "*", unary as u) <|
-            return m * u 
+            return m * u
         rule(mul as m, "/", unary as u) <|
-            return m / u 
+            return m / u
         rule(unary as u) <|
-            return u 
+            return u
 
         var unary: int
-        
+
         rule("-", unary as u) <|
-            return u 
+            return u
         rule(prim as p) <|
-            return p 
+            return p
 
         var prim: int
-        
+
         rule("(", add as a, ")") <|
             return a
-        rule(number as n) <| 
+        rule(number as n) <|
             return n
-
     var res <- parser |> parse_add
 
     print("Assert {res.value} == -6\n")
