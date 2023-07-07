@@ -531,7 +531,12 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
         tp << "smart pointers leaked: " << uint64_t(g_smart_ptr_total) << "\n";
 #if DAS_SMART_PTR_ID
         tp << "leaked ids:";
+        vector<uint64_t> ids;
         for ( auto it : ptr_ref_count::ref_count_ids ) {
+            ids.push_back(it);
+        }
+        std::sort(ids.begin(), ids.end());
+        for ( auto it : ids ) {
             tp << " " << HEX << it << DEC;
         }
         tp << "\n";
