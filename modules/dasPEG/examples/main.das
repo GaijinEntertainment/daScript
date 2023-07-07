@@ -15,7 +15,11 @@ require peg/peg
 [export]
 def main
     var parser <- [[calcParser]]
-    parser.input = "1+2*2+1---(3*2+1*2)-1-1-1*2"
+
+    let input = "1+2*2+1---(3*2+1*2)-1-1-1*2"
+
+    for char in input
+        parser.input |> push(char |> uint8())
 
     parse calc
         var add: int

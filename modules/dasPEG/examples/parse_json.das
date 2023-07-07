@@ -6,6 +6,7 @@ options strict_smart_pointers = true
 
 require strings
 require daslib/strings_boost
+require daslib/utf8_utils
 require daslib/json
 
 require peg/peg
@@ -61,7 +62,6 @@ def main
         var Element: JsonValue?
             
         rule(Array as a) <|
-            print("Parsed element\n")
             return <- JV(a)
 
         rule(Object as o) <|
@@ -80,9 +80,7 @@ def main
         // If items are present (not []), then no trailing comma is allowed
 
         rule("[", WS, MB(ElementList) as list, "]", WS) <|
-            print("Parsed Array\n")
             return <- [[array<JsonValue?>]] if list |> empty
-            print("List non empty\n")
             return <- list[0] // Take the value from optional
 
 
@@ -92,7 +90,6 @@ def main
         // If the list is not empty, there must always be a final one
 
         rule(*CommaSeparatedElements as els, Element as last) <|
-            print("Parsed element list\n")
             els |> push <| last
             return <- els
 
@@ -102,7 +99,6 @@ def main
         // Helper to shave off commas
 
         rule(Element as e, ",", WS) <|
-            print("Parsed comma sep\n")
             return <- e
 
 
@@ -142,7 +138,6 @@ def main
         var Value: JsonValue?
 
         rule("true", WS) <|
-            print("Parsed true\n")
             return <- JV(true)
 
         rule("false", WS) <|
@@ -155,15 +150,22 @@ def main
             return <- JV(d)
 
         rule(string_ as s, WS) <|  // <- builtin string_ rule
-            print("Parsed sring\n")
             return <- JV(s)
 
 
 
     var parser <- [[jsonParser]] 
-    // parser.input = "[\"123\", true,[], \{\}, \{\"hello\" : true, \"less\": \"more\"\}, [[true]], \"123\"]"
 
-    parser.input = "\{\"a\" : 123.53, \"b\": true \}"
+
+    // let input = "\{\"a\" : 123.53, \"b\": true \}"
+    let input = "[\"123\", true,[], \{\}, \{\"hello\" : true, \"less\": \"more\"\}, [[true]], \"123\"]"
+
+    if !is_utf8_string_valid(input)
+        print("Invalid utf-8 in the parsed string")
+        return
+
+    for char in input
+        parser.input |> push(char |> uint8())
 
     var result <- parser |> parse_JsonValue()
 

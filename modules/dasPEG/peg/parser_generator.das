@@ -7,10 +7,12 @@ options strict_smart_pointers = true
 module parser_generator
 
 require daslib/match public
+require daslib/strings
 require daslib/ast
 require daslib/fio
 require daslib/rtti
 require daslib/ast_boost
+require daslib/utf8_utils
 require daslib/templates_boost
 
 require peg/meta_ast
@@ -52,6 +54,51 @@ def iota
             return false if i == 0 else yield i
 
 
+// Array is asserted to be valid utf-8 at the beginning of the parsing.
+def public get_next_character(utf8_string: array<uint8>; var index: int&): int
+    var codepoint = 0
+    var state = 0u
+
+    while true // Guaranteed to terminate
+        let byte = utf8_string[index] |> int()
+        index += 1
+        let type_ = s_utf8d[byte]
+        codepoint = (byte & int(0x3F)) | (codepoint << 6)
+        state = s_utf8d[256u + state + type_]
+        return codepoint if state == UTF8_ACCEPT
+
+    return 0
+
+
+def public decode_utf8_codepoint(utf8_data: array<uint8>; var index: int): tuple<res:int; len:int>
+    var byte1 = utf8_data[index] |> uint()
+
+    if (byte1 & 0x80u) == 0u
+        // Single-byte codepoint
+        return [[auto byte1 |> int(), 1]]
+    elif (byte1 & 0xE0) == 0xC0
+        // Two-byte codepoint
+        var byte2 = utf8_data[index + 1] |> uint()
+        var val = ((byte1 & 0x1F) << 6u) | (byte2 & 0x3F)
+        return [[auto val |> int(), 2]]
+    // elif (byte1 & 0xF0) == 0xE0
+    //     // Three-byte codepoint
+    //     var byte2 = utf8_data[index + 1]
+    //     var byte3 = utf8_data[index + 2]
+    //     var val = ((byte1 & 0x0F) << 12) | ((byte2 & 0x3F) << 6) | (byte3 & 0x3F)
+    //     return [[auto val, 3]]
+    // elif (byte1 & 0xF8) == 0xF0
+    //     // Four-byte codepoint
+    //     var byte2 = utf8_data[index + 1]
+    //     var byte3 = utf8_data[index + 2]
+    //     var byte4 = utf8_data[index + 3]
+    //     var val = ((byte1 & 0x07) << 18) | ((byte2 & 0x3F) << 12) | ((byte3 & 0x3F) << 6) | (byte4 & 0x3F)
+    //     return [[auto val, 4]]
+    else
+        // Invalid UTF-8 sequence
+        return [[auto -1, 0]]
+
+
 def rule_left_recursive(name: string; rule: Rule): bool
     match rule
         if [[Rule alt = $v(alts)]]
@@ -77,8 +124,6 @@ def rule_left_recursive(name: string; rule: Rule): bool
             abort("TODO: rule_left_recursive")
 
     return false
-
-
 
 
 def generate_wrapper(var gen: ParserGenerator)
@@ -168,7 +213,7 @@ def generate_parser_class(var gen: ParserGenerator; parser_name: string)
 
     // Add input and index fields
 
-    s |> add_structure_field_new("input", qmacro_type(type<string>))
+    s |> add_structure_field_new("input", qmacro_type(type<array<uint8>>))
     s |> add_structure_field_new("index", qmacro_type(type<int>))
 
     // Save constructed parser type for later
@@ -271,23 +316,37 @@ def generate_parser_methods(var gen: ParserGenerator)
     var inscope eof <- qmacro_function("reached_EOF") <| $(var parser: $t(gen.parser_type)): bool
         return parser |> get_current_char == -1
 
-    var inscope matches <- qmacro_function("matches") <| $(var parser: $t(gen.parser_type); template_: string): bool
-        with parser
-            var st = input |> slice(index)
-            if !st |> starts_with(template_)
-                return false
-            parser |> move(template_ |> length)
-            return true
+    var inscope matches <- qmacro_function("matches") <| $(var parser: $t(gen.parser_type); template_: string; strlen: int): bool
+        var mark <- parser |> mark
+
+        // Not sufficient supply of charachters in the input
+        return false if parser.input |> length < mark + strlen
+
+        for i in range(strlen)
+            var template_char = unsafe(template_ |> character_uat(i) ) |> uint8()
+            var parser_input = parser.input[i + mark]
+            return false if template_char != parser_input
+
+        parser |> move(strlen)
+        return true
 
     var inscope skip_whitespace <- qmacro_function("skip_whitespace") <| $(var parser: $t(gen.parser_type))
         while parser |> get_current_char |> is_white_space
             parser |> move(1)
 
-    var inscope get_current_char <- qmacro_function("get_current_char") <| $(var parser: $t(gen.parser_type)): int
-        return -1 if parser.input |> length == parser.index
-        return unsafe(parser.input |> character_uat(parser.index))
+    var inscope get_current_char <- qmacro_function("get_current_char") <| $(var parser: $t(gen.parser_type))
+        return -1 if parser.input |> length <= parser.index
+        return parser.input[parser.index] |> int()
 
-    var inscope lex_number <- qmacro_function("lex_number") <| $(var parser: $t(gen.parser_type)): tuple<success:bool;value:int;endpos:int>
+    // TODO: UTF-8
+    // var inscope get_current_char <- qmacro_function("get_current_char") <| $(var parser: $t(gen.parser_type))
+    //     return [[auto -1, 0]] if parser.input |> length <= parser.index
+    //     return decode_utf8_codepoint(parser.input, parser.index)
+    // var inscope peek_current_char <- qmacro_function("peek_current_char") <| $(var parser: $t(gen.parser_type))
+    //     return -1 if parser.input |> length <= parser.index
+    //     return decode_utf8_codepoint(parser.input, parser.index).res
+
+    var inscope match_decimal_literal <- qmacro_function("match_decimal_literal") <| $(var parser: $t(gen.parser_type)): tuple<success:bool;value:int;endpos:int>
         //! Simple lexing of decimal integers, doesn't check for overflow
 
         if !parser |> get_current_char |> is_number
@@ -296,12 +355,12 @@ def generate_parser_methods(var gen: ParserGenerator)
 
         var result = 0
 
-        while parser |> get_current_char |> is_number()
+        while parser |> get_current_char |> is_number
             result *= 10
             result +=  parser |> get_current_char - '0'
             parser |> move(1)
 
-        return [[tuple<success:bool;value:int;endpos:int> true, result, parser |> mark]]
+        return [[auto true, result, parser |> mark]]
 
     var inscope match_string_literal <- qmacro_function("match_string_literal") <| $ (var parser: $t(gen.parser_type)): tuple<success:bool; string>
         //! Tries to match everything inside ""
@@ -332,8 +391,12 @@ def generate_parser_methods(var gen: ParserGenerator)
         //! Matches doubles in the form of [-+]? [0-9]* .? [0-9]+ ([eE] [-+]? [0-9]+)?
         //! The number is not checked to be representable as defined in IEEE-754
 
-        var inscope buffer: array<uint8>
         var current_char = parser |> get_current_char
+
+        if !current_char |> is_number && current_char != '+' && current_char != '-'
+            return <- [[auto false, 0.0 |> double()]]
+
+        var inscope buffer: array<uint8>
 
         if current_char == '-' || current_char == '+'
             buffer |> push(current_char |> uint8())
@@ -375,7 +438,7 @@ def generate_parser_methods(var gen: ParserGenerator)
     compiling_module() |> add_function(matches)
     compiling_module() |> add_function(skip_whitespace)
     compiling_module() |> add_function(get_current_char)
-    compiling_module() |> add_function(lex_number)
+    compiling_module() |> add_function(match_decimal_literal)
     compiling_module() |> add_function(match_string_literal)
     compiling_module() |> add_function(match_double_literal)
 
@@ -702,14 +765,17 @@ def alternative_add_epilogue(var block_contents: array<ExpressionPtr>; var gen: 
         block_contents |> emplace <| e
 
 
-def generate_terminal(var gen: ParserGenerator; terminal: Terminal): ExpressionPtr
+def generate_terminal(var gen: ParserGenerator; var terminal: Terminal): ExpressionPtr
+    // TODO: check for leaks
     var inscope return_type := gen.return_types[gen.current_context]
 
     match terminal
         if [[Terminal lit = $v(l) ]]
+            var l1 : string := l
+            var precomputed_length = length(l1)
 
             return <- qmacro_block <|
-                return <- [[$t(return_type)]] if !parser |> matches($v(l))
+                return <- [[$t(return_type)]] if !parser |> matches($v(l), $v(precomputed_length))
 
         if [[Terminal range_ = $v(r) ]]
 
@@ -719,7 +785,7 @@ def generate_terminal(var gen: ParserGenerator; terminal: Terminal): ExpressionP
         if [[Terminal number = $v(handle)]]
 
             return <- qmacro_block <|
-                var res : tuple<bool;int;int> = parser |> lex_number
+                var res : tuple<bool;int;int> = parser |> match_decimal_literal
                 return [[$t(return_type)]] if !res._0
                 var $i(handle) = res._1
 
