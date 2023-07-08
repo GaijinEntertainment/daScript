@@ -136,16 +136,15 @@ def generate_wrapper(var gen: ParserGenerator)
     var inscope wrapper_fun <- qmacro_function("parse_{rule_name}") <| $ (var parser: $t(gen.parser_type)): $t(return_type)
         var mark = parser |> mark
 
-        with parser
-            if $i(cache_table) |> key_exists(index)
-                var result := $i(cache_table)[index]
-                parser |> reset(result.endpos)
-                return <- result
-
-            var result <- $c(inner_parsing_fun)(parser)
-            $i(cache_table)[mark] := result
-
+        if parser.$f(cache_table) |> key_exists(parser.index)
+            var result := parser.$f(cache_table)[parser.index]
+            parser |> reset(result.endpos)
             return <- result
+
+        var result <- $c(inner_parsing_fun)(parser)
+        parser.$f(cache_table)[mark] := result
+
+        return <- result
 
     return <- wrapper_fun
 
@@ -739,10 +738,8 @@ def generate_one_alternative(var gen: ParserGenerator; var alt: Alternative; var
     return <- qmacro_block <|
         var parse_pos <- parser |> mark
 
-        var $i(block_name) <- $ <|
+        var $i(result) <- invoke <|
             $b(block_contents)
-
-        var $i(result) <- $i(block_name) |> invoke()
 
         return <- $i(result) if $i(result).success
 
@@ -750,8 +747,8 @@ def generate_one_alternative(var gen: ParserGenerator; var alt: Alternative; var
 
 
 def alternative_add_epilogue(var block_contents: array<ExpressionPtr>; var gen: ParserGenerator; var action_block)
-    var inscope action_type := gen.rule_types[gen.current_context]
-    var inscope return_type := gen.return_types[gen.current_context]
+    var inscope action_type <- gen.rule_types[gen.current_context] |> clone_type()
+    var inscope return_type <- gen.return_types[gen.current_context] |> clone_type()
 
     var inscope t <- qmacro_block <|
         var val: $t(action_type) -const <- invoke <| $(): $t(action_type) -const
