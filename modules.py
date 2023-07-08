@@ -17,7 +17,7 @@ options_table = {
     "dasOpenGL":      "",
     "dasQuirrel":     "DAS_QUIRREL_DISABLED",
     "dasSFML":        "DAS_SFML_DISABLED",
-    "dasSound":       "DAS_SOUND_DISABLED",
+    "dasAudio":       "DAS_AUDIO_DISABLED",
     "dasStbImage":    "DAS_STBIMAGE_DISABLED",
     "dasStbTrueType": "DAS_STBTRUETYPE_DISABLED",
     "dasStdDlg":      "DAS_STDDLG_DISABLED",
