@@ -131,25 +131,35 @@ def get_parser_with(input: string): jsonParser
 [test]
 def test1(t: T?)
     let input = "[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]"
+
     var parser <- get_parser_with(input)
+    var res_json <- parse_JsonValue(parser).value
+
     var discard_error: string
     var json <- read_json(input, discard_error)
-    t |> equal(json,  parse_JsonValue(parser).value)
+
+    t |> equal(json |> write_json(), res_json |> write_json)
 
 
 [test]
 def test2(t: T?)
     let input = "\{\"a\" : 123.53, \"b\": true \}"
     var parser <- get_parser_with(input)
+    var res_json <- parse_JsonValue(parser).value
+
     var discard_error: string
     var json <- read_json(input, discard_error)
-    t |> equal(json,  parse_JsonValue(parser).value)
+
+    t |> equal(json |> write_json(), res_json |> write_json)
 
 
 [test]
 def test3(t: T?)
     let input = "[\"123\", true,[], \{\}, \{\"hello\" : true, \"less\": \"more\"\}, [[[true]]], \"123\"]"
     var parser <- get_parser_with(input)
+    var res_json <- parse_JsonValue(parser).value
+
     var discard_error: string
     var json <- read_json(input, discard_error)
-    t |> equal(json,  parse_JsonValue(parser).value)
+
+    t |> equal(json |> write_json(), res_json |> write_json)
