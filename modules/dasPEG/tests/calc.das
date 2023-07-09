@@ -1,26 +1,8 @@
-options indenting = 4
-options no_unused_block_arguments = false
-options no_unused_function_arguments = false
-options no_aot = true
-options strict_smart_pointers = true
-
-// options log_infer_passes
-
-require strings
-require daslib/strings_boost
-
+require dastest/testing_boost
 require peg/peg
 
 
-[export]
-def main
-    var parser <- [[calcParser]]
-
-    let input = "1+2*2+1---(3*2+1*2)-1-1-1*2"
-
-    for char in input
-        parser.input |> push(char |> uint8())
-
+def get_parser_with(input: string): calcParser
     parse calc
         var add: int
 
@@ -54,6 +36,19 @@ def main
         rule(number as n) <|
             return n
 
-    var res <- parser |> parse_add
 
-    print("Assert {res.value} == -6\n")
+
+    var parser <- [[calcParser]]
+
+    for char in input
+        parser.input |> push(char |> uint8())
+
+    return <- parser
+
+
+[test]
+def test_calc(t: T?)
+    let input = "1+2*2+1---(3*2+1*2)-1-1-1*2"
+    var parser <- get_parser_with(input)
+    var res <- parser |> parse_add
+    t |> equal(-6, res.value)

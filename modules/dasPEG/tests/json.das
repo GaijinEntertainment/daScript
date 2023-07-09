@@ -1,41 +1,8 @@
-options indenting = 4
-options no_unused_block_arguments = false
-options no_unused_function_arguments = false
-options no_aot = true
-options strict_smart_pointers = true
-
-require strings
-require daslib/strings_boost
+require dastest/testing_boost
 require daslib/utf8_utils
 require daslib/json
-
 require peg/peg
 
-// Grammar:
-//
-// # A JSON text is a sequence of whitespace followed by an element
-// Json <- Spacing Element EOF
-//
-// # An element is an object, an array or a value
-// Element <- Object / Array / Value
-//
-// # A JSON object is an unordered set of name/value pairs
-// Object <- '{' Spacing Pair (',' Spacing Pair)* '}' Spacing
-//
-// Pair <- String ':' Spacing Element
-//
-// # A JSON array is an ordered collection of values
-// Array <- '[' Spacing Element (',' Spacing Element)* ']' Spacing
-//
-// # A JSON value can be a string, number, "true", "false", or "null"
-// Value <- String / Number / 'true' Spacing / 'false' Spacing / 'null' Spacing
-//
-// # JSON strings are surrounded by double quotes and support a backslash escaping syntax
-// String <- '"' (!'"' Character)* '"' Spacing
-// Character <- '\\' Escape / !'\\' .
-//
-// Escape <- ["\\/bfnrt] / 'u' [0-9A-Fa-f]{4}
-//
 
 
 def into_table(var src: array<tuple<auto(K); auto(V)>>): table<K; V>
@@ -45,12 +12,7 @@ def into_table(var src: array<tuple<auto(K); auto(V)>>): table<K; V>
     return <- result
 
 
-// Parsing specification
-
-
-[export]
-def main
-
+def get_parser_with(input: string): jsonParser
     parse json
         var JsonValue: JsonValue?
 
@@ -60,7 +22,7 @@ def main
 
 
         var Element: JsonValue?
-            
+
         rule(Array as a) <|
             return <- JV(a)
 
@@ -110,7 +72,7 @@ def main
             var empty: table<string; JsonValue?>
             return <- empty if list |> empty
             return <- list[0] |> into_table
-        
+
 
         var MappingList: array<tuple<string; JsonValue?>>
 
@@ -145,7 +107,7 @@ def main
 
         rule("null", WS) <|
             return <- JVNull()
-            
+
         rule(double_ as d, WS) <|  // <- builtin double_ rule
             return <- JV(d)
 
@@ -154,21 +116,50 @@ def main
 
 
 
-    var parser <- [[jsonParser]] 
+    var parser <- [[jsonParser]]
 
+    // TODO: move into set_input parser method
 
-    // let input = "\{\"a\" : 123.53, \"b\": true \}"
-    let input = "[\"123\", true,[], \{\}, \{\"hello\" : true, \"less\": \"more\"\}, [[true]], \"123\"]"
-
-    if !is_utf8_string_valid(input)
-        print("Invalid utf-8 in the parsed string")
-        return
+    verify(input |> is_utf8_string_valid, "Invalid utf-8 in the parsed string")
 
     for char in input
         parser.input |> push(char |> uint8())
 
-    var result <- parser |> parse_JsonValue()
+    return <- parser
 
-    print ("{result.value |> write_json}\n")
 
-    return
+[test]
+def test1(t: T?)
+    let input = "[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]"
+
+    var parser <- get_parser_with(input)
+    var res_json <- parse_JsonValue(parser).value
+
+    var discard_error: string
+    var json <- read_json(input, discard_error)
+
+    t |> equal(json |> write_json(), res_json |> write_json)
+
+
+[test]
+def test2(t: T?)
+    let input = "\{\"a\" : 123.53, \"b\": true \}"
+    var parser <- get_parser_with(input)
+    var res_json <- parse_JsonValue(parser).value
+
+    var discard_error: string
+    var json <- read_json(input, discard_error)
+
+    t |> equal(json |> write_json(), res_json |> write_json)
+
+
+[test]
+def test3(t: T?)
+    let input = "[\"123\", true,[], \{\}, \{\"hello\" : true, \"less\": \"more\"\}, [[[true]]], \"123\"]"
+    var parser <- get_parser_with(input)
+    var res_json <- parse_JsonValue(parser).value
+
+    var discard_error: string
+    var json <- read_json(input, discard_error)
+
+    t |> equal(json |> write_json(), res_json |> write_json)
