@@ -40,6 +40,31 @@ def add_name(var rule: Rule; var name: string)
             abort("Unreachable")
 
 
+def into_terminal(var expr: ExpressionPtr): tuple<int;int>
+    if expr is ExprConstInt
+        // Single character '\n', '1', 'a'
+
+        let v = (expr as ExprConstInt).value
+        return <- [[auto v, v]]
+
+    elif expr is ExprCall && (expr as ExprCall).name == "interval"
+        // Range of charachters '1'..'9'
+
+        var inscope left_exp <- expr as ExprCall.arguments[0]
+        var inscope right_exp <- (expr as ExprCall).arguments[1]
+
+        // macro_verify(left_exp is ExprConstInt, null, "Range end should be integer constants");
+        // macro_verify(right_exp is ExprConstInt, null, "Range end should be integer constants")
+
+        var left <- (left_exp as ExprConstInt).value
+        var right <- (right_exp as ExprConstInt).value
+
+        return <- [[auto left, right]]
+
+    abort("Unreachable `into_terminal`")
+    return <- [[auto 0, 0]]
+
+
 [macro_function]
 def into_rule_(var expr: ExpressionPtr): Rule_?
     if expr is ExprAsVariant && (expr as ExprAsVariant).value is ExprVar
@@ -119,6 +144,30 @@ def into_rule_(var expr: ExpressionPtr): Rule_?
 
         var subrule = (expr as ExprCall).arguments[0] |> into_rule_
         return <- new [[Rule_ rule <- [[Rule option = subrule ]]]]
+
+    elif expr is ExprCall && (expr as ExprCall).name == "PEEK"
+        // Lookahead rule (PEEK) -- match the rule without advancing
+
+        var subrule = (expr as ExprCall).arguments[0] |> into_rule_
+        return <- new [[Rule_ rule <- [[Rule and_rule = subrule ]]]]
+
+    elif expr is ExprOp1 && (expr as ExprOp1).op == "!"
+        // Negaitve Lookahead rule (!) -- assert unable to match the rule, without advancing
+
+        var subrule = (expr as ExprCall).arguments[0] |> into_rule_
+        return <- new [[Rule_ rule <- [[Rule not_rule = subrule ]]]]
+
+    elif expr is ExprCall && (expr as ExprCall).name == "set"
+        // Matching set syntax set('1'..'9', 'a'..'z', 'A'..'Z', '_')
+
+        var set = expr as ExprCall
+
+        var terms: array<tuple<int;int>>
+
+        for arg in set.arguments
+            terms |> push (arg |> into_terminal)
+
+        return <- new [[Rule_ rule <- [[Rule terminal <- [[Terminal charset <- terms]] ]] ]]
 
     elif expr is ExprOp1 && (expr as ExprOp1).op == "+"
         abort("TODO: Unreachable +")
