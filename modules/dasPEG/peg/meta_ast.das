@@ -24,8 +24,8 @@ variant Terminal
     // Literal: "Hello world"
     lit: string 
 
-    // Range: [0-9]
-    range_: tuple<int; int> 
+    // Range: set('0'..'9', 'a'..'z')
+    charset: array<tuple<int; int>>
 
     // Name of the result (int)
     number: string
@@ -47,14 +47,14 @@ typedef Nonterminal = string;
 
 
 variant Rule
-    seq: array<Rule_?>   // R1 R2 R3
-    alt: array<Alternative>   // R1 | R2 | R3
-    subrule: Rule_?      // (R1)
+    seq: array<Rule_?>        // rule(R1, R2, R3)
+    alt: array<Alternative>   // seq <| {...} ; seq <| {...}; etc
+    subrule: Rule_?           // (R1)
     
-    maybe_repeat: Rule_? // Rule*
-    repeat: Rule_?       // Rule+
+    maybe_repeat: Rule_?      // * Rule
+    repeat: Rule_?            // + Rule
 
-    option: Rule_?       // Rule?
+    option: Rule_?            // MB(Rule)
 
     terminal: Terminal 
     nonterminal: Nonterminal
@@ -62,7 +62,7 @@ variant Rule
 
     // Do not consume the input
     not_rule: Rule_?     // !Rule
-    and_rule: Rule_?     // &Rule
+    and_rule: Rule_?     // PEEK(Rule)
 
 
 struct Rule_
@@ -70,7 +70,7 @@ struct Rule_
     rule: Rule
 
 
-// E.g. rule_name: rule
+// E.g. var <name>: <type_>
 struct Definition
     name: string
 
