@@ -131,7 +131,7 @@ def generate_wrapper(var gen: ParserGenerator)
     let cache_table = "{rule_name}_cache"
     let inner_parsing_fun = "parse_{rule_name}_inner"
 
-    var inscope return_type <- gen.return_types[rule_name]
+    var inscope return_type <- gen.return_types[rule_name] |> clone_type
 
     var inscope wrapper_fun <- qmacro_function("parse_{rule_name}") <| $ (var parser: $t(gen.parser_type)): $t(return_type)
         var mark = parser.index
@@ -156,7 +156,7 @@ def generate_wrapper_leftrec(var gen: ParserGenerator)
     let cache_table = "{rule_name}_cache"
     let inner_parsing_fun = "parse_{rule_name}_inner"
 
-    var inscope return_type <- gen.return_types[rule_name]
+    var inscope return_type <- gen.return_types[rule_name] |> clone_type
 
     var inscope wrapper_fun <- qmacro_function("parse_{rule_name}") <| $ (var parser: $t(gen.parser_type)): $t(return_type)
         var mark = parser.index
@@ -275,7 +275,7 @@ def generate(var gen: ParserGenerator; var def_: Definition)
     gen.current_context = def_.name
 
     var inscope function_body <- gen |> generate(def_.rule)
-    var inscope return_type := gen.return_types[def_.name]
+    var inscope return_type <- gen.return_types[def_.name] |> clone_type
 
     var inscope fun <- qmacro_function("parse_{def_.name}_inner") <| $ (var parser: $t(gen.parser_type)): $t(return_type)
         $b(function_body)
@@ -694,7 +694,7 @@ def generate(var gen: ParserGenerator; var rule_: Rule): array<ExpressionPtr>
 
         if [[Rule subrule = $v(subrule)]]
             // Create a new unnamed subrule for the (...)
-            var inscope return_type := gen.return_types[gen.current_context]
+            var inscope return_type <- gen.return_types[gen.current_context] |> clone_type
             var inscope rule_code <- gen |> generate(subrule.rule)
 
             var inscope t <- qmacro_block <|
@@ -707,7 +707,7 @@ def generate(var gen: ParserGenerator; var rule_: Rule): array<ExpressionPtr>
             var result_handle = rule_.name
 
             var inscope type_decl <- gen |> get_rule_type(rule_.rule)
-            var inscope result_type := gen.return_types[gen.current_context]
+            var inscope result_type <- gen.return_types[gen.current_context] |> clone_type
 
             if rule_.name == "" // Rule not bound by name, discard result
                 var inscope rule_code <- gen |> generate(rule_.rule)
