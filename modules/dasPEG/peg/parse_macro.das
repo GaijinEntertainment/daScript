@@ -93,12 +93,18 @@ def into_rule_(var expr: ExpressionPtr): Rule_?
         return <- new [[Rule_ rule <- t, name <- as_expr.name |> string()]]
 
     elif expr is ExprAsVariant && ((expr as ExprAsVariant).value is ExprPtr2Ref)
-        // Optional rule (MB) -- zero or one
         var as_expr <- expr as ExprAsVariant
 
         var subrule = (as_expr.value as ExprPtr2Ref).subexpr |> into_rule_
         subrule.name := as_expr.name
         return <- new [[Rule_ rule <- [[Rule maybe_repeat <- subrule ]]]]
+
+
+    elif expr is ExprAsVariant && ((expr as ExprAsVariant).value is ExprStringBuilder)
+        var as_expr <- expr as ExprAsVariant
+        var subrule = (as_expr.value as ExprStringBuilder).elements[0] |> into_rule_
+        subrule.name := as_expr.name
+        return <- new [[Rule_ rule <- [[Rule text_extraction <- subrule]]]]
 
 
     elif expr is ExprAsVariant

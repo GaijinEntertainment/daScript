@@ -60,6 +60,9 @@ variant Rule
     nonterminal: Nonterminal
     bound_nonterminal: tuple<Nonterminal; string>
 
+    // Extracts text from a (nonterminal) rule for custom interpretation
+    text_extraction: Rule_?  // "{digits}" as ds
+
     // Do not consume the input
     not_rule: Rule_?     // !Rule
     and_rule: Rule_?     // PEEK(Rule)

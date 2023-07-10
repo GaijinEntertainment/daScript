@@ -120,6 +120,9 @@ def rule_left_recursive(name: string; rule: Rule): bool
         if [[Rule terminal = _]]
             return false
 
+        if [[Rule text_extraction = $v(rule_)]]
+            return true if rule_left_recursive(name, rule_.rule)
+
         if _
             abort("TODO: rule_left_recursive")
 
@@ -528,7 +531,7 @@ def generate(var gen: ParserGenerator; var rule_: Rule): array<ExpressionPtr>
 
         if [[Rule nonterminal = $v(nonterm)]]
             let name = nonterm
-            let count = "{gen.rule_counter[name]}"
+            let count = "{gen.rule_counter[name]++}"
 
             // Type of the function that we are now generating code for
             var inscope return_type <- gen.return_types[gen.current_context] |> clone_type
@@ -562,6 +565,21 @@ def generate(var gen: ParserGenerator; var rule_: Rule): array<ExpressionPtr>
 
             return <- flatten_block(t as ExprBlock)
 
+        if [[Rule text_extraction = $v(subrule)]]
+
+            var result_handle = subrule.name
+            var inscope subrule_ <- gen |> generate(subrule.rule)
+            var inscope return_type <- gen.return_types[gen.current_context] |> clone_type
+            var i = gen.rule_counter["extract"]++
+
+            var inscope t <- qmacro_block <|
+                var $i("ext_pos{i}") = parser.index
+                $b(subrule_)
+                var $i("str{i}") = unsafe(reinterpret<string> unsafe(addr(parser.input[0])))
+                var $i(result_handle): string <- $i("str{i}") |> slice($i("ext_pos{i}"), parser.index)
+
+            return <- flatten_block(t as ExprBlock)
+
         if [[Rule seq = $v(rules)]]
 
             var inscope result: array<ExpressionPtr>
@@ -587,11 +605,16 @@ def generate(var gen: ParserGenerator; var rule_: Rule): array<ExpressionPtr>
             var inscope type_decl <- gen |> get_rule_type(rule_.rule)
 
             if rule_.name == "" // Rule not bound by name, discard result
-                var inscope rule_code <- gen |> generate(rule_.rule)
+                var inscope rule_code <- gen |> with_context("__repetition__") <|
+                    return <- gen |> generate(rule_.rule)
+
+                rule_code |> append_block <| ( qmacro_block <| {
+                    return <- [[$t(make_default_type_decl()) true, 0, parser.index]];
+                } )
 
                 var inscope t <- qmacro_block <|
                     while true
-                        invoke <|
+                        var res <- invoke <|
                             $b(rule_code)
                         break if !res.success
 
