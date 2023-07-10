@@ -57,7 +57,7 @@ def get_parser_with(input: string): emailParser
 
 
 [test]
-def test_email(t: T?)
+def test_email_0(t: T?)
     var input = "abc@mail.example.com"
 
     var parser <- get_parser_with(input)
@@ -66,3 +66,135 @@ def test_email(t: T?)
 
     t |> equal("abc", email.username)
     t |> equal("mail.example.com", email.domain)
+
+
+[test]
+def test_email_1(t: T?)
+    var input = "abc@mail.example.com"
+
+    var parser <- get_parser_with(input)
+    var res <- parser |> parse_email
+    var email = res.value
+
+    t |> equal("abc", email.username)
+    t |> equal("mail.example.com", email.domain)
+
+
+[test]
+def test_email_2(t: T?)
+    var input = "john.doe@example.com"
+
+    var parser <- get_parser_with(input)
+    var res <- parser |> parse_email
+    var email = res.value
+
+    t |> equal("john.doe", email.username)
+    t |> equal("example.com", email.domain)
+
+
+[test]
+def test_email_3(t: T?)
+    var input = "this_is_a_very_long_username@example.com"
+
+    var parser <- get_parser_with(input)
+    var res <- parser |> parse_email
+    var email = res.value
+
+    t |> equal("this_is_a_very_long_username", email.username)
+    t |> equal("example.com", email.domain)
+
+
+[test]
+def test_email_4(t: T?)
+    var input = "12345@example.com"
+
+    var parser <- get_parser_with(input)
+    var res <- parser |> parse_email
+    var email = res.value
+
+    t |> equal("12345", email.username)
+    t |> equal("example.com", email.domain)
+
+
+[test]
+def test_email_5(t: T?)
+    var input = "jane-doe@mail-example.com"
+
+    var parser <- get_parser_with(input)
+    var res <- parser |> parse_email
+    var email = res.value
+
+    t |> equal("jane-doe", email.username)
+    t |> equal("mail-example.com", email.domain)
+
+
+[test]
+def test_email_6(t: T?)
+    var input = ".username@example.com"
+
+    var parser <- get_parser_with(input)
+    var res <- parser |> parse_email
+    var email = res.value
+
+    t |> equal(".username", email.username)
+    t |> equal("example.com", email.domain)
+
+
+[test]
+def test_email_7(t: T?)
+    var input = "user_name@example.com"
+
+    var parser <- get_parser_with(input)
+    var res <- parser |> parse_email
+    var email = res.value
+
+    t |> equal("user_name", email.username)
+    t |> equal("example.com", email.domain)
+
+
+[test]
+def test_email_8(t: T?)
+    var input = "john.doe@example.net"
+
+    var parser <- get_parser_with(input)
+    var res <- parser |> parse_email
+    var email = res.value
+
+    t |> equal("john.doe", email.username)
+    t |> equal("example.net", email.domain)
+
+
+[test]
+def test_email_9(t: T?)
+    var input = "JOHN.DOE@EXAMPLE.COM"
+
+    var parser <- get_parser_with(input)
+    var res <- parser |> parse_email
+    var email = res.value
+
+    t |> equal("JOHN.DOE", email.username)
+    t |> equal("EXAMPLE.COM", email.domain)
+
+
+[test]
+def test_email_10(t: T?)
+    var input = "a@example.com"
+
+    var parser <- get_parser_with(input)
+    var res <- parser |> parse_email
+    var email = res.value
+
+    t |> equal("a", email.username)
+    t |> equal("example.com", email.domain)
+
+
+[test]
+def test_email_11(t: T?)
+    var input = "user@subdomain1.subdomain2.example.com"
+
+    var parser <- get_parser_with(input)
+    var res <- parser |> parse_email
+    var email = res.value
+
+    t |> equal("user", email.username)
+    t |> equal("subdomain1.subdomain2.example.com", email.domain)
