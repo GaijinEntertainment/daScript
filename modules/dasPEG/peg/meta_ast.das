@@ -33,6 +33,9 @@ variant Terminal
     // WS <- [' ', '\n', '\t']*
     whitespace: void?
 
+    // Any charachter
+    any: void?
+
     // End of file (!.)
     EOF: void? 
 
