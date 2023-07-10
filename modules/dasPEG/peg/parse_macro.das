@@ -116,7 +116,7 @@ def into_rule_(var expr: ExpressionPtr): Rule_?
 
         var rule: Rule_? <- into_rule_(as_expr.value)
         rule.name = as_expr.name |> string()
-        print("{rule}\n")
+        //print("{rule}\n")
         return <- rule
 
 
@@ -176,7 +176,6 @@ def into_rule_(var expr: ExpressionPtr): Rule_?
         return <- new [[Rule_ rule <- [[Rule terminal <- [[Terminal charset <- terms]] ]] ]]
 
     elif expr is ExprOp1 && (expr as ExprOp1).op == "+"
-        abort("TODO: Unreachable +")
         // Several (+) -- one or more
 
         var subrule = (expr as ExprOp1).subexpr |> into_rule_

@@ -17,6 +17,7 @@ require daslib/templates_boost
 
 require peg/meta_ast
 
+options log
 
 struct ParserGenerator
     // Provides information to generate unique names
@@ -111,6 +112,9 @@ def rule_left_recursive(name: string; rule: Rule): bool
         if [[Rule maybe_repeat = $v(rule_)]]
             return true if rule_left_recursive(name, rule_.rule)
 
+        if [[Rule repeat = $v(rule_)]]
+            return true if rule_left_recursive(name, rule_.rule)
+
         if [[Rule nonterminal = $v(name_)]]
             return true if name == name_
 
@@ -179,7 +183,6 @@ def generate_wrapper_leftrec(var gen: ParserGenerator)
                 parser.index = mark
 
                 var newres = $c(inner_parsing_fun)(parser)
-                print("{$v(inner_parsing_fun)}: {newres}\n")
                 var endpos = parser.index
 
                 // Break if no movement
@@ -694,26 +697,69 @@ def generate(var gen: ParserGenerator; var rule_: Rule): array<ExpressionPtr>
 
 
         if [[Rule repeat = $v(rule_)]]
+            // TODO:
 
-            var result_handle = rule_.name
-            var inscope rule_code <- gen |> generate(rule_.rule)
-            var inscope type_decl <- gen |> get_rule_type(rule_.rule)
+            // If I uncomments this, for some reason stack overflows
+            // somewhere in applications of templates. Even if the rule does
+            // not use + -- how?
 
-            var inscope return_type <- gen.return_types[gen.current_context] |> clone_type
+            // var result_handle = rule_.name
+            // var inscope type_decl <- gen |> get_rule_type(rule_.rule)
+            // var inscope return_type <- gen.return_types[gen.current_context] |> clone_type
 
-            if rule_.name == "" // Rule not bound by name, discard result
-                var inscope t <- qmacro_block <|
 
-                    var res <- invoke($b(rule_code))
-                    return [[$t(return_type)]] if !res.success
+            // if rule_.name == "" // Rule not bound by name, discard result
+            //     var inscope rule_code1 <- gen |> with_context("__repetition__") <|
+            //         return <- gen |> generate(rule_.rule)
+            // //     var inscope rule_code1 := rule_code
 
-                    while true
-                        var res <- invoke($b(rule_code))
-                        break if !res.success
+            //     rule_code1 |> append_block <| ( qmacro_block <| {
+            //         return <- [[$t(make_default_type_decl()) true, 0, parser.index]];
+            //     } )
 
-                return <- flatten_block(t as ExprBlock)
+            //     var inscope t1111 <- qmacro_block <|
+            //         var res1 <- invoke <|
+            //             $b(rule_code1)
 
-            abort("TODO: Rule repeat bound")
+            //         return [[$t(return_type)]] if !res1.success
+
+            //         while true
+            //             var res <- invoke <|
+            //                 $b(rule_code1)
+            //             break if !res.success
+
+            //     return <- flatten_block(t as ExprBlock)
+
+	        // Bind result to the provided name
+
+            // set_rule_handle(rule_, "temp_name")
+            // var inscope rule_code <- gen |> with_context("__repetition__") <|
+            //     return <- gen |> generate(rule_.rule)
+
+            // rule_code |> append_block <| ( qmacro_block <| {
+            //     $i(result_handle) |> emplace <| temp_name;
+            //     return <- [[$t(make_default_type_decl())]];
+            // } )
+
+            // var inscope t <- qmacro_block <|
+            //     var $i(result_handle) : array<$t(type_decl)>
+
+            //     var res1 <- invoke <|
+            //         $b(rule_code)
+
+            //     return [[$t(return_type)]] if !res1.success
+            //     $i(result_handle) |> emplace <| res1.value
+
+            //     while true
+            //         var sz = $i(result_handle) |> length
+
+            //         invoke <|
+            //             $b(rule_code) // Adds an element on success
+
+            //         break if sz == $i(result_handle) |> length
+
+            // return <- flatten_block(t as ExprBlock)
+            abort("Generate repeat")
 
         if [[Rule subrule = $v(subrule)]]
             // Create a new unnamed subrule for the (...)
@@ -833,7 +879,7 @@ def generate_terminal(var gen: ParserGenerator; var terminal: Terminal): Express
 
             // Get the currect charachter from the stream
 
-            var inscope rule_code: array<ExpressionPtr>;
+            var inscope rule_code: array<ExpressionPtr>
 
             rule_code |> append_block <| ( qmacro_block <| {
                 let current_char = parser |> get_current_char;
