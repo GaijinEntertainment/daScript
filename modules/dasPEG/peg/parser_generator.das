@@ -17,8 +17,6 @@ require daslib/templates_boost
 
 require peg/meta_ast
 
-//options log
-
 struct ParserGenerator
     // Provides information to generate unique names
     rule_counter: table<string; int>
