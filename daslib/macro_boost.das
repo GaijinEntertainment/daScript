@@ -104,3 +104,14 @@ def public collect_labels(expr:ExpressionPtr)
     unsafe
         delete astVisitor
     return <- res
+
+[call_macro(name="return_skip_lockcheck")]
+class private ReturnSkipLockcheck : AstCallMacro
+    //! this is similar to regular return <-, but it does not check for locks
+    def override visit ( prog:ProgramPtr; mod:Module?; var call:smart_ptr<ExprCallMacro> ) : ExpressionPtr
+        macro_verify( call.arguments |> length==1,prog,call.at,"expecting return_skip_lockcheck(expr)" )
+        return <- new [[ExprReturn()
+            at=call.at,
+            subexpr <- clone_expression(call.arguments[0]),
+            returnFlags = ExprReturnFlags skipLockCheck | ExprReturnFlags moveSemantics
+        ]]
