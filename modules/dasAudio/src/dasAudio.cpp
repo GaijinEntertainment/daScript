@@ -242,6 +242,7 @@ public:
         ModuleLibrary lib;
         lib.addModule(this);
         lib.addBuiltInModule();
+        lib.addModule(Module::require("rtti"));
         // opl3
         addAnnotation(make_smart<Opl3ChipAnnotation>(lib));
         addExtern<DAS_BIND_FUN(OPL3_Generate)>(*this, lib, "OPL3_Generate",
