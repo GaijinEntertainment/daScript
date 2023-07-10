@@ -3,7 +3,7 @@ require daslib/utf8_utils
 require daslib/json
 require peg/peg
 
-
+options stack = 10000000
 
 def into_table(var src: array<tuple<auto(K); auto(V)>>): table<K; V>
     var result: table<K; V>
@@ -156,6 +156,51 @@ def test2(t: T?)
 [test]
 def test3(t: T?)
     let input = "[\"123\", true,[], \{\}, \{\"hello\" : true, \"less\": \"more\"\}, [[[true]]], \"123\"]"
+    var parser <- get_parser_with(input)
+    var res_json <- parse_JsonValue(parser).value
+
+    var discard_error: string
+    var json <- read_json(input, discard_error)
+
+    t |> equal(json |> write_json(), res_json |> write_json)
+
+
+[test]
+def test4(t: T?)
+    let input = "\{\"message\": \"Hello, world!\", \"nested\": \{\"nested_again\":
+    \{\"is_it_deep\": true, \"numbers\": [1, 2, 3, 4]\}\}, \"array\": [false, null, \"mixed array\"]\}"
+    var parser <- get_parser_with(input)
+    var res_json <- parse_JsonValue(parser).value
+
+    var discard_error: string
+    var json <- read_json(input, discard_error)
+
+    t |> equal(json |> write_json(), res_json |> write_json)
+
+
+[test]
+def test5(t: T?)
+    let input = "[\{\"name\": \"John\", \"age\": 30, \"city\": \"New York\", \"siblings\":
+    [\{\"name\": \"Jane\", \"age\": 25, \"city\": \"Chicago\"\},
+    \{\"name\": \"Joe\", \"age\": 35, \"city\": \"San Francisco\"\}]\}, true, 123, null, [1, 2, 3]]"
+    var parser <- get_parser_with(input)
+    var res_json <- parse_JsonValue(parser).value
+
+    var discard_error: string
+    var json <- read_json(input, discard_error)
+
+    t |> equal(json |> write_json(), res_json |> write_json)
+
+
+[test]
+def test6(t: T?)
+    let input = "\{\"colors\": [\{\"colorName\": \"red\", \"hexValue\": \"#f00\"\},
+    \{\"colorName\": \"green\", \"hexValue\": \"#0f0\"\},
+    \{\"colorName\": \"blue\", \"hexValue\": \"#00f\"\},
+    \{\"colorName\": \"cyan\", \"hexValue\": \"#0ff\"\},
+    \{\"colorName\": \"magenta\", \"hexValue\": \"#f0f\"\},
+    \{\"colorName\": \"yellow\", \"hexValue\": \"#ff0\"\},
+    \{\"colorName\": \"black\", \"hexValue\": \"#000\"\}]\}"
     var parser <- get_parser_with(input)
     var res_json <- parse_JsonValue(parser).value
 

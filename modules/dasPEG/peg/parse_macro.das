@@ -93,12 +93,18 @@ def into_rule_(var expr: ExpressionPtr): Rule_?
         return <- new [[Rule_ rule <- t, name <- as_expr.name |> string()]]
 
     elif expr is ExprAsVariant && ((expr as ExprAsVariant).value is ExprPtr2Ref)
-        // Optional rule (MB) -- zero or one
         var as_expr <- expr as ExprAsVariant
 
         var subrule = (as_expr.value as ExprPtr2Ref).subexpr |> into_rule_
         subrule.name := as_expr.name
         return <- new [[Rule_ rule <- [[Rule maybe_repeat <- subrule ]]]]
+
+
+    elif expr is ExprAsVariant && ((expr as ExprAsVariant).value is ExprStringBuilder)
+        var as_expr <- expr as ExprAsVariant
+        var subrule = (as_expr.value as ExprStringBuilder).elements[0] |> into_rule_
+        subrule.name := as_expr.name
+        return <- new [[Rule_ rule <- [[Rule text_extraction <- subrule]]]]
 
 
     elif expr is ExprAsVariant
@@ -110,7 +116,7 @@ def into_rule_(var expr: ExpressionPtr): Rule_?
 
         var rule: Rule_? <- into_rule_(as_expr.value)
         rule.name = as_expr.name |> string()
-        print("{rule}\n")
+        //print("{rule}\n")
         return <- rule
 
 
@@ -124,6 +130,8 @@ def into_rule_(var expr: ExpressionPtr): Rule_?
             return <- new [[Rule_ rule <- [[Rule terminal <- [[Terminal whitespace = null]]]]]]
         elif name == "EOF"
             return <- new [[Rule_ rule <- [[Rule terminal <- [[Terminal EOF = null]]]]]]
+        elif name == "any"
+            return <- new [[Rule_ rule <- [[Rule terminal <- [[Terminal any = null]]]]]]
         else
             return <- new [[Rule_ rule <- [[Rule nonterminal <- name]]]]
 
@@ -154,7 +162,7 @@ def into_rule_(var expr: ExpressionPtr): Rule_?
     elif expr is ExprOp1 && (expr as ExprOp1).op == "!"
         // Negaitve Lookahead rule (!) -- assert unable to match the rule, without advancing
 
-        var subrule = (expr as ExprCall).arguments[0] |> into_rule_
+        var subrule = (expr as ExprOp1).subexpr |> into_rule_
         return <- new [[Rule_ rule <- [[Rule not_rule = subrule ]]]]
 
     elif expr is ExprCall && (expr as ExprCall).name == "set"
@@ -170,7 +178,6 @@ def into_rule_(var expr: ExpressionPtr): Rule_?
         return <- new [[Rule_ rule <- [[Rule terminal <- [[Terminal charset <- terms]] ]] ]]
 
     elif expr is ExprOp1 && (expr as ExprOp1).op == "+"
-        abort("TODO: Unreachable +")
         // Several (+) -- one or more
 
         var subrule = (expr as ExprOp1).subexpr |> into_rule_
