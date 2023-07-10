@@ -130,6 +130,8 @@ def into_rule_(var expr: ExpressionPtr): Rule_?
             return <- new [[Rule_ rule <- [[Rule terminal <- [[Terminal whitespace = null]]]]]]
         elif name == "EOF"
             return <- new [[Rule_ rule <- [[Rule terminal <- [[Terminal EOF = null]]]]]]
+        elif name == "any"
+            return <- new [[Rule_ rule <- [[Rule terminal <- [[Terminal any = null]]]]]]
         else
             return <- new [[Rule_ rule <- [[Rule nonterminal <- name]]]]
 
@@ -160,7 +162,7 @@ def into_rule_(var expr: ExpressionPtr): Rule_?
     elif expr is ExprOp1 && (expr as ExprOp1).op == "!"
         // Negaitve Lookahead rule (!) -- assert unable to match the rule, without advancing
 
-        var subrule = (expr as ExprCall).arguments[0] |> into_rule_
+        var subrule = (expr as ExprOp1).subexpr |> into_rule_
         return <- new [[Rule_ rule <- [[Rule not_rule = subrule ]]]]
 
     elif expr is ExprCall && (expr as ExprCall).name == "set"

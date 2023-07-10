@@ -17,7 +17,7 @@ require daslib/templates_boost
 
 require peg/meta_ast
 
-options log
+//options log
 
 struct ParserGenerator
     // Provides information to generate unique names
@@ -113,6 +113,12 @@ def rule_left_recursive(name: string; rule: Rule): bool
             return true if rule_left_recursive(name, rule_.rule)
 
         if [[Rule repeat = $v(rule_)]]
+            return true if rule_left_recursive(name, rule_.rule)
+
+        if [[Rule not_rule = $v(rule_)]]
+            return true if rule_left_recursive(name, rule_.rule)
+
+        if [[Rule and_rule = $v(rule_)]]
             return true if rule_left_recursive(name, rule_.rule)
 
         if [[Rule nonterminal = $v(name_)]]
@@ -275,6 +281,8 @@ def generate_result_types(var gen: ParserGenerator)
 
     gen.return_types["__repetition__"] := make_default_type_decl()
     gen.return_types["__option__"] := make_default_type_decl()
+    gen.return_types["__PEEK__"] := make_default_type_decl()
+
 
 
 def generate(var gen: ParserGenerator; var def_: Definition)
@@ -655,7 +663,7 @@ def generate(var gen: ParserGenerator; var rule_: Rule): array<ExpressionPtr>
                 return <- gen |> generate(rule_.rule)
 
             var inscope epilogue <- qmacro_block <|
-                return true
+                return <- [[$t(make_default_type_decl()) true, 0, parser.index]];
 
             for e in flatten_block(epilogue as ExprBlock)
                 rule_code |> emplace <| e
@@ -667,7 +675,7 @@ def generate(var gen: ParserGenerator; var rule_: Rule): array<ExpressionPtr>
                     $b(rule_code)
 
                 parser.index = mark
-                return <- [[$t(return_type)]] if success
+                return <- [[$t(return_type)]] if success.success
 
             return <- flatten_block(t as ExprBlock)
 
@@ -679,7 +687,7 @@ def generate(var gen: ParserGenerator; var rule_: Rule): array<ExpressionPtr>
                 return <- gen |> generate(rule_.rule)
 
             var inscope epilogue <- qmacro_block <|
-                return true
+                return <- [[$t(make_default_type_decl()) true, 0, parser.index]];
 
             for e in flatten_block(epilogue as ExprBlock)
                 rule_code |> emplace <| e
@@ -691,7 +699,7 @@ def generate(var gen: ParserGenerator; var rule_: Rule): array<ExpressionPtr>
                     $b(rule_code)
 
                 parser.index = mark
-                return <- [[$t(return_type)]] if !success
+                return <- [[$t(return_type)]] if !success.success
 
             return <- flatten_block(t as ExprBlock)
 
@@ -920,7 +928,13 @@ def generate_terminal(var gen: ParserGenerator; var terminal: Terminal): Express
         if [[Terminal EOF = _]]
 
             return <- qmacro_block <|
-                return [[$t(return_type)]] if !parser |> reached_EOF
+                return <- [[$t(return_type)]] if !parser |> reached_EOF
+
+        if [[Terminal any = _]]
+
+            return <- qmacro_block <|
+                return [[$t(return_type)]] if parser |> reached_EOF
+                parser.index += 1
 
 
         if [[Terminal string_ = $v(handle)]]
