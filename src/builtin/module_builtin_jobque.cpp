@@ -17,9 +17,9 @@ namespace das {
         DAS_ASSERT(mRef==0);
     }
 
-    void Channel::push ( void * data, Context * context ) {
+    void Channel::push ( void * data, TypeInfo * ti, Context * context ) {
         lock_guard<mutex> guard(lock);
-        pipe.emplace(data, context!=owner ? context : nullptr);
+        pipe.emplace_back(data, ti, context!=owner ? context : nullptr);
         cond.notify_all();  // notify_one??
     }
 
@@ -40,7 +40,7 @@ namespace das {
             tail.clear();
         } else {
             tail = das::move(pipe.front());
-            pipe.pop();
+            pipe.pop_front();
         }
         return tail.data;
     }
@@ -97,9 +97,13 @@ namespace das {
         return remaining==0;
     }
 
-    void channelPush ( Channel * ch, void * data, Context * context, LineInfoArg * at ) {
-        if ( !ch ) context->throw_error_at(at, "channelPush: channel is null");
-        ch->push(data, context);
+    vec4f channelPush ( Context & context, SimNode_CallBase * call, vec4f * args ) {
+        auto ch = cast<Channel *>::to(args[0]);
+        if ( !ch ) context.throw_error_at(call->debugInfo, "channelPush: channel is null");
+        void * data = cast<void *>::to(args[1]);
+        TypeInfo * ti = call->types[1];
+        ch->push(data, ti, &context);
+        return v_zero();
     }
 
     void * channelPop ( Channel * ch, Context * context, LineInfoArg * at ) {
@@ -176,6 +180,13 @@ namespace das {
             addProperty<DAS_BIND_MANAGED_PROP(isReady)>("isReady");
             addProperty<DAS_BIND_MANAGED_PROP(size)>("size");
             addProperty<DAS_BIND_MANAGED_PROP(total)>("total");
+        }
+        virtual void walk(DataWalker & walker, void * data) override {
+            BasicStructureAnnotation::walk(walker, data);
+            Channel * ch = (Channel *) data;
+            ch->for_each_item([&](void * data, TypeInfo * ti, Context *) {
+                walker.walk((char *)&data, ti);
+            });
         }
     };
 
@@ -313,9 +324,9 @@ namespace das {
             lib.addBuiltInModule();
             // channel
             addAnnotation(make_smart<ChannelAnnotation>(lib));
-            addExtern<DAS_BIND_FUN(channelPush)>(*this, lib,  "_builtin_channel_push",
+            addInterop<channelPush,void,Channel *,vec4f>(*this, lib,  "_builtin_channel_push",
                 SideEffects::modifyArgumentAndExternal, "channelPush")
-                    ->args({"channel","data","context","line"});
+                    ->args({"channel","data"});
             addExtern<DAS_BIND_FUN(channelPop)>(*this, lib,  "_builtin_channel_pop",
                 SideEffects::modifyArgumentAndExternal, "channelPop")
                     ->args({"channel","context","line"});

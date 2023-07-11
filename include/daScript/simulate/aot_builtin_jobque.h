@@ -9,9 +9,10 @@ namespace das {
 
     struct Feature {
         void *              data = nullptr;
+        TypeInfo *          type = nullptr;
         shared_ptr<Context> from;
         Feature() {}
-        __forceinline Feature ( void * d, Context * c) : data(d), from(c ? c->shared_from_this() : nullptr) {}
+        __forceinline Feature ( void * d, TypeInfo * ti, Context * c) : data(d), type(ti), from(c ? c->shared_from_this() : nullptr) {}
         __forceinline void clear() {
             data = nullptr;
             from.reset();
@@ -27,7 +28,7 @@ namespace das {
         Channel ( const Channel & ) = delete;
         Channel & operator = ( const Channel & ) = delete;
         Channel & operator = ( Channel && ) = delete;
-        void push ( void * data, Context * context );
+        void push ( void * data, TypeInfo * ti, Context * context );
         void * pop();
         bool isEmpty() const;
         int size() const;
@@ -39,10 +40,17 @@ namespace das {
         int append(int size);
         int addRef() { return mRef++; }
         int releaseRef() { return --mRef; }
+        template <typename TT>
+        void for_each_item ( const TT & tt ) {
+            lock_guard<mutex> guard(lock);
+            for ( auto & f : pipe ) {
+                tt(f.data, f.type, f.from.get());
+            }
+        }
     protected:
         uint32_t            mSleepMs = 1;
         mutable mutex       lock;
-        queue<Feature>      pipe;
+        deque<Feature>      pipe;
         Feature             tail;
         uint32_t			remaining = 0;
         condition_variable	cond;
@@ -62,7 +70,7 @@ namespace das {
     void waitForJob ( JobStatus * status, Context * context, LineInfoArg * at );
     void notifyJob ( JobStatus * status, Context * context, LineInfoArg * at );
     void notifyAndReleaseJob ( JobStatus * & status, Context * context, LineInfoArg * at );
-    void channelPush ( Channel * ch, void * data, Context * context, LineInfoArg * at );
+    vec4f channelPush ( Context & context, SimNode_CallBase * call, vec4f * args );
     void * channelPop ( Channel * ch, Context * context, LineInfoArg * at );
     int channelAppend ( Channel * ch, int size, Context * context, LineInfoArg * at );
     void withChannel ( const TBlock<void,Channel *> & blk, Context * context, LineInfoArg * lineinfo );
