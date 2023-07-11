@@ -17,6 +17,7 @@ require daslib/templates_boost
 
 require peg/meta_ast
 
+
 struct ParserGenerator
     // Provides information to generate unique names
     rule_counter: table<string; int>
@@ -703,69 +704,62 @@ def generate(var gen: ParserGenerator; var rule_: Rule): array<ExpressionPtr>
 
 
         if [[Rule repeat = $v(rule_)]]
-            // TODO:
 
-            // If I uncomments this, for some reason stack overflows
-            // somewhere in applications of templates. Even if the rule does
-            // not use + -- how?
-
-            // var result_handle = rule_.name
-            // var inscope type_decl <- gen |> get_rule_type(rule_.rule)
-            // var inscope return_type <- gen.return_types[gen.current_context] |> clone_type
+            var result_handle = rule_.name
+            var inscope type_decl <- gen |> get_rule_type(rule_.rule)
+            var inscope return_type <- gen.return_types[gen.current_context] |> clone_type
 
 
-            // if rule_.name == "" // Rule not bound by name, discard result
-            //     var inscope rule_code1 <- gen |> with_context("__repetition__") <|
-            //         return <- gen |> generate(rule_.rule)
-            // //     var inscope rule_code1 := rule_code
+            if rule_.name == "" // Rule not bound by name, discard result
+                var inscope rule_code <- gen |> with_context("__repetition__") <|
+                    return <- gen |> generate(rule_.rule)
 
-            //     rule_code1 |> append_block <| ( qmacro_block <| {
-            //         return <- [[$t(make_default_type_decl()) true, 0, parser.index]];
-            //     } )
+                rule_code |> append_block <| ( qmacro_block <| {
+                    return <- [[$t(make_default_type_decl()) true, 0, parser.index]];
+                } )
 
-            //     var inscope t1111 <- qmacro_block <|
-            //         var res1 <- invoke <|
-            //             $b(rule_code1)
+                var inscope t <- qmacro_block <|
+                    var res1 <- invoke <|
+                        $b(rule_code)
 
-            //         return [[$t(return_type)]] if !res1.success
+                    return [[$t(return_type)]] if !res1.success
 
-            //         while true
-            //             var res <- invoke <|
-            //                 $b(rule_code1)
-            //             break if !res.success
+                    while true
+                        var res <- invoke <|
+                            $b(rule_code)
+                        break if !res.success
 
-            //     return <- flatten_block(t as ExprBlock)
+                return <- flatten_block(t as ExprBlock)
 
-	        // Bind result to the provided name
+	       // Bind result to the provided name
 
-            // set_rule_handle(rule_, "temp_name")
-            // var inscope rule_code <- gen |> with_context("__repetition__") <|
-            //     return <- gen |> generate(rule_.rule)
+            set_rule_handle(rule_, "temp_name")
+            var inscope rule_code <- gen |> with_context("__repetition__") <|
+                return <- gen |> generate(rule_.rule)
 
-            // rule_code |> append_block <| ( qmacro_block <| {
-            //     $i(result_handle) |> emplace <| temp_name;
-            //     return <- [[$t(make_default_type_decl())]];
-            // } )
+            rule_code |> append_block <| ( qmacro_block <| {
+                $i(result_handle) |> emplace <| temp_name;
+                return <- [[$t(make_default_type_decl()) true, 0, parser.index]];
+            } )
 
-            // var inscope t <- qmacro_block <|
-            //     var $i(result_handle) : array<$t(type_decl)>
+            var inscope t <- qmacro_block <|
+                var $i(result_handle) : array<$t(type_decl)>
 
-            //     var res1 <- invoke <|
-            //         $b(rule_code)
+                var res1 <- invoke <|
+                    $b(rule_code)
 
-            //     return [[$t(return_type)]] if !res1.success
-            //     $i(result_handle) |> emplace <| res1.value
+                return [[$t(return_type)]] if !res1.success
+                $i(result_handle) |> emplace <| res1.value
 
-            //     while true
-            //         var sz = $i(result_handle) |> length
+                while true
+                    var sz = $i(result_handle) |> length
 
-            //         invoke <|
-            //             $b(rule_code) // Adds an element on success
+                    invoke <|
+                        $b(rule_code) // Adds an element on success
 
-            //         break if sz == $i(result_handle) |> length
+                    break if sz == $i(result_handle) |> length
 
-            // return <- flatten_block(t as ExprBlock)
-            abort("Generate repeat")
+            return <- flatten_block(t as ExprBlock)
 
         if [[Rule subrule = $v(subrule)]]
             // Create a new unnamed subrule for the (...)

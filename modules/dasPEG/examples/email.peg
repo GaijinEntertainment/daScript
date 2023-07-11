@@ -1,33 +1,33 @@
 // Shows how to extract the text from the parsed patterns
 
-parse email
+    parse email
 
-    var email: Email
+        var email: Email
 
-    rule("{alnums}" as username, "@", "{domain}" as domain) <|
-        print("{username}@{domain}\n")
-        return [[Email username = username, domain = domain]]
+        rule("{alnums}" as username, "@", "{domain}" as domain) <|
+            print("{username}@{domain}\n")
+            return [[Email username = username, domain = domain]]
 
-    var alnums: void? // Just a pattern to be interpreted later
+        var alnums: void? // Just a pattern to be interpreted later
 
-    rule(*set('0'..'9', 'a'..'z', 'A'..'Z')) <|
-        return null
+        rule(+set('0'..'9', 'a'..'z', 'A'..'Z')) <|
+            return null
 
-    var domain: void?
+        var domain: void?
 
-    rule(subdomain, *subdomain, tld) <|
-        return null
+        rule(+subdomain, tld) <|
+            return null
 
-    var tld: void?
+        var tld: void?
 
-    rule("com") <|
-        return null
-    rule("net") <|
-        return null
-    rule("org") <|
-        return null
+        rule("com") <|
+            return null
+        rule("net") <|
+            return null
+        rule("org") <|
+            return null
 
-    var subdomain: void?
+        var subdomain: void?
 
-    rule( *set('0'..'9', 'a'..'z', 'A'..'Z', '-'), "." ) <|
-        return null
+        rule( +set('0'..'9', 'a'..'z', 'A'..'Z', '-'), "." ) <|
+            return null

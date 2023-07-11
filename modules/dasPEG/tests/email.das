@@ -26,12 +26,12 @@ def get_parser_with(input: string): emailParser
 
         var alnums: void? // Just a pattern to be interpreted later
 
-        rule(*set('0'..'9', 'a'..'z', 'A'..'Z', '-', '.', '_')) <|
+        rule(+set('0'..'9', 'a'..'z', 'A'..'Z', '-', '.', '_')) <|
             return null
 
         var domain: void?
 
-        rule(subdomain, *subdomain, tld) <|
+        rule(+subdomain, tld) <|
             return null
 
         var tld: void?
@@ -45,7 +45,7 @@ def get_parser_with(input: string): emailParser
 
         var subdomain: void?
 
-        rule( *set('0'..'9', 'a'..'z', 'A'..'Z', '-'), "." ) <|
+        rule( +set('0'..'9', 'a'..'z', 'A'..'Z', '-'), "." ) <|
             return null
 
     var parser <- [[emailParser]]

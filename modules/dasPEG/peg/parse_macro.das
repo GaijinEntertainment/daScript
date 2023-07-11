@@ -15,6 +15,9 @@ require daslib/defer
 require peg/parser_generator
 require peg/meta_ast
 
+// To avoid overflow during template expansion
+options stack = 10000000
+
 
 struct MacroRule
     [[do_not_delete]] rule: ExprLet? // from let rule: type
