@@ -1102,6 +1102,11 @@ namespace debugapi {
             return false;
         }
     }
+
+    void break_on_free ( Context & ctx, void * ptr, uint32_t size ) {
+        ctx.heap->breakOnFree(ptr,size);
+    }
+
     class Module_Debugger : public Module {
     public:
         Module_Debugger() : Module("debugapi") {
@@ -1338,6 +1343,10 @@ namespace debugapi {
             addExtern<DAS_BIND_FUN(heap_stats)>(*this, lib, "get_heap_stats",
                 SideEffects::modifyArgumentAndAccessExternal, "heap_stats")
                     ->args({"context","bytes"})->unsafeOperation = true;
+            // heap debugger
+            addExtern<DAS_BIND_FUN(break_on_free)>(*this, lib, "break_on_free",
+                SideEffects::modifyArgumentAndAccessExternal, "break_on_free")
+                    ->args({"context","ptr","size"})->unsafeOperation = true;
             // add builtin module
             compileBuiltinModule("debugger.das",debugger_das,sizeof(debugger_das));
             // lets make sure its all aot ready

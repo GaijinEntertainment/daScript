@@ -32,4 +32,6 @@ namespace das {
 
     int32_t set_hw_breakpoint ( Context & ctx, void * address, int32_t size, bool writeOnly );
     bool clear_hw_breakpoint ( int32_t bpi );
+
+    void break_on_free ( Context & ctx, void * ptr, uint32_t size );
 }

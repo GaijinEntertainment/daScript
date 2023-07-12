@@ -40,6 +40,8 @@ namespace das {
         int append(int size);
         int addRef() { return mRef++; }
         int releaseRef() { return --mRef; }
+        Context * getOwner() { return owner; }
+    public:
         template <typename TT>
         void for_each_item ( const TT & tt ) {
             lock_guard<mutex> guard(lock);
@@ -47,6 +49,15 @@ namespace das {
                 tt(f.data, f.type, f.from.get());
             }
         }
+        template <typename TT>
+        void gather ( const TT & tt ) {
+            lock_guard<mutex> guard(lock);
+            for ( auto & f : pipe ) {
+                tt(f.data, f.type, f.from.get());
+            }
+            pipe.clear();
+        }
+
     protected:
         uint32_t            mSleepMs = 1;
         mutable mutex       lock;
@@ -82,4 +93,7 @@ namespace das {
     void waitForChannel ( Channel * status, Context * context, LineInfoArg * at );
     void notifyChannel ( Channel * status, Context * context, LineInfoArg * at );
     void notifyAndReleaseChannel ( Channel * & status, Context * context, LineInfoArg * at );
+    void channelGather ( Channel * ch, const TBlock<void,void *> & blk, Context * context, LineInfoArg * at );
+    void channelPeek ( Channel * ch, const TBlock<void,void *> & blk, Context * context, LineInfoArg * at );
+    void channelVerify ( Channel * ch, Context * context, LineInfoArg * at );
 }
