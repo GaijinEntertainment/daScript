@@ -75,7 +75,6 @@ class AudioChannel
         if paused || !source->ready()
             return true
         if stop && volume_mixer.volume==0.
-            print("stop with volume 0\n")
             return false
         let inputRate = uint(float(source.bitrate) * pitch)
         ma_resampler_set_rate(unsafe(addr(resampler)), inputRate, uint(rate))
@@ -83,7 +82,6 @@ class AudioChannel
         var inputSamples = ma_resampler_get_required_input_frame_count(unsafe(addr(resampler)), outputSamples)
         var samples <- source->get_samples(int(inputSamples))
         if length(samples)==0
-            print("eos\n")
             return false    // reached end of stream
         if length(samples) < int(inputSamples)
             samples |> resize(int(inputSamples))
@@ -219,59 +217,70 @@ def setup_command_processor ( ch:Channel? )
     g_command_channel = ch
     g_command_channel |> add_ref
 
+def gather ( ch:Channel?; blk:block<(arg:auto(TT)#):void>)
+    _builtin_channel_gather(ch) <| $ ( var data : void?  )
+        var pv = unsafe(reinterpret<int?> data)
+        invoke(blk, *(unsafe(reinterpret<TT?#> data)))
+
+def peek ( ch:Channel?; blk:block<(arg:auto(TT)#):void>)
+    _builtin_channel_peek(ch) <| $ ( var data : void?  )
+        var pv = unsafe(reinterpret<int?> data)
+        invoke(blk, *(unsafe(reinterpret<TT?#> data)))
+
 def command_processor
     return if g_command_channel==null
-    let nCmd = g_command_channel.total
-    for _ in range(nCmd)
-        g_command_channel |> pop_one <| $ ( cmd:AudioCommand# )
-            if cmd is shutdown
-                delete g_channels
-                g_command_channel |> notify_and_release
-            elif cmd is add_decoder
-                var dcmd = cmd as add_decoder
-                var decoder  = new AudioSourceDecoder()
-                decoder->initFromDecoder(unsafe(reinterpret<ma_decoder?> dcmd.decoder),dcmd.rate,dcmd.channels)
-                var channel = new AudioChannel(decoder)
-                g_channels |> push(channel)
-                if dcmd.sid != 0ul
-                    channel.sid = dcmd.sid
-                    g_sid_2_channel[dcmd.sid] = channel
-            elif cmd is add_pcm
-                assume pcmd = cmd as add_pcm
-                var decoder  = new AudioSourcePCM(pcmd.channels, pcmd.rate, clone_to_move(pcmd.samples))
-                var channel = new AudioChannel(decoder)
-                g_channels |> push(channel)
-                if pcmd.sid != 0ul
-                    channel.sid = pcmd.sid
-                    g_sid_2_channel[pcmd.sid] = channel
-            elif cmd is append_pcm
-                assume pcmd = cmd as append_pcm
-                g_sid_2_channel |> get(pcmd.sid) <| $ ( var ch:AudioChannel?& )
-                    ch.source->append(clone_to_move(pcmd.samples))
-            elif cmd is pause
-                var pcmd = cmd as pause
-                g_sid_2_channel |> get(pcmd.sid) <| $ ( var ch:AudioChannel?& )
-                    ch.paused = pcmd.paused
-            elif cmd is volume
-                var vcmd = cmd as volume
-                g_sid_2_channel |> get(vcmd.sid) <| $ ( var ch:AudioChannel?& )
-                    if vcmd.time > 0.
-                        let nFrames = uint64(vcmd.time * float(MA_SAMPLE_RATE))
-                        ma_volume_mixer_set_volume_over_time(unsafe(addr(ch.volume_mixer)), vcmd.volume, nFrames)
-                    else
-                        ma_volume_mixer_set_volume(unsafe(addr(ch.volume_mixer)), vcmd.volume)
-            elif cmd is stop
-                var scmd = cmd as stop
-                g_sid_2_channel |> get(scmd.sid) <| $ ( var ch:AudioChannel?& )
-                    if scmd.time > 0.
-                        let nFrames = uint64(scmd.time * float(MA_SAMPLE_RATE))
-                        ma_volume_mixer_set_volume_over_time(unsafe(addr(ch.volume_mixer)), 0., nFrames)
-                        ch.stop = true
-                    else
-                        ma_volume_mixer_set_volume(unsafe(addr(ch.volume_mixer)), 0.)
-                        ch.stop = true
-            else
-                panic("unknown audio command")
+    var commands : array<AudioCommand>
+    g_command_channel |> gather <| $ ( cmd:AudioCommand# )
+        commands |> push_clone(cmd)
+    for cmd in commands
+        if cmd is shutdown
+            delete g_channels
+            g_command_channel |> notify_and_release
+        elif cmd is add_decoder
+            var dcmd = cmd as add_decoder
+            var decoder  = new AudioSourceDecoder()
+            decoder->initFromDecoder(unsafe(reinterpret<ma_decoder?> dcmd.decoder),dcmd.rate,dcmd.channels)
+            var channel = new AudioChannel(decoder)
+            g_channels |> push(channel)
+            if dcmd.sid != 0ul
+                channel.sid = dcmd.sid
+                g_sid_2_channel[dcmd.sid] = channel
+        elif cmd is add_pcm
+            assume pcmd = cmd as add_pcm
+            var decoder  = new AudioSourcePCM(pcmd.channels, pcmd.rate, clone_to_move(pcmd.samples))
+            var channel = new AudioChannel(decoder)
+            g_channels |> push(channel)
+            if pcmd.sid != 0ul
+                channel.sid = pcmd.sid
+                g_sid_2_channel[pcmd.sid] = channel
+        elif cmd is append_pcm
+            assume pcmd = cmd as append_pcm
+            g_sid_2_channel |> get(pcmd.sid) <| $ ( var ch:AudioChannel?& )
+                ch.source->append(clone_to_move(pcmd.samples))
+        elif cmd is pause
+            var pcmd = cmd as pause
+            g_sid_2_channel |> get(pcmd.sid) <| $ ( var ch:AudioChannel?& )
+                ch.paused = pcmd.paused
+        elif cmd is volume
+            var vcmd = cmd as volume
+            g_sid_2_channel |> get(vcmd.sid) <| $ ( var ch:AudioChannel?& )
+                if vcmd.time > 0.
+                    let nFrames = uint64(vcmd.time * float(MA_SAMPLE_RATE))
+                    ma_volume_mixer_set_volume_over_time(unsafe(addr(ch.volume_mixer)), vcmd.volume, nFrames)
+                else
+                    ma_volume_mixer_set_volume(unsafe(addr(ch.volume_mixer)), vcmd.volume)
+        elif cmd is stop
+            var scmd = cmd as stop
+            g_sid_2_channel |> get(scmd.sid) <| $ ( var ch:AudioChannel?& )
+                if scmd.time > 0.
+                    let nFrames = uint64(scmd.time * float(MA_SAMPLE_RATE))
+                    ma_volume_mixer_set_volume_over_time(unsafe(addr(ch.volume_mixer)), 0., nFrames)
+                    ch.stop = true
+                else
+                    ma_volume_mixer_set_volume(unsafe(addr(ch.volume_mixer)), 0.)
+                    ch.stop = true
+        else
+            panic("unknown audio command {cmd}")
 
 var g_limiter : ma_limiter
 var g_mix_buffer : array<float>
@@ -390,3 +399,4 @@ def public decode_audio ( data:array<uint8> | #; var channels,rate:int& ) : arra
     samples |> resize(int(rframes))
     ma_decoder_uninit(decoder)
     return <- samples
+

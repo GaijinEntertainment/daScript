@@ -126,6 +126,7 @@ namespace das {
 
     class AnyHeapAllocator : public ptr_ref_count {
     public:
+        virtual bool breakOnFree ( void *, uint32_t ) { return false; }
         virtual char * allocate ( uint32_t ) = 0;
         virtual void free ( char *, uint32_t ) = 0;
         virtual char * reallocate ( char *, uint32_t, uint32_t ) = 0;
@@ -194,11 +195,41 @@ namespace das {
         bool needIntern = false;
     };
 
+#ifndef DAS_HEAP_DEBUGGER_BREAK_ON_FREE
+#define DAS_HEAP_DEBUGGER_BREAK_ON_FREE 0
+#endif
+
     class PersistentHeapAllocator final : public AnyHeapAllocator {
+#if DAS_HEAP_DEBUGGER_BREAK_ON_FREE
+        void * breakFreeAddr = nullptr;
+        uint32_t breakFreeSize = 0;
+    public:
+        virtual bool breakOnFree ( void * ptr, uint32_t size ) {
+            size = (size + 15) & ~15;
+            breakFreeAddr = ptr;
+            breakFreeSize = size;
+            return true;
+        }
+        virtual void free ( char * ptr, uint32_t size ) override {
+            if ( ptr==breakFreeAddr ) os_debug_break();
+            model.free(ptr,size);
+        }
+        virtual void sweep() override {
+            model.sweep();
+            if ( breakFreeAddr!=nullptr && !model.isAllocatedPtr((char *)breakFreeAddr,breakFreeSize) ) {
+                printf("COLLECTED: breakFreeAddr = %p, breakFreeSize = %u\n", breakFreeAddr, breakFreeSize);
+                breakFreeAddr = nullptr;
+                breakFreeSize = 0;
+            }
+        }
+#else
+    public:
+        virtual void free ( char * ptr, uint32_t size ) override { model.free(ptr,size); }
+        virtual void sweep() override { model.sweep(); }
+#endif
     public:
         PersistentHeapAllocator() {}
         virtual char * allocate ( uint32_t size ) override { return model.allocate(size); }
-        virtual void free ( char * ptr, uint32_t size ) override { model.free(ptr,size); }
         virtual char * reallocate ( char * ptr, uint32_t oldSize, uint32_t newSize ) override { return model.reallocate(ptr,oldSize,newSize); }
         virtual int depth() const override { return model.depth(); }
         virtual uint64_t bytesAllocated() const override { return model.bytesAllocated(); }
@@ -207,7 +238,6 @@ namespace das {
         virtual void report() override;
         virtual bool mark() override;
         virtual bool mark ( char * ptr, uint32_t size ) override;
-        virtual void sweep() override { model.sweep(); }
         virtual bool isOwnPtr ( char * ptr, uint32_t size ) override { return model.isOwnPtr(ptr,size); }
         virtual bool isValidPtr ( char * ptr, uint32_t size ) override { return model.isAllocatedPtr(ptr,size); }
         virtual void setInitialSize ( uint32_t size ) override { model.setInitialSize(size); }
