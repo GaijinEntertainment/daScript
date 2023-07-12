@@ -77,11 +77,11 @@ namespace das {
     __forceinline DAS_FINITE_MATH bool   fisnan(float  a) { volatile float b = a; return b != a; }
     __forceinline DAS_FINITE_MATH bool   disnan(double  a) { volatile double b = a; return b != a; }
 #else
-    __forceinline DAS_FINITE_MATH bool   fisnan(float  a) { return __builtin_isnan(a); }
-    __forceinline DAS_FINITE_MATH bool   disnan(double  a) { return __builtin_isnan(a); }
+    ___noinline DAS_FINITE_MATH inline bool   fisnan(float  a) { return __builtin_isnan(a); }
+    ___noinline DAS_FINITE_MATH inline bool   disnan(double  a) { return __builtin_isnan(a); }
 #endif
-    __forceinline DAS_FINITE_MATH bool   fisfinite(float  a) { return !__builtin_isinf(a); }
-    __forceinline DAS_FINITE_MATH bool   disfinite(double  a) { return !__builtin_isinf(a); }
+    ___noinline DAS_FINITE_MATH inline bool   fisfinite(float  a) { return !__builtin_isinf(a); }
+    ___noinline DAS_FINITE_MATH inline bool   disfinite(double  a) { return !__builtin_isinf(a); }
 #undef DAS_FINITE_MATH
 #if defined(__clang__) && !defined(__arm64__)
 #pragma float_control(pop)
