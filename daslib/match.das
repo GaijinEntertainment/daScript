@@ -529,6 +529,8 @@ class MatchMacro : AstCallMacro
                     var inscope nblk <- new [[ExprBlock() at=eto.at]]
                     for l in (eto.if_true as ExprBlock).list
                         nblk.list |> emplace_new <| clone_expression(l)
+                    for l in (eto.if_true as ExprBlock).finalList
+                        nblk.finalList |> emplace_new <| clone_expression(l)
                     apply_template(nblk) <| $ ( rules )
                         for dv,dn in keys(to.declarations),values(to.declarations)
                             rules |> replaceVariable(dv) <| clone_expression(dn)
