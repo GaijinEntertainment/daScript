@@ -26,7 +26,7 @@ def test
                         channel |> push_clone ( [[Work x=x, t=t]] )
                     channel |> notify_and_release                               // at this point we are done with the channel on this job
             var summ = 0
-            channel |> for_each <| $ ( w : Work# )
+            channel |> for_each_clone <| $ ( w : Work# )
                 summ += w.x * w.t
             assert(summ==30)
             assert(channel.isEmpty)
@@ -39,7 +39,7 @@ def test
                         channel |> push_clone ( [[Work x=x, t=t]] )
                     channel |> notify_and_release                               // at this point we are done with the channel on this job
             var summ = 0
-            for w in each(channel,type<Work>)
+            for w in each_clone(channel,type<Work>)
                 summ += w.x * w.t
             assert(summ==30)
             assert(channel.isEmpty)

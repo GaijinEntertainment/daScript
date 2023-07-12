@@ -217,16 +217,6 @@ def setup_command_processor ( ch:Channel? )
     g_command_channel = ch
     g_command_channel |> add_ref
 
-def gather ( ch:Channel?; blk:block<(arg:auto(TT)#):void>)
-    _builtin_channel_gather(ch) <| $ ( var data : void?  )
-        var pv = unsafe(reinterpret<int?> data)
-        invoke(blk, *(unsafe(reinterpret<TT?#> data)))
-
-def peek ( ch:Channel?; blk:block<(arg:auto(TT)#):void>)
-    _builtin_channel_peek(ch) <| $ ( var data : void?  )
-        var pv = unsafe(reinterpret<int?> data)
-        invoke(blk, *(unsafe(reinterpret<TT?#> data)))
-
 def command_processor
     return if g_command_channel==null
     var commands : array<AudioCommand>

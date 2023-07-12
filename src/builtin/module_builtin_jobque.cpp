@@ -23,7 +23,7 @@ namespace das {
         cond.notify_all();  // notify_one??
     }
 
-    void * Channel::pop () {
+    void Channel::pop ( const TBlock<void,void *> & blk, Context * context, LineInfoArg * at ) {
         while ( true ) {
             unique_lock<mutex> uguard(lock);
             if ( !cond.wait_for(uguard, chrono::milliseconds(mSleepMs), [&]() {
@@ -42,7 +42,7 @@ namespace das {
             tail = das::move(pipe.front());
             pipe.pop_front();
         }
-        return tail.data;
+        das_invoke<void>::invoke<void *>(context, at, blk, tail.data);
     }
 
     bool Channel::isEmpty() const {
@@ -134,13 +134,13 @@ namespace das {
         return v_zero();
     }
 
-    void * channelPop ( Channel * ch, Context * context, LineInfoArg * at ) {
+    void channelPop ( Channel * ch, const TBlock<void,void*> & blk, Context * context, LineInfoArg * at ) {
         if ( !ch ) context->throw_error_at(at, "channelPop: channel is null");
-        return ch->pop();
+        ch->pop(blk,context,at);
     }
 
     int channelAppend ( Channel * ch, int size, Context * context, LineInfoArg * at ) {
-        if ( !ch ) context->throw_error_at(at, "channelPop: channel is null");
+        if ( !ch ) context->throw_error_at(at, "channelAppend: channel is null");
         return ch->append(size);
     }
 
@@ -360,7 +360,7 @@ namespace das {
                     ->args({"channel","data"});
             addExtern<DAS_BIND_FUN(channelPop)>(*this, lib,  "_builtin_channel_pop",
                 SideEffects::modifyArgumentAndExternal, "channelPop")
-                    ->args({"channel","context","line"});
+                    ->args({"channel","block","context","line"});
             addExtern<DAS_BIND_FUN(channelGather)>(*this, lib,  "_builtin_channel_gather",
                 SideEffects::modifyArgumentAndExternal, "channelGather")
                     ->args({"channel","block","context","line"});

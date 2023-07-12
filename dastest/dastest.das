@@ -12,6 +12,8 @@ require suite
 require log
 require math
 
+options multiple_contexts
+
 let private jsonResultPrefix = "##dastest##\n"
 
 
@@ -112,7 +114,7 @@ def main()
 
                     for t in range(totalThreads)
                         new_thread <| @
-                            for_each(inputChannel) <| $ (input : IsoInput#)
+                            for_each_clone(inputChannel) <| $ (input : IsoInput#)
                                 var isoRes : IsolatedResult
                                 isoRes.uri = clone_string(input.uri)
                                 isoRes.cmd = clone_string(input.cmd)
@@ -158,7 +160,7 @@ def main()
                         inputChannel |> push_clone([[IsoInput uri=clone_string(uri), cmd=clone_string(singleTest)]])
                         inputChannel |> notify()
 
-                    for isoRes in each(outputChannel, type<IsolatedResult>)
+                    for isoRes in each_clone(outputChannel, type<IsolatedResult>)
                         res += isoRes.status
                         for err in isoRes.err
                             log::error(err)

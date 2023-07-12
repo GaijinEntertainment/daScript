@@ -49,6 +49,16 @@ However, result will be substituted with::
     if !expr
         macro_error( prog, at, message )
         return [[ExpressionPtr]]
++++++++++++
+Call macros
++++++++++++
+
+.. _call-macro-macro_boost-return_skip_lockcheck:
+
+.. das:attribute:: return_skip_lockcheck
+
+this is similar to regular return <-, but it does not check for locks
+
 ++++++++++++++++++++++
 Implementation details
 ++++++++++++++++++++++

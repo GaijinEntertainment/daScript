@@ -144,16 +144,16 @@ returns true if 'v' has 0 elements. this also implies that `length(v)` is define
 Uncategorized
 +++++++++++++
 
-.. _function-_at_array_boost_c__c_array_view_C1_ls_Y_ls_TT_gr_._gr_A_Ci_Ci_CN_ls_view_gr_0_ls_C_hh_1_ls_Y_ls_TT_gr_L_gr_A_gr_1_ls_v_gr__builtin_:
+.. _function-_at_array_boost_c__c_array_view_C_eq_1_ls_Y_ls_TT_gr_._gr_A_Ci_Ci_CN_ls_view_gr_0_ls_C_hh_1_ls_Y_ls_TT_gr_L_gr_A_gr_1_ls_v_gr__builtin_:
 
-.. das:function:: array_view(bytes: array<auto(TT)> const; offset: int const; length: int const; blk: block<(view:array<TT> const#):void> const)
+.. das:function:: array_view(bytes: array<auto(TT)> const ==const; offset: int const; length: int const; blk: block<(view:array<TT> const#):void> const)
 
 array_view returns auto
 
 +--------+-----------------------------------------+
 +argument+argument type                            +
 +========+=========================================+
-+bytes   +array<auto(TT)> const                    +
++bytes   +array<auto(TT)> const!                   +
 +--------+-----------------------------------------+
 +offset  +int const                                +
 +--------+-----------------------------------------+
@@ -161,6 +161,27 @@ array_view returns auto
 +--------+-----------------------------------------+
 +blk     +block<(view:array<TT> const#):void> const+
 +--------+-----------------------------------------+
+
+
+creates a view of the array, which is a temporary array that is valid only within the block
+
+.. _function-_at_array_boost_c__c_array_view__eq_1_ls_Y_ls_TT_gr_._gr_A_Ci_Ci_CN_ls_view_gr_0_ls__hh_1_ls_Y_ls_TT_gr_L_gr_A_gr_1_ls_v_gr__builtin_:
+
+.. das:function:: array_view(bytes: array<auto(TT)> ==const; offset: int const; length: int const; blk: block<(var view:array<TT># -const):void> const)
+
+array_view returns auto
+
++--------+-----------------------------------+
++argument+argument type                      +
++========+===================================+
++bytes   +array<auto(TT)>!                   +
++--------+-----------------------------------+
++offset  +int const                          +
++--------+-----------------------------------+
++length  +int const                          +
++--------+-----------------------------------+
++blk     +block<(view:array<TT>#):void> const+
++--------+-----------------------------------+
 
 
 creates a view of the array, which is a temporary array that is valid only within the block

@@ -29,7 +29,7 @@ namespace das {
         Channel & operator = ( const Channel & ) = delete;
         Channel & operator = ( Channel && ) = delete;
         void push ( void * data, TypeInfo * ti, Context * context );
-        void * pop();
+        void pop ( const TBlock<void,void *> & blk, Context * context, LineInfoArg * at );
         bool isEmpty() const;
         int size() const;
         int total() const;
@@ -82,7 +82,7 @@ namespace das {
     void notifyJob ( JobStatus * status, Context * context, LineInfoArg * at );
     void notifyAndReleaseJob ( JobStatus * & status, Context * context, LineInfoArg * at );
     vec4f channelPush ( Context & context, SimNode_CallBase * call, vec4f * args );
-    void * channelPop ( Channel * ch, Context * context, LineInfoArg * at );
+    void channelPop ( Channel * ch, const TBlock<void,void*> & blk, Context * context, LineInfoArg * at );
     int channelAppend ( Channel * ch, int size, Context * context, LineInfoArg * at );
     void withChannel ( const TBlock<void,Channel *> & blk, Context * context, LineInfoArg * lineinfo );
     void withChannelEx ( int32_t count, const TBlock<void,Channel *> & blk, Context * context, LineInfoArg * lineinfo );

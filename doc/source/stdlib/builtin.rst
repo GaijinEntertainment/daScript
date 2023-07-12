@@ -149,6 +149,16 @@ Constants
 
 |variable-builtin-print_flags_debugger|
 
+++++++++++++++++++
+Handled structures
+++++++++++++++++++
+
+.. _handle-builtin-HashBuilder:
+
+.. das:attribute:: HashBuilder
+
+|structure_annotation-builtin-HashBuilder|
+
 ++++++++++++++++++++
 Function annotations
 ++++++++++++++++++++
@@ -212,6 +222,12 @@ Function annotations
 .. das:attribute:: export
 
 |function_annotation-builtin-export|
+
+.. _handle-builtin-pinvoke:
+
+.. das:attribute:: pinvoke
+
+|function_annotation-builtin-pinvoke|
 
 .. _handle-builtin-no_lint:
 
@@ -477,6 +493,8 @@ Containers
   *  :ref:`back (a:array\<auto(TT)\># ==const -const) : TT&# <function-_at__builtin__c__c_back__hh__eq_1_ls_Y_ls_TT_gr_._gr_A>` 
   *  :ref:`back (a:array\<auto(TT)\> const ==const) : TT const& <function-_at__builtin__c__c_back_C_eq_1_ls_Y_ls_TT_gr_._gr_A>` 
   *  :ref:`back (a:array\<auto(TT)\> const# ==const) : TT const&# <function-_at__builtin__c__c_back_C_hh__eq_1_ls_Y_ls_TT_gr_._gr_A>` 
+  *  :ref:`back (arr:auto(TT) ==const -const) : auto& <function-_at__builtin__c__c_back__eq_Y_ls_TT_gr_.>` 
+  *  :ref:`back (arr:auto(TT) const ==const) : auto const& <function-_at__builtin__c__c_back_C_eq_Y_ls_TT_gr_.>` 
   *  :ref:`erase (Arr:array\<auto(numT)\> -const;at:int const) : auto <function-_at__builtin__c__c_erase_1_ls_Y_ls_numT_gr_._gr_A_Ci>` 
   *  :ref:`erase (Arr:array\<auto(numT)\> -const;at:int const;count:int const) : auto <function-_at__builtin__c__c_erase_1_ls_Y_ls_numT_gr_._gr_A_Ci_Ci>` 
   *  :ref:`length (a:auto const[]) : int <function-_at__builtin__c__c_length_C[-1].>` 
@@ -1035,6 +1053,36 @@ back returns TT const&#
 +========+=======================+
 +a       +array<auto(TT)> const#!+
 +--------+-----------------------+
+
+
+|function-builtin-back|
+
+.. _function-_at__builtin__c__c_back__eq_Y_ls_TT_gr_.:
+
+.. das:function:: back(arr: auto(TT) ==const)
+
+back returns auto&
+
++--------+-------------+
++argument+argument type+
++========+=============+
++arr     +auto(TT)!    +
++--------+-------------+
+
+
+|function-builtin-back|
+
+.. _function-_at__builtin__c__c_back_C_eq_Y_ls_TT_gr_.:
+
+.. das:function:: back(arr: auto(TT) const ==const)
+
+back returns auto const&
+
++--------+---------------+
++argument+argument type  +
++========+===============+
++arr     +auto(TT) const!+
++--------+---------------+
 
 
 |function-builtin-back|
@@ -2314,6 +2362,27 @@ das::string manipulation
 |function-builtin-peek|
 
 ++++++++++++++
+String builder
+++++++++++++++
+
+  *  :ref:`write (arg0:$::HashBuilder implicit;arg1:string const implicit) : void <function-_at__builtin__c__c_write_IH_ls__builtin__c__c_HashBuilder_gr__CIs>` 
+
+.. _function-_at__builtin__c__c_write_IH_ls__builtin__c__c_HashBuilder_gr__CIs:
+
+.. das:function:: write(arg0: HashBuilder implicit; arg1: string const implicit)
+
++--------+-------------------------------------------------------------------+
++argument+argument type                                                      +
++========+===================================================================+
++arg0    + :ref:`builtin::HashBuilder <handle-builtin-HashBuilder>`  implicit+
++--------+-------------------------------------------------------------------+
++arg1    +string const implicit                                              +
++--------+-------------------------------------------------------------------+
+
+
+|function-builtin-write|
+
+++++++++++++++
 Heap reporting
 ++++++++++++++
 
@@ -2504,6 +2573,7 @@ Smart ptr infrastructure
   *  :ref:`smart_ptr_clone (dest:smart_ptr\<void\>& implicit;src:void? const implicit;context:__context const;at:__lineInfo const) : void <function-_at__builtin__c__c_smart_ptr_clone_&I1_ls_v_gr_?M_CI?_C_c_C_l>` 
   *  :ref:`smart_ptr_clone (dest:smart_ptr\<void\>& implicit;src:smart_ptr\<void\> const implicit;context:__context const;at:__lineInfo const) : void <function-_at__builtin__c__c_smart_ptr_clone_&I1_ls_v_gr_?M_CI1_ls_v_gr_?M_C_c_C_l>` 
   *  :ref:`smart_ptr_use_count (ptr:smart_ptr\<void\> const implicit;context:__context const;at:__lineInfo const) : uint <function-_at__builtin__c__c_smart_ptr_use_count_CI1_ls_v_gr_?M_C_c_C_l>` 
+  *  :ref:`smart_ptr_is_valid (dest:smart_ptr\<void\> const implicit) : bool <function-_at__builtin__c__c_smart_ptr_is_valid_CI1_ls_v_gr_?M>` 
   *  :ref:`get_ptr (src:smart_ptr\<auto(TT)\> const) : TT? <function-_at__builtin__c__c_get_ptr_C1_ls_Y_ls_TT_gr_._gr_?M>` 
   *  :ref:`get_const_ptr (src:smart_ptr\<auto(TT)\> const) : TT? const <function-_at__builtin__c__c_get_const_ptr_C1_ls_Y_ls_TT_gr_._gr_?M>` 
   *  :ref:`add_ptr_ref (src:smart_ptr\<auto(TT)\> const) : smart_ptr\<TT\> <function-_at__builtin__c__c_add_ptr_ref_C1_ls_Y_ls_TT_gr_._gr_?M>` 
@@ -2597,6 +2667,21 @@ smart_ptr_use_count returns uint
 
 
 |function-builtin-smart_ptr_use_count|
+
+.. _function-_at__builtin__c__c_smart_ptr_is_valid_CI1_ls_v_gr_?M:
+
+.. das:function:: smart_ptr_is_valid(dest: smart_ptr<void> const implicit)
+
+smart_ptr_is_valid returns bool
+
++--------+------------------------------+
++argument+argument type                 +
++========+==============================+
++dest    +smart_ptr<void> const implicit+
++--------+------------------------------+
+
+
+|function-builtin-smart_ptr_is_valid|
 
 .. _function-_at__builtin__c__c_get_ptr_C1_ls_Y_ls_TT_gr_._gr_?M:
 
@@ -2925,6 +3010,7 @@ Memory manipulation
   *  :ref:`variant_index (arg0:variant\<\> const implicit) : int <function-_at__builtin__c__c_variant_index_CIV>` 
   *  :ref:`set_variant_index (variant:variant\<\> implicit;index:int const) : void <function-_at__builtin__c__c_set_variant_index_IV_Ci>` 
   *  :ref:`hash (data:any const) : uint64 <function-_at__builtin__c__c_hash_C*>` 
+  *  :ref:`hash (data:string const implicit) : uint64 <function-_at__builtin__c__c_hash_CIs>` 
   *  :ref:`memcpy (left:void? const implicit;right:void? const implicit;size:int const) : void <function-_at__builtin__c__c_memcpy_CI?_CI?_Ci>` 
   *  :ref:`memcmp (left:void? const implicit;right:void? const implicit;size:int const) : int <function-_at__builtin__c__c_memcmp_CI?_CI?_Ci>` 
   *  :ref:`intptr (p:void? const) : uint64 <function-_at__builtin__c__c_intptr_C1_ls_v_gr_?>` 
@@ -2978,6 +3064,21 @@ hash returns uint64
 +========+=============+
 +data    +any const    +
 +--------+-------------+
+
+
+|function-builtin-hash|
+
+.. _function-_at__builtin__c__c_hash_CIs:
+
+.. das:function:: hash(data: string const implicit)
+
+hash returns uint64
+
++--------+---------------------+
++argument+argument type        +
++========+=====================+
++data    +string const implicit+
++--------+---------------------+
 
 
 |function-builtin-hash|
@@ -3581,11 +3682,11 @@ class_rtti_size returns int
 Lock verification
 +++++++++++++++++
 
-  *  :ref:`set_verify_context_locks (slc:bool const;context:__context const) : bool <function-_at__builtin__c__c_set_verify_context_locks_Cb_C_c>` 
+  *  :ref:`set_verify_context_locks (check:bool const;context:__context const) : bool <function-_at__builtin__c__c_set_verify_context_locks_Cb_C_c>` 
 
 .. _function-_at__builtin__c__c_set_verify_context_locks_Cb_C_c:
 
-.. das:function:: set_verify_context_locks(slc: bool const)
+.. das:function:: set_verify_context_locks(check: bool const)
 
 set_verify_context_locks returns bool
 
@@ -3595,7 +3696,7 @@ set_verify_context_locks returns bool
 +--------+-------------+
 +argument+argument type+
 +========+=============+
-+slc     +bool const   +
++check   +bool const   +
 +--------+-------------+
 
 
@@ -3804,5 +3905,89 @@ Memset
 
 
 |function-builtin-memset128|
+
++++++++++++++
+Uncategorized
++++++++++++++
+
+.. _function-_at__builtin__c__c_build_hash_CI0_ls_H_ls__builtin__c__c_HashBuilder_gr__gr_1_ls_v_gr__builtin__C_c_C_l:
+
+.. das:function:: build_hash(block: block<(var arg0:HashBuilder):void> const implicit)
+
+build_hash returns uint64
+
++--------+---------------------------------------------------------------------------------------+
++argument+argument type                                                                          +
++========+=======================================================================================+
++block   +block<( :ref:`builtin::HashBuilder <handle-builtin-HashBuilder>` ):void> const implicit+
++--------+---------------------------------------------------------------------------------------+
+
+
+|function-builtin-build_hash|
+
+.. _function-_at__builtin__c__c_malloc_Cu64:
+
+.. das:function:: malloc(size: uint64 const)
+
+malloc returns void?
+
+.. warning:: 
+  This is unsafe operation.
+
++--------+-------------+
++argument+argument type+
++========+=============+
++size    +uint64 const +
++--------+-------------+
+
+
+|function-builtin-malloc|
+
+.. _function-_at__builtin__c__c_free_CI?:
+
+.. das:function:: free(ptr: void? const implicit)
+
+.. warning:: 
+  This is unsafe operation.
+
++--------+--------------------+
++argument+argument type       +
++========+====================+
++ptr     +void? const implicit+
++--------+--------------------+
+
+
+|function-builtin-free|
+
+.. _function-_at__builtin__c__c_malloc_usable_size_CI?:
+
+.. das:function:: malloc_usable_size(ptr: void? const implicit)
+
+malloc_usable_size returns uint64
+
+.. warning:: 
+  This is unsafe operation.
+
++--------+--------------------+
++argument+argument type       +
++========+====================+
++ptr     +void? const implicit+
++--------+--------------------+
+
+
+|function-builtin-malloc_usable_size|
+
+.. _function-_at__builtin__c__c_eval_main_loop_CI1_ls_b_gr__builtin__C_c_C_l:
+
+.. das:function:: eval_main_loop(block: block<bool> const implicit)
+
++--------+----------------------+
++argument+argument type         +
++========+======================+
++block   +block<> const implicit+
++--------+----------------------+
+
+
+|function-builtin-eval_main_loop|
 
 

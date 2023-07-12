@@ -67,27 +67,78 @@ class private NewJobMacro : AstFunctionAnnotation
         ncall.arguments |> emplace_new <| new [[ExprConstInt() at=call.at, value=int(mks._type.sizeOf)]]
         return <- ncall
 
+def gather ( ch:Channel?; blk:block<(arg:auto(TT)#):void>)
+    //! reads input from the channel (in order it was pushed) and invokes the block on each input.
+    //! afterwards input is consumed
+    _builtin_channel_gather(ch) <| $ ( var data : void?  )
+        var pv = unsafe(reinterpret<int?> data)
+        invoke(blk, *(unsafe(reinterpret<TT?#> data)))
+
+def peek ( ch:Channel?; blk:block<(arg:auto(TT)#):void>)
+    //! reads input from the channel (in order it was pushed) and invokes the block on each input.
+    //! afterwards input is not consumed
+    _builtin_channel_peek(ch) <| $ ( var data : void?  )
+        var pv = unsafe(reinterpret<int?> data)
+        invoke(blk, *(unsafe(reinterpret<TT?#> data)))
+
+
+[deprecated(message="use `for_each_clone` instead")]
 def for_each ( channel:Channel?; blk:block<(res:auto(TT)#):void> )
     //! reads input from the channel (in order it was pushed) and invokes the block on each input.
     //! stops once channel is depleted (internal entry counter is 0)
     //! this can happen on multiple threads or jobs at the same time.
     while true
-        let void_data = _builtin_channel_pop(channel)
+        var void_data : void?
+        _builtin_channel_pop(channel) <| $ ( vd )
+            void_data = vd
         if void_data==null
             break
         unsafe
             let typed_data = reinterpret<TT?#> void_data
             invoke ( blk, *typed_data )
 
+def for_each_clone ( channel:Channel?; blk:block<(res:auto(TT)#):void> )
+    //! reads input from the channel (in order it was pushed) and invokes the block on each input.
+    //! stops once channel is depleted (internal entry counter is 0)
+    //! this can happen on multiple threads or jobs at the same time.
+    while true
+        var temp : TT-#-&-const
+        var any = false
+        _builtin_channel_pop(channel) <| $ ( vd )
+            if vd != null
+                any = true
+                temp := *(unsafe(reinterpret<TT-#-&-const?#> vd))
+        if !any
+            break
+        invoke ( blk, unsafe(reinterpret<TT-&-const#>temp) )
+        delete temp
+
+[deprecated(message="use `pop_and_clone_one` instead")]
 def pop_one ( channel:Channel?; blk:block<(res:auto(TT)#):void> )
     //! reads one command from channel
-    let void_data = _builtin_channel_pop(channel)
+    var void_data : void?
+    _builtin_channel_pop(channel) <| $ ( vd )
+        void_data = vd
     if void_data==null
         return false
     unsafe
         let typed_data = reinterpret<TT?#> void_data
         invoke ( blk, *typed_data )
         return true
+
+def pop_and_clone_one ( channel:Channel?; blk:block<(res:auto(TT)#):void> )
+    //! reads one command from channel
+    var any = false
+    var temp : TT-#-&-const
+    _builtin_channel_pop(channel) <| $ ( vd )
+        if vd != null
+            any = true
+            temp := *(unsafe(reinterpret<TT-#-&-const?#> vd))
+    if !any
+        return false
+    invoke ( blk, unsafe(reinterpret<TT-&-const#> temp) )
+    delete temp
+    return true
 
 def push_clone ( channel:Channel?; data : auto(TT) )
     //! clones data and pushed value to the channel (at the end)
@@ -99,7 +150,7 @@ def push ( channel:Channel?; data : auto? )
     //! pushes value to the channel (at the end)
     _builtin_channel_push(channel, data)
 
-[template (tinfo)]
+[template (tinfo),deprecated(message="use `each_clone` instead")]
 def each ( var channel:Channel?; tinfo : auto(TT) )
     //! this iterator is used to iterate over the channel in order it was pushed.
     //! iterator stops once channel is depleted (internal entry counter is 0)
@@ -107,11 +158,34 @@ def each ( var channel:Channel?; tinfo : auto(TT) )
     unsafe
         return <- generator<TT&#> () <| $ ()
             while true
-                let void_data = _builtin_channel_pop(channel)
+                var void_data : void?
+                _builtin_channel_pop(channel) <| $ ( vd )
+                    void_data = vd
                 if void_data==null
                     break
                 unsafe
                     yield * reinterpret<TT?#> void_data
+            return false
+        finally
+            channel |> release
+
+def each_clone ( var channel:Channel?; tinfo : auto(TT) )
+    //! this iterator is used to iterate over the channel in order it was pushed.
+    //! iterator stops once channel is depleted (internal entry counter is 0)
+    //! iteration can happen on multiple threads or jobs at the same time.
+    unsafe
+        return <- generator<TT&#> () <| $ ()
+            while true
+                var temp : TT-#-&-const
+                var any = false
+                _builtin_channel_pop(channel) <| $ ( vd )
+                    if vd != null
+                        any = true
+                        temp := *(unsafe(reinterpret<TT-#-&-const?#> vd))
+                if !any
+                    break
+                yield unsafe(reinterpret<TT-&-const#>temp)
+                delete temp
             return false
         finally
             channel |> release
