@@ -1,17 +1,29 @@
-//require daslib/profiler
-require daslib/json
-require daslib/strings_boost
-require daslib/fio
-require dastest/testing_boost
-require daslib/utf8_utils
-require peg/peg
+options indenting = 4
+options no_unused_block_arguments = false
+options no_unused_function_arguments = false
+options no_aot = true
+options strict_smart_pointers = true
 
 options stack = 1000000000
 
 
+require dastest/testing_boost
+
+require daslib/strings_boost
+require daslib/utf8_utils
+require daslib/defer
+require daslib/json
+require daslib/fio
+
+require peg/peg
+
+
 [export]
 def main
-    var input <- fopen("canada.json", "r") |> fread
+    var file = fopen("canada.json", "rb")
+    defer <|
+        fclose(file)
+    var input = file |> fread
 
     profile(10, "PEG json") <|
         var parser <- get_parser_with(input)

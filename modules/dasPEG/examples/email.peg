@@ -10,12 +10,12 @@ parse email
 
     var alnums: void? // Just a pattern to be interpreted later
 
-    rule(*set('0'..'9', 'a'..'z', 'A'..'Z')) <|
+    rule(+set('0'..'9', 'a'..'z', 'A'..'Z')) <|
         return null
 
     var domain: void?
 
-    rule(subdomain, *subdomain, tld) <|
+    rule(+subdomain, tld) <|
         return null
 
     var tld: void?
@@ -29,5 +29,5 @@ parse email
 
     var subdomain: void?
 
-    rule( *set('0'..'9', 'a'..'z', 'A'..'Z', '-'), "." ) <|
+    rule( +set('0'..'9', 'a'..'z', 'A'..'Z', '-'), "." ) <|
         return null
