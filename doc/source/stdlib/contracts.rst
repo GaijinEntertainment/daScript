@@ -36,6 +36,12 @@ Function annotations
 
 [expect_any_enum(argname)] contract, which only accepts enumerations
 
+.. _handle-contracts-expect_any_bitfield:
+
+.. das:attribute:: expect_any_bitfield
+
+[expect_any_bitfield(argname)] contract, which only accepts bitfields
+
 .. _handle-contracts-expect_any_vector_type:
 
 .. das:attribute:: expect_any_vector_type
@@ -85,6 +91,12 @@ Workhorse types are: bool,int*,uint*,float*,double,range and urange, range64 and
 
 [expect_any_function(argname)] contract, which only accepts functions
 
+.. _handle-contracts-expect_any_lambda:
+
+.. das:attribute:: expect_any_lambda
+
+[expect_any_lambda(argname)] contract, which only accepts lambdas
+
 .. _handle-contracts-expect_ref:
 
 .. das:attribute:: expect_ref
@@ -96,6 +108,12 @@ Workhorse types are: bool,int*,uint*,float*,double,range and urange, range64 and
 .. das:attribute:: expect_pointer
 
 [expect_pointer(argname)] contract, which only accepts pointers
+
+.. _handle-contracts-expect_class:
+
+.. das:attribute:: expect_class
+
+[expect_class(argname)] contract, which only accepts class instances
 
 .. _handle-contracts-expect_value_handle:
 

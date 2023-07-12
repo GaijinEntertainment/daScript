@@ -32,6 +32,8 @@ Channel property operators are
 +-------+----+
 +size   +int +
 +-------+----+
++total  +int +
++-------+----+
 
 
 |structure_annotation-jobque-Channel|

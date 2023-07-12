@@ -14,7 +14,7 @@ def main
             for t in range(total_threads)
                 new_thread <| @
                     print("in thread {t}\n")
-                    for_each(channel) <| $ ( j : OneJob# )
+                    for_each_clone(channel) <| $ ( j : OneJob# )
                         // each thread reads from channel, until its empty
                         print("in thread {t} job {j.name}\n")
                     channel |> release

@@ -119,6 +119,10 @@ Type aliases
 +----------------+---+-----+
 +skipLockCheck   +10 +1024 +
 +----------------+---+-----+
++circular        +11 +2048 +
++----------------+---+-----+
++_generator      +12 +4096 +
++----------------+---+-----+
 
 
 |typedef-ast-StructureFlags|
@@ -299,6 +303,8 @@ Type aliases
 +--------------------------+---+-----+
 +propertyFunction          +12 +4096 +
 +--------------------------+---+-----+
++pinvoke                   +13 +8192 +
++--------------------------+---+-----+
 
 
 |typedef-ast-MoreFunctionFlags|
@@ -360,6 +366,8 @@ Type aliases
 +global          +12 +4096 +
 +----------------+---+-----+
 +inScope         +13 +8192 +
++----------------+---+-----+
++no_capture      +14 +16384+
 +----------------+---+-----+
 
 
@@ -1475,6 +1483,8 @@ MakeFieldDecl fields are
 +at   + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
 +-----+-----------------------------------------------------------+
 +name + :ref:`builtin::das_string <handle-builtin-das_string>`    +
++-----+-----------------------------------------------------------+
++tag  +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
 +-----+-----------------------------------------------------------+
 +flags+ :ref:`MakeFieldDeclFlags <alias-MakeFieldDeclFlags>`      +
 +-----+-----------------------------------------------------------+
@@ -11571,6 +11581,7 @@ Adding objects to objects
   *  :ref:`add_keyword (module:rtti::Module? const implicit;keyword:string const implicit;needOxfordComma:bool const;context:__context const;line:__lineInfo const) : bool <function-_at_ast_c__c_add_keyword_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CIs_Cb_C_c_C_l>` 
   *  :ref:`add_structure (module:rtti::Module? const implicit;structure:smart_ptr\<ast::Structure\>& implicit) : bool <function-_at_ast_c__c_add_structure_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_Structure_gr__gr_?W>` 
   *  :ref:`add_alias (module:rtti::Module? const implicit;structure:smart_ptr\<ast::TypeDecl\>& implicit) : bool <function-_at_ast_c__c_add_alias_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W>` 
+  *  :ref:`add_module_require (module:rtti::Module? const implicit;publicModule:rtti::Module? const implicit;pub:bool const) : void <function-_at_ast_c__c_add_module_require_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_Cb>` 
 
 .. _function-_at_ast_c__c_add_enumeration_entry_CI1_ls_H_ls_ast_c__c_Enumeration_gr__gr_?W_CIs:
 
@@ -11692,6 +11703,23 @@ add_alias returns bool
 
 
 |function-ast-add_alias|
+
+.. _function-_at_ast_c__c_add_module_require_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_Cb:
+
+.. das:function:: add_module_require(module: rtti::Module? const implicit; publicModule: rtti::Module? const implicit; pub: bool const)
+
++------------+----------------------------------------------------------+
++argument    +argument type                                             +
++============+==========================================================+
++module      + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit+
++------------+----------------------------------------------------------+
++publicModule+ :ref:`rtti::Module <handle-rtti-Module>` ? const implicit+
++------------+----------------------------------------------------------+
++pub         +bool const                                                +
++------------+----------------------------------------------------------+
+
+
+|function-ast-add_module_require|
 
 +++++++++++++++++++++++++
 Program and module access

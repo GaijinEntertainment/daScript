@@ -80,6 +80,9 @@ Iteration
 
 for_each returns auto
 
+.. warning:: 
+  This function is deprecated.
+
 +--------+-------------------------------------------------------+
 +argument+argument type                                          +
 +========+=======================================================+
@@ -98,6 +101,9 @@ this can happen on multiple threads or jobs at the same time.
 .. das:function:: each(channel: jobque::Channel?; tinfo: auto(TT) const)
 
 each returns auto
+
+.. warning:: 
+  This function is deprecated.
 
 +--------+-------------------------------------------------+
 +argument+argument type                                    +
@@ -217,5 +223,120 @@ this function is used to release a channel that is used by the jobque.
 
 
 this function is used to release a job status that is used by the jobque.
+
++++++++++++++
+Uncategorized
++++++++++++++
+
+.. _function-_at_jobque_boost_c__c_gather_C1_ls_H_ls_jobque_c__c_Channel_gr__gr_?_CN_ls_arg_gr_0_ls_C_hh_Y_ls_TT_gr_._gr_1_ls_v_gr__builtin_:
+
+.. das:function:: gather(ch: jobque::Channel? const; blk: block<(arg:auto(TT) const#):void> const)
+
+gather returns auto
+
++--------+-------------------------------------------------------+
++argument+argument type                                          +
++========+=======================================================+
++ch      + :ref:`jobque::Channel <handle-jobque-Channel>` ? const+
++--------+-------------------------------------------------------+
++blk     +block<(arg:auto(TT) const#):void> const                +
++--------+-------------------------------------------------------+
+
+
+reads input from the channel (in order it was pushed) and invokes the block on each input.
+afterwards input is consumed
+
+.. _function-_at_jobque_boost_c__c_peek_C1_ls_H_ls_jobque_c__c_Channel_gr__gr_?_CN_ls_arg_gr_0_ls_C_hh_Y_ls_TT_gr_._gr_1_ls_v_gr__builtin_:
+
+.. das:function:: peek(ch: jobque::Channel? const; blk: block<(arg:auto(TT) const#):void> const)
+
+peek returns auto
+
++--------+-------------------------------------------------------+
++argument+argument type                                          +
++========+=======================================================+
++ch      + :ref:`jobque::Channel <handle-jobque-Channel>` ? const+
++--------+-------------------------------------------------------+
++blk     +block<(arg:auto(TT) const#):void> const                +
++--------+-------------------------------------------------------+
+
+
+reads input from the channel (in order it was pushed) and invokes the block on each input.
+afterwards input is not consumed
+
+.. _function-_at_jobque_boost_c__c_for_each_clone_C1_ls_H_ls_jobque_c__c_Channel_gr__gr_?_CN_ls_res_gr_0_ls_C_hh_Y_ls_TT_gr_._gr_1_ls_v_gr__builtin_:
+
+.. das:function:: for_each_clone(channel: jobque::Channel? const; blk: block<(res:auto(TT) const#):void> const)
+
+for_each_clone returns auto
+
++--------+-------------------------------------------------------+
++argument+argument type                                          +
++========+=======================================================+
++channel + :ref:`jobque::Channel <handle-jobque-Channel>` ? const+
++--------+-------------------------------------------------------+
++blk     +block<(res:auto(TT) const#):void> const                +
++--------+-------------------------------------------------------+
+
+
+reads input from the channel (in order it was pushed) and invokes the block on each input.
+stops once channel is depleted (internal entry counter is 0)
+this can happen on multiple threads or jobs at the same time.
+
+.. _function-_at_jobque_boost_c__c_pop_one_C1_ls_H_ls_jobque_c__c_Channel_gr__gr_?_CN_ls_res_gr_0_ls_C_hh_Y_ls_TT_gr_._gr_1_ls_v_gr__builtin_:
+
+.. das:function:: pop_one(channel: jobque::Channel? const; blk: block<(res:auto(TT) const#):void> const)
+
+pop_one returns auto
+
+.. warning:: 
+  This function is deprecated.
+
++--------+-------------------------------------------------------+
++argument+argument type                                          +
++========+=======================================================+
++channel + :ref:`jobque::Channel <handle-jobque-Channel>` ? const+
++--------+-------------------------------------------------------+
++blk     +block<(res:auto(TT) const#):void> const                +
++--------+-------------------------------------------------------+
+
+
+reads one command from channel
+
+.. _function-_at_jobque_boost_c__c_pop_and_clone_one_C1_ls_H_ls_jobque_c__c_Channel_gr__gr_?_CN_ls_res_gr_0_ls_C_hh_Y_ls_TT_gr_._gr_1_ls_v_gr__builtin_:
+
+.. das:function:: pop_and_clone_one(channel: jobque::Channel? const; blk: block<(res:auto(TT) const#):void> const)
+
+pop_and_clone_one returns auto
+
++--------+-------------------------------------------------------+
++argument+argument type                                          +
++========+=======================================================+
++channel + :ref:`jobque::Channel <handle-jobque-Channel>` ? const+
++--------+-------------------------------------------------------+
++blk     +block<(res:auto(TT) const#):void> const                +
++--------+-------------------------------------------------------+
+
+
+reads one command from channel
+
+.. _function-_at_jobque_boost_c__c_each_clone_1_ls_H_ls_jobque_c__c_Channel_gr__gr_?_CY_ls_TT_gr_.:
+
+.. das:function:: each_clone(channel: jobque::Channel?; tinfo: auto(TT) const)
+
+each_clone returns auto
+
++--------+-------------------------------------------------+
++argument+argument type                                    +
++========+=================================================+
++channel + :ref:`jobque::Channel <handle-jobque-Channel>` ?+
++--------+-------------------------------------------------+
++tinfo   +auto(TT) const                                   +
++--------+-------------------------------------------------+
+
+
+this iterator is used to iterate over the channel in order it was pushed.
+iterator stops once channel is depleted (internal entry counter is 0)
+iteration can happen on multiple threads or jobs at the same time.
 
 

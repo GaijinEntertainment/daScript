@@ -5627,4 +5627,42 @@ unpack_byte_to_float returns float4
 
 |function-math-unpack_byte_to_float|
 
++++++++++++++
+Uncategorized
++++++++++++++
+
+.. _function-_at_math_c__c_un_quat_from_euler_Cf3:
+
+.. das:function:: un_quat_from_euler(angles: float3 const)
+
+un_quat_from_euler returns float4
+
++--------+-------------+
++argument+argument type+
++========+=============+
++angles  +float3 const +
++--------+-------------+
+
+
+|function-math-un_quat_from_euler|
+
+.. _function-_at_math_c__c_un_quat_from_euler_Cf_Cf_Cf:
+
+.. das:function:: un_quat_from_euler(x: float const; y: float const; z: float const)
+
+un_quat_from_euler returns float4
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float const  +
++--------+-------------+
++y       +float const  +
++--------+-------------+
++z       +float const  +
++--------+-------------+
+
+
+|function-math-un_quat_from_euler|
+
 
