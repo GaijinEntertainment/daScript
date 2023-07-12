@@ -12,6 +12,8 @@ require daslib/macro_boost
 require daslib/ast_boost
 require daslib/defer
 
+require detail/helpers
+
 require peg/parser_generator
 require peg/meta_ast
 
