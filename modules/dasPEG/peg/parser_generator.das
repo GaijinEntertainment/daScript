@@ -271,6 +271,9 @@ def get_rule_type(var gen: ParserGenerator; rule: Rule): TypeDeclPtr
         if [[Rule nonterminal = $v(nonterm)]]
             return <- gen.rule_types[nonterm] |> clone_type
 
+        if [[Rule bound_nonterminal = $v(nonterm)]]
+            return <- gen.rule_types[nonterm._0] |> clone_type
+
         if [[Rule subrule = $v(subrule)]]
             abort("Infer subrule type")
 
@@ -661,6 +664,7 @@ def alternative_add_epilogue(var block_contents: array<ExpressionPtr>; var gen: 
 
 
 def generate_terminal(var gen: ParserGenerator; var terminal: Terminal): ExpressionPtr
+    var name = "_terminal_result_{gen.rule_counter["terminal"]++}"
     var inscope return_type <- gen.return_types[gen.current_context] |> clone_type()
 
     match terminal
@@ -687,17 +691,17 @@ def generate_terminal(var gen: ParserGenerator; var terminal: Terminal): Express
             })
 
             return <- qmacro_block <|
-                var success = invoke <|
+                var $i(name) = invoke <|
                     $b(rule_code)
-                return <- [[$t(return_type)]] if !success
+                return <- [[$t(return_type)]] if !$i(name)
                 parser.index += 1
 
         if [[Terminal number = $v(handle)]]
 
             return <- qmacro_block <|
-                var res : tuple<bool;int;int> = parser |> match_decimal_literal
-                return [[$t(return_type)]] if !res._0
-                var $i(handle) = res._1
+                var $i(name) : tuple<bool;int;int> = parser |> match_decimal_literal
+                return [[$t(return_type)]] if !$i(name)._0
+                var $i(handle) = $i(name)._1
 
         if [[Terminal whitespace = _]]
 
@@ -719,16 +723,16 @@ def generate_terminal(var gen: ParserGenerator; var terminal: Terminal): Express
         if [[Terminal string_ = $v(handle)]]
 
             return <- qmacro_block <|
-                var res <- parser |> match_string_literal
-                return [[$t(return_type)]] if !res.success
-                var $i(handle) : string = res._1
+                var $i(name) <- parser |> match_string_literal
+                return [[$t(return_type)]] if !$i(name).success
+                var $i(handle) : string = $i(name)._1
 
         if [[Terminal double_ = $v(handle)]]
 
             return <- qmacro_block <|
-                var res <- parser |> match_double_literal
-                return [[$t(return_type)]] if !res.success
-                var $i(handle) = res._1
+                var $i(name) <- parser |> match_double_literal
+                return [[$t(return_type)]] if !$i(name).success
+                var $i(handle) = $i(name)._1
 
 
     abort("Unreachable")
