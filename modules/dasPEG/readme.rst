@@ -1,8 +1,8 @@
-=============================
+=======================================
 The *das-PEG*  parser generator library
-=============================
+=======================================
 
-The ***das-PEG*** (Parsing Expression Grammar) parser generator library is a
+The **das-PEG** (Parsing Expression Grammar) parser generator library is a
 versatile tool that helps you design deterministic parsers with unlimited
 lookahead capability. PEG is a type of parsing algorithm that describes a
 formal language in terms of an *ordered* set of rules.
@@ -21,9 +21,11 @@ a single activity.
 Example
 ~~~~~~~
 
-**The grammar** is a series of rules; each rule is introduced with ``var
-<rule-name>: <rule-type>``. **The types are significant**, as they are used for
-binding variables.
+**The grammar** is a series of rules; each rule is introduced with
+
+      var <rule-name>: <rule-type>
+
+**The types are significant**, as they are used for binding variables.
 
 Following each rule is a series of ``rule(...)`` calls - the alternatives that
 the rule will try to match. For example, in this simplified arithmetic parser:
@@ -67,7 +69,8 @@ The basic building blocks to the more complicated rules are
 - **Range match**. Ranges are specified via ``range('1', '9')`` syntax
 - **Text extraction**. Text extraction is specified with the interpolation
   syntax and is used to match the rule and extract its corresponding ``string``.
-  ``rule("{name}", "=" , Value as v) <| $ { variables[name] = v; }``
+
+      rule("{name}", "=" , Value as v) <| $ { variables[name] = v; }
 
 Binding to the rules
 ~~~~~~~~~~~~~~~~~~~~~
@@ -118,8 +121,8 @@ handled faster.
 **Linear Time Complexity**: In general, PEG parsers exhibit super-linear time
 complexity with respect to the size of the input. Using caching techniques
 alleviates some of the performance penalties. However, this can be affected by
-the specifics of the grammar. For example, excessive use of repetitions '*'
-(zero or more) or '+' (one or more) operators in the grammar can lead to
+the specifics of the grammar. For example, excessive use of repetitions ``*``
+(zero or more) or ``+`` (one or more) operators in the grammar can lead to
 super-linear performance because these operators may require the parser to
 repeatedly attempt the same parsing operation.
 
@@ -129,7 +132,17 @@ additional memory.
 Benchmarks
 ~~~~~~~~~~
 
-...
+The benchmark(s) are situated in the ``dasPEG/bench`` directory. For now the generated parsers are not
+extremely blazingly fast – only achieveing 3x slowdown when compared with handwritten ones
+base on the json canada sample.
+
++----------------+-----------+---------------+
+| Parser         | File Size | Parsing Time  |
++================+===========+===============+
+| PEG Parser     | 2 MB json | 0.61 seconds  |
++----------------+-----------+---------------+
+| Stdlib Parser  | 2 MB json | 0.18 seconds  |
++----------------+-----------+---------------+
 
 Warnings
 ~~~~~~~~
@@ -142,8 +155,8 @@ Warnings
 
   By default in interpreted mode the stack for a das program is quite small
   (16KB) and can easily overflow. Specify the bigger value in the beginning of
-  the module to overcome this issue. ``options stack = 1000000000`` - 1MB
-  extremely big.
+  the module to overcome this issue. ``options stack = 1000000`` – 1MB
+  most probably enough.
 
 - **Stateful actions are prohibited**
 
@@ -154,8 +167,9 @@ Warnings
 Inspiration
 ~~~~~~~~~~~
 
-The creation of the das PEG parser generator was substantially influenced by
-Guido van Rossum's work on Python's pegen library. His series of detailed
-articles on the internal mechanics of PEG parser generators provided a
-blueprint for generating high-performance parsers, which the das PEG library
-strives to replicate.
+The creation of the *das-PEG* parser generator was substantially influenced by
+Guido van Rossum's work on Python's *pegen* library. His series of detailed
+articles on the internal mechanics of PEG parser generators provided a nice
+blueprint for generating parsers. Another thanks goes to the excellent reification
+capabilities of dascript – the integration between the generator and the
+generating program has never been so tight!
