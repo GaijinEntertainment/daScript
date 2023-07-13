@@ -9,6 +9,25 @@ require fio
 def main
 
     with_audio_system <|
+        print("with third file system\n")
+        print("play sin-440 looped\n")
+        var sin1 <- [{for x in range(MA_SAMPLE_RATE); sin(2.*PI*440.*float(x)/float(48000))}]
+        let sid_pcm = play_sound_from_pcm(MA_SAMPLE_RATE,1,sin1,true)
+        sid_pcm |> set_volume(0.25)
+        print("left\n")
+        sid_pcm |> set_pan(-1.0)
+        sleep(1500u)
+        print("right\n")
+        sid_pcm |> set_pan(1.0)
+        sleep(1500u)
+        print("panning\n")
+        for t in range(300)
+            let pan = sin(2.*PI*float(t)/float(150))
+            print("pan = {pan}\n")
+            sid_pcm |> set_pan(pan)
+            sleep(10u)
+
+    with_audio_system <|
         print("with first file system\n")
         var sound_data : array<float>
         var channels, rate : int
@@ -20,7 +39,7 @@ def main
                 sound_data <- samples
         print("{length(sound_data)} samples, {channels} channels, {rate} rate\n")
         let sid_pcm = play_sound_from_pcm(MA_SAMPLE_RATE,channels,sound_data)
-        sleep(1000u)
+        sleep(3000u)
 
     with_audio_system <|
         print("with second file system\n")

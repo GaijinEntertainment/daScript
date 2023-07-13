@@ -117,14 +117,6 @@ class AudioChannel
         playback_position += inputSamples
         return true
 
-class AudioChannel2D : AudioChannel
-    pan : float = 0.     // -1 left to 1 right
-
-class AudioChannel3D : AudioChannel
-    position : float3       // meters
-    velocity : float3       // meters per second
-    attenuation : float
-
 var g_channels : array<AudioChannel?>
 var g_sid_2_channel : table<uint64; AudioChannel?>
 var g_mixer_total_time = 0.lf
@@ -132,10 +124,14 @@ var g_mixer_total_samples = 0ul
 
 class AudioSourcePCM : AudioSource
     samples : array<float>
-    def AudioSourcePCM ( ch,rate:int; var smp:array<float> )
+    offset  : int
+    loop    : bool
+    def AudioSourcePCM ( ch,rate:int; var smp:array<float>; l:bool )
         bitrate = rate
         channels = ch
         samples <- smp
+        offset = 0
+        loop = l
     def override append ( var data : array<float> ) : bool
         let ofs = length(samples)
         let nsmp = length(data)
@@ -147,13 +143,30 @@ class AudioSourcePCM : AudioSource
     def finalize
         delete samples
     def override get_samples ( nsamples:int ) : array<float>
-        let nsmp = min(length(samples), nsamples * channels)
         var data : array<float>
-        if nsmp!=0
-            data |> resize(nsmp)
-            unsafe
-                memcpy ( unsafe(addr(data[0])), unsafe(addr(samples[0])), nsmp * 4 )
-            samples |> erase(0,nsmp)
+        let lsamples = length(samples)
+        if loop
+            let wsmp = nsamples * channels
+            data |> resize(wsmp)
+            var dofs = 0
+            while dofs < wsmp
+                let lsmp = min(lsamples, offset + wsmp - dofs)
+                let nsmp = lsmp - offset
+                if nsmp!=0
+                    unsafe
+                        memcpy ( unsafe(addr(data[dofs])), unsafe(addr(samples[offset])), nsmp * 4 )
+                    offset += nsmp
+                else
+                    offset = 0
+                dofs += nsmp
+        else
+            let lsmp = min(length(samples), offset + nsamples * channels)
+            let nsmp = lsmp - offset
+            if nsmp!=0
+                data |> resize(nsmp)
+                unsafe
+                    memcpy ( unsafe(addr(data[0])), unsafe(addr(samples[offset])), nsmp * 4 )
+                offset += nsmp
         return <- data
 
 let MA_RESULT_OK = 0
@@ -201,13 +214,20 @@ def remove_channel ( srci:int )
         delete g_channels[srci]
     g_channels |> erase(srci)
 
+struct AudioCommandAddDecoder
+    sid:uint64
+    [[do_not_delete]] decoder:ma_decoder?
+    rate:int
+    channels:int
+
 variant AudioCommand
     shutdown    : bool
-    add_decoder : tuple<sid:uint64; decoder:ma_decoder?; rate:int; channels:int>
-    add_pcm     : tuple<sid:uint64; rate:int; channels:int; samples:array<float>>
+    add_decoder : AudioCommandAddDecoder
+    add_pcm     : tuple<sid:uint64; rate:int; channels:int; samples:array<float>; loop:bool>
     append_pcm  : tuple<sid:uint64; samples:array<float>>
     pause       : tuple<sid:uint64; paused:bool>
     volume      : tuple<sid:uint64; volume:float; time:float>
+    pan         : tuple<sid:uint64; pan:float>
     stop        : tuple<sid:uint64; time:float>
 
 var g_command_channel : Channel?
@@ -237,7 +257,7 @@ def command_processor
                 g_sid_2_channel[dcmd.sid] = channel
         elif cmd is add_pcm
             assume pcmd = cmd as add_pcm
-            var decoder  = new AudioSourcePCM(pcmd.channels, pcmd.rate, clone_to_move(pcmd.samples))
+            var decoder  = new AudioSourcePCM(pcmd.channels, pcmd.rate, pcmd.samples, pcmd.loop)
             var channel = new AudioChannel(decoder)
             g_channels |> push(channel)
             if pcmd.sid != 0ul
@@ -246,7 +266,7 @@ def command_processor
         elif cmd is append_pcm
             assume pcmd = cmd as append_pcm
             g_sid_2_channel |> get(pcmd.sid) <| $ ( var ch:AudioChannel?& )
-                ch.source->append(clone_to_move(pcmd.samples))
+                ch.source->append(pcmd.samples)
         elif cmd is pause
             var pcmd = cmd as pause
             g_sid_2_channel |> get(pcmd.sid) <| $ ( var ch:AudioChannel?& )
@@ -259,6 +279,10 @@ def command_processor
                     ma_volume_mixer_set_volume_over_time(unsafe(addr(ch.volume_mixer)), vcmd.volume, nFrames)
                 else
                     ma_volume_mixer_set_volume(unsafe(addr(ch.volume_mixer)), vcmd.volume)
+        elif cmd is pan
+            var vcmd = cmd as pan
+            g_sid_2_channel |> get(vcmd.sid) <| $ ( var ch:AudioChannel?& )
+                ma_volume_mixer_set_pan(unsafe(addr(ch.volume_mixer)), vcmd.pan)
         elif cmd is stop
             var scmd = cmd as stop
             g_sid_2_channel |> get(scmd.sid) <| $ ( var ch:AudioChannel?& )
@@ -271,6 +295,7 @@ def command_processor
                     ch.stop = true
         else
             panic("unknown audio command {cmd}")
+    delete commands
 
 var g_limiter : ma_limiter
 var g_mix_buffer : array<float>
@@ -348,13 +373,13 @@ def public play_sound_from_file ( filename:string; rate,channels:int )
     if result != MA_RESULT_OK
         return 0ul
     let sid = generate_sid()
-    g_command_channel |> push_clone <| [[AudioCommand add_decoder=[[auto sid, decoder, rate, channels]]]]
+    g_command_channel |> push_clone <| [[AudioCommand add_decoder=[[AudioCommandAddDecoder sid=sid, decoder=decoder, rate=rate, channels=channels]]]]
     return sid
 
-def public play_sound_from_pcm ( rate,channels:int; var samples:array<float> )
+def public play_sound_from_pcm ( rate,channels:int; var samples:array<float>; loop:bool=false )
     //! plays sound from PCM data
     var sid = generate_sid()
-    g_command_channel |> push_clone <| [[AudioCommand add_pcm<-[[auto sid, rate, channels, samples]]]]
+    g_command_channel |> push_clone <| [[AudioCommand add_pcm<-[[auto sid, rate, channels, samples, loop]]]]
     return sid
 
 def public append_to_pcm ( sid:SID; var samples:array<float> )
@@ -368,6 +393,11 @@ def public set_pause ( sid:SID; paused:bool )
 def public set_volume ( sid:SID; volume:float; time:float = 0.0f )
     //! set volume of sound
     g_command_channel |> push_clone <| [[AudioCommand volume=[[auto sid, volume, time]]]]
+
+def public set_pan ( sid:SID; pan:float )
+    //! set volume of sound
+    g_command_channel |> push_clone <| [[AudioCommand pan=[[auto sid, pan]]]]
+
 
 def public stop ( sid:SID; time:float = 0.0f )
     //! stop sound

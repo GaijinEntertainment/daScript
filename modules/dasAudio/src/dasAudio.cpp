@@ -193,6 +193,7 @@ struct MAVolumeMixerAnnotation : ManagedStructureAnnotation<ma_volume_mixer> {
         addField<DAS_BIND_MANAGED_FIELD(volume)>("volume","volume");
         addField<DAS_BIND_MANAGED_FIELD(dvolume)>("dvolume","dvolume");
         addField<DAS_BIND_MANAGED_FIELD(tvolume)>("tvolume","tvolume");
+        addField<DAS_BIND_MANAGED_FIELD(pan)>("pan","pan");
         addField<DAS_BIND_MANAGED_FIELD(nChannels)>("channels","nChannels");
     }
 };
@@ -321,6 +322,8 @@ public:
             SideEffects::modifyArgument, "ma_volume_mixer_set_volume")->args({"mixer", "volume"});
         addExtern<DAS_BIND_FUN(ma_volume_mixer_set_volume_over_time)>(*this, lib, "ma_volume_mixer_set_volume_over_time",
             SideEffects::modifyArgument, "ma_volume_mixer_set_volume_over_time")->args({"mixer", "volume", "nFrames"});
+        addExtern<DAS_BIND_FUN(ma_volume_mixer_set_pan)>(*this, lib, "ma_volume_mixer_set_pan",
+            SideEffects::modifyArgument, "ma_volume_mixer_set_pan")->args({"mixer", "pan"});
         addExtern<DAS_BIND_FUN(ma_volume_mixer_process_pcm_frames)>(*this, lib, "ma_volume_mixer_process_pcm_frames",
             SideEffects::modifyArgument, "ma_volume_mixer_process_pcm_frames")->args({"mixer", "pFramesOut", "pFramesIn", "frameCount"});
         // decoder
