@@ -10,6 +10,7 @@ struct ma_volume_mixer {
     float volume;
     float dvolume;
     float tvolume;
+    float pan;
     uint32_t nChannels;
 };
 
@@ -18,6 +19,7 @@ void ma_volume_mixer_uninit ( ma_volume_mixer * mixer );
 void ma_volume_mixer_set_channels ( ma_volume_mixer * mixer, uint32_t nChannels );
 void ma_volume_mixer_set_volume ( ma_volume_mixer * mixer, float volume );
 void ma_volume_mixer_set_volume_over_time ( ma_volume_mixer * mixer, float volume, uint64_t nFrames );
+void ma_volume_mixer_set_pan ( ma_volume_mixer * mixer, float pan );
 void ma_volume_mixer_process_pcm_frames ( ma_volume_mixer * mixer, float * InFrames, float * OutFrames, uint64_t nFrames );
 
 // look-ahead limiter
@@ -42,6 +44,7 @@ void ma_volume_mixer_init ( ma_volume_mixer * mixer, uint32_t nChannels ) {
     mixer->volume = 1.0f;
     mixer->dvolume = 0.0f;
     mixer->tvolume = 1.0f;
+    mixer->pan = 0.0f;
     mixer->nChannels = nChannels;
 }
 
@@ -59,6 +62,10 @@ void ma_volume_mixer_set_volume ( ma_volume_mixer * mixer, float volume ) {
     mixer->tvolume = volume;
 }
 
+void ma_volume_mixer_set_pan ( ma_volume_mixer * mixer, float pan ) {
+    mixer->pan = pan;
+}
+
 void ma_volume_mixer_set_volume_over_time ( ma_volume_mixer * mixer, float volume, uint64_t nFrames ) {
     mixer->dvolume = (volume - mixer->volume) / float(nFrames);
     mixer->tvolume = volume;
@@ -72,9 +79,12 @@ void ma_volume_mixer_process_pcm_frames_linear ( ma_volume_mixer * mixer, float 
             OutFrames[i] += InFrames[i] * volume;
         }
     } else if ( nChannels==2 ) {
+        float pan = max(min(mixer->pan,1.0f),-1.0f);
+        float volumeL = volume * min(1.0f + pan, 1.0f);
+        float volumeR = volume * min(1.0f - pan, 1.0f);
         for ( uint64_t i=0; i!=nFrames; ++i ) {
-            OutFrames[i*2+0] += InFrames[i*2+0] * volume;
-            OutFrames[i*2+1] += InFrames[i*2+1] * volume;
+            OutFrames[i*2+0] += InFrames[i*2+0] * volumeR;
+            OutFrames[i*2+1] += InFrames[i*2+1] * volumeL;
         }
     } else if ( nChannels==4 ) {
         for ( uint64_t i=0; i!=nFrames; ++i ) {
@@ -97,6 +107,7 @@ void ma_volume_mixer_process_pcm_frames_descending ( ma_volume_mixer * mixer, fl
     float volume = mixer->volume;
     float dvolume = mixer->dvolume;
     float tvolume = mixer->tvolume;
+    float pan = max(min(mixer->pan,1.0f),-1.0f);
     if ( nChannels==1 ) {
         for ( uint64_t i=0; i!=nFrames; ++i ) {
             OutFrames[i] += InFrames[i] * volume;
@@ -104,8 +115,10 @@ void ma_volume_mixer_process_pcm_frames_descending ( ma_volume_mixer * mixer, fl
         }
     } else if ( nChannels==2 ) {
         for ( uint64_t i=0; i!=nFrames; ++i ) {
-            OutFrames[i*2+0] += InFrames[i*2+0] * volume;
-            OutFrames[i*2+1] += InFrames[i*2+1] * volume;
+            float volumeL = volume * min(1.0f + pan, 1.0f);
+            float volumeR = volume * min(1.0f - pan, 1.0f);
+            OutFrames[i*2+0] += InFrames[i*2+0] * volumeR;
+            OutFrames[i*2+1] += InFrames[i*2+1] * volumeL;
             volume = ma_max(volume+dvolume,tvolume);
         }
     } else if ( nChannels==4 ) {
@@ -133,6 +146,7 @@ void ma_volume_mixer_process_pcm_frames_ascending ( ma_volume_mixer * mixer, flo
     float volume = mixer->volume;
     float dvolume = mixer->dvolume;
     float tvolume = mixer->tvolume;
+    float pan = max(min(mixer->pan,1.0f),-1.0f);
     if ( nChannels==1 ) {
         for ( uint64_t i=0; i!=nFrames; ++i ) {
             OutFrames[i] += InFrames[i] * volume;
@@ -140,8 +154,10 @@ void ma_volume_mixer_process_pcm_frames_ascending ( ma_volume_mixer * mixer, flo
         }
     } else if ( nChannels==2 ) {
         for ( uint64_t i=0; i!=nFrames; ++i ) {
-            OutFrames[i*2+0] += InFrames[i*2+0] * volume;
-            OutFrames[i*2+1] += InFrames[i*2+1] * volume;
+            float volumeL = volume * min(1.0f + pan, 1.0f);
+            float volumeR = volume * min(1.0f - pan, 1.0f);
+            OutFrames[i*2+0] += InFrames[i*2+0] * volumeR;
+            OutFrames[i*2+1] += InFrames[i*2+1] * volumeL;
             volume = ma_min(volume+dvolume,tvolume);
         }
     } else if ( nChannels==4 ) {
