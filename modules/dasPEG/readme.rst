@@ -22,13 +22,12 @@ Example
 ~~~~~~~
 
 **The grammar** is a series of rules; each rule is introduced with
-
-      var <rule-name>: <rule-type>
+``var <rule-name>: <rule-type>``.
 
 **The types are significant**, as they are used for binding variables.
 
-Following each rule is a series of ``rule(...)`` calls - the alternatives that
-the rule will try to match. For example, in this simplified arithmetic parser:
+Following each rule is a series of ``rule(...)`` calls – the alternatives that
+the rule will try to match. For example, in this simplified arithmetic parser —
 
 .. code-block:: das
 
@@ -46,6 +45,9 @@ the rule will try to match. For example, in this simplified arithmetic parser:
 
        var mul: int
        ...
+
+— the rules for plus and minus will be tried in order. If neither of these
+matches then the last rule is checked against.
 
 **Caching.** The ``a`` in ``add as a`` is not parsed several times. The parser keeps
 the caches for every rule and reuses its results. This technique is known as
@@ -70,6 +72,8 @@ The basic building blocks to the more complicated rules are
 - **Text extraction**. Text extraction is specified with the interpolation
   syntax and is used to match the rule and extract its corresponding ``string``.
 
+  .. code-block:: das
+
       rule("{name}", "=" , Value as v) <| $ { variables[name] = v; }
 
 Binding to the rules
@@ -87,6 +91,28 @@ Rule Modifiers
 There are several modifiers that can be applied to the rules. 
 
 - **Repetition** (``*``)
+
+  This modifier matches the rule *zero or more times*. Returns its result
+  inside the array. Take, for example, the array from json parser -
+
+  .. code-block:: das
+     var ElementList: array<JsonValue?>
+
+     rule(*CommaSeparatedElement as els, Element as last) <|
+     print("Parsed element list\n")
+     els |> push <| last
+     return <- els
+
+     var CommaSeparatedElement: JsonValue?
+     ...
+
+  - its contents are represented as `ElementList`, a list of comma separated
+  elements ending with just the last `Element` (without comma).
+
+  Here the rule `*CommaSeparatedElement as els` binds several elements and
+  produces `array<JsonValue?>` - because `CommaSeparatedElement` is a
+  `JsonValue?`.
+
 - **Certain repetition** (``+``)
 - **Optional** (``MB``)
 - **Positive lookahead** (``PEEK``)
@@ -103,8 +129,8 @@ The options are specified anywhere in the body of the parse macro with the ``opt
        options(utf-8)
        ...
 
-- ``utf-8`` - enables utf-8 decoding support
-- ``trace`` - enable line info tracking and failure reporting
+- ``utf-8`` – enables utf-8 decoding support
+- ``trace`` – enable line info tracking and failure reporting
 
 Performance
 -----------
@@ -112,22 +138,26 @@ Performance
 PEG parsers, including the *das-PEG* parser generator, have certain performance
 characteristics that can impact the efficiency of your parsing tasks.
 
-**Importance of Ordering**: Unlike some other parser types that may require
-conflict resolution, PEG parsers operate in a deterministic way, always trying
-the first alternative in order. Therefore it is advisable to place alternatives
-in their expected order of frequency. This way, the more common cases will be
-handled faster.
+- **Importance of Ordering**
 
-**Linear Time Complexity**: In general, PEG parsers exhibit super-linear time
-complexity with respect to the size of the input. Using caching techniques
-alleviates some of the performance penalties. However, this can be affected by
-the specifics of the grammar. For example, excessive use of repetitions ``*``
-(zero or more) or ``+`` (one or more) operators in the grammar can lead to
-super-linear performance because these operators may require the parser to
-repeatedly attempt the same parsing operation.
+  Unlike some other parser types that may require
+  conflict resolution, PEG parsers operate in a deterministic way, always trying
+  the first alternative in order. Therefore it is advisable to place alternatives
+  in their expected order of frequency. This way, the more common cases will be
+  handled faster.
 
-**Memory Use**: Due to the use of caching this type of parsers can consume some
-additional memory.
+- **Linear Time Complexity**
+
+  In general, PEG parsers exhibit super-linear time
+  complexity with respect to the size of the input. Using caching techniques
+  alleviates some of the performance penalties. However, this can be affected by
+  the specifics of the grammar. For example, excessive use of repetitions ``*``
+  (zero or more) or ``+`` (one or more) operators in the grammar can lead to
+  super-linear performance because these operators may require the parser to
+  repeatedly attempt the same parsing operation.
+
+- **Memory Use**: Due to the use of caching this type of parsers can consume some
+  additional memory.
 
 Benchmarks
 ~~~~~~~~~~
