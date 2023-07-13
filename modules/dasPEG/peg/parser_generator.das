@@ -240,9 +240,6 @@ def generate(var gen: ParserGenerator; var def_: Definition)
         $b(function_body)
         return <- [[$t(return_type)]]
 
-    // XXX: disabling locks for the entire function
-    fun.moreFlags |= MoreFunctionFlags skipLockCheck
-
     //fun |> describe |> print
     compiling_module() |> add_function(fun)
 
