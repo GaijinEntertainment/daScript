@@ -41,6 +41,24 @@ struct ParserGenerator
     // The constructed type for the parser
     parser_type: TypeDeclPtr
 
+    // Enable debug output for library development
+    debug: bool
+
+    // Whether or not to emit code to trace the execution
+    tracing: bool
+
+    // Output ansi escape sequences in trace
+    color_output: bool
+
+
+def accept_option(var gen: ParserGenerator; opt: string)
+    if opt == "tracing"
+        gen.tracing = true
+    elif opt == "color"
+        gen.color_output = true
+    else
+        abort("Unsupported option `{opt}` passed to the parser generator")
+
 
 def rule_left_recursive(name: string; rule: Rule): bool
     match rule
@@ -94,24 +112,27 @@ def generate_wrapper(var gen: ParserGenerator)
     var inscope wrapper_fun <- qmacro_function("parse_{rule_name}") <| $ (var parser: $t(gen.parser_type)): $t(return_type)
         var mark = parser |> current_index
 
-        parser |> parser_log <| "Entered function parse_{$v(rule_name)}"
-        parser.tabs++
+        if $v(gen.tracing)
+            parser |> log_plain <| "Entered function parse_{$v(rule_name) |> bold}"
+            parser.tabs++
 
         if parser.$f(cache_table) |> key_exists(mark)
             var result := parser.$f(cache_table)[mark]
             parser.index = result.endpos
 
-            parser.tabs--
-            parser |> parser_log <| "Exited function parse_{$v(rule_name)}"
+            if $v(gen.tracing)
+                parser.tabs--
+                //parser |> log_plain <| "Exited  function parse_{$v(rule_name) |> bold}"
 
             return <- result
 
         var result <- $c(inner_parsing_fun)(parser)
         parser.$f(cache_table)[mark] := result
 
-        parser.tabs--
-        parser |> parser_log <| "Exited function parse_{$v(rule_name)}"
-        parser |> parser_log <| "Matched from {mark} to {parser |> current_index}"
+        if $v(gen.tracing)
+            parser.tabs--
+            //parser |> log_plain <| "Exited  function parse_{$v(rule_name) |> bold}"
+            parser |> log_info <| "Matched from {mark} to {parser |> current_index}"
 
         return <- result
 
@@ -130,16 +151,18 @@ def generate_wrapper_leftrec(var gen: ParserGenerator)
     var inscope wrapper_fun <- qmacro_function("parse_{rule_name}") <| $ (var parser: $t(gen.parser_type)): $t(return_type)
         var mark = parser |> current_index
 
-        parser |> parser_log <| "Entered function parse_{$v(rule_name)}"
-        parser.tabs++
+        if $v(gen.tracing)
+            parser |> log_plain <| "Entered function parse_{$v(rule_name) |> bold}"
+            parser.tabs++
 
         with parser
             if $i(cache_table) |> key_exists(mark)
                 var result = $i(cache_table)[mark]
                 parser.index = result.endpos
 
-                parser.tabs--
-                parser |> parser_log <| "Exited function parse_{$v(rule_name)}"
+                if $v(gen.tracing)
+                    parser.tabs--
+                    //parser |> log_plain <| "Exited  function parse_{$v(rule_name) |> bold}"
 
                 return result
 
@@ -160,8 +183,9 @@ def generate_wrapper_leftrec(var gen: ParserGenerator)
                 res = newres
                 $i(cache_table)[mark] = res
 
-            parser.tabs--
-            parser |> parser_log <| "Exited function parse_{$v(rule_name)}"
+            if $v(gen.tracing)
+                parser.tabs--
+                //parser |> log_plain <| "Exited  function parse_{$v(rule_name) |> bold}"
 
             parser.index = res.endpos
             return res
@@ -196,6 +220,7 @@ def generate_parser_class(var gen: ParserGenerator; parser_name: string)
     s |> add_structure_field_new("current", qmacro_type(type<int>))
     s |> add_structure_field_new("index", qmacro_type(type<int>))
     s |> add_structure_field_new("tabs", qmacro_type(type<int>))
+    s |> add_structure_field_new("color_output", qmacro_type(type<bool>))
 
     s.flags |= StructureFlags skipLockCheck
 
@@ -328,8 +353,8 @@ def set_rule_handle(var subrule_: Rule_?; handle: string)
                     abort("Matching repeated literals is not allowed")
 
                 if [[Terminal charset = $v(r) ]]
-                    // *[1-9] as numbers -- should be possible
-                    abort("Matching repeated charsets is not allowed")
+                    // *[1-9] as numbers
+                    abort("Matching repeated charsets is not allowed -- use text extraction")
 
                 if [[Terminal number = $v(name)]]
                     name = handle
@@ -419,6 +444,8 @@ def generate(var gen: ParserGenerator; var rule_: Rule): array<ExpressionPtr>
                 $b(subrule_)
                 var $i("str_{i}") = unsafe(reinterpret<string> unsafe(addr(parser.input[0])))
                 var $i(result_handle): string <- $i("str_{i}") |> slice($i("ext_pos_{i}"), parser |> current_index)
+                if $v(gen.tracing)
+                    parser |> log_info <| "Extracted text from the stream: '{$i(result_handle)}'"
 
             return <- flatten_block(t as ExprBlock)
 
@@ -435,7 +462,7 @@ def generate(var gen: ParserGenerator; var rule_: Rule): array<ExpressionPtr>
             var inscope results: array<ExpressionPtr>
 
             for alt, i in alts, iota()
-                results |> emplace_new <| generate_one_alternative(gen, alt, i)
+                results |> emplace_new <| generate_one_alternative(gen, alt, i, alts |> length == 1)
 
             return <- results
 
@@ -520,22 +547,27 @@ def generate_not(var gen: ParserGenerator; var rule_: Rule_?): array<ExpressionP
         var mark = parser.index
         var current_ = parser.current
 
-        parser |> parser_log <| "Saved the state for negative assertion: [{mark}, {current}]"
+        if $v(gen.debug)
+            parser |> log_plain <| "Saved the state for negative assertion: [{mark}, {current}]"
 
         var success = invoke <|
             $b(rule_code)
 
-        parser |> parser_log <| "Resetting the state: [{parser.index}, {parser.current}] -> [{mark}, {current}]"
+        if $v(gen.debug)
+            parser |> log_plain <| "Resetting the state: [{parser.index}, {parser.current}] -> [{mark}, {current}]"
 
         parser.index = mark
         parser.current = current_
 
         if success.success
-            parser |> parser_log <| "Assertion successful; failing"
+            if $v(gen.tracing)
+                parser |> log_fail <| "Assertion successful; failing"
 
             return_skip_lockcheck <| [[$t(return_type)]]
             return <- [[$t(return_type)]]
-        parser |> parser_log <| "Assertion failed; continuing"
+
+            if $v(gen.tracing)
+                parser |> log_success <| "Assertion failed; continuing"
 
 
     return <- flatten_block(t as ExprBlock)
@@ -678,7 +710,7 @@ def with_context(var gen: ParserGenerator; context: string; block_)
     return <- r
 
 
-def generate_one_alternative(var gen: ParserGenerator; var alt: Alternative; var i)
+def generate_one_alternative(var gen: ParserGenerator; var alt: Alternative; i; only)
     let block_name = "blk_{i}"
     let parse_pos = "pos_{i}"
     let result  = "res_{i}"
@@ -696,19 +728,29 @@ def generate_one_alternative(var gen: ParserGenerator; var alt: Alternative; var
     return <- qmacro_block <|
         var parse_pos = parser.index
         var current = parser.current
-
-        parser |> parser_log <| "Trying alternative {$v(i)}"
+        if $v(gen.tracing) && !$v(only)
+            parser |> log_info <| "Trying alternative {$v(i)}"
+        parser.tabs++
 
         var $i(result) <- invoke <|
             $b(block_contents)
 
         if $i(result).success
-            parser |> parser_log <| "Alternative {$v(i)} successful, index: {parser.index}, current: {parser.current}"
+            parser.tabs--
+            if $v(gen.tracing) && !$v(only)
+                pass
+                //parser |> log_success <| "Alternative {$v(i)} successful"
+            if $v(gen.debug) && !$v(only)
+                parser |> log_plain <|  "State: index: {parser.index}, current: {parser.current}"
             return_skip_lockcheck($i(result))
             return <- $i(result)
 
-        parser |> parser_log <| "Alternative {$v(i)} failed, index: {parser.index}, current: {parser.current}"
-        parser |> parser_log <| "Resetting index to {parse_pos}, current: {parser.current}"
+        parser.tabs--
+        if $v(gen.tracing) && !$v(only)
+            pass
+            //parser |> log_fail <| "Alternative {$v(i)} failed, index: {parser.index}, current: {parser.current}"
+        if $v(gen.debug) && !$v(only)
+            parser |> log_plain <| "Resetting index to {parse_pos}, current: {parser.current}"
 
         parser.index = parse_pos
         parser.current = current
@@ -719,12 +761,15 @@ def alternative_add_epilogue(var block_contents: array<ExpressionPtr>; var gen: 
     var inscope return_type <- gen.return_types[gen.current_context] |> clone_type()
 
     var inscope t <- qmacro_block <|
-        parser |> parser_log <| "Executing action"
+
+        if $v(gen.debug)
+            parser |> log_plain <| "Executing action"
+
         var val: $t(action_type) <- invoke <| $(): $t(action_type)
             $b(action_block)
 
-        // For some reason I cannot directly return [[Result]]
-        parser |> parser_log <| "Returning result at index {parser.index}"
+        if $v(gen.debug)
+            parser |> log_plain <| "Returning result at index {parser.index}"
 
         var result: $t(return_type) <- [[$t(return_type) true, val, parser.index]]
         return_skip_lockcheck <| result
@@ -742,15 +787,18 @@ def generate_terminal(var gen: ParserGenerator; var terminal: Terminal): Express
             var precomputed_length = l |> length
 
             return <- qmacro_block <|
-                parser |> parser_log <| "Trying to match terminal {$v(l)}"
+                if $v(gen.debug)
+                    parser |> log_plain <| "Trying to match terminal {$v(l) |> escape}"
 
                 if !parser |> matches($v(l), $v(precomputed_length))
-                    parser |> parser_log <| "Did not match the `{$v(l)}`"
+                    if $v(gen.tracing)
+                        parser |> log_fail <| "Did not match the terminal `{$v(l) |> escape}`"
 
                     return_skip_lockcheck <| [[$t(return_type)]]
                     return <- [[$t(return_type)]]
 
-                parser |> parser_log <| "Matched the `{$v(l)}` successfully"
+                if $v(gen.tracing)
+                    parser |> log_success <| "Matched the terminal `{$v(l) |> escape}`"
 
         if [[Terminal charset = $v(ranges) ]]
 
@@ -772,6 +820,8 @@ def generate_terminal(var gen: ParserGenerator; var terminal: Terminal): Express
                 var $i(name) = invoke <|
                     $b(rule_code)
                 if !$i(name)
+                    if $v(gen.tracing)
+                        parser |> log_fail <| "Failed the range check for character {parser.current}"
                     return_skip_lockcheck <| [[$t(return_type)]]
                     return <- [[$t(return_type)]]
                 parser |> move_to_next_char
@@ -781,8 +831,12 @@ def generate_terminal(var gen: ParserGenerator; var terminal: Terminal): Express
             return <- qmacro_block <|
                 var $i(name) : tuple<bool;int;int> = parser |> match_decimal_literal
                 if !$i(name)._0
+                    if $v(gen.tracing)
+                        parser |> log_fail <| "Could not match a decimal number"
                     return_skip_lockcheck <| [[$t(return_type)]]
                     return <- [[$t(return_type)]]
+                if $v(gen.tracing)
+                    parser |> log_success <| "Matched a decimal number {$i(name)._1}"
                 var $i(handle) = $i(name)._1
 
         if [[Terminal whitespace = _]]
@@ -794,20 +848,24 @@ def generate_terminal(var gen: ParserGenerator; var terminal: Terminal): Express
 
             return <- qmacro_block <|
                 if !parser |> reached_EOF
+                    if $v(gen.tracing)
+                        parser |> log_fail <| "Did not match EOF"
                     return_skip_lockcheck <| [[$t(return_type)]]
                     return <- [[$t(return_type)]]
 
         if [[Terminal any = _]]
 
             return <- qmacro_block <|
-                parser |> parser_log <| "Matching any charachter"
-
                 if parser |> reached_EOF
-                    parser |> parser_log <| "Failed, reached EOF"
+                    if $v(gen.tracing)
+                        parser |> log_fail <| "Failed matching any, reached EOF"
+
                     return_skip_lockcheck <| [[$t(return_type)]]
                     return <- [[$t(return_type)]]
 
-                parser |> parser_log <| "Ok, moving on"
+                if $v(gen.tracing)
+                    parser |> log_success <| "Matched any character"
+
                 parser |> move_to_next_char
 
         if [[Terminal string_ = $v(handle)]]
@@ -815,8 +873,12 @@ def generate_terminal(var gen: ParserGenerator; var terminal: Terminal): Express
             return <- qmacro_block <|
                 var $i(name) <- parser |> match_string_literal
                 if !$i(name).success
+                    if $v(gen.tracing)
+                        parser |> log_fail <| "Could not match a string"
                     return_skip_lockcheck <| [[$t(return_type)]]
                     return <- [[$t(return_type)]]
+                if $v(gen.tracing)
+                    parser |> log_success <| "Matched a string {$i(name)._1}"
                 var $i(handle) : string = $i(name)._1
 
         if [[Terminal double_ = $v(handle)]]
@@ -824,8 +886,12 @@ def generate_terminal(var gen: ParserGenerator; var terminal: Terminal): Express
             return <- qmacro_block <|
                 var $i(name) <- parser |> match_double_literal
                 if !$i(name).success
+                    if $v(gen.tracing)
+                        parser |> log_fail <| "Could not match a double"
                     return_skip_lockcheck <| [[$t(return_type)]]
                     return <- [[$t(return_type)]]
+                if $v(gen.tracing)
+                    parser |> log_success <| "Matched a double {$i(name)._1}"
                 var $i(handle) = $i(name)._1
 
 

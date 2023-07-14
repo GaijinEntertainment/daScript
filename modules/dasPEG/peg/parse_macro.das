@@ -13,6 +13,7 @@ require daslib/ast_boost
 require daslib/defer
 
 require detail/helpers
+require detail/colors
 
 require peg/parser_generator
 require peg/meta_ast
@@ -23,13 +24,19 @@ options stack = 10000000
 
 struct MacroRule
     [[do_not_delete]] rule: ExprLet? // from let rule: type
+    options_: array<string>
     alternatives: array<ExprCall?>
 
 
 [macro_function]
 def add_alternative(var rules: array<MacroRule>; var expr: ExprCall?; prog: ProgramPtr)
-    // macro_verify(expr.name |> string() == "rule", prog, expr.at, "parsing rules alternatives should be called with `rule` name")
-    (rules |> back).alternatives |> emplace <| expr
+    var call_name = expr.name |> string()
+
+    if call_name == "rule"
+        (rules |> back).alternatives |> emplace <| expr
+    elif call_name == "option"
+        var opt = (expr.arguments[0] as ExprVar).name |> string()
+        (rules |> back).options_ |> emplace <| opt
 
 
 [macro_function]
@@ -296,6 +303,10 @@ class ParseMacro : AstCallMacro
         // Generate
 
         var inscope gen <- [[ParserGenerator]]
+
+        for mrule in rules_
+            for opt in mrule.options_
+                gen |> accept_option(opt) // Set the state of the generator up
 
         gen |> generate_grammar(gram, name)
 

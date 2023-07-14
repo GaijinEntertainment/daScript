@@ -9,6 +9,7 @@ module peg
 require detail/utf8
 
 require peg/parse_macro public
+require peg/detail/colors public
 require strings
 
 
@@ -25,7 +26,6 @@ def public matches(var parser; template_: string; strlen: int): bool
     unsafe
         if memcmp(addr(parser.input[mark]), reinterpret<uint8?> template_, strlen) == 0
             parser.index += strlen - backtrack_len
-            print("Moved index to {parser.index}\n")
             parser |> move_to_next_char
             return true
 
@@ -33,12 +33,28 @@ def public matches(var parser; template_: string; strlen: int): bool
 
 
 def public tabulate(var parser)
-    print("{repeat("\t", parser.tabs)}")
+    print("{repeat("|   ", parser.tabs)}")
 
 
-def public parser_log(var parser, message)
+
+def public log_plain(var parser, message)
     parser |> tabulate
-    print("[!] {message}\n")
+    print("[-] {message}\n")
+
+
+def public log_fail(var parser, message)
+    parser |> tabulate
+    print("[!] {message}\n" |> red_str <| parser.color_output)
+
+
+def public log_success(var parser, message)
+    parser |> tabulate
+    print("[!] {message}\n"  |> green_str <| parser.color_output)
+
+
+def public log_info(var parser, message)
+    parser |> tabulate
+    print("[.] {message}\n" |> blue_str <| parser.color_output)
 
 
 def public reached_EOF(var parser): bool
@@ -58,10 +74,8 @@ def public skip_whitespace(var parser)
 def public move_to_next_char(var parser)
     if parser.input |> length <= parser.index
         parser.current = -1 // EOF
-        print("Reached EOF\n")
     else
         parser.current = get_next_character(parser.input, parser.index)
-        print("Next charachter is {parser.current}\n")
 
 
 def public current_index(var parser): int
@@ -75,7 +89,6 @@ def public current_buffer_pos(var parser): string
 
 
 def public get_current_char(var parser): int
-    print("Current index is {parser.index}\n")
     return parser.current
 
 
