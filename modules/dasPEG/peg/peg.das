@@ -6,8 +6,12 @@ options strict_smart_pointers = true
 
 module peg
 
+require detail/utf8
+
 require peg/parse_macro public
-require strings public
+require peg/detail/colors public
+require strings
+
 
 def public matches(var parser; template_: string; strlen: int): bool
     var mark = parser.index
@@ -23,6 +27,30 @@ def public matches(var parser; template_: string; strlen: int): bool
     return false
 
 
+def public tabulate(var parser)
+    print("{repeat("|   ", parser.tabs)}")
+
+
+def public log_plain(var parser, message)
+    parser |> tabulate
+    print("[-] {message}\n")
+
+
+def public log_fail(var parser, message)
+    parser |> tabulate
+    print("[!] {message}\n" |> red_str <| parser.color_output)
+
+
+def public log_success(var parser, message)
+    parser |> tabulate
+    print("[!] {message}\n"  |> green_str <| parser.color_output)
+
+
+def public log_info(var parser, message)
+    parser |> tabulate
+    print("[.] {message}\n" |> blue_str <| parser.color_output)
+
+
 def public reached_EOF(var parser): bool
     return parser.input |> length <= parser.index
 
@@ -35,6 +63,27 @@ def public skip_whitespace(var parser)
 def public get_current_char(var parser): int
     return -1 if parser.input |> length <= parser.index
     return parser.input[parser.index] |> int()
+
+
+// def public move_to_next_char(var parser)
+//     if parser.input |> length <= parser.index
+//         parser.current = -1 // EOF
+//     else
+//         parser.current = get_next_character(parser.input, parser.index)
+
+
+// def public current_index(var parser): int
+//     var backtrack_len = parser.current |> get_utf8_byte_count
+//     return parser.index - backtrack_len
+
+
+// def public current_buffer_pos(var parser): string
+//     var backtrack_len = parser.current |> get_utf8_byte_count
+//     return parser.input[parser.index - backtrack_len] |> string()
+
+
+// def public get_current_char(var parser): int
+//     return parser.current
 
 
 def public match_decimal_literal(var parser): tuple<success:bool; value:int; endpos:int>

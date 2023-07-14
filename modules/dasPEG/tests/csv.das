@@ -92,7 +92,6 @@ def get_parser_with(input: string): csvParser
             return null
 
 
-
         var EOL: void?
 
         rule("\r\n") <|

@@ -10,7 +10,7 @@ require daslib/fio
 
 def abort(message: string)
     print("{message}\n")
-    stackwalk(false, false)
+    false |> stackwalk <| false  // God I love the pipe syntax so much
     unsafe { exit(1); }
 
 
