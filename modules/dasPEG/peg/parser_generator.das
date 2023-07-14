@@ -94,13 +94,24 @@ def generate_wrapper(var gen: ParserGenerator)
     var inscope wrapper_fun <- qmacro_function("parse_{rule_name}") <| $ (var parser: $t(gen.parser_type)): $t(return_type)
         var mark = parser |> current_index
 
+        parser |> parser_log <| "Entered function parse_{$v(rule_name)}"
+        parser.tabs++
+
         if parser.$f(cache_table) |> key_exists(mark)
             var result := parser.$f(cache_table)[mark]
             parser.index = result.endpos
+
+            parser.tabs--
+            parser |> parser_log <| "Exited function parse_{$v(rule_name)}"
+
             return <- result
 
         var result <- $c(inner_parsing_fun)(parser)
         parser.$f(cache_table)[mark] := result
+
+        parser.tabs--
+        parser |> parser_log <| "Exited function parse_{$v(rule_name)}"
+        parser |> parser_log <| "Matched from {mark} to {parser |> current_index}"
 
         return <- result
 
@@ -119,10 +130,17 @@ def generate_wrapper_leftrec(var gen: ParserGenerator)
     var inscope wrapper_fun <- qmacro_function("parse_{rule_name}") <| $ (var parser: $t(gen.parser_type)): $t(return_type)
         var mark = parser |> current_index
 
+        parser |> parser_log <| "Entered function parse_{$v(rule_name)}"
+        parser.tabs++
+
         with parser
             if $i(cache_table) |> key_exists(mark)
                 var result = $i(cache_table)[mark]
                 parser.index = result.endpos
+
+                parser.tabs--
+                parser |> parser_log <| "Exited function parse_{$v(rule_name)}"
+
                 return result
 
             // Build new cache entry from scratch
@@ -142,6 +160,8 @@ def generate_wrapper_leftrec(var gen: ParserGenerator)
                 res = newres
                 $i(cache_table)[mark] = res
 
+            parser.tabs--
+            parser |> parser_log <| "Exited function parse_{$v(rule_name)}"
 
             parser.index = res.endpos
             return res
@@ -175,6 +195,7 @@ def generate_parser_class(var gen: ParserGenerator; parser_name: string)
     s |> add_structure_field_new("input", qmacro_type(type<array<uint8>>))
     s |> add_structure_field_new("current", qmacro_type(type<int>))
     s |> add_structure_field_new("index", qmacro_type(type<int>))
+    s |> add_structure_field_new("tabs", qmacro_type(type<int>))
 
     s.flags |= StructureFlags skipLockCheck
 
@@ -499,14 +520,23 @@ def generate_not(var gen: ParserGenerator; var rule_: Rule_?): array<ExpressionP
         var mark = parser.index
         var current_ = parser.current
 
+        parser |> parser_log <| "Saved the state for negative assertion: [{mark}, {current}]"
+
         var success = invoke <|
             $b(rule_code)
+
+        parser |> parser_log <| "Resetting the state: [{parser.index}, {parser.current}] -> [{mark}, {current}]"
+
         parser.index = mark
         parser.current = current_
 
         if success.success
+            parser |> parser_log <| "Assertion successful; failing"
+
             return_skip_lockcheck <| [[$t(return_type)]]
             return <- [[$t(return_type)]]
+        parser |> parser_log <| "Assertion failed; continuing"
+
 
     return <- flatten_block(t as ExprBlock)
 
@@ -667,14 +697,18 @@ def generate_one_alternative(var gen: ParserGenerator; var alt: Alternative; var
         var parse_pos = parser.index
         var current = parser.current
 
+        parser |> parser_log <| "Trying alternative {$v(i)}"
 
         var $i(result) <- invoke <|
             $b(block_contents)
 
         if $i(result).success
+            parser |> parser_log <| "Alternative {$v(i)} successful, index: {parser.index}, current: {parser.current}"
             return_skip_lockcheck($i(result))
             return <- $i(result)
 
+        parser |> parser_log <| "Alternative {$v(i)} failed, index: {parser.index}, current: {parser.current}"
+        parser |> parser_log <| "Resetting index to {parse_pos}, current: {parser.current}"
 
         parser.index = parse_pos
         parser.current = current
@@ -685,10 +719,13 @@ def alternative_add_epilogue(var block_contents: array<ExpressionPtr>; var gen: 
     var inscope return_type <- gen.return_types[gen.current_context] |> clone_type()
 
     var inscope t <- qmacro_block <|
+        parser |> parser_log <| "Executing action"
         var val: $t(action_type) <- invoke <| $(): $t(action_type)
             $b(action_block)
 
         // For some reason I cannot directly return [[Result]]
+        parser |> parser_log <| "Returning result at index {parser.index}"
+
         var result: $t(return_type) <- [[$t(return_type) true, val, parser.index]]
         return_skip_lockcheck <| result
         return <- result
@@ -705,9 +742,15 @@ def generate_terminal(var gen: ParserGenerator; var terminal: Terminal): Express
             var precomputed_length = l |> length
 
             return <- qmacro_block <|
+                parser |> parser_log <| "Trying to match terminal {$v(l)}"
+
                 if !parser |> matches($v(l), $v(precomputed_length))
+                    parser |> parser_log <| "Did not match the `{$v(l)}`"
+
                     return_skip_lockcheck <| [[$t(return_type)]]
                     return <- [[$t(return_type)]]
+
+                parser |> parser_log <| "Matched the `{$v(l)}` successfully"
 
         if [[Terminal charset = $v(ranges) ]]
 
@@ -757,11 +800,14 @@ def generate_terminal(var gen: ParserGenerator; var terminal: Terminal): Express
         if [[Terminal any = _]]
 
             return <- qmacro_block <|
+                parser |> parser_log <| "Matching any charachter"
+
                 if parser |> reached_EOF
+                    parser |> parser_log <| "Failed, reached EOF"
                     return_skip_lockcheck <| [[$t(return_type)]]
                     return <- [[$t(return_type)]]
-                parser.index += 1
 
+                parser |> parser_log <| "Ok, moving on"
                 parser |> move_to_next_char
 
         if [[Terminal string_ = $v(handle)]]
