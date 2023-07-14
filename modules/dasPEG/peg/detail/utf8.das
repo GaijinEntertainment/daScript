@@ -4,10 +4,10 @@ options no_unused_function_arguments = false
 options no_aot = true
 options strict_smart_pointers = true
 
-module peg_utf8
-
 require dastest/testing_boost
 require daslib/utf8_utils
+require daslib/strings
+
 
 // Array is asserted to be valid utf-8 at the beginning of the parsing.
 def public get_next_character(utf8_string: array<uint8>; var index: int&): int
@@ -27,10 +27,27 @@ def public get_next_character(utf8_string: array<uint8>; var index: int&): int
 
         if state == UTF8_ACCEPT
             return unsafe (reinterpret<int> codepoint)
-        if state == -1u // UTF8_REJECT
+        if state == 1u // UTF8_REJECT
             return -1
 
-    return -1
+    return 0
+
+
+def public get_utf8_byte_count(code_point: int): int
+    if code_point == -1
+        return 0
+
+    if code_point <= 0x7F |> int()
+        return 1
+    elif code_point <= 0x7FF |> int()
+        return 2
+    elif code_point <= 0xFFFF |> int()
+        return 3
+    elif code_point <= 0x10FFFF |> int()
+        return 4
+
+    panic("Not a unicode symbol")
+    return 0
 
 
 [test]
