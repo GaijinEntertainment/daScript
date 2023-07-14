@@ -132,7 +132,7 @@ def generate_wrapper(var gen: ParserGenerator)
         if $v(gen.tracing)
             parser.tabs--
             //parser |> log_plain <| "Exited  function parse_{$v(rule_name) |> bold}"
-            parser |> log_info <| "Matched from {mark} to {parser |> current_index}"
+            parser |> log_info <| "Matched from {mark} to {parser.index}"
 
         return <- result
 
@@ -830,6 +830,15 @@ def generate_terminal(var gen: ParserGenerator; var terminal: Terminal): Express
                     return_skip_lockcheck <| [[$t(return_type)]]
                     return <- [[$t(return_type)]]
                 parser.index += 1
+
+        if [[Terminal log_msg = $v(message) ]]
+
+            return <- qmacro_block <|
+                if $v(gen.tracing)
+                    // Respect tabulation
+                    parser |> log_plain <| "Logged: {$e(message)}"
+                else
+                    $e(message) |> print
 
         if [[Terminal number = $v(handle)]]
 

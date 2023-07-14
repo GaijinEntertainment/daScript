@@ -27,6 +27,9 @@ variant Terminal
     // Range: set('0'..'9', 'a'..'z')
     charset: array<tuple<int; int>>
 
+    // Log: allows to send messages via `log("Parsed A: {a}")`
+    log_msg: ExpressionPtr
+
     // Name of the result (int)
     number: string
 

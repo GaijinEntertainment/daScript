@@ -189,6 +189,13 @@ def into_rule_(var expr: ExpressionPtr): Rule_?
 
         return <- new [[Rule_ rule <- [[Rule terminal <- [[Terminal charset <- terms]] ]] ]]
 
+    elif expr is ExprCall && (expr as ExprCall).name == "log"
+        // Log partial matching: log("Here goes your message")
+
+        var log = expr as ExprCall
+        var inscope message <- log.arguments[0] |> clone_expression
+        return <- new [[Rule_ rule <- [[Rule terminal <- [[Terminal log_msg <- message ]] ]] ]]
+
     elif expr is ExprOp1 && (expr as ExprOp1).op == "+"
         // Several (+) -- one or more
 
