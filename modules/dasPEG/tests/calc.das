@@ -49,8 +49,6 @@ def get_parser_with(input: string): calcParser
     for char in input
         parser.input |> push(char |> uint8())
 
-    parser |> move_to_next_char
-
     return <- parser
 
 

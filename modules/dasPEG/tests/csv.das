@@ -16,8 +16,6 @@ require daslib/fio
 require peg/peg
 
 
-options log
-
 def get_parser_with(input: string): csvParser
     parse csv
         var Document: array<array<string>>
@@ -93,8 +91,6 @@ def get_parser_with(input: string): csvParser
         rule(",") <|
             return null
 
-        option(color)
-        option(tracing)
 
         var EOL: void?
 
@@ -111,111 +107,108 @@ def get_parser_with(input: string): csvParser
     for char in input
         parser.input |> push(char |> uint8())
 
-    parser |> move_to_next_char
-    parser.color_output = true
-
     return <- parser
 
 
-// [test]
-// def test_basic_csv(t: T?)
-//     var input = "John,Doe,30"
+[test]
+def test_basic_csv(t: T?)
+    var input = "John,Doe,30"
 
-//     var inscope parser <- get_parser_with(input)
-//     var inscope res <- parser |> parse_Row
-//     var inscope expected_res <-  [{string "John"; "Doe"; "30"}]
+    var inscope parser <- get_parser_with(input)
+    var inscope res <- parser |> parse_Row
+    var inscope expected_res <-  [{string "John"; "Doe"; "30"}]
 
-//     for a, b in expected_res, res.value
-//         t |> equal(a, b)
-
-
-// [test]
-// def test_quoted_fields(t: T?)
-//     var input = "\"John Doe\",\"123, Main Street, NY\",\"123-456-7890\""
-
-//     var inscope parser <- get_parser_with(input)
-//     var inscope res <- parser |> parse_Row
-//     var inscope expected_res <-  [{string "John Doe"; "123, Main Street, NY"; "123-456-7890"}]
-
-//     for a, b in expected_res, res.value
-//         t |> equal(a, b)
+    for a, b in expected_res, res.value
+        t |> equal(a, b)
 
 
-// [test]
-// def test_newline_fields(t: T?)
-//     var input = "\"John Doe\",\"Hello, world!\nNice to meet you.\""
+[test]
+def test_quoted_fields(t: T?)
+    var input = "\"John Doe\",\"123, Main Street, NY\",\"123-456-7890\""
 
-//     var inscope parser <- get_parser_with(input)
-//     var inscope res <- parser |> parse_Row
-//     var inscope expected_res <-  [{string "John Doe"; "Hello, world!\nNice to meet you."}]
+    var inscope parser <- get_parser_with(input)
+    var inscope res <- parser |> parse_Row
+    var inscope expected_res <-  [{string "John Doe"; "123, Main Street, NY"; "123-456-7890"}]
 
-//     for a, b in expected_res, res.value
-//         t |> equal(a, b)
-
-
-// [test]
-// def test_special_chars(t: T?)
-//     var input = "\"John Doe\",\"john.doe@example.com\""
-
-//     var inscope parser <- get_parser_with(input)
-//     var inscope res <- parser |> parse_Row
-//     var inscope expected_res <-  [{string "John Doe"; "john.doe@example.com"}]
-
-//     for a, b in expected_res, res.value
-//         t |> equal(a, b)
+    for a, b in expected_res, res.value
+        t |> equal(a, b)
 
 
-// [test]
-// def test_missing_fields(t: T?)
-//     var input = "\"John Doe\",30,"
+[test]
+def test_newline_fields(t: T?)
+    var input = "\"John Doe\",\"Hello, world!\nNice to meet you.\""
 
-//     var inscope parser <- get_parser_with(input)
-//     var inscope res <- parser |> parse_Row
-//     var inscope expected_res <-  [{string "John Doe"; "30"; ""}]
+    var inscope parser <- get_parser_with(input)
+    var inscope res <- parser |> parse_Row
+    var inscope expected_res <-  [{string "John Doe"; "Hello, world!\nNice to meet you."}]
 
-//     for a, b in expected_res, res.value
-//         t |> equal(a, b)
-
-
-// [test]
-// def test_different_types_of_data(t: T?)
-//     var input = "1,\"John Doe\",True,100000,\"2023-06-01\""
-
-//     var inscope parser <- get_parser_with(input)
-//     var inscope res <- parser |> parse_Row
-//     var inscope expected_res <-  [{string "1"; "John Doe"; "True"; "100000"; "2023-06-01"}]
-
-//     for a, b in expected_res, res.value
-//         t |> equal(a, b)
+    for a, b in expected_res, res.value
+        t |> equal(a, b)
 
 
-// [test]
-// def test_escaped_quotes(t: T?)
-//     var input = "1,\"She said, \"\"Hello, world!\"\"\""
+[test]
+def test_special_chars(t: T?)
+    var input = "\"John Doe\",\"john.doe@example.com\""
 
-//     var inscope parser <- get_parser_with(input)
-//     var inscope res <- parser |> parse_Row
-//     var inscope expected_res <-  [{string "1"; "She said, \"\"Hello, world!\"\""}]
+    var inscope parser <- get_parser_with(input)
+    var inscope res <- parser |> parse_Row
+    var inscope expected_res <-  [{string "John Doe"; "john.doe@example.com"}]
 
-//     for a, b in expected_res, res.value
-//         t |> equal(a, b)
+    for a, b in expected_res, res.value
+        t |> equal(a, b)
 
 
-// [test]
-// def test_leading_trailing_spaces(t: T?)
-//     var input = " John Doe , 123 Main Street, NY , 123-456-7890 "
+[test]
+def test_missing_fields(t: T?)
+    var input = "\"John Doe\",30,"
 
-//     var inscope parser <- get_parser_with(input)
-//     var inscope res <- parser |> parse_Row
-//     var inscope expected_res <-  [{string " John Doe "; " 123 Main Street"; " NY "; " 123-456-7890 "}]
+    var inscope parser <- get_parser_with(input)
+    var inscope res <- parser |> parse_Row
+    var inscope expected_res <-  [{string "John Doe"; "30"; ""}]
 
-//     for a, b in expected_res, res.value
-//         t |> equal(a, b)
+    for a, b in expected_res, res.value
+        t |> equal(a, b)
+
+
+[test]
+def test_different_types_of_data(t: T?)
+    var input = "1,\"John Doe\",True,100000,\"2023-06-01\""
+
+    var inscope parser <- get_parser_with(input)
+    var inscope res <- parser |> parse_Row
+    var inscope expected_res <-  [{string "1"; "John Doe"; "True"; "100000"; "2023-06-01"}]
+
+    for a, b in expected_res, res.value
+        t |> equal(a, b)
+
+
+[test]
+def test_escaped_quotes(t: T?)
+    var input = "1,\"She said, \"\"Hello, world!\"\"\""
+
+    var inscope parser <- get_parser_with(input)
+    var inscope res <- parser |> parse_Row
+    var inscope expected_res <-  [{string "1"; "She said, \"\"Hello, world!\"\""}]
+
+    for a, b in expected_res, res.value
+        t |> equal(a, b)
+
+
+[test]
+def test_leading_trailing_spaces(t: T?)
+    var input = " John Doe , 123 Main Street, NY , 123-456-7890 "
+
+    var inscope parser <- get_parser_with(input)
+    var inscope res <- parser |> parse_Row
+    var inscope expected_res <-  [{string " John Doe "; " 123 Main Street"; " NY "; " 123-456-7890 "}]
+
+    for a, b in expected_res, res.value
+        t |> equal(a, b)
 
 
 [test]
 def test_all_empty_fields(t: T?)
-    var input = ","
+    var input = ",,"
 
     var inscope parser <- get_parser_with(input)
     var inscope res <- parser |> parse_Row
@@ -225,13 +218,13 @@ def test_all_empty_fields(t: T?)
         t |> equal(a, b)
 
 
-// [test]
-// def test_more(t: T?)
-//     var input = "1,,\"\"\" A famous quote \"\"\""
+[test]
+def test_more(t: T?)
+    var input = "1,,\"\"\" A famous quote \"\"\""
 
-//     var inscope parser <- get_parser_with(input)
-//     var inscope res <- parser |> parse_Row
-//     var inscope expected_res <-  [{string "1"; ""; "\"\" A famous quote \"\""}]
+    var inscope parser <- get_parser_with(input)
+    var inscope res <- parser |> parse_Row
+    var inscope expected_res <-  [{string "1"; ""; "\"\" A famous quote \"\""}]
 
-//     for a, b in expected_res, res.value
-//         t |> equal(a, b)
+    for a, b in expected_res, res.value
+        t |> equal(a, b)
