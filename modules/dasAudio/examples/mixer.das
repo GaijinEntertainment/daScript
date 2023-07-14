@@ -9,7 +9,22 @@ require fio
 def main
 
     with_audio_system <|
-        print("with third file system\n")
+        print("testing stream\n")
+        var sin1 <- [{for x in range(MA_SAMPLE_RATE); sin(2.*PI*440.*float(x)/float(48000))}]
+        let sid_pcm = play_sound_from_pcm_stream(MA_SAMPLE_RATE,1)
+        sid_pcm |> set_volume(0.25)
+        sleep(500u)
+        print("play sin-440\n")
+        sid_pcm |> append_to_pcm(sin1)
+        sleep(500u)
+        print("gen and append sin-880\n")
+        var sin2 <- [{for x in range(MA_SAMPLE_RATE); sin(2.*PI*880.*float(x)/float(48000))}]
+        sid_pcm |> append_to_pcm(sin2)
+        sleep(1500u)
+        print("play\n")
+
+    with_audio_system <|
+        print("seting panning\n")
         print("play sin-440 looped\n")
         var sin1 <- [{for x in range(MA_SAMPLE_RATE); sin(2.*PI*440.*float(x)/float(48000))}]
         let sid_pcm = play_sound_loop_from_pcm(MA_SAMPLE_RATE,1,sin1)
@@ -27,7 +42,7 @@ def main
             sleep(10u)
 
     with_audio_system <|
-        print("with first file system\n")
+        print("testing mp3 from pcm, decoded\n")
         var sound_data : array<float>
         var channels, rate : int
         fopen("{get_das_root()}/modules/dasAudio/examples/test.mp3","rb") <| $ ( fr )
@@ -41,16 +56,7 @@ def main
         sleep(3000u)
 
     with_audio_system <|
-        print("with second file system\n")
-        print("play sin-440\n")
-        var sin1 <- [{for x in range(MA_SAMPLE_RATE); sin(2.*PI*440.*float(x)/float(48000))}]
-        let sid_pcm = play_sound_from_pcm(MA_SAMPLE_RATE,1,sin1)
-        sid_pcm |> set_volume(0.25)
-        sleep(500u)
-        print("gen and append sin-880\n")
-        var sin2 <- [{for x in range(MA_SAMPLE_RATE); sin(2.*PI*880.*float(x)/float(48000))}]
-        sid_pcm |> append_to_pcm(sin2)
-        sleep(1500u)
+        print("testing play,stop,pause on sound from file\n")
         print("play\n")
         let sid = play_sound_from_file("{get_das_root()}/modules/dasAudio/examples/test.mp3", MA_SAMPLE_RATE, 2)
         sleep(2000u)
