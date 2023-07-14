@@ -12,7 +12,7 @@ def main
         print("with third file system\n")
         print("play sin-440 looped\n")
         var sin1 <- [{for x in range(MA_SAMPLE_RATE); sin(2.*PI*440.*float(x)/float(48000))}]
-        let sid_pcm = play_sound_from_pcm(MA_SAMPLE_RATE,1,sin1,true)
+        let sid_pcm = play_sound_loop_from_pcm(MA_SAMPLE_RATE,1,sin1)
         sid_pcm |> set_volume(0.25)
         print("left\n")
         sid_pcm |> set_pan(-1.0)
@@ -23,7 +23,6 @@ def main
         print("panning\n")
         for t in range(300)
             let pan = sin(2.*PI*float(t)/float(150))
-            print("pan = {pan}\n")
             sid_pcm |> set_pan(pan)
             sleep(10u)
 
