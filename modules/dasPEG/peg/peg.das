@@ -10,8 +10,9 @@ require detail/utf8
 
 require peg/parse_macro public
 require peg/detail/colors public
-require strings
 
+require strings public
+require math public
 
 def public matches(var parser; template_: string; strlen: int): bool
     var mark = parser.index
@@ -21,10 +22,19 @@ def public matches(var parser; template_: string; strlen: int): bool
 
     unsafe
         if memcmp(addr(parser.input[mark]), reinterpret<uint8?> template_, strlen) == 0
-            parser.index += strlen
+            parser |> move(strlen)
             return true
 
     return false
+
+
+def at_around(text: string; position, window: int): string
+    return text |> chop(position - window / 2, window)
+
+
+def public move(var parser; offset)
+    parser.index += offset
+    parser.longest_prefix = parser.longest_prefix |> max <| parser.index
 
 
 def public tabulate(var parser)
@@ -57,7 +67,7 @@ def public reached_EOF(var parser): bool
 
 def public skip_whitespace(var parser)
     while parser |> get_current_char |> is_white_space
-        parser.index += 1
+        parser |> move(1)
 
 
 def public get_current_char(var parser): int
@@ -98,7 +108,7 @@ def public match_decimal_literal(var parser): tuple<success:bool; value:int; end
     while parser |> get_current_char |> is_number
         result *= 10
         result +=  parser |> get_current_char - '0'
-        parser.index += 1
+        parser |> move(1)
 
     return [[auto true, result, parser.index]]
 
@@ -114,18 +124,18 @@ def public match_string_literal(var parser): tuple<success:bool; string>
     // If the current character is not a double quote, the rule is not a string
     return [[auto false, ""]] if current_char != '"'
 
-    parser.index += 1
+    parser |> move(1)
     current_char = parser |> get_current_char
 
     while current_char != '"' && !parser |> reached_EOF
         buffer |> push(current_char |> uint8())
-        parser.index += 1
+        parser |> move(1)
         current_char = parser |> get_current_char
 
     // If we've reached EOF file without finding a closing quote
     return [[auto false, ""]] if parser |> reached_EOF
 
-    parser.index += 1
+    parser |> move(1)
     return [[auto true, buffer |> string()]]
 
 
@@ -142,32 +152,32 @@ def public match_double_literal(var parser): tuple<success:bool; double>
 
     if current_char == '-' || current_char == '+'
         buffer |> push(current_char |> uint8())
-        parser.index += 1
+        parser |> move(1)
         current_char = parser |> get_current_char
 
     // Add everything up to '.' to the buffer
     while current_char |> is_number || current_char == '.'
         buffer |> push(current_char |> uint8())
-        parser.index += 1
+        parser |> move(1)
         current_char = parser |> get_current_char
 
 
     // Match exponent part
     if current_char == 'e' || current_char == 'E'
         buffer |> push(current_char |> uint8())
-        parser.index += 1
+        parser |> move(1)
         current_char = parser |> get_current_char
 
         // Check for '-' or '+' after 'e' or 'E'
         if current_char == '-' || current_char == '+'
             buffer |> push(current_char |> uint8())
-            parser.index += 1
+            parser |> move(1)
             current_char = parser |> get_current_char
 
         // Continue appending digits after 'e' or 'E'
         while current_char |> is_number
             buffer |> push(current_char |> uint8())
-            parser.index += 1
+            parser |> move(1)
             current_char = parser |> get_current_char
 
     return [[auto true, buffer |> string() |> double()]]

@@ -39,6 +39,9 @@ variant Terminal
     // Any charachter
     any: void?
 
+    // Aka `cut operator`: a way to throw an error on failing
+    commit: void?
+
     // End of file (!.)
     EOF: void? 
 
