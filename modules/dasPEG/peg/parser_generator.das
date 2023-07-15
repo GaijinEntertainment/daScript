@@ -10,6 +10,7 @@ require daslib/match public
 require daslib/strings
 require daslib/ast
 require daslib/rtti
+require daslib/math
 require daslib/ast_boost
 require daslib/utf8_utils
 require daslib/macro_boost
@@ -17,7 +18,6 @@ require daslib/templates_boost
 
 require peg/meta_ast
 require detail/helpers
-
 
 struct ParserGenerator
     // Provides information to generate unique names
@@ -116,13 +116,12 @@ def generate_wrapper(var gen: ParserGenerator)
             parser |> log_plain <| "Entered function parse_{$v(rule_name) |> bold}"
             parser.tabs++
 
-        if parser.$f(cache_table) |> key_exists(parser.index)
+        if parser.$f(cache_table) |> key_exists(parser.index) && !parser.error_reporting
             var result := parser.$f(cache_table)[parser.index]
             parser.index = result.endpos
 
             if $v(gen.tracing)
                 parser.tabs--
-                //parser |> log_plain <| "Exited  function parse_{$v(rule_name) |> bold}"
 
             return <- result
 
@@ -131,7 +130,6 @@ def generate_wrapper(var gen: ParserGenerator)
 
         if $v(gen.tracing)
             parser.tabs--
-            //parser |> log_plain <| "Exited  function parse_{$v(rule_name) |> bold}"
             parser |> log_info <| "Matched from {mark} to {parser.index}"
 
         return <- result
@@ -156,13 +154,12 @@ def generate_wrapper_leftrec(var gen: ParserGenerator)
             parser.tabs++
 
         with parser
-            if $i(cache_table) |> key_exists(index)
+            if $i(cache_table) |> key_exists(index) && !parser.error_reporting
                 var result = $i(cache_table)[index]
                 parser.index = result.endpos
 
                 if $v(gen.tracing)
                     parser.tabs--
-                    //parser |> log_plain <| "Exited  function parse_{$v(rule_name) |> bold}"
 
                 return result
 
@@ -185,7 +182,6 @@ def generate_wrapper_leftrec(var gen: ParserGenerator)
 
             if $v(gen.tracing)
                 parser.tabs--
-                //parser |> log_plain <| "Exited  function parse_{$v(rule_name) |> bold}"
 
             parser.index = res.endpos
             return res
@@ -220,6 +216,9 @@ def generate_parser_class(var gen: ParserGenerator; parser_name: string)
     s |> add_structure_field_new("index", qmacro_type(type<int>))
     s |> add_structure_field_new("tabs", qmacro_type(type<int>))
     s |> add_structure_field_new("color_output", qmacro_type(type<bool>))
+    s |> add_structure_field_new("error_reporting", qmacro_type(type<bool>))
+    // The longest correctly parsed prefix in the grammar, for error reporting
+    s |> add_structure_field_new("longest_prefix", qmacro_type(type<int>))
 
     s.flags |= StructureFlags skipLockCheck
 
@@ -486,6 +485,7 @@ def generate(var gen: ParserGenerator; var rule_: Rule): array<ExpressionPtr>
     abort("Unreachable")
     return <- [[array<ExpressionPtr>]]
 
+
 def generate_maybe_repeat(var gen: ParserGenerator; var rule_: Rule_?): array<ExpressionPtr>
     var result_handle = rule_.name
 
@@ -622,6 +622,14 @@ def generate_repeat(var gen: ParserGenerator; var rule_: Rule_?): array<Expressi
                 $b(rule_code)
 
             if !$i(first_result_name).success
+                if parser.error_reporting && abs(parser.index - parser.longest_prefix) <= 2
+                    var error = "Error: Expected the rule `" |> red_str <| parser.color_output
+                    var terminal = "{$v(rule_ |> describe_rule)}" |> bold
+                    var rest = "` at {parser.index}, around" |> red_str <| parser.color_output
+                    var complete_message = "{error}{terminal}{rest}"
+                    print("{complete_message} '{parser.input |> string() |> at_around(parser.index, 10)}'\n")
+                    print("{" " |> repeat <| (complete_message |> length - 24)}     ^\n")
+
                 return_skip_lockcheck <| [[$t(return_type)]]
                 return <- [[$t(return_type)]]
 
@@ -652,6 +660,9 @@ def generate_repeat(var gen: ParserGenerator; var rule_: Rule_?): array<Expressi
             $b(rule_code)
 
         if !$i(first_result_name).success
+            if parser.error_reporting && parser.index == parser.longest_prefix
+                print("Error: Expected a `{$v(rule_ |> describe_rule)}` rule at {parser.index}\n")
+
             return_skip_lockcheck <| [[$t(return_type)]]
             return <- [[$t(return_type)]]
 
@@ -664,6 +675,92 @@ def generate_repeat(var gen: ParserGenerator; var rule_: Rule_?): array<Expressi
             break if sz == $i(result_handle) |> length
 
     return <- flatten_block(t as ExprBlock)
+
+
+def describe_terminal(term: Terminal): string
+    match term
+        if [[Terminal lit = $v(l) ]]
+            return "{l}"
+
+        if [[Terminal charset = $v(ranges) ]]
+            var sb = build_string <| $ ( writer )
+                for i in range() <| min(ranges |> length, 3) // Don't print too many
+                    var range_ = ranges[i]
+
+                    if range_._0 == range_._1
+                        writer |> write <| " '{range_._0}' "
+                    else
+                        writer |> write <| " '{range_._0}'-'{range_._1}' "
+
+            return "set({sb})"
+
+        if [[Terminal log_msg = $v(message) ]]
+            return "log"
+
+        if [[Terminal number = $v(handle)]]
+            return "number"
+
+        if [[Terminal whitespace = _]]
+            return "whitespace"
+
+        if [[Terminal EOF = _]]
+            return "EOF"
+
+        if [[Terminal any = _]]
+            return "any"
+
+        if [[Terminal string_ = $v(handle)]]
+            return "string_"
+
+        if [[Terminal double_ = $v(handle)]]
+            return "double_"
+
+    abort("Unreachable")
+    return ""
+
+
+def describe_rule(r: Rule_?): string
+    match r.rule
+        if [[Rule terminal = $v(term)]]
+            return describe_terminal(term)
+
+        if [[Rule nonterminal = $v(nonterm)]]
+            let name = nonterm
+            return "{name}"
+
+        if [[Rule bound_nonterminal = $v(nonterm)]]
+            let name = nonterm._0
+            return "{name}"
+
+        if [[Rule text_extraction = $v(subrule)]]
+            return describe_rule(subrule)
+
+        if [[Rule seq = $v(rules)]]
+            abort("Don't need this")
+
+        if [[Rule alt = $v(alts)]]
+            abort("Don't need this")
+
+        if [[Rule maybe_repeat = $v(rule_)]]
+            return "*{describe_rule(rule_)}"
+
+        if [[Rule not_rule = $v(rule_)]]
+            return "!{describe_rule(rule_)}"
+
+        if [[Rule and_rule = $v(rule_)]]
+            return "PEEK({describe_rule(rule_)})"
+
+        if [[Rule repeat = $v(rule_)]]
+            return "+{describe_rule(rule_)}"
+
+        if [[Rule subrule = $v(subrule)]]
+            abort("Don't need this")
+
+        if [[Rule option = $v(rule_)]]
+            return "?{describe_rule(rule_)}"
+
+    abort("Unreachable")
+    return ""
 
 
 def generate_option(var gen: ParserGenerator; var rule_: Rule_?): array<ExpressionPtr>
@@ -744,17 +841,14 @@ def generate_one_alternative(var gen: ParserGenerator; var alt: Alternative; i; 
         if $i(result).success
             parser.tabs--
             if $v(gen.tracing) && !$v(only)
-                pass
-                //parser |> log_success <| "Alternative {$v(i)} successful"
+                parser |> log_success <| "Alternative {$v(i)} successful"
             if $v(gen.debug) && !$v(only)
                 parser |> log_plain <|  "State: index: {parser.index}, current: {parser.current}"
             return_skip_lockcheck($i(result))
             return <- $i(result)
 
         parser.tabs--
-        if $v(gen.tracing) && !$v(only)
-            pass
-            //parser |> log_fail <| "Alternative {$v(i)} failed, index: {parser.index}, current: {parser.current}"
+
         if $v(gen.debug) && !$v(only)
             parser |> log_plain <| "Resetting index to {parse_pos}, current: {parser.current}"
 
@@ -799,6 +893,14 @@ def generate_terminal(var gen: ParserGenerator; var terminal: Terminal): Express
                     if $v(gen.tracing)
                         parser |> log_fail <| "Did not match the terminal `{$v(l) |> escape}`"
 
+                    if parser.error_reporting && parser.index == parser.longest_prefix
+                        var error = "Error: Expected the terminal `" |> red_str <| parser.color_output
+                        var terminal = "{$v(l) |> escape}" |> bold
+                        var rest = "` at {parser.index}, around" |> red_str <| parser.color_output
+                        var complete_message = "{error}{terminal}{rest}"
+                        print("{complete_message} '{parser.input |> string() |> at_around(parser.index, 10)}'\n")
+                        print("{" " |> repeat <| (complete_message |> length - 24)}     ^\n")
+
                     return_skip_lockcheck <| [[$t(return_type)]]
                     return <- [[$t(return_type)]]
 
@@ -824,12 +926,17 @@ def generate_terminal(var gen: ParserGenerator; var terminal: Terminal): Express
             return <- qmacro_block <|
                 var $i(name) = invoke <|
                     $b(rule_code)
+
                 if !$i(name)
                     if $v(gen.tracing)
-                        parser |> log_fail <| "Failed the range check for character {parser.current}"
+                        parser |> log_fail <| "Failed the range check for character {parser.index}"
+
+                    if parser.error_reporting && parser.index == parser.longest_prefix
+                        print("Error: Expected charset item {$v(terminal |> describe_terminal)} at {parser.index}\n")
+
                     return_skip_lockcheck <| [[$t(return_type)]]
                     return <- [[$t(return_type)]]
-                parser.index += 1
+                parser|> move(1)
 
         if [[Terminal log_msg = $v(message) ]]
 
@@ -845,12 +952,19 @@ def generate_terminal(var gen: ParserGenerator; var terminal: Terminal): Express
             return <- qmacro_block <|
                 var $i(name) : tuple<bool;int;int> = parser |> match_decimal_literal
                 if !$i(name)._0
+
                     if $v(gen.tracing)
                         parser |> log_fail <| "Could not match a decimal number"
+
+                    if parser.error_reporting && parser.index == parser.longest_prefix
+                        print("Error: Expected a decimal number at {parser.index}\n")
+
                     return_skip_lockcheck <| [[$t(return_type)]]
                     return <- [[$t(return_type)]]
+
                 if $v(gen.tracing)
                     parser |> log_success <| "Matched a decimal number {$i(name)._1}"
+
                 var $i(handle) = $i(name)._1
 
         if [[Terminal whitespace = _]]
@@ -864,6 +978,10 @@ def generate_terminal(var gen: ParserGenerator; var terminal: Terminal): Express
                 if !parser |> reached_EOF
                     if $v(gen.tracing)
                         parser |> log_fail <| "Did not match EOF"
+
+                    if parser.error_reporting && parser.index == parser.longest_prefix
+                        print("Error: Expected EOF at {parser.index}\n")
+
                     return_skip_lockcheck <| [[$t(return_type)]]
                     return <- [[$t(return_type)]]
 
@@ -873,6 +991,9 @@ def generate_terminal(var gen: ParserGenerator; var terminal: Terminal): Express
                 if parser |> reached_EOF
                     if $v(gen.tracing)
                         parser |> log_fail <| "Failed matching any, reached EOF"
+
+                    if parser.error_reporting && parser.index == parser.longest_prefix
+                        print("Error: Unexpected EOF at {parser.index}\n")
 
                     return_skip_lockcheck <| [[$t(return_type)]]
                     return <- [[$t(return_type)]]
@@ -887,10 +1008,16 @@ def generate_terminal(var gen: ParserGenerator; var terminal: Terminal): Express
             return <- qmacro_block <|
                 var $i(name) <- parser |> match_string_literal
                 if !$i(name).success
+
                     if $v(gen.tracing)
                         parser |> log_fail <| "Could not match a string"
+
+                    if parser.error_reporting && parser.index == parser.longest_prefix
+                        print("Error: Expected a string at {parser.index}\n")
+
                     return_skip_lockcheck <| [[$t(return_type)]]
                     return <- [[$t(return_type)]]
+
                 if $v(gen.tracing)
                     parser |> log_success <| "Matched a string {$i(name)._1}"
                 var $i(handle) : string = $i(name)._1
@@ -900,10 +1027,16 @@ def generate_terminal(var gen: ParserGenerator; var terminal: Terminal): Express
             return <- qmacro_block <|
                 var $i(name) <- parser |> match_double_literal
                 if !$i(name).success
+
                     if $v(gen.tracing)
                         parser |> log_fail <| "Could not match a double"
+
+                    if parser.error_reporting && parser.index == parser.longest_prefix
+                        print("Error: Expected a double at {parser.index}\n")
+
                     return_skip_lockcheck <| [[$t(return_type)]]
                     return <- [[$t(return_type)]]
+
                 if $v(gen.tracing)
                     parser |> log_success <| "Matched a double {$i(name)._1}"
                 var $i(handle) = $i(name)._1
