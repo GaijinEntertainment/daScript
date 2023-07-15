@@ -485,7 +485,7 @@ def public with_audio_system ( blk:block )
 
 var private g_sound_sid = 1ul
 
-def private generate_sid
+def public generate_sound_sid
     //! generate unique ID for sound
     return g_sound_sid ++
 
@@ -503,7 +503,7 @@ def public play_sound_from_file ( filename:string; rate,channels:int )
     var decoder = make_decoder(filename, rate, channels)
     if decoder == null
         return 0ul
-    let sid = generate_sid()
+    let sid = generate_sound_sid()
     g_command_channel |> push_clone <| [[AudioCommand add_decoder=[[AudioCommandAddDecoder sid=sid, decoder=decoder, rate=rate, channels=channels]]]]
     return sid
 
@@ -513,46 +513,45 @@ def public play_3d_sound_from_file ( filename:string; position:float3; radius:fl
     var decoder = make_decoder(filename, rate, channels)
     if decoder == null
         return 0ul
-    let sid = generate_sid()
+    let sid = generate_sound_sid()
     g_command_channel |> push_clone <| [[AudioCommand add_decoder_3d=
         [[AudioCommandAddDecoder3D sid=sid, decoder=decoder, rate=rate, channels=channels, position=position, radius=radius]]]]
     return sid
 
-def public play_sound_from_pcm_stream ( rate,channels:int )
+def public play_sound_from_pcm_stream ( rate,channels:int; sid:SID = generate_sound_sid() )
     //! plays sound from PCM data
-    var sid = generate_sid()
     g_command_channel |> push_clone <| [[AudioCommand add_pcm_stream<-[[AudioCommandAddPCMStream sid=sid, rate=rate, channels=channels]]]]
     return sid
 
 def public play_3d_sound_from_pcm_stream ( position:float3; radius:float; rate,channels:int )
     //! plays sound from PCM data
-    var sid = generate_sid()
+    var sid = generate_sound_sid()
     g_command_channel |> push_clone <| [[AudioCommand add_pcm_stream_3d<-
         [[AudioCommandAddPCMStream3D sid=sid, rate=rate, channels=channels, position=position, radius=radius]]]]
     return sid
 
 def public play_sound_from_pcm ( rate,channels:int; var samples:array<float> )
     //! plays sound from PCM data
-    var sid = generate_sid()
+    var sid = generate_sound_sid()
     g_command_channel |> push_clone <| [[AudioCommand add_pcm<-[[AudioCommandAddPCM sid=sid, rate=rate, channels=channels, samples<-samples, loop=false]]]]
     return sid
 
 def public play_sound_loop_from_pcm ( rate,channels:int; var samples:array<float> )
     //! plays looping sound from PCM data
-    var sid = generate_sid()
+    var sid = generate_sound_sid()
     g_command_channel |> push_clone <| [[AudioCommand add_pcm<-[[AudioCommandAddPCM sid=sid, rate=rate, channels=channels, samples<-samples, loop=true]]]]
     return sid
 
 def public play_3d_sound_from_pcm ( position:float3; radius:float; rate,channels:int; var samples:array<float> )
     //! plays 3D sound from PCM data
-    var sid = generate_sid()
+    var sid = generate_sound_sid()
     g_command_channel |> push_clone <| [[AudioCommand add_pcm_3d<-
         [[AudioCommandAddPCM3D sid=sid, rate=rate, channels=channels, samples<-samples, loop=false, position=position, radius=radius]]]]
     return sid
 
 def public play_3d_sound_loop_from_pcm ( position:float3; radius:float; rate,channels:int; var samples:array<float> )
     //! plays 3D looping sound from PCM data
-    var sid = generate_sid()
+    var sid = generate_sound_sid()
     g_command_channel |> push_clone <| [[AudioCommand add_pcm_3d<-
         [[AudioCommandAddPCM3D sid=sid, rate=rate, channels=channels, samples<-samples, loop=true, position=position, radius=radius]]]]
     return sid
