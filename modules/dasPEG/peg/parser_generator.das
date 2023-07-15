@@ -50,6 +50,9 @@ struct ParserGenerator
     // Output ansi escape sequences in trace
     color_output: bool
 
+    // Check for cut operator on fail
+    cut_operator: bool
+
 
 def accept_option(var gen: ParserGenerator; opt: string)
     if opt == "tracing"
@@ -279,7 +282,7 @@ def generate(var gen: ParserGenerator; var def_: Definition)
     gen.current_context = def_.name
 
     var inscope function_body <- gen |> generate(def_.rule)
-    var inscope return_type <- gen.return_types[def_.name] |> clone_type
+    var inscope return_type <- gen.return_types[gen.current_context] |> clone_type
 
     var inscope fun <- qmacro_function("parse_{def_.name}_inner") <| $ (var parser: $t(gen.parser_type)): $t(return_type)
         $b(function_body)
@@ -818,6 +821,7 @@ def generate_one_alternative(var gen: ParserGenerator; var alt: Alternative; i; 
     let result  = "res_{i}"
 
     var inscope action <- alt.action
+    var inscope return_type <- gen.return_types[gen.current_context] |> clone_type
     var inscope action_block <- action as ExprBlock |> flatten_block
     var inscope block_contents <- gen |> generate(alt.rule.rule)
 
@@ -834,6 +838,8 @@ def generate_one_alternative(var gen: ParserGenerator; var alt: Alternative; i; 
             parser |> log_info <| "Trying alternative {$v(i)}"
 
         parser.tabs++
+
+        var cut = false
 
         var $i(result) <- invoke <|
             $b(block_contents)
@@ -853,6 +859,12 @@ def generate_one_alternative(var gen: ParserGenerator; var alt: Alternative; i; 
             parser |> log_plain <| "Resetting index to {parse_pos}, current: {parser.current}"
 
         parser.index = parse_pos
+
+        if cut // Committed but failed; let's fail, too
+            return_skip_lockcheck <| [[$t(return_type)]]
+            return <- [[$t(return_type)]]
+
+
 
 
 def alternative_add_epilogue(var block_contents: array<ExpressionPtr>; var gen: ParserGenerator; var action_block)
@@ -1002,6 +1014,11 @@ def generate_terminal(var gen: ParserGenerator; var terminal: Terminal): Express
                     parser |> log_success <| "Matched any character"
 
                 parser.index += 1
+
+        if [[Terminal commit = _]]
+            return <- qmacro_block <|
+                // Now every failure that checks cut operator will report an error and quit
+                cut = true
 
         if [[Terminal string_ = $v(handle)]]
 

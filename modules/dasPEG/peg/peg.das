@@ -11,8 +11,8 @@ require detail/utf8
 require peg/parse_macro public
 require peg/detail/colors public
 
-require strings
-require math
+require strings public
+require math public
 
 def public matches(var parser; template_: string; strlen: int): bool
     var mark = parser.index

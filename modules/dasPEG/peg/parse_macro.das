@@ -144,6 +144,8 @@ def into_rule_(var expr: ExpressionPtr): Rule_?
             return <- new [[Rule_ rule <- [[Rule terminal <- [[Terminal EOF = null]]]]]]
         elif name == "any"
             return <- new [[Rule_ rule <- [[Rule terminal <- [[Terminal any = null]]]]]]
+        elif name == "commit"
+            return <- new [[Rule_ rule <- [[Rule terminal <- [[Terminal commit = null]]]]]]
         else
             return <- new [[Rule_ rule <- [[Rule nonterminal <- name]]]]
 
