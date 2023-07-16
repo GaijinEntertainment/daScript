@@ -11,8 +11,20 @@ require detail/utf8
 require peg/parse_macro public
 require peg/detail/colors public
 
-require strings public
+require daslib/strings_boost public
 require math public
+
+struct public ParsingError
+    text : string
+    index : int
+
+def public operator != ( a,b : ParsingError ) : bool
+    return a.text != b.text || a.index != b.index
+
+def public operator < ( a,b : ParsingError ) : bool
+    if a.index == b.index
+        return a.text < b.text
+    return a.index < b.index
 
 def public matches(var parser; template_: string; strlen: int): bool
     var mark = parser.index
@@ -65,10 +77,17 @@ def public reached_EOF(var parser): bool
     return parser.input |> length <= parser.index
 
 
+def public reached_EOL(var parser): bool
+    return parser |> matches("\n", 1) || parser |> matches("\r\n", 2)
+
+
 def public skip_whitespace(var parser)
     while parser |> get_current_char |> is_white_space
         parser |> move(1)
 
+def public skip_taborspace(var parser)
+    while parser |> get_current_char |> is_tab_or_space
+        parser |> move(1)
 
 def public get_current_char(var parser): int
     return -1 if parser.input |> length <= parser.index

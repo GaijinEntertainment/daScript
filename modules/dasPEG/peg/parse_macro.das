@@ -140,8 +140,12 @@ def into_rule_(var expr: ExpressionPtr): Rule_?
             return <- new [[Rule_ rule <- [[Rule terminal <- [[Terminal number = ""]]]]]]
         elif name == "WS"
             return <- new [[Rule_ rule <- [[Rule terminal <- [[Terminal whitespace = null]]]]]]
+        elif name == "TS"
+            return <- new [[Rule_ rule <- [[Rule terminal <- [[Terminal taborspace = null]]]]]]
         elif name == "EOF"
             return <- new [[Rule_ rule <- [[Rule terminal <- [[Terminal EOF = null]]]]]]
+        elif name == "EOL"
+            return <- new [[Rule_ rule <- [[Rule terminal <- [[Terminal EOL = null]]]]]]
         elif name == "any"
             return <- new [[Rule_ rule <- [[Rule terminal <- [[Terminal any = null]]]]]]
         elif name == "commit"
@@ -205,14 +209,21 @@ def into_rule_(var expr: ExpressionPtr): Rule_?
         return <- new [[Rule_ rule <- [[Rule repeat <- subrule ]]]]
 
     elif expr is ExprConstInt
-        abort("\nYour rule contains integers (possibly in the form of '_', please use \"\" for literals)")
+        transfrom_error(expr.at, "Your rule contains integers (possibly in the form of '_', please use \"\" for literals)")
+        return <- new [[Rule_]]
 
     abort("TODO: Unreachable")
     return <- new [[Rule_]]
 
+def transfrom_error ( at:LineInfo; message:string )
+    macro_error(compiling_program(), at, message)
+    failed_to_transform = true
+
+var private failed_to_transform = false
 
 [macro_function]
 def transform(var rule: MacroRule): Definition
+    failed_to_transform = false
     var name = rule.rule.variables[0].name |> string()
     var inscope type_ <- rule.rule.variables[0]._type
 
@@ -222,12 +233,11 @@ def transform(var rule: MacroRule): Definition
 
     for alt in rule.alternatives                 // alt: ExprCall?
         if true // creates scope for inscope
-            var inscope blk: ExpressionPtr <- alt.arguments |> back
-            alt.arguments |> pop
+            var inscope blk: ExpressionPtr <- clone_expression(alt.arguments |> back)
 
             var sequence: array<Rule_?>
 
-            for sequence_elem in alt.arguments
+            for sequence_elem,_ in alt.arguments,range(length(alt.arguments)-1)
                 sequence |> push <| into_rule_(sequence_elem)
 
             alternatives |> emplace <| [[Alternative
@@ -306,12 +316,15 @@ class ParseMacro : AstCallMacro
 
         var inscope gram: array<Definition>
 
+        var inscope gen <- [[ParserGenerator]]
+
         for mrule in rules_
             gram |> emplace(mrule |> transform)
 
-        // Generate
+        if failed_to_transform
+            return <- [[ExpressionPtr]]
 
-        var inscope gen <- [[ParserGenerator]]
+        // Generate
 
         for mrule in rules_
             for opt in mrule.options_

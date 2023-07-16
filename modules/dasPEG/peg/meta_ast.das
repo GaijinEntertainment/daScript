@@ -17,12 +17,12 @@ require daslib/templates_boost
 // Note on Rule vs. Rule_:
 //  Since variant (like tuple) is a weak type
 //  you cannot reference variant Rule directly in Rule
-//  definition. Thus Rule_ wraps it in a struct, which is strong  
+//  definition. Thus Rule_ wraps it in a struct, which is strong
 
 
 variant Terminal
     // Literal: "Hello world"
-    lit: string 
+    lit: string
 
     // Range: set('0'..'9', 'a'..'z')
     charset: array<tuple<int; int>>
@@ -36,6 +36,9 @@ variant Terminal
     // WS <- [' ', '\n', '\t']*
     whitespace: void?
 
+    // TS <- ['\t', ' ']*
+    taborspace: void?
+
     // Any charachter
     any: void?
 
@@ -43,14 +46,17 @@ variant Terminal
     commit: void?
 
     // End of file (!.)
-    EOF: void? 
+    EOF: void?
+
+    // End of line \r\n | \n
+    EOL: void?
 
     // "..." as <name>
     string_: string
 
     // double_ as <name>
     double_: string
-    
+
 
 typedef Nonterminal = string;
 
@@ -59,13 +65,13 @@ variant Rule
     seq: array<Rule_?>        // rule(R1, R2, R3)
     alt: array<Alternative>   // seq <| {...} ; seq <| {...}; etc
     subrule: Rule_?           // (R1)
-    
+
     maybe_repeat: Rule_?      // * Rule
     repeat: Rule_?            // + Rule
 
     option: Rule_?            // MB(Rule)
 
-    terminal: Terminal 
+    terminal: Terminal
     nonterminal: Nonterminal
     bound_nonterminal: tuple<Nonterminal; string>
 
