@@ -63,17 +63,17 @@ def into_terminal(var expr: ExpressionPtr): tuple<int;int>
         // Range of charachters '1'..'9'
 
         var inscope left_exp <- expr as ExprCall.arguments[0]
-        var inscope right_exp <- (expr as ExprCall).arguments[1]
+        var inscope right_exp <- expr as ExprCall.arguments[1]
 
-        // macro_verify(left_exp is ExprConstInt, null, "Range end should be integer constants");
-        // macro_verify(right_exp is ExprConstInt, null, "Range end should be integer constants")
+        if !left_exp is ExprConstInt || !right_exp is ExprConstInt
+            transfrom_error(expr.at, "Range ends should be integer constants")
 
         var left <- (left_exp as ExprConstInt).value
         var right <- (right_exp as ExprConstInt).value
 
         return <- [[auto left, right]]
 
-    abort("Unreachable `into_terminal`")
+    transfrom_error(expr.at, "Unknown rule passed to `rule` as argument")
     return <- [[auto 0, 0]]
 
 
@@ -212,7 +212,7 @@ def into_rule_(var expr: ExpressionPtr): Rule_?
         transfrom_error(expr.at, "Your rule contains integers (possibly in the form of '_', please use \"\" for literals)")
         return <- new [[Rule_]]
 
-    abort("TODO: Unreachable")
+    transfrom_error(expr.at, "Unknown rule passed to `rule` as argument")
     return <- new [[Rule_]]
 
 def transfrom_error ( at:LineInfo; message:string )
@@ -231,7 +231,7 @@ def transform(var rule: MacroRule): Definition
 
     var inscope alternatives: array<Alternative>
 
-    for alt in rule.alternatives                 // alt: ExprCall?
+    for alt in rule.alternatives
         if true // creates scope for inscope
             var inscope blk: ExpressionPtr <- clone_expression(alt.arguments |> back)
 

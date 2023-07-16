@@ -53,8 +53,14 @@ struct ParserGenerator
     // Check for cut operator on fail
     cut_operator: bool
 
+    // Print generated inner parsing functions
+    print_generated: bool
+
 
 def accept_option(var gen: ParserGenerator; opt: string)
+    // XXX
+    gen.print_generated = true
+
     if opt == "tracing"
         gen.tracing = true
     elif opt == "color"
@@ -121,14 +127,19 @@ def generate_wrapper(var gen: ParserGenerator)
 
         if parser.$f(cache_table) |> key_exists(parser.index) && !parser.error_reporting
             var result := parser.$f(cache_table)[parser.index]
-            parser.index = result.endpos
+
+            if result.success // Change the state only on success
+                parser.index = result.endpos
 
             if $v(gen.tracing)
+                parser |> log_info <| "Got result from cache {parser.index}"
                 parser.tabs--
 
             return <- result
 
         var result <- $c(inner_parsing_fun)(parser)
+        if $v(gen.tracing)
+            parser |> log_info <| "Placing result {result} to cache {parser.index}"
         parser.$f(cache_table)[mark] := result
 
         if $v(gen.tracing)
@@ -159,7 +170,8 @@ def generate_wrapper_leftrec(var gen: ParserGenerator)
         with parser
             if $i(cache_table) |> key_exists(index) && !parser.error_reporting
                 var result = $i(cache_table)[index]
-                parser.index = result.endpos
+                if result.success // Change the state only on success
+                    parser.index = result.endpos
 
                 if $v(gen.tracing)
                     parser.tabs--
@@ -289,7 +301,8 @@ def generate(var gen: ParserGenerator; var def_: Definition)
         $b(function_body)
         return <- [[$t(return_type)]]
 
-    //fun |> describe |> print
+    if gen.print_generated
+        fun |> describe |> print
     compiling_module() |> add_function(fun)
 
     if rule_left_recursive(def_.name, def_.rule)
@@ -920,7 +933,7 @@ def generate_terminal(var gen: ParserGenerator; var terminal: Terminal): Express
                     if $v(gen.tracing)
                         parser |> log_fail <| "Did not match the terminal `{$v(l) |> escape}`"
 
-                    if parser.error_reporting && parser.index == parser.longest_prefix
+                    if parser.error_reporting && parser.index == parser.longest_prefix && $v(gen.current_context != "__option__")
                         var error = "Error: Expected the terminal `" |> red_str <| parser.color_output
                         var terminal = "{$v(l) |> escape}" |> bold
                         var rest = "` at {parser.index}, around" |> red_str <| parser.color_output
