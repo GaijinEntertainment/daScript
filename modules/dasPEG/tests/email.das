@@ -21,7 +21,7 @@ struct Email
     domain: string
 
 
-def get_parser_with(input: string): emailParser
+def get_parser_with(email: string)
     parse email
         var email: Email
 
@@ -52,20 +52,12 @@ def get_parser_with(input: string): emailParser
         rule( +set('0'..'9', 'a'..'z', 'A'..'Z', '-'), "." ) <|
             return null
 
-    var parser <- [[emailParser]]
-
-    for char in input
-        parser.input |> push(char |> uint8())
-
-    return <- parser
-
 
 [test]
 def test_email_1(t: T?)
     var input = "abc@mail.example.com"
 
-    var parser <- get_parser_with(input)
-    var res <- parser |> parse_email
+    var res <- get_parser_with(input)
     var email = res.value
 
     t |> equal("abc", email.username)
@@ -76,8 +68,7 @@ def test_email_1(t: T?)
 def test_email_2(t: T?)
     var input = "john.doe@example.com"
 
-    var parser <- get_parser_with(input)
-    var res <- parser |> parse_email
+    var res <- get_parser_with(input)
     var email = res.value
 
     t |> equal("john.doe", email.username)
@@ -88,8 +79,7 @@ def test_email_2(t: T?)
 def test_email_3(t: T?)
     var input = "this_is_a_very_long_username@example.com"
 
-    var parser <- get_parser_with(input)
-    var res <- parser |> parse_email
+    var res <- get_parser_with(input)
     var email = res.value
 
     t |> equal("this_is_a_very_long_username", email.username)
@@ -100,8 +90,7 @@ def test_email_3(t: T?)
 def test_email_4(t: T?)
     var input = "12345@example.com"
 
-    var parser <- get_parser_with(input)
-    var res <- parser |> parse_email
+    var res <- get_parser_with(input)
     var email = res.value
 
     t |> equal("12345", email.username)
@@ -112,8 +101,7 @@ def test_email_4(t: T?)
 def test_email_5(t: T?)
     var input = "jane-doe@mail-example.com"
 
-    var parser <- get_parser_with(input)
-    var res <- parser |> parse_email
+    var res <- get_parser_with(input)
     var email = res.value
 
     t |> equal("jane-doe", email.username)
@@ -124,8 +112,7 @@ def test_email_5(t: T?)
 def test_email_6(t: T?)
     var input = ".username@example.com"
 
-    var parser <- get_parser_with(input)
-    var res <- parser |> parse_email
+    var res <- get_parser_with(input)
     var email = res.value
 
     t |> equal(".username", email.username)
@@ -136,8 +123,7 @@ def test_email_6(t: T?)
 def test_email_7(t: T?)
     var input = "user_name@example.com"
 
-    var parser <- get_parser_with(input)
-    var res <- parser |> parse_email
+    var res <- get_parser_with(input)
     var email = res.value
 
     t |> equal("user_name", email.username)
@@ -148,8 +134,7 @@ def test_email_7(t: T?)
 def test_email_8(t: T?)
     var input = "john.doe@example.net"
 
-    var parser <- get_parser_with(input)
-    var res <- parser |> parse_email
+    var res <- get_parser_with(input)
     var email = res.value
 
     t |> equal("john.doe", email.username)
@@ -160,8 +145,7 @@ def test_email_8(t: T?)
 def test_email_9(t: T?)
     var input = "JOHN.DOE@EXAMPLE.com"
 
-    var parser <- get_parser_with(input)
-    var res <- parser |> parse_email
+    var res <- get_parser_with(input)
     var email = res.value
 
     t |> equal("JOHN.DOE", email.username)
@@ -172,8 +156,7 @@ def test_email_9(t: T?)
 def test_email_10(t: T?)
     var input = "a@example.com"
 
-    var parser <- get_parser_with(input)
-    var res <- parser |> parse_email
+    var res <- get_parser_with(input)
     var email = res.value
 
     t |> equal("a", email.username)
@@ -184,8 +167,7 @@ def test_email_10(t: T?)
 def test_email_11(t: T?)
     var input = "user@subdomain1.subdomain2.example.com"
 
-    var parser <- get_parser_with(input)
-    var res <- parser |> parse_email
+    var res <- get_parser_with(input)
     var email = res.value
 
     t |> equal("user", email.username)

@@ -127,21 +127,20 @@ def generate_wrapper(var gen: ParserGenerator)
         if parser.$f(cache_table) |> key_exists(parser.index) && !parser.error_reporting
             var result := parser.$f(cache_table)[parser.index]
 
-            if result.success // Change the state only on success
-                parser.index = result.endpos
-
             if $v(gen.tracing)
                 parser |> log_info <| "Got result from cache {parser.index}"
                 parser.tabs--
 
+            if result.success // Change the state only on success
+                parser.index = result.endpos
+
             return <- result
 
         var result <- $c(inner_parsing_fun)(parser)
-        if $v(gen.tracing)
-            parser |> log_info <| "Placing result {result} to cache {parser.index}"
         parser.$f(cache_table)[mark] := result
 
         if $v(gen.tracing)
+            parser |> log_info <| "Placing result {result} to cache {mark}"
             parser.tabs--
             parser |> log_info <| "Matched from {mark} to {parser.index}"
 
@@ -233,6 +232,8 @@ def generate_parser_class(var gen: ParserGenerator; parser_name: string)
     s |> add_structure_field_new("error_reporting", qmacro_type(type<bool>))
     // The longest correctly parsed prefix in the grammar, for error reporting
     s |> add_structure_field_new("longest_prefix", qmacro_type(type<int>))
+    // Supress errors flag is set when entering modifier like MB or *
+    s |> add_structure_field_new("suppress_errors", qmacro_type(type<bool>))
     s |> add_structure_field_new("errors", qmacro_type(type<array<ParsingError>>))
 
     s.flags |= StructureFlags skipLockCheck

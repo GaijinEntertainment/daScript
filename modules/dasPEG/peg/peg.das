@@ -12,7 +12,8 @@ require peg/parse_macro public
 require peg/detail/colors public
 
 require daslib/strings_boost public
-require math public
+require daslib/algorithm public
+require daslib/math public
 
 struct public ParsingError
     text : string

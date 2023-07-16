@@ -347,12 +347,19 @@ class ParseMacro : AstCallMacro
             var result : $t(gen.return_types[gram[0].name])
             result <- $c("parse_{gram[0].name}")(parser)
 
+            print("{result}\n")
+
             if !result.success // Create an error-reporting parser and emit errors
+                print("Error!!\n")
                 parser.error_reporting = true
                 result <- $c("parse_{gram[0].name}")(parser)
                 sort_unique(parser.errors)
                 return <- result
 
+            print("No error!\n")
+            write_json(result.value) |> print()
+
+            print("{result}\n")
             return <- result
 
 
