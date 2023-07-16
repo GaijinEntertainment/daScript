@@ -332,8 +332,28 @@ class ParseMacro : AstCallMacro
 
         gen |> generate_grammar(gram, name)
 
+
+        var first_method_name = gram[0].name
+
         return <- qmacro_block <|
-            pass // Just return something non-zero
+            var inscope parser : $t(gen.parser_type)
+
+            if $v(gen.color_output)
+                parser.color_output = true
+
+            peek_data($i(name)) <| $ ( inp )
+                parser.input := inp
+
+            var result : $t(gen.return_types[gram[0].name])
+            result <- $c("parse_{gram[0].name}")(parser)
+
+            if !result.success // Create an error-reporting parser and emit errors
+                parser.error_reporting = true
+                result <- $c("parse_{gram[0].name}")(parser)
+                sort_unique(parser.errors)
+                return <- result
+
+            return <- result
 
 
 [_macro]

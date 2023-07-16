@@ -58,11 +58,10 @@ struct ParserGenerator
 
 
 def accept_option(var gen: ParserGenerator; opt: string)
-    // XXX
-    gen.print_generated = true
-
     if opt == "tracing"
         gen.tracing = true
+    elif opt == "print_generated"
+        gen.print_generated = true
     elif opt == "color"
         gen.color_output = true
     else
@@ -646,9 +645,9 @@ def generate_repeat(var gen: ParserGenerator; var rule_: Rule_?): array<Expressi
 
             if !$i(first_result_name).success
                 if parser.error_reporting && abs(parser.index - parser.longest_prefix) <= 2
-                    var error = "Error: Expected the rule `" |> red_str <| parser.color_output
+                    var error = "Error: Expected the rule `" |> red_str($v(gen.color_output))
                     var terminal = "{$v(rule_ |> describe_rule)}" |> bold
-                    var rest = "` at {parser.index}, around" |> red_str <| parser.color_output
+                    var rest = "` at {parser.index}, around" |> red_str($v(gen.color_output))
                     var complete_message = "{error}{terminal}{rest}"
                     parser.errors |> push <| [[ParsingError text=complete_message,index=parser.index]]
                     // to_log(LOG_ERROR,"{complete_message} '{parser.input |> string() |> at_around(parser.index, 10)}'\n")
@@ -934,9 +933,9 @@ def generate_terminal(var gen: ParserGenerator; var terminal: Terminal): Express
                         parser |> log_fail <| "Did not match the terminal `{$v(l) |> escape}`"
 
                     if parser.error_reporting && parser.index == parser.longest_prefix && $v(gen.current_context != "__option__")
-                        var error = "Error: Expected the terminal `" |> red_str <| parser.color_output
+                        var error = "Error: Expected the terminal `" |> red_str($v(gen.color_output))
                         var terminal = "{$v(l) |> escape}" |> bold
-                        var rest = "` at {parser.index}, around" |> red_str <| parser.color_output
+                        var rest = "` at {parser.index}, around" |> red_str($v(gen.color_output))
                         var complete_message = "{error}{terminal}{rest}"
                         parser.errors |> push <| [[ParsingError text=complete_message,index=parser.index]]
                         // print("{complete_message} '{parser.input |> string() |> at_around(parser.index, 10)}'\n")

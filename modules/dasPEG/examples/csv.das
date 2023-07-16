@@ -11,8 +11,16 @@ typedef Row = array<Cell>
 struct Table
     rows  : array<Row>
     errors : array<ParsingError>
-def parse_csv ( text:string )
+
+def parse_csv ( CSV:string ) // The same as the first `parse` arg
     parse CSV
+        // The parsing begins from the first rule
+        var rows : array<Row>
+        rule(*new_line_row as rows, MB(row) as tail, MB(eol), EOF) <|
+            for r in tail
+                rows |> emplace(r)
+            return <- rows
+
         var cell : Cell
         rule(string_ as text,TS) <|
             return [[Cell text=text]]
@@ -24,7 +32,7 @@ def parse_csv ( text:string )
             return cell
 
         var row : Row
-        rule(TS,*comma_separated_cell as row,cell as tail) <|
+        rule(TS, *comma_separated_cell as row, cell as tail) <|
             row |> emplace(tail)
             return <- row
 
@@ -38,27 +46,10 @@ def parse_csv ( text:string )
         rule("\n") <|
             return true
 
-        var rows : array<Row>
-        rule(*new_line_row as rows, MB(row) as tail, MB(eol), EOF) <|
-            for r in tail
-                rows |> emplace(r)
-            return <- rows
+        // option(tracing)
+        // option(color)
+        // option(print_generated)
 
-        option(tracing)
-        option(color)
-
-
-    var inscope parser : CSVParser
-    parser.color_output = true
-    peek_data(text) <| $ ( inp )
-        parser.input := inp
-    var rows <- parser |> parse_rows  // parse`rows
-    if !rows.success
-        parser.error_reporting = true
-        rows <- parser |> parse_rows
-        sort_unique(parser.errors)
-        return <- [[Table errors <- parser.errors ]]
-    return <- [[Table rows<-rows.value]]
 
 let s1 = %stringify~1,"hello",3.141%%
 let s2 = %stringify~1,"hello",3.141,%%
