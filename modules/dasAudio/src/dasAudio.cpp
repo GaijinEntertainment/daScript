@@ -73,7 +73,7 @@ struct Opl3ChipAnnotation : ManagedStructureAnnotation<opl3_chip> {
 
 static ma_device g_device;
 static ma_log g_ma_log_struct;
-static Context * g_mixer_context = nullptr;
+static shared_ptr<Context> g_mixer_context;
 static daScriptEnvironment * g_mixer_env = nullptr;
 static Func g_mixer_function = nullptr;
 static bool g_mixer_initialized = false;
@@ -97,7 +97,7 @@ void data_callback(ma_device*, void* pOutput, const void*, ma_uint32 frameCount)
     lock_guard<recursive_mutex> guard(*g_mixer_context->contextMutex);
     auto saved = daScriptEnvironment::bound;
     daScriptEnvironment::bound = g_mixer_env;
-    das_invoke_function<void>::invoke<Array&,int32_t,int32_t>(g_mixer_context,nullptr,g_mixer_function,buffer,g_channels,g_rate,fdt);
+    das_invoke_function<void>::invoke<Array&,int32_t,int32_t>(g_mixer_context.get(),nullptr,g_mixer_function,buffer,g_channels,g_rate,fdt);
     daScriptEnvironment::bound = saved;
 }
 
@@ -125,13 +125,12 @@ bool dasAudio_init ( TFunc<void,TTemporary<TArray<float>>,int32_t,int32_t,float>
         LOG(LogLevel::error) << "failed to open playback device.\n";
         return false;
     }
-    g_mixer_context = get_clone_context(&context,uint32_t(ContextCategory::audio_context));
+    g_mixer_context.reset(get_clone_context(&context,uint32_t(ContextCategory::audio_context)));
     g_mixer_function = mixer;
     g_mixer_env = daScriptEnvironment::bound;
     if ( ma_device_start(&g_device) != MA_SUCCESS ) {
         ma_device_uninit(&g_device);
-        delete g_mixer_context;
-        g_mixer_context = nullptr;
+        g_mixer_context.reset();
         return false;
     }
     g_mixer_initialized = true;
@@ -141,8 +140,7 @@ bool dasAudio_init ( TFunc<void,TTemporary<TArray<float>>,int32_t,int32_t,float>
 void dasAudio_finalize ( void ) {
     if ( g_mixer_initialized ) {
         ma_device_uninit(&g_device);
-        delete g_mixer_context;
-        g_mixer_context = nullptr;
+        g_mixer_context.reset();
         g_mixer_initialized = false;
     }
 }

@@ -150,6 +150,29 @@ def push ( channel:Channel?; data : auto? )
     //! pushes value to the channel (at the end)
     _builtin_channel_push(channel, data)
 
+def set ( box:LockBox?; data : auto(TT) )
+    //! clones data and sets value to the lock box
+    var heap_data = new TT
+    *heap_data := data
+    _builtin_lockbox_set(box, heap_data)
+
+def set ( box:LockBox?; data : auto? )
+    //! sets value to the lock box
+    _builtin_lockbox_set(box, data)
+
+def get ( box:LockBox?; blk:block<(res:auto(TT)#):void> )
+    //! reads value from the lock box and invokes the block on it
+    var void_data : void?
+    _builtin_lockbox_get(box) <| $ ( vd )
+        void_data = vd
+    if void_data==null
+        return false
+    unsafe
+        let typed_data = reinterpret<TT?#> void_data
+        invoke ( blk, *typed_data )
+        return true
+
+
 [template (tinfo),deprecated(message="use `each_clone` instead")]
 def each ( var channel:Channel?; tinfo : auto(TT) )
     //! this iterator is used to iterate over the channel in order it was pushed.

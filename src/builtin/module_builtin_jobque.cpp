@@ -129,8 +129,8 @@ namespace das {
         ch->pop(blk,context,at);
     }
 
-    int channelAppend ( Channel * ch, int size, Context * context, LineInfoArg * at ) {
-        if ( !ch ) context->throw_error_at(at, "channelAppend: channel is null");
+    int jobAppend ( JobStatus * ch, int size, Context * context, LineInfoArg * at ) {
+        if ( !ch ) context->throw_error_at(at, "jobAppend: job is null");
         return ch->append(size);
     }
 
@@ -385,7 +385,7 @@ namespace das {
             addExtern<DAS_BIND_FUN(withLockBox)>(*this, lib,  "with_lock_box",
                 SideEffects::invoke, "withLockBox")
                     ->args({"block","context","line"});
-            addInterop<lockBoxSet,void,Channel *,vec4f>(*this, lib,  "_builtin_lockbox_set",
+            addInterop<lockBoxSet,void,LockBox *,vec4f>(*this, lib,  "_builtin_lockbox_set",
                 SideEffects::modifyArgumentAndExternal, "lockBoxSet")
                     ->args({"box","data"});
             addExtern<DAS_BIND_FUN(lockBoxGet)>(*this, lib,  "_builtin_lockbox_get",
@@ -407,8 +407,8 @@ namespace das {
             addExtern<DAS_BIND_FUN(channelVerify)>(*this, lib,  "_builtin_channel_verify",
                 SideEffects::modifyArgumentAndExternal, "channelGather")
                     ->args({"channel","context","line"});
-            addExtern<DAS_BIND_FUN(channelAppend)>(*this, lib, "append",
-                SideEffects::modifyArgument, "channelAppend")
+            addExtern<DAS_BIND_FUN(jobAppend)>(*this, lib, "append",
+                SideEffects::modifyArgument, "jobAppend")
                     ->args({"channel","size","context","line"});
             addExtern<DAS_BIND_FUN(withChannel)>(*this, lib,  "with_channel",
                 SideEffects::invoke, "withChannel")
