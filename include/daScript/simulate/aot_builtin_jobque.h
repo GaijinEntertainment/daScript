@@ -84,7 +84,7 @@ namespace das {
     void notifyAndReleaseJob ( JobStatus * & status, Context * context, LineInfoArg * at );
     vec4f channelPush ( Context & context, SimNode_CallBase * call, vec4f * args );
     void channelPop ( Channel * ch, const TBlock<void,void*> & blk, Context * context, LineInfoArg * at );
-    int channelAppend ( Channel * ch, int size, Context * context, LineInfoArg * at );
+    int jobAppend ( JobStatus * ch, int size, Context * context, LineInfoArg * at );
     void withChannel ( const TBlock<void,Channel *> & blk, Context * context, LineInfoArg * lineinfo );
     void withChannelEx ( int32_t count, const TBlock<void,Channel *> & blk, Context * context, LineInfoArg * lineinfo );
     Channel* channelCreate( Context * context, LineInfoArg * at);

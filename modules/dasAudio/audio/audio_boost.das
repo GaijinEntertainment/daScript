@@ -24,6 +24,18 @@ let MA_LIMITER_RELEASE_TIME = 0.100
 
 typedef SID = uint64
 
+enum public AudioChannelState
+    stopped
+    stopping
+    playing
+    paused
+
+struct public AudioChannelStatus
+    sid : SID
+    state : AudioChannelState
+    playback_position : uint64
+    stream_que_length : int
+
 class AudioSource
     bitrate : int = MA_SAMPLE_RATE  // samples per second
     channels : int = 1              // 1 or 2
@@ -31,6 +43,8 @@ class AudioSource
         return true
     def abstract get_samples ( nsamples:int ) : array<float>
     def abstract append ( var data : array<float> ) : bool
+    def update_status ( var status:AudioChannelStatus )
+        status.stream_que_length = 0
 
 class AudioChannel
     sid    : SID = 0ul
@@ -46,6 +60,7 @@ class AudioChannel
     position3d : float3
     radius : float = 1.
     is3D : bool = false
+    [[do_not_delete]] status : LockBox?
     def AudioChannel ( src:AudioSource? )
         source = src
         // resampler
@@ -75,6 +90,12 @@ class AudioChannel
         ma_volume_mixer_uninit(unsafe(addr(volume_mixer)))
         ma_channel_converter_uninit(unsafe(addr(channel_converter)))
         ma_resampler_uninit(unsafe(addr(resampler)))
+        if status != null
+            status |> notify_and_release
+            status = null
+    def report_eos
+        if status != null
+            status |> set <| [[AudioChannelStatus sid=sid, state=AudioChannelState stopped]]
     def mix ( var data:array<float>#; channels,rate:int; dt:float ) : bool
         if paused || !source->ready()
             return true
@@ -119,10 +140,18 @@ class AudioChannel
         delete channel_data
         // update position
         playback_position += inputSamples
+        // update status
+        if status != null
+            var status_data : AudioChannelStatus
+            status_data.sid = sid
+            status_data.state = paused ? AudioChannelState paused : (stop ? AudioChannelState stopping : AudioChannelState playing)
+            status_data.playback_position = playback_position
+            source->update_status(status_data)
+            status |> set(status_data)
         return true
 
 var g_channels : array<AudioChannel?>
-var g_sid_2_channel : table<uint64; AudioChannel?>
+var g_sid_2_channel : table<SID; AudioChannel?>
 var g_mixer_total_time = 0.lf
 var g_mixer_total_samples = 0ul
 
@@ -184,6 +213,8 @@ class AudioSourcePCMStream : AudioSource
             else
                 break
         return <- data
+    def override update_status ( var status:AudioChannelStatus )
+        status.stream_que_length = length(chunks)
 
 class AudioSourcePCMLoop : AudioSource
     samples : array<float>
@@ -251,6 +282,7 @@ class AudioSourceDecoder : AudioSource
         return false
 
 def remove_channel ( srci:int )
+    g_channels[srci]->report_eos()
     let sid = g_channels[srci].sid
     if sid != 0ul
         g_sid_2_channel |> erase(sid)
@@ -275,7 +307,7 @@ def update_hrtf
             ma_volume_mixer_set_pan(unsafe(addr(ch.volume_mixer)), nrxy.y )
 
 struct AudioCommandAddDecoder
-    sid:uint64
+    sid:SID
     [[do_not_delete]] decoder:ma_decoder?
     rate:int
     channels:int
@@ -285,7 +317,7 @@ struct AudioCommandAddDecoder3D : AudioCommandAddDecoder
     radius : float
 
 struct AudioCommandAddPCM
-    sid:uint64
+    sid:SID
     samples:array<float>
     rate:int
     channels:int
@@ -296,7 +328,7 @@ struct AudioCommandAddPCM3D : AudioCommandAddPCM
     radius : float
 
 struct AudioCommandAddPCMStream
-    sid:uint64
+    sid:SID
     rate:int
     channels:int
     loop:bool
@@ -304,6 +336,10 @@ struct AudioCommandAddPCMStream
 struct AudioCommandAddPCMStream3D : AudioCommandAddPCMStream
     position : float3
     radius : float
+
+struct AudioCommandStatus
+    sid:SID
+    [[do_not_delete]] status : LockBox?
 
 variant AudioCommand
     shutdown            : bool
@@ -313,12 +349,13 @@ variant AudioCommand
     add_pcm_3d          : AudioCommandAddPCM3D
     add_pcm_stream      : AudioCommandAddPCMStream
     add_pcm_stream_3d   : AudioCommandAddPCMStream3D
-    append_pcm          : tuple<sid:uint64; samples:array<float>>
-    pause               : tuple<sid:uint64; paused:bool>
-    volume              : tuple<sid:uint64; volume:float; time:float>
-    pan                 : tuple<sid:uint64; pan:float>
-    stop                : tuple<sid:uint64; time:float>
+    append_pcm          : tuple<sid:SID; samples:array<float>>
+    pause               : tuple<sid:SID; paused:bool>
+    volume              : tuple<sid:SID; volume:float; time:float>
+    pan                 : tuple<sid:SID; pan:float>
+    stop                : tuple<sid:SID; time:float>
     head_transform      : tuple<head_position:float3; head_direction:float3>
+    status              : AudioCommandStatus
 
 var g_command_channel : Channel?
 
@@ -417,6 +454,15 @@ def command_processor
             assume hcmd = cmd as head_transform
             g_head_position = hcmd.head_position
             g_head_direction = normalize(hcmd.head_direction)
+        elif cmd is status
+            assume scmd = cmd as status
+            let found = g_sid_2_channel |> get(scmd.sid) <| $ ( var ch:AudioChannel?& )
+                if ch.status != null
+                    ch.status |> notify_and_release
+                ch.status = scmd.status
+            if !found
+                scmd.status |> set <| [[AudioChannelStatus sid=scmd.sid, state=AudioChannelState stopped]]
+                scmd.status |> notify_and_release
         else
             panic("unknown audio command {cmd}")
     delete commands
@@ -440,7 +486,8 @@ def mixer ( var data:array<float>#; channels,rate:int; dt:float )
         let srct = g_channels |> length
         for i in range(srct)
             let srci = srct - i - 1
-            if !g_channels[srci]->mix(mix_data,channels,rate,dt)
+            assume ch = g_channels[srci]
+            if !ch->mix(mix_data,channels,rate,dt)
                 remove_channel(srci)
     ma_limiter_process_pcm_frames(unsafe(addr(g_limiter)),
         unsafe(addr(g_mix_buffer[0])),
@@ -579,6 +626,12 @@ def public stop ( sid:SID; time:float = 0.0f )
 def public set_head_position ( pos,dir:float3 )
     //! set head position for 3D sound
     g_command_channel |> push_clone <| [[AudioCommand pos,dir]]
+
+def public set_status_update ( sid:SID; var status:LockBox? )
+    //! set status for sound
+    status |> add_ref
+    status |> append(1)
+    g_command_channel |> push_clone <| [[AudioCommand status=[[AudioCommandStatus sid=sid, status=status]]]]
 
 def public decode_audio ( data:array<uint8> | #; var channels,rate:int& ) : array<float>
     var decoder = new ma_decoder
