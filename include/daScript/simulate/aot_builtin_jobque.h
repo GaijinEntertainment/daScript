@@ -19,15 +19,29 @@ namespace das {
         }
     };
 
+    class LockBox : public JobStatus {
+    public:
+        LockBox() {}
+        virtual ~LockBox();
+        void set ( void * data, TypeInfo * ti, Context * context );
+        void get ( const TBlock<void,void *> & blk, Context * context, LineInfoArg * at );
+    public:
+        template <typename TT>
+        void peek ( TT && tt ) {
+            lock_guard<mutex> guard(mCompleteMutex);
+            if ( box.data ) {
+                tt(box.data, box.type, box.from.get());
+            }
+        }
+    protected:
+        Feature box;
+    };
+
     class Channel : public JobStatus {
     public:
         Channel( Context * ctx ) : owner(ctx) {}
         Channel( Context * ctx, int count) : owner(ctx) { mRemaining = count; }
         virtual ~Channel();
-        Channel ( Channel && ) = delete;
-        Channel ( const Channel & ) = delete;
-        Channel & operator = ( const Channel & ) = delete;
-        Channel & operator = ( Channel && ) = delete;
         void push ( void * data, TypeInfo * ti, Context * context );
         void pop ( const TBlock<void,void *> & blk, Context * context, LineInfoArg * at );
         bool isEmpty() const;
@@ -35,21 +49,20 @@ namespace das {
         Context * getOwner() { return owner; }
     public:
         template <typename TT>
-        void for_each_item ( const TT & tt ) {
+        void for_each_item ( TT && tt ) {
             lock_guard<mutex> guard(mCompleteMutex);
             for ( auto & f : pipe ) {
                 tt(f.data, f.type, f.from.get());
             }
         }
         template <typename TT>
-        void gather ( const TT & tt ) {
+        void gather ( TT && tt ) {
             lock_guard<mutex> guard(mCompleteMutex);
             for ( auto & f : pipe ) {
                 tt(f.data, f.type, f.from.get());
             }
             pipe.clear();
         }
-
     protected:
         uint32_t            mSleepMs = 1;
         deque<Feature>      pipe;
@@ -79,4 +92,9 @@ namespace das {
     void channelGather ( Channel * ch, const TBlock<void,void *> & blk, Context * context, LineInfoArg * at );
     void channelPeek ( Channel * ch, const TBlock<void,void *> & blk, Context * context, LineInfoArg * at );
     void channelVerify ( Channel * ch, Context * context, LineInfoArg * at );
+    LockBox * lockBoxCreate( Context *, LineInfoArg * );
+    void lockBoxRemove( LockBox * ch, Context * context, LineInfoArg * at );
+    void withLockBox ( const TBlock<void,LockBox *> & blk, Context * context, LineInfoArg * at );
+    vec4f lockBoxSet ( Context & context, SimNode_CallBase * call, vec4f * args );
+    void lockBoxGet ( LockBox * ch, const TBlock<void,void*> & blk, Context * context, LineInfoArg * at );
 }
