@@ -200,6 +200,11 @@ def public capture_jobque_job_status ( js:JobStatus? ) : JobStatus?
     js |> add_ref
     return js
 
+def public capture_jobque_lock_box ( js:LockBox? ) : LockBox?
+    //! this function is used to capture a lock box that is used by the jobque.
+    js |> add_ref
+    return js
+
 def public release_capture_jobque_channel ( ch:Channel? )
     //! this function is used to release a channel that is used by the jobque.
     if ch != null
@@ -209,6 +214,12 @@ def public release_capture_jobque_job_status ( js:JobStatus? )
     //! this function is used to release a job status that is used by the jobque.
     if js != null
         panic("JobStatus has not been released. missing status|>release or status|>notify_and_release")
+
+def public release_capture_jobque_lock_box ( js:LockBox? )
+    //! this function is used to release a lock box that is used by the jobque.
+    if js != null
+        panic("LockBox has not been released. missing status|>release or status|>notify_and_release")
+
 
 [macro_function]
 def private isPtrToJQ ( typ:TypeDeclPtr; jqt:string ) : bool
@@ -226,18 +237,28 @@ def private isPtrToJQ ( typ:TypeDeclPtr; jqt:string ) : bool
 
 [capture_macro(name=channel_and_status_capture_macro)]
 class private ChannelAndStatusCapture : AstCaptureMacro
-    //! This macro implements capturing of the `jobque::Channel` and `jobque::JobStatus` types.
+    def make_capture_call (expr:ExpressionPtr; name:string): ExpressionPtr
+        var inscope pCall <- new [[ExprCall() at=expr.at, name:=name]]
+        pCall.arguments |> emplace_new <| clone_expression(expr)
+        return <- pCall
+    def make_release_call (fld:FieldDeclaration; name:string): ExpressionPtr
+        var inscope pCall <- new [[ExprCall() at=fld.at, name:=name]]
+        pCall.arguments |> emplace_new <| new [[ExprField() at=fld.at,
+            value <- new [[ExprVar() at=fld.at, name:="__this"]],
+            name := fld.name,
+            derefFlags = ExprFieldDerefFlags ignoreCaptureConst
+        ]]
+        return <- pCall
+        //! This macro implements capturing of the `jobque::Channel` and `jobque::JobStatus` types.
     //! When captured reference counts are increased. When lambda is destroyed, reference counts are decreased.
     def override captureExpression ( prog:Program?; mod:Module?; expr:ExpressionPtr; typ:TypeDeclPtr ) : ExpressionPtr
         //! Implementation details for the capture macro.
         if typ |> isPtrToJQ("Channel")
-            var inscope pCall <- new [[ExprCall() at=expr.at, name:="jobque_boost::capture_jobque_channel"]]
-            pCall.arguments |> emplace_new <| clone_expression(expr)
-            return <- pCall
+            return <- make_capture_call(expr,"jobque_boost::capture_jobque_channel")
         elif typ |> isPtrToJQ("JobStatus")
-            var inscope pCall <- new [[ExprCall() at=expr.at, name:="jobque_boost::capture_jobque_job_status"]]
-            pCall.arguments |> emplace_new <| clone_expression(expr)
-            return <- pCall
+            return <- make_capture_call(expr,"jobque_boost::capture_jobque_job_status")
+        elif typ |> isPtrToJQ("LockBox")
+            return <- make_capture_call(expr,"jobque_boost::capture_jobque_lock_box")
         return <- [[ExpressionPtr]]
     def override captureFunction ( prog:Program?; mod:Module?; var lcs:Structure?; var fun:FunctionPtr ) : void
         //! Implementation details for the capture macro.
@@ -245,19 +266,13 @@ class private ChannelAndStatusCapture : AstCaptureMacro
             return
         for fld in lcs.fields
             if fld._type |> isPtrToJQ("Channel")
-                var inscope pCall <- new [[ExprCall() at=fld.at, name:="jobque_boost::release_capture_jobque_channel"]]
-                pCall.arguments |> emplace_new <| new [[ExprField() at=fld.at,
-                    value <- new [[ExprVar() at=fld.at, name:="__this"]],
-                    name := fld.name,
-                    derefFlags = ExprFieldDerefFlags ignoreCaptureConst
-                ]]
+                var inscope pCall <- make_release_call(fld,"jobque_boost::release_capture_jobque_channel")
                 (fun.body as ExprBlock).finalList |> emplace(pCall)
             elif fld._type |> isPtrToJQ("JobStatus")
-                var inscope pCall <- new [[ExprCall() at=fld.at, name:="jobque_boost::release_capture_jobque_job_status"]]
-                pCall.arguments |> emplace_new <| new [[ExprField() at=fld.at,
-                    value <- new [[ExprVar() at=fld.at, name:="__this"]],
-                    name := fld.name,
-                    derefFlags = ExprFieldDerefFlags ignoreCaptureConst
-                ]]
+                var inscope pCall <- make_release_call(fld,"jobque_boost::release_capture_jobque_job_status")
                 (fun.body as ExprBlock).finalList |> emplace(pCall)
+            elif fld._type |> isPtrToJQ("LockBox")
+                var inscope pCall <- make_release_call(fld,"jobque_boost::release_capture_jobque_lock_box")
+                (fun.body as ExprBlock).finalList |> emplace(pCall)
+
 
