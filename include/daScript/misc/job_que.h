@@ -29,7 +29,7 @@ namespace das {
         JobStatus(uint32_t count) { Clear( count); };
         JobStatus ( JobStatus && ) = delete;
         JobStatus ( const JobStatus & ) = delete;
-        ~JobStatus();
+        virtual ~JobStatus();
         JobStatus & operator = ( JobStatus && ) = delete;
         JobStatus & operator = ( const JobStatus & ) = delete;
         void Notify();
@@ -39,8 +39,10 @@ namespace das {
         void Clear(uint32_t count = 1);
         int addRef() { return mRef++; }
         int releaseRef() { return --mRef; }
+        int size() const;
+        int append(int size);
     protected:
-        mutex				mCompleteMutex;
+        mutable mutex		mCompleteMutex;
         uint32_t			mRemaining = 0;
         condition_variable	mCond;
         atomic<int>         mRef{0};

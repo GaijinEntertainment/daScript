@@ -5,29 +5,30 @@
 #include "daScript/ast/ast.h"
 #include "daScript/ast/ast_handle.h"
 
+#include "daScript/misc/job_que.h"
+
 MAKE_TYPE_FACTORY(JobStatus, JobStatus)
 MAKE_TYPE_FACTORY(Channel, Channel)
 
 namespace das {
-
     Channel::~Channel() {
-        lock_guard<mutex> guard(lock);
+        lock_guard<mutex> guard(mCompleteMutex);
         pipe = {};
         tail.clear();
         DAS_ASSERT(mRef==0);
     }
 
     void Channel::push ( void * data, TypeInfo * ti, Context * context ) {
-        lock_guard<mutex> guard(lock);
+        lock_guard<mutex> guard(mCompleteMutex);
         pipe.emplace_back(data, ti, context!=owner ? context : nullptr);
-        cond.notify_all();  // notify_one??
+        mCond.notify_all();  // notify_one??
     }
 
     void Channel::pop ( const TBlock<void,void *> & blk, Context * context, LineInfoArg * at ) {
         while ( true ) {
-            unique_lock<mutex> uguard(lock);
-            if ( !cond.wait_for(uguard, chrono::milliseconds(mSleepMs), [&]() {
-                bool continue_waiting = (remaining>0) && pipe.empty();
+            unique_lock<mutex> uguard(mCompleteMutex);
+            if ( !mCond.wait_for(uguard, chrono::milliseconds(mSleepMs), [&]() {
+                bool continue_waiting = (mRemaining>0) && pipe.empty();
                 return !continue_waiting;
             }) ) {
                 this_thread::yield();
@@ -35,7 +36,7 @@ namespace das {
                 break;
             }
         }
-        lock_guard<mutex> guard(lock);
+        lock_guard<mutex> guard(mCompleteMutex);
         if ( pipe.empty() ) {
             tail.clear();
         } else {
@@ -46,55 +47,24 @@ namespace das {
     }
 
     bool Channel::isEmpty() const {
-        lock_guard<mutex> guard(lock);
+        lock_guard<mutex> guard(mCompleteMutex);
         return pipe.empty();
     }
 
-    int32_t Channel::size() const {
-        lock_guard<mutex> guard(lock);
-        return (int32_t) remaining;
+    int32_t JobStatus::size() const {
+        lock_guard<mutex> guard(mCompleteMutex);
+        return (int32_t) mRemaining;
     }
 
     int32_t Channel::total() const {
-        lock_guard<mutex> guard(lock);
+        lock_guard<mutex> guard(mCompleteMutex);
         return (int32_t) pipe.size();
     }
 
-    void Channel::notify() {
-        lock_guard<mutex> guard(lock);
-        DAS_ASSERTF(remaining != 0, "Nothing to notify!");
-        --remaining;
-        if ( remaining==0 ) {
-            cond.notify_all();
-        }
-    }
-
-    void Channel::notifyAndRelease() {
-        lock_guard<mutex> guard(lock);
-        mRef--;
-        DAS_ASSERTF(remaining != 0, "Nothing to notify!");
-        --remaining;
-        if ( remaining==0 ) {
-            cond.notify_all();
-        }
-    }
-
-    void Channel::wait() {
-        unique_lock<mutex> uguard(lock);
-        cond.wait(uguard, [&]() {
-            return remaining==0;
-        });
-    }
-
-    int Channel::append(int size) {
-        lock_guard<mutex> guard(lock);
-        remaining += size;
-        return remaining;
-    }
-
-    bool Channel::isReady() const {
-        lock_guard<mutex> guard(lock);
-        return remaining==0;
+    int JobStatus::append(int size) {
+        lock_guard<mutex> guard(mCompleteMutex);
+        mRemaining += size;
+        return mRemaining;
     }
 
     void channelGather ( Channel * ch, const TBlock<void,void *> & blk, Context * context, LineInfoArg * at ) {
@@ -173,33 +143,6 @@ namespace das {
             context->throw_error_at(at, "channel beeing deleted while being used");
         }
         delete ch;
-    }
-
-    void channelAddRef ( Channel * ch, Context * context, LineInfoArg * at ) {
-        if ( !ch ) context->throw_error_at(at, "channelAddRef: channel is null");
-        ch->addRef();
-    }
-
-    void channelReleaseRef ( Channel * & ch, Context * context, LineInfoArg * at ) {
-        if ( !ch ) context->throw_error_at(at, "channelReleaseRef: channel is null");
-        ch->releaseRef();
-        ch = nullptr;
-    }
-
-    void waitForChannel ( Channel * status, Context * context, LineInfoArg * at ) {
-        if ( !status ) context->throw_error_at(at, "waitForChannel: channel is null");
-        status->wait();
-    }
-
-    void notifyChannel ( Channel * status, Context * context, LineInfoArg * at ) {
-        if ( !status ) context->throw_error_at(at, "notifyChannel: channel is null");
-        status->notify();
-    }
-
-    void notifyAndReleaseChannel ( Channel * & status, Context * context, LineInfoArg * at ) {
-        if ( !status ) context->throw_error_at(at, "notifyAndReleaseChannel: channel is null");
-        status->notifyAndRelease();
-        status = nullptr;
     }
 
     struct ChannelAnnotation : ManagedStructureAnnotation<Channel,false> {
@@ -353,8 +296,12 @@ namespace das {
             ModuleLibrary lib;
             lib.addModule(this);
             lib.addBuiltInModule();
+            // types
+            addAnnotation(make_smart<JobStatusAnnotation>(lib));
+            auto cha = make_smart<ChannelAnnotation>(lib);
+            cha->from("JobStatus");
+            addAnnotation(cha);
             // channel
-            addAnnotation(make_smart<ChannelAnnotation>(lib));
             addInterop<channelPush,void,Channel *,vec4f>(*this, lib,  "_builtin_channel_push",
                 SideEffects::modifyArgumentAndExternal, "channelPush")
                     ->args({"channel","data"});
@@ -385,23 +332,7 @@ namespace das {
             addExtern<DAS_BIND_FUN(channelRemove)>(*this, lib, "channel_remove",
                 SideEffects::invoke, "channelRemove")
                     ->args({ "channel", "context","line" })->unsafeOperation = true;;
-            addExtern<DAS_BIND_FUN(channelAddRef)>(*this, lib,  "add_ref",
-                SideEffects::modifyArgumentAndAccessExternal, "channelAddRef")
-                    ->args({"channel","context","line"});
-            addExtern<DAS_BIND_FUN(channelReleaseRef)>(*this, lib,  "release",
-                SideEffects::modifyArgumentAndAccessExternal, "channelReleaseRef")
-                    ->args({"channel","context","line"});
-            addExtern<DAS_BIND_FUN(waitForChannel)>(*this, lib,  "join",
-                SideEffects::modifyExternal, "waitForChannel")
-                    ->args({"channel","context","line"});
-            addExtern<DAS_BIND_FUN(notifyChannel)>(*this, lib,  "notify",
-                SideEffects::modifyExternal, "notifyChannel")
-                    ->args({"channel","context","line"});
-            addExtern<DAS_BIND_FUN(notifyAndReleaseChannel)>(*this, lib,  "notify_and_release",
-                SideEffects::modifyExternal, "notifyAndReleaseChannel")
-                    ->args({"channel","context","line"});
             // job
-            addAnnotation(make_smart<JobStatusAnnotation>(lib));
             addExtern<DAS_BIND_FUN(withJobStatus)>(*this, lib,  "with_job_status",
                 SideEffects::modifyExternal, "withJobStatus")
                     ->args({"total","block","context","line"});
