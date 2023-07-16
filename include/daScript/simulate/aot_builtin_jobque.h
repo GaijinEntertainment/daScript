@@ -19,11 +19,11 @@ namespace das {
         }
     };
 
-    class Channel {
+    class Channel : public JobStatus {
     public:
         Channel( Context * ctx ) : owner(ctx) {}
-        Channel( Context * ctx, int count) : remaining(count), owner(ctx) {}
-        ~Channel();
+        Channel( Context * ctx, int count) : owner(ctx) { mRemaining = count; }
+        virtual ~Channel();
         Channel ( Channel && ) = delete;
         Channel ( const Channel & ) = delete;
         Channel & operator = ( const Channel & ) = delete;
@@ -31,27 +31,19 @@ namespace das {
         void push ( void * data, TypeInfo * ti, Context * context );
         void pop ( const TBlock<void,void *> & blk, Context * context, LineInfoArg * at );
         bool isEmpty() const;
-        int size() const;
         int total() const;
-        bool isReady() const;
-        void notify();
-        void notifyAndRelease();
-        void wait();
-        int append(int size);
-        int addRef() { return mRef++; }
-        int releaseRef() { return --mRef; }
         Context * getOwner() { return owner; }
     public:
         template <typename TT>
         void for_each_item ( const TT & tt ) {
-            lock_guard<mutex> guard(lock);
+            lock_guard<mutex> guard(mCompleteMutex);
             for ( auto & f : pipe ) {
                 tt(f.data, f.type, f.from.get());
             }
         }
         template <typename TT>
         void gather ( const TT & tt ) {
-            lock_guard<mutex> guard(lock);
+            lock_guard<mutex> guard(mCompleteMutex);
             for ( auto & f : pipe ) {
                 tt(f.data, f.type, f.from.get());
             }
@@ -60,13 +52,9 @@ namespace das {
 
     protected:
         uint32_t            mSleepMs = 1;
-        mutable mutex       lock;
         deque<Feature>      pipe;
         Feature             tail;
-        uint32_t			remaining = 0;
-        condition_variable	cond;
         Context *           owner = nullptr;
-        atomic<int>         mRef{0};
     };
 
     bool is_job_que_shutting_down();
@@ -88,11 +76,6 @@ namespace das {
     void withChannelEx ( int32_t count, const TBlock<void,Channel *> & blk, Context * context, LineInfoArg * lineinfo );
     Channel* channelCreate( Context * context, LineInfoArg * at);
     void channelRemove(Channel * ch, Context * context, LineInfoArg * at);
-    void channelAddRef ( Channel * ch, Context * context, LineInfoArg * at );
-    void channelReleaseRef ( Channel * & ch, Context * context, LineInfoArg * at );
-    void waitForChannel ( Channel * status, Context * context, LineInfoArg * at );
-    void notifyChannel ( Channel * status, Context * context, LineInfoArg * at );
-    void notifyAndReleaseChannel ( Channel * & status, Context * context, LineInfoArg * at );
     void channelGather ( Channel * ch, const TBlock<void,void *> & blk, Context * context, LineInfoArg * at );
     void channelPeek ( Channel * ch, const TBlock<void,void *> & blk, Context * context, LineInfoArg * at );
     void channelVerify ( Channel * ch, Context * context, LineInfoArg * at );
