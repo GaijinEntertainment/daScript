@@ -339,6 +339,8 @@ class ParseMacro : AstCallMacro
         return <- qmacro_block <|
             var inscope parser : $t(gen.parser_type)
 
+            parser.suppress_errors |> push <| false
+
             if $v(gen.color_output)
                 parser.color_output = true
 
@@ -355,13 +357,17 @@ class ParseMacro : AstCallMacro
             // Create an error-reporting parser and emit errors
 
             var inscope error_reporting_parser : $t(gen.parser_type)
+            error_reporting_parser.suppress_errors |> push <| false
+
             peek_data($i(name)) <| $ ( inp )
                 error_reporting_parser.input := inp
+
             error_reporting_parser.error_reporting = true
             error_reporting_parser.longest_prefix = parser.longest_prefix
-            result <- $c("parse_{gram[0].name}")(error_reporting_parser)
 
+            result <- $c("parse_{gram[0].name}")(error_reporting_parser)
             sort_unique(error_reporting_parser.errors)
+
             invoke(blk, result.value, error_reporting_parser.errors)
 
 

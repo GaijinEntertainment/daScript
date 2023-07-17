@@ -12,19 +12,22 @@ struct Table
     rows  : array<Row>
     errors : array<ParsingError>
 
-def parse_csv ( CSV:string ) // The same as the first `parse` arg
+def parse_csv ( CSV:string; blk: block<( val:array<Row>; err:array<ParsingError>):void>) // The same as the first `parse` arg
     parse CSV
         // The parsing begins from the first rule
         var rows : array<Row>
-        rule(*new_line_row as rows, MB(row) as tail, MB(eol), EOF) <|
-            for r in tail
-                rows |> emplace(r)
+
+        rule(*new_line_row as rows, MB(eol), EOF) <|
+            return <- rows
+
+        rule(*new_line_row as rows, row as tail, MB(eol), EOF) <|
+            rows |> emplace(tail)
             return <- rows
 
         var cell : Cell
-        rule(string_ as text,TS) <|
+        rule(string_ as text, TS) <|
             return [[Cell text=text]]
-        rule(double_ as value,TS) <|
+        rule(double_ as value, TS) <|
             return [[Cell value=value]]
 
         var comma_separated_cell : Cell
@@ -60,19 +63,14 @@ let s3 = %stringify~1,"hello",3.141
 
 [export]
 def main
-/*
-    var c1 <- parse_csv(s1)
-    print("c1 = {c1}\n")
+    parse_csv(s1) <| $(s1; err)
+        print("c1 = {s1}\n")
 
-    var c2 <- parse_csv(s2)
-    print("c2 = {c2}\n")
-*/
-    var c3 <- parse_csv(s3)
-    print("c3 = {c3}\n")
+    parse_csv(s2) <| $(s2; err)
+        print("c2 = {s2}\n")
 
-/*
-    print("s3 = {escape(s3)}\n")
-    peek_data(s3) <| $ ( inp )
-        print("inp = {inp}\n")
-        print("length(inp) = {length(inp)}\n")
-*/
+        for e in err
+            "{e}\n" |> print
+
+    parse_csv(s3) <| $(c3; err)
+        print("c3 = {c3}\n")

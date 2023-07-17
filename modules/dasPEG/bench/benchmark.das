@@ -26,9 +26,8 @@ def main
     var input = file |> fread
 
     profile(10, "PEG json") <|
-        var parser <- get_parser_with(input)
-        var res_json <- parse_JsonValue(parser).value
-        print("{intptr(unsafe(addr(res_json)))}")
+        get_parser_with(input) <| $(res_json; err)
+            print("{intptr(unsafe(reinterpret<JsonValue?> addr(res_json)))}")
 
     profile(10, "std json") <|
         var discard_error: string
@@ -44,7 +43,7 @@ def into_table(var src: array<tuple<auto(K); auto(V)>>): table<K; V>
     return <- result
 
 
-def get_parser_with(input: string): jsonParser
+def get_parser_with( json:string; blk:block<(var res_json: JsonValue? # implicit; errors:array<ParsingError>):void> )
     parse json
         var JsonValue: JsonValue?
 
@@ -73,9 +72,11 @@ def get_parser_with(input: string): jsonParser
         // Optional element list;
         // If items are present (not []), then no trailing comma is allowed
 
-        rule("[", WS, MB(ElementList) as list, "]", WS) <|
-            return <- [[array<JsonValue?>]] if list |> empty
-            return <- list[0] // Take the value from optional
+        rule("[", WS, "]", WS) <|
+            return <- [[array<JsonValue?>]]
+
+        rule("[", WS, ElementList as list, "]", WS) <|
+            return <- list
 
 
         var ElementList: array<JsonValue?>
@@ -100,11 +101,12 @@ def get_parser_with(input: string): jsonParser
 
         var Object: table<string; JsonValue?>
 
-        rule("\{", WS, MB(MappingList) as list, "\}", WS) <|
+        rule("\{", WS, "\}", WS) <|
             var empty: table<string; JsonValue?>
-            return <- empty if list |> empty
-            return <- list[0] |> into_table
+            return <- empty
 
+        rule("\{", WS, MappingList as list, "\}", WS) <|
+            return <- list |> into_table
 
         var MappingList: array<tuple<string; JsonValue?>>
 
@@ -131,9 +133,6 @@ def get_parser_with(input: string): jsonParser
 
         var Value: JsonValue?
 
-        rule(double_ as d, WS) <|  // <- builtin double_ rule
-            return <- JV(d)
-
         rule("true", WS) <|
             return <- JV(true)
 
@@ -143,19 +142,8 @@ def get_parser_with(input: string): jsonParser
         rule("null", WS) <|
             return <- JVNull()
 
+        rule(double_ as d, WS) <|  // <- builtin double_ rule
+            return <- JV(d)
+
         rule(string_ as s, WS) <|  // <- builtin string_ rule
             return <- JV(s)
-
-
-
-    var parser <- [[jsonParser]]
-
-    // TODO: move into set_input parser method
-
-    //verify(input |> is_utf8_string_valid, "Invalid utf-8 in the parsed string")
-
-    for char in input
-        parser.input |> push(char |> uint8())
-
-    return <- parser
-

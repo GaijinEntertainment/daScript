@@ -13,13 +13,7 @@ require dastest/testing_boost
 require daslib/utf8_utils
 require peg/peg
 
-
-struct Email
-    username: string
-    domain: string
-
-
-def one
+def one( greeting: string; blk: block<( a:bool; err:array<ParsingError> ):void>)
     parse greeting
         var greeting: bool
 
@@ -37,46 +31,29 @@ def one
         rule(!set('!', '1'..'9'), any) <|
             return null
 
-    var parser <- [[greetingParser]]
-    parser.color_output = true
 
-    var input = "Hello, ! world"
-    for char in input
-        parser.input |> push(char |> uint8())
-
-    parser |> parse_greeting
-
-    // Now again with error reporting
-    parser.error_reporting = true
-    parser |> parse_greeting
-
-
-def two
-    parse cut
+def two( prog:string; blk: block<( a:bool; err:array<ParsingError> ):void>)
+    parse prog
         var prog: bool
 
-        option(tracing)
-        option(color)
+        // option(tracing)
+        // option(color)
 
         rule(decl) <|
             return true
-
-
-
-
 
         var decl: bool
 
         rule("def ", commit,
                     "{ident_}" as name,
-                    log("Parsed function name: {name}"),
+                    log("Parsed function name: {name}\n"),
                     "(", *argument as args, argument_last as last, ")"
                 ) <|
             return true
 
         rule("var ", commit,
                     "{ident_}" as name,
-                    log("Parsed var name: {name}"),
+                    log("Parsed var name: {name}\n"),
                     MB(typing),
                     MB(initializer)
                 ) <|
@@ -84,13 +61,11 @@ def two
 
         rule("let ", commit,
                     "{ident_}" as name,
-                    log("Parsed var name: {name}"),
+                    log("Parsed var name: {name}\n"),
                     MB(typing),
                     MB(initializer)
                 ) <|
             return true
-
-
 
 
 
@@ -115,7 +90,6 @@ def two
 
 
 
-
         var ident: string
         rule("{ident}" as ident) <|
             return ident
@@ -137,22 +111,15 @@ def two
         rule(set('1'..'9', '_')) <|
             return null
 
-    var parser <- [[cutParser]]
-    parser.color_output = true
-
-    var input = "def main(argc, argv) \{"
-    var input = "def main(123, argv) \{"
-
-    for char in input
-        parser.input |> push(char |> uint8())
-
-    print("{parser |> parse_decl}\n")
-
-    // Now again with error reporting
-    parser.error_reporting = true
-    print("{parser |> parse_decl}\n")
-
 
 [export]
 def main
-    two()
+    var input1 = "def main(argc, argv) \{"
+    var input2 = "def main(123, argv) \{"
+
+    two(input1) <| $(val; err)
+        print("Success: {val}\n")
+
+    two(input2) <| $(val; err)
+        for e in err
+            "{e}\n" |> print
