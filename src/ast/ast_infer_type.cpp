@@ -1807,6 +1807,10 @@ namespace das {
                         var->at, CompilationError::invalid_variable_type);
                 }
             }
+            if ( !var->type->ref && var->type->hasClasses() ) {
+                error("can only have global pointers to classes " + describeType(var->type), "", "",
+                      var->at, CompilationError::unsafe);
+            }
             if ( !var->init && var->type->hasNonTrivialCtor() ) {
                 error("global variable of type " + describeType(var->type) + " needs to be initialized", "", "",
                     var->at, CompilationError::invalid_variable_type);
