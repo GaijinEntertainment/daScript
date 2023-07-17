@@ -12,7 +12,9 @@ require peg/parse_macro public
 require peg/detail/colors public
 
 require daslib/strings_boost public
-require math public
+require daslib/algorithm public
+require daslib/math public
+require daslib/fio public
 
 struct public ParsingError
     text : string
@@ -39,47 +41,37 @@ def public matches(var parser; template_: string; strlen: int): bool
 
     return false
 
-
 def at_around(text: string; position, window: int): string
     return text |> chop(position - window / 2, window)
-
 
 def public move(var parser; offset)
     parser.index += offset
     parser.longest_prefix = parser.longest_prefix |> max <| parser.index
 
-
 def public tabulate(var parser)
     print("{repeat("|   ", parser.tabs)}")
-
 
 def public log_plain(var parser, message)
     parser |> tabulate
     print("[-] {message}\n")
 
-
 def public log_fail(var parser, message)
     parser |> tabulate
     print("[!] {message}\n" |> red_str <| parser.color_output)
-
 
 def public log_success(var parser, message)
     parser |> tabulate
     print("[!] {message}\n"  |> green_str <| parser.color_output)
 
-
 def public log_info(var parser, message)
     parser |> tabulate
     print("[.] {message}\n" |> blue_str <| parser.color_output)
 
-
 def public reached_EOF(var parser): bool
     return parser.input |> length <= parser.index
 
-
 def public reached_EOL(var parser): bool
     return parser |> matches("\n", 1) || parser |> matches("\r\n", 2)
-
 
 def public skip_whitespace(var parser)
     while parser |> get_current_char |> is_white_space
@@ -93,27 +85,22 @@ def public get_current_char(var parser): int
     return -1 if parser.input |> length <= parser.index
     return parser.input[parser.index] |> int()
 
-
 // def public move_to_next_char(var parser)
 //     if parser.input |> length <= parser.index
 //         parser.current = -1 // EOF
 //     else
 //         parser.current = get_next_character(parser.input, parser.index)
 
-
 // def public current_index(var parser): int
 //     var backtrack_len = parser.current |> get_utf8_byte_count
 //     return parser.index - backtrack_len
-
 
 // def public current_buffer_pos(var parser): string
 //     var backtrack_len = parser.current |> get_utf8_byte_count
 //     return parser.input[parser.index - backtrack_len] |> string()
 
-
 // def public get_current_char(var parser): int
 //     return parser.current
-
 
 def public match_decimal_literal(var parser): tuple<success:bool; value:int; endpos:int>
     //! Simple lexing of decimal integers, doesn't check for overflow
@@ -130,7 +117,6 @@ def public match_decimal_literal(var parser): tuple<success:bool; value:int; end
         parser |> move(1)
 
     return [[auto true, result, parser.index]]
-
 
 def public match_string_literal(var parser): tuple<success:bool; string>
     //! Tries to match everything inside ""

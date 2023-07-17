@@ -3,6 +3,7 @@ options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 options no_aot = true
 options strict_smart_pointers = true
+options no_global_variables = false
 
 module parse_macro
 
@@ -63,17 +64,17 @@ def into_terminal(var expr: ExpressionPtr): tuple<int;int>
         // Range of charachters '1'..'9'
 
         var inscope left_exp <- expr as ExprCall.arguments[0]
-        var inscope right_exp <- (expr as ExprCall).arguments[1]
+        var inscope right_exp <- expr as ExprCall.arguments[1]
 
-        // macro_verify(left_exp is ExprConstInt, null, "Range end should be integer constants");
-        // macro_verify(right_exp is ExprConstInt, null, "Range end should be integer constants")
+        if !left_exp is ExprConstInt || !right_exp is ExprConstInt
+            transfrom_error(expr.at, "Range ends should be integer constants")
 
         var left <- (left_exp as ExprConstInt).value
         var right <- (right_exp as ExprConstInt).value
 
         return <- [[auto left, right]]
 
-    abort("Unreachable `into_terminal`")
+    transfrom_error(expr.at, "Unknown rule passed to `rule` as argument")
     return <- [[auto 0, 0]]
 
 
@@ -212,7 +213,7 @@ def into_rule_(var expr: ExpressionPtr): Rule_?
         transfrom_error(expr.at, "Your rule contains integers (possibly in the form of '_', please use \"\" for literals)")
         return <- new [[Rule_]]
 
-    abort("TODO: Unreachable")
+    transfrom_error(expr.at, "Unknown rule passed to `rule` as argument")
     return <- new [[Rule_]]
 
 def transfrom_error ( at:LineInfo; message:string )
@@ -231,7 +232,7 @@ def transform(var rule: MacroRule): Definition
 
     var inscope alternatives: array<Alternative>
 
-    for alt in rule.alternatives                 // alt: ExprCall?
+    for alt in rule.alternatives
         if true // creates scope for inscope
             var inscope blk: ExpressionPtr <- clone_expression(alt.arguments |> back)
 
@@ -332,8 +333,42 @@ class ParseMacro : AstCallMacro
 
         gen |> generate_grammar(gram, name)
 
+        // Emit wrapper code
+        var first_method_name = gram[0].name
+
         return <- qmacro_block <|
-            pass // Just return something non-zero
+            var inscope parser : $t(gen.parser_type)
+
+            parser.suppress_errors |> push <| false
+
+            if $v(gen.color_output)
+                parser.color_output = true
+
+            peek_data($i(name)) <| $ ( inp )
+                parser.input := inp
+
+            var result : $t(gen.return_types[gram[0].name])
+            result <- $c("parse_{gram[0].name}")(parser)
+
+            if result.success
+                invoke(blk, result.value, [[array<ParsingError>]])
+                return
+
+            // Create an error-reporting parser and emit errors
+
+            var inscope error_reporting_parser : $t(gen.parser_type)
+            error_reporting_parser.suppress_errors |> push <| false
+
+            peek_data($i(name)) <| $ ( inp )
+                error_reporting_parser.input := inp
+
+            error_reporting_parser.error_reporting = true
+            error_reporting_parser.longest_prefix = parser.longest_prefix
+
+            result <- $c("parse_{gram[0].name}")(error_reporting_parser)
+            sort_unique(error_reporting_parser.errors)
+
+            invoke(blk, result.value, error_reporting_parser.errors)
 
 
 [_macro]

@@ -12,17 +12,13 @@ options debugger
 require dastest/testing_boost
 require daslib/strings_boost
 require daslib/utf8_utils
+require daslib/stringify
 require daslib/fio
 require peg/peg
 
 
-def get_parser_with(input: string): csvParser
+def get_parser_with(csv: string; blk: block<(email:array<string>; err:array<ParsingError>):void>)
     parse csv
-        var Document: array<array<string>>
-
-        rule(*Row as rows, EOF) <|
-            return <- rows
-
         var Row: array<string>
 
         rule(*CommarSeparatedCell as cells, Cell as c, EOL) <|
@@ -36,7 +32,8 @@ def get_parser_with(input: string): csvParser
 
         var Cell: string
 
-        rule(QuotedCell as qc) <|
+        rule(PEEK("\""), commit, // Now we can not turn back
+             QuotedCell as qc) <|
             return <- qc
         rule(NonQuotedCell as nqc) <|
             return <- nqc
@@ -102,129 +99,106 @@ def get_parser_with(input: string): csvParser
             return null
 
 
-    var parser <- [[csvParser]]
-
-    for char in input
-        parser.input |> push(char |> uint8())
-
-    return <- parser
-
-
 [test]
 def test_basic_csv(t: T?)
-    var input = "John,Doe,30"
-
-    var inscope parser <- get_parser_with(input)
-    var inscope res <- parser |> parse_Row
+    var input = "John,Doe,30\n"
     var inscope expected_res <-  [{string "John"; "Doe"; "30"}]
 
-    for a, b in expected_res, res.value
-        t |> equal(a, b)
+    get_parser_with(input) <| $(email; errors)
+        if !errors |> empty
+            t |> failure("Parsing failed")
+
+        for a, b in expected_res, email
+            t |> equal(a, b)
 
 
 [test]
 def test_quoted_fields(t: T?)
-    var input = "\"John Doe\",\"123, Main Street, NY\",\"123-456-7890\""
-
-    var inscope parser <- get_parser_with(input)
-    var inscope res <- parser |> parse_Row
+    let input = %stringify~"John Doe","123, Main Street, NY","123-456-7890"
+    %%
     var inscope expected_res <-  [{string "John Doe"; "123, Main Street, NY"; "123-456-7890"}]
 
-    for a, b in expected_res, res.value
-        t |> equal(a, b)
+    get_parser_with(input) <| $(email; errors)
+        if !errors |> empty
+            t |> failure("Parsing failed")
+            return
 
-
-[test]
-def test_newline_fields(t: T?)
-    var input = "\"John Doe\",\"Hello, world!\nNice to meet you.\""
-
-    var inscope parser <- get_parser_with(input)
-    var inscope res <- parser |> parse_Row
-    var inscope expected_res <-  [{string "John Doe"; "Hello, world!\nNice to meet you."}]
-
-    for a, b in expected_res, res.value
-        t |> equal(a, b)
+        for a, b in expected_res, email
+            t |> equal(a, b)
 
 
 [test]
 def test_special_chars(t: T?)
-    var input = "\"John Doe\",\"john.doe@example.com\""
-
-    var inscope parser <- get_parser_with(input)
-    var inscope res <- parser |> parse_Row
+    var input = "John Doe,john.doe@example.com\n"
     var inscope expected_res <-  [{string "John Doe"; "john.doe@example.com"}]
 
-    for a, b in expected_res, res.value
-        t |> equal(a, b)
+    get_parser_with(input) <| $(email; errors)
+        if !errors |> empty
+            t |> failure("Parsing failed")
+            return
 
-
-[test]
-def test_missing_fields(t: T?)
-    var input = "\"John Doe\",30,"
-
-    var inscope parser <- get_parser_with(input)
-    var inscope res <- parser |> parse_Row
-    var inscope expected_res <-  [{string "John Doe"; "30"; ""}]
-
-    for a, b in expected_res, res.value
-        t |> equal(a, b)
-
-
-[test]
-def test_different_types_of_data(t: T?)
-    var input = "1,\"John Doe\",True,100000,\"2023-06-01\""
-
-    var inscope parser <- get_parser_with(input)
-    var inscope res <- parser |> parse_Row
-    var inscope expected_res <-  [{string "1"; "John Doe"; "True"; "100000"; "2023-06-01"}]
-
-    for a, b in expected_res, res.value
-        t |> equal(a, b)
-
+        for a, b in expected_res, email
+            t |> equal(a, b)
 
 [test]
 def test_escaped_quotes(t: T?)
-    var input = "1,\"She said, \"\"Hello, world!\"\"\""
-
-    var inscope parser <- get_parser_with(input)
-    var inscope res <- parser |> parse_Row
+    let input = %stringify~1,"She said, ""Hello, world!"""
+    %%
     var inscope expected_res <-  [{string "1"; "She said, \"\"Hello, world!\"\""}]
 
-    for a, b in expected_res, res.value
-        t |> equal(a, b)
+    get_parser_with(input) <| $(email; errors)
+        if !errors |> empty
+            t |> failure("Parsing failed")
+            return
 
+        for a, b in expected_res, email
+            t |> equal(a, b)
 
 [test]
 def test_leading_trailing_spaces(t: T?)
-    var input = " John Doe , 123 Main Street, NY , 123-456-7890 "
-
-    var inscope parser <- get_parser_with(input)
-    var inscope res <- parser |> parse_Row
+    var input = " John Doe , 123 Main Street, NY , 123-456-7890 \n"
     var inscope expected_res <-  [{string " John Doe "; " 123 Main Street"; " NY "; " 123-456-7890 "}]
 
-    for a, b in expected_res, res.value
-        t |> equal(a, b)
+    get_parser_with(input) <| $(email; errors)
+        if !errors |> empty
+            t |> failure("Parsing failed")
+            return
 
+        for a, b in expected_res, email
+            t |> equal(a, b)
 
 [test]
 def test_all_empty_fields(t: T?)
-    var input = ",,"
-
-    var inscope parser <- get_parser_with(input)
-    var inscope res <- parser |> parse_Row
+    var input = ",,\n"
     var inscope expected_res <-  [{string ""; ""; ""}]
 
-    for a, b in expected_res, res.value
-        t |> equal(a, b)
+    get_parser_with(input) <| $(email; errors)
+        if !errors |> empty
+            t |> failure("Parsing failed")
+            return
 
+        for a, b in expected_res, email
+            t |> equal(a, b)
+
+
+// Test errors
 
 [test]
-def test_more(t: T?)
-    var input = "1,,\"\"\" A famous quote \"\"\""
+def test_no_eol(t: T?)
+    let input = %stringify~1,True%%
 
-    var inscope parser <- get_parser_with(input)
-    var inscope res <- parser |> parse_Row
-    var inscope expected_res <-  [{string "1"; ""; "\"\" A famous quote \"\""}]
+    get_parser_with(input) <| $(email; errors)
+        if errors |> empty
+            t |> failure("Parsing did not fail")
+            return
 
-    for a, b in expected_res, res.value
-        t |> equal(a, b)
+[test]
+def test_missing_quote(t: T?)
+    let input = %stringify~1,"True
+    %%
+
+    get_parser_with(input) <| $(email; errors)
+        if errors |> empty
+            t |> failure("Parsing did not fail")
+            return
+

@@ -8,13 +8,18 @@ require dastest/testing_boost
 require peg/peg
 
 
-def get_parser_with(input: string): calcParser
+def parse_expr( calc:string; blk: block<( val:int; err:array<ParsingError> ):void> )
     parse calc
+        var expr: int // Place EOF to consume all input (for error reporting)
+
+        rule(add as a, EOF) <|
+            return a
+
         var add: int
 
-        rule(add as a, "+", mul as m) <|
+        rule(add as a, "+", commit, mul as m) <|
             return a + m
-        rule(add as a, "-", mul as m) <|
+        rule(add as a, "-", commit, mul as m) <|
             return a - m
         rule(mul as m) <|
             return m
@@ -30,87 +35,86 @@ def get_parser_with(input: string): calcParser
 
         var unary: int
 
-        rule("-", unary as u) <|
+        rule("-", commit, unary as u) <|
             return u
         rule(prim as p) <|
             return p
 
         var prim: int
 
-        rule("(", add as a, ")") <|
+        rule("(", commit, add as a, ")") <|
             return a
-        rule(number as n) <|
+        rule( PEEK(set('0'..'9')), commit,
+                number as n ) <|
             return n
-
-
-
-    var parser <- [[calcParser]]
-
-    for char in input
-        parser.input |> push(char |> uint8())
-
-    return <- parser
 
 
 [test]
 def test_calc_1(t: T?)
     let input = "1+2*2+1---(3*2+1*2)-1-1-1*2"
-    var parser <- get_parser_with(input)
-    var res <- parser |> parse_add
-    t |> equal(-6, res.value)
-
+    parse_expr(input) <| $(res;err)
+        t |> equal(-6, res)
 
 [test]
 def test_calc_2(t: T?)
     let input = "5-2*3+4/2"
-    var parser <- get_parser_with(input)
-    var res <- parser |> parse_add
-    t |> equal(1, res.value)
+    parse_expr(input) <| $(res;err)
+        t |> equal(1, res)
 
 
 [test]
 def test_calc_3(t: T?)
     let input = "4*(2+3)-6"
-    var parser <- get_parser_with(input)
-    var res <- parser |> parse_add
-    t |> equal(14, res.value)
+    parse_expr(input) <| $(res;err)
+        t |> equal(14, res)
 
 
 [test]
 def test_calc_4(t: T?)
     let input = "(2+3)*4-6"
-    var parser <- get_parser_with(input)
-    var res <- parser |> parse_add
-    t |> equal(14, res.value)
+    parse_expr(input) <| $(res;err)
+        t |> equal(14, res)
 
-
-[test]
-def test_calc_5(t: T?)
-    let input = "2+3*4-6"
-    var parser <- get_parser_with(input)
-    var res <- parser |> parse_add
-    t |> equal(8, res.value)
-
+// Parsing fails
 
 [test]
-def test_calc_6(t: T?)
-    let input = "10/2+5*2"
-    var parser <- get_parser_with(input)
-    var res <- parser |> parse_add
-    t |> equal(15, res.value)
-
-
-[test]
-def test_calc_7(t: T?)
-    let input = "(10-4)/2+5"
-    var parser <- get_parser_with(input)
-    var res <- parser |> parse_add
-    t |> equal(8, res.value)
-
+def test_calc_error_1(t: T?)
+    let input = "4-"
+    parse_expr(input) <| $(res;err)
+        if err |> empty
+            t |> failure("Should fail")
 
 [test]
-def test_calc_8(t: T?)
-    let input = "10-4/(2+3)"
-    var parser <- get_parser_with(input)
-    var res <- parser |> parse_add
-    t |> equal(10, res.value)
+def test_ctest_calc_error_2(t: T?)
+    let input = "(2"
+    parse_expr(input) <| $(res;err)
+        if err |> empty
+            t |> failure("Should fail")
+
+[test]
+def test_calc_error_3(t: T?)
+    let input = "2+3)"
+    parse_expr(input) <| $(res;err)
+        if err |> empty
+            t |> failure("Should fail")
+
+[test]
+def test_calc_error_4(t: T?)
+    let input = "2+*3"
+    parse_expr(input) <| $(res;err)
+        if err |> empty
+            t |> failure("Should fail")
+
+[test]
+def test_calc_error_5(t: T?)
+    let input = "4*(2+3-6"
+    parse_expr(input) <| $(res;err)
+        if err |> empty
+            t |> failure("Should fail")
+
+[test]
+def test_calc_error_6(t: T?)
+    let input = "2*3*"
+    parse_expr(input) <| $(res;err)
+        if err |> empty
+            t |> failure("Should fail")
