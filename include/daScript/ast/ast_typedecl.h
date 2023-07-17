@@ -164,6 +164,8 @@ namespace das {
         __forceinline bool isVectorType() const;
         bool isBaseVectorType() const;
         __forceinline bool isBitfield() const;
+        bool isSafeToDelete() const;
+        bool isSafeToDelete ( das_set<Structure*> & dep) const;
         bool isLocal() const;
         bool isLocal( das_set<Structure*> & dep ) const;
         bool hasClasses() const;

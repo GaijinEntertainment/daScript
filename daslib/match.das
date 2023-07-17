@@ -21,7 +21,7 @@ let LOG_MATCH = false
 
 struct MatchError
     msg : string
-    at : LineInfo const?
+    [[do_not_delete]] at : LineInfo const?
 
 struct MatchTo
     conditions   : array<ExpressionPtr>

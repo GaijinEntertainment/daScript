@@ -236,6 +236,7 @@ namespace das
         bool isPod() const;
         bool isRawPod() const;
         bool isExprTypeAnywhere( das_set<Structure *> & dep ) const;
+        bool isSafeToDelete( das_set<Structure *> & dep ) const;
         bool isLocal( das_set<Structure *> & dep ) const;
         bool isTemp( das_set<Structure *> & dep ) const;
         bool isShareable ( das_set<Structure *> & dep ) const;
@@ -1305,6 +1306,7 @@ namespace das
         bool no_aliasing = false;                       // if true, aliasing will be reported as error, otherwise will turn off optimization
         bool strict_smart_pointers = false;             // collection of tests for smart pointers, like van inscope for any local, etc
         bool no_init = false;                           // if true, then no [init] is allowed in any shape or form
+        bool strict_unsafe_delete = false;               // if true, delete of type which contains 'unsafe' delete is unsafe // TODO: enable when need be
     // environment
         bool no_optimizations = false;                  // disable optimizations, regardless of settings
         bool fail_on_no_aot = true;                     // AOT link failure is error

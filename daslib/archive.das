@@ -149,7 +149,8 @@ def public serialize ( var arch:Archive; var value : auto(TT)[] )
 def public serialize ( var arch:Archive; var value : array<auto(TT)> )
     if arch.reading
         var len : int
-        delete value
+        unsafe
+            delete value
         arch |> read_raw(len)
         value |> resize(len)
         for element in value

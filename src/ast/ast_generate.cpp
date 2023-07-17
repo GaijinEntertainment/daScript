@@ -270,14 +270,10 @@ namespace das {
     }
 
     ExpressionPtr makeDelete ( const VariablePtr & var ) {
-        auto eUns = make_smart<ExprUnsafe>(var->at);
-        auto bod = make_smart<ExprBlock>();
-        bod->at = var->at;
-        eUns->body = bod;
         auto eVar = make_smart<ExprVar>(var->at, var->name);
         auto del = make_smart<ExprDelete>(var->at, eVar);
-        bod->list.push_back(del);
-        return eUns;
+        del->alwaysSafe = true;
+        return del;
     }
 
     // return [[t()]]
@@ -464,6 +460,7 @@ namespace das {
                     auto fld = make_smart<ExprField>(fl.at, fva, fl.name);
                     fld->ignoreCaptureConst = true;
                     auto delf = make_smart<ExprDelete>(fl.at, fld);
+                    delf->alwaysSafe = true;
                     fb->list.emplace_back(delf);
                     if ( fl.type->isPointer() ) {
                         needUnsafe = true;
@@ -519,6 +516,7 @@ namespace das {
         auto THISA = make_smart<ExprVar>(block->at, "__this");
         auto THISAP = make_smart<ExprPtr2Ref>(block->at, THISA);
         auto delit = make_smart<ExprDelete>(block->at, THISAP);
+        delit->alwaysSafe = true;
         fb->list.push_back(delit);
         // delete this
         auto THISA1 = make_smart<ExprVar>(block->at, "__this");
@@ -1364,6 +1362,7 @@ namespace das {
                 auto lv = make_smart<ExprVar>(at, "__this");
                 auto lf = make_smart<ExprField>(at, lv, argn);
                 auto cl = make_smart<ExprDelete>(at, lf);
+                cl->alwaysSafe = true;
                 block->list.push_back(cl);
                 if ( tupleType->argTypes[argi]->isPointer() ) {
                     needUnsafe = true;
@@ -1474,6 +1473,7 @@ namespace das {
                 auto lf = make_smart<ExprField>(at, lv, argn);
                 lf->alwaysSafe = true;
                 auto cl = make_smart<ExprDelete>(at, lf);
+                cl->alwaysSafe = true;
                 auto cb = make_smart<ExprBlock>();
                 cb->at = at;
                 cb->list.push_back(cl);
@@ -1807,6 +1807,7 @@ namespace das {
         // delete
         auto vself = make_smart<ExprVar>(func->at, "self");
         auto edel = make_smart<ExprDelete>(func->at, vself);
+        edel->alwaysSafe = true;
         block->list.push_back(edel);
         // and done
         verifyGenerated(func->body);

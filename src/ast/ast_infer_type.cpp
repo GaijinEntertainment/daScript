@@ -47,6 +47,7 @@ namespace das {
             strictSmartPointers = prog->options.getBoolOption("strict_smart_pointers", prog->policies.strict_smart_pointers);
             disableInit = prog->options.getBoolOption("no_init", prog->policies.no_init);
             skipModuleLockChecks = prog->options.getBoolOption("skip_module_lock_checks", false);
+            strictUnsafeDelete = prog->options.getBoolOption("strict_unsafe_delete", prog->policies.strict_unsafe_delete);
         }
         bool finished() const { return !needRestart; }
         bool verbose = true;
@@ -78,6 +79,7 @@ namespace das {
         bool                    strictSmartPointers = false;
         bool                    disableInit = false;
         bool                    skipModuleLockChecks = false;
+        bool                    strictUnsafeDelete = false;
     public:
         vector<FunctionPtr>     extraFunctions;
     protected:
@@ -3603,6 +3605,12 @@ namespace das {
                       expr->at, CompilationError::bad_delete);
                 }
             }
+            // strict unsafe delete
+            if ( strictUnsafeDelete && !safeExpression(expr) && !expr->subexpr->type->isSafeToDelete() ) {
+                error("delete of " + expr->subexpr->type->describe() + " requires unsafe",  "", "",
+                    expr->at, CompilationError::unsafe);
+                return Visitor::visit(expr);
+            }
             // infer
             if ( !expr->subexpr->type->canDelete() ) {
                 expr->subexpr->type->canDelete();
@@ -3627,7 +3635,7 @@ namespace das {
                         auto ptrf = getFinalizeFunc(expr->subexpr->type);
                         if ( ptrf.size()==0 ) {
                             auto fnDel = generatePointerFinalizer(expr->subexpr->type, expr->at);
-                            if ( !expr->alwaysSafe ) fnDel->unsafeOperation = true;
+                            if ( !strictUnsafeDelete && !expr->alwaysSafe ) fnDel->unsafeOperation = true;
                             if ( !program->addFunction(fnDel) ) {
                                 reportMissingFinalizer("finalizer mismatch ", expr->at, expr->subexpr->type);
                                 return Visitor::visit(expr);
