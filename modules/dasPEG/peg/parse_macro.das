@@ -3,6 +3,7 @@ options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 options no_aot = true
 options strict_smart_pointers = true
+options no_global_variables = false
 
 module parse_macro
 
@@ -332,7 +333,7 @@ class ParseMacro : AstCallMacro
 
         gen |> generate_grammar(gram, name)
 
-
+        // Emit wrapper code
         var first_method_name = gram[0].name
 
         return <- qmacro_block <|
@@ -347,20 +348,21 @@ class ParseMacro : AstCallMacro
             var result : $t(gen.return_types[gram[0].name])
             result <- $c("parse_{gram[0].name}")(parser)
 
-            print("{result}\n")
+            if result.success
+                invoke(blk, result.value, [[array<ParsingError>]])
+                return
 
-            if !result.success // Create an error-reporting parser and emit errors
-                print("Error!!\n")
-                parser.error_reporting = true
-                result <- $c("parse_{gram[0].name}")(parser)
-                sort_unique(parser.errors)
-                return <- result
+            // Create an error-reporting parser and emit errors
 
-            print("No error!\n")
-            write_json(result.value) |> print()
+            var inscope error_reporting_parser : $t(gen.parser_type)
+            peek_data($i(name)) <| $ ( inp )
+                error_reporting_parser.input := inp
+            error_reporting_parser.error_reporting = true
+            error_reporting_parser.longest_prefix = parser.longest_prefix
+            result <- $c("parse_{gram[0].name}")(error_reporting_parser)
 
-            print("{result}\n")
-            return <- result
+            sort_unique(error_reporting_parser.errors)
+            invoke(blk, result.value, error_reporting_parser.errors)
 
 
 [_macro]

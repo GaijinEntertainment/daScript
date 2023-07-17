@@ -364,6 +364,11 @@ def write_json ( val : JsonValue? ) : string
         write_value(writer, val, 0)
     return st
 
+def write_json ( val : JsonValue? # ) : string
+    //! Overload accepting temporary type
+    unsafe // Fine, as json doesn't escape the function
+        return write_json(reinterpret<JsonValue?> val)
+
 def try_fixing_broken_json ( var bad:string )
     //! fixes broken json. so far supported
     //! 1. "string" + "string" string concatination

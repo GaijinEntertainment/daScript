@@ -166,17 +166,21 @@ def generate_wrapper_leftrec(var gen: ParserGenerator)
             parser.tabs++
 
         with parser
-            if $i(cache_table) |> key_exists(index) && !parser.error_reporting
+            if $i(cache_table) |> key_exists(index) // For reft-recursive rules memoization must be enabled
                 var result = $i(cache_table)[index]
                 if result.success // Change the state only on success
                     parser.index = result.endpos
 
                 if $v(gen.tracing)
+                    parser |> log_info <| "Got result from cache {$v(cache_table)} {mark}"
                     parser.tabs--
 
                 return result
 
             // Build new cache entry from scratch
+
+            if $v(gen.debug)
+                parser |> log_info <| "Entering the leftrec create cycle"
 
             var res = [[$t(return_type)]]
             $i(cache_table)[mark] = res
@@ -188,13 +192,20 @@ def generate_wrapper_leftrec(var gen: ParserGenerator)
                 var endpos = parser.index
 
                 // Break if no movement
-                break if res.endpos >= endpos
+                if $v(gen.debug)
+                    parser |> log_info <| "Advanced from {res.endpos} to {endpos} this iteration\n"
+                break if res.endpos >= endpos || !newres.success
 
                 res = newres
+
+                if $v(gen.debug)
+                    parser |> log_info <| "Placing result {res} to cache {$v(cache_table)} {mark}"
+
                 $i(cache_table)[mark] = res
 
             if $v(gen.tracing)
                 parser.tabs--
+                parser |> log_info <| "Matched from {mark} to {res.endpos}"
 
             parser.index = res.endpos
             return res
@@ -645,14 +656,12 @@ def generate_repeat(var gen: ParserGenerator; var rule_: Rule_?): array<Expressi
                 $b(rule_code)
 
             if !$i(first_result_name).success
-                if parser.error_reporting && abs(parser.index - parser.longest_prefix) <= 2
+                if parser.error_reporting && !parser.suppress_errors && abs(parser.index - parser.longest_prefix) <= 2
                     var error = "Error: Expected the rule `" |> red_str($v(gen.color_output))
                     var terminal = "{$v(rule_ |> describe_rule)}" |> bold
                     var rest = "` at {parser.index}, around" |> red_str($v(gen.color_output))
                     var complete_message = "{error}{terminal}{rest}"
                     parser.errors |> push <| [[ParsingError text=complete_message,index=parser.index]]
-                    // to_log(LOG_ERROR,"{complete_message} '{parser.input |> string() |> at_around(parser.index, 10)}'\n")
-                    // to_log(LOG_ERROR,"{" " |> repeat <| (complete_message |> length - 24)}     ^\n")
 
                 return_skip_lockcheck <| [[$t(return_type)]]
                 return <- [[$t(return_type)]]
@@ -684,7 +693,7 @@ def generate_repeat(var gen: ParserGenerator; var rule_: Rule_?): array<Expressi
             $b(rule_code)
 
         if !$i(first_result_name).success
-            if parser.error_reporting && parser.index == parser.longest_prefix
+            if parser.error_reporting && !parser.suppress_errors && parser.index == parser.longest_prefix
                 let complete_message = "Expected a `{$v(rule_ |> describe_rule)}` rule at {parser.index}"
                 parser.errors |> push <| [[ParsingError text=complete_message,index=parser.index]]
 
@@ -803,7 +812,10 @@ def generate_option(var gen: ParserGenerator; var rule_: Rule_?): array<Expressi
 
         var inscope t <- qmacro_block <|
             invoke <|
+                var prev = parser.suppress_errors
+                parser.suppress_errors = true
                 $b(rule_code)
+                parser.suppress_errors = prev
                 return_skip_lockcheck <| [[auto false, 0, 0]]
                 return <- [[auto false, 0, 0]]
 
@@ -826,8 +838,13 @@ def generate_option(var gen: ParserGenerator; var rule_: Rule_?): array<Expressi
 
     var inscope t <- qmacro_block <|
         var $i(result_handle) : array<$t(type_decl)>
+
+        var prev = parser.suppress_errors
+        parser.suppress_errors = true
         invoke <|
             $b(rule_code)
+        parser.suppress_errors = prev
+
     return <- flatten_block(t as ExprBlock)
 
 
@@ -933,7 +950,7 @@ def generate_terminal(var gen: ParserGenerator; var terminal: Terminal): Express
                     if $v(gen.tracing)
                         parser |> log_fail <| "Did not match the terminal `{$v(l) |> escape}`"
 
-                    if parser.error_reporting && parser.index == parser.longest_prefix && $v(gen.current_context != "__option__")
+                    if parser.error_reporting && !parser.suppress_errors && parser.index == parser.longest_prefix
                         var error = "Error: Expected the terminal `" |> red_str($v(gen.color_output))
                         var terminal = "{$v(l) |> escape}" |> bold
                         var rest = "` at {parser.index}, around" |> red_str($v(gen.color_output))
@@ -972,7 +989,7 @@ def generate_terminal(var gen: ParserGenerator; var terminal: Terminal): Express
                     if $v(gen.tracing)
                         parser |> log_fail <| "Failed the range check for character {parser.index}"
 
-                    if parser.error_reporting && parser.index == parser.longest_prefix
+                    if parser.error_reporting && !parser.suppress_errors && parser.index == parser.longest_prefix
                         let complete_message = "Error: Expected charset item {$v(terminal |> describe_terminal)} at {parser.index}\n"
                         parser.errors |> push <| [[ParsingError text=complete_message,index=parser.index]]
 
@@ -998,7 +1015,7 @@ def generate_terminal(var gen: ParserGenerator; var terminal: Terminal): Express
                     if $v(gen.tracing)
                         parser |> log_fail <| "Could not match a decimal number"
 
-                    if parser.error_reporting && parser.index == parser.longest_prefix
+                    if parser.error_reporting && !parser.suppress_errors && parser.index == parser.longest_prefix
                         let complete_message ="Error: Expected a decimal number at {parser.index}\n"
                         parser.errors |> push <| [[ParsingError text=complete_message,index=parser.index]]
 
@@ -1027,7 +1044,7 @@ def generate_terminal(var gen: ParserGenerator; var terminal: Terminal): Express
                     if $v(gen.tracing)
                         parser |> log_fail <| "Did not match EOF"
 
-                    if parser.error_reporting && parser.index == parser.longest_prefix
+                    if parser.error_reporting && !parser.suppress_errors && parser.index == parser.longest_prefix
                         let complete_message = "Error: Expected EOF at {parser.index}\n"
                         parser.errors |> push <| [[ParsingError text=complete_message,index=parser.index]]
 
@@ -1041,7 +1058,7 @@ def generate_terminal(var gen: ParserGenerator; var terminal: Terminal): Express
                     if $v(gen.tracing)
                         parser |> log_fail <| "Did not match EOL"
 
-                    if parser.error_reporting && parser.index == parser.longest_prefix
+                    if parser.error_reporting && !parser.suppress_errors && parser.index == parser.longest_prefix
                         let complete_message = "Error: Expected EOL at {parser.index}\n"
                         parser.errors |> push <| [[ParsingError text=complete_message,index=parser.index]]
 
@@ -1055,7 +1072,7 @@ def generate_terminal(var gen: ParserGenerator; var terminal: Terminal): Express
                     if $v(gen.tracing)
                         parser |> log_fail <| "Failed matching any, reached EOF"
 
-                    if parser.error_reporting && parser.index == parser.longest_prefix
+                    if parser.error_reporting && !parser.suppress_errors && parser.index == parser.longest_prefix
                         let complete_message = "Error: Unexpected EOF at {parser.index}\n"
                         parser.errors |> push <| [[ParsingError text=complete_message,index=parser.index]]
 
@@ -1081,7 +1098,7 @@ def generate_terminal(var gen: ParserGenerator; var terminal: Terminal): Express
                     if $v(gen.tracing)
                         parser |> log_fail <| "Could not match a string"
 
-                    if parser.error_reporting && parser.index == parser.longest_prefix
+                    if parser.error_reporting && !parser.suppress_errors && parser.index == parser.longest_prefix
                         let complete_message = "Error: Expected a string at {parser.index}\n"
                         parser.errors |> push <| [[ParsingError text=complete_message,index=parser.index]]
 
@@ -1101,7 +1118,7 @@ def generate_terminal(var gen: ParserGenerator; var terminal: Terminal): Express
                     if $v(gen.tracing)
                         parser |> log_fail <| "Could not match a double"
 
-                    if parser.error_reporting && parser.index == parser.longest_prefix
+                    if parser.error_reporting && !parser.suppress_errors && parser.index == parser.longest_prefix
                         let complete_message = "Error: Expected a double at {parser.index}\n"
                         parser.errors |> push <| [[ParsingError text=complete_message,index=parser.index]]
 

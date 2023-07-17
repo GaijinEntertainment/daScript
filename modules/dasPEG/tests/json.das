@@ -5,13 +5,12 @@ options no_aot = true
 options strict_smart_pointers = true
 
 require dastest/testing_boost
+require daslib/stringify
 require daslib/utf8_utils
 require daslib/json
 require peg/peg
 
 options stack = 10000000
-
-options log
 
 def into_table(var src: array<tuple<auto(K); auto(V)>>): table<K; V>
     var result: table<K; V>
@@ -20,7 +19,7 @@ def into_table(var src: array<tuple<auto(K); auto(V)>>): table<K; V>
     return <- result
 
 
-def get_parser_with(json: string): tuple<succes:bool; value:JsonValue?; endpos:int>
+def get_parser_with( json:string; blk:block<(var res_json: JsonValue? # implicit; errors:array<ParsingError>):void> )
     parse json
         var JsonValue: JsonValue?
 
@@ -49,9 +48,11 @@ def get_parser_with(json: string): tuple<succes:bool; value:JsonValue?; endpos:i
         // Optional element list;
         // If items are present (not []), then no trailing comma is allowed
 
-        rule("[", WS, MB(ElementList) as list, "]", WS) <|
-            return <- [[array<JsonValue?>]] if list |> empty
-            return <- list[0] // Take the value from optional
+        rule("[", WS, "]", WS) <|
+            return <- [[array<JsonValue?>]]
+
+        rule("[", WS, ElementList as list, "]", WS) <|
+            return <- list
 
 
         var ElementList: array<JsonValue?>
@@ -76,11 +77,12 @@ def get_parser_with(json: string): tuple<succes:bool; value:JsonValue?; endpos:i
 
         var Object: table<string; JsonValue?>
 
-        rule("\{", WS, MB(MappingList) as list, "\}", WS) <|
+        rule("\{", WS, "\}", WS) <|
             var empty: table<string; JsonValue?>
-            return <- empty if list |> empty
-            return <- list[0] |> into_table
+            return <- empty
 
+        rule("\{", WS, MappingList as list, "\}", WS) <|
+            return <- list |> into_table
 
         var MappingList: array<tuple<string; JsonValue?>>
 
@@ -122,84 +124,145 @@ def get_parser_with(json: string): tuple<succes:bool; value:JsonValue?; endpos:i
         rule(string_ as s, WS) <|  // <- builtin string_ rule
             return <- JV(s)
 
-        option(tracing)
-        option(color)
 
 
+[test]
+def test1(t: T?)
+    let input = "[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]"
 
-// [test]
-// def test1(t: T?)
-//     let input = "[[[[[[[[[[[[[[[[[[[[[[[]]]]]]]]]]]]]]]]]]]]]]]"
+    var discard_error: string
+    var json <- read_json(input, discard_error)
 
-//     var res_json <- get_parser_with(input).value
-
-//     var discard_error: string
-//     var json <- read_json(input, discard_error)
-
-//     t |> equal(json |> write_json(), res_json |> write_json)
+    get_parser_with(input) <| $(var res_json: JsonValue? # implicit; errors: array<ParsingError>)
+        t |> equal(json |> write_json(), res_json |> write_json)
 
 
 [test]
 def test2(t: T?)
     let input = "\{\"a\" : 123.53, \"b\": true \}"
-    var res_json = get_parser_with(input)
-    print("{res_json}\n")
+
     var discard_error: string
     var json <- read_json(input, discard_error)
 
-    //t |> equal(json |> write_json(), res_json |> write_json)
+    get_parser_with(input) <| $(var res_json; errors)
+        t |> equal(json |> write_json(), res_json |> write_json)
 
 
-// [test]
-// def test3(t: T?)
-//     let input = "[\"123\", true,[], \{\}, \{\"hello\" : true, \"less\": \"more\"\}, [[[true]]], \"123\"]"
-//     var res_json <- get_parser_with(input).value
+[test]
+def test3(t: T?)
+    let input = "[\"123\", true,[], \{\}, \{\"hello\" : true, \"less\": \"more\"\}, [[[true]]], \"123\"]"
 
-//     var discard_error: string
-//     var json <- read_json(input, discard_error)
+    var discard_error: string
+    var json <- read_json(input, discard_error)
 
-//     t |> equal(json |> write_json(), res_json |> write_json)
-
-
-// [test]
-// def test4(t: T?)
-//     let input = "\{\"message\": \"Hello, world!\", \"nested\": \{\"nested_again\":
-//     \{\"is_it_deep\": true, \"numbers\": [1, 2, 3, 4]\}\}, \"array\": [false, null, \"mixed array\"]\}"
-//     var res_json <- get_parser_with(input).value
-
-//     var discard_error: string
-//     var json <- read_json(input, discard_error)
-
-//     t |> equal(json |> write_json(), res_json |> write_json)
+    get_parser_with(input) <| $(var res_json; errors)
+        t |> equal(json |> write_json(), res_json |> write_json)
 
 
-// [test]
-// def test5(t: T?)
-//     let input = "[\{\"name\": \"John\", \"age\": 30, \"city\": \"New York\", \"siblings\":
-//     [\{\"name\": \"Jane\", \"age\": 25, \"city\": \"Chicago\"\},
-//     \{\"name\": \"Joe\", \"age\": 35, \"city\": \"San Francisco\"\}]\}, true, 123, null, [1, 2, 3]]"
-//     var res_json <- get_parser_with(input).value
+[test]
+def test4(t: T?)
+    let input = "\{\"message\": \"Hello, world!\", \"nested\": \{\"nested_again\":
+    \{\"is_it_deep\": true, \"numbers\": [1, 2, 3, 4]\}\}, \"array\": [false, null, \"mixed array\"]\}"
+
+    var discard_error: string
+    var json <- read_json(input, discard_error)
+
+    get_parser_with(input) <| $(var res_json; errors)
+        t |> equal(json |> write_json(), res_json |> write_json)
 
 
-//     var discard_error: string
-//     var json <- read_json(input, discard_error)
+[test]
+def test5(t: T?)
+    let input = "[\{\"name\": \"John\", \"age\": 30, \"city\": \"New York\", \"siblings\":
+    [\{\"name\": \"Jane\", \"age\": 25, \"city\": \"Chicago\"\},
+    \{\"name\": \"Joe\", \"age\": 35, \"city\": \"San Francisco\"\}]\}, true, 123, null, [1, 2, 3]]"
 
-//     t |> equal(json |> write_json(), res_json |> write_json)
+    var discard_error: string
+    var json <- read_json(input, discard_error)
 
-
-// [test]
-// def test6(t: T?)
-//     let input = "\{\"colors\": [\{\"colorName\": \"red\", \"hexValue\": \"#f00\"\},
-//     \{\"colorName\": \"green\", \"hexValue\": \"#0f0\"\},
-//     \{\"colorName\": \"blue\", \"hexValue\": \"#00f\"\},
-//     \{\"colorName\": \"cyan\", \"hexValue\": \"#0ff\"\},
-//     \{\"colorName\": \"magenta\", \"hexValue\": \"#f0f\"\},
-//     \{\"colorName\": \"yellow\", \"hexValue\": \"#ff0\"\},
-//     \{\"colorName\": \"black\", \"hexValue\": \"#000\"\}]\}"
-//     var res_json <- get_parser_with(input).value
+    get_parser_with(input) <| $(var res_json; errors)
+        t |> equal(json |> write_json(), res_json |> write_json)
 
 
-//     var discard_error: string
-//     var json <- read_json(input, discard_error)
+[test]
+def test6(t: T?)
+    let input = "\{\"colors\": [\{\"colorName\": \"red\", \"hexValue\": \"#f00\"\},
+    \{\"colorName\": \"green\", \"hexValue\": \"#0f0\"\},
+    \{\"colorName\": \"blue\", \"hexValue\": \"#00f\"\},
+    \{\"colorName\": \"cyan\", \"hexValue\": \"#0ff\"\},
+    \{\"colorName\": \"magenta\", \"hexValue\": \"#f0f\"\},
+    \{\"colorName\": \"yellow\", \"hexValue\": \"#ff0\"\},
+    \{\"colorName\": \"black\", \"hexValue\": \"#000\"\}]\}"
 
-//     t |> equal(json |> write_json(), res_json |> write_json)
+    var discard_error: string
+    var json <- read_json(input, discard_error)
+
+    get_parser_with(input) <| $(var res_json; errors)
+        t |> equal(json |> write_json(), res_json |> write_json)
+
+
+[test]
+def test_json_error_1(t: T?)
+    let input = %stringify~{
+"name": "John",
+"city": "New York"
+%%
+    // Error: Expected the terminal `;` ...
+    get_parser_with(input) <| $(res; err)
+        if err |> empty
+            t |> failure <| "Should not parse missing right curly bracket"
+
+
+[test]
+def test_json_error_2(t: T?)
+    let input = %stringify~{
+  "name": "John",
+  "age" 30,
+  "city": "New York"
+}%%
+    // Error: Expected the terminal `:` at 30, around; 30
+    get_parser_with(input) <| $(res; err)
+        if err |> empty
+            t |> failure <| "Should not parse missing semilcolon"
+
+[test]
+def test_json_error_3(t: T?)
+    let input = %stringify~"city": "New York"
+}%%
+    // Error: Expected EOF at 6
+    get_parser_with(input) <| $(res; err)
+        if err |> empty
+            t |> failure <| "Should not parse missing semilcolon"
+
+
+[test]
+def test_json_error_4(t: T?)
+    let input = %stringify~{
+  "name": "John,
+  "age": 30,
+  "city": "New York"
+}%%
+    // Unhelpful error, though
+
+    // Error: Expected the terminal `,` at 24, around; 24
+    // Error: Expected the terminal `}` at 24, around; 24
+    get_parser_with(input) <| $(res; err)
+        if err |> empty
+            t |> failure <| "Should not parse missing semilcolon"
+
+
+[test]
+def test_json_error_5(t: T?)
+    let input = %stringify~
+{
+  "name": "John",
+  "age": 30,
+  "hobbies": ["reading",
+  "cooking"
+}
+}%%
+    // Error: Expected the terminal `]` at 77, around; 77
+    // Error: Expected the terminal `,` at 77, around; 77
+    get_parser_with(input) <| $(res; err)
+        if err |> empty
+            t |> failure <| "Should not parse missing semilcolon"
