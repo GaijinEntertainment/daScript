@@ -79,6 +79,8 @@ namespace das {
     void withJobStatus ( int32_t total, const TBlock<void,JobStatus *> & block, Context * context, LineInfoArg * lineInfo );
     void jobStatusAddRef ( JobStatus * status, Context * context, LineInfoArg * at );
     void jobStatusReleaseRef ( JobStatus * & status, Context * context, LineInfoArg * at );
+    JobStatus * jobStatusCreate( Context * context, LineInfoArg * );
+    void jobStatusRemove( JobStatus * ch, Context * context, LineInfoArg * at );
     void waitForJob ( JobStatus * status, Context * context, LineInfoArg * at );
     void notifyJob ( JobStatus * status, Context * context, LineInfoArg * at );
     void notifyAndReleaseJob ( JobStatus * & status, Context * context, LineInfoArg * at );

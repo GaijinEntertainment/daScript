@@ -333,6 +333,19 @@ namespace das {
         }
     }
 
+    JobStatus * jobStatusCreate( Context *, LineInfoArg * ) {
+        JobStatus * ch = new JobStatus();
+        ch->addRef();
+        return ch;
+    }
+
+    void jobStatusRemove( JobStatus * ch, Context * context, LineInfoArg * at ) {
+        if (ch->releaseRef()) {
+            context->throw_error_at(at, "job status beeing deleted while being used");
+        }
+        delete ch;
+    }
+
     void waitForJob ( JobStatus * status, Context * context, LineInfoArg * at ) {
         if ( !status ) context->throw_error_at(at, "waitForJob: status is null");
         status->Wait();
@@ -378,7 +391,7 @@ namespace das {
             // lock box
             addExtern<DAS_BIND_FUN(lockBoxCreate)>(*this, lib, "lock_box_create",
                 SideEffects::invoke, "lockBoxCreate")
-                    ->args({ "context","line" })->unsafeOperation = true;
+                    ->args({ "context","line" });
             addExtern<DAS_BIND_FUN(lockBoxRemove)>(*this, lib, "lock_box_remove",
                 SideEffects::invoke, "lockBoxRemove")
                     ->args({ "box", "context","line" })->unsafeOperation = true;
@@ -418,11 +431,11 @@ namespace das {
                     ->args({"count","block","context","line"});
             addExtern<DAS_BIND_FUN(channelCreate)>(*this, lib, "channel_create",
                 SideEffects::invoke, "channelCreate")
-                    ->args({ "context","line" })->unsafeOperation = true;
+                    ->args({ "context","line" });
             addExtern<DAS_BIND_FUN(channelRemove)>(*this, lib, "channel_remove",
                 SideEffects::invoke, "channelRemove")
                     ->args({ "channel", "context","line" })->unsafeOperation = true;;
-            // job
+            // job status
             addExtern<DAS_BIND_FUN(withJobStatus)>(*this, lib,  "with_job_status",
                 SideEffects::modifyExternal, "withJobStatus")
                     ->args({"total","block","context","line"});
@@ -441,6 +454,12 @@ namespace das {
             addExtern<DAS_BIND_FUN(notifyAndReleaseJob)>(*this, lib,  "notify_and_release",
                 SideEffects::modifyExternal, "notifyAndReleaseJob")
                     ->args({"job","context","line"});
+            addExtern<DAS_BIND_FUN(jobStatusCreate)>(*this, lib, "job_status_create",
+                SideEffects::invoke, "jobStatusCreate")
+                    ->args({ "context","line" });
+            addExtern<DAS_BIND_FUN(jobStatusRemove)>(*this, lib, "job_status_remove",
+                SideEffects::invoke, "jobStatusRemove")
+                    ->args({ "jobStatus", "context","line" })->unsafeOperation = true;
             // fork \ invoke \ etc
             addExtern<DAS_BIND_FUN(new_job_invoke)>(*this, lib,  "new_job_invoke",
                 SideEffects::modifyExternal, "new_job_invoke")
