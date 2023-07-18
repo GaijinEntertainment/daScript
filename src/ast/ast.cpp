@@ -432,6 +432,15 @@ namespace das {
         return false;
     }
 
+    bool Structure::isSafeToDelete(das_set<Structure *> & dep) const {   // &&
+        for ( const auto & fd : fields ) {
+            if ( fd.type && !fd.type->isSafeToDelete(dep) && fd.annotation.find("do_not_delete",Type::tBool)==nullptr ) {
+                return false;
+            }
+        }
+        return true;
+    }
+
     bool Structure::isLocal(das_set<Structure *> & dep) const {   // &&
         for ( const auto & fd : fields ) {
             if ( fd.type && !fd.type->isLocal(dep) ) {

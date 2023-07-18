@@ -12,7 +12,8 @@ def fooBar
     var pipelines <- create_graphics_pipelines()
     return <- pipelines[0]
 finally
-    delete pipelines
+    unsafe
+        delete pipelines
 
 [export]
 def test

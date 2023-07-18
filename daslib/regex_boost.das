@@ -28,7 +28,8 @@ class RegexReader : AstReaderMacro
         var regex:Regex
         regex_compile(regex,"{expr.sequence}")
         if !is_valid(regex)
-            delete regex
+            unsafe
+                delete regex
             macro_error(prog,expr.at,"regular expression did not compile")
             return <- [[ExpressionPtr]]
         // TODO: turn into AOT?

@@ -1112,6 +1112,42 @@ namespace das
         return gcf;
     }
 
+    bool TypeDecl::isSafeToDelete() const {
+        das_set<Structure *> dep;
+        return isSafeToDelete(dep);
+    }
+
+    bool TypeDecl::isSafeToDelete ( das_set<Structure*> & dep) const {
+        if ( baseType==Type::tPointer ) {
+            if ( smartPtr ) return true;
+            return !firstType || firstType->baseType==Type::tVoid;
+        } else if ( baseType==Type::tHandle ) {
+            return !annotation->hasNonTrivialDtor() || annotation->canDelete();
+        } else  if ( baseType==Type::tStructure ) {
+            if (structType) {
+                if (dep.find(structType) != dep.end()) return true;
+                dep.insert(structType);
+                return structType->isSafeToDelete(dep);
+            } else {
+                return true;
+            }
+        } else if ( baseType==Type::tTuple || baseType==Type::tVariant || baseType == Type::option ) {
+            for ( const auto & arg : argTypes ) {
+                if ( !arg->isSafeToDelete(dep) ) {
+                    return false;
+                }
+            }
+            return true;
+        } else if ( baseType==Type::tBlock ) {
+            return false;
+        } else if ( baseType==Type::tArray || baseType==Type::tTable ) {
+            if ( firstType && !firstType->isSafeToDelete(dep) ) return false;
+            if ( secondType && !secondType->isSafeToDelete(dep) ) return false;
+        }
+        return true;
+    }
+
+
     bool TypeDecl::isLocal() const {
         das_set<Structure *> dep;
         return isLocal(dep);
