@@ -1548,6 +1548,59 @@ namespace das
         static DAS_THREAD_LOCAL daScriptEnvironment * owned;
         static void ensure();
     };
+
+    struct AstSerializer {
+        FileAccess *        fileAccess = nullptr;
+        ModuleLibrary *     moduleLibrary = nullptr;
+        Module *            thisModule = nullptr;
+        bool                writing = false;
+        size_t              readOffset = 0;
+        vector<uint8_t>     buffer;
+        AstSerializer ( const vector<uint8_t> & from );
+        AstSerializer ( void );
+        AstSerializer ( const AstSerializer & from ) = delete;
+        AstSerializer & operator = ( const AstSerializer & from ) = delete;
+        void write ( void * data, size_t size );
+        void read  ( const void * data, size_t size );
+        void serialize ( void * data, size_t size );
+        void tag ( const char * name );
+        AstSerializer & operator << ( int64_t & value ) { serialize(&value, sizeof(value)); return *this; }
+        AstSerializer & operator << ( uint64_t & value ) { serialize(&value, sizeof(value)); return *this; }
+        AstSerializer & operator << ( int32_t & value ) { serialize(&value, sizeof(value)); return *this; }
+        AstSerializer & operator << ( uint32_t & value ) { serialize(&value, sizeof(value)); return *this; }
+        AstSerializer & operator << ( TypeDeclPtr & type );
+        AstSerializer & operator << ( Type & baseType );
+        AstSerializer & operator << ( string & str );
+        AstSerializer & operator << ( LineInfo & at );
+        AstSerializer & operator << ( FileInfo * & info );
+        AstSerializer & operator << ( Module * & module );
+        template <typename TT>
+        AstSerializer & operator << ( vector<TT> & value ) {
+            if ( writing ) {
+                uint32_t size = (uint32_t) value.size();
+                *this << size;
+            } else {
+                uint32_t size = 0;
+                *this << size;
+                value.resize(size);
+            }
+            for ( auto & v : value ) {
+                *this << v;
+            }
+            return *this;
+        }
+        template <typename EnumType>
+        void serialize_enum ( EnumType & baseType ) {
+            if ( writing ) {
+                uint32_t bt = (uint32_t) baseType;
+                *this << bt;
+            } else {
+                uint32_t bt = 0;
+                *this << bt;
+                baseType = (EnumType) bt;
+            }
+        }
+    };
 }
 
 
