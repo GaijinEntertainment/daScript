@@ -219,6 +219,31 @@ namespace das {
         return *this;
     }
 
+    AstSerializer & AstSerializer::operator << ( Enumeration * & enum_type ) {
+        enum_type->serialize(*this);
+        return *this;
+    }
+
+    AstSerializer & AstSerializer::operator << ( Enumeration::EnumEntry & entry ) {
+        entry.serialize(*this);
+        return *this;
+    }
+
+    AstSerializer & AstSerializer::operator << ( TypeAnnotation * & type_anno ) {
+        type_anno->serialize(*this);
+        return *this;
+    }
+
+    AstSerializer & AstSerializer::operator << ( VariablePtr & var ) {
+        var->serialize(*this);
+        return *this;
+    }
+
+    AstSerializer & AstSerializer::operator << ( Variable * & var ) {
+        var->serialize(*this);
+        return *this;
+    }
+
     AstSerializer & AstSerializer::operator << ( Module * & module ) {
         if ( writing ) {
             *this << module->name;
@@ -232,14 +257,23 @@ namespace das {
         return *this;
     }
 
+    AstSerializer & AstSerializer::operator << ( Function::AliasInfo & alias_info ) {
+        alias_info.serialize(*this);
+        return *this;
+    }
+    AstSerializer & AstSerializer::operator << ( InferHistory & history ) {
+        history.serialize(*this);
+        return *this;
+    }
+
 // typedecl
 
     void TypeDecl::serialize ( AstSerializer & ser ) {
         ser.tag("TypeDecl");
         ser << baseType;
         ser << structType;
-        // ser << enumType;
-        // ser << annotation;
+        ser << enumType;
+        ser << annotation;
         ser << dim;
         ser << dimExpr;
         ser << flags;
@@ -306,6 +340,30 @@ namespace das {
         ser << flags;
     }
 
+    void Enumeration::EnumEntry::serialize( AstSerializer & ser ) {
+        ser << name;
+        ser << cppName;
+        ser << at;
+        ser << value;
+    }
+
+    void Enumeration::serialize ( AstSerializer & ser ) {
+        ser << name;
+        ser << cppName;
+        ser << at;
+        ser << list;
+        ser << module;
+        ser << external;
+        ser << baseType;
+        ser << annotations;
+        ser << isPrivate;
+        ptr_ref_count::serialize(ser);
+    }
+
+    void TypeAnnotation::serialize ( AstSerializer & ser ) {
+        Annotation::serialize(ser);
+    }
+
     void Structure::serialize ( AstSerializer & ser ) {
         ser.tag("Structure");
         ser << name;
@@ -319,13 +377,44 @@ namespace das {
         ptr_ref_count::serialize(ser);
     }
 
+    void Variable::serialize ( AstSerializer & ser ) {
+        ser << name;
+        ser << aka;
+        ser << type;
+        ser << init;
+        ser << source;
+        ser << at;
+        ser << index;
+        ser << stackTop;
+        ser << extraLocalOffset;
+        ser << module;
+        ser << useFunctions;
+        ser << useGlobalVariables;
+        ser << initStackSize;
+        ser << flags;
+        ser << access_flags;
+        ser << annotation;
+        ptr_ref_count::serialize(ser);
+    }
+
+    void Function::AliasInfo::serialize ( AstSerializer & ser ) {
+        ser << var;
+        ser << func;
+        ser << viaPointer;
+    }
+
+    void InferHistory::serialize ( AstSerializer & ser ) {
+        ser << at;
+        ser << func;
+    }
+
 // function
 
     void Function::serialize ( AstSerializer & ser ) {
         ser.tag("Function");
-        // ser << annotations;
+        ser << annotations;
         ser << name;
-        // ser << arguments;
+        ser << arguments;
         ser << result;
         ser << body;
         ser << index;
@@ -334,112 +423,20 @@ namespace das {
         ser << at;
         ser << atDecl;
         ser << module;
-        // ser << useFunctions;
-
+        ser << useFunctions;
+        ser << useGlobalVariables;
+        ser << classParent;
+        ser << resultAliases;
+        ser << argumentAliases;
+        ser << resultAliasesGlobals;
+        ser << flags;
+        ser << moreFlags;
+        ser << sideEffectFlags;
+        ser << inferStack;
+        ser << fromGeneric;
+        ser << hash;
+        ser << aotHash;
     }
-
-/*
-        AnnotationList      annotations;
-        string              name;
-        vector<VariablePtr> arguments;
-        TypeDeclPtr         result;
-        ExpressionPtr       body;
-        int                 index = -1;
-        uint32_t            totalStackSize = 0;
-        int32_t             totalGenLabel = 0;
-        LineInfo            at, atDecl;
-        Module *            module = nullptr;
-        das_set<Function *>     useFunctions;
-        das_set<Variable *>     useGlobalVariables;
-        Structure *         classParent = nullptr;
-    // this is what we use for alias checking
-        vector<int>         resultAliases;
-        vector<vector<int>> argumentAliases;
-        struct AliasInfo {
-            Variable *  var = nullptr;
-            Function *  func = nullptr;
-            bool        viaPointer = false;
-        };
-        vector<AliasInfo>  resultAliasesGlobals;
-    // end of what we use for alias checking
-        union {
-            struct {
-                bool    builtIn : 1;
-                bool    policyBased : 1;
-                bool    callBased : 1;
-                bool    interopFn : 1;
-                bool    hasReturn: 1;
-                bool    copyOnReturn : 1;
-                bool    moveOnReturn : 1;
-                bool    exports : 1;
-
-                bool    init : 1;
-                bool    addr : 1;
-                bool    used : 1;
-                bool    fastCall : 1;
-                bool    knownSideEffects : 1;
-                bool    hasToRunAtCompileTime : 1;
-                bool    unsafeOperation : 1;
-                bool    unsafeDeref : 1;
-
-                bool    hasMakeBlock : 1;
-                bool    aotNeedPrologue : 1;
-                bool    noAot : 1;
-                bool    aotHybrid : 1;
-                bool    aotTemplate : 1;
-                bool    generated : 1;
-                bool    privateFunction : 1;
-                bool    generator : 1;
-
-                bool    lambda : 1;
-                bool    firstArgReturnType : 1;
-                bool    noPointerCast : 1;
-                bool    isClassMethod : 1;
-                bool    isTypeConstructor : 1;
-                bool    shutdown : 1;
-                bool    anyTemplate : 1;
-                bool    macroInit : 1;
-            };
-            uint32_t flags = 0;
-        };
-
-        union {
-            struct {
-                bool    macroFunction : 1;
-                bool    needStringCast : 1;
-                bool    aotHashDeppendsOnArguments : 1;
-                bool    lateInit : 1;
-                bool    requestJit : 1;
-                bool    unsafeOutsideOfFor : 1;
-                bool    skipLockCheck : 1;
-                bool    safeImplicit : 1;
-
-                bool    deprecated : 1;
-                bool    aliasCMRES : 1;
-                bool    neverAliasCMRES : 1;
-                bool    addressTaken : 1;
-                bool    propertyFunction : 1;
-                bool    pinvoke : 1;
-            };
-            uint32_t moreFlags = 0;
-
-        };
-        union {
-            struct {
-                bool unsafeFunction : 1;
-                bool userScenario : 1;
-                bool modifyExternal : 1;
-                bool modifyArgument : 1;
-                bool accessGlobal : 1;
-                bool invoke : 1;
-            };
-            uint32_t    sideEffectFlags = 0;
-        };
-        vector<InferHistory> inferStack;
-        Function * fromGeneric = nullptr;
-        uint64_t hash = 0;
-        uint64_t aotHash = 0;
-*/
 
     void Expression::serialize ( AstSerializer & /* ser */ ) {
         // TODO: implement

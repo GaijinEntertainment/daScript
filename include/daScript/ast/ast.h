@@ -149,6 +149,7 @@ namespace das
             string          cppName;
             LineInfo        at;
             ExpressionPtr   value;
+            void serialize( AstSerializer & ser );
         };
     public:
         Enumeration() = default;
@@ -166,6 +167,7 @@ namespace das
         TypeDeclPtr makeBaseType() const;
         Type getEnumType() const;
         TypeDeclPtr makeEnumType() const;
+        void serialize ( AstSerializer & ser );
     public:
         string              name;
         string              cppName;
@@ -295,6 +297,7 @@ namespace das
         uint64_t getMangledNameHash() const;
         bool isAccessUnused() const;
         bool isCtorInitialized() const;
+        void serialize ( AstSerializer & ser );
         string          name;
         string          aka;        // name alias
         TypeDeclPtr     type;
@@ -503,6 +506,8 @@ namespace das
         virtual bool isYetAnotherVectorTemplate() const { return false; }   // has [], there is length(x), data is linear in memory
         // factory
         virtual void * factory () const { return nullptr; }
+        // serialization
+        void serialize ( AstSerializer & ser );
     };
 
     struct StructureAnnotation : Annotation {
@@ -733,6 +738,7 @@ namespace das
         Function *  func = nullptr;
         InferHistory() = default;
         InferHistory(const LineInfo & a, const FunctionPtr & p) : at(a), func(p.get()) {}
+        void serialize ( AstSerializer & ser );
     };
     class Function : public ptr_ref_count {
     public:
@@ -796,6 +802,7 @@ namespace das
             Variable *  var = nullptr;
             Function *  func = nullptr;
             bool        viaPointer = false;
+            void serialize ( AstSerializer & ser );
         };
         vector<AliasInfo>  resultAliasesGlobals;
     // end of what we use for alias checking
@@ -1601,6 +1608,14 @@ namespace das
         AstSerializer & operator << ( Module * & module );
         AstSerializer & operator << ( FileInfo * & info );
         AstSerializer & operator << ( Structure * & struct_ );
+        AstSerializer & operator << ( Enumeration * & enum_type );
+        AstSerializer & operator << ( Enumeration::EnumEntry & entry );
+        AstSerializer & operator << ( TypeAnnotation * & type_anno );
+        AstSerializer & operator << ( VariablePtr & var );
+        AstSerializer & operator << ( Variable * & var );
+        AstSerializer & operator << ( Function::AliasInfo & alias_info );
+        AstSerializer & operator << ( InferHistory & history );
+
         template <typename TT>
         AstSerializer & operator << ( vector<TT> & value ) {
             if ( writing ) {
@@ -1640,6 +1655,30 @@ namespace das
                     deser.emplace(std::move(k), v);
                 }
 
+                value = std::move(deser);
+            }
+
+            return *this;
+        }
+        template<typename TT>
+        AstSerializer & operator << ( das_set<TT> & value ) {
+
+            if ( writing ) {
+                auto size = value.size();
+                *this << size;
+                for ( auto & item : value ) {
+                    *this << item;
+                }
+            } else {
+                uint32_t size = 0;
+                *this << size;
+                das_set<TT> deser;
+                deser.reserve(size);
+                for ( size_t i = 0; i < size; i++ ) {
+                    TT v;
+                    *this << v;
+                    deser.emplace(std::move(v));
+                }
                 value = std::move(deser);
             }
 
