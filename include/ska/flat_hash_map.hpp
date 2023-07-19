@@ -624,9 +624,9 @@ public:
         deallocate_data(new_buckets, num_buckets, old_max_lookups);
     }
 
-    void reserve(size_t num_elements)
+    void reserve(size_t num_elements_)
     {
-        size_t required_buckets = num_buckets_for_reserve(num_elements);
+        size_t required_buckets = num_buckets_for_reserve(num_elements_);
         if (required_buckets > bucket_count())
             rehash(required_buckets);
     }
