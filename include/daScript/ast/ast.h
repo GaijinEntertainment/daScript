@@ -94,6 +94,7 @@ namespace das
             : type(Type::tFloat), name(n), fValue(f), at(loc) {}
         AnnotationArgument ( const string & n, AnnotationArgumentList * al, const LineInfo & loc = LineInfo() )
             : type(Type::none), name(n), aList(al), at(loc) {}
+        void serialize ( AstSerializer & ser );
     };
 
     typedef vector<AnnotationArgument> AnnotationArguments;
@@ -102,6 +103,7 @@ namespace das
         const AnnotationArgument * find ( const string & name, Type type ) const;
         bool getBoolOption(const string & name, bool def = false) const;
         int32_t getIntOption(const string & name, int32_t def = false) const;
+        void serialize ( AstSerializer & ser );
     };
 
     struct Annotation : BasicAnnotation {
@@ -116,6 +118,7 @@ namespace das
         virtual bool rtti_isBasicStructureAnnotation() const { return false;  }
         string describe() const { return name; }
         string getMangledName() const;
+        void serialize( AstSerializer & ser );
         virtual void log ( TextWriter & ss, const AnnotationDeclaration & decl ) const;
         Module *    module = nullptr;
     };
@@ -131,6 +134,7 @@ namespace das
             uint32_t            flags;
         };
         string getMangledName() const;
+        void serialize( AstSerializer & ser );
     };
     typedef smart_ptr<AnnotationDeclaration> AnnotationDeclarationPtr;
 
@@ -215,6 +219,7 @@ namespace das
                     }
                 }
             }
+            void serialize ( AstSerializer & ser );
         };
     public:
         Structure() {}
@@ -249,6 +254,7 @@ namespace das
         string describe() const { return name; }
         string getMangledName() const;
         bool hasAnyInitializers() const;
+        void serialize( AstSerializer & ser );
     public:
         string                          name;
         vector<FieldDeclaration>        fields;
@@ -1572,20 +1578,29 @@ namespace das
         void serialize ( void * data, size_t size );
         void tag ( const char * name );
         void patch();
+        // TODO: concepts
+        // template <typename TT>
+        // AstSerializer & operator << ( TT * & value ) { serialize(&value, sizeof(value)); return *this; }
         AstSerializer & operator << ( bool & value ) { serialize(&value, sizeof(value)); return *this; }
         AstSerializer & operator << ( int64_t & value ) { serialize(&value, sizeof(value)); return *this; }
         AstSerializer & operator << ( uint64_t & value ) { serialize(&value, sizeof(value)); return *this; }
         AstSerializer & operator << ( int32_t & value ) { serialize(&value, sizeof(value)); return *this; }
         AstSerializer & operator << ( uint32_t & value ) { serialize(&value, sizeof(value)); return *this; }
+        AstSerializer & operator << ( float & value ) { serialize(&value, sizeof(value)); return *this; }
         AstSerializer & operator << ( TypeDeclPtr & type );
+        AstSerializer & operator << ( AnnotationArgument & arg );
+        AstSerializer & operator << ( AnnotationDeclarationPtr & annotation_decl );
+        AstSerializer & operator << ( AnnotationPtr & anno );
+        AstSerializer & operator << ( Structure::FieldDeclaration & field_declaration );
         AstSerializer & operator << ( ExpressionPtr & expr );
         AstSerializer & operator << ( FunctionPtr & func );
         AstSerializer & operator << ( Function * & func );
         AstSerializer & operator << ( Type & baseType );
         AstSerializer & operator << ( string & str );
         AstSerializer & operator << ( LineInfo & at );
-        AstSerializer & operator << ( FileInfo * & info );
         AstSerializer & operator << ( Module * & module );
+        AstSerializer & operator << ( FileInfo * & info );
+        AstSerializer & operator << ( Structure * & struct_ );
         template <typename TT>
         AstSerializer & operator << ( vector<TT> & value ) {
             if ( writing ) {
@@ -1596,9 +1611,38 @@ namespace das
                 *this << size;
                 value.resize(size);
             }
-            for ( auto & v : value ) {
+            for ( TT & v : value ) {
                 *this << v;
             }
+            return *this;
+        }
+        // template <typename TT>
+        AstSerializer & operator << ( das_hash_map<string, int32_t> & value ) {
+            using TT = int32_t;
+
+            if ( writing ) {
+                auto size = value.size();
+                *this << size;
+                for ( auto & item : value ) {
+                    *this << item.first;
+                    *this << item.second;
+                }
+            } else {
+                uint32_t size = 0;
+                *this << size;
+                das_hash_map<string, TT> deser;
+                deser.reserve(size);
+                for ( size_t i = 0; i < size; i++ ) {
+                    string k;
+                    TT v;
+                    *this << k;
+                    *this << v;
+                    deser.emplace(std::move(k), v);
+                }
+
+                value = std::move(deser);
+            }
+
             return *this;
         }
         template <typename EnumType>

@@ -15,16 +15,16 @@ namespace das {
         writing = true;
     }
 
-    void AstSerializer::patch() {
-        for ( auto & p : functionRefs ) {
-            auto it = functionMap.find(p.second);
-            if ( it == functionMap.end() ) {
-                DAS_FATAL_ERROR("ast serializer function ref not found");
-            } else {
-                *p.first = it->second.get();
-            }
-        }
-    }
+    // void AstSerializer::patch() {
+    //     for ( auto & p : functionRefs ) {
+    //         auto it = functionMap.find(p.second);
+    //         if ( it == functionMap.end() ) {
+    //             DAS_FATAL_ERROR("ast serializer function ref not found");
+    //         } else {
+    //             *p.first = it->second.get();
+    //         }
+    //     }
+    // }
 
     void AstSerializer::write ( void * data, size_t size ) {
         auto oldSize = buffer.size();
@@ -60,6 +60,8 @@ namespace das {
             }
         }
     }
+
+    ////////////////////////////////////////////////////////////////////////////
 
     AstSerializer & AstSerializer::operator << ( Type & baseType ) {
         serialize_enum(baseType);
@@ -159,6 +161,28 @@ namespace das {
         return *this;
     }
 
+    AstSerializer & AstSerializer::operator << ( AnnotationArgument & arg ) {
+        arg.serialize(*this);
+        return *this;
+    }
+
+    AstSerializer & AstSerializer::operator << ( AnnotationDeclarationPtr & annotation_decl ) {
+        if ( !writing ) annotation_decl = make_smart<AnnotationDeclaration>();
+        annotation_decl->serialize(*this);
+        return *this;
+    }
+
+    AstSerializer & AstSerializer::operator << ( AnnotationPtr & anno ) {
+        if ( !writing ) anno = make_smart<Annotation>("", "");
+        anno->serialize(*this);
+        return *this;
+    }
+
+    AstSerializer & AstSerializer::operator << ( Structure::FieldDeclaration & field_declaration ) {
+        field_declaration.serialize(*this);
+        return *this;
+    }
+
     AstSerializer & AstSerializer::operator << ( string & str ) {
         if ( writing ) {
             uint32_t size = (uint32_t) str.size();
@@ -188,6 +212,13 @@ namespace das {
         return *this;
     }
 
+    AstSerializer & AstSerializer::operator << ( Structure * & struct_ ) {
+        if ( writing && struct_ == nullptr ) return *this;
+        if ( struct_ == nullptr ) struct_ = new Structure;
+        struct_->serialize(*this);
+        return *this;
+    }
+
     AstSerializer & AstSerializer::operator << ( Module * & module ) {
         if ( writing ) {
             *this << module->name;
@@ -206,11 +237,9 @@ namespace das {
     void TypeDecl::serialize ( AstSerializer & ser ) {
         ser.tag("TypeDecl");
         ser << baseType;
-        /*
         ser << structType;
-        ser << enumType;
-        ser << annotation;
-        */
+        // ser << enumType;
+        // ser << annotation;
         ser << dim;
         ser << dimExpr;
         ser << flags;
@@ -221,6 +250,73 @@ namespace das {
         ser << secondType;
         ser << argTypes;
         ser << argNames;
+    }
+
+    void AnnotationArgument::serialize ( AstSerializer & ser ) {
+        ser.tag("AnnotationArgument");
+
+        ser << type;
+        ser << name;
+        ser << sValue;
+        ser << iValue;
+        ser << at;
+    }
+
+    void AnnotationArgumentList::serialize ( AstSerializer & ser ) {
+        ser << * static_cast <AnnotationArguments *> (this);
+    }
+
+    void AnnotationDeclaration::serialize ( AstSerializer & ser ) {
+        ser << annotation;
+        ser << arguments;
+        ser << at;
+        ser << flags;
+        ptr_ref_count::serialize(ser);
+    }
+
+    void Annotation::serialize ( AstSerializer & ser ) {
+        ser << module;
+        BasicAnnotation::serialize(ser);
+    }
+
+    void BasicAnnotation::serialize ( AstSerializer & ser ) {
+        ser << name;
+        ser << cppName;
+        ptr_ref_count::serialize(ser);
+    }
+
+    void ptr_ref_count::serialize ( AstSerializer & ser ) {
+#if DAS_SMART_PTR_ID
+        ser << ref_count_id;
+#endif
+#if DAS_SMART_PTR_MAGIC
+        ser << magic;
+#endif
+        ser << ref_count;
+    }
+
+    void Structure::FieldDeclaration::serialize ( AstSerializer & ser ) {
+        ser.tag("FieldDeclaration");
+        ser << name;
+        ser << type;
+        ser << init;
+        ser << annotation;
+        ser << at;
+        ser << offset;
+        ser << flags;
+    }
+
+    void Structure::serialize ( AstSerializer & ser ) {
+        ser.tag("Structure");
+        ser << name;
+        ser << fields;
+        ser << fieldLookup;
+        ser << at;
+        ser << module;
+        ser << parent; // parent could be in the current module or in some other module
+        ser << annotations;
+        ser << flags;
+        ptr_ref_count::serialize(ser);
     }
 
 // function
@@ -345,7 +441,7 @@ namespace das {
         uint64_t aotHash = 0;
 */
 
-    void Expression::serialize ( AstSerializer & ser ) {
+    void Expression::serialize ( AstSerializer & /* ser */ ) {
         // TODO: implement
     }
 
