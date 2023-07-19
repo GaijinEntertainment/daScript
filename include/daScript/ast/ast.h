@@ -495,6 +495,8 @@ namespace das
         virtual void walk ( DataWalker &, void * ) { }
         // familiar patterns
         virtual bool isYetAnotherVectorTemplate() const { return false; }   // has [], there is length(x), data is linear in memory
+        // factory
+        virtual void * factory () const { return nullptr; }
     };
 
     struct StructureAnnotation : Annotation {
@@ -609,6 +611,7 @@ namespace das
         virtual Expression * tail() { return this; }
         virtual bool swap_tail ( Expression *, Expression * ) { return false; }
         virtual uint32_t getEvalFlags() const { return 0; }
+        virtual void serialize ( AstSerializer & ser );
         LineInfo    at;
         TypeDeclPtr type;
         const char * __rtti = nullptr;
@@ -765,6 +768,7 @@ namespace das
             return this;
         }
         Function * getOrigin() const;
+        void serialize ( AstSerializer & ser );
     public:
         AnnotationList      annotations;
         string              name;
@@ -1553,9 +1557,12 @@ namespace das
         FileAccess *        fileAccess = nullptr;
         ModuleLibrary *     moduleLibrary = nullptr;
         Module *            thisModule = nullptr;
+        Module *            astModule = nullptr;
         bool                writing = false;
         size_t              readOffset = 0;
         vector<uint8_t>     buffer;
+        das_hash_map<uint64_t,FunctionPtr>  functionMap;
+        vector<pair<Function **,uint64_t>>  functionRefs;
         AstSerializer ( const vector<uint8_t> & from );
         AstSerializer ( void );
         AstSerializer ( const AstSerializer & from ) = delete;
@@ -1564,11 +1571,16 @@ namespace das
         void read  ( const void * data, size_t size );
         void serialize ( void * data, size_t size );
         void tag ( const char * name );
+        void patch();
+        AstSerializer & operator << ( bool & value ) { serialize(&value, sizeof(value)); return *this; }
         AstSerializer & operator << ( int64_t & value ) { serialize(&value, sizeof(value)); return *this; }
         AstSerializer & operator << ( uint64_t & value ) { serialize(&value, sizeof(value)); return *this; }
         AstSerializer & operator << ( int32_t & value ) { serialize(&value, sizeof(value)); return *this; }
         AstSerializer & operator << ( uint32_t & value ) { serialize(&value, sizeof(value)); return *this; }
         AstSerializer & operator << ( TypeDeclPtr & type );
+        AstSerializer & operator << ( ExpressionPtr & expr );
+        AstSerializer & operator << ( FunctionPtr & func );
+        AstSerializer & operator << ( Function * & func );
         AstSerializer & operator << ( Type & baseType );
         AstSerializer & operator << ( string & str );
         AstSerializer & operator << ( LineInfo & at );

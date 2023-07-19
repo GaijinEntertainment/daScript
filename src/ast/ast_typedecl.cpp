@@ -10,28 +10,6 @@ namespace das
         return library.makeHandleType(typeName);
     }
 
-    void TypeDecl::serialize ( AstSerializer & ser ) {
-        ser.tag("TypeDecl");
-        ser << baseType;
-        /*
-        ser << structType;
-        ser << enumType;
-        ser << annotation;
-        */
-        ser << dim;
-        /*
-        ser << dimExpr;
-        */
-        ser << flags;
-        ser << alias;
-        ser << at;
-        ser << module;
-        ser << firstType;
-        ser << secondType;
-        ser << argTypes;
-        ser << argNames;
-    }
-
     Annotation * TypeDecl::isPointerToAnnotation() const {
         if ( baseType!=Type::tPointer || !firstType || firstType->baseType!=Type::tHandle ) {
             return nullptr;
