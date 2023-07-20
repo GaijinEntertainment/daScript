@@ -383,12 +383,7 @@ namespace das {
 
     void AnnotationArgument::serialize ( AstSerializer & ser ) {
         ser.tag("AnnotationArgument");
-
-        ser << type;
-        ser << name;
-        ser << sValue;
-        ser << iValue;
-        ser << at;
+        ser << type << name << sValue << iValue << at;
     }
 
     void AnnotationArgumentList::serialize ( AstSerializer & ser ) {
@@ -396,10 +391,7 @@ namespace das {
     }
 
     void AnnotationDeclaration::serialize ( AstSerializer & ser ) {
-        ser << annotation;
-        ser << arguments;
-        ser << at;
-        ser << flags;
+        ser << annotation << arguments << at << flags;
         ptr_ref_count::serialize(ser);
     }
 
@@ -409,8 +401,7 @@ namespace das {
     }
 
     void BasicAnnotation::serialize ( AstSerializer & ser ) {
-        ser << name;
-        ser << cppName;
+        ser << name << cppName;
         ptr_ref_count::serialize(ser);
     }
 
@@ -426,32 +417,16 @@ namespace das {
 
     void Structure::FieldDeclaration::serialize ( AstSerializer & ser ) {
         ser.tag("FieldDeclaration");
-        ser << name;
-        ser << type;
-        ser << init;
-        ser << annotation;
-        ser << at;
-        ser << offset;
-        ser << flags;
+        ser << name << type << ini << annotation << at << offset << flags;
     }
 
     void Enumeration::EnumEntry::serialize( AstSerializer & ser ) {
-        ser << name;
-        ser << cppName;
-        ser << at;
-        ser << value;
+        ser << name << cppName << at << value;
     }
 
     void Enumeration::serialize ( AstSerializer & ser ) {
-        ser << name;
-        ser << cppName;
-        ser << at;
-        ser << list;
-        ser << module;
-        ser << external;
-        ser << baseType;
-        ser << annotations;
-        ser << isPrivate;
+        ser << name << cppName << at << list << module << external << baseType
+            << annotations << isPrivate;
         ptr_ref_count::serialize(ser);
     }
 
@@ -461,84 +436,38 @@ namespace das {
 
     void Structure::serialize ( AstSerializer & ser ) {
         ser.tag("Structure");
-        ser << name;
-        ser << fields;
-        ser << fieldLookup;
-        ser << at;
-        ser << module;
-        ser << parent; // parent could be in the current module or in some other module
-        ser << annotations;
-        ser << flags;
+        ser << name << fields << fieldLookup << at << module
+            << parent // parent could be in the current module or in some other
+                      // module
+            << annotations << flags;
         ptr_ref_count::serialize(ser);
     }
 
     void Variable::serialize ( AstSerializer & ser ) {
-        ser << name;
-        ser << aka;
-        ser << type;
-        ser << init;
-        ser << source;
-        ser << at;
-        ser << index;
-        ser << stackTop;
-        ser << extraLocalOffset;
-        ser << module;
-        ser << useFunctions;
-        ser << useGlobalVariables;
-        ser << initStackSize;
-        ser << flags;
-        ser << access_flags;
-        ser << annotation;
+        ser << name << aka << type << init << source << at << index << stackTop
+            << extraLocalOffset << module << useFunctions << useGlobalVariables
+            << initStackSize << flags << access_flags << annotation;
         ptr_ref_count::serialize(ser);
     }
 
     void Function::AliasInfo::serialize ( AstSerializer & ser ) {
-        ser << var;
-        ser << func;
-        ser << viaPointer;
+        ser << var << func << viaPointer;
     }
 
     void InferHistory::serialize ( AstSerializer & ser ) {
-        ser << at;
-        ser << func;
+        ser << at << func;
     }
 
 // function
 
     void Function::serialize ( AstSerializer & ser ) {
         ser.tag("Function");
-        ser << annotations;
-        ser << name;
-        ser << arguments;
-        ser << result;
-        ser << body;
-        ser << index;
-        ser << totalStackSize;
-        ser << totalGenLabel;
-        ser << at;
-        ser << atDecl;
-        ser << module;
-        ser << useFunctions;
-        ser << useGlobalVariables;
-        ser << classParent;
-        ser << resultAliases;
-        ser << argumentAliases;
-        ser << resultAliasesGlobals;
-        ser << flags;
-        ser << moreFlags;
-        ser << sideEffectFlags;
-        ser << inferStack;
-        ser << fromGeneric;
-        ser << hash;
-        ser << aotHash;
-
-        ser << annotations << name << arguments << result <<
-            body << index << totalStackSize << totalGenLabel <<
-            at << atDecl << module << useFunctions << useGlobalVariables <<
-            classParent << resultAliases << argumentAliases <<
-            resultAliasesGlobals << flags << moreFlags << sideEffectFlags <<
-            inferStack << fromGeneric << hash << aotHash;
-
+        ser << annotations << name << arguments << result << body << index
+            << totalStackSize << totalGenLabel << at << atDecl << module
+            << useFunctions << useGlobalVariables << classParent
+            << resultAliases << argumentAliases << resultAliasesGlobals << flags
+            << moreFlags << sideEffectFlags << inferStack << fromGeneric << hash
+            << aotHash;
     }
 
 // Expressions
@@ -605,41 +534,27 @@ namespace das {
 
     void ExprBlock::serialize ( AstSerializer & ser ) {
         Expression::serialize(ser);
-        ser << list << finalList
-            << returnType << arguments
-            << stackTop << stackVarTop << stackVarBottom << stackCleanVars
-            << maxLabelIndex
-            << annotations << annotationData << annotationDataSid
-            << blockFlags
+        ser << list << finalList << returnType << arguments << stackTop
+            << stackVarTop << stackVarBottom << stackCleanVars << maxLabelIndex
+            << annotations << annotationData << annotationDataSid << blockFlags
             << inFunction;
     }
 
     void ExprVar::serialize ( AstSerializer & ser ) {
         Expression::serialize(ser);
-        ser << name
-        << variable
-        << pBlock
-        << argumentIndex
-        << varFlags;
+        ser << name << variable << pBlock << argumentIndex << varFlags;
     }
 
     void ExprTag::serialize ( AstSerializer & ser ) {
-        ser << subexpr
-        << value
-        << name;
+        ser << subexpr << value << name;
         Expression::serialize(ser);
     }
 
     void ExprField::serialize ( AstSerializer & ser ) {
-        ser << value
-        << name
-        << atField
-        // << field // TODO: operator << const FieldDeclaration*
-        << fieldIndex
-        << annotation
-        << underClone
-        << derefFlags
-        << fieldFlags;
+        ser << value << name << atField
+            // << field // TODO: operator << const FieldDeclaration*
+            << fieldIndex << annotation << underClone << derefFlags
+            << fieldFlags;
         Expression::serialize(ser);
     }
 
@@ -726,14 +641,8 @@ namespace das {
 
     void ExprReturn::serialize ( AstSerializer & ser ) {
         Expression::serialize(ser);
-        ser
-          << subexpr
-          << returnFlags
-          << stackTop
-          << refStackTop
-          << returnFunc
-          << block
-          << returnType;
+        ser << subexpr << returnFlags << stackTop << refStackTop << returnFunc
+            << block << returnType;
     }
 
     void ExprBreak::serialize ( AstSerializer & ser ) {
@@ -805,30 +714,22 @@ namespace das {
     // struct ExprLikeCall -- no new fields
 
     void ExprMakeBlock::serialize(AstSerializer & ser) {
-        ser << capture
-            << block
-            << stackTop
-            << mmFlags;
+        ser << capture << block << stackTop << mmFlags;
         Expression::serialize(ser);
     }
 
     void ExprMakeGenerator::serialize(AstSerializer & ser) {
-        ser << iterType
-            << capture;
+        ser << iterType << capture;
         ExprLooksLikeCall::serialize(ser);
     }
 
     void ExprYield::serialize(AstSerializer & ser) {
-        ser << subexpr
-            << returnFlags;
+        ser << subexpr << returnFlags;
         Expression::serialize(ser);
     }
 
     void ExprInvoke::serialize(AstSerializer & ser) {
-        ser << stackTop
-            << doesNotNeedSp
-            << isInvokeMethod
-            << cmresAlias;
+        ser << stackTop << doesNotNeedSp << isInvokeMethod << cmresAlias;
         ExprLikeCall<ExprInvoke>::serialize(ser);
     }
 
@@ -880,69 +781,42 @@ namespace das {
     }
 
     void ExprTypeInfo::serialize(AstSerializer & ser) {
-        ser
-            << trait
-            << subexpr
-            << typeexpr
-            << subtrait
-            << extratrait
-            << macro;
+        ser << trait << subexpr << typeexpr << subtrait << extratrait << macro;
         Expression::serialize(ser);
     }
 
     void ExprIs::serialize(AstSerializer & ser) {
-        ser
-            << subexpr
-            << typeexpr;
+        ser << subexpr << typeexpr;
         Expression::serialize(ser);
     }
 
     void ExprAscend::serialize(AstSerializer & ser) {
-        ser
-            << subexpr
-            << ascType
-            << stackTop
-            << ascendFlags;
+        ser << subexpr << ascType << stackTop << ascendFlags;
         Expression::serialize(ser);
     }
 
     void ExprCast::serialize(AstSerializer & ser) {
-        ser
-            << subexpr
-            << castType
-            << castFlags;
+        ser << subexpr << castType << castFlags;
         Expression::serialize(ser);
     }
 
     void ExprNew::serialize(AstSerializer & ser) {
-        ser
-            << typeexpr
-            << initializer;
+        ser << typeexpr << initializer;
         ExprCallFunc::serialize(ser);
     }
 
     void ExprCall::serialize(AstSerializer & ser) {
-        ser
-            << doesNotNeedSp
-            << cmresAlias;
+        ser << doesNotNeedSp << cmresAlias;
         ExprCallFunc::serialize(ser);
     }
 
     void ExprIfThenElse::serialize ( AstSerializer & ser ) {
-        ser
-            << cond
-            << if_true
-            << if_false
-            << ifFlags;
+        ser << cond << if_true << if_false << ifFlags;
         Expression::serialize(ser);
     }
 
     void MakeFieldDecl::serialize ( AstSerializer & ser ) {
-        ser << at
-            << name
-            << value
-            << tag
-            << flags;
+        ser << at << name << value << tag << flags;
         ptr_ref_count::serialize(ser);
     }
 
@@ -952,62 +826,42 @@ namespace das {
     }
 
     void ExprNamedCall::serialize ( AstSerializer & ser ) {
-        ser
-            << name
-            << nonNamedArguments
-            << arguments
-            << argumentsFailedToInfer;
+        ser << name << nonNamedArguments << arguments << argumentsFailedToInfer;
         Expression::serialize(ser);
     }
 
     void ExprMakeLocal::serialize ( AstSerializer & ser ) {
-        ser
-            << makeType
-            << stackTop
-            << extraOffset
-            << makeFlags;
+        ser << makeType << stackTop << extraOffset << makeFlags;
         Expression::serialize(ser);
     }
 
     void ExprMakeStruct::serialize ( AstSerializer & ser ) {
-        ser
-            << structs
-            << block
-            << makeStructFlags;
+        ser << structs << block << makeStructFlags;
         ExprMakeLocal::serialize(ser);
     }
 
     void ExprMakeVariant::serialize ( AstSerializer & ser ) {
-        ser
-            << variants;
+        ser << variants;
         ExprMakeLocal::serialize(ser);
     }
 
     void ExprMakeArray::serialize ( AstSerializer & ser ) {
-        ser
-            << recordType
-            << values;
+        ser << recordType << values;
         ExprMakeLocal::serialize(ser);
     }
 
     void ExprMakeTuple::serialize ( AstSerializer & ser ) {
-        ser
-            << isKeyValue;
+        ser << isKeyValue;
         ExprMakeArray::serialize(ser);
     }
 
     void ExprArrayComprehension::serialize ( AstSerializer & ser ) {
-        ser
-            << exprFor
-            << exprWhere
-            << subexpr
-            << generatorSyntax;
+        ser << exprFor << exprWhere << subexpr << generatorSyntax;
         Expression::serialize(ser);
     }
 
     void ExprTypeDecl::serialize ( AstSerializer & ser ) {
-        ser
-            << typeexpr;
+        ser << typeexpr;
         Expression::serialize(ser);
     }
 
@@ -1026,3 +880,4 @@ namespace das {
         ptr_ref_count::serialize(ser);
     }
 }
+
