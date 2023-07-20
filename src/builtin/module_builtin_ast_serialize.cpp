@@ -231,6 +231,12 @@ namespace das {
     }
 
     AstSerializer & AstSerializer::operator << ( Enumeration * & enum_type ) {
+        //TODO:
+        enum_type->serialize(*this);
+        return *this;
+    }
+
+    AstSerializer & AstSerializer::operator << ( EnumerationPtr & enum_type ) {
         enum_type->serialize(*this);
         return *this;
     }
@@ -306,6 +312,52 @@ namespace das {
 
     AstSerializer & AstSerializer::operator << ( InferHistory & history ) {
         history.serialize(*this);
+        return *this;
+    }
+
+    AstSerializer & AstSerializer::operator << ( ExprCallMacro * & macro ) {
+        bool null = macro == nullptr;
+        *this << null;
+        if ( !null ) {
+            if ( !writing ) macro = new ExprCallMacro();
+            macro->serialize(*this);
+        }
+        return *this;
+    }
+
+    AstSerializer & AstSerializer::operator << ( CallMacro * & macro ) {
+        bool null = macro == nullptr;
+        *this << null;
+        if ( !null ) {
+            if ( !writing ) macro = new CallMacro();
+            macro->serialize(*this);
+        }
+        return *this;
+    }
+
+    AstSerializer & AstSerializer::operator << ( CaptureEntry & entry ) {
+        *this << entry.name;
+        serialize_enum<CaptureMode>(entry.mode);
+        return *this;
+    }
+
+    AstSerializer & AstSerializer::operator << ( MakeFieldDeclPtr & make_field_decl_ptr ) {
+        make_field_decl_ptr->serialize(*this);
+        return *this;
+    }
+
+    AstSerializer & AstSerializer::operator << ( MakeStructPtr & make_struct_ptr ) {
+        make_struct_ptr->serialize(*this);
+        return *this;
+    }
+
+    AstSerializer & AstSerializer::operator << ( TypeInfoMacro * & macro ) {
+        bool null = macro == nullptr;
+        *this << null;
+        if ( !null ) {
+            if ( !writing ) macro = new TypeInfoMacro("");
+            macro->serialize(*this);
+        }
         return *this;
     }
 
@@ -591,47 +643,386 @@ namespace das {
         Expression::serialize(ser);
     }
 
-    // void ExprIsVariant::serialize ( AstSerializer & ser ) {}
-    // void ExprAsVariant::serialize ( AstSerializer & ser ) {}
-    // void ExprSafeAsVariant::serialize ( AstSerializer & ser ) {}
-    // void ExprSwizzle::serialize ( AstSerializer & ser ) {}
-    // void ExprSafeField::serialize ( AstSerializer & ser ) {}
+    void ExprIsVariant::serialize ( AstSerializer & ser ) {
+        ExprField::serialize(ser);
+    }
+
+    void ExprAsVariant::serialize ( AstSerializer & ser ) {
+        ExprField::serialize(ser);
+    }
+
+    void ExprSafeAsVariant::serialize ( AstSerializer & ser ) {
+        ser << skipQQ;
+        ExprField::serialize(ser);
+    }
+    void ExprSwizzle::serialize ( AstSerializer & ser ) {
+        Expression::serialize(ser);
+        ser << value << mask << fields << fieldFlags;
+    }
+    void ExprSafeField::serialize ( AstSerializer & ser ) {
+        ser << skipQQ;
+        ExprField::serialize(ser);
+    }
+
     void ExprLooksLikeCall::serialize ( AstSerializer & ser ) {
         ser << name << arguments
             << argumentsFailedToInfer << aliasSubstitution << atEnclosure;
         Expression::serialize(ser);
     }
-    // void ExprCallMacro::serialize ( AstSerializer & ser ) {}
+
+    void ExprCallMacro::serialize ( AstSerializer & ser ) {
+        ser << macro;
+        ExprLooksLikeCall::serialize(ser);
+    }
+
     void ExprCallFunc::serialize ( AstSerializer & ser ) {
         ser << func << stackTop;
         ExprLooksLikeCall::serialize(ser);
     }
+
     void ExprOp::serialize ( AstSerializer & ser ) {
         ser << op;
         ExprCallFunc::serialize(ser);
     }
-    // void ExprOp1::serialize ( AstSerializer & ser ) {}
+
+    void ExprOp1::serialize ( AstSerializer & ser ) {
+        ser << subexpr;
+        ExprOp::serialize(ser);
+    }
+
     void ExprOp2::serialize ( AstSerializer & ser ) {
         ser << left << right;
         ExprOp::serialize(ser);
     }
-    // void ExprCopy::serialize ( AstSerializer & ser ) {}
+
+    void ExprCopy::serialize ( AstSerializer & ser ) {
+        ser << copyFlags;
+        ExprOp2::serialize(ser);
+    }
+
+    void ExprMove::serialize ( AstSerializer & ser ) {
+        ser << moveFlags;
+        ExprOp2::serialize(ser);
+    }
+
     void ExprClone::serialize ( AstSerializer & ser ) {
         ser << cloneSet;
         ExprOp2::serialize(ser);
     }
-    // void ExprMove::serialize ( AstSerializer & ser ) {}
-    // void ExprSequence::serialize ( AstSerializer & ser ) {}
-    // void ExprOp3::serialize ( AstSerializer & ser ) {}
-    // void ExprTryCatch::serialize ( AstSerializer & ser ) {}
-    // void ExprReturn::serialize ( AstSerializer & ser ) {}
-    // void ExprBreak::serialize ( AstSerializer & ser ) {}
-    // void ExprContinue::serialize ( AstSerializer & ser ) {}
-    // void ExprFakeContext::serialize ( AstSerializer & ser ) {}
-    // void ExprFakeLineInfo::serialize ( AstSerializer & ser ) {}
+
+    void ExprSequence::serialize ( AstSerializer & ser ) {
+        ExprOp2::serialize(ser);
+    }
+
+    void ExprOp3::serialize ( AstSerializer & ser ) {
+        ser << subexpr << left << right;
+        ExprOp::serialize(ser);
+    }
+
+    void ExprTryCatch::serialize ( AstSerializer & ser ) {
+        ser << try_block << catch_block;
+        Expression::serialize(ser);
+    }
+
+    void ExprReturn::serialize ( AstSerializer & ser ) {
+        Expression::serialize(ser);
+        ser
+          << subexpr
+          << returnFlags
+          << stackTop
+          << refStackTop
+          << returnFunc
+          << block
+          << returnType;
+    }
+
+    void ExprBreak::serialize ( AstSerializer & ser ) {
+        Expression::serialize(ser);
+    }
+
+    void ExprContinue::serialize ( AstSerializer & ser ) {
+        Expression::serialize(ser);
+    }
+
+    void ExprConst::serialize ( AstSerializer & ser ) {
+        ser << baseType << value;
+        Expression::serialize(ser);
+    }
+
+    void ExprConstPtr::serialize( AstSerializer & ser ) {
+       ser <<  isSmartPtr <<
+         ptrType;
+        ExprConstT<void *,ExprConstPtr>::serialize(ser);
+    }
+
+     void ExprConstEnumeration::serialize( AstSerializer & ser ) {
+        ser << enumType << text;
+        ExprConst::serialize(ser);
+     }
+
+    void ExprConstString::serialize(AstSerializer& ser) {
+        ser << text;
+        ExprConst::serialize(ser);
+    }
+
+    void ExprStringBuilder::serialize(AstSerializer& ser) {
+        ser << elements;
+        Expression::serialize(ser);
+    }
+
+    void ExprLet::serialize(AstSerializer& ser) {
+        ser << variables << visibility << atInit << letFlags;
+        Expression::serialize(ser);
+    }
+
+    void ExprFor::serialize(AstSerializer& ser) {
+        ser << iterators << iteratorsAka << iteratorsAt << iteratorsTags
+            << iteratorVariables << sources << body << visibility
+            << allowIteratorOptimization << canShadow;
+        Expression::serialize(ser);
+    }
+
+    void ExprUnsafe::serialize(AstSerializer& ser) {
+        ser << body;
+        Expression::serialize(ser);
+    }
+
+    void ExprWhile::serialize(AstSerializer& ser) {
+        ser << cond << body;
+        Expression::serialize(ser);
+    }
+
+    void ExprWith::serialize(AstSerializer& ser) {
+        ser << with << body;
+        Expression::serialize(ser);
+    }
+
+    void ExprAssume::serialize(AstSerializer& ser) {
+        ser << alias << subexpr;
+        Expression::serialize(ser);
+    }
+
+    // struct ExprLikeCall -- no new fields
+
+    void ExprMakeBlock::serialize(AstSerializer & ser) {
+        ser << capture
+            << block
+            << stackTop
+            << mmFlags;
+        Expression::serialize(ser);
+    }
+
+    void ExprMakeGenerator::serialize(AstSerializer & ser) {
+        ser << iterType
+            << capture;
+        ExprLooksLikeCall::serialize(ser);
+    }
+
+    void ExprYield::serialize(AstSerializer & ser) {
+        ser << subexpr
+            << returnFlags;
+        Expression::serialize(ser);
+    }
+
+    void ExprInvoke::serialize(AstSerializer & ser) {
+        ser << stackTop
+            << doesNotNeedSp
+            << isInvokeMethod
+            << cmresAlias;
+        ExprLikeCall<ExprInvoke>::serialize(ser);
+    }
+
+    void ExprAssert::serialize(AstSerializer & ser) {
+        ser << isVerify;
+        ExprLikeCall<ExprAssert>::serialize(ser);
+    }
+
+    void ExprQuote::serialize(AstSerializer & ser) {
+        ExprLikeCall<ExprQuote>::serialize(ser);
+    }
+
+    void ExprStaticAssert::serialize(AstSerializer & ser) {
+        ExprLikeCall<ExprStaticAssert>::serialize(ser);
+    }
+
+    void ExprDebug::serialize(AstSerializer & ser) {
+        ExprLikeCall<ExprDebug>::serialize(ser);
+    }
+
+    void ExprMemZero::serialize(AstSerializer & ser) {
+        ExprLikeCall<ExprMemZero>::serialize(ser);
+    }
+
+    template <typename It, typename SimNodeT, bool first>
+    void ExprTableKeysOrValues<It,SimNodeT,first>::serialize(AstSerializer & ser) {
+        ExprLooksLikeCall::serialize(ser);
+    }
+
+    template <typename It, typename SimNodeT>
+    void ExprArrayCallWithSizeOrIndex<It,SimNodeT>::serialize(AstSerializer & ser) {
+        ExprLooksLikeCall::serialize(ser);
+    }
+
+    void ExprErase::serialize(AstSerializer & ser) {
+        ExprLikeCall<ExprErase>::serialize(ser);
+    }
+
+    void ExprFind::serialize(AstSerializer & ser) {
+        ExprLikeCall<ExprFind>::serialize(ser);
+    }
+
+    void ExprKeyExists::serialize(AstSerializer & ser) {
+        ExprLikeCall<ExprKeyExists>::serialize(ser);
+    }
+
+    void ExprSetInsert::serialize(AstSerializer & ser) {
+        ExprLikeCall<ExprSetInsert>::serialize(ser);
+    }
+
+    void ExprTypeInfo::serialize(AstSerializer & ser) {
+        ser
+            << trait
+            << subexpr
+            << typeexpr
+            << subtrait
+            << extratrait
+            << macro;
+        Expression::serialize(ser);
+    }
+
+    void ExprIs::serialize(AstSerializer & ser) {
+        ser
+            << subexpr
+            << typeexpr;
+        Expression::serialize(ser);
+    }
+
+    void ExprAscend::serialize(AstSerializer & ser) {
+        ser
+            << subexpr
+            << ascType
+            << stackTop
+            << ascendFlags;
+        Expression::serialize(ser);
+    }
+
+    void ExprCast::serialize(AstSerializer & ser) {
+        ser
+            << subexpr
+            << castType
+            << castFlags;
+        Expression::serialize(ser);
+    }
+
+    void ExprNew::serialize(AstSerializer & ser) {
+        ser
+            << typeexpr
+            << initializer;
+        ExprCallFunc::serialize(ser);
+    }
+
+    void ExprCall::serialize(AstSerializer & ser) {
+        ser
+            << doesNotNeedSp
+            << cmresAlias;
+        ExprCallFunc::serialize(ser);
+    }
+
+    void ExprIfThenElse::serialize ( AstSerializer & ser ) {
+        ser
+            << cond
+            << if_true
+            << if_false
+            << ifFlags;
+        Expression::serialize(ser);
+    }
+
+    void MakeFieldDecl::serialize ( AstSerializer & ser ) {
+        ser << at
+            << name
+            << value
+            << tag
+            << flags;
+        ptr_ref_count::serialize(ser);
+    }
+
+    void MakeStruct::serialize( AstSerializer & ser ) {
+        ser << static_cast<vector<MakeFieldDeclPtr>&>(*this);
+        ptr_ref_count::serialize(ser);
+    }
+
+    void ExprNamedCall::serialize ( AstSerializer & ser ) {
+        ser
+            << name
+            << nonNamedArguments
+            << arguments
+            << argumentsFailedToInfer;
+        Expression::serialize(ser);
+    }
+
+    void ExprMakeLocal::serialize ( AstSerializer & ser ) {
+        ser
+            << makeType
+            << stackTop
+            << extraOffset
+            << makeFlags;
+        Expression::serialize(ser);
+    }
+
+    void ExprMakeStruct::serialize ( AstSerializer & ser ) {
+        ser
+            << structs
+            << block
+            << makeStructFlags;
+        ExprMakeLocal::serialize(ser);
+    }
+
+    void ExprMakeVariant::serialize ( AstSerializer & ser ) {
+        ser
+            << variants;
+        ExprMakeLocal::serialize(ser);
+    }
+
+    void ExprMakeArray::serialize ( AstSerializer & ser ) {
+        ser
+            << recordType
+            << values;
+        ExprMakeLocal::serialize(ser);
+    }
+
+    void ExprMakeTuple::serialize ( AstSerializer & ser ) {
+        ser
+            << isKeyValue;
+        ExprMakeArray::serialize(ser);
+    }
+
+    void ExprArrayComprehension::serialize ( AstSerializer & ser ) {
+        ser
+            << exprFor
+            << exprWhere
+            << subexpr
+            << generatorSyntax;
+        Expression::serialize(ser);
+    }
+
+    void ExprTypeDecl::serialize ( AstSerializer & ser ) {
+        ser
+            << typeexpr;
+        Expression::serialize(ser);
+    }
+
 
     void Expression::serialize ( AstSerializer & /* ser */ ) {
         // TODO: implement
     }
 
+    void TypeInfoMacro::serialize ( AstSerializer & ser ) {
+        ser << name << module;
+        ptr_ref_count::serialize(ser);
+    }
+
+    void CallMacro::serialize ( AstSerializer & ser ) {
+        ser << name << module;
+        ptr_ref_count::serialize(ser);
+    }
 }

@@ -687,7 +687,7 @@ namespace das
         virtual bool rtti_isConstant() const override { return true; }
         template <typename QQ> QQ & cvalue() { return *((QQ *)&value); }
         template <typename QQ> const QQ & cvalue() const { return *((const QQ *)&value); }
-        void serialize ( AstSerializer & ser );
+        virtual void serialize ( AstSerializer & ser ) override;
         Type    baseType = Type::none;
         vec4f   value = v_zero();
       };
@@ -714,7 +714,6 @@ namespace das
         }
         virtual ExpressionPtr visit(Visitor & vis) override;
         TT getValue() const { return cast<TT>::to(value); }
-        void serialize ( AstSerializer & ser );
     };
 
     enum class SideEffects : uint32_t {
@@ -1586,6 +1585,13 @@ namespace das
     };
 
     struct ExprClone;
+    struct CaptureEntry;
+
+    struct MakeFieldDecl;
+    typedef smart_ptr<MakeFieldDecl>   MakeFieldDeclPtr;
+
+    class MakeStruct;
+    typedef smart_ptr<MakeStruct>   MakeStructPtr;
 
     struct AstSerializer {
         FileAccess *        fileAccess = nullptr;
@@ -1611,8 +1617,10 @@ namespace das
         AstSerializer & operator << ( uint64_t & value ) { serialize(&value, sizeof(value)); return *this; }
         AstSerializer & operator << ( int32_t & value ) { serialize(&value, sizeof(value)); return *this; }
         AstSerializer & operator << ( uint32_t & value ) { serialize(&value, sizeof(value)); return *this; }
+        AstSerializer & operator << ( uint8_t & value ) { serialize(&value, sizeof(value)); return *this; }
         AstSerializer & operator << ( std::pair<uint32_t,uint32_t> & value ) { serialize(&value, sizeof(value)); return *this; }
         AstSerializer & operator << ( float & value ) { serialize(&value, sizeof(value)); return *this; }
+        AstSerializer & operator << ( vec4f & value ) { serialize(&value, sizeof(value)); return *this; }
         AstSerializer & operator << ( TypeDeclPtr & type );
         AstSerializer & operator << ( AnnotationArgument & arg );
         AstSerializer & operator << ( AnnotationDeclarationPtr & annotation_decl );
@@ -1629,6 +1637,7 @@ namespace das
         AstSerializer & operator << ( FileInfo * & info );
         AstSerializer & operator << ( Structure * & struct_ );
         AstSerializer & operator << ( Enumeration * & enum_type );
+        AstSerializer & operator << ( EnumerationPtr & enum_type );
         AstSerializer & operator << ( Enumeration::EnumEntry & entry );
         AstSerializer & operator << ( TypeAnnotationPtr & type_anno );
         AstSerializer & operator << ( TypeAnnotation * & type_anno );
@@ -1639,6 +1648,12 @@ namespace das
         AstSerializer & operator << ( ReaderMacroPtr & reader );
         AstSerializer & operator << ( ExprBlock * & block );
         AstSerializer & operator << ( ExprClone * & clone );
+        AstSerializer & operator << ( TypeInfoMacro * & macro );
+        AstSerializer & operator << ( ExprCallMacro * & macro );
+        AstSerializer & operator << ( CallMacro * & macro );
+        AstSerializer & operator << ( CaptureEntry & entry );
+        AstSerializer & operator << ( MakeFieldDeclPtr & make_field_decl_ptr );
+        AstSerializer & operator << ( MakeStructPtr & make_struct_ptr );
 
         template <typename TT>
         AstSerializer & operator << ( vector<TT> & value ) {
