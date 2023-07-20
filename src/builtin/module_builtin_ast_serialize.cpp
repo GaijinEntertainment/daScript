@@ -85,35 +85,6 @@ namespace das {
         return *this;
     }
 
-    AstSerializer & AstSerializer::operator << ( FunctionPtr & func ) {
-        if ( writing ) {
-            DAS_ASSERTF(!func->builtIn, "cannot serialize built-in function");
-            DAS_ASSERTF(func->module==thisModule, "function is not from this module");
-            uint64_t fid = intptr_t(func.get());
-            *this << fid;
-            if ( functionMap.find(fid) == functionMap.end() ) {
-                functionMap[fid] = func;
-                func->serialize(*this);
-            }
-        } else {
-            uint64_t fid = 0;
-            *this << fid;
-            if ( fid ) {
-                auto it = functionMap.find(fid);
-                if ( it == functionMap.end() ) {
-                    func = make_smart<Function>();
-                    functionMap[fid] = func;
-                    func->serialize(*this);
-                } else {
-                    func = it->second;
-                }
-            } else {
-                func = nullptr;
-            }
-        }
-        return *this;
-    }
-
     AstSerializer & AstSerializer::operator << ( Function * & func ) {
         if ( writing ) {
             bool inThisModule = func->module == thisModule;
@@ -156,6 +127,15 @@ namespace das {
         return *this;
     }
 
+    AstSerializer & AstSerializer::operator << (FunctionPtr & func) {
+        if (writing) {
+            DAS_ASSERTF(!func->builtIn, "cannot serialize built-in function");
+            DAS_ASSERTF(func->module==thisModule, "function is not from this module");
+        }
+        serializeSmartPtr(func, functionMap);
+        return *this;
+    }
+
     AstSerializer & AstSerializer::operator << ( TypeDeclPtr & type ) {
         if ( !writing ) type = make_smart<TypeDecl>();
         type->serialize(*this);
@@ -188,6 +168,7 @@ namespace das {
         bool null = field_declaration == nullptr;
         *this << null;
         if ( !null ) {
+            // Field declarations (probably) are not shared, create new every time
             if ( !writing ) field_declaration = new Structure::FieldDeclaration;
             field_declaration->serialize(*this);
         }
@@ -209,9 +190,8 @@ namespace das {
     }
 
     AstSerializer & AstSerializer::operator << ( LineInfo & at ) {
-        *this << at.fileInfo;
-        *this << at.column << at.line;
-        *this << at.last_column << at.last_line;
+        *this << at.fileInfo << at.column << at.line
+              << at.last_column << at.last_line;
         return *this;
     }
 
@@ -223,21 +203,64 @@ namespace das {
         return *this;
     }
 
-    AstSerializer & AstSerializer::operator << ( Structure * & struct_ ) {
-        if ( writing && struct_ == nullptr ) return *this;
-        if ( struct_ == nullptr ) struct_ = new Structure;
-        struct_->serialize(*this);
+    template <typename T>
+    AstSerializer & AstSerializer::serializePointer(T * & obj, das_hash_map<void*, T*> & objMap) {
+        void* pointer = obj;
+        *this << pointer;
+        if ( !pointer ) {
+            return *this; // Nullptr to end it all
+        }
+        if ( writing ) {
+            if ( objMap.count(pointer) == 0 ) {
+                objMap[pointer] = obj;
+                obj->serialize(*this);
+            }
+        } else {
+            if ( objMap.count(pointer) != 0 ) {
+                obj = objMap[pointer];
+            } else {
+                objMap[pointer] = obj = new T;
+                obj->serialize(*this);
+            }
+        }
         return *this;
+    }
+
+    AstSerializer & AstSerializer::operator << ( Structure * & struct_ ) {
+        return serializePointer(struct_, structureMap);
     }
 
     AstSerializer & AstSerializer::operator << ( Enumeration * & enum_type ) {
-        //TODO:
-        enum_type->serialize(*this);
-        return *this;
+        return serializePointer(enum_type, enumMap);
+    }
+
+    template<typename T>
+    void AstSerializer::serializeSmartPtr( smart_ptr<T> & obj, das_hash_map<uintptr_t, smart_ptr<T>> & objMap) {
+        uint64_t id = intptr_t(obj.get());
+        *this << id;
+        if ( writing ) {
+            if ( objMap.find(id) == objMap.end() ) {
+                objMap[id] = obj;
+                obj->serialize(*this);
+            }
+        } else {
+            if ( id ) {
+                auto it = objMap.find(id);
+                if (it == objMap.end()) {
+                    obj = make_smart<T>();
+                    objMap[id] = obj;
+                    obj->serialize(*this);
+                } else {
+                    obj = it->second;
+                }
+            } else {
+                obj = nullptr;
+            }
+        }
     }
 
     AstSerializer & AstSerializer::operator << ( EnumerationPtr & enum_type ) {
-        enum_type->serialize(*this);
+        serializeSmartPtr(enum_type, smartEnumMap);
         return *this;
     }
 
@@ -247,22 +270,22 @@ namespace das {
     }
 
     AstSerializer & AstSerializer::operator << ( TypeAnnotationPtr & type_anno ) {
-        type_anno->serialize(*this);
+        serializeSmartPtr(type_anno, typeAnnotationMap);
         return *this;
     }
 
     AstSerializer & AstSerializer::operator << ( TypeAnnotation * & type_anno ) {
-        type_anno->serialize(*this);
+        serializePointer(type_anno, typeAnnotationMap);
         return *this;
     }
 
     AstSerializer & AstSerializer::operator << ( VariablePtr & var ) {
-        var->serialize(*this);
+        serializeSmartPtr(var, smartVariableMap);
         return *this;
     }
 
     AstSerializer & AstSerializer::operator << ( Variable * & var ) {
-        var->serialize(*this);
+        serializePointer(var, variableMap);
         return *this;
     }
 
@@ -365,20 +388,10 @@ namespace das {
 
     void TypeDecl::serialize ( AstSerializer & ser ) {
         ser.tag("TypeDecl");
-        ser << baseType;
-        ser << structType;
-        ser << enumType;
-        ser << annotation;
-        ser << dim;
-        ser << dimExpr;
-        ser << flags;
-        ser << alias;
-        ser << at;
-        ser << module;
-        ser << firstType;
-        ser << secondType;
-        ser << argTypes;
-        ser << argNames;
+        ser << baseType << structType << enumType
+         << annotation << dim << dimExpr
+         << flags << alias << at << module
+         << firstType << secondType << argTypes << argNames;
     }
 
     void AnnotationArgument::serialize ( AstSerializer & ser ) {
@@ -417,7 +430,7 @@ namespace das {
 
     void Structure::FieldDeclaration::serialize ( AstSerializer & ser ) {
         ser.tag("FieldDeclaration");
-        ser << name << type << ini << annotation << at << offset << flags;
+        ser << name << type << init << annotation << at << offset << flags;
     }
 
     void Enumeration::EnumEntry::serialize( AstSerializer & ser ) {

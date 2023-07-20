@@ -1601,7 +1601,14 @@ namespace das
         bool                writing = false;
         size_t              readOffset = 0;
         vector<uint8_t>     buffer;
-        das_hash_map<uint64_t,FunctionPtr>  functionMap;
+        das_hash_map<void*, Variable*>  variableMap;
+        das_hash_map<void*, Structure*> structureMap; // old pointer (void*) -> new Strucutre *
+        das_hash_map<void*, Enumeration*> enumMap;    // old pointer (void*) -> new Enumeration  *
+        das_hash_map<void*, TypeAnnotation*>  typeAnnotationMap;
+        das_hash_map<uint64_t, TypeAnnotationPtr>  smartTypeAnnotationMap;
+        das_hash_map<uint64_t, EnumerationPtr>  smartEnumMap;
+        das_hash_map<uint64_t, VariablePtr>  smartVariableMap;
+        das_hash_map<uint64_t, FunctionPtr>  functionMap;
         vector<pair<Function **,uint64_t>>  functionRefs;
         AstSerializer ( const vector<uint8_t> & from );
         AstSerializer ( void );
@@ -1612,15 +1619,17 @@ namespace das
         void serialize ( void * data, size_t size );
         void tag ( const char * name );
         void patch();
+        AstSerializer & operator << ( string & str );
         AstSerializer & operator << ( bool & value ) { serialize(&value, sizeof(value)); return *this; }
-        AstSerializer & operator << ( int64_t & value ) { serialize(&value, sizeof(value)); return *this; }
-        AstSerializer & operator << ( uint64_t & value ) { serialize(&value, sizeof(value)); return *this; }
-        AstSerializer & operator << ( int32_t & value ) { serialize(&value, sizeof(value)); return *this; }
-        AstSerializer & operator << ( uint32_t & value ) { serialize(&value, sizeof(value)); return *this; }
-        AstSerializer & operator << ( uint8_t & value ) { serialize(&value, sizeof(value)); return *this; }
-        AstSerializer & operator << ( std::pair<uint32_t,uint32_t> & value ) { serialize(&value, sizeof(value)); return *this; }
-        AstSerializer & operator << ( float & value ) { serialize(&value, sizeof(value)); return *this; }
         AstSerializer & operator << ( vec4f & value ) { serialize(&value, sizeof(value)); return *this; }
+        AstSerializer & operator << ( float & value ) { serialize(&value, sizeof(value)); return *this; }
+        AstSerializer & operator << ( void * & value ) { serialize(&value, sizeof(value)); return *this; }
+        AstSerializer & operator << ( uint8_t & value ) { serialize(&value, sizeof(value)); return *this; }
+        AstSerializer & operator << ( int32_t & value ) { serialize(&value, sizeof(value)); return *this; }
+        AstSerializer & operator << ( int64_t & value ) { serialize(&value, sizeof(value)); return *this; }
+        AstSerializer & operator << ( uint32_t & value ) { serialize(&value, sizeof(value)); return *this; }
+        AstSerializer & operator << ( uint64_t & value ) { serialize(&value, sizeof(value)); return *this; }
+        AstSerializer & operator << ( std::pair<uint32_t,uint32_t> & value ) { serialize(&value, sizeof(value)); return *this; }
         AstSerializer & operator << ( TypeDeclPtr & type );
         AstSerializer & operator << ( AnnotationArgument & arg );
         AstSerializer & operator << ( AnnotationDeclarationPtr & annotation_decl );
@@ -1631,7 +1640,6 @@ namespace das
         AstSerializer & operator << ( FunctionPtr & func );
         AstSerializer & operator << ( Function * & func );
         AstSerializer & operator << ( Type & baseType );
-        AstSerializer & operator << ( string & str );
         AstSerializer & operator << ( LineInfo & at );
         AstSerializer & operator << ( Module * & module );
         AstSerializer & operator << ( FileInfo * & info );
@@ -1654,6 +1662,11 @@ namespace das
         AstSerializer & operator << ( CaptureEntry & entry );
         AstSerializer & operator << ( MakeFieldDeclPtr & make_field_decl_ptr );
         AstSerializer & operator << ( MakeStructPtr & make_struct_ptr );
+
+        template <typename T>
+        AstSerializer & serializePointer( T * & obj, das_hash_map<void *, T *> & objMap );
+        template<typename T>
+        void serializeSmartPtr( smart_ptr<T> & obj, das_hash_map<uintptr_t, smart_ptr<T>> & objMap );
 
         template <typename TT>
         AstSerializer & operator << ( vector<TT> & value ) {
