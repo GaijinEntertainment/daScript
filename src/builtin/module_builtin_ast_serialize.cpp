@@ -1,5 +1,6 @@
 #include "daScript/misc/platform.h"
 
+#include "daScript/ast/ast_expressions.h"
 #include "daScript/ast/ast.h"
 
 namespace das {
@@ -183,6 +184,16 @@ namespace das {
         return *this;
     }
 
+    AstSerializer & AstSerializer::operator << ( Structure::FieldDeclaration * & field_declaration ) {
+        bool null = field_declaration == nullptr;
+        *this << null;
+        if ( !null ) {
+            if ( !writing ) field_declaration = new Structure::FieldDeclaration;
+            field_declaration->serialize(*this);
+        }
+        return *this;
+    }
+
     AstSerializer & AstSerializer::operator << ( string & str ) {
         if ( writing ) {
             uint32_t size = (uint32_t) str.size();
@@ -229,6 +240,11 @@ namespace das {
         return *this;
     }
 
+    AstSerializer & AstSerializer::operator << ( TypeAnnotationPtr & type_anno ) {
+        type_anno->serialize(*this);
+        return *this;
+    }
+
     AstSerializer & AstSerializer::operator << ( TypeAnnotation * & type_anno ) {
         type_anno->serialize(*this);
         return *this;
@@ -261,6 +277,33 @@ namespace das {
         alias_info.serialize(*this);
         return *this;
     }
+
+    AstSerializer & AstSerializer::operator << ( ReaderMacroPtr & history ) {
+        if ( !writing ) history = make_smart<ReaderMacro>();
+        history->serialize(*this);
+        return *this;
+    }
+
+    AstSerializer & AstSerializer::operator << ( ExprBlock * & block ) {
+        bool null = block == nullptr;
+        *this << null;
+        if ( !null ) {
+            if ( !writing ) block = new ExprBlock;
+            block->serialize(*this);
+        }
+        return *this;
+    }
+
+    AstSerializer & AstSerializer::operator << ( ExprClone * & clone ) {
+        bool null = clone == nullptr;
+        *this << null;
+        if ( !null ) {
+            if ( !writing ) clone = new ExprClone;
+            clone->serialize(*this);
+        }
+        return *this;
+    }
+
     AstSerializer & AstSerializer::operator << ( InferHistory & history ) {
         history.serialize(*this);
         return *this;
@@ -436,7 +479,156 @@ namespace das {
         ser << fromGeneric;
         ser << hash;
         ser << aotHash;
+
+        ser << annotations << name << arguments << result <<
+            body << index << totalStackSize << totalGenLabel <<
+            at << atDecl << module << useFunctions << useGlobalVariables <<
+            classParent << resultAliases << argumentAliases <<
+            resultAliasesGlobals << flags << moreFlags << sideEffectFlags <<
+            inferStack << fromGeneric << hash << aotHash;
+
     }
+
+// Expressions
+
+    void ReaderMacro::serialize ( AstSerializer & ser ) {
+        ser << name << module;
+        ptr_ref_count::serialize(ser);
+    }
+
+    void ExprReader::serialize ( AstSerializer & ser ) {
+        ser << macro << sequence;
+        Expression::serialize(ser);
+    }
+
+    void ExprLabel::serialize ( AstSerializer & ser ) {
+        ser << label << comment;
+        Expression::serialize(ser);
+    }
+
+    void ExprGoto::serialize ( AstSerializer & ser ) {
+        ser << label << subexpr;
+        Expression::serialize(ser);
+    }
+
+    void ExprRef2Value::serialize ( AstSerializer & ser ) {
+        ser << subexpr;
+        Expression::serialize(ser);
+    }
+
+    void ExprRef2Ptr::serialize ( AstSerializer & ser ) {
+        ser << subexpr;
+        Expression::serialize(ser);
+    }
+
+    void ExprPtr2Ref::serialize ( AstSerializer & ser ) {
+        ser << subexpr << unsafeDeref;
+        Expression::serialize(ser);
+    }
+
+    void ExprAddr::serialize ( AstSerializer & ser ) {
+        ser << target << funcType << func;
+        Expression::serialize(ser);
+    }
+
+    void ExprNullCoalescing::serialize ( AstSerializer & ser ) {
+        ser << defaultValue;
+        ExprPtr2Ref::serialize(ser);
+    }
+
+    void ExprDelete::serialize ( AstSerializer & ser ) {
+        ser << subexpr << sizeexpr << native;
+        Expression::serialize(ser);
+    }
+
+    void ExprAt::serialize ( AstSerializer & ser ) {
+        ser << subexpr << index;
+        ser << atFlags;
+        Expression::serialize(ser);
+    }
+
+    void ExprSafeAt::serialize ( AstSerializer & ser ) {
+        ExprAt::serialize(ser);
+    }
+
+    void ExprBlock::serialize ( AstSerializer & ser ) {
+        Expression::serialize(ser);
+        ser << list << finalList
+            << returnType << arguments
+            << stackTop << stackVarTop << stackVarBottom << stackCleanVars
+            << maxLabelIndex
+            << annotations << annotationData << annotationDataSid
+            << blockFlags
+            << inFunction;
+    }
+
+    void ExprVar::serialize ( AstSerializer & ser ) {
+        Expression::serialize(ser);
+        ser << name
+        << variable
+        << pBlock
+        << argumentIndex
+        << varFlags;
+    }
+
+    void ExprTag::serialize ( AstSerializer & ser ) {
+        ser << subexpr
+        << value
+        << name;
+        Expression::serialize(ser);
+    }
+
+    void ExprField::serialize ( AstSerializer & ser ) {
+        ser << value
+        << name
+        << atField
+        // << field // TODO: operator << const FieldDeclaration*
+        << fieldIndex
+        << annotation
+        << underClone
+        << derefFlags
+        << fieldFlags;
+        Expression::serialize(ser);
+    }
+
+    // void ExprIsVariant::serialize ( AstSerializer & ser ) {}
+    // void ExprAsVariant::serialize ( AstSerializer & ser ) {}
+    // void ExprSafeAsVariant::serialize ( AstSerializer & ser ) {}
+    // void ExprSwizzle::serialize ( AstSerializer & ser ) {}
+    // void ExprSafeField::serialize ( AstSerializer & ser ) {}
+    void ExprLooksLikeCall::serialize ( AstSerializer & ser ) {
+        ser << name << arguments
+            << argumentsFailedToInfer << aliasSubstitution << atEnclosure;
+        Expression::serialize(ser);
+    }
+    // void ExprCallMacro::serialize ( AstSerializer & ser ) {}
+    void ExprCallFunc::serialize ( AstSerializer & ser ) {
+        ser << func << stackTop;
+        ExprLooksLikeCall::serialize(ser);
+    }
+    void ExprOp::serialize ( AstSerializer & ser ) {
+        ser << op;
+        ExprCallFunc::serialize(ser);
+    }
+    // void ExprOp1::serialize ( AstSerializer & ser ) {}
+    void ExprOp2::serialize ( AstSerializer & ser ) {
+        ser << left << right;
+        ExprOp::serialize(ser);
+    }
+    // void ExprCopy::serialize ( AstSerializer & ser ) {}
+    void ExprClone::serialize ( AstSerializer & ser ) {
+        ser << cloneSet;
+        ExprOp2::serialize(ser);
+    }
+    // void ExprMove::serialize ( AstSerializer & ser ) {}
+    // void ExprSequence::serialize ( AstSerializer & ser ) {}
+    // void ExprOp3::serialize ( AstSerializer & ser ) {}
+    // void ExprTryCatch::serialize ( AstSerializer & ser ) {}
+    // void ExprReturn::serialize ( AstSerializer & ser ) {}
+    // void ExprBreak::serialize ( AstSerializer & ser ) {}
+    // void ExprContinue::serialize ( AstSerializer & ser ) {}
+    // void ExprFakeContext::serialize ( AstSerializer & ser ) {}
+    // void ExprFakeLineInfo::serialize ( AstSerializer & ser ) {}
 
     void Expression::serialize ( AstSerializer & /* ser */ ) {
         // TODO: implement

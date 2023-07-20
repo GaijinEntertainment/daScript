@@ -408,6 +408,7 @@ namespace das
         virtual bool isCompatible ( const FunctionPtr &, const vector<TypeDeclPtr> &, const AnnotationDeclaration &, string &  ) const { return true; }
         virtual bool isSpecialized() const { return false; }
         virtual void appendToMangledName( const FunctionPtr &, const AnnotationDeclaration &, string & /* mangledName */ ) const { }
+        void serialize ( AstSerializer & ser );
     };
 
     struct TransformFunctionAnnotation : FunctionAnnotation {
@@ -425,6 +426,7 @@ namespace das
         virtual bool finalize ( ExprBlock *, ModuleGroup &, const AnnotationArgumentList &, const AnnotationArgumentList &, string & ) override {
             return false;
         }
+        void serialize ( AstSerializer & ser );
     };
 
     struct TypeAnnotation : Annotation {
@@ -523,6 +525,7 @@ namespace das
         virtual void aotPrefix ( const StructurePtr &, const AnnotationArgumentList &, TextWriter & ) { }
         virtual void aotBody   ( const StructurePtr &, const AnnotationArgumentList &, TextWriter & ) { }
         virtual void aotSuffix ( const StructurePtr &, const AnnotationArgumentList &, TextWriter & ) { }
+        void serialize ( AstSerializer & ser );
     };
     typedef smart_ptr<StructureAnnotation> StructureAnnotationPtr;
 
@@ -531,6 +534,7 @@ namespace das
         virtual bool rtti_isEnumerationAnnotation() const override { return true; }
         virtual bool touch ( const EnumerationPtr & st, ModuleGroup & libGroup,
                             const AnnotationArgumentList & args, string & err ) = 0;    // this one happens before infer. u can change enum here
+        void serialize ( AstSerializer & ser );
     };
     typedef smart_ptr<EnumerationAnnotation> EnumerationAnnotationPtr;
 
@@ -555,6 +559,7 @@ namespace das
             cp->structureType = structureType;
             return TypeAnnotation::clone(cp);
         }
+        void serialize ( AstSerializer & ser );
         smart_ptr<Structure>   structureType;
     };
 
@@ -682,6 +687,7 @@ namespace das
         virtual bool rtti_isConstant() const override { return true; }
         template <typename QQ> QQ & cvalue() { return *((QQ *)&value); }
         template <typename QQ> const QQ & cvalue() const { return *((const QQ *)&value); }
+        void serialize ( AstSerializer & ser );
         Type    baseType = Type::none;
         vec4f   value = v_zero();
       };
@@ -708,6 +714,7 @@ namespace das
         }
         virtual ExpressionPtr visit(Visitor & vis) override;
         TT getValue() const { return cast<TT>::to(value); }
+        void serialize ( AstSerializer & ser );
     };
 
     enum class SideEffects : uint32_t {
@@ -917,6 +924,7 @@ namespace das
             return this;
         }
         virtual void * getBuiltinAddress() const { return nullptr; }
+        void serialize ( AstSerializer & ser );
     public:
         void construct (const vector<TypeDeclPtr> & args );
         void constructExternal (const vector<TypeDeclPtr> & args );
@@ -943,6 +951,7 @@ namespace das
         virtual bool aotInfix ( TextWriter &, const ExpressionPtr & ) { return false; }
         virtual bool aotNeedTypeInfo ( const ExpressionPtr & ) const { return false; }
         virtual bool noAot ( const ExpressionPtr & ) const { return false; }
+        void serialize ( AstSerializer & ser );
         string name;
         Module * module = nullptr;
     };
@@ -1183,6 +1192,7 @@ namespace das
         ModuleGroupUserData ( const string & n ) : name(n) {}
         virtual ~ModuleGroupUserData() {}
         string name;
+        void serialize ( AstSerializer & ser );
     };
     typedef unique_ptr<ModuleGroupUserData> ModuleGroupUserDataPtr;
 
@@ -1200,6 +1210,7 @@ namespace das
     struct PassMacro : ptr_ref_count {
         PassMacro ( const string na = "" ) : name(na) {}
         virtual bool apply( Program *, Module * ) { return false; }
+        void serialize ( AstSerializer & ser );
         string name;
     };
 
@@ -1209,6 +1220,7 @@ namespace das
         virtual bool accept ( Program *, Module *, ExprReader *, int, const LineInfo & ) { return false; }
         virtual ExpressionPtr visit (  Program *, Module *, ExprReader * ) { return nullptr; }
         virtual void seal( Module * m ) { module = m; }
+        void serialize ( AstSerializer & ser );
         string name;
         Module * module = nullptr;
     };
@@ -1221,6 +1233,7 @@ namespace das
         virtual void seal( Module * m ) { module = m; }
         virtual bool canVisitArguments ( ExprCallMacro *, int ) { return true; }
         virtual bool canFoldReturnResult ( ExprCallMacro * ) { return true; }
+        void serialize ( AstSerializer & ser );
         string name;
         Module * module = nullptr;
     };
@@ -1229,6 +1242,7 @@ namespace das
     struct ForLoopMacro : ptr_ref_count {
         ForLoopMacro ( const string & na = "" ) : name(na) {}
         virtual ExpressionPtr visit ( Program *, Module *, ExprFor * ) { return nullptr; }
+        void serialize ( AstSerializer & ser );
         string name;
     };
 
@@ -1236,6 +1250,7 @@ namespace das
         CaptureMacro ( const string & na = "" ) : name(na) {}
         virtual ExpressionPtr captureExpression ( Program *, Module *, Expression *, TypeDecl * ) { return nullptr; }
         virtual void captureFunction ( Program *, Module *, Structure *, Function * ) { }
+        void serialize ( AstSerializer & ser );
         string name;
     };
 
@@ -1247,6 +1262,7 @@ namespace das
         virtual ExpressionPtr visitIs     (  Program *, Module *, ExprIsVariant * ) { return nullptr; }
         virtual ExpressionPtr visitAs     (  Program *, Module *, ExprAsVariant * ) { return nullptr; }
         virtual ExpressionPtr visitSafeAs (  Program *, Module *, ExprSafeAsVariant * ) { return nullptr; }
+        void serialize ( AstSerializer & ser );
         string name;
     };
 
@@ -1254,6 +1270,7 @@ namespace das
         SimulateMacro ( const string na = "" ) : name(na) {}
         virtual bool preSimulate ( Program *, Context * ) { return true; }
         virtual bool simulate ( Program *, Context * ) { return true; }
+        void serialize ( AstSerializer & ser );
         string name;
     };
 
@@ -1270,8 +1287,9 @@ namespace das
         EnumInfo * makeEnumDebugInfo ( const Enumeration & en );
         FuncInfo * makeInvokeableTypeDebugInfo ( const TypeDeclPtr & blk, const LineInfo & at );
         void appendLocalVariables ( FuncInfo * info, const ExpressionPtr & body );
-         void appendGlobalVariables ( FuncInfo * info, const FunctionPtr & body );
+        void appendGlobalVariables ( FuncInfo * info, const FunctionPtr & body );
         void logMemInfo ( TextWriter & tw );
+        void serialize ( AstSerializer & ser );
     public:
         shared_ptr<DebugInfoAllocator>  debugInfo;
         bool                            rtti = false;
@@ -1367,6 +1385,7 @@ namespace das
         virtual void afterEnumeration ( const char * name, const LineInfo & at ) = 0;
         virtual void beforeAlias ( const LineInfo & at ) = 0;
         virtual void afterAlias ( const char * name, const LineInfo & at ) = 0;
+        void serialize ( AstSerializer & ser );
     };
 
     class Program : public ptr_ref_count {
@@ -1566,6 +1585,8 @@ namespace das
         static void ensure();
     };
 
+    struct ExprClone;
+
     struct AstSerializer {
         FileAccess *        fileAccess = nullptr;
         ModuleLibrary *     moduleLibrary = nullptr;
@@ -1585,20 +1606,19 @@ namespace das
         void serialize ( void * data, size_t size );
         void tag ( const char * name );
         void patch();
-        // TODO: concepts
-        // template <typename TT>
-        // AstSerializer & operator << ( TT * & value ) { serialize(&value, sizeof(value)); return *this; }
         AstSerializer & operator << ( bool & value ) { serialize(&value, sizeof(value)); return *this; }
         AstSerializer & operator << ( int64_t & value ) { serialize(&value, sizeof(value)); return *this; }
         AstSerializer & operator << ( uint64_t & value ) { serialize(&value, sizeof(value)); return *this; }
         AstSerializer & operator << ( int32_t & value ) { serialize(&value, sizeof(value)); return *this; }
         AstSerializer & operator << ( uint32_t & value ) { serialize(&value, sizeof(value)); return *this; }
+        AstSerializer & operator << ( std::pair<uint32_t,uint32_t> & value ) { serialize(&value, sizeof(value)); return *this; }
         AstSerializer & operator << ( float & value ) { serialize(&value, sizeof(value)); return *this; }
         AstSerializer & operator << ( TypeDeclPtr & type );
         AstSerializer & operator << ( AnnotationArgument & arg );
         AstSerializer & operator << ( AnnotationDeclarationPtr & annotation_decl );
         AstSerializer & operator << ( AnnotationPtr & anno );
         AstSerializer & operator << ( Structure::FieldDeclaration & field_declaration );
+        AstSerializer & operator << ( Structure::FieldDeclaration * & field_declaration );
         AstSerializer & operator << ( ExpressionPtr & expr );
         AstSerializer & operator << ( FunctionPtr & func );
         AstSerializer & operator << ( Function * & func );
@@ -1610,11 +1630,15 @@ namespace das
         AstSerializer & operator << ( Structure * & struct_ );
         AstSerializer & operator << ( Enumeration * & enum_type );
         AstSerializer & operator << ( Enumeration::EnumEntry & entry );
+        AstSerializer & operator << ( TypeAnnotationPtr & type_anno );
         AstSerializer & operator << ( TypeAnnotation * & type_anno );
         AstSerializer & operator << ( VariablePtr & var );
         AstSerializer & operator << ( Variable * & var );
         AstSerializer & operator << ( Function::AliasInfo & alias_info );
         AstSerializer & operator << ( InferHistory & history );
+        AstSerializer & operator << ( ReaderMacroPtr & reader );
+        AstSerializer & operator << ( ExprBlock * & block );
+        AstSerializer & operator << ( ExprClone * & clone );
 
         template <typename TT>
         AstSerializer & operator << ( vector<TT> & value ) {
@@ -1631,59 +1655,51 @@ namespace das
             }
             return *this;
         }
-        // template <typename TT>
-        AstSerializer & operator << ( das_hash_map<string, int32_t> & value ) {
-            using TT = int32_t;
 
+        template <typename K, typename V>
+        AstSerializer & operator << ( das_hash_map<K, V> & value ) {
             if ( writing ) {
-                auto size = value.size();
-                *this << size;
+                auto size = value.size(); *this << size;
                 for ( auto & item : value ) {
-                    *this << item.first;
-                    *this << item.second;
+                    *this << item.first << item.second;
                 }
-            } else {
-                uint32_t size = 0;
-                *this << size;
-                das_hash_map<string, TT> deser;
-                deser.reserve(size);
-                for ( size_t i = 0; i < size; i++ ) {
-                    string k;
-                    TT v;
-                    *this << k;
-                    *this << v;
-                    deser.emplace(std::move(k), v);
-                }
-
-                value = std::move(deser);
+                return *this;
             }
-
+            uint32_t size = 0; *this << size;
+            das_hash_map<K, V> deser;
+            deser.reserve(size);
+            for ( size_t i = 0; i < size; i++ ) {
+                K k; V v;
+                *this << k << v;
+                deser.emplace(std::move(k), std::move(v));
+            }
+            value = std::move(deser);
             return *this;
         }
+
         template<typename TT>
         AstSerializer & operator << ( das_set<TT> & value ) {
-
             if ( writing ) {
                 auto size = value.size();
                 *this << size;
                 for ( auto & item : value ) {
                     *this << item;
                 }
-            } else {
-                uint32_t size = 0;
-                *this << size;
-                das_set<TT> deser;
-                deser.reserve(size);
-                for ( size_t i = 0; i < size; i++ ) {
-                    TT v;
-                    *this << v;
-                    deser.emplace(std::move(v));
-                }
-                value = std::move(deser);
+                return *this;
             }
-
+            uint32_t size = 0;
+            *this << size;
+            das_set<TT> deser;
+            deser.reserve(size);
+            for ( size_t i = 0; i < size; i++ ) {
+                TT v;
+                *this << v;
+                deser.emplace(std::move(v));
+            }
+            value = std::move(deser);
             return *this;
         }
+
         template <typename EnumType>
         void serialize_enum ( EnumType & baseType ) {
             if ( writing ) {
