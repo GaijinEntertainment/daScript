@@ -938,7 +938,7 @@ namespace das
     }
 
     struct TypeInfoMacro : public ptr_ref_count {
-        TypeInfoMacro ( const string & n )
+        TypeInfoMacro ( const string & n = "")
             : name(n) {
         }
         virtual void seal( Module * m ) { module = m; }
@@ -1052,6 +1052,7 @@ namespace das
         void verifyAotReady();
         void verifyBuiltinNames(uint32_t flags);
         void addDependency ( Module * mod, bool pub );
+        void serialize( AstSerializer & ser );
     public:
         template <typename RecAnn>
         void initRecAnnotation ( const smart_ptr<RecAnn> & rec, ModuleLibrary & lib ) {
@@ -1191,7 +1192,6 @@ namespace das
         ModuleGroupUserData ( const string & n ) : name(n) {}
         virtual ~ModuleGroupUserData() {}
         string name;
-        void serialize ( AstSerializer & ser );
     };
     typedef unique_ptr<ModuleGroupUserData> ModuleGroupUserDataPtr;
 
@@ -1601,26 +1601,31 @@ namespace das
         bool                writing = false;
         size_t              readOffset = 0;
         vector<uint8_t>     buffer;
-        das_hash_map<void*, Variable*>  variableMap;
-        das_hash_map<void*, Structure*> structureMap; // old pointer (void*) -> new Strucutre *
-        das_hash_map<void*, Enumeration*> enumMap;    // old pointer (void*) -> new Enumeration  *
-        das_hash_map<void*, TypeAnnotation*>  typeAnnotationMap;
-        das_hash_map<uint64_t, TypeAnnotationPtr>  smartTypeAnnotationMap;
-        das_hash_map<uint64_t, EnumerationPtr>  smartEnumMap;
-        das_hash_map<uint64_t, VariablePtr>  smartVariableMap;
-        das_hash_map<uint64_t, FunctionPtr>  functionMap;
-        vector<pair<Function **,uint64_t>>  functionRefs;
-        das_hash_map<uint64_t, ExpressionPtr>  exprMap;
-        vector<pair<ExprBlock **,uint64_t>>  blockRefs;
-        vector<pair<ExprClone **,uint64_t>>  cloneRefs;
+        das_hash_map<void*, Variable*>          variableMap;
+        das_hash_map<void*, Structure*>         structureMap;
+        das_hash_map<void*, Enumeration*>       enumMap;
+        das_hash_map<void*, TypeAnnotation*>    typeAnnotationMap;
+        das_hash_map<void*, TypeInfoMacro*>     typeInfoMacroMap;
+        das_hash_map<uint64_t, TypeAnnotationPtr>   smartTypeAnnotationMap;
+        das_hash_map<uint64_t, EnumerationPtr>      smartEnumMap;
+        das_hash_map<uint64_t, VariablePtr>         smartVariableMap;
+        das_hash_map<uint64_t, MakeFieldDeclPtr>    smartMakeFieldDeclMap;
+        das_hash_map<uint64_t, MakeStructPtr>       smartMakeStructMap;
+        das_hash_map<uint64_t, FunctionPtr>         functionMap;
+        vector<pair<Function **,uint64_t>>          functionRefs;
+        das_hash_map<uint64_t, ExpressionPtr>       exprMap;
+        vector<pair<ExprBlock **,uint64_t>>         blockRefs;
+        vector<pair<ExprClone **,uint64_t>>         cloneRefs;
+        vector<pair<Structure::FieldDeclaration **,uint64_t>>  fieldDeclRefs;
         AstSerializer ( const vector<uint8_t> & from );
         AstSerializer ( void );
         AstSerializer ( const AstSerializer & from ) = delete;
         AstSerializer & operator = ( const AstSerializer & from ) = delete;
-        void write ( void * data, size_t size );
-        void read  ( const void * data, size_t size );
+        void write ( const void * data, size_t size );
+        void read  ( void * data, size_t size );
         void serialize ( void * data, size_t size );
         void tag ( const char * name );
+        void setWriteMode() { writing = true; }
         void patch();
         AstSerializer & operator << ( string & str );
         AstSerializer & operator << ( const char * & value );
@@ -1639,7 +1644,7 @@ namespace das
         AstSerializer & operator << ( AnnotationDeclarationPtr & annotation_decl );
         AstSerializer & operator << ( AnnotationPtr & anno );
         AstSerializer & operator << ( Structure::FieldDeclaration & field_declaration );
-        AstSerializer & operator << ( Structure::FieldDeclaration * & field_declaration );
+        // AstSerializer & operator << ( const Structure::FieldDeclaration * & field_declaration );
         AstSerializer & operator << ( ExpressionPtr & expr );
         AstSerializer & operator << ( FunctionPtr & func );
         AstSerializer & operator << ( Function * & func );
@@ -1662,10 +1667,12 @@ namespace das
         AstSerializer & operator << ( ExprClone * & clone );
         AstSerializer & operator << ( TypeInfoMacro * & macro );
         AstSerializer & operator << ( ExprCallMacro * & macro );
-        AstSerializer & operator << ( CallMacro * & macro );
+        // AstSerializer & operator << ( CallMacro * & macro );
         AstSerializer & operator << ( CaptureEntry & entry );
         AstSerializer & operator << ( MakeFieldDeclPtr & make_field_decl_ptr );
         AstSerializer & operator << ( MakeStructPtr & make_struct_ptr );
+        // Top-level
+        AstSerializer & operator << ( Module & module );
 
         template <typename T>
         AstSerializer & serializePointer( T * & obj, das_hash_map<void *, T *> & objMap );
