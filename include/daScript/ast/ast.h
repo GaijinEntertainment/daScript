@@ -430,7 +430,7 @@ namespace das
     };
 
     struct TypeAnnotation : Annotation {
-        TypeAnnotation ( const string & n, const string & cpn = "" ) : Annotation(n,cpn) {}
+        TypeAnnotation ( const string & n = "", const string & cpn = "" ) : Annotation(n,cpn) {}
         virtual TypeAnnotationPtr clone ( const TypeAnnotationPtr & p = nullptr ) const {
             DAS_ASSERTF(p, "can only clone real type %s", name.c_str());
             p->name = name;
@@ -1610,6 +1610,9 @@ namespace das
         das_hash_map<uint64_t, VariablePtr>  smartVariableMap;
         das_hash_map<uint64_t, FunctionPtr>  functionMap;
         vector<pair<Function **,uint64_t>>  functionRefs;
+        das_hash_map<uint64_t, ExpressionPtr>  exprMap;
+        vector<pair<ExprBlock **,uint64_t>>  blockRefs;
+        vector<pair<ExprClone **,uint64_t>>  cloneRefs;
         AstSerializer ( const vector<uint8_t> & from );
         AstSerializer ( void );
         AstSerializer ( const AstSerializer & from ) = delete;
@@ -1620,6 +1623,7 @@ namespace das
         void tag ( const char * name );
         void patch();
         AstSerializer & operator << ( string & str );
+        AstSerializer & operator << ( const char * & value );
         AstSerializer & operator << ( bool & value ) { serialize(&value, sizeof(value)); return *this; }
         AstSerializer & operator << ( vec4f & value ) { serialize(&value, sizeof(value)); return *this; }
         AstSerializer & operator << ( float & value ) { serialize(&value, sizeof(value)); return *this; }
@@ -1715,13 +1719,11 @@ namespace das
                 }
                 return *this;
             }
-            uint32_t size = 0;
-            *this << size;
+            uint32_t size = 0; *this << size;
             das_set<TT> deser;
             deser.reserve(size);
             for ( size_t i = 0; i < size; i++ ) {
-                TT v;
-                *this << v;
+                TT v; *this << v;
                 deser.emplace(std::move(v));
             }
             value = std::move(deser);

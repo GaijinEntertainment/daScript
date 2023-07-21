@@ -16,16 +16,40 @@ namespace das {
         writing = true;
     }
 
-    // void AstSerializer::patch() {
-    //     for ( auto & p : functionRefs ) {
-    //         auto it = functionMap.find(p.second);
-    //         if ( it == functionMap.end() ) {
-    //             DAS_FATAL_ERROR("ast serializer function ref not found");
-    //         } else {
-    //             *p.first = it->second.get();
-    //         }
-    //     }
-    // }
+    void AstSerializer::patch() {
+        for ( auto & p : functionRefs ) {
+            auto it = functionMap.find(p.second);
+            if ( it == functionMap.end() ) {
+                DAS_FATAL_ERROR("ast serializer function ref not found");
+            } else {
+                *p.first = it->second.get();
+            }
+        }
+        for ( auto & p : blockRefs ) {
+            auto it = exprMap.find(p.second);
+            if ( it == exprMap.end() ) {
+                DAS_FATAL_ERROR("ast serializer function ref not found");
+            } else {
+                if (auto block = dynamic_cast<ExprBlock*>(it->second.get())) {
+                    *p.first = block;
+                } else {
+                    DAS_FATAL_ERROR("Expression should be ExprBlock");
+                }
+            }
+        }
+        for ( auto & p : cloneRefs ) {
+            auto it = exprMap.find(p.second);
+            if ( it == exprMap.end() ) {
+                DAS_FATAL_ERROR("ast serializer function ref not found");
+            } else {
+                if (auto block = dynamic_cast<ExprClone*>(it->second.get())) {
+                    *p.first = block;
+                } else {
+                    DAS_FATAL_ERROR("Expression should be ExprClone");
+                }
+            }
+        }
+    }
 
     void AstSerializer::write ( void * data, size_t size ) {
         auto oldSize = buffer.size();
@@ -189,6 +213,29 @@ namespace das {
         return *this;
     }
 
+    // Discards constness!
+    AstSerializer & AstSerializer::operator << ( const char * & value ) {
+        bool is_null = value == nullptr;
+        *this << is_null;
+        if ( writing ) {
+            if ( !is_null ) {
+                auto len = strlen(value);
+                *this << len;
+                serialize((void*)value, len);
+            }
+        } else {
+            if ( !is_null ) {
+                auto len = strlen(value);
+                *this << len;
+                value = new char [len + 1];
+                serialize((void*)value, len);
+            } else {
+                value = nullptr;
+            }
+        }
+        return *this;
+    }
+
     AstSerializer & AstSerializer::operator << ( LineInfo & at ) {
         *this << at.fileInfo << at.column << at.line
               << at.last_column << at.last_line;
@@ -270,7 +317,7 @@ namespace das {
     }
 
     AstSerializer & AstSerializer::operator << ( TypeAnnotationPtr & type_anno ) {
-        serializeSmartPtr(type_anno, typeAnnotationMap);
+        serializeSmartPtr(type_anno, smartTypeAnnotationMap);
         return *this;
     }
 
@@ -307,44 +354,38 @@ namespace das {
         return *this;
     }
 
-    AstSerializer & AstSerializer::operator << ( ReaderMacroPtr & history ) {
-        if ( !writing ) history = make_smart<ReaderMacro>();
-        history->serialize(*this);
+    AstSerializer & AstSerializer::operator << ( ReaderMacroPtr & reader ) {
+        if ( !writing ) reader = make_smart<ReaderMacro>();
+        reader->serialize(*this);
         return *this;
     }
 
     AstSerializer & AstSerializer::operator << ( ExprBlock * & block ) {
-        bool null = block == nullptr;
-        *this << null;
-        if ( !null ) {
-            if ( !writing ) block = new ExprBlock;
-            block->serialize(*this);
+        if ( writing ) {
+            DAS_ASSERTF(block, "block should be not null"); // Probably
+        }
+        uint64_t addr = (uintptr_t) block;
+        *this << addr;
+        if ( !writing ) {
+            blockRefs.emplace_back(&block, addr);
         }
         return *this;
     }
 
     AstSerializer & AstSerializer::operator << ( ExprClone * & clone ) {
-        bool null = clone == nullptr;
-        *this << null;
-        if ( !null ) {
-            if ( !writing ) clone = new ExprClone;
-            clone->serialize(*this);
+        if ( writing ) {
+           DAS_ASSERTF(clone, "expr should be not null");
+        }
+        uint64_t addr = (uintptr_t) clone;
+        *this << addr;
+        if ( !writing ) {
+            cloneRefs.emplace_back(&clone, addr);
         }
         return *this;
     }
 
     AstSerializer & AstSerializer::operator << ( InferHistory & history ) {
         history.serialize(*this);
-        return *this;
-    }
-
-    AstSerializer & AstSerializer::operator << ( ExprCallMacro * & macro ) {
-        bool null = macro == nullptr;
-        *this << null;
-        if ( !null ) {
-            if ( !writing ) macro = new ExprCallMacro();
-            macro->serialize(*this);
-        }
         return *this;
     }
 
@@ -879,8 +920,14 @@ namespace das {
     }
 
 
-    void Expression::serialize ( AstSerializer & /* ser */ ) {
-        // TODO: implement
+    void Expression::serialize ( AstSerializer & ser ) {
+        ser << at
+            << type
+            << __rtti
+            << genFlags
+            << flags
+            << printFlags;
+        ptr_ref_count::serialize(ser);
     }
 
     void TypeInfoMacro::serialize ( AstSerializer & ser ) {
