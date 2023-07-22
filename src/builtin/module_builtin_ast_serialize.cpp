@@ -95,6 +95,12 @@ namespace das {
         return *this;
     }
 
+    AstSerializer & AstSerializer::operator << ( CallMacro * & ptr ) {
+        tag("CallMacro *");
+        serializePointer(ptr, callMacroMap);
+        return *this;
+    }
+
     AstSerializer & AstSerializer::operator << ( ExpressionPtr & expr ) {
         tag("ExpressionPtr");
         if ( writing ) {
@@ -160,6 +166,12 @@ namespace das {
             DAS_ASSERTF(func->module==thisModule, "function is not from this module");
         }
         serializeSmartPtr(func, functionMap);
+        return *this;
+    }
+
+    AstSerializer & AstSerializer::operator << ( TypeInfoMacroPtr & type_info_macro ) {
+        tag("TypeInfoMacroPtr");
+        serializeSmartPtr(type_info_macro, smartTypeinfoMacroMap);
         return *this;
     }
 
@@ -285,13 +297,27 @@ namespace das {
         return *this;
     }
 
+    AstSerializer & AstSerializer::operator << ( FileInfoPtr & ptr ) {
+        *this << ptr->name << ptr->tabSize;
+#if DAS_ENABLE_PROFILER
+        *this << ptr->profileData;
+#endif
+        return *this;
+    }
+
+    AstSerializer & AstSerializer::operator << ( FileAccessPtr & ptr ) {
+        DAS_FATAL_ERROR("TODO: serailze FileAccessPtr");
+        // *this << ptr->files;
+        return *this;
+    }
+
+
     AstSerializer & AstSerializer::operator << ( Structure * & struct_ ) {
         return serializePointer(struct_, structureMap);
     }
 
-    // Used in module inside vector
-    AstSerializer & AstSerializer::operator << ( Structure & struct_ ) {
-        struct_.serialize(*this);
+    AstSerializer & AstSerializer::operator << ( StructurePtr & struct_ ) {
+        serializeSmartPtr(struct_, smartStructureMap);
         return *this;
     }
 
@@ -382,6 +408,37 @@ namespace das {
     AstSerializer & AstSerializer::operator << ( ReaderMacroPtr & reader ) {
         if ( !writing ) reader = make_smart<ReaderMacro>();
         reader->serialize(*this);
+        return *this;
+    }
+
+    AstSerializer & AstSerializer::operator << ( PassMacroPtr & macro ) {
+        serializeSmartPtr(macro, smartPassMacroMap);
+        return *this;
+    }
+
+    AstSerializer & AstSerializer::operator << ( SimulateMacroPtr & macro ) {
+        serializeSmartPtr(macro, smartSimulateMacroMap);
+        return *this;
+    }
+
+    AstSerializer & AstSerializer::operator << ( CaptureMacroPtr & macro ) {
+        serializeSmartPtr(macro, smartCaptureMacroMap);
+        return *this;
+    }
+
+    AstSerializer & AstSerializer::operator << ( ForLoopMacroPtr & macro ) {
+        serializeSmartPtr(macro, smartForLoopMacroMap);
+        return *this;
+    }
+
+    AstSerializer & AstSerializer::operator << ( VariantMacroPtr & macro ) {
+        serializeSmartPtr(macro, smartVariantMacroMap);
+        return *this;
+    }
+
+    AstSerializer & AstSerializer::operator << ( CommentReaderPtr & reader ) {
+        DAS_FATAL_ERROR("TODO: serialize comment reader");
+        // serializeSmartPtr(reader, smartCommentReaderMap);
         return *this;
     }
 
@@ -581,6 +638,11 @@ namespace das {
         ptr_ref_count::serialize(ser);
     }
 
+    void PassMacro::serialize ( AstSerializer & ser ) {
+        ser << name;
+        ptr_ref_count::serialize(ser);
+    }
+
     void ExprReader::serialize ( AstSerializer & ser ) {
         ser << macro << sequence;
         Expression::serialize(ser);
@@ -684,10 +746,12 @@ namespace das {
         ser << skipQQ;
         ExprField::serialize(ser);
     }
+
     void ExprSwizzle::serialize ( AstSerializer & ser ) {
         Expression::serialize(ser);
         ser << value << mask << fields << fieldFlags;
     }
+
     void ExprSafeField::serialize ( AstSerializer & ser ) {
         ser << skipQQ;
         ExprField::serialize(ser);
@@ -700,7 +764,7 @@ namespace das {
     }
 
     void ExprCallMacro::serialize ( AstSerializer & ser ) {
-        // ser << macro;
+        ser << macro;
         ExprLooksLikeCall::serialize(ser);
     }
 
@@ -773,8 +837,7 @@ namespace das {
     }
 
     void ExprConstPtr::serialize( AstSerializer & ser ) {
-       ser <<  isSmartPtr <<
-         ptrType;
+        ser << isSmartPtr << ptrType;
         ExprConstT<void *,ExprConstPtr>::serialize(ser);
     }
 
@@ -824,8 +887,6 @@ namespace das {
         ser << alias << subexpr;
         Expression::serialize(ser);
     }
-
-    // struct ExprLikeCall -- no new fields
 
     void ExprMakeBlock::serialize(AstSerializer & ser) {
         ser << capture << block << stackTop << mmFlags;
@@ -999,69 +1060,64 @@ namespace das {
         ptr_ref_count::serialize(ser);
     }
 
+    void VariantMacro::serialize ( AstSerializer & ser ) {
+        ser << name;
+        ptr_ref_count::serialize(ser);
+
+    }
+
+    void ForLoopMacro::serialize ( AstSerializer & ser ) {
+        ser << name;
+        ptr_ref_count::serialize(ser);
+    }
+
+    void CaptureMacro::serialize ( AstSerializer & ser ) {
+        ser << name;
+        ptr_ref_count::serialize(ser);
+    }
+
+    void SimulateMacro::serialize ( AstSerializer & ser ) {
+        ser << name;
+        ptr_ref_count::serialize(ser);
+    }
+
     void Module::serialize( AstSerializer & ser ) {
+        //     smart_ptr<Context>                          macroContext;
         ser << aliasTypes;
         ser << handleTypes;
         ser << structures;
-        // ser << enumerations;
-        // ser << globals;
-        // ser << functions;
-        // ser << functionsByName;
-        // ser << generics;
-        // ser << genericsByName;
+        ser << enumerations;
+        ser << globals;
+        ser << functions;
+        ser << functionsByName;
+        ser << generics;
+        ser << genericsByName;
         // ser << callThis;
-        //     smart_ptr<Context>                          macroContext;
-        //     safebox<TypeDecl>                           aliasTypes;
-        //     safebox<Annotation>                         handleTypes;
-        //     safebox<Structure>                          structures;
-        //     safebox<Enumeration>                        enumerations;
-        //     safebox<Variable>                           globals;
-        //     safebox<Function>                           functions;          // mangled name 2 function name
-        //     safebox_map<vector<FunctionPtr>>            functionsByName;    // all functions of the same name
-        //     safebox<Function>                           generics;           // mangled name 2 generic name
-        //     safebox_map<vector<FunctionPtr>>            genericsByName;     // all generics of the same name
         //     mutable das_map<string, ExprCallFactory>    callThis;
-        // ser << typeInfoMacros;
-        // ser << annotationData;
-        // ser << requireModule;
-        // ser << macros;
-        // ser << inferMacros;
-        // ser << optimizationMacros;
-        // ser << lintMacros;
-        // ser << globalLintMacros;
-        // ser << variantMacros;
-        // ser << forLoopMacros;
-        // ser << captureMacros;
-        // ser << simulateMacros;
-        // ser << readMacros;
-        // ser << commentReader;
-        // ser << keywords;
-        // ser << options;
-        //     das_map<string, TypeInfoMacroPtr>           typeInfoMacros;
-        //     das_map<uint64_t, uint64_t>                 annotationData;
-        //     das_map<Module *,bool>                      requireModule;      // visibility modules
-        //     vector<PassMacroPtr>                        macros;             // infer macros (clean infer, assume no errors)
-        //     vector<PassMacroPtr>                        inferMacros;        // infer macros (dirty infer, assume half-way-there tree)
-        //     vector<PassMacroPtr>                        optimizationMacros; // optimization macros
-        //     vector<PassMacroPtr>                        lintMacros;         // lint macros (assume read-only)
-        //     vector<PassMacroPtr>                        globalLintMacros;   // lint macros which work everywhere
-        //     vector<VariantMacroPtr>                     variantMacros;      //  X is Y, X as Y expression handler
-        //     vector<ForLoopMacroPtr>                     forLoopMacros;      // for loop macros (for every for loop)
-        //     vector<CaptureMacroPtr>                     captureMacros;      // lambda capture macros
-        //     vector<SimulateMacroPtr>                    simulateMacros;     // simulate macros (every time we simulate context)
-        //     das_map<string,ReaderMacroPtr>              readMacros;         // %foo "blah"
-        //     CommentReaderPtr                            commentReader;      // /* blah */ or // blah
-        //     vector<pair<string,bool>>                   keywords;           // keywords (and if they need oxford comma)
-        //     das_hash_map<string,Type>                   options;            // options
-        // ser << name;
-        // ser << moduleFlags;
-        // ser << next;
-        // ser << ownFileInfo;
+
+        ser << typeInfoMacros;
+        ser << annotationData;
+        ser << requireModule;
+        ser << macros;
+        ser << inferMacros;
+        ser << optimizationMacros;
+        ser << lintMacros;
+        ser << globalLintMacros;
+        ser << variantMacros;
+        ser << forLoopMacros;
+        ser << captureMacros;
+        ser << simulateMacros;
+        ser << readMacros;
+        // ser << commentReader;  // TODO: abstract class, probably need a factory
+                                  // Do I need a factory for all the other macros, too?
+        ser << keywords;
+        ser << options;
+        ser << name;
+        ser << moduleFlags;
+        ser << next;
+        ser << ownFileInfo;
+
         // ser << promotedAccess
-        //     string  name;
-        // private:
-        //     Module * next = nullptr;
-        //     unique_ptr<FileInfo>    ownFileInfo;
         //     FileAccessPtr           promotedAccess;
 
     }

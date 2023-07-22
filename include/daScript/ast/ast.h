@@ -1384,7 +1384,6 @@ namespace das
         virtual void afterEnumeration ( const char * name, const LineInfo & at ) = 0;
         virtual void beforeAlias ( const LineInfo & at ) = 0;
         virtual void afterAlias ( const char * name, const LineInfo & at ) = 0;
-        void serialize ( AstSerializer & ser );
     };
 
     class Program : public ptr_ref_count {
@@ -1601,16 +1600,25 @@ namespace das
         bool                writing = false;
         size_t              readOffset = 0;
         vector<uint8_t>     buffer;
+        das_hash_map<void*, Enumeration*>       enumMap;
         das_hash_map<void*, Variable*>          variableMap;
         das_hash_map<void*, Structure*>         structureMap;
-        das_hash_map<void*, Enumeration*>       enumMap;
+        das_hash_map<void*, CallMacro*>         callMacroMap;
         das_hash_map<void*, TypeAnnotation*>    typeAnnotationMap;
         das_hash_map<void*, TypeInfoMacro*>     typeInfoMacroMap;
         das_hash_map<uint64_t, TypeAnnotationPtr>   smartTypeAnnotationMap;
         das_hash_map<uint64_t, EnumerationPtr>      smartEnumMap;
+        das_hash_map<uint64_t, StructurePtr>        smartStructureMap;
         das_hash_map<uint64_t, VariablePtr>         smartVariableMap;
         das_hash_map<uint64_t, MakeFieldDeclPtr>    smartMakeFieldDeclMap;
         das_hash_map<uint64_t, MakeStructPtr>       smartMakeStructMap;
+        das_hash_map<uint64_t, TypeInfoMacroPtr>    smartTypeinfoMacroMap;
+        das_hash_map<uint64_t, VariantMacroPtr>     smartVariantMacroMap;
+        das_hash_map<uint64_t, ForLoopMacroPtr>     smartForLoopMacroMap;
+        das_hash_map<uint64_t, CaptureMacroPtr>     smartCaptureMacroMap;
+        das_hash_map<uint64_t, SimulateMacroPtr>    smartSimulateMacroMap;
+        das_hash_map<uint64_t, CommentReaderPtr>    smartCommentReaderMap;
+        das_hash_map<uint64_t, PassMacroPtr>        smartPassMacroMap;
         das_hash_map<uint64_t, FunctionPtr>         functionMap;
         vector<pair<Function **,uint64_t>>          functionRefs;
         das_hash_map<uint64_t, ExpressionPtr>       exprMap;
@@ -1645,7 +1653,6 @@ namespace das
         AstSerializer & operator << ( AnnotationDeclarationPtr & annotation_decl );
         AstSerializer & operator << ( AnnotationPtr & anno );
         AstSerializer & operator << ( Structure::FieldDeclaration & field_declaration );
-        // AstSerializer & operator << ( const Structure::FieldDeclaration * & field_declaration );
         AstSerializer & operator << ( ExpressionPtr & expr );
         AstSerializer & operator << ( FunctionPtr & func );
         AstSerializer & operator << ( Function * & func );
@@ -1653,8 +1660,10 @@ namespace das
         AstSerializer & operator << ( LineInfo & at );
         AstSerializer & operator << ( Module * & module );
         AstSerializer & operator << ( FileInfo * & info );
-        AstSerializer & operator << ( Structure & struct_ );
+        AstSerializer & operator << ( FileInfoPtr & ptr );
+        AstSerializer & operator << ( FileAccessPtr & ptr );
         AstSerializer & operator << ( Structure * & struct_ );
+        AstSerializer & operator << ( StructurePtr & struct_ );
         AstSerializer & operator << ( Enumeration * & enum_type );
         AstSerializer & operator << ( EnumerationPtr & enum_type );
         AstSerializer & operator << ( Enumeration::EnumEntry & entry );
@@ -1665,11 +1674,18 @@ namespace das
         AstSerializer & operator << ( Function::AliasInfo & alias_info );
         AstSerializer & operator << ( InferHistory & history );
         AstSerializer & operator << ( ReaderMacroPtr & reader );
+        AstSerializer & operator << ( PassMacroPtr & macro );
+        AstSerializer & operator << ( TypeInfoMacroPtr & type );
+        AstSerializer & operator << ( SimulateMacroPtr & macro );
+        AstSerializer & operator << ( CaptureMacroPtr & macro );
+        AstSerializer & operator << ( ForLoopMacroPtr & macro );
+        AstSerializer & operator << ( VariantMacroPtr & macro );
+        AstSerializer & operator << ( CommentReaderPtr & reader );
         AstSerializer & operator << ( ExprBlock * & block );
         AstSerializer & operator << ( ExprClone * & clone );
         AstSerializer & operator << ( TypeInfoMacro * & macro );
         AstSerializer & operator << ( ExprCallMacro * & macro );
-        // AstSerializer & operator << ( CallMacro * & macro );
+        AstSerializer & operator << ( CallMacro * & macro );
         AstSerializer & operator << ( CaptureEntry & entry );
         AstSerializer & operator << ( MakeFieldDeclPtr & make_field_decl_ptr );
         AstSerializer & operator << ( MakeStructPtr & make_struct_ptr );
