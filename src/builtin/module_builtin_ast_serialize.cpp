@@ -82,7 +82,7 @@ namespace das {
             uint64_t hash2 = 0;
             *this << hash2;
             if ( hash != hash2 ) {
-                DAS_FATAL_ERROR("ast serializer tag mismatch");
+                DAS_FATAL_ERROR("ast serializer tag '%s' mismatch", name);
             }
         }
     }
@@ -90,11 +90,13 @@ namespace das {
     ////////////////////////////////////////////////////////////////////////////
 
     AstSerializer & AstSerializer::operator << ( Type & baseType ) {
+        tag("Type");
         serialize_enum(baseType);
         return *this;
     }
 
     AstSerializer & AstSerializer::operator << ( ExpressionPtr & expr ) {
+        tag("ExpressionPtr");
         if ( writing ) {
             string rtti = expr->__rtti;
             *this << rtti;
@@ -111,7 +113,8 @@ namespace das {
     }
 
     AstSerializer & AstSerializer::operator << ( Function * & func ) {
-        uint64_t fid = intptr_t(func);
+        tag("Function pointer");
+        uint64_t fid = uintptr_t(func);
         *this << fid;
         if ( writing ) {
             if ( fid ) {
@@ -151,6 +154,7 @@ namespace das {
     }
 
     AstSerializer & AstSerializer::operator << (FunctionPtr & func) {
+        tag("FunctionPtr");
         if ( writing ) {
             DAS_ASSERTF(!func->builtIn, "cannot serialize built-in function");
             DAS_ASSERTF(func->module==thisModule, "function is not from this module");
@@ -160,6 +164,7 @@ namespace das {
     }
 
     AstSerializer & AstSerializer::operator << ( TypeDeclPtr & type ) {
+        tag("TypeDeclPtr");
         uint64_t id = intptr_t(type.get());
         *this << id;
         if ( writing ) {
@@ -178,17 +183,20 @@ namespace das {
     }
 
     AstSerializer & AstSerializer::operator << ( AnnotationArgument & arg ) {
+        tag("AnnotationArgument");
         arg.serialize(*this);
         return *this;
     }
 
     AstSerializer & AstSerializer::operator << ( AnnotationDeclarationPtr & annotation_decl ) {
+        tag("AnnotationDeclarationPtr");
         if ( !writing ) annotation_decl = make_smart<AnnotationDeclaration>();
         annotation_decl->serialize(*this);
         return *this;
     }
 
     AstSerializer & AstSerializer::operator << ( AnnotationPtr & anno ) {
+        tag("AnnotationPtr");
         if ( !writing ) anno = make_smart<Annotation>("", "");
         anno->serialize(*this);
         return *this;
@@ -200,6 +208,7 @@ namespace das {
     }
 
     AstSerializer & AstSerializer::operator << ( string & str ) {
+        tag("string");
         if ( writing ) {
             uint32_t size = (uint32_t) str.size();
             *this << size;
@@ -214,20 +223,22 @@ namespace das {
     }
 
     AstSerializer & AstSerializer::operator << ( const char * & value ) {
+        tag("const char *");
         bool is_null = value == nullptr;
         *this << is_null;
         if ( writing ) {
             if ( !is_null ) {
-                auto len = strlen(value);
+                uint64_t len = strlen(value);
                 *this << len;
                 write(static_cast<const void*>(value), len);
             }
         } else {
             if ( !is_null ) {
-                auto len = 0;
+                uint64_t len = 0;
                 *this << len;
-                auto data = new char [len + 1];
+                auto data = new char [len + 1]();
                 read(static_cast<void*>(data), len);
+                data[len] = '\0';
                 value = data;
             } else {
                 value = nullptr;
@@ -237,6 +248,7 @@ namespace das {
     }
 
     AstSerializer & AstSerializer::operator << ( LineInfo & at ) {
+        tag("LineInfo");
         *this << at.fileInfo << at.column << at.line
               << at.last_column << at.last_line;
         return *this;
@@ -368,6 +380,7 @@ namespace das {
     }
 
     AstSerializer & AstSerializer::operator << ( ExprBlock * & block ) {
+        tag("ExprBlock*");
         if ( writing ) {
             DAS_ASSERTF(block, "block should be not null"); // Probably
         }
@@ -380,6 +393,7 @@ namespace das {
     }
 
     AstSerializer & AstSerializer::operator << ( ExprClone * & clone ) {
+        tag("ExprClone*");
         if ( writing ) {
            DAS_ASSERTF(clone, "expr should be not null");
         }
@@ -392,6 +406,7 @@ namespace das {
     }
 
     AstSerializer & AstSerializer::operator << ( InferHistory & history ) {
+        tag("InferHistory");
         history.serialize(*this);
         return *this;
     }
@@ -469,6 +484,7 @@ namespace das {
     }
 
     void ptr_ref_count::serialize ( AstSerializer & ser ) {
+        ser.tag("ptr_ref_count");
 #if DAS_SMART_PTR_ID
         ser << ref_count_id;
 #endif
@@ -494,6 +510,7 @@ namespace das {
     }
 
     void TypeAnnotation::serialize ( AstSerializer & ser ) {
+        ser.tag("TypeAnnotation");
         Annotation::serialize(ser);
     }
 

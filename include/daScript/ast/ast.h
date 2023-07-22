@@ -1718,15 +1718,16 @@ namespace das
 
         template<typename TT>
         AstSerializer & operator << ( das_set<TT> & value ) {
+            tag("DasSet");
             if ( writing ) {
-                auto size = value.size();
+                size_t size = value.size();
                 *this << size;
                 for ( auto & item : value ) {
                     *this << item;
                 }
                 return *this;
             }
-            uint32_t size = 0; *this << size;
+            size_t size = 0; *this << size;
             das_set<TT> deser;
             deser.reserve(size);
             for ( size_t i = 0; i < size; i++ ) {

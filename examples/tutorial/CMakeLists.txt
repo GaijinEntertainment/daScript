@@ -135,7 +135,7 @@ ${CMAKE_SOURCE_DIR}/examples/tutorial/tutorial07a.c
 DAS_TUTORIAL(tutorial07a "${TUTORIAL_07A_SRC}")
 
 ##########################################
-# tutorial 02 - module, function, constant
+# tutorial 08- serialization
 ##########################################
 SET(TUTORIAL_08_SRC
 ${CMAKE_SOURCE_DIR}/examples/tutorial/tutorial08.cpp
