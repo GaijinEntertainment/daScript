@@ -1639,6 +1639,7 @@ namespace das
         AstSerializer & operator << ( uint32_t & value ) { serialize(&value, sizeof(value)); return *this; }
         AstSerializer & operator << ( uint64_t & value ) { serialize(&value, sizeof(value)); return *this; }
         AstSerializer & operator << ( std::pair<uint32_t,uint32_t> & value ) { serialize(&value, sizeof(value)); return *this; }
+        AstSerializer & operator << ( std::pair<string,bool> & value ) { *this << value.first << value.second; return *this; }
         AstSerializer & operator << ( TypeDeclPtr & type );
         AstSerializer & operator << ( AnnotationArgument & arg );
         AstSerializer & operator << ( AnnotationDeclarationPtr & annotation_decl );
@@ -1652,6 +1653,7 @@ namespace das
         AstSerializer & operator << ( LineInfo & at );
         AstSerializer & operator << ( Module * & module );
         AstSerializer & operator << ( FileInfo * & info );
+        AstSerializer & operator << ( Structure & struct_ );
         AstSerializer & operator << ( Structure * & struct_ );
         AstSerializer & operator << ( Enumeration * & enum_type );
         AstSerializer & operator << ( EnumerationPtr & enum_type );
@@ -1695,17 +1697,16 @@ namespace das
             return *this;
         }
 
-        template <typename K, typename V>
-        AstSerializer & operator << ( das_hash_map<K, V> & value ) {
+        template <typename K, typename V, typename H, typename E>
+        void serialize_hash_map ( das_hash_map<K, V, H, E> & value ) {
             if ( writing ) {
                 auto size = value.size(); *this << size;
                 for ( auto & item : value ) {
                     *this << item.first << item.second;
                 }
-                return *this;
             }
             uint32_t size = 0; *this << size;
-            das_hash_map<K, V> deser;
+            das_hash_map<K, V, H, E> deser;
             deser.reserve(size);
             for ( size_t i = 0; i < size; i++ ) {
                 K k; V v;
@@ -1713,6 +1714,37 @@ namespace das
                 deser.emplace(std::move(k), std::move(v));
             }
             value = std::move(deser);
+        }
+
+        template <typename K, typename V>
+        AstSerializer & operator << ( das_hash_map<K, V> & value ) {
+            serialize_hash_map<K, V, hash<K>, equal_to<K>>(value);
+            return *this;
+        }
+
+        template <typename V>
+        AstSerializer & operator << ( safebox_map<V> & box ) {
+            serialize_hash_map<uint64_t, V, skip_hash, das::equal_to<uint64_t>>(box);
+            return *this;
+        }
+
+        template <typename V>
+        AstSerializer & operator << ( safebox<V> & box ) {
+            if ( writing ) {
+                uint64_t size = box.unlocked_size(); *this << size;
+                box.foreach_with_hash ([&](smart_ptr<V> obj, uint64_t hash) {
+                    *this << hash << obj;
+                });
+                return *this;
+            }
+            uint64_t size = 0; *this << size;
+            safebox<V> deser;
+            for ( size_t i = 0; i < size; i++ ) {
+                smart_ptr<V> obj; uint64_t hash;
+                *this << hash << obj;
+                deser.insert(hash, obj);
+            }
+            box = std::move(deser);
             return *this;
         }
 

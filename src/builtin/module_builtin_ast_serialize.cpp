@@ -289,6 +289,12 @@ namespace das {
         return serializePointer(struct_, structureMap);
     }
 
+    // Used in module inside vector
+    AstSerializer & AstSerializer::operator << ( Structure & struct_ ) {
+        struct_.serialize(*this);
+        return *this;
+    }
+
     AstSerializer & AstSerializer::operator << ( Enumeration * & enum_type ) {
         return serializePointer(enum_type, enumMap);
     }
@@ -973,7 +979,6 @@ namespace das {
         Expression::serialize(ser);
     }
 
-
     void Expression::serialize ( AstSerializer & ser ) {
         ser << at
             << type
@@ -995,74 +1000,70 @@ namespace das {
     }
 
     void Module::serialize( AstSerializer & ser ) {
-        // aliasTypes.foreach ([&](TypeDecl * s) {
-        //     //ser << s;
-        // });
-        // structures.foreach ([&](Structure * s) {
-        //     ser << s;
-        // });
-        // globals.foreach ([&](Variable * s) {
-        //     ser << s;
-        // });
-        if ( ser.writing ) {
-            uint64_t size = functions.unlocked_size();
-            ser << size;
-            functions.foreach_with_hash ([&](FunctionPtr f, uint64_t hash) {
-                ser << hash << f;
-            });
-        } else {
-            uint64_t size = 0;
-            ser << size;
-            for ( int i = 0; i < size; i++ ) {
-                FunctionPtr func; uint64_t hash;
-                ser << hash << func;
-                functions.insert(hash, func);
-            }
-        }
-    //     smart_ptr<Context>                          macroContext;
-    //     safebox<TypeDecl>                           aliasTypes;
-    //     safebox<Annotation>                         handleTypes;
-    //     safebox<Structure>                          structures;
-    //     safebox<Enumeration>                        enumerations;
-    //     safebox<Variable>                           globals;
-    //     safebox<Function>                           functions;          // mangled name 2 function name
-    //     safebox_map<vector<FunctionPtr>>            functionsByName;    // all functions of the same name
-    //     safebox<Function>                           generics;           // mangled name 2 generic name
-    //     safebox_map<vector<FunctionPtr>>            genericsByName;     // all generics of the same name
-    //     mutable das_map<string, ExprCallFactory>    callThis;
-    //     das_map<string, TypeInfoMacroPtr>           typeInfoMacros;
-    //     das_map<uint64_t, uint64_t>                 annotationData;
-    //     das_map<Module *,bool>                      requireModule;      // visibility modules
-    //     vector<PassMacroPtr>                        macros;             // infer macros (clean infer, assume no errors)
-    //     vector<PassMacroPtr>                        inferMacros;        // infer macros (dirty infer, assume half-way-there tree)
-    //     vector<PassMacroPtr>                        optimizationMacros; // optimization macros
-    //     vector<PassMacroPtr>                        lintMacros;         // lint macros (assume read-only)
-    //     vector<PassMacroPtr>                        globalLintMacros;   // lint macros which work everywhere
-    //     vector<VariantMacroPtr>                     variantMacros;      //  X is Y, X as Y expression handler
-    //     vector<ForLoopMacroPtr>                     forLoopMacros;      // for loop macros (for every for loop)
-    //     vector<CaptureMacroPtr>                     captureMacros;      // lambda capture macros
-    //     vector<SimulateMacroPtr>                    simulateMacros;     // simulate macros (every time we simulate context)
-    //     das_map<string,ReaderMacroPtr>              readMacros;         // %foo "blah"
-    //     CommentReaderPtr                            commentReader;      // /* blah */ or // blah
-    //     vector<pair<string,bool>>                   keywords;           // keywords (and if they need oxford comma)
-    //     das_hash_map<string,Type>                   options;            // options
-    //     string  name;
-    //     union {
-    //         struct {
-    //             bool    builtIn : 1;
-    //             bool    promoted : 1;
-    //             bool    isPublic : 1;
-    //             bool    isModule : 1;
-    //             bool    isSolidContext : 1;
-    //             bool    doNotAllowUnsafe : 1;
-    //         };
-    //         uint32_t        moduleFlags = 0;
-    //     };
-    // private:
-    //     Module * next = nullptr;
-    //     unique_ptr<FileInfo>    ownFileInfo;
-    //     FileAccessPtr           promotedAccess;
-    // }
+        ser << aliasTypes;
+        ser << handleTypes;
+        ser << structures;
+        // ser << enumerations;
+        // ser << globals;
+        // ser << functions;
+        // ser << functionsByName;
+        // ser << generics;
+        // ser << genericsByName;
+        // ser << callThis;
+        //     smart_ptr<Context>                          macroContext;
+        //     safebox<TypeDecl>                           aliasTypes;
+        //     safebox<Annotation>                         handleTypes;
+        //     safebox<Structure>                          structures;
+        //     safebox<Enumeration>                        enumerations;
+        //     safebox<Variable>                           globals;
+        //     safebox<Function>                           functions;          // mangled name 2 function name
+        //     safebox_map<vector<FunctionPtr>>            functionsByName;    // all functions of the same name
+        //     safebox<Function>                           generics;           // mangled name 2 generic name
+        //     safebox_map<vector<FunctionPtr>>            genericsByName;     // all generics of the same name
+        //     mutable das_map<string, ExprCallFactory>    callThis;
+        // ser << typeInfoMacros;
+        // ser << annotationData;
+        // ser << requireModule;
+        // ser << macros;
+        // ser << inferMacros;
+        // ser << optimizationMacros;
+        // ser << lintMacros;
+        // ser << globalLintMacros;
+        // ser << variantMacros;
+        // ser << forLoopMacros;
+        // ser << captureMacros;
+        // ser << simulateMacros;
+        // ser << readMacros;
+        // ser << commentReader;
+        // ser << keywords;
+        // ser << options;
+        //     das_map<string, TypeInfoMacroPtr>           typeInfoMacros;
+        //     das_map<uint64_t, uint64_t>                 annotationData;
+        //     das_map<Module *,bool>                      requireModule;      // visibility modules
+        //     vector<PassMacroPtr>                        macros;             // infer macros (clean infer, assume no errors)
+        //     vector<PassMacroPtr>                        inferMacros;        // infer macros (dirty infer, assume half-way-there tree)
+        //     vector<PassMacroPtr>                        optimizationMacros; // optimization macros
+        //     vector<PassMacroPtr>                        lintMacros;         // lint macros (assume read-only)
+        //     vector<PassMacroPtr>                        globalLintMacros;   // lint macros which work everywhere
+        //     vector<VariantMacroPtr>                     variantMacros;      //  X is Y, X as Y expression handler
+        //     vector<ForLoopMacroPtr>                     forLoopMacros;      // for loop macros (for every for loop)
+        //     vector<CaptureMacroPtr>                     captureMacros;      // lambda capture macros
+        //     vector<SimulateMacroPtr>                    simulateMacros;     // simulate macros (every time we simulate context)
+        //     das_map<string,ReaderMacroPtr>              readMacros;         // %foo "blah"
+        //     CommentReaderPtr                            commentReader;      // /* blah */ or // blah
+        //     vector<pair<string,bool>>                   keywords;           // keywords (and if they need oxford comma)
+        //     das_hash_map<string,Type>                   options;            // options
+        // ser << name;
+        // ser << moduleFlags;
+        // ser << next;
+        // ser << ownFileInfo;
+        // ser << promotedAccess
+        //     string  name;
+        // private:
+        //     Module * next = nullptr;
+        //     unique_ptr<FileInfo>    ownFileInfo;
+        //     FileAccessPtr           promotedAccess;
+
     }
 
 }
