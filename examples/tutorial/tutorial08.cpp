@@ -41,18 +41,22 @@ void tutorial () {
         return;
     }
 
+    Module mod;
     AstSerializer ser;
     ser.thisModule = program->thisModule.get();
     ser.moduleLibrary = &program->library;
     program.get()->thisModule->serialize(ser);
 
-    Module mod;
     ser.writing = false;
     ser.functionMap.clear();
+
+    program->thisModule.reset(&mod);
+    program->library.MyXXXoperation(&mod);
+
     mod.serialize(ser);
-    mod.findFunction("test");
-    ModuleLibrary lib;
-    lib.addModule(&mod);
+
+
+    DAS_VERIFY(mod.findFunction("test").get() != nullptr);
 
 
     // create daScript context

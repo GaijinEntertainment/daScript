@@ -49,6 +49,10 @@ namespace das {
                 }
             }
         }
+        for ( auto & [name, ref] : moduleRefs ) {
+            *ref = moduleLibrary->findModule(name);
+            DAS_VERIFYF(*ref!=nullptr, "module '%s' is not found", name.c_str());
+        }
     }
 
     void AstSerializer::write ( const void * data, size_t size ) {
@@ -267,10 +271,27 @@ namespace das {
     }
 
     AstSerializer & AstSerializer::operator << ( FileInfo * & info ) {
-        // TODO: implement (likely add 'serialize' and 'factory' to FileAccess)
-        if ( !writing ) {
-            info = nullptr; // temporary!!!
+        bool is_null = info == nullptr;
+        *this << is_null;
+        if ( writing ) {
+            if ( !is_null ) {
+                return *this;
+                info->serialize(*this);
+            }
+        } else {
+            if ( !is_null ) {
+                info = nullptr; return *this;
+                // TODO: info = factory();
+                info->serialize(*this);
+            } else {
+                info = nullptr;
+            }
         }
+        return *this;
+    }
+
+    AstSerializer & AstSerializer::operator << ( FileInfoPtr & ptr ) {
+        ptr->serialize(*this);
         return *this;
     }
 
@@ -297,14 +318,6 @@ namespace das {
         return *this;
     }
 
-    AstSerializer & AstSerializer::operator << ( FileInfoPtr & ptr ) {
-        *this << ptr->name << ptr->tabSize;
-#if DAS_ENABLE_PROFILER
-        *this << ptr->profileData;
-#endif
-        return *this;
-    }
-
     AstSerializer & AstSerializer::operator << ( FileAccessPtr & ptr ) {
         DAS_FATAL_ERROR("TODO: serailze FileAccessPtr");
         // *this << ptr->files;
@@ -322,7 +335,7 @@ namespace das {
     }
 
     AstSerializer & AstSerializer::operator << ( Enumeration * & enum_type ) {
-        return serializePointer(enum_type, enumMap);
+        return serializePointer(enum_type, enumerationMap);
     }
 
     template<typename T>
@@ -390,11 +403,9 @@ namespace das {
             if ( is_null ) {
                 module = nullptr;
             } else {
-                DAS_VERIFYF(moduleLibrary!=nullptr, "module library is not set");
                 string name;
                 *this << name;
-                module = moduleLibrary->findModule(name);
-                DAS_VERIFYF(module!=nullptr, "module '%s' is not found", name.c_str());
+                moduleRefs.emplace_back(move(name), &module);
             }
         }
         return *this;
@@ -1081,6 +1092,21 @@ namespace das {
         ptr_ref_count::serialize(ser);
     }
 
+
+    void FileInfo::serialize ( AstSerializer & ser ) {
+        ser.tag("FileInfo");
+        ser << name << tabSize;
+#if DAS_ENABLE_PROFILER
+        ser << profileData;
+#endif
+    }
+
+    void TextFileInfo::serialize ( AstSerializer & ser ) {
+        ser.tag("TextFileInfo");
+        ser << source << sourceLength << owner;
+        FileInfo::serialize(ser);
+    }
+
     void Module::serialize( AstSerializer & ser ) {
         //     smart_ptr<Context>                          macroContext;
         ser << aliasTypes;
@@ -1115,11 +1141,12 @@ namespace das {
         ser << name;
         ser << moduleFlags;
         ser << next;
-        ser << ownFileInfo;
+        // ser << ownFileInfo;
 
         // ser << promotedAccess
         //     FileAccessPtr           promotedAccess;
 
+        ser.patch();
     }
 
 }

@@ -92,6 +92,7 @@ namespace das
     struct TypeAnnotation;
     struct EnumInfo;
 
+
     struct BasicAnnotation : ptr_ref_count {
         BasicAnnotation ( const string & n, const string & cpn = "" ) : name(n), cppName(cpn) {}
         void serialize ( AstSerializer & ser );
@@ -105,6 +106,7 @@ namespace das
         virtual ~FileInfo() { freeSourceData(); }
         void reserveProfileData();
         virtual void getSourceAndLength ( const char * & src, uint32_t & len ) { src=nullptr; len=0; }
+        virtual void serialize ( AstSerializer & ser );
         string                name;
         int32_t               tabSize = 4;
 #if DAS_ENABLE_PROFILER
@@ -121,6 +123,7 @@ namespace das
         virtual ~TextFileInfo() { if ( owner ) freeSourceData(); }
         virtual void freeSourceData() override;
         virtual void getSourceAndLength ( const char * & src, uint32_t & len ) override;
+        virtual void serialize ( AstSerializer & ser ) override;
     protected:
         const char *          source = nullptr;
         uint32_t              sourceLength = 0;
