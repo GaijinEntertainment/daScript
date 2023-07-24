@@ -1698,7 +1698,7 @@ namespace das
         template <typename T>
         AstSerializer & serializePointer( T * & obj, das_hash_map<void *, T *> & objMap );
         template<typename T>
-        void serializeSmartPtr( smart_ptr<T> & obj, das_hash_map<uintptr_t, smart_ptr<T>> & objMap );
+        void serializeSmartPtr( smart_ptr<T> & obj, das_hash_map<uint64_t, smart_ptr<T>> & objMap );
 
         template <typename TT>
         AstSerializer & operator << ( vector<TT> & value ) {

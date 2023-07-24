@@ -356,8 +356,8 @@ namespace das {
     }
 
     template<typename T>
-    void AstSerializer::serializeSmartPtr( smart_ptr<T> & obj, das_hash_map<uintptr_t, smart_ptr<T>> & objMap) {
-        uint64_t id = intptr_t(obj.get());
+    void AstSerializer::serializeSmartPtr( smart_ptr<T> & obj, das_hash_map<uint64_t, smart_ptr<T>> & objMap) {
+        uint64_t id = uint64_t(obj.get());
         *this << id;
         if ( writing ) {
             if ( id && objMap.find(id) == objMap.end() ) {
@@ -753,7 +753,7 @@ namespace das {
     }
 
     void ExprField::serialize ( AstSerializer & ser ) {
-        auto idx = findIndex(value->type->firstType->structType, name);
+        uint64_t idx = findIndex(value->type->firstType->structType, name);
         ser << value << name << atField
             // << field
             << idx // Instead of the field we are serializing its index
