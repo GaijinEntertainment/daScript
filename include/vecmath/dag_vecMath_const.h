@@ -7,6 +7,13 @@
 
 #include "dag_vecMathDecl.h"
 
+#ifdef __cplusplus
+#include <cmath> // for INFINITY
+#else
+#include <math.h>
+#endif
+
+
 #if defined(_MSC_VER) && !defined(__clang__)
   #define DECL_VEC_CONST extern const __declspec(selectany) __declspec(align(16))
 #else
@@ -31,12 +38,12 @@
   DECL_VEC_CONST vec4f_const V_C_HALF_MINUS_EPS = { REPLICATE(0.5f - 1.192092896e-07f * 32) };
   DECL_VEC_CONST vec4f_const V_C_ONE = { REPLICATE(1.0f) };
   DECL_VEC_CONST vec4f_const V_C_TWO = { REPLICATE(2.0f) };
-  DECL_VEC_CONST vec4f_const V_C_PI = { REPLICATE(3.141592f) };                  // pi
-  DECL_VEC_CONST vec4f_const V_C_HALFPI = { REPLICATE(3.141592f / 2.f) };        // pi/2
-  DECL_VEC_CONST vec4f_const V_C_TWOPI = { REPLICATE(2.f * 3.141592f) };         // pi*2
-  DECL_VEC_CONST vec4f_const V_C_PI_DIV_4 = { REPLICATE(0.785398f) };            // pi/4
-  DECL_VEC_CONST vec4f_const V_C_2_DIV_PI = { REPLICATE(0.636619f) };            // 2/pi
-  DECL_VEC_CONST vec4f_const V_C_4_DIV_PI = { REPLICATE(1.273239f) };            // 4/pi
+  DECL_VEC_CONST vec4f_const V_C_PI = { REPLICATE(3.14159265f) };                  // pi
+  DECL_VEC_CONST vec4f_const V_C_HALFPI = { REPLICATE(3.14159265f / 2.f) };        // pi/2
+  DECL_VEC_CONST vec4f_const V_C_TWOPI = { REPLICATE(2.f * 3.14159265f) };         // pi*2
+  DECL_VEC_CONST vec4f_const V_C_PI_DIV_4 = { REPLICATE(0.78539816f) };            // pi/4
+  DECL_VEC_CONST vec4f_const V_C_2_DIV_PI = { REPLICATE(0.63661977f) };            // 2/pi
+  DECL_VEC_CONST vec4f_const V_C_4_DIV_PI = { REPLICATE(1.27323954f) };            // 4/pi
   DECL_VEC_CONST vec4f_const V_C_MAX_VAL = { REPLICATE(1e32f) };
   DECL_VEC_CONST vec4f_const V_C_MIN_VAL = { REPLICATE(-1e32f) };
   DECL_VEC_CONST vec4f_const V_C_EPS_VAL = { REPLICATE(1.192092896e-07f) };
@@ -88,12 +95,12 @@
   #define V_C_HALF_MINUS_EPS  vdupq_n_f32(0.5f - 1.192092896e-07f * 32)
   #define V_C_ONE             vdupq_n_f32(1.0f)
   #define V_C_TWO             vdupq_n_f32(2.0f)
-  #define V_C_PI              vdupq_n_f32(3.141592f)           // pi
-  #define V_C_HALFPI          vdupq_n_f32(3.141592f / 2.f)     // pi/2
-  #define V_C_TWOPI           vdupq_n_f32(2.f * 3.141592f)     // pi*2
-  #define V_C_PI_DIV_4        vdupq_n_f32(0.785398f)           // pi/4
-  #define V_C_2_DIV_PI        vdupq_n_f32(0.636619f)           // 2/pi
-  #define V_C_4_DIV_PI        vdupq_n_f32(1.273239f)           // 4/pi
+  #define V_C_PI              vdupq_n_f32(3.14159265f)           // pi
+  #define V_C_HALFPI          vdupq_n_f32(3.14159265f / 2.f)     // pi/2
+  #define V_C_TWOPI           vdupq_n_f32(2.f * 3.14159265f)     // pi*2
+  #define V_C_PI_DIV_4        vdupq_n_f32(0.78539816f)           // pi/4
+  #define V_C_2_DIV_PI        vdupq_n_f32(0.63661977f)           // 2/pi
+  #define V_C_4_DIV_PI        vdupq_n_f32(1.27323954f)           // 4/pi
   #define V_C_MAX_VAL         vdupq_n_f32(1e32f)
   #define V_C_MIN_VAL         vdupq_n_f32(-1e32f)
   #define V_C_EPS_VAL         vdupq_n_f32(1.192092896e-07f)

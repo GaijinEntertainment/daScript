@@ -664,6 +664,10 @@ namespace das {
             addExternEx<float(float4,float4),DAS_BIND_FUN(distanceSq4)>(*this, lib, "distance_sq", SideEffects::none, "distanceSq4")->args({"x","y"});
             addExternEx<float(float4,float4),DAS_BIND_FUN(invdistance4)>(*this, lib, "inv_distance", SideEffects::none, "invdistance4")->args({"x","y"});
             addExternEx<float(float4,float4),DAS_BIND_FUN(invdistanceSq4)>(*this, lib, "inv_distance_sq", SideEffects::none, "invdistanceSq4")->args({"x","y"});
+            addExternEx<float2(float2,float2,float),DAS_BIND_FUN(lerp_vec_float)>(*this, lib, "lerp", SideEffects::none, "lerp_vec_float")->args({"a", "b", "t"});
+            addExternEx<float3(float3,float3,float),DAS_BIND_FUN(lerp_vec_float)>(*this, lib, "lerp", SideEffects::none, "lerp_vec_float")->args({"a", "b", "t"});
+            addExternEx<float4(float4,float4,float),DAS_BIND_FUN(lerp_vec_float)>(*this, lib, "lerp", SideEffects::none, "lerp_vec_float")->args({"a", "b", "t"});
+
             // unique float functions
             addExtern<DAS_BIND_FUN(fisnan)>(*this, lib, "is_nan", SideEffects::none, "fisnan")->arg("x");
             addExtern<DAS_BIND_FUN(fisfinite)>(*this, lib, "is_finite", SideEffects::none, "fisfinite")->arg("x");
@@ -688,8 +692,12 @@ namespace das {
             addExtern<DAS_BIND_FUN(sincosD)>(*this, lib, "sincos", SideEffects::modifyArgument, "sincosD")->args({"x","s","c"});
             addExternEx<float3(float3,float3),DAS_BIND_FUN(reflect)>(*this, lib, "reflect",
                 SideEffects::none, "reflect")->args({"v","n"});
+            addExternEx<float2(float2,float2),DAS_BIND_FUN(reflect2)>(*this, lib, "reflect",
+                SideEffects::none, "reflect2")->args({"v","n"});
             addExternEx<float3(float3,float3,float),DAS_BIND_FUN(refract)>(*this, lib, "refract",
                 SideEffects::none, "refract")->args({"v","n","nint"});
+            addExternEx<float2(float2,float2,float),DAS_BIND_FUN(refract2)>(*this, lib, "refract",
+                SideEffects::none, "refract2")->args({"v","n","nint"});
             addFunctionCommonConversion<int, float>  (*this, lib);
             addFunctionCommonConversion<int, double>  (*this, lib);
             addFunctionCommonConversion<int2, float2>(*this,lib);

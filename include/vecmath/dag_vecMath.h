@@ -403,6 +403,7 @@ VECMATH_FINLINE vec4i VECTORCALL v_permi_xzac(vec4i xyzw, vec4i abcd);
 VECMATH_FINLINE vec4i VECTORCALL v_permi_xyab(vec4i xyzw, vec4i abcd);
 VECMATH_FINLINE vec4i VECTORCALL v_permi_xycd(vec4i xyzw, vec4i abcd);
 VECMATH_FINLINE vec4i VECTORCALL v_permi_xbzd(vec4i xyzw, vec4i abcd);
+VECMATH_FINLINE vec4i VECTORCALL v_permi_xyzd(vec4i xyzw, vec4i abcd);
 VECMATH_FINLINE vec4i VECTORCALL v_permi_xzxz(vec4i xyzw);
 VECMATH_FINLINE vec4i VECTORCALL v_permi_ywyw(vec4i xyzw);
 VECMATH_FINLINE vec4i VECTORCALL v_permi_xyxy(vec4i xyzw);
@@ -438,11 +439,14 @@ VECMATH_FINLINE vec4i VECTORCALL v_packus16(vec4i a);
 //
 // vector algebra
 //
-
+//! dot product: .xyzw = (a.x * b.x + a.y * b.y); a.z, b.z, a.w, b.w could be anything (even NAN)
+VECMATH_FINLINE vec4f VECTORCALL v_dot2(vec4f a, vec4f b);
 //! dot product: .xyzw = (a.x * b.x + a.y * b.y + a.z * b.z); a.w, b.w could be anything (even NAN)
 VECMATH_FINLINE vec4f VECTORCALL v_dot3(vec4f a, vec4f b);
 //! dot product: .xyzw = (a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w)
 VECMATH_FINLINE vec4f VECTORCALL v_dot4(vec4f a, vec4f b);
+//! dot product: .x = (a.x * b.x + a.y * b.y); a.z, b.z, a.w, b.w could be anything (even NAN)
+VECMATH_FINLINE vec4f VECTORCALL v_dot2_x(vec4f a, vec4f b);
 //! dot product: .x = (a.x * b.x + a.y * b.y + a.z * b.z); a.w, b.w could be anything (even NAN)
 VECMATH_FINLINE vec4f VECTORCALL v_dot3_x(vec4f a, vec4f b);
 //! dot product: .x = (a.x * b.x + a.y * b.y + a.z * b.z + a.w * b.w)
@@ -477,33 +481,47 @@ VECMATH_FINLINE vec3f VECTORCALL v_vtriple3(vec3f a, vec3f b, vec3f c);
 VECMATH_FINLINE vec4f VECTORCALL v_length4_sq(vec4f a);
 //! length squared: .xyzw = a.x*a.x + a.y*a.y + a.z*a.z
 VECMATH_FINLINE vec3f VECTORCALL v_length3_sq(vec3f a);
+//! length squared: .xyzw = a.x*a.x + a.y*a.y
+VECMATH_FINLINE vec4f VECTORCALL v_length2_sq(vec4f a);
 
 //! length: .xyzw = sqrt_est(a.x*a.x + a.y*a.y + a.z*a.z + a.w*a.w)
 VECMATH_FINLINE vec4f VECTORCALL v_length4_est(vec4f a);
 //! estimate length: .xyzw = sqrt_est(a.x*a.x + a.y*a.y + a.z*a.z)
 VECMATH_FINLINE vec3f VECTORCALL v_length3_est(vec3f a);
-//! estimate length: .xyzw = sqrt(a.x*a.x + a.y*a.y + a.z*a.z + a.w*a.w)
+//! estimate length: .xyzw = sqrt_est(a.x*a.x + a.y*a.y)
+VECMATH_FINLINE vec4f VECTORCALL v_length2_est(vec4f a);
+//! length: .xyzw = sqrt(a.x*a.x + a.y*a.y + a.z*a.z + a.w*a.w)
 VECMATH_FINLINE vec4f VECTORCALL v_length4(vec4f a);
 //! length: .xyzw = sqrt(a.x*a.x + a.y*a.y + a.z*a.z)
 VECMATH_FINLINE vec3f VECTORCALL v_length3(vec3f a);
+//! length: .xyzw = sqrt(a.x*a.x + a.y*a.y)
+VECMATH_FINLINE vec4f VECTORCALL v_length2(vec4f a);
 //! length squared: .x = a.x*a.x + a.y*a.y + a.z*a.z + a.w*a.w
 VECMATH_FINLINE vec4f VECTORCALL v_length4_sq_x(vec4f a);
 //! length squared: .x = a.x*a.x + a.y*a.y + a.z*a.z, a.w could be anything (even NAN)
 VECMATH_FINLINE vec3f VECTORCALL v_length3_sq_x(vec3f a);
+//! length squared: .x = a.x*a.x + a.y*a.y, a.z, a.w could be anything (even NAN)
+VECMATH_FINLINE vec4f VECTORCALL v_length2_sq_x(vec4f a);
 
 //! estimate length: .x = sqrt_est(a.x*a.x + a.y*a.y + a.z*a.z + a.w*a.w)
 VECMATH_FINLINE vec4f VECTORCALL v_length4_est_x(vec4f a);
 //! estimate length: .x = sqrt_est(a.x*a.x + a.y*a.y + a.z*a.z), a.w could be anything (even NAN)
 VECMATH_FINLINE vec3f VECTORCALL v_length3_est_x(vec3f a);
+//! estimate length: .x = sqrt_est(a.x*a.x + a.y*a.y, a.z, a.w could be anything (even NAN)
+VECMATH_FINLINE vec4f VECTORCALL v_length2_est_x(vec4f a);
 //! length: .x = sqrt(a.x*a.x + a.y*a.y + a.z*a.z + a.w*a.w)
 VECMATH_FINLINE vec4f VECTORCALL v_length4_x(vec4f a);
 //! length: .x = sqrt(a.x*a.x + a.y*a.y + a.z*a.z), a.w could be anything (even NAN)
 VECMATH_FINLINE vec3f VECTORCALL v_length3_x(vec3f a);
+//! length: .x = sqrt(a.x*a.x + a.y*a.y), a.z, a.w could be anything (even NAN)
+VECMATH_FINLINE vec4f VECTORCALL v_length2_x(vec4f a);
 
 //! normalize: a/length(a). will return NaN for zero vector
 VECMATH_FINLINE vec4f VECTORCALL v_norm4(vec4f a);
 //! normalize: a/length(a), .w could be anything (even NAN). will return NaN for zero vector
 VECMATH_FINLINE vec3f VECTORCALL v_norm3(vec3f a);
+//! normalize: a/length(a), .z, .w could be anything (even NAN). will return NaN for zero vector
+VECMATH_FINLINE vec4f VECTORCALL v_norm2(vec4f a);
 //! nans converted to zero, v_and(a, v_cmp_eq(a,a))
 VECMATH_FINLINE vec4f VECTORCALL v_remove_nan(vec4f a);
 //! nans and infs converted to zero
@@ -514,6 +532,9 @@ VECMATH_FINLINE vec4f VECTORCALL v_norm4_safe(vec4f a);
 //! safe normalize: a/length(a), .w could be anything (even NAN)
 //! result is not guaranteed to be normalized, but is definetly not NaN (NAN components will be zero)
 VECMATH_FINLINE vec3f VECTORCALL v_norm3_safe(vec3f a);
+//! safe normalize: a/length(a), .z, .w could be anything (even NAN)
+//! result is not guaranteed to be normalized, but is definetly not NaN (NAN components will be zero)
+VECMATH_FINLINE vec4f VECTORCALL v_norm2_safe(vec4f a);
 
 
 //
@@ -710,13 +731,17 @@ VECMATH_FINLINE void VECTORCALL v_bbox3_add_pt(bbox3f &b, vec3f p);
 VECMATH_FINLINE void VECTORCALL v_bbox3_add_box(bbox3f &b, bbox3f b2);
 //! extend bbox to enclose bb2 transformed with 4x4 matrix m
 VECMATH_FINLINE void VECTORCALL v_bbox3_add_transformed_box(bbox3f &b, mat44f_cref m, bbox3f b2);
+//! return b1+b2
+VECMATH_FINLINE bbox3f VECTORCALL v_bbox3_sum(bbox3f b1, bbox3f b2);
+//! return c ? b2 : b1 component-wise
+VECMATH_FINLINE bbox3f VECTORCALL v_bbox3_sel(bbox3f b1, bbox3f b2, vec4f c);
 
 //! .xyz = bbox dimensions; for empty bbox dimensions will be invalid (negative)
 VECMATH_FINLINE vec3f VECTORCALL v_bbox3_size(bbox3f b);
 //! .xyzw = bbox max dimension
 VECMATH_FINLINE vec3f VECTORCALL v_bbox3_max_size(bbox3f b);
 //! scale bbox by size_factor
-VECMATH_FINLINE bbox3f v_bbox3_scale(bbox3f b, vec4f size_factor);
+VECMATH_FINLINE bbox3f VECTORCALL v_bbox3_scale(bbox3f b, vec4f size_factor);
 //! .xyz = bbox center
 VECMATH_FINLINE vec3f VECTORCALL v_bbox3_center(bbox3f b);
 // get bbox vertex by index [0;7]
@@ -755,11 +780,50 @@ VECMATH_FINLINE bool VECTORCALL v_bbox3_test_trasformed_box_intersect_rel_tm(bbo
 VECMATH_FINLINE bbox3f VECTORCALL v_bbox3_get_box_intersection(bbox3f box0, bbox3f box1);
 //! tests whether box intersecs sphere and returns boolean
 VECMATH_FINLINE bool VECTORCALL v_bbox3_test_sph_intersect(bbox3f box, vec4f bsph_center, vec4f bsph_r2_x);
+//! extend box in all 3 dimensions by ext
+VECMATH_FINLINE void VECTORCALL v_bbox3_extend(bbox3f &b, vec3f ext);
+//! extend 2d box component-wise by ext
+VECMATH_FINLINE vec4f VECTORCALL v_bbox2_extend(vec4f box2d, vec4f ext);
 
+//! create empty bounding sphere (radius < 0)
+VECMATH_FINLINE void v_bsph_init_empty(vec4f &sph);
+//! create bounding sphere with specified center and radius
+VECMATH_FINLINE void v_bsph_init(vec4f &sph, vec3f center, vec4f radius_x);
 //! create minimal bounding sphere containing bbox (.xyz=bbox_center .w=radius)
-VECMATH_FINLINE vec4f v_bsph_r_from_bbox3(bbox3f b);
-//! create minimal bounding sphere containing bbox (.xyz=bbox_center .w=radius*radius)
-VECMATH_FINLINE vec4f v_bsph_r2_from_bbox3(bbox3f b);
+VECMATH_FINLINE void v_bsph_init_by_bbox3(vec4f &sph, bbox3f b);
+
+//! cehck that bsph is empty (radius < 0)
+VECMATH_FINLINE bool v_bsph_is_empty(vec4f sph);
+//! extract bsph radius to all components of result
+VECMATH_FINLINE vec4f v_bsph_radius(vec4f sph);
+VECMATH_FINLINE vec4f v_bsph_radius_sq(vec4f sph);
+
+//! check that two bounding spheres intersects
+VECMATH_FINLINE bool v_test_bsph_bsph_intersection(vec4f a, vec4f b);
+
+//! create minimal sphere containing sphere and point
+VECMATH_FINLINE vec4f v_bsph_pt_best_sum(vec4f bsph, vec3f pt);
+//! create minimal sphere containing two spheres
+VECMATH_FINLINE vec4f v_bsph_bsph_best_sum(vec4f a, vec4f b);
+//! create minimal sphere containing sphere and bbox
+VECMATH_FINLINE vec4f v_bsph_bbox_best_sum(vec4f bsph, bbox3f bbox);
+
+// Same as above, but all containers should not be empty
+VECMATH_FINLINE vec4f v_bsph_pt_best_sum_unsafe(vec4f bsph, vec3f pt);
+VECMATH_FINLINE vec4f v_bsph_bsph_best_sum_unsafe(vec4f a, vec4f b);
+VECMATH_FINLINE vec4f v_bsph_bbox_best_sum_unsafe(vec4f bsph, bbox3f bbox);
+
+//! extend bsphere to enclose point p
+VECMATH_FINLINE void v_bsph_add_pt(vec4f& sph, vec3f p);
+//! extend bsphere to enclose bsph b
+VECMATH_FINLINE void v_bsph_add_bsph(vec4f& a, vec4f b);
+//! extend bsphere to enclose bounding box b
+VECMATH_FINLINE void v_bsph_add_bbox(vec4f& sph, bbox3f b);
+
+// Same as above, but all containers should not be empty
+VECMATH_FINLINE void v_bsph_add_pt_unsafe(vec4f& sph, vec3f p);
+VECMATH_FINLINE void v_bsph_add_bsph_unsafe(vec4f& a, vec4f b);
+VECMATH_FINLINE void v_bsph_add_bbox_unsafe(vec4f& sph, bbox3f b);
 
 //! .x = squared MINIMUM distance from point c to bbox (bmin, bmax)
 VECMATH_FINLINE vec4f VECTORCALL v_distance_sq_to_bbox_x(vec4f bmin, vec4f bmax, vec4f c);
@@ -769,6 +833,12 @@ VECMATH_FINLINE vec4f VECTORCALL v_distance_sq_to_bbox_2d_x(vec4f bmin, vec4f bm
 
 //! .x = squared MAXIMUM 3d distance from point c to bbox (bmin, bmax)
 VECMATH_FINLINE vec4f VECTORCALL v_max_dist_sq_to_bbox_x(vec4f bmin, vec4f bmax, vec4f c);
+
+//! .x = squared MINIMUM 3d distance from between two bbox
+VECMATH_FINLINE vec4f VECTORCALL v_distance_sq_box_to_box_x(vec3f centerA, vec3f extentA, vec3f centerB, vec3f extentB);
+
+//! .x = squared MINIMUM 3d distance from between two bbox
+VECMATH_FINLINE vec4f VECTORCALL v_distance_sq_box_to_box_x_scaled(vec3f cA, vec3f extentA, vec3f cB, vec3f extentB, vec3f axis_scale);
 
 //returns point on infinite line which is closes to point
 VECMATH_FINLINE vec3f VECTORCALL closest_point_on_line(vec3f point, vec3f a, vec3f dir);
@@ -783,8 +853,12 @@ VECMATH_FINLINE vec3f VECTORCALL v_closest_bbox_point(vec3f bmin, vec3f bmax, ve
 
 //returns 1 if segment with start, start + dir*tmax intersects box
 VECMATH_INLINE bool VECTORCALL v_test_ray_box_intersection(vec3f start, vec3f dir, vec3f len_x, bbox3f box);
-//returns 1 if segment with start, start + dir*tmax intersects box, tmax will contain distance along ray. If <= 0, ray originated from box
+//same as previous but without support of empty bboxes
+VECMATH_INLINE bool VECTORCALL v_test_ray_box_intersection_unsafe(vec3f start, vec3f dir, vec3f len_x, bbox3f box);
+//returns 1 if segment with start, start + dir*tmax intersects box, tmax will contain distance along ray
 VECMATH_INLINE bool VECTORCALL v_ray_box_intersection(vec3f start, vec3f dir, vec3f &t_x, bbox3f box);
+//same as previous but without support of empty bboxes
+VECMATH_INLINE bool VECTORCALL v_ray_box_intersection_unsafe(vec3f start, vec3f dir, vec3f &t_x, bbox3f box);
 //returns 1 if segment with start, start + end intersects box
 VECMATH_FINLINE bool VECTORCALL v_test_segment_box_intersection(vec3f start, vec3f end, bbox3f box);
 
@@ -792,9 +866,9 @@ VECMATH_FINLINE bool VECTORCALL v_test_segment_box_intersection(vec3f start, vec
 //.x - closest dist (tmin), .y farthest dist (tmax)
 // both can be negative
 // ray intersects box if tmax >= max(ray.tmin, tmin) && tmin <= ray.tmax
-VECMATH_INLINE vec4f VECTORCALL v_ray_box_intersect_dist(vec3f bmin, vec3f bmax, vec3f rayOrigin, vec3f rayDir);
+VECMATH_INLINE vec4f VECTORCALL v_ray_box_intersect_dist(vec3f bmin, vec3f bmax, vec3f ray_origin, vec3f ray_dir, vec3f is_empty_box);
 //approximate distance to box intersection (uses v_rcp_est instead of 1/rayDir). A bit faster, v_rcp_est error is < 1e-12
-VECMATH_INLINE vec4f VECTORCALL v_ray_box_intersect_dist_est(vec3f bmin, vec3f bmax, vec3f rayOrigin, vec3f rayDir);
+VECMATH_INLINE vec4f VECTORCALL v_ray_box_intersect_dist_est(vec3f bmin, vec3f bmax, vec3f ray_origin, vec3f ray_dir, vec3f is_empty_box);
 
 // return -1 if no intersection found, or box side index in [0; 5] and output param 'at' in range [0.0; 1.0]
 inline int VECTORCALL v_segment_box_intersection_side(vec3f start, vec3f end, bbox3f box, float& out_at);
@@ -802,6 +876,11 @@ inline int VECTORCALL v_segment_box_intersection_side(vec3f start, vec3f end, bb
 // check ray or segment intersection with sphere
 VECMATH_FINLINE bool VECTORCALL v_test_ray_sphere_intersection(vec3f p0, vec3f dir, vec4f len, vec4f sphere_center, vec4f sphere_r2_x);
 VECMATH_FINLINE bool VECTORCALL v_test_segment_sphere_intersection(vec3f p0, vec3f p1, vec3f sphere_center, vec4f sphere_r2_x);
+
+// return two intersection distances if ray intersect sphere. both distances can be negative.
+VECMATH_FINLINE bool v_ray_sphere_intersection_dist(vec3f start, vec3f dir, vec3f sphere_center, vec4f sphere_r2_x, vec4f &out_p1_t, vec4f &out_p2_t);
+// check that ray intersect sphere on distance [0; t] from start and set T of closest intersection (0 if start inside sphere)
+VECMATH_FINLINE bool v_ray_sphere_intersection(vec3f start, vec3f dir, vec4f &t_x, vec3f sphere_center, vec4f sphere_r2_x);
 
 //visibility
 ///construct 6 planes from worldviewproj matrix, with reversed z-buffer camPlanes5 far, camPlanes4 near
