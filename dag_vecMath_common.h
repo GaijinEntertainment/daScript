@@ -219,18 +219,24 @@ VECMATH_FINLINE vec4f VECTORCALL
 #if !_TARGET_SIMD_NEON
 VECMATH_FINLINE vec4f VECTORCALL v_length4_sq(vec4f a) { return v_dot4(a,a); }
 VECMATH_FINLINE vec3f VECTORCALL v_length3_sq(vec3f a) { return v_dot3(a,a); }
+VECMATH_FINLINE vec4f VECTORCALL v_length2_sq(vec4f a) { return v_dot2(a,a); }
 VECMATH_FINLINE vec4f VECTORCALL v_length4_sq_x(vec4f a) { return v_dot4_x(a,a); }
 VECMATH_FINLINE vec3f VECTORCALL v_length3_sq_x(vec3f a) { return v_dot3_x(a,a); }
+VECMATH_FINLINE vec4f VECTORCALL v_length2_sq_x(vec4f a) { return v_dot2_x(a,a); }
 #endif
 
 VECMATH_FINLINE vec4f VECTORCALL v_length4(vec4f a) { return v_sqrt4(v_length4_sq(a)); }
 VECMATH_FINLINE vec3f VECTORCALL v_length3(vec3f a) { return v_sqrt4(v_length3_sq(a)); }
+VECMATH_FINLINE vec4f VECTORCALL v_length2(vec4f a) { return v_sqrt4(v_length2_sq(a)); }
 VECMATH_FINLINE vec4f VECTORCALL v_length4_est(vec4f a) { return v_sqrt4_fast(v_length4_sq(a)); }
 VECMATH_FINLINE vec3f VECTORCALL v_length3_est(vec3f a) { return v_sqrt4_fast(v_length3_sq(a)); }
+VECMATH_FINLINE vec4f VECTORCALL v_length2_est(vec4f a) { return v_sqrt4_fast(v_length2_sq(a)); }
 VECMATH_FINLINE vec4f VECTORCALL v_length4_x(vec4f a) { return v_sqrt_x(v_length4_sq_x(a)); }
 VECMATH_FINLINE vec3f VECTORCALL v_length3_x(vec3f a) { return v_sqrt_x(v_length3_sq_x(a)); }
+VECMATH_FINLINE vec4f VECTORCALL v_length2_x(vec4f a) { return v_sqrt_x(v_length2_sq_x(a)); }
 VECMATH_FINLINE vec4f VECTORCALL v_length4_est_x(vec4f a) { return v_sqrt_fast_x(v_length4_sq_x(a)); }
 VECMATH_FINLINE vec3f VECTORCALL v_length3_est_x(vec3f a) { return v_sqrt_fast_x(v_length3_sq_x(a)); }
+VECMATH_FINLINE vec4f VECTORCALL v_length2_est_x(vec4f a) { return v_sqrt_fast_x(v_length2_sq_x(a)); }
 
 VECMATH_FINLINE vec3f VECTORCALL v_striple3(vec3f a, vec3f b, vec3f c) { return v_dot3(v_cross3(a, b), c); }
 VECMATH_FINLINE vec3f VECTORCALL v_vtriple3(vec3f a, vec3f b, vec3f c)
@@ -321,6 +327,7 @@ VECMATH_FINLINE vec4f VECTORCALL v_remove_nan(vec4f a) {return v_and(a, v_cmp_eq
 #endif
 VECMATH_FINLINE vec4f VECTORCALL v_norm4_safe(vec4f a) {return v_remove_not_finite(v_norm4(a));}
 VECMATH_FINLINE vec4f VECTORCALL v_norm3_safe(vec4f a) {return v_remove_not_finite(v_norm3(a));}
+VECMATH_FINLINE vec4f VECTORCALL v_norm2_safe(vec4f a) {return v_remove_not_finite(v_norm2(a));}
 
 VECMATH_FINLINE void VECTORCALL v_mat33_transpose(mat33f &dest, mat33f_cref src)
 {
@@ -731,13 +738,29 @@ VECMATH_FINLINE void VECTORCALL v_bbox3_add_transformed_box(bbox3f &b, mat44f_cr
   v_bbox3_add_box(b, temp);
 }
 
+VECMATH_FINLINE bbox3f VECTORCALL v_bbox3_sum(bbox3f b1, bbox3f b2)
+{
+  bbox3f b;
+  b.bmin = v_min(b1.bmin, b2.bmin);
+  b.bmax = v_max(b1.bmax, b2.bmax);
+  return b;
+}
+
+VECMATH_FINLINE bbox3f VECTORCALL v_bbox3_sel(bbox3f b1, bbox3f b2, vec4f c)
+{
+  bbox3f b;
+  b.bmin = v_sel(b1.bmin, b2.bmin, c);
+  b.bmax = v_sel(b1.bmax, b2.bmax, c);
+  return b;
+}
+
 VECMATH_FINLINE vec3f VECTORCALL v_bbox3_size(bbox3f b) { return v_sub(b.bmax, b.bmin); }
 
 VECMATH_FINLINE vec3f VECTORCALL v_bbox3_max_size(bbox3f b)
 {
   return v_hmax3(v_bbox3_size(b));
 }
-VECMATH_FINLINE bbox3f v_bbox3_scale(bbox3f b, vec4f size_factor)
+VECMATH_FINLINE bbox3f VECTORCALL v_bbox3_scale(bbox3f b, vec4f size_factor)
 {
   vec3f center = v_bbox3_center(b);
   return bbox3f
@@ -945,13 +968,171 @@ VECMATH_FINLINE bool VECTORCALL v_bbox3_test_sph_intersect(bbox3f box, vec4f bsp
   return v_test_vec_x_le_0(v_sub_x(distSq, bsph_r2_x));
 }
 
-VECMATH_FINLINE vec4f v_bsph_r_from_bbox3(bbox3f b)
+VECMATH_FINLINE void VECTORCALL v_bbox3_extend(bbox3f &b, vec3f ext)
 {
-  return v_mul(V_C_HALF, v_perm_xyzd(v_add(b.bmin, b.bmax), v_length3(v_bbox3_size(b))));
+  b.bmin = v_sub(b.bmin, ext);
+  b.bmax = v_add(b.bmax, ext);
 }
-VECMATH_FINLINE vec4f v_bsph_r2_from_bbox3(bbox3f b)
+
+VECMATH_FINLINE vec4f VECTORCALL v_bbox2_extend(vec4f box2d, vec4f ext)
 {
-  return v_mul(V_C_HALF, v_perm_xyzd(v_add(b.bmin, b.bmax), v_length3_sq(v_bbox3_size(b))));
+  return v_perm_xycd(v_sub(box2d, ext), v_add(box2d, ext));
+}
+
+VECMATH_FINLINE void v_bsph_init_empty(vec4f &sph)
+{
+  sph = v_make_vec4f(0, 0, 0, -1);
+}
+
+VECMATH_FINLINE void v_bsph_init(vec4f &sph, vec3f center, vec4f radius_x)
+{
+  sph = v_perm_xyzd(center, v_splat_x(radius_x));
+}
+
+VECMATH_FINLINE void v_bsph_init_by_bbox3(vec4f &sph, bbox3f b)
+{
+  sph = v_mul(V_C_HALF, v_perm_xyzd(v_add(b.bmin, b.bmax), v_length3(v_bbox3_size(b))));
+}
+
+VECMATH_FINLINE bool v_bsph_is_empty(vec4f sph)
+{
+  return v_extract_w(sph) < 0;
+}
+
+VECMATH_FINLINE vec4f v_bsph_radius(vec4f sph)
+{
+  return v_splat_w(sph);
+}
+
+VECMATH_FINLINE vec4f v_bsph_radius_sq(vec4f sph)
+{
+  return v_sqr(v_bsph_radius(sph));
+}
+
+VECMATH_FINLINE bool v_test_bsph_bsph_intersection(vec4f a, vec4f b)
+{
+  vec4f distSq = v_length3_sq_x(v_sub(a, b));
+  vec4f radSum = v_splat_w(v_add(a, b));
+  return v_test_vec_x_le(distSq, v_sqr(radSum));
+}
+
+VECMATH_FINLINE vec4f v_bsph_pt_best_sum(vec4f bsph, vec3f pt)
+{
+  if (v_bsph_is_empty(bsph))
+    return v_perm_xyzd(pt, v_zero());
+  return v_bsph_pt_best_sum_unsafe(bsph, pt);
+}
+
+VECMATH_FINLINE vec4f v_bsph_bsph_best_sum(vec4f a, vec4f b)
+{
+  vec3f cd = v_sub(b, a);
+  vec4f rd = v_length3(cd);
+  vec4f ar = v_splat_w(a);
+  vec4f br = v_splat_w(b);
+  vec4f isEmptyA = v_cmp_lt(v_splat_w(a), v_zero());
+  vec4f isEmptyB = v_cmp_lt(v_splat_w(b), v_zero());
+  vec4f insideA = v_cmp_ge(ar, v_add(rd, br));
+  vec4f insideB = v_cmp_ge(br, v_add(rd, ar));
+  vec4f rad = v_div(v_add(rd, v_add(ar, br)), V_C_TWO);
+  vec4f center = v_madd(cd, v_div(v_sub(rad, ar), rd), a);
+  vec4f sph = v_perm_xyzd(center, rad);
+  vec4f forceA = v_or(insideA, isEmptyB);
+  vec4f forceB = v_or(insideB, isEmptyA);
+  return v_sel(v_sel(sph, b, forceB), a, forceA);
+}
+
+VECMATH_FINLINE vec4f v_bsph_bbox_best_sum(vec4f bsph, bbox3f bbox)
+{
+  if (v_bsph_is_empty(bsph))
+  {
+    vec4f sphB;
+    v_bsph_init_by_bbox3(sphB, bbox);
+    return sphB;
+  }
+  if (v_bbox3_is_empty(bbox))
+    return bsph;
+  return v_bsph_bbox_best_sum_unsafe(bsph, bbox);
+}
+
+VECMATH_FINLINE vec4f v_bsph_pt_best_sum_unsafe(vec4f bsph, vec3f pt)
+{
+  vec3f cd = v_sub(pt, bsph);
+  vec4f rd = v_length3(cd);
+  vec4f r = v_splat_w(bsph);
+  vec4f inside = v_cmp_ge(r, rd);
+  vec4f rad = v_div(v_add(rd, r), V_C_TWO);
+  vec4f center = v_madd(cd, v_div(v_sub(rad, r), rd), bsph);
+  vec4f sph = v_perm_xyzd(center, rad);
+  return v_sel(sph, bsph, inside);
+}
+
+VECMATH_FINLINE vec4f v_bsph_bsph_best_sum_unsafe(vec4f a, vec4f b)
+{
+  vec3f cd = v_sub(b, a);
+  vec4f rd = v_length3(cd);
+  vec4f ar = v_splat_w(a);
+  vec4f br = v_splat_w(b);
+  vec4f insideA = v_cmp_ge(ar, v_add(rd, br));
+  vec4f insideB = v_cmp_ge(br, v_add(rd, ar));
+  vec4f rad = v_div(v_add(rd, v_add(ar, br)), V_C_TWO);
+  vec4f center = v_madd(cd, v_div(v_sub(rad, ar), rd), a);
+  vec4f sph = v_perm_xyzd(center, rad);
+  return v_sel(v_sel(sph, b, insideB), a, insideA);
+}
+
+VECMATH_FINLINE vec4f v_bsph_bbox_best_sum_unsafe(vec4f bsph, bbox3f bbox)
+{
+  vec3f mind = v_abs(v_sub(bbox.bmin, bsph));
+  vec3f maxd = v_abs(v_sub(bbox.bmax, bsph));
+  vec3f p = v_sel(bbox.bmax, bbox.bmin, v_cmp_ge(mind, maxd));
+  return v_bsph_pt_best_sum_unsafe(bsph, p);
+}
+
+VECMATH_FINLINE void v_bsph_add_pt(vec4f& sph, vec3f p)
+{
+  vec4f isEmpty = v_cmp_lt(v_splat_w(sph), v_zero());
+  v_bsph_add_pt_unsafe(sph, p);
+  sph = v_sel(sph, v_perm_xyzd(p, v_zero()), isEmpty);
+}
+
+VECMATH_FINLINE void v_bsph_add_bsph(vec4f& a, vec4f b)
+{
+  vec4f initialA = a;
+  vec4f isEmptyA = v_cmp_lt(v_splat_w(a), v_zero());
+  vec4f isEmptyB = v_cmp_lt(v_splat_w(b), v_zero());
+  v_bsph_add_bsph_unsafe(a, b);
+  a = v_sel(v_sel(a, initialA, isEmptyB), b, isEmptyA);
+}
+
+VECMATH_FINLINE void v_bsph_add_bbox(vec4f& sph, bbox3f b)
+{
+  vec4f sphA = sph;
+  vec4f sphB;
+  v_bsph_init_by_bbox3(sphB, b);
+  vec4f isEmptyA = v_cmp_lt(v_splat_w(sph), v_zero());
+  vec4f isEmptyB = v_cmp_gt(b.bmin, b.bmax);;
+  v_bsph_add_bbox_unsafe(sph, b);
+  sph = v_sel(v_sel(sph, sphA, isEmptyB), sphB, isEmptyA);
+}
+
+VECMATH_FINLINE void v_bsph_add_pt_unsafe(vec4f& sph, vec3f p)
+{
+  vec4f r = v_length3(v_sub(sph, p));
+  sph = v_perm_xyzd(sph, v_max(sph, r));
+}
+
+VECMATH_FINLINE void v_bsph_add_bsph_unsafe(vec4f& a, vec4f b)
+{
+  vec4f r = v_add(v_length3(v_sub(a, b)), v_splat_w(b));
+  a = v_perm_xyzd(a, v_max(a, r));
+}
+
+VECMATH_FINLINE void v_bsph_add_bbox_unsafe(vec4f& sph, bbox3f b)
+{
+  vec4f d1 = v_abs(v_sub(sph, b.bmin));
+  vec4f d2 = v_abs(v_sub(sph, b.bmax));
+  vec4f r = v_length3(v_max(d1, d2));
+  sph = v_perm_xyzd(sph, v_max(sph, r));
 }
 
 VECMATH_FINLINE quat4f VECTORCALL v_quat_lerp(vec4f tttt, quat4f a, quat4f b)
@@ -1409,14 +1590,11 @@ VECMATH_FINLINE vec3f VECTORCALL v_unsafe_ray_intersect_plane(vec3f point, vec3f
 
 VECMATH_FINLINE vec3f VECTORCALL closest_point_on_segment(vec3f point, vec3f a, vec3f b)
 {
-  vec3f apoint = v_sub(point, a);
+  vec3f ap = v_sub(point, a);
   vec3f ab = v_sub(b, a);
-  vec3f ab2 = v_length3_sq(ab);
-  vec3f t = v_div(v_dot3(apoint, ab), ab2);
-  //clamp segment
-  t = v_max(t, v_zero());
-  t = v_min(t, V_C_ONE);
-  return v_madd(ab, t, a);
+  vec3f lenSq = v_length3_sq(ab);
+  vec3f t = v_clamp(v_dot3(ap, ab), v_zero(), lenSq);
+  return v_madd(v_safediv(ab, lenSq), t, a);
 }
 
 VECMATH_FINLINE void VECTORCALL vis_transform_points_4(vec4f* dest, vec4f x, vec4f y, vec4f z, mat44f_cref mat)
@@ -2142,32 +2320,30 @@ VECMATH_FINLINE int VECTORCALL v_screen_size_b(vec3f box2_xyXY, vec3f threshold,
 //.x - closest dist (tmin), .y farthest dist (tmax)
 // both can be negative
 // ray intersects box if tmax >= max(ray.tmin, tmin) && tmin < ray.tmax
-VECMATH_INLINE vec4f VECTORCALL v_ray_box_intersect_dist_est(vec3f bmin, vec3f bmax, vec3f rayOrigin, vec3f rayDir)
+VECMATH_INLINE vec4f VECTORCALL v_ray_box_intersect_dist_est(vec3f bmin, vec3f bmax, vec3f ray_origin, vec3f ray_dir, vec3f is_empty_box)
 {
-  vec3f invRay = v_rcp_est(rayDir);//we can't use 1/x or v_rcp, as we have to ensure that invRay has infs if rayDir is 0 in some direction
-  vec3f isEmptyBox = v_cmp_gt(bmin, bmax);
-  vec3f firstPlaneIntersect  = v_mul(v_sub(bmin, rayOrigin), invRay);
-  vec3f secondPlaneIntersect = v_mul(v_sub(bmax, rayOrigin), invRay);
+  vec3f invRay = v_rcp_est(ray_dir);//we can't use 1/x or v_rcp, as we have to ensure that invRay has infs if rayDir is 0 in some direction
+  vec3f firstPlaneIntersect  = v_mul(v_sub(bmin, ray_origin), invRay);
+  vec3f secondPlaneIntersect = v_mul(v_sub(bmax, ray_origin), invRay);
   vec3f furthestPlane = v_max(firstPlaneIntersect, secondPlaneIntersect);
   vec3f closestPlane = v_min(firstPlaneIntersect, secondPlaneIntersect);
   vec3f furthestDistance = v_hmin3(furthestPlane);
-  vec3f closestDistance = v_hmax3(v_sel(closestPlane, V_C_INF, isEmptyBox)); // closest dist invalidation will be enough to fail intersection
+  vec3f closestDistance = v_hmax3(v_sel(closestPlane, V_C_INF, is_empty_box)); // closest dist invalidation will be enough to fail intersection
   return v_perm_xaxa(closestDistance, furthestDistance);
 }
 
 //.x - closest dist (tmin), .y farthest dist (tmax)
 // both can be negative
 // ray intersects box if tmax >= max(ray.tmin, tmin) && tmin <= ray.tmax
-VECMATH_INLINE vec4f VECTORCALL v_ray_box_intersect_dist(vec3f bmin, vec3f bmax, vec3f rayOrigin, vec3f rayDir)
+VECMATH_INLINE vec4f VECTORCALL v_ray_box_intersect_dist(vec3f bmin, vec3f bmax, vec3f ray_origin, vec3f ray_dir, vec3f is_empty_box)
 {
-  vec3f invRay = v_rcp_safe(rayDir, V_C_INF);
-  vec3f isEmptyBox = v_cmp_gt(bmin, bmax);
-  vec3f firstPlaneIntersect = v_mul(v_sub(bmin, rayOrigin), invRay);
-  vec3f secondPlaneIntersect = v_mul(v_sub(bmax, rayOrigin), invRay);
+  vec3f invRay = v_rcp_safe(ray_dir, V_C_INF);
+  vec3f firstPlaneIntersect = v_mul(v_sub(bmin, ray_origin), invRay);
+  vec3f secondPlaneIntersect = v_mul(v_sub(bmax, ray_origin), invRay);
   vec3f furthestPlane = v_max(firstPlaneIntersect, secondPlaneIntersect);
   vec3f closestPlane = v_min(firstPlaneIntersect, secondPlaneIntersect);
   vec3f furthestDistance = v_hmin3(furthestPlane);
-  vec3f closestDistance = v_hmax3(v_sel(closestPlane, V_C_INF, isEmptyBox));
+  vec3f closestDistance = v_hmax3(v_sel(closestPlane, V_C_INF, is_empty_box));
   return v_perm_xaxa(closestDistance, furthestDistance);
 }
 
@@ -2182,13 +2358,28 @@ VECMATH_INLINE bool VECTORCALL v_segment_test_internal(vec3f lmin_lmax, vec3f& t
 
 VECMATH_INLINE bool VECTORCALL v_ray_box_intersection(vec3f start, vec3f dir, vec3f &t_x, bbox3f box)
 {
-  vec4f at = v_ray_box_intersect_dist(box.bmin, box.bmax, start, dir);
+  vec3f isEmptyBox = v_cmp_gt(box.bmin, box.bmax);
+  vec4f at = v_ray_box_intersect_dist(box.bmin, box.bmax, start, dir, isEmptyBox);
+  return v_segment_test_internal(at, t_x);
+}
+
+VECMATH_INLINE bool VECTORCALL v_ray_box_intersection_unsafe(vec3f start, vec3f dir, vec3f &t_x, bbox3f box)
+{
+  vec3f isEmptyBox = v_zero();
+  vec4f at = v_ray_box_intersect_dist(box.bmin, box.bmax, start, dir, isEmptyBox);
   return v_segment_test_internal(at, t_x);
 }
 
 VECMATH_INLINE bool VECTORCALL v_test_ray_box_intersection(vec3f start, vec3f dir, vec3f len_x, bbox3f box)
 {
-  return v_segment_test_internal(v_ray_box_intersect_dist(box.bmin, box.bmax, start, dir), len_x);
+  vec3f isEmptyBox = v_cmp_gt(box.bmin, box.bmax);
+  return v_segment_test_internal(v_ray_box_intersect_dist(box.bmin, box.bmax, start, dir, isEmptyBox), len_x);
+}
+
+VECMATH_INLINE bool VECTORCALL v_test_ray_box_intersection_unsafe(vec3f start, vec3f dir, vec3f len_x, bbox3f box)
+{
+  vec3f isEmptyBox = v_zero();
+  return v_segment_test_internal(v_ray_box_intersect_dist(box.bmin, box.bmax, start, dir, isEmptyBox), len_x);
 }
 
 VECMATH_FINLINE bool VECTORCALL v_test_segment_box_intersection(vec3f start, vec3f end, bbox3f box)
@@ -2289,6 +2480,36 @@ VECMATH_FINLINE bool VECTORCALL v_test_segment_sphere_intersection(vec3f p0,
   vec3f ap = v_sub(sphere_center, p0);
   vec4f t = v_min(v_max(v_div(v_dot3(ap, dir), v_max(lenSq, v_splats(0.00001f))), v_zero()), V_C_ONE);
   return v_test_vec_x_le(v_length3_sq(v_sub(v_mul(dir, t), ap)), sphere_r2_x);
+}
+
+VECMATH_FINLINE bool v_ray_sphere_intersection_dist(vec3f start, vec3f dir, vec3f sphere_center, vec4f sphere_r2_x, vec4f &out_p1_t, vec4f &out_p2_t)
+{
+  vec3f p = v_sub(start, sphere_center);
+  vec4f c = v_sub_x(v_length3_sq_x(p), sphere_r2_x);
+  vec4f b = v_dot3_x(p, dir);
+  c = v_add_x(c, c);
+  c = v_add_x(c, c);
+  b = v_add_x(b, b);
+  vec4f d = v_sub_x(v_mul_x(b, b), c);
+  if (v_test_vec_x_ge_0(d))
+  {
+    vec4f sq = v_sqrt_x(d);
+    out_p1_t = v_mul_x(v_add_x(b, sq), v_set_x(-0.5f));
+    out_p2_t = v_mul_x(v_sub_x(b, sq), v_set_x(-0.5f));
+    return true;
+  }
+  return false;
+}
+
+VECMATH_FINLINE bool v_ray_sphere_intersection(vec3f start, vec3f dir, vec4f &t_x, vec3f sphere_center, vec4f sphere_r2_x)
+{
+  vec4f p1t, p2t;
+  if (v_ray_sphere_intersection_dist(start, dir, sphere_center, sphere_r2_x, p1t, p2t) && v_test_vec_x_lt(p1t, t_x) && v_test_vec_x_ge_0(p2t))
+  {
+    t_x = v_max(p1t, v_zero());
+    return true;
+  }
+  return false;
 }
 
 #if !_TARGET_SIMD_SSE
@@ -2519,32 +2740,34 @@ VECMATH_FINLINE plane3f VECTORCALL v_transform_plane(plane3f plane, mat44f_cref 
 
 VECMATH_FINLINE vec4f VECTORCALL v_distance_sq_to_bbox_x(vec4f bmin, vec4f bmax, vec4f c)
 {
-  vec4f dist = v_sub(bmin, c);
-  vec4f dmin3 = v_and(v_cmp_gt(bmin, c), v_mul(dist,dist));
-
-  dist = v_sub(bmax, c);
-  dmin3 = v_add(dmin3, v_and(v_cmp_gt(c, bmax), v_mul(dist,dist)));
-  return v_add_x(v_add_x(dmin3, v_splat_z(dmin3)), v_splat_y(dmin3));
+  vec4f diff = v_max(v_max(v_sub(bmin, c), v_sub(c, bmax)), v_zero());
+  return v_dot3_x(diff, diff);
 }
 
 VECMATH_FINLINE vec4f VECTORCALL v_distance_sq_to_bbox_2d_x(vec4f bmin, vec4f bmax, vec4f c)
 {
-  vec4f dist = v_sub(bmin, c);
-  vec4f dmin3 = v_and(v_cmp_gt(bmin, c), v_mul(dist,dist));
+  vec4f diff = v_max(v_max(v_sub(bmin, c), v_sub(c, bmax)), v_zero());
+  vec3f diffSq = v_mul(diff, diff);
+  return v_add_x(diffSq, v_splat_z(diffSq));
+}
 
-  dist = v_sub(bmax, c);
-  dmin3 = v_add(dmin3, v_and(v_cmp_gt(c, bmax), v_mul(dist,dist)));
-  return v_add_x(dmin3, v_splat_z(dmin3));
+VECMATH_FINLINE vec4f VECTORCALL v_distance_sq_box_to_box_x(vec3f centerA, vec3f extentA, vec3f centerB, vec3f extentB)
+{
+  vec3f axisDistances = v_max(v_sub(v_abs(v_sub(centerB, centerA)), v_add(extentA, extentB)), v_zero());
+  return v_dot3_x(axisDistances, axisDistances);
+}
+
+VECMATH_FINLINE vec4f VECTORCALL v_distance_sq_box_to_box_x_scaled(vec3f centerA, vec3f extentA, vec3f centerB, vec3f extentB, vec3f scale)
+{
+  vec3f axisDistances = v_max(v_sub(v_abs(v_sub(centerB, centerA)), v_add(extentA, extentB)), v_zero());
+  axisDistances = v_mul(axisDistances, scale);
+  return v_dot3_x(axisDistances, axisDistances);
 }
 
 VECMATH_FINLINE vec4f VECTORCALL v_max_dist_sq_to_bbox_x(vec4f bmin, vec4f bmax, vec4f c)
 {
-  vec4f dist1 = v_sub(bmin, c);
-  dist1 = v_mul(dist1, dist1);
-  vec4f dist2 = v_sub(bmax, c);
-  dist2 = v_mul(dist2, dist2);
-  dist2 = v_max(dist2, dist1);
-  return v_add_x(v_add_x(dist2, v_splat_z(dist2)), v_splat_y(dist2));
+  vec4f diff = v_max(v_max(v_sub(c, bmin), v_sub(bmax, c)), v_zero());
+  return v_dot3_x(diff, diff);
 }
 
 VECMATH_FINLINE vec3f VECTORCALL v_closest_bbox_point(vec3f bmin, vec3f bmax, vec3f c)
@@ -2864,6 +3087,7 @@ VECMATH_FINLINE vec4i VECTORCALL v_permi_xzac(vec4i xyzw, vec4i abcd) { return v
 VECMATH_FINLINE vec4i VECTORCALL v_permi_xyab(vec4i xyzw, vec4i abcd) { return v_cast_vec4i(v_perm_xyab(v_cast_vec4f(xyzw), v_cast_vec4f(abcd))); }
 VECMATH_FINLINE vec4i VECTORCALL v_permi_xycd(vec4i xyzw, vec4i abcd) { return v_cast_vec4i(v_perm_xycd(v_cast_vec4f(xyzw), v_cast_vec4f(abcd))); }
 VECMATH_FINLINE vec4i VECTORCALL v_permi_xbzd(vec4i xyzw, vec4i abcd) { return v_cast_vec4i(v_perm_xayb(v_perm_xzxz(v_cast_vec4f(xyzw)), v_perm_ywyw(v_cast_vec4f(abcd)))); }
+VECMATH_FINLINE vec4i VECTORCALL v_permi_xyzd(vec4i xyzw, vec4i abcd) { return v_cast_vec4i(v_perm_xyzd(v_cast_vec4f(xyzw), v_cast_vec4f(abcd))); }
 VECMATH_FINLINE vec4i VECTORCALL v_permi_xzxz(vec4i xyzw) { return v_cast_vec4i(v_perm_xzxz(v_cast_vec4f(xyzw))); }
 VECMATH_FINLINE vec4i VECTORCALL v_permi_ywyw(vec4i xyzw) { return v_cast_vec4i(v_perm_ywyw(v_cast_vec4f(xyzw))); }
 VECMATH_FINLINE vec4i VECTORCALL v_permi_xyxy(vec4i xyzw) { return v_cast_vec4i(v_perm_xyxy(v_cast_vec4f(xyzw))); }
