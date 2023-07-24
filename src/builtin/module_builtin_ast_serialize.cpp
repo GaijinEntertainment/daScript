@@ -1,5 +1,6 @@
 #include "daScript/misc/platform.h"
 
+#include "daScript/ast/ast_serialize_macro.h"
 #include "daScript/ast/ast_expressions.h"
 #include "daScript/ast/ast.h"
 
@@ -57,8 +58,8 @@ namespace das {
 
     void AstSerializer::write ( const void * data, size_t size ) {
         auto oldSize = buffer.size();
-        buffer.resize(oldSize+size);
-        memcpy(buffer.data()+oldSize, data, size);
+        buffer.resize(oldSize + size);
+        memcpy(buffer.data() + oldSize, data, size);
     }
 
     void AstSerializer::read  ( void * data, size_t size ) {
@@ -390,11 +391,13 @@ namespace das {
     }
 
     AstSerializer & AstSerializer::operator << ( TypeAnnotationPtr & type_anno ) {
+        // TODO: more elaborate code with factory
         serializeSmartPtr(type_anno, smartTypeAnnotationMap);
         return *this;
     }
 
     AstSerializer & AstSerializer::operator << ( TypeAnnotation * & type_anno ) {
+        // TODO: more elaborate code with factory
         serializePointer(type_anno, typeAnnotationMap);
         return *this;
     }
@@ -568,13 +571,9 @@ namespace das {
         BasicAnnotation::serialize(ser);
     }
 
-    bool Annotation::registered = AnnotationFactory::registerCreator (
-        "Annotation", Annotation::createInstance
-    );
-
-    bool FunctionAnnotation::registered = AnnotationFactory::registerCreator (
-        "FunctionAnnotation", FunctionAnnotation::createInstance
-    );
+    FACTORY_REGISTER_ANNOTATION ( Annotation )
+    FACTORY_REGISTER_ANNOTATION ( TypeAnnotation )
+    FACTORY_REGISTER_ANNOTATION ( StructureTypeAnnotation )
 
     void BasicAnnotation::serialize ( AstSerializer & ser ) {
         ser << name << cppName;
@@ -583,12 +582,12 @@ namespace das {
 
     void ptr_ref_count::serialize ( AstSerializer & ser ) {
         ser.tag("ptr_ref_count");
-#if DAS_SMART_PTR_ID
-        ser << ref_count_id;
-#endif
-#if DAS_SMART_PTR_MAGIC
-        ser << magic;
-#endif
+        #if DAS_SMART_PTR_ID
+                ser << ref_count_id;
+        #endif
+        #if DAS_SMART_PTR_MAGIC
+                ser << magic;
+        #endif
         ser << ref_count;
     }
 
@@ -605,11 +604,6 @@ namespace das {
         ser << name << cppName << at << list << module << external << baseType
             << annotations << isPrivate;
         ptr_ref_count::serialize(ser);
-    }
-
-    void TypeAnnotation::serialize ( AstSerializer & ser ) {
-        ser.tag("TypeAnnotation");
-        Annotation::serialize(ser);
     }
 
     void Structure::serialize ( AstSerializer & ser ) {

@@ -8,6 +8,7 @@
 #include "daScript/misc/rangetype.h"
 #include "daScript/simulate/data_walker.h"
 #include "daScript/simulate/debug_info.h"
+#include "daScript/ast/ast_serialize_macro.h"
 #include "daScript/ast/compilation_errors.h"
 #include "daScript/ast/ast_typedecl.h"
 #include "daScript/simulate/aot_library.h"
@@ -19,12 +20,6 @@
 #ifndef DAS_THREAD_SAFE_ANNOTATIONS
 #define DAS_THREAD_SAFE_ANNOTATIONS    1
 #endif
-
-#define REGISTER_ANNOTATION_FACTORY( _name )                         \
-static AnnotationPtr create_ ## _name() { return make_smart<_name>(); }  \
-inline static bool _name ## _creator_registered =                 \
-                        AnnotationFactory::registerCreator(# _name,  \
-                                                             create_ ## _name)
 
 namespace das
 {
@@ -127,10 +122,8 @@ namespace das
         string describe() const { return name; }
         string getMangledName() const;
         void serialize( AstSerializer & ser );
+        ANNOTATION_DECLARE_SERIALIZABLE( Annotation );
         virtual void log ( TextWriter & ss, const AnnotationDeclaration & decl ) const;
-        virtual const char * getFactoryTag () override { return "Annotation"; }
-        static AnnotationPtr createInstance () { return make_smart<Annotation>(); }
-        static bool registered;
         Module *    module = nullptr;
     };
 
@@ -419,15 +412,10 @@ namespace das
         virtual bool isCompatible ( const FunctionPtr &, const vector<TypeDeclPtr> &, const AnnotationDeclaration &, string &  ) const { return true; }
         virtual bool isSpecialized() const { return false; }
         virtual void appendToMangledName( const FunctionPtr &, const AnnotationDeclaration &, string & /* mangledName */ ) const { }
-        virtual const char * getFactoryTag () override { return "FunctionAnnotation"; }
-        static AnnotationPtr createInstance () {
-            // XXX: FunctionAnnotation is abstract
-            return make_smart<Annotation>(); }
-        static bool registered;
     };
 
     struct TransformFunctionAnnotation : FunctionAnnotation {
-        TransformFunctionAnnotation ( const string & n ) : FunctionAnnotation(n) {}
+        TransformFunctionAnnotation ( const string & n = "" ) : FunctionAnnotation(n) {}
         virtual ExpressionPtr transformCall ( ExprCallFunc * /*call*/, string & /*err*/ ) override = 0;
         virtual bool apply ( const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &, string & ) override {
             return false;
@@ -441,7 +429,6 @@ namespace das
         virtual bool finalize ( ExprBlock *, ModuleGroup &, const AnnotationArgumentList &, const AnnotationArgumentList &, string & ) override {
             return false;
         }
-        // REGISTER_ANNOTATION_FACTORY( TransformFunctionAnnotation );
     };
 
     struct TypeAnnotation : Annotation {
@@ -524,12 +511,11 @@ namespace das
         // factory
 
         virtual void * factory () const { return nullptr; }
-        void serialize ( AstSerializer & ser );
-        // REGISTER_ANNOTATION_FACTORY( TypeAnnotation );
+        ANNOTATION_DECLARE_SERIALIZABLE ( TypeAnnotation )
     };
 
     struct StructureAnnotation : Annotation {
-        StructureAnnotation ( const string & n ) : Annotation(n) {}
+        StructureAnnotation ( const string & n = "" ) : Annotation(n) {}
         virtual bool rtti_isStructureAnnotation() const override { return true; }
         virtual bool touch ( const StructurePtr & st, ModuleGroup & libGroup,
                             const AnnotationArgumentList & args, string & err ) = 0;    // this one happens before infer. u can change structure here
@@ -541,16 +527,14 @@ namespace das
         virtual void aotPrefix ( const StructurePtr &, const AnnotationArgumentList &, TextWriter & ) { }
         virtual void aotBody   ( const StructurePtr &, const AnnotationArgumentList &, TextWriter & ) { }
         virtual void aotSuffix ( const StructurePtr &, const AnnotationArgumentList &, TextWriter & ) { }
-        void serialize ( AstSerializer & ser );
     };
     typedef smart_ptr<StructureAnnotation> StructureAnnotationPtr;
 
     struct EnumerationAnnotation : Annotation {
-        EnumerationAnnotation ( const string & n ) : Annotation(n) {}
+        EnumerationAnnotation ( const string & n = "" ) : Annotation(n) {}
         virtual bool rtti_isEnumerationAnnotation() const override { return true; }
         virtual bool touch ( const EnumerationPtr & st, ModuleGroup & libGroup,
                             const AnnotationArgumentList & args, string & err ) = 0;    // this one happens before infer. u can change enum here
-        void serialize ( AstSerializer & ser );
     };
     typedef smart_ptr<EnumerationAnnotation> EnumerationAnnotationPtr;
 
@@ -559,7 +543,7 @@ namespace das
     //  needs to override
     //      create,clone
     struct StructureTypeAnnotation : TypeAnnotation {
-        StructureTypeAnnotation ( const string & n ) : TypeAnnotation(n) {}
+        StructureTypeAnnotation ( const string & n = "" ) : TypeAnnotation(n) {}
         virtual bool rtti_isStructureTypeAnnotation() const override { return true; }
         virtual bool rtti_isHandledTypeAnnotation() const override { return true; }
         virtual bool canCopy() const override { return false; }
@@ -575,7 +559,7 @@ namespace das
             cp->structureType = structureType;
             return TypeAnnotation::clone(cp);
         }
-        void serialize ( AstSerializer & ser );
+        ANNOTATION_DECLARE_SERIALIZABLE ( StructureTypeAnnotation );
         smart_ptr<Structure>   structureType;
     };
 

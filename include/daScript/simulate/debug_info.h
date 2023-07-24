@@ -92,18 +92,6 @@ namespace das
     struct TypeAnnotation;
     struct EnumInfo;
 
-    enum class AnnotationType {
-        BasicAnnotation,
-        Annotation,
-        FunctionAnnotation,
-        TransformFunctionAnnotation,
-        TypeAnnotation,
-        StructureAnnotation,
-        StructureTypeAnnotation,
-        // etc...
-        // TODO: how to improve?
-    };
-
     struct BasicAnnotation : ptr_ref_count {
         BasicAnnotation ( const string & n, const string & cpn = "" ) : name(n), cppName(cpn) {}
         void serialize ( AstSerializer & ser );
