@@ -26,30 +26,30 @@ namespace das {
                 *p.first = it->second.get();
             }
         }
-        for ( auto & p : blockRefs ) {
-            auto it = exprMap.find(p.second);
-            if ( it == exprMap.end() ) {
-                DAS_FATAL_ERROR("ast serializer function ref not found");
-            } else {
-                if (auto block = dynamic_cast<ExprBlock*>(it->second.get())) {
-                    *p.first = block;
-                } else {
-                    DAS_FATAL_ERROR("Expression should be ExprBlock");
-                }
-            }
-        }
-        for ( auto & p : cloneRefs ) {
-            auto it = exprMap.find(p.second);
-            if ( it == exprMap.end() ) {
-                DAS_FATAL_ERROR("ast serializer function ref not found");
-            } else {
-                if (auto block = dynamic_cast<ExprClone*>(it->second.get())) {
-                    *p.first = block;
-                } else {
-                    DAS_FATAL_ERROR("Expression should be ExprClone");
-                }
-            }
-        }
+        // for ( auto & p : blockRefs ) {
+        //     auto it = exprMap.find(p.second);
+        //     if ( it == exprMap.end() ) {
+        //         DAS_FATAL_ERROR("ast serializer function ref not found");
+        //     } else {
+        //         if (auto block = dynamic_cast<ExprBlock*>(it->second.get())) {
+        //             *p.first = block;
+        //         } else {
+        //             DAS_FATAL_ERROR("Expression should be ExprBlock");
+        //         }
+        //     }
+        // }
+        // for ( auto & p : cloneRefs ) {
+        //     auto it = exprMap.find(p.second);
+        //     if ( it == exprMap.end() ) {
+        //         DAS_FATAL_ERROR("ast serializer function ref not found");
+        //     } else {
+        //         if (auto block = dynamic_cast<ExprClone*>(it->second.get())) {
+        //             *p.first = block;
+        //         } else {
+        //             DAS_FATAL_ERROR("Expression should be ExprClone");
+        //         }
+        //     }
+        // }
         for ( auto & [name, ref] : moduleRefs ) {
             *ref = moduleLibrary->findModule(name);
             DAS_VERIFYF(*ref!=nullptr, "module '%s' is not found", name.c_str());
