@@ -115,7 +115,7 @@ namespace das
     };
 
     struct Annotation : BasicAnnotation {
-        Annotation ( const string & n, const string & cpn = "" ) : BasicAnnotation(n,cpn) {}
+        Annotation ( const string & n = "", const string & cpn = "" ) : BasicAnnotation(n,cpn) {}
         virtual ~Annotation() {}
         virtual void seal( Module * m ) { module = m; }
         virtual bool rtti_isHandledTypeAnnotation() const { return false; }
@@ -128,6 +128,9 @@ namespace das
         string getMangledName() const;
         void serialize( AstSerializer & ser );
         virtual void log ( TextWriter & ss, const AnnotationDeclaration & decl ) const;
+        virtual const char * getFactoryTag () override { return "Annotation"; }
+        static AnnotationPtr createInstance () { return make_smart<Annotation>(); }
+        static bool registered;
         Module *    module = nullptr;
     };
 
@@ -416,7 +419,11 @@ namespace das
         virtual bool isCompatible ( const FunctionPtr &, const vector<TypeDeclPtr> &, const AnnotationDeclaration &, string &  ) const { return true; }
         virtual bool isSpecialized() const { return false; }
         virtual void appendToMangledName( const FunctionPtr &, const AnnotationDeclaration &, string & /* mangledName */ ) const { }
-        REGISTER_ANNOTATION_FACTORY( FunctionAnnotation );
+        virtual const char * getFactoryTag () override { return "FunctionAnnotation"; }
+        static AnnotationPtr createInstance () {
+            // XXX: FunctionAnnotation is abstract
+            return make_smart<Annotation>(); }
+        static bool registered;
     };
 
     struct TransformFunctionAnnotation : FunctionAnnotation {
@@ -1819,6 +1826,7 @@ namespace das
     public:
         static bool registerCreator( const char* type, AnnotationPtr (*creator)() ) {
             map[string(type)] = creator;
+            return true;
         }
         static AnnotationPtr create( string type ) {
             return map[type]();

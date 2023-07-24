@@ -41,7 +41,7 @@ void tutorial () {
         return;
     }
 
-    Module mod;
+    Module* mod = new Module;
     AstSerializer ser;
     ser.thisModule = program->thisModule.get();
     ser.moduleLibrary = &program->library;
@@ -50,14 +50,12 @@ void tutorial () {
     ser.writing = false;
     ser.functionMap.clear();
 
-    program->thisModule.reset(&mod);
-    program->library.MyXXXoperation(&mod);
+    program->thisModule.reset(mod);
+    program->library.MyXXXoperation(mod);
 
-    mod.serialize(ser);
+    mod->serialize(ser);
 
-
-    DAS_VERIFY(mod.findFunction("test").get() != nullptr);
-
+    DAS_VERIFY(mod->findFunction("test").get() != nullptr);
 
     // create daScript context
     Context ctx(program->getContextStackSize());

@@ -213,8 +213,24 @@ namespace das {
 
     AstSerializer & AstSerializer::operator << ( AnnotationPtr & anno ) {
         tag("AnnotationPtr");
-        if ( !writing ) anno = make_smart<Annotation>("", "");
-        anno->serialize(*this);
+        const char * name = nullptr;
+        bool is_null = anno.get() == nullptr;
+        *this << is_null;
+        if ( !writing ) {
+            if ( !is_null ) {
+                *this << name;
+                anno = AnnotationFactory::create(name);
+                anno->serialize(*this);
+            } else {
+                anno = nullptr;
+            }
+        } else {
+            if ( !is_null ) {
+                name = anno->getFactoryTag();
+                *this << name;
+                anno->serialize(*this);
+            }
+        }
         return *this;
     }
 
@@ -551,6 +567,14 @@ namespace das {
         ser << module;
         BasicAnnotation::serialize(ser);
     }
+
+    bool Annotation::registered = AnnotationFactory::registerCreator (
+        "Annotation", Annotation::createInstance
+    );
+
+    bool FunctionAnnotation::registered = AnnotationFactory::registerCreator (
+        "FunctionAnnotation", FunctionAnnotation::createInstance
+    );
 
     void BasicAnnotation::serialize ( AstSerializer & ser ) {
         ser << name << cppName;

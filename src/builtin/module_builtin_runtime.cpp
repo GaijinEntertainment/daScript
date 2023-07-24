@@ -174,7 +174,14 @@ namespace das
             func->exports = true;
             return true;
         };
+        virtual const char * getFactoryTag () override { return "ExportFunctionAnnotation"; }
+        static AnnotationPtr createInstance () { return make_smart<ExportFunctionAnnotation>(); }
+        static bool registered;
     };
+
+    bool ExportFunctionAnnotation::registered = AnnotationFactory::registerCreator (
+        "ExportFunctionAnnotation", ExportFunctionAnnotation::createInstance
+    );
 
     struct PInvokeFunctionAnnotation : MarkFunctionAnnotation {
         PInvokeFunctionAnnotation() : MarkFunctionAnnotation("pinvoke") { }
