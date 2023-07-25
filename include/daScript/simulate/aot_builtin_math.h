@@ -12,10 +12,10 @@ namespace das {
         return uint_noise3D(pos.x, pos.y, pos.z, seed);
     }
 
-    __forceinline float length2(vec4f a){vec4f v = a; v = v_mul(v,v); return v_extract_x(v_sqrt_x(v_add_x(v, v_rot_1(v))));}
+    __forceinline float length2(vec4f a){return v_extract_x(v_length2_x(a));}
     __forceinline float length3(vec4f a){return v_extract_x(v_length3_x(a));}
     __forceinline float length4(vec4f a){return v_extract_x(v_length4_x(a));}
-    __forceinline float lengthSq2(vec4f a){vec4f v = a; v = v_mul(v,v); return v_extract_x(v_add_x(v, v_rot_1(v)));}
+    __forceinline float lengthSq2(vec4f a){return v_extract_x(v_length2_sq_x(a));}
     __forceinline float lengthSq3(vec4f a){return v_extract_x(v_length3_sq_x(a));}
     __forceinline float lengthSq4(vec4f a){return v_extract_x(v_length4_sq_x(a));}
 
@@ -25,12 +25,12 @@ namespace das {
     __forceinline float invlength3(vec4f a) { return 1.0f / length3(a); }
     __forceinline float invlength4(vec4f a) { return 1.0f / length4(a); }
 #else
-    __forceinline float invlength2(vec4f a){vec4f v = a; v = v_mul(v,v); return v_extract_x(v_rsqrt_x(v_add_x(v, v_rot_1(v))));}
+    __forceinline float invlength2(vec4f a){return v_extract_x(v_rsqrt_x(v_length2_sq_x(a)));}
     __forceinline float invlength3(vec4f a){return v_extract_x(v_rsqrt_x(v_length3_sq_x(a)));}
     __forceinline float invlength4(vec4f a){return v_extract_x(v_rsqrt_x(v_length4_sq_x(a)));}
 #endif
 
-    __forceinline float invlengthSq2(vec4f a){vec4f v = a; v = v_mul(v,v); return v_extract_x(v_rcp_x(v_add_x(v, v_rot_1(v))));}
+    __forceinline float invlengthSq2(vec4f a){return v_extract_x(v_rcp_x(v_length3_sq_x(a)));}
     __forceinline float invlengthSq3(vec4f a){return v_extract_x(v_rcp_x(v_length3_sq_x(a)));}
     __forceinline float invlengthSq4(vec4f a){return v_extract_x(v_rcp_x(v_length4_sq_x(a)));}
 
@@ -49,18 +49,20 @@ namespace das {
     __forceinline float distanceSq4   (vec4f a, vec4f b){return v_extract_x(v_length4_sq_x(v_sub(a, b)));}
     __forceinline float invdistanceSq4(vec4f a, vec4f b){return v_extract_x(v_rcp_x(v_length4_sq_x(v_sub(a,b))));}
 
-    __forceinline float dot2(vec4f a, vec4f b){vec4f v = v_mul(a, b); return v_extract_x(v_add_x(v, v_rot_1(v)));}
+    __forceinline float dot2(vec4f a, vec4f b){return v_extract_x(v_dot2_x(a, b));}
     __forceinline float dot3(vec4f a, vec4f b){return v_extract_x(v_dot3_x(a, b));}
     __forceinline float dot4(vec4f a, vec4f b){return v_extract_x(v_dot4_x(a, b));}
 
-    __forceinline vec4f normalize2(vec4f a){vec4f v = v_mul(a, a); return v_div(a, v_splat_x(v_sqrt_x(v_add_x(v, v_rot_1(v))))); }
+    __forceinline vec4f normalize2(vec4f a){return v_norm2(a); }
     __forceinline vec4f normalize3(vec4f a){return v_norm3(a); }
     __forceinline vec4f normalize4(vec4f a){return v_norm4(a); }
-    __forceinline vec4f safe_normalize2(vec4f a){vec4f v = v_mul(a, a); return v_remove_not_finite(v_div(a, v_splat_x(v_sqrt_x(v_add_x(v, v_rot_1(v)))))); }
+    __forceinline vec4f safe_normalize2(vec4f a){return v_norm2_safe(a);}
     __forceinline vec4f safe_normalize3(vec4f a){return v_norm3_safe(a); }
     __forceinline vec4f safe_normalize4(vec4f a){return v_norm4_safe(a); }
 
     __forceinline vec4f cross3(vec4f a, vec4f b){vec4f v = v_cross3(a,b); return v;}
+
+    __forceinline vec4f lerp_vec_float(vec4f a, vec4f b, float t) { return v_madd(v_sub(b, a), v_splats(t), a); }
 
 #if defined(__GNUC__) || defined(__clang__)
 #if !defined(__clang__)
@@ -131,6 +133,12 @@ namespace das {
         return v_sub(v, v_add(t,t));
     }
 
+    __forceinline vec4f reflect2 ( vec4f v, vec4f n ) {
+        vec4f t = v_mul(v_dot2(v,n),n);
+        return v_sub(v, v_add(t,t));
+    }
+
+
     // def refract(v,n:float3;nint:float;outRefracted:float3&)
     // let dt = dot(v,n)
     // let discr = 1. - nint*nint*(1.-dt*dt)
@@ -142,7 +150,20 @@ namespace das {
         vec4f dtv = v_dot3(v, n);
         float dt = v_extract_x(dtv);
         float discr = 1.0f - nint*nint*(1.0f - dt*dt);
-        if (discr > 0.0f) {
+        if (discr >= 0.0f) {
+            vec4f nintv = v_splats(nint);
+            vec4f sqrt_discr = v_perm_xxxx(v_sqrt_x(v_set_x(discr)));
+            return v_sub(v_mul(nintv, v_sub(v, v_mul(n, dtv))), v_mul(n, sqrt_discr));
+        } else {
+            return v_zero();
+        }
+    }
+
+    __forceinline vec4f refract2(vec4f v, vec4f n, float nint) {
+        vec4f dtv = v_dot2(v, n);
+        float dt = v_extract_x(dtv);
+        float discr = 1.0f - nint*nint*(1.0f - dt*dt);
+        if (discr >= 0.0f) {
             vec4f nintv = v_splats(nint);
             vec4f sqrt_discr = v_perm_xxxx(v_sqrt_x(v_set_x(discr)));
             return v_sub(v_mul(nintv, v_sub(v, v_mul(n, dtv))), v_mul(n, sqrt_discr));
