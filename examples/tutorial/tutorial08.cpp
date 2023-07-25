@@ -1,4 +1,5 @@
 #include "daScript/daScript.h"
+#include "daScript/ast/ast_serializer.h"
 
 using namespace das;
 

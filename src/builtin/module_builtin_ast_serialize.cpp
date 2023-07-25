@@ -1,7 +1,8 @@
 #include "daScript/misc/platform.h"
 
 #include "daScript/ast/ast_serialize_macro.h"
-#include "daScript/ast/ast_expressions.h"
+#include "daScript/ast/ast_serializer.h"
+#include "daScript/ast/ast_handle.h"
 #include "daScript/ast/ast.h"
 
 namespace das {

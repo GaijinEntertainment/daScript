@@ -1,4 +1,6 @@
 
+namespace das { class AnnotationFactory; }
+
 // Use in the definition of the annotation class
 // Do not use in abstract classes
 #define ANNOTATION_DECLARE_SERIALIZABLE( annotation_type )                            \
