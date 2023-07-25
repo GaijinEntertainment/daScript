@@ -522,6 +522,10 @@ namespace das
 
     template <typename TT>
     struct registerVectorFunctions<TT,true> {
+        static void initIndex ( const FunctionPtr & ptr ) {
+            ptr->generated = true;
+            ptr->arguments[0]->type->explicitConst = true;
+        }
         static void init ( Module * mod, const ModuleLibrary & lib, bool canCopy, bool canMove ) {
             if ( canMove ) {
                 addExtern<DAS_BIND_FUN((das_vector_emplace<TT>)),SimNode_ExtFuncCall,permanentArgFn>(*mod, lib, "emplace",
@@ -572,6 +576,26 @@ namespace das
                 SideEffects::none, "das_vector_length")->generated = true;
             addExtern<DAS_BIND_FUN(das_vector_capacity<TT>)>(*mod, lib, "capacity",
                 SideEffects::none, "das_vector_capacity")->generated = true;
+            // index
+            using OT = typename TT::value_type;
+            auto TTN = describeCppType(makeType<TT>(lib));
+            auto OTN = describeCppType(makeType<OT>(lib));
+            auto atin = "das_ati<"+TTN+","+OTN+">";
+            initIndex(addExtern<DAS_BIND_FUN((das_ati<TT,OT>)),SimNode_ExtFuncCallRef>(*mod, lib, "[]",
+                SideEffects::modifyArgument, atin.c_str())
+                    ->args({"vec","index","context","at"}));
+            auto atun = "das_atu<"+TTN+","+OTN+">";
+            initIndex(addExtern<DAS_BIND_FUN((das_atu<TT,OT>)),SimNode_ExtFuncCallRef>(*mod, lib, "[]",
+                SideEffects::modifyArgument, atun.c_str())
+                    ->args({"vec","index","context","at"}));
+            auto atcin = "das_atci<"+TTN+","+OTN+">";
+            initIndex(addExtern<DAS_BIND_FUN((das_atci<TT,OT>)),SimNode_ExtFuncCallRef>(*mod, lib, "[]",
+                SideEffects::none, atcin.c_str())
+                    ->args({"vec","index","context","at"}));
+            auto atcun = "das_atcu<"+TTN+","+OTN+">";
+            initIndex(addExtern<DAS_BIND_FUN((das_atcu<TT,OT>)),SimNode_ExtFuncCallRef>(*mod, lib, "[]",
+                SideEffects::none, atcun.c_str())
+                    ->args({"vec","index","context","at"}));
         }
     };
 
