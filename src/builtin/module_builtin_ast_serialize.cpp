@@ -213,26 +213,46 @@ namespace das {
         return *this;
     }
 
-    AstSerializer & AstSerializer::operator << ( AnnotationPtr & anno ) {
-        tag("AnnotationPtr");
-        const char * name = nullptr;
-        bool is_null = anno.get() == nullptr;
-        *this << is_null;
-        if ( !writing ) {
-            if ( !is_null ) {
-                *this << name;
-                anno = AnnotationFactory::create(name);
-                anno->serialize(*this);
+    void serializeAnnotationPointer( AstSerializer & ser, Annotation * & anno ) {
+        uint64_t fid = uint64_t(anno);
+        ser << fid;
+        if ( ser.writing ) {
+            if ( fid ) {
+                bool inThisModule = anno->module == ser.thisModule;
+                ser << inThisModule;
+                if ( !inThisModule ) {
+                    ser << anno->module->name;
+                    string mangeldName = anno->getMangledName();
+                    ser << mangeldName;
+                }
+            }
+        } else {
+            if ( fid ) {
+                bool inThisModule;
+                ser << inThisModule;
+                if ( inThisModule ) {
+                    // ??
+                    DAS_VERIFYF(false, "annotation is not found in the current module");
+                } else {
+                    string moduleName, mangledName;
+                    ser << moduleName;
+                    auto mod = ser.moduleLibrary->findModule(moduleName);
+                    DAS_VERIFYF(mod!=nullptr, "module '%s' is not found", moduleName.c_str());
+                    ser << mangledName;
+                    anno = mod->findAnnotation(mangledName).get();
+                    DAS_VERIFYF(anno!=nullptr, "annotation '%s' is not found", mangledName.c_str());
+                }
             } else {
                 anno = nullptr;
             }
-        } else {
-            if ( !is_null ) {
-                name = anno->getFactoryTag();
-                *this << name;
-                anno->serialize(*this);
-            }
         }
+    }
+
+    AstSerializer & AstSerializer::operator << ( AnnotationPtr & anno ) {
+        tag("AnnotationPtr");
+        Annotation * a = anno.get();
+        serializeAnnotationPointer(*this, a);
+        anno = a;
         return *this;
     }
 
@@ -391,15 +411,19 @@ namespace das {
         return *this;
     }
 
+    // Note for review: this is the usual downward serialization, no need to backpatch
     AstSerializer & AstSerializer::operator << ( TypeAnnotationPtr & type_anno ) {
-        // TODO: more elaborate code with factory
-        serializeSmartPtr(type_anno, smartTypeAnnotationMap);
+        AnnotationPtr a = static_pointer_cast<Annotation>(type_anno);
+        *this << a;
+        // TODO:
+        // type_anno = dynamic_pointer_cast<TypeAnnotation>(a);
         return *this;
     }
 
     AstSerializer & AstSerializer::operator << ( TypeAnnotation * & type_anno ) {
-        // TODO: more elaborate code with factory
-        serializePointer(type_anno, typeAnnotationMap);
+        TypeAnnotationPtr t = type_anno;
+        *this << t;
+        type_anno = t.get();
         return *this;
     }
 
@@ -571,10 +595,6 @@ namespace das {
         ser << module;
         BasicAnnotation::serialize(ser);
     }
-
-    FACTORY_REGISTER_ANNOTATION ( Annotation )
-    FACTORY_REGISTER_ANNOTATION ( TypeAnnotation )
-    FACTORY_REGISTER_ANNOTATION ( StructureTypeAnnotation )
 
     void BasicAnnotation::serialize ( AstSerializer & ser ) {
         ser << name << cppName;
@@ -762,6 +782,21 @@ namespace das {
             << fieldFlags;
         // ser.fieldDeclRefs.emplace_back(&field, idx); // Backpatch at a later stage
         Expression::serialize(ser);
+    }
+
+    AstSerializer & AstSerializer::operator << ( BasicStructureAnnotation::StructureField & field ) {
+        *this << field.name << field.cppName << field.aotPrefix << field.aotPostfix;
+        return *this << field.decl << field.constDecl << field.offset;
+    }
+
+    void BasicStructureAnnotation::serialize ( AstSerializer & ser ) {
+        ser << fields << fieldsInOrder;
+        // ser << helpA;
+        // ser << sti;
+        // ser << mlib;
+        ser << parents;
+        ser << validationNeverFails;
+        // ser << walkMutex;  // Is this always unlocked during serialization?
     }
 
     void ExprIsVariant::serialize ( AstSerializer & ser ) {
@@ -1115,9 +1150,9 @@ namespace das {
     void FileInfo::serialize ( AstSerializer & ser ) {
         ser.tag("FileInfo");
         ser << name << tabSize;
-#if DAS_ENABLE_PROFILER
-        ser << profileData;
-#endif
+        #if DAS_ENABLE_PROFILER
+                ser << profileData;
+        #endif
     }
 
     void TextFileInfo::serialize ( AstSerializer & ser ) {

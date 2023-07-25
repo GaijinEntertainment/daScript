@@ -112,6 +112,11 @@ namespace das {
         template<typename T>
         void serializeSmartPtr( smart_ptr<T> & obj, das_hash_map<uint64_t, smart_ptr<T>> & objMap );
 
+        template <uint64_t n>
+        AstSerializer& operator << ( int (&value)[n] ) {
+            serialize(value, n * sizeof(int)); return *this;
+        }
+
         template <typename TT>
         AstSerializer & operator << ( vector<TT> & value ) {
             tag("Vector");

@@ -5,6 +5,7 @@
 #include "daScript/simulate/simulate_visit_op.h"
 #include "daScript/ast/ast_policy_types.h"
 #include "daScript/ast/ast_expressions.h"
+#include "daScript/ast/ast_serializer.h"
 #include "daScript/ast/ast_generate.h"
 #include "daScript/ast/ast_visitor.h"
 #include "daScript/simulate/aot_builtin_ast.h"
@@ -705,13 +706,17 @@ namespace das {
     }
 
     struct AstVisitorAdapterAnnotation : ManagedStructureAnnotation<VisitorAdapter,false,true> {
+        AstVisitorAdapterAnnotation () = default;
         AstVisitorAdapterAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("VisitorAdapter", ml) {
         }
+        ANNOTATION_DECLARE_SERIALIZABLE ( AstVisitorAdapterAnnotation )
     };
+    FACTORY_REGISTER_ANNOTATION ( AstVisitorAdapterAnnotation )
 
     class BlockAnnotationAdapter : public FunctionAnnotation, AstBlockAnnotation_Adapter {
     public:
+        BlockAnnotationAdapter () = default;
         BlockAnnotationAdapter ( const string & n, char * pClass, const StructInfo * info, Context * ctx )
         : FunctionAnnotation(n), AstBlockAnnotation_Adapter(info), classPtr(pClass), context(ctx) {
         }
@@ -751,13 +756,20 @@ namespace das {
                 return true;
             }
         }
+        ANNOTATION_DECLARE_SERIALIZABLE ( BlockAnnotationAdapter )
+        virtual void serialize ( AstSerializer & ser ) override {
+            ser << _das_class_method_offset;
+            FunctionAnnotation::serialize(ser);
+        }
     protected:
         void *      classPtr;
         Context *   context;
     };
+    FACTORY_REGISTER_ANNOTATION ( BlockAnnotationAdapter )
 
     class FunctionAnnotationAdapter : public FunctionAnnotation, AstFunctionAnnotation_Adapter {
     public:
+        FunctionAnnotationAdapter () = default;
         FunctionAnnotationAdapter ( const string & n, char * pClass, const StructInfo * info, Context * ctx )
         : FunctionAnnotation(n), AstFunctionAnnotation_Adapter(info), classPtr(pClass), context(ctx) {
         }
@@ -908,18 +920,28 @@ namespace das {
                 });
             }
         }
+        virtual void serialize ( AstSerializer & ser ) override {
+            ser << _das_class_method_offset;
+            FunctionAnnotation::serialize(ser);
+        }
+        ANNOTATION_DECLARE_SERIALIZABLE ( FunctionAnnotationAdapter )
     protected:
         void *      classPtr;
         Context *   context;
     };
+    FACTORY_REGISTER_ANNOTATION ( FunctionAnnotationAdapter )
 
     struct AstFunctionAnnotationAnnotation : ManagedStructureAnnotation<FunctionAnnotation,false,true> {
+        AstFunctionAnnotationAnnotation () = default;
         AstFunctionAnnotationAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("FunctionAnnotation", ml) {
         }
+        ANNOTATION_DECLARE_SERIALIZABLE ( AstFunctionAnnotationAnnotation )
     };
+    FACTORY_REGISTER_ANNOTATION ( AstFunctionAnnotationAnnotation )
 
     struct StructureAnnotationAdapter : StructureAnnotation, AstStructureAnnotation_Adapter {
+        StructureAnnotationAdapter () = default;
         StructureAnnotationAdapter ( const string & n, char * pClass, const StructInfo * info, Context * ctx )
             : StructureAnnotation(n), AstStructureAnnotation_Adapter(info), classPtr(pClass), context(ctx) {
         }
@@ -988,18 +1010,28 @@ namespace das {
                 });
             }
         }
+        ANNOTATION_DECLARE_SERIALIZABLE ( StructureAnnotationAdapter )
+        virtual void serialize ( AstSerializer & ser ) override {
+            ser << _das_class_method_offset;
+            StructureAnnotation::serialize(ser);
+        }
     protected:
         void *      classPtr;
         Context *   context;
     };
+    FACTORY_REGISTER_ANNOTATION ( StructureAnnotationAdapter )
 
     struct AstStructureAnnotationAnnotation : ManagedStructureAnnotation<StructureAnnotation,false,true> {
+        AstStructureAnnotationAnnotation () = default;
         AstStructureAnnotationAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("StructureAnnotation", ml) {
         }
+        ANNOTATION_DECLARE_SERIALIZABLE ( AstStructureAnnotationAnnotation )
     };
+    FACTORY_REGISTER_ANNOTATION ( AstStructureAnnotationAnnotation )
 
     struct EnumerationAnnotationAdapter : EnumerationAnnotation, AstEnumerationAnnotation_Adapter {
+        EnumerationAnnotationAdapter () = default;
         EnumerationAnnotationAdapter ( const string & n, char * pClass, const StructInfo * info, Context * ctx )
             : EnumerationAnnotation(n), AstEnumerationAnnotation_Adapter(info), classPtr(pClass), context(ctx) {
         }
@@ -1015,18 +1047,29 @@ namespace das {
                 return true;
             }
         }
+        ANNOTATION_DECLARE_SERIALIZABLE ( EnumerationAnnotationAdapter )
+        virtual void serialize ( AstSerializer & ser ) override {
+            ser << _das_class_method_offset;
+            EnumerationAnnotation::serialize(ser);
+        }
     protected:
         void *      classPtr;
         Context *   context;
     };
+    FACTORY_REGISTER_ANNOTATION ( EnumerationAnnotationAdapter )
+
 
     struct AstEnumerationAnnotationAnnotation : ManagedStructureAnnotation<EnumerationAnnotation,false,true> {
+        AstEnumerationAnnotationAnnotation () = default;
         AstEnumerationAnnotationAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("EnumerationAnnotation", ml) {
         }
+        ANNOTATION_DECLARE_SERIALIZABLE ( AstEnumerationAnnotationAnnotation )
     };
+    FACTORY_REGISTER_ANNOTATION ( AstEnumerationAnnotationAnnotation )
 
     struct PassMacroAdapter : PassMacro, AstPassMacro_Adapter {
+        PassMacroAdapter () = default;
         PassMacroAdapter ( const string & n, char * pClass, const StructInfo * info, Context * ctx )
             : PassMacro(n), AstPassMacro_Adapter(info), classPtr(pClass), context(ctx) {
         }
@@ -1041,19 +1084,30 @@ namespace das {
                 return false;
             }
         }
+        DECLARE_SERIALIZABLE ( PassMacro, PassMacroAdapter )
+        virtual void serialize ( AstSerializer & ser ) override {
+            ser << _das_class_method_offset;
+            PassMacro::serialize(ser);
+        }
     protected:
         void *      classPtr;
         Context *   context;
     };
+    FACTORY_REGISTER ( PassMacro, PassMacroAdapter )
+
 
     struct AstPassMacroAnnotation : ManagedStructureAnnotation<PassMacro,false,true> {
+        AstPassMacroAnnotation () = default;
         AstPassMacroAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("PassMacro", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
         }
+        ANNOTATION_DECLARE_SERIALIZABLE ( AstPassMacroAnnotation )
     };
+    FACTORY_REGISTER_ANNOTATION ( AstPassMacroAnnotation )
 
     struct VariantMacroAdapter : VariantMacro, AstVarianMacro_Adapter {
+        VariantMacroAdapter () = default;
         VariantMacroAdapter ( const string & n, char * pClass, const StructInfo * info, Context * ctx )
             : VariantMacro(n), AstVarianMacro_Adapter(info), classPtr(pClass), context(ctx) {
         }
@@ -1090,19 +1144,30 @@ namespace das {
                 return nullptr;
             }
         }
+        DECLARE_SERIALIZABLE ( VariantMacro, VariantMacroAdapter )
+        virtual void serialize ( AstSerializer & ser ) override {
+            ser << _das_class_method_offset;
+            VariantMacro::serialize(ser);
+        }
     protected:
         void *      classPtr;
         Context *   context;
     };
+    FACTORY_REGISTER ( VariantMacro, VariantMacroAdapter )
+
 
     struct AstVariantMacroAnnotation : ManagedStructureAnnotation<VariantMacro,false,true> {
+        AstVariantMacroAnnotation () = default;
         AstVariantMacroAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("VariantMacro", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
         }
+        ANNOTATION_DECLARE_SERIALIZABLE ( AstVariantMacroAnnotation )
     };
+    FACTORY_REGISTER_ANNOTATION ( AstVariantMacroAnnotation )
 
     struct ForLoopMacroAdapter : ForLoopMacro, AstForLoopMacro_Adapter {
+        ForLoopMacroAdapter () = default;
         ForLoopMacroAdapter ( const string & n, char * pClass, const StructInfo * info, Context * ctx )
             : ForLoopMacro(n), AstForLoopMacro_Adapter(info), classPtr(pClass), context(ctx) {
         }
@@ -1117,19 +1182,30 @@ namespace das {
                 return nullptr;
             }
         }
+        DECLARE_SERIALIZABLE ( ForLoopMacro, ForLoopMacroAdapter )
+        virtual void serialize ( AstSerializer & ser ) override {
+            ser << _das_class_method_offset;
+            ForLoopMacro::serialize(ser);
+        }
     protected:
         void *      classPtr;
         Context *   context;
     };
+    FACTORY_REGISTER ( ForLoopMacro, ForLoopMacroAdapter )
+
 
     struct AstForLoopMacroAnnotation : ManagedStructureAnnotation<ForLoopMacro,false,true> {
+        AstForLoopMacroAnnotation() = default;
         AstForLoopMacroAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("ForLoopMacro", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
         }
+        ANNOTATION_DECLARE_SERIALIZABLE ( AstForLoopMacroAnnotation )
     };
+    FACTORY_REGISTER_ANNOTATION ( AstForLoopMacroAnnotation )
 
     struct CaptureMacroAdapter : CaptureMacro, AstCaptureMacro_Adapter {
+        CaptureMacroAdapter () = default;
         CaptureMacroAdapter ( const string & n, char * pClass, const StructInfo * info, Context * ctx )
             : CaptureMacro(n), AstCaptureMacro_Adapter(info), classPtr(pClass), context(ctx) {
         }
@@ -1151,19 +1227,30 @@ namespace das {
                 });
             }
         }
+        DECLARE_SERIALIZABLE ( CaptureMacro, CaptureMacroAdapter )
+        virtual void serialize ( AstSerializer & ser ) override {
+            ser << _das_class_method_offset;
+            CaptureMacro::serialize(ser);
+        }
     protected:
         void *      classPtr;
         Context *   context;
     };
+    FACTORY_REGISTER ( CaptureMacro, CaptureMacroAdapter )
+
 
     struct AstCaptureMacroAnnotation : ManagedStructureAnnotation<CaptureMacro,false,true> {
+        AstCaptureMacroAnnotation () = default;
         AstCaptureMacroAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("CaptureMacro", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
         }
+        ANNOTATION_DECLARE_SERIALIZABLE ( AstCaptureMacroAnnotation )
     };
+    FACTORY_REGISTER_ANNOTATION ( AstCaptureMacroAnnotation )
 
     struct SimulateMacroAdapter : SimulateMacro, AstSimulateMacro_Adapter {
+        SimulateMacroAdapter () = default;
         SimulateMacroAdapter ( const string & n, char * pClass, const StructInfo * info, Context * ctx )
             : SimulateMacro(n), AstSimulateMacro_Adapter(info), classPtr(pClass), context(ctx) {
         }
@@ -1189,19 +1276,30 @@ namespace das {
                 return true;
             }
         }
+        DECLARE_SERIALIZABLE ( SimulateMacro, SimulateMacroAdapter )
+        virtual void serialize ( AstSerializer & ser ) override {
+            ser << _das_class_method_offset;
+            SimulateMacro::serialize(ser);
+        }
     protected:
         void *      classPtr;
         Context *   context;
     };
+    FACTORY_REGISTER ( SimulateMacro, SimulateMacroAdapter )
+
 
     struct AstSimulateMacroAnnotation : ManagedStructureAnnotation<SimulateMacro,false,true> {
+        AstSimulateMacroAnnotation () = default;
         AstSimulateMacroAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("SimulateMacro", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
         }
+        ANNOTATION_DECLARE_SERIALIZABLE ( AstSimulateMacroAnnotation )
     };
+    FACTORY_REGISTER_ANNOTATION ( AstSimulateMacroAnnotation )
 
     struct ReaderMacroAdapter : ReaderMacro, AstReaderMacro_Adapter {
+        ReaderMacroAdapter () = default;
         ReaderMacroAdapter ( const string & n, char * pClass, const StructInfo * info, Context * ctx )
             : ReaderMacro(n), AstReaderMacro_Adapter(info), classPtr(pClass), context(ctx) {
         }
@@ -1227,20 +1325,30 @@ namespace das {
                 return nullptr;
             }
         }
+        DECLARE_SERIALIZABLE ( ReaderMacro, ReaderMacroAdapter )
+        virtual void serialize ( AstSerializer & ser ) override {
+            ser << _das_class_method_offset;
+            ReaderMacro::serialize(ser);
+        }
     protected:
         void *      classPtr;
         Context *   context;
     };
+    FACTORY_REGISTER ( ReaderMacro, ReaderMacroAdapter )
 
     struct AstReaderMacroAnnotation : ManagedStructureAnnotation<ReaderMacro,false,true> {
+        AstReaderMacroAnnotation () = default;
         AstReaderMacroAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("ReaderMacro", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
             addField<DAS_BIND_MANAGED_FIELD(module)>("_module", "module");
         }
+        ANNOTATION_DECLARE_SERIALIZABLE ( AstReaderMacroAnnotation )
     };
+    FACTORY_REGISTER_ANNOTATION ( AstReaderMacroAnnotation )
 
     struct CommentReaderAdapter : CommentReader, AstCommentReader_Adapter {
+        CommentReaderAdapter () = default;
         CommentReaderAdapter ( char * pClass, const StructInfo * info, Context * ctx )
             : AstCommentReader_Adapter(info), classPtr(pClass), context(ctx) {
         }
@@ -1435,18 +1543,28 @@ namespace das {
                 });
             }
         }
+        DECLARE_SERIALIZABLE ( CommentReader, CommentReaderAdapter )
+        virtual void serialize ( AstSerializer & ser ) {
+            ser << _das_class_method_offset;
+            CommentReader::serialize(ser);
+        }
     protected:
         void *      classPtr;
         Context *   context;
     };
+    FACTORY_REGISTER ( CommentReader, CommentReaderAdapter )
 
     struct AstCommentReaderAnnotation : ManagedStructureAnnotation<CommentReader,false,true> {
+        AstCommentReaderAnnotation () = default;
         AstCommentReaderAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("CommentReader", ml) {
         }
+        ANNOTATION_DECLARE_SERIALIZABLE ( AstCommentReaderAnnotation )
     };
+    FACTORY_REGISTER_ANNOTATION ( AstCommentReaderAnnotation )
 
     struct CallMacroAdapter : CallMacro, AstCallMacro_Adapter {
+        CallMacroAdapter () = default;
         CallMacroAdapter ( const string & n, char * pClass, const StructInfo * info, Context * ctx )
             : CallMacro(n), AstCallMacro_Adapter(info), classPtr(pClass), context(ctx) {
         }
@@ -1490,19 +1608,28 @@ namespace das {
                 return true;
             }
         }
+        DECLARE_SERIALIZABLE ( CallMacro, CallMacroAdapter )
+        virtual void serialize ( AstSerializer & ser ) {
+            ser << _das_class_method_offset;
+            CallMacro::serialize(ser);
+        }
     protected:
         void *      classPtr;
         Context *   context;
     };
-
+    FACTORY_REGISTER ( CallMacro, CallMacroAdapter )
     struct AstCallMacroAnnotation : ManagedStructureAnnotation<CallMacro,false,true> {
+        AstCallMacroAnnotation () = default;
         AstCallMacroAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("CallMacro", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
             addField<DAS_BIND_MANAGED_FIELD(module)>("_module", "module");
         }
+        ANNOTATION_DECLARE_SERIALIZABLE ( AstCallMacroAnnotation )
     };
+    FACTORY_REGISTER_ANNOTATION ( AstCallMacroAnnotation )
     struct TypeInfoMacroAdapter : TypeInfoMacro, AstTypeInfoMacro_Adapter {
+        TypeInfoMacroAdapter () = default;
         TypeInfoMacroAdapter ( const string & n, char * pClass, const StructInfo * info, Context * ctx )
             : TypeInfoMacro(n), AstTypeInfoMacro_Adapter(info), classPtr(pClass), context(ctx) {
         }
@@ -1530,10 +1657,16 @@ namespace das {
                 return nullptr;
             }
         }
+        DECLARE_SERIALIZABLE ( TypeInfoMacro, TypeInfoMacroAdapter )
+        virtual void serialize ( AstSerializer & ser ) {
+            ser << _das_class_method_offset;
+            TypeInfoMacro::serialize(ser);
+        }
     protected:
         void *      classPtr;
         Context *   context;
     };
+    FACTORY_REGISTER ( TypeInfoMacro, TypeInfoMacroAdapter )
 
     ReaderMacroPtr makeReaderMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context ) {
         return make_smart<ReaderMacroAdapter>(name,(char *)pClass,info,context);

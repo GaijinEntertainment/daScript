@@ -29,7 +29,7 @@ namespace das
 #endif
 
     struct MarkFunctionAnnotation : FunctionAnnotation {
-        MarkFunctionAnnotation(const string & na = "") : FunctionAnnotation(na) { }
+        MarkFunctionAnnotation(const string & na) : FunctionAnnotation(na) { }
         virtual bool apply(ExprBlock *, ModuleGroup &, const AnnotationArgumentList &, string & err) override {
             err = "not supported for block";
             return false;
@@ -56,7 +56,6 @@ namespace das
         virtual bool finalize(const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &, const AnnotationArgumentList &, string &) override {
             return true;
         }
-        ANNOTATION_DECLARE_SERIALIZABLE ( MarkFunctionOrBlockAnnotation )
     };
 
     struct MacroFunctionAnnotation : MarkFunctionAnnotation {
@@ -67,7 +66,6 @@ namespace das
             program->needMacroModule = true;
             return true;
         };
-        ANNOTATION_DECLARE_SERIALIZABLE ( MacroFunctionAnnotation )
     };
 
     struct MacroFnFunctionAnnotation : MarkFunctionAnnotation {
@@ -76,7 +74,6 @@ namespace das
             func->macroFunction = true;
             return true;
         };
-        ANNOTATION_DECLARE_SERIALIZABLE ( MacroFnFunctionAnnotation )
     };
 
     struct RequestJitFunctionAnnotation : MarkFunctionAnnotation {
@@ -85,7 +82,6 @@ namespace das
             func->requestJit = true;
             return true;
         };
-        ANNOTATION_DECLARE_SERIALIZABLE ( RequestJitFunctionAnnotation )
     };
 
     struct DeprecatedFunctionAnnotation : MarkFunctionAnnotation {
@@ -103,7 +99,6 @@ namespace das
             }
             return true;
         }
-        ANNOTATION_DECLARE_SERIALIZABLE ( DeprecatedFunctionAnnotation )
     };
 
     struct NeverAliasCMRESFunctionAnnotation : MarkFunctionAnnotation {
@@ -112,7 +107,6 @@ namespace das
             func->neverAliasCMRES = true;
             return true;
         };
-        ANNOTATION_DECLARE_SERIALIZABLE ( NeverAliasCMRESFunctionAnnotation )
     };
 
     struct AliasCMRESFunctionAnnotation : MarkFunctionAnnotation {
@@ -121,7 +115,6 @@ namespace das
             func->aliasCMRES = true;
             return true;
         };
-        ANNOTATION_DECLARE_SERIALIZABLE ( AliasCMRESFunctionAnnotation )
     };
 
 
@@ -140,7 +133,6 @@ namespace das
         virtual bool finalize(const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &, const AnnotationArgumentList &, string &) override {
             return true;
         }
-        ANNOTATION_DECLARE_SERIALIZABLE ( HintFunctionAnnotation )
     };
 
     struct UnsafeDerefFunctionAnnotation : MarkFunctionAnnotation {
@@ -149,7 +141,6 @@ namespace das
             func->unsafeDeref = true;
             return true;
         };
-        ANNOTATION_DECLARE_SERIALIZABLE ( UnsafeDerefFunctionAnnotation )
     };
 
     struct SkipLockCheckFunctionAnnotation : MarkFunctionAnnotation {
@@ -158,7 +149,6 @@ namespace das
             func->skipLockCheck = true;
             return true;
         };
-        ANNOTATION_DECLARE_SERIALIZABLE ( SkipLockCheckFunctionAnnotation )
     };
 
     struct GenericFunctionAnnotation : MarkFunctionAnnotation {
@@ -169,7 +159,6 @@ namespace das
         virtual bool apply(const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &, string &) override {
             return true;
         };
-        ANNOTATION_DECLARE_SERIALIZABLE ( GenericFunctionAnnotation )
     };
 
     struct NoLintFunctionAnnotation : MarkFunctionAnnotation {
@@ -177,7 +166,6 @@ namespace das
         virtual bool apply(const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &, string &) override {
             return true;
         };
-        ANNOTATION_DECLARE_SERIALIZABLE ( NoLintFunctionAnnotation )
     };
 
     struct ExportFunctionAnnotation : MarkFunctionAnnotation {
@@ -186,7 +174,6 @@ namespace das
             func->exports = true;
             return true;
         };
-        ANNOTATION_DECLARE_SERIALIZABLE ( ExportFunctionAnnotation )
     };
 
     struct PInvokeFunctionAnnotation : MarkFunctionAnnotation {
@@ -195,7 +182,6 @@ namespace das
             func->pinvoke = true;
             return true;
         };
-        ANNOTATION_DECLARE_SERIALIZABLE ( PInvokeFunctionAnnotation )
     };
 
     struct SideEffectsFunctionAnnotation : MarkFunctionAnnotation {
@@ -204,7 +190,6 @@ namespace das
             func->sideEffectFlags |= uint32_t(SideEffects::userScenario);
             return true;
         };
-        ANNOTATION_DECLARE_SERIALIZABLE ( SideEffectsFunctionAnnotation )
     };
 
     struct RunAtCompileTimeFunctionAnnotation : MarkFunctionAnnotation {
@@ -213,7 +198,6 @@ namespace das
             func->hasToRunAtCompileTime = true;
             return true;
         };
-        ANNOTATION_DECLARE_SERIALIZABLE ( RunAtCompileTimeFunctionAnnotation )
     };
 
     struct UnsafeOpFunctionAnnotation : MarkFunctionAnnotation {
@@ -222,7 +206,6 @@ namespace das
             func->unsafeOperation = true;
             return true;
         };
-        ANNOTATION_DECLARE_SERIALIZABLE ( UnsafeOpFunctionAnnotation )
     };
 
     struct UnsafeOutsideOfForFunctionAnnotation : MarkFunctionAnnotation {
@@ -231,7 +214,6 @@ namespace das
             func->unsafeOutsideOfFor = true;
             return true;
         };
-        ANNOTATION_DECLARE_SERIALIZABLE ( UnsafeOutsideOfForFunctionAnnotation )
     };
 
     struct NoAotFunctionAnnotation : MarkFunctionAnnotation {
@@ -240,7 +222,6 @@ namespace das
             func->noAot = true;
             return true;
         };
-        ANNOTATION_DECLARE_SERIALIZABLE ( NoAotFunctionAnnotation )
     };
 
     struct InitFunctionAnnotation : MarkFunctionAnnotation {
@@ -267,7 +248,6 @@ namespace das
             }
             return true;
         }
-        ANNOTATION_DECLARE_SERIALIZABLE ( InitFunctionAnnotation )
     };
 
     struct FinalizeFunctionAnnotation : MarkFunctionAnnotation {
@@ -287,7 +267,6 @@ namespace das
             }
             return true;
         }
-        ANNOTATION_DECLARE_SERIALIZABLE ( FinalizeFunctionAnnotation )
     };
 
     struct MarkUsedFunctionAnnotation : MarkFunctionAnnotation {
@@ -308,7 +287,6 @@ namespace das
             }
             return true;
         };
-        ANNOTATION_DECLARE_SERIALIZABLE ( MarkUsedFunctionAnnotation )
     };
 
     struct IsYetAnotherVectorTemplateAnnotation : MarkFunctionAnnotation {
@@ -341,7 +319,6 @@ namespace das
             }
             return true;
         }
-        ANNOTATION_DECLARE_SERIALIZABLE ( IsYetAnotherVectorTemplateAnnotation )
     };
 
     // totally dummy annotation, needed for comments
@@ -355,7 +332,6 @@ namespace das
                            const AnnotationArgumentList &, string & ) override {
             return true;
         }
-        ANNOTATION_DECLARE_SERIALIZABLE ( CommentAnnotation )
     };
 
     struct MacroInterfaceAnnotation : StructureAnnotation {
@@ -369,7 +345,6 @@ namespace das
                            const AnnotationArgumentList &, string & ) override {
             return true;
         }
-        ANNOTATION_DECLARE_SERIALIZABLE ( MacroInterfaceAnnotation )
     };
 
 
@@ -384,7 +359,6 @@ namespace das
                            const AnnotationArgumentList &, string & ) override {
             return true;
         }
-        ANNOTATION_DECLARE_SERIALIZABLE ( SkipLockCheckStructureAnnotation )
     };
 
 
@@ -394,7 +368,6 @@ namespace das
             func->aotHybrid = true;
             return true;
         };
-        ANNOTATION_DECLARE_SERIALIZABLE ( HybridFunctionAnnotation )
     };
 
     struct CppAlignmentAnnotation : StructureAnnotation {
@@ -409,7 +382,6 @@ namespace das
                            const AnnotationArgumentList &, string & ) override {
             return true;
         }
-        ANNOTATION_DECLARE_SERIALIZABLE ( CppAlignmentAnnotation )
     };
 
     struct LocalOnlyFunctionAnnotation : FunctionAnnotation {
@@ -451,7 +423,6 @@ namespace das
             }
             return true;
         }
-        ANNOTATION_DECLARE_SERIALIZABLE ( LocalOnlyFunctionAnnotation )
     };
 
     struct PersistentStructureAnnotation : StructureAnnotation {
@@ -474,7 +445,6 @@ namespace das
             }
             return allPod;
         }
-        ANNOTATION_DECLARE_SERIALIZABLE ( PersistentStructureAnnotation )
     };
 
 
@@ -1828,36 +1798,4 @@ namespace das
                 ->args({"block","context","at"});
 
     }
-
-    FACTORY_REGISTER_ANNOTATION ( MarkFunctionOrBlockAnnotation )
-    FACTORY_REGISTER_ANNOTATION ( MacroFunctionAnnotation )
-    FACTORY_REGISTER_ANNOTATION ( MacroFnFunctionAnnotation )
-    FACTORY_REGISTER_ANNOTATION ( RequestJitFunctionAnnotation )
-    FACTORY_REGISTER_ANNOTATION ( DeprecatedFunctionAnnotation )
-    FACTORY_REGISTER_ANNOTATION ( NeverAliasCMRESFunctionAnnotation )
-    FACTORY_REGISTER_ANNOTATION ( AliasCMRESFunctionAnnotation )
-    FACTORY_REGISTER_ANNOTATION ( HintFunctionAnnotation )
-    FACTORY_REGISTER_ANNOTATION ( UnsafeDerefFunctionAnnotation )
-    FACTORY_REGISTER_ANNOTATION ( SkipLockCheckFunctionAnnotation )
-    FACTORY_REGISTER_ANNOTATION ( GenericFunctionAnnotation )
-    FACTORY_REGISTER_ANNOTATION ( NoLintFunctionAnnotation )
-    FACTORY_REGISTER_ANNOTATION ( ExportFunctionAnnotation )
-    FACTORY_REGISTER_ANNOTATION ( PInvokeFunctionAnnotation )
-    FACTORY_REGISTER_ANNOTATION ( SideEffectsFunctionAnnotation )
-    FACTORY_REGISTER_ANNOTATION ( RunAtCompileTimeFunctionAnnotation )
-    FACTORY_REGISTER_ANNOTATION ( UnsafeOpFunctionAnnotation )
-    FACTORY_REGISTER_ANNOTATION ( UnsafeOutsideOfForFunctionAnnotation )
-    FACTORY_REGISTER_ANNOTATION ( NoAotFunctionAnnotation )
-    FACTORY_REGISTER_ANNOTATION ( InitFunctionAnnotation )
-    FACTORY_REGISTER_ANNOTATION ( FinalizeFunctionAnnotation )
-    FACTORY_REGISTER_ANNOTATION ( MarkUsedFunctionAnnotation )
-    FACTORY_REGISTER_ANNOTATION ( IsYetAnotherVectorTemplateAnnotation )
-    FACTORY_REGISTER_ANNOTATION ( CommentAnnotation )
-    FACTORY_REGISTER_ANNOTATION ( MacroInterfaceAnnotation )
-    FACTORY_REGISTER_ANNOTATION ( SkipLockCheckStructureAnnotation )
-    FACTORY_REGISTER_ANNOTATION ( HybridFunctionAnnotation )
-    FACTORY_REGISTER_ANNOTATION ( CppAlignmentAnnotation )
-    FACTORY_REGISTER_ANNOTATION ( LocalOnlyFunctionAnnotation )
-    FACTORY_REGISTER_ANNOTATION ( PersistentStructureAnnotation )
-
 }

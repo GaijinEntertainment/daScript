@@ -1,5 +1,22 @@
+#pragma once
 
-namespace das { class AnnotationFactory; }
+namespace das {
+    class AnnotationFactory;
+
+    template <typename T>
+    struct DeserializationFactory {
+    public:
+        static bool registerCreator ( const char* type, smart_ptr<T> (*creator)() ) {
+            map[string(type)] = creator;
+            return true;
+        }
+        static smart_ptr<T> create ( string type ) {
+            return map[type]();
+        }
+    private:
+        inline static das_hash_map<string, smart_ptr<T> (*)() > map;
+    };
+}
 
 // Use in the definition of the annotation class
 // Do not use in abstract classes
@@ -28,3 +45,15 @@ namespace das { class AnnotationFactory; }
 // ..
 // FACTORY_REGISTER_ANNOTATION ( Annotation )
 // ..
+
+// A more general version, for all difference macro versions.
+
+#define DECLARE_SERIALIZABLE( BaseType, DerivedType )                                   \
+    virtual const char * getFactoryTag () override { return #DerivedType; }             \
+    static smart_ptr<BaseType> createInstance () { return make_smart<DerivedType>(); }  \
+    static bool registered;
+
+#define FACTORY_REGISTER( BaseType, DerivedType )                                      \
+    bool DerivedType::registered = DeserializationFactory<BaseType>::registerCreator ( \
+        #DerivedType, DerivedType::createInstance                                      \
+    );
