@@ -4013,7 +4013,10 @@ namespace das {
             if ( !expr->subexpr->type || expr->subexpr->type->isAliasOrExpr() ) return Visitor::visit(expr);    // failed to infer
             if ( !expr->index->type   || expr->index->type->isAliasOrExpr()   ) return Visitor::visit(expr);    // failed to infer
             if ( !expr->no_promotion ) {
-                if ( auto opE = inferGenericOperator("[]",expr->at,expr->subexpr,expr->index) ) return opE;
+                if ( auto opE = inferGenericOperator("[]",expr->at,expr->subexpr,expr->index) ) {
+                    opE->alwaysSafe = expr->alwaysSafe;
+                    return opE;
+                }
             }
             expr->index = Expression::autoDereference(expr->index);
             auto seT = expr->subexpr->type;
