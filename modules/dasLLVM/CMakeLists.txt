@@ -193,6 +193,9 @@ IF(WIN32)
         DESTINATION bin
     )
 	install(FILES ${PROJECT_SOURCE_DIR}/modules/dasLLVM/LICENSE.TXT DESTINATION . RENAME LLVM.LICENSE)
+	INSTALL(DIRECTORY ${DAS_LLVM_DIR}/daslib
+		DESTINATION modules/dasLLVM
+	)
 ENDIF()
 
     #ADD_MODULE_DAS(cbind cbind cbind_boost)

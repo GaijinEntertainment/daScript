@@ -674,6 +674,8 @@ class LlvmJitVisitor : AstVisitor
             var arg_types : array<LLVMOpaqueType?>
             var res_type : LLVMOpaqueType?
             res_type = type_to_llvm_type(expr.func.result)
+            if expr.func.result.flags.ref
+                res_type = LLVMPointerType(res_type,0u)
             let cmres = isCMRES(expr.func)
             if cmres
                 arg_types |> push(LLVMPointerType(res_type,0u))

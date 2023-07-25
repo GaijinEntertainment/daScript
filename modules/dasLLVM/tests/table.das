@@ -96,3 +96,4 @@ def test_table ( t:T? )
         t |> success ( tab_key_exist(tab, 2) )
         t |> success ( !tab_key_exist(tab, 3) )
         t |> success ( tab_key_exist(tab, 4) )
+
