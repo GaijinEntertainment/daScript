@@ -3474,6 +3474,9 @@ class JIT_LLVM : AstSimulateMacro
         return true if is_in_completion() || is_compiling_macros() || is_folding()
         if !LLVM_JIT_ENABLED
             return true
+        if !jit_enabled()
+            error("jit is disabled. use `-jit` option for daScript, or enable jit via CodeOfPolicies")
+            return false
         var funcs : array<FunctionPtr>
         prog |> for_each_module <| $ ( mod )
             mod |> for_each_function("") <| $ ( fun )
