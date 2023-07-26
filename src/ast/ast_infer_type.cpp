@@ -1121,6 +1121,7 @@ namespace das {
                 if ( itFnList != mod->functionsByName.end() ) {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
+                        if ( pFn->jitOnly && !program->policies.jit ) continue;
                         if ( !visCheck || isVisibleFunc(inWhichModule,getFunctionVisModule(pFn.get()) ) ) {
                             if ( !pFn->fromGeneric || thisModule->isVisibleDirectly(mod) ) {
                                 if ( canCallPrivate(pFn,inWhichModule,thisModule) ) {
@@ -1149,6 +1150,7 @@ namespace das {
                 if ( itFnList != mod->genericsByName.end() ) {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
+                        if ( pFn->jitOnly && !program->policies.jit ) continue;
                         if ( isVisibleFunc(inWhichModule,getFunctionVisModule(pFn.get())) ) {
                             if ( canCallPrivate(pFn,inWhichModule,thisModule) ) {
                                 if ( isFunctionCompatible(pFn, types, arguments, true, true) ) {   // infer block here?

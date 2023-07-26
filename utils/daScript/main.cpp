@@ -16,6 +16,7 @@ static bool debuggerRequired = false;
 static bool pauseAfterErrors = false;
 static bool quiet = false;
 static bool paranoid_validation = false;
+static bool jitEnabled = false;
 
 das::Context * get_context ( int stackSize=0 );
 
@@ -276,6 +277,7 @@ bool compile_and_run ( const string & fn, const string & mainFnName, bool output
     bool success = false;
     ModuleGroup dummyGroup;
     CodeOfPolicies policies;
+    policies.jit = jitEnabled;
     policies.debugger = debuggerRequired;
     if ( debuggerRequired ) {
         policies.debug_module = getDasRoot() + "/daslib/debug.das";
@@ -413,6 +415,8 @@ int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
                 }
                 setDasRoot(argv[i+1]);
                 i += 1;
+            } else if ( cmd=="jit") {
+                jitEnabled = true;
             } else if ( cmd=="log" ) {
                 outputProgramCode = true;
             } else if ( cmd=="dry-run" ) {
