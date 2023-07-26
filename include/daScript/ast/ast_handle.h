@@ -79,7 +79,6 @@ namespace das
             uint32_t    offset;
             __forceinline void adjustAot ( const char * pref, const char * postf ) { aotPrefix=pref; aotPostfix=postf; }
         };
-        BasicStructureAnnotation() = default;
         BasicStructureAnnotation(const string & n, const string & cpn, ModuleLibrary * l)
             : TypeAnnotation(n,cpn), mlib(l) {
             mlib->getThisModule()->registerAnnotation(this);
@@ -103,7 +102,6 @@ namespace das
         int32_t fieldCount() const { return int32_t(fields.size()); }
         void from(BasicStructureAnnotation * ann);
         void from(const char* parentName);
-        virtual void serialize ( AstSerializer & ser ) override;
         das_map<string,StructureField> fields;
         vector<string>                 fieldsInOrder;
         DebugInfoHelper            helpA;
@@ -229,7 +227,6 @@ namespace das
     template <typename OT>
     struct ManagedStructureAnnotation<OT,false,false> : BasicStructureAnnotation {
         typedef OT ManagedType;
-        ManagedStructureAnnotation () = default;
         ManagedStructureAnnotation (const string & n, ModuleLibrary & ml, const string & cpn = "" )
             : BasicStructureAnnotation(n,cpn,&ml) { }
         virtual size_t getSizeOf() const override { return sizeof(ManagedType); }
@@ -302,7 +299,6 @@ namespace das
     struct ManagedStructureAnnotation<OT, true, false> : public ManagedStructureAnnotation<OT, false, false> {
         typedef OT ManagedType;
         enum { is_smart = is_base_of<ptr_ref_count, OT>::value };
-        ManagedStructureAnnotation () = default;
         ManagedStructureAnnotation(const string& n, ModuleLibrary& ml, const string& cpn = "")
             : ManagedStructureAnnotation<OT, false,false>(n, ml, cpn) { }
         virtual bool canNew() const override { return true; }
@@ -315,7 +311,6 @@ namespace das
     struct ManagedStructureAnnotation<OT, false, true> : public ManagedStructureAnnotation<OT, false, false> {
         typedef OT ManagedType;
         enum { is_smart = is_base_of<ptr_ref_count, OT>::value };
-        ManagedStructureAnnotation () = default;
         ManagedStructureAnnotation(const string& n, ModuleLibrary& ml, const string& cpn = "")
             : ManagedStructureAnnotation<OT, false,false>(n, ml, cpn) { }
         virtual bool canDeletePtr() const override { return true; }
@@ -328,7 +323,6 @@ namespace das
     struct ManagedStructureAnnotation<OT,true,true> : public ManagedStructureAnnotation<OT,false,false> {
         typedef OT ManagedType;
         enum { is_smart = is_base_of<ptr_ref_count,OT>::value };
-        ManagedStructureAnnotation () = default;
         ManagedStructureAnnotation (const string & n, ModuleLibrary & ml, const string & cpn = "" )
             : ManagedStructureAnnotation<OT,false,false>(n,ml,cpn) { }
         virtual bool canNew() const override { return true; }

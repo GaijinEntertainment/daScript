@@ -17,7 +17,6 @@ protected:
 protected:
   int _das_class_method_offset[12];
 public:
-  AstFunctionAnnotation_Adapter ( ) = default;
   AstFunctionAnnotation_Adapter ( const StructInfo * info ) {
       _das_class_method_offset[__fn_transform] = adapt_field_offset("transform",info);
       _das_class_method_offset[__fn_verifyCall] = adapt_field_offset("verifyCall",info);
@@ -151,7 +150,6 @@ protected:
 protected:
   int _das_class_method_offset[2];
 public:
-  AstBlockAnnotation_Adapter ( ) = default;
   AstBlockAnnotation_Adapter ( const StructInfo * info ) {
       _das_class_method_offset[__fn_apply] = adapt_field_offset("apply",info);
       _das_class_method_offset[__fn_finish] = adapt_field_offset("finish",info);
@@ -190,7 +188,6 @@ protected:
 protected:
   int _das_class_method_offset[7];
 public:
-  AstStructureAnnotation_Adapter ( ) = default;
   AstStructureAnnotation_Adapter ( const StructInfo * info ) {
       _das_class_method_offset[__fn_apply] = adapt_field_offset("apply",info);
       _das_class_method_offset[__fn_finish] = adapt_field_offset("finish",info);
@@ -273,7 +270,6 @@ protected:
 protected:
   int _das_class_method_offset[1];
 public:
-  AstEnumerationAnnotation_Adapter ( ) = default;
   AstEnumerationAnnotation_Adapter ( const StructInfo * info ) {
       _das_class_method_offset[__fn_apply] = adapt_field_offset("apply",info);
   }
@@ -296,7 +292,6 @@ protected:
 protected:
   int _das_class_method_offset[1];
 public:
-  AstPassMacro_Adapter ( ) = default;
   AstPassMacro_Adapter ( const StructInfo * info ) {
       _das_class_method_offset[__fn_apply] = adapt_field_offset("apply",info);
   }
@@ -321,7 +316,6 @@ protected:
 protected:
   int _das_class_method_offset[3];
 public:
-  AstVarianMacro_Adapter ( ) = default;
   AstVarianMacro_Adapter ( const StructInfo * info ) {
       _das_class_method_offset[__fn_visitExprIsVariant] = adapt_field_offset("visitExprIsVariant",info);
       _das_class_method_offset[__fn_visitExprAsVariant] = adapt_field_offset("visitExprAsVariant",info);
@@ -364,7 +358,6 @@ protected:
 protected:
   int _das_class_method_offset[1];
 public:
-  AstForLoopMacro_Adapter ( ) = default;
   AstForLoopMacro_Adapter ( const StructInfo * info ) {
       _das_class_method_offset[__fn_visitExprFor] = adapt_field_offset("visitExprFor",info);
   }
@@ -388,7 +381,6 @@ protected:
 protected:
   int _das_class_method_offset[2];
 public:
-  AstCaptureMacro_Adapter ( ) = default;
   AstCaptureMacro_Adapter ( const StructInfo * info ) {
       _das_class_method_offset[__fn_captureExpression] = adapt_field_offset("captureExpression",info);
       _das_class_method_offset[__fn_captureFunction] = adapt_field_offset("captureFunction",info);
@@ -422,7 +414,6 @@ protected:
 protected:
   int _das_class_method_offset[2];
 public:
-  AstSimulateMacro_Adapter ( ) = default;
   AstSimulateMacro_Adapter ( const StructInfo * info ) {
       _das_class_method_offset[__fn_preSimulate] = adapt_field_offset("preSimulate",info);
       _das_class_method_offset[__fn_simulate] = adapt_field_offset("simulate",info);
@@ -456,7 +447,6 @@ protected:
 protected:
   int _das_class_method_offset[2];
 public:
-  AstReaderMacro_Adapter ( ) = default;
   AstReaderMacro_Adapter ( const StructInfo * info ) {
       _das_class_method_offset[__fn_accept] = adapt_field_offset("accept",info);
       _das_class_method_offset[__fn_visit] = adapt_field_offset("visit",info);
@@ -507,7 +497,6 @@ protected:
 protected:
   int _das_class_method_offset[19];
 public:
-  AstCommentReader_Adapter ( ) = default;
   AstCommentReader_Adapter ( const StructInfo * info ) {
       _das_class_method_offset[__fn_open] = adapt_field_offset("open",info);
       _das_class_method_offset[__fn_accept] = adapt_field_offset("accept",info);
@@ -713,7 +702,6 @@ protected:
 protected:
   int _das_class_method_offset[4];
 public:
-  AstCallMacro_Adapter ( ) = default;
   AstCallMacro_Adapter ( const StructInfo * info ) {
       _das_class_method_offset[__fn_preVisit] = adapt_field_offset("preVisit",info);
       _das_class_method_offset[__fn_visit] = adapt_field_offset("visit",info);
@@ -767,7 +755,6 @@ protected:
 protected:
   int _das_class_method_offset[2];
 public:
-  AstTypeInfoMacro_Adapter ( ) = default;
   AstTypeInfoMacro_Adapter ( const StructInfo * info ) {
       _das_class_method_offset[__fn_getAstChange] = adapt_field_offset("getAstChange",info);
       _das_class_method_offset[__fn_getAstType] = adapt_field_offset("getAstType",info);

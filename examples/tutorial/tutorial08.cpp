@@ -41,22 +41,12 @@ void tutorial () {
         }
         return;
     }
-
-    Module* mod = new Module;
+// serialize
     AstSerializer ser;
-    ser.thisModule = program->thisModule.get();
-    ser.moduleLibrary = &program->library;
-    program.get()->thisModule->serialize(ser);
-
-    ser.writing = false;
-    ser.functionMap.clear();
-
-    program->thisModule.reset(mod);
-    program->library.MyXXXoperation(mod);
-
-    mod->serialize(ser);
-
-    DAS_VERIFY(mod->findFunction("test").get() != nullptr);
+    program->serialize(ser);
+// deserialize
+    AstSerializer deser ( ForReading{}, move(ser.buffer) );
+    program->serialize(deser);
 
     // create daScript context
     Context ctx(program->getContextStackSize());

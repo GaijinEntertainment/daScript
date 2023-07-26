@@ -24,7 +24,6 @@
 namespace das
 {
     struct AstSerializer;
-    class AnnotationFactory;
 
     class Function;
     typedef smart_ptr<Function> FunctionPtr;
@@ -111,7 +110,7 @@ namespace das
     };
 
     struct Annotation : BasicAnnotation {
-        Annotation ( const string & n = "", const string & cpn = "" ) : BasicAnnotation(n,cpn) {}
+        Annotation ( const string & n, const string & cpn = "" ) : BasicAnnotation(n,cpn) {}
         virtual ~Annotation() {}
         virtual void seal( Module * m ) { module = m; }
         virtual bool rtti_isHandledTypeAnnotation() const { return false; }
@@ -122,8 +121,6 @@ namespace das
         virtual bool rtti_isBasicStructureAnnotation() const { return false;  }
         string describe() const { return name; }
         string getMangledName() const;
-        void serialize( AstSerializer & ser );
-        ANNOTATION_DECLARE_SERIALIZABLE( Annotation );
         virtual void log ( TextWriter & ss, const AnnotationDeclaration & decl ) const;
         Module *    module = nullptr;
     };
@@ -154,7 +151,7 @@ namespace das
             string          cppName;
             LineInfo        at;
             ExpressionPtr   value;
-            void serialize( AstSerializer & ser );
+            void serialize ( AstSerializer & ser );
         };
     public:
         Enumeration() = default;
@@ -375,7 +372,6 @@ namespace das
     struct ExprCallFunc;
 
     struct FunctionAnnotation : Annotation {
-        FunctionAnnotation ( ) = default;
         FunctionAnnotation ( const string & n ) : Annotation(n) {}
         virtual bool rtti_isFunctionAnnotation() const override { return true; }
         virtual bool apply ( const FunctionPtr & func, ModuleGroup & libGroup,
@@ -417,7 +413,7 @@ namespace das
     };
 
     struct TransformFunctionAnnotation : FunctionAnnotation {
-        TransformFunctionAnnotation ( const string & n = "" ) : FunctionAnnotation(n) {}
+        TransformFunctionAnnotation ( const string & n ) : FunctionAnnotation(n) {}
         virtual ExpressionPtr transformCall ( ExprCallFunc * /*call*/, string & /*err*/ ) override = 0;
         virtual bool apply ( const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &, string & ) override {
             return false;
@@ -434,7 +430,7 @@ namespace das
     };
 
     struct TypeAnnotation : Annotation {
-        TypeAnnotation ( const string & n = "", const string & cpn = "" ) : Annotation(n,cpn) {}
+        TypeAnnotation ( const string & n, const string & cpn = "" ) : Annotation(n,cpn) {}
         virtual TypeAnnotationPtr clone ( const TypeAnnotationPtr & p = nullptr ) const {
             DAS_ASSERTF(p, "can only clone real type %s", name.c_str());
             p->name = name;
@@ -515,7 +511,7 @@ namespace das
     };
 
     struct StructureAnnotation : Annotation {
-        StructureAnnotation ( const string & n = "" ) : Annotation(n) {}
+        StructureAnnotation ( const string & n ) : Annotation(n) {}
         virtual bool rtti_isStructureAnnotation() const override { return true; }
         virtual bool touch ( const StructurePtr & st, ModuleGroup & libGroup,
                             const AnnotationArgumentList & args, string & err ) = 0;    // this one happens before infer. u can change structure here
@@ -531,7 +527,7 @@ namespace das
     typedef smart_ptr<StructureAnnotation> StructureAnnotationPtr;
 
     struct EnumerationAnnotation : Annotation {
-        EnumerationAnnotation ( const string & n = "" ) : Annotation(n) {}
+        EnumerationAnnotation ( const string & n ) : Annotation(n) {}
         virtual bool rtti_isEnumerationAnnotation() const override { return true; }
         virtual bool touch ( const EnumerationPtr & st, ModuleGroup & libGroup,
                             const AnnotationArgumentList & args, string & err ) = 0;    // this one happens before infer. u can change enum here
@@ -543,7 +539,7 @@ namespace das
     //  needs to override
     //      create,clone
     struct StructureTypeAnnotation : TypeAnnotation {
-        StructureTypeAnnotation ( const string & n = "" ) : TypeAnnotation(n) {}
+        StructureTypeAnnotation ( const string & n ) : TypeAnnotation(n) {}
         virtual bool rtti_isStructureTypeAnnotation() const override { return true; }
         virtual bool rtti_isHandledTypeAnnotation() const override { return true; }
         virtual bool canCopy() const override { return false; }
@@ -559,7 +555,6 @@ namespace das
             cp->structureType = structureType;
             return TypeAnnotation::clone(cp);
         }
-        ANNOTATION_DECLARE_SERIALIZABLE ( StructureTypeAnnotation );
         smart_ptr<Structure>   structureType;
     };
 
@@ -938,7 +933,7 @@ namespace das
     }
 
     struct TypeInfoMacro : public ptr_ref_count {
-        TypeInfoMacro ( const string & n = "")
+        TypeInfoMacro ( const string & n )
             : name(n) {
         }
         virtual void seal( Module * m ) { module = m; }
@@ -950,8 +945,6 @@ namespace das
         virtual bool aotInfix ( TextWriter &, const ExpressionPtr & ) { return false; }
         virtual bool aotNeedTypeInfo ( const ExpressionPtr & ) const { return false; }
         virtual bool noAot ( const ExpressionPtr & ) const { return false; }
-        virtual const char * getFactoryTag () { return "TypeInfoMacro"; }
-        virtual void serialize ( AstSerializer & ser );
         string name;
         Module * module = nullptr;
     };
@@ -1211,8 +1204,6 @@ namespace das
     struct PassMacro : ptr_ref_count {
         PassMacro ( const string na = "" ) : name(na) {}
         virtual bool apply( Program *, Module * ) { return false; }
-        virtual const char * getFactoryTag () { return "PassMacro"; }
-        virtual void serialize ( AstSerializer & ser );
         string name;
     };
 
@@ -1222,8 +1213,6 @@ namespace das
         virtual bool accept ( Program *, Module *, ExprReader *, int, const LineInfo & ) { return false; }
         virtual ExpressionPtr visit (  Program *, Module *, ExprReader * ) { return nullptr; }
         virtual void seal( Module * m ) { module = m; }
-        virtual const char * getFactoryTag () { return "ReaderMacro"; }
-        virtual void serialize ( AstSerializer & ser );
         string name;
         Module * module = nullptr;
     };
@@ -1236,8 +1225,6 @@ namespace das
         virtual void seal( Module * m ) { module = m; }
         virtual bool canVisitArguments ( ExprCallMacro *, int ) { return true; }
         virtual bool canFoldReturnResult ( ExprCallMacro * ) { return true; }
-        virtual const char * getFactoryTag () { return "CallMacro"; }
-        virtual void serialize ( AstSerializer & ser );
         string name;
         Module * module = nullptr;
     };
@@ -1246,8 +1233,6 @@ namespace das
     struct ForLoopMacro : ptr_ref_count {
         ForLoopMacro ( const string & na = "" ) : name(na) {}
         virtual ExpressionPtr visit ( Program *, Module *, ExprFor * ) { return nullptr; }
-        virtual const char * getFactoryTag () { return "ForLoopMacro"; }
-        virtual void serialize ( AstSerializer & ser );
         string name;
     };
 
@@ -1255,8 +1240,6 @@ namespace das
         CaptureMacro ( const string & na = "" ) : name(na) {}
         virtual ExpressionPtr captureExpression ( Program *, Module *, Expression *, TypeDecl * ) { return nullptr; }
         virtual void captureFunction ( Program *, Module *, Structure *, Function * ) { }
-        virtual const char * getFactoryTag () { return "CaptureMacro"; }
-        virtual void serialize ( AstSerializer & ser );
         string name;
     };
 
@@ -1268,8 +1251,6 @@ namespace das
         virtual ExpressionPtr visitIs     (  Program *, Module *, ExprIsVariant * ) { return nullptr; }
         virtual ExpressionPtr visitAs     (  Program *, Module *, ExprAsVariant * ) { return nullptr; }
         virtual ExpressionPtr visitSafeAs (  Program *, Module *, ExprSafeAsVariant * ) { return nullptr; }
-        virtual const char * getFactoryTag () { return "VariantMacro"; }
-        virtual void serialize ( AstSerializer & ser );
         string name;
     };
 
@@ -1277,8 +1258,6 @@ namespace das
         SimulateMacro ( const string na = "" ) : name(na) {}
         virtual bool preSimulate ( Program *, Context * ) { return true; }
         virtual bool simulate ( Program *, Context * ) { return true; }
-        virtual const char * getFactoryTag () { return "SimulateMacro"; }
-        virtual void serialize ( AstSerializer & ser );
         string name;
     };
 
@@ -1297,7 +1276,6 @@ namespace das
         void appendLocalVariables ( FuncInfo * info, const ExpressionPtr & body );
         void appendGlobalVariables ( FuncInfo * info, const FunctionPtr & body );
         void logMemInfo ( TextWriter & tw );
-        void serialize ( AstSerializer & ser );
     public:
         shared_ptr<DebugInfoAllocator>  debugInfo;
         bool                            rtti = false;
@@ -1393,7 +1371,6 @@ namespace das
         virtual void afterEnumeration ( const char * name, const LineInfo & at ) = 0;
         virtual void beforeAlias ( const LineInfo & at ) = 0;
         virtual void afterAlias ( const char * name, const LineInfo & at ) = 0;
-        virtual const char * getFactoryTag () { return "CommentReader"; }
     };
 
     class Program : public ptr_ref_count {
@@ -1467,6 +1444,7 @@ namespace das
         bool getProfiler() const;
         void makeMacroModule( TextWriter & logs );
         vector<ReaderMacroPtr> getReaderMacro ( const string & markup ) const;
+        void serialize ( AstSerializer & ser );
     protected:
         // this is no longer the way to link AOT
         //  set CodeOfPolicies::aot instead
@@ -1592,7 +1570,6 @@ namespace das
         static DAS_THREAD_LOCAL daScriptEnvironment * owned;
         static void ensure();
     };
-
 }
 
 

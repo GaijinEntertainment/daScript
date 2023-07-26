@@ -3,8 +3,15 @@
 #include "daScript/ast/ast.h"
 
 namespace das {
+    struct ForReading {};
 
     struct AstSerializer {
+        AstSerializer ( void );
+        AstSerializer ( ForReading, vector<uint8_t> && buffer_ );
+
+        AstSerializer ( const AstSerializer & from ) = delete;
+        AstSerializer & operator = ( const AstSerializer & from ) = delete;
+
         FileAccess *        fileAccess = nullptr;
         ModuleLibrary *     moduleLibrary = nullptr;
         Module *            thisModule = nullptr;
@@ -40,9 +47,6 @@ namespace das {
         vector<pair<string, Module **>>             moduleRefs;
         vector<pair<Structure::FieldDeclaration **,uint64_t>>  fieldDeclRefs;
         AstSerializer ( const vector<uint8_t> & from );
-        AstSerializer ( void );
-        AstSerializer ( const AstSerializer & from ) = delete;
-        AstSerializer & operator = ( const AstSerializer & from ) = delete;
         void write ( const void * data, size_t size );
         void read  ( void * data, size_t size );
         void serialize ( void * data, size_t size );
@@ -83,7 +87,6 @@ namespace das {
         AstSerializer & operator << ( Enumeration::EnumEntry & entry );
         AstSerializer & operator << ( TypeAnnotationPtr & type_anno );
         AstSerializer & operator << ( TypeAnnotation * & type_anno );
-        AstSerializer & operator << ( BasicStructureAnnotation::StructureField & field );
         AstSerializer & operator << ( VariablePtr & var );
         AstSerializer & operator << ( Variable * & var );
         AstSerializer & operator << ( Function::AliasInfo & alias_info );
