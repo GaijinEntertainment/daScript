@@ -3021,6 +3021,8 @@ namespace das {
     }
 
     void ___noinline builtin_try_recover ( const Block & try_block, const Block & catch_block, Context * context, LineInfoArg * at );
+
+    bool das_jit_enabled ( Context * context, LineInfoArg * at );
 }
 
 #if defined(_MSC_VER)

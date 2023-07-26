@@ -5,7 +5,6 @@
 #include "daScript/ast/ast_visitor.h"
 
 namespace das {
-    bool das_jit_enabled ( Context * context, LineInfoArg * at );
     float4 das_invoke_code ( void * pfun, vec4f anything, void * cmres, Context * context );
     bool das_is_jit_function ( const Func func );
     bool das_remove_jit ( const Func func );

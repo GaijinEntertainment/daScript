@@ -277,11 +277,6 @@ namespace das {
         return (void *) &builtin_iterator_close;
     }
 
-    bool das_jit_enabled ( Context * context, LineInfoArg * at ) {
-        if ( !context->thisProgram ) context->throw_error_at(at, "can only query for jit during compilation");
-        return context->thisProgram->policies.jit;
-    }
-
     class Module_Jit : public Module {
     public:
         Module_Jit() : Module("jit") {
@@ -291,9 +286,6 @@ namespace das {
             lib.addBuiltInModule();
             lib.addModule(Module::require("rtti"));
             lib.addModule(Module::require("ast"));
-            addExtern<DAS_BIND_FUN(das_jit_enabled)>(*this, lib, "jit_enabled",
-                SideEffects::none, "das_jit_enabled")
-                    ->args({"context","at"});
             addExtern<DAS_BIND_FUN(das_invoke_code)>(*this, lib, "invoke_code",
                 SideEffects::worstDefault, "das_invoke_code")
                     ->args({"code","arguments","cmres","context"})->unsafeOperation = true;
