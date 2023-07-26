@@ -158,7 +158,7 @@ namespace das {
         return *this;
     }
 
-    AstSerializer & AstSerializer::operator << (FunctionPtr & func) {
+    AstSerializer & AstSerializer::operator << ( FunctionPtr & func ) {
         tag("FunctionPtr");
         if ( writing ) {
             DAS_ASSERTF(!func->builtIn, "cannot serialize built-in function");
@@ -285,6 +285,8 @@ namespace das {
                     ser << anno->module->name;
                     string mangeldName = anno->getMangledName();
                     ser << mangeldName;
+                } else {
+                    DAS_VERIFYF(false, "annotation is not found in the current module");
                 }
             }
         } else {
@@ -292,8 +294,7 @@ namespace das {
                 bool inThisModule;
                 ser << inThisModule;
                 if ( inThisModule ) {
-                    // ??
-                    DAS_VERIFYF(false, "annotation is not found in the current module");
+                    DAS_VERIFYF(false, "Unreachable");
                 } else {
                     string moduleName, mangledName;
                     ser << moduleName;
@@ -330,7 +331,7 @@ namespace das {
             write((void *)str.data(), size);
         } else {
             uint32_t size = 0;
-            * this << size;
+            *this << size;
             str.resize(size);
             read(&str[0], size);
         }
@@ -370,27 +371,37 @@ namespace das {
     }
 
     AstSerializer & AstSerializer::operator << ( FileInfo * & info ) {
+        FileInfoPtr t;
+        if ( writing ) {
+            t.reset(info);
+            *this << t;
+        } else {
+            *this << t;
+            info = t.release();
+        }
+        return *this;
+    }
+
+    AstSerializer & AstSerializer::operator << ( FileInfoPtr & info ) {
         bool is_null = info == nullptr;
         *this << is_null;
         if ( writing ) {
             if ( !is_null ) {
-                return *this;
                 info->serialize(*this);
             }
         } else {
             if ( !is_null ) {
-                info = nullptr; return *this;
-                // TODO: info = factory();
+                int tag = 0; *this << tag;
+                switch ( tag ) {
+                    case 0: info.reset(new FileInfo); break;
+                    case 1: info.reset(new TextFileInfo); break;
+                    default: DAS_VERIFYF(false, "Unreachable");
+                }
                 info->serialize(*this);
             } else {
                 info = nullptr;
             }
         }
-        return *this;
-    }
-
-    AstSerializer & AstSerializer::operator << ( FileInfoPtr & ptr ) {
-        ptr->serialize(*this);
         return *this;
     }
 
@@ -417,12 +428,38 @@ namespace das {
         return *this;
     }
 
-    AstSerializer & AstSerializer::operator << ( FileAccessPtr & ptr ) {
-        DAS_FATAL_ERROR("TODO: serailze FileAccessPtr");
-        // *this << ptr->files;
-        return *this;
+    void FileAccess::serialize ( AstSerializer & ser ) {
+        ser.tag("FileAccess");
+        if ( ser.writing ) {
+            int tag = 0;
+            ser << tag;
+        }
+        ser << files;
     }
 
+    void ModuleFileAccess::serialize ( AstSerializer & ser ) {
+        ser.tag("ModuleFileAccess");
+        if ( ser.writing ) {
+            int tag = 1;
+            ser << tag;
+        }
+        ser << files;
+    }
+
+    AstSerializer & AstSerializer::operator << ( FileAccessPtr & ptr ) {
+        if ( writing ) {
+            ptr->serialize(*this);
+        } else {
+            int tag; *this << tag;
+            switch ( tag ) {
+                case 0: ptr = new FileAccess; break;
+                case 1: ptr = new ModuleFileAccess; break;
+                default: DAS_VERIFYF(false, "Unreachable");
+            }
+            ptr->serialize(*this);
+        }
+        return *this;
+    }
 
     AstSerializer & AstSerializer::operator << ( Structure * & struct_ ) {
         return serializePointer(struct_, structureMap);
@@ -437,6 +474,7 @@ namespace das {
         return serializePointer(enum_type, enumerationMap);
     }
 
+    // This method creates concrete (i.e. non-polymorphic types without duplications)
     template<typename T>
     void AstSerializer::serializeSmartPtr( smart_ptr<T> & obj, das_hash_map<uint64_t, smart_ptr<T>> & objMap) {
         uint64_t id = uint64_t(obj.get());
@@ -476,15 +514,14 @@ namespace das {
     AstSerializer & AstSerializer::operator << ( TypeAnnotationPtr & type_anno ) {
         AnnotationPtr a = static_pointer_cast<Annotation>(type_anno);
         *this << a;
-        // TODO:
-        // type_anno = dynamic_pointer_cast<TypeAnnotation>(a);
+        type_anno = static_pointer_cast<TypeAnnotation>(a);
         return *this;
     }
 
     AstSerializer & AstSerializer::operator << ( TypeAnnotation * & type_anno ) {
         TypeAnnotationPtr t = type_anno;
         *this << t;
-        type_anno = t.get();
+        type_anno = t.orphan();
         return *this;
     }
 
@@ -502,15 +539,15 @@ namespace das {
         bool is_null = module == nullptr;
         *this << is_null;
         if ( writing ) {
-            if ( is_null ) return *this;
-            *this << module->name;
+            if ( !is_null ) {
+                *this << module->name;
+            }
         } else {
-            if ( is_null ) {
-                module = nullptr;
-            } else {
-                string name;
-                *this << name;
+            if ( !is_null ) {
+                string name; *this << name;
                 moduleRefs.emplace_back(move(name), &module);
+            } else {
+                module = nullptr;
             }
         }
         return *this;
@@ -1148,6 +1185,8 @@ namespace das {
 
     void FileInfo::serialize ( AstSerializer & ser ) {
         ser.tag("FileInfo");
+        int tag = 0;
+        ser << tag;
         ser << name << tabSize;
         #if DAS_ENABLE_PROFILER
                 ser << profileData;
@@ -1156,8 +1195,13 @@ namespace das {
 
     void TextFileInfo::serialize ( AstSerializer & ser ) {
         ser.tag("TextFileInfo");
+        int tag = 1; // Signify the text file info
+        ser << tag;
+        ser << name << tabSize;
+        #if DAS_ENABLE_PROFILER
+                ser << profileData;
+        #endif
         ser << source << sourceLength << owner;
-        FileInfo::serialize(ser);
     }
 
     AstSerializer & AstSerializer::operator << ( CallMacro * & ptr ) {

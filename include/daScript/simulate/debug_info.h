@@ -118,6 +118,7 @@ namespace das
 
     class TextFileInfo : public FileInfo {
     public:
+        TextFileInfo ( ) = default;
         TextFileInfo ( const char * src, uint32_t len, bool own )
             : source(src), sourceLength(len), owner(own) {}
         virtual ~TextFileInfo() { if ( owner ) freeSourceData(); }
@@ -150,6 +151,7 @@ namespace das
         virtual bool isModuleAllowed ( const string &, const string & ) const { return true; };
         virtual bool canModuleBeUnsafe ( const string &, const string & ) const { return true; };
         virtual bool addFsRoot ( const string & , const string & ) { return false; }
+        virtual void serialize ( AstSerializer & ser );
     protected:
         virtual FileInfo * getNewFileInfo ( const string & ) { return nullptr; }
     protected:
@@ -171,6 +173,7 @@ namespace das
         virtual string getIncludeFileName ( const string & fileName, const string & incFileName ) const override;
         virtual bool isModuleAllowed ( const string &, const string & ) const override;
         virtual bool canModuleBeUnsafe ( const string &, const string & ) const override;
+        virtual void serialize ( AstSerializer & ser ) override;
     protected:
         Context *           context = nullptr;
         SimFunction *       modGet = nullptr;
