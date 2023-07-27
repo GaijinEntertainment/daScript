@@ -36,5 +36,28 @@ namespace das {
             return this->invoke_f(this->data_ptr, das::forward<Args>(args)...);
         }
     };
+
+    template <typename... Args>
+    class callable<void(Args...)> {
+        typedef void (*invoke_fn_t)(const char*, Args...);
+        template <typename Functor>
+        static __forceinline void invoke_fn(Functor* fn, Args... args) {
+            (*fn)(das::forward<Args>(args)...);
+        }
+        invoke_fn_t     invoke_f;
+        const char *    data_ptr;
+    public:
+        callable(callable && rhs) = delete;
+        callable(callable const& rhs) = delete;
+        __forceinline callable() = default;
+        template <typename Functor>
+        __forceinline callable(const Functor & f)
+            : invoke_f(reinterpret_cast<invoke_fn_t>(invoke_fn<Functor>))
+            , data_ptr(reinterpret_cast<const char *>(&f)) {
+        }
+        __forceinline void operator()(Args... args) const {
+            this->invoke_f(this->data_ptr, das::forward<Args>(args)...);
+        }
+    };
 }
 

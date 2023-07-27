@@ -175,6 +175,13 @@ das::Context * get_context ( int stackSize=0 );//link time resolved dependencies
 
 namespace das {
     template <>
+    struct das_default_vector_size<AnnotationArgumentList> {
+        static __forceinline uint32_t size( const AnnotationArgumentList & value ) {
+            return uint32_t(value.size());
+        }
+    };
+
+    template <>
     struct typeFactory<RttiValue> {
         static TypeDeclPtr make(const ModuleLibrary & library ) {
             auto vtype = make_smart<TypeDecl>(Type::tVariant);

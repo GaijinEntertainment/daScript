@@ -1121,6 +1121,7 @@ namespace das {
                 if ( itFnList != mod->functionsByName.end() ) {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
+                        if ( pFn->jitOnly && !program->policies.jit ) continue;
                         if ( !visCheck || isVisibleFunc(inWhichModule,getFunctionVisModule(pFn.get()) ) ) {
                             if ( !pFn->fromGeneric || thisModule->isVisibleDirectly(mod) ) {
                                 if ( canCallPrivate(pFn,inWhichModule,thisModule) ) {
@@ -1149,6 +1150,7 @@ namespace das {
                 if ( itFnList != mod->genericsByName.end() ) {
                     auto & goodFunctions = itFnList->second;
                     for ( auto & pFn : goodFunctions ) {
+                        if ( pFn->jitOnly && !program->policies.jit ) continue;
                         if ( isVisibleFunc(inWhichModule,getFunctionVisModule(pFn.get())) ) {
                             if ( canCallPrivate(pFn,inWhichModule,thisModule) ) {
                                 if ( isFunctionCompatible(pFn, types, arguments, true, true) ) {   // infer block here?
@@ -4013,7 +4015,10 @@ namespace das {
             if ( !expr->subexpr->type || expr->subexpr->type->isAliasOrExpr() ) return Visitor::visit(expr);    // failed to infer
             if ( !expr->index->type   || expr->index->type->isAliasOrExpr()   ) return Visitor::visit(expr);    // failed to infer
             if ( !expr->no_promotion ) {
-                if ( auto opE = inferGenericOperator("[]",expr->at,expr->subexpr,expr->index) ) return opE;
+                if ( auto opE = inferGenericOperator("[]",expr->at,expr->subexpr,expr->index) ) {
+                    opE->alwaysSafe = expr->alwaysSafe;
+                    return opE;
+                }
             }
             expr->index = Expression::autoDereference(expr->index);
             auto seT = expr->subexpr->type;
@@ -6035,6 +6040,12 @@ namespace das {
             that->isForLoopSource = true;
         }
         virtual ExpressionPtr visitForSource ( ExprFor * expr, Expression * that , bool last ) override {
+            if ( program->policies.jit & that->type && that->type->isHandle() && that->type->annotation->isIterable() ) {
+                reportAstChanged();
+                auto eachFn = make_smart<ExprCall>(expr->at, "each");
+                eachFn->arguments.push_back(that->clone());
+                return eachFn;
+            }
             if ( that->type && that->type->isRef() ) {
                 return Expression::autoDereference(that);
             }

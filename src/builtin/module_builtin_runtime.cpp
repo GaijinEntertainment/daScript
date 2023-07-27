@@ -1338,6 +1338,10 @@ namespace das
 #endif
     }
 
+    bool das_jit_enabled ( Context * context, LineInfoArg * at ) {
+        if ( !context->thisProgram ) context->throw_error_at(at, "can only query for jit during compilation");
+        return context->thisProgram->policies.jit;
+    }
 
 #define STR_DSTR_REG(OPNAME,EXPR) \
     addExtern<DAS_BIND_FUN(OPNAME##_str_dstr)>(*this, lib, #EXPR, SideEffects::none, DAS_TOSTRING(OPNAME##_str_dstr)); \
@@ -1796,6 +1800,9 @@ namespace das
         addExtern<DAS_BIND_FUN(builtin_main_loop)>(*this, lib, "eval_main_loop",
             SideEffects::invoke, "builtin_main_loop")
                 ->args({"block","context","at"});
-
+        // jit
+        addExtern<DAS_BIND_FUN(das_jit_enabled)>(*this, lib, "jit_enabled",
+            SideEffects::none, "das_jit_enabled")
+                ->args({"context","at"});
     }
 }

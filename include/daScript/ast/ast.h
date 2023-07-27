@@ -487,10 +487,6 @@ namespace das
         virtual SimNode * simulateGetAtR2V ( Context &, const LineInfo &, const TypeDeclPtr &,
                                             const ExpressionPtr &, const ExpressionPtr &, uint32_t ) const { return nullptr; }
         virtual SimNode * simulateGetIterator ( Context &, const LineInfo &, const ExpressionPtr & ) const { return nullptr; }
-        // jit
-        virtual void * jitGetAt ( Context *, LineInfo *, const ExpressionPtr & /*rv*/, const ExpressionPtr & /*idx*/ ) const { return nullptr; }
-        virtual void * jitGetAtR2V ( Context * /*context*/, LineInfo * /*at*/,
-            const ExpressionPtr & /*rv*/, const ExpressionPtr & /*idx*/, const TypeDeclPtr & /*r2vType*/ ) const { return nullptr; }
         // data walker
         virtual void walk ( DataWalker &, void * ) { }
         // familiar patterns
@@ -847,6 +843,7 @@ namespace das
                 bool    addressTaken : 1;
                 bool    propertyFunction : 1;
                 bool    pinvoke : 1;
+                bool    jitOnly : 1;
             };
             uint32_t moreFlags = 0;
 
@@ -1325,7 +1322,7 @@ namespace das
         bool profiler = false;
         string profile_module;
     // jit
-        bool jit = true;
+        bool jit = false;
     // pinvoke
         bool threadlock_context = false;               // has context mutex
     };

@@ -586,6 +586,40 @@ namespace das {
         }
     };
 
+    template <typename TT, typename OT>
+    __forceinline OT & das_ati ( TT & value, int32_t index, Context * __context__, LineInfoArg * __info__ ) {
+        using SIZE_POLICY = das_default_vector_size<TT>;
+        uint32_t size = SIZE_POLICY::size(value);
+        uint32_t idx = uint32_t(index);
+        if ( idx>=size ) __context__->throw_error_at(__info__,"vector index out of range, %u of %u", idx, size);
+        return value[index];
+    }
+
+    template <typename TT, typename OT>
+    __forceinline OT & das_atu ( TT & value, uint32_t idx, Context * __context__, LineInfoArg * __info__ ) {
+        using SIZE_POLICY = das_default_vector_size<TT>;
+        uint32_t size = SIZE_POLICY::size(value);
+        if ( idx>=size ) __context__->throw_error_at(__info__,"vector index out of range, %u of %u", idx, size);
+        return value[idx];
+    }
+
+    template <typename TT, typename OT>
+    __forceinline const OT & das_atci ( const TT & value, int32_t index, Context * __context__, LineInfoArg * __info__ ) {
+        using SIZE_POLICY = das_default_vector_size<TT>;
+        uint32_t size = SIZE_POLICY::size(value);
+        uint32_t idx = uint32_t(index);
+        if ( idx>=size ) __context__->throw_error_at(__info__,"vector index out of range, %u of %u", idx, size);
+        return value[index];
+    }
+
+    template <typename TT, typename OT>
+    __forceinline const OT & das_atcu ( const TT & value, uint32_t idx, Context * __context__, LineInfoArg * __info__ ) {
+        using SIZE_POLICY = das_default_vector_size<TT>;
+        uint32_t size = SIZE_POLICY::size(value);
+        if ( idx>=size ) __context__->throw_error_at(__info__,"vector index out of range, %u of %u", idx, size);
+        return value[idx];
+    }
+
     template <typename TT>
     struct das_index<vector<TT>> : das_default_vector_index<vector<TT>, TT> {};
 
@@ -2987,6 +3021,8 @@ namespace das {
     }
 
     void ___noinline builtin_try_recover ( const Block & try_block, const Block & catch_block, Context * context, LineInfoArg * at );
+
+    bool das_jit_enabled ( Context * context, LineInfoArg * at );
 }
 
 #if defined(_MSC_VER)
