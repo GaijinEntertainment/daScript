@@ -2025,6 +2025,28 @@ namespace das {
                 return cast<ResType>::to(result);
             }
         }
+        static __forceinline ResType invoke ( Context * __context__, LineInfo * __lineinfo__, const das_make_block<ResType> & blk ) {
+            using BlockFn = callable < ResType () >;
+            if ( blk.aotFunction ) {
+                auto fn = (BlockFn *) blk.aotFunction;
+                return (*fn) ();
+            } else {
+                vec4f result = __context__->invoke(blk, nullptr, nullptr,__lineinfo__);
+                return cast<ResType>::to(result);
+            }
+        }
+        template <typename ...ArgType>
+        static __forceinline ResType invoke ( Context * __context__, LineInfo * __lineinfo__, const das_make_block<ResType,ArgType...> & blk, ArgType ...arg ) {
+            using BlockFn = callable < ResType ( ArgType... ) >;
+            if ( blk.aotFunction ) {
+                auto fn = (BlockFn *) blk.aotFunction;
+                return (*fn) ( das::forward<ArgType>(arg)... );
+            } else {
+                vec4f arguments [] = { cast<ArgType>::from(arg)... };
+                vec4f result = __context__->invoke(blk, arguments, nullptr, __lineinfo__);
+                return cast<ResType>::to(result);
+            }
+        }
         // cmres
         static __forceinline ResType invoke_cmres ( Context * __context__, LineInfo * __lineinfo__, const Block & blk ) {
             using BlockFn = callable < ResType () >;
@@ -2039,6 +2061,30 @@ namespace das {
         }
         template <typename ...ArgType>
         static __forceinline ResType invoke_cmres ( Context * __context__, LineInfo * __lineinfo__, const Block & blk, ArgType ...arg ) {
+            using BlockFn = callable < ResType ( ArgType... ) >;
+            if ( blk.aotFunction ) {
+                auto fn = (BlockFn *) blk.aotFunction;
+                return (*fn) ( das::forward<ArgType>(arg)... );
+            } else {
+                vec4f arguments [] = { cast<ArgType>::from(arg)... };
+                typename remove_const<ResType>::type result;
+                __context__->invoke(blk, arguments, &result, __lineinfo__);
+                return result;
+            }
+        }
+        static __forceinline ResType invoke_cmres ( Context * __context__, LineInfo * __lineinfo__, const das_make_block_cmres<ResType> & blk ) {
+            using BlockFn = callable < ResType () >;
+            if ( blk.aotFunction ) {
+                auto fn = (BlockFn *) blk.aotFunction;
+                return (*fn) ();
+            } else {
+                typename remove_const<ResType>::type result;
+                __context__->invoke(blk, nullptr, &result, __lineinfo__);
+                return result;
+            }
+        }
+        template <typename ...ArgType>
+        static __forceinline ResType invoke_cmres ( Context * __context__, LineInfo * __lineinfo__, const das_make_block_cmres<ResType,ArgType...> & blk, ArgType ...arg ) {
             using BlockFn = callable < ResType ( ArgType... ) >;
             if ( blk.aotFunction ) {
                 auto fn = (BlockFn *) blk.aotFunction;
@@ -2069,6 +2115,26 @@ namespace das {
         }
         template <typename ...ArgType>
         static __forceinline void invoke ( Context * __context__, LineInfo * __lineinfo__, const Block & blk, ArgType ...arg ) {
+            using BlockFn = callable < void ( ArgType... ) >;
+            if ( blk.aotFunction ) {
+                auto fn = (BlockFn *) blk.aotFunction;
+                (*fn) ( das::forward<ArgType>(arg)... );
+            } else {
+                vec4f arguments [] = { cast<ArgType>::from(arg)... };
+                __context__->invoke(blk, arguments, nullptr, __lineinfo__);
+            }
+        }
+        static __forceinline void invoke ( Context * __context__, LineInfo * __lineinfo__, const das_make_block<void> & blk ) {
+            using BlockFn = callable < void () >;
+            if ( blk.aotFunction ) {
+                auto fn = (BlockFn *) blk.aotFunction;
+                (*fn) ();
+            } else {
+                __context__->invoke(blk, nullptr, nullptr, __lineinfo__);
+            }
+        }
+        template <typename ...ArgType>
+        static __forceinline void invoke ( Context * __context__, LineInfo * __lineinfo__, const das_make_block<void,ArgType...> & blk ) {
             using BlockFn = callable < void ( ArgType... ) >;
             if ( blk.aotFunction ) {
                 auto fn = (BlockFn *) blk.aotFunction;
