@@ -2134,7 +2134,7 @@ namespace das {
             }
         }
         template <typename ...ArgType>
-        static __forceinline void invoke ( Context * __context__, LineInfo * __lineinfo__, const das_make_block<void,ArgType...> & blk ) {
+        static __forceinline void invoke ( Context * __context__, LineInfo * __lineinfo__, const das_make_block<void,ArgType...> & blk, ArgType ...arg ) {
             using BlockFn = callable < void ( ArgType... ) >;
             if ( blk.aotFunction ) {
                 auto fn = (BlockFn *) blk.aotFunction;
