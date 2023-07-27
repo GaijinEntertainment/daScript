@@ -9,6 +9,8 @@ namespace das {
 
     template <typename VecT, int rowC>
     struct Matrix {
+        using VecType = VecT;
+        enum { Rows = rowC };
         VecT    m[rowC];
     };
 

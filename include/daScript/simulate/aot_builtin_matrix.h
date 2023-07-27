@@ -99,5 +99,29 @@ namespace das {
     __forceinline bool float3x3_nequ ( const float3x3 & a, const float3x3 & b ) {
         return memcmp(&a,&b,sizeof(float3x3))!=0;
     }
+
+    template <typename floatNxN>
+    __forceinline typename floatNxN::VecType & floatNxN_ati(floatNxN & m, int32_t i, Context * context, LineInfoArg * at ) {
+        if ( uint32_t(i)>=floatNxN::Rows ) context->throw_error_at(at, "index out of range %i", i);
+        return m.m[i];
+    }
+
+    template <typename floatNxN>
+    __forceinline const typename floatNxN::VecType & floatNxN_atci(const floatNxN & m, int32_t i, Context * context, LineInfoArg * at ) {
+        if ( uint32_t(i)>=floatNxN::Rows ) context->throw_error_at(at, "index out of range %i", i);
+        return m.m[i];
+    }
+
+    template <typename floatNxN>
+    __forceinline typename floatNxN::VecType & floatNxN_atu(floatNxN & m, uint32_t i, Context * context, LineInfoArg * at ) {
+        if ( uint32_t(i)>=floatNxN::Rows ) context->throw_error_at(at, "index out of range %i", i);
+        return m.m[i];
+    }
+
+    template <typename floatNxN>
+    __forceinline const typename floatNxN::VecType & floatNxN_atcu(const floatNxN & m, uint32_t i, Context * context, LineInfoArg * at ) {
+        if ( uint32_t(i)>=floatNxN::Rows ) context->throw_error_at(at, "index out of range %i", i);
+        return m.m[i];
+    }
 }
 
