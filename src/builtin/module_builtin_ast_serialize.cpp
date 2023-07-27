@@ -19,8 +19,8 @@ namespace das {
 
     void AstSerializer::patch () {
         for ( auto & p : functionRefs ) {
-            auto it = functionMap.find(p.second);
-            if ( it == functionMap.end() ) {
+            auto it = smartFunctionMap.find(p.second);
+            if ( it == smartFunctionMap.end() ) {
                 DAS_FATAL_ERROR("ast serializer function ref not found");
             } else {
                 *p.first = it->second.get();
@@ -136,8 +136,8 @@ namespace das {
                 bool inThisModule;
                 *this << inThisModule;
                 if ( inThisModule ) {
-                    auto it = functionMap.find(fid);
-                    if ( it == functionMap.end() ) {
+                    auto it = smartFunctionMap.find(fid);
+                    if ( it == smartFunctionMap.end() ) {
                         functionRefs.emplace_back(&func, fid);
                     } else {
                         func = it->second.get();
@@ -164,7 +164,7 @@ namespace das {
             DAS_ASSERTF(!func->builtIn, "cannot serialize built-in function");
             DAS_ASSERTF(func->module==thisModule, "function is not from this module");
         }
-        serializeSmartPtr(func, functionMap);
+        serializeSmartPtr(func, smartFunctionMap);
         return *this;
     }
 
@@ -501,7 +501,7 @@ namespace das {
     }
 
     AstSerializer & AstSerializer::operator << ( EnumerationPtr & enum_type ) {
-        serializeSmartPtr(enum_type, smartEnumMap);
+        serializeSmartPtr(enum_type, smartEnumerationMap);
         return *this;
     }
 
@@ -558,65 +558,36 @@ namespace das {
         return *this;
     }
 
-    AstSerializer & AstSerializer::operator << ( ReaderMacroPtr & reader ) {
-        if ( !writing ) reader = make_smart<ReaderMacro>();
-        reader->serialize(*this);
-        return *this;
-    }
-
-    AstSerializer & AstSerializer::operator << ( PassMacroPtr & macro ) {
-        serializeSmartPtr(macro, smartPassMacroMap);
-        return *this;
-    }
-
-    AstSerializer & AstSerializer::operator << ( SimulateMacroPtr & macro ) {
-        serializeSmartPtr(macro, smartSimulateMacroMap);
-        return *this;
-    }
-
-    AstSerializer & AstSerializer::operator << ( CaptureMacroPtr & macro ) {
-        serializeSmartPtr(macro, smartCaptureMacroMap);
-        return *this;
-    }
-
-    AstSerializer & AstSerializer::operator << ( ForLoopMacroPtr & macro ) {
-        serializeSmartPtr(macro, smartForLoopMacroMap);
-        return *this;
-    }
-
-    AstSerializer & AstSerializer::operator << ( VariantMacroPtr & macro ) {
-        serializeSmartPtr(macro, smartVariantMacroMap);
-        return *this;
-    }
-
-    AstSerializer & AstSerializer::operator << ( CommentReaderPtr & reader ) {
-        DAS_FATAL_ERROR("TODO: serialize comment reader");
-        // serializeSmartPtr(reader, smartCommentReaderMap);
+    AstSerializer & AstSerializer::operator << ( ReaderMacroPtr & ptr ) {
+        tag("ReaderMacroPtr");
+        if ( writing ) {
+            DAS_ASSERTF(ptr, "did not expext to see null ReaderMacroPtr");
+            bool inThisModule = ptr->module == thisModule;
+            DAS_ASSERTF(!inThisModule, "did not expect to find macro from the current module");
+            *this << ptr->module->name;
+            *this << ptr->name;
+        } else {
+            string moduleName, name;
+            *this << moduleName << name;
+            auto mod = moduleLibrary->findModule(moduleName);
+            DAS_VERIFYF(mod!=nullptr, "module '%s' not found", moduleName.c_str());
+            ptr = mod->findReaderMacro(name);
+            DAS_VERIFYF(ptr, "Reader macro '%s' not found in the module '%s'",
+                name.c_str(), mod->name.c_str()
+            );
+        }
         return *this;
     }
 
     AstSerializer & AstSerializer::operator << ( ExprBlock * & block ) {
         tag("ExprBlock*");
         if ( writing ) {
-            DAS_ASSERTF(block, "block should be not null"); // Probably
+            DAS_ASSERTF(block, "block should be not null");
         }
         uint64_t addr = (uintptr_t) block;
         *this << addr;
         if ( !writing ) {
             blockRefs.emplace_back(&block, addr);
-        }
-        return *this;
-    }
-
-    AstSerializer & AstSerializer::operator << ( ExprClone * & clone ) {
-        tag("ExprClone*");
-        if ( writing ) {
-           DAS_ASSERTF(clone, "expr should be not null");
-        }
-        uint64_t addr = (uintptr_t) clone;
-        *this << addr;
-        if ( !writing ) {
-            cloneRefs.emplace_back(&clone, addr);
         }
         return *this;
     }
@@ -627,52 +598,40 @@ namespace das {
         return *this;
     }
 
-
     AstSerializer & AstSerializer::operator << ( CaptureEntry & entry ) {
         *this << entry.name;
         serialize_enum<CaptureMode>(entry.mode);
         return *this;
     }
 
-    AstSerializer & AstSerializer::operator << ( MakeFieldDeclPtr & make_field_decl_ptr ) {
-        serializeSmartPtr(make_field_decl_ptr, smartMakeFieldDeclMap);
+    AstSerializer & AstSerializer::operator << ( MakeFieldDeclPtr & ptr ) {
+        serializeSmartPtr(ptr, smartMakeFieldDeclMap);
         return *this;
     }
 
-    AstSerializer & AstSerializer::operator << ( MakeStructPtr & make_struct_ptr ) {
-        serializeSmartPtr(make_struct_ptr, smartMakeStructMap);
+    AstSerializer & AstSerializer::operator << ( MakeStructPtr & ptr ) {
+        serializeSmartPtr(ptr, smartMakeStructMap);
         return *this;
     }
-
-    // AstSerializer & AstSerializer::operator << ( TypeInfoMacro * & macro ) {
-    //     serializePointer(macro, typeInfoMacroMap);
-    //     return *this;
-    // }
 
     AstSerializer & AstSerializer::operator << ( Module & module ) {
+        thisModule = &module;
         module.serialize(*this);
         return *this;
     }
-
 
 // typedecl
 
     void TypeDecl::serialize ( AstSerializer & ser ) {
         ser.tag("TypeDecl");
         ser << baseType;
-        ser << structType;
-        ser << enumType;
+        ser << structType << enumType;
+        ser << firstType  << secondType;
         ser << annotation;
-        ser << firstType;
-        ser << secondType;
-        ser << argTypes;
-        ser << argNames;
-        ser << dim;
-        ser << dimExpr;
-        ser << flags;
-        ser << alias;
-        ser << at;
-        ser << module;
+        ser << argTypes   << argNames;
+        ser << dim        << dimExpr;
+        ser << flags      << alias;
+        ser << at         << module;
     }
 
     void AnnotationArgument::serialize ( AstSerializer & ser ) {
@@ -849,30 +808,25 @@ namespace das {
         Expression::serialize(ser);
     }
 
-    size_t findIndex( const Structure * struct_, string & name ) {
-        for ( size_t i = 0; i < struct_->fields.size(); i++ )
-            if ( name == struct_->fields[i].name )
-                return i;
-        return (size_t)-1;
-    }
-
     void ExprField::serialize ( AstSerializer & ser ) {
-        uint64_t idx = findIndex(value->type->firstType->structType, name);
         ser << value << name << atField
-            // << field
-            << idx // Instead of the field we are serializing its index
-            << fieldIndex << annotation << underClone << derefFlags
+            // Note: `field` is const, save it for later backpatching
+            << fieldIndex << annotation << derefFlags
+            // Note: underClone is only used during infer and we don't need it
             << fieldFlags;
-        // ser.fieldDeclRefs.emplace_back(&field, idx); // Backpatch at a later stage
+        if ( ser.writing ) {
+            auto nam = type->structType->getMangledName();
+            ser << type->module << name;
+        } else {
+            string module, mangledName;
+            ser << module << mangledName;
+            auto mod = ser.moduleLibrary->findModule(module);
+            DAS_ASSERTF(mod, "expected to find a module for struct '%s'", mangledName.c_str());
+            auto struct_ = mod->findStructure(mangledName);
+        // set the missing field field
+            field = struct_->findField(name);
+        }
         Expression::serialize(ser);
-    }
-
-    void ExprIsVariant::serialize ( AstSerializer & ser ) {
-        ExprField::serialize(ser);
-    }
-
-    void ExprAsVariant::serialize ( AstSerializer & ser ) {
-        ExprField::serialize(ser);
     }
 
     void ExprSafeAsVariant::serialize ( AstSerializer & ser ) {
@@ -881,8 +835,8 @@ namespace das {
     }
 
     void ExprSwizzle::serialize ( AstSerializer & ser ) {
-        Expression::serialize(ser);
         ser << value << mask << fields << fieldFlags;
+        Expression::serialize(ser);
     }
 
     void ExprSafeField::serialize ( AstSerializer & ser ) {
@@ -936,10 +890,6 @@ namespace das {
         ExprOp2::serialize(ser);
     }
 
-    void ExprSequence::serialize ( AstSerializer & ser ) {
-        ExprOp2::serialize(ser);
-    }
-
     void ExprOp3::serialize ( AstSerializer & ser ) {
         ser << subexpr << left << right;
         ExprOp::serialize(ser);
@@ -954,14 +904,6 @@ namespace das {
         Expression::serialize(ser);
         ser << subexpr << returnFlags << stackTop << refStackTop << returnFunc
             << block << returnType;
-    }
-
-    void ExprBreak::serialize ( AstSerializer & ser ) {
-        Expression::serialize(ser);
-    }
-
-    void ExprContinue::serialize ( AstSerializer & ser ) {
-        Expression::serialize(ser);
     }
 
     void ExprConst::serialize ( AstSerializer & ser ) {
@@ -1050,18 +992,6 @@ namespace das {
         ExprLikeCall<ExprQuote>::serialize(ser);
     }
 
-    void ExprStaticAssert::serialize(AstSerializer & ser) {
-        ExprLikeCall<ExprStaticAssert>::serialize(ser);
-    }
-
-    void ExprDebug::serialize(AstSerializer & ser) {
-        ExprLikeCall<ExprDebug>::serialize(ser);
-    }
-
-    void ExprMemZero::serialize(AstSerializer & ser) {
-        ExprLikeCall<ExprMemZero>::serialize(ser);
-    }
-
     template <typename It, typename SimNodeT, bool first>
     void ExprTableKeysOrValues<It,SimNodeT,first>::serialize(AstSerializer & ser) {
         ExprLooksLikeCall::serialize(ser);
@@ -1070,22 +1000,6 @@ namespace das {
     template <typename It, typename SimNodeT>
     void ExprArrayCallWithSizeOrIndex<It,SimNodeT>::serialize(AstSerializer & ser) {
         ExprLooksLikeCall::serialize(ser);
-    }
-
-    void ExprErase::serialize(AstSerializer & ser) {
-        ExprLikeCall<ExprErase>::serialize(ser);
-    }
-
-    void ExprFind::serialize(AstSerializer & ser) {
-        ExprLikeCall<ExprFind>::serialize(ser);
-    }
-
-    void ExprKeyExists::serialize(AstSerializer & ser) {
-        ExprLikeCall<ExprKeyExists>::serialize(ser);
-    }
-
-    void ExprSetInsert::serialize(AstSerializer & ser) {
-        ExprLikeCall<ExprSetInsert>::serialize(ser);
     }
 
     void ExprTypeInfo::serialize(AstSerializer & ser) {
@@ -1129,7 +1043,7 @@ namespace das {
     }
 
     void MakeStruct::serialize( AstSerializer & ser ) {
-        ser << static_cast<vector<MakeFieldDeclPtr>&>(*this);
+        ser << static_cast <vector<MakeFieldDeclPtr> &> ( *this );
         ptr_ref_count::serialize(ser);
     }
 
@@ -1186,27 +1100,44 @@ namespace das {
     void FileInfo::serialize ( AstSerializer & ser ) {
         ser.tag("FileInfo");
         int tag = 0;
-        ser << tag;
-        ser << name << tabSize;
-        #if DAS_ENABLE_PROFILER
-                ser << profileData;
-        #endif
+        ser << tag << name << tabSize;
+        // Note: we do not serialize profileData
     }
 
     void TextFileInfo::serialize ( AstSerializer & ser ) {
         ser.tag("TextFileInfo");
         int tag = 1; // Signify the text file info
-        ser << tag;
-        ser << name << tabSize;
-        #if DAS_ENABLE_PROFILER
-                ser << profileData;
-        #endif
+        ser << tag    << name        << tabSize;
         ser << source << sourceLength << owner;
     }
 
     AstSerializer & AstSerializer::operator << ( CallMacro * & ptr ) {
         tag("CallMacro *");
-        serializePointer(ptr, callMacroMap);
+        if ( writing ) {
+            DAS_ASSERTF ( ptr, "did not expect to see a nullptr CallMacro *" );
+            bool inThisModule = ptr->module == thisModule;
+            DAS_ASSERTF ( !inThisModule, "did not expect to find macro from the current module" );
+            *this << ptr->module->name;
+            *this << ptr->name;
+        } else {
+            string moduleName, name;
+            *this << moduleName << name;
+            auto mod = moduleLibrary->findModule(moduleName);
+            DAS_VERIFYF(mod!=nullptr, "module '%s' not found", moduleName.c_str());
+        // perform a litte dance to access the internal macro; for details see: src/builtin/module_builtin_ast_adapters.cpp
+        // 1564: void addModuleCallMacro ( .... CallMacroPtr & .... )
+            auto callFactory = mod->findCall(name);
+            DAS_VERIFYF(
+                callFactory, "could not find CallMacro '%s' in the module '%s'",
+                name.c_str(), mod->name.c_str()
+            );
+            auto exprLooksLikeCall = (*callFactory)({});
+            DAS_ASSERTF(
+                strncmp("ExprCallMacro", exprLooksLikeCall->__rtti, 14) == 0,
+                "excepted to see an ExprCallMacro"
+            );
+            ptr = static_cast<ExprCallMacro *>(exprLooksLikeCall)->macro;
+        }
         return *this;
     }
 
@@ -1218,9 +1149,7 @@ namespace das {
     // initialize program
         auto program = make_smart<Program>();
         program->promoteToBuiltin = false;
-        program->isCompiling = true;
         program->isDependency = true;
-        program->needMacroModule = false;
         program->thisModuleGroup = nullptr;
         // program->thisModuleGroup = &libGroup;
         program->thisModuleName.clear();
@@ -1230,26 +1159,6 @@ namespace das {
         },"*");
     // set the current module
         program->thisModule.reset(this_mod);
-    // do not do all the compilation stuff
-        // program->buildAccessFlags(logs);    // this is used by the lint pass
-        // program->lint(logs, libGroup);
-        // program->foldUnsafe();
-        // if (program->getOptimize()) {
-        //     program->optimize(logs,libGroup);
-        // } else {
-        //     program->buildAccessFlags(logs);
-        // }
-        //     program->verifyAndFoldContracts();
-        // if ( program->thisModule->isModule || exportAll ) {
-        //     program->markModuleSymbolUse();
-        // } else {
-        //     program->markExecutableSymbolUse();
-        //     program->removeUnusedSymbols();
-        // }
-        // program->fixupAnnotations();
-        // program->deriveAliases(logs);
-        // program->allocateStack(logs);
-        // program->finalizeAnnotations();
     // create the module macro state
         program->isCompiling = false;
         program->markMacroSymbolUse();
@@ -1260,20 +1169,11 @@ namespace das {
     }
 
     void Module::serialize ( AstSerializer & ser ) {
-        ser << aliasTypes << handleTypes << structures << enumerations << globals;
-        ser << functions << functionsByName;
-        ser << generics << genericsByName;
-
-        ser << typeInfoMacros;
-        ser << annotationData;
-        ser << requireModule;
-        ser << macros << inferMacros << optimizationMacros;
-        ser << lintMacros << globalLintMacros << variantMacros;
-        ser << forLoopMacros << captureMacros << simulateMacros;
-        ser << readMacros;
-        // Needed? Module * next
-        // ser << next;
-        ser << name << moduleFlags;
+        ser << aliasTypes     << handleTypes << structures << enumerations << globals;
+        ser << functions      << functionsByName;
+        ser << generics       << genericsByName;
+        ser << annotationData << requireModule;
+        ser << name           << moduleFlags;
 
         // Now we need to restore the internal state in case this has been a macro module
 
@@ -1288,21 +1188,15 @@ namespace das {
             }
         }
 
-        // ser << commentReader;  // TODO: abstract class, probably need a factory
-                                  // Do I need a factory for all the other macros, too?
-
-        // ser << ownFileInfo;
-        // ser << promotedAccess
+        ser << ownFileInfo << promotedAccess;
 
         ser.patch();
     }
 
 
     void Program::serialize ( AstSerializer & ser ) {
-        ModuleLibrary * dummy = new ModuleLibrary;
-        ser.moduleLibrary = dummy;
-
         if ( ser.writing ) {
+            ser.moduleLibrary = &library;
             uint64_t size = library.modules.size();
             ser << size;
             for ( auto & m : library.modules ) {
@@ -1312,8 +1206,10 @@ namespace das {
                 if ( !builtin )
                     ser << *m; // Serialize the whole module
             }
-
         } else {
+            ModuleLibrary * dummy = new ModuleLibrary;
+            ser.moduleLibrary = dummy;
+
             uint64_t size = 0; ser << size;
             for ( uint64_t i = 0; i < size; i++ ) {
                 bool builtin; string name;

@@ -458,6 +458,11 @@ namespace das {
         return handleTypes.find(na);
     }
 
+    ReaderMacroPtr Module::findReaderMacro ( const string & na ) const {
+        auto it = readMacros.find(na);
+        return it != readMacros.end() ? it->second : nullptr;
+    }
+
     TypeInfoMacroPtr Module::findTypeInfoMacro ( const string & na ) const {
         auto it = typeInfoMacros.find(na);
         return it != typeInfoMacros.end() ? it->second : nullptr;
