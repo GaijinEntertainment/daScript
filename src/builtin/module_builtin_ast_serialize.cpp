@@ -26,6 +26,7 @@ namespace das {
                 *p.first = it->second.get();
             }
         }
+
         // for ( auto & p : blockRefs ) {
         //     auto it = exprMap.find(p.second);
         //     if ( it == exprMap.end() ) {
@@ -38,18 +39,7 @@ namespace das {
         //         }
         //     }
         // }
-        // for ( auto & p : cloneRefs ) {
-        //     auto it = exprMap.find(p.second);
-        //     if ( it == exprMap.end() ) {
-        //         DAS_FATAL_ERROR("ast serializer function ref not found");
-        //     } else {
-        //         if (auto block = dynamic_cast<ExprClone*>(it->second.get())) {
-        //             *p.first = block;
-        //         } else {
-        //             DAS_FATAL_ERROR("Expression should be ExprClone");
-        //         }
-        //     }
-        // }
+
         for ( auto & [name, ref] : moduleRefs ) {
             *ref = moduleLibrary->findModule(name);
             DAS_VERIFYF(*ref!=nullptr, "module '%s' is not found", name.c_str());
@@ -283,8 +273,7 @@ namespace das {
                 ser << inThisModule;
                 if ( !inThisModule ) {
                     ser << anno->module->name;
-                    string mangeldName = anno->getMangledName();
-                    ser << mangeldName;
+                    ser << anno->name;
                 } else {
                     DAS_VERIFYF(false, "annotation is not found in the current module");
                 }
@@ -296,13 +285,13 @@ namespace das {
                 if ( inThisModule ) {
                     DAS_VERIFYF(false, "Unreachable");
                 } else {
-                    string moduleName, mangledName;
+                    string moduleName, name;
                     ser << moduleName;
                     auto mod = ser.moduleLibrary->findModule(moduleName);
                     DAS_VERIFYF(mod!=nullptr, "module '%s' is not found", moduleName.c_str());
-                    ser << mangledName;
-                    anno = mod->findAnnotation(mangledName).get();
-                    DAS_VERIFYF(anno!=nullptr, "annotation '%s' is not found", mangledName.c_str());
+                    ser << name;
+                    anno = mod->findAnnotation(name).get();
+                    DAS_VERIFYF(anno!=nullptr, "annotation '%s' is not found", name.c_str());
                 }
             } else {
                 anno = nullptr;
@@ -375,6 +364,7 @@ namespace das {
         if ( writing ) {
             t.reset(info);
             *this << t;
+            t.release();
         } else {
             *this << t;
             info = t.release();
@@ -383,6 +373,9 @@ namespace das {
     }
 
     AstSerializer & AstSerializer::operator << ( FileInfoPtr & info ) {
+        // TODO: talk about it; FileInfo points to somewhere else
+        return *this;
+
         bool is_null = info == nullptr;
         *this << is_null;
         if ( writing ) {
@@ -447,9 +440,14 @@ namespace das {
     }
 
     AstSerializer & AstSerializer::operator << ( FileAccessPtr & ptr ) {
+        bool is_null = ptr == nullptr;
+        *this << is_null;
         if ( writing ) {
-            ptr->serialize(*this);
+            if ( !is_null ) {
+                ptr->serialize(*this);
+            }
         } else {
+            if ( is_null ) return *this;
             int tag; *this << tag;
             switch ( tag ) {
                 case 0: ptr = new FileAccess; break;
@@ -1193,13 +1191,52 @@ namespace das {
         ser.patch();
     }
 
+    class TopSort {
+    public:
+        TopSort(const vector<Module*> & inputModules) : input(inputModules) {
+            for (auto mod : input) {
+                visited[mod] = NOT_SEEN;
+            }
+        }
+
+        vector<Module*> getDependecyOrdered() {
+            for ( auto mod : input ) {
+                visit(mod);
+            }
+            return std::move(sorted);
+        }
+
+        void visit( Module * mod ) {
+            if ( visited[mod] != NOT_SEEN ) return;
+            visited[mod] = IN_PROGRESS;
+            for ( auto [module, required] : mod->requireModule ) {
+                if ( module != mod ) {
+                    visit(module);
+                }
+            }
+            visited[mod] = FINISHED;
+            sorted.push_back(mod);
+        }
+
+    private:
+        enum WalkStatus { NOT_SEEN, IN_PROGRESS, FINISHED };
+        vector<Module*> sorted;
+        const vector<Module*> & input;
+        das_hash_map<Module*, WalkStatus> visited;
+    };
+
+
 
     void Program::serialize ( AstSerializer & ser ) {
         if ( ser.writing ) {
             ser.moduleLibrary = &library;
             uint64_t size = library.modules.size();
             ser << size;
-            for ( auto & m : library.modules ) {
+
+            TopSort ts(library.modules);
+            auto modules = ts.getDependecyOrdered();
+
+            for ( auto & m : modules ) {
                 bool builtin = m->builtIn;
                 ser << builtin;
                 ser << m->name;
@@ -1207,22 +1244,22 @@ namespace das {
                     ser << *m; // Serialize the whole module
             }
         } else {
-            ModuleLibrary * dummy = new ModuleLibrary;
-            ser.moduleLibrary = dummy;
+            library.reset();
+            ser.moduleLibrary = &library;
 
             uint64_t size = 0; ser << size;
             for ( uint64_t i = 0; i < size; i++ ) {
                 bool builtin; string name;
                 ser << builtin << name;
                 if ( name == "$" )
-                    dummy->addBuiltInModule();
+                    library.addBuiltInModule();
                 else if ( builtin ) {
                     Module * m = Module::require(name);
-                    dummy->addModule(m);
+                    library.addModule(m);
                 } else {
                     auto deser = new Module;
+                    library.addModule(deser);
                     ser << *deser;
-                    dummy->addModule(deser);
                 }
             }
         }

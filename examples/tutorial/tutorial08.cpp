@@ -46,7 +46,10 @@ void tutorial () {
     program->serialize(ser);
 // deserialize
     AstSerializer deser ( ForReading{}, move(ser.buffer) );
-    program->serialize(deser);
+    // program->serialize(deser);
+    auto new_program = make_smart<Program>();
+    new_program->serialize(deser);
+    program = new_program;
 
     // create daScript context
     Context ctx(program->getContextStackSize());
