@@ -1241,6 +1241,7 @@ namespace das {
         cexpr->isLambda = isLambda;
         cexpr->isLocalFunction = isLocalFunction;
         cexpr->capture = capture;
+        cexpr->aotFunctorName = aotFunctorName;
         return cexpr;
     }
 

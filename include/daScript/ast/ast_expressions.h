@@ -951,6 +951,7 @@ namespace das
             };
             uint32_t mmFlags = 0;
         };
+        string aotFunctorName;
     };
 
     struct ExprMakeGenerator : ExprLooksLikeCall {
