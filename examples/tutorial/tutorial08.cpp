@@ -49,7 +49,7 @@ void tutorial () {
     // program->serialize(deser);
     auto new_program = make_smart<Program>();
     new_program->serialize(deser);
-    program = new_program;
+    program.reset(new_program.orphan());
 
     // create daScript context
     Context ctx(program->getContextStackSize());

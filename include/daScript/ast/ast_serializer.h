@@ -57,6 +57,8 @@ namespace das {
         AstSerializer & operator << ( uint64_t & value ) { serialize(&value, sizeof(value)); return *this; }
         AstSerializer & operator << ( std::pair<uint32_t,uint32_t> & value ) { serialize(&value, sizeof(value)); return *this; }
         AstSerializer & operator << ( std::pair<string,bool> & value ) { *this << value.first << value.second; return *this; }
+        AstSerializer & operator << ( tuple<Module *, string, string, bool, LineInfo> & value );
+        AstSerializer & operator << ( CodeOfPolicies & ser );
         AstSerializer & operator << ( TypeDeclPtr & type );
         AstSerializer & operator << ( AnnotationArgument & arg );
         AstSerializer & operator << ( AnnotationDeclarationPtr & annotation_decl );

@@ -1226,8 +1226,33 @@ namespace das {
     };
 
 
+    AstSerializer & AstSerializer::operator << ( CodeOfPolicies & value ) {
+        serialize(&value, sizeof(value));
+    // restore strings
+        *this << value.debug_module << value.profile_module;
+        return *this;
+    }
+
+    AstSerializer & AstSerializer::operator << ( tuple<Module *, string, string, bool, LineInfo> & value ) {
+        serialize(&value, sizeof(value));
+        *this << get<1>(value) << get<2>(value);
+        return *this;
+    }
+
 
     void Program::serialize ( AstSerializer & ser ) {
+        ser << thisNamespace << thisModuleName;
+
+        ser << totalFunctions << totalVariables << newLambdaIndex;
+    // don't serialize errors
+        ser << globalInitStackSize << globalStringHeapSize;
+        ser << flags;
+
+        // ModuleGroup *               thisModuleGroup;
+        ser << options << policies;
+        ser << allRequireDecl;
+
+    // serialize library
         if ( ser.writing ) {
             ser.moduleLibrary = &library;
             uint64_t size = library.modules.size();
