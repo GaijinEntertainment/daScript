@@ -1265,11 +1265,21 @@ namespace das {
     // let
         virtual void preVisitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
             Visitor::preVisitLet(let, var, last);
+            auto vname = collector.getVarName(var);
+            if ( var->init && var->init->rtti_isMakeBlock() ) {
+                auto mkb = static_pointer_cast<ExprMakeBlock>(var->init);
+                auto blk = static_pointer_cast<ExprBlock>(mkb->block);
+                blk->aotSkipMakeBlock = true;
+                ss << "auto " << vname << "_TempFunctor = ";
+                var->init->visit(*this);
+                ss << ";\n" << string(tab,'\t');
+                blk->aotSkipMakeBlock = false;
+                mkb->aotFunctorName = vname + "_TempFunctor";
+            }
             if ( !collector.isMoved(var) ) {
                 describeVarLocalCppType(ss, var->type);
                 ss << " ";
             }
-            auto vname = collector.getVarName(var);
             auto cvname = vname;
             if ( var->type->constant && var->type->isRefType() && !var->type->ref ) {
                 cvname += "_ConstRef";
@@ -2780,6 +2790,9 @@ namespace das {
             return Visitor::visit(expr);
         }
     // ExprMakeBlock
+        virtual bool canVisitMakeBlockBody ( ExprMakeBlock * blk ) override {
+            return blk->aotFunctorName.empty();
+        }
         virtual void preVisit ( ExprMakeBlock * expr ) override {
             Visitor::preVisit(expr);
             auto block = static_pointer_cast<ExprBlock>(expr->block);
@@ -2809,25 +2822,29 @@ namespace das {
                 auto info = helper.makeInvokeableTypeDebugInfo(block->makeBlockType(), block->at);
                 ss << "&" << helper.funcInfoName(info) << ",";
             }
-            ss << "[&](";
-            int ai = 0;
-            for ( auto & arg : block->arguments ) {
-                if (ai++) ss << ", ";
-                if (isLocalVec(arg->type)) {
-                    describeLocalCppType(ss, arg->type);
-                } else {
-                    ss << describeCppType(arg->type,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::no);
-                    if ( arg->type->isRefType() && !arg->type->ref ) {
-                        ss << " &";
+            if ( expr->aotFunctorName.empty() ) {
+                ss << "[&](";
+                int ai = 0;
+                for ( auto & arg : block->arguments ) {
+                    if (ai++) ss << ", ";
+                    if (isLocalVec(arg->type)) {
+                        describeLocalCppType(ss, arg->type);
+                    } else {
+                        ss << describeCppType(arg->type,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::no);
+                        if ( arg->type->isRefType() && !arg->type->ref ) {
+                            ss << " &";
+                        }
                     }
+                    ss << " " << collector.getVarName(arg);
                 }
-                ss << " " << collector.getVarName(arg);
+                ss << ") ";
+                if ( block->aotSkipMakeBlock ) {
+                    ss << "DAS_AOT_INLINE_LAMBDA ";
+                }
+                ss << "-> " << describeCppType(block->returnType);
+            } else {
+                ss << expr->aotFunctorName;
             }
-            ss << ") ";
-            if ( block->aotSkipMakeBlock ) {
-                ss << "DAS_AOT_INLINE_LAMBDA ";
-            }
-            ss << "-> " << describeCppType(block->returnType);
         }
         virtual ExpressionPtr visit ( ExprMakeBlock * expr ) override {
             auto block = static_pointer_cast<ExprBlock>(expr->block);
