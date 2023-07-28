@@ -418,7 +418,9 @@ namespace das {
     }
 
     bool Module::addGeneric ( const FunctionPtr & fn, bool canFail ) {
+        fn->module = this;
         auto mangledName = fn->getMangledName();
+        fn->module = nullptr;
         if ( generics.insert(mangledName, fn) ) {
             genericsByName[hash64z(fn->name.c_str())].push_back(fn);
             fn->module = this;
