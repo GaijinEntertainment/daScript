@@ -25,7 +25,9 @@ public:
 // registering module, so that its available via 'NEED_MODULE' macro
 REGISTER_MODULE(Module_Tutorial08);
 
-#define TUTORIAL_NAME   "/examples/tutorial/tutorial08.das"
+// #define TUTORIAL_NAME   "/examples/tutorial/tutorial08.das"
+// #define TUTORIAL_NAME   "/examples/test/unit_tests/abc.das"
+#define TUTORIAL_NAME   "/examples/test/unit_tests/access_private_from_lambda.das"
 
 void tutorial () {
     TextPrinter tout;                               // output stream for all compiler messages (stdout. for stringstream use TextWriter)
@@ -69,16 +71,21 @@ void tutorial () {
     }
     // verify if 'test' is a function, with the correct signature
     // note, this operation is slow, so don't do it every time for every call
-    if ( !verifyCall<void>(fnTest->debugInfo, dummyLibGroup) ) {
+    if ( !verifyCall<bool>(fnTest->debugInfo, dummyLibGroup) ) {
         tout << "function 'test', call arguments do not match. expecting def test : void\n";
         return;
     }
-    // evaluate 'test' function in the context
-    ctx.evalWithCatch(fnTest, nullptr);
-    if ( auto ex = ctx.getException() ) {       // if function cased panic, report it
+    ctx.restart();
+    bool result = cast<bool>::to(ctx.eval(fnTest, nullptr));
+    if ( auto ex = ctx.getException() ) {
         tout << "exception: " << ex << "\n";
         return;
     }
+    if ( !result ) {
+        tout << "failed\n";
+        return;
+    }
+    tout << "ok\n";
 }
 
 int main( int, char * [] ) {

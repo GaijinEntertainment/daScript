@@ -92,6 +92,12 @@ namespace das {
 
     AstSerializer & AstSerializer::operator << ( ExpressionPtr & expr ) {
         tag("ExpressionPtr");
+        bool is_null = expr == nullptr;
+        *this << is_null;
+        if ( is_null ) {
+            if ( !writing ) expr = nullptr;
+            return *this;
+        }
         if ( writing ) {
             string rtti = expr->__rtti;
             *this << rtti;
@@ -111,38 +117,40 @@ namespace das {
         tag("Function pointer");
         uint64_t fid = uintptr_t(func);
         *this << fid;
+        if ( !fid ) {
+            if ( !writing ) func = nullptr;
+            return *this;
+        }
         if ( writing ) {
-            if ( fid ) {
-                bool inThisModule = func->module == thisModule;
-                *this << inThisModule;
-                if ( !inThisModule ) {
-                    *this << func->module->name;
-                    string mangeldName = func->getMangledName();
-                    *this << mangeldName;
-                }
+            bool inThisModule = func->module == thisModule;
+            *this << inThisModule;
+            if ( !inThisModule ) {
+                *this << func->module->name;
+                string mangeldName = func->getMangledName();
+                *this << mangeldName;
             }
         } else {
-            if ( fid ) {
-                bool inThisModule;
-                *this << inThisModule;
-                if ( inThisModule ) {
-                    auto it = smartFunctionMap.find(fid);
-                    if ( it == smartFunctionMap.end() ) {
-                        functionRefs.emplace_back(&func, fid);
-                    } else {
-                        func = it->second.get();
-                    }
+            bool inThisModule;
+            *this << inThisModule;
+            if ( inThisModule ) {
+                auto it = smartFunctionMap.find(fid);
+                if ( it == smartFunctionMap.end() ) {
+                    functionRefs.emplace_back(&func, fid);
                 } else {
-                    string moduleName, mangledName;
-                    *this << moduleName;
-                    auto funcModule = moduleLibrary->findModule(moduleName);
-                    DAS_VERIFYF(funcModule!=nullptr, "module '%s' is not found", moduleName.c_str());
-                    *this << mangledName;
-                    func = funcModule->findFunction(mangledName).get();
-                    DAS_VERIFYF(func!=nullptr, "function '%s' is not found", mangledName.c_str());
+                    func = it->second.get();
                 }
             } else {
-                func = nullptr;
+                string moduleName, mangledName;
+                *this << moduleName;
+                auto funcModule = moduleLibrary->findModule(moduleName);
+                DAS_VERIFYF(funcModule!=nullptr, "module '%s' is not found", moduleName.c_str());
+                *this << mangledName;
+                if ( auto f = funcModule->findFunction(mangledName) ) {
+                    func = f.get();
+                } else {
+                    func = funcModule->findGeneric(mangledName).get();
+                }
+                DAS_VERIFYF(func!=nullptr, "function '%s' is not found", mangledName.c_str());
             }
         }
         return *this;
@@ -579,8 +587,11 @@ namespace das {
 
     AstSerializer & AstSerializer::operator << ( ExprBlock * & block ) {
         tag("ExprBlock*");
-        if ( writing ) {
-            DAS_ASSERTF(block, "block should be not null");
+        bool is_null = block == nullptr;
+        *this << is_null;
+        if ( is_null ) {
+            if ( !writing ) block = nullptr;
+            return *this;
         }
         uint64_t addr = (uintptr_t) block;
         *this << addr;
@@ -638,15 +649,18 @@ namespace das {
     }
 
     void AnnotationArgumentList::serialize ( AstSerializer & ser ) {
+        ser.tag("AnnotationArgumentList");
         ser << * static_cast <AnnotationArguments *> (this);
     }
 
     void AnnotationDeclaration::serialize ( AstSerializer & ser ) {
+        ser.tag("AnnotationDeclaration");
         ser << annotation << arguments << at << flags;
         ptr_ref_count::serialize(ser);
     }
 
     void BasicAnnotation::serialize ( AstSerializer & ser ) {
+        ser.tag("BasicAnnotation");
         ser << name << cppName;
         ptr_ref_count::serialize(ser);
     }
@@ -668,10 +682,12 @@ namespace das {
     }
 
     void Enumeration::EnumEntry::serialize( AstSerializer & ser ) {
+        ser.tag("EnumEntry");
         ser << name << cppName << at << value;
     }
 
     void Enumeration::serialize ( AstSerializer & ser ) {
+        ser.tag("Enumeration");
         ser << name << cppName << at << list << module << external << baseType
             << annotations << isPrivate;
         ptr_ref_count::serialize(ser);
@@ -687,6 +703,7 @@ namespace das {
     }
 
     void Variable::serialize ( AstSerializer & ser ) {
+        ser.tag("Variable");
         ser << name << aka << type << init << source << at << index << stackTop
             << extraLocalOffset << module << useFunctions << useGlobalVariables
             << initStackSize << flags << access_flags << annotation;
@@ -694,10 +711,12 @@ namespace das {
     }
 
     void Function::AliasInfo::serialize ( AstSerializer & ser ) {
+        ser.tag("AliasInfo");
         ser << var << func << viaPointer;
     }
 
     void InferHistory::serialize ( AstSerializer & ser ) {
+        ser.tag("InferHistory");
         ser << at << func;
     }
 
@@ -734,61 +753,73 @@ namespace das {
 // Expressions
 
     void ExprReader::serialize ( AstSerializer & ser ) {
+        ser.tag("ExprReader");
         ser << macro << sequence;
         Expression::serialize(ser);
     }
 
     void ExprLabel::serialize ( AstSerializer & ser ) {
+        ser.tag("ExprLabel");
         ser << label << comment;
         Expression::serialize(ser);
     }
 
     void ExprGoto::serialize ( AstSerializer & ser ) {
+        ser.tag("ExprGoto");
         ser << label << subexpr;
         Expression::serialize(ser);
     }
 
     void ExprRef2Value::serialize ( AstSerializer & ser ) {
+        ser.tag("ExprRef2Value");
         ser << subexpr;
         Expression::serialize(ser);
     }
 
     void ExprRef2Ptr::serialize ( AstSerializer & ser ) {
+        ser.tag("ExprRef2Ptr");
         ser << subexpr;
         Expression::serialize(ser);
     }
 
     void ExprPtr2Ref::serialize ( AstSerializer & ser ) {
+        ser.tag("ExprPtr2Ref");
         ser << subexpr << unsafeDeref;
         Expression::serialize(ser);
     }
 
     void ExprAddr::serialize ( AstSerializer & ser ) {
+        ser.tag("ExprAddr");
         ser << target << funcType << func;
         Expression::serialize(ser);
     }
 
     void ExprNullCoalescing::serialize ( AstSerializer & ser ) {
+        ser.tag("ExprNullCoalescing");
         ser << defaultValue;
         ExprPtr2Ref::serialize(ser);
     }
 
     void ExprDelete::serialize ( AstSerializer & ser ) {
+        ser.tag("ExprDelete");
         ser << subexpr << sizeexpr << native;
         Expression::serialize(ser);
     }
 
     void ExprAt::serialize ( AstSerializer & ser ) {
+        ser.tag("ExprAt");
         ser << subexpr << index;
         ser << atFlags;
         Expression::serialize(ser);
     }
 
     void ExprSafeAt::serialize ( AstSerializer & ser ) {
+        ser.tag("ExprSafeAt");
         ExprAt::serialize(ser);
     }
 
     void ExprBlock::serialize ( AstSerializer & ser ) {
+        ser.tag("ExprBlock");
         Expression::serialize(ser);
         ser << list << finalList << returnType << arguments << stackTop
             << stackVarTop << stackVarBottom << stackCleanVars << maxLabelIndex
@@ -797,32 +828,44 @@ namespace das {
     }
 
     void ExprVar::serialize ( AstSerializer & ser ) {
+        ser.tag("ExprVar");
         Expression::serialize(ser);
         ser << name << variable << pBlock << argumentIndex << varFlags;
     }
 
     void ExprTag::serialize ( AstSerializer & ser ) {
+        ser.tag("ExprTag");
         ser << subexpr << value << name;
         Expression::serialize(ser);
     }
 
     void ExprField::serialize ( AstSerializer & ser ) {
+        ser.tag("ExprField");
         ser << value << name << atField
             // Note: `field` is const, save it for later backpatching
             << fieldIndex << annotation << derefFlags
             // Note: underClone is only used during infer and we don't need it
             << fieldFlags;
+
         if ( ser.writing ) {
-            auto nam = type->structType->getMangledName();
-            ser << type->module << name;
+            string mangledName;
+            if ( value->type->isPointer() ) {
+                mangledName = value->type->firstType->structType->getMangledName();
+            } else {
+                mangledName = value->type->structType->getMangledName();
+            }
+            ser << mangledName;
         } else {
-            string module, mangledName;
-            ser << module << mangledName;
-            auto mod = ser.moduleLibrary->findModule(module);
-            DAS_ASSERTF(mod, "expected to find a module for struct '%s'", mangledName.c_str());
-            auto struct_ = mod->findStructure(mangledName);
+            string mangledName;
+            ser << mangledName;
+            auto struct_ = ser.moduleLibrary->findStructure(mangledName, nullptr);
+            if ( struct_.size() == 0 ) {
+                DAS_ASSERTF(false, "expected to find structure '%s'", mangledName.c_str());
+            } else if ( struct_.size() > 1 ) {
+                DAS_ASSERTF(false, "too many candidates for structure '%s'", mangledName.c_str());
+            }
         // set the missing field field
-            field = struct_->findField(name);
+            field = struct_.front()->findField(name);
         }
         Expression::serialize(ser);
     }
@@ -900,8 +943,8 @@ namespace das {
 
     void ExprReturn::serialize ( AstSerializer & ser ) {
         Expression::serialize(ser);
-        ser << subexpr << returnFlags << stackTop << refStackTop << returnFunc
-            << block << returnType;
+        ser << subexpr    << returnFlags << stackTop << refStackTop
+            << returnFunc << block       << returnType;
     }
 
     void ExprConst::serialize ( AstSerializer & ser ) {

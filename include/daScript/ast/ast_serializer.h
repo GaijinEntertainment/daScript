@@ -38,7 +38,6 @@ namespace das {
         vector<pair<string, Module **>>             moduleRefs;
         vector<pair<Function **,uint64_t>>          functionRefs;
         vector<pair<ExprBlock **,uint64_t>>         blockRefs;
-        vector<pair<Structure::FieldDeclaration **,uint64_t>>  fieldDeclRefs;
         void tag ( const char * name );
         void read  ( void * data, size_t size );
         void write ( const void * data, size_t size );
