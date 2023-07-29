@@ -10,9 +10,9 @@ def fibR(n)
 
 [sideeffects]
 def fibI(n)
-    var last = 0
-    var cur = 1
-    for i in range( n-1)
+    var last = 1
+    var cur = 0
+    for i in range(n)
         let tmp = cur
         cur += last
         last = tmp
