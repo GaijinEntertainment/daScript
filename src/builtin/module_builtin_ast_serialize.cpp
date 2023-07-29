@@ -283,16 +283,18 @@ namespace das {
                     ser << anno->module->name;
                     ser << anno->name;
                 } else {
-                    DAS_VERIFYF(false, "annotation is not found in the current module");
+                    // If the macro is from current module, do nothing
+                    // it will probably take care of itself during compilation
+                    DAS_ASSERTF( anno->module->macroContext,
+                        "expected to see macro module '%s'", anno->module->name.c_str()
+                    );
                 }
             }
         } else {
             if ( fid ) {
                 bool inThisModule;
                 ser << inThisModule;
-                if ( inThisModule ) {
-                    DAS_VERIFYF(false, "Unreachable");
-                } else {
+                if ( !inThisModule ) {
                     string moduleName, name;
                     ser << moduleName;
                     auto mod = ser.moduleLibrary->findModule(moduleName);
@@ -841,17 +843,32 @@ namespace das {
 
     void ExprField::serialize ( AstSerializer & ser ) {
         ser.tag("ExprField");
+        Expression::serialize(ser);
         ser << value << name << atField
             // Note: `field` is const, save it for later backpatching
             << fieldIndex << annotation << derefFlags
             // Note: underClone is only used during infer and we don't need it
             << fieldFlags;
 
+        bool is_null = value->type == nullptr;
+        ser << is_null;
+        if ( is_null ) return; // Sometimes generic functions contain
+
+        bool is_weak = value->type->isTuple() || value->type->isVariant() || value->type->isBitfield();
+        ser << is_weak;
+        if ( is_weak ) return; // They don't have field `field` set
+
+        bool is_handle = value->type->isHandle() || value->type->isPointerToAnnotation();
+        ser << is_handle;
+        if ( is_handle ) return; // Likewise
+
         if ( ser.writing ) {
             string mangledName;
             if ( value->type->isPointer() ) {
+                DAS_VERIFYF(value->type->firstType->isStructure(), "expected to see structure field access via pointer");
                 mangledName = value->type->firstType->structType->getMangledName();
             } else {
+                DAS_VERIFYF(value->type->isStructure(), "expected to see structure field access");
                 mangledName = value->type->structType->getMangledName();
             }
             ser << mangledName;
@@ -867,7 +884,6 @@ namespace das {
         // set the missing field field
             field = struct_.front()->findField(name);
         }
-        Expression::serialize(ser);
     }
 
     void ExprSafeAsVariant::serialize ( AstSerializer & ser ) {
@@ -1305,7 +1321,7 @@ namespace das {
             auto modules = ts.getDependecyOrdered();
 
             for ( auto & m : modules ) {
-                bool builtin = m->builtIn;
+                bool builtin = m->builtIn && !m->promoted;
                 ser << builtin;
                 ser << m->name;
                 if ( !builtin )

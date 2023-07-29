@@ -547,6 +547,7 @@ namespace das {
                 DAS_ASSERTF(options.find(op.first)==options.end(),"duplicate option %s", op.first.c_str());
                 options[op.first] = op.second;
             }
+            program.orphan();
             return true;
         } else {
             DAS_FATAL_ERROR("builtin module did not parse %s\n", modName.c_str());

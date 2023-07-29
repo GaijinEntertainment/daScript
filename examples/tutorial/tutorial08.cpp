@@ -27,7 +27,9 @@ REGISTER_MODULE(Module_Tutorial08);
 
 // #define TUTORIAL_NAME   "/examples/tutorial/tutorial08.das"
 // #define TUTORIAL_NAME   "/examples/test/unit_tests/abc.das"
-#define TUTORIAL_NAME   "/examples/test/unit_tests/access_private_from_lambda.das"
+// #define TUTORIAL_NAME   "/examples/test/unit_tests/access_private_from_lambda.das"
+// #define TUTORIAL_NAME   "/examples/test/unit_tests/aka.das"
+#define TUTORIAL_NAME   "/examples/test/unit_tests/aonce.das"
 
 void tutorial () {
     TextPrinter tout;                               // output stream for all compiler messages (stdout. for stringstream use TextWriter)
