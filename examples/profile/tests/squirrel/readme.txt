@@ -1,0 +1,1 @@
+modified squirrel is build from slightly modified by Gaijin sources (addOne added, error func print removed, and module support)

@@ -1,0 +1,271 @@
+MACRO(SOURCE_GROUP_FILES _groupName _fileNames )
+	STRING(REGEX REPLACE "/" "\\\\" _groupNameP ${_groupName} )
+	SOURCE_GROUP( ${_groupNameP} FILES ${${_fileNames}} )
+	SET_SOURCE_FILES_PROPERTIES( ${${_fileNames}} PROPERTIES "MY_GROUP_NAME" ${_groupNameP} )
+ENDMACRO(SOURCE_GROUP_FILES)
+
+MACRO(SETUP_LTO _targetName)
+    IF(APPLE)
+        IF ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+            # set_property(TARGET ${_targetName} PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+        ELSE()
+            set_property(TARGET ${_targetName} PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+        ENDIF()
+    ELSEIF(UNIX)
+        IF ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+            set_property(TARGET ${_targetName} PROPERTY INTERPROCEDURAL_OPTIMIZATION TRUE)
+        ENDIF()
+    ENDIF()
+ENDMACRO()
+
+IF(WIN32)
+include(CheckCXXSourceRuns)
+
+# AVX
+set(CMAKE_REQUIRED_FLAGS "-mavx")
+set(AVX_TEST_SOURCE "
+#include <immintrin.h>
+int main() {
+    __m256 a = _mm256_set_ps(0, 1, 2, 3, 4, 5, 6, 7);
+    __m256 b = _mm256_set_ps(7, 6, 5, 4, 3, 2, 1, 0);
+    __m256 c = _mm256_add_ps(a, b);
+    return 0;
+}")
+check_cxx_source_runs("${AVX_TEST_SOURCE}" AVX_SUPPORTED)
+
+# AVX2
+set(CMAKE_REQUIRED_FLAGS "-mavx2")
+set(AVX2_TEST_SOURCE "
+#include <immintrin.h>
+int main() {
+    __m256i a = _mm256_set_epi32(0, 1, 2, 3, 4, 5, 6, 7);
+    __m256i b = _mm256_set_epi32(7, 6, 5, 4, 3, 2, 1, 0);
+    __m256i c = _mm256_add_epi32(a, b);
+    return 0;
+}")
+check_cxx_source_runs("${AVX2_TEST_SOURCE}" AVX2_SUPPORTED)
+
+set(AVX512_TEST_SOURCE "
+#include <immintrin.h>
+int main() {
+    __m512d a = _mm512_set_pd(0.0, 1.0, 2.0, 3.0, 4.0, 5.0, 6.0, 7.0);
+    __m512d b = _mm512_set_pd(7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0, 0.0);
+    __m512d c = _mm512_add_pd(a, b);
+    return 0;
+}")
+
+check_cxx_source_runs("${AVX512_TEST_SOURCE}" AVX512_SUPPORTED)
+
+# SSE2
+set(CMAKE_REQUIRED_FLAGS "-msse2")
+set(SSE2_TEST_SOURCE "
+#include <emmintrin.h>
+int main() {
+    __m128i a = _mm_set_epi32(0, 1, 2, 3);
+    __m128i b = _mm_set_epi32(3, 2, 1, 0);
+    __m128i c = _mm_add_epi32(a, b);
+    return 0;
+}")
+check_cxx_source_runs("${SSE2_TEST_SOURCE}" SSE2_SUPPORTED)
+ENDIF()
+
+MACRO(SETUP_COMPILER)
+    IF(EMSCRIPTEN)
+        ADD_COMPILE_OPTIONS(-Wno-ignored-attributes)
+		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-invalid-offsetof")
+		SET(CMAKE_CXX_FLAGS_RELEASE "-O3 -fno-rtti -fomit-frame-pointer -fno-stack-protector -s -DDAS_FUSION=2 -DDAS_DEBUGGER=0 -DNDEBUG=1")
+		SET(CMAKE_CXX_FLAGS_MINSIZEREL "-Os -fno-rtti -fomit-frame-pointer -fno-stack-protector -s -DDAS_FUSION=1 -DDAS_DEBUGGER=0 -DNDEBUG=1")
+		SET(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 -fno-rtti -fno-stack-protector -DDAS_FUSION=1 -DNDEBUG=1 -DDAS_SMART_PTR_DEBUG=1")
+	ELSEIF(APPLE)
+		ADD_DEFINITIONS(-DITS_PLATFORM_APPLE=1)
+		ADD_DEFINITIONS(-Wall -Wextra -pedantic)
+		# UNCOMMENT FOR ASAN
+			# ADD_DEFINITIONS("-fsanitize=address")
+			# SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address")
+		# ADD_DEFINITIONS("-fsanitize=thread")
+		# SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=thread")
+        IF ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+			ADD_COMPILE_OPTIONS(-Wno-pedantic)
+			ADD_COMPILE_OPTIONS(-Wno-ignored-attributes)
+			ADD_COMPILE_OPTIONS(-Wno-unused-but-set-variable)
+			ADD_COMPILE_OPTIONS(-Wno-unused-parameter)
+			ADD_COMPILE_OPTIONS(-Wno-strict-aliasing)
+			ADD_COMPILE_OPTIONS(-Wno-extra)
+			ADD_COMPILE_OPTIONS(-Wno-unused-value)
+			ADD_COMPILE_OPTIONS(-Wno-unused-variable)
+			ADD_COMPILE_OPTIONS(-Wno-class-memaccess)
+			ADD_COMPILE_OPTIONS(-Wno-invalid-offsetof)
+		    SET(CMAKE_CXX_FLAGS_RELEASE "-O3 -fno-rtti -fno-exceptions -fomit-frame-pointer -fno-stack-protector -s -DDAS_FUSION=2 -DDAS_DEBUGGER=0 -DNDEBUG=1")
+			SET(CMAKE_CXX_FLAGS_MINSIZEREL "-Os -fno-rtti -fno-exceptions -fomit-frame-pointer -fno-stack-protector -s -DDAS_FUSION=1 -DDAS_DEBUGGER=0 -DNDEBUG=1")
+		    SET(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 -fno-rtti -fno-exceptions -fno-stack-protector -DDAS_FUSION=1 -DNDEBUG=1 -DDAS_SMART_PTR_DEBUG=1")
+        ELSE()
+			ADD_COMPILE_OPTIONS(-Wno-c99-extensions)
+			ADD_COMPILE_OPTIONS(-Wno-unused-variable)
+			ADD_COMPILE_OPTIONS(-Wno-deprecated-declarations)
+			ADD_COMPILE_OPTIONS(-Wno-missing-field-initializers)
+			ADD_COMPILE_OPTIONS(-Wno-deprecated-copy)
+            SET(CMAKE_CXX_FLAGS_RELEASE "-O3 -fno-rtti -fno-exceptions -fomit-frame-pointer -fno-stack-protector -DDAS_FUSION=2 -DDAS_DEBUGGER=0 -DNDEBUG=1")
+			SET(CMAKE_CXX_FLAGS_MINSIZEREL "-Os -fno-rtti -fno-exceptions -fomit-frame-pointer -fno-stack-protector -DDAS_FUSION=1 -DDAS_DEBUGGER=0 -DNDEBUG=1")
+            SET(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 -fno-rtti -fno-exceptions -fno-stack-protector -DDAS_FUSION=1 -DNDEBUG=1 -DDAS_SMART_PTR_DEBUG=1")
+			SET(CMAKE_EXE_LINKER_FLAGS_RELEASE "${CMAKE_EXE_LINKER_FLAGS_RELEASE} -s")
+			SET(CMAKE_EXE_LINKER_FLAGS_MINSIZEREL "${CMAKE_EXE_LINKER_FLAGS_MINSIZEREL} -s")
+        ENDIF()
+    ELSEIF(UNIX)
+		# UNCOMMENT THIS FOR ASAN
+			# ADD_DEFINITIONS("-fsanitize=address")
+			# SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fsanitize=address")
+        ADD_COMPILE_OPTIONS(-Wno-ignored-attributes)
+		set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-invalid-offsetof")
+		SET(CMAKE_CXX_FLAGS_RELEASE "-O3 -fno-rtti -fno-exceptions -fomit-frame-pointer -fno-stack-protector -s -DDAS_FUSION=2 -DDAS_DEBUGGER=0 -DNDEBUG=1")
+		SET(CMAKE_CXX_FLAGS_MINSIZEREL "-Os -fno-rtti -fno-exceptions -fomit-frame-pointer -fno-stack-protector -s -DDAS_FUSION=1 -DDAS_DEBUGGER=0 -DNDEBUG=1")
+		SET(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 -fno-rtti -fno-exceptions -fno-stack-protector -DDAS_FUSION=1 -DNDEBUG=1 -DDAS_SMART_PTR_DEBUG=1")
+	ELSEIF(WIN32)
+		IF("${CMAKE_CXX_COMPILER_ID}" STREQUAL "Clang")
+			SET(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -v")
+			ADD_DEFINITIONS(-D_CRT_SECURE_NO_WARNINGS)
+			ADD_COMPILE_OPTIONS(-msse2)
+			ADD_COMPILE_OPTIONS(-Wno-unused-parameter)
+			ADD_COMPILE_OPTIONS(-Wno-ignored-attributes)
+			ADD_COMPILE_OPTIONS(-Wno-deprecated-declarations)
+			ADD_COMPILE_OPTIONS(-Wno-implicit-exception-spec-mismatch)
+			ADD_COMPILE_OPTIONS(-Wno-missing-field-initializers)
+			ADD_COMPILE_OPTIONS(-Wno-tautological-constant-compare)
+			ADD_COMPILE_OPTIONS(-Wno-microsoft-cast)
+			set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-invalid-offsetof")
+			SET(CMAKE_CXX_FLAGS_RELEASE "-Ox -DDAS_FUSION=2 -DDAS_DEBUGGER=0 -DNDEBUG=1")
+			SET(CMAKE_CXX_FLAGS_MINSIZEREL "-Os -DDAS_FUSION=1 -DDAS_DEBUGGER=0 -DNDEBUG=1")
+			SET(CMAKE_CXX_FLAGS_RELWITHDEBINFO "-O2 -DDAS_FUSION=1 -DNDEBUG=1 -DDAS_SMART_PTR_DEBUG=1")
+			#SET(CMAKE_CXX_LINK_EXECUTABLE "<CMAKE_CXX_COMPILER> -fuse-ld=lld-link -nostartfiles -nostdlib <FLAGS> <CMAKE_CXX_LINK_FLAGS> <LINK_FLAGS> <OBJECTS> -o <TARGET> -Xlinker /pdb:<TARGET_PDB> -Xlinker /version:<TARGET_VERSION_MAJOR>.<TARGET_VERSION_MINOR>  <LINK_LIBRARIES> <MANIFESTS>")
+		ELSE()
+			ADD_COMPILE_OPTIONS(-bigobj)
+			ADD_DEFINITIONS(-DITS_PLATFORM_WIN32=1)
+			ADD_DEFINITIONS(-D_CRT_SECURE_NO_WARNINGS)
+			# setup parallel build
+			cmake_host_system_information(RESULT Ncpu QUERY NUMBER_OF_LOGICAL_CORES)
+			message("PARALLEL BUILD ON ${Ncpu} CORES" )
+			set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /MP${Ncpu}")
+			set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /utf-8")
+			# end setup
+			string(REPLACE "/W3" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+			string(REPLACE "/EHsc" "" CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS}")
+			string(REPLACE "INCREMENTAL:YES" "INCREMENTAL:NO" CMAKE_EXE_LINKER_FLAGS_DEBUG ${CMAKE_EXE_LINKER_FLAGS_DEBUG})
+			string(REPLACE "INCREMENTAL:YES" "INCREMENTAL:NO" CMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO ${CMAKE_EXE_LINKER_FLAGS_RELWITHDEBINFO})
+			ADD_DEFINITIONS("/W4")
+			# UNCOMMENT THIS FOR ASAN
+			# ADD_DEFINITIONS("/fsanitize=address")
+			IF("${CMAKE_SIZEOF_VOID_P}" STREQUAL "4")
+				MESSAGE("32 bit build")
+				ADD_DEFINITIONS("-DDAS_ENABLE_FPE")
+				ADD_DEFINITIONS("/arch:IA32")
+				ADD_DEFINITIONS("-D_TARGET_SIMD_SSE=2")
+			ELSEIF(AVX2_SUPPORTED)
+				MESSAGE("AVX2 bit build")
+				ADD_DEFINITIONS("/arch:AVX2")
+			ELSEIF(AVX_SUPPORTED)
+				MESSAGE("AVX bit build")
+				ADD_DEFINITIONS("/arch:AVX")
+			ELSEIF(SSE2_SUPPORTED)
+				ADD_DEFINITIONS("/arch:SSE2")
+			ENDIF()
+			IF(DAS_USE_STATIC_STD_LIBS)
+				SET(MSVC_STD_LIB_FLAG "/MT")
+			ELSE()
+				SET(MSVC_STD_LIB_FLAG "/MD")
+			ENDIF()
+			SET(CMAKE_CXX_FLAGS_DEBUG "${CMAKE_CXX_FLAGS_DEBUG} /EHa")
+			SET(CMAKE_CXX_FLAGS_RELEASE "${MSVC_STD_LIB_FLAG} /Ot /Ox /Oi /DNDEBUG=1 /DDAS_FUSION=2 /DDAS_DEBUGGER=1 /Gy /GS- /GR- /EHa /DDAS_FREE_LIST=1")
+			SET(CMAKE_CXX_FLAGS_MINSIZEREL "${MSVC_STD_LIB_FLAG} /Os /Oi /DNDEBUG=1 /DDAS_FUSION=1 /DDAS_DEBUGGER=1 /Gy /GS- /GR- /EHa /DDAS_FREE_LIST=1")
+			#SET(CMAKE_CXX_FLAGS_RELWITHDEBINFO "/Zi ${MSVC_STD_LIB_FLAG} /Ot /Oi /DNDEBUG=1 /DDAS_FUSION=1 /DDAS_RELWITHDEBINFO=1 /Gy /GS- /GR- /EHa /Bt+ /DDAS_SMART_PTR_DEBUG=1")
+			SET(CMAKE_CXX_FLAGS_RELWITHDEBINFO "/Zi ${MSVC_STD_LIB_FLAG} /Ot /Oi /DNDEBUG=1 /DDAS_FUSION=1 /DDAS_RELWITHDEBINFO=1 /Gy /GS- /GR- /EHa /DDAS_SMART_PTR_DEBUG=1")
+
+			# HUGE LINKER HEAP
+			set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} /HEAP:536870912")
+		ENDIF()
+	ENDIF()
+    ADD_DEFINITIONS(-DSIZE_OF_VOID_P=${CMAKE_SIZEOF_VOID_P})
+ENDMACRO()
+
+MACRO(SETUP_CPP11 _targetName)
+	IF(APPLE)
+		SET_TARGET_PROPERTIES(${_targetName} PROPERTIES XCODE_ATTRIBUTE_CLANG_CXX_LANGUAGE_STANDARD "c++17")
+		SET_TARGET_PROPERTIES(${_targetName} PROPERTIES XCODE_ATTRIBUTE_CLANG_CXX_LIBRARY "libc++")
+		SET_TARGET_PROPERTIES(${_targetName} PROPERTIES XCODE_ATTRIBUTE_ARCHS "$(ARCHS_STANDARD_64_BIT)")
+		SET_TARGET_PROPERTIES(${_targetName} PROPERTIES XCODE_ATTRIBUTE_ONLY_ACTIVE_ARCH "YES")
+        SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-register -std=c++1z")
+	ENDIF()
+	IF ("${CMAKE_CXX_COMPILER_ID}" STREQUAL "GNU")
+        #SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -m64 -std=c++1z -stdlib=libc++")
+	ENDIF()
+	IF (WIN32)
+		SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /std:c++17")
+	ENDIF()
+ENDMACRO()
+
+MACRO(CMAKE_TEXT_XXD project_name file_name)
+	add_custom_command(
+		DEPENDS ${file_name}
+		OUTPUT ${file_name}.inc
+		VERBATIM
+		WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+  		COMMAND ${CMAKE_COMMAND} -DFILE_TYPE:STRING="TEXT" -DINPUT_FILE_NAME:STRING=${file_name}
+			-P CMakeXxdImpl.txt
+	)
+
+	list(APPEND XXD_DEPENDS_LIST_${project_name} ${file_name}.inc)
+ 	execute_process(
+		WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+		COMMAND ${CMAKE_COMMAND} -DFILE_TYPE:STRING="TEXT" -DINPUT_FILE_NAME:STRING=${file_name}
+			-P CMakeXxdImpl.txt
+	)
+ENDMACRO()
+
+MACRO(ADD_PROJECT_XXD_DEPENDS project_name)
+	ADD_CUSTOM_TARGET(${project_name}_xxd ALL
+		DEPENDS ${XXD_DEPENDS_LIST_${project_name}}
+		WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+	)
+	ADD_DEPENDENCIES(${project_name} ${project_name}_xxd)
+ENDMACRO()
+
+
+MACRO(FIND_FLEX_AND_BISON)
+	find_package(BISON)
+	find_package(FLEX)
+ENDMACRO(FIND_FLEX_AND_BISON)
+
+
+MACRO(FLEX input)
+	IF(NOT(FLEX_FOUND AND ((FLEX_VERSION MATCHES "2\.*"))))
+		MESSAGE(STATUS "FLEX not found or version is less than 2.x; pre-generated files will be used." )
+	ELSE()
+		MESSAGE(STATUS "FLEX `${FLEX_VERSION}` found" )
+		get_filename_component(input_src ${input} ABSOLUTE)
+		get_filename_component(input_dir ${input_src} DIRECTORY)
+		get_filename_component(input_name ${input} NAME_WE)
+		get_filename_component(input_name_ext ${input} NAME)
+		ADD_CUSTOM_COMMAND(
+			DEPENDS ${input_src}
+			OUTPUT ${input_dir}/${input_name}.cpp
+			WORKING_DIRECTORY ${input_dir}
+			COMMAND ${FLEX_EXECUTABLE} --outfile=${input_name}.cpp ${input_name_ext}
+			COMMENT "flex (v ${FLEX_VERSION}) ${input} to ${input_dir}/${input_name}.cpp")
+	ENDIF()
+ENDMACRO()
+
+MACRO(BISON input)
+	IF(NOT(BISON_FOUND AND ((BISON_VERSION MATCHES "3\.*"))))
+		MESSAGE(STATUS "BISON not found, or version is less than 3.x; pre-generated files will be used." )
+	ELSE()
+		MESSAGE(STATUS "BISON `${BISON_VERSION}` found" )
+		get_filename_component(input_src ${input} ABSOLUTE)
+		get_filename_component(input_dir ${input_src} DIRECTORY)
+		get_filename_component(input_name ${input} NAME_WE)
+		get_filename_component(input_name_ext ${input} NAME)
+		ADD_CUSTOM_COMMAND(
+			DEPENDS ${input_src}
+			OUTPUT ${input_dir}/${input_name}.cpp ${input_dir}/${input_name}.hpp ${input_dir}/${input_name}.output
+			WORKING_DIRECTORY ${input_dir}
+			COMMAND ${BISON_EXECUTABLE} --output=${input_name}.cpp --defines=${input_name}.hpp ${input_name_ext}
+			COMMENT "bison (v ${BISON_VERSION}) ${input} to ${input_dir}/${input_name}.cpp + ${input_dir}/${input_name}.hpp + ${input_dir}/${input_name}.output")
+	ENDIF()
+ENDMACRO()

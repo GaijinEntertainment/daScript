@@ -1,0 +1,27 @@
+[submodule "modules/dasGlfw"]
+	path = modules/dasGlfw
+	url = https://github.com/borisbat/dasGlfw.git
+[submodule "modules/dasImgui"]
+	path = modules/dasImgui
+	url = https://github.com/borisbat/dasImgui.git
+[submodule "modules/dasBGFX"]
+	path = modules/dasBGFX
+	url = https://github.com/borisbat/dasBGFX.git
+[submodule "modules/dasXbyak"]
+	path = modules/dasXbyak
+	url = https://github.com/borisbat/dasXbyak.git
+[submodule "modules/dasMinfft"]
+	path = modules/dasMinfft
+	url = https://github.com/imp5imp5/dasMinfft.git
+[submodule "modules/dasHV"]
+	path = modules/dasHV
+	url = https://github.com/borisbat/dasHV.git
+[submodule "modules/dasSFML"]
+	path = modules/dasSFML
+	url = https://github.com/borisbat/dasSFML.git
+[submodule "modules/dasLLVM"]
+	path = modules/dasLLVM
+	url = https://github.com/borisbat/dasLLVM.git
+[submodule "modules/dasQuirrel"]
+	path = modules/dasQuirrel
+	url = https://github.com/borisbat/dasQuirrel.git

@@ -1,0 +1,2 @@
+xcopy %1 %2 /D /I /E /F /Y /H /R > NUL
+If %ERRORLEVEL% NEQ 0	ECHO SYNC %1 FAILED

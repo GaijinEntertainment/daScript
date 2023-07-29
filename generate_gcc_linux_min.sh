@@ -1,0 +1,25 @@
+rm -r -f cmake_temp
+
+mkdir cmake_temp
+
+cd cmake_temp
+
+CC=gcc-9 CXX=g++-9 cmake -DCMAKE_OSX_ARCHITECTURES="x86_64" \
+        -DDAS_GLFW_DISABLED:BOOL=TRUE           \
+        -DDAS_IMGUI_DISABLED:BOOL=TRUE          \
+        -DDAS_BGFX_DISABLED:BOOL=TRUE           \
+        -DDAS_XBYAK_DISABLED:BOOL=TRUE          \
+        -DDAS_CLANG_BIND_DISABLED:BOOL=TRUE     \
+        -DDAS_LLVM_DISABLED:BOOL=TRUE           \
+        -DDAS_QUIRREL_DISABLED:BOOL=TRUE           \
+        -DDAS_MINFFT_DISABLED:BOOL=TRUE         \
+        -DDAS_AUDIO_DISABLED:BOOL=TRUE          \
+        -DDAS_STDDLG_DISABLED:BOOL=TRUE         \
+        -DDAS_STBIMAGE_DISABLED:BOOL=TRUE       \
+        -DDAS_STBTRUETYPE_DISABLED:BOOL=TRUE    \
+        -DDAS_SFML_DISABLED:BOOL=TRUE    		\
+		-DDAS_HV_DISABLED:BOOL=TRUE				\
+	-DCMAKE_INSTALL_PREFIX=. -DCMAKE_BUILD_TYPE=DEBUG -DDAS_CLANG_BIND_DISABLED=TRUE -G "Unix Makefiles" ../
+
+
+

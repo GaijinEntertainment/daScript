@@ -1,0 +1,153 @@
+<!doctype html>
+<html lang="en-GB">
+
+<head>
+    <title>daScript - Web</title>
+
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=0">
+
+    <link rel="stylesheet" href="./src/main.css">
+    
+    <link rel="stylesheet" href="./src/codemirror.css">
+    <link rel="stylesheet" href="./src/eclipse.css">
+
+</head>
+
+
+
+
+
+<body onload="pageInit()">
+
+<script type="text/javascript" src="./src/jquery-3.6.0.min.js"></script>
+<script type="text/javascript" src="./src/codemirror.min.js"></script>
+
+<script type="text/javascript" src="./src/main.js"></script>
+
+<div class="header">
+    <img src="https://dascript.org/doc/_static/daScript.png" height="100%">
+
+    <div class="header_part">
+        <b>daScript</b>
+    </div>
+
+    <div class="header_part">
+        <a href="https://dascript.org/">Overview</a>
+    </div>
+
+
+    <div class="header_part">
+        <a href="https://dascript.org/doc/index.html">Documentation</a>
+
+    </div>
+
+    <div class="header_part">
+        <a href="https://github.com/GaijinEntertainment/daScript">Source</a>
+
+    </div>
+
+
+</div>
+
+<div class="main">
+
+    <div class="main_col">
+
+
+        <div class="main_header">
+
+            <div class="main_header_left">
+
+                <div class="main_header_part">
+                    <div class="main_name">Source</div>
+                </div>
+
+                <div class="main_header_part">
+
+                    <label for="examples"></label>
+                    <select name="examples" id="examples" class="select_header" onchange="selectSample('examples')">
+                        <option value="init">Select example</option>
+                    </select>
+                </div>
+
+            </div>
+
+            <div class="main_header_right">
+
+
+                <div class="main_header_part">
+                    <button class="button_header" onclick="runCode()">Run</button>
+                </div>
+
+            </div>
+        </div>
+
+        <div class="main_col_part">
+            <div id="code">
+            </div>
+
+        </div>
+
+
+    </div>
+
+    <div class="main_col">
+
+        <div class="main_header">
+
+            <div class="main_header_left">
+
+                <div class="main_header_part">
+                    <div class="main_name">Output</div>
+                </div>
+
+                <div class="main_header_part">
+                    <button class="button_header" onclick="clearOutput()">Clear</button>
+                </div>
+
+            </div>
+
+
+            <div class="main_header_right">
+
+
+
+                <div class="main_header_part">
+
+                    <label for="tests"></label>
+                    <select name="tests" id="tests" class="select_header" onchange="selectSample('tests')">
+                        <option value="init">Select test</option>
+                    </select>
+                </div>
+
+                <div class="main_header_part">
+                    <button class="button_header" onclick="runTests()">Run all tests</button>
+                </div>
+
+            </div>
+
+        </div>
+
+
+        <div class="main_col_part">
+            <div id="output">
+            </div>
+
+        </div>
+
+    </div>
+</div>
+
+<footer>
+    <p class="footer_p">
+        Copyright ©2022 <a href="https://gaijin.net/en">Gaijin Entertainment</a> | All Rights Reserved.
+
+    </p>
+</footer>
+
+
+
+</body>
+
+</html>
