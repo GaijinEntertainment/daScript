@@ -1566,6 +1566,7 @@ namespace das {
         if ( ! module->addCallMacro(newM->name, [=](const LineInfo & at) -> ExprLooksLikeCall * {
             auto ecm = new ExprCallMacro(at, newM->name);
             ecm->macro = newM.get();
+            newM->module = module;
             return ecm;
         }) ) {
             context->throw_error_ex("can't add call macro %s to module %s", newM->name.c_str(), module->name.c_str());
