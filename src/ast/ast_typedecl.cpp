@@ -1,5 +1,6 @@
 #include "daScript/misc/platform.h"
 
+#include "daScript/ast/ast_visitor.h"
 #include "daScript/ast/ast.h"
 
 #include <inttypes.h>
@@ -74,6 +75,7 @@ namespace das
     }
 
     TypeDeclPtr TypeDecl::visit ( Visitor & vis ) {
+        vis.preVisit(this);
         for ( size_t i=0, is=dim.size(); i!=is; ++i ) {
             if ( dim[i]==TypeDecl::dimConst ) {
                 if ( dimExpr[i] ) {
