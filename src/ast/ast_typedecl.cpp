@@ -75,7 +75,6 @@ namespace das
     }
 
     TypeDeclPtr TypeDecl::visit ( Visitor & vis ) {
-        vis.preVisit(this);
         for ( size_t i=0, is=dim.size(); i!=is; ++i ) {
             if ( dim[i]==TypeDecl::dimConst ) {
                 if ( dimExpr[i] ) {
@@ -84,12 +83,15 @@ namespace das
             }
         }
         if ( firstType ) {
+            vis.preVisit(firstType.get());
             firstType = firstType->visit(vis);
         }
         if ( secondType ) {
+            vis.preVisit(secondType.get());
             secondType = secondType->visit(vis);
         }
         for ( auto & argType : argTypes ) {
+            vis.preVisit(argType.get());
             argType = argType->visit(vis);
         }
         return this;
