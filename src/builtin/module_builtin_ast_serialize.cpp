@@ -39,11 +39,6 @@ namespace das {
         //         }
         //     }
         // }
-
-        for ( auto & [name, ref] : moduleRefs ) {
-            *ref = moduleLibrary->findModule(name);
-            DAS_VERIFYF(*ref!=nullptr, "module '%s' is not found", name.c_str());
-        }
     }
 
     void AstSerializer::write ( const void * data, size_t size ) {
@@ -432,7 +427,6 @@ namespace das {
     }
 
     void FileAccess::serialize ( AstSerializer & ser ) {
-        ser.tag("FileAccess");
         if ( ser.writing ) {
             int tag = 0;
             ser << tag;
@@ -441,7 +435,6 @@ namespace das {
     }
 
     void ModuleFileAccess::serialize ( AstSerializer & ser ) {
-        ser.tag("ModuleFileAccess");
         if ( ser.writing ) {
             int tag = 1;
             ser << tag;
@@ -450,6 +443,7 @@ namespace das {
     }
 
     AstSerializer & AstSerializer::operator << ( FileAccessPtr & ptr ) {
+        tag("FileAccessPtr");
         bool is_null = ptr == nullptr;
         *this << is_null;
         if ( writing ) {
@@ -553,7 +547,7 @@ namespace das {
         } else {
             if ( !is_null ) {
                 string name; *this << name;
-                moduleRefs.emplace_back(move(name), &module);
+                module = moduleLibrary->findModule(name);
             } else {
                 module = nullptr;
             }
@@ -1226,11 +1220,14 @@ namespace das {
     }
 
     void Module::serialize ( AstSerializer & ser ) {
+        ser << name           << moduleFlags;
         ser << aliasTypes     << handleTypes << structures << enumerations << globals;
         ser << functions      << functionsByName;
         ser << generics       << genericsByName;
         ser << annotationData << requireModule;
-        ser << name           << moduleFlags;
+        ser << ownFileInfo    << promotedAccess;
+
+        ser.patch();
 
         // Now we need to restore the internal state in case this has been a macro module
 
@@ -1245,9 +1242,6 @@ namespace das {
             }
         }
 
-        ser << ownFileInfo << promotedAccess;
-
-        ser.patch();
     }
 
     class TopSort {
