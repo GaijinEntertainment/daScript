@@ -1,5 +1,6 @@
 #include "daScript/misc/platform.h"
 
+#include "daScript/ast/ast_visitor.h"
 #include "daScript/ast/ast.h"
 
 #include <inttypes.h>
@@ -82,12 +83,15 @@ namespace das
             }
         }
         if ( firstType ) {
+            vis.preVisit(firstType.get());
             firstType = firstType->visit(vis);
         }
         if ( secondType ) {
+            vis.preVisit(secondType.get());
             secondType = secondType->visit(vis);
         }
         for ( auto & argType : argTypes ) {
+            vis.preVisit(argType.get());
             argType = argType->visit(vis);
         }
         return this;
