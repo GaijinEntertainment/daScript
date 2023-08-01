@@ -6,13 +6,13 @@
 #include "daScript/ast/ast_handle.h"
 #include "daScript/simulate/bind_enum.h"
 
-#include "dasAudio.h"
-
 #include <opl3.h>
 
 #define MINIAUDIO_IMPLEMENTATION
 #include <miniaudio.h>
 #include <volume_mixer.h>
+
+#include "dasAudio.h"
 
 MAKE_TYPE_FACTORY(Opl3Chip,opl3_chip)
 MAKE_EXTERNAL_TYPE_FACTORY(Context,Context);
@@ -44,7 +44,7 @@ DAS_BIND_ENUM_CAST ( ma_format );
 
 DAS_BASE_BIND_ENUM ( ma_resample_algorithm, ma_resample_algorithm, \
     ma_resample_algorithm_linear, \
-    ma_resample_algorithm_speex \
+    ma_resample_algorithm_custom \
 );
 DAS_BIND_ENUM_CAST ( ma_resample_algorithm );
 
@@ -52,7 +52,6 @@ DAS_BASE_BIND_ENUM ( ma_channel_mix_mode, ma_channel_mix_mode, \
     ma_channel_mix_mode_rectangular, \
     ma_channel_mix_mode_simple, \
     ma_channel_mix_mode_custom_weights, \
-    ma_channel_mix_mode_planar_blend, \
     ma_channel_mix_mode_default \
 );
 DAS_BIND_ENUM_CAST ( ma_channel_mix_mode );
@@ -63,6 +62,79 @@ DAS_BASE_BIND_ENUM ( ma_dither_mode, ma_dither_mode, \
     ma_dither_mode_triangle \
 );
 DAS_BIND_ENUM_CAST ( ma_dither_mode );
+
+DAS_BASE_BIND_ENUM ( ma_result, ma_result, \
+    MA_SUCCESS                        ,\
+    MA_ERROR                          ,\
+    MA_INVALID_ARGS                   ,\
+    MA_INVALID_OPERATION              ,\
+    MA_OUT_OF_MEMORY                  ,\
+    MA_OUT_OF_RANGE                   ,\
+    MA_ACCESS_DENIED                  ,\
+    MA_DOES_NOT_EXIST                 ,\
+    MA_ALREADY_EXISTS                 ,\
+    MA_TOO_MANY_OPEN_FILES            ,\
+    MA_INVALID_FILE                   ,\
+    MA_TOO_BIG                        ,\
+    MA_PATH_TOO_LONG                  ,\
+    MA_NAME_TOO_LONG                  ,\
+    MA_NOT_DIRECTORY                  ,\
+    MA_IS_DIRECTORY                   ,\
+    MA_DIRECTORY_NOT_EMPTY            ,\
+    MA_AT_END                         ,\
+    MA_NO_SPACE                       ,\
+    MA_BUSY                           ,\
+    MA_IO_ERROR                       ,\
+    MA_INTERRUPT                      ,\
+    MA_UNAVAILABLE                    ,\
+    MA_ALREADY_IN_USE                 ,\
+    MA_BAD_ADDRESS                    ,\
+    MA_BAD_SEEK                       ,\
+    MA_BAD_PIPE                       ,\
+    MA_DEADLOCK                       ,\
+    MA_TOO_MANY_LINKS                 ,\
+    MA_NOT_IMPLEMENTED                ,\
+    MA_NO_MESSAGE                     ,\
+    MA_BAD_MESSAGE                    ,\
+    MA_NO_DATA_AVAILABLE              ,\
+    MA_INVALID_DATA                   ,\
+    MA_TIMEOUT                        ,\
+    MA_NO_NETWORK                     ,\
+    MA_NOT_UNIQUE                     ,\
+    MA_NOT_SOCKET                     ,\
+    MA_NO_ADDRESS                     ,\
+    MA_BAD_PROTOCOL                   ,\
+    MA_PROTOCOL_UNAVAILABLE           ,\
+    MA_PROTOCOL_NOT_SUPPORTED         ,\
+    MA_PROTOCOL_FAMILY_NOT_SUPPORTED  ,\
+    MA_ADDRESS_FAMILY_NOT_SUPPORTED   ,\
+    MA_SOCKET_NOT_SUPPORTED           ,\
+    MA_CONNECTION_RESET               ,\
+    MA_ALREADY_CONNECTED              ,\
+    MA_NOT_CONNECTED                  ,\
+    MA_CONNECTION_REFUSED             ,\
+    MA_NO_HOST                        ,\
+    MA_IN_PROGRESS                    ,\
+    MA_CANCELLED                      ,\
+    MA_MEMORY_ALREADY_MAPPED          ,\
+    MA_FORMAT_NOT_SUPPORTED           ,\
+    MA_DEVICE_TYPE_NOT_SUPPORTED      ,\
+    MA_SHARE_MODE_NOT_SUPPORTED       ,\
+    MA_NO_BACKEND                     ,\
+    MA_NO_DEVICE                      ,\
+    MA_API_NOT_FOUND                  ,\
+    MA_INVALID_DEVICE_CONFIG          ,\
+    MA_LOOP                           ,\
+    MA_DEVICE_NOT_INITIALIZED         ,\
+    MA_DEVICE_ALREADY_INITIALIZED     ,\
+    MA_DEVICE_NOT_STARTED             ,\
+    MA_DEVICE_NOT_STOPPED             ,\
+    MA_FAILED_TO_INIT_BACKEND         ,\
+    MA_FAILED_TO_OPEN_BACKEND_DEVICE  ,\
+    MA_FAILED_TO_START_BACKEND_DEVICE ,\
+    MA_FAILED_TO_STOP_BACKEND_DEVICE  \
+);
+DAS_BIND_ENUM_CAST ( ma_result );
 
 namespace das {
 
@@ -144,6 +216,47 @@ void dasAudio_finalize ( void ) {
         g_mixer_initialized = false;
     }
 }
+
+MA_API ma_result dasAudio_ma_resampler_init(const ma_resampler_config* pConfig, ma_resampler* pResampler) {
+    return ma_resampler_init(pConfig, nullptr, pResampler);
+}
+
+MA_API void dasAudio_ma_resampler_uninit(ma_resampler* pResampler) {
+    return ma_resampler_uninit(pResampler,nullptr);
+}
+
+MA_API ma_result dasAudio_ma_channel_converter_init(const ma_channel_converter_config* pConfig, ma_channel_converter* pConverter) {
+    return ma_channel_converter_init(pConfig, nullptr, pConverter);
+}
+
+MA_API void dasAudio_ma_channel_converter_uninit(ma_channel_converter* pConverter) {
+    return ma_channel_converter_uninit(pConverter, nullptr);
+}
+
+MA_API ma_uint64 dasAudio_ma_resampler_get_required_input_frame_count(const ma_resampler* pResampler, ma_uint64 outputFrameCount) {
+    ma_uint64 inputFrameCount = 0ul;
+    ma_resampler_get_required_input_frame_count(pResampler, outputFrameCount, &inputFrameCount);
+    return inputFrameCount;
+}
+
+MA_API ma_uint64 dasAudio_ma_resampler_get_expected_output_frame_count(const ma_resampler* pResampler, ma_uint64 inputFrameCount) {
+    ma_uint64 outputFrameCount = 0ul;
+    ma_resampler_get_expected_output_frame_count(pResampler, inputFrameCount, &outputFrameCount);
+    return outputFrameCount;
+}
+
+MA_API ma_uint64 dasAudio_ma_decoder_get_length_in_pcm_frames(ma_decoder* pDecoder) {
+    ma_uint64 frameCount = 0;
+    ma_decoder_get_length_in_pcm_frames(pDecoder, &frameCount);
+    return frameCount;
+}
+
+MA_API ma_uint64 dasAudio_ma_decoder_read_pcm_frames(ma_decoder* pDecoder, void* pFramesOut, ma_uint64 frameCount) {
+    ma_uint64 framesRead = 0;
+    ma_decoder_read_pcm_frames(pDecoder, pFramesOut, frameCount, &framesRead);
+    return framesRead;
+}
+
 struct MAResamplerConfigAnnotation : ManagedStructureAnnotation<ma_resampler_config> {
     MAResamplerConfigAnnotation ( ModuleLibrary & mlib )
         : ManagedStructureAnnotation("ma_resampler_config", mlib, "ma_resampler_config") {
@@ -162,7 +275,11 @@ struct MAResamplerConfigAnnotation : ManagedStructureAnnotation<ma_resampler_con
 struct MAResamplerAnnotation : ManagedStructureAnnotation<ma_resampler> {
     MAResamplerAnnotation ( ModuleLibrary & mlib )
         : ManagedStructureAnnotation("ma_resampler", mlib, "ma_resampler") {
-        addField<DAS_BIND_MANAGED_FIELD(config)>("config","config");
+        addField<DAS_BIND_MANAGED_FIELD(format)>("format","format");
+        addField<DAS_BIND_MANAGED_FIELD(channels)>("channels","channels");
+        addField<DAS_BIND_MANAGED_FIELD(sampleRateIn)>("sampleRateIn","sampleRateIn");
+        addField<DAS_BIND_MANAGED_FIELD(sampleRateOut)>("sampleRateOut","sampleRateOut");
+        // addField<DAS_BIND_MANAGED_FIELD(state)>("state","state");
     }
 };
 
@@ -172,10 +289,10 @@ struct MAChannelConvertorConfigAnnotation : ManagedStructureAnnotation<ma_channe
         addField<DAS_BIND_MANAGED_FIELD(format)>("format","format");
         addField<DAS_BIND_MANAGED_FIELD(channelsIn)>("channelsIn","channelsIn");
         addField<DAS_BIND_MANAGED_FIELD(channelsOut)>("channelsOut","channelsOut");
-        addField<DAS_BIND_MANAGED_FIELD(channelMapIn)>("channelMapIn","channelMapIn");
-        addField<DAS_BIND_MANAGED_FIELD(channelMapOut)>("channelMapOut","channelMapOut");
+        addField<DAS_BIND_MANAGED_FIELD(pChannelMapIn)>("channelMapIn","channelMapIn");
+        addField<DAS_BIND_MANAGED_FIELD(pChannelMapOut)>("channelMapOut","channelMapOut");
         addField<DAS_BIND_MANAGED_FIELD(mixingMode)>("mixingMode","mixingMode");
-        addField<DAS_BIND_MANAGED_FIELD(weights)>("weights","weights");
+        addField<DAS_BIND_MANAGED_FIELD(ppWeights)>("weights","weights");
     }
 };
 
@@ -201,7 +318,7 @@ struct MADecoderConfigAnnotation : ManagedStructureAnnotation<ma_decoder_config>
         : ManagedStructureAnnotation("ma_decoder_config", mlib, "ma_decoder_config") {
         addField<DAS_BIND_MANAGED_FIELD(format)>("format","format");
         addField<DAS_BIND_MANAGED_FIELD(channels)>("channels","channels");
-        addField<DAS_BIND_MANAGED_FIELD(channelMap)>("channelMap","channelMap");
+        addField<DAS_BIND_MANAGED_FIELD(pChannelMap)>("channelMap","channelMap");
         addField<DAS_BIND_MANAGED_FIELD(channelMixMode)>("channelMixMode","channelMixMode");
         addField<DAS_BIND_MANAGED_FIELD(ditherMode)>("ditherMode","ditherMode");
     }
@@ -274,25 +391,26 @@ public:
         addEnumeration(make_smart<Enumerationma_resample_algorithm>());
         addEnumeration(make_smart<Enumerationma_channel_mix_mode>());
         addEnumeration(make_smart<Enumerationma_dither_mode>());
+        addEnumeration(make_smart<Enumerationma_result>());
         // resampler
         addAnnotation(make_smart<MAResamplerConfigAnnotation>(lib));
         addAnnotation(make_smart<MAResamplerAnnotation>(lib));
         addExtern<DAS_BIND_FUN(ma_resampler_config_init),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "ma_resampler_config_init",
             SideEffects::none, "ma_resampler_config_init")->args({"format", "channels", "sampleRateIn", "sampleRateOut","algorithm"});
-        addExtern<DAS_BIND_FUN(ma_resampler_init)>(*this, lib, "ma_resampler_init",
-            SideEffects::modifyArgumentAndExternal, "ma_resampler_init")->args({"config", "resampler"});
-        addExtern<DAS_BIND_FUN(ma_resampler_uninit)>(*this, lib, "ma_resampler_uninit",
-            SideEffects::modifyArgumentAndExternal, "ma_resampler_uninit")->args({"resampler"});
+        addExtern<DAS_BIND_FUN(dasAudio_ma_resampler_init)>(*this, lib, "ma_resampler_init",
+            SideEffects::modifyArgumentAndExternal, "dasAudio_ma_resampler_init")->args({"config", "resampler"});
+        addExtern<DAS_BIND_FUN(dasAudio_ma_resampler_uninit)>(*this, lib, "ma_resampler_uninit",
+            SideEffects::modifyArgumentAndExternal, "dasAudio_ma_resampler_uninit")->args({"resampler"});
         addExtern<DAS_BIND_FUN(ma_resampler_process_pcm_frames)>(*this, lib, "ma_resampler_process_pcm_frames",
             SideEffects::modifyArgument, "ma_resampler_process_pcm_frames")->args({"resampler", "pFramesIn", "pFrameCountIn", "pFramesOut", "pFrameCountOut"});
         addExtern<DAS_BIND_FUN(ma_resampler_set_rate)>(*this, lib, "ma_resampler_set_rate",
             SideEffects::modifyArgument, "ma_resampler_set_rate")->args({"resampler", "sampleRateIn", "sampleRateOut"});
         addExtern<DAS_BIND_FUN(ma_resampler_set_rate_ratio)>(*this, lib, "ma_resampler_set_rate_ratio",
             SideEffects::modifyArgument, "ma_resampler_set_rate_ratio")->args({"resampler", "ratioInOut"});
-        addExtern<DAS_BIND_FUN(ma_resampler_get_required_input_frame_count)>(*this, lib, "ma_resampler_get_required_input_frame_count",
-            SideEffects::none, "ma_resampler_get_required_input_frame_count")->args({"resampler", "outputFrameCount"});
-        addExtern<DAS_BIND_FUN(ma_resampler_get_expected_output_frame_count)>(*this, lib, "ma_resampler_get_expected_output_frame_count",
-            SideEffects::none, "ma_resampler_get_expected_output_frame_count")->args({"resampler", "inputFrameCount"});
+        addExtern<DAS_BIND_FUN(dasAudio_ma_resampler_get_required_input_frame_count)>(*this, lib, "ma_resampler_get_required_input_frame_count",
+            SideEffects::none, "dasAudio_ma_resampler_get_required_input_frame_count")->args({"resampler", "outputFrameCount"});
+        addExtern<DAS_BIND_FUN(dasAudio_ma_resampler_get_expected_output_frame_count)>(*this, lib, "ma_resampler_get_expected_output_frame_count",
+            SideEffects::none, "dasAudio_ma_resampler_get_expected_output_frame_count")->args({"resampler", "inputFrameCount"});
         addExtern<DAS_BIND_FUN(ma_resampler_get_input_latency)>(*this, lib, "ma_resampler_get_input_latency",
             SideEffects::none, "ma_resampler_get_input_latency")->args({"resampler"});
         addExtern<DAS_BIND_FUN(ma_resampler_get_output_latency)>(*this, lib, "ma_resampler_get_output_latency",
@@ -302,10 +420,10 @@ public:
         addAnnotation(make_smart<MAChannelConverterAnnotation>(lib));
         addExtern<DAS_BIND_FUN(ma_channel_converter_config_init),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "ma_channel_converter_config_init",
             SideEffects::none, "ma_channel_converter_config_init")->args({"format", "channelsIn", "channelsOut", "channelMapIn", "channelMapOut", "mixingMode"});
-        addExtern<DAS_BIND_FUN(ma_channel_converter_init)>(*this, lib, "ma_channel_converter_init",
-            SideEffects::modifyArgumentAndExternal, "ma_channel_converter_init")->args({"config", "converter"});
-        addExtern<DAS_BIND_FUN(ma_channel_converter_uninit)>(*this, lib, "ma_channel_converter_uninit",
-            SideEffects::modifyArgumentAndExternal, "ma_channel_converter_uninit")->args({"converter"});
+        addExtern<DAS_BIND_FUN(dasAudio_ma_channel_converter_init)>(*this, lib, "ma_channel_converter_init",
+            SideEffects::modifyArgumentAndExternal, "dasAudio_ma_channel_converter_init")->args({"config", "converter"});
+        addExtern<DAS_BIND_FUN(dasAudio_ma_channel_converter_uninit)>(*this, lib, "ma_channel_converter_uninit",
+            SideEffects::modifyArgumentAndExternal, "dasAudio_ma_channel_converter_uninit")->args({"converter"});
         addExtern<DAS_BIND_FUN(ma_channel_converter_process_pcm_frames)>(*this, lib, "ma_channel_converter_process_pcm_frames",
             SideEffects::modifyArgument, "ma_channel_converter_process_pcm_frames")->args({"converter", "pFramesOut", "pFramesIn", "frameCount"});
         // volume mixer
@@ -339,10 +457,10 @@ public:
             SideEffects::modifyArgumentAndExternal, "ma_decoder_uninit")->args({"decoder"});
         addExtern<DAS_BIND_FUN(ma_decoder_get_cursor_in_pcm_frames)>(*this, lib, "ma_decoder_get_cursor_in_pcm_frames",
             SideEffects::none, "ma_decoder_get_cursor_in_pcm_frames")->args({"decoder", "pCursor"});
-        addExtern<DAS_BIND_FUN(ma_decoder_get_length_in_pcm_frames)>(*this, lib, "ma_decoder_get_length_in_pcm_frames",
-            SideEffects::none, "ma_decoder_get_length_in_pcm_frames")->args({"decoder"});
-        addExtern<DAS_BIND_FUN(ma_decoder_read_pcm_frames)>(*this, lib, "ma_decoder_read_pcm_frames",
-            SideEffects::modifyArgument, "ma_decoder_read_pcm_frames")->args({"decoder", "pFramesOut", "frameCount"});
+        addExtern<DAS_BIND_FUN(dasAudio_ma_decoder_get_length_in_pcm_frames)>(*this, lib, "ma_decoder_get_length_in_pcm_frames",
+            SideEffects::none, "dasAudio_ma_decoder_get_length_in_pcm_frames")->args({"decoder"});
+        addExtern<DAS_BIND_FUN(dasAudio_ma_decoder_read_pcm_frames)>(*this, lib, "ma_decoder_read_pcm_frames",
+            SideEffects::modifyArgument, "dasAudio_ma_decoder_read_pcm_frames")->args({"decoder", "pFramesOut", "frameCount"});
         addExtern<DAS_BIND_FUN(ma_decoder_seek_to_pcm_frame)>(*this, lib, "ma_decoder_seek_to_pcm_frame",
             SideEffects::modifyArgument, "ma_decoder_seek_to_pcm_frame")->args({"decoder", "frameIndex"});
         addExtern<DAS_BIND_FUN(ma_decoder_get_available_frames)>(*this, lib, "ma_decoder_get_available_frames",
@@ -361,8 +479,6 @@ public:
     }
     virtual ModuleAotType aotRequire ( TextWriter & tw ) const override {
         tw << "#include \"../modules/dasAudio/src/dasAudio.h\"\n";
-        tw << "#include <miniaudio.h>\n";
-        tw << "#include <volume_mixer.h>\n";
         return ModuleAotType::cpp;
     }
 };
