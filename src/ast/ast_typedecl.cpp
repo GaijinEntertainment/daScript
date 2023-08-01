@@ -1144,9 +1144,10 @@ namespace das
             return true;
         } else if ( baseType==Type::tBlock ) {
             return false;
-        } else if ( baseType==Type::tArray || baseType==Type::tTable ) {
-            if ( firstType && !firstType->isSafeToDelete(dep) ) return false;
+        } else if ( baseType==Type::tTable ) {
             if ( secondType && !secondType->isSafeToDelete(dep) ) return false;
+        } else if ( baseType==Type::tArray ) {
+            if ( firstType && !firstType->isSafeToDelete(dep) ) return false;
         }
         return true;
     }
