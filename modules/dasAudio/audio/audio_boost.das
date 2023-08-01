@@ -244,8 +244,6 @@ class AudioSourcePCMLoop : AudioSource
             dofs += nsmp
         return <- data
 
-let MA_RESULT_OK = 0
-
 class AudioSourceDecoder : AudioSource
     decoder : ma_decoder?
     isReady : bool = false
@@ -255,7 +253,7 @@ class AudioSourceDecoder : AudioSource
         decoder = new ma_decoder
         var config <- ma_decoder_config_init(ma_format ma_format_f32, uint(channels), uint(rate))
         let result = ma_decoder_init_file(filename, unsafe(addr(config)), decoder)
-        if result == MA_RESULT_OK
+        if result == ma_result MA_SUCCESS
             initFromDecoder(decoder, rate, nChannels)
     def initFromDecoder ( dec:ma_decoder?; rate,nChannels:int )
         bitrate = rate
@@ -540,7 +538,7 @@ def make_decoder ( filename:string; rate,channels:int )
     var decoder = new ma_decoder
     var config <- ma_decoder_config_init(ma_format ma_format_f32, uint(channels), uint(rate))
     let result = ma_decoder_init_file(filename, unsafe(addr(config)), decoder)
-    if result != MA_RESULT_OK
+    if result != ma_result MA_SUCCESS
         return null
     return decoder
 
