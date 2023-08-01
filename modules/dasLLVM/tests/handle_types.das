@@ -45,6 +45,14 @@ def handle_fields_ptr ( var m:float4x4? )
     m.w = float4(0,0,0,4)
     return m.y
 
+[jit]
+def handle_index ( var m:float4x4 )
+    m[0] = float4(1,0,0,0)
+    m[1] = float4(0,2,0,0)
+    m[2] = float4(0,0,3,0)
+    m[3] = float4(0,0,0,4)
+    return m.y
+
 [test]
 def test_handle_type ( t:T? )
     t |> run("handle val") <| @ ( t : T? )
@@ -84,6 +92,15 @@ def test_handle_type ( t:T? )
         t |> success(is_jit_function(@@handle_fields))
         var m : float4x4
         var my = handle_fields(m)
+        t |> equal ( float4(1,0,0,0), m.x )
+        t |> equal ( float4(0,2,0,0), m.y )
+        t |> equal ( float4(0,0,3,0), m.z )
+        t |> equal ( float4(0,0,0,4), m.w )
+        t |> equal ( float4(0,2,0,0), my )
+    t |> run("handle index") <| @ ( t : T? )
+        t |> success(is_jit_function(@@handle_index))
+        var m : float4x4
+        var my = handle_index(m)
         t |> equal ( float4(1,0,0,0), m.x )
         t |> equal ( float4(0,2,0,0), m.y )
         t |> equal ( float4(0,0,3,0), m.z )
