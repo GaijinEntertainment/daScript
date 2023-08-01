@@ -674,10 +674,6 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(no_global_variables)>("no_global_variables");
             addField<DAS_BIND_MANAGED_FIELD(no_global_variables_at_all)>("no_global_variables_at_all");
             addField<DAS_BIND_MANAGED_FIELD(no_global_heap)>("no_global_heap");
-            addField<DAS_BIND_MANAGED_FIELD(no_deprecated)>("no_deprecated");
-            addField<DAS_BIND_MANAGED_FIELD(strict_smart_pointers)>("strict_smart_pointers");
-            addField<DAS_BIND_MANAGED_FIELD(no_init)>("no_init");
-            addField<DAS_BIND_MANAGED_FIELD(no_aliasing)>("no_aliasing");
             addField<DAS_BIND_MANAGED_FIELD(only_fast_aot)>("only_fast_aot");
             addField<DAS_BIND_MANAGED_FIELD(aot_order_side_effects)>("aot_order_side_effects");
             addField<DAS_BIND_MANAGED_FIELD(no_unused_function_arguments)>("no_unused_function_arguments");
@@ -688,6 +684,11 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(allow_shared_lambda)>("allow_shared_lambda");
             addField<DAS_BIND_MANAGED_FIELD(ignore_shared_modules)>("ignore_shared_modules");
             addField<DAS_BIND_MANAGED_FIELD(default_module_public)>("default_module_public");
+            addField<DAS_BIND_MANAGED_FIELD(no_deprecated)>("no_deprecated");
+            addField<DAS_BIND_MANAGED_FIELD(no_aliasing)>("no_aliasing");
+            addField<DAS_BIND_MANAGED_FIELD(strict_smart_pointers)>("strict_smart_pointers");
+            addField<DAS_BIND_MANAGED_FIELD(no_init)>("no_init");
+            addField<DAS_BIND_MANAGED_FIELD(strict_unsafe_delete)>("strict_unsafe_delete");
         // environment
             addField<DAS_BIND_MANAGED_FIELD(no_optimizations)>("no_optimizations");
             addField<DAS_BIND_MANAGED_FIELD(fail_on_no_aot)>("fail_on_no_aot");
