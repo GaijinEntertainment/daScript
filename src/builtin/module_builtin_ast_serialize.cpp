@@ -26,19 +26,47 @@ namespace das {
                 *p.first = it->second.get();
             }
         }
+        functionRefs.clear();
 
-        // for ( auto & p : blockRefs ) {
-        //     auto it = exprMap.find(p.second);
-        //     if ( it == exprMap.end() ) {
-        //         DAS_FATAL_ERROR("ast serializer function ref not found");
-        //     } else {
-        //         if (auto block = dynamic_cast<ExprBlock*>(it->second.get())) {
-        //             *p.first = block;
-        //         } else {
-        //             DAS_FATAL_ERROR("Expression should be ExprBlock");
-        //         }
-        //     }
-        // }
+        for ( auto & p : variableRefs ) {
+            auto it = smartVariableMap.find(p.second);
+            if ( it == smartVariableMap.end() ) {
+                DAS_FATAL_ERROR("ast serializer variable ref not found");
+            } else {
+                *p.first = it->second.get();
+            }
+        }
+        variableRefs.clear();
+
+        for ( auto & p : structureRefs ) {
+            auto it = smartStructureMap.find(get<1>(p));
+            if ( it == smartStructureMap.end() ) {
+                DAS_FATAL_ERROR("ast serializer variable ref not found");
+            } else {
+                *get<0>(p) = it->second.get();
+            }
+        }
+        structureRefs.clear();
+
+        for ( auto & p : enumerationRefs ) {
+            auto it = smartEnumerationMap.find(p.second);
+            if ( it == smartEnumerationMap.end() ) {
+                DAS_FATAL_ERROR("ast serializer variable ref not found");
+            } else {
+                *p.first = it->second.get();
+            }
+        }
+        enumerationRefs.clear();
+
+        for ( auto & p : blockRefs ) {
+            auto it = exprBlockMap.find(p.second);
+            if ( it == exprBlockMap.end() ) {
+                DAS_FATAL_ERROR("ast serializer function ref not found");
+            } else {
+                *p.first = it->second;
+            }
+        }
+        blockRefs.clear();
     }
 
     void AstSerializer::write ( const void * data, size_t size ) {
@@ -146,6 +174,121 @@ namespace das {
                     func = funcModule->findGeneric(mangledName).get();
                 }
                 DAS_VERIFYF(func!=nullptr, "function '%s' is not found", mangledName.c_str());
+            }
+        }
+        return *this;
+    }
+
+
+    AstSerializer & AstSerializer::operator << ( Structure * & ptr ) {
+        tag("Structure pointer");
+        uint64_t fid = uintptr_t(ptr);
+        *this << fid;
+        if ( !fid ) {
+            if ( !writing ) ptr = nullptr;
+            return *this;
+        }
+        if ( writing ) {
+            bool inThisModule = ptr->module == thisModule;
+            *this << inThisModule;
+            if ( !inThisModule ) {
+                *this << ptr->module->name;
+                *this << ptr->name;
+            }
+        } else {
+            bool inThisModule;
+            *this << inThisModule;
+            if ( inThisModule ) {
+                auto it = smartStructureMap.find(fid);
+                if ( it == smartStructureMap.end() ) {
+                    structureRefs.emplace_back(&ptr, fid);
+                } else {
+                    ptr = it->second.get();
+                }
+            } else {
+                string moduleName, mangledName;
+                *this << moduleName;
+                auto funcModule = moduleLibrary->findModule(moduleName);
+                DAS_VERIFYF(funcModule!=nullptr, "module '%s' is not found", moduleName.c_str());
+                *this << mangledName;
+                auto f = funcModule->findStructure(mangledName);
+                DAS_VERIFYF(f!=nullptr, "function '%s' is not found", mangledName.c_str());
+            }
+        }
+        return *this;
+    }
+
+    AstSerializer & AstSerializer::operator << ( Enumeration * & ptr ) {
+        tag("Enumeration pointer");
+        uint64_t fid = uintptr_t(ptr);
+        *this << fid;
+        if ( !fid ) {
+            if ( !writing ) ptr = nullptr;
+            return *this;
+        }
+        if ( writing ) {
+            bool inThisModule = ptr->module == thisModule;
+            *this << inThisModule;
+            if ( !inThisModule ) {
+                *this << ptr->module->name;
+                *this << ptr->name;
+            }
+        } else {
+            bool inThisModule;
+            *this << inThisModule;
+            if ( inThisModule ) {
+                auto it = smartEnumerationMap.find(fid);
+                if ( it == smartEnumerationMap.end() ) {
+                    enumerationRefs.emplace_back(&ptr, fid);
+                } else {
+                    ptr = it->second.get();
+                }
+            } else {
+                string moduleName, mangledName;
+                *this << moduleName;
+                auto funcModule = moduleLibrary->findModule(moduleName);
+                DAS_VERIFYF(funcModule!=nullptr, "module '%s' is not found", moduleName.c_str());
+                *this << mangledName;
+                auto f = funcModule->findEnum(mangledName);
+                DAS_VERIFYF(f!=nullptr, "function '%s' is not found", mangledName.c_str());
+            }
+        }
+        return *this;
+    }
+
+    AstSerializer & AstSerializer::operator << ( Variable * & ptr ) {
+        tag("Enumeration pointer");
+        uint64_t fid = uintptr_t(ptr);
+        *this << fid;
+        if ( !fid ) {
+            if ( !writing ) ptr = nullptr;
+            return *this;
+        }
+        if ( writing ) {
+            bool inThisModule = ptr->module == thisModule;
+            *this << inThisModule;
+            if ( !inThisModule ) {
+                *this << ptr->module->name;
+                *this << ptr->name;
+            }
+        } else {
+            bool inThisModule;
+            *this << inThisModule;
+            if ( inThisModule ) {
+                auto it = smartVariableMap.find(fid);
+                if ( it == smartVariableMap.end() ) {
+                    variableRefs.emplace_back(&ptr, fid);
+                } else {
+                    ptr = it->second.get();
+                }
+            } else {
+                string moduleName, mangledName;
+                *this << moduleName;
+                auto funcModule = moduleLibrary->findModule(moduleName);
+                DAS_VERIFYF(funcModule!=nullptr, "module '%s' is not found", moduleName.c_str());
+                *this << mangledName;
+                auto f = funcModule->findVariable(mangledName);
+                DAS_VERIFYF(f!=nullptr, "function '%s' is not found", mangledName.c_str());
             }
         }
         return *this;
@@ -403,26 +546,13 @@ namespace das {
         return *this;
     }
 
-    template <typename T>
-    AstSerializer & AstSerializer::serializePointer(T * & obj, das_hash_map<void*, T*> & objMap) {
-        void* pointer = obj;
-        *this << pointer;
-        if ( !pointer ) {
-            return *this; // Nullptr to end it all
+
+    AstSerializer & AstSerializer::operator << ( StructurePtr & struct_ ) {
+        *this << struct_->name;
+        if ( struct_->name == "TagStructureAnnotation" && !writing ) {
+            os_debug_break();
         }
-        if ( writing ) {
-            if ( objMap.count(pointer) == 0 ) {
-                objMap[pointer] = obj;
-                obj->serialize(*this);
-            }
-        } else {
-            if ( objMap.count(pointer) != 0 ) {
-                obj = objMap[pointer];
-            } else {
-                objMap[pointer] = obj = new T;
-                obj->serialize(*this);
-            }
-        }
+        serializeSmartPtr(struct_, smartStructureMap);
         return *this;
     }
 
@@ -463,19 +593,6 @@ namespace das {
         return *this;
     }
 
-    AstSerializer & AstSerializer::operator << ( Structure * & struct_ ) {
-        return serializePointer(struct_, structureMap);
-    }
-
-    AstSerializer & AstSerializer::operator << ( StructurePtr & struct_ ) {
-        serializeSmartPtr(struct_, smartStructureMap);
-        return *this;
-    }
-
-    AstSerializer & AstSerializer::operator << ( Enumeration * & enum_type ) {
-        return serializePointer(enum_type, enumerationMap);
-    }
-
     // This method creates concrete (i.e. non-polymorphic types without duplications)
     template<typename T>
     void AstSerializer::serializeSmartPtr( smart_ptr<T> & obj, das_hash_map<uint64_t, smart_ptr<T>> & objMap) {
@@ -489,7 +606,7 @@ namespace das {
         } else {
             if ( id ) {
                 auto it = objMap.find(id);
-                if (it == objMap.end()) {
+                if ( it == objMap.end() ) {
                     obj = make_smart<T>();
                     objMap[id] = obj;
                     obj->serialize(*this);
@@ -529,11 +646,6 @@ namespace das {
 
     AstSerializer & AstSerializer::operator << ( VariablePtr & var ) {
         serializeSmartPtr(var, smartVariableMap);
-        return *this;
-    }
-
-    AstSerializer & AstSerializer::operator << ( Variable * & var ) {
-        serializePointer(var, variableMap);
         return *this;
     }
 
@@ -583,16 +695,10 @@ namespace das {
 
     AstSerializer & AstSerializer::operator << ( ExprBlock * & block ) {
         tag("ExprBlock*");
-        bool is_null = block == nullptr;
-        *this << is_null;
-        if ( is_null ) {
-            if ( !writing ) block = nullptr;
-            return *this;
-        }
-        uint64_t addr = (uintptr_t) block;
+        void * addr = block;
         *this << addr;
-        if ( !writing ) {
-            blockRefs.emplace_back(&block, addr);
+        if ( !writing && addr ) {
+            blockRefs.emplace_back(&block, (uint64_t) addr);
         }
         return *this;
     }
@@ -691,7 +797,9 @@ namespace das {
 
     void Structure::serialize ( AstSerializer & ser ) {
         ser.tag("Structure");
-        ser << name << fields << fieldLookup << at << module
+        ser << name;
+        ser << fields;
+        ser << fieldLookup << at << module
             << parent // parent could be in the current module or in some other
                       // module
             << annotations << flags;
@@ -701,7 +809,7 @@ namespace das {
     void Variable::serialize ( AstSerializer & ser ) {
         ser.tag("Variable");
         ser << name << aka << type << init << source << at << index << stackTop
-            << extraLocalOffset << module << useFunctions << useGlobalVariables
+            << extraLocalOffset << module// << useFunctions << useGlobalVariables
             << initStackSize << flags << access_flags << annotation;
         ptr_ref_count::serialize(ser);
     }
@@ -731,8 +839,6 @@ namespace das {
         ser << at;
         ser << atDecl;
         ser << module;
-        ser << useFunctions;
-        ser << useGlobalVariables;
         ser << classParent;
         ser << resultAliases;
         ser << argumentAliases;
@@ -817,6 +923,15 @@ namespace das {
     void ExprBlock::serialize ( AstSerializer & ser ) {
         ser.tag("ExprBlock");
         Expression::serialize(ser);
+
+        if ( ser.writing ) {
+            void * thisBlock = this;
+            ser << thisBlock;
+        } else {
+            void * thisBlock; ser << thisBlock;
+            ser.exprBlockMap.emplace((uint64_t) thisBlock, this);
+        }
+
         ser << list << finalList << returnType << arguments << stackTop
             << stackVarTop << stackVarBottom << stackCleanVars << maxLabelIndex
             << annotations << annotationData << annotationDataSid << blockFlags
@@ -1219,13 +1334,117 @@ namespace das {
         return program->thisModule.release();
     }
 
+    void serializeUseFunctions ( AstSerializer & ser, const FunctionPtr & f ) {
+        if ( ser.writing ) {
+            string name = f->name; ser << name;
+            uint64_t size = 0; ser << size;
+            uint64_t sz = f->useFunctions.size();
+            ser << sz;
+            for ( auto & usedFun : f->useFunctions ) {
+                void * addr = usedFun;
+                ser << addr;
+            }
+        } else {
+            string name; ser << name;
+            DAS_ASSERTF(name == f->name, "expected to serialize in the same order");
+            uint64_t size = 0; ser << size;
+            f->useFunctions.reserve(size);
+            for ( uint64_t i = 0; i < size; i++ ) {
+                void* addr; ser << addr;
+                auto fun = ser.smartFunctionMap.at((uint64_t) addr);
+                f->useFunctions.emplace(fun.get());
+            }
+        }
+    }
+
+    void serializeUseFunctions ( AstSerializer & ser, const VariablePtr & f ) {
+        if ( ser.writing ) {
+            string name = f->name; ser << name;
+            uint64_t size = 0; ser << size;
+            uint64_t sz = f->useFunctions.size();
+            ser << sz;
+            for ( auto & usedFun : f->useFunctions ) {
+                void * addr = usedFun;
+                ser << addr;
+            }
+        } else {
+            string name; ser << name;
+            DAS_ASSERTF(name == f->name, "expected to serialize in the same order");
+            uint64_t size = 0; ser << size;
+            f->useFunctions.reserve(size);
+            for ( uint64_t i = 0; i < size; i++ ) {
+                void* addr; ser << addr;
+                auto fun = ser.smartFunctionMap.at((uint64_t) addr);
+                f->useFunctions.emplace(fun.get());
+            }
+        }
+    }
+
+    void serializeUseVariables ( AstSerializer & ser, const FunctionPtr & f ) {
+        ser.tag("serializeUseVariables");
+        if ( ser.writing ) {
+            string name = f->name; ser << name;
+            uint64_t sz = f->useGlobalVariables.size();
+            ser << sz;
+            for ( auto & use : f->useGlobalVariables ) {
+                void * addr = use;
+                ser << addr;
+            }
+        } else {
+            string name; ser << name;
+            DAS_ASSERTF(name == f->name, "expected to serialize in the same order");
+            uint64_t size = 0; ser << size;
+            f->useGlobalVariables.reserve(size);
+            for ( uint64_t i = 0; i < size; i++ ) {
+                void* addr; ser << addr;
+                auto fun = ser.smartVariableMap.at((uint64_t) addr);
+                f->useGlobalVariables.emplace(fun.get());
+            }
+        }
+    }
+
+    void serializeUseVariables ( AstSerializer & ser, const VariablePtr & f ) {
+        if ( ser.writing ) {
+            string name = f->name; ser << name;
+            uint64_t sz = f->useGlobalVariables.size();
+            ser << sz;
+            for ( auto & use : f->useGlobalVariables ) {
+                void * addr = use;
+                ser << addr;
+            }
+        } else {
+            string name; ser << name;
+            DAS_ASSERTF(name == f->name, "expected to serialize in the same order");
+            uint64_t size = 0; ser << size;
+            f->useGlobalVariables.reserve(size);
+            for ( uint64_t i = 0; i < size; i++ ) {
+                void* addr; ser << addr;
+                auto fun = ser.smartVariableMap.at((uint64_t) addr);
+                f->useGlobalVariables.emplace(fun.get());
+            }
+        }
+    }
+
     void Module::serialize ( AstSerializer & ser ) {
         ser << name           << moduleFlags;
-        ser << aliasTypes     << handleTypes << structures << enumerations << globals;
+        ser << aliasTypes     << structures << enumerations << globals;
         ser << functions      << functionsByName;
         ser << generics       << genericsByName;
         ser << annotationData << requireModule;
         ser << ownFileInfo    << promotedAccess;
+
+        ser.tag("before");
+
+        for ( auto & f : functions.each() ) {
+            ser.tag("before");
+            serializeUseVariables(ser, f);
+            serializeUseFunctions(ser, f);
+        }
+
+        for ( auto & g : globals.each() ) {
+            serializeUseVariables(ser, g);
+            serializeUseFunctions(ser, g);
+        }
 
         ser.patch();
 
@@ -1291,7 +1510,6 @@ namespace das {
         *this << get<1>(value) << get<2>(value);
         return *this;
     }
-
 
     void Program::serialize ( AstSerializer & ser ) {
         ser << thisNamespace << thisModuleName;

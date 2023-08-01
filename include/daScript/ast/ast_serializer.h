@@ -20,13 +20,7 @@ namespace das {
         size_t              readOffset = 0;
         vector<uint8_t>     buffer;
     // pointers
-        das_hash_map<void*, Module*>            moduleMap;
-        das_hash_map<void*, Variable*>          variableMap;
-        das_hash_map<void*, Structure*>         structureMap;
-        das_hash_map<void*, CallMacro*>         callMacroMap;
-        das_hash_map<void*, Enumeration*>       enumerationMap;
-        das_hash_map<void*, TypeAnnotation*>    typeAnnotationMap;
-        das_hash_map<void*, TypeInfoMacro*>     typeInfoMacroMap;
+        das_hash_map<uint64_t, ExprBlock*>          exprBlockMap;
     // smart pointers
         das_hash_map<uint64_t, MakeFieldDeclPtr>    smartMakeFieldDeclMap;
         das_hash_map<uint64_t, EnumerationPtr>      smartEnumerationMap;
@@ -35,9 +29,11 @@ namespace das {
         das_hash_map<uint64_t, FunctionPtr>         smartFunctionMap;
         das_hash_map<uint64_t, MakeStructPtr>       smartMakeStructMap;
     // refs
-        vector<pair<string, Module **>>             moduleRefs;
+        vector<pair<ExprBlock**,uint64_t>>          blockRefs;
         vector<pair<Function **,uint64_t>>          functionRefs;
-        vector<pair<ExprBlock **,uint64_t>>         blockRefs;
+        vector<pair<Variable **,uint64_t>>          variableRefs;
+        vector<pair<Structure **,uint64_t>>         structureRefs;
+        vector<pair<Enumeration **,uint64_t>>       enumerationRefs;
         void tag ( const char * name );
         void read  ( void * data, size_t size );
         void write ( const void * data, size_t size );
@@ -94,8 +90,6 @@ namespace das {
    // Top-level
         AstSerializer & operator << ( Module & module );
 
-        template <typename T>
-        AstSerializer & serializePointer( T * & obj, das_hash_map<void *, T *> & objMap );
         template<typename T>
         void serializeSmartPtr( smart_ptr<T> & obj, das_hash_map<uint64_t, smart_ptr<T>> & objMap );
 
@@ -175,27 +169,28 @@ namespace das {
             return *this;
         }
 
-        template<typename TT>
-        AstSerializer & operator << ( das_set<TT> & value ) {
-            tag("DasSet");
-            if ( writing ) {
-                uint64_t size = value.size();
-                *this << size;
-                for ( auto & item : value ) {
-                    *this << item;
-                }
-                return *this;
-            }
-            uint64_t size = 0; *this << size;
-            das_set<TT> deser;
-            deser.reserve(size);
-            for ( uint64_t i = 0; i < size; i++ ) {
-                TT v; *this << v;
-                deser.emplace(std::move(v));
-            }
-            value = std::move(deser);
-            return *this;
-        }
+        // template<typename TT>
+        // AstSerializer & operator << ( das_set<TT> & value ) {
+        //     tag("DasSet");
+        //     if ( writing ) {
+        //         uint64_t size = value.size();
+        //         *this << size;
+        //         for ( auto & item : value ) {
+        //             *this << item;
+        //         }
+        //         return *this;
+        //     }
+        //     uint64_t size = 0; *this << size;
+        //     das_set<TT> deser;
+        //     deser.reserve(size);
+        //     for ( uint64_t i = 0; i < size; i++ ) {
+        //         TT v; *this << v;
+        //         patch(); // TT can be a pointer or contain pointers
+        //         deser.emplace(std::move(v));
+        //     }
+        //     value = std::move(deser);
+        //     return *this;
+        // }
 
         template <typename EnumType>
         void serialize_enum ( EnumType & baseType ) {
