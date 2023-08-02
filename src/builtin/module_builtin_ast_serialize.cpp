@@ -1335,9 +1335,9 @@ namespace das {
     }
 
     void serializeUseFunctions ( AstSerializer & ser, const FunctionPtr & f ) {
+        ser.tag("serializeUseFunctions");
         if ( ser.writing ) {
             string name = f->name; ser << name;
-            uint64_t size = 0; ser << size;
             uint64_t sz = f->useFunctions.size();
             ser << sz;
             for ( auto & usedFun : f->useFunctions ) {
@@ -1358,9 +1358,9 @@ namespace das {
     }
 
     void serializeUseFunctions ( AstSerializer & ser, const VariablePtr & f ) {
+        ser.tag("serializeUseFunctions");
         if ( ser.writing ) {
             string name = f->name; ser << name;
-            uint64_t size = 0; ser << size;
             uint64_t sz = f->useFunctions.size();
             ser << sz;
             for ( auto & usedFun : f->useFunctions ) {
@@ -1396,7 +1396,7 @@ namespace das {
             uint64_t size = 0; ser << size;
             f->useGlobalVariables.reserve(size);
             for ( uint64_t i = 0; i < size; i++ ) {
-                void* addr; ser << addr;
+                void * addr; ser << addr;
                 auto fun = ser.smartVariableMap.at((uint64_t) addr);
                 f->useGlobalVariables.emplace(fun.get());
             }
