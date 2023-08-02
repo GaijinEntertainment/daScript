@@ -17,9 +17,56 @@ def sleep_and_log_status ( var status:LockBox?; delay:uint )
         else
             print("status = null\n")
 
-
 [export]
 def main
+    with_audio_system <|
+        print("testing stream status channel\n")
+        var sin1 <- [{for x in range(MA_SAMPLE_RATE); sin(2.*PI*440.*float(x)/float(48000))}]
+        let sid_pcm = play_sound_from_pcm_stream(MA_SAMPLE_RATE,1)
+        with_channel <| $ ( status_channel )
+            sid_pcm |> set_status_update(status_channel)
+            sid_pcm |> set_volume(0.25)
+            sleep(500u)
+            status_channel |> gather <| $(cmd : AudioChannelStatus#)
+                print("status: {cmd}\n")
+            print("play sin-440\n")
+            sid_pcm |> append_to_pcm(sin1)
+            sleep(500u)
+            status_channel |> gather <| $(cmd : AudioChannelStatus#)
+                print("status: {cmd}\n")
+            print("gen and append sin-880\n")
+            var sin2 <- [{for x in range(MA_SAMPLE_RATE); sin(2.*PI*880.*float(x)/float(48000))}]
+            sid_pcm |> append_to_pcm(sin2)
+            sleep(1400u)
+            status_channel |> gather <| $(cmd : AudioChannelStatus#)
+                print("status: {cmd}\n")
+            print("now stopping\n")
+            sid_pcm |> stop(0.3)
+            sleep(400u)
+            status_channel |> gather <| $(cmd : AudioChannelStatus#)
+                print("status: {cmd}\n")
+        print("and done\n")
+
+    with_audio_system <|
+        print("setting 3D position\n")
+        set_head_position(float3(0,0,0),float3(0,-1,0))
+        print("play sin-440 looped\n")
+        var sin1 <- [{for x in range(MA_SAMPLE_RATE); sin(2.*PI*440.*float(x)/float(48000))}]
+        let sid_pcm = play_3d_sound_loop_from_pcm(float3(0),100.0,MA_SAMPLE_RATE,1,sin1)
+        sid_pcm |> set_volume(0.25)
+        print("left\n")
+        sid_pcm |> set_position(float3(-1,0,0))
+        sleep(1500u)
+        print("right\n")
+        sid_pcm |> set_position(float3(1,0,0))
+        sleep(1500u)
+        print("circling\n")
+        for t in range(360)
+            let O = 2.*PI*float(t*2)/float(360)
+            let pos = float3(sin(O),cos(O),0.)
+            sid_pcm |> set_position(pos)
+            sleep(10u)
+
     with_audio_system <|
         print("testing stream\n")
         var sin1 <- [{for x in range(MA_SAMPLE_RATE); sin(2.*PI*440.*float(x)/float(48000))}]
