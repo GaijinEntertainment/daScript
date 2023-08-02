@@ -20,7 +20,6 @@ def sleep_and_log_status ( var status:LockBox?; delay:uint )
 
 [export]
 def main
-
     with_audio_system <|
         print("testing stream\n")
         var sin1 <- [{for x in range(MA_SAMPLE_RATE); sin(2.*PI*440.*float(x)/float(48000))}]

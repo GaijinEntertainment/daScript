@@ -24,6 +24,8 @@ let MA_LIMITER_RELEASE_TIME = 0.100
 
 typedef SID = uint64
 
+let public INVALID_SID : SID = 0ul
+
 enum public AudioChannelState
     stopped
     stopping
@@ -41,13 +43,13 @@ class AudioSource
     channels : int = 1              // 1 or 2
     def ready : bool
         return true
-    def abstract get_samples ( nsamples:int ) : array<float>
-    def abstract append ( var data : array<float> ) : bool
-    def update_status ( var status:AudioChannelStatus )
+    def abstract get_samples(nframes : int) : array<float>
+    def abstract append(var data : array<float>) : bool
+    def update_status(var status : AudioChannelStatus)
         status.stream_que_length = 0
 
 class AudioChannel
-    sid    : SID = 0ul
+    sid    : SID = INVALID_SID
     paused : bool = false
     stop   : bool = false
     pitch  : float = 1.
@@ -61,7 +63,7 @@ class AudioChannel
     radius : float = 1.
     is3D : bool = false
     [[do_not_delete]] status : LockBox?
-    def AudioChannel ( src:AudioSource? )
+    def AudioChannel(src : AudioSource?)
         source = src
         // resampler
         var resampler_config <- ma_resampler_config_init(
@@ -83,7 +85,7 @@ class AudioChannel
         )
         ma_channel_converter_init(unsafe(addr(channel_converter_config)), unsafe(addr(channel_converter)))
         // volume mixer
-        ma_volume_mixer_init(unsafe(addr(volume_mixer)),1u)
+        ma_volume_mixer_init(unsafe(addr(volume_mixer)), 1u)
     def finalize
         unsafe
             delete source
@@ -96,29 +98,29 @@ class AudioChannel
     def report_eos
         if status != null
             status |> set <| [[AudioChannelStatus sid=sid, state=AudioChannelState stopped]]
-    def mix ( var data:array<float>#; channels,rate:int; dt:float ) : bool
+    def mix(var data : array<float>#; channels, rate : int; dt : float) : bool
         if paused || !source->ready()
             return true
-        if stop && volume_mixer.volume==0.
+        if stop && volume_mixer.volume == 0.
             return false
         let inputRate = uint(float(source.bitrate) * pitch)
         ma_resampler_set_rate(unsafe(addr(resampler)), inputRate, uint(rate))
-        var outputSamples = uint64(data|>length/channels)
-        var inputSamples = ma_resampler_get_required_input_frame_count(unsafe(addr(resampler)), outputSamples)
-        var samples <- source->get_samples(int(inputSamples))
-        if length(samples)==0
+        var outputFrames = uint64(data |> length / channels)
+        var inputFrames = ma_resampler_get_required_input_frame_count(unsafe(addr(resampler)), outputFrames)
+        var samples <- source->get_samples(int(inputFrames))
+        if length(samples) == 0
             return false    // reached end of stream
-        if length(samples) < int(inputSamples)
-            samples |> resize(int(inputSamples))
-        if inputSamples != outputSamples
+        if length(samples) < int(inputFrames) * channels
+            samples |> resize(int(inputFrames) * channels)
+        if inputFrames != outputFrames
             // resample
             var temp : array<float>
-            temp |> resize(int(outputSamples))
+            temp |> resize(int(outputFrames) * channels)
             ma_resampler_process_pcm_frames(unsafe(addr(resampler)),
                 unsafe(addr(samples[0])),
-                unsafe(addr(inputSamples)),
+                unsafe(addr(inputFrames)),
                 unsafe(addr(temp[0])),
-                unsafe(addr(outputSamples)))
+                unsafe(addr(outputFrames)))
             delete samples
             samples <- temp
         // convert channels
@@ -127,7 +129,7 @@ class AudioChannel
         ma_channel_converter_process_pcm_frames(unsafe(addr(channel_converter)),
             unsafe(addr(channel_data[0])),
             unsafe(addr(samples[0])),
-            outputSamples)
+            outputFrames)
         unsafe
             delete samples
         // apply volume envelope
@@ -136,10 +138,10 @@ class AudioChannel
             unsafe(addr(volume_mixer)),
             unsafe(addr(channel_data[0])),
             unsafe(addr(data[0])),
-            outputSamples)
+            outputFrames)
         delete channel_data
         // update position
-        playback_position += inputSamples
+        playback_position += inputFrames
         // update status
         if status != null
             var status_data : AudioChannelStatus
@@ -157,27 +159,27 @@ var g_mixer_total_samples = 0ul
 
 class AudioSourcePCM : AudioSource
     samples : array<float>
-    def AudioSourcePCM ( ch,rate:int; var smp:array<float> )
+    def AudioSourcePCM(ch, rate : int; var smp : array<float>)
         bitrate = rate
         channels = ch
         samples <- smp
-    def override append ( var data : array<float> ) : bool
+    def override append(var data : array<float>) : bool
         let ofs = length(samples)
         let nsmp = length(data)
-        samples |> resize(ofs+nsmp)
+        samples |> resize(ofs + nsmp)
         unsafe
-            memcpy ( unsafe(addr(samples[ofs])), unsafe(addr(data[0])), nsmp * 4 )
+            memcpy(unsafe(addr(samples[ofs])), unsafe(addr(data[0])), nsmp * 4)
         delete data
         return true
     def finalize
         delete samples
-    def override get_samples ( nsamples:int ) : array<float>
+    def override get_samples(nframes : int) : array<float>
         var data : array<float>
-        let nsmp = min(length(samples), nsamples * channels)
-        if nsmp!=0
+        let nsmp = min(length(samples), nframes * channels)
+        if nsmp != 0
             data |> resize(nsmp)
             unsafe
-                memcpy ( unsafe(addr(data[0])), unsafe(addr(samples[0])), nsmp * 4 )
+                memcpy(unsafe(addr(data[0])), unsafe(addr(samples[0])), nsmp * 4)
             samples |> erase(0, nsmp)
         return <- data
 
@@ -187,24 +189,24 @@ struct StreamChunk
 
 class AudioSourcePCMStream : AudioSource
     chunks : array<StreamChunk>
-    def AudioSourcePCMStream ( ch,rate:int )
+    def AudioSourcePCMStream(ch, rate : int)
         bitrate = rate
         channels = ch
-    def override append ( var data : array<float> ) : bool
-        chunks |> emplace([[StreamChunk samples<-data]])
+    def override append(var data : array<float>) : bool
+        chunks |> emplace([[StreamChunk samples <- data]])
         return true
     def finalize
         delete chunks
-    def override get_samples ( nsamples:int ) : array<float>
+    def override get_samples(nframes : int) : array<float>
         var data : array<float>
-        let nsmp = nsamples * channels
+        let nsmp = nframes * channels
         data |> resize(nsmp)
         var ofs = 0
-        while ofs < nsmp && length(chunks)!=0
+        while ofs < nsmp && length(chunks) != 0
             var ncopy = min(length(chunks[0].samples), nsmp - ofs)
-            if ncopy!=0
+            if ncopy != 0
                 unsafe
-                    memcpy ( unsafe(addr(data[ofs])), unsafe(addr(chunks[0].samples[0])), ncopy * 4 )
+                    memcpy(unsafe(addr(data[ofs])), unsafe(addr(chunks[0].samples[0])), ncopy * 4)
                 chunks[0].samples |> erase(0, ncopy)
                 if chunks[0].samples |> empty
                     delete chunks[0].samples
@@ -213,31 +215,31 @@ class AudioSourcePCMStream : AudioSource
             else
                 break
         return <- data
-    def override update_status ( var status:AudioChannelStatus )
+    def override update_status(var status : AudioChannelStatus)
         status.stream_que_length = length(chunks)
 
 class AudioSourcePCMLoop : AudioSource
     samples : array<float>
     offset  : int
-    def AudioSourcePCMLoop ( ch,rate:int; var smp:array<float> )
+    def AudioSourcePCMLoop(ch, rate : int; var smp : array<float>)
         bitrate = rate
         channels = ch
         samples <- smp
         offset = 0
     def finalize
         delete samples
-    def override get_samples ( nsamples:int ) : array<float>
+    def override get_samples(nframes : int) : array<float>
         var data : array<float>
         let lsamples = length(samples)
-        let wsmp = nsamples * channels
+        let wsmp = nframes * channels
         data |> resize(wsmp)
         var dofs = 0
         while dofs < wsmp
             let lsmp = min(lsamples, offset + wsmp - dofs)
             let nsmp = lsmp - offset
-            if nsmp!=0
+            if nsmp != 0
                 unsafe
-                    memcpy ( unsafe(addr(data[dofs])), unsafe(addr(samples[offset])), nsmp * 4 )
+                    memcpy(unsafe(addr(data[dofs])), unsafe(addr(samples[offset])), nsmp * 4)
                 offset += nsmp
             else
                 offset = 0
@@ -249,13 +251,13 @@ class AudioSourceDecoder : AudioSource
     isReady : bool = false
     def AudioSourceDecoder
         pass
-    def initFromFile ( filename:string; rate,nChannels:int )
+    def initFromFile(filename : string; rate, nChannels : int)
         decoder = new ma_decoder
         var config <- ma_decoder_config_init(ma_format ma_format_f32, uint(channels), uint(rate))
         let result = ma_decoder_init_file(filename, unsafe(addr(config)), decoder)
         if result == ma_result MA_SUCCESS
             initFromDecoder(decoder, rate, nChannels)
-    def initFromDecoder ( dec:ma_decoder?; rate,nChannels:int )
+    def initFromDecoder(dec : ma_decoder?; rate, nChannels : int)
         bitrate = rate
         channels = nChannels
         decoder = dec
@@ -267,22 +269,22 @@ class AudioSourceDecoder : AudioSource
             delete decoder
     def override ready : bool
         return isReady
-    def override get_samples ( nsamples:int ) : array<float>
+    def override get_samples(nframes : int) : array<float>
         var samples : array<float>
-        samples |> resize(nsamples * channels)
-        let nframes = ma_decoder_read_pcm_frames(
+        samples |> resize(nframes * channels)
+        let rframes = ma_decoder_read_pcm_frames(
             decoder,
             unsafe(addr(samples[0])),
-            uint64(nsamples))
-        samples |> resize(int(nframes))
+            uint64(nframes))
+        samples |> resize(int(rframes) * channels)
         return <- samples
-    def override append ( var data : array<float> ) : bool
+    def override append(var data : array<float>) : bool
         return false
 
-def remove_channel ( srci:int )
+def remove_channel(srci : int)
     g_channels[srci]->report_eos()
     let sid = g_channels[srci].sid
-    if sid != 0ul
+    if sid != INVALID_SID
         g_sid_2_channel |> erase(sid)
     unsafe
         delete g_channels[srci]
@@ -302,41 +304,41 @@ def update_hrtf
             ma_volume_mixer_set_volume(unsafe(addr(ch.volume_mixer)), ch.volume * attn)
             // panning
             let nrxy = normalize(rxy)
-            ma_volume_mixer_set_pan(unsafe(addr(ch.volume_mixer)), nrxy.y )
+            ma_volume_mixer_set_pan(unsafe(addr(ch.volume_mixer)), nrxy.y)
 
 struct AudioCommandAddDecoder
-    sid:SID
-    [[do_not_delete]] decoder:ma_decoder?
-    rate:int
-    channels:int
+    sid : SID
+    [[do_not_delete]] decoder : ma_decoder?
+    rate : int
+    channels : int
 
 struct AudioCommandAddDecoder3D : AudioCommandAddDecoder
     position : float3
     radius : float
 
 struct AudioCommandAddPCM
-    sid:SID
-    samples:array<float>
-    rate:int
-    channels:int
-    loop:bool
+    sid : SID
+    samples : array<float>
+    rate : int
+    channels : int
+    loop : bool
 
 struct AudioCommandAddPCM3D : AudioCommandAddPCM
     position : float3
     radius : float
 
 struct AudioCommandAddPCMStream
-    sid:SID
-    rate:int
-    channels:int
-    loop:bool
+    sid : SID
+    rate : int
+    channels : int
+    loop : bool
 
 struct AudioCommandAddPCMStream3D : AudioCommandAddPCMStream
     position : float3
     radius : float
 
 struct AudioCommandStatus
-    sid:SID
+    sid : SID
     [[do_not_delete]] status : LockBox?
 
 variant AudioCommand
@@ -347,51 +349,52 @@ variant AudioCommand
     add_pcm_3d          : AudioCommandAddPCM3D
     add_pcm_stream      : AudioCommandAddPCMStream
     add_pcm_stream_3d   : AudioCommandAddPCMStream3D
-    append_pcm          : tuple<sid:SID; samples:array<float>>
-    pause               : tuple<sid:SID; paused:bool>
-    volume              : tuple<sid:SID; volume:float; time:float>
-    pan                 : tuple<sid:SID; pan:float>
-    stop                : tuple<sid:SID; time:float>
-    head_transform      : tuple<head_position:float3; head_direction:float3>
+    append_pcm          : tuple<sid : SID; samples : array<float>>
+    pause               : tuple<sid : SID; paused : bool>
+    volume              : tuple<sid : SID; volume : float; time : float>
+    pan                 : tuple<sid : SID; pan : float>
+    stop                : tuple<sid : SID; time : float>
+    head_transform      : tuple<head_position : float3; head_direction : float3>
     status              : AudioCommandStatus
 
 var g_command_channel : Channel?
 
 [pinvoke, export]
-def setup_command_processor ( ch:Channel? )
+def setup_command_processor(ch : Channel?)
     g_command_channel = ch
     g_command_channel |> add_ref
 
-def add_channel ( sid:SID; var channel:AudioChannel? )
+def add_channel(sid : SID; var channel : AudioChannel?)
     g_channels |> push(channel)
-    if sid != 0ul
+    if sid != INVALID_SID
         channel.sid = sid
         g_sid_2_channel[sid] = channel
 
-def add_channel_3d ( sid:SID; position:float3; radius:float; var channel:AudioChannel? )
+def add_channel_3d(sid : SID; position : float3; radius : float; var channel : AudioChannel?)
     channel.position3d = position
     channel.radius = radius
     channel.is3D = true
     add_channel(sid, channel)
 
 def command_processor
-    return if g_command_channel==null
+    return if g_command_channel == null
     var commands : array<AudioCommand>
-    g_command_channel |> gather <| $ ( cmd:AudioCommand# )
+    g_command_channel |> gather <| $(cmd : AudioCommand#)
         commands |> push_clone(cmd)
     for cmd in commands
         if cmd is shutdown
-            delete g_channels
+            unsafe
+                delete g_channels
             g_command_channel |> notify_and_release
         elif cmd is add_decoder
             assume dcmd = cmd as add_decoder
             var decoder  = new AudioSourceDecoder()
-            decoder->initFromDecoder(unsafe(reinterpret<ma_decoder?> dcmd.decoder),dcmd.rate,dcmd.channels)
+            decoder->initFromDecoder(unsafe(reinterpret<ma_decoder?> dcmd.decoder), dcmd.rate, dcmd.channels)
             add_channel(dcmd.sid) <| new AudioChannel(decoder)
         elif cmd is add_decoder_3d
             assume dcmd = cmd as add_decoder_3d
             var decoder  = new AudioSourceDecoder()
-            decoder->initFromDecoder(unsafe(reinterpret<ma_decoder?> dcmd.decoder),dcmd.rate,dcmd.channels)
+            decoder->initFromDecoder(unsafe(reinterpret<ma_decoder?> dcmd.decoder), dcmd.rate, dcmd.channels)
             add_channel_3d(dcmd.sid, dcmd.position, dcmd.radius) <| new AudioChannel(decoder)
         elif cmd is add_pcm_stream
             assume pcmd = cmd as add_pcm_stream
@@ -416,18 +419,18 @@ def command_processor
                 decoder = new AudioSourcePCMLoop(pcmd.channels, pcmd.rate, pcmd.samples)
             else
                 decoder = new AudioSourcePCM(pcmd.channels, pcmd.rate, pcmd.samples)
-            add_channel_3d(pcmd.sid,pcmd.position, pcmd.radius) <| new AudioChannel(decoder)
+            add_channel_3d(pcmd.sid, pcmd.position, pcmd.radius) <| new AudioChannel(decoder)
         elif cmd is append_pcm
             assume pcmd = cmd as append_pcm
-            g_sid_2_channel |> get(pcmd.sid) <| $ ( var ch:AudioChannel?& )
+            g_sid_2_channel |> get(pcmd.sid) <| $(var ch : AudioChannel?&)
                 ch.source->append(pcmd.samples)
         elif cmd is pause
             var pcmd = cmd as pause
-            g_sid_2_channel |> get(pcmd.sid) <| $ ( var ch:AudioChannel?& )
+            g_sid_2_channel |> get(pcmd.sid) <| $(var ch : AudioChannel?&)
                 ch.paused = pcmd.paused
         elif cmd is volume
             var vcmd = cmd as volume
-            g_sid_2_channel |> get(vcmd.sid) <| $ ( var ch:AudioChannel?& )
+            g_sid_2_channel |> get(vcmd.sid) <| $(var ch : AudioChannel?&)
                 ch.volume = vcmd.volume
                 if vcmd.time > 0.
                     let nFrames = uint64(vcmd.time * float(MA_SAMPLE_RATE))
@@ -436,11 +439,11 @@ def command_processor
                     ma_volume_mixer_set_volume(unsafe(addr(ch.volume_mixer)), vcmd.volume)
         elif cmd is pan
             var vcmd = cmd as pan
-            g_sid_2_channel |> get(vcmd.sid) <| $ ( var ch:AudioChannel?& )
+            g_sid_2_channel |> get(vcmd.sid) <| $(var ch : AudioChannel?&)
                 ma_volume_mixer_set_pan(unsafe(addr(ch.volume_mixer)), vcmd.pan)
         elif cmd is stop
             var scmd = cmd as stop
-            g_sid_2_channel |> get(scmd.sid) <| $ ( var ch:AudioChannel?& )
+            g_sid_2_channel |> get(scmd.sid) <| $(var ch : AudioChannel?&)
                 if scmd.time > 0.
                     let nFrames = uint64(scmd.time * float(MA_SAMPLE_RATE))
                     ma_volume_mixer_set_volume_over_time(unsafe(addr(ch.volume_mixer)), 0., nFrames)
@@ -454,7 +457,7 @@ def command_processor
             g_head_direction = normalize(hcmd.head_direction)
         elif cmd is status
             assume scmd = cmd as status
-            let found = g_sid_2_channel |> get(scmd.sid) <| $ ( var ch:AudioChannel?& )
+            let found = g_sid_2_channel |> get(scmd.sid) <| $(var ch : AudioChannel?&)
                 if ch.status != null
                     ch.status |> notify_and_release
                 ch.status = scmd.status
@@ -469,23 +472,23 @@ var g_limiter : ma_limiter
 var g_mix_buffer : array<float>
 
 [export]
-def mixer ( var data:array<float>#; channels,rate:int; dt:float )
+def mixer(var data : array<float>#; channels, rate : int; dt : float)
     let t0 = ref_time_ticks()
     command_processor()
     update_hrtf()
-    let output_samples = length(data)/channels
-    let input_samples = int(ma_limiter_get_required_input_frame_count(unsafe(addr(g_limiter)),uint64(output_samples)))
-    let current_samples = length(g_mix_buffer)/channels
+    let output_samples = length(data) / channels
+    let input_samples = int(ma_limiter_get_required_input_frame_count(unsafe(addr(g_limiter)), uint64(output_samples)))
+    let current_samples = length(g_mix_buffer) / channels
     let missing_samples = input_samples - current_samples
     if missing_samples < 0
         panic("{input_samples} - {current_samples}, need {output_samples}; mixer: missing_samples < 0")
-    g_mix_buffer |> resize(input_samples*channels)
-    array_view(g_mix_buffer, current_samples * channels, missing_samples * channels) <| $ ( mix_data )
+    g_mix_buffer |> resize(input_samples * channels)
+    array_view(g_mix_buffer, current_samples * channels, missing_samples * channels) <| $(mix_data)
         let srct = g_channels |> length
         for i in range(srct)
             let srci = srct - i - 1
             assume ch = g_channels[srci]
-            if !ch->mix(mix_data,channels,rate,dt)
+            if !ch->mix(mix_data, channels, rate, dt)
                 remove_channel(srci)
     ma_limiter_process_pcm_frames(unsafe(addr(g_limiter)),
         unsafe(addr(g_mix_buffer[0])),
@@ -493,7 +496,7 @@ def mixer ( var data:array<float>#; channels,rate:int; dt:float )
         uint64(output_samples))
     g_mix_buffer |> erase(0, output_samples * channels)
     g_mixer_total_time += double(get_time_usec(t0)) / 1000.lf
-    g_mixer_total_samples += uint64(length(data)/channels)
+    g_mixer_total_samples += uint64(length(data) / channels)
 
 [init]
 def initialize_mixer
@@ -516,17 +519,26 @@ def finalize_mixer
         let UTILIZATION = int(SPEED / SPEED_OF_LIGHT * 1000.lf)
         to_log(LOG_INFO, "mixer {UTILIZATION/10}.{UTILIZATION%10}% utilization\n")
 
-def public with_audio_system ( blk:block )
-    sound_initalize(@@mixer,MA_SAMPLE_RATE,MA_CHANNELS,this_context())
-    with_channel(1) <| $ ( channel )
-        g_command_channel = channel
-        unsafe
-            invoke_in_context(mixer_context(),"setup_command_processor",channel)
-        invoke(blk)
-        channel |> push_clone <| [[AudioCommand shutdown=true]]
-        g_command_channel = null
-        channel |> join
+def public audio_system_create() : Channel?
+    sound_initalize(@@mixer, MA_SAMPLE_RATE, MA_CHANNELS, this_context())
+    var channel = channel_create()
+    g_command_channel = channel
+    unsafe
+        invoke_in_context(mixer_context(), "setup_command_processor", channel)
+    return channel
+
+def public audio_system_finalize(var channel : Channel?&)
+    channel |> push_clone <| [[AudioCommand shutdown=true]]
+    g_command_channel = null
     sound_finalize()
+    channel |> join
+    channel |> release
+    channel = null
+
+def public with_audio_system(blk : block)
+    var channel = audio_system_create()
+    invoke(blk)
+    audio_system_finalize(channel)
 
 var private g_sound_sid = 1ul
 
@@ -534,7 +546,7 @@ def public generate_sound_sid
     //! generate unique ID for sound
     return g_sound_sid ++
 
-def make_decoder ( filename:string; rate,channels:int )
+def make_decoder(filename : string; rate, channels : int)
     var decoder = new ma_decoder
     var config <- ma_decoder_config_init(ma_format ma_format_f32, uint(channels), uint(rate))
     let result = ma_decoder_init_file(filename, unsafe(addr(config)), decoder)
@@ -542,96 +554,96 @@ def make_decoder ( filename:string; rate,channels:int )
         return null
     return decoder
 
-def public play_sound_from_file ( filename:string; rate,channels:int )
+def public play_sound_from_file(filename : string; rate, channels : int)
     //! plays sound from file
     //! note - this function is blocking for the duration of the decoder creation
     var decoder = make_decoder(filename, rate, channels)
     if decoder == null
-        return 0ul
+        return INVALID_SID
     let sid = generate_sound_sid()
     g_command_channel |> push_clone <| [[AudioCommand add_decoder=[[AudioCommandAddDecoder sid=sid, decoder=decoder, rate=rate, channels=channels]]]]
     return sid
 
-def public play_3d_sound_from_file ( filename:string; position:float3; radius:float; rate,channels:int )
+def public play_3d_sound_from_file(filename : string; position : float3; radius : float; rate, channels : int)
     //! plays 3D sound from file
     //! note - this function is blocking for the duration of the decoder creation
     var decoder = make_decoder(filename, rate, channels)
     if decoder == null
-        return 0ul
+        return INVALID_SID
     let sid = generate_sound_sid()
     g_command_channel |> push_clone <| [[AudioCommand add_decoder_3d=
         [[AudioCommandAddDecoder3D sid=sid, decoder=decoder, rate=rate, channels=channels, position=position, radius=radius]]]]
     return sid
 
-def public play_sound_from_pcm_stream ( rate,channels:int; sid:SID = generate_sound_sid() )
+def public play_sound_from_pcm_stream(rate, channels : int; sid : SID = generate_sound_sid())
     //! plays sound from PCM data
-    g_command_channel |> push_clone <| [[AudioCommand add_pcm_stream<-[[AudioCommandAddPCMStream sid=sid, rate=rate, channels=channels]]]]
+    g_command_channel |> push_clone <| [[AudioCommand add_pcm_stream <- [[AudioCommandAddPCMStream sid=sid, rate=rate, channels=channels]]]]
     return sid
 
-def public play_3d_sound_from_pcm_stream ( position:float3; radius:float; rate,channels:int )
+def public play_3d_sound_from_pcm_stream(position : float3; radius : float; rate, channels : int)
     //! plays sound from PCM data
     var sid = generate_sound_sid()
-    g_command_channel |> push_clone <| [[AudioCommand add_pcm_stream_3d<-
+    g_command_channel |> push_clone <| [[AudioCommand add_pcm_stream_3d <-
         [[AudioCommandAddPCMStream3D sid=sid, rate=rate, channels=channels, position=position, radius=radius]]]]
     return sid
 
-def public play_sound_from_pcm ( rate,channels:int; var samples:array<float> )
+def public play_sound_from_pcm(rate, channels : int; var samples : array<float>)
     //! plays sound from PCM data
     var sid = generate_sound_sid()
-    g_command_channel |> push_clone <| [[AudioCommand add_pcm<-[[AudioCommandAddPCM sid=sid, rate=rate, channels=channels, samples<-samples, loop=false]]]]
+    g_command_channel |> push_clone <| [[AudioCommand add_pcm <- [[AudioCommandAddPCM sid=sid, rate=rate, channels=channels, samples <- samples, loop=false]]]]
     return sid
 
-def public play_sound_loop_from_pcm ( rate,channels:int; var samples:array<float> )
+def public play_sound_loop_from_pcm(rate, channels : int; var samples : array<float>)
     //! plays looping sound from PCM data
     var sid = generate_sound_sid()
-    g_command_channel |> push_clone <| [[AudioCommand add_pcm<-[[AudioCommandAddPCM sid=sid, rate=rate, channels=channels, samples<-samples, loop=true]]]]
+    g_command_channel |> push_clone <| [[AudioCommand add_pcm <- [[AudioCommandAddPCM sid=sid, rate=rate, channels=channels, samples <- samples, loop=true]]]]
     return sid
 
-def public play_3d_sound_from_pcm ( position:float3; radius:float; rate,channels:int; var samples:array<float> )
+def public play_3d_sound_from_pcm(position : float3; radius : float; rate, channels : int; var samples : array<float>)
     //! plays 3D sound from PCM data
     var sid = generate_sound_sid()
-    g_command_channel |> push_clone <| [[AudioCommand add_pcm_3d<-
-        [[AudioCommandAddPCM3D sid=sid, rate=rate, channels=channels, samples<-samples, loop=false, position=position, radius=radius]]]]
+    g_command_channel |> push_clone <| [[AudioCommand add_pcm_3d <-
+        [[AudioCommandAddPCM3D sid=sid, rate=rate, channels=channels, samples <- samples, loop=false, position=position, radius=radius]]]]
     return sid
 
-def public play_3d_sound_loop_from_pcm ( position:float3; radius:float; rate,channels:int; var samples:array<float> )
+def public play_3d_sound_loop_from_pcm(position : float3; radius : float; rate, channels : int; var samples : array<float>)
     //! plays 3D looping sound from PCM data
     var sid = generate_sound_sid()
-    g_command_channel |> push_clone <| [[AudioCommand add_pcm_3d<-
-        [[AudioCommandAddPCM3D sid=sid, rate=rate, channels=channels, samples<-samples, loop=true, position=position, radius=radius]]]]
+    g_command_channel |> push_clone <| [[AudioCommand add_pcm_3d <-
+        [[AudioCommandAddPCM3D sid=sid, rate=rate, channels=channels, samples <- samples, loop=true, position=position, radius=radius]]]]
     return sid
 
-def public append_to_pcm ( sid:SID; var samples:array<float> )
+def public append_to_pcm(sid : SID; var samples : array<float>)
     //! append samples to PCM stream
-    g_command_channel |> push_clone <| [[AudioCommand append_pcm<-[[auto sid, samples]]]]
+    g_command_channel |> push_clone <| [[AudioCommand append_pcm <- [[auto sid, samples]]]]
 
-def public set_pause ( sid:SID; paused:bool )
+def public set_pause(sid : SID; paused : bool)
     //! pause or unpause sound
     g_command_channel |> push_clone <| [[AudioCommand pause=[[auto sid, paused]]]]
 
-def public set_volume ( sid:SID; volume:float; time:float = 0.0f )
+def public set_volume(sid : SID; volume : float; time : float = 0.0f)
     //! set volume of sound
     g_command_channel |> push_clone <| [[AudioCommand volume=[[auto sid, volume, time]]]]
 
-def public set_pan ( sid:SID; pan:float )
+def public set_pan(sid : SID; pan : float)
     //! set volume of sound
     g_command_channel |> push_clone <| [[AudioCommand pan=[[auto sid, pan]]]]
 
-def public stop ( sid:SID; time:float = 0.0f )
+def public stop(sid : SID; time : float = 0.0f)
     //! stop sound
     g_command_channel |> push_clone <| [[AudioCommand stop=[[auto sid, time]]]]
 
-def public set_head_position ( pos,dir:float3 )
+def public set_head_position(pos, dir : float3)
     //! set head position for 3D sound
-    g_command_channel |> push_clone <| [[AudioCommand pos,dir]]
+    g_command_channel |> push_clone <| [[AudioCommand pos, dir]]
 
-def public set_status_update ( sid:SID; var status:LockBox? )
+def public set_status_update(sid : SID; var status : LockBox?)
     //! set status for sound
     status |> add_ref
     status |> append(1)
     g_command_channel |> push_clone <| [[AudioCommand status=[[AudioCommandStatus sid=sid, status=status]]]]
 
-def public decode_audio ( data:array<uint8> | #; var channels,rate:int& ) : array<float>
+def public decode_audio(data : array<uint8> |#; var channels, rate : int&) : array<float>
     var decoder = new ma_decoder
     var config <- ma_decoder_config_init(ma_format ma_format_f32, 0u, 0u)
     let result = ma_decoder_init_memory(unsafe(addr(data[0])), uint64(length(data)), unsafe(addr(config)), decoder)
@@ -639,20 +651,20 @@ def public decode_audio ( data:array<uint8> | #; var channels,rate:int& ) : arra
     rate = int(decoder.outputSampleRate)
     let nframes = ma_decoder_get_length_in_pcm_frames(decoder)
     var samples : array<float>
-    samples |> resize(int(nframes))
+    samples |> resize(int(nframes) * channels)
     let rframes = ma_decoder_read_pcm_frames(
         decoder,
         unsafe(addr(samples[0])),
         nframes)
-    samples |> resize(int(rframes))
+    samples |> resize(int(rframes) * channels)
     ma_decoder_uninit(decoder)
     return <- samples
 
-def public get_audio_command_channel : void?
+def public get_audio_command_channel : void ?
     return g_command_channel
 
 [unsafe_operation]
-def public set_audio_thread_command_channel ( ch:void? )
+def public set_audio_thread_command_channel(ch : void?)
     g_command_channel = unsafe(reinterpret<Channel?> ch)
 
 
