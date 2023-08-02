@@ -362,6 +362,7 @@ namespace das {
                 }
             }
             if ( !program->failed() ) {
+                program->normalizeOptionTypes();
                 if (!program->failed())
                     program->lint(logs, libGroup);
                 if ( policies.macro_context_collect ) libGroup.collectMacroContexts();
