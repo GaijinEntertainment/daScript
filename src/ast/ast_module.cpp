@@ -7,6 +7,24 @@
 
 namespace das {
 
+    struct SubstituteModuleRefs : Visitor {
+        SubstituteModuleRefs ( Module * from, Module * to ) : to(to), from(from) {}
+        virtual void preVisit ( TypeDecl * td ) {
+            if ( td->module == from ) td->module = to;
+        }
+        Module * const from;
+        Module * const to;
+    };
+
+    //! Builtin modules are sometimes compiled from both native code and das code.
+    //! In that case das code is parsed via parseDaScript function producing ProgramPtr
+    //! It internally references itself, whereas it should actually reference the builtin module
+    //! This visitor walks the program and substitutes references from parsed to builtin module.
+    void SubstituteBuiltinModuleRefs ( ProgramPtr program, Module * from, Module * to ) {
+        SubstituteModuleRefs subs ( from, to );
+        program->visit(subs,/*visitGenerics =*/true);
+    }
+
     DAS_THREAD_LOCAL unsigned ModuleKarma = 0;
 
     bool splitTypeName ( const string & name, string & moduleName, string & funcName ) {
@@ -540,6 +558,7 @@ namespace das {
                 DAS_ASSERTF(options.find(op.first)==options.end(),"duplicate option %s", op.first.c_str());
                 options[op.first] = op.second;
             }
+            SubstituteBuiltinModuleRefs( program, program->thisModule.get(), this );
             return true;
         } else {
             DAS_FATAL_ERROR("builtin module did not parse %s\n", modName.c_str());
