@@ -33,7 +33,7 @@ namespace das {
 
         virtual void preVisit ( TypeDecl * td ) {
             if ( !td ) return;
-            if ( !td->baseType == option ) return;
+            if ( td->baseType != option ) return;
 
             for ( size_t i=0, is=td->argTypes.size(); i!=is; ++i ) {
                 auto & TT = td->argTypes[i];
