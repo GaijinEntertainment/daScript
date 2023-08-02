@@ -132,6 +132,35 @@ namespace das
         return astChanged;
     }
 
+    struct NormalizeOptionTypes : Visitor {
+        static void run ( ProgramPtr program ) {
+            NormalizeOptionTypes vis;
+            program->visit(vis,/*visitGenerics =*/true);
+        }
+
+        virtual void preVisit ( TypeDecl * td ) {
+            if ( !td ) return;
+            if ( td->baseType != option ) return;
+
+            for ( size_t i=0, is=td->argTypes.size(); i!=is; ++i ) {
+                auto & TT = td->argTypes[i];
+                TT->ref             = TT->ref            || td->ref;
+                TT->constant        = TT->constant       || td->constant;
+                TT->temporary       = TT->temporary      || td->temporary;
+                TT->removeConstant  = TT->removeConstant || td->removeConstant;
+                TT->removeDim       = TT->removeDim      || td->removeDim;
+                TT->removeRef       = TT->removeRef      || td->removeRef;
+                TT->explicitConst   = TT->explicitConst  || td->explicitConst;
+                TT->explicitRef     = TT->explicitRef    || td->explicitRef;
+                TT->implicit        = TT->implicit       || td->implicit;
+            }
+        }
+    };
+
+    void Program::normalizeOptionTypes () {
+        NormalizeOptionTypes::run(this);
+    }
+
     void Program::fixupAnnotations() {
         thisModule->functions.foreach([&](auto fn){
             for ( auto & ann : fn->annotations ) {

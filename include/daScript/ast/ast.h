@@ -1396,6 +1396,7 @@ namespace das
         void finalizeAnnotations();
         bool patchAnnotations();
         void fixupAnnotations();
+        void normalizeOptionTypes ();
         void inferTypes(TextWriter & logs, ModuleGroup & libGroup);
         void inferTypesDirty(TextWriter & logs, bool verbose);
         void lint (TextWriter & logs, ModuleGroup & libGroup );
