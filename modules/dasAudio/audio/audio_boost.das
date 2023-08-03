@@ -62,7 +62,8 @@ class AudioChannel
     position3d : float3
     radius : float = 1.
     is3D : bool = false
-    [[do_not_delete]] status : LockBox?
+    [[do_not_delete]] status : LockBox? = null
+    [[do_not_delete]] status_channel : Channel? = null
     def AudioChannel(src : AudioSource?)
         source = src
         // resampler
@@ -95,6 +96,9 @@ class AudioChannel
         if status != null
             status |> notify_and_release
             status = null
+        if status_channel != null
+            status_channel |> notify_and_release
+            status_channel = null
     def report_eos
         if status != null
             status |> set <| [[AudioChannelStatus sid=sid, state=AudioChannelState stopped]]
@@ -143,13 +147,16 @@ class AudioChannel
         // update position
         playback_position += inputFrames
         // update status
-        if status != null
+        if status != null || status_channel != null
             var status_data : AudioChannelStatus
             status_data.sid = sid
             status_data.state = paused ? AudioChannelState paused : (stop ? AudioChannelState stopping : AudioChannelState playing)
             status_data.playback_position = playback_position
             source->update_status(status_data)
-            status |> set(status_data)
+            if status != null
+                status |> set(status_data)
+            if status_channel != null
+                status_channel |> push_clone(status_data)
         return true
 
 var g_channels : array<AudioChannel?>
@@ -291,7 +298,7 @@ def remove_channel(srci : int)
     g_channels |> erase(srci)
 
 var g_head_position : float3
-var g_head_direction : float3
+var g_head_direction : float3 = float3(0., 1., 0.)
 
 def update_hrtf
     for ch in g_channels
@@ -340,6 +347,7 @@ struct AudioCommandAddPCMStream3D : AudioCommandAddPCMStream
 struct AudioCommandStatus
     sid : SID
     [[do_not_delete]] status : LockBox?
+    [[do_not_delete]] status_channel : Channel?
 
 variant AudioCommand
     shutdown            : bool
@@ -355,6 +363,7 @@ variant AudioCommand
     pan                 : tuple<sid : SID; pan : float>
     stop                : tuple<sid : SID; time : float>
     head_transform      : tuple<head_position : float3; head_direction : float3>
+    sound_position      : tuple<sid : SID; position : float3>
     status              : AudioCommandStatus
 
 var g_command_channel : Channel?
@@ -374,6 +383,7 @@ def add_channel_3d(sid : SID; position : float3; radius : float; var channel : A
     channel.position3d = position
     channel.radius = radius
     channel.is3D = true
+    print("make it 3D\n")
     add_channel(sid, channel)
 
 def command_processor
@@ -455,15 +465,26 @@ def command_processor
             assume hcmd = cmd as head_transform
             g_head_position = hcmd.head_position
             g_head_direction = normalize(hcmd.head_direction)
+        elif cmd is sound_position
+            assume scmd = cmd as sound_position
+            g_sid_2_channel |> get(scmd.sid) <| $(var ch : AudioChannel?&)
+                ch.position3d = scmd.position
         elif cmd is status
             assume scmd = cmd as status
             let found = g_sid_2_channel |> get(scmd.sid) <| $(var ch : AudioChannel?&)
                 if ch.status != null
                     ch.status |> notify_and_release
                 ch.status = scmd.status
+                if ch.status_channel != null
+                    ch.status_channel |> notify_and_release
+                ch.status_channel = scmd.status_channel
             if !found
-                scmd.status |> set <| [[AudioChannelStatus sid=scmd.sid, state=AudioChannelState stopped]]
-                scmd.status |> notify_and_release
+                if scmd.status != null
+                    scmd.status |> set <| [[AudioChannelStatus sid=scmd.sid, state=AudioChannelState stopped]]
+                    scmd.status |> notify_and_release
+                if scmd.status_channel != null
+                    scmd.status_channel |> push_clone <| [[AudioChannelStatus sid=scmd.sid, state=AudioChannelState stopped]]
+                    scmd.status_channel |> notify_and_release
         else
             panic("unknown audio command {cmd}")
     delete commands
@@ -637,11 +658,20 @@ def public set_head_position(pos, dir : float3)
     //! set head position for 3D sound
     g_command_channel |> push_clone <| [[AudioCommand pos, dir]]
 
+def public set_position(sid : SID; pos : float3)
+    //! set sound position for 3D sound
+    g_command_channel |> push_clone <| [[AudioCommand sid, pos]]
+
 def public set_status_update(sid : SID; var status : LockBox?)
     //! set status for sound
     status |> add_ref
     status |> append(1)
-    g_command_channel |> push_clone <| [[AudioCommand status=[[AudioCommandStatus sid=sid, status=status]]]]
+    g_command_channel |> push_clone <| [[AudioCommand status=[[AudioCommandStatus sid=sid, status=status, status_channel=null]]]]
+
+def public set_status_update(sid : SID; var status_channel : Channel?)
+    //! set status for sound
+    status_channel |> add_ref
+    g_command_channel |> push_clone <| [[AudioCommand status=[[AudioCommandStatus sid=sid, status=null, status_channel=status_channel]]]]
 
 def public decode_audio(data : array<uint8> |#; var channels, rate : int&) : array<float>
     var decoder = new ma_decoder
