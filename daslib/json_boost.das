@@ -247,6 +247,8 @@ def from_JV ( var v:JsonValue explicit?; anything : auto(TT) )
 			return <- ret
 	static_elif typeinfo(is_struct anything) || typeinfo(is_tuple anything)
 		var ret : TT
+	    if v==null || !(v.value is _object)
+			return <- ret
 		apply(ret) <| $ ( name:string; var field )
             move_to_ref ( field, _::from_JV((v as _object)[name], decltype_noref(field)) )
 		return <- ret
