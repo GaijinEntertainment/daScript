@@ -79,9 +79,9 @@ void ma_volume_mixer_process_pcm_frames_linear ( ma_volume_mixer * mixer, float 
             OutFrames[i] += InFrames[i] * volume;
         }
     } else if ( nChannels==2 ) {
-        float pan = max(min(mixer->pan,1.0f),-1.0f);
-        float volumeL = volume * min(1.0f + pan, 1.0f);
-        float volumeR = volume * min(1.0f - pan, 1.0f);
+        float pan = ma_max(ma_min(mixer->pan,1.0f),-1.0f);
+        float volumeL = volume * ma_min(1.0f + pan, 1.0f);
+        float volumeR = volume * ma_min(1.0f - pan, 1.0f);
         for ( uint64_t i=0; i!=nFrames; ++i ) {
             OutFrames[i*2+0] += InFrames[i*2+0] * volumeR;
             OutFrames[i*2+1] += InFrames[i*2+1] * volumeL;
@@ -107,7 +107,7 @@ void ma_volume_mixer_process_pcm_frames_descending ( ma_volume_mixer * mixer, fl
     float volume = mixer->volume;
     float dvolume = mixer->dvolume;
     float tvolume = mixer->tvolume;
-    float pan = max(min(mixer->pan,1.0f),-1.0f);
+    float pan = ma_max(ma_min(mixer->pan,1.0f),-1.0f);
     if ( nChannels==1 ) {
         for ( uint64_t i=0; i!=nFrames; ++i ) {
             OutFrames[i] += InFrames[i] * volume;
@@ -115,8 +115,8 @@ void ma_volume_mixer_process_pcm_frames_descending ( ma_volume_mixer * mixer, fl
         }
     } else if ( nChannels==2 ) {
         for ( uint64_t i=0; i!=nFrames; ++i ) {
-            float volumeL = volume * min(1.0f + pan, 1.0f);
-            float volumeR = volume * min(1.0f - pan, 1.0f);
+            float volumeL = volume * ma_min(1.0f + pan, 1.0f);
+            float volumeR = volume * ma_min(1.0f - pan, 1.0f);
             OutFrames[i*2+0] += InFrames[i*2+0] * volumeR;
             OutFrames[i*2+1] += InFrames[i*2+1] * volumeL;
             volume = ma_max(volume+dvolume,tvolume);
@@ -146,7 +146,7 @@ void ma_volume_mixer_process_pcm_frames_ascending ( ma_volume_mixer * mixer, flo
     float volume = mixer->volume;
     float dvolume = mixer->dvolume;
     float tvolume = mixer->tvolume;
-    float pan = max(min(mixer->pan,1.0f),-1.0f);
+    float pan = ma_max(ma_min(mixer->pan,1.0f),-1.0f);
     if ( nChannels==1 ) {
         for ( uint64_t i=0; i!=nFrames; ++i ) {
             OutFrames[i] += InFrames[i] * volume;
@@ -154,8 +154,8 @@ void ma_volume_mixer_process_pcm_frames_ascending ( ma_volume_mixer * mixer, flo
         }
     } else if ( nChannels==2 ) {
         for ( uint64_t i=0; i!=nFrames; ++i ) {
-            float volumeL = volume * min(1.0f + pan, 1.0f);
-            float volumeR = volume * min(1.0f - pan, 1.0f);
+            float volumeL = volume * ma_min(1.0f + pan, 1.0f);
+            float volumeR = volume * ma_min(1.0f - pan, 1.0f);
             OutFrames[i*2+0] += InFrames[i*2+0] * volumeR;
             OutFrames[i*2+1] += InFrames[i*2+1] * volumeL;
             volume = ma_min(volume+dvolume,tvolume);
