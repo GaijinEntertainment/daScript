@@ -1520,15 +1520,55 @@ namespace das {
 
 
     AstSerializer & AstSerializer::operator << ( CodeOfPolicies & value ) {
-        serialize(&value, sizeof(value));
-    // restore strings
-        *this << value.debug_module << value.profile_module;
+        *this << value.aot
+              << value.aot_module
+              << value.completion
+              << value.export_all
+              << value.always_report_candidates_threshold
+              << value.stack
+              << value.intern_strings
+              << value.persistent_heap
+              << value.multiple_contexts
+              << value.heap_size_hint
+              << value.string_heap_size_hint
+              << value.solid_context
+              << value.macro_context_persistent_heap
+              << value.macro_context_collect
+              << value.rtti
+              << value.no_unsafe
+              << value.local_ref_is_unsafe
+              << value.no_global_variables
+              << value.no_global_variables_at_all
+              << value.no_global_heap
+              << value.only_fast_aot
+              << value.aot_order_side_effects
+              << value.no_unused_function_arguments
+              << value.no_unused_block_arguments
+              << value.smart_pointer_by_value_unsafe
+              << value.allow_block_variable_shadowing
+              << value.allow_local_variable_shadowing
+              << value.allow_shared_lambda
+              << value.ignore_shared_modules
+              << value.default_module_public
+              << value.no_deprecated
+              << value.no_aliasing
+              << value.strict_smart_pointers
+              << value.no_init
+              << value.strict_unsafe_delete
+              << value.no_optimizations
+              << value.fail_on_no_aot
+              << value.fail_on_lack_of_aot_export
+              << value.debugger
+              << value.debug_module
+              << value.profiler
+              << value.profile_module
+              << value.jit
+              << value.threadlock_context;
         return *this;
     }
 
     AstSerializer & AstSerializer::operator << ( tuple<Module *, string, string, bool, LineInfo> & value ) {
-        serialize(&value, sizeof(value));
-        *this << get<1>(value) << get<2>(value);
+        *this << get<0>(value) << get<1>(value) << get<2>(value) << get<3>(value) << get<4>(value);
         return *this;
     }
 
@@ -1541,7 +1581,6 @@ namespace das {
         ser << flags;
 
         ser << options << policies;
-        ser << allRequireDecl;
 
     // serialize library
         if ( ser.writing ) {
@@ -1581,6 +1620,9 @@ namespace das {
             }
             thisModule.reset(library.modules.back());
         }
+
+        ser << allRequireDecl;
+
     // for the last module, mark symbols manually
         markExecutableSymbolUse();
         removeUnusedSymbols();
