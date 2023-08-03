@@ -431,10 +431,10 @@ namespace das {
                     ->args({"count","block","context","line"});
             addExtern<DAS_BIND_FUN(channelCreate)>(*this, lib, "channel_create",
                 SideEffects::invoke, "channelCreate")
-                    ->args({ "context","line" });
+                    ->args({ "context","line" })->unsafeOperation = true;
             addExtern<DAS_BIND_FUN(channelRemove)>(*this, lib, "channel_remove",
                 SideEffects::invoke, "channelRemove")
-                    ->args({ "channel", "context","line" })->unsafeOperation = true;;
+                    ->args({ "channel", "context","line" })->unsafeOperation = true;
             // job status
             addExtern<DAS_BIND_FUN(withJobStatus)>(*this, lib,  "with_job_status",
                 SideEffects::modifyExternal, "withJobStatus")
