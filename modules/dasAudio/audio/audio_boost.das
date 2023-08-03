@@ -1,4 +1,5 @@
 options indenting = 4
+options no_global_variables = false
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 
@@ -361,6 +362,7 @@ variant AudioCommand
     pause               : tuple<sid : SID; paused : bool>
     volume              : tuple<sid : SID; volume : float; time : float>
     pan                 : tuple<sid : SID; pan : float>
+    pitch               : tuple<sid : SID; pitch : float>
     stop                : tuple<sid : SID; time : float>
     head_transform      : tuple<head_position : float3; head_direction : float3>
     sound_position      : tuple<sid : SID; position : float3>
@@ -451,6 +453,10 @@ def command_processor
             var vcmd = cmd as pan
             g_sid_2_channel |> get(vcmd.sid) <| $(var ch : AudioChannel?&)
                 ma_volume_mixer_set_pan(unsafe(addr(ch.volume_mixer)), vcmd.pan)
+        elif cmd is pitch
+            var pcmd = cmd as pitch
+            g_sid_2_channel |> get(pcmd.sid) <| $(var ch : AudioChannel?&)
+                ch.pitch = pcmd.pitch
         elif cmd is stop
             var scmd = cmd as stop
             g_sid_2_channel |> get(scmd.sid) <| $(var ch : AudioChannel?&)
@@ -550,10 +556,11 @@ def public audio_system_create() : Channel?
 
 def public audio_system_finalize(var channel : Channel?&)
     channel |> push_clone <| [[AudioCommand shutdown=true]]
-    g_command_channel = null
+    g_command_channel |> release
     sound_finalize()
     channel |> join
-    channel |> release
+    unsafe
+        channel_remove(channel)
     channel = null
 
 def public with_audio_system(blk : block)
@@ -637,22 +644,32 @@ def public play_3d_sound_loop_from_pcm(position : float3; radius : float; rate, 
 def public append_to_pcm(sid : SID; var samples : array<float>)
     //! append samples to PCM stream
     g_command_channel |> push_clone <| [[AudioCommand append_pcm <- [[auto sid, samples]]]]
+    return sid
 
 def public set_pause(sid : SID; paused : bool)
     //! pause or unpause sound
     g_command_channel |> push_clone <| [[AudioCommand pause=[[auto sid, paused]]]]
+    return sid
 
 def public set_volume(sid : SID; volume : float; time : float = 0.0f)
     //! set volume of sound
     g_command_channel |> push_clone <| [[AudioCommand volume=[[auto sid, volume, time]]]]
+    return sid
 
 def public set_pan(sid : SID; pan : float)
-    //! set volume of sound
+    //! set pan of sound
     g_command_channel |> push_clone <| [[AudioCommand pan=[[auto sid, pan]]]]
+    return sid
+
+def public set_pitch(sid : SID; pitch : float)
+    //! set pitch of sound
+    g_command_channel |> push_clone <| [[AudioCommand pitch=[[auto sid, pitch]]]]
+    return sid
 
 def public stop(sid : SID; time : float = 0.0f)
     //! stop sound
     g_command_channel |> push_clone <| [[AudioCommand stop=[[auto sid, time]]]]
+    return sid
 
 def public set_head_position(pos, dir : float3)
     //! set head position for 3D sound
@@ -661,17 +678,20 @@ def public set_head_position(pos, dir : float3)
 def public set_position(sid : SID; pos : float3)
     //! set sound position for 3D sound
     g_command_channel |> push_clone <| [[AudioCommand sid, pos]]
+    return sid
 
 def public set_status_update(sid : SID; var status : LockBox?)
     //! set status for sound
     status |> add_ref
     status |> append(1)
     g_command_channel |> push_clone <| [[AudioCommand status=[[AudioCommandStatus sid=sid, status=status, status_channel=null]]]]
+    return sid
 
 def public set_status_update(sid : SID; var status_channel : Channel?)
     //! set status for sound
     status_channel |> add_ref
     g_command_channel |> push_clone <| [[AudioCommand status=[[AudioCommandStatus sid=sid, status=null, status_channel=status_channel]]]]
+    return sid
 
 def public decode_audio(data : array<uint8> |#; var channels, rate : int&) : array<float>
     var decoder = new ma_decoder
