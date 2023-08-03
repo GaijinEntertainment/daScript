@@ -17,47 +17,26 @@ namespace das {
         writing = true;
     }
 
-    void AstSerializer::patch () {
-        for ( auto & p : functionRefs ) {
-            auto it = smartFunctionMap.find(p.second);
-            if ( it == smartFunctionMap.end() ) {
+    // Mnemonic: TT*[old_addr] <- objects[old_addr]
+    template <typename TT>
+    void patchRefs ( vector<pair<TT**,uint64_t>> & refs, const das_hash_map<uint64_t,smart_ptr<TT>> & objects) {
+        for ( auto & p : refs ) {
+            auto it = objects.find(p.second);
+            if ( it == objects.end() ) {
                 DAS_FATAL_ERROR("ast serializer function ref not found");
             } else {
                 *p.first = it->second.get();
             }
         }
-        functionRefs.clear();
+        refs.clear();
+    }
 
-        for ( auto & p : variableRefs ) {
-            auto it = smartVariableMap.find(p.second);
-            if ( it == smartVariableMap.end() ) {
-                DAS_FATAL_ERROR("ast serializer variable ref not found");
-            } else {
-                *p.first = it->second.get();
-            }
-        }
-        variableRefs.clear();
-
-        for ( auto & p : structureRefs ) {
-            auto it = smartStructureMap.find(get<1>(p));
-            if ( it == smartStructureMap.end() ) {
-                DAS_FATAL_ERROR("ast serializer variable ref not found");
-            } else {
-                *get<0>(p) = it->second.get();
-            }
-        }
-        structureRefs.clear();
-
-        for ( auto & p : enumerationRefs ) {
-            auto it = smartEnumerationMap.find(p.second);
-            if ( it == smartEnumerationMap.end() ) {
-                DAS_FATAL_ERROR("ast serializer variable ref not found");
-            } else {
-                *p.first = it->second.get();
-            }
-        }
-        enumerationRefs.clear();
-
+    void AstSerializer::patch () {
+        patchRefs(functionRefs, smartFunctionMap);
+        patchRefs(variableRefs, smartVariableMap);
+        patchRefs(structureRefs, smartStructureMap);
+        patchRefs(enumerationRefs, smartEnumerationMap);
+    // finally, patch block refs (differenct container)
         for ( auto & p : blockRefs ) {
             auto it = exprBlockMap.find(p.second);
             if ( it == exprBlockMap.end() ) {
@@ -579,20 +558,18 @@ namespace das {
         tag("FileAccessPtr");
         bool is_null = ptr == nullptr;
         *this << is_null;
-        if ( writing ) {
-            if ( !is_null ) {
-                ptr->serialize(*this);
-            }
-        } else {
-            if ( is_null ) return *this;
+        if ( is_null ) {
+            return *this;
+        }
+        if ( !writing ) {
             int tag; *this << tag;
             switch ( tag ) {
                 case 0: ptr = new FileAccess; break;
                 case 1: ptr = new ModuleFileAccess; break;
                 default: DAS_VERIFYF(false, "Unreachable");
             }
-            ptr->serialize(*this);
         }
+        ptr->serialize(*this);
         return *this;
     }
 
@@ -601,23 +578,23 @@ namespace das {
     void AstSerializer::serializeSmartPtr( smart_ptr<T> & obj, das_hash_map<uint64_t, smart_ptr<T>> & objMap) {
         uint64_t id = uint64_t(obj.get());
         *this << id;
+        if ( id == 0 ) {
+            if ( !writing ) obj = nullptr;
+            return;
+        }
         if ( writing ) {
-            if ( id && objMap.find(id) == objMap.end() ) {
+            if ( objMap.find(id) == objMap.end() ) {
                 objMap[id] = obj;
                 obj->serialize(*this);
             }
         } else {
-            if ( id ) {
-                auto it = objMap.find(id);
-                if ( it == objMap.end() ) {
-                    obj = make_smart<T>();
-                    objMap[id] = obj;
-                    obj->serialize(*this);
-                } else {
-                    obj = it->second;
-                }
+            auto it = objMap.find(id);
+            if ( it == objMap.end() ) {
+                obj = make_smart<T>();
+                objMap[id] = obj;
+                obj->serialize(*this);
             } else {
-                obj = nullptr;
+                obj = it->second;
             }
         }
     }
@@ -765,12 +742,6 @@ namespace das {
         ptr_ref_count::serialize(ser);
     }
 
-    void BasicAnnotation::serialize ( AstSerializer & ser ) {
-        ser.tag("BasicAnnotation");
-        ser << name << cppName;
-        ptr_ref_count::serialize(ser);
-    }
-
     void ptr_ref_count::serialize ( AstSerializer & ser ) {
         ser.tag("ptr_ref_count");
         #if DAS_SMART_PTR_ID
@@ -834,28 +805,18 @@ namespace das {
 
     void Function::serialize ( AstSerializer & ser ) {
         ser.tag("Function");
-        ser << annotations;
-        ser << name;
+        ser << name << annotations;
+    // Note: importatnt fields are placed separately for easier debugging
         ser << arguments;
         ser << result;
         ser << body;
-        ser << index;
-        ser << totalStackSize;
-        ser << totalGenLabel;
-        ser << at;
-        ser << atDecl;
-        ser << module;
         ser << classParent;
-        ser << resultAliases;
-        ser << argumentAliases;
-        ser << resultAliasesGlobals;
-        ser << flags;
-        ser << moreFlags;
-        ser << sideEffectFlags;
-        ser << inferStack;
         ser << fromGeneric;
-        ser << hash;
-        ser << aotHash;
+        ser << index         << totalStackSize  << totalGenLabel;
+        ser << at            << atDecl          << module;
+        ser << inferStack    << hash            << aotHash;
+        ser << resultAliases << argumentAliases << resultAliasesGlobals;
+        ser << flags         << moreFlags       << sideEffectFlags;
     }
 
 // Expressions
@@ -1326,7 +1287,8 @@ namespace das {
             *this << moduleName << name;
             auto mod = moduleLibrary->findModule(moduleName);
             DAS_VERIFYF(mod!=nullptr, "module '%s' not found", moduleName.c_str());
-        // perform a litte dance to access the internal macro; for details see: src/builtin/module_builtin_ast_adapters.cpp
+        // perform a litte dance to access the internal macro;
+        // for details see: src/builtin/module_builtin_ast_adapters.cpp
         // 1564: void addModuleCallMacro ( .... CallMacroPtr & .... )
             auto callFactory = mod->findCall(name);
             DAS_VERIFYF(
@@ -1346,19 +1308,17 @@ namespace das {
     // Restores the internal state of macro module
     Module * reinstantiateMacroModuleState ( ModuleLibrary & lib, Module * this_mod ) {
         TextWriter ignore_logs;
-        // ModuleGroup libGroup;
         ReuseCacheGuard rcg;
     // initialize program
         auto program = make_smart<Program>();
         program->promoteToBuiltin = false;
         program->isDependency = true;
         program->thisModuleGroup = nullptr;
-        // program->thisModuleGroup = &libGroup;
         program->thisModuleName.clear();
         program->library.reset();
         program->thisModule.release();
         program->thisModule.reset(this_mod);
-        lib.foreach([&](Module * pm){
+        lib.foreach([&] ( Module * pm ) {
             program->library.addModule(pm);
             return true;
         },"*");
@@ -1474,8 +1434,6 @@ namespace das {
         ser << annotationData << requireModule;
         ser << ownFileInfo    << promotedAccess;
 
-        ser.tag("before");
-
         functions.foreach_with_hash ([&](smart_ptr<Function> f, uint64_t hash) {
             if ( ser.writing ) {
                 ser << hash;
@@ -1582,7 +1540,6 @@ namespace das {
         ser << globalInitStackSize << globalStringHeapSize;
         ser << flags;
 
-        // ModuleGroup *               thisModuleGroup;
         ser << options << policies;
         ser << allRequireDecl;
 

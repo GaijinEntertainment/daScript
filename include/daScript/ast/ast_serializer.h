@@ -102,11 +102,9 @@ namespace das {
         AstSerializer & operator << ( vector<TT> & value ) {
             tag("Vector");
             if ( writing ) {
-                uint64_t size = value.size();
-                *this << size;
+                uint64_t size = value.size(); *this << size;
             } else {
-                uint64_t size = 0;
-                *this << size;
+                uint64_t size = 0; *this << size;
                 value.resize(size);
             }
             for ( TT & v : value ) {
@@ -129,8 +127,7 @@ namespace das {
             das_hash_map<K, V, H, E> deser;
             deser.reserve(size);
             for ( uint64_t i = 0; i < size; i++ ) {
-                K k; V v;
-                *this << k << v;
+                K k; V v; *this << k << v;
                 deser.emplace(std::move(k), std::move(v));
             }
             value = std::move(deser);
@@ -168,29 +165,6 @@ namespace das {
             box = std::move(deser);
             return *this;
         }
-
-        // template<typename TT>
-        // AstSerializer & operator << ( das_set<TT> & value ) {
-        //     tag("DasSet");
-        //     if ( writing ) {
-        //         uint64_t size = value.size();
-        //         *this << size;
-        //         for ( auto & item : value ) {
-        //             *this << item;
-        //         }
-        //         return *this;
-        //     }
-        //     uint64_t size = 0; *this << size;
-        //     das_set<TT> deser;
-        //     deser.reserve(size);
-        //     for ( uint64_t i = 0; i < size; i++ ) {
-        //         TT v; *this << v;
-        //         patch(); // TT can be a pointer or contain pointers
-        //         deser.emplace(std::move(v));
-        //     }
-        //     value = std::move(deser);
-        //     return *this;
-        // }
 
         template <typename EnumType>
         void serialize_enum ( EnumType & baseType ) {

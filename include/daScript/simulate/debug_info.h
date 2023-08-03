@@ -94,8 +94,6 @@ namespace das
 
     struct BasicAnnotation : ptr_ref_count {
         BasicAnnotation ( const string & n, const string & cpn = "" ) : name(n), cppName(cpn) {}
-        virtual void serialize ( AstSerializer & ser );
-        virtual const char * getFactoryTag () { return "BasicAnnotation"; }
         string      name;
         string      cppName;
     };
