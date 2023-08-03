@@ -1355,12 +1355,14 @@ namespace das {
         program->thisModuleGroup = nullptr;
         // program->thisModuleGroup = &libGroup;
         program->thisModuleName.clear();
+        program->library.reset();
+        program->thisModule.release();
+        program->thisModule.reset(this_mod);
         lib.foreach([&](Module * pm){
             program->library.addModule(pm);
             return true;
         },"*");
     // set the current module
-        program->thisModule.reset(this_mod);
     // create the module macro state
         program->isCompiling = false;
         program->markMacroSymbolUse();

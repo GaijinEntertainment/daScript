@@ -53,7 +53,7 @@ void tutorial () {
     // program->serialize(deser);
     auto new_program = make_smart<Program>();
     new_program->serialize(deser);
-    program.reset(new_program.orphan());
+    program = new_program;
 
     // create daScript context
     Context ctx(program->getContextStackSize());
