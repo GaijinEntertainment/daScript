@@ -168,6 +168,7 @@ namespace das {
         }
         __forceinline const vector<ValueType> & each () const { return objectsInOrder; }
         size_t unlocked_size () const {
+            DAS_VERIFYF(locked == false, "expected to see an unlocked box");
             return objectsInOrder.size();
         }
     protected:

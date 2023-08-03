@@ -158,6 +158,7 @@ namespace das {
             if ( inThisModule ) {
                 auto it = smartFunctionMap.find(fid);
                 if ( it == smartFunctionMap.end() ) {
+                    func = ( Function * ) 1;
                     functionRefs.emplace_back(&func, fid);
                 } else {
                     func = it->second.get();
@@ -201,6 +202,7 @@ namespace das {
             if ( inThisModule ) {
                 auto it = smartStructureMap.find(fid);
                 if ( it == smartStructureMap.end() ) {
+                    ptr = ( Structure * ) 1;
                     structureRefs.emplace_back(&ptr, fid);
                 } else {
                     ptr = it->second.get();
@@ -213,6 +215,7 @@ namespace das {
                 *this << mangledName;
                 auto f = funcModule->findStructure(mangledName);
                 DAS_VERIFYF(f!=nullptr, "function '%s' is not found", mangledName.c_str());
+                ptr = f.get();
             }
         }
         return *this;
@@ -239,6 +242,7 @@ namespace das {
             if ( inThisModule ) {
                 auto it = smartEnumerationMap.find(fid);
                 if ( it == smartEnumerationMap.end() ) {
+                    ptr = ( Enumeration * ) 1;
                     enumerationRefs.emplace_back(&ptr, fid);
                 } else {
                     ptr = it->second.get();
@@ -251,6 +255,7 @@ namespace das {
                 *this << mangledName;
                 auto f = funcModule->findEnum(mangledName);
                 DAS_VERIFYF(f!=nullptr, "function '%s' is not found", mangledName.c_str());
+                ptr = f.get();
             }
         }
         return *this;
@@ -265,7 +270,7 @@ namespace das {
             return *this;
         }
         if ( writing ) {
-            bool inThisModule = ptr->module == thisModule;
+            bool inThisModule = ptr->module == thisModule || ptr->module == nullptr; // local var
             *this << inThisModule;
             if ( !inThisModule ) {
                 *this << ptr->module->name;
@@ -277,6 +282,7 @@ namespace das {
             if ( inThisModule ) {
                 auto it = smartVariableMap.find(fid);
                 if ( it == smartVariableMap.end() ) {
+                    ptr = ( Variable * ) 1;
                     variableRefs.emplace_back(&ptr, fid);
                 } else {
                     ptr = it->second.get();
@@ -289,6 +295,7 @@ namespace das {
                 *this << mangledName;
                 auto f = funcModule->findVariable(mangledName);
                 DAS_VERIFYF(f!=nullptr, "function '%s' is not found", mangledName.c_str());
+                ptr = f.get();
             }
         }
         return *this;
@@ -548,10 +555,6 @@ namespace das {
 
 
     AstSerializer & AstSerializer::operator << ( StructurePtr & struct_ ) {
-        *this << struct_->name;
-        if ( struct_->name == "TagStructureAnnotation" && !writing ) {
-            os_debug_break();
-        }
         serializeSmartPtr(struct_, smartStructureMap);
         return *this;
     }
@@ -698,6 +701,7 @@ namespace das {
         void * addr = block;
         *this << addr;
         if ( !writing && addr ) {
+            block = ( ExprBlock * ) 1;
             blockRefs.emplace_back(&block, (uint64_t) addr);
         }
         return *this;
@@ -780,7 +784,9 @@ namespace das {
 
     void Structure::FieldDeclaration::serialize ( AstSerializer & ser ) {
         ser.tag("FieldDeclaration");
-        ser << name << type << init << annotation << at << offset << flags;
+        ser << name << at;
+        ser << type;
+        ser << init << annotation << offset << flags;
     }
 
     void Enumeration::EnumEntry::serialize( AstSerializer & ser ) {
@@ -809,7 +815,7 @@ namespace das {
     void Variable::serialize ( AstSerializer & ser ) {
         ser.tag("Variable");
         ser << name << aka << type << init << source << at << index << stackTop
-            << extraLocalOffset << module// << useFunctions << useGlobalVariables
+            << extraLocalOffset << module
             << initStackSize << flags << access_flags << annotation;
         ptr_ref_count::serialize(ser);
     }
@@ -941,7 +947,37 @@ namespace das {
     void ExprVar::serialize ( AstSerializer & ser ) {
         ser.tag("ExprVar");
         Expression::serialize(ser);
-        ser << name << variable << pBlock << argumentIndex << varFlags;
+
+        ser << name << argumentIndex << varFlags;
+        ser << pBlock;
+
+        // The variable is smart_ptr but we actually need
+        // non-owning semantics
+        if ( ser.writing ) {
+            bool inThisModule =  variable == nullptr // this happens with [generic] functions, for example
+                      || variable->module == nullptr
+                      || variable->module == ser.thisModule;
+            ser << inThisModule;
+            if ( inThisModule ) {
+                ser << variable; // serialize as smart pointer
+            } else {
+                ser << variable->name;
+                ser << variable->module->name;
+            }
+        } else {
+
+            bool inThisModule; ser << inThisModule;
+            if ( inThisModule ) {
+                ser << variable;
+            } else {
+                string varname, modname;
+                ser << varname << modname;
+                auto mod = ser.moduleLibrary->findModule(modname);
+                DAS_VERIFYF(mod, "expected to find module '%s'", modname.c_str());
+                variable = mod->findVariable(name);
+            }
+
+        }
     }
 
     void ExprTag::serialize ( AstSerializer & ser ) {
@@ -1388,7 +1424,9 @@ namespace das {
             ser << sz;
             for ( auto & use : f->useGlobalVariables ) {
                 void * addr = use;
+                ser << use->name;
                 ser << addr;
+                ser << use;
             }
         } else {
             string name; ser << name;
@@ -1396,9 +1434,10 @@ namespace das {
             uint64_t size = 0; ser << size;
             f->useGlobalVariables.reserve(size);
             for ( uint64_t i = 0; i < size; i++ ) {
+                string varname; ser << varname;
                 void * addr; ser << addr;
-                auto fun = ser.smartVariableMap.at((uint64_t) addr);
-                f->useGlobalVariables.emplace(fun.get());
+                Variable * fun; ser << fun;
+                f->useGlobalVariables.emplace(fun);
             }
         }
     }
@@ -1435,16 +1474,38 @@ namespace das {
 
         ser.tag("before");
 
-        for ( auto & f : functions.each() ) {
-            ser.tag("before");
+        functions.foreach_with_hash ([&](smart_ptr<Function> f, uint64_t hash) {
+            if ( ser.writing ) {
+                ser << hash;
+            } else {
+                uint64_t h; ser << h;
+                DAS_VERIFYF(h == hash, "expected to walk in the same order");
+            }
             serializeUseVariables(ser, f);
             serializeUseFunctions(ser, f);
-        }
+        });
 
-        for ( auto & g : globals.each() ) {
+        generics.foreach_with_hash ([&](smart_ptr<Function> f, uint64_t hash) {
+            if ( ser.writing ) {
+                ser << hash;
+            } else {
+                uint64_t h; ser << h;
+                DAS_VERIFYF(h == hash, "expected to walk in the same order");
+            }
+            serializeUseVariables(ser, f);
+            serializeUseFunctions(ser, f);
+        });
+
+        globals.foreach_with_hash ([&](smart_ptr<Variable> g, uint64_t hash) {
+            if ( ser.writing ) {
+                ser << hash;
+            } else {
+                uint64_t h; ser << h;
+                DAS_VERIFYF(h == hash, "expected to walk in the same order");
+            }
             serializeUseVariables(ser, g);
             serializeUseFunctions(ser, g);
-        }
+        });
 
         ser.patch();
 
