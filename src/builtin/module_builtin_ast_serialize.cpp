@@ -981,7 +981,7 @@ namespace das {
         } else {
             string mangledName;
             ser << mangledName;
-            auto struct_ = ser.moduleLibrary->findStructure(mangledName, nullptr);
+            auto struct_ = ser.moduleLibrary->findStructure(mangledName, ser.thisModule);
             if ( struct_.size() == 0 ) {
                 DAS_ASSERTF(false, "expected to find structure '%s'", mangledName.c_str());
             } else if ( struct_.size() > 1 ) {
@@ -1561,6 +1561,7 @@ namespace das {
             }
         } else {
             library.reset();
+            thisModule.release();
             ser.moduleLibrary = &library;
 
             uint64_t size = 0; ser << size;
@@ -1578,7 +1579,13 @@ namespace das {
                     ser << *deser;
                 }
             }
+            thisModule.reset(library.modules.back());
         }
+    // for the last module, mark symbols manually
+        markExecutableSymbolUse();
+        removeUnusedSymbols();
+        TextWriter logs;
+        allocateStack(logs);
     }
 
 }
