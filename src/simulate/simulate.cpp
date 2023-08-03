@@ -1281,6 +1281,9 @@ namespace das
         DAS_ASSERTF(insideContext==0,"can't run init script on the locked context");
         if ( shutdown ) return false;
         shutdown = true;
+        auto ssz = 16384 + globalInitStackSize;
+        StackAllocator init_stack(ssz);
+        SharedStackGuard guard(*this, init_stack);
         return runWithCatch([&](){
             for ( int j=0, js=totalFunctions; j!=js && !stopFlags; ++j ) {
                 auto & pf = functions[j];
