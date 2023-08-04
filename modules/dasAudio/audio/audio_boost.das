@@ -547,7 +547,7 @@ def finalize_mixer
 
 def public audio_system_create() : Channel?
     sound_initalize(@@mixer, MA_SAMPLE_RATE, MA_CHANNELS, this_context())
-    var channel = channel_create()
+    var channel = unsafe(channel_create())
     g_command_channel = channel
     unsafe
         invoke_in_context(mixer_context(), "setup_command_processor", channel)
