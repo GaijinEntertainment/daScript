@@ -780,7 +780,7 @@ namespace das
             result = td;
             return this;
         }
-        Function * getOrigin() const;
+        FunctionPtr getOrigin() const;
         void serialize ( AstSerializer & ser );
     public:
         AnnotationList      annotations;
@@ -881,7 +881,7 @@ namespace das
             uint32_t    sideEffectFlags = 0;
         };
         vector<InferHistory> inferStack;
-        Function * fromGeneric = nullptr;
+        FunctionPtr fromGeneric = nullptr;
         uint64_t hash = 0;
         uint64_t aotHash = 0;
 #if DAS_MACRO_SANITIZER
