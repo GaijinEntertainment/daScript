@@ -6,15 +6,12 @@
 #include "daScript/ast/ast_handle.h"
 #include "daScript/simulate/bind_enum.h"
 
-#include <opl3.h>
-
 #define MINIAUDIO_IMPLEMENTATION
 #include <miniaudio.h>
 #include <volume_mixer.h>
 
 #include "dasAudio.h"
 
-MAKE_TYPE_FACTORY(Opl3Chip,opl3_chip)
 MAKE_EXTERNAL_TYPE_FACTORY(Context,Context);
 
 das::Context* get_clone_context( das::Context * ctx, uint32_t category );//link time resolved dependencies
@@ -137,11 +134,6 @@ DAS_BASE_BIND_ENUM ( ma_result, ma_result, \
 DAS_BIND_ENUM_CAST ( ma_result );
 
 namespace das {
-
-struct Opl3ChipAnnotation : ManagedStructureAnnotation<opl3_chip> {
-    Opl3ChipAnnotation ( ModuleLibrary & mlib ) : ManagedStructureAnnotation("Opl3Chip", mlib, "opl3_chip") {
-    }
-};
 
 static ma_device g_device;
 static ma_log g_ma_log_struct;
@@ -359,26 +351,6 @@ public:
         lib.addModule(this);
         lib.addBuiltInModule();
         lib.addModule(Module::require("rtti"));
-        // opl3
-        addAnnotation(make_smart<Opl3ChipAnnotation>(lib));
-        addExtern<DAS_BIND_FUN(OPL3_Generate)>(*this, lib, "OPL3_Generate",
-            SideEffects::worstDefault, "OPL3_Generate")->args({"chip", "buf"});
-        addExtern<DAS_BIND_FUN(OPL3_GenerateResampled)>(*this, lib, "OPL3_GenerateResampled",
-            SideEffects::worstDefault, "OPL3_GenerateResampled")->args({"chip", "buf"});
-        addExtern<DAS_BIND_FUN(OPL3_Reset)>(*this, lib, "OPL3_Reset",
-            SideEffects::worstDefault, "OPL3_Reset")->args({"chip", "sampleRate"});
-        addExtern<DAS_BIND_FUN(OPL3_WriteReg)>(*this, lib, "OPL3_WriteReg",
-            SideEffects::worstDefault, "OPL3_WriteReg")->args({"chip", "reg", "v"});
-        addExtern<DAS_BIND_FUN(OPL3_WriteRegBuffered)>(*this, lib, "OPL3_WriteRegBuffered",
-            SideEffects::worstDefault, "OPL3_WriteRegBuffered")->args({"chip", "reg", "v"});
-        addExtern<DAS_BIND_FUN(OPL3_GenerateStream)>(*this, lib, "OPL3_GenerateStream",
-            SideEffects::worstDefault, "OPL3_GenerateStream")->args({"OPL3_GenerateStream", "sndptr", "numsamples"});
-        addExtern<DAS_BIND_FUN(OPL3_Generate4Ch)>(*this, lib, "OPL3_Generate4Ch",
-            SideEffects::worstDefault, "OPL3_Generate4Ch")->args({"chip", "buf"});
-        addExtern<DAS_BIND_FUN(OPL3_Generate4ChResampled)>(*this, lib, "OPL3_Generate4ChResampled",
-            SideEffects::worstDefault, "OPL3_Generate4ChResampled")->args({"chip", "buf"});
-        addExtern<DAS_BIND_FUN(OPL3_Generate4ChStream)>(*this, lib, "OPL3_Generate4ChStream",
-            SideEffects::worstDefault, "OPL3_Generate4ChStream")->args({"chip", "sndptr1", "sndptr2", "numsamples"});
         // mixer
         addExtern<DAS_BIND_FUN(dasAudio_init)>(*this, lib, "sound_initalize",
             SideEffects::modifyExternal, "dasAudio_init")->args({"mixer", "rate", "channels","context"});

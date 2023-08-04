@@ -383,7 +383,6 @@ def add_channel_3d(sid : SID; position : float3; radius : float; var channel : A
     channel.position3d = position
     channel.radius = radius
     channel.is3D = true
-    print("make it 3D\n")
     add_channel(sid, channel)
 
 def command_processor
