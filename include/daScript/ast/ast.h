@@ -761,7 +761,6 @@ namespace das
             return this;
         }
         FunctionPtr getOrigin() const;
-        void serialize ( AstSerializer & ser );
     public:
         AnnotationList      annotations;
         string              name;
