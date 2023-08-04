@@ -183,7 +183,7 @@ def public utf8_decode(source_utf8_string: string const): array<uint>
     return <- dest_utf32_string
 
 
-def public utf8_decode(var dest_utf32_string: array<uint> &; source_utf8_string: string const)
+def public utf8_decode(var dest_utf32_string: array<uint>; source_utf8_string: string const)
     //! Converts UTF-8 string to UTF-32 and appends it to the array of codepoints (UTF-32 string)
     peek_data(source_utf8_string) <| $(arr)
         dest_utf32_string |> utf8_decode(arr)
