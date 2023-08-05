@@ -65,6 +65,7 @@ class AudioChannel
     is3D : bool = false
     [[do_not_delete]] status : LockBox? = null
     [[do_not_delete]] status_channel : Channel? = null
+    [[do_not_delete]] reverb : I3DL2Reverb?
     def AudioChannel(src : AudioSource?)
         source = src
         // resampler
@@ -100,6 +101,9 @@ class AudioChannel
         if status_channel != null
             status_channel |> notify_and_release
             status_channel = null
+        if reverb != null
+            unsafe
+                delete reverb
     def report_eos
         if status != null
             status |> set <| [[AudioChannelStatus sid=sid, state=AudioChannelState stopped]]
@@ -126,6 +130,18 @@ class AudioChannel
                 unsafe(addr(inputFrames)),
                 unsafe(addr(temp[0])),
                 unsafe(addr(outputFrames)))
+            delete samples
+            samples <- temp
+        // reverb
+        if reverb != null
+            var temp : array<float>
+            temp |> resize(int(outputFrames) * channels)
+            if channels == 1
+                reverb |> process_mono(unsafe(addr(samples[0])), unsafe(addr(temp[0])), int(outputFrames))
+            elif channels == 2
+                reverb |> process_stereo(unsafe(addr(samples[0])), unsafe(addr(temp[0])), int(outputFrames))
+            else
+                panic("unsupported channel count {channels}")
             delete samples
             samples <- temp
         // convert channels
@@ -367,6 +383,7 @@ variant AudioCommand
     head_transform      : tuple<head_position : float3; head_direction : float3>
     sound_position      : tuple<sid : SID; position : float3>
     status              : AudioCommandStatus
+    reverb              : tuple<sid : SID; properties:I3DL2ReverbProperties>
 
 var g_command_channel : Channel?
 
@@ -490,6 +507,13 @@ def command_processor
                 if scmd.status_channel != null
                     scmd.status_channel |> push_clone <| [[AudioChannelStatus sid=scmd.sid, state=AudioChannelState stopped]]
                     scmd.status_channel |> notify_and_release
+        elif cmd is reverb
+            assume rcmd = cmd as reverb
+            g_sid_2_channel |> get(rcmd.sid) <| $(var ch : AudioChannel?&)
+                if ch.reverb == null
+                    ch.reverb = new I3DL2Reverb
+                ch.reverb |> set_sample_rate(float(MA_SAMPLE_RATE))
+                ch.reverb |> set_properties(rcmd.properties)
         else
             panic("unknown audio command {cmd}")
     delete commands
@@ -691,6 +715,40 @@ def public set_status_update(sid : SID; var status_channel : Channel?)
     status_channel |> add_ref
     g_command_channel |> push_clone <| [[AudioCommand status=[[AudioCommandStatus sid=sid, status=null, status_channel=status_channel]]]]
     return sid
+
+def public set_reverb(sid: SID; reverb : I3DL2ReverbProperties)
+    //! set reverb for sound
+    g_command_channel |> push_clone <| [[AudioCommand reverb=[[auto sid, reverb]]]]
+    return sid
+
+enum public ReverbPreset // so that we don't expose internals
+    Generic
+    PaddedCell
+    Room
+    Bathroom
+    LivingRoom
+    StoneRoom
+    Auditorium
+    ConcertHall
+    Cave
+    Arena
+    Hangar
+    CarpetedHallway
+    Hallway
+    StoneCorridor
+    Alley
+    Forest
+    City
+    Mountains
+    Quarry
+    Plain
+    ParkingLot
+    SewerPipe
+    Underwater
+
+def public set_reverb_preset(sid: SID; preset : ReverbPreset)
+    //! set reverb from preset for sound
+    return set_reverb(sid, get_preset(unsafe(reinterpret<I3DL2Preset> preset)))
 
 def public decode_audio(data : array<uint8> |#; var channels, rate : int&) : array<float>
     var decoder = new ma_decoder

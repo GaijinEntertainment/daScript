@@ -12,6 +12,8 @@
 
 #include "dasAudio.h"
 
+#include "reverb.h"
+
 MAKE_EXTERNAL_TYPE_FACTORY(Context,Context);
 
 das::Context* get_clone_context( das::Context * ctx, uint32_t category );//link time resolved dependencies
@@ -132,6 +134,36 @@ DAS_BASE_BIND_ENUM ( ma_result, ma_result, \
     MA_FAILED_TO_STOP_BACKEND_DEVICE  \
 );
 DAS_BIND_ENUM_CAST ( ma_result );
+
+DAS_BASE_BIND_ENUM( das::I3DL2Preset, I3DL2Preset, \
+    Generic, \
+    PaddedCell, \
+    Room, \
+    Bathroom, \
+    LivingRoom, \
+    StoneRoom, \
+    Auditorium, \
+    ConcertHall, \
+    Cave, \
+    Arena, \
+    Hangar, \
+    CarpetedHallway, \
+    Hallway, \
+    StoneCorridor, \
+    Alley, \
+    Forest, \
+    City, \
+    Mountains, \
+    Quarry, \
+    Plain, \
+    ParkingLot, \
+    SewerPipe, \
+    Underwater \
+);
+DAS_BIND_ENUM_CAST ( das::I3DL2Preset );
+
+MAKE_TYPE_FACTORY(I3DL2ReverbProperties,I3DL2ReverbProperties);
+MAKE_TYPE_FACTORY(I3DL2Reverb,I3DL2Reverb);
 
 namespace das {
 
@@ -337,6 +369,62 @@ struct MALimiterAnnotation : ManagedStructureAnnotation<ma_limiter> {
     }
 };
 
+struct I3DL2ReverbPropertiesAnnotation : ManagedStructureAnnotation<I3DL2ReverbProperties> {
+    I3DL2ReverbPropertiesAnnotation ( ModuleLibrary & mlib )
+        : ManagedStructureAnnotation("I3DL2ReverbProperties", mlib, "I3DL2ReverbProperties") {
+        addField<DAS_BIND_MANAGED_FIELD(lRoom)>("lRoom","lRoom");
+        addField<DAS_BIND_MANAGED_FIELD(lRoomHF)>("lRoomHF","lRoomHF");
+        addField<DAS_BIND_MANAGED_FIELD(flDecayTime)>("flDecayTime","flDecayTime");
+        addField<DAS_BIND_MANAGED_FIELD(flDecayHFRatio)>("flDecayHFRatio","flDecayHFRatio");
+        addField<DAS_BIND_MANAGED_FIELD(lReflections)>("lReflections","lReflections");
+        addField<DAS_BIND_MANAGED_FIELD(flReflectionsDelay)>("flReflectionsDelay","flReflectionsDelay");
+        addField<DAS_BIND_MANAGED_FIELD(lReverb)>("lReverb","lReverb");
+        addField<DAS_BIND_MANAGED_FIELD(flReverbDelay)>("flReverbDelay","flReverbDelay");
+        addField<DAS_BIND_MANAGED_FIELD(flDiffusion)>("flDiffusion","flDiffusion");
+        addField<DAS_BIND_MANAGED_FIELD(flDensity)>("flDensity","flDensity");
+    }
+};
+
+struct I3DL2ReverbAnnotation : ManagedStructureAnnotation<I3DL2Reverb,true,true> {
+    I3DL2ReverbAnnotation ( ModuleLibrary & mlib )
+        : ManagedStructureAnnotation("I3DL2Reverb", mlib, "I3DL2Reverb") {
+    }
+};
+
+void dasAudio_setSampleRate ( I3DL2Reverb * reverb, float rate, Context * context, LineInfoArg * at ) {
+    if ( !reverb ) context->throw_error_at(at,"reverb is null");
+    reverb->SetSampleRate(rate);
+}
+
+void dasAudio_setProperties ( I3DL2Reverb * reverb, const I3DL2ReverbProperties & props, Context * context, LineInfoArg * at ) {
+    if ( !reverb ) context->throw_error_at(at,"reverb is null");
+    reverb->SetReverbProperties(props);
+}
+
+void dasAudio_process ( I3DL2Reverb * reverb, float * buffer, float * outBuffer, int nSamples, Context * context, LineInfoArg * at ) {
+    if ( !reverb ) context->throw_error_at(at,"reverb is null");
+    reverb->Process(buffer,outBuffer,nSamples);
+}
+
+void dasAudio_processMono ( I3DL2Reverb * reverb, float * buffer, float * outBuffer, int nSamples, Context * context, LineInfoArg * at ) {
+    if ( !reverb ) context->throw_error_at(at,"reverb is null");
+    vector<float> inbuf(nSamples*2);
+    for ( int i=0; i!=nSamples; ++i ) {
+        inbuf[i*2] = inbuf[i*2+1] = buffer[i];
+    }
+    vector<float> outbuf(nSamples*2);
+    reverb->Process(&inbuf[0],&outbuf[0],nSamples);
+    for ( int i=0; i!=nSamples; ++i ) {
+        outBuffer[i] = outbuf[i*2]; // left channel only and hope its the same as right
+    }
+}
+
+I3DL2ReverbProperties & dasAudio_getReverbPreset ( I3DL2Preset preset, Context * context, LineInfoArg * at ) {
+    auto pi = int(preset);
+    if ( pi<0 || pi>int(I3DL2Preset::Underwater) ) context->throw_error_at(at,"invalid reverb preset");
+    return ReverbPresets[preset];
+}
+
 class Module_Audio : public das::Module {
 protected:
     bool initialized = false;
@@ -351,6 +439,20 @@ public:
         lib.addModule(this);
         lib.addBuiltInModule();
         lib.addModule(Module::require("rtti"));
+        // reverb
+        addEnumeration(make_smart<EnumerationI3DL2Preset>());
+        addAnnotation(make_smart<I3DL2ReverbPropertiesAnnotation>(lib));
+        addAnnotation(make_smart<I3DL2ReverbAnnotation>(lib));
+        addExtern<DAS_BIND_FUN(dasAudio_setSampleRate)>(*this, lib, "set_sample_rate",
+            SideEffects::modifyArgumentAndExternal, "dasAudio_setSampleRate")->args({"reverb", "rate", "context", "at"});
+        addExtern<DAS_BIND_FUN(dasAudio_setProperties)>(*this, lib, "set_properties",
+            SideEffects::modifyArgumentAndExternal, "dasAudio_setProperties")->args({"reverb", "props", "context", "at"});
+        addExtern<DAS_BIND_FUN(dasAudio_process)>(*this, lib, "process_stereo",
+            SideEffects::modifyArgumentAndExternal, "dasAudio_process")->args({"reverb", "input", "output", "nSamples", "context", "at"});
+        addExtern<DAS_BIND_FUN(dasAudio_processMono)>(*this, lib, "process_mono",
+            SideEffects::modifyArgumentAndExternal, "dasAudio_processMono")->args({"reverb", "input", "output", "nSamples", "context", "at"});
+        addExtern<DAS_BIND_FUN(dasAudio_getReverbPreset),SimNode_ExtFuncCallRef>(*this, lib, "get_preset",
+            SideEffects::modifyArgumentAndExternal, "dasAudio_getReverbPreset")->args({"preset", "context", "at"});
         // mixer
         addExtern<DAS_BIND_FUN(dasAudio_init)>(*this, lib, "sound_initalize",
             SideEffects::modifyExternal, "dasAudio_init")->args({"mixer", "rate", "channels","context"});
