@@ -177,9 +177,9 @@ namespace das {
         }
     };
 
-    struct AstExprSafeAsVariantAnnotation : AstExprFieldAnnotation<ExprSafeField> {
+    struct AstExprSafeAsVariantAnnotation : AstExprFieldAnnotation<ExprSafeAsVariant> {
         AstExprSafeAsVariantAnnotation(ModuleLibrary & ml)
-            :  AstExprFieldAnnotation<ExprSafeField> ("ExprSafeAsVariant", ml) {
+            :  AstExprFieldAnnotation<ExprSafeAsVariant> ("ExprSafeAsVariant", ml) {
             addField<DAS_BIND_MANAGED_FIELD(skipQQ)>("skipQQ");
         }
     };
