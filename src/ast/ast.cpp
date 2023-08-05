@@ -756,7 +756,7 @@ namespace das {
         return this;
     }
 
-    Function * Function::getOrigin() const {
+    FunctionPtr Function::getOrigin() const {
         if ( fromGeneric ) {
             auto origin = fromGeneric;
             while ( origin->fromGeneric ) {
