@@ -17,8 +17,23 @@ def sleep_and_log_status ( var status:LockBox?; delay:uint )
         else
             print("status = null\n")
 
+def play_with_reverb ( preset : ReverbPreset )
+    print("reverb {preset}\n")
+    let sid = play_sound_from_file("{get_das_root()}/modules/dasAudio/examples/shot.wav", MA_SAMPLE_RATE, 2)
+    sid |> set_reverb_preset(preset)
+    sleep(2000u)
+
 [export]
 def main
+    with_audio_system <|
+        print("testing reverb\n")
+        print("no reverb\n")
+        play_sound_from_file("{get_das_root()}/modules/dasAudio/examples/shot.wav", MA_SAMPLE_RATE, 2)
+        sleep(2000u)
+        play_with_reverb(ReverbPreset Generic)
+        play_with_reverb(ReverbPreset Bathroom)
+        play_with_reverb(ReverbPreset ConcertHall)
+
     with_audio_system <|
         print("testing stream status channel\n")
         var sin1 <- [{for x in range(MA_SAMPLE_RATE); sin(2.*PI*440.*float(x)/float(48000))}]
