@@ -955,7 +955,7 @@ namespace das {
                 ser << varname << modname;
                 auto mod = ser.moduleLibrary->findModule(modname);
                 DAS_VERIFYF(mod, "expected to find module '%s'", modname.c_str());
-                variable = mod->findVariable(name);
+                variable = mod->findVariable(varname);
             }
 
         }
