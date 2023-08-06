@@ -284,7 +284,6 @@ namespace das {
         tag("FunctionPtr");
         if ( writing ) {
             DAS_ASSERTF(!func->builtIn, "cannot serialize built-in function");
-            DAS_ASSERTF(func->module==thisModule, "function is not from this module");
         }
         serializeSmartPtr(func, smartFunctionMap);
         return *this;
@@ -744,13 +743,7 @@ namespace das {
 
     void ptr_ref_count::serialize ( AstSerializer & ser ) {
         ser.tag("ptr_ref_count");
-        #if DAS_SMART_PTR_ID
-                ser << ref_count_id;
-        #endif
-        #if DAS_SMART_PTR_MAGIC
-                ser << magic;
-        #endif
-        ser << ref_count;
+        // Do nothing
     }
 
     void Structure::FieldDeclaration::serialize ( AstSerializer & ser ) {
@@ -765,10 +758,33 @@ namespace das {
         ser << name << cppName << at << value;
     }
 
+    void serializeAnnotationList ( AstSerializer & ser, AnnotationList & list ) {
+        if ( ser.writing ) {
+            uint64_t size = 0;
+        // count the real size without generated annotations
+            for ( auto & it : list ) {
+                bool inThisModule = it->annotation->module == ser.thisModule;
+                if ( !inThisModule ) { size += 1; }
+            }
+            ser << size;
+            for ( auto & it : list ) {
+                bool inThisModule = it->annotation->module == ser.thisModule;
+                if ( !inThisModule ) { ser << it; }
+            }
+        } else {
+            uint64_t size = 0; ser << size;
+            AnnotationList result; result.resize(size);
+            for ( uint64_t i = 0; i < size; i++ ) {
+                ser << result[i];
+            }
+        }
+    }
+
     void Enumeration::serialize ( AstSerializer & ser ) {
         ser.tag("Enumeration");
-        ser << name << cppName << at << list << module << external << baseType
-            << annotations << isPrivate;
+        ser << name     << cppName  << at << list << module
+            << external << baseType << isPrivate;
+        serializeAnnotationList(ser, annotations);
         ptr_ref_count::serialize(ser);
     }
 
@@ -779,7 +795,8 @@ namespace das {
         ser << fieldLookup << at << module
             << parent // parent could be in the current module or in some other
                       // module
-            << annotations << flags;
+            << flags;
+        serializeAnnotationList(ser, annotations);
         ptr_ref_count::serialize(ser);
     }
 
@@ -805,8 +822,9 @@ namespace das {
 
     void Function::serialize ( AstSerializer & ser ) {
         ser.tag("Function");
-        ser << name << annotations;
+        ser << name ;
     // Note: importatnt fields are placed separately for easier debugging
+        serializeAnnotationList(ser, annotations);
         ser << arguments;
         ser << result;
         ser << body;
@@ -901,8 +919,10 @@ namespace das {
 
         ser << list << finalList << returnType << arguments << stackTop
             << stackVarTop << stackVarBottom << stackCleanVars << maxLabelIndex
-            << annotations << annotationData << annotationDataSid << blockFlags
+            << annotationData << annotationDataSid << blockFlags
             << inFunction;
+
+        serializeAnnotationList(ser, annotations);
     }
 
     void ExprVar::serialize ( AstSerializer & ser ) {

@@ -48,6 +48,7 @@ void tutorial () {
 // serialize
     AstSerializer ser;
     program->serialize(ser);
+    program.reset();
 // deserialize
     AstSerializer deser ( ForReading{}, move(ser.buffer) );
     auto new_program = make_smart<Program>();
