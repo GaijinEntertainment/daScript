@@ -976,19 +976,12 @@ namespace das {
             // Note: underClone is only used during infer and we don't need it
             << fieldFlags;
 
-        bool is_null = value->type == nullptr;
-        ser << is_null;
-        if ( is_null ) return; // Sometimes generic functions contain
-
-        bool is_weak = value->type->isTuple() || value->type->isVariant() || value->type->isBitfield();
-        ser << is_weak;
-        if ( is_weak ) return; // They don't have field `field` set
-
-        bool is_handle = value->type->isHandle() || value->type->isPointerToAnnotation();
-        ser << is_handle;
-        if ( is_handle ) return; // Likewise
-
         if ( ser.writing ) {
+            bool has_field = value->type && (
+                value->type->isStructure() || ( value->type->isPointer() && value->type->firstType->isStructure() )
+            );
+            ser << has_field;
+            if ( !has_field ) return;
             string mangledName;
             if ( value->type->isPointer() ) {
                 DAS_VERIFYF(value->type->firstType->isStructure(), "expected to see structure field access via pointer");
@@ -999,8 +992,9 @@ namespace das {
             }
             ser << mangledName;
         } else {
-            string mangledName;
-            ser << mangledName;
+            bool has_field; ser << has_field;
+            if ( !has_field ) return;
+            string mangledName; ser << mangledName;
             auto struct_ = ser.moduleLibrary->findStructure(mangledName, ser.thisModule);
             if ( struct_.size() == 0 ) {
                 DAS_ASSERTF(false, "expected to find structure '%s'", mangledName.c_str());
