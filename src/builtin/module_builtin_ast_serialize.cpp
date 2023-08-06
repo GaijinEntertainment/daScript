@@ -1440,12 +1440,31 @@ namespace das {
         }
     }
 
+    void serializeGlobals ( AstSerializer & ser, safebox<Variable> & globals ) {
+        if ( ser.writing ) {
+            uint64_t size = globals.unlocked_size(); ser << size;
+            globals.foreach ( [&] ( VariablePtr g ) {
+                ser << g;
+            });
+        } else {
+            safebox<Variable> result;
+            uint64_t size; ser << size;
+            for ( uint64_t i = 0; i < size; i++ ) {
+                VariablePtr g; ser << g;
+                result.insert(g->name, g);
+            }
+            globals = move(result);
+        }
+    }
+
     void Module::serialize ( AstSerializer & ser ) {
+        ser.tag("Module");
         ser << name           << moduleFlags;
-        ser << aliasTypes     << structures << enumerations << globals;
+        ser << annotationData << requireModule;
+        ser << aliasTypes     << structures << enumerations;
+        serializeGlobals(ser, globals); // globals require insertion in the same order
         ser << functions      << functionsByName;
         ser << generics       << genericsByName;
-        ser << annotationData << requireModule;
         ser << ownFileInfo    << promotedAccess;
 
         functions.foreach_with_hash ([&](smart_ptr<Function> f, uint64_t hash) {
