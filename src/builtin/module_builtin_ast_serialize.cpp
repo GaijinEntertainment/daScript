@@ -1631,28 +1631,32 @@ namespace das {
                 if ( !builtin )
                     ser << *m; // Serialize the whole module
             }
-        } else {
-            library.reset();
-            thisModule.release();
-            ser.moduleLibrary = &library;
 
-            uint64_t size = 0; ser << size;
-            for ( uint64_t i = 0; i < size; i++ ) {
-                bool builtin; string name;
-                ser << builtin << name;
-                if ( name == "$" )
-                    library.addBuiltInModule();
-                else if ( builtin ) {
-                    Module * m = Module::require(name);
-                    library.addModule(m);
-                } else {
-                    auto deser = new Module;
-                    library.addModule(deser);
-                    ser << *deser;
-                }
-            }
-            thisModule.reset(library.modules.back());
+            ser << allRequireDecl;
+            return;
         }
+
+        library.reset();
+        thisModule.release();
+        ser.moduleLibrary = &library;
+
+        uint64_t size = 0; ser << size;
+        for ( uint64_t i = 0; i < size; i++ ) {
+            bool builtin; string name;
+            ser << builtin << name;
+            if ( name == "$" )
+                library.addBuiltInModule();
+            else if ( builtin ) {
+                Module * m = Module::require(name);
+                library.addModule(m);
+            } else {
+                auto deser = new Module;
+                library.addModule(deser);
+                ser << *deser;
+            }
+        }
+
+        thisModule.reset(library.modules.back());
 
         ser << allRequireDecl;
 
