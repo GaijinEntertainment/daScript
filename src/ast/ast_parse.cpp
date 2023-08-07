@@ -504,6 +504,7 @@ namespace das {
                     }
                     if ( program->thisModule->name.empty() ) {
                         program->thisModule->name = mod.moduleName;
+                        program->thisModule->wasParsedNameless = true;
                     }
                     if ( program->promoteToBuiltin ) {
                         bool regFromShar = false;

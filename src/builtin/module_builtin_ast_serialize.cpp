@@ -153,6 +153,11 @@ namespace das {
                 } else {
                     func = funcModule->findGeneric(mangledName).get();
                 }
+                if ( func == nullptr && funcModule->wasParsedNameless ) {
+                    string modname, funcname;
+                    splitTypeName(mangledName, modname, funcname);
+                    func = funcModule->findFunction(funcname).get();
+                }
                 DAS_VERIFYF(func!=nullptr, "function '%s' is not found", mangledName.c_str());
             }
         }
@@ -282,7 +287,7 @@ namespace das {
 
     AstSerializer & AstSerializer::operator << ( FunctionPtr & func ) {
         tag("FunctionPtr");
-        if ( writing ) {
+        if ( writing && func ) {
             DAS_ASSERTF(!func->builtIn, "cannot serialize built-in function");
         }
         serializeSmartPtr(func, smartFunctionMap);

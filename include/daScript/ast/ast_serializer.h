@@ -12,7 +12,6 @@ namespace das {
         AstSerializer ( const AstSerializer & from ) = delete;
         AstSerializer & operator = ( const AstSerializer & from ) = delete;
 
-        FileAccess *        fileAccess = nullptr;
         ModuleLibrary *     moduleLibrary = nullptr;
         Module *            thisModule = nullptr;
         Module *            astModule = nullptr;
