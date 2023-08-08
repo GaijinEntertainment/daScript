@@ -76,31 +76,32 @@ class ConstantExpressionMacro : AstFunctionAnnotation
         argi |> reverse
         if empty(argi)
             return <- [[ExpressionPtr]]
-        var inscope func_copy <- clone_function(FunctionPtr(expr.func))
-        var func_name = "{func_copy.name}`constant_expression"
-        for i in argi
-            let fhash = hash(describe(expr.arguments[i]))
-            func_name += "`{fhash}"
-        func_copy.name := func_name
-        if expr.func.fromGeneric != null
-            func_copy.body := null
-            func_copy.result := null
-            unsafe
-                func_copy.body <- clone_expression(expr.func.fromGeneric.body)
-                func_copy.result <- clone_type(expr.func.fromGeneric.result)
-
-        apply_template(func_copy.body) <| $ ( rules )
+        if true
+            var inscope func_copy <- clone_function(FunctionPtr(expr.func))
+            var func_name = "{func_copy.name}`constant_expression"
             for i in argi
-                rules |> replaceVariable(string(expr.func.arguments[i].name)) <| clone_expression(expr.arguments[i])
-        for i in argi
-            func_copy.arguments |> erase(i)
-        // func_copy.flags |= FunctionFlags exports
-        func_copy.flags |= FunctionFlags generated
-        func_copy.annotations |> erase(anni)
-        compiling_module() |> add_function(func_copy)
-        var inscope new_call <- clone_expression(expr)
-        var ncall = new_call as ExprCall
-        ncall.name := func_name
-        for i in argi
-            ncall.arguments |> erase(i)
-        return <- new_call
+                let fhash = hash(describe(expr.arguments[i]))
+                func_name += "`{fhash}"
+            func_copy.name := func_name
+            if expr.func.fromGeneric != null
+                func_copy.body := null
+                func_copy.result := null
+                unsafe
+                    func_copy.body <- clone_expression(expr.func.fromGeneric.body)
+                    func_copy.result <- clone_type(expr.func.fromGeneric.result)
+            apply_template(func_copy.body) <| $ ( rules )
+                for i in argi
+                    rules |> replaceVariable(string(expr.func.arguments[i].name)) <| clone_expression(expr.arguments[i])
+            for i in argi
+                func_copy.arguments |> erase(i)
+            // func_copy.flags |= FunctionFlags exports
+            func_copy.flags |= FunctionFlags generated
+            func_copy.annotations |> erase(anni)
+            compiling_module() |> add_function(func_copy)
+            if true
+                var inscope new_call <- clone_expression(expr)
+                var ncall = new_call as ExprCall
+                ncall.name := func_name
+                for i in argi
+                    ncall.arguments |> erase(i)
+                return <- new_call

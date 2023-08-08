@@ -37,9 +37,10 @@ def lpipe_expr ( var fnCall:ExpressionPtr&; var arg:ExpressionPtr& ) : Expressio
         if length(pLet.variables)!=1 || pLet.variables[0].init==null
             delete arg
             return <- [[ExpressionPtr]]
-        var inscope cLet <- clone_expression(fnCall)
-        move_new((cLet as ExprLet).variables[0].init) <| lpipe_expr(pLet.variables[0].init, arg)
-        return <- cLet
+        if true
+            var inscope cLet <- clone_expression(fnCall)
+            move_new((cLet as ExprLet).variables[0].init) <| lpipe_expr(pLet.variables[0].init, arg)
+            return <- cLet
     elif fnCall |> is_expr_like_call()
         var pCall = unsafe(reinterpret<ExprLooksLikeCall?> fnCall)
         if string(pCall.name)=="lpipe"  // not piping pipe into pipe
@@ -86,13 +87,14 @@ class LpipeMacro : AstCallMacro
                 macro_error(prog,call.at,"can't pipe first expression in the block")
                 return
             let pidx = eidx - 1
-            var inscope pipe <- lpipe_expr(blk.list[pidx], call.arguments[0] )
-            if pipe==null
-                macro_error(prog,call.at,"can only pipe to a function call, and not {blk.list[pidx].__rtti}")
-                return
-            move(blk.list[pidx]) <| pipe
-            delete blk.list[eidx]
-            success = true
+            if true
+                var inscope pipe <- lpipe_expr(blk.list[pidx], call.arguments[0] )
+                if pipe==null
+                    macro_error(prog,call.at,"can only pipe to a function call, and not {blk.list[pidx].__rtti}")
+                    return
+                move(blk.list[pidx]) <| pipe
+                delete blk.list[eidx]
+                success = true
         if !success
             return <- [[ExpressionPtr]]
         return <- quote <|

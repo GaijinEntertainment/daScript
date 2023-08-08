@@ -167,6 +167,7 @@ namespace das {
         bool checkUnsafe;
         bool checkDeprecated;
         bool disableInit;
+        bool checkEarlyOut;
     public:
         LintVisitor ( const ProgramPtr & prog ) : program(prog) {
             checkOnlyFastAot = program->options.getBoolOption("only_fast_aot", program->policies.only_fast_aot);
@@ -179,6 +180,7 @@ namespace das {
             checkUnsafe = program->policies.no_unsafe || program->thisModule->doNotAllowUnsafe;
             checkDeprecated = program->options.getBoolOption("no_deprecated", program->policies.no_deprecated);
             disableInit = prog->options.getBoolOption("no_init", prog->policies.no_init);
+            checkEarlyOut = program->options.getBoolOption("strict_early_out", program->policies.strict_early_out);
         }
     protected:
         void verifyOnlyFastAot ( Function * _func, const LineInfo & at ) {
@@ -340,6 +342,10 @@ namespace das {
                     }
                 }
             }
+            if ( checkEarlyOut && inFinally.size() && inFinally.back() && expr->variable->early_out ) {
+                program->error("using potentially uninitialized variable " + expr->name + " in the `finally` block", "", "",
+                    expr->at, CompilationError::early_out_in_finally);
+            }
         }
 
         virtual void preVisit(ExprFor * expr) override {
@@ -357,6 +363,11 @@ namespace das {
         }
         virtual void preVisit(ExprLet * expr) override {
             Visitor::preVisit(expr);
+            if ( (inFinally.size()==0 || inFinally.back()==false) && (blocks.size() && blocks.back().earlyOut) ) {
+                for ( auto & var : expr->variables ) {
+                    var->early_out = true;
+                }
+            }
             // macro genearted invisible variable
             // DAS_ASSERT(expr->visibility.line);
             for (const auto & var : expr->variables) {
@@ -386,6 +397,13 @@ namespace das {
             if ( expr->returnType && needAvoidNullPtr(expr->returnType,false) && expr->subexpr->rtti_isNullPtr() ) {
                 program->error("can't return null", "", "",
                     expr->subexpr->at, CompilationError::cant_be_null);
+            }
+            // mark blocks with early out
+            auto i = blocks.size();
+            while ( i>0 ) {
+                i --;
+                blocks[i].earlyOut = true;
+                if ( blocks[i].block->isClosure ) break;
             }
         }
         void verifyToTableMove ( ExprCall * expr ) {
@@ -683,6 +701,8 @@ namespace das {
         }
         virtual void preVisit ( ExprBlock * block ) override {
             Visitor::preVisit(block);
+            inFinally.push_back(false);
+            blocks.emplace_back(block,false);
             if ( block->isClosure ) {
                 if (  !block->returnType->isVoid() && !block->returnType->isAuto() ) {
                     if ( !exprReturns(block) ) {
@@ -691,6 +711,14 @@ namespace das {
                     }
                 }
             }
+        }
+        virtual ExpressionPtr visit ( ExprBlock * block ) override {
+            inFinally.pop_back();
+            blocks.pop_back();
+            return Visitor::visit(block);
+        }
+        virtual void preVisitBlockFinal ( ExprBlock * ) override {
+            inFinally.back() = true;
         }
         virtual void preVisitBlockArgument ( ExprBlock * block, const VariablePtr & var, bool lastArg ) override {
             Visitor::preVisitBlockArgument(block, var, lastArg);
@@ -725,6 +753,14 @@ namespace das {
         Function * func = nullptr;
         Variable * globalVar = nullptr;
         bool anyUnsafe = false;
+    protected:
+        struct BlockInfo {
+            ExprBlock * block = nullptr;
+            bool        earlyOut = false;
+            BlockInfo(ExprBlock * b, bool eo) : block(b), earlyOut(eo) {}
+        };
+        vector<BlockInfo> blocks;
+        vector<bool>      inFinally;
     };
 
     struct Option {
@@ -744,6 +780,7 @@ namespace das {
         "no_aliasing",                  Type::tBool,
         "strict_smart_pointers",        Type::tBool,
         "no_init",                      Type::tBool,
+        "strict_early_out",             Type::tBool,
     // memory
         "stack",                        Type::tInt,
         "intern_strings",               Type::tBool,
