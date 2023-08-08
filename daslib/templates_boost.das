@@ -446,26 +446,25 @@ class private QRulesVisitor : AstVisitor
                 failed = true
                 return <- typ
             let new_tag_name = "temp`type`{tag_index++}`{typ.at.line}`{typ.at.column}"
-            if true
-                var inscope ntyp <- new [[TypeDecl() at=typ.at,
-                    baseType = Type alias,
-                    alias := new_tag_name
-                ]]
-                ntyp.flags |= typ.flags & ~TypeDeclFlags isTag
-                rblock.list |> emplace_new <| new [[ExprCall() at=typ.at,
-                    name:="replaceTypeWithTypeDecl",
-                    arguments:=[{ExpressionPtr
-                        new [[ExprVar() at=typ.at, name:="rules"]];
-                        new [[ExprConstString() at=typ.at, value:=new_tag_name]] |> generatedExpr();
-                        new [[ExprCall() at=typ.at, name:="add_type_ptr_ref",
-                            arguments := [{ExpressionPtr
-                                clone_expression(typ.firstType.dimExpr[0]);
-                                new [[ExprConstBitfield() at=typ.at, value:=ntyp.flags]]
-                            }]
-                        ]]
-                    }]
-                ]]
-                return <- ntyp
+            var inscope ntyp <- new [[TypeDecl() at=typ.at,
+                baseType = Type alias,
+                alias := new_tag_name
+            ]]
+            ntyp.flags |= typ.flags & ~TypeDeclFlags isTag
+            rblock.list |> emplace_new <| new [[ExprCall() at=typ.at,
+                name:="replaceTypeWithTypeDecl",
+                arguments:=[{ExpressionPtr
+                    new [[ExprVar() at=typ.at, name:="rules"]];
+                    new [[ExprConstString() at=typ.at, value:=new_tag_name]] |> generatedExpr();
+                    new [[ExprCall() at=typ.at, name:="add_type_ptr_ref",
+                        arguments := [{ExpressionPtr
+                            clone_expression(typ.firstType.dimExpr[0]);
+                            new [[ExprConstBitfield() at=typ.at, value:=ntyp.flags]]
+                        }]
+                    ]]
+                }]
+            ]]
+            return <- ntyp
         if typ.firstType != null
             visitTD(typ.firstType)
         if typ.secondType != null
@@ -721,21 +720,21 @@ class private  AstQCallMacro : AstCallMacro
         if call.arguments |> length != 1
             macro_error(prog,call.at,"expecting 1 argument, {macro_call}(expression)")
             return <- [[ExpressionPtr]]
-        if true
-            var inscope qclone <- clone_expression(call.arguments[0])
-            var inscope qblk <- apply_qrules(qclone)
-            if qblk==null
-                return <- [[ExpressionPtr]]
-            return <- new [[ExprCall() at=call.at,
-                name:=apply_call,
-                arguments := [{ExpressionPtr
-                    new [[ExprQuote()
-                        at=call.at,
-                        arguments := [{ExpressionPtr[1] qclone}]
-                    ]];
-                    new [[ExprMakeBlock() _block<-qblk, at=call.at]]
-                }]
-            ]]
+        var inscope qclone <- clone_expression(call.arguments[0])
+        var inscope qblk <- apply_qrules(qclone)
+        if qblk==null
+            return <- [[ExpressionPtr]]
+        var inscope acall <- new [[ExprCall() at=call.at,
+            name:=apply_call,
+            arguments := [{ExpressionPtr
+                new [[ExprQuote()
+                    at=call.at,
+                    arguments := [{ExpressionPtr[1] qclone}]
+                ]];
+                new [[ExprMakeBlock() _block<-qblk, at=call.at]]
+            }]
+        ]]
+        return <- acall
 
 [call_macro(name="qmacro")]
 class private QMacro : AstQCallMacro {}
@@ -810,22 +809,21 @@ class private AstQNamedMacro : AstCallMacro
         if !(call.arguments[0]._type.isString)
             macro_error(prog,call.at,"expecting function name, {macro_call}(NAME,expression)")
             return <- [[ExpressionPtr]]
-        if true
-            var inscope qclone <- clone_expression(call.arguments[1])
-            var inscope qblk <- apply_qrules(qclone)
-            if qblk==null
-                return <- [[ExpressionPtr]]
-            return <- new [[ExprCall() at=call.at,
-                name:=apply_call,
-                arguments := [{ExpressionPtr
-                    clone_expression(call.arguments[0]);
-                    new [[ExprQuote()
-                        at=call.at,
-                        arguments := [{ExpressionPtr[1] qclone}]
-                    ]];
-                    new [[ExprMakeBlock() _block<-qblk, at=call.at]]
-                }]
-            ]]
+        var inscope qclone <- clone_expression(call.arguments[1])
+        var inscope qblk <- apply_qrules(qclone)
+        if qblk==null
+            return <- [[ExpressionPtr]]
+        return <- new [[ExprCall() at=call.at,
+            name:=apply_call,
+            arguments := [{ExpressionPtr
+                clone_expression(call.arguments[0]);
+                new [[ExprQuote()
+                    at=call.at,
+                    arguments := [{ExpressionPtr[1] qclone}]
+                ]];
+                new [[ExprMakeBlock() _block<-qblk, at=call.at]]
+            }]
+        ]]
 
 [call_macro(name="qmacro_function")]
 class private AstQFunctionMacro : AstQNamedMacro {}
@@ -848,23 +846,22 @@ class private AstQNamedClassMacro : AstCallMacro
         if !(call.arguments[0]._type.isString)
             macro_error(prog,call.at,"expecting function name, {macro_call}(NAME,class,expression)")
             return <- [[ExpressionPtr]]
-        if true
-            var inscope qclone <- clone_expression(call.arguments[2])
-            var inscope qblk <- apply_qrules(qclone)
-            if qblk==null
-                return <- [[ExpressionPtr]]
-            return <- new [[ExprCall() at=call.at,
-                name:=apply_call,
-                arguments := [{ExpressionPtr
-                    clone_expression(call.arguments[0]);
-                    clone_expression(call.arguments[1]);
-                    new [[ExprQuote()
-                        at=call.at,
-                        arguments := [{ExpressionPtr[1] qclone}]
-                    ]];
-                    new [[ExprMakeBlock() _block<-qblk, at=call.at]]
-                }]
-            ]]
+        var inscope qclone <- clone_expression(call.arguments[2])
+        var inscope qblk <- apply_qrules(qclone)
+        if qblk==null
+            return <- [[ExpressionPtr]]
+        return <- new [[ExprCall() at=call.at,
+            name:=apply_call,
+            arguments := [{ExpressionPtr
+                clone_expression(call.arguments[0]);
+                clone_expression(call.arguments[1]);
+                new [[ExprQuote()
+                    at=call.at,
+                    arguments := [{ExpressionPtr[1] qclone}]
+                ]];
+                new [[ExprMakeBlock() _block<-qblk, at=call.at]]
+            }]
+        ]]
 
 [call_macro(name="qmacro_method")]
 class private AstQMethodMacro : AstQNamedClassMacro

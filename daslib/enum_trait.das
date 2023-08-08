@@ -32,11 +32,10 @@ class TypeInfoGetEnumNames : AstTypeInfoMacro
         if !expr.typeexpr.isEnum
             errors := "expecting enumeration"
             return <- [[ExpressionPtr]]
-        if true
-            var inscope arr <- new [[ExprMakeArray() at=expr.at, makeType <- typeinfo(ast_typedecl type<string>)]]
-            for i in iter_range(expr.typeexpr.enumType.list)
-                if true
-                    assume name = expr.typeexpr.enumType.list[i].name
-                    var inscope nameExpr <- new [[ExprConstString() at=expr.at, value:=name]]
-                    arr.values |> emplace <| nameExpr
-            return <- arr
+        var inscope arr <- new [[ExprMakeArray() at=expr.at, makeType <- typeinfo(ast_typedecl type<string>)]]
+        for i in iter_range(expr.typeexpr.enumType.list)
+            if true
+                assume name = expr.typeexpr.enumType.list[i].name
+                var inscope nameExpr <- new [[ExprConstString() at=expr.at, value:=name]]
+                arr.values |> emplace <| nameExpr
+        return <- arr

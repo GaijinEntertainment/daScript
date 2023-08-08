@@ -44,29 +44,28 @@ class private NewJobMacro : AstFunctionAnnotation
         var mks = asc.subexpr as ExprMakeStruct
         macro_verify(!(mks._type==null || mks._type.baseType!=Type tStructure),compiling_program(),call.at,"expecting lambda declaration, not a structure")
         // clone structure type. make fields non-constant, so that they can be cloned
-        if true
-            var inscope stype <- clone_structure(mks._type.structType)
-            stype.name := "{stype.name}_new_job_clone"
-            var stype_ptr = get_ptr(stype)
-            var inscope sttype <- new [[TypeDecl() at=call.at, baseType=Type tStructure, structType = stype_ptr]]
-            for fld in stype.fields // TODO: verify field type here
-                fld._type.flags &= ~(TypeDeclFlags constant)
-                fld.flags &= ~(FieldDeclarationFlags capturedConstant)
-            var inscope pclone <- make_clone_structure(stype_ptr)
-            compiling_module() |> add_function(pclone)
-            compiling_module() |> add_structure(stype)
-            // make an @@<function<(var L;L):void> type
-            var inscope ftype <- new [[TypeDecl() at=call.at, baseType=Type tFunction ]]
-            move_new(ftype.firstType) <| new [[TypeDecl() at=call.at, baseType=Type tVoid]]
-            ftype.argTypes |> emplace_new <| clone_type(sttype)
-            ftype.argTypes |> emplace <| sttype
-            ftype.argTypes[1].flags |= TypeDeclFlags constant
-            // make a new_job_invoke call
-            var inscope ncall <- new [[ExprCall() at=call.at, name:="{call.name}_invoke"]]
-            ncall.arguments |> emplace_new <| clone_expression(call.arguments[0])
-            ncall.arguments |> emplace_new <| new [[ExprAddr() at=call.at, target:="clone", funcType <- ftype]]
-            ncall.arguments |> emplace_new <| new [[ExprConstInt() at=call.at, value=int(mks._type.sizeOf)]]
-            return <- ncall
+        var inscope stype <- clone_structure(mks._type.structType)
+        stype.name := "{stype.name}_new_job_clone"
+        var stype_ptr = get_ptr(stype)
+        var inscope sttype <- new [[TypeDecl() at=call.at, baseType=Type tStructure, structType = stype_ptr]]
+        for fld in stype.fields // TODO: verify field type here
+            fld._type.flags &= ~(TypeDeclFlags constant)
+            fld.flags &= ~(FieldDeclarationFlags capturedConstant)
+        var inscope pclone <- make_clone_structure(stype_ptr)
+        compiling_module() |> add_function(pclone)
+        compiling_module() |> add_structure(stype)
+        // make an @@<function<(var L;L):void> type
+        var inscope ftype <- new [[TypeDecl() at=call.at, baseType=Type tFunction ]]
+        move_new(ftype.firstType) <| new [[TypeDecl() at=call.at, baseType=Type tVoid]]
+        ftype.argTypes |> emplace_new <| clone_type(sttype)
+        ftype.argTypes |> emplace <| sttype
+        ftype.argTypes[1].flags |= TypeDeclFlags constant
+        // make a new_job_invoke call
+        var inscope ncall <- new [[ExprCall() at=call.at, name:="{call.name}_invoke"]]
+        ncall.arguments |> emplace_new <| clone_expression(call.arguments[0])
+        ncall.arguments |> emplace_new <| new [[ExprAddr() at=call.at, target:="clone", funcType <- ftype]]
+        ncall.arguments |> emplace_new <| new [[ExprConstInt() at=call.at, value=int(mks._type.sizeOf)]]
+        return <- ncall
 
 def gather ( ch:Channel?; blk:block<(arg:auto(TT)#):void>)
     //! reads input from the channel (in order it was pushed) and invokes the block on each input.

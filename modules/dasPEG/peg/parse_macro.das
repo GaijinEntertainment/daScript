@@ -315,62 +315,60 @@ class ParseMacro : AstCallMacro
 
         // Transform
 
+        var inscope gram: array<Definition>
+
+        var inscope gen <- [[ParserGenerator]]
+
+        for mrule in rules_
+            gram |> emplace(mrule |> transform)
+
         if failed_to_transform
             return <- [[ExpressionPtr]]
 
-        if true
+        // Generate
 
-            var inscope gram: array<Definition>
+        for mrule in rules_
+            for opt in mrule.options_
+                gen |> accept_option(opt) // Set the state of the generator up
 
-            var inscope gen <- [[ParserGenerator]]
+        gen |> generate_grammar(gram, name)
 
-            for mrule in rules_
-                gram |> emplace(mrule |> transform)
+        // Emit wrapper code
+        var first_method_name = gram[0].name
 
-            // Generate
+        return <- qmacro_block <|
+            var inscope parser : $t(gen.parser_type)
 
-            for mrule in rules_
-                for opt in mrule.options_
-                    gen |> accept_option(opt) // Set the state of the generator up
+            parser.suppress_errors |> push <| false
 
-            gen |> generate_grammar(gram, name)
+            if $v(gen.color_output)
+                parser.color_output = true
 
-            // Emit wrapper code
-            var first_method_name = gram[0].name
+            peek_data($i(name)) <| $ ( inp )
+                parser.input := inp
 
-            return <- qmacro_block <|
-                var inscope parser : $t(gen.parser_type)
+            var result : $t(gen.return_types[gram[0].name])
+            result <- $c("parse_{gram[0].name}")(parser)
 
-                parser.suppress_errors |> push <| false
+            if result.success
+                invoke(blk, result.value, [[array<ParsingError>]])
+                return
 
-                if $v(gen.color_output)
-                    parser.color_output = true
+            // Create an error-reporting parser and emit errors
 
-                peek_data($i(name)) <| $ ( inp )
-                    parser.input := inp
+            var inscope error_reporting_parser : $t(gen.parser_type)
+            error_reporting_parser.suppress_errors |> push <| false
 
-                var result : $t(gen.return_types[gram[0].name])
-                result <- $c("parse_{gram[0].name}")(parser)
+            peek_data($i(name)) <| $ ( inp )
+                error_reporting_parser.input := inp
 
-                if result.success
-                    invoke(blk, result.value, [[array<ParsingError>]])
-                    return
+            error_reporting_parser.error_reporting = true
+            error_reporting_parser.longest_prefix = parser.longest_prefix
 
-                // Create an error-reporting parser and emit errors
-                if true
-                    var inscope error_reporting_parser : $t(gen.parser_type)
-                    error_reporting_parser.suppress_errors |> push <| false
+            result <- $c("parse_{gram[0].name}")(error_reporting_parser)
+            sort_unique(error_reporting_parser.errors)
 
-                    peek_data($i(name)) <| $ ( inp )
-                        error_reporting_parser.input := inp
-
-                    error_reporting_parser.error_reporting = true
-                    error_reporting_parser.longest_prefix = parser.longest_prefix
-
-                    result <- $c("parse_{gram[0].name}")(error_reporting_parser)
-                    sort_unique(error_reporting_parser.errors)
-
-                    invoke(blk, result.value, error_reporting_parser.errors)
+            invoke(blk, result.value, error_reporting_parser.errors)
 
 
 [_macro]

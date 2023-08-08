@@ -305,14 +305,13 @@ class SetupAnyAnnotation : AstStructureAnnotation
         else
             name = argName as tString
         var blk <- setup_macro("__setup_macros", st.at)
-        if true
-            var inscope cll <- new [[ExprCall() at=st.at, name:=annotation_function_call]]
-            self->setup_call(st,cll)
-            var inscope nee <- new [[ExprNew() at=st.at, initializer=true,
-                typeexpr <- new [[TypeDecl() baseType=Type tStructure, structType=get_ptr(st), at=st.at]]
-            ]]
-            emplace(cll.arguments,nee)
-            emplace(blk.list,cll)
+        var inscope cll <- new [[ExprCall() at=st.at, name:=annotation_function_call]]
+        self->setup_call(st,cll)
+        var inscope nee <- new [[ExprNew() at=st.at, initializer=true,
+            typeexpr <- new [[TypeDecl() baseType=Type tStructure, structType=get_ptr(st), at=st.at]]
+        ]]
+        emplace(cll.arguments,nee)
+        emplace(blk.list,cll)
         return true
 
 class SetupFunctionAnnotatoin : SetupAnyAnnotation

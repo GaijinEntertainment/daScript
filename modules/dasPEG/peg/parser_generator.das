@@ -545,29 +545,28 @@ def generate_maybe_repeat(var gen: ParserGenerator; var rule_: Rule_?): array<Ex
     // Bind result to the provided name
 
     set_rule_handle(rule_, "temp_name")
-    if true
-        var inscope type_decl <- gen |> get_rule_type(rule_.rule)
+    var inscope type_decl <- gen |> get_rule_type(rule_.rule)
 
-        var inscope rule_code <- gen |> with_context("__repetition__") <|
-            return <- gen |> generate(rule_.rule)
+    var inscope rule_code <- gen |> with_context("__repetition__") <|
+        return <- gen |> generate(rule_.rule)
 
-        rule_code |> append_block_new <| (qmacro_block <| {
-            $i(result_handle) |> emplace <| temp_name;
-            return_skip_lockcheck <| [[auto true, 0, 0]];
-            return <- [[auto true, 0, 0]];
-        })
+    rule_code |> append_block_new <| (qmacro_block <| {
+        $i(result_handle) |> emplace <| temp_name;
+        return_skip_lockcheck <| [[auto true, 0, 0]];
+        return <- [[auto true, 0, 0]];
+    })
 
-        var inscope t <- qmacro_block <|
-            var $i(result_handle) : array<$t(type_decl)>
-            parser.suppress_errors |> push <| true
-            while true
-                var sz = $i(result_handle) |> length
-                invoke <|
-                    $b(rule_code) // Adds an element on success
-                break if sz == $i(result_handle) |> length
-            parser.suppress_errors |> pop
+    var inscope t <- qmacro_block <|
+        var $i(result_handle) : array<$t(type_decl)>
+        parser.suppress_errors |> push <| true
+        while true
+            var sz = $i(result_handle) |> length
+            invoke <|
+                $b(rule_code) // Adds an element on success
+            break if sz == $i(result_handle) |> length
+        parser.suppress_errors |> pop
 
-        return <- flatten_block(t as ExprBlock)
+    return <- flatten_block(t as ExprBlock)
 
 
 def generate_not(var gen: ParserGenerator; var rule_: Rule_?): array<ExpressionPtr>
@@ -683,46 +682,45 @@ def generate_repeat(var gen: ParserGenerator; var rule_: Rule_?): array<Expressi
 
     // Bind result to the provided name
 
-    if true
-        set_rule_handle(rule_, "temp_name")
-        var inscope rule_code <- gen |> with_context("__repetition__") <|
-            return <- gen |> generate(rule_.rule)
+    set_rule_handle(rule_, "temp_name")
+    var inscope rule_code <- gen |> with_context("__repetition__") <|
+        return <- gen |> generate(rule_.rule)
 
-        rule_code |> append_block_new <| (qmacro_block <| {
-            $i(result_handle) |> emplace <| temp_name;
-            return_skip_lockcheck <| [[auto true, 0, parser.index]];
-            return <- [[auto true, 0, parser.index]];
-        })
+    rule_code |> append_block_new <| (qmacro_block <| {
+        $i(result_handle) |> emplace <| temp_name;
+        return_skip_lockcheck <| [[auto true, 0, parser.index]];
+        return <- [[auto true, 0, parser.index]];
+    })
 
-        var inscope type_decl <- gen |> get_rule_type(rule_.rule)
+    var inscope type_decl <- gen |> get_rule_type(rule_.rule)
 
-        var inscope t <- qmacro_block <|
-            var $i(result_handle) : array<$t(type_decl)>
-            var $i(first_result_name) <- invoke <|
-                $b(rule_code)
+    var inscope t <- qmacro_block <|
+        var $i(result_handle) : array<$t(type_decl)>
+        var $i(first_result_name) <- invoke <|
+            $b(rule_code)
 
-            if !$i(first_result_name).success
-                if parser.error_reporting && !parser.suppress_errors |> back && parser.index == parser.longest_prefix
-                    var error = "Error: Expected a `" |> red_str($v(gen.color_output))
-                    var terminal = "{$v(rule_ |> describe_rule)}" |> bold
-                    var rest = "` rule at {parser.index}" |> red_str($v(gen.color_output))
-                    var complete_message = "{error}{terminal}{rest}"
-                    parser.errors |> push <| [[ParsingError text=complete_message,index=parser.index]]
+        if !$i(first_result_name).success
+            if parser.error_reporting && !parser.suppress_errors |> back && parser.index == parser.longest_prefix
+                var error = "Error: Expected a `" |> red_str($v(gen.color_output))
+                var terminal = "{$v(rule_ |> describe_rule)}" |> bold
+                var rest = "` rule at {parser.index}" |> red_str($v(gen.color_output))
+                var complete_message = "{error}{terminal}{rest}"
+                parser.errors |> push <| [[ParsingError text=complete_message,index=parser.index]]
 
-                return_skip_lockcheck <| [[$t(return_type)]]
-                return <- [[$t(return_type)]]
+            return_skip_lockcheck <| [[$t(return_type)]]
+            return <- [[$t(return_type)]]
 
-            $i(result_handle) |> emplace <| ($i(first_result_name).value)
+        $i(result_handle) |> emplace <| ($i(first_result_name).value)
 
-            parser.suppress_errors |> push <| true
-            while true
-                var sz = $i(result_handle) |> length
-                invoke <|
-                    $b(rule_code) // Adds an element on success
-                break if sz == $i(result_handle) |> length
-            parser.suppress_errors |> pop
+        parser.suppress_errors |> push <| true
+        while true
+            var sz = $i(result_handle) |> length
+            invoke <|
+                $b(rule_code) // Adds an element on success
+            break if sz == $i(result_handle) |> length
+        parser.suppress_errors |> pop
 
-        return <- flatten_block(t as ExprBlock)
+    return <- flatten_block(t as ExprBlock)
 
 
 def describe_terminal(term: Terminal): string
@@ -835,29 +833,29 @@ def generate_option(var gen: ParserGenerator; var rule_: Rule_?): array<Expressi
         return <- flatten_block(t as ExprBlock)
 
     // Bind result to the provided name
-    if true
-        set_rule_handle(rule_, "temp_name")
-        var inscope type_decl <- gen |> get_rule_type(rule_.rule)
-        var inscope result_type <- gen.return_types[gen.current_context] |> clone_type
 
-        var inscope rule_code <- gen |> with_context("__option__") <|
-            return <- gen |> generate(rule_.rule)
+    set_rule_handle(rule_, "temp_name")
+    var inscope type_decl <- gen |> get_rule_type(rule_.rule)
+    var inscope result_type <- gen.return_types[gen.current_context] |> clone_type
 
-        rule_code |> append_block_new <| (qmacro_block <| {
-            $i(result_handle) |> emplace <| temp_name;
-            return_skip_lockcheck <| [[auto false, 0, 0]];
-            return <- [[auto false, 0, 0]];
-        })
+    var inscope rule_code <- gen |> with_context("__option__") <|
+        return <- gen |> generate(rule_.rule)
 
-        var inscope t <- qmacro_block <|
-            var $i(result_handle) : array<$t(type_decl)>
+    rule_code |> append_block_new <| (qmacro_block <| {
+        $i(result_handle) |> emplace <| temp_name;
+        return_skip_lockcheck <| [[auto false, 0, 0]];
+        return <- [[auto false, 0, 0]];
+    })
 
-            parser.suppress_errors |> push <| true
-            invoke <|
-                $b(rule_code)
-            parser.suppress_errors |> pop
+    var inscope t <- qmacro_block <|
+        var $i(result_handle) : array<$t(type_decl)>
 
-        return <- flatten_block(t as ExprBlock)
+        parser.suppress_errors |> push <| true
+        invoke <|
+            $b(rule_code)
+        parser.suppress_errors |> pop
+
+    return <- flatten_block(t as ExprBlock)
 
 
 def with_context(var gen: ParserGenerator; context: string; block_)

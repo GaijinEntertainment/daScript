@@ -1,1 +1,1 @@
-Overload accepting temporary type
+returns JSON (textual) representation of JsonValue as a string.

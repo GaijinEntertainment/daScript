@@ -159,10 +159,9 @@ class ApplyMacro : AstCallMacro
                 macro_error(prog,expr.at,"internal error. can't apply to {describe(argT)}")
                 return <- [[ExpressionPtr]]
             // make a call
-            if true
-                var inscope call <- new [[ExprCall() name:="_::" + callName, at=expr.at]]
-                emplace_new(call.arguments,clone_expression(expr.arguments[0]))
-                for _ in range(nfields)
-                    emplace_new(call.arguments,clone_expression(expr.arguments[1]))
-                return <- call
+            var inscope call <- new [[ExprCall() name:="_::" + callName, at=expr.at]]
+            emplace_new(call.arguments,clone_expression(expr.arguments[0]))
+            for _ in range(nfields)
+                emplace_new(call.arguments,clone_expression(expr.arguments[1]))
+            return <- call
         return <- [[ExpressionPtr]]

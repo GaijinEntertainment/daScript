@@ -18,9 +18,8 @@ class ExportConstructor : AstStructureAnnotation
         if args |> length!=0
             errors := "expecting [export_constructor] to have no arguments"
             return false
-        if true
-            var inscope qfn <- qmacro_function("make`{st.name}") <|
-                return new <$t(st)>()
-            qfn.flags |= FunctionFlags exports
-            add_function(st._module, qfn)
-            return true
+        var inscope qfn <- qmacro_function("make`{st.name}") <|
+            return new <$t(st)>()
+        qfn.flags |= FunctionFlags exports
+        add_function(st._module, qfn)
+        return true
