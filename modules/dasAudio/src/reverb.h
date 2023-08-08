@@ -3,8 +3,6 @@
 // this is from https://github.com/OpenMPT/openmpt
 // see LICENSE.OPENMPT for details
 
-#include <cmath>
-
 namespace das {
 
 enum I3DL2Preset {
@@ -143,6 +141,14 @@ protected:
     void SetDecayCoeffs();
     float CalcDecayCoeffs(int32_t index);
 };
+
+}
+
+#ifdef I3DL32_REVERB_IMPLEMENTATION
+
+#include <cmath>
+
+namespace das {
 
 void I3DL2Reverb::DelayLine::Init(int32_t ms, int32_t padding, uint32_t sampleRate, int32_t delayTap) {
 	m_length = (sampleRate * ms / 1000) + padding;
@@ -594,3 +600,6 @@ float I3DL2Reverb::CalcDecayCoeffs(int32_t index) {
 }
 
 }
+
+#endif
+

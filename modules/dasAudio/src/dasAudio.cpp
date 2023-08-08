@@ -10,9 +10,10 @@
 #include <miniaudio.h>
 #include <volume_mixer.h>
 
-#include "dasAudio.h"
-
+#define I3DL32_REVERB_IMPLEMENTATION    1
 #include "reverb.h"
+
+#include "dasAudio.h"
 
 MAKE_EXTERNAL_TYPE_FACTORY(Context,Context);
 
