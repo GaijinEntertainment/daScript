@@ -41,13 +41,13 @@ class StaticLetMacro : AstFunctionAnnotation
     //! This macro implements the `static_let` and `static_let_finalize` functions.
     def override transform ( var call : smart_ptr<ExprCallFunc>; var errors : das_string ) : ExpressionPtr
         assert(call.arguments[0] is ExprMakeBlock)
+        var inscope renames : array<tuple<old_name:string;new_name:string>>
         let mblk = call.arguments[0] as ExprMakeBlock
         var blk = mblk._block as ExprBlock
         if blk.finalList |> length != 0
             errors := "not expecting finally section in the static_let"
             return <- [[ExpressionPtr]]
         let prefix = "`static`at_line_{int(call.at.line)}`"
-        var inscope renames : array<tuple<old_name:string;new_name:string>>
         for ex in blk.list
             if !(ex is ExprLet)
                 errors := "expecting let ... expressions in the static_let"

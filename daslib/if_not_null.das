@@ -34,12 +34,13 @@ class ApplyMacro : AstCallMacro
             macro_verify(PTR._type.isPointer,prog,expr.at,"first argument must be pointer , expecting ptr |> if_not_null() <| call()")
             let ifnn_name = "__ifnn_ptr_{if_not_null_index++}"
             var fcall = expr.arguments[1] as ExprCall
-            var inscope vtype <- clone_type(PTR._type)
-            if !PTR._type.flags.constant
-                vtype.flags |= TypeDeclFlags removeConstant
-            return <- qmacro_block <|
-                let $i(ifnn_name) : $t(vtype) = $e(PTR)
-                if $i(ifnn_name)!=null
-                    $c(fcall.name)(*$i(ifnn_name),$a(fcall.arguments))
+            if true
+                var inscope vtype <- clone_type(PTR._type)
+                if !PTR._type.flags.constant
+                    vtype.flags |= TypeDeclFlags removeConstant
+                return <- qmacro_block <|
+                    let $i(ifnn_name) : $t(vtype) = $e(PTR)
+                    if $i(ifnn_name)!=null
+                        $c(fcall.name)(*$i(ifnn_name),$a(fcall.arguments))
         return <- [[ExpressionPtr]]
 

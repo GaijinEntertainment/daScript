@@ -116,6 +116,7 @@ namespace das
     ,   incompatible_cast                       =   31201       //  cast<NotBarParent> bar
 
     ,   unsafe                                  =   31300       // unsafe operation in safe function
+    ,   early_out_in_finally                    =   31301       // using potentially uninitialized variable in 'finally' block
 
     ,   index_out_of_range                      =   31400       // a:int[3] a[4]
 
