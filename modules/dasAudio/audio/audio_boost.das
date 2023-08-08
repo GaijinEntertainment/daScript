@@ -716,6 +716,11 @@ def public set_status_update(sid : SID; var status_channel : Channel?)
     g_command_channel |> push_clone <| [[AudioCommand status=[[AudioCommandStatus sid=sid, status=null, status_channel=status_channel]]]]
     return sid
 
+def public unset_status_update(sid : SID)
+    //! unset status for sound
+    g_command_channel |> push_clone <| [[AudioCommand status=[[AudioCommandStatus sid=sid, status=null, status_channel=null]]]]
+    return sid
+
 def public set_reverb(sid: SID; reverb : I3DL2ReverbProperties)
     //! set reverb for sound
     g_command_channel |> push_clone <| [[AudioCommand reverb=[[auto sid, reverb]]]]
