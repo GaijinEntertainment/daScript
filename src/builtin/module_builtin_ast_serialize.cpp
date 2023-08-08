@@ -400,6 +400,20 @@ namespace das {
         return *this;
     }
 
+    bool isLogicAnnotation ( string & name ) {
+        return name == "||" || name == "&&" || name == "!" || name == "^^";
+    }
+
+    LogicAnnotationOp makeOpFromName ( string & name ) {
+        switch ( name[0] ) {
+        case '|':    return LogicAnnotationOp::Or;
+        case '&':    return LogicAnnotationOp::And;
+        case '!':    return LogicAnnotationOp::Not;
+        case '^':    return LogicAnnotationOp::Xor;
+        default: DAS_VERIFYF(false, "expected to be called on logic annotation name");
+        }
+    }
+
     void serializeAnnotationPointer( AstSerializer & ser, Annotation * & anno ) {
         uint64_t fid = uint64_t(anno);
         ser << fid;
@@ -408,8 +422,17 @@ namespace das {
                 bool inThisModule = anno->module == ser.thisModule;
                 ser << inThisModule;
                 if ( !inThisModule ) {
-                    ser << anno->module->name;
                     ser << anno->name;
+                    if ( anno->name == "||" ) {
+                        anno->name.size();
+                    }
+                    if ( isLogicAnnotation(anno->name) ) {
+                        LogicAnnotationOp op = makeOpFromName(anno->name);
+                        ser.serialize_enum(op);
+                        anno->serialize(ser);
+                    } else {
+                        ser << anno->module->name;
+                    }
                 } else {
                     // If the macro is from current module, do nothing
                     // it will probably take care of itself during compilation
@@ -424,12 +447,19 @@ namespace das {
                 ser << inThisModule;
                 if ( !inThisModule ) {
                     string moduleName, name;
-                    ser << moduleName;
-                    auto mod = ser.moduleLibrary->findModule(moduleName);
-                    DAS_VERIFYF(mod!=nullptr, "module '%s' is not found", moduleName.c_str());
                     ser << name;
-                    anno = mod->findAnnotation(name).get();
-                    DAS_VERIFYF(anno!=nullptr, "annotation '%s' is not found", name.c_str());
+                    if ( isLogicAnnotation(name) ) {
+                        LogicAnnotationOp op; ser.serialize_enum(op);
+                        AnnotationPtr lann = newLogicAnnotation(op);
+                        lann->serialize(ser);
+                        anno = lann.get();
+                    } else {
+                       ser << moduleName;
+                        auto mod = ser.moduleLibrary->findModule(moduleName);
+                        DAS_VERIFYF(mod!=nullptr, "module '%s' is not found", moduleName.c_str());
+                        anno = mod->findAnnotation(name).get();
+                        DAS_VERIFYF(anno!=nullptr, "annotation '%s' is not found", name.c_str());
+                    }
                 }
             } else {
                 anno = nullptr;

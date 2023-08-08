@@ -66,6 +66,13 @@ namespace das
 
     struct AnnotationArgumentList;
     struct AnnotationDeclaration;
+    typedef smart_ptr<AnnotationDeclaration> AnnotationDeclarationPtr;
+
+    enum class LogicAnnotationOp { And, Or, Xor, Not };
+    AnnotationPtr newLogicAnnotation ( LogicAnnotationOp op );
+    AnnotationPtr newLogicAnnotation ( LogicAnnotationOp op,
+        const AnnotationDeclarationPtr & arg0, const AnnotationDeclarationPtr & arg1 );
+
 
     //      [annotation (value,value,...,value)]
     //  or  [annotation (key=value,key,value,...,key=value)]
@@ -122,6 +129,7 @@ namespace das
         string describe() const { return name; }
         string getMangledName() const;
         virtual void log ( TextWriter & ss, const AnnotationDeclaration & decl ) const;
+        virtual void serialize( AstSerializer & ) { }
         Module *    module = nullptr;
     };
 
@@ -138,7 +146,6 @@ namespace das
         string getMangledName() const;
         void serialize( AstSerializer & ser );
     };
-    typedef smart_ptr<AnnotationDeclaration> AnnotationDeclarationPtr;
 
     typedef vector<AnnotationDeclarationPtr> AnnotationList;
 
