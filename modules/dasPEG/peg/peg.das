@@ -150,10 +150,10 @@ def public match_double_literal(var parser): tuple<success:bool; double>
 
     var current_char = parser |> get_current_char
 
-    var inscope buffer: array<uint8>
-
     if !current_char |> is_number && current_char != '+' && current_char != '-'
         return <- [[auto false, 0.0 |> double()]]
+
+    var inscope buffer: array<uint8>
 
     if current_char == '-' || current_char == '+'
         buffer |> push(current_char |> uint8())

@@ -42,21 +42,20 @@ class DecsTemplate : AstStructureAnnotation
             return false
         let ppref = decs_prefix(args)
         let prefix = (ppref is yes) ? (ppref as yes) : "{st.name}_"
-        if true
-            var inscope blkApply : array<ExpressionPtr>
-            var inscope blkErase : array<ExpressionPtr>
-            for fld in st.fields
-                blkApply |> emplace_new <| qmacro(decs::set(cmp,$v("{prefix}{fld.name}"),src.$f(fld.name)))
-                blkErase |> emplace_new <| qmacro(decs::remove(cmp,$v("{prefix}{fld.name}")))
-            var inscope fnApply <- qmacro_function("apply_decs_template") <| $ ( var cmp:ComponentMap; var src:$t(st) ) : void
-                $b(blkApply)
-            if !(compiling_module() |> add_function(fnApply))
-                panic("failed to add apply_decs_template, can't add function {fnApply.name}")
-            var inscope  fnErase <- qmacro_function("remove_decs_template`{st.name}") <| $ ( var cmp:ComponentMap; var src:$t(st) ) : void
-                $b(blkErase)
-            if !(compiling_module() |> add_function(fnErase))
-                panic("failed to add remove_decs_template, can't add function {fnErase.name}")
-            return true
+        var inscope blkApply : array<ExpressionPtr>
+        var inscope blkErase : array<ExpressionPtr>
+        for fld in st.fields
+            blkApply |> emplace_new <| qmacro(decs::set(cmp,$v("{prefix}{fld.name}"),src.$f(fld.name)))
+            blkErase |> emplace_new <| qmacro(decs::remove(cmp,$v("{prefix}{fld.name}")))
+        var inscope fnApply <- qmacro_function("apply_decs_template") <| $ ( var cmp:ComponentMap; var src:$t(st) ) : void
+            $b(blkApply)
+        if !(compiling_module() |> add_function(fnApply))
+            panic("failed to add apply_decs_template, can't add function {fnApply.name}")
+        var inscope  fnErase <- qmacro_function("remove_decs_template`{st.name}") <| $ ( var cmp:ComponentMap; var src:$t(st) ) : void
+            $b(blkErase)
+        if !(compiling_module() |> add_function(fnErase))
+            panic("failed to add remove_decs_template, can't add function {fnErase.name}")
+        return true
 
 variant ItCheck
     //! DECS prefix check.
@@ -164,10 +163,10 @@ def private append_iterator ( arch_name:string; var qloop:smart_ptr<ExprFor>; a;
 
 [macro_function]
 def private append_index_lookup ( arch_name:string; var qblock:smart_ptr<ExprBlock>; a; prefix, suffix:string; const_parent : bool = false; can_be_optional : bool = true )
-    var inscope iget : ExpressionPtr
     var getter = getter_name(a,const_parent,can_be_optional)
     if empty(getter)
         return false
+    var inscope iget : ExpressionPtr
     if getter=="get_default_ro"
         unsafe
             iget <- clone_expression(a.init)
@@ -176,30 +175,29 @@ def private append_index_lookup ( arch_name:string; var qblock:smart_ptr<ExprBlo
         ftype.flags &= ~ TypeDeclFlags constant
         ftype.flags &= ~ TypeDeclFlags ref
         move(iget, get_ptr(qmacro($c(getter)($i(arch_name),$v("{prefix}{a.name}"),type<$t(ftype)>)[entity_index])))
-    if true
-        var inscope vlet <- new [[ExprLet() at=a.at, atInit=a.at]]
-        vlet.genFlags |= ExprGenFlags alwaysSafe
-        var inscope vtype <- clone_type(a._type)
-        if getter=="get_default_ro"
-            vtype.flags |= TypeDeclFlags constant
-        elif getter=="get_ro"
-            vtype.flags |= TypeDeclFlags constant
-            // if length(a._type.dim)==0
-            vtype.flags |= TypeDeclFlags ref
-        else
-            // if length(a._type.dim)==0
-            vtype.flags |= TypeDeclFlags ref
-            // else
-            //    macro_error(compiling_program(),a.at,"[] arguments are not supported in eid queries yet")
-            //    return false
-        vlet.variables |> emplace_new() <| new [[Variable() at = a.at,
-            name := "{prefix}{a.name}{suffix}",
-            _type <- vtype,
-            init <- iget,
-            flags = VariableFlags can_shadow
-            ]]
-        qblock.list |> emplace(vlet)
-        return true
+    var inscope vlet <- new [[ExprLet() at=a.at, atInit=a.at]]
+    vlet.genFlags |= ExprGenFlags alwaysSafe
+    var inscope vtype <- clone_type(a._type)
+    if getter=="get_default_ro"
+        vtype.flags |= TypeDeclFlags constant
+    elif getter=="get_ro"
+        vtype.flags |= TypeDeclFlags constant
+        // if length(a._type.dim)==0
+        vtype.flags |= TypeDeclFlags ref
+    else
+        // if length(a._type.dim)==0
+        vtype.flags |= TypeDeclFlags ref
+        // else
+        //    macro_error(compiling_program(),a.at,"[] arguments are not supported in eid queries yet")
+        //    return false
+    vlet.variables |> emplace_new() <| new [[Variable() at = a.at,
+        name := "{prefix}{a.name}{suffix}",
+        _type <- vtype,
+        init <- iget,
+        flags = VariableFlags can_shadow
+        ]]
+    qblock.list |> emplace(vlet)
+    return true
 
 enum private DecsQueryType
     query
@@ -285,97 +283,93 @@ class DecsQueryMacro : AstCallMacro
         req.at = EcsRequestPos(expr.at)
         var vreq = verify_request(req)
         macro_verify(vreq.ok,compiling_program(),expr.at,"incorrect query, {vreq.error}")
-        if true
-            // @@ => [[EcsQuery ...]]
-            var inscope erq_fun <- qmacro <| @@
-                return <- $v(req)
-            var kaboom : array<tuple<string;string;string>>
-            var inscope qtop : ExpressionPtr
-            if qt==DecsQueryType eid_query
-                var inscope qlbody <- new [[ExprBlock() at=qblk.at]]
-                for a in qblk.arguments
-                    let detp = a |> is_decs_template
-                    if detp is yes
-                        kaboom |> push <| [[auto string(a.name),detp as yes,"_{a.name}"]]
-                        for f in a._type.structType.fields
-                            if !append_index_lookup(arch_name, qlbody, f, detp as yes, "_{a.name}", a._type.flags.constant, false)
-                                return <- [[ExpressionPtr]]
-                    else
-                        if !append_index_lookup(arch_name, qlbody, a, "", "")
+        // @@ => [[EcsQuery ...]]
+        var inscope erq_fun <- qmacro <| @@
+            return <- $v(req)
+        var kaboom : array<tuple<string;string;string>>
+        var inscope qtop : ExpressionPtr
+        if qt==DecsQueryType eid_query
+            var inscope qlbody <- new [[ExprBlock() at=qblk.at]]
+            for a in qblk.arguments
+                let detp = a |> is_decs_template
+                if detp is yes
+                    kaboom |> push <| [[auto string(a.name),detp as yes,"_{a.name}"]]
+                    for f in a._type.structType.fields
+                        if !append_index_lookup(arch_name, qlbody, f, detp as yes, "_{a.name}", a._type.flags.constant, false)
                             return <- [[ExpressionPtr]]
-                for l in qblk.list
-                    qlbody.list |> emplace_new <| clone_expression(l)
-                for fl in qblk.finalList
-                    qlbody.finalList |> emplace_new <| clone_expression(fl)
-                convert_block_to_loop(qlbody, true, false, false)
-                move(qtop) <| qlbody
+                else
+                    if !append_index_lookup(arch_name, qlbody, a, "", "")
+                        return <- [[ExpressionPtr]]
+            for l in qblk.list
+                qlbody.list |> emplace_new <| clone_expression(l)
+            for fl in qblk.finalList
+                qlbody.finalList |> emplace_new <| clone_expression(fl)
+            convert_block_to_loop(qlbody, true, false, false)
+            move(qtop) <| qlbody
+        else
+            // for s1, s2 ...
+            var inscope qloop <- new [[ExprFor() at=qblk.at, visibility=qblk.at]]
+            qloop.allowIteratorOptimization = true
+            qloop.canShadow = true
+            for a in qblk.arguments
+                let detp = a |> is_decs_template
+                if detp is yes
+                    kaboom |> push <| [[auto string(a.name),detp as yes,"_{a.name}"]]
+                    for f in a._type.structType.fields
+                        if !append_iterator(arch_name, qloop, f, detp as yes, "_{a.name}", a._type.flags.constant, false)
+                            return <- [[ExpressionPtr]]
+                else
+                    if !append_iterator(arch_name, qloop, a, "", "")
+                        return <- [[ExpressionPtr]]
+            var inscope qlbody <- new [[ExprBlock() at=qblk.at]]
+            for l in qblk.list
+                qlbody.list |> emplace_new <| clone_expression(l)
+            for fl in qblk.finalList
+                qlbody.finalList |> emplace_new <| clone_expression(fl)
+            if qt==DecsQueryType query
+                convert_block_to_loop(qlbody, false, true, false )
             else
-                // for s1, s2 ...
-                var inscope qloop <- new [[ExprFor() at=qblk.at, visibility=qblk.at]]
-                qloop.allowIteratorOptimization = true
-                qloop.canShadow = true
-                for a in qblk.arguments
-                    let detp = a |> is_decs_template
-                    if detp is yes
-                        kaboom |> push <| [[auto string(a.name),detp as yes,"_{a.name}"]]
-                        for f in a._type.structType.fields
-                            if !append_iterator(arch_name, qloop, f, detp as yes, "_{a.name}", a._type.flags.constant, false)
-                                return <- [[ExpressionPtr]]
-                    else
-                        if !append_iterator(arch_name, qloop, a, "", "")
-                            return <- [[ExpressionPtr]]
-                if true
-                    var inscope qlbody <- new [[ExprBlock() at=qblk.at]]
-                    for l in qblk.list
-                        qlbody.list |> emplace_new <| clone_expression(l)
-                    for fl in qblk.finalList
-                        qlbody.finalList |> emplace_new <| clone_expression(fl)
-                    if qt==DecsQueryType query
-                        convert_block_to_loop(qlbody, false, true, false )
-                    else
-                        convert_block_to_loop(qlbody, false, true, true )
-                    move(qloop.body) <| qlbody
-                    move(qtop) <| qloop
+                convert_block_to_loop(qlbody, false, true, true )
+            move(qloop.body) <| qlbody
+            move(qtop) <| qloop
+        apply_template(qtop) <| $ ( rules )
+            for kb in kaboom
+                rules |> kaboomVarField(kb._0,kb._1,kb._2)
+        if length(kaboom) > 0
             apply_template(qtop) <| $ ( rules )
                 for kb in kaboom
-                    rules |> kaboomVarField(kb._0,kb._1,kb._2)
-            if length(kaboom) > 0
-                apply_template(qtop) <| $ ( rules )
-                    for kb in kaboom
-                        rules |> replaceVariable(kb._0) <| make_static_assert_false("decs_template variables can only be accessed by fields", expr.at)
-            if true
-                var inscope qblock : ExpressionPtr
-                unsafe
-                    if qt==DecsQueryType eid_query
-                        qblock <- quote() <|
-                            for_eid_archetype (tag_eid, tag_req, tag_erq) <| $ ( tag_arch, entity_index )
-                                tag_loop
-                    elif qt==DecsQueryType find_query
-                        qblock <- quote() <|
-                            for_each_archetype_find (tag_req, tag_erq) <| $ ( tag_arch )
-                                tag_loop
-                                return false
-                    elif qt==DecsQueryType query
-                        qblock <- quote() <|
-                            for_each_archetype (tag_req, tag_erq) <| $ ( tag_arch )
-                                tag_loop
-                    else
-                        macro_error(compiling_program(),expr.at,"internal error. unsupported query type")
-                        return [[ExpressionPtr]]
-                qblock |> force_at(expr.at)
-                apply_template(qblock) <| $ ( rules )
-                    if qt==DecsQueryType eid_query
-                        rules |> replaceVariable("tag_eid") <| clone_expression(expr.arguments[0])
-                    rules |> replaceVariable("tag_erq") <| add_ptr_ref(erq_fun)
-                    rules |> replaceBlockArgument("tag_arch") <| arch_name
-                    rules |> replaceVariable("tag_req") <| new [[ExprConstUInt64() at=expr.at, value=req.hash]]
-                    rules |> replaceVariable("tag_loop") <| add_ptr_ref(qtop)
-                if true
-                    var inscope qres <- move_unquote_block(qblock)
-                    assert(length(qres.list)==1 && length(qres.finalList)==0)
-                    var inscope rqres <- qres.list[0]
-                    qres := null
-                    return <- rqres
+                    rules |> replaceVariable(kb._0) <| make_static_assert_false("decs_template variables can only be accessed by fields", expr.at)
+        var inscope qblock : ExpressionPtr
+        unsafe
+            if qt==DecsQueryType eid_query
+                qblock <- quote() <|
+                    for_eid_archetype (tag_eid, tag_req, tag_erq) <| $ ( tag_arch, entity_index )
+                        tag_loop
+            elif qt==DecsQueryType find_query
+                qblock <- quote() <|
+                    for_each_archetype_find (tag_req, tag_erq) <| $ ( tag_arch )
+                        tag_loop
+                        return false
+            elif qt==DecsQueryType query
+                qblock <- quote() <|
+                    for_each_archetype (tag_req, tag_erq) <| $ ( tag_arch )
+                        tag_loop
+            else
+                macro_error(compiling_program(),expr.at,"internal error. unsupported query type")
+                return [[ExpressionPtr]]
+        qblock |> force_at(expr.at)
+        apply_template(qblock) <| $ ( rules )
+            if qt==DecsQueryType eid_query
+                rules |> replaceVariable("tag_eid") <| clone_expression(expr.arguments[0])
+            rules |> replaceVariable("tag_erq") <| add_ptr_ref(erq_fun)
+            rules |> replaceBlockArgument("tag_arch") <| arch_name
+            rules |> replaceVariable("tag_req") <| new [[ExprConstUInt64() at=expr.at, value=req.hash]]
+            rules |> replaceVariable("tag_loop") <| add_ptr_ref(qtop)
+        var inscope qres <- move_unquote_block(qblock)
+        assert(length(qres.list)==1 && length(qres.finalList)==0)
+        var inscope rqres <- qres.list[0]
+        qres := null
+        return <- rqres
 
 [call_macro(name="find_query")]
 class DecsFindQueryMacro : DecsQueryMacro
@@ -421,49 +415,48 @@ class DecsEcsMacro : AstFunctionAnnotation
             reg.list |> emplace_new <| qmacro(decs::register_decs_stage_call($v(passName),@@$c(passFuncName)))
         func.flags |= FunctionFlags privateFunction
         blk.list |> emplace_new <| qmacro($c("_::{func.name}")())
-        if true
-            var inscope fblk <- new [[ExprBlock() at=func.body.at]]                 // new function block
-            var inscope cqq <- make_call(func.at,"query")
-            var cquery = cqq as ExprCallMacro
-            var inscope qblk <- new [[ExprBlock() at=func.body.at]]                 // inside the query block
-            qblk.blockFlags |= ExprBlockFlags isClosure
-            move_new(qblk.returnType) <| new [[TypeDecl() baseType=Type tVoid, at=func.at]]
-            var req, nreq : array<string>
-            for arg in args
-                if arg.basicType==Type tString
-                    if arg.name=="REQUIRE"
-                        req |> push("{arg.sValue}")
-                    if arg.name=="REQUIRE_NOT"
-                        nreq |> push("{arg.sValue}")
-            if !req |> empty
-                var inscope decl <- new [[AnnotationDeclaration() ]]
-                var ann = find_annotation("decs_boost", "REQUIRE")
-                unsafe
-                    decl.annotation := reinterpret<smart_ptr<Annotation>> ann
-                for rq in req
-                    decl.arguments |> add_annotation_argument(rq, true)
-                qblk.annotations |> emplace(decl)
-            if !nreq |> empty
-                var inscope decl <- new [[AnnotationDeclaration() ]]
-                var ann = find_annotation("decs_boost", "REQUIRE_NOT")
-                unsafe
-                    decl.annotation := reinterpret<smart_ptr<Annotation>> ann
-                for rq in nreq
-                    decl.arguments |> add_annotation_argument(rq, true)
-                qblk.annotations |> emplace(decl)
-            var fnbody = func.body as ExprBlock
-            for el in fnbody.list                                           // list goes to inside query
-                qblk.list |> emplace_new <| clone_expression(el)
-            for ef in fnbody.finalList                                      // finally goes to new finally
-                fblk.finalList |> emplace_new <| clone_expression(ef)
-            for arg in func.arguments                                       // add function arguments to query arguments
-                qblk.arguments |> emplace_new <| new [[Variable() at=arg.at,
-                    name := arg.name,
-                    _type <- clone_type(arg._type),
-                    init <- clone_expression(arg.init)
-                ]]
-            func.arguments |> clear
-            cquery.arguments |> emplace_new <| new [[ExprMakeBlock() _block <- qblk, at=func.at]]
-            fblk.list |> emplace(cqq)
-            move(func.body, fblk)
-            return true
+        var inscope fblk <- new [[ExprBlock() at=func.body.at]]                 // new function block
+        var inscope cqq <- make_call(func.at,"query")
+        var cquery = cqq as ExprCallMacro
+        var inscope qblk <- new [[ExprBlock() at=func.body.at]]                 // inside the query block
+        qblk.blockFlags |= ExprBlockFlags isClosure
+        move_new(qblk.returnType) <| new [[TypeDecl() baseType=Type tVoid, at=func.at]]
+        var req, nreq : array<string>
+        for arg in args
+            if arg.basicType==Type tString
+                if arg.name=="REQUIRE"
+                    req |> push("{arg.sValue}")
+                if arg.name=="REQUIRE_NOT"
+                    nreq |> push("{arg.sValue}")
+        if !req |> empty
+            var inscope decl <- new [[AnnotationDeclaration() ]]
+            var ann = find_annotation("decs_boost", "REQUIRE")
+            unsafe
+                decl.annotation := reinterpret<smart_ptr<Annotation>> ann
+            for rq in req
+                decl.arguments |> add_annotation_argument(rq, true)
+            qblk.annotations |> emplace(decl)
+        if !nreq |> empty
+            var inscope decl <- new [[AnnotationDeclaration() ]]
+            var ann = find_annotation("decs_boost", "REQUIRE_NOT")
+            unsafe
+                decl.annotation := reinterpret<smart_ptr<Annotation>> ann
+            for rq in nreq
+                decl.arguments |> add_annotation_argument(rq, true)
+            qblk.annotations |> emplace(decl)
+        var fnbody = func.body as ExprBlock
+        for el in fnbody.list                                           // list goes to inside query
+            qblk.list |> emplace_new <| clone_expression(el)
+        for ef in fnbody.finalList                                      // finally goes to new finally
+            fblk.finalList |> emplace_new <| clone_expression(ef)
+        for arg in func.arguments                                       // add function arguments to query arguments
+            qblk.arguments |> emplace_new <| new [[Variable() at=arg.at,
+                name := arg.name,
+                _type <- clone_type(arg._type),
+                init <- clone_expression(arg.init)
+            ]]
+        func.arguments |> clear
+        cquery.arguments |> emplace_new <| new [[ExprMakeBlock() _block <- qblk, at=func.at]]
+        fblk.list |> emplace(cqq)
+        move(func.body, fblk)
+        return true

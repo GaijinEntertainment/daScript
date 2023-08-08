@@ -176,19 +176,18 @@ def test_module(var mod: rtti::Module; var context: rtti::Context; suite_ctx: Su
         if f.hash == 0ul
             return
         let func = context |> get_function_by_mnh(f.hash)
-        if true
-            var inscope fn <- modPtr |> find_module_function_via_rtti(func)
-            if fn == null
+        var inscope fn <- modPtr |> find_module_function_via_rtti(func)
+        if fn == null
+            return
+        for ann in fn.annotations
+            if ann.annotation.name == "test"
+                var name = "{fn.name}"
+                for arg in ann.arguments
+                    if arg.name == "name"
+                        name = "{arg.sValue}"
+                if match_test_name(name, suite_ctx)
+                    test_any(name, func, length(fn.arguments), fileCtx, res)
                 return
-            for ann in fn.annotations
-                if ann.annotation.name == "test"
-                    var name = "{fn.name}"
-                    for arg in ann.arguments
-                        if arg.name == "name"
-                            name = "{arg.sValue}"
-                    if match_test_name(name, suite_ctx)
-                        test_any(name, func, length(fn.arguments), fileCtx, res)
-                    return
     delete fileCtx
     return res
 

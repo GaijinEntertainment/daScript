@@ -1,15 +1,17 @@
-var foo : bool
+require dump_fields
+
+[|>dump_fields]
+struct Foo
+    a : int
+
+struct Bar : Foo
+    b : int
 
 [export]
 def main
-    print("hello!\n")
-    if true
-        var inscope a : array<int>
-        if foo
-            return
-        var inscope b : array<int>
-        print("{a} {b}\n")
-finally
-    print("bye\n")
+    var a = Foo()
+    print("a = {a}\n")
+    var b = Bar()
+    print("b = {b}\n")
 
 options log

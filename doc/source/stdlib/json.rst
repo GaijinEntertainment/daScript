@@ -177,7 +177,6 @@ Read and write
   *  :ref:`read_json (text:string const implicit;error:string& -const) : json::JsonValue? <function-_at_json_c__c_read_json_CIs_&s>` 
   *  :ref:`read_json (text:array\<uint8\> const;error:string& -const) : json::JsonValue? <function-_at_json_c__c_read_json_C1_ls_u8_gr_A_&s>` 
   *  :ref:`write_json (val:json::JsonValue? const) : string <function-_at_json_c__c_write_json_C1_ls_S_ls_json_c__c_JsonValue_gr__gr_?>` 
-  *  :ref:`write_json (val:json::JsonValue? const#) : string <function-_at_json_c__c_write_json_C_hh_1_ls_S_ls_json_c__c_JsonValue_gr__gr_?>` 
 
 .. _function-_at_json_c__c_read_json_CIs_&s:
 
@@ -228,22 +227,7 @@ write_json returns string
 +--------+-------------------------------------------------------+
 
 
-Overload accepting temporary type
-
-.. _function-_at_json_c__c_write_json_C_hh_1_ls_S_ls_json_c__c_JsonValue_gr__gr_?:
-
-.. das:function:: write_json(val: json::JsonValue? const#)
-
-write_json returns string
-
-+--------+--------------------------------------------------------+
-+argument+argument type                                           +
-+========+========================================================+
-+val     + :ref:`json::JsonValue <struct-json-JsonValue>` ? const#+
-+--------+--------------------------------------------------------+
-
-
-Overload accepting temporary type
+returns JSON (textual) representation of JsonValue as a string.
 
 +++++++++++++++
 JSON properties

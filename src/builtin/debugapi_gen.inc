@@ -199,7 +199,7 @@ public:
   }
   __forceinline bool invoke_canVisitArrayData ( Context * __context__, Func __funcCall__, void * self, TypeInfo const  & ti, uint32_t count ) const {
     return das_invoke_function<bool>::invoke
-      <void *,TypeInfo const  &,uint32_t>
+      <void *,TypeInfo const  &>
         (__context__,nullptr,__funcCall__,
           self,ti,count);
   }

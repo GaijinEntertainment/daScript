@@ -319,7 +319,6 @@ namespace das
                 bool    global : 1;
                 bool    inScope : 1;
                 bool    no_capture : 1;
-                bool    early_out : 1;
             };
             uint32_t flags = 0;
         };
@@ -1304,8 +1303,7 @@ namespace das
         bool no_aliasing = false;                       // if true, aliasing will be reported as error, otherwise will turn off optimization
         bool strict_smart_pointers = false;             // collection of tests for smart pointers, like van inscope for any local, etc
         bool no_init = false;                           // if true, then no [init] is allowed in any shape or form
-        bool strict_unsafe_delete = false;              // if true, delete of type which contains 'unsafe' delete is unsafe // TODO: enable when need be
-        bool strict_early_out = false;                  // if true - finalizer using uninitialized variables is an error
+        bool strict_unsafe_delete = false;               // if true, delete of type which contains 'unsafe' delete is unsafe // TODO: enable when need be
     // environment
         bool no_optimizations = false;                  // disable optimizations, regardless of settings
         bool fail_on_no_aot = true;                     // AOT link failure is error
