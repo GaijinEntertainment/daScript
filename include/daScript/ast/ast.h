@@ -1169,7 +1169,6 @@ namespace das
         ModuleLibrary() = default;
         ModuleLibrary( Module * this_module );
         virtual ~ModuleLibrary() {};
-        void removeLast ();
         void addBuiltInModule ();
         bool addModule ( Module * module );
         void foreach ( const callable<bool (Module * module)> & func, const string & name ) const;

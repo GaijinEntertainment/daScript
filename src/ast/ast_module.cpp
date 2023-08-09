@@ -704,17 +704,6 @@ namespace das {
         addModule(this_module);
     }
 
-    void ModuleLibrary::removeLast () {
-        modules.pop_back();
-        for ( auto & mod : modules ) {
-            if ( !mod->builtIn || mod->promoted ) {
-                mod->builtIn = false;
-                delete mod;
-            }
-        }
-        modules.clear();
-    }
-
     void ModuleLibrary::addBuiltInModule () {
         Module * module = Module::require("$");
         DAS_ASSERTF(module, "builtin module not found? or you have forgotten to NEED_MODULE(Module_BuiltIn) be called first");

@@ -18,8 +18,21 @@ namespace das {
     }
 
     AstSerializer::~AstSerializer () {
-        if ( !writing ) {
-            moduleLibrary->removeLast();
+        if ( writing ) {
+            return;
+        }
+    // gather modules to delete
+        vector<Module*> modules_to_delete;
+        moduleLibrary->foreach([&]( Module * m ) {
+            if (!m->builtIn || m->promoted)
+                modules_to_delete.push_back(m);
+            return true;
+        }, "*");
+        modules_to_delete.pop_back(); // the Program is itself responsible for deleting its module
+    // delete modules
+        for ( auto m : modules_to_delete ) {
+            m->builtIn = false; // created manually, don't care about flags
+            delete m;
         }
     }
 
