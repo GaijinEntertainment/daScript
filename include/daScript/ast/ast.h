@@ -319,6 +319,8 @@ namespace das
                 bool    global : 1;
                 bool    inScope : 1;
                 bool    no_capture : 1;
+                bool    early_out : 1;              // this variable is potentially uninitialized in the finally section
+                bool    used_in_finally : 1;        // this variable is used in the finally section
             };
             uint32_t flags = 0;
         };
@@ -1374,6 +1376,7 @@ namespace das
         void normalizeOptionTypes ();
         void inferTypes(TextWriter & logs, ModuleGroup & libGroup);
         void inferTypesDirty(TextWriter & logs, bool verbose);
+        bool relocatePotentiallyUninitialized(TextWriter & logs);
         void lint (TextWriter & logs, ModuleGroup & libGroup );
         void checkSideEffects();
         void foldUnsafe();

@@ -662,5 +662,83 @@ namespace das {
             return true;
         }, thisModule.get());
     }
+
+    class RelocatePotentiallyUninitialized : public Visitor {
+    protected:
+        virtual void preVisit ( ExprBlock * block ) override {
+            Visitor::preVisit(block);
+            scopes.push_back(block);
+            onTopOfTheBlock.push_back(vector<ExpressionPtr>());
+        }
+        virtual ExpressionPtr visit ( ExprBlock * block ) override {
+            if ( onTopOfTheBlock.back().size() ) {
+                for ( auto & topE : onTopOfTheBlock.back() ) {
+                    block->list.insert(block->list.begin(), topE);
+                }
+            }
+            onTopOfTheBlock.pop_back();
+            scopes.pop_back();
+            return Visitor::visit(block);
+        }
+        virtual ExpressionPtr visit ( ExprLet * expr ) override {
+            if ( expr->hasEarlyOut ) {
+                auto anyNeedRelocate = false;
+                for ( auto & var : expr->variables ) {
+                    if ( var->used_in_finally ) {
+                        anyNeedRelocate = true;
+                        break;
+                    }
+                }
+                if ( anyNeedRelocate ) {
+                    anyWork = true;
+                    vector<ExpressionPtr> afterThisExpression;
+                    for ( auto & var : expr->variables ) {
+                        if ( var->init ) {
+                            auto left = make_smart<ExprVar>(expr->at, var->name);
+                            left->variable = var;
+                            auto right = var->init->clone();
+                            ExpressionPtr assign;
+                            if ( var->init_via_move ) {
+                                assign = make_smart<ExprMove>(expr->at, left, right);
+                            } else {
+                                assign = make_smart<ExprCopy>(expr->at, left, right);
+                            }
+                            assign->alwaysSafe = true;
+                            afterThisExpression.push_back(assign);
+                        }
+                    }
+                    auto elet = static_pointer_cast<ExprLet>(expr->clone());
+                    for ( auto & evar : elet->variables ) {
+                        evar->init = nullptr;
+                    }
+                    onTopOfTheBlock.back().push_back(elet);
+                    // lets see if we have anything to return
+                    if ( afterThisExpression.size()==1 ) {
+                        return afterThisExpression.back();
+                    } else {
+                        auto blk = make_smart<ExprBlock>();
+                        blk->at = expr->at;
+                        blk->list.reserve(afterThisExpression.size());
+                        for ( auto & ee : afterThisExpression ) {
+                            blk->list.push_back(ee);
+                        }
+                        return blk;
+                    }
+                }
+            }
+            return Visitor::visit(expr);
+        }
+    protected:
+        vector<ExprBlock *> scopes;
+        vector<vector<ExpressionPtr>> onTopOfTheBlock;
+    public:
+        bool anyWork = false;
+    };
+
+    bool Program::relocatePotentiallyUninitialized(TextWriter & ) {
+        RelocatePotentiallyUninitialized vis;
+        visit(vis);
+        return vis.anyWork;
+    }
 }
 

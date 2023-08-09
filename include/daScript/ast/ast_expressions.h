@@ -190,6 +190,7 @@ namespace das
                 bool            isCollapseable : 1;         // generated block which needs to be flattened
                 bool            needCollapse : 1;           // if this block needs collapse at all
                 bool            hasMakeBlock : 1;           // if this block has make block inside
+                bool            hasEarlyOut : 1;            // this block has return, or other blocks with return
             };
             uint32_t            blockFlags = 0;
         };
@@ -828,6 +829,7 @@ namespace das
         union {
             struct {
                 bool    inScope : 1;
+                bool    hasEarlyOut : 1;
             };
             uint32_t    letFlags = 0;
         };

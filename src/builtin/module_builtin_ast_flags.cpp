@@ -20,7 +20,7 @@ namespace das {
     TypeDeclPtr makeExprLetFlagsFlags() {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
         ft->alias = "ExprLetFlags";
-        ft->argNames = { "inScope" };
+        ft->argNames = { "inScope", "hasEarlyOut" };
         return ft;
     }
 
@@ -50,7 +50,7 @@ namespace das {
         ft->alias = "ExprBlockFlags";
         ft->argNames = { "isClosure", "hasReturn", "copyOnReturn", "moveOnReturn",
             "inTheLoop", "finallyBeforeBody", "finallyDisabled","aotSkipMakeBlock",
-            "aotDoNotSkipAnnotationData", "isCollapseable", "needCollapse", "hasMakeBlock" };
+            "aotDoNotSkipAnnotationData", "isCollapseable", "needCollapse", "hasMakeBlock", "hasEarlyOut" };
         return ft;
     }
 
@@ -211,7 +211,7 @@ namespace das {
         ft->alias = "VariableFlags";
         ft->argNames = { "init_via_move", "init_via_clone", "used", "aliasCMRES",
             "marked_used", "global_shared", "do_not_delete", "generated", "capture_as_ref",
-            "can_shadow", "private_variable", "tag", "global", "inScope", "no_capture" };
+            "can_shadow", "private_variable", "tag", "global", "inScope", "no_capture", "early_out", "used_in_finally" };
         return ft;
     }
 
