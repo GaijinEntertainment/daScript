@@ -277,6 +277,10 @@ class AudioSourcePCMLoop : AudioSource
                 offset = 0
             dofs += nsmp
         return <- data
+    def override set_position(pos : uint64) : uint64
+        let offsetFrames = clamp(int(pos), 0, length(samples) / channels)
+        offset = offsetFrames * channels
+        return uint64(offsetFrames)
 
 class AudioSourceDecoder : AudioSource
     decoder : ma_decoder?

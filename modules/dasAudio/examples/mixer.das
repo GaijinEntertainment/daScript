@@ -81,6 +81,15 @@ def main
             let pos = float3(sin(O),cos(O),0.)
             sid_pcm |> set_position(pos)
             sleep(10u)
+        print("set play position\n")
+        sid_pcm |> set_playback_position(0ul)
+        sleep(3000u)
+        print("set play position\n")
+        sid_pcm |> set_playback_position(0ul)
+        sleep(3000u)
+        print("set play position\n")
+        sid_pcm |> set_playback_position(0ul)
+        sleep(3000u)
 
     with_audio_system <|
         print("testing stream\n")
@@ -121,6 +130,15 @@ def main
             let pan = sin(2.*PI*float(t)/float(150))
             sid_pcm |> set_pan(pan)
             sleep(10u)
+        print("set play position\n")
+        sid_pcm |> set_playback_position(0ul)
+        sleep(3000u)
+        print("set play position\n")
+        sid_pcm |> set_playback_position(0ul)
+        sleep(3000u)
+        print("set play position\n")
+        sid_pcm |> set_playback_position(0ul)
+        sleep(3000u)
 
     with_audio_system <|
         print("testing mp3 from pcm, decoded\n")
