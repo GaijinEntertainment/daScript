@@ -62,6 +62,7 @@ namespace das {
         vector<ExprAssume *>    assume;
         vector<size_t>          varStack;
         vector<size_t>          assumeStack;
+        vector<bool>            inFinally;
         bool                    canFoldResult = true;
         das_hash_set<int32_t>   labels;
         size_t                  fieldOffset = 0;
@@ -4294,6 +4295,7 @@ namespace das {
         }
         virtual void preVisit ( ExprBlock * block ) override {
             Visitor::preVisit(block);
+            block->hasEarlyOut = false;
             block->hasReturn = false;
             if ( block->isClosure ) {
                 if ( block->returnType ) {
@@ -4305,11 +4307,13 @@ namespace das {
                 }
             }
             scopes.push_back(block);
+            inFinally.push_back(false);
             pushVarStack();
             block->inFunction = func.get();
         }
         virtual void preVisitBlockFinal ( ExprBlock * block ) override {
             Visitor::preVisitBlockFinal(block);
+            inFinally.back() = true;
             if ( block->getFinallyEvalFlags() ) {
                 error("finally section can't have break, return, or goto",  "", "",
                     block->at, CompilationError::return_or_break_in_finally );
@@ -4435,6 +4439,7 @@ namespace das {
             // to the rest of it
             popVarStack();
             scopes.pop_back();
+            inFinally.pop_back();
             if ( block->isClosure && block->returnType ) {
                 blocks.pop_back();
                 if ( block->list.size() ) {
@@ -4941,6 +4946,7 @@ namespace das {
                     expr->local = true;
                     expr->type = make_smart<TypeDecl>(*var->type);
                     expr->type->ref = true;
+                    var->used_in_finally = inFinally.back();
                     return Visitor::visit(expr);
                 }
             }
@@ -5624,6 +5630,13 @@ namespace das {
             Visitor::preVisit(expr);
             expr->block = nullptr;
             expr->returnType.reset();
+            // ok, now lets mark early outs for the block chain
+            auto i = scopes.size();
+            while ( i>0 ) {
+                i --;
+                scopes[i]->hasEarlyOut = true;
+                if ( scopes[i]->isClosure ) break;
+            }
         }
         virtual ExpressionPtr visit ( ExprReturn * expr ) override {
             if ( blocks.size() ) {
@@ -6358,6 +6371,13 @@ namespace das {
                 // ---
                 reportAstChanged();
                 return blk;
+            }
+            if ( scopes.size() ) {
+                auto hasEarlyOut = scopes.back()->hasEarlyOut;
+                expr->hasEarlyOut = hasEarlyOut;
+                for ( auto & var : expr->variables ) {
+                    var->early_out = hasEarlyOut;
+                }
             }
             return Visitor::visit(expr);
         }
@@ -8068,6 +8088,16 @@ namespace das {
             Module::foreach(modMacro);
             if (failed()) break;
             if (anyMacrosDidWork) continue;
+            if (relocatePotentiallyUninitialized(logs)) {
+                anyMacrosDidWork = true;
+                reportingInferErrors = true;
+                inferTypesDirty(logs, true);
+                reportingInferErrors = false;
+                if ( failed() ) {
+                    error("interlan compiler error. variable relocation infer to fail", "", "", LineInfo());
+                }
+                continue;
+            }
             libGroup.foreach(modMacro, "*");
         } while ( !failed() && anyMacrosDidWork );
     failed_to_infer:;

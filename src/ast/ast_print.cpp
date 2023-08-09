@@ -490,6 +490,8 @@ namespace das {
             ss << var->name;
             if ( !var->aka.empty() ) ss << " aka " << var->aka;
             if ( printAliases && var->aliasCMRES ) ss << "/*cmres*/";
+            if ( var->early_out ) ss << "/*early_out*/";
+            if ( var->used_in_finally ) ss << "/*used_in_finally*/";
             ss << ":" << var->type->describe();
         }
         virtual VariablePtr visitLet ( ExprLet * let, const VariablePtr & var, bool last ) override {
