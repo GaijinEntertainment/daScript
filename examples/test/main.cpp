@@ -266,7 +266,7 @@ bool run_tests( const string & path, bool (*test_fn)(const string &, bool useAot
         while ((ent = readdir (dir)) != NULL) {
             const char * atDas = strstr(ent->d_name,".das");
             if ( atDas && strcmp(atDas,".das")==0 && ent->d_name[0]!='_' ) {
-                ok = test_fn(path + "/" + ent->d_name, useAot) && ok;
+                ok = test_fn(path + "/" + ent->d_name, useAot, useSer) && ok;
             }
         }
         closedir (dir);
