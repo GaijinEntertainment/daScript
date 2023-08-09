@@ -85,7 +85,7 @@ namespace das
         virtual bool rtti_isAddr() const override { return true; }
         string target;
         TypeDeclPtr funcType;
-        Function * func = nullptr;
+        FunctionPtr func = nullptr;
     };
 
     struct ExprNullCoalescing : ExprPtr2Ref {

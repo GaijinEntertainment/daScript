@@ -279,7 +279,7 @@ namespace das {
             if ( exprTypeInfo->subexpr && exprTypeInfo->subexpr->rtti_isAddr() ) {
                 auto exprAddr = static_pointer_cast<ExprAddr>(exprTypeInfo->subexpr);
                 char * descr = context->code->allocateName(exprAddr->func->getMangledName());
-                return context->code->makeNode<SimNode_AstGetFunction>(expr->at, exprAddr->func, descr);
+                return context->code->makeNode<SimNode_AstGetFunction>(expr->at, exprAddr->func.get(), descr);
             } else {
                 errors = "ast_expression requires @@func expression";
                 return nullptr;

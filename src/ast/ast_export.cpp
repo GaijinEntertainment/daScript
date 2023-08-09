@@ -181,9 +181,9 @@ namespace das {
             if (builtInDependencies || (addr->func && !addr->func->builtIn)) {
                 assert(addr->func);
                 if (func) {
-                    func->useFunctions.insert(addr->func);
+                    func->useFunctions.insert(addr->func.get());
                 } else if (gVar) {
-                    gVar->useFunctions.insert(addr->func);
+                    gVar->useFunctions.insert(addr->func.get());
                 }
             }
         }
