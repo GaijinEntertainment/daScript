@@ -158,6 +158,7 @@ def test_file(file_name: string; ctx: SuiteCtx; file_ctx: FileCtx): SuiteResult
                                 msg = "{msg}. Current context is null."
                             log::error(msg)
                 if ctx.serialize
+                    print <| "With serialization"
                     simulate_and_run |> with_program_serialized <| program
                 else
                     invoke(simulate_and_run, program)
