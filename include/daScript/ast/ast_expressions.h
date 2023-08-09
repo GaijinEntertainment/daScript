@@ -92,7 +92,7 @@ namespace das
         virtual void serialize( AstSerializer & ser ) override;
         string target;
         TypeDeclPtr funcType;
-        FunctionPtr func = nullptr;
+        Function * func = nullptr;
     };
 
     struct ExprNullCoalescing : ExprPtr2Ref {
