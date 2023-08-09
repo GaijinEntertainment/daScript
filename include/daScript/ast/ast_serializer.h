@@ -33,6 +33,8 @@ namespace das {
         vector<pair<Variable **,uint64_t>>          variableRefs;
         vector<pair<Structure **,uint64_t>>         structureRefs;
         vector<pair<Enumeration **,uint64_t>>       enumerationRefs;
+        // fieldptr, module, structname, fieldname
+        vector<tuple<const Structure::FieldDeclaration **, Module *, string, string>>       fieldRefs;
         void tag ( const char * name );
         void read  ( void * data, size_t size );
         void write ( const void * data, size_t size );

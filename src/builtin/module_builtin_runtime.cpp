@@ -478,7 +478,7 @@ namespace das
             ss << ")";
         }
         virtual void serialize ( AstSerializer & ser ) override {
-            subexpr->serialize(ser);
+            ser << subexpr;
         }
         AnnotationDeclarationPtr subexpr;
     };

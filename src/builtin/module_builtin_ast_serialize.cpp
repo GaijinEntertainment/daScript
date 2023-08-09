@@ -46,6 +46,18 @@ namespace das {
             }
         }
         blockRefs.clear();
+
+        for ( auto & [field, mod, name, fieldname] : fieldRefs ) {
+            auto struct_ = moduleLibrary->findStructure(name, mod);
+            if ( struct_.size() == 0 ) {
+                DAS_ASSERTF(false, "expected to find structure '%s'", name.c_str());
+            } else if ( struct_.size() > 1 ) {
+                DAS_ASSERTF(false, "too many candidates for structure '%s'", name.c_str());
+            }
+        // set the missing field field
+            *field = struct_.front()->findField(fieldname);
+        }
+        fieldRefs.clear();
     }
 
     void AstSerializer::write ( const void * data, size_t size ) {
@@ -410,11 +422,11 @@ namespace das {
         case '&':    return LogicAnnotationOp::And;
         case '!':    return LogicAnnotationOp::Not;
         case '^':    return LogicAnnotationOp::Xor;
-        default: DAS_VERIFYF(false, "expected to be called on logic annotation name");
+        default: DAS_FATAL_ERROR("expected to be called on logic annotation name");
         }
     }
 
-    void serializeAnnotationPointer( AstSerializer & ser, Annotation * & anno ) {
+    void serializeAnnotationPointer ( AstSerializer & ser, AnnotationPtr & anno ) {
         uint64_t fid = uint64_t(anno);
         ser << fid;
         if ( ser.writing ) {
@@ -423,9 +435,6 @@ namespace das {
                 ser << inThisModule;
                 if ( !inThisModule ) {
                     ser << anno->name;
-                    if ( anno->name == "||" ) {
-                        anno->name.size();
-                    }
                     if ( isLogicAnnotation(anno->name) ) {
                         LogicAnnotationOp op = makeOpFromName(anno->name);
                         ser.serialize_enum(op);
@@ -450,11 +459,10 @@ namespace das {
                     ser << name;
                     if ( isLogicAnnotation(name) ) {
                         LogicAnnotationOp op; ser.serialize_enum(op);
-                        AnnotationPtr lann = newLogicAnnotation(op);
-                        lann->serialize(ser);
-                        anno = lann.get();
+                        anno = newLogicAnnotation(op);
+                        anno->serialize(ser);
                     } else {
-                       ser << moduleName;
+                        ser << moduleName;
                         auto mod = ser.moduleLibrary->findModule(moduleName);
                         DAS_VERIFYF(mod!=nullptr, "module '%s' is not found", moduleName.c_str());
                         anno = mod->findAnnotation(name).get();
@@ -469,9 +477,7 @@ namespace das {
 
     AstSerializer & AstSerializer::operator << ( AnnotationPtr & anno ) {
         tag("AnnotationPtr");
-        Annotation * a = anno.get();
-        serializeAnnotationPointer(*this, a);
-        anno = a;
+        serializeAnnotationPointer(*this, anno);
         return *this;
     }
 
@@ -812,6 +818,7 @@ namespace das {
             for ( uint64_t i = 0; i < size; i++ ) {
                 ser << result[i];
             }
+            list = move(result);
         }
     }
 
@@ -867,7 +874,7 @@ namespace das {
         ser << fromGeneric;
         ser << index         << totalStackSize  << totalGenLabel;
         ser << at            << atDecl          << module;
-        ser << inferStack    << hash            << aotHash;
+        ser << hash          << aotHash;  // do not serialize inferStack
         ser << resultAliases << argumentAliases << resultAliasesGlobals;
         ser << flags         << moreFlags       << sideEffectFlags;
     }
@@ -1030,14 +1037,8 @@ namespace das {
             bool has_field; ser << has_field;
             if ( !has_field ) return;
             string mangledName; ser << mangledName;
-            auto struct_ = ser.moduleLibrary->findStructure(mangledName, ser.thisModule);
-            if ( struct_.size() == 0 ) {
-                DAS_ASSERTF(false, "expected to find structure '%s'", mangledName.c_str());
-            } else if ( struct_.size() > 1 ) {
-                DAS_ASSERTF(false, "too many candidates for structure '%s'", mangledName.c_str());
-            }
-        // set the missing field field
-            field = struct_.front()->findField(name);
+            field = ( Structure::FieldDeclaration * ) 1;
+            ser.fieldRefs.emplace_back(&field, ser.thisModule, move(mangledName), name);
         }
     }
 
@@ -1376,6 +1377,7 @@ namespace das {
         program->isCompiling = false;
         program->markMacroSymbolUse();
         program->allocateStack(ignore_logs);
+        daScriptEnvironment::bound->g_Program = program;
         program->makeMacroModule(ignore_logs);
     // unbind the module from the program
         return program->thisModule.release();
@@ -1492,15 +1494,49 @@ namespace das {
         }
     }
 
+    void serializeStructures ( AstSerializer & ser, safebox<Structure> & structures ) {
+        if ( ser.writing ) {
+            uint64_t size = structures.unlocked_size(); ser << size;
+            structures.foreach ( [&] ( StructurePtr g ) {
+                ser << g;
+            });
+        } else {
+            uint64_t size; ser << size;
+            for ( uint64_t i = 0; i < size; i++ ) {
+                StructurePtr g; ser << g;
+                structures.insert(g->name, g);
+            }
+        }
+    }
+
+    void serializeFunctions ( AstSerializer & ser, safebox<Function> & structures ) {
+        if ( ser.writing ) {
+            uint64_t size = structures.unlocked_size(); ser << size;
+            structures.foreach ( [&] ( FunctionPtr g ) {
+                string name = g->getMangledName();
+                ser << name << g;
+            });
+        } else {
+            uint64_t size; ser << size;
+            for ( uint64_t i = 0; i < size; i++ ) {
+                string name; ser << name;
+                FunctionPtr g; ser << g;
+                structures.insert(name, g);
+            }
+        }
+    }
+
     void Module::serialize ( AstSerializer & ser ) {
         ser.tag("Module");
         ser << name           << moduleFlags;
         ser << annotationData << requireModule;
-        ser << aliasTypes     << structures << enumerations;
+        ser << aliasTypes     << enumerations;
         serializeGlobals(ser, globals); // globals require insertion in the same order
-        ser << functions      << functionsByName;
-        ser << generics       << genericsByName;
-        ser << ownFileInfo    << promotedAccess;
+        serializeStructures(ser, structures);
+        serializeFunctions(ser, functions);
+        serializeFunctions(ser, generics);
+        ser << functionsByName << genericsByName;
+        ser << ownFileInfo     << promotedAccess;
 
         functions.foreach_with_hash ([&](smart_ptr<Function> f, uint64_t hash) {
             if ( ser.writing ) {
