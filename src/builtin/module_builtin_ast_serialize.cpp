@@ -1436,9 +1436,6 @@ namespace das {
             uint64_t sz = f->useGlobalVariables.size();
             ser << sz;
             for ( auto & use : f->useGlobalVariables ) {
-                void * addr = use;
-                ser << use->name;
-                ser << addr;
                 ser << use;
             }
         } else {
@@ -1447,8 +1444,6 @@ namespace das {
             uint64_t size = 0; ser << size;
             f->useGlobalVariables.reserve(size);
             for ( uint64_t i = 0; i < size; i++ ) {
-                string varname; ser << varname;
-                void * addr; ser << addr;
                 Variable * fun; ser << fun;
                 f->useGlobalVariables.emplace(fun);
             }
@@ -1538,23 +1533,23 @@ namespace das {
         ser << functionsByName << genericsByName;
         ser << ownFileInfo     << promotedAccess;
 
-        functions.foreach_with_hash ([&](smart_ptr<Function> f, uint64_t hash) {
+        functions.foreach ([&] ( smart_ptr<Function> f ) {
             if ( ser.writing ) {
-                ser << hash;
+                ser << f->name;
             } else {
-                uint64_t h; ser << h;
-                DAS_VERIFYF(h == hash, "expected to walk in the same order");
+                string name; ser << name;
+                DAS_VERIFYF(name == f->name, "expected to walk in the same order");
             }
             serializeUseVariables(ser, f);
             serializeUseFunctions(ser, f);
         });
 
-        generics.foreach_with_hash ([&](smart_ptr<Function> f, uint64_t hash) {
+        generics.foreach ([&] ( smart_ptr<Function> f ) {
             if ( ser.writing ) {
-                ser << hash;
+                ser << f->name;
             } else {
-                uint64_t h; ser << h;
-                DAS_VERIFYF(h == hash, "expected to walk in the same order");
+                string name; ser << name;
+                DAS_VERIFYF(name == f->name, "expected to walk in the same order");
             }
             serializeUseVariables(ser, f);
             serializeUseFunctions(ser, f);
