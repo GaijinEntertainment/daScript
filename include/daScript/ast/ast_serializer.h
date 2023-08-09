@@ -6,6 +6,7 @@ namespace das {
     struct ForReading {};
 
     struct AstSerializer {
+        ~AstSerializer ();
         AstSerializer ( void );
         AstSerializer ( ForReading, vector<uint8_t> && buffer_ );
 

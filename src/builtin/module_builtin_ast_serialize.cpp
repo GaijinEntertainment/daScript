@@ -17,6 +17,12 @@ namespace das {
         writing = true;
     }
 
+    AstSerializer::~AstSerializer () {
+        if ( !writing ) {
+            moduleLibrary->removeLast();
+        }
+    }
+
     // Mnemonic: TT*[old_addr] <- objects[old_addr]
     template <typename TT>
     void patchRefs ( vector<pair<TT**,uint64_t>> & refs, const das_hash_map<uint64_t,smart_ptr<TT>> & objects) {
@@ -660,7 +666,7 @@ namespace das {
     AstSerializer & AstSerializer::operator << ( TypeAnnotation * & type_anno ) {
         TypeAnnotationPtr t = type_anno;
         *this << t;
-        type_anno = t.orphan();
+        type_anno = t.get();
         return *this;
     }
 
@@ -1012,8 +1018,7 @@ namespace das {
     void ExprField::serialize ( AstSerializer & ser ) {
         ser.tag("ExprField");
         Expression::serialize(ser);
-        ser << value << name << atField
-            // Note: `field` is const, save it for later backpatching
+        ser << value      << name       << atField
             << fieldIndex << annotation << derefFlags
             // Note: underClone is only used during infer and we don't need it
             << fieldFlags;
@@ -1351,6 +1356,7 @@ namespace das {
                 "excepted to see an ExprCallMacro"
             );
             ptr = static_cast<ExprCallMacro *>(exprLooksLikeCall)->macro;
+            delete exprLooksLikeCall;
         }
         return *this;
     }
