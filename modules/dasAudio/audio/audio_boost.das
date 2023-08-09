@@ -114,7 +114,6 @@ class AudioChannel
             return true
         if stop && volume_mixer.volume == 0.
             return false
-        this_context().breakOnException = true
         let inputRate = uint(float(source.bitrate) * pitch)
         ma_resampler_set_rate(unsafe(addr(resampler)), inputRate, uint(rate))
         var outputFrames = uint64(data |> length / channels)

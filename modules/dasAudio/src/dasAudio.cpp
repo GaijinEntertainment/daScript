@@ -198,6 +198,9 @@ void data_callback(ma_device*, void* pOutput, const void*, ma_uint32 frameCount)
         das_invoke_function<void>::invoke<Array&,int32_t,int32_t>(g_mixer_context.get(),nullptr,g_mixer_function,buffer,g_channels,g_rate,fdt);
     });
     // TODO: i don't know what to do with exceptions here. im ignoring for now. better than crashing
+    if ( const char* exp = g_mixer_context->getException() ) {
+        g_mixer_context->to_err(exp);
+    }
     daScriptEnvironment::bound = saved;
 }
 
