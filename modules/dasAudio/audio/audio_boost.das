@@ -46,6 +46,8 @@ class AudioSource
         return true
     def abstract get_samples(nframes : int) : array<float>
     def abstract append(var data : array<float>) : bool
+    def set_position(pos : uint64) : uint64
+        return 0ul
     def update_status(var status : AudioChannelStatus)
         status.stream_que_length = 0
 
@@ -112,6 +114,7 @@ class AudioChannel
             return true
         if stop && volume_mixer.volume == 0.
             return false
+        this_context().breakOnException = true
         let inputRate = uint(float(source.bitrate) * pitch)
         ma_resampler_set_rate(unsafe(addr(resampler)), inputRate, uint(rate))
         var outputFrames = uint64(data |> length / channels)
@@ -183,29 +186,35 @@ var g_mixer_total_samples = 0ul
 
 class AudioSourcePCM : AudioSource
     samples : array<float>
+    offsetFrames : int
     def AudioSourcePCM(ch, rate : int; var smp : array<float>)
         bitrate = rate
         channels = ch
         samples <- smp
+        offsetFrames = 0
     def override append(var data : array<float>) : bool
         let ofs = length(samples)
         let nsmp = length(data)
         samples |> resize(ofs + nsmp)
         unsafe
-            memcpy(unsafe(addr(samples[ofs])), unsafe(addr(data[0])), nsmp * 4)
+            memcpy(addr(samples[ofs]), addr(data[0]), nsmp * 4)
         delete data
         return true
     def finalize
         delete samples
     def override get_samples(nframes : int) : array<float>
         var data : array<float>
-        let nsmp = min(length(samples), nframes * channels)
-        if nsmp != 0
+        let psmp = offsetFrames * channels
+        let nsmp = min(length(samples) - psmp, nframes * channels)
+        if nsmp > 0
             data |> resize(nsmp)
             unsafe
-                memcpy(unsafe(addr(data[0])), unsafe(addr(samples[0])), nsmp * 4)
-            samples |> erase(0, nsmp)
+                memcpy(addr(data[0]), addr(samples[psmp]), nsmp * 4)
+            offsetFrames += nsmp / channels
         return <- data
+    def override set_position(pos : uint64) : uint64
+        offsetFrames = clamp(int(pos), 0, length(samples) / channels)
+        return uint64(offsetFrames)
 
 [skip_field_lock_check]
 struct StreamChunk
@@ -304,6 +313,12 @@ class AudioSourceDecoder : AudioSource
         return <- samples
     def override append(var data : array<float>) : bool
         return false
+    def override set_position(pos : uint64) : uint64
+        ma_decoder_seek_to_pcm_frame(decoder, pos)
+        var cursor : uint64
+        ma_decoder_get_cursor_in_pcm_frames(decoder,unsafe(addr(cursor)))
+        return cursor
+
 
 def remove_channel(srci : int)
     g_channels[srci]->report_eos()
@@ -367,23 +382,24 @@ struct AudioCommandStatus
     [[do_not_delete]] status_channel : Channel?
 
 variant AudioCommand
-    shutdown            : bool
-    add_decoder         : AudioCommandAddDecoder
-    add_decoder_3d      : AudioCommandAddDecoder3D
-    add_pcm             : AudioCommandAddPCM
-    add_pcm_3d          : AudioCommandAddPCM3D
-    add_pcm_stream      : AudioCommandAddPCMStream
-    add_pcm_stream_3d   : AudioCommandAddPCMStream3D
-    append_pcm          : tuple<sid : SID; samples : array<float>>
-    pause               : tuple<sid : SID; paused : bool>
-    volume              : tuple<sid : SID; volume : float; time : float>
-    pan                 : tuple<sid : SID; pan : float>
-    pitch               : tuple<sid : SID; pitch : float>
-    stop                : tuple<sid : SID; time : float>
-    head_transform      : tuple<head_position : float3; head_direction : float3>
-    sound_position      : tuple<sid : SID; position : float3>
-    status              : AudioCommandStatus
-    reverb              : tuple<sid : SID; properties:I3DL2ReverbProperties>
+    shutdown                : bool
+    add_decoder             : AudioCommandAddDecoder
+    add_decoder_3d          : AudioCommandAddDecoder3D
+    add_pcm                 : AudioCommandAddPCM
+    add_pcm_3d              : AudioCommandAddPCM3D
+    add_pcm_stream          : AudioCommandAddPCMStream
+    add_pcm_stream_3d       : AudioCommandAddPCMStream3D
+    append_pcm              : tuple<sid : SID; samples : array<float>>
+    pause                   : tuple<sid : SID; paused : bool>
+    volume                  : tuple<sid : SID; volume : float; time : float>
+    pan                     : tuple<sid : SID; pan : float>
+    pitch                   : tuple<sid : SID; pitch : float>
+    stop                    : tuple<sid : SID; time : float>
+    head_transform          : tuple<head_position : float3; head_direction : float3>
+    sound_position          : tuple<sid : SID; position : float3>
+    status                  : AudioCommandStatus
+    reverb                  : tuple<sid : SID; properties:I3DL2ReverbProperties>
+    set_playback_position   : tuple<sid : SID; position : uint64>
 
 var g_command_channel : Channel?
 
@@ -514,6 +530,10 @@ def command_processor
                     ch.reverb = new I3DL2Reverb
                 ch.reverb |> set_sample_rate(float(MA_SAMPLE_RATE))
                 ch.reverb |> set_properties(rcmd.properties)
+        elif cmd is set_playback_position
+            assume scmd = cmd as set_playback_position
+            g_sid_2_channel |> get(scmd.sid) <| $(var ch : AudioChannel?&)
+                ch.playback_position = ch.source->set_position(scmd.position)
         else
             panic("unknown audio command {cmd}")
     delete commands
@@ -754,6 +774,11 @@ enum public ReverbPreset // so that we don't expose internals
 def public set_reverb_preset(sid: SID; preset : ReverbPreset)
     //! set reverb from preset for sound
     return set_reverb(sid, get_preset(unsafe(reinterpret<I3DL2Preset> preset)))
+
+def public set_playback_position(sid : SID; position : uint64)
+    //! set playback position for sound (in frames)
+    g_command_channel |> push_clone <| [[AudioCommand set_playback_position=[[auto sid, position]]]]
+    return sid
 
 def public decode_audio(data : array<uint8> |#; var channels, rate : int&) : array<float>
     var decoder = new ma_decoder
