@@ -12,8 +12,8 @@ namespace das {
         virtual void preVisit ( TypeDecl * td ) {
             if ( td->module == from ) td->module = to;
         }
-        Module * const from;
         Module * const to;
+        Module * const from;
     };
 
     //! Builtin modules are sometimes compiled from both native code and das code.
