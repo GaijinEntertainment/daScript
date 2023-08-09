@@ -3340,7 +3340,9 @@ float3 only
   *  :ref:`inv_distance (x:float4 const;y:float4 const) : float <function-_at_math_c__c_inv_distance_Cf4_Cf4>` 
   *  :ref:`inv_distance_sq (x:float4 const;y:float4 const) : float <function-_at_math_c__c_inv_distance_sq_Cf4_Cf4>` 
   *  :ref:`reflect (v:float3 const;n:float3 const) : float3 <function-_at_math_c__c_reflect_Cf3_Cf3>` 
+  *  :ref:`reflect (v:float2 const;n:float2 const) : float2 <function-_at_math_c__c_reflect_Cf2_Cf2>` 
   *  :ref:`refract (v:float3 const;n:float3 const;nint:float const) : float3 <function-_at_math_c__c_refract_Cf3_Cf3_Cf>` 
+  *  :ref:`refract (v:float2 const;n:float2 const;nint:float const) : float2 <function-_at_math_c__c_refract_Cf2_Cf2_Cf>` 
 
 .. _function-_at_math_c__c_cross_Cf3_Cf3:
 
@@ -3583,6 +3585,26 @@ returns vector representing reflection of vector v from normal n same as ::
     def reflect(v, n: float3)
         return v - 2. * dot(v, n) * n
 
+.. _function-_at_math_c__c_reflect_Cf2_Cf2:
+
+.. das:function:: reflect(v: float2 const; n: float2 const)
+
+reflect returns float2
+
++--------+-------------+
++argument+argument type+
++========+=============+
++v       +float2 const +
++--------+-------------+
++n       +float2 const +
++--------+-------------+
+
+
+returns vector representing reflection of vector v from normal n same as ::
+
+    def reflect(v, n: float3)
+        return v - 2. * dot(v, n) * n
+
 .. _function-_at_math_c__c_refract_Cf3_Cf3_Cf:
 
 .. das:function:: refract(v: float3 const; n: float3 const; nint: float const)
@@ -3595,6 +3617,33 @@ refract returns float3
 +v       +float3 const +
 +--------+-------------+
 +n       +float3 const +
++--------+-------------+
++nint    +float const  +
++--------+-------------+
+
+
+returns vector representing refractoin of vector v from normal n same as ::
+
+    def refract(v, n: float3; nint: float; outRefracted: float3&)
+        let dt = dot(v, n)
+        let discr = 1. - nint * nint * (1. - dt * dt)
+        if discr > 0.
+            outRefracted = nint * (v - n * dt) - n * sqrt(discr)
+            return true
+        return false
+
+.. _function-_at_math_c__c_refract_Cf2_Cf2_Cf:
+
+.. das:function:: refract(v: float2 const; n: float2 const; nint: float const)
+
+refract returns float2
+
++--------+-------------+
++argument+argument type+
++========+=============+
++v       +float2 const +
++--------+-------------+
++n       +float2 const +
 +--------+-------------+
 +nint    +float const  +
 +--------+-------------+
@@ -4078,6 +4127,9 @@ lerp/mad/clamp
   *  :ref:`clamp (t:double const;a:double const;b:double const) : double <function-_at_math_c__c_clamp_Cd_Cd_Cd>` 
   *  :ref:`clamp (t:int64 const;a:int64 const;b:int64 const) : int64 <function-_at_math_c__c_clamp_Ci64_Ci64_Ci64>` 
   *  :ref:`clamp (t:uint64 const;a:uint64 const;b:uint64 const) : uint64 <function-_at_math_c__c_clamp_Cu64_Cu64_Cu64>` 
+  *  :ref:`lerp (a:float2 const;b:float2 const;t:float const) : float2 <function-_at_math_c__c_lerp_Cf2_Cf2_Cf>` 
+  *  :ref:`lerp (a:float3 const;b:float3 const;t:float const) : float3 <function-_at_math_c__c_lerp_Cf3_Cf3_Cf>` 
+  *  :ref:`lerp (a:float4 const;b:float4 const;t:float const) : float4 <function-_at_math_c__c_lerp_Cf4_Cf4_Cf>` 
 
 .. _function-_at_math_c__c_mad_Cf_Cf_Cf:
 
@@ -4877,6 +4929,63 @@ clamp returns uint64
 
 |function-math-clamp|
 
+.. _function-_at_math_c__c_lerp_Cf2_Cf2_Cf:
+
+.. das:function:: lerp(a: float2 const; b: float2 const; t: float const)
+
+lerp returns float2
+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +float2 const +
++--------+-------------+
++b       +float2 const +
++--------+-------------+
++t       +float const  +
++--------+-------------+
+
+
+|function-math-lerp|
+
+.. _function-_at_math_c__c_lerp_Cf3_Cf3_Cf:
+
+.. das:function:: lerp(a: float3 const; b: float3 const; t: float const)
+
+lerp returns float3
+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +float3 const +
++--------+-------------+
++b       +float3 const +
++--------+-------------+
++t       +float const  +
++--------+-------------+
+
+
+|function-math-lerp|
+
+.. _function-_at_math_c__c_lerp_Cf4_Cf4_Cf:
+
+.. das:function:: lerp(a: float4 const; b: float4 const; t: float const)
+
+lerp returns float4
+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +float4 const +
++--------+-------------+
++b       +float4 const +
++--------+-------------+
++t       +float const  +
++--------+-------------+
+
+
+|function-math-lerp|
+
 +++++++++++++++++
 Matrix operations
 +++++++++++++++++
@@ -5631,6 +5740,142 @@ unpack_byte_to_float returns float4
 Uncategorized
 +++++++++++++
 
+.. _function-_at_math_c__c_[]_I_eq_H_ls_math_c__c_float4x4_gr__Ci_C_c_C_l:
+
+.. das:function:: operator [](m: float4x4 implicit ==const; i: int const)
+
+[] returns float4&
+
++--------+--------------------------------------------------------+
++argument+argument type                                           +
++========+========================================================+
++m       + :ref:`math::float4x4 <handle-math-float4x4>`  implicit!+
++--------+--------------------------------------------------------+
++i       +int const                                               +
++--------+--------------------------------------------------------+
+
+
+|function-math-[]|
+
+.. _function-_at_math_c__c_[]_CI_eq_H_ls_math_c__c_float4x4_gr__Ci_C_c_C_l:
+
+.. das:function:: operator [](m: float4x4 const implicit ==const; i: int const)
+
+[] returns float4 const&
+
++--------+--------------------------------------------------------------+
++argument+argument type                                                 +
++========+==============================================================+
++m       + :ref:`math::float4x4 <handle-math-float4x4>`  const implicit!+
++--------+--------------------------------------------------------------+
++i       +int const                                                     +
++--------+--------------------------------------------------------------+
+
+
+|function-math-[]|
+
+.. _function-_at_math_c__c_[]_I_eq_H_ls_math_c__c_float4x4_gr__Cu_C_c_C_l:
+
+.. das:function:: operator [](m: float4x4 implicit ==const; i: uint const)
+
+[] returns float4&
+
++--------+--------------------------------------------------------+
++argument+argument type                                           +
++========+========================================================+
++m       + :ref:`math::float4x4 <handle-math-float4x4>`  implicit!+
++--------+--------------------------------------------------------+
++i       +uint const                                              +
++--------+--------------------------------------------------------+
+
+
+|function-math-[]|
+
+.. _function-_at_math_c__c_[]_CI_eq_H_ls_math_c__c_float4x4_gr__Cu_C_c_C_l:
+
+.. das:function:: operator [](m: float4x4 const implicit ==const; i: uint const)
+
+[] returns float4 const&
+
++--------+--------------------------------------------------------------+
++argument+argument type                                                 +
++========+==============================================================+
++m       + :ref:`math::float4x4 <handle-math-float4x4>`  const implicit!+
++--------+--------------------------------------------------------------+
++i       +uint const                                                    +
++--------+--------------------------------------------------------------+
+
+
+|function-math-[]|
+
+.. _function-_at_math_c__c_[]_I_eq_H_ls_math_c__c_float3x4_gr__Ci_C_c_C_l:
+
+.. das:function:: operator [](m: float3x4 implicit ==const; i: int const)
+
+[] returns float3&
+
++--------+--------------------------------------------------------+
++argument+argument type                                           +
++========+========================================================+
++m       + :ref:`math::float3x4 <handle-math-float3x4>`  implicit!+
++--------+--------------------------------------------------------+
++i       +int const                                               +
++--------+--------------------------------------------------------+
+
+
+|function-math-[]|
+
+.. _function-_at_math_c__c_[]_CI_eq_H_ls_math_c__c_float3x4_gr__Ci_C_c_C_l:
+
+.. das:function:: operator [](m: float3x4 const implicit ==const; i: int const)
+
+[] returns float3 const&
+
++--------+--------------------------------------------------------------+
++argument+argument type                                                 +
++========+==============================================================+
++m       + :ref:`math::float3x4 <handle-math-float3x4>`  const implicit!+
++--------+--------------------------------------------------------------+
++i       +int const                                                     +
++--------+--------------------------------------------------------------+
+
+
+|function-math-[]|
+
+.. _function-_at_math_c__c_[]_I_eq_H_ls_math_c__c_float3x4_gr__Cu_C_c_C_l:
+
+.. das:function:: operator [](m: float3x4 implicit ==const; i: uint const)
+
+[] returns float3&
+
++--------+--------------------------------------------------------+
++argument+argument type                                           +
++========+========================================================+
++m       + :ref:`math::float3x4 <handle-math-float3x4>`  implicit!+
++--------+--------------------------------------------------------+
++i       +uint const                                              +
++--------+--------------------------------------------------------+
+
+
+|function-math-[]|
+
+.. _function-_at_math_c__c_[]_CI_eq_H_ls_math_c__c_float3x4_gr__Cu_C_c_C_l:
+
+.. das:function:: operator [](m: float3x4 const implicit ==const; i: uint const)
+
+[] returns float3 const&
+
++--------+--------------------------------------------------------------+
++argument+argument type                                                 +
++========+==============================================================+
++m       + :ref:`math::float3x4 <handle-math-float3x4>`  const implicit!+
++--------+--------------------------------------------------------------+
++i       +uint const                                                    +
++--------+--------------------------------------------------------------+
+
+
+|function-math-[]|
+
 .. _function-_at_math_c__c_un_quat_from_euler_Cf3:
 
 .. das:function:: un_quat_from_euler(angles: float3 const)
@@ -5664,5 +5909,73 @@ un_quat_from_euler returns float4
 
 
 |function-math-un_quat_from_euler|
+
+.. _function-_at_math_c__c_[]_I_eq_H_ls_math_c__c_float3x3_gr__Ci_C_c_C_l:
+
+.. das:function:: operator [](m: float3x3 implicit ==const; i: int const)
+
+[] returns float3&
+
++--------+--------------------------------------------------------+
++argument+argument type                                           +
++========+========================================================+
++m       + :ref:`math::float3x3 <handle-math-float3x3>`  implicit!+
++--------+--------------------------------------------------------+
++i       +int const                                               +
++--------+--------------------------------------------------------+
+
+
+|function-math-[]|
+
+.. _function-_at_math_c__c_[]_CI_eq_H_ls_math_c__c_float3x3_gr__Ci_C_c_C_l:
+
+.. das:function:: operator [](m: float3x3 const implicit ==const; i: int const)
+
+[] returns float3 const&
+
++--------+--------------------------------------------------------------+
++argument+argument type                                                 +
++========+==============================================================+
++m       + :ref:`math::float3x3 <handle-math-float3x3>`  const implicit!+
++--------+--------------------------------------------------------------+
++i       +int const                                                     +
++--------+--------------------------------------------------------------+
+
+
+|function-math-[]|
+
+.. _function-_at_math_c__c_[]_I_eq_H_ls_math_c__c_float3x3_gr__Cu_C_c_C_l:
+
+.. das:function:: operator [](m: float3x3 implicit ==const; i: uint const)
+
+[] returns float3&
+
++--------+--------------------------------------------------------+
++argument+argument type                                           +
++========+========================================================+
++m       + :ref:`math::float3x3 <handle-math-float3x3>`  implicit!+
++--------+--------------------------------------------------------+
++i       +uint const                                              +
++--------+--------------------------------------------------------+
+
+
+|function-math-[]|
+
+.. _function-_at_math_c__c_[]_CI_eq_H_ls_math_c__c_float3x3_gr__Cu_C_c_C_l:
+
+.. das:function:: operator [](m: float3x3 const implicit ==const; i: uint const)
+
+[] returns float3 const&
+
++--------+--------------------------------------------------------------+
++argument+argument type                                                 +
++========+==============================================================+
++m       + :ref:`math::float3x3 <handle-math-float3x3>`  const implicit!+
++--------+--------------------------------------------------------------+
++i       +uint const                                                    +
++--------+--------------------------------------------------------------+
+
+
+|function-math-[]|
 
 

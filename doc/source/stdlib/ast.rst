@@ -148,11 +148,13 @@ Type aliases
 
 .. das:attribute:: ExprLetFlags is a bitfield
 
-+-------+---+-----+
-+field  +bit+value+
-+=======+===+=====+
-+inScope+0  +1    +
-+-------+---+-----+
++-----------+---+-----+
++field      +bit+value+
++===========+===+=====+
++inScope    +0  +1    +
++-----------+---+-----+
++hasEarlyOut+1  +2    +
++-----------+---+-----+
 
 
 |typedef-ast-ExprLetFlags|
@@ -305,6 +307,8 @@ Type aliases
 +--------------------------+---+-----+
 +pinvoke                   +13 +8192 +
 +--------------------------+---+-----+
++jitOnly                   +14 +16384+
++--------------------------+---+-----+
 
 
 |typedef-ast-MoreFunctionFlags|
@@ -369,6 +373,10 @@ Type aliases
 +----------------+---+-----+
 +no_capture      +14 +16384+
 +----------------+---+-----+
++early_out       +15 +32768+
++----------------+---+-----+
++used_in_finally +16 +65536+
++----------------+---+-----+
 
 
 |typedef-ast-VariableFlags|
@@ -424,6 +432,8 @@ Type aliases
 +needCollapse              +10 +1024 +
 +--------------------------+---+-----+
 +hasMakeBlock              +11 +2048 +
++--------------------------+---+-----+
++hasEarlyOut               +12 +4096 +
 +--------------------------+---+-----+
 
 
@@ -1239,7 +1249,7 @@ Function fields are
 +---------------+----------------------------------------------------------------+
 +arguments      +vector<smart_ptr<Variable>>                                     +
 +---------------+----------------------------------------------------------------+
-+fromGeneric    + :ref:`ast::Function <handle-ast-Function>` ?                   +
++fromGeneric    +smart_ptr< :ref:`ast::Function <handle-ast-Function>` >         +
 +---------------+----------------------------------------------------------------+
 +result         +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >         +
 +---------------+----------------------------------------------------------------+
@@ -1279,11 +1289,11 @@ Function fields are
 
 Function property operators are
 
-+---------+---------------------------------------------+
-+origin   + :ref:`ast::Function <handle-ast-Function>` ?+
-+---------+---------------------------------------------+
-+isGeneric+bool                                         +
-+---------+---------------------------------------------+
++---------+-------------------------------------------------------+
++origin   +smart_ptr< :ref:`ast::Function <handle-ast-Function>` >+
++---------+-------------------------------------------------------+
++isGeneric+bool                                                   +
++---------+-------------------------------------------------------+
 
 
 |structure_annotation-ast-Function|
@@ -2593,7 +2603,7 @@ ExprRef2Ptr fields are
 ExprAddr fields are
 
 +----------+--------------------------------------------------------+
-+func      + :ref:`ast::Function <handle-ast-Function>` ?           +
++func      +smart_ptr< :ref:`ast::Function <handle-ast-Function>` > +
 +----------+--------------------------------------------------------+
 +target    + :ref:`builtin::das_string <handle-builtin-das_string>` +
 +----------+--------------------------------------------------------+
