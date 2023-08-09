@@ -663,7 +663,7 @@ namespace das {
                 auto pAddr = static_pointer_cast<ExprAddr>(what);
                 auto funcC = pAddr->func;
                 auto pCall = make_smart<ExprCall>(expr->at, funcC->name);
-                pCall->func = funcC;
+                pCall->func = funcC.get();
                 uint32_t numArgs = uint32_t(expr->arguments.size());
                 pCall->arguments.reserve(numArgs-1);
                 for ( uint32_t i=1; i!=numArgs; ++i ) {
