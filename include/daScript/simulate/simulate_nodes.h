@@ -2617,6 +2617,7 @@ SIM_NODE_AT_VECTOR(Float, float)
         SimNode_IfTheElseAny ( const LineInfo & at, SimNode * c, SimNode * t, SimNode * f )
             : SimNode(at), cond(c), if_true(t), if_false(f) {}
         SimNode * cond, * if_true, * if_false;
+        virtual bool rtti_node_isIf() const override { return true; }
     };
 
     // IF-THEN-ELSE (also Cond)

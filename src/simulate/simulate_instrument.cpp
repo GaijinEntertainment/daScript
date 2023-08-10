@@ -49,6 +49,21 @@ namespace das {
                     }
                 }
             }
+            else if ( node->rtti_node_isIf() ) {
+                SimNode_IfTheElseAny * cond = (SimNode_IfTheElseAny *) node;
+                if ( cond->if_true && !cond->if_true->rtti_node_isBlock() ) {
+                    auto & expr = cond->if_true;
+                    if ( anyLine || isCorrectFileAndLine(expr->debugInfo) ) {
+                        expr = isInstrumenting ? instrumentNode(expr) : clearNode(expr);
+                    }
+                }
+                if ( cond->if_false && !cond->if_false->rtti_node_isBlock() ) {
+                    auto & expr = cond->if_false;
+                    if ( anyLine || isCorrectFileAndLine(expr->debugInfo) ) {
+                        expr = isInstrumenting ? instrumentNode(expr) : clearNode(expr);
+                    }
+                }
+            }
             return node;
         }
         Context * context = nullptr;
