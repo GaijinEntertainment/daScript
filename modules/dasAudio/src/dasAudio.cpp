@@ -373,6 +373,7 @@ struct MALimiterAnnotation : ManagedStructureAnnotation<ma_limiter> {
         addField<DAS_BIND_MANAGED_FIELD(threshold)>("threshold","threshold");
         addField<DAS_BIND_MANAGED_FIELD(attack_coeff)>("attack_coeff","attack_coeff");
         addField<DAS_BIND_MANAGED_FIELD(release_coeff)>("release_coeff","release_coeff");
+        addField<DAS_BIND_MANAGED_FIELD(linear_limiter)>("linear_limiter","linear_limiter");
     }
 };
 
@@ -550,6 +551,8 @@ public:
         addAnnotation(make_smart<MALimiterAnnotation>(lib));
         addExtern<DAS_BIND_FUN(ma_limiter_init)>(*this, lib, "ma_limiter_init",
             SideEffects::modifyArgument, "ma_limiter_init")->args({"limiter", "threshold", "attack_time", "release_time", "sample_rate", "nChannels"});
+        addExtern<DAS_BIND_FUN(ma_limiter_init_linear)>(*this, lib, "ma_limiter_init_linear",
+            SideEffects::modifyArgument, "ma_limiter_init_linear")->args({"limiter", "nChannels"});
         addExtern<DAS_BIND_FUN(ma_limiter_process_pcm_frames)>(*this, lib, "ma_limiter_process_pcm_frames",
             SideEffects::modifyArgument, "ma_limiter_process_pcm_frames")->args({"limiter", "InFames", "OutFrames", "nFrames"});
         addExtern<DAS_BIND_FUN(ma_limiter_get_required_input_frame_count)>(*this, lib, "ma_limiter_get_required_input_frame_count",
