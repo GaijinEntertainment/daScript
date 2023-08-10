@@ -1,6 +1,6 @@
 #include <miniaudio.h>
-#include <volume_mixer.h>
-#include <reverb.h>
+#include "volume_mixer.h"
+#include "reverb.h"
 
 namespace das {
     bool dasAudio_init ( TFunc<void,TTemporary<TArray<float>>,int32_t,int32_t,float> mixer, int32_t rate, int32_t channels, Context & context );
