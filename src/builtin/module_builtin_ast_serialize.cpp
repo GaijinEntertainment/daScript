@@ -569,26 +569,32 @@ namespace das {
         tag("FileInfoPtr");
         bool is_null = info == nullptr;
         *this << is_null;
+        if ( is_null ) {
+            if ( !writing ) { info = nullptr; }
+            return *this;
+        }
         if ( writing ) {
-            if ( !is_null ) {
+            uint64_t ptr = (uint64_t) info.get();
+            *this << ptr;
+            if ( fileInfoMap[ptr] == nullptr ) {
+                fileInfoMap[ptr] = info.get();
                 info->serialize(*this);
             }
         } else {
-            if ( !is_null ) {
+            uint64_t ptr; *this << ptr;
+            if ( fileInfoMap[ptr] == nullptr ) {
                 int tag = 0; *this << tag;
                 switch ( tag ) {
                     case 0: info.reset(new FileInfo); break;
                     case 1: info.reset(new TextFileInfo); break;
                     default: DAS_VERIFYF(false, "Unreachable");
                 }
+                fileInfoMap[ptr] = info.get();
                 info->serialize(*this);
-            } else {
-                info = nullptr;
             }
         }
         return *this;
     }
-
 
     AstSerializer & AstSerializer::operator << ( StructurePtr & struct_ ) {
         serializeSmartPtr(struct_, smartStructureMap);
@@ -1340,15 +1346,13 @@ namespace das {
         if ( ser.writing ) {
             ser << tag;
         }
-        ser << name   << tabSize;
-        ser << source << sourceLength << owner;
-        if ( owner ) {
-            if ( ser.writing ) {
-                ser.write((const void *) source, sourceLength);
-            } else {
-                source = (char *) das_aligned_alloc16(sourceLength + 1);
-                ser.read((void *) source, sourceLength);
-            }
+        ser << name         << tabSize;
+        ser << sourceLength << owner;
+        if ( ser.writing ) {
+            ser.write((const void *) source, sourceLength);
+        } else {
+            source = (char *) das_aligned_alloc16(sourceLength + 1);
+            ser.read((void *) source, sourceLength);
         }
     }
 

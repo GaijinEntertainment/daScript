@@ -21,6 +21,7 @@ namespace das {
         vector<uint8_t>     buffer;
     // pointers
         das_hash_map<uint64_t, ExprBlock*>          exprBlockMap;
+        das_hash_map<uint64_t, FileInfo*>           fileInfoMap;
     // smart pointers
         das_hash_map<uint64_t, MakeFieldDeclPtr>    smartMakeFieldDeclMap;
         das_hash_map<uint64_t, EnumerationPtr>      smartEnumerationMap;
