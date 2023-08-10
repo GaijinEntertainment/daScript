@@ -110,6 +110,7 @@ namespace das
         LineInfo debugInfo;
         virtual bool rtti_node_isSourceBase() const { return false;  }
         virtual bool rtti_node_isBlock() const { return false; }
+        virtual bool rtti_node_isIf() const { return false; }
         virtual bool rtti_node_isInstrument() const { return false; }
         virtual bool rtti_node_isInstrumentFunction() const { return false; }
         virtual bool rtti_node_isJit() const { return false; }
