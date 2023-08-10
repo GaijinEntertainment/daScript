@@ -6541,7 +6541,7 @@ namespace das {
         }
 
         int prepareCandidates ( MatchingFunctions & candidates, const vector<TypeDeclPtr>& nonNamedArguments,  bool inferAuto, bool inferBlocks ) {
-            if ( candidates.size()<program->policies.always_report_candidates_threshold ) return 0;
+            if ( candidates.size()<(size_t)program->policies.always_report_candidates_threshold ) return 0;
             RankedMatchingFunctions ranked;
             ranked.reserve(candidates.size());
             for ( auto can : candidates ) {

@@ -8,7 +8,7 @@
 
 #define MINIAUDIO_IMPLEMENTATION
 #include <miniaudio.h>
-#include <volume_mixer.h>
+#include "volume_mixer.h"
 
 #define I3DL32_REVERB_IMPLEMENTATION    1
 #include "reverb.h"
