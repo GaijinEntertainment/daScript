@@ -31,9 +31,11 @@ struct ma_limiter {
     float    threshold;
     float    attack_coeff;
     float    release_coeff;
+    float    linear_limiter;
 };
 
 void ma_limiter_init ( ma_limiter * limiter, float threshold, float attack_time, float release_time, float sample_rate, uint32_t nChannels );
+void ma_limiter_init_linerar ( ma_limiter * limiter );
 void ma_limiter_process_pcm_frames ( ma_limiter * limiter, float * InFames, float * OutFrames, uint64_t nFrames );
 uint64_t ma_limiter_get_required_input_frame_count ( ma_limiter * limiter, uint64_t out_len );
 void ma_limiter_uninit ( ma_limiter * );
@@ -190,15 +192,28 @@ void ma_volume_mixer_process_pcm_frames ( ma_volume_mixer * mixer, float * InFra
     }
 }
 
+void ma_limiter_init_linear ( ma_limiter * limiter, uint32_t nChannels ) {
+    limiter->nChannels = nChannels;
+    limiter->linear_limiter = 1.0;
+    limiter->threshold = 0.0f;
+    limiter->attack_samples = 0;
+    limiter->attack_coeff = 1.0f;
+    limiter->release_coeff = 1.0f;
+    for ( uint32_t i=0; i!=MA_MAX_CHANNELS; ++i ) {
+        limiter->gain[i] = 1.0f;
+    }
+}
+
 void ma_limiter_init ( ma_limiter * limiter, float threshold, float attack_time, float release_time, float sample_rate, uint32_t nChannels ) {
     limiter->nChannels = nChannels;
     limiter->threshold = threshold;
     limiter->attack_samples = (int)(attack_time * sample_rate);
     limiter->attack_coeff = expf(-1.0f / (limiter->attack_samples));
-    limiter->release_coeff = expf(-1.0f / (release_time));
+    limiter->release_coeff = expf(-1.0f / (release_time * sample_rate));
     for ( uint32_t i=0; i!=MA_MAX_CHANNELS; ++i ) {
         limiter->gain[i] = 1.0f;
     }
+    limiter->linear_limiter = 0.0;
 }
 
 void ma_limiter_uninit ( ma_limiter * ) {
@@ -282,8 +297,23 @@ void ma_limiter_porcess_pcm_frames_any ( ma_limiter * limiter, float * InFames, 
     }
 }
 
+void ma_apply_limiter ( ma_limiter * limiter, float * InFrames, float * OutFrames, uint64_t count ) {
+    float limiter_mult = limiter->linear_limiter;
+    for (int i = 0; i < count; i++, InFrames++, OutFrames++) {
+        float v = *InFrames * limiter_mult;
+        *OutFrames = v;
+        if (fabsf(v) > 1.0f)
+            limiter_mult *= 0.96f;
+        if (limiter_mult < 1.0f)
+            limiter_mult = min(limiter_mult + (0.5f / 65536), 1.0f);
+    }
+    limiter->linear_limiter = limiter_mult;
+}
+
 void ma_limiter_process_pcm_frames ( ma_limiter * limiter, float * InFames, float * OutFrames, uint64_t nFrames ) {
-    if ( limiter->nChannels==1 ) {
+    if ( limiter->linear_limiter != 0.0f ) {
+        ma_apply_limiter(limiter, InFames, OutFrames, nFrames * limiter->nChannels);
+    } else if ( limiter->nChannels==1 ) {
         ma_limiter_porcess_pcm_frames_mono(limiter, InFames, OutFrames, nFrames);
     } else if ( limiter->nChannels==2 ) {
         ma_limiter_porcess_pcm_frames_stereo(limiter, InFames, OutFrames, nFrames);

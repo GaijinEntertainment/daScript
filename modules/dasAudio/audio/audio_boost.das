@@ -19,9 +19,9 @@ let public MA_SAMPLE_RATE = 48000
 let public MA_CHANNELS = 2
 
 // limiter config
-let MA_LIMITER_THRESHOLD = 1.0
-let MA_LIMITER_ATTACK_TIME = 0.005
-let MA_LIMITER_RELEASE_TIME = 0.100
+let MA_LIMITER_THRESHOLD = 0.95
+let MA_LIMITER_ATTACK_TIME = 0.0001
+let MA_LIMITER_RELEASE_TIME = .01
 
 typedef SID = uint64
 
@@ -581,6 +581,11 @@ def initialize_mixer
             MA_LIMITER_RELEASE_TIME,
             float(MA_SAMPLE_RATE),
             uint(MA_CHANNELS))
+        /*
+        ma_limiter_init_linear(unsafe(addr(g_limiter)),
+            uint(MA_CHANNELS))
+        */
+        to_log(LOG_INFO, "limiter requires {int(g_limiter.attack_samples)} samples, {int(double(g_limiter.attack_samples)*1000.0lf/double(MA_SAMPLE_RATE))} ms\n")
 
 [finalize]
 def finalize_mixer
