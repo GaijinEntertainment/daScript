@@ -566,9 +566,7 @@ namespace das {
     }
 
     AstSerializer & AstSerializer::operator << ( FileInfoPtr & info ) {
-        // TODO: talk about it; FileInfo points to somewhere else
-        return *this;
-
+        tag("FileInfoPtr");
         bool is_null = info == nullptr;
         *this << is_null;
         if ( writing ) {
@@ -1329,17 +1327,29 @@ namespace das {
     }
 
     void FileInfo::serialize ( AstSerializer & ser ) {
-        ser.tag("FileInfo");
         int tag = 0;
-        ser << tag << name << tabSize;
+        if ( ser.writing ) {
+            ser << tag;
+        }
+        ser << name << tabSize;
         // Note: we do not serialize profileData
     }
 
     void TextFileInfo::serialize ( AstSerializer & ser ) {
-        ser.tag("TextFileInfo");
         int tag = 1; // Signify the text file info
-        ser << tag    << name        << tabSize;
+        if ( ser.writing ) {
+            ser << tag;
+        }
+        ser << name   << tabSize;
         ser << source << sourceLength << owner;
+        if ( owner ) {
+            if ( ser.writing ) {
+                ser.write((const void *) source, sourceLength);
+            } else {
+                source = (char *) das_aligned_alloc16(sourceLength + 1);
+                ser.read((void *) source, sourceLength);
+            }
+        }
     }
 
     AstSerializer & AstSerializer::operator << ( CallMacro * & ptr ) {
