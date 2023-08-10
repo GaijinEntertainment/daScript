@@ -299,13 +299,13 @@ void ma_limiter_porcess_pcm_frames_any ( ma_limiter * limiter, float * InFames, 
 
 void ma_apply_limiter ( ma_limiter * limiter, float * InFrames, float * OutFrames, uint64_t count ) {
     float limiter_mult = limiter->linear_limiter;
-    for (int i = 0; i < count; i++, InFrames++, OutFrames++) {
+    for (uint64_t i = 0; i < count; i++, InFrames++, OutFrames++) {
         float v = *InFrames * limiter_mult;
         *OutFrames = v;
         if (fabsf(v) > 1.0f)
             limiter_mult *= 0.96f;
         if (limiter_mult < 1.0f)
-            limiter_mult = min(limiter_mult + (0.5f / 65536), 1.0f);
+            limiter_mult = ma_min(limiter_mult + (0.5f / 65536), 1.0f);
     }
     limiter->linear_limiter = limiter_mult;
 }
