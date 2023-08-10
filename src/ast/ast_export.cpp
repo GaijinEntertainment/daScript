@@ -7,7 +7,7 @@ namespace das {
 
     class ClearUnusedSymbols : public Visitor {
     public:
-        virtual bool canVisitStructureFieldInit ( Structure * ) override { return false; }
+        virtual bool canVisitStructureFieldInit ( Structure * ) override { return true; }
         virtual bool canVisitArgumentInit ( Function *, const VariablePtr &, Expression * ) override { return false; }
         virtual void preVisit(ExprAddr * expr) override {
             Visitor::preVisit(expr);
