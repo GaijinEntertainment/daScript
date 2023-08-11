@@ -1,4 +1,5 @@
 #include "daScript/misc/platform.h"
+#include "daScript/misc/performance_time.h"
 
 #include "daScript/ast/ast_serialize_macro.h"
 #include "daScript/ast/ast_serializer.h"
@@ -95,14 +96,15 @@ namespace das {
     }
 
     void AstSerializer::serialize ( void * data, size_t size ) {
-        if ( writing ) {
-            write(data,size);
-        } else {
+        // if ( writing ) {
+        //     write(data,size);
+        // } else {
             read(data,size);
-        }
+        // }
     }
 
     void AstSerializer::tag ( const char * name ) {
+        return;
         uint64_t hash = hash64z(name);
         if ( writing ) {
             *this << hash;
@@ -117,11 +119,90 @@ namespace das {
 
     ////////////////////////////////////////////////////////////////////////////
 
+    uint64_t totalVectorSize = 0;
+
+    template <typename TT>
+    AstSerializer & AstSerializer::operator << ( vector<TT> & value ) {
+        tag("Vector");
+        if ( writing ) {
+            uint64_t size = value.size(); *this << size;
+        } else {
+            totalVectorSize += 8;
+            uint64_t size = 0; *this << size;
+            value.resize(size);
+        }
+        for ( TT & v : value ) {
+            *this << v;
+        }
+        return *this;
+    }
+
+    uint64_t totalSafeboxSize = 0;
+
+    template <typename V>
+    AstSerializer & AstSerializer::operator << ( safebox<V> & box ) {
+        tag("Safebox");
+        if ( writing ) {
+            uint64_t size = box.unlocked_size(); *this << size;
+            box.foreach_with_hash ([&](smart_ptr<V> obj, uint64_t hash) {
+                *this << hash << obj;
+            });
+            return *this;
+        }
+        uint64_t size = 0; *this << size;
+        totalSafeboxSize += 8;
+        safebox<V> deser;
+        for ( uint64_t i = 0; i < size; i++ ) {
+            smart_ptr<V> obj; uint64_t hash;
+            *this << hash << obj;
+            deser.insert(hash, obj);
+        }
+        box = std::move(deser);
+        return *this;
+    }
+
+    uint64_t totalHashmapSize = 0;
+
+    template <typename K, typename V, typename H, typename E>
+    void AstSerializer::serialize_hash_map ( das_hash_map<K, V, H, E> & value ) {
+        tag("DasHashmap");
+        if ( writing ) {
+            uint64_t size = value.size(); *this << size;
+            for ( auto & item : value ) {
+                *this << item.first << item.second;
+            }
+            return;
+        }
+        uint64_t size = 0; *this << size;
+        totalHashmapSize += 8;
+        das_hash_map<K, V, H, E> deser;
+        deser.reserve(size);
+        for ( uint64_t i = 0; i < size; i++ ) {
+            K k; V v; *this << k << v;
+            deser.emplace(std::move(k), std::move(v));
+        }
+        value = std::move(deser);
+    }
+
+    template <typename K, typename V>
+    AstSerializer & AstSerializer::operator << ( das_hash_map<K, V> & value ) {
+        serialize_hash_map<K, V, hash<K>, equal_to<K>>(value);
+        return *this;
+    }
+
+    template <typename V>
+    AstSerializer & AstSerializer::operator << ( safebox_map<V> & box ) {
+        serialize_hash_map<uint64_t, V, skip_hash, das::equal_to<uint64_t>>(box);
+        return *this;
+    }
+
     AstSerializer & AstSerializer::operator << ( Type & baseType ) {
         tag("Type");
         serialize_enum(baseType);
         return *this;
     }
+
+    static uint64_t rtti_size = 0;
 
     AstSerializer & AstSerializer::operator << ( ExpressionPtr & expr ) {
         tag("ExpressionPtr");
@@ -138,6 +219,7 @@ namespace das {
         } else {
             string rtti;
             *this << rtti;
+            rtti_size += rtti.size() + 4;
             auto annotation = astModule->findAnnotation(rtti);
             DAS_VERIFYF(annotation!=nullptr, "annotation '%s' is not found", rtti.c_str());
             expr.reset((Expression *) static_pointer_cast<TypeAnnotation>(annotation)->factory());
@@ -505,6 +587,8 @@ namespace das {
         return *this;
     }
 
+    uint64_t totStringsSize = 0;
+
     AstSerializer & AstSerializer::operator << ( string & str ) {
         tag("string");
         if ( writing ) {
@@ -516,9 +600,12 @@ namespace das {
             *this << size;
             str.resize(size);
             read(&str[0], size);
+            totStringsSize += 4 + size;
         }
         return *this;
     }
+
+    uint64_t totalCstrSize = 0;
 
     AstSerializer & AstSerializer::operator << ( const char * & value ) {
         tag("const char *");
@@ -534,6 +621,7 @@ namespace das {
             if ( !is_null ) {
                 uint64_t len = 0;
                 *this << len;
+                totalCstrSize += 8 + len;
                 auto data = new char [len + 1]();
                 read(static_cast<void*>(data), len);
                 data[len] = '\0';
@@ -545,8 +633,11 @@ namespace das {
         return *this;
     }
 
+    static uint64_t lineinfo_size = 0;
+
     AstSerializer & AstSerializer::operator << ( LineInfo & at ) {
         tag("LineInfo");
+        lineinfo_size += 16; // do not count text -- it's only serialized rarely
         *this << at.fileInfo << at.column << at.line
               << at.last_column << at.last_line;
         return *this;
@@ -565,10 +656,13 @@ namespace das {
         return *this;
     }
 
+    uint64_t totalFileInfoSize = 0;
+
     AstSerializer & AstSerializer::operator << ( FileInfoPtr & info ) {
         tag("FileInfoPtr");
         bool is_null = info == nullptr;
         *this << is_null;
+        totalFileInfoSize += 1;
         if ( is_null ) {
             if ( !writing ) { info = nullptr; }
             return *this;
@@ -582,8 +676,10 @@ namespace das {
             }
         } else {
             uint64_t ptr; *this << ptr;
+            totalFileInfoSize += 8;
             if ( fileInfoMap[ptr] == nullptr ) {
                 int tag = 0; *this << tag;
+                totalFileInfoSize += 4;
                 switch ( tag ) {
                     case 0: info.reset(new FileInfo); break;
                     case 1: info.reset(new TextFileInfo); break;
@@ -1338,6 +1434,7 @@ namespace das {
             ser << tag;
         }
         ser << name << tabSize;
+        totalFileInfoSize += 4;
         // Note: we do not serialize profileData
     }
 
@@ -1348,9 +1445,11 @@ namespace das {
         }
         ser << name         << tabSize;
         ser << sourceLength << owner;
+        totalFileInfoSize += 9; // Do not count name - stringSize
         if ( ser.writing ) {
             ser.write((const void *) source, sourceLength);
         } else {
+            totalFileInfoSize += sourceLength;
             source = (char *) das_aligned_alloc16(sourceLength + 1);
             ser.read((void *) source, sourceLength);
         }
@@ -1610,7 +1709,9 @@ namespace das {
             bool is_macro_module = false;
             ser << is_macro_module;
             if ( is_macro_module ) {
-                reinstantiateMacroModuleState (*ser.moduleLibrary, this);
+                auto time0 = ref_time_ticks();
+                reinstantiateMacroModuleState(*ser.moduleLibrary, this);
+                ser.totMacroTime += get_time_usec(time0);
             }
         }
 
@@ -1764,6 +1865,15 @@ namespace das {
         removeUnusedSymbols();
         TextWriter logs;
         allocateStack(logs);
+
+        printf("Rtti strings written: %llu\n", rtti_size);
+        printf("Total strings size: %llu\n",   totStringsSize);
+        printf("Line info size: %llu\n",       lineinfo_size);
+        printf("totalFileInfoSize: %llu\n",       totalFileInfoSize);
+        printf("totalCstrSize: %llu\n",       totalCstrSize);
+        printf("totalVectorSize: %llu\n",       totalVectorSize);
+        printf("totalSafeboxSize: %llu\n",       totalSafeboxSize);
+        printf("totalHashmapSize: %llu\n",       totalHashmapSize);
     }
 
 }

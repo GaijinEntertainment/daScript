@@ -19,6 +19,8 @@ namespace das {
         bool                writing = false;
         size_t              readOffset = 0;
         vector<uint8_t>     buffer;
+    // profile data
+        uint64_t totMacroTime = 0;
     // pointers
         das_hash_map<uint64_t, ExprBlock*>          exprBlockMap;
         das_hash_map<uint64_t, FileInfo*>           fileInfoMap;
@@ -102,72 +104,19 @@ namespace das {
         }
 
         template <typename TT>
-        AstSerializer & operator << ( vector<TT> & value ) {
-            tag("Vector");
-            if ( writing ) {
-                uint64_t size = value.size(); *this << size;
-            } else {
-                uint64_t size = 0; *this << size;
-                value.resize(size);
-            }
-            for ( TT & v : value ) {
-                *this << v;
-            }
-            return *this;
-        }
+        AstSerializer & operator << ( vector<TT> & value );
 
         template <typename K, typename V, typename H, typename E>
-        void serialize_hash_map ( das_hash_map<K, V, H, E> & value ) {
-            tag("DasHashmap");
-            if ( writing ) {
-                uint64_t size = value.size(); *this << size;
-                for ( auto & item : value ) {
-                    *this << item.first << item.second;
-                }
-                return;
-            }
-            uint64_t size = 0; *this << size;
-            das_hash_map<K, V, H, E> deser;
-            deser.reserve(size);
-            for ( uint64_t i = 0; i < size; i++ ) {
-                K k; V v; *this << k << v;
-                deser.emplace(std::move(k), std::move(v));
-            }
-            value = std::move(deser);
-        }
+        void serialize_hash_map ( das_hash_map<K, V, H, E> & value );
 
         template <typename K, typename V>
-        AstSerializer & operator << ( das_hash_map<K, V> & value ) {
-            serialize_hash_map<K, V, hash<K>, equal_to<K>>(value);
-            return *this;
-        }
+        AstSerializer & operator << ( das_hash_map<K, V> & value );
 
         template <typename V>
-        AstSerializer & operator << ( safebox_map<V> & box ) {
-            serialize_hash_map<uint64_t, V, skip_hash, das::equal_to<uint64_t>>(box);
-            return *this;
-        }
+        AstSerializer & operator << ( safebox_map<V> & box );
 
         template <typename V>
-        AstSerializer & operator << ( safebox<V> & box ) {
-            tag("Safebox");
-            if ( writing ) {
-                uint64_t size = box.unlocked_size(); *this << size;
-                box.foreach_with_hash ([&](smart_ptr<V> obj, uint64_t hash) {
-                    *this << hash << obj;
-                });
-                return *this;
-            }
-            uint64_t size = 0; *this << size;
-            safebox<V> deser;
-            for ( uint64_t i = 0; i < size; i++ ) {
-                smart_ptr<V> obj; uint64_t hash;
-                *this << hash << obj;
-                deser.insert(hash, obj);
-            }
-            box = std::move(deser);
-            return *this;
-        }
+        AstSerializer & operator << ( safebox<V> & box );
 
         template <typename EnumType>
         void serialize_enum ( EnumType & baseType ) {

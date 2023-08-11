@@ -27,9 +27,9 @@ REGISTER_MODULE(Module_Tutorial08);
 
 // #define TUTORIAL_NAME   "/examples/tutorial/tutorial08.das"
 // #define TUTORIAL_NAME   "/examples/test/unit_tests/abc.das"
-// #define TUTORIAL_NAME   "/examples/test/unit_tests/access_private_from_lambda.das"
-// #define TUTORIAL_NAME   "/examples/test/unit_tests/aka.das"
 #define TUTORIAL_NAME   "/examples/test/unit_tests/aonce.das"
+// #define TUTORIAL_NAME   "/examples/test/unit_tests/aka.das"
+// #define TUTORIAL_NAME   "/examples/test/unit_tests/abc.das"
 
 void tutorial () {
     TextPrinter tout;                               // output stream for all compiler messages (stdout. for stringstream use TextWriter)
@@ -101,5 +101,21 @@ int main( int, char * [] ) {
     tutorial();
     // shut-down daScript, free all memory
     Module::Shutdown();
+
+    if ( g_smart_ptr_total ) {
+        TextPrinter tp;
+        tp << "smart pointers leaked: " << uint64_t(g_smart_ptr_total) << "\n";
+        tp << "leaked ids:";
+        vector<uint64_t> ids;
+        // for ( auto it : ptr_ref_count::ref_count_ids ) {
+        //     ids.push_back(it);
+        // }
+        std::sort(ids.begin(), ids.end());
+        for ( auto it : ids ) {
+            tp << " " << HEX << it << DEC;
+        }
+        tp << "\n";
+    }
+
     return 0;
 }
