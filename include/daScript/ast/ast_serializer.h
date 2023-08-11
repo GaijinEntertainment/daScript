@@ -31,6 +31,7 @@ namespace das {
         das_hash_map<uint64_t, VariablePtr>         smartVariableMap;
         das_hash_map<uint64_t, FunctionPtr>         smartFunctionMap;
         das_hash_map<uint64_t, MakeStructPtr>       smartMakeStructMap;
+        das_hash_map<uint64_t, TypeDeclPtr>         smartTypeDeclMap;
     // refs
         vector<pair<ExprBlock**,uint64_t>>          blockRefs;
         vector<pair<Function **,uint64_t>>          functionRefs;

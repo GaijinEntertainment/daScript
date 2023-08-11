@@ -96,11 +96,11 @@ namespace das {
     }
 
     void AstSerializer::serialize ( void * data, size_t size ) {
-        // if ( writing ) {
-        //     write(data,size);
-        // } else {
+        if ( writing ) {
+            write(data,size);
+        } else {
             read(data,size);
-        // }
+        }
     }
 
     void AstSerializer::tag ( const char * name ) {
@@ -481,20 +481,27 @@ namespace das {
         return *this;
     }
 
+    uint64_t totalTypedeclPtrCount = 0;
+
     AstSerializer & AstSerializer::operator << ( TypeDeclPtr & type ) {
         tag("TypeDeclPtr");
+        totalTypedeclPtrCount += 1;
         uint64_t id = intptr_t(type.get());
         *this << id;
+        if ( id == 0 ) {
+            if ( !writing ) type = nullptr;
+            return *this;
+        }
         if ( writing ) {
-            if ( id ) {
+            if ( smartTypeDeclMap[id] == nullptr ) {
+                smartTypeDeclMap[id] = type;
                 type->serialize(*this);
             }
         } else {
-            if ( id ) {
+            if ( smartTypeDeclMap[id] == nullptr ) {
                 type = make_smart<TypeDecl>();
+                smartTypeDeclMap[id] = type;
                 type->serialize(*this);
-            } else {
-                type = nullptr;
             }
         }
         return *this;
@@ -873,8 +880,11 @@ namespace das {
 
 // typedecl
 
+    uint64_t totalTypedeclCount = 0;
+
     void TypeDecl::serialize ( AstSerializer & ser ) {
         ser.tag("TypeDecl");
+        totalTypedeclCount += 1;
         ser << baseType;
         ser << structType << enumType;
         ser << firstType  << secondType;
@@ -918,6 +928,8 @@ namespace das {
         ser << name << cppName << at << value;
     }
 
+    uint64_t totalAnnotationList = 0;
+
     void serializeAnnotationList ( AstSerializer & ser, AnnotationList & list ) {
         if ( ser.writing ) {
             uint64_t size = 0;
@@ -933,6 +945,7 @@ namespace das {
             }
         } else {
             uint64_t size = 0; ser << size;
+            totalAnnotationList += 8;
             AnnotationList result; result.resize(size);
             for ( uint64_t i = 0; i < size; i++ ) {
                 ser << result[i];
@@ -1529,6 +1542,7 @@ namespace das {
             string name; ser << name;
             DAS_ASSERTF(name == f->name, "expected to serialize in the same order");
             uint64_t size = 0; ser << size;
+            totalSafeboxSize += 8;
             f->useFunctions.reserve(size);
             for ( uint64_t i = 0; i < size; i++ ) {
                 void* addr; ser << addr;
@@ -1552,6 +1566,7 @@ namespace das {
             string name; ser << name;
             DAS_ASSERTF(name == f->name, "expected to serialize in the same order");
             uint64_t size = 0; ser << size;
+            totalSafeboxSize += 8;
             f->useFunctions.reserve(size);
             for ( uint64_t i = 0; i < size; i++ ) {
                 void* addr; ser << addr;
@@ -1574,6 +1589,7 @@ namespace das {
             string name; ser << name;
             DAS_ASSERTF(name == f->name, "expected to serialize in the same order");
             uint64_t size = 0; ser << size;
+            totalSafeboxSize += 8;
             f->useGlobalVariables.reserve(size);
             for ( uint64_t i = 0; i < size; i++ ) {
                 Variable * fun; ser << fun;
@@ -1595,6 +1611,7 @@ namespace das {
             string name; ser << name;
             DAS_ASSERTF(name == f->name, "expected to serialize in the same order");
             uint64_t size = 0; ser << size;
+            totalSafeboxSize += 8;
             f->useGlobalVariables.reserve(size);
             for ( uint64_t i = 0; i < size; i++ ) {
                 void* addr; ser << addr;
@@ -1613,6 +1630,7 @@ namespace das {
         } else {
             safebox<Variable> result;
             uint64_t size; ser << size;
+            totalSafeboxSize += 8;
             for ( uint64_t i = 0; i < size; i++ ) {
                 VariablePtr g; ser << g;
                 result.insert(g->name, g);
@@ -1629,6 +1647,7 @@ namespace das {
             });
         } else {
             uint64_t size; ser << size;
+            totalSafeboxSize += 8;
             for ( uint64_t i = 0; i < size; i++ ) {
                 StructurePtr g; ser << g;
                 structures.insert(g->name, g);
@@ -1645,6 +1664,7 @@ namespace das {
             });
         } else {
             uint64_t size; ser << size;
+            totalSafeboxSize += 8;
             for ( uint64_t i = 0; i < size; i++ ) {
                 string name; ser << name;
                 FunctionPtr g; ser << g;
@@ -1874,6 +1894,9 @@ namespace das {
         printf("totalVectorSize: %llu\n",       totalVectorSize);
         printf("totalSafeboxSize: %llu\n",       totalSafeboxSize);
         printf("totalHashmapSize: %llu\n",       totalHashmapSize);
+        printf("totalTypedeclCount: %llu\n",       totalTypedeclCount);
+        printf("totalAnnotationList: %llu\n",       totalAnnotationList);
+        printf("totalTypedeclPtrCount: %llu\n",       totalTypedeclPtrCount);
     }
 
 }
