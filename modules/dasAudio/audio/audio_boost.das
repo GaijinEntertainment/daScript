@@ -138,9 +138,9 @@ class AudioChannel
         if reverb != null
             var temp : array<float>
             temp |> resize(int(outputFrames) * channels)
-            if channels == 1
+            if source.channels == 1
                 reverb |> process_mono(unsafe(addr(samples[0])), unsafe(addr(temp[0])), int(outputFrames))
-            elif channels == 2
+            elif source.channels == 2
                 reverb |> process_stereo(unsafe(addr(samples[0])), unsafe(addr(temp[0])), int(outputFrames))
             else
                 panic("unsupported channel count {channels}")
@@ -432,6 +432,7 @@ def command_processor
         if cmd is shutdown
             unsafe
                 delete g_channels
+            g_sid_2_channel |> clear()
             g_command_channel |> notify_and_release
         elif cmd is add_decoder
             assume dcmd = cmd as add_decoder
@@ -582,10 +583,10 @@ def initialize_mixer
             float(MA_SAMPLE_RATE),
             uint(MA_CHANNELS))
         /*
+        to_log(LOG_INFO, "limiter requires {int(g_limiter.attack_samples)} samples, {int(double(g_limiter.attack_samples)*1000.0lf/double(MA_SAMPLE_RATE))} ms\n")
         ma_limiter_init_linear(unsafe(addr(g_limiter)),
             uint(MA_CHANNELS))
         */
-        to_log(LOG_INFO, "limiter requires {int(g_limiter.attack_samples)} samples, {int(double(g_limiter.attack_samples)*1000.0lf/double(MA_SAMPLE_RATE))} ms\n")
 
 [finalize]
 def finalize_mixer
