@@ -138,9 +138,9 @@ class AudioChannel
         if reverb != null
             var temp : array<float>
             temp |> resize(int(outputFrames) * channels)
-            if channels == 1
+            if source.channels == 1
                 reverb |> process_mono(unsafe(addr(samples[0])), unsafe(addr(temp[0])), int(outputFrames))
-            elif channels == 2
+            elif source.channels == 2
                 reverb |> process_stereo(unsafe(addr(samples[0])), unsafe(addr(temp[0])), int(outputFrames))
             else
                 panic("unsupported channel count {channels}")
