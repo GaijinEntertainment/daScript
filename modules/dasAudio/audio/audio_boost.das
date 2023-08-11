@@ -432,6 +432,7 @@ def command_processor
         if cmd is shutdown
             unsafe
                 delete g_channels
+            g_sid_2_channel |> clear()
             g_command_channel |> notify_and_release
         elif cmd is add_decoder
             assume dcmd = cmd as add_decoder
@@ -582,10 +583,10 @@ def initialize_mixer
             float(MA_SAMPLE_RATE),
             uint(MA_CHANNELS))
         /*
+        to_log(LOG_INFO, "limiter requires {int(g_limiter.attack_samples)} samples, {int(double(g_limiter.attack_samples)*1000.0lf/double(MA_SAMPLE_RATE))} ms\n")
         ma_limiter_init_linear(unsafe(addr(g_limiter)),
             uint(MA_CHANNELS))
         */
-        to_log(LOG_INFO, "limiter requires {int(g_limiter.attack_samples)} samples, {int(double(g_limiter.attack_samples)*1000.0lf/double(MA_SAMPLE_RATE))} ms\n")
 
 [finalize]
 def finalize_mixer

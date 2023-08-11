@@ -153,7 +153,7 @@ def main
         print("{length(sound_data)} samples, {channels} channels, {rate} rate\n")
         let sid_pcm = play_sound_from_pcm(MA_SAMPLE_RATE,channels,sound_data)
         sleep(3000u)
-        print("seek to 20 sec")
+        print("seek to 20 sec\n")
         sid_pcm |> set_playback_position(44100ul * 20ul)
         sleep(3000u)
 
@@ -175,7 +175,7 @@ def main
         sid |> set_pause(false)
         sid |> set_volume(0.25, 1.0)
         sleep(1000u)
-        print("seek to 20 sec")
+        print("seek to 20 sec\n")
         sid |> set_playback_position(44100ul * 20ul)
         sleep(3000u)
         print("stop\n")
