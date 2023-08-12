@@ -11,7 +11,7 @@ option(DAS_IMGUI_DISABLED "Disable dasIMGUI (IMGUI, IMNODES, IMGUI-NODE-EDITOR g
 option(DAS_BGFX_DISABLED "Disable dasBGFX (BGFX graphics API)" ON)
 option(DAS_XBYAK_DISABLED "Disable dasXbyak (XBYAK and ZYDIS, x86 assembly, jit)" ON)
 option(DAS_MINFFT_DISABLED "Disable dasMinfft (Minimal FFT library)" ON)
-option(DAS_AUDIO_DISABLED "Disable dasAudio (Miniaudio sound library)" OFF)
+option(DAS_AUDIO_DISABLED "Disable dasAudio (Miniaudio sound library)" ON)
 option(DAS_STDDLG_DISABLED "Disable dasStdDlg (File new,open,save etc dialogs)" OFF)
 option(DAS_STBIMAGE_DISABLED "Disable dasStbImage (StbImage bindings, image loading and saving)" OFF)
 option(DAS_STBTRUETYPE_DISABLED "Disable dasStbTrueType (StbTrueType bindings, ttf rasterization)" OFF)

@@ -119,8 +119,6 @@ namespace das {
 
     ////////////////////////////////////////////////////////////////////////////
 
-    // uint64_t totalVectorSize = 0;
-
     // Encode numbers by their size:
     //      0...254 (just value) => 1 byte
     //      254 (tag) + 2 bytes value => 3 bytes
@@ -143,15 +141,12 @@ namespace das {
             uint8_t tag; *this << tag;
             if ( tag < 254 ) {
                 size = tag;
-                // totalVectorSize += 1;
             } else if ( tag == 254 ) {
                 uint16_t sz; *this << sz;
                 size = sz;
-                // totalVectorSize += 3;
             } else {
                 uint32_t sz; *this << sz;
                 size = sz;
-                // totalVectorSize += 5;
             }
         }
     }
@@ -184,31 +179,20 @@ namespace das {
         return *this;
     }
 
-    // uint64_t totStringsSize = 0;
-
     AstSerializer & AstSerializer::operator << ( string & str ) {
-        // static das_hash_map<string, bool> seen;
         tag("string");
         if ( writing ) {
             uint64_t size = str.size();
             serializeAdaptiveSize64(size);
             write((void *)str.data(), size);
-            // if ( !seen[str] ) {
-            //     seen[str] = true;
-            //     totStringsSize += str.size();
-            // }
-            // printf("%.20s\n", str.data());
         } else {
             uint64_t size = 0;
             serializeAdaptiveSize64(size);
             str.resize(size);
             read(&str[0], size);
-            // totStringsSize += size;
         }
         return *this;
     }
-
-    // uint64_t totalCstrSize = 0;
 
     AstSerializer & AstSerializer::operator << ( const char * & value ) {
         tag("const char *");
@@ -222,20 +206,16 @@ namespace das {
             uint64_t len = strlen(value);
             serializeAdaptiveSize64(len);
             write(static_cast<const void*>(value), len);
-            // printf("%.20s\n", value);
         } else {
             uint64_t len = 0;
             serializeAdaptiveSize64(len);
             auto data = new char [len + 1]();
             read(static_cast<void*>(data), len);
-            // totalCstrSize += len;
             data[len] = '\0';
             value = data;
         }
         return *this;
     }
-
-    // uint64_t totalSafeboxSize = 0;
 
     template <typename V>
     AstSerializer & AstSerializer::operator << ( safebox<V> & box ) {
@@ -248,7 +228,6 @@ namespace das {
             return *this;
         }
         uint64_t size = 0; *this << size;
-        // totalSafeboxSize += 8;
         safebox<V> deser;
         for ( uint64_t i = 0; i < size; i++ ) {
             smart_ptr<V> obj; uint64_t hash;
@@ -258,8 +237,6 @@ namespace das {
         box = std::move(deser);
         return *this;
     }
-
-    // uint64_t totalHashmapSize = 0;
 
     template <typename K, typename V, typename H, typename E>
     void AstSerializer::serialize_hash_map ( das_hash_map<K, V, H, E> & value ) {
@@ -272,7 +249,6 @@ namespace das {
             return;
         }
         uint64_t size = 0; *this << size;
-        // totalHashmapSize += 8;
         das_hash_map<K, V, H, E> deser;
         deser.reserve(size);
         for ( uint64_t i = 0; i < size; i++ ) {
@@ -299,8 +275,6 @@ namespace das {
         serialize_small_enum(baseType);
         return *this;
     }
-
-    static uint64_t rtti_size = 0;
 
     AstSerializer & AstSerializer::operator << ( ExpressionPtr & expr ) {
         tag("ExpressionPtr");
@@ -742,9 +716,6 @@ namespace das {
         tag("FileInfoPtr");
         bool is_null = info == nullptr;
         *this << is_null;
-        // if ( !writing ) {
-        //     totalFileInfoSize += 1;
-        // }
         if ( is_null ) {
             if ( !writing ) { info = nullptr; }
             return *this;
@@ -758,10 +729,8 @@ namespace das {
             }
         } else {
             uint64_t ptr; *this << ptr;
-            // totalFileInfoSize += 8;
             if ( fileInfoMap[ptr] == nullptr ) {
                 uint8_t tag = 0; *this << tag;
-                // totalFileInfoSize += 1;
                 switch ( tag ) {
                     case 0: info.reset(new FileInfo); break;
                     case 1: info.reset(new TextFileInfo); break;
@@ -961,42 +930,41 @@ namespace das {
 
     void TypeDecl::serialize ( AstSerializer & ser ) {
         ser.tag("TypeDecl");
-        // totalTypedeclCount += 1;
         ser << baseType;
         switch ( baseType ) {
             case Type::alias:
                 ser << alias << dim << dimExpr;
-                // DAS_VERIFYF(!annotation,       "not expected to see");
-                // DAS_VERIFYF(!structType,      "not expected to see");
-                // DAS_VERIFYF(!enumType,        "not expected to see");
-                // DAS_VERIFYF(!firstType,       "not expected to see");
-                // DAS_VERIFYF(!secondType,      "not expected to see");
-                // DAS_VERIFYF(!alias.empty(),    "not expected to see");
-                // DAS_VERIFYF(argTypes.empty(), "not expected to see");
-                // DAS_VERIFYF(argNames.empty(), "not expected to see");
+                DAS_VERIFYF(!annotation,       "not expected to see");
+                DAS_VERIFYF(!structType,      "not expected to see");
+                DAS_VERIFYF(!enumType,        "not expected to see");
+                DAS_VERIFYF(!firstType,       "not expected to see");
+                DAS_VERIFYF(!secondType,      "not expected to see");
+                DAS_VERIFYF(!alias.empty(),    "not expected to see");
+                DAS_VERIFYF(argTypes.empty(), "not expected to see");
+                DAS_VERIFYF(argNames.empty(), "not expected to see");
                 break;
             case option:
                 ser << argTypes;
-                // DAS_VERIFYF(!annotation,       "not expected to see");
-                // DAS_VERIFYF(!structType,      "not expected to see");
-                // DAS_VERIFYF(!enumType,        "not expected to see");
-                // DAS_VERIFYF(!firstType,       "not expected to see");
-                // DAS_VERIFYF(!secondType,      "not expected to see");
-                // DAS_VERIFYF(alias.empty(),    "not expected to see");
-                // DAS_VERIFYF(!argTypes.empty(), "not expected to see");
-                // DAS_VERIFYF(argNames.empty(), "not expected to see");
-                // DAS_VERIFYF(dim.empty(),      "not expected to see");
-                // DAS_VERIFYF(dimExpr.empty(),  "not expected to see");
+                DAS_VERIFYF(!annotation,       "not expected to see");
+                DAS_VERIFYF(!structType,      "not expected to see");
+                DAS_VERIFYF(!enumType,        "not expected to see");
+                DAS_VERIFYF(!firstType,       "not expected to see");
+                DAS_VERIFYF(!secondType,      "not expected to see");
+                DAS_VERIFYF(alias.empty(),    "not expected to see");
+                DAS_VERIFYF(!argTypes.empty(), "not expected to see");
+                DAS_VERIFYF(argNames.empty(), "not expected to see");
+                DAS_VERIFYF(dim.empty(),      "not expected to see");
+                DAS_VERIFYF(dimExpr.empty(),  "not expected to see");
                 break;
             case autoinfer:
                 ser << dim << dimExpr << alias;
-                // DAS_VERIFYF(!annotation,       "not expected to see");
-                // DAS_VERIFYF(!structType,      "not expected to see");
-                // DAS_VERIFYF(!enumType,        "not expected to see");
-                // DAS_VERIFYF(!firstType,       "not expected to see");
-                // DAS_VERIFYF(!secondType,      "not expected to see");
-                // DAS_VERIFYF(argTypes.empty(), "not expected to see");
-                // DAS_VERIFYF(argNames.empty(), "not expected to see");
+                DAS_VERIFYF(!annotation,       "not expected to see");
+                DAS_VERIFYF(!structType,      "not expected to see");
+                DAS_VERIFYF(!enumType,        "not expected to see");
+                DAS_VERIFYF(!firstType,       "not expected to see");
+                DAS_VERIFYF(!secondType,      "not expected to see");
+                DAS_VERIFYF(argTypes.empty(), "not expected to see");
+                DAS_VERIFYF(argNames.empty(), "not expected to see");
                 break;
             case fakeContext:
             case fakeLineInfo:
@@ -1025,118 +993,118 @@ namespace das {
             case tDouble:
             case tString:
                 ser << alias << dim << dimExpr;
-                // DAS_VERIFYF(!annotation,       "not expected to see");
-                // DAS_VERIFYF(!structType,      "not expected to see");
-                // DAS_VERIFYF(!enumType,        "not expected to see");
-                // DAS_VERIFYF(!firstType,       "not expected to see");
-                // DAS_VERIFYF(!secondType,      "not expected to see");
-                // DAS_VERIFYF(argTypes.empty(), "not expected to see");
-                // DAS_VERIFYF(argNames.empty(), "not expected to see");
+                DAS_VERIFYF(!annotation,       "not expected to see");
+                DAS_VERIFYF(!structType,      "not expected to see");
+                DAS_VERIFYF(!enumType,        "not expected to see");
+                DAS_VERIFYF(!firstType,       "not expected to see");
+                DAS_VERIFYF(!secondType,      "not expected to see");
+                DAS_VERIFYF(argTypes.empty(), "not expected to see");
+                DAS_VERIFYF(argNames.empty(), "not expected to see");
                 break;
             case tRange:
             case tURange:
             case tRange64:
             case tURange64: // blow up!
-                // DAS_VERIFYF(!annotation,       "not expected to see");
-                // DAS_VERIFYF(!structType,      "not expected to see");
-                // DAS_VERIFYF(!enumType,        "not expected to see");
-                // DAS_VERIFYF(!firstType,       "not expected to see");
-                // DAS_VERIFYF(!secondType,      "not expected to see");
-                // DAS_VERIFYF(alias.empty(),    "not expected to see");
-                // DAS_VERIFYF(argTypes.empty(), "not expected to see");
-                // DAS_VERIFYF(argNames.empty(), "not expected to see");
-                // DAS_VERIFYF(dim.empty(),      "not expected to see");
-                // DAS_VERIFYF(dimExpr.empty(),  "not expected to see");
+                DAS_VERIFYF(!annotation,       "not expected to see");
+                DAS_VERIFYF(!structType,      "not expected to see");
+                DAS_VERIFYF(!enumType,        "not expected to see");
+                DAS_VERIFYF(!firstType,       "not expected to see");
+                DAS_VERIFYF(!secondType,      "not expected to see");
+                DAS_VERIFYF(alias.empty(),    "not expected to see");
+                DAS_VERIFYF(argTypes.empty(), "not expected to see");
+                DAS_VERIFYF(argNames.empty(), "not expected to see");
+                DAS_VERIFYF(dim.empty(),      "not expected to see");
+                DAS_VERIFYF(dimExpr.empty(),  "not expected to see");
                 break;
             case tStructure:
                 ser << alias << structType << dim << dimExpr;
-                // DAS_VERIFYF(!annotation,       "not expected to see");
-                // DAS_VERIFYF(structType,      "not expected to see");
-                // DAS_VERIFYF(!enumType,        "not expected to see");
-                // DAS_VERIFYF(!firstType,       "not expected to see");
-                // DAS_VERIFYF(!secondType,      "not expected to see");
-                // DAS_VERIFYF(argTypes.empty(), "not expected to see");
-                // DAS_VERIFYF(argNames.empty(), "not expected to see");
+                DAS_VERIFYF(!annotation,       "not expected to see");
+                DAS_VERIFYF(structType,      "not expected to see");
+                DAS_VERIFYF(!enumType,        "not expected to see");
+                DAS_VERIFYF(!firstType,       "not expected to see");
+                DAS_VERIFYF(!secondType,      "not expected to see");
+                DAS_VERIFYF(argTypes.empty(), "not expected to see");
+                DAS_VERIFYF(argNames.empty(), "not expected to see");
                 break;
             case tHandle:
                 ser << alias << annotation;
-                // DAS_VERIFYF(annotation,       "not expected to see");
-                // DAS_VERIFYF(!structType,      "not expected to see");
-                // DAS_VERIFYF(!enumType,        "not expected to see");
-                // DAS_VERIFYF(!firstType,       "not expected to see");
-                // DAS_VERIFYF(!secondType,      "not expected to see");
-                // DAS_VERIFYF(argTypes.empty(), "not expected to see");
-                // DAS_VERIFYF(argNames.empty(), "not expected to see");
-                // DAS_VERIFYF(dim.empty(),      "not expected to see");
-                // DAS_VERIFYF(dimExpr.empty(),  "not expected to see");
+                DAS_VERIFYF(annotation,       "not expected to see");
+                DAS_VERIFYF(!structType,      "not expected to see");
+                DAS_VERIFYF(!enumType,        "not expected to see");
+                DAS_VERIFYF(!firstType,       "not expected to see");
+                DAS_VERIFYF(!secondType,      "not expected to see");
+                DAS_VERIFYF(argTypes.empty(), "not expected to see");
+                DAS_VERIFYF(argNames.empty(), "not expected to see");
+                DAS_VERIFYF(dim.empty(),      "not expected to see");
+                DAS_VERIFYF(dimExpr.empty(),  "not expected to see");
                 break;
             case tEnumeration:
             case tEnumeration8:
             case tEnumeration16:
                 ser << alias << enumType << dim << dimExpr;
-                // DAS_VERIFYF(!annotation,       "not expected to see");
-                // DAS_VERIFYF(!structType,      "not expected to see");
-                // DAS_VERIFYF(enumType,        "not expected to see");
-                // DAS_VERIFYF(!firstType,       "not expected to see");
-                // DAS_VERIFYF(!secondType,      "not expected to see");
-                // DAS_VERIFYF(argTypes.empty(), "not expected to see");
-                // DAS_VERIFYF(argNames.empty(), "not expected to see");
+                DAS_VERIFYF(!annotation,       "not expected to see");
+                DAS_VERIFYF(!structType,      "not expected to see");
+                DAS_VERIFYF(enumType,        "not expected to see");
+                DAS_VERIFYF(!firstType,       "not expected to see");
+                DAS_VERIFYF(!secondType,      "not expected to see");
+                DAS_VERIFYF(argTypes.empty(), "not expected to see");
+                DAS_VERIFYF(argNames.empty(), "not expected to see");
                 break;
             case tBitfield:  // blow up!
                 ser << alias << argNames;
-                // DAS_VERIFYF(!annotation,       "not expected to see");
-                // DAS_VERIFYF(!structType,      "not expected to see");
-                // DAS_VERIFYF(!enumType,        "not expected to see");
-                // DAS_VERIFYF(!firstType,       "not expected to see");
-                // DAS_VERIFYF(!secondType,      "not expected to see");
-                // DAS_VERIFYF(argTypes.empty(), "not expected to see");
-                // DAS_VERIFYF(dim.empty(),      "not expected to see");
-                // DAS_VERIFYF(dimExpr.empty(),  "not expected to see");
+                DAS_VERIFYF(!annotation,       "not expected to see");
+                DAS_VERIFYF(!structType,      "not expected to see");
+                DAS_VERIFYF(!enumType,        "not expected to see");
+                DAS_VERIFYF(!firstType,       "not expected to see");
+                DAS_VERIFYF(!secondType,      "not expected to see");
+                DAS_VERIFYF(argTypes.empty(), "not expected to see");
+                DAS_VERIFYF(dim.empty(),      "not expected to see");
+                DAS_VERIFYF(dimExpr.empty(),  "not expected to see");
                 break;
             case tIterator:
             case tPointer:
             case tArray: // blow up!
                 ser << alias << firstType << dim << dimExpr;
-                // DAS_VERIFYF(!annotation,       "not expected to see");
-                // DAS_VERIFYF(!structType,      "not expected to see");
-                // DAS_VERIFYF(!enumType,        "not expected to see");
-                // DAS_VERIFYF(!secondType,      "not expected to see");
-                // DAS_VERIFYF(argTypes.empty(), "not expected to see");
-                // DAS_VERIFYF(argNames.empty(), "not expected to see");
+                DAS_VERIFYF(!annotation,       "not expected to see");
+                DAS_VERIFYF(!structType,      "not expected to see");
+                DAS_VERIFYF(!enumType,        "not expected to see");
+                DAS_VERIFYF(!secondType,      "not expected to see");
+                DAS_VERIFYF(argTypes.empty(), "not expected to see");
+                DAS_VERIFYF(argNames.empty(), "not expected to see");
                 break;
             case tFunction:
             case tLambda:
             case tBlock:
                 ser << alias << firstType << argTypes << argNames;
-                // DAS_VERIFYF(!annotation,       "not expected to see");
-                // DAS_VERIFYF(!structType,      "not expected to see");
-                // DAS_VERIFYF(!enumType,        "not expected to see");
-                // DAS_VERIFYF(!secondType,      "not expected to see");
-                // DAS_VERIFYF(dim.empty(),      "not expected to see");
-                // DAS_VERIFYF(dimExpr.empty(),  "not expected to see");
+                DAS_VERIFYF(!annotation,       "not expected to see");
+                DAS_VERIFYF(!structType,      "not expected to see");
+                DAS_VERIFYF(!enumType,        "not expected to see");
+                DAS_VERIFYF(!secondType,      "not expected to see");
+                DAS_VERIFYF(dim.empty(),      "not expected to see");
+                DAS_VERIFYF(dimExpr.empty(),  "not expected to see");
                 break;
             case tTable:
                 ser << firstType << secondType;
-                // DAS_VERIFYF(!annotation,       "not expected to see");
-                // DAS_VERIFYF(!structType,      "not expected to see");
-                // DAS_VERIFYF(!enumType,        "not expected to see");
-                // DAS_VERIFYF(firstType,       "not expected to see");
-                // DAS_VERIFYF(secondType,      "not expected to see");
-                // DAS_VERIFYF(alias.empty(),    "not expected to see");
-                // DAS_VERIFYF(argTypes.empty(), "not expected to see");
-                // DAS_VERIFYF(argNames.empty(), "not expected to see");
-                // DAS_VERIFYF(dim.empty(),      "not expected to see");
-                // DAS_VERIFYF(dimExpr.empty(),  "not expected to see");
+                DAS_VERIFYF(!annotation,       "not expected to see");
+                DAS_VERIFYF(!structType,      "not expected to see");
+                DAS_VERIFYF(!enumType,        "not expected to see");
+                DAS_VERIFYF(firstType,       "not expected to see");
+                DAS_VERIFYF(secondType,      "not expected to see");
+                DAS_VERIFYF(alias.empty(),    "not expected to see");
+                DAS_VERIFYF(argTypes.empty(), "not expected to see");
+                DAS_VERIFYF(argNames.empty(), "not expected to see");
+                DAS_VERIFYF(dim.empty(),      "not expected to see");
+                DAS_VERIFYF(dimExpr.empty(),  "not expected to see");
                 break;
             case tTuple:
             case tVariant:
                 ser << alias << argTypes << argNames << dim << dimExpr;
-                // DAS_VERIFYF(!annotation,       "not expected to see");
-                // DAS_VERIFYF(!structType,      "not expected to see");
-                // DAS_VERIFYF(!enumType,        "not expected to see");
-                // DAS_VERIFYF(!firstType,       "not expected to see");
-                // DAS_VERIFYF(!secondType,      "not expected to see");
-                // DAS_VERIFYF(!argTypes.empty(), "not expected to see");
+                DAS_VERIFYF(!annotation,       "not expected to see");
+                DAS_VERIFYF(!structType,      "not expected to see");
+                DAS_VERIFYF(!enumType,        "not expected to see");
+                DAS_VERIFYF(!firstType,       "not expected to see");
+                DAS_VERIFYF(!secondType,      "not expected to see");
+                DAS_VERIFYF(!argTypes.empty(), "not expected to see");
                 break;
             default:
                 DAS_VERIFYF(false,  "not expected to see");
@@ -1144,9 +1112,6 @@ namespace das {
         }
 
         ser << flags << at << module;
-        // if ( flags <= 255) {
-        //     flagsLessThanByte += 1;
-        // }
     }
 
     void AnnotationArgument::serialize ( AstSerializer & ser ) {
@@ -1182,8 +1147,6 @@ namespace das {
         ser << name << cppName << at << value;
     }
 
-    uint64_t totalAnnotationList = 0;
-
     void serializeAnnotationList ( AstSerializer & ser, AnnotationList & list ) {
         if ( ser.writing ) {
             uint64_t size = 0;
@@ -1199,7 +1162,6 @@ namespace das {
             }
         } else {
             uint64_t size = 0; ser << size;
-            totalAnnotationList += 8;
             AnnotationList result; result.resize(size);
             for ( uint64_t i = 0; i < size; i++ ) {
                 ser << result[i];
@@ -1699,8 +1661,7 @@ namespace das {
         if ( ser.writing ) {
             ser << tag;
         }
-        ser << name; //<< tabSize;
-        // totalFileInfoSize += 0;
+        ser << name << tabSize;
         // Note: we do not serialize profileData
     }
 
@@ -1709,14 +1670,12 @@ namespace das {
         if ( ser.writing ) {
             ser << tag;
         }
-        ser << name; //        << tabSize;
+        ser << name << tabSize;
         ser.serializeAdaptiveSize32(sourceLength);
         ser << owner;
-        // totalFileInfoSize += 5; // Do not count name - stringSize
         if ( ser.writing ) {
             ser.write((const void *) source, sourceLength);
         } else {
-            // totalCstrSize += sourceLength;
             source = (char *) das_aligned_alloc16(sourceLength + 1);
             ser.read((void *) source, sourceLength);
         }
@@ -1796,7 +1755,6 @@ namespace das {
             string name; ser << name;
             DAS_ASSERTF(name == f->name, "expected to serialize in the same order");
             uint64_t size = 0; ser << size;
-            // totalSafeboxSize += 8;
             f->useFunctions.reserve(size);
             for ( uint64_t i = 0; i < size; i++ ) {
                 void* addr; ser << addr;
@@ -1820,7 +1778,6 @@ namespace das {
             string name; ser << name;
             DAS_ASSERTF(name == f->name, "expected to serialize in the same order");
             uint64_t size = 0; ser << size;
-            // totalSafeboxSize += 8;
             f->useFunctions.reserve(size);
             for ( uint64_t i = 0; i < size; i++ ) {
                 void* addr; ser << addr;
@@ -1843,7 +1800,6 @@ namespace das {
             string name; ser << name;
             DAS_ASSERTF(name == f->name, "expected to serialize in the same order");
             uint64_t size = 0; ser << size;
-            // totalSafeboxSize += 8;
             f->useGlobalVariables.reserve(size);
             for ( uint64_t i = 0; i < size; i++ ) {
                 Variable * fun; ser << fun;
@@ -1865,7 +1821,6 @@ namespace das {
             string name; ser << name;
             DAS_ASSERTF(name == f->name, "expected to serialize in the same order");
             uint64_t size = 0; ser << size;
-            // totalSafeboxSize += 8;
             f->useGlobalVariables.reserve(size);
             for ( uint64_t i = 0; i < size; i++ ) {
                 void* addr; ser << addr;
@@ -1884,7 +1839,6 @@ namespace das {
         } else {
             safebox<Variable> result;
             uint64_t size; ser << size;
-            // totalSafeboxSize += 8;
             for ( uint64_t i = 0; i < size; i++ ) {
                 VariablePtr g; ser << g;
                 result.insert(g->name, g);
@@ -1901,7 +1855,6 @@ namespace das {
             });
         } else {
             uint64_t size; ser << size;
-            // totalSafeboxSize += 8;
             for ( uint64_t i = 0; i < size; i++ ) {
                 StructurePtr g; ser << g;
                 structures.insert(g->name, g);
@@ -1918,7 +1871,6 @@ namespace das {
             });
         } else {
             uint64_t size; ser << size;
-            // totalSafeboxSize += 8;
             for ( uint64_t i = 0; i < size; i++ ) {
                 string name; ser << name;
                 FunctionPtr g; ser << g;
@@ -2139,19 +2091,6 @@ namespace das {
         removeUnusedSymbols();
         TextWriter logs;
         allocateStack(logs);
-
-        // printf("Rtti strings written: %llu\n", rtti_size);
-        // printf("Total strings size: %llu\n",   totStringsSize);
-        // printf("Line info size: %llu\n",       lineinfo_size);
-        // printf("totalFileInfoSize: %llu\n",       totalFileInfoSize);
-        // printf("totalCstrSize: %llu\n",       totalCstrSize);
-        // printf("totalVectorSize: %llu\n",       totalVectorSize);
-        // printf("totalSafeboxSize: %llu\n",       totalSafeboxSize);
-        // printf("totalHashmapSize: %llu\n",       totalHashmapSize);
-        // printf("totalTypedeclCount: %llu\n",       totalTypedeclCount);
-        // printf("totalAnnotationList: %llu\n",       totalAnnotationList);
-        // printf("totalTypedeclPtrCount: %llu\n",       totalTypedeclPtrCount);
-        // printf("flagsLessThanByte: %llu\n",       flagsLessThanByte);
     }
 
 }
