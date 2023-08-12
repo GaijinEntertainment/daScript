@@ -292,37 +292,37 @@ bool compile_and_run ( const string & fn, const string & mainFnName, bool output
     policies.fail_on_lack_of_aot_export = false;
 
 
-    // auto program = compileDaScript(fn,access,tout,dummyGroup,false,policies);
+    auto program = compileDaScript(fn,access,tout,dummyGroup,false,policies);
 
-    // if ( program->failed() ) {
-    //     for ( auto & err : program->errors ) {
-    //         tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
-    //     }
-    //     if ( pauseAfterErrors ) {
-    //         getchar();
-    //     }
-    // } else {
-    //     if ( outputProgramCode )
-    //         tout << *program << "\n";
-    // // serialize
-    //     AstSerializer ser;
-    //     program->serialize(ser);
-    //     program.reset();
+    if ( program->failed() ) {
+        for ( auto & err : program->errors ) {
+            tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
+        }
+        if ( pauseAfterErrors ) {
+            getchar();
+        }
+    } else {
+        if ( outputProgramCode )
+            tout << *program << "\n";
+    // serialize
+        AstSerializer ser;
+        program->serialize(ser);
+        program.reset();
 
-    // // Open a binary file for writing
-    //     std::ofstream out("data3.bin", std::ios::out | std::ios::binary);
-    //     if (!out) {
-    //         return 134;
-    //     }
-    //     vector<uint8_t> & data = ser.buffer;
-    //     size_t size = data.size();
-    //     tout << "Expected size " << size << "\n";
-    //     out.write(reinterpret_cast<char*>(&size), sizeof(size));
-    //     out.write(reinterpret_cast<char*>(data.data()), data.size() * sizeof(uint8_t));
-    //     out.close();
-    // // deserialize
-    //     tout << "Serialized program\n";
-    // }
+    // Open a binary file for writing
+        std::ofstream out("data3.bin", std::ios::out | std::ios::binary);
+        if (!out) {
+            return 134;
+        }
+        vector<uint8_t> & data = ser.buffer;
+        size_t size = data.size();
+        tout << "Expected size " << size << "\n";
+        out.write(reinterpret_cast<char*>(&size), sizeof(size));
+        out.write(reinterpret_cast<char*>(data.data()), data.size() * sizeof(uint8_t));
+        out.close();
+    // deserialize
+        tout << "Serialized program\n";
+    }
 
     auto time0 = ref_time_ticks();
 
@@ -353,63 +353,61 @@ bool compile_and_run ( const string & fn, const string & mainFnName, bool output
 
     totDeserialize += get_time_usec(time0);
 
-    exit(0);
 
-    // tout
-    //      << "\tmacro  "      << (deser.totMacroTime / 1000000.) << "\n"
-    //      << "\tdeser  "      << (totDeserialize     / 1000000.) << "\n"
-    // ;
+    tout
+         << "\tmacro  "      << (deser.totMacroTime / 1000000.) << "\n"
+         << "\tdeser  "      << (totDeserialize     / 1000000.) << "\n"
+    ;
 
-    // ProgramPtr program = new_program;
+     program = new_program;
 
 
-    // tout << "Deserialized ast\n";
+    tout << "Deserialized ast\n";
 
-    // smart_ptr<Context> pctx ( get_context(program->getContextStackSize()) );
+    smart_ptr<Context> pctx ( get_context(program->getContextStackSize()) );
 
-    // if ( !program->simulate(*pctx, tout) ) {
-    //     tout << "failed to simulate\n";
-    //     for ( auto & err : program->errors ) {
-    //         tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
-    //     }
-    // } else if ( program->thisModule->isModule ) {
-    //     tout<< "WARNING: program is setup as both module, and endpoint.\n";
-    // } else if ( dryRun ) {
-    //     success = true;
-    //     tout << "dry run: " << fn << "\n";
-    // } else {
-    //     auto fnVec = pctx->findFunctions(mainFnName.c_str());
-    //     das::vector<SimFunction *> fnMVec;
-    //     for ( auto fnAS : fnVec ) {
-    //         if ( verifyCall<void>(fnAS->debugInfo, dummyGroup) || verifyCall<bool>(fnAS->debugInfo, dummyGroup) ) {
-    //             fnMVec.push_back(fnAS);
-    //         }
-    //     }
-    //     if ( fnMVec.size()==0 ) {
-    //         tout << "function '"  << mainFnName << "' not found\n";
-    //     } else if ( fnMVec.size()>1 ) {
-    //         tout << "too many options for '" << mainFnName << "'\ncandidates are:\n";
-    //         for ( auto fnAS : fnMVec ) {
-    //             tout << "\t" << fnAS->mangledName << "\n";
-    //         }
-    //     } else {
-    //         success = true;
-    //         auto fnTest = fnMVec.back();
-    //         pctx->restart();
-    //         if ( debuggerRequired ) {
-    //             pctx->eval(fnTest, nullptr);
-    //         } else {
-    //             pctx->evalWithCatch(fnTest, nullptr);
-    //         }
-    //         if ( auto ex = pctx->getException() ) {
-    //             tout << "EXCEPTION: " << ex << " at " << pctx->exceptionAt.describe() << "\n";
-    //             success = false;
-    //         }
-    //     }
-    // }
+    if ( !program->simulate(*pctx, tout) ) {
+        tout << "failed to simulate\n";
+        for ( auto & err : program->errors ) {
+            tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
+        }
+    } else if ( program->thisModule->isModule ) {
+        tout<< "WARNING: program is setup as both module, and endpoint.\n";
+    } else if ( dryRun ) {
+        success = true;
+        tout << "dry run: " << fn << "\n";
+    } else {
+        auto fnVec = pctx->findFunctions(mainFnName.c_str());
+        das::vector<SimFunction *> fnMVec;
+        for ( auto fnAS : fnVec ) {
+            if ( verifyCall<void>(fnAS->debugInfo, dummyGroup) || verifyCall<bool>(fnAS->debugInfo, dummyGroup) ) {
+                fnMVec.push_back(fnAS);
+            }
+        }
+        if ( fnMVec.size()==0 ) {
+            tout << "function '"  << mainFnName << "' not found\n";
+        } else if ( fnMVec.size()>1 ) {
+            tout << "too many options for '" << mainFnName << "'\ncandidates are:\n";
+            for ( auto fnAS : fnMVec ) {
+                tout << "\t" << fnAS->mangledName << "\n";
+            }
+        } else {
+            success = true;
+            auto fnTest = fnMVec.back();
+            pctx->restart();
+            if ( debuggerRequired ) {
+                pctx->eval(fnTest, nullptr);
+            } else {
+                pctx->evalWithCatch(fnTest, nullptr);
+            }
+            if ( auto ex = pctx->getException() ) {
+                tout << "EXCEPTION: " << ex << " at " << pctx->exceptionAt.describe() << "\n";
+                success = false;
+            }
+        }
+    }
 
-    // return success;
-    return 0;
+    return success;
 }
 
 void replace( string& str, const string& from, const string& to ) {

@@ -43,6 +43,8 @@ namespace das {
         void tag ( const char * name );
         void read  ( void * data, size_t size );
         void write ( const void * data, size_t size );
+        void serializeAdaptiveSize64 ( uint64_t & size );
+        void serializeAdaptiveSize32 ( uint32_t & size );
         void serialize ( void * data, size_t size );
         void patch ();
         AstSerializer & operator << ( string & str );
@@ -54,6 +56,7 @@ namespace das {
         AstSerializer & operator << ( uint8_t & value ) { serialize(&value, sizeof(value)); return *this; }
         AstSerializer & operator << ( int32_t & value ) { serialize(&value, sizeof(value)); return *this; }
         AstSerializer & operator << ( int64_t & value ) { serialize(&value, sizeof(value)); return *this; }
+        AstSerializer & operator << ( uint16_t & value ) { serialize(&value, sizeof(value)); return *this; }
         AstSerializer & operator << ( uint32_t & value ) { serialize(&value, sizeof(value)); return *this; }
         AstSerializer & operator << ( uint64_t & value ) { serialize(&value, sizeof(value)); return *this; }
         AstSerializer & operator << ( std::pair<uint32_t,uint32_t> & value ) { serialize(&value, sizeof(value)); return *this; }
@@ -118,6 +121,18 @@ namespace das {
 
         template <typename V>
         AstSerializer & operator << ( safebox<V> & box );
+
+        template <typename EnumType>
+        void serialize_small_enum ( EnumType & baseType ) {
+            if ( writing ) {
+                uint8_t bt = (uint8_t) baseType;
+                *this << bt;
+            } else {
+                uint8_t bt = 0;
+                *this << bt;
+                baseType = (EnumType) bt;
+            }
+        }
 
         template <typename EnumType>
         void serialize_enum ( EnumType & baseType ) {

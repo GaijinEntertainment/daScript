@@ -119,16 +119,63 @@ namespace das {
 
     ////////////////////////////////////////////////////////////////////////////
 
-    uint64_t totalVectorSize = 0;
+    // uint64_t totalVectorSize = 0;
+
+    // Encode numbers by their size:
+    //      0...254 (just value) => 1 byte
+    //      254 (tag) + 2 bytes value => 3 bytes
+    //      255 (tag) + 4 bytes value => 5 bytes
+    void AstSerializer::serializeAdaptiveSize32 ( uint32_t & size ) {
+        if ( writing ) {
+            if ( size < 254 ) {
+                uint8_t sz = static_cast<uint8_t>(size);
+                *this << sz;
+            } else if ( size <= 65535 ) {
+                uint8_t tag = 254;
+                uint16_t sz = static_cast<uint16_t>(size);
+                *this << tag << sz;
+            } else {
+                uint8_t tag = 255;
+                uint32_t sz = static_cast<uint32_t>(size);
+                *this << tag << sz;
+            }
+        } else {
+            uint8_t tag; *this << tag;
+            if ( tag < 254 ) {
+                size = tag;
+                // totalVectorSize += 1;
+            } else if ( tag == 254 ) {
+                uint16_t sz; *this << sz;
+                size = sz;
+                // totalVectorSize += 3;
+            } else {
+                uint32_t sz; *this << sz;
+                size = sz;
+                // totalVectorSize += 5;
+            }
+        }
+    }
+
+    void AstSerializer::serializeAdaptiveSize64 ( uint64_t & size ) {
+        DAS_ASSERTF(size < (uint64_t(1) << 32), "number too large");
+        if ( writing ) {
+            uint32_t sz = static_cast<uint32_t>(size);
+            serializeAdaptiveSize32(sz);
+        } else {
+            uint32_t sz; serializeAdaptiveSize32(sz);
+            size = sz;
+        }
+    }
 
     template <typename TT>
     AstSerializer & AstSerializer::operator << ( vector<TT> & value ) {
         tag("Vector");
         if ( writing ) {
-            uint64_t size = value.size(); *this << size;
+            uint64_t size = value.size();
+            serializeAdaptiveSize64(size);
         } else {
-            totalVectorSize += 8;
-            uint64_t size = 0; *this << size;
+            uint64_t size = 0;
+            serializeAdaptiveSize64(size);
             value.resize(size);
         }
         for ( TT & v : value ) {
@@ -137,7 +184,58 @@ namespace das {
         return *this;
     }
 
-    uint64_t totalSafeboxSize = 0;
+    // uint64_t totStringsSize = 0;
+
+    AstSerializer & AstSerializer::operator << ( string & str ) {
+        // static das_hash_map<string, bool> seen;
+        tag("string");
+        if ( writing ) {
+            uint64_t size = str.size();
+            serializeAdaptiveSize64(size);
+            write((void *)str.data(), size);
+            // if ( !seen[str] ) {
+            //     seen[str] = true;
+            //     totStringsSize += str.size();
+            // }
+            // printf("%.20s\n", str.data());
+        } else {
+            uint64_t size = 0;
+            serializeAdaptiveSize64(size);
+            str.resize(size);
+            read(&str[0], size);
+            // totStringsSize += size;
+        }
+        return *this;
+    }
+
+    // uint64_t totalCstrSize = 0;
+
+    AstSerializer & AstSerializer::operator << ( const char * & value ) {
+        tag("const char *");
+        bool is_null = value == nullptr;
+        *this << is_null;
+        if ( is_null ) {
+            if ( !writing ) value = nullptr;
+            return *this;
+        }
+        if ( writing ) {
+            uint64_t len = strlen(value);
+            serializeAdaptiveSize64(len);
+            write(static_cast<const void*>(value), len);
+            // printf("%.20s\n", value);
+        } else {
+            uint64_t len = 0;
+            serializeAdaptiveSize64(len);
+            auto data = new char [len + 1]();
+            read(static_cast<void*>(data), len);
+            // totalCstrSize += len;
+            data[len] = '\0';
+            value = data;
+        }
+        return *this;
+    }
+
+    // uint64_t totalSafeboxSize = 0;
 
     template <typename V>
     AstSerializer & AstSerializer::operator << ( safebox<V> & box ) {
@@ -150,7 +248,7 @@ namespace das {
             return *this;
         }
         uint64_t size = 0; *this << size;
-        totalSafeboxSize += 8;
+        // totalSafeboxSize += 8;
         safebox<V> deser;
         for ( uint64_t i = 0; i < size; i++ ) {
             smart_ptr<V> obj; uint64_t hash;
@@ -161,7 +259,7 @@ namespace das {
         return *this;
     }
 
-    uint64_t totalHashmapSize = 0;
+    // uint64_t totalHashmapSize = 0;
 
     template <typename K, typename V, typename H, typename E>
     void AstSerializer::serialize_hash_map ( das_hash_map<K, V, H, E> & value ) {
@@ -174,7 +272,7 @@ namespace das {
             return;
         }
         uint64_t size = 0; *this << size;
-        totalHashmapSize += 8;
+        // totalHashmapSize += 8;
         das_hash_map<K, V, H, E> deser;
         deser.reserve(size);
         for ( uint64_t i = 0; i < size; i++ ) {
@@ -198,7 +296,7 @@ namespace das {
 
     AstSerializer & AstSerializer::operator << ( Type & baseType ) {
         tag("Type");
-        serialize_enum(baseType);
+        serialize_small_enum(baseType);
         return *this;
     }
 
@@ -213,16 +311,15 @@ namespace das {
             return *this;
         }
         if ( writing ) {
-            string rtti = expr->__rtti;
+            const char * rtti = expr->__rtti;
             *this << rtti;
             expr->serialize(*this);
         } else {
-            string rtti;
-            *this << rtti;
-            rtti_size += rtti.size() + 4;
+            const char * rtti; *this << rtti;
             auto annotation = astModule->findAnnotation(rtti);
-            DAS_VERIFYF(annotation!=nullptr, "annotation '%s' is not found", rtti.c_str());
+            DAS_VERIFYF(annotation!=nullptr, "annotation '%s' is not found", rtti);
             expr.reset((Expression *) static_pointer_cast<TypeAnnotation>(annotation)->factory());
+            expr->__rtti = rtti;
             expr->serialize(*this);
         }
         return *this;
@@ -486,12 +583,14 @@ namespace das {
     AstSerializer & AstSerializer::operator << ( TypeDeclPtr & type ) {
         tag("TypeDeclPtr");
         totalTypedeclPtrCount += 1;
-        uint64_t id = intptr_t(type.get());
-        *this << id;
-        if ( id == 0 ) {
+        bool is_null = type == nullptr;
+        *this << is_null;
+        if ( is_null ) {
             if ( !writing ) type = nullptr;
             return *this;
         }
+        uint64_t id = intptr_t(type.get());
+        *this << id;
         if ( writing ) {
             if ( smartTypeDeclMap[id] == nullptr ) {
                 smartTypeDeclMap[id] = type;
@@ -502,6 +601,8 @@ namespace das {
                 type = make_smart<TypeDecl>();
                 smartTypeDeclMap[id] = type;
                 type->serialize(*this);
+            } else {
+                type = smartTypeDeclMap[id];
             }
         }
         return *this;
@@ -535,50 +636,48 @@ namespace das {
     }
 
     void serializeAnnotationPointer ( AstSerializer & ser, AnnotationPtr & anno ) {
-        uint64_t fid = uint64_t(anno);
-        ser << fid;
+        bool is_null = anno == nullptr;
+        ser << is_null;
+        if ( is_null ) {
+            if ( !ser.writing ) anno = nullptr;
+            return;
+        }
         if ( ser.writing ) {
-            if ( fid ) {
-                bool inThisModule = anno->module == ser.thisModule;
-                ser << inThisModule;
-                if ( !inThisModule ) {
-                    ser << anno->name;
-                    if ( isLogicAnnotation(anno->name) ) {
-                        LogicAnnotationOp op = makeOpFromName(anno->name);
-                        ser.serialize_enum(op);
-                        anno->serialize(ser);
-                    } else {
-                        ser << anno->module->name;
-                    }
+            bool inThisModule = anno->module == ser.thisModule;
+            ser << inThisModule;
+            if ( !inThisModule ) {
+                ser << anno->name;
+                if ( isLogicAnnotation(anno->name) ) {
+                    LogicAnnotationOp op = makeOpFromName(anno->name);
+                    ser.serialize_enum(op);
+                    anno->serialize(ser);
                 } else {
-                    // If the macro is from current module, do nothing
-                    // it will probably take care of itself during compilation
-                    DAS_ASSERTF( anno->module->macroContext,
-                        "expected to see macro module '%s'", anno->module->name.c_str()
-                    );
-                }
-            }
-        } else {
-            if ( fid ) {
-                bool inThisModule;
-                ser << inThisModule;
-                if ( !inThisModule ) {
-                    string moduleName, name;
-                    ser << name;
-                    if ( isLogicAnnotation(name) ) {
-                        LogicAnnotationOp op; ser.serialize_enum(op);
-                        anno = newLogicAnnotation(op);
-                        anno->serialize(ser);
-                    } else {
-                        ser << moduleName;
-                        auto mod = ser.moduleLibrary->findModule(moduleName);
-                        DAS_VERIFYF(mod!=nullptr, "module '%s' is not found", moduleName.c_str());
-                        anno = mod->findAnnotation(name).get();
-                        DAS_VERIFYF(anno!=nullptr, "annotation '%s' is not found", name.c_str());
-                    }
+                    ser << anno->module->name;
                 }
             } else {
-                anno = nullptr;
+                // If the macro is from current module, do nothing
+                // it will probably take care of itself during compilation
+                DAS_ASSERTF( anno->module->macroContext,
+                    "expected to see macro module '%s'", anno->module->name.c_str()
+                );
+            }
+        } else {
+            bool inThisModule;
+            ser << inThisModule;
+            if ( !inThisModule ) {
+                string moduleName, name;
+                ser << name;
+                if ( isLogicAnnotation(name) ) {
+                    LogicAnnotationOp op; ser.serialize_enum(op);
+                    anno = newLogicAnnotation(op);
+                    anno->serialize(ser);
+                } else {
+                    ser << moduleName;
+                    auto mod = ser.moduleLibrary->findModule(moduleName);
+                    DAS_VERIFYF(mod!=nullptr, "module '%s' is not found", moduleName.c_str());
+                    anno = mod->findAnnotation(name).get();
+                    DAS_VERIFYF(anno!=nullptr, "annotation '%s' is not found", name.c_str());
+                }
             }
         }
     }
@@ -594,59 +693,33 @@ namespace das {
         return *this;
     }
 
-    uint64_t totStringsSize = 0;
-
-    AstSerializer & AstSerializer::operator << ( string & str ) {
-        tag("string");
-        if ( writing ) {
-            uint32_t size = (uint32_t) str.size();
-            *this << size;
-            write((void *)str.data(), size);
-        } else {
-            uint32_t size = 0;
-            *this << size;
-            str.resize(size);
-            read(&str[0], size);
-            totStringsSize += 4 + size;
-        }
-        return *this;
-    }
-
-    uint64_t totalCstrSize = 0;
-
-    AstSerializer & AstSerializer::operator << ( const char * & value ) {
-        tag("const char *");
-        bool is_null = value == nullptr;
-        *this << is_null;
-        if ( writing ) {
-            if ( !is_null ) {
-                uint64_t len = strlen(value);
-                *this << len;
-                write(static_cast<const void*>(value), len);
-            }
-        } else {
-            if ( !is_null ) {
-                uint64_t len = 0;
-                *this << len;
-                totalCstrSize += 8 + len;
-                auto data = new char [len + 1]();
-                read(static_cast<void*>(data), len);
-                data[len] = '\0';
-                value = data;
-            } else {
-                value = nullptr;
-            }
-        }
-        return *this;
-    }
 
     static uint64_t lineinfo_size = 0;
 
     AstSerializer & AstSerializer::operator << ( LineInfo & at ) {
         tag("LineInfo");
-        lineinfo_size += 16; // do not count text -- it's only serialized rarely
-        *this << at.fileInfo << at.column << at.line
-              << at.last_column << at.last_line;
+        *this << at.fileInfo;
+
+        serializeAdaptiveSize32(at.line);
+
+        if ( writing ) {
+            uint32_t diff = at.last_line - at.line;
+            serializeAdaptiveSize32(diff);
+        } else {
+            uint32_t diff; serializeAdaptiveSize32(diff);
+            at.last_line = at.line + diff;
+        }
+
+        // if ( writing ) {
+        //     DAS_ASSERTF(at.column <= 255 && at.last_column <= 255, "unexpected long line");
+        //     uint8_t column = at.column, last_column = at.last_column;
+        //     *this << column << last_column;
+        // } else {
+        //     uint8_t column, last_column;
+        //     *this << column << last_column;
+        //     at.column = column; at.last_column = last_column;
+        // }
+
         return *this;
     }
 
@@ -663,13 +736,15 @@ namespace das {
         return *this;
     }
 
-    uint64_t totalFileInfoSize = 0;
+    // uint64_t totalFileInfoSize = 0;
 
     AstSerializer & AstSerializer::operator << ( FileInfoPtr & info ) {
         tag("FileInfoPtr");
         bool is_null = info == nullptr;
         *this << is_null;
-        totalFileInfoSize += 1;
+        // if ( !writing ) {
+        //     totalFileInfoSize += 1;
+        // }
         if ( is_null ) {
             if ( !writing ) { info = nullptr; }
             return *this;
@@ -683,10 +758,10 @@ namespace das {
             }
         } else {
             uint64_t ptr; *this << ptr;
-            totalFileInfoSize += 8;
+            // totalFileInfoSize += 8;
             if ( fileInfoMap[ptr] == nullptr ) {
-                int tag = 0; *this << tag;
-                totalFileInfoSize += 4;
+                uint8_t tag = 0; *this << tag;
+                // totalFileInfoSize += 1;
                 switch ( tag ) {
                     case 0: info.reset(new FileInfo); break;
                     case 1: info.reset(new TextFileInfo); break;
@@ -694,6 +769,8 @@ namespace das {
                 }
                 fileInfoMap[ptr] = info.get();
                 info->serialize(*this);
+            } else {
+                info.reset( fileInfoMap[ptr] );
             }
         }
         return *this;
@@ -706,7 +783,7 @@ namespace das {
 
     void FileAccess::serialize ( AstSerializer & ser ) {
         if ( ser.writing ) {
-            int tag = 0;
+            uint8_t tag = 0;
             ser << tag;
         }
         ser << files;
@@ -714,7 +791,7 @@ namespace das {
 
     void ModuleFileAccess::serialize ( AstSerializer & ser ) {
         if ( ser.writing ) {
-            int tag = 1;
+            uint8_t tag = 1;
             ser << tag;
         }
         ser << files;
@@ -728,7 +805,7 @@ namespace das {
             return *this;
         }
         if ( !writing ) {
-            int tag; *this << tag;
+            uint8_t tag; *this << tag;
             switch ( tag ) {
                 case 0: ptr = new FileAccess; break;
                 case 1: ptr = new ModuleFileAccess; break;
@@ -880,19 +957,196 @@ namespace das {
 
 // typedecl
 
-    uint64_t totalTypedeclCount = 0;
+    // uint64_t totalTypedeclCount = 0;
 
     void TypeDecl::serialize ( AstSerializer & ser ) {
         ser.tag("TypeDecl");
-        totalTypedeclCount += 1;
+        // totalTypedeclCount += 1;
         ser << baseType;
-        ser << structType << enumType;
-        ser << firstType  << secondType;
-        ser << annotation;
-        ser << argTypes   << argNames;
-        ser << dim        << dimExpr;
-        ser << flags      << alias;
-        ser << at         << module;
+        switch ( baseType ) {
+            case Type::alias:
+                ser << alias << dim << dimExpr;
+                // DAS_VERIFYF(!annotation,       "not expected to see");
+                // DAS_VERIFYF(!structType,      "not expected to see");
+                // DAS_VERIFYF(!enumType,        "not expected to see");
+                // DAS_VERIFYF(!firstType,       "not expected to see");
+                // DAS_VERIFYF(!secondType,      "not expected to see");
+                // DAS_VERIFYF(!alias.empty(),    "not expected to see");
+                // DAS_VERIFYF(argTypes.empty(), "not expected to see");
+                // DAS_VERIFYF(argNames.empty(), "not expected to see");
+                break;
+            case option:
+                ser << argTypes;
+                // DAS_VERIFYF(!annotation,       "not expected to see");
+                // DAS_VERIFYF(!structType,      "not expected to see");
+                // DAS_VERIFYF(!enumType,        "not expected to see");
+                // DAS_VERIFYF(!firstType,       "not expected to see");
+                // DAS_VERIFYF(!secondType,      "not expected to see");
+                // DAS_VERIFYF(alias.empty(),    "not expected to see");
+                // DAS_VERIFYF(!argTypes.empty(), "not expected to see");
+                // DAS_VERIFYF(argNames.empty(), "not expected to see");
+                // DAS_VERIFYF(dim.empty(),      "not expected to see");
+                // DAS_VERIFYF(dimExpr.empty(),  "not expected to see");
+                break;
+            case autoinfer:
+                ser << dim << dimExpr << alias;
+                // DAS_VERIFYF(!annotation,       "not expected to see");
+                // DAS_VERIFYF(!structType,      "not expected to see");
+                // DAS_VERIFYF(!enumType,        "not expected to see");
+                // DAS_VERIFYF(!firstType,       "not expected to see");
+                // DAS_VERIFYF(!secondType,      "not expected to see");
+                // DAS_VERIFYF(argTypes.empty(), "not expected to see");
+                // DAS_VERIFYF(argNames.empty(), "not expected to see");
+                break;
+            case fakeContext:
+            case fakeLineInfo:
+            case none:
+            case anyArgument:
+            case tVoid:
+            case tBool:
+            case tInt8:
+            case tUInt8:
+            case tInt16:
+            case tUInt16:
+            case tInt64:
+            case tUInt64:
+            case tInt:
+            case tInt2:
+            case tInt3:
+            case tInt4:
+            case tUInt:
+            case tUInt2:
+            case tUInt3:
+            case tUInt4:
+            case tFloat:
+            case tFloat2:
+            case tFloat3:
+            case tFloat4:
+            case tDouble:
+            case tString:
+                ser << alias << dim << dimExpr;
+                // DAS_VERIFYF(!annotation,       "not expected to see");
+                // DAS_VERIFYF(!structType,      "not expected to see");
+                // DAS_VERIFYF(!enumType,        "not expected to see");
+                // DAS_VERIFYF(!firstType,       "not expected to see");
+                // DAS_VERIFYF(!secondType,      "not expected to see");
+                // DAS_VERIFYF(argTypes.empty(), "not expected to see");
+                // DAS_VERIFYF(argNames.empty(), "not expected to see");
+                break;
+            case tRange:
+            case tURange:
+            case tRange64:
+            case tURange64: // blow up!
+                // DAS_VERIFYF(!annotation,       "not expected to see");
+                // DAS_VERIFYF(!structType,      "not expected to see");
+                // DAS_VERIFYF(!enumType,        "not expected to see");
+                // DAS_VERIFYF(!firstType,       "not expected to see");
+                // DAS_VERIFYF(!secondType,      "not expected to see");
+                // DAS_VERIFYF(alias.empty(),    "not expected to see");
+                // DAS_VERIFYF(argTypes.empty(), "not expected to see");
+                // DAS_VERIFYF(argNames.empty(), "not expected to see");
+                // DAS_VERIFYF(dim.empty(),      "not expected to see");
+                // DAS_VERIFYF(dimExpr.empty(),  "not expected to see");
+                break;
+            case tStructure:
+                ser << alias << structType << dim << dimExpr;
+                // DAS_VERIFYF(!annotation,       "not expected to see");
+                // DAS_VERIFYF(structType,      "not expected to see");
+                // DAS_VERIFYF(!enumType,        "not expected to see");
+                // DAS_VERIFYF(!firstType,       "not expected to see");
+                // DAS_VERIFYF(!secondType,      "not expected to see");
+                // DAS_VERIFYF(argTypes.empty(), "not expected to see");
+                // DAS_VERIFYF(argNames.empty(), "not expected to see");
+                break;
+            case tHandle:
+                ser << alias << annotation;
+                // DAS_VERIFYF(annotation,       "not expected to see");
+                // DAS_VERIFYF(!structType,      "not expected to see");
+                // DAS_VERIFYF(!enumType,        "not expected to see");
+                // DAS_VERIFYF(!firstType,       "not expected to see");
+                // DAS_VERIFYF(!secondType,      "not expected to see");
+                // DAS_VERIFYF(argTypes.empty(), "not expected to see");
+                // DAS_VERIFYF(argNames.empty(), "not expected to see");
+                // DAS_VERIFYF(dim.empty(),      "not expected to see");
+                // DAS_VERIFYF(dimExpr.empty(),  "not expected to see");
+                break;
+            case tEnumeration:
+            case tEnumeration8:
+            case tEnumeration16:
+                ser << alias << enumType << dim << dimExpr;
+                // DAS_VERIFYF(!annotation,       "not expected to see");
+                // DAS_VERIFYF(!structType,      "not expected to see");
+                // DAS_VERIFYF(enumType,        "not expected to see");
+                // DAS_VERIFYF(!firstType,       "not expected to see");
+                // DAS_VERIFYF(!secondType,      "not expected to see");
+                // DAS_VERIFYF(argTypes.empty(), "not expected to see");
+                // DAS_VERIFYF(argNames.empty(), "not expected to see");
+                break;
+            case tBitfield:  // blow up!
+                ser << alias << argNames;
+                // DAS_VERIFYF(!annotation,       "not expected to see");
+                // DAS_VERIFYF(!structType,      "not expected to see");
+                // DAS_VERIFYF(!enumType,        "not expected to see");
+                // DAS_VERIFYF(!firstType,       "not expected to see");
+                // DAS_VERIFYF(!secondType,      "not expected to see");
+                // DAS_VERIFYF(argTypes.empty(), "not expected to see");
+                // DAS_VERIFYF(dim.empty(),      "not expected to see");
+                // DAS_VERIFYF(dimExpr.empty(),  "not expected to see");
+                break;
+            case tIterator:
+            case tPointer:
+            case tArray: // blow up!
+                ser << alias << firstType << dim << dimExpr;
+                // DAS_VERIFYF(!annotation,       "not expected to see");
+                // DAS_VERIFYF(!structType,      "not expected to see");
+                // DAS_VERIFYF(!enumType,        "not expected to see");
+                // DAS_VERIFYF(!secondType,      "not expected to see");
+                // DAS_VERIFYF(argTypes.empty(), "not expected to see");
+                // DAS_VERIFYF(argNames.empty(), "not expected to see");
+                break;
+            case tFunction:
+            case tLambda:
+            case tBlock:
+                ser << alias << firstType << argTypes << argNames;
+                // DAS_VERIFYF(!annotation,       "not expected to see");
+                // DAS_VERIFYF(!structType,      "not expected to see");
+                // DAS_VERIFYF(!enumType,        "not expected to see");
+                // DAS_VERIFYF(!secondType,      "not expected to see");
+                // DAS_VERIFYF(dim.empty(),      "not expected to see");
+                // DAS_VERIFYF(dimExpr.empty(),  "not expected to see");
+                break;
+            case tTable:
+                ser << firstType << secondType;
+                // DAS_VERIFYF(!annotation,       "not expected to see");
+                // DAS_VERIFYF(!structType,      "not expected to see");
+                // DAS_VERIFYF(!enumType,        "not expected to see");
+                // DAS_VERIFYF(firstType,       "not expected to see");
+                // DAS_VERIFYF(secondType,      "not expected to see");
+                // DAS_VERIFYF(alias.empty(),    "not expected to see");
+                // DAS_VERIFYF(argTypes.empty(), "not expected to see");
+                // DAS_VERIFYF(argNames.empty(), "not expected to see");
+                // DAS_VERIFYF(dim.empty(),      "not expected to see");
+                // DAS_VERIFYF(dimExpr.empty(),  "not expected to see");
+                break;
+            case tTuple:
+            case tVariant:
+                ser << alias << argTypes << argNames << dim << dimExpr;
+                // DAS_VERIFYF(!annotation,       "not expected to see");
+                // DAS_VERIFYF(!structType,      "not expected to see");
+                // DAS_VERIFYF(!enumType,        "not expected to see");
+                // DAS_VERIFYF(!firstType,       "not expected to see");
+                // DAS_VERIFYF(!secondType,      "not expected to see");
+                // DAS_VERIFYF(!argTypes.empty(), "not expected to see");
+                break;
+            default:
+                DAS_VERIFYF(false,  "not expected to see");
+                break;
+        }
+
+        ser << flags << at << module;
+        // if ( flags <= 255) {
+        //     flagsLessThanByte += 1;
+        // }
     }
 
     void AnnotationArgument::serialize ( AstSerializer & ser ) {
@@ -1434,7 +1688,6 @@ namespace das {
     void Expression::serialize ( AstSerializer & ser ) {
         ser << at
             << type
-            << __rtti
             << genFlags
             << flags
             << printFlags;
@@ -1442,27 +1695,28 @@ namespace das {
     }
 
     void FileInfo::serialize ( AstSerializer & ser ) {
-        int tag = 0;
+        uint8_t tag = 0;
         if ( ser.writing ) {
             ser << tag;
         }
-        ser << name << tabSize;
-        totalFileInfoSize += 4;
+        ser << name; //<< tabSize;
+        // totalFileInfoSize += 0;
         // Note: we do not serialize profileData
     }
 
     void TextFileInfo::serialize ( AstSerializer & ser ) {
-        int tag = 1; // Signify the text file info
+        uint8_t tag = 1; // Signify the text file info
         if ( ser.writing ) {
             ser << tag;
         }
-        ser << name         << tabSize;
-        ser << sourceLength << owner;
-        totalFileInfoSize += 9; // Do not count name - stringSize
+        ser << name; //        << tabSize;
+        ser.serializeAdaptiveSize32(sourceLength);
+        ser << owner;
+        // totalFileInfoSize += 5; // Do not count name - stringSize
         if ( ser.writing ) {
             ser.write((const void *) source, sourceLength);
         } else {
-            totalFileInfoSize += sourceLength;
+            // totalCstrSize += sourceLength;
             source = (char *) das_aligned_alloc16(sourceLength + 1);
             ser.read((void *) source, sourceLength);
         }
@@ -1542,7 +1796,7 @@ namespace das {
             string name; ser << name;
             DAS_ASSERTF(name == f->name, "expected to serialize in the same order");
             uint64_t size = 0; ser << size;
-            totalSafeboxSize += 8;
+            // totalSafeboxSize += 8;
             f->useFunctions.reserve(size);
             for ( uint64_t i = 0; i < size; i++ ) {
                 void* addr; ser << addr;
@@ -1566,7 +1820,7 @@ namespace das {
             string name; ser << name;
             DAS_ASSERTF(name == f->name, "expected to serialize in the same order");
             uint64_t size = 0; ser << size;
-            totalSafeboxSize += 8;
+            // totalSafeboxSize += 8;
             f->useFunctions.reserve(size);
             for ( uint64_t i = 0; i < size; i++ ) {
                 void* addr; ser << addr;
@@ -1589,7 +1843,7 @@ namespace das {
             string name; ser << name;
             DAS_ASSERTF(name == f->name, "expected to serialize in the same order");
             uint64_t size = 0; ser << size;
-            totalSafeboxSize += 8;
+            // totalSafeboxSize += 8;
             f->useGlobalVariables.reserve(size);
             for ( uint64_t i = 0; i < size; i++ ) {
                 Variable * fun; ser << fun;
@@ -1611,7 +1865,7 @@ namespace das {
             string name; ser << name;
             DAS_ASSERTF(name == f->name, "expected to serialize in the same order");
             uint64_t size = 0; ser << size;
-            totalSafeboxSize += 8;
+            // totalSafeboxSize += 8;
             f->useGlobalVariables.reserve(size);
             for ( uint64_t i = 0; i < size; i++ ) {
                 void* addr; ser << addr;
@@ -1630,7 +1884,7 @@ namespace das {
         } else {
             safebox<Variable> result;
             uint64_t size; ser << size;
-            totalSafeboxSize += 8;
+            // totalSafeboxSize += 8;
             for ( uint64_t i = 0; i < size; i++ ) {
                 VariablePtr g; ser << g;
                 result.insert(g->name, g);
@@ -1647,7 +1901,7 @@ namespace das {
             });
         } else {
             uint64_t size; ser << size;
-            totalSafeboxSize += 8;
+            // totalSafeboxSize += 8;
             for ( uint64_t i = 0; i < size; i++ ) {
                 StructurePtr g; ser << g;
                 structures.insert(g->name, g);
@@ -1664,7 +1918,7 @@ namespace das {
             });
         } else {
             uint64_t size; ser << size;
-            totalSafeboxSize += 8;
+            // totalSafeboxSize += 8;
             for ( uint64_t i = 0; i < size; i++ ) {
                 string name; ser << name;
                 FunctionPtr g; ser << g;
@@ -1886,17 +2140,18 @@ namespace das {
         TextWriter logs;
         allocateStack(logs);
 
-        printf("Rtti strings written: %llu\n", rtti_size);
-        printf("Total strings size: %llu\n",   totStringsSize);
-        printf("Line info size: %llu\n",       lineinfo_size);
-        printf("totalFileInfoSize: %llu\n",       totalFileInfoSize);
-        printf("totalCstrSize: %llu\n",       totalCstrSize);
-        printf("totalVectorSize: %llu\n",       totalVectorSize);
-        printf("totalSafeboxSize: %llu\n",       totalSafeboxSize);
-        printf("totalHashmapSize: %llu\n",       totalHashmapSize);
-        printf("totalTypedeclCount: %llu\n",       totalTypedeclCount);
-        printf("totalAnnotationList: %llu\n",       totalAnnotationList);
-        printf("totalTypedeclPtrCount: %llu\n",       totalTypedeclPtrCount);
+        // printf("Rtti strings written: %llu\n", rtti_size);
+        // printf("Total strings size: %llu\n",   totStringsSize);
+        // printf("Line info size: %llu\n",       lineinfo_size);
+        // printf("totalFileInfoSize: %llu\n",       totalFileInfoSize);
+        // printf("totalCstrSize: %llu\n",       totalCstrSize);
+        // printf("totalVectorSize: %llu\n",       totalVectorSize);
+        // printf("totalSafeboxSize: %llu\n",       totalSafeboxSize);
+        // printf("totalHashmapSize: %llu\n",       totalHashmapSize);
+        // printf("totalTypedeclCount: %llu\n",       totalTypedeclCount);
+        // printf("totalAnnotationList: %llu\n",       totalAnnotationList);
+        // printf("totalTypedeclPtrCount: %llu\n",       totalTypedeclPtrCount);
+        // printf("flagsLessThanByte: %llu\n",       flagsLessThanByte);
     }
 
 }
