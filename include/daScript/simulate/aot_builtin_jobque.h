@@ -15,6 +15,7 @@ namespace das {
         __forceinline Feature ( void * d, TypeInfo * ti, Context * c) : data(d), type(ti), from(c ? c->shared_from_this() : nullptr) {}
         __forceinline void clear() {
             data = nullptr;
+            type = nullptr;
             from.reset();
         }
     };
@@ -25,6 +26,7 @@ namespace das {
         virtual ~LockBox();
         void set ( void * data, TypeInfo * ti, Context * context );
         void get ( const TBlock<void,void *> & blk, Context * context, LineInfoArg * at );
+        void update ( const TBlock<void *,void *> & blk, TypeInfo * ti, Context * context, LineInfoArg * at );
     public:
         template <typename TT>
         void peek ( TT && tt ) {
@@ -99,4 +101,5 @@ namespace das {
     void withLockBox ( const TBlock<void,LockBox *> & blk, Context * context, LineInfoArg * at );
     vec4f lockBoxSet ( Context & context, SimNode_CallBase * call, vec4f * args );
     void lockBoxGet ( LockBox * ch, const TBlock<void,void*> & blk, Context * context, LineInfoArg * at );
+    void lockBoxUpdate ( LockBox * ch, TypeInfo * ti, const TBlock<void *,void*> & blk, Context * context, LineInfoArg * at );
 }

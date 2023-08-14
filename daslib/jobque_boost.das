@@ -162,15 +162,35 @@ def set ( box:LockBox?; data : auto? )
 
 def get ( box:LockBox?; blk:block<(res:auto(TT)#):void> )
     //! reads value from the lock box and invokes the block on it
-    var void_data : void?
-    _builtin_lockbox_get(box) <| $ ( vd )
-        void_data = vd
-    if void_data==null
-        return false
-    unsafe
-        let typed_data = reinterpret<TT?#> void_data
-        invoke ( blk, *typed_data )
-        return true
+    var res = false
+    _builtin_lockbox_get(box) <| $ ( void_data )
+        if void_data!=null
+            let typed_data = unsafe(reinterpret<TT?#> void_data)
+            invoke ( blk, *typed_data )
+            res = true
+    return res
+
+def update ( box:LockBox?; blk:block<(var res:auto(TT)#):void> )
+    //! update value in the lock box and invokes the block on it
+    _builtin_lockbox_update(box, unsafe(reinterpret<TypeInfo?>(typeinfo(rtti_typeinfo type<TT? -#>)))) <| $ ( var void_data : void? )
+        if void_data!=null
+            var typed_data = unsafe(reinterpret<TT?#> void_data)
+            invoke ( blk, *typed_data )
+            return void_data
+        else
+            var heap_data = new TT
+            invoke ( blk, *heap_data )
+            return unsafe(reinterpret<void?> heap_data)
+
+[template(type_)]
+def clear ( box:LockBox? ; type_ : auto(TT) )
+    //! clear value from the lock box
+    _builtin_lockbox_update(box, unsafe(reinterpret<TypeInfo?>(typeinfo(rtti_typeinfo type<TT? -#>)))) <| $ ( var void_data : void? ) : void?
+        if void_data!=null
+            var typed_data = unsafe(reinterpret<TT -const?> void_data)
+            unsafe
+                delete typed_data
+        return null
 
 
 [template (tinfo),deprecated(message="use `each_clone` instead")]
