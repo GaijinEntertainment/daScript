@@ -6,6 +6,7 @@
 #include "daScript/ast/ast_handle.h"
 
 #include "daScript/misc/job_que.h"
+#include "module_builtin_rtti.h"
 
 MAKE_TYPE_FACTORY(JobStatus, JobStatus)
 MAKE_TYPE_FACTORY(Channel, Channel)
@@ -26,8 +27,16 @@ namespace das {
 
     void LockBox::get ( const TBlock<void,void *> & blk, Context * context, LineInfoArg * at ) {
         lock_guard<mutex> guard(mCompleteMutex);
-        if ( box.data ) {
-            das_invoke<void>::invoke<void *>(context, at, blk, box.data);
+        das_invoke<void>::invoke<void *>(context, at, blk, box.data);
+    }
+
+    void LockBox::update ( const TBlock<void *,void *> & blk, TypeInfo * ti, Context * context, LineInfoArg * at ) {
+        lock_guard<mutex> guard(mCompleteMutex);
+        void * oldData = box.data;
+        box.data = das_invoke<void *>::invoke<void *>(context, at, blk, box.data);
+        if ( oldData != box.data ) {
+            box.from = context->shared_from_this();
+            box.type = ti;
         }
     }
 
@@ -224,6 +233,11 @@ namespace das {
         return v_zero();
     }
 
+    void lockBoxUpdate ( LockBox * ch, TypeInfo * ti, const TBlock<void *,void*> & blk, Context * context, LineInfoArg * at ) {
+        if ( !ch ) context->throw_error_at(at, "lockBoxUpdate: box is null");
+        ch->update(blk,ti,context,at);
+    }
+
     void lockBoxGet ( LockBox * ch, const TBlock<void,void*> & blk, Context * context, LineInfoArg * at ) {
         if ( !ch ) context->throw_error_at(at, "lockBoxGet: box is null");
         ch->get(blk,context,at);
@@ -404,6 +418,9 @@ namespace das {
             addExtern<DAS_BIND_FUN(lockBoxGet)>(*this, lib,  "_builtin_lockbox_get",
                 SideEffects::modifyArgumentAndExternal, "lockBoxGet")
                     ->args({"box","block","context","line"});
+            addExtern<DAS_BIND_FUN(lockBoxUpdate)>(*this, lib,  "_builtin_lockbox_update",
+                SideEffects::modifyArgumentAndExternal, "lockBoxUpdate")
+                    ->args({"box","type_info","block","context","line"});
             // channel
             addInterop<channelPush,void,Channel *,vec4f>(*this, lib,  "_builtin_channel_push",
                 SideEffects::modifyArgumentAndExternal, "channelPush")

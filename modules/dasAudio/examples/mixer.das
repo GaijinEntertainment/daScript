@@ -35,34 +35,6 @@ def main
         play_with_reverb(ReverbPreset ConcertHall)
 
     with_audio_system <|
-        print("testing stream status channel\n")
-        var sin1 <- [{for x in range(MA_SAMPLE_RATE); sin(2.*PI*440.*float(x)/float(48000))}]
-        let sid_pcm = play_sound_from_pcm_stream(MA_SAMPLE_RATE,1)
-        with_channel <| $ ( status_channel )
-            sid_pcm |> set_status_update(status_channel)
-            sid_pcm |> set_volume(0.25)
-            sleep(500u)
-            status_channel |> gather <| $(cmd : AudioChannelStatus#)
-                print("status: {cmd}\n")
-            print("play sin-440\n")
-            sid_pcm |> append_to_pcm(sin1)
-            sleep(500u)
-            status_channel |> gather <| $(cmd : AudioChannelStatus#)
-                print("status: {cmd}\n")
-            print("gen and append sin-880\n")
-            var sin2 <- [{for x in range(MA_SAMPLE_RATE); sin(2.*PI*880.*float(x)/float(48000))}]
-            sid_pcm |> append_to_pcm(sin2)
-            sleep(1400u)
-            status_channel |> gather <| $(cmd : AudioChannelStatus#)
-                print("status: {cmd}\n")
-            print("now stopping\n")
-            sid_pcm |> stop(0.3)
-            sleep(400u)
-            status_channel |> gather <| $(cmd : AudioChannelStatus#)
-                print("status: {cmd}\n")
-        print("and done\n")
-
-    with_audio_system <|
         print("setting 3D position\n")
         set_head_position(float3(0,0,0),float3(0,-1,0))
         print("play sin-440 looped\n")

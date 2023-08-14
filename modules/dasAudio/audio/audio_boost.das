@@ -34,10 +34,11 @@ enum public AudioChannelState
     paused
 
 struct public AudioChannelStatus
-    sid : SID
     state : AudioChannelState
     playback_position : uint64
     stream_que_length : int
+
+let STOPPED_STATUS = new [[AudioChannelStatus state=AudioChannelState stopped]]
 
 class AudioSource
     bitrate : int = MA_SAMPLE_RATE  // samples per second
@@ -48,7 +49,7 @@ class AudioSource
     def abstract append(var data : array<float>) : bool
     def set_position(pos : uint64) : uint64
         return 0ul
-    def update_status(var status : AudioChannelStatus)
+    def update_status(var status : AudioChannelStatus#)
         status.stream_que_length = 0
 
 class AudioChannel
@@ -66,7 +67,6 @@ class AudioChannel
     radius : float = 1.
     is3D : bool = false
     [[do_not_delete]] status : LockBox? = null
-    [[do_not_delete]] status_channel : Channel? = null
     [[do_not_delete]] reverb : I3DL2Reverb?
     def AudioChannel(src : AudioSource?)
         source = src
@@ -98,17 +98,16 @@ class AudioChannel
         ma_channel_converter_uninit(unsafe(addr(channel_converter)))
         ma_resampler_uninit(unsafe(addr(resampler)))
         if status != null
+            status |> clear(type <AudioChannelStatus>)
             status |> notify_and_release
             status = null
-        if status_channel != null
-            status_channel |> notify_and_release
-            status_channel = null
         if reverb != null
             unsafe
                 delete reverb
     def report_eos
         if status != null
-            status |> set <| [[AudioChannelStatus sid=sid, state=AudioChannelState stopped]]
+            status |> update <| $(var data : AudioChannelStatus#)
+                data = [[AudioChannelStatus state=AudioChannelState stopped]]
     def mix(var data : array<float>#; channels, rate : int; dt : float) : bool
         if paused || !source->ready()
             return true
@@ -166,16 +165,11 @@ class AudioChannel
         // update position
         playback_position += inputFrames
         // update status
-        if status != null || status_channel != null
-            var status_data : AudioChannelStatus
-            status_data.sid = sid
-            status_data.state = paused ? AudioChannelState paused : (stop ? AudioChannelState stopping : AudioChannelState playing)
-            status_data.playback_position = playback_position
-            source->update_status(status_data)
-            if status != null
-                status |> set(status_data)
-            if status_channel != null
-                status_channel |> push_clone(status_data)
+        if status != null
+            status |> update <| $(var status_channel : AudioChannelStatus#)
+                status_channel.state = paused ? AudioChannelState paused : (stop ? AudioChannelState stopping : AudioChannelState playing)
+                status_channel.playback_position = playback_position
+                source->update_status(status_channel)
         return true
 
 var g_channels : array<AudioChannel?>
@@ -247,7 +241,7 @@ class AudioSourcePCMStream : AudioSource
             else
                 break
         return <- data
-    def override update_status(var status : AudioChannelStatus)
+    def override update_status(var status : AudioChannelStatus#)
         status.stream_que_length = length(chunks)
 
 class AudioSourcePCMLoop : AudioSource
@@ -319,7 +313,7 @@ class AudioSourceDecoder : AudioSource
     def override set_position(pos : uint64) : uint64
         ma_decoder_seek_to_pcm_frame(decoder, pos)
         var cursor : uint64
-        ma_decoder_get_cursor_in_pcm_frames(decoder,unsafe(addr(cursor)))
+        ma_decoder_get_cursor_in_pcm_frames(decoder, unsafe(addr(cursor)))
         return cursor
 
 
@@ -382,7 +376,6 @@ struct AudioCommandAddPCMStream3D : AudioCommandAddPCMStream
 struct AudioCommandStatus
     sid : SID
     [[do_not_delete]] status : LockBox?
-    [[do_not_delete]] status_channel : Channel?
 
 variant AudioCommand
     shutdown                : bool
@@ -401,7 +394,7 @@ variant AudioCommand
     head_transform          : tuple<head_position : float3; head_direction : float3>
     sound_position          : tuple<sid : SID; position : float3>
     status                  : AudioCommandStatus
-    reverb                  : tuple<sid : SID; properties:I3DL2ReverbProperties>
+    reverb                  : tuple<sid : SID; properties : I3DL2ReverbProperties>
     set_playback_position   : tuple<sid : SID; position : uint64>
 
 var g_command_channel : Channel?
@@ -515,18 +508,13 @@ def command_processor
             assume scmd = cmd as status
             let found = g_sid_2_channel |> get(scmd.sid) <| $(var ch : AudioChannel?&)
                 if ch.status != null
+                    ch.status |> clear(type <AudioChannelStatus>)
                     ch.status |> notify_and_release
                 ch.status = scmd.status
-                if ch.status_channel != null
-                    ch.status_channel |> notify_and_release
-                ch.status_channel = scmd.status_channel
             if !found
                 if scmd.status != null
-                    scmd.status |> set <| [[AudioChannelStatus sid=scmd.sid, state=AudioChannelState stopped]]
+                    scmd.status |> set(STOPPED_STATUS)
                     scmd.status |> notify_and_release
-                if scmd.status_channel != null
-                    scmd.status_channel |> push_clone <| [[AudioChannelStatus sid=scmd.sid, state=AudioChannelState stopped]]
-                    scmd.status_channel |> notify_and_release
         elif cmd is reverb
             assume rcmd = cmd as reverb
             g_sid_2_channel |> get(rcmd.sid) <| $(var ch : AudioChannel?&)
@@ -583,10 +571,10 @@ def initialize_mixer
             float(MA_SAMPLE_RATE),
             uint(MA_CHANNELS))
         /*
-        to_log(LOG_INFO, "limiter requires {int(g_limiter.attack_samples)} samples, {int(double(g_limiter.attack_samples)*1000.0lf/double(MA_SAMPLE_RATE))} ms\n")
         ma_limiter_init_linear(unsafe(addr(g_limiter)),
             uint(MA_CHANNELS))
         */
+        // to_log(LOG_INFO, "limiter requires {int(g_limiter.attack_samples)} samples, {int(double(g_limiter.attack_samples)*1000.0lf/double(MA_SAMPLE_RATE))} ms\n")
 
 [finalize]
 def finalize_mixer
@@ -607,7 +595,7 @@ def public audio_system_create() : Channel?
     return channel
 
 def public audio_system_finalize(var channel : Channel?&)
-    channel |> push_clone <| [[AudioCommand shutdown=true]]
+    channel |> push <| new [[AudioCommand shutdown=true]]
     g_command_channel |> release
     sound_finalize()
     channel |> join
@@ -641,7 +629,7 @@ def public play_sound_from_file(filename : string; rate, channels : int)
     if decoder == null
         return INVALID_SID
     let sid = generate_sound_sid()
-    g_command_channel |> push_clone <| [[AudioCommand add_decoder=[[AudioCommandAddDecoder sid=sid, decoder=decoder, rate=rate, channels=channels]]]]
+    g_command_channel |> push <| new [[AudioCommand add_decoder=[[AudioCommandAddDecoder sid=sid, decoder=decoder, rate=rate, channels=channels]]]]
     return sid
 
 def public play_3d_sound_from_file(filename : string; position : float3; radius : float; rate, channels : int)
@@ -651,108 +639,102 @@ def public play_3d_sound_from_file(filename : string; position : float3; radius 
     if decoder == null
         return INVALID_SID
     let sid = generate_sound_sid()
-    g_command_channel |> push_clone <| [[AudioCommand add_decoder_3d=
+    g_command_channel |> push <| new [[AudioCommand add_decoder_3d=
         [[AudioCommandAddDecoder3D sid=sid, decoder=decoder, rate=rate, channels=channels, position=position, radius=radius]]]]
     return sid
 
 def public play_sound_from_pcm_stream(rate, channels : int; sid : SID = generate_sound_sid())
     //! plays sound from PCM data
-    g_command_channel |> push_clone <| [[AudioCommand add_pcm_stream <- [[AudioCommandAddPCMStream sid=sid, rate=rate, channels=channels]]]]
+    g_command_channel |> push <| new [[AudioCommand add_pcm_stream <- [[AudioCommandAddPCMStream sid=sid, rate=rate, channels=channels]]]]
     return sid
 
 def public play_3d_sound_from_pcm_stream(position : float3; radius : float; rate, channels : int)
     //! plays sound from PCM data
     var sid = generate_sound_sid()
-    g_command_channel |> push_clone <| [[AudioCommand add_pcm_stream_3d <-
+    g_command_channel |> push <| new [[AudioCommand add_pcm_stream_3d <-
         [[AudioCommandAddPCMStream3D sid=sid, rate=rate, channels=channels, position=position, radius=radius]]]]
     return sid
 
 def public play_sound_from_pcm(rate, channels : int; var samples : array<float>)
     //! plays sound from PCM data
     var sid = generate_sound_sid()
-    g_command_channel |> push_clone <| [[AudioCommand add_pcm <- [[AudioCommandAddPCM sid=sid, rate=rate, channels=channels, samples <- samples, loop=false]]]]
+    g_command_channel |> push <| new [[AudioCommand add_pcm <- [[AudioCommandAddPCM sid=sid, rate=rate, channels=channels, samples <- samples, loop=false]]]]
     return sid
 
 def public play_sound_loop_from_pcm(rate, channels : int; var samples : array<float>)
     //! plays looping sound from PCM data
     var sid = generate_sound_sid()
-    g_command_channel |> push_clone <| [[AudioCommand add_pcm <- [[AudioCommandAddPCM sid=sid, rate=rate, channels=channels, samples <- samples, loop=true]]]]
+    g_command_channel |> push <| new [[AudioCommand add_pcm <- [[AudioCommandAddPCM sid=sid, rate=rate, channels=channels, samples <- samples, loop=true]]]]
     return sid
 
 def public play_3d_sound_from_pcm(position : float3; radius : float; rate, channels : int; var samples : array<float>)
     //! plays 3D sound from PCM data
     var sid = generate_sound_sid()
-    g_command_channel |> push_clone <| [[AudioCommand add_pcm_3d <-
+    g_command_channel |> push <| new [[AudioCommand add_pcm_3d <-
         [[AudioCommandAddPCM3D sid=sid, rate=rate, channels=channels, samples <- samples, loop=false, position=position, radius=radius]]]]
     return sid
 
 def public play_3d_sound_loop_from_pcm(position : float3; radius : float; rate, channels : int; var samples : array<float>)
     //! plays 3D looping sound from PCM data
     var sid = generate_sound_sid()
-    g_command_channel |> push_clone <| [[AudioCommand add_pcm_3d <-
+    g_command_channel |> push <| new [[AudioCommand add_pcm_3d <-
         [[AudioCommandAddPCM3D sid=sid, rate=rate, channels=channels, samples <- samples, loop=true, position=position, radius=radius]]]]
     return sid
 
 def public append_to_pcm(sid : SID; var samples : array<float>)
     //! append samples to PCM stream
-    g_command_channel |> push_clone <| [[AudioCommand append_pcm <- [[auto sid, samples]]]]
+    g_command_channel |> push <| new [[AudioCommand append_pcm <- [[auto sid, samples]]]]
     return sid
 
 def public set_pause(sid : SID; paused : bool)
     //! pause or unpause sound
-    g_command_channel |> push_clone <| [[AudioCommand pause=[[auto sid, paused]]]]
+    g_command_channel |> push <| new [[AudioCommand pause=[[auto sid, paused]]]]
     return sid
 
 def public set_volume(sid : SID; volume : float; time : float = 0.0f)
     //! set volume of sound
-    g_command_channel |> push_clone <| [[AudioCommand volume=[[auto sid, volume, time]]]]
+    g_command_channel |> push <| new [[AudioCommand volume=[[auto sid, volume, time]]]]
     return sid
 
 def public set_pan(sid : SID; pan : float)
     //! set pan of sound
-    g_command_channel |> push_clone <| [[AudioCommand pan=[[auto sid, pan]]]]
+    g_command_channel |> push <| new [[AudioCommand pan=[[auto sid, pan]]]]
     return sid
 
 def public set_pitch(sid : SID; pitch : float)
     //! set pitch of sound
-    g_command_channel |> push_clone <| [[AudioCommand pitch=[[auto sid, pitch]]]]
+    g_command_channel |> push <| new [[AudioCommand pitch=[[auto sid, pitch]]]]
     return sid
 
 def public stop(sid : SID; time : float = 0.0f)
     //! stop sound
-    g_command_channel |> push_clone <| [[AudioCommand stop=[[auto sid, time]]]]
+    g_command_channel |> push <| new [[AudioCommand stop=[[auto sid, time]]]]
     return sid
 
 def public set_head_position(pos, dir : float3)
     //! set head position for 3D sound
-    g_command_channel |> push_clone <| [[AudioCommand pos, dir]]
+    g_command_channel |> push <| new [[AudioCommand pos, dir]]
 
 def public set_position(sid : SID; pos : float3)
     //! set sound position for 3D sound
-    g_command_channel |> push_clone <| [[AudioCommand sid, pos]]
+    g_command_channel |> push <| new [[AudioCommand sid, pos]]
     return sid
 
 def public set_status_update(sid : SID; var status : LockBox?)
     //! set status for sound
     status |> add_ref
     status |> append(1)
-    g_command_channel |> push_clone <| [[AudioCommand status=[[AudioCommandStatus sid=sid, status=status, status_channel=null]]]]
-    return sid
-
-def public set_status_update(sid : SID; var status_channel : Channel?)
-    //! set status for sound
-    status_channel |> add_ref
-    g_command_channel |> push_clone <| [[AudioCommand status=[[AudioCommandStatus sid=sid, status=null, status_channel=status_channel]]]]
+    g_command_channel |> push <| new [[AudioCommand status=[[AudioCommandStatus sid=sid, status=status]]]]
     return sid
 
 def public unset_status_update(sid : SID)
     //! unset status for sound
-    g_command_channel |> push_clone <| [[AudioCommand status=[[AudioCommandStatus sid=sid, status=null, status_channel=null]]]]
+    g_command_channel |> push <| new [[AudioCommand status=[[AudioCommandStatus sid=sid, status=null]]]]
     return sid
 
-def public set_reverb(sid: SID; reverb : I3DL2ReverbProperties)
+def public set_reverb(sid : SID; reverb : I3DL2ReverbProperties)
     //! set reverb for sound
-    g_command_channel |> push_clone <| [[AudioCommand reverb=[[auto sid, reverb]]]]
+    g_command_channel |> push <| new [[AudioCommand reverb=[[auto sid, reverb]]]]
     return sid
 
 enum public ReverbPreset // so that we don't expose internals
@@ -780,13 +762,13 @@ enum public ReverbPreset // so that we don't expose internals
     SewerPipe
     Underwater
 
-def public set_reverb_preset(sid: SID; preset : ReverbPreset)
+def public set_reverb_preset(sid : SID; preset : ReverbPreset)
     //! set reverb from preset for sound
     return set_reverb(sid, get_preset(unsafe(reinterpret<I3DL2Preset> preset)))
 
 def public set_playback_position(sid : SID; position : uint64)
     //! set playback position for sound (in frames)
-    g_command_channel |> push_clone <| [[AudioCommand set_playback_position=[[auto sid, position]]]]
+    g_command_channel |> push <| new [[AudioCommand set_playback_position=[[auto sid, position]]]]
     return sid
 
 def public decode_audio(data : array<uint8> |#; var channels, rate : int&) : array<float>
