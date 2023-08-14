@@ -4946,7 +4946,7 @@ namespace das {
                     expr->local = true;
                     expr->type = make_smart<TypeDecl>(*var->type);
                     expr->type->ref = true;
-                    var->used_in_finally = inFinally.back();
+                    var->used_in_finally = inFinally.empty() ? false : inFinally.back();
                     return Visitor::visit(expr);
                 }
             }
