@@ -116,7 +116,6 @@ int main( int, char * [] ) {
             tp << " " << HEX << it << DEC;
         }
         tp << "\n";
-    }
 #endif
     }
 #endif
