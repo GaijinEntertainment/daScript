@@ -707,7 +707,7 @@ namespace das
 
     void heap_report ( Context * context, LineInfoArg * info ) {
         context->heap->report();
-        context->reportAnyHeap(info, false, true, true, false);
+        context->reportAnyHeap(info, false, true, false, false);
     }
 
     void memory_report ( bool errOnly, Context * context, LineInfoArg * info ) {
