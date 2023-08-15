@@ -6003,7 +6003,7 @@ namespace das {
                 } else if ( src->type->isHandle() && src->type->annotation->isIterable() ) {
                     pVar->type = make_smart<TypeDecl>(*src->type->annotation->makeIteratorType(src));
                 } else {
-                    error("unsupported iteration type for the loop variable " + pVar->name + ", iterating over " + describeType(src->type), "", "",
+                    error("unsupported iteration type " + src->type->describe() + " for the loop variable " + pVar->name + ", iterating over " + describeType(src->type), "", "",
                         expr->at, CompilationError::invalid_iteration_source);
                     return;
                 }

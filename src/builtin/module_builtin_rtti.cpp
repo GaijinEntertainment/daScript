@@ -517,6 +517,15 @@ namespace das {
         TypeDeclPtr fieldType;
     };
 
+    template <typename ST, typename VT>
+    Sequence debugInfoIterator ( ST * st, Context * context ) {
+        using StructIterator = DebugInfoIterator<VT,ST>;
+        char * iter = context->heap->allocate(sizeof(StructIterator));
+        context->heap->mark_comment(iter, "debug info iterator");
+        new (iter) StructIterator(st);
+        return { (Iterator *) iter };
+    }
+
     struct EnumInfoAnnotation : DebugInfoAnnotation<EnumValueInfo,EnumInfo> {
         EnumInfoAnnotation(ModuleLibrary & ml) : DebugInfoAnnotation ("EnumInfo", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
@@ -526,6 +535,15 @@ namespace das {
             fieldType->ref = true;
         }
     };
+
+    TSequence<EnumValueInfo> each_EnumInfo ( EnumInfo & st, Context * context ) {
+        return debugInfoIterator<EnumInfo,EnumValueInfo>(&st, context);
+    }
+
+    TSequence<const EnumValueInfo> each_const_EnumInfo ( const EnumInfo & st, Context * context ) {
+        return debugInfoIterator<EnumInfo,EnumValueInfo>((EnumInfo *)&st, context);
+    }
+
 
     TypeDeclPtr makeStructInfoFlags() {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
@@ -548,6 +566,14 @@ namespace das {
             fieldType->ref = true;
         }
     };
+
+    TSequence<VarInfo> each_StructInfo ( StructInfo & st, Context * context ) {
+        return debugInfoIterator<StructInfo,VarInfo>(&st, context);
+    }
+
+    TSequence<const VarInfo> each_const_StructInfo ( const StructInfo & st, Context * context ) {
+        return debugInfoIterator<StructInfo,VarInfo>((StructInfo *)&st, context);
+    }
 
     TypeDeclPtr makeTypeInfoFlags() {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
@@ -646,6 +672,14 @@ namespace das {
             fieldType->ref = true;
         }
     };
+
+    TSequence<VarInfo> each_FuncInfo ( FuncInfo & st, Context * context ) {
+        return debugInfoIterator<FuncInfo,VarInfo>(&st, context);
+    }
+
+    TSequence<const VarInfo> each_const_FuncInfo ( const FuncInfo & st, Context * context ) {
+        return debugInfoIterator<FuncInfo,VarInfo>((FuncInfo *)&st, context);
+    }
 
     struct CodeOfPoliciesAnnotation : ManagedStructureAnnotation<CodeOfPolicies,false,false> {
         CodeOfPoliciesAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CodeOfPolicies", ml) {
@@ -1536,6 +1570,25 @@ namespace das {
             addExtern<DAS_BIND_FUN(rtti_getTablePtr)>(*this, lib, "get_table_key_index",
                 SideEffects::none, "rtti_getTablePtr")
                     ->args({"table","key","baseType","valueTypeSize","context","at"});
+            // 'each' iterators for jit
+            addExtern<DAS_BIND_FUN(each_FuncInfo),SimNode_ExtFuncCallAndCopyOrMove,explicitConstArgFn>(*this, lib, "each",
+                SideEffects::none, "each_FuncInfo")
+                    ->args({"info","context"});
+            addExtern<DAS_BIND_FUN(each_const_FuncInfo),SimNode_ExtFuncCallAndCopyOrMove,explicitConstArgFn>(*this, lib, "each",
+                SideEffects::none, "each_const_FuncInfo")
+                    ->args({"info","context"});
+            addExtern<DAS_BIND_FUN(each_StructInfo),SimNode_ExtFuncCallAndCopyOrMove,explicitConstArgFn>(*this, lib, "each",
+                SideEffects::none, "each_StructInfo")
+                    ->args({"info","context"});
+            addExtern<DAS_BIND_FUN(each_const_StructInfo),SimNode_ExtFuncCallAndCopyOrMove,explicitConstArgFn>(*this, lib, "each",
+                SideEffects::none, "each_const_StructInfo")
+                    ->args({"info","context"});
+            addExtern<DAS_BIND_FUN(each_EnumInfo),SimNode_ExtFuncCallAndCopyOrMove,explicitConstArgFn>(*this, lib, "each",
+                SideEffects::none, "each_EnumInfo")
+                    ->args({"info","context"});
+            addExtern<DAS_BIND_FUN(each_const_EnumInfo),SimNode_ExtFuncCallAndCopyOrMove,explicitConstArgFn>(*this, lib, "each",
+                SideEffects::none, "each_const_EnumInfo")
+                    ->args({"info","context"});
             // add builtin module
             compileBuiltinModule("rtti.das",rtti_das, sizeof(rtti_das));
             // lets make sure its all aot ready
