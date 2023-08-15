@@ -109,7 +109,14 @@ class AudioChannel
             status |> update <| $(var data : AudioChannelStatus#)
                 data = [[AudioChannelStatus state=AudioChannelState stopped]]
     def mix(var data : array<float>#; channels, rate : int; dt : float) : bool
-        if paused || !source->ready()
+        if !source->ready()
+            return true
+        if paused
+            if status != null
+                status |> update <| $(var status_channel : AudioChannelStatus#)
+                    status_channel.state = AudioChannelState paused
+                    status_channel.playback_position = playback_position
+                    source->update_status(status_channel)
             return true
         if stop && volume_mixer.volume == 0.
             return false
