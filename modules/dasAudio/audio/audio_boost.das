@@ -109,7 +109,14 @@ class AudioChannel
             status |> update <| $(var data : AudioChannelStatus#)
                 data = [[AudioChannelStatus state=AudioChannelState stopped]]
     def mix(var data : array<float>#; channels, rate : int; dt : float) : bool
-        if paused || !source->ready()
+        if !source->ready()
+            return true
+        if paused
+            if status != null
+                status |> update <| $(var status_channel : AudioChannelStatus#)
+                    status_channel.state = AudioChannelState paused
+                    status_channel.playback_position = playback_position
+                    source->update_status(status_channel)
             return true
         if stop && volume_mixer.volume == 0.
             return false
@@ -331,7 +338,7 @@ var g_head_direction : float3 = float3(0., 1., 0.)
 
 def update_hrtf
     for ch in g_channels
-        if ch.is3D
+        if ch.is3D && !ch.stop
             var rxy = ch.position3d.xy - g_head_position.xy
             rxy = float2(rxy.x * g_head_direction.x + rxy.y * g_head_direction.y,
                         -rxy.x * g_head_direction.y + rxy.y * g_head_direction.x)
@@ -426,7 +433,7 @@ def command_processor
             unsafe
                 delete g_channels
             g_sid_2_channel |> clear()
-            g_command_channel |> notify_and_release
+            g_command_channel |> release
         elif cmd is add_decoder
             assume dcmd = cmd as add_decoder
             var decoder  = new AudioSourceDecoder()
@@ -589,6 +596,7 @@ def finalize_mixer
 def public audio_system_create() : Channel?
     sound_initalize(@@mixer, MA_SAMPLE_RATE, MA_CHANNELS, this_context())
     var channel = unsafe(channel_create())
+    channel |> add_ref()
     g_command_channel = channel
     unsafe
         invoke_in_context(mixer_context(), "setup_command_processor", channel)
@@ -596,8 +604,10 @@ def public audio_system_create() : Channel?
 
 def public audio_system_finalize(var channel : Channel?&)
     channel |> push <| new [[AudioCommand shutdown=true]]
-    g_command_channel |> release
+    unsafe
+        invoke_in_context(mixer_context(), "command_processor")
     sound_finalize()
+    g_command_channel |> release
     channel |> join
     unsafe
         channel_remove(channel)
