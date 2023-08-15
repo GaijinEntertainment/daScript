@@ -426,7 +426,7 @@ def command_processor
             unsafe
                 delete g_channels
             g_sid_2_channel |> clear()
-            g_command_channel |> notify_and_release
+            g_command_channel |> release
         elif cmd is add_decoder
             assume dcmd = cmd as add_decoder
             var decoder  = new AudioSourceDecoder()
@@ -589,6 +589,7 @@ def finalize_mixer
 def public audio_system_create() : Channel?
     sound_initalize(@@mixer, MA_SAMPLE_RATE, MA_CHANNELS, this_context())
     var channel = unsafe(channel_create())
+    channel |> add_ref()
     g_command_channel = channel
     unsafe
         invoke_in_context(mixer_context(), "setup_command_processor", channel)
@@ -596,8 +597,10 @@ def public audio_system_create() : Channel?
 
 def public audio_system_finalize(var channel : Channel?&)
     channel |> push <| new [[AudioCommand shutdown=true]]
-    g_command_channel |> release
+    unsafe
+        invoke_in_context(mixer_context(), "command_processor")
     sound_finalize()
+    g_command_channel |> release
     channel |> join
     unsafe
         channel_remove(channel)
