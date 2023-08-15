@@ -331,7 +331,7 @@ var g_head_direction : float3 = float3(0., 1., 0.)
 
 def update_hrtf
     for ch in g_channels
-        if ch.is3D
+        if ch.is3D && !ch.stop
             var rxy = ch.position3d.xy - g_head_position.xy
             rxy = float2(rxy.x * g_head_direction.x + rxy.y * g_head_direction.y,
                         -rxy.x * g_head_direction.y + rxy.y * g_head_direction.x)
