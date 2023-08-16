@@ -1555,9 +1555,8 @@ namespace das {
             for ( auto it = finalList.begin(); it!=finalList.end(); ) {
                 auto & subexpr = *it;
                 vis.preVisitBlockFinalExpression(this, subexpr.get());
-                subexpr = subexpr->visit(vis);
-                if ( subexpr )
-                    subexpr = vis.visitBlockFinalExpression(this, subexpr.get());
+                if ( subexpr ) subexpr = subexpr->visit(vis);
+                if ( subexpr ) subexpr = vis.visitBlockFinalExpression(this, subexpr.get());
                 if ( subexpr ) ++it; else it = finalList.erase(it);
             }
             vis.visitBlockFinal(this);
@@ -1595,9 +1594,8 @@ namespace das {
         for ( auto it = list.begin(); it!=list.end(); ) {
             auto & subexpr = *it;
             vis.preVisitBlockExpression(this, subexpr.get());
-            subexpr = subexpr->visit(vis);
-            if ( subexpr )
-                subexpr = vis.visitBlockExpression(this, subexpr.get());
+            if ( subexpr ) subexpr = subexpr->visit(vis);
+            if ( subexpr ) subexpr = vis.visitBlockExpression(this, subexpr.get());
             if ( subexpr ) ++it; else it = list.erase(it);
         }
         if ( !finallyBeforeBody ) {
@@ -1611,11 +1609,11 @@ namespace das {
         Expression::clone(cexpr);
         cexpr->list.reserve(list.size());
         for ( auto & subexpr : list ) {
-            cexpr->list.push_back(subexpr->clone());
+            if ( subexpr ) cexpr->list.push_back(subexpr->clone());
         }
         cexpr->finalList.reserve(finalList.size());
         for ( auto & subexpr : finalList ) {
-            cexpr->finalList.push_back(subexpr->clone());
+            if ( subexpr ) cexpr->finalList.push_back(subexpr->clone());
         }
         cexpr->blockFlags = blockFlags;
         if ( returnType )
