@@ -7617,11 +7617,9 @@ namespace das {
                         }
                     }
                     if ( !expr->structs.size() ) expr->structs.emplace_back(make_smart<MakeStruct>());
-                    bool anyInit = false;
                     for ( auto & st : expr->structs ) {
                         for ( auto & fi : expr->makeType->structType->fields ) {
                             if ( fi.init ) {
-                                anyInit = true;
                                 auto it = find_if(st->begin(), st->end(), [&](const MakeFieldDeclPtr & fd){
                                     return fd->name == fi.name;
                                 });
@@ -7633,9 +7631,7 @@ namespace das {
                             }
                         }
                     }
-                    if ( anyInit ) {
-                        expr->useInitializer = false;
-                    }
+                    expr->useInitializer = false;
                 }
                 // see if we need to init fields
                 if ( expr->makeType->structType ) {
