@@ -9,6 +9,7 @@
 #define MINIAUDIO_IMPLEMENTATION
 #include <miniaudio.h>
 #include "volume_mixer.h"
+#include "hrtf.h"
 
 #define I3DL32_REVERB_IMPLEMENTATION    1
 #include "reverb.h"
@@ -165,6 +166,9 @@ DAS_BIND_ENUM_CAST ( das::I3DL2Preset );
 
 MAKE_TYPE_FACTORY(I3DL2ReverbProperties,I3DL2ReverbProperties);
 MAKE_TYPE_FACTORY(I3DL2Reverb,I3DL2Reverb);
+
+
+MAKE_TYPE_FACTORY(ma_hrtf,ma_hrtf);
 
 namespace das {
 
@@ -399,6 +403,18 @@ struct I3DL2ReverbAnnotation : ManagedStructureAnnotation<I3DL2Reverb,true,true>
     }
 };
 
+struct MAHrtfAnnotation : ManagedStructureAnnotation<ma_hrtf> {
+    MAHrtfAnnotation ( ModuleLibrary & mlib )
+        : ManagedStructureAnnotation("ma_hrtf", mlib, "ma_hrtf") {
+        addField<DAS_BIND_MANAGED_FIELD(taps)>("taps","taps");
+        addField<DAS_BIND_MANAGED_FIELD(left)>("left","left");
+        addField<DAS_BIND_MANAGED_FIELD(right)>("right","right");
+        addField<DAS_BIND_MANAGED_FIELD(azimuth)>("azimuth","azimuth");
+        addField<DAS_BIND_MANAGED_FIELD(elevation)>("elevation","elevation");
+        addField<DAS_BIND_MANAGED_FIELD(sampleRate)>("sampleRate","sampleRate");
+    }
+};
+
 void dasAudio_setSampleRate ( I3DL2Reverb * reverb, float rate, Context * context, LineInfoArg * at ) {
     if ( !reverb ) context->throw_error_at(at,"reverb is null");
     reverb->SetSampleRate(rate);
@@ -559,6 +575,16 @@ public:
             SideEffects::none, "ma_limiter_get_required_input_frame_count")->args({"limiter", "out_len"});
         addExtern<DAS_BIND_FUN(ma_limiter_uninit)>(*this, lib, "ma_limiter_uninit",
             SideEffects::modifyArgument, "ma_limiter_uninit")->args({"limiter"});
+        // hrtf
+        addAnnotation(make_smart<MAHrtfAnnotation>(lib));
+        addExtern<DAS_BIND_FUN(ma_hrtf_init)>(*this, lib, "ma_hrtf_init",
+            SideEffects::modifyArgument, "ma_hrtf_init")->args({"hrtf", "sampleRate"});
+        addExtern<DAS_BIND_FUN(ma_hrtf_process_frames)>(*this, lib, "ma_hrtf_process_frames",
+            SideEffects::modifyArgument, "ma_hrtf_process_frames")->args({"hrtf", "pOut", "pIn", "nChannels", "frameCount"});
+        addExtern<DAS_BIND_FUN(ma_hrtf_set_direction)>(*this, lib, "ma_hrtf_set_direction",
+            SideEffects::modifyArgument, "ma_hrtf_set_direction")->args({"hrtf", "azimuth", "elevation"});
+        addExtern<DAS_BIND_FUN(ma_hrtf_uninit)>(*this, lib, "ma_hrtf_uninit",
+            SideEffects::modifyArgument, "ma_hrtf_uninit")->args({"hrtf"});
         return true;
     }
     virtual ModuleAotType aotRequire ( TextWriter & tw ) const override {
