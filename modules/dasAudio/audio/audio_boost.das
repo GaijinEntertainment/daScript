@@ -803,7 +803,11 @@ def public get_audio_command_channel : void ?
 
 [unsafe_operation]
 def public set_audio_thread_command_channel(ch : void?)
-    g_command_channel = unsafe(reinterpret<Channel?> ch)
-
-
-
+    var channel = unsafe(reinterpret<Channel?> ch)
+    if channel == g_command_channel
+        return
+    if g_command_channel != null
+        g_command_channel |> release
+    g_command_channel = channel
+    if g_command_channel != null
+        g_command_channel |> add_ref
