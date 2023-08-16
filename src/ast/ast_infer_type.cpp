@@ -7633,10 +7633,7 @@ namespace das {
                             }
                         }
                     }
-                    if ( !anyInit ) {
-                        error("[[" + describeType(expr->makeType) + "() ]] does not have default initializer", "", "",
-                              expr->at, CompilationError::invalid_type);
-                    } else {
+                    if ( anyInit ) {
                         expr->useInitializer = false;
                     }
                 }
