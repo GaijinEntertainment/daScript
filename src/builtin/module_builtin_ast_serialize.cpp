@@ -295,8 +295,8 @@ namespace das {
             const char * rtti; *this << rtti;
             auto annotation = astModule->findAnnotation(rtti);
             DAS_VERIFYF(annotation!=nullptr, "annotation '%s' is not found", rtti);
+            delete [] rtti;
             expr.reset((Expression *) static_pointer_cast<TypeAnnotation>(annotation)->factory());
-            expr->__rtti = rtti;
             expr->serialize(*this);
         }
         return *this;
@@ -959,11 +959,10 @@ namespace das {
         ser << baseType;
         switch ( baseType ) {
             case Type::alias:
-                ser << alias << dim << dimExpr;
+                ser << alias << firstType << dim << dimExpr;
                 DAS_VERIFYF(!annotation,       "not expected to see");
                 DAS_VERIFYF(!structType,      "not expected to see");
                 DAS_VERIFYF(!enumType,        "not expected to see");
-                DAS_VERIFYF(!firstType,       "not expected to see");
                 DAS_VERIFYF(!secondType,      "not expected to see");
                 DAS_VERIFYF(!alias.empty(),    "not expected to see");
                 DAS_VERIFYF(argTypes.empty(), "not expected to see");
@@ -1031,12 +1030,12 @@ namespace das {
             case tURange:
             case tRange64:
             case tURange64: // blow up!
+                ser << alias;
                 DAS_VERIFYF(!annotation,       "not expected to see");
                 DAS_VERIFYF(!structType,      "not expected to see");
                 DAS_VERIFYF(!enumType,        "not expected to see");
                 DAS_VERIFYF(!firstType,       "not expected to see");
                 DAS_VERIFYF(!secondType,      "not expected to see");
-                DAS_VERIFYF(alias.empty(),    "not expected to see");
                 DAS_VERIFYF(argTypes.empty(), "not expected to see");
                 DAS_VERIFYF(argNames.empty(), "not expected to see");
                 DAS_VERIFYF(dim.empty(),      "not expected to see");
@@ -1053,7 +1052,7 @@ namespace das {
                 DAS_VERIFYF(argNames.empty(), "not expected to see");
                 break;
             case tHandle:
-                ser << alias << annotation;
+                ser << alias << annotation << dim << dimExpr;
                 DAS_VERIFYF(annotation,       "not expected to see");
                 DAS_VERIFYF(!structType,      "not expected to see");
                 DAS_VERIFYF(!enumType,        "not expected to see");
@@ -1061,8 +1060,6 @@ namespace das {
                 DAS_VERIFYF(!secondType,      "not expected to see");
                 DAS_VERIFYF(argTypes.empty(), "not expected to see");
                 DAS_VERIFYF(argNames.empty(), "not expected to see");
-                DAS_VERIFYF(dim.empty(),      "not expected to see");
-                DAS_VERIFYF(dimExpr.empty(),  "not expected to see");
                 break;
             case tEnumeration:
             case tEnumeration8:
@@ -1110,13 +1107,12 @@ namespace das {
                 DAS_VERIFYF(dimExpr.empty(),  "not expected to see");
                 break;
             case tTable:
-                ser << firstType << secondType;
+                ser << alias << firstType << secondType;
                 DAS_VERIFYF(!annotation,       "not expected to see");
                 DAS_VERIFYF(!structType,      "not expected to see");
                 DAS_VERIFYF(!enumType,        "not expected to see");
                 DAS_VERIFYF(firstType,       "not expected to see");
                 DAS_VERIFYF(secondType,      "not expected to see");
-                DAS_VERIFYF(alias.empty(),    "not expected to see");
                 DAS_VERIFYF(argTypes.empty(), "not expected to see");
                 DAS_VERIFYF(argNames.empty(), "not expected to see");
                 DAS_VERIFYF(dim.empty(),      "not expected to see");
