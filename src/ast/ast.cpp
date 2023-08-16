@@ -1611,11 +1611,15 @@ namespace das {
         Expression::clone(cexpr);
         cexpr->list.reserve(list.size());
         for ( auto & subexpr : list ) {
-            cexpr->list.push_back(subexpr->clone());
+            if ( subexpr ) {
+                cexpr->list.push_back(subexpr->clone());
+            }
         }
         cexpr->finalList.reserve(finalList.size());
         for ( auto & subexpr : finalList ) {
-            cexpr->finalList.push_back(subexpr->clone());
+            if ( subexpr ) {
+                cexpr->finalList.push_back(subexpr->clone());
+            }
         }
         cexpr->blockFlags = blockFlags;
         if ( returnType )
