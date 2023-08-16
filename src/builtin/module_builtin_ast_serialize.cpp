@@ -7,6 +7,10 @@
 #include "daScript/ast/ast.h"
 
 namespace das {
+// potentially leaking
+    das_hash_set<FileInfo *> leaking;
+// potentially double delete
+    das_hash_set<FileInfo *> deleted;
 
     AstSerializer::AstSerializer ( ForReading, vector<uint8_t> && buffer_ ) : buffer(buffer_) {
         astModule = Module::require("ast");
@@ -104,7 +108,6 @@ namespace das {
     }
 
     void AstSerializer::tag ( const char * name ) {
-        return;
         uint64_t hash = hash64z(name);
         if ( writing ) {
             *this << hash;
@@ -698,14 +701,39 @@ namespace das {
     }
 
     AstSerializer & AstSerializer::operator << ( FileInfo * & info ) {
-        FileInfoPtr t;
+        tag("FileInfo *");
+        bool is_null = info == nullptr;
+        *this << is_null;
+        if ( is_null ) {
+            if ( !writing ) { info = nullptr; }
+            return *this;
+        }
         if ( writing ) {
-            t.reset(info);
-            *this << t;
-            t.release();
+            uint64_t ptr = (uint64_t) info;
+            *this << ptr;
+            if ( fileInfoMap[ptr] == nullptr ) {
+                fileInfoMap[ptr] = info;
+                info->serialize(*this);
+            }
         } else {
-            *this << t;
-            info = t.release();
+            uint64_t ptr; *this << ptr;
+            if ( fileInfoMap[ptr] == nullptr ) {
+                uint8_t tag = 0; *this << tag;
+                switch ( tag ) {
+                    case 0: info = new FileInfo; break;
+                    case 1: info = new TextFileInfo; break;
+                    default: DAS_VERIFYF(false, "Unreachable");
+                }
+                leaking.emplace(info);
+                fileInfoMap[ptr] = info;
+                info->serialize(*this);
+            } else {
+                info = fileInfoMap[ptr];
+            }
+
+            if ( info == (void*)0x606000175340 ) {
+                info->name.size();
+            }
         }
         return *this;
     }
@@ -714,33 +742,17 @@ namespace das {
 
     AstSerializer & AstSerializer::operator << ( FileInfoPtr & info ) {
         tag("FileInfoPtr");
-        bool is_null = info == nullptr;
-        *this << is_null;
-        if ( is_null ) {
-            if ( !writing ) { info = nullptr; }
-            return *this;
-        }
         if ( writing ) {
-            uint64_t ptr = (uint64_t) info.get();
-            *this << ptr;
-            if ( fileInfoMap[ptr] == nullptr ) {
-                fileInfoMap[ptr] = info.get();
-                info->serialize(*this);
-            }
+            FileInfo * info_ptr = info.get();
+            *this << info_ptr;
         } else {
-            uint64_t ptr; *this << ptr;
-            if ( fileInfoMap[ptr] == nullptr ) {
-                uint8_t tag = 0; *this << tag;
-                switch ( tag ) {
-                    case 0: info.reset(new FileInfo); break;
-                    case 1: info.reset(new TextFileInfo); break;
-                    default: DAS_VERIFYF(false, "Unreachable");
-                }
-                fileInfoMap[ptr] = info.get();
-                info->serialize(*this);
-            } else {
-                info.reset( fileInfoMap[ptr] );
+            FileInfo * info_ptr; *this << info_ptr;
+            info.reset(info_ptr);
+            if ( deleted.count(info.get()) && info.get() ) {
+                printf("Detected double delete %x %s\n", info.get(), info->name.c_str());
             }
+            deleted.emplace(info.get());
+            leaking.erase(info.get());
         }
         return *this;
     }
@@ -771,17 +783,31 @@ namespace das {
         bool is_null = ptr == nullptr;
         *this << is_null;
         if ( is_null ) {
+            if ( !writing ) ptr = nullptr;
             return *this;
         }
-        if ( !writing ) {
-            uint8_t tag; *this << tag;
-            switch ( tag ) {
-                case 0: ptr = new FileAccess; break;
-                case 1: ptr = new ModuleFileAccess; break;
-                default: DAS_VERIFYF(false, "Unreachable");
+        if ( writing ) {
+            uint64_t p = (uint64_t) ptr;
+            *this << p;
+            if ( fileAccessMap[p] == nullptr ) {
+                fileAccessMap[p] = ptr.get();
+                ptr->serialize(*this);
+            }
+        } else {
+            uint64_t p; *this << p;
+            if ( fileAccessMap[p] == nullptr ) {
+                uint8_t tag; *this << tag;
+                switch ( tag ) {
+                    case 0: ptr = make_smart<FileAccess>(); break;
+                    case 1: ptr = make_smart<ModuleFileAccess>(); break;
+                    default: DAS_VERIFYF(false, "Unreachable");
+                }
+                fileAccessMap[p] = ptr.get();
+                ptr->serialize(*this);
+            } else {
+                ptr = fileAccessMap[p];
             }
         }
-        ptr->serialize(*this);
         return *this;
     }
 
@@ -1672,13 +1698,13 @@ namespace das {
         }
         ser << name << tabSize;
         ser.serializeAdaptiveSize32(sourceLength);
-        ser << owner;
-        if ( ser.writing ) {
-            ser.write((const void *) source, sourceLength);
-        } else {
-            source = (char *) das_aligned_alloc16(sourceLength + 1);
-            ser.read((void *) source, sourceLength);
-        }
+        // ser << owner;
+        // if ( ser.writing ) {
+        //     ser.write((const void *) source, sourceLength);
+        // } else {
+        //     source = (char *) das_aligned_alloc16(sourceLength + 1);
+        //     ser.read((void *) source, sourceLength);
+        // }
     }
 
     AstSerializer & AstSerializer::operator << ( CallMacro * & ptr ) {
@@ -2086,6 +2112,13 @@ namespace das {
 
         ser << allRequireDecl;
 
+        for ( auto & p : leaking ) {
+            printf("Leaking: %x : %s\n", p, p->name.c_str());
+        }
+
+        leaking.clear();
+        deleted.clear();
+ 
     // for the last module, mark symbols manually
         markExecutableSymbolUse();
         removeUnusedSymbols();

@@ -24,6 +24,7 @@ namespace das {
     // pointers
         das_hash_map<uint64_t, ExprBlock*>          exprBlockMap;
         das_hash_map<uint64_t, FileInfo*>           fileInfoMap;
+        das_hash_map<uint64_t, FileAccess*>         fileAccessMap;
     // smart pointers
         das_hash_map<uint64_t, MakeFieldDeclPtr>    smartMakeFieldDeclMap;
         das_hash_map<uint64_t, EnumerationPtr>      smartEnumerationMap;
