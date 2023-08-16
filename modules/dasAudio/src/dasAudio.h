@@ -1,5 +1,6 @@
 #include <miniaudio.h>
 #include "volume_mixer.h"
+#include "hrtf.h"
 #include "reverb.h"
 
 namespace das {

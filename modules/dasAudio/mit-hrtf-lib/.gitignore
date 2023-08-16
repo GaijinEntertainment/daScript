@@ -1,0 +1,12 @@
+mac/mit_hrtf_lib.xcodeproj/project.xcworkspace/xcuserdata
+mac/mit_hrtf_lib.xcodeproj/project.xcworkspace/xcshareddata
+mac/DerivedData
+*.db
+*.opendb
+*.suo
+win/Debug/
+win/Release/
+*.user
+win/x64/
+mac/Build
+mac/library

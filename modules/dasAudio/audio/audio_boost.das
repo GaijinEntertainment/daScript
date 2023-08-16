@@ -17,6 +17,7 @@ require daslib/apply_in_context
 // audio config
 let public MA_SAMPLE_RATE = 48000
 let public MA_CHANNELS = 2
+let public MA_HRTF = true
 
 // limiter config
 let MA_LIMITER_THRESHOLD = 0.95
@@ -68,6 +69,7 @@ class AudioChannel
     is3D : bool = false
     [[do_not_delete]] status : LockBox? = null
     [[do_not_delete]] reverb : I3DL2Reverb?
+    hrtf : ma_hrtf
     def AudioChannel(src : AudioSource?)
         source = src
         // resampler
@@ -91,6 +93,20 @@ class AudioChannel
         ma_channel_converter_init(unsafe(addr(channel_converter_config)), unsafe(addr(channel_converter)))
         // volume mixer
         ma_volume_mixer_init(unsafe(addr(volume_mixer)), 1u)
+    def set3D
+        is3D = true
+        if MA_HRTF
+            ma_hrtf_init(unsafe(addr(hrtf)),uint(MA_SAMPLE_RATE))
+            ma_channel_converter_uninit(unsafe(addr(channel_converter)))
+            var channel_converter_config <- ma_channel_converter_config_init(
+                ma_format ma_format_f32,
+                2u,
+                null,
+                uint(MA_CHANNELS),
+                null,
+                ma_channel_mix_mode ma_channel_mix_mode_default
+            )
+            ma_channel_converter_init(unsafe(addr(channel_converter_config)), unsafe(addr(channel_converter)))
     def finalize
         unsafe
             delete source
@@ -104,6 +120,8 @@ class AudioChannel
         if reverb != null
             unsafe
                 delete reverb
+        if MA_HRTF && is3D
+            ma_hrtf_uninit(unsafe(addr(hrtf)))
     def report_eos
         if status != null
             status |> update <| $(var data : AudioChannelStatus#)
@@ -140,13 +158,27 @@ class AudioChannel
                 unsafe(addr(outputFrames)))
             delete samples
             samples <- temp
+        // hrtf
+        var nSoundChannels = source.channels
+        if is3D && MA_HRTF
+            // void ma_hrtf_process_frames(ma_hrtf * hrtf, float * pOut, const float * pIn, ma_uint32 nChannels, ma_uint32 frameCount)
+            var temp : array<float>
+            temp |> resize(int(outputFrames) * 2)
+            ma_hrtf_process_frames(unsafe(addr(hrtf)),
+                unsafe(addr(temp[0])),
+                unsafe(addr(samples[0])),
+                uint(source.channels),
+                uint(outputFrames))
+            nSoundChannels = 2      // HRTF always produces stereo
+            delete samples
+            samples <- temp
         // reverb
         if reverb != null
             var temp : array<float>
             temp |> resize(int(outputFrames) * channels)
-            if source.channels == 1
+            if nSoundChannels == 1
                 reverb |> process_mono(unsafe(addr(samples[0])), unsafe(addr(temp[0])), int(outputFrames))
-            elif source.channels == 2
+            elif nSoundChannels == 2
                 reverb |> process_stereo(unsafe(addr(samples[0])), unsafe(addr(temp[0])), int(outputFrames))
             else
                 panic("unsupported channel count {channels}")
@@ -342,12 +374,21 @@ def update_hrtf
             var rxy = ch.position3d.xy - g_head_position.xy
             rxy = float2(rxy.x * g_head_direction.x + rxy.y * g_head_direction.y,
                         -rxy.x * g_head_direction.y + rxy.y * g_head_direction.x)
+            let nrxy = normalize(rxy)
+            static_if MA_HRTF
+                let asimuth = atan2(nrxy.y, nrxy.x)
+                let elevation = atan2(ch.position3d.z - g_head_position.z, length(rxy))
+                let iasimuth = int(asimuth * 180. / PI)
+                let ielevation = int(elevation * 180. / PI)
+                ma_hrtf_set_direction(unsafe(addr(ch.hrtf)), iasimuth, ielevation)
+                // print("{iasimuth} {ielevation}\n")
+            else
+                // panning
+                ma_volume_mixer_set_pan(unsafe(addr(ch.volume_mixer)), nrxy.y)
             // linear volume attenuation???
             let attn = max(0.0f, 1.0f - length(rxy) / ch.radius)
             ma_volume_mixer_set_volume(unsafe(addr(ch.volume_mixer)), ch.volume * attn)
-            // panning
-            let nrxy = normalize(rxy)
-            ma_volume_mixer_set_pan(unsafe(addr(ch.volume_mixer)), nrxy.y)
+
 
 struct AudioCommandAddDecoder
     sid : SID
@@ -420,7 +461,7 @@ def add_channel(sid : SID; var channel : AudioChannel?)
 def add_channel_3d(sid : SID; position : float3; radius : float; var channel : AudioChannel?)
     channel.position3d = position
     channel.radius = radius
-    channel.is3D = true
+    channel->set3D()
     add_channel(sid, channel)
 
 def command_processor
