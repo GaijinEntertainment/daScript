@@ -6,18 +6,25 @@ require fio
 
 require daslib/jobque_boost
 
+let USE_MP3 = true
+
 [export]
 def main
     with_audio_system <|
         print("loading test data\n")
         var sound_data : array<float>
         var channels, rate : int
-        fopen("{get_das_root()}/modules/dasAudio/examples/test.mp3","rb") <| $ ( fr )
-            if fr == null
-                panic("cannot open file")
-            fmap(fr) <| $ ( data )
-                var samples <- decode_audio(data, channels, rate)
-                sound_data <- samples
+        static_if USE_MP3
+            fopen("{get_das_root()}/modules/dasAudio/examples/test.mp3","rb") <| $ ( fr )
+                if fr == null
+                    panic("cannot open file")
+                fmap(fr) <| $ ( data )
+                    var samples <- decode_audio(data, channels, rate)
+                    sound_data <- samples
+        else
+            sound_data <- [{for x in range(MA_SAMPLE_RATE); sin(2.*PI*440.*float(x)/float(48000))}]
+            channels = 1
+            rate = MA_SAMPLE_RATE
         print("{channels} x {rate}\n")
         print("setting 3D position\n")
         set_head_position(float3(0,0,0),float3(0,-1,0))
