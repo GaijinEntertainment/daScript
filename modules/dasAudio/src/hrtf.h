@@ -70,7 +70,7 @@ void ma_hrtf_process_channel ( ma_hrtf* hrtf, float* pOut, const float* pInBuffe
     }
     for ( ma_uint32 m = 0; m != taps; ++m ) {
         float filter_m = pFilter[m] / 32768.0f;
-        for ( ma_uint32 n = 0; n != (frameCount + hist); n++ ) {
+        for ( ma_uint32 n = 0; n != (frameCount + hist) - m; n++ ) {
             outBuf[n + m] += pIn[n] * filter_m;
         }
     }
