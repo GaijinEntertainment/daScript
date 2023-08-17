@@ -412,6 +412,10 @@ struct MAHrtfAnnotation : ManagedStructureAnnotation<ma_hrtf> {
         addField<DAS_BIND_MANAGED_FIELD(azimuth)>("azimuth","azimuth");
         addField<DAS_BIND_MANAGED_FIELD(elevation)>("elevation","elevation");
         addField<DAS_BIND_MANAGED_FIELD(sampleRate)>("sampleRate","sampleRate");
+        addField<DAS_BIND_MANAGED_FIELD(mixbuffer)>("mixbuffer","mixbuffer");
+        addField<DAS_BIND_MANAGED_FIELD(mixsize)>("mixsize","mixsize");
+        addField<DAS_BIND_MANAGED_FIELD(leftfip)>("leftfip","leftfip");
+        addField<DAS_BIND_MANAGED_FIELD(rightfip)>("rightfip","rightfip");
     }
 };
 
