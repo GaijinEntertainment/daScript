@@ -96,7 +96,7 @@ class AudioChannel
     def set3D
         is3D = true
         if MA_HRTF
-            ma_hrtf_init(unsafe(addr(hrtf)),uint(MA_SAMPLE_RATE))
+            ma_hrtf_init(unsafe(addr(hrtf)), uint(MA_SAMPLE_RATE))
             ma_channel_converter_uninit(unsafe(addr(channel_converter)))
             var channel_converter_config <- ma_channel_converter_config_init(
                 ma_format ma_format_f32,
@@ -127,7 +127,7 @@ class AudioChannel
             status |> update <| $(var data : AudioChannelStatus#)
                 data = [[AudioChannelStatus state=AudioChannelState stopped]]
     def mix(var data : array<float>#; channels, rate : int; dt : float) : bool
-        if !source->ready()
+        if !source->ready() || g_pitch == 0.
             return true
         if paused
             if status != null
@@ -138,7 +138,7 @@ class AudioChannel
             return true
         if stop && volume_mixer.volume == 0.
             return false
-        let inputRate = uint(float(source.bitrate) * pitch)
+        let inputRate = uint(float(source.bitrate) * pitch * g_pitch)
         ma_resampler_set_rate(unsafe(addr(resampler)), inputRate, uint(rate))
         var outputFrames = uint64(data |> length / channels)
         var inputFrames = ma_resampler_get_required_input_frame_count(unsafe(addr(resampler)), outputFrames)
@@ -215,6 +215,7 @@ var g_channels : array<AudioChannel?>
 var g_sid_2_channel : table<SID; AudioChannel?>
 var g_mixer_total_time = 0.lf
 var g_mixer_total_samples = 0ul
+var g_pitch = 1.
 
 class AudioSourcePCM : AudioSource
     samples : array<float>
@@ -438,6 +439,7 @@ variant AudioCommand
     volume                  : tuple<sid : SID; volume : float; time : float>
     pan                     : tuple<sid : SID; pan : float>
     pitch                   : tuple<sid : SID; pitch : float>
+    global_pitch            : float
     stop                    : tuple<sid : SID; time : float>
     head_transform          : tuple<head_position : float3; head_direction : float3>
     sound_position          : tuple<sid : SID; position : float3>
@@ -534,6 +536,8 @@ def command_processor
             var pcmd = cmd as pitch
             g_sid_2_channel |> get(pcmd.sid) <| $(var ch : AudioChannel?&)
                 ch.pitch = pcmd.pitch
+        elif cmd is global_pitch
+            g_pitch = cmd as global_pitch
         elif cmd is stop
             var scmd = cmd as stop
             g_sid_2_channel |> get(scmd.sid) <| $(var ch : AudioChannel?&)
@@ -756,6 +760,10 @@ def public set_pitch(sid : SID; pitch : float)
     //! set pitch of sound
     g_command_channel |> push <| new [[AudioCommand pitch=[[auto sid, pitch]]]]
     return sid
+
+def public set_global_pitch(pitch : float)
+    //! set global pitch of sounds
+    g_command_channel |> push <| new [[AudioCommand global_pitch=pitch]]
 
 def public stop(sid : SID; time : float = 0.0f)
     //! stop sound
