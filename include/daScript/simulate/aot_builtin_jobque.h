@@ -61,9 +61,22 @@ namespace das {
         void gather ( TT && tt ) {
             lock_guard<mutex> guard(mCompleteMutex);
             for ( auto & f : pipe ) {
-                tt(f.data, f.type, f.from.get());
+                tt(f.data, f.type, f.from ? f.from.get() : owner);
             }
             pipe.clear();
+        }
+        template <typename TT>
+        void gather_and_forward ( Channel * that, TT && tt ) {
+            lock_guard<mutex> guard(mCompleteMutex);
+            for ( auto & f : pipe ) {
+                tt(f.data, f.type, f.from.get());
+            }
+            lock_guard<mutex> guard2(that->mCompleteMutex);
+            for ( auto & f : pipe ) {
+                that->pipe.emplace_back(move(f));
+            }
+            pipe.clear();
+            that->mCond.notify_all();  // notify_one??
         }
     protected:
         uint32_t            mSleepMs = 1;
@@ -94,6 +107,8 @@ namespace das {
     Channel* channelCreate( Context * context, LineInfoArg * at);
     void channelRemove(Channel * ch, Context * context, LineInfoArg * at);
     void channelGather ( Channel * ch, const TBlock<void,void *> & blk, Context * context, LineInfoArg * at );
+    void channelGatherEx ( Channel * ch, const TBlock<void,void *,const TypeInfo *,Context &> & blk, Context * context, LineInfoArg * at );
+    void channelGatherAndForward ( Channel * ch, Channel * toCh, const TBlock<void,void *> & blk, Context * context, LineInfoArg * at );
     void channelPeek ( Channel * ch, const TBlock<void,void *> & blk, Context * context, LineInfoArg * at );
     void channelVerify ( Channel * ch, Context * context, LineInfoArg * at );
     LockBox * lockBoxCreate( Context *, LineInfoArg * );

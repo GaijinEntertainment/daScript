@@ -103,6 +103,20 @@ namespace das {
         });
     }
 
+    void channelGatherEx ( Channel * ch, const TBlock<void,void *,const TypeInfo *, Context &> & blk, Context * context, LineInfoArg * at ) {
+        if ( !ch ) context->throw_error_at(at, "channelGather: channel is null");
+        ch->gather([&](void * data, TypeInfo * tinfo, Context * ctx) {
+            das_invoke<void>::invoke<void *,const TypeInfo *,Context &>(context, at, blk, data, tinfo, *ctx);
+        });
+    }
+
+    void channelGatherAndForward ( Channel * ch, Channel * toCh, const TBlock<void,void *> & blk, Context * context, LineInfoArg * at ) {
+        if ( !ch ) context->throw_error_at(at, "channelGather: channel is null");
+        ch->gather_and_forward(toCh, [&](void * data, TypeInfo *, Context *) {
+            das_invoke<void>::invoke<void *>(context, at, blk, data);
+        });
+    }
+
     void channelPeek ( Channel * ch, const TBlock<void,void *> & blk, Context * context, LineInfoArg * at ) {
         if ( !ch ) context->throw_error_at(at, "channelPeek: channel is null");
         ch->for_each_item([&](void * data, TypeInfo *, Context *) {
@@ -431,11 +445,17 @@ namespace das {
             addExtern<DAS_BIND_FUN(channelGather)>(*this, lib,  "_builtin_channel_gather",
                 SideEffects::modifyArgumentAndExternal, "channelGather")
                     ->args({"channel","block","context","line"});
+            addExtern<DAS_BIND_FUN(channelGatherEx)>(*this, lib,  "_builtin_channel_gather_ex",
+                SideEffects::modifyArgumentAndExternal, "channelGatherEx")
+                    ->args({"channel","block","context","line"});
+            addExtern<DAS_BIND_FUN(channelGatherAndForward)>(*this, lib,  "_builtin_channel_gather_and_forward",
+                SideEffects::modifyArgumentAndExternal, "channelGatherAndForward")
+                    ->args({"channel","toChannel","block","context","line"});
             addExtern<DAS_BIND_FUN(channelPeek)>(*this, lib,  "_builtin_channel_peek",
                 SideEffects::modifyArgumentAndExternal, "channelPeek")
                     ->args({"channel","block","context","line"});
             addExtern<DAS_BIND_FUN(channelVerify)>(*this, lib,  "_builtin_channel_verify",
-                SideEffects::modifyArgumentAndExternal, "channelGather")
+                SideEffects::modifyArgumentAndExternal, "channelVerify")
                     ->args({"channel","context","line"});
             addExtern<DAS_BIND_FUN(jobAppend)>(*this, lib, "append",
                 SideEffects::modifyArgument, "jobAppend")
