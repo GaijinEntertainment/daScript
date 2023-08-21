@@ -448,11 +448,15 @@ variant AudioCommand
     set_playback_position   : tuple<sid : SID; position : uint64>
 
 var g_command_channel : Channel?
+var g_collect_channel : Channel?
 
 [pinvoke, export]
-def setup_command_processor(ch : Channel?)
+def setup_command_processor(ch, cch : Channel?)
     g_command_channel = ch
     g_command_channel |> add_ref
+    if cch != null
+        g_collect_channel = cch
+        g_collect_channel |> add_ref
 
 def add_channel(sid : SID; var channel : AudioChannel?)
     g_channels |> push(channel)
@@ -466,17 +470,32 @@ def add_channel_3d(sid : SID; position : float3; radius : float; var channel : A
     channel->set3D()
     add_channel(sid, channel)
 
+def public audio_system_collect
+    //! delete collected audio commands
+    let cctx : Context? = unsafe(addr(this_context()))
+    g_collect_channel |> gather_ex <| $(cmd : AudioCommand#; info:TypeInfo const?; var ctx:Context)
+        unsafe
+            if addr(ctx) == cctx
+                var pCmd = reinterpret<AudioCommand?> addr(cmd)
+                delete pCmd
+
 def command_processor
     return if g_command_channel == null
     var commands : array<AudioCommand>
-    g_command_channel |> gather <| $(cmd : AudioCommand#)
-        commands |> push_clone(cmd)
+    if g_collect_channel != null
+        g_command_channel |> gather_and_forward(g_collect_channel) <| $(cmd : AudioCommand#)
+            commands |> push_clone(cmd)
+    else
+        g_command_channel |> gather <| $(cmd : AudioCommand#)
+            commands |> push_clone(cmd)
     for cmd in commands
         if cmd is shutdown
             unsafe
                 delete g_channels
             g_sid_2_channel |> clear()
             g_command_channel |> release
+            if g_collect_channel != null
+                g_collect_channel |> release
         elif cmd is add_decoder
             assume dcmd = cmd as add_decoder
             var decoder  = new AudioSourceDecoder()
@@ -638,30 +657,42 @@ def finalize_mixer
         let UTILIZATION = int(SPEED / SPEED_OF_LIGHT * 1000.lf)
         to_log(LOG_INFO, "mixer {UTILIZATION/10}.{UTILIZATION%10}% utilization\n")
 
-def public audio_system_create() : Channel?
+def public audio_system_create(collect:bool=false) : tuple<command:Channel?;collect:Channel?>
     sound_initalize(@@mixer, MA_SAMPLE_RATE, MA_CHANNELS, this_context())
     var channel = unsafe(channel_create())
     channel |> add_ref()
     g_command_channel = channel
-    unsafe
-        invoke_in_context(mixer_context(), "setup_command_processor", channel)
-    return channel
+    var collectChannel : Channel?
+    if collect
+        collectChannel = unsafe(channel_create())
+        collectChannel |> add_ref()
+        g_collect_channel = collectChannel
+    unsafe(invoke_in_context(mixer_context(), "setup_command_processor", channel, collectChannel))
+    return [[auto channel, collectChannel]]
 
-def public audio_system_finalize(var channel : Channel?&)
+def public audio_system_finalize(var channel, collectChannel : Channel?&)
     channel |> push <| new [[AudioCommand shutdown=true]]
-    unsafe
-        invoke_in_context(mixer_context(), "command_processor")
+    unsafe(invoke_in_context(mixer_context(), "command_processor"))
     sound_finalize()
     g_command_channel |> release
     channel |> join
-    unsafe
-        channel_remove(channel)
+    unsafe(channel_remove(channel))
     channel = null
+    if g_collect_channel != null
+        g_collect_channel |> release
+        collectChannel |> join
+        unsafe(channel_remove(collectChannel))
+        collectChannel = null
 
 def public with_audio_system(blk : block)
-    var channel = audio_system_create()
+    var channels = audio_system_create()
     invoke(blk)
-    audio_system_finalize(channel)
+    audio_system_finalize(channels.command,channels.collect)
+
+def public with_collected_audio_system(blk : block)
+    var channels = audio_system_create(true)
+    invoke(blk)
+    audio_system_finalize(channels.command,channels.collect)
 
 var private g_sound_sid = 1ul
 
