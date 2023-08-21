@@ -602,7 +602,9 @@ namespace das
             *value += step;
             return true;
         }
-        virtual void close ( Context &, char * ) override { }
+        virtual void close ( Context & context, char * ) override {
+            context.heap->free((char *)this, sizeof(CountIterator));
+        }
         int32_t start = 0;
         int32_t step = 0;
     };
