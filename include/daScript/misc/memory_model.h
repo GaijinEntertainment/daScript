@@ -272,10 +272,18 @@ namespace das {
         char * reallocate ( char * ptr, uint32_t size, uint32_t nsize );
         __forceinline int depth() const { return shoe.depth(); }
         __forceinline bool isOwnPtr( char * ptr, uint32_t size ) const {
-            return (size<=DAS_MAX_SHOE_ALLOCATION) ? shoe.isOwnPtr(ptr,size) : (bigStuff.find(ptr)!=bigStuff.end());
+#if !DAS_TRACK_ALLOCATIONS
+            if ( size<=DAS_MAX_SHOE_ALLOCATION )
+                return shoe.isOwnPtr(ptr,size);
+#endif
+            return (bigStuff.find(ptr)!=bigStuff.end());
         }
         __forceinline bool isAllocatedPtr( char * ptr, uint32_t size ) const {
-            return (size<=DAS_MAX_SHOE_ALLOCATION) ? shoe.isAllocatedPtr(ptr,size) : (bigStuff.find(ptr)!=bigStuff.end());
+#if !DAS_TRACK_ALLOCATIONS
+            if ( size<=DAS_MAX_SHOE_ALLOCATION )
+                return shoe.isAllocatedPtr(ptr,size);
+#endif
+            return (bigStuff.find(ptr)!=bigStuff.end());
         }
         uint32_t bytesAllocated() const { return totalAllocated; }
         uint32_t maxBytesAllocated() const { return maxAllocated; }

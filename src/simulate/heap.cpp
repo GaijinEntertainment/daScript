@@ -38,9 +38,12 @@ namespace das {
 
     bool PersistentHeapAllocator::mark ( char * ptr, uint32_t len ) {
         auto size = (len + 15) & ~15; // model.alignMask
+#if !DAS_TRACK_ALLOCATIONS
         if ( size <= DAS_MAX_SHOE_ALLOCATION ) {
             return model.shoe.mark(ptr,size);
-        } else {
+        } else
+#endif
+        {
             auto it = model.bigStuff.find(ptr);
             if ( it != model.bigStuff.end() ) {
                 bool marked = it->second & DAS_PAGE_GC_MASK;
@@ -240,9 +243,12 @@ namespace das {
 
     bool PersistentStringAllocator::mark ( char * ptr, uint32_t len ) {
         auto size = (len + 15) & ~15; // model.alignMask
+#if !DAS_TRACK_ALLOCATIONS
         if (size <= DAS_MAX_SHOE_ALLOCATION) {
             return model.shoe.mark(ptr,len);
-        } else {
+        } else
+#endif
+        {
             auto it = model.bigStuff.find(ptr);
             if ( it != model.bigStuff.end() ) {
                 bool marked = it->second & DAS_PAGE_GC_MASK;
