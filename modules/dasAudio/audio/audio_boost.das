@@ -475,9 +475,8 @@ def public audio_system_collect
     let cctx : Context? = unsafe(addr(this_context()))
     g_collect_channel |> gather_ex <| $(cmd : AudioCommand#; info:TypeInfo const?; var ctx:Context)
         unsafe
-            if addr(ctx) == cctx
-                var pCmd = reinterpret<AudioCommand?> addr(cmd)
-                delete pCmd
+            var pCmd = reinterpret<AudioCommand?> addr(cmd)
+            delete pCmd
 
 def command_processor
     return if g_command_channel == null
