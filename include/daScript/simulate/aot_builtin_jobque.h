@@ -54,7 +54,7 @@ namespace das {
         void for_each_item ( TT && tt ) {
             lock_guard<mutex> guard(mCompleteMutex);
             for ( auto & f : pipe ) {
-                tt(f.data, f.type, f.from.get());
+                tt(f.data, f.type, f.from ? f.from.get() : owner);
             }
         }
         template <typename TT>
@@ -69,11 +69,13 @@ namespace das {
         void gather_and_forward ( Channel * that, TT && tt ) {
             lock_guard<mutex> guard(mCompleteMutex);
             for ( auto & f : pipe ) {
-                tt(f.data, f.type, f.from.get());
+                tt(f.data, f.type, f.from ? f.from.get() : owner);
             }
             lock_guard<mutex> guard2(that->mCompleteMutex);
             for ( auto & f : pipe ) {
-                that->pipe.emplace_back(move(f));
+                if ( !f.from ) {
+                    that->pipe.emplace_back(move(f));
+                }
             }
             pipe.clear();
             that->mCond.notify_all();  // notify_one??
