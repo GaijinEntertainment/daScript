@@ -472,7 +472,6 @@ def add_channel_3d(sid : SID; position : float3; radius : float; var channel : A
 
 def public audio_system_collect
     //! delete collected audio commands
-    let cctx : Context? = unsafe(addr(this_context()))
     g_collect_channel |> gather_ex <| $(cmd : AudioCommand#; info:TypeInfo const?; var ctx:Context)
         unsafe
             var pCmd = reinterpret<AudioCommand?> addr(cmd)
@@ -656,7 +655,7 @@ def finalize_mixer
         let UTILIZATION = int(SPEED / SPEED_OF_LIGHT * 1000.lf)
         to_log(LOG_INFO, "mixer {UTILIZATION/10}.{UTILIZATION%10}% utilization\n")
 
-def public audio_system_create(collect:bool=false) : tuple<command:Channel?;collect:Channel?>
+def public audio_system_create(collect : bool = false) : tuple<command : Channel?; collect : Channel?>
     sound_initalize(@@mixer, MA_SAMPLE_RATE, MA_CHANNELS, this_context())
     var channel = unsafe(channel_create())
     channel |> add_ref()
@@ -686,12 +685,12 @@ def public audio_system_finalize(var channel, collectChannel : Channel?&)
 def public with_audio_system(blk : block)
     var channels = audio_system_create()
     invoke(blk)
-    audio_system_finalize(channels.command,channels.collect)
+    audio_system_finalize(channels.command, channels.collect)
 
 def public with_collected_audio_system(blk : block)
     var channels = audio_system_create(true)
     invoke(blk)
-    audio_system_finalize(channels.command,channels.collect)
+    audio_system_finalize(channels.command, channels.collect)
 
 var private g_sound_sid = 1ul
 
@@ -890,3 +889,17 @@ def public set_audio_thread_command_channel(ch : void?)
     g_command_channel = channel
     if g_command_channel != null
         g_command_channel |> add_ref
+
+def public get_collect_command_channel : void ?
+    return g_command_channel
+
+[unsafe_operation]
+def public set_collect_thread_command_channel(ch : void?)
+    var channel = unsafe(reinterpret<Channel?> ch)
+    if channel == g_collect_channel
+        return
+    if g_collect_channel != null
+        g_collect_channel |> release
+    g_collect_channel = channel
+    if g_collect_channel != null
+        g_collect_channel |> add_ref
