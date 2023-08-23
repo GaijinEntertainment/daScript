@@ -66,6 +66,19 @@ namespace das {
             pipe.clear();
         }
         template <typename TT>
+        void gatherEx ( Context * ctx, TT && tt ) {
+            lock_guard<mutex> guard(mCompleteMutex);
+            for ( auto f = pipe.begin(); f != pipe.end(); ) {
+                auto itOwner = f->from ? f->from.get() : owner;
+                if ( itOwner == ctx ) {
+                    tt(f->data, f->type, itOwner);
+                    f = pipe.erase(f);
+                } else {
+                    ++f;
+                }
+            }
+        }
+        template <typename TT>
         void gather_and_forward ( Channel * that, TT && tt ) {
             lock_guard<mutex> guard(mCompleteMutex);
             for ( auto & f : pipe ) {
@@ -73,9 +86,7 @@ namespace das {
             }
             lock_guard<mutex> guard2(that->mCompleteMutex);
             for ( auto & f : pipe ) {
-                if ( !f.from ) {
-                    that->pipe.emplace_back(move(f));
-                }
+                that->pipe.emplace_back(move(f));
             }
             pipe.clear();
             that->mCond.notify_all();  // notify_one??

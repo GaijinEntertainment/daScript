@@ -105,7 +105,7 @@ namespace das {
 
     void channelGatherEx ( Channel * ch, const TBlock<void,void *,const TypeInfo *, Context &> & blk, Context * context, LineInfoArg * at ) {
         if ( !ch ) context->throw_error_at(at, "channelGather: channel is null");
-        ch->gather([&](void * data, TypeInfo * tinfo, Context * ctx) {
+        ch->gatherEx(context, [&](void * data, TypeInfo * tinfo, Context * ctx) {
             das_invoke<void>::invoke<void *,const TypeInfo *,Context &>(context, at, blk, data, tinfo, *ctx);
         });
     }
