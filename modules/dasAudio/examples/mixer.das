@@ -25,6 +25,25 @@ def play_with_reverb ( preset : ReverbPreset )
 
 [export]
 def main
+
+    with_audio_system <|
+        let velocity = 30.0
+        print("doppler, velocity {velocity}\n")
+        set_head_position(float3(0,0,0),float3(0,-1,0))
+        print("play sin-440 looped\n")
+        var sin1 <- [{for x in range(MA_SAMPLE_RATE); sin(2.*PI*440.*float(x)/float(48000))}]
+        let sid_pcm = play_3d_sound_loop_from_pcm(float3(0),100.0,MA_SAMPLE_RATE,1,sin1)
+        sid_pcm |> set_volume(0.25)
+        print("stationarry\n")
+        sid_pcm |> set_position(float3(0,1,0))
+        sleep(1500u)
+        print("moving towards me\n")
+        sid_pcm |> set_position(float3(0,1,0), float3(0.,-velocity,0.))
+        sleep(1500u)
+        print("moving away from me\n")
+        sid_pcm |> set_position(float3(0,1,0), float3(0., velocity,0.))
+        sleep(1500u)
+
     with_audio_system <|
         print("testing reverb\n")
         print("no reverb\n")

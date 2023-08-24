@@ -14,6 +14,8 @@ require daslib/array_boost
 require daslib/jobque_boost
 require daslib/apply_in_context
 
+let public MA_SPEED_OF_SOUND = 343.3f
+
 // audio config
 let public MA_SAMPLE_RATE = 48000
 let public MA_CHANNELS = 2
@@ -65,6 +67,8 @@ class AudioChannel
     volume_mixer : ma_volume_mixer
     playback_position : uint64 = 0ul
     position3d : float3
+    velocity3d : float3
+    doppler : float = 1.
     radius : float = 1.
     is3D : bool = false
     [[do_not_delete]] status : LockBox? = null
@@ -138,7 +142,7 @@ class AudioChannel
             return true
         if stop && volume_mixer.volume == 0.
             return false
-        let inputRate = uint(float(source.bitrate) * pitch * g_pitch)
+        let inputRate = uint(float(source.bitrate) * pitch * doppler * g_pitch)
         ma_resampler_set_rate(unsafe(addr(resampler)), inputRate, uint(rate))
         var outputFrames = uint64(data |> length / channels)
         var inputFrames = ma_resampler_get_required_input_frame_count(unsafe(addr(resampler)), outputFrames)
@@ -368,6 +372,7 @@ def remove_channel(srci : int)
 
 var g_head_position : float3
 var g_head_direction : float3 = float3(0., 1., 0.)
+var g_head_velocity : float3
 
 def update_hrtf
     for ch in g_channels
@@ -382,14 +387,17 @@ def update_hrtf
                 let iasimuth = int(asimuth * 180. / PI)
                 let ielevation = int(elevation * 180. / PI)
                 ma_hrtf_set_direction(unsafe(addr(ch.hrtf)), iasimuth, ielevation)
-                // print("{iasimuth} {ielevation}\n")
             else
                 // panning
                 ma_volume_mixer_set_pan(unsafe(addr(ch.volume_mixer)), nrxy.y)
             // linear volume attenuation???
             let attn = max(0.0f, 1.0f - length(rxy) / ch.radius)
             ma_volume_mixer_set_volume(unsafe(addr(ch.volume_mixer)), ch.volume * attn)
-
+            // doppler
+            let vrel = g_head_velocity - ch.velocity3d
+            let r = normalize(ch.position3d - g_head_position)
+            let v = dot(vrel, r)
+            ch.doppler = 1. + v / MA_SPEED_OF_SOUND
 
 struct AudioCommandAddDecoder
     sid : SID
@@ -426,6 +434,16 @@ struct AudioCommandStatus
     sid : SID
     [[do_not_delete]] status : LockBox?
 
+struct AudioCommandSoundPosition3D
+    sid : SID
+    position : float3
+    velocity : float3
+
+struct AudioCommandHeadPosition3D
+    position : float3
+    direction : float3
+    velocity : float3
+
 variant AudioCommand
     shutdown                : bool
     add_decoder             : AudioCommandAddDecoder
@@ -441,8 +459,8 @@ variant AudioCommand
     pitch                   : tuple<sid : SID; pitch : float>
     global_pitch            : float
     stop                    : tuple<sid : SID; time : float>
-    head_transform          : tuple<head_position : float3; head_direction : float3>
-    sound_position          : tuple<sid : SID; position : float3>
+    head_transform          : AudioCommandHeadPosition3D
+    sound_position          : AudioCommandSoundPosition3D
     status                  : AudioCommandStatus
     reverb                  : tuple<sid : SID; properties : I3DL2ReverbProperties>
     set_playback_position   : tuple<sid : SID; position : uint64>
@@ -567,12 +585,14 @@ def command_processor
                     ch.stop = true
         elif cmd is head_transform
             assume hcmd = cmd as head_transform
-            g_head_position = hcmd.head_position
-            g_head_direction = normalize(hcmd.head_direction)
+            g_head_position = hcmd.position
+            g_head_direction = normalize(hcmd.direction)
+            g_head_velocity = hcmd.velocity
         elif cmd is sound_position
             assume scmd = cmd as sound_position
             g_sid_2_channel |> get(scmd.sid) <| $(var ch : AudioChannel?&)
                 ch.position3d = scmd.position
+                ch.velocity3d = scmd.velocity
         elif cmd is status
             assume scmd = cmd as status
             let found = g_sid_2_channel |> get(scmd.sid) <| $(var ch : AudioChannel?&)
@@ -799,13 +819,13 @@ def public stop(sid : SID; time : float = 0.0f)
     g_command_channel |> push <| new [[AudioCommand stop=[[auto sid, time]]]]
     return sid
 
-def public set_head_position(pos, dir : float3)
+def public set_head_position(pos, dir : float3; vel : float3 = float3(0.))
     //! set head position for 3D sound
-    g_command_channel |> push <| new [[AudioCommand pos, dir]]
+    g_command_channel |> push <| new [[AudioCommand head_transform = [[AudioCommandHeadPosition3D position=pos, direction=dir, velocity=vel]]]]
 
-def public set_position(sid : SID; pos : float3)
+def public set_position(sid : SID; pos : float3; dir : float3 = float3(0.))
     //! set sound position for 3D sound
-    g_command_channel |> push <| new [[AudioCommand sid, pos]]
+    g_command_channel |> push <| new [[AudioCommand sound_position=[[AudioCommandSoundPosition3D sid=sid, position=pos, velocity=dir]]]]
     return sid
 
 def public set_status_update(sid : SID; var status : LockBox?)
