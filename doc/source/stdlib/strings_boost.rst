@@ -342,4 +342,23 @@ is_hex returns bool
 
 |function-strings_boost-is_hex|
 
++++++++++++++
+Uncategorized
++++++++++++++
+
+.. _function-_at_strings_boost_c__c_is_tab_or_space_Ci:
+
+.. das:function:: is_tab_or_space(ch: int const)
+
+is_tab_or_space returns bool
+
++--------+-------------+
++argument+argument type+
++========+=============+
++ch      +int const    +
++--------+-------------+
+
+
+|function-strings_boost-is_tab_or_space|
+
 

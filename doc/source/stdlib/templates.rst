@@ -38,6 +38,12 @@ For example::
 Call macros
 +++++++++++
 
+.. _call-macro-templates-decltype_noref:
+
+.. das:attribute:: decltype_noref
+
+This macro returns TypeDecl for the corresponding expression, minus the ref (&) portion.
+
 .. _call-macro-templates-decltype:
 
 .. das:attribute:: decltype
@@ -47,11 +53,5 @@ This macro returns ast::TypeDecl for the corresponding expression. For example::
     let x = 1
     let y <- decltype(x) // [[TypeDecl() baseType==Type tInt, flags=TypeDeclFlags constant | TypeDeclFlags ref]]
 
-
-.. _call-macro-templates-decltype_noref:
-
-.. das:attribute:: decltype_noref
-
-This macro returns TypeDecl for the corresponding expression, minus the ref (&) portion.
 
 
