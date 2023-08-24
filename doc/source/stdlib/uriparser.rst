@@ -89,27 +89,27 @@ UriPathSegmentStructA fields are
 UriUriA fields are
 
 +------------+-----------------------------------------------------------------------------------+
-+query       + :ref:`uriparser::UriTextRangeA <handle-uriparser-UriTextRangeA>`                  +
++hostData    + :ref:`uriparser::UriHostDataA <handle-uriparser-UriHostDataA>`                    +
 +------------+-----------------------------------------------------------------------------------+
 +absolutePath+int                                                                                +
 +------------+-----------------------------------------------------------------------------------+
-+fragment    + :ref:`uriparser::UriTextRangeA <handle-uriparser-UriTextRangeA>`                  +
-+------------+-----------------------------------------------------------------------------------+
-+userInfo    + :ref:`uriparser::UriTextRangeA <handle-uriparser-UriTextRangeA>`                  +
-+------------+-----------------------------------------------------------------------------------+
 +hostText    + :ref:`uriparser::UriTextRangeA <handle-uriparser-UriTextRangeA>`                  +
-+------------+-----------------------------------------------------------------------------------+
-+scheme      + :ref:`uriparser::UriTextRangeA <handle-uriparser-UriTextRangeA>`                  +
-+------------+-----------------------------------------------------------------------------------+
-+hostData    + :ref:`uriparser::UriHostDataA <handle-uriparser-UriHostDataA>`                    +
-+------------+-----------------------------------------------------------------------------------+
-+portText    + :ref:`uriparser::UriTextRangeA <handle-uriparser-UriTextRangeA>`                  +
 +------------+-----------------------------------------------------------------------------------+
 +pathTail    + :ref:`uriparser::UriPathSegmentStructA <handle-uriparser-UriPathSegmentStructA>` ?+
 +------------+-----------------------------------------------------------------------------------+
++pathHead    + :ref:`uriparser::UriPathSegmentStructA <handle-uriparser-UriPathSegmentStructA>` ?+
++------------+-----------------------------------------------------------------------------------+
++query       + :ref:`uriparser::UriTextRangeA <handle-uriparser-UriTextRangeA>`                  +
++------------+-----------------------------------------------------------------------------------+
++scheme      + :ref:`uriparser::UriTextRangeA <handle-uriparser-UriTextRangeA>`                  +
++------------+-----------------------------------------------------------------------------------+
++portText    + :ref:`uriparser::UriTextRangeA <handle-uriparser-UriTextRangeA>`                  +
++------------+-----------------------------------------------------------------------------------+
++fragment    + :ref:`uriparser::UriTextRangeA <handle-uriparser-UriTextRangeA>`                  +
++------------+-----------------------------------------------------------------------------------+
 +owner       +int                                                                                +
 +------------+-----------------------------------------------------------------------------------+
-+pathHead    + :ref:`uriparser::UriPathSegmentStructA <handle-uriparser-UriPathSegmentStructA>` ?+
++userInfo    + :ref:`uriparser::UriTextRangeA <handle-uriparser-UriTextRangeA>`                  +
 +------------+-----------------------------------------------------------------------------------+
 
 

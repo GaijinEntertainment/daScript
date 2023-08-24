@@ -228,6 +228,34 @@ this function is used to release a job status that is used by the jobque.
 Uncategorized
 +++++++++++++
 
+.. _function-_at_jobque_boost_c__c_capture_jobque_lock_box_C1_ls_H_ls_jobque_c__c_LockBox_gr__gr_?:
+
+.. das:function:: capture_jobque_lock_box(js: jobque::LockBox? const)
+
+capture_jobque_lock_box returns  :ref:`jobque::LockBox <handle-jobque-LockBox>` ?
+
++--------+-------------------------------------------------------+
++argument+argument type                                          +
++========+=======================================================+
++js      + :ref:`jobque::LockBox <handle-jobque-LockBox>` ? const+
++--------+-------------------------------------------------------+
+
+
+this function is used to capture a lock box that is used by the jobque.
+
+.. _function-_at_jobque_boost_c__c_release_capture_jobque_lock_box_C1_ls_H_ls_jobque_c__c_LockBox_gr__gr_?:
+
+.. das:function:: release_capture_jobque_lock_box(js: jobque::LockBox? const)
+
++--------+-------------------------------------------------------+
++argument+argument type                                          +
++========+=======================================================+
++js      + :ref:`jobque::LockBox <handle-jobque-LockBox>` ? const+
++--------+-------------------------------------------------------+
+
+
+this function is used to release a lock box that is used by the jobque.
+
 .. _function-_at_jobque_boost_c__c_gather_C1_ls_H_ls_jobque_c__c_Channel_gr__gr_?_CN_ls_arg_gr_0_ls_C_hh_Y_ls_TT_gr_._gr_1_ls_v_gr__builtin_:
 
 .. das:function:: gather(ch: jobque::Channel? const; blk: block<(arg:auto(TT) const#):void> const)
@@ -238,6 +266,44 @@ gather returns auto
 +argument+argument type                                          +
 +========+=======================================================+
 +ch      + :ref:`jobque::Channel <handle-jobque-Channel>` ? const+
++--------+-------------------------------------------------------+
++blk     +block<(arg:auto(TT) const#):void> const                +
++--------+-------------------------------------------------------+
+
+
+reads input from the channel (in order it was pushed) and invokes the block on each input.
+afterwards input is consumed
+
+.. _function-_at_jobque_boost_c__c_gather_ex_C1_ls_H_ls_jobque_c__c_Channel_gr__gr_?_CN_ls_arg;info;ctx_gr_0_ls_C_hh_Y_ls_TT_gr_.;C1_ls_CH_ls_rtti_c__c_TypeInfo_gr__gr_?;H_ls_rtti_c__c_Context_gr__gr_1_ls_v_gr__builtin_:
+
+.. das:function:: gather_ex(ch: jobque::Channel? const; blk: block<(arg:auto(TT) const#;info:rtti::TypeInfo const? const;var ctx:rtti::Context -const):void> const)
+
+gather_ex returns auto
+
++--------+---------------------------------------------------------------------------------------------------------------------------------------------------------+
++argument+argument type                                                                                                                                            +
++========+=========================================================================================================================================================+
++ch      + :ref:`jobque::Channel <handle-jobque-Channel>` ? const                                                                                                  +
++--------+---------------------------------------------------------------------------------------------------------------------------------------------------------+
++blk     +block<(arg:auto(TT) const#;info: :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const? const;ctx: :ref:`rtti::Context <handle-rtti-Context>` ):void> const+
++--------+---------------------------------------------------------------------------------------------------------------------------------------------------------+
+
+
+reads input from the channel (in order it was pushed) and invokes the block on each input.
+afterwards input is consumed
+
+.. _function-_at_jobque_boost_c__c_gather_and_forward_C1_ls_H_ls_jobque_c__c_Channel_gr__gr_?_C1_ls_H_ls_jobque_c__c_Channel_gr__gr_?_CN_ls_arg_gr_0_ls_C_hh_Y_ls_TT_gr_._gr_1_ls_v_gr__builtin_:
+
+.. das:function:: gather_and_forward(ch: jobque::Channel? const; toCh: jobque::Channel? const; blk: block<(arg:auto(TT) const#):void> const)
+
+gather_and_forward returns auto
+
++--------+-------------------------------------------------------+
++argument+argument type                                          +
++========+=======================================================+
++ch      + :ref:`jobque::Channel <handle-jobque-Channel>` ? const+
++--------+-------------------------------------------------------+
++toCh    + :ref:`jobque::Channel <handle-jobque-Channel>` ? const+
 +--------+-------------------------------------------------------+
 +blk     +block<(arg:auto(TT) const#):void> const                +
 +--------+-------------------------------------------------------+
@@ -319,6 +385,91 @@ pop_and_clone_one returns auto
 
 
 reads one command from channel
+
+.. _function-_at_jobque_boost_c__c_set_C1_ls_H_ls_jobque_c__c_LockBox_gr__gr_?_CY_ls_TT_gr_.:
+
+.. das:function:: set(box: jobque::LockBox? const; data: auto(TT) const)
+
+set returns auto
+
++--------+-------------------------------------------------------+
++argument+argument type                                          +
++========+=======================================================+
++box     + :ref:`jobque::LockBox <handle-jobque-LockBox>` ? const+
++--------+-------------------------------------------------------+
++data    +auto(TT) const                                         +
++--------+-------------------------------------------------------+
+
+
+sets value to the lock box
+
+.. _function-_at_jobque_boost_c__c_set_C1_ls_H_ls_jobque_c__c_LockBox_gr__gr_?_C1_ls_._gr_?:
+
+.. das:function:: set(box: jobque::LockBox? const; data: auto? const)
+
+set returns auto
+
++--------+-------------------------------------------------------+
++argument+argument type                                          +
++========+=======================================================+
++box     + :ref:`jobque::LockBox <handle-jobque-LockBox>` ? const+
++--------+-------------------------------------------------------+
++data    +auto? const                                            +
++--------+-------------------------------------------------------+
+
+
+sets value to the lock box
+
+.. _function-_at_jobque_boost_c__c_get_C1_ls_H_ls_jobque_c__c_LockBox_gr__gr_?_CN_ls_res_gr_0_ls_C_hh_Y_ls_TT_gr_._gr_1_ls_v_gr__builtin_:
+
+.. das:function:: get(box: jobque::LockBox? const; blk: block<(res:auto(TT) const#):void> const)
+
+get returns auto
+
++--------+-------------------------------------------------------+
++argument+argument type                                          +
++========+=======================================================+
++box     + :ref:`jobque::LockBox <handle-jobque-LockBox>` ? const+
++--------+-------------------------------------------------------+
++blk     +block<(res:auto(TT) const#):void> const                +
++--------+-------------------------------------------------------+
+
+
+reads value from the lock box and invokes the block on it
+
+.. _function-_at_jobque_boost_c__c_update_C1_ls_H_ls_jobque_c__c_LockBox_gr__gr_?_CN_ls_res_gr_0_ls__hh_Y_ls_TT_gr_._gr_1_ls_v_gr__builtin_:
+
+.. das:function:: update(box: jobque::LockBox? const; blk: block<(var res:auto(TT)# -const):void> const)
+
+update returns auto
+
++--------+-------------------------------------------------------+
++argument+argument type                                          +
++========+=======================================================+
++box     + :ref:`jobque::LockBox <handle-jobque-LockBox>` ? const+
++--------+-------------------------------------------------------+
++blk     +block<(res:auto(TT)#):void> const                      +
++--------+-------------------------------------------------------+
+
+
+update value in the lock box and invokes the block on it
+
+.. _function-_at_jobque_boost_c__c_clear_C1_ls_H_ls_jobque_c__c_LockBox_gr__gr_?_CY_ls_TT_gr_.:
+
+.. das:function:: clear(box: jobque::LockBox? const; type_: auto(TT) const)
+
+clear returns auto
+
++--------+-------------------------------------------------------+
++argument+argument type                                          +
++========+=======================================================+
++box     + :ref:`jobque::LockBox <handle-jobque-LockBox>` ? const+
++--------+-------------------------------------------------------+
++type_   +auto(TT) const                                         +
++--------+-------------------------------------------------------+
+
+
+clear value from the lock box
 
 .. _function-_at_jobque_boost_c__c_each_clone_1_ls_H_ls_jobque_c__c_Channel_gr__gr_?_CY_ls_TT_gr_.:
 
