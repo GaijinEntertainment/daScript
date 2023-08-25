@@ -497,7 +497,7 @@ namespace das {
         return reinterpret_cast<float4x4&>(mat);;
     }
 
-    void float4x4_decompose(const float4x4 & mat, float3 & pos, float4 & rot, float4 & scale) {
+    void float4x4_decompose(const float4x4 & mat, float3 & pos, float4 & rot, float3 & scale) {
         mat44f gmat;
         memcpy(&gmat, &mat, sizeof(float4x4));
         vec3f gpos;

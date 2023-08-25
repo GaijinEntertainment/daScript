@@ -86,8 +86,8 @@ def test_matrix_manip ( t:T? )
     t |> run("fuzz decompose") <| @@ ( t : T? )
         var fake <- Faker()
         fuzz <|
-            var pos : float3
-            var rot, scale : float4
+            var pos, scale : float3
+            var rot : float4
             t |> accept ( decompose ( fake |> random_float4x4, pos, rot, scale ) )
 
     t |> run("fuzz inverse") <| @@ ( t : T? )
