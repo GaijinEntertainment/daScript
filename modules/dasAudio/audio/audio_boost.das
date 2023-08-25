@@ -14,7 +14,8 @@ require daslib/array_boost
 require daslib/jobque_boost
 require daslib/apply_in_context
 
-let public MA_SPEED_OF_SOUND = 343.3f
+let public SPEED_OF_SOUND = 343.3f
+let public MAX_SPEED_OF_OBJECT = SPEED_OF_SOUND / 2.
 
 // audio config
 let public MA_SAMPLE_RATE = 48000
@@ -40,6 +41,46 @@ struct public AudioChannelStatus
     state : AudioChannelState
     playback_position : uint64
     stream_que_length : int
+
+struct public Attenuation
+    A, B, C, D : float
+    E : float = 1.
+    F : float
+
+def public compute_attenuation ( attn:Attenuation; d:float )
+    //! compute attenuation given distance
+    let d2 = d * d
+    let denom = attn.D * d2 + attn.E * d + attn.F
+    if denom == 0.
+        return 1.
+    return clamp((attn.A * d2 + attn.B * d + attn.C) / denom, 0., 1.)
+
+def public inverse_distance_attenuation ( dmin:float )
+    //! DEFAULT ATTENUATION MODEL
+    //! fades with inverse distance, i.e. dmin / (d + dmin)
+    // ( dmin / (d + dmin) )
+    return [[Attenuation A=0., B=0., C=dmin, D=0., E=1., F=dmin]]
+
+def public linear_attenuation ( dmax:float )
+    //! fades linearly with distance, i.e 1 - d / dmax
+    // ( -1/dmax * d + 1 ) / 1
+    return [[Attenuation A=0., B=-1./dmax, C=1., D=0., E=0., F=1.]]
+
+def public quadratic_attenuation ( dmax:float )
+    //! fades quadratically with distance, i.e 1 - d^2 / dmax^2
+    // ( -1/dmax^2 * d^2 + 1 ) / 1
+    return [[Attenuation A=-1./dmax/dmax, B=0., C=1., D=0., E=0., F=1.]]
+
+def public inverse_square_attenuation ( dmin:float )
+    //! fades with inverse square distance, i.e. dmin^2 / (d^2 + dmin^2)
+    // ( dmin^2 / (d^2 + dmin^2) )
+    let dmin2 = dmin * dmin
+    return [[Attenuation A=0., B=0., C=dmin2, D=1., E=0., F=dmin2]]
+
+def public default_attenuation
+    //! default attenuation
+    //! 1 / (d + 1)
+    return inverse_distance_attenuation(1.)
 
 let STOPPED_STATUS = new [[AudioChannelStatus state=AudioChannelState stopped]]
 
@@ -69,7 +110,7 @@ class AudioChannel
     position3d : float3
     velocity3d : float3
     doppler : float = 1.
-    radius : float = 1.
+    attenuation : Attenuation = default_attenuation()
     is3D : bool = false
     [[do_not_delete]] status : LockBox? = null
     [[do_not_delete]] reverb : I3DL2Reverb?
@@ -391,13 +432,14 @@ def update_hrtf
                 // panning
                 ma_volume_mixer_set_pan(unsafe(addr(ch.volume_mixer)), nrxy.y)
             // linear volume attenuation???
-            let attn = max(0.0f, 1.0f - length(rxy) / ch.radius)
+            let distance = length(ch.position3d - g_head_position)
+            let attn = compute_attenuation(ch.attenuation, distance)
             ma_volume_mixer_set_volume(unsafe(addr(ch.volume_mixer)), ch.volume * attn)
             // doppler
             let vrel = g_head_velocity - ch.velocity3d
             let r = normalize(ch.position3d - g_head_position)
-            let v = dot(vrel, r)
-            ch.doppler = 1. + v / MA_SPEED_OF_SOUND
+            let v = clamp ( dot(vrel, r), -MAX_SPEED_OF_OBJECT, MAX_SPEED_OF_OBJECT )
+            ch.doppler = 1. + v / SPEED_OF_SOUND
 
 struct AudioCommandAddDecoder
     sid : SID
@@ -407,7 +449,7 @@ struct AudioCommandAddDecoder
 
 struct AudioCommandAddDecoder3D : AudioCommandAddDecoder
     position : float3
-    radius : float
+    attenuation : Attenuation
 
 struct AudioCommandAddPCM
     sid : SID
@@ -418,7 +460,7 @@ struct AudioCommandAddPCM
 
 struct AudioCommandAddPCM3D : AudioCommandAddPCM
     position : float3
-    radius : float
+    attenuation : Attenuation
 
 struct AudioCommandAddPCMStream
     sid : SID
@@ -428,7 +470,7 @@ struct AudioCommandAddPCMStream
 
 struct AudioCommandAddPCMStream3D : AudioCommandAddPCMStream
     position : float3
-    radius : float
+    attenuation : Attenuation
 
 struct AudioCommandStatus
     sid : SID
@@ -482,9 +524,9 @@ def add_channel(sid : SID; var channel : AudioChannel?)
         channel.sid = sid
         g_sid_2_channel[sid] = channel
 
-def add_channel_3d(sid : SID; position : float3; radius : float; var channel : AudioChannel?)
+def add_channel_3d(sid : SID; position : float3; attenuation : Attenuation; var channel : AudioChannel?)
     channel.position3d = position
-    channel.radius = radius
+    channel.attenuation = attenuation
     channel->set3D()
     add_channel(sid, channel)
 
@@ -521,7 +563,7 @@ def command_processor
             assume dcmd = cmd as add_decoder_3d
             var decoder  = new AudioSourceDecoder()
             decoder->initFromDecoder(unsafe(reinterpret<ma_decoder?> dcmd.decoder), dcmd.rate, dcmd.channels)
-            add_channel_3d(dcmd.sid, dcmd.position, dcmd.radius) <| new AudioChannel(decoder)
+            add_channel_3d(dcmd.sid, dcmd.position, dcmd.attenuation) <| new AudioChannel(decoder)
         elif cmd is add_pcm_stream
             assume pcmd = cmd as add_pcm_stream
             var decoder = new AudioSourcePCMStream(pcmd.channels, pcmd.rate)
@@ -529,7 +571,7 @@ def command_processor
         elif cmd is add_pcm_stream_3d
             assume pcmd = cmd as add_pcm_stream_3d
             var decoder = new AudioSourcePCMStream(pcmd.channels, pcmd.rate)
-            add_channel_3d(pcmd.sid, pcmd.position, pcmd.radius) <| new AudioChannel(decoder)
+            add_channel_3d(pcmd.sid, pcmd.position, pcmd.attenuation) <| new AudioChannel(decoder)
         elif cmd is add_pcm
             assume pcmd = cmd as add_pcm
             var decoder : audio_boost::AudioSource?
@@ -545,7 +587,7 @@ def command_processor
                 decoder = new AudioSourcePCMLoop(pcmd.channels, pcmd.rate, pcmd.samples)
             else
                 decoder = new AudioSourcePCM(pcmd.channels, pcmd.rate, pcmd.samples)
-            add_channel_3d(pcmd.sid, pcmd.position, pcmd.radius) <| new AudioChannel(decoder)
+            add_channel_3d(pcmd.sid, pcmd.position, pcmd.attenuation) <| new AudioChannel(decoder)
         elif cmd is append_pcm
             assume pcmd = cmd as append_pcm
             g_sid_2_channel |> get(pcmd.sid) <| $(var ch : AudioChannel?&)
@@ -736,7 +778,7 @@ def public play_sound_from_file(filename : string; rate, channels : int)
     g_command_channel |> push <| new [[AudioCommand add_decoder=[[AudioCommandAddDecoder sid=sid, decoder=decoder, rate=rate, channels=channels]]]]
     return sid
 
-def public play_3d_sound_from_file(filename : string; position : float3; radius : float; rate, channels : int)
+def public play_3d_sound_from_file(filename : string; position : float3; attenuation : Attenuation; rate, channels : int)
     //! plays 3D sound from file
     //! note - this function is blocking for the duration of the decoder creation
     var decoder = make_decoder(filename, rate, channels)
@@ -744,7 +786,7 @@ def public play_3d_sound_from_file(filename : string; position : float3; radius 
         return INVALID_SID
     let sid = generate_sound_sid()
     g_command_channel |> push <| new [[AudioCommand add_decoder_3d=
-        [[AudioCommandAddDecoder3D sid=sid, decoder=decoder, rate=rate, channels=channels, position=position, radius=radius]]]]
+        [[AudioCommandAddDecoder3D sid=sid, decoder=decoder, rate=rate, channels=channels, position=position, attenuation=attenuation]]]]
     return sid
 
 def public play_sound_from_pcm_stream(rate, channels : int; sid : SID = generate_sound_sid())
@@ -752,11 +794,11 @@ def public play_sound_from_pcm_stream(rate, channels : int; sid : SID = generate
     g_command_channel |> push <| new [[AudioCommand add_pcm_stream <- [[AudioCommandAddPCMStream sid=sid, rate=rate, channels=channels]]]]
     return sid
 
-def public play_3d_sound_from_pcm_stream(position : float3; radius : float; rate, channels : int)
+def public play_3d_sound_from_pcm_stream(position : float3; attenuation : Attenuation; rate, channels : int)
     //! plays sound from PCM data
     var sid = generate_sound_sid()
     g_command_channel |> push <| new [[AudioCommand add_pcm_stream_3d <-
-        [[AudioCommandAddPCMStream3D sid=sid, rate=rate, channels=channels, position=position, radius=radius]]]]
+        [[AudioCommandAddPCMStream3D sid=sid, rate=rate, channels=channels, position=position, attenuation=attenuation]]]]
     return sid
 
 def public play_sound_from_pcm(rate, channels : int; var samples : array<float>)
@@ -771,18 +813,18 @@ def public play_sound_loop_from_pcm(rate, channels : int; var samples : array<fl
     g_command_channel |> push <| new [[AudioCommand add_pcm <- [[AudioCommandAddPCM sid=sid, rate=rate, channels=channels, samples <- samples, loop=true]]]]
     return sid
 
-def public play_3d_sound_from_pcm(position : float3; radius : float; rate, channels : int; var samples : array<float>)
+def public play_3d_sound_from_pcm(position : float3; attenuation : Attenuation; rate, channels : int; var samples : array<float>)
     //! plays 3D sound from PCM data
     var sid = generate_sound_sid()
     g_command_channel |> push <| new [[AudioCommand add_pcm_3d <-
-        [[AudioCommandAddPCM3D sid=sid, rate=rate, channels=channels, samples <- samples, loop=false, position=position, radius=radius]]]]
+        [[AudioCommandAddPCM3D sid=sid, rate=rate, channels=channels, samples <- samples, loop=false, position=position, attenuation=attenuation]]]]
     return sid
 
-def public play_3d_sound_loop_from_pcm(position : float3; radius : float; rate, channels : int; var samples : array<float>)
+def public play_3d_sound_loop_from_pcm(position : float3; attenuation : Attenuation; rate, channels : int; var samples : array<float>)
     //! plays 3D looping sound from PCM data
     var sid = generate_sound_sid()
     g_command_channel |> push <| new [[AudioCommand add_pcm_3d <-
-        [[AudioCommandAddPCM3D sid=sid, rate=rate, channels=channels, samples <- samples, loop=true, position=position, radius=radius]]]]
+        [[AudioCommandAddPCM3D sid=sid, rate=rate, channels=channels, samples <- samples, loop=true, position=position, attenuation=attenuation]]]]
     return sid
 
 def public append_to_pcm(sid : SID; var samples : array<float>)

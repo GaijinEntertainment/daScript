@@ -30,7 +30,7 @@ def main
         set_head_position(float3(0,0,0),float3(0,-1,0))
         print("play looped\n")
         var sin1 <- [{for x in range(MA_SAMPLE_RATE); sin(2.*PI*440.*float(x)/float(48000))}]
-        let sid_pcm = play_3d_sound_loop_from_pcm(float3(0),100.0,rate,channels,sound_data)
+        let sid_pcm = play_3d_sound_loop_from_pcm(float3(0),linear_attenuation(100.0),rate,channels,sound_data)
         sid_pcm |> set_volume(0.25)
         print("left\n")
         sid_pcm |> set_position(float3(-1,0,0))
