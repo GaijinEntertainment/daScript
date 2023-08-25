@@ -953,7 +953,7 @@ def public set_audio_thread_command_channel(ch : void?)
         g_command_channel |> add_ref
 
 def public get_collect_command_channel : void ?
-    return g_command_channel
+    return g_collect_channel
 
 [unsafe_operation]
 def public set_collect_thread_command_channel(ch : void?)
