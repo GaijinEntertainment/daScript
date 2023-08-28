@@ -40,6 +40,11 @@ VECMATH_FINLINE vec4i VECTORCALL v_make_vec4i(int x, int y, int z, int w)
   alignas(16) int data[4] = { x, y, z, w };
   return vld1q_s32(data);
 }
+VECMATH_FINLINE vec4f VECTORCALL v_make_vec3f(float x, float y, float z) { return v_make_vec4f(x, y, z, z); }
+VECMATH_FINLINE vec4f VECTORCALL v_make_vec3f(vec4f x, vec4f y, vec4f z)
+{
+  return __builtin_shufflevector(__builtin_shufflevector(x, y, 0, 0, 4, 4), z, 0, 2, 4, 4);
+}
 
 VECMATH_FINLINE void VECTORCALL v_st(void *m, vec4f v)  { vst1q_f32((float*)m, v); }
 VECMATH_FINLINE void VECTORCALL v_stu(void *m, vec4f v) { vst1q_f32((float*)m, v); }
@@ -666,8 +671,8 @@ VECMATH_FINLINE vec4f VECTORCALL v_norm4(vec4f a) { return v_mul(a, vdupq_lane_f
 VECMATH_FINLINE vec4f VECTORCALL v_norm3(vec4f a) { return v_mul(a, vdupq_lane_f32(v_rsqrt_x(v_length3_sq_xd(a)), 0)); }
 VECMATH_FINLINE vec4f VECTORCALL v_norm2(vec4f a) { return v_mul(a, vdupq_lane_f32(v_rsqrt_x(v_length2_sq_xd(a)), 0)); }
 
-VECMATH_FINLINE vec4f VECTORCALL v_distance3p_x(plane3f a, vec3f b) { return v_add_x(v_dot3_x(a,b), v_rot_3(a)); }
-VECMATH_FINLINE vec4f VECTORCALL v_distance3p(plane3f a, vec3f b) { return v_splat_x(v_distance3p_x(a,b)); }
+VECMATH_FINLINE vec4f VECTORCALL v_plane_dist_x(plane3f a, vec3f b) { return v_add_x(v_dot3_x(a,b), v_rot_3(a)); }
+VECMATH_FINLINE vec4f VECTORCALL v_plane_dist(plane3f a, vec3f b) { return v_splat_x(v_plane_dist_x(a,b)); }
 
 VECMATH_FINLINE vec4f VECTORCALL v_perm_yzxz(vec4f a) { return __builtin_shufflevector(a, a, 1, 2, 0, 2); }
 
