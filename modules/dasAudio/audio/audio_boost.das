@@ -474,7 +474,7 @@ struct AudioCommandAddPCMStream3D : AudioCommandAddPCMStream
 
 struct AudioCommandStatus
     sid : SID
-    [[do_not_delete]] status : LockBox?
+    status : void?
 
 struct AudioCommandSoundPosition3D
     sid : SID
@@ -639,9 +639,11 @@ def command_processor
             assume scmd = cmd as status
             let found = g_sid_2_channel |> get(scmd.sid) <| $(var ch : AudioChannel?&)
                 if ch.status != null
+                    if scmd.status != null
+                        panic("audio: status already set for {scmd.sid}")
                     ch.status |> clear(type <AudioChannelStatus>)
                     ch.status |> notify_and_release
-                ch.status = scmd.status
+                ch.status = unsafe(reinterpret<LockBox?> scmd.status)
             if !found
                 if scmd.status != null
                     scmd.status |> set(STOPPED_STATUS)
@@ -953,7 +955,7 @@ def public set_audio_thread_command_channel(ch : void?)
         g_command_channel |> add_ref
 
 def public get_collect_command_channel : void ?
-    return g_command_channel
+    return g_collect_channel
 
 [unsafe_operation]
 def public set_collect_thread_command_channel(ch : void?)

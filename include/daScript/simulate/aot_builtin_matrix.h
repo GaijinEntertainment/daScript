@@ -45,7 +45,7 @@ namespace das {
     float4x4 float4x4_persp_reverse(float wk, float hk, float zn, float zf);
     float4x4 float4x4_look_at(float4 eye, float4 at, float4 up);
     float4x4 float4x4_compose(float4 pos, float4 rot, float4 scale);
-    void float4x4_decompose(const float4x4 & mat, float3 & pos, float4 & rot, float4 & scale);
+    void float4x4_decompose(const float4x4 & mat, float3 & pos, float4 & rot, float3 & scale);
 
     float4 un_quat_from_unit_arc(float3 v0, float3 v1);
     float4 un_quat_from_unit_vec_ang(float3 v, float ang);

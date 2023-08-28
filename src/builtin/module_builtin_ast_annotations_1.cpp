@@ -46,6 +46,7 @@ namespace das {
             addProperty<DAS_BIND_MANAGED_PROP(isExprType)>("isExprType","isExprType");
             addProperty<bool (TypeDecl::*)() const, &ManagedType::isSimpleType>("isSimpleType","isSimpleType");
             addProperty<DAS_BIND_MANAGED_PROP(isArray)>("isArray","isArray");
+            addProperty<DAS_BIND_MANAGED_PROP(isGoodIteratorType)>("isGoodIteratorType","isGoodIteratorType");
             addProperty<DAS_BIND_MANAGED_PROP(isGoodArrayType)>("isGoodArrayType","isGoodArrayType");
             addProperty<DAS_BIND_MANAGED_PROP(isGoodTableType)>("isGoodTableType","isGoodTableType");
             addProperty<DAS_BIND_MANAGED_PROP(isGoodBlockType)>("isGoodBlockType","isGoodBlockType");
