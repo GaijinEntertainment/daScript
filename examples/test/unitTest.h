@@ -195,7 +195,7 @@ struct SampleVariant {
 };
 
 template <> struct das::das_alias<SampleVariant>
-    : das::das_alias_ref<SampleVariant,TVariant<sizeof(SampleVariant),int32_t,float,char *>> {};
+    : das::das_alias_ref<SampleVariant,TVariant<sizeof(SampleVariant),alignof(SampleVariant),int32_t,float,char *>> {};
 
 __forceinline SampleVariant makeSampleI() {
     SampleVariant v;

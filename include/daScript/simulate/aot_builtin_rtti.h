@@ -43,7 +43,7 @@ namespace das {
     static_assert(sizeof(RttiValue)==32,"sizeof RttiValue must be 32");
 
     template <> struct das_alias<RttiValue>
-        : das_alias_ref<RttiValue,TVariant<sizeof(RttiValue),bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>> {};
+        : das_alias_ref<RttiValue,TVariant<sizeof(RttiValue),alignof(RttiValue),bool,int32_t,uint32_t,int64_t,uint64_t,float,double,char *,vec4f>> {};
 
     template <typename TT, typename PD, typename TTA = const TT>
     struct das_rtti_iterator {

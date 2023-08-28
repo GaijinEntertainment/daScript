@@ -1032,9 +1032,11 @@ namespace das {
         }
     };
 
-#pragma pack(1)
-    template <int variantSize, typename ...TA>
-    struct TVariant : Variant {
+    template <int variantSize, int variantAlign, typename ...TA>
+    struct alignas(variantAlign) TVariant : Variant {
+        struct alignas(1) TData {
+            char data[variantSize - sizeof(int32_t)];
+        };
         TVariant() {}
         TVariant(const TVariant & arr) { moveT(arr); }
         TVariant(TVariant && arr ) { moveT(arr); }
@@ -1043,9 +1045,8 @@ namespace das {
         __forceinline void moveT ( const TVariant & arr ) {
             memcpy ( (char *)this, &arr, variantSize );
         }
-        char data[variantSize-sizeof(int32_t)];
+        TData data;
     };
-#pragma pack()
 
     template <typename TT, int offset, int variant>
     struct das_get_variant_field {
