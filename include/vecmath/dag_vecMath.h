@@ -74,6 +74,11 @@ VECMATH_FINLINE vec4i VECTORCALL v_seti_x(int a);
 VECMATH_FINLINE vec4f VECTORCALL v_make_vec4f(float x, float y, float z, float w);
 VECMATH_FINLINE vec4i VECTORCALL v_make_vec4i(int x, int y, int z, int w);
 
+//! .xyz = {x y z}
+VECMATH_FINLINE vec4f VECTORCALL v_make_vec3f(float x, float y, float z);
+//! .xyz = {x y z}, where .x component of each source vector used
+VECMATH_FINLINE vec4f VECTORCALL v_make_vec3f(vec4f x, vec4f y, vec4f z);
+
 //! unpack 4 low bits from bitmask to 4x32 bits mask, true=0xFFFFFFFF, false=0
 VECMATH_FINLINE vec4f VECTORCALL v_make_vec4f_mask(uint8_t bitmask);
 
@@ -467,10 +472,10 @@ VECMATH_FINLINE plane3f VECTORCALL v_make_plane_norm(vec3f p0, vec3f norm);
 VECMATH_FINLINE plane3f VECTORCALL v_transform_plane(plane3f plane, mat44f_cref transform);
 
 //! distance from point b to plane a: .xyzw = (a.x * b.x + a.y * b.y + a.z * b.z + a.w)
-VECMATH_FINLINE vec4f VECTORCALL v_distance3p(plane3f a, vec3f b);
+VECMATH_FINLINE vec4f VECTORCALL v_plane_dist(plane3f a, vec3f b);
 
 //! distance from point b to plane a: .x = (a.x * b.x + a.y * b.y + a.z * b.z + a.w)
-VECMATH_FINLINE vec4f VECTORCALL v_distance3p_x(plane3f a, vec3f b);
+VECMATH_FINLINE vec4f VECTORCALL v_plane_dist_x(plane3f a, vec3f b);
 
 //! scalar triple product: (a x b) * c = dot3(cross3(a, b), c)
 VECMATH_FINLINE vec3f VECTORCALL v_striple3(vec3f a, vec3f b, vec3f c);
@@ -554,6 +559,10 @@ VECMATH_FINLINE vec3f VECTORCALL v_mat43_mul_vec3v(mat43f_cref m, vec3f v);
 //! m * v,  matrix is treated row-major, v.w=1
 VECMATH_FINLINE vec3f VECTORCALL v_mat43_mul_vec3p(mat43f_cref m, vec3f v);
 
+//! transfrom position and apply max scale to radius
+VECMATH_FINLINE vec4f VECTORCALL v_mat44_mul_bsph(mat44f_cref m, vec4f bsph);
+VECMATH_FINLINE void VECTORCALL v_mat44_mul_bsph(mat44f_cref m, vec4f &bsph_pos, vec4f &bsph_rad_x);
+
 //! q * v, rotate vector using normalized quaternion
 VECMATH_FINLINE vec3f VECTORCALL v_quat_mul_vec3(quat4f q, vec3f v);
 
@@ -614,8 +623,6 @@ VECMATH_FINLINE void VECTORCALL v_mat33_transpose(mat33f &dest, mat33f_cref src)
 VECMATH_FINLINE void VECTORCALL v_mat44_transpose_to_mat43(mat43f &dest, mat44f_cref src);
 //! T(m), 4x3 row major -> 4x4 column major
 VECMATH_FINLINE void VECTORCALL v_mat43_transpose_to_mat44(mat44f &dest, mat43f_cref src);
-//! complement mat33 to mat44 (col1.w=col2.w=col0.w=0, col3=0,0,0,1)
-VECMATH_FINLINE void VECTORCALL v_mat44_from_mat33(mat44f &dest, mat33f_cref m);
 //! extract rotation/scale transformation from mat44 to mat33
 VECMATH_FINLINE void VECTORCALL v_mat33_from_mat44(mat33f &dest, mat44f_cref m);
 
@@ -692,7 +699,11 @@ VECMATH_FINLINE vec4f VECTORCALL v_mat44_det43(mat44f_cref m);
 //! Determinant(m)
 VECMATH_FINLINE vec4f VECTORCALL v_mat33_det(mat33f_cref m);
 //! Calculate maximum scale of 3 axes
+VECMATH_FINLINE vec4f VECTORCALL v_mat44_max_scale43_sq(mat44f_cref tm);
+VECMATH_FINLINE vec4f VECTORCALL v_mat44_max_scale43(mat44f_cref tm);
 VECMATH_FINLINE vec4f VECTORCALL v_mat44_max_scale43_x(mat44f_cref tm);
+//! .xyz = scales of 3 axes
+VECMATH_FINLINE vec3f VECTORCALL v_mat44_scale43_sq(mat44f_cref tm);
 
 //! stores mat44f to aligned TMatrix from mat44f
 VECMATH_FINLINE void VECTORCALL v_mat_43ca_from_mat44(float * __restrict m43, const mat44f &tm);
@@ -724,6 +735,10 @@ VECMATH_FINLINE void VECTORCALL v_bbox3_init(bbox3f &b, vec3f p);
 VECMATH_FINLINE void VECTORCALL v_bbox3_init(bbox3f &b, mat44f_cref m, bbox3f bb2);
 //! init with bsph
 VECMATH_FINLINE void VECTORCALL v_bbox3_init_by_bsph(bbox3f &b, vec3f bsph_center, vec3f bsph_radius);
+//! init with ray
+VECMATH_FINLINE void VECTORCALL v_bbox3_init_by_ray(bbox3f &b, vec3f from, vec3f dir, vec4f len);
+//! init with segment
+VECMATH_FINLINE void VECTORCALL v_bbox3_init_by_segment(bbox3f &b, vec4f from, vec4f to);
 
 //! extend bbox to enclose point
 VECMATH_FINLINE void VECTORCALL v_bbox3_add_pt(bbox3f &b, vec3f p);
@@ -731,6 +746,8 @@ VECMATH_FINLINE void VECTORCALL v_bbox3_add_pt(bbox3f &b, vec3f p);
 VECMATH_FINLINE void VECTORCALL v_bbox3_add_box(bbox3f &b, bbox3f b2);
 //! extend bbox to enclose bb2 transformed with 4x4 matrix m
 VECMATH_FINLINE void VECTORCALL v_bbox3_add_transformed_box(bbox3f &b, mat44f_cref m, bbox3f b2);
+//! extend bbox to enclose ray
+VECMATH_FINLINE void VECTORCALL v_bbox3_add_ray(bbox3f &b, vec3f from, vec3f dir, vec4f len);
 //! return b1+b2
 VECMATH_FINLINE bbox3f VECTORCALL v_bbox3_sum(bbox3f b1, bbox3f b2);
 //! return c ? b2 : b1 component-wise
@@ -800,6 +817,10 @@ VECMATH_FINLINE vec4f v_bsph_radius_sq(vec4f sph);
 
 //! check that two bounding spheres intersects
 VECMATH_FINLINE bool v_test_bsph_bsph_intersection(vec4f a, vec4f b);
+//! check that sphere b is inside sphere a
+VECMATH_FINLINE bool v_bsph_test_sph_inside(vec4f sph_a, vec4f sph_a_rad_sq_x, vec4f sph_b, vec4f sph_b_rad_x);
+//! check that bbox inside sphere
+VECMATH_FINLINE bool v_bsph_test_box_inside(vec4f sph, vec4f sph_rad_sq_x, bbox3f b);
 
 //! create minimal sphere containing sphere and point
 VECMATH_FINLINE vec4f v_bsph_pt_best_sum(vec4f bsph, vec3f pt);
@@ -957,13 +978,15 @@ VECMATH_FINLINE quat4f VECTORCALL v_un_quat_from_mat4(mat44f_cref m);
 VECMATH_FINLINE quat4f VECTORCALL v_un_quat_from_mat(vec3f col0, vec3f col1, vec3f col2);
 
 //! make (unnormalized) quaternion to rotate 'ang' radians around normalized 'v';
-VECMATH_FINLINE quat4f VECTORCALL v_un_quat_from_unit_vec_ang(vec3f v, vec4f ang);
+inline quat4f VECTORCALL v_un_quat_from_unit_vec_ang(vec3f v, vec4f ang);
 //! make (unnormalized) quaternion to rotate 'v0' to 'v1'; both 'v0' and 'v1' must be normalized
 VECMATH_FINLINE quat4f VECTORCALL v_un_quat_from_unit_arc(vec3f v0, vec3f v1);
 //! make (unnormalized) quaternion to rotate 'v0' to 'v1'
 VECMATH_FINLINE quat4f VECTORCALL v_un_quat_from_arc(vec3f v0, vec3f v1);
 //! make (unnormalized) quaternion from heading, attitude, bank angles in .xyz
-VECMATH_FINLINE quat4f VECTORCALL v_un_quat_from_euler(vec3f angles);
+inline quat4f VECTORCALL v_un_quat_from_euler(vec3f angles);
+//! make heading, attitude, bank angles from (unnormalized) quaternion
+inline vec3f VECTORCALL v_euler_from_un_quat(quat4f quat);
 
 //! linear interpolation between normalized quaternions using parameter tttt
 VECMATH_FINLINE quat4f VECTORCALL v_quat_lerp(vec4f tttt, quat4f a, quat4f b);
@@ -990,6 +1013,7 @@ VECMATH_FINLINE vec4f VECTORCALL v_tan(vec4f a);
 VECMATH_FINLINE vec4f VECTORCALL v_asin(vec4f a);
 VECMATH_FINLINE vec4f VECTORCALL v_acos(vec4f a);
 VECMATH_FINLINE vec4f VECTORCALL v_atan(vec4f a);
+VECMATH_FINLINE vec4f VECTORCALL v_atan2(vec4f x, vec4f y);
 
 //! compute sine, cosine, tangent or arc for .x component
 VECMATH_FINLINE vec4f VECTORCALL v_sin_x(vec4f a);
@@ -998,6 +1022,7 @@ VECMATH_FINLINE vec4f VECTORCALL v_tan_x(vec4f a);
 VECMATH_FINLINE vec4f VECTORCALL v_asin_x(vec4f a);
 VECMATH_FINLINE vec4f VECTORCALL v_acos_x(vec4f a);
 VECMATH_FINLINE vec4f VECTORCALL v_atan_x(vec4f a);
+VECMATH_FINLINE vec4f VECTORCALL v_atan2_x(vec4f x, vec4f y);
 
 // compute approximate atan |error| is < 0.00045
 VECMATH_FINLINE vec4f VECTORCALL v_atan_est(vec4f x);  // any x
