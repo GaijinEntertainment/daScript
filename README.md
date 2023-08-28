@@ -1,7 +1,7 @@
 # vecmath
 SIMD HAL header-only library
 
-This is one-header-only (it is 4 headers, but you need to include one) Hardware Abstraction Layer over SIMD intrinsics.
+This is one-header-only (it is 7 headers, but you need to include one) Hardware Abstraction Layer over SIMD intrinsics.
 
 Currently for SSE and NEON only, PS3/Xbox360 version is under NDA and not needed nowdays.
 
