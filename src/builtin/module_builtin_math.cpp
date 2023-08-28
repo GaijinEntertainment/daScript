@@ -525,6 +525,10 @@ namespace das {
         return v_un_quat_from_euler(v_make_vec4f(x, y, z, 0.f));
     }
 
+    float3 euler_from_un_quat_vec(float4 v) {
+        return v_euler_from_un_quat(v);
+    }
+
     float4 un_quat(const float4x4 & m) {
         mat44f vm;
         memcpy(&vm, &m, sizeof(float4x4));
@@ -779,8 +783,10 @@ namespace das {
                 SideEffects::none, "un_quat_from_unit_vec_ang")->args({"v","ang"});
             addExtern<DAS_BIND_FUN(un_quat_from_euler_vec)>(*this, lib, "un_quat_from_euler",
                 SideEffects::none, "un_quat_from_euler_vec")->args({"angles"});
-           addExtern<DAS_BIND_FUN(un_quat_from_euler)>(*this, lib, "un_quat_from_euler",
+            addExtern<DAS_BIND_FUN(un_quat_from_euler)>(*this, lib, "un_quat_from_euler",
                 SideEffects::none, "un_quat_from_euler")->args({"x", "y", "z"});
+            addExtern<DAS_BIND_FUN(euler_from_un_quat_vec)>(*this, lib, "euler_from_un_quat",
+                SideEffects::none, "euler_from_un_quat_vec")->args({"angles"});
             addExtern<DAS_BIND_FUN(un_quat)>(*this, lib, "un_quat",
                 SideEffects::none, "un_quat")->arg("m");
             addExtern<DAS_BIND_FUN(quat_mul)>(*this, lib, "quat_mul",
