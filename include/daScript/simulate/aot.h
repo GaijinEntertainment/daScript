@@ -1034,6 +1034,9 @@ namespace das {
 
     template <int variantSize, int variantAlign, typename ...TA>
     struct alignas(variantAlign) TVariant : Variant {
+        struct alignas(1) TData {
+            char data[variantSize - sizeof(int32_t)];
+        };
         TVariant() {}
         TVariant(const TVariant & arr) { moveT(arr); }
         TVariant(TVariant && arr ) { moveT(arr); }
@@ -1042,7 +1045,7 @@ namespace das {
         __forceinline void moveT ( const TVariant & arr ) {
             memcpy ( (char *)this, &arr, variantSize );
         }
-        char alignas(1) data[variantSize - sizeof(int32_t)];
+        TData data;
     };
 
     template <typename TT, int offset, int variant>
