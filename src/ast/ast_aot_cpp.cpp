@@ -201,7 +201,7 @@ namespace das {
             }
             stream << ">";
         } else if ( baseType==Type::tVariant ) {
-            stream << "TVariant<" << int(type->getVariantSize());
+            stream << "TVariant<" << int(type->getVariantSize()) << "," << int(type->getVariantAlign());
             for ( const auto & arg : type->argTypes ) {
                 stream << "," << describeCppTypeEx(arg,CpptSubstitureRef::no,CpptSkipRef::no,CpptSkipConst::no,CpptRedundantConst::yes,useAlias);
             }
