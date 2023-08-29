@@ -663,6 +663,28 @@ namespace das {
         }, thisModule.get());
     }
 
+    class RenameVariables : public Visitor {
+    public:
+        virtual void preVisit ( ExprVar * var ) override {
+            Visitor::preVisit(var);
+            auto it = variables.find(var->variable.get());
+            if ( it != variables.end() ) {
+                var->name = it->second;
+            }
+        }
+        virtual void preVisit ( ExprLet * let ) override {
+            Visitor::preVisit(let);
+            for ( auto & v : let->variables ) {
+                auto it = variables.find(v.get());
+                if ( it != variables.end() ) {
+                    v->name = it->second;
+                }
+            }
+        }
+    public:
+        das_hash_map<Variable *, string> variables;
+    };
+
     class RelocatePotentiallyUninitialized : public Visitor {
     protected:
         virtual void preVisit ( ExprBlock * block ) override {
@@ -672,9 +694,14 @@ namespace das {
         }
         virtual ExpressionPtr visit ( ExprBlock * block ) override {
             if ( onTopOfTheBlock.back().size() ) {
+                RenameVariables ren;
                 for ( auto & topE : onTopOfTheBlock.back() ) {
+                    auto eLet = static_pointer_cast<ExprLet>(topE);
+                    auto vVar = eLet->variables[0].get();
+                    ren.variables[vVar] = vVar->name + "`at`" + to_string(vVar->at.line) + "`" + to_string(vVar->at.column);
                     block->list.insert(block->list.begin(), topE);
                 }
+                block->visit(ren);
             }
             onTopOfTheBlock.pop_back();
             scopes.pop_back();
@@ -708,6 +735,7 @@ namespace das {
                         }
                     }
                     auto elet = static_pointer_cast<ExprLet>(expr->clone());
+                    elet->variables = move(expr->variables);
                     for ( auto & evar : elet->variables ) {
                         evar->init = nullptr;
                     }
