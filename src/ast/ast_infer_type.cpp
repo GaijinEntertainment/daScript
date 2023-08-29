@@ -1624,7 +1624,7 @@ namespace das {
             }
             if ( decl.init ) {
                 if ( decl.init->type ) {
-                    if ( !canCopyOrMoveType(decl.type,decl.init->type,TemporaryMatters::yes) ) {
+                    if ( !canCopyOrMoveType(decl.type,decl.init->type,TemporaryMatters::yes, decl.init.get()) ) {
                         error("structure field initialization type mismatch, "
                               + describeType(decl.type) + " = " + describeType(decl.init->type),  "", "",
                             decl.at,CompilationError::invalid_initialization_type);
@@ -1736,7 +1736,7 @@ namespace das {
                     var->type = varT;
                     reportAstChanged();
                 }
-            } else if ( !canCopyOrMoveType(var->type,var->init->type,TemporaryMatters::no) ) {
+            } else if ( !canCopyOrMoveType(var->type,var->init->type,TemporaryMatters::no,var->init.get()) ) {
                 error("global variable " + var->name + " initialization type mismatch, "
                       + describeType(var->type) + " = " + describeType(var->init->type),  "", "",
                     var->at, CompilationError::invalid_initialization_type);
@@ -5312,8 +5312,9 @@ namespace das {
             return Visitor::visit(expr);
         }
     // ExprMove
-        bool canCopyOrMoveType ( const TypeDeclPtr & leftType, const TypeDeclPtr & rightType, TemporaryMatters tmatter ) const {
+        bool canCopyOrMoveType ( const TypeDeclPtr & leftType, const TypeDeclPtr & rightType, TemporaryMatters tmatter, Expression * leftExpr ) const {
             if ( leftType->baseType==Type::tPointer ) {
+                if ( !leftType->isVoidPointer() && rightType->isVoidPointer() ) return leftExpr->rtti_isNullPtr();  // anyptr = null ok, otherwise no void copy
                 return leftType->isSameType(*rightType, RefMatters::no, ConstMatters::no, tmatter, AllowSubstitute::yes, true, true);
             } else {
                 return leftType->isSameType(*rightType, RefMatters::no, ConstMatters::no, tmatter, AllowSubstitute::no, true, true);
@@ -5329,7 +5330,7 @@ namespace das {
         virtual ExpressionPtr visit ( ExprMove * expr ) override {
             if ( !expr->left->type || !expr->right->type ) return Visitor::visit(expr);
             // infer
-            if ( !canCopyOrMoveType(expr->left->type,expr->right->type,TemporaryMatters::no) ) {
+            if ( !canCopyOrMoveType(expr->left->type,expr->right->type,TemporaryMatters::no,expr->right.get()) ) {
                 error("can only move compatible type"+moveErrorInfo(expr), "", "",
                     expr->at, CompilationError::operator_not_found);
             } else if ( !expr->left->type->isRef() ) {
@@ -5387,7 +5388,7 @@ namespace das {
         virtual ExpressionPtr visit ( ExprCopy * expr ) override {
             if ( !expr->left->type || !expr->right->type ) return Visitor::visit(expr);
             // infer
-            if ( !canCopyOrMoveType(expr->left->type,expr->right->type,TemporaryMatters::no) ) {
+            if ( !canCopyOrMoveType(expr->left->type,expr->right->type,TemporaryMatters::no,expr->right.get()) ) {
                 error("can only copy compatible type"+copyErrorInfo(expr), "", "",
                     expr->at, CompilationError::operator_not_found);
             } else if ( !expr->left->type->isRef() ) {
@@ -5597,7 +5598,7 @@ namespace das {
                     error("expecting a return value", "", "",
                         expr->at, CompilationError::expecting_return_value);
                 } else {
-                    if ( !canCopyOrMoveType(resType,expr->subexpr->type,TemporaryMatters::yes) ) {
+                    if ( !canCopyOrMoveType(resType,expr->subexpr->type,TemporaryMatters::yes,expr->subexpr.get()) ) {
                         error("incompatible return type, expecting "
                               + describeType(resType) + ", passing " + describeType(expr->subexpr->type), "", "",
                               expr->at, CompilationError::invalid_return_type);
@@ -6286,7 +6287,7 @@ namespace das {
                     var->type->sanitize();
                     reportAstChanged();
                 }
-            } else if ( !canCopyOrMoveType(var->type,var->init->type,TemporaryMatters::no) ) {
+            } else if ( !canCopyOrMoveType(var->type,var->init->type,TemporaryMatters::no,var->init.get()) ) {
                 error("local variable " + var->name + " initialization type mismatch, "
                       + describeType(var->type) + " = " + describeType(var->init->type), "", "",
                     var->at, CompilationError::invalid_initialization_type);
@@ -7371,7 +7372,7 @@ namespace das {
             auto fieldVariant = expr->makeType->findArgumentIndex(decl->name);
             if (fieldVariant != -1) {
                 auto fieldType = expr->makeType->argTypes[fieldVariant];
-                if ( !canCopyOrMoveType(fieldType,decl->value->type,TemporaryMatters::yes) ) {
+                if ( !canCopyOrMoveType(fieldType,decl->value->type,TemporaryMatters::yes,decl->value.get()) ) {
                     error("can't initialize field " + decl->name + "; expecting "
                         + describeType(fieldType) + ", passing " + describeType(decl->value->type),"", "",
                         decl->value->at, CompilationError::invalid_type);
@@ -7460,7 +7461,7 @@ namespace das {
             }
             if ( expr->makeType->baseType == Type::tStructure ) {
                 if ( auto field = expr->makeType->structType->findField(decl->name) ) {
-                    if ( !canCopyOrMoveType(field->type,decl->value->type,TemporaryMatters::yes) ) {
+                    if ( !canCopyOrMoveType(field->type,decl->value->type,TemporaryMatters::yes,decl->value.get()) ) {
                         error("can't initialize field " + decl->name + "; expecting "
                               + describeType(field->type) + ", passing " + describeType(decl->value->type), "", "",
                                 decl->value->at, CompilationError::invalid_type );
@@ -7493,7 +7494,7 @@ namespace das {
                         error("field is a property, not a value; " + decl->name, "", "",
                             decl->at, CompilationError::cant_get_field);
                     }
-                    if ( !canCopyOrMoveType(fldt,decl->value->type,TemporaryMatters::no) ) {
+                    if ( !canCopyOrMoveType(fldt,decl->value->type,TemporaryMatters::no,decl->value.get()) ) {
                         error("can't initialize field " + decl->name + "; expecting "
                               + describeType(fldt)+", passing " + describeType(decl->value->type), "", "",
                                 decl->value->at, CompilationError::invalid_type );
@@ -7877,7 +7878,7 @@ namespace das {
             if ( !init->type|| !expr->recordType ) {
                 return Visitor::visitMakeArrayIndex(expr,index,init,last);
             }
-            if ( !canCopyOrMoveType(expr->recordType,init->type,TemporaryMatters::no) ) {
+            if ( !canCopyOrMoveType(expr->recordType,init->type,TemporaryMatters::no,init) ) {
                 if ( expr->recordType->isVariant() ) {
                     int uidx = expr->recordType->getVariantUniqueFieldIndex(init->type);
                     if ( uidx==-1 ) {

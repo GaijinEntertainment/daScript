@@ -19,7 +19,7 @@ def public bitmap8_size ( size:int2 )
 def public SurfaceData ( size:uint64 )
     //! allocate surface data
     unsafe
-        return [[SurfaceData data=malloc(size), size=size]]
+        return [[SurfaceData data=unsafe(reinterpret<uint8?> malloc(size)), size=size]]
 
 def public finalize ( var data:SurfaceData )
     //! free surface data
