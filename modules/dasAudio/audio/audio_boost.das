@@ -762,7 +762,7 @@ def public generate_sound_sid
     //! generate unique ID for sound
     return g_sound_sid ++
 
-def make_decoder(filename : string; rate, channels : int)
+def make_decoder(filename : string; rate, channels : int) : ma_decoder?
     var decoder = new ma_decoder
     var config <- ma_decoder_config_init(ma_format ma_format_f32, uint(channels), uint(rate))
     let result = ma_decoder_init_file(filename, unsafe(addr(config)), decoder)

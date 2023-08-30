@@ -152,7 +152,7 @@ def private set_new_context ( var ptr : smart_ptr<Context>; full_restart:bool = 
             // fixup decs if its there
             var pvar = get_context_global_variable(appPtr, "decsState")
             if pvar != null
-                var pstate : array<uint8> ? = get_context_global_variable(appPtr, "decsLiveData")
+                var pstate : array<uint8> ? = unsafe(reinterpret<array<uint8>?> get_context_global_variable(appPtr, "decsLiveData"))
                 assert(pstate!=null)
                 var css <- @ <|
                     saveLiveContext()
@@ -167,7 +167,7 @@ def private set_new_context ( var ptr : smart_ptr<Context>; full_restart:bool = 
             // fixup decs if its there
             var pvar = get_context_global_variable(appPtr, "decsState")
             if pvar != null
-                var pstate : array<uint8> ? = get_context_global_variable(appPtr, "decsLiveData")
+                var pstate : array<uint8> ? = unsafe(reinterpret<array<uint8>?> get_context_global_variable(appPtr, "decsLiveData"))
                 assert(pstate!=null)
                 var css <- @ <| [[&decsState,&decsLiveData]] ( data : array<uint8># )
                     decsLiveData := data
