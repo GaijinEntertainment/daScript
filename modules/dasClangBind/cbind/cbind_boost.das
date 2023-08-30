@@ -979,6 +979,8 @@ class CppGenBind : AnyGenBind
             fprint(func_file_aot,"{arg_name}")
         fprint(func_file_aot,");\n\}\n\n")
         return wrapper_name
+    def get_module_temp_fn: string
+        return ""
     def parse_anyFunctionDecl ( var c : CXCursor; isMethod : bool )
         step_Function()
         let isStatic = clang_Cursor_getStorageClass(c)==CX_StorageClass Static
@@ -998,11 +1000,11 @@ class CppGenBind : AnyGenBind
         das_function_name = rename_function(das_function_name,function_cpp_name)
         var bind_enchantation = ""
         var cpp_enchantation = ""
-        var extra_enchantation = ""
+        var extra_enchantation = ", SimNode_ExtFuncCall"
         if clang_das_isRef(res_type)
             extra_enchantation = ", SimNode_ExtFuncCallRef"
         elif clang_das_isCopyOnReturn(res_type) && !isAotAliasType(nc_res_type)
-            extra_enchantation = ",SimNode_ExtFuncCallAndCopyOrMove"
+            extra_enchantation = ", SimNode_ExtFuncCallAndCopyOrMove"
         if isMethod
             let using_mname = methodName()
             if isVirtual || isStatic
@@ -1022,7 +1024,7 @@ class CppGenBind : AnyGenBind
             bind_enchantation = " {function_cpp_type} , {function_cpp_name} "
             cpp_enchantation = function_cpp_name
         fprint(func_file, "// from {clang_getCursorLocationDescription(c)}\n")
-        fprint(func_file, "\taddExtern<{bind_enchantation}{extra_enchantation}>(*this,lib,\"{das_function_name}\",SideEffects::worstDefault,\"{cpp_enchantation}\")")
+        fprint(func_file, "\taddExtern<{bind_enchantation}{extra_enchantation}{get_module_temp_fn()}>(*this,lib,\"{das_function_name}\",SideEffects::worstDefault,\"{cpp_enchantation}\")")
         let narg = clang_Cursor_getNumArguments(c)
         if narg!=0 || isMethod
             fprint(func_file,"\n\t\t->args(\{")
