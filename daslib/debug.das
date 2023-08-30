@@ -584,8 +584,8 @@ class private DAStackWalker: DapiStackWalker
     def override onBeforeCall(pp: Prologue; sp: void?): void
         let iblock = intptr(pp._block)
         let isBlock = (iblock & 1ul) != 0ul
-        let funcInfo = isBlock ? null : pp.info
-        ctx.stack |> emplace([[DAStackFrame() func=unsafe(reinterpret<FuncInfo?> funcInfo), isBlock=isBlock, spAddr=intptr(sp) ]])
+        let funcInfo = isBlock ? [[FuncInfo?]] : pp.info
+        ctx.stack |> emplace([[DAStackFrame() func=funcInfo, isBlock=isBlock, spAddr=intptr(sp) ]])
 
     def override onVariable(inf: FuncInfo; vinfo: LocalVariableInfo; arg: void?; inScope: bool): void
         if !inScope
