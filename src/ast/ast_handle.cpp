@@ -45,6 +45,17 @@ namespace das {
         return gcf;
     }
 
+    TypeInfo * BasicStructureAnnotation::getFieldType ( const string & na ) const {
+        updateTypeInfo();
+        for ( uint32_t n=0; n!=sti->count; ++n ) {
+            auto & fi = sti->fields[n];
+            if ( fi->name == na ) {
+                return fi;
+            }
+        }
+        return nullptr;
+    }
+
     uint32_t BasicStructureAnnotation::getFieldOffset ( const string & na ) const {
         auto it = fields.find(na);
         if ( it!=fields.end() ) {
@@ -126,29 +137,30 @@ namespace das {
         return field;
     }
 
-    void BasicStructureAnnotation::walk ( DataWalker & walker, void * data ) {
-        {
-            lock_guard<recursive_mutex> guard(walkMutex);
-            if ( !sti ) {
-                auto debugInfo = helpA.debugInfo;
-                sti = debugInfo->template makeNode<StructInfo>();
-                sti->name = debugInfo->allocateName(name);
-                // flags
-                sti->flags = 0;
-                // count fields
-                sti->count = 0;
-                for ( auto & fi : fields ) {
-                    auto & var = fi.second;
-                    if ( var.offset != -1U ) {
-                        sti->count ++;
-                    }
+    void BasicStructureAnnotation::updateTypeInfo() const {
+        lock_guard<recursive_mutex> guard(walkMutex);
+        if ( !sti ) {
+            auto debugInfo = helpA.debugInfo;
+            sti = debugInfo->template makeNode<StructInfo>();
+            sti->name = debugInfo->allocateName(name);
+            // flags
+            sti->flags = 0;
+            // count fields
+            sti->count = 0;
+            for ( auto & fi : fields ) {
+                auto & var = fi.second;
+                if ( var.offset != -1U ) {
+                    sti->count ++;
                 }
-                // and allocate
-                sti->size = (uint32_t) getSizeOf();
-                sti->fields = (VarInfo **) debugInfo->allocate( sizeof(VarInfo *) * sti->count );
-                int i = 0;
-                for ( const auto & fn : fieldsInOrder ) {
-                    auto & var = fields[fn];
+            }
+            // and allocate
+            sti->size = (uint32_t) getSizeOf();
+            sti->fields = (VarInfo **) debugInfo->allocate( sizeof(VarInfo *) * sti->count );
+            int i = 0;
+            for ( const auto & fn : fieldsInOrder ) {
+                auto itvar = fields.find(fn);
+                if ( itvar != fields.end() ) {
+                    auto & var = itvar->second;
                     if ( var.offset != -1U ) {
                         VarInfo * vi = debugInfo->template makeNode<VarInfo>();
                         helpA.makeTypeInfo(vi, var.decl);
@@ -159,6 +171,11 @@ namespace das {
                 }
             }
         }
+
+    }
+
+    void BasicStructureAnnotation::walk ( DataWalker & walker, void * data ) {
+        updateTypeInfo();
         walker.walk_struct((char *)data, sti);
     }
 

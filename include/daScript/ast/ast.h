@@ -466,6 +466,7 @@ namespace das
         virtual size_t getSizeOf() const { return sizeof(void *); }
         virtual size_t getAlignOf() const { return 1; }
         virtual uint32_t getFieldOffset ( const string & ) const { return -1U; }
+        virtual TypeInfo * getFieldType ( const string & ) const { return nullptr; }
         virtual TypeDeclPtr makeValueType() const { return nullptr; }
         virtual TypeDeclPtr makeFieldType ( const string &, bool ) const { return nullptr; }
         virtual TypeDeclPtr makeSafeFieldType ( const string &, bool ) const { return nullptr; }
