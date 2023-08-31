@@ -230,6 +230,36 @@ namespace das
     }
 
 #if DAS_SLOW_CALL_INTEROP
+    template <typename FuncT, FuncT fn, template <typename FuncTT> class SimNodeT = SimNode_ExtFuncCall, typename QQ = defaultTempFn>
+#else
+    template <typename FuncT, FuncT fn, template <typename FuncTT, FuncTT fnt> class SimNodeT = SimNode_ExtFuncCall, typename QQ = defaultTempFn>
+#endif
+    inline auto makeExtern ( const ModuleLibrary & lib, const char * name,
+                                const char * cppName = nullptr, QQ && tempFn = QQ() ) {
+#if DAS_SLOW_CALL_INTEROP
+        using SimNodeType = SimNodeT<FuncT>;
+        auto fnX = make_smart<ExternalFn<FuncT, SimNodeType, FuncT>>(fn, name, lib, cppName);
+#else
+        using SimNodeType = SimNodeT<FuncT, fn>;
+        auto fnX = make_smart<ExternalFn<FuncT, fn, SimNodeType, FuncT>>(name, lib, cppName);
+#endif
+
+        tempFn(fnX.get());
+
+        if (!SimNodeType::IS_CMRES) {
+            if (fnX->result->isRefType() && !fnX->result->ref) {
+                DAS_FATAL_ERROR(
+                    "addExtern(%s)::failed\n"
+                    "  this function should be bound with addExtern<DAS_BIND_FUNC(%s), SimNode_ExtFuncCallAndCopyOrMove>\n"
+                    "  likely cast<> is implemented for the return type, and it should not\n",
+                    fnX->name.c_str(), fnX->name.c_str());
+            }
+        }
+
+        return fnX;
+    }
+
+#if DAS_SLOW_CALL_INTEROP
     template <typename FuncArgT, typename FuncT, FuncT fn, template <typename FuncTT> class SimNodeT = SimNode_ExtFuncCall>
 #else
     template <typename FuncArgT, typename FuncT, FuncT fn, template <typename FuncTT, FuncTT fnt> class SimNodeT = SimNode_ExtFuncCall, typename QQ = defaultTempFn>

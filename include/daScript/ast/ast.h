@@ -762,6 +762,7 @@ namespace das
             result = td;
             return this;
         }
+        FunctionPtr addToModule ( Module & mod, SideEffects seFlags );
         FunctionPtr getOrigin() const;
     public:
         AnnotationList      annotations;
