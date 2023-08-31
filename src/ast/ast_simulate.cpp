@@ -2898,7 +2898,7 @@ namespace das
         isSimulating = true;
         auto disableInit = options.getBoolOption("no_init", policies.no_init);
         context.thisProgram = this;
-        context.breakOnException = policies.debugger;
+        context.breakOnException |= policies.debugger;
         context.persistent = options.getBoolOption("persistent_heap", policies.persistent_heap);
         if ( context.persistent ) {
             context.heap = make_smart<PersistentHeapAllocator>();
