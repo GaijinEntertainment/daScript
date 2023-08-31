@@ -756,6 +756,14 @@ namespace das {
         return this;
     }
 
+    FunctionPtr Function::addToModule ( Module & mod, SideEffects seFlags ) {
+        setSideEffects(seFlags);
+        if (!mod.addFunction(this)) {
+            DAS_FATAL_ERROR("addExtern(%s) failed in module %s\n", name.c_str(), mod.name.c_str());
+        }
+        return this;
+    }
+
     FunctionPtr Function::getOrigin() const {
         if ( fromGeneric ) {
             auto origin = fromGeneric;
