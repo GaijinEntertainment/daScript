@@ -1665,10 +1665,19 @@ class private DAServer: Server
                             break
                 if !found
                     var inscope vars : table<string; Result>
-                    ctxData.stack[frameId] |> iter_top_child_var() <| $(child)
-                        if child.typeInfo != null
-                            let tInfo & = unsafe(*child.typeInfo)
-                            vars[child.name] <- [[Result tinfo=tInfo, value=child.rawValue, data=unsafe(reinterpret<void?>child.address)]]
+                    var frame = frameId
+                    let stackLen = length(ctxData.stack)
+                    // collect all vars from all blocks till the function frame
+                    while frame < stackLen && ctxData.stack[frame].isBlock
+                        frame += 1
+                    if frame >= stackLen
+                        frame = stackLen - 1
+                    while frame >= frameId
+                        ctxData.stack[frame] |> iter_top_child_var() <| $(child)
+                            if child.typeInfo != null
+                                let tInfo & = unsafe(*child.typeInfo)
+                                vars[child.name] <- [[Result tinfo=tInfo, value=child.rawValue, data=unsafe(reinterpret<void?>child.address)]]
+                        --frame
 
                     var result = debug_eval(vars, ini.expression)
                     var resStr = ""
