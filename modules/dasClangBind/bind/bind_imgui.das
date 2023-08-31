@@ -28,6 +28,8 @@ class ImguiGen : CppGenBind
         init_rename()
         setDefaultFiles()
         openAllFiles()
+    def override get_module_temp_fn: string
+        return ", imguiTempFn"
     def init_rename
         aot_alias <- {{
             "ImVec2"    =>  true;
@@ -97,6 +99,8 @@ class ImguiGen : CppGenBind
 
 class ImguiSubmoduleGen : ImguiGen
     cb_extra : string = ""
+    def override get_module_temp_fn: string
+        return ""
     def ImguiSubmoduleGen(mod_name,das_mod_name,pfn,pfp:string)
         ImguiGen`ImguiGen(self,mod_name,das_mod_name,pfn,pfp)
     def override generateModuleHPrefix

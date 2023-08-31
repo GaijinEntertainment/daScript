@@ -819,6 +819,7 @@ class CppGenBind : AnyGenBind
     def isArgByValue ( name:string )
         return false
     def override parse_Struct ( var c : CXCursor; struct_name : string )
+        return if struct_name |> starts_with <| "(" // do nothing for anonymous unions/structs
         let struct_namespace_name = namespace_name(struct_name)
         nsst2st[struct_namespace_name] = struct_name
         st2nsst[struct_name] = struct_namespace_name
@@ -979,6 +980,8 @@ class CppGenBind : AnyGenBind
             fprint(func_file_aot,"{arg_name}")
         fprint(func_file_aot,");\n\}\n\n")
         return wrapper_name
+    def get_module_temp_fn: string
+        return ""
     def parse_anyFunctionDecl ( var c : CXCursor; isMethod : bool )
         step_Function()
         let isStatic = clang_Cursor_getStorageClass(c)==CX_StorageClass Static
@@ -998,11 +1001,11 @@ class CppGenBind : AnyGenBind
         das_function_name = rename_function(das_function_name,function_cpp_name)
         var bind_enchantation = ""
         var cpp_enchantation = ""
-        var extra_enchantation = ""
+        var extra_enchantation = ", SimNode_ExtFuncCall "
         if clang_das_isRef(res_type)
-            extra_enchantation = ", SimNode_ExtFuncCallRef"
+            extra_enchantation = ", SimNode_ExtFuncCallRef "
         elif clang_das_isCopyOnReturn(res_type) && !isAotAliasType(nc_res_type)
-            extra_enchantation = ",SimNode_ExtFuncCallAndCopyOrMove"
+            extra_enchantation = ", SimNode_ExtFuncCallAndCopyOrMove "
         if isMethod
             let using_mname = methodName()
             if isVirtual || isStatic
@@ -1022,7 +1025,7 @@ class CppGenBind : AnyGenBind
             bind_enchantation = " {function_cpp_type} , {function_cpp_name} "
             cpp_enchantation = function_cpp_name
         fprint(func_file, "// from {clang_getCursorLocationDescription(c)}\n")
-        fprint(func_file, "\taddExtern<{bind_enchantation}{extra_enchantation}>(*this,lib,\"{das_function_name}\",SideEffects::worstDefault,\"{cpp_enchantation}\")")
+        fprint(func_file, "\tmakeExtern<{bind_enchantation}{extra_enchantation}{get_module_temp_fn()}>(lib,\"{das_function_name}\",\"{cpp_enchantation}\")")
         let narg = clang_Cursor_getNumArguments(c)
         if narg!=0 || isMethod
             fprint(func_file,"\n\t\t->args(\{")
@@ -1047,6 +1050,7 @@ class CppGenBind : AnyGenBind
         let rp = getCursorArgType(nc_res_type)
         if rp != ""
             fprint(func_file,"\n\t\t->res_type(makeType<{rp}>(lib))")
+		fprint(func_file, "\n\t\t->addToModule(*this, SideEffects::worstDefault)")
         fprint(func_file,";\n")
     def override parse_Constructor ( var c : CXCursor )
         let ctor_name = string(clang_getCursorSpelling(c))
@@ -1190,7 +1194,7 @@ class CppGenBind : AnyGenBind
         enumDecl |> push([[auto ns_en,enum_name]])
         let dashing_name = namespace_name(enum_name,"_")
         fprint(enum_class_file, "// from {clang_getCursorLocationDescription(cursor)}\n")
-        fprint(enum_class_file, "class Enumeration_{dashing_name} : public das::Enumeration\{\n")
+        fprint(enum_class_file, "class Enumeration_{dashing_name} : public das::Enumeration \{\n")
         fprint(enum_class_file, "public:\n")
         fprint(enum_class_file, "\tEnumeration_{dashing_name}() : das::Enumeration(\"{das_enum_name}\") \{\n")
         fprint(enum_class_file, "\t\texternal = true;\n")
