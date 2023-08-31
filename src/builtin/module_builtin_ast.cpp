@@ -549,6 +549,12 @@ namespace das {
         return type->annotation->makeValueType();
     }
 
+    TypeInfo * getHandledTypeFieldType ( smart_ptr_raw<TypeAnnotation> annotation, char * name, Context * context, LineInfoArg * at ) {
+        if ( !name ) context->throw_error_at(at, "expecting field name");
+        if ( !annotation ) context->throw_error_at(at, "expecting type annotation");
+        return annotation->getFieldType(name);
+    }
+
     uint32_t getHandledTypeFieldOffset ( smart_ptr_raw<TypeAnnotation> annotation, char * name, Context * context, LineInfoArg * at ) {
         if ( !name ) context->throw_error_at(at, "expecting field name");
         if ( !annotation ) context->throw_error_at(at, "expecting type annotation");
@@ -730,6 +736,9 @@ namespace das {
                 ->args({"type","context","line"});
         addExtern<DAS_BIND_FUN(getHandledTypeFieldOffset)>(*this, lib,  "get_handled_type_field_offset",
             SideEffects::none, "getHandledTypeFieldOffset")
+                ->args({"type","field","context","line"});
+        addExtern<DAS_BIND_FUN(getHandledTypeFieldType)>(*this, lib,  "get_handled_type_field_type",
+            SideEffects::none, "getHandledTypeFieldType")
                 ->args({"type","field","context","line"});
         // module
         addExtern<DAS_BIND_FUN(for_each_typedef)>(*this, lib,  "for_each_typedef",

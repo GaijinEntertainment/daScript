@@ -90,6 +90,7 @@ namespace das
         virtual bool isRefType() const override { return true; }
         virtual int32_t getGcFlags(das_set<Structure *> &, das_set<Annotation *> &) const override;
         virtual uint32_t getFieldOffset ( const string & ) const override;
+        virtual TypeInfo * getFieldType ( const string & ) const override;
         virtual TypeDeclPtr makeFieldType(const string & na, bool isConst) const override;
         virtual TypeDeclPtr makeSafeFieldType(const string & na, bool isConst) const override;
         virtual void aotPreVisitGetField ( TextWriter &, const string & ) override;
@@ -99,17 +100,18 @@ namespace das
         virtual bool canSubstitute(TypeAnnotation * ann) const override;
         StructureField & addFieldEx(const string & na, const string & cppNa, off_t offset, TypeDeclPtr pT);
         virtual void walk(DataWalker & walker, void * data) override;
+        void updateTypeInfo() const;
         int32_t fieldCount() const { return int32_t(fields.size()); }
         void from(BasicStructureAnnotation * ann);
         void from(const char* parentName);
         das_map<string,StructureField> fields;
         vector<string>                 fieldsInOrder;
-        DebugInfoHelper            helpA;
-        StructInfo *               sti = nullptr;
+        mutable DebugInfoHelper    helpA;
+        mutable StructInfo *       sti = nullptr;
         ModuleLibrary *            mlib = nullptr;
         vector<TypeAnnotation*> parents;
         bool validationNeverFails = false;
-        recursive_mutex walkMutex;
+        mutable recursive_mutex walkMutex;
     };
 
     template <typename TT, bool canCopy = isCloneable<TT>::value>
