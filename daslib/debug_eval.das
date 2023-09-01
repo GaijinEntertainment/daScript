@@ -248,7 +248,6 @@ def getHandleFieldOffset ( var st:TokenStream; ident:string; var result:Result )
     if ofs == -1
         return [[auto -1, [[TypeInfo()]]]]
     let tinfo = get_handled_type_field_type(ann, ident)
-    print("tinfo [{ident}] is {tinfo}\n")
     return [[auto ofs, *tinfo]]
 
 def expr_field ( var st:TokenStream ) : Result
