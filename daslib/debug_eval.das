@@ -1,5 +1,6 @@
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
+options strict_smart_pointers
 options indenting = 4
 options no_aot = true
 
@@ -241,14 +242,15 @@ def getVectorOffset ( var st:TokenStream; ident:string; var result:Result ) : tu
     return [[auto ofs*fieldSize,tinfo]]
 
 def getHandleFieldOffset ( var st:TokenStream; ident:string; var result:Result ) : tuple<int;TypeInfo>
-    var ann <- unsafe(reinterpret<smart_ptr<TypeAnnotation>> result.tinfo.annotation)
-    if ann == null
-        return [[auto -1, [[TypeInfo()]]]]
-    let ofs  = int(get_handled_type_field_offset(ann, ident))
-    if ofs == -1
-        return [[auto -1, [[TypeInfo()]]]]
-    let tinfo = get_handled_type_field_type(ann, ident)
-    return [[auto ofs, *tinfo]]
+    unsafe
+        var ann <- unsafe(reinterpret<smart_ptr<TypeAnnotation>> result.tinfo.annotation)
+        if ann == null
+            return [[auto -1, [[TypeInfo()]]]]
+        let ofs  = int(get_handled_type_field_offset(ann, ident))
+        if ofs == -1
+            return [[auto -1, [[TypeInfo()]]]]
+        let tinfo = get_handled_type_field_type(ann, ident)
+        return [[auto ofs, *tinfo]]
 
 def expr_field ( var st:TokenStream ) : Result
     var result = expr_value(st)
