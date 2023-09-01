@@ -63,7 +63,7 @@ Dynamic arrays can also be constructed inline::
 
 This is syntactic equivalent to::
 
-	let arr : array<string> <- to_array_move([[string[4] "one"; "two"; "three"]])
+	let arr : array<string> <- to_array_move([[string[3] "one"; "two"; "three"]])
 
 If only one element is specified, local data construction is of that element::
 
