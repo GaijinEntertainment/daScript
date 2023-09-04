@@ -121,6 +121,11 @@ def getPD ( var st:TokenStream; result:Result; offset:int = 0 ) : void?
             data = result.data
         else
             data = addr(result.value)
+            if result.tinfo.flags.refType
+                let pdata = reinterpret<void??>data
+                if pdata == null
+                    return null
+                data = *pdata
         if result.tinfo.flags.ref
             let pdata = reinterpret<void??>data
             if pdata == null
