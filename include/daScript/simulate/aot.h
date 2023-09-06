@@ -2520,7 +2520,7 @@ namespace das {
             context.heap->free((char *)this, sizeof(StdVectorIterator));
         }
         VectorType * array;
-        size_t index;
+        size_t index = 0;
     };
 
     template <typename TT>

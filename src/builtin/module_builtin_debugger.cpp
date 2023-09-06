@@ -1111,10 +1111,9 @@ namespace debugapi {
     public:
         Module_Debugger() : Module("debugapi") {
             DAS_PROFILE_SECTION("Module_Debugger");
-            ModuleLibrary lib;
-            lib.addModule(this);
+            ModuleLibrary lib(this);
             lib.addBuiltInModule();
-            lib.addModule(Module::require("rtti"));
+            addBuiltinDependency(lib, Module::require("rtti"));
             // annotations
             addAnnotation(make_smart<PrologueAnnotation>(lib));
             addAnnotation(make_smart<AstDebugAgentAnnotation>(lib));

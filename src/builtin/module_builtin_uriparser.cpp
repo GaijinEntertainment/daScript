@@ -306,8 +306,7 @@ void uri_for_each_query_kv ( const Uri & uri, const TBlock<void,TTemporary<char 
 class Module_UriParser : public Module {
 public:
     Module_UriParser() : Module("uriparser") {
-        ModuleLibrary lib;
-        lib.addModule(this);
+        ModuleLibrary lib(this);
         lib.addBuiltInModule();
         // uri
         addAnnotation(make_smart<UriTextRangeAAnnotation>(lib));

@@ -428,8 +428,7 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
     public:
         Module_DASBIND() : Module("dasbind") {
             DAS_PROFILE_SECTION("Module_DASBIND");
-            ModuleLibrary lib;
-            lib.addModule(this);
+            ModuleLibrary lib(this);
             lib.addBuiltInModule();
             addAnnotation(make_smart<ExternFunctionAnnotation>());
             addExtern<DAS_BIND_FUN(safe_pass_string)>(*this, lib, "safe_pass_string",

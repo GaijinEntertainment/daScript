@@ -1329,8 +1329,7 @@ namespace das {
         }
         Module_Rtti() : Module("rtti") {
             DAS_PROFILE_SECTION("Module_Rtti");
-            ModuleLibrary lib;
-            lib.addModule(this);
+            ModuleLibrary lib(this);
             lib.addBuiltInModule();
             // flags
             addAlias(makeProgramFlags());
