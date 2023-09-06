@@ -169,8 +169,7 @@ namespace das
     class Module_Raster : public Module {
     public:
         Module_Raster() : Module("raster") {
-            ModuleLibrary lib;
-            lib.addModule(this);
+            ModuleLibrary lib(this);
             lib.addBuiltInModule();
             // gather
             addExternEx<float4(const float *,uint4),DAS_BIND_FUN(v_gather)>(*this, lib, "gather",

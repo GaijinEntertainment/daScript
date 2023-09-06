@@ -692,8 +692,7 @@ namespace das
     public:
         Module_Strings() : Module("strings") {
             DAS_PROFILE_SECTION("Module_Strings");
-            ModuleLibrary lib;
-            lib.addModule(this);
+            ModuleLibrary lib(this);
             lib.addBuiltInModule();
             // string builder writer
             addAnnotation(make_smart<StringBuilderWriterAnnotation>(lib));

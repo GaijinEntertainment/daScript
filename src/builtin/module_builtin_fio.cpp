@@ -520,10 +520,9 @@ namespace das {
     public:
         Module_FIO() : Module("fio") {
             DAS_PROFILE_SECTION("Module_FIO");
-            ModuleLibrary lib;
-            lib.addModule(this);
+            ModuleLibrary lib(this);
             lib.addBuiltInModule();
-            lib.addModule(Module::require("strings"));
+            addBuiltinDependency(lib, Module::require("strings"));
             // type
             addAnnotation(make_smart<DummyTypeAnnotation>("FILE", "FILE", 16, 16));
             addAnnotation(make_smart<FStatAnnotation>(lib));

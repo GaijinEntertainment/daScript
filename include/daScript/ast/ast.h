@@ -1028,6 +1028,7 @@ namespace das
         void verifyAotReady();
         void verifyBuiltinNames(uint32_t flags);
         void addDependency ( Module * mod, bool pub );
+        void addBuiltinDependency ( ModuleLibrary & lib, Module * mod, bool pub = false );
     public:
         template <typename RecAnn>
         void initRecAnnotation ( const smart_ptr<RecAnn> & rec, ModuleLibrary & lib ) {

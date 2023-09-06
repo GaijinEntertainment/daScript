@@ -93,8 +93,7 @@ namespace das
 
     Module_BuiltIn::Module_BuiltIn() : Module("$") {
         DAS_PROFILE_SECTION("Module_Builtin");
-        ModuleLibrary lib;
-        lib.addModule(this);
+        ModuleLibrary lib(this);
         // boolean
         addFunctionBasic<bool>(*this,lib);
         addFunctionBoolean<bool>(*this,lib);
