@@ -12,7 +12,7 @@ void pathtracer () {
     policies.aot = true;
     policies.fail_on_no_aot = false;
     // compile program
-    auto program = compileDaScript(getDasRoot() + PATHTRACER_NAME, fAccess, tout, dummyLibGroup, false, policies);
+    auto program = compileDaScript(getDasRoot() + PATHTRACER_NAME, fAccess, tout, dummyLibGroup, policies);
     if ( program->failed() ) {
         // if compilation failed, report errors
         tout << "failed to compile\n";

@@ -94,7 +94,7 @@ bool unit_test ( const string & fn, bool useAot ) {
     // policies.intern_strings = true;
     // policies.intern_const_strings = true;
     // policies.no_unsafe = true;
-    if ( auto program = compileDaScript(fn, fAccess, tout, dummyLibGroup, false, policies) ) {
+    if ( auto program = compileDaScript(fn, fAccess, tout, dummyLibGroup, policies) ) {
         if ( program->failed() ) {
             tout << "failed to compile\n";
             for ( auto & err : program->errors ) {
@@ -145,7 +145,7 @@ bool exception_test ( const string & fn, bool useAot ) {
     ModuleGroup dummyLibGroup;
     CodeOfPolicies policies;
     policies.aot = useAot;
-    if ( auto program = compileDaScript(fn, fAccess, tout, dummyLibGroup, false, policies) ) {
+    if ( auto program = compileDaScript(fn, fAccess, tout, dummyLibGroup, policies) ) {
         if ( program->failed() ) {
             tout << "failed to compile\n";
             for ( auto & err : program->errors ) {
@@ -194,7 +194,7 @@ bool performance_test ( const string & fn, bool useAot ) {
     // policies.intern_strings = true;
     // policies.intern_const_strings = true;
     // policies.no_unsafe = true;
-    if ( auto program = compileDaScript(fn, fAccess, tout, dummyLibGroup, false, policies) ) {
+    if ( auto program = compileDaScript(fn, fAccess, tout, dummyLibGroup, policies) ) {
         if ( program->failed() ) {
             tout << fn << " failed to compile\n";
             for ( auto & err : program->errors ) {

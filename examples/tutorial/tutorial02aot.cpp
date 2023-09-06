@@ -11,7 +11,7 @@ void tutorial () {
     auto fAccess = make_smart<FsFileAccess>();      // default file access
     policies.aot = true;
     // compile program
-    auto program = compileDaScript(getDasRoot() + TUTORIAL_NAME, fAccess, tout, dummyLibGroup, false, policies);
+    auto program = compileDaScript(getDasRoot() + TUTORIAL_NAME, fAccess, tout, dummyLibGroup, policies);
     if ( program->failed() ) {
         // if compilation failed, report errors
         tout << "failed to compile\n";

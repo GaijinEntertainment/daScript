@@ -34,7 +34,7 @@ bool unit_test ( const string & fn, bool useAOT ) {
     policies.stack = 0;
     auto access = make_smart<FsFileAccess>();
     ModuleGroup dummyGroup;
-    if ( auto program = compileDaScript(fn,access,tout,dummyGroup,false,policies) ) {
+    if ( auto program = compileDaScript(fn,access,tout,dummyGroup,policies) ) {
         if ( program->failed() ) {
             tout << fn << " failed to compile\n";
             for ( auto & err : program->errors ) {

@@ -41,7 +41,7 @@ bool compile ( const string & fn, const string & cppFn, bool dryRun ) {
     policies.aot = false;
     policies.aot_module = true;
     policies.fail_on_lack_of_aot_export = true;
-    if ( auto program = compileDaScript(fn,access,tout,dummyGroup,false,policies) ) {
+    if ( auto program = compileDaScript(fn,access,tout,dummyGroup,policies) ) {
         if ( program->failed() ) {
             tout << "failed to compile\n";
             for ( auto & err : program->errors ) {
@@ -288,7 +288,7 @@ bool compile_and_run ( const string & fn, const string & mainFnName, bool output
     }
     policies.fail_on_no_aot = false;
     policies.fail_on_lack_of_aot_export = false;
-    if ( auto program = compileDaScript(fn,access,tout,dummyGroup,false,policies) ) {
+    if ( auto program = compileDaScript(fn,access,tout,dummyGroup,policies) ) {
         if ( program->failed() ) {
             for ( auto & err : program->errors ) {
                 tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr );
