@@ -42,7 +42,7 @@ bool performance_test ( const string & fn, bool useAot ) {
     // policies.intern_strings = true;
     // policies.intern_const_strings = true;
     // policies.no_unsafe = true;
-    if ( auto program = compileDaScript(fn, fAccess, tout, dummyLibGroup, false, policies) ) {
+    if ( auto program = compileDaScript(fn, fAccess, tout, dummyLibGroup, policies) ) {
         if ( program->failed() ) {
             tout << fn << " failed to compile (" << this_thread_id() << ")\n";
             for ( auto & err : program->errors ) {

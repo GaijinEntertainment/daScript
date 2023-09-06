@@ -1055,7 +1055,7 @@ namespace das {
             const TBlock<void,bool,smart_ptr<Program>,const string> & block, Context * context, LineInfoArg * at ) {
         TextWriter issues;
         if ( !access ) access = make_smart<FsFileAccess>();
-        auto program = compileDaScript(modName, access, issues, *module_group, cop.export_all, cop);
+        auto program = compileDaScript(modName, access, issues, *module_group, cop);
         if ( program ) {
             if (program->failed()) {
                 for (auto & err : program->errors) {

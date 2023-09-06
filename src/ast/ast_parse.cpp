@@ -464,9 +464,9 @@ namespace das {
                                 const FileAccessPtr & access,
                                 TextWriter & logs,
                                 ModuleGroup & libGroup,
-                                bool exportAll,
                                 CodeOfPolicies policies ) {
         ReuseCacheGuard rcg;
+        bool exportAll = policies.export_all;
         auto time0 = ref_time_ticks();
         totParse = 0;
         totInfer = 0;
