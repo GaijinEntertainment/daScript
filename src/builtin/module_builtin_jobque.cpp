@@ -181,11 +181,12 @@ namespace das {
         return ch;
     }
 
-    void channelRemove( Channel * ch, Context * context, LineInfoArg * at ) {
+    void channelRemove( Channel * & ch, Context * context, LineInfoArg * at ) {
         if (ch->releaseRef()) {
             context->throw_error_at(at, "channel beeing deleted while being used");
         }
         delete ch;
+        ch = nullptr;
     }
 
     struct ChannelAnnotation : ManagedStructureAnnotation<Channel,false> {
@@ -222,11 +223,12 @@ namespace das {
         return ch;
     }
 
-    void lockBoxRemove( LockBox * ch, Context * context, LineInfoArg * at ) {
+    void lockBoxRemove( LockBox * & ch, Context * context, LineInfoArg * at ) {
         if (ch->releaseRef()) {
             context->throw_error_at(at, "lock box beeing deleted while being used");
         }
         delete ch;
+        ch = nullptr;
     }
 
     void withLockBox ( const TBlock<void,LockBox *> & blk, Context * context, LineInfoArg * at ) {
@@ -367,11 +369,12 @@ namespace das {
         return ch;
     }
 
-    void jobStatusRemove( JobStatus * ch, Context * context, LineInfoArg * at ) {
+    void jobStatusRemove( JobStatus * & ch, Context * context, LineInfoArg * at ) {
         if (ch->releaseRef()) {
             context->throw_error_at(at, "job status beeing deleted while being used");
         }
         delete ch;
+        ch = nullptr;
     }
 
     void waitForJob ( JobStatus * status, Context * context, LineInfoArg * at ) {

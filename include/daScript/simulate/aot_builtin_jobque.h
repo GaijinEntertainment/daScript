@@ -108,7 +108,7 @@ namespace das {
     void jobStatusAddRef ( JobStatus * status, Context * context, LineInfoArg * at );
     void jobStatusReleaseRef ( JobStatus * & status, Context * context, LineInfoArg * at );
     JobStatus * jobStatusCreate( Context * context, LineInfoArg * );
-    void jobStatusRemove( JobStatus * ch, Context * context, LineInfoArg * at );
+    void jobStatusRemove( JobStatus * & ch, Context * context, LineInfoArg * at );
     void waitForJob ( JobStatus * status, Context * context, LineInfoArg * at );
     void notifyJob ( JobStatus * status, Context * context, LineInfoArg * at );
     void notifyAndReleaseJob ( JobStatus * & status, Context * context, LineInfoArg * at );
@@ -118,14 +118,14 @@ namespace das {
     void withChannel ( const TBlock<void,Channel *> & blk, Context * context, LineInfoArg * lineinfo );
     void withChannelEx ( int32_t count, const TBlock<void,Channel *> & blk, Context * context, LineInfoArg * lineinfo );
     Channel* channelCreate( Context * context, LineInfoArg * at);
-    void channelRemove(Channel * ch, Context * context, LineInfoArg * at);
+    void channelRemove(Channel * & ch, Context * context, LineInfoArg * at);
     void channelGather ( Channel * ch, const TBlock<void,void *> & blk, Context * context, LineInfoArg * at );
     void channelGatherEx ( Channel * ch, const TBlock<void,void *,const TypeInfo *,Context &> & blk, Context * context, LineInfoArg * at );
     void channelGatherAndForward ( Channel * ch, Channel * toCh, const TBlock<void,void *> & blk, Context * context, LineInfoArg * at );
     void channelPeek ( Channel * ch, const TBlock<void,void *> & blk, Context * context, LineInfoArg * at );
     void channelVerify ( Channel * ch, Context * context, LineInfoArg * at );
     LockBox * lockBoxCreate( Context *, LineInfoArg * );
-    void lockBoxRemove( LockBox * ch, Context * context, LineInfoArg * at );
+    void lockBoxRemove( LockBox * & ch, Context * context, LineInfoArg * at );
     void withLockBox ( const TBlock<void,LockBox *> & blk, Context * context, LineInfoArg * at );
     vec4f lockBoxSet ( Context & context, SimNode_CallBase * call, vec4f * args );
     void lockBoxGet ( LockBox * ch, const TBlock<void,void*> & blk, Context * context, LineInfoArg * at );
