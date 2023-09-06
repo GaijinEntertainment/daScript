@@ -405,8 +405,7 @@ namespace das {
             DAS_PROFILE_SECTION("Module_JobQue");
             g_jobQueAvailable++;
             // libs
-            ModuleLibrary lib;
-            lib.addModule(this);
+            ModuleLibrary lib(this);
             lib.addBuiltInModule();
             // types
             addAnnotation(make_smart<JobStatusAnnotation>(lib));

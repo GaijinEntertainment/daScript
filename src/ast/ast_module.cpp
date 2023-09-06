@@ -71,6 +71,11 @@ namespace das {
         }
     }
 
+    void Module::addBuiltinDependency ( ModuleLibrary & lib, Module * m, bool pub ) {
+        lib.addModule(m);
+        requireModule[m] = pub;
+    }
+
     TypeAnnotation * Module::resolveAnnotation ( const TypeInfo * info ) {
         if ( info->type != Type::tHandle ) {
             return nullptr;

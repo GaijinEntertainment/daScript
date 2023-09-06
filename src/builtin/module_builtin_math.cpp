@@ -556,8 +556,7 @@ namespace das {
     public:
         Module_Math() : Module("math") {
             DAS_PROFILE_SECTION("Module_Math");
-            ModuleLibrary lib;
-            lib.addModule(this);
+            ModuleLibrary lib(this);
             lib.addBuiltInModule();
             // constants
             addConstant(*this,"PI",(float)M_PI);

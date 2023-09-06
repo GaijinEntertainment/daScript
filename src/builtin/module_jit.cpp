@@ -281,11 +281,10 @@ namespace das {
     public:
         Module_Jit() : Module("jit") {
             DAS_PROFILE_SECTION("Module_Jit");
-            ModuleLibrary lib;
-            lib.addModule(this);
+            ModuleLibrary lib(this);
             lib.addBuiltInModule();
-            lib.addModule(Module::require("rtti"));
-            lib.addModule(Module::require("ast"));
+            addBuiltinDependency(lib, Module::require("rtti"));
+            addBuiltinDependency(lib, Module::require("ast"));
             addExtern<DAS_BIND_FUN(das_invoke_code)>(*this, lib, "invoke_code",
                 SideEffects::worstDefault, "das_invoke_code")
                     ->args({"code","arguments","cmres","context"})->unsafeOperation = true;

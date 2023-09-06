@@ -569,10 +569,9 @@ namespace das {
 
     Module_Ast::Module_Ast() : Module("ast") {
         DAS_PROFILE_SECTION("Module_Ast");
-        ModuleLibrary lib;
-        lib.addModule(this);
+        ModuleLibrary lib(this);
         lib.addBuiltInModule();
-        lib.addModule(Module::require("rtti"));
+        addBuiltinDependency(lib, Module::require("rtti"));
         registerAnnotations(lib);
         registerAnnotations1(lib);
         registerAnnotations2(lib);
