@@ -81,9 +81,10 @@ protected:
     __fn_WalkEnumeration8 = 77,
     __fn_WalkEnumeration16 = 78,
     __fn_FakeContext = 79,
+    __fn_InvalidData = 80,
   };
 protected:
-  int _das_class_method_offset[80];
+  int _das_class_method_offset[81];
 public:
   DapiDataWalker_Adapter ( const StructInfo * info ) {
       _das_class_method_offset[__fn_canVisitHandle] = adapt_field_offset("canVisitHandle",info);
@@ -166,6 +167,7 @@ public:
       _das_class_method_offset[__fn_WalkEnumeration8] = adapt_field_offset("WalkEnumeration8",info);
       _das_class_method_offset[__fn_WalkEnumeration16] = adapt_field_offset("WalkEnumeration16",info);
       _das_class_method_offset[__fn_FakeContext] = adapt_field_offset("FakeContext",info);
+      _das_class_method_offset[__fn_InvalidData] = adapt_field_offset("InvalidData",info);
   }
   __forceinline Func get_canVisitHandle ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_canVisitHandle]);
@@ -199,7 +201,7 @@ public:
   }
   __forceinline bool invoke_canVisitArrayData ( Context * __context__, Func __funcCall__, void * self, TypeInfo const  & ti, uint32_t count ) const {
     return das_invoke_function<bool>::invoke
-      <void *,TypeInfo const  &>
+      <void *,TypeInfo const  &,uint32_t>
         (__context__,nullptr,__funcCall__,
           self,ti,count);
   }
@@ -886,6 +888,15 @@ public:
       <void *,Context &>
         (__context__,nullptr,__funcCall__,
           self,value);
+  }
+  __forceinline Func get_InvalidData ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_InvalidData]);
+  }
+  __forceinline void invoke_InvalidData ( Context * __context__, Func __funcCall__, void * self ) const {
+    das_invoke_function<void>::invoke
+      <void *>
+        (__context__,nullptr,__funcCall__,
+          self);
   }
 };
 

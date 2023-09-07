@@ -592,6 +592,11 @@ namespace debugapi {
                 invoke_FakeContext(context,fn_FakeContext,classPtr,*value);
             }
         }
+        virtual void invalidData ( ) override {
+           if ( auto fnInvalidData = get_InvalidData(classPtr) ) {
+                invoke_InvalidData(context,fnInvalidData,classPtr);
+            }
+        }
     protected:
         void *      classPtr;
     };

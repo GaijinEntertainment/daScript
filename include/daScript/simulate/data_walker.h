@@ -120,6 +120,8 @@ namespace das {
         virtual void walk_array ( char * pa, uint32_t stride, uint32_t count, TypeInfo * ti );
         virtual void walk_dim ( char * pa, TypeInfo * ti );
         virtual void walk_table ( Table * tab, TypeInfo * info );
+    // invalid data
+        virtual void invalidData () {}
     };
 
     typedef smart_ptr<DataWalker> DataWalkerPtr;

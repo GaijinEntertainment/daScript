@@ -163,6 +163,7 @@ class DapiDataWalker
     def abstract WalkEnumeration8  ( var value:int8 &; ei:EnumInfo ) : void
     def abstract WalkEnumeration16 ( var value:int16 &; ei:EnumInfo ) : void
     def abstract FakeContext ( var value:Context ) : void
+    def abstract InvalidData : void
 
 def make_data_walker ( classPtr ) : smart_ptr<DataWalker>
     static_if typeinfo(is_class *classPtr)
