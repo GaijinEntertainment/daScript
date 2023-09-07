@@ -37,8 +37,7 @@ Color makeGray ( const Color & c ) {
 class Module_Tutorial03 : public Module {
 public:
     Module_Tutorial03() : Module("tutorial_03") {   // module name, when used from das file
-        ModuleLibrary lib;
-        lib.addModule(this);
+        ModuleLibrary lib(this);
         lib.addBuiltInModule();
         // register custom type annotation
         addAnnotation(make_smart<ColorAnnotation>(lib));
