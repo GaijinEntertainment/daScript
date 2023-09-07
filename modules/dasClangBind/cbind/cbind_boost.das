@@ -684,6 +684,7 @@ class CppGenBind : AnyGenBind
     enums_with_flags : table<string; bool>
     abstract_class : array<bool>
     wrapper_count : int
+    local_type_names : table<string; bool>
     def CppGenBind ( pfn,pfp:string; args:array<string> )
         init_args(pfn,pfp,args)
         setDefaultFiles()
@@ -815,7 +816,7 @@ class CppGenBind : AnyGenBind
             *wr |> write("\t\taddField<{substType},offsetof(ManagedType,{field_name})>(\"{getBindFldName(field_name)}\",\"{field_name}\")\n")
             *wr |> write("\t\t\t.adjustAot(\"das_reinterpret<{substType}>::pass(\",\")\");\n")
     def isLocalType ( name,cppname:string )
-        return false
+        return local_type_names[name]
     def isArgByValue ( name:string )
         return false
     def override parse_Struct ( var c : CXCursor; struct_name : string )
@@ -1177,6 +1178,7 @@ class CppGenBind : AnyGenBind
             das_enum_name = das_enum_name |> slice(0,-1)
         return das_enum_name
     def generateEnumDecl
+        fprint(enum_decl_cast_file, "#pragma once\n")
         for decl in enumDecl
             let cppEnumName = enum2enum?[decl.ns_en] ?? decl.ns_en
             let das_enum_name = dasEnumName(decl.enum_name,cppEnumName)
