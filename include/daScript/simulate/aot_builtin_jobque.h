@@ -2,6 +2,7 @@
 
 #include "daScript/misc/job_que.h"
 #include "daScript/simulate/simulate.h"
+#include "aot.h"
 
 #include <queue>
 
