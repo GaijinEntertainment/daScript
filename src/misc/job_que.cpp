@@ -218,7 +218,9 @@ namespace das {
     }
 
     JobStatus::~JobStatus() {
+        DAS_ASSERT(mMagic==STATUS_MAGIC);
         DAS_ASSERT(mRef==0);
+        mMagic = 0;
     }
 
     void JobStatus::Notify() {

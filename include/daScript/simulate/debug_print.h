@@ -444,6 +444,9 @@ namespace das {
                 ss << "null";
             }
         }
+        virtual void invalidData () override {
+            ss << "invalid data";
+        }
     };
 
     string debug_value ( void * pX, TypeInfo * info, PrintFlags flags );

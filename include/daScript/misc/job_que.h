@@ -25,6 +25,7 @@ namespace das {
 
     class JobStatus {
     public:
+        enum { STATUS_MAGIC = 0xdeadbeef };
         JobStatus() {};
         JobStatus(uint32_t count) { Clear( count); };
         JobStatus ( JobStatus && ) = delete;
@@ -41,11 +42,13 @@ namespace das {
         int releaseRef() { return --mRef; }
         int size() const;
         int append(int size);
+        bool isValid() const { return mMagic==STATUS_MAGIC; }
     protected:
         mutable mutex		mCompleteMutex;
         uint32_t			mRemaining = 0;
         condition_variable	mCond;
         atomic<int>         mRef{0};
+        int32_t             mMagic = STATUS_MAGIC;
     };
 
     class JobQue {

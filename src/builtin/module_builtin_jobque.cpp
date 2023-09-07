@@ -182,9 +182,8 @@ namespace das {
     }
 
     void channelRemove( Channel * & ch, Context * context, LineInfoArg * at ) {
-        if (ch->releaseRef()) {
-            context->throw_error_at(at, "channel beeing deleted while being used");
-        }
+        if (!ch->isValid()) context->throw_error_at(at, "channel is invalid (already deleted?)");
+        if (ch->releaseRef()) context->throw_error_at(at, "channel beeing deleted while being used");
         delete ch;
         ch = nullptr;
     }
@@ -202,6 +201,10 @@ namespace das {
         virtual void walk(DataWalker & walker, void * data) override {
             BasicStructureAnnotation::walk(walker, data);
             Channel * ch = (Channel *) data;
+            if ( !ch->isValid() ) {
+                walker.invalidData();
+                return;
+            }
             ch->for_each_item([&](void * data, TypeInfo * ti, Context *) {
                 walker.walk((char *)&data, ti);
             });
@@ -211,6 +214,7 @@ namespace das {
     struct JobStatusAnnotation : ManagedStructureAnnotation<JobStatus,false> {
         JobStatusAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("JobStatus", ml) {
             addProperty<DAS_BIND_MANAGED_PROP(isReady)>("isReady");
+            addProperty<DAS_BIND_MANAGED_PROP(isValid)>("isValid");
         }
     };
 
@@ -224,9 +228,8 @@ namespace das {
     }
 
     void lockBoxRemove( LockBox * & ch, Context * context, LineInfoArg * at ) {
-        if (ch->releaseRef()) {
-            context->throw_error_at(at, "lock box beeing deleted while being used");
-        }
+        if (!ch->isValid()) context->throw_error_at(at, "lock box is invalid (already deleted?)");
+        if (ch->releaseRef()) context->throw_error_at(at, "lock box beeing deleted while being used");
         delete ch;
         ch = nullptr;
     }
@@ -268,6 +271,10 @@ namespace das {
         virtual void walk(DataWalker & walker, void * data) override {
             BasicStructureAnnotation::walk(walker, data);
             LockBox * ch = (LockBox *) data;
+            if ( !ch->isValid() ) {
+                walker.invalidData();
+                return;
+            }
             ch->peek([&](void * data, TypeInfo * ti, Context *) {
                 walker.walk((char *)&data, ti);
             });
@@ -370,9 +377,8 @@ namespace das {
     }
 
     void jobStatusRemove( JobStatus * & ch, Context * context, LineInfoArg * at ) {
-        if (ch->releaseRef()) {
-            context->throw_error_at(at, "job status beeing deleted while being used");
-        }
+        if (!ch->isValid()) context->throw_error_at(at, "job status is invalid (already deleted?)");
+        if (ch->releaseRef()) context->throw_error_at(at, "job status beeing deleted while being used");
         delete ch;
         ch = nullptr;
     }
