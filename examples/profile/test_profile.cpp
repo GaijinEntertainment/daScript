@@ -953,8 +953,7 @@ uint32_t testMaxFrom1s(uint32_t x) {
 class Module_TestProfile : public Module {
 public:
     Module_TestProfile() : Module("testProfile") {
-        ModuleLibrary lib;
-        lib.addModule(this);
+        ModuleLibrary lib(this);
         lib.addBuiltInModule();
         // function annotations
         addAnnotation(make_smart<EsFunctionAnnotation>());

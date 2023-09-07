@@ -82,10 +82,9 @@ void addObject ( const void * pClass, const StructInfo * info, Context * context
 class Module_Tutorial04 : public Module {
 public:
     Module_Tutorial04() : Module("tutorial_04") {   // module name, when used from das file
-        ModuleLibrary lib;
-        lib.addModule(this);
+        ModuleLibrary lib(this);
         lib.addBuiltInModule();
-        lib.addModule(Module::require("rtti"));     // we add RTTI to ModuleLibrary so that we can bind addObject
+        addBuiltinDependency(lib, Module::require("rtti"));   // we add RTTI to ModuleLibrary so that we can bind addObject
         // add_object is how daScript will 'register' objects with C++
         addExtern<DAS_BIND_FUN(addObject)>(*this, lib, "add_object",
             SideEffects::modifyExternal, "addObject");

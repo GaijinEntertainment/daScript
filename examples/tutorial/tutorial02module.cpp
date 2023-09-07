@@ -8,8 +8,7 @@ using namespace das;
 class Module_Tutorial02 : public Module {
 public:
     Module_Tutorial02() : Module("tutorial_02") {   // module name, when used from das file
-        ModuleLibrary lib;
-        lib.addModule(this);
+        ModuleLibrary lib(this);
         lib.addBuiltInModule();
         // adding constant to the module
         addConstant(*this,"SQRT2",sqrtf(2.0));
