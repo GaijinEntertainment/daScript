@@ -73,6 +73,10 @@ class ImguiGen : CppGenBind
             "ImGuiViewportFlags"        => "ImGuiViewportFlags_";
             "ImGuiWindowFlags"          => "ImGuiWindowFlags_"
         }}
+        local_type_names <- {{
+            "ImGuiTableColumnSortSpecs" => true;
+            "Config" => true;
+        }};
         imgui_skip_func <- {{
             "ImGui::TextUnformatted" => true;
             "ImGuiTextFilter::PassFilter" => true;
@@ -99,8 +103,9 @@ class ImguiGen : CppGenBind
 
 class ImguiSubmoduleGen : ImguiGen
     cb_extra : string = ""
+    temp_fn_extra : string = ""
     def override get_module_temp_fn: string
-        return ""
+        return "{temp_fn_extra}"
     def ImguiSubmoduleGen(mod_name,das_mod_name,pfn,pfp:string)
         ImguiGen`ImguiGen(self,mod_name,das_mod_name,pfn,pfp)
     def override generateModuleHPrefix
@@ -143,5 +148,6 @@ def main
         cgb.aot_alias["ax::NodeEditor::LinkId"] = true
         cgb.aot_alias["ax::NodeEditor::PinId"] = true
         cgb.cb_extra = "#include \"cb_dasIMGUI_NODE_EDITOR.h\"\n"
+        cgb.temp_fn_extra = ", imgui_node_editorTempFn"
         cgb->generate()
         cgb->genCMakeDecl("DAS_IMGUI_NODE_EDITOR_BIND")
