@@ -12,6 +12,9 @@ MAKE_TYPE_FACTORY(JobStatus, JobStatus)
 MAKE_TYPE_FACTORY(Channel, Channel)
 MAKE_TYPE_FACTORY(LockBox, LockBox)
 
+MAKE_TYPE_FACTORY(Atomic32, AtomicTT<int32_t>)
+MAKE_TYPE_FACTORY(Atomic64, AtomicTT<int64_t>)
+
 namespace das {
 
     LockBox::~LockBox() {
@@ -281,6 +284,25 @@ namespace das {
         }
     };
 
+
+    template <typename TT>
+    struct AtomicAnnotation : ManagedStructureAnnotation<AtomicTT<TT>,false> {
+        AtomicAnnotation(const char * ttname, ModuleLibrary & ml) : ManagedStructureAnnotation (ttname, ml) {
+        }
+        virtual void walk(DataWalker & walker, void * data) override {
+            BasicStructureAnnotation::walk(walker, data);
+            auto ch = (AtomicTT<TT> *) data;
+            if ( !ch->isValid() ) {
+                walker.invalidData();
+                return;
+            }
+            TypeInfo info;
+            memset(&info, 0, sizeof(TypeInfo));
+            info.type = sizeof(TT)==4 ? Type::tInt : Type::tInt64;
+            vec4f vd = cast<TT>::from(ch->get());
+            walker.walk(vd, &info);
+        }
+    };
 }
 
 das::Context* get_clone_context( das::Context * ctx, uint32_t category );//link time resolved dependencies
@@ -424,6 +446,56 @@ namespace das {
             auto lbx = make_smart<LockBoxAnnotation>(lib);
             lbx->from("JobStatus");
             addAnnotation(lbx);
+            auto a32 = make_smart<AtomicAnnotation<int32_t>>("Atomic32",lib);
+            a32->from("JobStatus");
+            addAnnotation(a32);
+            auto a64 = make_smart<AtomicAnnotation<int64_t>>("Atomic64",lib);
+            a64->from("JobStatus");
+            addAnnotation(a64);
+            // atomic 32
+            addExtern<DAS_BIND_FUN(atomicCreate<int32_t>)>(*this, lib, "atomic32_create",
+                SideEffects::modifyExternal, "atomicCreate<int32_t>")
+                    ->args({ "context","line" });
+            addExtern<DAS_BIND_FUN(atomicRemove<int32_t>)>(*this, lib, "atomic32_remove",
+                SideEffects::modifyArgumentAndExternal, "atomicRemove<int32_t>")
+                    ->args({ "atomic", "context","line" })->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(withAtomic<int32_t>)>(*this, lib,  "with_atomic32",
+                SideEffects::invoke, "withAtomic<int32_t>")
+                    ->args({"block","context","line"});
+            addExtern<DAS_BIND_FUN(atomicSet<int32_t>)>(*this, lib, "set",
+                SideEffects::modifyArgumentAndExternal, "atomicSet<int32_t>")
+                    ->args({ "atomic", "value", "context","line" });
+            addExtern<DAS_BIND_FUN(atomicGet<int32_t>)>(*this, lib, "get",
+                SideEffects::modifyArgumentAndExternal, "atomicGet<int32_t>")
+                    ->args({ "atomic", "context","line" });
+            addExtern<DAS_BIND_FUN(atomicInc<int32_t>)>(*this, lib, "inc",
+                SideEffects::modifyArgumentAndExternal, "atomicInc<int32_t>")
+                    ->args({ "atomic", "context","line" });
+            addExtern<DAS_BIND_FUN(atomicDec<int32_t>)>(*this, lib, "dec",
+                SideEffects::modifyArgumentAndExternal, "atomicDec<int32_t>")
+                    ->args({ "atomic", "context","line" });
+            // atomic 64
+            addExtern<DAS_BIND_FUN(atomicCreate<int64_t>)>(*this, lib, "atomic64_create",
+                SideEffects::modifyExternal, "atomicCreate<int64_t>")
+                    ->args({ "context","line" });
+            addExtern<DAS_BIND_FUN(atomicRemove<int64_t>)>(*this, lib, "atomic64_remove",
+                SideEffects::modifyArgumentAndExternal, "atomicRemove<int64_t>")
+                    ->args({ "atomic", "context","line" })->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(withAtomic<int64_t>)>(*this, lib,  "with_atomic64",
+                SideEffects::invoke, "withAtomic<int64_t>")
+                    ->args({"block","context","line"});
+            addExtern<DAS_BIND_FUN(atomicSet<int64_t>)>(*this, lib, "set",
+                SideEffects::modifyArgumentAndExternal, "atomicSet<int64_t>")
+                    ->args({ "atomic", "value", "context","line" });
+            addExtern<DAS_BIND_FUN(atomicGet<int64_t>)>(*this, lib, "get",
+                SideEffects::modifyArgumentAndExternal, "atomicGet<int64_t>")
+                    ->args({ "atomic", "context","line" });
+            addExtern<DAS_BIND_FUN(atomicInc<int64_t>)>(*this, lib, "inc",
+                SideEffects::modifyArgumentAndExternal, "atomicInc<int64_t>")
+                    ->args({ "atomic", "context","line" });
+            addExtern<DAS_BIND_FUN(atomicDec<int64_t>)>(*this, lib, "dec",
+                SideEffects::modifyArgumentAndExternal, "atomicDec<int64_t>")
+                    ->args({ "atomic", "context","line" });
             // lock box
             addExtern<DAS_BIND_FUN(lockBoxCreate)>(*this, lib, "lock_box_create",
                 SideEffects::invoke, "lockBoxCreate")
