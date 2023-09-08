@@ -163,7 +163,7 @@ namespace das {
 
     template <typename TT>
     void withAtomic ( const TBlock<void,AtomicTT<TT> *> & blk, Context * context, LineInfoArg * at ) {
-        using TAtomic = typename AtomicTT<TT>;
+        using TAtomic = AtomicTT<TT>;
         TAtomic ch;
         ch.addRef();
         das::das_invoke<void>::invoke<TAtomic *>(context, at, blk, &ch);
