@@ -163,9 +163,10 @@ namespace das {
 
     template <typename TT>
     void withAtomic ( const TBlock<void,AtomicTT<TT> *> & blk, Context * context, LineInfoArg * at ) {
-        AtomicTT<TT> ch;
+        using TAtomic = typename AtomicTT<TT>;
+        TAtomic ch;
         ch.addRef();
-        das_invoke<void>::invoke<typename AtomicTT<TT> *>(context, at, blk, &ch);
+        das::das_invoke<void>::invoke<TAtomic *>(context, at, blk, &ch);
         if ( ch.releaseRef() ) {
             context->throw_error_at(at, "atomic box beeing deleted while being used");
         }
