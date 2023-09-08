@@ -2,6 +2,7 @@
 
 #include "daScript/misc/job_que.h"
 #include "daScript/simulate/simulate.h"
+#include "aot.h"
 
 #include <queue>
 
@@ -38,6 +39,20 @@ namespace das {
     protected:
         Feature box;
     };
+
+    template <typename TT>
+    class AtomicTT : public JobStatus {
+    public:
+        TT inc () { return ++ value; }
+        TT dec () { return -- value; }
+        TT get () { return value.load(); }
+        void set ( TT v ) { value.store(v); }
+    public:
+        atomic<TT>  value;
+    };
+
+    typedef AtomicTT<int32_t> AtomicInt;
+    typedef AtomicTT<int64_t> AtomicInt64;
 
     class Channel : public JobStatus {
     public:
@@ -130,4 +145,58 @@ namespace das {
     vec4f lockBoxSet ( Context & context, SimNode_CallBase * call, vec4f * args );
     void lockBoxGet ( LockBox * ch, const TBlock<void,void*> & blk, Context * context, LineInfoArg * at );
     void lockBoxUpdate ( LockBox * ch, TypeInfo * ti, const TBlock<void *,void*> & blk, Context * context, LineInfoArg * at );
+
+    template <typename TT>
+    AtomicTT<TT> * atomicCreate( Context *, LineInfoArg * ) {
+        auto ch = new AtomicTT<TT>();
+        ch->addRef();
+        return ch;
+    }
+
+    template <typename TT>
+    void atomicRemove( AtomicTT<TT> * & ch, Context * context, LineInfoArg * at ) {
+        if (!ch->isValid()) context->throw_error_at(at, "atomic is invalid (already deleted?)");
+        if (ch->releaseRef()) context->throw_error_at(at, "atomic beeing deleted while being used");
+        delete ch;
+        ch = nullptr;
+    }
+
+    template <typename TT>
+    void withAtomic ( const TBlock<void,AtomicTT<TT> *> & blk, Context * context, LineInfoArg * at ) {
+        using TAtomic = AtomicTT<TT>;
+        TAtomic ch;
+        ch.addRef();
+        das::das_invoke<void>::invoke<TAtomic *>(context, at, blk, &ch);
+        if ( ch.releaseRef() ) {
+            context->throw_error_at(at, "atomic box beeing deleted while being used");
+        }
+    }
+
+    template <typename TT>
+    TT atomicGet ( AtomicTT<TT> * ch, Context * context, LineInfoArg * at ) {
+        if ( !ch ) context->throw_error_at(at, "atomic is null");
+        if (!ch->isValid()) context->throw_error_at(at, "atomic is invalid (already deleted?)");
+        return ch->get();
+    }
+
+    template <typename TT>
+    void atomicSet ( AtomicTT<TT> * ch, TT val, Context * context, LineInfoArg * at ) {
+        if ( !ch ) context->throw_error_at(at, "atomic is null");
+        if (!ch->isValid()) context->throw_error_at(at, "atomic is invalid (already deleted?)");
+        ch->set(val);
+    }
+
+    template <typename TT>
+    TT atomicInc ( AtomicTT<TT> * ch, Context * context, LineInfoArg * at ) {
+        if ( !ch ) context->throw_error_at(at, "atomic is null");
+        if (!ch->isValid()) context->throw_error_at(at, "atomic is invalid (already deleted?)");
+        return ch->inc();
+    }
+
+    template <typename TT>
+    TT atomicDec ( AtomicTT<TT> * ch, Context * context, LineInfoArg * at ) {
+        if ( !ch ) context->throw_error_at(at, "atomic is null");
+        if (!ch->isValid()) context->throw_error_at(at, "atomic is invalid (already deleted?)");
+        return ch->dec();
+    }
 }
