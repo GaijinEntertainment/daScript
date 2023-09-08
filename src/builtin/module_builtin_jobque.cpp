@@ -286,8 +286,8 @@ namespace das {
 
 
     template <typename TT>
-    struct AtomicAnnotation : ManagedStructureAnnotation<typename AtomicTT<TT>,false> {
-        AtomicAnnotation(const char * ttname, ModuleLibrary & ml) : ManagedStructureAnnotation (ttname, ml) {
+    struct AtomicAnnotation : ManagedStructureAnnotation<AtomicTT<TT>,false> {
+        AtomicAnnotation(const char * ttname, ModuleLibrary & ml) : ManagedStructureAnnotation<AtomicTT<TT>,false> (ttname, ml) {
         }
         virtual void walk(DataWalker & walker, void * data) override {
             BasicStructureAnnotation::walk(walker, data);
