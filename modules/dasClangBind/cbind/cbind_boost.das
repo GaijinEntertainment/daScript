@@ -934,7 +934,9 @@ class CppGenBind : AnyGenBind
     def rename_function ( name,nsname:string )
         return name
     def isAotAliasType ( var t : CXType )
-        if t.kind == CXTypeKind Record || t.kind == CXTypeKind Typedef
+        if ( t.kind == CXTypeKind Record ||
+             t.kind == CXTypeKind Typedef ||
+             t.kind == CXTypeKind Elaborated )
             let tname = string(clang_getTypeSpelling(t))
             if aot_alias |> key_exists(tname)
                 return true
