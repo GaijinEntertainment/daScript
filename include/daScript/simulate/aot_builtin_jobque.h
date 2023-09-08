@@ -162,7 +162,7 @@ namespace das {
     }
 
     template <typename TT>
-    void withAtomic ( const TBlock<void,AtomicTT<TT> *> & blk, Context * context, LineInfoArg * at ) {
+    void withAtomic ( const TBlock<void,typename AtomicTT<TT> *> & blk, Context * context, LineInfoArg * at ) {
         AtomicTT<TT> ch;
         ch.addRef();
         das_invoke<void>::invoke<typename AtomicTT<TT> *>(context, at, blk, &ch);
