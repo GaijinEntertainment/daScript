@@ -25,3 +25,6 @@
 [submodule "modules/dasQuirrel"]
 	path = modules/dasQuirrel
 	url = https://github.com/borisbat/dasQuirrel.git
+[submodule "miniaudio"]
+	path = modules/dasAudio/miniaudio
+	url = https://github.com/mackron/miniaudio.git
