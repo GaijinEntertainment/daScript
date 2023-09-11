@@ -2848,15 +2848,15 @@ System infastructure
 
   *  :ref:`get_das_root (context:__context const) : string <function-_at__builtin__c__c_get_das_root_C_c>` 
   *  :ref:`panic (text:string const implicit;context:__context const;at:__lineInfo const) : void <function-_at__builtin__c__c_panic_CIs_C_c_C_l>` 
-  *  :ref:`print (text:string const implicit;context:__context const) : void <function-_at__builtin__c__c_print_CIs_C_c>` 
-  *  :ref:`error (text:string const implicit;context:__context const) : void <function-_at__builtin__c__c_error_CIs_C_c>` 
+  *  :ref:`print (text:string const implicit;context:__context const;at:__lineInfo const) : void <function-_at__builtin__c__c_print_CIs_C_c_C_l>` 
+  *  :ref:`error (text:string const implicit;context:__context const;at:__lineInfo const) : void <function-_at__builtin__c__c_error_CIs_C_c_C_l>` 
   *  :ref:`sprint (value:any const;flags:bitfield\<escapeString;namesAndDimensions;typeQualifiers;refAddresses;humanReadable;singleLine\> const) : string <function-_at__builtin__c__c_sprint_C*_CY_ls_print_flags_gr_N_ls_escapeString;namesAndDimensions;typeQualifiers;refAddresses;humanReadable;singleLine_gr_t>` 
   *  :ref:`sprint_json (value:any const;humanReadable:bool const) : string <function-_at__builtin__c__c_sprint_json_C*_Cb>` 
   *  :ref:`terminate (context:__context const) : void <function-_at__builtin__c__c_terminate_C_c>` 
   *  :ref:`breakpoint () : void <function-_at__builtin__c__c_breakpoint>` 
   *  :ref:`stackwalk (args:bool const;vars:bool const;context:__context const;lineinfo:__lineInfo const) : void <function-_at__builtin__c__c_stackwalk_Cb_Cb_C_c_C_l>` 
   *  :ref:`is_in_aot () : bool <function-_at__builtin__c__c_is_in_aot>` 
-  *  :ref:`to_log (level:int const;text:string const implicit) : void <function-_at__builtin__c__c_to_log_Ci_CIs>` 
+  *  :ref:`to_log (level:int const;text:string const implicit;context:__context const;at:__lineInfo const) : void <function-_at__builtin__c__c_to_log_Ci_CIs_C_c_C_l>` 
   *  :ref:`to_compiler_log (text:string const implicit;context:__context const;at:__lineInfo const) : void <function-_at__builtin__c__c_to_compiler_log_CIs_C_c_C_l>` 
 
 .. _function-_at__builtin__c__c_get_das_root_C_c:
@@ -2880,7 +2880,7 @@ get_das_root returns string
 
 |function-builtin-panic|
 
-.. _function-_at__builtin__c__c_print_CIs_C_c:
+.. _function-_at__builtin__c__c_print_CIs_C_c_C_l:
 
 .. das:function:: print(text: string const implicit)
 
@@ -2893,7 +2893,7 @@ get_das_root returns string
 
 |function-builtin-print|
 
-.. _function-_at__builtin__c__c_error_CIs_C_c:
+.. _function-_at__builtin__c__c_error_CIs_C_c_C_l:
 
 .. das:function:: error(text: string const implicit)
 
@@ -2975,7 +2975,7 @@ is_in_aot returns bool
 
 |function-builtin-is_in_aot|
 
-.. _function-_at__builtin__c__c_to_log_Ci_CIs:
+.. _function-_at__builtin__c__c_to_log_Ci_CIs_C_c_C_l:
 
 .. das:function:: to_log(level: int const; text: string const implicit)
 

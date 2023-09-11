@@ -253,12 +253,12 @@ namespace das {
         return (void *) &jit_make_block;
     }
 
-    void jit_debug ( vec4f res, TypeInfo * typeInfo, char * message, Context * context ) {
+    void jit_debug ( vec4f res, TypeInfo * typeInfo, char * message, Context * context, LineInfoArg * at ) {
         FPE_DISABLE;
         TextWriter ssw;
         if ( message ) ssw << message << " ";
         ssw << debug_type(typeInfo) << " = " << debug_value(res, typeInfo, PrintFlags::debugger) << "\n";
-        context->to_out(ssw.str().c_str());
+        context->to_out(at, ssw.str().c_str());
     }
 
     void * das_get_jit_debug () {

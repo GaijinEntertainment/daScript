@@ -2,6 +2,9 @@
 
 namespace das {
 
+    class Context;
+    struct LineInfo;
+
     #define DAS_SMALL_BUFFER_SIZE   4096
 
     class SmallBufferPolicy {
@@ -169,7 +172,7 @@ namespace das {
     };
 
     const char * getLogMarker(int level);
-    void logger ( int level, const char *marker, const char * text );
+    void logger ( int level, const char *marker, const char * text, Context * context, LineInfo * at );
 
     class LOG : public TextWriter {
     public:
@@ -178,7 +181,7 @@ namespace das {
             int newPos = tellp();
             if (newPos != pos) {
                 string st(data.data() + pos, newPos - pos);
-                logger(logLevel, useMarker ? getLogMarker(logLevel) : "", st.c_str());
+                logger(logLevel, useMarker ? getLogMarker(logLevel) : "", st.c_str(), /*ctx*/nullptr, /*at*/nullptr);
                 useMarker = false;
                 data.clear();
                 pos = newPos = 0;

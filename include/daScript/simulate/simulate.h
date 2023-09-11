@@ -221,7 +221,7 @@ namespace das
         virtual void onVariable ( Context *, const char *, const char *, TypeInfo *, void * ) {}
         virtual void onTick () {}
         virtual void onCollect ( Context *, const LineInfo & ) {}
-        virtual bool onLog ( int /*level*/, const char * /*text*/ ) { return false; }
+        virtual bool onLog ( Context *, const LineInfo * at, int /*level*/, const char * /*text*/ ) { return false; }
         virtual void onBreakpointsReset ( const char * /*file*/, int /*breakpointsNum*/ ) {}
         virtual bool isCppOnlyAgent() const { return false; }
         bool isThreadLocal = false;
@@ -386,8 +386,8 @@ namespace das
         void runInitScript ();
         bool runShutdownScript ();
 
-        virtual void to_out ( const char * message );   // output to stdout or equivalent
-        virtual void to_err ( const char * message );   // output to stderr or equivalent
+        virtual void to_out ( const LineInfo * at, const char * message );   // output to stdout or equivalent
+        virtual void to_err ( const LineInfo * at, const char * message );   // output to stderr or equivalent
         virtual void breakPoint(const LineInfo & info, const char * reason = "breakpoint", const char * text = ""); // what to do in case of breakpoint
 
         __forceinline vec4f * abiArguments() {
@@ -741,6 +741,7 @@ namespace das
     Context & getDebugAgentContext ( const char * category, LineInfoArg * at, Context * context );
     void onCreateCppDebugAgent ( const char * category, function<void (Context *)> && );
     void onDestroyCppDebugAgent ( const char * category, function<void (Context *)> && );
+    void onLogCppDebugAgent ( const char * category, function<bool(Context *, const LineInfo * at, int, const char *)> && lmb );
     void uninstallCppDebugAgent ( const char * category );
 
     class SharedStackGuard {

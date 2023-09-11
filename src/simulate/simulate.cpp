@@ -226,7 +226,7 @@ namespace das
         if ( message ) ssw << message << " ";
         ssw << debug_type(typeInfo) << " = " << debug_value(res, typeInfo, PrintFlags::debugger)
         << " at " << FILE << ":" << LINE << "\n";
-        context->to_out(ssw.str().c_str());
+        context->to_out(nullptr, ssw.str().c_str());
     }
 
     vec4f SimNode_Debug::eval ( Context & context ) {
@@ -237,7 +237,7 @@ namespace das
         if ( message ) ssw << message << " ";
         ssw << debug_type(typeInfo) << " = " << debug_value(res, typeInfo, PrintFlags::debugger)
             << " at " << debugInfo.describe() << "\n";
-        context.to_out(ssw.str().c_str());
+        context.to_out(&debugInfo, ssw.str().c_str());
         return res;
     }
 
@@ -256,7 +256,7 @@ namespace das
 #else
                 error = context.getStackWalk(&debugInfo, true, true) + error;
 #endif
-                context.to_err(error.c_str());
+                context.to_err(&debugInfo, error.c_str());
             }
             context.throw_error_at(debugInfo,"assert failed");
         }
@@ -1340,7 +1340,7 @@ namespace das
 
     void Context::stackWalk( const LineInfo * at, bool showArguments, bool showLocalVariables ) {
         auto str = getStackWalk(at, showArguments, showLocalVariables);
-        to_out(str.c_str());
+        to_out(at, str.c_str());
     }
 
     class StackWalkerTextWriter : public StackWalker {
@@ -1470,12 +1470,14 @@ namespace das
 
     class CppOnlyDebugAgent : public DebugAgent {
     public:
-        virtual void onCreateContext ( Context * ctx ) { if ( onCreateContextOp ) onCreateContextOp(ctx); }
-        virtual void onDestroyContext ( Context * ctx ) { if ( onDestroyContextOp ) onDestroyContextOp(ctx); }
+        virtual void onCreateContext ( Context * ctx ) override { if ( onCreateContextOp ) onCreateContextOp(ctx); }
+        virtual void onDestroyContext ( Context * ctx ) override { if ( onDestroyContextOp ) onDestroyContextOp(ctx); }
+        virtual bool onLog ( Context * context, const LineInfo * at, int level, const char * text ) override { return onLogOp ? onLogOp(context, at, level, text) : false; }
         virtual bool isCppOnlyAgent() const { return true; }
     public:
         function<void(Context*)> onCreateContextOp;
         function<void(Context*)> onDestroyContextOp;
+        function<bool(Context *, const LineInfo *, int, const char *)> onLogOp;
     };
 
     template <typename TT>
@@ -1507,7 +1509,12 @@ namespace das
         onCppDebugAgent(category, [&](CppOnlyDebugAgent * agent){
             agent->onDestroyContextOp = das::move(lmb);
         });
+    }
 
+    void onLogCppDebugAgent ( const char * category, function<bool(Context *, const LineInfo *, int, const char *)> && lmb ) {
+        onCppDebugAgent(category, [&](CppOnlyDebugAgent * agent){
+            agent->onLogOp = das::move(lmb);
+        });
     }
 
     void uninstallCppDebugAgent ( const char * category ) {
@@ -1530,10 +1537,10 @@ namespace das
             return "";
     }
 
-    void logger ( int level, const char *prefix, const char * text ) {
+    void logger ( int level, const char *prefix, const char * text, Context * context, LineInfo * at) {
         bool any = false;
         for_each_debug_agent([&](const DebugAgentPtr & pAgent){
-            any |= pAgent->onLog(int(level), text);
+            any |= pAgent->onLog(context, at, level, text);
         });
         if ( !any ) {
             if ( level>=LogLevel::warning ) {
@@ -1658,13 +1665,13 @@ namespace das
         os_debug_break();
     }
 
-    void Context::to_out ( const char * message ) {
+    void Context::to_out ( const LineInfo *, const char * message ) {
         if (message) {
             das_to_stdout("%s", message);
         }
     }
 
-    void Context::to_err ( const char * message ) {
+    void Context::to_err ( const LineInfo *, const char * message ) {
         if (message) {
             das_to_stderr("%s", message);
         }

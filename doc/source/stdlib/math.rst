@@ -5341,7 +5341,7 @@ Matrix manipulation
   *  :ref:`persp_reverse (wk:float const;hk:float const;zn:float const;zf:float const) : math::float4x4 <function-_at_math_c__c_persp_reverse_Cf_Cf_Cf_Cf>` 
   *  :ref:`look_at (eye:float4 const;at:float4 const;up:float4 const) : math::float4x4 <function-_at_math_c__c_look_at_Cf4_Cf4_Cf4>` 
   *  :ref:`compose (pos:float4 const;rot:float4 const;scale:float4 const) : math::float4x4 <function-_at_math_c__c_compose_Cf4_Cf4_Cf4>` 
-  *  :ref:`decompose (mat:math::float4x4 const implicit;pos:float3& implicit;rot:float4& implicit;scale:float4& implicit) : void <function-_at_math_c__c_decompose_CIH_ls_math_c__c_float4x4_gr__&If3_&If4_&If4>` 
+  *  :ref:`decompose (mat:math::float4x4 const implicit;pos:float3& implicit;rot:float4& implicit;scale:float3& implicit) : void <function-_at_math_c__c_decompose_CIH_ls_math_c__c_float4x4_gr__&If3_&If4_&If3>` 
   *  :ref:`identity (x:math::float3x4 implicit) : void <function-_at_math_c__c_identity_IH_ls_math_c__c_float3x4_gr_>` 
   *  :ref:`inverse (x:math::float3x4 const implicit) : math::float3x4 <function-_at_math_c__c_inverse_CIH_ls_math_c__c_float3x4_gr_>` 
   *  :ref:`inverse (m:math::float4x4 const implicit) : math::float4x4 <function-_at_math_c__c_inverse_CIH_ls_math_c__c_float4x4_gr_>` 
@@ -5483,9 +5483,9 @@ compose returns  :ref:`math::float4x4 <handle-math-float4x4>`
 
 |function-math-compose|
 
-.. _function-_at_math_c__c_decompose_CIH_ls_math_c__c_float4x4_gr__&If3_&If4_&If4:
+.. _function-_at_math_c__c_decompose_CIH_ls_math_c__c_float4x4_gr__&If3_&If4_&If3:
 
-.. das:function:: decompose(mat: float4x4 const implicit; pos: float3& implicit; rot: float4& implicit; scale: float4& implicit)
+.. das:function:: decompose(mat: float4x4 const implicit; pos: float3& implicit; rot: float4& implicit; scale: float3& implicit)
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -5496,7 +5496,7 @@ compose returns  :ref:`math::float4x4 <handle-math-float4x4>`
 +--------+-------------------------------------------------------------+
 +rot     +float4& implicit                                             +
 +--------+-------------------------------------------------------------+
-+scale   +float4& implicit                                             +
++scale   +float3& implicit                                             +
 +--------+-------------------------------------------------------------+
 
 
@@ -5909,6 +5909,21 @@ un_quat_from_euler returns float4
 
 
 |function-math-un_quat_from_euler|
+
+.. _function-_at_math_c__c_euler_from_un_quat_Cf4:
+
+.. das:function:: euler_from_un_quat(angles: float4 const)
+
+euler_from_un_quat returns float3
+
++--------+-------------+
++argument+argument type+
++========+=============+
++angles  +float4 const +
++--------+-------------+
+
+
+|function-math-euler_from_un_quat|
 
 .. _function-_at_math_c__c_[]_I_eq_H_ls_math_c__c_float3x3_gr__Ci_C_c_C_l:
 

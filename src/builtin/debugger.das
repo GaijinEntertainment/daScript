@@ -21,7 +21,7 @@ class DapiDebugAgent
     def abstract onBreakpointsReset ( file:string; breakpointsNum:int ) : void
     def abstract onTick : void
     def abstract onCollect ( var ctx:Context; at:LineInfo ) : void
-    def abstract onLog ( level:int; text:string# ) : bool
+    def abstract onLog ( context : Context?; at : LineInfo const?; level:int; text:string# ) : bool
     [[do_not_delete]] thisAgent:DebugAgent?
 
 def install_new_debug_agent ( var agentPtr; category:string )

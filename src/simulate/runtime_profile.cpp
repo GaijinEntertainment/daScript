@@ -19,7 +19,7 @@ namespace das
         if ( category ) {
             TextWriter ss;
             ss << "\"" << category << "\", " << tSec << ", " << count << "\n";
-            context->to_out(ss.str().c_str());
+            context->to_out(at, ss.str().c_str());
         }
         return (float) tSec;
     }

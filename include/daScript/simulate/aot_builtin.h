@@ -9,8 +9,8 @@ namespace das {
     bool is_compiling ( );
     bool is_compiling_macros ( );
     void builtin_throw ( char * text, Context * context, LineInfoArg * at );
-    void builtin_print ( char * text, Context * context );
-    void builtin_error ( char * text, Context * context );
+    void builtin_print ( char * text, Context * context, LineInfoArg * at );
+    void builtin_error ( char * text, Context * context, LineInfoArg * at );
     vec4f builtin_sprint ( Context & context, SimNode_CallBase * call, vec4f * args );
     vec4f builtin_json_sprint ( Context & context, SimNode_CallBase * call, vec4f * args );
     char * builtin_print_data ( void * data, const TypeInfo * typeInfo, Bitfield flags, Context * context );
@@ -57,7 +57,7 @@ namespace das {
     void builtin_array_free ( Array & dim, int szt, Context * __context__ );
     void builtin_table_free ( Table & tab, int szk, int szv, Context * __context__ );
 
-    void toLog ( int level, const char * text );
+    void toLog ( int level, const char * text, Context * context, LineInfoArg * at );
     void toCompilerLog ( const char * text, Context * context, LineInfoArg * at );
 
     vec4f builtin_verify_locks ( Context & context, SimNode_CallBase * node, vec4f * args );

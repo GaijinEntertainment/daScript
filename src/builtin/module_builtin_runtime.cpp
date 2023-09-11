@@ -629,12 +629,12 @@ namespace das
         context->throw_error_at(at, "%s", text);
     }
 
-    void builtin_print ( char * text, Context * context ) {
-        context->to_out(text);
+    void builtin_print ( char * text, Context * context, LineInfoArg * at ) {
+        context->to_out(at, text);
     }
 
-    void builtin_error ( char * text, Context * context ) {
-        context->to_err(text);
+    void builtin_error ( char * text, Context * context, LineInfoArg * at ) {
+        context->to_err(at, text);
     }
 
     vec4f builtin_breakpoint ( Context & context, SimNode_CallBase * call, vec4f * ) {
@@ -1267,8 +1267,8 @@ namespace das
         arr.flags = 0;
     }
 
-    void toLog ( int level, const char * text ) {
-        logger(level, getLogMarker(level), text);
+    void toLog ( int level, const char * text, Context * context, LineInfoArg * at ) {
+        logger(level, getLogMarker(level), text, context, at);
     }
 
     void toCompilerLog ( const char * text, Context * context, LineInfoArg * at ) {
@@ -1463,10 +1463,10 @@ namespace das
                 ->args({"text","context","at"});
         addExtern<DAS_BIND_FUN(builtin_print)>(*this, lib, "print",
             SideEffects::modifyExternal, "builtin_print")
-                ->args({"text","context"});
+                ->args({"text","context", "at"});
         addExtern<DAS_BIND_FUN(builtin_error)>(*this, lib, "error",
             SideEffects::modifyExternal, "builtin_error")
-                ->args({"text","context"});
+                ->args({"text","context", "at"});
         addInterop<builtin_sprint,char *,vec4f,PrintFlags>(*this, lib, "sprint",
             SideEffects::modifyExternal, "builtin_sprint")
                 ->args({"value","flags"});
@@ -1774,7 +1774,7 @@ namespace das
             SideEffects::worstDefault, "is_folding");
         // logger
         addExtern<DAS_BIND_FUN(toLog)>(*this, lib, "to_log",
-            SideEffects::modifyExternal, "toLog")->args({"level", "text"});
+            SideEffects::modifyExternal, "toLog")->args({"level", "text", "context", "at"});
         addExtern<DAS_BIND_FUN(toCompilerLog)>(*this, lib, "to_compiler_log",
             SideEffects::modifyExternal, "toCompilerLog")->args({"text","context","at"});
         // log levels
