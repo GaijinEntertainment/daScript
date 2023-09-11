@@ -133,10 +133,10 @@ namespace debugapi {
                 context->unlock();
             }
         }
-        virtual bool onLog ( Context * context, const LineInfo * at, int level, const char * text ) override {
+        virtual bool onLog ( Context * ctx, const LineInfo * at, int level, const char * text ) override {
             if ( auto fnOnLog = get_onLog(classPtr) ) {
                 context->lock();
-                auto res = invoke_onLog(context,fnOnLog,classPtr,context,at,level,(char *)text);
+                auto res = invoke_onLog(context,fnOnLog,classPtr,ctx,at,level,(char *)text);
                 context->unlock();
                 return res;
             } else {
