@@ -47,10 +47,10 @@ namespace das {
     float4x4 float4x4_compose(float4 pos, float4 rot, float4 scale);
     void float4x4_decompose(const float4x4 & mat, float3 & pos, float4 & rot, float3 & scale);
 
-    float4 un_quat_from_unit_arc(float3 v0, float3 v1);
-    float4 un_quat_from_unit_vec_ang(float3 v, float ang);
-    float4 un_quat_from_euler_vec(float3 v);
-    float4 un_quat_from_euler(float x, float y, float z);
+    float4 quat_from_unit_arc(float3 v0, float3 v1);
+    float4 quat_from_unit_vec_ang(float3 v, float ang);
+    float4 quat_from_euler_vec(float3 v);
+    float4 quat_from_euler(float x, float y, float z);
     float3 euler_from_un_quat(float4 v);
     float4 un_quat(const float4x4 & m);
 

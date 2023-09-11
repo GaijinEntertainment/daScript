@@ -83,7 +83,7 @@ def main
             glfwSetTime(t - 10lf)
         f_camera_position = float3(0,0,8)
         v_view = look_at_rh(f_camera_position,float3(0,0,0),float3(0,1,0))
-        let rot = un_quat_from_unit_vec_ang(normalize(float3(1.,1.,0.)), float(t)*PI*2.*0.1)
+        let rot = quat_from_unit_vec_ang(normalize(float3(1.,1.,0.)), float(t)*PI*2.*0.1)
         v_projection = perspective_rh_opengl( 45.0f*PI/180., aspect, 0.1f, 50.0f)
         f_tex := checkerboard_texture
         glUseProgram(program)

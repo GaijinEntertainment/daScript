@@ -6,15 +6,15 @@ require math
 
 [test]
 def test_quaternions ( t:T? )
-    t |> run("fuzz un_quat_from_unit_arc") <| @@ ( t : T? )
+    t |> run("fuzz quat_from_unit_arc") <| @@ ( t : T? )
         var fake <- Faker()
         fuzz <|
-            t |> accept ( un_quat_from_unit_arc(fake |> random_float3, fake |> random_float3) )
+            t |> accept ( quat_from_unit_arc(fake |> random_float3, fake |> random_float3) )
 
-    t |> run("fuzz un_quat_from_unit_vec_ang") <| @@ ( t : T? )
+    t |> run("fuzz quat_from_unit_vec_ang") <| @@ ( t : T? )
         var fake <- Faker()
         fuzz <|
-            t |> accept ( un_quat_from_unit_vec_ang(fake |> random_float3, fake |> random_float) )
+            t |> accept ( quat_from_unit_vec_ang(fake |> random_float3, fake |> random_float) )
 
     t |> run("fuzz un_quat") <| @@ ( t : T? )
         var fake <- Faker()
