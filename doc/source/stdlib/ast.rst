@@ -984,6 +984,8 @@ TypeDecl property operators are
 +-------------------------+------------------------------------+
 +isArray                  +bool                                +
 +-------------------------+------------------------------------+
++isGoodIteratorType       +bool                                +
++-------------------------+------------------------------------+
 +isGoodArrayType          +bool                                +
 +-------------------------+------------------------------------+
 +isGoodTableType          +bool                                +
@@ -12909,6 +12911,7 @@ Properties
   *  :ref:`is_temp_type (type:smart_ptr\<ast::TypeDecl\> const implicit;refMatters:bool const) : bool <function-_at_ast_c__c_is_temp_type_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_Cb>` 
   *  :ref:`is_same_type (leftType:smart_ptr\<ast::TypeDecl\> const implicit;rightType:smart_ptr\<ast::TypeDecl\> const implicit;refMatters:rtti::RefMatters const;constMatters:rtti::ConstMatters const;tempMatters:rtti::TemporaryMatters const;context:__context const;at:__lineInfo const) : bool <function-_at_ast_c__c_is_same_type_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_CE_ls_rtti_c__c_RefMatters_gr__CE_ls_rtti_c__c_ConstMatters_gr__CE_ls_rtti_c__c_TemporaryMatters_gr__C_c_C_l>` 
   *  :ref:`get_underlying_value_type (type:smart_ptr\<ast::TypeDecl\> const implicit;context:__context const;line:__lineInfo const) : smart_ptr\<ast::TypeDecl\> <function-_at_ast_c__c_get_underlying_value_type_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_C_c_C_l>` 
+  *  :ref:`get_handled_type_field_type (type:smart_ptr\<rtti::TypeAnnotation\> const implicit;field:string const implicit;context:__context const;line:__lineInfo const) : rtti::TypeInfo? <function-_at_ast_c__c_get_handled_type_field_type_CI1_ls_H_ls_rtti_c__c_TypeAnnotation_gr__gr_?M_CIs_C_c_C_l>` 
   *  :ref:`has_field (type:smart_ptr\<ast::TypeDecl\> const implicit;fieldName:string const implicit;constant:bool const) : bool <function-_at_ast_c__c_has_field_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_CIs_Cb>` 
   *  :ref:`get_field_type (type:smart_ptr\<ast::TypeDecl\> const implicit;fieldName:string const implicit;constant:bool const) : smart_ptr\<ast::TypeDecl\> <function-_at_ast_c__c_get_field_type_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_CIs_Cb>` 
   *  :ref:`is_visible_directly (from_module:rtti::Module? const implicit;which_module:rtti::Module? const implicit) : bool <function-_at_ast_c__c_is_visible_directly_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?>` 
@@ -12969,6 +12972,23 @@ get_underlying_value_type returns smart_ptr< :ref:`ast::TypeDecl <handle-ast-Typ
 
 
 |function-ast-get_underlying_value_type|
+
+.. _function-_at_ast_c__c_get_handled_type_field_type_CI1_ls_H_ls_rtti_c__c_TypeAnnotation_gr__gr_?M_CIs_C_c_C_l:
+
+.. das:function:: get_handled_type_field_type(type: smart_ptr<rtti::TypeAnnotation> const implicit; field: string const implicit)
+
+get_handled_type_field_type returns  :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>` ?
+
++--------+------------------------------------------------------------------------------------+
++argument+argument type                                                                       +
++========+====================================================================================+
++type    +smart_ptr< :ref:`rtti::TypeAnnotation <handle-rtti-TypeAnnotation>` > const implicit+
++--------+------------------------------------------------------------------------------------+
++field   +string const implicit                                                               +
++--------+------------------------------------------------------------------------------------+
+
+
+|function-ast-get_handled_type_field_type|
 
 .. _function-_at_ast_c__c_has_field_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_CIs_Cb:
 
