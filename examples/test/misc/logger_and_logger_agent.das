@@ -1,8 +1,8 @@
 require debugapi
 
 class LogAgent : DapiDebugAgent
-    def override onLog ( level:int; text:string# ) : bool
-        print("onLog - {level} - '{text}'\n")
+    def override onLog ( context : Context?; at : LineInfo const?; level:int; text:string# ) : bool
+        print("onLog - {level} - '{text}'\n'{context}' <{at}>\n")
         return true // false for not consuming
 
 [export]

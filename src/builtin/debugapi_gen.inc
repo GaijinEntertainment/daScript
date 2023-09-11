@@ -1057,11 +1057,11 @@ public:
   __forceinline Func get_onLog ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_onLog]);
   }
-  __forceinline bool invoke_onLog ( Context * __context__, Func __funcCall__, void * self, int32_t level, char * const  text ) const {
+  __forceinline bool invoke_onLog ( Context * __context__, Func __funcCall__, void * self, Context * const  context, LineInfo const  * const  at, int32_t level, char * const  text ) const {
     return das_invoke_function<bool>::invoke
-      <void *,int32_t,char * const >
+      <void *,Context * const ,LineInfo const  * const ,int32_t,char * const >
         (__context__,nullptr,__funcCall__,
-          self,level,text);
+          self,context,at,level,text);
   }
 };
 

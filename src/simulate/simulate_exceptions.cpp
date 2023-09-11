@@ -21,8 +21,8 @@ namespace das {
 #if DAS_ENABLE_EXCEPTIONS
         if ( alwaysStackWalkOnException ) {
             if (message) {
-                to_err(message);
-                to_err("\n");
+                to_err(&at, message);
+                to_err(&at, "\n");
             }
             stackWalk(&at, false, false);
         }
@@ -32,8 +32,8 @@ namespace das {
         if ( throwBuf ) {
             if ( alwaysStackWalkOnException ) {
                 if (message) {
-                    to_err(message);
-                    to_err("\n");
+                    to_err(&at, message);
+                    to_err(&at, "\n");
                 }
                 stackWalk(&at, false, false);
             }
@@ -45,11 +45,11 @@ namespace das {
 #endif
             longjmp(*throwBuf,1);
         } else {
-            to_err("\nunhandled exception\n");
+            to_err(&at, "\nunhandled exception\n");
             if ( exception ) {
                 string msg = exceptionAt.describe() + ": " + exception;
-                to_err(msg.c_str());
-                to_err("\n");
+                to_err(&at, msg.c_str());
+                to_err(&at, "\n");
             }
             stackWalk(&at, false, false);
             breakPoint(at, "exception", message);
@@ -73,11 +73,11 @@ namespace das {
 
             longjmp(*throwBuf,1);
         } else {
-            to_err("\nunhandled exception\n");
+            to_err(nullptr, "\nunhandled exception\n");
             if ( exception ) {
                 string msg = exceptionAt.describe() + ": " + exception;
-                to_err(msg.c_str());
-                to_err("\n");
+                to_err(nullptr, msg.c_str());
+                to_err(nullptr, "\n");
             }
             stackWalk(nullptr, false, false);
             os_debug_break();

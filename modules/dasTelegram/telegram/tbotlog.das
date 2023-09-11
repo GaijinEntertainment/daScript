@@ -24,7 +24,7 @@ class LoggerAgent : DapiDebugAgent
     def operator delete
         fclose(flog)
         flog = null
-    def override onLog ( level:int; text:string# ) : bool
+    def override onLog ( context : Context?; at : LineInfo const?; level:int; text:string# ) : bool
         let date_time = "{get_clock()}"
         if level >= LOG_ERROR
             print("{level}:{date_time}: {text}")
