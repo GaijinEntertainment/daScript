@@ -180,12 +180,12 @@ def main
     scene |> addCube(
         float3(-0.5,-0.5,0.),
         float3(1,1,1),
-        un_quat_from_unit_vec_ang(float3(0.,1.,0.), 0.)
+        quat_from_unit_vec_ang(float3(0.,1.,0.), 0.)
     )
     scene |> addSphere(
         float3(0.,0.2,-1.),
         float3(1.2,1.2,1.2),
-        un_quat_from_unit_vec_ang(float3(0.,1.,0.), 0.)
+        quat_from_unit_vec_ang(float3(0.,1.,0.), 0.)
     )
     scene |> seal()
 
@@ -292,7 +292,7 @@ def main
 
         f_camera_position = float3(0.,camera_position_y+camera_distance*0.5,camera_distance)
         let v_view = look_at_rh(f_camera_position,float3(0,0,0),float3(0,1,0))
-        let rot = un_quat_from_unit_vec_ang(normalize(float3(0.,1.,0.)), camera_rotation*PI/180.)
+        let rot = quat_from_unit_vec_ang(normalize(float3(0.,1.,0.)), camera_rotation*PI/180.)
         let v_rot = compose(float4(0,0,0,1),rot,float4(1,1,1,1))
         let v_projection = perspective_rh_opengl( 45.0f*PI/180., aspect, 0.1f, 50.0f)
 

@@ -1276,7 +1276,7 @@ VECMATH_FINLINE quat4f VECTORCALL v_un_quat_from_mat4(mat44f_cref m)
 }
 
 //! make quaternion to rotate 'v0' to 'v1'; v0 and v1 must be normalized
-VECMATH_FINLINE quat4f VECTORCALL v_un_quat_from_unit_arc(vec3f v0, vec3f v1)
+VECMATH_FINLINE quat4f VECTORCALL v_quat_from_unit_arc(vec3f v0, vec3f v1)
 {
   vec4f cosAngle = v_dot3(v0, v1);
   vec4f cosAngleX2Plus2 = v_madd_x(cosAngle, V_C_TWO, V_C_TWO);
@@ -1296,7 +1296,7 @@ VECMATH_FINLINE quat4f VECTORCALL v_un_quat_from_unit_arc(vec3f v0, vec3f v1)
 }
 
 //! make quaternion to rotate 'v0' to 'v1'
-VECMATH_FINLINE quat4f VECTORCALL v_un_quat_from_arc(vec3f v0, vec3f v1)
+VECMATH_FINLINE quat4f VECTORCALL v_quat_from_arc(vec3f v0, vec3f v1)
 {
   vec4f inv_len_product = v_rsqrt_x(v_mul_x(v_length3_sq_x(v0), v_length3_sq_x(v1)));
   vec4f cosAngle = v_mul_x(v_dot3(v0, v1), inv_len_product);
@@ -1317,7 +1317,7 @@ VECMATH_FINLINE quat4f VECTORCALL v_un_quat_from_arc(vec3f v0, vec3f v1)
 }
 
 //! make quaternion to rotate 'ang' radians around 'v' vector; v must be normalized
-inline quat4f VECTORCALL v_un_quat_from_unit_vec_ang(vec3f v, vec4f ang)
+inline quat4f VECTORCALL v_quat_from_unit_vec_ang(vec3f v, vec4f ang)
 {
   vec4f s, c;
   v_sincos4(v_mul(ang, V_C_HALF), s, c);
@@ -1325,7 +1325,7 @@ inline quat4f VECTORCALL v_un_quat_from_unit_vec_ang(vec3f v, vec4f ang)
 }
 
 // .xyz = heading, attitude, bank
-inline quat4f VECTORCALL v_un_quat_from_euler(vec3f angles)
+inline quat4f VECTORCALL v_quat_from_euler(vec3f angles)
 {
   vec4f s, c;
   v_sincos4(v_mul(angles, V_C_HALF), s, c);
@@ -3044,7 +3044,7 @@ VECMATH_FINLINE vec4f v_byte_to_float ( uint32_t x )
 {
     vec4i y = v_splatsi(x);
     y = v_cvt_byte_vec4i(y);
-    y = v_cvt_ush_vec4i(y);
+    y = v_cvt_lo_ush_vec4i(y);
     return v_cvt_vec4f(y);
 }
 

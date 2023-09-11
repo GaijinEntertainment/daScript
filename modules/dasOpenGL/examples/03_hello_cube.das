@@ -130,7 +130,7 @@ def main
         let t = glfwGetTime()
         if t > 10lf
             glfwSetTime(t - 10lf)
-        let rot = un_quat_from_unit_vec_ang(normalize(float3(1.,1.,0.)), float(t)*PI*2.*0.1)
+        let rot = quat_from_unit_vec_ang(normalize(float3(1.,1.,0.)), float(t)*PI*2.*0.1)
         v_model = compose(float4(0,0,0,0), rot, float4(1.0))        // bind model
         v_projection = perspective_rh_opengl( 45.0f*PI/180., aspect, 0.1f, 50.0f)   // bind projection
         glUseProgram(program)

@@ -114,7 +114,7 @@ def main
         var display_w, display_h : int
         glfwGetFramebufferSize(window, display_w, display_h)
         // fill c_mat with values
-        let rot = un_quat_from_unit_vec_ang(normalize(float3(1.,0.,0.)), PI*0.25)
+        let rot = quat_from_unit_vec_ang(normalize(float3(1.,0.,0.)), PI*0.25)
         c_mat.a = compose(float4(0.), rot, float4(1.))
         c_mat.b = translation(float3(1.,2.,3.))
         identity(c_mat.a_times_b)

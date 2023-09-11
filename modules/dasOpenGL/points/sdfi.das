@@ -332,8 +332,8 @@ def create_gl_objects
     glBufferData(GL_ELEMENT_ARRAY_BUFFER, indices, GL_STATIC_DRAW)
 
 def camera_rotation ( camera_rotation_xy:float2 )
-    let rot_x = un_quat_from_unit_vec_ang(normalize(float3(1.,0.,0.)), camera_rotation_xy.x*PI/180.)
-    let rot_y = un_quat_from_unit_vec_ang(normalize(float3(0.,1.,0.)), camera_rotation_xy.y*PI/180.)
+    let rot_x = quat_from_unit_vec_ang(normalize(float3(1.,0.,0.)), camera_rotation_xy.x*PI/180.)
+    let rot_y = quat_from_unit_vec_ang(normalize(float3(0.,1.,0.)), camera_rotation_xy.y*PI/180.)
     let rot = quat_mul(rot_x,rot_y)
     return <- compose(float4(0,0,0,1), rot, float4(1.))
 
