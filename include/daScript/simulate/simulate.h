@@ -221,7 +221,7 @@ namespace das
         virtual void onVariable ( Context *, const char *, const char *, TypeInfo *, void * ) {}
         virtual void onTick () {}
         virtual void onCollect ( Context *, const LineInfo & ) {}
-        virtual bool onLog ( Context *, const LineInfo * at, int /*level*/, const char * /*text*/ ) { return false; }
+        virtual bool onLog ( Context *, const LineInfo * /*at*/, int /*level*/, const char * /*text*/ ) { return false; }
         virtual void onBreakpointsReset ( const char * /*file*/, int /*breakpointsNum*/ ) {}
         virtual bool isCppOnlyAgent() const { return false; }
         bool isThreadLocal = false;
