@@ -1060,8 +1060,14 @@ VECMATH_FINLINE void v_prefetch(const void *m)
   __builtin_prefetch(m);
 }
 
-VECMATH_FINLINE vec4i VECTORCALL v_cvt_ush_vec4i(vec4i a) { return (int32x4_t)vmovl_u16(vget_low_u16(vreinterpretq_u16_s32(a))); }
-VECMATH_FINLINE vec4i VECTORCALL v_cvt_ssh_vec4i(vec4i a) { return vmovl_s16(vget_low_s16(vreinterpretq_s16_s32(a))); }
+VECMATH_FINLINE vec4i VECTORCALL v_cvt_lo_ush_vec4i(vec4i a) { return vreinterpretq_s64_s16(vzip1q_s16(vreinterpretq_s16_s64(a), vdupq_n_s16(0))); }
+VECMATH_FINLINE vec4i VECTORCALL v_cvt_hi_ush_vec4i(vec4i a) { return vreinterpretq_s64_s16(vzip2q_f32(vreinterpretq_s16_s64(a), vdupq_n_s16(0))); }
+
+VECMATH_FINLINE vec4i VECTORCALL v_cvt_lo_ssh_vec4i(vec4i a) { return vmovl_s16(vget_low_s16(vreinterpretq_s16_s32(a))); }
+VECMATH_FINLINE vec4i VECTORCALL v_cvt_hi_ssh_vec4i(vec4i a) 
+{
+  return vreinterpretq_s64_s16(vzip2q_f32(vreinterpretq_s16_s64(a), vcltq_s16(vreinterpretq_s16_s64(a), vdupq_n_s16(0))));
+}
 
 VECMATH_FINLINE vec4i v_cvt_byte_vec4i(vec4i a)
 {

@@ -166,10 +166,12 @@ VECMATH_FINLINE vec4f VECTORCALL v_cvtu_vec4f(vec4i a);//works correctly on all 
 VECMATH_FINLINE vec4f VECTORCALL v_cvtu_vec4f_ieee(vec4i a);//works same as scalar operations on all values
 VECMATH_FINLINE vec4f VECTORCALL v_cvt_vec4f(vec4i a) {return v_cvti_vec4f(a);}
 
-//! unpacks 4 unsigned shorts (in low 64 bits of vector, .xy) to 4 ints
-VECMATH_FINLINE vec4i VECTORCALL v_cvt_ush_vec4i(vec4i a);
-//! unpacks 4 signed shorts (in low 64 bits of vector, .xy) to 4 ints
-VECMATH_FINLINE vec4i VECTORCALL v_cvt_ssh_vec4i(vec4i a);
+//! unpacks 4 low/high unsigned shorts (in low 64 bits of vector, .xy) to 4 ints
+VECMATH_FINLINE vec4i VECTORCALL v_cvt_lo_ush_vec4i(vec4i a);
+VECMATH_FINLINE vec4i VECTORCALL v_cvt_hi_ush_vec4i(vec4i a);
+//! unpacks 4 low/high signed shorts (in low 64 bits of vector, .xy) to 4 ints
+VECMATH_FINLINE vec4i VECTORCALL v_cvt_lo_ssh_vec4i(vec4i a);
+VECMATH_FINLINE vec4i VECTORCALL v_cvt_hi_ssh_vec4i(vec4i a);
 //! unpacks 8 unsigned bytes (in low 64 bits of vector, .xy) to 4 shorts
 VECMATH_FINLINE vec4i VECTORCALL v_cvt_byte_vec4i(vec4i a);
 
@@ -978,13 +980,13 @@ VECMATH_FINLINE quat4f VECTORCALL v_un_quat_from_mat4(mat44f_cref m);
 VECMATH_FINLINE quat4f VECTORCALL v_un_quat_from_mat(vec3f col0, vec3f col1, vec3f col2);
 
 //! make (unnormalized) quaternion to rotate 'ang' radians around normalized 'v';
-inline quat4f VECTORCALL v_un_quat_from_unit_vec_ang(vec3f v, vec4f ang);
+inline quat4f VECTORCALL v_quat_from_unit_vec_ang(vec3f v, vec4f ang);
 //! make (unnormalized) quaternion to rotate 'v0' to 'v1'; both 'v0' and 'v1' must be normalized
-VECMATH_FINLINE quat4f VECTORCALL v_un_quat_from_unit_arc(vec3f v0, vec3f v1);
-//! make (unnormalized) quaternion to rotate 'v0' to 'v1'
-VECMATH_FINLINE quat4f VECTORCALL v_un_quat_from_arc(vec3f v0, vec3f v1);
+VECMATH_FINLINE quat4f VECTORCALL v_quat_from_unit_arc(vec3f v0, vec3f v1);
+//! make (unnormalized) quaternion to rotate 'v0' to 'v1', both CAN be not normalized
+VECMATH_FINLINE quat4f VECTORCALL v_quat_from_arc(vec3f v0, vec3f v1);
 //! make (unnormalized) quaternion from heading, attitude, bank angles in .xyz
-inline quat4f VECTORCALL v_un_quat_from_euler(vec3f angles);
+inline quat4f VECTORCALL v_quat_from_euler(vec3f angles);
 //! make heading, attitude, bank angles from (unnormalized) quaternion
 inline vec3f VECTORCALL v_euler_from_un_quat(quat4f quat);
 
