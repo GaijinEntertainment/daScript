@@ -355,7 +355,7 @@ namespace das
         if ( length ) {
             auto pStr = context.stringHeap->allocateString(writer.c_str(), length);
             if ( !pStr  ) {
-                context.throw_error("can't allocate string builder result, out of heap");
+                context.throw_error_at(debugInfo, "can't allocate string builder result, out of heap");
             }
             return cast<char *>::from(pStr);
         } else {

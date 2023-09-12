@@ -22,49 +22,49 @@ namespace das {
         return arr.lock;
     }
 
-    void builtin_array_resize ( Array & pArray, int newSize, int stride, Context * context ) {
-        if ( newSize<0 ) context->throw_error_ex("resizing array to negative size %i", newSize);
-        array_resize ( *context, pArray, newSize, stride, true );
+    void builtin_array_resize ( Array & pArray, int newSize, int stride, Context * context, LineInfoArg * at ) {
+        if ( newSize<0 ) context->throw_error_at(at, "resizing array to negative size %i", newSize);
+        array_resize ( *context, pArray, newSize, stride, /*zero*/ true, at );
     }
 
-    void builtin_array_resize_no_init ( Array & pArray, int newSize, int stride, Context * context ) {
-        if ( newSize<0 ) context->throw_error_ex("resizing array to negative size %i", newSize);
-        array_resize ( *context, pArray, newSize, stride, false );
+    void builtin_array_resize_no_init ( Array & pArray, int newSize, int stride, Context * context,  LineInfoArg * at ) {
+        if ( newSize<0 ) context->throw_error_at(at, "resizing array to negative size %i", newSize);
+        array_resize ( *context, pArray, newSize, stride, /*zero*/ false, at );
     }
 
-    void builtin_array_reserve ( Array & pArray, int newSize, int stride, Context * context ) {
-        if ( newSize<0 ) context->throw_error_ex("reserving array to negative size %i", newSize);
-        array_reserve( *context, pArray, newSize, stride );
+    void builtin_array_reserve ( Array & pArray, int newSize, int stride, Context * context, LineInfoArg * at ) {
+        if ( newSize<0 ) context->throw_error_at(at, "reserving array to negative size %i", newSize);
+        array_reserve( *context, pArray, newSize, stride, at );
     }
 
-    void builtin_array_erase ( Array & pArray, int index, int stride, Context * context ) {
+    void builtin_array_erase ( Array & pArray, int index, int stride, Context * context, LineInfoArg * at ) {
         if ( uint32_t(index) >= pArray.size ) {
-            context->throw_error_ex("erase index out of range, %u of %u", uint32_t(index), pArray.size);
+            context->throw_error_at(at, "erase index out of range, %u of %u", uint32_t(index), pArray.size);
             return;
         }
         memmove ( pArray.data+index*stride, pArray.data+(index+1)*stride, size_t(pArray.size-index-1)*size_t(stride) );
-        array_resize(*context, pArray, pArray.size-1, stride, false);
+        array_resize(*context, pArray, pArray.size-1, stride, false, at);
     }
 
-    void builtin_array_erase_range ( Array & pArray, int index, int count, int stride, Context * context ) {
+    void builtin_array_erase_range ( Array & pArray, int index, int count, int stride, Context * context, LineInfoArg * at ) {
         if ( index < 0 || count < 0 || uint32_t(index + count) > pArray.size ) {
-            context->throw_error_ex("erasing array range is invalid: index=%i count=%i size=%u", index, count, pArray.size);
+            context->throw_error_at(at, "erasing array range is invalid: index=%i count=%i size=%u", index, count, pArray.size);
             return;
         }
         memmove ( pArray.data+index*stride, pArray.data+(index+count)*stride, size_t(pArray.size-index-count)*size_t(stride) );
-        array_resize(*context, pArray, pArray.size-count, stride, false);
+        array_resize(*context, pArray, pArray.size-count, stride, false, at);
     }
 
-    void builtin_array_clear ( Array & pArray, Context * context ) {
-        array_clear(*context, pArray);
+    void builtin_array_clear ( Array & pArray, Context * context, LineInfoArg * at ) {
+        array_clear(*context, pArray, at);
     }
 
-    void builtin_array_lock ( const Array & arr, Context * context ) {
-        array_lock(*context, const_cast<Array&>(arr));
+    void builtin_array_lock ( const Array & arr, Context * context, LineInfoArg * at ) {
+        array_lock(*context, const_cast<Array&>(arr), at);
     }
 
-    void builtin_array_unlock ( const Array & arr, Context * context ) {
-        array_unlock(*context, const_cast<Array&>(arr));
+    void builtin_array_unlock ( const Array & arr, Context * context, LineInfoArg * at ) {
+        array_unlock(*context, const_cast<Array&>(arr), at);
     }
 
     void builtin_array_clear_lock ( const Array & arr, Context * ) {
@@ -75,7 +75,7 @@ namespace das {
         // array functions
         addExtern<DAS_BIND_FUN(builtin_array_clear)>(*this, lib, "clear",
             SideEffects::modifyArgument, "builtin_array_clear")
-                ->args({"array","context"});
+                ->args({"array","context","at"});
         addExtern<DAS_BIND_FUN(builtin_array_size)>(*this, lib, "length",
             SideEffects::none, "builtin_array_size")
                 ->arg("array");
@@ -88,37 +88,37 @@ namespace das {
         // array built-in functions
         addExtern<DAS_BIND_FUN(builtin_array_resize)>(*this, lib, "__builtin_array_resize",
             SideEffects::modifyArgument, "builtin_array_resize")
-                ->args({"array","newSize","stride","context"});
+                ->args({"array","newSize","stride","context","at"});
         addExtern<DAS_BIND_FUN(builtin_array_resize_no_init)>(*this, lib, "__builtin_array_resize_no_init",
             SideEffects::modifyArgument, "builtin_array_resize_no_init")
-                ->args({"array","newSize","stride","context"});
+                ->args({"array","newSize","stride","context","at"});
         addExtern<DAS_BIND_FUN(builtin_array_reserve)>(*this, lib, "__builtin_array_reserve",
             SideEffects::modifyArgument, "builtin_array_reserve")
-                ->args({"array","newSize","stride","context"});
+                ->args({"array","newSize","stride","context","at"});
         addExtern<DAS_BIND_FUN(builtin_array_push)>(*this, lib, "__builtin_array_push",
             SideEffects::modifyArgument, "builtin_array_push")
-                ->args({"array","index","stride","context"});
+                ->args({"array","index","stride","context","at"});
         addExtern<DAS_BIND_FUN(builtin_array_push_zero)>(*this, lib, "__builtin_array_push_zero",
             SideEffects::modifyArgument, "builtin_array_push_zero")
-                ->args({"array","index","stride","context"});
+                ->args({"array","index","stride","context","at"});
         addExtern<DAS_BIND_FUN(builtin_array_push_back)>(*this, lib, "__builtin_array_push_back",
             SideEffects::modifyArgument, "builtin_array_push_back")
-                ->args({"array","stride","context"});
+                ->args({"array","stride","context","at"});
         addExtern<DAS_BIND_FUN(builtin_array_push_back_zero)>(*this, lib, "__builtin_array_push_back_zero",
             SideEffects::modifyArgument, "builtin_array_push_back_zero")
-                ->args({"array","stride","context"});
+                ->args({"array","stride","context","at"});
         addExtern<DAS_BIND_FUN(builtin_array_erase)>(*this, lib, "__builtin_array_erase",
             SideEffects::modifyArgument, "builtin_array_erase")
-                ->args({"array","index","stride","context"});
+                ->args({"array","index","stride","context","at"});
         addExtern<DAS_BIND_FUN(builtin_array_erase_range)>(*this, lib, "__builtin_array_erase_range",
             SideEffects::modifyArgument, "builtin_array_erase_range")
-                ->args({"array","index","count","stride","context"});
+                ->args({"array","index","count","stride","context","at"});
         addExtern<DAS_BIND_FUN(builtin_array_lock)>(*this, lib, "__builtin_array_lock",
             SideEffects::modifyArgumentAndExternal, "builtin_array_lock")
-                ->args({"array","context"});
+                ->args({"array","context","at"});
         addExtern<DAS_BIND_FUN(builtin_array_unlock)>(*this, lib, "__builtin_array_unlock",
             SideEffects::modifyArgumentAndExternal, "builtin_array_unlock")
-                ->args({"array","context"});
+                ->args({"array","context","at"});
         addExtern<DAS_BIND_FUN(builtin_array_clear_lock)>(*this, lib, "__builtin_array_clear_lock",
             SideEffects::modifyArgumentAndExternal, "builtin_array_clear_lock")
                 ->args({"array","context"});

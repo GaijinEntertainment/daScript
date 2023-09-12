@@ -12,12 +12,12 @@ namespace das {
     char * builtin_string_peek_and_modify ( const char * str, const TBlock<void,TTemporary<TArray<uint8_t>>> & block, Context * context, LineInfoArg * lineinfo );
 
     char * builtin_string_escape ( const char *str, Context * context );
-    char * builtin_string_unescape ( const char *str, Context * context );
+    char * builtin_string_unescape ( const char *str, Context * context, LineInfoArg * at );
     char * builtin_string_safe_unescape ( const char *str, Context * context );
 
     vec4f builtin_strdup ( Context &, SimNode_CallBase * call, vec4f * args );
 
-    int32_t get_character_at ( const char * str, int32_t index, Context * context );
+    int32_t get_character_at ( const char * str, int32_t index, Context * context, LineInfoArg * at );
 
     bool builtin_string_endswith ( const char * str, const char * cmp, Context * context );
     bool builtin_string_startswith ( const char * str, const char * cmp, Context * context );

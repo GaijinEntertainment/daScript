@@ -27,11 +27,11 @@ IMPLEMENT_EXTERNAL_TYPE_FACTORY(Uri,das::Uri)
 #include <rpc.h>
 #pragma comment(lib,"Rpcrt4")
 
-char * das::makeNewGuid( das::Context * context ) {
+char * das::makeNewGuid( das::Context * context, LineInfoArg * at ) {
 	UUID id;
-	if ( UuidCreate(&id)!=RPC_S_OK ) context->throw_error("can't create UUID");
+	if ( UuidCreate(&id)!=RPC_S_OK ) context->throw_error_at(at, "can't create UUID");
     CHAR* uuidstr = NULL;
-    if ( UuidToStringA(&id, (RPC_CSTR *)&uuidstr)!=RPC_S_OK ) context->throw_error("can't convert UUID to string");
+    if ( UuidToStringA(&id, (RPC_CSTR *)&uuidstr)!=RPC_S_OK ) context->throw_error_at(at, "can't convert UUID to string");
     char * res = context->stringHeap->allocateString(uuidstr);
     RpcStringFreeA((RPC_CSTR *)&uuidstr);
     return res;
@@ -41,7 +41,7 @@ char * das::makeNewGuid( das::Context * context ) {
 
 #include <uuid/uuid.h>
 
-char * das::makeNewGuid( das::Context * context ) {
+char * das::makeNewGuid( das::Context * context, LineInfoArg * ) {
     union {
         unsigned char   data[16];
         uint32_t        data32[4];
@@ -56,7 +56,7 @@ char * das::makeNewGuid( das::Context * context ) {
 
 #include <uuid/uuid.h>
 
-char * das::makeNewGuid( das::Context * context ) {
+char * das::makeNewGuid( das::Context * context, LineInfoArg * ) {
     union {
         unsigned char   data[16];
         uint32_t        data32[4];
@@ -69,8 +69,8 @@ char * das::makeNewGuid( das::Context * context ) {
 
 #else
 
-char * das::makeNewGuid( Context * context ) {
-    context->throw_error("GUID generation is not implemented for this platform");
+char * das::makeNewGuid( Context * context, LineInfoArg * at ) {
+    context->throw_error_at(at, "GUID generation is not implemented for this platform");
     return nullptr;
 }
 
@@ -372,7 +372,7 @@ public:
         // guid
         addExtern<DAS_BIND_FUN(makeNewGuid)> (*this, lib, "make_new_guid",
             SideEffects::accessExternal, "makeNewGuid")
-                ->args({"context"});
+                ->args({"context","at"});
         addExtern<DAS_BIND_FUN(uri_to_unix_file_name)> (*this, lib, "uri_to_unix_file_name",
             SideEffects::none, "uri_to_unix_file_name")
                 ->args({"uriStr","context"});

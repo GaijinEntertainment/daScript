@@ -41,7 +41,7 @@ void testNBodiesS(int32_t N);
 void testParticles(int count);
 void testParticlesI(int count);
 int testPrimes(int n);
-void testTryCatch(das::Context * context);
+void testTryCatch(das::Context * context, das::LineInfoArg * at);
 int testTree();
 uint32_t testMaxFrom1s(uint32_t x);
 
@@ -49,8 +49,8 @@ void testManagedInt(const das::TBlock<void, const das::vector<int32_t>> & blk, d
 
 void updateObject(Object & obj);
 void updateTest(ObjectArray & objects);
-void update10000(ObjectArray & objects, das::Context * context);
-void update10000ks(ObjectArray & objects, das::Context * context);
+void update10000(ObjectArray & objects, das::Context * context, das::LineInfoArg * at);
+void update10000ks(ObjectArray & objects, das::Context * context, das::LineInfoArg * at);
 
 // ES
 
@@ -96,8 +96,8 @@ DAS_THREAD_LOCAL extern das::vector<EsComponent>   g_components;
 void initEsComponents();
 void initEsComponentsTable ();
 void releaseEsComponents();
-void verifyEsComponents(das::Context * ctx);
-void testEsUpdate(char * pass, das::Context * ctx);
-uint32_t queryEs(const das::Block & block, das::Context * context);
+void verifyEsComponents(das::Context * ctx, das::LineInfoArg * at);
+void testEsUpdate(char * pass, das::Context * ctx, das::LineInfoArg * at);
+uint32_t queryEs(const das::Block & block, das::Context * context, das::LineInfoArg * at);
 
 

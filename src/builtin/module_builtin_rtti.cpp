@@ -742,23 +742,23 @@ namespace das {
     };
 
     template <typename TT>
-    int32_t rtti_getDim ( const TT & ti, int32_t _index, Context * context ) {
+    int32_t rtti_getDim ( const TT & ti, int32_t _index, Context * context, LineInfoArg * at ) {
         uint32_t index = _index;
         if ( ti.dimSize==0 ) {
-            context->throw_error("type is not an array");
+            context->throw_error_at(at, "type is not an array");
         }
         if ( index>=ti.dimSize ) {
-            context->throw_error_ex("dim index out of range, %u of %u", index, uint32_t(ti.dimSize));
+            context->throw_error_at(at, "dim index out of range, %u of %u", index, uint32_t(ti.dimSize));
         }
         return ti.dim[index];
     }
 
-    int32_t rtti_getDimTypeInfo ( const TypeInfo & ti, int32_t index, Context * context ) {
-        return rtti_getDim(ti, index, context);
+    int32_t rtti_getDimTypeInfo ( const TypeInfo & ti, int32_t index, Context * context, LineInfoArg * at ) {
+        return rtti_getDim(ti, index, context, at);
     }
 
-    int32_t rtti_getDimVarInfo ( const VarInfo & ti, int32_t index, Context * context ) {
-        return rtti_getDim(ti, index, context);
+    int32_t rtti_getDimVarInfo ( const VarInfo & ti, int32_t index, Context * context, LineInfoArg * at ) {
+        return rtti_getDim(ti, index, context, at);
     }
 
     int32_t rtti_contextTotalFunctions ( Context & context ) {
@@ -769,23 +769,23 @@ namespace das {
         return context.getTotalVariables();
     }
 
-    vec4f rtti_contextFunctionInfo ( Context & context, SimNode_CallBase *, vec4f * args ) {
+    vec4f rtti_contextFunctionInfo ( Context & context, SimNode_CallBase * call, vec4f * args ) {
         Context * ctx = cast<Context *>::to(args[0]);
         int32_t tf = ctx->getTotalFunctions();
         int32_t index = cast<int32_t>::to(args[1]);
         if ( index<0 || index>=tf ) {
-            context.throw_error_ex("function index out of range, %i of %i", index, tf);
+            context.throw_error_at(call->debugInfo, "function index out of range, %i of %i", index, tf);
         }
         FuncInfo * fi = ctx->getFunction(index)->debugInfo;
         return cast<FuncInfo *>::from(fi);
     }
 
-    vec4f rtti_contextVariableInfo ( Context & context, SimNode_CallBase *, vec4f * args ) {
+    vec4f rtti_contextVariableInfo ( Context & context, SimNode_CallBase * call, vec4f * args ) {
         Context * ctx = cast<Context *>::to(args[0]);
         int32_t tf = ctx->getTotalVariables();
         int32_t index = cast<int32_t>::to(args[1]);
         if ( index<0 || index>=tf ) {
-            context.throw_error_ex("variable index out of range, %i of %i", index, tf);
+            context.throw_error_at(call->debugInfo, "variable index out of range, %i of %i", index, tf);
         }
         return cast<VarInfo *>::from(ctx->getVariableInfo(index));
     }
@@ -843,7 +843,7 @@ namespace das {
                 context->invoke(block, args, nullptr, at);
             }
         } else {
-            context->throw_error("rtti_compile internal error, something went wrong");
+            context->throw_error_at(at, "rtti_compile internal error, something went wrong");
         }
     }
 
@@ -1078,34 +1078,34 @@ namespace das {
                 context->invoke(block, args, nullptr, at);
             }
         } else {
-            context->throw_error("rtti_compile internal error, something went wrong");
+            context->throw_error_at(at, "rtti_compile internal error, something went wrong");
         }
     }
 
-    smart_ptr<FileAccess> makeFileAccess( char * pak, Context * ) {
+    smart_ptr<FileAccess> makeFileAccess( char * pak, Context *, LineInfoArg * ) {
         return get_file_access(pak);
     }
 
-    bool introduceFile ( smart_ptr_raw<FileAccess> access, char * fname, char * str, Context * context, LineInfoArg * ) {
-        if ( !str ) context->throw_error("can't introduce empty file");
+    bool introduceFile ( smart_ptr_raw<FileAccess> access, char * fname, char * str, Context * context, LineInfoArg * at ) {
+        if ( !str ) context->throw_error_at(at, "can't introduce empty file");
         uint32_t str_len = stringLengthSafe(*context, str);
         auto fileInfo = make_unique<TextFileInfo>(str, str_len, false);
         return access->setFileInfo(fname, das::move(fileInfo)) != nullptr;
     }
 
 #else
-    smart_ptr<FileAccess> makeFileAccess( char *, Context * context ) {
-        context->throw_error("not supported with DAS_NO_FILEIO");
+    smart_ptr<FileAccess> makeFileAccess( char *, Context * context, LineInfoArg * at ) {
+        context->throw_error_at(at, "not supported with DAS_NO_FILEIO");
         return nullptr;
     }
 
     void rtti_builtin_compile_file(  char *, smart_ptr<FileAccess>, ModuleGroup*, const CodeOfPolicies & cop,
-            const TBlock<void, bool, smart_ptr<Program>, const string> &, Context * context, LineInfoArg * ) {
-        context->throw_error("not supported with DAS_NO_FILEIO");
+            const TBlock<void, bool, smart_ptr<Program>, const string> &, Context * context, LineInfoArg * at ) {
+        context->throw_error_at(at, "not supported with DAS_NO_FILEIO");
     }
 
-    bool introduceFile ( smart_ptr_raw<FileAccess>, char *, char *, Context * context, LineInfoArg * ) {
-        context->throw_error("not supported with DAS_NO_FILEIO");
+    bool introduceFile ( smart_ptr_raw<FileAccess>, char *, char *, Context * context, LineInfoArg * at ) {
+        context->throw_error_at(at, "not supported with DAS_NO_FILEIO");
         return false;
     }
 #endif
@@ -1395,10 +1395,10 @@ namespace das {
             //      hence SideEffects::modifyExternal is essential for it to not be optimized out
             addExtern<DAS_BIND_FUN(rtti_getDimTypeInfo)>(*this, lib, "get_dim",
                 SideEffects::modifyExternal, "rtti_getDimTypeInfo")
-                    ->args({"typeinfo","index","context"});
+                    ->args({"typeinfo","index","context","at"});
             addExtern<DAS_BIND_FUN(rtti_getDimVarInfo)>(*this, lib, "get_dim",
                 SideEffects::modifyExternal, "rtti_getDimVarInfo")
-                    ->args({"typeinfo","index","context"});
+                    ->args({"typeinfo","index","context","at"});
             addExtern<DAS_BIND_FUN(rtti_contextTotalFunctions)>(*this, lib, "get_total_functions",
                 SideEffects::modifyExternal, "rtti_contextTotalFunctions")
                     ->arg("context");
@@ -1437,7 +1437,7 @@ namespace das {
                     ->args({"program","block","context","line"});
             addExtern<DAS_BIND_FUN(makeFileAccess)>(*this, lib, "make_file_access",
                 SideEffects::modifyExternal, "makeFileAccess")
-                    ->args({"project","context"});
+                    ->args({"project","context","at"});
             addExtern<DAS_BIND_FUN(introduceFile)>(*this, lib, "set_file_source",
                 SideEffects::modifyExternal, "introduceFile")
                     ->args({"access","fileName","text","context","line"});

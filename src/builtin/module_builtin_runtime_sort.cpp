@@ -70,15 +70,15 @@ namespace das
     }
 
     void builtin_sort_array_any_cblock ( Array & arr, int32_t elementSize, int32_t, const Block & cmp, Context * context, LineInfoArg * at ) {
-        array_lock(*context,arr);
+        array_lock(*context,arr,at);
         builtin_sort_any_cblock(arr.data, elementSize, arr.size, cmp, context, at);
-        array_unlock(*context,arr);
+        array_unlock(*context,arr,at);
     }
 
     void builtin_sort_array_any_ref_cblock ( Array & arr, int32_t elementSize, int32_t, const Block & cmp, Context * context, LineInfoArg * at ) {
-        array_lock(*context,arr);
+        array_lock(*context,arr,at);
         builtin_sort_any_ref_cblock(arr.data, elementSize, arr.size, cmp, context, at);
-        array_unlock(*context,arr);
+        array_unlock(*context,arr,at);
     }
 
     void builtin_sort_string ( void * data, int32_t length ) {
