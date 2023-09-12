@@ -36,10 +36,10 @@ void updateTest ( ObjectArray & objects ) {
     }
 }
 
-void update10000 ( ObjectArray & objects, Context * context ) {
+void update10000 ( ObjectArray & objects, Context * context, LineInfoArg * at ) {
     auto updateFn = context->findFunction("update");
     if (!updateFn) {
-        context->throw_error("update not exported");
+        context->throw_error_at(at, "update not exported");
         return;
     }
     for ( auto & obj : objects ) {
@@ -48,10 +48,10 @@ void update10000 ( ObjectArray & objects, Context * context ) {
     }
 }
 
-void update10000ks ( ObjectArray & objects, Context * context ) {
+void update10000ks ( ObjectArray & objects, Context * context, LineInfoArg * at ) {
     auto ksUpdateFn = context->findFunction("ks_update");
     if (!ksUpdateFn) {
-        context->throw_error("ks_update not exported");
+        context->throw_error_at(at, "ks_update not exported");
         return;
     }
     for ( auto & obj : objects ) {
@@ -283,11 +283,11 @@ bool EsRunPass ( Context & context, EsPassAttributeTable & table, const vector<E
 }
 #endif
 
-uint32_t EsRunBlock ( Context & context, const Block & block, const vector<EsComponent> & components, uint32_t totalComponents ) {
+uint32_t EsRunBlock ( Context & context, LineInfo * at, const Block & block, const vector<EsComponent> & components, uint32_t totalComponents ) {
     auto * closure = (SimNode_ClosureBlock *) block.body;
     EsAttributeTable * table = (EsAttributeTable *) closure->annotationData;
     if ( !table ) {
-        context.throw_error("EsRunBlock - query missing annotation data");
+        context.throw_error_at(at, "EsRunBlock - query missing annotation data");
     }
     uint32_t nAttr = (uint32_t) table->attributes.size();
     DAS_VERIFYF(nAttr, "EsRunBlock - query has no attributes");
@@ -495,7 +495,7 @@ void initEsComponentsTable() {
     g_components.emplace_back("velBoxed", sizeof(float3), sizeof(float3 *), true );
 }
 
-void verifyEsComponents(Context * context) {
+void verifyEsComponents(Context * context, LineInfoArg * at) {
     float f = 1.0f;
     float t = 1.0f;
     for ( int i = 0; i != g_total; ++i, ++f ) {
@@ -508,16 +508,16 @@ void verifyEsComponents(Context * context) {
         if ( g_pos[i].x!=npos.x || g_pos[i].y!=npos.y || g_pos[i].z!=npos.z ) {
             TextWriter twrt;
             twrt << "g_pos[" << i << "] (" << g_pos[i] << ") != npos (" << npos << ")\n";
-            context->throw_error_ex("verifyEsComponents failed, %s\n", twrt.str().c_str());
+            context->throw_error_at(at, "verifyEsComponents failed, %s\n", twrt.str().c_str());
         }
     }
 }
 
 
-void testEsUpdate ( char * pass, Context * ctx ) {
+void testEsUpdate ( char * pass, Context * ctx, LineInfoArg * at ) {
     das_stack_prologue guard(ctx, sizeof(Prologue), "testEsUpdate " DAS_FILE_LINE);
     if ( !EsGroupData::THAT ) {
-        ctx->throw_error_ex("missing pass data for the pass %s", pass);
+        ctx->throw_error_at(at, "missing pass data for the pass %s", pass);
         return;
     }
     for ( auto & tab : EsGroupData::THAT->g_esPassTable ) {
@@ -527,9 +527,9 @@ void testEsUpdate ( char * pass, Context * ctx ) {
     }
 }
 
-uint32_t queryEs (const Block & block, Context * context) {
+uint32_t queryEs (const Block & block, Context * context, LineInfoArg * at) {
     das_stack_prologue guard(context,sizeof(Prologue), "queryEs " DAS_FILE_LINE);
-    return EsRunBlock(*context, block, g_components, g_total);
+    return EsRunBlock(*context, at, block, g_components, g_total);
 }
 
 #if DAS_USE_EASTL
@@ -631,7 +631,7 @@ ___noinline void testParticlesI(int count) {
     particlesI(objects, count);
 }
 
-___noinline void testTryCatch(Context * context) {
+___noinline void testTryCatch(Context * context, LineInfoArg * at) {
     #if _CPPUNWIND || __cpp_exceptions
     int arr[1000]; memset(arr, 0, sizeof(arr));
     int cnt = 0; cnt;
@@ -647,7 +647,7 @@ ___noinline void testTryCatch(Context * context) {
             }
         }
         if (fail != 1000) {
-            context->throw_error("test optimized out");
+            context->throw_error_at(at, "test optimized out");
             return;
         }
     }

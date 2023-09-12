@@ -22,6 +22,6 @@ namespace das {
     char * escape_uri ( char * uristr, bool spaceToPlus, bool normalizeBreaks, Context * context );
     char * unescape_uri ( char * uristr,Context * context );
     char * normalize_uri ( char * uristr,Context * context );
-    char * makeNewGuid( Context * context );
+    char * makeNewGuid( Context * context, LineInfoArg * at );
     void uri_for_each_query_kv ( const Uri & uri, const TBlock<void,TTemporary<char *>,TTemporary<char*>> & blk, Context * context, LineInfoArg * at );
 }

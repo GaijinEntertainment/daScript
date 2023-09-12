@@ -176,14 +176,14 @@ void test_das_string(const Block & block, Context * context, LineInfoArg * at) {
     args[0] = cast<void *>::from(&str);
     args[1] = cast<void *>::from(&str2);
     context->invoke(block, args, nullptr, at);
-    if (str != "out_of_it") context->throw_error("test string mismatch");
-    if (str2 != "test_das_string") context->throw_error("test string clone mismatch");
+    if (str != "out_of_it") context->throw_error_at(at, "test string mismatch");
+    if (str2 != "test_das_string") context->throw_error_at(at, "test string clone mismatch");
 }
 
 vec4f new_and_init ( Context & context, SimNode_CallBase * call, vec4f * ) {
     TypeInfo * typeInfo = call->types[0];
     if ( typeInfo->dim || typeInfo->type!=Type::tStructure ) {
-        context.throw_error("invalid type");
+        context.throw_error_at(call->debugInfo, "invalid type");
         return v_zero();
     }
     auto size = getTypeSize(typeInfo);
@@ -201,15 +201,15 @@ int *getPtr() {return &g_st;}
 
 uint2 get_screen_dimensions() {return uint2{1280, 720};}
 
-uint64_t CheckEid ( TestObjectFoo & foo, char * const name, Context * context ) {
-    if (!name) context->throw_error("invalid id");
+uint64_t CheckEid ( TestObjectFoo & foo, char * const name, Context * context, LineInfoArg * at ) {
+    if (!name) context->throw_error_at(at, "invalid id");
     return hash_function(*context, name) + foo.fooData;
 }
 
-uint64_t CheckEidHint ( TestObjectFoo & foo, char * const name, uint64_t hashHint, Context * context ) {
-    if (!name) context->throw_error("invalid id");
+uint64_t CheckEidHint ( TestObjectFoo & foo, char * const name, uint64_t hashHint, Context * context, LineInfoArg * at ) {
+    if (!name) context->throw_error_at(at, "invalid id");
     uint64_t hv = hash_function(*context, name) + foo.fooData;
-    if ( hv != hashHint ) context->throw_error("invalid hash value");
+    if ( hv != hashHint ) context->throw_error_at(at, "invalid hash value");
     return hashHint;
 }
 

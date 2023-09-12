@@ -459,8 +459,8 @@ namespace das {
         vec.resize(newSize);
     }
 
-    Module * compileModule ( Context * context );
-    smart_ptr_raw<Program> compileProgram ( Context * context );
+    Module * compileModule ( Context * context, LineInfoArg * at );
+    smart_ptr_raw<Program> compileProgram ( Context * context, LineInfoArg * at );
 
     DebugAgentPtr makeDebugAgent ( const void * pClass, const StructInfo * info, Context * context );
     Module * thisModule ( Context * context, LineInfoArg * lineinfo );
@@ -485,12 +485,13 @@ namespace das {
     void addModuleCaptureMacro ( Module * module, CaptureMacroPtr & _newM, Context * );
     SimulateMacroPtr makeSimulateMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context );
     void addModuleSimulateMacro ( Module * module, SimulateMacroPtr & _newM, Context * );
-    void addModuleFunctionAnnotation ( Module * module, FunctionAnnotationPtr & ann, Context * context );
+    void addModuleFunctionAnnotation ( Module * module, FunctionAnnotationPtr & ann, Context * context, LineInfoArg * at );
     FunctionAnnotationPtr makeFunctionAnnotation ( const char * name, void * pClass, const StructInfo * info, Context * context );
     StructureAnnotationPtr makeStructureAnnotation ( const char * name, void * pClass, const StructInfo * info, Context * context );
     EnumerationAnnotationPtr makeEnumerationAnnotation ( const char * name, void * pClass, const StructInfo * info, Context * context );
-    void addModuleStructureAnnotation ( Module * module, StructureAnnotationPtr & ann, Context * context );
-    void addModuleEnumerationAnnotation ( Module * module, EnumerationAnnotationPtr & ann, Context * context );
+    void addModuleStructureAnnotation ( Module * module, StructureAnnotationPtr & ann, Context * context, LineInfoArg * at );
+    void addStructureStructureAnnotation ( smart_ptr_raw<Structure> st, StructureAnnotationPtr & _ann, Context * context, LineInfoArg * at );
+    void addModuleEnumerationAnnotation ( Module * module, EnumerationAnnotationPtr & ann, Context * context, LineInfoArg * at );
     int addEnumerationEntry ( smart_ptr<Enumeration> enu, const char* name );
     void forEachFunction ( Module * module, const char * name, const TBlock<void,FunctionPtr> & block, Context * context, LineInfoArg * lineInfo );
     void forEachGenericFunction ( Module * module, const char * name, const TBlock<void,FunctionPtr> & block, Context * context, LineInfoArg * lineInfo );
@@ -503,19 +504,19 @@ namespace das {
     bool addModuleStructure ( Module * module, StructurePtr & stru );
     bool addModuleAlias ( Module * module, TypeDeclPtr & _ptr );
     void ast_error ( ProgramPtr prog, const LineInfo & at, const char * message, Context * context, LineInfoArg * lineInfo );
-    void addModuleReaderMacro ( Module * module, ReaderMacroPtr & newM, Context * context );
+    void addModuleReaderMacro ( Module * module, ReaderMacroPtr & newM, Context * context, LineInfoArg * lineInfo );
     ReaderMacroPtr makeReaderMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context );
     CommentReaderPtr makeCommentReader ( const void * pClass, const StructInfo * info, Context * context );
-    void addModuleCommentReader ( Module * module, CommentReaderPtr & _newM, Context * context );
-    void addModuleCallMacro ( Module * module, CallMacroPtr & newM, Context * context );
+    void addModuleCommentReader ( Module * module, CommentReaderPtr & _newM, Context * context, LineInfoArg * lineInfo );
+    void addModuleCallMacro ( Module * module, CallMacroPtr & newM, Context * context, LineInfoArg * lineInfo );
     CallMacroPtr makeCallMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context );
     TypeInfoMacroPtr makeTypeInfoMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context );
-    void addModuleTypeInfoMacro ( Module * module, TypeInfoMacroPtr & _newM, Context * context );
-    void addFunctionFunctionAnnotation(smart_ptr_raw<Function> func, FunctionAnnotationPtr & ann, Context* context);
-    void addAndApplyFunctionAnnotation ( smart_ptr_raw<Function> func, smart_ptr_raw<AnnotationDeclaration> & ann, Context * context );
-    void addBlockBlockAnnotation ( smart_ptr_raw<ExprBlock> block, FunctionAnnotationPtr & _ann, Context * context );
-    void addAndApplyBlockAnnotation ( smart_ptr_raw<ExprBlock> blk, smart_ptr_raw<AnnotationDeclaration> & ann, Context * context );
-    void addAndApplyStructAnnotation ( smart_ptr_raw<Structure> st, smart_ptr_raw<AnnotationDeclaration> & ann, Context * context );
+    void addModuleTypeInfoMacro ( Module * module, TypeInfoMacroPtr & _newM, Context * context, LineInfoArg * at );
+    void addFunctionFunctionAnnotation(smart_ptr_raw<Function> func, FunctionAnnotationPtr & ann, Context* context, LineInfoArg* at);
+    void addAndApplyFunctionAnnotation ( smart_ptr_raw<Function> func, smart_ptr_raw<AnnotationDeclaration> & ann, Context * context, LineInfoArg * at );
+    void addBlockBlockAnnotation ( smart_ptr_raw<ExprBlock> block, FunctionAnnotationPtr & _ann, Context * context, LineInfoArg * at );
+    void addAndApplyBlockAnnotation ( smart_ptr_raw<ExprBlock> blk, smart_ptr_raw<AnnotationDeclaration> & ann, Context * context, LineInfoArg * at );
+    void addAndApplyStructAnnotation ( smart_ptr_raw<Structure> st, smart_ptr_raw<AnnotationDeclaration> & ann, Context * context, LineInfoArg * at );
     __forceinline ExpressionPtr clone_expression ( ExpressionPtr value ) { return value ?value->clone() : nullptr; }
     __forceinline FunctionPtr clone_function ( FunctionPtr value ) { return value ? value->clone() : nullptr; }
     __forceinline TypeDeclPtr clone_type ( TypeDeclPtr value ) { return value ? make_smart<TypeDecl>(*value) : nullptr; }

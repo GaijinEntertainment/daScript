@@ -164,8 +164,8 @@ It's always safe, but inefficient, to specify ``SideEffects::worstDefault``.
 
 Let's look at the exposed function in detail::
 
-    void builtin_fprint ( const FILE * f, const char * text, Context * context ) {
-        if ( !f ) context->throw_error("can't fprint NULL");
+    void builtin_fprint ( const FILE * f, const char * text, Context * context, LineInfoArg * at ) {
+        if ( !f ) context->throw_error_at(at, "can't fprint NULL");
         if ( text ) fputs(text,(FILE *)f);
     }
 
@@ -226,7 +226,7 @@ Let's look at the exposed function in detail::
     vec4f builtin_read ( Context & context, SimNode_CallBase * call, vec4f * args ) {
         DAS_ASSERT ( call->types[1]->isRef() || call->types[1]->isRefType() || call->types[1]->type==Type::tString);
         auto fp = cast<FILE *>::to(args[0]);
-        if ( !fp ) context.throw_error("can't read NULL");
+        if ( !fp ) context.throw_error_at(call->debugInfo, "can't read NULL");
         auto buf = cast<void *>::to(args[1]);
         auto len = cast<int32_t>::to(args[2]);
         int32_t res = (int32_t) fread(buf,1,len,fp);

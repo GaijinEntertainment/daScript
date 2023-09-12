@@ -196,7 +196,7 @@ FastCallWrapper getExtraWrapper ( int nargs, int res, int perm ) {
                     crash_and_burn = "internal error. missing BoundFunction";
                 }
             });
-            if ( !crash_and_burn.empty() ) context.throw_error_ex("%s",crash_and_burn.c_str());
+            if ( !crash_and_burn.empty() ) context.throw_error_at(debugInfo, "%s",crash_and_burn.c_str());
         }
         vec4f DAS_EVAL_ABI eval ( Context & context ) {
             if ( !fnptr ) bind(context);

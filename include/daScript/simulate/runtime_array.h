@@ -132,7 +132,7 @@ namespace das
             char * __restrict ph[totalCount];
             for ( int t=0; t!=totalCount; ++t ) {
                 pha[t] = cast<Array *>::to(sources[t]->eval(context));
-                array_lock(context, *pha[t]);
+                array_lock(context, *pha[t], &this->debugInfo);
                 ph[t]  = pha[t]->data;
             }
             char ** __restrict pi[totalCount];
@@ -156,7 +156,7 @@ namespace das
             }
         loopend:;
             for ( int t=0; t!=totalCount; ++t ) {
-                array_unlock(context, *pha[t]);
+                array_unlock(context, *pha[t], &this->debugInfo);
             }
             evalFinal(context);
             context.stopFlags &= ~EvalFlags::stopForBreak;
@@ -191,7 +191,7 @@ namespace das
             Array * __restrict pha;
             char * __restrict ph;
             pha = cast<Array *>::to(sources[0]->eval(context));
-            array_lock(context, *pha);
+            array_lock(context, *pha, &this->debugInfo);
             ph = pha->data;
             char ** __restrict pi;
             int szz = int(pha->size);
@@ -210,7 +210,7 @@ namespace das
             }
         loopend:;
             evalFinal(context);
-            array_unlock(context, *pha);
+            array_unlock(context, *pha, &this->debugInfo);
             context.stopFlags &= ~EvalFlags::stopForBreak;
             return v_zero();
         }
@@ -228,7 +228,7 @@ namespace das
             char * __restrict ph[totalCount];
             for ( int t=0; t!=totalCount; ++t ) {
                 pha[t] = cast<Array *>::to(sources[t]->eval(context));
-                array_lock(context, *pha[t]);
+                array_lock(context, *pha[t], &this->debugInfo);
                 ph[t]  = pha[t]->data;
             }
             char ** __restrict pi[totalCount];
@@ -249,7 +249,7 @@ namespace das
         loopend:;
             evalFinal(context);
             for ( int t=0; t!=totalCount; ++t ) {
-                array_unlock(context, *pha[t]);
+                array_unlock(context, *pha[t], &this->debugInfo);
             }
             context.stopFlags &= ~EvalFlags::stopForBreak;
             return v_zero();
@@ -283,7 +283,7 @@ namespace das
             Array * __restrict pha;
             char * __restrict ph;
             pha = cast<Array *>::to(sources[0]->eval(context));
-            array_lock(context, *pha);
+            array_lock(context, *pha, &this->debugInfo);
             ph = pha->data;
             char ** __restrict pi;
             int szz = int(pha->size);
@@ -298,7 +298,7 @@ namespace das
             }
         loopend:;
             evalFinal(context);
-            array_unlock(context, *pha);
+            array_unlock(context, *pha, &this->debugInfo);
             context.stopFlags &= ~EvalFlags::stopForBreak;
             return v_zero();
         }
@@ -319,7 +319,7 @@ namespace das
             char * __restrict ph[totalCount];
             for ( int t=0; t!=totalCount; ++t ) {
                 pha[t] = cast<Array *>::to(this->sources[t]->eval(context));
-                array_lock(context, *pha[t]);
+                array_lock(context, *pha[t], &this->debugInfo);
                 ph[t]  = pha[t]->data;
             }
             char ** __restrict pi[totalCount];
@@ -344,7 +344,7 @@ namespace das
             }
         loopend:;
             for ( int t=0; t!=totalCount; ++t ) {
-                array_unlock(context, *pha[t]);
+                array_unlock(context, *pha[t], &this->debugInfo);
             }
             this->evalFinal(context);
             context.stopFlags &= ~EvalFlags::stopForBreak;
@@ -365,7 +365,7 @@ namespace das
             Array * __restrict pha;
             char * __restrict ph;
             pha = cast<Array *>::to(sources[0]->eval(context));
-            array_lock(context, *pha);
+            array_lock(context, *pha, &this->debugInfo);
             ph = pha->data;
             char ** __restrict pi;
             int szz = int(pha->size);
@@ -385,7 +385,7 @@ namespace das
             }
         loopend:;
             evalFinal(context);
-            array_unlock(context, *pha);
+            array_unlock(context, *pha, &this->debugInfo);
             context.stopFlags &= ~EvalFlags::stopForBreak;
             return v_zero();
         }
@@ -400,7 +400,7 @@ namespace das
             char * __restrict ph[totalCount];
             for ( int t=0; t!=totalCount; ++t ) {
                 pha[t] = cast<Array *>::to(this->sources[t]->eval(context));
-                array_lock(context, *pha[t]);
+                array_lock(context, *pha[t], &this->debugInfo);
                 ph[t]  = pha[t]->data;
             }
             char ** __restrict pi[totalCount];
@@ -422,7 +422,7 @@ namespace das
         loopend:;
             this->evalFinal(context);
             for ( int t=0; t!=totalCount; ++t ) {
-                array_unlock(context, *pha[t]);
+                array_unlock(context, *pha[t], &this->debugInfo);
             }
             context.stopFlags &= ~EvalFlags::stopForBreak;
             return v_zero();
@@ -442,7 +442,7 @@ namespace das
             Array * __restrict pha;
             char * __restrict ph;
             pha = cast<Array *>::to(sources[0]->eval(context));
-            array_lock(context, *pha);
+            array_lock(context, *pha, &this->debugInfo);
             ph = pha->data;
             char ** __restrict pi;
             int szz = int(pha->size);
@@ -458,7 +458,7 @@ namespace das
             }
         loopend:;
             evalFinal(context);
-            array_unlock(context, *pha);
+            array_unlock(context, *pha, &this->debugInfo);
             context.stopFlags &= ~EvalFlags::stopForBreak;
             return v_zero();
         }

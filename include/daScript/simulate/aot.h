@@ -1186,7 +1186,7 @@ namespace das {
         template <typename QQ>
         __forceinline bool first(Context * __context__, QQ * & i) {
             context = __context__;
-            array_lock(*__context__, *that);
+            array_lock(*__context__, *that, /*at*/nullptr);
             i = (QQ *)that->data;
             return i != (QQ *)array_end;
         }
@@ -1197,7 +1197,7 @@ namespace das {
         }
         template <typename QQ>
         __forceinline void close(Context * __context__, QQ * & i) {
-            array_unlock(*__context__, *that);
+            array_unlock(*__context__, *that, /*at*/nullptr);
             context = nullptr;
             i = nullptr;
         }
@@ -1219,7 +1219,7 @@ namespace das {
         template <typename QQ>
         __forceinline bool first ( Context * __context__, const QQ * & i ) {
             context = __context__;
-            array_lock(*__context__, *(Array *)(that)); // technically we don't need for the const array, but...
+            array_lock(*__context__, *(Array *)(that), /*at*/nullptr); // technically we don't need for the const array, but...
             i = (const QQ *) that->data;
             return i!=(const QQ *)array_end;
         }
@@ -1230,7 +1230,7 @@ namespace das {
         }
         template <typename QQ>
         __forceinline void close ( Context * __context__, const QQ * & i ) {
-            array_unlock(*__context__, *(Array *)(that));  // technically we don't need for the const array, but...
+            array_unlock(*__context__, *(Array *)(that), /*at*/nullptr);  // technically we don't need for the const array, but...
             context = nullptr;
             i = nullptr;
         }
@@ -2155,7 +2155,7 @@ namespace das {
     struct das_invoke_function {
         static __forceinline ResType invoke ( Context * __context__, LineInfo * __lineinfo__, const Func & blk ) {
             SimFunction * simFunc = blk.PTR;
-            if (!simFunc) __context__->throw_error("invoke null function");
+            if (!simFunc) __context__->throw_error_at(__lineinfo__, "invoke null function");
             if ( simFunc->aotFunction ) {
                 using fnPtrType = ResType (*) ( Context * );
                 auto fnPtr = (fnPtrType) simFunc->aotFunction;
@@ -2168,7 +2168,7 @@ namespace das {
         template <typename ...ArgType>
         static __forceinline ResType invoke ( Context * __context__, LineInfo * __lineinfo__, const Func & blk, ArgType ...arg ) {
             SimFunction * simFunc = blk.PTR;
-            if (!simFunc) __context__->throw_error("invoke null function");
+            if (!simFunc) __context__->throw_error_at(__lineinfo__, "invoke null function");
             if ( simFunc->aotFunction ) {
                 using fnPtrType = ResType (*) ( Context *, ArgType... );
                 auto fnPtr = (fnPtrType) simFunc->aotFunction;
@@ -2181,7 +2181,7 @@ namespace das {
         }
         static __forceinline ResType invoke_cmres ( Context * __context__, LineInfo * __lineinfo__, const Func & blk ) {
             SimFunction * simFunc = blk.PTR;
-            if (!simFunc) __context__->throw_error("invoke null function");
+            if (!simFunc) __context__->throw_error_at(__lineinfo__, "invoke null function");
             if ( simFunc->aotFunction ) {
                 using fnPtrType = ResType (*) ( Context * );
                 auto fnPtr = (fnPtrType) simFunc->aotFunction;
@@ -2201,7 +2201,7 @@ namespace das {
                 auto fnPtr = (fnPtrType) simFunc->aotFunction;
                 return (*fnPtr) ( __context__, das::forward<ArgType>(arg)... );
             } else {
-                if (!simFunc) __context__->throw_error("invoke null function");
+                if (!simFunc) __context__->throw_error_at(__lineinfo__, "invoke null function");
                 typename remove_const<ResType>::type result;
                 __context__->callWithCopyOnReturn(simFunc, arguments, &result, __lineinfo__);
                 return result;
@@ -2213,14 +2213,14 @@ namespace das {
     struct das_invoke_function<void> {
         static __forceinline void invoke ( Context * __context__, LineInfo * __lineinfo__, const Func & blk ) {
             SimFunction * simFunc = blk.PTR;
-            if (!simFunc) __context__->throw_error("invoke null function");
+            if (!simFunc) __context__->throw_error_at(__lineinfo__, "invoke null function");
             __context__->callOrFastcall(simFunc, nullptr, __lineinfo__);
         }
         template <typename ...ArgType>
         static __forceinline void invoke ( Context * __context__, LineInfo * __lineinfo__, const Func & blk, ArgType ...arg ) {
             vec4f arguments [] = { cast<ArgType>::from(arg)... };
             SimFunction * simFunc = blk.PTR;
-            if (!simFunc) __context__->throw_error("invoke null function");
+            if (!simFunc) __context__->throw_error_at(__lineinfo__, "invoke null function");
             __context__->callOrFastcall(simFunc, arguments, __lineinfo__);
         }
     };
@@ -2228,13 +2228,13 @@ namespace das {
     template <typename ResType>
     struct das_invoke_function_by_name {
         static __forceinline ResType invoke ( Context * __context__, LineInfo * __lineinfo__, const char * funcName ) {
-            if (!funcName) __context__->throw_error("invoke null function");
+            if (!funcName) __context__->throw_error_at(__lineinfo__, "invoke null function");
             bool unique = false;
             SimFunction * simFunc = __context__->findFunction(funcName, unique);
-            if (!simFunc) __context__->throw_error("invoke null function");
-            if (!unique) __context__->throw_error_ex("invoke non-unique function %s", funcName);
-            if ( simFunc->cmres ) __context__->throw_error_ex("can't dynamically invoke function %s, which returns by reference",funcName);
-            if ( simFunc->unsafe ) __context__->throw_error_ex("can't dynamically invoke unsafe function %s",funcName);
+            if (!simFunc) __context__->throw_error_at(__lineinfo__, "invoke null function");
+            if (!unique) __context__->throw_error_at(__lineinfo__, "invoke non-unique function %s", funcName);
+            if ( simFunc->cmres ) __context__->throw_error_at(__lineinfo__, "can't dynamically invoke function %s, which returns by reference",funcName);
+            if ( simFunc->unsafe ) __context__->throw_error_at(__lineinfo__, "can't dynamically invoke unsafe function %s",funcName);
             if ( simFunc->aotFunction ) {
                 using fnPtrType = ResType (*) ( Context * );
                 auto fnPtr = (fnPtrType) simFunc->aotFunction;
@@ -2246,13 +2246,13 @@ namespace das {
         }
         template <typename ...ArgType>
         static __forceinline ResType invoke ( Context * __context__, LineInfo * __lineinfo__, const char * funcName, ArgType ...arg ) {
-            if (!funcName) __context__->throw_error("invoke null function");
+            if (!funcName) __context__->throw_error_at(__lineinfo__, "invoke null function");
             bool unique = false;
             SimFunction * simFunc = __context__->findFunction(funcName, unique);
-            if (!simFunc) __context__->throw_error("invoke null function");
-            if (!unique) __context__->throw_error_ex("invoke non-unique function %s", funcName);
-            if ( simFunc->cmres ) __context__->throw_error_ex("can't dynamically invoke function %s, which returns by reference",funcName);
-            if ( simFunc->unsafe ) __context__->throw_error_ex("can't dynamically invoke unsafe function %s",funcName);
+            if (!simFunc) __context__->throw_error_at(__lineinfo__, "invoke null function");
+            if (!unique) __context__->throw_error_at(__lineinfo__, "invoke non-unique function %s", funcName);
+            if ( simFunc->cmres ) __context__->throw_error_at(__lineinfo__, "can't dynamically invoke function %s, which returns by reference",funcName);
+            if ( simFunc->unsafe ) __context__->throw_error_at(__lineinfo__, "can't dynamically invoke unsafe function %s",funcName);
             if ( simFunc->aotFunction ) {
                 using fnPtrType = ResType (*) ( Context *, ArgType... );
                 auto fnPtr = (fnPtrType) simFunc->aotFunction;
@@ -2268,25 +2268,25 @@ namespace das {
     template <>
     struct das_invoke_function_by_name<void> {
         static __forceinline void invoke ( Context * __context__, LineInfo * __lineinfo__, const char * funcName ) {
-            if (!funcName) __context__->throw_error("invoke null function");
+            if (!funcName) __context__->throw_error_at(__lineinfo__, "invoke null function");
             bool unique = false;
             SimFunction * simFunc = __context__->findFunction(funcName, unique);
-            if (!simFunc) __context__->throw_error("invoke null function");
-            if (!unique) __context__->throw_error_ex("invoke non-unique function %s", funcName);
-            if ( simFunc->cmres ) __context__->throw_error_ex("can't dynamically invoke function %s, which returns by reference",funcName);
-            if ( simFunc->unsafe ) __context__->throw_error_ex("can't dynamically invoke unsafe function %s",funcName);
+            if (!simFunc) __context__->throw_error_at(__lineinfo__, "invoke null function");
+            if (!unique) __context__->throw_error_at(__lineinfo__, "invoke non-unique function %s", funcName);
+            if ( simFunc->cmres ) __context__->throw_error_at(__lineinfo__, "can't dynamically invoke function %s, which returns by reference",funcName);
+            if ( simFunc->unsafe ) __context__->throw_error_at(__lineinfo__, "can't dynamically invoke unsafe function %s",funcName);
             __context__->callOrFastcall(simFunc, nullptr, __lineinfo__);
         }
         template <typename ...ArgType>
         static __forceinline void invoke ( Context * __context__, LineInfo * __lineinfo__, const char * funcName, ArgType ...arg ) {
             vec4f arguments [] = { cast<ArgType>::from(arg)... };
-            if (!funcName) __context__->throw_error("invoke null function");
+            if (!funcName) __context__->throw_error_at(__lineinfo__, "invoke null function");
             bool unique = false;
             SimFunction * simFunc = __context__->findFunction(funcName, unique);
-            if (!simFunc) __context__->throw_error("invoke null function");
-            if (!unique) __context__->throw_error_ex("invoke non-unique function %s", funcName);
-            if ( simFunc->cmres ) __context__->throw_error_ex("can't dynamically invoke function %s, which returns by reference",funcName);
-            if ( simFunc->unsafe ) __context__->throw_error_ex("can't dynamically invoke unsafe function %s",funcName);
+            if (!simFunc) __context__->throw_error_at(__lineinfo__, "invoke null function");
+            if (!unique) __context__->throw_error_at(__lineinfo__, "invoke non-unique function %s", funcName);
+            if ( simFunc->cmres ) __context__->throw_error_at(__lineinfo__, "can't dynamically invoke function %s, which returns by reference",funcName);
+            if ( simFunc->unsafe ) __context__->throw_error_at(__lineinfo__, "can't dynamically invoke unsafe function %s",funcName);
             __context__->callOrFastcall(simFunc, arguments, __lineinfo__);
         }
     };
@@ -2296,9 +2296,9 @@ namespace das {
     struct das_invoke_lambda {
         static __forceinline ResType invoke ( Context * __context__, LineInfo * __lineinfo__, const Lambda & blk ) {
             SimFunction ** fnpp = (SimFunction **) blk.capture;
-            if (!fnpp) __context__->throw_error("invoke null lambda");
+            if (!fnpp) __context__->throw_error_at(__lineinfo__, "invoke null lambda");
             SimFunction * simFunc = *fnpp;
-            if (!simFunc) __context__->throw_error("invoke null function");
+            if (!simFunc) __context__->throw_error_at(__lineinfo__, "invoke null function");
             if ( simFunc->aotFunction ) {
                 using fnPtrType = ResType (*) ( Context *, void * );
                 auto fnPtr = (fnPtrType) simFunc->aotFunction;
@@ -2313,9 +2313,9 @@ namespace das {
         template <typename ...ArgType>
         static __forceinline ResType invoke ( Context * __context__, LineInfo * __lineinfo__, const Lambda & blk, ArgType ...arg ) {
             SimFunction ** fnpp = (SimFunction **) blk.capture;
-            if (!fnpp) __context__->throw_error("invoke null lambda");
+            if (!fnpp) __context__->throw_error_at(__lineinfo__, "invoke null lambda");
             SimFunction * simFunc = *fnpp;
-            if (!simFunc) __context__->throw_error("invoke null function");
+            if (!simFunc) __context__->throw_error_at(__lineinfo__, "invoke null function");
             if ( simFunc->aotFunction ) {
                 using fnPtrType = ResType (*) ( Context *, void *, ArgType... );
                 auto fnPtr = (fnPtrType) simFunc->aotFunction;
@@ -2328,9 +2328,9 @@ namespace das {
         }
         static __forceinline ResType invoke_cmres ( Context * __context__, LineInfo * __lineinfo__, const Lambda & blk ) {
             SimFunction ** fnpp = (SimFunction **) blk.capture;
-            if (!fnpp) __context__->throw_error("invoke null lambda");
+            if (!fnpp) __context__->throw_error_at(__lineinfo__, "invoke null lambda");
             SimFunction * simFunc = *fnpp;
-            if (!simFunc) __context__->throw_error("invoke null function");
+            if (!simFunc) __context__->throw_error_at(__lineinfo__, "invoke null function");
             if ( simFunc->aotFunction ) {
                 using fnPtrType = ResType (*) ( Context *, void * );
                 auto fnPtr = (fnPtrType) simFunc->aotFunction;
@@ -2346,9 +2346,9 @@ namespace das {
         template <typename ...ArgType>
         static __forceinline ResType invoke_cmres ( Context * __context__, LineInfo * __lineinfo__, const Lambda & blk, ArgType ...arg ) {
             SimFunction ** fnpp = (SimFunction **) blk.capture;
-            if (!fnpp) __context__->throw_error("invoke null lambda");
+            if (!fnpp) __context__->throw_error_at(__lineinfo__, "invoke null lambda");
             SimFunction * simFunc = *fnpp;
-            if (!simFunc) __context__->throw_error("invoke null function");
+            if (!simFunc) __context__->throw_error_at(__lineinfo__, "invoke null function");
             if ( simFunc->aotFunction ) {
                 using fnPtrType = ResType (*) ( Context *, void *, ArgType... );
                 auto fnPtr = (fnPtrType) simFunc->aotFunction;
@@ -2366,9 +2366,9 @@ namespace das {
     struct das_invoke_lambda<void> {
         static __forceinline void invoke ( Context * __context__, LineInfo * __lineinfo__, const Lambda & blk ) {
             SimFunction ** fnpp = (SimFunction **) blk.capture;
-            if (!fnpp) __context__->throw_error("invoke null lambda");
+            if (!fnpp) __context__->throw_error_at(__lineinfo__, "invoke null lambda");
             SimFunction * simFunc = *fnpp;
-            if (!simFunc) __context__->throw_error("invoke null function");
+            if (!simFunc) __context__->throw_error_at(__lineinfo__, "invoke null function");
             if ( simFunc->aotFunction ) {
                 using fnPtrType = void (*) ( Context *, void * );
                 auto fnPtr = (fnPtrType) simFunc->aotFunction;
@@ -2382,9 +2382,9 @@ namespace das {
         template <typename ...ArgType>
         static __forceinline void invoke ( Context * __context__, LineInfo * __lineinfo__, const Lambda & blk, ArgType ...arg ) {
             SimFunction ** fnpp = (SimFunction **) blk.capture;
-            if (!fnpp) __context__->throw_error("invoke null lambda");
+            if (!fnpp) __context__->throw_error_at(__lineinfo__, "invoke null lambda");
             SimFunction * simFunc = *fnpp;
-            if (!simFunc) __context__->throw_error("invoke null function");
+            if (!simFunc) __context__->throw_error_at(__lineinfo__, "invoke null function");
             if ( simFunc->aotFunction ) {
                 using fnPtrType = void (*) ( Context *, void *, ArgType... );
                 auto fnPtr = (fnPtrType) simFunc->aotFunction;
@@ -2919,12 +2919,12 @@ namespace das {
 
     template <typename CompareFn, typename TT>
     struct scblk_array {
-        static __forceinline void srt ( Array & arr, int32_t, int32_t, CompareFn && cmp, Context * context, LineInfoArg * ) {
+        static __forceinline void srt ( Array & arr, int32_t, int32_t, CompareFn && cmp, Context * context, LineInfoArg * at ) {
             if ( arr.size<=1 ) return;
-            array_lock(*context, arr);
+            array_lock(*context, arr, at);
             auto sdata = (TT *) arr.data;
             das::sort(sdata, sdata + arr.size, cmp);
-            array_unlock(*context, arr);
+            array_unlock(*context, arr, at);
         }
         static __forceinline void srtr ( Array & arr, int32_t elemSize, int32_t length, CompareFn && cmp, Context * context, LineInfoArg * lineinfo ) {
             srt(arr,elemSize,length,das::forward<CompareFn>(cmp),context,lineinfo);
@@ -2933,10 +2933,10 @@ namespace das {
 
     template <typename TT>
     struct scblk_array < const Block &,TT > {
-        static __forceinline void srtr ( Array & arr, int32_t, int32_t, const Block & cmp, Context * context, LineInfoArg * lineinfo ) {
+        static __forceinline void srtr ( Array & arr, int32_t, int32_t, const Block & cmp, Context * context, LineInfoArg * at ) {
             if ( arr.size<=1 ) return;
             auto data = (TT *) arr.data;
-            array_lock(*context, arr);
+            array_lock(*context, arr, at);
             if ( cmp.jitFunction ) {
                 auto cmpFn = (bool (*)(TT,TT,const Block &,Context *)) cmp.jitFunction;
                 das::sort ( data, data+arr.size, [&](TT x, TT y) -> bool {
@@ -2950,14 +2950,14 @@ namespace das {
                         bargs[1] = cast<TT>::from(y);
                         return code->evalBool(*context);
                     });
-                },lineinfo);
+                },at);
             }
-            array_unlock(*context, arr);
+            array_unlock(*context, arr, at);
         }
-        static __forceinline void srt ( Array & arr, int32_t, int32_t, const Block & cmp, Context * context, LineInfoArg * lineinfo ) {
+        static __forceinline void srt ( Array & arr, int32_t, int32_t, const Block & cmp, Context * context, LineInfoArg * at ) {
             if ( arr.size<=1 ) return;
             auto data = (TT *) arr.data;
-            array_lock(*context, arr);
+            array_lock(*context, arr, at);
             if ( cmp.jitFunction ) {
                 auto cmpFn = (bool (*)(const TT &,const TT &,const Block &,Context *)) cmp.jitFunction;
                 das::sort ( data, data+arr.size, [&](const TT & x,const TT & y) -> bool {
@@ -2971,9 +2971,9 @@ namespace das {
                         bargs[1] = cast<const TT &>::from(y);
                         return code->evalBool(*context);
                     });
-                },lineinfo);
+                },at);
             }
-            array_unlock(*context, arr);
+            array_unlock(*context, arr, at);
         }
     };
 

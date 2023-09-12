@@ -4,8 +4,8 @@
 
 namespace das
 {
-    void table_clear ( Context & context, Table & arr ) {
-        if ( arr.isLocked() ) context.throw_error("can't clear locked table");
+    void table_clear ( Context & context, Table & arr, LineInfo * at ) {
+        if ( arr.isLocked() ) context.throw_error_at(at, "can't clear locked table");
         if ( arr.data ) {
             memset(arr.hashes, 0, arr.capacity*sizeof(uint64_t));
             memset(arr.data, 0, arr.keys - arr.data);
@@ -13,15 +13,15 @@ namespace das
         arr.size = 0;
     }
 
-    void table_lock ( Context & context, Table & arr ) {
+    void table_lock ( Context & context, Table & arr, LineInfo * at ) {
         if ( arr.shared || arr.hopeless ) return;
         arr.lock ++;
-        if ( arr.lock==0 ) context.throw_error("table lock overflow");
+        if ( arr.lock==0 ) context.throw_error_at(at, "table lock overflow");
     }
 
-    void table_unlock ( Context & context, Table & arr ) {
+    void table_unlock ( Context & context, Table & arr, LineInfo * at ) {
         if ( arr.shared || arr.hopeless ) return;
-        if ( arr.lock==0 ) context.throw_error("table lock underflow");
+        if ( arr.lock==0 ) context.throw_error_at(at, "table lock underflow");
         arr.lock --;
     }
 
@@ -38,7 +38,7 @@ namespace das
 
     bool TableIterator::first ( Context & context, char * _value ) {
         char ** value = (char **)_value;
-        table_lock(context, *(Table *)table);
+        table_lock(context, *(Table *)table, nullptr);
         data  = getData();
         table_end = data + table->capacity*stride;
         size_t index = nextValid(0);
@@ -62,7 +62,7 @@ namespace das
             char ** value = (char **) _value;
             *value = nullptr;
         }
-        table_unlock(context, *(Table *)table);
+        table_unlock(context, *(Table *)table, nullptr);
     }
 
     // keys and values
@@ -111,7 +111,7 @@ namespace das
                     uint32_t oldSize = pTable->capacity*(vts_add_kts + sizeof(uint64_t));
                     context.heap->free(pTable->data, oldSize);
                 } else {
-                    context.throw_error("deleting locked table");
+                    context.throw_error_at(debugInfo, "deleting locked table");
                     return v_zero();
                 }
             }

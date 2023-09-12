@@ -646,8 +646,8 @@ namespace das
         context->stackWalk(lineInfo, args, vars);
     }
 
-    void builtin_terminate ( Context * context ) {
-        context->throw_error("terminate");
+    void builtin_terminate ( Context * context, LineInfoArg * at ) {
+        context->throw_error_at(at, "terminate");
     }
 
     int builtin_table_size ( const Table & arr ) {
@@ -658,8 +658,8 @@ namespace das
         return arr.capacity;
     }
 
-    void builtin_table_clear ( Table & arr, Context * context ) {
-        table_clear(*context, arr);
+    void builtin_table_clear ( Table & arr, Context * context, LineInfoArg * at ) {
+        table_clear(*context, arr, at);
     }
 
     struct HashBuilderAnnotation : ManagedStructureAnnotation <HashBuilder,false> {
@@ -720,28 +720,28 @@ namespace das
         context->reportAnyHeap(info,true,true,false,errOnly);
     }
 
-    void builtin_table_lock ( const Table & arr, Context * context ) {
-        table_lock(*context, const_cast<Table&>(arr));
+    void builtin_table_lock ( const Table & arr, Context * context, LineInfoArg * at ) {
+        table_lock(*context, const_cast<Table&>(arr), at);
     }
 
-    void builtin_table_unlock ( const Table & arr, Context * context ) {
-        table_unlock(*context, const_cast<Table&>(arr));
+    void builtin_table_unlock ( const Table & arr, Context * context, LineInfoArg * at ) {
+        table_unlock(*context, const_cast<Table&>(arr), at);
     }
 
     void builtin_table_clear_lock ( const Table & arr, Context * ) {
         const_cast<Table&>(arr).hopeless = 0;
     }
 
-    bool builtin_iterator_first ( const Sequence & it, void * data, Context * context ) {
-        if ( !it.iter ) context->throw_error("calling first on empty iterator");
-        else if ( it.iter->isOpen ) context->throw_error("calling first on already open iterator");
+    bool builtin_iterator_first ( const Sequence & it, void * data, Context * context, LineInfoArg * at ) {
+        if ( !it.iter ) context->throw_error_at(at, "calling first on empty iterator");
+        else if ( it.iter->isOpen ) context->throw_error_at(at, "calling first on already open iterator");
         it.iter->isOpen = true;
         return it.iter->first(*context, (char *)data);
     }
 
-    bool builtin_iterator_next ( const Sequence & it, void * data, Context * context ) {
-        if ( !it.iter ) context->throw_error("calling next on empty iterator");
-        else if ( !it.iter->isOpen ) context->throw_error("calling next on a non-open iterator");
+    bool builtin_iterator_next ( const Sequence & it, void * data, Context * context, LineInfoArg * at ) {
+        if ( !it.iter ) context->throw_error_at(at, "calling next on empty iterator");
+        else if ( !it.iter->isOpen ) context->throw_error_at(at, "calling next on a non-open iterator");
         return it.iter->next(*context, (char *)data);
     }
 
@@ -804,17 +804,17 @@ namespace das
     }
 
     vec4f builtin_make_enum_iterator ( Context & context, SimNode_CallBase * call, vec4f * args ) {
-        if ( !call->types ) context.throw_error("missing type info");
+        if ( !call->types ) context.throw_error_at(call->debugInfo, "missing type info");
         auto itinfo = call->types[0];
-        if ( itinfo->type != Type::tIterator ) context.throw_error("not an iterator");
+        if ( itinfo->type != Type::tIterator ) context.throw_error_at(call->debugInfo, "not an iterator");
         auto tinfo = itinfo->firstType;
-        if ( !tinfo ) context.throw_error("missing iterator type info");
+        if ( !tinfo ) context.throw_error_at(call->debugInfo, "missing iterator type info");
         if ( tinfo->type!=Type::tEnumeration && tinfo->type!=Type::tEnumeration8
             && tinfo->type!=Type::tEnumeration16 ) {
-            context.throw_error("not an iterator of enumeration");
+            context.throw_error_at(call->debugInfo, "not an iterator of enumeration");
         }
         auto einfo = tinfo->enumType;
-        if ( !einfo ) context.throw_error("missing enumeraiton type info");
+        if ( !einfo ) context.throw_error_at(call->debugInfo, "missing enumeraiton type info");
         char * iter = nullptr;
         switch ( tinfo->type ) {
         case Type::tEnumeration:
@@ -935,13 +935,13 @@ namespace das
         return context->stringHeap->allocateString(tout.str());
     }
 
-    void builtin_array_free ( Array & dim, int szt, Context * __context__ ) {
+    void builtin_array_free ( Array & dim, int szt, Context * __context__, LineInfoArg * at ) {
         if ( dim.data ) {
             if ( !dim.lock || dim.hopeless ) {
                 uint32_t oldSize = dim.capacity*szt;
                 __context__->heap->free(dim.data, oldSize);
             } else {
-                __context__->throw_error("can't delete locked array");
+                __context__->throw_error_at(at, "can't delete locked array");
             }
             if ( dim.hopeless ) {
                 memset ( &dim, 0, sizeof(Array) );
@@ -952,13 +952,13 @@ namespace das
         }
     }
 
-    void builtin_table_free ( Table & tab, int szk, int szv, Context * __context__ ) {
+    void builtin_table_free ( Table & tab, int szk, int szv, Context * __context__, LineInfoArg * at ) {
         if ( tab.data ) {
             if ( !tab.lock || tab.hopeless ) {
                 uint32_t oldSize = tab.capacity*(szk+szv+sizeof(uint64_t));
                 __context__->heap->free(tab.data, oldSize);
             } else {
-                __context__->throw_error("can't delete locked table");
+                __context__->throw_error_at(at, "can't delete locked table");
             }
             if ( tab.hopeless ) {
                 memset ( &tab, 0, sizeof(Table) );
@@ -1408,10 +1408,10 @@ namespace das
         // iterator functions
         addExtern<DAS_BIND_FUN(builtin_iterator_first)>(*this, lib, "_builtin_iterator_first",
             SideEffects::modifyArgumentAndExternal, "builtin_iterator_first")
-                ->args({"iterator","data","context"});
+                ->args({"iterator","data","context","at"});
         addExtern<DAS_BIND_FUN(builtin_iterator_next)>(*this, lib,  "_builtin_iterator_next",
             SideEffects::modifyArgumentAndExternal, "builtin_iterator_next")
-                ->args({"iterator","data","context"});
+                ->args({"iterator","data","context","at"});
         addExtern<DAS_BIND_FUN(builtin_iterator_close)>(*this, lib, "_builtin_iterator_close",
             SideEffects::modifyArgumentAndExternal, "builtin_iterator_close")
                 ->args({"iterator","data","context"});
@@ -1463,10 +1463,10 @@ namespace das
                 ->args({"text","context","at"});
         addExtern<DAS_BIND_FUN(builtin_print)>(*this, lib, "print",
             SideEffects::modifyExternal, "builtin_print")
-                ->args({"text","context", "at"});
+                ->args({"text","context","at"});
         addExtern<DAS_BIND_FUN(builtin_error)>(*this, lib, "error",
             SideEffects::modifyExternal, "builtin_error")
-                ->args({"text","context", "at"});
+                ->args({"text","context","at"});
         addInterop<builtin_sprint,char *,vec4f,PrintFlags>(*this, lib, "sprint",
             SideEffects::modifyExternal, "builtin_sprint")
                 ->args({"value","flags"});
@@ -1475,7 +1475,7 @@ namespace das
                 ->args({"value","humanReadable"});
         addExtern<DAS_BIND_FUN(builtin_terminate)>(*this, lib, "terminate",
             SideEffects::modifyExternal, "terminate")
-                ->arg("context");
+                ->args({"context","at"});
         addInterop<builtin_breakpoint,void>(*this, lib, "breakpoint", SideEffects::modifyExternal, "breakpoint");
         // stackwalk
         auto fnsw = addExtern<DAS_BIND_FUN(builtin_stackwalk)>(*this, lib, "stackwalk",
@@ -1574,7 +1574,7 @@ namespace das
         // table functions
         addExtern<DAS_BIND_FUN(builtin_table_clear)>(*this, lib, "_builtin_table_clear",
             SideEffects::modifyArgument, "builtin_table_clear")
-                ->args({"table","context"});
+                ->args({"table","context","at"});
         addExtern<DAS_BIND_FUN(builtin_table_size)>(*this, lib, "length",
             SideEffects::none, "builtin_table_size")
                 ->arg("table");
@@ -1583,10 +1583,10 @@ namespace das
                 ->arg("table");
         addExtern<DAS_BIND_FUN(builtin_table_lock)>(*this, lib, "__builtin_table_lock",
             SideEffects::modifyArgumentAndExternal, "builtin_table_lock")
-                ->args({"table","context"});
+                ->args({"table","context","at"});
         addExtern<DAS_BIND_FUN(builtin_table_unlock)>(*this, lib, "__builtin_table_unlock",
             SideEffects::modifyArgumentAndExternal, "builtin_table_unlock")
-                ->args({"table","context"});
+                ->args({"table","context","at"});
         addExtern<DAS_BIND_FUN(builtin_table_clear_lock)>(*this, lib, "__builtin_table_clear_lock",
             SideEffects::modifyArgumentAndExternal, "builtin_table_clear_lock")
                 ->args({"table","context"});
@@ -1599,10 +1599,10 @@ namespace das
         // array and table free
         addExtern<DAS_BIND_FUN(builtin_array_free)>(*this, lib, "__builtin_array_free",
             SideEffects::modifyArgumentAndExternal, "builtin_array_free")
-                ->args({"array","stride","context"});
+                ->args({"array","stride","context","at"});
         addExtern<DAS_BIND_FUN(builtin_table_free)>(*this, lib, "__builtin_table_free",
             SideEffects::modifyArgumentAndExternal, "builtin_table_free")
-                ->args({"table","sizeOfKey","sizeOfValue","context"});
+                ->args({"table","sizeOfKey","sizeOfValue","context","at"});
         // table expressions
         addCall<ExprErase>("__builtin_table_erase");
         addCall<ExprSetInsert>("__builtin_table_set_insert");

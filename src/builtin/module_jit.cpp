@@ -60,8 +60,8 @@ namespace das {
         return true;
     }
 
-    void jit_exception ( const char * text, Context * context ) {
-        context->throw_error(text);
+    void jit_exception ( const char * text, Context * context, LineInfoArg * at ) {
+        context->throw_error_at(at, "%s", text);
     }
 
     void * das_get_jit_exception ( ) {
@@ -178,8 +178,8 @@ namespace das {
     }
 
     template <typename KeyType>
-    bool jit_table_erase ( Table * tab, KeyType key, int32_t valueTypeSize, Context * context ) {
-        if ( tab->isLocked() ) context->throw_error("can't erase from locked table");
+    bool jit_table_erase ( Table * tab, KeyType key, int32_t valueTypeSize, Context * context, LineInfoArg * at ) {
+        if ( tab->isLocked() ) context->throw_error_at(at, "can't erase from locked table");
         TableHash<KeyType> thh(context,valueTypeSize);
         auto hfn = hash_function(*context, key);
         return thh.erase(*tab, key, hfn) != -1;
@@ -213,9 +213,9 @@ namespace das {
         char * SP;
     };
 
-    void jit_prologue ( int32_t stackSize, JitStackState * stackState, Context * context ) {
+    void jit_prologue ( int32_t stackSize, JitStackState * stackState, Context * context, LineInfoArg * at ) {
         if (!context->stack.push(stackSize, stackState->EP, stackState->SP)) {
-            context->throw_error("stack overflow");
+            context->throw_error_at(at, "stack overflow");
         }
 #if DAS_ENABLE_STACK_WALK
         Prologue * pp = (Prologue *)context->stack.sp();

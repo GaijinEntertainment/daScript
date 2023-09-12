@@ -109,8 +109,8 @@ namespace das {
             if ( reading ) {
                 uint32_t newSize = 0;
                 load(newSize);
-                array_clear(*context, *pa);
-                array_resize(*context, *pa, newSize, getTypeBaseSize(ti), true);
+                array_clear(*context, *pa, /*at*/nullptr);
+                array_resize(*context, *pa, newSize, getTypeBaseSize(ti), true, /*at*/nullptr);
             } else {
                 save(pa->size);
             }

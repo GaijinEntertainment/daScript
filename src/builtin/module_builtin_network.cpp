@@ -93,33 +93,33 @@ namespace das {
         return true;
     }
 
-    bool server_init ( smart_ptr_raw<Server> server, int port, Context * context ) {
-        if ( !server ) context->throw_error("null server");
+    bool server_init ( smart_ptr_raw<Server> server, int port, Context * context, LineInfoArg * at ) {
+        if ( !server ) context->throw_error_at(at, "null server");
         return server->init(port);
     }
 
-    bool server_is_open ( smart_ptr_raw<Server> server, Context * context ) {
-        if ( !server ) context->throw_error("null server");
+    bool server_is_open ( smart_ptr_raw<Server> server, Context * context, LineInfoArg * at ) {
+        if ( !server ) context->throw_error_at(at, "null server");
         return server->is_open();
     }
 
-    bool server_is_connected ( smart_ptr_raw<Server> server, Context * context ) {
-        if ( !server ) context->throw_error("null server");
+    bool server_is_connected ( smart_ptr_raw<Server> server, Context * context, LineInfoArg * at ) {
+        if ( !server ) context->throw_error_at(at, "null server");
         return server->is_connected();
     }
 
-    bool server_send ( smart_ptr_raw<Server> server, uint8_t * data, int32_t size, Context * context ) {
-        if ( !server ) context->throw_error("null server");
+    bool server_send ( smart_ptr_raw<Server> server, uint8_t * data, int32_t size, Context * context, LineInfoArg * at ) {
+        if ( !server ) context->throw_error_at(at, "null server");
         return server->send_msg((char *)data, size);
     }
 
-    void server_tick ( smart_ptr_raw<Server> server, Context * context ) {
-        if ( !server ) context->throw_error("null server");
+    void server_tick ( smart_ptr_raw<Server> server, Context * context, LineInfoArg * at ) {
+        if ( !server ) context->throw_error_at(at, "null server");
         server->tick();
     }
 
-    void server_restore ( smart_ptr_raw<Server> server, const void * pClass, const StructInfo * info, Context * context ) {
-        if ( !server ) context->throw_error("null server");
+    void server_restore ( smart_ptr_raw<Server> server, const void * pClass, const StructInfo * info, Context * context, LineInfoArg * at ) {
+        if ( !server ) context->throw_error_at(at, "null server");
         auto adapter = (ServerAdapter *) server.get();
         adapter->update((char *)pClass,info,context);
     }
@@ -138,22 +138,22 @@ namespace das {
                     ->args({"class","info","context"});
             addExtern<DAS_BIND_FUN(server_init)>(*this, lib,  "server_init",
                 SideEffects::modifyArgumentAndExternal, "server_init")
-                    ->args({"server","port","context"});
+                    ->args({"server","port","context","at"});
             addExtern<DAS_BIND_FUN(server_is_open)>(*this, lib,  "server_is_open",
                 SideEffects::modifyArgumentAndExternal, "server_is_open")
-                    ->args({"server","context"});
+                    ->args({"server","context","at"});
             addExtern<DAS_BIND_FUN(server_is_connected)>(*this, lib,  "server_is_connected",
                 SideEffects::modifyArgumentAndExternal, "server_is_connected")
-                    ->args({"server","context"});
+                    ->args({"server","context","at"});
             addExtern<DAS_BIND_FUN(server_tick)>(*this, lib,  "server_tick",
                 SideEffects::modifyArgumentAndExternal, "server_tick")
-                    ->args({"server","context"});
+                    ->args({"server","context","at"});
             addExtern<DAS_BIND_FUN(server_send)>(*this, lib,  "server_send",
                 SideEffects::modifyArgumentAndExternal, "server_send")
-                    ->args({"server","data","size","context"});
+                    ->args({"server","data","size","context","at"});
             addExtern<DAS_BIND_FUN(server_restore)>(*this, lib,  "server_restore",
                 SideEffects::modifyArgumentAndExternal, "server_restore")
-                    ->args({"server","class","info","context"});
+                    ->args({"server","class","info","context","at"});
             // add builtin module
             compileBuiltinModule("network.das",network_das,sizeof(network_das));
         }

@@ -1473,7 +1473,7 @@ namespace das
         virtual void onCreateContext ( Context * ctx ) override { if ( onCreateContextOp ) onCreateContextOp(ctx); }
         virtual void onDestroyContext ( Context * ctx ) override { if ( onDestroyContextOp ) onDestroyContextOp(ctx); }
         virtual bool onLog ( Context * context, const LineInfo * at, int level, const char * text ) override { return onLogOp ? onLogOp(context, at, level, text) : false; }
-        virtual bool isCppOnlyAgent() const { return true; }
+        virtual bool isCppOnlyAgent() const override { return true; }
     public:
         function<void(Context*)> onCreateContextOp;
         function<void(Context*)> onDestroyContextOp;

@@ -112,12 +112,12 @@ namespace das
 
     class Context;
 
-    void array_lock ( Context & context, Array & arr );
-    void array_unlock ( Context & context, Array & arr );
-    void array_reserve ( Context & context, Array & arr, uint32_t newCapacity, uint32_t stride );
-    void array_resize ( Context & context, Array & arr, uint32_t newSize, uint32_t stride, bool zero );
+    void array_lock ( Context & context, Array & arr, LineInfo * at );
+    void array_unlock ( Context & context, Array & arr, LineInfo * at );
+    void array_reserve ( Context & context, Array & arr, uint32_t newCapacity, uint32_t stride, LineInfo * at );
+    void array_resize ( Context & context, Array & arr, uint32_t newSize, uint32_t stride, bool zero, LineInfo * at );
     void array_grow ( Context & context, Array & arr, uint32_t newSize, uint32_t stride );  // always grows
-    void array_clear ( Context & context, Array & arr );
+    void array_clear ( Context & context, Array & arr, LineInfo * at );
 
     struct Table : Array {
         char *      keys;
@@ -126,9 +126,9 @@ namespace das
         uint32_t    shift;
     };
 
-    void table_clear ( Context & context, Table & arr );
-    void table_lock ( Context & context, Table & arr );
-    void table_unlock ( Context & context, Table & arr );
+    void table_clear ( Context & context, Table & arr, LineInfo * at );
+    void table_lock ( Context & context, Table & arr, LineInfo * at );
+    void table_unlock ( Context & context, Table & arr, LineInfo * at );
 
     struct Sequence;
     void builtin_table_keys ( Sequence & result, const Table & tab, int32_t stride, Context * __context__ );

@@ -143,15 +143,15 @@ namespace das {
         return context->thisProgram;
     }
 
-    Module * compileModule ( Context * context ) {
+    Module * compileModule ( Context * context, LineInfoArg * at ) {
         auto program = daScriptEnvironment::bound->g_Program;
-        if ( !program ) context->throw_error("compileModule only available during compilation");
+        if ( !program ) context->throw_error_at(at, "compileModule only available during compilation");
         return program->thisModule.get();
     }
 
-    smart_ptr_raw<Program> compileProgram ( Context * context ) {
+    smart_ptr_raw<Program> compileProgram ( Context * context, LineInfoArg * at ) {
         auto program = daScriptEnvironment::bound->g_Program;
-        if ( !program ) context->throw_error("compileProgram only available during compilation");
+        if ( !program ) context->throw_error_at(at, "compileProgram only available during compilation");
         return program;
     }
 
@@ -600,10 +600,10 @@ namespace das {
                 ->args({"module","function","context","lineinfo"});
         addExtern<DAS_BIND_FUN(compileProgram)>(*this, lib,  "compiling_program",
             SideEffects::accessExternal, "compileProgram")
-                ->arg("context");
+                ->args({"context","at"});
         addExtern<DAS_BIND_FUN(compileModule)>(*this, lib,  "compiling_module",
             SideEffects::accessExternal, "compileModule")
-                ->arg("context");;
+                ->args({"context","at"});
         addExtern<DAS_BIND_FUN(for_each_module)>(*this, lib,  "for_each_module",
             SideEffects::accessExternal, "for_each_module")
                 ->args({"program","block","context","line"});

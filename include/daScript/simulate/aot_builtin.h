@@ -22,10 +22,10 @@ namespace das {
     Func builtin_SimFunction_by_MNH ( Context & context, uint64_t MNH );
     vec4f builtin_breakpoint ( Context & context, SimNode_CallBase * call, vec4f * );
     void builtin_stackwalk ( bool args, bool vars, Context * context, LineInfoArg * lineInfo );
-    void builtin_terminate ( Context * context );
+    void builtin_terminate ( Context * context, LineInfoArg * lineInfo );
     int builtin_table_size ( const Table & arr );
     int builtin_table_capacity ( const Table & arr );
-    void builtin_table_clear ( Table & arr, Context * context );
+    void builtin_table_clear ( Table & arr, Context * context, LineInfoArg * at );
     vec4f _builtin_hash ( Context & context, SimNode_CallBase * call, vec4f * args );
     void heap_stats ( Context & context, uint64_t * bytes );
     uint64_t heap_bytes_allocated ( Context * context );
@@ -37,25 +37,25 @@ namespace das {
     void heap_collect ( bool stringHeap, bool validate, Context * context, LineInfoArg * info );
     void heap_report ( Context * context, LineInfoArg * info );
     void memory_report ( bool errorsOnly, Context * context, LineInfoArg * info );
-    void builtin_table_lock ( const Table & arr, Context * context );
-    void builtin_table_unlock ( const Table & arr, Context * context );
+    void builtin_table_lock ( const Table & arr, Context * context, LineInfoArg * at );
+    void builtin_table_unlock ( const Table & arr, Context * context, LineInfoArg * at );
     void builtin_table_clear_lock ( const Table & arr, Context * context );
     int builtin_array_size ( const Array & arr );
     int builtin_array_capacity ( const Array & arr );
     int builtin_array_lock_count ( const Array & arr );
-    void builtin_array_resize ( Array & pArray, int newSize, int stride, Context * context );
-    void builtin_array_resize_no_init ( Array & pArray, int newSize, int stride, Context * context );
-    void builtin_array_reserve ( Array & pArray, int newSize, int stride, Context * context );
-    void builtin_array_erase ( Array & pArray, int index, int stride, Context * context ) ;
-    void builtin_array_erase_range ( Array & pArray, int index, int count, int stride, Context * context ) ;
-    void builtin_array_clear ( Array & pArray, Context * context );
-    void builtin_array_lock ( const Array & arr, Context * context );
-    void builtin_array_unlock ( const Array & arr, Context * context );
+    void builtin_array_resize ( Array & pArray, int newSize, int stride, Context * context, LineInfoArg * at );
+    void builtin_array_resize_no_init ( Array & pArray, int newSize, int stride, Context * context, LineInfoArg * at );
+    void builtin_array_reserve ( Array & pArray, int newSize, int stride, Context * context, LineInfoArg * at );
+    void builtin_array_erase ( Array & pArray, int index, int stride, Context * context, LineInfoArg * at );
+    void builtin_array_erase_range ( Array & pArray, int index, int count, int stride, Context * context, LineInfoArg * at );
+    void builtin_array_clear ( Array & pArray, Context * context, LineInfoArg * at );
+    void builtin_array_lock ( const Array & arr, Context * context, LineInfoArg * at );
+    void builtin_array_unlock ( const Array & arr, Context * context, LineInfoArg * at );
     void builtin_array_clear_lock ( const Array & arr, Context * );
     void builtin_temp_array ( void * data, int size, const Block & block, Context * context, LineInfoArg * lineinfo );
     void builtin_make_temp_array ( Array & arr, void * data, int size );
-    void builtin_array_free ( Array & dim, int szt, Context * __context__ );
-    void builtin_table_free ( Table & tab, int szk, int szv, Context * __context__ );
+    void builtin_array_free ( Array & dim, int szt, Context * __context__, LineInfoArg * at );
+    void builtin_table_free ( Table & tab, int szk, int szv, Context * __context__, LineInfoArg * at );
 
     void toLog ( int level, const char * text, Context * context, LineInfoArg * at );
     void toCompilerLog ( const char * text, Context * context, LineInfoArg * at );
@@ -65,8 +65,8 @@ namespace das {
     bool builtin_set_verify_table_locks ( Table & tab, bool value );
     bool builtin_set_verify_context ( bool slc, Context * context );
 
-    bool builtin_iterator_first ( const Sequence & it, void * data, Context * context );
-    bool builtin_iterator_next  ( const Sequence & it, void * data, Context * context );
+    bool builtin_iterator_first ( const Sequence & it, void * data, Context * context, LineInfoArg * at );
+    bool builtin_iterator_next  ( const Sequence & it, void * data, Context * context, LineInfoArg * at );
     void builtin_iterator_close ( const Sequence & it, void * data, Context * context );
     bool builtin_iterator_iterate ( const Sequence & it, void * data, Context * context );
     void builtin_iterator_delete ( const Sequence & it, Context * context );
@@ -116,43 +116,43 @@ namespace das {
     smart_ptr_raw<void> gc0_restore_smart_ptr ( char * name, Context * context );
     void gc0_reset();
 
-    __forceinline void array_grow ( Context & context, Array & arr, uint32_t stride ) {
-        if ( arr.isLocked() ) context.throw_error("can't resize locked array");
+    __forceinline void array_grow ( Context & context, Array & arr, uint32_t stride, LineInfo * at ) {
+        if ( arr.isLocked() ) context.throw_error_at(at, "can't resize locked array");
         uint32_t newSize = arr.size + 1;
         if ( newSize > arr.capacity ) {
             uint32_t newCapacity = 1 << (32 - das_clz (das::max(newSize,2u) - 1));
             newCapacity = das::max(newCapacity, 16u);
-            array_reserve(context, arr, newCapacity, stride);
+            array_reserve(context, arr, newCapacity, stride, at);
         }
         arr.size = newSize;
     }
 
-    __forceinline int builtin_array_push ( Array & pArray, int index, int stride, Context * context ) {
+    __forceinline int builtin_array_push ( Array & pArray, int index, int stride, Context * context, LineInfoArg * at ) {
         uint32_t idx = pArray.size;
-        array_grow(*context, pArray, stride);
-        if ( uint32_t(index) >= pArray.size ) context->throw_error_ex("insert index out of range, %u of %u", uint32_t(index), pArray.size);
+        array_grow(*context, pArray, stride, at);
+        if ( uint32_t(index) >= pArray.size ) context->throw_error_at(at, "insert index out of range, %u of %u", uint32_t(index), pArray.size);
         memmove ( pArray.data+(index+1)*stride, pArray.data+index*stride, size_t(idx-index)*size_t(stride) );
         return index;
     }
 
-    __forceinline int builtin_array_push_zero ( Array & pArray, int index, int stride, Context * context ) {
+    __forceinline int builtin_array_push_zero ( Array & pArray, int index, int stride, Context * context, LineInfoArg * at ) {
         uint32_t idx = pArray.size;
-        array_grow(*context, pArray, stride);
-        if ( uint32_t(index) >= pArray.size ) context->throw_error_ex("insert index out of range, %u of %u", uint32_t(index), pArray.size);
+        array_grow(*context, pArray, stride, at);
+        if ( uint32_t(index) >= pArray.size ) context->throw_error_at(at, "insert index out of range, %u of %u", uint32_t(index), pArray.size);
         memmove ( pArray.data+(index+1)*stride, pArray.data+index*stride, size_t(idx-index)*size_t(stride) );
         memset ( pArray.data + index*stride, 0, stride );
         return index;
     }
 
-    __forceinline int builtin_array_push_back ( Array & pArray, int stride, Context * context ) {
+    __forceinline int builtin_array_push_back ( Array & pArray, int stride, Context * context, LineInfoArg * at ) {
         uint32_t idx = pArray.size;
-        array_grow(*context, pArray, stride);
+        array_grow(*context, pArray, stride, at);
         return idx;
     }
 
-    __forceinline int builtin_array_push_back_zero ( Array & pArray, int stride, Context * context ) {
+    __forceinline int builtin_array_push_back_zero ( Array & pArray, int stride, Context * context, LineInfoArg * at ) {
         uint32_t idx = pArray.size;
-        array_grow(*context, pArray, stride);
+        array_grow(*context, pArray, stride, at);
         memset(pArray.data + idx*stride, 0, stride);
         return idx;
     }

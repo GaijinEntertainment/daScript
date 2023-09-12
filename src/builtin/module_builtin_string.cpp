@@ -21,10 +21,10 @@ namespace das
         }
     };
 
-    int32_t get_character_at ( const char * str, int32_t index, Context * context ) {
+    int32_t get_character_at ( const char * str, int32_t index, Context * context, LineInfoArg * at ) {
         const uint32_t strLen = stringLengthSafe ( *context, str );
         if ( uint32_t(index)>=strLen ) {
-            context->throw_error_ex("string character index out of range, %u of %u", uint32_t(index), strLen);
+            context->throw_error_at(at, "string character index out of range, %u of %u", uint32_t(index), strLen);
         }
         return ((uint8_t *)str)[index];
     }
@@ -535,11 +535,11 @@ namespace das
         return context->stringHeap->allocateString(escapeString(str,false));
     }
 
-    char * builtin_string_unescape ( const char *str, Context * context ) {
+    char * builtin_string_unescape ( const char *str, Context * context, LineInfoArg * at ) {
         if ( !str ) return nullptr;
         bool err = false;
         auto estr = unescapeString(str, &err, false);
-        if ( err ) context->throw_error("invalid escape sequence");
+        if ( err ) context->throw_error_at(at, "invalid escape sequence");
         return context->stringHeap->allocateString(estr);
     }
 
@@ -731,7 +731,7 @@ namespace das
                 SideEffects::modifyArgumentAndExternal, "builtin_strdup")->arg("anything")->unsafeOperation = true;
             // regular string
             addExtern<DAS_BIND_FUN(get_character_at)>(*this, lib, "character_at",
-                SideEffects::none, "get_character_at")->args({"str","idx","context"});
+                SideEffects::none, "get_character_at")->args({"str","idx","context","at"});
             addExtern<DAS_BIND_FUN(get_character_uat)>(*this, lib, "character_uat",
                 SideEffects::none, "get_character_uat")->args({"str","idx"})->unsafeOperation = true;
             addExtern<DAS_BIND_FUN(string_repeat)>(*this, lib, "repeat",
@@ -823,7 +823,7 @@ namespace das
             addExtern<DAS_BIND_FUN(builtin_string_escape)>(*this, lib, "escape",
                 SideEffects::none, "builtin_string_escape")->args({"str","context"});
             addExtern<DAS_BIND_FUN(builtin_string_unescape)>(*this, lib, "unescape",
-                SideEffects::none, "builtin_string_unescape")->args({"str","context"});
+                SideEffects::none, "builtin_string_unescape")->args({"str","context", "at"});
             addExtern<DAS_BIND_FUN(builtin_string_safe_unescape)>(*this, lib, "safe_unescape",
                 SideEffects::none, "builtin_string_safe_unescape")->args({"str","context"});
             addExtern<DAS_BIND_FUN(builtin_string_replace)>(*this, lib, "replace",
