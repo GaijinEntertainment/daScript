@@ -10887,24 +10887,24 @@ make_simulate_macro returns  :ref:`SimulateMacroPtr <alias-SimulateMacroPtr>`
 Adapter application
 +++++++++++++++++++
 
-  *  :ref:`add_function_annotation (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::FunctionAnnotation\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_function_annotation_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_FunctionAnnotation_gr__gr_?W_C_c>` 
-  *  :ref:`add_function_annotation (function:smart_ptr\<ast::Function\> const implicit;annotation:smart_ptr\<ast::FunctionAnnotation\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_function_annotation_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?M_&I1_ls_H_ls_ast_c__c_FunctionAnnotation_gr__gr_?W_C_c>` 
-  *  :ref:`add_function_annotation (function:smart_ptr\<ast::Function\> const implicit;annotation:smart_ptr\<rtti::AnnotationDeclaration\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_function_annotation_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?M_&I1_ls_H_ls_rtti_c__c_AnnotationDeclaration_gr__gr_?M_C_c>` 
-  *  :ref:`add_block_annotation (block:smart_ptr\<ast::ExprBlock\> const implicit;annotation:smart_ptr\<ast::FunctionAnnotation\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_block_annotation_CI1_ls_H_ls_ast_c__c_ExprBlock_gr__gr_?M_&I1_ls_H_ls_ast_c__c_FunctionAnnotation_gr__gr_?W_C_c>` 
-  *  :ref:`add_block_annotation (block:smart_ptr\<ast::ExprBlock\> const implicit;annotation:smart_ptr\<rtti::AnnotationDeclaration\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_block_annotation_CI1_ls_H_ls_ast_c__c_ExprBlock_gr__gr_?M_&I1_ls_H_ls_rtti_c__c_AnnotationDeclaration_gr__gr_?M_C_c>` 
-  *  :ref:`add_structure_annotation (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::StructureAnnotation\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_structure_annotation_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_StructureAnnotation_gr__gr_?W_C_c>` 
-  *  :ref:`add_structure_annotation (structure:smart_ptr\<ast::Structure\> const implicit;annotation:smart_ptr\<ast::StructureAnnotation\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_structure_annotation_CI1_ls_H_ls_ast_c__c_Structure_gr__gr_?M_&I1_ls_H_ls_ast_c__c_StructureAnnotation_gr__gr_?W_C_c>` 
-  *  :ref:`add_structure_annotation (structure:smart_ptr\<ast::Structure\> const implicit;annotation:smart_ptr\<rtti::AnnotationDeclaration\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_structure_annotation_CI1_ls_H_ls_ast_c__c_Structure_gr__gr_?M_&I1_ls_H_ls_rtti_c__c_AnnotationDeclaration_gr__gr_?M_C_c>` 
-  *  :ref:`add_enumeration_annotation (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::EnumerationAnnotation\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_enumeration_annotation_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_EnumerationAnnotation_gr__gr_?W_C_c>` 
+  *  :ref:`add_function_annotation (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::FunctionAnnotation\>& implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_add_function_annotation_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_FunctionAnnotation_gr__gr_?W_C_c_C_l>` 
+  *  :ref:`add_function_annotation (function:smart_ptr\<ast::Function\> const implicit;annotation:smart_ptr\<ast::FunctionAnnotation\>& implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_add_function_annotation_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?M_&I1_ls_H_ls_ast_c__c_FunctionAnnotation_gr__gr_?W_C_c_C_l>` 
+  *  :ref:`add_function_annotation (function:smart_ptr\<ast::Function\> const implicit;annotation:smart_ptr\<rtti::AnnotationDeclaration\>& implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_add_function_annotation_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?M_&I1_ls_H_ls_rtti_c__c_AnnotationDeclaration_gr__gr_?M_C_c_C_l>` 
+  *  :ref:`add_block_annotation (block:smart_ptr\<ast::ExprBlock\> const implicit;annotation:smart_ptr\<ast::FunctionAnnotation\>& implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_add_block_annotation_CI1_ls_H_ls_ast_c__c_ExprBlock_gr__gr_?M_&I1_ls_H_ls_ast_c__c_FunctionAnnotation_gr__gr_?W_C_c_C_l>` 
+  *  :ref:`add_block_annotation (block:smart_ptr\<ast::ExprBlock\> const implicit;annotation:smart_ptr\<rtti::AnnotationDeclaration\>& implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_add_block_annotation_CI1_ls_H_ls_ast_c__c_ExprBlock_gr__gr_?M_&I1_ls_H_ls_rtti_c__c_AnnotationDeclaration_gr__gr_?M_C_c_C_l>` 
+  *  :ref:`add_structure_annotation (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::StructureAnnotation\>& implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_add_structure_annotation_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_StructureAnnotation_gr__gr_?W_C_c_C_l>` 
+  *  :ref:`add_structure_annotation (structure:smart_ptr\<ast::Structure\> const implicit;annotation:smart_ptr\<ast::StructureAnnotation\>& implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_add_structure_annotation_CI1_ls_H_ls_ast_c__c_Structure_gr__gr_?M_&I1_ls_H_ls_ast_c__c_StructureAnnotation_gr__gr_?W_C_c_C_l>` 
+  *  :ref:`add_structure_annotation (structure:smart_ptr\<ast::Structure\> const implicit;annotation:smart_ptr\<rtti::AnnotationDeclaration\>& implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_add_structure_annotation_CI1_ls_H_ls_ast_c__c_Structure_gr__gr_?M_&I1_ls_H_ls_rtti_c__c_AnnotationDeclaration_gr__gr_?M_C_c_C_l>` 
+  *  :ref:`add_enumeration_annotation (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::EnumerationAnnotation\>& implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_add_enumeration_annotation_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_EnumerationAnnotation_gr__gr_?W_C_c_C_l>` 
   *  :ref:`add_infer_macro (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::PassMacro\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_infer_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_PassMacro_gr__gr_?W_C_c>` 
   *  :ref:`add_dirty_infer_macro (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::PassMacro\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_dirty_infer_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_PassMacro_gr__gr_?W_C_c>` 
   *  :ref:`add_lint_macro (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::PassMacro\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_lint_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_PassMacro_gr__gr_?W_C_c>` 
   *  :ref:`add_global_lint_macro (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::PassMacro\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_global_lint_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_PassMacro_gr__gr_?W_C_c>` 
   *  :ref:`add_optimization_macro (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::PassMacro\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_optimization_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_PassMacro_gr__gr_?W_C_c>` 
-  *  :ref:`add_reader_macro (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::ReaderMacro\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_reader_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_ReaderMacro_gr__gr_?W_C_c>` 
-  *  :ref:`add_comment_reader (module:rtti::Module? const implicit;reader:smart_ptr\<ast::CommentReader\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_comment_reader_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_CommentReader_gr__gr_?W_C_c>` 
-  *  :ref:`add_call_macro (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::CallMacro\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_call_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_CallMacro_gr__gr_?W_C_c>` 
-  *  :ref:`add_typeinfo_macro (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::TypeInfoMacro\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_typeinfo_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_TypeInfoMacro_gr__gr_?W_C_c>` 
+  *  :ref:`add_reader_macro (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::ReaderMacro\>& implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_add_reader_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_ReaderMacro_gr__gr_?W_C_c_C_l>` 
+  *  :ref:`add_comment_reader (module:rtti::Module? const implicit;reader:smart_ptr\<ast::CommentReader\>& implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_add_comment_reader_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_CommentReader_gr__gr_?W_C_c_C_l>` 
+  *  :ref:`add_call_macro (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::CallMacro\>& implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_add_call_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_CallMacro_gr__gr_?W_C_c_C_l>` 
+  *  :ref:`add_typeinfo_macro (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::TypeInfoMacro\>& implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_add_typeinfo_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_TypeInfoMacro_gr__gr_?W_C_c_C_l>` 
   *  :ref:`add_variant_macro (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::VariantMacro\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_variant_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_VariantMacro_gr__gr_?W_C_c>` 
   *  :ref:`add_for_loop_macro (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::ForLoopMacro\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_for_loop_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_ForLoopMacro_gr__gr_?W_C_c>` 
   *  :ref:`add_capture_macro (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::CaptureMacro\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_capture_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_CaptureMacro_gr__gr_?W_C_c>` 
@@ -10929,7 +10929,7 @@ Adapter application
   *  :ref:`add_new_global_lint_macro (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_global_lint_macro_Cs_C.>` 
   *  :ref:`add_new_optimization_macro (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_optimization_macro_Cs_C.>` 
 
-.. _function-_at_ast_c__c_add_function_annotation_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_FunctionAnnotation_gr__gr_?W_C_c:
+.. _function-_at_ast_c__c_add_function_annotation_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_FunctionAnnotation_gr__gr_?W_C_c_C_l:
 
 .. das:function:: add_function_annotation(module: rtti::Module? const implicit; annotation: smart_ptr<ast::FunctionAnnotation>& implicit)
 
@@ -10944,7 +10944,7 @@ Adapter application
 
 |function-ast-add_function_annotation|
 
-.. _function-_at_ast_c__c_add_function_annotation_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?M_&I1_ls_H_ls_ast_c__c_FunctionAnnotation_gr__gr_?W_C_c:
+.. _function-_at_ast_c__c_add_function_annotation_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?M_&I1_ls_H_ls_ast_c__c_FunctionAnnotation_gr__gr_?W_C_c_C_l:
 
 .. das:function:: add_function_annotation(function: smart_ptr<ast::Function> const implicit; annotation: smart_ptr<ast::FunctionAnnotation>& implicit)
 
@@ -10959,7 +10959,7 @@ Adapter application
 
 |function-ast-add_function_annotation|
 
-.. _function-_at_ast_c__c_add_function_annotation_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?M_&I1_ls_H_ls_rtti_c__c_AnnotationDeclaration_gr__gr_?M_C_c:
+.. _function-_at_ast_c__c_add_function_annotation_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?M_&I1_ls_H_ls_rtti_c__c_AnnotationDeclaration_gr__gr_?M_C_c_C_l:
 
 .. das:function:: add_function_annotation(function: smart_ptr<ast::Function> const implicit; annotation: smart_ptr<rtti::AnnotationDeclaration>& implicit)
 
@@ -10974,7 +10974,7 @@ Adapter application
 
 |function-ast-add_function_annotation|
 
-.. _function-_at_ast_c__c_add_block_annotation_CI1_ls_H_ls_ast_c__c_ExprBlock_gr__gr_?M_&I1_ls_H_ls_ast_c__c_FunctionAnnotation_gr__gr_?W_C_c:
+.. _function-_at_ast_c__c_add_block_annotation_CI1_ls_H_ls_ast_c__c_ExprBlock_gr__gr_?M_&I1_ls_H_ls_ast_c__c_FunctionAnnotation_gr__gr_?W_C_c_C_l:
 
 .. das:function:: add_block_annotation(block: smart_ptr<ast::ExprBlock> const implicit; annotation: smart_ptr<ast::FunctionAnnotation>& implicit)
 
@@ -10989,7 +10989,7 @@ Adapter application
 
 |function-ast-add_block_annotation|
 
-.. _function-_at_ast_c__c_add_block_annotation_CI1_ls_H_ls_ast_c__c_ExprBlock_gr__gr_?M_&I1_ls_H_ls_rtti_c__c_AnnotationDeclaration_gr__gr_?M_C_c:
+.. _function-_at_ast_c__c_add_block_annotation_CI1_ls_H_ls_ast_c__c_ExprBlock_gr__gr_?M_&I1_ls_H_ls_rtti_c__c_AnnotationDeclaration_gr__gr_?M_C_c_C_l:
 
 .. das:function:: add_block_annotation(block: smart_ptr<ast::ExprBlock> const implicit; annotation: smart_ptr<rtti::AnnotationDeclaration>& implicit)
 
@@ -11004,7 +11004,7 @@ Adapter application
 
 |function-ast-add_block_annotation|
 
-.. _function-_at_ast_c__c_add_structure_annotation_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_StructureAnnotation_gr__gr_?W_C_c:
+.. _function-_at_ast_c__c_add_structure_annotation_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_StructureAnnotation_gr__gr_?W_C_c_C_l:
 
 .. das:function:: add_structure_annotation(module: rtti::Module? const implicit; annotation: smart_ptr<ast::StructureAnnotation>& implicit)
 
@@ -11019,7 +11019,7 @@ Adapter application
 
 |function-ast-add_structure_annotation|
 
-.. _function-_at_ast_c__c_add_structure_annotation_CI1_ls_H_ls_ast_c__c_Structure_gr__gr_?M_&I1_ls_H_ls_ast_c__c_StructureAnnotation_gr__gr_?W_C_c:
+.. _function-_at_ast_c__c_add_structure_annotation_CI1_ls_H_ls_ast_c__c_Structure_gr__gr_?M_&I1_ls_H_ls_ast_c__c_StructureAnnotation_gr__gr_?W_C_c_C_l:
 
 .. das:function:: add_structure_annotation(structure: smart_ptr<ast::Structure> const implicit; annotation: smart_ptr<ast::StructureAnnotation>& implicit)
 
@@ -11034,7 +11034,7 @@ Adapter application
 
 |function-ast-add_structure_annotation|
 
-.. _function-_at_ast_c__c_add_structure_annotation_CI1_ls_H_ls_ast_c__c_Structure_gr__gr_?M_&I1_ls_H_ls_rtti_c__c_AnnotationDeclaration_gr__gr_?M_C_c:
+.. _function-_at_ast_c__c_add_structure_annotation_CI1_ls_H_ls_ast_c__c_Structure_gr__gr_?M_&I1_ls_H_ls_rtti_c__c_AnnotationDeclaration_gr__gr_?M_C_c_C_l:
 
 .. das:function:: add_structure_annotation(structure: smart_ptr<ast::Structure> const implicit; annotation: smart_ptr<rtti::AnnotationDeclaration>& implicit)
 
@@ -11049,7 +11049,7 @@ Adapter application
 
 |function-ast-add_structure_annotation|
 
-.. _function-_at_ast_c__c_add_enumeration_annotation_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_EnumerationAnnotation_gr__gr_?W_C_c:
+.. _function-_at_ast_c__c_add_enumeration_annotation_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_EnumerationAnnotation_gr__gr_?W_C_c_C_l:
 
 .. das:function:: add_enumeration_annotation(module: rtti::Module? const implicit; annotation: smart_ptr<ast::EnumerationAnnotation>& implicit)
 
@@ -11139,7 +11139,7 @@ Adapter application
 
 |function-ast-add_optimization_macro|
 
-.. _function-_at_ast_c__c_add_reader_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_ReaderMacro_gr__gr_?W_C_c:
+.. _function-_at_ast_c__c_add_reader_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_ReaderMacro_gr__gr_?W_C_c_C_l:
 
 .. das:function:: add_reader_macro(module: rtti::Module? const implicit; annotation: smart_ptr<ast::ReaderMacro>& implicit)
 
@@ -11154,7 +11154,7 @@ Adapter application
 
 |function-ast-add_reader_macro|
 
-.. _function-_at_ast_c__c_add_comment_reader_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_CommentReader_gr__gr_?W_C_c:
+.. _function-_at_ast_c__c_add_comment_reader_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_CommentReader_gr__gr_?W_C_c_C_l:
 
 .. das:function:: add_comment_reader(module: rtti::Module? const implicit; reader: smart_ptr<ast::CommentReader>& implicit)
 
@@ -11169,7 +11169,7 @@ Adapter application
 
 |function-ast-add_comment_reader|
 
-.. _function-_at_ast_c__c_add_call_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_CallMacro_gr__gr_?W_C_c:
+.. _function-_at_ast_c__c_add_call_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_CallMacro_gr__gr_?W_C_c_C_l:
 
 .. das:function:: add_call_macro(module: rtti::Module? const implicit; annotation: smart_ptr<ast::CallMacro>& implicit)
 
@@ -11184,7 +11184,7 @@ Adapter application
 
 |function-ast-add_call_macro|
 
-.. _function-_at_ast_c__c_add_typeinfo_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_TypeInfoMacro_gr__gr_?W_C_c:
+.. _function-_at_ast_c__c_add_typeinfo_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_TypeInfoMacro_gr__gr_?W_C_c_C_l:
 
 .. das:function:: add_typeinfo_macro(module: rtti::Module? const implicit; annotation: smart_ptr<ast::TypeInfoMacro>& implicit)
 
@@ -11739,8 +11739,8 @@ Program and module access
 
   *  :ref:`this_program (context:__context const) : smart_ptr\<rtti::Program\> <function-_at_ast_c__c_this_program_C_c>` 
   *  :ref:`this_module (context:__context const;line:__lineInfo const) : rtti::Module? <function-_at_ast_c__c_this_module_C_c_C_l>` 
-  *  :ref:`compiling_program (context:__context const) : smart_ptr\<rtti::Program\> <function-_at_ast_c__c_compiling_program_C_c>` 
-  *  :ref:`compiling_module (context:__context const) : rtti::Module? <function-_at_ast_c__c_compiling_module_C_c>` 
+  *  :ref:`compiling_program (context:__context const;at:__lineInfo const) : smart_ptr\<rtti::Program\> <function-_at_ast_c__c_compiling_program_C_c_C_l>` 
+  *  :ref:`compiling_module (context:__context const;at:__lineInfo const) : rtti::Module? <function-_at_ast_c__c_compiling_module_C_c_C_l>` 
 
 .. _function-_at_ast_c__c_this_program_C_c:
 
@@ -11758,7 +11758,7 @@ this_module returns  :ref:`rtti::Module <handle-rtti-Module>` ?
 
 |function-ast-this_module|
 
-.. _function-_at_ast_c__c_compiling_program_C_c:
+.. _function-_at_ast_c__c_compiling_program_C_c_C_l:
 
 .. das:function:: compiling_program()
 
@@ -11766,7 +11766,7 @@ compiling_program returns smart_ptr< :ref:`rtti::Program <handle-rtti-Program>` 
 
 |function-ast-compiling_program|
 
-.. _function-_at_ast_c__c_compiling_module_C_c:
+.. _function-_at_ast_c__c_compiling_module_C_c_C_l:
 
 .. das:function:: compiling_module()
 

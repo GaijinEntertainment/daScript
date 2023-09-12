@@ -463,7 +463,7 @@ Structure macros
 Containers
 ++++++++++
 
-  *  :ref:`clear (array:array implicit;context:__context const) : void <function-_at__builtin__c__c_clear_IA_C_c>` 
+  *  :ref:`clear (array:array implicit;context:__context const;at:__lineInfo const) : void <function-_at__builtin__c__c_clear_IA_C_c_C_l>` 
   *  :ref:`length (array:array const implicit) : int <function-_at__builtin__c__c_length_CIA>` 
   *  :ref:`capacity (array:array const implicit) : int <function-_at__builtin__c__c_capacity_CIA>` 
   *  :ref:`empty (iterator:iterator const implicit) : bool <function-_at__builtin__c__c_empty_CIG>` 
@@ -569,7 +569,7 @@ Containers
   *  :ref:`move_to_ref (a:auto& -const;b:auto -const) : auto <function-_at__builtin__c__c_move_to_ref_&._.>` 
   *  :ref:`clear (t:table\<auto(KT);auto(VT)\> -const) : auto <function-_at__builtin__c__c_clear_1_ls_Y_ls_KT_gr_._gr_2_ls_Y_ls_VT_gr_._gr_T>` 
 
-.. _function-_at__builtin__c__c_clear_IA_C_c:
+.. _function-_at__builtin__c__c_clear_IA_C_c_C_l:
 
 .. das:function:: clear(array: array implicit)
 
@@ -2852,7 +2852,7 @@ System infastructure
   *  :ref:`error (text:string const implicit;context:__context const;at:__lineInfo const) : void <function-_at__builtin__c__c_error_CIs_C_c_C_l>` 
   *  :ref:`sprint (value:any const;flags:bitfield\<escapeString;namesAndDimensions;typeQualifiers;refAddresses;humanReadable;singleLine\> const) : string <function-_at__builtin__c__c_sprint_C*_CY_ls_print_flags_gr_N_ls_escapeString;namesAndDimensions;typeQualifiers;refAddresses;humanReadable;singleLine_gr_t>` 
   *  :ref:`sprint_json (value:any const;humanReadable:bool const) : string <function-_at__builtin__c__c_sprint_json_C*_Cb>` 
-  *  :ref:`terminate (context:__context const) : void <function-_at__builtin__c__c_terminate_C_c>` 
+  *  :ref:`terminate (context:__context const;at:__lineInfo const) : void <function-_at__builtin__c__c_terminate_C_c_C_l>` 
   *  :ref:`breakpoint () : void <function-_at__builtin__c__c_breakpoint>` 
   *  :ref:`stackwalk (args:bool const;vars:bool const;context:__context const;lineinfo:__lineInfo const) : void <function-_at__builtin__c__c_stackwalk_Cb_Cb_C_c_C_l>` 
   *  :ref:`is_in_aot () : bool <function-_at__builtin__c__c_is_in_aot>` 
@@ -2940,7 +2940,7 @@ sprint_json returns string
 
 |function-builtin-sprint_json|
 
-.. _function-_at__builtin__c__c_terminate_C_c:
+.. _function-_at__builtin__c__c_terminate_C_c_C_l:
 
 .. das:function:: terminate()
 

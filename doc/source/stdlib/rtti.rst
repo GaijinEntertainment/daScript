@@ -1421,8 +1421,8 @@ RttiValue_nothing returns auto
 Type access
 +++++++++++
 
-  *  :ref:`get_dim (typeinfo:rtti::TypeInfo const implicit;index:int const;context:__context const) : int <function-_at_rtti_c__c_get_dim_CIH_ls_rtti_c__c_TypeInfo_gr__Ci_C_c>` 
-  *  :ref:`get_dim (typeinfo:rtti::VarInfo const implicit;index:int const;context:__context const) : int <function-_at_rtti_c__c_get_dim_CIH_ls_rtti_c__c_VarInfo_gr__Ci_C_c>` 
+  *  :ref:`get_dim (typeinfo:rtti::TypeInfo const implicit;index:int const;context:__context const;at:__lineInfo const) : int <function-_at_rtti_c__c_get_dim_CIH_ls_rtti_c__c_TypeInfo_gr__Ci_C_c_C_l>` 
+  *  :ref:`get_dim (typeinfo:rtti::VarInfo const implicit;index:int const;context:__context const;at:__lineInfo const) : int <function-_at_rtti_c__c_get_dim_CIH_ls_rtti_c__c_VarInfo_gr__Ci_C_c_C_l>` 
   *  :ref:`builtin_is_same_type (a:rtti::TypeInfo const? const implicit;b:rtti::TypeInfo const? const implicit;refMatters:rtti::RefMatters const;cosntMatters:rtti::ConstMatters const;tempMatters:rtti::TemporaryMatters const;topLevel:bool const) : bool <function-_at_rtti_c__c_builtin_is_same_type_CI1_ls_CH_ls_rtti_c__c_TypeInfo_gr__gr_?_CI1_ls_CH_ls_rtti_c__c_TypeInfo_gr__gr_?_CE_ls_rtti_c__c_RefMatters_gr__CE_ls_rtti_c__c_ConstMatters_gr__CE_ls_rtti_c__c_TemporaryMatters_gr__Cb>` 
   *  :ref:`get_type_size (type:rtti::TypeInfo? const implicit) : int <function-_at_rtti_c__c_get_type_size_CI1_ls_H_ls_rtti_c__c_TypeInfo_gr__gr_?>` 
   *  :ref:`get_type_align (type:rtti::TypeInfo? const implicit) : int <function-_at_rtti_c__c_get_type_align_CI1_ls_H_ls_rtti_c__c_TypeInfo_gr__gr_?>` 
@@ -1437,7 +1437,7 @@ Type access
   *  :ref:`arg_names (info:rtti::TypeInfo const) : auto <function-_at_rtti_c__c_arg_names_CH_ls_rtti_c__c_TypeInfo_gr_>` 
   *  :ref:`arg_names (info:rtti::VarInfo const) : auto <function-_at_rtti_c__c_arg_names_CH_ls_rtti_c__c_VarInfo_gr_>` 
 
-.. _function-_at_rtti_c__c_get_dim_CIH_ls_rtti_c__c_TypeInfo_gr__Ci_C_c:
+.. _function-_at_rtti_c__c_get_dim_CIH_ls_rtti_c__c_TypeInfo_gr__Ci_C_c_C_l:
 
 .. das:function:: get_dim(typeinfo: TypeInfo const implicit; index: int const)
 
@@ -1454,7 +1454,7 @@ get_dim returns int
 
 |function-rtti-get_dim|
 
-.. _function-_at_rtti_c__c_get_dim_CIH_ls_rtti_c__c_VarInfo_gr__Ci_C_c:
+.. _function-_at_rtti_c__c_get_dim_CIH_ls_rtti_c__c_VarInfo_gr__Ci_C_c_C_l:
 
 .. das:function:: get_dim(typeinfo: VarInfo const implicit; index: int const)
 
@@ -2257,11 +2257,11 @@ Compilation and simulation
 File access
 +++++++++++
 
-  *  :ref:`make_file_access (project:string const implicit;context:__context const) : smart_ptr\<rtti::FileAccess\> <function-_at_rtti_c__c_make_file_access_CIs_C_c>` 
+  *  :ref:`make_file_access (project:string const implicit;context:__context const;at:__lineInfo const) : smart_ptr\<rtti::FileAccess\> <function-_at_rtti_c__c_make_file_access_CIs_C_c_C_l>` 
   *  :ref:`set_file_source (access:smart_ptr\<rtti::FileAccess\> const implicit;fileName:string const implicit;text:string const implicit;context:__context const;line:__lineInfo const) : bool <function-_at_rtti_c__c_set_file_source_CI1_ls_H_ls_rtti_c__c_FileAccess_gr__gr_?M_CIs_CIs_C_c_C_l>` 
   *  :ref:`add_file_access_root (access:smart_ptr\<rtti::FileAccess\> const implicit;mod:string const implicit;path:string const implicit) : bool <function-_at_rtti_c__c_add_file_access_root_CI1_ls_H_ls_rtti_c__c_FileAccess_gr__gr_?W_CIs_CIs>` 
 
-.. _function-_at_rtti_c__c_make_file_access_CIs_C_c:
+.. _function-_at_rtti_c__c_make_file_access_CIs_C_c_C_l:
 
 .. das:function:: make_file_access(project: string const implicit)
 
