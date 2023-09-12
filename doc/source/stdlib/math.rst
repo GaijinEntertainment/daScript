@@ -5594,18 +5594,18 @@ rotate returns float3
 Quaternion operations
 +++++++++++++++++++++
 
-  *  :ref:`un_quat_from_unit_arc (v0:float3 const;v1:float3 const) : float4 <function-_at_math_c__c_un_quat_from_unit_arc_Cf3_Cf3>` 
-  *  :ref:`un_quat_from_unit_vec_ang (v:float3 const;ang:float const) : float4 <function-_at_math_c__c_un_quat_from_unit_vec_ang_Cf3_Cf>` 
+  *  :ref:`quat_from_unit_arc (v0:float3 const;v1:float3 const) : float4 <function-_at_math_c__c_quat_from_unit_arc_Cf3_Cf3>` 
+  *  :ref:`quat_from_unit_vec_ang (v:float3 const;ang:float const) : float4 <function-_at_math_c__c_quat_from_unit_vec_ang_Cf3_Cf>` 
   *  :ref:`un_quat (m:math::float4x4 const implicit) : float4 <function-_at_math_c__c_un_quat_CIH_ls_math_c__c_float4x4_gr_>` 
   *  :ref:`quat_mul (q1:float4 const;q2:float4 const) : float4 <function-_at_math_c__c_quat_mul_Cf4_Cf4>` 
   *  :ref:`quat_mul_vec (q:float4 const;v:float3 const) : float3 <function-_at_math_c__c_quat_mul_vec_Cf4_Cf3>` 
   *  :ref:`quat_conjugate (q:float4 const) : float4 <function-_at_math_c__c_quat_conjugate_Cf4>` 
 
-.. _function-_at_math_c__c_un_quat_from_unit_arc_Cf3_Cf3:
+.. _function-_at_math_c__c_quat_from_unit_arc_Cf3_Cf3:
 
-.. das:function:: un_quat_from_unit_arc(v0: float3 const; v1: float3 const)
+.. das:function:: quat_from_unit_arc(v0: float3 const; v1: float3 const)
 
-un_quat_from_unit_arc returns float4
+quat_from_unit_arc returns float4
 
 +--------+-------------+
 +argument+argument type+
@@ -5616,13 +5616,13 @@ un_quat_from_unit_arc returns float4
 +--------+-------------+
 
 
-|function-math-un_quat_from_unit_arc|
+|function-math-quat_from_unit_arc|
 
-.. _function-_at_math_c__c_un_quat_from_unit_vec_ang_Cf3_Cf:
+.. _function-_at_math_c__c_quat_from_unit_vec_ang_Cf3_Cf:
 
-.. das:function:: un_quat_from_unit_vec_ang(v: float3 const; ang: float const)
+.. das:function:: quat_from_unit_vec_ang(v: float3 const; ang: float const)
 
-un_quat_from_unit_vec_ang returns float4
+quat_from_unit_vec_ang returns float4
 
 +--------+-------------+
 +argument+argument type+
@@ -5633,7 +5633,7 @@ un_quat_from_unit_vec_ang returns float4
 +--------+-------------+
 
 
-|function-math-un_quat_from_unit_vec_ang|
+|function-math-quat_from_unit_vec_ang|
 
 .. _function-_at_math_c__c_un_quat_CIH_ls_math_c__c_float4x4_gr_:
 
@@ -5876,11 +5876,11 @@ Uncategorized
 
 |function-math-[]|
 
-.. _function-_at_math_c__c_un_quat_from_euler_Cf3:
+.. _function-_at_math_c__c_quat_from_euler_Cf3:
 
-.. das:function:: un_quat_from_euler(angles: float3 const)
+.. das:function:: quat_from_euler(angles: float3 const)
 
-un_quat_from_euler returns float4
+quat_from_euler returns float4
 
 +--------+-------------+
 +argument+argument type+
@@ -5889,13 +5889,13 @@ un_quat_from_euler returns float4
 +--------+-------------+
 
 
-|function-math-un_quat_from_euler|
+|function-math-quat_from_euler|
 
-.. _function-_at_math_c__c_un_quat_from_euler_Cf_Cf_Cf:
+.. _function-_at_math_c__c_quat_from_euler_Cf_Cf_Cf:
 
-.. das:function:: un_quat_from_euler(x: float const; y: float const; z: float const)
+.. das:function:: quat_from_euler(x: float const; y: float const; z: float const)
 
-un_quat_from_euler returns float4
+quat_from_euler returns float4
 
 +--------+-------------+
 +argument+argument type+
@@ -5908,7 +5908,7 @@ un_quat_from_euler returns float4
 +--------+-------------+
 
 
-|function-math-un_quat_from_euler|
+|function-math-quat_from_euler|
 
 .. _function-_at_math_c__c_euler_from_un_quat_Cf4:
 

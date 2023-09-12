@@ -154,10 +154,10 @@ is_number returns bool
 Character by index
 ++++++++++++++++++
 
-  *  :ref:`character_at (str:string const implicit;idx:int const;context:__context const) : int <function-_at_strings_c__c_character_at_CIs_Ci_C_c>` 
+  *  :ref:`character_at (str:string const implicit;idx:int const;context:__context const;at:__lineInfo const) : int <function-_at_strings_c__c_character_at_CIs_Ci_C_c_C_l>` 
   *  :ref:`character_uat (str:string const implicit;idx:int const) : int <function-_at_strings_c__c_character_uat_CIs_Ci>` 
 
-.. _function-_at_strings_c__c_character_at_CIs_Ci_C_c:
+.. _function-_at_strings_c__c_character_at_CIs_Ci_C_c_C_l:
 
 .. das:function:: character_at(str: string const implicit; idx: int const)
 
@@ -724,7 +724,7 @@ String modifications
   *  :ref:`to_lower_in_place (str:string const implicit) : string <function-_at_strings_c__c_to_lower_in_place_CIs>` 
   *  :ref:`to_upper_in_place (str:string const implicit) : string <function-_at_strings_c__c_to_upper_in_place_CIs>` 
   *  :ref:`escape (str:string const implicit;context:__context const) : string <function-_at_strings_c__c_escape_CIs_C_c>` 
-  *  :ref:`unescape (str:string const implicit;context:__context const) : string <function-_at_strings_c__c_unescape_CIs_C_c>` 
+  *  :ref:`unescape (str:string const implicit;context:__context const;at:__lineInfo const) : string <function-_at_strings_c__c_unescape_CIs_C_c_C_l>` 
   *  :ref:`safe_unescape (str:string const implicit;context:__context const) : string <function-_at_strings_c__c_safe_unescape_CIs_C_c>` 
   *  :ref:`replace (str:string const implicit;toSearch:string const implicit;replace:string const implicit;context:__context const) : string <function-_at_strings_c__c_replace_CIs_CIs_CIs_C_c>` 
   *  :ref:`rtrim (str:string const implicit;context:__context const) : string <function-_at_strings_c__c_rtrim_CIs_C_c>` 
@@ -943,7 +943,7 @@ escape returns string
 
 |function-strings-escape|
 
-.. _function-_at_strings_c__c_unescape_CIs_C_c:
+.. _function-_at_strings_c__c_unescape_CIs_C_c_C_l:
 
 .. das:function:: unescape(str: string const implicit)
 

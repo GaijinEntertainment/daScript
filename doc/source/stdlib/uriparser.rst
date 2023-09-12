@@ -612,9 +612,9 @@ file_name_to_uri returns string
 GUID
 ++++
 
-  *  :ref:`make_new_guid (context:__context const) : string <function-_at_uriparser_c__c_make_new_guid_C_c>` 
+  *  :ref:`make_new_guid (context:__context const;at:__lineInfo const) : string <function-_at_uriparser_c__c_make_new_guid_C_c_C_l>` 
 
-.. _function-_at_uriparser_c__c_make_new_guid_C_c:
+.. _function-_at_uriparser_c__c_make_new_guid_C_c_C_l:
 
 .. das:function:: make_new_guid()
 
