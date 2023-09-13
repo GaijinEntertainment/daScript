@@ -1,3 +1,12 @@
+SET(PROFILE_MAIN_LIB_SRC
+    examples/profile/test_profile.cpp
+    examples/profile/test_profile.h
+)
+SOURCE_GROUP_FILES("source" PROFILE_MAIN_LIB_SRC)
+
+ADD_LIBRARY(libDaScriptProfile ${PROFILE_MAIN_LIB_SRC})
+SETUP_CPP11(libDaScriptProfile)
+
 file(GLOB PROFILE_SRC
 "${CMAKE_SOURCE_DIR}/examples/profile/tests/*.das"
 )

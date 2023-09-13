@@ -18,6 +18,11 @@ option(DAS_STBTRUETYPE_DISABLED "Disable dasStbTrueType (StbTrueType bindings, t
 option(DAS_SFML_DISABLED "Disable dasSFML (SFML multimedia library)" ON)
 option(DAS_PUGIXML_DISABLED "Disable dasPUGIXML (xml parsing library)" ON)
 option(DAS_SQLITE_DISABLED "Disable dasSQLITE (sqlite3 library)" ON)
+option(DAS_TOOLS_DISABLED "Disable dasTools" OFF)
+option(DAS_AOT_EXAMPLES_DISABLED "Disable dasAOT examples" OFF)
+option(DAS_PROFILE_DISABLED "Disable dasProfile" OFF)
+option(DAS_TUTORIAL_DISABLED "Disable dasTutorial" OFF)
+option(DAS_TESTS_DISABLED "Disable dasTests" OFF)
 
 IF(WIN32)
     IF(DAS_LLVM_DISABLED)
@@ -639,19 +644,21 @@ ENDIF()
 SETUP_CPP11(libDaScript)
 #target_precompile_headers(libDaScript PUBLIC include/daScript/misc/platform.h)
 
-add_custom_target(dasAotStub)
-SET(AOT_GENERATED_SRC)
-DAS_AOT("daslib/functional.das" AOT_GENERATED_SRC dasAotStub daScript)
-DAS_AOT("daslib/json.das" AOT_GENERATED_SRC dasAotStub daScript)
-DAS_AOT("daslib/json_boost.das" AOT_GENERATED_SRC dasAotStub daScript)
-DAS_AOT("daslib/regex.das" AOT_GENERATED_SRC dasAotStub daScript)
-DAS_AOT("daslib/regex_boost.das" AOT_GENERATED_SRC dasAotStub daScript)
-DAS_AOT("daslib/strings_boost.das" AOT_GENERATED_SRC dasAotStub daScript)
-DAS_AOT("daslib/random.das" AOT_GENERATED_SRC dasAotStub daScript)
-DAS_AOT("daslib/math_boost.das" AOT_GENERATED_SRC dasAotStub daScript)
-DAS_AOT("daslib/utf8_utils.das" AOT_GENERATED_SRC dasAotStub daScript)
-SOURCE_GROUP_FILES("aot stub" AOT_GENERATED_SRC)
-#UNITIZE_BUILD("daslib" AOT_GENERATED_SRC)
+if(NOT ${DAS_AOT_EXAMPLES_DISABLED})
+    add_custom_target(dasAotStub)
+    SET(AOT_GENERATED_SRC)
+    DAS_AOT("daslib/functional.das" AOT_GENERATED_SRC dasAotStub daScript)
+    DAS_AOT("daslib/json.das" AOT_GENERATED_SRC dasAotStub daScript)
+    DAS_AOT("daslib/json_boost.das" AOT_GENERATED_SRC dasAotStub daScript)
+    DAS_AOT("daslib/regex.das" AOT_GENERATED_SRC dasAotStub daScript)
+    DAS_AOT("daslib/regex_boost.das" AOT_GENERATED_SRC dasAotStub daScript)
+    DAS_AOT("daslib/strings_boost.das" AOT_GENERATED_SRC dasAotStub daScript)
+    DAS_AOT("daslib/random.das" AOT_GENERATED_SRC dasAotStub daScript)
+    DAS_AOT("daslib/math_boost.das" AOT_GENERATED_SRC dasAotStub daScript)
+    DAS_AOT("daslib/utf8_utils.das" AOT_GENERATED_SRC dasAotStub daScript)
+    SOURCE_GROUP_FILES("aot stub" AOT_GENERATED_SRC)
+    #UNITIZE_BUILD("daslib" AOT_GENERATED_SRC)
+endif()
 
 SET(DAS_DASCRIPT_MAIN_SRC
     ${PROJECT_SOURCE_DIR}/utils/daScript/main.cpp
@@ -659,7 +666,7 @@ SET(DAS_DASCRIPT_MAIN_SRC
     CACHE INTERNAL "DAS_DASCRIPT_MAIN_SRC"
 )
 
-if (NOT ${DAS_BUILD_TOOLS} MATCHES NO)
+if (NOT ${DAS_TOOLS_DISABLED})
 # Stand alone command line compiler
 
     SOURCE_GROUP_FILES("main" DAS_DASCRIPT_MAIN_SRC)
@@ -694,11 +701,11 @@ if (NOT ${DAS_BUILD_TOOLS} MATCHES NO)
 
 endif()
 
-    install(FILES ${PROJECT_SOURCE_DIR}/LICENSE DESTINATION .)
-    install(FILES ${PROJECT_SOURCE_DIR}/3rdparty/uriparser/COPYING DESTINATION . RENAME URIPARSER.LICENSE)
-    install(FILES ${PROJECT_SOURCE_DIR}/include/dag_noise/LICENSE DESTINATION . RENAME DAG_NOISE.LICENSE)
-    install(FILES ${PROJECT_SOURCE_DIR}/include/ska/LICENSE_1_0.txt DESTINATION . RENAME SKA.LICENSE)
-    install(FILES ${PROJECT_SOURCE_DIR}/include/vecmath/LICENSE DESTINATION . RENAME VEC_MATH.LICENSE)
+install(FILES ${PROJECT_SOURCE_DIR}/LICENSE DESTINATION .)
+install(FILES ${PROJECT_SOURCE_DIR}/3rdparty/uriparser/COPYING DESTINATION . RENAME URIPARSER.LICENSE)
+install(FILES ${PROJECT_SOURCE_DIR}/include/dag_noise/LICENSE DESTINATION . RENAME DAG_NOISE.LICENSE)
+install(FILES ${PROJECT_SOURCE_DIR}/include/ska/LICENSE_1_0.txt DESTINATION . RENAME SKA.LICENSE)
+install(FILES ${PROJECT_SOURCE_DIR}/include/vecmath/LICENSE DESTINATION . RENAME VEC_MATH.LICENSE)
 
 
 # Test module
@@ -713,43 +720,20 @@ examples/test/unit_test.das
 )
 SOURCE_GROUP_FILES("source" TEST_MAIN_LIB_SRC)
 
-CMAKE_TEXT_XXD(libDaScriptTest examples/test/unit_test.das)
 
-ADD_LIBRARY(libDaScriptTest ${TEST_MAIN_LIB_SRC})
-SETUP_CPP11(libDaScriptTest)
-ADD_PROJECT_XXD_DEPENDS(libDaScriptTest)
 
-# Test
-if (NOT ${DAS_BUILD_TEST} MATCHES NO)
-  include(examples/test/CMakeLists.txt)
+# Tests
+if (NOT ${DAS_TESTS_DISABLED})
+    include(examples/test/CMakeLists.txt)
+    include(examples/pathTracer/CMakeLists.txt)
 endif()
-
-# Test
-if (NOT ${DAS_BUILD_TEST} MATCHES NO)
-  include(examples/pathTracer/CMakeLists.txt)
-endif()
-
-install(DIRECTORY ${PROJECT_SOURCE_DIR}/examples/pathTracer
-    DESTINATION ./examples
-    FILES_MATCHING
-    PATTERN "*.das"
-)
 
 # Profile module
 
-SET(PROFILE_MAIN_LIB_SRC
-examples/profile/test_profile.cpp
-examples/profile/test_profile.h
-)
-SOURCE_GROUP_FILES("source" PROFILE_MAIN_LIB_SRC)
-
-ADD_LIBRARY(libDaScriptProfile ${PROFILE_MAIN_LIB_SRC})
-SETUP_CPP11(libDaScriptProfile)
-
-if (NOT ${DAS_BUILD_PROFILE} MATCHES NO)
-  include(examples/profile/CMakeLists.txt)
+if (NOT ${DAS_PROFILE_DISABLED})
+    include(examples/profile/CMakeLists.txt)
 endif()
 
-if (NOT ${DAS_BUILD_TUTORIAL} MATCHES NO)
-  include(examples/tutorial/CMakeLists.txt)
+if (NOT ${DAS_TUTORIAL_DISABLED})
+    include(examples/tutorial/CMakeLists.txt)
 endif()

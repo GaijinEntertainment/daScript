@@ -26,3 +26,9 @@ target_include_directories(path_tracer PUBLIC ${PROJECT_SOURCE_DIR}/examples/pat
 TARGET_LINK_LIBRARIES(path_tracer libDaScript ${DAS_MODULES_LIBS})
 ADD_DEPENDENCIES(path_tracer libDaScript pathtracer_dasAotStub)
 SETUP_CPP11(path_tracer)
+
+install(DIRECTORY ${PROJECT_SOURCE_DIR}/examples/pathTracer
+    DESTINATION ./examples
+    FILES_MATCHING
+    PATTERN "*.das"
+)
