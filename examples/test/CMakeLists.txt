@@ -1,3 +1,9 @@
+CMAKE_TEXT_XXD(libDaScriptTest examples/test/unit_test.das)
+
+ADD_LIBRARY(libDaScriptTest ${TEST_MAIN_LIB_SRC})
+SETUP_CPP11(libDaScriptTest)
+ADD_PROJECT_XXD_DEPENDS(libDaScriptTest)
+
 file(GLOB UNIT_TEST_SRC
 "${CMAKE_SOURCE_DIR}/examples/test/unit_tests/*.das"
 )
