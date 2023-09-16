@@ -703,6 +703,10 @@ namespace das
         context->reportAnyHeap(info, true, false, false, false);
     }
 
+    bool is_intern_strings ( Context * context ) {
+        return context->stringHeap->isIntern();
+    }
+
     void heap_collect ( bool sheap, bool validate, Context * context, LineInfoArg * info ) {
         context->collectHeap(info, sheap, validate);
     }
@@ -1531,6 +1535,9 @@ namespace das
         addExtern<DAS_BIND_FUN(memory_report)>(*this, lib, "memory_report",
             SideEffects::modifyExternal, "memory_report")
                 ->args({"errorsOnly","context","lineinfo"});
+        addExtern<DAS_BIND_FUN(is_intern_strings)>(*this, lib, "is_intern_strings",
+            SideEffects::modifyExternal, "is_intern_strings")
+                ->arg("context");
         // binary serializer
         addInterop<_builtin_binary_load,void,vec4f,const Array &>(*this,lib,"_builtin_binary_load",
             SideEffects::modifyArgumentAndExternal, "_builtin_binary_load")
