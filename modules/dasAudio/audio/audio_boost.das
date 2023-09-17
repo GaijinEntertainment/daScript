@@ -719,27 +719,31 @@ def finalize_mixer
         let UTILIZATION = int(SPEED / SPEED_OF_LIGHT * 1000.lf)
         to_log(LOG_INFO, "mixer {UTILIZATION/10}.{UTILIZATION%10}% utilization\n")
 
-def public audio_system_create(collect : bool = false) : tuple<command : Channel?; collect : Channel?>
+def public audio_system_create(collect : bool = false) : tuple<command : Channel?; collect : Channel?; next_sid : Atomic64?>
     sound_initalize(@@mixer, MA_SAMPLE_RATE, MA_CHANNELS, this_context())
     var channel = unsafe(channel_create())
     channel |> add_ref()
     g_command_channel = channel
+    g_sound_sid = atomic64_create()
+    g_sound_sid |> add_ref()
     var collectChannel : Channel?
     if collect
         collectChannel = unsafe(channel_create())
         collectChannel |> add_ref()
         g_collect_channel = collectChannel
     unsafe(invoke_in_context(mixer_context(), "setup_command_processor", channel, collectChannel))
-    return [[auto channel, collectChannel]]
+    return [[auto channel, collectChannel, g_sound_sid]]
 
-def public audio_system_finalize(var channel, collectChannel : Channel?&)
+def public audio_system_finalize(var channel, collectChannel : Channel?&; var next_sid : Atomic64?)
     channel |> push <| new [[AudioCommand shutdown=true]]
     unsafe(invoke_in_context(mixer_context(), "command_processor"))
     sound_finalize()
     g_command_channel |> release
     channel |> join
     unsafe(channel_remove(channel))
-    channel = null
+    next_sid |> release
+    g_sound_sid |> join
+    unsafe(atomic64_remove(g_sound_sid))
     if g_collect_channel != null
         g_collect_channel |> release
         collectChannel |> join
@@ -749,18 +753,18 @@ def public audio_system_finalize(var channel, collectChannel : Channel?&)
 def public with_audio_system(blk : block)
     var channels = audio_system_create()
     invoke(blk)
-    audio_system_finalize(channels.command, channels.collect)
+    audio_system_finalize(channels.command, channels.collect, channels.next_sid)
 
 def public with_collected_audio_system(blk : block)
     var channels = audio_system_create(true)
     invoke(blk)
-    audio_system_finalize(channels.command, channels.collect)
+    audio_system_finalize(channels.command, channels.collect, channels.next_sid)
 
-var private g_sound_sid = 1ul
+var private g_sound_sid : Atomic64?
 
 def public generate_sound_sid
     //! generate unique ID for sound
-    return g_sound_sid ++
+    return g_sound_sid |> inc() |> uint64()
 
 def make_decoder(filename : string; rate, channels : int) : ma_decoder?
     var decoder = new ma_decoder
@@ -967,3 +971,16 @@ def public set_collect_thread_command_channel(ch : void?)
     g_collect_channel = channel
     if g_collect_channel != null
         g_collect_channel |> add_ref
+
+def public get_sound_sid : void?
+    return g_sound_sid
+
+def public set_sound_sid(next_sid : void?)
+    var sid = unsafe(reinterpret<Atomic64?> next_sid)
+    if sid == g_sound_sid
+        return
+    if g_sound_sid != null
+        g_sound_sid |> release
+    g_sound_sid = sid
+    if g_sound_sid != null
+        g_sound_sid |> add_ref
