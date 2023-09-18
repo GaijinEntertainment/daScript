@@ -8,14 +8,14 @@ require daslib/jobque_boost
 
 def sleep_and_log_status ( var status:LockBox?; delay:uint )
     for t in range(delay/100u)
-        sleep(100u)
         if status != null
             let got = status |> get <| $ ( ch:AudioChannelStatus# )
                 print("status: {ch}\n")
             if !got
                 print("no status\n")
         else
-            print("status = null\n")
+            assert(false, "status is null")
+        sleep(100u)
 
 def play_with_reverb ( preset : ReverbPreset )
     print("reverb {preset}\n")
@@ -102,6 +102,7 @@ def main
             box |> sleep_and_log_status(400u)
             print("waiting for box {box.size}\n")
             box |> join
+            box |> clear_status
             print("and done\n")
 
     with_audio_system <|

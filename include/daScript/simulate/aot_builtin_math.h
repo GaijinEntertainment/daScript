@@ -70,7 +70,7 @@ namespace das {
 #else
 #define DAS_FINITE_MATH
 #endif
-#if defined(__clang__) && !defined(__arm64__)
+#if defined(__clang__) && !defined(__arm64__) && !defined(__NINTENDO__)
 #pragma float_control(push)
 #pragma float_control(precise, on)
 #endif
@@ -85,7 +85,7 @@ namespace das {
     ___noinline DAS_FINITE_MATH inline bool   fisfinite(float  a) { return !__builtin_isinf(a); }
     ___noinline DAS_FINITE_MATH inline bool   disfinite(double  a) { return !__builtin_isinf(a); }
 #undef DAS_FINITE_MATH
-#if defined(__clang__) && !defined(__arm64__)
+#if defined(__clang__) && !defined(__arm64__) && !defined(__NINTENDO__)
 #pragma float_control(pop)
 #endif
 #else
