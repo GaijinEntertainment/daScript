@@ -8,7 +8,6 @@ module audio_boost shared private
 require audio
 require math
 require rtti
-require debugapi
 
 require daslib/array_boost
 require daslib/jobque_boost
@@ -36,6 +35,7 @@ enum public AudioChannelState
     stopping
     playing
     paused
+    starting
 
 struct public AudioChannelStatus
     state : AudioChannelState
@@ -47,7 +47,7 @@ struct public Attenuation
     E : float = 1.
     F : float
 
-def public compute_attenuation ( attn:Attenuation; d:float )
+def public compute_attenuation(attn : Attenuation; d : float)
     //! compute attenuation given distance
     let d2 = d * d
     let denom = attn.D * d2 + attn.E * d + attn.F
@@ -55,23 +55,23 @@ def public compute_attenuation ( attn:Attenuation; d:float )
         return 1.
     return clamp((attn.A * d2 + attn.B * d + attn.C) / denom, 0., 1.)
 
-def public inverse_distance_attenuation ( dmin:float )
+def public inverse_distance_attenuation(dmin : float)
     //! DEFAULT ATTENUATION MODEL
     //! fades with inverse distance, i.e. dmin / (d + dmin)
     // ( dmin / (d + dmin) )
     return [[Attenuation A=0., B=0., C=dmin, D=0., E=1., F=dmin]]
 
-def public linear_attenuation ( dmax:float )
+def public linear_attenuation(dmax : float)
     //! fades linearly with distance, i.e 1 - d / dmax
     // ( -1/dmax * d + 1 ) / 1
-    return [[Attenuation A=0., B=-1./dmax, C=1., D=0., E=0., F=1.]]
+    return [[Attenuation A=0., B=-1. / dmax, C=1., D=0., E=0., F=1.]]
 
-def public quadratic_attenuation ( dmax:float )
+def public quadratic_attenuation(dmax : float)
     //! fades quadratically with distance, i.e 1 - d^2 / dmax^2
     // ( -1/dmax^2 * d^2 + 1 ) / 1
-    return [[Attenuation A=-1./dmax/dmax, B=0., C=1., D=0., E=0., F=1.]]
+    return [[Attenuation A=-1. / dmax / dmax, B=0., C=1., D=0., E=0., F=1.]]
 
-def public inverse_square_attenuation ( dmin:float )
+def public inverse_square_attenuation(dmin : float)
     //! fades with inverse square distance, i.e. dmin^2 / (d^2 + dmin^2)
     // ( dmin^2 / (d^2 + dmin^2) )
     let dmin2 = dmin * dmin
@@ -81,8 +81,6 @@ def public default_attenuation
     //! default attenuation
     //! 1 / (d + 1)
     return inverse_distance_attenuation(1.)
-
-let STOPPED_STATUS = new [[AudioChannelStatus state=AudioChannelState stopped]]
 
 class AudioSource
     bitrate : int = MA_SAMPLE_RATE  // samples per second
@@ -159,7 +157,6 @@ class AudioChannel
         ma_channel_converter_uninit(unsafe(addr(channel_converter)))
         ma_resampler_uninit(unsafe(addr(resampler)))
         if status != null
-            status |> clear(type <AudioChannelStatus>)
             status |> notify_and_release
             status = null
         if reverb != null
@@ -438,7 +435,7 @@ def update_hrtf
             // doppler
             let vrel = g_head_velocity - ch.velocity3d
             let r = normalize(ch.position3d - g_head_position)
-            let v = clamp ( dot(vrel, r), -MAX_SPEED_OF_OBJECT, MAX_SPEED_OF_OBJECT )
+            let v = clamp(dot(vrel, r), -MAX_SPEED_OF_OBJECT, MAX_SPEED_OF_OBJECT)
             ch.doppler = 1. + v / SPEED_OF_SOUND
 
 struct AudioCommandAddDecoder
@@ -530,12 +527,26 @@ def add_channel_3d(sid : SID; position : float3; attenuation : Attenuation; var 
     channel->set3D()
     add_channel(sid, channel)
 
-def public audio_system_collect
-    //! delete collected audio commands
-    g_collect_channel |> gather_ex <| $(cmd : AudioCommand#; info:TypeInfo const?; var ctx:Context)
+def collect_channel(channel : Channel?)
+    channel |> gather_ex <| $(cmd : AudioCommand#; info : TypeInfo const?; var ctx : Context)
         unsafe
             var pCmd = reinterpret<AudioCommand?> addr(cmd)
             delete pCmd
+
+def public audio_system_collect
+    //! delete collected audio commands
+    if g_collect_channel != null
+        g_collect_channel |> collect_channel()
+
+def public audio_system_release_context
+    //! release collected audio commands related to the context
+    if g_command_channel != null
+        unsafe(invoke_in_context(mixer_context(), "command_processor"))
+
+    audio_system_collect()
+
+    if g_command_channel != null
+        g_command_channel |> collect_channel()
 
 def command_processor
     return if g_command_channel == null
@@ -641,12 +652,12 @@ def command_processor
                 if ch.status != null
                     if scmd.status != null
                         panic("audio: status already set for {scmd.sid}")
-                    ch.status |> clear(type <AudioChannelStatus>)
                     ch.status |> notify_and_release
                 ch.status = unsafe(reinterpret<LockBox?> scmd.status)
             if !found
                 if scmd.status != null
-                    scmd.status |> set(STOPPED_STATUS)
+                    scmd.status |> update <| $(var data : AudioChannelStatus#)
+                        data = [[AudioChannelStatus state=AudioChannelState stopped]]
                     scmd.status |> notify_and_release
         elif cmd is reverb
             assume rcmd = cmd as reverb
@@ -707,7 +718,7 @@ def initialize_mixer
         ma_limiter_init_linear(unsafe(addr(g_limiter)),
             uint(MA_CHANNELS))
         */
-        // to_log(LOG_INFO, "limiter requires {int(g_limiter.attack_samples)} samples, {int(double(g_limiter.attack_samples)*1000.0lf/double(MA_SAMPLE_RATE))} ms\n")
+        // print("limiter requires {int(g_limiter.attack_samples)} samples, {int(double(g_limiter.attack_samples)*1000.0lf/double(MA_SAMPLE_RATE))} ms\n")
 
 [finalize]
 def finalize_mixer
@@ -717,7 +728,7 @@ def finalize_mixer
         let SPEED = g_mixer_total_time / double(g_mixer_total_samples)
         let SPEED_OF_LIGHT = 1000.lf / 48000.lf
         let UTILIZATION = int(SPEED / SPEED_OF_LIGHT * 1000.lf)
-        to_log(LOG_INFO, "mixer {UTILIZATION/10}.{UTILIZATION%10}% utilization\n")
+        print("mixer {UTILIZATION/10}.{UTILIZATION%10}% utilization\n")
 
 def public audio_system_create(collect : bool = false) : tuple<command : Channel?; collect : Channel?; next_sid : Atomic64?>
     sound_initalize(@@mixer, MA_SAMPLE_RATE, MA_CHANNELS, this_context())
@@ -880,8 +891,13 @@ def public set_status_update(sid : SID; var status : LockBox?)
     //! set status for sound
     status |> add_ref
     status |> append(1)
+    status |> set() <| new [[AudioChannelStatus() state=AudioChannelState starting]]
     g_command_channel |> push <| new [[AudioCommand status=[[AudioCommandStatus sid=sid, status=status]]]]
     return sid
+
+def public clear_status(var status : LockBox?)
+    //! clear status for sound
+    status |> clear(type <AudioChannelStatus>)
 
 def public unset_status_update(sid : SID)
     //! unset status for sound
@@ -972,7 +988,7 @@ def public set_collect_thread_command_channel(ch : void?)
     if g_collect_channel != null
         g_collect_channel |> add_ref
 
-def public get_sound_sid : void?
+def public get_sound_sid : void ?
     return g_sound_sid
 
 def public set_sound_sid(next_sid : void?)

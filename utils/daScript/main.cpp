@@ -49,7 +49,7 @@ bool compile ( const string & fn, const string & cppFn, bool dryRun ) {
             }
             return false;
         } else {
-            smart_ptr<Context> pctx ( get_context(program->getContextStackSize()) );
+            shared_ptr<Context> pctx ( get_context(program->getContextStackSize()) );
             if ( !program->simulate(*pctx, tout) ) {
                 tout << "failed to simulate\n";
                 for ( auto & err : program->errors ) {
@@ -299,7 +299,7 @@ bool compile_and_run ( const string & fn, const string & mainFnName, bool output
         } else {
             if ( outputProgramCode )
                 tout << *program << "\n";
-            smart_ptr<Context> pctx ( get_context(program->getContextStackSize()) );
+            shared_ptr<Context> pctx ( get_context(program->getContextStackSize()) );
             if ( !program->simulate(*pctx, tout) ) {
                 tout << "failed to simulate\n";
                 for ( auto & err : program->errors ) {
