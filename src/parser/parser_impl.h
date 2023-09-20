@@ -83,7 +83,4 @@ namespace das {
     Expression * ast_makeGenerator ( yyscan_t scanner, TypeDecl * typeDecl, vector<CaptureEntry> * clist, Expression * subexpr, const LineInfo & locAt );
     ExprBlock * ast_wrapInBlock ( Expression * expr );
 
-    enum class LogicAnnotationOp { And, Or, Xor, Not };
-
-    AnnotationPtr newLogicAnnotation ( LogicAnnotationOp op, const AnnotationDeclarationPtr & arg0, const AnnotationDeclarationPtr & arg1 );
 }

@@ -133,3 +133,12 @@ SET(TUTORIAL_07A_SRC
 ${CMAKE_SOURCE_DIR}/examples/tutorial/tutorial07a.c
 )
 DAS_TUTORIAL(tutorial07a "${TUTORIAL_07A_SRC}")
+
+##########################################
+# tutorial 08- serialization
+##########################################
+SET(TUTORIAL_08_SRC
+${CMAKE_SOURCE_DIR}/examples/tutorial/tutorial08.cpp
+${CMAKE_SOURCE_DIR}/examples/tutorial/tutorial08.das
+)
+DAS_TUTORIAL(tutorial08 "${TUTORIAL_08_SRC}")

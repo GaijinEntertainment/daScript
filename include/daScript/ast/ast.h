@@ -8,6 +8,7 @@
 #include "daScript/misc/rangetype.h"
 #include "daScript/simulate/data_walker.h"
 #include "daScript/simulate/debug_info.h"
+#include "daScript/ast/ast_serialize_macro.h"
 #include "daScript/ast/compilation_errors.h"
 #include "daScript/ast/ast_typedecl.h"
 #include "daScript/simulate/aot_library.h"
@@ -22,6 +23,8 @@
 
 namespace das
 {
+    struct AstSerializer;
+
     class Function;
     typedef smart_ptr<Function> FunctionPtr;
 
@@ -63,6 +66,13 @@ namespace das
 
     struct AnnotationArgumentList;
     struct AnnotationDeclaration;
+    typedef smart_ptr<AnnotationDeclaration> AnnotationDeclarationPtr;
+
+    enum class LogicAnnotationOp { And, Or, Xor, Not };
+    AnnotationPtr newLogicAnnotation ( LogicAnnotationOp op );
+    AnnotationPtr newLogicAnnotation ( LogicAnnotationOp op,
+        const AnnotationDeclarationPtr & arg0, const AnnotationDeclarationPtr & arg1 );
+
 
     //      [annotation (value,value,...,value)]
     //  or  [annotation (key=value,key,value,...,key=value)]
@@ -94,6 +104,7 @@ namespace das
             : type(Type::tFloat), name(n), fValue(f), at(loc) {}
         AnnotationArgument ( const string & n, AnnotationArgumentList * al, const LineInfo & loc = LineInfo() )
             : type(Type::none), name(n), aList(al), at(loc) {}
+        void serialize ( AstSerializer & ser );
     };
 
     typedef vector<AnnotationArgument> AnnotationArguments;
@@ -102,6 +113,7 @@ namespace das
         const AnnotationArgument * find ( const string & name, Type type ) const;
         bool getBoolOption(const string & name, bool def = false) const;
         int32_t getIntOption(const string & name, int32_t def = false) const;
+        void serialize ( AstSerializer & ser );
     };
 
     struct Annotation : BasicAnnotation {
@@ -117,6 +129,7 @@ namespace das
         string describe() const { return name; }
         string getMangledName() const;
         virtual void log ( TextWriter & ss, const AnnotationDeclaration & decl ) const;
+        virtual void serialize( AstSerializer & ) { }
         Module *    module = nullptr;
     };
 
@@ -131,8 +144,8 @@ namespace das
             uint32_t            flags;
         };
         string getMangledName() const;
+        void serialize( AstSerializer & ser );
     };
-    typedef smart_ptr<AnnotationDeclaration> AnnotationDeclarationPtr;
 
     typedef vector<AnnotationDeclarationPtr> AnnotationList;
 
@@ -145,6 +158,7 @@ namespace das
             string          cppName;
             LineInfo        at;
             ExpressionPtr   value;
+            void serialize ( AstSerializer & ser );
         };
     public:
         Enumeration() = default;
@@ -162,6 +176,7 @@ namespace das
         TypeDeclPtr makeBaseType() const;
         Type getEnumType() const;
         TypeDeclPtr makeEnumType() const;
+        void serialize ( AstSerializer & ser );
     public:
         string              name;
         string              cppName;
@@ -215,6 +230,7 @@ namespace das
                     }
                 }
             }
+            void serialize ( AstSerializer & ser );
         };
     public:
         Structure() {}
@@ -249,6 +265,7 @@ namespace das
         string describe() const { return name; }
         string getMangledName() const;
         bool hasAnyInitializers() const;
+        void serialize( AstSerializer & ser );
     public:
         string                          name;
         vector<FieldDeclaration>        fields;
@@ -289,6 +306,7 @@ namespace das
         uint64_t getMangledNameHash() const;
         bool isAccessUnused() const;
         bool isCtorInitialized() const;
+        void serialize ( AstSerializer & ser );
         string          name;
         string          aka;        // name alias
         TypeDeclPtr     type;
@@ -494,6 +512,8 @@ namespace das
         virtual void walk ( DataWalker &, void * ) { }
         // familiar patterns
         virtual bool isYetAnotherVectorTemplate() const { return false; }   // has [], there is length(x), data is linear in memory
+        // factory
+        virtual void * factory () const { return nullptr; }
     };
 
     struct StructureAnnotation : Annotation {
@@ -608,6 +628,7 @@ namespace das
         virtual Expression * tail() { return this; }
         virtual bool swap_tail ( Expression *, Expression * ) { return false; }
         virtual uint32_t getEvalFlags() const { return 0; }
+        virtual void serialize ( AstSerializer & ser );
         LineInfo    at;
         TypeDeclPtr type;
         const char * __rtti = nullptr;
@@ -667,6 +688,7 @@ namespace das
         virtual bool rtti_isConstant() const override { return true; }
         template <typename QQ> QQ & cvalue() { return *((QQ *)&value); }
         template <typename QQ> const QQ & cvalue() const { return *((const QQ *)&value); }
+        virtual void serialize ( AstSerializer & ser ) override;
         Type    baseType = Type::none;
         vec4f   value = v_zero();
       };
@@ -723,6 +745,7 @@ namespace das
         Function *  func = nullptr;
         InferHistory() = default;
         InferHistory(const LineInfo & a, const FunctionPtr & p) : at(a), func(p.get()) {}
+        void serialize ( AstSerializer & ser );
     };
     class Function : public ptr_ref_count {
     public:
@@ -765,6 +788,7 @@ namespace das
         }
         FunctionPtr addToModule ( Module & mod, SideEffects seFlags );
         FunctionPtr getOrigin() const;
+        void serialize ( AstSerializer & ser );
     public:
         AnnotationList      annotations;
         string              name;
@@ -786,6 +810,7 @@ namespace das
             Variable *  var = nullptr;
             Function *  func = nullptr;
             bool        viaPointer = false;
+            void serialize ( AstSerializer & ser );
         };
         vector<AliasInfo>  resultAliasesGlobals;
     // end of what we use for alias checking
@@ -1005,10 +1030,12 @@ namespace das
         TypeDeclPtr findAlias ( const string & name ) const;
         VariablePtr findVariable ( const string & name ) const;
         FunctionPtr findFunction ( const string & mangledName ) const;
+        FunctionPtr findGeneric ( const string & mangledName ) const;
         FunctionPtr findUniqueFunction ( const string & name ) const;
         StructurePtr findStructure ( const string & name ) const;
         AnnotationPtr findAnnotation ( const string & name ) const;
         EnumerationPtr findEnum ( const string & name ) const;
+        ReaderMacroPtr findReaderMacro ( const string & name ) const;
         TypeInfoMacroPtr findTypeInfoMacro ( const string & name ) const;
         ExprCallFactory * findCall ( const string & name ) const;
         bool isVisibleDirectly ( Module * objModule ) const;
@@ -1029,6 +1056,7 @@ namespace das
         void verifyBuiltinNames(uint32_t flags);
         void addDependency ( Module * mod, bool pub );
         void addBuiltinDependency ( ModuleLibrary & lib, Module * mod, bool pub = false );
+        void serialize( AstSerializer & ser );
     public:
         template <typename RecAnn>
         void initRecAnnotation ( const smart_ptr<RecAnn> & rec, ModuleLibrary & lib ) {
@@ -1090,6 +1118,7 @@ namespace das
                 bool    isModule : 1;
                 bool    isSolidContext : 1;
                 bool    doNotAllowUnsafe : 1;
+                bool    wasParsedNameless : 1;
             };
             uint32_t        moduleFlags = 0;
         };
@@ -1255,7 +1284,7 @@ namespace das
         EnumInfo * makeEnumDebugInfo ( const Enumeration & en );
         FuncInfo * makeInvokeableTypeDebugInfo ( const TypeDeclPtr & blk, const LineInfo & at );
         void appendLocalVariables ( FuncInfo * info, const ExpressionPtr & body );
-         void appendGlobalVariables ( FuncInfo * info, const FunctionPtr & body );
+        void appendGlobalVariables ( FuncInfo * info, const FunctionPtr & body );
         void logMemInfo ( TextWriter & tw );
     public:
         shared_ptr<DebugInfoAllocator>  debugInfo;
@@ -1427,6 +1456,7 @@ namespace das
         bool getProfiler() const;
         void makeMacroModule( TextWriter & logs );
         vector<ReaderMacroPtr> getReaderMacro ( const string & markup ) const;
+        void serialize ( AstSerializer & ser );
     protected:
         // this is no longer the way to link AOT
         //  set CodeOfPolicies::aot instead

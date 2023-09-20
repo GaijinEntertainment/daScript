@@ -68,7 +68,7 @@ class BgfxCompileComputeShaderFunctionAnnotation : AstFunctionAnnotation
         let cs_name = get_shader_const_name(call.arguments[0],errors)
         if cs_name==""
             return [[ExpressionPtr]]
-        let func = (call.arguments[0] as ExprAddr).func
+        let func <- (call.arguments[0] as ExprAddr).func
         let target = func._module.name!="" ? "{func._module.name}::{func.name}" : "{func.name}"
         var cll <- new [[ExprCall() at=call.at, name:="create_compute_shader_program"]]
         cll.arguments |> emplace_new <| new [[ExprVar() at=call.at, name:=cs_name]]
