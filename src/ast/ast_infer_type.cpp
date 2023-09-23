@@ -2171,6 +2171,7 @@ namespace das {
             if ( fns.size()==1 ) {
                 expr->func = fns.back();
                 expr->func->addr = true;
+                expr->func->fastCall = false;
                 expr->type = make_smart<TypeDecl>(Type::tFunction);
                 expr->type->firstType = make_smart<TypeDecl>(*expr->func->result);
                 expr->type->argTypes.reserve ( expr->func->arguments.size() );
@@ -5880,61 +5881,6 @@ namespace das {
     // ExprAssume
         virtual void preVisit ( ExprAssume * expr ) override {
             Visitor::preVisit(expr);
-            const auto & name = expr->alias;
-            // assume
-            for ( const auto & aa : assume ) {
-                if ( aa->alias==name ) {
-                    error("can't assume " + name + ", alias already taken by another assume expression at " + aa->at.describe(), "", "",
-                                  expr->at, CompilationError::invalid_assume);
-                    return;
-                }
-            }
-            // local variable
-            for ( const auto & lv : local ) {
-                if ( lv->name==name || lv->aka==name ) {
-                    error("can't assume " + name + ", alias already taken by local variable at " + lv->at.describe(), "", "",
-                                  expr->at, CompilationError::invalid_assume);
-                    return;
-                }
-            }
-            // with
-            if ( auto mW = hasMatchingWith(name) ) {
-                error("can't assume " + name + ", alias already taken by `with` at " + mW->at.describe(), "", "",
-                    expr->at, CompilationError::invalid_assume);
-                return;
-            }
-            // block arguments
-            for ( const auto & block : blocks ) {
-                for ( const auto & arg : block->arguments ) {
-                    if ( arg->name==name || arg->aka==name ) {
-                        error("can't assume " + name + ", alias already taken by block argument at " + arg->at.describe(), "", "",
-                                    expr->at, CompilationError::invalid_assume);
-                        return;
-                    }
-                }
-            }
-            // function argument
-            if ( func ) {
-                for ( auto & arg : func->arguments ) {
-                    if ( arg->name==name || arg->aka==name ) {
-                        error("can't assume " + name + ", alias already taken by block argument at " + arg->at.describe(), "", "",
-                                    expr->at, CompilationError::invalid_assume);
-                        return;
-                    }
-                }
-            }
-            // global
-            auto globals = findMatchingVar(name, false);
-            if ( globals.size() ) {
-                if ( globals.size()==1 ) {
-                    error("can't assume " + name + ", alias already taken by global variable at " + globals[0]->at.describe(), "", "",
-                                expr->at, CompilationError::invalid_assume);
-                } else {
-                    error("can't assume " + name + ", alias already taken by multiple global variables", "", "",
-                                expr->at, CompilationError::invalid_assume);
-                }
-                return;
-            }
             assume.push_back(expr);
         }
     // ExprWith
