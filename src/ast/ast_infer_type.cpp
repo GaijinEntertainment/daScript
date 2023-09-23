@@ -3880,7 +3880,6 @@ namespace das {
             if ( !expr->subexpr->type->getSizeOf64() ) {
                 error("can't ascend (to heap) type of size 0",  "", "",
                     expr->at, CompilationError::invalid_new_type);
-                return expr;
             }
             if ( !expr->subexpr->type->isRef() ) {
                 error("can't ascend (to heap) non-reference value",  "", "",
