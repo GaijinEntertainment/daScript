@@ -3877,10 +3877,6 @@ namespace das {
                     mks->isNewHandle = true;
                 }
             }
-            if ( !expr->subexpr->type->getSizeOf64() ) {
-                error("can't ascend (to heap) type of size 0",  "", "",
-                    expr->at, CompilationError::invalid_new_type);
-            }
             if ( !expr->subexpr->type->isRef() ) {
                 error("can't ascend (to heap) non-reference value",  "", "",
                     expr->at, CompilationError::invalid_new_type);
@@ -3995,10 +3991,6 @@ namespace das {
             if ( expr->initializer && expr->name.empty() ) {
                 error("only native structures can have initializers, not " + describeType(expr->typeexpr), "", "",
                       expr->at, CompilationError::invalid_new_type);
-            }
-            if ( expr->type && expr->type->firstType && !expr->type->firstType->getSizeOf64() ) {
-                error("can't new (to heap) type of size 0",  "", "",
-                    expr->at, CompilationError::invalid_new_type);
             }
             if ( expr->type && expr->initializer && !expr->name.empty() ) {
                 auto resultType = expr->type;
