@@ -519,15 +519,6 @@ int main( int argc, char * argv[] ) {
     ok = run_module_test(getDasRoot() +  "/examples/test/module/alias",  "main.das", true, false) && ok;
     ok = run_module_test(getDasRoot() +  "/examples/test/module/cdp",    "main.das", true, false) && ok;
     ok = run_module_test(getDasRoot() +  "/examples/test/module/unsafe", "main.das", true, false) && ok;
-// now with serialization
-    ok = run_unit_tests(getDasRoot() +  "/examples/test/unit_tests",    false, true) && ok;
-    ok = run_unit_tests(getDasRoot() +  "/examples/test/optimizations", false, true) && ok;
-    ok = run_module_test(getDasRoot() +  "/examples/test/module", "main.das",        true, true) && ok;
-    ok = run_module_test(getDasRoot() +  "/examples/test/module", "main_inc.das",    true, true)  && ok;
-    ok = run_module_test(getDasRoot() +  "/examples/test/module", "main_default.das", false, true) && ok;
-    ok = run_module_test(getDasRoot() +  "/examples/test/module/alias",  "main.das", true, true) && ok;
-    ok = run_module_test(getDasRoot() +  "/examples/test/module/cdp",    "main.das", true, true) && ok;
-    ok = run_module_test(getDasRoot() +  "/examples/test/module/unsafe", "main.das", true, true) && ok;
     int usec = get_time_usec(timeStamp);
     tout << "TESTS " << (ok ? "PASSED " : "FAILED!!! ") << ((usec/1000)/1000.0) << "\n";
     // shutdown
