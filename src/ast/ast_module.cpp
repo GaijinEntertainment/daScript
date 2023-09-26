@@ -468,6 +468,10 @@ namespace das {
         return functions.find(mangledName);
     }
 
+    FunctionPtr Module::findGeneric ( const string & mangledName ) const {
+        return generics.find(mangledName);
+    }
+
     FunctionPtr Module::findUniqueFunction ( const string & mangledName ) const {
         auto it = functionsByName.find(hash64z(mangledName.c_str()));
         if ( it==functionsByName.end() ) return nullptr;
@@ -481,6 +485,11 @@ namespace das {
 
     AnnotationPtr Module::findAnnotation ( const string & na ) const {
         return handleTypes.find(na);
+    }
+
+    ReaderMacroPtr Module::findReaderMacro ( const string & na ) const {
+        auto it = readMacros.find(na);
+        return it != readMacros.end() ? it->second : nullptr;
     }
 
     TypeInfoMacroPtr Module::findTypeInfoMacro ( const string & na ) const {

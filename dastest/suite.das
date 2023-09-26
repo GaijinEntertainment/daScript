@@ -19,6 +19,7 @@ struct SuiteCtx
     uriPaths: bool = false
     testNames: array<string>
     verbose: bool = false
+    serialize: bool = false
 
 
 def createSuiteCtx(): SuiteCtx
@@ -42,6 +43,7 @@ def SuiteCtx(args: array<string>): SuiteCtx
     ctx.dastestRoot = dir_name(at.fileInfo != null ? string(at.fileInfo.name) : args[1])
     ctx.verbose = args |> has_value("--verbose")
     ctx.uriPaths = args |> has_value("--uri-paths")
+    ctx.serialize = args |> has_value("--serialize")
     ctx.projectPath = args |> get_str_arg("--test-project", "")
     collect_tests_names(args, ctx.testNames)
     return <- ctx
@@ -137,24 +139,29 @@ def test_file(file_name: string; ctx: SuiteCtx; file_ctx: FileCtx): SuiteResult
                     else
                         res.passed += 1
                     return
-                simulate(program) <| $ (sok; context; serrors)
-                    if !sok
-                        res.total += 1
-                        res.errors += 1
-                        log::error("Failed to simulate {file_name}\n{serrors}")
-                        return
-                    var mod = program |> get_this_module()
-                    if mod != null && context != null
-                        res += test_module(*mod, *context, ctx, file_ctx)
-                    else
-                        res.errors += 1
-                        res.total += 1
-                        var msg = "Failed to execute {file_name}"
-                        if mod == null
-                            msg = "{msg}. Current module is null."
-                        if context == null
-                            msg = "{msg}. Current context is null."
-                        log::error(msg)
+                var simulate_and_run <- $ <| ( var new_program:ProgramPtr )
+                    simulate(new_program) <| $ (sok; context; serrors)
+                        if !sok
+                            res.total += 1
+                            res.errors += 1
+                            log::error("Failesd to simulate {file_name}\n{serrors}")
+                            return
+                        var mod = new_program |> get_this_module()
+                        if mod != null && context != null
+                            res += test_module(*mod, *context, ctx, file_ctx)
+                        else
+                            res.errors += 1
+                            res.total += 1
+                            var msg = "Failed to execute {file_name}"
+                            if mod == null
+                                msg = "{msg}. Current module is null."
+                            if context == null
+                                msg = "{msg}. Current context is null."
+                            log::error(msg)
+                if ctx.serialize
+                    simulate_and_run |> with_program_serialized <| program
+                else
+                    invoke(simulate_and_run, program)
     return res
 
 
