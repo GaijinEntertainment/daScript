@@ -91,6 +91,9 @@ class AstStructureAnnotation
     def abstract aotPrefix ( var st:StructurePtr; args:AnnotationArgumentList; var writer : StringBuilderWriter ) : void
     def abstract aotBody ( var st:StructurePtr; args:AnnotationArgumentList; var writer : StringBuilderWriter ) : void
     def abstract aotSuffix ( var st:StructurePtr; args:AnnotationArgumentList; var writer : StringBuilderWriter ) : void
+    def abstract aotNeedReinterpret ( var st:StructurePtr; args:AnnotationArgumentList ) : bool
+    def abstract canSubstitute ( var st:StructurePtr; args:AnnotationArgumentList; passType:TypeDeclPtr ) : bool
+    def abstract canBeSubstituted ( var st:StructurePtr; args:AnnotationArgumentList; passType:TypeDeclPtr ) : bool
 
 [macro_interface]
 class AstPassMacro

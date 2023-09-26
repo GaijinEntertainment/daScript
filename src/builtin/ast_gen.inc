@@ -184,9 +184,12 @@ protected:
     __fn_aotPrefix = 4,
     __fn_aotBody = 5,
     __fn_aotSuffix = 6,
+    __fn_aotNeedReinterpret = 7,
+    __fn_canSubstitute = 8,
+    __fn_canBeSubstituted = 9,
   };
 protected:
-  int _das_class_method_offset[7];
+  int _das_class_method_offset[10];
 public:
   AstStructureAnnotation_Adapter ( const StructInfo * info ) {
       _das_class_method_offset[__fn_apply] = adapt_field_offset("apply",info);
@@ -196,6 +199,9 @@ public:
       _das_class_method_offset[__fn_aotPrefix] = adapt_field_offset("aotPrefix",info);
       _das_class_method_offset[__fn_aotBody] = adapt_field_offset("aotBody",info);
       _das_class_method_offset[__fn_aotSuffix] = adapt_field_offset("aotSuffix",info);
+      _das_class_method_offset[__fn_aotNeedReinterpret] = adapt_field_offset("aotNeedReinterpret",info);
+      _das_class_method_offset[__fn_canSubstitute] = adapt_field_offset("canSubstitute",info);
+      _das_class_method_offset[__fn_canBeSubstituted] = adapt_field_offset("canBeSubstituted",info);
   }
   __forceinline Func get_apply ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_apply]);
@@ -259,6 +265,33 @@ public:
       <void *,smart_ptr_raw<Structure>,AnnotationArgumentList const  &,StringBuilderWriter &>
         (__context__,nullptr,__funcCall__,
           self,st,args,writer);
+  }
+  __forceinline Func get_aotNeedReinterpret ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_aotNeedReinterpret]);
+  }
+  __forceinline bool invoke_aotNeedReinterpret ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Structure> st, AnnotationArgumentList const  & args ) const {
+    return das_invoke_function<bool>::invoke
+      <void *,smart_ptr_raw<Structure>,AnnotationArgumentList const  &>
+        (__context__,nullptr,__funcCall__,
+          self,st,args);
+  }
+  __forceinline Func get_canSubstitute ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_canSubstitute]);
+  }
+  __forceinline bool invoke_canSubstitute ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Structure> st, AnnotationArgumentList const  & args, smart_ptr_raw<TypeDecl> const  passType ) const {
+    return das_invoke_function<bool>::invoke
+      <void *,smart_ptr_raw<Structure>,AnnotationArgumentList const  &,smart_ptr_raw<TypeDecl> const >
+        (__context__,nullptr,__funcCall__,
+          self,st,args,passType);
+  }
+  __forceinline Func get_canBeSubstituted ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_canBeSubstituted]);
+  }
+  __forceinline bool invoke_canBeSubstituted ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Structure> st, AnnotationArgumentList const  & args, smart_ptr_raw<TypeDecl> const  passType ) const {
+    return das_invoke_function<bool>::invoke
+      <void *,smart_ptr_raw<Structure>,AnnotationArgumentList const  &,smart_ptr_raw<TypeDecl> const >
+        (__context__,nullptr,__funcCall__,
+          self,st,args,passType);
   }
 };
 

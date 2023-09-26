@@ -730,6 +730,30 @@ namespace das
         }
     }
 
+    bool TypeDecl::needAotReinterpret() const {
+        das_set<Structure *> recAot;
+        return needAotReinterpret(recAot);
+    }
+
+    bool TypeDecl::needAotReinterpret( das_set<Structure *> & recAot ) const {
+        if ( firstType && firstType->needAotReinterpret(recAot) ) return true;
+        if ( secondType && secondType->needAotReinterpret(recAot) ) return true;
+        for ( auto & arg : argTypes ) {
+            if ( arg->needAotReinterpret(recAot) ) {
+                return true;
+            }
+        }
+        if ( structType ) {
+            if ( recAot.find(structType)==recAot.end() ) {
+                recAot.insert(structType);
+                if ( structType->needAotReinterpret(recAot) ) {
+                    return true;
+                }
+            }
+        }
+        return false;
+    }
+
     bool TypeDecl::canAot() const {
         das_set<Structure *> recAot;
         return canAot(recAot);
@@ -1277,9 +1301,25 @@ namespace das
             return false;
         }
         if ( baseType==Type::tStructure && structType!=decl.structType ) {
-            if ( !isExplicit && (allowSubstitute == AllowSubstitute::yes) ) {
-                if ( structType && decl.structType && structType->isCompatibleCast(*(decl.structType)) ){
+            if ( !isExplicit && structType && decl.structType ) {
+                if ( (allowSubstitute == AllowSubstitute::yes) && structType->isCompatibleCast(*(decl.structType)) ){
                     return true;
+                }
+                for ( auto & ann : structType->annotations ) {
+                    if ( ann->annotation->rtti_isStructureAnnotation() ) {
+                        auto sann = static_pointer_cast<StructureAnnotation>(ann->annotation);
+                        if ( sann->canSubstitute(structType, ann->arguments, &decl) ) {
+                            return true;
+                        }
+                    }
+                }
+                for ( auto & ann : decl.structType->annotations ) {
+                    if ( !ann->annotation->rtti_isStructureAnnotation() ) {
+                        auto sann = static_pointer_cast<StructureAnnotation>(ann->annotation);
+                        if ( sann->canBeSubstituted(decl.structType, ann->arguments, this) ) {
+                            return true;
+                        }
+                    }
                 }
             }
             return false;

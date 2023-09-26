@@ -286,6 +286,28 @@ namespace das {
         return canAot(recAot);
     }
 
+    bool Structure::needAotReinterpret( das_set<Structure *> & recAot ) const {
+        for ( auto & ann : annotations ) {
+            if ( ann->annotation->rtti_isStructureAnnotation() ) {
+                auto pAnn = static_pointer_cast<StructureAnnotation>(ann->annotation);
+                if ( pAnn->aotNeedReinterpret(this, ann->arguments) ) {
+                    return true;
+                }
+            }
+        }
+        for ( const auto & fd : fields ) {
+            if ( fd.type->needAotReinterpret(recAot) )
+                return true;
+        }
+        return false;
+    }
+
+    bool Structure::needAotReinterpret() const {
+        das_set<Structure *> recAot;
+        return needAotReinterpret(recAot);
+    }
+
+
     bool Structure::isNoHeapType() const {
         for ( const auto & fd : fields ) {
             if ( !fd.type->isNoHeapType() )

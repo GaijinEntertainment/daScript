@@ -3016,6 +3016,9 @@ namespace das {
             if ( func->module == program->thisModule.get() ) return false;
             return true;
         }
+        bool needsArgReinterpret ( const TypeDeclPtr & argType, const TypeDeclPtr & funcArgType ) const {
+            return funcArgType->needAotReinterpret() || argType->needAotReinterpret();
+        }
         bool needsArgPass ( const TypeDeclPtr & argType ) const {
             return !argType->constant && !argType->isGoodBlockType();
         }
@@ -3171,6 +3174,19 @@ namespace das {
             }
             if ( !call->func->interopFn && arg->type->isRefType() ) {
                 if ( needsArgPass(arg) ) {
+                    if ( needsArgReinterpret(arg->type,funArgType) ) {
+                        ss <<"reinterpret_cast<";
+                        needsArgReinterpret(arg->type,funArgType);
+                        if (isLocalVec(arg->type)) {
+                            describeLocalCppType(ss, funArgType);
+                        } else {
+                            ss << describeCppType(funArgType);
+                        }
+                        if ( funArgType->isRefType() ) {
+                            ss << " &";
+                        }
+                        ss << ">(";
+                    }
                     ss << "das_arg<" << describeCppType(argType,CpptSubstitureRef::no,CpptSkipRef::yes) << ">::pass(";
                 }
             }
@@ -3207,6 +3223,9 @@ namespace das {
             if ( !call->func->interopFn && arg->type->isRefType() ) {
                 if ( needsArgPass(arg) ) {
                     ss << ")";
+                    if ( needsArgReinterpret(arg->type,funArgType) ) {
+                        ss << ")";
+                    }
                 }
             }
             if ( !call->func->noPointerCast && needPtrCast(funArgType,arg->type,arg) ) ss << ")";

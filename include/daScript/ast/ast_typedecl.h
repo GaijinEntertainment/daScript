@@ -59,6 +59,8 @@ namespace das {
         void getMangledName ( FixedBufferTextWriter & tw, bool fullName=false ) const;
         bool canAot() const;
         bool canAot( das_set<Structure *> & recAot ) const;
+        bool needAotReinterpret() const;
+        bool needAotReinterpret( das_set<Structure *> & recAot ) const;
         bool isSameType ( const TypeDecl & decl, RefMatters refMatters, ConstMatters constMatters,
             TemporaryMatters temporaryMatters, AllowSubstitute allowSubstitute = AllowSubstitute::no, bool topLevel = true, bool isPassType = false ) const;
         bool isSameExactType ( const TypeDecl & decl ) const;

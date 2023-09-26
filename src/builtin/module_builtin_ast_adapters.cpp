@@ -988,6 +988,39 @@ namespace das {
                 });
             }
         }
+        virtual bool canSubstitute (const StructurePtr & st, const AnnotationArgumentList & args, const TypeDecl * passType ) const override {
+            if ( auto fnCanSubstitute = get_canSubstitute(classPtr) ) {
+                bool result = true;
+                runMacroFunction(context, "canSubstitute", [&]() {
+                    result = invoke_canSubstitute(context,fnCanSubstitute,classPtr,st,args,(TypeDecl *)passType);
+                });
+                return result;
+            } else {
+                return false;
+            }
+        }
+        virtual bool canBeSubstituted ( const StructurePtr & st, const AnnotationArgumentList & args, const TypeDecl * passType ) const override {
+            if ( auto fnCanBeSubstituted = get_canBeSubstituted(classPtr) ) {
+                bool result = true;
+                runMacroFunction(context, "canBeSubstituted", [&]() {
+                    result = invoke_canBeSubstituted(context,fnCanBeSubstituted,classPtr,st,args,(TypeDecl *)passType);
+                });
+                return result;
+            } else {
+                return false;
+            }
+        }
+        virtual bool aotNeedReinterpret ( const Structure * st, const AnnotationArgumentList & args ) override {
+            if ( auto fnAotNeedReinterpret = get_aotNeedReinterpret(classPtr) ) {
+                bool result = true;
+                runMacroFunction(context, "aotNeedReinterpret", [&]() {
+                    result = invoke_aotNeedReinterpret(context,fnAotNeedReinterpret,classPtr,(Structure *)st,args);
+                });
+                return result;
+            } else {
+                return false;
+            }
+        }
     protected:
         void *      classPtr;
         Context *   context;

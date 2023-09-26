@@ -232,6 +232,8 @@ namespace das
         bool canMove() const;
         bool canAot() const;
         bool canAot( das_set<Structure *> & recAot ) const;
+        bool needAotReinterpret() const;
+        bool needAotReinterpret( das_set<Structure *> & recAot ) const;
         bool isNoHeapType() const;
         bool isPod() const;
         bool isRawPod() const;
@@ -509,6 +511,9 @@ namespace das
         virtual void aotPrefix ( const StructurePtr &, const AnnotationArgumentList &, TextWriter & ) { }
         virtual void aotBody   ( const StructurePtr &, const AnnotationArgumentList &, TextWriter & ) { }
         virtual void aotSuffix ( const StructurePtr &, const AnnotationArgumentList &, TextWriter & ) { }
+        virtual bool aotNeedReinterpret ( const Structure *, const AnnotationArgumentList & ) { return false; }
+        virtual bool canSubstitute (const StructurePtr &, const AnnotationArgumentList &, const TypeDecl * /* passType */ ) const { return false; }
+        virtual bool canBeSubstituted ( const StructurePtr &, const AnnotationArgumentList &, const TypeDecl * /* passType */ ) const { return false; }
     };
     typedef smart_ptr<StructureAnnotation> StructureAnnotationPtr;
 
