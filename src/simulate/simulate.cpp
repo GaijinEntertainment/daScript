@@ -1867,5 +1867,5 @@ namespace das
 
 //workaround compiler bug in MSVC 32 bit
 #if defined(_MSC_VER) && !defined(__clang__) && INTPTR_MAX == INT32_MAX
-vec4i VECTORCALL v_ldu_ptr(const void * a) {return v_seti_x((int32_t)a);}
+VECTORCALL vec4i v_ldu_ptr(const void * a) {return v_seti_x((int32_t)a);}
 #endif

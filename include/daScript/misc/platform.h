@@ -73,7 +73,9 @@
 #include <float.h>
 #include <daScript/das_config.h>
 
-#if (defined(_MSC_VER) || defined(__clang__)) && __SSE__
+#if _TARGET_PC_MACOSX && __SSE__
+   #define DAS_EVAL_ABI [[clang::vectorcall]]
+#elif (defined(_MSC_VER) || defined(__clang__)) && __SSE__
     #define DAS_EVAL_ABI __vectorcall
 #else
     #define DAS_EVAL_ABI
