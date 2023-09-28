@@ -672,11 +672,11 @@ namespace das
         SimFunction * functions = nullptr;
         int totalVariables = 0;
         int totalFunctions = 0;
-        SimNode * aotInitScript = nullptr;
         SimFunction ** initFunctions = nullptr;
         int totalInitFunctions = 0;
     public:
         bool skipLockChecks = false;
+        SimNode * aotInitScript = nullptr;
     protected:
         bool            debugger = false;
         volatile bool   singleStepMode = false;

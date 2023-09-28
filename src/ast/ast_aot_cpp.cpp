@@ -3421,10 +3421,10 @@ namespace das {
             uint64_t semH = context.getInitSemanticHash();
             semH = getInitSemanticHashWithDep(semH);
             logs << "\t// [[ init script ]]\n";
-            logs << "\taotLib[0x" << HEX << semH << DEC << "] = [&](Context & ctx){\n\t\treturn ";
-            logs << "ctx.code->makeNode<SimNode_Aot";
-            logs << "<void (*)(Context *, bool),";
-            logs << "&__init_script>>();\n\t};\n";
+            logs << "\taotLib[0x" << HEX << semH << DEC << "] = [&](Context & ctx){\n";
+            logs << "\t\tctx.aotInitScript = ctx.code->makeNode<SimNode_Aot<void (*)(Context *, bool),&__init_script>>();\n";
+            logs << "\t\treturn ctx.aotInitScript;\n";
+            logs << "\t};\n";
         }
         if ( headers ) {
             logs << "}\n";
