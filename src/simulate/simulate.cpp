@@ -1226,7 +1226,7 @@ namespace das
         };
         abiArg = args;
         abiCMRES = nullptr;
-        if ( false && aotInitScript ) {
+        if ( aotInitScript ) {
             aotInitScript->eval(*this);
         } else {
 #if DAS_ENABLE_STACK_WALK
