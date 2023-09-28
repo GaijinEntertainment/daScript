@@ -785,6 +785,44 @@ def make_decoder(filename : string; rate, channels : int) : ma_decoder?
         return null
     return decoder
 
+var global_batch : array<AudioCommand?>?
+
+def public begin_batch()
+    if global_batch != null
+        panic("nested batch")
+    var tempBatch = new [[array<AudioCommand?>]]
+
+    global_batch = tempBatch
+
+def public end_batch()
+    if global_batch == null
+        panic("no batch")
+    g_command_channel |> push_batch(*global_batch)
+    *global_batch |> resize(0)
+    unsafe
+        delete *global_batch
+    global_batch = null
+
+def public batch(cb : block)
+    if global_batch != null
+        panic("nested batch")
+    var tempBatch : array<AudioCommand?>
+
+    global_batch = unsafe(addr(tempBatch))
+    cb |> invoke()
+    global_batch = null
+
+    g_command_channel |> push_batch(tempBatch)
+    tempBatch |> resize(0)
+    unsafe
+        delete tempBatch
+
+def push_cmd(cmd : AudioCommand?)
+    if global_batch != null
+        *global_batch |> push(cmd)
+    else
+        g_command_channel |> push(cmd)
+
 def public play_sound_from_file(filename : string; rate, channels : int)
     //! plays sound from file
     //! note - this function is blocking for the duration of the decoder creation
@@ -792,7 +830,7 @@ def public play_sound_from_file(filename : string; rate, channels : int)
     if decoder == null
         return INVALID_SID
     let sid = generate_sound_sid()
-    g_command_channel |> push <| new [[AudioCommand add_decoder=[[AudioCommandAddDecoder sid=sid, decoder=decoder, rate=rate, channels=channels]]]]
+    push_cmd <| new [[AudioCommand add_decoder=[[AudioCommandAddDecoder sid=sid, decoder=decoder, rate=rate, channels=channels]]]]
     return sid
 
 def public play_3d_sound_from_file(filename : string; position : float3; attenuation : Attenuation; rate, channels : int)
@@ -802,89 +840,89 @@ def public play_3d_sound_from_file(filename : string; position : float3; attenua
     if decoder == null
         return INVALID_SID
     let sid = generate_sound_sid()
-    g_command_channel |> push <| new [[AudioCommand add_decoder_3d=
+    push_cmd <| new [[AudioCommand add_decoder_3d=
         [[AudioCommandAddDecoder3D sid=sid, decoder=decoder, rate=rate, channels=channels, position=position, attenuation=attenuation]]]]
     return sid
 
 def public play_sound_from_pcm_stream(rate, channels : int; sid : SID = generate_sound_sid())
     //! plays sound from PCM data
-    g_command_channel |> push <| new [[AudioCommand add_pcm_stream <- [[AudioCommandAddPCMStream sid=sid, rate=rate, channels=channels]]]]
+    push_cmd <| new [[AudioCommand add_pcm_stream <- [[AudioCommandAddPCMStream sid=sid, rate=rate, channels=channels]]]]
     return sid
 
 def public play_3d_sound_from_pcm_stream(position : float3; attenuation : Attenuation; rate, channels : int)
     //! plays sound from PCM data
     var sid = generate_sound_sid()
-    g_command_channel |> push <| new [[AudioCommand add_pcm_stream_3d <-
+    push_cmd <| new [[AudioCommand add_pcm_stream_3d <-
         [[AudioCommandAddPCMStream3D sid=sid, rate=rate, channels=channels, position=position, attenuation=attenuation]]]]
     return sid
 
 def public play_sound_from_pcm(rate, channels : int; var samples : array<float>)
     //! plays sound from PCM data
     var sid = generate_sound_sid()
-    g_command_channel |> push <| new [[AudioCommand add_pcm <- [[AudioCommandAddPCM sid=sid, rate=rate, channels=channels, samples <- samples, loop=false]]]]
+    push_cmd <| new [[AudioCommand add_pcm <- [[AudioCommandAddPCM sid=sid, rate=rate, channels=channels, samples <- samples, loop=false]]]]
     return sid
 
 def public play_sound_loop_from_pcm(rate, channels : int; var samples : array<float>)
     //! plays looping sound from PCM data
     var sid = generate_sound_sid()
-    g_command_channel |> push <| new [[AudioCommand add_pcm <- [[AudioCommandAddPCM sid=sid, rate=rate, channels=channels, samples <- samples, loop=true]]]]
+    push_cmd <| new [[AudioCommand add_pcm <- [[AudioCommandAddPCM sid=sid, rate=rate, channels=channels, samples <- samples, loop=true]]]]
     return sid
 
 def public play_3d_sound_from_pcm(position : float3; attenuation : Attenuation; rate, channels : int; var samples : array<float>)
     //! plays 3D sound from PCM data
     var sid = generate_sound_sid()
-    g_command_channel |> push <| new [[AudioCommand add_pcm_3d <-
+    push_cmd <| new [[AudioCommand add_pcm_3d <-
         [[AudioCommandAddPCM3D sid=sid, rate=rate, channels=channels, samples <- samples, loop=false, position=position, attenuation=attenuation]]]]
     return sid
 
 def public play_3d_sound_loop_from_pcm(position : float3; attenuation : Attenuation; rate, channels : int; var samples : array<float>)
     //! plays 3D looping sound from PCM data
     var sid = generate_sound_sid()
-    g_command_channel |> push <| new [[AudioCommand add_pcm_3d <-
+    push_cmd <| new [[AudioCommand add_pcm_3d <-
         [[AudioCommandAddPCM3D sid=sid, rate=rate, channels=channels, samples <- samples, loop=true, position=position, attenuation=attenuation]]]]
     return sid
 
 def public append_to_pcm(sid : SID; var samples : array<float>)
     //! append samples to PCM stream
-    g_command_channel |> push <| new [[AudioCommand append_pcm <- [[auto sid, samples]]]]
+    push_cmd <| new [[AudioCommand append_pcm <- [[auto sid, samples]]]]
     return sid
 
 def public set_pause(sid : SID; paused : bool)
     //! pause or unpause sound
-    g_command_channel |> push <| new [[AudioCommand pause=[[auto sid, paused]]]]
+    push_cmd <| new [[AudioCommand pause=[[auto sid, paused]]]]
     return sid
 
 def public set_volume(sid : SID; volume : float; time : float = 0.0f)
     //! set volume of sound
-    g_command_channel |> push <| new [[AudioCommand volume=[[auto sid, volume, time]]]]
+    push_cmd <| new [[AudioCommand volume=[[auto sid, volume, time]]]]
     return sid
 
 def public set_pan(sid : SID; pan : float)
     //! set pan of sound
-    g_command_channel |> push <| new [[AudioCommand pan=[[auto sid, pan]]]]
+    push_cmd <| new [[AudioCommand pan=[[auto sid, pan]]]]
     return sid
 
 def public set_pitch(sid : SID; pitch : float)
     //! set pitch of sound
-    g_command_channel |> push <| new [[AudioCommand pitch=[[auto sid, pitch]]]]
+    push_cmd <| new [[AudioCommand pitch=[[auto sid, pitch]]]]
     return sid
 
 def public set_global_pitch(pitch : float)
     //! set global pitch of sounds
-    g_command_channel |> push <| new [[AudioCommand global_pitch=pitch]]
+    push_cmd <| new [[AudioCommand global_pitch=pitch]]
 
 def public stop(sid : SID; time : float = 0.0f)
     //! stop sound
-    g_command_channel |> push <| new [[AudioCommand stop=[[auto sid, time]]]]
+    push_cmd <| new [[AudioCommand stop=[[auto sid, time]]]]
     return sid
 
 def public set_head_position(pos, dir : float3; vel : float3 = float3(0.))
     //! set head position for 3D sound
-    g_command_channel |> push <| new [[AudioCommand head_transform = [[AudioCommandHeadPosition3D position=pos, direction=dir, velocity=vel]]]]
+    push_cmd <| new [[AudioCommand head_transform = [[AudioCommandHeadPosition3D position=pos, direction=dir, velocity=vel]]]]
 
 def public set_position(sid : SID; pos : float3; dir : float3 = float3(0.))
     //! set sound position for 3D sound
-    g_command_channel |> push <| new [[AudioCommand sound_position=[[AudioCommandSoundPosition3D sid=sid, position=pos, velocity=dir]]]]
+    push_cmd <| new [[AudioCommand sound_position=[[AudioCommandSoundPosition3D sid=sid, position=pos, velocity=dir]]]]
     return sid
 
 def public set_status_update(sid : SID; var status : LockBox?)
@@ -892,7 +930,7 @@ def public set_status_update(sid : SID; var status : LockBox?)
     status |> add_ref
     status |> append(1)
     status |> set() <| new [[AudioChannelStatus() state=AudioChannelState starting]]
-    g_command_channel |> push <| new [[AudioCommand status=[[AudioCommandStatus sid=sid, status=status]]]]
+    push_cmd <| new [[AudioCommand status=[[AudioCommandStatus sid=sid, status=status]]]]
     return sid
 
 def public clear_status(var status : LockBox?)
@@ -901,12 +939,12 @@ def public clear_status(var status : LockBox?)
 
 def public unset_status_update(sid : SID)
     //! unset status for sound
-    g_command_channel |> push <| new [[AudioCommand status=[[AudioCommandStatus sid=sid, status=null]]]]
+    push_cmd <| new [[AudioCommand status=[[AudioCommandStatus sid=sid, status=null]]]]
     return sid
 
 def public set_reverb(sid : SID; reverb : I3DL2ReverbProperties)
     //! set reverb for sound
-    g_command_channel |> push <| new [[AudioCommand reverb=[[auto sid, reverb]]]]
+    push_cmd <| new [[AudioCommand reverb=[[auto sid, reverb]]]]
     return sid
 
 enum public ReverbPreset // so that we don't expose internals
@@ -940,7 +978,7 @@ def public set_reverb_preset(sid : SID; preset : ReverbPreset)
 
 def public set_playback_position(sid : SID; position : uint64)
     //! set playback position for sound (in frames)
-    g_command_channel |> push <| new [[AudioCommand set_playback_position=[[auto sid, position]]]]
+    push_cmd <| new [[AudioCommand set_playback_position=[[auto sid, position]]]]
     return sid
 
 def public decode_audio(data : array<uint8> |#; var channels, rate : int&) : array<float>
