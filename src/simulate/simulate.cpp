@@ -1259,11 +1259,10 @@ namespace das
         }
         abiArg = nullptr;
         stack.pop(EP,SP);
-        if ( !aotInitScript ) {
-            for ( int j=0, js=totalInitFunctions; j!=js && !stopFlags; ++j ) {
-                auto & pf = initFunctions[j];
-                callOrFastcall(pf, nullptr, 0);
-            }
+        // run init functions
+        for ( int j=0, js=totalInitFunctions; j!=js && !stopFlags; ++j ) {
+            auto & pf = initFunctions[j];
+            callOrFastcall(pf, nullptr, 0);
         }
         // now, share the data
         if ( sharedOwner && shared ) {

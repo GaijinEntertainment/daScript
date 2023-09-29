@@ -1074,19 +1074,6 @@ namespace das {
             }
         }
         virtual void visitGlobalLetBody ( Program * prog ) override {
-            program->thisModule->functions.foreach([&](auto fn){
-                if ( fn->init ) {
-                    ss << string(tab,'\t');
-                    if ( fn->noAot ) {
-                        auto mangledName = fn->getMangledName();
-                        uint64_t hash = fn->getMangledNameHash();
-                        ss << "das_invoke_function<void>::invoke(__context__,nullptr,Func(__context__->fnByMangledName(/*"
-                            << mangledName << "*/ " << hash << "u)));\n";
-                    } else {
-                        ss << aotFuncName(fn.get()) << "(__context__);\n";
-                    }
-                }
-            });
             tab --;
             ss << "}\n";
             Visitor::visitGlobalLetBody(prog);
