@@ -453,6 +453,10 @@ I3DL2ReverbProperties & dasAudio_getReverbPreset ( I3DL2Preset preset, Context *
     return ReverbPresets[preset];
 }
 
+void dasAudio_disableLinearResamplerFiltering ( ma_resampler_config * config ) {
+    config->linear.lpfOrder = 0;
+}
+
 class Module_Audio : public das::Module {
 protected:
     bool initialized = false;
@@ -517,6 +521,8 @@ public:
             SideEffects::none, "ma_resampler_get_input_latency")->args({"resampler"});
         addExtern<DAS_BIND_FUN(ma_resampler_get_output_latency)>(*this, lib, "ma_resampler_get_output_latency",
             SideEffects::none, "ma_resampler_get_output_latency")->args({"resampler"});
+        addExtern<DAS_BIND_FUN(dasAudio_disableLinearResamplerFiltering)>(*this, lib, "ma_resampler_disable_linear_filtering",
+            SideEffects::modifyArgument, "dasAudio_disableLinearResamplerFiltering")->args({"config"});
         // channel converter
         addAnnotation(make_smart<MAChannelConvertorConfigAnnotation>(lib));
         addAnnotation(make_smart<MAChannelConverterAnnotation>(lib));
