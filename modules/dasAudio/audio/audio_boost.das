@@ -123,6 +123,7 @@ class AudioChannel
             uint(MA_SAMPLE_RATE),
             ma_resample_algorithm ma_resample_algorithm_linear
         )
+        ma_resampler_disable_linear_filtering(unsafe(addr(resampler_config)))
         ma_resampler_init(unsafe(addr(resampler_config)), unsafe(addr(resampler)))
         // channel converter
         var channel_converter_config <- ma_channel_converter_config_init(
