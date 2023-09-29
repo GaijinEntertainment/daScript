@@ -7,6 +7,7 @@
 #include "daScript/simulate/bind_enum.h"
 
 #define MINIAUDIO_IMPLEMENTATION
+#define MA_DISABLE_LINEAR_RESAMPLER_FILTERING
 #include <miniaudio.h>
 #include "volume_mixer.h"
 #include "hrtf.h"
