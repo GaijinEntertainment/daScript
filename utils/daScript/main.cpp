@@ -151,6 +151,7 @@ bool compile ( const string & fn, const string & cppFn, bool dryRun ) {
                 tw << "};\n";
                 tw << "\n";
                 tw << "AotListBase impl(registerAotFunctions);\n";
+                program->writeStandaloneContext(tw);
                 // validation stuff
                 if ( paranoid_validation ) {
                     program->validateAotCpp(tw,*pctx);

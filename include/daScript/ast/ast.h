@@ -1432,7 +1432,7 @@ namespace das
         void allocateStack(TextWriter & logs);
         void deriveAliases(TextWriter & logs);
         bool simulate ( Context & context, TextWriter & logs, StackAllocator * sharedStack = nullptr );
-        uint64_t getInitSemanticHashWithDep( uint64_t initHash ) const;
+        uint64_t getInitSemanticHashWithDep( uint64_t initHash );
         void error ( const string & str, const string & extra, const string & fixme, const LineInfo & at, CompilationError cerr = CompilationError::unspecified );
         bool failed() const { return failToCompile || macroException; }
         static ExpressionPtr makeConst ( const LineInfo & at, const TypeDeclPtr & type, vec4f value );
@@ -1446,6 +1446,7 @@ namespace das
         void visit(Visitor & vis, bool visitGenerics = false);
         void setPrintFlags();
         void aotCpp ( Context & context, TextWriter & logs );
+        void writeStandaloneContext ( TextWriter & logs );
         void registerAotCpp ( TextWriter & logs, Context & context, bool headers = true );
         void validateAotCpp ( TextWriter & logs, Context & context );
         void buildMNLookup ( Context & context, const vector<FunctionPtr> & lookupFunctions, TextWriter & logs );
@@ -1491,6 +1492,7 @@ namespace das
         uint32_t                    globalStringHeapSize = 0;
         bool                        folding = false;
         bool                        reportingInferErrors = false;
+        uint64_t                    initSemanticHashWithDep = 0;
         union {
             struct {
                 bool    failToCompile : 1;

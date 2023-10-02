@@ -3273,7 +3273,7 @@ namespace das
         return errors.size() == 0;
     }
 
-    uint64_t Program::getInitSemanticHashWithDep( uint64_t initHash ) const {
+    uint64_t Program::getInitSemanticHashWithDep( uint64_t initHash ) {
         vector<const Variable *> globs;
         globs.reserve(totalVariables);
         for (auto & pm : library.modules) {
@@ -3293,7 +3293,8 @@ namespace das
                 res = (res ^ pfun->aotHash) * fnv_prime;
             });
         }
-        return res;
+        initSemanticHashWithDep = res; // pass it to the standalone context registration
+        return initSemanticHashWithDep;
     }
 
     void Program::linkCppAot ( Context & context, AotLibrary & aotLib, TextWriter & logs ) {
