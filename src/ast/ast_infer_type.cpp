@@ -2231,8 +2231,25 @@ namespace das {
             } else {
                 if ( !safeExpression(expr) ) {
                     if ( !expr->subexpr->type->temporary ) { // address of temp type is temp, but its safe
-                        error("address of reference requires unsafe",  "", "",
-                            expr->at, CompilationError::unsafe);
+                        bool isSelf = false;
+                        if ( func && func->isClassMethod ) {
+                            ExprVar * mbs = nullptr;
+                            if ( expr->subexpr->rtti_isVar() ) {
+                                mbs = static_cast<ExprVar *>(expr->subexpr.get());
+                            } else if ( expr->subexpr->rtti_isR2V() ) {
+                                auto r2v = static_cast<ExprRef2Value *>(expr->subexpr.get());
+                                if ( r2v->subexpr->rtti_isVar() ) {
+                                    mbs = static_cast<ExprVar *>(r2v->subexpr.get());
+                                }
+                            }
+                            if ( mbs && mbs->name=="self" && mbs->argument==true ) {
+                                isSelf = true;
+                            }
+                        }
+                        if ( !isSelf ) {
+                            error("address of reference requires unsafe",  "", "",
+                                expr->at, CompilationError::unsafe);
+                        }
                     }
                 }
                 expr->type = make_smart<TypeDecl>(Type::tPointer);
