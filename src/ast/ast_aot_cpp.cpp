@@ -104,6 +104,17 @@ namespace das {
         }
     }
 
+    string aotFunctionName ( string str ) {
+        string result;
+        for (char c : str) {
+            if (c == '`')
+                result += "__";
+            else
+                result += c;
+        }
+        return result;
+    }
+
     string das_to_cppString ( Type t ) {
         return g_cppTypeTable.find(t);
     }
@@ -694,6 +705,18 @@ namespace das {
         }
     }
 
+    vector<Function *> collectUsedFunctions ( vector<Module *> & modules, int totalFunctions ) {
+        vector<Function *> fnn; fnn.reserve(totalFunctions);
+        for (auto & pm : modules) {
+            pm->functions.foreach([&](auto pfun){
+                if (pfun->index < 0 || !pfun->used)
+                    return;
+                fnn.push_back(pfun.get());
+            });
+        }
+        return fnn;
+    }
+
     string aotSuffixNameEx ( const string & funcName, const char * suffix ) {
         string name;
         bool prefix = false;
@@ -1050,14 +1073,21 @@ namespace das {
             return Visitor::visit(that);
         }
     // program body
-        virtual void preVisitProgramBody ( Program * prog, Module * ) override {
+        virtual void preVisitProgramBody ( Program * prog, Module * that ) override {
             // functions
             ss << "\n";
-            prog->thisModule->functions.foreach([&](auto fn){
-                if ( !fn->builtIn && !fn->noAot ) {
-                    ss << describeCppFunc(fn.get(),&collector) << ";\n";
-                }
-            });
+            // print forward declarations
+            vector<Function *> fnn; fnn.reserve(prog->totalFunctions);
+            prog->library.foreach([&](Module * pm) {
+                pm->functions.foreach([&](auto pfun) {
+                    if ( pfun->index < 0 || !pfun->used ) return true;
+                    if ( pfun->builtIn || pfun->noAot) return true;
+                    auto needInline = that == pm;
+                    ss << describeCppFunc(pfun.get(), &collector, true, needInline) << ";\n";
+                    return true;
+                });
+                return true;
+            }, "*");
             ss << "\n";
         }
     // global let body
@@ -1074,6 +1104,25 @@ namespace das {
             }
         }
         virtual void visitGlobalLetBody ( Program * prog ) override {
+            vector<Variable*> globals;
+            prog->library.foreach([&]( Module * pm ) {
+                pm->globals.foreach([&]( VariablePtr pvar ){
+                    if ( pvar->index < 0 || !pvar->used ) return;
+                    if ( pvar->module == prog->thisModule.get() ) return;
+                    globals.push_back(pvar.get());
+                });
+                return true;
+            }, "*");
+
+            for ( auto var : globals ) {
+                preVisitGlobalLet(var);
+                if ( var->init ) {
+                    preVisitGlobalLetInit(var, var->init.get());
+                    var->init = var->init->visit(*this);
+                    var->init = visitGlobalLetInit(var, var->init.get());
+                }
+                auto varn = visitGlobalLet(var);
+            }
             tab --;
             ss << "}\n";
             Visitor::visitGlobalLetBody(prog);
@@ -3372,15 +3421,42 @@ namespace das {
         return hash;
     }
 
-    void Program::registerAotCpp ( TextWriter & logs, Context & context, bool headers ) {
-        vector<Function *> fnn; fnn.reserve(totalFunctions);
-        for (auto & pm : library.modules) {
-            pm->functions.foreach([&](auto pfun){
-                if (pfun->index < 0 || !pfun->used)
-                    return;
-                fnn.push_back(pfun.get());
-            });
+    void Program::writeStandaloneContextMethods ( TextWriter & logs ) {
+        vector<Function *> fnn = collectUsedFunctions(library.modules, totalFunctions);
+        BlockVariableCollector collector;
+
+        for ( auto fn : fnn ) {
+            if ( !fn->exports ) continue;
+            logs << "    auto " << aotFunctionName(fn->getOrigin() ? fn->getOrigin()->name : fn->name) << " ( ";
+        // describe arguments
+            for ( auto & var : fn->arguments ) {
+                if (isLocalVec(var->type)) {
+                    describeLocalCppType(logs, var->type);
+                } else {
+                    logs << describeCppType(var->type);
+                }
+                logs << " ";
+                if ( var->type->isRefType() ) {
+                    logs << "& ";
+                }
+                logs << collector.getVarName(var);
+                bool last = &var == &fn->arguments.back();
+                if ( ! last ) logs << ", ";
+            }
+            logs << " ) -> ";
+            describeLocalCppType(logs,fn->result,CpptSubstitureRef::no);
+            logs << " {\n";
+            logs << "        return " << aotFuncName(fn) << "(this";
+            for ( auto & var : fn->arguments ) {
+                logs << ", " << collector.getVarName(var);
+            }
+            logs << "); \n";
+            logs << "    }\n\n";
         }
+    }
+
+    void Program::registerAotCpp ( TextWriter & logs, Context & context, bool headers ) {
+        vector<Function *> fnn = collectUsedFunctions(library.modules, totalFunctions);
         if ( headers ) {
             logs << "\nvoid registerAot ( AotLibrary & aotLib )\n{\n";
         }
@@ -3420,13 +3496,16 @@ namespace das {
 
     void Program::writeStandaloneContext ( TextWriter & logs ) {
 
-        logs << "class StandaloneContext : Context {\n";
+        logs << "\n\n";
+        logs << "class StandaloneContext : public Context {\n";
+        logs << "public: \n";
+        writeStandaloneContextMethods(logs);
         logs << "    StandaloneContext() {\n";
 
         auto disableInit = options.getBoolOption("no_init", policies.no_init);
         logs << "    auto & context = *this;\n";
-        logs << "    context.breakOnException |= " << policies.debugger << ";\n";
-        logs << "    context.persistent = " << options.getBoolOption("persistent_heap", policies.persistent_heap) << " ;\n";
+        logs << "    context.breakOnException |= " << policies.debugger << " /*policies.debugger*/;\n";
+        logs << "    context.persistent = " << options.getBoolOption("persistent_heap", policies.persistent_heap) << " /*options.getBoolOption(\"persistent_heap\", policies.persistent_heap)*/;\n";
         logs << "    if ( context.persistent ) {\n";
         logs << "        context.heap = make_smart<PersistentHeapAllocator>();\n";
         logs << "        context.stringHeap = make_smart<PersistentStringAllocator>();\n";
@@ -3434,17 +3513,17 @@ namespace das {
         logs << "        context.heap = make_smart<LinearHeapAllocator>();\n";
         logs << "        context.stringHeap = make_smart<LinearStringAllocator>();\n";
         logs << "    }\n";
-        logs << "    context.heap->setInitialSize ( " << options.getIntOption("heap_size_hint", policies.heap_size_hint) << " );\n";
-        logs << "    context.stringHeap->setInitialSize ( " << options.getIntOption("string_heap_size_hint", policies.string_heap_size_hint) << " );\n";
+        logs << "    context.heap->setInitialSize ( " << options.getIntOption("heap_size_hint", policies.heap_size_hint) << " /*options.getIntOption(\"heap_size_hint\", policies.heap_size_hint)*/);\n";
+        logs << "    context.stringHeap->setInitialSize ( " << options.getIntOption("string_heap_size_hint", policies.string_heap_size_hint) << " /*options.getIntOption(\"string_heap_size_hint\", policies.string_heap_size_hint)*/);\n";
         logs << "    context.constStringHeap = make_shared<ConstStringAllocator>();\n";
-        logs << "    if ( " << globalStringHeapSize << " ) {\n";
-        logs << "        context.constStringHeap->setInitialSize(" << globalStringHeapSize << ");\n";
+        logs << "    if ( " << globalStringHeapSize << " /*globalStringHeapSize*/) {\n";
+        logs << "        context.constStringHeap->setInitialSize(" << globalStringHeapSize << "/*globalStringHeapSize*/);\n";
         logs << "    }\n";
 
         // logs << "DebugInfoHelper helper(context.debugInfo);\n";
         // logs << "helper.rtti = " << options.getBoolOption("rtti",policies.rtti) << ";\n";
         // logs << "context.thisHelper = &helper;\n";
-        logs << "    context.globalVariables = (GlobalVariable *) context.code->allocate( " << totalVariables << "*sizeof(GlobalVariable) );\n";
+        logs << "    context.globalVariables = (GlobalVariable *) context.code->allocate( " << totalVariables << "/*totalVariables*/*sizeof(GlobalVariable) );\n";
         logs << "    context.globalsSize = 0;\n";
         logs << "    context.sharedSize = 0;\n";
 
@@ -3460,12 +3539,12 @@ namespace das {
                     }
                     logs << "     // totalVariables  "  << "\n";
                     logs << "    {\n";
-                    logs << "        auto & gvar = context.globalVariables[" << pvar->index << "];\n";
-                    logs << "        gvar.name = context.code->allocateName(\"" << pvar->name << "\");\n";
-                    logs << "        gvar.size = " << pvar->type->getSizeOf() << ";\n";
+                    logs << "        auto & gvar = context.globalVariables[" << pvar->index << "/*pvar->index*/];\n";
+                    logs << "        gvar.name = context.code->allocateName(\"" << pvar->name << "\"/*pvar->name*/);\n";
+                    logs << "        gvar.size = " << pvar->type->getSizeOf() << "/*pvar->type->getSizeOf()*/;\n";
                     // logs << "        gvar.debugInfo = helper.makeVariableDebugInfo(*pvar);\n";
                     logs << "        gvar.flags = 0;\n";
-                    logs << "        if ( " << pvar->global_shared << " ) {\n";
+                    logs << "        if ( " << pvar->global_shared << " /*pvar->global_shared*/) {\n";
                     logs << "            gvar.offset = context.sharedSize;\n";
                     logs << "            gvar.shared = true;\n";
                     logs << "            context.sharedSize = (context.sharedSize + gvar.size + 0xf) & ~0xf;\n";
@@ -3473,7 +3552,7 @@ namespace das {
                     logs << "            gvar.offset = context.globalsSize;\n";
                     logs << "            context.globalsSize = (context.globalsSize + gvar.size + 0xf) & ~0xf;\n";
                     logs << "        }\n";
-                    logs << "        gvar.mangledNameHash = " << pvar->getMangledNameHash() << ";\n";
+                    logs << "        gvar.mangledNameHash = 0x" << HEX << pvar->getMangledNameHash() << DEC  << "/*pvar->getMangledNameHash()*/;\n";
                     logs << "        gvar.init = nullptr;\n";
                     logs << "    }\n";
                 });
@@ -3482,12 +3561,12 @@ namespace das {
         logs << "    context.globals = (char *) das_aligned_alloc16(context.globalsSize);\n";
         logs << "    context.shared = (char *) das_aligned_alloc16(context.sharedSize);\n";
         logs << "    context.sharedOwner = true;\n";
-        logs << "    context.totalVariables = " << totalVariables << ";\n";
-        logs << "    context.functions = (SimFunction *) context.code->allocate( " << totalFunctions << "*sizeof(SimFunction) );\n";
-        logs << "    context.totalFunctions = " << totalFunctions << ";\n";
-        logs << "    auto debuggerOrGC = " << getDebugger() << " || " << options.getBoolOption("gc", false) << ";\n";
+        logs << "    context.totalVariables = " << totalVariables << "/*totalVariables*/;\n";
+        logs << "    context.functions = (SimFunction *) context.code->allocate( " << totalFunctions << "/*totalFunctions*/*sizeof(SimFunction) );\n";
+        logs << "    context.totalFunctions = " << totalFunctions << "/*totalFunctions*/;\n";
+        logs << "    auto debuggerOrGC = "  << getDebugger()                      << "/*getDebugger()*/ || "
+                                            << options.getBoolOption("gc", false) << "/*options.getBoolOption(\"gc\", false)*/;\n";
         vector<FunctionPtr> lookupFunctionTable;
-        // logs << "das_hash_map<uint64_t,Function *> fnByMnh;\n";
         logs << "    bool anyPInvoke = false;\n";
         if ( totalFunctions ) {
             for (auto & pm : library.modules) {
@@ -3501,11 +3580,11 @@ namespace das {
                     }
                     logs << "     // totalFunctions  "  << "\n";
                     logs << "    {\n";
-                    logs << "        string mangledName = \"" << pfun->getMangledName() << "\";\n";
+                    logs << "        string mangledName = \"" << pfun->getMangledName() << "\"/*pfun->getMangledName()*/;\n";
                     logs << "        auto MNH = hash_blockz64((uint8_t *)mangledName.c_str());\n";
                     // logs << "        fnByMnh[MNH] = pfun.get();\n";
-                    logs << "        auto & gfun = context.functions[" << pfun->index << "];\n";
-                    logs << "        gfun.name = context.code->allocateName(\"" << pfun->name << "\");\n";
+                    logs << "        auto & gfun = context.functions[" << pfun->index << "/*pfun->index*/];\n";
+                    logs << "        gfun.name = context.code->allocateName(\"" << pfun->name << "\"/*pfun->name*/);\n";
                     logs << "        gfun.mangledName = context.code->allocateName(mangledName);\n";
                     // logs << "        gfun.debugInfo = helper.makeFunctionDebugInfo(*pfun);\n";
 
@@ -3519,21 +3598,22 @@ namespace das {
                     // logs << "            helper.appendGlobalVariables(gfun.debugInfo, pfun);\n";
                     // logs << "        }\n";
 
-                    logs << "        gfun.stackSize = " << pfun->totalStackSize << ";\n";
+                    logs << "        gfun.stackSize = " << pfun->totalStackSize << "/*pfun->totalStackSize*/;\n";
                     logs << "        gfun.mangledNameHash = MNH;\n";
                     logs << "        gfun.aotFunction = nullptr;\n";
                     logs << "        gfun.flags = 0;\n";
-                    logs << "        gfun.fastcall = " << pfun->fastCall << ";\n";
-                    logs << "        gfun.unsafe = " << pfun->unsafeOperation << ";\n";
-                    logs << "        if ( " << (pfun->result->isRefType() && !pfun->result->ref) << " ) {\n";
+                    logs << "        gfun.fastcall = " << pfun->fastCall << "/*pfun->fastCall*/;\n";
+                    logs << "        gfun.unsafe = " << pfun->unsafeOperation << "/*pfun->unsafeOperation*/;\n";
+                    logs << "        if ( " << (pfun->result->isRefType() && !pfun->result->ref)
+                                        << "/*(pfun->result->isRefType() && !pfun->result->ref)*/ ) {\n";
                     logs << "            gfun.cmres = true;\n";
                     logs << "        }\n";
-                    logs << "        if ( " << (pfun->module->builtIn && !pfun->module->promoted) << " ) {\n";
+                    logs << "        if ( " << (pfun->module->builtIn && !pfun->module->promoted)
+                                        << "/*(pfun->module->builtIn && !pfun->module->promoted)*/ ) {\n";
                     logs << "            gfun.builtin = true;\n";
                     logs << "        }\n";
-                    // we do aot linking
-                    // logs << "        gfun.code = pfun->simulate(context);\n";
-                    logs << "        if ( " << pfun->pinvoke << " ) {\n";
+
+                    logs << "        if ( " << pfun->pinvoke << "/*pfun->pinvoke*/ ) {\n";
                     logs << "            anyPInvoke = true;\n";
                     logs << "            gfun.pinvoke = true;\n";
                     logs << "        }\n";
@@ -3543,43 +3623,8 @@ namespace das {
             }
         }
 
-        // // aot does not use this all?
-        // if ( totalVariables ) {
-        //     logs << " // gvars  "  << "\n";
-        //     for (auto & pm : library.modules ) {
-        //         pm->globals.foreach([&](auto pvar){
-        //             if (!pvar->used)
-        //                 return;
-        //             logs << "auto & gvar = context.globalVariables[" << pvar->index << "];\n";
-        //             logs << "if ( " << (!folding && pvar->init) << " ) {\n";
-        //             logs << "    if ( " << (disableInit && !pvar->init->rtti_isConstant()) << " ) {\n";
-        //             logs << "    error(\"[init] is disabled in the options or CodeOfPolicies\",\n";
-        //             logs << "        \"internal compiler error. [init] function made it all the way to simulate somehow\", \"\",\n";
-        //             logs << "            pvar->at, CompilationError::no_init);\n";
-        //             logs << "    }\n";
-        //             logs << "    if ( " << pvar->init->rtti_isMakeLocal() << " ) {\n";
-        //             logs << "    if ( " << pvar->global_shared << " ) {\n";
-        //             // logs << "            auto sl = context.code->makeNode<SimNode_GetSharedMnh>(" << pvar->init->at << ", " << pvar->stackTop << ", " << pvar->getMangledNameHash() << ");\n";
-        //             // logs << "            auto sr = ExprLet::simulateInit(context, pvar, false);\n";
-        //             // logs << "            auto gvari = context.code->makeNode<SimNode_SetLocalRefAndEval>(" << pfun->pinvoke << ", sl, sr, uint32_t(sizeof(Prologue)));\n";
-        //             // logs << "            auto cndb = context.code->makeNode<SimNode_GetArgument>(" << pfun->pinvoke << ", 1); // arg 1 of init script is \"init_globals\"\n";
-        //             // logs << "            gvar.init = context.code->makeNode<SimNode_IfThen>(" << pfun->pinvoke << ", cndb, gvari);\n";
-        //             logs << "        } else {\n";
-        //             // logs << "            auto sl = context.code->makeNode<SimNode_GetGlobalMnh>(pvar->init->at, pvar->stackTop, pvar->getMangledNameHash());\n";
-        //             // logs << "            auto sr = ExprLet::simulateInit(context, pvar, false);\n";
-        //             // logs << "            gvar.init = context.code->makeNode<SimNode_SetLocalRefAndEval>(pvar->init->at, sl, sr, uint32_t(sizeof(Prologue)));\n";
-        //             logs << "        }\n";
-        //             logs << "    } else {\n";
-        //             // logs << "        gvar.init = ExprLet::simulateInit(context, pvar, false);\n";
-        //             logs << "    }\n";
-        //             logs << "} else {\n";
-        //             logs << "    gvar.init = nullptr;\n";
-        //             logs << "}\n";
-
-        //         });
-        //     }
-        // }
-        logs << "    if ( anyPInvoke || " << (policies.threadlock_context || policies.debugger) << " ) {\n";
+        logs << "    if ( anyPInvoke || " << (policies.threadlock_context || policies.debugger)
+                                        << "/*(policies.threadlock_context || policies.debugger)*/ ) {\n";
         logs << "        context.contextMutex = new recursive_mutex;\n";
         logs << "    }\n";
 
@@ -3588,7 +3633,9 @@ namespace das {
 
         for ( const auto & fn : lookupFunctionTable ) {
             auto mnh = fn->getMangledNameHash();
-            logs << "    (*context.tabMnLookup)["<< mnh <<"] = context.functions + " << fn->index << ";\n";
+
+            logs << "    // " << fn->getMangledName() << "\n";
+            logs << "    (*context.tabMnLookup)["<< mnh <<"/*mnh*/] = context.functions + " << fn->index << "/*fn->index*/;\n";
         }
 
         logs << "    context.tabGMnLookup = make_shared<das_hash_map<uint64_t,uint32_t>>();\n";
@@ -3610,12 +3657,12 @@ namespace das {
             }
         }
 
-        vector<uint64_t> fnn; fnn.reserve(totalFunctions);
+        vector<pair<string, uint64_t>> fnn; fnn.reserve(totalFunctions);
         for (auto & pm : library.modules) {
             pm->functions.foreach([&](auto pfun){
                 if (pfun->index < 0 || !pfun->used)
                     return;
-                fnn.push_back(getFunctionAotHash(pfun.get()));
+                fnn.emplace_back(pfun->name, getFunctionAotHash(pfun.get()));
             });
         }
 
@@ -3623,10 +3670,12 @@ namespace das {
         logs << "    SimFunction * fn = nullptr;\n";
 
         for ( int fni=0, fnis=totalFunctions; fni!=fnis; ++fni ) {
+            const auto & [name, aotHash] = fnn[fni];
             logs << " // fnis = " << fni << "\n";
-            logs << "    fn = &context.functions[" << fni << "];\n";
+            logs << "    fn = &context.functions[" << fni << "/*fni*/];\n";
             logs << "    {\n";
-            logs << "        uint64_t semHash = "<< fnn[fni] <<";\n";
+            logs << "        // " << name << "\n";
+            logs << "        uint64_t semHash = 0x" << HEX << aotHash << DEC << "/*fnn[fni]*/;\n";
             logs << "        auto it = aotLib.find(semHash);\n";
             logs << "        if ( it != aotLib.end() ) {\n";
             logs << "            fn->code = (it->second)(context);\n";
@@ -3636,25 +3685,30 @@ namespace das {
             logs << "        }\n";
             logs << "    }\n";
         }
+    // aot init
+        if ( initSemanticHashWithDep ) {
+            logs << "    {\n";
+            logs << "        uint64_t semHash = 0x" << HEX << initSemanticHashWithDep << DEC <<"/*initSemanticHashWithDep*/;\n";
+            logs << "        auto it = aotLib.find(semHash);\n";
+            logs << "        if ( it != aotLib.end() ) {\n";
+            logs << "            (it->second)(context);\n";
+            logs << "        }\n";
+            logs << "    }\n";
+        }
 
-        uint64_t semH = initSemanticHashWithDep;
-        // aot init
-        logs << "    {\n";
-        logs << "        uint64_t semHash = "<< semH <<";\n";
-        logs << "        auto it = aotLib.find(semHash);\n";
-        logs << "        if ( it != aotLib.end() ) {\n";
-        logs << "            fn->code = (it->second)(context);\n";
-        logs << "            fn->aot = true;\n";
-        logs << "            auto fcb = (SimNode_CallBase *) fn->code;\n";
-        logs << "            fn->aotFunction = fcb->aotFunction;\n";
-        logs << "        }\n";
-        logs << "    }\n";
-
-        logs << "    context.relocateCode(true);\n";
-        logs << "    context.relocateCode();\n";
+        logs << "    context.runInitScript();\n";
 
         logs << "    }\n";
         logs << "};\n";
+
+        logs << "#ifdef STANDALONE_CONTEXT_TESTS\n";
+        logs << "static Context * registerStandaloneTest ( ) {\n";
+        logs << "    auto ctx = new StandaloneContext();\n";
+        logs << "    return ctx;\n";
+        logs << "}\n";
+        logs << "StandaloneContextNode node(registerStandaloneTest);\n";
+        logs << "#endif\n";
+
     }
 
     void Program::aotCpp ( Context & context, TextWriter & logs ) {

@@ -34,7 +34,7 @@ bool saveToFile ( const string & fname, const string & str ) {
     return true;
 }
 
-bool compile ( const string & fn, const string & cppFn, bool dryRun ) {
+bool compile ( const string & fn, const string & cppFn, bool dryRun, bool standaloneContext ) {
     auto access = get_file_access((char*)(projectFile.empty() ? nullptr : projectFile.c_str()));
     ModuleGroup dummyGroup;
     CodeOfPolicies policies;
@@ -79,17 +79,21 @@ bool compile ( const string & fn, const string & cppFn, bool dryRun ) {
                         tw << " // require " << mod->name << "\n";
                     }
                     if ( mod->aotRequire(tw)==ModuleAotType::no_aot ) {
-                        tw << "  // AOT disabled due to this module\n";
-                        noAotModule = true;
+                        if ( standaloneContext ) {
+                            tw << "  // no_aot ignored in standalone context\n";
+                        } else {
+                            tw << "  // AOT disabled due to this module\n";
+                            noAotModule = true;
+                        }
                     }
                 }
                 return true;
             },"*");
-            if (dryRun) {
+            if ( dryRun ) {
                 tout << "dry run success, no changes will be written\n";
                 return true;
             }
-            if (noAotOption) {
+            if ( noAotOption && !standaloneContext ) {
                 TextWriter noTw;
                 if (!noAotModule)
                   noTw << "// AOT disabled due to options no_aot=true. There are no modules which require no_aot\n\n";
@@ -140,7 +144,8 @@ bool compile ( const string & fn, const string & cppFn, bool dryRun ) {
                 tw << "#endif\n";
                 tw << "\n";
                 tw << "namespace das {\n";
-                tw << "namespace " << program->thisNamespace << " {\n"; // anonymous
+
+                tw << "namespace " << (program->thisModuleName.empty() ? program->thisNamespace : program->thisModuleName) << " {\n"; // anonymous
                 daScriptEnvironment::bound->g_Program = program;    // setting it for the AOT macros
                 program->aotCpp(*pctx, tw);
                 daScriptEnvironment::bound->g_Program.reset();
@@ -151,13 +156,14 @@ bool compile ( const string & fn, const string & cppFn, bool dryRun ) {
                 tw << "};\n";
                 tw << "\n";
                 tw << "AotListBase impl(registerAotFunctions);\n";
-                program->writeStandaloneContext(tw);
+                if ( program->thisModuleName.empty() )
+                    program->writeStandaloneContext(tw);
                 // validation stuff
                 if ( paranoid_validation ) {
                     program->validateAotCpp(tw,*pctx);
                     tw << "\n";
                 }
-                // footter
+                // footer
                 tw << "}\n";
                 tw << "}\n";
                 tw << "#if defined(_MSC_VER)\n";
@@ -190,6 +196,7 @@ int das_aot_main ( int argc, char * argv[] ) {
     }
     bool dryRun = false;
     bool scriptArgs = false;
+    bool standaloneContext = false;
     if ( argc>3  ) {
         for (int ai = 4; ai != argc; ++ai) {
             if ( strcmp(argv[ai],"-q")==0 ) {
@@ -198,6 +205,8 @@ int das_aot_main ( int argc, char * argv[] ) {
                 paranoid_validation = true;
             } else if ( strcmp(argv[ai],"-dry-run")==0 ) {
                 dryRun = true;
+            } else if ( strcmp(argv[ai],"-standalone-context")==0 ) {
+                standaloneContext = true;
             } else if ( strcmp(argv[ai],"-project")==0 ) {
                 if ( ai+1 > argc ) {
                     tout << "das-project requires argument";
@@ -264,7 +273,7 @@ int das_aot_main ( int argc, char * argv[] ) {
     #include "modules/external_need.inc"
     Module::Initialize();
     daScriptEnvironment::bound->g_isInAot = true;
-    bool compiled = compile(argv[2], argv[3], dryRun);
+    bool compiled = compile(argv[2], argv[3], dryRun, standaloneContext);
     Module::Shutdown();
     return compiled ? 0 : -1;
 }

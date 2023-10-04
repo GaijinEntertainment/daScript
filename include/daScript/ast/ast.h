@@ -1299,6 +1299,7 @@ namespace das
 
     struct CodeOfPolicies {
         bool        aot = false;                        // enable AOT
+        bool        standalone_context = false;         // generate standalone context class in aot mode
         bool        aot_module = false;                 // this is how AOT tool knows module is module, and not an entry point
         bool        completion = false;                 // this code is being compiled for 'completion' mode
         bool        export_all = false;                 // when user compiles, export all (public?) functions
@@ -1447,6 +1448,7 @@ namespace das
         void setPrintFlags();
         void aotCpp ( Context & context, TextWriter & logs );
         void writeStandaloneContext ( TextWriter & logs );
+        void writeStandaloneContextMethods ( TextWriter & logs );
         void registerAotCpp ( TextWriter & logs, Context & context, bool headers = true );
         void validateAotCpp ( TextWriter & logs, Context & context );
         void buildMNLookup ( Context & context, const vector<FunctionPtr> & lookupFunctions, TextWriter & logs );

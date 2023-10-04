@@ -38,6 +38,34 @@ bool with_program_serialized ( F callback, ProgramPtr program ) {
     return callback(program);
 }
 
+StandaloneContextNode * StandaloneContextNode::head = nullptr;
+
+bool run_all_standalone_context_tests () {
+    vector<Context *> contexts;
+    while ( auto h = StandaloneContextNode::head ) {
+        StandaloneContextNode::head = h->tail;
+        contexts.push_back(h->regFn());
+    }
+    bool res = true;
+    for ( auto context : contexts ) {
+        auto fn_tests = context->findFunctions("test");
+        DAS_ASSERTF(!fn_tests.empty(), "expected to see test inside a testing context");
+        for ( auto fn_test: fn_tests ) {
+            bool result = cast<bool>::to(context->eval(fn_test, nullptr));
+            if ( auto ex = context->getException() ) {
+                tout << "exception: " << ex << "\n";
+                res = false;
+            }
+            if ( !result ) {
+                tout << "failed\n";
+                res = false;
+            }
+        }
+
+    }
+    return res;
+}
+
 bool compilation_fail_test ( const string & fn, bool, bool ) {
     uint64_t timeStamp = ref_time_ticks();
     tout << fn << " ";
@@ -509,6 +537,7 @@ int main( int argc, char * argv[] ) {
 #endif
     uint64_t timeStamp = ref_time_ticks();
     bool ok = true;
+    // ok = run_all_standalone_context_tests() && ok;
     ok = run_compilation_fail_tests(getDasRoot() + "/examples/test/compilation_fail_tests") && ok;
     ok = run_unit_tests(getDasRoot() +  "/examples/test/unit_tests",    true,  false) && ok;
     ok = run_unit_tests(getDasRoot() +  "/examples/test/optimizations", false, false) && ok;
