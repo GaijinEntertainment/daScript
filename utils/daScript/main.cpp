@@ -145,7 +145,7 @@ bool compile ( const string & fn, const string & cppFn, bool dryRun, bool standa
                 tw << "\n";
                 tw << "namespace das {\n";
 
-                tw << "namespace " << (program->thisModuleName.empty() ? program->thisNamespace : program->thisModuleName) << " {\n"; // anonymous
+                tw << "namespace " << program->thisNamespace << " {\n"; // anonymous
                 daScriptEnvironment::bound->g_Program = program;    // setting it for the AOT macros
                 program->aotCpp(*pctx, tw);
                 daScriptEnvironment::bound->g_Program.reset();

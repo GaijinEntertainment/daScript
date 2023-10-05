@@ -3427,6 +3427,7 @@ namespace das {
 
         for ( auto fn : fnn ) {
             if ( !fn->exports ) continue;
+            if ( fn->module != thisModule.get() ) continue;
             logs << "    auto " << aotFunctionName(fn->getOrigin() ? fn->getOrigin()->name : fn->name) << " ( ";
         // describe arguments
             for ( auto & var : fn->arguments ) {
