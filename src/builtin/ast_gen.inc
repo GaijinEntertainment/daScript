@@ -18,18 +18,19 @@ protected:
   int _das_class_method_offset[12];
 public:
   AstFunctionAnnotation_Adapter ( const StructInfo * info ) {
-      _das_class_method_offset[__fn_transform] = adapt_field_offset("transform",info);
-      _das_class_method_offset[__fn_verifyCall] = adapt_field_offset("verifyCall",info);
-      _das_class_method_offset[__fn_apply] = adapt_field_offset("apply",info);
-      _das_class_method_offset[__fn_generic_apply] = adapt_field_offset("generic_apply",info);
-      _das_class_method_offset[__fn_finish] = adapt_field_offset("finish",info);
-      _das_class_method_offset[__fn_patch] = adapt_field_offset("patch",info);
-      _das_class_method_offset[__fn_fixup] = adapt_field_offset("fixup",info);
-      _das_class_method_offset[__fn_lint] = adapt_field_offset("lint",info);
-      _das_class_method_offset[__fn_complete] = adapt_field_offset("complete",info);
-      _das_class_method_offset[__fn_isCompatible] = adapt_field_offset("isCompatible",info);
-      _das_class_method_offset[__fn_isSpecialized] = adapt_field_offset("isSpecialized",info);
-      _das_class_method_offset[__fn_appendToMangledName] = adapt_field_offset("appendToMangledName",info);
+      uint32_t index = 0;
+      _das_class_method_offset[__fn_transform] = adapt_field_offset_ex("transform",info,index);
+      _das_class_method_offset[__fn_verifyCall] = adapt_field_offset_ex("verifyCall",info,index);
+      _das_class_method_offset[__fn_apply] = adapt_field_offset_ex("apply",info,index);
+      _das_class_method_offset[__fn_generic_apply] = adapt_field_offset_ex("generic_apply",info,index);
+      _das_class_method_offset[__fn_finish] = adapt_field_offset_ex("finish",info,index);
+      _das_class_method_offset[__fn_patch] = adapt_field_offset_ex("patch",info,index);
+      _das_class_method_offset[__fn_fixup] = adapt_field_offset_ex("fixup",info,index);
+      _das_class_method_offset[__fn_lint] = adapt_field_offset_ex("lint",info,index);
+      _das_class_method_offset[__fn_complete] = adapt_field_offset_ex("complete",info,index);
+      _das_class_method_offset[__fn_isCompatible] = adapt_field_offset_ex("isCompatible",info,index);
+      _das_class_method_offset[__fn_isSpecialized] = adapt_field_offset_ex("isSpecialized",info,index);
+      _das_class_method_offset[__fn_appendToMangledName] = adapt_field_offset_ex("appendToMangledName",info,index);
   }
   __forceinline Func get_transform ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_transform]);
@@ -151,8 +152,9 @@ protected:
   int _das_class_method_offset[2];
 public:
   AstBlockAnnotation_Adapter ( const StructInfo * info ) {
-      _das_class_method_offset[__fn_apply] = adapt_field_offset("apply",info);
-      _das_class_method_offset[__fn_finish] = adapt_field_offset("finish",info);
+      uint32_t index = 0;
+      _das_class_method_offset[__fn_apply] = adapt_field_offset_ex("apply",info,index);
+      _das_class_method_offset[__fn_finish] = adapt_field_offset_ex("finish",info,index);
   }
   __forceinline Func get_apply ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_apply]);
@@ -189,13 +191,14 @@ protected:
   int _das_class_method_offset[7];
 public:
   AstStructureAnnotation_Adapter ( const StructInfo * info ) {
-      _das_class_method_offset[__fn_apply] = adapt_field_offset("apply",info);
-      _das_class_method_offset[__fn_finish] = adapt_field_offset("finish",info);
-      _das_class_method_offset[__fn_patch] = adapt_field_offset("patch",info);
-      _das_class_method_offset[__fn_complete] = adapt_field_offset("complete",info);
-      _das_class_method_offset[__fn_aotPrefix] = adapt_field_offset("aotPrefix",info);
-      _das_class_method_offset[__fn_aotBody] = adapt_field_offset("aotBody",info);
-      _das_class_method_offset[__fn_aotSuffix] = adapt_field_offset("aotSuffix",info);
+      uint32_t index = 0;
+      _das_class_method_offset[__fn_apply] = adapt_field_offset_ex("apply",info,index);
+      _das_class_method_offset[__fn_finish] = adapt_field_offset_ex("finish",info,index);
+      _das_class_method_offset[__fn_patch] = adapt_field_offset_ex("patch",info,index);
+      _das_class_method_offset[__fn_complete] = adapt_field_offset_ex("complete",info,index);
+      _das_class_method_offset[__fn_aotPrefix] = adapt_field_offset_ex("aotPrefix",info,index);
+      _das_class_method_offset[__fn_aotBody] = adapt_field_offset_ex("aotBody",info,index);
+      _das_class_method_offset[__fn_aotSuffix] = adapt_field_offset_ex("aotSuffix",info,index);
   }
   __forceinline Func get_apply ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_apply]);
@@ -271,7 +274,8 @@ protected:
   int _das_class_method_offset[1];
 public:
   AstEnumerationAnnotation_Adapter ( const StructInfo * info ) {
-      _das_class_method_offset[__fn_apply] = adapt_field_offset("apply",info);
+      uint32_t index = 0;
+      _das_class_method_offset[__fn_apply] = adapt_field_offset_ex("apply",info,index);
   }
   __forceinline Func get_apply ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_apply]);
@@ -293,7 +297,8 @@ protected:
   int _das_class_method_offset[1];
 public:
   AstPassMacro_Adapter ( const StructInfo * info ) {
-      _das_class_method_offset[__fn_apply] = adapt_field_offset("apply",info);
+      uint32_t index = 0;
+      _das_class_method_offset[__fn_apply] = adapt_field_offset_ex("apply",info,index);
   }
   __forceinline Func get_apply ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_apply]);
@@ -317,9 +322,10 @@ protected:
   int _das_class_method_offset[3];
 public:
   AstVarianMacro_Adapter ( const StructInfo * info ) {
-      _das_class_method_offset[__fn_visitExprIsVariant] = adapt_field_offset("visitExprIsVariant",info);
-      _das_class_method_offset[__fn_visitExprAsVariant] = adapt_field_offset("visitExprAsVariant",info);
-      _das_class_method_offset[__fn_visitExprSafeAsVariant] = adapt_field_offset("visitExprSafeAsVariant",info);
+      uint32_t index = 0;
+      _das_class_method_offset[__fn_visitExprIsVariant] = adapt_field_offset_ex("visitExprIsVariant",info,index);
+      _das_class_method_offset[__fn_visitExprAsVariant] = adapt_field_offset_ex("visitExprAsVariant",info,index);
+      _das_class_method_offset[__fn_visitExprSafeAsVariant] = adapt_field_offset_ex("visitExprSafeAsVariant",info,index);
   }
   __forceinline Func get_visitExprIsVariant ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprIsVariant]);
@@ -359,7 +365,8 @@ protected:
   int _das_class_method_offset[1];
 public:
   AstForLoopMacro_Adapter ( const StructInfo * info ) {
-      _das_class_method_offset[__fn_visitExprFor] = adapt_field_offset("visitExprFor",info);
+      uint32_t index = 0;
+      _das_class_method_offset[__fn_visitExprFor] = adapt_field_offset_ex("visitExprFor",info,index);
   }
   __forceinline Func get_visitExprFor ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_visitExprFor]);
@@ -382,8 +389,9 @@ protected:
   int _das_class_method_offset[2];
 public:
   AstCaptureMacro_Adapter ( const StructInfo * info ) {
-      _das_class_method_offset[__fn_captureExpression] = adapt_field_offset("captureExpression",info);
-      _das_class_method_offset[__fn_captureFunction] = adapt_field_offset("captureFunction",info);
+      uint32_t index = 0;
+      _das_class_method_offset[__fn_captureExpression] = adapt_field_offset_ex("captureExpression",info,index);
+      _das_class_method_offset[__fn_captureFunction] = adapt_field_offset_ex("captureFunction",info,index);
   }
   __forceinline Func get_captureExpression ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_captureExpression]);
@@ -415,8 +423,9 @@ protected:
   int _das_class_method_offset[2];
 public:
   AstSimulateMacro_Adapter ( const StructInfo * info ) {
-      _das_class_method_offset[__fn_preSimulate] = adapt_field_offset("preSimulate",info);
-      _das_class_method_offset[__fn_simulate] = adapt_field_offset("simulate",info);
+      uint32_t index = 0;
+      _das_class_method_offset[__fn_preSimulate] = adapt_field_offset_ex("preSimulate",info,index);
+      _das_class_method_offset[__fn_simulate] = adapt_field_offset_ex("simulate",info,index);
   }
   __forceinline Func get_preSimulate ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_preSimulate]);
@@ -448,8 +457,9 @@ protected:
   int _das_class_method_offset[2];
 public:
   AstReaderMacro_Adapter ( const StructInfo * info ) {
-      _das_class_method_offset[__fn_accept] = adapt_field_offset("accept",info);
-      _das_class_method_offset[__fn_visit] = adapt_field_offset("visit",info);
+      uint32_t index = 0;
+      _das_class_method_offset[__fn_accept] = adapt_field_offset_ex("accept",info,index);
+      _das_class_method_offset[__fn_visit] = adapt_field_offset_ex("visit",info,index);
   }
   __forceinline Func get_accept ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_accept]);
@@ -498,25 +508,26 @@ protected:
   int _das_class_method_offset[19];
 public:
   AstCommentReader_Adapter ( const StructInfo * info ) {
-      _das_class_method_offset[__fn_open] = adapt_field_offset("open",info);
-      _das_class_method_offset[__fn_accept] = adapt_field_offset("accept",info);
-      _das_class_method_offset[__fn_close] = adapt_field_offset("close",info);
-      _das_class_method_offset[__fn_beforeStructure] = adapt_field_offset("beforeStructure",info);
-      _das_class_method_offset[__fn_afterStructure] = adapt_field_offset("afterStructure",info);
-      _das_class_method_offset[__fn_beforeStructureFields] = adapt_field_offset("beforeStructureFields",info);
-      _das_class_method_offset[__fn_afterStructureField] = adapt_field_offset("afterStructureField",info);
-      _das_class_method_offset[__fn_afterStructureFields] = adapt_field_offset("afterStructureFields",info);
-      _das_class_method_offset[__fn_beforeFunction] = adapt_field_offset("beforeFunction",info);
-      _das_class_method_offset[__fn_afterFunction] = adapt_field_offset("afterFunction",info);
-      _das_class_method_offset[__fn_beforeGlobalVariables] = adapt_field_offset("beforeGlobalVariables",info);
-      _das_class_method_offset[__fn_afterGlobalVariable] = adapt_field_offset("afterGlobalVariable",info);
-      _das_class_method_offset[__fn_afterGlobalVariables] = adapt_field_offset("afterGlobalVariables",info);
-      _das_class_method_offset[__fn_beforeVariant] = adapt_field_offset("beforeVariant",info);
-      _das_class_method_offset[__fn_afterVariant] = adapt_field_offset("afterVariant",info);
-      _das_class_method_offset[__fn_beforeEnumeration] = adapt_field_offset("beforeEnumeration",info);
-      _das_class_method_offset[__fn_afterEnumeration] = adapt_field_offset("afterEnumeration",info);
-      _das_class_method_offset[__fn_beforeAlias] = adapt_field_offset("beforeAlias",info);
-      _das_class_method_offset[__fn_afterAlias] = adapt_field_offset("afterAlias",info);
+      uint32_t index = 0;
+      _das_class_method_offset[__fn_open] = adapt_field_offset_ex("open",info,index);
+      _das_class_method_offset[__fn_accept] = adapt_field_offset_ex("accept",info,index);
+      _das_class_method_offset[__fn_close] = adapt_field_offset_ex("close",info,index);
+      _das_class_method_offset[__fn_beforeStructure] = adapt_field_offset_ex("beforeStructure",info,index);
+      _das_class_method_offset[__fn_afterStructure] = adapt_field_offset_ex("afterStructure",info,index);
+      _das_class_method_offset[__fn_beforeStructureFields] = adapt_field_offset_ex("beforeStructureFields",info,index);
+      _das_class_method_offset[__fn_afterStructureField] = adapt_field_offset_ex("afterStructureField",info,index);
+      _das_class_method_offset[__fn_afterStructureFields] = adapt_field_offset_ex("afterStructureFields",info,index);
+      _das_class_method_offset[__fn_beforeFunction] = adapt_field_offset_ex("beforeFunction",info,index);
+      _das_class_method_offset[__fn_afterFunction] = adapt_field_offset_ex("afterFunction",info,index);
+      _das_class_method_offset[__fn_beforeGlobalVariables] = adapt_field_offset_ex("beforeGlobalVariables",info,index);
+      _das_class_method_offset[__fn_afterGlobalVariable] = adapt_field_offset_ex("afterGlobalVariable",info,index);
+      _das_class_method_offset[__fn_afterGlobalVariables] = adapt_field_offset_ex("afterGlobalVariables",info,index);
+      _das_class_method_offset[__fn_beforeVariant] = adapt_field_offset_ex("beforeVariant",info,index);
+      _das_class_method_offset[__fn_afterVariant] = adapt_field_offset_ex("afterVariant",info,index);
+      _das_class_method_offset[__fn_beforeEnumeration] = adapt_field_offset_ex("beforeEnumeration",info,index);
+      _das_class_method_offset[__fn_afterEnumeration] = adapt_field_offset_ex("afterEnumeration",info,index);
+      _das_class_method_offset[__fn_beforeAlias] = adapt_field_offset_ex("beforeAlias",info,index);
+      _das_class_method_offset[__fn_afterAlias] = adapt_field_offset_ex("afterAlias",info,index);
   }
   __forceinline Func get_open ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_open]);
@@ -703,10 +714,11 @@ protected:
   int _das_class_method_offset[4];
 public:
   AstCallMacro_Adapter ( const StructInfo * info ) {
-      _das_class_method_offset[__fn_preVisit] = adapt_field_offset("preVisit",info);
-      _das_class_method_offset[__fn_visit] = adapt_field_offset("visit",info);
-      _das_class_method_offset[__fn_canVisitArgument] = adapt_field_offset("canVisitArgument",info);
-      _das_class_method_offset[__fn_canFoldReturnResult] = adapt_field_offset("canFoldReturnResult",info);
+      uint32_t index = 0;
+      _das_class_method_offset[__fn_preVisit] = adapt_field_offset_ex("preVisit",info,index);
+      _das_class_method_offset[__fn_visit] = adapt_field_offset_ex("visit",info,index);
+      _das_class_method_offset[__fn_canVisitArgument] = adapt_field_offset_ex("canVisitArgument",info,index);
+      _das_class_method_offset[__fn_canFoldReturnResult] = adapt_field_offset_ex("canFoldReturnResult",info,index);
   }
   __forceinline Func get_preVisit ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_preVisit]);
@@ -756,8 +768,9 @@ protected:
   int _das_class_method_offset[2];
 public:
   AstTypeInfoMacro_Adapter ( const StructInfo * info ) {
-      _das_class_method_offset[__fn_getAstChange] = adapt_field_offset("getAstChange",info);
-      _das_class_method_offset[__fn_getAstType] = adapt_field_offset("getAstType",info);
+      uint32_t index = 0;
+      _das_class_method_offset[__fn_getAstChange] = adapt_field_offset_ex("getAstChange",info,index);
+      _das_class_method_offset[__fn_getAstType] = adapt_field_offset_ex("getAstType",info,index);
   }
   __forceinline Func get_getAstChange ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_getAstChange]);

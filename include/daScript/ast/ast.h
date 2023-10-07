@@ -1517,6 +1517,7 @@ namespace das
 
     // access function from class adapter
     int adapt_field_offset ( const char * fName, const StructInfo * info );
+    int adapt_field_offset_ex ( const char * fName, const StructInfo * info, uint32_t & i );
     char * adapt_field ( const char * fName, char * pClass, const StructInfo * info );
     Func adapt ( const char * funcName, char * pClass, const StructInfo * info );
 

@@ -75,8 +75,9 @@ def log_cpp_class_adapter ( cpp_file:file; name:string; cinfo:TypeDeclPtr )
     fwrite(cpp_file, "  int _das_class_method_offset[{nmet}];\n")
     fwrite(cpp_file, "public:\n")
     fwrite(cpp_file, "  {name} ( const StructInfo * info ) \{\n")
+    fwrite(cpp_file, "      uint32_t index = 0;\n")
     for mn,mni in methods, count()
-        fwrite(cpp_file, "      _das_class_method_offset[__fn_{mn}] = adapt_field_offset(\"{mn}\",info);\n")
+        fwrite(cpp_file, "      _das_class_method_offset[__fn_{mn}] = adapt_field_offset_ex(\"{mn}\",info,index);\n")
     fwrite(cpp_file, "  \}\n")
     for mn,mt in methods,types
         // get
