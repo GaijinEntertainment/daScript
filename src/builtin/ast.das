@@ -168,6 +168,9 @@ class AstVisitor
 // module
     def abstract preVisitModule(mod:Module?) : void
     def abstract visitModule(mod:Module?) : void
+// type decl
+    def abstract preVisitExprTypeDecl(expr:smart_ptr<ExprTypeDecl>) : void
+    def abstract visitExprTypeDecl(expr:smart_ptr<ExprTypeDecl>) : ExpressionPtr
 // type
     def abstract preVisitTypeDecl(typ:TypeDeclPtr) : void
     def abstract visitTypeDecl(typ:TypeDeclPtr) : TypeDeclPtr

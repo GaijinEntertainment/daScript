@@ -105,9 +105,6 @@ namespace das {
 
 #define IMPL_VISIT_VOID(WHAT) IMPL_VISIT_VOID1(WHAT,WHAT)
 
-#define IMPL_ADAPT(WHAT) \
-    FN_PREVISIT(WHAT) = adapt("preVisit" #WHAT,pClass,info); \
-    FN_VISIT(WHAT) = adapt("visit" #WHAT,pClass,info);
 
 #define IMPL_BIND_EXPR(WHAT) \
     void VisitorAdapter::preVisit ( WHAT * expr ) \
@@ -119,168 +116,20 @@ namespace das {
         context = ctx;
         classPtr = pClass;
         // adapt
-        IMPL_ADAPT(Program);
-        FN_PREVISIT(ProgramBody) = adapt("preVisitProgramBody",pClass,info);
-        IMPL_ADAPT(Module);
-        IMPL_ADAPT(TypeDecl);
-        IMPL_ADAPT(Expression);
-        IMPL_ADAPT(Alias);
-        fnCanVisitEnumeration = adapt("canVisitEnumeration",pClass,info);
-        IMPL_ADAPT(Enumeration);
-        IMPL_ADAPT(EnumerationValue);
-        fnCanVisitStructure = adapt("canVisitStructure",pClass,info);
-        IMPL_ADAPT(Structure);
-        IMPL_ADAPT(StructureField);
-        fnCanVisitFunction = adapt("canVisitFunction",pClass,info);
-        fnCanVisitArgumentInit = adapt("canVisitFunctionArgumentInit",pClass,info);
-        IMPL_ADAPT(Function);
-        IMPL_ADAPT(FunctionArgument);
-        IMPL_ADAPT(FunctionArgumentInit);
-        IMPL_ADAPT(FunctionBody);
-        IMPL_ADAPT(ExprBlock);
-        IMPL_ADAPT(ExprBlockArgument);
-        IMPL_ADAPT(ExprBlockArgumentInit);
-        IMPL_ADAPT(ExprBlockExpression);
-        IMPL_ADAPT(ExprBlockFinal);
-        IMPL_ADAPT(ExprBlockFinalExpression);
-        IMPL_ADAPT(ExprLet);
-        IMPL_ADAPT(ExprLetVariable);
-        IMPL_ADAPT(ExprLetVariableInit);
-        fnCanVisitGlobalVariable = adapt("canVisitGlobalVariable",pClass,info);
-        IMPL_ADAPT(GlobalLet);
-        IMPL_ADAPT(GlobalLetVariable);
-        IMPL_ADAPT(GlobalLetVariableInit);
-        IMPL_ADAPT(ExprStringBuilder);
-        IMPL_ADAPT(ExprStringBuilderElement);
-        IMPL_ADAPT(ExprNew);
-        IMPL_ADAPT(ExprNewArgument);
-        IMPL_ADAPT(ExprNamedCall);
-        IMPL_ADAPT(ExprNamedCallArgument);
-        fnCanVisitCall = adapt("canVisitCall",pClass,info);
-        IMPL_ADAPT(ExprCall);
-        IMPL_ADAPT(ExprCallArgument);
-        IMPL_ADAPT(ExprLooksLikeCall);
-        IMPL_ADAPT(ExprLooksLikeCallArgument);
-        IMPL_ADAPT(ExprNullCoalescing);
-        FN_PREVISIT(ExprNullCoalescingDefault) = adapt("preVisitExprNullCoalescingDefault",pClass,info);
-        IMPL_ADAPT(ExprAt);
-        FN_PREVISIT(ExprAtIndex) = adapt("preVisitExprAtIndex",pClass,info);
-        IMPL_ADAPT(ExprSafeAt);
-        FN_PREVISIT(ExprSafeAtIndex) = adapt("preVisitExprSafeAtIndex",pClass,info);
-        IMPL_ADAPT(ExprIs);
-        FN_PREVISIT(ExprIsType) = adapt("preVisitExprIsType",pClass,info);
-        IMPL_ADAPT(ExprOp2);
-        FN_PREVISIT(ExprOp2Right) = adapt("preVisitExprOp2Right",pClass,info);
-        IMPL_ADAPT(ExprOp3);
-        FN_PREVISIT(ExprOp3Left) = adapt("preVisitExprOp3Left",pClass,info);
-        FN_PREVISIT(ExprOp3Right) = adapt("preVisitExprOp3Right",pClass,info);
-        IMPL_ADAPT(ExprCopy);
-        FN_PREVISIT(ExprCopyRight) = adapt("preVisitExprCopyRight",pClass,info);
-        IMPL_ADAPT(ExprMove);
-        FN_PREVISIT(ExprMoveRight) = adapt("preVisitExprMoveRight",pClass,info);
-        IMPL_ADAPT(ExprClone);
-        FN_PREVISIT(ExprCloneRight) = adapt("preVisitExprCloneRight",pClass,info);
-        fnCanVisitWithAliasSubexpression = adapt("canVisitWithAliasSubexpression",pClass,info);
-        IMPL_ADAPT(ExprAssume);
-        IMPL_ADAPT(ExprWith);
-        FN_PREVISIT(ExprWithBody) = adapt("preVisitExprWithBody",pClass,info);
-        IMPL_ADAPT(ExprWhile);
-        FN_PREVISIT(ExprWhileBody) = adapt("preVisitExprWhileBody",pClass,info);
-        IMPL_ADAPT(ExprTryCatch);
-        FN_PREVISIT(ExprTryCatchCatch) = adapt("preVisitExprTryCatchCatch",pClass,info);
-        IMPL_ADAPT(ExprIfThenElse);
-        FN_PREVISIT(ExprIfThenElseIfBlock) = adapt("preVisitExprIfThenElseIfBlock",pClass,info);
-        FN_PREVISIT(ExprIfThenElseElseBlock) = adapt("preVisitExprIfThenElseElseBlock",pClass,info);
-        IMPL_ADAPT(ExprFor);
-        IMPL_ADAPT(ExprForVariable);
-        IMPL_ADAPT(ExprForSource);
-        FN_PREVISIT(ExprForStack) = adapt("preVisitExprForStack",pClass,info);
-        FN_PREVISIT(ExprForBody) = adapt("preVisitExprForBody",pClass,info);
-        IMPL_ADAPT(ExprMakeVariant);
-        IMPL_ADAPT(ExprMakeVariantField);
-        fnCanVisitMakeStructBody = adapt("canVisitMakeStructBody",pClass,info);
-        fnCanVisitMakeStructBlock = adapt("canVisitMakeStructBlock",pClass,info);
-        IMPL_ADAPT(ExprMakeStruct);
-        IMPL_ADAPT(ExprMakeStructIndex);
-        IMPL_ADAPT(ExprMakeStructField);
-        IMPL_ADAPT(ExprMakeArray);
-        IMPL_ADAPT(ExprMakeArrayIndex);
-        IMPL_ADAPT(ExprMakeTuple);
-        IMPL_ADAPT(ExprMakeTupleIndex);
-        IMPL_ADAPT(ExprArrayComprehension);
-        FN_PREVISIT(ExprArrayComprehensionSubexpr) = adapt("preVisitExprArrayComprehensionSubexpr",pClass,info);
-        FN_PREVISIT(ExprArrayComprehensionWhere) = adapt("preVisitExprArrayComprehensionWhere",pClass,info);
-        IMPL_ADAPT(ExprTypeInfo);
-        IMPL_ADAPT(ExprLabel);
-        IMPL_ADAPT(ExprGoto);
-        IMPL_ADAPT(ExprRef2Value);
-        IMPL_ADAPT(ExprRef2Ptr);
-        IMPL_ADAPT(ExprPtr2Ref);
-        IMPL_ADAPT(ExprAddr);
-        IMPL_ADAPT(ExprAssert);
-        IMPL_ADAPT(ExprStaticAssert);
-        IMPL_ADAPT(ExprQuote);
-        IMPL_ADAPT(ExprDebug);
-        IMPL_ADAPT(ExprInvoke);
-        IMPL_ADAPT(ExprErase);
-        IMPL_ADAPT(ExprSetInsert);
-        IMPL_ADAPT(ExprFind);
-        IMPL_ADAPT(ExprKeyExists);
-        IMPL_ADAPT(ExprAscend);
-        IMPL_ADAPT(ExprCast);
-        IMPL_ADAPT(ExprDelete);
-        IMPL_ADAPT(ExprVar);
-        IMPL_ADAPT(ExprTag);
-        FN_PREVISIT(ExprTagValue) = adapt("preVisitExprTagValue",pClass,info);
-        IMPL_ADAPT(ExprSwizzle);
-        IMPL_ADAPT(ExprField);
-        IMPL_ADAPT(ExprSafeField);
-        IMPL_ADAPT(ExprIsVariant);
-        IMPL_ADAPT(ExprAsVariant);
-        IMPL_ADAPT(ExprSafeAsVariant);
-        IMPL_ADAPT(ExprOp1);
-        IMPL_ADAPT(ExprReturn);
-        IMPL_ADAPT(ExprYield);
-        IMPL_ADAPT(ExprBreak);
-        IMPL_ADAPT(ExprContinue);
-        IMPL_ADAPT(ExprConst);
-        IMPL_ADAPT(ExprFakeContext);
-        IMPL_ADAPT(ExprFakeLineInfo);
-        IMPL_ADAPT(ExprConstPtr);
-        IMPL_ADAPT(ExprConstEnumeration);
-        IMPL_ADAPT(ExprConstBitfield);
-        IMPL_ADAPT(ExprConstInt8);
-        IMPL_ADAPT(ExprConstInt16);
-        IMPL_ADAPT(ExprConstInt64);
-        IMPL_ADAPT(ExprConstInt);
-        IMPL_ADAPT(ExprConstInt2);
-        IMPL_ADAPT(ExprConstInt3);
-        IMPL_ADAPT(ExprConstInt4);
-        IMPL_ADAPT(ExprConstUInt8);
-        IMPL_ADAPT(ExprConstUInt16);
-        IMPL_ADAPT(ExprConstUInt64);
-        IMPL_ADAPT(ExprConstUInt);
-        IMPL_ADAPT(ExprConstUInt2);
-        IMPL_ADAPT(ExprConstUInt3);
-        IMPL_ADAPT(ExprConstUInt4);
-        IMPL_ADAPT(ExprConstRange);
-        IMPL_ADAPT(ExprConstURange);
-        IMPL_ADAPT(ExprConstRange64);
-        IMPL_ADAPT(ExprConstURange64);
-        IMPL_ADAPT(ExprConstBool);
-        IMPL_ADAPT(ExprConstFloat);
-        IMPL_ADAPT(ExprConstFloat2);
-        IMPL_ADAPT(ExprConstFloat3);
-        IMPL_ADAPT(ExprConstFloat4);
-        IMPL_ADAPT(ExprConstString);
-        IMPL_ADAPT(ExprConstDouble);
-        fnCanVisitMakeBlockBody = adapt("canVisitMakeBlockBody",pClass,info);
-        IMPL_ADAPT(ExprMakeBlock);
-        IMPL_ADAPT(ExprMakeGenerator);
-        IMPL_ADAPT(ExprMemZero);
-        IMPL_ADAPT(ExprReader);
-        IMPL_ADAPT(ExprUnsafe);
-        IMPL_ADAPT(ExprCallMacro);
+        #define FNX_PREVISIT(WHAT)  fnPreVisit##WHAT = adapt("preVisit" #WHAT,pClass,info);
+
+        #define DECLX_VISIT(WHAT) \
+                FNX_PREVISIT(WHAT) \
+                fnVisit##WHAT = adapt("visit" #WHAT,pClass,info);
+
+
+        #define FNX(WHAT) fn##WHAT = adapt(#WHAT,pClass,info);
+
+        VISITOR_XMACRO;
+
+        #undef FNX_PREVISIT
+        #undef DECLX_VISIT
+        #undef FNX
     }
 // whole program
     void VisitorAdapter::preVisitProgram ( Program * expr )
@@ -306,9 +155,9 @@ namespace das {
         { IMPL_VISIT2(Alias,TypeDecl,TypeDecl,expr,const string &,name); }
 // enumeration
     bool VisitorAdapter::canVisitEnumeration ( Enumeration * enu ) {
-        if ( fnCanVisitEnumeration ) {
+        if ( fncanVisitEnumeration ) {
             return das_invoke_function<bool>::invoke<void *,Enumeration *>
-                (context,nullptr,fnCanVisitEnumeration,classPtr,enu);
+                (context,nullptr,fncanVisitEnumeration,classPtr,enu);
         } else {
             return true;
         }
@@ -323,9 +172,9 @@ namespace das {
         { IMPL_VISIT4(EnumerationValue,Enumeration,Expression,value,const string &,name,ExpressionPtr,value,bool,last); }
 // structure
     bool VisitorAdapter::canVisitStructure ( Structure * var ) {
-        if ( fnCanVisitStructure ) {
+        if ( fncanVisitStructure ) {
             return das_invoke_function<bool>::invoke<void *,Structure *>
-                (context,nullptr,fnCanVisitStructure,classPtr,var);
+                (context,nullptr,fncanVisitStructure,classPtr,var);
         } else {
             return true;
         }
@@ -344,17 +193,17 @@ namespace das {
         { IMPL_VISIT(Structure); }
 // function
     bool VisitorAdapter::canVisitFunction ( Function * fun ) {
-        if ( fnCanVisitFunction ) {
+        if ( fncanVisitFunction ) {
             return das_invoke_function<bool>::invoke<void *,Function *>
-                (context,nullptr,fnCanVisitFunction,classPtr,fun);
+                (context,nullptr,fncanVisitFunction,classPtr,fun);
         } else {
             return true;
         }
     }
     bool VisitorAdapter::canVisitArgumentInit ( Function * fun, const VariablePtr & var, Expression * init ) {
-        if ( fnCanVisitArgumentInit ) {
+        if ( fncanVisitFunctionArgumentInit ) {
             return das_invoke_function<bool>::invoke<void *,Function *,VariablePtr,ExpressionPtr>
-                (context,nullptr,fnCanVisitArgumentInit,classPtr,fun,var,init);
+                (context,nullptr,fncanVisitFunctionArgumentInit,classPtr,fun,var,init);
         } else {
             return true;
         }
@@ -418,9 +267,9 @@ namespace das {
         { IMPL_VISIT3(ExprLetVariableInit,ExprLet,Expression,init,VariablePtr,var,ExpressionPtr,init); }
 // global let
     bool VisitorAdapter::canVisitGlobalVariable ( Variable * var ) {
-        if ( fnCanVisitGlobalVariable ) {
+        if ( fncanVisitGlobalVariable ) {
             return das_invoke_function<bool>::invoke<void *,Variable *>
-                (context,nullptr,fnCanVisitGlobalVariable,classPtr,var);
+                (context,nullptr,fncanVisitGlobalVariable,classPtr,var);
         } else {
             return true;
         }
@@ -458,9 +307,9 @@ namespace das {
 // call
     IMPL_BIND_EXPR(ExprCall);
     bool VisitorAdapter::canVisitCall ( ExprCall * expr ) {
-        if ( fnCanVisitCall ) {
+        if ( fncanVisitCall ) {
             return das_invoke_function<bool>::invoke<void *,ExprCall *>
-                (context,nullptr,fnCanVisitCall,classPtr,expr);
+                (context,nullptr,fncanVisitCall,classPtr,expr);
         } else {
             return true;
         }
@@ -516,9 +365,9 @@ namespace das {
 // assume
     IMPL_BIND_EXPR(ExprAssume);
     bool VisitorAdapter::canVisitWithAliasSubexpression ( ExprAssume * expr) {
-        if ( fnCanVisitWithAliasSubexpression ) {
+        if ( fncanVisitWithAliasSubexpression ) {
             return das_invoke_function<bool>::invoke<void *,ExprAssume *>
-                (context,nullptr,fnCanVisitWithAliasSubexpression,classPtr,expr);
+                (context,nullptr,fncanVisitWithAliasSubexpression,classPtr,expr);
         } else {
             return Visitor::canVisitWithAliasSubexpression(expr);
         }
@@ -563,17 +412,17 @@ namespace das {
         { IMPL_VISIT4(ExprMakeVariantField,ExprMakeVariant,MakeFieldDecl,decl,int,index,MakeFieldDeclPtr,decl,bool,last); }
 // make structure
     bool VisitorAdapter::canVisitMakeStructureBlock ( ExprMakeStruct * expr, Expression * blk ) {
-        if ( fnCanVisitMakeStructBlock ) {
+        if ( fncanVisitMakeStructBlock ) {
             return das_invoke_function<bool>::invoke<void *,smart_ptr<ExprMakeStruct>,ExpressionPtr>
-                (context,nullptr,fnCanVisitMakeStructBlock,classPtr,expr,blk);
+                (context,nullptr,fncanVisitMakeStructBlock,classPtr,expr,blk);
         } else {
             return true;
         }
     }
     bool VisitorAdapter::canVisitMakeStructureBody ( ExprMakeStruct * expr ) {
-        if ( fnCanVisitMakeStructBody ) {
+        if ( fncanVisitMakeStructBody ) {
             return das_invoke_function<bool>::invoke<void *,smart_ptr<ExprMakeStruct>>
-                (context,nullptr,fnCanVisitMakeStructBody,classPtr,expr);
+                (context,nullptr,fncanVisitMakeStructBody,classPtr,expr);
         } else {
             return true;
         }
@@ -674,9 +523,9 @@ namespace das {
     IMPL_BIND_EXPR(ExprConstDouble);
 // make block
     bool VisitorAdapter::canVisitMakeBlockBody ( ExprMakeBlock * expr ) {
-        if ( fnCanVisitMakeBlockBody ) {
+        if ( fncanVisitMakeBlockBody ) {
             return das_invoke_function<bool>::invoke<void *,smart_ptr<ExprMakeBlock>>
-                (context,nullptr,fnCanVisitMakeBlockBody,classPtr,expr);
+                (context,nullptr,fncanVisitMakeBlockBody,classPtr,expr);
         } else {
             return true;
         }
@@ -1469,10 +1318,10 @@ namespace das {
             }
         }
         virtual bool canVisitArguments ( ExprCallMacro * expr, int index ) override {
-            if ( auto fnCanVisitArguments = get_canVisitArgument(classPtr) ) {
+            if ( auto fncanVisitArguments = get_canVisitArgument(classPtr) ) {
                 bool result = true;
                 runMacroFunction(context, "canVisitArguments", [&]() {
-                    result = invoke_canVisitArgument(context,fnCanVisitArguments,classPtr,expr,index);
+                    result = invoke_canVisitArgument(context,fncanVisitArguments,classPtr,expr,index);
                 });
                 return result;
             } else {

@@ -5,12 +5,171 @@
 #include "daScript/ast/ast_visitor.h"
 namespace das {
 
-#define FN_PREVISIT(WHAT)  fnPreVisit##WHAT
-#define FN_VISIT(WHAT)      fnVisit##WHAT
+#define VISITOR_XMACRO \
+    DECLX_VISIT(Program) \
+    FNX_PREVISIT(ProgramBody) \
+    DECLX_VISIT(Module) \
+    DECLX_VISIT(TypeDecl) \
+    DECLX_VISIT(Expression) \
+    DECLX_VISIT(Alias) \
+    FNX(canVisitEnumeration) \
+    DECLX_VISIT(Enumeration) \
+    DECLX_VISIT(EnumerationValue) \
+    FNX(canVisitStructure) \
+    DECLX_VISIT(Structure) \
+    DECLX_VISIT(StructureField) \
+    FNX(canVisitFunction) \
+    FNX(canVisitFunctionArgumentInit) \
+    DECLX_VISIT(Function) \
+    DECLX_VISIT(FunctionArgument) \
+    DECLX_VISIT(FunctionArgumentInit) \
+    DECLX_VISIT(FunctionBody) \
+    DECLX_VISIT(ExprBlock) \
+    DECLX_VISIT(ExprBlockArgument) \
+    DECLX_VISIT(ExprBlockArgumentInit) \
+    DECLX_VISIT(ExprBlockExpression) \
+    DECLX_VISIT(ExprBlockFinal) \
+    DECLX_VISIT(ExprBlockFinalExpression) \
+    DECLX_VISIT(ExprLet) \
+    DECLX_VISIT(ExprLetVariable) \
+    DECLX_VISIT(ExprLetVariableInit) \
+    FNX(canVisitGlobalVariable) \
+    DECLX_VISIT(GlobalLet) \
+    DECLX_VISIT(GlobalLetVariable) \
+    DECLX_VISIT(GlobalLetVariableInit) \
+    DECLX_VISIT(ExprStringBuilder) \
+    DECLX_VISIT(ExprStringBuilderElement) \
+    DECLX_VISIT(ExprNew) \
+    DECLX_VISIT(ExprNewArgument) \
+    DECLX_VISIT(ExprNamedCall) \
+    DECLX_VISIT(ExprNamedCallArgument) \
+    FNX(canVisitCall) \
+    DECLX_VISIT(ExprCall) \
+    DECLX_VISIT(ExprCallArgument) \
+    DECLX_VISIT(ExprLooksLikeCall) \
+    DECLX_VISIT(ExprLooksLikeCallArgument) \
+    DECLX_VISIT(ExprNullCoalescing) \
+    FNX_PREVISIT(ExprNullCoalescingDefault) \
+    DECLX_VISIT(ExprAt) \
+    FNX_PREVISIT(ExprAtIndex) \
+    DECLX_VISIT(ExprSafeAt) \
+    FNX_PREVISIT(ExprSafeAtIndex) \
+    DECLX_VISIT(ExprIs) \
+    FNX_PREVISIT(ExprIsType) \
+    DECLX_VISIT(ExprOp2) \
+    FNX_PREVISIT(ExprOp2Right) \
+    DECLX_VISIT(ExprOp3) \
+    FNX_PREVISIT(ExprOp3Left) \
+    FNX_PREVISIT(ExprOp3Right) \
+    DECLX_VISIT(ExprCopy) \
+    FNX_PREVISIT(ExprCopyRight) \
+    DECLX_VISIT(ExprMove) \
+    FNX_PREVISIT(ExprMoveRight) \
+    DECLX_VISIT(ExprClone) \
+    FNX_PREVISIT(ExprCloneRight) \
+    FNX(canVisitWithAliasSubexpression) \
+    DECLX_VISIT(ExprAssume) \
+    DECLX_VISIT(ExprWith) \
+    FNX_PREVISIT(ExprWithBody) \
+    DECLX_VISIT(ExprWhile) \
+    FNX_PREVISIT(ExprWhileBody) \
+    DECLX_VISIT(ExprTryCatch) \
+    FNX_PREVISIT(ExprTryCatchCatch) \
+    DECLX_VISIT(ExprIfThenElse) \
+    FNX_PREVISIT(ExprIfThenElseIfBlock) \
+    FNX_PREVISIT(ExprIfThenElseElseBlock) \
+    DECLX_VISIT(ExprFor) \
+    DECLX_VISIT(ExprForVariable) \
+    DECLX_VISIT(ExprForSource) \
+    FNX_PREVISIT(ExprForStack) \
+    FNX_PREVISIT(ExprForBody) \
+    DECLX_VISIT(ExprMakeVariant) \
+    DECLX_VISIT(ExprMakeVariantField) \
+    FNX(canVisitMakeStructBody) \
+    FNX(canVisitMakeStructBlock) \
+    DECLX_VISIT(ExprMakeStruct) \
+    DECLX_VISIT(ExprMakeStructIndex) \
+    DECLX_VISIT(ExprMakeStructField) \
+    DECLX_VISIT(ExprMakeArray) \
+    DECLX_VISIT(ExprMakeArrayIndex) \
+    DECLX_VISIT(ExprMakeTuple) \
+    DECLX_VISIT(ExprMakeTupleIndex) \
+    DECLX_VISIT(ExprArrayComprehension) \
+    FNX_PREVISIT(ExprArrayComprehensionSubexpr) \
+    FNX_PREVISIT(ExprArrayComprehensionWhere) \
+    DECLX_VISIT(ExprTypeInfo) \
+    DECLX_VISIT(ExprTypeDecl) \
+    DECLX_VISIT(ExprLabel) \
+    DECLX_VISIT(ExprGoto) \
+    DECLX_VISIT(ExprRef2Value) \
+    DECLX_VISIT(ExprRef2Ptr) \
+    DECLX_VISIT(ExprPtr2Ref) \
+    DECLX_VISIT(ExprAddr) \
+    DECLX_VISIT(ExprAssert) \
+    DECLX_VISIT(ExprStaticAssert) \
+    DECLX_VISIT(ExprQuote) \
+    DECLX_VISIT(ExprDebug) \
+    DECLX_VISIT(ExprInvoke) \
+    DECLX_VISIT(ExprErase) \
+    DECLX_VISIT(ExprSetInsert) \
+    DECLX_VISIT(ExprFind) \
+    DECLX_VISIT(ExprKeyExists) \
+    DECLX_VISIT(ExprAscend) \
+    DECLX_VISIT(ExprCast) \
+    DECLX_VISIT(ExprDelete) \
+    DECLX_VISIT(ExprVar) \
+    DECLX_VISIT(ExprTag) \
+    FNX_PREVISIT(ExprTagValue) \
+    DECLX_VISIT(ExprSwizzle) \
+    DECLX_VISIT(ExprField) \
+    DECLX_VISIT(ExprSafeField) \
+    DECLX_VISIT(ExprIsVariant) \
+    DECLX_VISIT(ExprAsVariant) \
+    DECLX_VISIT(ExprSafeAsVariant) \
+    DECLX_VISIT(ExprOp1) \
+    DECLX_VISIT(ExprReturn) \
+    DECLX_VISIT(ExprYield) \
+    DECLX_VISIT(ExprBreak) \
+    DECLX_VISIT(ExprContinue) \
+    DECLX_VISIT(ExprConst) \
+    DECLX_VISIT(ExprFakeContext) \
+    DECLX_VISIT(ExprFakeLineInfo) \
+    DECLX_VISIT(ExprConstPtr) \
+    DECLX_VISIT(ExprConstEnumeration) \
+    DECLX_VISIT(ExprConstBitfield) \
+    DECLX_VISIT(ExprConstInt8) \
+    DECLX_VISIT(ExprConstInt16) \
+    DECLX_VISIT(ExprConstInt64) \
+    DECLX_VISIT(ExprConstInt) \
+    DECLX_VISIT(ExprConstInt2) \
+    DECLX_VISIT(ExprConstInt3) \
+    DECLX_VISIT(ExprConstInt4) \
+    DECLX_VISIT(ExprConstUInt8) \
+    DECLX_VISIT(ExprConstUInt16) \
+    DECLX_VISIT(ExprConstUInt64) \
+    DECLX_VISIT(ExprConstUInt) \
+    DECLX_VISIT(ExprConstUInt2) \
+    DECLX_VISIT(ExprConstUInt3) \
+    DECLX_VISIT(ExprConstUInt4) \
+    DECLX_VISIT(ExprConstRange) \
+    DECLX_VISIT(ExprConstURange) \
+    DECLX_VISIT(ExprConstRange64) \
+    DECLX_VISIT(ExprConstURange64) \
+    DECLX_VISIT(ExprConstBool) \
+    DECLX_VISIT(ExprConstFloat) \
+    DECLX_VISIT(ExprConstFloat2) \
+    DECLX_VISIT(ExprConstFloat3) \
+    DECLX_VISIT(ExprConstFloat4) \
+    DECLX_VISIT(ExprConstString) \
+    DECLX_VISIT(ExprConstDouble) \
+    FNX(canVisitMakeBlockBody) \
+    DECLX_VISIT(ExprMakeBlock) \
+    DECLX_VISIT(ExprMakeGenerator) \
+    DECLX_VISIT(ExprMemZero) \
+    DECLX_VISIT(ExprReader) \
+    DECLX_VISIT(ExprUnsafe) \
+    DECLX_VISIT(ExprCallMacro)
 
-#define DECL_VISIT(WHAT) \
-    Func        FN_PREVISIT(WHAT); \
-    Func        FN_VISIT(WHAT);
 
 #define IMPL_BIND_EXPR(WHAT) \
     virtual void preVisit ( WHAT * expr ) override; \
@@ -23,169 +182,21 @@ namespace das {
         void *      classPtr;
         Context *   context;
     protected:
-        DECL_VISIT(Program);
-        Func FN_PREVISIT(ProgramBody);
-        DECL_VISIT(Module);
-        DECL_VISIT(TypeDecl);
-        DECL_VISIT(Expression);
-        DECL_VISIT(Alias);
-        Func fnCanVisitEnumeration;
-        DECL_VISIT(Enumeration);
-        DECL_VISIT(EnumerationValue);
-        Func fnCanVisitStructure;
-        DECL_VISIT(Structure);
-        DECL_VISIT(StructureField);
-        Func fnCanVisitFunction;
-        Func fnCanVisitArgumentInit;
-        DECL_VISIT(Function);
-        DECL_VISIT(FunctionArgument);
-        DECL_VISIT(FunctionArgumentInit);
-        DECL_VISIT(FunctionBody);
-        DECL_VISIT(ExprBlock);
-        DECL_VISIT(ExprBlockArgument);
-        DECL_VISIT(ExprBlockArgumentInit);
-        DECL_VISIT(ExprBlockExpression);
-        DECL_VISIT(ExprBlockFinal);
-        DECL_VISIT(ExprBlockFinalExpression);
-        DECL_VISIT(ExprLet);
-        DECL_VISIT(ExprLetVariable);
-        DECL_VISIT(ExprLetVariableInit);
-        Func fnCanVisitGlobalVariable;
-        DECL_VISIT(GlobalLet);
-        DECL_VISIT(GlobalLetVariable);
-        DECL_VISIT(GlobalLetVariableInit);
-        DECL_VISIT(ExprStringBuilder);
-        DECL_VISIT(ExprStringBuilderElement);
-        DECL_VISIT(ExprNew);
-        DECL_VISIT(ExprNewArgument);
-        DECL_VISIT(ExprNamedCall);
-        DECL_VISIT(ExprNamedCallArgument);
-        Func fnCanVisitCall;
-        DECL_VISIT(ExprCall);
-        DECL_VISIT(ExprCallArgument);
-        DECL_VISIT(ExprLooksLikeCall);
-        DECL_VISIT(ExprLooksLikeCallArgument);
-        DECL_VISIT(ExprNullCoalescing);
-        Func FN_PREVISIT(ExprNullCoalescingDefault);
-        DECL_VISIT(ExprAt);
-        Func FN_PREVISIT(ExprAtIndex);
-        DECL_VISIT(ExprSafeAt);
-        Func FN_PREVISIT(ExprSafeAtIndex);
-        DECL_VISIT(ExprIs);
-        Func FN_PREVISIT(ExprIsType);
-        DECL_VISIT(ExprOp2);
-        Func FN_PREVISIT(ExprOp2Right);
-        DECL_VISIT(ExprOp3);
-        Func FN_PREVISIT(ExprOp3Left);
-        Func FN_PREVISIT(ExprOp3Right);
-        DECL_VISIT(ExprCopy);
-        Func FN_PREVISIT(ExprCopyRight);
-        DECL_VISIT(ExprMove);
-        Func FN_PREVISIT(ExprMoveRight);
-        DECL_VISIT(ExprClone);
-        Func FN_PREVISIT(ExprCloneRight);
-        Func fnCanVisitWithAliasSubexpression;
-        DECL_VISIT(ExprAssume);
-        DECL_VISIT(ExprWith);
-        Func FN_PREVISIT(ExprWithBody);
-        DECL_VISIT(ExprWhile);
-        Func FN_PREVISIT(ExprWhileBody);
-        DECL_VISIT(ExprTryCatch);
-        Func FN_PREVISIT(ExprTryCatchCatch);
-        DECL_VISIT(ExprIfThenElse);
-        Func FN_PREVISIT(ExprIfThenElseIfBlock);
-        Func FN_PREVISIT(ExprIfThenElseElseBlock);
-        DECL_VISIT(ExprFor);
-        DECL_VISIT(ExprForVariable);
-        DECL_VISIT(ExprForSource);
-        Func FN_PREVISIT(ExprForStack);
-        Func FN_PREVISIT(ExprForBody);
-        DECL_VISIT(ExprMakeVariant);
-        DECL_VISIT(ExprMakeVariantField);
-        Func fnCanVisitMakeStructBody;
-        Func fnCanVisitMakeStructBlock;
-        DECL_VISIT(ExprMakeStruct);
-        DECL_VISIT(ExprMakeStructIndex);
-        DECL_VISIT(ExprMakeStructField);
-        DECL_VISIT(ExprMakeArray);
-        DECL_VISIT(ExprMakeArrayIndex);
-        DECL_VISIT(ExprMakeTuple);
-        DECL_VISIT(ExprMakeTupleIndex);
-        DECL_VISIT(ExprArrayComprehension);
-        Func FN_PREVISIT(ExprArrayComprehensionSubexpr);
-        Func FN_PREVISIT(ExprArrayComprehensionWhere);
-        DECL_VISIT(ExprTypeInfo);
-        DECL_VISIT(ExprTypeDecl);
-        DECL_VISIT(ExprLabel);
-        DECL_VISIT(ExprGoto);
-        DECL_VISIT(ExprRef2Value);
-        DECL_VISIT(ExprRef2Ptr);
-        DECL_VISIT(ExprPtr2Ref);
-        DECL_VISIT(ExprAddr);
-        DECL_VISIT(ExprAssert);
-        DECL_VISIT(ExprStaticAssert);
-        DECL_VISIT(ExprQuote);
-        DECL_VISIT(ExprDebug);
-        DECL_VISIT(ExprInvoke);
-        DECL_VISIT(ExprErase);
-        DECL_VISIT(ExprSetInsert);
-        DECL_VISIT(ExprFind);
-        DECL_VISIT(ExprKeyExists);
-        DECL_VISIT(ExprAscend);
-        DECL_VISIT(ExprCast);
-        DECL_VISIT(ExprDelete);
-        DECL_VISIT(ExprVar);
-        DECL_VISIT(ExprTag);
-        Func FN_PREVISIT(ExprTagValue);
-        DECL_VISIT(ExprSwizzle);
-        DECL_VISIT(ExprField);
-        DECL_VISIT(ExprSafeField);
-        DECL_VISIT(ExprIsVariant);
-        DECL_VISIT(ExprAsVariant);
-        DECL_VISIT(ExprSafeAsVariant);
-        DECL_VISIT(ExprOp1);
-        DECL_VISIT(ExprReturn);
-        DECL_VISIT(ExprYield);
-        DECL_VISIT(ExprBreak);
-        DECL_VISIT(ExprContinue);
-        DECL_VISIT(ExprConst);
-        DECL_VISIT(ExprFakeContext);
-        DECL_VISIT(ExprFakeLineInfo);
-        DECL_VISIT(ExprConstPtr);
-        DECL_VISIT(ExprConstEnumeration);
-        DECL_VISIT(ExprConstBitfield);
-        DECL_VISIT(ExprConstInt8);
-        DECL_VISIT(ExprConstInt16);
-        DECL_VISIT(ExprConstInt64);
-        DECL_VISIT(ExprConstInt);
-        DECL_VISIT(ExprConstInt2);
-        DECL_VISIT(ExprConstInt3);
-        DECL_VISIT(ExprConstInt4);
-        DECL_VISIT(ExprConstUInt8);
-        DECL_VISIT(ExprConstUInt16);
-        DECL_VISIT(ExprConstUInt64);
-        DECL_VISIT(ExprConstUInt);
-        DECL_VISIT(ExprConstUInt2);
-        DECL_VISIT(ExprConstUInt3);
-        DECL_VISIT(ExprConstUInt4);
-        DECL_VISIT(ExprConstRange);
-        DECL_VISIT(ExprConstURange);
-        DECL_VISIT(ExprConstRange64);
-        DECL_VISIT(ExprConstURange64);
-        DECL_VISIT(ExprConstBool);
-        DECL_VISIT(ExprConstFloat);
-        DECL_VISIT(ExprConstFloat2);
-        DECL_VISIT(ExprConstFloat3);
-        DECL_VISIT(ExprConstFloat4);
-        DECL_VISIT(ExprConstString);
-        DECL_VISIT(ExprConstDouble);
-        Func fnCanVisitMakeBlockBody;
-        DECL_VISIT(ExprMakeBlock);
-        DECL_VISIT(ExprMakeGenerator);
-        DECL_VISIT(ExprMemZero);
-        DECL_VISIT(ExprReader);
-        DECL_VISIT(ExprUnsafe);
-        DECL_VISIT(ExprCallMacro);
+
+#define FNX_PREVISIT(WHAT)  Func fnPreVisit##WHAT;
+
+#define DECLX_VISIT(WHAT) \
+                            FNX_PREVISIT(WHAT) \
+                            Func fnVisit##WHAT;
+
+#define FNX(WHAT) Func        fn##WHAT;
+
+        VISITOR_XMACRO
+
+#undef FNX_PREVISIT
+#undef DECLX_VISIT
+#undef FNX
+
     protected:
     // whole program
         virtual void preVisitProgram ( Program * expr ) override;
@@ -425,9 +436,6 @@ namespace das {
         IMPL_BIND_EXPR(ExprTypeDecl);
     };
 
-#undef FN_PREVISIT
-#undef FN_VISIT
-#undef DECL_VISIT
 #undef IMPL_BIND_EXPR
 
     char * ast_describe_typedecl ( smart_ptr_raw<TypeDecl> t, bool d_extra, bool d_contracts, bool d_module, Context * context, LineInfoArg * at );
