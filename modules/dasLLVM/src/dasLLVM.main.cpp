@@ -48,7 +48,7 @@ void diagnosticHandler(LLVMDiagnosticInfoRef DI, void *) {
     }
     auto msg = LLVMGetDiagInfoDescription(DI);
     string text = string(msg) + "\n";
-    toLog(ll, text.c_str());
+    toLog(ll, text.c_str(), nullptr, nullptr);
     LLVMDisposeMessage(msg);
 }
 
