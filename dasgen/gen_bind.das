@@ -26,6 +26,7 @@ def main
         log_cpp_class_adapter(cpp_file, "AstCommentReader_Adapter", typeinfo(ast_typedecl type<AstCommentReader>))
         log_cpp_class_adapter(cpp_file, "AstCallMacro_Adapter", typeinfo(ast_typedecl type<AstCallMacro>))
         log_cpp_class_adapter(cpp_file, "AstTypeInfoMacro_Adapter", typeinfo(ast_typedecl type<AstTypeInfoMacro>))
+        log_cpp_class_adapter(cpp_file, "AstVisitor_Adapter", typeinfo(ast_typedecl type<AstVisitor>))
     fopen(root + "debugapi_gen.inc","wb") <| $ ( cpp_file )
         log_cpp_class_adapter(cpp_file, "DapiDataWalker_Adapter", typeinfo(ast_typedecl type<DapiDataWalker>))
         log_cpp_class_adapter(cpp_file, "DapiDebugAgent_Adapter", typeinfo(ast_typedecl type<DapiDebugAgent>))
