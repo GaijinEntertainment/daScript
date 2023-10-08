@@ -88,17 +88,17 @@ def main
         f_tex := checkerboard_texture
         glUseProgram(program)
         // cube
-        v_model = compose(float4(-3,0,0,0), rot, float4(1.0))
+        v_model = compose(float3(-3,0,0), rot, float3(1.0))
         vs_preview_bind_uniform(program)
         fs_preview_bind_uniform(program)
         draw_geometry_fragment(cube)
         // sphere
-        v_model = compose(float4(0,0,0,0), rot, float4(1.0))
+        v_model = compose(float3(0,0,0), rot, float3(1.0))
         vs_preview_bind_uniform(program)
         fs_preview_bind_uniform(program)
         draw_geometry_fragment(sphere)
         // cylinder
-        v_model = compose(float4(3,0,0,0), rot, float4(1.0))
+        v_model = compose(float3(3,0,0), rot, float3(1.0))
         vs_preview_bind_uniform(program)
         fs_preview_bind_uniform(program)
         draw_geometry_fragment(cylinder)

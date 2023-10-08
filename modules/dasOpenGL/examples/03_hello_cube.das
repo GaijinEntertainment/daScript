@@ -131,7 +131,7 @@ def main
         if t > 10lf
             glfwSetTime(t - 10lf)
         let rot = quat_from_unit_vec_ang(normalize(float3(1.,1.,0.)), float(t)*PI*2.*0.1)
-        v_model = compose(float4(0,0,0,0), rot, float4(1.0))        // bind model
+        v_model = compose(float3(0,0,0), rot, float3(1.0))        // bind model
         v_projection = perspective_rh_opengl( 45.0f*PI/180., aspect, 0.1f, 50.0f)   // bind projection
         glUseProgram(program)
         f_tex := texture
