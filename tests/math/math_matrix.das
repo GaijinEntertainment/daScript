@@ -76,12 +76,12 @@ def test_matrix_manip ( t:T? )
     t |> run("fuzz look_at") <| @@ ( t : T? )
         var fake <- Faker()
         fuzz <|
-            t |> accept ( look_at ( fake |> random_float4, fake |> random_float4, fake |> random_float4 ) )
+            t |> accept ( look_at ( fake |> random_float3, fake |> random_float3, fake |> random_float3 ) )
 
     t |> run("fuzz compose") <| @@ ( t : T? )
         var fake <- Faker()
         fuzz <|
-            t |> accept ( compose ( fake |> random_float4, fake |> random_float4, fake |> random_float4 ) )
+            t |> accept ( compose ( fake |> random_float3, fake |> random_float4, fake |> random_float3 ) )
 
     t |> run("fuzz decompose") <| @@ ( t : T? )
         var fake <- Faker()

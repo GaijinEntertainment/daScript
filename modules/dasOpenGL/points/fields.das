@@ -88,7 +88,7 @@ def build_sdf_preview ( field:SdfField )
                 node.quads <- font |> create_quads("{int(d*256.)}") // " {x} {y} {z}")
                 let dim = quads_dim(node.quads)
                 let qv = quads_view(node.quads, float2(3./(dim.vmax.x-dim.vmin.x)))
-                let qm = compose ( float4(ws_xyz,1.), float4(1,0,0,0), float4(length(xyzs)*0.2))
+                let qm = compose ( ws_xyz, float4(1,0,0,0), float3(length(xyzs)*0.2))
                 node.model = qm * qv
 
                 result.nodes |> emplace(node)
@@ -293,7 +293,7 @@ def main
         f_camera_position = float3(0.,camera_position_y+camera_distance*0.5,camera_distance)
         let v_view = look_at_rh(f_camera_position,float3(0,0,0),float3(0,1,0))
         let rot = quat_from_unit_vec_ang(normalize(float3(0.,1.,0.)), camera_rotation*PI/180.)
-        let v_rot = compose(float4(0,0,0,1),rot,float4(1,1,1,1))
+        let v_rot = compose(float3(0,0,0),rot,float3(1,1,1))
         let v_projection = perspective_rh_opengl( 45.0f*PI/180., aspect, 0.1f, 50.0f)
 
         /*

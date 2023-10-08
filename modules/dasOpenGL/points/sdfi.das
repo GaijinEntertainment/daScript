@@ -335,7 +335,7 @@ def camera_rotation ( camera_rotation_xy:float2 )
     let rot_x = quat_from_unit_vec_ang(normalize(float3(1.,0.,0.)), camera_rotation_xy.x*PI/180.)
     let rot_y = quat_from_unit_vec_ang(normalize(float3(0.,1.,0.)), camera_rotation_xy.y*PI/180.)
     let rot = quat_mul(rot_x,rot_y)
-    return <- compose(float4(0,0,0,1), rot, float4(1.))
+    return <- compose(float3(0,0,0), rot, float3(1.))
 
 [export]
 def main
@@ -408,7 +408,7 @@ def main
         glUseProgram(program)
         f_CameraNearFar = float2(0.05f,50.0f)
         f_PixelSize = float2(1.) / float2(display_w, display_h)
-        let v_view = camera_rotation(camera_rotation_xy) * compose(float4(-camera_position,1.), float4(0), float4(1.))
+        let v_view = camera_rotation(camera_rotation_xy) * compose(float3(-camera_position,1.), float4(0), float3(1.))
         let v_projection = perspective_rh_opengl( 45.0f*PI/180., aspect, f_CameraNearFar.x, f_CameraNearFar.y )
         f_Camera2World = inverse(v_projection * v_view)
         t_sdf.texture3D := t3d
