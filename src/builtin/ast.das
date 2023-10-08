@@ -272,7 +272,7 @@ class AstVisitor
 // is
     def abstract preVisitExprIs(expr:smart_ptr<ExprIs>): void
     def abstract visitExprIs(expr:smart_ptr<ExprIs>) : ExpressionPtr
-    def abstract preVisitExprIsType(expr:smart_ptr<ExprAt>;typeDecl:TypeDeclPtr): void
+    def abstract preVisitExprIsType(expr:smart_ptr<ExprIs>;typeDecl:TypeDeclPtr): void
 // op2
     def abstract preVisitExprOp2(expr:smart_ptr<ExprOp2>): void
     def abstract visitExprOp2(expr:smart_ptr<ExprOp2>) : ExpressionPtr
