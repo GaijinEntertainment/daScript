@@ -6,8 +6,28 @@
 #include "daScript/ast/ast_handle.h"
 #include "daScript/simulate/bind_enum.h"
 
+// include vorbis extras before miniaudio
+#define STB_VORBIS_HEADER_ONLY
+#ifdef __forceinline
+#undef __forceinline
+#define __forceinline inline
+#endif
+#include <extras/stb_vorbis.c>    /* Enables Vorbis decoding. */
+
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable:4755)
+#pragma warning(disable:4701)
+#endif
+
 #define MINIAUDIO_IMPLEMENTATION
+#define MA_USE_STDINT
 #include <miniaudio.h>
+
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
+
 #include "volume_mixer.h"
 #include "hrtf.h"
 
@@ -198,12 +218,13 @@ void data_callback(ma_device*, void* pOutput, const void*, ma_uint32 frameCount)
     lock_guard<recursive_mutex> guard(*g_mixer_context->contextMutex);
     auto saved = daScriptEnvironment::bound;
     daScriptEnvironment::bound = g_mixer_env;
+    g_mixer_context->restart();
     g_mixer_context.get()->runWithCatch([&](){
         das_invoke_function<void>::invoke<Array&,int32_t,int32_t>(g_mixer_context.get(),nullptr,g_mixer_function,buffer,g_channels,g_rate,fdt);
     });
     // TODO: i don't know what to do with exceptions here. im ignoring for now. better than crashing
     if ( const char* exp = g_mixer_context->getException() ) {
-        g_mixer_context->to_err(nullptr, exp);
+        g_mixer_context->to_err(&g_mixer_context->exceptionAt, exp);
     }
     daScriptEnvironment::bound = saved;
 }
@@ -467,10 +488,9 @@ public:
         if ( !Module::require("rtti") ) return false;
         initialized = true;
         // now, initialize
-        ModuleLibrary lib;
-        lib.addModule(this);
+        ModuleLibrary lib(this);
         lib.addBuiltInModule();
-        lib.addModule(Module::require("rtti"));
+        addBuiltinDependency(lib, Module::require("rtti"));
         // reverb
         addEnumeration(make_smart<EnumerationI3DL2Preset>());
         addAnnotation(make_smart<I3DL2ReverbPropertiesAnnotation>(lib));
@@ -606,3 +626,15 @@ public:
 } // namespace das
 
 REGISTER_MODULE_IN_NAMESPACE(Module_Audio, das);
+
+#ifdef _MSC_VER
+#pragma warning(push)
+#pragma warning(disable:4701) // stb_vorbis.c(4758) : warning C4701: potentially uninitialized local variable 'mid' used
+#endif
+
+#undef STB_VORBIS_HEADER_ONLY
+#include <extras/stb_vorbis.c>    /* Enables Vorbis decoding. */
+
+#ifdef _MSC_VER
+#pragma warning(pop)
+#endif
