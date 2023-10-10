@@ -20,6 +20,9 @@
 #pragma warning(disable:4701)
 #endif
 
+#ifdef __APPLE__
+    #define MA_NO_RUNTIME_LINKING
+#endif
 #define MINIAUDIO_IMPLEMENTATION
 #define MA_USE_STDINT
 #include <miniaudio.h>
