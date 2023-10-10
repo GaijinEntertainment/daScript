@@ -21,6 +21,14 @@ IF ((NOT DAS_AUDIO_INCLUDED) AND ((NOT ${DAS_AUDIO_DISABLED}) OR (NOT DEFINED DA
 		${MIT_HRTF_SOURCE_DIR}/mit_hrtf_lib.c
 	)
 
+	IF(APPLE)
+		SET(AUDIO_LIBRARIES
+			"-framework CoreFoundation"
+			"-framework CoreAudio"
+			"-framework AudioToolbox"
+		)
+	ENDIF()
+
 	ADD_MODULE_LIB(libDasModuleAudio)
 	ADD_MODULE_CPP(Audio)
 	# ADD_MODULE_NATIVE(AUDIO_boost)
