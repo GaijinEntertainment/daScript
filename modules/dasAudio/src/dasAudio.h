@@ -1,3 +1,4 @@
+#define MA_USE_STDINT
 #include <miniaudio.h>
 #include "volume_mixer.h"
 #include "hrtf.h"
