@@ -34,7 +34,7 @@ bool saveToFile ( const string & fname, const string & str ) {
     return true;
 }
 
-bool compile ( const string & fn, const string & cppFn, bool dryRun, bool standaloneContext ) {
+bool compile ( const string & fn, const string & cppFn, bool dryRun ) {
     auto access = get_file_access((char*)(projectFile.empty() ? nullptr : projectFile.c_str()));
     ModuleGroup dummyGroup;
     CodeOfPolicies policies;
@@ -79,12 +79,8 @@ bool compile ( const string & fn, const string & cppFn, bool dryRun, bool standa
                         tw << " // require " << mod->name << "\n";
                     }
                     if ( mod->aotRequire(tw)==ModuleAotType::no_aot ) {
-                        if ( standaloneContext ) {
-                            tw << "  // no_aot ignored in standalone context\n";
-                        } else {
-                            tw << "  // AOT disabled due to this module\n";
-                            noAotModule = true;
-                        }
+                        tw << "  // AOT disabled due to this module\n";
+                        noAotModule = true;
                     }
                 }
                 return true;
@@ -93,7 +89,7 @@ bool compile ( const string & fn, const string & cppFn, bool dryRun, bool standa
                 tout << "dry run success, no changes will be written\n";
                 return true;
             }
-            if ( noAotOption && !standaloneContext ) {
+            if ( noAotOption ) {
                 TextWriter noTw;
                 if (!noAotModule)
                   noTw << "// AOT disabled due to options no_aot=true. There are no modules which require no_aot\n\n";
@@ -156,8 +152,6 @@ bool compile ( const string & fn, const string & cppFn, bool dryRun, bool standa
                 tw << "};\n";
                 tw << "\n";
                 tw << "AotListBase impl(registerAotFunctions);\n";
-                if ( program->thisModuleName.empty() )
-                    program->writeStandaloneContext(tw);
                 // validation stuff
                 if ( paranoid_validation ) {
                     program->validateAotCpp(tw,*pctx);
@@ -273,7 +267,12 @@ int das_aot_main ( int argc, char * argv[] ) {
     #include "modules/external_need.inc"
     Module::Initialize();
     daScriptEnvironment::bound->g_isInAot = true;
-    bool compiled = compile(argv[2], argv[3], dryRun, standaloneContext);
+    bool compiled = false;
+    if ( standaloneContext ) {
+        compiled = compileStandalone(argv[2], argv[3], dryRun, standaloneContext);
+    } else {
+        compiled = compile(argv[2], argv[3], dryRun);
+    }
     Module::Shutdown();
     return compiled ? 0 : -1;
 }
