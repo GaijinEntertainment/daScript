@@ -3583,22 +3583,9 @@ namespace das {
                     logs << "    {\n";
                     logs << "        string mangledName = \"" << pfun->getMangledName() << "\"/*pfun->getMangledName()*/;\n";
                     logs << "        auto MNH = hash_blockz64((uint8_t *)mangledName.c_str());\n";
-                    // logs << "        fnByMnh[MNH] = pfun.get();\n";
                     logs << "        auto & gfun = context.functions[" << pfun->index << "/*pfun->index*/];\n";
                     logs << "        gfun.name = context.code->allocateName(\"" << pfun->name << "\"/*pfun->name*/);\n";
                     logs << "        gfun.mangledName = context.code->allocateName(mangledName);\n";
-                    // logs << "        gfun.debugInfo = helper.makeFunctionDebugInfo(*pfun);\n";
-
-                    // No need?
-                    // logs << "        if ( folding ) {\n";
-                    // logs << "            gfun.debugInfo->flags &= ~ (FuncInfo::flag_init | FuncInfo::flag_shutdown);\n";
-                    // logs << "        }\n";
-
-                    // logs << "        if ( debuggerOrGC ) {\n";
-                    // logs << "            helper.appendLocalVariables(gfun.debugInfo, pfun->body);\n";
-                    // logs << "            helper.appendGlobalVariables(gfun.debugInfo, pfun);\n";
-                    // logs << "        }\n";
-
                     logs << "        gfun.stackSize = " << pfun->totalStackSize << "/*pfun->totalStackSize*/;\n";
                     logs << "        gfun.mangledNameHash = MNH;\n";
                     logs << "        gfun.aotFunction = nullptr;\n";
