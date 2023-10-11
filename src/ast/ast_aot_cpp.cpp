@@ -3703,10 +3703,12 @@ namespace das {
 
     class StandaloneContextGen : public CppAot {
     public:
-        StandaloneContextGen(ProgramPtr prog, BlockVariableCollector & coll, string cppOutD) : CppAot(prog, coll) {
+      StandaloneContextGen(ProgramPtr prog, BlockVariableCollector &coll,
+                           string cppOutD, string standaloneContextName)
+          : CppAot(prog, coll), contextNameSuffix(standaloneContextName) {
             cppOutputDir = cppOutD;
-        }
-
+      }
+    private:
         void writeAotHeaderIncludes () {
             ss << "#include \"daScript/misc/platform.h\"\n\n";
 
@@ -3830,7 +3832,7 @@ namespace das {
             fclose(f);
             return bytes_written == str.length();
         }
-
+    public:
         bool run() {
             shared_ptr<Context> pctx ( get_context(program->getContextStackSize()) );
             if ( !program->simulate(*pctx, tw) ) {
@@ -3884,16 +3886,17 @@ namespace das {
 
             // get the name of the current file from program?
 
-            for ( auto & [a, b] : nameToOutput ) {
-                auto outputFile = cppOutputDir + '/' + a + ".das.cpp";
-                saveToFile(outputFile, b);
+            for ( auto & [nm, out] : nameToOutput ) {
+                if ( nm.empty() ) nm = contextNameSuffix;
+                const auto outputFile = cppOutputDir + '/' + nm + ".das.cpp";
+                saveToFile(outputFile, out);
             }
 
             daScriptEnvironment::bound->g_Program.reset();
 
             return true;
         }
-    public:
+    private:
         TextWriter                  tw;
         das_map<string, string>     nameToOutput;
         string                      cppOutputDir;
@@ -3901,9 +3904,9 @@ namespace das {
         const string                contextNameSuffix;
     };
 
-    void runStandaloneVisitor ( ProgramPtr prog, string cppOutputDir ) {
+    void runStandaloneVisitor ( ProgramPtr prog, string cppOutputDir, string standaloneContextName ) {
         BlockVariableCollector coll;
-        StandaloneContextGen gen(prog, coll, cppOutputDir);
+        StandaloneContextGen gen(prog, coll, cppOutputDir, standaloneContextName);
         gen.run();
     }
 
