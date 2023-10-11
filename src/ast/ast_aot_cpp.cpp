@@ -8,6 +8,9 @@
 #include "daScript/misc/enums.h"
 #include "daScript/simulate/hash.h"
 
+bool saveToFile ( const das::string & fname, const das::string & str );
+das::Context * get_context ( int stackSize = 0 );
+
 namespace das {
 
     Enum<Type> g_cppCTypeTable = {
@@ -3456,14 +3459,14 @@ namespace das {
         }
     }
 
-    void Program::registerAotCpp ( TextWriter & logs, Context & context, bool headers ) {
+    void Program::registerAotCpp ( TextWriter & logs, Context & context, bool headers, bool allModules ) {
         vector<Function *> fnn = collectUsedFunctions(library.modules, totalFunctions);
         if ( headers ) {
             logs << "\nvoid registerAot ( AotLibrary & aotLib )\n{\n";
         }
         bool funInit = false;
         for ( int i=0, is=context.totalFunctions; i!=is; ++i ) {
-            if ( fnn[i]->module != thisModule.get() )
+            if ( !allModules && fnn[i]->module != thisModule.get() )
                 continue;
             if ( fnn[i]->init ) {
                 funInit = true;
@@ -3697,6 +3700,204 @@ namespace das {
         logs << "StandaloneContextNode node(registerStandaloneTest);\n";
         logs << "#endif\n";
 
+    }
+
+    class StandaloneContextGen : public CppAot {
+    public:
+        StandaloneContextGen(ProgramPtr prog, BlockVariableCollector & coll, string cppOutD) : CppAot(prog, coll) {
+            cppOutputDir = cppOutD;
+        }
+
+        void writeAotHeaderIncludes () {
+            ss << "#include \"daScript/misc/platform.h\"\n\n";
+
+            ss << "#include \"daScript/simulate/simulate.h\"\n";
+            ss << "#include \"daScript/simulate/aot.h\"\n";
+            ss << "#include \"daScript/simulate/aot_library.h\"\n";
+            ss << "\n";
+        }
+
+        void writeAotHeader () {
+            ss << "\n";
+            ss << "#if defined(_MSC_VER)\n";
+            ss << "#pragma warning(push)\n";
+            ss << "#pragma warning(disable:4100)   // unreferenced formal parameter\n";
+            ss << "#pragma warning(disable:4189)   // local variable is initialized but not referenced\n";
+            ss << "#pragma warning(disable:4244)   // conversion from 'int32_t' to 'float', possible loss of data\n";
+            ss << "#pragma warning(disable:4114)   // same qualifier more than once\n";
+            ss << "#pragma warning(disable:4623)   // default constructor was implicitly defined as deleted\n";
+            ss << "#pragma warning(disable:4946)   // reinterpret_cast used besseen related classes\n";
+            ss << "#pragma warning(disable:4269)   // 'const' automatic data initialized with compiler generated default constructor produces unreliable results\n";
+            ss << "#pragma warning(disable:4555)   // result of expression not used\n";
+            ss << "#endif\n";
+            ss << "#if defined(__GNUC__) && !defined(__clang__)\n";
+            ss << "#pragma GCC diagnostic push\n";
+            ss << "#pragma GCC diagnostic ignored \"-Wunused-parameter\"\n";
+            ss << "#pragma GCC diagnostic ignored \"-Wunused-variable\"\n";
+            ss << "#pragma GCC diagnostic ignored \"-Wunused-function\"\n";
+            ss << "#pragma GCC diagnostic ignored \"-Wwrite-strings\"\n";
+            ss << "#pragma GCC diagnostic ignored \"-Wreturn-local-addr\"\n";
+            ss << "#pragma GCC diagnostic ignored \"-Wignored-qualifiers\"\n";
+            ss << "#pragma GCC diagnostic ignored \"-Wsign-compare\"\n";
+            ss << "#pragma GCC diagnostic ignored \"-Wsubobject-linkage\"\n";
+            ss << "#endif\n";
+            ss << "#if defined(__clang__)\n";
+            ss << "#pragma clang diagnostic push\n";
+            ss << "#pragma clang diagnostic ignored \"-Wunused-parameter\"\n";
+            ss << "#pragma clang diagnostic ignored \"-Wwritable-strings\"\n";
+            ss << "#pragma clang diagnostic ignored \"-Wunused-variable\"\n";
+            ss << "#if defined(__APPLE__)\n";
+            ss << "#pragma clang diagnostic ignored \"-Wunused-but-set-variable\"\n";
+            ss << "#endif\n";
+            ss << "#pragma clang diagnostic ignored \"-Wunsequenced\"\n";
+            ss << "#pragma clang diagnostic ignored \"-Wunused-function\"\n";
+            ss << "#endif\n";
+            ss << "\n";
+        }
+
+        void writeAotFooter () {
+            ss << "#if defined(_MSC_VER)\n";
+            ss << "#pragma warning(pop)\n";
+            ss << "#endif\n";
+            ss << "#if defined(__GNUC__) && !defined(__clang__)\n";
+            ss << "#pragma GCC diagnostic pop\n";
+            ss << "#endif\n";
+            ss << "#if defined(__clang__)\n";
+            ss << "#pragma clang diagnostic pop\n";
+            ss << "#endif\n";
+        }
+
+        void writeRegistration ( Context & context ) {
+            ss << "namespace "      << program->thisNamespace << " {\n";
+            ss << "\nstatic void registerAotFunctions ( AotLibrary & aotLib ) {\n";
+            program->registerAotCpp(ss, context, false, true);
+            ss << "\tresolveTypeInfoAnnotations();\n";
+            ss << "};\n";
+            ss << "\n";
+            ss << "AotListBase impl(registerAotFunctions);\n";
+            ss << "} // namespace " << program->thisNamespace << "\n";
+
+            ss << "namespace "      << contextNameSuffix << " {\n";
+            program->writeStandaloneContext(ss);
+            ss << "} // namespace " << contextNameSuffix << "\n";
+        }
+
+        void writeRequiredModulesFor ( Module * mod ) {
+            // lets comment on required modules
+            for ( auto [req, pub] : mod->requireModule ) {
+                if ( req->name=="" ) {
+                    // nothing, its main program module. i.e ::
+                } else {
+                    if ( req->name=="$" ) {
+                        ss << " // require builtin\n";
+                    } else {
+                        ss << " // require " << req->name << "\n";
+                    }
+                    if ( req->aotRequire(ss)==ModuleAotType::no_aot ) {
+                        ss << "  // no_aot ignored in standalone context\n";
+                    }
+                }
+            }
+        }
+
+        void setAotHashes ( Context & context ) {
+            // compute semantic hash for each used function
+            int fni = 0;
+            for ( auto & pm : program->library.getModules() ) {
+                pm->functions.foreach([&](auto pfun){
+                    if (pfun->index < 0 || !pfun->used)
+                        return;
+                    SimFunction * fn = context.getFunction(fni);
+                    pfun->hash = getFunctionHash(pfun.get(), fn->code, &context);
+                    fni++;
+                });
+            }
+            // compute AOT hash for each used function
+            // its the same as semantic hash, only takes dependencies into account
+            for (auto & pm : program->library.getModules() ) {
+                pm->functions.foreach([&](auto pfun){
+                    if (pfun->index < 0 || !pfun->used)
+                        return;
+                    pfun->aotHash = getFunctionAotHash(pfun.get());
+                    fni++;
+                });
+            }
+        }
+
+        bool run() {
+            shared_ptr<Context> pctx ( get_context(program->getContextStackSize()) );
+            if ( !program->simulate(*pctx, tw) ) {
+                tw << "failed to simulate\n";
+                for ( auto & err : program->errors ) {
+                    tw << reportError(err.at, err.what, err.extra, err.fixme, err.cerr);
+                }
+                return false;
+            }
+            Context & context = *pctx;
+            // header
+
+            daScriptEnvironment::bound->g_Program = program;    // setting it for the AOT macros
+
+
+            // run no-aot marker
+            NoAotMarker marker;
+            program->visit(marker);
+            // mark prologue
+            PrologueMarker pmarker;
+            program->visit(pmarker);
+
+            setAotHashes(context);
+
+            // now, for that AOT
+            program->setPrintFlags();
+            program->visit(collector);
+
+
+            program->library.foreach([&] (Module * mod) {
+                if ( mod->builtIn && !mod->promoted ) return true;
+                moduleNamespace = mod->promoted ? "" : mod->name;
+
+                ss << "// Module " << mod->name << "\n";
+
+                writeAotHeaderIncludes();
+                writeRequiredModulesFor(mod);
+                writeAotHeader();
+
+                ss << "namespace das {\n";
+                program->visitModule(*this, mod);
+                if ( mod->name.empty() ) writeRegistration(context);
+                ss << "} // namespace das\n";
+
+                writeAotFooter();
+
+                nameToOutput[mod->name] = ss.str();
+                ss = std::move(TextWriter{}); // clear the stream
+                return true;
+            }, "*");
+
+            // get the name of the current file from program?
+
+            for ( auto & [a, b] : nameToOutput ) {
+                auto outputFile = cppOutputDir + '/' + a + ".das.cpp";
+                saveToFile(outputFile, b);
+            }
+
+            daScriptEnvironment::bound->g_Program.reset();
+
+            return true;
+        }
+    public:
+        TextWriter                  tw;
+        das_map<string, string>     nameToOutput;
+        string                      cppOutputDir;
+        string                      moduleNamespace;
+        const string                contextNameSuffix;
+    };
+
+    void runStandaloneVisitor ( ProgramPtr prog, string cppOutputDir ) {
+        BlockVariableCollector coll;
+        StandaloneContextGen gen(prog, coll, cppOutputDir);
+        gen.run();
     }
 
     void Program::aotCpp ( Context & context, TextWriter & logs ) {

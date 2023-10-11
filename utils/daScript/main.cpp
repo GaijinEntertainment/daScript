@@ -178,6 +178,34 @@ bool compile ( const string & fn, const string & cppFn, bool dryRun ) {
     }
 }
 
+namespace das {
+    extern void runStandaloneVisitor ( ProgramPtr prog, string cppOutputDir );
+}
+
+bool compileStandalone ( const string & fn, const string & cppFn, bool dryRun, bool standaloneContext ) {
+    auto access = get_file_access((char*)(projectFile.empty() ? nullptr : projectFile.c_str()));
+    ModuleGroup dummyGroup;
+    CodeOfPolicies policies;
+    policies.aot = false;
+    policies.aot_module = true;
+    policies.fail_on_lack_of_aot_export = true;
+    if ( auto program = compileDaScript(fn,access,tout,dummyGroup,policies) ) {
+        if ( program->failed() ) {
+            tout << "failed to compile\n";
+            for ( auto & err : program->errors ) {
+                tout << reportError(err.at, err.what, err.extra, err.fixme, err.cerr);
+            }
+            return false;
+        } else {
+            runStandaloneVisitor(program, cppFn);
+            return true;
+        }
+    } else {
+        tout << "failed to compile\n";
+        return false;
+    }
+}
+
 int das_aot_main ( int argc, char * argv[] ) {
     setCommandLineArguments(argc, argv);
     #ifdef _MSC_VER

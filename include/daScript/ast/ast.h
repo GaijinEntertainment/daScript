@@ -1186,6 +1186,7 @@ namespace das
         TypeDeclPtr makeHandleType ( const string & name ) const;
         TypeDeclPtr makeEnumType ( const string & name ) const;
         Module* front() const { return modules.front(); }
+        vector<Module *> & getModules() { return modules; }
         Module* getThisModule() const { return thisModule; }
         void reset();
     protected:
@@ -1449,7 +1450,7 @@ namespace das
         void aotCpp ( Context & context, TextWriter & logs );
         void writeStandaloneContext ( TextWriter & logs );
         void writeStandaloneContextMethods ( TextWriter & logs );
-        void registerAotCpp ( TextWriter & logs, Context & context, bool headers = true );
+        void registerAotCpp ( TextWriter & logs, Context & context, bool headers = true, bool allModules = false );
         void validateAotCpp ( TextWriter & logs, Context & context );
         void buildMNLookup ( Context & context, const vector<FunctionPtr> & lookupFunctions, TextWriter & logs );
         void buildGMNLookup ( Context & context, TextWriter & logs );
