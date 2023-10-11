@@ -8,7 +8,6 @@
 #include "daScript/misc/enums.h"
 #include "daScript/simulate/hash.h"
 
-bool saveToFile ( const das::string & fname, const das::string & str );
 das::Context * get_context ( int stackSize = 0 );
 
 namespace das {
@@ -3822,6 +3821,14 @@ namespace das {
                     fni++;
                 });
             }
+        }
+
+        bool saveToFile ( const string & fname, const string & str ) {
+            FILE * f = fopen (fname.c_str(), "w");
+            if ( !f ) return false;
+            size_t bytes_written = fwrite(str.c_str(), str.length(), 1, f);
+            fclose(f);
+            return bytes_written == str.length();
         }
 
         bool run() {
