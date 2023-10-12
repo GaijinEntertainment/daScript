@@ -1186,6 +1186,7 @@ namespace das
         TypeDeclPtr makeHandleType ( const string & name ) const;
         TypeDeclPtr makeEnumType ( const string & name ) const;
         Module* front() const { return modules.front(); }
+        vector<Module *> & getModules() { return modules; }
         Module* getThisModule() const { return thisModule; }
         void reset();
     protected:
@@ -1299,6 +1300,7 @@ namespace das
 
     struct CodeOfPolicies {
         bool        aot = false;                        // enable AOT
+        bool        standalone_context = false;         // generate standalone context class in aot mode
         bool        aot_module = false;                 // this is how AOT tool knows module is module, and not an entry point
         bool        completion = false;                 // this code is being compiled for 'completion' mode
         bool        export_all = false;                 // when user compiles, export all (public?) functions
@@ -1432,7 +1434,7 @@ namespace das
         void allocateStack(TextWriter & logs);
         void deriveAliases(TextWriter & logs);
         bool simulate ( Context & context, TextWriter & logs, StackAllocator * sharedStack = nullptr );
-        uint64_t getInitSemanticHashWithDep( uint64_t initHash ) const;
+        uint64_t getInitSemanticHashWithDep( uint64_t initHash );
         void error ( const string & str, const string & extra, const string & fixme, const LineInfo & at, CompilationError cerr = CompilationError::unspecified );
         bool failed() const { return failToCompile || macroException; }
         static ExpressionPtr makeConst ( const LineInfo & at, const TypeDeclPtr & type, vec4f value );
@@ -1446,7 +1448,9 @@ namespace das
         void visit(Visitor & vis, bool visitGenerics = false);
         void setPrintFlags();
         void aotCpp ( Context & context, TextWriter & logs );
-        void registerAotCpp ( TextWriter & logs, Context & context, bool headers = true );
+        void writeStandaloneContext ( TextWriter & logs );
+        void writeStandaloneContextMethods ( TextWriter & logs );
+        void registerAotCpp ( TextWriter & logs, Context & context, bool headers = true, bool allModules = false );
         void validateAotCpp ( TextWriter & logs, Context & context );
         void buildMNLookup ( Context & context, const vector<FunctionPtr> & lookupFunctions, TextWriter & logs );
         void buildGMNLookup ( Context & context, TextWriter & logs );
@@ -1491,6 +1495,7 @@ namespace das
         uint32_t                    globalStringHeapSize = 0;
         bool                        folding = false;
         bool                        reportingInferErrors = false;
+        uint64_t                    initSemanticHashWithDep = 0;
         union {
             struct {
                 bool    failToCompile : 1;

@@ -43,6 +43,7 @@ namespace das {
             enableInferTimeFolding = prog->options.getBoolOption("infer_time_folding",true);
             disableAot = prog->options.getBoolOption("no_aot",false);
             multiContext = prog->options.getBoolOption("multiple_contexts", prog->policies.multiple_contexts);
+            standaloneContext = prog->options.getBoolOption("standalone_context", prog->policies.standalone_context);
             checkNoGlobalVariablesAtAll = prog->options.getBoolOption("no_global_variables_at_all", prog->policies.no_global_variables_at_all);
             strictSmartPointers = prog->options.getBoolOption("strict_smart_pointers", prog->policies.strict_smart_pointers);
             disableInit = prog->options.getBoolOption("no_init", prog->policies.no_init);
@@ -74,6 +75,7 @@ namespace das {
         bool                    enableInferTimeFolding = true;
         bool                    disableAot = false;
         bool                    multiContext = false;
+        bool                    standaloneContext = false;
         Expression *            lastEnuValue = nullptr;
         int32_t                 unsafeDepth = 0;
         bool                    checkNoGlobalVariablesAtAll = false;
@@ -1835,7 +1837,9 @@ namespace das {
             unsafeDepth = 0;
             func = f;
             func->hasReturn = false;
-            func->noAot |= disableAot;
+            if ( !standaloneContext ) {
+                func->noAot |= disableAot;
+            }
             if ( f->arguments.size() > DAS_MAX_FUNCTION_ARGUMENTS ) {
                 error("function has too many arguments, max allowed is DAS_MAX_FUNCTION_ARGUMENTS=" DAS_STR(DAS_MAX_FUNCTION_ARGUMENTS),  "", "",
                     f->at, CompilationError::too_many_arguments);
