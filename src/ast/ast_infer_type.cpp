@@ -7607,7 +7607,12 @@ namespace das {
                 }
             }
             if ( expr->block ) {
-                DAS_ASSERT(expr->block->rtti_isMakeBlock());
+                if ( !expr->block->rtti_isMakeBlock() ) {
+                    string btype  = expr->block->type ? describeType(expr->block->type) : "unknown";
+                    error("can only pipe block into structure declaration. expecting <| $ ( var decl ), got " + btype,
+                        "", "", expr->block->at, CompilationError::invalid_block );
+                    return Visitor::visit(expr);
+                }
                 auto mkb = static_pointer_cast<ExprMakeBlock>(expr->block);
                 DAS_ASSERT(mkb->block->rtti_isBlock());
                 auto blk = static_pointer_cast<ExprBlock>(mkb->block);
