@@ -1078,18 +1078,11 @@ namespace das {
         virtual void preVisitProgramBody ( Program * prog, Module * that ) override {
             // functions
             ss << "\n";
-            // print forward declarations
-            vector<Function *> fnn; fnn.reserve(prog->totalFunctions);
-            prog->library.foreach([&](Module * pm) {
-                pm->functions.foreach([&](auto pfun) {
-                    if ( pfun->index < 0 || !pfun->used ) return true;
-                    if ( pfun->builtIn || pfun->noAot) return true;
-                    auto needInline = that == pm;
-                    ss << describeCppFunc(pfun.get(), &collector, true, needInline) << ";\n";
-                    return true;
-                });
-                return true;
-            }, "*");
+            prog->thisModule->functions.foreach([&](auto fn){
+                if ( !fn->builtIn && !fn->noAot ) {
+                    ss << describeCppFunc(fn.get(),&collector) << ";\n";
+                }
+            });
             ss << "\n";
         }
     // global let body
@@ -1106,25 +1099,6 @@ namespace das {
             }
         }
         virtual void visitGlobalLetBody ( Program * prog ) override {
-            vector<Variable*> globals;
-            prog->library.foreach([&]( Module * pm ) {
-                pm->globals.foreach([&]( VariablePtr pvar ){
-                    if ( pvar->index < 0 || !pvar->used ) return;
-                    if ( pvar->module == prog->thisModule.get() ) return;
-                    globals.push_back(pvar.get());
-                });
-                return true;
-            }, "*");
-
-            for ( auto var : globals ) {
-                preVisitGlobalLet(var);
-                if ( var->init ) {
-                    preVisitGlobalLetInit(var, var->init.get());
-                    var->init = var->init->visit(*this);
-                    var->init = visitGlobalLetInit(var, var->init.get());
-                }
-                auto varn = visitGlobalLet(var);
-            }
             tab --;
             ss << "}\n";
             Visitor::visitGlobalLetBody(prog);
@@ -3833,6 +3807,47 @@ namespace das {
             return bytes_written == str.length();
         }
     public:
+        virtual void visitGlobalLetBody ( Program * prog ) override {
+            vector<Variable*> globals;
+            prog->library.foreach([&]( Module * pm ) {
+                pm->globals.foreach([&]( VariablePtr pvar ){
+                    if ( pvar->index < 0 || !pvar->used ) return;
+                    if ( pvar->module == prog->thisModule.get() ) return;
+                    globals.push_back(pvar.get());
+                });
+                return true;
+            }, "*");
+
+            for ( auto var : globals ) {
+                preVisitGlobalLet(var);
+                if ( var->init ) {
+                    preVisitGlobalLetInit(var, var->init.get());
+                    var->init = var->init->visit(*this);
+                    var->init = visitGlobalLetInit(var, var->init.get());
+                }
+                auto varn = visitGlobalLet(var);
+            }
+            tab --;
+            ss << "}\n";
+            Visitor::visitGlobalLetBody(prog);
+        }
+        virtual void preVisitProgramBody ( Program * prog, Module * that ) override {
+            // functions
+            ss << "\n";
+            // print forward declarations
+            vector<Function *> fnn; fnn.reserve(prog->totalFunctions);
+            prog->library.foreach([&](Module * pm) {
+                pm->functions.foreach([&](auto pfun) {
+                    if ( pfun->index < 0 || !pfun->used ) return true;
+                    if ( pfun->builtIn || pfun->noAot) return true;
+                    auto needInline = that == pm;
+                    ss << describeCppFunc(pfun.get(), &collector, true, needInline) << ";\n";
+                    return true;
+                });
+                return true;
+            }, "*");
+            ss << "\n";
+        }
         bool run() {
             shared_ptr<Context> pctx ( get_context(program->getContextStackSize()) );
             if ( !program->simulate(*pctx, tw) ) {
@@ -3848,9 +3863,6 @@ namespace das {
             daScriptEnvironment::bound->g_Program = program;    // setting it for the AOT macros
 
 
-            // run no-aot marker
-            NoAotMarker marker;
-            program->visit(marker);
             // mark prologue
             PrologueMarker pmarker;
             program->visit(pmarker);
@@ -3863,7 +3875,7 @@ namespace das {
 
 
             program->library.foreach([&] (Module * mod) {
-                if ( mod->builtIn && !mod->promoted ) return true;
+                // if ( mod->isProperBuiltin() ) return true;
                 moduleNamespace = mod->promoted ? "" : mod->name;
 
                 ss << "// Module " << mod->name << "\n";
