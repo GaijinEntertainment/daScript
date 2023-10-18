@@ -2204,7 +2204,7 @@ namespace das {
         virtual ExpressionPtr visit ( ExprPtr2Ref * expr ) override {
             if ( !expr->subexpr->type ) return Visitor::visit(expr);
             // safe deref of non-pointer is it
-            if ( expr->alwaysSafe && !expr->subexpr->type->isPointer() && !expr->subexpr->type->isAutoOrAlias() ) {
+            if ( expr->alwaysSafe && !expr->subexpr->type->isPointer() && !(expr->subexpr->type->baseType==Type::autoinfer || expr->subexpr->type->baseType==Type::alias) ) {
                 reportAstChanged();
                 return expr->subexpr;
             }
