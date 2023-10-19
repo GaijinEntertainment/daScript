@@ -150,6 +150,25 @@ namespace das
 
         bool grow ( Table & tab ) {
             uint32_t newCapacity = das::max(uint32_t(minCapacity), tab.capacity*2);
+            return reserveInternal(tab, newCapacity);
+        }
+
+        bool reserve(Table & tab, int size) {
+            if (size <= tab.capacity)
+              return true;
+
+            uint32_t newCapacity = das::max(uint32_t(minCapacity), tab.capacity*2);
+            while (newCapacity < size)
+            {
+              newCapacity *= 2;
+            }
+
+            return reserveInternal(tab, newCapacity);
+        }
+
+    private:
+        bool reserveInternal(Table & tab, uint32_t newCapacity)
+        {
         repeatIt:;
             Table newTab;
             uint64_t memSize64 = uint64_t(newCapacity) * (uint64_t(valueTypeSize) + uint64_t(sizeof(KeyType)) + uint64_t(sizeof(uint64_t)));
