@@ -187,6 +187,7 @@ namespace das
                     if ( hash>HASH_KILLED64 ) {
                         int index = insertNew(newTab, hash);
                         if ( index==-1 ) {
+                             context->heap->free(newTab.data, memSize);
                              newCapacity *= 2;
                             goto repeatIt;
                         } else {
