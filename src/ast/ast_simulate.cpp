@@ -3194,7 +3194,7 @@ namespace das
                 error("exception during init script", context.getException(), "",
                     context.exceptionAt, CompilationError::cant_initialize);
             }
-            if ( options.getBoolOption("log_total_compile_time",false) ) {
+            if ( options.getBoolOption("log_total_compile_time",policies.log_total_compile_time) ) {
                 auto dt = get_time_usec(time1) / 1000000.;
                 logs << "init script took " << dt << "\n";
             }
@@ -3265,7 +3265,7 @@ namespace das
         if ( !options.getBoolOption("rtti",policies.rtti) ) {
             context.thisProgram = nullptr;
         }
-        if ( options.getBoolOption("log_total_compile_time",false) ) {
+        if ( options.getBoolOption("log_total_compile_time",policies.log_total_compile_time) ) {
             auto dt = get_time_usec(time0) / 1000000.;
             logs << "simulate (including init script) took " << dt << "\n";
         }
