@@ -1346,6 +1346,8 @@ namespace das
         bool no_optimizations = false;                  // disable optimizations, regardless of settings
         bool fail_on_no_aot = true;                     // AOT link failure is error
         bool fail_on_lack_of_aot_export = false;        // remove_unused_symbols = false is missing in the module, which is passed to AOT
+        bool log_compile_time = false;                  // if true, then compile time will be printed at the end of the compilation
+        bool log_total_compile_time = false;            // if true, then detailed compile time will be printed at the end of the compilation
     // debugger
         //  when enabled
         //      1. disables [fastcall]
@@ -1585,6 +1587,7 @@ namespace das
         int             das_def_tab_size = 4;
         bool            g_resolve_annotations = true;
         TextWriter *    g_compilerLog = nullptr;
+        int64_t         macroTimeTicks = 0;
         DebugAgentInstance g_threadLocalDebugAgent;
         static DAS_THREAD_LOCAL daScriptEnvironment * bound;
         static DAS_THREAD_LOCAL daScriptEnvironment * owned;

@@ -18,6 +18,7 @@ namespace das {
 #include "ast_gen.inc"
 
     void runMacroFunction ( Context * context, const string & message, const callable<void()> & subexpr ) {
+        auto timeM = ref_time_ticks();
         if ( !context->runWithCatch(subexpr) ) {
             DAS_ASSERTF(daScriptEnvironment::bound->g_Program, "calling macros while not compiling a program");
             daScriptEnvironment::bound->g_Program->error(
@@ -28,6 +29,7 @@ namespace das {
             );
             daScriptEnvironment::bound->g_Program->macroException = true;
         }
+        daScriptEnvironment::bound->macroTimeTicks += ref_time_ticks() - timeM;
     }
 
     template <typename TT, typename QQ>

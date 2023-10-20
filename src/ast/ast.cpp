@@ -226,6 +226,9 @@ namespace das {
     }
 
     bool Structure::isCompatibleCast ( const Structure & castS ) const {
+        if (this == &castS) {
+            return true;
+        }
         if ( castS.fields.size() < fields.size() ) {
             return false;
         }
