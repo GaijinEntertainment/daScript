@@ -240,6 +240,18 @@ namespace das {
                         das_yyerror(scanner,"only class member can be private "+name_at.name,name_at.at,
                             CompilationError::invalid_private);
                     }
+                    if ( !pStruct->isClass && pDecl->isStatic ) {
+                        das_yyerror(scanner,"only class member can be static "+name_at.name,name_at.at,
+                            CompilationError::invalid_static);
+                    }
+                    if ( (pDecl->override || pDecl->sealed) && pDecl->isStatic ) {
+                        das_yyerror(scanner,"static member can't be sealed or override "+name_at.name,name_at.at,
+                            CompilationError::invalid_static);
+                    }
+                    if ( pDecl->isStatic && pDecl->annotation ) {
+                        das_yyerror(scanner,"static member can't have an annotation "+name_at.name,name_at.at,
+                            CompilationError::invalid_static);
+                    }
                     auto oldFd = (Structure::FieldDeclaration *) pStruct->findField(name_at.name);
                     if ( !oldFd ) {
                         if ( pDecl->override ) {
@@ -248,16 +260,35 @@ namespace das {
                         } else {
                             auto td = make_smart<TypeDecl>(*pDecl->pTypeDecl);
                             auto init = pDecl->pInit ? ExpressionPtr(pDecl->pInit->clone()) : nullptr;
-                            pStruct->fields.emplace_back(name_at.name, td, init,
-                                pDecl->annotation ? *pDecl->annotation : AnnotationArgumentList(),
-                                pDecl->init_via_move, name_at.at);
-                            auto & ffd = pStruct->fields.back();
-                            ffd.privateField = pDecl->isPrivate;
-                            ffd.sealed = pDecl->sealed;
-                            ffd.implemented = true;
+                            if ( pDecl->isStatic ) {
+                                auto pVar = make_smart<Variable>();
+                                pVar->name = pStruct->name + "`" + name_at.name;
+                                pVar->type = td;
+                                pVar->init = init;
+                                pVar->init_via_move = pDecl->init_via_move;
+                                pVar->static_class_member = true;
+                                pVar->private_variable = pDecl->isPrivate || pStruct->privateStructure;
+                                if ( !pStruct->module->addVariable(pVar,true) ) {
+                                    das_yyerror(scanner,"static variable already exists "+name_at.name,name_at.at,
+                                        CompilationError::invalid_static);
+                                }
+                                pStruct->hasStaticMembers = true;
+                            } else {
+                                pStruct->fields.emplace_back(name_at.name, td, init,
+                                    pDecl->annotation ? *pDecl->annotation : AnnotationArgumentList(),
+                                    pDecl->init_via_move, name_at.at);
+                                auto & ffd = pStruct->fields.back();
+                                ffd.privateField = pDecl->isPrivate;
+                                ffd.sealed = pDecl->sealed;
+                                ffd.implemented = true;
+                            }
                         }
                     } else {
-                        if ( pDecl->sealed || pDecl->override ) {
+                        if ( pDecl->isStatic ) {
+                            das_yyerror(scanner,"static structure field is already declared "+name_at.name
+                                +", can't have both member at static at the same name",name_at.at,
+                                    CompilationError::invalid_static);
+                        } else if ( pDecl->sealed || pDecl->override ) {
                             if ( oldFd->sealed ) {
                                 das_yyerror(scanner,"structure field "+name_at.name+" is sealed",
                                     name_at.at, CompilationError::invalid_override);
