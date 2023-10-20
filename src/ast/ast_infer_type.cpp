@@ -1385,6 +1385,14 @@ namespace das {
                         if ( pSt->fieldLookup.find(fieldName) != pSt->fieldLookup.end() ) {
                             return eW;
                         }
+                        if ( pSt->hasStaticMembers ) {
+                            auto fname = pSt->name + "`" + fieldName;
+                            if ( auto pVar = pSt->module->findVariable(fname) ) {
+                                if ( pVar->static_class_member ) {
+                                    return eW;
+                                }
+                            }
+                        }
                     }
                 }
             }
@@ -4729,6 +4737,15 @@ namespace das {
                     return Visitor::visit(expr);
                 } else if ( valT->firstType->isStructure() ) {
                     expr->field = valT->firstType->structType->findField(expr->name);
+                    if ( !expr->field && valT->structType->hasStaticMembers ) {
+                        auto fname = valT->firstType->structType->name + "`" + expr->name;
+                        if ( auto pVar = valT->firstType->structType->module->findVariable(fname) ) {
+                            if ( pVar->static_class_member ) {
+                                reportAstChanged();
+                                return make_smart<ExprVar>(expr->at, fname);
+                            }
+                        }
+                    }
                 } else if ( valT->firstType->isHandle() ) {
                     expr->annotation = valT->firstType->annotation;
                     expr->type = expr->annotation->makeFieldType(expr->name, valT->constant || valT->firstType->constant);
@@ -4785,6 +4802,15 @@ namespace das {
                     expr->type = expr->annotation->makeFieldType(expr->name, valT->constant);
                 } else if ( valT->isStructure() ) {
                     expr->field = valT->structType->findField(expr->name);
+                    if ( !expr->field && valT->structType->hasStaticMembers ) {
+                        auto fname = valT->structType->name + "`" + expr->name;
+                        if ( auto pVar = valT->structType->module->findVariable(fname) ) {
+                            if ( pVar->static_class_member ) {
+                                reportAstChanged();
+                                return make_smart<ExprVar>(expr->at, fname);
+                            }
+                        }
+                    }
                 } else if ( valT->isGoodTupleType() ) {
                     int index = valT->tupleFieldIndex(expr->name);
                     if ( index==-1 || index>=int(valT->argTypes.size()) ) {

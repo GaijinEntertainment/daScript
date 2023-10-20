@@ -201,6 +201,7 @@
 %token  DAS_SMART_PTR       "smart_ptr"
 %token  DAS_UNSAFE          "unsafe"
 %token  DAS_INSCOPE         "inscope"
+%token  DAS_STATIC          "static"
 
 /* basic types */
 %token  DAS_TBOOL           "bool"
@@ -385,6 +386,7 @@
 %type <b>               optional_public_or_private_structure
 %type <b>               optional_public_or_private_function
 %type <b>               optional_public_or_private_member_variable
+%type <b>               optional_static_member_variable
 %type <b>               optional_public_or_private_enum
 %type <b>               optional_in_scope
 
@@ -1845,12 +1847,18 @@ optional_public_or_private_member_variable
     |   DAS_PRIVATE     { $$ = true; }
     ;
 
+optional_static_member_variable
+    :                   { $$ = false; }
+    |   DAS_STATIC      { $$ = true; }
+    ;
+
 structure_variable_declaration
-    :   optional_field_annotation[alist] optional_override[ovr] optional_public_or_private_member_variable[isPrivate] variable_declaration[decl] {
+    :   optional_field_annotation[alist] optional_static_member_variable[sta] optional_override[ovr] optional_public_or_private_member_variable[isPrivate] variable_declaration[decl] {
         $decl->override = $ovr == OVERRIDE_OVERRIDE;
         $decl->sealed = $ovr == OVERRIDE_SEALED;
         $decl->annotation = $alist;
         $decl->isPrivate = $isPrivate;
+        $decl->isStatic = $sta;
         $$ = $decl;
     }
     ;

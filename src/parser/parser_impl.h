@@ -39,6 +39,7 @@ namespace das {
         bool                    override = false;
         bool                    sealed = false;
         bool                    isPrivate = false;
+        bool                    isStatic = false;
         AnnotationArgumentList  *annotation = nullptr;
     };
 

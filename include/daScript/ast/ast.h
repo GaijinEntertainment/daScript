@@ -289,6 +289,7 @@ namespace das
                 bool    skipLockCheck : 1;
                 bool    circular : 1;
                 bool    generator : 1;
+                bool    hasStaticMembers : 1;
             };
             uint32_t    flags = 0;
         };
@@ -339,6 +340,7 @@ namespace das
                 bool    no_capture : 1;
                 bool    early_out : 1;              // this variable is potentially uninitialized in the finally section
                 bool    used_in_finally : 1;        // this variable is used in the finally section
+                bool    static_class_member : 1;    // this is a static class member
             };
             uint32_t flags = 0;
         };
