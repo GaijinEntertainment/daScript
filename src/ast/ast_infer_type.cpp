@@ -4737,7 +4737,7 @@ namespace das {
                     return Visitor::visit(expr);
                 } else if ( valT->firstType->isStructure() ) {
                     expr->field = valT->firstType->structType->findField(expr->name);
-                    if ( !expr->field && valT->structType->hasStaticMembers ) {
+                    if ( !expr->field && valT->firstType->structType->hasStaticMembers ) {
                         auto fname = valT->firstType->structType->name + "`" + expr->name;
                         if ( auto pVar = valT->firstType->structType->module->findVariable(fname) ) {
                             if ( pVar->static_class_member ) {
@@ -5002,6 +5002,14 @@ namespace das {
             if ( auto eW = hasMatchingWith(expr->name) ) {
                 reportAstChanged();
                 return make_smart<ExprField>(expr->at, forceAt(eW->with->clone(),expr->at), expr->name);
+            }
+            // static class method accessing static variables
+            if ( func && func->isStaticClassMethod && func->classParent->hasStaticMembers ) {
+                auto staticVarName = func->classParent->name + "`" + expr->name;
+                if ( func->classParent->module->findVariable(staticVarName) ) {
+                    reportAstChanged();
+                    return make_smart<ExprVar>(expr->at, staticVarName);
+                }
             }
             // block arguments
             for ( auto it = blocks.rbegin(); it!=blocks.rend(); ++it ) {

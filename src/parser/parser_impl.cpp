@@ -531,7 +531,7 @@ namespace das {
     }
 
     vector<VariableDeclaration*> * ast_structVarDef ( yyscan_t scanner, vector<VariableDeclaration*> * list,
-        AnnotationList * annL, bool isPrivate, int ovr, bool cnst, Function * func, Expression * block,
+        AnnotationList * annL, bool isStatic, bool isPrivate, int ovr, bool cnst, Function * func, Expression * block,
             const LineInfo & fromBlock, const LineInfo & annLAt ) {
         func->atDecl = fromBlock;
         func->body = block;
@@ -545,6 +545,10 @@ namespace das {
             das_yyerror(scanner,"generic function can't be a member of a class " + func->getMangledName(),
                 func->at, CompilationError::invalid_member_function);
         } else if ( isOpName(func->name) ) {
+            if ( isStatic ) {
+                das_yyerror(scanner,"operator can't be static " + func->getMangledName(),
+                    func->at, CompilationError::invalid_member_function);
+            }
             if ( ovr ) {
                 das_yyerror(scanner,"can't override an operator " + func->getMangledName(),
                     func->at, CompilationError::invalid_member_function);
@@ -560,25 +564,37 @@ namespace das {
         } else {
             func->privateFunction = yyextra->g_thisStructure->privateStructure;
             if ( func->name != yyextra->g_thisStructure->name && func->name != "finalize") {
-                auto varName = func->name;
-                func->name = yyextra->g_thisStructure->name + "`" + func->name;
-                auto vars = new vector<VariableNameAndPosition>();
-                vars->emplace_back(VariableNameAndPosition{varName,"",func->at});
-                Expression * finit = new ExprAddr(func->at, inThisModule(func->name));
-                if ( ovr == OVERRIDE_OVERRIDE ) {
-                    finit = new ExprCast(func->at, finit, make_smart<TypeDecl>(Type::autoinfer));
+                if ( isStatic ) {
+                    func->name = yyextra->g_thisStructure->name + "`" + func->name;
+                    func->isClassMethod = true;
+                    func->isStaticClassMethod = true;
+                    func->classParent = yyextra->g_thisStructure;
+                    func->privateFunction = isPrivate || yyextra->g_thisStructure->privateStructure;
+                } else {
+                    auto varName = func->name;
+                    func->name = yyextra->g_thisStructure->name + "`" + func->name;
+                    auto vars = new vector<VariableNameAndPosition>();
+                    vars->emplace_back(VariableNameAndPosition{varName,"",func->at});
+                    Expression * finit = new ExprAddr(func->at, inThisModule(func->name));
+                    if ( ovr == OVERRIDE_OVERRIDE ) {
+                        finit = new ExprCast(func->at, finit, make_smart<TypeDecl>(Type::autoinfer));
+                    }
+                    VariableDeclaration * decl = new VariableDeclaration(
+                        vars,
+                        new TypeDecl(Type::autoinfer),
+                        finit
+                    );
+                    decl->override = ovr == OVERRIDE_OVERRIDE;
+                    decl->sealed = ovr == OVERRIDE_SEALED;
+                    decl->isPrivate = isPrivate;
+                    list->push_back(decl);
+                    modifyToClassMember(func, yyextra->g_thisStructure, false, cnst);
                 }
-                VariableDeclaration * decl = new VariableDeclaration(
-                    vars,
-                    new TypeDecl(Type::autoinfer),
-                    finit
-                );
-                decl->override = ovr == OVERRIDE_OVERRIDE;
-                decl->sealed = ovr == OVERRIDE_SEALED;
-                decl->isPrivate = isPrivate;
-                list->push_back(decl);
-                modifyToClassMember(func, yyextra->g_thisStructure, false, cnst);
             } else {
+                if ( isStatic ) {
+                    das_yyerror(scanner,"initializer or a finalizer can't be static " + func->getMangledName(),
+                        func->at, CompilationError::invalid_member_function);
+                }
                 if ( ovr ) {
                     das_yyerror(scanner,"can't override an initializer or a finalizer " + func->getMangledName(),
                         func->at, CompilationError::invalid_member_function);
