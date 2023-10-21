@@ -1900,7 +1900,7 @@ struct_variable_declaration_list
                 $$ = ast_structVarDefAbstract(scanner,$list,$annL,$isPrivate,$cnst, $func);
             }
     |   struct_variable_declaration_list[list] optional_annotation_list[annL]
-            DAS_DEF[from] optional_static_member_variable[isStatic] optional_public_or_private_member_variable[isPrivate] optional_override[ovr] optional_constant[cnst] {
+            DAS_DEF[from] optional_public_or_private_member_variable[isPrivate] optional_static_member_variable[isStatic] optional_override[ovr] optional_constant[cnst] {
                 if ( !yyextra->g_CommentReaders.empty() ) {
                     auto tak = tokAt(scanner,@cnst);
                     for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeFunction(tak);
