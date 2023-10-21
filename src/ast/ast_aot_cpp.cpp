@@ -642,9 +642,9 @@ namespace das {
                     auto tname = (char *)(intptr_t(info->annotation_or_name) ^ 1);  // already comes from string allocator
                     ss << ", DAS_MAKE_ANNOTATION(\"" << tname << "\")";
                 }  else {
-                    // we add ~ at the begining of the name for padding
+                    // we add ~ at the beginning of the name for padding
                     // if name is allocated by the compiler, it does not guarantee that it is aligned
-                    // we check if there is a ~ at the begining of the name, and if it is - we skip it
+                    // we check if there is a ~ at the beginning of the name, and if it is - we skip it
                     // that way we can accept both aligned and unaligned names
                     ss << ", DAS_MAKE_ANNOTATION(\"~" << info->annotation_or_name->module->name << "::" << info->annotation_or_name->name << "\")";
                 }

@@ -83,9 +83,9 @@ namespace das {
         intptr_t ann = (intptr_t) (info->annotation_or_name);
         if ( ann & 1 ) {
             DAS_VERIFYF(daScriptEnvironment::bound && daScriptEnvironment::bound->modules,"missing bound environment");
-            // we add ~ at the begining of the name for padding
+            // we add ~ at the beginning of the name for padding
             // if name is allocated by the compiler, it does not guarantee that it is aligned
-            // we check if there is a ~ at the begining of the name, and if it is - we skip it
+            // we check if there is a ~ at the beginning of the name, and if it is - we skip it
             // that way we can accept both aligned and unaligned names
             auto cvtbuf = (char *) ann;
             if ( cvtbuf[0]=='~' ) cvtbuf++;
