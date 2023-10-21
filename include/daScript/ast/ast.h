@@ -290,6 +290,7 @@ namespace das
                 bool    circular : 1;
                 bool    generator : 1;
                 bool    hasStaticMembers : 1;
+                bool    hasStaticFunctions : 1;
             };
             uint32_t    flags = 0;
         };
@@ -875,10 +876,11 @@ namespace das
                 bool    propertyFunction : 1;
                 bool    pinvoke : 1;
                 bool    jitOnly : 1;
+                bool    isStaticClassMethod : 1;
             };
             uint32_t moreFlags = 0;
-
         };
+
         union {
             struct {
                 bool unsafeFunction : 1;

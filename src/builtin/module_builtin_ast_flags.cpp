@@ -171,7 +171,7 @@ namespace das {
         ft->argNames = { "isClass", "genCtor", "cppLayout", "cppLayoutNotPod",
             "generated", "persistent", "isLambda", "privateStructure",
             "macroInterface", "_sealed", "skipLockCheck", "circular",
-            "_generator", "hasStaticMembers" };
+            "_generator", "hasStaticMembers", "hasStaticFunctions" };
         return ft;
     }
 
@@ -193,7 +193,7 @@ namespace das {
         ft->argNames = {
             "macroFunction", "needStringCast", "aotHashDeppendsOnArguments", "lateInit", "requestJit",
             "unsafeOutsideOfFor", "skipLockCheck", "safeImplicit", "deprecated", "aliasCMRES", "neverAliasCMRES",
-            "addressTaken", "propertyFunction", "pinvoke", "jitOnly"
+            "addressTaken", "propertyFunction", "pinvoke", "jitOnly", "isStaticClassMethod"
         };
         return ft;
     }

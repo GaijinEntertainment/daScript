@@ -9,6 +9,8 @@ class StaticCounter
         return count++
     def get
         return count
+    def static next_func
+        return count++
 
 [test]
 def test_static_members ( t : T? )
@@ -24,4 +26,8 @@ def test_static_members ( t : T? )
         t |> equal ( 16, StaticCounter`count )
         t |> equal ( 16, c1->get() )
         t |> equal ( 4, length(StaticCounter`mount) )
+    t |> run("functions") <| @ ( t : T? )
+        StaticCounter`count = 13
+        t |> equal ( 13, StaticCounter`next_func() )
+        t |> equal ( 14, StaticCounter`next_func() )
 

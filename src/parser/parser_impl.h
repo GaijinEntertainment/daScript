@@ -66,7 +66,7 @@ namespace das {
     vector<VariableDeclaration*> * ast_structVarDefAbstract ( yyscan_t scanner, vector<VariableDeclaration*> * list,
         AnnotationList * annL, bool isPrivate, bool cnst, Function * func );
     vector<VariableDeclaration*> * ast_structVarDef ( yyscan_t scanner, vector<VariableDeclaration*> * list,
-        AnnotationList * annL, bool isPrivate, int ovr, bool cnst, Function * func, Expression * block,
+        AnnotationList * annL, bool isStatic, bool isPrivate, int ovr, bool cnst, Function * func, Expression * block,
             const LineInfo & fromBlock, const LineInfo & annLAt );
     Expression * ast_NameName ( yyscan_t scanner, string * ena, string * eni, const LineInfo & enaAt, const LineInfo & eniAt );
     Expression * ast_makeBlock ( yyscan_t scanner, int bal, AnnotationList * annL, vector<CaptureEntry> * clist,

@@ -636,7 +636,7 @@ Grammar
 
   480 $@32: %empty
 
-  481 struct_variable_declaration_list: struct_variable_declaration_list optional_annotation_list "def" optional_public_or_private_member_variable optional_override optional_constant $@32 function_declaration_header expression_block
+  481 struct_variable_declaration_list: struct_variable_declaration_list optional_annotation_list "def" optional_public_or_private_member_variable optional_static_member_variable optional_override optional_constant $@32 function_declaration_header expression_block
   482                                 | struct_variable_declaration_list '[' annotation_list ']' ';'
 
   483 function_argument_declaration: optional_field_annotation variable_declaration
@@ -1574,7 +1574,7 @@ Nonterminals, with rules where they appear
         on right: 474 479 481
     optional_static_member_variable <b> (335)
         on left: 472 473
-        on right: 474
+        on right: 474 481
     structure_variable_declaration <pVarDecl> (336)
         on left: 474
         on right: 477
@@ -15615,7 +15615,7 @@ State 644
 
   477 struct_variable_declaration_list: struct_variable_declaration_list . $@30 structure_variable_declaration ';'
   479                                 | struct_variable_declaration_list . optional_annotation_list "def" optional_public_or_private_member_variable "abstract" optional_constant $@31 function_declaration_header ';'
-  481                                 | struct_variable_declaration_list . optional_annotation_list "def" optional_public_or_private_member_variable optional_override optional_constant $@32 function_declaration_header expression_block
+  481                                 | struct_variable_declaration_list . optional_annotation_list "def" optional_public_or_private_member_variable optional_static_member_variable optional_override optional_constant $@32 function_declaration_header expression_block
   482                                 | struct_variable_declaration_list . '[' annotation_list ']' ';'
   557 structure_declaration: optional_annotation_list class_or_struct optional_public_or_private_structure $@36 structure_name $@37 '{' struct_variable_declaration_list . '}'
 
@@ -25367,7 +25367,7 @@ State 847
 State 848
 
   479 struct_variable_declaration_list: struct_variable_declaration_list optional_annotation_list . "def" optional_public_or_private_member_variable "abstract" optional_constant $@31 function_declaration_header ';'
-  481                                 | struct_variable_declaration_list optional_annotation_list . "def" optional_public_or_private_member_variable optional_override optional_constant $@32 function_declaration_header expression_block
+  481                                 | struct_variable_declaration_list optional_annotation_list . "def" optional_public_or_private_member_variable optional_static_member_variable optional_override optional_constant $@32 function_declaration_header expression_block
 
     "def"  shift, and go to state 1015
 
@@ -31871,7 +31871,7 @@ State 1014
 State 1015
 
   479 struct_variable_declaration_list: struct_variable_declaration_list optional_annotation_list "def" . optional_public_or_private_member_variable "abstract" optional_constant $@31 function_declaration_header ';'
-  481                                 | struct_variable_declaration_list optional_annotation_list "def" . optional_public_or_private_member_variable optional_override optional_constant $@32 function_declaration_header expression_block
+  481                                 | struct_variable_declaration_list optional_annotation_list "def" . optional_public_or_private_member_variable optional_static_member_variable optional_override optional_constant $@32 function_declaration_header expression_block
 
     "public"   shift, and go to state 1110
     "private"  shift, and go to state 1111
@@ -34983,15 +34983,14 @@ State 1111
 State 1112
 
   479 struct_variable_declaration_list: struct_variable_declaration_list optional_annotation_list "def" optional_public_or_private_member_variable . "abstract" optional_constant $@31 function_declaration_header ';'
-  481                                 | struct_variable_declaration_list optional_annotation_list "def" optional_public_or_private_member_variable . optional_override optional_constant $@32 function_declaration_header expression_block
+  481                                 | struct_variable_declaration_list optional_annotation_list "def" optional_public_or_private_member_variable . optional_static_member_variable optional_override optional_constant $@32 function_declaration_header expression_block
 
-    "override"  shift, and go to state 1170
-    "abstract"  shift, and go to state 1171
-    "sealed"    shift, and go to state 1172
+    "abstract"  shift, and go to state 1170
+    "static"    shift, and go to state 1113
 
-    $default  reduce using rule 464 (optional_override)
+    $default  reduce using rule 472 (optional_static_member_variable)
 
-    optional_override  go to state 1173
+    optional_static_member_variable  go to state 1171
 
 
 State 1113
@@ -35005,8 +35004,8 @@ State 1114
 
   474 structure_variable_declaration: optional_field_annotation optional_static_member_variable . optional_override optional_public_or_private_member_variable variable_declaration
 
-    "override"  shift, and go to state 1170
-    "sealed"    shift, and go to state 1172
+    "override"  shift, and go to state 1172
+    "sealed"    shift, and go to state 1173
 
     $default  reduce using rule 464 (optional_override)
 
@@ -37214,13 +37213,6 @@ State 1169
 
 State 1170
 
-  465 optional_override: "override" .
-
-    $default  reduce using rule 465 (optional_override)
-
-
-State 1171
-
   479 struct_variable_declaration_list: struct_variable_declaration_list optional_annotation_list "def" optional_public_or_private_member_variable "abstract" . optional_constant $@31 function_declaration_header ';'
 
     "const"  shift, and go to state 1208
@@ -37230,22 +37222,30 @@ State 1171
     optional_constant  go to state 1209
 
 
+State 1171
+
+  481 struct_variable_declaration_list: struct_variable_declaration_list optional_annotation_list "def" optional_public_or_private_member_variable optional_static_member_variable . optional_override optional_constant $@32 function_declaration_header expression_block
+
+    "override"  shift, and go to state 1172
+    "sealed"    shift, and go to state 1173
+
+    $default  reduce using rule 464 (optional_override)
+
+    optional_override  go to state 1210
+
+
 State 1172
 
-  466 optional_override: "sealed" .
+  465 optional_override: "override" .
 
-    $default  reduce using rule 466 (optional_override)
+    $default  reduce using rule 465 (optional_override)
 
 
 State 1173
 
-  481 struct_variable_declaration_list: struct_variable_declaration_list optional_annotation_list "def" optional_public_or_private_member_variable optional_override . optional_constant $@32 function_declaration_header expression_block
+  466 optional_override: "sealed" .
 
-    "const"  shift, and go to state 1208
-
-    $default  reduce using rule 467 (optional_constant)
-
-    optional_constant  go to state 1210
+    $default  reduce using rule 466 (optional_override)
 
 
 State 1174
@@ -38968,11 +38968,13 @@ State 1209
 
 State 1210
 
-  481 struct_variable_declaration_list: struct_variable_declaration_list optional_annotation_list "def" optional_public_or_private_member_variable optional_override optional_constant . $@32 function_declaration_header expression_block
+  481 struct_variable_declaration_list: struct_variable_declaration_list optional_annotation_list "def" optional_public_or_private_member_variable optional_static_member_variable optional_override . optional_constant $@32 function_declaration_header expression_block
 
-    $default  reduce using rule 480 ($@32)
+    "const"  shift, and go to state 1208
 
-    $@32  go to state 1238
+    $default  reduce using rule 467 (optional_constant)
+
+    optional_constant  go to state 1238
 
 
 State 1211
@@ -39874,40 +39876,11 @@ State 1237
 
 State 1238
 
-  481 struct_variable_declaration_list: struct_variable_declaration_list optional_annotation_list "def" optional_public_or_private_member_variable optional_override optional_constant $@32 . function_declaration_header expression_block
+  481 struct_variable_declaration_list: struct_variable_declaration_list optional_annotation_list "def" optional_public_or_private_member_variable optional_static_member_variable optional_override optional_constant . $@32 function_declaration_header expression_block
 
-    "operator"  shift, and go to state 207
-    "bool"      shift, and go to state 208
-    "string"    shift, and go to state 209
-    "int"       shift, and go to state 210
-    "int2"      shift, and go to state 211
-    "int3"      shift, and go to state 212
-    "int4"      shift, and go to state 213
-    "uint"      shift, and go to state 214
-    "uint2"     shift, and go to state 215
-    "uint3"     shift, and go to state 216
-    "uint4"     shift, and go to state 217
-    "float"     shift, and go to state 218
-    "float2"    shift, and go to state 219
-    "float3"    shift, and go to state 220
-    "float4"    shift, and go to state 221
-    "range"     shift, and go to state 222
-    "urange"    shift, and go to state 223
-    "range64"   shift, and go to state 224
-    "urange64"  shift, and go to state 225
-    "int64"     shift, and go to state 226
-    "uint64"    shift, and go to state 227
-    "double"    shift, and go to state 228
-    "int8"      shift, and go to state 229
-    "uint8"     shift, and go to state 230
-    "int16"     shift, and go to state 231
-    "uint16"    shift, and go to state 232
-    "++"        shift, and go to state 233
-    "--"        shift, and go to state 234
-    "name"      shift, and go to state 235
+    $default  reduce using rule 480 ($@32)
 
-    function_name                go to state 236
-    function_declaration_header  go to state 1253
+    $@32  go to state 1253
 
 
 State 1239
@@ -40767,11 +40740,40 @@ State 1252
 
 State 1253
 
-  481 struct_variable_declaration_list: struct_variable_declaration_list optional_annotation_list "def" optional_public_or_private_member_variable optional_override optional_constant $@32 function_declaration_header . expression_block
+  481 struct_variable_declaration_list: struct_variable_declaration_list optional_annotation_list "def" optional_public_or_private_member_variable optional_static_member_variable optional_override optional_constant $@32 . function_declaration_header expression_block
 
-    '{'  shift, and go to state 333
+    "operator"  shift, and go to state 207
+    "bool"      shift, and go to state 208
+    "string"    shift, and go to state 209
+    "int"       shift, and go to state 210
+    "int2"      shift, and go to state 211
+    "int3"      shift, and go to state 212
+    "int4"      shift, and go to state 213
+    "uint"      shift, and go to state 214
+    "uint2"     shift, and go to state 215
+    "uint3"     shift, and go to state 216
+    "uint4"     shift, and go to state 217
+    "float"     shift, and go to state 218
+    "float2"    shift, and go to state 219
+    "float3"    shift, and go to state 220
+    "float4"    shift, and go to state 221
+    "range"     shift, and go to state 222
+    "urange"    shift, and go to state 223
+    "range64"   shift, and go to state 224
+    "urange64"  shift, and go to state 225
+    "int64"     shift, and go to state 226
+    "uint64"    shift, and go to state 227
+    "double"    shift, and go to state 228
+    "int8"      shift, and go to state 229
+    "uint8"     shift, and go to state 230
+    "int16"     shift, and go to state 231
+    "uint16"    shift, and go to state 232
+    "++"        shift, and go to state 233
+    "--"        shift, and go to state 234
+    "name"      shift, and go to state 235
 
-    expression_block  go to state 1263
+    function_name                go to state 236
+    function_declaration_header  go to state 1263
 
 
 State 1254
@@ -41294,6 +41296,15 @@ State 1262
 
 State 1263
 
-  481 struct_variable_declaration_list: struct_variable_declaration_list optional_annotation_list "def" optional_public_or_private_member_variable optional_override optional_constant $@32 function_declaration_header expression_block .
+  481 struct_variable_declaration_list: struct_variable_declaration_list optional_annotation_list "def" optional_public_or_private_member_variable optional_static_member_variable optional_override optional_constant $@32 function_declaration_header . expression_block
+
+    '{'  shift, and go to state 333
+
+    expression_block  go to state 1264
+
+
+State 1264
+
+  481 struct_variable_declaration_list: struct_variable_declaration_list optional_annotation_list "def" optional_public_or_private_member_variable optional_static_member_variable optional_override optional_constant $@32 function_declaration_header expression_block .
 
     $default  reduce using rule 481 (struct_variable_declaration_list)
