@@ -767,6 +767,7 @@ namespace das {
     // logging
         "log",                          Type::tBool,
         "log_optimization_passes",      Type::tBool,
+        "log_optimization",             Type::tBool,
         "log_stack",                    Type::tBool,
         "log_init",                     Type::tBool,
         "log_symbol_use",               Type::tBool,
