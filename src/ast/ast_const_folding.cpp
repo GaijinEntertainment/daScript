@@ -835,7 +835,11 @@ namespace das {
                         DAS_ASSERTF ( !runProgram->failed(), "internal error while folding (simulate)?" );
                         runProgram->folding = false;
                     }
-                    DAS_ASSERT ( expr->func->index!=-1 );
+                    if ( expr->func->index==-1 ) {
+                        runProgram->error("internal compilation error, folding symbol was not marked as used","","",
+                            expr->at, CompilationError::run_failed);
+                        return Visitor::visit(expr);
+                    }
                     return evalAndFold(expr);
                 }
             }
