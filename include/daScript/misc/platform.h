@@ -90,12 +90,12 @@
 
 #if defined(__has_feature)
     #if __has_feature(address_sanitizer)
-        #define DAS_SUPRESS_UB  __attribute__((no_sanitize("undefined")))
+        #define DAS_SUPPRESS_UB  __attribute__((no_sanitize("undefined")))
     #endif
 #endif
 
-#ifndef DAS_SUPRESS_UB
-#define DAS_SUPRESS_UB
+#ifndef DAS_SUPPRESS_UB
+#define DAS_SUPPRESS_UB
 #endif
 
 #if defined(__GNUC__) || defined(__clang__)

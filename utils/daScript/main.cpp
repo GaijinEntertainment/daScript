@@ -403,7 +403,7 @@ void print_help() {
         << "daScript -aot <in_script.das> <out_script.das.cpp> {-q} {-p}\n"
         << "    -project <path.das_project> path to project file\n"
         << "    -p          paranoid validation of CPP AOT\n"
-        << "    -q          supress all output\n"
+        << "    -q          suppress all output\n"
         << "    -dry-run    no changes will be written\n"
         << "    -dasroot    set path to dascript root folder (with daslib)\n"
     ;

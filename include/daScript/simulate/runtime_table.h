@@ -82,7 +82,7 @@ namespace das
         }
 
         __forceinline int insertNew ( Table & tab, uint64_t hash ) const {
-            // TODO: take key under account and be less agressive?
+            // TODO: take key under account and be less aggressive?
             uint32_t mask = tab.capacity - 1;
             uint32_t index = indexFromHash(hash, tab.shift);
             uint32_t lastI = (index+tab.maxLookups) & mask;

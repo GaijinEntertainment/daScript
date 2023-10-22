@@ -7245,11 +7245,11 @@ yyreduce:
     break;
 
   case 358: /* $@22: %empty  */
-                               { yyextra->das_supress_errors=true; }
+                               { yyextra->das_suppress_errors=true; }
     break;
 
   case 359: /* $@23: %empty  */
-                                                                           { yyextra->das_supress_errors=false; }
+                                                                           { yyextra->das_suppress_errors=false; }
     break;
 
   case 360: /* expr_field: expr '.' $@22 error $@23  */
@@ -9661,7 +9661,7 @@ void das_yyfatalerror ( DAS_YYLTYPE * lloc, yyscan_t scanner, const string & err
 }
 
 void das_yyerror ( DAS_YYLTYPE * lloc, yyscan_t scanner, const string & error ) {
-    if ( !yyextra->das_supress_errors ) {
+    if ( !yyextra->das_suppress_errors ) {
         yyextra->g_Program->error(error,"","",LineInfo(yyextra->g_FileAccessStack.back(),
             lloc->first_column,lloc->first_line,lloc->last_column,lloc->last_line),
                 CompilationError::syntax_error);
