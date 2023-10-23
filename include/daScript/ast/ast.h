@@ -1433,7 +1433,7 @@ namespace das
         void markModuleSymbolUse(TextWriter * logs = nullptr);
         void markMacroSymbolUse(TextWriter * logs = nullptr);
         void markExecutableSymbolUse(TextWriter * logs = nullptr);
-        void markFoldingSymbolUse(TextWriter * logs = nullptr);
+        void markFoldingSymbolUse(const vector<Function *> & needRun, TextWriter * logs = nullptr);
         void removeUnusedSymbols();
         void clearSymbolUse();
         void dumpSymbolUse(TextWriter & logs);
