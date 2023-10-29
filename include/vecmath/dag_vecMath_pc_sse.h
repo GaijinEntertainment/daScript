@@ -7,7 +7,7 @@
 
 #if !defined(_TARGET_PC_LINUX) && !defined(_TARGET_PC_MACOSX) && !defined(_TARGET_PC_WIN)\
  && !defined(_TARGET_PS4) && !defined(_TARGET_PS5)  && !defined(_TARGET_XBOX) && !defined(_TARGET_PC) && !defined(_TARGET_ANDROID)
-  #if __linux__ || __unix__
+  #if __linux__ || __unix__ || defined __HAIKU__
     #define _TARGET_PC_LINUX 1
   #elif __APPLE__
     #define _TARGET_PC_MACOSX 1
