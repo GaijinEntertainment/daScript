@@ -1198,7 +1198,7 @@ namespace das
     char * Context::intern( const char * str ) {
         if ( !str ) return nullptr;
         uint32_t len = uint32_t(strlen(str));
-        intern(str, len);
+        return intern(str, len);
     }
 
     char * Context::intern ( const char * str, uint32_t len ) {
