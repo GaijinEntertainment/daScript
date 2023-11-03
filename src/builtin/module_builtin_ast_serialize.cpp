@@ -838,6 +838,7 @@ namespace das {
             if ( !is_null ) {
                 string name; *this << name;
                 module = moduleLibrary->findModule(name);
+                DAS_VERIFYF(module, "expected to fetch module from library");
             } else {
                 module = nullptr;
             }
@@ -1291,17 +1292,20 @@ namespace das {
             if ( value->type->isPointer() ) {
                 DAS_VERIFYF(value->type->firstType->isStructure(), "expected to see structure field access via pointer");
                 mangledName = value->type->firstType->structType->getMangledName();
+                ser << value->type->firstType->structType->module;
             } else {
                 DAS_VERIFYF(value->type->isStructure(), "expected to see structure field access");
                 mangledName = value->type->structType->getMangledName();
+                ser << value->type->structType->module;
             }
             ser << mangledName;
         } else {
             bool has_field = false; ser << has_field;
             if ( !has_field ) return;
+            Module * module; ser << module;
             string mangledName; ser << mangledName;
             field = ( Structure::FieldDeclaration * ) 1;
-            ser.fieldRefs.emplace_back(&field, ser.thisModule, move(mangledName), name);
+            ser.fieldRefs.emplace_back(&field, module, move(mangledName), name);
         }
     }
 
@@ -1644,7 +1648,6 @@ namespace das {
         program->isCompiling = false;
         program->markMacroSymbolUse();
         program->allocateStack(ignore_logs);
-        daScriptEnvironment::bound->g_Program = program;
         program->makeMacroModule(ignore_logs);
     // unbind the module from the program
         return program->thisModule.release();
@@ -1668,6 +1671,7 @@ namespace das {
             program->thisModuleGroup = ser.thisModuleGroup;
             program->thisModuleName.clear();
             program->library.reset();
+            program->policies.stack = 64 * 1024;
             program->thisModule.release();
             program->thisModule.reset(this_mod);
             lib.foreach([&] ( Module * pm ) {
@@ -1675,6 +1679,7 @@ namespace das {
                 return true;
             },"*");
         // always finalize annotations
+            daScriptEnvironment::bound->g_Program = program;
             program->finalizeAnnotations();
 
             bool is_macro_module = false;
@@ -1909,6 +1914,11 @@ namespace das {
             }
         }
 
+        vector<Module*> getDependecyOrdered(Module * m) {
+            visit(m);
+            return std::move(sorted);
+        }
+
         vector<Module*> getDependecyOrdered() {
             for ( auto mod : input ) {
                 visit(mod);
@@ -1990,6 +2000,75 @@ namespace das {
         return *this;
     }
 
+    // Used in eden
+    void AstSerializer::serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) {
+        auto & ser = *this;
+
+        ser << program->thisNamespace << program->thisModuleName;
+
+        ser << program->totalFunctions      << program->totalVariables << program->newLambdaIndex;
+        ser << program->globalInitStackSize << program->globalStringHeapSize;
+        ser << program->flags;
+
+        ser << program->options << program->policies;
+
+        if ( writing ) {
+            TopSort ts(program->library.getModules());
+            auto modules = ts.getDependecyOrdered(program->thisModule.get());
+
+            uint64_t size = modules.size(); *this << size;
+
+            for ( auto & m : modules ) {
+                bool builtin = m->builtIn, promoted = m->promoted;
+                *this << builtin << promoted;
+                *this << m->name;
+
+                if ( m->builtIn && !m->promoted ) {
+                    continue;
+                }
+
+                if ( writingReadyModules.count(m) == 0 ) {
+                    writingReadyModules.insert(m);
+                    *this << *m;
+                }
+            }
+        } else {
+            uint64_t size = 0; ser << size;
+
+            program->library.reset();
+            program->thisModule.release();
+            moduleLibrary = &program->library;
+
+            for ( uint64_t i = 0; i < size; i++ ) {
+                bool builtin, promoted;
+                ser << builtin << promoted;
+                string name; ser << name;
+
+                if ( builtin && !promoted ) {
+                    auto m = Module::require(name);
+                    program->library.addModule(m);
+                    continue;
+                }
+
+                if ( auto m = libGroup.findModule(name) ) {
+                    program->library.addModule(m);
+                    continue;
+                }
+
+                auto deser = new Module();
+                program->library.addModule(deser);
+                ser << *deser;
+            }
+
+            for ( auto & m : program->library.getModules() ) {
+                if ( m->name == program->thisModuleName ) {
+                    program->thisModule.reset(m);
+                }
+            }
+        }
+    }
+
+    // Used in daNetGame currently
     void Program::serialize ( AstSerializer & ser ) {
         ser << thisNamespace << thisModuleName;
 
