@@ -1985,7 +1985,7 @@ class LlvmJitVisitor : AstVisitor
             pass // do nothing. we already handle this in preVisitExprMakeStructField
         else
             if decl.flags.moveSemantics
-                failed_E(expr, "makeStruct: move is not supported")
+                build_move(v_ptr, decl.value)   // TODO: verify
             else
                 build_copy(v_ptr, decl.value)
         return decl
@@ -2913,7 +2913,9 @@ class LlvmJitVisitor : AstVisitor
         // make block function
         var blk_make = make_block_funcion(expr, capture,first_field_index, this_block_type)
         // allocate block, set capture fields
-        var blk = LLVMBuildAlloca(g_builder, this_block_type, "block_at_{int(expr.at.line)}")
+        var blk : LLVMOpaqueValue?
+        at_function_entry <|
+            blk = LLVMBuildAlloca(g_builder, this_block_type, "block_at_{int(expr.at.line)}")
         var blkv = LLVMGetUndef(this_block_type)
         for c,idx in capture,count()
             var v_ptr = getV_ptr(c.variable, false)
@@ -2964,6 +2966,11 @@ class LlvmJitVisitor : AstVisitor
         assume sizeOf = subexpr._type.sizeOf
         assume alignOf = subexpr._type.alignOf
         LLVMBuildMemSet(g_builder, ptr, LLVMConstInt(LLVMInt8Type(), 0ul, 0), LLVMConstInt(LLVMInt32Type(), uint64(sizeOf), 0), uint(alignOf))
+        return expr
+
+// ExprTypeDecl
+    def override visitExprTypeDecl(expr:smart_ptr<ExprTypeDecl>) : ExpressionPtr
+        setE(expr, LLVMGetUndef(type_to_llvm_abi_type(expr._type)))
         return expr
 
 // ExprConstPtr

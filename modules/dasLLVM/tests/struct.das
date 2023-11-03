@@ -14,6 +14,10 @@ struct Bar
     foo : Foo
     b : int
 
+struct FooBar
+    a : array<int>
+    b : int
+
 [jit]
 def struct_field ( var f : Foo )
     f.a = 1
@@ -87,6 +91,14 @@ def new_struct_on_heap
 [jit]
 def new_struct_with_ctor_on_heap
     return new Foo()
+
+[jit]
+def struct_field_move_init
+    var fb : FooBar
+    var t <- [{for i in range(10); i*i}]
+    fb <- [[FooBar a<-t, b=13]]
+    assert(length(t)==0)
+    return <- fb
 
 [test]
 def test_struct ( t:T? )
@@ -228,3 +240,9 @@ def test_struct ( t:T? )
         t |> equal ( "1234", f.foo.c )
         t |> equal ( 1234, f.foo.d )
         t |> equal ( 10, f.b )
+    t |> run("move init") <| @ ( t : T? )
+        var f <- struct_field_move_init()
+        t |> success ( is_jit_function(@@struct_field_move_init) )
+        for i in range(10)
+            t |> equal(f.a[i], i*i)
+        t |> equal(f.b, 13)
