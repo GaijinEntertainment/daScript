@@ -524,6 +524,17 @@ namespace das {
         return result;
     }
 
+    void updateSerializationMetadata ( vector<ModuleInfo> & req ) {
+        if ( serializer_read != nullptr ) {
+            auto saved_filenames = restoreMetadata(serializer_read->metadata);
+            auto current_filenames = vector<string>();
+            for ( auto & mod : req ) { current_filenames.push_back(mod.fileName); }
+            if ( current_filenames != saved_filenames ) { serializer_read->seenNewModule = true; }
+        }
+        if ( serializer_write != nullptr )
+            serializer_write->metadata = saveRequireMetadata(req);
+    };
+
     bool aotModuleHasName ( ProgramPtr program, const ModuleInfo & mod ) {
         if ( bool no_aot = program->options.getBoolOption("no_aot",false); no_aot )
             return true;
@@ -577,117 +588,39 @@ namespace das {
         res->thisModule->addVariable(rtti_require);
     }
 
-    void updateSerializationMetadata ( vector<ModuleInfo> & req ) {
-        if ( serializer_read != nullptr ) {
-            auto saved_filenames = restoreMetadata(serializer_read->metadata);
-            auto current_filenames = vector<string>();
-            for ( auto & mod : req ) { current_filenames.push_back(mod.fileName); }
-            if ( current_filenames != saved_filenames ) { serializer_read->seenNewModule = true; }
-        }
-        if ( serializer_write != nullptr )
-            serializer_write->metadata = saveRequireMetadata(req);
-    };
 
-    ProgramPtr compileDaScriptSerialize ( const string & fileName,
-                                const FileAccessPtr & access,
-                                TextWriter & logs,
-                                ModuleGroup & libGroup,
-                                CodeOfPolicies policies ) {
-        ReuseCacheGuard rcg;
-        bool exportAll = policies.export_all;
-        auto time0 = ref_time_ticks();
-        totParse = 0;
-        totInfer = 0;
-        totOpt = 0;
-        totM = 0;
-        daScriptEnvironment::bound->macroTimeTicks = 0;
-        vector<ModuleInfo> req;
-        vector<string> missing, circular, notAllowed;
-        das_set<string> dependencies;
-        uint64_t preqT = 0;
-        bool gotReqs = getPrerequisits(fileName, access, req, missing, circular, notAllowed,
-                                        dependencies, libGroup, nullptr, 1, false);
-        DAS_VERIFYF(gotReqs, "expected to get prerequisites for serialization");
-        preqT = get_time_usec(time0);
-        updateSerializationMetadata(req);
-        if ( policies.debugger )
-            addExtraDependency("debug", policies.debug_module, missing, circular, notAllowed, req, dependencies, access, libGroup, policies);
-        if ( policies.profiler )
-            addExtraDependency("profiler", policies.profile_module, missing, circular, notAllowed, req, dependencies, access, libGroup, policies);
-        for ( auto & mod : req ) {
-            if ( libGroup.findModule(mod.moduleName) ) { continue; }
-            auto program = parseDaScript(mod.fileName, access, logs, libGroup, true, true, policies);
-            policies.threadlock_context |= program->options.getBoolOption("threadlock_context",false);
-            if ( program->failed() ) { return program; }
-            if ( policies.fail_on_lack_of_aot_export && !aotModuleHasName(program, mod) ) { return program; }
-            if ( program->thisModule->name.empty() ) {
-                program->thisModule->name = mod.moduleName;
-                program->thisModule->wasParsedNameless = true;
-            }
-            if ( program->promoteToBuiltin ) {
-                if ( canShareModule(program) ) {
-                    program->thisModule->promoteToBuiltin(access);
-                } else {
-                    return program;
-                }
-            }
-            addNewModules(libGroup, program);
+    ProgramPtr reportPrerequisitesErrors (
+            string fileName,
+            vector<string> & missing,
+            vector<string> & circular,
+            vector<string> & notAllowed,
+            vector<ModuleInfo> & req,
+            das_set<string> & dependencies,
+            const FileAccessPtr & access,
+            ModuleGroup & libGroup,
+            CodeOfPolicies policies ) {
+        TextWriter tw;
+        req.clear();
+        missing.clear();
+        circular.clear();
+        dependencies.clear();
+        getPrerequisits(fileName, access, req, missing, circular, notAllowed, dependencies, libGroup, &tw, 1, false);
+        auto program = make_smart<Program>();
+        program->policies = policies;
+        program->thisModuleGroup = &libGroup;
+        TextWriter err;
+        for ( auto & mis : missing ) {
+            err << "missing prerequisit " << mis << "\n";
         }
-        auto res = parseDaScript(fileName, access, logs, libGroup, exportAll, false, policies);
-        policies.threadlock_context |= res->options.getBoolOption("threadlock_context",false);
-        if ( !res->failed() ) {
-            if ( res->options.getBoolOption("log_symbol_use") ) {
-                res->markSymbolUse(false, false, false, nullptr, &logs);
-            }
+        for ( auto & mis : circular ) {
+            err << "circular dependency " << mis << "\n";
         }
-        if ( policies.aot_module && (res->promoteToBuiltin || res->thisModule->isModule || exportAll) ) {
-            if (!res->failed()) {
-                if(exportAll)
-                    res->markSymbolUse(false,true,true,nullptr);
-                else
-                    res->markModuleSymbolUse();
-            }
-            if (!res->failed() && !exportAll)
-                res->removeUnusedSymbols();
-            if (!res->failed())
-                res->allocateStack(logs);
-        } else {
-            if (!res->failed())
-                res->markExecutableSymbolUse();
-            if ( res->getDebugger() ) {
-                addRttiRequireVariable(res, fileName);
-            }
-            if (!res->failed())
-                res->removeUnusedSymbols();
-            if (!res->failed())
-                res->allocateStack(logs);
+        for ( auto & mis : notAllowed ) {
+            err << "module not allowed " << mis << "\n";
         }
-        if ( res->options.getBoolOption("log_require",false) ) {
-            TextWriter tw;
-            req.clear();
-            missing.clear();
-            circular.clear();
-            notAllowed.clear();
-            dependencies.clear();
-            getPrerequisits(fileName, access, req, missing, circular, notAllowed, dependencies, libGroup, &tw, 1, false);
-            logs << "module dependency graph:\n" << tw.str();
-        }
-        if ( !res->failed() ) {
-            auto hf = hash_blockz64((uint8_t *)fileName.c_str());
-            res->thisNamespace = "_anon_" + to_string(hf);
-        }
-        if ( res->options.getBoolOption("log_total_compile_time",policies.log_total_compile_time) ) {
-            auto totT = get_time_usec(time0);
-            logs << "compiler took " << (totT  / 1000000.) << ", " << fileName << "\n"
-                    << "\trequire  " << (preqT    / 1000000.) << "\n"
-                    << "\tparse    " << (totParse / 1000000.) << "\n"
-                    << "\tinfer    " << (totInfer / 1000000.) << "\n"
-                    << "\toptimize " << (totOpt   / 1000000.) << "\n"
-                    << "\tmacro    " << (ref_time_delta_to_usec(daScriptEnvironment::bound->macroTimeTicks)  / 1000000.) << "\n"
-                    << "\tmacro mods " << (totM     / 1000000.) << "\n"
-            ;
-        }
-        return res;
+        program->error(err.str(),"module dependency graph:\n" + tw.str(), "", LineInfo(),
+                        CompilationError::module_not_found);
+        return program;
     }
 
     ProgramPtr compileDaScript ( const string & fileName,
@@ -710,6 +643,7 @@ namespace das {
         if ( getPrerequisits(fileName, access, req, missing, circular, notAllowed,
                 dependencies, libGroup, nullptr, 1, !policies.ignore_shared_modules) ) {
             preqT = get_time_usec(time0);
+            updateSerializationMetadata(req);
             if ( policies.debugger ) {
                 addExtraDependency("debug", policies.debug_module, missing, circular, notAllowed, req, dependencies, access, libGroup, policies);
             }
@@ -717,51 +651,29 @@ namespace das {
                 addExtraDependency("profiler", policies.profile_module, missing, circular, notAllowed, req, dependencies, access, libGroup, policies);
             }
             for ( auto & mod : req ) {
-                if ( !libGroup.findModule(mod.moduleName) ) {
-                    auto program = parseDaScript(mod.fileName, access, logs, libGroup, true, true, policies);
-                    policies.threadlock_context |= program->options.getBoolOption("threadlock_context",false);
-                    if ( program->failed() ) {
+                if ( libGroup.findModule(mod.moduleName) ) {
+                    continue;
+                }
+                auto program = parseDaScript(mod.fileName, access, logs, libGroup, true, true, policies);
+                policies.threadlock_context |= program->options.getBoolOption("threadlock_context",false);
+                if ( program->failed() ) {
+                    return program;
+                }
+                if ( policies.fail_on_lack_of_aot_export && !aotModuleHasName(program, mod) ) {
+                    return program;
+                }
+                if ( program->thisModule->name.empty() ) {
+                    program->thisModule->name = mod.moduleName;
+                    program->thisModule->wasParsedNameless = true;
+                }
+                if ( program->promoteToBuiltin ) {
+                    if ( canShareModule(program) ) {
+                        program->thisModule->promoteToBuiltin(access);
+                    } else {
                         return program;
                     }
-                    if ( policies.fail_on_lack_of_aot_export ) {
-                        if ( !program->options.getBoolOption("no_aot",false) ) {
-                            if ( program->thisModule->name.empty() ) {
-                                program->error("Module " + mod.moduleName + " is not setup correctly for AOT",
-                                    "module " + mod.moduleName + " is required", "", LineInfo(),
-                                        CompilationError::module_does_not_have_a_name);
-                                return program;
-                            }
-                        }
-                    }
-                    if ( program->thisModule->name.empty() ) {
-                        program->thisModule->name = mod.moduleName;
-                        program->thisModule->wasParsedNameless = true;
-                    }
-                    if ( program->promoteToBuiltin ) {
-                        bool regFromShar = false;
-                        for ( auto & reqM : program->thisModule->requireModule ) {
-                            if ( !reqM.first->builtIn ) {
-                                program->error("Shared module " + program->thisModule->name + " has incorrect dependency type.",
-                                    "Can't require " + reqM.first->name + " because its not shared", "", LineInfo(),
-                                        CompilationError::module_required_from_shared);
-                                regFromShar = true;
-                            }
-                        }
-                        if (  regFromShar ) {
-                            return program;
-                        }
-                        program->thisModule->promoteToBuiltin(access);
-                    }
-                    libGroup.addModule(program->thisModule.release());
-                    program->library.foreach([&](Module * pm) -> bool {
-                        if ( !pm->name.empty() && pm->name!="$" ) {
-                            if ( !libGroup.findModule(pm->name) ) {
-                                libGroup.addModule(pm);
-                            }
-                        }
-                        return true;
-                    }, "*");
                 }
+                addNewModules(libGroup, program);
             }
             auto res = parseDaScript(fileName, access, logs, libGroup, exportAll, false, policies);
             policies.threadlock_context |= res->options.getBoolOption("threadlock_context",false);
@@ -784,21 +696,8 @@ namespace das {
             } else {
                 if (!res->failed())
                     res->markExecutableSymbolUse();
-                if ( res->getDebugger()) {
-                    TextWriter ss;
-                    for ( const auto & arq : res->allRequireDecl ) {
-                        ss << get<1>(arq) << " ";
-                    }
-                    ss << fileName;
-                    auto rtti_require = make_smart<Variable>();
-                    rtti_require->name = "__rtti_require";
-                    rtti_require->type = make_smart<TypeDecl>(Type::tString);
-                    rtti_require->init = make_smart<ExprConstString>(ss.str());
-                    rtti_require->init->type = make_smart<TypeDecl>(Type::tString);
-                    rtti_require->used = true;
-                    rtti_require->private_variable = true;
-                    res->thisModule->addVariable(rtti_require);
-                }
+                if (res->getDebugger())
+                    addRttiRequireVariable(res, fileName);
                 if (!res->failed())
                     res->removeUnusedSymbols();
                 if (!res->failed())
@@ -831,28 +730,8 @@ namespace das {
             }
             return res;
         } else {
-            TextWriter tw;
-            req.clear();
-            missing.clear();
-            circular.clear();
-            dependencies.clear();
-            getPrerequisits(fileName, access, req, missing, circular, notAllowed, dependencies, libGroup, &tw, 1, false);
-            auto program = make_smart<Program>();
-            program->policies = policies;
-            program->thisModuleGroup = &libGroup;
-            TextWriter err;
-            for ( auto & mis : missing ) {
-                err << "missing prerequisit " << mis << "\n";
-            }
-            for ( auto & mis : circular ) {
-                err << "circular dependency " << mis << "\n";
-            }
-            for ( auto & mis : notAllowed ) {
-                err << "module not allowed " << mis << "\n";
-            }
-            program->error(err.str(),"module dependency graph:\n" + tw.str(), "", LineInfo(),
-                            CompilationError::module_not_found);
-            return program;
+            return reportPrerequisitesErrors(fileName, missing, circular, notAllowed,
+                                        req, dependencies, access, libGroup, policies);
         }
     }
 }
