@@ -28,7 +28,7 @@ ADD_DEPENDENCIES(path_tracer libDaScript pathtracer_dasAotStub)
 SETUP_CPP11(path_tracer)
 
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/examples/pathTracer
-    DESTINATION ./examples
+    DESTINATION ${DAS_INSTALL_EXAMPLESDIR}
     FILES_MATCHING
     PATTERN "*.das"
 )

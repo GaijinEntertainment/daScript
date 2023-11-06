@@ -12,13 +12,13 @@ IF(NOT DAS_OPENGL_INCLUDED)
     ADD_MODULE_DAS(glsl glsl glsl_opengl)
 
     install(DIRECTORY ${PROJECT_SOURCE_DIR}/modules/dasOpenGL/opengl
-        DESTINATION modules/dasOpenGL
+        DESTINATION ${DAS_INSTALL_MODULESDIR}/dasOpenGL
         FILES_MATCHING
         PATTERN "*.das"
     )
 
     install(DIRECTORY ${PROJECT_SOURCE_DIR}/modules/dasOpenGL/glsl
-        DESTINATION modules/dasOpenGL
+        DESTINATION ${DAS_INSTALL_MODULESDIR}/dasOpenGL
         FILES_MATCHING
         PATTERN "*.das"
     )
@@ -28,13 +28,13 @@ IF(NOT DAS_OPENGL_INCLUDED)
     )
 
     install(FILES ${DAS_OPENGL_EXAMPLES}
-        DESTINATION examples/opengl
+        DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/opengl
     )
     install(FILES ${PROJECT_SOURCE_DIR}/modules/dasOpenGL/examples/image.png
-        DESTINATION examples/media
+        DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/media
     )
     install(FILES ${PROJECT_SOURCE_DIR}/modules/dasBGFX/bgfx/bgfx/examples/assets/meshes/orb.obj
-        DESTINATION examples/media
+        DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/media
     )
 
 ENDIF()

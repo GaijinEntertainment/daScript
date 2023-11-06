@@ -3,7 +3,7 @@ IF(NOT DAS_OPENAI_INCLUDED)
     MESSAGE(STATUS "dasOpenAI module included.")
     ADD_MODULE_DAS(openai openai openai)
     install(DIRECTORY ${PROJECT_SOURCE_DIR}/modules/dasOpenAI/openai
-        DESTINATION modules/dasOpenAI
+        DESTINATION ${DAS_INSTALL_MODULESDIR}/dasOpenAI
         FILES_MATCHING
         PATTERN "*.das"
     )
@@ -12,6 +12,6 @@ IF(NOT DAS_OPENAI_INCLUDED)
     )
 
     install(FILES ${DAS_OPENAI_EXAMPLES}
-        DESTINATION examples/openai
+        DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/openai
     )
 ENDIF()
