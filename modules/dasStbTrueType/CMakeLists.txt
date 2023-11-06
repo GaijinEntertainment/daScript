@@ -25,13 +25,13 @@ IF ((NOT DAS_STBTRUETYPE_INCLUDED) AND ((NOT ${DAS_STBTRUETYPE_DISABLED}) OR (NO
 	ADD_MODULE_DAS(ttf ttf stb_ttf_common)
 
     install(DIRECTORY ${PROJECT_SOURCE_DIR}/modules/dasStbTrueType/ttf
-        DESTINATION modules/dasStbTrueType
+        DESTINATION ${DAS_INSTALL_MODULESDIR}/dasStbTrueType
         FILES_MATCHING
         PATTERN "*.das"
     )
 
     install(FILES ${PROJECT_SOURCE_DIR}/modules/dasBGFX/bgfx/bgfx/examples/runtime/font/droidsansmono.ttf
-        DESTINATION examples/media
+        DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/media
     )
 
 

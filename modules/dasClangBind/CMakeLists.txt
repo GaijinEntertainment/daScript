@@ -101,9 +101,9 @@ IF(WIN32)
 		${PROJECT_SOURCE_DIR}/../libclang/bin/libclang.dll
 	)
 	install(FILES ${DAS_CLANG_DLLS}
-        DESTINATION bin
+        DESTINATION ${DAS_INSTALL_BINDIR}
     )
-	install(FILES ${PROJECT_SOURCE_DIR}/modules/dasClangBind/LICENSE.TXT DESTINATION . RENAME LLVM.LICENSE)
+	install(FILES ${PROJECT_SOURCE_DIR}/modules/dasClangBind/LICENSE.TXT DESTINATION ${DAS_INSTALL_DOCDIR} RENAME LLVM.LICENSE)
 ENDIF()
 
     ADD_MODULE_DAS(cbind cbind cbind_boost)

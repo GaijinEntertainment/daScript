@@ -7,7 +7,7 @@ IF(NOT DAS_GLSL_INCLUDED)
     ADD_MODULE_DAS(geometry glsl geom_gen)
 
     install(DIRECTORY ${PROJECT_SOURCE_DIR}/modules/dasGlsl/glsl
-        DESTINATION modules/dasGlsl
+        DESTINATION ${DAS_INSTALL_MODULESDIR}/dasGlsl
         FILES_MATCHING
         PATTERN "*.das"
     )

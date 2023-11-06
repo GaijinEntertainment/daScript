@@ -6,16 +6,16 @@ IF(NOT DAS_TELEGRAM_INCLUDED)
     ADD_MODULE_DAS(telegram telegram tbot)
 
     install(DIRECTORY ${PROJECT_SOURCE_DIR}/modules/dasTelegram/telegram
-        DESTINATION modules/dasTelegram
+        DESTINATION ${DAS_INSTALL_MODULESDIR}/dasTelegram
         FILES_MATCHING
         PATTERN "*.das"
     )
 
-    file(GLOB DAS_OPENGL_EXAMPLES
+    file(GLOB DAS_TELEGRAM_EXAMPLES
         ${PROJECT_SOURCE_DIR}/modules/dasTelegram/examples/*.das
     )
-    install(FILES ${DAS_OPENGL_EXAMPLES}
-        DESTINATION examples/telegram
+    install(FILES ${DAS_TELEGRAM_EXAMPLES}
+        DESTINATION ${DAS_INSTALL_EXAMPLESDIR}/telegram
     )
 
 ENDIF()

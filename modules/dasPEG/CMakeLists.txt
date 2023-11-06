@@ -8,7 +8,7 @@ IF(NOT DAS_PEG_INCLUDED)
 	ADD_MODULE_DAS(peg peg parser_generator)
 
     install(DIRECTORY ${PROJECT_SOURCE_DIR}/modules/dasPEG/peg
-        DESTINATION modules/dasPEG
+        DESTINATION ${DAS_INSTALL_MODULESDIR}/dasPEG
         FILES_MATCHING
         PATTERN "*.das"
     )
