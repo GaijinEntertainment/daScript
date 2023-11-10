@@ -288,7 +288,7 @@ namespace das {
     DAS_THREAD_LOCAL AstSerializer * serializer_write = nullptr;
     DAS_THREAD_LOCAL AstSerializer * serializer_read = nullptr;
 
-    bool trySerializeProgramModule ( ProgramPtr program, const string & fileName, ModuleGroup & libGroup ) {
+    bool trySerializeProgramModule ( ProgramPtr & program, const string & fileName, ModuleGroup & libGroup ) {
         if ( serializer_read == nullptr || serializer_read->seenNewModule ) {
             return false;
         }
@@ -307,6 +307,12 @@ namespace das {
         serializer_read->thisModuleGroup = &libGroup;
         serializer_read->serializeProgram(program, libGroup);
         program->thisModuleGroup = &libGroup;
+
+        if ( serializer_read->failed ) {
+            serializer_read->seenNewModule = true;
+            program = make_smart<Program>();
+            return false;
+        }
 
         // Writeback
         if ( serializer_write != nullptr ) {
@@ -675,6 +681,7 @@ namespace das {
                 }
                 addNewModules(libGroup, program);
             }
+            if (serializer_read) serializer_read->seenNewModule = true; // do not serialize main module
             auto res = parseDaScript(fileName, access, logs, libGroup, exportAll, false, policies);
             policies.threadlock_context |= res->options.getBoolOption("threadlock_context",false);
             if ( !res->failed() ) {

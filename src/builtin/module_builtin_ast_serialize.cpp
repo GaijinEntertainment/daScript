@@ -326,11 +326,6 @@ namespace das {
         string mangeldName = func->getMangledName();
         string moduleName = func->module->name;
         *this << moduleName << mangeldName;
-        if ( func->module->findFunction(mangeldName) == nullptr && func->module->builtIn && !func->module->promoted ) {
-            auto f = func->module->findUniqueFunction(func->name);
-            DAS_VERIFYF(f, "expected to find f");
-            *this << f->name;
-        }
     }
 
     void AstSerializer::writeIdentifications ( Enumeration * & ptr ) {
@@ -406,7 +401,10 @@ namespace das {
             splitTypeName(mangledName, modname, funcname);
             func = funcModule->findFunction(funcname).get();
         }
-        DAS_VERIFYF(func!=nullptr, "function '%s' is not found", mangledName.c_str());
+        if ( func == nullptr ) {
+            failed = true;
+            logwarn("das: ser: function '%s' not found");
+        }
     }
 
     void AstSerializer::findExternal ( Enumeration * & ptr ) {
@@ -1657,6 +1655,7 @@ namespace das {
     void finalizeModule ( AstSerializer & ser, ModuleLibrary & lib, Module * this_mod ) {
         ProgramPtr program;
 
+        if ( ser.failed ) return;
     // simulate macros
         if ( ser.writing ) {
             bool is_macro_module = this_mod->macroContext; // it's a macro module if it has macroContext
@@ -1862,7 +1861,9 @@ namespace das {
         serializeGlobals(ser, globals); // globals require insertion in the same order
         serializeStructures(ser, structures);
         serializeFunctions(ser, functions);
+        if ( ser.failed ) return;
         serializeFunctions(ser, generics);
+        if ( ser.failed ) return;
         ser << functionsByName << genericsByName;
         ser << ownFileInfo;     //<< promotedAccess;
 
