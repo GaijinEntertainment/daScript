@@ -23,6 +23,7 @@ namespace das {
         Module *            thisModule = nullptr;
         Module *            astModule = nullptr;
         bool                writing = false;
+        bool                failed = false;
         size_t              readOffset = 0;
         vector<uint8_t>     buffer;
         vector<uint8_t>     metadata;
