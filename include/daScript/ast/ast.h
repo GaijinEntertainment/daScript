@@ -1593,6 +1593,8 @@ namespace das
         bool            g_resolve_annotations = true;
         TextWriter *    g_compilerLog = nullptr;
         int64_t         macroTimeTicks = 0;
+        AstSerializer * serializer_read = nullptr;
+        AstSerializer * serializer_write = nullptr;
         DebugAgentInstance g_threadLocalDebugAgent;
         static DAS_THREAD_LOCAL daScriptEnvironment * bound;
         static DAS_THREAD_LOCAL daScriptEnvironment * owned;

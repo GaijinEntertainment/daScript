@@ -65,6 +65,12 @@ namespace das {
         }
     }
 
+    int FileAccess::getFileMtime ( const string & fileName) const {
+        struct stat st;
+        stat(fileName.c_str(), &st);
+        return st.st_mtime;
+    }
+
     bool ModuleFileAccess::canModuleBeUnsafe ( const string & mod, const string & fileName ) const {
         if(failed() || !moduleUnsafe) return FileAccess::canModuleBeUnsafe(mod,fileName);
         vec4f args[2];
