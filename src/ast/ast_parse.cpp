@@ -689,7 +689,7 @@ namespace das {
                 addNewModules(libGroup, program);
             }
             auto & serializer_read = daScriptEnvironment::bound->serializer_read;
-            if (serializer_read) serializer_read->seenNewModule = true;
+            if ( serializer_read && !policies.serialize_main_module ) serializer_read->seenNewModule = true;
             auto res = parseDaScript(fileName, access, logs, libGroup, exportAll, false, policies);
             policies.threadlock_context |= res->options.getBoolOption("threadlock_context",false);
             if ( !res->failed() ) {
