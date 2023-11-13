@@ -403,7 +403,7 @@ namespace das {
         }
         if ( func == nullptr ) {
             failed = true;
-            das_to_stderr("das: ser: function '%s' not found", mangledName);
+            das_to_stderr("das: ser: function '%s' not found", mangledName.c_str());
         }
     }
 
