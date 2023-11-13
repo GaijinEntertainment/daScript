@@ -4701,7 +4701,7 @@ namespace das {
         virtual ExpressionPtr visit ( ExprField * expr ) override {
             if ( !expr->value->type || expr->value->type->isAliasOrExpr() ) return Visitor::visit(expr);    // failed to infer
             if ( expr->underClone ) { // we wait for the 'right' type to be infered
-                if ( !expr->underClone->right->type || expr->underClone->right->type->isAliasOrExpr() ) {
+                if ( !expr->underClone->right->type || expr->underClone->right->type->isAutoOrAlias() ) {
                     error("under clone field type not infered yet", "", "",
                             expr->at, CompilationError::cant_get_field);
                     return Visitor::visit(expr);
