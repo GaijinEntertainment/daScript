@@ -70,9 +70,13 @@ namespace das {
     }
 
     int FileAccess::getFileMtime ( const string & fileName) const {
+#if !defined(DAS_NO_FILEIO)
         struct stat st;
         stat(fileName.c_str(), &st);
         return st.st_mtime;
+#else
+        return -1;
+#endif
     }
 
     bool ModuleFileAccess::canModuleBeUnsafe ( const string & mod, const string & fileName ) const {
