@@ -27,7 +27,6 @@ namespace das {
         size_t              readOffset = 0;
         vector<uint8_t>     buffer;
         vector<uint8_t>     metadata;
-        function<int64_t ( const char * )> dagor_get_mtime;
         bool                seenNewModule = false;
     // file info clean up
         vector<FileInfo*>         deleteUponFinish; // these pointers are for builtins (which we don't serialize) and need to be cleaned manually

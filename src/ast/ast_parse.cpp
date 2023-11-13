@@ -285,16 +285,20 @@ namespace das {
     static DAS_THREAD_LOCAL int64_t totOpt = 0;
     static DAS_THREAD_LOCAL int64_t totM = 0;
 
-    DAS_THREAD_LOCAL AstSerializer * serializer_write = nullptr;
-    DAS_THREAD_LOCAL AstSerializer * serializer_read = nullptr;
+    bool trySerializeProgramModule (
+            ProgramPtr          & program,
+            const FileAccessPtr & access,
+            const string        & fileName,
+            ModuleGroup         & libGroup ) {
+        auto & serializer_read = daScriptEnvironment::bound->serializer_read;
+        auto & serializer_write = daScriptEnvironment::bound->serializer_write;
 
-    bool trySerializeProgramModule ( ProgramPtr & program, const string & fileName, ModuleGroup & libGroup ) {
         if ( serializer_read == nullptr || serializer_read->seenNewModule ) {
             return false;
         }
 
-        auto file_mtime = serializer_write->dagor_get_mtime(fileName.c_str());
-        uint64_t saved_mtime = 0; *serializer_read << saved_mtime;
+        int file_mtime = access->getFileMtime(fileName.c_str());
+        int saved_mtime = 0; *serializer_read << saved_mtime;
 
         string saved_filename; *serializer_read << saved_filename;
         DAS_ASSERTF(saved_filename == fileName, "expected the same order of modules");
@@ -335,7 +339,7 @@ namespace das {
         ReuseCacheGuard rcg;
         auto time0 = ref_time_ticks();
 
-        if ( trySerializeProgramModule(program, fileName, libGroup) ) {
+        if ( trySerializeProgramModule(program, access, fileName, libGroup) ) {
             return program;
         }
 
@@ -472,8 +476,9 @@ namespace das {
                 auto dt = get_time_usec(time0) / 1000000.;
                 logs << "compiler took " << dt << ", " << fileName << "\n";
             }
+            auto & serializer_write = daScriptEnvironment::bound->serializer_write;
             if ( serializer_write != nullptr ) {
-                auto file_mtime = serializer_write->dagor_get_mtime(fileName.c_str());
+                int file_mtime = access->getFileMtime(fileName.c_str());
                 *serializer_write << file_mtime;
                 *serializer_write << const_cast<string &>(fileName);
                 serializer_write->serializeProgram(program, libGroup);
@@ -531,6 +536,8 @@ namespace das {
     }
 
     void updateSerializationMetadata ( vector<ModuleInfo> & req ) {
+        auto & serializer_read = daScriptEnvironment::bound->serializer_read;
+        auto & serializer_write = daScriptEnvironment::bound->serializer_write;
         if ( serializer_read != nullptr ) {
             auto saved_filenames = restoreMetadata(serializer_read->metadata);
             auto current_filenames = vector<string>();
@@ -681,7 +688,8 @@ namespace das {
                 }
                 addNewModules(libGroup, program);
             }
-            if (serializer_read) serializer_read->seenNewModule = true; // do not serialize main module
+            auto & serializer_read = daScriptEnvironment::bound->serializer_read;
+            if ( serializer_read && !policies.serialize_main_module ) serializer_read->seenNewModule = true;
             auto res = parseDaScript(fileName, access, logs, libGroup, exportAll, false, policies);
             policies.threadlock_context |= res->options.getBoolOption("threadlock_context",false);
             if ( !res->failed() ) {
