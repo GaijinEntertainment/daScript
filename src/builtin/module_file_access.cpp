@@ -1,6 +1,10 @@
 #include "daScript/misc/platform.h"
 #include "daScript/ast/ast.h"
 
+#if !defined(DAS_NO_FILEIO)
+#include <sys/stat.h>
+#endif
+
 das::Context * get_context ( int stackSize=0 );
 
 namespace das {
