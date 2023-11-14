@@ -69,7 +69,7 @@ namespace das {
         }
     }
 
-    int FileAccess::getFileMtime ( const string & fileName) const {
+    int64_t FileAccess::getFileMtime ( const string & fileName) const {
 #if !defined(DAS_NO_FILEIO)
         struct stat st;
         stat(fileName.c_str(), &st);
