@@ -297,8 +297,8 @@ namespace das {
             return false;
         }
 
-        int file_mtime = access->getFileMtime(fileName.c_str());
-        int saved_mtime = 0; *serializer_read << saved_mtime;
+        int64_t file_mtime = access->getFileMtime(fileName.c_str());
+        int64_t saved_mtime = 0; *serializer_read << saved_mtime;
 
         string saved_filename; *serializer_read << saved_filename;
         DAS_ASSERTF(saved_filename == fileName, "expected the same order of modules");
@@ -478,7 +478,7 @@ namespace das {
             }
             auto & serializer_write = daScriptEnvironment::bound->serializer_write;
             if ( serializer_write != nullptr ) {
-                int file_mtime = access->getFileMtime(fileName.c_str());
+                int64_t file_mtime = access->getFileMtime(fileName.c_str());
                 *serializer_write << file_mtime;
                 *serializer_write << const_cast<string &>(fileName);
                 serializer_write->serializeProgram(program, libGroup);
