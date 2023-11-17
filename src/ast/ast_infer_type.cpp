@@ -4998,19 +4998,6 @@ namespace das {
                     return Visitor::visit(expr);
                 }
             }
-            // with
-            if ( auto eW = hasMatchingWith(expr->name) ) {
-                reportAstChanged();
-                return make_smart<ExprField>(expr->at, forceAt(eW->with->clone(),expr->at), expr->name);
-            }
-            // static class method accessing static variables
-            if ( func && func->isStaticClassMethod && func->classParent->hasStaticMembers ) {
-                auto staticVarName = func->classParent->name + "`" + expr->name;
-                if ( func->classParent->module->findVariable(staticVarName) ) {
-                    reportAstChanged();
-                    return make_smart<ExprVar>(expr->at, staticVarName);
-                }
-            }
             // block arguments
             for ( auto it = blocks.rbegin(); it!=blocks.rend(); ++it ) {
                 ExprBlock * block = *it;
@@ -5048,6 +5035,19 @@ namespace das {
                         return Visitor::visit(expr);
                     }
                     argumentIndex ++;
+                }
+            }
+            // with
+            if ( auto eW = hasMatchingWith(expr->name) ) {
+                reportAstChanged();
+                return make_smart<ExprField>(expr->at, forceAt(eW->with->clone(),expr->at), expr->name);
+            }
+            // static class method accessing static variables
+            if ( func && func->isStaticClassMethod && func->classParent->hasStaticMembers ) {
+                auto staticVarName = func->classParent->name + "`" + expr->name;
+                if ( func->classParent->module->findVariable(staticVarName) ) {
+                    reportAstChanged();
+                    return make_smart<ExprVar>(expr->at, staticVarName);
                 }
             }
             // global
