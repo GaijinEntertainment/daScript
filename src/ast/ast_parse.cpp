@@ -220,7 +220,7 @@ namespace das {
                         }
                         if ( access->isModuleAllowed(module->name, fileName) ) {
                             libGroup.addModule(module);
-                            return true;
+                            continue;
                         } else {
                             logNotAllowed(fileName, log, tab, module->name);
                             return false;
