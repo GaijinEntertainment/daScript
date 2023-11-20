@@ -174,6 +174,152 @@ namespace das {
 
     string getDasRoot ( void );
 
+    class GetPrerequisites {
+        public:
+            GetPrerequisites ( const FileAccessPtr & access, bool allowPromoted )
+                : allowPromoted(allowPromoted)
+                , access(access) {
+            }
+
+            // structure for success (req) and failure (missing, circular, notAllowed) cases
+            struct Result {
+                bool success;
+                vector<ModuleInfo> req;
+                vector<string> missing, circular, notAllowed;
+            };
+
+            auto getPrerequisites ( const string & fileName, ModuleGroup & libGroup, TextWriter * log ) -> Result {
+                if (getPrerequisites(fileName, libGroup, log, 1)) {
+                    return Result{true, req, {}, {}, {}};
+                } else {
+                    return Result{false, {}, missing, circular, notAllowed};
+                }
+            }
+
+        private:
+            bool getPrerequisites ( const string & fileName, ModuleGroup & libGroup, TextWriter * log, int tab ) {
+                auto fi = access->getFileInfo(fileName);
+                if ( fi == nullptr ) {
+                    logFileNotFound(fileName, log, tab);
+                    return false;
+                }
+
+                if ( log ) {
+                    *log << string(tab,'\t') << "in " << fileName << "\n";
+                }
+
+                vector<string> ownReq = getAllRequire(fi, access);
+                for ( auto & mod : ownReq ) {
+                    if ( log ) {
+                        *log << string(tab,'\t') << "require " << mod << "\n";
+                    }
+
+                    if ( auto module = Module::requireEx(mod, allowPromoted) ) { // try native with that name
+                        if ( log ) {
+                            *log << string(tab,'\t') << "from " << fileName << " require " << mod << " - ok\n";
+                        }
+                        if ( access->isModuleAllowed(module->name, fileName) ) {
+                            libGroup.addModule(module);
+                            return true;
+                        } else {
+                            logNotAllowed(fileName, log, tab, module->name);
+                            return false;
+                        }
+                    }
+
+                    auto info = access->getModuleInfo(mod, fileName);
+                    if ( !info.moduleName.empty() ) {
+                        mod = info.moduleName;
+                        if ( log ) {
+                            *log << string(tab,'\t') << " resolved as " << mod << "\n";
+                        }
+                    }
+
+                    if ( auto module = Module::requireEx(mod, allowPromoted) ) { // try native with that name AGAIN (promoted?)
+                        if ( log ) {
+                            *log << string(tab,'\t') << "from " << fileName << " require " << mod << " - shared, ok\n";
+                        }
+                        return addRequirements(fileName, libGroup, module, access, notAllowed, log, tab);
+                    }
+
+                    auto it_r = find_if(req.begin(), req.end(), [&] ( const ModuleInfo & reqM ) {
+                        return reqM.moduleName == mod;
+                    });
+                    if ( it_r == req.end() ) {
+                        if ( dependencies.find(mod) != dependencies.end() ) {
+                            logCircularDependency(fileName, log, tab, mod);
+                            return false;
+                        }
+                        dependencies.insert(mod);
+                        // module file name
+                        if ( info.moduleName.empty() ) {
+                            logModuleNotFound(fileName, log, tab, mod);
+                            return false;
+                        }
+
+                        if ( !getPrerequisites(info.fileName, libGroup, log, tab + 1) ) {
+                            return false;
+                        }
+
+                        logModuleFound(fileName, log, tab, mod, info);
+                        req.push_back(info);
+                    } else {
+                        if ( log ) {
+                            *log << string(tab,'\t') << "from " << fileName << " require " << mod << " - already required\n";
+                        }
+                    }
+                }
+                return true;
+            }
+
+            void logFileNotFound ( const string & fileName, TextWriter * log, int tab ) {
+                if ( log ) {
+                    *log    << string(tab,'\t') << "in " << fileName << " - FILE NOT FOUND\n"
+                            << string(tab+1,'\t') << "getDasRoot()=`" << getDasRoot() << "`\n";
+                }
+                missing.push_back(fileName);
+            }
+
+            void logNotAllowed ( const string & fileName, TextWriter * log, int tab, const string & mod ) {
+                // module not allowed
+                if ( log ) {
+                    *log << string(tab,'\t') << "in " << fileName << " module " << mod << " - NOT ALLOWED\n";
+                }
+                notAllowed.push_back(mod);
+            }
+
+            void logCircularDependency ( const string & fileName, TextWriter * log, int tab, const string & mod ) {
+                // circular dependency
+                if ( log ) {
+                    *log << string(tab,'\t') << "from " << fileName << " require " << mod << " - CIRCULAR DEPENDENCY\n";
+                }
+                circular.push_back(mod);
+            }
+
+            void logModuleFound ( const string & fileName, TextWriter * log, int tab, const string & mod, const ModuleInfo & info ) {
+                if ( log ) {
+                    *log << string(tab,'\t') << "from " << fileName << " require " << mod
+                        << " - ok, new module " << info.moduleName << " at " << info.fileName << "\n";
+                }
+            }
+
+            void logModuleNotFound ( const string & fileName, TextWriter * log, int tab, const string & mod ) {
+                // request can't be translated to module name
+                if ( log ) {
+                    *log << string(tab,'\t') << "from " << fileName << " require " << mod << " - MODULE INFO NOT FOUND\n";
+                }
+                missing.push_back(mod);
+            }
+
+        private:
+            const bool allowPromoted;
+            const FileAccessPtr & access;
+
+            vector<ModuleInfo> req;
+            vector<string> missing, circular, notAllowed;
+            das_set<string> dependencies;
+    };
+
     bool getPrerequisits ( const string & fileName,
                           const FileAccessPtr & access,
                           vector<ModuleInfo> & req,
@@ -185,91 +331,16 @@ namespace das {
                           TextWriter * log,
                           int tab,
                           bool allowPromoted ) {
-        if ( auto fi = access->getFileInfo(fileName) ) {
-            if ( log ) {
-                *log << string(tab,'\t') << "in " << fileName << "\n";
-            }
-            vector<string> ownReq = getAllRequire(fi, access);
-            for ( auto & mod : ownReq ) {
-                if ( log ) {
-                    *log << string(tab,'\t') << "require " << mod << "\n";
-                }
-                auto module = Module::requireEx(mod, allowPromoted); // try native with that name
-                if ( !module ) {
-                    auto info = access->getModuleInfo(mod, fileName);
-                    if ( !info.moduleName.empty() ) {
-                        mod = info.moduleName;
-                        if ( log ) {
-                            *log << string(tab,'\t') << " resolved as " << mod << "\n";
-                        }
-                    }
-                    module = Module::requireEx(mod, allowPromoted); // try native with that name AGAIN (promoted?)
-                    if ( !module ) {
-                        auto it_r = find_if(req.begin(), req.end(), [&] ( const ModuleInfo & reqM ) {
-                            return reqM.moduleName == mod;
-                        });
-                        if ( it_r==req.end() ) {
-                            if ( dependencies.find(mod) != dependencies.end() ) {
-                                // circular dependency
-                                if ( log ) {
-                                    *log << string(tab,'\t') << "from " << fileName << " require " << mod << " - CIRCULAR DEPENDENCY\n";
-                                }
-                                circular.push_back(mod);
-                                return false;
-                            }
-                            dependencies.insert(mod);
-                            // module file name
-                            if ( info.moduleName.empty() ) {
-                                // request can't be translated to module name
-                                if ( log ) {
-                                    *log << string(tab,'\t') << "from " << fileName << " require " << mod << " - MODULE INFO NOT FOUND\n";
-                                }
-                                missing.push_back(mod);
-                                return false;
-                            }
-                            if ( !getPrerequisits(info.fileName, access, req, missing, circular, notAllowed, dependencies, libGroup, log, tab + 1, allowPromoted) ) {
-                                return false;
-                            }
-                            if ( log ) {
-                                *log << string(tab,'\t') << "from " << fileName << " require " << mod
-                                    << " - ok, new module " << info.moduleName << " at " << info.fileName << "\n";
-                            }
-                            req.push_back(info);
-                        } else {
-                            if ( log ) {
-                                *log << string(tab,'\t') << "from " << fileName << " require " << mod << " - already required\n";
-                            }
-                        }
-                    } else {
-                        if ( log ) {
-                            *log << string(tab,'\t') << "from " << fileName << " require " << mod << " - shared, ok\n";
-                        }
-                        if ( !addRequirements(fileName, libGroup, module, access, notAllowed, log, tab) ) {
-                            return false;
-                        }
-                    }
-                } else {
-                    if ( log ) {
-                        *log << string(tab,'\t') << "from " << fileName << " require " << mod << " - ok\n";
-                    }
-                    if ( !access->isModuleAllowed(module->name, fileName) ) {
-                        notAllowed.push_back(module->name);
-                        if ( log ) {
-                            *log << string(tab,'\t') << "in " << fileName << " module " << module->name << " - NOT ALLOWED\n";
-                        }
-                        return false;
-                    } else {
-                        libGroup.addModule(module);
-                    }
-                }
-            }
+        GetPrerequisites gp{access, allowPromoted};
+        auto res = gp.getPrerequisites(fileName, libGroup, log);
+        // Move results to output
+        if ( res.success ) {
+            req = das::move(res.req);
             return true;
         } else {
-            if ( log ) {
-                *log    << string(tab,'\t') << "in " << fileName << " - FILE NOT FOUND\n"
-                        << string(tab+1,'\t') << "getDasRoot()=`" << getDasRoot() << "`\n";
-            }
-            missing.push_back(fileName);
+            missing = das::move(res.missing);
+            circular = das::move(res.circular);
+            notAllowed = das::move(res.notAllowed);
             return false;
         }
     }
