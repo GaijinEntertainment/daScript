@@ -97,7 +97,18 @@ def test_matrix_manip ( t:T? )
         fuzz <|
             t |> accept ( inverse ( fake |> random_float4x4 ) )
 
+    t |> run("fuzz determinant") <| @@ ( t : T? )
+        var fake <- Faker()
+        fuzz <|
+            t |> accept ( determinant ( fake |> random_float3x3 ) )
+        fuzz <|
+            t |> accept ( determinant ( fake |> random_float3x4 ) )
+        fuzz <|
+            t |> accept ( determinant ( fake |> random_float4x4 ) )
+
     t |> run("fuzz orthonormal_inverse") <| @@ ( t : T? )
         var fake <- Faker()
         fuzz <|
-            t |> accept ( orthonormal_inverse ( fake |> random_float4x4 ) )
+            t |> accept ( orthonormal_inverse ( fake |> random_float3x3 ) )
+        fuzz <|
+            t |> accept ( orthonormal_inverse ( fake |> random_float3x4 ) )
