@@ -396,10 +396,10 @@ namespace das {
         return res;
     }
 
-    float float3x4_det ( const float3x4 & mat ) {
-        mat44f res;
-        v_mat44_make_from_43ca(res, (const float*)&mat);
-        return v_extract_x(v_mat44_det43(res));
+    float float4x4_det(const float4x4 &a) {
+        mat44f va;
+        memcpy(&va,&a,sizeof(float4x4));
+        return v_extract_x(v_mat44_det(va));
     }
 
     float4x4 float4x4_identity_m ( void ) {
@@ -434,7 +434,7 @@ namespace das {
         memcpy(&va,&a,sizeof(float4x4));
         memcpy(&vb,&b,sizeof(float4x4));
         v_mat44_mul(res,va,vb);
-        return reinterpret_cast<float4x4&>(res);;
+        return reinterpret_cast<float4x4&>(res);
     }
 
     float3x3 float3x3_mul(const float3x3 &a, const float3x3 &b) {
@@ -466,46 +466,45 @@ namespace das {
         mat44f mat, invMat;
         memcpy(&mat, &src, sizeof(float4x4));
         v_mat44_inverse(invMat, mat);
-        return reinterpret_cast<float4x4&>(invMat);;
+        return reinterpret_cast<float4x4&>(invMat);
     }
 
     float3x3 float3x3_inverse( const float3x3 & src) {
-        mat33f mat, invMat; mat.col0 = src.m[0]; mat.col1 = src.m[1]; mat.col2 = src.m[2];
+        mat33f mat, invMat;
         memcpy(&mat, &src, sizeof(float3x3));
         v_mat33_inverse(invMat, mat);
-        float3x3 res; res.m[0] = invMat.col0; res.m[1] = invMat.col1; res.m[2] = invMat.col2;
-        return res;
+        return reinterpret_cast<float3x3&>(invMat);
     }
 
-    float4x4 float4x4_orthonormal_inverse( const float4x4 & src) {
-        mat44f mat, invMat;
-        memcpy(&mat, &src, sizeof(float4x4));
-        v_mat44_orthonormal_inverse43(invMat, mat);
-        return reinterpret_cast<float4x4&>(invMat);;
+    float3x3 float3x3_orthonormal_inverse( const float3x3 & src) {
+        mat33f mat, invMat;
+        memcpy(&mat, &src, sizeof(float3x3));
+        v_mat33_orthonormal_inverse(invMat, mat);
+        return reinterpret_cast<float3x3&>(invMat);
     }
 
     float4x4 float4x4_persp_forward(float wk, float hk, float zn, float zf) {
         mat44f mat;
         v_mat44_make_persp_forward(mat, wk, hk, zn, zf);
-        return reinterpret_cast<float4x4&>(mat);;
+        return reinterpret_cast<float4x4&>(mat);
     }
 
     float4x4 float4x4_persp_reverse(float wk, float hk, float zn, float zf) {
         mat44f mat;
         v_mat44_make_persp_reverse(mat, wk, hk, zn, zf);
-        return reinterpret_cast<float4x4&>(mat);;
+        return reinterpret_cast<float4x4&>(mat);
     }
 
     float4x4 float4x4_look_at(float3 eye, float3 at, float3 up) {
         mat44f mat;
         v_mat44_make_look_at(mat, eye, at, up);
-        return reinterpret_cast<float4x4&>(mat);;
+        return reinterpret_cast<float4x4&>(mat);
     }
 
     float4x4 float4x4_compose(float3 pos, float4 rot, float3 scale) {
         mat44f mat;
         v_mat44_compose(mat, pos, rot, scale);
-        return reinterpret_cast<float4x4&>(mat);;
+        return reinterpret_cast<float4x4&>(mat);
     }
 
     void float4x4_decompose(const float4x4 & mat, float3 & pos, float4 & rot, float3 & scale) {
@@ -770,8 +769,10 @@ namespace das {
                 "inverse", SideEffects::none, "float3x4_inverse")->arg("x");
             addExtern<DAS_BIND_FUN(float4x4_inverse), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib,
                 "inverse", SideEffects::none, "float4x4_inverse")->arg("m");
-            addExtern<DAS_BIND_FUN(float4x4_orthonormal_inverse), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib,
-                "orthonormal_inverse", SideEffects::none, "float4x4_orthonormal_inverse")->arg("m");
+            addExtern<DAS_BIND_FUN(float3x3_orthonormal_inverse), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib,
+                "orthonormal_inverse", SideEffects::none, "float3x3_orthonormal_inverse")->arg("m");
+            addExtern<DAS_BIND_FUN(float3x4_orthonormal_inverse), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib,
+                "orthonormal_inverse", SideEffects::none, "float3x4_orthonormal_inverse")->arg("m");
             addExtern<DAS_BIND_FUN(rotate)>(*this, lib, "rotate",
                 SideEffects::none, "rotate")->args({"x","y"});
             addExtern<DAS_BIND_FUN(float3x4_equ)>(*this, lib, "==",
@@ -828,7 +829,7 @@ namespace das {
                 SideEffects::none, "float3x3_nequ")->args({"x","y"});
             addExtern<DAS_BIND_FUN(float3x3_neg), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "-",
                 SideEffects::none,"float3x3_neg")->arg("x");
-            addExtern<DAS_BIND_FUN(float3x3_det)>(*this, lib, "-detertminant",
+            addExtern<DAS_BIND_FUN(float3x3_det)>(*this, lib, "determinant",
                 SideEffects::none,"float3x3_det")->arg("x");
             initFloatNxNIndex(addExtern<DAS_BIND_FUN((floatNxN_ati<float3x3>)), SimNode_ExtFuncCallRef>(*this, lib,
                 "[]", SideEffects::none, "floatNxN_ati<float4>")->args({"m","i","context","at"}));
