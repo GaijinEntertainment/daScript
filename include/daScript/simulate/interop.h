@@ -141,6 +141,13 @@ namespace das
         }
     };
 
+    template <typename Result, typename ...Args>
+    struct ImplCallStaticFunctionImpl<char *, false, false, Result &, Args...> {   // any ref to char * (used in evalPtr)
+        static __forceinline char *call ( Result &(*fn)(Args...), Context & ctx, SimNode ** args ) {
+          return (char *) &CallStaticFunction<Result &,Args...>(fn,ctx,args);;
+        }
+    };
+
     // note: this is here because SimNode_At and such can call evalInt, while index is UInt
     //  this is going to be allowed for now, since the fix will result either in duplicating SimNode_AtU or a cast node
     template <typename ...Args>
