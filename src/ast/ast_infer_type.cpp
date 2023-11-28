@@ -1399,6 +1399,48 @@ namespace das {
             return nullptr;
         }
 
+        ExpressionPtr hasMatchingWithProp ( ExprVar * expr ) {
+            for ( auto it=with.rbegin(), its=with.rend(); it!=its; ++it ) {
+                auto eW = *it;
+                if ( auto eWT = eW->with->type ) {
+                    StructurePtr pSt;
+                    if ( eWT->isStructure() ) {
+                        pSt = eWT->structType;
+                    } else if ( eWT->isPointer() && eWT->firstType && eWT->firstType->isStructure() ) {
+                        pSt = eWT->firstType->structType;
+                    }
+                    if ( pSt ) {
+                        if ( eWT->isPointer() )
+                        {
+                            auto derefV = make_smart<ExprPtr2Ref>(expr->at, eW->with);
+                            derefV->type = eWT->firstType;
+                            TypeDecl::applyAutoContracts(derefV->type,eWT->firstType);
+                            derefV->type->ref = true;
+                            derefV->type->constant |= eWT->constant;
+                            if ( expr->underClone ) {
+                                expr->underClone->cloneSet = inferGenericOperator(".`"+expr->name+"`clone",expr->at,derefV,expr->underClone->right);
+                                if ( expr->underClone->cloneSet ) {
+                                    continue;
+                                }
+                            }
+                            if ( auto opE = inferGenericOperator(".`"+expr->name,expr->at,derefV,nullptr) ) return opE;
+                            if ( auto opE = inferGenericOperatorWithName(".",expr->at,derefV,expr->name) ) return opE;
+                        } else {
+                            if ( expr->underClone ) {
+                                expr->underClone->cloneSet = inferGenericOperator(".`"+expr->name+"`clone",expr->at,eW->with,expr->underClone->right);
+                                if ( expr->underClone->cloneSet ) {
+                                    continue;
+                                }
+                            }
+                            if ( auto opE = inferGenericOperator(".`"+expr->name,expr->at,eW->with,nullptr) ) return opE;
+                            if ( auto opE = inferGenericOperatorWithName(".",expr->at,eW->with,expr->name) ) return opE;
+                        }
+                    }
+                }
+            }
+            return nullptr;
+        }
+
         bool inferTypeExpr ( TypeDecl * type ) {
             bool any = false;
             for ( size_t i=0, is=type->dim.size(); i!=is; ++i ) {
@@ -4994,6 +5036,13 @@ namespace das {
             expr->argumentIndex = -1;
         }
         virtual ExpressionPtr visit ( ExprVar * expr ) override {
+            if ( expr->underClone ) { // we wait for the 'right' type to be infered
+                if ( !expr->underClone->right->type || expr->underClone->right->type->isAutoOrAlias() ) {
+                    error("under clone field type not infered yet", "", "",
+                            expr->at, CompilationError::variable_not_found);
+                    return Visitor::visit(expr);
+                }
+            }
             // assume (that on the stack)
             for ( auto it = assume.rbegin(), its=assume.rend(); it!=its; ++it ) {
                 auto ita = *it;
@@ -5059,6 +5108,10 @@ namespace das {
             if ( auto eW = hasMatchingWith(expr->name) ) {
                 reportAstChanged();
                 return make_smart<ExprField>(expr->at, forceAt(eW->with->clone(),expr->at), expr->name);
+            }
+            if ( auto eP = hasMatchingWithProp(expr) ) {
+                reportAstChanged();
+                return eP;
             }
             // static class method accessing static variables
             if ( func && func->isStaticClassMethod && func->classParent->hasStaticMembers ) {
@@ -5491,6 +5544,9 @@ namespace das {
             if ( expr->left->rtti_isField() ) {
                 auto field = static_pointer_cast<ExprField>(expr->left);
                 field->underClone = expr;
+            } else if ( expr->left->rtti_isVar() ) {
+                auto var = static_pointer_cast<ExprVar>(expr->left);
+                var->underClone = expr;
             }
             expr->cloneSet.reset();
         }
