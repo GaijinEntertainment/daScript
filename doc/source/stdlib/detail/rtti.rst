@@ -209,3 +209,12 @@
 .. |function-rtti-get_type_align| replace:: Returns alignment of the type in bytes.
 
 .. |function-rtti-get_table_key_index| replace:: Returns index of the key in the table.
+
+.. |function-rtti-with_program_serialized| replace:: Serializes program and then deserializes it. This is to test serialization.
+
+.. |function-rtti-get_tuple_field_offset| replace:: Returns offset of the tuple field.
+
+.. |function-rtti-get_variant_field_offset| replace:: Returns offset of the variant field.
+
+.. |function-rtti-each| replace:: Iterates through each element of the object.
+

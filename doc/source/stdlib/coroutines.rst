@@ -76,6 +76,14 @@ If return type is specified coroutine can serve as an advanced form of a generat
 Call macros
 +++++++++++
 
+.. _call-macro-coroutines-co_continue:
+
+.. das:attribute:: co_continue
+
+This macro converts co_continue to yield true.
+The idea is that coroutine without specified type is underneath a coroutine which yields bool.
+That way co_continue() does not distract from the fact that it is a generator<bool>.
+
 .. _call-macro-coroutines-co_await:
 
 .. das:attribute:: co_await
@@ -97,14 +105,6 @@ This macro converts yield_from(THAT) expression into::
         yield t
 
 The idea is that coroutine or generator can continuesly yield from another sub-coroutine or generator.
-
-.. _call-macro-coroutines-co_continue:
-
-.. das:attribute:: co_continue
-
-This macro converts co_continue to yield true.
-The idea is that coroutine without specified type is underneath a coroutine which yields bool.
-That way co_continue() does not distract from the fact that it is a generator<bool>.
 
 ++++++++++++++++++++++++++++++
 Top level coroutine evaluation
