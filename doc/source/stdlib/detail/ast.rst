@@ -1381,5 +1381,13 @@
 
 .. |function-ast-get_underlying_value_type| replace:: Returns daScript type which is aliased with ManagedValue handled type.
 
+.. |method-ast-AstVisitor.preVisitExprTypeDecl| replace:: before `ExprTypeDecl`
+
+.. |method-ast-AstVisitor.visitExprTypeDecl| replace:: after `ExprTypeDecl`
+
+.. |function-ast-add_module_require| replace:: Add module dependencies similar to "require" keyword.
+
+.. |function-ast-get_handled_type_field_type| replace:: Returns type of the field in the ManagedStructure handled type.
+
 
 

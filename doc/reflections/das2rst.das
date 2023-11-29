@@ -110,6 +110,7 @@ to_table_move|empty|subarray|insert|move_to_ref|copy_to_local|move_to_local|get)
         group_by_regex("Initialization and finalization", mod, %regex~(using|clone|finalize)$%%);
         group_by_regex("Algorithms", mod, %regex~(swap|iter_range|count|ucount)$%%);
         group_by_regex("Memset", mod, %regex~(memset.*)$%%);
+        group_by_regex("Malloc", mod, %regex~(malloc|free|malloc_usable_size)$%%);
     }]
     document("Built-in runtime",mod,"{root}/builtin.rst","{root}/detail/builtin.rst",groups)
 
@@ -241,7 +242,7 @@ def document_module_strings_boost(root:string)
         group_by_regex("Queries and comparisons", mod, %regex~(is_character_at|eq)$%%);
         group_by_regex("Replace", mod, %regex~(replace_multiple)$%%);
         group_by_regex("Levenshtein distance", mod, %regex~(levenshtein_distance|levenshtein_distance_fast)$%%);
-        group_by_regex("Character traits", mod, %regex~(is_hex)$%%);
+        group_by_regex("Character traits", mod, %regex~(is_hex|is_tab_or_space)$%%);
     }]
     document("Boost package for string manipulation library",mod,"{root}/strings_boost.rst","{root}/detail/strings_boost.rst",groups)
 
@@ -314,10 +315,11 @@ def document_module_apply(root:string)
 def document_module_jobque(root:string)
     var mod = find_module("jobque")
     var groups <- [{DocGroup
-        group_by_regex("Channel and JobStatus", mod, %regex~(append|notify|join|channel_create|channel_remove|add_ref|release|notify_and_release)$%%);
+        group_by_regex("Channel, JobStatus, Lockbox", mod, %regex~(append|notify|join|channel_create|channel_remove|add_ref|release|notify_and_release|lock_box_create|lock_box_remove|job_status_create|job_status_remove)$%%);
         group_by_regex("Queries", mod, %regex~(get_total_hw_jobs|get_total_hw_threads|is_job_que_shutting_down)$%%);
         group_by_regex("Internal invocations", mod, %regex~(new_job_invoke|new_thread_invoke)$%%);
-        group_by_regex("Construction", mod, %regex~(with_channel|with_job_status|with_job_que)$%%)
+        group_by_regex("Construction", mod, %regex~(with_channel|with_job_status|with_job_que|with_lock_box)$%%);
+        group_by_regex("Atomic", mod, %regex~(atomic32_create|atomic32_remove|with_atomic32|atomic64_create|atomic64_remove|with_atomic64|get|set|inc|dec)$%%)
     }]
     document("Jobs and threads",mod,"{root}/jobque.rst","{root}/detail/jobque.rst",groups)
 
