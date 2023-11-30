@@ -48,7 +48,7 @@ The following words are reserved as keywords and cannot be used as identifiers:
 +------------+------------+-----------+------------+------------+-------------+
 | shared     | private    | smart_ptr | generator  | yield      | unsafe      |
 +------------+------------+-----------+------------+------------+-------------+
-| assume     | explicit   | sealed    |            |            |             |
+| assume     | explicit   | sealed    | static     | inscope    |             |
 +------------+------------+-----------+------------+------------+-------------+
 
 The following words are reserved as type names and cannot be used as identifiers:
