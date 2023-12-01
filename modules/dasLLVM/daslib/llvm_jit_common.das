@@ -13,6 +13,7 @@ require fio
 require jit
 
 let public LLVM_JIT_ENABLED = true
+let public LLVM_JIT_ALL_FUNCTIONS = false
 
 let public LLVM_DEBUG_RESULT = false
 let public LLVM_DEBUG_EVERYTHING = false
