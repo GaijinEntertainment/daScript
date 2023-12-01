@@ -33,6 +33,12 @@ def test_invoke_lambda(lmb:lambda<(a:int;b:float):int>)
     return invoke(lmb, 1, 2.0)
 
 [jit]
+def test_invoke_and_delete_lambda(var lmb:lambda<(a:int;b:float):int>)
+    let res = invoke(lmb, 1, 2.0)
+    delete lmb
+    return res
+
+[jit]
 def test_invoke_lambda2cmres(lmb:lambda<(a:int;b:float):Foo>)
     return invoke(lmb, 1, 2.0)
 
@@ -73,6 +79,20 @@ def test_ref ( t:T? )
         t |> equal(13, res)
         t |> equal(1, g_A)
         t |> equal(2.0, g_B)
+    t |> run("invoke and delete lambda") <| @ ( t : T? )
+        t |> success(is_jit_function(@@test_invoke_and_delete_lambda))
+        g_A = 0
+        g_B = 0.
+        let res = test_invoke_and_delete_lambda <| @(a:int;b:float):int
+            g_A = a
+            return 13
+        finally
+            g_B = 2.0
+        t |> equal(13, res)
+        t |> equal(1, g_A)
+        t |> equal(2.0, g_B)
+        // now empty lambda
+
     t |> run("invoke lambda2cmres") <| @ ( t : T? )
         t |> success(is_jit_function(@@test_invoke_lambda2cmres))
         g_A = 0
@@ -108,4 +128,5 @@ def test_ref ( t:T? )
         t |> equal(12., res.b)
         t |> equal(1, g_A)
         t |> equal(2.0, g_B)
+
 

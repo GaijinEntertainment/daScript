@@ -389,10 +389,11 @@ class LlvmJitVisitor : AstVisitor
             alwaysPromote = true
         for a,ai in arguments,range(10050)
             if (alwaysPromote || a.access_flags.access_ref || a.access_flags.access_pass) && !a._type.isRef
-                var tryV = LLVMBuildAlloca(g_builder, type_to_llvm_abi_type(a._type), "var_{a.name}")
-                LLVMSetAlignment(tryV, 16u)
-                LLVMBuildStore(g_builder, LLVMGetParam(ffunc,uint(ai)), tryV)
-                setV(a, tryV)
+                if !(a._type.baseType == Type tLambda)  // we do not promote lambda?
+                    var tryV = LLVMBuildAlloca(g_builder, type_to_llvm_abi_type(a._type), "var_{a.name}")
+                    LLVMSetAlignment(tryV, 16u)
+                    LLVMBuildStore(g_builder, LLVMGetParam(ffunc,uint(ai)), tryV)
+                    setV(a, tryV)
         // function body
         function_body = LLVMAppendBasicBlock(ffunc, "body_{bodyId}")
         LLVMPositionBuilderAtEnd(g_builder,function_body)
@@ -2280,6 +2281,7 @@ class LlvmJitVisitor : AstVisitor
         elif blockT.isGoodLambdaType
             var args = build_array_of_arguments(expr.arguments, false)
             var LAMBDA = getE(expr.arguments[0])
+            check_ptr_zero(LAMBDA, "invoke null lambda")
             LAMBDA = LLVMBuildLoad(g_builder, LAMBDA, "LAMBDA")
             var SIMFUNCTION = LLVMBuildExtractValue(g_builder, LAMBDA, uint(JIT_LAMBDA EVAL), "EVAL")
             SIMFUNCTION = LLVMBuildPointerCast(g_builder, SIMFUNCTION, LLVMPointerType(LLVMVoidType(), 0u), "")
@@ -2413,6 +2415,31 @@ class LlvmJitVisitor : AstVisitor
         return expr
 
 // ExprDelete
+    def build_lambda_delete ( lmb:LLVMOpaqueValue? )
+        var args : LLVMOpaqueValue?
+        at_function_entry <|
+            args = LLVMBuildAlloca(g_builder, LLVMArrayType(LLVMFloat4Type(), 1u), "args")
+            LLVMSetAlignment(args, 16u)
+            args = LLVMBuildPointerCast(g_builder, args, LLVMPointerType(LLVMFloat4Type(), 0u), "delete lambda args ptr")
+        check_ptr_zero(lmb, "invoke null lambda")
+        // build arguments (1, and its 'capture')
+        let ai = 0
+        var arg_ptr = LLVMBuildGEP(g_builder, args, LLVMConstInt(LLVMInt32Type(), uint64(ai), 0), "call_arg_{ai}_ptr")
+        var arg_val = lmb
+        var arg_cast_type = LLVMPointerType(g_t_lambda, 0u)
+        LLVMBuildStore2(g_builder, arg_cast_type, arg_val, arg_ptr)
+        // now invoke
+        var LAMBDA = LLVMBuildLoad(g_builder, lmb, "LAMBDA")
+        var SIMFUNCTION = LLVMBuildExtractValue(g_builder, LAMBDA, uint(JIT_LAMBDA FINALIZER), "FINALIZER")
+        SIMFUNCTION = LLVMBuildPointerCast(g_builder, SIMFUNCTION, LLVMPointerType(LLVMVoidType(), 0u), "")
+        var params : array<LLVMOpaqueValue?>
+        params |> push(SIMFUNCTION)
+        params |> push(args)
+        params |> push(get_context_param())
+        var func = LLVMGetNamedFunction(g_mod, FN_JIT_CALL_OR_FASTCALL)
+        LLVMBuildCall(g_builder, func, params, "delete_lambda")
+
+
     def override visitExprDelete(expr:smart_ptr<ExprDelete>) : ExpressionPtr
         assume subexpr = expr.subexpr
         assume subT = expr.subexpr._type
@@ -2447,7 +2474,7 @@ class LlvmJitVisitor : AstVisitor
                         ]]
                         LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, FN_JIT_FREE_HEAP), params, "")
                         */
-                        failed_E(expr, "delete lambda is not supported yet {describe(subT)}")
+                        failed_E(expr, "delete lambda ptr is not supported yet {describe(subT)}")
                     else
                         var params = [[auto
                             ps;
@@ -2459,6 +2486,8 @@ class LlvmJitVisitor : AstVisitor
                     failed_E(expr, "delete class pointer is not supported yet {describe(subT)}")
             else
                 failed_E(expr, "delete of pointer non-structure type is not supported yet {describe(subT)}")
+        elif subT.isGoodLambdaType
+            build_lambda_delete(se)
         else
             failed_E(expr, "delete of non-pointer type is not supported yet {describe(subT)}")
         return expr
