@@ -19,6 +19,12 @@ def variant_field ( var f : FooT )
         return f.a
 
 [jit]
+def variant_field_move ( var f : FooT )
+    var b : BarT
+    b = [[BarT foo <-f]]
+    return b
+
+[jit]
 def variant_is ( var f : FooT )
     f = [[FooT b = 1.]]
     return f is b
@@ -80,6 +86,13 @@ def test_variant ( t:T? )
         t |> success ( is_jit_function(@@variant_field) )
         var res = variant_field(f)
         t |> equal ( res, int(0x3f800000) )
+    t |> run("variant field move") <| @ ( t : T? )
+        var f : FooT
+        t |> success ( is_jit_function(@@variant_field_move) )
+        f = [[FooT a=1234]]
+        var res = variant_field_move(f)
+        t |> equal ( 0, f as a)
+        t |> equal ( 1234, (res as foo) as a )
     t |> run("variant is") <| @ ( t : T? )
         var f : FooT
         t |> success ( is_jit_function(@@variant_is) )

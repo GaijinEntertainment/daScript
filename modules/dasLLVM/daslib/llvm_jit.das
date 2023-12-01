@@ -1915,7 +1915,7 @@ class LlvmJitVisitor : AstVisitor
             pass // do nothing. we already handle this in preVisitExprMakeVariantField
         else
             if decl.flags.moveSemantics
-                failed_E(expr, "makeVariant: move is not supported")
+                build_move(v_ptr, decl.value)   // TODO: verify
             else
                 build_copy(v_ptr, decl.value)
         return decl
