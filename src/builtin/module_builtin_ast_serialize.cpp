@@ -2061,11 +2061,7 @@ namespace das {
                 ser << *deser;
             }
 
-            for ( auto & m : program->library.getModules() ) {
-                if ( m->name == program->thisModuleName ) {
-                    program->thisModule.reset(m);
-                }
-            }
+            program->thisModule.reset(program->library.getModules().back());
         }
     }
 
