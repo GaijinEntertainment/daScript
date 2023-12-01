@@ -2463,17 +2463,16 @@ class LlvmJitVisitor : AstVisitor
                         ]]
                         LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, FN_JIT_FREE_PERSISTENT), params, "")
                     elif isLambda
-                        /*
-                        ps -= 16; // TODO:
-                        structSize += 16;
+                        structSize += 16
+                        var p2int = LLVMBuildPtrToInt(g_builder, ps, LLVMIntPtrType(), "")
+                        var sub16 = LLVMBuildSub(g_builder, p2int, LLVMConstInt(LLVMIntPtrType(), uint64(16), 0), "")
+                        var lmb = LLVMBuildIntToPtr(g_builder, sub16, LLVMPointerType(LLVMVoidType(),0u), "")
                         var params = [[auto
-                            ps;
+                            lmb;
                             LLVMConstInt(LLVMInt32Type(), uint64(structSize), 0);
                             get_context_param()
                         ]]
                         LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, FN_JIT_FREE_HEAP), params, "")
-                        */
-                        failed_E(expr, "delete lambda ptr is not supported yet {describe(subT)}")
                     else
                         var params = [[auto
                             ps;
