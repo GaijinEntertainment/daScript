@@ -389,11 +389,10 @@ class LlvmJitVisitor : AstVisitor
             alwaysPromote = true
         for a,ai in arguments,range(10050)
             if (alwaysPromote || a.access_flags.access_ref || a.access_flags.access_pass) && !a._type.isRef
-                if !(a._type.baseType == Type tLambda)  // we do not promote lambda?
-                    var tryV = LLVMBuildAlloca(g_builder, type_to_llvm_abi_type(a._type), "var_{a.name}")
-                    LLVMSetAlignment(tryV, 16u)
-                    LLVMBuildStore(g_builder, LLVMGetParam(ffunc,uint(ai)), tryV)
-                    setV(a, tryV)
+                var tryV = LLVMBuildAlloca(g_builder, type_to_llvm_abi_type(a._type), "var_{a.name}")
+                LLVMSetAlignment(tryV, 16u)
+                LLVMBuildStore(g_builder, LLVMGetParam(ffunc,uint(ai)), tryV)
+                setV(a, tryV)
         // function body
         function_body = LLVMAppendBasicBlock(ffunc, "body_{bodyId}")
         LLVMPositionBuilderAtEnd(g_builder,function_body)
@@ -2487,7 +2486,8 @@ class LlvmJitVisitor : AstVisitor
             else
                 failed_E(expr, "delete of pointer non-structure type is not supported yet {describe(subT)}")
         elif subT.isGoodLambdaType
-            build_lambda_delete(se)
+            var lse = LLVMBuildLoadDataAligned(g_builder, se, uint(subT.alignOf), "lambda_r2v")
+            build_lambda_delete(lse)
         else
             failed_E(expr, "delete of non-pointer type is not supported yet {describe(subT)}")
         return expr
