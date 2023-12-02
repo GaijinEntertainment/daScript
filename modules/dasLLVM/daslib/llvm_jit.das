@@ -1270,6 +1270,12 @@ class LlvmJitVisitor : AstVisitor
             elif expr.left._type.baseType == Type tString
                 var cmpR = build_str_cmp(left, right)
                 opR = LLVMBuildICmp(g_builder, get_int_compare_op(expr,string(expr.op)), cmpR, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
+            elif expr.left._type.baseType == Type tFunction
+                var lptr = LLVMBuildExtractValue(g_builder, left, uint(JIT_FUNCTION SIM_FUNCTION), "SIMFUNCTION")
+                var rptr = LLVMBuildExtractValue(g_builder, right, uint(JIT_FUNCTION SIM_FUNCTION), "SIMFUNCTION")
+                lptr = LLVMBuildPointerCast(g_builder, lptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
+                rptr = LLVMBuildPointerCast(g_builder, rptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
+                opR = LLVMBuildICmp(g_builder, get_uint_compare_op(expr,string(expr.op)), lptr, rptr, "")
             if opR == null
                 opR = LLVMGetUndef(LLVMInt8Type())
                 failed_E(expr, "unsupported compare type {describe(expr.left._type)} {expr.op} {describe(expr.right._type)}")
