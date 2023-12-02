@@ -40,7 +40,7 @@ namespace das {
 
     Func adapt ( const char * funcName, char * pClass, const StructInfo * info ) {
         char * field = adapt_field(funcName, pClass, info);
-        return field ? *(Func*)field : Func(0);
+        return field ? *(Func*)field : Func((void *)nullptr);
     }
 
     bool addModuleFunction ( Module * module, FunctionPtr & _func, Context * context, LineInfoArg * lineInfo ) {
