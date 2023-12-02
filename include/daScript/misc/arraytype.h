@@ -35,6 +35,10 @@ namespace das
         struct SimFunction * PTR;
         Func() : PTR(nullptr) {}
         Func(SimFunction * P) : PTR(P) {}
+        Func(void * P) : PTR((SimFunction *)P) {}
+        __forceinline operator void * () const {
+            return PTR;
+        }
         __forceinline explicit operator bool () const {
             return PTR!=nullptr;
         }
