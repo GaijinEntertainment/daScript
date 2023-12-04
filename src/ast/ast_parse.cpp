@@ -316,7 +316,9 @@ namespace das {
             return false;
         }
 
-        serializer_write->parsedModules.push_back({fileName, file_mtime, program, program->thisModule.get()});
+        if ( serializer_write != nullptr ) {
+            serializer_write->parsedModules.push_back({fileName, file_mtime, program, program->thisModule.get()});
+        }
 
         return true;
     }
