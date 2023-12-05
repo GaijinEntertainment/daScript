@@ -199,7 +199,7 @@ static ma_device g_device;
 static ma_log g_ma_log_struct;
 static shared_ptr<Context> g_mixer_context;
 static daScriptEnvironment * g_mixer_env = nullptr;
-static Func g_mixer_function = nullptr;
+static Func g_mixer_function = (void *) nullptr;
 static bool g_mixer_initialized = false;
 static int g_rate = 0;
 static int g_channels = 0;
