@@ -504,6 +504,7 @@ variant AudioCommand
     status                  : AudioCommandStatus
     reverb                  : tuple<sid : SID; properties : I3DL2ReverbProperties>
     set_playback_position   : tuple<sid : SID; position : uint64>
+    global_pause            : bool
 
 var g_command_channel : Channel?
 var g_collect_channel : Channel?
@@ -627,6 +628,8 @@ def command_processor
                 ch.pitch = pcmd.pitch
         elif cmd is global_pitch
             g_pitch = cmd as global_pitch
+        elif cmd is global_pause
+            g_pause = cmd as global_pause // todo: envelope?
         elif cmd is stop
             var scmd = cmd as stop
             g_sid_2_channel |> get(scmd.sid) <| $(var ch : AudioChannel?&)
@@ -677,31 +680,36 @@ def command_processor
 
 var g_limiter : ma_limiter
 var g_mix_buffer : array<float>
+var g_pause : bool = false
 
 [export]
 def mixer(var data : array<float>#; channels, rate : int; dt : float)
     let t0 = ref_time_ticks()
     command_processor()
-    update_hrtf()
-    let output_samples = length(data) / channels
-    let input_samples = int(ma_limiter_get_required_input_frame_count(unsafe(addr(g_limiter)), uint64(output_samples)))
-    let current_samples = length(g_mix_buffer) / channels
-    let missing_samples = input_samples - current_samples
-    if missing_samples < 0
-        panic("{input_samples} - {current_samples}, need {output_samples}; mixer: missing_samples < 0")
-    g_mix_buffer |> resize(input_samples * channels)
-    array_view(g_mix_buffer, current_samples * channels, missing_samples * channels) <| $(mix_data)
-        let srct = g_channels |> length
-        for i in range(srct)
-            let srci = srct - i - 1
-            assume ch = g_channels[srci]
-            if !ch->mix(mix_data, channels, rate, dt)
-                remove_channel(srci)
-    ma_limiter_process_pcm_frames(unsafe(addr(g_limiter)),
-        unsafe(addr(g_mix_buffer[0])),
-        unsafe(addr(data[0])),
-        uint64(output_samples))
-    g_mix_buffer |> erase(0, output_samples * channels)
+    if g_pause
+        unsafe
+            memset32(addr(data[0]), 0u, length(data))
+    else
+        update_hrtf()
+        let output_samples = length(data) / channels
+        let input_samples = int(ma_limiter_get_required_input_frame_count(unsafe(addr(g_limiter)), uint64(output_samples)))
+        let current_samples = length(g_mix_buffer) / channels
+        let missing_samples = input_samples - current_samples
+        if missing_samples < 0
+            panic("{input_samples} - {current_samples}, need {output_samples}; mixer: missing_samples < 0")
+        g_mix_buffer |> resize(input_samples * channels)
+        array_view(g_mix_buffer, current_samples * channels, missing_samples * channels) <| $(mix_data)
+            let srct = g_channels |> length
+            for i in range(srct)
+                let srci = srct - i - 1
+                assume ch = g_channels[srci]
+                if !ch->mix(mix_data, channels, rate, dt)
+                    remove_channel(srci)
+        ma_limiter_process_pcm_frames(unsafe(addr(g_limiter)),
+            unsafe(addr(g_mix_buffer[0])),
+            unsafe(addr(data[0])),
+            uint64(output_samples))
+        g_mix_buffer |> erase(0, output_samples * channels)
     g_mixer_total_time += double(get_time_usec(t0)) / 1000.lf
     g_mixer_total_samples += uint64(length(data) / channels)
 
@@ -911,6 +919,10 @@ def public set_pitch(sid : SID; pitch : float)
 def public set_global_pitch(pitch : float)
     //! set global pitch of sounds
     push_cmd <| new [[AudioCommand global_pitch=pitch]]
+
+def public set_global_pause(pause : bool)
+    //! set global pause of sounds
+    push_cmd <| new [[AudioCommand global_pause=pause]]
 
 def public stop(sid : SID; time : float = 0.0f)
     //! stop sound
