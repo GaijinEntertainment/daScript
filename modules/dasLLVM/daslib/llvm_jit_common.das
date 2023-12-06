@@ -461,6 +461,8 @@ def public get_string_constant_ptr ( builder:LLVMOpaqueBuilder?; message:string 
     return LLVMBuildPointerCast(builder, str, get_type_string(), "string_constant {message}")
 
 def public failed ( msg:string )
+    static_if LLVM_DEBUG_EVERYTHING
+        print("FAILED: {msg}\n")
     g_errors |> push("{msg}")
 
 def public failed_E ( e:ExpressionPtr; msg:string )

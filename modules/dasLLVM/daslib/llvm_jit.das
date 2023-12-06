@@ -2318,7 +2318,7 @@ class LlvmJitVisitor : AstVisitor
             var ccall = LLVMBuildCall(g_builder, func, params, "invoke")
             if cmresEval != null
                 setE(expr, cmresEval)
-            elif blockT.firstType.isVoid
+            elif blockT.firstType==null || blockT.firstType.isVoid
                 setE(expr, ccall)
             else
                 var cres = cast_from_vec4f(expr, expr._type, ccall)
@@ -2407,14 +2407,22 @@ class LlvmJitVisitor : AstVisitor
 // ExprCast
     def override visitExprCast(expr:smart_ptr<ExprCast>) : ExpressionPtr
         var res : LLVMOpaqueValue?
-        if expr.castType.isPointer && expr.subexpr._type.isPointer
-            res = LLVMBuildPointerCast(g_builder, getE(expr.subexpr), LLVMPointerType(type_to_llvm_type(expr.castType),0u), "")
-        elif expr.castType.isRef && expr.subexpr._type.isRef
-            res = LLVMBuildPointerCast(g_builder, getE(expr.subexpr), LLVMPointerType(type_to_llvm_type(expr.castType),0u), "")
-        elif expr.castType.isInteger && (expr.castType.baseType==Type tInt64 || expr.castType.baseType==Type tUInt64) && expr.subexpr._type.isPointer
-            res = LLVMBuildPtrToInt(g_builder, getE(expr.subexpr), type_to_llvm_type(expr.castType), "")
+        assume ect = expr.castType
+        assume subT = expr.subexpr._type
+        if ect.isPointer && subT.isPointer
+            res = LLVMBuildPointerCast(g_builder, getE(expr.subexpr), LLVMPointerType(type_to_llvm_type(ect),0u), "")
+        elif ect.isRef && subT.isRef
+            res = LLVMBuildPointerCast(g_builder, getE(expr.subexpr), LLVMPointerType(type_to_llvm_type(ect),0u), "")
+        elif ect.isInteger && (ect.baseType==Type tInt64 || ect.baseType==Type tUInt64) && subT.isPointer
+            res = LLVMBuildPtrToInt(g_builder, getE(expr.subexpr), type_to_llvm_type(ect), "")
+        elif !ect.isRefType && !subT.isRefType
+            if ect.sizeOf == subT.sizeOf
+                res = LLVMBuildBitCast(g_builder, getE(expr.subexpr), type_to_llvm_type(ect), "")
+            else
+                res = LLVMGetUndef(type_to_llvm_type(ect))
+                failed_E(expr, "cast<{describe(expr.castType)}> is not supported, bitcast size mismatch")
         else
-            res = LLVMGetUndef(type_to_llvm_type(expr.castType))
+            res = LLVMGetUndef(type_to_llvm_type(ect))
             failed_E(expr, "cast<{describe(expr.castType)}> is not supported yet")
         setE(expr, res)
         return expr
@@ -2942,7 +2950,10 @@ class LlvmJitVisitor : AstVisitor
         blk_fields |> push(LLVMArrayType(LLVMFloat4Type(), 3u))
         var first_field_index = length(blk_fields)
         for c in capture
-            blk_fields |> push(LLVMPointerType(type_to_llvm_type(c.variable._type), 0u))
+            if c.variable._type.isGoodBlockType
+                blk_fields |> push(type_to_llvm_type(c.variable._type))
+            else
+                blk_fields |> push(LLVMPointerType(type_to_llvm_type(c.variable._type), 0u))
         var this_block_type = LLVMStructType(blk_fields)
         // make block function
         var blk_make = make_block_funcion(expr, capture,first_field_index, this_block_type)
@@ -3228,8 +3239,18 @@ class LlvmJitVisitor : AstVisitor
                 var tbit = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
                 tres = LLVMBuildBitCast(g_builder, tbit, LLVMInt32Type(), "vec4f_to_int")
                 tres = LLVMBuildTruncOrBitCast(g_builder, tres, LLVMInt16Type(), "int_to_int16")
-            elif bt == Type tFloat4
-                return v4f
+            elif bt == Type tFloat
+                return LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "vec4f_to_float")
+            elif bt == Type tDouble
+                var tvec = LLVMBuildBitCast(g_builder, v4f, LLVMVectorType(LLVMDoubleType(),2u), "")
+                return LLVMBuildExtractElement(g_builder, tvec, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "vec4f_to_double")
+            elif bt == Type tFloat2
+                var vec = LLVMGetUndef(LLVMFloat2Type())
+                var x = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
+                var y = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 1ul, 0), "")
+                vec = LLVMBuildInsertElement(g_builder, vec, x, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
+                vec = LLVMBuildInsertElement(g_builder, vec, y, LLVMConstInt(LLVMInt32Type(), 1ul, 0), "vec4f_to_float2")
+                return vec
             elif bt == Type tFloat3
                 var vec = LLVMGetUndef(LLVMFloat3Type())
                 var x = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
@@ -3239,9 +3260,25 @@ class LlvmJitVisitor : AstVisitor
                 vec = LLVMBuildInsertElement(g_builder, vec, y, LLVMConstInt(LLVMInt32Type(), 1ul, 0), "")
                 vec = LLVMBuildInsertElement(g_builder, vec, z, LLVMConstInt(LLVMInt32Type(), 2ul, 0), "vec4f_to_float3")
                 return vec
-            elif bt == Type tFloat
-                return LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "vec4f_to_float")
-            elif bt == Type tInt4
+            elif bt == Type tFloat4
+                return v4f
+            elif bt == Type tInt2 || bt == Type tUInt2
+                var vec = LLVMGetUndef(LLVMFloat2Type())
+                var x = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
+                var y = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 1ul, 0), "")
+                vec = LLVMBuildInsertElement(g_builder, vec, x, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
+                vec = LLVMBuildInsertElement(g_builder, vec, y, LLVMConstInt(LLVMInt32Type(), 1ul, 0), "")
+                return LLVMBuildBitCast(g_builder, vec, LLVMInt2Type(), "vec4f_to_int2")
+            elif bt == Type tInt3 || bt == Type tUInt3
+                var vec = LLVMGetUndef(LLVMFloat3Type())
+                var x = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
+                var y = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 1ul, 0), "")
+                var z = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 2ul, 0), "")
+                vec = LLVMBuildInsertElement(g_builder, vec, x, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
+                vec = LLVMBuildInsertElement(g_builder, vec, y, LLVMConstInt(LLVMInt32Type(), 1ul, 0), "")
+                vec = LLVMBuildInsertElement(g_builder, vec, z, LLVMConstInt(LLVMInt32Type(), 2ul, 0), "vec4f_to_float3")
+                return LLVMBuildBitCast(g_builder, vec, LLVMInt3Type(), "vec4f_to_int2")
+            elif bt == Type tInt4 || bt == Type tUInt4
                 return LLVMBuildBitCast(g_builder, v4f, LLVMInt4Type(), "vec4f_to_int4")
             elif bt == Type tBool
                 var tbit = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
@@ -3251,12 +3288,14 @@ class LlvmJitVisitor : AstVisitor
                 var ptr_type = bt==Type tString ? get_type_string() : type_to_llvm_type(etype)
                 tres = cast_from_vec4f_ptr(v4f, ptr_type)
             else
-                failed_E(expr, "unsupported cast_from_vec4f cast {describe(etype)}")
+                failed_E(expr, "unsupported cast_from_vec4f cast {describe(etype)} workhorse")
         elif etype.isRef
             var ptr_type = LLVMPointerType(type_to_llvm_type(etype),0u)
             tres = cast_from_vec4f_ptr(v4f, ptr_type)
         else
             failed_E(expr, "unsupported cast_from_vec4f type {describe(etype)}")
+        if tres == null
+            tres = LLVMGetUndef(LLVMFloat4Type())
         return tres
 
     def cast_ptr_to_vec4f ( tsrc:LLVMOpaqueValue? )
