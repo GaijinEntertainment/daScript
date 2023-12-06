@@ -413,7 +413,8 @@ def public finalize_jit
         mod <- g_mod,
         engine <- g_engine
     ]])
-    delete g_str2v
+    unsafe
+        delete g_str2v
 
 [finalize]
 def private finalize_all_jit
@@ -428,7 +429,8 @@ def private finalize_all_jit
         g_t_sequence = null
         // TODO: figure out why this crashes
         // LLVMDisposeModule(je.mod); je.mod = null
-    delete g_all_engines
+    unsafe
+        delete g_all_engines
 
 def public build_string_constant ( message:string )
     if g_str2v |> key_exists(message)

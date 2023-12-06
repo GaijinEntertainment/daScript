@@ -83,13 +83,14 @@ def LLVMAddAttributeToFunctionArgument(ffunc:LLVMOpaqueValue?; ai:uint; attr:LLV
     LLVMAddAttributeAtIndex(ffunc, ai+1u, attr)
 
 def LLVMBuildShuffleVector(builder:LLVMOpaqueBuilder?; v1, v2:LLVMOpaqueValue?; mask:array<int>; name:string )
-    var inscope elem : array<LLVMOpaqueValue?>
-    for m in mask
-        if m!=-1
-            elem |> push(LLVMConstInt(LLVMInt32Type(), uint64(m), 0))
-        else
-            elem |> push(LLVMGetUndef(LLVMInt32Type()))
-    return LLVMBuildShuffleVector(builder, v1, v2, LLVMConstVector(unsafe(addr(elem[0])), uint(length(elem))), name)
+    unsafe
+        var inscope elem : array<LLVMOpaqueValue?>
+        for m in mask
+            if m!=-1
+                elem |> push(LLVMConstInt(LLVMInt32Type(), uint64(m), 0))
+            else
+                elem |> push(LLVMGetUndef(LLVMInt32Type()))
+        return LLVMBuildShuffleVector(builder, v1, v2, LLVMConstVector(unsafe(addr(elem[0])), uint(length(elem))), name)
 
 def LLVMAddIncoming(phi:LLVMOpaqueValue?; var phi_vals:LLVMOpaqueValue? []; var phi_blocks:LLVMOpaqueBasicBlock? [])
     static_if typeinfo(dim phi_vals) != typeinfo(dim phi_blocks)
