@@ -358,6 +358,7 @@ namespace das {
         parserState.das_def_tab_size = daScriptEnvironment::bound->das_def_tab_size;
         yyscan_t scanner = nullptr;
         das_yylex_init_extra(&parserState, &scanner);
+        int64_t file_mtime = access->getFileMtime(fileName.c_str());
         if ( auto fi = access->getFileInfo(fileName) ) {
             parserState.g_FileAccessStack.push_back(fi);
             const char * src = nullptr;
@@ -473,7 +474,6 @@ namespace das {
             }
             auto & serializer_write = daScriptEnvironment::bound->serializer_write;
             if ( serializer_write != nullptr ) {
-                int64_t file_mtime = access->getFileMtime(fileName.c_str());
                 serializer_write->parsedModules.push_back({fileName, file_mtime, program, program->thisModule.get()});
             }
             return program;
