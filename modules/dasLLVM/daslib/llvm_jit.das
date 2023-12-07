@@ -26,6 +26,7 @@ require daslib/ast_debug
 require llvm/llvm_debug
 */
 
+
 [macro_function]
 def private get_expr_ptr ( expr:ExpressionPtr )
     return get_ptr(expr)
@@ -1941,7 +1942,7 @@ class LlvmJitVisitor : AstVisitor
                 at_function_entry <|
                     s_ptr = LLVMBuildAlloca(g_builder, vtype, "mks_local_sp_{expr.stackTop}")
                     LLVMSetAlignment(s_ptr, 16u)
-                    s_ptr = LLVMBuildPointerCast(g_builder, s_ptr, LLVMPointerType(LLVMInt8Type(),0u), "mks_local_sp_{expr.stackTop}")
+                    // s_ptr = LLVMBuildPointerCast(g_builder, s_ptr, LLVMPointerType(LLVMInt8Type(),0u), "mks_local_sp_{expr.stackTop}")
                 return s_ptr
             if expr.extraOffset != 0u
                 mks_ptr = LLVMBuildGEP(g_builder, mks_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.extraOffset), 0), "mks_local_sp_{expr.stackTop}_eo_{expr.extraOffset}")
@@ -1962,6 +1963,7 @@ class LlvmJitVisitor : AstVisitor
         let offset =  index*stride + field.offset
         var v_ptr = getE(expr)
         verify(v_ptr!=null && LLVMIsUndef(v_ptr)==0,"make struct field, but no pointer")
+        v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
         let field_ptr = LLVMBuildGEP(g_builder, v_ptr, LLVMConstInt(LLVMInt32Type(), uint64(offset), 0), "")
         if decl.value |> isMakeLocal
             var val = unsafe(reinterpret<ExprMakeLocal?> get_ptr(decl.value))
@@ -1983,6 +1985,7 @@ class LlvmJitVisitor : AstVisitor
         let stride = expr.makeType.stride
         let offset =  index*stride + field.offset
         var v_ptr = getE(expr)
+        v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
         v_ptr = LLVMBuildGEP(g_builder, v_ptr, LLVMConstInt(LLVMInt32Type(), uint64(offset), 0), "[{index}].{decl.name}")
         v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, get_type_pointer(field._type), "")
         if decl.value |> isMakeLocal
