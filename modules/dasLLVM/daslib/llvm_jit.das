@@ -2416,6 +2416,8 @@ class LlvmJitVisitor : AstVisitor
             res = LLVMBuildPointerCast(g_builder, getE(expr.subexpr), LLVMPointerType(type_to_llvm_type(ect),0u), "")
         elif ect.isRef && subT.isRef
             res = LLVMBuildPointerCast(g_builder, getE(expr.subexpr), LLVMPointerType(type_to_llvm_type(ect),0u), "")
+        elif length(ect.dim)!=0 && subT.isPointer
+            res = LLVMBuildPointerCast(g_builder, getE(expr.subexpr), LLVMPointerType(type_to_llvm_type(ect),0u), "")
         elif ect.isInteger && (ect.baseType==Type tInt64 || ect.baseType==Type tUInt64) && subT.isPointer
             res = LLVMBuildPtrToInt(g_builder, getE(expr.subexpr), type_to_llvm_type(ect), "")
         elif !ect.isRefType && !subT.isRefType
@@ -2426,7 +2428,7 @@ class LlvmJitVisitor : AstVisitor
                 failed_E(expr, "cast<{describe(expr.castType)}> is not supported, bitcast size mismatch")
         else
             res = LLVMGetUndef(type_to_llvm_type(ect))
-            failed_E(expr, "cast<{describe(expr.castType)}> is not supported yet")
+            failed_E(expr, "cast<{describe(expr.castType)}> is not supported yet in {describe(expr)} {describe(subT)} -> {describe(ect)}")
         setE(expr, res)
         return expr
 
