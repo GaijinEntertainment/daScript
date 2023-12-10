@@ -1665,7 +1665,7 @@ namespace das {
             ReuseCacheGuard rcg;
         // initialize program
             program = make_smart<Program>();
-            program->promoteToBuiltin = false;
+            program->promoteToBuiltin = this_mod->promoted;;
             program->isDependency = true;
             program->thisModuleGroup = ser.thisModuleGroup;
             program->thisModuleName.clear();
@@ -2141,7 +2141,7 @@ namespace das {
                 // pass
             } else if ( builtin && promoted ) {
                 bool isNew = false; ser << isNew;
-                if ( isNew) {
+                if ( isNew ) {
                     auto deser = new Module;
                     library.addModule(deser);
                     ser << *deser;
