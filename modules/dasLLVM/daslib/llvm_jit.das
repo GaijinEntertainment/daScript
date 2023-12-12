@@ -1259,11 +1259,11 @@ class LlvmJitVisitor : AstVisitor
                 failed_E(expr, "unsupported division type operator {expr.op}")
         elif expr.op=="<" || expr.op==">" || expr.op=="<=" || expr.op==">=" || expr.op=="==" || expr.op=="!="
             var opR : LLVMOpaqueValue?
-            if expr.left._type.isSignedInteger || (expr.left._type.isVectorType && expr.left._type.vectorBaseType==Type tInt) || expr.left._type.isEnum
+            if expr.left._type.isSignedInteger || (expr.left._type.isVectorType && (expr.left._type.vectorBaseType==Type tInt || expr.left._type.vectorBaseType==Type tInt64)) || expr.left._type.isEnum
                 opR = LLVMBuildICmp(g_builder, get_int_compare_op(expr,string(expr.op)), left, right, "")
                 if expr.left._type.isVectorType
                     opR = reduce_bit_vector(opR, expr.left._type.vectorDim, string(expr.op))
-            elif expr.left._type.isUnsignedInteger || (expr.left._type.isVectorType && expr.left._type.vectorBaseType==Type tUInt)
+            elif expr.left._type.isUnsignedInteger || (expr.left._type.isVectorType && (expr.left._type.vectorBaseType==Type tUInt || expr.left._type.vectorBaseType==Type tUInt64))
                 opR = LLVMBuildICmp(g_builder, get_uint_compare_op(expr,string(expr.op)), left, right, "")
                 if expr.left._type.isVectorType
                     opR = reduce_bit_vector(opR, expr.left._type.vectorDim, string(expr.op))
