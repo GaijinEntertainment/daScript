@@ -3278,7 +3278,7 @@ class LlvmJitVisitor : AstVisitor
                 return vec
             elif bt == Type tFloat4
                 return v4f
-            elif bt == Type tInt2 || bt == Type tUInt2
+            elif bt == Type tInt2 || bt == Type tUInt2 || bt == Type tRange || bt == Type tURange
                 var vec = LLVMGetUndef(LLVMFloat2Type())
                 var x = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
                 var y = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 1ul, 0), "")
@@ -3303,6 +3303,8 @@ class LlvmJitVisitor : AstVisitor
             elif bt == Type tString || bt == Type tPointer
                 var ptr_type = bt==Type tString ? get_type_string() : type_to_llvm_type(etype)
                 tres = cast_from_vec4f_ptr(v4f, ptr_type)
+            elif bt == Type tRange64 || bt == Type tURange64
+                return LLVMBuildBitCast(g_builder, v4f, LLVMRange64Type(), "vec4f_to_range64")
             else
                 failed_E(expr, "unsupported cast_from_vec4f cast {describe(etype)} workhorse")
         elif etype.isRef
