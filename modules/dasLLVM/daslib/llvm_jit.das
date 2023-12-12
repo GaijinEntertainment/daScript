@@ -2868,6 +2868,8 @@ class LlvmJitVisitor : AstVisitor
                 if !expr.returnFlags.returnCMRES
                     build_copy(get_cmres_param(),expr.subexpr)
                 LLVMBuildRetVoid(g_builder)
+            elif returnType.isPointer && (expr.subexpr is ExprConstPtr) // return null
+                LLVMBuildRet(g_builder, LLVMConstPointerNull(type_to_llvm_abi_type(returnType)))
             else
                 LLVMBuildRet(g_builder, getE(expr.subexpr))
         else
