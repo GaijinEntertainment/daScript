@@ -994,6 +994,15 @@ class LlvmJitVisitor : AstVisitor
                 setE(expr, at_r2v)
             else
                 setE(expr, ptr_idx)
+        elif subExprT.isVectorType
+            check_range(tidx, LLVMConstInt(LLVMInt32Type(), uint64(subExprT.vectorDim), 0), "vector index out of range")
+            if expr.atFlags.r2v
+                var lvec = LLVMBuildLoadDataAligned(g_builder, tsrc, uint(subExprT.alignOf), "vector_at")
+                var at_r2v = LLVMBuildExtractElement(g_builder, lvec, tidx, "vector_at_r2v")
+                setE(expr, at_r2v)
+            else
+                var ptr_idx = build_array_index(tsrc, tidx, expr._type, "vector_at")
+                setE(expr, ptr_idx)
         else
             failed("unsupported visitExprAt type {describe(subExprT)}")
         return expr
