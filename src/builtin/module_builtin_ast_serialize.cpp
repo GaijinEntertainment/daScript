@@ -853,8 +853,7 @@ namespace das {
         tag("ReaderMacroPtr");
         if ( writing ) {
             DAS_ASSERTF(ptr, "did not expext to see null ReaderMacroPtr");
-            bool inThisModule = ptr->module == thisModule;
-            DAS_ASSERTF(!inThisModule, "did not expect to find macro from the current module");
+            DAS_ASSERTF(!(ptr->module == thisModule), "did not expect to find macro from the current module");
             *this << ptr->module->name;
             *this << ptr->name;
         } else {
@@ -1610,8 +1609,7 @@ namespace das {
         tag("CallMacro *");
         if ( writing ) {
             DAS_ASSERTF ( ptr, "did not expect to see a nullptr CallMacro *" );
-            bool inThisModule = ptr->module == thisModule;
-            DAS_ASSERTF ( !inThisModule, "did not expect to find macro from the current module" );
+            DAS_ASSERTF ( !(ptr->module == thisModule), "did not expect to find macro from the current module" );
             *this << ptr->module->name;
             *this << ptr->name;
         } else {
@@ -1639,7 +1637,7 @@ namespace das {
     }
 
     // Restores the internal state of macro module
-    Module * reinstantiateMacroModuleState ( AstSerializer & ser, ProgramPtr program ) {
+    Module * reinstantiateMacroModuleState ( AstSerializer & /*ser*/, ProgramPtr program ) {
         TextWriter ignore_logs;
     // set the current module
     // create the module macro state

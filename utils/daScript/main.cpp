@@ -180,7 +180,7 @@ namespace das {
     extern void runStandaloneVisitor ( ProgramPtr prog, string cppOutputDir, string standaloneContextName );
 }
 
-bool compileStandalone ( const string & fn, const string & cppFn, bool dryRun, char * standaloneContextName ) {
+bool compileStandalone ( const string & fn, const string & cppFn, bool /*dryRun*/, char * standaloneContextName ) {
     auto access = get_file_access((char*)(projectFile.empty() ? nullptr : projectFile.c_str()));
     ModuleGroup dummyGroup;
     CodeOfPolicies policies;
