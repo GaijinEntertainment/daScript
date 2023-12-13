@@ -3601,7 +3601,7 @@ class JIT_LLVM : AstSimulateMacro
                 var gen = generate_llvm_code(mangled_name)
                 unsafe
                     if gen != null
-                        gen |> instrument_jit(simfun)
+                        gen |> instrument_jit(simfun, *ctx)
                     else
                         remove_jit(simfun)
             finalize_jit()
