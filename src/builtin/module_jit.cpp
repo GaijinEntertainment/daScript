@@ -41,14 +41,14 @@ namespace das {
         }
     }
 
-    bool das_instrument_jit ( void * pfun, const Func func, Context * context ) {
+    bool das_instrument_jit ( void * pfun, const Func func, Context & context ) {
         auto simfn = func.PTR;
         if ( !simfn ) return false;
         if ( simfn->code && simfn->code->rtti_node_isJit() ) {
             auto jitNode = static_cast<SimNode_Jit *>(simfn->code);
             jitNode->func = (JitFunction) pfun;
         } else {
-            auto node = context->code->makeNode<SimNode_Jit>(LineInfo(), (JitFunction)pfun);
+            auto node = context.code->makeNode<SimNode_Jit>(LineInfo(), (JitFunction)pfun);
             node->saved_code = simfn->code;
             node->saved_aot = simfn->aot;
             node->saved_aot_function = simfn->aotFunction;
