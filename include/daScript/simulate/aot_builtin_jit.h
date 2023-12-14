@@ -8,7 +8,7 @@ namespace das {
     float4 das_invoke_code ( void * pfun, vec4f anything, void * cmres, Context * context );
     bool das_is_jit_function ( const Func func );
     bool das_remove_jit ( const Func func );
-    bool das_instrument_jit ( void * pfun, const Func func, Context * context );
+    bool das_instrument_jit ( void * pfun, const Func func, Context & context );
     void * das_get_jit_exception ();
     void * das_get_jit_call_or_fastcall ();
     void * das_get_jit_call_with_cmres ( );
