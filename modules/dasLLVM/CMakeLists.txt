@@ -120,9 +120,13 @@ IF ((NOT DAS_LLVM_INCLUDED) AND DAS_LIBCLANG_DETECTED AND ((NOT ${DAS_LLVM_DISAB
 		${DAS_LLVM_DIR}/src/dasLLVM.func_66.cpp
 		${DAS_LLVM_DIR}/src/dasLLVM.func_67.cpp
 		${DAS_LLVM_DIR}/src/dasLLVM.func_68.cpp
+	# llvm config module ( for passing setting externally )
+		${DAS_LLVM_DIR}/src/llvm_config/llvmConfigModule.cpp
+		${DAS_LLVM_DIR}/src/llvm_config/llvmConfigStub.cpp
 	)
 
 	ADD_MODULE_LIB(libDasModuleLlvm)
+	ADD_MODULE_CPP(LlvmConfig)
 	ADD_MODULE_CPP(dasLLVM)
 	ADD_MODULE_DAS(llvm daslib llvm_boost)
 	ADD_MODULE_DAS(llvm daslib llvm_debug)
