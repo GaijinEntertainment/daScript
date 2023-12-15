@@ -88,13 +88,20 @@ namespace das
     };
 
     struct GcRootLambda : Lambda  {
-        GcRootLambda() = delete;
+        GcRootLambda() = default;
         GcRootLambda( const GcRootLambda & ) = delete;
-        GcRootLambda( GcRootLambda && ) = delete;
+        GcRootLambda( GcRootLambda && ) = default;
         GcRootLambda & operator = ( const GcRootLambda & ) = delete;
-        GcRootLambda & operator = ( GcRootLambda && ) = delete;
+        __forceinline GcRootLambda & operator = ( GcRootLambda && l ) {
+            capture = l.capture;
+            context = l.context;
+            l.capture = nullptr;
+            l.context = nullptr;
+            return *this;
+        }
         GcRootLambda( const Lambda & that, Context * _context );
         ~GcRootLambda();
+        void reset() { capture = nullptr; context = nullptr; }
         Context * context = nullptr;
     };
 

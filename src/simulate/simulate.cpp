@@ -20,7 +20,9 @@ namespace das
     }
 
     GcRootLambda::~GcRootLambda() {
-        context->removeGcRoot( (void *)capture );
+        if ( capture && context ) {
+            context->removeGcRoot( (void *)capture );
+        }
     }
 
     bool PointerDimIterator::first ( Context &, char * _value ) {

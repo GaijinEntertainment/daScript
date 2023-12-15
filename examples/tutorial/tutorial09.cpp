@@ -2,12 +2,12 @@
 
 using namespace das;
 
-unique_ptr<GcRootLambda> rootLambda;
+GcRootLambda rootLambda;
 
 void setLambda ( Lambda lmb, Context * ctx ) {
     // store lambda in global variable, which is only visible from the C++ side
     printf("setting lambda from C++ side\n");
-    rootLambda = make_unique<GcRootLambda>(lmb,ctx);
+    rootLambda = GcRootLambda(lmb,ctx);
 }
 
 // making custom builtin moGcdule
@@ -70,9 +70,9 @@ void tutorial () {
         ctx.reportAnyHeap(nullptr,true,true,false,false);
         ctx.collectHeap(nullptr,true,true);
         // now call lambda, if its there
-        if ( rootLambda ) {
+        if ( rootLambda.capture ) {
             tout << "calling lambda\n";
-            das_invoke_lambda<void>::invoke(&ctx, nullptr, *rootLambda);
+            das_invoke_lambda<void>::invoke(&ctx, nullptr, rootLambda);
         }
         // now done
         ctx.evalWithCatch(fnTest, nullptr);
@@ -81,6 +81,8 @@ void tutorial () {
             return;
         }
     }
+    // reset root lambda
+    rootLambda.reset();
 }
 
 int main( int, char * [] ) {
