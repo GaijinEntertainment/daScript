@@ -142,3 +142,12 @@ ${CMAKE_SOURCE_DIR}/examples/tutorial/tutorial08.cpp
 ${CMAKE_SOURCE_DIR}/examples/tutorial/tutorial08.das
 )
 DAS_TUTORIAL(tutorial08 "${TUTORIAL_08_SRC}")
+
+##########################################
+# tutorial 09- gc and gc roots
+##########################################
+SET(TUTORIAL_09_SRC
+${CMAKE_SOURCE_DIR}/examples/tutorial/tutorial09.cpp
+${CMAKE_SOURCE_DIR}/examples/tutorial/tutorial09.das
+)
+DAS_TUTORIAL(tutorial09 "${TUTORIAL_09_SRC}")
