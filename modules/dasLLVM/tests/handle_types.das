@@ -30,6 +30,10 @@ def handle_val(var num:int&)
     return iid2
 
 [jit]
+def handle_eid ( l : lambda<(val:int):EntityId> )
+    return invoke(l,13)
+
+[jit]
 def handle_fields ( var m:float4x4 )
     m.x = float4(1,0,0,0)
     m.y = float4(0,2,0,0)
@@ -61,6 +65,12 @@ def test_handle_type ( t:T? )
         var iid = handle_val(num)
         t |> equal(13, int(iid))
         t |> equal(-1, num)
+    t |> run("handle eid") <| @ ( t : T? )
+        t |> success(is_jit_function(@@handle_eid))
+        var l <- @ <| ( var val : int ) : EntityId
+            return EntityId(val)
+        var eid = handle_eid(l)
+        t |> equal(13, int(eid))
     t |> run("handle op1") <| @ ( t : T? )
         t |> success(is_jit_function(@@handle_ref_op1))
         var a, b, c : float4x4

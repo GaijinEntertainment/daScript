@@ -3236,80 +3236,91 @@ class LlvmJitVisitor : AstVisitor
             tres = LLVMBuildIntToPtr(g_builder, tres, ptr_type, "vec4f_to_ptr")
         return tres
 
+    def cast_from_vec4f_workhorse ( etype:TypeDeclPtr; expr:ExpressionPtr; v4f:LLVMOpaqueValue? )
+        let bt = etype.baseType
+        if bt==Type tInt || bt==Type tUInt || bt==Type tBitfield
+            var tbit = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
+            return LLVMBuildBitCast(g_builder, tbit, LLVMInt32Type(), "vec4f_to_int")
+        elif bt==Type tInt64 || bt==Type tUInt64
+            var tvec = LLVMBuildBitCast(g_builder, v4f, LLVMVectorType(LLVMInt64Type(),2u), "")
+            var tbit = LLVMBuildExtractElement(g_builder, tvec, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
+            return tbit
+        elif bt==Type tInt8 || bt==Type tUInt8
+            var tbit = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
+            var tres = LLVMBuildBitCast(g_builder, tbit, LLVMInt32Type(), "vec4f_to_int")
+            return  LLVMBuildTruncOrBitCast(g_builder, tres, LLVMInt8Type(), "int_to_int8")
+        elif bt==Type tInt16 || bt==Type tUInt16
+            var tbit = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
+            var tres = LLVMBuildBitCast(g_builder, tbit, LLVMInt32Type(), "vec4f_to_int")
+            return LLVMBuildTruncOrBitCast(g_builder, tres, LLVMInt16Type(), "int_to_int16")
+        elif bt == Type tFloat
+            return LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "vec4f_to_float")
+        elif bt == Type tDouble
+            var tvec = LLVMBuildBitCast(g_builder, v4f, LLVMVectorType(LLVMDoubleType(),2u), "")
+            return LLVMBuildExtractElement(g_builder, tvec, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "vec4f_to_double")
+        elif bt == Type tFloat2
+            var vec = LLVMGetUndef(LLVMFloat2Type())
+            var x = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
+            var y = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 1ul, 0), "")
+            vec = LLVMBuildInsertElement(g_builder, vec, x, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
+            vec = LLVMBuildInsertElement(g_builder, vec, y, LLVMConstInt(LLVMInt32Type(), 1ul, 0), "vec4f_to_float2")
+            return vec
+        elif bt == Type tFloat3
+            var vec = LLVMGetUndef(LLVMFloat3Type())
+            var x = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
+            var y = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 1ul, 0), "")
+            var z = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 2ul, 0), "")
+            vec = LLVMBuildInsertElement(g_builder, vec, x, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
+            vec = LLVMBuildInsertElement(g_builder, vec, y, LLVMConstInt(LLVMInt32Type(), 1ul, 0), "")
+            vec = LLVMBuildInsertElement(g_builder, vec, z, LLVMConstInt(LLVMInt32Type(), 2ul, 0), "vec4f_to_float3")
+            return vec
+        elif bt == Type tFloat4
+            return v4f
+        elif bt == Type tInt2 || bt == Type tUInt2 || bt == Type tRange || bt == Type tURange
+            var vec = LLVMGetUndef(LLVMFloat2Type())
+            var x = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
+            var y = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 1ul, 0), "")
+            vec = LLVMBuildInsertElement(g_builder, vec, x, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
+            vec = LLVMBuildInsertElement(g_builder, vec, y, LLVMConstInt(LLVMInt32Type(), 1ul, 0), "")
+            return LLVMBuildBitCast(g_builder, vec, LLVMInt2Type(), "vec4f_to_int2")
+        elif bt == Type tInt3 || bt == Type tUInt3
+            var vec = LLVMGetUndef(LLVMFloat3Type())
+            var x = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
+            var y = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 1ul, 0), "")
+            var z = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 2ul, 0), "")
+            vec = LLVMBuildInsertElement(g_builder, vec, x, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
+            vec = LLVMBuildInsertElement(g_builder, vec, y, LLVMConstInt(LLVMInt32Type(), 1ul, 0), "")
+            vec = LLVMBuildInsertElement(g_builder, vec, z, LLVMConstInt(LLVMInt32Type(), 2ul, 0), "vec4f_to_float3")
+            return LLVMBuildBitCast(g_builder, vec, LLVMInt3Type(), "vec4f_to_int2")
+        elif bt == Type tInt4 || bt == Type tUInt4
+            return LLVMBuildBitCast(g_builder, v4f, LLVMInt4Type(), "vec4f_to_int4")
+        elif bt == Type tBool
+            var tbit = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
+            var tres = LLVMBuildBitCast(g_builder, tbit, LLVMInt32Type(), "")
+            return LLVMBuildTruncOrBitCast(g_builder, tres, LLVMInt1Type(), "vec4f_to_bool")
+        elif bt == Type tString || bt == Type tPointer
+            var ptr_type = bt==Type tString ? get_type_string() : type_to_llvm_type(etype)
+            return cast_from_vec4f_ptr(v4f, ptr_type)
+        elif bt == Type tRange64 || bt == Type tURange64
+            return LLVMBuildBitCast(g_builder, v4f, LLVMRange64Type(), "vec4f_to_range64")
+        else
+            failed_E(expr, "unsupported cast_from_vec4f cast {describe(etype)} workhorse")
+        return null
+
     def cast_from_vec4f ( expr:ExpressionPtr; etype:TypeDeclPtr; v4f:LLVMOpaqueValue? )
         var tres : LLVMOpaqueValue?
         if etype.isWorkhorseType
-            let bt = etype.baseType
-            if bt==Type tInt || bt==Type tUInt || bt==Type tBitfield
-                var tbit = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
-                tres = LLVMBuildBitCast(g_builder, tbit, LLVMInt32Type(), "vec4f_to_int")
-            elif bt==Type tInt64 || bt==Type tUInt64
-                var tvec = LLVMBuildBitCast(g_builder, v4f, LLVMVectorType(LLVMInt64Type(),2u), "")
-                var tbit = LLVMBuildExtractElement(g_builder, tvec, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
-                return tbit
-            elif bt==Type tInt8 || bt==Type tUInt8
-                var tbit = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
-                tres = LLVMBuildBitCast(g_builder, tbit, LLVMInt32Type(), "vec4f_to_int")
-                tres = LLVMBuildTruncOrBitCast(g_builder, tres, LLVMInt8Type(), "int_to_int8")
-            elif bt==Type tInt16 || bt==Type tUInt16
-                var tbit = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
-                tres = LLVMBuildBitCast(g_builder, tbit, LLVMInt32Type(), "vec4f_to_int")
-                tres = LLVMBuildTruncOrBitCast(g_builder, tres, LLVMInt16Type(), "int_to_int16")
-            elif bt == Type tFloat
-                return LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "vec4f_to_float")
-            elif bt == Type tDouble
-                var tvec = LLVMBuildBitCast(g_builder, v4f, LLVMVectorType(LLVMDoubleType(),2u), "")
-                return LLVMBuildExtractElement(g_builder, tvec, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "vec4f_to_double")
-            elif bt == Type tFloat2
-                var vec = LLVMGetUndef(LLVMFloat2Type())
-                var x = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
-                var y = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 1ul, 0), "")
-                vec = LLVMBuildInsertElement(g_builder, vec, x, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
-                vec = LLVMBuildInsertElement(g_builder, vec, y, LLVMConstInt(LLVMInt32Type(), 1ul, 0), "vec4f_to_float2")
-                return vec
-            elif bt == Type tFloat3
-                var vec = LLVMGetUndef(LLVMFloat3Type())
-                var x = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
-                var y = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 1ul, 0), "")
-                var z = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 2ul, 0), "")
-                vec = LLVMBuildInsertElement(g_builder, vec, x, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
-                vec = LLVMBuildInsertElement(g_builder, vec, y, LLVMConstInt(LLVMInt32Type(), 1ul, 0), "")
-                vec = LLVMBuildInsertElement(g_builder, vec, z, LLVMConstInt(LLVMInt32Type(), 2ul, 0), "vec4f_to_float3")
-                return vec
-            elif bt == Type tFloat4
-                return v4f
-            elif bt == Type tInt2 || bt == Type tUInt2 || bt == Type tRange || bt == Type tURange
-                var vec = LLVMGetUndef(LLVMFloat2Type())
-                var x = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
-                var y = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 1ul, 0), "")
-                vec = LLVMBuildInsertElement(g_builder, vec, x, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
-                vec = LLVMBuildInsertElement(g_builder, vec, y, LLVMConstInt(LLVMInt32Type(), 1ul, 0), "")
-                return LLVMBuildBitCast(g_builder, vec, LLVMInt2Type(), "vec4f_to_int2")
-            elif bt == Type tInt3 || bt == Type tUInt3
-                var vec = LLVMGetUndef(LLVMFloat3Type())
-                var x = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
-                var y = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 1ul, 0), "")
-                var z = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 2ul, 0), "")
-                vec = LLVMBuildInsertElement(g_builder, vec, x, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
-                vec = LLVMBuildInsertElement(g_builder, vec, y, LLVMConstInt(LLVMInt32Type(), 1ul, 0), "")
-                vec = LLVMBuildInsertElement(g_builder, vec, z, LLVMConstInt(LLVMInt32Type(), 2ul, 0), "vec4f_to_float3")
-                return LLVMBuildBitCast(g_builder, vec, LLVMInt3Type(), "vec4f_to_int2")
-            elif bt == Type tInt4 || bt == Type tUInt4
-                return LLVMBuildBitCast(g_builder, v4f, LLVMInt4Type(), "vec4f_to_int4")
-            elif bt == Type tBool
-                var tbit = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
-                tres = LLVMBuildBitCast(g_builder, tbit, LLVMInt32Type(), "")
-                tres = LLVMBuildTruncOrBitCast(g_builder, tres, LLVMInt1Type(), "vec4f_to_bool")
-            elif bt == Type tString || bt == Type tPointer
-                var ptr_type = bt==Type tString ? get_type_string() : type_to_llvm_type(etype)
-                tres = cast_from_vec4f_ptr(v4f, ptr_type)
-            elif bt == Type tRange64 || bt == Type tURange64
-                return LLVMBuildBitCast(g_builder, v4f, LLVMRange64Type(), "vec4f_to_range64")
-            else
-                failed_E(expr, "unsupported cast_from_vec4f cast {describe(etype)} workhorse")
+            tres = cast_from_vec4f_workhorse(etype,expr,v4f)
         elif etype.isRef
             var ptr_type = LLVMPointerType(type_to_llvm_type(etype),0u)
             tres = cast_from_vec4f_ptr(v4f, ptr_type)
+        elif etype.isHandle
+            var inscope tp <- get_underlying_value_type(etype)
+            if tp==null
+                failed("internal integration error.`get_underlying_value_type` returned null for {describe(etype)}")
+            elif !tp.isWorkhorseType
+                failed("internal error. expecting workhorse type from `get_underlying_value_type` for {describe(etype)}")
+            tres = cast_from_vec4f_workhorse(tp,expr,v4f)
         else
             failed_E(expr, "unsupported cast_from_vec4f type {describe(etype)}")
         if tres == null
