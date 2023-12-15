@@ -87,6 +87,24 @@ namespace das
         TLambda( const Lambda & that ) { *(Lambda *)this = that; }
     };
 
+    struct GcRootLambda : Lambda  {
+        GcRootLambda() = default;
+        GcRootLambda( const GcRootLambda & ) = delete;
+        GcRootLambda( GcRootLambda && ) = default;
+        GcRootLambda & operator = ( const GcRootLambda & ) = delete;
+        __forceinline GcRootLambda & operator = ( GcRootLambda && l ) {
+            capture = l.capture;
+            context = l.context;
+            l.capture = nullptr;
+            l.context = nullptr;
+            return *this;
+        }
+        GcRootLambda( const Lambda & that, Context * _context );
+        ~GcRootLambda();
+        void reset() { capture = nullptr; context = nullptr; }
+        Context * context = nullptr;
+    };
+
     struct Tuple {
         Tuple() {}
     };
