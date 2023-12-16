@@ -10,7 +10,6 @@ options persistent_heap = true
 
 require daslib/random
 
-require llvm/llvm_jit
 require jit
 
 struct Node

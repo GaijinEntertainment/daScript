@@ -1,6 +1,5 @@
 require dastest/testing_boost
 
-require llvm/llvm_jit
 require daslib/fuzzer
 require daslib/faker
 require jit

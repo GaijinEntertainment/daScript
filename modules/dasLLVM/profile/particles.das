@@ -1,8 +1,6 @@
 // options log = true, log_nodes =true, print_ref = true, print_var_access = true // , log_optimization_passes = true
 // options logCpp = true
 // options log_nodes=true
-require llvm/llvm_jit
-
 struct NObject
     position : float3
     velocity : float3

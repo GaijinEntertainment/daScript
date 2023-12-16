@@ -6,7 +6,6 @@
 require math
 require strings
 require stbimage
-require llvm/llvm_jit
 
 /*
 [jit]

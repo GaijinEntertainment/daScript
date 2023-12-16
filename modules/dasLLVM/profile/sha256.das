@@ -1,7 +1,4 @@
 // options log_nodes=true
-
-require llvm/llvm_jit
-
 require daslib/unroll
 
 // options log_nodes=true

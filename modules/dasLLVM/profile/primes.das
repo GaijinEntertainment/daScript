@@ -1,5 +1,3 @@
-require llvm/llvm_jit
-
 [jit,sideeffects]
 def isprime_jit(n:int)
     for i in range(2, n)

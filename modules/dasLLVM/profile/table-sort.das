@@ -1,7 +1,6 @@
 // options log=true, print_var_access=true, print_ref=true
 
 require math
-require llvm/llvm_jit
 
 def makeRandomSequence(var src:array<int>)
     let n = 2000000

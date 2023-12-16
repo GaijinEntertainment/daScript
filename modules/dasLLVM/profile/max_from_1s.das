@@ -1,5 +1,3 @@
-require llvm/llvm_jit
-
 // from https://spiiin.github.io/blog/2385889062/
 
 def popcount(x)

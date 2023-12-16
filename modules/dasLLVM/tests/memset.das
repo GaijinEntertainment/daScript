@@ -2,7 +2,6 @@ require dastest/testing_boost
 
 require daslib/constant_expression
 
-require llvm/llvm_jit
 require jit
 
 [jit]

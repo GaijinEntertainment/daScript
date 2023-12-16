@@ -3,6 +3,7 @@ require daslib/math_bits
 
 require llvm/llvm_boost
 require jit
+require rtti
 
 [sideeffects]
 def add_two_ints ( a,b : int ) : int
@@ -39,7 +40,7 @@ def main
     LLVMCreateJITCompilerForModule(engine, mod)
     var pfun = LLVMGetFunctionAddress(engine, "sum")
     unsafe
-        instrument_jit(reinterpret<void?> pfun, @@add_two_ints)
+        instrument_jit(reinterpret<void?> pfun, @@add_two_ints, this_context())
     let res = add_two_ints(11,12)
     print("result = {res}\n")
     LLVMDumpModule(mod)

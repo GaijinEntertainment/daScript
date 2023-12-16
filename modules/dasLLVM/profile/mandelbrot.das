@@ -1,5 +1,3 @@
-require llvm/llvm_jit
-
 require strings
 require fio
 //require brainfuck_mandelbrot
