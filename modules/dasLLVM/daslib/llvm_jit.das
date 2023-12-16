@@ -2715,12 +2715,16 @@ class LlvmJitVisitor : AstVisitor
                 val_ptr = LLVMBuildPointerCast(g_builder, val_ptr, get_type_pointer(expr._type), "")
                 setE(expr, LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr._type), val_ptr, uint(expr.value._type.alignOf), "swizzle_{expr.fields}"))
             else
-                assert(expr.fields |> length!=1)
-                var res = LLVMGetUndef(type_to_llvm_type(expr._type))
-                for i,fi in count(),expr.fields
-                    var f = LLVMBuildExtractElement(g_builder, val, LLVMConstInt(LLVMInt32Type(), uint64(fi), 0), "")
-                    res = LLVMBuildInsertElement(g_builder, res, f, LLVMConstInt(LLVMInt32Type(), uint64(i), 0), "")
-                setE(expr, res)
+                if expr.fields |> length == 1
+                    let fi = expr.fields[0]
+                    let res = LLVMBuildExtractElement(g_builder, val, LLVMConstInt(LLVMInt32Type(), uint64(fi), 0), "")
+                    setE(expr, res)
+                else
+                    var res = LLVMGetUndef(type_to_llvm_type(expr._type))
+                    for i,fi in count(),expr.fields
+                        var f = LLVMBuildExtractElement(g_builder, val, LLVMConstInt(LLVMInt32Type(), uint64(fi), 0), "")
+                        res = LLVMBuildInsertElement(g_builder, res, f, LLVMConstInt(LLVMInt32Type(), uint64(i), 0), "")
+                    setE(expr, res)
         return expr
 
 // ExprIsVariant

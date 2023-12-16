@@ -51,8 +51,20 @@ def swizzle_yz ( v:float4 )
 def swizzle_y ( v:float4 )
     return v.y
 
+[sideeffects]
+def get_screen_size ( x,y:float )
+    return float2(x,y)
+
+[jit]
+def swizzle_1
+    return get_screen_size(1.,2.).y
+
 [test]
 def test_vector_swizzle ( t:T? )
+    t |> run("swizzle 1") <| @ ( t : T? )
+        t |> success ( is_jit_function(@@swizzle_1) )
+        let q = swizzle_1()
+        t |> equal( 2., q )
     t |> run("swizzle ref") <| @ ( t : T? )
         var v = float4(1,2,3,4)
         t |> success ( is_jit_function(@@swizzle_ref_xyz) )
