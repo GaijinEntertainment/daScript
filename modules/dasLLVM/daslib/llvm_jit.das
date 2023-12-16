@@ -3594,8 +3594,8 @@ class JIT_LLVM : AstSimulateMacro
         prog |> for_each_module <| $ ( mod )
             mod |> for_each_function("") <| $ ( fun )
                 if fun.flags.used && (LLVM_JIT_ALL_FUNCTIONS || fun.moreFlags.requestJit)
-                    // print("JIT {fun._module.name}::{fun.name}\n")
-                    funcs |> emplace(fun)
+                    if ! fun.moreFlags.requestNoJit
+                        funcs |> emplace(fun)
         if !empty(funcs)
             let totalTime = ref_time_ticks()
             init_jit()
