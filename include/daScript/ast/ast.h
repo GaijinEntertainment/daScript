@@ -877,6 +877,8 @@ namespace das
                 bool    pinvoke : 1;
                 bool    jitOnly : 1;
                 bool    isStaticClassMethod : 1;
+
+                bool    requestNoJit : 1;
             };
             uint32_t moreFlags = 0;
         };
