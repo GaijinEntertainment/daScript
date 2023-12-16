@@ -669,9 +669,10 @@ namespace das {
             updateSerializationMetadata(req);
             if ( policies.debugger ) {
                 addExtraDependency("debug", policies.debug_module, missing, circular, notAllowed, req, dependencies, access, libGroup, policies);
-            }
-            if ( policies.profiler ) {
+            } else if ( policies.profiler ) {
                 addExtraDependency("profiler", policies.profile_module, missing, circular, notAllowed, req, dependencies, access, libGroup, policies);
+            } else if ( policies.jit ) {
+                addExtraDependency("just_in_time", policies.jit_module, missing, circular, notAllowed, req, dependencies, access, libGroup, policies);
             }
             for ( auto & mod : req ) {
                 if ( libGroup.findModule(mod.moduleName) ) {
