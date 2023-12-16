@@ -1369,6 +1369,7 @@ namespace das
         string profile_module;
     // jit
         bool jit = false;
+        string jit_module;
     // pinvoke
         bool threadlock_context = false;               // has context mutex
     };
