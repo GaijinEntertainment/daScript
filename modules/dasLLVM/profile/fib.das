@@ -1,5 +1,3 @@
-require llvm/llvm_jit
-
 [jit,sideeffects]
 def fibR_jit(n)
     if n < 2

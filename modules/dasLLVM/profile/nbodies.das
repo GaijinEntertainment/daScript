@@ -1,5 +1,3 @@
-require llvm/llvm_jit
-
 require math
 require daslib/unroll
 //ported from https://benchmarksgame-team.pages.debian.net/benchmarksgame/program/nbody-gcc-2.html

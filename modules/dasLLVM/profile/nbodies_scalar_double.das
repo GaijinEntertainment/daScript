@@ -1,5 +1,3 @@
-require llvm/llvm_jit
-
 require math
 
 struct body

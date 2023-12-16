@@ -1,6 +1,5 @@
 require dastest/testing_boost
 
-require llvm/llvm_jit
 require jit
 
 var g_label = -1

@@ -1,4 +1,3 @@
-require llvm/llvm_jit
 // options log=true, log_nodes=true, print_var_access=true, print_ref=true
 
 require math
