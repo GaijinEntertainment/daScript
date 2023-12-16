@@ -2562,6 +2562,7 @@ namespace das {
                                 ls->generator = true;
                                 if ( program->addStructure(ls) ) {
                                     auto jitFlags = (func && func->requestJit) ? generator_jit : 0;
+                                    if ( func && func->requestNoJit ) jitFlags |= generator_nojit;
                                     auto pFn = generateLambdaFunction(lname, block.get(), ls, cl.capt, expr->capture, generator_needYield | jitFlags, program);
                                     if ( program->addFunction(pFn) ) {
                                         auto pFnFin = generateLambdaFinalizer(lname, block.get(), ls);
@@ -2685,6 +2686,7 @@ namespace das {
                             auto ls = generateLambdaStruct(lname, block.get(), cl.capt, expr->capture, false);
                             if ( program->addStructure(ls) ) {
                                 auto jitFlags = (func && func->requestJit) ? generator_jit : 0;
+                                if ( func && func->requestNoJit ) jitFlags |= generator_nojit;
                                 auto pFn = generateLambdaFunction(lname, block.get(), ls, cl.capt, expr->capture, jitFlags, program);
                                 if ( program->addFunction(pFn) ) {
                                     auto pFnFin = generateLambdaFinalizer(lname, block.get(), ls);
