@@ -125,10 +125,10 @@ def intrinsic_builtin_int(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallF
             return LLVMBuildFPToSI(g_builder, arguments[0], intType, string(expr.name))
         else
             return LLVMBuildFPToUI(g_builder, arguments[0], intType, string(expr.name))
-    elif argType.isInteger
+    elif argType.isInteger || argType.isEnum
         if argType.sizeOf>=expr._type.sizeOf
             return LLVMBuildTruncOrBitCast(g_builder, arguments[0],intType, string(expr.name))
-        elif argType.isSignedInteger
+        elif argType.isSignedInteger || argType.isEnum
             return LLVMBuildSExtOrBitCast(g_builder, arguments[0], intType, string(expr.name))
         else
             return LLVMBuildZExtOrBitCast(g_builder, arguments[0], intType, string(expr.name))

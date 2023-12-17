@@ -2,6 +2,8 @@ require dastest/testing_boost
 
 require jit
 
+require rtti
+
 require daslib/fuzzer
 require daslib/faker
 require daslib/math
@@ -60,6 +62,8 @@ def test_intrin_int ( t:T? )
     var fake <- Faker()
     fuzz <|
         fuzz_numeric_and_storage_op1(t,fake,"test_int")
+    t |> success ( is_jit_function(@@<(a:CompilationError):int> jit_int) )
+    t |> equal ( int(CompilationError function_not_found), jit_int ( CompilationError function_not_found ) )
 
 // uint
 
@@ -76,6 +80,9 @@ def test_intrin_uint ( t:T? )
     var fake <- Faker()
     fuzz <|
         fuzz_numeric_and_storage_op1(t,fake,"test_uint")
+    t |> success ( is_jit_function(@@<(a:CompilationError):int> jit_uint) )
+    t |> equal ( uint(CompilationError function_not_found), jit_uint ( CompilationError function_not_found ) )
+
 
 // int8
 
@@ -92,6 +99,9 @@ def test_intrin_int8 ( t:T? )
     var fake <- Faker()
     fuzz <|
         fuzz_numeric_and_storage_op1(t,fake,"test_int8")
+    t |> success ( is_jit_function(@@<(a:CompilationError):int> jit_int8) )
+    t |> equal ( int8(CompilationError function_not_found), jit_int8 ( CompilationError function_not_found ) )
+
 
 // uint8
 
@@ -108,6 +118,8 @@ def test_intrin_uint8 ( t:T? )
     var fake <- Faker()
     fuzz <|
         fuzz_numeric_and_storage_op1(t,fake,"test_uint8")
+    t |> success ( is_jit_function(@@<(a:CompilationError):int> jit_uint8) )
+    t |> equal ( uint8(CompilationError function_not_found), jit_uint8 ( CompilationError function_not_found ) )
 
 // int16
 
@@ -124,6 +136,9 @@ def test_intrin_int16 ( t:T? )
     var fake <- Faker()
     fuzz <|
         fuzz_numeric_and_storage_op1(t,fake,"test_int16")
+    t |> success ( is_jit_function(@@<(a:CompilationError):int> jit_int16) )
+    t |> equal ( int16(CompilationError function_not_found), jit_int16 ( CompilationError function_not_found ) )
+
 
 // uint16
 
@@ -140,6 +155,9 @@ def test_intrin_uint16 ( t:T? )
     var fake <- Faker()
     fuzz <|
         fuzz_numeric_and_storage_op1(t,fake,"test_uint16")
+    t |> success ( is_jit_function(@@<(a:CompilationError):int> jit_uint16) )
+    t |> equal ( uint16(CompilationError function_not_found), jit_uint16 ( CompilationError function_not_found ) )
+
 
 // int64
 
@@ -156,6 +174,9 @@ def test_intrin_int64 ( t:T? )
     var fake <- Faker()
     fuzz <|
         fuzz_numeric_and_storage_op1(t,fake,"test_int64")
+    t |> success ( is_jit_function(@@<(a:CompilationError):int> jit_int64) )
+    t |> equal ( int64(CompilationError function_not_found), jit_int64 ( CompilationError function_not_found ) )
+
 
 // uint64
 
@@ -172,6 +193,9 @@ def test_intrin_uint64 ( t:T? )
     var fake <- Faker()
     fuzz <|
         fuzz_numeric_and_storage_op1(t,fake,"test_uint64")
+    t |> success ( is_jit_function(@@<(a:CompilationError):int> jit_uint64) )
+    t |> equal ( uint64(CompilationError function_not_found), jit_uint64 ( CompilationError function_not_found ) )
+
 
 ///////////////
 // vector ctors
