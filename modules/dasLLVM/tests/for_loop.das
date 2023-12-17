@@ -3,6 +3,20 @@ require dastest/testing_boost
 require jit
 
 [jit]
+def string_for ( t : T? )
+	for c,i in "hello", count()
+        if i == 0
+            t |> equal ( c, 'h' )
+        elif i == 1
+            t |> equal ( c, 'e' )
+        elif i == 2 || i == 3
+            t |> equal ( c, 'l' )
+        elif i == 4
+            t |> equal ( c, 'o' )
+        else
+            t |> failure ( "unexpected character" )
+
+[jit]
 def range_for ( value:int )
     var i = 0
     for _ in range(0,value)
@@ -133,6 +147,9 @@ def special_count ( max,start,step:int )
 
 [test]
 def test_for_loop ( t:T? )
+    t |> run("string for") <| @ ( t : T? )
+        t |> success ( is_jit_function ( @@string_for ) )
+        string_for(t)
     t |> run("range for") <| @ ( t : T? )
         t |> success ( is_jit_function ( @@range_for ) )
         t |> success ( is_jit_function ( @@range_for_range ) )
