@@ -6241,7 +6241,10 @@ namespace das {
             that->isForLoopSource = true;
         }
         virtual ExpressionPtr visitForSource ( ExprFor * expr, Expression * that , bool last ) override {
-            if ( program->policies.jit & that->type && that->type->isHandle() && that->type->annotation->isIterable() ) {
+            if ( program->policies.jit & that->type && (
+                    (that->type->isHandle() && that->type->annotation->isIterable()) ||
+                    (that->type->isString())
+             )) {
                 reportAstChanged();
                 auto eachFn = make_smart<ExprCall>(expr->at, "each");
                 eachFn->arguments.push_back(that->clone());
