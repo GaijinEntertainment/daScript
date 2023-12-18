@@ -120,9 +120,13 @@ IF ((NOT DAS_LLVM_INCLUDED) AND DAS_LIBCLANG_DETECTED AND ((NOT ${DAS_LLVM_DISAB
 		${DAS_LLVM_DIR}/src/dasLLVM.func_66.cpp
 		${DAS_LLVM_DIR}/src/dasLLVM.func_67.cpp
 		${DAS_LLVM_DIR}/src/dasLLVM.func_68.cpp
+	# llvm config module ( for passing setting externally )
+		${DAS_LLVM_DIR}/src/llvm_config/llvmConfigModule.cpp
+		${DAS_LLVM_DIR}/src/llvm_config/llvmConfigStub.cpp
 	)
 
 	ADD_MODULE_LIB(libDasModuleLlvm)
+	ADD_MODULE_CPP(LlvmConfig)
 	ADD_MODULE_CPP(dasLLVM)
 	ADD_MODULE_DAS(llvm daslib llvm_boost)
 	ADD_MODULE_DAS(llvm daslib llvm_debug)
@@ -169,25 +173,25 @@ IF ((NOT DAS_LLVM_INCLUDED) AND DAS_LIBCLANG_DETECTED AND ((NOT ${DAS_LLVM_DISAB
 IF(WIN32)
 	add_custom_command(TARGET libDasModuleLlvm POST_BUILD
     	COMMAND ${CMAKE_COMMAND} -E copy_if_different
-	        "${PROJECT_SOURCE_DIR}/../libclang/bin/LLVM-C.dll"
+	        "${PATH_TO_LIBCLANG}/bin/LLVM-C.dll"
     	    "${PROJECT_SOURCE_DIR}/bin/$<CONFIG>/LLVM-C.dll")
 	add_custom_command(TARGET libDasModuleLlvm POST_BUILD
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different
-		"${PROJECT_SOURCE_DIR}/../libclang/bin/LTO.dll"
+		"${PATH_TO_LIBCLANG}/bin/LTO.dll"
 		"${PROJECT_SOURCE_DIR}/bin/$<CONFIG>/LTO.dll")
 	add_custom_command(TARGET libDasModuleLlvm POST_BUILD
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different
-		"${PROJECT_SOURCE_DIR}/../libclang/bin/Remarks.dll"
+		"${PATH_TO_LIBCLANG}/bin/Remarks.dll"
 		"${PROJECT_SOURCE_DIR}/bin/$<CONFIG>/Remarks.dll")
 		add_custom_command(TARGET libDasModuleLlvm POST_BUILD
 		COMMAND ${CMAKE_COMMAND} -E copy_if_different
-		"${PROJECT_SOURCE_DIR}/../libclang/bin/libclang.dll"
+		"${PATH_TO_LIBCLANG}/bin/libclang.dll"
 		"${PROJECT_SOURCE_DIR}/bin/$<CONFIG>/libclang.dll")
 	set(DAS_CLANG_DLLS
-		${PROJECT_SOURCE_DIR}/../libclang/bin/LLVM-C.dll
-		${PROJECT_SOURCE_DIR}/../libclang/bin/LTO.dll
-		${PROJECT_SOURCE_DIR}/../libclang/bin/Remarks.dll
-		${PROJECT_SOURCE_DIR}/../libclang/bin/libclang.dll
+		${PATH_TO_LIBCLANG}/bin/LLVM-C.dll
+		${PATH_TO_LIBCLANG}/bin/LTO.dll
+		${PATH_TO_LIBCLANG}/bin/Remarks.dll
+		${PATH_TO_LIBCLANG}/bin/libclang.dll
 	)
 	install(FILES ${DAS_CLANG_DLLS}
         DESTINATION bin
