@@ -736,6 +736,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(profile_module)>("profile_module");
         // jit
             addField<DAS_BIND_MANAGED_FIELD(jit)>("jit");
+            addField<DAS_BIND_MANAGED_FIELD(jit_module)>("jit_module");
         // threadlock context
             addField<DAS_BIND_MANAGED_FIELD(threadlock_context)>("threadlock_context");
         }

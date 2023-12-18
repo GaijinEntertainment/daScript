@@ -94,6 +94,7 @@ def test_file(file_name: string; ctx: SuiteCtx; file_ctx: FileCtx): SuiteResult
             cop.aot_module = true
             cop.threadlock_context = true
             cop.jit = jit_enabled()
+            cop.jit_module := "{get_das_root()}/daslib/just_in_time.das"
             compile_file(file_name, access, unsafe(addr(mg)), cop) <| $(ok, program, output)
                 var expectedErrors : table<CompilationError; int>
                 if program != null

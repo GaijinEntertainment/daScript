@@ -315,14 +315,15 @@ bool compile_and_run ( const string & fn, const string & mainFnName, bool output
     bool success = false;
     ModuleGroup dummyGroup;
     CodeOfPolicies policies;
-    policies.jit = jitEnabled;
-    policies.debugger = debuggerRequired;
     if ( debuggerRequired ) {
+        policies.debugger = true;
         policies.debug_module = getDasRoot() + "/daslib/debug.das";
-    }
-    if ( !policies.debugger && profilerRequired ) {
+    } else if ( profilerRequired ) {
         policies.profiler = true;
         policies.profile_module = getDasRoot() + "/daslib/profiler.das";
+    } else if ( jitEnabled ) {
+        policies.jit = true;
+        policies.jit_module = getDasRoot() + "/daslib/just_in_time.das";
     }
     policies.fail_on_no_aot = false;
     policies.fail_on_lack_of_aot_export = false;

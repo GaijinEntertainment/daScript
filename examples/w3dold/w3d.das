@@ -10,8 +10,6 @@ require fio
 require stbimage
 require strings
 
-// require llvm/llvm_jit
-
 def set_debug_status_string(str)
     print("status: {str}\n")
 
