@@ -1588,9 +1588,9 @@ namespace das
             context->shared_from_this()
         };
         DebugAgent * newAgentPtr = newAgent.get();
-        for ( auto & ap : g_DebugAgents ) {
-            ap.second.debugAgent->onInstall(newAgentPtr);
-        }
+        for_each_debug_agent([newAgentPtr](DebugAgentPtr agent){
+            agent->onInstall(newAgentPtr);
+        });
     }
 
     void installDebugAgent ( DebugAgentPtr newAgent, const char * category, LineInfoArg * at, Context * context ) {
