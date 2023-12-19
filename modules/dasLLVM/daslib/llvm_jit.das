@@ -1135,6 +1135,10 @@ class LlvmJitVisitor : AstVisitor
     def build_str_cmp ( a,b:LLVMOpaqueValue? ) : LLVMOpaqueValue?
         return LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod,FN_JIT_STR_CMP), [[auto a;b]], "")
 
+    def build_str_cat ( a,b:LLVMOpaqueValue? ) : LLVMOpaqueValue?
+        return LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod,FN_JIT_STR_CAT), [[auto a;b;get_context_param()]], "")
+
+
     def reduce_bit_vector ( i1v:LLVMOpaqueValue?; bits:int; op:string )
         var result = LLVMBuildExtractElement(g_builder, i1v, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "bit_0")
         for b in range(1,bits)
@@ -1177,6 +1181,8 @@ class LlvmJitVisitor : AstVisitor
                 setE(expr, LLVMBuildAdd(g_builder, left, right, ""))
             elif opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType==Type tFloat)
                 setE(expr, LLVMBuildFAdd(g_builder, left, right, ""))
+            elif opType.isString
+                setE(expr, build_str_cat(left, right))
             else
                 failed_E(expr, "unsupported + type {describe(opType)}")
         elif expr.op=="+="
@@ -1184,6 +1190,8 @@ class LlvmJitVisitor : AstVisitor
                 setE(expr, LLVMBuildStoreAligned(g_builder, LLVMBuildAdd(g_builder, r2v_left, right, ""), left, uint(expr.left._type.alignOf)))
             elif opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType==Type tFloat)
                 setE(expr, LLVMBuildStoreAligned(g_builder, LLVMBuildFAdd(g_builder, r2v_left, right, ""), left, uint(expr.left._type.alignOf)))
+            elif opType.isString
+                setE(expr, LLVMBuildStoreAligned(g_builder, build_str_cat(r2v_left, right), left, uint(expr.left._type.alignOf)))
             else
                 failed_E(expr, "unsupported += type {describe(opType)}")
         elif expr.op=="-"

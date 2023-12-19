@@ -45,6 +45,7 @@ let public FN_JIT_FREE_PERSISTENT = "`jit`free_persistent`"
 let public FN_JIT_ARRAY_LOCK = "`jit`array_lock`"
 let public FN_JIT_ARRAY_UNLOCK = "`jit`array_unlock`"
 let public FN_JIT_STR_CMP = "`jit`str_cmp`"
+let public FN_JIT_STR_CAT = "`jit`str_cat`"
 let public FN_JIT_PROLOGUE = "`jit`prologue`"
 let public FN_JIT_EPILOGUE = "`jit`epilogue`"
 let public FN_JIT_MAKE_BLOCK = "`jit`make_block`"
@@ -294,6 +295,13 @@ def public init_jit
     LLVMAddGlobalMapping(g_engine, jit_str_cmp, get_jit_str_cmp())
     LLVMAddAttributesToFunction(jit_str_cmp, [[auto nounwind; willreturn; readonly]])
     LLVMAddAttributeToFunctionArgumentRange(jit_str_cmp, urange(0,2), nocapture)
+    // char * jit_str_cat ( char * a, char * b, Copntext * context )
+    var jit_str_cat = LLVMAddFunction(g_mod, FN_JIT_STR_CAT,
+        LLVMFunctionType(LLVMPointerType(LLVMInt8Type(),0u),
+            [[LLVMTypeRef LLVMPointerType(LLVMInt8Type(),0u); LLVMPointerType(LLVMInt8Type(),0u); LLVMPointerType(LLVMVoidType(),0u) ]]))
+    LLVMAddGlobalMapping(g_engine, jit_str_cat, get_jit_str_cat())
+    LLVMAddAttributesToFunction(jit_str_cat, [[auto nounwind; willreturn]])
+    LLVMAddAttributeToFunctionArgumentRange(jit_str_cat, urange(0,3), nocapture)
     // void jit_prologue ( int32_t stackSize, JitStackState * stackState, Context * context )
     var jit_prologue = LLVMAddFunction(g_mod, FN_JIT_PROLOGUE,
         LLVMFunctionType(LLVMVoidType(),
