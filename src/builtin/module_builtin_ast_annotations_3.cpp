@@ -136,6 +136,7 @@ namespace das {
         AstExprDeleteAnnotation(ModuleLibrary & ml)
             :  AstExpressionAnnotation<ExprDelete> ("ExprDelete", ml) {
             addField<DAS_BIND_MANAGED_FIELD(subexpr)>("subexpr");
+            addField<DAS_BIND_MANAGED_FIELD(sizeexpr)>("sizeexpr");
             addField<DAS_BIND_MANAGED_FIELD(native)>("native");
         }
     };
