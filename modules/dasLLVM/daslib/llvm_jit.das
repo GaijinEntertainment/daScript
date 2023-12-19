@@ -2509,7 +2509,23 @@ class LlvmJitVisitor : AstVisitor
                         ]]
                         LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, FN_JIT_FREE_HEAP), params, "")
                 else
-                    failed_E(expr, "delete class pointer is not supported yet {describe(subT)}")
+                    var structSize = getE(expr.sizeexpr)
+                    let persistent = firstT.structType.flags.persistent
+                    var pps = LLVMBuildPointerCast(g_builder, se, LLVMPointerType(LLVMPointerType(LLVMVoidType(),0u),0u), "ppClass")
+                    var ps = LLVMBuildLoad(g_builder, pps, "pClass")
+                    if persistent
+                        var params = [[auto
+                            ps;
+                            get_context_param()
+                        ]]
+                        LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, FN_JIT_FREE_PERSISTENT), params, "")
+                    else
+                        var params = [[auto
+                            ps;
+                            structSize;
+                            get_context_param()
+                        ]]
+                        LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, FN_JIT_FREE_HEAP), params, "")
             else
                 failed_E(expr, "delete of pointer non-structure type is not supported yet {describe(subT)}")
         elif subT.isGoodLambdaType
@@ -3581,6 +3597,14 @@ def private optimize_llvm_module
     LLVMDisposePassManager(pm)
     LLVMPassManagerBuilderDispose(pmb)
 
+class DisableJitVisitor : AstVisitor
+    disable : bool
+    def TypeInfoVisitor
+        disable = false
+    def override preVisitExprTypeInfo(expr:smart_ptr<ExprTypeInfo>) : void
+        disable = true
+
+
 [simulate_macro(name="jit_llvm")]
 class JIT_LLVM : AstSimulateMacro
     def override simulate ( prog:Program?; var ctx:Context? ) : bool
@@ -3591,11 +3615,20 @@ class JIT_LLVM : AstSimulateMacro
             error("jit is disabled. use `-jit` option for daScript, or enable jit via CodeOfPolicies")
             return false
         var funcs : array<FunctionPtr>
+        var disableJitVisitor = new DisableJitVisitor()
+        var inscope disableJitVisitorAdapter <- make_visitor(*disableJitVisitor)
         prog |> for_each_module <| $ ( mod )
             mod |> for_each_function("") <| $ ( fun )
                 if fun.flags.used && (LLVM_JIT_ALL_FUNCTIONS || fun.moreFlags.requestJit)
                     if ! fun.moreFlags.requestNoJit
-                        funcs |> emplace(fun)
+                        disableJitVisitor.disable = false
+                        fun |> visit(disableJitVisitorAdapter)
+                        if ( !disableJitVisitor.disable )
+                            funcs |> emplace(fun)
+                        else
+                            print("LLVM JIT: disabled {fun.name}\n")
+        unsafe
+            delete disableJitVisitor
         if !empty(funcs)
             let totalTime = ref_time_ticks()
             init_jit()
