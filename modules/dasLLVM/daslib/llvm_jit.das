@@ -683,6 +683,9 @@ class LlvmJitVisitor : AstVisitor
                 res_type = LLVMVoidType()
             for arg in expr.func.arguments
                 arg_types |> push(type_to_llvm_abi_type(arg._type))
+            if expr.func.moreFlags.jitContextAndLineInfo
+                arg_types |> push(LLVMPointerType(LLVMVoidType(),0u))   // context
+                arg_types |> push(LLVMPointerType(LLVMVoidType(),0u))   // line info arg
             ofunc = LLVMAddFunction(g_mod, mangled_name, LLVMFunctionType(res_type,arg_types))
             let FUNC_PTR = get_builtin_function_address(expr.func)
             if FUNC_PTR==null
@@ -805,6 +808,9 @@ class LlvmJitVisitor : AstVisitor
             else
                 var params <- build_call_params(expr, expr.func)
                 var func = register_extern_function(expr)
+                if expr.func.moreFlags.jitContextAndLineInfo
+                    params |> push(get_context_param())
+                    params |> push(LLVMConstPointerNull(LLVMPointerType(LLVMVoidType(),0u)))
                 if cmresEval!=null
                     var cmresPtr = LLVMBuildPointerCast(g_builder,cmresEval,LLVMPointerType(type_to_llvm_type(expr.func.result),0u),"cmresPTR")
                     params |> push(cmresPtr, 0)
