@@ -51,6 +51,7 @@ class ProfilerDebugAgent : DapiDebugAgent
     instrumented : table<uint64>
     map_time_units : table<string; int64> <- {{
         "ns" => 1l;
+        "us" => 1_000l;
         "ms" => 1_000_000l;
         "s" => 1_000_000_000l
     }}
