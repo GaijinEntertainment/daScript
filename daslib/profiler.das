@@ -148,8 +148,8 @@ class ProfilerDebugAgent : DapiDebugAgent
     def dump_node ( node:PerfNode?; tab:int = -1 )
         if node==null
             return
-        let total_time = convert_ns_to_unit(node.total_time, time_unit)
         if node.fun!=null
+            let total_time = convert_ns_to_unit(node.total_time, time_unit)
             let tabs = repeat("  ",tab)
             if report_memory
                 var hb = node.total_heap_bytes
