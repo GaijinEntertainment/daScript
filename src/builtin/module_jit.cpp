@@ -277,6 +277,27 @@ namespace das {
         return (void *) &builtin_iterator_close;
     }
 
+    char * jit_str_cat ( char * sA, char * sB, Context * context ) {
+        auto la = stringLength(*context, sA);
+        auto lb = stringLength(*context, sB);
+        uint32_t commonLength = la + lb;
+        if ( !commonLength ) {
+            return nullptr;
+        } else if ( char * sAB = (char * ) context->stringHeap->allocateString(nullptr, commonLength) ) {
+            memcpy ( sAB, sA, la );
+            memcpy ( sAB+la, sB, lb+1 );
+            context->stringHeap->recognize(sAB);
+            return sAB;
+        } else {
+            context->throw_error("can't add two strings, out of heap"); // this is so unlikely
+            return nullptr;
+        }
+    }
+
+    void * das_get_jit_str_cat () {
+        return (void *) &jit_str_cat;
+    }
+
     class Module_Jit : public Module {
     public:
         Module_Jit() : Module("jit") {
@@ -331,6 +352,8 @@ namespace das {
                 SideEffects::none, "das_get_jit_table_find");
             addExtern<DAS_BIND_FUN(das_get_jit_str_cmp)>(*this, lib, "get_jit_str_cmp",
                 SideEffects::none, "das_get_jit_str_cmp");
+            addExtern<DAS_BIND_FUN(das_get_jit_str_cat)>(*this, lib, "get_jit_str_cat",
+                SideEffects::none, "das_get_jit_str_cat");
             addExtern<DAS_BIND_FUN(das_get_jit_prologue)>(*this, lib, "get_jit_prologue",
                 SideEffects::none, "das_get_jit_prologue");
             addExtern<DAS_BIND_FUN(das_get_jit_epilogue)>(*this, lib, "get_jit_epilogue",
