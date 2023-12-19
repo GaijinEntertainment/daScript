@@ -1457,6 +1457,10 @@ class LlvmJitVisitor : AstVisitor
         if expr.left is ExprConstPtr
             let null_ptr = LLVMConstPointerNull(type_to_llvm_abi_type(expr._type))
             setE(expr.left, null_ptr)
+        elif expr.left._type.isPointer
+            // we need to cast pointer to the type of the right expression
+            let cleft = LLVMBuildPointerCast(g_builder, getE(expr.left), type_to_llvm_type(expr._type), "")
+            setE(expr.left, cleft)
         var blk = ite2blocks[get_expr_ptr(expr)]
         LLVMBuildBr(g_builder, blk.phi_true)
         LLVMPositionBuilderAtEnd(g_builder,blk.phi_true)
@@ -1467,6 +1471,10 @@ class LlvmJitVisitor : AstVisitor
         if expr.right is ExprConstPtr
             let null_ptr = LLVMConstPointerNull(type_to_llvm_abi_type(expr._type))
             setE(expr.right, null_ptr)
+        elif expr.right._type.isPointer
+            // we need to cast pointer to the type of the left expression
+            let cright = LLVMBuildPointerCast(g_builder, getE(expr.right), type_to_llvm_type(expr._type), "")
+            setE(expr.right, cright)
         var blk = ite2blocks[get_expr_ptr(expr)]
         LLVMBuildBr(g_builder, blk.phi_false)
         LLVMPositionBuilderAtEnd(g_builder,blk.phi_false)
@@ -2422,7 +2430,7 @@ class LlvmJitVisitor : AstVisitor
         assume ect = expr.castType
         assume subT = expr.subexpr._type
         if ect.isPointer && subT.isPointer
-            res = LLVMBuildPointerCast(g_builder, getE(expr.subexpr), LLVMPointerType(type_to_llvm_type(ect),0u), "")
+            res = LLVMBuildPointerCast(g_builder, getE(expr.subexpr), type_to_llvm_type(ect), "")
         elif ect.isRef && subT.isRef
             res = LLVMBuildPointerCast(g_builder, getE(expr.subexpr), LLVMPointerType(type_to_llvm_type(ect),0u), "")
         elif length(ect.dim)!=0 && subT.isPointer
@@ -2899,6 +2907,11 @@ class LlvmJitVisitor : AstVisitor
                 LLVMBuildRetVoid(g_builder)
             elif returnType.isPointer && (expr.subexpr is ExprConstPtr) // return null
                 LLVMBuildRet(g_builder, LLVMConstPointerNull(type_to_llvm_abi_type(returnType)))
+            elif returnType.isPointer
+                // cast pointer type, becasue we may need to cast void* onto returntype*.
+                // TODO: check? (we don't check, we just cast for now)
+                var cres = LLVMBuildPointerCast(g_builder, getE(expr.subexpr), type_to_llvm_abi_type(returnType), "")
+                LLVMBuildRet(g_builder, cres)
             else
                 LLVMBuildRet(g_builder, getE(expr.subexpr))
         else
