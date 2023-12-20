@@ -879,6 +879,7 @@ namespace das
                 bool    isStaticClassMethod : 1;
 
                 bool    requestNoJit : 1;
+                bool    jitContextAndLineInfo : 1;
             };
             uint32_t moreFlags = 0;
         };
