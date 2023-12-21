@@ -26,7 +26,6 @@ require daslib/ast_debug
 require llvm/llvm_debug
 */
 
-
 [macro_function]
 def private get_expr_ptr ( expr:ExpressionPtr )
     return get_ptr(expr)
@@ -619,10 +618,40 @@ class LlvmJitVisitor : AstVisitor
             LLVMBuildMemSet(g_builder, new_ptr, LLVMConstInt(LLVMInt8Type(), 0ul, 0), LLVMConstInt(LLVMInt32Type(), uint64(bytes), 0), 16u)
         return LLVMBuildPointerCast(g_builder, new_ptr, dim_element_type_to_llvm_type(expr._type), "new")
 
+    def get_new_handle_function ( t:TypeDeclPtr ) : LLVMOpaqueValue?
+        let mangeld_name = get_mangled_name(t)
+        let func_name = "new`handle`{mangeld_name}"
+        var new_handle = LLVMGetNamedFunction(g_mod, func_name)
+        if new_handle == null
+            var new_handle_ptr = get_jit_new(t)
+            if new_handle_ptr == null
+                failed_T(t, "missing new`handle function pointer for {describe(t)}")
+                return null
+            // void * new_handle ( Context * ) {
+            new_handle = LLVMAddFunction(g_mod, func_name,
+                LLVMFunctionType(LLVMPointerType(LLVMVoidType(),0u),
+                    [[LLVMTypeRef[] LLVMPointerType(LLVMVoidType(),0u)]]))
+            LLVMAddGlobalMapping(g_engine, new_handle, new_handle_ptr)
+            var nounwind = LLVMGetEnumAttribute("nounwind")
+            var willreturn = LLVMGetEnumAttribute("willreturn")
+            var nocapture = LLVMGetEnumAttribute("nocapture")
+            LLVMAddAttributesToFunction(new_handle, [[auto nounwind; willreturn]])
+            LLVMAddAttributeToFunctionArgumentRange(new_handle, urange(0,1), nocapture)
+        return new_handle
+
     def override preVisitExprNew(expr:smart_ptr<ExprNew>): void
         if expr.typeexpr.baseType==Type tHandle
-            failed_E(expr, "new handle is not supported yet")
-            return
+            let fn_new_handle = get_new_handle_function(expr.typeexpr)
+            if fn_new_handle == null
+                setE(expr, LLVMConstNull(LLVMPointerType(LLVMVoidType(),0u)))
+                return
+            var params = [[auto[]
+                get_context_param()
+            ]]
+            var new_ptr = LLVMBuildCall(g_builder, fn_new_handle, params, "new`handle`{describe(expr.typeexpr)}")
+            check_ptr_zero(new_ptr, "new returned null")
+            new_ptr = LLVMBuildPointerCast(g_builder, new_ptr, LLVMPointerType(type_to_llvm_type(expr.typeexpr),0u), "")
+            setE(expr, new_ptr)
         else
             if expr.typeexpr.dim |> length > 0
                 let count = expr.typeexpr.countOf
@@ -1986,12 +2015,19 @@ class LlvmJitVisitor : AstVisitor
         setE(expr, mks_ptr)
 
     def override preVisitExprMakeStructField(expr:smart_ptr<ExprMakeStruct>;index:int;decl:MakeFieldDeclPtr;last:bool) : void
-        var field = find_structure_field(expr.makeType.structType, string(decl.name))
-        if field==null
-            failed_E(expr, "field {decl.name} not found")
-            return
+        var field_offset : int
+        if expr.makeType.isHandle
+            var pann = expr.makeType.annotation
+            var ann <- unsafe(reinterpret<smart_ptr<TypeAnnotation>> pann)
+            field_offset = int(get_handled_type_field_offset(ann, string(decl.name)))
+        else
+            var field = find_structure_field(expr.makeType.structType, string(decl.name))
+            if field==null
+                failed_E(expr, "field {decl.name} not found")
+                return
+            field_offset = field.offset
         let stride = expr.makeType.stride
-        let offset =  index*stride + field.offset
+        let offset =  index*stride + field_offset
         var v_ptr = getE(expr)
         verify(v_ptr!=null && LLVMIsUndef(v_ptr)==0,"make struct field, but no pointer")
         v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
@@ -2009,16 +2045,26 @@ class LlvmJitVisitor : AstVisitor
             pass
 
     def override visitExprMakeStructField(expr:smart_ptr<ExprMakeStruct>;index:int;decl:MakeFieldDeclPtr;last:bool) : MakeFieldDeclPtr
-        var field = find_structure_field(expr.makeType.structType, string(decl.name))
-        if field==null
-            failed_E(expr, "field {decl.name} not found")
-            return decl
+        var field_offset : int
+        var inscope field_type : TypeDeclPtr
+        if expr.makeType.isHandle
+            var pann = expr.makeType.annotation
+            var ann <- unsafe(reinterpret<smart_ptr<TypeAnnotation>> pann)
+            field_offset = int(get_handled_type_field_offset(ann, string(decl.name)))
+            field_type := get_handled_type_field_type_declaration(ann, string(decl.name), false)
+        else
+            var field = find_structure_field(expr.makeType.structType, string(decl.name))
+            if field==null
+                failed_E(expr, "field {decl.name} not found")
+                return decl
+            field_offset = field.offset
+            field_type := field._type
         let stride = expr.makeType.stride
-        let offset =  index*stride + field.offset
+        let offset =  index*stride + field_offset
         var v_ptr = getE(expr)
         v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
         v_ptr = LLVMBuildGEP(g_builder, v_ptr, LLVMConstInt(LLVMInt32Type(), uint64(offset), 0), "[{index}].{decl.name}")
-        v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, get_type_pointer(field._type), "")
+        v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, get_type_pointer(field_type), "")
         if decl.value |> isMakeLocal
             pass // do nothign. we already taken care of makeLocal in preVisitExprMakeStructField
         elif isCall2CMRES(decl.value)
@@ -2425,11 +2471,19 @@ class LlvmJitVisitor : AstVisitor
 
 // ExprAscend
     def override preVisitExprAscend(expr:smart_ptr<ExprAscend>) : void
-        if expr.subexpr._type.baseType == Type tHandle
-            failed_E(expr, "ascend of handle is not supported")
-            return
         let bytes = expr.subexpr._type.sizeOf
-        var mks_ptr = build_alloc(bytes, false)
+        var mks_ptr : LLVMOpaqueValue?
+        if expr.subexpr._type.baseType == Type tHandle
+            let fn_new_handle = get_new_handle_function(expr.subexpr._type)
+            if fn_new_handle == null
+                setE(expr, LLVMConstNull(LLVMPointerType(LLVMVoidType(),0u)))
+                return
+            var params = [[auto[]
+                get_context_param()
+            ]]
+            mks_ptr = LLVMBuildCall(g_builder, fn_new_handle, params, "new`handle`{describe(expr.subexpr._type)}")
+        else
+            mks_ptr = build_alloc(bytes, false)
         check_ptr_zero(mks_ptr, "new [[...]] returned null")
         LLVMBuildMemSet(g_builder, mks_ptr, LLVMConstInt(LLVMInt8Type(), 0ul, 0), LLVMConstInt(LLVMInt32Type(), uint64(bytes), 0), 16u)
         if expr.ascendFlags.useStackRef
