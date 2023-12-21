@@ -298,6 +298,18 @@ namespace das {
         return (void *) &jit_str_cat;
     }
 
+    void * das_get_jit_new ( TypeDeclPtr htype, Context * context, LineInfoArg * at ) {
+        if ( !htype ) context->throw_error_at(at, "can't get `new`, type is null");
+        if ( !htype->isHandle() ) context->throw_error_at(at, "can't get `new`, type is not a handle");
+        return htype->annotation->jitGetNew();
+    }
+
+    void * das_get_jit_delete ( TypeDeclPtr htype, Context * context, LineInfoArg * at ) {
+        if ( !htype ) context->throw_error_at(at, "can't get `delete`, type is null");
+        if ( !htype->isHandle() ) context->throw_error_at(at, "can't get `delete`, type is not a handle");
+        return htype->annotation->jitGetDelete();
+    }
+
     class Module_Jit : public Module {
     public:
         Module_Jit() : Module("jit") {
@@ -377,6 +389,12 @@ namespace das {
             addExtern<DAS_BIND_FUN(das_sb_make_interop_node)>(*this, lib,  "make_interop_node",
                 SideEffects::none, "das_sb_make_interop_node")
                     ->args({"ctx","builder","context","at"});
+            addExtern<DAS_BIND_FUN(das_get_jit_new)>(*this, lib,  "get_jit_new",
+                SideEffects::none, "das_get_jit_new")
+                    ->args({"type","context","at"});
+            addExtern<DAS_BIND_FUN(das_get_jit_delete)>(*this, lib,  "get_jit_delete",
+                SideEffects::none, "das_get_jit_delete")
+                    ->args({"type","context","at"});
             addConstant<uint32_t>(*this, "SIZE_OF_PROLOGUE", uint32_t(sizeof(Prologue)));
             addConstant<uint32_t>(*this, "CONTEXT_OFFSET_OF_EVAL_TOP", uint32_t(uint32_t(offsetof(Context, stack) + offsetof(StackAllocator, evalTop))));
             addConstant<uint32_t>(*this, "CONTEXT_OFFSET_OF_GLOBALS", uint32_t(uint32_t(offsetof(Context, globals))));

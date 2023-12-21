@@ -565,6 +565,12 @@ namespace das {
         return annotation->getFieldType(name);
     }
 
+    TypeDeclPtr getHandledTypeFieldTypeDecl ( smart_ptr_raw<TypeAnnotation> annotation, char * name, bool isConst, Context * context, LineInfoArg * at ) {
+        if ( !name ) context->throw_error_at(at, "expecting field name");
+        if ( !annotation ) context->throw_error_at(at, "expecting type annotation");
+        return annotation->makeFieldType(name,isConst);
+    }
+
     uint32_t getHandledTypeFieldOffset ( smart_ptr_raw<TypeAnnotation> annotation, char * name, Context * context, LineInfoArg * at ) {
         if ( !name ) context->throw_error_at(at, "expecting field name");
         if ( !annotation ) context->throw_error_at(at, "expecting type annotation");
@@ -749,6 +755,9 @@ namespace das {
         addExtern<DAS_BIND_FUN(getHandledTypeFieldType)>(*this, lib,  "get_handled_type_field_type",
             SideEffects::none, "getHandledTypeFieldType")
                 ->args({"type","field","context","line"});
+        addExtern<DAS_BIND_FUN(getHandledTypeFieldTypeDecl)>(*this, lib,  "get_handled_type_field_type_declaration",
+            SideEffects::none, "getHandledTypeFieldTypeDecl")
+                ->args({"type","field","isConst","context","line"});
         // module
         addExtern<DAS_BIND_FUN(for_each_typedef)>(*this, lib,  "for_each_typedef",
             SideEffects::modifyExternal, "for_each_typedef")

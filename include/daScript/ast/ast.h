@@ -517,6 +517,9 @@ namespace das
         virtual bool isYetAnotherVectorTemplate() const { return false; }   // has [], there is length(x), data is linear in memory
         // factory
         virtual void * factory () const { return nullptr; }
+        // new and delete, jit versions
+        virtual void * jitGetNew () const { return nullptr; }
+        virtual void * jitGetDelete () const { return nullptr; }
     };
 
     struct StructureAnnotation : Annotation {

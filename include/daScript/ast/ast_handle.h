@@ -297,6 +297,29 @@ namespace das
         }
     };
 
+    template <typename OT, bool is_smart>
+    struct JitManagedStructure;
+
+    template <typename OT>
+    struct JitManagedStructure<OT,false> {
+        static void * jit_new ( Context * ) { return new OT(); }
+        static void jit_delete ( void * ptr, Context * ) { delete (OT *) ptr; }
+    };
+
+    template <typename OT>
+    struct JitManagedStructure<OT,true> {
+        static void * jit_new ( Context * ) {
+            OT * res = new OT();
+            res->addRef();
+            return res;
+        }
+        static void jit_delete ( void * ptr, Context * ) {
+            OT * res = (OT *) ptr;
+            res->delRef();
+        }
+    };
+
+
     template <typename OT>
     struct ManagedStructureAnnotation<OT, true, false> : public ManagedStructureAnnotation<OT, false, false> {
         typedef OT ManagedType;
@@ -307,6 +330,7 @@ namespace das
         virtual SimNode* simulateGetNew(Context& context, const LineInfo& at) const override {
             return context.code->makeNode<SimNode_NewHandle<ManagedType, is_smart>>(at);
         }
+        virtual void * jitGetNew() const override { return (void *) &JitManagedStructure<ManagedType,is_smart>::jit_new; }
     };
 
     template <typename OT>
@@ -319,6 +343,7 @@ namespace das
         virtual SimNode* simulateDeletePtr(Context& context, const LineInfo& at, SimNode* sube, uint32_t count) const override {
             return context.code->makeNode<SimNode_DeleteHandlePtr<ManagedType, is_smart>>(at, sube, count);
         }
+        virtual void * jitGetDelete() const override { return (void *) &JitManagedStructure<ManagedType,is_smart>::jit_delete; }
     };
 
     template <typename OT>
@@ -335,6 +360,8 @@ namespace das
         virtual SimNode * simulateDeletePtr ( Context & context, const LineInfo & at, SimNode * sube, uint32_t count ) const override {
             return context.code->makeNode<SimNode_DeleteHandlePtr<ManagedType,is_smart>>(at,sube,count);
         }
+        virtual void * jitGetNew() const override { return (void *) &JitManagedStructure<ManagedType,is_smart>::jit_new; }
+        virtual void * jitGetDelete() const override { return (void *) &JitManagedStructure<ManagedType,is_smart>::jit_delete; }
     };
 
     template <typename VectorType>
