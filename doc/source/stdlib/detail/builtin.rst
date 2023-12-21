@@ -32,7 +32,7 @@
 
 .. |function-builtin-get_command_line_arguments| replace:: returns array of command line arguments.
 
-.. |function-builtin-get_das_root| replace:: returns path to where `daslib` and other libraries exist. this is typically root folder of the daScript main repository
+.. |function-builtin-get_das_root| replace:: returns path to where `daslib` and other libraries exist. this is typically root folder of the Daslang main repository
 
 .. |function-builtin-hash| replace:: returns hash value of the `data`. current implementation uses FNV64a hash.
 
@@ -364,9 +364,9 @@
 
 .. |structure_macro-builtin-macro_interface| replace:: [macro_interface] specifies that class and its inherited children are used as a macro interfaces, and would not be exported by default.
 
-.. |structure_macro-builtin-cpp_layout| replace:: [cpp_layout] specifies that structure uses C++ memory layout rules, as oppose to native daScript memory layout rules.
+.. |structure_macro-builtin-cpp_layout| replace:: [cpp_layout] specifies that structure uses C++ memory layout rules, as oppose to native Daslang memory layout rules.
 
-.. |structure_macro-builtin-persistent| replace:: [persistent] annotation specifies that structure is allocated (via new) on the C++ heap, as oppose to daScript context heap.
+.. |structure_macro-builtin-persistent| replace:: [persistent] annotation specifies that structure is allocated (via new) on the C++ heap, as oppose to Daslang context heap.
 
 .. |variable-builtin-SIZE_OF_PROLOGUE| replace:: size of the Prologue structure on the call stack.
 

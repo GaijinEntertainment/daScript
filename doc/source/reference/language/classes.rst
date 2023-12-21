@@ -4,7 +4,7 @@
 Class
 =====
 
-In daScript, classes are an extension of structures designed to provide OOP capabilities.
+In Daslang, classes are an extension of structures designed to provide OOP capabilities.
 Classes provides single parent inheritance, abstract and virtual methods, initializers, and finalizers.
 
 The basic class declaration is similar to that of a structure, but with the ``class`` keyword::

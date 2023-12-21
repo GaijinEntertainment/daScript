@@ -65,7 +65,7 @@ and convenience of using the parser.
 - ``WS`` - *whitespace*
 - ``EOF`` - *end of file*
 
-The basic building blocks to the more complicated rules are 
+The basic building blocks to the more complicated rules are
 
 - **Literal match**. String literals can be enclosed in ``""`` and matched against
 - **Range match**. Ranges are specified via ``range('1', '9')`` syntax
@@ -88,7 +88,7 @@ The modifiers can alter the meaning of binding constructs.
 Rule Modifiers
 ~~~~~~~~~~~~~~~
 
-There are several modifiers that can be applied to the rules. 
+There are several modifiers that can be applied to the rules.
 
 - **Repetition** (``*``)
 
@@ -201,5 +201,5 @@ The creation of the *das-PEG* parser generator was substantially influenced by
 Guido van Rossum's work on Python's *pegen* library. His series of detailed
 articles on the internal mechanics of PEG parser generators provided a nice
 blueprint for generating parsers. Another thanks goes to the excellent reification
-capabilities of dascript – the integration between the generator and the
+capabilities of Daslang – the integration between the generator and the
 generating program has never been so tight!
