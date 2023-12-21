@@ -321,7 +321,7 @@ bool compile_and_run ( const string & fn, const string & mainFnName, bool output
     } else if ( profilerRequired ) {
         policies.profiler = true;
         policies.profile_module = getDasRoot() + "/daslib/profiler.das";
-    } else if ( jitEnabled ) {
+    } /*else*/ if ( jitEnabled ) {
         policies.jit = true;
         policies.jit_module = getDasRoot() + "/daslib/just_in_time.das";
     }
