@@ -535,14 +535,14 @@ namespace das {
         return v_quat_from_euler(v_make_vec4f(x, y, z, 0.f));
     }
 
-    float3 euler_from_un_quat_vec(float4 v) {
-        return v_euler_from_un_quat(v);
+    float3 euler_from_quat_vec(float4 v) {
+        return v_euler_from_quat(v);
     }
 
-    float4 un_quat(const float4x4 & m) {
-        mat44f vm;
-        memcpy(&vm, &m, sizeof(float4x4));
-        return v_un_quat_from_mat4(vm);
+    float4 quat_from_float3x4(const float3x4 & m) {
+        mat44f tm;
+        v_mat44_make_from_43cu_unsafe(tm, &m.m[0].x);
+        return v_quat_from_mat43(tm);
     }
 
     float4 quat_mul(float4 q1, float4 q2) {
@@ -555,6 +555,10 @@ namespace das {
 
     float4 quat_conjugate(float4 q) {
         return v_quat_conjugate(q);
+    }
+
+    float4 quat_slerp(float t, float4 a, float4 b) {
+        return v_quat_slerp(v_splats(t), a, b);
     }
 
     static void initFloatNxNIndex ( const FunctionPtr & ptr ) {
@@ -800,16 +804,18 @@ namespace das {
                 SideEffects::none, "quat_from_euler_vec")->args({"angles"});
             addExtern<DAS_BIND_FUN(quat_from_euler)>(*this, lib, "quat_from_euler",
                 SideEffects::none, "quat_from_euler")->args({"x", "y", "z"});
-            addExtern<DAS_BIND_FUN(euler_from_un_quat_vec)>(*this, lib, "euler_from_un_quat",
-                SideEffects::none, "euler_from_un_quat_vec")->args({"angles"});
-            addExtern<DAS_BIND_FUN(un_quat)>(*this, lib, "un_quat",
-                SideEffects::none, "un_quat")->arg("m");
+            addExtern<DAS_BIND_FUN(euler_from_quat_vec)>(*this, lib, "euler_from_quat",
+                SideEffects::none, "euler_from_quat_vec")->args({"angles"});
+            addExtern<DAS_BIND_FUN(quat_from_float3x4)>(*this, lib, "quat",
+                SideEffects::none, "quat_from_float3x4")->arg("m");
             addExtern<DAS_BIND_FUN(quat_mul)>(*this, lib, "quat_mul",
                 SideEffects::none, "quat_mul")->args({"q1","q2"});
             addExtern<DAS_BIND_FUN(quat_mul_vec)>(*this, lib, "quat_mul_vec",
                 SideEffects::none, "quat_mul_vec")->args({"q","v"});
             addExtern<DAS_BIND_FUN(quat_conjugate)>(*this, lib, "quat_conjugate",
                 SideEffects::none, "quat_conjugate")->arg("q");
+            addExtern<DAS_BIND_FUN(quat_slerp)>(*this, lib, "quat_slerp",
+                SideEffects::none, "quat_slerp")->args({"t", "a", "b"});
             // 3x3
             addExtern<DAS_BIND_FUN(float3x3_from_float44), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "float3x3",
                 SideEffects::none,"float3x3_from_float44");
