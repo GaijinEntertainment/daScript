@@ -2051,7 +2051,7 @@ class LlvmJitVisitor : AstVisitor
             var pann = expr.makeType.annotation
             var ann <- unsafe(reinterpret<smart_ptr<TypeAnnotation>> pann)
             field_offset = int(get_handled_type_field_offset(ann, string(decl.name)))
-            field_type := get_handled_type_field_type_declaration(ann, string(decl.name), false)
+            field_type |> move_new <| get_handled_type_field_type_declaration(ann, string(decl.name), false)
         else
             var field = find_structure_field(expr.makeType.structType, string(decl.name))
             if field==null
