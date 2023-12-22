@@ -7249,11 +7249,11 @@ yyreduce:
     break;
 
   case 359: /* $@23: %empty  */
-                                                                           { yyextra->das_suppress_errors=false; }
+                                                                            { yyextra->das_suppress_errors=false; }
     break;
 
   case 360: /* expr_field: expr '.' $@22 error $@23  */
-                                                                                                                  {
+                                                                                                                    {
         (yyval.pExpression) = new ExprField(tokAt(scanner,(yylsp[-3])), tokAt(scanner,(yylsp[-3])), ExpressionPtr((yyvsp[-4].pExpression)), "");
         yyerrok;
     }

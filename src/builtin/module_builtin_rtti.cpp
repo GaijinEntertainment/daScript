@@ -724,6 +724,8 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(strict_smart_pointers)>("strict_smart_pointers");
             addField<DAS_BIND_MANAGED_FIELD(no_init)>("no_init");
             addField<DAS_BIND_MANAGED_FIELD(strict_unsafe_delete)>("strict_unsafe_delete");
+            addField<DAS_BIND_MANAGED_FIELD(no_members_functions_in_struct)>("no_members_functions_in_struct");
+            addField<DAS_BIND_MANAGED_FIELD(no_local_class_members)>("no_local_class_members");
         // environment
             addField<DAS_BIND_MANAGED_FIELD(no_optimizations)>("no_optimizations");
             addField<DAS_BIND_MANAGED_FIELD(fail_on_no_aot)>("fail_on_no_aot");
