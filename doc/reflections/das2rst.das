@@ -70,7 +70,7 @@ dot|normalize|fast_normalize)$%%);
         group_by_regex("Matrix operations", mod, %regex~(\=\=|\!\=|\*)$%%);
         group_by_regex("Matrix initializers", mod, %regex~(float3x4|float4x4|float3x3|identity3x4|identity4x4|identity3x3)$%%);
         group_by_regex("Matrix manipulation", mod, %regex~(identity|inverse|rotate|transpose|translation|compose|decompose|look_at|orthonormal_inverse|persp_forward|persp_reverse)$%%);
-        group_by_regex("Quaternion operations", mod, %regex~(quat_conjugate|quat_mul|quat_mul_vec|un_quat|quat_from_unit_arc|quat_from_unit_vec_ang)$%%);
+        group_by_regex("Quaternion operations", mod, %regex~(quat_conjugate|quat_mul|quat_mul_vec|quat_from_unit_arc|quat_from_unit_vec_ang)$%%);
         group_by_regex("Packing and unpacking", mod, %regex~(pack_float_to_byte|unpack_byte_to_float)$%%)
     }]
     document("Math library",mod,"{root}/math.rst","{root}/detail/math.rst",groups)

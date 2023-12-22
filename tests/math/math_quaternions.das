@@ -16,10 +16,10 @@ def test_quaternions ( t:T? )
         fuzz <|
             t |> accept ( quat_from_unit_vec_ang(fake |> random_float3, fake |> random_float) )
 
-    t |> run("fuzz un_quat") <| @@ ( t : T? )
+    t |> run("fuzz quat_from_float3x4") <| @@ ( t : T? )
         var fake <- Faker()
         fuzz <|
-            t |> accept ( un_quat(fake |> random_float4x4) )
+            t |> accept ( quat(fake |> random_float3x4) )
 
     t |> run("fuzz quat_mul") <| @@ ( t : T? )
         var fake <- Faker()
