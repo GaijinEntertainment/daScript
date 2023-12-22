@@ -90,9 +90,13 @@ namespace das
     struct GcRootLambda : Lambda  {
         GcRootLambda() = default;
         GcRootLambda( const GcRootLambda & ) = delete;
-        GcRootLambda( GcRootLambda && ) = default;
+        GcRootLambda( GcRootLambda && other) : Lambda(other.capture), context(other.context) {
+            other.capture = nullptr;
+            other.context = nullptr;
+        }
         GcRootLambda & operator = ( const GcRootLambda & ) = delete;
         __forceinline GcRootLambda & operator = ( GcRootLambda && l ) {
+            if ( this == &l ) return *this;
             capture = l.capture;
             context = l.context;
             l.capture = nullptr;
