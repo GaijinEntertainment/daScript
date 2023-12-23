@@ -7828,6 +7828,7 @@ namespace das {
                         }
                     }
                     expr->useInitializer = false;
+                    expr->usedInitializer = true;
                 }
                 // see if we need to init fields
                 if ( expr->makeType->structType ) {
@@ -7911,10 +7912,13 @@ namespace das {
             } else if ( !expr->type->isRefType() ) {
                 expr->type->ref = true;
             }
-            if ( expr->type->isAuto() ) {
+            if ( expr->type->isAutoOrAlias() ) {
                 error("[[auto ]] needs to be fully inferred", "", "",
                     expr->at, CompilationError::invalid_type);
                 return Visitor::visit(expr);
+            } else if ( expr->type->isClass() && !expr->usedInitializer && !safeExpression(expr) ) {
+                error("skipping initializer for class initialization requires unsafe", "", "",
+                    expr->at, CompilationError::unsafe);
             }
             verifyType(expr->type);
             return Visitor::visit(expr);
