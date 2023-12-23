@@ -1375,6 +1375,7 @@ namespace das
             struct {
                 bool useInitializer : 1;
                 bool isNewHandle : 1;
+                bool usedInitializer : 1;
             };
             uint32_t makeStructFlags = 0;
         };

@@ -79,7 +79,7 @@ namespace das {
     TypeDeclPtr makeExprMakeStructFlags() {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
         ft->alias = "ExprMakeStructFlags";
-        ft->argNames = { "useInitializer", "isNewHandle" };
+        ft->argNames = { "useInitializer", "isNewHandle", "usedInitializer" };
         return ft;
     }
 
