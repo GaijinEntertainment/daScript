@@ -639,12 +639,12 @@ class LlvmJitVisitor : AstVisitor
             LLVMAddAttributeToFunctionArgumentRange(new_handle, urange(0,1), nocapture)
         return new_handle
 
-    def override preVisitExprNew(expr:smart_ptr<ExprNew>): void
+    def override visitExprNew(expr:smart_ptr<ExprNew>) : ExpressionPtr
         if expr.typeexpr.baseType==Type tHandle
             let fn_new_handle = get_new_handle_function(expr.typeexpr)
             if fn_new_handle == null
                 setE(expr, LLVMConstNull(LLVMPointerType(LLVMVoidType(),0u)))
-                return
+                return expr
             var params = [[auto[]
                 get_context_param()
             ]]
@@ -666,6 +666,7 @@ class LlvmJitVisitor : AstVisitor
                 setE(expr, arr)
             else
                 setE(expr, new_entry(expr))
+        return expr
 
 // ExprLooksLikeCall
     def override preVisitExprLooksLikeCall(expr:smart_ptr<ExprLooksLikeCall>): void
@@ -3734,11 +3735,14 @@ class JIT_LLVM : AstSimulateMacro
         var inscope disableJitVisitorAdapter <- make_visitor(*disableJitVisitor)
         prog |> for_each_module <| $ ( mod )
             mod |> for_each_function("") <| $ ( fun )
-                if fun.flags.used && (LLVM_JIT_ALL_FUNCTIONS || fun.moreFlags.requestJit)
+                var rqj = fun.moreFlags.requestJit
+                fun.moreFlags &= ~MoreFunctionFlags requestJit
+                if fun.flags.used && (LLVM_JIT_ALL_FUNCTIONS || rqj)
                     if ! fun.moreFlags.requestNoJit
                         disableJitVisitor.disable = false
                         fun |> visit(disableJitVisitorAdapter)
                         if ( !disableJitVisitor.disable )
+                            fun.moreFlags |= MoreFunctionFlags requestJit
                             funcs |> emplace(fun)
                         else
                             print("LLVM JIT: disabled {fun.name}\n")
