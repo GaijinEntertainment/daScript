@@ -2542,6 +2542,26 @@ class LlvmJitVisitor : AstVisitor
         var func = LLVMGetNamedFunction(g_mod, FN_JIT_CALL_OR_FASTCALL)
         LLVMBuildCall(g_builder, func, params, "delete_lambda")
 
+    def get_delete_handle_function ( t:TypeDeclPtr ) : LLVMOpaqueValue?
+        let mangeld_name = get_mangled_name(t)
+        let func_name = "delete`handle`{mangeld_name}"
+        var delete_handle = LLVMGetNamedFunction(g_mod, func_name)
+        if delete_handle == null
+            var delete_handle_ptr = get_jit_delete(t)
+            if delete_handle_ptr == null
+                failed_T(t, "missing delete`handle function pointer for {describe(t)}")
+                return null
+            // void delete_handle ( void *; Context * ) {
+            delete_handle = LLVMAddFunction(g_mod, func_name,
+                LLVMFunctionType(LLVMVoidType(),
+                    [[LLVMTypeRef[] LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
+            LLVMAddGlobalMapping(g_engine, delete_handle, delete_handle_ptr)
+            var nounwind = LLVMGetEnumAttribute("nounwind")
+            var willreturn = LLVMGetEnumAttribute("willreturn")
+            var nocapture = LLVMGetEnumAttribute("nocapture")
+            LLVMAddAttributesToFunction(delete_handle, [[auto nounwind; willreturn]])
+            LLVMAddAttributeToFunctionArgumentRange(delete_handle, urange(0,1), nocapture)
+        return delete_handle
 
     def override visitExprDelete(expr:smart_ptr<ExprDelete>) : ExpressionPtr
         assume subexpr = expr.subexpr
@@ -2584,6 +2604,7 @@ class LlvmJitVisitor : AstVisitor
                             get_context_param()
                         ]]
                         LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, FN_JIT_FREE_HEAP), params, "")
+                    LLVMBuildStore(g_builder, LLVMConstNull(LLVMPointerType(LLVMVoidType(),0u)), pps)
                 else
                     var structSize = getE(expr.sizeexpr)
                     let persistent = firstT.structType.flags.persistent
@@ -2602,6 +2623,19 @@ class LlvmJitVisitor : AstVisitor
                             get_context_param()
                         ]]
                         LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, FN_JIT_FREE_HEAP), params, "")
+                    LLVMBuildStore(g_builder, LLVMConstNull(LLVMPointerType(LLVMVoidType(),0u)), pps)
+            elif firstT.isHandle
+                let fn_delete_handle = get_delete_handle_function(firstT)
+                if fn_delete_handle == null
+                    return expr
+                var pps = LLVMBuildPointerCast(g_builder, se, LLVMPointerType(LLVMPointerType(LLVMVoidType(),0u),0u), "")
+                var ps = LLVMBuildLoad(g_builder, pps, "delete`handle`{describe(firstT)}")
+                var params = [[auto[]
+                    ps;
+                    get_context_param()
+                ]]
+                LLVMBuildCall(g_builder, fn_delete_handle, params, "")
+                LLVMBuildStore(g_builder, LLVMConstNull(LLVMPointerType(LLVMVoidType(),0u)), pps)
             else
                 failed_E(expr, "delete of pointer non-structure type is not supported yet {describe(subT)}")
         elif subT.isGoodLambdaType
