@@ -1164,7 +1164,7 @@ namespace das {
     };
 
     LineInfo getCurrentLineInfo( LineInfoArg * lineInfo ) {
-        return *lineInfo;
+        return lineInfo ? *lineInfo : LineInfo();
     }
 
     char * builtin_print_data ( void * data, const TypeInfo * typeInfo, Bitfield flags, Context * context ) {

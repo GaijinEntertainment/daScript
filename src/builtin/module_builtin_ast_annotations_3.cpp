@@ -301,7 +301,7 @@ namespace das {
         addExpressionAnnotation(make_smart<AstExpressionAnnotation<ExprContinue>>("ExprContinue",lib))->from("Expression");
         addExpressionAnnotation(make_smart<AstExprConstAnnotation<ExprConst>>("ExprConst",lib))->from("Expression");
         addExpressionAnnotation(make_smart<AstExprConstAnnotation<ExprFakeContext>>("ExprFakeContext",lib))->from("ExprConst");
-        addExpressionAnnotation(make_smart<AstExprConstAnnotation<ExprFakeLineInfo>>("ExprFakeLineInfo",lib))->from("ExprConst");
+        addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprFakeLineInfo,void *>>("ExprFakeLineInfo",lib))->from("ExprConst");
         addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstPtr,void *>>("ExprConstPtr",lib))->from("ExprConst");
         addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstInt8 ,int8_t>> ("ExprConstInt8",lib))->from("ExprConst");
         addExpressionAnnotation(make_smart<AstExprConstTAnnotation<ExprConstInt16,int16_t>>("ExprConstInt16",lib))->from("ExprConst");
