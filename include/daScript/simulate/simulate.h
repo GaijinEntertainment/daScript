@@ -126,6 +126,7 @@ namespace das
         union {
             struct {
                 const char * fileName;
+                LineInfo *   functionLine;
                 int32_t      stackSize;
             };
             struct {

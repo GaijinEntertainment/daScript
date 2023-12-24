@@ -9,6 +9,7 @@ namespace das {
     bool das_is_jit_function ( const Func func );
     bool das_remove_jit ( const Func func );
     bool das_instrument_jit ( void * pfun, const Func func, Context & context );
+    void * das_instrument_line_info ( const LineInfo & info, Context * context, LineInfoArg * at );
     void * das_get_jit_exception ();
     void * das_get_jit_call_or_fastcall ();
     void * das_get_jit_call_with_cmres ( );
