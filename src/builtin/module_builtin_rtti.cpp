@@ -1244,7 +1244,7 @@ namespace das {
                     info = pp->info;
                 }
             }
-            lineAt = info ? pp->line : nullptr;
+            lineAt = info ? pp->line : pp->functionLine;
             sp += info ? info->stackSize : pp->stackSize;
             depth --;
             if ( depth==0 ) return lineAt ? *lineAt : LineInfo();

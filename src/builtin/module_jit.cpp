@@ -213,7 +213,7 @@ namespace das {
         char * SP;
     };
 
-    void jit_prologue ( int32_t stackSize, JitStackState * stackState, Context * context, LineInfoArg * at ) {
+    void jit_prologue ( void * funcLineInfo, int32_t stackSize, JitStackState * stackState, Context * context, LineInfoArg * at ) {
         if (!context->stack.push(stackSize, stackState->EP, stackState->SP)) {
             context->throw_error_at(at, "stack overflow");
         }
@@ -221,6 +221,7 @@ namespace das {
         Prologue * pp = (Prologue *)context->stack.sp();
         pp->info = nullptr;
         pp->fileName = "`jit`";
+        pp->functionLine = (LineInfo *) funcLineInfo;
         pp->stackSize = stackSize;
 #endif
     }
@@ -310,6 +311,13 @@ namespace das {
         return htype->annotation->jitGetDelete();
     }
 
+    void * das_instrument_line_info ( const LineInfo & info, Context * context, LineInfoArg * at ) {
+        LineInfo * info_ptr = (LineInfo *) context->code->allocate(sizeof(LineInfo));
+        if ( !info_ptr ) context->throw_error_at(at, "can't instrument line info, out of heap");
+        *info_ptr = info;
+        return (void *) info_ptr;
+    }
+
     class Module_Jit : public Module {
     public:
         Module_Jit() : Module("jit") {
@@ -327,6 +335,9 @@ namespace das {
             addExtern<DAS_BIND_FUN(das_remove_jit)>(*this, lib, "remove_jit",
                 SideEffects::worstDefault, "das_remove_jit")
                     ->args({"function"})->unsafeOperation = true;
+            addExtern<DAS_BIND_FUN(das_instrument_line_info)>(*this, lib, "instrument_line_info",
+                SideEffects::worstDefault, "das_instrument_line_info")
+                    ->args({"info","context","at"});
             addExtern<DAS_BIND_FUN(das_is_jit_function)>(*this, lib, "is_jit_function",
                 SideEffects::worstDefault, "das_is_jit_function")
                     ->args({"function"});
