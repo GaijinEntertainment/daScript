@@ -514,7 +514,10 @@ class LlvmJitVisitor : AstVisitor
             vptrtype = LLVMPointerType(vtype,0u)
         else
             vtype = type_to_llvm_type(arg._type)
-            vptrtype = get_type_pointer(arg._type)
+            if arg._type.isGoodBlockType
+                vptrtype = vtype
+            else
+                vptrtype = get_type_pointer(arg._type)
         var v_ptr : LLVMOpaqueValue?
         if arg.flags.aliasCMRES
             v_ptr = get_cmres_param()
@@ -763,7 +766,8 @@ class LlvmJitVisitor : AstVisitor
             if a._type.baseType==Type fakeContext
                 params |> push(get_context_param())
             elif a._type.baseType==Type fakeLineInfo
-                params |> push(LLVMConstPointerNull(LLVMPointerType(LLVMVoidType(),0u)))
+                var pinfo = getE(a)
+                params |> push(pinfo)
             elif a._type.baseType==Type tPointer
                 assume funcArg = expr.func.arguments[ai]
                 var ptrType = type_to_llvm_abi_type(funcArg._type)
@@ -2317,7 +2321,8 @@ class LlvmJitVisitor : AstVisitor
             if a._type.baseType==Type fakeContext
                 params |> push(get_context_param())
             elif a._type.baseType==Type fakeLineInfo
-                params |> push(LLVMConstPointerNull(LLVMVoidType()))
+                var pinfo = getE(a)
+                params |> push(pinfo)
             elif a._type.baseType==Type tPointer
                 assume funcArg = blockT.argTypes[ai-1]
                 var ptrType = type_to_llvm_abi_type(funcArg)
@@ -3353,7 +3358,9 @@ class LlvmJitVisitor : AstVisitor
 
 // ExprFakeLineInfo
     def override visitExprFakeLineInfo(expr:smart_ptr<ExprFakeLineInfo>) : ExpressionPtr
-        setE(expr, LLVMConstPointerNull(LLVMVoidType()))
+        var iaddr = intptr(unsafe(addr(expr.at)))
+        var iptr = LLVMConstIntToPtr(LLVMConstInt(LLVMInt64Type(), uint64(iaddr), 0), LLVMPointerType(LLVMVoidType(), 0u))
+        setE(expr, iptr)
         return expr
 
 ///////
