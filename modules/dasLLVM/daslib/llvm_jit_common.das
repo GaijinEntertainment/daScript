@@ -302,13 +302,13 @@ def public init_jit
     LLVMAddGlobalMapping(g_engine, jit_str_cat, get_jit_str_cat())
     LLVMAddAttributesToFunction(jit_str_cat, [[auto nounwind; willreturn]])
     LLVMAddAttributeToFunctionArgumentRange(jit_str_cat, urange(0,3), nocapture)
-    // void jit_prologue ( int32_t stackSize, JitStackState * stackState, Context * context )
+    // void jit_prologue ( void * line_info, int32_t stackSize, JitStackState * stackState, Context * context )
     var jit_prologue = LLVMAddFunction(g_mod, FN_JIT_PROLOGUE,
         LLVMFunctionType(LLVMVoidType(),
-            [[LLVMTypeRef LLVMInt32Type(); LLVMPointerType(g_t_stack_state,0u); LLVMPointerType(LLVMVoidType(),0u) ]]))
+            [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMInt32Type(); LLVMPointerType(g_t_stack_state,0u); LLVMPointerType(LLVMVoidType(),0u) ]]))
     LLVMAddGlobalMapping(g_engine, jit_prologue, get_jit_prologue())
     LLVMAddAttributesToFunction(jit_prologue, [[auto nounwind; willreturn]])
-    LLVMAddAttributeToFunctionArgumentRange(jit_prologue, urange(1,3), nocapture)
+    LLVMAddAttributeToFunctionArgumentRange(jit_prologue, urange(2,4), nocapture)
     // void jit_epilogue ( JitStackState * stackState, Context * context )
     var jit_epilogue = LLVMAddFunction(g_mod, FN_JIT_EPILOGUE,
         LLVMFunctionType(LLVMVoidType(),

@@ -363,7 +363,7 @@ class LlvmJitVisitor : AstVisitor
         else
             LLVMBuildRet(g_builder, LLVMGetUndef(LLVMFloat4Type()))
 
-    def build_function_entry(bodyId:uint64; hasMakeBlock:bool; totalStackSize:uint; var arguments:dasvector`smart_ptr`Variable)
+    def build_function_entry(funAt:LineInfo; bodyId:uint64; hasMakeBlock:bool; totalStackSize:uint; var arguments:dasvector`smart_ptr`Variable)
         // now write to regular function
         function_entry = LLVMAppendBasicBlock(ffunc, "entry")
         LLVMPositionBuilderAtEnd(g_builder,function_entry)
@@ -371,7 +371,9 @@ class LlvmJitVisitor : AstVisitor
         if hasMakeBlock
             prologue = LLVMBuildAlloca(g_builder, g_t_stack_state, "prologue")
             prologue = LLVMBuildPointerCast(g_builder, prologue, LLVMPointerType(g_t_stack_state,0u), "")
+            let info_ptr = instrument_line_info(funAt)
             var params = [[auto
+                LLVMConstIntToPtr(LLVMConstInt(LLVMInt64Type(), uint64(intptr(info_ptr)), 0), LLVMPointerType(LLVMVoidType(), 0u));
                 LLVMConstInt(LLVMInt32Type(), uint64(totalStackSize), 0);
                 prologue;
                 get_context_param()
@@ -405,7 +407,7 @@ class LlvmJitVisitor : AstVisitor
         wfunc = LLVMGetNamedFunction(g_mod, fnmna)
         // build wrapper function
         build_wrapper_funcion(fun.arguments, fun.result, isCMRES(fun), null, fun.at)
-        build_function_entry(intptr(fun), fun.flags.hasMakeBlock, fun.totalStackSize, fun.arguments)
+        build_function_entry(fun.at, intptr(fun), fun.flags.hasMakeBlock, fun.totalStackSize, fun.arguments)
         process_function_hints(fun.annotations, fun.arguments)
         process_labels(fun.body)
         process_finally(fun.body)
@@ -3062,7 +3064,7 @@ class LlvmJitVisitor : AstVisitor
         wfunc = LLVMGetNamedFunction(g_mod, fnmna)
         // build wrapper function
         build_wrapper_funcion(thisBlock.arguments, thisBlock.returnType, isCmres, captureType, thisBlock.at)
-        build_function_entry(intptr(expr), thisBlock.blockFlags.hasMakeBlock, thisFunc.totalStackSize, thisBlock.arguments)
+        build_function_entry(expr.at, intptr(expr), thisBlock.blockFlags.hasMakeBlock, thisFunc.totalStackSize, thisBlock.arguments)
         process_function_hints(thisBlock.annotations, thisBlock.arguments)
         process_labels(expr)
         process_finally(expr)
@@ -3358,8 +3360,8 @@ class LlvmJitVisitor : AstVisitor
 
 // ExprFakeLineInfo
     def override visitExprFakeLineInfo(expr:smart_ptr<ExprFakeLineInfo>) : ExpressionPtr
-        var iaddr = intptr(unsafe(addr(expr.at)))
-        var iptr = LLVMConstIntToPtr(LLVMConstInt(LLVMInt64Type(), uint64(iaddr), 0), LLVMPointerType(LLVMVoidType(), 0u))
+        let info_ptr = instrument_line_info(expr.at)
+        var iptr = LLVMConstIntToPtr(LLVMConstInt(LLVMInt64Type(), uint64(intptr(info_ptr)), 0), LLVMPointerType(LLVMVoidType(), 0u))
         setE(expr, iptr)
         return expr
 
