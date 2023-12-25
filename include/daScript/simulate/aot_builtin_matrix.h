@@ -65,7 +65,9 @@ namespace das {
     float4 quat_from_euler_vec(float3 v);
     float4 quat_from_euler(float x, float y, float z);
     float3 euler_from_quat(float4 v);
-    float4 quat_from_float3x4(const float3x4 & m);
+    float4 quat_from_float3x3(const float3x3 & a);
+    float4 quat_from_float3x4(const float3x4 & a);
+    float4 quat_from_float4x4(const float4x4 & a);
 
     float4 quat_mul(float4 q1, float4 q2);
     float3 quat_mul_vec(float4 q, float3 v);
