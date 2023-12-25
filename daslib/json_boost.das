@@ -36,40 +36,40 @@ def operator ?[] ( var a : json::JsonValue? == const; idx:int ) : JsonValue?
     return a != null && a.value is _array ? (a.value as _array)?[idx] ?? JVNull() : JVNull()
 
 def operator ?? ( a : json::JsonValue?; val:double ) : double
-    return a != null || a.value is _number ? a.value as _number : val
+    return a != null && a.value is _number ? a.value as _number : val
 
 def operator ?? ( a : json::JsonValue?; val:float ) : float
-    return a != null || a.value is _number ? float(a.value as _number) : val
+    return a != null && a.value is _number ? float(a.value as _number) : val
 
 def operator ?? ( a : json::JsonValue?; val:int8 ) : int8
-    return a != null || a.value is _number ? int8(a.value as _number) : val
+    return a != null && a.value is _number ? int8(a.value as _number) : val
 
 def operator ?? ( a : json::JsonValue?; val:int16 ) : int16
-    return a != null || a.value is _number ? int16(a.value as _number) : val
+    return a != null && a.value is _number ? int16(a.value as _number) : val
 
 def operator ?? ( a : json::JsonValue?; val:int ) : int
-    return a != null || a.value is _number ? int(a.value as _number) : val
+    return a != null && a.value is _number ? int(a.value as _number) : val
 
 def operator ?? ( a : json::JsonValue?; val:int64 ) : int64
-    return a != null || a.value is _number ? int64(a.value as _number) : val
+    return a != null && a.value is _number ? int64(a.value as _number) : val
 
 def operator ?? ( a : json::JsonValue?; val:uint8 ) : uint8
-    return a != null || a.value is _number ? uint8(a.value as _number) : val
+    return a != null && a.value is _number ? uint8(a.value as _number) : val
 
 def operator ?? ( a : json::JsonValue?; val:uint16 ) : uint16
-    return a != null || a.value is _number ? uint16(a.value as _number) : val
+    return a != null && a.value is _number ? uint16(a.value as _number) : val
 
 def operator ?? ( a : json::JsonValue?; val:uint ) : uint
-    return a != null || a.value is _number ? uint(a.value as _number) : val
+    return a != null && a.value is _number ? uint(a.value as _number) : val
 
 def operator ?? ( a : json::JsonValue?; val:uint64 ) : uint64
-    return a != null || a.value is _number ? uint64(a.value as _number) : val
+    return a != null && a.value is _number ? uint64(a.value as _number) : val
 
 def operator ?? ( a : json::JsonValue?; val:bool ) : bool
-    return a != null || a.value is _bool ? a.value as _bool : val
+    return a != null && a.value is _bool ? a.value as _bool : val
 
 def operator ?? ( a : json::JsonValue?; val:string ) : string
-    return a != null || a.value is _string ? a.value as _string : val
+    return a != null && a.value is _string ? a.value as _string : val
 
 
 [macro_function]
