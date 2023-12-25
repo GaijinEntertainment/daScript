@@ -2798,37 +2798,34 @@ class LlvmJitVisitor : AstVisitor
             else
                 fieldOffset = expr.field.offset
             assert(fieldOffset>=0,"field offset is somehow not there")
-        if expr.skipQQ
-            if expr.annotation != null
-                unsupported(expr, "safe field for annotations pointer is not supported yet")
-                setE(expr, LLVMGetUndef(LLVMInt32Type()))
-            else
-                var val_ptr = getE(expr.value)
-                var cond = LLVMBuildIsNotNull(g_builder, val_ptr, "")
-                var res_type = type_to_llvm_type(expr._type)
-                var res = build_select(cond, res_type) <|
-                    val_ptr = LLVMBuildPointerCast(g_builder, val_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
-                    var field_ptr = LLVMBuildGEP(g_builder, val_ptr, LLVMConstInt(LLVMInt32Type(), uint64(fieldOffset), 0), "")
-                    field_ptr = LLVMBuildPointerCast(g_builder, field_ptr, LLVMPointerType(res_type,0u), ".{expr.name}")
-                    field_ptr = LLVMBuildLoad(g_builder, field_ptr, "")
-                    return field_ptr
-                lpipe <|
-                    return  LLVMConstPointerNull(res_type)
-                setE(expr, res)
         else
-            if expr.annotation != null
-                unsupported(expr, "safe field for annotations is not supported yet")
-                setE(expr, LLVMGetUndef(LLVMInt32Type()))
-            else
-                // SimNode_SafeFieldDeref
-                var val_ptr = getE(expr.value)
+            fieldOffset = int(expr.annotation |> get_handled_type_field_offset(string(expr.name)))
+            if fieldOffset==-1
+                setE(expr, LLVMGetUndef(type_to_llvm_type(expr._type)))
+                failed_E(expr, "field {expr.name} offset is -1")
+                return expr
+        if expr.skipQQ
+            var val_ptr = getE(expr.value)
+            var cond = LLVMBuildIsNotNull(g_builder, val_ptr, "")
+            var res_type = type_to_llvm_type(expr._type)
+            var res = build_select(cond, res_type) <|
                 val_ptr = LLVMBuildPointerCast(g_builder, val_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
                 var field_ptr = LLVMBuildGEP(g_builder, val_ptr, LLVMConstInt(LLVMInt32Type(), uint64(fieldOffset), 0), "")
-                var res_type = type_to_llvm_type(expr._type)
-                field_ptr = LLVMBuildPointerCast(g_builder, field_ptr, res_type, ".{expr.name}")
-                var cond = LLVMBuildIsNotNull(g_builder, val_ptr, "")
-                var res = LLVMBuildSelect(g_builder, cond, field_ptr, LLVMConstPointerNull(res_type), "")
-                setE(expr, res)
+                field_ptr = LLVMBuildPointerCast(g_builder, field_ptr, LLVMPointerType(res_type,0u), ".{expr.name}")
+                field_ptr = LLVMBuildLoad(g_builder, field_ptr, "")
+                return field_ptr
+            lpipe <|
+                return  LLVMConstPointerNull(res_type)
+            setE(expr, res)
+        else
+            var val_ptr = getE(expr.value)
+            val_ptr = LLVMBuildPointerCast(g_builder, val_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
+            var field_ptr = LLVMBuildGEP(g_builder, val_ptr, LLVMConstInt(LLVMInt32Type(), uint64(fieldOffset), 0), "")
+            var res_type = type_to_llvm_type(expr._type)
+            field_ptr = LLVMBuildPointerCast(g_builder, field_ptr, res_type, ".{expr.name}")
+            var cond = LLVMBuildIsNotNull(g_builder, val_ptr, "")
+            var res = LLVMBuildSelect(g_builder, cond, field_ptr, LLVMConstPointerNull(res_type), "")
+            setE(expr, res)
         return expr
 
 // ExprSwizzle
@@ -3468,6 +3465,9 @@ class LlvmJitVisitor : AstVisitor
             elif !tp.isWorkhorseType
                 failed("internal error. expecting workhorse type from `get_underlying_value_type` for {describe(etype)}")
             tres = cast_from_vec4f_workhorse(tp,expr,v4f)
+        elif etype.isPointer
+            var ptr_type = type_to_llvm_type(etype)
+            tres = cast_from_vec4f_ptr(v4f, ptr_type)
         else
             failed_E(expr, "unsupported cast_from_vec4f type {describe(etype)}")
         if tres == null
