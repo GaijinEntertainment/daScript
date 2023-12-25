@@ -159,9 +159,9 @@ def public init_jit
     var nocapture = LLVMGetEnumAttribute("nocapture")
     build_jit_types()
     // add default functions
-    var jit_exception = LLVMAddFunction(g_mod, FN_JIT_EXCEPTION,    // jit_exception(text,context *)
+    var jit_exception = LLVMAddFunction(g_mod, FN_JIT_EXCEPTION,    // jit_exception(text,context *,lineinfo *)
         LLVMFunctionType(LLVMVoidType(),
-            [[LLVMTypeRef get_type_string(); LLVMPointerType(LLVMVoidType(),0u)]]))
+            [[LLVMTypeRef get_type_string(); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
     LLVMAddGlobalMapping(g_engine, jit_exception, get_jit_exception())
     LLVMAddAttributeToFunction(jit_exception, noreturn)
     LLVMAddAttributeToFunctionArgumentRange(jit_exception, urange(0,2), nocapture)

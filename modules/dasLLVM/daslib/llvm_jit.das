@@ -570,7 +570,7 @@ class LlvmJitVisitor : AstVisitor
         return expr
 
 // ExprNew
-    def check_ptr_zero ( tsrc:LLVMOpaqueValue?; message:string="dereferencing null pointer")
+    def check_ptr_zero ( tsrc:LLVMOpaqueValue?; at:LineInfo; message:string="dereferencing null pointer")
         var check_null_ptr = LLVMAppendBasicBlock(ffunc,"check_null_ptr")
         var check_true = LLVMAppendBasicBlock(ffunc,"check_true")
         var check_end = LLVMAppendBasicBlock(ffunc,"check_end")
@@ -579,7 +579,7 @@ class LlvmJitVisitor : AstVisitor
         var cond = LLVMBuildIsNull(g_builder, tsrc, "null_check")
         LLVMBuildCondBr(g_builder, cond, check_true, check_end)
         LLVMPositionBuilderAtEnd(g_builder,check_true)
-        build_exception(message)
+        build_exception(message, at)
         LLVMBuildBr(g_builder, check_end)
         LLVMPositionBuilderAtEnd(g_builder,check_end)
 
@@ -615,7 +615,7 @@ class LlvmJitVisitor : AstVisitor
             persistent = expr.typeexpr.structType.flags.persistent
         let bytes = expr.typeexpr.baseSizeOf
         new_ptr = build_alloc(bytes, persistent)
-        check_ptr_zero(new_ptr, "new returned null")
+        check_ptr_zero(new_ptr, expr.at, "new returned null")
         if expr.initializer
             call2cmres[get_ptr(ExpressionPtr(expr))] = new_ptr
             make_call(expr, false)
@@ -654,7 +654,7 @@ class LlvmJitVisitor : AstVisitor
                 get_context_param()
             ]]
             var new_ptr = LLVMBuildCall(g_builder, fn_new_handle, params, "new`handle`{describe(expr.typeexpr)}")
-            check_ptr_zero(new_ptr, "new returned null")
+            check_ptr_zero(new_ptr, expr.at, "new returned null")
             new_ptr = LLVMBuildPointerCast(g_builder, new_ptr, LLVMPointerType(type_to_llvm_type(expr.typeexpr),0u), "")
             setE(expr, new_ptr)
         else
@@ -938,7 +938,7 @@ class LlvmJitVisitor : AstVisitor
         return expr
 
 // ExprAt
-    def check_range ( tidx, maxIdx:LLVMOpaqueValue?; message:string )
+    def check_range ( tidx, maxIdx:LLVMOpaqueValue?; at:LineInfo; message:string )
         if option_no_range_check
             return
         var check_null_ptr = LLVMAppendBasicBlock(ffunc,"check_dim_range")
@@ -949,7 +949,7 @@ class LlvmJitVisitor : AstVisitor
         var cond = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntUGE, tidx, maxIdx, "range_check")
         LLVMBuildCondBr(g_builder, cond, check_true, check_end)
         LLVMPositionBuilderAtEnd(g_builder,check_true)
-        build_exception(message)
+        build_exception(message, at)
         LLVMBuildBr(g_builder, check_end)
         LLVMPositionBuilderAtEnd(g_builder,check_end)
 
@@ -996,7 +996,7 @@ class LlvmJitVisitor : AstVisitor
         assume subExprT = expr.subexpr._type
         if subExprT.isPointer
             if thisFunc!=null && !thisFunc.flags.unsafeDeref
-                check_ptr_zero(tsrc)
+                check_ptr_zero(tsrc, expr.at)
             var ptr_idx = build_array_index(tsrc, tidx, subExprT.firstType, "ptr_at")
             if expr.atFlags.r2v
                 var at_r2v = LLVMBuildLoadDataAligned(g_builder, ptr_idx, uint(expr._type.alignOf), "at_r2v")
@@ -1007,7 +1007,7 @@ class LlvmJitVisitor : AstVisitor
             var inscope etype <- clone_type(subExprT)
             let maxIndex = etype.dim[etype.dim |> length-1]
             etype.dim |> pop()
-            check_range(tidx, LLVMConstInt(LLVMInt32Type(), uint64(maxIndex), 0), "dim index out of range")
+            check_range(tidx, LLVMConstInt(LLVMInt32Type(), uint64(maxIndex), 0), expr.at, "dim index out of range")
             var ptr_idx = build_array_index(tsrc, tidx, etype, "dim_at")
             if expr.atFlags.r2v
                 var at_r2v = LLVMBuildLoadDataAligned(g_builder, ptr_idx, uint(expr._type.alignOf), "dim_at_r2v")
@@ -1017,7 +1017,7 @@ class LlvmJitVisitor : AstVisitor
         elif subExprT.isGoodArrayType
             var arr = LLVMBuildLoad(g_builder, tsrc, "arr")
             var size = LLVMBuildExtractValue(g_builder, arr, uint(JIT_ARRAY SIZE), "array.size")
-            check_range(tidx, size, "array index out of range")
+            check_range(tidx, size, expr.at, "array index out of range")
             var data = LLVMBuildExtractValue(g_builder, arr, uint(JIT_ARRAY DATA), "array.data")
             var ptr_idx = build_array_index(data, tidx, subExprT.firstType, "array_at")
             if expr.atFlags.r2v
@@ -1037,7 +1037,7 @@ class LlvmJitVisitor : AstVisitor
             else
                 setE(expr, ptr_idx)
         elif subExprT.isVectorType
-            check_range(tidx, LLVMConstInt(LLVMInt32Type(), uint64(subExprT.vectorDim), 0), "vector index out of range")
+            check_range(tidx, LLVMConstInt(LLVMInt32Type(), uint64(subExprT.vectorDim), 0), expr.at, "vector index out of range")
             if expr.atFlags.r2v
                 var lvec = LLVMBuildLoadDataAligned(g_builder, tsrc, uint(subExprT.alignOf), "vector_at")
                 var at_r2v = LLVMBuildExtractElement(g_builder, lvec, tidx, "vector_at_r2v")
@@ -1153,7 +1153,7 @@ class LlvmJitVisitor : AstVisitor
         failed_E(e, "unsupported float compare operator {op}")
         return LLVMRealPredicate LLVMRealOEQ
 
-    def check_divide_by_0 ( right:LLVMOpaqueValue?; opType:TypeDeclPtr )
+    def check_divide_by_0 ( right:LLVMOpaqueValue?; at:LineInfo; opType:TypeDeclPtr )
         var check_div_0 = LLVMAppendBasicBlock(ffunc,"check_div_0")
         var check_true = LLVMAppendBasicBlock(ffunc,"check_true")
         var check_end = LLVMAppendBasicBlock(ffunc,"check_end")
@@ -1163,7 +1163,7 @@ class LlvmJitVisitor : AstVisitor
         let cond = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntEQ, right, zero, "cmp_is_zero")
         LLVMBuildCondBr(g_builder, cond, check_true, check_end)
         LLVMPositionBuilderAtEnd(g_builder,check_true)
-        build_exception("division by zero")
+        build_exception("division by zero", at)
         LLVMBuildBr(g_builder, check_end)
         LLVMPositionBuilderAtEnd(g_builder,check_end)
 
@@ -1268,7 +1268,7 @@ class LlvmJitVisitor : AstVisitor
             // for integer division we check division by zero
             if opType.isInteger && expr.left._type.isInteger
                 if !isExprIntNZ(expr.right)
-                    check_divide_by_0(right, opType)
+                    check_divide_by_0(right, expr.at, opType)
             if expr.op=="/"
                 if opType.isSignedInteger || (opType.isVectorType && opType.vectorBaseType==Type tInt)
                     setE(expr, LLVMBuildSDiv(g_builder, left, right, ""))
@@ -2220,7 +2220,7 @@ class LlvmJitVisitor : AstVisitor
     def override visitExprPtr2Ref(expr:smart_ptr<ExprPtr2Ref>) : ExpressionPtr
         var tsrc = getE(expr.subexpr)
         if thisFunc!=null && !thisFunc.flags.unsafeDeref
-            check_ptr_zero(tsrc)
+            check_ptr_zero(tsrc, expr.at)
         setE(expr, tsrc)
         return expr
 
@@ -2244,7 +2244,7 @@ class LlvmJitVisitor : AstVisitor
                 let isL = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntEQ, labI, LLVMConstInt(LLVMInt32Type(), uint64(kv.index), 0), "")
                 LLVMBuildCondBr(g_builder, isL, kv.blk, nextLab)
                 LLVMPositionBuilderAtEnd(g_builder,nextLab)
-            build_exception("invalid label index at {describe(expr.at)}")
+            build_exception("invalid label index", expr.at)
         else
             var lab = labels[expr.labelName]
             if lab==null
@@ -2279,9 +2279,11 @@ class LlvmJitVisitor : AstVisitor
         var message = "assert failed"
         if length(expr.arguments) > 1
             message = string((expr.arguments[1] as ExprConstString).value)
+        let info_ptr = instrument_line_info(expr.at)
         var params = [[auto
             get_string_constant_ptr(g_builder,message + " at {describe(expr.at)}");
-            get_context_param()
+            get_context_param();
+            LLVMConstIntToPtr(LLVMConstInt(LLVMInt64Type(), uint64(intptr(info_ptr)), 0), LLVMPointerType(LLVMVoidType(), 0u))
         ]]
         var check_assert = LLVMAppendBasicBlock(ffunc,"assert")
         var assert_ok = LLVMAppendBasicBlock(ffunc,"assert_ok")
@@ -2374,7 +2376,7 @@ class LlvmJitVisitor : AstVisitor
         elif blockT.isGoodLambdaType
             var args = build_array_of_arguments(expr.arguments, false)
             var LAMBDA = getE(expr.arguments[0])
-            check_ptr_zero(LAMBDA, "invoke null lambda")
+            check_ptr_zero(LAMBDA, expr.at, "invoke null lambda")
             LAMBDA = LLVMBuildLoad(g_builder, LAMBDA, "LAMBDA")
             var SIMFUNCTION = LLVMBuildExtractValue(g_builder, LAMBDA, uint(JIT_LAMBDA EVAL), "EVAL")
             SIMFUNCTION = LLVMBuildPointerCast(g_builder, SIMFUNCTION, LLVMPointerType(LLVMVoidType(), 0u), "")
@@ -2492,7 +2494,7 @@ class LlvmJitVisitor : AstVisitor
             mks_ptr = LLVMBuildCall(g_builder, fn_new_handle, params, "new`handle`{describe(expr.subexpr._type)}")
         else
             mks_ptr = build_alloc(bytes, false)
-        check_ptr_zero(mks_ptr, "new [[...]] returned null")
+        check_ptr_zero(mks_ptr, expr.at, "new [[...]] returned null")
         LLVMBuildMemSet(g_builder, mks_ptr, LLVMConstInt(LLVMInt8Type(), 0ul, 0), LLVMConstInt(LLVMInt32Type(), uint64(bytes), 0), 16u)
         if expr.ascendFlags.useStackRef
             let stackref_ptr = LLVMBuildPointerCast(g_builder, mks_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
@@ -2526,13 +2528,13 @@ class LlvmJitVisitor : AstVisitor
         return expr
 
 // ExprDelete
-    def build_lambda_delete ( lmb:LLVMOpaqueValue? )
+    def build_lambda_delete ( lmb:LLVMOpaqueValue?; at:LineInfo )
         var args : LLVMOpaqueValue?
         at_function_entry <|
             args = LLVMBuildAlloca(g_builder, LLVMArrayType(LLVMFloat4Type(), 1u), "args")
             LLVMSetAlignment(args, 16u)
             args = LLVMBuildPointerCast(g_builder, args, LLVMPointerType(LLVMFloat4Type(), 0u), "delete lambda args ptr")
-        check_ptr_zero(lmb, "invoke null lambda")
+        check_ptr_zero(lmb, at, "invoke null lambda")
         // build arguments (1, and its 'capture')
         let ai = 0
         var arg_ptr = LLVMBuildGEP(g_builder, args, LLVMConstInt(LLVMInt32Type(), uint64(ai), 0), "call_arg_{ai}_ptr")
@@ -2648,7 +2650,7 @@ class LlvmJitVisitor : AstVisitor
                 failed_E(expr, "delete of pointer non-structure type is not supported yet {describe(subT)}")
         elif subT.isGoodLambdaType
             var lse = LLVMBuildLoadDataAligned(g_builder, se, uint(subT.alignOf), "lambda_r2v")
-            build_lambda_delete(lse)
+            build_lambda_delete(lse, expr.at)
         else
             failed_E(expr, "delete of non-pointer type is not supported yet {describe(subT)}")
         return expr
@@ -2733,7 +2735,7 @@ class LlvmJitVisitor : AstVisitor
                 return expr
             var val_ptr = getE(expr.value)
             if expr.value._type.isPointer && !expr.derefFlags.unsafeDeref
-                check_ptr_zero(val_ptr)
+                check_ptr_zero(val_ptr, expr.at)
             val_ptr = LLVMBuildPointerCast(g_builder, val_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
             var field_ptr = LLVMBuildGEP(g_builder, val_ptr, LLVMConstInt(LLVMInt32Type(), uint64(field_offset), 0), "")
             field_ptr = LLVMBuildPointerCast(g_builder, field_ptr, get_type_pointer(expr._type), "{describe(expr.value._type,false,false,false)}.{expr.name}")
@@ -2745,7 +2747,7 @@ class LlvmJitVisitor : AstVisitor
             assert(expr.fieldIndex!=-1)
             var val_ptr = getE(expr.value)
             if expr.value._type.isPointer && !expr.derefFlags.unsafeDeref
-                check_ptr_zero(val_ptr)
+                check_ptr_zero(val_ptr, expr.at)
             val_ptr = LLVMBuildPointerCast(g_builder, val_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
             let field_offset = get_tuple_field_offset(expr.value._type, expr.fieldIndex)
             var field_ptr = LLVMBuildGEP(g_builder, val_ptr, LLVMConstInt(LLVMInt32Type(), uint64(field_offset), 0), "")
@@ -2759,7 +2761,7 @@ class LlvmJitVisitor : AstVisitor
             assert(expr.fieldIndex!=-1)
             var val_ptr = getE(expr.value)
             if expr.value._type.isPointer && !expr.derefFlags.unsafeDeref
-                check_ptr_zero(val_ptr)
+                check_ptr_zero(val_ptr, expr.at)
             val_ptr = LLVMBuildPointerCast(g_builder, val_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
             let field_offset = get_variant_field_offset(expr.value._type, expr.fieldIndex)
             var field_ptr = LLVMBuildGEP(g_builder, val_ptr, LLVMConstInt(LLVMInt32Type(), uint64(field_offset), 0), "")
@@ -2773,7 +2775,7 @@ class LlvmJitVisitor : AstVisitor
             assert(expr.field!=null)
             var val_ptr = getE(expr.value)
             if expr.value._type.isPointer && !expr.derefFlags.unsafeDeref
-                check_ptr_zero(val_ptr)
+                check_ptr_zero(val_ptr, expr.at)
             val_ptr = LLVMBuildPointerCast(g_builder, val_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
             var field_ptr = LLVMBuildGEP(g_builder, val_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.field.offset), 0), "")
             field_ptr = LLVMBuildPointerCast(g_builder, field_ptr, get_type_pointer(expr.field._type), "{describe(expr.value._type,false,false,false)}.{expr.field.name}")
@@ -2874,7 +2876,7 @@ class LlvmJitVisitor : AstVisitor
         return expr
 
 // ExprAsVariant
-    def check_variant_index ( tidx:LLVMOpaqueValue?; vidx:int; message:string )
+    def check_variant_index ( tidx:LLVMOpaqueValue?; at:LineInfo; vidx:int; message:string )
         var cmpIdx = LLVMConstInt(LLVMInt32Type(), uint64(vidx), 0)
         var check_null_ptr = LLVMAppendBasicBlock(ffunc,"check_variant_index")
         var check_true = LLVMAppendBasicBlock(ffunc,"check_true")
@@ -2884,7 +2886,7 @@ class LlvmJitVisitor : AstVisitor
         var cond = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntNE, tidx, cmpIdx, "index_check")
         LLVMBuildCondBr(g_builder, cond, check_true, check_end)
         LLVMPositionBuilderAtEnd(g_builder,check_true)
-        build_exception(message)
+        build_exception(message,at)
         LLVMBuildBr(g_builder, check_end)
         LLVMPositionBuilderAtEnd(g_builder,check_end)
 
@@ -2895,7 +2897,7 @@ class LlvmJitVisitor : AstVisitor
             return expr
         var vptr = getE(expr.value)
         var vint = LLVMBuildLoad2(g_builder, LLVMInt32Type(), vptr, "variant_index")
-        check_variant_index(vint, field_index, "variant mismatch, expecting {expr.value._type.argNames[field_index]}")
+        check_variant_index(vint, expr.at, field_index, "variant mismatch, expecting {expr.value._type.argNames[field_index]}")
         let field_offset = get_variant_field_offset(expr.value._type,field_index)
         var fptr = LLVMBuildPointerCast(g_builder, vptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
         fptr = LLVMBuildGEP(g_builder, fptr, LLVMConstInt(LLVMInt32Type(), uint64(field_offset), 0), "")
@@ -3593,10 +3595,12 @@ class LlvmJitVisitor : AstVisitor
         LLVMAddIncoming(phi, [[auto pt; pf]], [[auto phi_true; phi_false]])
         return phi
 
-    def build_exception ( message:string )
+    def build_exception ( message:string; at:LineInfo )
+        let info_ptr = instrument_line_info(at)
         var params = [[auto
             get_string_constant_ptr(g_builder, message);   // message
-            get_context_param()
+            get_context_param();
+            LLVMConstIntToPtr(LLVMConstInt(LLVMInt64Type(), uint64(intptr(info_ptr)), 0), LLVMPointerType(LLVMVoidType(), 0u))
         ]]
         LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, FN_JIT_EXCEPTION), params, "")
 
