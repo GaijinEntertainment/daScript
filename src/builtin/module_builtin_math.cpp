@@ -539,10 +539,19 @@ namespace das {
         return v_euler_from_quat(v);
     }
 
-    float4 quat_from_float3x4(const float3x4 & m) {
+    float4 quat_from_float3x3(const float3x3 & a) {
+        mat33f va;  va.col0 = a.m[0]; va.col1 = a.m[1]; va.col2 = a.m[2];
+        return v_quat_from_mat33(va);
+    }
+    float4 quat_from_float3x4(const float3x4 & a) {
         mat44f tm;
-        v_mat44_make_from_43cu_unsafe(tm, &m.m[0].x);
+        v_mat44_make_from_43cu_unsafe(tm, &a.m[0].x);
         return v_quat_from_mat43(tm);
+    }
+    float4 quat_from_float4x4(const float4x4 & a) {
+        mat44f va;
+        memcpy(&va,&a,sizeof(float4x4));
+        return v_quat_from_mat43(va);
     }
 
     float4 quat_mul(float4 q1, float4 q2) {
@@ -806,8 +815,12 @@ namespace das {
                 SideEffects::none, "quat_from_euler")->args({"x", "y", "z"});
             addExtern<DAS_BIND_FUN(euler_from_quat_vec)>(*this, lib, "euler_from_quat",
                 SideEffects::none, "euler_from_quat_vec")->args({"angles"});
+            addExtern<DAS_BIND_FUN(quat_from_float3x3)>(*this, lib, "quat",
+                SideEffects::none, "quat_from_float3x3")->arg("m");
             addExtern<DAS_BIND_FUN(quat_from_float3x4)>(*this, lib, "quat",
                 SideEffects::none, "quat_from_float3x4")->arg("m");
+            addExtern<DAS_BIND_FUN(quat_from_float4x4)>(*this, lib, "quat",
+                SideEffects::none, "quat_from_float4x4")->arg("m");
             addExtern<DAS_BIND_FUN(quat_mul)>(*this, lib, "quat_mul",
                 SideEffects::none, "quat_mul")->args({"q1","q2"});
             addExtern<DAS_BIND_FUN(quat_mul_vec)>(*this, lib, "quat_mul_vec",
