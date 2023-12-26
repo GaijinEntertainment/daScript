@@ -495,6 +495,7 @@ namespace das {
         if ( !fn->builtIn || !fn->interopFn ) context->throw_error_at(at, "expecting built-in interop function");
         if ( !ctx.thisHelper ) context->throw_error_at(at, "missing debug info helper. get_aot_interop_node can only be called in the SimulateMacro");
         auto node = ctx.code->makeNode<SimNode_AotInteropBase>();
+        node->debugInfo = call->at;
         node->nArguments = (int) call->arguments.size();
         node->argumentValues = nullptr;
         if ( node->nArguments ) {
@@ -518,6 +519,7 @@ namespace das {
         if ( !call ) context->throw_error_at(at, "expecting string builder");
         if ( !ctx.thisHelper ) context->throw_error_at(at, "missing debug info helper. get_aot_interop_node can only be called in the SimulateMacro");
         auto node = ctx.code->makeNode<SimNode_AotInteropBase>();
+        node->debugInfo = call->at;
         node->nArguments = (int) call->elements.size();
         node->argumentValues = nullptr;
         if ( node->nArguments ) {
