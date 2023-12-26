@@ -61,7 +61,7 @@ namespace das {
     }
 
     void jit_exception ( const char * text, Context * context, LineInfoArg * at ) {
-        context->throw_error_at(at, text);
+        context->throw_error_at(at, "%s", text ? text : "");
     }
 
     void * das_get_jit_exception ( ) {
