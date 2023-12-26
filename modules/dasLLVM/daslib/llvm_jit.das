@@ -363,6 +363,13 @@ class LlvmJitVisitor : AstVisitor
         else
             LLVMBuildRet(g_builder, LLVMGetUndef(LLVMFloat4Type()))
 
+    def get_line_info_ptr ( at:LineInfo )
+        // TODO: (so that we can have .dll)
+        //  * generate LLVM data block with LineInfo
+        //  * generate LLVM data block with dummy FileInfo
+        let info_ptr = instrument_line_info(at) // right now just pointer in 'code' of the context
+        return LLVMConstIntToPtr(LLVMConstInt(LLVMInt64Type(), uint64(intptr(info_ptr)), 0), LLVMPointerType(LLVMVoidType(), 0u))
+
     def build_function_entry(funAt:LineInfo; bodyId:uint64; hasMakeBlock:bool; totalStackSize:uint; var arguments:dasvector`smart_ptr`Variable)
         // now write to regular function
         function_entry = LLVMAppendBasicBlock(ffunc, "entry")
@@ -371,9 +378,8 @@ class LlvmJitVisitor : AstVisitor
         if hasMakeBlock
             prologue = LLVMBuildAlloca(g_builder, g_t_stack_state, "prologue")
             prologue = LLVMBuildPointerCast(g_builder, prologue, LLVMPointerType(g_t_stack_state,0u), "")
-            let info_ptr = instrument_line_info(funAt)
             var params = [[auto
-                LLVMConstIntToPtr(LLVMConstInt(LLVMInt64Type(), uint64(intptr(info_ptr)), 0), LLVMPointerType(LLVMVoidType(), 0u));
+                get_line_info_ptr(funAt);
                 LLVMConstInt(LLVMInt32Type(), uint64(totalStackSize), 0);
                 prologue;
                 get_context_param()
@@ -2279,11 +2285,10 @@ class LlvmJitVisitor : AstVisitor
         var message = "assert failed"
         if length(expr.arguments) > 1
             message = string((expr.arguments[1] as ExprConstString).value)
-        let info_ptr = instrument_line_info(expr.at)
         var params = [[auto
             get_string_constant_ptr(g_builder,message + " at {describe(expr.at)}");
             get_context_param();
-            LLVMConstIntToPtr(LLVMConstInt(LLVMInt64Type(), uint64(intptr(info_ptr)), 0), LLVMPointerType(LLVMVoidType(), 0u))
+            get_line_info_ptr(expr.at)
         ]]
         var check_assert = LLVMAppendBasicBlock(ffunc,"assert")
         var assert_ok = LLVMAppendBasicBlock(ffunc,"assert_ok")
@@ -3359,9 +3364,7 @@ class LlvmJitVisitor : AstVisitor
 
 // ExprFakeLineInfo
     def override visitExprFakeLineInfo(expr:smart_ptr<ExprFakeLineInfo>) : ExpressionPtr
-        let info_ptr = instrument_line_info(expr.at)
-        var iptr = LLVMConstIntToPtr(LLVMConstInt(LLVMInt64Type(), uint64(intptr(info_ptr)), 0), LLVMPointerType(LLVMVoidType(), 0u))
-        setE(expr, iptr)
+        setE(expr,get_line_info_ptr(expr.at))
         return expr
 
 ///////
@@ -3596,11 +3599,10 @@ class LlvmJitVisitor : AstVisitor
         return phi
 
     def build_exception ( message:string; at:LineInfo )
-        let info_ptr = instrument_line_info(at)
         var params = [[auto
             get_string_constant_ptr(g_builder, message);   // message
             get_context_param();
-            LLVMConstIntToPtr(LLVMConstInt(LLVMInt64Type(), uint64(intptr(info_ptr)), 0), LLVMPointerType(LLVMVoidType(), 0u))
+            get_line_info_ptr(at)
         ]]
         LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, FN_JIT_EXCEPTION), params, "")
 
