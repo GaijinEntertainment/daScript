@@ -15,8 +15,6 @@ class ScopeLint : AstPassMacro
         return true
 
 class LintVisitor : AstVisitor
-    astVisitorAdapter : smart_ptr<ast::VisitorAdapter>
-    exprForTerminator : array<uint64>
     compile_time_errors : bool
     noLint : bool = false
     def LintVisitor()
