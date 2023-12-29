@@ -17,6 +17,7 @@ let public LLVM_JIT_ALL_FUNCTIONS = false
 
 let public LLVM_DEBUG_RESULT = false
 let public LLVM_DEBUG_EVERYTHING = false
+let public LLVM_DEBUG_TRACES = false
 
 let public LLVM_JIT_LOG = false || LLVM_DEBUG_EVERYTHING
 let public LLVM_DEBUG_INFO = false || LLVM_DEBUG_EVERYTHING
@@ -53,6 +54,8 @@ let public FN_JIT_DEBUG = "`jit`debug`"
 let public FN_JIT_ITERATOR_ITERATE = "`jit`iterator_iterate`"
 let public FN_JIT_ITERATOR_DELETE = "`jit`iterator_delete`"
 let public FN_JIT_ITERATOR_CLOSE = "`jit`iterator_close`"
+let public FN_JIT_DEBUG_ENTER = "`jit`debug_enter`"
+let public FN_JIT_DEBUG_EXIT = "`jit`debug_exit`"
 
 struct JitEngine
     mod : LLVMOpaqueModule?
@@ -353,6 +356,20 @@ def public init_jit
     LLVMAddGlobalMapping(g_engine, jit_iterator_close, get_jit_iterator_close())
     LLVMAddAttributesToFunction(jit_iterator_close, [[auto nounwind; willreturn]])
     LLVMAddAttributeToFunctionArgumentRange(jit_iterator_close, urange(0,3), nocapture)
+    // void das_jit_debug_enter ( char * message, Context * context, LineInfoArg * at ) {
+    var jit_debug_enter = LLVMAddFunction(g_mod, FN_JIT_DEBUG_ENTER,
+        LLVMFunctionType(LLVMVoidType(),
+            [[LLVMTypeRef LLVMPointerType(LLVMInt8Type(),0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
+    LLVMAddGlobalMapping(g_engine, jit_debug_enter, get_jit_debug_enter())
+    LLVMAddAttributesToFunction(jit_debug_enter, [[auto nounwind; willreturn]])
+    LLVMAddAttributeToFunctionArgumentRange(jit_debug_enter, urange(0,3), nocapture)
+    // void das_jit_debug_exit ( char * message, Context * context, LineInfoArg * at ) {
+    var jit_debug_exit = LLVMAddFunction(g_mod, FN_JIT_DEBUG_EXIT,
+        LLVMFunctionType(LLVMVoidType(),
+            [[LLVMTypeRef LLVMPointerType(LLVMInt8Type(),0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
+    LLVMAddGlobalMapping(g_engine, jit_debug_exit, get_jit_debug_exit())
+    LLVMAddAttributesToFunction(jit_debug_exit, [[auto nounwind; willreturn]])
+    LLVMAddAttributeToFunctionArgumentRange(jit_debug_exit, urange(0,3), nocapture)
 
 def private build_jit_types
     // simfunction type
@@ -465,6 +482,8 @@ def public get_type_string : LLVMOpaqueType?
     return LLVMPointerType(LLVMInt8Type(), 0u)
 
 def public get_string_constant_ptr ( builder:LLVMOpaqueBuilder?; message:string )
+    if message |> length == 0
+        return LLVMConstPointerNull(get_type_string())
     var str = build_string_constant(message)
     return LLVMBuildPointerCast(builder, str, get_type_string(), "string_constant {message}")
 

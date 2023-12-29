@@ -374,6 +374,8 @@ class LlvmJitVisitor : AstVisitor
         // now write to regular function
         function_entry = LLVMAppendBasicBlock(ffunc, "entry")
         LLVMPositionBuilderAtEnd(g_builder,function_entry)
+        // enter
+        build_enter(funAt)
         // allocate prologue if need be
         if hasMakeBlock
             prologue = LLVMBuildAlloca(g_builder, g_t_stack_state, "prologue")
@@ -447,7 +449,7 @@ class LlvmJitVisitor : AstVisitor
             return
         if !current_block_terminates()
             call_all_finally_blocks(false)
-            build_epilogue()
+            build_exit(blk.at)
             LLVMBuildRetVoid(g_builder)
 
     def call_all_finally_blocks(stopAtLoop:bool)
@@ -3012,8 +3014,30 @@ class LlvmJitVisitor : AstVisitor
         elif thisFunc!=null
             pre_visit_expr_return(expr, isCMRES(thisFunc))
 
+    def build_enter  ( at:LineInfo )
+        if LLVM_DEBUG_TRACES
+            build_trace(at, true)
+
+    def build_exit  ( at:LineInfo )
+        if LLVM_DEBUG_TRACES
+            build_trace(at, false)
+
+    def build_trace ( at:LineInfo; enter:bool )
+        var message : string
+        if thisFunc != null
+            message = FunctionPtr(thisFunc) |> get_mangled_name
+        elif thisBlock != null
+            message = "$block"
+        var params = [[auto
+            get_string_constant_ptr(g_builder, message);   // message
+            get_context_param();                           // Context
+            get_line_info_ptr(at)
+        ]]
+        LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, enter ? FN_JIT_DEBUG_ENTER : FN_JIT_DEBUG_EXIT), params, "")
+
     def visit_expr_return(expr:smart_ptr<ExprReturn>; returnType:TypeDeclPtr; isCmres:bool)
         call_all_finally_blocks(false)
+        build_exit(expr.at)
         if !returnType.isVoid
             if isCmres
                 if !expr.returnFlags.returnCMRES
