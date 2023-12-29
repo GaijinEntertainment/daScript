@@ -487,6 +487,11 @@ namespace das {
         return remove(path) == 0;
     }
 
+    bool builtin_rename_file ( const char * old_path, const char * new_path ) {
+        if ( !old_path || !new_path ) return false;
+        return rename(old_path, new_path) == 0;
+    }
+
     char * get_env_variable ( const char * var, Context * context ) {
         if ( !var ) return nullptr;
         auto res = getenv(var);
@@ -534,6 +539,9 @@ namespace das {
             addExtern<DAS_BIND_FUN(builtin_remove_file)>(*this, lib, "remove",
                 SideEffects::modifyExternal, "builtin_remove_file")
                     ->args({"name"});
+            addExtern<DAS_BIND_FUN(builtin_rename_file)>(*this, lib, "rename",
+                SideEffects::modifyExternal, "builtin_rename_file")
+                    ->args({"old_name","new_name"});
             addExtern<DAS_BIND_FUN(builtin_fopen)>(*this, lib, "fopen",
                 SideEffects::modifyExternal, "builtin_fopen")
                     ->args({"name","mode"});
