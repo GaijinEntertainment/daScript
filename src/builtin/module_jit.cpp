@@ -318,6 +318,38 @@ namespace das {
         return (void *) info_ptr;
     }
 
+    void das_jit_debug_enter ( char * message, Context * context, LineInfoArg * at ) {
+        TextWriter tw;
+        tw << string(context->fnDepth, '\t'); context->fnDepth ++;
+        tw << ">>";
+        if ( !context->name.empty() ) tw << "(" << context->name << ")";
+        tw << ": ";
+        if ( message && message ) tw << message;
+        if ( at && at->line ) tw << " at " << at->describe();
+        tw << "\n";
+        context->to_out(at, tw.str().c_str());
+    }
+
+    void das_jit_debug_exit ( char * message, Context * context, LineInfoArg * at ) {
+        TextWriter tw;
+        context->fnDepth --; tw << string(context->fnDepth, '\t');
+        tw << " -";
+        if ( !context->name.empty() ) tw << "(" << context->name << ")";
+        tw << ": ";
+        if ( message && message ) tw << message;
+        if ( at && at->line ) tw << " at " << at->describe();
+        tw << "\n";
+        context->to_out(at, tw.str().c_str());
+    }
+
+    void * das_get_jit_debug_enter () {
+        return (void *) &das_jit_debug_enter;
+    }
+
+    void * das_get_jit_debug_exit () {
+        return (void *) &das_jit_debug_exit;
+    }
+
     class Module_Jit : public Module {
     public:
         Module_Jit() : Module("jit") {
@@ -406,6 +438,10 @@ namespace das {
             addExtern<DAS_BIND_FUN(das_get_jit_delete)>(*this, lib,  "get_jit_delete",
                 SideEffects::none, "das_get_jit_delete")
                     ->args({"type","context","at"});
+            addExtern<DAS_BIND_FUN(das_get_jit_debug_enter)>(*this, lib,  "get_jit_debug_enter",
+                SideEffects::none, "das_get_jit_debug_enter");
+            addExtern<DAS_BIND_FUN(das_get_jit_debug_exit)>(*this, lib,  "get_jit_debug_exit",
+                SideEffects::none, "das_get_jit_debug_exit");
             addConstant<uint32_t>(*this, "SIZE_OF_PROLOGUE", uint32_t(sizeof(Prologue)));
             addConstant<uint32_t>(*this, "CONTEXT_OFFSET_OF_EVAL_TOP", uint32_t(uint32_t(offsetof(Context, stack) + offsetof(StackAllocator, evalTop))));
             addConstant<uint32_t>(*this, "CONTEXT_OFFSET_OF_GLOBALS", uint32_t(uint32_t(offsetof(Context, globals))));
