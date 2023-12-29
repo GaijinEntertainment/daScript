@@ -40,4 +40,6 @@ namespace das {
     void * das_sb_make_interop_node ( Context & ctx, ExprStringBuilder * call, Context * context, LineInfoArg * at );
     void * das_get_jit_new ( TypeDeclPtr htype, Context * context, LineInfoArg * at );
     void * das_get_jit_delete ( TypeDeclPtr htype, Context * context, LineInfoArg * at );
+    void * das_get_jit_debug_enter ();
+    void * das_get_jit_debug_exit ();
 }

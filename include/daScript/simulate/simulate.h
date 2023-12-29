@@ -692,7 +692,7 @@ namespace das
         bool            debugger = false;
         volatile bool   singleStepMode = false;
         void *          hwBpAddress = nullptr;
-        int             hwBpIndex = -1;
+        int32_t         hwBpIndex = -1;
         const LineInfo * singleStepAt = nullptr;
     public:
         shared_ptr<das_hash_map<uint64_t,SimFunction *>> tabMnLookup;
@@ -709,6 +709,8 @@ namespace das
         recursive_mutex * contextMutex = nullptr;
     protected:
         das_hash_map<void *, TypeInfo *> gcRoots;
+    public:
+        int32_t         fnDepth = 0;
     public:
 #if DAS_ENABLE_SMART_PTR_TRACKING
         static vector<smart_ptr<ptr_ref_count>> sptrAllocations;
