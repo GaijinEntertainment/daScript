@@ -54,6 +54,8 @@ let public FN_JIT_DEBUG = "`jit`debug`"
 let public FN_JIT_ITERATOR_ITERATE = "`jit`iterator_iterate`"
 let public FN_JIT_ITERATOR_DELETE = "`jit`iterator_delete`"
 let public FN_JIT_ITERATOR_CLOSE = "`jit`iterator_close`"
+let public FN_JIT_ITERATOR_FIRST = "`jit`iterator_first`"
+let public FN_JIT_ITERATOR_NEXT = "`jit`iterator_next`"
 let public FN_JIT_DEBUG_ENTER = "`jit`debug_enter`"
 let public FN_JIT_DEBUG_EXIT = "`jit`debug_exit`"
 
@@ -349,6 +351,20 @@ def public init_jit
     LLVMAddGlobalMapping(g_engine, jit_iterator_delete, get_jit_iterator_delete())
     LLVMAddAttributesToFunction(jit_iterator_delete, [[auto nounwind; willreturn]])
     LLVMAddAttributeToFunctionArgumentRange(jit_iterator_delete, urange(0,2), nocapture)
+    // bool builtin_iterator_first ( const Sequence & it, void * data, Context * context, LineInfoArg * at ) {
+    var jit_iterator_first = LLVMAddFunction(g_mod, FN_JIT_ITERATOR_FIRST,
+        LLVMFunctionType(LLVMInt1Type(),
+            [[LLVMTypeRef LLVMPointerType(g_t_sequence,0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
+    LLVMAddGlobalMapping(g_engine, jit_iterator_first, get_jit_iterator_first())
+    LLVMAddAttributesToFunction(jit_iterator_first, [[auto nounwind; willreturn]])
+    LLVMAddAttributeToFunctionArgumentRange(jit_iterator_first, urange(0,4), nocapture)
+    // bool builtin_iterator_next ( const Sequence & it, void * data, Context * context, LineInfoArg * at ) {
+    var jit_iterator_next = LLVMAddFunction(g_mod, FN_JIT_ITERATOR_NEXT,
+        LLVMFunctionType(LLVMInt1Type(),
+            [[LLVMTypeRef LLVMPointerType(g_t_sequence,0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
+    LLVMAddGlobalMapping(g_engine, jit_iterator_next, get_jit_iterator_next())
+    LLVMAddAttributesToFunction(jit_iterator_next, [[auto nounwind; willreturn]])
+    LLVMAddAttributeToFunctionArgumentRange(jit_iterator_next, urange(0,4), nocapture)
     // void builtin_iterator_close ( const Sequence & it, void * data, Context * context ) {
     var jit_iterator_close = LLVMAddFunction(g_mod, FN_JIT_ITERATOR_CLOSE,
         LLVMFunctionType(LLVMVoidType(),
