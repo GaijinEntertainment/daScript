@@ -278,6 +278,14 @@ namespace das {
         return (void *) &builtin_iterator_close;
     }
 
+    void * das_get_jit_iterator_first() {
+        return (void *) &builtin_iterator_first;
+    }
+
+    void * das_get_jit_iterator_next() {
+        return (void *) &builtin_iterator_next;
+    }
+
     char * jit_str_cat ( char * sA, char * sB, Context * context ) {
         auto la = stringLength(*context, sA);
         auto lb = stringLength(*context, sB);
@@ -421,6 +429,10 @@ namespace das {
                 SideEffects::none, "das_get_jit_iterator_iterate");
             addExtern<DAS_BIND_FUN(das_get_jit_iterator_delete)>(*this, lib, "get_jit_iterator_delete",
                 SideEffects::none, "das_get_jit_iterator_delete");
+            addExtern<DAS_BIND_FUN(das_get_jit_iterator_first)>(*this, lib, "get_jit_iterator_first",
+                SideEffects::none, "das_get_jit_iterator_first");
+            addExtern<DAS_BIND_FUN(das_get_jit_iterator_next)>(*this, lib, "get_jit_iterator_next",
+                SideEffects::none, "das_get_jit_iterator_next");
             addExtern<DAS_BIND_FUN(das_get_jit_iterator_close)>(*this, lib, "get_jit_iterator_close",
                 SideEffects::none, "das_get_jit_iterator_close");
             addExtern<DAS_BIND_FUN(das_get_builtin_function_address)>(*this, lib,  "get_builtin_function_address",
