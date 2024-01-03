@@ -35,6 +35,8 @@ namespace das {
     void * das_get_jit_iterator_iterate();
     void * das_get_jit_iterator_delete();
     void * das_get_jit_iterator_close();
+    void * das_get_jit_iterator_first();
+    void * das_get_jit_iterator_next();
     void * das_get_builtin_function_address ( Function * fn, Context * context, LineInfoArg * at );
     void * das_make_interop_node ( Context & ctx, ExprCallFunc * call, Context * context, LineInfoArg * at );
     void * das_sb_make_interop_node ( Context & ctx, ExprStringBuilder * call, Context * context, LineInfoArg * at );
