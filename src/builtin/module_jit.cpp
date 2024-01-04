@@ -286,7 +286,9 @@ namespace das {
         return (void *) &builtin_iterator_next;
     }
 
-    char * jit_str_cat ( char * sA, char * sB, Context * context ) {
+    char * jit_str_cat ( const char * sA, const char * sB, Context * context ) {
+        sA = sA ? sA : "";
+        sB = sB ? sB : "";
         auto la = stringLength(*context, sA);
         auto lb = stringLength(*context, sB);
         uint32_t commonLength = la + lb;
