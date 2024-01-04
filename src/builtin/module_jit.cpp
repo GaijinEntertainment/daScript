@@ -287,6 +287,8 @@ namespace das {
     }
 
     char * jit_str_cat ( char * sA, char * sB, Context * context ) {
+        sA = sA ? sA : "";
+        sB = sB ? sB : "";
         auto la = stringLength(*context, sA);
         auto lb = stringLength(*context, sB);
         uint32_t commonLength = la + lb;
