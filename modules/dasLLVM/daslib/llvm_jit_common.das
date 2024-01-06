@@ -18,6 +18,7 @@ let public LLVM_JIT_ALL_FUNCTIONS = false
 let public LLVM_DEBUG_RESULT = false
 let public LLVM_DEBUG_EVERYTHING = false
 let public LLVM_DEBUG_TRACES = false
+let public LLVM_DEBUG_LINE_TRACES = false
 
 let public LLVM_JIT_LOG = false || LLVM_DEBUG_EVERYTHING
 let public LLVM_DEBUG_INFO = false || LLVM_DEBUG_EVERYTHING
@@ -58,6 +59,7 @@ let public FN_JIT_ITERATOR_FIRST = "`jit`iterator_first`"
 let public FN_JIT_ITERATOR_NEXT = "`jit`iterator_next`"
 let public FN_JIT_DEBUG_ENTER = "`jit`debug_enter`"
 let public FN_JIT_DEBUG_EXIT = "`jit`debug_exit`"
+let public FN_JIT_DEBUG_LINE = "`jit`debug_line`"
 
 struct JitEngine
     mod : LLVMOpaqueModule?
@@ -386,6 +388,13 @@ def public init_jit
     LLVMAddGlobalMapping(g_engine, jit_debug_exit, get_jit_debug_exit())
     LLVMAddAttributesToFunction(jit_debug_exit, [[auto nounwind; willreturn]])
     LLVMAddAttributeToFunctionArgumentRange(jit_debug_exit, urange(0,3), nocapture)
+    // void das_jit_debug_line ( char * message, Context * context, LineInfoArg * at ) {
+    var jit_debug_line = LLVMAddFunction(g_mod, FN_JIT_DEBUG_LINE,
+        LLVMFunctionType(LLVMVoidType(),
+            [[LLVMTypeRef LLVMPointerType(LLVMInt8Type(),0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
+    LLVMAddGlobalMapping(g_engine, jit_debug_line, get_jit_debug_line())
+    LLVMAddAttributesToFunction(jit_debug_line, [[auto nounwind; willreturn]])
+    LLVMAddAttributeToFunctionArgumentRange(jit_debug_line, urange(0,3), nocapture)
 
 def private build_jit_types
     // simfunction type

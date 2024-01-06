@@ -243,7 +243,7 @@ class LlvmJitVisitor : AstVisitor
     def process_finally ( expr:ExpressionPtr )
         var blk <- collect_finally(expr)
         for bl in blk
-            finallyBlocks[bl] = LLVMAppendBasicBlock(ffunc, "finally_block_at_{int(bl.at.line)}")
+            finallyBlocks[bl] = LLVMAppendBasicBlock(ffunc, "finally_block_at_{int(bl.at.line)}_")
         if length(blk) > 0
             at_function_entry <|
                 callBlock = LLVMBuildAlloca(g_builder, LLVMPointerType(LLVMInt8Type(),0u), "call_block")
@@ -252,7 +252,7 @@ class LlvmJitVisitor : AstVisitor
     def process_labels ( expr:ExpressionPtr )
         var lls <- collect_labels(expr)
         for ll in lls
-            labels[ll] = LLVMAppendBasicBlock(ffunc, "label_{ll}")
+            labels[ll] = LLVMAppendBasicBlock(ffunc, "label_{ll}_")
         sortedLabels |> reserve(length(labels))
         for k,v in keys(labels),values(labels)
             sortedLabels |> push([[SLabel index=k,blk=v]])
@@ -461,7 +461,7 @@ class LlvmJitVisitor : AstVisitor
             if stopAtLoop && blk.blockFlags.inTheLoop
                 break
             if length(blk.finalList) > 0
-                var after = LLVMAppendBasicBlock(ffunc, "call_finally_block_{int(blk.at.line)}")
+                var after = LLVMAppendBasicBlock(ffunc, "call_finally_block_{int(blk.at.line)}_")
                 var after_ptr = LLVMBlockAddress(LLVMGetBasicBlockParent(after),after)
                 LLVMBuildStore(g_builder, after_ptr, callBlock)
                 LLVMBuildBr(g_builder, finallyBlocks[get_ptr(blk)])
@@ -472,6 +472,11 @@ class LlvmJitVisitor : AstVisitor
         if blk.blockFlags.inTheLoop
             blk.blockFlags |= ExprBlockFlags finallyDisabled
         block_stack |> push(get_ptr(blk))
+
+    def override preVisitExprBlockExpression(blk:smart_ptr<ExprBlock>;expr:ExpressionPtr): void
+        if LLVM_DEBUG_TRACES && LLVM_DEBUG_LINE_TRACES
+            if !current_block_terminates()
+                build_debug_trace(expr.at, FN_JIT_DEBUG_LINE)
 
     def override preVisitExprBlockFinal(blk:smart_ptr<ExprBlock>): void
         add_default_terminator(blk)
@@ -491,8 +496,8 @@ class LlvmJitVisitor : AstVisitor
                     var needCond = thisFunc.body!=get_ptr(blk) && thisBlock!=get_ptr(blk)
                     var do_jump, skip_jump : LLVMOpaqueBasicBlock?
                     if needCond
-                        do_jump = LLVMAppendBasicBlock(ffunc, "do_jump_blk_line_{int(blk.at.line)}")
-                        skip_jump = LLVMAppendBasicBlock(ffunc, "skip_jump_blk_line_{int(blk.at.line)}")
+                        do_jump = LLVMAppendBasicBlock(ffunc, "do_jump_blk_line_{int(blk.at.line)}_")
+                        skip_jump = LLVMAppendBasicBlock(ffunc, "skip_jump_blk_line_{int(blk.at.line)}_")
                         var not_null = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntNE, cc, LLVMConstNull(LLVMPointerType(LLVMInt8Type(),0u)), "")
                         LLVMBuildCondBr(g_builder, not_null, do_jump, skip_jump)
                         LLVMPositionBuilderAtEnd(g_builder, do_jump)
@@ -909,11 +914,11 @@ class LlvmJitVisitor : AstVisitor
 // ExprNullCoalescing
     def override preVisitExprNullCoalescing(expr:smart_ptr<ExprNullCoalescing>): void
         var blk = [[IteBlock
-            if_true   = LLVMAppendBasicBlock(ffunc,"nullc_null_at_line_{int(expr.at.line)}"),
-            if_false  = LLVMAppendBasicBlock(ffunc,"nullc_not_null_at_line_{int(expr.at.line)}"),
-            if_end    = LLVMAppendBasicBlock(ffunc,"nullc_end_at_line_{int(expr.at.line)}"),
-            phi_true  = LLVMAppendBasicBlock(ffunc,"nullc_phi_true_at_line_{int(expr.at.line)}"),
-            phi_false = LLVMAppendBasicBlock(ffunc,"nullc_phi_false_at_line_{int(expr.at.line)}")
+            if_true   = LLVMAppendBasicBlock(ffunc,"nullc_null_at_line_{int(expr.at.line)}_"),
+            if_false  = LLVMAppendBasicBlock(ffunc,"nullc_not_null_at_line_{int(expr.at.line)}_"),
+            if_end    = LLVMAppendBasicBlock(ffunc,"nullc_end_at_line_{int(expr.at.line)}_"),
+            phi_true  = LLVMAppendBasicBlock(ffunc,"nullc_phi_true_at_line_{int(expr.at.line)}_"),
+            phi_false = LLVMAppendBasicBlock(ffunc,"nullc_phi_false_at_line_{int(expr.at.line)}_")
         ]]
         ite2blocks[get_expr_ptr(expr)] = blk
 
@@ -1459,12 +1464,12 @@ class LlvmJitVisitor : AstVisitor
         if isExprOp2_Func(expr)
             return
         if expr.op=="&&" || expr.op=="&&=" || expr.op=="||" || expr.op=="||="
-            var monad_true = LLVMAppendBasicBlock(ffunc,"monad_true_at_{int(expr.at.line)}")
-            var monad_false = LLVMAppendBasicBlock(ffunc,"monad_true_at_{int(expr.at.line)}")
+            var monad_true = LLVMAppendBasicBlock(ffunc,"monad_true_at_{int(expr.at.line)}_")
+            var monad_false = LLVMAppendBasicBlock(ffunc,"monad_true_at_{int(expr.at.line)}_")
             var monad_result, monad_cond : LLVMOpaqueValue?
             if expr.op=="&&" || expr.op=="||"
                 at_function_entry <|
-                    monad_result = LLVMBuildAlloca(g_builder, LLVMInt1Type(), "{expr.op}_at_{int(expr.at.line)}")
+                    monad_result = LLVMBuildAlloca(g_builder, LLVMInt1Type(), "{expr.op}_at_{int(expr.at.line)}_")
                 monad_cond = getE(expr.left)
             else
                 monad_result = getE(expr.left)
@@ -1496,15 +1501,15 @@ class LlvmJitVisitor : AstVisitor
 // ExprOp3
     def override preVisitExprOp3(expr:smart_ptr<ExprOp3>): void
         var res : LLVMOpaqueValue?
-        var before_if = LLVMAppendBasicBlock(ffunc,"op3_cond_at_{expr.at.line}")
+        var before_if = LLVMAppendBasicBlock(ffunc,"op3_cond_at_{int(expr.at.line)}_")
         LLVMBuildBr(g_builder, before_if)
         LLVMPositionBuilderAtEnd(g_builder,before_if)
         var blk = [[IteBlock
-            if_true  = LLVMAppendBasicBlock(ffunc,"op3_true_at_line_{int(expr.at.line)}"),
-            if_false = LLVMAppendBasicBlock(ffunc,"op3_false_at_line_{int(expr.at.line)}"),
-            if_end   = LLVMAppendBasicBlock(ffunc,"op3_end_at_line_{int(expr.at.line)}"),
-            phi_true = LLVMAppendBasicBlock(ffunc,"phi_true_at_line_{int(expr.at.line)}"),
-            phi_false= LLVMAppendBasicBlock(ffunc,"phi_false_at_line_{int(expr.at.line)}")
+            if_true  = LLVMAppendBasicBlock(ffunc,"op3_true_at_line_{int(expr.at.line)}_"),
+            if_false = LLVMAppendBasicBlock(ffunc,"op3_false_at_line_{int(expr.at.line)}_"),
+            if_end   = LLVMAppendBasicBlock(ffunc,"op3_end_at_line_{int(expr.at.line)}_"),
+            phi_true = LLVMAppendBasicBlock(ffunc,"phi_true_at_line_{int(expr.at.line)}_"),
+            phi_false= LLVMAppendBasicBlock(ffunc,"phi_false_at_line_{int(expr.at.line)}_")
         ]]
         ite2blocks[get_expr_ptr(expr)] = blk
 
@@ -1667,13 +1672,13 @@ class LlvmJitVisitor : AstVisitor
     if_end:
     */
     def override preVisitExprIfThenElse(expr:smart_ptr<ExprIfThenElse>) : void
-        var before_if = LLVMAppendBasicBlock(ffunc,"if_cond_at_{int(expr.at.line)}")
+        var before_if = LLVMAppendBasicBlock(ffunc,"if_cond_at_{int(expr.at.line)}_")
         LLVMBuildBr(g_builder, before_if)
         LLVMPositionBuilderAtEnd(g_builder,before_if)
         var blk = [[IteBlock
-            if_true  = LLVMAppendBasicBlock(ffunc,"if_true_at_line_{int(expr.at.line)}"),
-            if_false = LLVMAppendBasicBlock(ffunc,"if_false_at_line_{int(expr.at.line)}"),
-            if_end   = LLVMAppendBasicBlock(ffunc,"if_end_at_line_{int(expr.at.line)}")
+            if_true  = LLVMAppendBasicBlock(ffunc,"if_true_at_line_{int(expr.at.line)}_"),
+            if_false = LLVMAppendBasicBlock(ffunc,"if_false_at_line_{int(expr.at.line)}_"),
+            if_end   = LLVMAppendBasicBlock(ffunc,"if_end_at_line_{int(expr.at.line)}_")
         ]]
         ite2blocks[get_expr_ptr(expr)] = blk
 
@@ -3062,13 +3067,13 @@ class LlvmJitVisitor : AstVisitor
 
     def build_enter  ( at:LineInfo )
         if LLVM_DEBUG_TRACES
-            build_trace(at, true)
+            build_debug_trace(at, FN_JIT_DEBUG_ENTER)
 
     def build_exit  ( at:LineInfo )
         if LLVM_DEBUG_TRACES
-            build_trace(at, false)
+            build_debug_trace(at, FN_JIT_DEBUG_EXIT)
 
-    def build_trace ( at:LineInfo; enter:bool )
+    def build_debug_trace ( at:LineInfo; func_name:string )
         var message : string
         if thisFunc != null
             message = FunctionPtr(thisFunc) |> get_mangled_name
@@ -3079,7 +3084,7 @@ class LlvmJitVisitor : AstVisitor
             get_context_param();                           // Context
             get_line_info_ptr(at)
         ]]
-        LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, enter ? FN_JIT_DEBUG_ENTER : FN_JIT_DEBUG_EXIT), params, "")
+        LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, func_name), params, "")
 
     def visit_expr_return(expr:smart_ptr<ExprReturn>; returnType:TypeDeclPtr; isCmres:bool)
         call_all_finally_blocks(false)
@@ -3193,7 +3198,7 @@ class LlvmJitVisitor : AstVisitor
         // allocate block, set capture fields
         var blk : LLVMOpaqueValue?
         at_function_entry <|
-            blk = LLVMBuildAlloca(g_builder, this_block_type, "block_at_{int(expr.at.line)}")
+            blk = LLVMBuildAlloca(g_builder, this_block_type, "block_at_{int(expr.at.line)}_")
         var blkv = LLVMGetUndef(this_block_type)
         for c,idx in capture,count()
             var v_ptr = getV_ptr(c.variable, false)
