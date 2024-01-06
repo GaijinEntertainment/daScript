@@ -421,6 +421,11 @@ struct FancyClassAnnotation : ManagedStructureAnnotation <FancyClass,true,true> 
     virtual bool canBePlacedInContainer() const override { return true; }   // this is here so that we can make array<FancyClass>
 };
 
+void test_abi_lambda_and_function ( Lambda lambda, Func fn, int32_t lambdaSize, Context * context, LineInfoArg * lineinfo ) {
+    das_invoke_function<void>::invoke(context, lineinfo, fn, lambdaSize);
+    das_invoke_lambda<void>::invoke(context, lineinfo, lambda, lambdaSize);
+}
+
 Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     ModuleLibrary lib(this);
     lib.addBuiltInModule();
@@ -572,6 +577,9 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     using method_hitMe = DAS_CALL_MEMBER(TestObjectFoo::hitMe);
     addExtern< DAS_CALL_METHOD(method_hitMe) >(*this, lib, "hit_me", SideEffects::modifyArgument,
        DAS_CALL_MEMBER_CPP(TestObjectFoo::hitMe));
+    // abit
+    addExtern<DAS_BIND_FUN(test_abi_lambda_and_function)>(*this, lib, "test_abi_lambda_and_function",
+        SideEffects::invokeAndAccessExternal, "test_abi_lambda_and_function");
     // and verify
     verifyAotReady();
 }

@@ -19,6 +19,7 @@ template <> struct WrapType<range64> { enum { value = true }; typedef vec4f type
 template <> struct WrapType<urange64> { enum { value = true }; typedef vec4f type; typedef vec4f rettype; };
 
 template <> struct WrapType<Func> { enum { value = true }; typedef void * type; typedef void * rettype; };
+template <> struct WrapType<Lambda> { enum { value = true }; typedef void * type; typedef void * rettype; };
 
 template <typename T>
 struct WrapType<smart_ptr_raw<T>> { enum { value = true }; typedef smart_ptr_jit & type; typedef smart_ptr_jit * rettype; };
