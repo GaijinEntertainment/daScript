@@ -352,12 +352,29 @@ namespace das {
         context->to_out(at, tw.str().c_str());
     }
 
+    void das_jit_debug_line ( char * message, Context * context, LineInfoArg * at ) {
+        TextWriter tw;
+        tw << string(context->fnDepth + 1, '\t');
+        tw << ">>";
+        if ( !context->name.empty() ) tw << "(" << context->name << ")";
+        tw << ": ";
+        if ( message && message ) tw << message;
+        if ( at && at->line ) tw << " at " << at->describe();
+        tw << "\n";
+        context->to_out(at, tw.str().c_str());
+    }
+
+
     void * das_get_jit_debug_enter () {
         return (void *) &das_jit_debug_enter;
     }
 
     void * das_get_jit_debug_exit () {
         return (void *) &das_jit_debug_exit;
+    }
+
+    void * das_get_jit_debug_line () {
+        return (void *) &das_jit_debug_line;
     }
 
     class Module_Jit : public Module {
@@ -456,6 +473,8 @@ namespace das {
                 SideEffects::none, "das_get_jit_debug_enter");
             addExtern<DAS_BIND_FUN(das_get_jit_debug_exit)>(*this, lib,  "get_jit_debug_exit",
                 SideEffects::none, "das_get_jit_debug_exit");
+            addExtern<DAS_BIND_FUN(das_get_jit_debug_line)>(*this, lib,  "get_jit_debug_line",
+                SideEffects::none, "das_get_jit_debug_line");
             addConstant<uint32_t>(*this, "SIZE_OF_PROLOGUE", uint32_t(sizeof(Prologue)));
             addConstant<uint32_t>(*this, "CONTEXT_OFFSET_OF_EVAL_TOP", uint32_t(uint32_t(offsetof(Context, stack) + offsetof(StackAllocator, evalTop))));
             addConstant<uint32_t>(*this, "CONTEXT_OFFSET_OF_GLOBALS", uint32_t(uint32_t(offsetof(Context, globals))));

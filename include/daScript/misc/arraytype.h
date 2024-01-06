@@ -68,6 +68,9 @@ namespace das
         Lambda() : capture(nullptr) {}
         Lambda(void * ptr) : capture((char *)ptr) {}
         char *      capture;
+        __forceinline operator void * () const {
+            return capture;
+        }
         __forceinline TypeInfo * getTypeInfo() const {
             return capture ? *(TypeInfo **)(capture-16) : nullptr;
         }
@@ -76,6 +79,12 @@ namespace das
         }
         __forceinline bool operator != ( const Lambda & b ) const {
             return capture != b.capture;
+        }
+        __forceinline bool operator == ( void * ptr ) const {
+            return capture == ptr;
+        }
+        __forceinline bool operator != ( void * ptr ) const {
+            return capture != ptr;
         }
     };
     static_assert(sizeof(Lambda)==sizeof(void *), "has to be castable");
