@@ -247,7 +247,7 @@ namespace das {
         block->jitFunction = jitImpl;
         block->functionArguments = context->abiArguments();
         block->info = (FuncInfo *) funcInfo;
-        new (block->node) SimNode_JitBlock(LineInfo(), (JitBlockFunction) bodyNode);
+        new (block->node) SimNode_JitBlock(LineInfo(), (JitBlockFunction) bodyNode, blk);
     }
 
     void * das_get_jit_make_block () {

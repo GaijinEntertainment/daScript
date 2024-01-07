@@ -123,11 +123,8 @@ namespace das
     }
 
     vec4f SimNode_JitBlock::eval ( Context & context ) {
-        char * THAT = (char *) this;
-        THAT -= offsetof(JitBlock, node);
-        auto block = (Block *) THAT;
-        auto ba = (BlockArguments *) ( context.stack.bottom() + block->argumentsOffset );
-        return func(&context, ba->arguments, ba->copyOrMoveResult, block );
+        auto ba = (BlockArguments *) ( context.stack.bottom() + blockPtr->argumentsOffset );
+        return func(&context, ba->arguments, ba->copyOrMoveResult, blockPtr );
     }
 
     vec4f SimNode_NOP::eval ( Context & ) {
