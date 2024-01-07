@@ -605,7 +605,7 @@ def public type_to_llvm_type ( t:TypeDeclPtr )
     elif t.baseType == Type tFunction
         res = g_t_function
     elif t.baseType == Type tLambda
-        res = LLVMPointerType(g_t_lambda,0u)
+        res = LLVMPointerType(LLVMVoidType(),0u)
     elif t.baseType == Type tIterator
         res = g_t_sequence
     elif t.baseType == Type tBlock

@@ -533,8 +533,6 @@ class LlvmJitVisitor : AstVisitor
             vtype = type_to_llvm_type(arg._type)
             if arg._type.isGoodBlockType
                 vptrtype = vtype
-            elif arg._type.isGoodLambdaType
-                vptrtype = vtype
             else
                 vptrtype = get_type_pointer(arg._type)
         var v_ptr : LLVMOpaqueValue?
@@ -2437,6 +2435,7 @@ class LlvmJitVisitor : AstVisitor
             var args = build_array_of_arguments(expr.arguments, false)
             var LAMBDA = getE(expr.arguments[0])
             check_ptr_zero(LAMBDA, expr.at, "invoke null lambda")
+            LAMBDA = LLVMBuildPointerCast(g_builder, LAMBDA, LLVMPointerType(g_t_lambda,0u), "LAMBDA ON HEAP")
             LAMBDA = LLVMBuildLoad(g_builder, LAMBDA, "LAMBDA")
             var SIMFUNCTION = LLVMBuildExtractValue(g_builder, LAMBDA, uint(JIT_LAMBDA EVAL), "EVAL")
             SIMFUNCTION = LLVMBuildPointerCast(g_builder, SIMFUNCTION, LLVMPointerType(LLVMVoidType(), 0u), "")
@@ -2541,7 +2540,10 @@ class LlvmJitVisitor : AstVisitor
 
 // ExprAscend
     def override preVisitExprAscend(expr:smart_ptr<ExprAscend>) : void
-        let bytes = expr.subexpr._type.sizeOf
+        var bytes = expr.subexpr._type.sizeOf
+        let needTypeInfo = expr.ascendFlags.needTypeInfo
+        if needTypeInfo
+            bytes += 16
         var mks_ptr : LLVMOpaqueValue?
         if expr.subexpr._type.baseType == Type tHandle
             let fn_new_handle = get_new_handle_function(expr.subexpr._type)
@@ -2555,6 +2557,14 @@ class LlvmJitVisitor : AstVisitor
         else
             mks_ptr = build_alloc(bytes, false)
         check_ptr_zero(mks_ptr, expr.at, "new [[...]] returned null")
+        if needTypeInfo
+            var tinfo = make_type_info_structure(*jit_context,expr.subexpr._type)
+            var tptr = LLVMConstIntToPtr(LLVMConstInt(LLVMInt64Type(), intptr(tinfo), 0), LLVMPointerType(LLVMVoidType(), 0u))
+            LLVMBuildStore2(g_builder, LLVMPointerType(LLVMVoidType(), 0u), tptr, mks_ptr)
+            // skip 16 bytes in mks_ptr
+            var p2int = LLVMBuildPtrToInt(g_builder, mks_ptr, LLVMIntPtrType(), "")
+            var add16 = LLVMBuildAdd(g_builder, p2int, LLVMConstInt(LLVMIntPtrType(), uint64(16), 0), "")
+            mks_ptr = LLVMBuildIntToPtr(g_builder, add16, LLVMPointerType(LLVMVoidType(),0u), "")
         LLVMBuildMemSet(g_builder, mks_ptr, LLVMConstInt(LLVMInt8Type(), 0ul, 0), LLVMConstInt(LLVMInt32Type(), uint64(bytes), 0), 16u)
         if expr.ascendFlags.useStackRef
             let stackref_ptr = LLVMBuildPointerCast(g_builder, mks_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
@@ -2599,10 +2609,11 @@ class LlvmJitVisitor : AstVisitor
         let ai = 0
         var arg_ptr = LLVMBuildGEP(g_builder, args, LLVMConstInt(LLVMInt32Type(), uint64(ai), 0), "call_arg_{ai}_ptr")
         var arg_val = lmb
-        var arg_cast_type = LLVMPointerType(g_t_lambda, 0u)
+        var arg_cast_type = LLVMPointerType(LLVMVoidType(), 0u)
         LLVMBuildStore2(g_builder, arg_cast_type, arg_val, arg_ptr)
         // now invoke
-        var LAMBDA = LLVMBuildLoad(g_builder, lmb, "LAMBDA")
+        var LAMBDA = LLVMBuildPointerCast(g_builder, lmb, LLVMPointerType(g_t_lambda,0u), "LAMBDA ON HEAP")
+        LAMBDA = LLVMBuildLoad(g_builder, LAMBDA, "LAMBDA")
         var SIMFUNCTION = LLVMBuildExtractValue(g_builder, LAMBDA, uint(JIT_LAMBDA FINALIZER), "FINALIZER")
         SIMFUNCTION = LLVMBuildPointerCast(g_builder, SIMFUNCTION, LLVMPointerType(LLVMVoidType(), 0u), "")
         var params : array<LLVMOpaqueValue?>
