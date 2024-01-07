@@ -215,11 +215,12 @@ namespace das {
     };
 
     struct SimNode_JitBlock : SimNode {
-        SimNode_JitBlock ( const LineInfo & at, JitBlockFunction eval )
-            : SimNode(at), func(eval) {}
+        SimNode_JitBlock ( const LineInfo & at, JitBlockFunction eval, Block * bptr )
+            : SimNode(at), func(eval), blockPtr(bptr) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override;
         JitBlockFunction func = nullptr;
+        Block * blockPtr = nullptr;
     };
     static_assert(sizeof(SimNode_JitBlock)<=(3*16),"jit block node must fit under 3 vec4f");
 
