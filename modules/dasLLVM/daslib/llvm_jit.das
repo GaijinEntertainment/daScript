@@ -533,6 +533,8 @@ class LlvmJitVisitor : AstVisitor
             vtype = type_to_llvm_type(arg._type)
             if arg._type.isGoodBlockType
                 vptrtype = vtype
+            elif arg._type.isGoodLambdaType
+                vptrtype = vtype
             else
                 vptrtype = get_type_pointer(arg._type)
         var v_ptr : LLVMOpaqueValue?
