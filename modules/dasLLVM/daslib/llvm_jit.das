@@ -2155,12 +2155,12 @@ class LlvmJitVisitor : AstVisitor
                 var vtype = type_to_llvm_type(expr._type)
                 var s_ptr : LLVMOpaqueValue?
                 at_function_entry <|
-                    s_ptr = LLVMBuildAlloca(g_builder, vtype, "mka_local_sp_{expr.stackTop}")
+                    s_ptr = LLVMBuildAlloca(g_builder, vtype, "mka_local_sp_{expr.stackTop}_at_{int(expr.at.line)}_")
                     LLVMSetAlignment(s_ptr, 16u)
-                    s_ptr = LLVMBuildPointerCast(g_builder, s_ptr, LLVMPointerType(LLVMInt8Type(),0u), "mka_local_sp_{expr.stackTop}")
+                    s_ptr = LLVMBuildPointerCast(g_builder, s_ptr, LLVMPointerType(LLVMInt8Type(),0u), "mka_local_sp_{expr.stackTop}_at_{int(expr.at.line)}_")
                 return s_ptr
             if expr.extraOffset != 0u
-                mks_ptr = LLVMBuildGEP(g_builder, mks_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.extraOffset), 0), "mka_local_sp_{expr.stackTop}_eo_{expr.extraOffset}")
+                mks_ptr = LLVMBuildGEP(g_builder, mks_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.extraOffset), 0), "mka_local_sp_{expr.stackTop}_eo_{expr.extraOffset}_at_{int(expr.at.line)}_")
         let stride = expr.makeType.stride
         if !expr.makeFlags.doesNotNeedInit && !expr.makeFlags.initAllFields && stride!=0
             let total = int(expr.values |> length)
@@ -2203,6 +2203,11 @@ class LlvmJitVisitor : AstVisitor
             else
                 failed_E(expr, "makeArray: move is not supported")
         return init
+
+    def override visitExprMakeArray(expr:smart_ptr<ExprMakeArray>) : ExpressionPtr
+        var v_ptr = getE(expr)
+        setE(expr, LLVMBuildPointerCast(g_builder, v_ptr, get_type_pointer(expr._type), ""))
+        return expr
 
 // ExprMakeTuple
     def override preVisitExprMakeTuple(expr:smart_ptr<ExprMakeTuple>) : void
