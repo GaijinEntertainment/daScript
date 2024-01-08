@@ -2407,15 +2407,17 @@ class LlvmJitVisitor : AstVisitor
     def override visitExprInvoke(expr:smart_ptr<ExprInvoke>) : ExpressionPtr
         assume blockT = expr.arguments[0]._type
         var cmresEval : LLVMOpaqueValue?
+        var cmresEvalPtr : LLVMOpaqueValue?
         if isCMRESType(expr._type)
             if call2cmres |> key_exists(get_ptr(expr))
                 cmresEval = call2cmres[get_ptr(ExpressionPtr(expr))]
+                cmresEvalPtr = LLVMBuildPointerCast(g_builder, cmresEval, LLVMPointerType(LLVMVoidType(),0u), "invoke_cmres_eval_{int(expr.at.line)}_ptr")
             else
                 var vtype = type_to_llvm_type(expr._type)
                 at_function_entry <|
                     cmresEval = LLVMBuildAlloca(g_builder, vtype, "invoke_cmres_eval_{int(expr.at.line)}_var")
                     LLVMSetAlignment(cmresEval, 16u)
-                    cmresEval = LLVMBuildPointerCast(g_builder, cmresEval, LLVMPointerType(LLVMVoidType(),0u), "invoke_cmres_eval_{int(expr.at.line)}_ptr")
+                    cmresEvalPtr = LLVMBuildPointerCast(g_builder, cmresEval, LLVMPointerType(LLVMVoidType(),0u), "invoke_cmres_eval_{int(expr.at.line)}_ptr")
         if blockT.isGoodFunctionType
             var args = build_array_of_arguments(expr.arguments, true)
             var FUNC = getE(expr.arguments[0])
@@ -2425,7 +2427,7 @@ class LlvmJitVisitor : AstVisitor
             params |> push(SIMFUNCTION)
             params |> push(args)
             if cmresEval!=null
-                params |> push(cmresEval)
+                params |> push(cmresEvalPtr)
             params |> push(get_context_param())
             var func = LLVMGetNamedFunction(g_mod, cmresEval!=null ? FN_JIT_CALL_WITH_CMRES : FN_JIT_CALL_OR_FASTCALL)
             var ccall = LLVMBuildCall(g_builder, func, params, "invoke")
@@ -2448,7 +2450,7 @@ class LlvmJitVisitor : AstVisitor
             params |> push(SIMFUNCTION)
             params |> push(args)
             if cmresEval!=null
-                params |> push(cmresEval)
+                params |> push(cmresEvalPtr)
             params |> push(get_context_param())
             var func = LLVMGetNamedFunction(g_mod, cmresEval!=null ? FN_JIT_CALL_WITH_CMRES : FN_JIT_CALL_OR_FASTCALL)
             var ccall = LLVMBuildCall(g_builder, func, params, "invoke")
@@ -2466,7 +2468,7 @@ class LlvmJitVisitor : AstVisitor
             params |> push(blk)
             params |> push(args)
             if cmresEval!=null
-                params |> push(cmresEval)
+                params |> push(cmresEvalPtr)
             params |> push(get_context_param())
             var func = LLVMGetNamedFunction(g_mod, cmresEval!=null ? FN_JIT_INVOKE_BLOCK_WITH_CMRES : FN_JIT_INVOKE_BLOCK)
             var ccall = LLVMBuildCall(g_builder, func, params, "invoke")
