@@ -181,6 +181,8 @@ namespace das {
         return *this;
     }
 
+    template AstSerializer & AstSerializer::operator << ( vector<int64_t> & value );
+
     AstSerializer & AstSerializer::operator << ( string & str ) {
         tag("string");
         if ( writing ) {
@@ -516,11 +518,8 @@ namespace das {
         return *this;
     }
 
-    uint64_t totalTypedeclPtrCount = 0;
-
     AstSerializer & AstSerializer::operator << ( TypeDeclPtr & type ) {
         tag("TypeDeclPtr");
-        totalTypedeclPtrCount += 1;
         bool is_null = type == nullptr;
         *this << is_null;
         if ( is_null ) {
@@ -697,8 +696,6 @@ namespace das {
         }
         return *this;
     }
-
-    // uint64_t totalFileInfoSize = 0;
 
     AstSerializer & AstSerializer::operator << ( FileInfoPtr & info ) {
         tag("FileInfoPtr");
