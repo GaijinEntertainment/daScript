@@ -175,11 +175,11 @@ namespace das {
     void lockAnyContext ( Context & ctx, const TBlock<void> & block, Context * context, LineInfoArg * lineInfo );
     void lockAnyMutex ( recursive_mutex & rm, const TBlock<void> & block, Context * context, LineInfoArg * lineInfo );
 
-    TSequence<VarInfo> each_FuncInfo ( FuncInfo & st, Context * context );
-    TSequence<const VarInfo> each_const_FuncInfo ( const FuncInfo & st, Context * context );
-    TSequence<VarInfo> each_StructInfo ( StructInfo & st, Context * context );
-    TSequence<const VarInfo> each_const_StructInfo ( const StructInfo & st, Context * context );
-    TSequence<EnumValueInfo> each_EnumInfo ( EnumInfo & st, Context * context );
-    TSequence<const EnumValueInfo> each_const_EnumInfo ( const EnumInfo & st, Context * context );
+    TSequence<VarInfo&> each_FuncInfo ( FuncInfo & st, Context * context );
+    TSequence<const VarInfo&> each_const_FuncInfo ( const FuncInfo & st, Context * context );
+    TSequence<VarInfo&> each_StructInfo ( StructInfo & st, Context * context );
+    TSequence<const VarInfo&> each_const_StructInfo ( const StructInfo & st, Context * context );
+    TSequence<EnumValueInfo&> each_EnumInfo ( EnumInfo & st, Context * context );
+    TSequence<const EnumValueInfo&> each_const_EnumInfo ( const EnumInfo & st, Context * context );
 }
 

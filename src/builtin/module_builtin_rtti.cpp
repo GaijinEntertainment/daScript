@@ -537,11 +537,11 @@ namespace das {
         }
     };
 
-    TSequence<EnumValueInfo> each_EnumInfo ( EnumInfo & st, Context * context ) {
+    TSequence<EnumValueInfo&> each_EnumInfo ( EnumInfo & st, Context * context ) {
         return debugInfoIterator<EnumInfo,EnumValueInfo>(&st, context);
     }
 
-    TSequence<const EnumValueInfo> each_const_EnumInfo ( const EnumInfo & st, Context * context ) {
+    TSequence<const EnumValueInfo&> each_const_EnumInfo ( const EnumInfo & st, Context * context ) {
         return debugInfoIterator<EnumInfo,EnumValueInfo>((EnumInfo *)&st, context);
     }
 
@@ -568,11 +568,11 @@ namespace das {
         }
     };
 
-    TSequence<VarInfo> each_StructInfo ( StructInfo & st, Context * context ) {
+    TSequence<VarInfo&> each_StructInfo ( StructInfo & st, Context * context ) {
         return debugInfoIterator<StructInfo,VarInfo>(&st, context);
     }
 
-    TSequence<const VarInfo> each_const_StructInfo ( const StructInfo & st, Context * context ) {
+    TSequence<const VarInfo&> each_const_StructInfo ( const StructInfo & st, Context * context ) {
         return debugInfoIterator<StructInfo,VarInfo>((StructInfo *)&st, context);
     }
 
@@ -674,11 +674,11 @@ namespace das {
         }
     };
 
-    TSequence<VarInfo> each_FuncInfo ( FuncInfo & st, Context * context ) {
+    TSequence<VarInfo&> each_FuncInfo ( FuncInfo & st, Context * context ) {
         return debugInfoIterator<FuncInfo,VarInfo>(&st, context);
     }
 
-    TSequence<const VarInfo> each_const_FuncInfo ( const FuncInfo & st, Context * context ) {
+    TSequence<const VarInfo&> each_const_FuncInfo ( const FuncInfo & st, Context * context ) {
         return debugInfoIterator<FuncInfo,VarInfo>((FuncInfo *)&st, context);
     }
 
