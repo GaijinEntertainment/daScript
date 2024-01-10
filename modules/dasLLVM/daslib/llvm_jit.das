@@ -1599,9 +1599,18 @@ class LlvmJitVisitor : AstVisitor
                 var temp = LLVMBuildLoadDataAligned(g_builder, tsrc, ralign, "")
                 LLVMBuildStoreAligned(g_builder, temp, tdst, ralign)
             */
+            var lptr = LLVMBuildPtrToInt(g_builder, tsrc, LLVMIntPtrType(), "")
+            var rptr = LLVMBuildPtrToInt(g_builder, tdst, LLVMIntPtrType(), "")
+            var cmpR = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntEQ, lptr, rptr, "")
+            var move_start = LLVMAppendBasicBlock(ffunc, "move_start")
+            var move_end = LLVMAppendBasicBlock(ffunc, "move_end")
+            LLVMBuildCondBr(g_builder, cmpR, move_end, move_start)
+            LLVMPositionBuilderAtEnd(g_builder,move_start)
             let rsize = LLVMConstInt(LLVMInt32Type(), uint64(right._type.sizeOf), 0)
             LLVMBuildMemCpy(g_builder, tdst, ralign, tsrc, ralign, rsize)
             LLVMBuildMemSet(g_builder, tsrc, LLVMConstInt(LLVMInt8Type(), 0ul, 0), rsize, ralign)
+            LLVMBuildBr(g_builder, move_end)
+            LLVMPositionBuilderAtEnd(g_builder,move_end)
         else
             if right is ExprConstPtr
                 let null_ptr = LLVMConstPointerNull(LLVMPointerType(LLVMVoidType(),0u))
