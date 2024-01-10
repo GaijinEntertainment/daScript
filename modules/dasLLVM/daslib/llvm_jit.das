@@ -2825,8 +2825,15 @@ class LlvmJitVisitor : AstVisitor
 
     def override visitExprField(expr:smart_ptr<ExprField>) : ExpressionPtr
         if expr.value._type.isBitfield
-            setE(expr, LLVMGetUndef(LLVMInt32Type()))
-            failed_E(expr, "bitfields are not supported yet")
+            let mask = 1u << uint(expr.fieldIndex)
+            let mand = LLVMBuildAnd(g_builder, getE(expr.value), LLVMConstInt(LLVMInt32Type(), uint64(mask), 0), "")
+            let if_not_zero = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntNE, mand, LLVMConstInt(LLVMInt32Type(), uint64(0), 0), "")
+            var res_type = type_to_llvm_type(expr._type)
+            var res = build_select(if_not_zero, res_type) <|
+                return LLVMConstInt(LLVMInt1Type(), uint64(1), 0)
+            lpipe <|
+                return LLVMConstInt(LLVMInt1Type(), uint64(0), 0)
+            setE(expr, res)
         elif expr.field==null && expr.fieldIndex==-1
             let field_offset = expr.annotation |> get_handled_type_field_offset(string(expr.name))
             if field_offset==-1U
@@ -3612,10 +3619,10 @@ class LlvmJitVisitor : AstVisitor
             tres = cast_ptr_to_vec4f(tsrc)
         elif etype.isWorkhorseType
             let bt = etype.baseType
-            if bt==Type tInt || bt==Type tUInt || bt==Type tBitfield
+            if bt==Type tInt || bt==Type tUInt || bt==Type tBitfield || bt==Type tEnumeration
                 var tbit = LLVMBuildBitCast(g_builder, tsrc, LLVMFloatType(), "tbit")
                 tres = LLVMBuildInsertElement(g_builder, vres, tbit, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "return_result")
-            elif bt==Type tBool || bt==Type tInt8 || bt==Type tInt16 || bt==Type tUInt8 || bt==Type tUInt16
+            elif bt==Type tBool || bt==Type tInt8 || bt==Type tInt16 || bt==Type tUInt8 || bt==Type tUInt16 || bt==Type tEnumeration8 || bt==Type tEnumeration16
                 var tibit = LLVMBuildZExtOrBitCast(g_builder, tsrc, LLVMInt32Type(), "int_bit")
                 var tbit = LLVMBuildBitCast(g_builder, tibit, LLVMFloatType(), "tbit")
                 tres = LLVMBuildInsertElement(g_builder, vres, tbit, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "return_result")
@@ -3646,7 +3653,7 @@ class LlvmJitVisitor : AstVisitor
             elif bt==Type tString || bt==Type tPointer
                 tres = cast_ptr_to_vec4f(tsrc)
             else
-                failed("unsupported workhorse cast_to_vec4f cast {describe(etype)}")
+                failed("unsupported workhorse cast_to_vec4f cast {describe(etype)} aka {etype.baseType}")
         elif etype.isFunction
             assert(typeinfo(sizeof type<void?>)==8)
             var vvec = LLVMGetUndef(LLVMVectorType(LLVMInt64Type(), 2u))
