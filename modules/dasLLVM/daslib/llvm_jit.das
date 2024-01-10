@@ -1590,7 +1590,7 @@ class LlvmJitVisitor : AstVisitor
 
 // ExprMove
 
-    def build_move ( tdst:LLVMOpaqueValue?; right:ExpressionPtr )
+    def build_move ( tdst:LLVMOpaqueValue?; right:ExpressionPtr; needTest:bool )
         var tsrc = getE(right)
         var ralign = uint(right._type.alignOf)
         if right._type.isRef
@@ -1599,18 +1599,23 @@ class LlvmJitVisitor : AstVisitor
                 var temp = LLVMBuildLoadDataAligned(g_builder, tsrc, ralign, "")
                 LLVMBuildStoreAligned(g_builder, temp, tdst, ralign)
             */
-            var lptr = LLVMBuildPtrToInt(g_builder, tsrc, LLVMIntPtrType(), "")
-            var rptr = LLVMBuildPtrToInt(g_builder, tdst, LLVMIntPtrType(), "")
-            var cmpR = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntEQ, lptr, rptr, "")
-            var move_start = LLVMAppendBasicBlock(ffunc, "move_start")
-            var move_end = LLVMAppendBasicBlock(ffunc, "move_end")
-            LLVMBuildCondBr(g_builder, cmpR, move_end, move_start)
-            LLVMPositionBuilderAtEnd(g_builder,move_start)
-            let rsize = LLVMConstInt(LLVMInt32Type(), uint64(right._type.sizeOf), 0)
-            LLVMBuildMemCpy(g_builder, tdst, ralign, tsrc, ralign, rsize)
-            LLVMBuildMemSet(g_builder, tsrc, LLVMConstInt(LLVMInt8Type(), 0ul, 0), rsize, ralign)
-            LLVMBuildBr(g_builder, move_end)
-            LLVMPositionBuilderAtEnd(g_builder,move_end)
+            if needTest
+                var lptr = LLVMBuildPtrToInt(g_builder, tsrc, LLVMIntPtrType(), "")
+                var rptr = LLVMBuildPtrToInt(g_builder, tdst, LLVMIntPtrType(), "")
+                var cmpR = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntEQ, lptr, rptr, "")
+                var move_start = LLVMAppendBasicBlock(ffunc, "move_start")
+                var move_end = LLVMAppendBasicBlock(ffunc, "move_end")
+                LLVMBuildCondBr(g_builder, cmpR, move_end, move_start)
+                LLVMPositionBuilderAtEnd(g_builder,move_start)
+                let rsize = LLVMConstInt(LLVMInt32Type(), uint64(right._type.sizeOf), 0)
+                LLVMBuildMemCpy(g_builder, tdst, ralign, tsrc, ralign, rsize)
+                LLVMBuildMemSet(g_builder, tsrc, LLVMConstInt(LLVMInt8Type(), 0ul, 0), rsize, ralign)
+                LLVMBuildBr(g_builder, move_end)
+                LLVMPositionBuilderAtEnd(g_builder,move_end)
+            else
+                let rsize = LLVMConstInt(LLVMInt32Type(), uint64(right._type.sizeOf), 0)
+                LLVMBuildMemCpy(g_builder, tdst, ralign, tsrc, ralign, rsize)
+                LLVMBuildMemSet(g_builder, tsrc, LLVMConstInt(LLVMInt8Type(), 0ul, 0), rsize, ralign)
         else
             if right is ExprConstPtr
                 let null_ptr = LLVMConstPointerNull(LLVMPointerType(LLVMVoidType(),0u))
@@ -1632,7 +1637,7 @@ class LlvmJitVisitor : AstVisitor
             pass    // already a call to cmres, no need to copy
         else
             var tdst = getE(expr.left)
-            build_move(tdst, expr.right)
+            build_move(tdst, expr.right, true)
         return expr
 
 // ExprWhile
@@ -2059,7 +2064,7 @@ class LlvmJitVisitor : AstVisitor
             pass // do nothing. we already handle this in preVisitExprMakeVariantField
         else
             if decl.flags.moveSemantics
-                build_move(v_ptr, decl.value)   // TODO: verify
+                build_move(v_ptr, decl.value, false)   // TODO: verify
             else
                 build_copy(v_ptr, decl.value)
         return decl
@@ -2153,7 +2158,7 @@ class LlvmJitVisitor : AstVisitor
             pass // do nothing. we already handle this in preVisitExprMakeStructField
         else
             if decl.flags.moveSemantics
-                build_move(v_ptr, decl.value)   // TODO: verify
+                build_move(v_ptr, decl.value, false)   // TODO: verify
             else
                 build_copy(v_ptr, decl.value)
         return decl
