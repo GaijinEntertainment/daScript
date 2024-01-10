@@ -1296,7 +1296,7 @@ namespace das {
         } else {
             bool has_field = false; ser << has_field;
             if ( !has_field ) return;
-            Module * module; ser << module;
+            Module * module = nullptr; ser << module;
             string mangledName; ser << mangledName;
             field = ( Structure::FieldDeclaration * ) 1;
             ser.fieldRefs.emplace_back(&field, module, move(mangledName), name);
