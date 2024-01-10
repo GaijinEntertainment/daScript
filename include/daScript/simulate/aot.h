@@ -1774,6 +1774,8 @@ namespace das {
 #ifdef _MSC_VER
 #pragma warning(push)
 #pragma warning(disable:4100)
+#elif defined(__EDG__)
+#pragma diag_suppress 826
 #endif
 
     struct SimNode_AotInteropBase : SimNode_CallBase {
@@ -1787,6 +1789,8 @@ namespace das {
 
 #ifdef _MSC_VER
 #pragma warning(pop)
+#elif defined(__EDG__)
+#pragma diag_default 826
 #endif
 
     template <int argumentCount>
@@ -1895,6 +1899,8 @@ namespace das {
 #ifdef _MSC_VER
 #pragma warning(push)
 #pragma warning(disable:4100)
+#elif defined(__EDG__)
+#pragma diag_suppress 826
 #endif
 
     template <typename resType>
@@ -1930,6 +1936,8 @@ namespace das {
 
 #ifdef _MSC_VER
 #pragma warning(pop)
+#elif defined(__EDG__)
+#pragma diag_default 826
 #endif
 
     template <typename ...argType>
