@@ -116,7 +116,9 @@ bool compile ( const string & fn, const string & cppFn, bool dryRun ) {
                 tw << "#pragma warning(disable:4269)   // 'const' automatic data initialized with compiler generated default constructor produces unreliable results\n";
                 tw << "#pragma warning(disable:4555)   // result of expression not used\n";
                 tw << "#endif\n";
-                tw << "#if defined(__GNUC__) && !defined(__clang__)\n";
+                tw << "#if defined(__EDG__)\n";
+                tw << "#pragma diag_suppress 826\n";
+                tw << "#elif defined(__GNUC__) && !defined(__clang__)\n";
                 tw << "#pragma GCC diagnostic push\n";
                 tw << "#pragma GCC diagnostic ignored \"-Wunused-parameter\"\n";
                 tw << "#pragma GCC diagnostic ignored \"-Wunused-variable\"\n";
@@ -161,7 +163,9 @@ bool compile ( const string & fn, const string & cppFn, bool dryRun ) {
                 tw << "#if defined(_MSC_VER)\n";
                 tw << "#pragma warning(pop)\n";
                 tw << "#endif\n";
-                tw << "#if defined(__GNUC__) && !defined(__clang__)\n";
+                tw << "#if defined(__EDG__)\n";
+                tw << "#pragma diag_default 826\n";
+                tw << "#elif defined(__GNUC__) && !defined(__clang__)\n";
                 tw << "#pragma GCC diagnostic pop\n";
                 tw << "#endif\n";
                 tw << "#if defined(__clang__)\n";

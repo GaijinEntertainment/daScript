@@ -13,6 +13,8 @@ namespace das {
 #if defined(_MSC_VER)
 #pragma warning(push)
 #pragma warning(disable:4100)    // unreferenced formal parameter
+#elif defined(__EDG__)
+#pragma diag_suppress 826
 #elif defined(__GNUC__)
 #pragma GCC diagnostic push
 #pragma GCC diagnostic ignored "-Wunused-parameter"
@@ -128,6 +130,8 @@ namespace das {
 
 #if defined(_MSC_VER)
 #pragma warning(pop)
+#elif defined(__EDG__)
+#pragma diag_default 826
 #elif defined(__GNUC__)
 #pragma GCC diagnostic pop
 #elif defined(__clang__)
