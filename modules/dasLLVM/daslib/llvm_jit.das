@@ -547,7 +547,8 @@ class LlvmJitVisitor : AstVisitor
         setV(arg, v_ptr)
         if arg.init == null
             var vsize = arg._type.flags.ref ?  typeinfo(sizeof type<void?>) : arg._type.sizeOf
-            LLVMBuildMemSet(g_builder, v_ptr, LLVMConstInt(LLVMInt8Type(), 0ul, 0), LLVMConstInt(LLVMInt32Type(), uint64(vsize), 0), 16u)
+            var valign = arg._type.flags.ref ?  typeinfo(alignof type<void?>) : arg._type.alignOf
+            LLVMBuildMemSet(g_builder, v_ptr, LLVMConstInt(LLVMInt8Type(), 0ul, 0), LLVMConstInt(LLVMInt32Type(), uint64(vsize), 0), uint(valign))
         elif make_call_to_cmres(arg.init, v_ptr)
             pass    // do nothing
         elif isMakeLocal(arg.init)
