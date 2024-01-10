@@ -1645,7 +1645,8 @@ class LlvmJitVisitor : AstVisitor
     def override visitExprWhile(expr:smart_ptr<ExprWhile>) : ExpressionPtr
         var lblk = loop_stack |> back()
         loop_stack |> pop()
-        LLVMBuildBr(g_builder, lblk.loop_start)
+        if !current_block_terminates()
+            LLVMBuildBr(g_builder, lblk.loop_start)
         LLVMPositionBuilderAtEnd(g_builder,lblk.loop_end)
         if expr.body is ExprBlock
             let body = expr.body as ExprBlock
