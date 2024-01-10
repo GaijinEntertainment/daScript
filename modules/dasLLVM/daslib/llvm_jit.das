@@ -3150,6 +3150,10 @@ class LlvmJitVisitor : AstVisitor
                 // TODO: check? (we don't check, we just cast for now)
                 var cres = LLVMBuildPointerCast(g_builder, getE(expr.subexpr), type_to_llvm_abi_type(returnType), "")
                 LLVMBuildRet(g_builder, cres)
+            elif expr.returnFlags.moveSemantics && expr.subexpr._type.isWorkhorseType
+                // return <- blah // where blah is string and such
+                var lres = LLVMBuildLoad(g_builder, getE(expr.subexpr), "")
+                LLVMBuildRet(g_builder, lres)
             else
                 LLVMBuildRet(g_builder, getE(expr.subexpr))
         else
