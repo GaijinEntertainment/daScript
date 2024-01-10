@@ -211,7 +211,7 @@ namespace das {
         vec4f args[1];
         args[0] = cast<Array *>::from(&arr);
         context->invoke(blk, args, nullptr, at);
-        munmap(data, 0);
+        munmap(data, st.st_size);
     }
 
     int64_t builtin_ftell ( const FILE * f, Context * context, LineInfoArg * at ) {

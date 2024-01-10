@@ -817,7 +817,7 @@ namespace das {
 
     __forceinline bool is_char_in_set ( int32_t ch, const TDim<uint32_t,8> & bitset, Context * ctx, LineInfoArg * at ) {
         if ( ch<0 || ch>=256 ) ctx->throw_error_at(at,"invalid character %d", ch);
-        return bitset[ch>>5] & (1u<<uint32_t(ch));
+        return bitset[ch>>5] & (1u<<uint32_t(ch & 31));
     }
 
     template <typename TT, int size>
