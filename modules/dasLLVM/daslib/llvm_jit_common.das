@@ -580,6 +580,8 @@ def public type_to_llvm_abi_type ( t:TypeDeclPtr )
                 failed("internal error. expecting workhorse type from `get_underlying_value_type` for {describe(t)} at {describe(t.at)}")
                 return LLVMInt32Type()
             return type_to_llvm_abi_type(tp)
+    elif t.baseType==Type anyArgument
+        return LLVMFloat4Type()
     else
         failed("type_to_llvm_abi_type: unsupported type {describe(t)} at {describe(t.at)}")
         return LLVMInt32Type()
