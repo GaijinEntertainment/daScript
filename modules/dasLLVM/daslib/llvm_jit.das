@@ -2053,6 +2053,11 @@ class LlvmJitVisitor : AstVisitor
                 build_copy(v_ptr, decl.value)
         return decl
 
+    def override visitExprMakeVariant(expr:smart_ptr<ExprMakeVariant>) : ExpressionPtr
+        var v_ptr = getE(expr)
+        setE(expr, LLVMBuildPointerCast(g_builder, v_ptr, get_type_pointer(expr._type), ""))
+        return expr
+
 // ExprMakeStruct
     def override preVisitExprMakeStruct(expr:smart_ptr<ExprMakeStruct>) : void
         var mks_ptr : LLVMOpaqueValue?
