@@ -3705,7 +3705,9 @@ namespace das {
             ss << "#pragma warning(disable:4269)   // 'const' automatic data initialized with compiler generated default constructor produces unreliable results\n";
             ss << "#pragma warning(disable:4555)   // result of expression not used\n";
             ss << "#endif\n";
-            ss << "#if defined(__GNUC__) && !defined(__clang__)\n";
+            ss << "#if defined(__EDG__)\n";
+            ss << "#pragma diag_suppress 826\n";
+            ss << "#elif defined(__GNUC__) && !defined(__clang__)\n";
             ss << "#pragma GCC diagnostic push\n";
             ss << "#pragma GCC diagnostic ignored \"-Wunused-parameter\"\n";
             ss << "#pragma GCC diagnostic ignored \"-Wunused-variable\"\n";
@@ -3732,7 +3734,9 @@ namespace das {
             ss << "#if defined(_MSC_VER)\n";
             ss << "#pragma warning(pop)\n";
             ss << "#endif\n";
-            ss << "#if defined(__GNUC__) && !defined(__clang__)\n";
+            ss << "#if defined(__EDG__)\n";
+            ss << "#pragma diag_default 826\n";
+            ss << "#elif defined(__GNUC__) && !defined(__clang__)\n";
             ss << "#pragma GCC diagnostic pop\n";
             ss << "#endif\n";
             ss << "#if defined(__clang__)\n";
