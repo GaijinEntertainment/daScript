@@ -1905,7 +1905,8 @@ class LlvmJitVisitor : AstVisitor
             }
         LOOP_END:
         */
-        LLVMBuildBr(g_builder, lblk.loop_continue)                           // LOOP CONTINUE
+        if !current_block_terminates()
+            LLVMBuildBr(g_builder, lblk.loop_continue)                           // LOOP CONTINUE
         LLVMPositionBuilderAtEnd(g_builder,lblk.loop_continue)
         for svar,ssrc in expr.iteratorVariables,expr.sources
             if ssrc._type.isRange           // range()->next()
