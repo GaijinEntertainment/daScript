@@ -565,7 +565,10 @@ class LlvmJitVisitor : AstVisitor
         elif isMakeLocal(arg.init)
             pass
         else
-            build_copy(tdst, expr)
+            if arg.flags.init_via_move && arg._type.canMove && !arg._type.isGoodBlockType
+                build_move(tdst, expr, true)
+            else
+                build_copy(tdst, expr)
         return expr
 
 // ExprStringBuilder
