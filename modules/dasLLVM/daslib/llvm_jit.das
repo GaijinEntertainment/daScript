@@ -2168,6 +2168,11 @@ class LlvmJitVisitor : AstVisitor
                 build_copy(v_ptr, decl.value)
         return decl
 
+    def override visitExprMakeStruct(expr:smart_ptr<ExprMakeStruct>) : ExpressionPtr
+        var v_ptr = getE(expr)
+        setE(expr, LLVMBuildPointerCast(g_builder, v_ptr, get_type_pointer(expr._type), ""))
+        return expr
+
 // ExprMakeArray
     def override preVisitExprMakeArray(expr:smart_ptr<ExprMakeArray>) : void
         var mks_ptr : LLVMOpaqueValue?
@@ -3229,7 +3234,13 @@ class LlvmJitVisitor : AstVisitor
             carg = LLVMBuildLoad(astVisitor.g_builder, carg, "capture")
             for c,ai in capture,count()
                 var arg_i = LLVMBuildExtractValue(astVisitor.g_builder, carg, uint(ai+first_field_index), "var_{c.variable.name}_index_{ai}_stindex_{ai+first_field_index}")
-                (*astVisitor)->setV_ptr(c.variable, arg_i)
+                if c.eref
+                    var arg_t = LLVMPointerType(type_to_llvm_type(c.variable._type), 0u)
+                    var arg_p = LLVMBuildAlloca(astVisitor.g_builder, arg_t, "var_{c.variable.name}_index_{ai}_stindex_{ai+first_field_index}_var")
+                    LLVMBuildStore(astVisitor.g_builder, arg_i, arg_p)
+                    (*astVisitor)->setV_ptr(c.variable, arg_p)
+                else
+                    (*astVisitor)->setV_ptr(c.variable, arg_i)
             (*astVisitor)->after_function_entry(cblk)
             visit(expr._block, astVisitor.adapter)
             (*astVisitor)->post_make_block(reinterpret<smart_ptr<ExprBlock>> expr._block)
@@ -3255,8 +3266,6 @@ class LlvmJitVisitor : AstVisitor
             else
                 blk_fields |> push(LLVMPointerType(type_to_llvm_type(c.variable._type), 0u))
         var this_block_type = LLVMStructType(blk_fields)
-        // make block function
-        var blk_make = make_block_funcion(expr, capture,first_field_index, this_block_type)
         // allocate block, set capture fields
         var blk : LLVMOpaqueValue?
         at_function_entry <|
@@ -3281,11 +3290,24 @@ class LlvmJitVisitor : AstVisitor
                         if a == c.variable
                             v_ptr = LLVMGetParam(ffunc, uint(c.expression.argumentIndex))
                             break
+            else
+                /*
+                    var a : int& = ...
+                    invoke <| a // we capture ref as ref, unless its argument. then ref is ref already
+                */
+                if c.variable._type.flags.ref
+                    v_ptr = LLVMBuildLoad(g_builder, v_ptr, "")
+                    c.eref = true
+
             if v_ptr == null
                 failed_E(expr, "capture {c.variable.name} not found")
                 return
             blkv = LLVMBuildInsertValue(g_builder, blkv, v_ptr, uint(idx + first_field_index), "capture_{c.variable.name}")
         LLVMBuildStore(g_builder, blkv, blk)
+
+        // make block function
+        var blk_make = make_block_funcion(expr, capture,first_field_index, this_block_type)
+
         // call jit_make_block
         var blk_ptr = LLVMBuildPointerCast(g_builder, blk, LLVMPointerType(g_t_block, 0u), "")
         let argStackTop = (expr._block as ExprBlock).stackTop
