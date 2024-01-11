@@ -1558,7 +1558,11 @@ class LlvmJitVisitor : AstVisitor
         if right._type.isRef
             if right._type.isWorkhorseType
                 var temp = LLVMBuildLoadDataAligned(g_builder, tsrc, ralign, "")
-                LLVMBuildStoreAligned(g_builder, temp, tdst, ralign)
+                if right._type.isPointer
+                    var compDst = LLVMBuildPointerCast(g_builder, tdst, LLVMPointerType(LLVMTypeOf(temp),0u), "")
+                    LLVMBuildStoreAligned(g_builder, temp, compDst, ralign)
+                else
+                    LLVMBuildStoreAligned(g_builder, temp, tdst, ralign)
             else
                 let rsize = LLVMConstInt(LLVMInt32Type(), uint64(right._type.sizeOf), 0)
                 LLVMBuildMemCpy(g_builder, tdst, ralign, tsrc, ralign, rsize)
