@@ -334,7 +334,7 @@ namespace das {
         tw << ">>";
         if ( !context->name.empty() ) tw << "(" << context->name << ")";
         tw << ": ";
-        if ( message && message ) tw << message;
+        if ( message ) tw << message;
         if ( at && at->line ) tw << " at " << at->describe();
         tw << "\n";
         context->to_out(at, tw.str().c_str());
@@ -346,7 +346,7 @@ namespace das {
         tw << " -";
         if ( !context->name.empty() ) tw << "(" << context->name << ")";
         tw << ": ";
-        if ( message && message ) tw << message;
+        if ( message ) tw << message;
         if ( at && at->line ) tw << " at " << at->describe();
         tw << "\n";
         context->to_out(at, tw.str().c_str());
@@ -358,7 +358,7 @@ namespace das {
         tw << ">>";
         if ( !context->name.empty() ) tw << "(" << context->name << ")";
         tw << ": ";
-        if ( message && message ) tw << message;
+        if ( message ) tw << message;
         if ( at && at->line ) tw << " at " << at->describe();
         tw << "\n";
         context->to_out(at, tw.str().c_str());
