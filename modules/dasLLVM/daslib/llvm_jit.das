@@ -2608,12 +2608,12 @@ class LlvmJitVisitor : AstVisitor
 // ExprCast
     def override visitExprCast(expr:smart_ptr<ExprCast>) : ExpressionPtr
         var res : LLVMOpaqueValue?
-        assume ect = expr.castType
+        assume ect = expr._type
         assume subT = expr.subexpr._type
-        if ect.isPointer && subT.isPointer
-            res = LLVMBuildPointerCast(g_builder, getE(expr.subexpr), type_to_llvm_type(ect), "")
-        elif ect.isRef && subT.isRef
+        if ect.isRef && subT.isRef
             res = LLVMBuildPointerCast(g_builder, getE(expr.subexpr), LLVMPointerType(type_to_llvm_type(ect),0u), "")
+        elif ect.isPointer && subT.isPointer
+            res = LLVMBuildPointerCast(g_builder, getE(expr.subexpr), type_to_llvm_type(ect), "")
         elif length(ect.dim)!=0 && subT.isPointer
             res = LLVMBuildPointerCast(g_builder, getE(expr.subexpr), LLVMPointerType(type_to_llvm_type(ect),0u), "")
         elif ect.isInteger && (ect.baseType==Type tInt64 || ect.baseType==Type tUInt64) && subT.isPointer
