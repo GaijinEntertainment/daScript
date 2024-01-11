@@ -5325,6 +5325,7 @@ namespace das {
                     if ( !pop.empty() ) {
                         reportAstChanged();
                         auto popc = make_smart<ExprCall>(expr->at, pop);
+                        popc->alwaysSafe = expr->alwaysSafe;
                         auto stride = expr->left->type->firstType->getSizeOf();
                         popc->arguments.push_back(expr->left->clone());
                         popc->arguments.push_back(expr->right->clone());

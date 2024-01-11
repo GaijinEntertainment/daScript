@@ -51,6 +51,7 @@ struct public CapturedVariable
     //! Stored captured variable together with the `ExprVar` which uses it
     variable : Variable?
     expression : ExprVar?
+    eref : bool             //! this one indicates if its used by reference and does not come from argument. its only used in JIT
 
 [macro_function]
 def public capture_block(expr:ExpressionPtr) : array<CapturedVariable>
