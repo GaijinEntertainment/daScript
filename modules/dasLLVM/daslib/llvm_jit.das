@@ -2302,6 +2302,11 @@ class LlvmJitVisitor : AstVisitor
                 failed_E(expr, "makeTuple: move is not supported")
         return init
 
+    def override visitExprMakeTuple(expr:smart_ptr<ExprMakeTuple>) : ExpressionPtr
+        var v_ptr = getE(expr)
+        setE(expr, LLVMBuildPointerCast(g_builder, v_ptr, get_type_pointer(expr._type), ""))
+        return expr
+
 // ExprArrayComprehension
     def override preVisitExprArrayComprehension(expr:smart_ptr<ExprArrayComprehension>) : void
         unsupported(expr, "array comprehension")
@@ -3676,6 +3681,8 @@ class LlvmJitVisitor : AstVisitor
             elif !tp.isWorkhorseType
                 failed("internal error. expecting workhorse type from `get_underlying_value_type` for {describe(etype)}")
             tres = cast_to_vec4f(tp, tsrc)
+        elif etype.baseType == Type tLambda
+            tres = cast_ptr_to_vec4f(tsrc)
         else
             failed("unsupported cast_to_vec4f type {describe(etype)}")
         return tres
