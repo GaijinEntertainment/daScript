@@ -2679,9 +2679,23 @@ namespace das {
             if ( !expr->isNewHandle ) {
                 if ( !needTempSrc(expr) ) {
                     ss << string(tab,'\t') << describeCppType(expr->type,CpptSubstitureRef::no,CpptSkipRef::yes)
-                        << " " << mksName(expr) << ";\n";
+                        << " " << mksName(expr);
+                    if ( expr->constructor ) {
+                        ss << " = ";
+                        auto call_func = expr->constructor;
+                        if ( isHybridCall(call_func) ) {
+                            ss << "das_invoke_function<" << describeCppType(call_func->result) << ">::invoke_cmres";
+                            auto mangledName = call_func->getMangledName();
+                            uint64_t hash = call_func->getMangledNameHash();
+                            ss << "(__context__,nullptr,";
+                            ss << "Func(__context__->fnByMangledName(/*" << mangledName << "*/ " << hash << "u))";
+                            ss << ");\n";
+                        } else {
+                            ss << aotFuncName(call_func) << "(__context__);\n";
+                        }
+                    } else ss << ";\n";
                 }
-                if ( !expr->initAllFields || (expr->makeType->baseType==Type::tTuple && expr->structs.size()==0) ) {
+                if ( !expr->constructor && !expr->initAllFields || (expr->makeType->baseType==Type::tTuple && expr->structs.size()==0) ) {
                     ss << string(tab,'\t') << "das_zero(" << mksName(expr) << ");\n";
                 }
             }
