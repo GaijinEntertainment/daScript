@@ -1534,7 +1534,7 @@ namespace das {
 
     void ExprMakeStruct::serialize ( AstSerializer & ser ) {
         ExprMakeLocal::serialize(ser);
-        ser << structs << block << makeStructFlags;
+        ser << structs << block << makeStructFlags << constructor;
     }
 
     void ExprMakeVariant::serialize ( AstSerializer & ser ) {

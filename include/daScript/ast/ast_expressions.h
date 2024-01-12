@@ -1371,11 +1371,13 @@ namespace das
         virtual void serialize( AstSerializer & ser ) override;
         vector<MakeStructPtr>       structs;
         ExpressionPtr               block;
+        Function *                  constructor = nullptr;
         union {
             struct {
                 bool useInitializer : 1;
                 bool isNewHandle : 1;
                 bool usedInitializer : 1;
+                bool nativeClassInitializer : 1;
             };
             uint32_t makeStructFlags = 0;
         };

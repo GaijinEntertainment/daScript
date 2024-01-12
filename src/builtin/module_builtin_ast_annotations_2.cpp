@@ -177,6 +177,7 @@ namespace das {
             :  AstExprMakeLocalAnnotation<ExprMakeStruct> ("ExprMakeStruct", ml) {
             addField<DAS_BIND_MANAGED_FIELD(structs)>("structs");
             addField<DAS_BIND_MANAGED_FIELD(block)>("_block","block");
+            addField<DAS_BIND_MANAGED_FIELD(constructor)>("constructor","constructor");
             this->addFieldEx ( "makeStructFlags", "makeStructFlags", offsetof(ExprMakeStruct, makeStructFlags), makeExprMakeStructFlags() );
         }
     };

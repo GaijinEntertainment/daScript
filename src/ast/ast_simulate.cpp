@@ -682,6 +682,20 @@ namespace das
         }
         if ( makeType->baseType == Type::tStructure ) {
             for ( int index=0; index != total; ++index ) {
+                if ( constructor ) {
+                    uint32_t offset =  extraOffset + index*stride;
+                    SimNode_CallBase * pCall = (SimNode_CallBase *) context.code->makeNodeUnrollAny<SimNode_CallAndCopyOrMove>(0, at);
+                    DAS_ASSERT(constructor->index!=-1 && "should have failed in type infer otherwise");
+                    pCall->fnPtr = context.getFunction(constructor->index);
+                    if ( useCMRES ) {
+                        pCall->cmresEval = context.code->makeNode<SimNode_GetCMResOfs>(at, offset);
+                    } else if ( useStackRef ) {
+                        pCall->cmresEval = context.code->makeNode<SimNode_GetLocalRefOff>(at, stackTop, offset);
+                    } else {
+                        pCall->cmresEval = context.code->makeNode<SimNode_GetLocal>(at, stackTop + offset);
+                    }
+                    simlist.push_back(pCall);
+                }
                 auto & fields = structs[index];
                 for ( const auto & decl : *fields ) {
                     auto field = makeType->structType->findField(decl->name);

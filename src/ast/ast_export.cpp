@@ -213,6 +213,16 @@ namespace das {
                 }
             }
         }
+        virtual void preVisit(ExprMakeStruct * call) override {
+            Visitor::preVisit(call);
+            if ( call->constructor ) {
+                if (func) {
+                    func->useFunctions.insert(call->constructor);
+                } else if (gVar) {
+                    gVar->useFunctions.insert(call->constructor);
+                }
+            }
+        }
         // Op1
         virtual void preVisit(ExprOp1 * expr) override {
             Visitor::preVisit(expr);

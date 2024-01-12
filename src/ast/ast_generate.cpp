@@ -293,6 +293,7 @@ namespace das {
         block->at = str->at;
         auto makeT = make_smart<ExprMakeStruct>(str->at);
         makeT->useInitializer = false;
+        makeT->nativeClassInitializer = true;
         for ( auto & f : str->fields ) {
             if ( f.init ) {
                 makeT->useInitializer = true;
@@ -1702,6 +1703,7 @@ namespace das {
         auto makeT = make_smart<ExprMakeStruct>(baseClass->at);
         makeT->at = func->at;
         makeT->useInitializer = true;
+        makeT->nativeClassInitializer = true;
         makeT->makeType = make_smart<TypeDecl>(baseClass);
         makeT->structs.push_back(make_smart<MakeStruct>());
         auto letS = make_smart<ExprLet>();

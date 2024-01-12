@@ -3960,6 +3960,17 @@ namespace das {
             return Visitor::visit(expr);
         }
     // ExprAscend
+        virtual void preVisit ( ExprAscend * expr ) override {
+            Visitor::preVisit(expr);
+            if ( !expr->subexpr->type ) return;
+            if ( expr->subexpr->type->baseType==Type::tHandle && expr->subexpr->rtti_isMakeStruct() ) {
+                auto mks = static_pointer_cast<ExprMakeStruct>(expr->subexpr);
+                if ( !mks->isNewHandle ) {
+                    reportAstChanged();
+                    mks->isNewHandle = true;
+                }
+            }
+        }
         virtual ExpressionPtr visit ( ExprAscend * expr ) override {
             if ( !expr->subexpr->type ) return Visitor::visit(expr);
             if ( expr->subexpr->type->baseType==Type::tHandle && expr->subexpr->rtti_isMakeStruct() ) {
@@ -7609,6 +7620,7 @@ namespace das {
             if ( expr->makeType && expr->makeType->isExprType() ) {
                 return;
             }
+            expr->constructor = nullptr;
             verifyType(expr->makeType);
             if ( expr->makeType->baseType!=Type::tStructure && expr->makeType->baseType!=Type::tHandle ) {
                 if ( expr->structs.size() ) {
@@ -7720,6 +7732,18 @@ namespace das {
                         reportInferAliasErrors(expr->makeType), "", expr->makeType->at, CompilationError::type_not_found );
                 }
             }
+            auto isClassCtor = !expr->nativeClassInitializer && (expr->useInitializer || expr->usedInitializer) && expr->makeType && expr->makeType->isClass();
+            if (  isClassCtor ) {
+                auto st = expr->makeType->structType;
+                auto ctorName = st->module->name  + "::" + st->name;
+                auto tempCall = make_smart<ExprLooksLikeCall>(expr->at,ctorName);
+                expr->constructor = inferFunctionCall(tempCall.get(),InferCallError::functionOrGeneric).get();
+                if ( !expr->constructor ) {
+                    error("class constructor can't be inferred " + describeType(expr->makeType),
+                        reportInferAliasErrors(expr->makeType), "", expr->makeType->at, CompilationError::function_not_found );
+                }
+            }
+
             if ( expr->block ) {
                 if ( !expr->block->rtti_isMakeBlock() ) {
                     string btype  = expr->block->type ? describeType(expr->block->type) : "unknown";
@@ -7813,17 +7837,22 @@ namespace das {
                             }
                         }
                     }
-                    if ( !expr->structs.size() ) expr->structs.emplace_back(make_smart<MakeStruct>());
-                    for ( auto & st : expr->structs ) {
-                        for ( auto & fi : expr->makeType->structType->fields ) {
-                            if ( fi.init ) {
-                                auto it = find_if(st->begin(), st->end(), [&](const MakeFieldDeclPtr & fd){
-                                    return fd->name == fi.name;
-                                });
-                                if ( it==st->end() ) {
-                                    auto msf = make_smart<MakeFieldDecl>(fi.at, fi.name, fi.init->clone(), !fi.init->type->canCopy(), false);
-                                    st->push_back(msf);
-                                    reportAstChanged();
+                    if ( !expr->structs.size() ) {
+                        reportAstChanged();
+                        expr->structs.emplace_back(make_smart<MakeStruct>());
+                    }
+                    if ( !isClassCtor ) {
+                        for ( auto & st : expr->structs ) {
+                            for ( auto & fi : expr->makeType->structType->fields ) {
+                                if ( fi.init ) {
+                                    auto it = find_if(st->begin(), st->end(), [&](const MakeFieldDeclPtr & fd){
+                                        return fd->name == fi.name;
+                                    });
+                                    if ( it==st->end() ) {
+                                        auto msf = make_smart<MakeFieldDecl>(fi.at, fi.name, fi.init->clone(), !fi.init->type->canCopy(), false);
+                                        st->push_back(msf);
+                                        reportAstChanged();
+                                    }
                                 }
                             }
                         }
