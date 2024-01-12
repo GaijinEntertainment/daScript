@@ -2083,6 +2083,29 @@ class LlvmJitVisitor : AstVisitor
         return expr
 
 // ExprMakeStruct
+    def callConstructor ( expr:smart_ptr<ExprMakeStruct>; cmresEval:LLVMOpaqueValue? )
+        assume expr_func = expr.constructor
+        if expr_func.moreFlags.requestJit
+            var params : array<LLVMOpaqueValue?>
+            params |> push(get_context_param())
+            params |> push(LLVMBuildPointerCast(g_builder, cmresEval, LLVMPointerType(LLVMVoidType(),0u), ""))
+            let fmna = get_mangled_name(FunctionPtr(expr_func))
+            var func = LLVMGetNamedFunction(g_mod, "{fmna} implementation")
+            var ccall = LLVMBuildCall(g_builder, func, params, "")
+            setE(expr, cmresEval)
+        else
+            var MNH_ADDR = get_function_addr(expr_func)
+            if MNH_ADDR==0ul
+                failed_E(expr, "missing function pointer for {expr_func.name}")
+            var params : array<LLVMOpaqueValue?>
+            params |> push(LLVMConstIntToPtr(LLVMConstInt(LLVMInt64Type(), MNH_ADDR, 0), LLVMPointerType(LLVMVoidType(), 0u)))  // mnh
+            params |> push(LLVMConstPointerNull(LLVMPointerType(LLVMFloat4Type(), 0u))) // args
+            params |> push(LLVMBuildPointerCast(g_builder, cmresEval, LLVMPointerType(LLVMVoidType(),0u), ""))
+            params |> push(get_context_param())
+            var func = LLVMGetNamedFunction(g_mod, cmresEval!=null ? FN_JIT_CALL_WITH_CMRES : FN_JIT_CALL_OR_FASTCALL)
+            var ccall = LLVMBuildCall(g_builder, func, params, "")
+            setE(expr, cmresEval)
+
     def override preVisitExprMakeStruct(expr:smart_ptr<ExprMakeStruct>) : void
         var mks_ptr : LLVMOpaqueValue?
         if expr.makeFlags.useCMRES
@@ -2108,6 +2131,16 @@ class LlvmJitVisitor : AstVisitor
             let align = uint(expr.makeType.alignOf)
             LLVMBuildMemSet(g_builder, mks_ptr, LLVMConstInt(LLVMInt8Type(), 0ul, 0), LLVMConstInt(LLVMInt32Type(), uint64(bytes), 0), align)
         setE(expr, mks_ptr)
+
+    def override preVisitExprMakeStructIndex(expr:smart_ptr<ExprMakeStruct>;index:int;last:bool) : void
+        if expr.constructor != null
+            var mks_ptr = getE(expr)
+            mks_ptr = LLVMBuildPointerCast(g_builder, mks_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
+            let stride = expr.makeType.stride
+            let offset = index*stride
+            mks_ptr = LLVMBuildGEP(g_builder, mks_ptr, LLVMConstInt(LLVMInt32Type(), uint64(offset), 0), "")
+            mks_ptr = LLVMBuildPointerCast(g_builder, mks_ptr, LLVMPointerType(type_to_llvm_type(expr.makeType),0u), "")
+            callConstructor(expr, mks_ptr)
 
     def override preVisitExprMakeStructField(expr:smart_ptr<ExprMakeStruct>;index:int;decl:MakeFieldDeclPtr;last:bool) : void
         var field_offset : int
