@@ -314,8 +314,10 @@ namespace das
             return res;
         }
         static void jit_delete ( void * ptr, Context * ) {
-            OT * res = (OT *) ptr;
-            res->delRef();
+            if ( ptr ) {
+                OT * res = (OT *) ptr;
+                res->delRef();
+            }
         }
     };
 
