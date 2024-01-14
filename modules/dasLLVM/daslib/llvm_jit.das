@@ -1628,6 +1628,9 @@ class LlvmJitVisitor : AstVisitor
             if right is ExprConstPtr
                 let null_ptr = LLVMConstPointerNull(LLVMPointerType(LLVMVoidType(),0u))
                 LLVMBuildStore2Aligned(g_builder, LLVMPointerType(LLVMVoidType(),0u), null_ptr, tdst, ralign)
+            elif right._type.isPointer
+                var compDst = LLVMBuildPointerCast(g_builder, tdst, LLVMPointerType(LLVMTypeOf(tsrc),0u), "")
+                LLVMBuildStoreAligned(g_builder, tsrc, compDst, ralign)
             else
                 LLVMBuildStoreAligned(g_builder, tsrc, tdst, ralign)
 
@@ -2624,6 +2627,7 @@ class LlvmJitVisitor : AstVisitor
         if needTypeInfo
             bytes += 16
         var mks_ptr : LLVMOpaqueValue?
+        var needMemset = true
         if expr.subexpr._type.baseType == Type tHandle
             let fn_new_handle = get_new_handle_function(expr.subexpr._type)
             if fn_new_handle == null
@@ -2633,6 +2637,7 @@ class LlvmJitVisitor : AstVisitor
                 get_context_param()
             ]]
             mks_ptr = LLVMBuildCall(g_builder, fn_new_handle, params, "new`handle`{describe(expr.subexpr._type)}")
+            needMemset = false
         else
             mks_ptr = build_alloc(bytes, false)
         check_ptr_zero(mks_ptr, expr.at, "new [[...]] returned null")
@@ -2644,7 +2649,8 @@ class LlvmJitVisitor : AstVisitor
             var p2int = LLVMBuildPtrToInt(g_builder, mks_ptr, LLVMIntPtrType(), "")
             var add16 = LLVMBuildAdd(g_builder, p2int, LLVMConstInt(LLVMIntPtrType(), uint64(16), 0), "")
             mks_ptr = LLVMBuildIntToPtr(g_builder, add16, LLVMPointerType(LLVMVoidType(),0u), "")
-        LLVMBuildMemSet(g_builder, mks_ptr, LLVMConstInt(LLVMInt8Type(), 0ul, 0), LLVMConstInt(LLVMInt32Type(), uint64(bytes), 0), 16u)
+        if needMemset
+            LLVMBuildMemSet(g_builder, mks_ptr, LLVMConstInt(LLVMInt8Type(), 0ul, 0), LLVMConstInt(LLVMInt32Type(), uint64(bytes), 0), 16u)
         if expr.ascendFlags.useStackRef
             let stackref_ptr = LLVMBuildPointerCast(g_builder, mks_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
             setE(expr.subexpr, stackref_ptr)
@@ -3196,9 +3202,15 @@ class LlvmJitVisitor : AstVisitor
             elif returnType.isPointer && (expr.subexpr is ExprConstPtr) // return null
                 LLVMBuildRet(g_builder, LLVMConstPointerNull(type_to_llvm_abi_type(returnType)))
             elif returnType.isPointer
+                var resPtr = getE(expr.subexpr)
+                if expr.subexpr._type.flags.ref
+                    // if source is ptr&, we empty it
+                    resPtr = LLVMBuildLoadDataAligned(g_builder, resPtr, uint(expr.subexpr._type.alignOf), "")
+                    if expr.returnFlags.moveSemantics
+                        LLVMBuildStore(g_builder, LLVMConstNull(type_to_llvm_abi_type(returnType)), getE(expr.subexpr))
                 // cast pointer type, becasue we may need to cast void* onto returntype*.
                 // TODO: check? (we don't check, we just cast for now)
-                var cres = LLVMBuildPointerCast(g_builder, getE(expr.subexpr), type_to_llvm_abi_type(returnType), "")
+                var cres = LLVMBuildPointerCast(g_builder, resPtr, type_to_llvm_abi_type(returnType), "")
                 LLVMBuildRet(g_builder, cres)
             elif expr.returnFlags.moveSemantics && expr.subexpr._type.isWorkhorseType
                 // return <- blah // where blah is string and such
