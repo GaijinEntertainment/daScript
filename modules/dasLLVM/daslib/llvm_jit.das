@@ -2268,7 +2268,7 @@ class LlvmJitVisitor : AstVisitor
             if expr.recordType.canCopy
                 build_copy(v_ptr, init)
             else
-                failed_E(expr, "makeArray: move is not supported")
+                build_move(v_ptr, init, false)
         return init
 
     def override visitExprMakeArray(expr:smart_ptr<ExprMakeArray>) : ExpressionPtr
@@ -3740,6 +3740,8 @@ class LlvmJitVisitor : AstVisitor
                 failed("internal error. expecting workhorse type from `get_underlying_value_type` for {describe(etype)}")
             tres = cast_to_vec4f(tp, tsrc)
         elif etype.baseType == Type tLambda
+            tres = cast_ptr_to_vec4f(tsrc)
+        elif etype.baseType == Type tPointer
             tres = cast_ptr_to_vec4f(tsrc)
         else
             failed("unsupported cast_to_vec4f type {describe(etype)}")
