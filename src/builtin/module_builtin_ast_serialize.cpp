@@ -2060,6 +2060,11 @@ namespace das {
         }
     }
 
+        uint32_t AstSerializer::getVersion () {
+        static constexpr uint32_t currentVersion = 7;
+        return currentVersion;
+    }
+
     // Used in daNetGame currently
     void Program::serialize ( AstSerializer & ser ) {
         ser << thisNamespace << thisModuleName;
