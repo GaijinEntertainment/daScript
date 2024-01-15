@@ -118,6 +118,8 @@ namespace das {
    // Top-level
         AstSerializer & operator << ( Module & module );
 
+        uint32_t getVersion ();
+
         void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup );
 
         template<typename T>
