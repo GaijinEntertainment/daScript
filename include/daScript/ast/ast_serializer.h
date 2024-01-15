@@ -59,12 +59,13 @@ namespace das {
         vector<tuple<string, uint64_t, ProgramPtr, Module*>> parsedModules;
     // tracking for shared modules
         das_hash_set<Module *>                      writingReadyModules;
-        void tag ( const char * name );
+        void tag   ( const char * name );
         void read  ( void * data, size_t size );
         void write ( const void * data, size_t size );
+        void serialize ( void * data, size_t size );
         void serializeAdaptiveSize64 ( uint64_t & size );
         void serializeAdaptiveSize32 ( uint32_t & size );
-        void serialize ( void * data, size_t size );
+        void collectFileInfo ( vector<FileInfoPtr> & orphanedFileInfos );
         void patch ();
         AstSerializer & operator << ( string & str );
         AstSerializer & operator << ( const char * & value );

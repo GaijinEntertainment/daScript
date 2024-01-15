@@ -18,6 +18,16 @@ namespace das {
         writing = true;
     }
 
+    void AstSerializer::collectFileInfo ( vector<FileInfoPtr> & orphanedFileInfos ) {
+        for ( auto fileInfo : deleteUponFinish ) {
+            if ( doNotDelete.count(fileInfo) == 0 ) {
+                orphanedFileInfos.emplace_back(fileInfo);
+            }
+        }
+        deleteUponFinish.clear();
+        doNotDelete.clear();
+    }
+
     AstSerializer::~AstSerializer () {
         for ( auto fileInfo : deleteUponFinish ) {
             if ( doNotDelete.count(fileInfo) == 0 ) {
