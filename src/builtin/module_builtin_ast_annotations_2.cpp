@@ -48,6 +48,19 @@ namespace das {
         virtual SimNode * simulateDeletePtr ( Context & context, const LineInfo & at, SimNode * sube, uint32_t count ) const override {
             return context.code->makeNode<SimNode_DeleteHandlePtr<MakeStruct,true>>(at,sube,count);
         }
+        static void * jit_new ( Context * ) {
+            auto res = new MakeStruct();
+            res->addRef();
+            return res;
+        }
+        static void jit_delete ( void * ptr, Context * ) {
+            if ( ptr ) {
+                auto res = (MakeStruct *) ptr;
+                res->delRef();
+            }
+        }
+        virtual void * jitGetNew() const override { return (void *) &jit_new; }
+        virtual void * jitGetDelete() const override { return (void *) &jit_delete; }
     };
 
     struct AstExprNamedCallAnnotation : AstExpressionAnnotation<ExprNamedCall> {
