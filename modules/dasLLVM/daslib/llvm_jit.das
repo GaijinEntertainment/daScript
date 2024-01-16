@@ -340,13 +340,16 @@ class LlvmJitVisitor : AstVisitor
             var arg_ptr = LLVMBuildGEP(g_builder, args, LLVMConstInt(LLVMInt32Type(), uint64(ai), 0), "arg_ptr_{ai}")
             arg_ptr = LLVMBuildPointerCast(g_builder, arg_ptr, LLVMPointerType(type_to_llvm_abi_type(a._type),0u), "")
             var arg_v : LLVMOpaqueValue?
-            if a._type.flags.ref
+            if a._type.isVoid
+                pass
+            elif a._type.flags.ref
                 arg_v = LLVMBuildLoad(g_builder, arg_ptr, "arg_ref_value_{ai}")
             elif !a._type.isRef
                 arg_v = LLVMBuildLoad(g_builder, arg_ptr, "arg_value_{ai}")
             else
                 arg_v = LLVMBuildLoad(g_builder, arg_ptr, "arg_any_{ai}")
-            wargs |> push(arg_v)
+            if arg_v != null
+                wargs |> push(arg_v)
         if captureType!=null
             wargs |> push(LLVMGetParam(wfunc,3u))   // block
         wargs |> push(LLVMGetParam(wfunc,0u))  // context
