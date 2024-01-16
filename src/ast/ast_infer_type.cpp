@@ -1910,6 +1910,10 @@ namespace das {
                         reportInferAliasErrors(var->type), "", var->at, CompilationError::type_not_found );
                 }
             }
+            if ( var->type->isVoid() ) {
+                error("function argument type can't be declared void",  "", "",
+                    var->at, CompilationError::invalid_type);
+            }
             if ( var->type->ref && var->type->isRefType() ) {   // silently fix a : Foo& into a : Foo
                 var->type->ref = false;
                 auto mname = fn->getMangledName();
@@ -4474,6 +4478,10 @@ namespace das {
             }
             if ( var->type->ref && var->type->isRefType() ) { // silently fix a : Foo& into a : Foo
                 var->type->ref = false;
+            }
+            if ( var->type->isVoid() ) {
+                error("block argument type can't be declared void",  "", "",
+                    var->at, CompilationError::invalid_type);
             }
             verifyType(var->type,true);
         }
