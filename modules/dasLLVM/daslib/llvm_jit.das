@@ -452,7 +452,12 @@ class LlvmJitVisitor : AstVisitor
         if !current_block_terminates()
             call_all_finally_blocks(false)
             build_exit(blk.at)
-            LLVMBuildRetVoid(g_builder)
+            if thisBlock!=null && thisBlock.returnType!=null && !thisBlock.returnType.isVoid
+                LLVMBuildUnreachable(g_builder)
+            elif thisBlock==null && thisFunc!=null && thisFunc.result!=null && !thisFunc.result.isVoid
+                LLVMBuildUnreachable(g_builder)
+            else
+                LLVMBuildRetVoid(g_builder)
 
     def call_all_finally_blocks(stopAtLoop:bool)
         var len = length(block_stack)
@@ -3205,9 +3210,10 @@ class LlvmJitVisitor : AstVisitor
                 var resPtr = getE(expr.subexpr)
                 if expr.subexpr._type.flags.ref
                     // if source is ptr&, we empty it
-                    resPtr = LLVMBuildLoadDataAligned(g_builder, resPtr, uint(expr.subexpr._type.alignOf), "")
+                    resPtr = LLVMBuildLoadDataAligned(g_builder, resPtr, uint(expr.subexpr._type.alignOf), "result_before_move")
                     if expr.returnFlags.moveSemantics
-                        LLVMBuildStore(g_builder, LLVMConstNull(type_to_llvm_abi_type(returnType)), getE(expr.subexpr))
+                        var subPtrType = LLVMPointerType(type_to_llvm_type(expr.subexpr._type.firstType), 0u)
+                        LLVMBuildStore(g_builder, LLVMConstNull(subPtrType), getE(expr.subexpr))
                 // cast pointer type, becasue we may need to cast void* onto returntype*.
                 // TODO: check? (we don't check, we just cast for now)
                 var cres = LLVMBuildPointerCast(g_builder, resPtr, type_to_llvm_abi_type(returnType), "")
