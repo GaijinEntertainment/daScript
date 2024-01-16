@@ -52,10 +52,10 @@ def test_float_and_double ( t:T? )
         var fake <- Faker()
         fuzz <|
             var s, c : float
-            t |> accept ( sincos(fake |> random_float, s, c) )
+            sincos(fake |> random_float, s, c)
         fuzz <|
             var s, c : double
-            t |> accept ( sincos(fake |> random_double, s, c) )
+            sincos(fake |> random_double, s, c)
 
 [test]
 def test_float_only ( t:T? )
