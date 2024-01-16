@@ -802,6 +802,11 @@ class LlvmJitVisitor : AstVisitor
                 var ptrType = type_to_llvm_abi_type(funcArg._type)
                 var ptrValue = LLVMBuildPointerCast(g_builder, getE(a), ptrType, "arg_{funcArg.name}_ptr")
                 params |> push( ptrValue )
+            elif a._type.baseType==Type tStructure  // possibly inherited structure
+                assume funcArg = expr.func.arguments[ai]
+                var ptrType = type_to_llvm_abi_type(funcArg._type)
+                var ptrValue = LLVMBuildPointerCast(g_builder, getE(a), ptrType, "arg_{funcArg.name}_struct")
+                params |> push( ptrValue )
             elif (a._type.baseType==Type tArray || a._type.baseType==Type tTable) && (extern_func != null)
                 assume funcArg = expr.func.arguments[ai]
                 var destType = type_to_llvm_abi_type(funcArg._type)
