@@ -22,6 +22,8 @@ struct Data
     // return false // force exit
 
 [async] def get_data(a : int) : Data
+    if a < 0
+        return false // returns empty data: [[Data]]
     log("get_data 1\n")
     await_next_frame()
     log("get_data 2\n")
@@ -33,29 +35,43 @@ struct Data
 
 [async] def async_range() : int
     yield 1
+    yield 2
     yield 3
-    yield 5
 
 [async] def bool_range() : bool
     yield true
     yield false
     yield true
 
-[coroutine] def just_coroutine(n) : void
+[coroutine] def just_coroutine(n)
     for i in 0..n
         yield true
 
-
 [async] def getall() : void
-    let a2 = await <| get_plus_1(100)
-    debug(a2)
+    var a = await <| get_plus_1(100)
+    debug(a, "1+100")
+    assert(a == 101)
+
+    a <- await <| get_plus_1(200)
+    debug(a, "1+200")
+    assert(a == 201)
 
     log("pass frame\n")
     await_next_frame()
 
     // await <| get_data(1) // 40102: call annotated by AwaitMacro failed to transform, result should be assigned to a variable, use 'let res <- await(get_data(1))'
-    let res = await <| get_data(1)
-    debug(res)
+    let res <- await <| get_data(1)
+    debug(res, "res")
+    assert(res.a == 1)
+    assert(res.b == "hello")
+    assert(res.arr[0] == 1)
+    // res = await <| get_data(1) // 30507: this type can't be copied, Data& -const = Data
+
+    let noRes <- await <| get_data(-1) // empty result
+    debug(noRes, "noRes")
+    assert(noRes.a == 0)
+    assert(noRes.b == "")
+    assert(length(noRes.arr) == 0)
 
 
 // coroutine
@@ -68,14 +84,24 @@ struct Data
 	await <| getall() // ok, async function with void result
 
     log("async_range\n")
-    for i in async_range()
+    var ints = 0
+    for idx, i in count(), async_range()
         print("int {i}\n")
+        assert(i is res)
+        assert(idx + 1 == (i as res))
+        ints++
         await_next_frame()
+    assert(ints == 3)
 
     log("bool_range\n")
-    for b in bool_range()
+    var bools = 0
+    for idx, b in count(), bool_range()
         print("bool {b}\n")
+        assert(b is res)
+        assert(b as res == (idx % 2 == 0))
+        bools++
         await_next_frame()
+    assert(bools == 3)
 
     let n = 5
     log("wait coroutine ({n} frames)\n")

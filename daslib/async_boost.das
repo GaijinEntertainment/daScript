@@ -53,14 +53,18 @@ class AwaitCoroutineMacro : AstFunctionAnnotation
 
 
 [function_macro(name="async")]
-class private CoroutineMacro : AstFunctionAnnotation
+class private AsyncMacro : AstFunctionAnnotation
     //! This macro converts function into generator.
     //! Generator yields bool if its a void function (coroutine), and yields the return type otherwise (async return).
     //! async function can wait for another async function using await(<async fn call>).
+    //! use 'return false' to immediately return from the generator.
     [unused_argument(group, args, errors)] def override apply(var func : FunctionPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool
+        if func.result.baseType == Type autoinfer
+            errors := "async function should have explicit return type"
+            return false
         var inscope retT : TypeDeclPtr
         var voidRoutine = true
-        if func.result.baseType == Type tVoid// || func.result.baseType == Type autoinfer
+        if func.result.baseType == Type tVoid
             move_new(retT) <| qmacro_type(type<bool>)
         else
             voidRoutine = false
@@ -96,6 +100,59 @@ class private CoroutineMacro : AstFunctionAnnotation
         func.result |> move_new() <| qmacro_type(type<iterator<$t(retT)>>)
         return true
 
+[macro_function]
+def validateAwaitFn(fn : smart_ptr<ast::Function>&; subCallName : das_string; var errors : string&) : bool
+    if fn == null
+        errors = "{errors}\nexpecting await(<async fn>), but function {subCallName} is not found, make sure it is defined before the coroutine"
+        return false
+    if fn.result.baseType != Type tIterator
+        errors = "{errors}\nexpecting await(<async fn>), add [async] annotation to the function {subCallName}"
+        return false
+    if fn.result.firstType.baseType != Type tVariant
+        errors = "{errors}\nexpecting await(<async fn>), add [async] annotation to the function {subCallName}"
+        return false
+    if fn.result.firstType.argTypes |> length() != 2
+        errors = "{errors}\nexpecting await(<async fn>), add [async] annotation to the function {subCallName}"
+        return false
+    return true
+
+enum AssignOp
+    copy
+    move
+    clone
+
+[macro_function]
+def move_clone_copy(var expr; voidRoutine : bool; var retType : smart_ptr<TypeDecl>&; var errors : string&; assignOp : AssignOp) : ExpressionPtr
+    if expr.right is ExprCall
+        var call = expr.right as ExprCall
+        if call.name == "await"
+            if call.arguments[0] is ExprCall
+                var subCall = call.arguments[0] as ExprCall
+                var inscope fn <- compiling_module() |> find_unique_function("{subCall.name}")
+                if !validateAwaitFn(fn, subCall.name, errors)
+                    return <- expr
+
+                let name = make_unique_private_name("_async_iterator", expr.at)
+                let useMove = assignOp == AssignOp move
+                let useClone = assignOp == AssignOp clone
+                var inscope blk <- qmacro_block <|
+                    for $i(name) in $e(call.arguments[0])
+                        if $i(name) is res
+                            if $v(useMove)
+                                $e(expr.left) <- $i(name) as res
+                            elif $v(useClone)
+                                $e(expr.left) := $i(name) as res
+                            else
+                                $e(expr.left) = $i(name) as res
+                        else
+                            if $v(voidRoutine)
+                                yield true
+                            else
+                                yield <- [[$t(retType) wait=true]]
+                var exprBlock = blk as ExprBlock
+                blk |> force_at(expr.at)
+                return <- blk
+    return <- expr
 
 [macro_interface]
 class CollectAndReplaceIteratorFields : AstVisitor
@@ -105,22 +162,40 @@ class CollectAndReplaceIteratorFields : AstVisitor
 
     [[do_not_delete]] private blocksStack : array<ExprBlock?>
 
+
     def override visitExprYield(var expr : smart_ptr<ExprYield>) : ExpressionPtr
         if voidRoutine
             return <- expr
         if expr._type != null && expr._type |> is_same_type(retType, RefMatters no, ConstMatters no, TemporaryMatters no)
             return <- expr
         if !retType.argTypes[0].canCopy
-            return <- qmacro_expr(${ yield <- [[$t(retType) res <- $e(expr.subexpr)]]; })
+            var inscope res <- qmacro_expr(${ yield <- [[$t(retType) res <- $e(expr.subexpr)]]; })
+            res |> force_at(expr.at)
+            return <- res
 
-        return <- qmacro_expr(${ yield <- [[$t(retType) res = $e(expr.subexpr)]]; })
+        var inscope res <- qmacro_expr(${ yield <- [[$t(retType) res = $e(expr.subexpr)]]; })
+        res |> force_at(expr.at)
+        return <- res
+
+    def override visitExprCopy(var expr:smart_ptr<ExprCopy>) : ExpressionPtr
+        return <- move_clone_copy(expr, voidRoutine, retType, errors, AssignOp copy)
+
+    def override visitExprMove(var expr:smart_ptr<ExprMove>) : ExpressionPtr
+        return <- move_clone_copy(expr, voidRoutine, retType, errors, AssignOp move)
+
+    def override visitExprClone(var expr:smart_ptr<ExprClone>) : ExpressionPtr
+        return <- move_clone_copy(expr, voidRoutine, retType, errors, AssignOp clone)
 
     def override visitExprCall(var expr : smart_ptr<ExprCall>) : ExpressionPtr
         if expr.name == "await_next_frame"
             if voidRoutine
-                return <- qmacro_expr(${ yield true; })
+                var inscope res <- qmacro_expr(${ yield true; })
+                res |> force_at(expr.at)
+                return <- res
             else
-                return <- qmacro_expr(${ yield <- [[$t(retType) wait=true]]; })
+                var inscope res <- qmacro_expr(${ yield <- [[$t(retType) wait=true]]; })
+                res |> force_at(expr.at)
+                return <- res
         return <- expr
 
     def override preVisitExprBlock(blk:smart_ptr<ExprBlock>) : void
@@ -144,27 +219,24 @@ class CollectAndReplaceIteratorFields : AstVisitor
 
                         var subCall = call.arguments[0] as ExprCall
                         var inscope fn <- compiling_module() |> find_unique_function("{subCall.name}")
-                        if fn == null
-                            errors = "{errors}\nexpecting await(<async fn>), but function {subCall.name} is not found, make sure it is defined before the coroutine"
-                            return <- expr
-                        if fn.result.baseType != Type tIterator
-                            errors = "{errors}\nexpecting await(<async fn>), add [async] annotation to the function {subCall.name}"
-                            return <- expr
-                        if fn.result.firstType.baseType != Type tVariant
-                            errors = "{errors}\nexpecting await(<async fn>), add [async] annotation to the function {subCall.name}"
-                            return <- expr
-                        if fn.result.firstType.argTypes |> length() != 2
-                            errors = "{errors}\nexpecting await(<async fn>), add [async] annotation to the function {subCall.name}"
+                        if !validateAwaitFn(fn, subCall.name, errors)
                             return <- expr
 
                         v._type |> move_new() <| clone_type(fn.result.firstType.argTypes[0])
 
                     var name = make_unique_private_name("_async_iterator", expr.at)
+                    let useMove = v.flags.init_via_move
+                    let useClone = v.flags.init_via_clone
                     var inscope blk <- qmacro_block <|
                         var $i(v.name) : $t(v._type)
                         for $i(name) in $e(call.arguments[0])
                             if $i(name) is res
-                                $i(v.name) := $i(name) as res
+                                if $v(useMove)
+                                    $i(v.name) <- $i(name) as res
+                                elif $v(useClone)
+                                    $i(v.name) := $i(name) as res
+                                else
+                                    $i(v.name) = $i(name) as res
                             else
                                 if $v(voidRoutine)
                                     yield true
