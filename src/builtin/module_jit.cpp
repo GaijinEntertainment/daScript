@@ -8,6 +8,7 @@
 #include "daScript/ast/ast_handle.h"
 #include "daScript/ast/ast_visitor.h"
 #include "daScript/misc/fpe.h"
+#include "daScript/misc/sysos.h"
 #include "module_builtin_rtti.h"
 #include "module_builtin_ast.h"
 
@@ -60,9 +61,11 @@ namespace das {
         return true;
     }
 
+extern "C" {
     void jit_exception ( const char * text, Context * context, LineInfoArg * at ) {
         context->throw_error_at(at, "%s", text ? text : "");
     }
+}
 
     void * das_get_jit_exception ( ) {
         return (void *) &jit_exception;
@@ -377,6 +380,25 @@ namespace das {
         return (void *) &das_jit_debug_line;
     }
 
+    void create_shared_library ( const char * objFilePath, const char * libraryName, const char * jitModuleObj ) {
+        char cmd[1024];
+
+        #if defined(_WIN32) || defined(_WIN64)
+            snprintf(cmd, sizeof(cmd), "clang-cl %s %s -link -DLL -OUT:%s ", objFilePath, jitModuleObj, libraryName);
+        #elif defined(__APPLE__)
+            snprintf(cmd, sizeof(cmd), "clang -shared -o %s %s %s", libraryName, objFilePath, jitModuleObj);
+        #else
+            snprintf(cmd, sizeof(cmd), "gcc -shared -o %s %s %s", libraryName, objFilePath, jitModuleObj);
+        #endif
+
+        int result = system(cmd);
+        if (result != 0) {
+            das_to_stderr("Failed to make shared library %s, command '%s'", libraryName, cmd);
+        } else {
+            das_to_stdout("Library %s made - ok", libraryName);
+        }
+    }
+
     class Module_Jit : public Module {
     public:
         Module_Jit() : Module("jit") {
@@ -475,6 +497,15 @@ namespace das {
                 SideEffects::none, "das_get_jit_debug_exit");
             addExtern<DAS_BIND_FUN(das_get_jit_debug_line)>(*this, lib,  "get_jit_debug_line",
                 SideEffects::none, "das_get_jit_debug_line");
+            addExtern<DAS_BIND_FUN(loadDynamicLibrary)>(*this, lib,  "load_dynamic_library",
+                SideEffects::worstDefault, "loadDynamicLibrary")
+                    ->args({"filename"});
+            addExtern<DAS_BIND_FUN(getFunctionAddress)>(*this, lib,  "get_function_address",
+                SideEffects::worstDefault, "getFunctionAddress")
+                    ->args({"library","name"});
+            addExtern<DAS_BIND_FUN(create_shared_library)>(*this, lib,  "create_shared_library",
+                SideEffects::worstDefault, "create_shared_library")
+                    ->args({"objFilePath","libraryName","jitModuleObj"});
             addConstant<uint32_t>(*this, "SIZE_OF_PROLOGUE", uint32_t(sizeof(Prologue)));
             addConstant<uint32_t>(*this, "CONTEXT_OFFSET_OF_EVAL_TOP", uint32_t(uint32_t(offsetof(Context, stack) + offsetof(StackAllocator, evalTop))));
             addConstant<uint32_t>(*this, "CONTEXT_OFFSET_OF_GLOBALS", uint32_t(uint32_t(offsetof(Context, globals))));
