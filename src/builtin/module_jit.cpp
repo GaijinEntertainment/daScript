@@ -249,33 +249,33 @@ extern "C" {
     }
 }
 
-void *das_get_jit_exception() { return (void *)&jit_exception; }
-void *das_get_jit_call_or_fastcall() { return (void *)&jit_call_or_fastcall; }
-void *das_get_jit_invoke_block() { return (void *)&jit_invoke_block; }
-void *das_get_jit_invoke_block_with_cmres() { return (void *)&jit_invoke_block_with_cmres; }
-void *das_get_jit_call_with_cmres() { return (void *)&jit_call_with_cmres; }
-void *das_get_jit_string_builder() { return (void *)&jit_string_builder; }
-void *das_get_jit_get_global_mnh() { return (void *)&jit_get_global_mnh; }
-void *das_get_jit_alloc_heap() { return (void *)&jit_alloc_heap; }
-void *das_get_jit_alloc_persistent() { return (void *)&jit_alloc_persistent; }
-void *das_get_jit_free_heap() { return (void *)&jit_free_heap; }
-void *das_get_jit_free_persistent() { return (void *)&jit_free_persistent; }
-void *das_get_jit_array_lock() { return (void *)&builtin_array_lock; }
-void *das_get_jit_array_unlock() { return (void *)&builtin_array_unlock; }
-void *das_get_jit_str_cmp() { return (void *)&jit_str_cmp; }
-void *das_get_jit_prologue() { return (void *)&jit_prologue; }
-void *das_get_jit_epilogue() { return (void *)&jit_epilogue; }
-void *das_get_jit_make_block() { return (void *)&jit_make_block; }
-void *das_get_jit_debug() { return (void *)&jit_debug; }
-void *das_get_jit_iterator_iterate() { return (void *)&builtin_iterator_iterate; }
-void *das_get_jit_iterator_delete() { return (void *)&builtin_iterator_delete; }
-void *das_get_jit_iterator_close() { return (void *)&builtin_iterator_close; }
-void *das_get_jit_iterator_first() { return (void *)&builtin_iterator_first; }
-void *das_get_jit_iterator_next() { return (void *)&builtin_iterator_next; }
-void *das_get_jit_str_cat() { return (void *)&jit_str_cat; }
-void *das_get_jit_debug_enter() { return (void *)&jit_debug_enter; }
-void *das_get_jit_debug_exit() { return (void *)&jit_debug_exit; }
-void *das_get_jit_debug_line() { return (void *)&jit_debug_line; }
+    void *das_get_jit_exception() { return (void *)&jit_exception; }
+    void *das_get_jit_call_or_fastcall() { return (void *)&jit_call_or_fastcall; }
+    void *das_get_jit_invoke_block() { return (void *)&jit_invoke_block; }
+    void *das_get_jit_invoke_block_with_cmres() { return (void *)&jit_invoke_block_with_cmres; }
+    void *das_get_jit_call_with_cmres() { return (void *)&jit_call_with_cmres; }
+    void *das_get_jit_string_builder() { return (void *)&jit_string_builder; }
+    void *das_get_jit_get_global_mnh() { return (void *)&jit_get_global_mnh; }
+    void *das_get_jit_alloc_heap() { return (void *)&jit_alloc_heap; }
+    void *das_get_jit_alloc_persistent() { return (void *)&jit_alloc_persistent; }
+    void *das_get_jit_free_heap() { return (void *)&jit_free_heap; }
+    void *das_get_jit_free_persistent() { return (void *)&jit_free_persistent; }
+    void *das_get_jit_array_lock() { return (void *)&builtin_array_lock; }
+    void *das_get_jit_array_unlock() { return (void *)&builtin_array_unlock; }
+    void *das_get_jit_str_cmp() { return (void *)&jit_str_cmp; }
+    void *das_get_jit_prologue() { return (void *)&jit_prologue; }
+    void *das_get_jit_epilogue() { return (void *)&jit_epilogue; }
+    void *das_get_jit_make_block() { return (void *)&jit_make_block; }
+    void *das_get_jit_debug() { return (void *)&jit_debug; }
+    void *das_get_jit_iterator_iterate() { return (void *)&builtin_iterator_iterate; }
+    void *das_get_jit_iterator_delete() { return (void *)&builtin_iterator_delete; }
+    void *das_get_jit_iterator_close() { return (void *)&builtin_iterator_close; }
+    void *das_get_jit_iterator_first() { return (void *)&builtin_iterator_first; }
+    void *das_get_jit_iterator_next() { return (void *)&builtin_iterator_next; }
+    void *das_get_jit_str_cat() { return (void *)&jit_str_cat; }
+    void *das_get_jit_debug_enter() { return (void *)&jit_debug_enter; }
+    void *das_get_jit_debug_exit() { return (void *)&jit_debug_exit; }
+    void *das_get_jit_debug_line() { return (void *)&jit_debug_line; }
 
     template <typename KeyType>
     int32_t jit_table_at ( Table * tab, KeyType key, int32_t valueTypeSize, Context * context ) {
