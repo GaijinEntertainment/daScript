@@ -5,6 +5,8 @@ options no_unused_function_arguments = false
 module llvm_jit_common shared private
 
 require llvm/llvm_boost
+require llvm_config
+
 require daslib/ast_boost
 require daslib/strings
 require daslib/defer
@@ -12,20 +14,25 @@ require daslib/enum_trait
 require fio
 require jit
 
-let public LLVM_JIT_ENABLED = true
-let public LLVM_JIT_ALL_FUNCTIONS = false
+let public LLVM_JIT_ENABLED = true || llvm_config::llvm_jit_enabled()
+let public LLVM_JIT_ALL_FUNCTIONS = llvm_config::llvm_jit_all_functions()
 
-let public LLVM_DEBUG_RESULT = false
-let public LLVM_DEBUG_EVERYTHING = false
+let public LLVM_DEBUG_RESULT = llvm_config::llvm_debug_result()
+let public LLVM_DEBUG_EVERYTHING = llvm_config::llvm_debug_everything()
+
 let public LLVM_DEBUG_TRACES = false
 let public LLVM_DEBUG_LINE_TRACES = false
 
 let public LLVM_JIT_LOG = false || LLVM_DEBUG_EVERYTHING
 let public LLVM_DEBUG_INFO = false || LLVM_DEBUG_EVERYTHING
 
-let public LLVM_JIT_ALWAYS_SOLID = true
-let public LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS = true
+let public LLVM_JIT_ALWAYS_SOLID = llvm_config::llvm_jit_always_solid()
+let public LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS = (
+    llvm_config::llvm_jit_allow_unaligned_vector_read_out_of_bounds()
+)
 
+let public LLVM_OUTPUT_OJBECT_FILE = true
+let public LLVM_OUTPUT_OJBECT_FILE_NAME = "output.o"
 let public LLVM_ENABLE_OPT_PASS = LLVM_DEBUG_EVERYTHING ? false : true
 let public LLVM_OPT_LEVEL = LLVM_DEBUG_EVERYTHING ? 0u : 2u
 let public LLVM_SIZE_LEVEL = LLVM_DEBUG_EVERYTHING ? 0u : 0u
@@ -33,7 +40,7 @@ let public LLVM_JIT_OPT_LEVEL = LLVM_DEBUG_EVERYTHING ? 0u : 2u
 let public LLVM_LOG_RESULT = LLVM_DEBUG_EVERYTHING || LLVM_DEBUG_RESULT
 let public LLVM_INLINE_THRESHOLD = 1024u // 225u
 
-let public FN_JIT_EXCEPTION = "`jit`exception`"
+let public FN_JIT_EXCEPTION = "jit_exception"
 let public FN_JIT_CALL_OR_FASTCALL = "`jit`call_or_fastcall`"
 let public FN_JIT_CALL_WITH_CMRES = "`jit`call_with_cmres`"
 let public FN_JIT_INVOKE_BLOCK = "`jit`invoke_block`"
@@ -61,6 +68,9 @@ let public FN_JIT_DEBUG_ENTER = "`jit`debug_enter`"
 let public FN_JIT_DEBUG_EXIT = "`jit`debug_exit`"
 let public FN_JIT_DEBUG_LINE = "`jit`debug_line`"
 
+let public JIT_DLL_OUTPUT = "output.dll"
+let public DASCRIPT_LIBRARY = "libDaScript.lib" // liblibDaScript.a on linux
+
 struct JitEngine
     mod : LLVMOpaqueModule?
     engine : LLVMExecutionEngineRef
@@ -71,6 +81,7 @@ var public g_mod : LLVMOpaqueModule?
 var public g_engine : LLVMExecutionEngineRef
 var public g_failed : bool = false
 var public g_errors : array<string>
+var public g_dynamic_lib_handle : void?
 
 var public g_t_simFunction : LLVMOpaqueType?
 var public g_t_function : LLVMOpaqueType?
@@ -453,17 +464,57 @@ def public build_block_type
     }]
 
 [macro_function]
+def public with_default_target_machine ( blk : block<(LLVMTargetMachineRef):void> )
+    LLVMInitializeAllTargetInfos()
+    LLVMInitializeAllTargets()
+    LLVMInitializeAllTargetMCs()
+    LLVMInitializeAllAsmPrinters()
+
+    // let triple = "x86_64-pc-linux-gnu"
+    let triple = LLVMGetDefaultTargetTriple()
+
+    // Find the target using the triple
+    var target : LLVMTarget?
+    let error : string?
+    unsafe
+        LLVMGetTargetFromTriple(triple, addr(target), error)
+
+    let targetMachine = LLVMCreateTargetMachine(
+        target,
+        triple,
+        "", // CPU
+        "", // Features
+        LLVMCodeGenOptLevel LLVMCodeGenLevelDefault,
+        LLVMRelocMode LLVMRelocPIC, // PIC in order to have shared object
+        LLVMCodeModel Default
+    )
+
+    invoke(blk, targetMachine)
+
+    LLVMDisposeMessage(triple)
+    LLVMDisposeTargetMachine(targetMachine)
+
+
+[macro_function]
 def public finalize_jit
     return if is_in_completion() || is_compiling_macros()
     return if g_mod == null    // prevent double finalize
     if LLVM_LOG_RESULT
         LLVMDumpModule(g_mod)
         fflush(fstderr())
+    if LLVM_OUTPUT_OJBECT_FILE
+        with_default_target_machine <| $ ( targetMachine : LLVMTargetMachineRef )
+            let error : string?
+            let file = LLVM_OUTPUT_OJBECT_FILE_NAME
+            let filetype = LLVMCodeGenFileType LLVMObjectFile
+            LLVMTargetMachineEmitToFile(targetMachine, g_mod, file, filetype, error)
+            create_shared_library(file, JIT_DLL_OUTPUT, DASCRIPT_LIBRARY)
     g_all_engines |> push([[ JitEngine
         mod <- g_mod,
         engine <- g_engine
     ]])
-    delete g_str2v
+    unsafe
+        delete g_str2v
 
 [finalize]
 def private finalize_all_jit
@@ -478,7 +529,8 @@ def private finalize_all_jit
         g_t_sequence = null
         // TODO: figure out why this crashes
         // LLVMDisposeModule(je.mod); je.mod = null
-    delete g_all_engines
+    unsafe
+        delete g_all_engines
 
 def public build_string_constant ( message:string )
     if g_str2v |> key_exists(message)
