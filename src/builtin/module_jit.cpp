@@ -380,20 +380,63 @@ extern "C" {
         return (void *) &das_jit_debug_line;
     }
 
+    bool check_file_present ( const char * filename ) {
+        if ( FILE * file = fopen(filename, "r"); file == NULL ) {
+            return false;
+        } else {
+            fclose(file);
+            return true;
+        }
+    }
+
     void create_shared_library ( const char * objFilePath, const char * libraryName, const char * jitModuleObj ) {
         char cmd[1024];
 
+        if (!check_file_present(jitModuleObj)) {
+            das_to_stderr("Error: File '%s', containing daScript library, does not exist", jitModuleObj);
+            return;
+        }
+        if (!check_file_present(objFilePath)) {
+            das_to_stderr("Error: File '%s', containing compiled definitions, does not exist", objFilePath);
+            return;
+        }
+
         #if defined(_WIN32) || defined(_WIN64)
-            snprintf(cmd, sizeof(cmd), "clang-cl %s %s -link -DLL -OUT:%s ", objFilePath, jitModuleObj, libraryName);
+            snprintf(cmd, sizeof(cmd), "clang-cl %s %s -link -DLL -OUT:%s 2>&1", objFilePath, jitModuleObj, libraryName);
         #elif defined(__APPLE__)
-            snprintf(cmd, sizeof(cmd), "clang -shared -o %s %s %s", libraryName, objFilePath, jitModuleObj);
+            snprintf(cmd, sizeof(cmd), "clang -shared -o %s %s %s 2>&1", libraryName, objFilePath, jitModuleObj);
         #else
-            snprintf(cmd, sizeof(cmd), "gcc -shared -o %s %s %s", libraryName, objFilePath, jitModuleObj);
+            snprintf(cmd, sizeof(cmd), "gcc -shared -o %s %s %s 2>&1", libraryName, objFilePath, jitModuleObj);
         #endif
 
-        int result = system(cmd);
-        if (result != 0) {
+        FILE * fp = _popen(cmd, "r");
+        if ( fp == NULL ) {
+            das_to_stderr("Failed to run command '%s'\n", cmd);
+            return;
+        }
+
+        static constexpr int MAX_OUTPUT_SIZE = 16 * 1024;
+
+        char buffer[1024], output[MAX_OUTPUT_SIZE];
+        output[0] = '\0';
+
+        size_t output_length = 0;
+
+        // Read the output a line at a time and accumulate it
+        while (fgets(buffer, sizeof(buffer), fp) != NULL) {
+            size_t buffer_length = strlen(buffer);
+            if (output_length + buffer_length < MAX_OUTPUT_SIZE) {
+                strcat(output, buffer);
+                output_length += buffer_length;
+            } else {
+                strncat(output, buffer, MAX_OUTPUT_SIZE - output_length - 1);
+                break;
+            }
+        }
+
+        if ( int status = _pclose(fp); status != 0 ) {
             das_to_stderr("Failed to make shared library %s, command '%s'", libraryName, cmd);
+            das_to_stderr("Output:\n%s", output);
         } else {
             das_to_stdout("Library %s made - ok", libraryName);
         }
