@@ -3253,6 +3253,11 @@ namespace das
                 }
             }
         }
+        for ( int i=0, is=context.totalFunctions; i!=is; ++i ) {
+            Function * func = indexToFunction[i];
+            SimFunction & fn = context.functions[i];
+            func->hash = getFunctionHash(func, fn.code, &context);
+        }
         for (auto pm : library.modules) {
             pm->structures.foreach([&](auto st){
                 for ( auto & ann : st->annotations ) {
