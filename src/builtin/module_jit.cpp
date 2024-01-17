@@ -359,7 +359,12 @@ void *das_get_jit_debug_line() { return (void *)&jit_debug_line; }
             snprintf(cmd, sizeof(cmd), "gcc -shared -o %s %s %s 2>&1", libraryName, objFilePath, jitModuleObj);
         #endif
 
-        FILE * fp = _popen(cmd, "r");
+#ifdef _WIN32
+    #define popen _popen
+    #define pclose _pclose
+#endif
+
+        FILE * fp = popen(cmd, "r");
         if ( fp == NULL ) {
             das_to_stderr("Failed to run command '%s'\n", cmd);
             return;
@@ -384,7 +389,7 @@ void *das_get_jit_debug_line() { return (void *)&jit_debug_line; }
             }
         }
 
-        if ( int status = _pclose(fp); status != 0 ) {
+        if ( int status = pclose(fp); status != 0 ) {
             das_to_stderr("Failed to make shared library %s, command '%s'", libraryName, cmd);
             das_to_stderr("Output:\n%s", output);
         } else {
