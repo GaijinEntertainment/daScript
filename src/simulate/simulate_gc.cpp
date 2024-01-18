@@ -629,7 +629,7 @@ namespace das
         virtual void beforeIterator ( Iterator * iter ) override {
             char * ptr = ((char *) iter) - 16;
             uint32_t size = *((uint32_t *)ptr);
-            markRange(PtrRange(ptr, size));
+            markRange(PtrRange(ptr, size+16));
         }
     };
 
