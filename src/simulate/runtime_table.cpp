@@ -63,6 +63,7 @@ namespace das
             *value = nullptr;
         }
         table_unlock(context, *(Table *)table, nullptr);
+        context.heap->freeIterator((char *)this);
     }
 
     // keys and values
@@ -71,30 +72,18 @@ namespace das
         return table->keys;
     }
 
-    void TableKeysIterator::close ( Context & context, char * value ) {
-        TableIterator::close(context,value);
-        context.heap->free((char *)this, sizeof(TableKeysIterator));
-    }
-
     char * TableValuesIterator::getData ( ) const {
         return table->data;
     }
 
-    void TableValuesIterator::close ( Context & context, char * value ) {
-        TableIterator::close(context,value);
-        context.heap->free((char *)this, sizeof(TableValuesIterator));
-    }
-
     void builtin_table_keys ( Sequence & result, const Table & tab, int32_t stride, Context * __context__ ) {
-        char * iter = __context__->heap->allocate(sizeof(TableKeysIterator));
-        __context__->heap->mark_comment(iter,"table keys iterator");
+        char * iter = __context__->heap->allocateIterator(sizeof(TableKeysIterator),"table keys iterator");
         new (iter) TableKeysIterator(&tab, stride);
         result = { (Iterator *) iter };
     }
 
     void builtin_table_values ( Sequence & result, const Table & tab, int32_t stride, Context * __context__ ) {
-        char * iter = __context__->heap->allocate(sizeof(TableKeysIterator));
-        __context__->heap->mark_comment(iter,"table values iterator");
+        char * iter = __context__->heap->allocateIterator(sizeof(TableKeysIterator),"table values iterator");
         new (iter) TableValuesIterator(&tab, stride);
         result = { (Iterator *) iter };
     }

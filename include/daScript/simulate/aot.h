@@ -2525,7 +2525,7 @@ namespace das {
                 char ** value = (char **) _value;
                 *value = nullptr;
             }
-            context.heap->free((char *)this, sizeof(StdVectorIterator));
+            context.heap->freeIterator((char *)this);
         }
         VectorType * array;
         size_t index = 0;
@@ -2534,8 +2534,7 @@ namespace das {
     template <typename TT>
     Sequence das_vector_each_sequence ( const TT & vec, Context * context ) {
         using VectorIterator = StdVectorIterator<TT>;
-        char * iter = context->heap->allocate(sizeof(VectorIterator));
-        context->heap->mark_comment(iter, "std::vector<> iterator");
+        char * iter = context->heap->allocateIterator(sizeof(VectorIterator), "std::vector<> iterator");
         new (iter) VectorIterator((TT *)&vec);
         return { (Iterator *) iter };
     }

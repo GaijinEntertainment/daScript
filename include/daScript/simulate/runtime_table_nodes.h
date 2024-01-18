@@ -170,13 +170,11 @@ namespace das
     struct TableKeysIterator : TableIterator {
         TableKeysIterator ( const Table * tab, uint32_t st ) : TableIterator(tab,st) {}
         virtual char * getData ( ) const override;
-        virtual void close ( Context & context, char * value ) override;
     };
 
     struct TableValuesIterator : TableIterator {
         TableValuesIterator ( const Table * tab, uint32_t st ) : TableIterator(tab,st) {}
         virtual char * getData ( ) const override;
-        virtual void close ( Context & context, char * value ) override;
     };
 
     struct SimNode_DeleteTable : SimNode_Delete {

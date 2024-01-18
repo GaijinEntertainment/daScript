@@ -15,6 +15,20 @@ namespace das {
     }
 #endif
 
+    char * AnyHeapAllocator::allocateIterator ( uint32_t size, const char * name, LineInfo * info ) {
+        char * data = allocate(size + 16);
+        *((uint32_t *)data) = size;
+        mark_comment(data, name);
+        if ( info ) mark_location(data,info);
+        return (data + 16);
+    }
+
+    void AnyHeapAllocator::freeIterator ( char * ptr ) {
+        ptr -= 16;
+        uint32_t size = *((uint32_t *)ptr);
+        free(ptr, size + 16);
+    }
+
     char * AnyHeapAllocator::allocateName ( const string & name ) {
         if (!name.empty()) {
             auto length = uint32_t(name.length());
