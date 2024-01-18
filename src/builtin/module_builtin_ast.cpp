@@ -867,10 +867,6 @@ namespace das {
         addExtern<DAS_BIND_FUN(addModuleOption)>(*this, lib,  "add_module_option",
             SideEffects::modifyExternal, "addModuleOption")
                 ->args({"module","option","type","context","at"});
-        // hash
-        addExtern<DAS_BIND_FUN(getFunctionAotHash)>(*this, lib,  "get_function_aot_hash",
-            SideEffects::none, "getFunctionAotHash")
-                ->args({"fun"});
     }
 
     ModuleAotType Module_Ast::aotRequire ( TextWriter & tw ) const {
