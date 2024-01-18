@@ -164,6 +164,8 @@ namespace das
 
         using DataWalker::walk;
 
+        virtual void beforeIterator ( Iterator * ) {}
+
         virtual void walk ( char * pa, TypeInfo * info ) override {
             if ( pa == nullptr ) {
             } else if ( info->flags & TypeInfo::flag_ref ) {
@@ -211,6 +213,7 @@ namespace das
                     case Type::tIterator: {
                             auto ll = (Sequence *) pa;
                             if ( ll->iter ) {
+                                beforeIterator(ll->iter);
                                 ll->iter->walk(*this);
                             }
                         }
@@ -622,6 +625,12 @@ namespace das
                 }
             }
         }
+
+        virtual void beforeIterator ( Iterator * iter ) override {
+            char * ptr = ((char *) iter) - 16;
+            uint32_t size = *((uint32_t *)ptr);
+            markRange(PtrRange(ptr, size));
+        }
     };
 
     void Context::reportAnyHeap(LineInfo * at, bool sth, bool rgh, bool rghOnly, bool errorsOnly) {
@@ -848,6 +857,7 @@ namespace das
                     case Type::tIterator: {
                             auto ll = (Sequence *) pa;
                             if ( ll->iter ) {
+                                // do nothing. string heap collector does not care about iterators
                                 ll->iter->walk(*this);
                             }
                         }

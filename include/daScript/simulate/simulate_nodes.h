@@ -3256,9 +3256,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             DAS_PROFILE_NODE
             vec4f ll = source->eval(context);
             TT * array = cast<TT *>::to(ll);
-            char * iter = context.heap->allocate(sizeof(IterT));
-            context.heap->mark_comment(iter,"any iterator");
-            context.heap->mark_location(iter,&debugInfo);
+            char * iter = context.heap->allocateIterator(sizeof(IterT),"any iterator",&debugInfo);
             new (iter) IterT(array);
             return cast<char *>::from(iter);
         }

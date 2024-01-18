@@ -521,8 +521,7 @@ namespace das {
     template <typename ST, typename VT>
     Sequence debugInfoIterator ( ST * st, Context * context ) {
         using StructIterator = DebugInfoIterator<VT,ST>;
-        char * iter = context->heap->allocate(sizeof(StructIterator));
-        context->heap->mark_comment(iter, "debug info iterator");
+        char * iter = context->heap->allocateIterator(sizeof(StructIterator), "debug info iterator");
         new (iter) StructIterator(st);
         return { (Iterator *) iter };
     }

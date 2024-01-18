@@ -23,7 +23,7 @@ namespace das
         }
 
         virtual void close ( Context & context, char * ) override {
-            context.heap->free((char *)this, sizeof(RangeIterator<TRange>));
+            context.heap->freeIterator((char *)this);
         }
         TRange  rng;
         baseType range_to;
@@ -38,9 +38,7 @@ namespace das
             DAS_PROFILE_NODE
             vec4f ll = subexpr->eval(context);
             TRange r = cast<TRange>::to(ll);
-            char * iter = context.heap->allocate(sizeof(RangeIterator<TRange>));
-            context.heap->mark_comment(iter,"range iterator");
-            context.heap->mark_location(iter,&debugInfo);
+            char * iter = context.heap->allocateIterator(sizeof(RangeIterator<TRange>),"range iterator",&debugInfo);
             new (iter) RangeIterator<TRange>(r);
             return cast<char *>::from(iter);
         }

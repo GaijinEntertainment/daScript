@@ -153,6 +153,8 @@ namespace das {
 #endif
     public:
         char * allocateName ( const string & name );
+        char * allocateIterator ( uint32_t size, const char * name="", LineInfo * info=nullptr );
+        void   freeIterator ( char * ptr );
     };
 
     struct StrHashEntry {

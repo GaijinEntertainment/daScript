@@ -71,16 +71,14 @@ namespace das
             *value = nullptr;
         }
         array_unlock(context, *array, nullptr);
-        context.heap->free((char *)this, sizeof(GoodArrayIterator));
+        context.heap->freeIterator((char *)this);
     }
 
     vec4f SimNode_GoodArrayIterator::eval ( Context & context ) {
         DAS_PROFILE_NODE
         vec4f ll = source->eval(context);
         Array * arr = cast<Array *>::to(ll);
-        char * iter = context.heap->allocate(sizeof(GoodArrayIterator));
-        context.heap->mark_comment(iter,"array<> iterator");
-        context.heap->mark_location(iter,&debugInfo);
+        char * iter = context.heap->allocateIterator(sizeof(GoodArrayIterator),"array<> iterator", &debugInfo);
         new (iter) GoodArrayIterator(arr, stride);
         return cast<char *>::from(iter);
     }
@@ -106,16 +104,14 @@ namespace das
             char ** value = (char **) _value;
             *value = nullptr;
         }
-        context.heap->free((char *)this, sizeof(FixedArrayIterator));
+        context.heap->freeIterator((char *)this);
     }
 
     vec4f SimNode_FixedArrayIterator::eval ( Context & context ) {
         DAS_PROFILE_NODE
         vec4f ll = source->eval(context);
         char * data = cast<char *>::to(ll);
-        char * iter = context.heap->allocate(sizeof(FixedArrayIterator));
-        context.heap->mark_comment(iter,"fixed array iterator");
-        context.heap->mark_location(iter,&debugInfo);
+        char * iter = context.heap->allocateIterator(sizeof(FixedArrayIterator),"fixed array iterator", &debugInfo);
         new (iter) FixedArrayIterator(data, size, stride);
         return cast<char *>::from(iter);
     }

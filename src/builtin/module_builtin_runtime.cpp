@@ -613,7 +613,7 @@ namespace das
             }
         }
         virtual void close ( Context & context, char * ) override {
-            context.heap->free((char *)this, sizeof(EnumIterator<intT>));
+            context.heap->freeIterator((char *)this);
         }
         EnumInfo *  info = nullptr;
         int32_t     count = 0;
@@ -633,22 +633,20 @@ namespace das
             return true;
         }
         virtual void close ( Context & context, char * ) override {
-            context.heap->free((char *)this, sizeof(CountIterator));
+            context.heap->freeIterator((char *)this);
         }
         int32_t start = 0;
         int32_t step = 0;
     };
 
     TSequence<int32_t> builtin_count ( int32_t start, int32_t step, Context * context ) {
-        char * iter = context->heap->allocate(sizeof(CountIterator));
-        context->heap->mark_comment(iter, "count iterator");
+        char * iter = context->heap->allocateIterator(sizeof(CountIterator), "count iterator");
         new (iter) CountIterator(start, step);
         return TSequence<int>((Iterator *)iter);
     }
 
     TSequence<uint32_t> builtin_ucount ( uint32_t start, uint32_t step, Context * context ) {
-        char * iter = context->heap->allocate(sizeof(CountIterator));
-        context->heap->mark_comment(iter, "ucount iterator");
+        char * iter = context->heap->allocateIterator(sizeof(CountIterator), "ucount iterator");
         new (iter) CountIterator(start, step);
         return TSequence<int>((Iterator *)iter);
     }
@@ -817,22 +815,19 @@ namespace das
     }
 
     void builtin_make_good_array_iterator ( Sequence & result, const Array & arr, int stride, Context * context ) {
-        char * iter = context->heap->allocate(sizeof(GoodArrayIterator));
-        context->heap->mark_comment(iter, "array<> iterator");
+        char * iter = context->heap->allocateIterator(sizeof(GoodArrayIterator), "array<> iterator");
         new (iter) GoodArrayIterator((Array *)&arr, stride);
         result = { (Iterator *) iter };
     }
 
     void builtin_make_fixed_array_iterator ( Sequence & result, void * data, int size, int stride, Context * context ) {
-        char * iter = context->heap->allocate(sizeof(FixedArrayIterator));
-        context->heap->mark_comment(iter, "fixed array iterator");
+        char * iter = context->heap->allocateIterator(sizeof(FixedArrayIterator), "fixed array iterator");
         new (iter) FixedArrayIterator((char *)data, size, stride);
         result = { (Iterator *) iter };
     }
 
     void builtin_make_range_iterator ( Sequence & result, range rng, Context * context ) {
-        char * iter = context->heap->allocate(sizeof(RangeIterator<range>));
-        context->heap->mark_comment(iter, "range iterator");
+        char * iter = context->heap->allocateIterator(sizeof(RangeIterator<range>), "range iterator");
         new (iter) RangeIterator<range>(rng);
         result = { (Iterator *) iter };
     }
@@ -852,18 +847,15 @@ namespace das
         char * iter = nullptr;
         switch ( tinfo->type ) {
         case Type::tEnumeration:
-            iter = context.heap->allocate(sizeof(EnumIterator<int32_t>));
-            context.heap->mark_comment(iter, "enum iterator");
+            iter = context.heap->allocateIterator(sizeof(EnumIterator<int32_t>), "enum iterator");
             new (iter) EnumIterator<int32_t>(einfo);
             break;
         case Type::tEnumeration8:
-            iter = context.heap->allocate(sizeof(EnumIterator<int8_t>));
-            context.heap->mark_comment(iter, "enum8 iterator");
+            iter = context.heap->allocateIterator(sizeof(EnumIterator<int8_t>), "enum8 iterator");
             new (iter) EnumIterator<int8_t>(einfo);
             break;
         case Type::tEnumeration16:
-            iter = context.heap->allocate(sizeof(EnumIterator<int16_t>));
-            context.heap->mark_comment(iter, "enum16 iterator");
+            iter = context.heap->allocateIterator(sizeof(EnumIterator<int16_t>), "enum16 iterator");
             new (iter) EnumIterator<int16_t>(einfo);
             break;
         default:
@@ -875,8 +867,7 @@ namespace das
     }
 
     void builtin_make_string_iterator ( Sequence & result, char * str, Context * context ) {
-        char * iter = context->heap->allocate(sizeof(StringIterator));
-        context->heap->mark_comment(iter, "string iterator");
+        char * iter = context->heap->allocateIterator(sizeof(StringIterator), "string iterator");
         new (iter) StringIterator(str);
         result = { (Iterator *) iter };
     }
@@ -890,8 +881,7 @@ namespace das
     };
 
     void builtin_make_nil_iterator ( Sequence & result, Context * context ) {
-        char * iter = context->heap->allocate(sizeof(NilIterator));
-        context->heap->mark_comment(iter, "nil iterator");
+        char * iter = context->heap->allocateIterator(sizeof(NilIterator), "nil iterator");
         new (iter) NilIterator();
         result = { (Iterator *) iter };
     }
@@ -933,7 +923,7 @@ namespace das
             };
             auto flags = context.stopFlags; // need to save stop flags, we can be in the middle of some return or something
             context.call(finFunc, argValues, 0);
-            context.heap->free((char *)this, sizeof(LambdaIterator));
+            context.heap->freeIterator((char *)this);
             context.stopFlags = flags;
         }
         virtual void walk ( DataWalker & walker ) override {
@@ -948,8 +938,7 @@ namespace das
     };
 
     void builtin_make_lambda_iterator ( Sequence & result, const Lambda lambda, int stride, Context * context ) {
-        char * iter = context->heap->allocate(sizeof(LambdaIterator));
-        context->heap->mark_comment(iter, "lambda iterator");
+        char * iter = context->heap->allocateIterator(sizeof(LambdaIterator), "lambda iterator");
         new (iter) LambdaIterator(*context, lambda, stride);
         result = { (Iterator *) iter };
     }
