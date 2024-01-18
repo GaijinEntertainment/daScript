@@ -876,7 +876,7 @@ namespace das
         virtual bool first ( Context &, char * ) override { return false; }
         virtual bool next  ( Context &, char * ) override { return false; }
         virtual void close ( Context & context, char * ) override {
-            context.heap->free((char *)this, sizeof(NilIterator));
+            context.heap->freeIterator((char *)this);
         }
     };
 
