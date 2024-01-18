@@ -1096,6 +1096,12 @@ namespace das
             }
         }
 
+        virtual void beforeIterator ( Iterator * iter ) override {
+            char * ptr = ((char *) iter) - 16;
+            uint32_t size = *((uint32_t *)ptr);
+            markAndPushRange(PtrRange(ptr, size+16));
+        }
+
         using DataWalker::walk;
 
         virtual void walk ( char * pa, TypeInfo * info ) override {
@@ -1172,6 +1178,7 @@ namespace das
                     case Type::tIterator: {
                             auto ll = (Sequence *) pa;
                             if ( ll->iter ) {
+                                beforeIterator(ll->iter);
                                 ll->iter->walk(*this);
                             }
                         }
@@ -1286,4 +1293,3 @@ namespace das
         }
     }
 }
-
