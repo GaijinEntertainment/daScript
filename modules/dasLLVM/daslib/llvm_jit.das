@@ -1,7 +1,6 @@
 options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
-options strict_smart_pointers = false
 
 module llvm_jit shared private
 
@@ -274,8 +273,6 @@ class LlvmJitVisitor : AstVisitor
         else
             fun_type = LLVMFunctionType(type_to_llvm_abi_type(result), fun_args)
         ffunc = LLVMAddFunction(g_mod, "{fun_name} implementation", fun_type)
-        LLVMSetLinkage(ffunc, LLVMLinkage LLVMDLLExportLinkage)
-        LLVMSetDLLStorageClass(ffunc, LLVMDLLStorageClass LLVMDLLExportStorageClass);
         // setup parameter alignment
         var readonly_attr = LLVMGetEnumAttribute("readonly")
         var noalias_attr = LLVMGetEnumAttribute("noalias")
@@ -321,8 +318,6 @@ class LlvmJitVisitor : AstVisitor
                 LLVMPointerType(LLVMVoidType(),0u)                  // cmres
             ]])
         wfunc = LLVMAddFunction(g_mod, fun_name, ret_type)
-        LLVMSetLinkage(wfunc, LLVMLinkage LLVMDLLExportLinkage)
-        LLVMSetDLLStorageClass(wfunc, LLVMDLLStorageClass LLVMDLLExportStorageClass)
         LLVMSetParamAlignment(LLVMGetParam(wfunc,0u), 16u)
         LLVMSetParamAlignment(LLVMGetParam(wfunc,1u), 16u)
         if isCmres
@@ -3920,19 +3915,6 @@ class LlvmJitVisitor : AstVisitor
 [macro_function]
 def private generate_llvm ( ctx:Context?; fn : FunctionPtr )
     return if is_in_completion() || is_compiling_macros() || is_folding()
-    if g_dynamic_lib_handle != null
-        var dll_function_aot_hash = g_dynamic_lib_handle |> get_function_address <| "{get_mangled_name(fn)} hash"
-        // debug("dll_function_aot_hash: {dll_function_aot_hash}")
-        var written_hash = unsafe(reinterpret<uint64?> (dll_function_aot_hash))
-        if written_hash != null && get_function_aot_hash(fn |> get_ptr) == *written_hash
-            debug("function {get_mangled_name(fn)} taken from the dll with aot_hash {*written_hash}")
-            return
-    let globalVar = LLVMAddGlobal(g_mod, LLVMInt64Type(), "{get_mangled_name(fn)} hash")
-    LLVMSetLinkage(globalVar, LLVMLinkage LLVMDLLExportLinkage)
-    LLVMSetDLLStorageClass(globalVar, LLVMDLLStorageClass LLVMDLLExportStorageClass)
-    let aot_hash : uint64 = get_function_aot_hash(fn |> get_ptr)
-    debug("initializer hash for {get_mangled_name(fn)}: {aot_hash}")
-    globalVar |> LLVMSetInitializer(LLVMConstInt(LLVMInt64Type(), aot_hash, 0))
     var astVisitor = new LlvmJitVisitor(fn.at, ctx, true, null, null)
     unsafe
         astVisitor.adapter <- make_visitor(*astVisitor)
@@ -3951,14 +3933,8 @@ def private generate_llvm_code ( fmna:string )
     return null if is_in_completion() || is_compiling_macros() || is_folding()
     return null if g_failed
     var code = LLVMGetFunctionAddress(g_engine, fmna)
-    return unsafe(reinterpret<void?> code) if code != 0ul
-    if g_dynamic_lib_handle != null
-        let result = g_dynamic_lib_handle |> get_function_address(fmna)
-        if result == null
-            to_log(LOG_ERROR, "LLVM JIT FAILED: {fmna}\n")
-        return result
-    to_log(LOG_ERROR, "LLVM JIT FAILED: {fmna}\n")
-    return null
+    to_log(LOG_ERROR, "LLVM JIT FAILED: {fmna}\n")  if code==0ul
+    return unsafe(reinterpret<void?> code)
 
 [macro_function]
 def private optimize_llvm_module
@@ -3994,7 +3970,7 @@ class JIT_LLVM : AstSimulateMacro
         if !jit_enabled()
             error("jit is disabled. use `-jit` option for daScript, or enable jit via CodeOfPolicies")
             return false
-        var inscope funcs : array<FunctionPtr>
+        var funcs : array<FunctionPtr>
         var disableJitVisitor = new DisableJitVisitor()
         var inscope disableJitVisitorAdapter <- make_visitor(*disableJitVisitor)
         prog |> for_each_module <| $ ( mod )
@@ -4020,7 +3996,6 @@ class JIT_LLVM : AstSimulateMacro
                 fake_visitor->add_llvm_functions(fun)
             unsafe
                 delete fake_visitor
-            g_dynamic_lib_handle = load_dynamic_library(JIT_DLL_OUTPUT)
             for fun in funcs
                 generate_llvm(ctx, fun)
             if !LLVMVerifyModule(g_mod, LLVMVerifierFailureAction LLVMPrintMessageAction, false)
