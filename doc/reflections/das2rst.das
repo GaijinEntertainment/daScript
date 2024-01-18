@@ -544,7 +544,7 @@ def document_module_decs(root:string)
         group_by_regex("Iteration", mod, %regex~(for_each_archetype|for_eid_archetype|for_each_archetype_find|get_ro|decs_array|get_default_ro|get_optional)$%%);
         group_by_regex("Request", mod, %regex~(verify_request|compile_request|lookup_request|EcsRequestPos)$%%)
     }]
-    document("DECS, daScript entity component system",mod,"{root}/decs.rst","{root}/detail/decs.rst",groups)
+    document("DECS, Daslang entity component system",mod,"{root}/decs.rst","{root}/detail/decs.rst",groups)
 
 def document_module_decs_boost(root:string)
     var mod = find_module("decs_boost")
