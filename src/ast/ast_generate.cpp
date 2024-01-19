@@ -788,6 +788,21 @@ namespace das {
             scopes.pop_back();
             return Visitor::visit(block);
         }
+        virtual void preVisit ( ExprFor * expr ) override {
+            Visitor::preVisit(expr);
+            if ( scopes.size()==0 ) {   // only top level for loop
+                for ( int i=0; i!=expr->iterators.size(); ++i ) {
+                    auto & varName = expr->iterators[i];
+                    auto & var = expr->iteratorVariables[i];
+                    if ( varName[0]!='_' || varName[1]!='_' ) {
+                        string newName = "__" + aotSuffixNameEx(varName,"_Var") + "_rename_at_" + to_string(var->at.line);
+                        rename[var->name] = newName;
+                        var->name = newName;
+                        varName = newName;
+                    }
+                }
+            }
+        }
         virtual void preVisit ( ExprLet * expr ) override {
             Visitor::preVisit(expr);
             if ( scopes.size()==1 ) {   // only top level block
@@ -1131,11 +1146,14 @@ namespace das {
         auto begin_loop_label = func->totalGenLabel ++;
         auto mid_loop_label = func->totalGenLabel ++;
         auto end_loop_label = func->totalGenLabel ++;
+        smart_ptr<ExprFor> forCopy;
         smart_ptr<ExprBlock> bodyBlock;
         if ( expr->body->rtti_isBlock() ) {
-            bodyBlock = static_pointer_cast<ExprBlock>(expr->body->clone());
-            giveBlockVariablesUniqueNames(bodyBlock);
+            forCopy = static_pointer_cast<ExprFor>(expr->clone());
+            bodyBlock = static_pointer_cast<ExprBlock>(forCopy->body);
+            giveBlockVariablesUniqueNames(forCopy);
             replaceBreakAndContinue(bodyBlock.get(), end_loop_label, mid_loop_label);
+            expr = forCopy.get();
         }
         auto blk = make_smart<ExprBlock>();
         blk->at = expr->at;
