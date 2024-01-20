@@ -453,7 +453,7 @@ class LlvmJitVisitor : AstVisitor
         if thisBlock!=null && thisBlock!=get_ptr(blk)
             return
         if !current_block_terminates()
-            call_all_finally_blocks(false)
+            call_all_finally_blocks("default_terminator", false)
             build_exit(blk.at)
             if thisBlock!=null && thisBlock.returnType!=null && !thisBlock.returnType.isVoid
                 LLVMBuildUnreachable(g_builder)
@@ -470,14 +470,23 @@ class LlvmJitVisitor : AstVisitor
         // TODO: do better test here. block with iterator, or over an array<> has a final section. maybe other??? but not all
         return blk.blockFlags.forLoop   // for loop always has final section
 
-    def call_all_finally_blocks(stopAtLoop:bool)
+    def has_any_finally_block(stopAtLoop:bool)
+        var len = length(block_stack)
+        for i in range(len)
+            var blk = block_stack[len-1-i]
+            if stopAtLoop && blk.blockFlags.inTheLoop
+                break
+            return true
+        return false
+
+    def call_all_finally_blocks(from_where:string; stopAtLoop:bool)
         var len = length(block_stack)
         for i in range(len)
             var blk = block_stack[len-1-i]
             if stopAtLoop && blk.blockFlags.inTheLoop
                 break
             if blk |> hasFinalSection()
-                var after = LLVMAppendBasicBlock(ffunc, "call_finally_block_{int(blk.at.line)}_")
+                var after = LLVMAppendBasicBlock(ffunc, "{from_where}_after_call_finally_block_{int(blk.at.line)}_")
                 var after_ptr = LLVMBlockAddress(LLVMGetBasicBlockParent(after),after)
                 LLVMBuildStore(g_builder, after_ptr, callBlock)
                 var fblk = finallyBlocks[get_ptr(blk)]
@@ -504,26 +513,29 @@ class LlvmJitVisitor : AstVisitor
                     LLVMBuildBr(g_builder, fblk)
                 LLVMPositionBuilderAtEnd(g_builder, fblk)
 
+    def jump_to_next_finally ( blk:ExprBlock? )
+        afterFinallyBlocks  |> get(blk) <| $ ( AfterFinallyBlocks )
+            if length(AfterFinallyBlocks)>0
+                var cc = LLVMBuildLoad(g_builder, callBlock, "")
+                var needCond = thisFunc.body!=get_ptr(blk) && thisBlock!=get_ptr(blk)
+                var do_jump, skip_jump : LLVMOpaqueBasicBlock?
+                if needCond
+                    do_jump = LLVMAppendBasicBlock(ffunc, "do_jump_blk_line_{int(blk.at.line)}_")
+                    skip_jump = LLVMAppendBasicBlock(ffunc, "skip_jump_blk_line_{int(blk.at.line)}_")
+                    var not_null = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntNE, cc, LLVMConstNull(LLVMPointerType(LLVMInt8Type(),0u)), "")
+                    LLVMBuildCondBr(g_builder, not_null, do_jump, skip_jump)
+                    LLVMPositionBuilderAtEnd(g_builder, do_jump)
+                var indb = LLVMBuildIndirectBr(g_builder, cc, uint(length(AfterFinallyBlocks)))
+                for bb in AfterFinallyBlocks
+                    LLVMAddDestination(indb, bb)
+                if skip_jump!=null
+                    LLVMPositionBuilderAtEnd(g_builder, skip_jump)
+
     def override visitExprBlock(var blk:smart_ptr<ExprBlock>) : ExpressionPtr
         if length(blk.finalList)==0         // TODO: check for loop
             add_default_terminator(blk)
-        else
-            afterFinallyBlocks  |> get(get_ptr(blk)) <| $ ( AfterFinallyBlocks )
-                if length(AfterFinallyBlocks)>0
-                    var cc = LLVMBuildLoad(g_builder, callBlock, "")
-                    var needCond = thisFunc.body!=get_ptr(blk) && thisBlock!=get_ptr(blk)
-                    var do_jump, skip_jump : LLVMOpaqueBasicBlock?
-                    if needCond
-                        do_jump = LLVMAppendBasicBlock(ffunc, "do_jump_blk_line_{int(blk.at.line)}_")
-                        skip_jump = LLVMAppendBasicBlock(ffunc, "skip_jump_blk_line_{int(blk.at.line)}_")
-                        var not_null = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntNE, cc, LLVMConstNull(LLVMPointerType(LLVMInt8Type(),0u)), "")
-                        LLVMBuildCondBr(g_builder, not_null, do_jump, skip_jump)
-                        LLVMPositionBuilderAtEnd(g_builder, do_jump)
-                    var indb = LLVMBuildIndirectBr(g_builder, cc, uint(length(AfterFinallyBlocks)))
-                    for bb in AfterFinallyBlocks
-                        LLVMAddDestination(indb, bb)
-                    if skip_jump!=null
-                        LLVMPositionBuilderAtEnd(g_builder, skip_jump)
+        elif !blk.blockFlags.inTheLoop
+            jump_to_next_finally(get_ptr(blk))
         block_stack |> pop()
         if blk.blockFlags.inTheLoop
             blk.blockFlags ^= ExprBlockFlags finallyDisabled
@@ -1699,8 +1711,10 @@ class LlvmJitVisitor : AstVisitor
         if expr.body is ExprBlock
             let body = expr.body as ExprBlock
             if length(body.finalList) != 0
+                LLVMBuildStore(g_builder, LLVMConstNull(LLVMPointerType(LLVMInt8Type(),0u)), callBlock)
                 LLVMBuildBr(g_builder, finallyBlocks[get_ptr(body)])
                 visit_finally(body, adapter)
+                jump_to_next_finally(body)
         return expr
 
 // ExprTryCatch
@@ -2012,6 +2026,7 @@ class LlvmJitVisitor : AstVisitor
         // in for loop closing iterators is included in the finally section
         let body = expr.body as ExprBlock
         var fblk = finallyBlocks[get_ptr(body)]
+        LLVMBuildStore(g_builder, LLVMConstNull(LLVMPointerType(LLVMInt8Type(),0u)), callBlock)
         LLVMBuildBr(g_builder, fblk)
         LLVMPositionBuilderAtEnd(g_builder, fblk)
         // close all iterators
@@ -2031,6 +2046,7 @@ class LlvmJitVisitor : AstVisitor
         // now, final block if there is anythign there
         if length(body.finalList) != 0
             visit_finally(body, adapter)
+        jump_to_next_finally(body)
         return expr
 
 // ExprMakeVariant
@@ -2864,21 +2880,21 @@ class LlvmJitVisitor : AstVisitor
             if varType.flags.ref
                 var_ptr = LLVMBuildLoadDataAligned(g_builder, var_ptr, uint(expr._type.alignOf), "")
             if expr.varFlags.r2v
-                setE(expr, LLVMBuildLoadDataAligned(g_builder, var_ptr, uint(expr._type.alignOf), "var_r2v_{expr.variable.name}"))
+                setE(expr, LLVMBuildLoadDataAligned(g_builder, var_ptr, uint(expr._type.alignOf), "local_var_r2v_{expr.variable.name}"))
             else
                 setE(expr, var_ptr)
         elif expr.varFlags.argument // arguments
             var tryV = tryGetV(expr.variable)
             if tryV != null
                 if expr.varFlags.r2v
-                    setE(expr, LLVMBuildLoadDataAligned(g_builder, tryV, uint(expr._type.alignOf), "var_r2v_{expr.variable.name}"))
+                    setE(expr, LLVMBuildLoadDataAligned(g_builder, tryV, uint(expr._type.alignOf), "arg_var_r2v_{expr.variable.name}"))
                 else
                     setE(expr, tryV)
                 return expr
             var arg = LLVMGetParam(ffunc,uint(expr.argumentIndex))
             if expr.varFlags.r2v
                 if varType.flags.ref
-                    setE(expr, LLVMBuildLoadDataAligned(g_builder, arg, uint(expr._type.alignOf), "var_ref_r2v_{expr.variable.name}"))
+                    setE(expr, LLVMBuildLoadDataAligned(g_builder, arg, uint(expr._type.alignOf), "arg_var_ref_r2v_{expr.variable.name}"))
                 else
                     setE(expr, arg)
             else
@@ -3219,7 +3235,7 @@ class LlvmJitVisitor : AstVisitor
         LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, func_name), params, "")
 
     def visit_expr_return(expr:smart_ptr<ExprReturn>; returnType:TypeDeclPtr; isCmres:bool)
-        call_all_finally_blocks(false)
+        call_all_finally_blocks("return", false)
         build_exit(expr.at)
         if !returnType.isVoid
             if isCmres
@@ -3259,7 +3275,7 @@ class LlvmJitVisitor : AstVisitor
 
 // ExprBreak
     def override preVisitExprBreak(expr:smart_ptr<ExprBreak>) : void
-        call_all_finally_blocks(true)
+        call_all_finally_blocks("break", true)
         if callBlock!=null
             LLVMBuildStore(g_builder, LLVMConstNull(LLVMPointerType(LLVMInt8Type(),0u)), callBlock)
         var lblk = loop_stack |> back()
@@ -3267,7 +3283,7 @@ class LlvmJitVisitor : AstVisitor
 
 // ExprContinue
     def override preVisitExprContinue(expr:smart_ptr<ExprContinue>) : void
-        call_all_finally_blocks(true)
+        call_all_finally_blocks("continue", true)
         if callBlock!=null
             LLVMBuildStore(g_builder, LLVMConstNull(LLVMPointerType(LLVMInt8Type(),0u)), callBlock)
         var lblk = loop_stack |> back()
