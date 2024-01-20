@@ -4404,6 +4404,7 @@ namespace das {
             Visitor::preVisit(block);
             block->hasEarlyOut = false;
             block->hasReturn = false;
+            block->forLoop = false;
             if ( block->isClosure ) {
                 if ( block->returnType ) {
                     blocks.push_back(block);
@@ -6278,6 +6279,10 @@ namespace das {
         virtual ExpressionPtr visit ( ExprFor * expr ) override {
             popVarStack();
             loop.pop_back();
+            // forLoop flag
+            if ( expr->body && expr->body->rtti_isBlock() ) {
+                static_pointer_cast<ExprBlock>(expr->body)->forLoop = true;
+            }
             // now, to unwrap the generator
             if ( func && func->generator ) {
                 // only fully resolved loop

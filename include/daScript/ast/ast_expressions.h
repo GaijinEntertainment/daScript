@@ -205,6 +205,7 @@ namespace das
                 bool            needCollapse : 1;           // if this block needs collapse at all
                 bool            hasMakeBlock : 1;           // if this block has make block inside
                 bool            hasEarlyOut : 1;            // this block has return, or other blocks with return
+                bool            forLoop : 1;                // this block is a for loop
             };
             uint32_t            blockFlags = 0;
         };
