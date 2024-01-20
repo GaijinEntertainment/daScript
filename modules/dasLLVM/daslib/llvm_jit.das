@@ -3235,15 +3235,12 @@ class LlvmJitVisitor : AstVisitor
         LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, func_name), params, "")
 
     def visit_expr_return(expr:smart_ptr<ExprReturn>; returnType:TypeDeclPtr; isCmres:bool)
-        call_all_finally_blocks("return", false)
-        build_exit(expr.at)
+        var expr_res : LLVMOpaqueValue?
         if !returnType.isVoid
             if isCmres
-                if !expr.returnFlags.returnCMRES
-                    build_copy(get_cmres_param(),expr.subexpr)
-                LLVMBuildRetVoid(g_builder)
+                pass
             elif returnType.isPointer && (expr.subexpr is ExprConstPtr) // return null
-                LLVMBuildRet(g_builder, LLVMConstPointerNull(type_to_llvm_abi_type(returnType)))
+                pass
             elif returnType.isPointer
                 var resPtr = getE(expr.subexpr)
                 if expr.subexpr._type.flags.ref
@@ -3255,13 +3252,44 @@ class LlvmJitVisitor : AstVisitor
                 // cast pointer type, becasue we may need to cast void* onto returntype*.
                 // TODO: check? (we don't check, we just cast for now)
                 var cres = LLVMBuildPointerCast(g_builder, resPtr, type_to_llvm_abi_type(returnType), "")
-                LLVMBuildRet(g_builder, cres)
+                expr_res = cres
             elif expr.returnFlags.moveSemantics && expr.subexpr._type.isWorkhorseType
                 // return <- blah // where blah is string and such
                 var lres = LLVMBuildLoad(g_builder, getE(expr.subexpr), "")
-                LLVMBuildRet(g_builder, lres)
+                expr_res = lres
             else
-                LLVMBuildRet(g_builder, getE(expr.subexpr))
+                expr_res = getE(expr.subexpr)
+
+        var has_afb = false
+
+        if expr_res != null
+            has_afb = has_any_finally_block(false)
+            if has_afb
+                var temp_res : LLVMOpaqueValue?
+                at_function_entry <|
+                    temp_res = LLVMBuildAlloca(g_builder, type_to_llvm_abi_type(returnType), "return_temp")
+                LLVMBuildStore(g_builder, expr_res, temp_res)
+                expr_res = temp_res
+
+        call_all_finally_blocks("return", false)
+        build_exit(expr.at)
+
+        if has_afb
+            expr_res = LLVMBuildLoad(g_builder, expr_res, "return_temp_load")
+
+        if !returnType.isVoid
+            if isCmres
+                if !expr.returnFlags.returnCMRES
+                    build_copy(get_cmres_param(),expr.subexpr)
+                LLVMBuildRetVoid(g_builder)
+            elif returnType.isPointer && (expr.subexpr is ExprConstPtr) // return null
+                LLVMBuildRet(g_builder, LLVMConstPointerNull(type_to_llvm_abi_type(returnType)))
+            elif returnType.isPointer
+                LLVMBuildRet(g_builder, expr_res)
+            elif expr.returnFlags.moveSemantics && expr.subexpr._type.isWorkhorseType
+                LLVMBuildRet(g_builder, expr_res)
+            else
+                LLVMBuildRet(g_builder, expr_res)
         else
             LLVMBuildRetVoid(g_builder)
 
