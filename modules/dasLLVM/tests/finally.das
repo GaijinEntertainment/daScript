@@ -28,6 +28,28 @@ def test_finally ( t:T? )
     t |> run("test block finally") <| @ ( t : T? )
         t |> success ( is_jit_function(@@test_block_finally) )
         t |> success ( test_block_finally() )
+    t |> run("for loop with early out") <| @ ( t : T? )
+        t |> success ( is_jit_function(@@early_out) )
+        g_steps = 0
+        early_out(t, [{int 1;2;3;4}])
+        t |> equal(2, g_steps)
+
+var g_steps = 0
+
+[jit,sideeffects]
+def early_out ( t : T?; var aclone : array<int> )
+	t |> equal(0, lock_count(aclone))
+    for aidx in aclone
+		if aidx==2
+			t |> equal(1, lock_count(aclone))
+			return
+	finally
+        g_steps ++
+		t |> equal(0, lock_count(aclone))
+finally
+	t |> equal(0, lock_count(aclone))
+    g_steps ++
+	delete aclone
 
 [jit, sideeffects]
 def test_if_double_break(max:int=10)

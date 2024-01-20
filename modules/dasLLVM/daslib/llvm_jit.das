@@ -241,7 +241,7 @@ class LlvmJitVisitor : AstVisitor
             LLVMAddAttributeToFunction(ffunc, LLVMGetEnumAttribute("hot"))
 
     def process_finally ( expr:ExpressionPtr )
-        var blk <- collect_finally(expr)
+        var blk <- collect_finally(expr,true)
         for bl in blk
             finallyBlocks[bl] = LLVMAppendBasicBlock(ffunc, "finally_block_at_{int(bl.at.line)}_")
         if length(blk) > 0
@@ -462,17 +462,26 @@ class LlvmJitVisitor : AstVisitor
             else
                 LLVMBuildRetVoid(g_builder)
 
+    def hasFinalSection ( blk:ExprBlock? )
+        if blk==null
+            return false
+        if length(blk.finalList)>0
+            return true
+        // TODO: do better test here. block with iterator, or over an array<> has a final section. maybe other??? but not all
+        return blk.blockFlags.forLoop   // for loop always has final section
+
     def call_all_finally_blocks(stopAtLoop:bool)
         var len = length(block_stack)
         for i in range(len)
             var blk = block_stack[len-1-i]
             if stopAtLoop && blk.blockFlags.inTheLoop
                 break
-            if length(blk.finalList) > 0
+            if blk |> hasFinalSection()
                 var after = LLVMAppendBasicBlock(ffunc, "call_finally_block_{int(blk.at.line)}_")
                 var after_ptr = LLVMBlockAddress(LLVMGetBasicBlockParent(after),after)
                 LLVMBuildStore(g_builder, after_ptr, callBlock)
-                LLVMBuildBr(g_builder, finallyBlocks[get_ptr(blk)])
+                var fblk = finallyBlocks[get_ptr(blk)]
+                LLVMBuildBr(g_builder, fblk)
                 LLVMPositionBuilderAtEnd(g_builder, after)
                 afterFinallyBlocks[get_ptr(blk)] |> push(after)
 
@@ -488,14 +497,15 @@ class LlvmJitVisitor : AstVisitor
 
     def override preVisitExprBlockFinal(blk:smart_ptr<ExprBlock>): void
         add_default_terminator(blk)
-        if finallyBlocks |> key_exists(get_ptr(blk))
-            var fblk = finallyBlocks[get_ptr(blk)]
-            if !current_block_terminates()
-                LLVMBuildBr(g_builder, fblk)
-            LLVMPositionBuilderAtEnd(g_builder, fblk)
+        if !blk.blockFlags.forLoop                              // for loop just does it
+            if finallyBlocks |> key_exists(get_ptr(blk))
+                var fblk = finallyBlocks[get_ptr(blk)]
+                if !current_block_terminates()
+                    LLVMBuildBr(g_builder, fblk)
+                LLVMPositionBuilderAtEnd(g_builder, fblk)
 
     def override visitExprBlock(var blk:smart_ptr<ExprBlock>) : ExpressionPtr
-        if length(blk.finalList)==0
+        if length(blk.finalList)==0         // TODO: check for loop
             add_default_terminator(blk)
         else
             afterFinallyBlocks  |> get(get_ptr(blk)) <| $ ( AfterFinallyBlocks )
@@ -1999,8 +2009,14 @@ class LlvmJitVisitor : AstVisitor
             }
         */
         LLVMPositionBuilderAtEnd(g_builder,lblk.loop_end)                   // LOOP END
+        // in for loop closing iterators is included in the finally section
+        let body = expr.body as ExprBlock
+        var fblk = finallyBlocks[get_ptr(body)]
+        LLVMBuildBr(g_builder, fblk)
+        LLVMPositionBuilderAtEnd(g_builder, fblk)
+        // close all iterators
         let len = length(expr.iteratorVariables)
-        for i in range(len)                                                 // close all iterators
+        for i in range(len)
             let ri = len - i - 1
             let svar & = unsafe(expr.iteratorVariables[ri])
             let ssrc & = unsafe(expr.sources[ri])
@@ -2012,11 +2028,9 @@ class LlvmJitVisitor : AstVisitor
                     pass
                 else
                     build_iter_close(getE(ssrc), getV(svar))
-        if expr.body is ExprBlock                                           // finally  (TODO: wrong order!!! finlly before iterator close!!!)
-            let body = expr.body as ExprBlock
-            if length(body.finalList) != 0
-                LLVMBuildBr(g_builder, finallyBlocks[get_ptr(body)])
-                visit_finally(body, adapter)
+        // now, final block if there is anythign there
+        if length(body.finalList) != 0
+            visit_finally(body, adapter)
         return expr
 
 // ExprMakeVariant
