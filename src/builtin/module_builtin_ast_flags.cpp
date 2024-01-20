@@ -50,7 +50,8 @@ namespace das {
         ft->alias = "ExprBlockFlags";
         ft->argNames = { "isClosure", "hasReturn", "copyOnReturn", "moveOnReturn",
             "inTheLoop", "finallyBeforeBody", "finallyDisabled","aotSkipMakeBlock",
-            "aotDoNotSkipAnnotationData", "isCollapseable", "needCollapse", "hasMakeBlock", "hasEarlyOut" };
+            "aotDoNotSkipAnnotationData", "isCollapseable", "needCollapse", "hasMakeBlock",
+            "hasEarlyOut", "forLoop" };
         return ft;
     }
 
