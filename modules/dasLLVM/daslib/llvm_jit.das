@@ -4052,7 +4052,7 @@ class JIT_LLVM : AstSimulateMacro
         if !jit_enabled()
             error("jit is disabled. use `-jit` option for daScript, or enable jit via CodeOfPolicies")
             return false
-        var inscope funcs : array<FunctionPtr>
+        var funcs : array<FunctionPtr>
         var disableJitVisitor = new DisableJitVisitor()
         var inscope disableJitVisitorAdapter <- make_visitor(*disableJitVisitor)
         prog |> for_each_module <| $ ( mod )
