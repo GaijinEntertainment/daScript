@@ -27,6 +27,8 @@ require daslib/ast_debug
 require llvm/llvm_debug
 */
 
+var modules2mnh : table<Module?; array<string>>
+
 [macro_function]
 def private get_expr_ptr ( expr:ExpressionPtr )
     return get_ptr(expr)
@@ -797,23 +799,22 @@ class LlvmJitVisitor : AstVisitor
 
     def register_interop_function ( expr:smart_ptr<ExprCallFunc> ) : LLVMOpaqueValue?
         let mangled_name = get_mangled_name(FunctionPtr(expr.func))
-        var ofunc = LLVMGetNamedFunction(g_mod, mangled_name)
+        var ofunc = LLVMGetNamedGlobal(g_mod, mangled_name)
         if ofunc == null
-            ofunc = LLVMAddFunction(g_mod, mangled_name, // InteropFunction(context *, node *, args *)
-                LLVMFunctionType(LLVMFloat4Type(),
-                    [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMFloat4Type(),0u)]]))
+            modules2mnh[expr.func._module] |> push <| (FunctionPtr(expr.func) |> get_mangled_name)
+
+            // let fn : function<( context : void? ; node : void? ; args : float4? ) : float4>
+            // let fn_type <- type_to_llvm_type <| typeinfo(ast_typedecl fn_type)
+
+            var fn_type = LLVMFunctionType(LLVMFloat4Type(),
+                    [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMFloat4Type(),0u)]])
+            let funcPtrType = LLVMPointerType(fn_type, 0u)
+            ofunc = LLVMAddGlobal(g_mod, funcPtrType, "{mangled_name}")
+            LLVMSetInitializer(ofunc, LLVMConstPointerNull(funcPtrType))
             let FUNC_PTR = get_builtin_function_address(expr.func)
             if FUNC_PTR==null
                 failed_E(expr, "missing interop function pointer for {expr.func._module.name}::{expr.func.name}")
             LLVMAddGlobalMapping(g_engine, ofunc, FUNC_PTR)
-            if expr.func.sideEffectFlags == bitfield(0)
-                LLVMAddAttributeToFunction(ofunc, LLVMGetEnumAttribute("readonly"))
-                LLVMAddAttributeToFunction(ofunc, LLVMGetEnumAttribute("nounwind"))     // TODO: better no-unwind?
-                LLVMAddAttributeToFunction(ofunc, LLVMGetEnumAttribute("willreturn"))
-            if !expr.func.sideEffectFlags.modifyExternal
-                var nocapture_attr = LLVMGetEnumAttribute("nocapture")
-                for ai in urange(3)
-                    LLVMAddAttributeToFunctionArgument(ofunc, ai, nocapture_attr)
         return ofunc
 
     def build_call_params ( expr:smart_ptr<ExprCallFunc>; extern_func : Function? = null )
@@ -894,7 +895,9 @@ class LlvmJitVisitor : AstVisitor
                     LLVMConstIntToPtr(LLVMConstInt(LLVMInt64Type(), NODE_ADDR, 0), LLVMPointerType(LLVMVoidType(), 0u)); // Node *
                     args                                                   // args
                 }]
-                var ccall = LLVMBuildCall(g_builder, func, params, "")
+                // Load the function pointer
+                var loaded_func = LLVMBuildLoad(g_builder, func, "");
+                var ccall = LLVMBuildCall(g_builder, loaded_func, params, "")
                 if expr.func.result.isVoid
                     setE(expr, ccall)
                 else
@@ -3976,6 +3979,98 @@ class LlvmJitVisitor : AstVisitor
         return res
 
 [macro_function]
+def private get_llvm_function_type ( func : FunctionPtr )
+    var arg_types : array<LLVMOpaqueType?>
+    var res_type : LLVMOpaqueType?
+    res_type = type_to_llvm_type(func.result)
+    if func.result.flags.ref
+        res_type = LLVMPointerType(res_type,0u)
+    let cmres = isCMRES(func)
+    if cmres
+        arg_types |> push(LLVMPointerType(res_type,0u))
+        res_type = LLVMVoidType()
+    for arg in func.arguments
+        arg_types |> push(type_to_llvm_abi_type(arg._type))
+    if func.moreFlags.jitContextAndLineInfo
+        arg_types |> push(LLVMPointerType(LLVMVoidType(),0u))   // context
+        arg_types |> push(LLVMPointerType(LLVMVoidType(),0u))   // line info arg
+    return LLVMFunctionType(res_type,arg_types)
+
+[macro_function]
+def private recreate_engine_extern_mappings ()
+    // if we are here, then we are loading the dll and we will not recreate it
+    for mod, externs in keys(modules2mnh), values(modules2mnh)
+        for extern in externs
+            let fn <- mod |> find_unique_function(extern)
+            var sym = g_dynamic_lib_handle |> get_function_address(name)
+            let FUNC_PTR = get_builtin_function_address(fn |> get_ptr())
+            sym* = FUNC_PTR
+
+[macro_function]
+def private restore_modules2externs ( )
+    var mod_count = fetch_uint64_from_dll("mod_count")
+    for i in mod_count |> range64()
+        var mod_name = fetch_string_from_dll("mod_name_{i}")
+        var mod_extern_cnt = fetch_uint64_from_dll("mod_extern_cnt_{mod_name}")
+        var externs : array<string>
+        for j in mod_extern_cnt |> range64()
+            var extern_name = fetch_string_from_dll("mod_extern_{mod_name}_{j}")
+            externs |> push (extern_name)
+        let module_ = find_module(mod_name)
+        modules2mnh[module_] <- externs
+
+[macro_function]
+def private fetch_uint64_from_dll ( name : string )
+    if g_dynamic_lib_handle != null
+        var sym = g_dynamic_lib_handle |> get_function_address(name)
+        var val = unsafe(reinterpret<uint64?> (sym))
+        return *val
+    panic("Expect a string!")
+    return 0 |> uint64()
+
+[macro_function]
+def private fetch_string_from_dll ( name : string )
+    if g_dynamic_lib_handle != null
+        var sym = g_dynamic_lib_handle |> get_function_address(name)
+        var val = unsafe(reinterpret<string?> (sym))
+        return *val
+    panic("Expect a string!")
+    return ""
+
+[macro_function]
+def private save_modules2externs ( )
+    var mod_count : uint64 = 0 |> uint64()
+    for mod, externs in keys(modules2mnh), values(modules2mnh)
+        mod_count += 1 |> uint64()
+        var mod_extern_count : uint64 = externs |> length() |> uint64()
+        add_uint64_global_variable("mod_extern_cnt_{mod.name}", mod_extern_count)
+        add_string_global_variable("mod_name_{mod_count}", mod.name |> string())
+        var extern_count : uint64 = 0 |> uint64()
+        for extern in externs
+            add_string_global_variable("mod_extern_{mod.name}_{extern_count}", extern)
+            extern_count += 1 |> uint64()
+    add_uint64_global_variable("mod_count", mod_count)
+
+[macro_function]
+def private add_string_global_variable ( name : string; value : string )
+    let extern_name = build_string_constant(value)
+    var global_var = add_global_variable(name, LLVMTypeOf(extern_name), extern_name)
+    LLVMSetGlobalConstant(global_var, 1)
+    return global_var
+
+[macro_function]
+def private add_uint64_global_variable ( name : string; init : uint64 )
+    return add_global_variable(name, LLVMInt64Type(), LLVMConstInt(LLVMInt64Type(), init, 0))
+
+[macro_function]
+def private add_global_variable ( name : string; type_ : LLVMOpaqueType?; initializer : LLVMOpaqueValue? ): LLVMOpaqueValue?
+    let globalVar = LLVMAddGlobal(g_mod, type_, name)
+    LLVMSetLinkage(globalVar, LLVMLinkage LLVMDLLExportLinkage)
+    LLVMSetDLLStorageClass(globalVar, LLVMDLLStorageClass LLVMDLLExportStorageClass)
+    globalVar |> LLVMSetInitializer <| initializer
+    return globalVar
+
+[macro_function]
 def private generate_llvm ( ctx:Context?; fn : FunctionPtr )
     return if is_in_completion() || is_compiling_macros() || is_folding()
     if g_dynamic_lib_handle != null
@@ -3985,6 +4080,7 @@ def private generate_llvm ( ctx:Context?; fn : FunctionPtr )
         if written_hash != null && get_function_aot_hash(fn |> get_ptr) == *written_hash
             debug("function {get_mangled_name(fn)} taken from the dll with aot_hash {*written_hash}")
             return
+    g_loading_from_dll = false
     let globalVar = LLVMAddGlobal(g_mod, LLVMInt64Type(), "{get_mangled_name(fn)} hash")
     LLVMSetLinkage(globalVar, LLVMLinkage LLVMDLLExportLinkage)
     LLVMSetDLLStorageClass(globalVar, LLVMDLLStorageClass LLVMDLLExportStorageClass)
@@ -4084,6 +4180,13 @@ class JIT_LLVM : AstSimulateMacro
             if !LLVMVerifyModule(g_mod, LLVMVerifierFailureAction LLVMPrintMessageAction, false)
                 g_failed = true
             optimize_llvm_module()
+            if g_dynamic_lib_handle != null
+                if g_loading_from_dll
+                    restore_modules2externs()
+                else
+                    save_modules2externs()
+            g_dynamic_lib_handle |> close_dynamic_library()
+            g_dynamic_lib_handle = null
             for fun in funcs
                 var mangled_name = get_mangled_name(fun)
                 let MNH = hash(mangled_name)
