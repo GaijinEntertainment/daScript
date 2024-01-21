@@ -49,6 +49,7 @@ let g_intrin_lookup <- {{
             "$::uint" => @@intrinsic_builtin_int;
             "$::int64" => @@intrinsic_builtin_int;
             "$::uint64" => @@intrinsic_builtin_int;
+            "$::bitfield" => @@intrinsic_builtin_int;
     // bits
         "$::clz" => @@intrinsic_bit_nzp_op1;
         "$::ctz" => @@intrinsic_bit_nzp_op1;

@@ -982,6 +982,9 @@ class LlvmJitVisitor : AstVisitor
         var blk = ite2blocks[get_expr_ptr(expr)]
         var sE = getE(expr.subexpr)
         var dE = getE(expr.defaultValue)
+        if expr._type.isPointer // could be null there, right? TODO: should we try ref
+            sE = LLVMBuildPointerCast(g_builder, sE, LLVMPointerType(type_to_llvm_type(expr._type.firstType), 0u), "")
+            dE = LLVMBuildPointerCast(g_builder, dE, LLVMPointerType(type_to_llvm_type(expr._type.firstType), 0u), "")
         LLVMBuildBr(g_builder, blk.phi_false)
         LLVMPositionBuilderAtEnd(g_builder, blk.phi_false)
         LLVMBuildBr(g_builder, blk.if_end)
@@ -3664,18 +3667,18 @@ class LlvmJitVisitor : AstVisitor
 
     def cast_from_vec4f_workhorse ( etype:TypeDeclPtr; expr:ExpressionPtr; v4f:LLVMOpaqueValue? )
         let bt = etype.baseType
-        if bt==Type tInt || bt==Type tUInt || bt==Type tBitfield
+        if bt==Type tInt || bt==Type tUInt || bt==Type tBitfield || bt==Type tEnumeration
             var tbit = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
             return LLVMBuildBitCast(g_builder, tbit, LLVMInt32Type(), "vec4f_to_int")
         elif bt==Type tInt64 || bt==Type tUInt64
             var tvec = LLVMBuildBitCast(g_builder, v4f, LLVMVectorType(LLVMInt64Type(),2u), "")
             var tbit = LLVMBuildExtractElement(g_builder, tvec, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
             return tbit
-        elif bt==Type tInt8 || bt==Type tUInt8
+        elif bt==Type tInt8 || bt==Type tUInt8 || bt==Type tEnumeration8
             var tbit = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
             var tres = LLVMBuildBitCast(g_builder, tbit, LLVMInt32Type(), "vec4f_to_int")
             return  LLVMBuildTruncOrBitCast(g_builder, tres, LLVMInt8Type(), "int_to_int8")
-        elif bt==Type tInt16 || bt==Type tUInt16
+        elif bt==Type tInt16 || bt==Type tUInt16 || bt==Type tEnumeration16
             var tbit = LLVMBuildExtractElement(g_builder, v4f, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
             var tres = LLVMBuildBitCast(g_builder, tbit, LLVMInt32Type(), "vec4f_to_int")
             return LLVMBuildTruncOrBitCast(g_builder, tres, LLVMInt16Type(), "int_to_int16")
