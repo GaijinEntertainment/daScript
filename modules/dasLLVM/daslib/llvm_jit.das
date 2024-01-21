@@ -543,7 +543,10 @@ class LlvmJitVisitor : AstVisitor
 
 // ExprLet
     def isCall2CMRES ( expr:ExpressionPtr )
-        return (expr is ExprCall) && isCMRES((expr as ExprCall).func)
+        return false if !(expr is ExprCall)
+        let call = expr as ExprCall
+        return false if !isCMRES(call.func)
+        return call.doesNotNeedSp || call.stackTop==0u
 
     def make_call_to_cmres ( expr:ExpressionPtr; v_ptr:LLVMOpaqueValue? )
         if isCall2CMRES(expr)
