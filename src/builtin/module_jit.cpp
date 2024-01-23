@@ -348,11 +348,11 @@ extern "C" {
         char cmd[1024];
 
         if (!check_file_present(jitModuleObj)) {
-            das_to_stderr("Error: File '%s', containing daScript library, does not exist", jitModuleObj);
+            das_to_stderr("Error: File '%s', containing daScript library, does not exist\n", jitModuleObj);
             return;
         }
         if (!check_file_present(objFilePath)) {
-            das_to_stderr("Error: File '%s', containing compiled definitions, does not exist", objFilePath);
+            das_to_stderr("Error: File '%s', containing compiled definitions, does not exist\n", objFilePath);
             return;
         }
 
@@ -395,10 +395,10 @@ extern "C" {
         }
 
         if ( int status = _pclose(fp); status != 0 ) {
-            das_to_stderr("Failed to make shared library %s, command '%s'", libraryName, cmd);
+            das_to_stderr("Failed to make shared library %s, command '%s'\n", libraryName, cmd);
             printf("Output:\n%s", output);
         } else {
-            das_to_stdout("Library %s made - ok", libraryName);
+            das_to_stdout("Library %s made - ok\n", libraryName);
         }
     }
 
