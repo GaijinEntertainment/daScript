@@ -1,6 +1,7 @@
 #include "daScript/misc/platform.h"
 
 #include "daScript/misc/performance_time.h"
+#include "daScript/misc/sysos.h"
 #include "daScript/simulate/aot.h"
 #include "daScript/simulate/aot_builtin_jit.h"
 #include "daScript/simulate/aot_builtin_ast.h"
@@ -330,6 +331,10 @@ extern "C" {
         return (void *) info_ptr;
     }
 
+    void das_recreate_fileinfo_name ( FileInfo * info, const char * name, Context * context, LineInfoArg * at ) {
+        info->name = string{ name };
+    }
+
     bool check_file_present ( const char * filename ) {
         if ( FILE * file = fopen(filename, "r"); file == NULL ) {
             return false;
@@ -389,9 +394,9 @@ extern "C" {
             }
         }
 
-        if ( int status = pclose(fp); status != 0 ) {
+        if ( int status = _pclose(fp); status != 0 ) {
             das_to_stderr("Failed to make shared library %s, command '%s'", libraryName, cmd);
-            das_to_stderr("Output:\n%s", output);
+            printf("Output:\n%s", output);
         } else {
             das_to_stdout("Library %s made - ok", libraryName);
         }
@@ -495,12 +500,17 @@ extern "C" {
                 SideEffects::none, "das_get_jit_debug_exit");
             addExtern<DAS_BIND_FUN(das_get_jit_debug_line)>(*this, lib,  "get_jit_debug_line",
                 SideEffects::none, "das_get_jit_debug_line");
+            addExtern<DAS_BIND_FUN(das_recreate_fileinfo_name)>(*this, lib,  "recreate_fileinfo_name",
+                SideEffects::worstDefault, "das_recreate_fileinfo_name");
             addExtern<DAS_BIND_FUN(loadDynamicLibrary)>(*this, lib,  "load_dynamic_library",
                 SideEffects::worstDefault, "loadDynamicLibrary")
                     ->args({"filename"});
             addExtern<DAS_BIND_FUN(getFunctionAddress)>(*this, lib,  "get_function_address",
                 SideEffects::worstDefault, "getFunctionAddress")
                     ->args({"library","name"});
+            addExtern<DAS_BIND_FUN(closeLibrary)>(*this, lib,  "close_dynamic_library",
+                SideEffects::worstDefault, "closeLibrary")
+                    ->args({"library"});
             addExtern<DAS_BIND_FUN(create_shared_library)>(*this, lib,  "create_shared_library",
                 SideEffects::worstDefault, "create_shared_library")
                     ->args({"objFilePath","libraryName","jitModuleObj"});
@@ -512,6 +522,7 @@ extern "C" {
         }
         virtual ModuleAotType aotRequire ( TextWriter & tw ) const override {
             tw << "#include \"daScript/simulate/aot_builtin_jit.h\"\n";
+            tw << "#include \"daScript/misc/sysos.h\"\n";
             return ModuleAotType::cpp;
         }
     };
