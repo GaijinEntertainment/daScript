@@ -1383,7 +1383,7 @@ class LlvmJitVisitor : AstVisitor
                     opR = reduce_bit_vector(opR, expr.left._type.vectorDim, string(expr.op))
             elif expr.left._type.baseType == Type tBool
                 opR = LLVMBuildICmp(g_builder, get_bool_compare_op(expr,string(expr.op)), left, right, "")
-            elif expr.left._type.baseType == Type tPointer
+            elif expr.left._type.baseType == Type tPointer || expr.left._type.baseType == Type tLambda
                 var lptr = LLVMBuildPointerCast(g_builder, left, LLVMPointerType(LLVMInt8Type(), 0u), "")
                 var rptr = LLVMBuildPointerCast(g_builder, right, LLVMPointerType(LLVMInt8Type(), 0u), "")
                 opR = LLVMBuildICmp(g_builder, get_uint_compare_op(expr,string(expr.op)), lptr, rptr, "")
@@ -2694,6 +2694,7 @@ class LlvmJitVisitor : AstVisitor
         else
             mks_ptr = build_alloc(bytes, false)
         check_ptr_zero(mks_ptr, expr.at, "new [[...]] returned null")
+        var memset_bytes = bytes
         if needTypeInfo
             var tinfo = make_type_info_structure(*jit_context,expr.subexpr._type)
             var tptr = LLVMConstIntToPtr(LLVMConstInt(LLVMInt64Type(), intptr(tinfo), 0), LLVMPointerType(LLVMVoidType(), 0u))
@@ -2702,8 +2703,9 @@ class LlvmJitVisitor : AstVisitor
             var p2int = LLVMBuildPtrToInt(g_builder, mks_ptr, LLVMIntPtrType(), "")
             var add16 = LLVMBuildAdd(g_builder, p2int, LLVMConstInt(LLVMIntPtrType(), uint64(16), 0), "")
             mks_ptr = LLVMBuildIntToPtr(g_builder, add16, LLVMPointerType(LLVMVoidType(),0u), "")
+            memset_bytes -= 16
         if needMemset
-            LLVMBuildMemSet(g_builder, mks_ptr, LLVMConstInt(LLVMInt8Type(), 0ul, 0), LLVMConstInt(LLVMInt32Type(), uint64(bytes), 0), 16u)
+            LLVMBuildMemSet(g_builder, mks_ptr, LLVMConstInt(LLVMInt8Type(), 0ul, 0), LLVMConstInt(LLVMInt32Type(), uint64(memset_bytes), 0), 16u)
         if expr.ascendFlags.useStackRef
             let stackref_ptr = LLVMBuildPointerCast(g_builder, mks_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
             setE(expr.subexpr, stackref_ptr)
@@ -3760,6 +3762,8 @@ class LlvmJitVisitor : AstVisitor
         elif etype.isPointer
             var ptr_type = type_to_llvm_type(etype)
             tres = cast_from_vec4f_ptr(v4f, ptr_type)
+        elif etype.baseType == Type tLambda
+            tres = cast_from_vec4f_ptr(v4f, LLVMPointerType(LLVMVoidType(),0u))
         else
             failed_E(expr, "unsupported cast_from_vec4f type {describe(etype)}")
         if tres == null
