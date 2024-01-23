@@ -801,10 +801,7 @@ class LlvmJitVisitor : AstVisitor
         let mangled_name = get_mangled_name(FunctionPtr(expr.func))
         var ofunc = LLVMGetNamedGlobal(g_mod, mangled_name)
         if ofunc == null
-            modules2mnh[expr.func._module] |> push <| (FunctionPtr(expr.func) |> get_mangled_name)
-
-            // let fn : function<( context : void? ; node : void? ; args : float4? ) : float4>
-            // let fn_type <- type_to_llvm_type <| typeinfo(ast_typedecl fn_type)
+            modules2mnh[expr.func._module] |> push(FunctionPtr(expr.func) |> get_mangled_name)
 
             var fn_type = LLVMFunctionType(LLVMFloat4Type(),
                     [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMFloat4Type(),0u)]])
@@ -814,6 +811,8 @@ class LlvmJitVisitor : AstVisitor
             let FUNC_PTR = get_builtin_function_address(expr.func)
             if FUNC_PTR==null
                 failed_E(expr, "missing interop function pointer for {expr.func._module.name}::{expr.func.name}")
+            let funcPtrValue = LLVMConstIntToPtr(LLVMConstInt(LLVMIntPtrType(), FUNC_PTR |> intptr(), 0), funcPtrType)
+            LLVMSetInitializer(ofunc, funcPtrValue);
             LLVMAddGlobalMapping(g_engine, ofunc, FUNC_PTR)
         return ofunc
 
@@ -4002,9 +4001,10 @@ def private recreate_engine_extern_mappings ()
     for mod, externs in keys(modules2mnh), values(modules2mnh)
         for extern in externs
             let fn <- mod |> find_unique_function(extern)
-            var sym = g_dynamic_lib_handle |> get_function_address(name)
+            var func_ptr = g_dynamic_lib_handle |> get_function_address(extern)
+            var func_addr = unsafe(reinterpret<void??> func_ptr)
             let FUNC_PTR = get_builtin_function_address(fn |> get_ptr())
-            sym* = FUNC_PTR
+            *func_addr = FUNC_PTR
 
 [macro_function]
 def private restore_modules2externs ( )
@@ -4183,6 +4183,7 @@ class JIT_LLVM : AstSimulateMacro
             if g_dynamic_lib_handle != null
                 if g_loading_from_dll
                     restore_modules2externs()
+                    recreate_engine_extern_mappings()
                 else
                     save_modules2externs()
             g_dynamic_lib_handle |> close_dynamic_library()
