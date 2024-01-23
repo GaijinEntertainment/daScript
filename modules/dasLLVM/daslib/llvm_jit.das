@@ -1911,16 +1911,18 @@ class LlvmJitVisitor : AstVisitor
                 range2[get_ptr(ssrc)] = sto
                 LLVMBuildStore(g_builder, sfrom, getV(svar))
             elif ssrc._type.dim |> length != 0  // []->first()
+                var inscope etype <- clone_type(ssrc._type)
+                etype.dim |> pop()
                 var element_type = type_to_llvm_type(svar._type)
                 var sdim = getE(ssrc)
                 var s0 = LLVMBuildGEP2(g_builder, element_type, sdim, LLVMConstInt(LLVMInt32Type(),0ul,0), "dim_0")
                 LLVMBuildStore(g_builder, s0, getV(svar))
                 let dimSize = ssrc._type.dim[ssrc._type.dim |> length-1]
-                var sto = LLVMBuildGEP2(g_builder, element_type, sdim, LLVMConstInt(LLVMInt32Type(),uint64(dimSize-1),0), "")
+                var tail = LLVMConstInt(LLVMInt32Type(),uint64(dimSize-1),0)
+                var sto = build_array_index(sdim, tail, etype, "last_element")
                 sto = LLVMBuildPtrToInt(g_builder, sto, LLVMIntPtrType(), "dim_end")
                 range2[get_ptr(ssrc)] = sto
             elif ssrc._type.isGoodArrayType     // {}->first()
-                var element_type = type_to_llvm_type(svar._type)
                 var arr = LLVMBuildLoad(g_builder, getE(ssrc), "array")
                 var size = LLVMBuildExtractValue(g_builder, arr, uint(JIT_ARRAY SIZE), "array.size")
                 var cmp_from_to = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntNE, size, LLVMConstInt(LLVMInt32Type(),0ul,0), "")
@@ -1935,7 +1937,7 @@ class LlvmJitVisitor : AstVisitor
                 var data = LLVMBuildExtractValue(g_builder, arr, uint(JIT_ARRAY DATA), "array.data")
                 LLVMBuildStore(g_builder, data, getV(svar))
                 var tail = LLVMBuildSub(g_builder, size, LLVMConstInt(LLVMInt32Type(),1ul,0), "")
-                var sto = LLVMBuildGEP2(g_builder, element_type, data, tail, "")
+                var sto = build_array_index(data, tail, ssrc._type.firstType, "last_element")
                 sto = LLVMBuildPtrToInt(g_builder, sto, LLVMIntPtrType(), "array_end")
                 range2[get_ptr(ssrc)] = sto
             elif ssrc._type.isIterator
@@ -1996,8 +1998,10 @@ class LlvmJitVisitor : AstVisitor
                 LLVMBuildCondBr(g_builder, rcond, lblk.loop_end, nextOk)
                 LLVMPositionBuilderAtEnd(g_builder,nextOk)
             elif ssrc._type.dim |> length != 0 // []->next()
+                var inscope etype <- clone_type(ssrc._type)
+                etype.dim |> pop()
                 var svar_v = LLVMBuildLoad(g_builder, getV(svar), "")
-                var svar_i = LLVMBuildGEP2(g_builder, type_to_llvm_type(svar._type), svar_v, LLVMConstInt(LLVMInt32Type(),1ul,0), "")
+                var svar_i = build_array_index(svar_v, LLVMConstInt(LLVMInt32Type(),1ul,0), etype, "next_element")
                 LLVMBuildStore(g_builder, svar_i, getV(svar))
                 var sto = range2[get_ptr(ssrc)]
                 svar_i = LLVMBuildPtrToInt(g_builder, svar_v, LLVMIntPtrType(), "")
@@ -2007,7 +2011,7 @@ class LlvmJitVisitor : AstVisitor
                 LLVMPositionBuilderAtEnd(g_builder,nextOk)
             elif ssrc._type.isGoodArrayType // {}->next()
                 var svar_v = LLVMBuildLoad(g_builder, getV(svar), "")
-                var svar_i = LLVMBuildGEP2(g_builder, type_to_llvm_type(svar._type), svar_v, LLVMConstInt(LLVMInt32Type(),1ul,0), "")
+                var svar_i = build_array_index(svar_v, LLVMConstInt(LLVMInt32Type(),1ul,0), ssrc._type.firstType, "next_element")
                 LLVMBuildStore(g_builder, svar_i, getV(svar))
                 var sto = range2[get_ptr(ssrc)]
                 svar_i = LLVMBuildPtrToInt(g_builder, svar_v, LLVMIntPtrType(), "")
