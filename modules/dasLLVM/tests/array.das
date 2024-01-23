@@ -24,8 +24,34 @@ def resizeLocked ( var a : array<int> )
 def outOfRange ( var a : array<int> )
     return a[13]
 
+[jit]
+def check_array_float3 ( t : T?; a : array<float3> )
+    for v,i in a,count()
+        t |> equal ( float3(i+1,i+2,i+3), v )
+
+[jit]
+def check_dim_float3 ( t : T?; a : float3[3] )
+    for v,i in a,count()
+        t |> equal ( float3(i+1,i+2,i+3), v )
+
 [test]
 def test_array ( t:T? )
+    t |> run("array float3") <| @ ( t : T? )
+        t |> success ( is_jit_function(@@check_array_float3) )
+        var a <- [{float3
+            float3(1,2,3);
+            float3(2,3,4);
+            float3(3,4,5)
+        }]
+        check_array_float3(t,a)
+    t |> run("dim float3") <| @ ( t : T? )
+        t |> success ( is_jit_function(@@check_dim_float3) )
+        var a <- [[float3
+            float3(1,2,3);
+            float3(2,3,4);
+            float3(3,4,5)
+        ]]
+        check_dim_float3(t,a)
     t |> run("array []") <| @ ( t : T? )
         var x : array<int>
         resize(x,10)
