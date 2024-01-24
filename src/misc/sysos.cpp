@@ -95,6 +95,9 @@
             auto ret = GetFullPathNameA(fileName,MAX_PATH,buffer,nullptr);
             return ret ? buffer : "";
         }
+        bool closeLibrary ( void * module ) {
+            return FreeLibrary(HMODULE(module));
+        }
     }
 #elif defined(__linux__) || defined(_EMSCRIPTEN_VER)
     #include <unistd.h>
@@ -124,6 +127,9 @@
         string normalizeFileName ( const char * fileName ) {
             // TODO: implement
             return "";
+        }
+        bool closeLibrary ( void * module ) {
+            return dlclose(module) == 0;
         }
     }
 #elif defined(__APPLE__)
@@ -398,6 +404,9 @@
             // TODO: implement
             return "";
         }
+        bool closeLibrary ( void * module ) {
+            return dlclose(module) == 0;
+        }
     }
 #elif defined __HAIKU__
     #include <unistd.h>
@@ -434,6 +443,10 @@
             // TODO: implement
             return "";
         }
+        bool closeLibrary ( void * ) {
+            // TODO: implement
+            return false;
+        }
     }
 #else
     namespace das {
@@ -463,6 +476,10 @@
         string normalizeFileName ( const char * fileName ) {
             // TODO: implement
             return "";
+        }
+        bool closeLibrary ( void * ) {
+            // TODO: implement
+            return false;
         }
     }
 #endif

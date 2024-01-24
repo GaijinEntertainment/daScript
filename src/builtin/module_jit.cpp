@@ -1,6 +1,7 @@
 #include "daScript/misc/platform.h"
 
 #include "daScript/misc/performance_time.h"
+#include "daScript/misc/sysos.h"
 #include "daScript/simulate/aot.h"
 #include "daScript/simulate/aot_builtin_jit.h"
 #include "daScript/simulate/aot_builtin_ast.h"
@@ -330,6 +331,14 @@ extern "C" {
         return (void *) info_ptr;
     }
 
+    void das_recreate_fileinfo_name ( FileInfo * info, const char * name, Context * context, LineInfoArg * at ) {
+        info->name = string{ name };
+    }
+
+    void initialize_dummy_fileinfo (void * dummy) {
+        *(FileInfo*)dummy = FileInfo{};
+    }
+
     bool check_file_present ( const char * filename ) {
         if ( FILE * file = fopen(filename, "r"); file == NULL ) {
             return false;
@@ -343,11 +352,11 @@ extern "C" {
         char cmd[1024];
 
         if (!check_file_present(jitModuleObj)) {
-            das_to_stderr("Error: File '%s', containing daScript library, does not exist", jitModuleObj);
+            das_to_stderr("Error: File '%s', containing daScript library, does not exist\n", jitModuleObj);
             return;
         }
         if (!check_file_present(objFilePath)) {
-            das_to_stderr("Error: File '%s', containing compiled definitions, does not exist", objFilePath);
+            das_to_stderr("Error: File '%s', containing compiled definitions, does not exist\n", objFilePath);
             return;
         }
 
@@ -390,10 +399,10 @@ extern "C" {
         }
 
         if ( int status = pclose(fp); status != 0 ) {
-            das_to_stderr("Failed to make shared library %s, command '%s'", libraryName, cmd);
-            das_to_stderr("Output:\n%s", output);
+            das_to_stderr("Failed to make shared library %s, command '%s'\n", libraryName, cmd);
+            printf("Output:\n%s", output);
         } else {
-            das_to_stdout("Library %s made - ok", libraryName);
+            das_to_stdout("Library %s made - ok\n", libraryName);
         }
     }
 
@@ -495,15 +504,22 @@ extern "C" {
                 SideEffects::none, "das_get_jit_debug_exit");
             addExtern<DAS_BIND_FUN(das_get_jit_debug_line)>(*this, lib,  "get_jit_debug_line",
                 SideEffects::none, "das_get_jit_debug_line");
+            addExtern<DAS_BIND_FUN(das_recreate_fileinfo_name)>(*this, lib,  "recreate_fileinfo_name",
+                SideEffects::worstDefault, "das_recreate_fileinfo_name");
             addExtern<DAS_BIND_FUN(loadDynamicLibrary)>(*this, lib,  "load_dynamic_library",
                 SideEffects::worstDefault, "loadDynamicLibrary")
                     ->args({"filename"});
             addExtern<DAS_BIND_FUN(getFunctionAddress)>(*this, lib,  "get_function_address",
                 SideEffects::worstDefault, "getFunctionAddress")
                     ->args({"library","name"});
+            addExtern<DAS_BIND_FUN(closeLibrary)>(*this, lib,  "close_dynamic_library",
+                SideEffects::worstDefault, "closeLibrary")
+                    ->args({"library"});
             addExtern<DAS_BIND_FUN(create_shared_library)>(*this, lib,  "create_shared_library",
                 SideEffects::worstDefault, "create_shared_library")
                     ->args({"objFilePath","libraryName","jitModuleObj"});
+            addExtern<DAS_BIND_FUN(initialize_dummy_fileinfo)>(*this, lib,  "initialize_dummy_fileinfo",
+                SideEffects::worstDefault, "initialize_dummy_fileinfo");
             addConstant<uint32_t>(*this, "SIZE_OF_PROLOGUE", uint32_t(sizeof(Prologue)));
             addConstant<uint32_t>(*this, "CONTEXT_OFFSET_OF_EVAL_TOP", uint32_t(uint32_t(offsetof(Context, stack) + offsetof(StackAllocator, evalTop))));
             addConstant<uint32_t>(*this, "CONTEXT_OFFSET_OF_GLOBALS", uint32_t(uint32_t(offsetof(Context, globals))));
@@ -512,6 +528,7 @@ extern "C" {
         }
         virtual ModuleAotType aotRequire ( TextWriter & tw ) const override {
             tw << "#include \"daScript/simulate/aot_builtin_jit.h\"\n";
+            tw << "#include \"daScript/misc/sysos.h\"\n";
             return ModuleAotType::cpp;
         }
     };
