@@ -490,7 +490,7 @@ class LlvmJitVisitor : AstVisitor
         var len = length(block_stack)
         for i in range(len)
             var blk = block_stack[len-1-i]
-            if stopAtLoop && blk.blockFlags.inTheLoop
+            if stopAtLoop && (blk.blockFlags.inTheLoop || blk.blockFlags.forLoop)
                 break
             if blk |> hasFinalSection()
                 var after = LLVMAppendBasicBlock(ffunc, "{from_where}_after_call_finally_block_{int(blk.at.line)}_")
