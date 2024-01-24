@@ -398,7 +398,7 @@ extern "C" {
             }
         }
 
-        if ( int status = _pclose(fp); status != 0 ) {
+        if ( int status = pclose(fp); status != 0 ) {
             das_to_stderr("Failed to make shared library %s, command '%s'\n", libraryName, cmd);
             printf("Output:\n%s", output);
         } else {
