@@ -335,6 +335,10 @@ extern "C" {
         info->name = string{ name };
     }
 
+    void initialize_dummy_fileinfo (void * dummy) {
+        *(FileInfo*)dummy = FileInfo{};
+    }
+
     bool check_file_present ( const char * filename ) {
         if ( FILE * file = fopen(filename, "r"); file == NULL ) {
             return false;
@@ -514,6 +518,8 @@ extern "C" {
             addExtern<DAS_BIND_FUN(create_shared_library)>(*this, lib,  "create_shared_library",
                 SideEffects::worstDefault, "create_shared_library")
                     ->args({"objFilePath","libraryName","jitModuleObj"});
+            addExtern<DAS_BIND_FUN(initialize_dummy_fileinfo)>(*this, lib,  "initialize_dummy_fileinfo",
+                SideEffects::worstDefault, "initialize_dummy_fileinfo");
             addConstant<uint32_t>(*this, "SIZE_OF_PROLOGUE", uint32_t(sizeof(Prologue)));
             addConstant<uint32_t>(*this, "CONTEXT_OFFSET_OF_EVAL_TOP", uint32_t(uint32_t(offsetof(Context, stack) + offsetof(StackAllocator, evalTop))));
             addConstant<uint32_t>(*this, "CONTEXT_OFFSET_OF_GLOBALS", uint32_t(uint32_t(offsetof(Context, globals))));
