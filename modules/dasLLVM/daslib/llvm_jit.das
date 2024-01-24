@@ -383,56 +383,51 @@ class LlvmJitVisitor : AstVisitor
 
     def create_file_info_global ()
         let sz = typeinfo(sizeof type<FileInfo>)
-        let FileInfoType = LLVMArrayType(LLVMInt8Type(), uint(sz))
+        let file_info_type = LLVMArrayType(LLVMInt8Type(), uint(sz))
         var dummy = LLVMGetNamedGlobal(g_mod, "fileinfo_dummy")
         if dummy == null
-            dummy = LLVMAddGlobal(g_mod, FileInfoType, "fileinfo_dummy")
+            dummy = LLVMAddGlobal(g_mod, file_info_type, "fileinfo_dummy")
         return dummy |> get_first_element_addr()
 
     def create_line_info_global ( at: LineInfo; dummy: LLVMOpaqueValue? )
         let uint8_ptr = LLVMPointerType(LLVMInt8Type(), 0u)
-        var LineInfoMembers = [[auto
+        var line_info_members = [[auto
             LLVMPointerType(LLVMInt8Type(), 0u); LLVMInt32Type(); LLVMInt32Type(); LLVMInt32Type(); LLVMInt32Type()
         ]]
-        let LineInfoType = LLVMStructType(unsafe(addr(LineInfoMembers[0])), LineInfoMembers |> length() |> uint(), 0)
-        let LineInfoGlobal = LLVMAddGlobal(g_mod, LineInfoType, "" /* no name */)
-        var InitValues =  [[auto LLVMConstPointerCast(dummy, uint8_ptr);
+        let line_info_type = LLVMStructType(unsafe(addr(line_info_members[0])), line_info_members |> length() |> uint(), 0)
+        let line_info_global = LLVMAddGlobal(g_mod, line_info_type, "" /* no name */)
+        var init_values =  [[auto LLVMConstPointerCast(dummy, uint8_ptr);
             LLVMConstInt(LLVMInt32Type(), at.column |> uint64(), 0);
             LLVMConstInt(LLVMInt32Type(), at.line |> uint64(), 0);
             LLVMConstInt(LLVMInt32Type(), at.last_column |> uint64(), 0);
             LLVMConstInt(LLVMInt32Type(), at.last_line |> uint64(), 0)
         ]]
-        let LineInfoInit = LLVMConstStruct(unsafe(addr(InitValues[0])), InitValues |> length() |> uint(), 0)
-        LLVMSetInitializer(LineInfoGlobal, LineInfoInit)
-        return LineInfoGlobal
+        let line_info_init = LLVMConstStruct(unsafe(addr(init_values[0])), init_values |> length() |> uint(), 0)
+        LLVMSetInitializer(line_info_global, line_info_init)
+        return line_info_global
 
-    def create_line_info_ptr_global ( LineInfoGlobal: LLVMOpaqueValue? )
-        // let zero = LLVMConstInt(LLVMInt32Type(), 0 |> uint64(), 0)
-        // var indices = [[auto zero; zero]] // Two zeros for getting the address of the start of the global
-        // let ptrToLineInfoGlobal = LLVMConstInBoundsGEP(LineInfoGlobal, unsafe(addr(indices[0])), 2u)
-        let ptrToLineInfoGlobal = get_first_element_addr(LineInfoGlobal)
+    def create_line_info_ptr_global ( line_info_global: LLVMOpaqueValue? )
+        let ptr_to_line_info_global = get_first_element_addr(line_info_global)
         let uint8_ptr = LLVMPointerType(LLVMPointerType(LLVMInt8Type(), 0u), 0u)
-        // let LineInfoPtrType = LLVMPointerType(LLVMTypeOf(LineInfoGlobal), 0u)
-        let LineInfoPtrType = uint8_ptr
+        let line_info_ptr_type = uint8_ptr
         // print("Type of LineInfoPtrType : '{LineInfoPtrType |> describe}'\n")
         // print("Type of ptrToLineInfoGlobal : '{ptrToLineInfoGlobal |> LLVMTypeOf() |> describe()}'\n")
+        let line_info_ptr_global = LLVMAddGlobal(g_mod, line_info_ptr_type, "" /* no name */)
+        LLVMSetInitializer(line_info_ptr_global, ptr_to_line_info_global)
+        return line_info_ptr_global
 
-        let LineInfoPtrGlobal = LLVMAddGlobal(g_mod, LineInfoPtrType, "" /* no name */)
-        LLVMSetInitializer(LineInfoPtrGlobal, ptrToLineInfoGlobal)
-        return LineInfoPtrGlobal
-
-    def instrument_and_map_global ( at: LineInfo; LineInfoPtrGlobal: LLVMOpaqueValue? )
+    def instrument_and_map_global ( at: LineInfo; line_info_ptr_global: LLVMOpaqueValue? )
         let info_ptr = instrument_line_info(at) // pointer in 'code' of the context
-        g_engine |> LLVMAddGlobalMapping(LineInfoPtrGlobal, info_ptr)
-        return LineInfoPtrGlobal
+        g_engine |> LLVMAddGlobalMapping(line_info_ptr_global, info_ptr)
+        return line_info_ptr_global
 
     def get_line_info_ptr ( at:LineInfo )
         let void_ptr = LLVMPointerType(LLVMVoidType(), 0u)
         let dummy = create_file_info_global()
-        let LineInfoGlobal = create_line_info_global(at, dummy)
-        let LineInfoPtrGlobal = create_line_info_ptr_global(LineInfoGlobal)
-        instrument_and_map_global(at, LineInfoPtrGlobal)
-        return LLVMConstPointerCast(LineInfoPtrGlobal, void_ptr)
+        let line_info_global = create_line_info_global(at, dummy)
+        let line_info_ptr_global = create_line_info_ptr_global(line_info_global)
+        instrument_and_map_global(at, line_info_ptr_global)
+        return LLVMConstPointerCast(line_info_ptr_global, void_ptr)
 
     def build_function_entry(funAt:LineInfo; bodyId:uint64; hasMakeBlock:bool; totalStackSize:uint; var arguments:dasvector`smart_ptr`Variable)
         // now write to regular function
