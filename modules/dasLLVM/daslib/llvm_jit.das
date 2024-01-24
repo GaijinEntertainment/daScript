@@ -380,17 +380,19 @@ class LlvmJitVisitor : AstVisitor
             LLVMBuildRet(g_builder, LLVMGetUndef(LLVMFloat4Type()))
 
     def get_line_info_ptr ( at:LineInfo )
+        let void_ptr = LLVMPointerType(LLVMVoidType(), 0u)
+
+        let sz = typeinfo(sizeof type<FileInfo>)
+        let FileInfoType = LLVMArrayType(LLVMInt8Type(), uint(sz))
         var LineInfoMembers = [[auto
             LLVMPointerType(LLVMInt8Type(), 0u); LLVMInt32Type(); LLVMInt32Type(); LLVMInt32Type(); LLVMInt32Type()
         ]]
         let LineInfoType = LLVMStructType(unsafe(addr(LineInfoMembers[0])), LineInfoMembers |> length() |> uint(), 0)
         let LineInfoGlobal = LLVMAddGlobal(g_mod, LineInfoType, "" /* no name */)
-
-        let dummy = get_dummy_fileinfo()
-        let void_ptr = LLVMPointerType(LLVMVoidType(), 0u)
-
-        var InitValues =  [[auto
-            LLVMConstIntToPtr(LLVMConstInt(LLVMIntPtrType(), dummy |> intptr(), 0), void_ptr);
+        var dummy = LLVMGetNamedGlobal(g_mod, "fileinfo_dummy")
+        if dummy == null
+            dummy = LLVMAddGlobal(g_mod, FileInfoType, "fileinfo_dummy")
+        var InitValues =  [[auto dummy;
             LLVMConstInt(LLVMInt32Type(), at.column |> uint64(), 0);
             LLVMConstInt(LLVMInt32Type(), at.line |> uint64(), 0);
             LLVMConstInt(LLVMInt32Type(), at.last_column |> uint64(), 0);
@@ -4044,6 +4046,11 @@ def private restore_modules2externs ( )
             externs |> push (extern_name)
         let module_ = find_module(mod_name)
         modules2mnh[module_] <- externs
+
+[macro_function]
+def private restore_fileinfo_dummy ( )
+    var sym = g_dynamic_lib_handle |> get_function_address("fileinfo_dummy")
+    initialize_dummy_fileinfo(sym)
 
 def private create_fileinfo ( addr_ : void? )
     assert(g_dynamic_lib_handle != null, "g_dynamic_lib_handle is null")
