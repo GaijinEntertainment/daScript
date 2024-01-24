@@ -28,6 +28,10 @@ require llvm/llvm_debug
 */
 
 var modules2mnh : table<Module?; array<string>>
+var finfosFromAddr: table<void?; FileInfo?>
+var createdFileinfos: table<FileInfo?; FileInfo?>
+var lineinfo_count : uint64 = 0 |> uint64()
+var saved_fileinfos: table<FileInfo?; bool>
 
 [macro_function]
 def private get_expr_ptr ( expr:ExpressionPtr )
@@ -376,11 +380,34 @@ class LlvmJitVisitor : AstVisitor
             LLVMBuildRet(g_builder, LLVMGetUndef(LLVMFloat4Type()))
 
     def get_line_info_ptr ( at:LineInfo )
-        // TODO: (so that we can have .dll)
-        //  * generate LLVM data block with LineInfo
-        //  * generate LLVM data block with dummy FileInfo
-        let info_ptr = instrument_line_info(at) // right now just pointer in 'code' of the context
-        return LLVMConstIntToPtr(LLVMConstInt(LLVMInt64Type(), uint64(intptr(info_ptr)), 0), LLVMPointerType(LLVMVoidType(), 0u))
+        var LineInfoMembers = [[auto
+            LLVMPointerType(LLVMInt8Type(), 0u); LLVMInt32Type(); LLVMInt32Type(); LLVMInt32Type(); LLVMInt32Type()
+        ]]
+        let LineInfoType = LLVMStructType(unsafe(addr(LineInfoMembers[0])), LineInfoMembers |> length() |> uint(), 0)
+        let LineInfoGlobal = LLVMAddGlobal(g_mod, LineInfoType, "" /* no name */)
+
+        let dummy = get_dummy_fileinfo()
+        let void_ptr = LLVMPointerType(LLVMVoidType(), 0u)
+
+        var InitValues =  [[auto
+            LLVMConstIntToPtr(LLVMConstInt(LLVMIntPtrType(), dummy |> intptr(), 0), void_ptr);
+            LLVMConstInt(LLVMInt32Type(), at.column |> uint64(), 0);
+            LLVMConstInt(LLVMInt32Type(), at.line |> uint64(), 0);
+            LLVMConstInt(LLVMInt32Type(), at.last_column |> uint64(), 0);
+            LLVMConstInt(LLVMInt32Type(), at.last_line |> uint64(), 0)
+        ]]
+        let LineInfoInit = LLVMConstStruct(unsafe(addr(InitValues[0])), InitValues |> length() |> uint(), 0)
+        LLVMSetInitializer(LineInfoGlobal, LineInfoInit)
+
+        // TODO: real fileinfos with initialization
+        // if saved_fileinfos[lineinfo.fileInfo] == false
+        //     saved_fileinfos[lineinfo.fileInfo] = true
+        //     add_string_global_variable("fileinfo_at_{lineinfo.fileInfo}_name", "{lineinfo.fileInfo.name}")
+
+        let info_ptr = instrument_line_info(at) // pointer in 'code' of the context
+        g_engine |> LLVMAddGlobalMapping(LineInfoGlobal, info_ptr)
+
+        return LineInfoGlobal
 
     def build_function_entry(funAt:LineInfo; bodyId:uint64; hasMakeBlock:bool; totalStackSize:uint; var arguments:dasvector`smart_ptr`Variable)
         // now write to regular function
@@ -807,12 +834,11 @@ class LlvmJitVisitor : AstVisitor
                     [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMFloat4Type(),0u)]])
             let funcPtrType = LLVMPointerType(fn_type, 0u)
             ofunc = LLVMAddGlobal(g_mod, funcPtrType, "{mangled_name}")
-            LLVMSetInitializer(ofunc, LLVMConstPointerNull(funcPtrType))
             let FUNC_PTR = get_builtin_function_address(expr.func)
             if FUNC_PTR==null
                 failed_E(expr, "missing interop function pointer for {expr.func._module.name}::{expr.func.name}")
             let funcPtrValue = LLVMConstIntToPtr(LLVMConstInt(LLVMIntPtrType(), FUNC_PTR |> intptr(), 0), funcPtrType)
-            LLVMSetInitializer(ofunc, funcPtrValue);
+            LLVMSetInitializer(ofunc, funcPtrValue)
             LLVMAddGlobalMapping(g_engine, ofunc, FUNC_PTR)
         return ofunc
 
@@ -4019,23 +4045,41 @@ def private restore_modules2externs ( )
         let module_ = find_module(mod_name)
         modules2mnh[module_] <- externs
 
+def private create_fileinfo ( addr_ : void? )
+    assert(g_dynamic_lib_handle != null, "g_dynamic_lib_handle is null")
+    var sym = g_dynamic_lib_handle |> get_function_address("fileinfo_at_{addr_}")
+    var sym_name = g_dynamic_lib_handle |> get_function_address("fileinfo_at_{addr_}_name")
+    var val = unsafe(reinterpret<FileInfo?> (sym))
+    var name = unsafe(reinterpret<string> (sym_name))
+    recreate_fileinfo_name(val, name)
+    return val
+
+[macro_function]
+def private fetch_lineinfo_from_dll ( name : string )
+    assert(g_dynamic_lib_handle != null, "g_dynamic_lib_handle is null")
+    var sym = g_dynamic_lib_handle |> get_function_address(name)
+    var val = unsafe(reinterpret<LineInfo?> (sym))
+    let fi = val.fileInfo
+    if createdFileinfos[fi] == null
+        createdFileinfos[fi] = create_fileinfo(unsafe(reinterpret<void?> fi))
+    val.fileInfo = createdFileinfos[fi]
+    return *val
+
 [macro_function]
 def private fetch_uint64_from_dll ( name : string )
-    if g_dynamic_lib_handle != null
-        var sym = g_dynamic_lib_handle |> get_function_address(name)
-        var val = unsafe(reinterpret<uint64?> (sym))
-        return *val
-    panic("Expect a string!")
-    return 0 |> uint64()
+    assert(g_dynamic_lib_handle != null, "g_dynamic_lib_handle is null")
+    var sym = g_dynamic_lib_handle |> get_function_address(name)
+    var val = unsafe(reinterpret<uint64?> (sym))
+    return *val
+
 
 [macro_function]
 def private fetch_string_from_dll ( name : string )
-    if g_dynamic_lib_handle != null
-        var sym = g_dynamic_lib_handle |> get_function_address(name)
-        var val = unsafe(reinterpret<string?> (sym))
-        return *val
-    panic("Expect a string!")
-    return ""
+    assert(g_dynamic_lib_handle != null, "g_dynamic_lib_handle is null")
+    var sym = g_dynamic_lib_handle |> get_function_address(name)
+    var val = unsafe(reinterpret<string?> (sym))
+    return *val
+
 
 [macro_function]
 def private save_modules2externs ( )
@@ -4177,6 +4221,7 @@ class JIT_LLVM : AstSimulateMacro
             g_dynamic_lib_handle = load_dynamic_library(JIT_DLL_OUTPUT)
             for fun in funcs
                 generate_llvm(ctx, fun)
+            g_dynamic_lib_handle |> close_dynamic_library()
             if !LLVMVerifyModule(g_mod, LLVMVerifierFailureAction LLVMPrintMessageAction, false)
                 g_failed = true
             optimize_llvm_module()
