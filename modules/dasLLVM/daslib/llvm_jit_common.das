@@ -47,6 +47,7 @@ let public FN_JIT_INVOKE_BLOCK      = "jit_invoke_block"
 let public FN_JIT_INVOKE_BLOCK_WITH_CMRES = "jit_invoke_block_with_cmres"
 let public FN_JIT_STRING_BUILDER    = "jit_string_builder"
 let public FN_JIT_GET_GLOBAL_MNH    = "jit_get_global_mnh"
+let public FN_JIT_GET_SHARED_MNH    = "jit_get_shared_mnh"
 let public FN_JIT_ALLOC_HEAP        = "jit_alloc_heap"
 let public FN_JIT_ALLOC_PERSISTENT  = "jit_alloc_persistent"
 let public FN_JIT_FREE_HEAP         = "jit_free_heap"
@@ -219,13 +220,20 @@ def public init_jit
     LLVMAddGlobalMapping(g_engine, jit_string_builder, get_jit_string_builder())
     LLVMAddAttributesToFunction(jit_string_builder, [[auto nounwind; willreturn; readonly]])
     LLVMAddAttributeToFunctionArgumentRange(jit_string_builder, urange(0,3), nocapture)
-    // jit_get_global_mnh ( uint64_t mnh, context * )
+    // void * jit_get_global_mnh ( uint64_t mnh, context * )
     var jit_get_global_mnh = LLVMAddFunction(g_mod, FN_JIT_GET_GLOBAL_MNH,
         LLVMFunctionType(LLVMPointerType(LLVMVoidType(),0u),
             [[LLVMTypeRef LLVMInt64Type(); LLVMPointerType(LLVMVoidType(),0u) ]]))
     LLVMAddGlobalMapping(g_engine, jit_get_global_mnh, get_jit_get_global_mnh())
     LLVMAddAttributesToFunction(jit_get_global_mnh, [[auto nounwind; willreturn; readonly]])
     LLVMAddAttributeToFunctionArgument(jit_get_global_mnh, 1u, nocapture)
+    // void * jit_get_shared_mnh ( uint64_t mnh, context * )
+    var jit_get_shared_mnh = LLVMAddFunction(g_mod, FN_JIT_GET_SHARED_MNH,
+        LLVMFunctionType(LLVMPointerType(LLVMVoidType(),0u),
+            [[LLVMTypeRef LLVMInt64Type(); LLVMPointerType(LLVMVoidType(),0u) ]]))
+    LLVMAddGlobalMapping(g_engine, jit_get_shared_mnh, get_jit_get_shared_mnh())
+    LLVMAddAttributesToFunction(jit_get_shared_mnh, [[auto nounwind; willreturn; readonly]])
+    LLVMAddAttributeToFunctionArgument(jit_get_shared_mnh, 1u, nocapture)
     // jit_alloc_heap ( uint64_t mnh, context * )
     var jit_alloc_heap = LLVMAddFunction(g_mod, FN_JIT_ALLOC_HEAP,
         LLVMFunctionType(LLVMPointerType(LLVMVoidType(),0u),

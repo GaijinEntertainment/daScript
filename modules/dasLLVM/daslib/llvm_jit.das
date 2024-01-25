@@ -2874,6 +2874,15 @@ class LlvmJitVisitor : AstVisitor
         return expr
 
 // ExprVar
+    def get_global_offset_by_mnh ( mnh:uint64; shared_mnh:bool; name:string )
+        var params = [[auto
+            LLVMConstInt(LLVMInt64Type(), mnh, 0);
+            get_context_param()
+        ]]
+        var func = LLVMGetNamedFunction(g_mod, shared_mnh ? FN_JIT_GET_SHARED_MNH : FN_JIT_GET_GLOBAL_MNH)
+        var res = LLVMBuildCall(g_builder, func, params, name)
+        return res
+
     def override visitExprVar(expr:smart_ptr<ExprVar>) : ExpressionPtr
         assume varType = expr.variable._type
         if expr.varFlags._block
@@ -2922,11 +2931,18 @@ class LlvmJitVisitor : AstVisitor
             var tryV = tryGetV(expr.variable)
             if tryV == null
                 at_function_entry <|
+                    let isSolidContext = expr.variable._module.moduleFlags.isSolidContext
                     var vptr : LLVMOpaqueValue?
-                    var ctx_ptr = LLVMBuildPointerCast(g_builder, get_context_param(), LLVMPointerType(LLVMInt8Type(),0u), "")
-                    var global_ptr = LLVMBuildGEP(g_builder, ctx_ptr, LLVMConstInt(LLVMInt32Type(), uint64(CONTEXT_OFFSET_OF_GLOBALS), 0), "")
-                    global_ptr = LLVMBuildLoad2(g_builder, LLVMPointerType(LLVMInt8Type(),0u), global_ptr, "")
-                    vptr = LLVMBuildGEP(g_builder, global_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.variable.stackTop), 0), "")
+                    if !isSolidContext
+                        let mnh = hash(get_mangled_name(expr.variable))
+                        vptr = get_global_offset_by_mnh(mnh, expr.variable.flags.global_shared, "global_var_{expr.variable.name}_mnh_ptr")
+                        vptr = LLVMBuildPointerCast(g_builder, vptr, get_type_pointer(expr.variable._type), "global_var_{expr.variable.name}")
+                    else
+                        var ctx_ptr = LLVMBuildPointerCast(g_builder, get_context_param(), LLVMPointerType(LLVMInt8Type(),0u), "")
+                        let coffset = expr.variable.flags.global_shared ? CONTEXT_OFFSET_OF_SHARED : CONTEXT_OFFSET_OF_GLOBALS
+                        var global_ptr = LLVMBuildGEP(g_builder, ctx_ptr, LLVMConstInt(LLVMInt32Type(), uint64(coffset), 0), "")
+                        global_ptr = LLVMBuildLoad2(g_builder, LLVMPointerType(LLVMInt8Type(),0u), global_ptr, "")
+                        vptr = LLVMBuildGEP(g_builder, global_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.variable.stackTop), 0), "")
                     tryV = LLVMBuildPointerCast(g_builder, vptr, get_type_pointer(expr.variable._type), "global_var_{expr.variable.name}")
             if expr.varFlags.r2v
                 setE(expr, LLVMBuildLoadDataAligned(g_builder, tryV, uint(expr._type.alignOf), "global_var_r2v_{expr.variable.name}"))
@@ -4099,7 +4115,7 @@ def private generate_llvm ( ctx:Context?; fn : FunctionPtr )
     LLVMSetLinkage(globalVar, LLVMLinkage LLVMDLLExportLinkage)
     LLVMSetDLLStorageClass(globalVar, LLVMDLLStorageClass LLVMDLLExportStorageClass)
     let aot_hash : uint64 = get_function_aot_hash(fn |> get_ptr)
-    debug("initializer hash for {get_mangled_name(fn)}: {aot_hash}")
+    // debug("initializer hash for {get_mangled_name(fn)}: {aot_hash}")
     globalVar |> LLVMSetInitializer(LLVMConstInt(LLVMInt64Type(), aot_hash, 0))
     var astVisitor = new LlvmJitVisitor(fn.at, ctx, true, null, null)
     unsafe
