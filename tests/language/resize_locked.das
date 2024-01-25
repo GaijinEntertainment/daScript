@@ -70,7 +70,6 @@ def test_resize_table ( t : T? )
         var failed = false
         try
             for x in a[3]
-                print("here\n")
                 a[13] <- [{for q in range(3); x}]       // object contains locked elements and can't be resized
         recover
             failed = true
