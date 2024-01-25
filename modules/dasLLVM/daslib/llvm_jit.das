@@ -382,7 +382,7 @@ class LlvmJitVisitor : AstVisitor
         let info_ptr = instrument_line_info(at) // right now just pointer in 'code' of the context
         return LLVMConstIntToPtr(LLVMConstInt(LLVMInt64Type(), uint64(intptr(info_ptr)), 0), LLVMPointerType(LLVMVoidType(), 0u))
 
-    def build_function_entry(funAt:LineInfo; bodyId:uint64; hasMakeBlock:bool; totalStackSize:uint; var arguments:dasvector`smart_ptr`Variable)
+    def build_function_entry(funAt:LineInfo; bodyId:uint64; hasMakeBlock:bool; var totalStackSize:uint; var arguments:dasvector`smart_ptr`Variable)
         // now write to regular function
         function_entry = LLVMAppendBasicBlock(ffunc, "entry")
         LLVMPositionBuilderAtEnd(g_builder,function_entry)
@@ -467,6 +467,7 @@ class LlvmJitVisitor : AstVisitor
             elif thisBlock==null && thisFunc!=null && thisFunc.result!=null && !thisFunc.result.isVoid
                 LLVMBuildUnreachable(g_builder)
             else
+                build_epilogue()
                 LLVMBuildRetVoid(g_builder)
 
     def hasFinalSection ( blk:ExprBlock? )
@@ -3312,6 +3313,8 @@ class LlvmJitVisitor : AstVisitor
         if has_afb
             expr_res = LLVMBuildLoad(g_builder, expr_res, "return_temp_load")
 
+        build_epilogue()
+
         if !returnType.isVoid
             if isCmres
                 if !expr.returnFlags.returnCMRES
@@ -3329,7 +3332,6 @@ class LlvmJitVisitor : AstVisitor
             LLVMBuildRetVoid(g_builder)
 
     def override visitExprReturn(expr:smart_ptr<ExprReturn>) : ExpressionPtr
-        build_epilogue()
         if thisBlock!=null
             visit_expr_return(expr, thisBlock.returnType, isCMRESType(thisBlock.returnType))
         elif thisFunc!=null
