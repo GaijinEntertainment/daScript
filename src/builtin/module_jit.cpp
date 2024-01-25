@@ -104,6 +104,10 @@ extern "C" {
         return context.globals + context.globalOffsetByMangledName(mnh);
     }
 
+    void * jit_get_shared_mnh ( uint64_t mnh, Context & context ) {
+        return context.shared + context.globalOffsetByMangledName(mnh);
+    }
+
     void * jit_alloc_heap ( uint32_t bytes, Context * context ) {
         return context->heap->allocate(bytes);
     }
@@ -257,6 +261,7 @@ extern "C" {
     void *das_get_jit_call_with_cmres() { return (void *)&jit_call_with_cmres; }
     void *das_get_jit_string_builder() { return (void *)&jit_string_builder; }
     void *das_get_jit_get_global_mnh() { return (void *)&jit_get_global_mnh; }
+    void *das_get_jit_get_shared_mnh() { return (void *)&jit_get_shared_mnh; }
     void *das_get_jit_alloc_heap() { return (void *)&jit_alloc_heap; }
     void *das_get_jit_alloc_persistent() { return (void *)&jit_alloc_persistent; }
     void *das_get_jit_free_heap() { return (void *)&jit_free_heap; }
@@ -331,7 +336,7 @@ extern "C" {
         return (void *) info_ptr;
     }
 
-    void das_recreate_fileinfo_name ( FileInfo * info, const char * name, Context * context, LineInfoArg * at ) {
+    void das_recreate_fileinfo_name ( FileInfo * info, const char * name, Context *, LineInfoArg *  ) {
         info->name = string{ name };
     }
 
@@ -443,6 +448,8 @@ extern "C" {
                 SideEffects::none, "das_get_jit_string_builder");
             addExtern<DAS_BIND_FUN(das_get_jit_get_global_mnh)>(*this, lib, "get_jit_get_global_mnh",
                 SideEffects::none, "das_get_jit_get_global_mnh");
+            addExtern<DAS_BIND_FUN(das_get_jit_get_shared_mnh)>(*this, lib, "get_jit_get_shared_mnh",
+                SideEffects::none, "das_get_jit_get_shared_mnh");
             addExtern<DAS_BIND_FUN(das_get_jit_alloc_heap)>(*this, lib, "get_jit_alloc_heap",
                 SideEffects::none, "das_get_jit_alloc_heap");
             addExtern<DAS_BIND_FUN(das_get_jit_alloc_persistent)>(*this, lib, "get_jit_alloc_persistent",
@@ -523,6 +530,7 @@ extern "C" {
             addConstant<uint32_t>(*this, "SIZE_OF_PROLOGUE", uint32_t(sizeof(Prologue)));
             addConstant<uint32_t>(*this, "CONTEXT_OFFSET_OF_EVAL_TOP", uint32_t(uint32_t(offsetof(Context, stack) + offsetof(StackAllocator, evalTop))));
             addConstant<uint32_t>(*this, "CONTEXT_OFFSET_OF_GLOBALS", uint32_t(uint32_t(offsetof(Context, globals))));
+            addConstant<uint32_t>(*this, "CONTEXT_OFFSET_OF_SHARED", uint32_t(uint32_t(offsetof(Context, shared))));
             // lets make sure its all aot ready
             verifyAotReady();
         }
