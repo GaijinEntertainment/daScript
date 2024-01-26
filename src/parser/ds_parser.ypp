@@ -2210,7 +2210,7 @@ alias_list
 
 alias_declaration
     :   DAS_TYPEDEF '{' alias_list '}'
-    |   DAS_TYPEDEF single_alias
+    |   DAS_TYPEDEF { yyextra->das_force_oxford_comma=true;} single_alias ';'
     ;
 
 optional_public_or_private_enum
