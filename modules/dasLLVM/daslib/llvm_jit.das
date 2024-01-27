@@ -4236,14 +4236,4 @@ class JIT_LLVM : AstSimulateMacro
                 to_log(LOG_INFO, "LLVM JIT: {length(funcs)} functions in {totalDt} sec\n")
         return true
 
-// TODO:
-//  Topics:
-//      * handled types
-//      * support for debugger
-//      * support for debug info
-//          - types for the functions
-//          - variables
-//          - lexical scopes?
-//  Expressions:
-//      * ExprTryCatch
 

@@ -71,6 +71,9 @@ let g_intrin_lookup <- {{
     "math::rcp" => @@intrinsic_math_rcp;
     "math::rcp_est"=> @@intrinsic_math_rcp;
     "math::exp" => @@intrinsic_math_float_op1;
+    "math::log" => @@intrinsic_math_float_op1;
+    "math::exp2" => @@intrinsic_math_float_op1;
+    "math::log2" => @@intrinsic_math_float_op1;
     "math::sqrt" => @@intrinsic_math_float_op1;
     "math::tan" => @@intrinsic_math_tan;
     "math::sin" => @@intrinsic_math_float_op1;
@@ -845,3 +848,4 @@ def intrinsic_math_u8x4_gather_store(g_builder:LLVMOpaqueBuilder?; expr:smart_pt
     out = LLVMBuildGEP(g_builder, out, stride, "")
     LLVMBuildStore(g_builder, W, out)
     return out
+
