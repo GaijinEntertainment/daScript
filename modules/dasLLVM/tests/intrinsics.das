@@ -347,3 +347,34 @@ def test_clamp ( t:T? )
         fuzz_numeric_op3(t,fake,"test_clamp")
     fuzz <|
         fuzz_vec_op3(t,fake,"test_clamp")
+
+[jit,sideeffects]
+def get_m_3x3
+    return float3x3()
+
+[jit,sideeffects]
+def get_m_3x4
+    return float3x4()
+
+[jit,sideeffects]
+def get_m_4x4
+    return float4x4()
+
+[test]
+def test_mat_ctor ( t:T? )
+    t |> success ( is_jit_function(@@get_m_3x3) )
+    t |> success ( is_jit_function(@@get_m_3x4) )
+    t |> success ( is_jit_function(@@get_m_4x4) )
+
+    var m1 = get_m_3x3()
+    for x in 0..2
+        for y in 0..2
+            t |> equal ( 0., m1[x][y] )
+    var m2 = get_m_3x4()
+    for x in 0..2
+        for y in 0..3
+            t |> equal ( 0., m2[x][y] )
+    var m3 = get_m_4x4()
+    for x in 0..3
+        for y in 0..3
+            t |> equal ( 0., m3[x][y] )
