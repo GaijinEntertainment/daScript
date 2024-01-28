@@ -378,3 +378,58 @@ def test_mat_ctor ( t:T? )
     for x in 0..3
         for y in 0..3
             t |> equal ( 0., m3[x][y] )
+
+[jit,sideeffects]
+def jit_sign(x)
+    return sign(x)
+
+[test]
+def test_sign ( t:T? )
+    // int
+    t |> equal ( 1, jit_sign(1) )
+    t |> equal ( 1, jit_sign(2) )
+    t |> equal ( 1, jit_sign(100) )
+    t |> equal ( -1, jit_sign(-1) )
+    t |> equal ( -1, jit_sign(-2) )
+    t |> equal ( -1, jit_sign(-100) )
+    t |> equal ( 0, jit_sign(0) )
+    // uint
+    t |> equal ( 1u, jit_sign(1u) )
+    t |> equal ( 1u, jit_sign(2u) )
+    t |> equal ( 1u, jit_sign(100u) )
+    t |> equal ( 0u, jit_sign(0u) )
+    // float
+    t |> equal ( 1., jit_sign(1.) )
+    t |> equal ( 1., jit_sign(2.) )
+    t |> equal ( 1., jit_sign(100.) )
+    t |> equal ( -1., jit_sign(-1.) )
+    t |> equal ( -1., jit_sign(-2.) )
+    t |> equal ( -1., jit_sign(-100.) )
+    t |> equal ( 0., jit_sign(0.) )
+    // int3 vec
+    t |> equal ( int3(1,1,1), jit_sign(int3(1,1,1)) )
+    t |> equal ( int3(1,1,1), jit_sign(int3(2,2,2)) )
+    t |> equal ( int3(1,1,1), jit_sign(int3(100,100,100)) )
+    t |> equal ( int3(-1,-1,-1), jit_sign(int3(-1,-1,-1)) )
+    t |> equal ( int3(-1,-1,-1), jit_sign(int3(-2,-2,-2)) )
+    t |> equal ( int3(-1,-1,-1), jit_sign(int3(-100,-100,-100)) )
+    t |> equal ( int3(0,0,0), jit_sign(int3(0,0,0)) )
+    // uint2 vec
+    t |> equal ( uint2(1u,1u), jit_sign(uint2(1u,1u)) )
+    t |> equal ( uint2(1u,1u), jit_sign(uint2(2u,2u)) )
+    t |> equal ( uint2(1u,1u), jit_sign(uint2(100u,100u)) )
+    t |> equal ( uint2(0u,0u), jit_sign(uint2(0u,0u)) )
+    // float4 vec
+    t |> equal ( float4(1.,1.,1.,1.), jit_sign(float4(1.,1.,1.,1.)) )
+    t |> equal ( float4(1.,1.,1.,1.), jit_sign(float4(2.,2.,2.,2.)) )
+    t |> equal ( float4(1.,1.,1.,1.), jit_sign(float4(100.,100.,100.,100.)) )
+    t |> equal ( float4(-1.,-1.,-1.,-1.), jit_sign(float4(-1.,-1.,-1.,-1.)) )
+    t |> equal ( float4(-1.,-1.,-1.,-1.), jit_sign(float4(-2.,-2.,-2.,-2.)) )
+    t |> equal ( float4(-1.,-1.,-1.,-1.), jit_sign(float4(-100.,-100.,-100.,-100.)) )
+    t |> equal ( float4(0.,0.,0.,0.), jit_sign(float4(0.,0.,0.,0.)) )
+
+
+
+
+
+

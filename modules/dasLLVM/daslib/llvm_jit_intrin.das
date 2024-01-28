@@ -64,6 +64,7 @@ let g_intrin_lookup <- {{
     "math::gather_store_stride" => @@intrinsic_math_gather_store_stride;
     "math::u8x4_gather_store" => @@intrinsic_math_u8x4_gather_store;
 // math
+    "math::sign" => @@intrinsic_math_sign;
     "math::saturate" => @@intrinsic_math_saturate;
     "math::abs" => @@intrinsic_math_abs;
     "math::mad" => @@intrinsic_math_mad_op3;
@@ -858,3 +859,72 @@ def intrinsic_math_roundi(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallF
 def intrinsic_math_trunci(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
     var res = intrinsic_math_any_float_op1("trunc", g_builder, expr, arguments)
     return LLVMBuildFPToSI(g_builder, res, type_to_llvm_abi_type(expr._type), "")
+
+def intrinsic_math_sign(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+    assume resType = expr._type
+    if resType.isVectorType
+        if resType.vectorBaseType==Type tInt
+            var vzero = LLVMGetUndef(LLVMVectorType(LLVMInt32Type(), uint(resType.vectorDim)))
+            var vone = LLVMGetUndef(LLVMVectorType(LLVMInt32Type(), uint(resType.vectorDim)))
+            var vminus_one = LLVMGetUndef(LLVMVectorType(LLVMInt32Type(), uint(resType.vectorDim)))
+            for i in range(resType.vectorDim)
+                vzero = LLVMBuildInsertElement(g_builder, vzero, LLVMConstInt(LLVMInt32Type(), 0ul, 0), LLVMConstInt(LLVMInt32Type(), uint64(i), 0), "")
+                vone = LLVMBuildInsertElement(g_builder, vone, LLVMConstInt(LLVMInt32Type(), 1ul, 0), LLVMConstInt(LLVMInt32Type(), uint64(i), 0), "")
+                vminus_one = LLVMBuildInsertElement(g_builder, vminus_one, LLVMConstInt(LLVMInt32Type(), uint64(-1), 0), LLVMConstInt(LLVMInt32Type(), uint64(i), 0), "")
+            var cond_z = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntEQ, arguments[0], vzero, "")
+            var cond_gt = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntSGT, arguments[0], vzero, "")
+            var res = LLVMBuildSelect(g_builder, cond_gt, vone, vminus_one, "")
+            res = LLVMBuildSelect(g_builder, cond_z, vzero, res, "")
+            return res
+        elif resType.vectorBaseType==Type tUInt
+            var vzero = LLVMGetUndef(LLVMVectorType(LLVMInt32Type(), uint(resType.vectorDim)))
+            var vone = LLVMGetUndef(LLVMVectorType(LLVMInt32Type(), uint(resType.vectorDim)))
+            for i in range(resType.vectorDim)
+                vzero = LLVMBuildInsertElement(g_builder, vzero, LLVMConstInt(LLVMInt32Type(), 0ul, 0), LLVMConstInt(LLVMInt32Type(), uint64(i), 0), "")
+                vone = LLVMBuildInsertElement(g_builder, vone, LLVMConstInt(LLVMInt32Type(), 1ul, 0), LLVMConstInt(LLVMInt32Type(), uint64(i), 0), "")
+            var cond = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntEQ, arguments[0], vzero, "")
+            var res = LLVMBuildSelect(g_builder, cond, vzero, vone, "")
+            return res
+        elif resType.vectorBaseType==Type tFloat
+            var vzero = LLVMGetUndef(LLVMVectorType(LLVMFloatType(), uint(resType.vectorDim)))
+            var vone = LLVMGetUndef(LLVMVectorType(LLVMFloatType(), uint(resType.vectorDim)))
+            var vminus_one = LLVMGetUndef(LLVMVectorType(LLVMFloatType(), uint(resType.vectorDim)))
+            for i in range(resType.vectorDim)
+                vzero = LLVMBuildInsertElement(g_builder, vzero, LLVMConstReal(LLVMFloatType(), 0.0lf), LLVMConstInt(LLVMInt32Type(), uint64(i), 0), "")
+                vone = LLVMBuildInsertElement(g_builder, vone, LLVMConstReal(LLVMFloatType(), 1.0lf), LLVMConstInt(LLVMInt32Type(), uint64(i), 0), "")
+                vminus_one = LLVMBuildInsertElement(g_builder, vminus_one, LLVMConstReal(LLVMFloatType(), -1.0lf), LLVMConstInt(LLVMInt32Type(), uint64(i), 0), "")
+            var cond_z = LLVMBuildFCmp(g_builder, LLVMRealPredicate LLVMRealOEQ, arguments[0], vzero, "")
+            var cond_gt = LLVMBuildFCmp(g_builder, LLVMRealPredicate LLVMRealOGT, arguments[0], vzero, "")
+            var res = LLVMBuildSelect(g_builder, cond_gt, vone, vminus_one, "")
+            res = LLVMBuildSelect(g_builder, cond_z, vzero, res, "")
+            return res
+        else
+            return null
+    elif resType.isSignedInteger
+        var zero = LLVMConstInt(type_to_llvm_abi_type(resType), 0ul, 0)
+        var one = LLVMConstInt(type_to_llvm_abi_type(resType), 1ul, 0)
+        var minus_one = LLVMConstInt(type_to_llvm_abi_type(resType), uint64(-1), 0)
+        var cond_z = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntEQ, arguments[0], zero, "")
+        var cond_gt = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntSGT, arguments[0], zero, "")
+        var res = LLVMBuildSelect(g_builder, cond_gt, one, minus_one, "")
+        res = LLVMBuildSelect(g_builder, cond_z, zero, res, "")
+        return res
+    elif resType.isUnsignedInteger
+        var zero = LLVMConstInt(type_to_llvm_abi_type(resType), 0ul, 0)
+        var one = LLVMConstInt(type_to_llvm_abi_type(resType), 1ul, 0)
+        var cond = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntEQ, arguments[0], zero, "")
+        var res = LLVMBuildSelect(g_builder, cond, zero, one, "")
+        return res
+    elif resType.isFloatOrDouble
+        var zero = LLVMConstReal(type_to_llvm_abi_type(resType), 0.0lf)
+        var one = LLVMConstReal(type_to_llvm_abi_type(resType), 1.0lf)
+        var minus_one = LLVMConstReal(type_to_llvm_abi_type(resType), -1.0lf)
+        var cond_z = LLVMBuildFCmp(g_builder, LLVMRealPredicate LLVMRealOEQ, arguments[0], zero, "")
+        var cond_gt = LLVMBuildFCmp(g_builder, LLVMRealPredicate LLVMRealOGT, arguments[0], zero, "")
+        var res = LLVMBuildSelect(g_builder, cond_gt, one, minus_one, "")
+        res = LLVMBuildSelect(g_builder, cond_z, zero, res, "")
+        return res
+    else
+        failed("sign({describe(resType)}) is not supported (yet?)")
+        return null
+
