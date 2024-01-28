@@ -5,6 +5,7 @@ module testing shared
 require rtti
 require strings // to compare strings/das_strings
 require daslib/math_bits
+require math
 
 class T
     name: string
@@ -123,6 +124,91 @@ def strictEqual(t: T?; a,b:float4; msg = ""): bool
 
 def strictEqual(t: T?; a,b:double; msg = ""): bool
     if double_bits_to_int64(a) == double_bits_to_int64(b)
+        return true
+    t->errorAt(!empty(msg) ? msg : "values differ", get_line_info(1))
+    t->errorAt("\texpected: {a}", get_line_info(1))
+    t->fatalAt("\tgot: {b}", get_line_info(1))
+    return false
+
+def numericEqual(t: T?; a; b; msg = ""): bool
+    if a == b
+        return true
+    t->errorAt(!empty(msg) ? msg : "numeric values differ", get_line_info(1))
+    t->errorAt("\texpected: {a}", get_line_info(1))
+    t->fatalAt("\tgot: {b}", get_line_info(1))
+    return false
+
+def numericEqual(t: T?; a,b:float; msg = ""): bool
+    if is_nan(a) && is_nan(b)
+        return true
+    if a == b
+        return true
+    t->errorAt(!empty(msg) ? msg : "numeric values differ", get_line_info(1))
+    t->errorAt("\texpected: {a}", get_line_info(1))
+    t->fatalAt("\tgot: {b}", get_line_info(1))
+    return false
+
+def numericEqual(t: T?; _a,_b:float2; msg = ""): bool
+    var a = _a
+    var b = _b
+    if is_nan(a.x) && is_nan(b.x)
+        a.x = 0.
+        b.x = 0.
+    if is_nan(a.y) && is_nan(b.y)
+        a.y = 0.
+        b.y = 0.
+    if a==b
+        return true
+    t->errorAt(!empty(msg) ? msg : "numeric values differ", get_line_info(1))
+    t->errorAt("\texpected: {_a}", get_line_info(1))
+    t->fatalAt("\tgot: {_b}", get_line_info(1))
+    return false
+
+def numericEqual(t: T?; _a,_b:float3; msg = ""): bool
+    var a = _a
+    var b = _b
+    if is_nan(a.x) && is_nan(b.x)
+        a.x = 0.
+        b.x = 0.
+    if is_nan(a.y) && is_nan(b.y)
+        a.y = 0.
+        b.y = 0.
+    if is_nan(a.z) && is_nan(b.z)
+        a.z = 0.
+        b.z = 0.
+    if a==b
+        return true
+    t->errorAt(!empty(msg) ? msg : "numeric values differ", get_line_info(1))
+    t->errorAt("\texpected: {_a}", get_line_info(1))
+    t->fatalAt("\tgot: {_b}", get_line_info(1))
+    return false
+
+def numericEqual(t: T?; _a,_b:float4; msg = ""): bool
+    var a = _a
+    var b = _b
+    if is_nan(a.x) && is_nan(b.x)
+        a.x = 0.
+        b.x = 0.
+    if is_nan(a.y) && is_nan(b.y)
+        a.y = 0.
+        b.y = 0.
+    if is_nan(a.z) && is_nan(b.z)
+        a.z = 0.
+        b.z = 0.
+    if is_nan(a.w) && is_nan(b.w)
+        a.w = 0.
+        b.w = 0.
+    if a==b
+        return true
+    t->errorAt(!empty(msg) ? msg : "numeric values differ", get_line_info(1))
+    t->errorAt("\texpected: {_a}", get_line_info(1))
+    t->fatalAt("\tgot: {_b}", get_line_info(1))
+    return false
+
+def numericEqual(t: T?; a,b:double; msg = ""): bool
+    if is_nan(a) && is_nan(b)
+        return true
+    if a == b
         return true
     t->errorAt(!empty(msg) ? msg : "values differ", get_line_info(1))
     t->errorAt("\texpected: {a}", get_line_info(1))

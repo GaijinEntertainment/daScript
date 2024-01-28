@@ -575,6 +575,25 @@ namespace das {
         ptr->arguments[0]->type->explicitConst = true;
     }
 
+    template  <typename SimT, typename RetT>
+    class MatrixCTorFn : public BuiltInFunction {
+    public:
+        __forceinline MatrixCTorFn(const char * fn, const ModuleLibrary & lib, const char * cna = nullptr, bool pbas = true)
+        : BuiltInFunction(fn,cna) {
+            this->policyBased = pbas;
+            construct(makeBuiltinArgs<RetT>(lib));
+        }
+        virtual SimNode * makeSimNode ( Context & context, const vector<ExpressionPtr> & ) override {
+            return context.code->makeNode<SimT>(at);
+        }
+        static RetT ctorFn() {
+            RetT res;
+            memset(&res, 0, sizeof(RetT));
+            return res;
+        }
+        virtual void * getBuiltinAddress() const { return (void *) &ctorFn; }
+    };
+
     class Module_Math : public Module {
     public:
         Module_Math() : Module("math") {
@@ -723,9 +742,9 @@ namespace das {
             addAnnotation(make_smart<float3x4_ann>(lib));
             addAnnotation(make_smart<float3x3_ann>(lib));
             // c-tor
-            addFunction ( make_smart< BuiltInFn< SimNode_MatrixCtor<float3x3>,float3x3 > >("float3x3",lib) );
-            addFunction ( make_smart< BuiltInFn< SimNode_MatrixCtor<float3x4>,float3x4 > >("float3x4",lib) );
-            addFunction ( make_smart< BuiltInFn< SimNode_MatrixCtor<float4x4>,float4x4 > >("float4x4",lib) );
+            addFunction ( make_smart< MatrixCTorFn< SimNode_MatrixCtor<float3x3>,float3x3 > >("float3x3",lib) );
+            addFunction ( make_smart< MatrixCTorFn< SimNode_MatrixCtor<float3x4>,float3x4 > >("float3x4",lib) );
+            addFunction ( make_smart< MatrixCTorFn< SimNode_MatrixCtor<float4x4>,float4x4 > >("float4x4",lib) );
             // 4x4
             addExtern<DAS_BIND_FUN(float4x4_from_float34), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "float4x4",
                 SideEffects::none,"float4x4_from_float34");
