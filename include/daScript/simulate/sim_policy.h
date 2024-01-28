@@ -185,7 +185,13 @@ namespace  das {
         }
         static __forceinline vec4f Clamp ( vec4f t, vec4f a, vec4f b, Context & ctx, LineInfo * at ) { return Max(a, Min(t, b, ctx, at), ctx, at); }
         static __forceinline vec4f Abs   ( vec4f a, Context &, LineInfo * ) { return a; }
-        static __forceinline vec4f Sign  ( vec4f, Context &, LineInfo * ) { return v_zero(); }
+        static __forceinline vec4f Sign  ( vec4f t, Context &, LineInfo * ) {
+            auto a = v_cast_vec4i(t);
+            auto res = v_cmp_eqi(a, v_zeroi());
+            auto invbits = v_andi(v_splatsi(1), res);
+            auto setbits = v_xori(v_splatsi(1), invbits);
+            return v_cast_vec4f(setbits);
+        }
     };
 
     struct SimPolicy_MathFloat {
