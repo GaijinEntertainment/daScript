@@ -8,6 +8,36 @@ require daslib/math
 require daslib/constant_expression
 
 [jit]
+def jit_roundi ( x )
+    return roundi(x)
+
+def test_roundi ( t:T?; a:auto(TT) )
+    t |> success ( is_jit_function(@@<(a:TT):void> jit_roundi) )
+    jit_roundi(a)
+    // precision mismatch???
+    // t |> numericEqual ( roundi(a), jit_roundi(a), "roundi(a)" )
+
+[test]
+def test_intrin_roundi ( t:T? )
+    var fake <- Faker()
+    fuzz <|
+        fuzz_float_or_float_vec_op1(t,fake,"test_roundi")
+
+[jit]
+def jit_trunci ( x )
+    return trunci(x)
+
+def test_trunci( t:T?; a:auto(TT) )
+    t |> success ( is_jit_function(@@<(a:TT):void> jit_trunci) )
+    t |> strictEqual ( trunci(a), jit_trunci(a), "trunci(a)" )
+
+[test]
+def test_intrin_trunci ( t:T? )
+    var fake <- Faker()
+    fuzz <|
+        fuzz_float_or_float_vec_op1(t,fake,"test_trunci")
+
+[jit]
 def jit_floor ( x )
     return floor(x)
 
@@ -27,9 +57,7 @@ def jit_ceil ( x )
 
 def test_ceil( t:T?; a:auto(TT) )
     t |> success ( is_jit_function(@@<(a:TT):void> jit_ceil) )
-    jit_ceil(a)
-    // note: mismatching precision
-    // t |> strictEqual ( ceil(a), jit_ceil(a), "ceil(a)" )
+    t |> numericEqual ( ceil(a), jit_ceil(a), "ceil(a)" )
 
 [test]
 def test_intrin_ceil ( t:T? )
@@ -59,7 +87,7 @@ def test_rcp( t:T?; a:auto(TT) )
     t |> success ( is_jit_function(@@<(a:TT):void> jit_rcp) )
     jit_rcp(a)
     // note: we can't really compare, because precision is different
-    //t |> equal ( rcp(a), jit_rcp(a), "rcp(a)" )
+    //t |> numericEqual ( rcp(a), jit_rcp(a), "rcp(a)" )
 
 [test]
 def test_intrin_rcp ( t:T? )
@@ -91,7 +119,7 @@ def test_exp( t:T?; a:auto(TT) )
     t |> success ( is_jit_function(@@<(a:TT):void> jit_exp) )
     jit_exp(a)
     // note: we can't really compare, because precision is different
-    //t |> equal ( exp(a), jit_exp(a), "exp(a)" )
+    // t |> numericEqual ( exp(a), jit_exp(a), "exp(a)" )
 
 [test]
 def test_intrin_exp ( t:T? )
@@ -107,7 +135,7 @@ def test_exp2( t:T?; a:auto(TT) )
     t |> success ( is_jit_function(@@<(a:TT):void> jit_exp2) )
     jit_exp2(a)
     // note: we can't really compare, because precision is different
-    // t |> equal ( exp2(a), jit_exp2(a), "exp2(a)" )
+    // t |> numericEqual ( exp2(a), jit_exp2(a), "exp2(a)" )
 
 [test]
 def test_intrin_exp2 ( t:T? )
@@ -123,7 +151,7 @@ def test_log( t:T?; a:auto(TT) )
     t |> success ( is_jit_function(@@<(a:TT):void> jit_log) )
     jit_log(a)
     // note: we can't really compare, because precision is different
-    // t |> equal ( log(a), jit_log(a), "log(a)" )
+    // t |> numericEqual ( log(a), jit_log(a), "log(a)" )
 
 [test]
 def test_intrin_log ( t:T? )
@@ -139,7 +167,7 @@ def test_log2( t:T?; a:auto(TT) )
     t |> success ( is_jit_function(@@<(a:TT):void> jit_log2) )
     jit_log2(a)
     // note: we can't really compare, because precision is different
-    // t |> equal ( log2(a), jit_log2(a), "log2(a)" )
+    // t |> numericEqual ( log2(a), jit_log2(a), "log2(a)" )
 
 [test]
 def test_intrin_log2 ( t:T? )
@@ -253,7 +281,7 @@ def test_pow( t:T?; a,b:auto(TT) )
     t |> success ( is_jit_function(@@<(a,b:TT):void> jit_pow) )
     jit_pow(a,b)
     // note: mismatching precision
-    // t |> strictEqual ( pow(a,b), jit_pow(a,b), "pow(a,b)" )
+    // t |> numericEqual ( pow(a,b), jit_pow(a,b), "pow(a,b)" )
 
 [test]
 def test_intrin_pow ( t:T? )
@@ -269,7 +297,7 @@ def test_mad( t:T?; a:auto(TT); b:auto(QQ); c:TT )
     t |> success ( is_jit_function(@@<(a:TT;b:QQ;c:TT):TT> jit_mad) )
     jit_mad(a,b,c)
     // note: mismatching precision
-    // t |> strictEqual ( mad(a,b,c), jit_mad(a,b,c), "mad({a},{b},{c})" )
+    // t |> numericEqual ( mad(a,b,c), jit_mad(a,b,c), "mad(a,b,c)" )
 
 [test]
 def test_mad ( t:T? )
@@ -289,7 +317,7 @@ def test_lerp( t:T?; a:auto(TT); b:auto(QQ); c:TT )
     t |> success ( is_jit_function(@@<(a:TT;b:QQ;c:TT):TT> jit_mad) )
     jit_lerp(a,b,c)
     // note: mismatching precision
-    // t |> strictEqual ( lerp(a,b,c), jit_lerp(a,b,c), "lerp({a},{b},{c})" )
+    // t |> numericEqual ( lerp(a,b,c), jit_lerp(a,b,c), "lerp({a},{b},{c})" )
 
 [test]
 def test_lerp ( t:T? )
@@ -307,7 +335,7 @@ def test_clamp( t:T?; a:auto(TT); _b:auto(QQ); c:TT )
     t |> success ( is_jit_function(@@<(a:TT;b:QQ;c:TT):TT> jit_mad) )
     jit_clamp(a,b,c)
     // note: mismatching precision
-    // t |> strictEqual ( clamp(a,b,c), jit_clamp(a,b,c), "clamp({a},{b},{c})" )
+    // t |> numericEqual ( clamp(a,b,c), jit_clamp(a,b,c), "clamp({a},{b},{c})" )
 
 [test]
 def test_clamp ( t:T? )

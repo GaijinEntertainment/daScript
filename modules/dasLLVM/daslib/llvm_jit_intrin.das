@@ -86,6 +86,8 @@ let g_intrin_lookup <- {{
     "math::ceil" => @@intrinsic_math_float_op1;
     "math::floori" => @@intrinsic_math_float_op1_to_int;
     "math::ceili" => @@intrinsic_math_float_op1_to_int;
+    "math::roundi" => @@intrinsic_math_roundi;
+    "math::trunci" => @@intrinsic_math_trunci;
     "math::length_sq" => @@intrinsic_math_length_sq;
     "math::dot" => @@intrinsic_math_dot;
     "math::cross" => @@intrinsic_math_cross;
@@ -849,3 +851,10 @@ def intrinsic_math_u8x4_gather_store(g_builder:LLVMOpaqueBuilder?; expr:smart_pt
     LLVMBuildStore(g_builder, W, out)
     return out
 
+def intrinsic_math_roundi(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+    var res = intrinsic_math_any_float_op1("round", g_builder, expr, arguments)
+    return LLVMBuildFPToSI(g_builder, res, type_to_llvm_abi_type(expr._type), "")
+
+def intrinsic_math_trunci(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+    var res = intrinsic_math_any_float_op1("trunc", g_builder, expr, arguments)
+    return LLVMBuildFPToSI(g_builder, res, type_to_llvm_abi_type(expr._type), "")
