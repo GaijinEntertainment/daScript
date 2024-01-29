@@ -4173,12 +4173,8 @@ def private add_constructor_function ( func: LLVMOpaqueValue? )
     let dataPointerType = LLVMPointerType(LLVMInt8Type(), 0u)
     var ctorTypes = [[auto LLVMInt32Type(); funcType; dataPointerType]]
 
-    debug("Hello world")
-
-    // var ctorFields = [[auto LLVMConstInt(LLVMInt32Type(), priority, 0); func; LLVMConstPointerNull(dataPointerType)]]
     var ctorFields = [[auto LLVMConstInt(LLVMInt32Type(), priority, 0); func; LLVMConstPointerNull(dataPointerType)]]
 
-    debug("Hello world2")
 
     let ctorStructType = LLVMStructType(unsafe(addr(ctorTypes[0])), 3u, 0)
 
