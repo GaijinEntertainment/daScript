@@ -434,7 +434,8 @@ class LlvmJitVisitor : AstVisitor
         let line_info_global = create_line_info_global(at, dummy)
         let line_info_ptr_global = create_line_info_ptr_global(line_info_global)
         instrument_and_map_global(at, line_info_ptr_global)
-        return g_builder |> LLVMBuildPointerCast(line_info_ptr_global, void_ptr, "")
+        var loaded_ptr = LLVMBuildLoad(g_builder, line_info_ptr_global, "")
+        return g_builder |> LLVMBuildPointerCast(loaded_ptr, void_ptr, "")
 
     def build_function_entry(funAt:LineInfo; bodyId:uint64; hasMakeBlock:bool; totalStackSize:uint; var arguments:dasvector`smart_ptr`Variable)
         // now write to regular function
