@@ -37,7 +37,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        target: [linux, darwin, windows]
+        target: [linux, darwin, darwin14, windows]
         architecture: [32, 64]
         cmake_preset: [ Debug, Release ]
 
@@ -50,6 +50,10 @@ jobs:
             runner: macos-latest
             archive_ext: tar.gz
 
+          - target: darwin14
+            runner: macos-14
+            archive_ext: tar.gz
+
           - target: windows
             runner: windows-latest
             archive_ext: zip
@@ -57,11 +61,15 @@ jobs:
           - target: windows
             build_system: cmake
             cmake_generator: Visual Studio 17 2022
-            
+
           - target: darwin
             build_system: cmake
             cmake_generator: Ninja
-            
+
+          - target: darwin14  
+            build_system: cmake
+            cmake_generator: Ninja
+
           - target: linux
             build_system: cmake
             cmake_generator: Ninja
@@ -77,14 +85,17 @@ jobs:
         exclude:
           - target: darwin
             architecture: 32
-            
+
+          - target: darwin14
+            architecture: 32
+
           - target: linux
             architecture: 32
 
     steps:
     - name: "SCM Checkout"
       uses: actions/checkout@v3
-      
+
     - name: "Install CMake and Ninja"
       uses: lukka/get-cmake@latest
 
@@ -118,6 +129,11 @@ jobs:
             echo 'export PATH="/usr/local/opt/bison/bin:$PATH"' >> ~/.bash_profile
             export LDFLAGS="-L/usr/local/opt/bison/lib"
             ;;
+          darwin1464)
+            brew install bison
+            echo 'export PATH="/opt/homebrew/opt/bison/bin:$PATH"' >> /Users/runner/.bash_profile
+            export LDFLAGS="-L/opt/homebrew/opt/bison/lib"
+            ;;
         esac
 
     - name: "Build: DaScript"
@@ -139,7 +155,7 @@ jobs:
                 cmake --build ./build --config ${{ matrix.cmake_preset }} --target daScriptTest
                 ;;
               *)
-                CC=clang CXX=clang++ cmake --no-warn-unused-cli -B./build -DCMAKE_OSX_ARCHITECTURES="x86_64" -DCMAKE_PREFIX_PATH=/usr/local/opt/bison/bin -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }}  -G "${{ matrix.cmake_generator }}"
+                CC=clang CXX=clang++ cmake --no-warn-unused-cli -B./build -DCMAKE_OSX_ARCHITECTURES="x86_64" -DCMAKE_BUILD_TYPE:STRING=${{ matrix.cmake_preset }}  -G "${{ matrix.cmake_generator }}"
                 cd build
                 ninja daScript
                 ninja daScriptTest
