@@ -45,7 +45,7 @@ def test_reader
 [export]
 def test
     test_reader()
-    for jidx in range(1,8)
+    for jidx in range(1,9)
         let fname = "D:/Work/daScript/examples/test/json/{jidx}.json"
         // let fname = "/Users/borisbatkin/Work/yzg/examples/test/json/{jidx}.json"
         fopen(fname, "rb") <| $ ( f )

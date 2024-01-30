@@ -211,7 +211,7 @@ def private parse_value ( var itv : iterator<TokenAt>; var error : string & ) : 
             while !empty(itv)
                 let value = parse_value(itv, error)
                 if value == null
-                    if error=="unexpected ]" && length(arr)==0
+                    if error |> starts_with("unexpected ]") && length(arr)==0
                         error = ""
                         return JV(arr)
                     return null
