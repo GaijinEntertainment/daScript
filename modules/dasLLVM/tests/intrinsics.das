@@ -103,13 +103,45 @@ def test_rcp_est( t:T?; a:auto(TT) )
     t |> success ( is_jit_function(@@<(a:TT):void> jit_rcp_est) )
     jit_rcp_est(a)
     // note: we can't really compare, because precision is different
-    //t |> equal ( rcp_est(a), jit_rcp_est(a), "rcp_est(a)" )
+    // t |> numericEqual ( rsqrt(a), jit_rsqrt(a), "rsqrt(a)" )
 
 [test]
 def test_intrin_rcp_est ( t:T? )
     var fake <- Faker()
     fuzz <|
         fuzz_float_or_float_vec_op1(t,fake,"test_rcp_est")
+
+[sideeffects,jit]
+def jit_rsqrt ( x )
+    return rsqrt(x)
+
+def test_rsqrt( t:T?; a:auto(TT) )
+    t |> success ( is_jit_function(@@<(a:TT):void> jit_rsqrt) )
+    jit_rsqrt(a)
+    // note: we can't really compare, because precision is different
+    // t |> numericEqual ( rsqrt(a), jit_rsqrt(a), "rsqrt(a)" )
+
+[test]
+def test_intrin_rsqrt ( t:T? )
+    var fake <- Faker()
+    fuzz <|
+        fuzz_float_or_float_vec_op1(t,fake,"test_rsqrt")
+
+[sideeffects,jit]
+def jit_rsqrt_est ( x )
+    return rsqrt_est(x)
+
+def test_rsqrt_est( t:T?; a:auto(TT) )
+    t |> success ( is_jit_function(@@<(a:TT):void> jit_rsqrt_est) )
+    jit_rsqrt_est(a)
+    // note: we can't really compare, because precision is different
+    //t |> numericEqual ( rsqrt_est(a), jit_rsqrt_est(a), "rsqrt_est(a)" )
+
+[test]
+def test_intrin_rsqrt_est ( t:T? )
+    var fake <- Faker()
+    fuzz <|
+        fuzz_float_or_float_vec_op1(t,fake,"test_rsqrt_est")
 
 [sideeffects,jit]
 def jit_exp ( x )
