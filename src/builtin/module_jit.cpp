@@ -252,6 +252,10 @@ extern "C" {
         tw << "\n";
         context->to_out(at, tw.str().c_str());
     }
+
+    void jit_initialize_fileinfo ( void * dummy ) {
+        *(FileInfo*)dummy = FileInfo{};
+    }
 }
 
     void *das_get_jit_exception() { return (void *)&jit_exception; }
@@ -282,6 +286,7 @@ extern "C" {
     void *das_get_jit_debug_enter() { return (void *)&jit_debug_enter; }
     void *das_get_jit_debug_exit() { return (void *)&jit_debug_exit; }
     void *das_get_jit_debug_line() { return (void *)&jit_debug_line; }
+    void *das_get_jit_initialize_fileinfo () { return (void*)&jit_initialize_fileinfo; }
 
     template <typename KeyType>
     int32_t jit_table_at ( Table * tab, KeyType key, int32_t valueTypeSize, Context * context ) {
@@ -338,10 +343,6 @@ extern "C" {
 
     void das_recreate_fileinfo_name ( FileInfo * info, const char * name, Context *, LineInfoArg *  ) {
         info->name = string{ name };
-    }
-
-    void initialize_dummy_fileinfo (void * dummy) {
-        *(FileInfo*)dummy = FileInfo{};
     }
 
     bool check_file_present ( const char * filename ) {
@@ -511,6 +512,8 @@ extern "C" {
                 SideEffects::none, "das_get_jit_debug_exit");
             addExtern<DAS_BIND_FUN(das_get_jit_debug_line)>(*this, lib,  "get_jit_debug_line",
                 SideEffects::none, "das_get_jit_debug_line");
+            addExtern<DAS_BIND_FUN(das_get_jit_initialize_fileinfo)>(*this, lib,  "get_jit_initialize_fileinfo",
+                SideEffects::none, "das_get_jit_initialize_fileinfo");
             addExtern<DAS_BIND_FUN(das_recreate_fileinfo_name)>(*this, lib,  "recreate_fileinfo_name",
                 SideEffects::worstDefault, "das_recreate_fileinfo_name");
             addExtern<DAS_BIND_FUN(loadDynamicLibrary)>(*this, lib,  "load_dynamic_library",
@@ -525,8 +528,8 @@ extern "C" {
             addExtern<DAS_BIND_FUN(create_shared_library)>(*this, lib,  "create_shared_library",
                 SideEffects::worstDefault, "create_shared_library")
                     ->args({"objFilePath","libraryName","jitModuleObj"});
-            addExtern<DAS_BIND_FUN(initialize_dummy_fileinfo)>(*this, lib,  "initialize_dummy_fileinfo",
-                SideEffects::worstDefault, "initialize_dummy_fileinfo");
+            addExtern<DAS_BIND_FUN(jit_initialize_fileinfo)>(*this, lib,  "jit_initialize_fileinfo",
+                SideEffects::worstDefault, "jit_initialize_fileinfo");
             addConstant<uint32_t>(*this, "SIZE_OF_PROLOGUE", uint32_t(sizeof(Prologue)));
             addConstant<uint32_t>(*this, "CONTEXT_OFFSET_OF_EVAL_TOP", uint32_t(uint32_t(offsetof(Context, stack) + offsetof(StackAllocator, evalTop))));
             addConstant<uint32_t>(*this, "CONTEXT_OFFSET_OF_GLOBALS", uint32_t(uint32_t(offsetof(Context, globals))));
