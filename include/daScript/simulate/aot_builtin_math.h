@@ -114,6 +114,20 @@ namespace das {
     __forceinline double datan (double a){return atan(a);}
     __forceinline double datan2(double a,double b){return atan2(a,b);}
 
+    __forceinline float fasin (float a){return asin(a);}
+    __forceinline float facos (float a){return acos(a);}
+    __forceinline float fatan (float a){return atan(a);}
+    __forceinline float fatan_est (float a){return v_extract_x(v_atan_est_x(v_set_x(a)));}
+    __forceinline float fatan2(float a,float b){return atan2(a,b);}
+    __forceinline float fatan2_est(float a,float b){return v_extract_x(v_atan2_est_x(v_set_x(a), v_set_x(b)));}
+
+    __forceinline vec4f vasin(vec4f a){return v_asin(a);}
+    __forceinline vec4f vacos(vec4f a){return v_acos(a);}
+    __forceinline vec4f vatan(vec4f a){return v_atan(a);}
+    __forceinline vec4f vatan_est(vec4f a){return v_atan_est(a);}
+    __forceinline vec4f vatan2(vec4f a, vec4f b){return v_atan2(a,b);}
+    __forceinline vec4f vatan2_est(vec4f a, vec4f b){return v_atan2_est(a,b);}
+
     __forceinline void sincosF ( float a, float & sv, float & cv ) {
         vec4f s,c;
         v_sincos_x(v_set_x(a), s, c);

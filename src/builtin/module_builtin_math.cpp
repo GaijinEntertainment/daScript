@@ -138,13 +138,6 @@ namespace das {
     MATH_FUN_OP1(Sin)
     MATH_FUN_OP1(Cos)
     MATH_FUN_OP1(Tan)
-    MATH_FUN_OP1(ATan)
-    MATH_FUN_OP1(ATan_est)
-    MATH_FUN_OP1(ASin)
-    MATH_FUN_OP1(ACos)
-
-    MATH_FUN_OP2(ATan2)
-    MATH_FUN_OP2(ATan2_est)
 
     DEFINE_POLICY(MadS)     // vector_a*scalar_b + vector_c
     IMPLEMENT_OP3_EVAL_FUNCTION_POLICY(MadS,float2);
@@ -164,12 +157,6 @@ namespace das {
         mod.addFunction( make_smart<BuiltInFn<Sim_Sin<TT>,        TT,   TT>        >("sin",       lib, "Sin")->arg("x") );
         mod.addFunction( make_smart<BuiltInFn<Sim_Cos<TT>,        TT,   TT>        >("cos",       lib, "Cos")->arg("x") );
         mod.addFunction( make_smart<BuiltInFn<Sim_Tan<TT>,        TT,   TT>        >("tan",       lib, "Tan")->arg("x") );
-        mod.addFunction( make_smart<BuiltInFn<Sim_ATan<TT>,       TT,   TT>        >("atan",      lib, "ATan")->arg("x") );
-        mod.addFunction( make_smart<BuiltInFn<Sim_ATan_est<TT>,   TT,   TT>        >("atan_est",  lib, "ATan_est")->arg("x") );
-        mod.addFunction( make_smart<BuiltInFn<Sim_ASin<TT>,       TT,   TT>        >("asin",      lib, "ASin")->arg("x") );
-        mod.addFunction( make_smart<BuiltInFn<Sim_ACos<TT>,       TT,   TT>        >("acos",      lib, "ACos")->arg("x") );
-        mod.addFunction( make_smart<BuiltInFn<Sim_ATan2<TT>,      TT,   TT,  TT>   >("atan2",     lib, "ATan2")->args({"y","x"}) );
-        mod.addFunction( make_smart<BuiltInFn<Sim_ATan2_est<TT>,  TT,   TT,  TT>   >("atan2_est", lib, "ATan2_est")->args({"y","x"}) );
     }
 
     template <typename TT>
@@ -724,6 +711,32 @@ namespace das {
             addExtern<DAS_BIND_FUN(datan2)>(*this, lib, "atan2", SideEffects::none, "datan2")->args({"y","x"});
             addExtern<DAS_BIND_FUN(sincosF)>(*this, lib, "sincos", SideEffects::modifyArgument, "sincosF")->args({"x","s","c"});
             addExtern<DAS_BIND_FUN(sincosD)>(*this, lib, "sincos", SideEffects::modifyArgument, "sincosD")->args({"x","s","c"});
+            // too big for intrinsic
+            addExtern<DAS_BIND_FUN(fasin)>(*this, lib, "asin", SideEffects::none, "fasin")->arg("x");
+            addExtern<DAS_BIND_FUN(facos)>(*this, lib, "acos", SideEffects::none, "facos")->arg("x");
+            addExtern<DAS_BIND_FUN(fatan)>(*this, lib, "atan", SideEffects::none, "fatan")->arg("x");
+            addExtern<DAS_BIND_FUN(fatan_est)>(*this, lib, "atan_est", SideEffects::none, "fatan_est")->arg("x");
+            addExtern<DAS_BIND_FUN(fatan2)>(*this, lib, "atan2", SideEffects::none, "fatan2")->args({"y","x"});
+            addExtern<DAS_BIND_FUN(fatan2_est)>(*this, lib, "atan2_est", SideEffects::none, "fatan2_est")->args({"y","x"});
+            addExternEx<float2(float2),DAS_BIND_FUN(vasin)>(*this, lib, "asin", SideEffects::none, "vasin")->arg("x");
+            addExternEx<float3(float3),DAS_BIND_FUN(vasin)>(*this, lib, "asin", SideEffects::none, "vasin")->arg("x");
+            addExternEx<float4(float4),DAS_BIND_FUN(vasin)>(*this, lib, "asin", SideEffects::none, "vasin")->arg("x");
+            addExternEx<float2(float2),DAS_BIND_FUN(vacos)>(*this, lib, "acos", SideEffects::none, "vacos")->arg("x");
+            addExternEx<float3(float3),DAS_BIND_FUN(vacos)>(*this, lib, "acos", SideEffects::none, "vacos")->arg("x");
+            addExternEx<float4(float4),DAS_BIND_FUN(vacos)>(*this, lib, "acos", SideEffects::none, "vacos")->arg("x");
+            addExternEx<float2(float2),DAS_BIND_FUN(vatan)>(*this, lib, "atan", SideEffects::none, "vatan")->arg("x");
+            addExternEx<float3(float3),DAS_BIND_FUN(vatan)>(*this, lib, "atan", SideEffects::none, "vatan")->arg("x");
+            addExternEx<float4(float4),DAS_BIND_FUN(vatan)>(*this, lib, "atan", SideEffects::none, "vatan")->arg("x");
+            addExternEx<float2(float2),DAS_BIND_FUN(vatan_est)>(*this, lib, "atan_est", SideEffects::none, "vatan_est")->arg("x");
+            addExternEx<float3(float3),DAS_BIND_FUN(vatan_est)>(*this, lib, "atan_est", SideEffects::none, "vatan_est")->arg("x");
+            addExternEx<float4(float4),DAS_BIND_FUN(vatan_est)>(*this, lib, "atan_est", SideEffects::none, "vatan_est")->arg("x");
+            addExternEx<float2(float2,float2),DAS_BIND_FUN(vatan2)>(*this, lib, "atan2", SideEffects::none, "vatan2")->args({"y","x"});
+            addExternEx<float3(float3,float3),DAS_BIND_FUN(vatan2)>(*this, lib, "atan2", SideEffects::none, "vatan2")->args({"y","x"});
+            addExternEx<float4(float4,float4),DAS_BIND_FUN(vatan2)>(*this, lib, "atan2", SideEffects::none, "vatan2")->args({"y","x"});
+            addExternEx<float2(float2,float2),DAS_BIND_FUN(vatan2_est)>(*this, lib, "atan2_est", SideEffects::none, "vatan2_est")->args({"y","x"});
+            addExternEx<float3(float3,float3),DAS_BIND_FUN(vatan2_est)>(*this, lib, "atan2_est", SideEffects::none, "vatan2_est")->args({"y","x"});
+            addExternEx<float4(float4,float4),DAS_BIND_FUN(vatan2_est)>(*this, lib, "atan2_est", SideEffects::none, "vatan2_est")->args({"y","x"});
+
             addExternEx<float3(float3,float3),DAS_BIND_FUN(reflect)>(*this, lib, "reflect",
                 SideEffects::none, "reflect")->args({"v","n"});
             addExternEx<float2(float2,float2),DAS_BIND_FUN(reflect2)>(*this, lib, "reflect",
