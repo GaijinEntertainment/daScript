@@ -3723,8 +3723,8 @@ class LlvmJitVisitor : AstVisitor
         var callArgs : array<LLVMValueRef>; callArgs |> push (firstElementPtr)
 
         let initializeFuncType = LLVMFunctionType(LLVMVoidType(), [[LLVMTypeRef[] LLVMPointerType(LLVMVoidType(), 0u) ]])
-        let initializeFunc = LLVMAddFunction(g_mod, "initialize_dummy_fileinfo", initializeFuncType)
-        LLVMAddGlobalMapping(g_engine, initializeFunc, get_initialize_dummy_fileinfo())
+        let initializeFunc = LLVMAddFunction(g_mod, "jit_initialize_fileinfo", initializeFuncType)
+        LLVMAddGlobalMapping(g_engine, initializeFunc, get_jit_initialize_fileinfo())
 
         LLVMBuildCall(g_builder, initializeFunc, callArgs, "")
         LLVMBuildRetVoid(g_builder)
