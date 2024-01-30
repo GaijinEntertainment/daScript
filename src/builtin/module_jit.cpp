@@ -344,6 +344,8 @@ extern "C" {
         *(FileInfo*)dummy = FileInfo{};
     }
 
+    void *das_get_initialize_dummy_fileinfo () { return (void*)&initialize_dummy_fileinfo; }
+
     bool check_file_present ( const char * filename ) {
         if ( FILE * file = fopen(filename, "r"); file == NULL ) {
             return false;
@@ -511,6 +513,8 @@ extern "C" {
                 SideEffects::none, "das_get_jit_debug_exit");
             addExtern<DAS_BIND_FUN(das_get_jit_debug_line)>(*this, lib,  "get_jit_debug_line",
                 SideEffects::none, "das_get_jit_debug_line");
+            addExtern<DAS_BIND_FUN(das_get_initialize_dummy_fileinfo)>(*this, lib,  "get_initialize_dummy_fileinfo",
+                SideEffects::none, "das_get_initialize_dummy_fileinfo");
             addExtern<DAS_BIND_FUN(das_recreate_fileinfo_name)>(*this, lib,  "recreate_fileinfo_name",
                 SideEffects::worstDefault, "das_recreate_fileinfo_name");
             addExtern<DAS_BIND_FUN(loadDynamicLibrary)>(*this, lib,  "load_dynamic_library",
