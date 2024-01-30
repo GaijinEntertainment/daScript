@@ -20,14 +20,13 @@ require jit
 require fio
 
 // uncomment to enable debug
-/*
 options debugger
 require daslib/debug
 require daslib/ast_debug
 require llvm/llvm_debug
-*/
 
 var modules2mnh : table<Module?; array<string>>
+var created_fileinfos: table<FileInfo?; FileInfo?>
 
 [macro_function]
 def private get_expr_ptr ( expr:ExpressionPtr )
@@ -375,12 +374,68 @@ class LlvmJitVisitor : AstVisitor
         else
             LLVMBuildRet(g_builder, LLVMGetUndef(LLVMFloat4Type()))
 
+    def get_first_element_addr ( dummy: LLVMOpaqueValue? )
+        let zero = LLVMConstInt(LLVMInt32Type(), 0 |> uint64(), 0)
+        var indices = [[auto zero; zero]]
+        return g_builder |> LLVMBuildGEP(dummy, unsafe(addr(indices[0])), 2u, "")
+
+    def get_file_info_global ()
+        var dummy = LLVMGetNamedGlobal(g_mod, "fileinfo_dummy")
+        if dummy == null
+            let sz = typeinfo(sizeof type<FileInfo>)
+            let file_info_type = LLVMArrayType(LLVMInt8Type(), uint(sz))
+            dummy = LLVMAddGlobal(g_mod, file_info_type, "fileinfo_dummy")
+            var zero = LLVMConstInt(LLVMInt8Type(), 0 |> uint64(), 0)
+            var zeros : array<LLVMValueRef>
+            for i in range(sz)
+                zeros |> push(zero)
+            let zeroInitializer = LLVMConstArray(LLVMInt8Type(), unsafe(addr(zeros[0])), sz |> uint())
+            LLVMSetInitializer(dummy, zeroInitializer)
+        return dummy |> get_first_element_addr()
+
+    def create_line_info_global ( at: LineInfo; dummy: LLVMOpaqueValue? )
+        let uint8_ptr = LLVMPointerType(LLVMInt8Type(), 0u)
+        var line_info_members = [[auto
+            LLVMPointerType(LLVMInt8Type(), 0u); LLVMInt32Type(); LLVMInt32Type(); LLVMInt32Type(); LLVMInt32Type()
+        ]]
+        let line_info_type = LLVMStructType(unsafe(addr(line_info_members[0])), line_info_members |> length() |> uint(), 0)
+        let line_info_global = LLVMAddGlobal(g_mod, line_info_type, "" /* no name */)
+        var init_values =  [[auto g_builder |> LLVMBuildPointerCast(dummy, uint8_ptr, "");
+            LLVMConstInt(LLVMInt32Type(), at.column |> uint64(), 0);
+            LLVMConstInt(LLVMInt32Type(), at.line |> uint64(), 0);
+            LLVMConstInt(LLVMInt32Type(), at.last_column |> uint64(), 0);
+            LLVMConstInt(LLVMInt32Type(), at.last_line |> uint64(), 0)
+        ]]
+        var line_info_init = LLVMGetUndef(line_info_type)
+        for i in urange(init_values |> length())
+            line_info_init = g_builder |> LLVMBuildInsertValue(line_info_init, init_values[i], i, "")
+        // let LineInfoInit = LLVMConstStruct(unsafe(addr(InitValues[0])), InitValues |> length() |> uint(), 0)
+        LLVMSetInitializer(line_info_global, line_info_init)
+        return line_info_global
+
+    def create_line_info_ptr_global ( line_info_global: LLVMOpaqueValue? )
+        let ptr_to_line_info_global = get_first_element_addr(line_info_global)
+        let uint8_ptr = LLVMPointerType(LLVMPointerType(LLVMInt8Type(), 0u), 0u)
+        let line_info_ptr_type = uint8_ptr
+        // print("Type of LineInfoPtrType : '{LineInfoPtrType |> describe}'\n")
+        // print("Type of ptrToLineInfoGlobal : '{ptrToLineInfoGlobal |> LLVMTypeOf() |> describe()}'\n")
+        let line_info_ptr_global = LLVMAddGlobal(g_mod, line_info_ptr_type, "" /* no name */)
+        LLVMSetInitializer(line_info_ptr_global, ptr_to_line_info_global)
+        return line_info_ptr_global
+
+    def instrument_and_map_global ( at: LineInfo; line_info_ptr_global: LLVMOpaqueValue? )
+        let info_ptr = instrument_line_info(at) // pointer in 'code' of the context
+        g_engine |> LLVMAddGlobalMapping(line_info_ptr_global, info_ptr)
+        return line_info_ptr_global
+
     def get_line_info_ptr ( at:LineInfo )
-        // TODO: (so that we can have .dll)
-        //  * generate LLVM data block with LineInfo
-        //  * generate LLVM data block with dummy FileInfo
-        let info_ptr = instrument_line_info(at) // right now just pointer in 'code' of the context
-        return LLVMConstIntToPtr(LLVMConstInt(LLVMInt64Type(), uint64(intptr(info_ptr)), 0), LLVMPointerType(LLVMVoidType(), 0u))
+        let void_ptr = LLVMPointerType(LLVMVoidType(), 0u)
+        let dummy = get_file_info_global()
+        let line_info_global = create_line_info_global(at, dummy)
+        let line_info_ptr_global = create_line_info_ptr_global(line_info_global)
+        instrument_and_map_global(at, line_info_ptr_global)
+        var loaded_ptr = LLVMBuildLoad(g_builder, line_info_ptr_global, "")
+        return g_builder |> LLVMBuildPointerCast(loaded_ptr, void_ptr, "")
 
     def build_function_entry(funAt:LineInfo; bodyId:uint64; hasMakeBlock:bool; var totalStackSize:uint; var arguments:dasvector`smart_ptr`Variable)
         // now write to regular function
@@ -811,12 +866,11 @@ class LlvmJitVisitor : AstVisitor
                     [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMFloat4Type(),0u)]])
             let funcPtrType = LLVMPointerType(fn_type, 0u)
             ofunc = LLVMAddGlobal(g_mod, funcPtrType, "{mangled_name}")
-            LLVMSetInitializer(ofunc, LLVMConstPointerNull(funcPtrType))
             let FUNC_PTR = get_builtin_function_address(expr.func)
             if FUNC_PTR==null
                 failed_E(expr, "missing interop function pointer for {expr.func._module.name}::{expr.func.name}")
             let funcPtrValue = LLVMConstIntToPtr(LLVMConstInt(LLVMIntPtrType(), FUNC_PTR |> intptr(), 0), funcPtrType)
-            LLVMSetInitializer(ofunc, funcPtrValue);
+            LLVMSetInitializer(ofunc, funcPtrValue)
             LLVMAddGlobalMapping(g_engine, ofunc, FUNC_PTR)
         return ofunc
 
@@ -3687,6 +3741,26 @@ class LlvmJitVisitor : AstVisitor
 // misc
 ///////
 
+    def generate_fileinfo_constructor ()
+        let functionType = LLVMFunctionType(LLVMVoidType(), null, 0u, 0)
+        let constructor = LLVMAddFunction(g_mod, "fileinfo_constructor", functionType)
+
+        let entry = LLVMAppendBasicBlock(constructor, "entry")
+        LLVMPositionBuilderAtEnd(g_builder, entry)
+
+        let void_ptr = LLVMPointerType(LLVMVoidType(), 0u)
+        var firstElementPtr = g_builder |> LLVMBuildPointerCast(get_file_info_global(), void_ptr, "")
+        var callArgs : array<LLVMValueRef>; callArgs |> push (firstElementPtr)
+
+        let initializeFuncType = LLVMFunctionType(LLVMVoidType(), [[LLVMTypeRef[] LLVMPointerType(LLVMVoidType(), 0u) ]])
+        let initializeFunc = LLVMAddFunction(g_mod, "jit_initialize_fileinfo", initializeFuncType)
+        LLVMAddGlobalMapping(g_engine, initializeFunc, get_jit_initialize_fileinfo())
+
+        LLVMBuildCall(g_builder, initializeFunc, callArgs, "")
+        LLVMBuildRetVoid(g_builder)
+
+        return constructor
+
     def cast_from_vec4f_ptr ( v4f:LLVMOpaqueValue?; ptr_type:LLVMOpaqueType? ) : LLVMOpaqueValue?
         var tres : LLVMOpaqueValue?
         if typeinfo(sizeof type<void?>)==8
@@ -4039,7 +4113,7 @@ def private recreate_engine_extern_mappings ()
             *func_addr = FUNC_PTR
 
 [macro_function]
-def private restore_modules2externs ( )
+def private restore_modules2mnh ( )
     var mod_count = fetch_uint64_from_dll("mod_count")
     for i in mod_count |> range64()
         var mod_name = fetch_string_from_dll("mod_name_{i}")
@@ -4052,25 +4126,48 @@ def private restore_modules2externs ( )
         modules2mnh[module_] <- externs
 
 [macro_function]
+def private restore_fileinfo_dummy ( )
+    var sym = g_dynamic_lib_handle |> get_function_address("fileinfo_dummy")
+    initialize_dummy_fileinfo(sym)
+
+def private create_fileinfo ( addr_ : void? )
+    assert(g_dynamic_lib_handle != null, "g_dynamic_lib_handle is null")
+    var sym = g_dynamic_lib_handle |> get_function_address("fileinfo_at_{addr_}")
+    var sym_name = g_dynamic_lib_handle |> get_function_address("fileinfo_at_{addr_}_name")
+    var val = unsafe(reinterpret<FileInfo?> (sym))
+    var name = unsafe(reinterpret<string> (sym_name))
+    recreate_fileinfo_name(val, name)
+    return val
+
+[macro_function]
+def private fetch_lineinfo_from_dll ( name : string )
+    assert(g_dynamic_lib_handle != null, "g_dynamic_lib_handle is null")
+    var sym = g_dynamic_lib_handle |> get_function_address(name)
+    var val = unsafe(reinterpret<LineInfo?> (sym))
+    let fi = val.fileInfo
+    if created_fileinfos[fi] == null
+        created_fileinfos[fi] = create_fileinfo(unsafe(reinterpret<void?> fi))
+    val.fileInfo = created_fileinfos[fi]
+    return *val
+
+[macro_function]
 def private fetch_uint64_from_dll ( name : string )
-    if g_dynamic_lib_handle != null
-        var sym = g_dynamic_lib_handle |> get_function_address(name)
-        var val = unsafe(reinterpret<uint64?> (sym))
-        return *val
-    panic("Expect a string!")
-    return 0 |> uint64()
+    assert(g_dynamic_lib_handle != null, "g_dynamic_lib_handle is null")
+    var sym = g_dynamic_lib_handle |> get_function_address(name)
+    var val = unsafe(reinterpret<uint64?> (sym))
+    return *val
+
 
 [macro_function]
 def private fetch_string_from_dll ( name : string )
-    if g_dynamic_lib_handle != null
-        var sym = g_dynamic_lib_handle |> get_function_address(name)
-        var val = unsafe(reinterpret<string?> (sym))
-        return *val
-    panic("Expect a string!")
-    return ""
+    assert(g_dynamic_lib_handle != null, "g_dynamic_lib_handle is null")
+    var sym = g_dynamic_lib_handle |> get_function_address(name)
+    var val = unsafe(reinterpret<string?> (sym))
+    return *val
+
 
 [macro_function]
-def private save_modules2externs ( )
+def private save_modules2mnh ( )
     var mod_count : uint64 = 0 |> uint64()
     for mod, externs in keys(modules2mnh), values(modules2mnh)
         mod_count += 1 |> uint64()
@@ -4101,6 +4198,23 @@ def private add_global_variable ( name : string; type_ : LLVMOpaqueType?; initia
     LLVMSetDLLStorageClass(globalVar, LLVMDLLStorageClass LLVMDLLExportStorageClass)
     globalVar |> LLVMSetInitializer <| initializer
     return globalVar
+
+[macro_function]
+def private add_constructor_function ( func: LLVMOpaqueValue? )
+    let priority = 0 |> uint64()
+    let funcType = LLVMTypeOf(func)
+    let dataPointerType = LLVMPointerType(LLVMInt8Type(), 0u)
+    var ctorTypes = [[auto LLVMInt32Type(); funcType; dataPointerType]]
+
+    var ctorFields = [[auto LLVMConstInt(LLVMInt32Type(), priority, 0); func; LLVMConstPointerNull(dataPointerType)]]
+
+
+    let ctorStructType = LLVMStructType(unsafe(addr(ctorTypes[0])), 3u, 0)
+
+    var ctorStruct = LLVMConstNamedStruct(ctorStructType, unsafe(addr(ctorFields[0])), 3u)
+    let ctorArray = LLVMAddGlobal(g_mod, LLVMArrayType(ctorStructType, 1u), "llvm.global_ctors")
+    LLVMSetLinkage(ctorArray, LLVMLinkage LLVMAppendingLinkage)
+    LLVMSetInitializer(ctorArray, LLVMConstArray(ctorStructType, unsafe(addr(ctorStruct)), 1u))
 
 [macro_function]
 def private generate_llvm ( ctx:Context?; fn : FunctionPtr )
@@ -4204,6 +4318,8 @@ class JIT_LLVM : AstSimulateMacro
             var fake_visitor = new LlvmJitVisitor(funcs[0].at, ctx, false, null, null)
             for fun in funcs
                 fake_visitor->add_llvm_functions(fun)
+            // initialize fileinfo
+            fake_visitor->generate_fileinfo_constructor() |> add_constructor_function()
             unsafe
                 delete fake_visitor
             g_dynamic_lib_handle = load_dynamic_library(JIT_DLL_OUTPUT)
@@ -4214,10 +4330,10 @@ class JIT_LLVM : AstSimulateMacro
             optimize_llvm_module()
             if g_dynamic_lib_handle != null
                 if g_loading_from_dll
-                    restore_modules2externs()
+                    restore_modules2mnh()
                     recreate_engine_extern_mappings()
                 else
-                    save_modules2externs()
+                    save_modules2mnh()
             g_dynamic_lib_handle |> close_dynamic_library()
             g_dynamic_lib_handle = null
             for fun in funcs
