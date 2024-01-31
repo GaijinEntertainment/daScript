@@ -442,14 +442,16 @@ class AstReaderMacro_Adapter {
 protected:
   enum {
     __fn_accept = 0,
-    __fn_visit = 1,
+    __fn_suffix = 1,
+    __fn_visit = 2,
   };
 protected:
-  int _das_class_method_offset[2];
+  int _das_class_method_offset[3];
 public:
   AstReaderMacro_Adapter ( const StructInfo * info ) {
       _das_class_method_offset[__fn_accept] = info->fields[2]->offset;
-      _das_class_method_offset[__fn_visit] = info->fields[3]->offset;
+      _das_class_method_offset[__fn_suffix] = info->fields[3]->offset;
+      _das_class_method_offset[__fn_visit] = info->fields[4]->offset;
   }
   __forceinline Func get_accept ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_accept]);
@@ -459,6 +461,15 @@ public:
       <void *,smart_ptr_raw<Program> const ,Module * const ,ExprReader * const ,int32_t,LineInfo const  &>
         (__context__,nullptr,__funcCall__,
           self,prog,mod,expr,ch,info);
+  }
+  __forceinline Func get_suffix ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_suffix]);
+  }
+  __forceinline char * invoke_suffix ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Program> const  prog, Module * const  mod, ExprReader * const  expr, LineInfo const  & info ) const {
+    return das_invoke_function<char *>::invoke
+      <void *,smart_ptr_raw<Program> const ,Module * const ,ExprReader * const ,LineInfo const  &>
+        (__context__,nullptr,__funcCall__,
+          self,prog,mod,expr,info);
   }
   __forceinline Func get_visit ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_visit]);

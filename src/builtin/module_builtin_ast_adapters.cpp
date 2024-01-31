@@ -1683,6 +1683,17 @@ namespace das {
         ReaderMacroAdapter ( const string & n, char * pClass, const StructInfo * info, Context * ctx )
             : ReaderMacro(n), AstReaderMacro_Adapter(info), classPtr(pClass), context(ctx) {
         }
+        virtual char * suffix ( Program * prog, Module * mod, ExprReader * expr, const LineInfo & info ) override {
+            if ( auto fnSuffix = get_suffix(classPtr) ) {
+                char * result = nullptr;
+                runMacroFunction(context, "suffix", [&]() {
+                    result = invoke_suffix(context,fnSuffix,classPtr,prog,mod,expr,info);
+                });
+                return result;
+            } else {
+                return nullptr;
+            }
+        }
         virtual bool accept ( Program * prog, Module * mod, ExprReader * expr, int Ch, const LineInfo & info ) override {
             if ( auto fnAccept = get_accept(classPtr) ) {
                 bool result = false;
