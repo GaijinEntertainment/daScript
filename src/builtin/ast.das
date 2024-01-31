@@ -119,6 +119,7 @@ class AstSimulateMacro
 [macro_interface]
 class AstReaderMacro
     def abstract accept ( prog:ProgramPtr; mod:Module?; expr:ExprReader?; ch:int; info:LineInfo ) : bool
+    def abstract suffix ( prog:ProgramPtr; mod:Module?; expr:ExprReader?; info:LineInfo ) : string
     def abstract visit ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprReader> ) : ExpressionPtr
 
 [macro_interface]

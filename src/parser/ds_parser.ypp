@@ -69,6 +69,7 @@
 
     void das_yybegin_reader ( yyscan_t yyscanner );
     void das_yyend_reader ( yyscan_t yyscanner );
+    void das_accept_sequence ( yyscan_t yyscanner, const char * seq, size_t seqLen, int lineNo );
 
     namespace das { class Module; }
     void das_collect_keywords ( das::Module * mod, yyscan_t yyscanner );
@@ -633,6 +634,13 @@ expr_reader
     } reader_character_sequence[seq] {
         yyextra->g_ReaderExpr->at = tokRangeAt(scanner,@loc,@seq);
         $$ = yyextra->g_ReaderExpr;
+        if ( auto seqt = yyextra->g_ReaderMacro->suffix(yyextra->g_Program.get(), yyextra->g_Program->thisModule.get(), yyextra->g_ReaderExpr, tokAt(scanner,@seq)) ) {
+            das_accept_sequence(scanner,seqt,strlen(seqt),@seq.first_line+1); // todo: where from?
+            yylloc.first_column = @seq.first_column;
+            yylloc.first_line = @seq.first_line;
+            yylloc.last_column = @seq.last_column;
+            yylloc.last_line = @seq.last_line;
+        }
         delete $mark;
         yyextra->g_ReaderMacro = nullptr;
         yyextra->g_ReaderExpr = nullptr;
