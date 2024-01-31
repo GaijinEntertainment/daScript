@@ -2695,7 +2695,7 @@ namespace das {
                         }
                     } else ss << ";\n";
                 }
-                if ( (!expr->constructor) && (!expr->initAllFields) || (expr->makeType->baseType==Type::tTuple && expr->structs.size()==0) ) {
+                if ( (!expr->constructor && !expr->initAllFields) || (expr->makeType->baseType==Type::tTuple && expr->structs.size()==0) ) {
                     ss << string(tab,'\t') << "das_zero(" << mksName(expr) << ");\n";
                 }
             }

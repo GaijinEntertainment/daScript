@@ -1232,7 +1232,7 @@ namespace das
     struct ReaderMacro : ptr_ref_count {
         ReaderMacro ( const string na = "" ) : name(na) {}
         virtual bool accept ( Program *, Module *, ExprReader *, int, const LineInfo & ) { return false; }
-        virtual char * suffix ( Program *, Module *, ExprReader *, const LineInfo & ) { return ""; }
+        virtual char * suffix ( Program *, Module *, ExprReader *, const LineInfo & ) { return nullptr; }
         virtual ExpressionPtr visit (  Program *, Module *, ExprReader * ) { return nullptr; }
         virtual void seal( Module * m ) { module = m; }
         string name;
