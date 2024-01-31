@@ -20,10 +20,12 @@ require jit
 require fio
 
 // uncomment to enable debug
+/*
 options debugger
 require daslib/debug
 require daslib/ast_debug
 require llvm/llvm_debug
+*/
 
 var modules2mnh : table<Module?; array<string>>
 var created_fileinfos: table<FileInfo?; FileInfo?>
