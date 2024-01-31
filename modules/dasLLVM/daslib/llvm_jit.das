@@ -4096,7 +4096,7 @@ def private restore_modules2mnh ( )
 [macro_function]
 def private restore_fileinfo_dummy ( )
     var sym = g_dynamic_lib_handle |> get_function_address("fileinfo_dummy")
-    initialize_dummy_fileinfo(sym)
+    jit_initialize_fileinfo(sym)
 
 def private create_fileinfo ( addr_ : void? )
     assert(g_dynamic_lib_handle != null, "g_dynamic_lib_handle is null")

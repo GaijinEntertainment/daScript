@@ -17,14 +17,14 @@ require jit
 let public LLVM_JIT_ENABLED = true || llvm_config::llvm_jit_enabled()
 let public LLVM_JIT_ALL_FUNCTIONS = llvm_config::llvm_jit_all_functions()
 
-let public LLVM_DEBUG_RESULT = true || llvm_config::llvm_debug_result()
-let public LLVM_DEBUG_EVERYTHING = true || llvm_config::llvm_debug_everything()
+let public LLVM_DEBUG_RESULT = false || llvm_config::llvm_debug_result()
+let public LLVM_DEBUG_EVERYTHING = false || llvm_config::llvm_debug_everything()
 
-let public LLVM_DEBUG_TRACES = true
-let public LLVM_DEBUG_LINE_TRACES = true
+let public LLVM_DEBUG_TRACES = false
+let public LLVM_DEBUG_LINE_TRACES = false
 
 let public LLVM_JIT_LOG = false || LLVM_DEBUG_EVERYTHING
-let public LLVM_DEBUG_INFO = true || LLVM_DEBUG_EVERYTHING
+let public LLVM_DEBUG_INFO = false || LLVM_DEBUG_EVERYTHING
 
 let public LLVM_JIT_ALWAYS_SOLID = llvm_config::llvm_jit_always_solid()
 let public LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS = (
