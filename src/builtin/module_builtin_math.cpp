@@ -578,7 +578,7 @@ namespace das {
             memset(&res, 0, sizeof(RetT));
             return res;
         }
-        virtual void * getBuiltinAddress() const { return (void *) &ctorFn; }
+        virtual void * getBuiltinAddress() const override { return (void *) &ctorFn; }
     };
 
     class Module_Math : public Module {
