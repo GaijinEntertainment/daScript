@@ -3189,8 +3189,12 @@ namespace das
             }
         }
         context.totalInitFunctions = (uint32_t) allInitFunctions.size();
-        context.initFunctions = (SimFunction **) context.code->allocate(uint32_t(allInitFunctions.size()*sizeof(SimFunction *)));
-        memcpy ( context.initFunctions, allInitFunctions.data(), allInitFunctions.size()*sizeof(SimFunction *) );
+        if ( context.totalInitFunctions!=0 && allInitFunctions.data()!=nullptr ) {
+            context.initFunctions = (SimFunction **) context.code->allocate(uint32_t(allInitFunctions.size()*sizeof(SimFunction *)));
+            memcpy ( context.initFunctions, allInitFunctions.data(), allInitFunctions.size()*sizeof(SimFunction *) );
+        } else {
+            context.initFunctions = nullptr;
+        }
         // lockchecking
         context.skipLockChecks = options.getBoolOption("skip_lock_checks",false);
         // run init script and restart
