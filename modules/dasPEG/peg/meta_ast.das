@@ -4,7 +4,7 @@ options no_unused_function_arguments = false
 options no_aot = true
 options strict_smart_pointers = true
 
-module meta_ast
+module meta_ast shared
 
 require daslib/match public
 require daslib/fio

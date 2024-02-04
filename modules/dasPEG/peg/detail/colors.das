@@ -4,7 +4,7 @@ options no_unused_function_arguments = false
 options no_aot = true
 options strict_smart_pointers = true
 
-
+module colors shared
 
 def public bold(str: string)
     return "\x1B[1m{str}\x1B[0m"
