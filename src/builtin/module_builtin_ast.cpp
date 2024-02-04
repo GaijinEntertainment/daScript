@@ -115,6 +115,70 @@ namespace das {
         return name ? module->findVariable(name) : nullptr;
     }
 
+    // variable lookup with all the rules
+
+    Module * getCurrentSearchModule(Program * program, Function * func, const char * _moduleName) {
+        string moduleName = _moduleName ? _moduleName : "";
+        if ( moduleName=="_" ) {
+            moduleName = "*";
+            return program->thisModule.get();
+        } else if ( moduleName=="__" ) {
+            moduleName = program->thisModule->name;
+            return program->thisModule.get();
+        } else if ( func ) {
+            if ( func->fromGeneric ) {
+                auto origin = func->getOrigin();
+                if ( moduleName.empty() ) {     // ::foo in generic means generic::goo, not this::foo
+                    moduleName = origin->module->name;
+                }
+                return origin->module;
+            } else {
+                return func->module;
+            }
+        } else {
+            return program->thisModule.get();
+        }
+    }
+
+    bool canAccessGlobalVariable ( const VariablePtr & pVar, Module * mod, Module * thisMod ) {
+        if ( !pVar->private_variable ) {
+            return true;
+        } else if ( pVar->module==mod || pVar->module==thisMod ) {
+            return true;
+        } else {
+            return false;
+        }
+    }
+
+    void findMatchingVariable ( Program * program, Function * func, const char * _name, bool seePrivate,
+            const TBlock<void,TTemporary<TArray<VariablePtr>>> & block, Context * context, LineInfoArg * arg ) {
+        if ( !program ) context->throw_error_at(arg, "expecting program");
+        if ( !_name ) context->throw_error_at(arg, "expecting name");
+        string name = _name ? _name : "";
+        string moduleName, varName;
+        splitTypeName(name, moduleName, varName);
+        vector<VariablePtr> result;
+        auto inWhichModule = getCurrentSearchModule(program, func, moduleName.c_str());
+        program->library.foreach([&](Module * mod) -> bool {
+            if ( auto var = mod->findVariable(varName) ) {
+                if ( inWhichModule->isVisibleDirectly(var->module) ) {
+                    if ( seePrivate || canAccessGlobalVariable(var,inWhichModule,program->thisModule.get()) ) {
+                        result.push_back(var);
+                    }
+                }
+            }
+            return true;
+        },moduleName);
+        Array arr;
+        arr.data = (char *) result.data();
+        arr.size = arr.capacity = (int32_t) result.size();
+        arr.lock = 1;
+        arr.flags = 0;
+        das_invoke<void>::invoke<Array&>(context,arg,block,arr);
+    }
+
+    // end lookup
+
     bool addModuleStructure ( Module * module, StructurePtr & _struct ) {
         StructurePtr stru = das::move(_struct);
         return module->addStructure(stru, true);
@@ -658,6 +722,15 @@ namespace das {
         addExtern<DAS_BIND_FUN(findModuleVariable)>(*this, lib, "find_variable",
             SideEffects::modifyExternal, "findModuleVariable")
                 ->args({"module","variable"});
+        addExtern<DAS_BIND_FUN(findMatchingVariable)>(*this, lib, "find_matching_variable",
+            SideEffects::invokeAndAccessExternal, "findMatchingVariable")
+                ->args({"program","function","name","seePrivate","block","context","line"});
+        addExtern<DAS_BIND_FUN(getCurrentSearchModule)>(*this, lib, "get_current_search_module",
+            SideEffects::none, "getCurrentSearchModule")
+                ->args({"program","function","moduleName"});
+        addExtern<DAS_BIND_FUN(canAccessGlobalVariable)>(*this, lib, "can_access_global_variable",
+            SideEffects::none, "canAccessGlobalVariable")
+                ->args({"variable","module","thisModule"});
         addExtern<DAS_BIND_FUN(addModuleStructure)>(*this, lib, "add_structure",
             SideEffects::modifyExternal, "addModuleStructure")
                 ->args({"module","structure"});

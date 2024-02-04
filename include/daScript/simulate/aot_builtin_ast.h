@@ -142,6 +142,11 @@ namespace das {
     TypeInfo * getHandledTypeFieldType ( smart_ptr_raw<TypeAnnotation> annotation, char * name, Context * context, LineInfoArg * at );
     TypeDeclPtr getHandledTypeFieldTypeDecl ( smart_ptr_raw<TypeAnnotation> annotation, char * name, bool isConst, Context * context, LineInfoArg * at );
     void addModuleRequrie ( Module * module, Module * reqModule, bool publ );
+    void findMatchingVariable ( Program * program, Function * func, const char * _name, bool seePrivate,
+        const TBlock<void,TTemporary<TArray<VariablePtr>>> & block, Context * context, LineInfoArg * arg );
+    Module * getCurrentSearchModule(Program * program, Function * func, const char * _moduleName);
+    bool canAccessGlobalVariable ( const VariablePtr & pVar, Module * mod, Module * thisMod );
+
 
     template <>
     struct das_iterator <AnnotationArgumentList> : das_iterator<vector<AnnotationArgument>> {

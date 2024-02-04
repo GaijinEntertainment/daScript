@@ -465,11 +465,11 @@ public:
   __forceinline Func get_suffix ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_suffix]);
   }
-  __forceinline char * invoke_suffix ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Program> const  prog, Module * const  mod, ExprReader * const  expr, LineInfo const  & info ) const {
+  __forceinline char * invoke_suffix ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Program> const  prog, Module * const  mod, ExprReader * const  expr, LineInfo const  & info, int32_t & outLine ) const {
     return das_invoke_function<char *>::invoke
-      <void *,smart_ptr_raw<Program> const ,Module * const ,ExprReader * const ,LineInfo const  &>
+      <void *,smart_ptr_raw<Program> const ,Module * const ,ExprReader * const ,LineInfo const  &,int32_t &>
         (__context__,nullptr,__funcCall__,
-          self,prog,mod,expr,info);
+          self,prog,mod,expr,info,outLine);
   }
   __forceinline Func get_visit ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_visit]);

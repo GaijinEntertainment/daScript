@@ -515,7 +515,14 @@ program
     |   program alias_declaration               { yyextra->das_has_type_declarations = true; }
     |   program variant_alias_declaration       { yyextra->das_has_type_declarations = true; }
     |   program bitfield_alias_declaration      { yyextra->das_has_type_declarations = true; }
+    |   program top_level_reader_macro
     |   program ';'
+    ;
+
+top_level_reader_macro
+    :   expr_reader[rdr] ';' {
+        delete $rdr;    // we do nothing, we don't even attemp to 'visit'
+    }
     ;
 
 optional_public_or_private_module
@@ -634,8 +641,9 @@ expr_reader
     } reader_character_sequence[seq] {
         yyextra->g_ReaderExpr->at = tokRangeAt(scanner,@loc,@seq);
         $$ = yyextra->g_ReaderExpr;
-        if ( auto seqt = yyextra->g_ReaderMacro->suffix(yyextra->g_Program.get(), yyextra->g_Program->thisModule.get(), yyextra->g_ReaderExpr, tokAt(scanner,@seq)) ) {
-            das_accept_sequence(scanner,seqt,strlen(seqt),@seq.first_line+1); // todo: where from?
+        int thisLine = 0;
+        if ( auto seqt = yyextra->g_ReaderMacro->suffix(yyextra->g_Program.get(), yyextra->g_Program->thisModule.get(), yyextra->g_ReaderExpr, thisLine, tokAt(scanner,@seq)) ) {
+            das_accept_sequence(scanner,seqt,strlen(seqt),thisLine);
             yylloc.first_column = @seq.first_column;
             yylloc.first_line = @seq.first_line;
             yylloc.last_column = @seq.last_column;
