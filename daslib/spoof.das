@@ -12,22 +12,27 @@ require strings
 
 let SPOOF_SPEFICAL = '%'
 
-enum SpoofError
-    none
-    expecting_open_paren
-    invalid_argument_character
-    invalid_argument_count
-    invalid_spoof_character
-    expecting_var_name
-    eof
-
 [macro_function]
-def next_not_whitespace ( it:iterator<int>; var Ch:int& ) : bool
-    Ch = -1
-    while next(it,Ch)
-        if !is_white_space(Ch)
-            return true
-    return false
+def spoof_args ( invocation:string; blk:block<(var res : array<string>; errors:array<ParsingError>):void> )
+    parse invocation
+        var element_list : array<string>
+        rule(WS, "(", WS, *comma_separated_elements as els, WS, element as last, WS, ")") <|
+            els |> push <| last
+            return <- els
+        var comma_separated_elements : string
+        rule(WS,element as e, WS, ",") <|
+            return e
+        var element : string
+        rule(ident_ as e) <|
+            return e
+        var class_name : string
+        rule(WS,"{ident_}" as scope, "::", "{ident_}" as id) <|
+            return scope + "::" + id
+        rule(WS,ident_ as id) <|
+            return id
+        var ident_ : string
+        rule("{set('a'..'z','A'..'Z','_')}" as fc,"{*set('a'..'z','A'..'Z','_','0'..'9')}" as tail) <|
+            return fc + tail
 
 [macro_function]
 def next_ident ( it:iterator<int>; var Ch:int&; var ident:string& ) : bool
@@ -43,43 +48,28 @@ def next_ident ( it:iterator<int>; var Ch:int&; var ident:string& ) : bool
     return true
 
 [macro_function]
-def instance_spoof ( temp:string; instance_arguments:array<string> ) : tuple<result:string;error:SpoofError>
-    var it <- unsafe(each(temp))
-    var Ch:int
-    // read template arguments
-    if !next_not_whitespace(it,Ch)
-        return [[auto "", SpoofError expecting_open_paren]]
-    if Ch!='(' || Ch==-1
-        return [[auto "", SpoofError expecting_open_paren]]
+def instance_spoof ( temp:string; instance_arguments:array<string> ) : tuple<result:string;ok:bool>
     var args : array<string>
-    while true
-        var ident : string
-        if next_ident(it,Ch,ident)
-            args |> push(ident)
-            if Ch==','
-                continue
-            elif Ch==')'
-                break
-            else
-                return [[auto "invalid character {Ch}", SpoofError invalid_argument_character]]
-        elif is_white_space(Ch)
-            continue
+    var error = "argument count mismatch"
+    spoof_args(temp) <| $ ( res, errors )
+        if errors |> length > 0
+            error = errors |> join("\n")
+        else
+            args <- res
     // compare argument counts
     if length(args) != length(instance_arguments)
-        return [[auto "argument count mismatch", SpoofError invalid_argument_count]]
+        return [[auto "argument count mismatch", false]]
     // skip to next line
-    Ch = -1
+    var it <- unsafe(each(temp))
+    var Ch = -1
     while next(it,Ch)
-        if Ch==' ' || Ch=='\t'
-            continue
-        elif Ch=='\n'
+        if  Ch=='\n'
             break
         elif Ch=='\r'
             pass
-        else
-            return [[auto "invalid character {Ch}", SpoofError invalid_argument_character]]
+        Ch = -1
     if Ch==-1
-        return [[auto "unexpected end of file", SpoofError eof]]
+        return [[auto "unexpected end of file", false]]
     // now, lets apply the arguments
     var result : array<uint8>
     var pendingCh : int
@@ -103,11 +93,11 @@ def instance_spoof ( temp:string; instance_arguments:array<string> ) : tuple<res
             elif Ch==-1
                 break   // eof
             else
-                return [[auto "invalid sequence after %", SpoofError invalid_spoof_character]]
+                return [[auto "invalid sequence after %", false]]
         else
             result |> push(uint8(Ch))
 
-    return [[auto string(result), SpoofError none]]
+    return [[auto string(result), true]]
 
 
 [reader_macro(name="spoof_template")]
@@ -202,8 +192,8 @@ class SpoofInstanceReader : AstReaderMacro
         // now, lets spoof the instance
         outLine = int(vptr.init.at.line) + 1
         var result <- instance_spoof(string(vstr),iargs.args)
-        if result.error != SpoofError none
-            prog |> macro_error(info, "spoof instance error({result.error}): {result.result}")
+        if !result.ok
+            prog |> macro_error(info, "spoof instance error {result.result}")
             return ""
         return result.result
 
