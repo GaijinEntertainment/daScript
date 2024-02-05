@@ -7,6 +7,7 @@ options strict_smart_pointers = true
 module spoof shared private
 
 require daslib/ast_boost
+require peg/peg
 require strings
 
 let SPOOF_SPEFICAL = '%'
@@ -108,26 +109,6 @@ def instance_spoof ( temp:string; instance_arguments:array<string> ) : tuple<res
 
     return [[auto string(result), SpoofError none]]
 
-def instance_args ( temp:string ) : tuple<varName:string;args:array<string>;error:SpoofError>
-    var it <- unsafe(each(temp))
-    var Ch:int
-    var args : array<string>
-    var varName : string
-    if !next_ident(it,Ch,varName)
-        return <- [[auto "expecting template name", args, SpoofError expecting_var_name]]
-    while true
-        var ident : string
-        if next_ident(it,Ch,ident)
-            args |> push(ident)
-            if Ch==','
-                continue
-            elif Ch==')'
-                break
-            else
-                return <- [[auto "invalid character {Ch}", args, SpoofError invalid_argument_character]]
-        elif is_white_space(Ch)
-            continue
-    return <- [[auto varName, args, SpoofError none]]
 
 [reader_macro(name="spoof_template")]
 class SpoofTemplateReader : AstReaderMacro
@@ -142,6 +123,35 @@ class SpoofTemplateReader : AstReaderMacro
     def override visit ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprReader> ) : ExpressionPtr
         return <- new [[ExprConstString() at=expr.at, value:=expr.sequence]]
 
+struct SpoofInvocation
+    varName : string
+    args : array<string>
+
+def instance_args ( invocation:string; blk:block<(var res : SpoofInvocation; errors:array<ParsingError>):void> )
+    parse invocation
+        var macro_invocation : SpoofInvocation
+        rule(WS, class_name as cn, WS, "(", element_list as el, WS, ")") <|
+            return <- [[SpoofInvocation varName=cn, args <- el]]
+        rule(WS, class_name as cn, WS, "(", WS, ")") <|
+            return <- [[SpoofInvocation varName=cn]]
+        var element_list : array<string>
+        rule(*comma_separated_elements as els, WS, element as last) <|
+            els |> push <| last
+            return <- els
+        var comma_separated_elements : string
+        rule(WS,element as e, WS, ",") <|
+            return e
+        var element : string
+        rule(ident_ as e) <|
+            return e
+        var class_name : string
+        rule(WS,"{ident_}" as scope, "::", "{ident_}" as id) <|
+            return scope + "::" + id
+        rule(WS,ident_ as id) <|
+            return id
+        var ident_ : string
+        rule("{set('a'..'z','A'..'Z','_')}" as fc,"{*set('a'..'z','A'..'Z','_','0'..'9')}" as tail) <|
+            return fc + tail
 
 [reader_macro(name="spoof_instance")]
 class SpoofInstanceReader : AstReaderMacro
@@ -155,10 +165,16 @@ class SpoofInstanceReader : AstReaderMacro
             return true
     def override suffix ( prog:ProgramPtr; mod:Module?; var expr:ExprReader?; info:LineInfo; var outLine:int& ) : string
         outLine = int(info.line)
-        var iargs <- instance_args(string(expr.sequence))
-        if iargs.error != SpoofError none
-            prog |> macro_error(info, "syntax error ({iargs.error}): {iargs.varName}")
-            return ""
+        var iargs : SpoofInvocation
+        var failed = false
+        instance_args(string(expr.sequence)) <| $ ( res, errors )
+            if errors |> length > 0
+                let all_errors = errors |> join("\n")
+                prog |> macro_error(info, all_errors)
+                failed = true
+            else
+                iargs <- res
+        return "" if failed
         // lets find the variable for the template
         var inscope vptr : VariablePtr
         find_matching_variable(get_ptr(prog),null,iargs.varName,false) <| $ ( vars )

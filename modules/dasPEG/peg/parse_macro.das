@@ -5,7 +5,7 @@ options no_aot = true
 options strict_smart_pointers = true
 options no_global_variables = false
 
-module parse_macro
+module parse_macro shared
 
 require daslib/templates_boost
 require daslib/strings_boost
@@ -75,7 +75,7 @@ def into_terminal(var expr: ExpressionPtr): tuple<int;int>
 
         return <- [[auto left, right]]
 
-    transfrom_error(expr.at, "Unknown rule passed to `rule` as argument")
+    transfrom_error(expr.at, "Unknown rule passed to `rule` as argument {describe(expr)} into terminal")
     return <- [[auto 0, 0]]
 
 
@@ -214,7 +214,7 @@ def into_rule_(var expr: ExpressionPtr): Rule_?
         transfrom_error(expr.at, "Your rule contains integers (possibly in the form of '_', please use \"\" for literals)")
         return <- new [[Rule_]]
 
-    transfrom_error(expr.at, "Unknown rule passed to `rule` as argument")
+    transfrom_error(expr.at, "Unknown rule passed to `rule` as argument {describe(expr)} into rule")
     return <- new [[Rule_]]
 
 def transfrom_error ( at:LineInfo; message:string )

@@ -4,7 +4,7 @@ options no_unused_function_arguments = false
 options no_aot = true
 options strict_smart_pointers = true
 
-module parser_generator
+module parser_generator shared
 
 require daslib/match public
 require daslib/strings

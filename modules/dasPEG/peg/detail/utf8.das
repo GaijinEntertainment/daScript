@@ -8,6 +8,7 @@ require dastest/testing_boost
 require daslib/utf8_utils
 require daslib/strings
 
+module utf8 shared
 
 // Array is asserted to be valid utf-8 at the beginning of the parsing.
 def public get_next_character(utf8_string: array<uint8>; var index: int&): int
