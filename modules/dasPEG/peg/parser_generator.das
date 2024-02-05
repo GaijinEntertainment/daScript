@@ -56,6 +56,8 @@ struct ParserGenerator
     // Print generated inner parsing functions
     print_generated: bool
 
+    // Number of times generator was called in the current module, to avoid name clashes
+    id: uint64
 
 def accept_option(var gen: ParserGenerator; opt: string)
     if opt == "tracing"
@@ -113,11 +115,11 @@ def rule_left_recursive(name: string; rule: Rule): bool
 def generate_wrapper(var gen: ParserGenerator)
     let rule_name = gen.current_context
     let cache_table = "{rule_name}_cache"
-    let inner_parsing_fun = "parse_{rule_name}_inner"
+    let inner_parsing_fun = "parse_{rule_name}_inner`id_{gen.id}"
 
     var inscope return_type <- gen.return_types[rule_name] |> clone_type
 
-    var inscope wrapper_fun <- qmacro_function("parse_{rule_name}") <| $ (var parser: $t(gen.parser_type)): $t(return_type)
+    var inscope wrapper_fun <- qmacro_function("parse_{rule_name}`id_{gen.id}") <| $ (var parser: $t(gen.parser_type)): $t(return_type)
         var mark = parser.index
 
         if $v(gen.tracing)
@@ -154,11 +156,11 @@ def generate_wrapper(var gen: ParserGenerator)
 def generate_wrapper_leftrec(var gen: ParserGenerator)
     let rule_name = gen.current_context
     let cache_table = "{rule_name}_cache"
-    let inner_parsing_fun = "parse_{rule_name}_inner"
+    let inner_parsing_fun = "parse_{rule_name}_inner`id_{gen.id}"
 
     var inscope return_type <- gen.return_types[rule_name] |> clone_type
 
-    var inscope wrapper_fun <- qmacro_function("parse_{rule_name}") <| $ (var parser: $t(gen.parser_type)): $t(return_type)
+    var inscope wrapper_fun <- qmacro_function("parse_{rule_name}`id_{gen.id}") <| $ (var parser: $t(gen.parser_type)): $t(return_type)
         var mark = parser.index
 
         if $v(gen.tracing)
@@ -219,7 +221,7 @@ def generate_parser_class(var gen: ParserGenerator; parser_name: string)
     var inscope s: StructurePtr <- new [[Structure()]]
 
     // jsonParser, expressionParser, dasParser
-    s.name := "{parser_name}Parser"
+    s.name := "{parser_name}Parser`id_{gen.id}"
     gen.parser_name := s.name
 
     s._module = compiling_module()
@@ -250,11 +252,7 @@ def generate_parser_class(var gen: ParserGenerator; parser_name: string)
     s.flags |= StructureFlags skipLockCheck
 
     // Save constructed parser type for later
-
-    var inscope parser_type <- qmacro_type(type<ParserGenerator>)
-    parser_type.structType := s |> get_ptr
-
-    gen.parser_type := parser_type
+    gen.parser_type |> move_new <| new [[TypeDecl() baseType=Type tStructure, structType = s |> get_ptr]]
 
     compiling_module() |> add_structure(s)
 
@@ -308,7 +306,7 @@ def generate(var gen: ParserGenerator; var def_: Definition)
     var inscope function_body <- gen |> generate(def_.rule)
     var inscope return_type <- gen.return_types[gen.current_context] |> clone_type
 
-    var inscope fun <- qmacro_function("parse_{def_.name}_inner") <| $ (var parser: $t(gen.parser_type)): $t(return_type)
+    var inscope fun <- qmacro_function("parse_{def_.name}_inner`id_{gen.id}") <| $ (var parser: $t(gen.parser_type)): $t(return_type)
         $b(function_body)
         return <- [[$t(return_type)]]
 
@@ -436,7 +434,7 @@ def generate(var gen: ParserGenerator; var rule_: Rule): array<ExpressionPtr>
             // varname is a generic name for unnamed nonterminals
             // e.g. add4, add5, mul0
             let varname = "{name}{count}"
-            let parse_fun = "parse_{name}"
+            let parse_fun = "parse_{name}`id_{gen.id}"
 
             var inscope t  <- qmacro_block <|
                 var $i(varname) <- $c(parse_fun)(parser)
@@ -454,7 +452,7 @@ def generate(var gen: ParserGenerator; var rule_: Rule): array<ExpressionPtr>
 
             let count = "{gen.rule_counter[name]}"
             let varname = "{name}{count}"
-            let parse_fun = "parse_{name}"
+            let parse_fun = "parse_{name}`id_{gen.id}"
 
             var inscope t <- qmacro_block <|
                 var $i(varname) <- $c(parse_fun)(parser)

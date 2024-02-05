@@ -22,6 +22,7 @@ require peg/meta_ast
 // To avoid overflow during template expansion
 options stack = 10000000
 
+var times_invoked: uint64 = 0 |> uint64()
 
 struct MacroRule
     [[do_not_delete]] rule: ExprLet? // from let rule: type
@@ -317,7 +318,7 @@ class ParseMacro : AstCallMacro
 
         var inscope gram: array<Definition>
 
-        var inscope gen <- [[ParserGenerator]]
+        var inscope gen <- [[ParserGenerator id = times_invoked++]]
 
         for mrule in rules_
             gram |> emplace(mrule |> transform)
@@ -335,6 +336,7 @@ class ParseMacro : AstCallMacro
 
         // Emit wrapper code
         var first_method_name = gram[0].name
+        let parse_main_func = "parse_{first_method_name}`id_{gen.id}"
 
         return <- qmacro_block <|
             var inscope parser : $t(gen.parser_type)
@@ -348,7 +350,7 @@ class ParseMacro : AstCallMacro
                 parser.input := inp
 
             var result : $t(gen.return_types[gram[0].name])
-            result <- $c("parse_{gram[0].name}")(parser)
+            result <- $c(parse_main_func)(parser)
 
             if result.success
                 invoke(blk, result.value, [[array<ParsingError>]])
@@ -365,7 +367,7 @@ class ParseMacro : AstCallMacro
             error_reporting_parser.error_reporting = true
             error_reporting_parser.longest_prefix = parser.longest_prefix
 
-            result <- $c("parse_{gram[0].name}")(error_reporting_parser)
+            result <- $c(parse_main_func)(error_reporting_parser)
             sort_unique(error_reporting_parser.errors)
 
             invoke(blk, result.value, error_reporting_parser.errors)
