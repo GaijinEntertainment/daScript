@@ -403,7 +403,8 @@ def set_rule_handle(var subrule_: Rule_?; handle: string)
 
             return
 
-    abort("Unreachable: `set_rule_handle`")
+    abort("Cannot bind this rule with 'as': `{subrule_ |> describe_rule()}`\n
+            HINT: set and iset do not interpret the data -- use text extraction \"\{\}\"") /*"{}"*/
 
 
 def get_action_block(var alternative: Alternative): ExpressionPtr
