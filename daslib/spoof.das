@@ -129,11 +129,20 @@ def instance_args ( invocation:string; blk:block<(var res : SpoofInvocation; err
             els |> push <| last
             return <- els
         var comma_separated_elements : string
-        rule(WS,element as e, WS, ",") <|
+        rule(WS,element as e, ",") <|
             return e
+        var sub_element : string
+        rule("#",string_ as e,commit) <|
+            return e
+        rule(string_ as e,commit) <|
+            return "\"{e}\""
+        rule("{set('a'..'z','A'..'Z','0'..'9','_',' ','\t','.','+','-','*','/','?','&','<','>')}" as e) <|
+            return e
+        rule("(",element as e,")") <|
+            return "({e})"
         var element : string
-        rule(ident_ as e) <|
-            return e
+        rule(sub_element as head, *sub_element as tail) <|
+            return head + tail |> join("")
         var class_name : string
         rule(WS,"{ident_}" as scope, "::", "{ident_}" as id) <|
             return scope + "::" + id
