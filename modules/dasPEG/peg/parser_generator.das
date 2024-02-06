@@ -450,7 +450,7 @@ def generate(var gen: ParserGenerator; var rule_: Rule): array<ExpressionPtr>
 
             var inscope return_type <- gen.return_types[gen.current_context] |> clone_type
 
-            let count = "{gen.rule_counter[name]}"
+            let count = "{gen.rule_counter[name]++}"
             let varname = "{name}{count}"
             let parse_fun = "parse_{name}`id_{gen.id}"
 
