@@ -129,11 +129,26 @@ def instance_args ( invocation:string; blk:block<(var res : SpoofInvocation; err
             els |> push <| last
             return <- els
         var comma_separated_elements : string
-        rule(WS,element as e, WS, ",") <|
+        rule(WS,element as e, ",") <|
             return e
+
+        var sub_element : string
+        rule("#(",WS,string_ as e,WS,")",commit) <|
+            print("E = {e}\n")
+            return e
+        rule(string_ as e,commit) <|
+            print("S = {e}\n")
+            return e
+        rule("{set('a'..'z','A'..'Z','0'..'9','_',' ','\t','.','+','-','*','/','?','&','<','>')}" as e) <|
+            return e
+        rule("(",element as e,")") <|
+            print("in brackets {e}\n")
+            return "({e})"
+
         var element : string
-        rule(ident_ as e) <|
-            return e
+        rule("{sub_element}" as head, "{*sub_element}" as tail) <|
+            print("head = {head}, tail = {tail}\n")
+            return head + tail |> join("")
         var class_name : string
         rule(WS,"{ident_}" as scope, "::", "{ident_}" as id) <|
             return scope + "::" + id
@@ -195,5 +210,6 @@ class SpoofInstanceReader : AstReaderMacro
         if !result.ok
             prog |> macro_error(info, "spoof instance error {result.result}")
             return ""
+        print("result: {result.result}\n")
         return result.result
 
