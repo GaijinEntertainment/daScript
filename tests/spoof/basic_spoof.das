@@ -12,8 +12,8 @@ let VALUE = 2
 %spoof_instance~template_basic_value(Foo_1,1)%%;         // number
 %spoof_instance~template_basic_value(Foo_2,VALUE)%%;     // literal
 %spoof_instance~template_basic_value(Foo_3,(2+1))%%;     // expression in brackets
-%spoof_instance~template_basic_value(Foo_4,"hello")%%;   // string
-%spoof_instance~template_basic_value(Foo_5,#("VALUE"))%%;  // unquoted literal
+%spoof_instance~template_basic_value(Foo_4,"hello\n")%%;   // string
+%spoof_instance~template_basic_value(Foo_5,#"VALUE")%%;  // unquoted literal
 
 [test]
 def test_basic_value ( t:T? )
@@ -24,7 +24,7 @@ def test_basic_value ( t:T? )
     let foo3 = Foo_3()
     t |> equal(3,foo3.value)
     let foo4 = Foo_4()
-    t |> equal("hello",foo4.value)
+    t |> equal("hello\n",foo4.value)
     let foo5 = Foo_5()
     t |> equal(VALUE,foo5.value)
 
