@@ -354,6 +354,7 @@ extern "C" {
         }
     }
 
+#if (defined(_MSC_VER) || defined(__linux__) || defined(__APPLE__)) && !defined(_GAMING_XBOX) && !defined(_DURANGO)
     void create_shared_library ( const char * objFilePath, const char * libraryName, const char * jitModuleObj ) {
         char cmd[1024];
 
@@ -374,7 +375,7 @@ extern "C" {
             snprintf(cmd, sizeof(cmd), "gcc -shared -o %s %s %s 2>&1", libraryName, objFilePath, jitModuleObj);
         #endif
 
-#ifdef _WIN32
+#if defined(_WIN32) || defined(_WIN64)
     #define popen _popen
     #define pclose _pclose
 #endif
@@ -411,6 +412,9 @@ extern "C" {
             das_to_stdout("Library %s made - ok\n", libraryName);
         }
     }
+#else
+    void create_shared_library ( const char * , const char * , const char *  ) { }
+#endif
 
     class Module_Jit : public Module {
     public:
