@@ -69,6 +69,7 @@ let public FN_JIT_DEBUG_ENTER       = "jit_debug_enter"
 let public FN_JIT_DEBUG_EXIT        = "jit_debug_exit"
 let public FN_JIT_DEBUG_LINE        = "jit_debug_line"
 
+let public LLVM_ENABLE_DLL_LOADING = true
 let public JIT_DLL_OUTPUT = "output.dll"
 let public DASCRIPT_LIBRARY = "libDaScript.lib" // liblibDaScript.a on linux
 

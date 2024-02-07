@@ -4320,24 +4320,26 @@ class JIT_LLVM : AstSimulateMacro
             var fake_visitor = new LlvmJitVisitor(funcs[0].at, ctx, false, null, null)
             for fun in funcs
                 fake_visitor->add_llvm_functions(fun)
-            // initialize fileinfo
-            fake_visitor->generate_fileinfo_constructor() |> add_constructor_function()
+            if LLVM_ENABLE_DLL_LOADING
+                // initialize fileinfo
+                fake_visitor->generate_fileinfo_constructor() |> add_constructor_function()
+                g_dynamic_lib_handle = load_dynamic_library(JIT_DLL_OUTPUT)
             unsafe
                 delete fake_visitor
-            g_dynamic_lib_handle = load_dynamic_library(JIT_DLL_OUTPUT)
             for fun in funcs
                 generate_llvm(ctx, fun)
             if !LLVMVerifyModule(g_mod, LLVMVerifierFailureAction LLVMPrintMessageAction, false)
                 g_failed = true
             optimize_llvm_module()
-            if g_dynamic_lib_handle != null
-                if g_loading_from_dll
-                    restore_modules2mnh()
-                    recreate_engine_extern_mappings()
-                else
-                    save_modules2mnh()
-            g_dynamic_lib_handle |> close_dynamic_library()
-            g_dynamic_lib_handle = null
+            if LLVM_ENABLE_DLL_LOADING
+                if g_dynamic_lib_handle != null
+                    if g_loading_from_dll // had no problems with changed semantic hash
+                        restore_modules2mnh()
+                        recreate_engine_extern_mappings()
+                    else
+                        save_modules2mnh()
+                        g_dynamic_lib_handle |> close_dynamic_library()
+                        g_dynamic_lib_handle = null
             for fun in funcs
                 var mangled_name = get_mangled_name(fun)
                 let MNH = hash(mangled_name)
