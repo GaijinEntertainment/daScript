@@ -12,6 +12,7 @@ require daslib/strings_boost
 require daslib/macro_boost
 require daslib/ast_boost
 require daslib/defer
+require math
 
 require detail/helpers
 require detail/colors
@@ -78,6 +79,33 @@ def into_terminal(var expr: ExpressionPtr): tuple<int;int>
     transfrom_error(expr.at, "Unknown rule passed to `rule` as argument {describe(expr)} into terminal")
     return <- [[auto 0, 0]]
 
+[macro_function]
+def flatten_intervals ( charset : array<tuple<from:int;to:int>>; invert:bool )
+    var chars : bool[256]
+
+    for r in charset
+        for i in max(r.from,0) .. min(r.to + 1,256)
+            chars[i] = true
+
+    if invert
+        for Ch in chars
+            Ch = !Ch
+
+    var result : array<tuple<int;int>>
+
+    var start : int = -1
+    for i in 0 .. 256
+        if chars[i]
+            if start == -1
+                start = i
+        else
+            if start != -1
+                result |> push <| [[auto start, i-1]]
+                start = -1
+    if start != -1
+        result |> push <| [[auto start, 256]]
+
+    return <- result
 
 [macro_function]
 def into_rule_(var expr: ExpressionPtr): Rule_?
@@ -185,17 +213,20 @@ def into_rule_(var expr: ExpressionPtr): Rule_?
         var subrule = (expr as ExprOp1).subexpr |> into_rule_
         return <- new [[Rule_ rule <- [[Rule not_rule = subrule ]]]]
 
-    elif expr is ExprCall && (expr as ExprCall).name == "set"
+    elif expr is ExprCall && ((expr as ExprCall).name == "set" || (expr as ExprCall).name == "not_set")
         // Matching set syntax set('1'..'9', 'a'..'z', 'A'..'Z', '_')
 
         var set = expr as ExprCall
+        let inverting = set.name == "not_set"
 
         var terms: array<tuple<int;int>>
 
         for arg in set.arguments
             terms |> push (arg |> into_terminal)
 
-        return <- new [[Rule_ rule <- [[Rule terminal <- [[Terminal charset <- terms]] ]] ]]
+        var fterms <- flatten_intervals(terms, inverting)
+
+        return <- new [[Rule_ rule <- [[Rule terminal <- [[Terminal charset <- fterms]] ]] ]]
 
     elif expr is ExprCall && (expr as ExprCall).name == "log"
         // Log partial matching: log("Here goes your message")
