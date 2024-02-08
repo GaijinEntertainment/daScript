@@ -9,9 +9,8 @@ module helpers shared
 require daslib/fio
 
 def abort(message: string)
-    print("{message}\n")
     false |> stackwalk <| false  // God I love the pipe syntax so much
-    unsafe { exit(1); }
+    panic(message)
 
 
 def iota

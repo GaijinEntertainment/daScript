@@ -351,19 +351,24 @@ class ParseMacro : AstCallMacro
 
         var inscope gen <- [[ParserGenerator id = times_invoked++]]
 
-        for mrule in rules_
-            gram |> emplace(mrule |> transform)
+        try
+            for mrule in rules_
+                gram |> emplace(mrule |> transform)
 
-        if failed_to_transform
-            return <- [[ExpressionPtr]]
+            if failed_to_transform
+                return <- [[ExpressionPtr]]
 
-        // Generate
+            // Generate
 
-        for mrule in rules_
-            for opt in mrule.options_
-                gen |> accept_option(opt) // Set the state of the generator up
+            for mrule in rules_
+                for opt in mrule.options_
+                    gen |> accept_option(opt) // Set the state of the generator up
 
-        gen |> generate_grammar(gram, name)
+            gen |> generate_grammar(gram, name)
+
+        recover
+            if failed_to_transform
+                return <- [[ExpressionPtr]]
 
         // Emit wrapper code
         var first_method_name = gram[0].name
