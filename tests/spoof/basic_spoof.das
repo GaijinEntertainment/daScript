@@ -14,6 +14,7 @@ let VALUE = 2
 %spoof_instance~template_basic_value(Foo_3,(2+1))%%;     // expression in brackets
 %spoof_instance~template_basic_value(Foo_4,"hello\n")%%;   // string
 %spoof_instance~template_basic_value(Foo_5,#"VALUE")%%;  // unquoted literal
+%spoof_instance~template_basic_value(Foo_6,\V\A\L\U\E + 1)%%;  // escaped literal
 
 [test]
 def test_basic_value ( t:T? )
@@ -27,5 +28,7 @@ def test_basic_value ( t:T? )
     t |> equal("hello\n",foo4.value)
     let foo5 = Foo_5()
     t |> equal(VALUE,foo5.value)
+    let foo6 = Foo_6()
+    t |> equal(VALUE + 1,foo6.value)
 
 

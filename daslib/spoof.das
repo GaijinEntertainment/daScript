@@ -132,14 +132,16 @@ def instance_args ( invocation:string; blk:block<(var res : SpoofInvocation; err
         rule(WS,element as e, ",") <|
             return e
         var sub_element : string
-        rule("#",string_ as e,commit) <|
+        rule("\\", "{set(0..255)}" as Ch) <|    // escape
+            return string(Ch)
+        rule("#",string_ as e,commit) <|        // contents of the string (do we need unescape?)
             return e
-        rule(string_ as e,commit) <|
+        rule(string_ as e,commit) <|            // "e"
             return "\"{e}\""
-        rule("{set('a'..'z','A'..'Z','0'..'9','_',' ','\t','.','+','-','*','/','?','&','<','>')}" as e) <|
-            return e
-        rule("(",element as e,")") <|
+        rule("(",element as e,")") <|           // (e)
             return "({e})"
+        rule("{not_set(')',',')}" as e) <|      // any character except ')' and ','
+            return e
         var element : string
         rule(sub_element as head, *sub_element as tail) <|
             return head + tail |> join("")
