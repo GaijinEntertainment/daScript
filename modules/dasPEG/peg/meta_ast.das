@@ -25,7 +25,7 @@ variant Terminal
     lit: string
 
     // Range: set('0'..'9', 'a'..'z')
-    charset: array<tuple<int; int>>
+    charset: tuple< chars : bool[256]; intervals : array< tuple<int;int> > >
 
     // Log: allows to send messages via `log("Parsed A: {a}")`
     log_msg: ExpressionPtr

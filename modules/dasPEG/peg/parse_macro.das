@@ -20,6 +20,8 @@ require detail/colors
 require peg/parser_generator
 require peg/meta_ast
 
+require math
+
 // To avoid overflow during template expansion
 options stack = 10000000
 
@@ -105,7 +107,7 @@ def flatten_intervals ( charset : array<tuple<from:int;to:int>>; invert:bool )
     if start != -1
         result |> push <| [[auto start, 256]]
 
-    return <- result
+    return <- [[auto chars, result]]
 
 [macro_function]
 def into_rule_(var expr: ExpressionPtr): Rule_?
@@ -224,9 +226,9 @@ def into_rule_(var expr: ExpressionPtr): Rule_?
         for arg in set.arguments
             terms |> push (arg |> into_terminal)
 
-        var fterms <- flatten_intervals(terms, inverting)
+        let inverting = expr as ExprCall . name == "not_set"
 
-        return <- new [[Rule_ rule <- [[Rule terminal <- [[Terminal charset <- fterms]] ]] ]]
+        return <- new [[Rule_ rule <- [[Rule terminal <- [[Terminal charset <- flatten_intervals(terms, inverting)]] ]] ]]
 
     elif expr is ExprCall && (expr as ExprCall).name == "log"
         // Log partial matching: log("Here goes your message")
