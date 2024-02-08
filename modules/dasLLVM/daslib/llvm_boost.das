@@ -13,8 +13,7 @@ require strings
 def LLVMIsVector3 ( typ:LLVMOpaqueType? ) : bool
     return (LLVMGetTypeKind(typ)==LLVMTypeKind LLVMVectorTypeKind) && (LLVMGetVectorSize(typ)==3u)
 
-def LLVMBuildLoadVector3 ( builder:LLVMOpaqueBuilder?; ptr:LLVMOpaqueValue?; name:string )
-    var typ = LLVMGetElementType(LLVMTypeOf(ptr))
+def LLVMBuildLoadVector3 ( builder:LLVMOpaqueBuilder?; var typ: LLVMOpaqueType?; ptr:LLVMOpaqueValue?; name:string )
     verify(LLVMGetVectorSize(typ)==3u)
     let elemT = LLVMGetElementType(typ)
     var ld = LLVMBuildLoad2(builder, LLVMVectorType(elemT, 4u), ptr, name)

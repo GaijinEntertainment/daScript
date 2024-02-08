@@ -743,13 +743,13 @@ def public build_broadcast_vector ( builder:LLVMOpaqueBuilder?; opType:TypeDeclP
 def public LLVMBuildLoadDataAligned ( builder:LLVMOpaqueBuilder?; ptr:LLVMOpaqueValue?; alignment:uint; name:string )
     var typ = LLVMGetElementType(LLVMTypeOf(ptr))
     if LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS && LLVMIsVector3(typ)
-        return LLVMBuildLoadVector3(builder, ptr, name)
+        return LLVMBuildLoadVector3(builder, typ, ptr, name)
     else
         return LLVMBuildLoadAligned(builder, ptr, alignment, name)
 
-def public LLVMBuildLoadData2Aligned ( builder:LLVMOpaqueBuilder?; typ:LLVMOpaqueType?; ptr:LLVMOpaqueValue?; alignment:uint; name:string )
+def public LLVMBuildLoadData2Aligned ( builder:LLVMOpaqueBuilder?; var typ:LLVMOpaqueType?; ptr:LLVMOpaqueValue?; alignment:uint; name:string )
     if LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS && alignment!=16u && LLVMIsVector3(typ)
-        return LLVMBuildLoadVector3(builder, ptr, name)
+        return LLVMBuildLoadVector3(builder, typ, ptr, name)
     else
         return LLVMBuildLoad2Aligned(builder, typ, ptr, alignment, name)
 
