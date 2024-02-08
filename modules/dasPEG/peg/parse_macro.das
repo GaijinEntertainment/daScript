@@ -226,8 +226,6 @@ def into_rule_(var expr: ExpressionPtr): Rule_?
         for arg in set.arguments
             terms |> push (arg |> into_terminal)
 
-        let inverting = expr as ExprCall . name == "not_set"
-
         return <- new [[Rule_ rule <- [[Rule terminal <- [[Terminal charset <- flatten_intervals(terms, inverting)]] ]] ]]
 
     elif expr is ExprCall && (expr as ExprCall).name == "log"
