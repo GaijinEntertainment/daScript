@@ -3136,7 +3136,7 @@ namespace das
         return false;
     }
 
-    bool isMatchingArgumentType (TypeDeclPtr argType, TypeDeclPtr passType) {
+    bool isMatchingArgumentType ( const TypeDeclPtr & argType, const TypeDeclPtr & passType ) {
         if (!passType) {
             return false;
         }
