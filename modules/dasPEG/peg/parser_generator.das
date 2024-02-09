@@ -729,8 +729,8 @@ def describe_terminal(term: Terminal): string
 
         if [[Terminal charset = $v(ranges) ]]
             var sb = build_string <| $ ( writer )
-                for i in range() <| min(ranges |> length, 3) // Don't print too many
-                    var range_ = ranges[i]
+                for i in range() <| min(ranges.intervals |> length, 3) // Don't print too many
+                    var range_ = ranges.intervals[i]
 
                     if range_._0 == range_._1
                         writer |> write <| " '{range_._0}' "
@@ -979,15 +979,8 @@ def generate_terminal(var gen: ParserGenerator; var terminal: Terminal): Express
             // Get the currect charachter from the stream
             var inscope rule_code: array<ExpressionPtr>
             rule_code |> append_block_new <| (qmacro_block <| {
-                let current_char = parser |> get_current_char;
-            })
-
-            for r in ranges // Check in it is inside any of the ranges
-                rule_code |> append_block_new <| generate_range_check(r)
-
-            // Otherwise return false
-            rule_code |> append_block_new <| (qmacro_block <| {
-                return false;
+                let ch = parser |> get_current_char;
+                return ch != -1 && $v(ranges.chars)[ch];
             })
 
             return <- qmacro_block <|
@@ -996,6 +989,9 @@ def generate_terminal(var gen: ParserGenerator; var terminal: Terminal): Express
 
                 if !$i(name)
                     if $v(gen.tracing)
+                        let ch = parser |> get_current_char
+                        if ch != -1 && (ch < 0 || ch >= 256)
+                            panic("failed character set check {ch}")
                         parser |> log_fail <| "Failed the range check for character {parser.index}"
 
                     if parser.error_reporting && !parser.suppress_errors |> back && parser.index == parser.longest_prefix

@@ -20,6 +20,8 @@ require detail/colors
 require peg/parser_generator
 require peg/meta_ast
 
+require math
+
 // To avoid overflow during template expansion
 options stack = 10000000
 
@@ -105,7 +107,7 @@ def flatten_intervals ( charset : array<tuple<from:int;to:int>>; invert:bool )
     if start != -1
         result |> push <| [[auto start, 256]]
 
-    return <- result
+    return <- [[auto chars, result]]
 
 [macro_function]
 def into_rule_(var expr: ExpressionPtr): Rule_?
@@ -224,9 +226,7 @@ def into_rule_(var expr: ExpressionPtr): Rule_?
         for arg in set.arguments
             terms |> push (arg |> into_terminal)
 
-        var fterms <- flatten_intervals(terms, inverting)
-
-        return <- new [[Rule_ rule <- [[Rule terminal <- [[Terminal charset <- fterms]] ]] ]]
+        return <- new [[Rule_ rule <- [[Rule terminal <- [[Terminal charset <- flatten_intervals(terms, inverting)]] ]] ]]
 
     elif expr is ExprCall && (expr as ExprCall).name == "log"
         // Log partial matching: log("Here goes your message")
@@ -351,19 +351,24 @@ class ParseMacro : AstCallMacro
 
         var inscope gen <- [[ParserGenerator id = times_invoked++]]
 
-        for mrule in rules_
-            gram |> emplace(mrule |> transform)
+        try
+            for mrule in rules_
+                gram |> emplace(mrule |> transform)
 
-        if failed_to_transform
-            return <- [[ExpressionPtr]]
+            if failed_to_transform
+                return <- [[ExpressionPtr]]
 
-        // Generate
+            // Generate
 
-        for mrule in rules_
-            for opt in mrule.options_
-                gen |> accept_option(opt) // Set the state of the generator up
+            for mrule in rules_
+                for opt in mrule.options_
+                    gen |> accept_option(opt) // Set the state of the generator up
 
-        gen |> generate_grammar(gram, name)
+            gen |> generate_grammar(gram, name)
+
+        recover
+            if failed_to_transform
+                return <- [[ExpressionPtr]]
 
         // Emit wrapper code
         var first_method_name = gram[0].name
