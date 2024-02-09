@@ -2740,10 +2740,18 @@ namespace das {
     }
 
     TypeDecl * Program::makeTypeDeclaration(const LineInfo &at, const string &name) {
-        auto structs = library.findStructure(name,thisModule.get());
-        auto handles = library.findAnnotation(name,thisModule.get());
-        auto enums = library.findEnum(name,thisModule.get());
-        auto aliases = library.findAlias(name,thisModule.get());
+
+        das::vector<das::StructurePtr> structs;
+        das::vector<das::AnnotationPtr> handles;
+        das::vector<das::EnumerationPtr> enums;
+        das::vector<das::TypeDeclPtr> aliases;
+        library.findWithCallback(name, thisModule.get(), [&](Module * pm, const string &name, Module * inWhichModule) {
+            library.findStructure(structs, pm, name, inWhichModule);
+            library.findAnnotation(handles, pm, name, inWhichModule);
+            library.findEnum(enums, pm, name, inWhichModule);
+            library.findAlias(aliases, pm, name, inWhichModule);
+        });
+
         if ( ((structs.size()!=0)+(handles.size()!=0)+(enums.size()!=0)+(aliases.size()!=0)) > 1 ) {
             string candidates = describeCandidates(structs);
             candidates += describeCandidates(handles, false);
