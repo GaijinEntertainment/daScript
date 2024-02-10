@@ -1537,6 +1537,7 @@ namespace das
         AnnotationArgumentList      options;
         CodeOfPolicies              policies;
         vector<tuple<Module *,string,string,bool,LineInfo>> allRequireDecl;
+        das_hash_map<uint64_t,TypeDecl *> astTypeInfo;
     };
 
     // module parsing routines

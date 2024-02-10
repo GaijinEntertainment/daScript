@@ -256,6 +256,17 @@ extern "C" {
     void jit_initialize_fileinfo ( void * dummy ) {
         *(FileInfo*)dummy = FileInfo{};
     }
+
+    void * jit_ast_typedecl ( uint64_t hash, Context * context, LineInfoArg * at ) {
+        if ( !context->thisProgram ) context->throw_error_at(at, "can't get ast_typeinfo, no program. is 'options rtti' missing?");
+        auto ti = context->thisProgram->astTypeInfo.find(hash);
+        if ( ti==context->thisProgram->astTypeInfo.end() ) {
+            context->throw_error_at(at, "can't find ast_typeinfo for hash %llx", hash);
+        }
+        auto info = ti->second;
+        info->addRef();
+        return (void*) info;
+    }
 }
 
     void *das_get_jit_exception() { return (void *)&jit_exception; }
@@ -287,6 +298,7 @@ extern "C" {
     void *das_get_jit_debug_exit() { return (void *)&jit_debug_exit; }
     void *das_get_jit_debug_line() { return (void *)&jit_debug_line; }
     void *das_get_jit_initialize_fileinfo () { return (void*)&jit_initialize_fileinfo; }
+    void *das_get_jit_ast_typedecl () { return (void*)&jit_ast_typedecl; }
 
     template <typename KeyType>
     int32_t jit_table_at ( Table * tab, KeyType key, int32_t valueTypeSize, Context * context ) {
@@ -495,6 +507,8 @@ extern "C" {
                 SideEffects::none, "das_get_jit_iterator_next");
             addExtern<DAS_BIND_FUN(das_get_jit_iterator_close)>(*this, lib, "get_jit_iterator_close",
                 SideEffects::none, "das_get_jit_iterator_close");
+            addExtern<DAS_BIND_FUN(das_get_jit_ast_typedecl)>(*this, lib, "get_jit_ast_typedecl",
+                SideEffects::none, "das_get_jit_ast_typedecl");
             addExtern<DAS_BIND_FUN(das_get_builtin_function_address)>(*this, lib,  "get_builtin_function_address",
                 SideEffects::none, "das_get_builtin_function_address")
                     ->args({"fn","context","at"});
