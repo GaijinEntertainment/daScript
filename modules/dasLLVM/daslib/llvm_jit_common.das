@@ -15,7 +15,7 @@ require fio
 require jit
 
 let public LLVM_JIT_ENABLED = true || llvm_config::llvm_jit_enabled()
-let public LLVM_JIT_ALL_FUNCTIONS = llvm_config::llvm_jit_all_functions()
+let public LLVM_JIT_ALL_FUNCTIONS = true ||llvm_config::llvm_jit_all_functions()
 
 let public LLVM_DEBUG_RESULT = false || llvm_config::llvm_debug_result()
 let public LLVM_DEBUG_EVERYTHING = false || llvm_config::llvm_debug_everything()
@@ -24,7 +24,7 @@ let public LLVM_DEBUG_TRACES = false
 let public LLVM_DEBUG_LINE_TRACES = false
 
 let public LLVM_JIT_LOG = false || LLVM_DEBUG_EVERYTHING
-let public LLVM_DEBUG_INFO = false || LLVM_DEBUG_EVERYTHING
+let public LLVM_DEBUG_INFO = false //  || LLVM_DEBUG_EVERYTHING
 
 let public LLVM_JIT_ALWAYS_SOLID = llvm_config::llvm_jit_always_solid()
 let public LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS = (
@@ -68,6 +68,7 @@ let public FN_JIT_ITERATOR_NEXT     = "jit_iterator_next"
 let public FN_JIT_DEBUG_ENTER       = "jit_debug_enter"
 let public FN_JIT_DEBUG_EXIT        = "jit_debug_exit"
 let public FN_JIT_DEBUG_LINE        = "jit_debug_line"
+let public FN_JIT_AST_TYPEDECL      = "jit_ast_typedecl"
 
 let public JIT_DLL_OUTPUT = "output.dll"
 let public DASCRIPT_LIBRARY = "libDaScript.lib" // liblibDaScript.a on linux
@@ -415,6 +416,14 @@ def public init_jit
     LLVMAddGlobalMapping(g_engine, jit_debug_line, get_jit_debug_line())
     LLVMAddAttributesToFunction(jit_debug_line, [[auto nounwind; willreturn]])
     LLVMAddAttributeToFunctionArgumentRange(jit_debug_line, urange(0,3), nocapture)
+    // void * jit_ast_typedecl ( uint64_t hash, Context * context, LineInfoArg * at )
+    var jit_ast_typedecl = LLVMAddFunction(g_mod, FN_JIT_AST_TYPEDECL,
+        LLVMFunctionType(LLVMPointerType(LLVMVoidType(),0u),
+            [[LLVMTypeRef LLVMInt64Type(); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
+    LLVMAddGlobalMapping(g_engine, jit_ast_typedecl, get_jit_ast_typedecl())
+    LLVMAddAttributesToFunction(jit_ast_typedecl, [[auto nounwind; willreturn]])
+    LLVMAddAttributeToFunctionArgumentRange(jit_ast_typedecl, urange(1,3), nocapture)
+
 
 def private build_jit_types
     // simfunction type

@@ -2,6 +2,9 @@ require dastest/testing_boost
 
 require jit
 require rtti
+require ast
+
+options rtti
 
 [jit]
 def take_it ( t : auto(TT) )
@@ -49,6 +52,12 @@ def test_rtti : StructInfo const?
     var f = new Foo()
     return class_info_stub(f)
 
+[jit]
+def test_ast_typedecl
+    var inscope info <- typeinfo(ast_typedecl type<int const>)
+    return <- info
+
+
 [test]
 def test_type_info ( t:T? )
     t |> run("typeinfo") <| @ ( t : T? )
@@ -60,3 +69,10 @@ def test_type_info ( t:T? )
     t |> run("typeinfo nojits") <| @ ( t : T? )
         t |> success ( is_jit_function(@@test_rtti) )
         print("rtti = {test_rtti()}\n")
+    t |> run("typeinfo ast_typedecl") <| @ ( t : T? )
+        t |> success ( is_jit_function(@@test_ast_typedecl) )
+        var inscope ccc <- test_ast_typedecl()
+        t |> equal ( ccc.baseType, Type tInt )
+        t |> equal ( ccc.flags.constant, true )
+        t |> equal ( "int const", ccc |> describe )
+

@@ -3739,6 +3739,21 @@ class LlvmJitVisitor : AstVisitor
         setE(expr,get_line_info_ptr(expr.at))
         return expr
 
+    def override visitExprTypeInfo(expr:smart_ptr<ExprTypeInfo>) : ExpressionPtr
+        if expr.trait=="ast_typedecl"
+            let mangled_name = expr.typeexpr |> get_mangled_name()
+            let hash_value = hash(mangled_name)
+            var params = [[auto
+                LLVMConstInt(LLVMInt64Type(), uint64(hash_value), 0); // hash
+                get_context_param();                                  // context
+                get_line_info_ptr(expr.at)                            // lineinfo
+            ]]
+            var cll = LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, FN_JIT_AST_TYPEDECL), params, "")
+            setE(expr, cll)
+        else
+            failed_E(expr, "typeinfo({expr.trait}) is not supported yet")
+        return expr
+
 ///////
 // misc
 ///////
@@ -4284,8 +4299,10 @@ class DisableJitVisitor : AstVisitor
     def TypeInfoVisitor
         disable = false
     def override preVisitExprTypeInfo(expr:smart_ptr<ExprTypeInfo>) : void
-        disable = true
-
+        if expr.trait=="ast_typedecl"
+            pass
+        else
+            disable = true
 
 [simulate_macro(name="jit_llvm")]
 class JIT_LLVM : AstSimulateMacro
