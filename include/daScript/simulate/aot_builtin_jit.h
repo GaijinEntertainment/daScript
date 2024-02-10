@@ -28,6 +28,7 @@ namespace das {
     void * das_get_jit_table_find ( int32_t baseType, Context * context, LineInfoArg * at );
     void * das_get_jit_str_cmp ();
     void * das_get_jit_str_cat ();
+    void * das_get_jit_ast_typedecl ();
     void * das_get_jit_prologue ();
     void * das_get_jit_epilogue ();
     void * das_get_jit_make_block ();

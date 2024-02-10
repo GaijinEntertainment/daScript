@@ -2914,6 +2914,7 @@ namespace das
     bool Program::simulate ( Context & context, TextWriter & logs, StackAllocator * sharedStack ) {
         auto time0 = ref_time_ticks();
         isSimulating = true;
+        astTypeInfo.clear();    // this is to be filled via typeinfo(ast_typedecl and such)
         auto disableInit = options.getBoolOption("no_init", policies.no_init);
         context.thisProgram = this;
         context.breakOnException |= policies.debugger;
