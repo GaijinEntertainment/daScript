@@ -60,7 +60,7 @@ struct ImplWrapCall<true,wrap,RetT(*)(Args...),fn> {                        // w
     static void static_call (typename remove_cv<RetT>::type * result, typename WrapType<Args>::type... args ) {
         typedef RetT (* FuncType)(typename WrapArgType<Args>::type...);
         auto fnPtr = reinterpret_cast<FuncType>(fn);
-        *result = fnPtr(args...);
+        new (result) RetT (fnPtr(args...));
     };
     static void * get_builtin_address() { return (void *) &static_call; }
 };
