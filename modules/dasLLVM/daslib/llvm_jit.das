@@ -3750,6 +3750,10 @@ class LlvmJitVisitor : AstVisitor
             ]]
             var cll = LLVMBuildCall(g_builder, LLVMGetNamedFunction(g_mod, FN_JIT_AST_TYPEDECL), params, "")
             setE(expr, cll)
+        elif expr.trait=="rtti_classinfo"
+            var tinfo = make_type_info_structure(*jit_context,expr.typeexpr)
+            var tptr = LLVMConstIntToPtr(LLVMConstInt(LLVMInt64Type(), intptr(tinfo), 0), LLVMPointerType(LLVMVoidType(), 0u))
+            setE(expr, tptr)
         else
             failed_E(expr, "typeinfo({expr.trait}) is not supported yet")
         return expr
@@ -4299,7 +4303,7 @@ class DisableJitVisitor : AstVisitor
     def TypeInfoVisitor
         disable = false
     def override preVisitExprTypeInfo(expr:smart_ptr<ExprTypeInfo>) : void
-        if expr.trait=="ast_typedecl"
+        if expr.trait=="ast_typedecl" || expr.trait=="rtti_classinfo"
             pass
         else
             disable = true

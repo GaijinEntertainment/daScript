@@ -52,11 +52,9 @@ def test_rtti : StructInfo const?
     var f = new Foo()
     return class_info_stub(f)
 
-[jit]
+[jit, sideeffects]
 def test_ast_typedecl
-    var inscope info <- typeinfo(ast_typedecl type<int const>)
-    return <- info
-
+    return <- typeinfo(ast_typedecl type<int const>)
 
 [test]
 def test_type_info ( t:T? )
@@ -71,8 +69,11 @@ def test_type_info ( t:T? )
         print("rtti = {test_rtti()}\n")
     t |> run("typeinfo ast_typedecl") <| @ ( t : T? )
         t |> success ( is_jit_function(@@test_ast_typedecl) )
-        var inscope ccc <- test_ast_typedecl()
+        var ccc <- test_ast_typedecl()
         t |> equal ( ccc.baseType, Type tInt )
         t |> equal ( ccc.flags.constant, true )
         t |> equal ( "int const", ccc |> describe )
+        delete ccc
+
+
 
