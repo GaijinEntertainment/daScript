@@ -367,8 +367,8 @@ class ParseMacro : AstCallMacro
         gen |> generate_grammar(gram, name)
 
         if g_failed
-            for e in g_errors
-                compiling_program() |> macro_error(expr.at, expr)
+            for err in g_errors
+                compiling_program() |> macro_error(expr.at, err)
             g_errors |> clear()
             return <- [[ExpressionPtr]]
 
