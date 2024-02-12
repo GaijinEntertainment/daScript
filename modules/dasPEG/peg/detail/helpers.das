@@ -9,14 +9,15 @@ module helpers shared
 require daslib/fio
 
 var public g_failed = false
+var public g_errors : array<string>
 
 def unreachable(message: string = "dasPEG: unreachable")
     stackwalk(false, false)
-    error(message)
+    panic(message)
 
 def abort(message: string)
     g_failed = true
-    error(message)
+    g_errors |> push(message)
 
 def iota
     return <- generator<int>() <|

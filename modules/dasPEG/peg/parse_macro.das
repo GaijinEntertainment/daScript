@@ -320,6 +320,7 @@ class ParseMacro : AstCallMacro
         return false
 
     def override visit ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprCallMacro> ) : ExpressionPtr
+        g_failed = false // refresh for new errors
 
         // Verify
 
@@ -366,6 +367,9 @@ class ParseMacro : AstCallMacro
         gen |> generate_grammar(gram, name)
 
         if g_failed
+            for e in g_errors
+                compiling_program() |> macro_error(expr.at, expr)
+            g_errors |> clear()
             return <- [[ExpressionPtr]]
 
         // Emit wrapper code

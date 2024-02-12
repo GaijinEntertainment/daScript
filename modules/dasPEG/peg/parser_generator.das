@@ -991,7 +991,7 @@ def generate_terminal(var gen: ParserGenerator; var terminal: Terminal): Express
                     if $v(gen.tracing)
                         let ch = parser |> get_current_char
                         if ch != -1 && (ch < 0 || ch >= 256)
-                            error("failed character set check {ch}")
+                            parser |> log_fail <| "failed character set check {ch}"
                         parser |> log_fail <| "Failed the range check for character {parser.index}"
 
                     if parser.error_reporting && !parser.suppress_errors |> back && parser.index == parser.longest_prefix
