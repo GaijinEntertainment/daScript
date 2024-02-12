@@ -8,10 +8,15 @@ module helpers shared
 
 require daslib/fio
 
-def abort(message: string)
-    false |> stackwalk <| false  // God I love the pipe syntax so much
-    panic(message)
+var public g_failed = false
 
+def unreachable()
+    stackwalk(false, false)
+    error("dasPEG: unreachable")
+
+def abort(message: string)
+    g_failed = true
+    error(message)
 
 def iota
     return <- generator<int>() <|

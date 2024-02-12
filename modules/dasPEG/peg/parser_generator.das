@@ -345,7 +345,7 @@ def get_rule_type(var gen: ParserGenerator; rule: Rule): TypeDeclPtr
         if [[Rule subrule = $v(subrule)]]
             abort("Infer subrule type")
 
-    abort("Unreachable `get_rule_type`")
+    unreachable("Unreachable `get_rule_type`")
     return <- [[TypeDeclPtr]]
 
 
@@ -515,7 +515,7 @@ def generate(var gen: ParserGenerator; var rule_: Rule): array<ExpressionPtr>
         if [[Rule option = $v(rule_)]]
             return <- gen |> generate_option(rule_)
 
-    abort("Unreachable")
+    unreachable()
     return <- [[array<ExpressionPtr>]]
 
 
@@ -766,7 +766,7 @@ def describe_terminal(term: Terminal): string
         if [[Terminal double_ = $v(handle)]]
             return "double_"
 
-    abort("Unreachable")
+    unreachable()
     return ""
 
 
@@ -810,7 +810,7 @@ def describe_rule(r: Rule_?): string
         if [[Rule option = $v(rule_)]]
             return "?{describe_rule(rule_)}"
 
-    abort("Unreachable")
+    unreachable()
     return ""
 
 
@@ -991,7 +991,7 @@ def generate_terminal(var gen: ParserGenerator; var terminal: Terminal): Express
                     if $v(gen.tracing)
                         let ch = parser |> get_current_char
                         if ch != -1 && (ch < 0 || ch >= 256)
-                            panic("failed character set check {ch}")
+                            error("failed character set check {ch}")
                         parser |> log_fail <| "Failed the range check for character {parser.index}"
 
                     if parser.error_reporting && !parser.suppress_errors |> back && parser.index == parser.longest_prefix
@@ -1138,7 +1138,7 @@ def generate_terminal(var gen: ParserGenerator; var terminal: Terminal): Express
                 var $i(handle) = $i(name)._1
 
 
-    abort("Unreachable")
+    unreachable()
     return <- [[ExpressionPtr]]
 
 
