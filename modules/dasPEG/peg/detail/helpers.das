@@ -10,9 +10,9 @@ require daslib/fio
 
 var public g_failed = false
 
-def unreachable()
+def unreachable(message: string = "dasPEG: unreachable")
     stackwalk(false, false)
-    error("dasPEG: unreachable")
+    error(message)
 
 def abort(message: string)
     g_failed = true
