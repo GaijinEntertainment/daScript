@@ -2583,7 +2583,21 @@ class LlvmJitVisitor : AstVisitor
     def get_llvm_type_for_varinto () : LLVMTypeRef
         let void_ptr = LLVMPointerType(LLVMVoidType(), 0u)
         return LLVMStructType() <| [[auto
-            get_llvm_type_for_typeinfo(); // VarInfo : TypeInfo
+        // Typeinfo fields
+            void_ptr;        // union StructInfo *, EnumInfo *, TypeAnnotation *
+            void_ptr;        // TypeInfo * firstType
+            void_ptr;        // TypeInfo * secondType
+            void_ptr;        // TypeInfo ** argTypes
+            void_ptr;        // const char ** argNames
+            void_ptr;        // uint32_t * dim
+            LLVMInt64Type(); // uint64_t hash
+            LLVMInt32Type(); // Type type (enum Type : uint32_t)
+            LLVMInt32Type(); // uint32_t enum flags: ref, refType, canCopy, etc
+            LLVMInt32Type(); // uint32_t size
+            LLVMInt32Type(); // uint32_t argCount
+            LLVMInt32Type(); // uint32_t dimSize
+
+        // Own fields
             LLVMFloat4Type(); // union { vec4f value; char * sValue }
             void_ptr;         // const char * name
             void_ptr;         // void * annotation_arguments
@@ -2682,16 +2696,22 @@ class LlvmJitVisitor : AstVisitor
         init_values |> push <| LLVMConstInt(LLVMInt32Type(), vi.offset       |> uint64(), 0)
         init_values |> push <| LLVMConstInt(LLVMInt32Type(), vi.nextGcField  |> uint64(), 0)
         let ty = get_llvm_type_for_varinto()
-        return LLVMConstNamedStruct(ty, unsafe(addr(init_values[0])), 6u)
+        return LLVMConstNamedStruct(ty, unsafe(addr(init_values[0])), init_values |> length |> uint())
 
     def create_struct_fields_global_array ( ei: VarInfo??; len: int )
         // not cached, probably don't need it
         var array_init : array<LLVMValueRef>
         let ty = get_llvm_type_for_varinto()
         for i in range(len)
-            array_init |> push <| get_value_for_varinfo(unsafe(ei[i]))
-        let my_struct_array_type = LLVMArrayType(ty, len |> uint())
-        return LLVMConstArray(my_struct_array_type, unsafe(addr(array_init[0])), len |> uint())
+            let varinfo = g_mod |> LLVMAddGlobal(ty, "varinfo")
+            varinfo |> LLVMSetInitializer <| get_value_for_varinfo(unsafe(ei[i]))
+            array_init |> push <| varinfo
+        let my_struct_array_type = LLVMArrayType(LLVMPointerType(ty, 0u), len |> uint())
+        let varinfo_array = LLVMAddGlobal(g_mod, my_struct_array_type, "varinfo_ptr_array")
+        let initializer = LLVMConstArray(LLVMPointerType(ty, 0u), unsafe(addr(array_init[0])), len |> uint())
+        LLVMSetInitializer(varinfo_array) <| initializer
+
+        return g_builder |> LLVMBuildPointerCast(varinfo_array, LLVMPointerType(LLVMVoidType(), 0u), "mycast")
 
     def create_enuminfo_global ( ei: EnumInfo? )
         if enuminfo_cache |> key_exists <| ei
@@ -2715,13 +2735,12 @@ class LlvmJitVisitor : AstVisitor
         var ty = get_llvm_type_for_structinfo()
         var struct_info_global = LLVMAddGlobal(g_mod, ty, "" /* no name */)
         structinfo_cache[si] = struct_info_global
-        debug("modname: {si.module_name}")
+        var void_ptr = LLVMPointerType(LLVMVoidType(), 0u)
         var init_values <- [{auto
             get_string_constant_ptr(g_builder, si.name);
             get_string_constant_ptr(g_builder, si.module_name);
             create_struct_fields_global_array(si.fields, si.count |> int());
-            // LLVMConstPointerNull(LLVMPointerType(LLVMVoidType(), 0u)); // NOTE: annotations are not used right now
-            LLVMConstPointerNull(LLVMPointerType(LLVMVoidType(), 0u)); // NOTE: annotations are not used right now
+            LLVMConstPointerNull(void_ptr); // NOTE: annotations are not used right now
 
             LLVMConstInt(LLVMInt64Type(), si.hash     |> uint64(), 0);
             LLVMConstInt(LLVMInt64Type(), si.init_mnh |> uint64(), 0);
@@ -2823,7 +2842,6 @@ class LlvmJitVisitor : AstVisitor
         var init_values <- get_typeinfo_fields(ti)
         var type_info_init = LLVMGetUndef(type_info_type)
         for i in urange(init_values |> length())
-            debug("Value {i}")
             type_info_init = g_builder |> LLVMBuildInsertValue(type_info_init, init_values[i], i, "")
         // let LineInfoInit = LLVMConstStruct(unsafe(addr(InitValues[0])), InitValues |> length() |> uint(), 0)
         LLVMSetInitializer(type_info_global, type_info_init)
