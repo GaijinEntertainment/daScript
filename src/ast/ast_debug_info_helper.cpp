@@ -256,6 +256,8 @@ namespace das {
             info->flags |= TypeInfo::flag_stringHeapGC;
         if ( type->firstType ) {
             info->firstType = makeTypeInfo(nullptr, type->firstType);
+        } else if ( type->baseType==Type::tStructure && type->structType->parent!=nullptr ) {
+            info->firstType = makeTypeInfo(nullptr, make_smart<TypeDecl>(type->structType->parent));
         } else {
             info->firstType = nullptr;
         }
