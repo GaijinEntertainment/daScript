@@ -15,6 +15,7 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <inttypes.h>
 
 namespace das {
 
@@ -261,7 +262,7 @@ extern "C" {
         if ( !context->thisProgram ) context->throw_error_at(at, "can't get ast_typeinfo, no program. is 'options rtti' missing?");
         auto ti = context->thisProgram->astTypeInfo.find(hash);
         if ( ti==context->thisProgram->astTypeInfo.end() ) {
-            context->throw_error_at(at, "can't find ast_typeinfo for hash %llx", hash);
+            context->throw_error_at(at, "can't find ast_typeinfo for hash %" PRIx64, hash);
         }
         auto info = ti->second;
         info->addRef();
