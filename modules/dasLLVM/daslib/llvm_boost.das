@@ -13,8 +13,7 @@ require strings
 def LLVMIsVector3 ( typ:LLVMOpaqueType? ) : bool
     return (LLVMGetTypeKind(typ)==LLVMTypeKind LLVMVectorTypeKind) && (LLVMGetVectorSize(typ)==3u)
 
-def LLVMBuildLoadVector3 ( builder:LLVMOpaqueBuilder?; ptr:LLVMOpaqueValue?; name:string )
-    var typ = LLVMGetElementType(LLVMTypeOf(ptr))
+def LLVMBuildLoadVector3 ( builder:LLVMOpaqueBuilder?; var typ: LLVMOpaqueType?; ptr:LLVMOpaqueValue?; name:string )
     verify(LLVMGetVectorSize(typ)==3u)
     let elemT = LLVMGetElementType(typ)
     var ld = LLVMBuildLoad2(builder, LLVMVectorType(elemT, 4u), ptr, name)
@@ -151,6 +150,18 @@ def LLVMFunctionType ( var ret_type:LLVMTypeRef; var param_types:array<LLVMTypeR
 
 def LLVMFunctionType ( var ret_type:LLVMTypeRef; isVariadic:bool = false )
     return LLVMFunctionType( ret_type, null, 0u, isVariadic ? 1 : 0)
+
+var interop_fn_type : LLVMTypeRef
+
+def LLVMInteropFunctionType
+    if interop_fn_type == null
+        interop_fn_type = LLVMFunctionType(LLVMFloat4Type(),
+            [[LLVMTypeRef
+                LLVMPointerType(LLVMVoidType(),0u);
+                LLVMPointerType(LLVMVoidType(),0u);
+                LLVMPointerType(LLVMFloat4Type(),0u)
+            ]])
+    return interop_fn_type
 
 def LLVMVerifyModule(mod:LLVMOpaqueModule?; action:LLVMVerifierFailureAction; fail:bool=true)
     var error : string
