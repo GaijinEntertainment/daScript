@@ -866,12 +866,9 @@ class LlvmJitVisitor : AstVisitor
         var ofunc = LLVMGetNamedGlobal(g_mod, mangled_name)
         if ofunc == null
             modules2mnh[expr.func._module] |> push(FunctionPtr(expr.func) |> get_mangled_name)
-
-            var fn_type = LLVMFunctionType(LLVMFloat4Type(),
-                    [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMFloat4Type(),0u)]])
+            var fn_type = LLVMInteropFunctionType()
             let funcPtrType = LLVMPointerType(fn_type, 0u)
             ofunc = LLVMAddGlobal(g_mod, funcPtrType, "{mangled_name}")
-            v2t[ofunc] = funcPtrType
             let FUNC_PTR = get_builtin_function_address(expr.func)
             if FUNC_PTR==null
                 failed_E(expr, "missing interop function pointer for {expr.func._module.name}::{expr.func.name}")
@@ -959,7 +956,8 @@ class LlvmJitVisitor : AstVisitor
                     args                                                   // args
                 }]
                 // Load the function pointer
-                var loaded_func = LLVMBuildLoad(g_builder, func, "");
+                var fn_type = LLVMInteropFunctionType()
+                var loaded_func = LLVMBuildLoad2(g_builder, LLVMPointerType(fn_type, 0u), func, "");
                 var ccall = LLVMBuildCall(g_builder, loaded_func, params, "")
                 if expr.func.result.isVoid
                     setE(expr, ccall)

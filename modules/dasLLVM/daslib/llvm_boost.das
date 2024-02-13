@@ -151,6 +151,18 @@ def LLVMFunctionType ( var ret_type:LLVMTypeRef; var param_types:array<LLVMTypeR
 def LLVMFunctionType ( var ret_type:LLVMTypeRef; isVariadic:bool = false )
     return LLVMFunctionType( ret_type, null, 0u, isVariadic ? 1 : 0)
 
+var interop_fn_type : LLVMTypeRef
+
+def LLVMInteropFunctionType
+    if interop_fn_type == null
+        interop_fn_type = LLVMFunctionType(LLVMFloat4Type(),
+            [[LLVMTypeRef
+                LLVMPointerType(LLVMVoidType(),0u);
+                LLVMPointerType(LLVMVoidType(),0u);
+                LLVMPointerType(LLVMFloat4Type(),0u)
+            ]])
+    return interop_fn_type
+
 def LLVMVerifyModule(mod:LLVMOpaqueModule?; action:LLVMVerifierFailureAction; fail:bool=true)
     var error : string
     if LLVMVerifyModule(mod, action, safe_addr(error)) != 0
