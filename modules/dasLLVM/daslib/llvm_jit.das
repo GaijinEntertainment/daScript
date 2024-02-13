@@ -959,7 +959,7 @@ class LlvmJitVisitor : AstVisitor
                     args                                                   // args
                 }]
                 // Load the function pointer
-                var loaded_func = LLVMBuildLoad2(g_builder, v2t[func], func, "");
+                var loaded_func = LLVMBuildLoad(g_builder, func, "");
                 var ccall = LLVMBuildCall(g_builder, loaded_func, params, "")
                 if expr.func.result.isVoid
                     setE(expr, ccall)
@@ -1209,7 +1209,7 @@ class LlvmJitVisitor : AstVisitor
             var inscope etype := subExprT.isPointer ? subExprT.firstType.firstType : subExprT.firstType
             var resType = LLVMPointerType(type_to_llvm_type(etype),0u)
             var res = build_select(if_not_null, resType) <|
-                var arr_ty := expr.subexpr._type.isPointer ? expr.subexpr._type.firstType : expr.subexpr._type
+                var inscope arr_ty := expr.subexpr._type.isPointer ? expr.subexpr._type.firstType : expr.subexpr._type
                 var arr = LLVMBuildLoad2(g_builder, type_to_llvm_type(arr_ty), tsrc, "arr")
                 var size = LLVMBuildExtractValue(g_builder, arr, uint(JIT_ARRAY SIZE), "array.size")
                 var if_range = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntULT, tidx, size, "array_range")
@@ -1227,8 +1227,8 @@ class LlvmJitVisitor : AstVisitor
             var inscope etype := subExprT.isPointer ? subExprT.firstType : subExprT
             var resType = LLVMPointerType(type_to_llvm_type(etype.secondType),0u)
             var res = build_select(if_not_null, resType) <|
-                var arr_ty := expr.subexpr._type.isPointer ? expr.subexpr._type.firstType : expr.subexpr._type
-                var tab = LLVMBuildLoad2(g_builder, type_to_llvm_type(arr_ty), tsrc, "tab")
+                var inscope tab_ty := expr.subexpr._type.isPointer ? expr.subexpr._type.firstType : expr.subexpr._type
+                var tab = LLVMBuildLoad2(g_builder, type_to_llvm_type(tab_ty), tsrc, "tab")
                 var tab_ptr = LLVMBuildPointerCast(g_builder, tsrc, LLVMPointerType(LLVMVoidType(),0u), "tab_ptr")
                 var at_tab = build_table_find(etype.firstType.baseType, tab_ptr, tidx, etype.secondType.sizeOf)
                 var if_found = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntNE, at_tab, LLVMConstInt(LLVMInt32Type(), uint64(-1), 0), "table_found")
