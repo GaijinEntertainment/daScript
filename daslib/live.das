@@ -144,7 +144,8 @@ def public watch_files
                 appTime[fname] = st.mtime
     return any
 
-def private set_new_context ( var ptr : smart_ptr<Context>; full_restart:bool = false )
+[export]
+def set_new_context ( var ptr : smart_ptr<Context>; full_restart:bool = false )
     to_log(LOG_TRACE, "LIVE: set new context {intptr(get_ptr(ptr))}\n")
     invoke_live("shutdown")
     if appPtr != null
