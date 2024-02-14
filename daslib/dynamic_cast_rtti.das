@@ -8,9 +8,13 @@ module dynamic_cast_rtti shared private
 require rtti
 require daslib/contracts
 require daslib/templates
+require daslib/templates_boost
+require daslib/ast_boost
 
 [expect_class(instance), template(otherclass)]
 def public is_instance_of(instance; otherclass : auto(TT) )
+    if instance==null
+        return false
     var refinfo = unsafe(reinterpret<TypeInfo?> typeinfo(rtti_classinfo type<TT - const>))
     var clsinfo = unsafe(reinterpret<TypeInfo?> instance.__rtti)
     while clsinfo != null
@@ -21,6 +25,8 @@ def public is_instance_of(instance; otherclass : auto(TT) )
 
 [expect_class(instance), template(otherclass)]
 def public dynamic_type_cast(instance; otherclass : auto(TT) ) : TT -const ?
+    if instance==null
+        return null
     var refinfo = unsafe(reinterpret<TypeInfo?> typeinfo(rtti_classinfo type<TT - const>))
     var clsinfo = unsafe(reinterpret<TypeInfo?> instance.__rtti)
     while clsinfo != null
@@ -28,5 +34,39 @@ def public dynamic_type_cast(instance; otherclass : auto(TT) ) : TT -const ?
             return unsafe(reinterpret<TT - const?> instance)
         clsinfo = clsinfo.firstType
     return null
+
+[expect_class(instance), template(otherclass)]
+def public force_dynamic_type_cast(instance; otherclass : auto(TT) ) : TT -const ?
+    if instance==null
+        panic("null pointer cast")
+    var refinfo = unsafe(reinterpret<TypeInfo?> typeinfo(rtti_classinfo type<TT - const>))
+    var clsinfo = unsafe(reinterpret<TypeInfo?> instance.__rtti)
+    while clsinfo != null
+        if clsinfo.hash == refinfo.hash
+            return unsafe(reinterpret<TT - const?> instance)
+        clsinfo = clsinfo.firstType
+    panic("not an instance of {typeinfo(typename type<TT-const>)}")
+    return null
+
+[variant_macro(name="ClassAsIs")]
+class ClassAsIs : AstVariantMacro
+    def override visitExprIsVariant     ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprIsVariant> ) : ExpressionPtr
+        assume vtype = expr.value._type
+        if !(vtype.isPointer && vtype.firstType!=null && vtype.firstType.isStructure && vtype.firstType.structType.flags.isClass)
+            return <- [[ExpressionPtr]]
+        var inscope atype <- new [[TypeDecl() at=expr.at, baseType=Type alias, alias:=expr.name]]
+        return <- qmacro(is_instance_of($e(expr.value), type<$t(atype)>))
+    def override visitExprAsVariant     ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprAsVariant> ) : ExpressionPtr
+        assume vtype = expr.value._type
+        if !(vtype.isPointer && vtype.firstType!=null && vtype.firstType.isStructure && vtype.firstType.structType.flags.isClass)
+            return <- [[ExpressionPtr]]
+        var inscope atype <- new [[TypeDecl() at=expr.at, baseType=Type alias, alias:=expr.name]]
+        return <- qmacro(force_dynamic_type_cast($e(expr.value), type<$t(atype)>))
+    def override visitExprSafeAsVariant ( prog:ProgramPtr; mod:Module?; expr:smart_ptr<ExprSafeAsVariant> ) : ExpressionPtr
+        assume vtype = expr.value._type
+        if !(vtype.isPointer && vtype.firstType!=null && vtype.firstType.isStructure && vtype.firstType.structType.flags.isClass)
+            return <- [[ExpressionPtr]]
+        var inscope atype <- new [[TypeDecl() at=expr.at, baseType=Type alias, alias:=expr.name]]
+        return <- qmacro(dynamic_type_cast($e(expr.value), type<$t(atype)>))
 
 

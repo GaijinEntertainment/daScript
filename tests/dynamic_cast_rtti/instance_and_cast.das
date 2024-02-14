@@ -23,6 +23,17 @@ def test_is_instance_of ( t:T? )
     t |> success ( !is_instance_of(f,type<Bar>) )
 
 [test]
+def test_is ( t:T? )
+    var f = new Foo()
+    f->hello()
+    var b = new Bar()
+    b->hello()
+    t |> success ( f is Foo )
+    t |> success ( b is Foo )
+    t |> success ( b is Bar )
+    t |> success ( !(f is Bar) )
+
+[test]
 def test_dynamic_type_cast ( t:T? )
     var f = new Foo()
     f->hello()
@@ -34,3 +45,13 @@ def test_dynamic_type_cast ( t:T? )
     t |> equal ( null, b2 )
 
 
+[test]
+def test_as ( t:T? )
+    var f = new Foo()
+    f->hello()
+    var b = new Bar()
+    b->hello()
+    var f2 = b as Foo
+    t |> equal ( intptr(b), intptr(f2) )
+    var b2 = f ?as Bar
+    t |> equal ( null, b2 )
