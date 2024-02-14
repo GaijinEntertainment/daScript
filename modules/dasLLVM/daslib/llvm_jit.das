@@ -3457,7 +3457,6 @@ class LlvmJitVisitor : AstVisitor
             fmna = (*astVisitor)->pre_make_block(reinterpret<smart_ptr<ExprBlock>> expr._block, thisFunc, captureType)
             var cblk = (*astVisitor)->before_function_entry()
             var carg = (*astVisitor)->get_capture_param()
-            // debug("123: {describe(LLVMTypeOf(carg))}")
             carg = LLVMBuildLoad2(astVisitor.g_builder, captureType, carg, "capture")
             for c,ai in capture,count()
                 var arg_i = LLVMBuildExtractValue(astVisitor.g_builder, carg, uint(ai+first_field_index), "var_{c.variable.name}_index_{ai}_stindex_{ai+first_field_index}")
