@@ -1337,7 +1337,6 @@ class LlvmJitVisitor : AstVisitor
         var right = getE(expr.right)
         assume opType = expr.right._type
         assume shiftType = expr.left._type
-        // var r2v_left = isReadModifyWriteOp2(expr.op) ? LLVMBuildLoadDataAligned(g_builder, left, uint(expr.left._type.alignOf), "") : null
         var r2v_left = isReadModifyWriteOp2(expr.op) ? LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr.left._type),
                                                             left, uint(expr.left._type.alignOf), "") : null
         // note: we need to handle vector vs scalar operations here
@@ -2522,7 +2521,8 @@ class LlvmJitVisitor : AstVisitor
 
 // ExprRef2Value
     def override visitExprRef2Value(expr:smart_ptr<ExprRef2Value>) : ExpressionPtr
-        setE(expr, LLVMBuildLoadDataAligned(g_builder, getE(expr.subexpr), uint(expr._type.alignOf), "r2v"))
+        setE(expr) <| LLVMBuildLoadData2Aligned(g_builder,
+            type_to_llvm_type(expr.subexpr._type), getE(expr.subexpr), uint(expr._type.alignOf), "r2v")
         return expr
 
 // ExprRef2Ptr
@@ -2646,7 +2646,8 @@ class LlvmJitVisitor : AstVisitor
             var LAMBDA = getE(expr.arguments[0])
             check_ptr_zero(LAMBDA, expr.at, "invoke null lambda")
             LAMBDA = LLVMBuildPointerCast(g_builder, LAMBDA, LLVMPointerType(g_t_lambda,0u), "LAMBDA ON HEAP")
-            LAMBDA = LLVMBuildLoad(g_builder, LAMBDA, "LAMBDA")
+            // debug("Lambda type: {describe(LLVMTypeOf(LAMBDA))}, {expr.at} : {describe(expr)}")
+            LAMBDA = LLVMBuildLoad2(g_builder, g_t_lambda, LAMBDA, "LAMBDA")
             var SIMFUNCTION = LLVMBuildExtractValue(g_builder, LAMBDA, uint(JIT_LAMBDA EVAL), "EVAL")
             SIMFUNCTION = LLVMBuildPointerCast(g_builder, SIMFUNCTION, LLVMPointerType(LLVMVoidType(), 0u), "")
             var params : array<LLVMOpaqueValue?>
@@ -2729,7 +2730,8 @@ class LlvmJitVisitor : AstVisitor
         var cond = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntNE, at_tab, LLVMConstInt(LLVMInt32Type(), uint64(-1), 0), "")
         var resType = LLVMPointerType(type_to_llvm_type(subExprT.secondType),0u)
         var res = build_select(cond, resType) <|
-            var tab = LLVMBuildLoad(g_builder, tsrc, "tab")
+            var inscope tab_ty := expr.arguments[0]._type.isPointer ? expr.arguments[0]._type.firstType : expr.arguments[0]._type
+            var tab = LLVMBuildLoad2(g_builder, type_to_llvm_type(tab_ty), tsrc, "tab")
             var data = LLVMBuildExtractValue(g_builder, tab, uint(JIT_TABLE DATA), "table.data")
             return LLVMBuildGEP(g_builder, data, at_tab, "table_at")
         lpipe <|
@@ -2828,7 +2830,7 @@ class LlvmJitVisitor : AstVisitor
         LLVMBuildStore2(g_builder, arg_cast_type, arg_val, arg_ptr)
         // now invoke
         var LAMBDA = LLVMBuildPointerCast(g_builder, lmb, LLVMPointerType(g_t_lambda,0u), "LAMBDA ON HEAP")
-        LAMBDA = LLVMBuildLoad(g_builder, LAMBDA, "LAMBDA")
+        LAMBDA = LLVMBuildLoad2(g_builder, g_t_lambda, LAMBDA, "LAMBDA")
         var SIMFUNCTION = LLVMBuildExtractValue(g_builder, LAMBDA, uint(JIT_LAMBDA FINALIZER), "FINALIZER")
         SIMFUNCTION = LLVMBuildPointerCast(g_builder, SIMFUNCTION, LLVMPointerType(LLVMVoidType(), 0u), "")
         var params : array<LLVMOpaqueValue?>
@@ -2875,7 +2877,7 @@ class LlvmJitVisitor : AstVisitor
                     let persistent = firstT.structType.flags.persistent
                     let isLambda = firstT.structType.flags.isLambda
                     var pps = LLVMBuildPointerCast(g_builder, se, LLVMPointerType(LLVMPointerType(LLVMVoidType(),0u),0u), "ppStruct")
-                    var ps = LLVMBuildLoad(g_builder, pps, "pStruct")
+                    var ps = LLVMBuildLoad2(g_builder, LLVMPointerType(LLVMVoidType(),0u), pps, "pStruct")
                     if persistent
                         var params = [[auto
                             ps;
@@ -2905,7 +2907,7 @@ class LlvmJitVisitor : AstVisitor
                     var structSize = getE(expr.sizeexpr)
                     let persistent = firstT.structType.flags.persistent
                     var pps = LLVMBuildPointerCast(g_builder, se, LLVMPointerType(LLVMPointerType(LLVMVoidType(),0u),0u), "ppClass")
-                    var ps = LLVMBuildLoad(g_builder, pps, "pClass")
+                    var ps = LLVMBuildLoad2(g_builder, LLVMPointerType(LLVMVoidType(),0u), pps, "pClass")
                     if persistent
                         var params = [[auto
                             ps;
@@ -2925,7 +2927,7 @@ class LlvmJitVisitor : AstVisitor
                 if fn_delete_handle == null
                     return expr
                 var pps = LLVMBuildPointerCast(g_builder, se, LLVMPointerType(LLVMPointerType(LLVMVoidType(),0u),0u), "")
-                var ps = LLVMBuildLoad(g_builder, pps, "delete`handle`{describe(firstT)}")
+                var ps = LLVMBuildLoad2(g_builder, LLVMPointerType(LLVMVoidType(),0u), pps, "delete`handle`{describe(firstT)}")
                 var params = [[auto[]
                     ps;
                     get_context_param()
@@ -3121,7 +3123,7 @@ class LlvmJitVisitor : AstVisitor
                 val_ptr = LLVMBuildPointerCast(g_builder, val_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
                 var field_ptr = LLVMBuildGEP(g_builder, val_ptr, LLVMConstInt(LLVMInt32Type(), uint64(fieldOffset), 0), "")
                 field_ptr = LLVMBuildPointerCast(g_builder, field_ptr, LLVMPointerType(res_type,0u), ".{expr.name}")
-                field_ptr = LLVMBuildLoad(g_builder, field_ptr, "")
+                field_ptr = LLVMBuildLoad2(g_builder, res_type, field_ptr, "")
                 return field_ptr
             lpipe <|
                 return  LLVMConstPointerNull(res_type)
@@ -3358,7 +3360,7 @@ class LlvmJitVisitor : AstVisitor
                 expr_res = cres
             elif expr.returnFlags.moveSemantics && expr.subexpr._type.isWorkhorseType
                 // return <- blah // where blah is string and such
-                var lres = LLVMBuildLoad(g_builder, getE(expr.subexpr), "")
+                var lres = LLVMBuildLoad2(g_builder, type_to_llvm_type(expr.subexpr._type), getE(expr.subexpr), "")
                 expr_res = lres
             else
                 expr_res = getE(expr.subexpr)
@@ -3378,7 +3380,7 @@ class LlvmJitVisitor : AstVisitor
         build_exit(expr.at)
 
         if has_afb
-            expr_res = LLVMBuildLoad(g_builder, expr_res, "return_temp_load")
+            expr_res = LLVMBuildLoad2(g_builder, type_to_llvm_abi_type(returnType), expr_res, "return_temp_load")
 
         build_epilogue()
 
@@ -3455,7 +3457,7 @@ class LlvmJitVisitor : AstVisitor
             fmna = (*astVisitor)->pre_make_block(reinterpret<smart_ptr<ExprBlock>> expr._block, thisFunc, captureType)
             var cblk = (*astVisitor)->before_function_entry()
             var carg = (*astVisitor)->get_capture_param()
-            carg = LLVMBuildLoad(astVisitor.g_builder, carg, "capture")
+            carg = LLVMBuildLoad2(astVisitor.g_builder, captureType, carg, "capture")
             for c,ai in capture,count()
                 var arg_i = LLVMBuildExtractValue(astVisitor.g_builder, carg, uint(ai+first_field_index), "var_{c.variable.name}_index_{ai}_stindex_{ai+first_field_index}")
                 if c.eref
@@ -3520,7 +3522,7 @@ class LlvmJitVisitor : AstVisitor
                     invoke <| a // we capture ref as ref, unless its argument. then ref is ref already
                 */
                 if c.variable._type.flags.ref
-                    v_ptr = LLVMBuildLoad(g_builder, v_ptr, "")
+                    v_ptr = LLVMBuildLoad2(g_builder, type_to_llvm_type(c.expression._type), v_ptr, "")
                     c.eref = true
 
             if v_ptr == null
