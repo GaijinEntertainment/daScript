@@ -132,7 +132,21 @@ namespace das {
         }
 
         template <typename TT>
-        AstSerializer & operator << ( vector<TT> & value );
+        AstSerializer & operator << ( vector<TT> & value ) {
+            tag("Vector");
+            if ( writing ) {
+                uint64_t size = value.size();
+                serializeAdaptiveSize64(size);
+            } else {
+                uint64_t size = 0;
+                serializeAdaptiveSize64(size);
+                value.resize(size);
+            }
+            for ( TT & v : value ) {
+                *this << v;
+            }
+            return *this;
+        }
 
         template <typename K, typename V, typename H, typename E>
         void serialize_hash_map ( das_hash_map<K, V, H, E> & value );
