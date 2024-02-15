@@ -2937,7 +2937,7 @@ class LlvmJitVisitor : AstVisitor
             else
                 failed_E(expr, "delete of pointer non-structure type is not supported yet {describe(subT)}")
         elif subT.isGoodLambdaType
-            var lse = LLVMBuildLoadDataAligned(g_builder, se, uint(subT.alignOf), "lambda_r2v")
+            var lse = LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr.subexpr._type), se, uint(subT.alignOf), "lambda_r2v")
             build_lambda_delete(lse, expr.at)
         else
             failed_E(expr, "delete of non-pointer type is not supported yet {describe(subT)}")
@@ -2959,14 +2959,14 @@ class LlvmJitVisitor : AstVisitor
             var tryV = tryGetV(expr.variable)
             if tryV != null
                 if expr.varFlags.r2v
-                    setE(expr, LLVMBuildLoadDataAligned(g_builder, tryV, uint(expr._type.alignOf), "var_block_r2v_{expr.variable.name}"))
+                    setE(expr, LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr.variable._type), tryV, uint(expr._type.alignOf), "var_block_r2v_{expr.variable.name}"))
                 else
                     setE(expr, tryV)
                 return expr
             var arg = LLVMGetParam(ffunc,uint(expr.argumentIndex))
             if expr.varFlags.r2v
                 if varType.flags.ref
-                    setE(expr, LLVMBuildLoadDataAligned(g_builder, arg, uint(expr._type.alignOf), "var_block_ref_r2v_{expr.variable.name}"))
+                    setE(expr, LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr.variable._type), arg, uint(expr._type.alignOf), "var_block_ref_r2v_{expr.variable.name}"))
                 else
                     setE(expr, arg)
             else
@@ -2976,23 +2976,23 @@ class LlvmJitVisitor : AstVisitor
             if expr.variable.flags.aliasCMRES
                 pass
             if varType.flags.ref
-                var_ptr = LLVMBuildLoadDataAligned(g_builder, var_ptr, uint(expr._type.alignOf), "")
+                var_ptr = LLVMBuildLoadData2Aligned(g_builder, LLVMPointerType(type_to_llvm_type(expr._type), 0u), var_ptr, uint(expr._type.alignOf), "")
             if expr.varFlags.r2v
-                setE(expr, LLVMBuildLoadDataAligned(g_builder, var_ptr, uint(expr._type.alignOf), "local_var_r2v_{expr.variable.name}"))
+                setE(expr, LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr._type), var_ptr, uint(expr._type.alignOf), "local_var_r2v_{expr.variable.name}"))
             else
                 setE(expr, var_ptr)
         elif expr.varFlags.argument // arguments
             var tryV = tryGetV(expr.variable)
             if tryV != null
                 if expr.varFlags.r2v
-                    setE(expr, LLVMBuildLoadDataAligned(g_builder, tryV, uint(expr._type.alignOf), "arg_var_r2v_{expr.variable.name}"))
+                    setE(expr, LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr._type), tryV, uint(expr._type.alignOf), "arg_var_r2v_{expr.variable.name}"))
                 else
                     setE(expr, tryV)
                 return expr
             var arg = LLVMGetParam(ffunc,uint(expr.argumentIndex))
             if expr.varFlags.r2v
                 if varType.flags.ref
-                    setE(expr, LLVMBuildLoadDataAligned(g_builder, arg, uint(expr._type.alignOf), "arg_var_ref_r2v_{expr.variable.name}"))
+                    setE(expr, LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr._type), arg, uint(expr._type.alignOf), "arg_var_ref_r2v_{expr.variable.name}"))
                 else
                     setE(expr, arg)
             else
@@ -3015,7 +3015,7 @@ class LlvmJitVisitor : AstVisitor
                         vptr = LLVMBuildGEP(g_builder, global_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.variable.stackTop), 0), "")
                     tryV = LLVMBuildPointerCast(g_builder, vptr, get_type_pointer(expr.variable._type), "global_var_{expr.variable.name}")
             if expr.varFlags.r2v
-                setE(expr, LLVMBuildLoadDataAligned(g_builder, tryV, uint(expr._type.alignOf), "global_var_r2v_{expr.variable.name}"))
+                setE(expr, LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr._type), tryV, uint(expr._type.alignOf), "global_var_r2v_{expr.variable.name}"))
             else
                 setE(expr, tryV)
         return expr
@@ -3051,7 +3051,7 @@ class LlvmJitVisitor : AstVisitor
             var field_ptr = LLVMBuildGEP(g_builder, val_ptr, LLVMConstInt(LLVMInt32Type(), uint64(field_offset), 0), "")
             field_ptr = LLVMBuildPointerCast(g_builder, field_ptr, get_type_pointer(expr._type), "{describe(expr.value._type,false,false,false)}.{expr.name}")
             if expr.fieldFlags.r2v
-                setE(expr, LLVMBuildLoadDataAligned(g_builder, field_ptr, uint(expr._type.alignOf), ""))
+                setE(expr, LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr._type), field_ptr, uint(expr._type.alignOf), ""))
             else
                 setE(expr, field_ptr)
         elif expr.value._type.isTuple
@@ -3065,7 +3065,7 @@ class LlvmJitVisitor : AstVisitor
             let argName = tuple_field_name(expr.value._type,expr.fieldIndex)
             field_ptr = LLVMBuildPointerCast(g_builder, field_ptr, get_type_pointer(expr.value._type.argTypes[expr.fieldIndex]), "{describe(expr.value._type,false,false,false)}.{argName}")
             if expr.fieldFlags.r2v
-                setE(expr, LLVMBuildLoadDataAligned(g_builder, field_ptr, uint(expr._type.alignOf), ""))
+                setE(expr, LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr._type), field_ptr, uint(expr._type.alignOf), ""))
             else
                 setE(expr, field_ptr)
         elif expr.value._type.isVariant
@@ -3079,7 +3079,7 @@ class LlvmJitVisitor : AstVisitor
             let argName = variant_field_name(expr.value._type,expr.fieldIndex)
             field_ptr = LLVMBuildPointerCast(g_builder, field_ptr, get_type_pointer(expr.value._type.argTypes[expr.fieldIndex]), "{describe(expr.value._type,false,false,false)}.{argName}")
             if expr.fieldFlags.r2v
-                setE(expr, LLVMBuildLoadDataAligned(g_builder, field_ptr, uint(expr._type.alignOf), ""))
+                setE(expr, LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr._type), field_ptr, uint(expr._type.alignOf), ""))
             else
                 setE(expr, field_ptr)
         else
@@ -3091,7 +3091,7 @@ class LlvmJitVisitor : AstVisitor
             var field_ptr = LLVMBuildGEP(g_builder, val_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.field.offset), 0), "")
             field_ptr = LLVMBuildPointerCast(g_builder, field_ptr, get_type_pointer(expr.field._type), "{describe(expr.value._type,false,false,false)}.{expr.field.name}")
             if expr.fieldFlags.r2v
-                setE(expr, LLVMBuildLoadDataAligned(g_builder, field_ptr, uint(expr._type.alignOf), ""))
+                setE(expr, LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr._type), field_ptr, uint(expr._type.alignOf), ""))
             else
                 setE(expr, field_ptr)
         return expr
@@ -3211,7 +3211,7 @@ class LlvmJitVisitor : AstVisitor
         fptr = LLVMBuildGEP(g_builder, fptr, LLVMConstInt(LLVMInt32Type(), uint64(field_offset), 0), "")
         fptr = LLVMBuildPointerCast(g_builder, fptr, LLVMPointerType(type_to_llvm_type(expr._type), 0u), "variant_field_ptr")
         if expr.fieldFlags.r2v
-            setE(expr, LLVMBuildLoadDataAligned(g_builder, fptr, uint(expr._type.alignOf), "variant_field"))
+            setE(expr, LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr._type), fptr, uint(expr._type.alignOf), "variant_field"))
         else
             setE(expr, fptr)
         return expr
@@ -3264,7 +3264,7 @@ class LlvmJitVisitor : AstVisitor
         assume opType = expr.subexpr._type
         if expr.op=="+++" || expr.op=="++"
             var expr_t = base_type_to_llvm_type(opType.baseType)
-            var sexpr_v = LLVMBuildLoadDataAligned(g_builder, sexpr, uint(expr.subexpr._type.alignOf), "")
+            var sexpr_v = LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr.subexpr._type), sexpr, uint(expr.subexpr._type.alignOf), "")
             var res_v : LLVMOpaqueValue?
             if opType.isInteger || (opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
                 res_v = LLVMBuildAdd(g_builder, sexpr_v, LLVMConstInt(expr_t,1ul,0), "")
@@ -3276,7 +3276,7 @@ class LlvmJitVisitor : AstVisitor
             setE(expr, sexpr_v)
         elif expr.op=="---" || expr.op=="--"
             var expr_t = base_type_to_llvm_type(opType.baseType)
-            var sexpr_v = LLVMBuildLoadDataAligned(g_builder, sexpr, uint(expr.subexpr._type.alignOf), "")
+            var sexpr_v = LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr.subexpr._type), sexpr, uint(expr.subexpr._type.alignOf), "")
             var res_v : LLVMOpaqueValue?
             if opType.isInteger || (opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
                 res_v = LLVMBuildSub(g_builder, sexpr_v, LLVMConstInt(expr_t,1ul,0), "")
@@ -3350,7 +3350,7 @@ class LlvmJitVisitor : AstVisitor
                 var resPtr = getE(expr.subexpr)
                 if expr.subexpr._type.flags.ref
                     // if source is ptr&, we empty it
-                    resPtr = LLVMBuildLoadDataAligned(g_builder, resPtr, uint(expr.subexpr._type.alignOf), "result_before_move")
+                    resPtr = LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(returnType), resPtr, uint(expr.subexpr._type.alignOf), "result_before_move")
                     if expr.returnFlags.moveSemantics
                         var subPtrType = LLVMPointerType(type_to_llvm_type(expr.subexpr._type.firstType), 0u)
                         LLVMBuildStore(g_builder, LLVMConstNull(subPtrType), getE(expr.subexpr))
