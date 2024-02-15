@@ -1359,7 +1359,7 @@ namespace das
         bool no_init = false;                           // if true, then no [init] is allowed in any shape or form
         bool strict_unsafe_delete = false;              // if true, delete of type which contains 'unsafe' delete is unsafe // TODO: enable when need be
         bool no_members_functions_in_struct = false;    // structures can't have member functions
-        bool no_local_class_members = false;            // members of the class can't be classes
+        bool no_local_class_members = true;             // members of the class can't be classes
     // environment
         bool no_optimizations = false;                  // disable optimizations, regardless of settings
         bool fail_on_no_aot = true;                     // AOT link failure is error
