@@ -3522,7 +3522,7 @@ class LlvmJitVisitor : AstVisitor
                     invoke <| a // we capture ref as ref, unless its argument. then ref is ref already
                 */
                 if c.variable._type.flags.ref
-                    v_ptr = LLVMBuildLoad2(g_builder, type_to_llvm_type(c.expression._type), v_ptr, "")
+                    v_ptr = LLVMBuildLoad2(g_builder, type_to_llvm_abi_type(c.variable._type), v_ptr, "")
                     c.eref = true
 
             if v_ptr == null
