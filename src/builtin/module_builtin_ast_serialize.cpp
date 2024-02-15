@@ -174,25 +174,6 @@ namespace das {
         }
     }
 
-    template <typename TT>
-    AstSerializer & AstSerializer::operator << ( vector<TT> & value ) {
-        tag("Vector");
-        if ( writing ) {
-            uint64_t size = value.size();
-            serializeAdaptiveSize64(size);
-        } else {
-            uint64_t size = 0;
-            serializeAdaptiveSize64(size);
-            value.resize(size);
-        }
-        for ( TT & v : value ) {
-            *this << v;
-        }
-        return *this;
-    }
-
-    template AstSerializer & AstSerializer::operator << ( vector<int64_t> & value );
-
     AstSerializer & AstSerializer::operator << ( string & str ) {
         tag("string");
         if ( writing ) {
@@ -779,7 +760,7 @@ namespace das {
     // This method creates concrete (i.e. non-polymorphic types without duplications)
     template<typename T>
     void AstSerializer::serializeSmartPtr( smart_ptr<T> & obj, das_hash_map<uint64_t, smart_ptr<T>> & objMap) {
-        uint64_t id = uint64_t(obj.get());
+        uint64_t id = uint64_t(uintptr_t(obj.get()));
         *this << id;
         if ( id == 0 ) {
             if ( !writing ) obj = nullptr;
@@ -1733,7 +1714,7 @@ namespace das {
                 } else {
                     void * addr = nullptr; ser << addr;
                     string name; ser << name;
-                    auto fun = ser.smartFunctionMap[(uint64_t) addr];
+                    auto fun = ser.smartFunctionMap[(uint64_t)(uintptr_t) addr];
                     string expected = fun->name;
                     DAS_VERIFYF(expected == name, "expected different function");
                     f->useFunctions.emplace(fun.get());
@@ -1759,7 +1740,7 @@ namespace das {
             f->useFunctions.reserve(size);
             for ( uint64_t i = 0; i < size; i++ ) {
                 void * addr = nullptr; ser << addr;
-                auto fun = ser.smartFunctionMap[(uint64_t) addr];
+                auto fun = ser.smartFunctionMap[(uint64_t)(uintptr_t) addr];
                 f->useFunctions.emplace(fun.get());
             }
         }
@@ -1803,7 +1784,7 @@ namespace das {
             f->useGlobalVariables.reserve(size);
             for ( uint64_t i = 0; i < size; i++ ) {
                 void * addr = nullptr; ser << addr;
-                auto fun = ser.smartVariableMap[(uint64_t) addr];
+                auto fun = ser.smartVariableMap[(uint64_t)(uintptr_t) addr];
                 f->useGlobalVariables.emplace(fun.get());
             }
         }
@@ -2070,8 +2051,8 @@ namespace das {
         }
     }
 
-        uint32_t AstSerializer::getVersion () {
-        static constexpr uint32_t currentVersion = 7;
+    uint32_t AstSerializer::getVersion () {
+        static constexpr uint32_t currentVersion = 9;
         return currentVersion;
     }
 
