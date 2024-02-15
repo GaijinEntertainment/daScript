@@ -529,6 +529,7 @@ namespace das {
     struct EnumInfoAnnotation : DebugInfoAnnotation<EnumValueInfo,EnumInfo> {
         EnumInfoAnnotation(ModuleLibrary & ml) : DebugInfoAnnotation ("EnumInfo", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
+            addField<DAS_BIND_MANAGED_FIELD(fields)>("fields");
             addField<DAS_BIND_MANAGED_FIELD(module_name)>("module_name");
             addField<DAS_BIND_MANAGED_FIELD(hash)>("hash");
             fieldType = makeType<EnumValueInfo>(*mlib);
@@ -556,6 +557,7 @@ namespace das {
         StructInfoAnnotation(ModuleLibrary & ml) : DebugInfoAnnotation ("StructInfo", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
             addField<DAS_BIND_MANAGED_FIELD(module_name)>("module_name");
+            addField<DAS_BIND_MANAGED_FIELD(firstGcField)>("firstGcField");
             addFieldEx ( "flags", "flags", offsetof(StructInfo, flags), makeStructInfoFlags());
             addField<DAS_BIND_MANAGED_FIELD(size)>("size");
             addField<DAS_BIND_MANAGED_FIELD(init_mnh)>("init_mnh");
@@ -564,6 +566,7 @@ namespace das {
         void init () {
             fieldType = makeType<VarInfo>(*mlib);
             fieldType->ref = true;
+            addField<DAS_BIND_MANAGED_FIELD(fields)>("fields");
         }
     };
 
@@ -628,6 +631,7 @@ namespace das {
         VarInfoAnnotation(ModuleLibrary & ml) : ManagedTypeInfoAnnotation ("VarInfo", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
             addField<DAS_BIND_MANAGED_FIELD(offset)>("offset");
+            addField<DAS_BIND_MANAGED_FIELD(nextGcField)>("nextGcField");
             addFieldEx ( "annotation_arguments", "annotation_arguments",
                         offsetof(VarInfo, annotation_arguments), makeType<const AnnotationArguments *>(ml) );
             // default values
