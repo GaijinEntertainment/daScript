@@ -1101,7 +1101,7 @@ class LlvmJitVisitor : AstVisitor
         ]]
         var tab_fun = LLVMGetNamedFunction(g_mod, FN_JIT_TABLE_FIND(ttype))
         if tab_fun==null
-            error("table_at {ttype} function not found")
+            error("table_find {ttype} function not found")
             return LLVMGetUndef(LLVMInt32Type())
         return LLVMBuildCall(g_builder, tab_fun, params, "")
 
@@ -1156,7 +1156,13 @@ class LlvmJitVisitor : AstVisitor
                 setE(expr, ptr_idx)
         elif subExprT.isGoodTableType
             var tab_ptr = LLVMBuildPointerCast(g_builder, tsrc, LLVMPointerType(LLVMVoidType(),0u), "tab_ptr")
-            var at_tab = build_table_at(subExprT.firstType.baseType, tab_ptr, tidx, subExprT.secondType.sizeOf)
+            var keyType : Type
+            if subExprT.firstType.isWorkhorseType
+                keyType = subExprT.firstType.baseType
+            else
+                var inscope uvt <- get_underlying_value_type(subExprT.firstType)
+                keyType = uvt.baseType
+            var at_tab = build_table_at(keyType, tab_ptr, tidx, subExprT.secondType.sizeOf)
             var tab = LLVMBuildLoad2(g_builder, type_to_llvm_type(expr.subexpr._type), tsrc, "tab")
             var data = LLVMBuildExtractValue(g_builder, tab, uint(JIT_TABLE DATA), "table.data")
             var ptr_idx = LLVMBuildGEP(g_builder, data, at_tab, "table_at")
@@ -1228,7 +1234,13 @@ class LlvmJitVisitor : AstVisitor
                 var inscope tab_ty := expr.subexpr._type.isPointer ? expr.subexpr._type.firstType : expr.subexpr._type
                 var tab = LLVMBuildLoad2(g_builder, type_to_llvm_type(tab_ty), tsrc, "tab")
                 var tab_ptr = LLVMBuildPointerCast(g_builder, tsrc, LLVMPointerType(LLVMVoidType(),0u), "tab_ptr")
-                var at_tab = build_table_find(etype.firstType.baseType, tab_ptr, tidx, etype.secondType.sizeOf)
+                var keyType : Type
+                if etype.firstType.isWorkhorseType
+                    keyType = etype.firstType.baseType
+                else
+                    var inscope uvt <- get_underlying_value_type(etype.firstType)
+                    keyType = uvt.baseType
+                var at_tab = build_table_find(keyType, tab_ptr, tidx, etype.secondType.sizeOf)
                 var if_found = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntNE, at_tab, LLVMConstInt(LLVMInt32Type(), uint64(-1), 0), "table_found")
                 var subRes = build_select(if_found, resType) <|
                     var data = LLVMBuildExtractValue(g_builder, tab, uint(JIT_TABLE DATA), "table.data")
@@ -2706,7 +2718,13 @@ class LlvmJitVisitor : AstVisitor
         var tidx = getE(expr.arguments[1])
         assume subExprT = expr.arguments[0]._type
         var tab_ptr = LLVMBuildPointerCast(g_builder, tsrc, LLVMPointerType(LLVMVoidType(),0u), "tab_ptr")
-        var res = build_table_erase(subExprT.firstType.baseType, tab_ptr, tidx, subExprT.secondType.sizeOf)
+        var keyType : Type
+        if subExprT.firstType.isWorkhorseType
+            keyType = subExprT.firstType.baseType
+        else
+            var inscope uvt <- get_underlying_value_type(subExprT.firstType)
+            keyType = uvt.baseType
+        var res = build_table_erase(keyType, tab_ptr, tidx, subExprT.secondType.sizeOf)
         setE(expr, res)
         return expr
 
@@ -2716,7 +2734,13 @@ class LlvmJitVisitor : AstVisitor
         var tidx = getE(expr.arguments[1])
         assume subExprT = expr.arguments[0]._type
         var tab_ptr = LLVMBuildPointerCast(g_builder, tsrc, LLVMPointerType(LLVMVoidType(),0u), "tab_ptr")
-        var res = build_table_at(subExprT.firstType.baseType, tab_ptr, tidx, 0)
+        var keyType : Type
+        if subExprT.firstType.isWorkhorseType
+            keyType = subExprT.firstType.baseType
+        else
+            var inscope uvt <- get_underlying_value_type(subExprT.firstType)
+            keyType = uvt.baseType
+        var res = build_table_at(keyType, tab_ptr, tidx, 0)
         setE(expr, res)
         return expr
 
@@ -2726,7 +2750,13 @@ class LlvmJitVisitor : AstVisitor
         var tidx = getE(expr.arguments[1])
         assume subExprT = expr.arguments[0]._type
         var tab_ptr = LLVMBuildPointerCast(g_builder, tsrc, LLVMPointerType(LLVMVoidType(),0u), "tab_ptr")
-        var at_tab = build_table_find(subExprT.firstType.baseType, tab_ptr, tidx, subExprT.secondType.sizeOf)
+        var keyType : Type
+        if subExprT.firstType.isWorkhorseType
+            keyType = subExprT.firstType.baseType
+        else
+            var inscope uvt <- get_underlying_value_type(subExprT.firstType)
+            keyType = uvt.baseType
+        var at_tab = build_table_find(keyType, tab_ptr, tidx, subExprT.secondType.sizeOf)
         var cond = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntNE, at_tab, LLVMConstInt(LLVMInt32Type(), uint64(-1), 0), "")
         var resType = LLVMPointerType(type_to_llvm_type(subExprT.secondType),0u)
         var res = build_select(cond, resType) <|
@@ -2745,7 +2775,13 @@ class LlvmJitVisitor : AstVisitor
         var tidx = getE(expr.arguments[1])
         assume subExprT = expr.arguments[0]._type
         var tab_ptr = LLVMBuildPointerCast(g_builder, tsrc, LLVMPointerType(LLVMVoidType(),0u), "tab_ptr")
-        var at_tab = build_table_find(subExprT.firstType.baseType, tab_ptr, tidx, subExprT.secondType.sizeOf)
+        var keyType : Type
+        if subExprT.firstType.isWorkhorseType
+            keyType = subExprT.firstType.baseType
+        else
+            var inscope uvt <- get_underlying_value_type(subExprT.firstType)
+            keyType = uvt.baseType
+        var at_tab = build_table_find(keyType, tab_ptr, tidx, subExprT.secondType.sizeOf)
         var res = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntNE, at_tab, LLVMConstInt(LLVMInt32Type(), uint64(-1), 0), "")
         setE(expr, res)
         return expr
