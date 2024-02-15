@@ -154,9 +154,8 @@ namespace das {
             const TBlock<void,TTemporary<TArray<VariablePtr>>> & block, Context * context, LineInfoArg * arg ) {
         if ( !program ) context->throw_error_at(arg, "expecting program");
         if ( !_name ) context->throw_error_at(arg, "expecting name");
-        string name = _name ? _name : "";
         string moduleName, varName;
-        splitTypeName(name, moduleName, varName);
+        splitTypeName(_name, moduleName, varName);
         vector<VariablePtr> result;
         auto inWhichModule = getCurrentSearchModule(program, func, moduleName.c_str());
         program->library.foreach([&](Module * mod) -> bool {
