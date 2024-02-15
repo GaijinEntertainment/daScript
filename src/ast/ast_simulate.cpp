@@ -1321,7 +1321,15 @@ namespace das
         auto val = arguments[1]->simulate(context);
         if ( arguments[0]->type->isGoodTableType() ) {
             uint32_t valueTypeSize = arguments[0]->type->secondType->getSizeOf();
-            return context.code->makeValueNode<SimNode_TableErase>(arguments[0]->type->firstType->baseType, at, cont, val, valueTypeSize);
+            Type valueType;
+            if ( arguments[0]->type->firstType->isWorkhorseType() ) {
+                valueType = arguments[0]->type->firstType->baseType;
+            } else {
+                auto valueT = arguments[0]->type->firstType->annotation->makeValueType();
+                valueType = valueT->baseType;
+                val = context.code->makeNode<SimNode_CastToWorkhorse>(at, val);
+            }
+            return context.code->makeValueNode<SimNode_TableErase>(valueType, at, cont, val, valueTypeSize);
         } else {
             DAS_ASSERTF(0, "we should not even be here. erase can only accept tables. infer type should have failed.");
             context.thisProgram->error("internal compilation error, generating erase for non-table type", "", "", at);
@@ -1334,7 +1342,15 @@ namespace das
         auto val = arguments[1]->simulate(context);
         if ( arguments[0]->type->isGoodTableType() ) {
             DAS_ASSERTF(arguments[0]->type->secondType->getSizeOf()==0,"Expecting value type size to be 0 for set insert");
-            return context.code->makeValueNode<SimNode_TableSetInsert>(arguments[0]->type->firstType->baseType, at, cont, val);
+            Type valueType;
+            if ( arguments[0]->type->firstType->isWorkhorseType() ) {
+                valueType = arguments[0]->type->firstType->baseType;
+            } else {
+                auto valueT = arguments[0]->type->firstType->annotation->makeValueType();
+                valueType = valueT->baseType;
+                val = context.code->makeNode<SimNode_CastToWorkhorse>(at, val);
+            }
+            return context.code->makeValueNode<SimNode_TableSetInsert>(valueType, at, cont, val);
         } else {
             DAS_ASSERTF(0, "we should not even be here. erase can only accept tables. infer type should have failed.");
             context.thisProgram->error("internal compilation error, generating erase for non-table type", "", "", at);
@@ -1347,7 +1363,15 @@ namespace das
         auto val = arguments[1]->simulate(context);
         if ( arguments[0]->type->isGoodTableType() ) {
             uint32_t valueTypeSize = arguments[0]->type->secondType->getSizeOf();
-            return context.code->makeValueNode<SimNode_TableFind>(arguments[0]->type->firstType->baseType, at, cont, val, valueTypeSize);
+            Type valueType;
+            if ( arguments[0]->type->firstType->isWorkhorseType() ) {
+                valueType = arguments[0]->type->firstType->baseType;
+            } else {
+                auto valueT = arguments[0]->type->firstType->annotation->makeValueType();
+                valueType = valueT->baseType;
+                val = context.code->makeNode<SimNode_CastToWorkhorse>(at, val);
+            }
+            return context.code->makeValueNode<SimNode_TableFind>(valueType, at, cont, val, valueTypeSize);
         } else {
             DAS_ASSERTF(0, "we should not even be here. find can only accept tables. infer type should have failed.");
             context.thisProgram->error("internal compilation error, generating find for non-table type", "", "", at);
@@ -1360,7 +1384,15 @@ namespace das
         auto val = arguments[1]->simulate(context);
         if ( arguments[0]->type->isGoodTableType() ) {
             uint32_t valueTypeSize = arguments[0]->type->secondType->getSizeOf();
-            return context.code->makeValueNode<SimNode_KeyExists>(arguments[0]->type->firstType->baseType, at, cont, val, valueTypeSize);
+            Type valueType;
+            if ( arguments[0]->type->firstType->isWorkhorseType() ) {
+                valueType = arguments[0]->type->firstType->baseType;
+            } else {
+                auto valueT = arguments[0]->type->firstType->annotation->makeValueType();
+                valueType = valueT->baseType;
+                val = context.code->makeNode<SimNode_CastToWorkhorse>(at, val);
+            }
+            return context.code->makeValueNode<SimNode_KeyExists>(valueType, at, cont, val, valueTypeSize);
         } else {
             DAS_ASSERTF(0, "we should not even be here. find can only accept tables. infer type should have failed.");
             context.thisProgram->error("internal compilation error, generating find for non-table type", "", "", at);
@@ -1629,7 +1661,15 @@ namespace das
             auto prv = subexpr->simulate(context);
             auto pidx = index->simulate(context);
             uint32_t valueTypeSize = subexpr->type->secondType->getSizeOf();
-            auto res = context.code->makeValueNode<SimNode_TableIndex>(subexpr->type->firstType->baseType, at, prv, pidx, valueTypeSize, 0);
+            Type keyType;
+            if ( subexpr->type->firstType->isWorkhorseType() ) {
+                keyType = subexpr->type->firstType->baseType;
+            } else {
+                auto keyValueType = subexpr->type->firstType->annotation->makeValueType();
+                keyType = keyValueType->baseType;
+                pidx = context.code->makeNode<SimNode_CastToWorkhorse>(at, pidx);
+            }
+            auto res = context.code->makeValueNode<SimNode_TableIndex>(keyType, at, prv, pidx, valueTypeSize, 0);
             if ( r2v ) {
                 return ExprRef2Value::GetR2V(context, at, type, res);
             } else {
@@ -1660,7 +1700,15 @@ namespace das
                 auto prv = subexpr->simulate(context);
                 auto pidx = index->simulate(context);
                 uint32_t valueTypeSize = seT->secondType->getSizeOf();
-                return context.code->makeValueNode<SimNode_SafeTableIndex>(seT->firstType->baseType, at, prv, pidx, valueTypeSize, 0);
+                Type valueType;
+                if ( seT->firstType->isWorkhorseType() ) {
+                    valueType = seT->firstType->baseType;
+                } else {
+                    auto valueT = seT->firstType->annotation->makeValueType();
+                    valueType = valueT->baseType;
+                    pidx = context.code->makeNode<SimNode_CastToWorkhorse>(at, pidx);
+                }
+                return context.code->makeValueNode<SimNode_SafeTableIndex>(valueType, at, prv, pidx, valueTypeSize, 0);
             } else if ( seT->dim.size() ) {
                 uint32_t range = seT->dim[0];
                 uint32_t stride = seT->getStride();
@@ -1687,7 +1735,15 @@ namespace das
                 auto prv = subexpr->simulate(context);
                 auto pidx = index->simulate(context);
                 uint32_t valueTypeSize = seT->secondType->getSizeOf();
-                return context.code->makeValueNode<SimNode_SafeTableIndex>(seT->firstType->baseType, at, prv, pidx, valueTypeSize, 0);
+                Type valueType;
+                if ( seT->firstType->isWorkhorseType() ) {
+                    valueType = seT->firstType->baseType;
+                } else {
+                    auto valueT = seT->firstType->annotation->makeValueType();
+                    valueType = valueT->baseType;
+                    pidx = context.code->makeNode<SimNode_CastToWorkhorse>(at, pidx);
+                }
+                return context.code->makeValueNode<SimNode_SafeTableIndex>(valueType, at, prv, pidx, valueTypeSize, 0);
             } else if ( seT->dim.size() ) {
                 uint32_t range = seT->dim[0];
                 uint32_t stride = seT->getStride();

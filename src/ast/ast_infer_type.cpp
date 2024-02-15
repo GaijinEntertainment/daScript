@@ -242,7 +242,7 @@ namespace das {
                         error("table key can't be declared as a reference, " + describeType(keyType), "", "",
                               keyType->at,CompilationError::invalid_table_type);
                     }
-                    if ( !keyType->isWorkhorseType() ) {
+                    if ( !(keyType->isWorkhorseType() || (keyType->baseType==Type::tHandle && !keyType->annotation->isRefType()) ) ) {
                         error("table key has to be declare as a basic 'hashable' type, " + describeType(keyType), "", "",
                               keyType->at,CompilationError::invalid_table_type);
                     }

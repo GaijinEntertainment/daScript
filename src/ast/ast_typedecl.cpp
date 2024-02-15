@@ -348,7 +348,7 @@ namespace das
             // if it's a table, infer table keys and values types separately
             TT->firstType = inferGenericType(autoT->firstType, initT->firstType, false, false, options);
             if ( !TT->firstType ) return nullptr;
-            if ( !TT->firstType->isWorkhorseType() ) return nullptr;            // table key has to be hashable too
+            if ( !TT->firstType->isTableKeyType() ) return nullptr;            // table key has to be hashable too
             TT->secondType = inferGenericType(autoT->secondType, initT->secondType, false, false, options);
             if ( !TT->secondType ) return nullptr;
         } else if ( autoT->baseType==Type::tBlock || autoT->baseType==Type::tFunction
@@ -1922,6 +1922,18 @@ namespace das
                 return true;
             default:
                 return false;
+        }
+    }
+
+    bool TypeDecl::isTableKeyType() const {
+        if ( dim.size() ) {
+            return false;
+        } else if ( isWorkhorseType() ) {
+            return true;
+        } else if ( baseType==Type::tHandle && annotation->isRefType()==false ) {
+            return true;
+        } else {
+            return false;
         }
     }
 
