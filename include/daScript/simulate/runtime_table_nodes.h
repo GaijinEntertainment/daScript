@@ -18,7 +18,7 @@ namespace das
             V_END();
         }
         SimNode * keyExpr;
-        virtual vec4f eval ( Context & context )             override { return keyExpr->eval(context); }
+        DAS_EVAL_ABI  virtual vec4f eval ( Context & context ) override { return keyExpr->eval(context); }
         virtual char *      evalPtr ( Context & context )    override { return cast<char *>::to(keyExpr->eval(context)); }
         virtual bool        evalBool ( Context & context )   override { return cast<bool>::to(keyExpr->eval(context)); }
         virtual float       evalFloat ( Context & context )  override { return cast<float>::to(keyExpr->eval(context)); }
