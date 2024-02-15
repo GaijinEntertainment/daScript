@@ -600,7 +600,7 @@ def intrinsic_das_ptr_set_add(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprC
     var value_stride = LLVMBuildMul(g_builder, arguments[1], arguments[2], "")
     var ptr_value = LLVMBuildLoad2(g_builder, type_to_llvm_type(expr.arguments[0]._type), arguments[0], "")
     var ptr_value_i8 = LLVMBuildPointerCast(g_builder, ptr_value, LLVMPointerType(LLVMInt8Type(), 0u), "")
-    var ptr_value_stride = LLVMBuildGEP(g_builder, ptr_value_i8, value_stride, "")
+    var ptr_value_stride = LLVMBuildGEP2(g_builder, LLVMInt8Type(), ptr_value_i8, value_stride, "")
     var vptr_value_stride = LLVMBuildPointerCast(g_builder, ptr_value_stride, type_to_llvm_type(expr.arguments[0]._type), "")
     return LLVMBuildStore(g_builder, vptr_value_stride, arguments[0])
 
@@ -610,7 +610,7 @@ def intrinsic_das_ptr_add(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallF
     var value_stride = LLVMBuildMul(g_builder, arguments[1], arguments[2], "")
     var ptr_value = arguments[0]
     var ptr_value_i8 = LLVMBuildPointerCast(g_builder, ptr_value, LLVMPointerType(LLVMInt8Type(), 0u), "")
-    var ptr_value_stride = LLVMBuildGEP(g_builder, ptr_value_i8, value_stride, "")
+    var ptr_value_stride = LLVMBuildGEP2(g_builder, LLVMInt8Type(), ptr_value_i8, value_stride, "")
     return LLVMBuildPointerCast(g_builder, ptr_value_stride, type_to_llvm_type(expr.arguments[0]._type), "")
 
 def intrinsic_memset8(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
@@ -630,10 +630,10 @@ def build_cmove_nz(g_builder:LLVMOpaqueBuilder?; val:LLVMOpaqueValue?; blk:block
     LLVMPositionBuilderAtEnd(g_builder, skip)
 
 def build_write_n_values(g_builder:LLVMOpaqueBuilder?; iptr,value,ival,isize:LLVMOpaqueValue?; count:int)
-    var ptr = LLVMBuildLoad(g_builder, iptr, "")
+    var ptr = LLVMBuildLoad2(g_builder, LLVMPointerType(LLVMInt4Type(),0u), iptr, "")
     for i in range(count)
         LLVMSetAlignment(LLVMBuildStore(g_builder, value, ptr),4u)
-        ptr = LLVMBuildGEP(g_builder, ptr, LLVMConstInt(LLVMInt64Type(), 1ul, 0), "")
+        ptr = LLVMBuildGEP2(g_builder, LLVMInt4Type(), ptr, LLVMConstInt(LLVMInt64Type(), 1ul, 0), "")
     LLVMBuildStore(g_builder, LLVMBuildSub(g_builder, ival, LLVMConstInt(LLVMInt64Type(), uint64(count), 0), ""), isize)
     LLVMBuildStore(g_builder, ptr, iptr)
 
@@ -767,11 +767,15 @@ def intrinsic_math_gather(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallF
     var iy = LLVMBuildExtractElement(g_builder, arguments[1], LLVMConstInt(LLVMInt32Type(), 1ul, 0), "")
     var iz = LLVMBuildExtractElement(g_builder, arguments[1], LLVMConstInt(LLVMInt32Type(), 2ul, 0), "")
     var iw = LLVMBuildExtractElement(g_builder, arguments[1], LLVMConstInt(LLVMInt32Type(), 3ul, 0), "")
+    var xaddr = LLVMBuildGEP2(g_builder, LLVMInt32Type(), ptr, ix, "")
+    var yaddr = LLVMBuildGEP2(g_builder, LLVMInt32Type(), ptr, iy, "")
+    var zaddr = LLVMBuildGEP2(g_builder, LLVMInt32Type(), ptr, iz, "")
+    var waddr = LLVMBuildGEP2(g_builder, LLVMInt32Type(), ptr, iw, "")
     var res = LLVMGetUndef(LLVMInt4Type())
-    res = LLVMBuildInsertElement(g_builder, res, LLVMBuildLoad2(g_builder, LLVMInt32Type(), LLVMBuildGEP(g_builder, ptr, ix, ""), ""), LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
-    res = LLVMBuildInsertElement(g_builder, res, LLVMBuildLoad2(g_builder, LLVMInt32Type(), LLVMBuildGEP(g_builder, ptr, iy, ""), ""), LLVMConstInt(LLVMInt32Type(), 1ul, 0), "")
-    res = LLVMBuildInsertElement(g_builder, res, LLVMBuildLoad2(g_builder, LLVMInt32Type(), LLVMBuildGEP(g_builder, ptr, iz, ""), ""), LLVMConstInt(LLVMInt32Type(), 2ul, 0), "")
-    res = LLVMBuildInsertElement(g_builder, res, LLVMBuildLoad2(g_builder, LLVMInt32Type(), LLVMBuildGEP(g_builder, ptr, iw, ""), ""), LLVMConstInt(LLVMInt32Type(), 3ul, 0), "")
+    res = LLVMBuildInsertElement(g_builder, res, LLVMBuildLoad2(g_builder, LLVMInt32Type(), xaddr, ""), LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
+    res = LLVMBuildInsertElement(g_builder, res, LLVMBuildLoad2(g_builder, LLVMInt32Type(), yaddr, ""), LLVMConstInt(LLVMInt32Type(), 1ul, 0), "")
+    res = LLVMBuildInsertElement(g_builder, res, LLVMBuildLoad2(g_builder, LLVMInt32Type(), zaddr, ""), LLVMConstInt(LLVMInt32Type(), 2ul, 0), "")
+    res = LLVMBuildInsertElement(g_builder, res, LLVMBuildLoad2(g_builder, LLVMInt32Type(), waddr, ""), LLVMConstInt(LLVMInt32Type(), 3ul, 0), "")
     return res
 
 def intrinsic_math_store_neq_mask(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
@@ -799,19 +803,19 @@ def intrinsic_math_gather_store_stride(g_builder:LLVMOpaqueBuilder?; expr:smart_
     var iy = LLVMBuildExtractElement(g_builder, arguments[3], LLVMConstInt(LLVMInt32Type(), 1ul, 0), "")
     var iz = LLVMBuildExtractElement(g_builder, arguments[3], LLVMConstInt(LLVMInt32Type(), 2ul, 0), "")
     var iw = LLVMBuildExtractElement(g_builder, arguments[3], LLVMConstInt(LLVMInt32Type(), 3ul, 0), "")
-    var X = LLVMBuildLoad2(g_builder, LLVMInt32Type(), LLVMBuildGEP(g_builder, ptr, ix, ""), "")
-    var Y = LLVMBuildLoad2(g_builder, LLVMInt32Type(), LLVMBuildGEP(g_builder, ptr, iy, ""), "")
-    var Z = LLVMBuildLoad2(g_builder, LLVMInt32Type(), LLVMBuildGEP(g_builder, ptr, iz, ""), "")
-    var W = LLVMBuildLoad2(g_builder, LLVMInt32Type(), LLVMBuildGEP(g_builder, ptr, iw, ""), "")
+    var X = LLVMBuildLoad2(g_builder, LLVMInt32Type(), LLVMBuildGEP2(g_builder, LLVMInt32Type(), ptr, ix, ""), "")
+    var Y = LLVMBuildLoad2(g_builder, LLVMInt32Type(), LLVMBuildGEP2(g_builder, LLVMInt32Type(), ptr, iy, ""), "")
+    var Z = LLVMBuildLoad2(g_builder, LLVMInt32Type(), LLVMBuildGEP2(g_builder, LLVMInt32Type(), ptr, iz, ""), "")
+    var W = LLVMBuildLoad2(g_builder, LLVMInt32Type(), LLVMBuildGEP2(g_builder, LLVMInt32Type(), ptr, iw, ""), "")
     // write it out
     var stride = arguments[1]
     var out = LLVMBuildPointerCast(g_builder, arguments[0], LLVMPointerType(LLVMInt32Type(),0u), "")
     LLVMBuildStore(g_builder, X, out)
-    out = LLVMBuildGEP(g_builder, out, stride, "")
+    out = LLVMBuildGEP2(g_builder, LLVMInt32Type(), out, stride, "")
     LLVMBuildStore(g_builder, Y, out)
-    out = LLVMBuildGEP(g_builder, out, stride, "")
+    out = LLVMBuildGEP2(g_builder, LLVMInt32Type(), out, stride, "")
     LLVMBuildStore(g_builder, Z, out)
-    out = LLVMBuildGEP(g_builder, out, stride, "")
+    out = LLVMBuildGEP2(g_builder, LLVMInt32Type(), out, stride, "")
     LLVMBuildStore(g_builder, W, out)
     return out
 
@@ -851,19 +855,19 @@ def intrinsic_math_u8x4_gather_store(g_builder:LLVMOpaqueBuilder?; expr:smart_pt
     var iy = LLVMBuildExtractElement(g_builder, arguments[2], LLVMConstInt(LLVMInt32Type(), 1ul, 0), "")
     var iz = LLVMBuildExtractElement(g_builder, arguments[2], LLVMConstInt(LLVMInt32Type(), 2ul, 0), "")
     var iw = LLVMBuildExtractElement(g_builder, arguments[2], LLVMConstInt(LLVMInt32Type(), 3ul, 0), "")
-    var X = LLVMBuildLoad2(g_builder, LLVMInt8Type(), LLVMBuildGEP(g_builder, ptr, ix, ""), "")
-    var Y = LLVMBuildLoad2(g_builder, LLVMInt8Type(), LLVMBuildGEP(g_builder, ptr, iy, ""), "")
-    var Z = LLVMBuildLoad2(g_builder, LLVMInt8Type(), LLVMBuildGEP(g_builder, ptr, iz, ""), "")
-    var W = LLVMBuildLoad2(g_builder, LLVMInt8Type(), LLVMBuildGEP(g_builder, ptr, iw, ""), "")
+    var X = LLVMBuildLoad2(g_builder, LLVMInt8Type(), LLVMBuildGEP2(g_builder, LLVMInt8Type(), ptr, ix, ""), "")
+    var Y = LLVMBuildLoad2(g_builder, LLVMInt8Type(), LLVMBuildGEP2(g_builder, LLVMInt8Type(), ptr, iy, ""), "")
+    var Z = LLVMBuildLoad2(g_builder, LLVMInt8Type(), LLVMBuildGEP2(g_builder, LLVMInt8Type(), ptr, iz, ""), "")
+    var W = LLVMBuildLoad2(g_builder, LLVMInt8Type(), LLVMBuildGEP2(g_builder, LLVMInt8Type(), ptr, iw, ""), "")
     // write it out
     var stride = LLVMConstInt(LLVMInt32Type(), 1ul, 0)
     var out = LLVMBuildPointerCast(g_builder, arguments[0], LLVMPointerType(LLVMInt8Type(),0u), "")
     LLVMBuildStore(g_builder, X, out)
-    out = LLVMBuildGEP(g_builder, out, stride, "")
+    out = LLVMBuildGEP2(g_builder, LLVMInt8Type(), out, stride, "")
     LLVMBuildStore(g_builder, Y, out)
-    out = LLVMBuildGEP(g_builder, out, stride, "")
+    out = LLVMBuildGEP2(g_builder, LLVMInt8Type(), out, stride, "")
     LLVMBuildStore(g_builder, Z, out)
-    out = LLVMBuildGEP(g_builder, out, stride, "")
+    out = LLVMBuildGEP2(g_builder, LLVMInt8Type(), out, stride, "")
     LLVMBuildStore(g_builder, W, out)
     return out
 

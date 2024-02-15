@@ -346,7 +346,7 @@ class LlvmJitVisitor : AstVisitor
         var wargs : array<LLVMOpaqueValue?>
         var args = LLVMGetParam(wfunc,1u)
         for a,ai in arguments, count()
-            var arg_ptr = LLVMBuildGEP(g_builder, args, LLVMConstInt(LLVMInt32Type(), uint64(ai), 0), "arg_ptr_{ai}")
+            var arg_ptr = LLVMBuildGEP2(g_builder, LLVMFloat4Type(), args, LLVMConstInt(LLVMInt32Type(), uint64(ai), 0), "arg_ptr_{ai}")
             var arg_type = type_to_llvm_abi_type(a._type)
             arg_ptr = LLVMBuildPointerCast(g_builder, arg_ptr, LLVMPointerType(arg_type, 0u), "")
             var arg_v : LLVMOpaqueValue?
@@ -813,7 +813,7 @@ class LlvmJitVisitor : AstVisitor
             for a,ai in arguments,range(from_ai,100500)
                 if ai<0
                     continue
-                var arg_ptr = LLVMBuildGEP(g_builder, args, LLVMConstInt(LLVMInt32Type(), uint64(ai), 0), "call_arg_{ai}_ptr")
+                var arg_ptr = LLVMBuildGEP2(g_builder, LLVMFloat4Type(), args, LLVMConstInt(LLVMInt32Type(), uint64(ai), 0), "call_arg_{ai}_ptr")
                 var arg_val = getE(a)
                 var arg_cast_type = type_to_llvm_abi_type(a._type)
                 if a._type.isRef
@@ -1110,7 +1110,7 @@ class LlvmJitVisitor : AstVisitor
         if elemType.isVectorType && elemType.vectorDim==3
             var data_bytes = LLVMBuildPointerCast(g_builder, data, LLVMPointerType(LLVMInt8Type(), 0u), "")
             var data_idx = LLVMBuildMul(g_builder, tidx, LLVMConstInt(LLVMInt32Type(), 12ul, 0), "")
-            ptr_idx = LLVMBuildGEP(g_builder, data_bytes, data_idx, "")
+            ptr_idx = LLVMBuildGEP2(g_builder, LLVMInt8Type(), data_bytes, data_idx, "")
             ptr_idx = LLVMBuildPointerCast(g_builder, ptr_idx, LLVMPointerType(type_to_llvm_type(elemType), 0u), name)
         else
             ptr_idx = LLVMBuildGEP2(g_builder, type_to_llvm_type(elemType), data, tidx, name)
@@ -2152,7 +2152,7 @@ class LlvmJitVisitor : AstVisitor
             mkv_ptr = get_cmres_param()
             mkv_ptr = LLVMBuildPointerCast(g_builder, mkv_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
             if expr.extraOffset != 0u
-                mkv_ptr = LLVMBuildGEP(g_builder, mkv_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.extraOffset), 0), "")
+                mkv_ptr = LLVMBuildGEP2(g_builder, LLVMInt8Type(), mkv_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.extraOffset), 0), "")
         else
             mkv_ptr = tryE(expr) <|
                 var vtype = type_to_llvm_type(expr._type)
@@ -2163,7 +2163,7 @@ class LlvmJitVisitor : AstVisitor
                     s_ptr = LLVMBuildPointerCast(g_builder, s_ptr, LLVMPointerType(LLVMInt8Type(),0u), "mkv_local_sp_{expr.stackTop}")
                 return s_ptr
             if expr.extraOffset != 0u
-                mkv_ptr = LLVMBuildGEP(g_builder, mkv_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.extraOffset), 0), "mkv_local_sp_{expr.stackTop}_eo_{expr.extraOffset}")
+                mkv_ptr = LLVMBuildGEP2(g_builder, LLVMInt8Type(), mkv_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.extraOffset), 0), "mkv_local_sp_{expr.stackTop}_eo_{expr.extraOffset}")
         let stride = expr.makeType.stride
         if stride!=0 && length(expr.variants)==0
             let total = int(expr.variants |> length)
@@ -2182,9 +2182,9 @@ class LlvmJitVisitor : AstVisitor
         let offset =  index*stride
         var v_ptr = getE(expr)
         verify(v_ptr!=null && LLVMIsUndef(v_ptr)==0,"make variant field, but no pointer")
-        let index_ptr = LLVMBuildGEP(g_builder, v_ptr, LLVMConstInt(LLVMInt32Type(), uint64(offset), 0), "")
+        let index_ptr = LLVMBuildGEP2(g_builder, LLVMInt8Type(), v_ptr, LLVMConstInt(LLVMInt32Type(), uint64(offset), 0), "")
         LLVMBuildStore2(g_builder, LLVMInt32Type(), LLVMConstInt(LLVMInt32Type(), uint64(field_index), 0), index_ptr)
-        let field_ptr = LLVMBuildGEP(g_builder, v_ptr, LLVMConstInt(LLVMInt32Type(), uint64(offset + field_offset), 0), "")
+        let field_ptr = LLVMBuildGEP2(g_builder, LLVMInt8Type(), v_ptr, LLVMConstInt(LLVMInt32Type(), uint64(offset + field_offset), 0), "")
         if decl.value |> isMakeLocal
             var val = unsafe(reinterpret<ExprMakeLocal?> get_ptr(decl.value))
             val.extraOffset = uint(offset + field_offset) + expr.extraOffset
@@ -2206,7 +2206,7 @@ class LlvmJitVisitor : AstVisitor
         let stride = expr.makeType.stride
         let offset =  index*stride
         var v_ptr = getE(expr)
-        v_ptr = LLVMBuildGEP(g_builder, v_ptr, LLVMConstInt(LLVMInt32Type(), uint64(offset+field_offset), 0), "[{index}].{decl.name}")
+        v_ptr = LLVMBuildGEP2(g_builder, LLVMInt8Type(), v_ptr, LLVMConstInt(LLVMInt32Type(), uint64(offset+field_offset), 0), "[{index}].{decl.name}")
         v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, get_type_pointer(expr.makeType.argTypes[field_index]), "")
         if decl.value |> isMakeLocal
             pass // do nothign. we already taken care of makeLocal in preVisitExprMakeVariantField
@@ -2254,7 +2254,7 @@ class LlvmJitVisitor : AstVisitor
             mks_ptr = get_cmres_param()
             mks_ptr = LLVMBuildPointerCast(g_builder, mks_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
             if expr.extraOffset != 0u
-                mks_ptr = LLVMBuildGEP(g_builder, mks_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.extraOffset), 0), "")
+                mks_ptr = LLVMBuildGEP2(g_builder, LLVMInt8Type(), mks_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.extraOffset), 0), "")
         else
             mks_ptr = tryE(expr) <|
                 var vtype = type_to_llvm_type(expr._type)
@@ -2265,7 +2265,7 @@ class LlvmJitVisitor : AstVisitor
                     // s_ptr = LLVMBuildPointerCast(g_builder, s_ptr, LLVMPointerType(LLVMInt8Type(),0u), "mks_local_sp_{expr.stackTop}")
                 return s_ptr
             if expr.extraOffset != 0u
-                mks_ptr = LLVMBuildGEP(g_builder, mks_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.extraOffset), 0), "mks_local_sp_{expr.stackTop}_eo_{expr.extraOffset}")
+                mks_ptr = LLVMBuildGEP2(g_builder, LLVMInt8Type(), mks_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.extraOffset), 0), "mks_local_sp_{expr.stackTop}_eo_{expr.extraOffset}")
         let stride = expr.makeType.stride
         if !expr.makeFlags.doesNotNeedInit && !expr.makeFlags.initAllFields && stride!=0
             let total = int(expr.structs |> length)
@@ -2280,7 +2280,7 @@ class LlvmJitVisitor : AstVisitor
             mks_ptr = LLVMBuildPointerCast(g_builder, mks_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
             let stride = expr.makeType.stride
             let offset = index*stride
-            mks_ptr = LLVMBuildGEP(g_builder, mks_ptr, LLVMConstInt(LLVMInt32Type(), uint64(offset), 0), "")
+            mks_ptr = LLVMBuildGEP2(g_builder, LLVMInt8Type(), mks_ptr, LLVMConstInt(LLVMInt32Type(), uint64(offset), 0), "")
             mks_ptr = LLVMBuildPointerCast(g_builder, mks_ptr, LLVMPointerType(type_to_llvm_type(expr.makeType),0u), "")
             callConstructor(expr, mks_ptr)
 
@@ -2301,7 +2301,7 @@ class LlvmJitVisitor : AstVisitor
         var v_ptr = getE(expr)
         verify(v_ptr!=null && LLVMIsUndef(v_ptr)==0,"make struct field, but no pointer")
         v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
-        let field_ptr = LLVMBuildGEP(g_builder, v_ptr, LLVMConstInt(LLVMInt32Type(), uint64(offset), 0), "")
+        let field_ptr = LLVMBuildGEP2(g_builder, LLVMInt8Type(), v_ptr, LLVMConstInt(LLVMInt32Type(), uint64(offset), 0), "")
         if decl.value |> isMakeLocal
             var val = unsafe(reinterpret<ExprMakeLocal?> get_ptr(decl.value))
             val.extraOffset = uint(offset) + expr.extraOffset
@@ -2333,7 +2333,7 @@ class LlvmJitVisitor : AstVisitor
         let offset =  index*stride + field_offset
         var v_ptr = getE(expr)
         v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
-        v_ptr = LLVMBuildGEP(g_builder, v_ptr, LLVMConstInt(LLVMInt32Type(), uint64(offset), 0), "[{index}].{decl.name}")
+        v_ptr = LLVMBuildGEP2(g_builder, LLVMInt8Type(), v_ptr, LLVMConstInt(LLVMInt32Type(), uint64(offset), 0), "[{index}].{decl.name}")
         v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, get_type_pointer(field_type), "")
         if decl.value |> isMakeLocal
             pass // do nothign. we already taken care of makeLocal in preVisitExprMakeStructField
@@ -2358,7 +2358,7 @@ class LlvmJitVisitor : AstVisitor
             mks_ptr = get_cmres_param()
             mks_ptr = LLVMBuildPointerCast(g_builder, mks_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
             if expr.extraOffset != 0u
-                mks_ptr = LLVMBuildGEP(g_builder, mks_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.extraOffset), 0), "")
+                mks_ptr = LLVMBuildGEP2(g_builder, LLVMInt8Type(), mks_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.extraOffset), 0), "")
         else
             mks_ptr = tryE(expr) <|
                 var vtype = type_to_llvm_type(expr._type)
@@ -2369,7 +2369,7 @@ class LlvmJitVisitor : AstVisitor
                     s_ptr = LLVMBuildPointerCast(g_builder, s_ptr, LLVMPointerType(LLVMInt8Type(),0u), "mka_local_sp_{expr.stackTop}_at_{int(expr.at.line)}_")
                 return s_ptr
             if expr.extraOffset != 0u
-                mks_ptr = LLVMBuildGEP(g_builder, mks_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.extraOffset), 0), "mka_local_sp_{expr.stackTop}_eo_{expr.extraOffset}_at_{int(expr.at.line)}_")
+                mks_ptr = LLVMBuildGEP2(g_builder, LLVMInt8Type(), mks_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.extraOffset), 0), "mka_local_sp_{expr.stackTop}_eo_{expr.extraOffset}_at_{int(expr.at.line)}_")
         let stride = expr.makeType.stride
         if !expr.makeFlags.doesNotNeedInit && !expr.makeFlags.initAllFields && stride!=0
             let total = int(expr.values |> length)
@@ -2383,7 +2383,7 @@ class LlvmJitVisitor : AstVisitor
         let offset =  index*stride
         var v_ptr = getE(expr)
         verify(v_ptr!=null && LLVMIsUndef(v_ptr)==0,"make array index, but no pointer")
-        let record_ptr = LLVMBuildGEP(g_builder, v_ptr, LLVMConstInt(LLVMInt32Type(), uint64(offset), 0), "")
+        let record_ptr = LLVMBuildGEP2(g_builder, LLVMInt8Type(), v_ptr, LLVMConstInt(LLVMInt32Type(), uint64(offset), 0), "")
         if init |> isMakeLocal
             var val = unsafe(reinterpret<ExprMakeLocal?> get_ptr(init))
             val.extraOffset = uint(offset) + expr.extraOffset
@@ -2400,7 +2400,7 @@ class LlvmJitVisitor : AstVisitor
         let stride = expr.makeType.stride
         let offset =  index*stride
         var v_ptr = getE(expr)
-        v_ptr = LLVMBuildGEP(g_builder, v_ptr, LLVMConstInt(LLVMInt32Type(), uint64(offset), 0), "[{index}]")
+        v_ptr = LLVMBuildGEP2(g_builder, LLVMInt8Type(), v_ptr, LLVMConstInt(LLVMInt32Type(), uint64(offset), 0), "[{index}]")
         v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, get_type_pointer(expr.recordType), "")
         if init |> isMakeLocal
             pass // do nothign. we already taken care of makeLocal in preVisitExprMakeArrayField
@@ -2425,7 +2425,7 @@ class LlvmJitVisitor : AstVisitor
             mks_ptr = get_cmres_param()
             mks_ptr = LLVMBuildPointerCast(g_builder, mks_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
             if expr.extraOffset != 0u
-                mks_ptr = LLVMBuildGEP(g_builder, mks_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.extraOffset), 0), "")
+                mks_ptr = LLVMBuildGEP2(g_builder, LLVMInt8Type(), mks_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.extraOffset), 0), "")
         else
             mks_ptr = tryE(expr) <|
                 var vtype = type_to_llvm_type(expr._type)
@@ -2436,7 +2436,7 @@ class LlvmJitVisitor : AstVisitor
                     s_ptr = LLVMBuildPointerCast(g_builder, s_ptr, LLVMPointerType(LLVMInt8Type(),0u), "mkt_local_sp_{expr.stackTop}")
                 return s_ptr
             if expr.extraOffset != 0u
-                mks_ptr = LLVMBuildGEP(g_builder, mks_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.extraOffset), 0), "mkt_local_sp_{expr.stackTop}_eo_{expr.extraOffset}")
+                mks_ptr = LLVMBuildGEP2(g_builder, LLVMInt8Type(), mks_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.extraOffset), 0), "mkt_local_sp_{expr.stackTop}_eo_{expr.extraOffset}")
         let stride = expr.makeType.stride
         if !expr.makeFlags.doesNotNeedInit && !expr.makeFlags.initAllFields && stride!=0
             let total = int(expr.values |> length)
@@ -2449,7 +2449,7 @@ class LlvmJitVisitor : AstVisitor
         let offset = get_tuple_field_offset(expr.makeType,index)
         var v_ptr = getE(expr)
         verify(v_ptr!=null && LLVMIsUndef(v_ptr)==0,"make struct field, but no pointer")
-        let field_ptr = LLVMBuildGEP(g_builder, v_ptr, LLVMConstInt(LLVMInt32Type(), uint64(offset), 0), "")
+        let field_ptr = LLVMBuildGEP2(g_builder, LLVMInt8Type(), v_ptr, LLVMConstInt(LLVMInt32Type(), uint64(offset), 0), "")
         if init |> isMakeLocal
             var val = unsafe(reinterpret<ExprMakeLocal?> get_ptr(init))
             val.extraOffset = uint(offset) + expr.extraOffset
@@ -2472,7 +2472,7 @@ class LlvmJitVisitor : AstVisitor
         let offset = get_tuple_field_offset(expr.makeType,index)
         var v_ptr = getE(expr)
         let argName = "_{tuple_field_name(expr.makeType,index)}"
-        v_ptr = LLVMBuildGEP(g_builder, v_ptr, LLVMConstInt(LLVMInt32Type(), uint64(offset), 0), "tuple_{index}{argName}")
+        v_ptr = LLVMBuildGEP2(g_builder, LLVMInt8Type(), v_ptr, LLVMConstInt(LLVMInt32Type(), uint64(offset), 0), "tuple_{index}{argName}")
         v_ptr = LLVMBuildPointerCast(g_builder, v_ptr, get_type_pointer(expr.makeType.argTypes[index]), "")
         if init |> isMakeLocal
             pass // do nothign. we already taken care of makeLocal in preVisitExprMakeStructField
@@ -3153,7 +3153,7 @@ class LlvmJitVisitor : AstVisitor
         check_ptr_zero(lmb, at, "invoke null lambda")
         // build arguments (1, and its 'capture')
         let ai = 0
-        var arg_ptr = LLVMBuildGEP(g_builder, args, LLVMConstInt(LLVMInt32Type(), uint64(ai), 0), "call_arg_{ai}_ptr")
+        var arg_ptr = LLVMBuildGEP2(g_builder, LLVMFloat4Type(), args, LLVMConstInt(LLVMInt32Type(), uint64(ai), 0), "call_arg_{ai}_ptr")
         var arg_val = lmb
         var arg_cast_type = LLVMPointerType(LLVMVoidType(), 0u)
         LLVMBuildStore2(g_builder, arg_cast_type, arg_val, arg_ptr)
@@ -3339,9 +3339,9 @@ class LlvmJitVisitor : AstVisitor
                     else
                         var ctx_ptr = LLVMBuildPointerCast(g_builder, get_context_param(), LLVMPointerType(LLVMInt8Type(),0u), "")
                         let coffset = expr.variable.flags.global_shared ? CONTEXT_OFFSET_OF_SHARED : CONTEXT_OFFSET_OF_GLOBALS
-                        var global_ptr = LLVMBuildGEP(g_builder, ctx_ptr, LLVMConstInt(LLVMInt32Type(), uint64(coffset), 0), "")
+                        var global_ptr = LLVMBuildGEP2(g_builder, LLVMInt8Type(), ctx_ptr, LLVMConstInt(LLVMInt32Type(), uint64(coffset), 0), "")
                         global_ptr = LLVMBuildLoad2(g_builder, LLVMPointerType(LLVMInt8Type(),0u), global_ptr, "")
-                        vptr = LLVMBuildGEP(g_builder, global_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.variable.stackTop), 0), "")
+                        vptr = LLVMBuildGEP2(g_builder, LLVMInt8Type(), global_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.variable.stackTop), 0), "")
                     tryV = LLVMBuildPointerCast(g_builder, vptr, get_type_pointer(expr.variable._type), "global_var_{expr.variable.name}")
             if expr.varFlags.r2v
                 setE(expr, LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr._type), tryV, uint(expr._type.alignOf), "global_var_r2v_{expr.variable.name}"))
@@ -3377,7 +3377,7 @@ class LlvmJitVisitor : AstVisitor
             if expr.value._type.isPointer && !expr.derefFlags.unsafeDeref
                 check_ptr_zero(val_ptr, expr.at)
             val_ptr = LLVMBuildPointerCast(g_builder, val_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
-            var field_ptr = LLVMBuildGEP(g_builder, val_ptr, LLVMConstInt(LLVMInt32Type(), uint64(field_offset), 0), "")
+            var field_ptr = LLVMBuildGEP2(g_builder, LLVMInt8Type(), val_ptr, LLVMConstInt(LLVMInt32Type(), uint64(field_offset), 0), "")
             field_ptr = LLVMBuildPointerCast(g_builder, field_ptr, get_type_pointer(expr._type), "{describe(expr.value._type,false,false,false)}.{expr.name}")
             if expr.fieldFlags.r2v
                 setE(expr, LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr._type), field_ptr, uint(expr._type.alignOf), ""))
@@ -3390,7 +3390,7 @@ class LlvmJitVisitor : AstVisitor
                 check_ptr_zero(val_ptr, expr.at)
             val_ptr = LLVMBuildPointerCast(g_builder, val_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
             let field_offset = get_tuple_field_offset(expr.value._type, expr.fieldIndex)
-            var field_ptr = LLVMBuildGEP(g_builder, val_ptr, LLVMConstInt(LLVMInt32Type(), uint64(field_offset), 0), "")
+            var field_ptr = LLVMBuildGEP2(g_builder, LLVMInt8Type(),val_ptr, LLVMConstInt(LLVMInt32Type(), uint64(field_offset), 0), "")
             let argName = tuple_field_name(expr.value._type,expr.fieldIndex)
             field_ptr = LLVMBuildPointerCast(g_builder, field_ptr, get_type_pointer(expr.value._type.argTypes[expr.fieldIndex]), "{describe(expr.value._type,false,false,false)}.{argName}")
             if expr.fieldFlags.r2v
@@ -3404,7 +3404,7 @@ class LlvmJitVisitor : AstVisitor
                 check_ptr_zero(val_ptr, expr.at)
             val_ptr = LLVMBuildPointerCast(g_builder, val_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
             let field_offset = get_variant_field_offset(expr.value._type, expr.fieldIndex)
-            var field_ptr = LLVMBuildGEP(g_builder, val_ptr, LLVMConstInt(LLVMInt32Type(), uint64(field_offset), 0), "")
+            var field_ptr = LLVMBuildGEP2(g_builder, LLVMInt8Type(), val_ptr, LLVMConstInt(LLVMInt32Type(), uint64(field_offset), 0), "")
             let argName = variant_field_name(expr.value._type,expr.fieldIndex)
             field_ptr = LLVMBuildPointerCast(g_builder, field_ptr, get_type_pointer(expr.value._type.argTypes[expr.fieldIndex]), "{describe(expr.value._type,false,false,false)}.{argName}")
             if expr.fieldFlags.r2v
@@ -3417,7 +3417,7 @@ class LlvmJitVisitor : AstVisitor
             if expr.value._type.isPointer && !expr.derefFlags.unsafeDeref
                 check_ptr_zero(val_ptr, expr.at)
             val_ptr = LLVMBuildPointerCast(g_builder, val_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
-            var field_ptr = LLVMBuildGEP(g_builder, val_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.field.offset), 0), "")
+            var field_ptr = LLVMBuildGEP2(g_builder, LLVMInt8Type(), val_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.field.offset), 0), "")
             field_ptr = LLVMBuildPointerCast(g_builder, field_ptr, get_type_pointer(expr.field._type), "{describe(expr.value._type,false,false,false)}.{expr.field.name}")
             if expr.fieldFlags.r2v
                 setE(expr, LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr._type), field_ptr, uint(expr._type.alignOf), ""))
@@ -3450,7 +3450,7 @@ class LlvmJitVisitor : AstVisitor
             var res_type = type_to_llvm_type(expr._type)
             var res = build_select(cond, res_type) <|
                 val_ptr = LLVMBuildPointerCast(g_builder, val_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
-                var field_ptr = LLVMBuildGEP(g_builder, val_ptr, LLVMConstInt(LLVMInt32Type(), uint64(fieldOffset), 0), "")
+                var field_ptr = LLVMBuildGEP2(g_builder, LLVMInt8Type(), val_ptr, LLVMConstInt(LLVMInt32Type(), uint64(fieldOffset), 0), "")
                 field_ptr = LLVMBuildPointerCast(g_builder, field_ptr, LLVMPointerType(res_type,0u), ".{expr.name}")
                 field_ptr = LLVMBuildLoad2(g_builder, res_type, field_ptr, "")
                 return field_ptr
@@ -3460,7 +3460,7 @@ class LlvmJitVisitor : AstVisitor
         else
             var val_ptr = getE(expr.value)
             val_ptr = LLVMBuildPointerCast(g_builder, val_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
-            var field_ptr = LLVMBuildGEP(g_builder, val_ptr, LLVMConstInt(LLVMInt32Type(), uint64(fieldOffset), 0), "")
+            var field_ptr = LLVMBuildGEP2(g_builder, LLVMInt8Type(), val_ptr, LLVMConstInt(LLVMInt32Type(), uint64(fieldOffset), 0), "")
             var res_type = type_to_llvm_type(expr._type)
             field_ptr = LLVMBuildPointerCast(g_builder, field_ptr, res_type, ".{expr.name}")
             var cond = LLVMBuildIsNotNull(g_builder, val_ptr, "")
@@ -3537,7 +3537,7 @@ class LlvmJitVisitor : AstVisitor
         check_variant_index(vint, expr.at, field_index, "variant mismatch, expecting {expr.value._type.argNames[field_index]}")
         let field_offset = get_variant_field_offset(expr.value._type,field_index)
         var fptr = LLVMBuildPointerCast(g_builder, vptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
-        fptr = LLVMBuildGEP(g_builder, fptr, LLVMConstInt(LLVMInt32Type(), uint64(field_offset), 0), "")
+        fptr = LLVMBuildGEP2(g_builder, LLVMInt8Type(), fptr, LLVMConstInt(LLVMInt32Type(), uint64(field_offset), 0), "")
         fptr = LLVMBuildPointerCast(g_builder, fptr, LLVMPointerType(type_to_llvm_type(expr._type), 0u), "variant_field_ptr")
         if expr.fieldFlags.r2v
             setE(expr, LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr._type), fptr, uint(expr._type.alignOf), "variant_field"))
@@ -3562,7 +3562,7 @@ class LlvmJitVisitor : AstVisitor
             var subRes = build_select(if_index,resType) <|
                 let field_offset = get_variant_field_offset(valueT.isPointer ? valueT.firstType : valueT,field_index)
                 var fptr = LLVMBuildPointerCast(g_builder, vptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
-                fptr = LLVMBuildGEP(g_builder, fptr, LLVMConstInt(LLVMInt32Type(), uint64(field_offset), 0), "")
+                fptr = LLVMBuildGEP2(g_builder, LLVMInt8Type(), fptr, LLVMConstInt(LLVMInt32Type(), uint64(field_offset), 0), "")
                 return LLVMBuildPointerCast(g_builder, fptr, resType, "variant_field_ptr")
             lpipe <|
                 return LLVMConstNull(resType)
