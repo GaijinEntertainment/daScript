@@ -8,6 +8,27 @@
 
 namespace das
 {
+    struct SimNode_CastToWorkhorse : SimNode {
+        SimNode_CastToWorkhorse(const LineInfo & at, SimNode * k)
+            : SimNode(at), keyExpr(k) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override {
+            V_BEGIN();
+            V_OP(CastToWorkhorse);
+            V_SUB(keyExpr);
+            V_END();
+        }
+        SimNode * keyExpr;
+        virtual vec4f eval ( Context & context )             override { return keyExpr->eval(context); }
+        virtual char *      evalPtr ( Context & context )    override { return cast<char *>::to(keyExpr->eval(context)); }
+        virtual bool        evalBool ( Context & context )   override { return cast<bool>::to(keyExpr->eval(context)); }
+        virtual float       evalFloat ( Context & context )  override { return cast<float>::to(keyExpr->eval(context)); }
+        virtual double      evalDouble ( Context & context ) override { return cast<double>::to(keyExpr->eval(context)); }
+        virtual int32_t     evalInt ( Context & context )    override { return cast<int32_t>::to(keyExpr->eval(context)); }
+        virtual uint32_t    evalUInt ( Context & context )   override { return cast<uint32_t>::to(keyExpr->eval(context)); }
+        virtual int64_t     evalInt64 ( Context & context )  override { return cast<int64_t>::to(keyExpr->eval(context)); }
+        virtual uint64_t    evalUInt64 ( Context & context ) override { return cast<uint64_t>::to(keyExpr->eval(context)); }
+    };
+
     struct SimNode_Table : SimNode {
         SimNode_Table(const LineInfo & at, SimNode * t, SimNode * k, uint32_t vts)
             : SimNode(at), tabExpr(t), keyExpr(k), valueTypeSize(vts) {}

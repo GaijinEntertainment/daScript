@@ -148,6 +148,7 @@ namespace das {
         bool isRawPod() const;
         bool isNoHeapType() const;
         bool isWorkhorseType() const; // we can return this, or pass this
+        bool isTableKeyType() const;  // workhorse or by value annotation
         bool isPolicyType() const;
         bool isVecPolicyType() const;
         bool isReturnType() const;

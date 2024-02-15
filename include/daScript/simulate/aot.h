@@ -929,7 +929,7 @@ namespace das {
 
     template <typename TK, typename TV>
     struct TTable : Table {
-        static_assert(is_workhorse_type<TK>::value,"only supported for `workhorse` types");
+        // static_assert(is_workhorse_type<TK>::value,"only supported for `workhorse` types");
         using THIS_TYPE = TTable<TK, TV>;
         TTable()  {}
         TTable(TTable & arr) { moveT(arr); }
@@ -971,7 +971,7 @@ namespace das {
 
     template <typename TK>
     struct TTable<TK,void> : Table {
-        static_assert(is_workhorse_type<TK>::value,"only supported for `workhorse` types");
+        // static_assert(is_workhorse_type<TK>::value,"only supported for `workhorse` types");
         using THIS_TYPE = TTable<TK, void>;
         TTable()  {}
         TTable(TTable & arr) { moveT(arr); }
