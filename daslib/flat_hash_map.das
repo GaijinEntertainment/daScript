@@ -46,40 +46,19 @@ def reserve ( var self:%FlatHashMap explicit; newSize : int )
         for K,V,H in newKeys, newValues, newHashes
             for k,v,h in K,V,H
                 let index = self |> find_index(h)
-                keys[index] |> push(k)
-                hashes[index] |> push(h)
-                values[index] |> push(v)
+                keys[index] |> emplace(k)
+                hashes[index] |> emplace(h)
+                values[index] |> emplace(v)
+        newKeys |> resize(0)
+        newHashes |> resize(0)
+        newValues |> resize(0)
+        delete newKeys
+        delete newHashes
+        delete newValues
 
 def find_index ( var self:%FlatHashMap explicit; hash : uint64 ) : int
     with self
         return int(hash) & mask
-
-def append ( var self:%FlatHashMap explicit; index : int; key : %KeyType; value : %ValueType; hash : uint64 ) : bool
-    with self
-        for k,v,h in keys[index], values[index], hashes[index]
-            if h == hash && k == key
-                return false
-        keys[index] |> push(key)
-        hashes[index] |> push(hash)
-        values[index] |> push(value)
-        return true
-
-def insert_with_hash ( var self:%FlatHashMap explicit; key : %KeyType; value : %ValueType; hash : uint64 ) : bool
-    with self
-        let index = self |> find_index(hash)
-        if length(keys[index]) > distance
-            self |> grow()
-            return self |> insert(key, value)
-        return self |> append(index, key, value, hash)
-
-def insert ( var self:%FlatHashMap explicit; key : %KeyType; value : %ValueType ) : bool
-    with self
-        let hash = hash(key)
-        let index = self |> find_index(hash)
-        if length(keys[index]) > distance
-            self |> grow()
-            return self |> insert_with_hash(key, value, hash)
-        return self |> append(index, key, value, hash)
 
 def key_exists ( var self:%FlatHashMap explicit; key : %KeyType )
     with self
@@ -126,7 +105,7 @@ def foreach ( var self:%FlatHashMap explicit; blk:block<(k:%KeyType;v:%ValueType
 [unsafe_outside_of_for]
 def keys ( var self:%FlatHashMap explicit )
     var pself = unsafe(addr(self))
-    return <- generator<%KeyType>() <|
+    return <- generator<%KeyType&>() <|
         for K in pself.keys
             for k in K
                 yield k
@@ -137,7 +116,7 @@ def keys ( var self:%FlatHashMap explicit )
 [unsafe_outside_of_for]
 def values ( var self:%FlatHashMap explicit )
     var pself = unsafe(addr(self))
-    return <- generator<%ValueType>() <|
+    return <- generator<%ValueType&>() <|
         for V in pself.values
             for v in V
                 yield v
@@ -154,7 +133,7 @@ def operator [] ( var self:%FlatHashMap explicit; key : %KeyType ) : %ValueType&
                 unsafe
                     return v
             let lastIndex = length(keys[index])
-            keys[index] |> push(key)
+            keys[index] |> push_clone(key)
             hashes[index] |> push(hash)
             values[index] |> emplace <| [[%ValueType]]
             unsafe
