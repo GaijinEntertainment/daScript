@@ -2,22 +2,38 @@ options indenting = 4
 options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 
-module flat_hash_map shared private
+module hash_map shared private
 
 require daslib/spoof public
 
-let public TFlatHashMap = %spoof_template~(FlatHashMap,KeyType,ValueType)
+let public TBucketHashMap = %spoof_template~(BucketHashMap,KeyType,ValueType)
 [skip_field_lock_check]
-struct %FlatHashMap
+struct %BucketHashMap
     keys   : array<array<%KeyType>>
     hashes : array<array<uint64>>
     values : array<array<%ValueType>>
     mask : int
     distance : int
+    length : int
 
-def %FlatHashMap ( initialSize : int = 64 ) : %FlatHashMap
+def %BucketHashMap ( data : array<tuple<k:%KeyType;v:%ValueType>> ) : %BucketHashMap
+    var self : %BucketHashMap
+    with self
+        let bit = int(clz(uint(length(data))))
+        let initialSize = 1 << (32 - bit)
+        mask = initialSize - 1
+        distance = 4 + (32-bit)
+        length = 0
+        keys |> resize(initialSize)
+        hashes |> resize(initialSize)
+        values |> resize(initialSize)
+        for kv in data
+            self[kv.k] := kv.v
+    return <- self
+
+def %BucketHashMap ( initialSize : int = 64 ) : %BucketHashMap
     assert((initialSize & (initialSize-1))==0, "size must be a power of 2")
-    var self : %FlatHashMap
+    var self : %BucketHashMap
     with self
         keys |> resize(initialSize)
         hashes |> resize(initialSize)
@@ -26,20 +42,27 @@ def %FlatHashMap ( initialSize : int = 64 ) : %FlatHashMap
         distance = 4
     return <- self
 
-def clear ( var self:%FlatHashMap explicit )
+def empty ( var self:%BucketHashMap explicit ) : bool
+    return self.length == 0
+
+def length ( var self:%BucketHashMap explicit ) : int
+    return self.length
+
+def clear ( var self:%BucketHashMap explicit )
     with self
         for k,v,h in keys, values, hashes
             k |> resize(0)
             v |> resize(0)
             h |> resize(0)
+        length = 0
 
-def grow ( var self:%FlatHashMap explicit )
+def grow ( var self:%BucketHashMap explicit )
     with self
         let newSize = length(keys) * 2
         distance ++
         self |> reserve(newSize)
 
-def reserve ( var self:%FlatHashMap explicit; newSize : int )
+def reserve ( var self:%BucketHashMap explicit; newSize : int )
     assert((newSize & (newSize-1))==0, "size must be a power of 2")
     with self
         var newKeys : array<array<%KeyType>>
@@ -65,11 +88,11 @@ def reserve ( var self:%FlatHashMap explicit; newSize : int )
         delete newHashes
         delete newValues
 
-def find_index ( var self:%FlatHashMap explicit; hash : uint64 ) : int
+def find_index ( self:%BucketHashMap explicit; hash : uint64 ) : int
     with self
         return int(hash) & mask
 
-def key_exists ( var self:%FlatHashMap explicit; key : %KeyType )
+def key_exists ( self:%BucketHashMap explicit; key : %KeyType )
     with self
         let hash = hash(key)
         let index = self |> find_index(hash)
@@ -78,17 +101,27 @@ def key_exists ( var self:%FlatHashMap explicit; key : %KeyType )
                 return true
         return false
 
-def get ( var self:%FlatHashMap explicit; key : %KeyType; blk:block<(k:%KeyType;v:%ValueType):void> ) : bool
+def get ( var self:%BucketHashMap ==const explicit; key : %KeyType; blk:block<(var v:%ValueType):void> ) : bool
     with self
         let hash = hash(key)
         let index = self |> find_index(hash)
         for k,v,h in keys[index], values[index], hashes[index]
             if h == hash && k == key
-                blk |> invoke(k,v)
+                blk |> invoke(v)
                 return true
         return false
 
-def erase ( var self:%FlatHashMap explicit; key : %KeyType ) : bool
+def get ( self:%BucketHashMap ==const explicit; key : %KeyType; blk:block<(v:%ValueType):void> ) : bool
+    with self
+        let hash = hash(key)
+        let index = self |> find_index(hash)
+        for k,v,h in keys[index], values[index], hashes[index]
+            if h == hash && k == key
+                blk |> invoke(v)
+                return true
+        return false
+
+def erase ( var self:%BucketHashMap explicit; key : %KeyType ) : bool
     with self
         let hash = hash(key)
         let index = self |> find_index(hash)
@@ -101,18 +134,25 @@ def erase ( var self:%FlatHashMap explicit; key : %KeyType ) : bool
             keys[index] |> erase(eindex)
             hashes[index] |> erase(eindex)
             values[index] |> erase(eindex)
+            length--
             return true
         else
             return false
 
-def foreach ( var self:%FlatHashMap explicit; blk:block<(k:%KeyType;v:%ValueType):void> )
+def foreach ( self:%BucketHashMap ==const explicit; blk:block<(k:%KeyType;v:%ValueType):void> )
+    with self
+        for K,V,H in keys, values, hashes
+            for k,v,h in K,V,H
+                blk |> invoke(k,v)
+
+def foreach ( var self:%BucketHashMap ==const explicit; blk:block<(k:%KeyType;var v:%ValueType):void> )
     with self
         for K,V,H in keys, values, hashes
             for k,v,h in K,V,H
                 blk |> invoke(k,v)
 
 [unsafe_outside_of_for]
-def keys ( var self:%FlatHashMap explicit )
+def keys ( var self:%BucketHashMap explicit )
     var pself = unsafe(addr(self))
     return <- generator<%KeyType&>() <|
         for K in pself.keys
@@ -123,7 +163,7 @@ def keys ( var self:%FlatHashMap explicit )
         pself = null
 
 [unsafe_outside_of_for]
-def values ( var self:%FlatHashMap explicit )
+def values ( var self:%BucketHashMap ==const explicit )
     var pself = unsafe(addr(self))
     return <- generator<%ValueType&>() <|
         for V in pself.values
@@ -133,7 +173,18 @@ def values ( var self:%FlatHashMap explicit )
     finally
         pself = null
 
-def operator [] ( var self:%FlatHashMap explicit; key : %KeyType ) : %ValueType&
+[unsafe_outside_of_for]
+def values ( self:%BucketHashMap ==const explicit )
+    var pself = unsafe(addr(self))
+    return <- generator<%ValueType const&>() <|
+        for V in pself.values
+            for v in V
+                yield v
+        return false
+    finally
+        pself = null
+
+def operator [] ( var self:%BucketHashMap ==const explicit; key : %KeyType ) : %ValueType&
     with self
         let hash = hash(key)
         var index = self |> find_index(hash)
@@ -146,6 +197,7 @@ def operator [] ( var self:%FlatHashMap explicit; key : %KeyType ) : %ValueType&
             self |> grow()
             index = self |> find_index(hash)
             lastIndex = length(keys[index])
+        length ++
         keys[index] |> push_clone(key)
         hashes[index] |> push(hash)
         static_if typeinfo(can_copy type<%ValueType>)
@@ -155,7 +207,28 @@ def operator [] ( var self:%FlatHashMap explicit; key : %KeyType ) : %ValueType&
         unsafe
             return values[index][lastIndex]
 
-def operator ?[] ( var self:%FlatHashMap explicit; key : %KeyType ) : %ValueType?
+def operator [] ( self:%BucketHashMap ==const explicit; key : %KeyType ) : %ValueType const&
+    with self
+        let hash = hash(key)
+        var index = self |> find_index(hash)
+        for k,v,h in keys[index], values[index], hashes[index]
+            if h == hash && k == key
+                unsafe
+                    return v
+        panic("key not found")
+        unsafe
+            return values[0][0] // we never get here due to panic
+
+def operator ?[] ( var self:%BucketHashMap ==const explicit; key : %KeyType ) : %ValueType?
+    with self
+        let hash = hash(key)
+        let index = self |> find_index(hash)
+        for k,v,h in keys[index], values[index], hashes[index]
+            if h == hash && k == key
+                return unsafe(addr(v))
+        return null
+
+def operator ?[] ( self:%BucketHashMap ==const explicit; key : %KeyType ) : %ValueType const?
     with self
         let hash = hash(key)
         let index = self |> find_index(hash)
@@ -164,4 +237,3 @@ def operator ?[] ( var self:%FlatHashMap explicit; key : %KeyType ) : %ValueType
                 return unsafe(addr(v))
         return null
 %%
-

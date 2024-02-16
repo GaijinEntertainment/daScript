@@ -1,4 +1,4 @@
-require daslib/flat_hash_map
+require daslib/hash_map
 
 struct ComplexKey
     key : int
@@ -20,11 +20,11 @@ def SomeValue ( v1,v2 : int )
     return <- [[SomeValue value=v1,value2=v2]]
 
 
-%spoof_instance~TFlatHashMap(FlatHashMap_CK_SV,ComplexKey,SomeValue)%%;
+%spoof_instance~TBucketHashMap(BucketHashMap_CK_SV,ComplexKey,SomeValue)%%;
 
 [export]
 def main
-    var hm <- FlatHashMap_CK_SV()
+    var hm <- BucketHashMap_CK_SV()
     hm[ComplexKey(1,2)] <- SomeValue(3,4)
     hm[ComplexKey(2,3)] <- SomeValue(4,5)
     hm[ComplexKey(3,4)] <- SomeValue(5,6)
@@ -42,12 +42,12 @@ def main
     for k,v in keys(hm), values(hm)
         print("{k} -> {v}\n")
 
-    let found = hm |> get(ComplexKey(3,4)) <| $ ( k,v )
-        print("found: {k} -> {v}\n")
+    let found = hm |> get(ComplexKey(3,4)) <| $ ( v )
+        print("found: {v}\n")
     print("found: {found}\n")
 
-    let notfound = hm |> get(ComplexKey(2,3)) <| $ ( k,v )
-        print("notfound: {k} -> {v}\n")
+    let notfound = hm |> get(ComplexKey(2,3)) <| $ ( v )
+        print("notfound: {v}\n")
     print("notfound: {notfound}\n")
 
     let exists = hm |> key_exists(ComplexKey(3,4))
