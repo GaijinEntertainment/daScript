@@ -15,7 +15,7 @@ struct %FlatHashMap
     mask : int
     distance : int
 
-def %FlatHashMap ( initialSize : int = 32 ) : %FlatHashMap
+def %FlatHashMap ( initialSize : int = 64 ) : %FlatHashMap
     assert((initialSize & (initialSize-1))==0, "size must be a power of 2")
     var self : %FlatHashMap
     with self
@@ -23,11 +23,20 @@ def %FlatHashMap ( initialSize : int = 32 ) : %FlatHashMap
         hashes |> resize(initialSize)
         values |> resize(initialSize)
         mask = initialSize - 1
+        distance = 4
     return <- self
+
+def clear ( var self:%FlatHashMap explicit )
+    with self
+        for k,v,h in keys, values, hashes
+            k |> resize(0)
+            v |> resize(0)
+            h |> resize(0)
 
 def grow ( var self:%FlatHashMap explicit )
     with self
         let newSize = length(keys) * 2
+        distance ++
         self |> reserve(newSize)
 
 def reserve ( var self:%FlatHashMap explicit; newSize : int )
@@ -127,17 +136,24 @@ def values ( var self:%FlatHashMap explicit )
 def operator [] ( var self:%FlatHashMap explicit; key : %KeyType ) : %ValueType&
     with self
         let hash = hash(key)
-        let index = self |> find_index(hash)
+        var index = self |> find_index(hash)
         for k,v,h in keys[index], values[index], hashes[index]
             if h == hash && k == key
                 unsafe
                     return v
-            let lastIndex = length(keys[index])
-            keys[index] |> push_clone(key)
-            hashes[index] |> push(hash)
+        var lastIndex = length(keys[index])
+        if lastIndex >= distance
+            self |> grow()
+            index = self |> find_index(hash)
+            lastIndex = length(keys[index])
+        keys[index] |> push_clone(key)
+        hashes[index] |> push(hash)
+        static_if typeinfo(can_copy type<%ValueType>)
+            values[index] |> push <| [[%ValueType]]
+        else
             values[index] |> emplace <| [[%ValueType]]
-            unsafe
-                return values[index][lastIndex]
+        unsafe
+            return values[index][lastIndex]
 
 def operator ?[] ( var self:%FlatHashMap explicit; key : %KeyType ) : %ValueType?
     with self
@@ -148,3 +164,4 @@ def operator ?[] ( var self:%FlatHashMap explicit; key : %KeyType ) : %ValueType
                 return unsafe(addr(v))
         return null
 %%
+
