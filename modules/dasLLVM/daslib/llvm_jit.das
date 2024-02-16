@@ -384,10 +384,10 @@ class LlvmJitVisitor : AstVisitor
         return g_builder |> LLVMBuildGEP(dummy, unsafe(addr(indices[0])), 2u, "")
 
     def get_file_info_global ()
+        let sz = typeinfo(sizeof type<FileInfo>)
+        let file_info_type = LLVMArrayType(LLVMInt8Type(), uint(sz))
         var dummy = LLVMGetNamedGlobal(g_mod, "fileinfo_dummy")
         if dummy == null
-            let sz = typeinfo(sizeof type<FileInfo>)
-            let file_info_type = LLVMArrayType(LLVMInt8Type(), uint(sz))
             dummy = LLVMAddGlobal(g_mod, file_info_type, "fileinfo_dummy")
             var zero = LLVMConstInt(LLVMInt8Type(), 0 |> uint64(), 0)
             var zeros : array<LLVMValueRef>
@@ -1175,7 +1175,7 @@ class LlvmJitVisitor : AstVisitor
             var at_tab = build_table_at(keyType, tab_ptr, tidx, subExprT.secondType.sizeOf)
             var tab = LLVMBuildLoad2(g_builder, type_to_llvm_type(expr.subexpr._type), tsrc, "tab")
             var data = LLVMBuildExtractValue(g_builder, tab, uint(JIT_TABLE DATA), "table.data")
-            var ptr_idx = LLVMBuildGEP(g_builder, data, at_tab, "table_at")
+            var ptr_idx = LLVMBuildGEP2(g_builder, type_to_llvm_type(expr._type), data, at_tab, "table_at")
             if expr.atFlags.r2v
                 var at_r2v = LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr._type),
                     ptr_idx, uint(expr._type.alignOf), "array_at_r2v")
@@ -1254,7 +1254,7 @@ class LlvmJitVisitor : AstVisitor
                 var if_found = LLVMBuildICmp(g_builder, LLVMIntPredicate LLVMIntNE, at_tab, LLVMConstInt(LLVMInt32Type(), uint64(-1), 0), "table_found")
                 var subRes = build_select(if_found, resType) <|
                     var data = LLVMBuildExtractValue(g_builder, tab, uint(JIT_TABLE DATA), "table.data")
-                    return LLVMBuildGEP(g_builder, data, at_tab, "table_at")
+                    return LLVMBuildGEP2(g_builder, type_to_llvm_type(etype.secondType), data, at_tab, "table_at")
                 lpipe <|
                     return LLVMConstNull(resType)
                 return subRes
@@ -2789,7 +2789,6 @@ class LlvmJitVisitor : AstVisitor
 
     def create_struct_global_pointer ( si: StructInfo? )
         var tinfo_global = create_struct_global(si)
-        // var tinfo_global_ptr = tinfo_global |> get_first_element_addr()
         g_engine |> LLVMAddGlobalMapping(tinfo_global, si)
         return tinfo_global
 
@@ -3083,7 +3082,7 @@ class LlvmJitVisitor : AstVisitor
             var inscope tab_ty := expr.arguments[0]._type.isPointer ? expr.arguments[0]._type.firstType : expr.arguments[0]._type
             var tab = LLVMBuildLoad2(g_builder, type_to_llvm_type(tab_ty), tsrc, "tab")
             var data = LLVMBuildExtractValue(g_builder, tab, uint(JIT_TABLE DATA), "table.data")
-            return LLVMBuildGEP(g_builder, data, at_tab, "table_at")
+            return LLVMBuildGEP2(g_builder, type_to_llvm_type(subExprT.secondType), data, at_tab, "table_at")
         lpipe <|
             return LLVMConstPointerNull(resType)
         setE(expr, res)
@@ -3507,7 +3506,8 @@ class LlvmJitVisitor : AstVisitor
         var val = getE(expr.value)
         if expr._type.flags.ref
             var val_ptr = LLVMBuildBitCast(g_builder, val, get_basetype_pointer(expr.value._type.vectorBaseType), "")
-            val_ptr = LLVMBuildGEP(g_builder, val_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.fields[0]), 0), "")
+            val_ptr = LLVMBuildGEP2(g_builder, base_type_to_llvm_type(expr.value._type.vectorBaseType),
+                    val_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.fields[0]), 0), "")
             val_ptr = LLVMBuildPointerCast(g_builder, val_ptr, get_type_pointer(expr._type), "")
             setE(expr, val_ptr)
         else
@@ -3518,7 +3518,8 @@ class LlvmJitVisitor : AstVisitor
                     break
             if expr.value._type.flags.ref && isSequencial
                 var val_ptr = LLVMBuildBitCast(g_builder, val, get_basetype_pointer(expr.value._type.vectorBaseType), "")
-                val_ptr = LLVMBuildGEP(g_builder, val_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.fields[0]), 0), "")
+                val_ptr = LLVMBuildGEP2(g_builder, base_type_to_llvm_type(expr.value._type.vectorBaseType),
+                        val_ptr, LLVMConstInt(LLVMInt32Type(), uint64(expr.fields[0]), 0), "")
                 val_ptr = LLVMBuildPointerCast(g_builder, val_ptr, get_type_pointer(expr._type), "")
                 setE(expr, LLVMBuildLoadData2Aligned(g_builder, type_to_llvm_type(expr._type), val_ptr, uint(expr.value._type.alignOf), "swizzle_{expr.fields}"))
             else
