@@ -2187,7 +2187,7 @@ class LlvmJitVisitor : AstVisitor
         let field_ptr = LLVMBuildGEP2(g_builder, LLVMInt8Type(), v_ptr, LLVMConstInt(LLVMInt32Type(), uint64(offset + field_offset), 0), "")
         if decl.value |> isMakeLocal
             var val = unsafe(reinterpret<ExprMakeLocal?> get_ptr(decl.value))
-            val.extraOffset = uint(offset + field_offset) + expr.extraOffset
+            val.extraOffset = uint(offset + field_offset) // + expr.extraOffset
             if expr.makeFlags.useCMRES
                 pass
             elif expr.makeFlags.useStackRef
@@ -2304,7 +2304,7 @@ class LlvmJitVisitor : AstVisitor
         let field_ptr = LLVMBuildGEP2(g_builder, LLVMInt8Type(), v_ptr, LLVMConstInt(LLVMInt32Type(), uint64(offset), 0), "")
         if decl.value |> isMakeLocal
             var val = unsafe(reinterpret<ExprMakeLocal?> get_ptr(decl.value))
-            val.extraOffset = uint(offset) + expr.extraOffset
+            val.extraOffset = uint(offset) // + expr.extraOffset
             if expr.makeFlags.useCMRES
                 pass
             elif expr.makeFlags.useStackRef
@@ -2386,7 +2386,7 @@ class LlvmJitVisitor : AstVisitor
         let record_ptr = LLVMBuildGEP2(g_builder, LLVMInt8Type(), v_ptr, LLVMConstInt(LLVMInt32Type(), uint64(offset), 0), "")
         if init |> isMakeLocal
             var val = unsafe(reinterpret<ExprMakeLocal?> get_ptr(init))
-            val.extraOffset = uint(offset) + expr.extraOffset
+            val.extraOffset = uint(offset) // + expr.extraOffset
             if expr.makeFlags.useCMRES
                 pass
             elif expr.makeFlags.useStackRef
@@ -2452,7 +2452,7 @@ class LlvmJitVisitor : AstVisitor
         let field_ptr = LLVMBuildGEP2(g_builder, LLVMInt8Type(), v_ptr, LLVMConstInt(LLVMInt32Type(), uint64(offset), 0), "")
         if init |> isMakeLocal
             var val = unsafe(reinterpret<ExprMakeLocal?> get_ptr(init))
-            val.extraOffset = uint(offset) + expr.extraOffset
+            val.extraOffset = uint(offset) // + expr.extraOffset
             if expr.makeFlags.useCMRES
                 pass
             elif expr.makeFlags.useStackRef
