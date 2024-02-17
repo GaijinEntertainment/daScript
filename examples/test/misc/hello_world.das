@@ -1,22 +1,21 @@
-require daslib/spoof
+require math
 
-let template_xy = %spoof_template~(tname,arga,argb)
-class %tname
-    x : %arga
-    y : %argb
-    def %tname(X:%arga;Y:%argb)
-        x = X
-        y = Y
-        debug(self)
-%%
+require daslib/spoof public
 
-%spoof_instance~template_xy(Foo_ii,int,int)%%;
-%spoof_instance~template_xy(Foo_ff,float,float)%%;
+require daslib/hash_map public
+
+struct Foo
+    a : int
+
+%spoof_instance~TBucketHashMap(BucketHashMap_int_Foo,int,Foo)%%;
 
 [export]
 def main
-    var a = new Foo_ii(1,2)
-    var b = new Foo_ff(1.0,2.0)
-    print("{a}\n{b}\n")
-
-
+    var tab <- BucketHashMap_int_Foo([{auto
+        1 => [[Foo a=1]];
+        2 => [[Foo a=2]];
+        3 => [[Foo a=3]]
+    }])
+    for k,v in keys(tab),values(tab)
+        print("k: {k} => {v.a}\n")
+    print("0=>{tab[0].a} 1=>{tab[1].a} 2=>{tab[2].a} 3=>{tab[3].a} 4=>{tab[4].a}\n")
