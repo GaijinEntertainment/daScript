@@ -49,11 +49,17 @@ def table_ops ( t : T?; var a:auto(AnyTable_int_to_Foo); var e:Foo; var et:Foo i
     t |> success ( !found )
 
 %spoof_instance~TBucketHashMap(BucketHashMap_int_Foo,int,Foo)%%;
+%spoof_instance~TFlatHashMap(FlatHashMap_int_Foo,int,Foo)%%;
 
 [test]
 def all_ops ( t : T? )
     t |> run("BucketHashMap") <| @ ( t : T? )
         var tab <- BucketHashMap_int_Foo()
+        t |> success(empty(tab))
+        t |> equal(0, length(tab))
+        table_ops ( t, tab, [[Foo a=1]], [[Foo a=2]])
+    t |> run("FlatHashMap") <| @ ( t : T? )
+        var tab <- FlatHashMap_int_Foo()
         t |> success(empty(tab))
         t |> equal(0, length(tab))
         table_ops ( t, tab, [[Foo a=1]], [[Foo a=2]])
@@ -66,6 +72,39 @@ def all_init ( t : T? )
             2 => [[Foo a=2]];
             3 => [[Foo a=3]]
         }])
+        t |> equal(3, length(tab))
+        t |> equal(1, tab[1].a)
+        t |> equal(2, tab[2].a)
+        t |> equal(3, tab[3].a)
+        t |> equal(0, tab[4].a)
+        delete tab
+        tab <- BucketHashMap_int_Foo([[auto
+            1 => [[Foo a=1]];
+            2 => [[Foo a=2]];
+            3 => [[Foo a=3]]
+        ]])
+        t |> equal(3, length(tab))
+        t |> equal(1, tab[1].a)
+        t |> equal(2, tab[2].a)
+        t |> equal(3, tab[3].a)
+        t |> equal(0, tab[4].a)
+    t |> run("FlatHashMap") <| @ ( t : T? )
+        var tab <- FlatHashMap_int_Foo([{auto
+            1 => [[Foo a=1]];
+            2 => [[Foo a=2]];
+            3 => [[Foo a=3]]
+        }])
+        t |> equal(3, length(tab))
+        t |> equal(1, tab[1].a)
+        t |> equal(2, tab[2].a)
+        t |> equal(3, tab[3].a)
+        t |> equal(0, tab[4].a)
+        delete tab
+        tab <- FlatHashMap_int_Foo([[auto
+            1 => [[Foo a=1]];
+            2 => [[Foo a=2]];
+            3 => [[Foo a=3]]
+        ]])
         t |> equal(3, length(tab))
         t |> equal(1, tab[1].a)
         t |> equal(2, tab[2].a)
