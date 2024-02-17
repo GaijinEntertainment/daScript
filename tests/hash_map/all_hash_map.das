@@ -58,7 +58,6 @@ def all_ops ( t : T? )
         t |> equal(0, length(tab))
         table_ops ( t, tab, [[Foo a=1]], [[Foo a=2]])
 
-/*
 [test]
 def all_init ( t : T? )
     t |> run("BucketHashMap") <| @ ( t : T? )
@@ -68,11 +67,7 @@ def all_init ( t : T? )
             3 => [[Foo a=3]]
         }])
         t |> equal(3, length(tab))
-        for k,v in keys(tab),values(tab)
-            print("k: {k} v: {v.a}\n")
-        print("{tab[0]} {tab[1]} {tab[2]} {tab[3]} {tab[4]}\n")
         t |> equal(1, tab[1].a)
         t |> equal(2, tab[2].a)
         t |> equal(3, tab[3].a)
         t |> equal(0, tab[4].a)
-*/
