@@ -4682,9 +4682,9 @@ void yyfree (void * ptr , yyscan_t yyscanner)
 #line 928 "ds_lexer.lpp"
 
 
-void das_accept_sequence ( yyscan_t yyscanner, const char * seq, size_t seqLen, int lineNo ) {
+void das_accept_sequence ( yyscan_t yyscanner, const char * seq, size_t seqLen, int lineNo, FileInfo * info ) {
     struct yyguts_t * yyg = (struct yyguts_t*)yyscanner;
-    auto infoPtr = yyextra->g_FileAccessStack.back();
+    auto infoPtr = info ? info : yyextra->g_FileAccessStack.back();
     yyextra->g_FileAccessStack.push_back(infoPtr);
     yyextra->das_line_no.push_back(yylineno);
     yypush_buffer_state(YY_CURRENT_BUFFER, yyscanner);

@@ -69,7 +69,7 @@
 
     void das_yybegin_reader ( yyscan_t yyscanner );
     void das_yyend_reader ( yyscan_t yyscanner );
-    void das_accept_sequence ( yyscan_t yyscanner, const char * seq, size_t seqLen, int lineNo );
+    void das_accept_sequence ( yyscan_t yyscanner, const char * seq, size_t seqLen, int lineNo, FileInfo * info );
 
     namespace das { class Module; }
     void das_collect_keywords ( das::Module * mod, yyscan_t yyscanner );
@@ -642,8 +642,9 @@ expr_reader
         yyextra->g_ReaderExpr->at = tokRangeAt(scanner,@loc,@seq);
         $$ = yyextra->g_ReaderExpr;
         int thisLine = 0;
-        if ( auto seqt = yyextra->g_ReaderMacro->suffix(yyextra->g_Program.get(), yyextra->g_Program->thisModule.get(), yyextra->g_ReaderExpr, thisLine, tokAt(scanner,@seq)) ) {
-            das_accept_sequence(scanner,seqt,strlen(seqt),thisLine);
+        FileInfo * info = nullptr;
+        if ( auto seqt = yyextra->g_ReaderMacro->suffix(yyextra->g_Program.get(), yyextra->g_Program->thisModule.get(), yyextra->g_ReaderExpr, thisLine, info, tokAt(scanner,@seq)) ) {
+            das_accept_sequence(scanner,seqt,strlen(seqt),thisLine,info);
             yylloc.first_column = @seq.first_column;
             yylloc.first_line = @seq.first_line;
             yylloc.last_column = @seq.last_column;
