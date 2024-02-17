@@ -164,7 +164,7 @@ class SpoofInstanceReader : AstReaderMacro
             return false
         else
             return true
-    def override suffix ( prog:ProgramPtr; mod:Module?; var expr:ExprReader?; info:LineInfo; var outLine:int& ) : string
+    def override suffix ( prog:ProgramPtr; mod:Module?; var expr:ExprReader?; info:LineInfo; var outLine:int&; var outFile:FileInfo?& ) : string
         outLine = int(info.line)
         var iargs : SpoofInvocation
         var failed = false
@@ -202,6 +202,7 @@ class SpoofInstanceReader : AstReaderMacro
             return ""
         // now, lets spoof the instance
         outLine = int(vptr.init.at.line) + 1
+        outFile = vptr.init.at.fileInfo
         var result <- instance_spoof(string(vstr),iargs.args)
         if !result.ok
             prog |> macro_error(info, "spoof instance error {result.result}")
