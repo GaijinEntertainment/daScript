@@ -3,6 +3,7 @@ require math
 require daslib/hash_map
 
 %spoof_instance~TBucketHashMap(BucketHashMap_string_to_int,string,int)%%;
+%spoof_instance~TFlatHashMap(FlatHashMap_string_to_int,string,int)%%;
 
 def makeRandomSequence(var src:array<string>)
     let n = 500000
@@ -12,7 +13,7 @@ def makeRandomSequence(var src:array<string>)
         let num = (271828183u ^ uint(i*119))%mod
         src[i] = "{num}"
 
-def dict(var tab:BucketHashMap_string_to_int; src:array<string>)
+def dict(var tab:auto; src:array<string>)
     clear(tab)
     var maxOcc = 0
     for s in src
@@ -21,9 +22,18 @@ def dict(var tab:BucketHashMap_string_to_int; src:array<string>)
 
 [export]
 def main
-    var tab <- BucketHashMap_string_to_int(64)
+
     var src : array<string>
     makeRandomSequence(src)
-	profile(20,"dictionary") <|
-        dict(tab,src)
-
+    if true
+        var tab : table<string;int>
+        profile(20,"dictionary") <|
+            dict(tab,src)
+    if true
+        var tab <- BucketHashMap_string_to_int()
+        profile(20,"bucket hash map") <|
+            dict(tab,src)
+    if true
+        var tab <- FlatHashMap_string_to_int()
+        profile(20,"flat hash map") <|
+            dict(tab,src)
