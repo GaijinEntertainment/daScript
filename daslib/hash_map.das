@@ -338,7 +338,7 @@ def reserve ( var self:%FlatHashMap explicit; newSize : int )
         swap(newHashes, hashes)
         swap(newValues, values)
         for k,v,h in newKeys, newValues, newHashes
-            if h != 0ul && h != 1ul
+            if h > 1ul
                 self[k] <- v
         newKeys |> resize(0)
         newHashes |> resize(0)
@@ -348,8 +348,7 @@ def reserve ( var self:%FlatHashMap explicit; newSize : int )
         delete newValues
 
 def find_hash ( self:%FlatHashMap explicit; key : %KeyType ) : uint64
-    let h = hash(key)
-    return h <= 1ul ? 2ul : h
+    return hash(key) | 0x8000000000000000ul
 
 def find_index ( self:%FlatHashMap explicit; hash : uint64 ) : int
     with self
@@ -406,13 +405,13 @@ def erase ( var self:%FlatHashMap explicit; key : %KeyType ) : bool
 def foreach ( self:%FlatHashMap ==const explicit; blk:block<(k:%KeyType;v:%ValueType):void> )
     with self
         for k,v,h in keys, values, hashes
-            if h != 0ul && h != 1ul
+            if h > 1ul
                 blk |> invoke(k,v)
 
 def foreach ( var self:%FlatHashMap ==const explicit; blk:block<(k:%KeyType;var v:%ValueType):void> )
     with self
         for k,v,h in keys, values, hashes
-            if h != 0ul && h != 1ul
+            if h > 1ul
                 blk |> invoke(k,v)
 
 [unsafe_outside_of_for]
@@ -420,7 +419,7 @@ def keys ( var self:%FlatHashMap explicit )
     var pself = unsafe(addr(self))
     return <- generator<%KeyType&>() <|
         for h,k in pself.hashes, pself.keys
-            if h != 0ul && h != 1ul
+            if h > 1ul
                 yield k
         return false
     finally
@@ -431,7 +430,7 @@ def values ( var self:%FlatHashMap ==const explicit )
     var pself = unsafe(addr(self))
     return <- generator<%ValueType&>() <|
         for h,v in pself.hashes, pself.values
-            if h != 0ul && h != 1ul
+            if h > 1ul
                 yield v
         return false
     finally
@@ -442,7 +441,7 @@ def values ( self:%FlatHashMap ==const explicit )
     var pself = unsafe(addr(self))
     return <- generator<%ValueType const&>() <|
         for h,v in pself.hashes, pself.values
-            if h != 0ul && h != 1ul
+            if h > 1ul
                 yield v
         return false
     finally
