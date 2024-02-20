@@ -167,6 +167,7 @@ def public init_jit
     if LLVM_DEBUG_INFO
         set_context_diagnostics_to_log(LLVMGetGlobalContext())
     g_failed = false
+    g_fn_types |> clear()
     g_mod = LLVMModuleCreateWithName("llvm_jit_module")
     LLVMLinkInMCJIT()
     LLVMInitializeNativeTarget()
