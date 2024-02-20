@@ -2784,16 +2784,22 @@ class LlvmJitVisitor : AstVisitor
                 let evi = argtypes[i] |> create_type_info_global()
                 array_init |> push <| evi
         let tinfo_array_ty = LLVMArrayType(ty, len |> uint())
-        return LLVMConstArray(tinfo_array_ty, unsafe(addr(array_init[0])), len |> uint())
+        var global = LLVMAddGlobal(g_mod, tinfo_array_ty, "argtypes")
+        global |> LLVMSetInitializer <| LLVMConstArray(tinfo_array_ty, unsafe(addr(array_init[0])), len |> uint())
+        return global
 
     def create_argnames_array ( argnames: string const?; len: int )
+        if len == 0
+            return LLVMConstPointerNull(LLVMPointerType(LLVMInt8Type(), 0u))
         var array_init : array<LLVMValueRef>
         var ty = LLVMPointerType(LLVMInt8Type(), 0u)
         for i in range(len)
             unsafe
                 array_init |> push <| get_string_constant_ptr(g_builder, argnames[i])
         let tinfo_array_ty = LLVMArrayType(ty, len |> uint())
-        return LLVMConstArray(tinfo_array_ty, unsafe(addr(array_init[0])), len |> uint())
+        var global = LLVMAddGlobal(g_mod, tinfo_array_ty, "argnames")
+        global |> LLVMSetInitializer <| LLVMConstArray(tinfo_array_ty, unsafe(addr(array_init[0])), len |> uint())
+        return global
 
     def rec_create_type_info_global ( info: TypeInfo?; var initValues: array<LLVMValueRef> )
         initValues |> resize(6)
@@ -2811,35 +2817,34 @@ class LlvmJitVisitor : AstVisitor
             let modifiedPtr = LLVMBuildOr(g_builder, ptrToInt, one, "modifiedPtr")
             let intToPtr = LLVMBuildIntToPtr(g_builder, modifiedPtr, LLVMPointerType(LLVMVoidType(), 0u), "intToPtr");
 
-            initValues |> push(intToPtr, 0)
+            initValues[0] = intToPtr
 
         elif info.basicType==Type tStructure
-            debug("Here {info.structType}")
             var t = create_struct_global_pointer(info.structType)
             initValues[0] = t
 
         elif info.basicType==Type tEnumeration || info.basicType==Type tEnumeration8 || info.basicType==Type tEnumeration16
-            initValues |> push(create_enum_global_pointer(info.enumType), 0)
+            initValues[0] = create_enum_global_pointer(info.enumType)
 
         elif info.basicType==Type tPointer || info.basicType==Type tArray
-            initValues |> push(create_type_info_global(info.firstType), 1)
+            initValues[1] = create_type_info_global(info.firstType)
 
         elif info.basicType==Type tTable
-            initValues |> push(create_type_info_global(info.firstType), 1)
-            initValues |> push(create_type_info_global(info.secondType), 2)
+            initValues[1] = create_type_info_global(info.firstType)
+            initValues[2] = create_type_info_global(info.secondType)
 
         elif info.basicType==Type tTuple || info.basicType==Type tVariant
             var aa = create_argtypes_array(info.argTypes, info.argCount |> int())
-            var an = create_argnames_array(info.argNames, info.argCount |> int())
-            initValues |> push(aa, 3)
-            initValues |> push(an, 4)
+            var an = create_argnames_array(info.argNames, info.argNames == null ? 0 : info.argCount |> int())
+            initValues[3] = aa
+            initValues[4] = an
 
         elif info.basicType==Type tFunction || info.basicType==Type tLambda || info.basicType==Type tBlock
             var aa = create_argtypes_array(info.argTypes, info.argCount |> int())
             var an = create_argnames_array(info.argNames, info.argCount |> int())
-            initValues |> push(create_type_info_global(info.firstType), 1)
-            initValues |> push(aa, 3)
-            initValues |> push(an, 4)
+            initValues[1] = create_type_info_global(info.firstType)
+            initValues[3] = aa
+            initValues[4] = an
 
     def create_type_info_global ( ti: TypeInfo? )
         if typeinfo_cache |> key_exists <| ti
