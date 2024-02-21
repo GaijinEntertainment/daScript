@@ -111,8 +111,6 @@ enum public JIT_TABLE
     FLAGS
     KEYS
     HASHES
-    MAX_LOOKUPS
-    SHIFT
 
 enum public JIT_SIMFUNCTION
     NAME
@@ -704,9 +702,7 @@ def public type_to_llvm_type ( t:TypeDeclPtr )
             LLVMInt32Type();                    // uint32_t lock
             LLVMInt32Type();                    // uint32_t flags
             LLVMPointerType(LLVMVoidType(),0u); // char * keys
-            LLVMPointerType(LLVMVoidType(),0u); // char * hashes
-            LLVMInt32Type();                    // uint32_t maxLookup
-            LLVMInt32Type()                     // uint32_t shift
+            LLVMPointerType(LLVMVoidType(),0u)  // char * hashes
         ]]
         if t.firstType!=null
             table_fields[int(JIT_TABLE KEYS)] = LLVMPointerType(type_to_llvm_type(t.firstType),0u)
@@ -782,3 +778,4 @@ def public build_lifetime ( g_builder:LLVMOpaqueBuilder?; size:uint64; ptr:LLVMO
         failed("missing intrinsic {lifetime_name}")
         return null
     return LLVMBuildCall(g_builder, decl, args, "")
+
