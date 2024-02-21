@@ -19,6 +19,10 @@ def test ( hmap : auto(HashMapType); randomNumbers )
             hashMap[num] = -num
         delete hashMap
 
+// note - this speeds up many of the tests, but it's not a fair comparison
+//def hash ( t : int )
+//    return t>=2 ? uint64(t) : 1099511628211ul
+
 [export]
 def main
     print("test03 - insert {TOTAL_RANDOM_NUMBERS} unique random numbers, clear, insert again\n")

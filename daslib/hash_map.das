@@ -262,7 +262,6 @@ struct %FlatHashMap
     hashes : array<uint64>
     values : array<%ValueType>
     mask : int
-    distance : int
     length : int
 
 def %FlatHashMap ( data : tuple<k:%KeyType;v:%ValueType>[] ) : %FlatHashMap
@@ -271,7 +270,6 @@ def %FlatHashMap ( data : tuple<k:%KeyType;v:%ValueType>[] ) : %FlatHashMap
         let bit = int(clz(uint(length(data))))
         let initialSize = 1 << (32 - bit)
         mask = initialSize - 1
-        distance = 4 + (32-bit)
         length = 0
         keys |> resize(initialSize)
         hashes |> resize(initialSize)
@@ -286,7 +284,6 @@ def %FlatHashMap ( data : array<tuple<k:%KeyType;v:%ValueType>> ) : %FlatHashMap
         let bit = int(clz(uint(length(data))))
         let initialSize = 1 << (32 - bit)
         mask = initialSize - 1
-        distance = 4 + (32-bit)
         length = 0
         keys |> resize(initialSize)
         hashes |> resize(initialSize)
@@ -303,7 +300,6 @@ def %FlatHashMap ( initialSize : int = 64 ) : %FlatHashMap
         hashes |> resize(initialSize)
         values |> resize(initialSize)
         mask = initialSize - 1
-        distance = 4
     return <- self
 
 def empty ( var self:%FlatHashMap explicit ) : bool
@@ -321,7 +317,6 @@ def clear ( var self:%FlatHashMap explicit )
 def grow ( var self:%FlatHashMap explicit )
     with self
         let newSize = length(keys) * 2
-        distance ++
         self |> reserve(newSize)
 
 def reserve ( var self:%FlatHashMap explicit; newSize : int )
@@ -337,6 +332,7 @@ def reserve ( var self:%FlatHashMap explicit; newSize : int )
         swap(newKeys, keys)
         swap(newHashes, hashes)
         swap(newValues, values)
+        length = 0
         for k,v,h in newKeys, newValues, newHashes
             if h > 1ul
                 self[k] <- v
@@ -347,18 +343,15 @@ def reserve ( var self:%FlatHashMap explicit; newSize : int )
         delete newHashes
         delete newValues
 
-def find_hash ( self:%FlatHashMap explicit; key : %KeyType ) : uint64
-    return hash(key) | 0x8000000000000000ul
-
 def find_index ( self:%FlatHashMap explicit; hash : uint64 ) : int
     with self
         return int(hash) & mask
 
 def key_index ( self:%FlatHashMap explicit; key : %KeyType )
     with self
-        let hash = self |> find_hash(key)
+        let hash = hash(key)
         var index = self |> find_index(hash)
-        for d in range(distance)
+        while true
             let h = hashes[index]
             if h == hash
                 if keys[index] == key   // otherwise skip matching hash collision
@@ -449,10 +442,12 @@ def values ( self:%FlatHashMap ==const explicit )
 
 def operator [] ( var self:%FlatHashMap ==const explicit; key : %KeyType ) : %ValueType&
     with self
-        let hash = self |> find_hash(key)
+        if length > ((mask+1)>>1) // ((mask+1)*2/3)
+            self |> grow()
+        let hash = hash(key)
         var index = self |> find_index(hash)
         var lastTombstone = -1
-        for d in range(distance)
+        while true
             let h = hashes[index]
             if h == hash
                 if keys[index] == key   // otherwise skip matching hash collision
@@ -470,9 +465,9 @@ def operator [] ( var self:%FlatHashMap ==const explicit; key : %KeyType ) : %Va
                 unsafe
                     return values[index]
             index = (index + 1) & mask
-        self |> grow()
+        panic("unreachable")
         unsafe
-            return self[key]
+            return values[0] // we never get here due to panic
 
 def operator [] ( self:%FlatHashMap ==const explicit; key : %KeyType ) : %ValueType const&
     with self

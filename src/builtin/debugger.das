@@ -58,8 +58,6 @@ struct DapiArray
 struct DapiTable : DapiArray
     keys : void?
     hashes : uint?
-    maxLookups : uint
-    shift : uint
 
 // das::Block
 struct DapiBlock

@@ -157,8 +157,6 @@ namespace das
     struct Table : Array {
         char *      keys;
         uint64_t *  hashes;
-        uint32_t    maxLookups;
-        uint32_t    shift;
     };
 
     void table_clear ( Context & context, Table & arr, LineInfo * at );

@@ -20,7 +20,7 @@ def SomeValue ( v1,v2 : int )
     return <- [[SomeValue value=v1,value2=v2]]
 
 
-%spoof_instance~TBucketHashMap(BucketHashMap_CK_SV,ComplexKey,SomeValue)%%;
+%spoof_instance~TFlatHashMap(BucketHashMap_CK_SV,ComplexKey,SomeValue)%%;
 
 [export]
 def main
