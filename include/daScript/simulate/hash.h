@@ -59,7 +59,7 @@ namespace das {
 
     template <typename TT>
     __forceinline uint64_t hash_function ( Context &, const TT x ) {
-        return hash_block64((const uint8_t *)&x, sizeof(x));
+        return fnv_hash<sizeof(x)>::hash((const uint8_t *)&x);
     }
 
     template <>

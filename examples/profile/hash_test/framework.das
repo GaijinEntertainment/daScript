@@ -21,7 +21,7 @@ def generate_unique_positive_random_numbers ( kNumberOfItems : int = TOTAL_RANDO
     var seed = random_seed(13)
     var set : table<int>
     for r in range(kNumberOfItems)
-        var n = random_int(seed)
+        var n = random_big_int(seed)
         while set |> key_exists(n)
             n = random_big_int(seed)
         set |> insert(n)

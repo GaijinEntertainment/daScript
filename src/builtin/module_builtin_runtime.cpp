@@ -1573,12 +1573,8 @@ namespace das
         addCall<ExprDebug>          ("debug");
         addCall<ExprMemZero>        ("memzero");
         // hash
-        addInterop<_builtin_hash,uint64_t,vec4f>(*this, lib, "hash",
-            SideEffects::none, "_builtin_hash")
-                ->arg("data");
-        addExtern<DAS_BIND_FUN(hash64z)>(*this, lib, "hash",
-            SideEffects::none, "hash64z")
-                ->arg("data");
+        addInterop<_builtin_hash,uint64_t,vec4f>(*this, lib, "hash", SideEffects::none, "_builtin_hash")->arg("data");
+        addExtern<DAS_BIND_FUN(hash64z)>(*this, lib, "hash", SideEffects::none, "hash64z")->arg("data");
         // hash builder
         addExtern<DAS_BIND_FUN(builtin_build_hash)>(*this, lib, "build_hash",
                 SideEffects::modifyExternal,"builtin_build_hash_T")->args({"block","context","lineinfo"})->setAotTemplate();
