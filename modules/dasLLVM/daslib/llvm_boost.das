@@ -9,6 +9,7 @@ require llvm public
 require daslib/safe_addr
 require daslib/defer
 require strings
+require ast_boost
 
 def LLVMIsVector3 ( typ:LLVMOpaqueType? ) : bool
     return (LLVMGetTypeKind(typ)==LLVMTypeKind LLVMVectorTypeKind) && (LLVMGetVectorSize(typ)==3u)
@@ -233,8 +234,14 @@ def LLVMBuildFloat4_xyzw ( builder:LLVMOpaqueBuilder?; x,y,z,w:LLVMOpaqueValue?;
 def LLVMBuildCall ( builder:LLVMOpaqueBuilder?; func:LLVMOpaqueValue?; var args:LLVMOpaqueValue? []; name:string )
     return LLVMBuildCall( builder, func, unsafe(addr(args[0])), uint(length(args)), name)
 
+def LLVMBuildCall2 ( builder:LLVMOpaqueBuilder?; typ : LLVMOpaqueType?; func:LLVMOpaqueValue?; var args:LLVMOpaqueValue? []; name:string )
+    return LLVMBuildCall2( builder, typ, func, unsafe(addr(args[0])), uint(length(args)), name)
+
 def LLVMBuildCall ( builder:LLVMOpaqueBuilder?; func:LLVMOpaqueValue?; name:string )
     return LLVMBuildCall( builder, func, null, 0u, name)
+
+def LLVMBuildCall2 ( builder:LLVMOpaqueBuilder?; typ : LLVMOpaqueType?; func:LLVMOpaqueValue?; name:string )
+    return LLVMBuildCall2( builder, typ, func, null, 0u, name)
 
 def LLVMBuildCall ( builder:LLVMOpaqueBuilder?; func:LLVMOpaqueValue?; var args:array<LLVMOpaqueValue?>; name:string )
     let nparams = length(args)
@@ -242,6 +249,13 @@ def LLVMBuildCall ( builder:LLVMOpaqueBuilder?; func:LLVMOpaqueValue?; var args:
         return LLVMBuildCall( builder, func, unsafe(addr(args[0])), uint(nparams), name)
     else
         return LLVMBuildCall( builder, func, null, 0u, name)
+
+def LLVMBuildCall2 ( builder:LLVMOpaqueBuilder?; typ : LLVMOpaqueType?; func:LLVMOpaqueValue?; var args:array<LLVMOpaqueValue?>; name:string )
+    let nparams = length(args)
+    if nparams != 0
+        return LLVMBuildCall2( builder, typ, func, unsafe(addr(args[0])), uint(nparams), name)
+    else
+        return LLVMBuildCall2( builder, typ, func, null, 0u, name)
 
 def LLVMLookupIntrinsicID ( name:string )
     return LLVMLookupIntrinsicID(name,uint64(length(name)))
