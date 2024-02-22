@@ -8,6 +8,7 @@ struct Value
 
 %spoof_instance~TBucketHashMap(BucketHashMap_test,int,Value)%%;
 %spoof_instance~TFlatHashMap(FlatHashMap_test,int,Value)%%;
+%spoof_instance~TInterleavedFlatHashMap(InterleavedFlatHashMap_test,int,Value)%%;
 
 [sideeffects]
 def test ( hmap : auto(HashMapType); randomNumbers )
@@ -26,3 +27,4 @@ def main
     profile_test("table<int;int>", type<table<int;Value>>, randomNumbers)
     profile_test("TBucketHashMap<int,int>", type<BucketHashMap_test>, randomNumbers)
     profile_test("TFlatHashMap<int,int>", type<FlatHashMap_test>, randomNumbers)
+    profile_test("TInterleavedFlatHashMap<int,int>", type<InterleavedFlatHashMap_test>, randomNumbers)

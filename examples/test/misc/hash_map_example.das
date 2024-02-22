@@ -20,11 +20,11 @@ def SomeValue ( v1,v2 : int )
     return <- [[SomeValue value=v1,value2=v2]]
 
 
-%spoof_instance~TFlatHashMap(BucketHashMap_CK_SV,ComplexKey,SomeValue)%%;
+%spoof_instance~TInterleavedFlatHashMap(ExampleHashMap,ComplexKey,SomeValue)%%;
 
 [export]
 def main
-    var hm <- BucketHashMap_CK_SV()
+    var hm <- ExampleHashMap()
     hm[ComplexKey(1,2)] <- SomeValue(3,4)
     hm[ComplexKey(2,3)] <- SomeValue(4,5)
     hm[ComplexKey(3,4)] <- SomeValue(5,6)
