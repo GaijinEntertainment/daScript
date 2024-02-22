@@ -31,8 +31,13 @@ let public LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS = (
     llvm_config::llvm_jit_allow_unaligned_vector_read_out_of_bounds()
 )
 
-let public LLVM_OUTPUT_OJBECT_FILE = true
+let public LLVM_OUTPUT_OJBECT_FILE = false
 let public LLVM_OUTPUT_OJBECT_FILE_NAME = "output.o"
+
+let public LLVM_ENABLE_DLL_LOADING = true
+let public JIT_DLL_OUTPUT = "output.dll"
+let public DASCRIPT_LIBRARY = "libDaScript.lib" // liblibDaScript.a on linux
+
 let public LLVM_ENABLE_OPT_PASS = LLVM_DEBUG_EVERYTHING ? false : true
 let public LLVM_OPT_LEVEL = LLVM_DEBUG_EVERYTHING ? 0u : 2u
 let public LLVM_SIZE_LEVEL = LLVM_DEBUG_EVERYTHING ? 0u : 0u
@@ -69,9 +74,6 @@ let public FN_JIT_DEBUG_ENTER       = "jit_debug_enter"
 let public FN_JIT_DEBUG_EXIT        = "jit_debug_exit"
 let public FN_JIT_DEBUG_LINE        = "jit_debug_line"
 let public FN_JIT_AST_TYPEDECL      = "jit_ast_typedecl"
-
-let public JIT_DLL_OUTPUT = "output.dll"
-let public DASCRIPT_LIBRARY = "libDaScript.lib" // liblibDaScript.a on linux
 
 struct JitEngine
     mod : LLVMOpaqueModule?
