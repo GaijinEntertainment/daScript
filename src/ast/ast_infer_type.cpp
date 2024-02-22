@@ -4794,6 +4794,16 @@ namespace das {
                         expr->at, CompilationError::cant_get_field);
                 return Visitor::visit(expr);
             }
+            if ( !expr->no_promotion ) {
+                if ( expr->underClone ) {
+                    expr->underClone->cloneSet = inferGenericOperator(".`"+expr->name+"`clone",expr->at,expr->value,expr->underClone->right);
+                    if ( expr->underClone->cloneSet ) {
+                        return Visitor::visit(expr);
+                    }
+                }
+                if ( auto opE = inferGenericOperator(".`"+expr->name,expr->at,expr->value,nullptr) ) return opE;
+                if ( auto opE = inferGenericOperatorWithName(".",expr->at,expr->value,expr->name) ) return opE;
+            }
             auto valT = expr->value->type;
             if ( valT->isPointer() ) {
                 if ( !expr->no_promotion && valT->firstType ) {
@@ -4856,16 +4866,6 @@ namespace das {
                     expr->fieldIndex = index;
                 }
             } else {
-                if ( !expr->no_promotion ) {
-                    if ( expr->underClone ) {
-                        expr->underClone->cloneSet = inferGenericOperator(".`"+expr->name+"`clone",expr->at,expr->value,expr->underClone->right);
-                        if ( expr->underClone->cloneSet ) {
-                            return Visitor::visit(expr);
-                        }
-                    }
-                    if ( auto opE = inferGenericOperator(".`"+expr->name,expr->at,expr->value,nullptr) ) return opE;
-                    if ( auto opE = inferGenericOperatorWithName(".",expr->at,expr->value,expr->name) ) return opE;
-                }
                 if ( valT->isVectorType() ) {
                     reportAstChanged();
                     return make_smart<ExprSwizzle>(expr->at,expr->value,expr->name);
