@@ -12,6 +12,16 @@
     NOTE: this should be the only file where daScript needs exceptions enabled.
 */
 
+// Workaround for https://github.com/google/sanitizers/issues/749
+#if DAS_ENABLE_EXCEPTIONS && defined(__clang__) && defined(_WIN32) && defined(__has_feature)
+#if __has_feature(address_sanitizer)
+#define WIN_EH_NO_ASAN __attribute__((no_sanitize_address))
+#endif
+#endif
+#ifndef WIN_EH_NO_ASAN
+#define WIN_EH_NO_ASAN
+#endif
+
 namespace das {
 
     void Context::throw_fatal_error ( const char * message, const LineInfo & at ) {
@@ -88,7 +98,7 @@ namespace das {
 #endif
     }
 
-    vec4f Context::evalWithCatch ( SimNode * node ) {
+    vec4f WIN_EH_NO_ASAN Context::evalWithCatch ( SimNode * node ) {
         auto aa = abiArg;
         auto acm = abiCMRES;
         auto atba = abiThisBlockArg;
@@ -124,7 +134,7 @@ namespace das {
         return vres;
     }
 
-    bool Context::runWithCatch ( const callable<void()> & subexpr ) {
+    bool WIN_EH_NO_ASAN Context::runWithCatch ( const callable<void()> & subexpr ) {
         auto aa = abiArg;
         auto acm = abiCMRES;
         auto atba = abiThisBlockArg;
@@ -162,7 +172,7 @@ namespace das {
         return bres;
     }
 
-    vec4f Context::evalWithCatch ( SimFunction * fnPtr, vec4f * args, void * res ) {
+    vec4f WIN_EH_NO_ASAN Context::evalWithCatch ( SimFunction * fnPtr, vec4f * args, void * res ) {
         auto aa = abiArg;
         auto acm = abiCMRES;
         auto atba = abiThisBlockArg;
@@ -200,7 +210,7 @@ namespace das {
 
     // SimNode_TryCatch
 
-    vec4f SimNode_TryCatch::eval ( Context & context ) {
+    vec4f WIN_EH_NO_ASAN SimNode_TryCatch::eval ( Context & context ) {
         DAS_PROFILE_NODE
         auto aa = context.abiArg; auto acm = context.abiCMRES;
         char * EP, * SP;
@@ -239,7 +249,7 @@ namespace das {
     }
 
 #if DAS_DEBUGGER
-    vec4f SimNodeDebug_TryCatch::eval ( Context & context ) {
+    vec4f WIN_EH_NO_ASAN SimNodeDebug_TryCatch::eval ( Context & context ) {
         DAS_PROFILE_NODE
         auto aa = context.abiArg; auto acm = context.abiCMRES;
         char * EP, * SP;
@@ -282,7 +292,7 @@ namespace das {
     }
 #endif
 
-    void das_try_recover ( Context * __context__, const callable<void()> & try_block, const callable<void()> & catch_block ) {
+    void WIN_EH_NO_ASAN das_try_recover ( Context * __context__, const callable<void()> & try_block, const callable<void()> & catch_block ) {
         auto aa = __context__->abiArg; auto acm = __context__->abiCMRES;
         char * EP, * SP;
         __context__->stack.watermark(EP,SP);
@@ -318,7 +328,7 @@ namespace das {
 #endif
     }
 
-    void builtin_try_recover ( const Block & try_block, const Block & catch_block, Context * context, LineInfoArg * at ) {
+    void WIN_EH_NO_ASAN builtin_try_recover ( const Block & try_block, const Block & catch_block, Context * context, LineInfoArg * at ) {
         auto aa = context->abiArg; auto acm = context->abiCMRES;
         char * EP, * SP;
         context->stack.watermark(EP,SP);
