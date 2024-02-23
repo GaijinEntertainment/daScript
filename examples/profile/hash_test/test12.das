@@ -3,7 +3,7 @@ options persistent_heap
 require framework
 require daslib/hash_map
 
-%spoof_instance~TBucketHashMap(BucketHashMap_test,int,int)%%;
+%spoof_instance~TCuckooHashMap(CuckooHashMap_test,int,int)%%;
 %spoof_instance~TFlatHashMap(FlatHashMap_test,int,int)%%;
 %spoof_instance~TInterleavedFlatHashMap(InterleavedFlatHashMap_test,int,int)%%;
 
@@ -31,7 +31,7 @@ def main
     for n in range(32768)
         randomNumbers[n] = n
     profile_test("table<int;int>", type<table<int;int>>, randomNumbers)
-    profile_test("TBucketHashMap<int,int>", type<BucketHashMap_test>, randomNumbers)
+    profile_test("TCuckooHashMap<int,int>", type<CuckooHashMap_test>, randomNumbers)
     profile_test("TFlatHashMap<int,int>", type<FlatHashMap_test>, randomNumbers)
     profile_test("TInterleavedFlatHashMap<int,int>", type<InterleavedFlatHashMap_test>, randomNumbers)
 

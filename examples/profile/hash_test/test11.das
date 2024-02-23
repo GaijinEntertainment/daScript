@@ -4,7 +4,7 @@ require framework
 require daslib/hash_map
 require daslib/spoof
 
-//! BucketHashMap is a hash map that uses separate chaining with buckets.
+//! Slot adapter for SlotMap
 let public TSlotMapAdapter = %spoof_template~(SlotMap,HashMapType)
 [skip_field_lock_check]
 struct %SlotMap
@@ -25,14 +25,14 @@ def emplace ( var self : %SlotMap explicit; val : int )
         return r
 %%
 
-%spoof_instance~TBucketHashMap(BucketHashMap_uint64_int,uint64,int)%%;
+%spoof_instance~TCuckooHashMap(CuckooHashMap_uint64_int,uint64,int)%%;
 %spoof_instance~TFlatHashMap(FlatHashMap_uint64_int,uint64,int)%%;
 %spoof_instance~TInterleavedFlatHashMap(InterleavedFlatHashMap_uint64_int,uint64,int)%%;
 
 typedef SlotTable = table<uint64;int>
 
 %spoof_instance~TSlotMapAdapter(SlotMapAdapter_Table,SlotTable)%%;
-%spoof_instance~TSlotMapAdapter(SlotMapAdapter_BucketHashMap,BucketHashMap_uint64_int)%%;
+%spoof_instance~TSlotMapAdapter(SlotMapAdapter_CuckooHashMap,CuckooHashMap_uint64_int)%%;
 %spoof_instance~TSlotMapAdapter(SlotMapAdapter_FlatHashMap,FlatHashMap_uint64_int)%%;
 %spoof_instance~TSlotMapAdapter(SlotMapAdapter_InterleavedFlatHashMap,InterleavedFlatHashMap_uint64_int)%%;
 
@@ -49,7 +49,7 @@ def main
     print("test11 - insert {TOTAL_RANDOM_NUMBERS} unique random numbers into slotmap\n")
     var randomNumbers <- generate_unique_positive_random_numbers()
     profile_test("table<int;int>", type<SlotMapAdapter_Table>, randomNumbers)
-    profile_test("TBucketHashMap<int,int>", type<SlotMapAdapter_BucketHashMap>, randomNumbers)
+    profile_test("TCuckooHashMap<int,int>", type<SlotMapAdapter_CuckooHashMap>, randomNumbers)
     profile_test("TFlatHashMap<int,int>", type<SlotMapAdapter_FlatHashMap>, randomNumbers)
     profile_test("TInterleavedFlatHashMap<int,int>", type<SlotMapAdapter_InterleavedFlatHashMap>, randomNumbers)
 
