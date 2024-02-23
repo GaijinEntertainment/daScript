@@ -7,7 +7,7 @@ module hash_map shared private
 require daslib/spoof public
 
 //! BucketHashMap is a hash map that uses separate chaining with buckets.
-let public TBucketHashMap = %spoof_template~(BucketHashMap,KeyType,ValueType)
+let public TBucketHashMap = %spoof_template~(BucketHashMap,KeyType,ValueType,HashFunction=hash)
 [skip_field_lock_check]
 struct %BucketHashMap
     keys   : array<array<%KeyType>>
@@ -110,7 +110,7 @@ def find_index ( self:%BucketHashMap explicit; hash : uint64 ) : int
 
 def key_exists ( self:%BucketHashMap explicit; key : %KeyType )
     with self
-        let hash = hash(key)
+        let hash = %HashFunction(key)
         let index = self |> find_index(hash)
         for k,v,h in keys[index], values[index], hashes[index]
             if h == hash && k == key
@@ -119,7 +119,7 @@ def key_exists ( self:%BucketHashMap explicit; key : %KeyType )
 
 def get ( var self:%BucketHashMap ==const explicit; key : %KeyType; blk:block<(var v:%ValueType):void> ) : bool
     with self
-        let hash = hash(key)
+        let hash = %HashFunction(key)
         let index = self |> find_index(hash)
         for k,v,h in keys[index], values[index], hashes[index]
             if h == hash && k == key
@@ -129,7 +129,7 @@ def get ( var self:%BucketHashMap ==const explicit; key : %KeyType; blk:block<(v
 
 def get ( self:%BucketHashMap ==const explicit; key : %KeyType; blk:block<(v:%ValueType):void> ) : bool
     with self
-        let hash = hash(key)
+        let hash = %HashFunction(key)
         let index = self |> find_index(hash)
         for k,v,h in keys[index], values[index], hashes[index]
             if h == hash && k == key
@@ -139,7 +139,7 @@ def get ( self:%BucketHashMap ==const explicit; key : %KeyType; blk:block<(v:%Va
 
 def erase ( var self:%BucketHashMap explicit; key : %KeyType ) : bool
     with self
-        let hash = hash(key)
+        let hash = %HashFunction(key)
         let index = self |> find_index(hash)
         var eindex = -1
         for k,h,c in keys[index], hashes[index], count()
@@ -202,7 +202,7 @@ def values ( self:%BucketHashMap ==const explicit )
 
 def operator [] ( var self:%BucketHashMap ==const explicit; key : %KeyType ) : %ValueType&
     with self
-        let hash = hash(key)
+        let hash = %HashFunction(key)
         var index = self |> find_index(hash)
         for k,v,h in keys[index], values[index], hashes[index]
             if h == hash && k == key
@@ -225,7 +225,7 @@ def operator [] ( var self:%BucketHashMap ==const explicit; key : %KeyType ) : %
 
 def operator [] ( self:%BucketHashMap ==const explicit; key : %KeyType ) : %ValueType const&
     with self
-        let hash = hash(key)
+        let hash = %HashFunction(key)
         var index = self |> find_index(hash)
         for k,v,h in keys[index], values[index], hashes[index]
             if h == hash && k == key
@@ -237,7 +237,7 @@ def operator [] ( self:%BucketHashMap ==const explicit; key : %KeyType ) : %Valu
 
 def operator ?[] ( var self:%BucketHashMap ==const explicit; key : %KeyType ) : %ValueType?
     with self
-        let hash = hash(key)
+        let hash = %HashFunction(key)
         let index = self |> find_index(hash)
         for k,v,h in keys[index], values[index], hashes[index]
             if h == hash && k == key
@@ -246,7 +246,7 @@ def operator ?[] ( var self:%BucketHashMap ==const explicit; key : %KeyType ) : 
 
 def operator ?[] ( self:%BucketHashMap ==const explicit; key : %KeyType ) : %ValueType const?
     with self
-        let hash = hash(key)
+        let hash = %HashFunction(key)
         let index = self |> find_index(hash)
         for k,v,h in keys[index], values[index], hashes[index]
             if h == hash && k == key
@@ -255,7 +255,7 @@ def operator ?[] ( self:%BucketHashMap ==const explicit; key : %KeyType ) : %Val
 %%
 
 //! FlatHashMap is a hash map that uses open addressing with linear probing.
-let public TFlatHashMap = %spoof_template~(FlatHashMap,KeyType,ValueType)
+let public TFlatHashMap = %spoof_template~(FlatHashMap,KeyType,ValueType,HashFunction=hash)
 [skip_field_lock_check]
 struct %FlatHashMap
     keys   : array<%KeyType>
@@ -349,7 +349,7 @@ def find_index ( self:%FlatHashMap explicit; hash : uint64 ) : int
 
 def key_index ( self:%FlatHashMap explicit; key : %KeyType )
     with self
-        let hash = hash(key)
+        let hash = %HashFunction(key)
         var index = self |> find_index(hash)
         while true
             let h = hashes[index]
@@ -444,7 +444,7 @@ def operator [] ( var self:%FlatHashMap ==const explicit; key : %KeyType ) : %Va
     with self
         if length > ((mask+1)>>1) // ((mask+1)*2/3)
             self |> grow()
-        let hash = hash(key)
+        let hash = %HashFunction(key)
         var index = self |> find_index(hash)
         var lastTombstone = -1
         while true
@@ -499,7 +499,7 @@ def operator ?[] ( self:%FlatHashMap ==const explicit; key : %KeyType ) : %Value
 // interleaved flat hash map
 //! InterleavedFlatHashMap is a hash map that uses open addressing with linear probing.
 //! Keys and values are interleaved in the same array.
-let public TInterleavedFlatHashMap = %spoof_template~(FlatHashMap,KeyType,ValueType)
+let public TInterleavedFlatHashMap = %spoof_template~(FlatHashMap,KeyType,ValueType,HashFunction=hash)
 
 [skip_field_lock_check]
 struct KVH_%FlatHashMap
@@ -582,7 +582,7 @@ def find_index ( self:%FlatHashMap explicit; hash : uint64 ) : int
 
 def key_index ( self:%FlatHashMap explicit; key : %KeyType )
     with self
-        let hash = hash(key)
+        let hash = %HashFunction(key)
         var index = self |> find_index(hash)
         while true
             let h = kvh[index].hash
@@ -677,7 +677,7 @@ def operator [] ( var self:%FlatHashMap ==const explicit; key : %KeyType ) : %Va
     with self
         if length > ((mask+1)>>1) // ((mask+1)*2/3)
             self |> grow()
-        let hash = hash(key)
+        let hash = %HashFunction(key)
         var index = self |> find_index(hash)
         var lastTombstone = -1
         while true
