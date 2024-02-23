@@ -27,12 +27,14 @@ def emplace ( var self : %SlotMap explicit; val : int )
 
 %spoof_instance~TBucketHashMap(BucketHashMap_uint64_int,uint64,int)%%;
 %spoof_instance~TFlatHashMap(FlatHashMap_uint64_int,uint64,int)%%;
+%spoof_instance~TInterleavedFlatHashMap(InterleavedFlatHashMap_uint64_int,uint64,int)%%;
 
 typedef SlotTable = table<uint64;int>
 
 %spoof_instance~TSlotMapAdapter(SlotMapAdapter_Table,SlotTable)%%;
 %spoof_instance~TSlotMapAdapter(SlotMapAdapter_BucketHashMap,BucketHashMap_uint64_int)%%;
 %spoof_instance~TSlotMapAdapter(SlotMapAdapter_FlatHashMap,FlatHashMap_uint64_int)%%;
+%spoof_instance~TSlotMapAdapter(SlotMapAdapter_InterleavedFlatHashMap,InterleavedFlatHashMap_uint64_int)%%;
 
 [sideeffects]
 def test ( hmap : auto(SlotMapType); randomNumbers )
@@ -49,4 +51,5 @@ def main
     profile_test("table<int;int>", type<SlotMapAdapter_Table>, randomNumbers)
     profile_test("TBucketHashMap<int,int>", type<SlotMapAdapter_BucketHashMap>, randomNumbers)
     profile_test("TFlatHashMap<int,int>", type<SlotMapAdapter_FlatHashMap>, randomNumbers)
+    profile_test("TInterleavedFlatHashMap<int,int>", type<SlotMapAdapter_InterleavedFlatHashMap>, randomNumbers)
 

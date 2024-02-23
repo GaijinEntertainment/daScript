@@ -496,3 +496,236 @@ def operator ?[] ( self:%FlatHashMap ==const explicit; key : %KeyType ) : %Value
             return null
 %%
 
+// interleaved flat hash map
+//! InterleavedFlatHashMap is a hash map that uses open addressing with linear probing.
+//! Keys and values are interleaved in the same array.
+let public TInterleavedFlatHashMap = %spoof_template~(FlatHashMap,KeyType,ValueType)
+
+[skip_field_lock_check]
+struct KVH_%FlatHashMap
+    hash : uint64
+    key : %KeyType
+    value : %ValueType
+
+[skip_field_lock_check]
+struct %FlatHashMap
+    kvh  : array<KVH_%FlatHashMap>
+    mask : int
+    length : int
+
+def %FlatHashMap ( data : tuple<k:%KeyType;v:%ValueType>[] ) : %FlatHashMap
+    var self : %FlatHashMap
+    with self
+        let bit = int(clz(uint(length(data))))
+        let initialSize = 1 << (32 - bit)
+        mask = initialSize - 1
+        length = 0
+        kvh |> resize(initialSize)
+        for kv in data
+            self[kv.k] := kv.v
+    return <- self
+
+def %FlatHashMap ( data : array<tuple<k:%KeyType;v:%ValueType>> ) : %FlatHashMap
+    var self : %FlatHashMap
+    with self
+        let bit = int(clz(uint(length(data))))
+        let initialSize = 1 << (32 - bit)
+        mask = initialSize - 1
+        length = 0
+        kvh |> resize(initialSize)
+        for kv in data
+            self[kv.k] := kv.v
+    return <- self
+
+def %FlatHashMap ( initialSize : int = 64 ) : %FlatHashMap
+    assert((initialSize & (initialSize-1))==0, "size must be a power of 2")
+    var self : %FlatHashMap
+    with self
+        kvh |> resize(initialSize)
+        mask = initialSize - 1
+    return <- self
+
+def empty ( var self:%FlatHashMap explicit ) : bool
+    return self.length == 0
+
+def length ( var self:%FlatHashMap explicit ) : int
+    return self.length
+
+def clear ( var self:%FlatHashMap explicit )
+    with self
+        for v in kvh
+            v.hash = 0ul
+        length = 0
+
+def grow ( var self:%FlatHashMap explicit )
+    with self
+        let newSize = length(kvh) * 2
+        self |> reserve(newSize)
+
+def reserve ( var self:%FlatHashMap explicit; newSize : int )
+    assert((newSize & (newSize-1))==0, "size must be a power of 2")
+    with self
+        var newKVH : array<KVH_%FlatHashMap>
+        newKVH |> resize(newSize)
+        mask = newSize - 1
+        swap(newKVH, kvh)
+        length = 0
+        for v in newKVH
+            if v.hash > 1ul
+                self[v.key] <- v.value
+        newKVH |> resize(0)
+        delete newKVH
+
+def find_index ( self:%FlatHashMap explicit; hash : uint64 ) : int
+    with self
+        return int(hash) & mask
+
+def key_index ( self:%FlatHashMap explicit; key : %KeyType )
+    with self
+        let hash = hash(key)
+        var index = self |> find_index(hash)
+        while true
+            let h = kvh[index].hash
+            if h == hash
+                if kvh[index].key == key   // otherwise skip matching hash collision
+                    return index
+            elif h==0ul                 // empty, key not found
+                break
+            // skip hash collision or tombstone(1)
+            index = (index + 1) & mask
+        return -1
+
+def key_exists ( self:%FlatHashMap explicit; key : %KeyType )
+    with self
+        let index = self |> key_index(key)
+        return index != -1
+
+def get ( var self:%FlatHashMap ==const explicit; key : %KeyType; blk:block<(var v:%ValueType):void> ) : bool
+    with self
+        let index = self |> key_index(key)
+        if index != -1
+            blk |> invoke(kvh[index].value)
+            return true
+        else
+            return false
+
+def get ( self:%FlatHashMap ==const explicit; key : %KeyType; blk:block<(v:%ValueType):void> ) : bool
+    with self
+        let index = self |> key_index(key)
+        if index != -1
+            blk |> invoke(kvh[index].value)
+            return true
+        else
+            return false
+
+def erase ( var self:%FlatHashMap explicit; key : %KeyType ) : bool
+    with self
+        let index = self |> key_index(key)
+        if index != -1
+            kvh[index].hash = 1ul   // tombstone
+            length --
+            return true
+        else
+            return false
+
+def foreach ( self:%FlatHashMap ==const explicit; blk:block<(k:%KeyType;v:%ValueType):void> )
+    with self
+        for v in kvh
+            if v.hash > 1ul
+                blk |> invoke(v.key,v.value)
+
+def foreach ( var self:%FlatHashMap ==const explicit; blk:block<(k:%KeyType;var v:%ValueType):void> )
+    with self
+        for v in kvh
+            if v.hash > 1ul
+                blk |> invoke(v.key,v.value)
+
+[unsafe_outside_of_for]
+def keys ( var self:%FlatHashMap explicit )
+    var pself = unsafe(addr(self))
+    return <- generator<%KeyType&>() <|
+        for v in pself.kvh
+            if v.hash > 1ul
+                yield v.key
+        return false
+    finally
+        pself = null
+
+[unsafe_outside_of_for]
+def values ( var self:%FlatHashMap ==const explicit )
+    var pself = unsafe(addr(self))
+    return <- generator<%ValueType&>() <|
+        for v in pself.kvh
+            if v.hash > 1ul
+                yield v.value
+        return false
+    finally
+        pself = null
+
+[unsafe_outside_of_for]
+def values ( self:%FlatHashMap ==const explicit )
+    var pself = unsafe(addr(self))
+    return <- generator<%ValueType const&>() <|
+        for v in pself.kvh
+            if v.hash > 1ul
+                yield v.value
+        return false
+    finally
+        pself = null
+
+def operator [] ( var self:%FlatHashMap ==const explicit; key : %KeyType ) : %ValueType&
+    with self
+        if length > ((mask+1)>>1) // ((mask+1)*2/3)
+            self |> grow()
+        let hash = hash(key)
+        var index = self |> find_index(hash)
+        var lastTombstone = -1
+        while true
+            let h = kvh[index].hash
+            if h == hash
+                if kvh[index].key == key   // otherwise skip matching hash collision
+                    unsafe
+                        return kvh[index].value
+            elif h == 1ul
+                if lastTombstone == -1
+                    lastTombstone = index
+            elif h == 0ul
+                if lastTombstone != -1
+                    index = lastTombstone
+                kvh[index].key := key
+                kvh[index].hash = hash
+                length ++
+                unsafe
+                    return kvh[index].value
+            index = (index + 1) & mask
+        panic("unreachable")
+        unsafe
+            return kvh[0].value // we never get here due to panic
+
+def operator [] ( self:%FlatHashMap ==const explicit; key : %KeyType ) : %ValueType const&
+    with self
+        let index = self |> key_index(key)
+        if index != -1
+            unsafe
+                return kvh[index].value
+        panic("key not found")
+        unsafe
+            return kvh[0].value // we never get here due to panic
+
+def operator ?[] ( var self:%FlatHashMap ==const explicit; key : %KeyType ) : %ValueType?
+    with self
+        let index = self |> key_index(key)
+        if index != -1
+            return unsafe(addr(kvh[index].value))
+        else
+            return null
+
+def operator ?[] ( self:%FlatHashMap ==const explicit; key : %KeyType ) : %ValueType const?
+    with self
+        let index = self |> key_index(key)
+        if index != -1
+            return unsafe(addr(kvh[index].value))
+        else
+            return null
+%%
+
