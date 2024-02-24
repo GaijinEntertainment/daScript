@@ -3,9 +3,11 @@ options persistent_heap
 require framework
 require daslib/hash_map
 
-%spoof_instance~TBucketHashMap(BucketHashMap_test,int,int)%%;
+%spoof_instance~TDualFlatHashMap(DualFlatHashMap_test,int,int)%%;
+%spoof_instance~TCuckooHashMap(CuckooHashMap_test,int,int)%%;
 %spoof_instance~TFlatHashMap(FlatHashMap_test,int,int)%%;
 %spoof_instance~TInterleavedFlatHashMap(InterleavedFlatHashMap_test,int,int)%%;
+%spoof_instance~TFlatHashMap(PathalogicalFlatHashMap_test,int,int,pathalogical)%%;
 
 [sideeffects]
 def test ( hmap : auto(HashMapType); randomNumbers )
@@ -20,9 +22,8 @@ def test ( hmap : auto(HashMapType); randomNumbers )
             hashMap[num] = -num
         delete hashMap
 
-// NOW, UNCOMMENT THIS TO DEMO PATHOLOGICAL CASE IN FLAT HASH MAP
-//def hash ( t : int )
-//    return t>=2 ? uint64(t) : 1099511628211ul
+def pathalogical ( t : int )
+    return t>=2 ? uint64(t) : 1099511628211ul
 
 [export]
 def main
@@ -31,10 +32,10 @@ def main
     for n in range(32768)
         randomNumbers[n] = n
     profile_test("table<int;int>", type<table<int;int>>, randomNumbers)
-    profile_test("TBucketHashMap<int,int>", type<BucketHashMap_test>, randomNumbers)
+    profile_test("TCuckooHashMap<int,int>", type<CuckooHashMap_test>, randomNumbers)
+    profile_test("TDualFlatHashMap<int,int>", type<DualFlatHashMap_test>, randomNumbers)
     profile_test("TFlatHashMap<int,int>", type<FlatHashMap_test>, randomNumbers)
     profile_test("TInterleavedFlatHashMap<int,int>", type<InterleavedFlatHashMap_test>, randomNumbers)
-
-
+    profile_test("TFlatHashMap<int,int> with hash(t)->t pathalogical", type<PathalogicalFlatHashMap_test>, randomNumbers)
 
 

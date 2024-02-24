@@ -20,7 +20,10 @@ def SomeValue ( v1,v2 : int )
     return <- [[SomeValue value=v1,value2=v2]]
 
 
-%spoof_instance~TInterleavedFlatHashMap(ExampleHashMap,ComplexKey,SomeValue)%%;
+%spoof_instance~TCuckooHashMap(ExampleHashMap,ComplexKey,SomeValue)%%;
+
+def hash0 ( k : ComplexKey )
+    return uint64(k.key) | (uint64(k.key2) << 32ul)
 
 [export]
 def main

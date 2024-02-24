@@ -6,24 +6,52 @@ module hash_map shared private
 
 require daslib/spoof public
 
-//! BucketHashMap is a hash map that uses separate chaining with buckets.
-let public TBucketHashMap = %spoof_template~(BucketHashMap,KeyType,ValueType,HashFunction=hash)
+require daslib/random public
+require strings public
+
+[hint(alwaysinline)]
+def public first_hash ( key ) : uint64
+    return hash(key)
+
+[hint(alwaysinline)]
+def public second_hash ( key; fhash : uint64 ) : uint64
+    return fhash + 1ul
+
+[hint(alwaysinline)]
+def public first_hash ( key : int ) : uint64
+    let k64 = uint64(key)
+    return k64<=2ul ? 0x9e3779b97f4a7c15ul : k64
+
+[hint(alwaysinline)]
+def public second_hash ( key : int; fhash : uint64 ) : uint64
+    return hash(key)
+
+[hint(alwaysinline)]
+def public first_hash ( key : uint64 ) : uint64
+    let k64 = uint64(key)
+    return k64<=2ul ? 0x9e3779b97f4a7c15ul : k64
+
+[hint(alwaysinline)]
+def public second_hash ( key : uint64; fhash : uint64 ) : uint64
+    return hash(key)
+
+//! DualFlatHashMap is a hash map that uses open addressing with linear probing.
+//!  it uses 2 hash functions and double lookup.
+let public TDualFlatHashMap = %spoof_template~(DualFlatHashMap,KeyType,ValueType,FirstHashFunction=first_hash,SecondHashFunction=second_hash)
 [skip_field_lock_check]
-struct %BucketHashMap
-    keys   : array<array<%KeyType>>
-    hashes : array<array<uint64>>
-    values : array<array<%ValueType>>
+struct %DualFlatHashMap
+    keys   : array<%KeyType>
+    hashes : array<uint64>
+    values : array<%ValueType>
     mask : int
-    distance : int
     length : int
 
-def %BucketHashMap ( data : tuple<k:%KeyType;v:%ValueType>[] ) : %BucketHashMap
-    var self : %BucketHashMap
+def %DualFlatHashMap ( data : tuple<k:%KeyType;v:%ValueType>[] ) : %DualFlatHashMap
+    var self : %DualFlatHashMap
     with self
         let bit = int(clz(uint(length(data))))
         let initialSize = 1 << (32 - bit)
         mask = initialSize - 1
-        distance = 4 + (32-bit)
         length = 0
         keys |> resize(initialSize)
         hashes |> resize(initialSize)
@@ -32,13 +60,12 @@ def %BucketHashMap ( data : tuple<k:%KeyType;v:%ValueType>[] ) : %BucketHashMap
             self[kv.k] := kv.v
     return <- self
 
-def %BucketHashMap ( data : array<tuple<k:%KeyType;v:%ValueType>> ) : %BucketHashMap
-    var self : %BucketHashMap
+def %DualFlatHashMap ( data : array<tuple<k:%KeyType;v:%ValueType>> ) : %DualFlatHashMap
+    var self : %DualFlatHashMap
     with self
         let bit = int(clz(uint(length(data))))
         let initialSize = 1 << (32 - bit)
         mask = initialSize - 1
-        distance = 4 + (32-bit)
         length = 0
         keys |> resize(initialSize)
         hashes |> resize(initialSize)
@@ -47,43 +74,40 @@ def %BucketHashMap ( data : array<tuple<k:%KeyType;v:%ValueType>> ) : %BucketHas
             self[kv.k] := kv.v
     return <- self
 
-def %BucketHashMap ( initialSize : int = 64 ) : %BucketHashMap
+def %DualFlatHashMap ( initialSize : int = 8 ) : %DualFlatHashMap
     assert((initialSize & (initialSize-1))==0, "size must be a power of 2")
-    var self : %BucketHashMap
+    var self : %DualFlatHashMap
     with self
         keys |> resize(initialSize)
         hashes |> resize(initialSize)
         values |> resize(initialSize)
         mask = initialSize - 1
-        distance = 4
     return <- self
 
-def empty ( var self:%BucketHashMap explicit ) : bool
+def empty ( var self:%DualFlatHashMap explicit ) : bool
     return self.length == 0
 
-def length ( var self:%BucketHashMap explicit ) : int
+def length ( var self:%DualFlatHashMap explicit ) : int
     return self.length
 
-def clear ( var self:%BucketHashMap explicit )
+def clear ( var self:%DualFlatHashMap explicit )
     with self
-        for k,v,h in keys, values, hashes
-            k |> resize(0)
-            v |> resize(0)
-            h |> resize(0)
+        for h in hashes
+            h = 0ul
         length = 0
 
-def grow ( var self:%BucketHashMap explicit )
+def grow ( var self:%DualFlatHashMap explicit )
     with self
         let newSize = length(keys) * 2
-        distance ++
         self |> reserve(newSize)
 
-def reserve ( var self:%BucketHashMap explicit; newSize : int )
+[hint(unsafe_range_check,noalias=self)]
+def reserve ( var self:%DualFlatHashMap explicit; newSize : int )
     assert((newSize & (newSize-1))==0, "size must be a power of 2")
     with self
-        var newKeys : array<array<%KeyType>>
-        var newHashes : array<array<uint64>>
-        var newValues : array<array<%ValueType>>
+        var newKeys : array<%KeyType>
+        var newHashes : array<uint64>
+        var newValues : array<%ValueType>
         newKeys |> resize(newSize)
         newHashes |> resize(newSize)
         newValues |> resize(newSize)
@@ -91,12 +115,10 @@ def reserve ( var self:%BucketHashMap explicit; newSize : int )
         swap(newKeys, keys)
         swap(newHashes, hashes)
         swap(newValues, values)
-        for K,V,H in newKeys, newValues, newHashes
-            for k,v,h in K,V,H
-                let index = self |> find_index(h)
-                keys[index] |> emplace(k)
-                hashes[index] |> emplace(h)
-                values[index] |> emplace(v)
+        length = 0
+        for k,v,h in newKeys, newValues, newHashes
+            if h > 1ul
+                self[k] <- v
         newKeys |> resize(0)
         newHashes |> resize(0)
         newValues |> resize(0)
@@ -104,154 +126,187 @@ def reserve ( var self:%BucketHashMap explicit; newSize : int )
         delete newHashes
         delete newValues
 
-def find_index ( self:%BucketHashMap explicit; hash : uint64 ) : int
+[hint(unsafe_range_check,noalias=self)]
+def key_index ( self:%DualFlatHashMap explicit; key : %KeyType )
     with self
-        return int(hash) & mask
-
-def key_exists ( self:%BucketHashMap explicit; key : %KeyType )
-    with self
-        let hash = %HashFunction(key)
-        let index = self |> find_index(hash)
-        for k,v,h in keys[index], values[index], hashes[index]
-            if h == hash && k == key
-                return true
-        return false
-
-def get ( var self:%BucketHashMap ==const explicit; key : %KeyType; blk:block<(var v:%ValueType):void> ) : bool
-    with self
-        let hash = %HashFunction(key)
-        let index = self |> find_index(hash)
-        for k,v,h in keys[index], values[index], hashes[index]
-            if h == hash && k == key
-                blk |> invoke(v)
-                return true
-        return false
-
-def get ( self:%BucketHashMap ==const explicit; key : %KeyType; blk:block<(v:%ValueType):void> ) : bool
-    with self
-        let hash = %HashFunction(key)
-        let index = self |> find_index(hash)
-        for k,v,h in keys[index], values[index], hashes[index]
-            if h == hash && k == key
-                blk |> invoke(v)
-                return true
-        return false
-
-def erase ( var self:%BucketHashMap explicit; key : %KeyType ) : bool
-    with self
-        let hash = %HashFunction(key)
-        let index = self |> find_index(hash)
-        var eindex = -1
-        for k,h,c in keys[index], hashes[index], count()
-            if h == hash && k == key
-                eindex = c
+        var hash = %FirstHashFunction(key)
+        var index = int(hash) & mask
+        if true
+            let h = hashes[index]
+            if h == hash
+                if keys[index] == key   // otherwise skip matching hash collision
+                    return index
+            elif h==0ul                 // empty, key not found
+                return -1
+        hash = %SecondHashFunction(key, hash)
+        index = int(hash) & mask
+        while true
+            let h = hashes[index]
+            if h == hash
+                if keys[index] == key   // otherwise skip matching hash collision
+                    return index
+            elif h==0ul                 // empty, key not found
                 break
-        if eindex != -1
-            keys[index] |> erase(eindex)
-            hashes[index] |> erase(eindex)
-            values[index] |> erase(eindex)
-            length--
+            // skip hash collision or tombstone(1)
+            index = (index + 1) & mask
+        return -1
+
+[hint(unsafe_range_check,noalias=self)]
+def key_exists ( self:%DualFlatHashMap explicit; key : %KeyType )
+    with self
+        let index = self |> key_index(key)
+        return index != -1
+
+[hint(unsafe_range_check,noalias=self)]
+def get ( var self:%DualFlatHashMap ==const explicit; key : %KeyType; blk:block<(var v:%ValueType):void> ) : bool
+    with self
+        let index = self |> key_index(key)
+        if index != -1
+            blk |> invoke(values[index])
             return true
         else
             return false
 
-def foreach ( self:%BucketHashMap ==const explicit; blk:block<(k:%KeyType;v:%ValueType):void> )
+[hint(unsafe_range_check,noalias=self)]
+def get ( self:%DualFlatHashMap ==const explicit; key : %KeyType; blk:block<(v:%ValueType):void> ) : bool
     with self
-        for K,V,H in keys, values, hashes
-            for k,v,h in K,V,H
+        let index = self |> key_index(key)
+        if index != -1
+            blk |> invoke(values[index])
+            return true
+        else
+            return false
+
+[hint(unsafe_range_check,noalias=self)]
+def erase ( var self:%DualFlatHashMap explicit; key : %KeyType ) : bool
+    with self
+        let index = self |> key_index(key)
+        if index != -1
+            hashes[index] = 1ul   // tombstone
+            length --
+            return true
+        else
+            return false
+
+[hint(unsafe_range_check,noalias=self)]
+def foreach ( self:%DualFlatHashMap ==const explicit; blk:block<(k:%KeyType;v:%ValueType):void> )
+    with self
+        for k,v,h in keys, values, hashes
+            if h > 1ul
                 blk |> invoke(k,v)
 
-def foreach ( var self:%BucketHashMap ==const explicit; blk:block<(k:%KeyType;var v:%ValueType):void> )
+[hint(unsafe_range_check,noalias=self)]
+def foreach ( var self:%DualFlatHashMap ==const explicit; blk:block<(k:%KeyType;var v:%ValueType):void> )
     with self
-        for K,V,H in keys, values, hashes
-            for k,v,h in K,V,H
+        for k,v,h in keys, values, hashes
+            if h > 1ul
                 blk |> invoke(k,v)
 
 [unsafe_outside_of_for]
-def keys ( var self:%BucketHashMap explicit )
+def keys ( var self:%DualFlatHashMap explicit )
     var pself = unsafe(addr(self))
     return <- generator<%KeyType&>() <|
-        for K in pself.keys
-            for k in K
+        for h,k in pself.hashes, pself.keys
+            if h > 1ul
                 yield k
         return false
     finally
         pself = null
 
 [unsafe_outside_of_for]
-def values ( var self:%BucketHashMap ==const explicit )
+def values ( var self:%DualFlatHashMap ==const explicit )
     var pself = unsafe(addr(self))
     return <- generator<%ValueType&>() <|
-        for V in pself.values
-            for v in V
+        for h,v in pself.hashes, pself.values
+            if h > 1ul
                 yield v
         return false
     finally
         pself = null
 
 [unsafe_outside_of_for]
-def values ( self:%BucketHashMap ==const explicit )
+def values ( self:%DualFlatHashMap ==const explicit )
     var pself = unsafe(addr(self))
     return <- generator<%ValueType const&>() <|
-        for V in pself.values
-            for v in V
+        for h,v in pself.hashes, pself.values
+            if h > 1ul
                 yield v
         return false
     finally
         pself = null
 
-def operator [] ( var self:%BucketHashMap ==const explicit; key : %KeyType ) : %ValueType&
+[hint(unsafe_range_check,noalias=self)]
+def operator [] ( var self:%DualFlatHashMap ==const explicit; key : %KeyType ) : %ValueType&
     with self
-        let hash = %HashFunction(key)
-        var index = self |> find_index(hash)
-        for k,v,h in keys[index], values[index], hashes[index]
-            if h == hash && k == key
-                unsafe
-                    return v
-        var lastIndex = length(keys[index])
-        if lastIndex >= distance
+        if length > ((mask+1)>>1) // ((mask+1)*2/3)
             self |> grow()
-            index = self |> find_index(hash)
-            lastIndex = length(keys[index])
-        length ++
-        keys[index] |> push_clone(key)
-        hashes[index] |> push(hash)
-        static_if typeinfo(can_copy type<%ValueType>)
-            values[index] |> push <| [[%ValueType]]
-        else
-            values[index] |> emplace <| [[%ValueType]]
-        unsafe
-            return values[index][lastIndex]
-
-def operator [] ( self:%BucketHashMap ==const explicit; key : %KeyType ) : %ValueType const&
-    with self
-        let hash = %HashFunction(key)
-        var index = self |> find_index(hash)
-        for k,v,h in keys[index], values[index], hashes[index]
-            if h == hash && k == key
+        var hash = %FirstHashFunction(key)
+        var index = int(hash) & mask
+        if true
+            let h = hashes[index]
+            if h == hash
+                if keys[index] == key   // otherwise skip matching hash collision
+                    unsafe
+                        return values[index]
+            elif h==0ul                 // empty, key not found
+                keys[index] := key
+                hashes[index] = hash
+                length ++
                 unsafe
-                    return v
+                    return values[index]
+        hash = %SecondHashFunction(key, hash)
+        index = int(hash) & mask
+        var lastTombstone = -1
+        while true
+            let h = hashes[index]
+            if h == hash
+                if keys[index] == key   // otherwise skip matching hash collision
+                    unsafe
+                        return values[index]
+            elif h == 1ul
+                if lastTombstone == -1
+                    lastTombstone = index
+            elif h == 0ul
+                if lastTombstone != -1
+                    index = lastTombstone
+                keys[index] := key
+                hashes[index] = hash
+                length ++
+                unsafe
+                    return values[index]
+            index = (index + 1) & mask
+        panic("unreachable")
+        unsafe
+            return values[0] // we never get here due to panic
+
+[hint(unsafe_range_check,noalias=self)]
+def operator [] ( self:%DualFlatHashMap ==const explicit; key : %KeyType ) : %ValueType const&
+    with self
+        let index = self |> key_index(key)
+        if index != -1
+            unsafe
+                return values[index]
         panic("key not found")
         unsafe
-            return values[0][0] // we never get here due to panic
+            return values[0] // we never get here due to panic
 
-def operator ?[] ( var self:%BucketHashMap ==const explicit; key : %KeyType ) : %ValueType?
+[hint(unsafe_range_check,noalias=self)]
+def operator ?[] ( var self:%DualFlatHashMap ==const explicit; key : %KeyType ) : %ValueType?
     with self
-        let hash = %HashFunction(key)
-        let index = self |> find_index(hash)
-        for k,v,h in keys[index], values[index], hashes[index]
-            if h == hash && k == key
-                return unsafe(addr(v))
-        return null
+        let index = self |> key_index(key)
+        if index != -1
+            return unsafe(addr(values[index]))
+        else
+            return null
 
-def operator ?[] ( self:%BucketHashMap ==const explicit; key : %KeyType ) : %ValueType const?
+[hint(unsafe_range_check,noalias=self)]
+def operator ?[] ( self:%DualFlatHashMap ==const explicit; key : %KeyType ) : %ValueType const?
     with self
-        let hash = %HashFunction(key)
-        let index = self |> find_index(hash)
-        for k,v,h in keys[index], values[index], hashes[index]
-            if h == hash && k == key
-                return unsafe(addr(v))
-        return null
+        let index = self |> key_index(key)
+        if index != -1
+            return unsafe(addr(values[index]))
+        else
+            return null
 %%
 
 //! FlatHashMap is a hash map that uses open addressing with linear probing.
@@ -292,7 +347,7 @@ def %FlatHashMap ( data : array<tuple<k:%KeyType;v:%ValueType>> ) : %FlatHashMap
             self[kv.k] := kv.v
     return <- self
 
-def %FlatHashMap ( initialSize : int = 64 ) : %FlatHashMap
+def %FlatHashMap ( initialSize : int = 8 ) : %FlatHashMap
     assert((initialSize & (initialSize-1))==0, "size must be a power of 2")
     var self : %FlatHashMap
     with self
@@ -319,6 +374,7 @@ def grow ( var self:%FlatHashMap explicit )
         let newSize = length(keys) * 2
         self |> reserve(newSize)
 
+[hint(unsafe_range_check,noalias=self)]
 def reserve ( var self:%FlatHashMap explicit; newSize : int )
     assert((newSize & (newSize-1))==0, "size must be a power of 2")
     with self
@@ -343,14 +399,11 @@ def reserve ( var self:%FlatHashMap explicit; newSize : int )
         delete newHashes
         delete newValues
 
-def find_index ( self:%FlatHashMap explicit; hash : uint64 ) : int
-    with self
-        return int(hash) & mask
-
+[hint(unsafe_range_check,noalias=self)]
 def key_index ( self:%FlatHashMap explicit; key : %KeyType )
     with self
         let hash = %HashFunction(key)
-        var index = self |> find_index(hash)
+        var index = int(hash) & mask
         while true
             let h = hashes[index]
             if h == hash
@@ -362,11 +415,13 @@ def key_index ( self:%FlatHashMap explicit; key : %KeyType )
             index = (index + 1) & mask
         return -1
 
+[hint(unsafe_range_check,noalias=self)]
 def key_exists ( self:%FlatHashMap explicit; key : %KeyType )
     with self
         let index = self |> key_index(key)
         return index != -1
 
+[hint(unsafe_range_check,noalias=self)]
 def get ( var self:%FlatHashMap ==const explicit; key : %KeyType; blk:block<(var v:%ValueType):void> ) : bool
     with self
         let index = self |> key_index(key)
@@ -376,6 +431,7 @@ def get ( var self:%FlatHashMap ==const explicit; key : %KeyType; blk:block<(var
         else
             return false
 
+[hint(unsafe_range_check,noalias=self)]
 def get ( self:%FlatHashMap ==const explicit; key : %KeyType; blk:block<(v:%ValueType):void> ) : bool
     with self
         let index = self |> key_index(key)
@@ -385,6 +441,7 @@ def get ( self:%FlatHashMap ==const explicit; key : %KeyType; blk:block<(v:%Valu
         else
             return false
 
+[hint(unsafe_range_check,noalias=self)]
 def erase ( var self:%FlatHashMap explicit; key : %KeyType ) : bool
     with self
         let index = self |> key_index(key)
@@ -395,12 +452,14 @@ def erase ( var self:%FlatHashMap explicit; key : %KeyType ) : bool
         else
             return false
 
+[hint(unsafe_range_check,noalias=self)]
 def foreach ( self:%FlatHashMap ==const explicit; blk:block<(k:%KeyType;v:%ValueType):void> )
     with self
         for k,v,h in keys, values, hashes
             if h > 1ul
                 blk |> invoke(k,v)
 
+[hint(unsafe_range_check,noalias=self)]
 def foreach ( var self:%FlatHashMap ==const explicit; blk:block<(k:%KeyType;var v:%ValueType):void> )
     with self
         for k,v,h in keys, values, hashes
@@ -440,12 +499,13 @@ def values ( self:%FlatHashMap ==const explicit )
     finally
         pself = null
 
+[hint(unsafe_range_check,noalias=self)]
 def operator [] ( var self:%FlatHashMap ==const explicit; key : %KeyType ) : %ValueType&
     with self
         if length > ((mask+1)>>1) // ((mask+1)*2/3)
             self |> grow()
         let hash = %HashFunction(key)
-        var index = self |> find_index(hash)
+        var index = int(hash) & mask
         var lastTombstone = -1
         while true
             let h = hashes[index]
@@ -469,6 +529,7 @@ def operator [] ( var self:%FlatHashMap ==const explicit; key : %KeyType ) : %Va
         unsafe
             return values[0] // we never get here due to panic
 
+[hint(unsafe_range_check,noalias=self)]
 def operator [] ( self:%FlatHashMap ==const explicit; key : %KeyType ) : %ValueType const&
     with self
         let index = self |> key_index(key)
@@ -479,6 +540,7 @@ def operator [] ( self:%FlatHashMap ==const explicit; key : %KeyType ) : %ValueT
         unsafe
             return values[0] // we never get here due to panic
 
+[hint(unsafe_range_check,noalias=self)]
 def operator ?[] ( var self:%FlatHashMap ==const explicit; key : %KeyType ) : %ValueType?
     with self
         let index = self |> key_index(key)
@@ -487,6 +549,7 @@ def operator ?[] ( var self:%FlatHashMap ==const explicit; key : %KeyType ) : %V
         else
             return null
 
+[hint(unsafe_range_check,noalias=self)]
 def operator ?[] ( self:%FlatHashMap ==const explicit; key : %KeyType ) : %ValueType const?
     with self
         let index = self |> key_index(key)
@@ -537,7 +600,7 @@ def %FlatHashMap ( data : array<tuple<k:%KeyType;v:%ValueType>> ) : %FlatHashMap
             self[kv.k] := kv.v
     return <- self
 
-def %FlatHashMap ( initialSize : int = 64 ) : %FlatHashMap
+def %FlatHashMap ( initialSize : int = 8 ) : %FlatHashMap
     assert((initialSize & (initialSize-1))==0, "size must be a power of 2")
     var self : %FlatHashMap
     with self
@@ -562,6 +625,7 @@ def grow ( var self:%FlatHashMap explicit )
         let newSize = length(kvh) * 2
         self |> reserve(newSize)
 
+[hint(unsafe_range_check,noalias=self)]
 def reserve ( var self:%FlatHashMap explicit; newSize : int )
     assert((newSize & (newSize-1))==0, "size must be a power of 2")
     with self
@@ -576,14 +640,11 @@ def reserve ( var self:%FlatHashMap explicit; newSize : int )
         newKVH |> resize(0)
         delete newKVH
 
-def find_index ( self:%FlatHashMap explicit; hash : uint64 ) : int
-    with self
-        return int(hash) & mask
-
+[hint(unsafe_range_check,noalias=self)]
 def key_index ( self:%FlatHashMap explicit; key : %KeyType )
     with self
         let hash = %HashFunction(key)
-        var index = self |> find_index(hash)
+        var index = int(hash) & mask
         while true
             let h = kvh[index].hash
             if h == hash
@@ -595,11 +656,13 @@ def key_index ( self:%FlatHashMap explicit; key : %KeyType )
             index = (index + 1) & mask
         return -1
 
+[hint(unsafe_range_check,noalias=self)]
 def key_exists ( self:%FlatHashMap explicit; key : %KeyType )
     with self
         let index = self |> key_index(key)
         return index != -1
 
+[hint(unsafe_range_check,noalias=self)]
 def get ( var self:%FlatHashMap ==const explicit; key : %KeyType; blk:block<(var v:%ValueType):void> ) : bool
     with self
         let index = self |> key_index(key)
@@ -609,6 +672,7 @@ def get ( var self:%FlatHashMap ==const explicit; key : %KeyType; blk:block<(var
         else
             return false
 
+[hint(unsafe_range_check,noalias=self)]
 def get ( self:%FlatHashMap ==const explicit; key : %KeyType; blk:block<(v:%ValueType):void> ) : bool
     with self
         let index = self |> key_index(key)
@@ -618,6 +682,7 @@ def get ( self:%FlatHashMap ==const explicit; key : %KeyType; blk:block<(v:%Valu
         else
             return false
 
+[hint(unsafe_range_check,noalias=self)]
 def erase ( var self:%FlatHashMap explicit; key : %KeyType ) : bool
     with self
         let index = self |> key_index(key)
@@ -628,12 +693,14 @@ def erase ( var self:%FlatHashMap explicit; key : %KeyType ) : bool
         else
             return false
 
+[hint(unsafe_range_check,noalias=self)]
 def foreach ( self:%FlatHashMap ==const explicit; blk:block<(k:%KeyType;v:%ValueType):void> )
     with self
         for v in kvh
             if v.hash > 1ul
                 blk |> invoke(v.key,v.value)
 
+[hint(unsafe_range_check,noalias=self)]
 def foreach ( var self:%FlatHashMap ==const explicit; blk:block<(k:%KeyType;var v:%ValueType):void> )
     with self
         for v in kvh
@@ -673,12 +740,13 @@ def values ( self:%FlatHashMap ==const explicit )
     finally
         pself = null
 
+[hint(unsafe_range_check,noalias=self)]
 def operator [] ( var self:%FlatHashMap ==const explicit; key : %KeyType ) : %ValueType&
     with self
         if length > ((mask+1)>>1) // ((mask+1)*2/3)
             self |> grow()
         let hash = %HashFunction(key)
-        var index = self |> find_index(hash)
+        var index = int(hash) & mask
         var lastTombstone = -1
         while true
             let h = kvh[index].hash
@@ -702,6 +770,7 @@ def operator [] ( var self:%FlatHashMap ==const explicit; key : %KeyType ) : %Va
         unsafe
             return kvh[0].value // we never get here due to panic
 
+[hint(unsafe_range_check,noalias=self)]
 def operator [] ( self:%FlatHashMap ==const explicit; key : %KeyType ) : %ValueType const&
     with self
         let index = self |> key_index(key)
@@ -712,6 +781,7 @@ def operator [] ( self:%FlatHashMap ==const explicit; key : %KeyType ) : %ValueT
         unsafe
             return kvh[0].value // we never get here due to panic
 
+[hint(unsafe_range_check,noalias=self)]
 def operator ?[] ( var self:%FlatHashMap ==const explicit; key : %KeyType ) : %ValueType?
     with self
         let index = self |> key_index(key)
@@ -720,6 +790,7 @@ def operator ?[] ( var self:%FlatHashMap ==const explicit; key : %KeyType ) : %V
         else
             return null
 
+[hint(unsafe_range_check,noalias=self)]
 def operator ?[] ( self:%FlatHashMap ==const explicit; key : %KeyType ) : %ValueType const?
     with self
         let index = self |> key_index(key)
@@ -729,3 +800,310 @@ def operator ?[] ( self:%FlatHashMap ==const explicit; key : %KeyType ) : %Value
             return null
 %%
 
+[hint(alwaysinline)]
+def public hash0 ( k )
+    //! this hash function converts and workhorse key to a 64 bit hash
+    let k64 = uint64(k)
+    return k64 <= 2ul ? 0x9e3779b97f4a7c15ul : k64
+
+[hint(alwaysinline)]
+def public hash0 ( s : string ) : uint64
+    //! adler32 extended to 64 bits
+    let MOD_ADLER = 0xFFFFFFFFFFFFFFC5ul
+    var a = 1ul
+    var b = 0ul
+    for c in s
+        a = (a + uint64(c)) % MOD_ADLER
+        b = (b + a) % MOD_ADLER
+    return (uint64(b) << 32ul) | uint64(a)
+
+//! CompactHashMap is a hash map that uses 2 hash functions and double lookup.
+let public TCuckooHashMap = %spoof_template~(CuckooHashMap,KeyType,ValueType,FirstHashFunction=hash0,SecondHashFunction=hash)
+
+struct KHV_%CuckooHashMap
+    key : %KeyType
+    hash : uint64
+    value : %ValueType
+
+[skip_field_lock_check]
+struct %CuckooHashMap
+    khv : array<KHV_%CuckooHashMap>
+    mask : int
+    length : int
+    seed : int4
+
+def %CuckooHashMap ( data : tuple<k:%KeyType;v:%ValueType>[] ) : %CuckooHashMap
+    var self : %CuckooHashMap
+    with self
+        seed = random_seed(13)
+        let bit = int(clz(uint(length(data))))
+        let initialSize = 1 << (32 - bit)
+        mask = initialSize - 1
+        length = 0
+        khv |> resize(initialSize)
+        for kv in data
+            self[kv.k] := kv.v
+    return <- self
+
+def %CuckooHashMap ( data : array<tuple<k:%KeyType;v:%ValueType>> ) : %CuckooHashMap
+    var self : %CuckooHashMap
+    with self
+        seed = random_seed(13)
+        let bit = int(clz(uint(length(data))))
+        let initialSize = 1 << (32 - bit)
+        mask = initialSize - 1
+        length = 0
+        khv |> resize(initialSize)
+        for kv in data
+            self[kv.k] := kv.v
+    return <- self
+
+def %CuckooHashMap ( initialSize : int = 64 ) : %CuckooHashMap
+    assert((initialSize & (initialSize-1))==0, "size must be a power of 2")
+    var self : %CuckooHashMap
+    with self
+        seed = random_seed(13)
+        khv |> resize(initialSize)
+        mask = initialSize - 1
+    return <- self
+
+def empty ( var self:%CuckooHashMap explicit ) : bool
+    return self.length == 0
+
+def length ( var self:%CuckooHashMap explicit ) : int
+    return self.length
+
+def clear ( var self:%CuckooHashMap explicit )
+    with self
+        for t in khv
+            t.hash = 0ul
+        length = 0
+
+def grow ( var self:%CuckooHashMap explicit )
+    with self
+        let newSize = length(khv) * 2
+        self |> reserve(newSize)
+
+[hint(unsafe_range_check,noalias=self)]
+def reserve ( var self:%CuckooHashMap explicit; newSize : int )
+    assert((newSize & (newSize-1))==0, "size must be a power of 2")
+    with self
+        var newKHV : array<KHV_%CuckooHashMap>
+        newKHV |> resize(newSize)
+        mask = newSize - 1
+        swap(newKHV, khv)
+        length = 0
+        for t in newKHV
+            if t.hash != 0ul
+                self[t.key] <- t.value
+        newKHV |> resize(0)
+        delete newKHV
+
+[hint(unsafe_range_check,noalias=self)]
+def key_index ( self:%CuckooHashMap explicit; key : %KeyType )
+    with self
+        let firstHash = %FirstHashFunction(key)
+        var index = int(firstHash) & mask
+        if khv[index].hash == firstHash && khv[index].key == key
+            return index
+        var secondHash = %SecondHashFunction(key)
+        index = int(secondHash) & mask
+        if khv[index].hash == secondHash && khv[index].key == key
+            return index
+        return -1
+
+[hint(unsafe_range_check,noalias=self)]
+def key_exists ( self:%CuckooHashMap explicit; key : %KeyType )
+    with self
+        let index = self |> key_index(key)
+        return index != -1
+
+[hint(unsafe_range_check,noalias=self)]
+def get ( var self:%CuckooHashMap ==const explicit; key : %KeyType; blk:block<(var v:%ValueType):void> ) : bool
+    with self
+        let index = self |> key_index(key)
+        if index != -1
+            blk |> invoke(khv[index].value)
+            return true
+        else
+            return false
+
+[hint(unsafe_range_check,noalias=self)]
+def get ( self:%CuckooHashMap ==const explicit; key : %KeyType; blk:block<(v:%ValueType):void> ) : bool
+    with self
+        let index = self |> key_index(key)
+        if index != -1
+            blk |> invoke(khv[index].value)
+            return true
+        else
+            return false
+
+[hint(unsafe_range_check,noalias=self)]
+def erase ( var self:%CuckooHashMap explicit; key : %KeyType ) : bool
+    with self
+        let index = self |> key_index(key)
+        if index != -1
+            khv[index].hash = 0ul
+            length --
+            return true
+        else
+            return false
+
+[hint(unsafe_range_check,noalias=self)]
+def foreach ( self:%CuckooHashMap ==const explicit; blk:block<(k:%KeyType;v:%ValueType):void> )
+    with self
+        for t in khv
+            if t.hash != 0ul
+                blk |> invoke(t.key,t.value)
+
+[hint(unsafe_range_check,noalias=self)]
+def foreach ( var self:%CuckooHashMap ==const explicit; blk:block<(k:%KeyType;var v:%ValueType):void> )
+    with self
+        for t in khv
+            if t.hash != 0ul
+                blk |> invoke(t.key,t.value)
+
+[unsafe_outside_of_for]
+def keys ( var self:%CuckooHashMap explicit )
+    var pself = unsafe(addr(self))
+    return <- generator<%KeyType&>() <|
+        for t in pself.khv
+            if t.hash != 0ul
+                yield t.key
+        return false
+    finally
+        pself = null
+
+[unsafe_outside_of_for]
+def values ( var self:%CuckooHashMap ==const explicit )
+    var pself = unsafe(addr(self))
+    return <- generator<%ValueType&>() <|
+        for t in pself.khv
+            if t.hash != 0ul
+                yield t.value
+        return false
+    finally
+        pself = null
+
+[unsafe_outside_of_for]
+def values ( self:%CuckooHashMap ==const explicit )
+    var pself = unsafe(addr(self))
+    return <- generator<%ValueType const&>() <|
+        for t in pself.khv
+            if t.hash != 0ul
+                yield t.value
+        return false
+    finally
+        pself = null
+
+[hint(unsafe_range_check,noalias=self)]
+def insert ( var self:%CuckooHashMap explicit; _key : %KeyType; _value : %ValueType )
+    //! insert a key value pair into the hash map
+    with self
+        var key := _key
+        var value := _value
+        while true
+            for i in range(length(khv)/2)
+                var firstHash = %FirstHashFunction(key)
+                var firstIndex = int(firstHash) & mask
+                if khv[firstIndex].hash == 0ul
+                    khv[firstIndex].hash = firstHash
+                    khv[firstIndex].key <- key
+                    khv[firstIndex].value <- value
+                    length ++
+                    return
+                var secondHash = %SecondHashFunction(key)
+                var secondIndex = int(secondHash) & mask
+                if khv[secondIndex].hash == 0ul
+                    khv[secondIndex].hash = secondHash
+                    khv[secondIndex].key <- key
+                    khv[secondIndex].value <- value
+                    length ++
+                    return
+                if (random_int(seed) & 1) == 0
+                    swap(key, khv[firstIndex].key)
+                    swap(value, khv[firstIndex].value)
+                    khv[firstIndex].hash = firstHash
+                else
+                    swap(key, khv[secondIndex].key)
+                    swap(value, khv[secondIndex].value)
+                    khv[secondIndex].hash = secondHash
+            self |> grow()
+
+def describe ( var self:%CuckooHashMap ==const explicit )
+    with self
+        return build_string <| $ ( writer )
+            writer |> write("\{\{\n")
+            for t,index in khv,count()
+                if t.hash != 0ul
+                    writer |> write(t.key)
+                    writer |> write("=>")
+                    writer |> write(t.value)
+                    writer |> write(index)
+                    writer |> write(";")
+            writer |> write("\}\}\n")
+
+[hint(unsafe_range_check,noalias=self)]
+def operator [] ( var self:%CuckooHashMap ==const explicit; key : %KeyType ) : %ValueType&
+    with self
+        if length > ((mask+1)>>1) // ((mask+1)*2/3)
+            self |> grow()
+        // if its already there
+        var firstHash = %FirstHashFunction(key)
+        var firstIndex = int(firstHash) & mask
+        if khv[firstIndex].hash == firstHash && khv[firstIndex].key == key
+            unsafe
+                return khv[firstIndex].value
+        var secondHash = %SecondHashFunction(key)
+        var secondIndex = int(secondHash) & mask
+        if khv[secondIndex].hash == secondHash && khv[secondIndex].key == key
+            unsafe
+                return khv[secondIndex].value
+        // now, if there is a room to insert
+        if khv[firstIndex].hash == 0ul
+            khv[firstIndex].hash = firstHash
+            khv[firstIndex].key := key
+            length ++
+            unsafe
+                return khv[firstIndex].value
+        if khv[secondIndex].hash == 0ul
+            khv[secondIndex].hash = secondHash
+            khv[secondIndex].key := key
+            length ++
+            unsafe
+                return khv[secondIndex].value
+        // now we have to kick out one of the existing keys
+        self |> insert(key, [[%ValueType]])
+        let index = self |> key_index(key)
+        unsafe
+            return khv[index].value
+
+[hint(unsafe_range_check,noalias=self)]
+def operator [] ( self:%CuckooHashMap ==const explicit; key : %KeyType ) : %ValueType const&
+    with self
+        let index = self |> key_index(key)
+        if index != -1
+            unsafe
+                return khv[index].value
+        panic("key not found")
+        unsafe
+            return khv[0].value // we never get here due to panic
+
+[hint(unsafe_range_check,noalias=self)]
+def operator ?[] ( var self:%CuckooHashMap ==const explicit; key : %KeyType ) : %ValueType?
+    with self
+        let index = self |> key_index(key)
+        if index != -1
+            return unsafe(addr(khv[index].value))
+        else
+            return null
+
+[hint(unsafe_range_check,noalias=self)]
+def operator ?[] ( self:%CuckooHashMap ==const explicit; key : %KeyType ) : %ValueType const?
+    with self
+        let index = self |> key_index(key)
+        if index != -1
+            return unsafe(addr(khv[index].value))
+        else
+            return null
+%%

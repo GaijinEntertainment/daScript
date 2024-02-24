@@ -3,7 +3,8 @@ options persistent_heap
 require framework
 require daslib/hash_map
 
-%spoof_instance~TBucketHashMap(BucketHashMap_test,int,int)%%;
+%spoof_instance~TDualFlatHashMap(DualFlatHashMap_test,int,int)%%;
+%spoof_instance~TCuckooHashMap(CuckooHashMap_test,int,int)%%;
 %spoof_instance~TFlatHashMap(FlatHashMap_test,int,int)%%;
 %spoof_instance~TInterleavedFlatHashMap(InterleavedFlatHashMap_test,int,int)%%;
 
@@ -12,15 +13,16 @@ def test ( hmap : auto(HashMapType); dummy )
     var inscope hashMap : HashMapType
     static_if !typeinfo(is_table type<HashMapType>)
         hashMap <- HashMapType()
-    for i in range(25)
+    for i in range(250)
         for j in range(300000)
             hashMap[3] = 3
 
 [export]
 def main
-    print("test05 - insert 300000 elements of the same value 25 times\n")
+    print("test05 - insert 300000 elements of the same value 250 times\n")
     profile_test("table<int;int>", type<table<int;int>>,0)
-    profile_test("TBucketHashMap<int,int>", type<BucketHashMap_test>,0)
+    profile_test("TCuckooHashMap<int,int>", type<CuckooHashMap_test>, 0)
+    profile_test("TDualFlatHashMap<int,int>", type<DualFlatHashMap_test>,0)
     profile_test("TFlatHashMap<int,int>", type<FlatHashMap_test>,0)
     profile_test("TInterleavedFlatHashMap<int,int>", type<InterleavedFlatHashMap_test>,0)
 

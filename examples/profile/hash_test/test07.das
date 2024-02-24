@@ -6,7 +6,8 @@ require daslib/hash_map
 struct Value
     val : int
 
-%spoof_instance~TBucketHashMap(BucketHashMap_test,int,Value)%%;
+%spoof_instance~TDualFlatHashMap(DualFlatHashMap_test,int,Value)%%;
+%spoof_instance~TCuckooHashMap(CuckooHashMap_test,int,Value)%%;
 %spoof_instance~TFlatHashMap(FlatHashMap_test,int,Value)%%;
 %spoof_instance~TInterleavedFlatHashMap(InterleavedFlatHashMap_test,int,Value)%%;
 
@@ -25,6 +26,7 @@ def main
     var randomNumbers <- get_random_numbers_with_intersections_50()
     print("test07 - insert {TOTAL_RANDOM_NUMBERS} random numbers with 50% intersections, increment each element's field\n")
     profile_test("table<int;int>", type<table<int;Value>>, randomNumbers)
-    profile_test("TBucketHashMap<int,int>", type<BucketHashMap_test>, randomNumbers)
+    profile_test("TCuckooHashMap<int,int>", type<CuckooHashMap_test>, randomNumbers)
+    profile_test("TDualFlatHashMap<int,int>", type<DualFlatHashMap_test>, randomNumbers)
     profile_test("TFlatHashMap<int,int>", type<FlatHashMap_test>, randomNumbers)
     profile_test("TInterleavedFlatHashMap<int,int>", type<InterleavedFlatHashMap_test>, randomNumbers)
