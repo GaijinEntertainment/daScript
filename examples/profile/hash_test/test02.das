@@ -3,7 +3,6 @@ options persistent_heap
 require framework
 require daslib/hash_map
 
-%spoof_instance~TDualFlatHashMap(DualFlatHashMap_test,int,int)%%;
 %spoof_instance~TCuckooHashMap(CuckooHashMap_test,int,int)%%;
 %spoof_instance~TFlatHashMap(FlatHashMap_test,int,int)%%;
 %spoof_instance~TInterleavedFlatHashMap(InterleavedFlatHashMap_test,int,int)%%;
@@ -26,7 +25,6 @@ def main
     print("test02 - insert 600000 elements in a hash map 25 times, with clear inbetween\n")
     profile_test("table<int;int>", type<table<int;int>>, 0)
     profile_test("TCuckooHashMap<int,int>", type<CuckooHashMap_test>, 0)
-    profile_test("TDualFlatHashMap<int,int>", type<DualFlatHashMap_test>, 0)
     profile_test("TFlatHashMap<int,int>", type<FlatHashMap_test>, 0)
     profile_test("TInterleavedFlatHashMap<int,int>", type<InterleavedFlatHashMap_test>, 0)
     profile_test("TFlatHashMap<int,int> with hash(x)->x", type<FlatHashMap_test0>, 0)

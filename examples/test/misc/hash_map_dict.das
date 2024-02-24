@@ -4,7 +4,6 @@ require daslib/hash_map
 
 %spoof_instance~TCuckooHashMap(CuckooHashMap_string_to_int,string,int)%%;
 %spoof_instance~TFlatHashMap(FlatHashMap_string_to_int,string,int)%%;
-%spoof_instance~TDualFlatHashMap(DualFlatHashMap_string_to_int,string,int)%%;
 %spoof_instance~TInterleavedFlatHashMap(InterleavedFlatHashMap_string_to_int,string,int)%%;
 
 def makeRandomSequence(var src:array<string>)
