@@ -48,12 +48,18 @@ def table_ops ( t : T?; var a:auto(AnyTable_int_to_Foo); var e:Foo; var et:Foo i
         t |> failure("we should not be here\n")
     t |> success ( !found )
 
+%spoof_instance~TDualFlatHashMap(DualFlatHashMap_int_Foo,int,Foo)%%;
 %spoof_instance~TCuckooHashMap(CuckooHashMap_int_Foo,int,Foo)%%;
 %spoof_instance~TFlatHashMap(FlatHashMap_int_Foo,int,Foo)%%;
 %spoof_instance~TInterleavedFlatHashMap(InterleavedFlatHashMap_int_Foo,int,Foo)%%;
 
 [test]
 def all_ops ( t : T? )
+    t |> run("DualFlatHashMap") <| @ ( t : T? )
+        var tab <- DualFlatHashMap_int_Foo()
+        t |> success(empty(tab))
+        t |> equal(0, length(tab))
+        table_ops ( t, tab, [[Foo a=1]], [[Foo a=2]])
     t |> run("CuckooHashMap") <| @ ( t : T? )
         var tab <- CuckooHashMap_int_Foo()
         t |> success(empty(tab))
@@ -73,6 +79,14 @@ def all_ops ( t : T? )
 [test]
 def all_stress ( t : T? )
     let STRESS_SIZE = 10000
+    t |> run("DualFlatHashMap") <| @ ( t : T? )
+        var tab <- DualFlatHashMap_int_Foo()
+        for i in range(STRESS_SIZE)
+            tab[i] = [[Foo a=i]]
+        t |> equal(STRESS_SIZE, length(tab))
+        for i in range(STRESS_SIZE)
+            t |> equal(i, tab[i].a)
+        delete tab
     t |> run("CuckooHashMap") <| @ ( t : T? )
         var tab <- CuckooHashMap_int_Foo()
         for i in range(STRESS_SIZE)
@@ -100,6 +114,28 @@ def all_stress ( t : T? )
 
 [test]
 def all_init ( t : T? )
+    t |> run("DualFlatHashMap") <| @ ( t : T? )
+        var tab <- DualFlatHashMap_int_Foo([{auto
+            1 => [[Foo a=1]];
+            2 => [[Foo a=2]];
+            3 => [[Foo a=3]]
+        }])
+        t |> equal(3, length(tab))
+        t |> equal(1, tab[1].a)
+        t |> equal(2, tab[2].a)
+        t |> equal(3, tab[3].a)
+        t |> equal(0, tab[4].a)
+        delete tab
+        tab <- DualFlatHashMap_int_Foo([[auto
+            1 => [[Foo a=1]];
+            2 => [[Foo a=2]];
+            3 => [[Foo a=3]]
+        ]])
+        t |> equal(3, length(tab))
+        t |> equal(1, tab[1].a)
+        t |> equal(2, tab[2].a)
+        t |> equal(3, tab[3].a)
+        t |> equal(0, tab[4].a)
     t |> run("CuckooHashMap") <| @ ( t : T? )
         var tab <- CuckooHashMap_int_Foo([{auto
             1 => [[Foo a=1]];

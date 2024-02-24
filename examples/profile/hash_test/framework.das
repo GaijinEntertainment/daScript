@@ -65,6 +65,7 @@ def shuffle ( var data : array<int>; var seed:int4& )
 let FNV_PRIME = 1099511628211ul
 let FNV_OFFSET_BASIS = 14695981039346656037ul
 
+[hint(alwaysinline)]
 def hash ( t : int )
     unsafe
         let data : uint8? = reinterpret<uint8?> addr(t)
@@ -77,6 +78,7 @@ def hash ( t : int )
             return FNV_PRIME
         return offset_basis
 
+[hint(alwaysinline)]
 def hash ( t : uint64 )
     unsafe
         let data : uint8? = reinterpret<uint8?> addr(t)

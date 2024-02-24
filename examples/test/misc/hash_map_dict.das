@@ -4,6 +4,8 @@ require daslib/hash_map
 
 %spoof_instance~TCuckooHashMap(CuckooHashMap_string_to_int,string,int)%%;
 %spoof_instance~TFlatHashMap(FlatHashMap_string_to_int,string,int)%%;
+%spoof_instance~TDualFlatHashMap(DualFlatHashMap_string_to_int,string,int)%%;
+%spoof_instance~TInterleavedFlatHashMap(InterleavedFlatHashMap_string_to_int,string,int)%%;
 
 def makeRandomSequence(var src:array<string>)
     let n = 500000
@@ -33,7 +35,14 @@ def main
         profile(20,"cuckoo hash map") <|
             dict(tab,src)
     if true
+        var tab <- DualFlatHashMap_string_to_int()
+        profile(20,"dual flat hash map") <|
+            dict(tab,src)
+    if true
         var tab <- FlatHashMap_string_to_int()
         profile(20,"flat hash map") <|
             dict(tab,src)
-
+    if true
+        var tab <- InterleavedFlatHashMap_string_to_int()
+        profile(20,"interleaved flat hash map") <|
+            dict(tab,src)

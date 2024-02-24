@@ -25,6 +25,7 @@ def emplace ( var self : %SlotMap explicit; val : int )
         return r
 %%
 
+%spoof_instance~TDualFlatHashMap(DualFlatHashMap_uint64_int,uint64,int)%%;
 %spoof_instance~TCuckooHashMap(CuckooHashMap_uint64_int,uint64,int)%%;
 %spoof_instance~TFlatHashMap(FlatHashMap_uint64_int,uint64,int)%%;
 %spoof_instance~TInterleavedFlatHashMap(InterleavedFlatHashMap_uint64_int,uint64,int)%%;
@@ -32,6 +33,7 @@ def emplace ( var self : %SlotMap explicit; val : int )
 typedef SlotTable = table<uint64;int>
 
 %spoof_instance~TSlotMapAdapter(SlotMapAdapter_Table,SlotTable)%%;
+%spoof_instance~TSlotMapAdapter(SlotMapAdapter_DualFlatHashMap,DualFlatHashMap_uint64_int)%%;
 %spoof_instance~TSlotMapAdapter(SlotMapAdapter_CuckooHashMap,CuckooHashMap_uint64_int)%%;
 %spoof_instance~TSlotMapAdapter(SlotMapAdapter_FlatHashMap,FlatHashMap_uint64_int)%%;
 %spoof_instance~TSlotMapAdapter(SlotMapAdapter_InterleavedFlatHashMap,InterleavedFlatHashMap_uint64_int)%%;
@@ -50,6 +52,7 @@ def main
     var randomNumbers <- generate_unique_positive_random_numbers()
     profile_test("table<int;int>", type<SlotMapAdapter_Table>, randomNumbers)
     profile_test("TCuckooHashMap<int,int>", type<SlotMapAdapter_CuckooHashMap>, randomNumbers)
+    profile_test("TDualFlatHashMap<int,int>", type<SlotMapAdapter_DualFlatHashMap>, randomNumbers)
     profile_test("TFlatHashMap<int,int>", type<SlotMapAdapter_FlatHashMap>, randomNumbers)
     profile_test("TInterleavedFlatHashMap<int,int>", type<SlotMapAdapter_InterleavedFlatHashMap>, randomNumbers)
 
