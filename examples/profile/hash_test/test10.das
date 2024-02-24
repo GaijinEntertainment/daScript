@@ -23,6 +23,7 @@ def main
     print("test10 - insert {TOTAL_RANDOM_NUMBERS} unique random numbers\n")
     var randomNumbers <- generate_unique_positive_random_numbers()
     profile_test("table<int;int>", type<table<int;int>>, randomNumbers)
+    profile_test("TCuckooHashMap<int,int>", type<CuckooHashMap_test>, randomNumbers)
     profile_test("TDualFlatHashMap<int,int>", type<DualFlatHashMap_test>, randomNumbers)
     profile_test("TFlatHashMap<int,int>", type<FlatHashMap_test>, randomNumbers)
     profile_test("TInterleavedFlatHashMap<int,int>", type<InterleavedFlatHashMap_test>, randomNumbers)
