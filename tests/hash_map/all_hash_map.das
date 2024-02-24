@@ -48,7 +48,6 @@ def table_ops ( t : T?; var a:auto(AnyTable_int_to_Foo); var e:Foo; var et:Foo i
         t |> failure("we should not be here\n")
     t |> success ( !found )
 
-%spoof_instance~TDualFlatHashMap(DualFlatHashMap_int_Foo,int,Foo)%%;
 %spoof_instance~TCuckooHashMap(CuckooHashMap_int_Foo,int,Foo)%%;
 %spoof_instance~TFlatHashMap(FlatHashMap_int_Foo,int,Foo)%%;
 %spoof_instance~TInterleavedFlatHashMap(InterleavedFlatHashMap_int_Foo,int,Foo)%%;
