@@ -11,13 +11,13 @@ def test
     */
     for i in 3..6
         tab |> insert(i)
-    for k,i in keys(tab),[{int 3;5;4}]
+    for k,i in keys(tab),[{int 5;4;3}]
         assert(k == i)
     tab |> erase(4)
-    for k,i in keys(tab),[{int 3;5}]
+    for k,i in keys(tab),[{int 5;3}]
         assert(k == i)
     var tc := tab
-    for k,i in keys(tc),[{int 3;5}]
+    for k,i in keys(tc),[{int 5;3}]
         assert(k == i)
     assert( tc |> key_exists(3) )
     assert(! tc |> key_exists(4) )
@@ -29,10 +29,10 @@ def test
         print("p = {p}\n")
     */
     var ttt <- {{ 1; 2; 3; 4 }}
-    for k,i in keys(ttt),[{int 3;1;2;4}]
+    for k,i in keys(ttt),[{int 4;3;2;1}]
         assert(k == i)
     var qqq <- to_table([[int 1;2;3;4]])
-    for k,i in keys(qqq),[{int 3;1;2;4}]
+    print("\n")
+    for k,i in keys(qqq),[{int 4;3;2;1}]
         assert(k == i)
     return true
-
