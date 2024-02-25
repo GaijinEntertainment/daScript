@@ -1,6 +1,6 @@
 #pragma once
 
-#include "daScript/misc/fnv.h"
+#include "daScript/misc/anyhash.h"
 
 namespace das {
 

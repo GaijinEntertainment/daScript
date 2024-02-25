@@ -1,34 +1,9 @@
 #pragma once
 
 #include "daScript/simulate/simulate.h"
-#include "daScript/misc/fnv.h"
+#include "daScript/misc/anyhash.h"
 
 namespace das {
-
-    class HashBuilder {
-        const uint64_t fnv_prime = 1099511628211ul;
-        uint64_t fnv_bias = 14695981039346656037ul;
-    public:
-        HashBuilder() { }
-
-        uint64_t getHash() {
-            if (fnv_bias <= HASH_KILLED64) {
-                return fnv_prime;
-            }
-            return fnv_bias;
-        }
-
-        void writeStr(char *str) {
-            if ( !str ) {
-                fnv_bias *= fnv_prime;
-                return;
-            }
-            uint8_t * block = (uint8_t *) str;
-            while ( *block ) {
-                fnv_bias = ( fnv_bias ^ *block++ ) * fnv_prime;
-            }
-        }
-    };
 
     __forceinline uint64_t builtin_build_hash ( const TBlock<void,HashBuilder> & block, Context * context, LineInfoArg * at ) {
         HashBuilder writer;
@@ -59,17 +34,17 @@ namespace das {
 
     template <typename TT>
     __forceinline uint64_t hash_function ( Context &, const TT x ) {
-        return fnv_hash<sizeof(x)>::hash((const uint8_t *)&x);
+        return hash_block64((uint8_t *)&x, sizeof(x));
     }
 
     template <>
     __forceinline uint64_t hash_function ( Context &, char * str ) {
-        return str ? hash_blockz64((uint8_t *)str) : 1099511628211ul;
+        return hash_blockz64((uint8_t *)str);
     }
 
     template <>
     __forceinline uint64_t hash_function ( Context &, const char * str ) {
-        return str ? hash_blockz64((uint8_t *)str) : 1099511628211ul;
+        return hash_blockz64((uint8_t *)str);
     }
 
     uint64_t hash_value ( Context & ctx, void * pX, TypeInfo * info );

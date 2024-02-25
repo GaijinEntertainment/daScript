@@ -1,8 +1,8 @@
 #pragma once
 
 #include "daScript/misc/memory_model.h"
-#include "daScript/misc/fnv.h"
 #include "daScript/misc/callable.h"
+#include "daScript/misc/anyhash.h"
 
 namespace das {
 
