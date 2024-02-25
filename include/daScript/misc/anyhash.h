@@ -23,6 +23,16 @@ namespace das {
         return h <= HASH_KILLED64 ? 1099511628211ul : h;
     }
 
+    static __forceinline uint64_t hash_uint32 ( uint32_t value ) {
+        auto h = ::_wymix(uint64_t(value), DAS_WYHASH_SEED);
+        return h <= HASH_KILLED64 ? 1099511628211ul : h;
+    }
+
+    static __forceinline uint64_t hash_uint64 ( uint64_t value ) {
+        auto h = ::_wymix(value, DAS_WYHASH_SEED);
+        return h <= HASH_KILLED64 ? 1099511628211ul : h;
+    }
+
     class HashBuilder {
         uint64_t seed = 0;
         static const uint64_t _wyp0 = 0xa0761d6478bd642full;

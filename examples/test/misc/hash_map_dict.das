@@ -2,7 +2,6 @@ require math
 
 require daslib/hash_map
 
-%spoof_instance~TCuckooHashMap(CuckooHashMap_string_to_int,string,int)%%;
 %spoof_instance~TFlatHashMap(FlatHashMap_string_to_int,string,int)%%;
 %spoof_instance~TInterleavedFlatHashMap(InterleavedFlatHashMap_string_to_int,string,int)%%;
 
@@ -28,14 +27,6 @@ def main
     if true
         var tab : table<string;int>
         profile(20,"dictionary") <|
-            dict(tab,src)
-    if true
-        var tab <- CuckooHashMap_string_to_int()
-        profile(20,"cuckoo hash map") <|
-            dict(tab,src)
-    if true
-        var tab <- DualFlatHashMap_string_to_int()
-        profile(20,"dual flat hash map") <|
             dict(tab,src)
     if true
         var tab <- FlatHashMap_string_to_int()
