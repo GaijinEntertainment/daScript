@@ -1578,7 +1578,7 @@ namespace das
         // hash builder
         addExtern<DAS_BIND_FUN(builtin_build_hash)>(*this, lib, "build_hash",
                 SideEffects::modifyExternal,"builtin_build_hash_T")->args({"block","context","lineinfo"})->setAotTemplate();
-        using method_hashBuilder_writeStr = DAS_CALL_MEMBER(HashBuilder::writeStr);
+        using method_hashBuilder_writeStr = DAS_CALL_MEMBER(HashBuilder::updateString);
         addExtern< DAS_CALL_METHOD(method_hashBuilder_writeStr) >(*this, lib, "write", SideEffects::modifyArgument,
             DAS_CALL_MEMBER_CPP(HashBuilder::writeStr));
         // locks

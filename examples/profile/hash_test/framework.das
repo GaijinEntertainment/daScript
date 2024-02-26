@@ -58,39 +58,3 @@ def shuffle ( var data : array<int>; var seed:int4& )
         data[i] <- data[j]
         data[j] <- temp
 
-
-// this is good for the jit version of the test
-// when measuring the performance with the interpreter, this needs to be commented out
-
-let FNV_PRIME = 1099511628211ul
-let FNV_OFFSET_BASIS = 14695981039346656037ul
-
-[hint(alwaysinline)]
-def hash ( t : int )
-    unsafe
-        let data : uint8? = reinterpret<uint8?> addr(t)
-        var offset_basis = FNV_OFFSET_BASIS
-        offset_basis = ( offset_basis ^ uint64(data[0]) ) * FNV_PRIME
-        offset_basis = ( offset_basis ^ uint64(data[1]) ) * FNV_PRIME
-        offset_basis = ( offset_basis ^ uint64(data[2]) ) * FNV_PRIME
-        offset_basis = ( offset_basis ^ uint64(data[3]) ) * FNV_PRIME
-        if offset_basis <= 0x0000FFFFFFFFFFFFul
-            return FNV_PRIME
-        return offset_basis
-
-[hint(alwaysinline)]
-def hash ( t : uint64 )
-    unsafe
-        let data : uint8? = reinterpret<uint8?> addr(t)
-        var offset_basis = FNV_OFFSET_BASIS
-        offset_basis = ( offset_basis ^ uint64(data[0]) ) * FNV_PRIME
-        offset_basis = ( offset_basis ^ uint64(data[1]) ) * FNV_PRIME
-        offset_basis = ( offset_basis ^ uint64(data[2]) ) * FNV_PRIME
-        offset_basis = ( offset_basis ^ uint64(data[3]) ) * FNV_PRIME
-        offset_basis = ( offset_basis ^ uint64(data[4]) ) * FNV_PRIME
-        offset_basis = ( offset_basis ^ uint64(data[5]) ) * FNV_PRIME
-        offset_basis = ( offset_basis ^ uint64(data[6]) ) * FNV_PRIME
-        offset_basis = ( offset_basis ^ uint64(data[7]) ) * FNV_PRIME
-        if offset_basis <= 0x0000FFFFFFFFFFFFul
-            return FNV_PRIME
-        return offset_basis
