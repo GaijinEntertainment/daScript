@@ -311,7 +311,8 @@ def intrinsic_bit_nzp_op1(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallF
     if decl==null
         failed_E(expr, "missing intrinsic {sqrt_name}")
         return null
-    return LLVMBuildCall(g_builder, decl, args, string(expr.name))
+    var typ = LLVMFunctionType(argTypes[0], [{auto argTypes[0]; LLVMInt1Type()}])
+    return LLVMBuildCall2(g_builder, typ, decl, args, string(expr.name))
 
 def intrinsic_bit_op1(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
     assume opType = expr.arguments[0]._type
@@ -332,7 +333,8 @@ def intrinsic_bit_op1(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>
     if decl==null
         failed_E(expr, "missing intrinsic {sqrt_name}")
         return null
-    return LLVMBuildCall(g_builder, decl, args, string(expr.name))
+    var typ = LLVMFunctionType(argTypes[0], argTypes)
+    return LLVMBuildCall2(g_builder, typ, decl, args, string(expr.name))
 
 let private op2_name <- {{
     "min" => "minimum";
@@ -359,7 +361,8 @@ def intrinsic_op2(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; ar
     if decl==null
         failed_E(expr, "missing intrinsic {sqrt_name}")
         return null
-    return LLVMBuildCall(g_builder, decl, args, string(expr.name))
+    var typ = LLVMFunctionType(argTypes[0], [{auto argTypes[0]; argTypes[0]}])
+    return LLVMBuildCall2(g_builder, typ, decl, args, string(expr.name))
 
 def build_math_minmax(g_builder:LLVMOpaqueBuilder?; exprName:string; expr:smart_ptr<ExprCallFunc>; arg0,arg1:LLVMOpaqueValue?) : LLVMOpaqueValue?
     assume opType = expr.arguments[0]._type
@@ -385,7 +388,8 @@ def build_math_minmax(g_builder:LLVMOpaqueBuilder?; exprName:string; expr:smart_
     if decl==null
         failed_E(expr, "missing intrinsic {sqrt_name}")
         return null
-    return LLVMBuildCall(g_builder, decl, args, string(exprName))
+    var typ = LLVMFunctionType(argTypes[0], [{auto argTypes[0]; argTypes[0]}])
+    return LLVMBuildCall2(g_builder, typ, decl, args, string(exprName))
 
 def intrinsic_math_minmax(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
     return build_math_minmax(g_builder, string(expr.name), expr, arguments[0], arguments[1])
@@ -434,7 +438,8 @@ def intrinsic_math_any_float_op1(expr_name:string; g_builder:LLVMOpaqueBuilder?;
     if decl==null
         failed_E(expr, "missing intrinsic {sqrt_name}")
         return null
-    return LLVMBuildCall(g_builder, decl, args, expr_name)
+    var typ = LLVMFunctionType(argTypes[0], argTypes) // type : a -> a
+    return LLVMBuildCall2(g_builder, typ, decl, args, expr_name)
 
 def intrinsic_math_float_op1(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
     return intrinsic_math_any_float_op1(string(expr.name), g_builder, expr, arguments)
@@ -472,32 +477,46 @@ def intrinsic_math_mad_op3(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCall
 
 def intrinsic_math_abs(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
     assume opType = expr.arguments[0]._type
-    var sqrt_name = ""
-    var int_abs = false
+    var int_name = ""
     if opType.isInteger || (opType.isVectorType && (opType.vectorBaseType==Type tInt || opType.vectorBaseType==Type tUInt))
-        int_abs = true
         if opType.baseType==Type tInt64 || opType.baseType==Type tUInt64
-            sqrt_name = "llvm.abs.i64"
+            int_name = "llvm.abs.i64"
         else
-            sqrt_name = "llvm.abs.i32"
+            int_name = "llvm.abs.i32"
+        return intrinsic_math_abs_int(int_name, g_builder, expr, arguments)
     elif opType.isFloatOrDouble || (opType.isVectorType && opType.vectorBaseType==Type tFloat)
         if opType.baseType==Type tDouble
-            sqrt_name = "llvm.fabs.f64"
+            int_name = "llvm.fabs.f64"
         else
-            sqrt_name = "llvm.fabs.f32"
+            int_name = "llvm.fabs.f32"
+        return intrinsic_math_abs_float(int_name, g_builder, expr, arguments)
     else
         failed("abs({describe(opType)}) is not supported (yet?)")
         return null
+
+def intrinsic_math_abs_float(int_name: string; g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+    assume opType = expr.arguments[0]._type
     var args <- [{auto[] arguments[0]}]
-    if int_abs
-        args |> push <| LLVMConstInt(LLVMInt1Type(), 0ul, 0)
-    var argTypes <- [{auto type_to_llvm_abi_type(expr.arguments[0]._type)}]
-    var id = LLVMLookupIntrinsicID(sqrt_name)
+    var argTypes <- [{auto type_to_llvm_abi_type(opType)}]
+    var id = LLVMLookupIntrinsicID(int_name)
     var decl = LLVMGetIntrinsicDeclaration(g_mod, id, argTypes)
     if decl==null
-        failed_E(expr, "missing intrinsic {sqrt_name}")
+        failed_E(expr, "missing intrinsic {int_name}")
         return null
-    return LLVMBuildCall(g_builder, decl, args, string(expr.name))
+    var typ = LLVMFunctionType(argTypes[0], argTypes) // type : a -> a
+    return LLVMBuildCall2(g_builder, typ, decl, args, string(expr.name))
+
+def intrinsic_math_abs_int(abs_name: string; g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+    assume opType = expr.arguments[0]._type
+    var args <- [{auto[] arguments[0]; LLVMConstInt(LLVMInt1Type(), 0ul, 0)}]
+    var argTypes <- [{auto type_to_llvm_abi_type(opType)}]
+    var id = LLVMLookupIntrinsicID(abs_name)
+    var decl = LLVMGetIntrinsicDeclaration(g_mod, id, argTypes)
+    if decl==null
+        failed_E(expr, "missing intrinsic {abs_name}")
+        return null
+    var typ = LLVMFunctionType(argTypes[0], [{auto argTypes[0]; LLVMInt1Type()}]) // type : (a, LLVMInt1Type) -> a
+    return LLVMBuildCall2(g_builder, typ, decl, args, string(expr.name))
 
 def intrinsic_math_saturate(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
     assume opType = expr.arguments[0]._type
@@ -525,7 +544,8 @@ def build_fadd ( g_builder:LLVMOpaqueBuilder?; opType:TypeDeclPtr; v2:LLVMOpaque
     if decl_fadd==null
         failed("missing intrinsic {fadd_name}")
         return null
-    return LLVMBuildCall(g_builder, decl_fadd, args_fadd, name)
+    var typ = LLVMFunctionType(LLVMFloatType(), [{auto LLVMFloatType(); type_to_llvm_abi_type(opType)}])
+    return LLVMBuildCall2(g_builder, typ, decl_fadd, args_fadd, name)
 
 def build_fsqrt ( g_builder:LLVMOpaqueBuilder?; v2:LLVMOpaqueValue?; name:string ) : LLVMOpaqueValue?
     let fsqrt_name = "llvm.sqrt.f32"
@@ -536,7 +556,8 @@ def build_fsqrt ( g_builder:LLVMOpaqueBuilder?; v2:LLVMOpaqueValue?; name:string
     if decl_fsqrt==null
         failed("missing intrinsic {fsqrt_name}")
         return null
-    return LLVMBuildCall(g_builder, decl_fsqrt, args_fsqrt, name)
+    var typ = LLVMFunctionType(LLVMFloatType(), argTypes_fsqrt)
+    return LLVMBuildCall2(g_builder, typ, decl_fsqrt, args_fsqrt, name)
 
 def build_frcp ( g_builder:LLVMOpaqueBuilder?; v2:LLVMOpaqueValue?; name:string ) : LLVMOpaqueValue?
     var one = LLVMConstReal(LLVMFloatType(), 1.0lf)

@@ -340,7 +340,7 @@ class LlvmJitVisitor : AstVisitor
         build_llvm_function_pair(fnmna, isCMRES(fun), fun.arguments, fun.result, null, fun.annotations)
         thisFunc = null
 
-    def build_wrapper_funcion(arguments:dasvector`smart_ptr`Variable; var result:TypeDeclPtr; isCmres:bool; captureType:LLVMOpaqueType?; at:LineInfo )
+    def build_wrapper_funcion(fnmna: string; arguments:dasvector`smart_ptr`Variable; var result:TypeDeclPtr; isCmres:bool; captureType:LLVMOpaqueType?; at:LineInfo )
         var wentry = LLVMAppendBasicBlock(wfunc, "entry")
         LLVMPositionBuilderAtEnd(g_builder, wentry)
         var wargs : array<LLVMOpaqueValue?>
@@ -365,7 +365,7 @@ class LlvmJitVisitor : AstVisitor
         wargs |> push(LLVMGetParam(wfunc,0u))  // context
         if isCmres
             wargs |> push(LLVMGetParam(wfunc,2u))  // cmres
-        var ret_v = LLVMBuildCall(g_builder, ffunc, wargs, "")
+        var ret_v = LLVMBuildCall2(g_builder, g_fn_types[("{fnmna} implementation")], ffunc, wargs, "")
         if !result.isVoid
             if isCmres
                 LLVMBuildRet(g_builder, cast_ptr_to_vec4f(LLVMGetParam(wfunc,2u)))
@@ -487,7 +487,7 @@ class LlvmJitVisitor : AstVisitor
         ffunc = LLVMGetNamedFunction(g_mod, "{fnmna} implementation")
         wfunc = LLVMGetNamedFunction(g_mod, fnmna)
         // build wrapper function
-        build_wrapper_funcion(fun.arguments, fun.result, isCMRES(fun), null, fun.at)
+        build_wrapper_funcion(fnmna, fun.arguments, fun.result, isCMRES(fun), null, fun.at)
         build_function_entry(fun.at, intptr(fun), fun.flags.hasMakeBlock, fun.totalStackSize, fun.arguments)
         process_function_hints(fun.annotations, fun.arguments)
         process_labels(fun.body)
@@ -778,7 +778,9 @@ class LlvmJitVisitor : AstVisitor
             var params = [[auto[]
                 get_context_param()
             ]]
-            var new_ptr = LLVMBuildCall(g_builder, fn_new_handle, params, "new`handle`{describe(expr.typeexpr)}")
+            var mangled_name = expr.typeexpr |> get_mangled_name()
+            var typ = g_fn_types[("new`handle`{mangled_name}")]
+            var new_ptr = LLVMBuildCall2(g_builder, typ, fn_new_handle, params, "new`handle`{describe(expr.typeexpr)}")
             check_ptr_zero(new_ptr, expr.at, "new returned null")
             new_ptr = LLVMBuildPointerCast(g_builder, new_ptr, LLVMPointerType(type_to_llvm_type(expr.typeexpr),0u), "")
             setE(expr, new_ptr)
@@ -1534,7 +1536,8 @@ class LlvmJitVisitor : AstVisitor
                 if decl==null
                     failed_E(expr, "failed to get intrinsic {fshr_name}")
                 else
-                    setE(expr, LLVMBuildCall(g_builder, decl, args, string(expr.op)))
+                    var typ = LLVMFunctionType(argTypes[0], [{auto argTypes[0]; argTypes[0]; argTypes[0]}])
+                    setE(expr, LLVMBuildCall2(g_builder, typ, decl, args, string(expr.op)))
             else
                 failed_E(expr, "unsupported >>> type {opType}")
         elif expr.op==">>>=" || expr.op=="<<<="
@@ -1549,7 +1552,8 @@ class LlvmJitVisitor : AstVisitor
                 if decl==null
                     failed_E(expr, "failed to get intrinsic {fshr_name}")
                 else
-                    var cll = LLVMBuildCall(g_builder, decl, args, string(expr.op))
+                    var typ = LLVMFunctionType(argTypes[0], [{auto argTypes[0]; argTypes[0]; argTypes[0]}])
+                    var cll = LLVMBuildCall2(g_builder, typ, decl, args, string(expr.op))
                     setE(expr, LLVMBuildStoreAligned(g_builder, cll, left, uint(expr.left._type.alignOf)))
             else
                 failed_E(expr, "unsupported >>> type {opType}")
@@ -3126,7 +3130,9 @@ class LlvmJitVisitor : AstVisitor
             var params = [[auto[]
                 get_context_param()
             ]]
-            mks_ptr = LLVMBuildCall(g_builder, fn_new_handle, params, "new`handle`{describe(expr.subexpr._type)}")
+            var mangled_name = expr.subexpr._type |> get_mangled_name()
+            var typ = g_fn_types[("new`handle`{mangled_name}")]
+            mks_ptr = LLVMBuildCall2(g_builder, typ, fn_new_handle, params, "new`handle`{describe(expr.subexpr._type)}")
             needMemset = false
         else
             mks_ptr = build_alloc(bytes, false)
@@ -3298,7 +3304,9 @@ class LlvmJitVisitor : AstVisitor
                     ps;
                     get_context_param()
                 ]]
-                LLVMBuildCall(g_builder, fn_delete_handle, params, "")
+                let mangeld_name = get_mangled_name(firstT)
+                let typ = g_fn_types[("delete`handle`{mangeld_name}")]
+                LLVMBuildCall2(g_builder, typ, fn_delete_handle, params, "")
                 LLVMBuildStore(g_builder, LLVMConstNull(LLVMPointerType(LLVMVoidType(),0u)), pps)
             else
                 failed_E(expr, "delete of pointer non-structure type is not supported yet {describe(subT)}")
@@ -3805,7 +3813,7 @@ class LlvmJitVisitor : AstVisitor
         ffunc = LLVMGetNamedFunction(g_mod, "{fnmna} implementation")
         wfunc = LLVMGetNamedFunction(g_mod, fnmna)
         // build wrapper function
-        build_wrapper_funcion(thisBlock.arguments, thisBlock.returnType, isCmres, captureType, thisBlock.at)
+        build_wrapper_funcion(fnmna, thisBlock.arguments, thisBlock.returnType, isCmres, captureType, thisBlock.at)
         build_function_entry(expr.at, intptr(expr), thisBlock.blockFlags.hasMakeBlock, thisFunc.totalStackSize, thisBlock.arguments)
         process_function_hints(thisBlock.annotations, thisBlock.arguments)
         process_labels(expr)
