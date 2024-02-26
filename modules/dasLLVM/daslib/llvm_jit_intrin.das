@@ -54,6 +54,8 @@ let g_intrin_lookup <- {{
         "$::clz" => @@intrinsic_bit_nzp_op1;
         "$::ctz" => @@intrinsic_bit_nzp_op1;
         "$::popcnt" => @@intrinsic_bit_op1;
+    // mul
+        "$::mul128" => @@intrinsic_mul_128;
     // variant
         "$::set_variant_index" => @@intrinsic_builtin_set_variant_index;
         "$::variant_index" => @@intrinsic_builtin_variant_index;
@@ -912,3 +914,16 @@ def intrinsic_math_sign(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFun
         failed("sign({describe(resType)}) is not supported (yet?)")
         return null
 
+def intrinsic_mul_128(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+    var a = arguments[0]
+    var b = arguments[1]
+    var A = LLVMBuildZExtOrBitCast(g_builder, a, LLVMInt128Type(), "")
+    var B = LLVMBuildZExtOrBitCast(g_builder, b, LLVMInt128Type(), "")
+    var ab = LLVMBuildMul(g_builder, A, B, "")
+    let lo = LLVMBuildTrunc(g_builder, ab, LLVMInt64Type(), "")
+    var hi = LLVMBuildLShr(g_builder, ab, LLVMConstInt(LLVMInt128Type(), 64ul, 0), "")
+    hi = LLVMBuildTrunc(g_builder, hi, LLVMInt64Type(), "")
+    var value = LLVMGetUndef(LLVMRange64Type())
+    value = LLVMBuildInsertElement(g_builder, value, lo, LLVMConstInt(LLVMInt32Type(), 0ul, 0), "")
+    value = LLVMBuildInsertElement(g_builder, value, hi, LLVMConstInt(LLVMInt32Type(), 1ul, 0), "")
+    return value
