@@ -1809,13 +1809,15 @@ namespace das
         addConstant<int>(*this, "LOG_TRACE",    LogLevel::trace);
         // separators
         addConstant(*this, "VEC_SEP",   DAS_PRINT_VEC_SEPARATROR);
-        // clz, ctz, popcnt
+        // clz, ctz, popcnt. mul
         addExtern<DAS_BIND_FUN(uint32_clz)>(*this, lib, "clz", SideEffects::none, "uint32_clz")->arg("bits");
         addExtern<DAS_BIND_FUN(uint64_clz)>(*this, lib, "clz", SideEffects::none, "uint64_clz")->arg("bits");
         addExtern<DAS_BIND_FUN(uint32_ctz)>(*this, lib, "ctz", SideEffects::none, "uint32_ctz")->arg("bits");
         addExtern<DAS_BIND_FUN(uint64_ctz)>(*this, lib, "ctz", SideEffects::none, "uint64_ctz")->arg("bits");
         addExtern<DAS_BIND_FUN(uint32_popcount)>(*this, lib, "popcnt", SideEffects::none, "uint32_popcount")->arg("bits");
         addExtern<DAS_BIND_FUN(uint64_popcount)>(*this, lib, "popcnt", SideEffects::none, "uint64_popcount")->arg("bits");
+        addExtern<DAS_BIND_FUN(mul_u64_u64)>(*this, lib, "mul128", SideEffects::none, "mul_u64_u64")->args({"a","b"});
+        // string using
         addUsing<das::string>(*this, lib, "das::string");
         // try-recover
         addExtern<DAS_BIND_FUN(builtin_try_recover)>(*this, lib, "builtin_try_recover",

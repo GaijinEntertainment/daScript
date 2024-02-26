@@ -3093,6 +3093,39 @@ namespace das {
     void ___noinline builtin_try_recover ( const Block & try_block, const Block & catch_block, Context * context, LineInfoArg * at );
 
     bool das_jit_enabled ( Context * context, LineInfoArg * at );
+
+    static inline urange64 mul_u64_u64 ( uint64_t a, uint64_t b ) {
+        // ultiplying two 64-bit unsigned integers (uint64_t* a, uint64_t* b) and splitting the 128-bit
+        // result across the two input variables: a contains the lower 64 bits,
+        // and b contains the upper 64 bits of the result.
+    #if defined(__SIZEOF_INT128__)
+        __uint128_t r = a;
+        r *= b;
+        a = static_cast<uint64_t>(r);
+        b = static_cast<uint64_t>(r >> 64U);
+    #elif defined(_MSC_VER) && defined(_M_X64)
+        a = _umul128(a, b, &b);
+    #else
+        uint64_t ha = a >> 32U;
+        uint64_t hb = b >> 32U;
+        uint64_t la = static_cast<uint32_t>(a);
+        uint64_t lb = static_cast<uint32_t>(b);
+        uint64_t hi{};
+        uint64_t lo{};
+        uint64_t rh = ha * hb;
+        uint64_t rm0 = ha * lb;
+        uint64_t rm1 = hb * la;
+        uint64_t rl = la * lb;
+        uint64_t t = rl + (rm0 << 32U);
+        auto c = static_cast<uint64_t>(t < rl);
+        lo = t + (rm1 << 32U);
+        c += static_cast<uint64_t>(lo < t);
+        hi = rh + (rm0 >> 32U) + (rm1 >> 32U) + c;
+        a = lo;
+        b = hi;
+    #endif
+        return urange64(a,b);
+    }
 }
 
 #if defined(_MSC_VER)
