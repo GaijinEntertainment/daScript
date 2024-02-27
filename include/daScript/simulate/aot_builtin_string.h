@@ -6,6 +6,7 @@ namespace das {
     void delete_string ( char * & str, Context * context );
 
     char * builtin_build_string ( const TBlock<void,StringBuilderWriter> & block, Context * context, LineInfoArg * lineinfo );
+    uint64_t builtin_build_hash ( const TBlock<void,StringBuilderWriter> & block, Context * context, LineInfoArg * at );
     vec4f builtin_write_string ( Context & context, SimNode_CallBase * call, vec4f * args );
 
     void builtin_string_peek ( const char * str, const TBlock<void,TTemporary<TArray<uint8_t> const>> & block, Context * context, LineInfoArg * lineinfo );
@@ -96,6 +97,13 @@ namespace das {
         } else {
             return nullptr;
         }
+    }
+
+    template <typename TT>
+    uint64_t builtin_build_hash_T ( TT && block, Context * context, LineInfoArg * at ) {
+        StringBuilderWriter writer;
+        block(writer);
+        return hash_block64((const uint8_t *)writer.c_str(),writer.tellp());
     }
 
     __forceinline int32_t get_character_uat ( const char * str, int32_t index ) { return ((uint8_t *)str)[index]; }
