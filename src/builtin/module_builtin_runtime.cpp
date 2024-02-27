@@ -330,6 +330,38 @@ namespace das
         }
     };
 
+    struct IsDimAnnotation : MarkFunctionAnnotation {
+        IsDimAnnotation() : MarkFunctionAnnotation("expect_dim") {}
+        virtual bool isSpecialized() const override { return true; }
+        virtual bool isCompatible ( const FunctionPtr & fn, const vector<TypeDeclPtr> & types,
+                const AnnotationDeclaration & decl, string & err  ) const override {
+            size_t maxIndex = min(types.size(), fn->arguments.size());
+            for ( size_t ai=0; ai!=maxIndex; ++ ai) {
+                if ( decl.arguments.find(fn->arguments[ai]->name, Type::tBool) ) {
+                    const auto & argT = types[ai];
+                    if ( argT->dim.size() == 0 ) {
+                        err = "argument " + fn->arguments[ai]->name + " is expected to be a dim []";
+                        return false;
+                    }
+                }
+            }
+            return true;
+        }
+        virtual bool apply(const FunctionPtr & fn, ModuleGroup &, const AnnotationArgumentList & decl, string & err) override {
+            for ( const auto & arg : decl ) {
+                if ( arg.type!=Type::tBool ) {
+                    err = "expecting names only";
+                    return false;
+                }
+                if ( !fn->findArgument(arg.name) ) {
+                    err = "unknown argument " + arg.name;
+                    return false;
+                }
+            }
+            return true;
+        }
+    };
+
     // totally dummy annotation, needed for comments
     struct CommentAnnotation : StructureAnnotation {
         CommentAnnotation() : StructureAnnotation("comment") {}
@@ -1414,6 +1446,7 @@ namespace das
         addAnnotation(make_smart<LocalOnlyFunctionAnnotation>());
         addAnnotation(make_smart<PersistentStructureAnnotation>());
         addAnnotation(make_smart<IsYetAnotherVectorTemplateAnnotation>());
+        addAnnotation(make_smart<IsDimAnnotation>());
         addAnnotation(make_smart<HashBuilderAnnotation>(lib));
         // typeinfo macros
         addTypeInfoMacro(make_smart<ClassInfoMacro>());

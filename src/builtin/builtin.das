@@ -264,8 +264,8 @@ def remove_value(var arr : array<auto(TT)>|#; key : TT) : bool
         return true
     return false
 
-[unused_argument(a)]
-def length(a:auto[]):int
+[unused_argument(a),expect_dim(a)]
+def length(a:auto|#):int
     return typeinfo(dim a)
 
 def empty(a:array<auto>|#) : bool
