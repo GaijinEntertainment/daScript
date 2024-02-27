@@ -117,9 +117,6 @@ IF ((NOT DAS_LLVM_INCLUDED) AND DAS_LIBCLANG_DETECTED AND ((NOT ${DAS_LLVM_DISAB
 		${DAS_LLVM_DIR}/src/dasLLVM.func_63.cpp
 		${DAS_LLVM_DIR}/src/dasLLVM.func_64.cpp
 		${DAS_LLVM_DIR}/src/dasLLVM.func_65.cpp
-		${DAS_LLVM_DIR}/src/dasLLVM.func_66.cpp
-		${DAS_LLVM_DIR}/src/dasLLVM.func_67.cpp
-		${DAS_LLVM_DIR}/src/dasLLVM.func_68.cpp
 	# llvm config module ( for passing setting externally )
 		${DAS_LLVM_DIR}/src/llvm_config/llvmConfigModule.cpp
 		${DAS_LLVM_DIR}/src/llvm_config/llvmConfigStub.cpp

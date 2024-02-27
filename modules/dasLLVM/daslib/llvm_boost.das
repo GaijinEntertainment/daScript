@@ -28,11 +28,6 @@ def LLVMBuildLoadVector3 ( builder:LLVMOpaqueBuilder?; var typ: LLVMOpaqueType?;
     xyz = LLVMBuildInsertElement(builder, xyz, z, LLVMConstInt(LLVMInt32Type(),2ul,0), "")
     return xyz
 
-def LLVMBuildLoadAligned ( builder:LLVMOpaqueBuilder?; ptr:LLVMOpaqueValue?; alignment:uint; name:string )
-    let ld = LLVMBuildLoad(builder, ptr, name)
-    LLVMSetAlignment(ld, alignment)
-    return ld
-
 def LLVMBuildLoad2Aligned ( builder:LLVMOpaqueBuilder?; typ:LLVMOpaqueType?; ptr:LLVMOpaqueValue?; alignment:uint; name:string )
     let ld = LLVMBuildLoad2(builder, typ, ptr, name)
     LLVMSetAlignment(ld, alignment)
@@ -99,12 +94,6 @@ def LLVMAddIncoming(phi:LLVMOpaqueValue?; var phi_vals:LLVMOpaqueValue? []; var 
 def LLVMAddIncoming(phi:LLVMOpaqueValue?; var phi_vals:array<LLVMOpaqueValue?>; var phi_blocks:array<LLVMOpaqueBasicBlock?>)
     assert(length(phi_vals) == length(phi_blocks), "LLVMAddIncoming: phi_vals and phi_blocks must have the same length")
     LLVMAddIncoming(phi, unsafe(addr(phi_vals[0])), unsafe(addr(phi_blocks[0])), uint(length(phi_vals)))
-
-def LLVMBuildGEP ( builder:LLVMOpaqueBuilder?; ptr:LLVMOpaqueValue?; var index:LLVMOpaqueValue?; name:string; inbounds:bool=true )
-    var gep = LLVMBuildGEP(builder, ptr, unsafe(addr(index)), 1u, name)
-    if inbounds
-        LLVMSetIsInBounds(gep, 1)
-    return gep
 
 def LLVMBuildGEP2 ( builder:LLVMOpaqueBuilder?; ty:LLVMOpaqueType?; ptr:LLVMOpaqueValue?; var index:LLVMOpaqueValue?; name:string; inbounds:bool=true )
     var gep = LLVMBuildGEP2(builder, ty, ptr, unsafe(addr(index)), 1u, name)
@@ -237,18 +226,8 @@ def LLVMBuildCall ( builder:LLVMOpaqueBuilder?; func:LLVMOpaqueValue?; var args:
 def LLVMBuildCall2 ( builder:LLVMOpaqueBuilder?; typ : LLVMOpaqueType?; func:LLVMOpaqueValue?; var args:LLVMOpaqueValue? []; name:string )
     return LLVMBuildCall2( builder, typ, func, unsafe(addr(args[0])), uint(length(args)), name)
 
-def LLVMBuildCall ( builder:LLVMOpaqueBuilder?; func:LLVMOpaqueValue?; name:string )
-    return LLVMBuildCall( builder, func, null, 0u, name)
-
 def LLVMBuildCall2 ( builder:LLVMOpaqueBuilder?; typ : LLVMOpaqueType?; func:LLVMOpaqueValue?; name:string )
     return LLVMBuildCall2( builder, typ, func, null, 0u, name)
-
-def LLVMBuildCall ( builder:LLVMOpaqueBuilder?; func:LLVMOpaqueValue?; var args:array<LLVMOpaqueValue?>; name:string )
-    let nparams = length(args)
-    if nparams != 0
-        return LLVMBuildCall( builder, func, unsafe(addr(args[0])), uint(nparams), name)
-    else
-        return LLVMBuildCall( builder, func, null, 0u, name)
 
 def LLVMBuildCall2 ( builder:LLVMOpaqueBuilder?; typ : LLVMOpaqueType?; func:LLVMOpaqueValue?; var args:array<LLVMOpaqueValue?>; name:string )
     let nparams = length(args)

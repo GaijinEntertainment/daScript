@@ -854,8 +854,6 @@ class LlvmJitVisitor : AstVisitor
                 failed_E(expr, "missing interop function pointer for {expr.func._module.name}::{expr.func.name}")
             LLVMAddGlobalMapping(g_engine, ofunc, FUNC_PTR)
             if expr.func.sideEffectFlags == bitfield(0)
-                if !cmres
-                    LLVMAddAttributeToFunction(ofunc, LLVMGetEnumAttribute("readonly"))
                 LLVMAddAttributeToFunction(ofunc, LLVMGetEnumAttribute("nounwind"))     // TODO: better no-unwind?
                 LLVMAddAttributeToFunction(ofunc, LLVMGetEnumAttribute("willreturn"))
             if !expr.func.sideEffectFlags.modifyExternal
