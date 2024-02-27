@@ -103,7 +103,7 @@ namespace das {
     uint64_t builtin_build_hash_T ( TT && block, Context * context, LineInfoArg * at ) {
         StringBuilderWriter writer;
         block(writer);
-        return hash_blockz64((const uint8_t *)writer.c_str(),writer.tellp());
+        return hash_block64((const uint8_t *)writer.c_str(),writer.tellp());
     }
 
     __forceinline int32_t get_character_uat ( const char * str, int32_t index ) { return ((uint8_t *)str)[index]; }
