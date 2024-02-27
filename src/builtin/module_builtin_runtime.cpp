@@ -1251,6 +1251,11 @@ namespace das
         return str;
     }
 
+    char * clone_pass_string(char * str, Context * ctx ) {
+        if ( !str ) return nullptr;
+        return ctx->stringHeap->allocateString(str);
+    }
+
     void set_das_string(string & str, const char * bs) {
         str = bs ? bs : "";
     }
@@ -1752,8 +1757,11 @@ namespace das
             SideEffects::none, "to_das_string")
                 ->args({"source","context"});
         addExtern<DAS_BIND_FUN(pass_string)>(*this, lib, "string",
-            SideEffects::none, "pass_string")
+            SideEffects::none, "pass_string", permanentArgFn())
                 ->args({"source"});
+        addExtern<DAS_BIND_FUN(clone_pass_string)>(*this, lib, "string",
+            SideEffects::none, "clone_pass_string", temporaryArgFn())
+                ->args({"source","context"});
         addExtern<DAS_BIND_FUN(set_das_string)>(*this, lib, "clone",
             SideEffects::modifyArgument,"set_das_string")
                 ->args({"target","src"});

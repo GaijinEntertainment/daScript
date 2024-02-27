@@ -2655,6 +2655,7 @@ namespace das {
 
     char * to_das_string(const string & str, Context * ctx);
     char * pass_string( char * str );
+    char * clone_pass_string( char * str, Context * ctx);
     void set_das_string(string & str, const char * bs);
     void set_string_das(char * & bs, const string & str, Context * ctx);
 
