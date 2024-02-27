@@ -1,8 +1,7 @@
 require dastest/testing_boost
 require daslib/faker
 require daslib/fuzzer
-
-/*
+require strings
 
 [test]
 def test_hash_builder ( t:T? )
@@ -32,5 +31,3 @@ def test_hash_builder4 ( t:T? )
                 bldr |> write(str3)
                 bldr |> write(str4)
             t |> equal(strHash, hashBuilder)
-
-*/

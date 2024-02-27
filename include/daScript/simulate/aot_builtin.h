@@ -26,7 +26,6 @@ namespace das {
     int builtin_table_size ( const Table & arr );
     int builtin_table_capacity ( const Table & arr );
     void builtin_table_clear ( Table & arr, Context * context, LineInfoArg * at );
-    vec4f _builtin_hash ( Context & context, SimNode_CallBase * call, vec4f * args );
     void heap_stats ( Context & context, uint64_t * bytes );
     uint64_t heap_bytes_allocated ( Context * context );
     int32_t heap_depth ( Context * context );
@@ -165,4 +164,17 @@ namespace das {
     LineInfo rtti_get_line_info ( int depth, Context * context, LineInfoArg * at );
 
     void builtin_main_loop ( const TBlock<bool> & block, Context * context, LineInfoArg * at );
+
+    vec4f _builtin_hash ( Context & context, SimNode_CallBase * call, vec4f * args );
+    inline uint64_t _builtin_hash_int8 ( int8_t value ) { return hash_uint32(uint32_t(value)); }
+    inline uint64_t _builtin_hash_uint8 ( uint8_t value ) { return hash_uint32(uint32_t(value)); }
+    inline uint64_t _builtin_hash_int16 ( int16_t value ) { return hash_uint32(uint32_t(value)); }
+    inline uint64_t _builtin_hash_uint16 ( uint16_t value ) { return hash_uint32(uint32_t(value)); }
+    inline uint64_t _builtin_hash_int32 ( int32_t value ) { return hash_uint32(value); }
+    inline uint64_t _builtin_hash_uint32 ( uint32_t value ) { return hash_uint32(value); }
+    inline uint64_t _builtin_hash_int64 ( int64_t value ) { return hash_uint64(value); }
+    inline uint64_t _builtin_hash_uint64 ( uint64_t value ) { return hash_uint64(value); }
+    inline uint64_t _builtin_hash_ptr ( void * value ) { return hash_uint64(uint64_t(value)); }
+    inline uint64_t _builtin_hash_float ( float value ) { return hash_uint32(*((uint32_t *)&value)); }
+    inline uint64_t _builtin_hash_double ( double value ) { return hash_uint64(*((uint64_t *)&value)); }
 }

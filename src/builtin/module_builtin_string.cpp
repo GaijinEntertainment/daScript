@@ -688,6 +688,14 @@ namespace das
         return cstr;
     }
 
+    uint64_t builtin_build_hash ( const TBlock<void,StringBuilderWriter> & block, Context * context, LineInfoArg * at ) {
+        StringBuilderWriter writer;
+        vec4f args[1];
+        args[0] = cast<StringBuilderWriter *>::from(&writer);
+        context->invoke(block, args, nullptr, at);
+        return hash_block64((const uint8_t *)writer.c_str(),writer.tellp());
+    }
+
     class Module_Strings : public Module {
     public:
         Module_Strings() : Module("strings") {
@@ -700,6 +708,8 @@ namespace das
                 SideEffects::modifyArgumentAndExternal,"delete_string")->args({"str","context"})->unsafeOperation = true;
             addExtern<DAS_BIND_FUN(builtin_build_string)>(*this, lib, "build_string",
                 SideEffects::modifyExternal,"builtin_build_string_T")->args({"block","context","lineinfo"})->setAotTemplate();
+            addExtern<DAS_BIND_FUN(builtin_build_hash)>(*this, lib, "build_hash",
+                SideEffects::modifyExternal,"builtin_build_hash_T")->args({"block","context","lineinfo"})->setAotTemplate();
             addExtern<DAS_BIND_FUN(builtin_string_peek)>(*this, lib, "peek_data",
                 SideEffects::modifyExternal,"builtin_string_peek")->args({"str","block","context","lineinfo"});
             addExtern<DAS_BIND_FUN(builtin_string_peek_and_modify)>(*this, lib, "modify_data",
