@@ -378,10 +378,10 @@ class LlvmJitVisitor : AstVisitor
         else
             LLVMBuildRet(g_builder, LLVMGetUndef(LLVMFloat4Type()))
 
-    def get_first_element_addr ( dummy: LLVMOpaqueValue? )
+    def get_first_element_addr ( dummy: LLVMOpaqueValue?; typ: LLVMTypeRef )
         let zero = LLVMConstInt(LLVMInt32Type(), 0 |> uint64(), 0)
         var indices = [[auto zero; zero]]
-        return g_builder |> LLVMBuildGEP(dummy, unsafe(addr(indices[0])), 2u, "")
+        return g_builder |> LLVMBuildGEP2(typ, dummy, unsafe(addr(indices[0])), 2u, "")
 
     def get_file_info_global ()
         let sz = typeinfo(sizeof type<FileInfo>)
@@ -395,7 +395,7 @@ class LlvmJitVisitor : AstVisitor
                 zeros |> push(zero)
             let zeroInitializer = LLVMConstArray(LLVMInt8Type(), unsafe(addr(zeros[0])), sz |> uint())
             LLVMSetInitializer(dummy, zeroInitializer)
-        return dummy |> get_first_element_addr()
+        return dummy |> get_first_element_addr(LLVMArrayType(LLVMInt8Type(), uint(sz)))
 
     def create_line_info_global ( at: LineInfo; dummy: LLVMOpaqueValue? )
         let uint8_ptr = LLVMPointerType(LLVMInt8Type(), 0u)
@@ -418,13 +418,13 @@ class LlvmJitVisitor : AstVisitor
         return line_info_global
 
     def create_line_info_ptr_global ( line_info_global: LLVMOpaqueValue? )
-        let ptr_to_line_info_global = get_first_element_addr(line_info_global)
+        // let ptr_to_line_info_global = get_first_element_addr(line_info_global)
         let uint8_ptr = LLVMPointerType(LLVMPointerType(LLVMInt8Type(), 0u), 0u)
         let line_info_ptr_type = uint8_ptr
         // print("Type of LineInfoPtrType : '{LineInfoPtrType |> describe}'\n")
         // print("Type of ptrToLineInfoGlobal : '{ptrToLineInfoGlobal |> LLVMTypeOf() |> describe()}'\n")
         let line_info_ptr_global = LLVMAddGlobal(g_mod, line_info_ptr_type, "" /* no name */)
-        LLVMSetInitializer(line_info_ptr_global, ptr_to_line_info_global)
+        LLVMSetInitializer(line_info_ptr_global, line_info_global)
         return line_info_ptr_global
 
     def instrument_and_map_global ( at: LineInfo; line_info_ptr_global: LLVMOpaqueValue? )
@@ -2798,9 +2798,9 @@ class LlvmJitVisitor : AstVisitor
 
     def create_enum_global_pointer ( si: EnumInfo? )
         var tinfo_global = create_enuminfo_global(si)
-        var tinfo_global_ptr = tinfo_global |> get_first_element_addr()
-        g_engine |> LLVMAddGlobalMapping(tinfo_global_ptr, si)
-        return tinfo_global_ptr
+        // var tinfo_global_ptr = tinfo_global |> get_first_element_addr()
+        g_engine |> LLVMAddGlobalMapping(tinfo_global, si)
+        return tinfo_global
 
     def create_argtypes_array ( argtypes: TypeInfo??; len: int )
         var array_init : array<LLVMValueRef>

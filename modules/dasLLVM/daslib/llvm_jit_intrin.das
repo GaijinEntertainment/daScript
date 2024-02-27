@@ -725,7 +725,7 @@ def intrinsic_memset128(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFun
     var ptr = LLVMBuildPointerCast(g_builder, arguments[0], LLVMPointerType(LLVMInt4Type(),0u), "")
     return build_memset_128(g_builder, ptr, arguments[1], size)
 
-def build_memset_skip(g_builder:LLVMOpaqueBuilder?; _ptr,val,_size:LLVMOpaqueValue? )
+def build_memset_skip(g_builder:LLVMOpaqueBuilder?; ptr_type:LLVMOpaqueType?; _ptr,val,_size:LLVMOpaqueValue? )
     var ptr = _ptr
     var size = _size
 // cond
@@ -734,7 +734,7 @@ def build_memset_skip(g_builder:LLVMOpaqueBuilder?; _ptr,val,_size:LLVMOpaqueVal
 // if ( size & 1 ) write 1 value
     build_write_if_cond(g_builder, cond, ptr, val)
 // ptr += (size & 1)
-    var ptr_add_1 = LLVMBuildGEP(g_builder, ptr, LLVMConstInt(LLVMInt64Type(), 1ul, 0), "")
+    var ptr_add_1 = LLVMBuildGEP2(g_builder, ptr_type, ptr, LLVMConstInt(LLVMInt64Type(), 1ul, 0), "")
     ptr = LLVMBuildSelect(g_builder, cond, ptr_add_1, ptr, "")
 // size &= ~1
     var size_sub_1 = LLVMBuildSub(g_builder, size, LLVMConstInt(LLVMInt64Type(), 1ul, 0), "")
@@ -743,8 +743,8 @@ def build_memset_skip(g_builder:LLVMOpaqueBuilder?; _ptr,val,_size:LLVMOpaqueVal
     size = LLVMBuildLShr(g_builder, size, LLVMConstInt(LLVMInt64Type(), 1ul, 0), "")
     return [[auto ptr,size]]
 
-def build_memset_64(g_builder:LLVMOpaqueBuilder?; _ptr,val,_size:LLVMOpaqueValue? ) : LLVMOpaqueValue?
-    var ps = build_memset_skip(g_builder, _ptr,val,_size)
+def build_memset_64(g_builder:LLVMOpaqueBuilder?; ptr_type:LLVMOpaqueType?; _ptr,val,_size:LLVMOpaqueValue? ) : LLVMOpaqueValue?
+    var ps = build_memset_skip(g_builder, ptr_type, _ptr,val,_size)
     var ptr = LLVMBuildPointerCast(g_builder, ps._0, LLVMPointerType(LLVMInt4Type(),0u), "")
     var size = ps._1
     var value = LLVMGetUndef(LLVMVectorType(LLVMInt64Type(), 2u))
@@ -756,33 +756,33 @@ def build_memset_64(g_builder:LLVMOpaqueBuilder?; _ptr,val,_size:LLVMOpaqueValue
 def intrinsic_memset64(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
     var size = LLVMBuildZExtOrBitCast(g_builder, arguments[2], LLVMInt64Type(), "")
     var ptr = LLVMBuildPointerCast(g_builder, arguments[0], LLVMPointerType(LLVMInt64Type(),0u), "")
-    return build_memset_64(g_builder, ptr, arguments[1], size)
+    return build_memset_64(g_builder, LLVMInt64Type(), ptr, arguments[1], size)
 
-def build_memset_32(g_builder:LLVMOpaqueBuilder?; _ptr,val,_size:LLVMOpaqueValue? ) : LLVMOpaqueValue?
-    var ps = build_memset_skip(g_builder, _ptr,val,_size)
+def build_memset_32(g_builder:LLVMOpaqueBuilder?; ptr_type:LLVMOpaqueType?; _ptr,val,_size:LLVMOpaqueValue? ) : LLVMOpaqueValue?
+    var ps = build_memset_skip(g_builder, ptr_type, _ptr,val,_size)
     var ptr = LLVMBuildPointerCast(g_builder, ps._0, LLVMPointerType(LLVMInt64Type(),0u), "")
     var size = ps._1
     var value = LLVMBuildZExtOrBitCast(g_builder, val, LLVMInt64Type(), "")
     value = LLVMBuildOr(g_builder, value, LLVMBuildShl(g_builder, value, LLVMConstInt(LLVMInt64Type(), 32ul, 0), ""), "")
-    return build_memset_64(g_builder, ptr, value, size)
+    return build_memset_64(g_builder, LLVMInt64Type(), ptr, value, size)
 
 def intrinsic_memset32(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
     var size = LLVMBuildZExtOrBitCast(g_builder, arguments[2], LLVMInt64Type(), "")
     var ptr = LLVMBuildPointerCast(g_builder, arguments[0], LLVMPointerType(LLVMInt32Type(),0u), "")
-    return build_memset_32(g_builder, ptr, arguments[1], size)
+    return build_memset_32(g_builder, LLVMInt32Type(), ptr, arguments[1], size)
 
-def build_memset_16(g_builder:LLVMOpaqueBuilder?; _ptr,val,_size:LLVMOpaqueValue? ) : LLVMOpaqueValue?
-    var ps = build_memset_skip(g_builder, _ptr,val,_size)
+def build_memset_16(g_builder:LLVMOpaqueBuilder?; ptr_type:LLVMOpaqueType?; _ptr,val,_size:LLVMOpaqueValue? ) : LLVMOpaqueValue?
+    var ps = build_memset_skip(g_builder, ptr_type, _ptr,val,_size)
     var ptr = LLVMBuildPointerCast(g_builder, ps._0, LLVMPointerType(LLVMInt32Type(),0u), "")
     var size = ps._1
     var value = LLVMBuildZExtOrBitCast(g_builder, val, LLVMInt32Type(), "")
     value = LLVMBuildOr(g_builder, value, LLVMBuildShl(g_builder, value, LLVMConstInt(LLVMInt32Type(), 16ul, 0), ""), "")
-    return build_memset_32(g_builder, ptr, value, size)
+    return build_memset_32(g_builder, LLVMInt32Type(), ptr, value, size)
 
 def intrinsic_memset16(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
     var size = LLVMBuildZExtOrBitCast(g_builder, arguments[2], LLVMInt64Type(), "")
     var ptr = LLVMBuildPointerCast(g_builder, arguments[0], LLVMPointerType(LLVMInt16Type(),0u), "")
-    return build_memset_16(g_builder, ptr, arguments[1], size)
+    return build_memset_16(g_builder, LLVMInt16Type(), ptr, arguments[1], size)
 
 def intrinsic_math_gather(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
     var ptr = LLVMBuildPointerCast(g_builder, arguments[0], LLVMPointerType(LLVMInt32Type(),0u), "")
