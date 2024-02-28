@@ -45,6 +45,7 @@ namespace das {
 
     static inline int64_t cast_int64(Time t) { return int64_t(t.time); }
     Time builtin_clock();
+    Time builtin_mktime(int year, int month, int mday, int hour, int min, int sec);
     void builtin_sleep ( uint32_t msec );
     void builtin_exit ( int32_t ec );
 }
