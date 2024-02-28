@@ -64,12 +64,28 @@ namespace das {
         return t;
     }
 
+    Time builtin_mktime(int year, int month, int mday, int hour, int min, int sec) {
+        struct tm timeinfo = {};
+        timeinfo.tm_year = year - 1900;
+        timeinfo.tm_mon = month - 1;
+        timeinfo.tm_mday = mday;
+        timeinfo.tm_hour = hour;
+        timeinfo.tm_min = min;
+        timeinfo.tm_sec = sec;
+
+        Time t;
+        t.time = mktime(&timeinfo);
+        return t;
+    }
+
     void Module_BuiltIn::addTime(ModuleLibrary & lib) {
         addAnnotation(make_smart<TimeAnnotation>(lib));
         addFunctionBasic<Time>(*this,lib);
         addFunctionOrdered<Time>(*this,lib);
         addFunction( make_smart<BuiltInFn<Sim_Sub<Time>,double,Time,Time>>("-",lib,"Sub"));
         addExtern<DAS_BIND_FUN(builtin_clock)>(*this, lib, "get_clock", SideEffects::modifyExternal, "builtin_clock");
+        addExtern<DAS_BIND_FUN(builtin_mktime)>(*this, lib, "mktime", SideEffects::modifyExternal, "builtin_mktime")
+            ->args({"year","month","mday","hour","min","sec"});
         // TODO: move to upstream das
         addExtern<DAS_BIND_FUN(ref_time_ticks)>(*this, lib, "ref_time_ticks",
             SideEffects::accessExternal, "ref_time_ticks");
