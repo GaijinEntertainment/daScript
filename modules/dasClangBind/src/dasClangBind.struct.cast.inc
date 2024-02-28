@@ -13,18 +13,6 @@ template <> struct cast_arg<CXStringSet> {
 		return * cast<CXStringSet *>::to(res);
 	}
 };
-template <> struct cast_arg<CXUnsavedFile> {
-	static __forceinline const CXUnsavedFile & to ( Context & ctx, SimNode * node ) {
-		vec4f res = node->eval(ctx);
-		return * cast<CXUnsavedFile *>::to(res);
-	}
-};
-template <> struct cast_arg<CXVersion> {
-	static __forceinline const CXVersion & to ( Context & ctx, SimNode * node ) {
-		vec4f res = node->eval(ctx);
-		return * cast<CXVersion *>::to(res);
-	}
-};
 template <> struct cast_arg<CXFileUniqueID> {
 	static __forceinline const CXFileUniqueID & to ( Context & ctx, SimNode * node ) {
 		vec4f res = node->eval(ctx);
@@ -47,6 +35,18 @@ template <> struct cast_arg<CXSourceRangeList> {
 	static __forceinline const CXSourceRangeList & to ( Context & ctx, SimNode * node ) {
 		vec4f res = node->eval(ctx);
 		return * cast<CXSourceRangeList *>::to(res);
+	}
+};
+template <> struct cast_arg<CXUnsavedFile> {
+	static __forceinline const CXUnsavedFile & to ( Context & ctx, SimNode * node ) {
+		vec4f res = node->eval(ctx);
+		return * cast<CXUnsavedFile *>::to(res);
+	}
+};
+template <> struct cast_arg<CXVersion> {
+	static __forceinline const CXVersion & to ( Context & ctx, SimNode * node ) {
+		vec4f res = node->eval(ctx);
+		return * cast<CXVersion *>::to(res);
 	}
 };
 template <> struct cast_arg<CXTUResourceUsageEntry> {

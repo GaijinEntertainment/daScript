@@ -12,66 +12,86 @@
 namespace das {
 #include "dasClangBind.func.aot.decl.inc"
 void Module_dasClangBind::initFunctions_8() {
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3746:25
-	addExtern< unsigned int (*)(CXType) , clang_isRestrictQualifiedType >(*this,lib,"clang_isRestrictQualifiedType",SideEffects::worstDefault,"clang_isRestrictQualifiedType")
-		->args({"T"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3751:25
-	addExtern< unsigned int (*)(CXType) , clang_getAddressSpace >(*this,lib,"clang_getAddressSpace",SideEffects::worstDefault,"clang_getAddressSpace")
-		->args({"T"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3756:25
-	addExtern< CXString (*)(CXType) , clang_getTypedefName ,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_getTypedefName",SideEffects::worstDefault,"clang_getTypedefName")
-		->args({"CT"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3761:23
-	addExtern< CXType (*)(CXType) , clang_getPointeeType ,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_getPointeeType",SideEffects::worstDefault,"clang_getPointeeType")
-		->args({"T"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3766:25
-	addExtern< CXCursor (*)(CXType) , clang_getTypeDeclaration ,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_getTypeDeclaration",SideEffects::worstDefault,"clang_getTypeDeclaration")
-		->args({"T"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3771:25
-	addExtern< CXString (*)(CXCursor) , clang_getDeclObjCTypeEncoding ,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_getDeclObjCTypeEncoding",SideEffects::worstDefault,"clang_getDeclObjCTypeEncoding")
-		->args({"C"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3776:25
-	addExtern< CXString (*)(CXType) , clang_Type_getObjCEncoding ,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_Type_getObjCEncoding",SideEffects::worstDefault,"clang_Type_getObjCEncoding")
-		->args({"type"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3781:25
-	addExtern< CXString (*)(CXTypeKind) , clang_getTypeKindSpelling ,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_getTypeKindSpelling",SideEffects::worstDefault,"clang_getTypeKindSpelling")
-		->args({"K"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3788:35
-	addExtern< CXCallingConv (*)(CXType) , clang_getFunctionTypeCallingConv >(*this,lib,"clang_getFunctionTypeCallingConv",SideEffects::worstDefault,"clang_getFunctionTypeCallingConv")
-		->args({"T"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3795:23
-	addExtern< CXType (*)(CXType) , clang_getResultType ,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_getResultType",SideEffects::worstDefault,"clang_getResultType")
-		->args({"T"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3803:20
-	addExtern< int (*)(CXType) , clang_getExceptionSpecificationType >(*this,lib,"clang_getExceptionSpecificationType",SideEffects::worstDefault,"clang_getExceptionSpecificationType")
-		->args({"T"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3811:20
-	addExtern< int (*)(CXType) , clang_getNumArgTypes >(*this,lib,"clang_getNumArgTypes",SideEffects::worstDefault,"clang_getNumArgTypes")
-		->args({"T"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3819:23
-	addExtern< CXType (*)(CXType,unsigned int) , clang_getArgType ,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_getArgType",SideEffects::worstDefault,"clang_getArgType")
-		->args({"T","i"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3826:23
-	addExtern< CXType (*)(CXType) , clang_Type_getObjCObjectBaseType ,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_Type_getObjCObjectBaseType",SideEffects::worstDefault,"clang_Type_getObjCObjectBaseType")
-		->args({"T"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3833:25
-	addExtern< unsigned int (*)(CXType) , clang_Type_getNumObjCProtocolRefs >(*this,lib,"clang_Type_getNumObjCProtocolRefs",SideEffects::worstDefault,"clang_Type_getNumObjCProtocolRefs")
-		->args({"T"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3841:25
-	addExtern< CXCursor (*)(CXType,unsigned int) , clang_Type_getObjCProtocolDecl ,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_Type_getObjCProtocolDecl",SideEffects::worstDefault,"clang_Type_getObjCProtocolDecl")
-		->args({"T","i"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3848:25
-	addExtern< unsigned int (*)(CXType) , clang_Type_getNumObjCTypeArgs >(*this,lib,"clang_Type_getNumObjCTypeArgs",SideEffects::worstDefault,"clang_Type_getNumObjCTypeArgs")
-		->args({"T"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3856:23
-	addExtern< CXType (*)(CXType,unsigned int) , clang_Type_getObjCTypeArg ,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_Type_getObjCTypeArg",SideEffects::worstDefault,"clang_Type_getObjCTypeArg")
-		->args({"T","i"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3861:25
-	addExtern< unsigned int (*)(CXType) , clang_isFunctionTypeVariadic >(*this,lib,"clang_isFunctionTypeVariadic",SideEffects::worstDefault,"clang_isFunctionTypeVariadic")
-		->args({"T"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3868:23
-	addExtern< CXType (*)(CXCursor) , clang_getCursorResultType ,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_getCursorResultType",SideEffects::worstDefault,"clang_getCursorResultType")
-		->args({"C"});
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3091:25
+	makeExtern< unsigned int (*)(CXType) , clang_isRestrictQualifiedType , SimNode_ExtFuncCall >(lib,"clang_isRestrictQualifiedType","clang_isRestrictQualifiedType")
+		->args({"T"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3096:25
+	makeExtern< unsigned int (*)(CXType) , clang_getAddressSpace , SimNode_ExtFuncCall >(lib,"clang_getAddressSpace","clang_getAddressSpace")
+		->args({"T"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3101:25
+	makeExtern< CXString (*)(CXType) , clang_getTypedefName , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_getTypedefName","clang_getTypedefName")
+		->args({"CT"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3106:23
+	makeExtern< CXType (*)(CXType) , clang_getPointeeType , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_getPointeeType","clang_getPointeeType")
+		->args({"T"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3143:23
+	makeExtern< CXType (*)(CXType) , clang_getUnqualifiedType , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_getUnqualifiedType","clang_getUnqualifiedType")
+		->args({"CT"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3154:23
+	makeExtern< CXType (*)(CXType) , clang_getNonReferenceType , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_getNonReferenceType","clang_getNonReferenceType")
+		->args({"CT"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3159:25
+	makeExtern< CXCursor (*)(CXType) , clang_getTypeDeclaration , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_getTypeDeclaration","clang_getTypeDeclaration")
+		->args({"T"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3164:25
+	makeExtern< CXString (*)(CXCursor) , clang_getDeclObjCTypeEncoding , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_getDeclObjCTypeEncoding","clang_getDeclObjCTypeEncoding")
+		->args({"C"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3169:25
+	makeExtern< CXString (*)(CXType) , clang_Type_getObjCEncoding , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_Type_getObjCEncoding","clang_Type_getObjCEncoding")
+		->args({"type"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3174:25
+	makeExtern< CXString (*)(CXTypeKind) , clang_getTypeKindSpelling , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_getTypeKindSpelling","clang_getTypeKindSpelling")
+		->args({"K"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3181:35
+	makeExtern< CXCallingConv (*)(CXType) , clang_getFunctionTypeCallingConv , SimNode_ExtFuncCall >(lib,"clang_getFunctionTypeCallingConv","clang_getFunctionTypeCallingConv")
+		->args({"T"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3188:23
+	makeExtern< CXType (*)(CXType) , clang_getResultType , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_getResultType","clang_getResultType")
+		->args({"T"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3196:20
+	makeExtern< int (*)(CXType) , clang_getExceptionSpecificationType , SimNode_ExtFuncCall >(lib,"clang_getExceptionSpecificationType","clang_getExceptionSpecificationType")
+		->args({"T"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3204:20
+	makeExtern< int (*)(CXType) , clang_getNumArgTypes , SimNode_ExtFuncCall >(lib,"clang_getNumArgTypes","clang_getNumArgTypes")
+		->args({"T"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3212:23
+	makeExtern< CXType (*)(CXType,unsigned int) , clang_getArgType , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_getArgType","clang_getArgType")
+		->args({"T","i"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3219:23
+	makeExtern< CXType (*)(CXType) , clang_Type_getObjCObjectBaseType , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_Type_getObjCObjectBaseType","clang_Type_getObjCObjectBaseType")
+		->args({"T"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3226:25
+	makeExtern< unsigned int (*)(CXType) , clang_Type_getNumObjCProtocolRefs , SimNode_ExtFuncCall >(lib,"clang_Type_getNumObjCProtocolRefs","clang_Type_getNumObjCProtocolRefs")
+		->args({"T"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3234:25
+	makeExtern< CXCursor (*)(CXType,unsigned int) , clang_Type_getObjCProtocolDecl , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_Type_getObjCProtocolDecl","clang_Type_getObjCProtocolDecl")
+		->args({"T","i"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3241:25
+	makeExtern< unsigned int (*)(CXType) , clang_Type_getNumObjCTypeArgs , SimNode_ExtFuncCall >(lib,"clang_Type_getNumObjCTypeArgs","clang_Type_getNumObjCTypeArgs")
+		->args({"T"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3249:23
+	makeExtern< CXType (*)(CXType,unsigned int) , clang_Type_getObjCTypeArg , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_Type_getObjCTypeArg","clang_Type_getObjCTypeArg")
+		->args({"T","i"})
+		->addToModule(*this, SideEffects::worstDefault);
 }
 }
 

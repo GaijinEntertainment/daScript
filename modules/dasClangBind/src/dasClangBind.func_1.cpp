@@ -13,64 +13,83 @@ namespace das {
 #include "dasClangBind.func.aot.decl.inc"
 void Module_dasClangBind::initFunctions_1() {
 // from D:\Work\libclang\include\clang-c/CXString.h:50:28
-	addExtern< const char * (*)(CXString) , clang_getCString >(*this,lib,"clang_getCString",SideEffects::worstDefault,"clang_getCString")
-		->args({"string"});
+	makeExtern< const char * (*)(CXString) , clang_getCString , SimNode_ExtFuncCall >(lib,"clang_getCString","clang_getCString")
+		->args({"string"})
+		->addToModule(*this, SideEffects::worstDefault);
 // from D:\Work\libclang\include\clang-c/CXString.h:55:21
-	addExtern< void (*)(CXString) , clang_disposeString >(*this,lib,"clang_disposeString",SideEffects::worstDefault,"clang_disposeString")
-		->args({"string"});
+	makeExtern< void (*)(CXString) , clang_disposeString , SimNode_ExtFuncCall >(lib,"clang_disposeString","clang_disposeString")
+		->args({"string"})
+		->addToModule(*this, SideEffects::worstDefault);
 // from D:\Work\libclang\include\clang-c/CXString.h:60:21
-	addExtern< void (*)(CXStringSet *) , clang_disposeStringSet >(*this,lib,"clang_disposeStringSet",SideEffects::worstDefault,"clang_disposeStringSet")
-		->args({"set"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:266:24
-	addExtern< void * (*)(int,int) , clang_createIndex >(*this,lib,"clang_createIndex",SideEffects::worstDefault,"clang_createIndex")
-		->args({"excludeDeclarationsFromPCH","displayDiagnostics"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:275:21
-	addExtern< void (*)(void *) , clang_disposeIndex >(*this,lib,"clang_disposeIndex",SideEffects::worstDefault,"clang_disposeIndex")
-		->args({"index"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:324:21
-	addExtern< void (*)(void *,unsigned int) , clang_CXIndex_setGlobalOptions >(*this,lib,"clang_CXIndex_setGlobalOptions",SideEffects::worstDefault,"clang_CXIndex_setGlobalOptions")
-		->args({"","options"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:332:25
-	addExtern< unsigned int (*)(void *) , clang_CXIndex_getGlobalOptions >(*this,lib,"clang_CXIndex_getGlobalOptions",SideEffects::worstDefault,"clang_CXIndex_getGlobalOptions")
-		->args({""});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:342:1
-	addExtern< void (*)(void *,const char *) , clang_CXIndex_setInvocationEmissionPathOption >(*this,lib,"clang_CXIndex_setInvocationEmissionPathOption",SideEffects::worstDefault,"clang_CXIndex_setInvocationEmissionPathOption")
-		->args({"","Path"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:358:25
-	addExtern< CXString (*)(void *) , clang_getFileName ,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_getFileName",SideEffects::worstDefault,"clang_getFileName")
-		->args({"SFile"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:363:23
-	addExtern< time_t (*)(void *) , clang_getFileTime >(*this,lib,"clang_getFileTime",SideEffects::worstDefault,"clang_getFileTime")
-		->args({"SFile"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:381:20
-	addExtern< int (*)(void *,CXFileUniqueID *) , clang_getFileUniqueID >(*this,lib,"clang_getFileUniqueID",SideEffects::worstDefault,"clang_getFileUniqueID")
-		->args({"file","outID"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:388:25
-	addExtern< unsigned int (*)(CXTranslationUnitImpl *,void *) , clang_isFileMultipleIncludeGuarded >(*this,lib,"clang_isFileMultipleIncludeGuarded",SideEffects::worstDefault,"clang_isFileMultipleIncludeGuarded")
-		->args({"tu","file"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:401:23
-	addExtern< void * (*)(CXTranslationUnitImpl *,const char *) , clang_getFile >(*this,lib,"clang_getFile",SideEffects::worstDefault,"clang_getFile")
-		->args({"tu","file_name"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:416:28
-	addExtern< const char * (*)(CXTranslationUnitImpl *,void *,size_t *) , clang_getFileContents >(*this,lib,"clang_getFileContents",SideEffects::worstDefault,"clang_getFileContents")
-		->args({"tu","file","size"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:423:20
-	addExtern< int (*)(void *,void *) , clang_File_isEqual >(*this,lib,"clang_File_isEqual",SideEffects::worstDefault,"clang_File_isEqual")
-		->args({"file1","file2"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:430:25
-	addExtern< CXString (*)(void *) , clang_File_tryGetRealPathName ,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_File_tryGetRealPathName",SideEffects::worstDefault,"clang_File_tryGetRealPathName")
-		->args({"file"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:476:33
-	addExtern< CXSourceLocation (*)() , clang_getNullLocation ,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_getNullLocation",SideEffects::worstDefault,"clang_getNullLocation");
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:486:25
-	addExtern< unsigned int (*)(CXSourceLocation,CXSourceLocation) , clang_equalLocations >(*this,lib,"clang_equalLocations",SideEffects::worstDefault,"clang_equalLocations")
-		->args({"loc1","loc2"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:493:33
-	addExtern< CXSourceLocation (*)(CXTranslationUnitImpl *,void *,unsigned int,unsigned int) , clang_getLocation ,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_getLocation",SideEffects::worstDefault,"clang_getLocation")
-		->args({"tu","file","line","column"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:500:33
-	addExtern< CXSourceLocation (*)(CXTranslationUnitImpl *,void *,unsigned int) , clang_getLocationForOffset ,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_getLocationForOffset",SideEffects::worstDefault,"clang_getLocationForOffset")
-		->args({"tu","file","offset"});
+	makeExtern< void (*)(CXStringSet *) , clang_disposeStringSet , SimNode_ExtFuncCall >(lib,"clang_disposeStringSet","clang_disposeStringSet")
+		->args({"set"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\libclang\include\clang-c/CXFile.h:39:25
+	makeExtern< CXString (*)(void *) , clang_getFileName , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_getFileName","clang_getFileName")
+		->args({"SFile"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\libclang\include\clang-c/CXFile.h:44:23
+	makeExtern< time_t (*)(void *) , clang_getFileTime , SimNode_ExtFuncCall >(lib,"clang_getFileTime","clang_getFileTime")
+		->args({"SFile"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\libclang\include\clang-c/CXFile.h:62:20
+	makeExtern< int (*)(void *,CXFileUniqueID *) , clang_getFileUniqueID , SimNode_ExtFuncCall >(lib,"clang_getFileUniqueID","clang_getFileUniqueID")
+		->args({"file","outID"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\libclang\include\clang-c/CXFile.h:68:20
+	makeExtern< int (*)(void *,void *) , clang_File_isEqual , SimNode_ExtFuncCall >(lib,"clang_File_isEqual","clang_File_isEqual")
+		->args({"file1","file2"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\libclang\include\clang-c/CXFile.h:75:25
+	makeExtern< CXString (*)(void *) , clang_File_tryGetRealPathName , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_File_tryGetRealPathName","clang_File_tryGetRealPathName")
+		->args({"file"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\libclang\include\clang-c/CXSourceLocation.h:64:33
+	makeExtern< CXSourceLocation (*)() , clang_getNullLocation , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_getNullLocation","clang_getNullLocation")
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\libclang\include\clang-c/CXSourceLocation.h:74:25
+	makeExtern< unsigned int (*)(CXSourceLocation,CXSourceLocation) , clang_equalLocations , SimNode_ExtFuncCall >(lib,"clang_equalLocations","clang_equalLocations")
+		->args({"loc1","loc2"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\libclang\include\clang-c/CXSourceLocation.h:80:20
+	makeExtern< int (*)(CXSourceLocation) , clang_Location_isInSystemHeader , SimNode_ExtFuncCall >(lib,"clang_Location_isInSystemHeader","clang_Location_isInSystemHeader")
+		->args({"location"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\libclang\include\clang-c/CXSourceLocation.h:86:20
+	makeExtern< int (*)(CXSourceLocation) , clang_Location_isFromMainFile , SimNode_ExtFuncCall >(lib,"clang_Location_isFromMainFile","clang_Location_isFromMainFile")
+		->args({"location"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\libclang\include\clang-c/CXSourceLocation.h:91:30
+	makeExtern< CXSourceRange (*)() , clang_getNullRange , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_getNullRange","clang_getNullRange")
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\libclang\include\clang-c/CXSourceLocation.h:97:30
+	makeExtern< CXSourceRange (*)(CXSourceLocation,CXSourceLocation) , clang_getRange , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_getRange","clang_getRange")
+		->args({"begin","end"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\libclang\include\clang-c/CXSourceLocation.h:105:25
+	makeExtern< unsigned int (*)(CXSourceRange,CXSourceRange) , clang_equalRanges , SimNode_ExtFuncCall >(lib,"clang_equalRanges","clang_equalRanges")
+		->args({"range1","range2"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\libclang\include\clang-c/CXSourceLocation.h:111:20
+	makeExtern< int (*)(CXSourceRange) , clang_Range_isNull , SimNode_ExtFuncCall >(lib,"clang_Range_isNull","clang_Range_isNull")
+		->args({"range"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\libclang\include\clang-c/CXSourceLocation.h:135:21
+	makeExtern< void (*)(CXSourceLocation,void **,unsigned int *,unsigned int *,unsigned int *) , clang_getExpansionLocation , SimNode_ExtFuncCall >(lib,"clang_getExpansionLocation","clang_getExpansionLocation")
+		->args({"location","file","line","column","offset"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\libclang\include\clang-c/CXSourceLocation.h:180:21
+	makeExtern< void (*)(CXSourceLocation,CXString *,unsigned int *,unsigned int *) , clang_getPresumedLocation , SimNode_ExtFuncCall >(lib,"clang_getPresumedLocation","clang_getPresumedLocation")
+		->args({"location","filename","line","column"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\libclang\include\clang-c/CXSourceLocation.h:192:21
+	makeExtern< void (*)(CXSourceLocation,void **,unsigned int *,unsigned int *,unsigned int *) , clang_getInstantiationLocation , SimNode_ExtFuncCall >(lib,"clang_getInstantiationLocation","clang_getInstantiationLocation")
+		->args({"location","file","line","column","offset"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\libclang\include\clang-c/CXSourceLocation.h:219:21
+	makeExtern< void (*)(CXSourceLocation,void **,unsigned int *,unsigned int *,unsigned int *) , clang_getSpellingLocation , SimNode_ExtFuncCall >(lib,"clang_getSpellingLocation","clang_getSpellingLocation")
+		->args({"location","file","line","column","offset"})
+		->addToModule(*this, SideEffects::worstDefault);
 }
 }
 

@@ -12,63 +12,86 @@
 namespace das {
 #include "dasClangBind.func.aot.decl.inc"
 void Module_dasClangBind::initFunctions_16() {
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6629:20
-	addExtern< int (*)(CXIdxEntityKind) , clang_index_isEntityObjCContainerKind >(*this,lib,"clang_index_isEntityObjCContainerKind",SideEffects::worstDefault,"clang_index_isEntityObjCContainerKind")
-		->args({""});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6631:1
-	addExtern< const CXIdxObjCContainerDeclInfo * (*)(const CXIdxDeclInfo *) , clang_index_getObjCContainerDeclInfo >(*this,lib,"clang_index_getObjCContainerDeclInfo",SideEffects::worstDefault,"clang_index_getObjCContainerDeclInfo")
-		->args({""});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6634:1
-	addExtern< const CXIdxObjCInterfaceDeclInfo * (*)(const CXIdxDeclInfo *) , clang_index_getObjCInterfaceDeclInfo >(*this,lib,"clang_index_getObjCInterfaceDeclInfo",SideEffects::worstDefault,"clang_index_getObjCInterfaceDeclInfo")
-		->args({""});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6638:1
-	addExtern< const CXIdxObjCCategoryDeclInfo * (*)(const CXIdxDeclInfo *) , clang_index_getObjCCategoryDeclInfo >(*this,lib,"clang_index_getObjCCategoryDeclInfo",SideEffects::worstDefault,"clang_index_getObjCCategoryDeclInfo")
-		->args({""});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6641:1
-	addExtern< const CXIdxObjCProtocolRefListInfo * (*)(const CXIdxDeclInfo *) , clang_index_getObjCProtocolRefListInfo >(*this,lib,"clang_index_getObjCProtocolRefListInfo",SideEffects::worstDefault,"clang_index_getObjCProtocolRefListInfo")
-		->args({""});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6644:1
-	addExtern< const CXIdxObjCPropertyDeclInfo * (*)(const CXIdxDeclInfo *) , clang_index_getObjCPropertyDeclInfo >(*this,lib,"clang_index_getObjCPropertyDeclInfo",SideEffects::worstDefault,"clang_index_getObjCPropertyDeclInfo")
-		->args({""});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6647:1
-	addExtern< const CXIdxIBOutletCollectionAttrInfo * (*)(const CXIdxAttrInfo *) , clang_index_getIBOutletCollectionAttrInfo >(*this,lib,"clang_index_getIBOutletCollectionAttrInfo",SideEffects::worstDefault,"clang_index_getIBOutletCollectionAttrInfo")
-		->args({""});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6650:1
-	addExtern< const CXIdxCXXClassDeclInfo * (*)(const CXIdxDeclInfo *) , clang_index_getCXXClassDeclInfo >(*this,lib,"clang_index_getCXXClassDeclInfo",SideEffects::worstDefault,"clang_index_getCXXClassDeclInfo")
-		->args({""});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6657:1
-	addExtern< void * (*)(const CXIdxContainerInfo *) , clang_index_getClientContainer >(*this,lib,"clang_index_getClientContainer",SideEffects::worstDefault,"clang_index_getClientContainer")
-		->args({""});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6663:21
-	addExtern< void (*)(const CXIdxContainerInfo *,void *) , clang_index_setClientContainer >(*this,lib,"clang_index_setClientContainer",SideEffects::worstDefault,"clang_index_setClientContainer")
-		->args({"",""});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6670:1
-	addExtern< void * (*)(const CXIdxEntityInfo *) , clang_index_getClientEntity >(*this,lib,"clang_index_getClientEntity",SideEffects::worstDefault,"clang_index_getClientEntity")
-		->args({""});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6675:21
-	addExtern< void (*)(const CXIdxEntityInfo *,void *) , clang_index_setClientEntity >(*this,lib,"clang_index_setClientEntity",SideEffects::worstDefault,"clang_index_setClientEntity")
-		->args({"",""});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6690:30
-	addExtern< void * (*)(void *) , clang_IndexAction_create >(*this,lib,"clang_IndexAction_create",SideEffects::worstDefault,"clang_IndexAction_create")
-		->args({"CIdx"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6698:21
-	addExtern< void (*)(void *) , clang_IndexAction_dispose >(*this,lib,"clang_IndexAction_dispose",SideEffects::worstDefault,"clang_IndexAction_dispose")
-		->args({""});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6764:20
-	addExtern< int (*)(void *,void *,IndexerCallbacks *,unsigned int,unsigned int,const char *,const char *const *,int,CXUnsavedFile *,unsigned int,CXTranslationUnitImpl **,unsigned int) , clang_indexSourceFile >(*this,lib,"clang_indexSourceFile",SideEffects::worstDefault,"clang_indexSourceFile")
-		->args({"","client_data","index_callbacks","index_callbacks_size","index_options","source_filename","command_line_args","num_command_line_args","unsaved_files","num_unsaved_files","out_TU","TU_options"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6776:20
-	addExtern< int (*)(void *,void *,IndexerCallbacks *,unsigned int,unsigned int,const char *,const char *const *,int,CXUnsavedFile *,unsigned int,CXTranslationUnitImpl **,unsigned int) , clang_indexSourceFileFullArgv >(*this,lib,"clang_indexSourceFileFullArgv",SideEffects::worstDefault,"clang_indexSourceFileFullArgv")
-		->args({"","client_data","index_callbacks","index_callbacks_size","index_options","source_filename","command_line_args","num_command_line_args","unsaved_files","num_unsaved_files","out_TU","TU_options"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6799:20
-	addExtern< int (*)(void *,void *,IndexerCallbacks *,unsigned int,unsigned int,CXTranslationUnitImpl *) , clang_indexTranslationUnit >(*this,lib,"clang_indexTranslationUnit",SideEffects::worstDefault,"clang_indexTranslationUnit")
-		->args({"","client_data","index_callbacks","index_callbacks_size","index_options",""});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6811:21
-	addExtern< void (*)(CXIdxLoc,void **,void **,unsigned int *,unsigned int *,unsigned int *) , clang_indexLoc_getFileLocation >(*this,lib,"clang_indexLoc_getFileLocation",SideEffects::worstDefault,"clang_indexLoc_getFileLocation")
-		->args({"loc","indexFile","file","line","column","offset"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6821:18
-	addExtern< CXSourceLocation (*)(CXIdxLoc) , clang_indexLoc_getCXSourceLocation ,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_indexLoc_getCXSourceLocation",SideEffects::worstDefault,"clang_indexLoc_getCXSourceLocation")
-		->args({"loc"});
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:5594:25
+	makeExtern< unsigned int (*)(void *) , clang_remap_getNumFiles , SimNode_ExtFuncCall >(lib,"clang_remap_getNumFiles","clang_remap_getNumFiles")
+		->args({""})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:5604:21
+	makeExtern< void (*)(void *,unsigned int,CXString *,CXString *) , clang_remap_getFilenames , SimNode_ExtFuncCall >(lib,"clang_remap_getFilenames","clang_remap_getFilenames")
+		->args({"","index","original","transformed"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:5611:21
+	makeExtern< void (*)(void *) , clang_remap_dispose , SimNode_ExtFuncCall >(lib,"clang_remap_dispose","clang_remap_dispose")
+		->args({""})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:5660:25
+	makeExtern< CXResult (*)(CXCursor,void *,CXCursorAndRangeVisitor) , clang_findReferencesInFile , SimNode_ExtFuncCall >(lib,"clang_findReferencesInFile","clang_findReferencesInFile")
+		->args({"cursor","file","visitor"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:5675:25
+	makeExtern< CXResult (*)(CXTranslationUnitImpl *,void *,CXCursorAndRangeVisitor) , clang_findIncludesInFile , SimNode_ExtFuncCall >(lib,"clang_findIncludesInFile","clang_findIncludesInFile")
+		->args({"TU","file","visitor"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6077:20
+	makeExtern< int (*)(CXIdxEntityKind) , clang_index_isEntityObjCContainerKind , SimNode_ExtFuncCall >(lib,"clang_index_isEntityObjCContainerKind","clang_index_isEntityObjCContainerKind")
+		->args({""})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6079:1
+	makeExtern< const CXIdxObjCContainerDeclInfo * (*)(const CXIdxDeclInfo *) , clang_index_getObjCContainerDeclInfo , SimNode_ExtFuncCall >(lib,"clang_index_getObjCContainerDeclInfo","clang_index_getObjCContainerDeclInfo")
+		->args({""})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6082:1
+	makeExtern< const CXIdxObjCInterfaceDeclInfo * (*)(const CXIdxDeclInfo *) , clang_index_getObjCInterfaceDeclInfo , SimNode_ExtFuncCall >(lib,"clang_index_getObjCInterfaceDeclInfo","clang_index_getObjCInterfaceDeclInfo")
+		->args({""})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6086:1
+	makeExtern< const CXIdxObjCCategoryDeclInfo * (*)(const CXIdxDeclInfo *) , clang_index_getObjCCategoryDeclInfo , SimNode_ExtFuncCall >(lib,"clang_index_getObjCCategoryDeclInfo","clang_index_getObjCCategoryDeclInfo")
+		->args({""})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6089:1
+	makeExtern< const CXIdxObjCProtocolRefListInfo * (*)(const CXIdxDeclInfo *) , clang_index_getObjCProtocolRefListInfo , SimNode_ExtFuncCall >(lib,"clang_index_getObjCProtocolRefListInfo","clang_index_getObjCProtocolRefListInfo")
+		->args({""})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6092:1
+	makeExtern< const CXIdxObjCPropertyDeclInfo * (*)(const CXIdxDeclInfo *) , clang_index_getObjCPropertyDeclInfo , SimNode_ExtFuncCall >(lib,"clang_index_getObjCPropertyDeclInfo","clang_index_getObjCPropertyDeclInfo")
+		->args({""})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6095:1
+	makeExtern< const CXIdxIBOutletCollectionAttrInfo * (*)(const CXIdxAttrInfo *) , clang_index_getIBOutletCollectionAttrInfo , SimNode_ExtFuncCall >(lib,"clang_index_getIBOutletCollectionAttrInfo","clang_index_getIBOutletCollectionAttrInfo")
+		->args({""})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6098:1
+	makeExtern< const CXIdxCXXClassDeclInfo * (*)(const CXIdxDeclInfo *) , clang_index_getCXXClassDeclInfo , SimNode_ExtFuncCall >(lib,"clang_index_getCXXClassDeclInfo","clang_index_getCXXClassDeclInfo")
+		->args({""})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6105:1
+	makeExtern< void * (*)(const CXIdxContainerInfo *) , clang_index_getClientContainer , SimNode_ExtFuncCall >(lib,"clang_index_getClientContainer","clang_index_getClientContainer")
+		->args({""})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6111:21
+	makeExtern< void (*)(const CXIdxContainerInfo *,void *) , clang_index_setClientContainer , SimNode_ExtFuncCall >(lib,"clang_index_setClientContainer","clang_index_setClientContainer")
+		->args({"",""})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6118:1
+	makeExtern< void * (*)(const CXIdxEntityInfo *) , clang_index_getClientEntity , SimNode_ExtFuncCall >(lib,"clang_index_getClientEntity","clang_index_getClientEntity")
+		->args({""})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6123:21
+	makeExtern< void (*)(const CXIdxEntityInfo *,void *) , clang_index_setClientEntity , SimNode_ExtFuncCall >(lib,"clang_index_setClientEntity","clang_index_setClientEntity")
+		->args({"",""})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6138:30
+	makeExtern< void * (*)(void *) , clang_IndexAction_create , SimNode_ExtFuncCall >(lib,"clang_IndexAction_create","clang_IndexAction_create")
+		->args({"CIdx"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6146:21
+	makeExtern< void (*)(void *) , clang_IndexAction_dispose , SimNode_ExtFuncCall >(lib,"clang_IndexAction_dispose","clang_IndexAction_dispose")
+		->args({""})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6212:20
+	makeExtern< int (*)(void *,void *,IndexerCallbacks *,unsigned int,unsigned int,const char *,const char *const *,int,CXUnsavedFile *,unsigned int,CXTranslationUnitImpl **,unsigned int) , clang_indexSourceFile , SimNode_ExtFuncCall >(lib,"clang_indexSourceFile","clang_indexSourceFile")
+		->args({"","client_data","index_callbacks","index_callbacks_size","index_options","source_filename","command_line_args","num_command_line_args","unsaved_files","num_unsaved_files","out_TU","TU_options"})
+		->addToModule(*this, SideEffects::worstDefault);
 }
 }
 

@@ -2,7 +2,7 @@
 // all user modifications will be lost after this file is re-generated
 
 // from D:\Work\libclang\include\clang-c/CXErrorCode.h:28:6
-class Enumeration_CXErrorCode : public das::Enumeration{
+class Enumeration_CXErrorCode : public das::Enumeration {
 public:
 	Enumeration_CXErrorCode() : das::Enumeration("CXErrorCode") {
 		external = true;
@@ -16,8 +16,53 @@ public:
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:125:6
-class Enumeration_CXAvailabilityKind : public das::Enumeration{
+// from D:\Work\libclang\include\clang-c/CXDiagnostic.h:33:6
+class Enumeration_CXDiagnosticSeverity : public das::Enumeration {
+public:
+	Enumeration_CXDiagnosticSeverity() : das::Enumeration("CXDiagnosticSeverity") {
+		external = true;
+		cppName = "CXDiagnosticSeverity";
+		baseType = (das::Type) das::ToBasicType<int>::type;
+		addIEx("Ignored", "CXDiagnostic_Ignored", int64_t(CXDiagnosticSeverity::CXDiagnostic_Ignored), das::LineInfo());
+		addIEx("Note", "CXDiagnostic_Note", int64_t(CXDiagnosticSeverity::CXDiagnostic_Note), das::LineInfo());
+		addIEx("Warning", "CXDiagnostic_Warning", int64_t(CXDiagnosticSeverity::CXDiagnostic_Warning), das::LineInfo());
+		addIEx("Error", "CXDiagnostic_Error", int64_t(CXDiagnosticSeverity::CXDiagnostic_Error), das::LineInfo());
+		addIEx("Fatal", "CXDiagnostic_Fatal", int64_t(CXDiagnosticSeverity::CXDiagnostic_Fatal), das::LineInfo());
+	}
+};
+
+// from D:\Work\libclang\include\clang-c/CXDiagnostic.h:97:6
+class Enumeration_CXLoadDiag_Error : public das::Enumeration {
+public:
+	Enumeration_CXLoadDiag_Error() : das::Enumeration("CXLoadDiag_Error") {
+		external = true;
+		cppName = "CXLoadDiag_Error";
+		baseType = (das::Type) das::ToBasicType<int>::type;
+		addIEx("None", "CXLoadDiag_None", int64_t(CXLoadDiag_Error::CXLoadDiag_None), das::LineInfo());
+		addIEx("Unknown", "CXLoadDiag_Unknown", int64_t(CXLoadDiag_Error::CXLoadDiag_Unknown), das::LineInfo());
+		addIEx("CannotLoad", "CXLoadDiag_CannotLoad", int64_t(CXLoadDiag_Error::CXLoadDiag_CannotLoad), das::LineInfo());
+		addIEx("InvalidFile", "CXLoadDiag_InvalidFile", int64_t(CXLoadDiag_Error::CXLoadDiag_InvalidFile), das::LineInfo());
+	}
+};
+
+// from D:\Work\libclang\include\clang-c/CXDiagnostic.h:162:6
+class Enumeration_CXDiagnosticDisplayOptions : public das::Enumeration {
+public:
+	Enumeration_CXDiagnosticDisplayOptions() : das::Enumeration("CXDiagnosticDisplayOptions") {
+		external = true;
+		cppName = "CXDiagnosticDisplayOptions";
+		baseType = (das::Type) das::ToBasicType<int>::type;
+		addIEx("SourceLocation", "CXDiagnostic_DisplaySourceLocation", int64_t(CXDiagnosticDisplayOptions::CXDiagnostic_DisplaySourceLocation), das::LineInfo());
+		addIEx("Column", "CXDiagnostic_DisplayColumn", int64_t(CXDiagnosticDisplayOptions::CXDiagnostic_DisplayColumn), das::LineInfo());
+		addIEx("SourceRanges", "CXDiagnostic_DisplaySourceRanges", int64_t(CXDiagnosticDisplayOptions::CXDiagnostic_DisplaySourceRanges), das::LineInfo());
+		addIEx("Option", "CXDiagnostic_DisplayOption", int64_t(CXDiagnosticDisplayOptions::CXDiagnostic_DisplayOption), das::LineInfo());
+		addIEx("CategoryId", "CXDiagnostic_DisplayCategoryId", int64_t(CXDiagnosticDisplayOptions::CXDiagnostic_DisplayCategoryId), das::LineInfo());
+		addIEx("CategoryName", "CXDiagnostic_DisplayCategoryName", int64_t(CXDiagnosticDisplayOptions::CXDiagnostic_DisplayCategoryName), das::LineInfo());
+	}
+};
+
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:126:6
+class Enumeration_CXAvailabilityKind : public das::Enumeration {
 public:
 	Enumeration_CXAvailabilityKind() : das::Enumeration("CXAvailabilityKind") {
 		external = true;
@@ -30,8 +75,8 @@ public:
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:174:6
-class Enumeration_CXCursor_ExceptionSpecificationKind : public das::Enumeration{
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:175:6
+class Enumeration_CXCursor_ExceptionSpecificationKind : public das::Enumeration {
 public:
 	Enumeration_CXCursor_ExceptionSpecificationKind() : das::Enumeration("CXCursor_ExceptionSpecificationKind") {
 		external = true;
@@ -50,8 +95,8 @@ public:
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:277:9
-class Enumeration_CXGlobalOptFlags : public das::Enumeration{
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:278:9
+class Enumeration_CXGlobalOptFlags : public das::Enumeration {
 public:
 	Enumeration_CXGlobalOptFlags() : das::Enumeration("CXGlobalOptFlags") {
 		external = true;
@@ -64,53 +109,8 @@ public:
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:739:6
-class Enumeration_CXDiagnosticSeverity : public das::Enumeration{
-public:
-	Enumeration_CXDiagnosticSeverity() : das::Enumeration("CXDiagnosticSeverity") {
-		external = true;
-		cppName = "CXDiagnosticSeverity";
-		baseType = (das::Type) das::ToBasicType<int>::type;
-		addIEx("Ignored", "CXDiagnostic_Ignored", int64_t(CXDiagnosticSeverity::CXDiagnostic_Ignored), das::LineInfo());
-		addIEx("Note", "CXDiagnostic_Note", int64_t(CXDiagnosticSeverity::CXDiagnostic_Note), das::LineInfo());
-		addIEx("Warning", "CXDiagnostic_Warning", int64_t(CXDiagnosticSeverity::CXDiagnostic_Warning), das::LineInfo());
-		addIEx("Error", "CXDiagnostic_Error", int64_t(CXDiagnosticSeverity::CXDiagnostic_Error), das::LineInfo());
-		addIEx("Fatal", "CXDiagnostic_Fatal", int64_t(CXDiagnosticSeverity::CXDiagnostic_Fatal), das::LineInfo());
-	}
-};
-
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:803:6
-class Enumeration_CXLoadDiag_Error : public das::Enumeration{
-public:
-	Enumeration_CXLoadDiag_Error() : das::Enumeration("CXLoadDiag_Error") {
-		external = true;
-		cppName = "CXLoadDiag_Error";
-		baseType = (das::Type) das::ToBasicType<int>::type;
-		addIEx("None", "CXLoadDiag_None", int64_t(CXLoadDiag_Error::CXLoadDiag_None), das::LineInfo());
-		addIEx("Unknown", "CXLoadDiag_Unknown", int64_t(CXLoadDiag_Error::CXLoadDiag_Unknown), das::LineInfo());
-		addIEx("CannotLoad", "CXLoadDiag_CannotLoad", int64_t(CXLoadDiag_Error::CXLoadDiag_CannotLoad), das::LineInfo());
-		addIEx("InvalidFile", "CXLoadDiag_InvalidFile", int64_t(CXLoadDiag_Error::CXLoadDiag_InvalidFile), das::LineInfo());
-	}
-};
-
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:895:6
-class Enumeration_CXDiagnosticDisplayOptions : public das::Enumeration{
-public:
-	Enumeration_CXDiagnosticDisplayOptions() : das::Enumeration("CXDiagnosticDisplayOptions") {
-		external = true;
-		cppName = "CXDiagnosticDisplayOptions";
-		baseType = (das::Type) das::ToBasicType<int>::type;
-		addIEx("SourceLocation", "CXDiagnostic_DisplaySourceLocation", int64_t(CXDiagnosticDisplayOptions::CXDiagnostic_DisplaySourceLocation), das::LineInfo());
-		addIEx("Column", "CXDiagnostic_DisplayColumn", int64_t(CXDiagnosticDisplayOptions::CXDiagnostic_DisplayColumn), das::LineInfo());
-		addIEx("SourceRanges", "CXDiagnostic_DisplaySourceRanges", int64_t(CXDiagnosticDisplayOptions::CXDiagnostic_DisplaySourceRanges), das::LineInfo());
-		addIEx("Option", "CXDiagnostic_DisplayOption", int64_t(CXDiagnosticDisplayOptions::CXDiagnostic_DisplayOption), das::LineInfo());
-		addIEx("CategoryId", "CXDiagnostic_DisplayCategoryId", int64_t(CXDiagnosticDisplayOptions::CXDiagnostic_DisplayCategoryId), das::LineInfo());
-		addIEx("CategoryName", "CXDiagnostic_DisplayCategoryName", int64_t(CXDiagnosticDisplayOptions::CXDiagnostic_DisplayCategoryName), das::LineInfo());
-	}
-};
-
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:1199:6
-class Enumeration_CXTranslationUnit_Flags : public das::Enumeration{
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:531:6
+class Enumeration_CXTranslationUnit_Flags : public das::Enumeration {
 public:
 	Enumeration_CXTranslationUnit_Flags() : das::Enumeration("CXTranslationUnit_Flags") {
 		external = true;
@@ -136,8 +136,8 @@ public:
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:1442:6
-class Enumeration_CXSaveTranslationUnit_Flags : public das::Enumeration{
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:774:6
+class Enumeration_CXSaveTranslationUnit_Flags : public das::Enumeration {
 public:
 	Enumeration_CXSaveTranslationUnit_Flags() : das::Enumeration("CXSaveTranslationUnit_Flags") {
 		external = true;
@@ -147,8 +147,8 @@ public:
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:1464:6
-class Enumeration_CXSaveError : public das::Enumeration{
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:796:6
+class Enumeration_CXSaveError : public das::Enumeration {
 public:
 	Enumeration_CXSaveError() : das::Enumeration("CXSaveError") {
 		external = true;
@@ -161,8 +161,8 @@ public:
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:1543:6
-class Enumeration_CXReparse_Flags : public das::Enumeration{
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:875:6
+class Enumeration_CXReparse_Flags : public das::Enumeration {
 public:
 	Enumeration_CXReparse_Flags() : das::Enumeration("CXReparse_Flags") {
 		external = true;
@@ -172,8 +172,8 @@ public:
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:1609:6
-class Enumeration_CXTUResourceUsageKind : public das::Enumeration{
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:941:6
+class Enumeration_CXTUResourceUsageKind : public das::Enumeration {
 public:
 	Enumeration_CXTUResourceUsageKind() : das::Enumeration("CXTUResourceUsageKind") {
 		external = true;
@@ -200,8 +200,8 @@ public:
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:1706:6
-class Enumeration_CXCursorKind : public das::Enumeration{
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:1038:6
+class Enumeration_CXCursorKind : public das::Enumeration {
 public:
 	Enumeration_CXCursorKind() : das::Enumeration("CXCursorKind") {
 		external = true;
@@ -323,6 +323,7 @@ public:
 		addIEx("CXXAddrspaceCastExpr", "CXCursor_CXXAddrspaceCastExpr", int64_t(CXCursorKind::CXCursor_CXXAddrspaceCastExpr), das::LineInfo());
 		addIEx("ConceptSpecializationExpr", "CXCursor_ConceptSpecializationExpr", int64_t(CXCursorKind::CXCursor_ConceptSpecializationExpr), das::LineInfo());
 		addIEx("RequiresExpr", "CXCursor_RequiresExpr", int64_t(CXCursorKind::CXCursor_RequiresExpr), das::LineInfo());
+		addIEx("CXXParenListInitExpr", "CXCursor_CXXParenListInitExpr", int64_t(CXCursorKind::CXCursor_CXXParenListInitExpr), das::LineInfo());
 		addIEx("LastExpr", "CXCursor_LastExpr", int64_t(CXCursorKind::CXCursor_LastExpr), das::LineInfo());
 		addIEx("FirstStmt", "CXCursor_FirstStmt", int64_t(CXCursorKind::CXCursor_FirstStmt), das::LineInfo());
 		addIEx("UnexposedStmt", "CXCursor_UnexposedStmt", int64_t(CXCursorKind::CXCursor_UnexposedStmt), das::LineInfo());
@@ -431,6 +432,7 @@ public:
 		addIEx("OMPMaskedTaskLoopSimdDirective", "CXCursor_OMPMaskedTaskLoopSimdDirective", int64_t(CXCursorKind::CXCursor_OMPMaskedTaskLoopSimdDirective), das::LineInfo());
 		addIEx("OMPParallelMaskedTaskLoopDirective", "CXCursor_OMPParallelMaskedTaskLoopDirective", int64_t(CXCursorKind::CXCursor_OMPParallelMaskedTaskLoopDirective), das::LineInfo());
 		addIEx("OMPParallelMaskedTaskLoopSimdDirective", "CXCursor_OMPParallelMaskedTaskLoopSimdDirective", int64_t(CXCursorKind::CXCursor_OMPParallelMaskedTaskLoopSimdDirective), das::LineInfo());
+		addIEx("OMPErrorDirective", "CXCursor_OMPErrorDirective", int64_t(CXCursorKind::CXCursor_OMPErrorDirective), das::LineInfo());
 		addIEx("LastStmt", "CXCursor_LastStmt", int64_t(CXCursorKind::CXCursor_LastStmt), das::LineInfo());
 		addIEx("TranslationUnit", "CXCursor_TranslationUnit", int64_t(CXCursorKind::CXCursor_TranslationUnit), das::LineInfo());
 		addIEx("FirstAttr", "CXCursor_FirstAttr", int64_t(CXCursorKind::CXCursor_FirstAttr), das::LineInfo());
@@ -495,8 +497,8 @@ public:
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:2882:6
-class Enumeration_CXLinkageKind : public das::Enumeration{
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:2224:6
+class Enumeration_CXLinkageKind : public das::Enumeration {
 public:
 	Enumeration_CXLinkageKind() : das::Enumeration("CXLinkageKind") {
 		external = true;
@@ -510,8 +512,8 @@ public:
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:2905:6
-class Enumeration_CXVisibilityKind : public das::Enumeration{
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:2247:6
+class Enumeration_CXVisibilityKind : public das::Enumeration {
 public:
 	Enumeration_CXVisibilityKind() : das::Enumeration("CXVisibilityKind") {
 		external = true;
@@ -524,8 +526,8 @@ public:
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3049:6
-class Enumeration_CXLanguageKind : public das::Enumeration{
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:2391:6
+class Enumeration_CXLanguageKind : public das::Enumeration {
 public:
 	Enumeration_CXLanguageKind() : das::Enumeration("CXLanguageKind") {
 		external = true;
@@ -538,8 +540,8 @@ public:
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3065:6
-class Enumeration_CXTLSKind : public das::Enumeration{
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:2407:6
+class Enumeration_CXTLSKind : public das::Enumeration {
 public:
 	Enumeration_CXTLSKind() : das::Enumeration("CXTLSKind") {
 		external = true;
@@ -551,8 +553,8 @@ public:
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3309:6
-class Enumeration_CXTypeKind : public das::Enumeration{
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:2651:6
+class Enumeration_CXTypeKind : public das::Enumeration {
 public:
 	Enumeration_CXTypeKind() : das::Enumeration("CXTypeKind") {
 		external = true;
@@ -683,8 +685,8 @@ public:
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3462:6
-class Enumeration_CXCallingConv : public das::Enumeration{
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:2804:6
+class Enumeration_CXCallingConv : public das::Enumeration {
 public:
 	Enumeration_CXCallingConv() : das::Enumeration("CXCallingConv") {
 		external = true;
@@ -715,8 +717,8 @@ public:
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3579:6
-class Enumeration_CXTemplateArgumentKind : public das::Enumeration{
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:2921:6
+class Enumeration_CXTemplateArgumentKind : public das::Enumeration {
 public:
 	Enumeration_CXTemplateArgumentKind() : das::Enumeration("CXTemplateArgumentKind") {
 		external = true;
@@ -735,8 +737,8 @@ public:
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3932:6
-class Enumeration_CXTypeNullabilityKind : public das::Enumeration{
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3325:6
+class Enumeration_CXTypeNullabilityKind : public das::Enumeration {
 public:
 	Enumeration_CXTypeNullabilityKind() : das::Enumeration("CXTypeNullabilityKind") {
 		external = true;
@@ -750,8 +752,8 @@ public:
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3975:6
-class Enumeration_CXTypeLayoutError : public das::Enumeration{
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3368:6
+class Enumeration_CXTypeLayoutError : public das::Enumeration {
 public:
 	Enumeration_CXTypeLayoutError() : das::Enumeration("CXTypeLayoutError") {
 		external = true;
@@ -766,8 +768,8 @@ public:
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:4096:6
-class Enumeration_CXRefQualifierKind : public das::Enumeration{
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3489:6
+class Enumeration_CXRefQualifierKind : public das::Enumeration {
 public:
 	Enumeration_CXRefQualifierKind() : das::Enumeration("CXRefQualifierKind") {
 		external = true;
@@ -779,8 +781,8 @@ public:
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:4145:6
-class Enumeration_CX_CXXAccessSpecifier : public das::Enumeration{
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3538:6
+class Enumeration_CX_CXXAccessSpecifier : public das::Enumeration {
 public:
 	Enumeration_CX_CXXAccessSpecifier() : das::Enumeration("CX_CXXAccessSpecifier") {
 		external = true;
@@ -793,8 +795,8 @@ public:
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:4165:6
-class Enumeration_CX_StorageClass : public das::Enumeration{
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3558:6
+class Enumeration_CX_StorageClass : public das::Enumeration {
 public:
 	Enumeration_CX_StorageClass() : das::Enumeration("CX_StorageClass") {
 		external = true;
@@ -811,8 +813,8 @@ public:
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:4249:6
-class Enumeration_CXChildVisitResult : public das::Enumeration{
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3642:6
+class Enumeration_CXChildVisitResult : public das::Enumeration {
 public:
 	Enumeration_CXChildVisitResult() : das::Enumeration("CXChildVisitResult") {
 		external = true;
@@ -824,8 +826,8 @@ public:
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:4426:6
-class Enumeration_CXPrintingPolicyProperty : public das::Enumeration{
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3819:6
+class Enumeration_CXPrintingPolicyProperty : public das::Enumeration {
 public:
 	Enumeration_CXPrintingPolicyProperty() : das::Enumeration("CXPrintingPolicyProperty") {
 		external = true;
@@ -861,8 +863,8 @@ public:
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:4617:9
-class Enumeration_CXObjCPropertyAttrKind : public das::Enumeration{
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:4010:9
+class Enumeration_CXObjCPropertyAttrKind : public das::Enumeration {
 public:
 	Enumeration_CXObjCPropertyAttrKind() : das::Enumeration("CXObjCPropertyAttrKind") {
 		external = true;
@@ -885,8 +887,8 @@ public:
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:4660:9
-class Enumeration_CXObjCDeclQualifierKind : public das::Enumeration{
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:4053:9
+class Enumeration_CXObjCDeclQualifierKind : public das::Enumeration {
 public:
 	Enumeration_CXObjCDeclQualifierKind() : das::Enumeration("CXObjCDeclQualifierKind") {
 		external = true;
@@ -902,8 +904,8 @@ public:
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:4985:6
-class Enumeration_CXNameRefFlags : public das::Enumeration{
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:4433:6
+class Enumeration_CXNameRefFlags : public das::Enumeration {
 public:
 	Enumeration_CXNameRefFlags() : das::Enumeration("CXNameRefFlags") {
 		external = true;
@@ -915,8 +917,8 @@ public:
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:5028:14
-class Enumeration_CXTokenKind : public das::Enumeration{
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:4476:14
+class Enumeration_CXTokenKind : public das::Enumeration {
 public:
 	Enumeration_CXTokenKind() : das::Enumeration("CXTokenKind") {
 		external = true;
@@ -930,8 +932,8 @@ public:
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:5243:6
-class Enumeration_CXCompletionChunkKind : public das::Enumeration{
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:4691:6
+class Enumeration_CXCompletionChunkKind : public das::Enumeration {
 public:
 	Enumeration_CXCompletionChunkKind() : das::Enumeration("CXCompletionChunkKind") {
 		external = true;
@@ -961,8 +963,8 @@ public:
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:5634:6
-class Enumeration_CXCodeComplete_Flags : public das::Enumeration{
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:5082:6
+class Enumeration_CXCodeComplete_Flags : public das::Enumeration {
 public:
 	Enumeration_CXCodeComplete_Flags() : das::Enumeration("CXCodeComplete_Flags") {
 		external = true;
@@ -976,8 +978,8 @@ public:
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:5673:6
-class Enumeration_CXCompletionContext : public das::Enumeration{
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:5121:6
+class Enumeration_CXCompletionContext : public das::Enumeration {
 public:
 	Enumeration_CXCompletionContext() : das::Enumeration("CXCompletionContext") {
 		external = true;
@@ -1011,8 +1013,8 @@ public:
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6031:9
-class Enumeration_CXEvalResultKind : public das::Enumeration{
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:5479:9
+class Enumeration_CXEvalResultKind : public das::Enumeration {
 public:
 	Enumeration_CXEvalResultKind() : das::Enumeration("CXEvalResultKind") {
 		external = true;
@@ -1028,8 +1030,8 @@ public:
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6174:6
-class Enumeration_CXVisitorResult : public das::Enumeration{
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:5622:6
+class Enumeration_CXVisitorResult : public das::Enumeration {
 public:
 	Enumeration_CXVisitorResult() : das::Enumeration("CXVisitorResult") {
 		external = true;
@@ -1040,8 +1042,8 @@ public:
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6181:9
-class Enumeration_CXResult : public das::Enumeration{
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:5629:9
+class Enumeration_CXResult : public das::Enumeration {
 public:
 	Enumeration_CXResult() : das::Enumeration("CXResult") {
 		external = true;
@@ -1053,8 +1055,8 @@ public:
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6326:9
-class Enumeration_CXIdxEntityKind : public das::Enumeration{
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:5774:9
+class Enumeration_CXIdxEntityKind : public das::Enumeration {
 public:
 	Enumeration_CXIdxEntityKind() : das::Enumeration("CXIdxEntityKind") {
 		external = true;
@@ -1091,8 +1093,8 @@ public:
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6362:9
-class Enumeration_CXIdxEntityLanguage : public das::Enumeration{
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:5810:9
+class Enumeration_CXIdxEntityLanguage : public das::Enumeration {
 public:
 	Enumeration_CXIdxEntityLanguage() : das::Enumeration("CXIdxEntityLanguage") {
 		external = true;
@@ -1106,8 +1108,8 @@ public:
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6380:9
-class Enumeration_CXIdxEntityCXXTemplateKind : public das::Enumeration{
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:5828:9
+class Enumeration_CXIdxEntityCXXTemplateKind : public das::Enumeration {
 public:
 	Enumeration_CXIdxEntityCXXTemplateKind() : das::Enumeration("CXIdxEntityCXXTemplateKind") {
 		external = true;
@@ -1120,8 +1122,8 @@ public:
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6387:9
-class Enumeration_CXIdxAttrKind : public das::Enumeration{
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:5835:9
+class Enumeration_CXIdxAttrKind : public das::Enumeration {
 public:
 	Enumeration_CXIdxAttrKind() : das::Enumeration("CXIdxAttrKind") {
 		external = true;
@@ -1134,8 +1136,8 @@ public:
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6422:9
-class Enumeration_CXIdxDeclInfoFlags : public das::Enumeration{
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:5870:9
+class Enumeration_CXIdxDeclInfoFlags : public das::Enumeration {
 public:
 	Enumeration_CXIdxDeclInfoFlags() : das::Enumeration("CXIdxDeclInfoFlags") {
 		external = true;
@@ -1145,8 +1147,8 @@ public:
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6450:9
-class Enumeration_CXIdxObjCContainerKind : public das::Enumeration{
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:5898:9
+class Enumeration_CXIdxObjCContainerKind : public das::Enumeration {
 public:
 	Enumeration_CXIdxObjCContainerKind() : das::Enumeration("CXIdxObjCContainerKind") {
 		external = true;
@@ -1158,8 +1160,8 @@ public:
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6510:9
-class Enumeration_CXIdxEntityRefKind : public das::Enumeration{
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:5958:9
+class Enumeration_CXIdxEntityRefKind : public das::Enumeration {
 public:
 	Enumeration_CXIdxEntityRefKind() : das::Enumeration("CXIdxEntityRefKind") {
 		external = true;
@@ -1170,8 +1172,8 @@ public:
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6528:9
-class Enumeration_CXSymbolRole : public das::Enumeration{
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:5976:9
+class Enumeration_CXSymbolRole : public das::Enumeration {
 public:
 	Enumeration_CXSymbolRole() : das::Enumeration("CXSymbolRole") {
 		external = true;
@@ -1190,8 +1192,8 @@ public:
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6700:9
-class Enumeration_CXIndexOptFlags : public das::Enumeration{
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6148:9
+class Enumeration_CXIndexOptFlags : public das::Enumeration {
 public:
 	Enumeration_CXIndexOptFlags() : das::Enumeration("CXIndexOptFlags") {
 		external = true;

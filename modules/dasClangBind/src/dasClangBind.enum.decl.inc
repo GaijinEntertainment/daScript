@@ -3,17 +3,17 @@
 
 DAS_BASE_BIND_ENUM_GEN(CXErrorCode,CXErrorCode);
 
-DAS_BASE_BIND_ENUM_GEN(CXAvailabilityKind,CXAvailabilityKind);
-
-DAS_BASE_BIND_ENUM_GEN(CXCursor_ExceptionSpecificationKind,CXCursor_ExceptionSpecificationKind);
-
-DAS_BASE_BIND_ENUM_GEN(CXGlobalOptFlags,CXGlobalOptFlags);
-
 DAS_BASE_BIND_ENUM_GEN(CXDiagnosticSeverity,CXDiagnosticSeverity);
 
 DAS_BASE_BIND_ENUM_GEN(CXLoadDiag_Error,CXLoadDiag_Error);
 
 DAS_BASE_BIND_ENUM_GEN(CXDiagnosticDisplayOptions,CXDiagnosticDisplayOptions);
+
+DAS_BASE_BIND_ENUM_GEN(CXAvailabilityKind,CXAvailabilityKind);
+
+DAS_BASE_BIND_ENUM_GEN(CXCursor_ExceptionSpecificationKind,CXCursor_ExceptionSpecificationKind);
+
+DAS_BASE_BIND_ENUM_GEN(CXGlobalOptFlags,CXGlobalOptFlags);
 
 DAS_BASE_BIND_ENUM_GEN(CXTranslationUnit_Flags,CXTranslationUnit_Flags);
 
