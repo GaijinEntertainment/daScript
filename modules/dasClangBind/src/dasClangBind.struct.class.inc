@@ -1,7 +1,7 @@
 // this file is generated via daScript automatic C++ binder
 // all user modifications will be lost after this file is re-generated
 
-// from D:\Work\libclang\include\clang-c/CXString.h:37:9
+// from C:\Users\andrei_orazov\libclang\include\clang-c/CXString.h:37:9
 struct CXString_GeneratedAnnotation : ManagedStructureAnnotation<CXString> {
 	CXString_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXString", ml, "CXString") {
 	}
@@ -11,7 +11,7 @@ struct CXString_GeneratedAnnotation : ManagedStructureAnnotation<CXString> {
 	}
 };
 
-// from D:\Work\libclang\include\clang-c/CXString.h:42:9
+// from C:\Users\andrei_orazov\libclang\include\clang-c/CXString.h:42:9
 struct CXStringSet_GeneratedAnnotation : ManagedStructureAnnotation<CXStringSet> {
 	CXStringSet_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXStringSet", ml, "CXStringSet") {
 	}
@@ -21,7 +21,7 @@ struct CXStringSet_GeneratedAnnotation : ManagedStructureAnnotation<CXStringSet>
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:101:8
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:102:8
 struct CXUnsavedFile_GeneratedAnnotation : ManagedStructureAnnotation<CXUnsavedFile> {
 	CXUnsavedFile_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXUnsavedFile", ml, "CXUnsavedFile") {
 	}
@@ -32,7 +32,7 @@ struct CXUnsavedFile_GeneratedAnnotation : ManagedStructureAnnotation<CXUnsavedF
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:149:16
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:150:16
 struct CXVersion_GeneratedAnnotation : ManagedStructureAnnotation<CXVersion> {
 	CXVersion_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXVersion", ml, "CXVersion") {
 	}
@@ -43,7 +43,7 @@ struct CXVersion_GeneratedAnnotation : ManagedStructureAnnotation<CXVersion> {
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:369:9
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:971:16
 struct CXFileUniqueID_GeneratedAnnotation : ManagedStructureAnnotation<CXFileUniqueID> {
 	CXFileUniqueID_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXFileUniqueID", ml, "CXFileUniqueID") {
 	}
@@ -93,7 +93,7 @@ struct CXTUResourceUsageEntry_GeneratedAnnotation : ManagedStructureAnnotation<C
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:1650:16
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:982:16
 struct CXTUResourceUsage_GeneratedAnnotation : ManagedStructureAnnotation<CXTUResourceUsage> {
 	CXTUResourceUsage_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXTUResourceUsage", ml, "CXTUResourceUsage") {
 	}
@@ -104,7 +104,7 @@ struct CXTUResourceUsage_GeneratedAnnotation : ManagedStructureAnnotation<CXTURe
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:2765:9
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:2107:9
 struct CXCursor_GeneratedAnnotation : ManagedStructureAnnotation<CXCursor> {
 	CXCursor_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXCursor", ml, "CXCursor") {
 	}
@@ -115,7 +115,7 @@ struct CXCursor_GeneratedAnnotation : ManagedStructureAnnotation<CXCursor> {
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:2946:16
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:2288:16
 struct CXPlatformAvailability_GeneratedAnnotation : ManagedStructureAnnotation<CXPlatformAvailability> {
 	CXPlatformAvailability_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXPlatformAvailability", ml, "CXPlatformAvailability") {
 	}
@@ -129,7 +129,7 @@ struct CXPlatformAvailability_GeneratedAnnotation : ManagedStructureAnnotation<C
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3493:9
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:2835:9
 struct CXType_GeneratedAnnotation : ManagedStructureAnnotation<CXType> {
 	CXType_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXType", ml, "CXType") {
 	}
@@ -139,7 +139,7 @@ struct CXType_GeneratedAnnotation : ManagedStructureAnnotation<CXType> {
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:5058:9
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:4506:9
 struct CXToken_GeneratedAnnotation : ManagedStructureAnnotation<CXToken> {
 	CXToken_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXToken", ml, "CXToken") {
 	}
@@ -149,7 +149,7 @@ struct CXToken_GeneratedAnnotation : ManagedStructureAnnotation<CXToken> {
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:5216:9
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:4664:9
 struct CXCompletionResult_GeneratedAnnotation : ManagedStructureAnnotation<CXCompletionResult> {
 	CXCompletionResult_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXCompletionResult", ml, "CXCompletionResult") {
 	}
@@ -159,7 +159,7 @@ struct CXCompletionResult_GeneratedAnnotation : ManagedStructureAnnotation<CXCom
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:5550:9
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:4998:9
 struct CXCodeCompleteResults_GeneratedAnnotation : ManagedStructureAnnotation<CXCodeCompleteResults> {
 	CXCodeCompleteResults_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXCodeCompleteResults", ml, "CXCodeCompleteResults") {
 	}
@@ -169,7 +169,7 @@ struct CXCodeCompleteResults_GeneratedAnnotation : ManagedStructureAnnotation<CX
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6176:16
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:5624:16
 struct CXCursorAndRangeVisitor_GeneratedAnnotation : ManagedStructureAnnotation<CXCursorAndRangeVisitor> {
 	CXCursorAndRangeVisitor_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXCursorAndRangeVisitor", ml, "CXCursorAndRangeVisitor") {
 	}
@@ -178,7 +178,7 @@ struct CXCursorAndRangeVisitor_GeneratedAnnotation : ManagedStructureAnnotation<
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6272:9
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:5720:9
 struct CXIdxLoc_GeneratedAnnotation : ManagedStructureAnnotation<CXIdxLoc> {
 	CXIdxLoc_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxLoc", ml, "CXIdxLoc") {
 	}
@@ -188,7 +188,7 @@ struct CXIdxLoc_GeneratedAnnotation : ManagedStructureAnnotation<CXIdxLoc> {
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6280:9
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:5728:9
 struct CXIdxIncludedFileInfo_GeneratedAnnotation : ManagedStructureAnnotation<CXIdxIncludedFileInfo> {
 	CXIdxIncludedFileInfo_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxIncludedFileInfo", ml, "CXIdxIncludedFileInfo") {
 	}
@@ -202,7 +202,7 @@ struct CXIdxIncludedFileInfo_GeneratedAnnotation : ManagedStructureAnnotation<CX
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6305:9
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:5753:9
 struct CXIdxImportedASTFileInfo_GeneratedAnnotation : ManagedStructureAnnotation<CXIdxImportedASTFileInfo> {
 	CXIdxImportedASTFileInfo_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxImportedASTFileInfo", ml, "CXIdxImportedASTFileInfo") {
 	}
@@ -214,7 +214,7 @@ struct CXIdxImportedASTFileInfo_GeneratedAnnotation : ManagedStructureAnnotation
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6394:9
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:5842:9
 struct CXIdxAttrInfo_GeneratedAnnotation : ManagedStructureAnnotation<CXIdxAttrInfo> {
 	CXIdxAttrInfo_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxAttrInfo", ml, "CXIdxAttrInfo") {
 	}
@@ -225,7 +225,7 @@ struct CXIdxAttrInfo_GeneratedAnnotation : ManagedStructureAnnotation<CXIdxAttrI
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6400:9
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:5848:9
 struct CXIdxEntityInfo_GeneratedAnnotation : ManagedStructureAnnotation<CXIdxEntityInfo> {
 	CXIdxEntityInfo_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxEntityInfo", ml, "CXIdxEntityInfo") {
 	}
@@ -241,7 +241,7 @@ struct CXIdxEntityInfo_GeneratedAnnotation : ManagedStructureAnnotation<CXIdxEnt
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6411:9
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:5859:9
 struct CXIdxContainerInfo_GeneratedAnnotation : ManagedStructureAnnotation<CXIdxContainerInfo> {
 	CXIdxContainerInfo_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxContainerInfo", ml, "CXIdxContainerInfo") {
 	}
@@ -250,7 +250,7 @@ struct CXIdxContainerInfo_GeneratedAnnotation : ManagedStructureAnnotation<CXIdx
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6415:9
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:5863:9
 struct CXIdxIBOutletCollectionAttrInfo_GeneratedAnnotation : ManagedStructureAnnotation<CXIdxIBOutletCollectionAttrInfo> {
 	CXIdxIBOutletCollectionAttrInfo_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxIBOutletCollectionAttrInfo", ml, "CXIdxIBOutletCollectionAttrInfo") {
 	}
@@ -262,7 +262,7 @@ struct CXIdxIBOutletCollectionAttrInfo_GeneratedAnnotation : ManagedStructureAnn
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6424:9
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:5872:9
 struct CXIdxDeclInfo_GeneratedAnnotation : ManagedStructureAnnotation<CXIdxDeclInfo> {
 	CXIdxDeclInfo_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxDeclInfo", ml, "CXIdxDeclInfo") {
 	}
@@ -283,7 +283,7 @@ struct CXIdxDeclInfo_GeneratedAnnotation : ManagedStructureAnnotation<CXIdxDeclI
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6456:9
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:5904:9
 struct CXIdxObjCContainerDeclInfo_GeneratedAnnotation : ManagedStructureAnnotation<CXIdxObjCContainerDeclInfo> {
 	CXIdxObjCContainerDeclInfo_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxObjCContainerDeclInfo", ml, "CXIdxObjCContainerDeclInfo") {
 	}
@@ -293,7 +293,7 @@ struct CXIdxObjCContainerDeclInfo_GeneratedAnnotation : ManagedStructureAnnotati
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6461:9
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:5909:9
 struct CXIdxBaseClassInfo_GeneratedAnnotation : ManagedStructureAnnotation<CXIdxBaseClassInfo> {
 	CXIdxBaseClassInfo_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxBaseClassInfo", ml, "CXIdxBaseClassInfo") {
 	}
@@ -304,7 +304,7 @@ struct CXIdxBaseClassInfo_GeneratedAnnotation : ManagedStructureAnnotation<CXIdx
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6467:9
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:5915:9
 struct CXIdxObjCProtocolRefInfo_GeneratedAnnotation : ManagedStructureAnnotation<CXIdxObjCProtocolRefInfo> {
 	CXIdxObjCProtocolRefInfo_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxObjCProtocolRefInfo", ml, "CXIdxObjCProtocolRefInfo") {
 	}
@@ -315,7 +315,7 @@ struct CXIdxObjCProtocolRefInfo_GeneratedAnnotation : ManagedStructureAnnotation
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6473:9
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:5921:9
 struct CXIdxObjCProtocolRefListInfo_GeneratedAnnotation : ManagedStructureAnnotation<CXIdxObjCProtocolRefListInfo> {
 	CXIdxObjCProtocolRefListInfo_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxObjCProtocolRefListInfo", ml, "CXIdxObjCProtocolRefListInfo") {
 	}
@@ -325,7 +325,7 @@ struct CXIdxObjCProtocolRefListInfo_GeneratedAnnotation : ManagedStructureAnnota
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6478:9
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:5926:9
 struct CXIdxObjCInterfaceDeclInfo_GeneratedAnnotation : ManagedStructureAnnotation<CXIdxObjCInterfaceDeclInfo> {
 	CXIdxObjCInterfaceDeclInfo_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxObjCInterfaceDeclInfo", ml, "CXIdxObjCInterfaceDeclInfo") {
 	}
@@ -336,7 +336,7 @@ struct CXIdxObjCInterfaceDeclInfo_GeneratedAnnotation : ManagedStructureAnnotati
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6484:9
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:5932:9
 struct CXIdxObjCCategoryDeclInfo_GeneratedAnnotation : ManagedStructureAnnotation<CXIdxObjCCategoryDeclInfo> {
 	CXIdxObjCCategoryDeclInfo_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxObjCCategoryDeclInfo", ml, "CXIdxObjCCategoryDeclInfo") {
 	}
@@ -349,7 +349,7 @@ struct CXIdxObjCCategoryDeclInfo_GeneratedAnnotation : ManagedStructureAnnotatio
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6492:9
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:5940:9
 struct CXIdxObjCPropertyDeclInfo_GeneratedAnnotation : ManagedStructureAnnotation<CXIdxObjCPropertyDeclInfo> {
 	CXIdxObjCPropertyDeclInfo_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxObjCPropertyDeclInfo", ml, "CXIdxObjCPropertyDeclInfo") {
 	}
@@ -360,7 +360,7 @@ struct CXIdxObjCPropertyDeclInfo_GeneratedAnnotation : ManagedStructureAnnotatio
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6498:9
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:5946:9
 struct CXIdxCXXClassDeclInfo_GeneratedAnnotation : ManagedStructureAnnotation<CXIdxCXXClassDeclInfo> {
 	CXIdxCXXClassDeclInfo_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxCXXClassDeclInfo", ml, "CXIdxCXXClassDeclInfo") {
 	}
@@ -371,7 +371,7 @@ struct CXIdxCXXClassDeclInfo_GeneratedAnnotation : ManagedStructureAnnotation<CX
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6544:9
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:5992:9
 struct CXIdxEntityRefInfo_GeneratedAnnotation : ManagedStructureAnnotation<CXIdxEntityRefInfo> {
 	CXIdxEntityRefInfo_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("CXIdxEntityRefInfo", ml, "CXIdxEntityRefInfo") {
 	}
@@ -386,7 +386,7 @@ struct CXIdxEntityRefInfo_GeneratedAnnotation : ManagedStructureAnnotation<CXIdx
 	}
 };
 
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6581:9
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:6029:9
 struct IndexerCallbacks_GeneratedAnnotation : ManagedStructureAnnotation<IndexerCallbacks> {
 	IndexerCallbacks_GeneratedAnnotation(ModuleLibrary & ml) : ManagedStructureAnnotation ("IndexerCallbacks", ml, "IndexerCallbacks") {
 	}
