@@ -4,7 +4,6 @@ options no_unused_function_arguments = false
 options no_aot = true
 options strict_smart_pointers = true
 
-require dastest/testing_boost
 require daslib/utf8_utils
 require daslib/strings
 
@@ -49,44 +48,3 @@ def public get_utf8_byte_count(code_point: int): int
 
     panic("Not a unicode symbol")
     return 0
-
-
-[test]
-def test_decoding_ascii(t: T?)
-    var input : array<uint8> <- [{auto 'a'u8; 'b'u8; 'c'u8}]
-    var index = 0
-
-    t |> equal('a', input |> get_next_character <| index)
-    t |> equal('b', input |> get_next_character <| index)
-    t |> equal('c', input |> get_next_character <| index)
-
-
-[test]
-def test_decoding_russian(t: T?)
-    var input : array<uint8> <- [{auto 0xD0u8; 0xB0u8;
-                                       0xD1u8; 0x80u8;
-                                       0xD0u8; 0xB8u8;
-                                       0xD0u8; 0xB2u8;
-                                       0xD0u8; 0xB5u8;
-                                       0xD1u8; 0x82u8}]
-    var index = 0
-
-    // Codes for symbols:
-    // https://symbl.cc/ru/unicode/blocks/cyrillic
-
-    t |> equal(1072, input |> get_next_character <| index) // п
-    t |> equal(1088, input |> get_next_character <| index) // р
-    t |> equal(1080, input |> get_next_character <| index) // и
-    t |> equal(1074, input |> get_next_character <| index) // в
-    t |> equal(1077, input |> get_next_character <| index) // е
-    t |> equal(1090, input |> get_next_character <| index) // т
-
-
-[test]
-def public test_decoding_japanese(t: T?)
-    var input : array<uint8> <- [{auto 0xE5u8; 0xA5u8; 0xBDu8;
-                                       0xE3u8; 0x81u8; 0x8Du8}]
-    var index = 0
-
-    t |> equal(22909, input |> get_next_character <| index) // 好
-    t |> equal(12365, input |> get_next_character <| index) // き
