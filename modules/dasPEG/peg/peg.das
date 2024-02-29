@@ -6,8 +6,6 @@ options strict_smart_pointers = true
 
 module peg shared
 
-require detail/utf8
-
 require peg/parse_macro public
 require peg/detail/colors public
 

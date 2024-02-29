@@ -256,30 +256,31 @@ var private failed_to_transform = false
 
 [macro_function]
 def transform(var rule: MacroRule): Definition
-    failed_to_transform = false
-    var name = rule.rule.variables[0].name |> string()
-    var inscope type_ <- rule.rule.variables[0]._type
+    unsafe
+        failed_to_transform = false
+        var name = rule.rule.variables[0].name |> string()
+        var inscope type_ <- rule.rule.variables[0]._type
 
-    // Transform array<ExprCall?> into an array of Rules
+        // Transform array<ExprCall?> into an array of Rules
 
-    var inscope alternatives: array<Alternative>
+        var inscope alternatives: array<Alternative>
 
-    for alt in rule.alternatives
-        if true // creates scope for inscope
-            var inscope blk: ExpressionPtr <- clone_expression(alt.arguments |> back)
+        for alt in rule.alternatives
+            if true // creates scope for inscope
+                var inscope blk: ExpressionPtr <- clone_expression(alt.arguments |> back)
 
-            var sequence: array<Rule_?>
+                var sequence: array<Rule_?>
 
-            for sequence_elem,_ in alt.arguments,range(length(alt.arguments)-1)
-                sequence |> push <| into_rule_(sequence_elem)
+                for sequence_elem,_ in alt.arguments,range(length(alt.arguments)-1)
+                    sequence |> push <| into_rule_(sequence_elem)
 
-            alternatives |> emplace <| [[Alternative
-                                      rule <- new [[Rule_ rule <- [[Rule seq <- sequence]]]],
-                                      action <- (blk as ExprMakeBlock)._block]]
+                alternatives |> emplace <| [[Alternative
+                                        rule <- new [[Rule_ rule <- [[Rule seq <- sequence]]]],
+                                        action <- (blk as ExprMakeBlock)._block]]
 
-    return <- [[Definition name = "{name}",
-                type_ <- type_,
-                rule <- [[Rule alt <- alternatives]]]]
+        return <- [[Definition name = "{name}",
+                    type_ <- type_,
+                    rule <- [[Rule alt <- alternatives]]]]
 
 
 [call_macro(name="parse")]
