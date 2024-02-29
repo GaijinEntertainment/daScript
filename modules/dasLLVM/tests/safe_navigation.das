@@ -68,7 +68,7 @@ def test_safe_field ( t:T? )
 def jit_safe_at(a,b,c)
     return a?[b] ?? c
 
-[test, no_jit]
+[test]
 def test_safe_at ( t:T? )
     t |> run("safe_at dim") <| @ ( t : T? )
         t |> success ( is_jit_function(@@<(a:int const[3];b,c:int):int>jit_safe_at) )
