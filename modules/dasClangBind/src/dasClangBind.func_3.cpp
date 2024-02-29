@@ -12,65 +12,86 @@
 namespace das {
 #include "dasClangBind.func.aot.decl.inc"
 void Module_dasClangBind::initFunctions_3() {
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:855:32
-	addExtern< void * (*)(void *) , clang_getChildDiagnostics >(*this,lib,"clang_getChildDiagnostics",SideEffects::worstDefault,"clang_getChildDiagnostics")
-		->args({"D"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:861:25
-	addExtern< unsigned int (*)(CXTranslationUnitImpl *) , clang_getNumDiagnostics >(*this,lib,"clang_getNumDiagnostics",SideEffects::worstDefault,"clang_getNumDiagnostics")
-		->args({"Unit"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:872:29
-	addExtern< void * (*)(CXTranslationUnitImpl *,unsigned int) , clang_getDiagnostic >(*this,lib,"clang_getDiagnostic",SideEffects::worstDefault,"clang_getDiagnostic")
-		->args({"Unit","Index"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:882:1
-	addExtern< void * (*)(CXTranslationUnitImpl *) , clang_getDiagnosticSetFromTU >(*this,lib,"clang_getDiagnosticSetFromTU",SideEffects::worstDefault,"clang_getDiagnosticSetFromTU")
-		->args({"Unit"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:887:21
-	addExtern< void (*)(void *) , clang_disposeDiagnostic >(*this,lib,"clang_disposeDiagnostic",SideEffects::worstDefault,"clang_disposeDiagnostic")
-		->args({"Diagnostic"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:972:25
-	addExtern< CXString (*)(void *,unsigned int) , clang_formatDiagnostic ,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_formatDiagnostic",SideEffects::worstDefault,"clang_formatDiagnostic")
-		->args({"Diagnostic","Options"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:982:25
-	addExtern< unsigned int (*)() , clang_defaultDiagnosticDisplayOptions >(*this,lib,"clang_defaultDiagnosticDisplayOptions",SideEffects::worstDefault,"clang_defaultDiagnosticDisplayOptions");
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:988:5
-	addExtern< CXDiagnosticSeverity (*)(void *) , clang_getDiagnosticSeverity >(*this,lib,"clang_getDiagnosticSeverity",SideEffects::worstDefault,"clang_getDiagnosticSeverity")
-		->args({""});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:996:33
-	addExtern< CXSourceLocation (*)(void *) , clang_getDiagnosticLocation ,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_getDiagnosticLocation",SideEffects::worstDefault,"clang_getDiagnosticLocation")
-		->args({""});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:1001:25
-	addExtern< CXString (*)(void *) , clang_getDiagnosticSpelling ,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_getDiagnosticSpelling",SideEffects::worstDefault,"clang_getDiagnosticSpelling")
-		->args({""});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:1015:25
-	addExtern< CXString (*)(void *,CXString *) , clang_getDiagnosticOption ,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_getDiagnosticOption",SideEffects::worstDefault,"clang_getDiagnosticOption")
-		->args({"Diag","Disable"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:1028:25
-	addExtern< unsigned int (*)(void *) , clang_getDiagnosticCategory >(*this,lib,"clang_getDiagnosticCategory",SideEffects::worstDefault,"clang_getDiagnosticCategory")
-		->args({""});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:1041:1
-	addExtern< CXString (*)(unsigned int) , clang_getDiagnosticCategoryName ,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_getDiagnosticCategoryName",SideEffects::worstDefault,"clang_getDiagnosticCategoryName")
-		->args({"Category"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:1048:25
-	addExtern< CXString (*)(void *) , clang_getDiagnosticCategoryText ,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_getDiagnosticCategoryText",SideEffects::worstDefault,"clang_getDiagnosticCategoryText")
-		->args({""});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:1054:25
-	addExtern< unsigned int (*)(void *) , clang_getDiagnosticNumRanges >(*this,lib,"clang_getDiagnosticNumRanges",SideEffects::worstDefault,"clang_getDiagnosticNumRanges")
-		->args({""});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:1069:30
-	addExtern< CXSourceRange (*)(void *,unsigned int) , clang_getDiagnosticRange ,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_getDiagnosticRange",SideEffects::worstDefault,"clang_getDiagnosticRange")
-		->args({"Diagnostic","Range"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:1076:25
-	addExtern< unsigned int (*)(void *) , clang_getDiagnosticNumFixIts >(*this,lib,"clang_getDiagnosticNumFixIts",SideEffects::worstDefault,"clang_getDiagnosticNumFixIts")
-		->args({"Diagnostic"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:1103:25
-	addExtern< CXString (*)(void *,unsigned int,CXSourceRange *) , clang_getDiagnosticFixIt ,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_getDiagnosticFixIt",SideEffects::worstDefault,"clang_getDiagnosticFixIt")
-		->args({"Diagnostic","FixIt","ReplacementRange"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:1124:1
-	addExtern< CXString (*)(CXTranslationUnitImpl *) , clang_getTranslationUnitSpelling ,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_getTranslationUnitSpelling",SideEffects::worstDefault,"clang_getTranslationUnitSpelling")
-		->args({"CTUnit"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:1166:34
-	addExtern< CXTranslationUnitImpl * (*)(void *,const char *,int,const char *const *,unsigned int,CXUnsavedFile *) , clang_createTranslationUnitFromSourceFile >(*this,lib,"clang_createTranslationUnitFromSourceFile",SideEffects::worstDefault,"clang_createTranslationUnitFromSourceFile")
-		->args({"CIdx","source_filename","num_clang_command_line_args","clang_command_line_args","num_unsaved_files","unsaved_files"});
+// from D:\Work\libclang\include\clang-c/CXDiagnostic.h:336:30
+	makeExtern< CXSourceRange (*)(void *,unsigned int) , clang_getDiagnosticRange , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_getDiagnosticRange","clang_getDiagnosticRange")
+		->args({"Diagnostic","Range"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\libclang\include\clang-c/CXDiagnostic.h:343:25
+	makeExtern< unsigned int (*)(void *) , clang_getDiagnosticNumFixIts , SimNode_ExtFuncCall >(lib,"clang_getDiagnosticNumFixIts","clang_getDiagnosticNumFixIts")
+		->args({"Diagnostic"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\libclang\include\clang-c/CXDiagnostic.h:370:25
+	makeExtern< CXString (*)(void *,unsigned int,CXSourceRange *) , clang_getDiagnosticFixIt , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_getDiagnosticFixIt","clang_getDiagnosticFixIt")
+		->args({"Diagnostic","FixIt","ReplacementRange"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:267:24
+	makeExtern< void * (*)(int,int) , clang_createIndex , SimNode_ExtFuncCall >(lib,"clang_createIndex","clang_createIndex")
+		->args({"excludeDeclarationsFromPCH","displayDiagnostics"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:276:21
+	makeExtern< void (*)(void *) , clang_disposeIndex , SimNode_ExtFuncCall >(lib,"clang_disposeIndex","clang_disposeIndex")
+		->args({"index"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:325:21
+	makeExtern< void (*)(void *,unsigned int) , clang_CXIndex_setGlobalOptions , SimNode_ExtFuncCall >(lib,"clang_CXIndex_setGlobalOptions","clang_CXIndex_setGlobalOptions")
+		->args({"","options"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:333:25
+	makeExtern< unsigned int (*)(void *) , clang_CXIndex_getGlobalOptions , SimNode_ExtFuncCall >(lib,"clang_CXIndex_getGlobalOptions","clang_CXIndex_getGlobalOptions")
+		->args({""})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:343:1
+	makeExtern< void (*)(void *,const char *) , clang_CXIndex_setInvocationEmissionPathOption , SimNode_ExtFuncCall >(lib,"clang_CXIndex_setInvocationEmissionPathOption","clang_CXIndex_setInvocationEmissionPathOption")
+		->args({"","Path"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:350:25
+	makeExtern< unsigned int (*)(CXTranslationUnitImpl *,void *) , clang_isFileMultipleIncludeGuarded , SimNode_ExtFuncCall >(lib,"clang_isFileMultipleIncludeGuarded","clang_isFileMultipleIncludeGuarded")
+		->args({"tu","file"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:363:23
+	makeExtern< void * (*)(CXTranslationUnitImpl *,const char *) , clang_getFile , SimNode_ExtFuncCall >(lib,"clang_getFile","clang_getFile")
+		->args({"tu","file_name"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:378:28
+	makeExtern< const char * (*)(CXTranslationUnitImpl *,void *,size_t *) , clang_getFileContents , SimNode_ExtFuncCall >(lib,"clang_getFileContents","clang_getFileContents")
+		->args({"tu","file","size"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:385:33
+	makeExtern< CXSourceLocation (*)(CXTranslationUnitImpl *,void *,unsigned int,unsigned int) , clang_getLocation , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_getLocation","clang_getLocation")
+		->args({"tu","file","line","column"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:392:33
+	makeExtern< CXSourceLocation (*)(CXTranslationUnitImpl *,void *,unsigned int) , clang_getLocationForOffset , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_getLocationForOffset","clang_getLocationForOffset")
+		->args({"tu","file","offset"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:402:35
+	makeExtern< CXSourceRangeList * (*)(CXTranslationUnitImpl *,void *) , clang_getSkippedRanges , SimNode_ExtFuncCall >(lib,"clang_getSkippedRanges","clang_getSkippedRanges")
+		->args({"tu","file"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:413:1
+	makeExtern< CXSourceRangeList * (*)(CXTranslationUnitImpl *) , clang_getAllSkippedRanges , SimNode_ExtFuncCall >(lib,"clang_getAllSkippedRanges","clang_getAllSkippedRanges")
+		->args({"tu"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:419:25
+	makeExtern< unsigned int (*)(CXTranslationUnitImpl *) , clang_getNumDiagnostics , SimNode_ExtFuncCall >(lib,"clang_getNumDiagnostics","clang_getNumDiagnostics")
+		->args({"Unit"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:430:29
+	makeExtern< void * (*)(CXTranslationUnitImpl *,unsigned int) , clang_getDiagnostic , SimNode_ExtFuncCall >(lib,"clang_getDiagnostic","clang_getDiagnostic")
+		->args({"Unit","Index"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:440:1
+	makeExtern< void * (*)(CXTranslationUnitImpl *) , clang_getDiagnosticSetFromTU , SimNode_ExtFuncCall >(lib,"clang_getDiagnosticSetFromTU","clang_getDiagnosticSetFromTU")
+		->args({"Unit"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:456:1
+	makeExtern< CXString (*)(CXTranslationUnitImpl *) , clang_getTranslationUnitSpelling , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_getTranslationUnitSpelling","clang_getTranslationUnitSpelling")
+		->args({"CTUnit"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:498:34
+	makeExtern< CXTranslationUnitImpl * (*)(void *,const char *,int,const char *const *,unsigned int,CXUnsavedFile *) , clang_createTranslationUnitFromSourceFile , SimNode_ExtFuncCall >(lib,"clang_createTranslationUnitFromSourceFile","clang_createTranslationUnitFromSourceFile")
+		->args({"CIdx","source_filename","num_clang_command_line_args","clang_command_line_args","num_unsaved_files","unsaved_files"})
+		->addToModule(*this, SideEffects::worstDefault);
 }
 }
 

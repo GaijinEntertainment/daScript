@@ -2,12 +2,12 @@
 // all user modifications will be lost after this file is re-generated
 
 addEnumeration(make_smart<Enumeration_CXErrorCode>());
-addEnumeration(make_smart<Enumeration_CXAvailabilityKind>());
-addEnumeration(make_smart<Enumeration_CXCursor_ExceptionSpecificationKind>());
-addEnumeration(make_smart<Enumeration_CXGlobalOptFlags>());
 addEnumeration(make_smart<Enumeration_CXDiagnosticSeverity>());
 addEnumeration(make_smart<Enumeration_CXLoadDiag_Error>());
 addEnumeration(make_smart<Enumeration_CXDiagnosticDisplayOptions>());
+addEnumeration(make_smart<Enumeration_CXAvailabilityKind>());
+addEnumeration(make_smart<Enumeration_CXCursor_ExceptionSpecificationKind>());
+addEnumeration(make_smart<Enumeration_CXGlobalOptFlags>());
 addEnumeration(make_smart<Enumeration_CXTranslationUnit_Flags>());
 addEnumeration(make_smart<Enumeration_CXSaveTranslationUnit_Flags>());
 addEnumeration(make_smart<Enumeration_CXSaveError>());

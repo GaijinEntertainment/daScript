@@ -12,65 +12,85 @@
 namespace das {
 #include "dasClangBind.func.aot.decl.inc"
 void Module_dasClangBind::initFunctions_6() {
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3024:1
-	addExtern< void (*)(CXPlatformAvailability *) , clang_disposeCXPlatformAvailability >(*this,lib,"clang_disposeCXPlatformAvailability",SideEffects::worstDefault,"clang_disposeCXPlatformAvailability")
-		->args({"availability"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3030:25
-	addExtern< CXCursor (*)(CXCursor) , clang_Cursor_getVarDeclInitializer ,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_Cursor_getVarDeclInitializer",SideEffects::worstDefault,"clang_Cursor_getVarDeclInitializer")
-		->args({"cursor"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3037:20
-	addExtern< int (*)(CXCursor) , clang_Cursor_hasVarDeclGlobalStorage >(*this,lib,"clang_Cursor_hasVarDeclGlobalStorage",SideEffects::worstDefault,"clang_Cursor_hasVarDeclGlobalStorage")
-		->args({"cursor"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3044:20
-	addExtern< int (*)(CXCursor) , clang_Cursor_hasVarDeclExternalStorage >(*this,lib,"clang_Cursor_hasVarDeclExternalStorage",SideEffects::worstDefault,"clang_Cursor_hasVarDeclExternalStorage")
-		->args({"cursor"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3059:36
-	addExtern< CXLanguageKind (*)(CXCursor) , clang_getCursorLanguage >(*this,lib,"clang_getCursorLanguage",SideEffects::worstDefault,"clang_getCursorLanguage")
-		->args({"cursor"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3071:31
-	addExtern< CXTLSKind (*)(CXCursor) , clang_getCursorTLSKind >(*this,lib,"clang_getCursorTLSKind",SideEffects::worstDefault,"clang_getCursorTLSKind")
-		->args({"cursor"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3076:34
-	addExtern< CXTranslationUnitImpl * (*)(CXCursor) , clang_Cursor_getTranslationUnit >(*this,lib,"clang_Cursor_getTranslationUnit",SideEffects::worstDefault,"clang_Cursor_getTranslationUnit")
-		->args({""});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3086:28
-	addExtern< CXCursorSetImpl * (*)() , clang_createCXCursorSet >(*this,lib,"clang_createCXCursorSet",SideEffects::worstDefault,"clang_createCXCursorSet");
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3091:21
-	addExtern< void (*)(CXCursorSetImpl *) , clang_disposeCXCursorSet >(*this,lib,"clang_disposeCXCursorSet",SideEffects::worstDefault,"clang_disposeCXCursorSet")
-		->args({"cset"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3098:25
-	addExtern< unsigned int (*)(CXCursorSetImpl *,CXCursor) , clang_CXCursorSet_contains >(*this,lib,"clang_CXCursorSet_contains",SideEffects::worstDefault,"clang_CXCursorSet_contains")
-		->args({"cset","cursor"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3106:25
-	addExtern< unsigned int (*)(CXCursorSetImpl *,CXCursor) , clang_CXCursorSet_insert >(*this,lib,"clang_CXCursorSet_insert",SideEffects::worstDefault,"clang_CXCursorSet_insert")
-		->args({"cset","cursor"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3142:25
-	addExtern< CXCursor (*)(CXCursor) , clang_getCursorSemanticParent ,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_getCursorSemanticParent",SideEffects::worstDefault,"clang_getCursorSemanticParent")
-		->args({"cursor"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3178:25
-	addExtern< CXCursor (*)(CXCursor) , clang_getCursorLexicalParent ,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_getCursorLexicalParent",SideEffects::worstDefault,"clang_getCursorLexicalParent")
-		->args({"cursor"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3223:21
-	addExtern< void (*)(CXCursor,CXCursor **,unsigned int *) , clang_getOverriddenCursors >(*this,lib,"clang_getOverriddenCursors",SideEffects::worstDefault,"clang_getOverriddenCursors")
-		->args({"cursor","overridden","num_overridden"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3231:21
-	addExtern< void (*)(CXCursor *) , clang_disposeOverriddenCursors >(*this,lib,"clang_disposeOverriddenCursors",SideEffects::worstDefault,"clang_disposeOverriddenCursors")
-		->args({"overridden"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3237:23
-	addExtern< void * (*)(CXCursor) , clang_getIncludedFile >(*this,lib,"clang_getIncludedFile",SideEffects::worstDefault,"clang_getIncludedFile")
-		->args({"cursor"});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3269:25
-	addExtern< CXCursor (*)(CXTranslationUnitImpl *,CXSourceLocation) , clang_getCursor ,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_getCursor",SideEffects::worstDefault,"clang_getCursor")
-		->args({"",""});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3281:33
-	addExtern< CXSourceLocation (*)(CXCursor) , clang_getCursorLocation ,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_getCursorLocation",SideEffects::worstDefault,"clang_getCursorLocation")
-		->args({""});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3294:30
-	addExtern< CXSourceRange (*)(CXCursor) , clang_getCursorExtent ,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_getCursorExtent",SideEffects::worstDefault,"clang_getCursorExtent")
-		->args({""});
-// from D:\Work\daScript/../libclang/include/clang-c/Index.h:3501:23
-	addExtern< CXType (*)(CXCursor) , clang_getCursorType ,SimNode_ExtFuncCallAndCopyOrMove>(*this,lib,"clang_getCursorType",SideEffects::worstDefault,"clang_getCursorType")
-		->args({"C"});
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:2366:1
+	makeExtern< void (*)(CXPlatformAvailability *) , clang_disposeCXPlatformAvailability , SimNode_ExtFuncCall >(lib,"clang_disposeCXPlatformAvailability","clang_disposeCXPlatformAvailability")
+		->args({"availability"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:2372:25
+	makeExtern< CXCursor (*)(CXCursor) , clang_Cursor_getVarDeclInitializer , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_Cursor_getVarDeclInitializer","clang_Cursor_getVarDeclInitializer")
+		->args({"cursor"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:2379:20
+	makeExtern< int (*)(CXCursor) , clang_Cursor_hasVarDeclGlobalStorage , SimNode_ExtFuncCall >(lib,"clang_Cursor_hasVarDeclGlobalStorage","clang_Cursor_hasVarDeclGlobalStorage")
+		->args({"cursor"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:2386:20
+	makeExtern< int (*)(CXCursor) , clang_Cursor_hasVarDeclExternalStorage , SimNode_ExtFuncCall >(lib,"clang_Cursor_hasVarDeclExternalStorage","clang_Cursor_hasVarDeclExternalStorage")
+		->args({"cursor"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:2401:36
+	makeExtern< CXLanguageKind (*)(CXCursor) , clang_getCursorLanguage , SimNode_ExtFuncCall >(lib,"clang_getCursorLanguage","clang_getCursorLanguage")
+		->args({"cursor"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:2413:31
+	makeExtern< CXTLSKind (*)(CXCursor) , clang_getCursorTLSKind , SimNode_ExtFuncCall >(lib,"clang_getCursorTLSKind","clang_getCursorTLSKind")
+		->args({"cursor"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:2418:34
+	makeExtern< CXTranslationUnitImpl * (*)(CXCursor) , clang_Cursor_getTranslationUnit , SimNode_ExtFuncCall >(lib,"clang_Cursor_getTranslationUnit","clang_Cursor_getTranslationUnit")
+		->args({""})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:2428:28
+	makeExtern< CXCursorSetImpl * (*)() , clang_createCXCursorSet , SimNode_ExtFuncCall >(lib,"clang_createCXCursorSet","clang_createCXCursorSet")
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:2433:21
+	makeExtern< void (*)(CXCursorSetImpl *) , clang_disposeCXCursorSet , SimNode_ExtFuncCall >(lib,"clang_disposeCXCursorSet","clang_disposeCXCursorSet")
+		->args({"cset"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:2440:25
+	makeExtern< unsigned int (*)(CXCursorSetImpl *,CXCursor) , clang_CXCursorSet_contains , SimNode_ExtFuncCall >(lib,"clang_CXCursorSet_contains","clang_CXCursorSet_contains")
+		->args({"cset","cursor"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:2448:25
+	makeExtern< unsigned int (*)(CXCursorSetImpl *,CXCursor) , clang_CXCursorSet_insert , SimNode_ExtFuncCall >(lib,"clang_CXCursorSet_insert","clang_CXCursorSet_insert")
+		->args({"cset","cursor"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:2484:25
+	makeExtern< CXCursor (*)(CXCursor) , clang_getCursorSemanticParent , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_getCursorSemanticParent","clang_getCursorSemanticParent")
+		->args({"cursor"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:2520:25
+	makeExtern< CXCursor (*)(CXCursor) , clang_getCursorLexicalParent , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_getCursorLexicalParent","clang_getCursorLexicalParent")
+		->args({"cursor"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:2565:21
+	makeExtern< void (*)(CXCursor,CXCursor **,unsigned int *) , clang_getOverriddenCursors , SimNode_ExtFuncCall >(lib,"clang_getOverriddenCursors","clang_getOverriddenCursors")
+		->args({"cursor","overridden","num_overridden"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:2573:21
+	makeExtern< void (*)(CXCursor *) , clang_disposeOverriddenCursors , SimNode_ExtFuncCall >(lib,"clang_disposeOverriddenCursors","clang_disposeOverriddenCursors")
+		->args({"overridden"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:2579:23
+	makeExtern< void * (*)(CXCursor) , clang_getIncludedFile , SimNode_ExtFuncCall >(lib,"clang_getIncludedFile","clang_getIncludedFile")
+		->args({"cursor"})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:2611:25
+	makeExtern< CXCursor (*)(CXTranslationUnitImpl *,CXSourceLocation) , clang_getCursor , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_getCursor","clang_getCursor")
+		->args({"",""})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:2623:33
+	makeExtern< CXSourceLocation (*)(CXCursor) , clang_getCursorLocation , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_getCursorLocation","clang_getCursorLocation")
+		->args({""})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:2636:30
+	makeExtern< CXSourceRange (*)(CXCursor) , clang_getCursorExtent , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_getCursorExtent","clang_getCursorExtent")
+		->args({""})
+		->addToModule(*this, SideEffects::worstDefault);
+// from D:\Work\daScript/../libclang/include/clang-c/Index.h:2843:23
+	makeExtern< CXType (*)(CXCursor) , clang_getCursorType , SimNode_ExtFuncCallAndCopyOrMove >(lib,"clang_getCursorType","clang_getCursorType")
+		->args({"C"})
+		->addToModule(*this, SideEffects::worstDefault);
 }
 }
 

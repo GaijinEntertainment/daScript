@@ -3,12 +3,12 @@
 
 initRecAnnotation(ann_CXString,lib);
 initRecAnnotation(ann_CXStringSet,lib);
-initRecAnnotation(ann_CXUnsavedFile,lib);
-initRecAnnotation(ann_CXVersion,lib);
 initRecAnnotation(ann_CXFileUniqueID,lib);
 initRecAnnotation(ann_CXSourceLocation,lib);
 initRecAnnotation(ann_CXSourceRange,lib);
 initRecAnnotation(ann_CXSourceRangeList,lib);
+initRecAnnotation(ann_CXUnsavedFile,lib);
+initRecAnnotation(ann_CXVersion,lib);
 initRecAnnotation(ann_CXTUResourceUsageEntry,lib);
 initRecAnnotation(ann_CXTUResourceUsage,lib);
 initRecAnnotation(ann_CXCursor,lib);

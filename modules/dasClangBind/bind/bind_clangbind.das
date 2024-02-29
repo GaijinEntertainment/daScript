@@ -71,6 +71,12 @@ class ClangGen : CppGenBind
             return false
         elif fname |> ends_with("CXString.h")
             return false
+        elif fname |> ends_with("CXDiagnostic.h")
+            return false
+        elif fname |> ends_with("CXFile.h")
+            return false
+        elif fname |> ends_with("CXSourceLocation.h")
+            return false
         return ! fname |> ends_with(PARSE_FILE_NAME)
     def override skip_alias ( var c : CXCursor )
         return false

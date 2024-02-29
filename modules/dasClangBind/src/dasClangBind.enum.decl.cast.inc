@@ -1,13 +1,14 @@
 // this file is generated via daScript automatic C++ binder
 // all user modifications will be lost after this file is re-generated
 
+#pragma once
 DAS_BIND_ENUM_CAST(CXErrorCode);
-DAS_BIND_ENUM_CAST(CXAvailabilityKind);
-DAS_BIND_ENUM_CAST(CXCursor_ExceptionSpecificationKind);
-DAS_BIND_ENUM_CAST(CXGlobalOptFlags);
 DAS_BIND_ENUM_CAST(CXDiagnosticSeverity);
 DAS_BIND_ENUM_CAST(CXLoadDiag_Error);
 DAS_BIND_ENUM_CAST(CXDiagnosticDisplayOptions);
+DAS_BIND_ENUM_CAST(CXAvailabilityKind);
+DAS_BIND_ENUM_CAST(CXCursor_ExceptionSpecificationKind);
+DAS_BIND_ENUM_CAST(CXGlobalOptFlags);
 DAS_BIND_ENUM_CAST(CXTranslationUnit_Flags);
 DAS_BIND_ENUM_CAST(CXSaveTranslationUnit_Flags);
 DAS_BIND_ENUM_CAST(CXSaveError);
