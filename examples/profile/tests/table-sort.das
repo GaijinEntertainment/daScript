@@ -11,7 +11,7 @@ def makeRandomSequence(var src:array<int>)
         src[i] = int(uint_noise_1D(i, seed))
 
 [export]
-def test
+def main
     var tab : array<int>
     makeRandomSequence(tab)
 	profile(1,"table-sort") <|
@@ -19,5 +19,5 @@ def test
     makeRandomSequence(tab)
 	profile(1,"table-sort-cmp") <|
         sort ( tab, $(a,b) => !(a < b) )
-    return true
+
 

@@ -19,7 +19,7 @@ def fibI(n)
     return cur
 
 [export]
-def test()
+def main
 	var f1 = 0
     profile(20,"fibbonacci loop") <|
         f1 = fibI(6511134)
@@ -36,5 +36,4 @@ def test()
     profile(20,"fibbonacci recursive c++") <|
         f5 = testProfile::testFibR(31)
 	assert(f5==1346269)
-    return true
 

@@ -23,7 +23,7 @@ def dict(var tab:table<string;int>; src:array<string>)
     return maxOcc
 
 [export]
-def test
+def main
     var tab : table<string;int>
     var src : array<string>
     makeRandomSequence(src)
@@ -31,5 +31,4 @@ def test
         dict(tab,src)
     profile(20,"c++ dictionary") <|
         testProfile::testDict(src)
-    return true
 

@@ -44,7 +44,7 @@ def queryThree()
         assert(count==100)
 
 [export]
-def test
+def main
     testProfile::initEsComponents()
     testProfile::testEsUpdate("ks")
     testProfile::verifyEsComponents()
@@ -82,4 +82,4 @@ def test
     profile(20,"query-3") <|
         queryThree()
     testProfile::releaseEsComponents()
-    return true
+

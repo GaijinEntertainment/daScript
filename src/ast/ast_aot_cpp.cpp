@@ -155,6 +155,49 @@ namespace das {
     ,   yes
     };
 
+    string aotSuffixNameEx ( const string & funcName, const char * suffix ) {
+        string name;
+        bool prefix = false;
+        for ( char ch : funcName ) {
+            if ( isalnum(ch) || ch=='_' ) {
+                name += ch;
+            } else {
+                prefix = true;
+                switch ( ch ) {
+                    case '=':   name += "Equ"; break;
+                    case '+':   name += "Add"; break;
+                    case '-':   name += "Sub"; break;
+                    case '*':   name += "Mul"; break;
+                    case '/':   name += "Div"; break;
+                    case '%':   name += "Mod"; break;
+                    case '&':   name += "And"; break;
+                    case '|':   name += "Or"; break;
+                    case '^':   name += "Xor"; break;
+                    case '?':   name += "Qmark"; break;
+                    case '~':   name += "Tilda"; break;
+                    case '!':   name += "Excl"; break;
+                    case '>':   name += "Greater"; break;
+                    case '<':   name += "Less"; break;
+                    case '[':   name += "Sqbl"; break;
+                    case ']':   name += "Sqbr"; break;
+                    case '.':   name += "Dot"; break;
+                    case '`':   name += "Tick"; break;
+                    default:
+                        name += "_0x";
+                        name += '0' + (ch>>4);
+                        name += '0' + (ch & 0x0f);
+                        name += "_";
+                        break;
+                }
+            }
+        }
+        return prefix ? (suffix + name) : name;
+    }
+
+    string aotStructName ( Structure * st ) {
+        return aotSuffixNameEx(st->name,"");
+    }
+
     string describeCppTypeEx ( const TypeDeclPtr & type,
                             CpptSubstitureRef substituteRef,
                             CpptSkipRef skipRef,
@@ -222,9 +265,9 @@ namespace das {
         } else if ( baseType==Type::tStructure ) {
             if ( type->structType ) {
                 if ( type->structType->module->name.empty() ) {
-                    stream << type->structType->name;
+                    stream << aotStructName(type->structType);
                 } else {
-                    stream << aotModuleName(type->structType->module) << "::" << type->structType->name;
+                    stream << aotModuleName(type->structType->module) << "::" << aotStructName(type->structType);
                 }
             } else {
                 stream << "DAS_COMMENT(unspecified structure) ";
@@ -719,44 +762,6 @@ namespace das {
         return fnn;
     }
 
-    string aotSuffixNameEx ( const string & funcName, const char * suffix ) {
-        string name;
-        bool prefix = false;
-        for ( char ch : funcName ) {
-            if ( isalnum(ch) || ch=='_' ) {
-                name += ch;
-            } else {
-                prefix = true;
-                switch ( ch ) {
-                    case '=':   name += "Equ"; break;
-                    case '+':   name += "Add"; break;
-                    case '-':   name += "Sub"; break;
-                    case '*':   name += "Mul"; break;
-                    case '/':   name += "Div"; break;
-                    case '%':   name += "Mod"; break;
-                    case '&':   name += "And"; break;
-                    case '|':   name += "Or"; break;
-                    case '^':   name += "Xor"; break;
-                    case '?':   name += "Qmark"; break;
-                    case '~':   name += "Tilda"; break;
-                    case '!':   name += "Excl"; break;
-                    case '>':   name += "Greater"; break;
-                    case '<':   name += "Less"; break;
-                    case '[':   name += "Sqbl"; break;
-                    case ']':   name += "Sqbr"; break;
-                    case '.':   name += "Dot"; break;
-                    default:
-                        name += "_0x";
-                        name += '0' + (ch>>4);
-                        name += '0' + (ch & 0x0f);
-                        name += "_";
-                        break;
-                }
-            }
-        }
-        return prefix ? (suffix + name) : name;
-    }
-
     string aotFuncName ( Function * func ) {
         if ( func->hash ) {
             TextWriter tw;
@@ -1027,9 +1032,9 @@ namespace das {
                     static_pointer_cast<StructureAnnotation>(ann->annotation)->aotPrefix(that, ann->arguments, ss);
                 }
             }
-            ss << "\nstruct " << that->name;
+            ss << "\nstruct " << aotStructName(that);
             if (that->cppLayout && that->parent) {
-                ss << " : " << that->parent->name;
+                ss << " : " << aotStructName(that->parent);
             }
             ss << " {\n";
             for ( auto & ann : that->annotations ) {
@@ -3977,7 +3982,7 @@ namespace das {
         visit(utm);
         for ( auto & pm : library.modules ) {
             pm->structures.foreach([&](auto ps){
-                aotVisitor.ss << "namespace " << aotModuleName(ps->module) << " { struct " << ps->name << "; };\n";
+                aotVisitor.ss << "namespace " << aotModuleName(ps->module) << " { struct " << aotStructName(ps.get()) << "; };\n";
             });
         }
         for ( auto & pm : library.modules ) {

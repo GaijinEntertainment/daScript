@@ -68,7 +68,7 @@ def init(var objects:array<NObject>)
     assert(i==length(objects))
 
 [export]
-def test()
+def main
     var objects:array<NObject>
     init(objects)
     let total=20
@@ -87,4 +87,4 @@ def test()
         testProfile::testParticles(100)
     profile(total,"particles kinematics, inlined C++") <|
         testProfile::testParticlesI(100)
-    return true
+

@@ -28,7 +28,7 @@ def primesI(n)
     return count
 
 [export]
-def test()
+def main
 	var f1 = 0
     profile(20,"primes loop") <|
         f1 = primes(14000)
@@ -41,5 +41,4 @@ def test()
     profile(20,"primes loop C++") <|
         f3 = testProfile::testPrimes(14000)
 	assert(f3==1652)
-    return true
 

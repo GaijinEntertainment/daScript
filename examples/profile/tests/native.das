@@ -10,10 +10,9 @@ def testAdds()
     return count
 
 [export]
-def test()
+def main
 	var count = 0
     profile(20,"native loop") <|
         count = testAdds()
 	assert(10000000==count)
-    return true
 
