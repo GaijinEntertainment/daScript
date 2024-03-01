@@ -1,5 +1,6 @@
 // from https://spiiin.github.io/blog/2385889062/
 
+[sideeffects]
 def popcount(x)
     var temp = x
     var count = 0u
@@ -30,7 +31,7 @@ def maxFrom1s_popcnt(x)
         res<<=1u
     return res
 
-[jit]
+[jit,sideeffects]
 def popcount_jit(x)
     var temp = x
     var count = 0u
@@ -61,7 +62,7 @@ def maxFrom1s_popcnt_jit(x)
         res<<=1u
     return res
 
-[export]
+[export,no_jit]
 def main
     verify(maxFrom1s(256u-1u)==0xff000000)
     verify(maxFrom1s_popcnt(256u-1u)==0xff000000)
@@ -79,3 +80,4 @@ def main
     profile(10, "max from 1s, popcnt, jit")  <|
         for i in range(100000)
             maxFrom1s_popcnt_jit(256u-1u)  //'0xff000000'
+

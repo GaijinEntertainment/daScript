@@ -1,5 +1,7 @@
 require math
 
+options solid_context
+
 struct body
     x,y,z:double
     vx,vy,vz:double

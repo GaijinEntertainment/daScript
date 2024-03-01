@@ -7,6 +7,7 @@
 // options log_nodes = true
 
 options persistent_heap = true
+options solid_context
 
 require daslib/random
 

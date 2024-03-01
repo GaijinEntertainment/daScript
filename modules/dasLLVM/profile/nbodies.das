@@ -1,3 +1,5 @@
+options solid_context
+
 require math
 require daslib/unroll
 //ported from https://benchmarksgame-team.pages.debian.net/benchmarksgame/program/nbody-gcc-2.html

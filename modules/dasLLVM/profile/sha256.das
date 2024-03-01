@@ -3,6 +3,8 @@ require daslib/unroll
 
 // options log_nodes=true
 
+options solid_context
+
 require math
 require strings
 
