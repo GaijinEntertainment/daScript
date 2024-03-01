@@ -21,7 +21,7 @@ def fibRH(n)
 	return fibRH(n - 1) + fibRH(n - 2)
 
 [export]
-def test()
+def main
 	var f1 = 0
     profile(20,"fibbonacci recursive") <|
         f1 = fibR(31)
@@ -34,6 +34,5 @@ def test()
     profile(20,"fibbonacci recursive, hybrid") <|
         f3 = fibRH(31)
 	assert(f3==1346269)
-    return true
 
 

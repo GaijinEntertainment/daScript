@@ -1,6 +1,6 @@
 options persistent_heap
 
-require framework
+require _framework
 require daslib/hash_map
 
 struct Value

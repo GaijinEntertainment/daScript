@@ -32,7 +32,7 @@ def verifyExp(f)
 	assert(q < eps)
 
 [export]
-def test()
+def main
 	var f1 = 0.
     profile(20,"exp loop") <|
         f1 = expLoop(1000000)
@@ -49,4 +49,3 @@ def test()
     profile(20,"c++ exp loop") <|
         f4 = testProfile::testExpLoop(1000000)
 	verifyExp(f4)
-    return true

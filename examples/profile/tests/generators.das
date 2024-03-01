@@ -53,7 +53,7 @@ def testLoop(total,mod:int)
     return st
 
 [export]
-def test()
+def main
     var s1, s2, s3 : string
     let TOTAL = 1000000
     let MOD = 99961
@@ -64,5 +64,5 @@ def test()
     profile(40,"testArr") <|
         s3 = testArr(TOTAL,MOD)
     assert(s1==s2 && s1==s3 && s2==s3)
-    return true
+
 

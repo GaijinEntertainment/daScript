@@ -1,3 +1,4 @@
+options solid_context
 // options log_nodes=true
 // options logCpp=true
 options indenting = 2
@@ -45,6 +46,7 @@ def offset_momentum(var bodies:body[5])
     px -= b.v * b.mass
   bodies[0].v = px / SOLAR_MASS
 
+[hint(alwaysinline,hot,noalias=bodies,unsafe_range_check)]
 def advance(var bodies:body[5])
   var i = 0
   for b in bodies
@@ -87,7 +89,7 @@ def nbodies(n)
   scale_bodies(1./0.01,g_bodies)
 
 [export]
-def test()
+def main
   offset_momentum(g_bodies)
   // print("\ninitial energy {energy()}\n")
   energy(g_bodies)
@@ -98,4 +100,3 @@ def test()
   testNBodiesInit()
   profile(10, "n-bodies, C++")  <|
     testNBodiesS(500000)
-  return true

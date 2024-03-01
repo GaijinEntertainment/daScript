@@ -20,6 +20,15 @@ struct Object {
 typedef das::vector<Object> ObjectArray;
 
 namespace das {
+    template <>
+    struct typeName<ObjectArray> {
+        constexpr static const char * name() {
+            return "ObjectArray";
+        }
+    };
+}
+
+namespace das {
     template<>
     struct SimPolicy<Object>
     {

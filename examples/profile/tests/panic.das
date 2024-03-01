@@ -15,10 +15,9 @@ def tryCatch()
 
 
 [export]
-def test
+def main
 	profile(20,"try-recover") <|
 		tryCatch()
 	profile(20,"try-recover c++") <|
 		testProfile::testTryCatch()
-    return true
 

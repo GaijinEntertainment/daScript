@@ -94,6 +94,11 @@ def verifyManagedInt
 			assert(x==y)
 
 [export]
+def main
+    using <| $ ( var objects:ObjectArray )
+        objects |> resize(10000)
+        test(objects)
+
 def test(var objects:ObjectArray)
 	// this is here for compilation testing purposes
 	verifyManagedInt()
@@ -155,5 +160,4 @@ def test(var objects:ObjectArray)
     print("ratio interop/c++: {intT/cT}\n")
     print("ratio interop-10000/c++: {manyT/cT}\n");
     print("ratio interop-10000-ks/c++: {manyKsT/cT}\n")
-    return true
 
