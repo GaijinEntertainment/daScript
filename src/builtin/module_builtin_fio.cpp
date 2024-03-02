@@ -427,6 +427,33 @@ namespace das {
  #endif
     }
 
+    bool builtin_chdir ( const char * path ) {
+#if defined(_EMSCRIPTEN_VER)
+        return false;
+#else
+        if ( path ) {
+            return chdir(path) == 0;
+        } else {
+            return false;
+        }
+#endif
+    }
+
+    char * builtin_getcwd ( Context * context ) {
+#if defined(_EMSCRIPTEN_VER)
+        return nullptr;
+#else
+        char * buf = getcwd(nullptr, 0);
+        if ( buf ) {
+            char * res = context->stringHeap->allocateString(buf, uint32_t(strlen(buf)));
+            free(buf);
+            return res;
+        } else {
+            return nullptr;
+        }
+#endif
+    }
+
     bool builtin_mkdir ( const char * path ) {
         if ( path ) {
 #if defined(_MSC_VER)
@@ -618,6 +645,12 @@ namespace das {
                     ->args({"path","block","context","line"});
             addExtern<DAS_BIND_FUN(builtin_mkdir)>(*this, lib, "mkdir",
                 SideEffects::modifyExternal, "builtin_mkdir")
+                    ->arg("path");
+            addExtern<DAS_BIND_FUN(builtin_chdir)>(*this, lib, "chdir",
+                SideEffects::modifyExternal, "builtin_chdir")
+                    ->arg("path");
+            addExtern<DAS_BIND_FUN(builtin_getcwd)>(*this, lib, "getcwd",
+                SideEffects::modifyExternal, "builtin_getcwd")
                     ->arg("path");
             addExtern<DAS_BIND_FUN(builtin_stdin)>(*this, lib, "fstdin",
                 SideEffects::modifyExternal, "builtin_stdin");

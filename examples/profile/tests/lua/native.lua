@@ -13,5 +13,5 @@ end
 
 loadfile("profile.lua")()
 
-io.write(string.format("native interop loop: %.8f\n", profile_it(20, function () testAdds() end)))
+io.write(string.format("\"native loop\", %.8f, 20\n", profile_it(20, function () testAdds() end)))
 

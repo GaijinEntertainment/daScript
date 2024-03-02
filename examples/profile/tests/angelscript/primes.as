@@ -20,14 +20,16 @@ int primes(int n)
 int main(int unused)
 {
     const int N = 14000;
-    print("primes: ");
+    print("\"primes loop\", ");
     int ctime = GetSystemTime();
-    int p = primes(N);
-    int time = GetSystemTime()-ctime;
-    print(p);
-    print("\n");
-    print("time taken (msec): ");
-    print (time);
-    print("\n");
+    for ( int j=0; j!=20; ++j ) {
+        int p = primes(N);
+        if ( p!=1652 ) print("test failed!\n");
+    }
+    int time = (GetSystemTime()-ctime)/20;
+    print (time/1000);
+    print (".");
+    print(time%1000);
+    print(", 20\n");
     return 0;
 }

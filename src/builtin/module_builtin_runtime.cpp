@@ -1405,6 +1405,11 @@ namespace das
         return context->thisProgram->policies.jit;
     }
 
+    bool das_aot_enabled ( Context * context, LineInfoArg * at ) {
+        if ( !context->thisProgram ) context->throw_error_at(at, "can only query for jit during compilation");
+        return context->thisProgram->policies.aot;
+    }
+
 #define STR_DSTR_REG(OPNAME,EXPR) \
     addExtern<DAS_BIND_FUN(OPNAME##_str_dstr)>(*this, lib, #EXPR, SideEffects::none, DAS_TOSTRING(OPNAME##_str_dstr)); \
     addExtern<DAS_BIND_FUN(OPNAME##_dstr_str)>(*this, lib, #EXPR, SideEffects::none, DAS_TOSTRING(OPNAME##_dstr_str));
@@ -1876,6 +1881,10 @@ namespace das
         // jit
         addExtern<DAS_BIND_FUN(das_jit_enabled)>(*this, lib, "jit_enabled",
             SideEffects::none, "das_jit_enabled")
+                ->args({"context","at"});
+        // aot
+        addExtern<DAS_BIND_FUN(das_aot_enabled)>(*this, lib, "aot_enabled",
+            SideEffects::none, "das_aot_enabled")
                 ->args({"context","at"});
     }
 }

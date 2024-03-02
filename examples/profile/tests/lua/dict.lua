@@ -39,4 +39,4 @@ for i = 1, n do
 end
 
 loadfile("profile.lua")()
-io.write(string.format("dictionary: %.8f\n", profile_it(20, function () clear(tab); dict(tab, src); end)))
+io.write(string.format("\"dictionary\", %.8f, 20\n", profile_it(20, function () clear(tab); dict(tab, src); end)))

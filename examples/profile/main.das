@@ -4,6 +4,8 @@ require rtti
 require debugapi
 require math
 
+let LOG_TEST_COMPILATION_TIME = false
+
 var failed = 0
 
 [no_jit]
@@ -15,14 +17,11 @@ def compile_and_run ( fileName:string; useAot:bool; useJit:bool )
             cop.aot_module = true
             cop.threadlock_context = true
             if useJit
-                print("JIT: ")
                 cop.jit = jit_enabled()
                 cop.jit_module := "{get_das_root()}/daslib/just_in_time.das"
             elif useAot
-                print("AOT: ")
                 cop.aot = true
             else
-                print("INTERPRETED: ")
                 cop.jit = false
                 cop.aot = false
             compile_file(fileName,access,unsafe(addr(mg)),cop) <| $(ok,program,issues)
@@ -37,7 +36,8 @@ def compile_and_run ( fileName:string; useAot:bool; useJit:bool )
                         return
                     var dt = get_time_usec(t0)
                     var sec = double(dt)/1000000.0lf
-                    print("compiled in {sec} sec\n")
+                    if LOG_TEST_COMPILATION_TIME
+                        print("compiled in {sec} sec\n")
                     try
                         unsafe(invoke_in_context(context,"main"))
                     recover
@@ -48,10 +48,13 @@ def compile_and_run ( fileName:string; useAot:bool; useJit:bool )
 
 [no_jit]
 def test_single_file ( fileName:string )
-    print("{fileName}\n")
-    compile_and_run(fileName, false, false)
+    // print("{fileName}\n")
+    print("\"DAS AOT\", ")
     compile_and_run(fileName, true, false)
+    print("\"DAS JIT\", ")
     compile_and_run(fileName, false, true)
+    print("\"DAS INTERPRETER\", ")
+    compile_and_run(fileName, false, false)
     print("\n\n")
 
 [no_jit]
@@ -63,19 +66,21 @@ def run_dir ( appDir : string )
 
 [export,no_jit]
 def main
-    print("RUNNING TESTS...\n\n")
+    // print("RUNNING TESTS...\n\n")
 
     if false // uncomment for single test
-        let appfile = "{get_das_root()}/examples/profile/tests/annotation.das"
+        let appfile = "{get_das_root()}/examples/profile/tests/primes.das"
         test_single_file(appfile)
         return
 
-    run_dir("{get_das_root()}/examples/profile/hash_test")
     run_dir("{get_das_root()}/examples/profile/tests")
+
+    /*
+    run_dir("{get_das_root()}/examples/profile/extra_tests")
+    run_dir("{get_das_root()}/examples/profile/hash_test")
+    */
 
     if failed != 0
         print("TOTAL FAILURES: {failed}\n")
-    else
-        print("ALL TESTS PASSED\n")
 
 

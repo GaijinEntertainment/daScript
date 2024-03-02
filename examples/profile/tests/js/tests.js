@@ -12,11 +12,11 @@ function merge(lower, greater) {
     if (lower === null) {
     	return greater
     }
-    
+
     if (greater === null) {
     	return lower
     }
-    
+
     if (lower.y < greater.y) {
         lower.right = merge(lower.right, greater)
         return lower
@@ -30,7 +30,7 @@ function splitBinary(orig, value) {
     if (orig === null) {
     	return [null, null]
     }
-    
+
     if (orig.x < value) {
         const splitPair = splitBinary(orig.right, value)
         orig.right = splitPair[0]
@@ -389,11 +389,11 @@ NBodySystem.prototype.energy = function(){
 function timeStamp() {
     if (typeof Duktape == 'object')
         return Date.now();
-	var timeStampInMs = 
-		window.performance && 
-		window.performance.now && 
-		window.performance.timing && 
-		window.performance.timing.navigationStart 
+	var timeStampInMs =
+		window.performance &&
+		window.performance.now &&
+		window.performance.timing &&
+		window.performance.timing.navigationStart
 			? window.performance.now() + window.performance.timing.navigationStart : Date.now();
 	return timeStampInMs;
 }
@@ -411,7 +411,7 @@ function profile(tname,cnt,testFn) {
 		count --;
 	}
 	t /= 1000.0;
-	var msg = '"'+tname+'",'+cnt+','+t;
+	var msg = '"'+tname+'", '+t+', '+cnt;
     if (typeof Duktape == 'object')
     {
         print(msg)
@@ -435,32 +435,32 @@ function performance_tests() {
 	});
 	profile("fibonacci loop",20,function(){
 		fibI(6511134);
-	});	
+	});
 	profile("fibonacci recursive",20,function(){
 		fibR(31)
-	});	
+	});
 	{
 		var src = dict_makeSrc();
 		profile("dictionary",20,function(){
 			dict(src);
-		});	
+		});
 	}
 	{
 		var particles = make_particles();
 		profile("particles",20,function(){
 			multi_update_particles(particles,100);
-		});	
+		});
 		profile("particles, inline",20,function(){
 			multi_update_particles_i(particles,100);
-		});	
+		});
 	}
 	{
-		var bodies = new NBodySystem( Array( 
-		   Sun(),Jupiter(),Saturn(),Uranus(),Neptune() 
+		var bodies = new NBodySystem( Array(
+		   Sun(),Jupiter(),Saturn(),Uranus(),Neptune()
 		));
 		profile("n-bodies",20,function(){
-			for (var i=0; i<500000; i++) { 
-				bodies.advance(0.01); 
+			for (var i=0; i<500000; i++) {
+				bodies.advance(0.01);
 			}
 		});
 	}

@@ -146,6 +146,4 @@ local nbody = bodies.len()
 loadfile("profile.nut")()
 
 offsetMomentum(bodies, nbody)
-print(energy(bodies, nbody) + "\n")
-print("nbodies: " + profile_it(10, function () {scale_bodies(bodies, nbody, 0.01);for (local i=0; i<n; i++){ advance(bodies, nbody);} scale_bodies(bodies, nbody, 1/0.01); }) + "\n")
-print(energy(bodies, nbody) + "\n")
+print("\"n-bodies\", " + profile_it(10, function () {scale_bodies(bodies, nbody, 0.01);for (local i=0; i<n; i++){ advance(bodies, nbody);} scale_bodies(bodies, nbody, 1/0.01); }) + ", 10\n")

@@ -22,4 +22,4 @@ local function primes(n)
 
 loadfile("profile.nut")()
 
-print("primes loop: " + profile_it(20, function() {primes(14000)}) + "\n");
+print("\"primes loop\", " + profile_it(20, function() {primes(14000)}) + ", 20\n");

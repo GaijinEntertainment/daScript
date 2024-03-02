@@ -8,4 +8,4 @@ local function testAdds()
 
 loadfile("profile.nut")()
 
-print("native loop: " + profile_it(20, function() {testAdds()}) + "\n");
+print("\"native loop\", " + profile_it(20, function() {testAdds()}) + ", 20\n");

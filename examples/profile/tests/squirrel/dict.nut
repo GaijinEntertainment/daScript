@@ -23,4 +23,4 @@ for (local i = 0; i < n; ++i)
 
 
 loadfile("profile.nut")()
-print("dictionary: " + profile_it(20, function () {tab<-{}; dict(tab, src) }) + "\n")
+print("\"dictionary\", " + profile_it(20, function () {tab<-{}; dict(tab, src) }) + ", 20\n")
