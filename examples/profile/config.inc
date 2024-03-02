@@ -42,6 +42,14 @@ def run_and_gun_silent ( cmdLine:string )
 
 [no_jit,no_aot]
 def run_files ( tf:TestFile )
+    if !empty(tf.jsFile)
+        // javascript
+        let jsRoot = "{get_das_root()}/examples/profile/tests/js"
+        let jsCompiler = "{jsRoot}/qjs.exe"
+        let cwd = getcwd()
+        chdir(jsRoot)
+        run_and_gun("QUICKJS","{jsCompiler} {jsRoot}/{tf.jsFile}")
+        chdir(cwd)
     if !empty(tf.monoFile)
         // csharp
         let monoRoot = "{get_das_root()}/examples/profile/tests/cs"
@@ -96,12 +104,4 @@ def run_files ( tf:TestFile )
         chdir(asRoot)
         run_and_gun("ANGELSCRIPT","{asCompiler} {asRoot}/{tf.asFile}")
         run_and_gun("ANGELSCRIPT-JIT","{asJitCompiler} {asRoot}/{tf.asFile}")
-        chdir(cwd)
-    if !empty(tf.jsFile)
-        // javascript
-        let jsRoot = "{get_das_root()}/examples/profile/tests/js"
-        let jsCompiler = "{jsRoot}/duktape.exe"
-        let cwd = getcwd()
-        chdir(jsRoot)
-        run_and_gun("DUKTAPE","{jsCompiler} {jsRoot}/{tf.jsFile}")
         chdir(cwd)
