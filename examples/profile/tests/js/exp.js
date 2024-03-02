@@ -11,15 +11,7 @@ function expLoop(n) {
 // infrastructure
 
 function timeStamp() {
-    if (typeof Duktape == 'object')
-        return Date.now();
-	var timeStampInMs =
-		window.performance &&
-		window.performance.now &&
-		window.performance.timing &&
-		window.performance.timing.navigationStart
-			? window.performance.now() + window.performance.timing.navigationStart : Date.now();
-	return timeStampInMs;
+   return Date.now();
 }
 
 function profile(tname,cnt,testFn) {
@@ -35,15 +27,7 @@ function profile(tname,cnt,testFn) {
 	}
 	t /= 1000.0;
 	var msg = '"'+tname+'", '+t+', '+cnt;
-    if (typeof Duktape == 'object')
-    {
-        print(msg)
-	} else
-	{
-	    msg+='\n'
-        console.log(msg);
-      	document.body.innerHTML += msg + "<br>";
-  	}
+    print(msg)
 }
 
 function performance_tests() {
