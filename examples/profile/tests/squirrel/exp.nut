@@ -10,4 +10,4 @@ local function expLoop(n)
 
 loadfile("profile.nut")()
 
-print("exp loop: " + profile_it(20, function() {expLoop(1000000)}) + "\n");
+print("\"exp loop\", " + profile_it(20, function() {expLoop(1000000)}) + ", 20\n");

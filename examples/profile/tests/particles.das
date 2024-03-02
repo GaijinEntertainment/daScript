@@ -4,6 +4,8 @@
 
 require testProfile
 
+include ../config.inc
+
 class CObject
     position : float3
     velocity : float3
@@ -67,24 +69,20 @@ def init(var objects:array<NObject>)
         obj.velocity=float3(1.0,2.0,3.0)
     assert(i==length(objects))
 
-[export]
+[export,no_aot,no_jit]
 def main
     var objects:array<NObject>
     init(objects)
-    let total=20
-    profile(total,"particles kinematics") <|
-        testSim2(objects,100)
-    profile(total,"particles kinematics, inlined") <|
+    profile(20,"particles kinematics, inlined") <|
         testSim2I(objects,100)
-    unsafe
-        var classes:array<CObject>
-	    init(classes)
-        profile(total,"particles kinematics OOP, virtual") <|
-            testVirtual2(classes,100)
-        profile(total,"particles kinematics OOP, method") <|
-            testMethod2(classes,100)
-    profile(total,"particles kinematics, C++") <|
-        testProfile::testParticles(100)
-    profile(total,"particles kinematics, inlined C++") <|
-        testProfile::testParticlesI(100)
-
+    if is_cpp_time()
+        cpp_label()
+        profile(20,"particles kinematics, inlined") <|
+            testProfile::testParticlesI(100)
+        run_files([[TestFile
+            luaFile = "particles.lua",
+            luaJitFile = "particles.lua",
+            nutFile = "particles.nut",
+            asFile = "particles.as",
+            jsFile = "particles.js"
+        ]])

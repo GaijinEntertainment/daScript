@@ -139,7 +139,5 @@ local nbody = #bodies
 
 loadfile("profile.lua")()
 offsetMomentum(bodies, nbody)
-io.write( string.format("%0.9f",energy(bodies, nbody)), "\n")
-io.write(string.format("nbodies loop: %.8f\n", profile_it(10, function () simulate(N, bodies, nbody) end)))
-io.write( string.format("%0.9f",energy(bodies, nbody)), "\n")
+io.write(string.format("\"n-bodies\", %.8f, 10\n", profile_it(10, function () simulate(N, bodies, nbody) end)))
 

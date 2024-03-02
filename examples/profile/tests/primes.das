@@ -2,6 +2,8 @@
 
 require testProfile
 
+include ../config.inc
+
 def isprime(n)
     for i in range(2, n)
         if (n % i == 0)
@@ -27,18 +29,22 @@ def primesI(n)
 				break
     return count
 
-[export]
+[export,no_jit,no_aot]
 def main
 	var f1 = 0
     profile(20,"primes loop") <|
         f1 = primes(14000)
 	assert(f1==1652)
-	var f2 = 0
-    profile(20,"primes loop, inline") <|
-        f2 = primesI(14000)
-	assert(f2==1652)
-	var f3 = 0
-    profile(20,"primes loop C++") <|
-        f3 = testProfile::testPrimes(14000)
-	assert(f3==1652)
-
+    if is_cpp_time()
+        cpp_label()
+        var f3 = 0
+        profile(20,"primes loop") <|
+            f3 = testProfile::testPrimes(14000)
+        assert(f3==1652)
+        run_files([[TestFile
+            luaFile = "primes.lua",
+            luaJitFile = "primes.lua",
+            nutFile = "primes.nut",
+            asFile = "primes.as",
+            jsFile = "primes.js"
+        ]])

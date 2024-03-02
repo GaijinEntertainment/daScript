@@ -6,6 +6,7 @@ require math
 // options intern_strings = true
 
 require testProfile
+include ../config.inc
 
 def makeRandomSequence(var src:array<string>)
     let n = 500000
@@ -22,13 +23,23 @@ def dict(var tab:table<string;int>; src:array<string>)
         maxOcc = max(++tab[s],maxOcc)
     return maxOcc
 
-[export]
+[export,no_jit,no_aot]
 def main
     var tab : table<string;int>
     var src : array<string>
     makeRandomSequence(src)
 	profile(20,"dictionary") <|
         dict(tab,src)
-    profile(20,"c++ dictionary") <|
-        testProfile::testDict(src)
+    if is_cpp_time()
+        cpp_label()
+        profile(20,"dictionary") <|
+            testProfile::testDict(src)
+        run_files([[TestFile
+            luaFile = "dict.lua",
+            luaJitFile = "dict.lua",
+            nutFile = "dict.nut",
+            // asFile = "dict.as",  // TODO: update AS to new version?
+            jsFile = "dict.js"
+        ]])
+
 

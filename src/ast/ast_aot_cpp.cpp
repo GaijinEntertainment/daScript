@@ -803,7 +803,7 @@ namespace das {
         }
         void renameVariable ( Variable * var ) {
             if ( needRenaming(var) ) {
-                string newName = "__" + aotSuffixNameEx(var->name,"_Var") + "_rename_at_" + to_string(var->at.line);
+                string newName = "__" + aotSuffixNameEx(var->name,"_Var") + "_rename_at_" + to_string(var->at.line) + "_" + to_string(tempCounter++);
                 rename[var] = newName;
             }
         }
@@ -906,6 +906,7 @@ namespace das {
     protected:
         das_map<Variable *,string>              rename;
         das_set<Variable *>                     moved;
+        uint64_t                                tempCounter = 0;
     };
 
     string describeCppFunc ( Function * fn, BlockVariableCollector * collector, bool needName = true, bool needInline = true ) {

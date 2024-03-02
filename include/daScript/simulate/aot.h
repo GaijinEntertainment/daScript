@@ -3094,6 +3094,7 @@ namespace das {
     void ___noinline builtin_try_recover ( const Block & try_block, const Block & catch_block, Context * context, LineInfoArg * at );
 
     bool das_jit_enabled ( Context * context, LineInfoArg * at );
+    bool das_aot_enabled ( Context * context, LineInfoArg * at );
 
     static inline urange64 mul_u64_u64 ( uint64_t a, uint64_t b ) {
         // ultiplying two 64-bit unsigned integers (uint64_t* a, uint64_t* b) and splitting the 128-bit

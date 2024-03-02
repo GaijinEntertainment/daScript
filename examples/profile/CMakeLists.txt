@@ -9,6 +9,7 @@ SETUP_CPP11(libDaScriptProfile)
 
 file(GLOB PROFILE_SRC
 "${CMAKE_SOURCE_DIR}/examples/profile/tests/*.das"
+"${CMAKE_SOURCE_DIR}/examples/profile/extra_test/*.das"
 "${CMAKE_SOURCE_DIR}/examples/profile/hash_test/*.das"
 )
 list(SORT PROFILE_SRC)

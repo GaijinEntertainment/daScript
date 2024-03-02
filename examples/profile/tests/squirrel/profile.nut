@@ -11,5 +11,5 @@ function profile_it(cnt, f)//for modified version
     if (i == 0 || measured < res)
       res = measured;
   }
-  return res
+  return res / 1.0
 }

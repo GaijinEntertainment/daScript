@@ -4,11 +4,11 @@ local function merge(lower, greater)
     if not lower then
         return greater
     end
-    
+
     if not greater then
         return lower
     end
-    
+
     if lower.y < greater.y then
         lower.right = merge(lower.right, greater)
         return lower
@@ -22,7 +22,7 @@ local function split_binary(orig, value)
     if not orig then
         return nil, nil
     end
-    
+
     if orig.x < value then
         local origRight, origLeft = split_binary(orig.right, value)
         orig.right = origRight
@@ -77,7 +77,7 @@ local function main()
     }
     local cur = 5
     local res = 0
-    
+
     for i = 1, 1000000 do
         local a = i % 3
         cur = (cur * 57 + 43) % 10007
@@ -94,4 +94,4 @@ local function main()
     --print(res)
 end
 
-io.write(string.format("tree: %.8f\n", profile_it(10, function () main() end)))
+io.write(string.format("\"tree\", %.8f, 10\n", profile_it(10, function () main() end)))
