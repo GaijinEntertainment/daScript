@@ -184,7 +184,7 @@ int main(int u)
       advance_bodies(nbody);
     }
   }
-  int time = (GetSystemTime()-ctime)/100;
+  int time = (GetSystemTime()-ctime)/10;
   print("\"n-bodies\", ");
   print (time/1000);
   print (".");

@@ -15,6 +15,7 @@ struct TestFile
     nutModifiedFile : string // squirrel modified
     asFile  : string // angel script
     jsFile  : string // javascript
+    monoFile  : string // csharp
 
 [no_jit,no_aot]
 def run_and_gun ( lang,cmdLine:string )
@@ -28,7 +29,31 @@ def run_and_gun ( lang,cmdLine:string )
             print("Error: {exitCode}\n")
 
 [no_jit,no_aot]
+def run_and_gun_silent ( cmdLine:string )
+    unsafe
+        var problem = ""
+        var exitCode = popen(cmdLine) <| $ ( f )
+            while !feof(f)
+                let st = fgets(f)
+                problem = "{problem}\n{st}"
+        if exitCode != 0
+            print("Error: {exitCode}\n{problem}\n")
+            return
+
+[no_jit,no_aot]
 def run_files ( tf:TestFile )
+    if !empty(tf.monoFile)
+        // csharp
+        let monoRoot = "{get_das_root()}/examples/profile/tests/cs"
+        let monoCompiler = "mcs"
+        let monoRunner = "mono"
+        let cwd = getcwd()
+        chdir(monoRoot)
+        run_and_gun_silent("{monoCompiler} -optimize+ {monoRoot}/{tf.monoFile} -out:test.exe")
+        run_and_gun("MONO --interpreter","{monoRunner} --interpreter test.exe")
+        run_and_gun("MONO","{monoRunner} test.exe")
+        run_and_gun(".NET","test.exe")
+        chdir(cwd)
     if !empty(tf.luaFile)
         // lua
         let luaRoot = "{get_das_root()}/examples/profile/tests/lua"

@@ -39,7 +39,8 @@ def main
             luaJitFile = "dict.lua",
             nutFile = "dict.nut",
             // asFile = "dict.as",  // TODO: update AS to new version?
-            jsFile = "dict.js"
+            jsFile = "dict.js",
+            monoFile = "dict.cs"
         ]])
 
 
