@@ -31,5 +31,6 @@ def main
             luaJitFile = "fib_loop.lua",
             nutFile = "fib_loop.nut",
             asFile = "fib_loop.as",
-            jsFile = "fib_loop.js"
+            jsFile = "fib_loop.js",
+            monoFile = "fib_loop.cs"
         ]])
