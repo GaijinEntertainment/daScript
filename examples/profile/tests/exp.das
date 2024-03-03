@@ -31,6 +31,7 @@ def main
             f4 = testProfile::testExpLoop(1000000)
         verifyExp(f4)
         run_files([[TestFile
+            luauFile = "exp.luau",
             luaFile = "exp.lua",
             luaJitFile = "exp.lua",
             nutFile = "exp.nut",

@@ -35,6 +35,7 @@ def main
         profile(20,"dictionary") <|
             testProfile::testDict(src)
         run_files([[TestFile
+            luauFile = "dict.luau",
             luaFile = "dict.lua",
             luaJitFile = "dict.lua",
             nutFile = "dict.nut",

@@ -1,11 +1,11 @@
 require fio
 
 let TEST_JAVASCRIPT = true
+let TEST_LUAU = true
 let TEST_LUA = true
 let TEST_LUA_JIT = true
 let TEST_SQUIRREL = true
 let TEST_CSHARP = true
-
 
 [no_jit,no_aot]
 def cpp_label
@@ -18,6 +18,7 @@ def is_cpp_time
 struct TestFile
     luaFile : string // lua
     luaJitFile : string // lua jit
+    luauFile : string // luau
     nutFile : string // squirrel
     nutModifiedFile : string // squirrel modified
     asFile  : string // angel script
@@ -49,25 +50,13 @@ def run_and_gun_silent ( cmdLine:string )
 
 [no_jit,no_aot]
 def run_files ( tf:TestFile )
-    if TEST_JAVASCRIPT && !empty(tf.jsFile)
-        // javascript
-        let jsRoot = "{get_das_root()}/examples/profile/tests/js"
-        let jsCompiler = "{jsRoot}/qjs.exe"
+    if TEST_LUAU && !empty(tf.luauFile)
+        // lua
+        let luaRoot = "{get_das_root()}/examples/profile/tests/luau"
+        let luaCompiler = "{luaRoot}/luau.exe"
         let cwd = getcwd()
-        chdir(jsRoot)
-        run_and_gun("QUICKJS","{jsCompiler} {jsRoot}/{tf.jsFile}")
-        chdir(cwd)
-    if TEST_CSHARP && !empty(tf.monoFile)
-        // csharp
-        let monoRoot = "{get_das_root()}/examples/profile/tests/cs"
-        let monoCompiler = "mcs"
-        let monoRunner = "mono"
-        let cwd = getcwd()
-        chdir(monoRoot)
-        run_and_gun_silent("{monoCompiler} -optimize+ {monoRoot}/{tf.monoFile} -out:test.exe")
-        run_and_gun("MONO --interpreter","{monoRunner} --interpreter test.exe")
-        run_and_gun("MONO","{monoRunner} test.exe")
-        run_and_gun(".NET","test.exe")
+        chdir(luaRoot)
+        run_and_gun("LUAU","{luaCompiler} {luaRoot}/{tf.luauFile}")
         chdir(cwd)
     if TEST_LUA && !empty(tf.luaFile)
         // lua
@@ -101,4 +90,24 @@ def run_files ( tf:TestFile )
         let cwd = getcwd()
         chdir(nutRoot)
         run_and_gun("SQ3-MODIFIED-64","{numModifiedCompiler} {nutRoot}/{tf.nutModifiedFile}")
+        chdir(cwd)
+    if TEST_JAVASCRIPT && !empty(tf.jsFile)
+        // javascript
+        let jsRoot = "{get_das_root()}/examples/profile/tests/js"
+        let jsCompiler = "{jsRoot}/qjs.exe"
+        let cwd = getcwd()
+        chdir(jsRoot)
+        run_and_gun("QUICKJS","{jsCompiler} {jsRoot}/{tf.jsFile}")
+        chdir(cwd)
+    if TEST_CSHARP && !empty(tf.monoFile)
+        // csharp
+        let monoRoot = "{get_das_root()}/examples/profile/tests/cs"
+        let monoCompiler = "mcs"
+        let monoRunner = "mono"
+        let cwd = getcwd()
+        chdir(monoRoot)
+        run_and_gun_silent("{monoCompiler} -optimize+ {monoRoot}/{tf.monoFile} -out:test.exe")
+        run_and_gun("MONO --interpreter","{monoRunner} --interpreter test.exe")
+        run_and_gun("MONO","{monoRunner} test.exe")
+        run_and_gun(".NET","test.exe")
         chdir(cwd)

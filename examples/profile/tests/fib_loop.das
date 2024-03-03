@@ -27,6 +27,7 @@ def main
             f4 = testProfile::testFibI(6511134)
         assert(f4==1781508648)
         run_files([[TestFile
+            luauFile = "fib_loop.luau",
             luaFile = "fib_loop.lua",
             luaJitFile = "fib_loop.lua",
             nutFile = "fib_loop.nut",
