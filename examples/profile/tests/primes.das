@@ -18,16 +18,6 @@ def primes(n)
             ++count
     return count
 
-[sideeffects]
-def primesI(n)
-    var count = 0
-    for i in range(2, n+1)
-		count ++
-		for j in range(2,i)
-			if i % j == 0
-				count --
-				break
-    return count
 
 [export,no_jit,no_aot]
 def main
@@ -42,9 +32,11 @@ def main
             f3 = testProfile::testPrimes(14000)
         assert(f3==1652)
         run_files([[TestFile
+            luauFile = "primes.luau",
             luaFile = "primes.lua",
             luaJitFile = "primes.lua",
             nutFile = "primes.nut",
             asFile = "primes.as",
-            jsFile = "primes.js"
+            jsFile = "primes.js",
+            monoFile = "primes.cs"
         ]])

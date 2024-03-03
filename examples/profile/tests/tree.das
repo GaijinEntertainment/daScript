@@ -69,7 +69,7 @@ def insert(var mRoot:Node? &; x: int)
     var lower, equal, greater : Node?
     split(mRoot, lower, equal, greater, x)
     if equal == null
-    	equal = new [[Node x=x, y=random_int(seed)]]
+    	equal = new [[Node x=x, y=random_big_int(seed)]]
     mRoot = merge(lower, equal, greater)
 
 [hint(alwaysinline,hot)]
@@ -106,9 +106,11 @@ def main
         profile(10, "tree")  <|
             testProfile::testTree()
         run_files([[TestFile
+            luauFile = "tree.luau",
             luaFile = "tree.lua",
             luaJitFile = "tree.lua",
             // nutFile = "tree.nut",
             // asFile = "tree.as",
-            jsFile = "tree.js"
+            jsFile = "tree.js",
+            monoFile = "tree.cs"
         ]])

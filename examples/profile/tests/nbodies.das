@@ -102,6 +102,7 @@ def main
         profile(10, "n-bodies")  <|
             testNBodiesS(500000)
         run_files([[TestFile
+            luauFile = "nbodies.luau",
             luaFile = "nbodies.lua",
             luaJitFile = "nbodies.lua",
             nutFile = "nbodies.nut",

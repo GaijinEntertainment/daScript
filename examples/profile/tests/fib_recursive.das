@@ -23,6 +23,7 @@ def main
             f5 = testProfile::testFibR(31)
         assert(f5==1346269)
         run_files([[TestFile
+            luauFile = "fib_recursive.luau",
             luaFile = "fib_recursive.lua",
             luaJitFile = "fib_recursive.lua",
             nutFile = "fib_recursive.nut",

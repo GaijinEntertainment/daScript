@@ -6,52 +6,9 @@ require testProfile
 
 include ../config.inc
 
-class CObject
-    position : float3
-    velocity : float3
-	def CObject(i:int)
-		position = float3(i,i+1,i+2)
-		velocity = float3(1,2,3)
-	def update()
-		position += velocity
-
-def testVirtual(var objects:array<CObject>)
-	for obj in objects
-		obj->update()
-
-def testVirtual2(var objects:array<CObject>;count:int)
-    for i in range(count)
-        testVirtual(objects)
-
-def testMethod(var objects:array<CObject>)
-	for obj in objects
-		CObject`update(obj)
-
-def testMethod2(var objects:array<CObject>;count:int)
-    for i in range(count)
-        testMethod(objects)
-
-def init(var objects:array<CObject>)
-    resize(objects, 50000)
-    var i = 0
-    for obj in objects
-        unsafe
-		    obj = CObject(i++)
-
 struct NObject
     position : float3
     velocity : float3
-
-def update(var a:NObject)
-    a.position+=a.velocity
-
-def testSim(var objects:array<NObject>)
-    for obj in objects
-        update(obj)
-
-def testSim2(var objects:array<NObject>; count:int)
-    for i in range(count)
-        testSim(objects)
 
 def testSimI(var objects:array<NObject>)
     for obj in objects
@@ -80,9 +37,11 @@ def main
         profile(20,"particles kinematics, inlined") <|
             testProfile::testParticlesI(100)
         run_files([[TestFile
+            luauFile = "particles.luau",
             luaFile = "particles.lua",
             luaJitFile = "particles.lua",
             nutFile = "particles.nut",
             asFile = "particles.as",
-            jsFile = "particles.js"
+            jsFile = "particles.js",
+            monoFile = "particles.cs"
         ]])
