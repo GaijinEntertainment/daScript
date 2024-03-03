@@ -1,5 +1,12 @@
 require fio
 
+let TEST_JAVASCRIPT = true
+let TEST_LUA = true
+let TEST_LUA_JIT = true
+let TEST_SQUIRREL = true
+let TEST_CSHARP = true
+
+
 [no_jit,no_aot]
 def cpp_label
     print("\"C++\", ")
@@ -42,7 +49,7 @@ def run_and_gun_silent ( cmdLine:string )
 
 [no_jit,no_aot]
 def run_files ( tf:TestFile )
-    if !empty(tf.jsFile)
+    if TEST_JAVASCRIPT && !empty(tf.jsFile)
         // javascript
         let jsRoot = "{get_das_root()}/examples/profile/tests/js"
         let jsCompiler = "{jsRoot}/qjs.exe"
@@ -50,7 +57,7 @@ def run_files ( tf:TestFile )
         chdir(jsRoot)
         run_and_gun("QUICKJS","{jsCompiler} {jsRoot}/{tf.jsFile}")
         chdir(cwd)
-    if !empty(tf.monoFile)
+    if TEST_CSHARP && !empty(tf.monoFile)
         // csharp
         let monoRoot = "{get_das_root()}/examples/profile/tests/cs"
         let monoCompiler = "mcs"
@@ -62,7 +69,7 @@ def run_files ( tf:TestFile )
         run_and_gun("MONO","{monoRunner} test.exe")
         run_and_gun(".NET","test.exe")
         chdir(cwd)
-    if !empty(tf.luaFile)
+    if TEST_LUA && !empty(tf.luaFile)
         // lua
         let luaRoot = "{get_das_root()}/examples/profile/tests/lua"
         let luaCompiler = "{luaRoot}/lua.exe"
@@ -70,16 +77,16 @@ def run_files ( tf:TestFile )
         chdir(luaRoot)
         run_and_gun("LUA","{luaCompiler} {luaRoot}/{tf.luaFile}")
         chdir(cwd)
-    if !empty(tf.luaJitFile)
+    if TEST_LUA_JIT && !empty(tf.luaJitFile)
         // lua
         let luaRoot = "{get_das_root()}/examples/profile/tests/lua"
-        let luaJitCompiler = "{luaRoot}/luajit2_1_0beta3/luajit.exe"
+        let luaJitCompiler = "{luaRoot}/luajit.exe"
         let cwd = getcwd()
         chdir(luaRoot)
         run_and_gun("LUAJIT -joff","{luaJitCompiler} -joff {luaRoot}/{tf.luaJitFile}")
         run_and_gun("LUAJIT","{luaJitCompiler} {luaRoot}/{tf.luaJitFile}")
         chdir(cwd)
-    if !empty(tf.nutFile)
+    if TEST_SQUIRREL && !empty(tf.nutFile)
         // squirrel
         let nutRoot = "{get_das_root()}/examples/profile/tests/squirrel"
         let nutCompiler = "{nutRoot}/sq3-64.exe"
@@ -87,21 +94,11 @@ def run_files ( tf:TestFile )
         chdir(nutRoot)
         run_and_gun("SQ3-64","{nutCompiler} {nutRoot}/{tf.nutFile}")
         chdir(cwd)
-    if !empty(tf.nutModifiedFile)
+    if TEST_SQUIRREL && !empty(tf.nutModifiedFile)
         // squirrel
         let nutRoot = "{get_das_root()}/examples/profile/tests/squirrel"
         let numModifiedCompiler = "{nutRoot}/sq3-modified-64.exe"
         let cwd = getcwd()
         chdir(nutRoot)
         run_and_gun("SQ3-MODIFIED-64","{numModifiedCompiler} {nutRoot}/{tf.nutModifiedFile}")
-        chdir(cwd)
-    if !empty(tf.asFile)
-        // angel script
-        let asRoot = "{get_das_root()}/examples/profile/tests/angelscript"
-        let asCompiler = "{asRoot}/as.exe"
-        let asJitCompiler = "{asRoot}/asjit.exe"
-        let cwd = getcwd()
-        chdir(asRoot)
-        run_and_gun("ANGELSCRIPT","{asCompiler} {asRoot}/{tf.asFile}")
-        run_and_gun("ANGELSCRIPT-JIT","{asJitCompiler} {asRoot}/{tf.asFile}")
         chdir(cwd)
