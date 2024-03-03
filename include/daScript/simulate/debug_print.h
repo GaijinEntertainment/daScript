@@ -11,6 +11,9 @@ namespace das {
     public:
         StringBuilderWriter() { }
         __forceinline char * c_str() const {
+            if ( !data.empty() && data.back() ) {
+                data.push_back(0);
+            }
             return (char *) data.data();
         }
     };

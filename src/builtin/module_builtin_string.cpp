@@ -693,7 +693,7 @@ namespace das
         vec4f args[1];
         args[0] = cast<StringBuilderWriter *>::from(&writer);
         context->invoke(block, args, nullptr, at);
-        return hash_block64((const uint8_t *)writer.c_str(),writer.tellp());
+        return hash_blockz64((const uint8_t *)writer.c_str());
     }
 
     class Module_Strings : public Module {

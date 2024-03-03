@@ -60,7 +60,7 @@ namespace das {
             return data.data() + data.size() - l;
         }
         virtual void output() {}
-        vector<char> data;
+        mutable vector<char> data;
     };
 
     // todo: support hex

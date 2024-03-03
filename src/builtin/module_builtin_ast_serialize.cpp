@@ -1069,7 +1069,7 @@ namespace das {
             for ( uint64_t i = 0; i < size; i++ ) {
                 ser << result[i];
             }
-            list = move(result);
+            list = std::move(result);
         }
     }
 
@@ -1290,7 +1290,7 @@ namespace das {
             Module * module = nullptr; ser << module;
             string mangledName; ser << mangledName;
             field = ( Structure::FieldDeclaration * ) 1;
-            ser.fieldRefs.emplace_back(&field, module, move(mangledName), name);
+            ser.fieldRefs.emplace_back(&field, module, std::move(mangledName), name);
         }
     }
 
@@ -1803,7 +1803,7 @@ namespace das {
                 VariablePtr g; ser << g;
                 result.insert(g->name, g);
             }
-            globals = move(result);
+            globals = std::move(result);
         }
     }
 

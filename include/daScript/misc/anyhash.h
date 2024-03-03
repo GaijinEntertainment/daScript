@@ -10,6 +10,10 @@
 #define HASH_KILLED64    1
 #define DAS_WYHASH_SEED  0x1234567890abcdeful
 
+#ifndef DAS_SAFE_HASH
+#define DAS_SAFE_HASH    0
+#endif
+
 namespace das {
 
     static __forceinline uint64_t hash_block64 ( const uint8_t * block, size_t size ) {
@@ -18,8 +22,25 @@ namespace das {
     }
 
     static __forceinline uint64_t hash_blockz64 ( const uint8_t * block ) {
-        if ( !block ) block = (const uint8_t *) "";
-        auto h = wyhash(block, strlen((char *)block), DAS_WYHASH_SEED);
+        auto FNV_offset_basis = 14695981039346656037ul;
+        auto FNV_prime = 1099511628211ul;
+        if ( !block ) return FNV_offset_basis;
+        auto h = FNV_offset_basis;
+#if DAS_SAFE_HASH
+        while ( *block ) {
+            h ^= *block++;
+            h *= FNV_prime;
+        }
+#else
+        while ( true ) {
+            uint64_t v = *(uint16_t *)block;
+            block += 2;
+            if ( (v & 0xff)==0 ) break;
+            h ^= v;
+            h *= FNV_prime;
+            if ( (v & 0xff00)==0 ) break;
+        }
+#endif
         return h <= HASH_KILLED64 ? 1099511628211ul : h;
     }
 
