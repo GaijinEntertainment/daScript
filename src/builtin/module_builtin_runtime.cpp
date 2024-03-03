@@ -1010,7 +1010,7 @@ namespace das
     void builtin_table_free ( Table & tab, int szk, int szv, Context * __context__, LineInfoArg * at ) {
         if ( tab.data ) {
             if ( !tab.lock || tab.hopeless ) {
-                uint32_t oldSize = tab.capacity*(szk+szv+sizeof(uint64_t));
+                uint32_t oldSize = tab.capacity*(szk+szv+sizeof(TableHashKey));
                 __context__->heap->free(tab.data, oldSize);
             } else {
                 __context__->throw_error_at(at, "can't delete locked table");

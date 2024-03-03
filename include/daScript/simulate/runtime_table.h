@@ -53,14 +53,15 @@ namespace das
         __forceinline int find ( const Table & tab, KeyType key, uint64_t hash ) const {
             if ( tab.capacity==0 ) return -1;
             uint32_t mask = tab.capacity - 1;
-            uint32_t index = hash & mask;
+            uint32_t index = TableHashKey(hash) & mask;
             auto pKeys = (const KeyType *) tab.keys;
             auto pHashes = tab.hashes;
+            auto hashKey = TableHashKey(hash);
             while ( true ) {
                 auto kh = pHashes[index];
                 if ( kh==HASH_EMPTY64 ) {
                     return -1;
-                } else if ( kh==hash && KeyCompare<KeyType>()(pKeys[index],key) ) {
+                } else if ( kh==hashKey && KeyCompare<KeyType>()(pKeys[index],key) ) {
                     return (int) index;
                 }
                 index = (index + 1) & mask;
@@ -70,7 +71,7 @@ namespace das
         __forceinline int insertNew ( Table & tab, uint64_t hash ) const {
             // TODO: take key under account and be less aggressive?
             uint32_t mask = tab.capacity - 1;
-            uint32_t index = hash & mask;
+            uint32_t index = TableHashKey(hash) & mask;
             auto pHashes = tab.hashes;
             while ( true ) {
                 auto kh = pHashes[index];
@@ -84,22 +85,23 @@ namespace das
         __forceinline int reserve ( Table & tab, KeyType key, uint64_t hash ) {
             if ( tab.size >= (tab.capacity/2) ) grow(tab);
             uint32_t mask = tab.capacity - 1;
-            uint32_t index = hash & mask;
+            uint32_t index = TableHashKey(hash) & mask;
             uint32_t insertI = -1u;
             auto pKeys = (KeyType *) tab.keys;
             auto pHashes = tab.hashes;
+            auto hashKey = TableHashKey(hash);
             while ( true ) {
                 auto kh = pHashes[index];
                 if (kh == HASH_EMPTY64 ) {
                     if ( tab.isLocked() ) context->throw_error("can't insert into locked table");
                     if ( insertI != -1u ) index = insertI;
-                    pHashes[index] = hash;
+                    pHashes[index] = hashKey;
                     pKeys[index] = key;
                     tab.size++;
                     return (int)index;
                 } else if (kh == HASH_KILLED64) {
                     if ( insertI == -1u ) insertI = index;
-                } else if (kh == hash && KeyCompare<KeyType>()(pKeys[index], key)) {
+                } else if (kh == hashKey && KeyCompare<KeyType>()(pKeys[index], key)) {
                     return (int)index;
                 }
                 index = (index + 1) & mask;
@@ -109,14 +111,15 @@ namespace das
         __forceinline int erase ( Table & tab, KeyType key, uint64_t hash ) {
             if ( tab.capacity==0 ) return -1;
             uint32_t mask = tab.capacity - 1;
-            uint32_t index = hash & mask;
+            uint32_t index = TableHashKey(hash) & mask;
             auto pKeys = (const KeyType *) tab.keys;
             auto pHashes = tab.hashes;
+            auto hashKey = TableHashKey(hash);
             while ( true ) {
                 auto kh = pHashes[index];
                 if ( kh==HASH_EMPTY64 ) {
                     return -1;
-                } else if ( kh==hash && KeyCompare<KeyType>()(pKeys[index],key) ) {
+                } else if ( kh==hashKey && KeyCompare<KeyType>()(pKeys[index],key) ) {
                     tab.size--;
                     pHashes[index] = HASH_KILLED64;
                     memset(tab.data + index*valueTypeSize, 0, valueTypeSize);
@@ -148,7 +151,7 @@ namespace das
         bool reserveInternal(Table & tab, uint32_t newCapacity) {
             DAS_VERIFYF((newCapacity & (newCapacity) - 1) == 0, "newCapacity must be power of 2, and not %i", int(newCapacity));
             Table newTab;
-            uint64_t memSize64 = uint64_t(newCapacity) * (uint64_t(valueTypeSize) + uint64_t(sizeof(KeyType)) + uint64_t(sizeof(uint64_t)));
+            uint64_t memSize64 = uint64_t(newCapacity) * (uint64_t(valueTypeSize) + uint64_t(sizeof(KeyType)) + uint64_t(sizeof(TableHashKey)));
             if ( memSize64>=0xffffffff ) {
                 context->throw_error_ex("can't grow table, out of index space [capacity=%i]", newCapacity);
                 return false;
@@ -162,14 +165,14 @@ namespace das
                 return false;
             }
             newTab.keys = newTab.data + newCapacity * valueTypeSize;
-            newTab.hashes = (uint64_t *)(newTab.keys + newCapacity * sizeof(KeyType));
+            newTab.hashes = (TableHashKey *)(newTab.keys + newCapacity * sizeof(KeyType));
             newTab.size = tab.size;
             newTab.capacity = newCapacity;
             newTab.lock = tab.lock;
             newTab.flags = tab.flags;
             if ( valueTypeSize ) memset(newTab.data, 0, size_t(newCapacity)*size_t(valueTypeSize));
             auto pHashes = newTab.hashes;
-            memset(pHashes, 0, newCapacity * sizeof(uint64_t));
+            memset(pHashes, 0, newCapacity * sizeof(TableHashKey));
             if ( tab.size ) {
                 auto pKeys = (KeyType *) newTab.keys;
                 auto pOldValues = tab.data;
@@ -187,7 +190,7 @@ namespace das
                 }
             }
             if (tab.capacity) {
-                uint32_t oldSize = tab.capacity*(valueTypeSize + sizeof(KeyType) + sizeof(uint64_t));
+                uint32_t oldSize = tab.capacity*(valueTypeSize + sizeof(KeyType) + sizeof(TableHashKey));
                 context->heap->free(tab.data, oldSize);
             }
             swap ( newTab, tab );

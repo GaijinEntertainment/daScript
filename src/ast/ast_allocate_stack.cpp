@@ -736,7 +736,7 @@ namespace das {
                         }
                     }
                     auto elet = static_pointer_cast<ExprLet>(expr->clone());
-                    elet->variables = move(expr->variables);
+                    elet->variables = std::move(expr->variables);
                     for ( auto & evar : elet->variables ) {
                         evar->init = nullptr;
                     }
