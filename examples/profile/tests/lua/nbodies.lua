@@ -127,6 +127,7 @@ local function offsetMomentum(b, nbody)
 end
 
 local function simulate(N, bodies, nbody)
+  scale_bodies(bodies, nbody, 0.01)
   for i=1,N do
     advance(bodies, nbody)
   end
@@ -138,7 +139,5 @@ local nbody = #bodies
 
 loadfile("profile.lua")()
 offsetMomentum(bodies, nbody)
-scale_bodies(bodies, nbody, 0.01)
 io.write(string.format("\"n-bodies\", %.8f, 10\n", profile_it(10, function () simulate(N, bodies, nbody) end)))
-scale_bodies(bodies, nbody, 1/0.01)
 

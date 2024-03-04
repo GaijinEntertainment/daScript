@@ -9,6 +9,13 @@ int main(int argc, char * argv[]) {
     NEED_MODULE(Module_TestProfile);
     // call daScript for main.das
     string dasRoot = getDasRoot() + "/examples/profile/main.das";
-    char * newArgv[3] = { argv[0], (char *)dasRoot.c_str(), "-jit" };
-    return MAIN_FUNC_NAME(3,newArgv);
+    vector<const char *> newArgv;
+    newArgv.push_back(argv[0]);
+    newArgv.push_back(dasRoot.c_str());
+    newArgv.push_back("-jit");
+    newArgv.push_back("--");
+    for ( int i=1; i<argc; ++i ) {
+        newArgv.push_back(argv[i]);
+    }
+    return MAIN_FUNC_NAME(newArgv.size(),(char **)newArgv.data());
 }

@@ -127,9 +127,11 @@ local function offsetMomentum(b, nbody)
 end
 
 local function simulate(N, bodies, nbody)
+  scale_bodies(bodies, nbody, 0.01)
   for i=1,N do
     advance(bodies, nbody)
   end
+  scale_bodies(bodies, nbody, 1/0.01)
 end
 
 local N = 500000 --tonumber(arg and arg[1]) or 5000000
@@ -147,7 +149,5 @@ function profile_it(profiles, fn)
 end
 
 offsetMomentum(bodies, nbody)
-scale_bodies(bodies, nbody, 0.01)
 print(string.format("\"n-bodies\", %.8f, 10", profile_it(10, function () simulate(N, bodies, nbody) end)))
-scale_bodies(bodies, nbody, 1/0.01)
 

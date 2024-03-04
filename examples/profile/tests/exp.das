@@ -3,7 +3,7 @@
 require math
 require testProfile
 
-include ../config.inc
+include ../config.das
 
 [sideeffects]
 def expLoop(n)

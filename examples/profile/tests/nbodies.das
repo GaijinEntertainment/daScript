@@ -6,7 +6,7 @@ require testProfile
 require daslib/unroll
 //ported from https://benchmarksgame-team.pages.debian.net/benchmarksgame/program/nbody-gcc-2.html
 
-include ../config.inc
+include ../config.das
 
 let SOLAR_MASS = 4.*PI*PI
 let DAYS_PER_YEAR = 365.24

@@ -4,7 +4,7 @@
 
 require testProfile
 
-include ../config.inc
+include ../config.das
 
 struct NObject
     position : float3

@@ -4,7 +4,7 @@ require rtti
 require debugapi
 require math
 
-let LOG_TEST_COMPILATION_TIME = false
+var LOG_TEST_COMPILATION_TIME = false
 
 var failed = 0
 
@@ -66,20 +66,45 @@ def run_dir ( appDir : string )
 
 [export,no_jit]
 def main
-    // print("RUNNING TESTS...\n\n")
-
-    if false // uncomment for single test
-        let appfile = "{get_das_root()}/examples/profile/tests/primes.das"
+    var singleTest = ""
+    var mainTests = true
+    var extraTests = false
+    var hashTests = false
+    print("{get_command_line_arguments()}\n")
+    let nArgs = get_command_line_arguments() |> length()
+    var i = 0
+    while i < nArgs
+        if get_command_line_arguments()[i]=="-test" && i < nArgs-1
+            singleTest = get_command_line_arguments()[i+1]
+            i += 2
+            continue
+        elif get_command_line_arguments()[i]=="-log"
+            LOG_TEST_COMPILATION_TIME = true
+        elif get_command_line_arguments()[i]=="-extra"
+            extraTests = true
+        elif get_command_line_arguments()[i]=="-hash"
+            hashTests = true
+        elif get_command_line_arguments()[i]=="-nomain"
+            mainTests = false
+        elif get_command_line_arguments()[i]=="-help"
+            print("Usage: profile_tests [-test <testname>] [-log] [-extra] [-hash]\n")
+            print("  -test testname  runs /examples/profile/tests/test.das and exits immediately\n")
+            print("  -log            logs compilation time\n")
+            print("  -extra          runs extra tests\n")
+            print("  -hash           runs hash tests\n")
+            print("  -nomain         disables main tests\n")
+            return
+        i += 1
+    if !empty(singleTest)
+        let appfile = "{get_das_root()}/examples/profile/tests/{singleTest}.das"
         test_single_file(appfile)
         return
-
-    run_dir("{get_das_root()}/examples/profile/tests")
-
-    /*
-    run_dir("{get_das_root()}/examples/profile/extra_tests")
-    run_dir("{get_das_root()}/examples/profile/hash_test")
-    */
-
+    if mainTests
+        run_dir("{get_das_root()}/examples/profile/tests")
+    if extraTests
+        run_dir("{get_das_root()}/examples/profile/extra_tests")
+    if hashTests
+        run_dir("{get_das_root()}/examples/profile/hash_test")
     if failed != 0
         print("TOTAL FAILURES: {failed}\n")
 

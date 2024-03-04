@@ -6,7 +6,7 @@ require math
 // options intern_strings = true
 
 require testProfile
-include ../config.inc
+include ../config.das
 
 def makeRandomSequence(var src:array<string>)
     let n = 500000
