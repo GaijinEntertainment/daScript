@@ -2,7 +2,7 @@
 
 require testProfile
 
-include ../config.inc
+include ../config.das
 
 def isprime(n)
     for i in range(2, n)

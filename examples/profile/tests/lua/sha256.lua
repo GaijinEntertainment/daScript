@@ -6,7 +6,7 @@ local bxor = bit.bxor or bit32.bxor
 local rrotate = bit.ror or bit32.rrotate
 local rshift = bit.rshift or bit32.rshift
 
-local primes = 
+local primes =
 {
     0x428a2f98, 0x71374491, 0xb5c0fbcf, 0xe9b5dba5,
     0x3956c25b, 0x59f111f1, 0x923f82a4, 0xab1c5ed5,
@@ -30,62 +30,62 @@ local function toHex(str)
     local result = str:gsub('.', function (char)
         return string.format("%02x", char:byte())
     end)
-    
+
     return result
 end
 
 local function toBytes(value, length)
     local str = ""
-    
+
     for i = 1, length do
         local rem = value % 256
         str = string.char(rem) .. str
         value = (value - rem) / 256
     end
-    
+
     return str
 end
 
 local function readInt32(buffer, index)
     local value = 0
-    
-    for i = index, index + 3 do 
+
+    for i = index, index + 3 do
         value = (value * 256) + string.byte(buffer, i)
     end
-    
+
     return value
 end
 
 local function digestBlock(msg, i, hash)
     local digest = {}
-    
-    for j = 1, 16 do 
-        digest[j] = readInt32(msg, i + (j - 1) * 4) 
+
+    for j = 1, 16 do
+        digest[j] = readInt32(msg, i + (j - 1) * 4)
     end
-    
+
     for j = 17, 64 do
         local v = digest[j - 15]
         local s0 = bxor(rrotate(v, 7), rrotate(v, 18), rshift(v, 3))
-        
+
         v = digest[j - 2]
         digest[j] = digest[j - 16] + s0 + digest[j - 7] + bxor(rrotate(v, 17), rrotate(v, 19), rshift(v, 10))
     end
-    
+
     local a, b, c, d, e, f, g, h = unpack(hash)
-    
+
     for i = 1, 64 do
         local s0 = bxor(rrotate(a, 2), rrotate(a, 13), rrotate(a, 22))
         local maj = bxor(band(a, b), band(a, c), band(b, c))
-        
+
         local t2 = s0 + maj
         local s1 = bxor(rrotate(e, 6), rrotate(e, 11), rrotate(e, 25))
-        
+
         local ch = bxor(band(e, f), band(bnot(e), g))
         local t1 = h + s1 + ch + primes[i] + digest[i]
-        
+
         h, g, f, e, d, c, b, a = g, f, e, d + t1, c, b, a, t1 + t2
     end
-    
+
     hash[1] = band(hash[1] + a)
     hash[2] = band(hash[2] + b)
     hash[3] = band(hash[3] + c)
@@ -97,7 +97,7 @@ local function digestBlock(msg, i, hash)
 end
 
 local function sha256(msg)
-    local hash = 
+    local hash =
     {
         0x6a09e667,
         0xbb67ae85,
@@ -106,35 +106,46 @@ local function sha256(msg)
         0x510e527f,
         0x9b05688c,
         0x1f83d9ab,
-        0x5be0cd19,	
+        0x5be0cd19,
     }
-    
-    for i = 1, #msg, 64 do 
+
+    for i = 1, #msg, 64 do
         digestBlock(msg, i, hash)
     end
-    
+
     local result = ""
-    
+
     for i = 1, 8 do
         local value = hash[i]
         result = result .. toBytes(value, 4)
     end
-    
+
     return toHex(result)
 end
 
 local input = string.rep(".", 1024)
 
+loadfile("profile.lua")()
+
 local ts0 = os.clock()
 
-for i = 1, 1024 do
-    sha256(input)
-end
+
+io.write(string.format("\"sha256\", %.8f, 20\n", profile_it(20, function ()
+    for i = 1, 1024 do
+        sha256(input)
+    end
+end)))
 
 local ts1 = os.clock()
 
-print(sha256(input))
+local input = sha256(input)
+if (input ~= "8adcaee60bb05a9964a1df12d2f007adcb8f3fa20ff7d1ecfde0a2ac301ff412") then
+    print("sha256 failed\n")
+    return
+end
 
-print(ts1 - ts0)
-print(1.0/(ts1-ts0),"mb/sec")
+io.write(string.format("\t%.8f mb/sec\n",1.0/((ts1-ts0)/20)))
+
+
+
 

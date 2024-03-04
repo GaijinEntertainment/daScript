@@ -6,7 +6,7 @@
 // options log = true
 // options log_nodes = true
 
-include ../config.inc
+include ../config.das
 
 options persistent_heap = true
 options solid_context

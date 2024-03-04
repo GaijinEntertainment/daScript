@@ -2,7 +2,7 @@
 // options logCpp=true
 require testProfile
 
-include ../config.inc
+include ../config.das
 
 [sideeffects]
 def testAdds()
