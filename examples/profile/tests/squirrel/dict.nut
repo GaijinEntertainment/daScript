@@ -11,16 +11,18 @@ local function dict(tab, src)
   return maxOcc
 }
 
-tab <- {}
-src <- []
+::tab <- {}
+::src <- []
 local n = 500000
 local modn = n
 for (local i = 0; i < n; ++i)
 {
   local num = (271828183 ^ i*119)%modn
-  src.push("_" + num)
+  ::src.append("_" + num)
 }
 
 
-loadfile("profile.nut")()
-print("\"dictionary\", " + profile_it(20, function () {tab<-{}; dict(tab, src) }) + ", 20\n")
+local profile_it
+try profile_it = ::loadfile("profile.nut")() catch (e) profile_it = require("profile.nut")
+
+print("\"dictionary\", " + profile_it(20, function () {::tab<-{}; dict(::tab, ::src) }) + ", 20\n")

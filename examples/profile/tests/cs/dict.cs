@@ -46,7 +46,6 @@ class HelloWorld {
             else
             {
                 tab[s] = 1;
-                maxOcc = Math.Max(1, maxOcc);
             }
 
         }
