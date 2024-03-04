@@ -1,4 +1,5 @@
-local clock_func = ("require" in this) ? require("system").clock : clock //we can also check existence of system module and clock in roottable, but currently it's ok
+local clock_func
+try clock_func = ::clock catch (e) clock_func = require("datetime").clock
 
 function profile_it(cnt, f)//for modified version
 {
@@ -13,3 +14,5 @@ function profile_it(cnt, f)//for modified version
   }
   return res / 1.0
 }
+
+return profile_it

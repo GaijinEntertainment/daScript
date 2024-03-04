@@ -1,6 +1,6 @@
-particles <- []
+::particles <- []
 for (local i = 0; i < 1000; ++i)
-  particles.push(i)
+  ::particles.append(i)
 
 local function try_catch_loop(fails_count)
 {
@@ -12,15 +12,14 @@ local function try_catch_loop(fails_count)
     for (local i = 0; i < fails_count; ++i)
     {
        try
-       {
-         cnt = cnt + particles[i]
-       } catch(e)
-       {
+         cnt = cnt + ::particles[i]
+       catch(e)
          fails = fails+1
-       }
     }
   }
 }
 
-loadfile("profile.nut")()
+local profile_it
+try profile_it = ::loadfile("profile.nut")() catch (e) profile_it = require("profile.nut")
+
 print("try-catch loop: " + profile_it(20, function() {try_catch_loop(1000)}) + "\n");
