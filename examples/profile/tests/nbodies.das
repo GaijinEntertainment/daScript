@@ -106,6 +106,7 @@ def main
             luaFile = "nbodies.lua",
             luaJitFile = "nbodies.lua",
             nutFile = "nbodies.nut",
+            nutModifiedFile = "nbodies.nut",
             asFile = "nbodies.as",
             jsFile = "nbodies.js",
             monoFile = "nbodies.cs"

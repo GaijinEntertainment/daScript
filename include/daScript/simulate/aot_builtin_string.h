@@ -69,6 +69,8 @@ namespace das {
     char * builtin_string_replace ( const char * str, const char * toSearch, const char * replaceStr, Context * context );
     char * builtin_string_rtrim ( char* s, Context * context );
     char * builtin_string_rtrim_ts ( char* s, char * ts, Context * context );
+    char * builtin_string_ltrim ( char* s, Context * context );
+    char * builtin_string_trim ( char* s, Context * context );
 
     char * builtin_reserve_string_buffer ( const char * str, int32_t length, Context * context );
 

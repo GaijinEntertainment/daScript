@@ -41,6 +41,7 @@ def main
             luaFile = "particles.lua",
             luaJitFile = "particles.lua",
             nutFile = "particles.nut",
+            nutModifiedFile = "particles.nut",
             asFile = "particles.as",
             jsFile = "particles.js",
             monoFile = "particles.cs"

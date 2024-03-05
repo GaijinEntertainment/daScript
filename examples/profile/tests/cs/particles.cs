@@ -18,7 +18,7 @@ class HelloWorld {
             double dt = ((double)elapsed.TotalMilliseconds) / 1000.0;
             minT = Math.Min(minT, dt);
         }
-        Console.WriteLine("\"" + category + "\"," + minT + ", " + count);
+        Console.WriteLine($"\"{category}\", {minT}, {count}");
     }
 
     struct Vector3

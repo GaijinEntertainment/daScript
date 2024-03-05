@@ -616,6 +616,23 @@ namespace das
         return buf;
     }
 
+    char * builtin_string_trim ( char* s, Context * context ) {
+        if ( !s ) return nullptr;
+        while ( is_white_space(*s) ) s++;
+        if ( *s ) return builtin_string_rtrim(s, context);
+        return nullptr;
+    }
+
+    char * builtin_string_ltrim ( char* s, Context * context ) {
+        if ( !s ) return nullptr;
+        while ( is_white_space(*s) ) s++;
+        if ( *s ) {
+            return context->stringHeap->allocateString(s, strlen(s));
+        } else  {
+            return nullptr;
+        }
+    }
+
     char * builtin_string_rtrim ( char* s, Context * context ) {
         if ( !s ) return nullptr;
         char * str_end_o = s + strlen(s);
@@ -842,6 +859,10 @@ namespace das
                 SideEffects::none, "builtin_string_rtrim")->args({"str","context"});
             addExtern<DAS_BIND_FUN(builtin_string_rtrim_ts)>(*this, lib, "rtrim",
                 SideEffects::none, "builtin_string_rtrim_ts")->args({"str","chars","context"});
+            addExtern<DAS_BIND_FUN(builtin_string_ltrim)>(*this, lib, "ltrim",
+                SideEffects::none, "builtin_string_ltrim")->args({"str","context"});
+            addExtern<DAS_BIND_FUN(builtin_string_trim)>(*this, lib, "trim",
+                SideEffects::none, "builtin_string_trim")->args({"str","context"});
             // format
             addExtern<DAS_BIND_FUN(format<int32_t>)> (*this, lib, "format",
                 SideEffects::none, "format<int32_t>")->args({"format","value","context"});

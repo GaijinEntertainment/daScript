@@ -36,6 +36,7 @@ def main
             luaFile = "primes.lua",
             luaJitFile = "primes.lua",
             nutFile = "primes.nut",
+            nutModifiedFile = "primes.nut",
             asFile = "primes.as",
             jsFile = "primes.js",
             monoFile = "primes.cs"

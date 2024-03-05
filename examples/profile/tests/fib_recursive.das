@@ -27,6 +27,7 @@ def main
             luaFile = "fib_recursive.lua",
             luaJitFile = "fib_recursive.lua",
             nutFile = "fib_recursive.nut",
+            nutModifiedFile = "fib_recursive.nut",
             asFile = "fib_recursive.as",
             jsFile = "fib_recursive.js",
             monoFile = "fib_recursive.cs"
