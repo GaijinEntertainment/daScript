@@ -46,5 +46,4 @@ for (local i = 0; i < 50000; ++i)
 local profile_it
 try profile_it = ::loadfile("profile.nut")() catch (e) profile_it = require("profile.nut")
 
-// print("particles kinematics: " + profile_it(20, function () {update_several_times(particles, 100) }) + "\n")
-print("\"particles kinematics, inline\", " + profile_it(20, function () {update_several_timesI(::particles, 100)}) + ", 20\n")
+print("\"particles kinematics\", " + profile_it(20, function () {update_several_timesI(::particles, 100)}) + ", 20\n")

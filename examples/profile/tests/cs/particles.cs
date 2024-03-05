@@ -83,7 +83,7 @@ class HelloWorld {
 
     static void Main() {
         var objects = Init();
-        profile(20, "particles kinematics, inlined", () => {
+        profile(20, "particles kinematics", () => {
             TestSim2I(objects, 100);
         });
         float f = 0;

@@ -30,7 +30,7 @@ class HelloWorld {
     }
 
     static void Main() {
-        profile(20, "fibbonacci recursive", () => {
+        profile(20, "fibonacci recursive", () => {
             int fi = FibR(31);
             Debug.Assert( fi==1346269, "The result is incorrect.");
         });

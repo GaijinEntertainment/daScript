@@ -76,7 +76,7 @@ function profile(tname,cnt,testFn) {
 function performance_tests() {
 	{
         var particles = make_particles();
-		profile("particles kinematics, inline",20,function(){
+		profile("particles kinematics",20,function(){
 			multi_update_particles_i(particles,100);
 		});
 	}

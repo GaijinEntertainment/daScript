@@ -35,7 +35,7 @@ class HelloWorld {
         return cur;
     }
     static void Main() {
-        profile(20, "fibbonacci loop", () => {
+        profile(20, "fibonacci loop", () => {
             int fi = FibI(6511134);
             Debug.Assert( fi==1781508648, "The result is incorrect.");
         });

@@ -127,7 +127,7 @@ class HelloWorld {
     static void Main() {
         NBodySystem bodies = new NBodySystem();
         double e1 = bodies.Energy();
-        profile(10, "nbodies", () => {
+        profile(10, "n-bodies", () => {
             for (int i = 0; i < 500000; i++) {
                 bodies.Advance(1.0);
             }

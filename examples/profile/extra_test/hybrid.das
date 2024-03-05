@@ -23,15 +23,15 @@ def fibRH(n)
 [export]
 def main
 	var f1 = 0
-    profile(20,"fibbonacci recursive") <|
+    profile(20,"fibonacci recursive") <|
         f1 = fibR(31)
 	assert(f1==1346269)
 	var f2 = 0
-    profile(20,"fibbonacci recursive, no aot") <|
+    profile(20,"fibonacci recursive, no aot") <|
         f2 = fibRNA(31)
 	assert(f2==1346269)
 	var f3 = 0
-    profile(20,"fibbonacci recursive, hybrid") <|
+    profile(20,"fibonacci recursive, hybrid") <|
         f3 = fibRH(31)
 	assert(f3==1346269)
 
