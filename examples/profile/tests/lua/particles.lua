@@ -42,5 +42,4 @@ end
 
 loadfile("profile.lua")()
 ---
---- io.write(string.format("particles kinematics: %.8f\n", profile_it(20, function () update_several_times(particles, 100) end)))
-io.write(string.format("\"particles kinematics, inlined\", %.8f, 20\n", profile_it(20, function () update_several_timesI(particles, 100) end)))
+io.write(string.format("\"particles kinematics\", %.8f, 20\n", profile_it(20, function () update_several_timesI(particles, 100) end)))

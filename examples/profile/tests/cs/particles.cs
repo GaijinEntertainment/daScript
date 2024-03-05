@@ -18,7 +18,7 @@ class HelloWorld {
             double dt = ((double)elapsed.TotalMilliseconds) / 1000.0;
             minT = Math.Min(minT, dt);
         }
-        Console.WriteLine("\"" + category + "\"," + minT + ", " + count);
+        Console.WriteLine($"\"{category}\", {minT}, {count}");
     }
 
     struct Vector3
@@ -83,7 +83,7 @@ class HelloWorld {
 
     static void Main() {
         var objects = Init();
-        profile(20, "particles kinematics, inlined", () => {
+        profile(20, "particles kinematics", () => {
             TestSim2I(objects, 100);
         });
         float f = 0;

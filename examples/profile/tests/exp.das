@@ -35,7 +35,9 @@ def main
             luaFile = "exp.lua",
             luaJitFile = "exp.lua",
             nutFile = "exp.nut",
+            nutModifiedFile = "exp.nut",
             // asFile = "exp.as", // TODO: implement
             jsFile = "exp.js",
-            monoFile = "exp.cs"
+            monoFile = "exp.cs",
+            dotNetFile = "exp.cs",
         ]])

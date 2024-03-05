@@ -17,7 +17,7 @@ class HelloWorld {
             double dt = ((double)elapsed.TotalMilliseconds) / 1000.0;
             minT = Math.Min(minT, dt);
         }
-        Console.WriteLine("\"" + category + "\"," + minT + ", " + count);
+        Console.WriteLine($"\"{category}\", {minT}, {count}");
     }
 
     public static int FibI(int n)
@@ -35,7 +35,7 @@ class HelloWorld {
         return cur;
     }
     static void Main() {
-        profile(20, "fibbonacci loop", () => {
+        profile(20, "fibonacci loop", () => {
             int fi = FibI(6511134);
             Debug.Assert( fi==1781508648, "The result is incorrect.");
         });

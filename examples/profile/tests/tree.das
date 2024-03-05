@@ -112,5 +112,6 @@ def main
             // nutFile = "tree.nut",
             // asFile = "tree.as",
             jsFile = "tree.js",
-            monoFile = "tree.cs"
+            monoFile = "tree.cs",
+            dotNetFile = "tree.cs",
         ]])

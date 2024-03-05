@@ -17,7 +17,7 @@ class HelloWorld {
             double dt = ((double)elapsed.TotalMilliseconds) / 1000.0;
             minT = Math.Min(minT, dt);
         }
-        Console.WriteLine("\"" + category + "\"," + minT + ", " + count);
+        Console.WriteLine($"\"{category}\", {minT}, {count}");
     }
 
     public static int FibR(int n)
@@ -30,7 +30,7 @@ class HelloWorld {
     }
 
     static void Main() {
-        profile(20, "fibbonacci recursive", () => {
+        profile(20, "fibonacci recursive", () => {
             int fi = FibR(31);
             Debug.Assert( fi==1346269, "The result is incorrect.");
         });

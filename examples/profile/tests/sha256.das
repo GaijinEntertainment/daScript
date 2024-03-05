@@ -107,5 +107,5 @@ def main
         run_files([[TestFile
             luauFile = "sha256.luau",
             luaJitFile = "sha256.lua",
-            monoFile = "sha256.cs"
+            dotNetFile = "sha256.cs",
         ]])

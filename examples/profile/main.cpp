@@ -12,8 +12,16 @@ int main(int argc, char * argv[]) {
     vector<const char *> newArgv;
     newArgv.push_back(argv[0]);
     newArgv.push_back(dasRoot.c_str());
-    newArgv.push_back("-jit");
-    newArgv.push_back("--");
+    bool noJIT = false;
+    for ( int i=1; i<argc; ++i ) {
+        if ( strcmp(argv[i],"-html")==0 ) {
+            noJIT = true;
+        }
+    }
+    if ( !noJIT ) {
+        newArgv.push_back("-jit");
+        newArgv.push_back("--");
+    }
     for ( int i=1; i<argc; ++i ) {
         newArgv.push_back(argv[i]);
     }

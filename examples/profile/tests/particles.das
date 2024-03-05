@@ -30,18 +30,20 @@ def init(var objects:array<NObject>)
 def main
     var objects:array<NObject>
     init(objects)
-    profile(20,"particles kinematics, inlined") <|
+    profile(20,"particles kinematics") <|
         testSim2I(objects,100)
     if is_cpp_time()
         cpp_label()
-        profile(20,"particles kinematics, inlined") <|
+        profile(20,"particles kinematics") <|
             testProfile::testParticlesI(100)
         run_files([[TestFile
             luauFile = "particles.luau",
             luaFile = "particles.lua",
             luaJitFile = "particles.lua",
             nutFile = "particles.nut",
+            nutModifiedFile = "particles.nut",
             asFile = "particles.as",
             jsFile = "particles.js",
-            monoFile = "particles.cs"
+            monoFile = "particles.cs",
+            dotNetFile = "particles.cs",
         ]])
