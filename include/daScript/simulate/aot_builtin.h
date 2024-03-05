@@ -177,4 +177,5 @@ namespace das {
     inline uint64_t _builtin_hash_ptr ( void * value ) { return hash_uint64(uint64_t(value)); }
     inline uint64_t _builtin_hash_float ( float value ) { return hash_uint32(*((uint32_t *)&value)); }
     inline uint64_t _builtin_hash_double ( double value ) { return hash_uint64(*((uint64_t *)&value)); }
+    inline uint64_t _builtin_hash_das_string ( const string & str ) { return hash_blockz64((uint8_t *)str.c_str()); }
 }

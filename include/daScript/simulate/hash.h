@@ -25,10 +25,13 @@ namespace das {
     __forceinline uint64_t hash_function ( Context &, char * str ) {
         return hash_blockz64((uint8_t *)str);
     }
-
     template <>
     __forceinline uint64_t hash_function ( Context &, const char * str ) {
         return hash_blockz64((uint8_t *)str);
+    }
+    template <>
+    __forceinline uint64_t hash_function ( Context &, const string & str ) {
+        return hash_blockz64((uint8_t *)str.c_str());
     }
     template <> __forceinline uint64_t hash_function ( Context &, bool value ) {
         return hash_uint32(value);

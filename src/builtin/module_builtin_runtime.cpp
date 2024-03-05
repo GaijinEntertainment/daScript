@@ -1453,6 +1453,8 @@ namespace das
         addAnnotation(make_smart<IsYetAnotherVectorTemplateAnnotation>());
         addAnnotation(make_smart<IsDimAnnotation>());
         addAnnotation(make_smart<HashBuilderAnnotation>(lib));
+        // string
+        addAnnotation(make_smart<DasStringTypeAnnotation>());
         // typeinfo macros
         addTypeInfoMacro(make_smart<ClassInfoMacro>());
         // command line arguments
@@ -1629,6 +1631,7 @@ namespace das
         addExtern<DAS_BIND_FUN(_builtin_hash_ptr)>(*this, lib, "hash", SideEffects::none, "_builtin_hash_ptr")->arg("value");
         addExtern<DAS_BIND_FUN(_builtin_hash_float)>(*this, lib, "hash", SideEffects::none, "_builtin_hash_float")->arg("value");
         addExtern<DAS_BIND_FUN(_builtin_hash_double)>(*this, lib, "hash", SideEffects::none, "_builtin_hash_double")->arg("value");
+        addExtern<DAS_BIND_FUN(_builtin_hash_das_string)>(*this, lib, "hash", SideEffects::none, "_builtin_hash_string")->arg("value");
         // locks
         addInterop<builtin_verify_locks,void,vec4f>(*this, lib, "_builtin_verify_locks",
             SideEffects::modifyArgumentAndExternal, "builtin_verify_locks")
@@ -1790,7 +1793,6 @@ namespace das
             SideEffects::modifyExternal, "builtin_profile")
                 ->args({"count","category","block","context","line"});
         // das string binding
-        addAnnotation(make_smart<DasStringTypeAnnotation>());
         addExtern<DAS_BIND_FUN(to_das_string)>(*this, lib, "string",
             SideEffects::none, "to_das_string")
                 ->args({"source","context"});
