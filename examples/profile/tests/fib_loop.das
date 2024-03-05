@@ -34,5 +34,6 @@ def main
             nutModifiedFile = "fib_loop.nut",
             asFile = "fib_loop.as",
             jsFile = "fib_loop.js",
-            monoFile = "fib_loop.cs"
+            monoFile = "fib_loop.cs",
+            dotNetFile = "fib_loop.cs",
         ]])

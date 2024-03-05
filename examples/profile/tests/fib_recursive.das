@@ -30,7 +30,8 @@ def main
             nutModifiedFile = "fib_recursive.nut",
             asFile = "fib_recursive.as",
             jsFile = "fib_recursive.js",
-            monoFile = "fib_recursive.cs"
+            monoFile = "fib_recursive.cs",
+            dotNetFile = "fib_recursive.cs",
         ]])
 
 

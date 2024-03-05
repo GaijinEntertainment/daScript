@@ -34,11 +34,11 @@ namespace das {
 #else
         while ( true ) {
             uint64_t v = *(uint16_t *)block;
-            block += 2;
             if ( (v & 0xff)==0 ) break;
             h ^= v;
             h *= FNV_prime;
-            if ( (v & 0xff00)==0 ) break;
+            if ( v < 0x100 ) break;
+            block += 2;
         }
 #endif
         return h <= HASH_KILLED64 ? 1099511628211ul : h;

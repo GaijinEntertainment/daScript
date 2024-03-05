@@ -39,5 +39,6 @@ def main
             nutModifiedFile = "primes.nut",
             asFile = "primes.as",
             jsFile = "primes.js",
-            monoFile = "primes.cs"
+            monoFile = "primes.cs",
+            dotNetFile = "primes.cs",
         ]])

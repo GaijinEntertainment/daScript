@@ -44,5 +44,6 @@ def main
             nutModifiedFile = "particles.nut",
             asFile = "particles.as",
             jsFile = "particles.js",
-            monoFile = "particles.cs"
+            monoFile = "particles.cs",
+            dotNetFile = "particles.cs",
         ]])

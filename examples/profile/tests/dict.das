@@ -42,7 +42,6 @@ def main
             nutModifiedFile = "dict.nut",
             // asFile = "dict.as",  // TODO: update AS to new version?
             jsFile = "dict.js",
-            monoFile = "dict.cs"
+            monoFile = "dict.cs",
+            dotNetFile = "dict.cs",
         ]])
-
-

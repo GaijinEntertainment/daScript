@@ -109,5 +109,6 @@ def main
             nutModifiedFile = "nbodies.nut",
             asFile = "nbodies.as",
             jsFile = "nbodies.js",
-            monoFile = "nbodies.cs"
+            monoFile = "nbodies.cs",
+            dotNetFile = "nbodies.cs"
         ]])
