@@ -4,6 +4,16 @@ require daslib/fuzzer
 require strings
 
 [test]
+def test_hash_das_string ( t:T? )
+    var h = 0ul
+    var h2 = 0ul
+    using() <| $ ( var st : das_string )
+        st := "hello"
+        h = hash(st)
+        h2 = hash(string(st))
+    t |> equal(h, h2)
+
+[test]
 def test_hash_builder ( t:T? )
     var fake <- Faker()
     fuzz <|
