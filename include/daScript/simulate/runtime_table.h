@@ -50,13 +50,19 @@ namespace das
         TableHash ( const TableHash & ) = delete;
         TableHash ( Context * ctx, uint32_t vs ) : context(ctx), valueTypeSize(vs) {}
 
+        __forceinline TableHashKey hashToHashKey ( TableHashKey hash ) const {
+            if ( sizeof(TableHashKey)==4 ) return hash <= 1 ? 16777619u : hash; // this should optimize out
+            else return hash;
+        }
+
         __forceinline int find ( const Table & tab, KeyType key, uint64_t hash ) const {
+            DAS_ASSERT(hash>1);
             if ( tab.capacity==0 ) return -1;
             uint32_t mask = tab.capacity - 1;
-            uint32_t index = TableHashKey(hash) & mask;
+            uint32_t index = uint32_t(hash) & mask;
             auto pKeys = (const KeyType *) tab.keys;
             auto pHashes = tab.hashes;
-            auto hashKey = TableHashKey(hash);
+            auto hashKey = hashToHashKey(hash);
             while ( true ) {
                 auto kh = pHashes[index];
                 if ( kh==HASH_EMPTY64 ) {
@@ -68,33 +74,24 @@ namespace das
             }
         }
 
-        __forceinline int insertNew ( Table & tab, uint64_t hash ) const {
-            // TODO: take key under account and be less aggressive?
-            uint32_t mask = tab.capacity - 1;
-            uint32_t index = TableHashKey(hash) & mask;
-            auto pHashes = tab.hashes;
-            while ( true ) {
-                auto kh = pHashes[index];
-                if ( kh==HASH_EMPTY64 ) {
-                    return (int) index;
-                }
-                index = (index + 1) & mask;
-            }
-        }
-
         __forceinline int reserve ( Table & tab, KeyType key, uint64_t hash ) {
+            DAS_ASSERT(hash>1);
             if ( tab.size >= (tab.capacity/2) ) grow(tab);
+            else if ( (tab.capacity-tab.size)/2 < tab.tombstones ) rehash(tab);
             uint32_t mask = tab.capacity - 1;
-            uint32_t index = TableHashKey(hash) & mask;
+            uint32_t index = uint32_t(hash) & mask;
             uint32_t insertI = -1u;
             auto pKeys = (KeyType *) tab.keys;
             auto pHashes = tab.hashes;
-            auto hashKey = TableHashKey(hash);
+            auto hashKey = hashToHashKey(hash);
             while ( true ) {
                 auto kh = pHashes[index];
                 if (kh == HASH_EMPTY64 ) {
                     if ( tab.isLocked() ) context->throw_error("can't insert into locked table");
-                    if ( insertI != -1u ) index = insertI;
+                    if ( insertI != -1u ) {
+                        index = insertI;
+                        tab.tombstones--;
+                    }
                     pHashes[index] = hashKey;
                     pKeys[index] = key;
                     tab.size++;
@@ -109,18 +106,20 @@ namespace das
         }
 
         __forceinline int erase ( Table & tab, KeyType key, uint64_t hash ) {
+            DAS_ASSERT(hash>1);
             if ( tab.capacity==0 ) return -1;
             uint32_t mask = tab.capacity - 1;
-            uint32_t index = TableHashKey(hash) & mask;
+            uint32_t index = uint32_t(hash) & mask;
             auto pKeys = (const KeyType *) tab.keys;
             auto pHashes = tab.hashes;
-            auto hashKey = TableHashKey(hash);
+            auto hashKey = hashToHashKey(hash);
             while ( true ) {
                 auto kh = pHashes[index];
                 if ( kh==HASH_EMPTY64 ) {
                     return -1;
                 } else if ( kh==hashKey && KeyCompare<KeyType>()(pKeys[index],key) ) {
                     tab.size--;
+                    tab.tombstones++;
                     pHashes[index] = HASH_KILLED64;
                     memset(tab.data + index*valueTypeSize, 0, valueTypeSize);
                     return (int) index;
@@ -132,6 +131,10 @@ namespace das
         bool grow ( Table & tab ) {
             uint32_t newCapacity = das::max(uint32_t(minCapacity), tab.capacity*2);
             return reserveInternal(tab, newCapacity);
+        }
+
+        bool rehash ( Table & tab ) {
+            return reserveInternal(tab, tab.capacity);
         }
 
         bool reserve(Table & tab, int size) {
@@ -148,6 +151,21 @@ namespace das
         }
 
     private:
+        __forceinline int insertNew ( Table & tab, uint64_t hash ) const {
+            // TODO: take key under account and be less aggressive?
+            DAS_ASSERT(hash>1);
+            uint32_t mask = tab.capacity - 1;
+            uint32_t index = uint32_t(hash) & mask;
+            auto pHashes = tab.hashes;
+            while ( true ) {
+                auto kh = pHashes[index];
+                if ( kh==HASH_EMPTY64 ) {
+                    return (int) index;
+                }
+                index = (index + 1) & mask;
+            }
+        }
+
         bool reserveInternal(Table & tab, uint32_t newCapacity) {
             DAS_VERIFYF((newCapacity & (newCapacity) - 1) == 0, "newCapacity must be power of 2, and not %i", int(newCapacity));
             Table newTab;
@@ -170,6 +188,7 @@ namespace das
             newTab.capacity = newCapacity;
             newTab.lock = tab.lock;
             newTab.flags = tab.flags;
+            newTab.tombstones = 0;
             if ( valueTypeSize ) memset(newTab.data, 0, size_t(newCapacity)*size_t(valueTypeSize));
             auto pHashes = newTab.hashes;
             memset(pHashes, 0, newCapacity * sizeof(TableHashKey));

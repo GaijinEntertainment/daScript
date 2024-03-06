@@ -5,7 +5,6 @@ require daslib/hash_map
 
 %spoof_instance~TCuckooHashMap(CuckooHashMap_test,int,int)%%;
 %spoof_instance~TFlatHashMap(FlatHashMap_test,int,int)%%;
-%spoof_instance~TInterleavedFlatHashMap(InterleavedFlatHashMap_test,int,int)%%;
 
 [sideeffects]
 def test ( hmap : auto(HashMapType); dummy )
@@ -22,7 +21,6 @@ def main
     profile_test("table<int;int>", type<table<int;int>>,0)
     profile_test("TCuckooHashMap<int,int>", type<CuckooHashMap_test>, 0)
     profile_test("TFlatHashMap<int,int>", type<FlatHashMap_test>,0)
-    profile_test("TInterleavedFlatHashMap<int,int>", type<InterleavedFlatHashMap_test>,0)
 
 
 

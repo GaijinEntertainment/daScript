@@ -17,8 +17,6 @@ def test ( hmap : auto(HashMapType); dummy )
 %spoof_instance~TFlatHashMap(FlatHashMap_test,int,int)%%;
 %spoof_instance~TFlatHashMap(FlatHashMap_test_inline,int,int,hash_inline)%%;
 %spoof_instance~TFlatHashMap(FlatHashMap_test0,int,int,hash0)%%;
-%spoof_instance~TInterleavedFlatHashMap(InterleavedFlatHashMap_test,int,int)%%;
-%spoof_instance~TInterleavedFlatHashMap(InterleavedFlatHashMap_test0,int,int,hash0)%%;
 
 def hash_inline ( i : int ) : uint64
     let DAS_WYHASH_SEED = 0x1234567890abcdeful
@@ -35,6 +33,4 @@ def main
     profile_test("TFlatHashMap<int,int>", type<FlatHashMap_test>, 0)
     profile_test("TFlatHashMap<int,int> with hash intrinsic", type<FlatHashMap_test_inline>, 0)
     profile_test("TFlatHashMap<int,int> with hash(x)->x", type<FlatHashMap_test0>, 0)
-    profile_test("TInterleavedFlatHashMap<int,int>", type<InterleavedFlatHashMap_test>, 0)
-    profile_test("TInterleavedFlatHashMap<int,int> with hash(x)->x", type<InterleavedFlatHashMap_test0>, 0)
 
