@@ -510,37 +510,6 @@ namespace das {
         }
     }
 
-    vector<uint8_t> saveRequireMetadata ( vector<ModuleInfo> & req ) {
-        AstSerializer ser;
-        for ( auto & r : req ) {
-            ser << r.fileName;
-        }
-        return das::move(ser.buffer);
-    }
-
-    vector<string> restoreMetadata ( vector<uint8_t> & metadata ) {
-        vector<string> result;
-        AstSerializer deser{ForReading{}, das::move(metadata)};
-        while ( deser.buffer.size() != deser.readOffset ) {
-            string filename; deser << filename;
-            result.push_back(das::move(filename));
-        }
-        return result;
-    }
-
-    void updateSerializationMetadata ( vector<ModuleInfo> & req ) {
-        auto & serializer_read = daScriptEnvironment::bound->serializer_read;
-        auto & serializer_write = daScriptEnvironment::bound->serializer_write;
-        if ( serializer_read != nullptr ) {
-            auto saved_filenames = restoreMetadata(serializer_read->metadata);
-            auto current_filenames = vector<string>();
-            for ( auto & mod : req ) { current_filenames.push_back(mod.fileName); }
-            if ( current_filenames != saved_filenames ) { serializer_read->seenNewModule = true; }
-        }
-        if ( serializer_write != nullptr )
-            serializer_write->metadata = saveRequireMetadata(req);
-    };
-
     bool aotModuleHasName ( ProgramPtr program, const ModuleInfo & mod ) {
         if ( bool no_aot = program->options.getBoolOption("no_aot",false); no_aot )
             return true;
@@ -646,6 +615,19 @@ namespace das {
         return program;
     }
 
+    void disableSerializationOnDebugger ( vector<ModuleInfo> & req ) {
+        if ( daScriptEnvironment::bound->serializer_read == nullptr )
+            return;
+        for ( auto & mod : req ) {
+            if ( mod.fileName.find("daslib/debug") != string::npos ) {
+                auto & serializer_read = daScriptEnvironment::bound->serializer_read;
+                auto & serializer_write = daScriptEnvironment::bound->serializer_read;
+                serializer_read = serializer_write = nullptr;
+                break;
+            }
+        }
+    }
+
     ProgramPtr compileDaScript ( const string & fileName,
                                 const FileAccessPtr & access,
                                 TextWriter & logs,
@@ -666,7 +648,7 @@ namespace das {
         if ( getPrerequisits(fileName, access, req, missing, circular, notAllowed,
                 dependencies, libGroup, nullptr, 1, !policies.ignore_shared_modules) ) {
             preqT = get_time_usec(time0);
-            updateSerializationMetadata(req);
+            disableSerializationOnDebugger(req);
             if ( policies.debugger ) {
                 addExtraDependency("debug", policies.debug_module, missing, circular, notAllowed, req, dependencies, access, libGroup, policies);
             } else if ( policies.profiler ) {
