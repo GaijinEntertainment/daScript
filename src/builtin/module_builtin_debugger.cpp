@@ -702,6 +702,24 @@ namespace debugapi {
         return make_smart<DebugAgentAdapter>((char *)pClass,info,context);
     }
 
+    atomic<bool>          stopped;
+    atomic<bool>          stop_requested;
+    atomic<bool>          debugger_started;
+    mutex                 debugger_mutex;
+    condition_variable    debugger_stopped;
+
+    bool debuggerStopRequested ( ) {
+        return stop_requested.load();
+    }
+
+    void shutdownDebuggers ( ) {
+        if (debugger_started.load()) {
+            das::unique_lock lock(das::debugger_mutex);
+            stop_requested.store(1);
+            debugger_stopped.wait(lock, []() { return stopped.load(); });
+        }
+    }
+
     void debuggerSetContextSingleStep ( Context & context, bool step ) {
         context.setSingleStep(step);
     }
@@ -1128,6 +1146,8 @@ namespace debugapi {
             addExtern<DAS_BIND_FUN(makeDebugAgent)>(*this, lib,  "make_debug_agent",
                 SideEffects::modifyExternal, "makeDebugAgent")
                     ->args({"class","info","context"});
+            addExtern<DAS_BIND_FUN(debuggerStopRequested)>(*this, lib,  "debugger_stop_requested",
+                SideEffects::modifyExternal, "debuggerStopRequested");
             addExtern<DAS_BIND_FUN(tickDebugAgent)>(*this, lib,  "tick_debug_agent",
                 SideEffects::modifyExternal, "tickDebugAgent");
             addExtern<DAS_BIND_FUN(tickSpecificDebugAgent)>(*this, lib,  "tick_debug_agent",
