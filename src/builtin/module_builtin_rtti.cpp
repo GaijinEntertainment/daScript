@@ -4,7 +4,6 @@
 
 #include "daScript/simulate/simulate_nodes.h"
 #include "daScript/ast/ast_interop.h"
-#include "daScript/ast/ast_serializer.h"
 #include "daScript/simulate/sim_policy.h"
 #include "daScript/simulate/fs_file_info.h"
 #include "daScript/simulate/simulate_visit_op.h"
@@ -1056,20 +1055,6 @@ namespace das {
         return access->addFsRoot(mod, path);
     }
 
-    void rtti_builtin_with_program_serialized ( const TBlock<void,ProgramPtr> & block,
-            smart_ptr<Program> program, Context * context, LineInfoArg * at ) {
-        // serialize
-            AstSerializer ser;
-            program->serialize(ser);
-            program.reset();
-        // deserialize
-            AstSerializer deser ( ForReading{}, std::move(ser.buffer) );
-            auto new_program = make_smart<Program>();
-            new_program->serialize(deser);
-            program = new_program;
-            vec4f args[1] = { cast<smart_ptr<Program>>::from(program) };
-            context->invoke(block, args, nullptr, at);
-    }
 
 #if !DAS_NO_FILEIO
 
@@ -1448,9 +1433,6 @@ namespace das {
             addExtern<DAS_BIND_FUN(rtti_builtin_compile_file)>(*this, lib, "compile_file",
                 SideEffects::modifyExternal, "rtti_builtin_compile_file")
                     ->args({"module_name","fileAccess","moduleGroup","codeOfPolicies","block","context","line"});
-            addExtern<DAS_BIND_FUN(rtti_builtin_with_program_serialized)>(*this, lib, "with_program_serialized",
-                SideEffects::modifyExternal, "rtti_builtin_with_program_serialized")
-                    ->args({"program","block","context","line"});
             addExtern<DAS_BIND_FUN(builtin_expected_errors)>(*this, lib, "for_each_expected_error",
                 SideEffects::modifyExternal, "builtin_expected_errors")
                     ->args({"program","block","context","line"});
