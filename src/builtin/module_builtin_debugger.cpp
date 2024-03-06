@@ -9,6 +9,8 @@
 #include "daScript/misc/performance_time.h"
 #include "daScript/misc/sysos.h"
 
+#include <condition_variable>
+
 using namespace das;
 
 MAKE_TYPE_FACTORY(DebugAgent,DebugAgent)
