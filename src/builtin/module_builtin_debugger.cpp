@@ -10,6 +10,7 @@
 #include "daScript/misc/sysos.h"
 
 #include <condition_variable>
+#include <atomic>
 
 using namespace das;
 
