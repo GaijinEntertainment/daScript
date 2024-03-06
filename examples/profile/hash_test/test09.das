@@ -5,7 +5,6 @@ require daslib/hash_map
 
 %spoof_instance~TCuckooHashMap(CuckooHashMap_test,int,int)%%;
 %spoof_instance~TFlatHashMap(FlatHashMap_test,int,int)%%;
-%spoof_instance~TInterleavedFlatHashMap(InterleavedFlatHashMap_test,int,int)%%;
 
 struct Adder
     val : uint64
@@ -33,5 +32,4 @@ def main
     profile_test("table<int;int>", type<table<int;int>>, randomNumbers)
     profile_test("TCuckooHashMap<int,int>", type<CuckooHashMap_test>, randomNumbers)
     profile_test("TFlatHashMap<int,int>", type<FlatHashMap_test>, randomNumbers)
-    profile_test("TInterleavedFlatHashMap<int,int>", type<InterleavedFlatHashMap_test>, randomNumbers)
 

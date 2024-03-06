@@ -11,6 +11,7 @@ namespace das
             memset(arr.data, 0, arr.keys - arr.data);
         }
         arr.size = 0;
+        arr.tombstones = 0;
     }
 
     void table_lock ( Context & context, Table & arr, LineInfo * at ) {

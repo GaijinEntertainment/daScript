@@ -8,7 +8,6 @@ struct Value
 
 %spoof_instance~TCuckooHashMap(CuckooHashMap_test,int,Value)%%;
 %spoof_instance~TFlatHashMap(FlatHashMap_test,int,Value)%%;
-%spoof_instance~TInterleavedFlatHashMap(InterleavedFlatHashMap_test,int,Value)%%;
 
 [sideeffects]
 def test ( hmap : auto(HashMapType); randomNumbers )
@@ -27,4 +26,3 @@ def main
     profile_test("table<int;int>", type<table<int;Value>>, randomNumbers)
     profile_test("TCuckooHashMap<int,int>", type<CuckooHashMap_test>, randomNumbers)
     profile_test("TFlatHashMap<int,int>", type<FlatHashMap_test>, randomNumbers)
-    profile_test("TInterleavedFlatHashMap<int,int>", type<InterleavedFlatHashMap_test>, randomNumbers)

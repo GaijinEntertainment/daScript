@@ -27,7 +27,6 @@ def emplace ( var self : %SlotMap explicit; val : int )
 
 %spoof_instance~TCuckooHashMap(CuckooHashMap_uint64_int,uint64,int)%%;
 %spoof_instance~TFlatHashMap(FlatHashMap_uint64_int,uint64,int)%%;
-%spoof_instance~TInterleavedFlatHashMap(InterleavedFlatHashMap_uint64_int,uint64,int)%%;
 %spoof_instance~TFlatHashMap(FlatHashMap0_uint64_int,uint64,int,hash0)%%;
 
 typedef SlotTable = table<uint64;int>
@@ -36,7 +35,6 @@ typedef SlotTable = table<uint64;int>
 %spoof_instance~TSlotMapAdapter(SlotMapAdapter_CuckooHashMap,CuckooHashMap_uint64_int)%%;
 %spoof_instance~TSlotMapAdapter(SlotMapAdapter_FlatHashMap,FlatHashMap_uint64_int)%%;
 %spoof_instance~TSlotMapAdapter(SlotMapAdapter_FlatHashMap0,FlatHashMap0_uint64_int)%%;
-%spoof_instance~TSlotMapAdapter(SlotMapAdapter_InterleavedFlatHashMap,InterleavedFlatHashMap_uint64_int)%%;
 
 [sideeffects]
 def test ( hmap : auto(SlotMapType); randomNumbers )
@@ -54,5 +52,4 @@ def main
     profile_test("TCuckooHashMap<int,int>", type<SlotMapAdapter_CuckooHashMap>, randomNumbers)
     profile_test("TFlatHashMap<int,int>", type<SlotMapAdapter_FlatHashMap>, randomNumbers)
     profile_test("TFlatHashMap<int,int> with hash(x)->x", type<SlotMapAdapter_FlatHashMap0>, randomNumbers)
-    profile_test("TInterleavedFlatHashMap<int,int>", type<SlotMapAdapter_InterleavedFlatHashMap>, randomNumbers)
 

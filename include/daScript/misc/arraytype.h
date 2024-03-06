@@ -159,6 +159,7 @@ namespace das
     struct Table : Array {
         char *      keys;
         TableHashKey *  hashes;
+        uint32_t    tombstones;
     };
 
     void table_clear ( Context & context, Table & arr, LineInfo * at );
