@@ -27,9 +27,7 @@ let public LLVM_JIT_LOG = false || LLVM_DEBUG_EVERYTHING
 let public LLVM_DEBUG_INFO = false //  || LLVM_DEBUG_EVERYTHING
 
 let public LLVM_JIT_ALWAYS_SOLID = llvm_config::llvm_jit_always_solid()
-let public LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS = (
-    llvm_config::llvm_jit_allow_unaligned_vector_read_out_of_bounds()
-)
+let public LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS = llvm_config::llvm_jit_allow_unaligned_vector_read_out_of_bounds()
 
 let public LLVM_OUTPUT_OJBECT_FILE = false
 let public LLVM_OUTPUT_OJBECT_FILE_NAME = "output.o"
@@ -711,7 +709,8 @@ def public type_to_llvm_type ( t:TypeDeclPtr )
             LLVMInt32Type();                    // uint32_t lock
             LLVMInt32Type();                    // uint32_t flags
             LLVMPointerType(LLVMVoidType(),0u); // char * keys
-            LLVMPointerType(LLVMVoidType(),0u)  // char * hashes
+            LLVMPointerType(LLVMVoidType(),0u); // char * hashes
+            LLVMInt32Type();                    // uint32_t tombstones
         ]]
         if t.firstType!=null
             table_fields[int(JIT_TABLE KEYS)] = LLVMPointerType(type_to_llvm_type(t.firstType),0u)

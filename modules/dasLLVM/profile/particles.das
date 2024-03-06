@@ -24,6 +24,6 @@ def main
     var objects:array<NObject>
     init(objects)
     let total=20
-    profile(total,"particles kinematics, inlined, jit") <|
+    profile(total,"particles kinematics") <|
         testSim2I(objects,100)
 

@@ -17,11 +17,11 @@ def fibI_jit(n:int)
 [export]
 def main()
     var f1_j = 0
-    profile(20,"fibbonacci loop - jit") <|
+    profile(20,"fibonacci loop - jit") <|
         f1_j = fibI_jit(6511134)
     assert(f1_j==1781508648)
     var f3_j = 0
-    profile(20,"fibbonacci recursive - jit") <|
+    profile(20,"fibonacci recursive - jit") <|
         f3_j = fibR_jit(31)
     assert(f3_j==1346269)
 
