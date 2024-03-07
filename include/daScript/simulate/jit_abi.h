@@ -22,10 +22,10 @@ template <> struct WrapType<Func> { enum { value = true }; typedef void * type; 
 template <> struct WrapType<Lambda> { enum { value = true }; typedef void * type; typedef void * rettype; };
 
 template <typename T>
-struct WrapType<smart_ptr_raw<T>> { enum { value = true }; typedef smart_ptr_jit & type; typedef smart_ptr_jit * rettype; };
+struct WrapType<smart_ptr_raw<T>> { enum { value = true }; typedef smart_ptr_jit * type; typedef smart_ptr_jit * rettype; };
 
 template <typename T>
-struct WrapType<smart_ptr<T>> { enum { value = true }; typedef smart_ptr_jit & type; typedef smart_ptr_jit * rettype; };
+struct WrapType<smart_ptr<T>> { enum { value = true }; typedef smart_ptr_jit * type; typedef smart_ptr_jit * rettype; };
 
 
 template <typename... Ts> struct AnyVectorType;
