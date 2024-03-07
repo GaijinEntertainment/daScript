@@ -379,6 +379,34 @@ namespace das {
         }).detach();
     }
 
+    extern condition_variable debugger_stopped;
+    extern atomic<bool>       debugger_started;
+    extern atomic<bool>       stopped;
+    extern mutex              debugger_mutex;
+
+    static void stop_debugger() {
+        g_jobQueTotalThreads --;
+        {
+            lock_guard guard{debugger_mutex};
+            stopped.store(true);
+        }
+        debugger_stopped.notify_all();
+    }
+
+    void new_debugger_thread ( const Block & lambda, Context * context, LineInfoArg * lineinfo ) {
+        g_jobQueTotalThreads ++;
+        debugger_started.store(true);
+        shared_ptr<Context> forkContext;
+        forkContext.reset(get_clone_context(context, uint32_t(ContextCategory::thread_clone)));
+        auto bound = daScriptEnvironment::bound;
+        thread([=]() mutable {
+            daScriptEnvironment::bound = bound;
+            das_invoke<void>::invoke(forkContext.get(), lineinfo, lambda);
+            forkContext.reset();
+            stop_debugger();
+        }).detach();
+    }
+
     void withJobQue ( const TBlock<void> & block, Context * context, LineInfoArg * lineInfo ) {
         if ( !g_jobQue ) {
             lock_guard<mutex> guard(g_jobQueMutex);
@@ -619,6 +647,9 @@ namespace das {
             addExtern<DAS_BIND_FUN(new_thread_invoke)>(*this, lib,  "new_thread_invoke",
                 SideEffects::modifyExternal, "new_thread_invoke")
                     ->args({"lambda","function","lambdaSize","context","line"});
+            addExtern<DAS_BIND_FUN(new_debugger_thread)>(*this, lib,  "new_debugger_thread",
+                SideEffects::modifyExternal, "new_debugger_thread")
+                    ->args({"block","context","line"});
             addExtern<DAS_BIND_FUN(is_job_que_shutting_down)>(*this, lib,  "is_job_que_shutting_down",
                 SideEffects::modifyExternal, "is_job_que_shutting_down");
         }

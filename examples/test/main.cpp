@@ -30,7 +30,8 @@ bool with_program_serialized ( F callback, ProgramPtr program ) {
     program->serialize(ser);
     program.reset();
 // deserialize
-    AstSerializer deser ( ForReading{}, std::move(ser.buffer) );
+    AstSerializer deser ( ForReading{} );
+    deser.buffer = move(ser.buffer);
     auto new_program = make_smart<Program>();
     new_program->serialize(deser);
     program = new_program;

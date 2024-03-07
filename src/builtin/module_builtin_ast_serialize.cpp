@@ -8,7 +8,7 @@
 
 namespace das {
 
-    AstSerializer::AstSerializer ( ForReading, vector<uint8_t> && buffer_ ) : buffer(buffer_) {
+    AstSerializer::AstSerializer ( ForReading ) {
         astModule = Module::require("ast");
         writing = false;
     }
@@ -94,18 +94,17 @@ namespace das {
     }
 
     void AstSerializer::write ( const void * data, size_t size ) {
-        auto oldSize = buffer.size();
-        buffer.resize(oldSize + size);
-        memcpy(buffer.data()+oldSize, data, size);
+        memcpy(buffer.end(), data, size);
+        buffer.move(size);
     }
 
     void AstSerializer::read ( void * data, size_t size ) {
-        if ( readOffset + size > buffer.size() ) {
+        if ( readOffset + size > buffer.capacity() ) {
             DAS_FATAL_ERROR("ast serializer read overflow");
             return;
         }
-        memcpy(data, buffer.data()+readOffset, size);
-        readOffset += size;
+        memcpy(data, buffer.end(), size);
+        buffer.move(size);
     }
 
     void AstSerializer::serialize ( void * data, size_t size ) {
@@ -2052,7 +2051,7 @@ namespace das {
     }
 
     uint32_t AstSerializer::getVersion () {
-        static constexpr uint32_t currentVersion = 9;
+        static constexpr uint32_t currentVersion = 10;
         return currentVersion;
     }
 
