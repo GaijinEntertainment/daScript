@@ -69,14 +69,6 @@ struct ObjectStructureTypeAnnotation : ManagedStructureAnnotation <Object> {
 
 MAKE_TYPE_FACTORY(Object, Object)
 
-namespace das {
-
-	IMPLEMENT_OP2_EVAL_BOOL_POLICY(Equ, Object);
-	IMPLEMENT_OP2_EVAL_BOOL_POLICY(NotEqu, Object);
-
-}
-
-
 ___noinline int AddOne(int a) {
     return a+1;
 }
@@ -951,7 +943,8 @@ public:
         // register types
         addAnnotation(make_smart<ObjectStructureTypeAnnotation>(lib));
         addAnnotation(make_smart<ManagedVectorAnnotation<ObjectArray>>("ObjectArray",lib));
-        addFunctionBasic<Object>(*this, lib);
+        addExtern<DAS_BIND_FUN(objEqu)>(*this, lib, "==",SideEffects::none,"objEqu");
+        addExtern<DAS_BIND_FUN(objNeq)>(*this, lib, "!=",SideEffects::none,"objNeq");
         addUsing<ObjectArray>(*this, lib, "ObjectArray");
         registerVectorFunctions<ObjectArray>::init(this, lib, true, true);
         // register functions

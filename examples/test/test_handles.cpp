@@ -543,7 +543,7 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
         SideEffects::none, "makeSampleS");
     // smart ptr
     addExtern<DAS_BIND_FUN(getTotalTestObjectSmart)>(*this, lib, "getTotalTestObjectSmart",
-        SideEffects::modifyExternal, "getTotalTestObjectSmart");
+        SideEffects::accessExternal, "getTotalTestObjectSmart");
     addExtern<DAS_BIND_FUN(makeTestObjectSmart)>(*this, lib, "makeTestObjectSmart",
         SideEffects::modifyExternal, "makeTestObjectSmart");
     addExtern<DAS_BIND_FUN(countTestObjectSmart)>(*this, lib, "countTestObjectSmart",

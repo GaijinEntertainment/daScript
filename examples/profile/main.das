@@ -5,6 +5,10 @@ require debugapi
 require math
 
 var LOG_TEST_COMPILATION_TIME = false
+var ENABLE_AOT = true
+var ENABLE_JIT = true
+var ENABLE_INTERPRETER = true
+
 
 var failed = 0
 
@@ -46,18 +50,17 @@ def compile_and_run ( fileName:string; useAot:bool; useJit:bool )
 
 
 def test_single_file ( fileName:string )
-    // print("{fileName}\n")
-    /*
-    if!(fileName |> ends_with("dict.das") || fileName |> ends_with("exp.das"))
-        return
-    */
-    print("\"DAS AOT\", ")
-    compile_and_run(fileName, true, false)
-    print("\"DAS JIT\", ")
-    compile_and_run(fileName, false, true)
-    print("\"DAS INTERPRETER\", ")
-    compile_and_run(fileName, false, false)
-    print("\n\n")
+    if ENABLE_AOT
+        print("\"DAS AOT\", ")
+        compile_and_run(fileName, true, false)
+    if ENABLE_JIT
+        print("\"DAS JIT\", ")
+        compile_and_run(fileName, false, true)
+    if ENABLE_INTERPRETER
+        print("\"DAS INTERPRETER\", ")
+        compile_and_run(fileName, false, false)
+    if ENABLE_AOT || ENABLE_JIT || ENABLE_INTERPRETER
+        print("\n\n")
 
 def run_dir ( appDir : string )
     dir(appDir) <| $ ( fileName )
@@ -237,7 +240,7 @@ def main
     if mainTests
         run_dir("{get_das_root()}/examples/profile/tests")
     if extraTests
-        run_dir("{get_das_root()}/examples/profile/extra_tests")
+        run_dir("{get_das_root()}/examples/profile/extra_test")
     if hashTests
         run_dir("{get_das_root()}/examples/profile/hash_test")
     if failed != 0

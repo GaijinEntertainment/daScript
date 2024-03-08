@@ -36,6 +36,9 @@ namespace das {
         static __forceinline bool Equ     ( vec4f a, vec4f b, Context &, LineInfo * ) { return to(a) == to(b); }
         static __forceinline bool NotEqu  ( vec4f a, vec4f b, Context &, LineInfo * ) { return to(a) != to(b); }
     };
+
+    __forceinline bool objEqu ( const Object & a, const Object & b ) { return a == b; }
+    __forceinline bool objNeq ( const Object & a, const Object & b ) { return a != b; }
 }
 
 int AddOne(int a);
