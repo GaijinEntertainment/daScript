@@ -851,7 +851,7 @@ class LlvmJitVisitor : AstVisitor
             ofunc = LLVMAddFunctionWithType(g_mod, mangled_name, LLVMFunctionType(res_type,arg_types))
             let FUNC_PTR = get_builtin_function_address(expr.func)
             if FUNC_PTR==null
-                failed_E(expr, "missing interop function pointer for {expr.func._module.name}::{expr.func.name}")
+                failed_E(expr, "missing interop function pointer for {expr.func._module.name}::{expr.func.name} // {mangled_name}")
             LLVMAddGlobalMapping(g_engine, ofunc, FUNC_PTR)
             if expr.func.sideEffectFlags == bitfield(0)
                 LLVMAddAttributeToFunction(ofunc, LLVMGetEnumAttribute("nounwind"))     // TODO: better no-unwind?
@@ -3860,7 +3860,7 @@ class LlvmJitVisitor : AstVisitor
         var capture <- capture_block(expr._block)
         // build block type
         var blk_fields <- build_block_type()
-        blk_fields |> push(LLVMArrayType(LLVMFloat4Type(), 3u))
+        blk_fields |> push(LLVMArrayType(LLVMFloat4Type(), 8u))
         var first_field_index = length(blk_fields)
         for c in capture
             if c.variable._type.isGoodBlockType
@@ -3913,12 +3913,14 @@ class LlvmJitVisitor : AstVisitor
         // call jit_make_block
         var blk_ptr = LLVMBuildPointerCast(g_builder, blk, LLVMPointerType(g_t_block, 0u), "")
         let argStackTop = (expr._block as ExprBlock).stackTop
+        let annotationData = (expr._block as ExprBlock).annotationData
         let null_ptr = LLVMConstPointerNull(LLVMPointerType(LLVMVoidType(),0u))
         let func_ptr = LLVMBuildPointerCast(g_builder, blk_make.func, LLVMPointerType(LLVMVoidType(),0u), "")
         let impl_ptr = LLVMBuildPointerCast(g_builder, blk_make.impl, LLVMPointerType(LLVMVoidType(),0u), "")
         var params = [[auto
             blk_ptr;                                                    // blk
             LLVMConstInt(LLVMInt32Type(), uint64(argStackTop), 0);      // argStackTop
+            LLVMConstInt(LLVMInt64Type(), uint64(annotationData), 0);   // annotation data
             func_ptr;                                                   // bodyNode
             impl_ptr;                                                   // jitImpl
             null_ptr;                                                   // TODO: funcInfo

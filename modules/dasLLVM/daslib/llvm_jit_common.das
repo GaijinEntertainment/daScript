@@ -349,15 +349,15 @@ def public init_jit
     LLVMAddGlobalMapping(g_engine, jit_epilogue, get_jit_epilogue())
     LLVMAddAttributesToFunction(jit_epilogue, [[auto nounwind; willreturn]])
     LLVMAddAttributeToFunctionArgumentRange(jit_epilogue, urange(0,2), nocapture)
-    // void jit_make_block ( Block * blk, int32_t argStackTop, void * bodyNode, void * jitImpl, void * funcInfo, Context * context )
+    // void jit_make_block ( Block * blk, int32_t argStackTop, uint64_t annotationData, void * bodyNode, void * jitImpl, void * funcInfo, Context * context )
     var jit_make_block = LLVMAddFunctionWithType(g_mod, FN_JIT_MAKE_BLOCK,
         LLVMFunctionType(LLVMVoidType(),
-            [[LLVMTypeRef LLVMPointerType(g_t_block,0u); LLVMInt32Type(); LLVMPointerType(LLVMVoidType(),0u);
+            [[LLVMTypeRef LLVMPointerType(g_t_block,0u); LLVMInt32Type(); LLVMInt64Type(); LLVMPointerType(LLVMVoidType(),0u);
                 LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u) ]]))
     LLVMAddGlobalMapping(g_engine, jit_make_block, get_jit_make_block())
     LLVMAddAttributesToFunction(jit_make_block, [[auto nounwind; willreturn]])
     LLVMAddAttributeToFunctionArgument(jit_make_block, 0u, nocapture)
-    LLVMAddAttributeToFunctionArgumentRange(jit_make_block, urange(2,6), nocapture)
+    LLVMAddAttributeToFunctionArgumentRange(jit_make_block, urange(3,7), nocapture)
     // void jit_debug ( vec4f res, TypeInfo * typeInfo, char * message, Context * )
     var jit_debug = LLVMAddFunctionWithType(g_mod, FN_JIT_DEBUG,
         LLVMFunctionType(LLVMVoidType(),
