@@ -21,5 +21,7 @@ def main
         run_files([[TestFile
             asFile = "native.as",
             luaJitFile = "native.lua",
-            nutModifiedFile = "native.nut"
+            nutModifiedFile = "native.nut",
+            monoFile = "native.cs",
+            dotNetFile = "native.cs"
         ]])
