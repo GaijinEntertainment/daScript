@@ -129,14 +129,6 @@ namespace das {
     }
 
     template <typename TT>
-    SimNode * SimNode_LexicalCast<TT>::visit ( SimVisitor & vis ) {
-        V_BEGIN();
-        V_OP_TT(LexicalCast);
-        V_SUB(arguments[0]);
-        V_END();
-    }
-
-    template <typename TT>
     SimNode * SimNode_AtR2V<TT>::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP_TT(AtR2V);

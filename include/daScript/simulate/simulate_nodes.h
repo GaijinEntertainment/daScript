@@ -1345,24 +1345,6 @@ SIM_NODE_AT_VECTOR(Float, float)
         }
     };
 
-    // LEXICAL CAST
-    template <typename CastFrom>
-    struct SimNode_LexicalCast : SimNode_CallBase {
-        SimNode_LexicalCast ( const LineInfo & at ) : SimNode_CallBase(at) {}
-        virtual SimNode * visit ( SimVisitor & vis ) override;
-        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
-            DAS_PROFILE_NODE
-            vec4f res = arguments[0]->eval(context);
-            auto str = to_string ( cast<CastFrom>::to(res) );
-            auto cpy = context.stringHeap->allocateString(str);
-            if ( !cpy ) {
-                context.throw_error_at(debugInfo,"can't cast to string, out of heap");
-                return v_zero();
-            }
-            return cast<char *>::from(cpy);
-        }
-    };
-
     // "DEBUG"
     struct SimNode_Debug : SimNode {
         SimNode_Debug ( const LineInfo & at, SimNode * s, TypeInfo * ti, char * msg )

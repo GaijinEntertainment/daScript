@@ -163,11 +163,11 @@ namespace das
         addFunctionBasic<char *>(*this,lib);
         addFunctionOrdered<char *>(*this,lib);
         addFunctionConcat<char *>(*this,lib);
-        addFunction ( make_smart<BuiltInFn<SimNode_LexicalCast<int32_t>,   char *,int32_t,Context *>>    ("string",lib,"das_lexical_cast",false) );
-        addFunction ( make_smart<BuiltInFn<SimNode_LexicalCast<uint32_t>,  char *,uint32_t,Context *>>   ("string",lib,"das_lexical_cast",false) );
-        addFunction ( make_smart<BuiltInFn<SimNode_LexicalCast<int64_t>,   char *,int64_t,Context *>>    ("string",lib,"das_lexical_cast",false) );
-        addFunction ( make_smart<BuiltInFn<SimNode_LexicalCast<uint64_t>,  char *,uint64_t,Context *>>   ("string",lib,"das_lexical_cast",false) );
-        addFunction ( make_smart<BuiltInFn<SimNode_LexicalCast<float>,     char *,float,Context *>>      ("string",lib,"das_lexical_cast",false) );
+        addExtern<DAS_BIND_FUN(das_lexical_cast<int32_t>)>(*this, lib, "string", SideEffects::none, "das_lexical_cast")->args({"value","context"});
+        addExtern<DAS_BIND_FUN(das_lexical_cast<uint32_t>)>(*this, lib, "string", SideEffects::none, "das_lexical_cast")->args({"value","context"});
+        addExtern<DAS_BIND_FUN(das_lexical_cast<int64_t>)>(*this, lib, "string", SideEffects::none, "das_lexical_cast")->args({"value","context"});
+        addExtern<DAS_BIND_FUN(das_lexical_cast<uint64_t>)>(*this, lib, "string", SideEffects::none, "das_lexical_cast")->args({"value","context"});
+        addExtern<DAS_BIND_FUN(das_lexical_cast<float>)>(*this, lib, "string", SideEffects::none, "das_lexical_cast")->args({"value","context"});
     }
 }
 
