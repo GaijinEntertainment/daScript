@@ -16,7 +16,6 @@ extern bool llvm_debug_result ();
 extern bool llvm_debug_everything ();
 
 extern bool llvm_jit_always_solid ();
-extern bool llvm_jit_allow_unaligned_vector_read_out_of_bounds ();
 
 namespace das {
 
@@ -39,9 +38,6 @@ namespace das {
 
             addExtern<DAS_BIND_FUN(llvm_jit_always_solid)>(*this, lib,  "llvm_jit_always_solid",
                 SideEffects::none, "llvm_jit_always_solid");
-            addExtern<DAS_BIND_FUN(llvm_jit_allow_unaligned_vector_read_out_of_bounds)>(*this,
-                lib,  "llvm_jit_allow_unaligned_vector_read_out_of_bounds",
-                SideEffects::none, "llvm_jit_allow_unaligned_vector_read_out_of_bounds");
 
             // lets make sure its all aot ready
             verifyAotReady();

@@ -88,6 +88,7 @@ class LlvmJitVisitor : AstVisitor
     option_no_alias : bool = false
     option_no_capture : bool = false
     own_di : bool = false
+    ldu_hint : array<bool>
 
     def LlvmJitVisitor ( at:LineInfo; ctx:Context?; need_di:bool; dib:LLVMOpaqueDIBuilder?; dicu:LLVMOpaqueMetadata? )
         jit_context = ctx
@@ -238,6 +239,8 @@ class LlvmJitVisitor : AstVisitor
                         for a,ai in arguments,ucount()
                             if a.name==arg.sValue
                                 LLVMSetParamAlignment(LLVMGetParam(ffunc,ai), 16u)
+                    elif arg.name=="vec3_ldu"
+                        LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS = arg.bValue
         if alwaysInline
             LLVMAddAttributeToFunction(ffunc, LLVMGetEnumAttribute("alwaysinline"))
         elif noInline
@@ -483,6 +486,7 @@ class LlvmJitVisitor : AstVisitor
     def override preVisitFunction(var fun:FunctionPtr) : void
         assert(g_builder!=null, "missing builder")
         thisFunc = get_ptr(fun)
+        ldu_hint |> push(LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS)
         let fnmna = get_mangled_name(fun)
         ffunc = LLVMGetNamedFunction(g_mod, "{fnmna} implementation")
         wfunc = LLVMGetNamedFunction(g_mod, fnmna)
@@ -511,6 +515,7 @@ class LlvmJitVisitor : AstVisitor
         LLVMPositionBuilderAtEnd(g_builder, function_entry)
         LLVMBuildBr(g_builder, function_body)
         debug_after_function()
+        ldu_hint |> pop()
         ffunc = null
         thisFunc = null
         return fun

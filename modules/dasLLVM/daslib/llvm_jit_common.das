@@ -27,7 +27,7 @@ let public LLVM_JIT_LOG = false || LLVM_DEBUG_EVERYTHING
 let public LLVM_DEBUG_INFO = false //  || LLVM_DEBUG_EVERYTHING
 
 let public LLVM_JIT_ALWAYS_SOLID = llvm_config::llvm_jit_always_solid()
-let public LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS = llvm_config::llvm_jit_allow_unaligned_vector_read_out_of_bounds()
+var public LLVM_JIT_ALLOW_UNALIGNED_VECTOR_READ_OUT_OF_BOUNDS = false
 
 let public LLVM_OUTPUT_OJBECT_FILE = false
 let public LLVM_OUTPUT_OJBECT_FILE_NAME = "output.o"
