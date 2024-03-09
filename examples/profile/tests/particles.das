@@ -10,10 +10,12 @@ struct NObject
     position : float3
     velocity : float3
 
+[hint(noalias=objects,vec3_ldu)]
 def testSimI(var objects:array<NObject>)
     for obj in objects
         obj.position += obj.velocity
 
+[hint(noalias=objects,vec3_ldu)]
 def testSim2I(var objects:array<NObject>; count:int)
     for i in range(count)
         testSimI(objects)
