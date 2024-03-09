@@ -1,4 +1,5 @@
 require daslib/strings_boost
+require peg/peg
 require fio
 require rtti
 require debugapi
@@ -68,53 +69,37 @@ def run_dir ( appDir : string )
             let appfile = "{appDir}/{fileName}"
             test_single_file(appfile)
 
+def get_cpu_name
+    var cpuName = ""
+    unsafe
+        popen("wmic cpu get name") <| $ ( f )
+            var prevName = false
+            while !feof(f)
+                let st = fgets(f)
+                if st |> find("Name") != -1
+                    prevName = true
+                elif prevName
+                    cpuName = st |> trim()
+                    prevName = false
+    return cpuName
+
 struct ProfileEntry
     language : string
     category : string
     time     : double
     count    : int
 
-enum ParseProfileEntryError
-    Ok
-    InvalidInput
-    InvalidLanguage
-    InvalidCategory
-    InvalidTime
-    InvalidCount
+def parse_profile_entry ( invocation:string; blk:block<(var res : ProfileEntry; errors:array<ParsingError>):void> )
+    parse invocation
+        var profile_entry : ProfileEntry
+        rule(WS, string_ as language, WS, ",", WS, string_ as category, WS, ",", WS, double_ as time, WS, ",", WS, double_ as count) <|
+            return <- [[ProfileEntry language=language, category=category, time=time, count=int(count)]]
 
-[no_jit,no_aot]
-def parse_profile_entry ( invocation:string; blk : block<(res:ProfileEntry):void> ) : ParseProfileEntryError
-    var sub <- invocation |> split(",")
-    if length(sub)!=4
-        return ParseProfileEntryError InvalidInput
-    for s in sub
-        s = s |> trim
-    var language = sub[0]
-    if language |> starts_with("\"") && language |> ends_with("\"")
-        language = language |> slice(1, -1)
-    else
-        return ParseProfileEntryError InvalidLanguage
-    var category = sub[1]
-    if category |> starts_with("\"") && category |> ends_with("\"")
-        category = category |> slice(1, -1)
-    else
-        return ParseProfileEntryError InvalidCategory
-    var time = DBL_MAX
-    try
-        time = double(sub[2])
-    recover
-        pass
-    if time == DBL_MAX
-        return ParseProfileEntryError InvalidTime
-    var count = INT_MAX
-    try
-        count = int(sub[3])
-    recover
-        pass
-    if count == INT_MAX
-        return ParseProfileEntryError InvalidCount
-    blk |> invoke([[ProfileEntry language=language, category=category, time=time, count=count]])
-    return ParseProfileEntryError Ok
+def parse_short_profile_entry ( invocation:string; blk:block<(var res : ProfileEntry; errors:array<ParsingError>):void> )
+    parse invocation
+        var profile_entry : ProfileEntry
+        rule(WS, string_ as category, WS, ",", WS, double_ as time, WS, ",", WS, double_ as count) <|
+            return <- [[ProfileEntry category=category, time=time, count=int(count)]]
 
 def make_table ( tablename:string; entries:array<ProfileEntry>; languages:table<string> )
     var categories : table<string; double>
@@ -130,21 +115,19 @@ def make_table ( tablename:string; entries:array<ProfileEntry>; languages:table<
     scategories |> sort
     print("<h2>{tablename}</h2>\n")
     print("<table border=\"1\">\n")
-    print("<tr><th>Language</th>\n")
-    for c in scategories
-        print("<th>{c}<br>times slower</th>")
-    print("</tr>\n")
+    print("<tr><th>Test</th>\n")
     for l in slanguages
-        // collect times for each category given language
+        print("<th>{l}</th>")
+    print("</tr>\n")
+    for c in scategories
         var cattime : table<string; double>
         for e in entries
-            if e.language == l
-                cattime[e.category] = e.time
-        // print category times of specific language
-        print("<tr><td>{l}</td>\n")
-        for c in scategories
-            if cattime |> key_exists(c)
-                let time = cattime[c]
+            if e.category==c
+                cattime[e.language] = e.time
+        print("<tr><td>{c}</td>\n")
+        for l in slanguages
+            if cattime |> key_exists(l)
+                let time = cattime[l]
                 let mintime = categories[c]
                 let factor = time / mintime
                 let ts = format("%.4f", float(time))
@@ -154,29 +137,45 @@ def make_table ( tablename:string; entries:array<ProfileEntry>; languages:table<
                 else
                     print("<td>{fs} ({ts})</td>")
             else
-                print("<td>0</td>")
+                print("<td>N/A</td>")
         print("</tr>\n")
     print("</table>\n")
 
-def make_html
+def make_entries ( extra:string = "" )
     let exe = get_command_line_arguments()[0]
-    let cmdLine = "{exe}"
+    let cmdLine = "{exe}{extra}"
     var entries : array<ProfileEntry>
+    var prevLanguage = ""
     unsafe
         var exitCode = popen(cmdLine) <| $ ( f )
             while !feof(f)
                 let st = fgets(f)
-                let err = parse_profile_entry(st) <| $ ( res )
-                    entries |> push(res)
-                    print("{res}\n")
-                if err != ParseProfileEntryError Ok
-                    print(st)
+                var parsed = false
+                parse_profile_entry(st) <| $ ( res, errors )
+                    if errors |> empty
+                        prevLanguage = res.language
+                        entries |> push(res)
+                        parsed = true
+                        print("{res}\n")
+                if !parsed
+                    parse_short_profile_entry(st) <| $ ( res, errors )
+                        if errors |> empty
+                            res.language = prevLanguage
+                            entries |> push(res)
+                            parsed = true
+                            print("{res}\n")
+                if !parsed
+                    print("{st}")
         if exitCode != 0
             print("Error: {exitCode}\n")
-            return
-    print("<!DOCTYPE html><html>\n")
+    return <- entries
+
+def make_html
+    var entries <- make_entries()
+    print("\n<!DOCTYPE html><html>\n")
     print("<body>\n")
-    make_table("interpreted", entries, {{
+    print("<small>Tested on {get_cpu_name()}</small><br>\n")
+    make_table("Interpreted", entries, {{
         "DAS INTERPRETER";
         "MONO --interpreter";
         "LUAU";
@@ -196,10 +195,25 @@ def make_html
         "LUAU --codegen";
     }})
     print("</body>\n")
-    print("</html>\n")
+    print("</html>\n\n")
+
+def make_extra_html
+    var entries <- make_entries(" -nomain -extra")
+    print("\n<!DOCTYPE html><html>\n")
+    print("<body>\n")
+    print("<small>Tested on {get_cpu_name()}</small><br>\n")
+    make_table("ExtraTests", entries, {{
+        "DAS INTERPRETER";
+        "DAS AOT";
+        "DAS JIT"
+    }})
+    print("</body>\n")
+    print("</html>\n\n")
 
 [export]
 def main
+    var cpuName = get_cpu_name()
+    print("Testing on {cpuName}\n")
     var singleTest = ""
     var mainTests = true
     var extraTests = false
@@ -215,6 +229,7 @@ def main
             continue
         elif arg=="-html"
             make_html()
+            make_extra_html()
             return
         elif arg=="-log"
             LOG_TEST_COMPILATION_TIME = true

@@ -73,13 +73,13 @@ def main
     profile(20,"es-update-def-string") <|
         for i in range(100)
             testProfile::testEsUpdate("ks4")
-    profile(20,"query-1") <|
+    profile(20,"es-query-1") <|
         for i in range(100)
             queryOne()
-    profile(20,"query-2") <|
+    profile(20,"es-query-2") <|
         for i in range(100)
             queryTwo()
-    profile(20,"query-3") <|
+    profile(20,"es-query-3") <|
         queryThree()
     testProfile::releaseEsComponents()
 

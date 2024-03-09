@@ -95,7 +95,4 @@ def main
   // print("\ninitial energy {energy()}\n")
   profile(10, "n-bodies, scalar")  <|
     nbodies(500000)
-  // print("\nresult energy {energy()}\n")
-  testNBodiesInit()
-  profile(10, "n-bodies, scalar, C++")  <|
-    testNBodiesS(500000)
+
