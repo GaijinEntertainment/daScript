@@ -129,33 +129,25 @@ def test(var objects:ObjectArray)
     update10000ks(objects)
     verifyObj(1,objects)
     // profile
-    let simTN = profile(20,"native basic version") <|
-        for i in range(1000)
-            testSim(nobjects)
-    let simTN_I = profile(20,"native basic version, inline") <|
-        for i in range(1000)
-            testSimI(nobjects)
-    let simT = profile(20,"basic version") <|
+    let simT = profile(20,"aos, basic version") <|
         for i in range(1000)
             testSim(objects)
-    let simT_I = profile(20,"basic version, inline") <|
+    let simT_I = profile(20,"aos, basic version, inline") <|
         for i in range(1000)
             testSimI(objects)
-    let cT = profile(20,"c++ version") <|
+    let cT = profile(20,"aos, c++ version") <|
         for i in range(1000)
             interopUpdateTest(objects)
-    let intT = profile(20,"interop version") <|
+    let intT = profile(20,"aos, interop version") <|
         for i in range(1000)
             testInterop(objects)
-    let manyT = profile(20,"interop 10000 version") <|
+    let manyT = profile(20,"aos, interop 10000 version") <|
         for i in range(1000)
             update10000(objects)
-    let manyKsT = profile(20,"interop 10000-ks version") <|
+    let manyKsT = profile(20,"aos, interop 10000-ks version") <|
         for i in range(1000)
             update10000ks(objects)
-    print("ratio nsim/c++ {simTN/cT}\n")
     print("ratio sim/c++: {simT/cT}\n")
-    print("ratio nsim,inline/c++ {simTN_I/cT}\n")
     print("ratio sim,inline/c++: {simT_I/cT}\n")
     print("ratio interop/c++: {intT/cT}\n")
     print("ratio interop-10000/c++: {manyT/cT}\n");

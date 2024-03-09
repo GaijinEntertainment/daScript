@@ -82,8 +82,8 @@ var g_bodies = [[body
 [export]
 def main
     offset_momentum(g_bodies)
-    print("initial energy {energy(g_bodies)}\n")
-    profile(10, "n-bodies")  <|
+    // print("initial energy {energy(g_bodies)}\n")
+    profile(10, "n-bodies, naive (double)")  <|
         for i in range(500000)
             advance(0.01lf, g_bodies)
-    print("result energy {energy(g_bodies)}\n")
+    // print("result energy {energy(g_bodies)}\n")

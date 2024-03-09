@@ -8,12 +8,6 @@ def fibR(n)
         return n
 	return fibR(n - 1) + fibR(n - 2)
 
-[sideeffects,no_aot]
-def fibRNA(n)
-    if (n < 2)
-        return n
-	return fibRNA(n - 1) + fibRNA(n - 2)
-
 [sideeffects, hybrid]
 def fibRH(n)
     if (n < 2)
@@ -26,10 +20,6 @@ def main
     profile(20,"fibonacci recursive") <|
         f1 = fibR(31)
 	assert(f1==1346269)
-	var f2 = 0
-    profile(20,"fibonacci recursive, no aot") <|
-        f2 = fibRNA(31)
-	assert(f2==1346269)
 	var f3 = 0
     profile(20,"fibonacci recursive, hybrid") <|
         f3 = fibRH(31)
