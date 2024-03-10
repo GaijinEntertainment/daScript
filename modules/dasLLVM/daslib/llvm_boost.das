@@ -11,6 +11,25 @@ require daslib/defer
 require strings
 require ast_boost
 
+def LLVMBuildSRemInt32 ( builder:LLVMOpaqueBuilder?; lhs, rhs:LLVMOpaqueValue?; name:string )
+    // convert lhs % rhs to lhs - int(double(lhs)/double(rhs))*rhs
+    let l = LLVMBuildSIToFP(builder, lhs, LLVMDoubleType(), "")
+    let r = LLVMBuildSIToFP(builder, rhs, LLVMDoubleType(), "")
+    let d = LLVMBuildFDiv(builder, l, r, "")
+    let i = LLVMBuildFPToSI(builder, d, LLVMInt32Type(), "")
+    let m = LLVMBuildMul(builder, i, rhs, "")
+    return LLVMBuildSub(builder, lhs, m, name)
+
+
+def LLVMBuildURemUInt32 ( builder:LLVMOpaqueBuilder?; lhs, rhs:LLVMOpaqueValue?; name:string )
+    // convert lhs % rhs to lhs - uint(double(lhs)/double(rhs))*rhs
+    let l = LLVMBuildUIToFP(builder, lhs, LLVMDoubleType(), "")
+    let r = LLVMBuildUIToFP(builder, rhs, LLVMDoubleType(), "")
+    let d = LLVMBuildFDiv(builder, l, r, "")
+    let i = LLVMBuildFPToUI(builder, d, LLVMInt32Type(), "")
+    let m = LLVMBuildMul(builder, i, rhs, "")
+    return LLVMBuildSub(builder, lhs, m, name)
+
 def LLVMIsVector3 ( typ:LLVMOpaqueType? ) : bool
     return (LLVMGetTypeKind(typ)==LLVMTypeKind LLVMVectorTypeKind) && (LLVMGetVectorSize(typ)==3u)
 
