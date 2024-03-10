@@ -1875,7 +1875,8 @@ namespace das
                         } else
 #endif
                         {
-                            block = context.code->makeNode<SimNode_BlockNF>(at);
+                            auto lsize = int(simlist.size());
+                            block = (SimNode_Block *) context.code->makeNodeUnrollAny<SimNode_BlockNFT>(lsize, at);
                         }
                     } else {
 #if DAS_DEBUGGER
