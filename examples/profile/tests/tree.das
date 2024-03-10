@@ -92,7 +92,8 @@ def mainTreeNode
         elif a == 1
             tree |> erase_raw(cur)
         elif a == 2
-            res += (tree |> hasValue(cur)) ? 1 : 0
+            if tree |> hasValue(cur)
+                res ++
     unsafe
 	    delete tree
     return res

@@ -17,25 +17,30 @@ function create_rng(seed)
       if j < 17 then Rj = j + 1 else Rj = 1 end
       return k
   end
-end 
+end
 
 rand = create_rng(12345)
 
-n = tonumber(arg and arg[1]) or 2000000
+n = tonumber(arg and arg[1]) or 100000
 t = {}
 for i = 1,n do
 	t[i] = rand()
 end
 
-loadfile("profile.lua")()
-
-io.write(string.format("table-sort: %.8f\n", profile_it(1, function () table.sort(t) end)))
-
-for i = 1,n-1 do
-	assert(t[i] <= t[i+1])
+function cmp(lhs, rhs)
+  return lhs > rhs
 end
 
---for i = 1,n do
---	print(t[i])
---end
+function table.shallow_copy(t)
+  local t2 = {}
+  for k,v in pairs(t) do
+    t2[k] = v
+  end
+  return t2
+end
+
+loadfile("profile.lua")()
+
+io.write(string.format("\"sort\", %.8f, 20\n", profile_it(20, function () table.sort(table.shallow_copy(t), cmp) end)))
+
 

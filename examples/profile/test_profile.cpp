@@ -933,6 +933,12 @@ uint32_t testMaxFrom1s(uint32_t x) {
     return res;
 }
 
+void testTableSort ( TArray<int32_t> & tab ) {
+    int32_t * begin = (int32_t *)(tab.data);
+    int32_t * end = begin + tab.size;
+    sort(begin, end, [&](int32_t a, int32_t b) { return a > b; });
+}
+
 class Module_TestProfile : public Module {
 public:
     Module_TestProfile() : Module("testProfile") {
@@ -982,6 +988,7 @@ public:
         addExtern<DAS_BIND_FUN(testNBodiesS)>(*this, lib, "testNBodiesS",SideEffects::modifyExternal,"testNBodiesS");
         addExtern<DAS_BIND_FUN(testTree)>(*this, lib, "testTree",SideEffects::modifyExternal,"testTree");
         addExtern<DAS_BIND_FUN(testMaxFrom1s)>(*this, lib, "testMaxFrom1s",SideEffects::modifyExternal,"testMaxFrom1s");
+        addExtern<DAS_BIND_FUN(testTableSort)>(*this, lib, "testTableSort",SideEffects::modifyExternal,"testTableSort");
         // its AOT ready
         verifyAotReady();
     }

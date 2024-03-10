@@ -132,7 +132,7 @@ def make_table ( tablename:string; entries:array<ProfileEntry>; languages:table<
                 let factor = time / mintime
                 let ts = format("%.4f", float(time))
                 let fs = format("%.2f", float(factor))
-                if time == mintime
+                if int(factor*100.0lf) == 100
                     print("<td><b>{fs} ({ts})</b></td>")
                 else
                     print("<td>{fs} ({ts})</td>")
@@ -174,7 +174,7 @@ def make_html
     var entries <- make_entries()
     print("\n<!DOCTYPE html><html>\n")
     print("<body>\n")
-    print("<small>Tested on {get_cpu_name()}</small><br>\n")
+    print("<small>Tested on {get_cpu_name()} at {get_clock()}</small><br>\n")
     make_table("Interpreted", entries, {{
         "DAS INTERPRETER";
         "MONO --interpreter";
@@ -213,7 +213,7 @@ def make_extra_html
 [export]
 def main
     var cpuName = get_cpu_name()
-    print("Testing on {cpuName}\n")
+    print("Testing on {cpuName} at {get_clock()}\n")
     var singleTest = ""
     var mainTests = true
     var extraTests = false
@@ -229,7 +229,7 @@ def main
             continue
         elif arg=="-html"
             make_html()
-            make_extra_html()
+            // make_extra_html()
             return
         elif arg=="-log"
             LOG_TEST_COMPILATION_TIME = true

@@ -1,12 +1,12 @@
 require fio
 require strings
 
-let TEST_JAVASCRIPT = false
-let TEST_LUAU = false
-let TEST_LUA = false
-let TEST_LUA_JIT = false
-let TEST_SQUIRREL = false
-let TEST_CSHARP = false
+let TEST_JAVASCRIPT = true
+let TEST_LUAU = true
+let TEST_LUA = true
+let TEST_LUA_JIT = true
+let TEST_SQUIRREL = true
+let TEST_CSHARP = true
 
 [no_jit,no_aot]
 def cpp_label

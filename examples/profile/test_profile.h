@@ -56,6 +56,7 @@ int testPrimes(int n);
 void testTryCatch(das::Context * context, das::LineInfoArg * at);
 int testTree();
 uint32_t testMaxFrom1s(uint32_t x);
+void testTableSort ( das::TArray<int32_t> & tab );
 
 void testManagedInt(const das::TBlock<void, const das::vector<int32_t>> & blk, das::Context * context, das::LineInfoArg * at);
 
