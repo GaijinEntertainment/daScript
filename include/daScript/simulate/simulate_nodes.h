@@ -193,6 +193,121 @@ namespace das {
         }
     };
 
+    template <int argCount>
+    struct SimNode_BlockNFT : SimNode_BlockNF {
+        SimNode_BlockNFT ( const LineInfo & at ) : SimNode_BlockNF(at) {}
+        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
+            SimNode ** __restrict tail = list + total;
+            for (SimNode ** __restrict body = list; body!=tail; ++body) {
+                (*body)->eval(context);
+                if ( context.stopFlags ) break;
+            }
+            return v_zero();
+        }
+    };
+
+    template <>
+    struct SimNode_BlockNFT<0> : SimNode_BlockNF {
+        SimNode_BlockNFT ( const LineInfo & at ) : SimNode_BlockNF(at) {}
+        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
+            return v_zero();
+        }
+    };
+
+    template <>
+    struct SimNode_BlockNFT<1> : SimNode_BlockNF {
+        SimNode_BlockNFT ( const LineInfo & at ) : SimNode_BlockNF(at) {}
+        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
+            list[0]->eval(context);
+            return v_zero();
+        }
+    };
+
+    template <>
+    struct SimNode_BlockNFT<2> : SimNode_BlockNF {
+        SimNode_BlockNFT ( const LineInfo & at ) : SimNode_BlockNF(at) {}
+        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
+            list[0]->eval(context); if ( context.stopFlags ) return v_zero();
+            list[1]->eval(context);
+            return v_zero();
+        }
+    };
+
+    template <>
+    struct SimNode_BlockNFT<3> : SimNode_BlockNF {
+        SimNode_BlockNFT ( const LineInfo & at ) : SimNode_BlockNF(at) {}
+        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
+            list[0]->eval(context); if ( context.stopFlags ) return v_zero();
+            list[1]->eval(context); if ( context.stopFlags ) return v_zero();
+            list[2]->eval(context);
+            return v_zero();
+        }
+    };
+
+    template <>
+    struct SimNode_BlockNFT<4> : SimNode_BlockNF {
+        SimNode_BlockNFT ( const LineInfo & at ) : SimNode_BlockNF(at) {}
+        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
+            list[0]->eval(context); if ( context.stopFlags ) return v_zero();
+            list[1]->eval(context); if ( context.stopFlags ) return v_zero();
+            list[2]->eval(context); if ( context.stopFlags ) return v_zero();
+            list[3]->eval(context);
+            return v_zero();
+        }
+    };
+
+    template <>
+    struct SimNode_BlockNFT<5> : SimNode_BlockNF {
+        SimNode_BlockNFT ( const LineInfo & at ) : SimNode_BlockNF(at) {}
+        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
+            list[0]->eval(context); if ( context.stopFlags ) return v_zero();
+            list[1]->eval(context); if ( context.stopFlags ) return v_zero();
+            list[2]->eval(context); if ( context.stopFlags ) return v_zero();
+            list[3]->eval(context); if ( context.stopFlags ) return v_zero();
+            list[4]->eval(context);
+            return v_zero();
+        }
+    };
+
+    template <>
+    struct SimNode_BlockNFT<6> : SimNode_BlockNF {
+        SimNode_BlockNFT ( const LineInfo & at ) : SimNode_BlockNF(at) {}
+        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
+            list[0]->eval(context); if ( context.stopFlags ) return v_zero();
+            list[1]->eval(context); if ( context.stopFlags ) return v_zero();
+            list[2]->eval(context); if ( context.stopFlags ) return v_zero();
+            list[3]->eval(context); if ( context.stopFlags ) return v_zero();
+            list[4]->eval(context); if ( context.stopFlags ) return v_zero();
+            list[5]->eval(context);
+            return v_zero();
+        }
+    };
+
+    template <>
+    struct SimNode_BlockNFT<7> : SimNode_BlockNF {
+        SimNode_BlockNFT ( const LineInfo & at ) : SimNode_BlockNF(at) {}
+        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE
+            list[0]->eval(context); if ( context.stopFlags ) return v_zero();
+            list[1]->eval(context); if ( context.stopFlags ) return v_zero();
+            list[2]->eval(context); if ( context.stopFlags ) return v_zero();
+            list[3]->eval(context); if ( context.stopFlags ) return v_zero();
+            list[4]->eval(context); if ( context.stopFlags ) return v_zero();
+            list[5]->eval(context); if ( context.stopFlags ) return v_zero();
+            list[6]->eval(context);
+            return v_zero();
+        }
+    };
+
+
     typedef vec4f ( * JitFunction ) ( Context * , vec4f *, void * );
 
     struct SimNode_Jit : SimNode {

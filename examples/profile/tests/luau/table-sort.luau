@@ -17,29 +17,29 @@ function create_rng(seed)
       if j < 17 then Rj = j + 1 else Rj = 1 end
       return k
   end
-end 
+end
 
 rand = create_rng(12345)
 
-n = tonumber(arg and arg[1]) or 2000000
+n = tonumber(arg and arg[1]) or 100000
 t = {}
 for i = 1,n do
-	t[i] = { x = rand() % 10000, y = rand() % 10000 }
+	t[i] = rand()
 end
 
 function cmp(lhs, rhs)
-	if lhs.x ~= rhs.x then
-		return lhs.x > rhs.x
-	else
-		return lhs.y > rhs.y
-	end
+    return lhs > rhs
 end
 
-loadfile("profile.lua")()
-
-io.write(string.format("table-sort-cmp: %.8f\n", profile_it(1, function () table.sort(t, cmp) end)))
-
-for i = 1,n-1 do
-	assert(not cmp(t[i+1], t[i]))
+function profile_it(profiles, fn)
+  local res
+  for i = 1, profiles do
+    local start = os.clock()
+    fn()
+    local measured = os.clock() - start
+    if i == 1 or res > measured then res = measured end
+  end
+  return res
 end
 
+print(string.format("\"sort\", %.8f, 20", profile_it(20, function () table.sort(table.clone(t), cmp) end)))

@@ -25,18 +25,14 @@ var
 def merge(var lower, greater: Node?): Node?
     if lower == null
     	return greater
-    if greater == null
+    elif greater == null
     	return lower
-    if lower.y < greater.y
+    elif lower.y < greater.y
         lower.right = merge(lower.right, greater)
         return lower
     else
         greater.left = merge(lower, greater.left)
         return greater
-
-[hint(alwaysinline,hot)]
-def merge(var lower,equal,greater: Node?): Node?
-    return merge(merge(lower, equal), greater)
 
 [unsafe_deref,hint(alwaysinline,hot)]
 def split(var orig:Node?; var lower:Node?&; var greaterOrEqual:Node?&; value: int)
@@ -51,34 +47,32 @@ def split(var orig:Node?; var lower:Node?&; var greaterOrEqual:Node?&; value: in
 		split(greaterOrEqual.left,lower,greaterOrEqual.left,value)
 
 [hint(alwaysinline,hot)]
-def split(var orig: Node?; var lower:Node?&; var equal:Node?&; var greater:Node?&; value: int)
-	var equalOrGreater : Node?
-    split(orig, lower, equalOrGreater, value)
-    split(equalOrGreater, equal, greater, value + 1)
-
-[hint(alwaysinline,hot)]
-def hasValue(var mRoot:Node? &; x: int): bool
+def hasValue(var orig:Node? &; x: int): bool
 	var lower, equal, greater : Node?
-    split(mRoot, lower, equal, greater, x)
+	var equalOrGreater : Node?
+    split(orig, lower, equalOrGreater, x)
+    split(equalOrGreater, equal, greater, x + 1)
     let res = equal != null
-    mRoot = merge(lower, equal, greater)
+    orig = merge(merge(lower, equal), greater)
     return res
 
 [hint(alwaysinline,hot)]
-def insert(var mRoot:Node? &; x: int)
+def insert(var orig:Node? &; x: int)
     var lower, equal, greater : Node?
-    split(mRoot, lower, equal, greater, x)
+	var equalOrGreater : Node?
+    split(orig, lower, equalOrGreater, x)
+    split(equalOrGreater, equal, greater, x + 1)
     if equal == null
     	equal = new [[Node x=x, y=random_big_int(seed)]]
-    mRoot = merge(lower, equal, greater)
+    orig = merge(merge(lower, equal), greater)
 
 [hint(alwaysinline,hot)]
-def erase_raw(var mRoot:Node? &; x: int)
+def erase_raw(var orig:Node? &; x: int)
     var lower, equal, greater : Node?
-    split(mRoot, lower, equal, greater, x)
-    mRoot = merge(lower, greater)
-    unsafe
-        delete equal
+	var equalOrGreater : Node?
+    split(orig, lower, equalOrGreater, x)
+    split(equalOrGreater, equal, greater, x + 1)
+    orig = merge(lower, greater)
 
 def mainTreeNode
     var tree:Node?
@@ -91,8 +85,9 @@ def mainTreeNode
             tree |> insert(cur)
         elif a == 1
             tree |> erase_raw(cur)
-        elif a == 2
-            res += (tree |> hasValue(cur)) ? 1 : 0
+        else
+            if tree |> hasValue(cur)
+                res ++
     unsafe
 	    delete tree
     return res
@@ -115,3 +110,5 @@ def main
             monoFile = "tree.cs",
             dotNetFile = "tree.cs",
         ]])
+
+
