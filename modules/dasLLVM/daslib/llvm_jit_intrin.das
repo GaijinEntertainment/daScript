@@ -144,7 +144,6 @@ def intrinsic_builtin_int(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallF
         else
             return LLVMBuildZExtOrBitCast(g_builder, arguments[0], intType, string(expr.name))
     else
-        failed_E(expr, "{expr.name}({describe(argType)}) is not supported (yet?)")
         return null
 
 def any2int ( g_builder:LLVMOpaqueBuilder?; val:LLVMOpaqueValue?; argType:Type; _outType:LLVMOpaqueType?; inbytes, outbytes:int; outSigned:bool ) : LLVMOpaqueValue?
@@ -250,7 +249,6 @@ def intrinsic_builtin_float(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCal
         else
             return LLVMBuildFPExt(g_builder, arguments[0], floatType, string(expr.name))
     else
-        failed_E(expr, "float({describe(argType)}) is not supported (yet?)")
         return null
 
 def intrinsic_builtin_range(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
