@@ -247,7 +247,7 @@ namespace das {
                 return fnc->sideEffectFlags;
             }
             if ( asked.find(fnc.get())!=asked.end() ) {
-                return 0;   // assume no side-effects on this branch
+                return fnc->sideEffectFlags;   // assume no extra side effects
             }
             asked.insert(fnc.get());
             auto sfn = func;
