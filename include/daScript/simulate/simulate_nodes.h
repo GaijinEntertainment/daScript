@@ -210,7 +210,7 @@ namespace das {
     template <>
     struct SimNode_BlockNFT<0> : SimNode_BlockNF {
         SimNode_BlockNFT ( const LineInfo & at ) : SimNode_BlockNF(at) {}
-        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
+        DAS_EVAL_ABI virtual vec4f eval ( Context & ) override {
             DAS_PROFILE_NODE
             return v_zero();
         }
@@ -326,7 +326,7 @@ namespace das {
     struct SimNode_JitBlock;
 
     struct JitBlock : Block {
-        vec4f   node[3];
+        vec4f   node[8];
     };
 
     struct SimNode_JitBlock : SimNode_ClosureBlock {
@@ -337,7 +337,7 @@ namespace das {
         JitBlockFunction func = nullptr;
         Block * blockPtr = nullptr;
     };
-    static_assert(sizeof(SimNode_JitBlock)<=(8*16),"jit block node must fit under 8 vec4f");
+    static_assert(sizeof(SimNode_JitBlock)<=sizeof(JitBlock().node),"jit block node must fit under node size");
 
     struct SimNode_SourceBase : SimNode {
         SimNode_SourceBase ( const LineInfo & at ) : SimNode(at) {}
