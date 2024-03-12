@@ -81,6 +81,7 @@ namespace das {
                 printVarAccess = program->options.getBoolOption("print_var_access");
                 printCStyle = program->options.getBoolOption("print_c_style");
                 printAliases= program->options.getBoolOption("log_aliasing");
+                printFuncUse= program->options.getBoolOption("print_func_use");
             }
         }
         string str() const { return ss.str(); };
@@ -88,6 +89,7 @@ namespace das {
         bool printVarAccess = false;
         bool printCStyle = false;
         bool printAliases = false;
+        bool printFuncUse = false;
     protected:
         void newLine () {
             auto nlPos = ss.tellp();
@@ -303,6 +305,22 @@ namespace das {
                         }
                         ss << "\n";
                     }
+                }
+            }
+            if ( printFuncUse ) {
+                if ( fn->useFunctions.size() ) {
+                    ss << "// use functions";
+                    for ( auto & ufn : fn->useFunctions ) {
+                        ss << " " << ufn->getMangledName();
+                    }
+                    ss << "\n";
+                }
+                if ( fn->useGlobalVariables.size() ) {
+                    ss << "// use global variables";
+                    for ( auto & uvar : fn->useGlobalVariables ) {
+                        ss << " " << uvar->getMangledName();
+                    }
+                    ss << "\n";
                 }
             }
             ss << "def " << (fn->privateFunction ? "private " : "public ") << fn->name;

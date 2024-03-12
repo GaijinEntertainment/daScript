@@ -799,6 +799,7 @@ namespace das {
         "print_ref",                    Type::tBool,
         "print_var_access",             Type::tBool,
         "print_c_style",                Type::tBool,
+        "print_func_use",               Type::tBool,
     // rtti
         "rtti",                         Type::tBool,
     // optimization
