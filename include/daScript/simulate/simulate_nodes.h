@@ -210,7 +210,7 @@ namespace das {
     template <>
     struct SimNode_BlockNFT<0> : SimNode_BlockNF {
         SimNode_BlockNFT ( const LineInfo & at ) : SimNode_BlockNF(at) {}
-        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
+        DAS_EVAL_ABI virtual vec4f eval ( Context & ) override {
             DAS_PROFILE_NODE
             return v_zero();
         }
