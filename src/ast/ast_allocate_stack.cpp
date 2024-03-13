@@ -148,6 +148,9 @@ namespace das {
             return Visitor::visitGlobalLet(var);
         }
     // function
+        virtual bool canVisitArgumentInit ( Function *, const VariablePtr &, Expression * ) override {
+            return false;
+        }
         virtual void preVisit ( Function * f ) override {
             Visitor::preVisit(f);
             func = f;
