@@ -2522,7 +2522,7 @@ class LlvmJitVisitor : AstVisitor
             if expr.makeType.canCopy
                 build_copy(v_ptr, init)
             else
-                failed_E(expr, "makeTuple: move is not supported")
+                build_move(v_ptr, init, false)
         return init
 
     def override visitExprMakeTuple(expr:smart_ptr<ExprMakeTuple>) : ExpressionPtr
