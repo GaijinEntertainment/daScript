@@ -483,6 +483,9 @@ class LlvmJitVisitor : AstVisitor
         function_body = LLVMAppendBasicBlock(ffunc, "body_{bodyId}")
         LLVMPositionBuilderAtEnd(g_builder,function_body)
 
+    def override canVisitFunctionArgumentInit (fun:Function?; arg:VariablePtr;value:ExpressionPtr) : bool
+        return false
+
     def override preVisitFunction(var fun:FunctionPtr) : void
         assert(g_builder!=null, "missing builder")
         thisFunc = get_ptr(fun)
