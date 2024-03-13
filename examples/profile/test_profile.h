@@ -113,4 +113,4 @@ void verifyEsComponents(das::Context * ctx, das::LineInfoArg * at);
 void testEsUpdate(char * pass, das::Context * ctx, das::LineInfoArg * at);
 uint32_t queryEs(const das::Block & block, das::Context * context, das::LineInfoArg * at);
 
-
+int testQueens();
