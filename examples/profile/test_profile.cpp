@@ -939,6 +939,39 @@ void testTableSort ( TArray<int32_t> & tab ) {
     sort(begin, end, [&](int32_t a, int32_t b) { return a > b; });
 }
 
+#define QUEEN_N 8
+
+bool isplaceok(int * a, int n, int c) {
+    for (int i = 0; i < n; i++) {
+        if (a[i] == c || a[i] - i == c - n || a[i] + i == c + n) {
+            return false;
+        }
+    }
+    return true;
+}
+
+int g_solutions = 0;
+
+void addqueen(int * a, int n) {
+    if (n == QUEEN_N) {
+        g_solutions++;
+    } else {
+        for (int c = 0; c < QUEEN_N; c++) {
+            if (isplaceok(a, n, c)) {
+                a[n] = c;
+                addqueen(a, n + 1);
+            }
+        }
+    }
+}
+
+int testQueens() {
+    int a[QUEEN_N];
+    g_solutions = 0;
+    addqueen(a, 0);
+    return g_solutions;
+}
+
 class Module_TestProfile : public Module {
 public:
     Module_TestProfile() : Module("testProfile") {
@@ -989,6 +1022,7 @@ public:
         addExtern<DAS_BIND_FUN(testTree)>(*this, lib, "testTree",SideEffects::modifyExternal,"testTree");
         addExtern<DAS_BIND_FUN(testMaxFrom1s)>(*this, lib, "testMaxFrom1s",SideEffects::modifyExternal,"testMaxFrom1s");
         addExtern<DAS_BIND_FUN(testTableSort)>(*this, lib, "testTableSort",SideEffects::modifyExternal,"testTableSort");
+        addExtern<DAS_BIND_FUN(testQueens)>(*this, lib, "testQueens",SideEffects::modifyExternal,"testQueens");
         // its AOT ready
         verifyAotReady();
     }
