@@ -115,8 +115,21 @@ namespace das {
         }
     }
 
+    // copied hash_blockz64 from mics/anyhash.h to avoid binary incompatible changes
+    static uint64_t hash_tag ( const uint8_t * block ) {
+        auto FNV_offset_basis = 14695981039346656037ul;
+        auto FNV_prime = 1099511628211ul;
+        if ( !block ) return FNV_offset_basis;
+        auto h = FNV_offset_basis;
+        while ( *block ) {
+            h ^= *block++;
+            h *= FNV_prime;
+        }
+        return h <= HASH_KILLED64 ? 1099511628211ul : h;
+    }
+
     void AstSerializer::tag ( const char * name ) {
-        uint64_t hash = hash64z(name);
+        uint64_t hash = hash_tag(( const uint8_t * )name);
         if ( writing ) {
             *this << hash;
         } else  {
@@ -2051,7 +2064,7 @@ namespace das {
     }
 
     uint32_t AstSerializer::getVersion () {
-        static constexpr uint32_t currentVersion = 10;
+        static constexpr uint32_t currentVersion = 12;
         return currentVersion;
     }
 
