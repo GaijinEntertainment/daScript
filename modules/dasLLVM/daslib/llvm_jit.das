@@ -3323,6 +3323,18 @@ class LlvmJitVisitor : AstVisitor
                 let typ = g_fn_types[("delete`handle`{mangeld_name}")]
                 LLVMBuildCall2(g_builder, typ, fn_delete_handle, params, "")
                 LLVMBuildStore(g_builder, LLVMConstNull(LLVMPointerType(LLVMVoidType(),0u)), pps)
+            elif firstT.isVariant || firstT.isTuple
+                var structSize = firstT.sizeOf
+                var pps = LLVMBuildPointerCast(g_builder, se, LLVMPointerType(LLVMPointerType(LLVMVoidType(),0u),0u), "ppData")
+                var ps = LLVMBuildLoad2(g_builder, LLVMPointerType(LLVMVoidType(),0u), pps, "pData")
+                var params = [[auto
+                    ps;
+                    LLVMConstInt(LLVMInt32Type(), uint64(structSize), 0);
+                    get_context_param()
+                ]]
+                var typ = g_fn_types[FN_JIT_FREE_HEAP]
+                LLVMBuildCall2(g_builder, typ, LLVMGetNamedFunction(g_mod, FN_JIT_FREE_HEAP), params, "")
+                LLVMBuildStore(g_builder, LLVMConstNull(LLVMPointerType(LLVMVoidType(),0u)), pps)
             else
                 failed_E(expr, "delete of pointer non-structure type is not supported yet {describe(subT)}")
         elif subT.isGoodLambdaType
