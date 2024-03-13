@@ -34,14 +34,6 @@ MAKE_TYPE_FACTORY(clock, das::Time)// use MAKE_TYPE_FACTORY out of namespace. So
 
 namespace das {
 
-    IMPLEMENT_OP2_EVAL_BOOL_POLICY(Equ,Time);
-    IMPLEMENT_OP2_EVAL_BOOL_POLICY(NotEqu,Time);
-    IMPLEMENT_OP2_EVAL_BOOL_POLICY(GtEqu,Time);
-    IMPLEMENT_OP2_EVAL_BOOL_POLICY(LessEqu,Time);
-    IMPLEMENT_OP2_EVAL_BOOL_POLICY(Gt,Time);
-    IMPLEMENT_OP2_EVAL_BOOL_POLICY(Less,Time);
-    IMPLEMENT_OP2_EVAL_POLICY(Sub, Time);
-
     struct TimeAnnotation : ManagedValueAnnotation<Time> {
         TimeAnnotation(ModuleLibrary & mlib) : ManagedValueAnnotation<Time>(mlib, "clock","das::Time") {}
         virtual void walk ( DataWalker & walker, void * data ) override {
@@ -80,12 +72,24 @@ namespace das {
 
     void Module_BuiltIn::addTime(ModuleLibrary & lib) {
         addAnnotation(make_smart<TimeAnnotation>(lib));
-        addFunctionBasic<Time>(*this,lib);
-        addFunctionOrdered<Time>(*this,lib);
-        addFunction( make_smart<BuiltInFn<Sim_Sub<Time>,double,Time,Time>>("-",lib,"Sub"));
         addExtern<DAS_BIND_FUN(builtin_clock)>(*this, lib, "get_clock", SideEffects::modifyExternal, "builtin_clock");
         addExtern<DAS_BIND_FUN(builtin_mktime)>(*this, lib, "mktime", SideEffects::modifyExternal, "builtin_mktime")
             ->args({"year","month","mday","hour","min","sec"});
+        // operations on time
+        addExtern<DAS_BIND_FUN(time_equal)>(*this, lib, "==",
+            SideEffects::none, "time_equal");
+        addExtern<DAS_BIND_FUN(time_nequal)>(*this, lib, "!=",
+            SideEffects::none, "time_nequal");
+        addExtern<DAS_BIND_FUN(time_gtequal)>(*this, lib, ">=",
+            SideEffects::none, "time_gtequal");
+        addExtern<DAS_BIND_FUN(time_ltequal)>(*this, lib, "<=",
+            SideEffects::none, "time_ltequal");
+        addExtern<DAS_BIND_FUN(time_gt)>(*this, lib, ">",
+            SideEffects::none, "time_gt");
+        addExtern<DAS_BIND_FUN(time_lt)>(*this, lib, "<",
+            SideEffects::none, "time_lt");
+        addExtern<DAS_BIND_FUN(time_sub)>(*this, lib, "-",
+            SideEffects::none, "time_sub");
         // TODO: move to upstream das
         addExtern<DAS_BIND_FUN(ref_time_ticks)>(*this, lib, "ref_time_ticks",
             SideEffects::accessExternal, "ref_time_ticks");
