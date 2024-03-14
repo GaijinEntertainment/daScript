@@ -559,6 +559,7 @@ class LlvmJitVisitor : AstVisitor
 
     def call_all_finally_blocks(from_where:string; stopAtLoop:bool)
         var len = length(block_stack)
+        var anyFinallyBlocks = false
         for i in range(len)
             var blk = block_stack[len-1-i]
             if stopAtLoop && (blk.blockFlags.inTheLoop || blk.blockFlags.forLoop)
@@ -571,6 +572,8 @@ class LlvmJitVisitor : AstVisitor
                 LLVMBuildBr(g_builder, fblk)
                 LLVMPositionBuilderAtEnd(g_builder, after)
                 afterFinallyBlocks[get_ptr(blk)] |> push(after)
+                anyFinallyBlocks = true
+        return anyFinallyBlocks
 
     def override preVisitExprBlock(var blk:smart_ptr<ExprBlock>) : void
         if blk.blockFlags.inTheLoop
@@ -3773,14 +3776,23 @@ class LlvmJitVisitor : AstVisitor
             else
                 expr_res = getE(expr.subexpr)
 
-        var has_afb = false
+        var any_afb =  has_any_finally_block(false)
+        if isCmres && any_afb
+            var temp_res : LLVMOpaqueValue?
+            var subPtrType = LLVMPointerType(type_to_llvm_type(returnType), 0u)
+            at_function_entry <|
+                temp_res = LLVMBuildAlloca(g_builder, subPtrType, "return_cmres_temp_")
+                LLVMBuildStore(g_builder, LLVMConstNull(subPtrType), temp_res)
+            LLVMBuildStore(g_builder, getE(expr.subexpr), temp_res)
+            setE(expr.subexpr, temp_res)
 
+        var has_afb : bool
         if expr_res != null
-            has_afb = has_any_finally_block(false)
+            has_afb = any_afb
             if has_afb
                 var temp_res : LLVMOpaqueValue?
                 at_function_entry <|
-                    temp_res = LLVMBuildAlloca(g_builder, type_to_llvm_abi_type(returnType), "return_temp")
+                    temp_res = LLVMBuildAlloca(g_builder, type_to_llvm_abi_type(returnType), "return_temp_")
                 LLVMBuildStore(g_builder, expr_res, temp_res)
                 expr_res = temp_res
 
@@ -3788,13 +3800,17 @@ class LlvmJitVisitor : AstVisitor
         build_exit(expr.at)
 
         if has_afb
-            expr_res = LLVMBuildLoad2(g_builder, type_to_llvm_abi_type(returnType), expr_res, "return_temp_load")
+            expr_res = LLVMBuildLoad2(g_builder, type_to_llvm_abi_type(returnType), expr_res, "return_temp_load_")
 
         build_epilogue()
 
         if !returnType.isVoid
             if isCmres
                 if !expr.returnFlags.returnCMRES
+                    if isCmres && any_afb
+                        var subPtrType = LLVMPointerType(type_to_llvm_type(returnType), 0u)
+                        var temp_load = LLVMBuildLoad2(g_builder, subPtrType, getE(expr.subexpr), "return_cmres_temp_load_")
+                        setE(expr.subexpr, temp_load)
                     build_copy(get_cmres_param(),expr.subexpr)
                 LLVMBuildRetVoid(g_builder)
             elif returnType.isPointer && (expr.subexpr is ExprConstPtr) // return null

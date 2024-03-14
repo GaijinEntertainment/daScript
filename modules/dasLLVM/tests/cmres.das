@@ -53,8 +53,20 @@ def cmres_return_call_cmres
 def cmres_passthrough ( var a:int[10] )
     return cmres_via_copy(a)
 
+struct ReturnFromFinally
+    values : table<string; int>
+
+[export,jit]
+def ReturnFromFinally(str : string)
+    var res : ReturnFromFinally
+    if empty(str)
+        return <- res
+    var inscope bytes : array<uint8>
+    return <- res
+
 [test]
 def test_cmres ( t:T? )
+    t |> success ( is_jit_function(@@ReturnFromFinally) )
     t |> run("cmres via copy") <| @ ( t : T? )
         t |> success ( is_jit_function(@@cmres_via_copy) )
         var x : int[10]
