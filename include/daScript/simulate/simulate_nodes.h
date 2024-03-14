@@ -307,6 +307,180 @@ namespace das {
         }
     };
 
+    struct SimNode_AndAny : SimNode_CallBase {
+        SimNode_AndAny ( const LineInfo & at ): SimNode_CallBase(at) {}
+        virtual SimNode* visit(SimVisitor& vis) override;
+    };
+
+    template <int argCount>
+    struct SimNode_AndT : SimNode_AndAny {
+        SimNode_AndT ( const LineInfo & at ) : SimNode_AndAny(at) {}
+        DAS_BOOL_NODE;
+        __forceinline bool compute ( Context & context ) {
+            for ( int i=0; i!=nArguments; ++i ) {
+                if ( !arguments[i]->evalBool(context) ) return false;
+            }
+            return true;
+        }
+    };
+
+    template <>
+    struct SimNode_AndT<3> : SimNode_AndAny {
+        SimNode_AndT ( const LineInfo & at ) : SimNode_AndAny(at) {}
+        DAS_BOOL_NODE;
+        __forceinline bool compute ( Context & context ) {
+            if ( !arguments[0]->evalBool(context) ) return false;
+            if ( !arguments[1]->evalBool(context) ) return false;
+            if ( !arguments[2]->evalBool(context) ) return false;
+            return true;
+        }
+    };
+
+    template <>
+    struct SimNode_AndT<4> : SimNode_AndAny {
+        SimNode_AndT ( const LineInfo & at ) : SimNode_AndAny(at) {}
+        DAS_BOOL_NODE;
+        __forceinline bool compute ( Context & context ) {
+            if ( !arguments[0]->evalBool(context) ) return false;
+            if ( !arguments[1]->evalBool(context) ) return false;
+            if ( !arguments[2]->evalBool(context) ) return false;
+            if ( !arguments[3]->evalBool(context) ) return false;
+            return true;
+        }
+    };
+
+    template <>
+    struct SimNode_AndT<5> : SimNode_AndAny {
+        SimNode_AndT ( const LineInfo & at ) : SimNode_AndAny(at) {}
+        DAS_BOOL_NODE;
+        __forceinline bool compute ( Context & context ) {
+            if ( !arguments[0]->evalBool(context) ) return false;
+            if ( !arguments[1]->evalBool(context) ) return false;
+            if ( !arguments[2]->evalBool(context) ) return false;
+            if ( !arguments[3]->evalBool(context) ) return false;
+            if ( !arguments[4]->evalBool(context) ) return false;
+            return true;
+        }
+    };
+
+    template <>
+    struct SimNode_AndT<6> : SimNode_AndAny {
+        SimNode_AndT ( const LineInfo & at ) : SimNode_AndAny(at) {}
+        DAS_BOOL_NODE;
+        __forceinline bool compute ( Context & context ) {
+            if ( !arguments[0]->evalBool(context) ) return false;
+            if ( !arguments[1]->evalBool(context) ) return false;
+            if ( !arguments[2]->evalBool(context) ) return false;
+            if ( !arguments[3]->evalBool(context) ) return false;
+            if ( !arguments[4]->evalBool(context) ) return false;
+            if ( !arguments[5]->evalBool(context) ) return false;
+            return true;
+        }
+    };
+
+    template <>
+    struct SimNode_AndT<7> : SimNode_AndAny {
+        SimNode_AndT ( const LineInfo & at ) : SimNode_AndAny(at) {}
+        DAS_BOOL_NODE;
+        __forceinline bool compute ( Context & context ) {
+            if ( !arguments[0]->evalBool(context) ) return false;
+            if ( !arguments[1]->evalBool(context) ) return false;
+            if ( !arguments[2]->evalBool(context) ) return false;
+            if ( !arguments[3]->evalBool(context) ) return false;
+            if ( !arguments[4]->evalBool(context) ) return false;
+            if ( !arguments[5]->evalBool(context) ) return false;
+            if ( !arguments[6]->evalBool(context) ) return false;
+            return false;
+        }
+    };
+
+    struct SimNode_OrAny : SimNode_CallBase {
+        SimNode_OrAny ( const LineInfo & at ): SimNode_CallBase(at) {}
+        virtual SimNode* visit(SimVisitor& vis) override;
+    };
+
+    template <int argCount>
+    struct SimNode_OrT : SimNode_OrAny {
+        SimNode_OrT ( const LineInfo & at ) : SimNode_OrAny(at) {}
+        DAS_BOOL_NODE;
+        __forceinline bool compute ( Context & context ) {
+            for ( int i=0; i!=nArguments; ++i ) {
+                if ( arguments[i]->evalBool(context) ) return true;
+            }
+            return false;
+        }
+    };
+
+    template <>
+    struct SimNode_OrT<3> : SimNode_OrAny {
+        SimNode_OrT ( const LineInfo & at ) : SimNode_OrAny(at) {}
+        DAS_BOOL_NODE;
+        __forceinline bool compute ( Context & context ) {
+            if ( arguments[0]->evalBool(context) ) return true;
+            if ( arguments[1]->evalBool(context) ) return true;
+            if ( arguments[2]->evalBool(context) ) return true;
+            return false;
+        }
+    };
+
+    template <>
+    struct SimNode_OrT<4> : SimNode_OrAny {
+        SimNode_OrT ( const LineInfo & at ) : SimNode_OrAny(at) {}
+        DAS_BOOL_NODE;
+        __forceinline bool compute ( Context & context ) {
+            if ( arguments[0]->evalBool(context) ) return true;
+            if ( arguments[1]->evalBool(context) ) return true;
+            if ( arguments[2]->evalBool(context) ) return true;
+            if ( arguments[3]->evalBool(context) ) return true;
+            return false;
+        }
+    };
+
+    template <>
+    struct SimNode_OrT<5> : SimNode_OrAny {
+        SimNode_OrT ( const LineInfo & at ) : SimNode_OrAny(at) {}
+        DAS_BOOL_NODE;
+        __forceinline bool compute ( Context & context ) {
+            if ( arguments[0]->evalBool(context) ) return true;
+            if ( arguments[1]->evalBool(context) ) return true;
+            if ( arguments[2]->evalBool(context) ) return true;
+            if ( arguments[3]->evalBool(context) ) return true;
+            if ( arguments[4]->evalBool(context) ) return true;
+            return false;
+        }
+    };
+
+    template <>
+    struct SimNode_OrT<6> : SimNode_OrAny {
+        SimNode_OrT ( const LineInfo & at ) : SimNode_OrAny(at) {}
+        DAS_BOOL_NODE;
+        __forceinline bool compute ( Context & context ) {
+            if ( arguments[0]->evalBool(context) ) return true;
+            if ( arguments[1]->evalBool(context) ) return true;
+            if ( arguments[2]->evalBool(context) ) return true;
+            if ( arguments[3]->evalBool(context) ) return true;
+            if ( arguments[4]->evalBool(context) ) return true;
+            if ( arguments[5]->evalBool(context) ) return true;
+            return false;
+        }
+    };
+
+    template <>
+    struct SimNode_OrT<7> : SimNode_OrAny {
+        SimNode_OrT ( const LineInfo & at ) : SimNode_OrAny(at) {}
+        DAS_BOOL_NODE;
+        __forceinline bool compute ( Context & context ) {
+            if ( arguments[0]->evalBool(context) ) return true;
+            if ( arguments[1]->evalBool(context) ) return true;
+            if ( arguments[2]->evalBool(context) ) return true;
+            if ( arguments[3]->evalBool(context) ) return true;
+            if ( arguments[4]->evalBool(context) ) return true;
+            if ( arguments[5]->evalBool(context) ) return true;
+            if ( arguments[6]->evalBool(context) ) return true;
+            return false;
+        }
+    };
+
 
     typedef vec4f ( * JitFunction ) ( Context * , vec4f *, void * );
 

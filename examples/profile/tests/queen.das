@@ -9,7 +9,7 @@ let N = 8
 def isplaceok ( a:int[8]; n,c:int )
     let cmn = c - n
     let cpn = c + n
-    for i in range(0, n)
+    for i in range(n)
         let ai = a[i]
         if ai == c || ai == cmn + i || ai  == cpn - i
             return false
@@ -18,12 +18,12 @@ def isplaceok ( a:int[8]; n,c:int )
 var solutions : int
 
 def addqueen ( var a:int[8]; n:int )
-    if n == N
-        solutions++
-    else
-        for c in range(0, N)
-            if isplaceok(a, n, c)
-                a[n] = c
+    for c in range(N)
+        if isplaceok(a, n, c)
+            a[n] = c
+            if n == (N-1)
+                solutions++
+            else
                 addqueen(a, n + 1)
 
 def test()
