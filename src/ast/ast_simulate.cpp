@@ -2244,7 +2244,45 @@ namespace das
         }
     }
 
+    // we flatten or(or(or(a,b),c),d) into a single vector {a,b,c,d}
+    void flattenOrSequence ( const ExprOp2 * op, vector<ExpressionPtr> & ret ) {
+        if ( op->left->rtti_isOp2() && static_pointer_cast<ExprOp2>(op->left)->op==op->op ) {
+            flattenOrSequence(static_pointer_cast<ExprOp2>(op->left).get(), ret);
+        } else {
+            ret.push_back(op->left);
+        }
+        if ( op->right->rtti_isOp2() && static_pointer_cast<ExprOp2>(op->right)->op==op->op ) {
+            flattenOrSequence(static_pointer_cast<ExprOp2>(op->right).get(), ret);
+        } else {
+            ret.push_back(op->right);
+        }
+    }
+
     SimNode * ExprOp2::simulate (Context & context) const {
+        // special case for logical operator sequence
+        if ( func->builtIn && func->module->name=="$" && func->arguments[0]->type->isBool() ) {
+            if ( func->name=="||" || func->name=="&&" ) {
+                vector<ExpressionPtr> flat;
+                flattenOrSequence(this, flat);
+                if ( flat.size()>2 && flat.size()<=7 ) {
+                    SimNode_CallBase * pSimNode;
+                    if ( func->name=="||" ) {
+                        pSimNode = (SimNode_OrAny *) context.code->makeNodeUnrollAny<SimNode_OrT>(flat.size(), at);
+                    } else if ( func->name=="&&" ) {
+                        pSimNode = (SimNode_AndAny *) context.code->makeNodeUnrollAny<SimNode_AndT>(flat.size(), at);
+                    } else {
+                        DAS_ASSERTF(0, "unknown logical operator");
+                        return nullptr;
+                    }
+                    pSimNode->nArguments = flat.size();
+                    pSimNode->arguments = (SimNode **) context.code->allocate(flat.size() * sizeof(SimNode *));
+                    for ( uint32_t i=0; i!=flat.size(); ++i ) {
+                        pSimNode->arguments[i] = flat[i]->simulate(context);
+                    }
+                    return pSimNode;
+                }
+            }
+        }
         vector<ExpressionPtr> sarguments = { left, right };
         if ( func->builtIn && !func->callBased ) {
             auto pSimOp2 = static_cast<SimNode_Op2 *>(func->makeSimNode(context,sarguments));
