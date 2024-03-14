@@ -6,9 +6,7 @@ options solid_context
 
 let N = 8
 
-def isplaceok ( a:int[8]; n,c:int )
-    let cmn = c - n
-    let cpn = c + n
+def isplaceok ( a:int[8]; n,c,cmn,cpn:int )
     for i in range(n)
         let ai = a[i]
         if ai == c || ai == cmn + i || ai  == cpn - i
@@ -19,7 +17,7 @@ var solutions : int
 
 def addqueen ( var a:int[8]; n:int )
     for c in range(N)
-        if isplaceok(a, n, c)
+        if isplaceok(a, n, c, c-n, c+n)
             a[n] = c
             if n == (N-1)
                 solutions++

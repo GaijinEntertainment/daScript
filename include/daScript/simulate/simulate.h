@@ -521,7 +521,6 @@ namespace das
             pp->cmres = cmres;
             pp->line = line;
 #else
-            finfo;
             stack.invoke(block.stackOffset, EP, SP);
 #endif
             BlockArguments * __restrict ba = nullptr;
@@ -1021,7 +1020,6 @@ __forceinline void profileNode ( SimNode * node ) {
         pp->cmres = cmres;
         pp->line = line;
 #else
-        finfo;
         stack.invoke(block.stackOffset, EP, SP);
 #endif
         BlockArguments * ba = nullptr;
