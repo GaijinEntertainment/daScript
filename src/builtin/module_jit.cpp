@@ -255,7 +255,9 @@ extern "C" {
     }
 
     void jit_initialize_fileinfo ( void * dummy ) {
-        *(FileInfo*)dummy = FileInfo{};
+        new (dummy) FileInfo();
+        auto fileInfoPtr = reinterpret_cast<FileInfo*>(dummy);
+        fileInfoPtr->name = "jit_generated_fileinfo";
     }
 
     void * jit_ast_typedecl ( uint64_t hash, Context * context, LineInfoArg * at ) {
