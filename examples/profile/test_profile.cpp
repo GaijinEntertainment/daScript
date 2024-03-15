@@ -972,6 +972,72 @@ int testQueens() {
     return g_solutions;
 }
 
+namespace snorm {
+
+    inline int A(int i, int j) {
+        return ((i + j) * (i + j + 1) / 2 + i + 1);
+    }
+
+    double dot(double *v, double *u, int n) {
+        int i;
+        double sum = 0;
+        for (i = 0; i < n; i++)
+            sum += v[i] * u[i];
+        return sum;
+    }
+
+    void mult_Av(double *v, double *out, const int n) {
+        int i, j;
+        double sum;
+        for (i = 0; i < n; i++) {
+            for (sum = j = 0; j < n; j++)
+                sum += v[j] / A(i, j);
+            out[i] = sum;
+        }
+    }
+
+    void mult_Atv(double *v, double *out, const int n) {
+        int i, j;
+        double sum;
+        for (i = 0; i < n; i++) {
+            for (sum = j = 0; j < n; j++)
+                sum += v[j] / A(j, i);
+            out[i] = sum;
+        }
+    }
+
+    static double *tmp;
+    void mult_AtAv(double *v, double *out, const int n) {
+        mult_Av(v, tmp, n);
+        mult_Atv(tmp, out, n);
+    }
+
+    double testSnorm() {
+        int n = 500;
+        double *u, *v;
+        u = (double *)malloc(n * sizeof(double));
+        v = (double *)malloc(n * sizeof(double));
+        tmp = (double *)malloc(n * sizeof(double));
+        int i;
+        for (i = 0; i < n; i++)
+            u[i] = 1;
+        for (i = 0; i < 10; i++) {
+            mult_AtAv(u, v, n);
+            mult_AtAv(v, u, n);
+        }
+        auto result = sqrt(dot(u, v, n) / dot(v, v, n));
+        free(u);
+        free(v);
+        free(tmp);
+        return result;
+    }
+}
+
+double testSnorm() {
+    return snorm::testSnorm();
+}
+
+
 class Module_TestProfile : public Module {
 public:
     Module_TestProfile() : Module("testProfile") {
@@ -1023,6 +1089,7 @@ public:
         addExtern<DAS_BIND_FUN(testMaxFrom1s)>(*this, lib, "testMaxFrom1s",SideEffects::modifyExternal,"testMaxFrom1s");
         addExtern<DAS_BIND_FUN(testTableSort)>(*this, lib, "testTableSort",SideEffects::modifyExternal,"testTableSort");
         addExtern<DAS_BIND_FUN(testQueens)>(*this, lib, "testQueens",SideEffects::modifyExternal,"testQueens");
+        addExtern<DAS_BIND_FUN(testSnorm)>(*this, lib, "testSnorm",SideEffects::modifyExternal,"testSnorm");
         // its AOT ready
         verifyAotReady();
     }
