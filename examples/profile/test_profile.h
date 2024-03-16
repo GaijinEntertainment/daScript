@@ -115,3 +115,4 @@ uint32_t queryEs(const das::Block & block, das::Context * context, das::LineInfo
 
 int testQueens();
 double testSnorm();
+int testMandelbrot();
