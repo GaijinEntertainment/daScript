@@ -24,45 +24,70 @@ SOFTWARE.
 
 function test()
 
-    local function A(i, j)
-      local ij = i+j-1
-      return 1.0 / (ij * (ij-1) * 0.5 + i)
+    local Complex={type="package"}
+
+    local function complex(x,y)
+     return setmetatable({ re=x, im=y }, Complex.metatable)
     end
 
-    local function Av(x, y, N)
-      for i=1,N do
-        local a = 0
-        for j=1,N do a = a + x[j] * A(i, j) end
-        y[i] = a
-      end
+    function Complex.conj(x,y)
+     return complex(x.re,-x.im)
     end
 
-    local function Atv(x, y, N)
-      for i=1,N do
-        local a = 0
-        for j=1,N do a = a + x[j] * A(j, i) end
-        y[i] = a
-      end
+    function Complex.norm2(x)
+     local n=Complex.mul(x,Complex.conj(x))
+     return n.re
     end
 
-    local function AtAv(x, y, t, N)
-      Av(x, t, N)
-      Atv(t, y, N)
+    function Complex.abs(x)
+     return sqrt(Complex.norm2(x))
     end
 
-    local N = 500
-    local u, v, t = {}, {}, {}
-    for i=1,N do u[i] = 1 end
+    function Complex.add(x,y)
+     return complex(x.re+y.re,x.im+y.im)
+    end
 
-    for i=1,10 do AtAv(u, v, t, N) AtAv(v, u, t, N) end
+    function Complex.mul(x,y)
+     return complex(x.re*y.re-x.im*y.im,x.re*y.im+x.im*y.re)
+    end
 
-    local vBv, vv = 0, 0
+    Complex.metatable={
+        __add = Complex.add,
+        __mul = Complex.mul,
+    }
+
+    local function abs(x)
+     return math.sqrt(Complex.norm2(x))
+    end
+
+    xmin=-2.0	xmax=2.0	ymin=-2.0	ymax=2.0
+    N=64
+
+    function level(x,y)
+     local c=complex(x,y)
+     local l=0
+     local z=c
+     repeat
+      z=z*z+c
+      l=l+1
+     until abs(z)>2.0 or l>255
+     return l-1
+    end
+
+    dx=(xmax-xmin)/N
+    dy=(ymax-ymin)/N
+
+    local S = 0
     for i=1,N do
-      local ui, vi = u[i], v[i]
-      vBv = vBv + ui*vi
-      vv = vv + vi*vi
+     local x=xmin+(i-1)*dx
+     for j=1,N do
+      local y=ymin+(j-1)*dy
+      S = S + level(x,y)
+     end
+     -- if i % 10 == 0 then print(collectgarbage("count")) end
     end
-    return math.sqrt(vBv / vv)
+
+    return S
 
 end
 
@@ -77,5 +102,5 @@ function profile_it(profiles, fn)
   return res
 end
 
-print(string.format("\"spectral norm\", %.8f, 10", profile_it(10, function () test() end)))
+print(string.format("\"mandelbrot\", %.8f, 20", profile_it(20, test)))
 

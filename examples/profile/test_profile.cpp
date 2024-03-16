@@ -1038,6 +1038,46 @@ double testSnorm() {
 }
 
 
+namespace mandelbrot {
+
+    int level ( float2 c ) {
+        int l = 0;
+        float2 z = c;
+        while ( v_extract_x(v_length2_x(z)) < 2.0 && l < 255 ) {
+            z = float2(z.x * z.x - z.y * z.y, z.x * z.y + z.y * z.x) + c;
+            l++;
+        }
+        return l - 1;
+    }
+
+    int test() {
+        float xmin = -2.0;
+        float xmax = 2.0;
+        float ymin = -2.0;
+        float ymax = 2.0;
+        int N = 64;
+        float dx = (xmax - xmin) / float(N);
+        float dy = (ymax - ymin) / float(N);
+        int S = 0;
+        float2 xy = float2(xmin, ymin);
+        for (int i = 0; i < N; i++) {
+            xy.y = ymin;
+            for (int j = 0; j < N; j++) {
+                S += level(xy);
+                xy.y += dy;
+            }
+            xy.x += dx;
+        }
+        return S;
+    }
+
+}
+
+int testMandelbrot() {
+    return mandelbrot::test();
+}
+
+
 class Module_TestProfile : public Module {
 public:
     Module_TestProfile() : Module("testProfile") {
@@ -1090,6 +1130,7 @@ public:
         addExtern<DAS_BIND_FUN(testTableSort)>(*this, lib, "testTableSort",SideEffects::modifyExternal,"testTableSort");
         addExtern<DAS_BIND_FUN(testQueens)>(*this, lib, "testQueens",SideEffects::modifyExternal,"testQueens");
         addExtern<DAS_BIND_FUN(testSnorm)>(*this, lib, "testSnorm",SideEffects::modifyExternal,"testSnorm");
+        addExtern<DAS_BIND_FUN(testMandelbrot)>(*this, lib, "testMandelbrot",SideEffects::modifyExternal,"testMandelbrot");
         // its AOT ready
         verifyAotReady();
     }

@@ -242,35 +242,39 @@ def fibI(n) {
             The overhead of data-oriented processing in interpretation mode in daScript is comparable to C++ in Debug mode, as demonstrated by the Particles sample.
         </p>
 
-        <small>Tested on AMD Ryzen Threadripper 3990X 64-Core Processor at Wed Mar 13 17:11:07 2024</small><br>
+        <small>Tested on AMD Ryzen Threadripper 3990X 64-Core Processor at Fri Mar 15 23:33:28 2024</small><br>
         <h2>Interpreted</h2>
         <table border="1">
         <tr><th>Test</th>
         <th>DAS INTERPRETER</th><th>LUA</th><th>LUAJIT -joff</th><th>LUAU</th><th>MONO --interpreter</th><th>QUICKJS</th><th>QUIRREL</th><th>SQUIRREL3</th></tr>
         <tr><td>dictionary</td>
-        <td><b>1.00 (0.0163)</b></td><td>4.00 (0.0650)</td><td><b>1.00 (0.0163)</b></td><td>1.84 (0.0299)</td><td>82.88 (1.3469)</td><td>6.09 (0.0990)</td><td>5.29 (0.0860)</td><td>6.71 (0.1090)</td></tr>
+        <td><b>1.00 (0.0162)</b></td><td>4.02 (0.0650)</td><td>1.02 (0.0165)</td><td>1.78 (0.0288)</td><td>83.16 (1.3455)</td><td>6.12 (0.0990)</td><td>5.44 (0.0880)</td><td>6.55 (0.1060)</td></tr>
         <tr><td>exp loop</td>
-        <td><b>1.00 (0.0112)</b></td><td>4.48 (0.0500)</td><td>3.33 (0.0372)</td><td>1.76 (0.0197)</td><td>34.59 (0.3864)</td><td>7.61 (0.0850)</td><td>7.79 (0.0870)</td><td>7.61 (0.0850)</td></tr>
+        <td><b>1.00 (0.0112)</b></td><td>4.64 (0.0520)</td><td>3.29 (0.0369)</td><td>1.73 (0.0194)</td><td>33.85 (0.3792)</td><td>7.59 (0.0850)</td><td>7.77 (0.0870)</td><td>7.59 (0.0850)</td></tr>
         <tr><td>fibonacci loop</td>
-        <td><b>1.00 (0.0302)</b></td><td>2.85 (0.0860)</td><td>1.46 (0.0441)</td><td>2.44 (0.0736)</td><td>4.30 (0.1296)</td><td>3.94 (0.1190)</td><td>5.07 (0.1530)</td><td>3.65 (0.1100)</td></tr>
+        <td><b>1.00 (0.0303)</b></td><td>2.84 (0.0860)</td><td>1.47 (0.0444)</td><td>2.43 (0.0735)</td><td>4.27 (0.1292)</td><td>4.00 (0.1210)</td><td>4.96 (0.1500)</td><td>3.64 (0.1100)</td></tr>
         <tr><td>fibonacci recursive</td>
-        <td><b>1.00 (0.0532)</b></td><td>1.88 (0.1000)</td><td>1.07 (0.0571)</td><td>1.67 (0.0889)</td><td>2.05 (0.1092)</td><td>3.08 (0.1640)</td><td>5.49 (0.2920)</td><td>5.52 (0.2940)</td></tr>
+        <td><b>1.00 (0.0567)</b></td><td>1.76 (0.1000)</td><td>1.01 (0.0573)</td><td>1.55 (0.0877)</td><td>1.93 (0.1094)</td><td>2.89 (0.1640)</td><td>5.15 (0.2920)</td><td>5.24 (0.2970)</td></tr>
+        <tr><td>mandelbrot</td>
+        <td><b>1.00 (0.0028)</b></td><td>55.30 (0.1570)</td><td>20.49 (0.0582)</td><td>19.32 (0.0548)</td><td>8.91 (0.0253)</td><td>N/A</td><td>N/A</td><td>N/A</td></tr>
         <tr><td>n-bodies</td>
-        <td><b>1.00 (0.2173)</b></td><td>5.18 (1.1250)</td><td>2.52 (0.5486)</td><td>3.10 (0.6745)</td><td>5.25 (1.1399)</td><td>10.85 (2.3570)</td><td>12.87 (2.7960)</td><td>12.70 (2.7600)</td></tr>
+        <td><b>1.00 (0.2367)</b></td><td>4.60 (1.0890)</td><td>2.31 (0.5462)</td><td>2.86 (0.6780)</td><td>4.81 (1.1393)</td><td>10.03 (2.3750)</td><td>11.87 (2.8090)</td><td>11.67 (2.7620)</td></tr>
         <tr><td>native loop</td>
-        <td><b>1.00 (0.0389)</b></td><td>N/A</td><td>22.22 (0.8645)</td><td>N/A</td><td>36.87 (1.4345)</td><td>N/A</td><td>17.86 (0.6950)</td><td>N/A</td></tr>
+        <td><b>1.00 (0.0365)</b></td><td>N/A</td><td>23.71 (0.8665)</td><td>N/A</td><td>48.92 (1.7880)</td><td>N/A</td><td>19.10 (0.6980)</td><td>N/A</td></tr>
         <tr><td>particles kinematics</td>
-        <td><b>1.00 (0.0110)</b></td><td>106.66 (1.1710)</td><td>26.25 (0.2882)</td><td>34.45 (0.3782)</td><td>57.04 (0.6263)</td><td>126.06 (1.3840)</td><td>58.20 (0.6390)</td><td>132.25 (1.4520)</td></tr>
+        <td><b>1.00 (0.0110)</b></td><td>109.33 (1.2020)</td><td>26.61 (0.2926)</td><td>34.36 (0.3778)</td><td>55.82 (0.6137)</td><td>126.07 (1.3860)</td><td>58.40 (0.6420)</td><td>130.25 (1.4320)</td></tr>
         <tr><td>primes loop</td>
-        <td><b>1.00 (0.0401)</b></td><td>2.35 (0.0940)</td><td>1.67 (0.0669)</td><td>2.30 (0.0921)</td><td>3.84 (0.1538)</td><td>3.17 (0.1270)</td><td>8.43 (0.3380)</td><td>8.23 (0.3300)</td></tr>
+        <td><b>1.00 (0.0400)</b></td><td>2.32 (0.0930)</td><td>1.67 (0.0668)</td><td>2.31 (0.0926)</td><td>3.86 (0.1545)</td><td>3.17 (0.1270)</td><td>8.52 (0.3410)</td><td>8.32 (0.3330)</td></tr>
         <tr><td>queen</td>
-        <td>1.10 (0.0013)</td><td>1.63 (0.0020)</td><td><b>1.00 (0.0012)</b></td><td>1.41 (0.0017)</td><td>N/A</td><td>N/A</td><td>N/A</td><td>N/A</td></tr>
+        <td>1.03 (0.0013)</td><td>1.64 (0.0020)</td><td><b>1.00 (0.0012)</b></td><td>1.40 (0.0017)</td><td>N/A</td><td>N/A</td><td>N/A</td><td>N/A</td></tr>
         <tr><td>sha256</td>
-        <td><b>1.00 (0.1160)</b></td><td>N/A</td><td>2.14 (0.2480)</td><td>6.11 (0.7093)</td><td>N/A</td><td>N/A</td><td>N/A</td><td>N/A</td></tr>
+        <td><b>1.00 (0.1153)</b></td><td>N/A</td><td>2.17 (0.2497)</td><td>6.17 (0.7119)</td><td>N/A</td><td>N/A</td><td>N/A</td><td>N/A</td></tr>
         <tr><td>sort</td>
-        <td><b>1.00 (0.0314)</b></td><td>2.83 (0.0890)</td><td>2.19 (0.0687)</td><td>1.64 (0.0514)</td><td>8.77 (0.2757)</td><td>N/A</td><td>N/A</td><td>N/A</td></tr>
+        <td><b>1.00 (0.0315)</b></td><td>2.83 (0.0890)</td><td>2.19 (0.0689)</td><td>1.64 (0.0516)</td><td>9.02 (0.2838)</td><td>N/A</td><td>N/A</td><td>N/A</td></tr>
+        <tr><td>spectral norm</td>
+        <td><b>1.00 (0.1995)</b></td><td>2.88 (0.5740)</td><td>1.42 (0.2823)</td><td>1.18 (0.2346)</td><td>2.14 (0.4264)</td><td>4.36 (0.8690)</td><td>N/A</td><td>N/A</td></tr>
         <tr><td>tree</td>
-        <td>1.15 (1.6901)</td><td>1.90 (2.7960)</td><td><b>1.00 (1.4678)</b></td><td>1.19 (1.7505)</td><td>1.27 (1.8710)</td><td>10.96 (16.0830)</td><td>N/A</td><td>N/A</td></tr>
+        <td>1.28 (1.8590)</td><td>1.93 (2.7920)</td><td><b>1.00 (1.4485)</b></td><td>1.22 (1.7634)</td><td>1.30 (1.8836)</td><td>11.20 (16.2290)</td><td>N/A</td><td>N/A</td></tr>
         </table>
 
         <p>
@@ -286,35 +290,39 @@ def fibI(n) {
             It is worth noting that unlike Just-in-Time compilation, Ahead-of-Time compilation can be used on any platform, including those with signed binary executables like iOS or consoles.
         </p>
 
-        <small>Tested on AMD Ryzen Threadripper 3990X 64-Core Processor at Wed Mar 13 17:11:07 2024</small><br>
+        <small>Tested on AMD Ryzen Threadripper 3990X 64-Core Processor at Fri Mar 15 23:33:28 2024</small><br>
         <h2>AOT or JIT</h2>
         <table border="1">
         <tr><th>Test</th>
         <th>.NET</th><th>C++</th><th>DAS AOT</th><th>DAS JIT</th><th>LUAJIT</th><th>LUAU --codegen</th><th>MONO</th></tr>
         <tr><td>dictionary</td>
-        <td>7.71 (0.0790)</td><td>4.11 (0.0422)</td><td><b>1.00 (0.0102)</b></td><td><b>1.01 (0.0103)</b></td><td>1.14 (0.0117)</td><td>2.46 (0.0252)</td><td>7.09 (0.0726)</td></tr>
+        <td>7.76 (0.0776)</td><td>4.10 (0.0410)</td><td><b>1.00 (0.0100)</b></td><td>1.03 (0.0103)</td><td>1.20 (0.0120)</td><td>2.26 (0.0226)</td><td>7.40 (0.0740)</td></tr>
         <tr><td>exp loop</td>
-        <td>1.55 (0.0056)</td><td><b>1.00 (0.0036)</b></td><td>1.39 (0.0050)</td><td><b>1.00 (0.0036)</b></td><td>4.80 (0.0174)</td><td>2.21 (0.0080)</td><td>2.76 (0.0100)</td></tr>
+        <td>1.52 (0.0056)</td><td><b>1.00 (0.0036)</b></td><td>1.33 (0.0049)</td><td><b>1.00 (0.0036)</b></td><td>4.80 (0.0175)</td><td>2.21 (0.0081)</td><td>2.75 (0.0100)</td></tr>
         <tr><td>fibonacci loop</td>
-        <td>1.93 (0.0030)</td><td><b>1.01 (0.0016)</b></td><td><b>1.00 (0.0016)</b></td><td>1.21 (0.0019)</td><td>3.01 (0.0047)</td><td>22.07 (0.0343)</td><td>1.93 (0.0030)</td></tr>
+        <td>1.93 (0.0030)</td><td><b>1.01 (0.0016)</b></td><td><b>1.00 (0.0016)</b></td><td>1.21 (0.0019)</td><td>3.02 (0.0047)</td><td>22.30 (0.0346)</td><td>1.93 (0.0030)</td></tr>
         <tr><td>fibonacci recursive</td>
-        <td>1.65 (0.0066)</td><td><b>1.00 (0.0040)</b></td><td>1.15 (0.0046)</td><td>1.08 (0.0043)</td><td>3.12 (0.0125)</td><td>14.66 (0.0587)</td><td>2.00 (0.0080)</td></tr>
+        <td>1.71 (0.0066)</td><td><b>1.00 (0.0038)</b></td><td>1.17 (0.0045)</td><td>1.16 (0.0045)</td><td>3.28 (0.0126)</td><td>15.34 (0.0590)</td><td>2.08 (0.0080)</td></tr>
+        <tr><td>mandelbrot</td>
+        <td>4.37 (0.0020)</td><td>1.27 (0.0006)</td><td>1.34 (0.0006)</td><td><b>1.00 (0.0005)</b></td><td>16.13 (0.0074)</td><td>81.45 (0.0373)</td><td>8.73 (0.0040)</td></tr>
         <tr><td>n-bodies</td>
-        <td>1.92 (0.0386)</td><td>1.31 (0.0265)</td><td>1.30 (0.0262)</td><td><b>1.00 (0.0202)</b></td><td>3.93 (0.0793)</td><td>11.09 (0.2237)</td><td>3.80 (0.0766)</td></tr>
+        <td>1.88 (0.0380)</td><td>1.33 (0.0267)</td><td>1.30 (0.0262)</td><td><b>1.00 (0.0202)</b></td><td>3.96 (0.0799)</td><td>11.62 (0.2342)</td><td>3.90 (0.0786)</td></tr>
         <tr><td>native loop</td>
-        <td>13.18 (0.1573)</td><td>N/A</td><td><b>1.01 (0.0120)</b></td><td><b>1.01 (0.0120)</b></td><td><b>1.00 (0.0119)</b></td><td>N/A</td><td>10.95 (0.1306)</td></tr>
+        <td>13.11 (0.1572)</td><td>N/A</td><td><b>1.01 (0.0121)</b></td><td><b>1.00 (0.0120)</b></td><td><b>1.00 (0.0120)</b></td><td>N/A</td><td>10.86 (0.1302)</td></tr>
         <tr><td>particles kinematics</td>
-        <td>2.42 (0.0070)</td><td>1.17 (0.0034)</td><td><b>1.00 (0.0029)</b></td><td>1.01 (0.0029)</td><td>70.19 (0.2026)</td><td>67.68 (0.1954)</td><td>30.84 (0.0890)</td></tr>
+        <td>2.41 (0.0070)</td><td>1.17 (0.0034)</td><td><b>1.00 (0.0029)</b></td><td><b>1.01 (0.0029)</b></td><td>64.44 (0.1868)</td><td>67.50 (0.1957)</td><td>30.91 (0.0896)</td></tr>
         <tr><td>primes loop</td>
-        <td>2.80 (0.0370)</td><td>2.86 (0.0378)</td><td><b>1.00 (0.0132)</b></td><td><b>1.00 (0.0132)</b></td><td><b>1.01 (0.0133)</b></td><td>2.57 (0.0340)</td><td>2.80 (0.0370)</td></tr>
+        <td>2.85 (0.0376)</td><td>2.86 (0.0378)</td><td><b>1.00 (0.0132)</b></td><td><b>1.00 (0.0132)</b></td><td><b>1.01 (0.0133)</b></td><td>2.58 (0.0341)</td><td>2.80 (0.0370)</td></tr>
         <tr><td>queen</td>
-        <td>44.64 (0.0050)</td><td>1.03 (0.0001)</td><td>1.22 (0.0001)</td><td><b>1.00 (0.0001)</b></td><td>3.84 (0.0004)</td><td>7.30 (0.0008)</td><td>N/A</td></tr>
+        <td>37.06 (0.0040)</td><td>1.05 (0.0001)</td><td>1.27 (0.0001)</td><td><b>1.00 (0.0001)</b></td><td>4.02 (0.0004)</td><td>7.59 (0.0008)</td><td>N/A</td></tr>
         <tr><td>sha256</td>
-        <td>1.35 (0.0070)</td><td>N/A</td><td>1.06 (0.0055)</td><td><b>1.00 (0.0052)</b></td><td>6.40 (0.0332)</td><td>105.41 (0.5473)</td><td>N/A</td></tr>
+        <td>1.37 (0.0070)</td><td>N/A</td><td>1.08 (0.0055)</td><td><b>1.00 (0.0051)</b></td><td>6.48 (0.0332)</td><td>107.30 (0.5500)</td><td>N/A</td></tr>
         <tr><td>sort</td>
-        <td>2.35 (0.0126)</td><td>1.01 (0.0054)</td><td><b>1.00 (0.0053)</b></td><td>1.63 (0.0087)</td><td>13.24 (0.0708)</td><td>8.96 (0.0479)</td><td>1.87 (0.0100)</td></tr>
+        <td>2.29 (0.0120)</td><td>1.02 (0.0053)</td><td><b>1.00 (0.0052)</b></td><td>1.68 (0.0088)</td><td>13.67 (0.0716)</td><td>8.85 (0.0464)</td><td>1.91 (0.0100)</td></tr>
+        <tr><td>spectral norm</td>
+        <td><b>1.00 (0.0120)</b></td><td><b>1.01 (0.0121)</b></td><td><b>1.01 (0.0121)</b></td><td><b>1.00 (0.0121)</b></td><td>1.19 (0.0142)</td><td>4.67 (0.0560)</td><td>2.17 (0.0260)</td></tr>
         <tr><td>tree</td>
-        <td>1.39 (0.2418)</td><td><b>1.00 (0.1740)</b></td><td><b>1.00 (0.1735)</b></td><td><b>1.00 (0.1735)</b></td><td>5.31 (0.9217)</td><td>7.82 (1.3562)</td><td>1.48 (0.2565)</td></tr>
+        <td>1.41 (0.2438)</td><td><b>1.00 (0.1726)</b></td><td><b>1.00 (0.1730)</b></td><td><b>1.01 (0.1735)</b></td><td>5.15 (0.8896)</td><td>7.84 (1.3525)</td><td>1.46 (0.2528)</td></tr>
         </table>
 
         <p>All samples for all languages in comparison are available in
