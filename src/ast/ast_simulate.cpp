@@ -572,13 +572,12 @@ namespace das
             // field itself
             auto fieldOffset = makeType->getVariantFieldOffset(fieldVariant);
             uint32_t offset =  voffset + fieldOffset;
-            SimNode * cpy;
+            SimNode * cpy = nullptr;
             if ( decl->value->rtti_isMakeLocal() ) {
                 // so what happens here, is we ask it for the generated commands and append it to this list only
                 auto mkl = static_pointer_cast<ExprMakeLocal>(decl->value);
                 auto lsim = mkl->simulateLocal(context);
                 simlist.insert(simlist.end(), lsim.begin(), lsim.end());
-                continue;
             } else if ( useCMRES ) {
                 if ( decl->moveSemantics ){
                     cpy = makeLocalCMResMove(at,context,offset,decl->value);
@@ -598,10 +597,7 @@ namespace das
                     cpy = makeLocalCopy(at,context,stackTop+offset,decl->value);
                 }
             }
-            if ( !cpy ) {
-                context.thisProgram->error("internal compilation error, can't generate structure initialization", "", "", at);
-            }
-            simlist.push_back(cpy);
+            if ( cpy ) simlist.push_back(cpy);
             index++;
         }
         return simlist;
@@ -3296,19 +3292,25 @@ namespace das
         // run init script and restart
         if ( !folding ) {
             auto time1 = ref_time_ticks();
-            if (!context.runWithCatch([&]() {
-                if ( context.stack.size() && context.stack.size()>globalInitStackSize ) {
+            bool initScriptSuccess;
+            if ( context.stack.size() && context.stack.size()>globalInitStackSize ) {
+                initScriptSuccess = context.runWithCatch([&]() {
                     context.runInitScript();
-                } else if ( sharedStack && sharedStack->size()>globalInitStackSize ) {
-                    SharedStackGuard guard(context, *sharedStack);
+                });
+            } else if ( sharedStack && sharedStack->size()>globalInitStackSize ) {
+                SharedStackGuard guard(context, *sharedStack);
+                initScriptSuccess = context.runWithCatch([&]() {
                     context.runInitScript();
-                } else {
-                    auto ssz = max ( getContextStackSize(), 16384 ) + globalInitStackSize;
-                    StackAllocator init_stack(ssz);
-                    SharedStackGuard guard(context, init_stack);
+                });
+            } else {
+                auto ssz = max ( getContextStackSize(), 16384 ) + globalInitStackSize;
+                StackAllocator init_stack(ssz);
+                SharedStackGuard guard(context, init_stack);
+                initScriptSuccess = context.runWithCatch([&]() {
                     context.runInitScript();
-                }
-            })) {
+                });
+            }
+            if (!initScriptSuccess) {
                 error("exception during init script", context.getException(), "",
                     context.exceptionAt, CompilationError::cant_initialize);
             }

@@ -864,15 +864,17 @@ namespace debugapi {
                 return;
             }
             invCtx->exception = nullptr;
-            invCtx->runWithCatch([&](){
-                if ( !invCtx->ownStack ) {
-                    StackAllocator sharedStack(8*1024);
-                    SharedStackGuard guard(*invCtx, sharedStack);
+            if ( !invCtx->ownStack ) {
+                StackAllocator sharedStack(8*1024);
+                SharedStackGuard guard(*invCtx, sharedStack);
+                invCtx->runWithCatch([&](){
                     res = invCtx->callOrFastcall(simFn, args+2, &call->debugInfo);
-                } else {
+                });
+            } else {
+                invCtx->runWithCatch([&](){
                     res = invCtx->callOrFastcall(simFn, args+2, &call->debugInfo);
-                }
-            });
+                });
+            }
             if ( invCtx->exception ) {
                 exAt = invCtx->exceptionAt;
                 exText = invCtx->exception;
@@ -897,15 +899,17 @@ namespace debugapi {
         string exText;
         invCtx->threadlock_context([&](){
             invCtx->exception = nullptr;
-            invCtx->runWithCatch([&](){
-                if ( !invCtx->ownStack ) {
-                    StackAllocator sharedStack(8*1024);
-                    SharedStackGuard guard(*invCtx, sharedStack);
+            if ( !invCtx->ownStack ) {
+                StackAllocator sharedStack(8*1024);
+                SharedStackGuard guard(*invCtx, sharedStack);
+                invCtx->runWithCatch([&](){
                     res = invCtx->callOrFastcall(simFn, args+2, &call->debugInfo);
-                } else {
+                });
+            } else {
+                invCtx->runWithCatch([&](){
                     res = invCtx->callOrFastcall(simFn, args+2, &call->debugInfo);
-                }
-            });
+                });
+            }
             if ( invCtx->exception ) {
                 exAt = invCtx->exceptionAt;
                 exText = invCtx->exception;
@@ -931,15 +935,17 @@ namespace debugapi {
         string exText;
         invCtx->threadlock_context([&](){
             invCtx->exception = nullptr;
-            invCtx->runWithCatch([&](){
-                if ( !invCtx->ownStack ) {
-                    StackAllocator sharedStack(8*1024);
-                    SharedStackGuard guard(*invCtx, sharedStack);
+            if ( !invCtx->ownStack ) {
+                StackAllocator sharedStack(8*1024);
+                SharedStackGuard guard(*invCtx, sharedStack);
+                invCtx->runWithCatch([&](){
                     res = invCtx->callOrFastcall(simFn, args+1, &call->debugInfo);
-                } else {
+                });
+            } else {
+                invCtx->runWithCatch([&](){
                     res = invCtx->callOrFastcall(simFn, args+1, &call->debugInfo);
-                }
-            });
+                });
+            }
             if ( invCtx->exception ) {
                 exAt = invCtx->exceptionAt;
                 exText = invCtx->exception;
