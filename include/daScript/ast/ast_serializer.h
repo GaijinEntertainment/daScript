@@ -178,7 +178,8 @@ namespace das {
 
         uint32_t getVersion ();
 
-        void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup );
+        void serializeProgram ( ProgramPtr program, ModuleGroup & libGroup ) noexcept;
+        bool serializeScript ( ProgramPtr program ) noexcept;
 
         template<typename T>
         void serializeSmartPtr( smart_ptr<T> & obj, das_hash_map<uint64_t, smart_ptr<T>> & objMap );
