@@ -5,6 +5,7 @@
 #include "daScript/ast/ast_serializer.h"
 #include "daScript/ast/ast_handle.h"
 #include "daScript/ast/ast.h"
+#include <cstdarg>
 
 namespace das {
 
