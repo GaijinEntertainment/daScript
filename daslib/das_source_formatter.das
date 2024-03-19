@@ -707,7 +707,7 @@ def fmt_spaces_around_operators(var ctx: FormatterCtx)
 
 
 let space_after_keywords <- [[auto "if"; "elif"; "while"; "switch"; "with";
-        "yield"; "catch"; "static_if"; "static_elif"; "for"
+        "yield"; "catch"; "static_if"; "static_elif"; "for"; "in";
     ]]
 
 def fmt_space_after_keyword(var ctx: FormatterCtx)
