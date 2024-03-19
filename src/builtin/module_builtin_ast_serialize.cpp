@@ -72,6 +72,8 @@ namespace das {
         char err[256];
         vsnprintf(err, 256, fmt, args);
 
+        va_end(args);
+
         throw std::runtime_error{err};
     }
 
