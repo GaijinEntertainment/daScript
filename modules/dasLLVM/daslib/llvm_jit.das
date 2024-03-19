@@ -2931,10 +2931,11 @@ class LlvmJitVisitor : AstVisitor
             cast_to_vec4f(expr.arguments[0]._type, getE(expr.arguments[0]));
             tinfo_global;
             get_string_constant_ptr(g_builder,message);
-            get_context_param()
+            get_context_param();
+            get_line_info_ptr(expr.at)   // at
         ]]
         var typ = g_fn_types[FN_JIT_DEBUG]
-        var dbg = LLVMBuildCall2(g_builder, typ, LLVMGetNamedFunction(g_mod,FN_JIT_DEBUG), params, "")
+        var dbg = LLVMBuildCall2(g_builder, typ, LLVMGetNamedFunction(g_mod, FN_JIT_DEBUG), params, "")
         setE(expr, dbg)
         return expr
 
