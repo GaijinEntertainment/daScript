@@ -390,7 +390,7 @@ namespace das {
             if ( !arguments[4]->evalBool(context) ) return false;
             if ( !arguments[5]->evalBool(context) ) return false;
             if ( !arguments[6]->evalBool(context) ) return false;
-            return false;
+            return true;
         }
     };
 
