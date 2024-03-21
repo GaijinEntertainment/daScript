@@ -358,13 +358,13 @@ def public init_jit
     LLVMAddAttributesToFunction(jit_make_block, [[auto nounwind; willreturn]])
     LLVMAddAttributeToFunctionArgument(jit_make_block, 0u, nocapture)
     LLVMAddAttributeToFunctionArgumentRange(jit_make_block, urange(3,7), nocapture)
-    // void jit_debug ( vec4f res, TypeInfo * typeInfo, char * message, Context * )
+    // void jit_debug ( vec4f res, TypeInfo * typeInfo, char * message, Context * context, LineInfoArg * at )
     var jit_debug = LLVMAddFunctionWithType(g_mod, FN_JIT_DEBUG,
         LLVMFunctionType(LLVMVoidType(),
-            [[LLVMTypeRef LLVMFloat4Type(); LLVMPointerType(LLVMVoidType(),0u); get_type_string(); LLVMPointerType(LLVMVoidType(),0u)]]))
+            [[LLVMTypeRef LLVMFloat4Type(); LLVMPointerType(LLVMVoidType(),0u); get_type_string(); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u)]]))
     LLVMAddGlobalMapping(g_engine, jit_debug, get_jit_debug())
     LLVMAddAttributesToFunction(jit_debug, [[auto nounwind; willreturn]])
-    LLVMAddAttributeToFunctionArgumentRange(jit_debug, urange(1,4), nocapture)
+    LLVMAddAttributeToFunctionArgumentRange(jit_debug, urange(1,5), nocapture)
     // bool builtin_iterator_iterate ( const Sequence & it, void * data, Context * context ) {
     var jit_iterator_iterate = LLVMAddFunctionWithType(g_mod, FN_JIT_ITERATOR_ITERATE,
         LLVMFunctionType(LLVMInt1Type(),
