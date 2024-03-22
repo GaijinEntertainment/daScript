@@ -497,6 +497,8 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
      */
     addExtern<DAS_BIND_FUN(makeDummy), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "makeDummy",
         SideEffects::none, "makeDummy");
+    addExtern<DAS_BIND_FUN(makeDummy), SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "makeTempDummy",
+        SideEffects::none, "makeDummy")->setTempResult();
     addExtern<DAS_BIND_FUN(takeDummy)>(*this, lib, "takeDummy",
         SideEffects::none, "takeDummy");
     // register Cpp alignment functions
