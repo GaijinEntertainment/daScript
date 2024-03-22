@@ -1200,6 +1200,19 @@ namespace das {
                                     CompilationError cerror, int nExtra ) {
             if ( verbose ) {
                 TextWriter ss;
+                ss << name << "(";
+                bool first = true;
+                for ( auto &it : types ) {
+                    ss << it->describe();
+                    if ( !first ) {
+                        ss << ", ";
+                    }
+                    first = false;
+                }
+                ss << ")\n";
+                if ( func ) {
+                    ss << "while compiling: " << func->describe() << "\n";
+                }
                 if ( candidateFunctions.size()==0 ) {
                     ss << "there are no good matching candidates out of " << nExtra << " total functions with the same name\n";
                 } else if ( candidateFunctions.size() > 1 ) {
@@ -7254,7 +7267,9 @@ namespace das {
                 // and all good
                 return funcC;
             } else if ( functions.size()>1 ) {
-                reportExcess(expr, types, "too many matching functions or generics ", functions, generics);
+                if ( cerr!=InferCallError::tryOperator ) {
+                    reportExcess(expr, types, "too many matching functions or generics ", functions, generics);
+                }
             } else if ( functions.size()==0 ) {
                 // if there is more than one, we pick more specialized
                 if ( generics.size()>1 ) {
@@ -7394,8 +7409,10 @@ namespace das {
                         reportAstChanged();
                     }
                 } else if ( generics.size()>1 ) {
-                    copmareFunctionSpecialization(generics.front(),generics[1],expr);
-                    reportExcess(expr, types, "too many matching functions or generics ", functions, generics);
+                    if ( cerr!=InferCallError::tryOperator ) {
+                        copmareFunctionSpecialization(generics.front(),generics[1],expr);
+                        reportExcess(expr, types, "too many matching functions or generics ", functions, generics);
+                    }
                 } else {
                     if ( auto aliasT = findAlias(expr->name) ) {
                         if ( aliasT->isCtorType() ) {
