@@ -113,7 +113,7 @@ __forceinline uint32_t countTestObjectSmart( const das::smart_ptr<TestObjectSmar
 
 __forceinline int32_t getTotalTestObjectSmart() { return TestObjectSmart::total; }
 
-__forceinline TestObjectFoo makeDummy() { TestObjectFoo x; x.fooData = 1; return x; }
+__forceinline TestObjectFoo makeDummy() { TestObjectFoo x; memset(&x, 0, sizeof(x)); x.fooData = 1;  return x; }
 __forceinline int takeDummy ( const TestObjectFoo & x ) { return x.fooData; }
 
 struct TestObjectBar {

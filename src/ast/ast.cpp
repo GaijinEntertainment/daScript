@@ -759,6 +759,11 @@ namespace das {
         return this;
     }
 
+    FunctionPtr Function::setTempResult() {
+        result->temporary = true;
+        return this;
+    }
+
     FunctionPtr Function::addToModule ( Module & mod, SideEffects seFlags ) {
         setSideEffects(seFlags);
         if (!mod.addFunction(this)) {
