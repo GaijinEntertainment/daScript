@@ -229,20 +229,14 @@ namespace das {
         if (this == &castS) {
             return true;
         }
-        if ( castS.fields.size() < fields.size() ) {
-            return false;
-        }
-        for ( size_t i=0; i!=fields.size(); ++i ) {
-            auto & fd = fields[i];
-            auto & cfd = castS.fields[i];
-            if ( fd.name != cfd.name ) {
-                return false;
+        auto *parent = castS.parent;
+        while ( parent ) {
+            if ( parent == this ) {
+                return true;
             }
-            if ( !fd.type->isSameType(*cfd.type, RefMatters::yes, ConstMatters::yes, TemporaryMatters::yes) ) {
-                return false;
-            }
+            parent = parent->parent;
         }
-        return true;
+        return false;
     }
 
     bool Structure::hasAnyInitializers() const {
