@@ -308,6 +308,14 @@ namespace das {
 
         serializer_read->thisModuleGroup = &libGroup;
         serializer_read->serializeProgram(program, libGroup);
+
+        if ( program->failed()) {
+            serializer_read->seenNewModule = true;
+            serializer_read->failed = true;
+            program = make_smart<Program>();
+            return false;
+        }
+
         program->thisModuleGroup = &libGroup;
 
         if ( serializer_read->failed ) {

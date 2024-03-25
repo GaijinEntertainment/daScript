@@ -606,6 +606,17 @@ include/daScript/simulate/fs_file_info.h
 src/simulate/fs_file_info.cpp
 ${DAS_MODULES_RESOLVE_INC}
 )
+
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+  set_source_files_properties(src/builtin/module_builtin_ast_serialize.cpp PROPERTIES
+    COMPILE_FLAGS "-fexceptions"
+  )
+elseif(MSVC)
+  set_source_files_properties(src/builtin/module_builtin_ast_serialize.cpp PROPERTIES
+    COMPILE_FLAGS "/EHsc"
+  )
+endif()
+
 list(SORT SIMULATE_SRC)
 SOURCE_GROUP_FILES("simulate" SIMULATE_SRC)
 
