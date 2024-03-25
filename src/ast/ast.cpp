@@ -229,12 +229,12 @@ namespace das {
         if (this == &castS) {
             return true;
         }
-        auto *parent = castS.parent;
-        while ( parent ) {
-            if ( parent == this ) {
+        auto *parentS = castS.parent;
+        while ( parentS ) {
+            if ( parentS == this ) {
                 return true;
             }
-            parent = parent->parent;
+            parentS = parentS->parent;
         }
         return false;
     }
@@ -1575,28 +1575,30 @@ namespace das {
 
     ExpressionPtr ExprBlock::visit(Visitor & vis) {
         vis.preVisit(this);
-        for ( auto it = arguments.begin(); it != arguments.end(); ) {
-            auto & arg = *it;
-            vis.preVisitBlockArgument(this, arg, arg==arguments.back());
-            if ( arg->type ) {
-                vis.preVisit(arg->type.get());
-                arg->type = arg->type->visit(vis);
-                arg->type = vis.visit(arg->type.get());
-            }
-            if ( arg->init ) {
-                vis.preVisitBlockArgumentInit(this, arg, arg->init.get());
-                arg->init = arg->init->visit(vis);
-                if ( arg->init ) {
-                    arg->init = vis.visitBlockArgumentInit(this, arg, arg->init.get());
-                }
-            }
-            arg = vis.visitBlockArgument(this, arg, arg==arguments.back());
-            if ( arg ) ++it; else it = arguments.erase(it);
-        }
-        if ( returnType ) {
-            vis.preVisit(returnType.get());
-            returnType = returnType->visit(vis);
-            returnType = vis.visit(returnType.get());
+        if ( isClosure ) {
+          for ( auto it = arguments.begin(); it != arguments.end(); ) {
+              auto & arg = *it;
+              vis.preVisitBlockArgument(this, arg, arg==arguments.back());
+              if ( arg->type ) {
+                  vis.preVisit(arg->type.get());
+                  arg->type = arg->type->visit(vis);
+                  arg->type = vis.visit(arg->type.get());
+              }
+              if ( arg->init ) {
+                  vis.preVisitBlockArgumentInit(this, arg, arg->init.get());
+                  arg->init = arg->init->visit(vis);
+                  if ( arg->init ) {
+                      arg->init = vis.visitBlockArgumentInit(this, arg, arg->init.get());
+                  }
+              }
+              arg = vis.visitBlockArgument(this, arg, arg==arguments.back());
+              if ( arg ) ++it; else it = arguments.erase(it);
+          }
+          if ( returnType ) {
+              vis.preVisit(returnType.get());
+              returnType = returnType->visit(vis);
+              returnType = vis.visit(returnType.get());
+          }
         }
         if ( finallyBeforeBody ) {
             visitFinally(vis);

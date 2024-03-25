@@ -2776,25 +2776,29 @@ namespace das {
                 // TODO: verify
                 // if ( isFullySealedType(expr->type) ) {
                 if ( !expr->type->isAutoOrAlias() ) {
-                    if ( isFullyInferredBlock(block.get()) ) {
+                    if ( auto unInferred = isFullyInferredBlock(block.get()) ) {
+                        TextWriter tt;
+                        tt << unInferred->at.describe() << ": " << unInferred->describe() << " is not fully inferred yet";
+                        error("block is not fully inferred yet", tt.str(), "",
+                            expr->at, CompilationError::invalid_block);
+                    } else {
                         if ( auto btl = convertBlockToLambda(expr) ) {
                             return btl;
                         }
-                    } else {
-                        error("block is not fully inferred yet",  "", "",
-                            expr->at, CompilationError::invalid_block);
                     }
                 }
             } else if ( expr->isLocalFunction ) {
                 expr->type->baseType = Type::tFunction;
                 if ( !expr->type->isAutoOrAlias() ) {
-                    if ( isFullyInferredBlock(block.get()) ) {
+                    if ( auto unInferred = isFullyInferredBlock(block.get()) ) {
+                        TextWriter tt;
+                        tt << unInferred->at.describe() << ": " << unInferred->describe() << " is not fully inferred yet";
+                        error("block is not fully inferred yet", tt.str(), "",
+                            expr->at, CompilationError::invalid_block);
+                    } else {
                         if ( auto btl = convertBlockToLocalFunction(expr) ) {
                             return btl;
                         }
-                    } else {
-                        error("block is not fully inferred yet",  "", "",
-                            expr->at, CompilationError::invalid_block);
                     }
                 }
             }
