@@ -95,18 +95,18 @@ namespace das {
     }
 
     struct CheckFullyInferred : Visitor {
-        bool fullyInferred = true;
+        TypeDecl * unInferredType = nullptr;
         virtual void preVisit ( TypeDecl * td ) {
-            if ( td->isAutoOrAlias() ) {
-                fullyInferred = false;
+            if ( !unInferredType && td->isAutoOrAlias() ) {
+                unInferredType = td;
             }
         }
     };
 
-    bool isFullyInferredBlock ( ExprBlock * block ) {
+    TypeDecl *isFullyInferredBlock ( ExprBlock * block ) {
         CheckFullyInferred vis;
         block->visit(vis);
-        return vis.fullyInferred;
+        return vis.unInferredType;
     }
 
     // array comprehension
