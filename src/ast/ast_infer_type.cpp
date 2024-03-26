@@ -2778,7 +2778,7 @@ namespace das {
                 if ( !expr->type->isAutoOrAlias() ) {
                     if ( auto unInferred = isFullyInferredBlock(block.get()) ) {
                         TextWriter tt;
-                        tt << unInferred->at.describe() << ": " << unInferred->describe() << " is not fully inferred yet";
+                        if ( verbose ) tt << unInferred->at.describe() << ": " << unInferred->describe() << " is not fully inferred yet";
                         error("block is not fully inferred yet", tt.str(), "",
                             expr->at, CompilationError::invalid_block);
                     } else {
@@ -2792,7 +2792,7 @@ namespace das {
                 if ( !expr->type->isAutoOrAlias() ) {
                     if ( auto unInferred = isFullyInferredBlock(block.get()) ) {
                         TextWriter tt;
-                        tt << unInferred->at.describe() << ": " << unInferred->describe() << " is not fully inferred yet";
+                        if ( verbose ) tt << unInferred->at.describe() << ": " << unInferred->describe() << " is not fully inferred yet";
                         error("block is not fully inferred yet", tt.str(), "",
                             expr->at, CompilationError::invalid_block);
                     } else {
