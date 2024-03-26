@@ -3295,7 +3295,7 @@ namespace das {
                 } else if ( expr->trait=="stripped_typename" ) {
                     reportAstChanged();
                     auto ctype = make_smart<TypeDecl>(*expr->typeexpr);
-                    ctype->constant = false; ctype->temporary = false; ctype->ref = false;
+                    ctype->constant = false; ctype->temporary = false; ctype->ref = false; ctype->explicitConst = false;
                     return make_smart<ExprConstString>(expr->at, ctype->describe(TypeDecl::DescribeExtra::no, TypeDecl::DescribeContracts::no, TypeDecl::DescribeModule::yes));
                 } else if ( expr->trait=="fulltypename" ) {
                     reportAstChanged();
@@ -3304,6 +3304,14 @@ namespace das {
                     reportAstChanged();
                     auto modd = expr->typeexpr->module;
                     return make_smart<ExprConstString>(expr->at, modd ? modd->name : "");
+                } else if ( expr->trait=="struct_name" ) {
+                    if ( expr->typeexpr->isStructure() ) {
+                        reportAstChanged();
+                        return make_smart<ExprConstString>(expr->at, expr->typeexpr->structType->name);
+                    } else {
+                        error("can't get struct_name of " + expr->typeexpr->describe(), "", "",
+                            expr->at,CompilationError::typeinfo_undefined);
+                    }
                 } else if ( expr->trait=="struct_modulename" ) {
                     if ( expr->typeexpr->isStructure() ) {
                         reportAstChanged();
