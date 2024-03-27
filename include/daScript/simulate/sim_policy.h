@@ -135,6 +135,7 @@ namespace  das {
         static __forceinline TT Mad   ( TT a, TT b, TT c, Context &, LineInfo * ) { return a*b + c; }
     };
 
+#if DAS_FAST_INTEGER_MOD
     struct SimPolicy_Int : SimPolicy_IntBin<int32_t,uint32_t,INT32_MIN>, SimPolicy_MathTT<int32_t> {
          static __forceinline int32_t Mod ( int32_t a, int32_t b, Context & context, LineInfo * at ) {
             if ( b==0 ) context.throw_error_at(at, "division by zero in modulo");
@@ -160,6 +161,7 @@ namespace  das {
             a = a - uint32_t(A/B)*b;
         }
     };
+#endif
 
     struct SimPolicy_Int64 : SimPolicy_IntBin<int64_t,uint64_t,INT64_MIN>, SimPolicy_MathTT<int64_t> {};
     struct SimPolicy_UInt64 : SimPolicy_Bin<uint64_t,uint64_t>, SimPolicy_MathTT<uint64_t> {};
