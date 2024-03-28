@@ -2,6 +2,8 @@ require dastest/testing_boost public
 
 require daslib/strings_boost
 
+require operators_derived
+
 struct Foo
     a : int
 
@@ -83,4 +85,7 @@ def test_operators ( t : T? )
         t |> equal("hard no",HARD_NO)
         t |> equal(5,T.length)
         t |> equal(6,T?.length)
+
+        var bar : BarOp? <- new [[BarOp() a=42]]
+        t |> equal(42, bar.Prop)
 
