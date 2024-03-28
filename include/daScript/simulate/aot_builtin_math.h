@@ -74,16 +74,36 @@ namespace das {
 #pragma float_control(push)
 #pragma float_control(precise, on)
 #endif
-#if __clang_major__ < 12 && defined(__clang__) && defined(__FAST_MATH__)
-    //unfortunately older clang versions do not work with float_control
+#if (__clang_major__ < 12 || (__clang_major__ >= 17 && __clang_major__ <= 18)) && defined(__clang__) && defined(__FAST_MATH__)
+#include <cstring> // memcpy
+#include <cmath> // INFINITY
+    //unfortunately older clang versions do not work with float_control, and in clang 17-18.1 it's broken
     __forceinline DAS_FINITE_MATH bool   fisnan(float  a) { volatile float b = a; return b != a; }
     __forceinline DAS_FINITE_MATH bool   disnan(double  a) { volatile double b = a; return b != a; }
+    __forceinline DAS_FINITE_MATH bool   fisfinite(float a)
+    {
+      uint32_t i;
+      memcpy(&i, &a, sizeof(a));
+      i &= ~(1 << 31);
+      memcpy(&a, &i, sizeof(a));
+      static volatile float inf = INFINITY;
+      return a != inf;
+    }
+    __forceinline DAS_FINITE_MATH bool   disfinite(double a)
+    {
+      uint64_t i;
+      memcpy(&i, &a, sizeof(a));
+      i &= ~(1ull << 63);
+      memcpy(&a, &i, sizeof(a));
+      static volatile double inf = INFINITY;
+      return a != inf;
+    }
 #else
     ___noinline DAS_FINITE_MATH inline bool   fisnan(float  a) { return __builtin_isnan(a); }
     ___noinline DAS_FINITE_MATH inline bool   disnan(double  a) { return __builtin_isnan(a); }
-#endif
     ___noinline DAS_FINITE_MATH inline bool   fisfinite(float  a) { return __builtin_isfinite(a); }
     ___noinline DAS_FINITE_MATH inline bool   disfinite(double  a) { return __builtin_isfinite(a); }
+#endif
 #undef DAS_FINITE_MATH
 #if defined(__clang__) && !defined(__arm64__) && !defined(__NINTENDO__)
 #pragma float_control(pop)
