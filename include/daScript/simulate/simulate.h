@@ -646,9 +646,8 @@ namespace das
         }
     public:
         __forceinline void freeTempString ( char * ptr ) {
-            if ( stringDisposeQue ) {
-                stringHeap->freeString(stringDisposeQue,(uint32_t)strlen(stringDisposeQue));
-            }
+            if ( stringHeap->isIntern() ) return;
+            if ( stringDisposeQue ) stringHeap->freeString(stringDisposeQue,(uint32_t)strlen(stringDisposeQue));
             stringDisposeQue = ptr;
         }
     public:
