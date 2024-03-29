@@ -1832,6 +1832,23 @@ namespace das {
         }
     }
 
+    __forceinline char * das_string_builder_temp ( Context * __context__, const SimNode_AotInteropBase & node ) {
+        StringBuilderWriter writer;
+        DebugDataWalker<StringBuilderWriter> walker(writer, PrintFlags::string_builder);
+        for ( int i=0, is=node.nArguments; i!=is; ++i ) {
+            walker.walk(node.argumentValues[i], node.types[i]);
+        }
+        auto length = writer.tellp();
+        if ( length ) {
+            auto str = __context__->stringHeap->allocateString(writer.c_str(), length);
+            __context__->freeTempString(str);
+            return str;
+        } else {
+            return nullptr;
+        }
+    }
+
+
     struct das_stack_prologue {
         __forceinline das_stack_prologue ( Context * __context__, uint32_t stackSize, const char * fn )
             : context(__context__) {

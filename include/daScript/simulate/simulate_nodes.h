@@ -1616,9 +1616,10 @@ SIM_NODE_AT_VECTOR(Float, float)
 
     // StringBuilder
     struct SimNode_StringBuilder : SimNode_CallBase {
-        SimNode_StringBuilder ( const LineInfo & at ) : SimNode_CallBase(at) {}
+        SimNode_StringBuilder ( bool ts, const LineInfo & at ) : SimNode_CallBase(at), isTempString(ts) {}
         virtual SimNode * visit ( SimVisitor & vis ) override;
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override;
+        bool isTempString;
     };
 
     // CAST

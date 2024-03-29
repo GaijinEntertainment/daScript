@@ -101,6 +101,23 @@ extern "C" {
         }
     }
 
+    char * jit_string_builder_temp ( Context & context, SimNode_CallBase * call, vec4f * args ) {
+        StringBuilderWriter writer;
+        DebugDataWalker<StringBuilderWriter> walker(writer, PrintFlags::string_builder);
+        for ( int i=0, is=call->nArguments; i!=is; ++i ) {
+            walker.walk(args[i], call->types[i]);
+        }
+        auto length = writer.tellp();
+        if ( length ) {
+            auto str = context.stringHeap->allocateString(writer.c_str(), length);
+            context.freeTempString(str);
+            return str;
+        } else {
+            return nullptr;
+        }
+    }
+
+
     void * jit_get_global_mnh ( uint64_t mnh, Context & context ) {
         return context.globals + context.globalOffsetByMangledName(mnh);
     }
@@ -278,6 +295,7 @@ extern "C" {
     void *das_get_jit_invoke_block_with_cmres() { return (void *)&jit_invoke_block_with_cmres; }
     void *das_get_jit_call_with_cmres() { return (void *)&jit_call_with_cmres; }
     void *das_get_jit_string_builder() { return (void *)&jit_string_builder; }
+    void *das_get_jit_string_builder_temp() { return (void *)&jit_string_builder_temp; }
     void *das_get_jit_get_global_mnh() { return (void *)&jit_get_global_mnh; }
     void *das_get_jit_get_shared_mnh() { return (void *)&jit_get_shared_mnh; }
     void *das_get_jit_alloc_heap() { return (void *)&jit_alloc_heap; }
@@ -466,6 +484,8 @@ extern "C" {
                 SideEffects::none, "das_get_jit_invoke_block_with_cmres");
             addExtern<DAS_BIND_FUN(das_get_jit_string_builder)>(*this, lib, "get_jit_string_builder",
                 SideEffects::none, "das_get_jit_string_builder");
+            addExtern<DAS_BIND_FUN(das_get_jit_string_builder_temp)>(*this, lib, "get_jit_string_builder_temp",
+                SideEffects::none, "das_get_jit_string_builder_temp");
             addExtern<DAS_BIND_FUN(das_get_jit_get_global_mnh)>(*this, lib, "get_jit_get_global_mnh",
                 SideEffects::none, "das_get_jit_get_global_mnh");
             addExtern<DAS_BIND_FUN(das_get_jit_get_shared_mnh)>(*this, lib, "get_jit_get_shared_mnh",

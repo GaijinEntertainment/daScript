@@ -20,6 +20,7 @@ namespace das {
         AstExprStringBuilderAnnotation(ModuleLibrary & ml)
             :  AstExpressionAnnotation<ExprStringBuilder> ("ExprStringBuilder", ml) {
             addField<DAS_BIND_MANAGED_FIELD(elements)>("elements");
+            addFieldEx ( "stringBuilderFlags", "stringBuilderFlags", offsetof(ExprStringBuilder, stringBuilderFlags), makeExprStringBuilderFlags() );
         }
     };
 

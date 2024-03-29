@@ -312,6 +312,7 @@ namespace das
             DAS_ASSERTF(insideContext==0,"can't reset heaps in locked context");
             heap->reset();
             stringHeap->reset();
+            stringDisposeQue = nullptr;
         }
 
         __forceinline uint32_t tryRestartAndLock() {
@@ -644,17 +645,25 @@ namespace das
             }
         }
     public:
-        uint64_t *                      annotationData = nullptr;
+        __forceinline void freeTempString ( char * ptr ) {
+            if ( stringDisposeQue ) {
+                stringHeap->freeString(stringDisposeQue,strlen(stringDisposeQue));
+            }
+            stringDisposeQue = ptr;
+        }
+    public:
         smart_ptr<StringHeapAllocator>  stringHeap;
         smart_ptr<AnyHeapAllocator>     heap;
-        bool                            persistent = false;
-        char *                          globals = nullptr;
-        char *                          shared = nullptr;
         shared_ptr<ConstStringAllocator> constStringHeap;
         shared_ptr<NodeAllocator>       code;
         shared_ptr<DebugInfoAllocator>  debugInfo;
+        char *                          stringDisposeQue = nullptr;
+        uint64_t *                      annotationData = nullptr;
+        char *                          globals = nullptr;
+        char *                          shared = nullptr;
         StackAllocator                  stack;
         uint32_t                        insideContext = 0;
+        bool                            persistent = false;
         bool                            ownStack = false;
         bool                            shutdown = false;
         bool                            breakOnException = false;
@@ -667,32 +676,32 @@ namespace das
         vec4f *         abiArg;
         void *          abiCMRES;
     public:
+        LineInfo        exceptionAt;
         string          exceptionMessage;
         const char *    exception = nullptr;
         const char *    last_exception = nullptr;
-        LineInfo        exceptionAt;
         jmp_buf *       throwBuf = nullptr;
     protected:
         GlobalVariable * globalVariables = nullptr;
+        SimFunction * functions = nullptr;
+        SimFunction ** initFunctions = nullptr;
         bool     globalsOwner = true;
         uint32_t sharedSize = 0;
         bool     sharedOwner = true;
         uint32_t globalsSize = 0;
         uint32_t globalInitStackSize = 0;
-        SimFunction * functions = nullptr;
         int totalVariables = 0;
         int totalFunctions = 0;
-        SimFunction ** initFunctions = nullptr;
         int totalInitFunctions = 0;
     public:
-        bool skipLockChecks = false;
         SimNode * aotInitScript = nullptr;
+        bool skipLockChecks = false;
     protected:
+        void *          hwBpAddress = nullptr;
+        const LineInfo * singleStepAt = nullptr;
+        int32_t         hwBpIndex = -1;
         bool            debugger = false;
         volatile bool   singleStepMode = false;
-        void *          hwBpAddress = nullptr;
-        int32_t         hwBpIndex = -1;
-        const LineInfo * singleStepAt = nullptr;
     public:
         shared_ptr<das_hash_map<uint64_t,SimFunction *>> tabMnLookup;
         shared_ptr<das_hash_map<uint64_t,uint32_t>> tabGMnLookup;
@@ -701,9 +710,9 @@ namespace das
         class Program * thisProgram = nullptr;
         class DebugInfoHelper * thisHelper = nullptr;
     public:
+        vec4f result;
         uint32_t stopFlags = 0;
         uint32_t gotoLabel = 0;
-        vec4f result;
     public:
         recursive_mutex * contextMutex = nullptr;
     protected:

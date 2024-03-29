@@ -304,6 +304,19 @@ namespace das {
     // ExprCall
         virtual void preVisit ( ExprCall * expr ) override {
             Visitor::preVisit(expr);
+            // what we do here is check, if the function can't possibly capture string
+            // and if so, we mark the LAST string builder as temporary
+            auto efun = expr->func;
+            if ( efun->builtIn && !efun->policyBased && !efun->invoke && !efun->captureString ) {
+                for ( int ai=expr->arguments.size()-1; ai>=0; ai-- ) {
+                    auto & arg = expr->arguments[ai];
+                    if ( arg->rtti_isStringBuilder() ) {
+                        auto sb = static_pointer_cast<ExprStringBuilder>(arg);
+                        sb->isTempString = true;
+                        break;
+                    }
+                }
+            }
             if ( inStruct ) return;
             if ( !expr->doesNotNeedSp ) {
                 if ( expr->func->copyOnReturn || expr->func->moveOnReturn ) {

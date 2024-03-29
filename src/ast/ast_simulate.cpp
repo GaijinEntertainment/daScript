@@ -2068,7 +2068,7 @@ namespace das
     }
 
     SimNode * ExprStringBuilder::simulate (Context & context) const {
-        SimNode_StringBuilder * pSB = context.code->makeNode<SimNode_StringBuilder>(at);
+        SimNode_StringBuilder * pSB = context.code->makeNode<SimNode_StringBuilder>(isTempString, at);
         if ( int nArg = (int) elements.size() ) {
             pSB->arguments = (SimNode **) context.code->allocate(nArg * sizeof(SimNode *));
             pSB->types = (TypeInfo **) context.code->allocate(nArg * sizeof(TypeInfo *));
