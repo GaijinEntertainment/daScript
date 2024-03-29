@@ -49,6 +49,7 @@ let public FN_JIT_CALL_WITH_CMRES   = "jit_call_with_cmres"
 let public FN_JIT_INVOKE_BLOCK      = "jit_invoke_block"
 let public FN_JIT_INVOKE_BLOCK_WITH_CMRES = "jit_invoke_block_with_cmres"
 let public FN_JIT_STRING_BUILDER    = "jit_string_builder"
+let public FN_JIT_STRING_BUILDER_TEMP    = "jit_string_builder_temp"
 let public FN_JIT_GET_GLOBAL_MNH    = "jit_get_global_mnh"
 let public FN_JIT_GET_SHARED_MNH    = "jit_get_shared_mnh"
 let public FN_JIT_ALLOC_HEAP        = "jit_alloc_heap"
@@ -226,6 +227,13 @@ def public init_jit
     LLVMAddGlobalMapping(g_engine, jit_string_builder, get_jit_string_builder())
     LLVMAddAttributesToFunction(jit_string_builder, [[auto nounwind; willreturn]])
     LLVMAddAttributeToFunctionArgumentRange(jit_string_builder, urange(0,3), nocapture)
+    // jit_string_builder_temp ( context *, node *, args * )
+    var jit_string_builder_temp = LLVMAddFunctionWithType(g_mod, FN_JIT_STRING_BUILDER_TEMP,
+        LLVMFunctionType(get_type_string(),
+            [[LLVMTypeRef LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMVoidType(),0u); LLVMPointerType(LLVMFloat4Type(),0u) ]]))
+    LLVMAddGlobalMapping(g_engine, jit_string_builder_temp, get_jit_string_builder_temp())
+    LLVMAddAttributesToFunction(jit_string_builder_temp, [[auto nounwind; willreturn]])
+    LLVMAddAttributeToFunctionArgumentRange(jit_string_builder_temp, urange(0,3), nocapture)
     // void * jit_get_global_mnh ( uint64_t mnh, context * )
     var jit_get_global_mnh = LLVMAddFunctionWithType(g_mod, FN_JIT_GET_GLOBAL_MNH,
         LLVMFunctionType(LLVMPointerType(LLVMVoidType(),0u),

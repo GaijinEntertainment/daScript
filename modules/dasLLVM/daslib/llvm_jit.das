@@ -688,7 +688,7 @@ class LlvmJitVisitor : AstVisitor
 // ExprStringBuilder
     def override visitExprStringBuilder(expr:smart_ptr<ExprStringBuilder>) : ExpressionPtr
         var args = build_array_of_arguments(expr.elements)
-        var func = LLVMGetNamedFunction(g_mod, FN_JIT_STRING_BUILDER)
+        var func = LLVMGetNamedFunction(g_mod, expr.stringBuilderFlags.isTempString ? FN_JIT_STRING_BUILDER_TEMP : FN_JIT_STRING_BUILDER)
         assert(func!=null)
         let NODE_PTR = make_interop_node(*jit_context,get_ptr(expr))
         if NODE_PTR==null
