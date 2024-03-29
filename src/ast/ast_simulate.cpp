@@ -1520,7 +1520,6 @@ namespace das
         if ( typeexpr->baseType == Type::tHandle ) {
             DAS_ASSERT(typeexpr->annotation->canNew() && "how???");
             if ( initializer ) {
-                int32_t bytes = type->firstType->getBaseSizeOf();
                 auto pCall = static_cast<SimNode_CallBase *>(func->makeSimNode(context,arguments));
                 ExprCall::simulateCall(func, this, context, pCall);
                 pCall->cmresEval = typeexpr->annotation->simulateGetNew(context, at);
@@ -2263,16 +2262,16 @@ namespace das
                 if ( flat.size()>2 && flat.size()<=7 ) {
                     SimNode_CallBase * pSimNode;
                     if ( func->name=="||" ) {
-                        pSimNode = (SimNode_OrAny *) context.code->makeNodeUnrollAny<SimNode_OrT>(flat.size(), at);
+                        pSimNode = (SimNode_OrAny *) context.code->makeNodeUnrollAny<SimNode_OrT>((int32_t)flat.size(), at);
                     } else if ( func->name=="&&" ) {
-                        pSimNode = (SimNode_AndAny *) context.code->makeNodeUnrollAny<SimNode_AndT>(flat.size(), at);
+                        pSimNode = (SimNode_AndAny *) context.code->makeNodeUnrollAny<SimNode_AndT>((int32_t)flat.size(), at);
                     } else {
                         DAS_ASSERTF(0, "unknown logical operator");
                         return nullptr;
                     }
-                    pSimNode->nArguments = flat.size();
-                    pSimNode->arguments = (SimNode **) context.code->allocate(flat.size() * sizeof(SimNode *));
-                    for ( uint32_t i=0; i!=flat.size(); ++i ) {
+                    pSimNode->nArguments = (uint32_t) flat.size();
+                    pSimNode->arguments = (SimNode **) context.code->allocate((uint32_t)(flat.size() * sizeof(SimNode *)));
+                    for ( uint32_t i=0; i!=uint32_t(flat.size()); ++i ) {
                         pSimNode->arguments[i] = flat[i]->simulate(context);
                     }
                     return pSimNode;

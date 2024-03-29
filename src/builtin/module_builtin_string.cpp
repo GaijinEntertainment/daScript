@@ -627,7 +627,7 @@ namespace das
         if ( !s ) return nullptr;
         while ( is_white_space(*s) ) s++;
         if ( *s ) {
-            return context->stringHeap->allocateString(s, strlen(s));
+            return context->stringHeap->allocateString(s, uint32_t(strlen(s)));
         } else  {
             return nullptr;
         }

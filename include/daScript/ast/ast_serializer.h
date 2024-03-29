@@ -54,7 +54,7 @@ namespace das {
         bool init ( uint64_t size = INITIAL_CAPACITY ) {
             data_ = ( uint8_t * ) malloc(size);
             if ( data_ == nullptr ) return false;
-            capacity_ = size;
+            capacity_ = (uint32_t) size;
             return true;
         }
 

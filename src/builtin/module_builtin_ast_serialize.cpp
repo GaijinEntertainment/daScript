@@ -114,7 +114,7 @@ namespace das {
 
     void AstSerializer::write ( const void * data, size_t size ) {
         memcpy(buffer.end(), data, size);
-        buffer.move(size);
+        buffer.move((uint32_t)size);
     }
 
     void AstSerializer::read ( void * data, size_t size ) {
@@ -122,7 +122,7 @@ namespace das {
             throw_formatted_error("ast serializer read overflow");
         }
         memcpy(data, buffer.end(), size);
-        buffer.move(size);
+        buffer.move(uint32_t(size));
     }
 
     void AstSerializer::serialize ( void * data, size_t size ) {
