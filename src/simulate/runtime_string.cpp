@@ -357,6 +357,7 @@ namespace das
             if ( !pStr  ) {
                 context.throw_error_at(debugInfo, "can't allocate string builder result, out of heap");
             }
+            if ( isTempString ) context.freeTempString(pStr);
             return cast<char *>::from(pStr);
         } else {
             return v_zero();

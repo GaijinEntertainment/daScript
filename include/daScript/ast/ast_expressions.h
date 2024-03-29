@@ -845,11 +845,18 @@ namespace das
         ExprStringBuilder() { __rtti = "ExprStringBuilder";  };
         ExprStringBuilder(const LineInfo & a)
             : Expression(a) { __rtti = "ExprStringBuilder"; }
+        virtual bool rtti_isStringBuilder() const override { return true; }
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual void serialize( AstSerializer & ser ) override;
         vector<ExpressionPtr>   elements;
+        union {
+            struct {
+                bool    isTempString : 1;       // this string is passed to a function, which does not capture it. it can be disposed of after the call
+            };
+            uint32_t    stringBuilderFlags = 0;
+        };
     };
 
     struct ExprLet : Expression {

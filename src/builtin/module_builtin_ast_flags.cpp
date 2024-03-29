@@ -247,6 +247,13 @@ namespace das {
         return ft;
     }
 
+    TypeDeclPtr makeExprStringBuilderFlags() {
+        auto ft = make_smart<TypeDecl>(Type::tBitfield);
+        ft->alias = "StringBuilderFlags";
+        ft->argNames = { "isTempString" };
+        return ft;
+    }
+
     void Module_Ast::registerFlags(ModuleLibrary & ) {
         // FLAGS?
         addAlias(makeTypeDeclFlags());

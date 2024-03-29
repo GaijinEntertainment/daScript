@@ -1516,7 +1516,7 @@ namespace das
                 ->args({"iterator","range","context"});;
         addExtern<DAS_BIND_FUN(builtin_make_string_iterator)>(*this, lib,  "_builtin_make_string_iterator",
             SideEffects::modifyArgumentAndExternal, "builtin_make_string_iterator")
-                ->args({"iterator","string","context"});
+                ->args({"iterator","string","context"})->setCaptureString();
         addExtern<DAS_BIND_FUN(builtin_make_nil_iterator)>(*this, lib,  "_builtin_make_nil_iterator",
             SideEffects::modifyArgumentAndExternal, "builtin_make_nil_iterator")
                 ->args({"iterator","context"});;
@@ -1798,7 +1798,7 @@ namespace das
                 ->args({"source","context"});
         addExtern<DAS_BIND_FUN(pass_string)>(*this, lib, "string",
             SideEffects::none, "pass_string", permanentArgFn())
-                ->args({"source"});
+                ->args({"source"})->setCaptureString();
         addExtern<DAS_BIND_FUN(clone_pass_string)>(*this, lib, "string",
             SideEffects::none, "clone_pass_string", temporaryArgFn())
                 ->args({"source","context"});

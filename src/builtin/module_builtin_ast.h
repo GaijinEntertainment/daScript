@@ -183,6 +183,7 @@ namespace das {
     TypeDeclPtr makeExprCopyFlags();
     TypeDeclPtr makeExprMoveFlags();
     TypeDeclPtr makeExprIfFlags();
+    TypeDeclPtr makeExprStringBuilderFlags();
 
     void init_expr ( BasicStructureAnnotation & ann );
     bool canSubstituteExpr ( const TypeAnnotation* thisAnn, TypeAnnotation* ann );

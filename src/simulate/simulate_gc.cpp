@@ -876,6 +876,7 @@ namespace das
     };
 
     void Context::collectStringHeap ( LineInfo * at, bool validate ) {
+        stringDisposeQue = nullptr;
         // clean up, so that all small allocations are marked as 'free'
         if ( !stringHeap->mark() ) return;
         // now
@@ -1200,6 +1201,7 @@ namespace das
 
     void Context::collectHeap ( LineInfo * at, bool sheap, bool validate ) {
         // clean up, so that all small allocations are marked as 'free'
+        stringDisposeQue = nullptr;
         if ( sheap && !stringHeap->mark() ) return;
         if ( !heap->mark() ) return;
         // now

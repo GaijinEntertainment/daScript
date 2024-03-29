@@ -2363,7 +2363,9 @@ namespace das {
         virtual void preVisit ( ExprStringBuilder * expr ) override {
             Visitor::preVisit(expr);
             uint32_t nArgs = uint32_t(expr->elements.size());
-            ss << "das_string_builder(__context__,SimNode_AotInterop<" << nArgs << ">(";
+            ss << "das_string_builder";
+            if ( expr->isTempString ) ss << "_temp";
+            ss << "(__context__,SimNode_AotInterop<" << nArgs << ">(";
             if ( nArgs ) {
                 auto debug_info_name = outputCallTypeInfo(nArgs, expr->elements);
                 ss << debug_info_name << ", ";

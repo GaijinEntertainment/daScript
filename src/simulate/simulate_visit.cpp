@@ -350,6 +350,7 @@ namespace das {
     SimNode * SimNode_StringBuilder::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP(StringBuilder);
+        V_ARG(isTempString);
         // TODO: types?
         V_CALL();
         V_END();

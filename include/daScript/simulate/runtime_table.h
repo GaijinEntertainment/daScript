@@ -62,7 +62,7 @@ namespace das
             uint32_t index = uint32_t(hash) & mask;
             auto pKeys = (const KeyType *) tab.keys;
             auto pHashes = tab.hashes;
-            auto hashKey = hashToHashKey(hash);
+            auto hashKey = hashToHashKey(TableHashKey(hash));
             while ( true ) {
                 auto kh = pHashes[index];
                 if ( kh==HASH_EMPTY64 ) {
@@ -83,7 +83,7 @@ namespace das
             uint32_t insertI = -1u;
             auto pKeys = (KeyType *) tab.keys;
             auto pHashes = tab.hashes;
-            auto hashKey = hashToHashKey(hash);
+            auto hashKey = hashToHashKey(TableHashKey(hash));
             while ( true ) {
                 auto kh = pHashes[index];
                 if (kh == HASH_EMPTY64 ) {
@@ -112,7 +112,7 @@ namespace das
             uint32_t index = uint32_t(hash) & mask;
             auto pKeys = (const KeyType *) tab.keys;
             auto pHashes = tab.hashes;
-            auto hashKey = hashToHashKey(hash);
+            auto hashKey = hashToHashKey(TableHashKey(hash));
             while ( true ) {
                 auto kh = pHashes[index];
                 if ( kh==HASH_EMPTY64 ) {

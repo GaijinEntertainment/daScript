@@ -584,6 +584,7 @@ namespace das
         virtual bool rtti_isSequence() const { return false; }
         virtual bool rtti_isConstant() const { return false; }
         virtual bool rtti_isStringConstant() const { return false; }
+        virtual bool rtti_isStringBuilder() const { return false; }
         virtual bool rtti_isCall() const { return false; }
         virtual bool rtti_isInvoke() const { return false; }
         virtual bool rtti_isCallLikeExpr() const { return false; }
@@ -730,11 +731,16 @@ namespace das
     ,   modifyExternal =    (1<<2)
     ,   accessExternal =    modifyExternal
     ,   modifyArgument =    (1<<3)
-    ,   modifyArgumentAndExternal   = modifyArgument | modifyExternal
-    ,   modifyArgumentAndAccessExternal = modifyArgument | accessExternal
-    ,   worstDefault =      modifyArgumentAndExternal// use this as 'default' bind if you don't know what are side effects of your function, or if you don't undersand what are SideEffects
     ,   accessGlobal =      (1<<4)
     ,   invoke =            (1<<5)
+    ,   captureString =     (1<<6)
+    ,   modifyArgumentAndExternal   = modifyArgument | modifyExternal
+    ,   modifyArgumentAndAccessExternal = modifyArgument | accessExternal
+
+    // use this as 'default' bind if you don't know what are side effects of your function, or if you don't undersand what are SideEffects
+    // note: should this 'captureString' be here? C++ code which requires string and does not invoke is SO rare, that it is not worth to have it here
+    ,   worstDefault =  modifyArgumentAndExternal
+
     ,   invokeAndAccessExternal = invoke | accessExternal
     ,   inferredSideEffects = uint32_t(SideEffects::modifyArgument) | uint32_t(SideEffects::accessGlobal) | uint32_t(SideEffects::invoke)
     };
@@ -781,6 +787,7 @@ namespace das
         FunctionPtr setAotTemplate();
         FunctionPtr setAnyTemplate();
         FunctionPtr setTempResult();
+        FunctionPtr setCaptureString();
         FunctionPtr arg_init ( int argIndex, const ExpressionPtr & initValue ) {
             arguments[argIndex]->init = initValue;
             return this;
@@ -896,6 +903,7 @@ namespace das
                 bool modifyArgument : 1;
                 bool accessGlobal : 1;
                 bool invoke : 1;
+                bool captureString : 1;
             };
             uint32_t    sideEffectFlags = 0;
         };
