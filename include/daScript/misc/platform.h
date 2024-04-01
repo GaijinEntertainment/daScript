@@ -385,7 +385,7 @@ inline size_t das_aligned_memsize(void * ptr){
     #endif
 #endif
 
-// if -funsafe-math-optimizations или -freciprocal-math is used, this flat needs to be 0
+// if -funsafe-math-optimizations or -freciprocal-math is used, this flat needs to be 0
 // unfortunately, it's not possible to detect this flag in the preprocessor
 #ifndef DAS_FAST_INTEGER_MOD
     #if defined(__FAST_MATH__)
