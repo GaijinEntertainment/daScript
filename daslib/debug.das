@@ -1036,7 +1036,7 @@ class private DAgent: DapiDebugAgent
             if logStrMemory
                 report = "STRING HEAP COLLECT: {bytes_hr(alloc)} -> "
             unsafe
-                string_heap_collect()
+                heap_collect(true)
             alloc = string_heap_bytes_allocated()
             if logStrMemory
                 to_log(LOG_DEBUG, "dap: {report}{bytes_hr(alloc)} limit : {bytes_hr(strLimit)}\n")

@@ -754,10 +754,6 @@ namespace das
         return (int32_t) context->stringHeap->depth();
     }
 
-    void string_heap_collect ( bool validate, Context * context, LineInfoArg * info ) {
-        context->collectStringHeap(info,validate);
-    }
-
     void string_heap_report ( Context * context, LineInfoArg * info ) {
         context->stringHeap->report();
         context->reportAnyHeap(info, true, false, false, false);
@@ -1580,11 +1576,6 @@ namespace das
         addExtern<DAS_BIND_FUN(string_heap_depth)>(*this, lib, "string_heap_depth",
             SideEffects::modifyExternal, "string_heap_depth")
                 ->arg("context");
-        auto shcol = addExtern<DAS_BIND_FUN(string_heap_collect)>(*this, lib, "string_heap_collect",
-            SideEffects::modifyExternal, "string_heap_collect")
-                ->args({"validate","context","at"});
-        shcol->unsafeOperation = true;
-        shcol->arguments[0]->init = make_smart<ExprConstBool>(false);
         auto hcol = addExtern<DAS_BIND_FUN(heap_collect)>(*this, lib, "heap_collect",
                 SideEffects::modifyExternal, "heap_collect")
                     ->args({"string_heap","validate","context","at"});

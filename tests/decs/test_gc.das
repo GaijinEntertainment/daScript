@@ -89,7 +89,7 @@ def test_gc_strings( t: T?)
         t |> equal( i, 3)
     before_gc()
     unsafe
-        string_heap_collect(true)
+        heap_collect(true, true)
     after_gc()
     t |> run("after string gc") <| @ ( t : T? )
         var j = 0
