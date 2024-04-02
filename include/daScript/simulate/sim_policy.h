@@ -161,6 +161,9 @@ namespace  das {
             a = a - uint32_t(A/B)*b;
         }
     };
+#else
+    struct SimPolicy_Int : SimPolicy_IntBin<int32_t,uint32_t,INT32_MIN>, SimPolicy_MathTT<int32_t> {};
+    struct SimPolicy_UInt : SimPolicy_Bin<uint32_t,uint32_t>, SimPolicy_MathTT<uint32_t> {};
 #endif
 
     struct SimPolicy_Int64 : SimPolicy_IntBin<int64_t,uint64_t,INT64_MIN>, SimPolicy_MathTT<int64_t> {};
@@ -768,10 +771,8 @@ namespace  das {
     struct SimPolicy;
 
     template <> struct SimPolicy<bool> : SimPolicy_Bool {};
-#if DAS_FAST_INTEGER_MOD
     template <> struct SimPolicy<int32_t> : SimPolicy_Int {};
     template <> struct SimPolicy<uint32_t> : SimPolicy_UInt {};
-#endif
     template <> struct SimPolicy<int64_t> : SimPolicy_Int64 {};
     template <> struct SimPolicy<uint64_t> : SimPolicy_UInt64 {};
     template <> struct SimPolicy<float> : SimPolicy_Float, SimPolicy_MathFloat {};
