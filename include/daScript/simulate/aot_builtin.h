@@ -31,7 +31,6 @@ namespace das {
     int32_t heap_depth ( Context * context );
     uint64_t string_heap_bytes_allocated ( Context * context );
     int32_t string_heap_depth ( Context * context );
-    void string_heap_collect ( bool validate, Context * context, LineInfoArg * info );
     void string_heap_report ( Context * context, LineInfoArg * info );
     bool is_intern_strings ( Context * context );
     void heap_collect ( bool stringHeap, bool validate, Context * context, LineInfoArg * info );

@@ -68,11 +68,11 @@ def test
                     print("before collect  {int(heap_bytes_allocated())} {int(string_heap_bytes_allocated())}\n")
                     heap_report()
                     unsafe
-                        string_heap_collect()
+                        heap_collect(true)
                     print("after collect {int(heap_bytes_allocated())} {int(string_heap_bytes_allocated())}\n")
     print("allocated {int(heap_bytes_allocated())} {int(string_heap_bytes_allocated())}\n")
     unsafe
-        string_heap_collect()
+        heap_collect(true)
     print("after collect {int(heap_bytes_allocated())} {int(string_heap_bytes_allocated())}\n")
     return true
 
