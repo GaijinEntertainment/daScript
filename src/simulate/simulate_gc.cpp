@@ -43,6 +43,9 @@ namespace das
                     return t.first==ps && t.second==info->hash;
                 }) == visited_handles.end();
         }
+        virtual bool canVisitPointer ( TypeInfo * ti ) override {
+            return ti->flags & gcFlags;
+        }
 
         virtual bool canVisitArrayData ( TypeInfo * ti, uint32_t ) override {
             return ti->flags & gcFlags;
@@ -194,7 +197,7 @@ namespace das
                         }
                         break;
                     case Type::tString:     String(*((char **)pa)); break;
-                    case Type::tPointer: {
+                    case Type::tPointer: if ( canVisitPointer(info) ) {
                             if ( info->firstType && info->firstType->type!=Type::tVoid ) {
                                 beforePtr(pa, info);
                                 walk(*(char**)pa, info->firstType);
@@ -529,6 +532,9 @@ namespace das
             return find_if(visited_handles.begin(),visited_handles.end(),[&]( const loop_point & t ){
                     return t.first==ps && t.second==info->hash;
                 }) == visited_handles.end();
+        }
+        virtual bool canVisitPointer ( TypeInfo * ti ) override {
+            return (ti->flags | gcAlways) & gcFlags;
         }
         virtual void String ( char * & st ) override {
             if ( !reportStringHeap ) return;
@@ -900,7 +906,7 @@ namespace das
                         }
                         break;
                     case Type::tString:     String(*((char **)pa)); break;
-                    case Type::tPointer: if ( *(char**)pa && info->firstType ) {
+                    case Type::tPointer: if ( canVisitPointer(info) && *(char**)pa && info->firstType ) {
                             if ( info->firstType->type==Type::tStructure ) {
                                 auto *si = info->firstType->structType;
                                 auto tsize = info->firstType->size;
