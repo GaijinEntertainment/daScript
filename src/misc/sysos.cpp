@@ -17,6 +17,7 @@
             dw = (dw & ~(mask << lowBit)) | (DWORD(newValue) << lowBit);
         }
 
+#if !defined(_M_ARM64)
         bool g_isVHSet = false;
         void ( * g_HwBpHandler ) ( int, void * ) = nullptr;
 
@@ -77,6 +78,11 @@
             if (!SetThreadContext(thisThread, &cxt)) return false;
             return true;
         }
+#else
+        void hwSetBreakpointHandler(void (*) (int, void *)) {}
+        int hwBreakpointSet(void *, int, int) { return -1; }
+        bool hwBreakpointClear(int) { return false; }
+#endif
 
         size_t getExecutablePathName(char* pathName, size_t pathNameCapacity) {
             return GetModuleFileNameA(NULL, pathName, (DWORD)pathNameCapacity);
