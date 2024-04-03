@@ -72,6 +72,7 @@ namespace das
         }
         __forceinline vec2() = default;
         __forceinline vec2(const vec2 &) = default;
+        __forceinline vec2 & operator = (const vec2 &) = default;
         __forceinline vec2(vec4f t) : x(vec_extract<TT>::x(t)), y(vec_extract<TT>::y(t)) {}
         __forceinline vec2(TT X, TT Y) : x(X), y(Y) {}
         __forceinline vec2(TT t) : x(t), y(t) {}
@@ -94,6 +95,7 @@ namespace das
         }
         __forceinline vec3() = default;
         __forceinline vec3(const vec3 &) = default;
+        __forceinline vec3 & operator = (const vec3 &) = default;
         __forceinline vec3(vec4f t) : x(vec_extract<TT>::x(t)), y(vec_extract<TT>::y(t)), z(vec_extract<TT>::z(t)) {}
         __forceinline vec3(TT X, TT Y, TT Z) : x(X), y(Y), z(Z) {}
         __forceinline vec3(TT t) : x(t), y(t), z(t) {}
@@ -117,6 +119,7 @@ namespace das
         }
         __forceinline vec4() = default;
         __forceinline vec4(const vec4 &) = default;
+        __forceinline vec4 & operator = (const vec4 &) = default;
         __forceinline vec4(vec4f t) : x(vec_extract<TT>::x(t)), y(vec_extract<TT>::y(t)), z(vec_extract<TT>::z(t)), w(vec_extract<TT>::w(t)) {}
         __forceinline vec4(TT X, TT Y, TT Z, TT W) : x(X), y(Y), z(Z), w(W) {}
         __forceinline vec4(TT t) : x(t), y(t), z(t), w(t) {}
