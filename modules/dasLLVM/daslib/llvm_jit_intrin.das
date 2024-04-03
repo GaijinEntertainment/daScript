@@ -580,9 +580,31 @@ def intrinsic_math_normalize(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCa
     let v2 = LLVMBuildFMul(g_builder, arguments[0], arguments[0], "")
     let len_sq = build_fadd(g_builder, opType, v2, "")
     let len = build_fsqrt(g_builder, len_sq, "")
-    let ilen = build_frcp(g_builder, len, "")
-    let vilen = build_broadcast_vector(g_builder, opType, ilen)
-    return LLVMBuildFMul(g_builder, arguments[0], vilen, "normalize")
+
+    let zero_val = LLVMConstNull(LLVMFloatType())
+    let is_zero = g_builder |> LLVMBuildFCmp(LLVMRealPredicate LLVMRealOEQ, len_sq, zero_val, "isVecZero")
+
+    let ffunc       = LLVMGetBasicBlockParent(LLVMGetInsertBlock(g_builder))
+    let if_zero     = LLVMAppendBasicBlock(ffunc, "if.zero")
+    let if_not_zero = LLVMAppendBasicBlock(ffunc, "if.notzero")
+    let merge_bb    = LLVMAppendBasicBlock(ffunc, "merge")
+    LLVMBuildCondBr(g_builder, is_zero, if_zero, if_not_zero)
+
+    LLVMPositionBuilderAtEnd(g_builder, if_zero)
+    let zero_vec = build_broadcast_vector(g_builder, opType, zero_val)
+    LLVMBuildBr(g_builder, merge_bb)
+
+    LLVMPositionBuilderAtEnd(g_builder, if_not_zero)
+    let ilen     = build_frcp(g_builder, len, "")
+    let vilen    = build_broadcast_vector(g_builder, opType, ilen)
+    let norm_vec = LLVMBuildFMul(g_builder, arguments[0], vilen, "normalize")
+    LLVMBuildBr(g_builder, merge_bb)
+
+    LLVMPositionBuilderAtEnd(g_builder, merge_bb)
+    let phi = LLVMBuildPhi(g_builder, type_to_llvm_type(opType), "result")
+    LLVMAddIncoming(phi, [[auto norm_vec; zero_vec]], [[auto if_not_zero; if_zero]])
+
+    return phi
 
 def intrinsic_math_cross(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
     //! a.yzx * b.zxy - a.zxy * b.yzx

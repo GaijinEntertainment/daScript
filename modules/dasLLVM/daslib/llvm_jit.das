@@ -1153,8 +1153,11 @@ class LlvmJitVisitor : AstVisitor
                 setE(expr, ptr_idx)
         elif subExprT.dim |> length != 0
             var inscope etype <- clone_type(subExprT)
-            let maxIndex = etype.dim[etype.dim |> length-1]
-            etype.dim |> pop()
+            assume vec = etype.dim
+            let maxIndex = vec[vec |> length-1]
+            for i in range(1, length(vec))
+                vec[i - 1] = vec[i]
+            vec |> resize( vec |> length - 1 )
             check_range(tidx, LLVMConstInt(LLVMInt32Type(), uint64(maxIndex), 0), expr.at, "dim index out of range")
             var ptr_idx = build_array_index(tsrc, tidx, etype, "dim_at")
             if expr.atFlags.r2v
@@ -1214,8 +1217,11 @@ class LlvmJitVisitor : AstVisitor
         assume subExprT = expr.subexpr._type
         if subExprT.dim |> length != 0 || (subExprT.isPointer && subExprT.firstType.dim |> length != 0)
             var inscope etype <- subExprT.isPointer ? clone_type(subExprT.firstType) : clone_type(subExprT)
-            let maxIndex = etype.dim[etype.dim |> length-1]
-            etype.dim |> pop()
+            assume vec = etype.dim
+            let maxIndex = vec[vec |> length-1]
+            for i in range(1, length(vec))
+                vec[i - 1] = vec[i]
+            vec |> resize( vec |> length - 1 )
             var resType = LLVMPointerType(type_to_llvm_type(etype),0u)
             var if_not_null = subExprT.dim |> length==0 ? LLVMBuildIsNotNull(g_builder, tsrc, "") : LLVMConstInt(LLVMInt1Type(), 1ul, 0)
             var res = build_select(if_not_null, resType) <|
