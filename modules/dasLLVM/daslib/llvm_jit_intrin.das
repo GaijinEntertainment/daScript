@@ -98,6 +98,7 @@ let g_intrin_lookup <- {{
     "math::cross" => @@intrinsic_math_cross;
     "math::inv_distance_sq" => @@intrinsic_math_inv_distance_sq;
     "math::inv_length" => @@intrinsic_math_inv_length;
+    "math::fast_normalize" => @@intrinsic_math_fast_normalize;
     "math::normalize" => @@intrinsic_math_normalize
 }}
 
@@ -573,6 +574,17 @@ def intrinsic_math_dot(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc
     assert(opType.isVectorType)
     let v2 = LLVMBuildFMul(g_builder, arguments[0], arguments[1], "")
     return build_fadd(g_builder, opType, v2, "dot")
+
+def intrinsic_math_fast_normalize(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+    assume opType = expr.arguments[0]._type
+    assert(opType.isVectorType)
+    let v2 = LLVMBuildFMul(g_builder, arguments[0], arguments[0], "")
+    let len_sq = build_fadd(g_builder, opType, v2, "")
+    let len = build_fsqrt(g_builder, len_sq, "")
+    let ilen = build_frcp(g_builder, len, "")
+    let vilen = build_broadcast_vector(g_builder, opType, ilen)
+    return LLVMBuildFMul(g_builder, arguments[0], vilen, "fast_normalize")
+
 
 def intrinsic_math_normalize(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
     assume opType = expr.arguments[0]._type
