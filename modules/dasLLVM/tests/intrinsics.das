@@ -351,6 +351,21 @@ def test_lerp( t:T?; a:auto(TT); b:auto(QQ); c:TT )
     // note: mismatching precision
     // t |> numericEqual ( lerp(a,b,c), jit_lerp(a,b,c), "lerp({a},{b},{c})" )
 
+[jit,sideeffects]
+def jit_normalize_zero()
+    return normalize(float2(0.0, 0.0))
+
+[jit,sideeffects]
+def jit_normalize_nonzero()
+    return normalize(float2(2.0, 2.0))
+
+[test]
+def test_normalize( t:T? )
+    t |> success ( is_jit_function(@@<():float2> jit_normalize_zero) )
+    t |> success ( is_jit_function(@@<():float2> jit_normalize_nonzero) )
+    t |> equal ( jit_normalize_nonzero(), float2(1.0 / sqrt(2.0), 1.0 / sqrt(2.0)) )
+    t |> equal ( jit_normalize_zero(), float2(0.0, 0.0) )
+
 [test]
 def test_lerp ( t:T? )
     var fake <- Faker()
