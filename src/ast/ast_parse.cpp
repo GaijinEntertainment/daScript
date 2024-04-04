@@ -638,7 +638,6 @@ namespace das {
 
     bool verifyModuleNamesUnique ( const vector<ModuleInfo> & req, TextWriter & logs ) {
         das_hash_map<string, string> fullName;
-        auto program = make_smart<Program>();
         for ( auto & r : req ) {
             if ( fullName.find(r.moduleName) != fullName.end() ) {
                 logs << "several modules with the name " << r.moduleName << "\n" <<
