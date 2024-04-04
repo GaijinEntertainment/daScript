@@ -636,6 +636,20 @@ namespace das {
         }
     }
 
+    bool verifyModuleNamesUnique ( const vector<ModuleInfo> & req, TextWriter & logs ) {
+        das_hash_map<string, string> fullName;
+        auto program = make_smart<Program>();
+        for ( auto & r : req ) {
+            if ( fullName.find(r.moduleName) != fullName.end() ) {
+                logs << "several modules with the name " << r.moduleName << "\n" <<
+                        "namely " << r.fileName << "\n\tand " << fullName[r.moduleName] << "\n";
+                return false;
+            }
+            fullName[r.moduleName] = r.fileName;
+        }
+        return true;
+    }
+
     ProgramPtr compileDaScript ( const string & fileName,
                                 const FileAccessPtr & access,
                                 TextWriter & logs,
@@ -663,6 +677,9 @@ namespace das {
                 addExtraDependency("profiler", policies.profile_module, missing, circular, notAllowed, req, dependencies, access, libGroup, policies);
             } /* else */ if ( policies.jit ) {
                 addExtraDependency("just_in_time", policies.jit_module, missing, circular, notAllowed, req, dependencies, access, libGroup, policies);
+            }
+            if ( !verifyModuleNamesUnique(req, logs) ) {
+                return make_smart<Program>();
             }
             for ( auto & mod : req ) {
                 if ( libGroup.findModule(mod.moduleName) ) {
