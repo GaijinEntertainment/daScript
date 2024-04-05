@@ -738,8 +738,8 @@ namespace das {
         return vtype->dim.size()==0 && vtype->isVectorType() && !vtype->ref;
     }
 
-    void describeLocalCppType ( TextWriter & ss, const TypeDeclPtr & vtype, CpptSubstitureRef substituteRef = CpptSubstitureRef::yes ) {
-        ss << describeCppType(vtype,substituteRef,CpptSkipRef::no);
+    void describeLocalCppType ( TextWriter & ss, const TypeDeclPtr & vtype, CpptSubstitureRef substituteRef = CpptSubstitureRef::yes, CpptSkipConst skipConst = CpptSkipConst::no ) {
+        ss << describeCppType(vtype,substituteRef,CpptSkipRef::no,skipConst);
     }
 
     void describeVarLocalCppType ( TextWriter & ss, const TypeDeclPtr & vtype, CpptSubstitureRef substituteRef = CpptSubstitureRef::yes ) {
@@ -914,7 +914,7 @@ namespace das {
         if ( needInline ) {
             ss << "inline ";
         }
-        describeLocalCppType(ss,fn->result,CpptSubstitureRef::no);
+        describeLocalCppType(ss,fn->result,CpptSubstitureRef::no, CpptSkipConst::yes);
         ss << " ";
         if ( needName ) {
             ss << aotFuncName(fn);
@@ -1151,7 +1151,7 @@ namespace das {
         virtual void preVisit ( Function * fn) override {
             Visitor::preVisit(fn);
             ss << "\ninline ";
-            describeLocalCppType(ss,fn->result,CpptSubstitureRef::no);
+            describeLocalCppType(ss,fn->result,CpptSubstitureRef::no, CpptSkipConst::yes);
             ss << " " << aotFuncName(fn) << " ( Context * __context__";
         }
         virtual void preVisitFunctionBody ( Function * fn,Expression * expr ) override {
@@ -1698,7 +1698,7 @@ namespace das {
                         ss << "das_auto_cast<";
                     }
                 }
-                ss << describeCppType(retT, CpptSubstitureRef::no, CpptSkipRef::no) << ">::cast(";
+                ss << describeCppType(retT, CpptSubstitureRef::no, CpptSkipRef::no, CpptSkipConst::yes) << ">::cast(";
             }
         }
         virtual ExpressionPtr visit(ExprReturn* expr) override {
@@ -2627,7 +2627,7 @@ namespace das {
         }
         virtual void preVisit ( ExprMakeVariant * expr ) override {
             Visitor::preVisit(expr);
-            ss << "(([&]() -> " << describeCppType(expr->type,CpptSubstitureRef::no,CpptSkipRef::yes)
+            ss << "(([&]() -> " << describeCppType(expr->type,CpptSubstitureRef::no,CpptSkipRef::yes, CpptSkipConst::yes)
                 << (needTempSrc(expr) ? "&" : "") << " {\n";
             tab ++;
             if ( !needTempSrc(expr) ) {
@@ -2679,7 +2679,7 @@ namespace das {
             }
             ss << ")";
             if ( !expr->isNewHandle ) {
-                ss << " -> " << describeCppType(expr->type,CpptSubstitureRef::no,CpptSkipRef::yes)
+                ss << " -> " << describeCppType(expr->type,CpptSubstitureRef::no,CpptSkipRef::yes, CpptSkipConst::yes)
                     << (needTempSrc(expr) ? "&" : "");
             }
             ss << " {\n";
@@ -2759,7 +2759,7 @@ namespace das {
         }
         virtual void preVisit ( ExprMakeArray * expr ) override {
             Visitor::preVisit(expr);
-            ss << "(([&]() -> " << describeCppType(expr->type,CpptSubstitureRef::no,CpptSkipRef::yes)
+            ss << "(([&]() -> " << describeCppType(expr->type,CpptSubstitureRef::no,CpptSkipRef::yes, CpptSkipConst::yes)
                 << (needTempSrc(expr) ? "&" : "") << " {\n";
             tab ++;
             if ( !needTempSrc(expr) ) {
@@ -2794,7 +2794,7 @@ namespace das {
         }
         virtual void preVisit ( ExprMakeTuple * expr ) override {
             Visitor::preVisit(expr);
-            ss << "(([&]() -> " << describeCppType(expr->type,CpptSubstitureRef::no,CpptSkipRef::yes)
+            ss << "(([&]() -> " << describeCppType(expr->type,CpptSubstitureRef::no,CpptSkipRef::yes, CpptSkipConst::yes)
                 << (needTempSrc(expr) ? "&" : "") << " {\n";
             tab ++;
             if ( !needTempSrc(expr) ) {
@@ -2835,7 +2835,7 @@ namespace das {
                 if ( block->returnType->isRefType() && !block->returnType->ref ) {
                     ss << "_cmres";
                 }
-                ss << "<" << describeCppType(block->returnType);
+                ss << "<" << describeCppType(block->returnType, CpptSubstitureRef::no, CpptSkipRef::no, CpptSkipConst::yes);
                 for ( auto & arg : block->arguments ) {
                     ss << "," << describeCppType(arg->type);
                     if ( arg->type->isRefType() && !arg->type->ref ) {
@@ -2875,7 +2875,7 @@ namespace das {
                 if ( block->aotSkipMakeBlock ) {
                     ss << "DAS_AOT_INLINE_LAMBDA ";
                 }
-                ss << "-> " << describeCppType(block->returnType);
+                ss << "-> " << describeCppType(block->returnType, CpptSubstitureRef::no, CpptSkipRef::no, CpptSkipConst::yes);
             } else {
                 ss << expr->aotFunctorName;
             }
@@ -3443,7 +3443,7 @@ namespace das {
                 if ( ! last ) logs << ", ";
             }
             logs << " ) -> ";
-            describeLocalCppType(logs,fn->result,CpptSubstitureRef::no);
+            describeLocalCppType(logs,fn->result,CpptSubstitureRef::no, CpptSkipConst::yes);
             logs << " {\n";
             logs << "        return " << aotFuncName(fn) << "(this";
             for ( auto & var : fn->arguments ) {
