@@ -788,6 +788,7 @@ namespace das
         FunctionPtr setAnyTemplate();
         FunctionPtr setTempResult();
         FunctionPtr setCaptureString();
+        FunctionPtr setNoDiscard();
         FunctionPtr arg_init ( int argIndex, const ExpressionPtr & initValue ) {
             arguments[argIndex]->init = initValue;
             return this;
@@ -891,6 +892,7 @@ namespace das
 
                 bool    requestNoJit : 1;
                 bool    jitContextAndLineInfo : 1;
+                bool    nodiscard : 1;
             };
             uint32_t moreFlags = 0;
         };

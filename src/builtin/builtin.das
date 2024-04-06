@@ -510,7 +510,7 @@ def clone(var a:table<string;auto(VT)>;b:table<string;VT>|#)
         let kk := k
         a[kk] := v
 
-[unsafe_outside_of_for]
+[unsafe_outside_of_for,nodiscard]
 def keys(a:table<auto(keyT);auto(valT)>|#) : iterator<keyT & const>
     var it : iterator<keyT & const>
     __builtin_table_keys(it,a,typeinfo(sizeof type<keyT>))
@@ -522,13 +522,13 @@ def values(a:table<auto(keyT);void> ==const|#)
 def values(var a:table<auto(keyT);void> ==const|#)
     concept_assert(false,"can't iterate over values of a table<...;void>")
 
-[unsafe_outside_of_for]
+[unsafe_outside_of_for,nodiscard]
 def values(a:table<auto(keyT);auto(valT)> ==const|#) : iterator<valT & const>
     var it : iterator<valT & const>
     __builtin_table_values(it,a,typeinfo(sizeof type<valT>))
     return <- it
 
-[unsafe_outside_of_for]
+[unsafe_outside_of_for,nodiscard]
 def values(var a:table<auto(keyT);auto(valT)> ==const|#) : iterator<valT &>
     var it : iterator<valT &>
     __builtin_table_values(it,a,typeinfo(sizeof type<valT>))
@@ -586,7 +586,7 @@ def next ( it:iterator<auto(TT)>; var value : TT& ) : bool
         unsafe
             return _builtin_iterator_iterate(it, addr(value))
 
-[generic]
+[generic,nodiscard]
 def each ( rng : range ) : iterator<int>
     var it : iterator<int>
     _builtin_make_range_iterator(it,rng)
@@ -596,13 +596,13 @@ def iter_range ( foo )
     concept_assert(typeinfo(is_iterable foo),"requires iterable")
     return range(_::length(foo)) // assuming length(foo) exists
 
-[generic,unsafe_outside_of_for]
+[generic,unsafe_outside_of_for,nodiscard]
 def each ( str : string ) : iterator<int>
     var it : iterator<int>
     _builtin_make_string_iterator(it,str)
     return <- it
 
-[unsafe_outside_of_for]
+[unsafe_outside_of_for,nodiscard]
 def each ( a : auto(TT)[] ) : iterator<TT&>
     unsafe
         var parr : void? = reinterpret<void?>(addr(a[0]))
@@ -610,19 +610,20 @@ def each ( a : auto(TT)[] ) : iterator<TT&>
         _builtin_make_fixed_array_iterator(it,parr,typeinfo(dim a),typeinfo(sizeof a[0]))
         return <- it
 
-[unsafe_outside_of_for]
+[unsafe_outside_of_for,nodiscard]
 def each ( a : array<auto(TT)> ) : iterator<TT&>
     var it : iterator<TT&>
     _builtin_make_good_array_iterator(it, a, typeinfo(sizeof a[0]))
     return <- it
 
-[unsafe_outside_of_for]
+[unsafe_outside_of_for,nodiscard]
 def each ( a : array<auto(TT)># ) : iterator<TT#&>
     var it : iterator<TT#&>
     _builtin_make_good_array_iterator(it, a, typeinfo(sizeof a[0]))
     unsafe
         return <- it
 
+[nodiscard]
 def each ( lam : lambda<(var arg:auto(argT)):bool> ) : iterator<argT -&>
     concept_assert(typeinfo(is_ref type<argT>),"lamda-to-iterator argument has to be reference; expecting value& or reference type")
     var it : iterator<argT -&>
@@ -630,13 +631,14 @@ def each ( lam : lambda<(var arg:auto(argT)):bool> ) : iterator<argT -&>
     unsafe
         return <- it
 
+[nodiscard]
 def each_ref ( lam : lambda<(var arg:auto(argT)?):bool> ) : iterator<argT &>
     var it : iterator<argT &>
     _builtin_make_lambda_iterator(it,lam,typeinfo(sizeof type<void?>))
     unsafe
         return <- it
 
-[unused_argument(tt)]
+[unused_argument(tt),nodiscard]
 def each_enum(tt:auto(TT)) : iterator<TT -const -&>
     concept_assert(typeinfo(is_enum tt),"expecting each_enum(any enum value)")
     var iter : iterator<TT -const -&>

@@ -591,7 +591,7 @@ namespace das {
                     ->args({"old_name","new_name"});
             addExtern<DAS_BIND_FUN(builtin_fopen)>(*this, lib, "fopen",
                 SideEffects::modifyExternal, "builtin_fopen")
-                    ->args({"name","mode"});
+                    ->args({"name","mode"})->setNoDiscard();
             addExtern<DAS_BIND_FUN(builtin_fclose)>(*this, lib, "fclose",
                 SideEffects::modifyExternal, "builtin_fclose")
                     ->args({"file","context","line"});
