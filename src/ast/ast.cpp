@@ -763,6 +763,11 @@ namespace das {
         return this;
     }
 
+    FunctionPtr Function::setNoDiscard() {
+        nodiscard = true;
+        return this;
+    }
+
     FunctionPtr Function::addToModule ( Module & mod, SideEffects seFlags ) {
         setSideEffects(seFlags);
         if (!mod.addFunction(this)) {

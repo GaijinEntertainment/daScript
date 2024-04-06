@@ -93,6 +93,14 @@ namespace das
         };
     };
 
+    struct RequestNoDiscardFunctionAnnotation : MarkFunctionAnnotation {
+        RequestNoDiscardFunctionAnnotation() : MarkFunctionAnnotation("nodiscard") { }
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
+            func->nodiscard = true;
+            return true;
+        };
+    };
+
     struct DeprecatedFunctionAnnotation : MarkFunctionAnnotation {
         DeprecatedFunctionAnnotation() : MarkFunctionAnnotation("deprecated") { }
         virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
@@ -1427,6 +1435,7 @@ namespace das
         addAnnotation(make_smart<HintFunctionAnnotation>());
         addAnnotation(make_smart<RequestJitFunctionAnnotation>());
         addAnnotation(make_smart<RequestNoJitFunctionAnnotation>());
+        addAnnotation(make_smart<RequestNoDiscardFunctionAnnotation>());
         addAnnotation(make_smart<DeprecatedFunctionAnnotation>());
         addAnnotation(make_smart<AliasCMRESFunctionAnnotation>());
         addAnnotation(make_smart<NeverAliasCMRESFunctionAnnotation>());
@@ -1492,12 +1501,12 @@ namespace das
         // count and ucount iterators
         auto fnCount = addExtern<DAS_BIND_FUN(builtin_count),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "count",
             SideEffects::modifyExternal, "builtin_count")
-                ->args({"start","step","context"});
+                ->args({"start","step","context"})->setNoDiscard();
         fnCount->arguments[0]->init = make_smart<ExprConstInt>(0);  // start=0
         fnCount->arguments[1]->init = make_smart<ExprConstInt>(1);  // step=0
         auto fnuCount = addExtern<DAS_BIND_FUN(builtin_ucount),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "ucount",
             SideEffects::none, "builtin_ucount")
-                ->args({"start","step","context"});
+                ->args({"start","step","context"})->setNoDiscard();
         fnuCount->arguments[0]->init = make_smart<ExprConstUInt>(0);  // start=0
         fnuCount->arguments[1]->init = make_smart<ExprConstUInt>(1);  // step=0
         // make-iterator functions

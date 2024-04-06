@@ -87,6 +87,7 @@ namespace das {
             :  AstExprCallFuncAnnotation<ExprCall> ("ExprCall", ml) {
             addField<DAS_BIND_MANAGED_FIELD(doesNotNeedSp)>("doesNotNeedSp");
             addField<DAS_BIND_MANAGED_FIELD(cmresAlias)>("cmresAlias");
+            addField<DAS_BIND_MANAGED_FIELD(notDiscarded)>("notDiscarded");
         }
     };
 

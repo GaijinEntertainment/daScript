@@ -1269,6 +1269,7 @@ namespace das
         virtual void serialize( AstSerializer & ser ) override;
         bool doesNotNeedSp = false;
         bool cmresAlias = false;
+        bool notDiscarded = false;
         __forceinline bool allowCmresSkip() const {
             return func && (func->copyOnReturn || func->moveOnReturn)
                 && !((func->aliasCMRES || cmresAlias) && !func->neverAliasCMRES);

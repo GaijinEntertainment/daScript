@@ -5502,6 +5502,10 @@ namespace das {
                 return "";
             }
         }
+        virtual void preVisit ( ExprMove * expr ) override {
+            Visitor::preVisit(expr);
+            markNoDiscard(expr->right.get());
+        }
         virtual ExpressionPtr visit ( ExprMove * expr ) override {
             if ( !expr->left->type || !expr->right->type ) return Visitor::visit(expr);
             // infer
@@ -5560,6 +5564,10 @@ namespace das {
                 return "";
             }
         }
+        void preVisit ( ExprCopy * expr ) override {
+            Visitor::preVisit(expr);
+            markNoDiscard(expr->right.get());
+        }
         virtual ExpressionPtr visit ( ExprCopy * expr ) override {
             if ( !expr->left->type || !expr->right->type ) return Visitor::visit(expr);
             // infer
@@ -5597,6 +5605,7 @@ namespace das {
                 var->underClone = expr;
             }
             expr->cloneSet.reset();
+            markNoDiscard(expr->right.get());
         }
         virtual ExpressionPtr visit ( ExprClone * expr ) override {
             if ( expr->cloneSet ) return expr->cloneSet;   // we've been promoted from underneath
@@ -5816,6 +5825,7 @@ namespace das {
                 scopes[i]->hasEarlyOut = true;
                 if ( scopes[i]->isClosure ) break;
             }
+            if ( expr->subexpr ) markNoDiscard(expr->subexpr.get());
         }
         virtual ExpressionPtr visit ( ExprReturn * expr ) override {
             if ( blocks.size() ) {
@@ -6285,6 +6295,7 @@ namespace das {
         virtual void preVisitForSource ( ExprFor * expr, Expression * that, bool last ) override {
             Visitor::preVisitForSource(expr,that,last);
             that->isForLoopSource = true;
+            markNoDiscard(that);
         }
         virtual ExpressionPtr visitForSource ( ExprFor * expr, Expression * that , bool last ) override {
             if ( program->policies.jit & that->type && (
@@ -6510,6 +6521,7 @@ namespace das {
             if ( !var->init->type ) {
                 return Visitor::visitLetInit(expr, var, init);
             }
+            markNoDiscard(var->init.get());
             if ( var->type->isAuto() ) {
                 auto varT = TypeDecl::inferGenericInitType(var->type, var->init->type);
                 if ( !varT || varT->isAlias() ) {
@@ -6859,6 +6871,55 @@ namespace das {
             return Visitor::visit(expr);
         }
     // ExprCall
+        void markNoDiscard ( Expression * expr ) { // this one marks that expression tree is not discarded (stops at call)
+            if ( expr->rtti_isCall() ) {
+                auto call = (ExprCall *) expr;
+                call->notDiscarded = true;
+            } else if ( expr->rtti_isR2V() ) {
+                auto r2v = (ExprRef2Value *) expr;
+                markNoDiscard(r2v->subexpr.get());
+            } else if  ( expr->rtti_isRef2Ptr() ) {
+                auto r2p = (ExprRef2Ptr *) expr;
+                markNoDiscard(r2p->subexpr.get());
+            } else if ( expr->rtti_isPtr2Ref() ) {
+                auto p2r = (ExprPtr2Ref *) expr;
+                markNoDiscard(p2r->subexpr.get());
+            } else if ( expr->rtti_isAt() ) {
+                auto at = (ExprAt *) expr;
+                markNoDiscard(at->subexpr.get());
+            } else if ( expr->rtti_isSafeAt() ) {
+                auto at = (ExprSafeAt *) expr;
+                markNoDiscard(at->subexpr.get());
+            } else if  ( expr->rtti_isField() ) {
+                auto fl = (ExprField *) expr;
+                markNoDiscard(fl->value.get());
+            } else if ( expr->rtti_isSafeField() ) {
+                auto fl = (ExprSafeField *) expr;
+                markNoDiscard(fl->value.get());
+            } else if ( expr->rtti_isOp1() ) {
+                auto op1 = (ExprOp1 *) expr;
+                markNoDiscard(op1->subexpr.get());
+            } else if ( expr->rtti_isOp2() ) {
+                auto op2 = (ExprOp2 *) expr;
+                markNoDiscard(op2->left.get());
+                markNoDiscard(op2->right.get());
+            } else if ( expr->rtti_isOp3() ) {
+                auto op3 = (ExprOp3 *) expr;
+                markNoDiscard(op3->subexpr.get());
+                markNoDiscard(op3->left.get());
+                markNoDiscard(op3->right.get());
+            } else if ( expr->rtti_isNullCoalescing() ) {
+                auto nc = (ExprNullCoalescing *) expr;
+                markNoDiscard(nc->subexpr.get());
+                markNoDiscard(nc->defaultValue.get());
+            } else if ( expr->rtti_isIsVariant() ) {
+                auto iv = (ExprIsVariant *) expr;
+                markNoDiscard(iv->value.get());
+            } else if ( expr->rtti_isAsVariant() ) {
+                auto av = (ExprAsVariant *) expr;
+                markNoDiscard(av->value.get());
+            }
+        }
         virtual void preVisit ( ExprCall * call ) override {
             Visitor::preVisit(call);
             call->argumentsFailedToInfer = false;
@@ -6866,10 +6927,16 @@ namespace das {
                 error("too many arguments in " + call->name + ", max allowed is DAS_MAX_FUNCTION_ARGUMENTS=" DAS_STR(DAS_MAX_FUNCTION_ARGUMENTS),  "", "",
                     call->at, CompilationError::too_many_arguments);
             }
+            if ( call->func && call->func->nodiscard && !call->notDiscarded && !safeExpression(call) ) {
+                error("call to " + call->name + " result is discarded, which is unsafe",
+                    "use let _ = " + call->name + "(...)", "",
+                        call->at, CompilationError::result_discarded);
+            }
         }
         virtual void preVisitCallArg ( ExprCall * call, Expression * arg, bool last ) override {
             Visitor::preVisitCallArg(call, arg, last);
             arg->isCallArgument = true;
+            markNoDiscard(arg);
         }
         virtual ExpressionPtr visitCallArg ( ExprCall * call, Expression * arg , bool last ) override {
             if (!arg->type) {

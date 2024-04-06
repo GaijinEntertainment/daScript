@@ -66,6 +66,7 @@ namespace das
     ,   type_alias_already_declared             =   30210       //  typdef A = b; typedef A = ...;
     ,   field_already_initialized               =   30211       //  typdef A = b; typedef A = ...;
     ,   too_many_arguments                      =   30212       //  func(x,y,z,....) with more than DAS_MAX_FUNCTION_ARGUMENTS arguments
+    ,   result_discarded                        =   30213       //  func() returns something, but result is not used. function is marked as [nodiscard]
 
     ,   type_not_found                          =   30301       //  a:wtf
     ,   structure_not_found                     =   30302       //  new wtf
