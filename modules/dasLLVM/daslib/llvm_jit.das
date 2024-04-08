@@ -2336,6 +2336,34 @@ class LlvmJitVisitor : AstVisitor
             mks_ptr = LLVMBuildPointerCast(g_builder, mks_ptr, LLVMPointerType(type_to_llvm_type(expr.makeType),0u), "")
             callConstructor(expr, mks_ptr)
 
+    def override visitMakeStructureBlock(expr:smart_ptr<ExprMakeStruct>;blk:ExpressionPtr) : ExpressionPtr
+        if expr._block != null
+            var params : array<LLVMOpaqueValue?>
+
+            var block_ptr = getE(expr._block)
+            block_ptr = LLVMBuildPointerCast(g_builder, block_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
+            params |> push(block_ptr)
+        // put put the result of ExprMakeStruct as the sole argument to the block
+            var mks_ptr = getE(expr)
+            mks_ptr = LLVMBuildPointerCast(g_builder, mks_ptr, LLVMPointerType(LLVMInt8Type(), 0u), "")
+
+            var args : LLVMOpaqueValue?
+            at_function_entry <|
+                args = LLVMBuildAlloca(g_builder, LLVMArrayType(LLVMFloat4Type(), 1u), "args")
+                LLVMSetAlignment(args, 16u)
+                args = LLVMBuildPointerCast(g_builder, args, LLVMPointerType(LLVMFloat4Type(), 0u), "call_args_ptr")
+            var arg_ptr = LLVMBuildGEP2(g_builder, LLVMFloat4Type(), args, LLVMConstInt(LLVMInt32Type(), 0 |> uint64(), 0), "call_arg__ptr")
+            var arg_val = mks_ptr
+            LLVMBuildStore2(g_builder, LLVMPointerType(LLVMVoidType(), 0u), arg_val, arg_ptr)
+
+            params |> push(args)
+            params |> push(get_context_param())
+
+            var func = LLVMGetNamedFunction(g_mod, FN_JIT_INVOKE_BLOCK)
+            var typ = g_fn_types[FN_JIT_INVOKE_BLOCK]
+            var ccall = LLVMBuildCall2(g_builder, typ, func, params, "invoke")
+        return blk
+
     def override preVisitExprMakeStructField(expr:smart_ptr<ExprMakeStruct>;index:int;decl:MakeFieldDeclPtr;last:bool) : void
         var field_offset : int
         if expr.makeType.isHandle
