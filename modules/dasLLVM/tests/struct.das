@@ -24,6 +24,11 @@ def struct_field ( var f : Foo )
     f.c = "hello"
     return f.d
 
+
+[jit]
+def make_struct_with_block
+    return [[Foo a=1 where $(var f) { f.a = 2; } ]]
+
 [jit]
 def struct_ptr_field ( var f : Foo? )
     f.a = 11
@@ -214,6 +219,14 @@ def test_struct ( t:T? )
         t |> equal ( 0.0, f.b )
         t |> equal ( "bar", f.c )
         t |> equal ( 0, f.d )
+    t |> run("make struct heap with block") <| @ ( t : T? )
+        var f = make_struct_with_block()
+        t |> success ( is_jit_function(@@make_struct_with_block) )
+        t |> equal ( 2,     f.a )
+        t |> equal ( 0.0,   f.b )
+        t |> equal ( "bar", f.c )
+        t |> equal ( 0,     f.d )
+    t |> run("make struct heap with block") <| @ ( t : T? )
     t |> run("make struct heap with init") <| @ ( t : T? )
         var f = make_struct_heap_with_init()
         t |> success ( is_jit_function(@@make_struct_heap_with_init) )
