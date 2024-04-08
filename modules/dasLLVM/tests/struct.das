@@ -24,7 +24,6 @@ def struct_field ( var f : Foo )
     f.c = "hello"
     return f.d
 
-
 [jit]
 def struct_ptr_field ( var f : Foo? )
     f.a = 11
