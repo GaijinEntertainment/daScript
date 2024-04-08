@@ -891,7 +891,7 @@ namespace das {
                 });
             }
         }
-        virtual void preVisitForBody ( ExprFor * expr, Expression * that ) override {
+        virtual void preVisitForBody ( ExprFor * expr, Expression * /*that*/ ) override {
             if ( auto fnPreVisit = get_preVisitExprForBody(classPtr) ) {
                 runMacroFunction(context, "preVisitForBody", [&]() {
                     invoke_preVisitExprForBody(context,fnPreVisit,classPtr,expr); // TODO: pass that
@@ -968,30 +968,24 @@ namespace das {
                 return decl;
             }
         }
-        /*
-        TODO: implement
         virtual void preVisitMakeStructureBlock ( ExprMakeStruct * expr, Expression * blk ) override {
-            if ( auto fnPreVisit = get_preVisitExprMakeStructBlock(classPtr) ) {
+            if ( auto fnPreVisit = get_preVisitMakeStructureBlock(classPtr) ) {
                 runMacroFunction(context, "preVisitMakeStructureBlock", [&]() {
-                    invoke_preVisitExprMakeStructBlock(context,fnPreVisit,classPtr,expr,blk);
+                    invoke_preVisitMakeStructureBlock(context,fnPreVisit,classPtr,expr,blk);
                 });
             }
         }
-        */
-        /*
-        // TODO: implement
         virtual ExpressionPtr visitMakeStructureBlock ( ExprMakeStruct * expr, Expression * blk ) override {
-            if ( auto fnVisit = get_visitExprMakeStructBlock(classPtr) ) {
+            if ( auto fnVisit = get_visitMakeStructureBlock(classPtr) ) {
                 ExpressionPtr result;
                 runMacroFunction(context, "visitMakeStructureBlock", [&]() {
-                    result = invoke_visitExprMakeStructBlock(context,fnVisit,classPtr,expr,blk);
+                    result = invoke_visitMakeStructureBlock(context,fnVisit,classPtr,expr,blk);
                 });
                 return return_smart(result,blk);
             } else {
                 return blk;
             }
         }
-        */
         // MAKE ARRAY
         virtual void preVisitMakeArrayIndex ( ExprMakeArray * expr, int index, Expression * init, bool lastIndex ) override {
             if ( auto fnPreVisit = get_preVisitExprMakeArrayIndex(classPtr) ) {

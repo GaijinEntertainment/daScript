@@ -339,6 +339,8 @@ class AstVisitor
     def abstract visitExprMakeStructIndex(expr:smart_ptr<ExprMakeStruct>;index:int;last:bool) : void
     def abstract preVisitExprMakeStructField(expr:smart_ptr<ExprMakeStruct>;index:int;decl:MakeFieldDeclPtr;last:bool) : void
     def abstract visitExprMakeStructField(expr:smart_ptr<ExprMakeStruct>;index:int;decl:MakeFieldDeclPtr;last:bool) : MakeFieldDeclPtr
+    def abstract preVisitMakeStructureBlock(expr:smart_ptr<ExprMakeStruct>;blk:smart_ptr<Expression>) : void
+    def abstract visitMakeStructureBlock(expr:smart_ptr<ExprMakeStruct>;blk:smart_ptr<Expression>) : ExpressionPtr
 // make array
     def abstract preVisitExprMakeArray(expr:smart_ptr<ExprMakeArray>) : void
     def abstract visitExprMakeArray(expr:smart_ptr<ExprMakeArray>) : ExpressionPtr
