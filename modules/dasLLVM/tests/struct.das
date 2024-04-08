@@ -26,10 +26,6 @@ def struct_field ( var f : Foo )
 
 
 [jit]
-def make_struct_with_block
-    return [[Foo a=1 where $(var f) { f.a = 2; } ]]
-
-[jit]
 def struct_ptr_field ( var f : Foo? )
     f.a = 11
     f.b = 22.0
@@ -43,6 +39,10 @@ def struct_ctor_call
 [jit]
 def make_struct_cmres
     return [[Foo a=1, c="bar"]]
+
+[jit]
+def make_struct_with_block
+    return [[Foo a=1, c="bar" where $(var f) { f.a = 2; } ]]
 
 [jit]
 def make_struct_cmres_with_init
