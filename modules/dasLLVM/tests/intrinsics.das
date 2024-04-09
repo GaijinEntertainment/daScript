@@ -372,7 +372,7 @@ def float3_lerp(from, to : float3; t: float): float3
 
 [test]
 def test_lerp ( t:T? )
-    t |> success ( is_jit_function(@@<(a:float3; b:float3; c:float):float3> approach) )
+    t |> success ( is_jit_function(@@<(a:float3; b:float3; c:float):float3> float3_lerp) )
     var fake <- Faker()
     fuzz <|
         fuzz_float_double_or_float_vec_op3(t,fake,"test_lerp")
