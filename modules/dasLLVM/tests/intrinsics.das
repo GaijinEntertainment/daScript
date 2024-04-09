@@ -366,8 +366,13 @@ def test_normalize( t:T? )
     t |> equal ( jit_normalize_nonzero(), float2(1.0 / sqrt(2.0), 1.0 / sqrt(2.0)) )
     t |> equal ( jit_normalize_zero(), float2(0.0, 0.0) )
 
+[jit,sideeffects]
+def float3_lerp(from, to : float3; t: float): float3
+    return lerp(from, to, t)
+
 [test]
 def test_lerp ( t:T? )
+    t |> success ( is_jit_function(@@<(a:float3; b:float3; c:float):float3> approach) )
     var fake <- Faker()
     fuzz <|
         fuzz_float_double_or_float_vec_op3(t,fake,"test_lerp")
