@@ -2393,6 +2393,12 @@ namespace das {
             return Visitor::visit(expr);
         }
     // ExprStaticAssert
+        virtual void preVisit ( ExprStaticAssert * expr ) override {
+            Visitor::preVisit(expr);
+            for ( auto & arg : expr->arguments ) {
+                markNoDiscard(arg.get());
+            }
+        }
         virtual ExpressionPtr visit ( ExprStaticAssert * expr ) override {
             if ( expr->argumentsFailedToInfer ) return Visitor::visit(expr);
             if ( expr->arguments.size()<1 || expr->arguments.size()>2  ) {
@@ -2413,6 +2419,12 @@ namespace das {
             return Visitor::visit(expr);
         }
     // ExprAssert
+        virtual void preVisit ( ExprAssert * expr ) override {
+            Visitor::preVisit(expr);
+            for ( auto & arg : expr->arguments ) {
+                markNoDiscard(arg.get());
+            }
+        }
         virtual ExpressionPtr visit ( ExprAssert * expr ) override {
             if ( expr->argumentsFailedToInfer ) return Visitor::visit(expr);
             if ( expr->arguments.size()<1 || expr->arguments.size()>2  ) {
@@ -6000,6 +6012,10 @@ namespace das {
             }
             return !expr->isStatic;
         }
+        virtual void preVisit ( ExprIfThenElse * expr ) override {
+            Visitor::preVisit(expr);
+            if ( expr->cond ) markNoDiscard(expr->cond.get());
+        }
         virtual ExpressionPtr visit ( ExprIfThenElse * expr ) override {
             if ( !expr->cond->type ) {
                 return Visitor::visit(expr);
@@ -6163,6 +6179,7 @@ namespace das {
         virtual void preVisit ( ExprWhile * expr ) override {
             Visitor::preVisit(expr);
             loop.push_back(expr);
+            markNoDiscard(expr->cond.get());
         }
         virtual ExpressionPtr visit ( ExprWhile * expr ) override {
             loop.pop_back();
@@ -6918,6 +6935,28 @@ namespace das {
             } else if ( expr->rtti_isAsVariant() ) {
                 auto av = (ExprAsVariant *) expr;
                 markNoDiscard(av->value.get());
+            } else if ( expr->rtti_isMakeArray() ) {
+                auto ma = (ExprMakeArray *) expr;
+                for ( auto & arg : ma->values ) {
+                    markNoDiscard(arg.get());
+                }
+            } else if ( expr->rtti_isMakeStruct() ) {
+                auto ms = (ExprMakeStruct *) expr;
+                for ( auto & arg : ms->structs ) {
+                    for ( auto & fld : *arg ) {
+                        markNoDiscard(fld->value.get());
+                    }
+                }
+            } else if ( expr->rtti_isMakeTuple() ) {
+                auto mt = (ExprMakeTuple *) expr;
+                for ( auto & arg : mt->values ) {
+                    markNoDiscard(arg.get());
+                }
+            } else if ( expr->rtti_isMakeVariant() ) {
+                auto mv = (ExprMakeVariant *) expr;
+                for ( auto & v : mv->variants ) {
+                    markNoDiscard(v->value.get());
+                }
             }
         }
         virtual void preVisit ( ExprCall * call ) override {
