@@ -7797,7 +7797,23 @@ namespace das {
                         decl->value = Expression::autoDereference(decl->value);
                     }
                 } else {
-                    error("field not found, " + decl->name, "", "",
+                    TextWriter extra;
+                    if ( verbose ) {
+                        vector<TypeDeclPtr> args;
+                        args.push_back(expr->makeType);
+                        args.push_back(decl->value->type);
+                        auto opName = "_::.`" + decl->name + "`clone";
+                        auto funs = findMatchingFunctions(opName, args);
+                        auto gens = findMatchingGenerics(opName, args);
+                        if ( funs.size()==1 || gens.size()==1 ) {
+                            TextWriter tw;
+                            extra
+                                << "since there is operator ."  << decl->name << " := ("
+                                    << expr->makeType->structType->name << "," << decl->value->type->describe() << ") , try "
+                                    <<  decl->name << " := " << *(decl->value);
+                        }
+                    }
+                    error("field not found, " + decl->name, extra.str(), "",
                         decl->at, CompilationError::cant_get_field);
                 }
             } else if ( expr->makeType->baseType == Type::tHandle ) {
