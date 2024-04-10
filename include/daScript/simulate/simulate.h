@@ -683,14 +683,14 @@ namespace das
         GlobalVariable * globalVariables = nullptr;
         SimFunction * functions = nullptr;
         SimFunction ** initFunctions = nullptr;
-        bool     globalsOwner = true;
-        uint32_t sharedSize = 0;
-        bool     sharedOwner = true;
-        uint32_t globalsSize = 0;
+        uint64_t sharedSize = 0;
+        uint64_t globalsSize = 0;
         uint32_t globalInitStackSize = 0;
         int totalVariables = 0;
         int totalFunctions = 0;
         int totalInitFunctions = 0;
+        bool     globalsOwner = true;
+        bool     sharedOwner = true;
     public:
         SimNode * aotInitScript = nullptr;
         bool skipLockChecks = false;
