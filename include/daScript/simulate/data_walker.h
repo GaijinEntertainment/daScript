@@ -27,9 +27,10 @@ namespace das {
     // we doing what?
         class Context * context = nullptr;
         bool reading = false;
-        bool cancel = false;
+        bool _cancel = false;
     // helpers
         void error ( const char * message );
+        virtual bool cancel () { return _cancel; }
     // data structures
         virtual bool canVisitArray ( Array * ar, TypeInfo * ti ) { return true; }
         virtual bool canVisitArrayData ( TypeInfo * ti, uint32_t count ) { return true; }

@@ -7,6 +7,8 @@
 
 namespace das {
 
+    uint64_t getCancelLimit();
+
     class StringBuilderWriter : public StringWriter<VectorAllocationPolicy> {
     public:
         StringBuilderWriter() { }
@@ -26,7 +28,18 @@ namespace das {
         vector<loop_point> visited;
         vector<loop_point> visited_handles;
         DebugDataWalker() = delete;
-        DebugDataWalker ( Writer & sss, PrintFlags f ) : ss(sss), flags(f) {}
+        DebugDataWalker ( Writer & sss, PrintFlags f ) : ss(sss), flags(f), limit(getCancelLimit()) {}
+        uint64_t limit = 0;
+    // we cancel
+        __forceinline bool cancel() override {
+            if ( _cancel ) return true;
+            if ( limit==0 ) return false;
+            if ( ss.tellp()>limit ) {
+                _cancel = true;
+                return true;
+            }
+            return false;
+        }
     // data structures
         __forceinline void br() {
             if ( int(flags) & int(PrintFlags::namesAndDimensions) ) {
