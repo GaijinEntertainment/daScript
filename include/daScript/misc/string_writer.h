@@ -48,8 +48,8 @@ namespace das {
         string str() const {            // todo: replace via stringview
             return string(data.data(), data.size());
         }
-        int tellp() const {
-            return int(data.size());
+        uint64_t tellp() const {
+            return uint64_t(data.size());
         }
     protected:
         __forceinline void append(const char * s, int l) {

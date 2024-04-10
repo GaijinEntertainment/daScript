@@ -43,13 +43,13 @@ namespace das
         virtual void beforeArray ( Array * pa, TypeInfo * ) override {
             if ( pa->lock ) {
                 locked = true;
-                cancel = true;
+                _cancel = true;
             }
         }
         virtual void beforeTable ( Table * pa, TypeInfo * ) override {
             if ( pa->lock ) {
                 locked = true;
-                cancel = true;
+                _cancel = true;
             }
         }
     };
