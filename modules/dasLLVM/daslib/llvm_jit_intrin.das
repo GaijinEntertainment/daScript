@@ -456,6 +456,8 @@ def intrinsic_math_lerp_op3(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCal
     var a = arguments[0]
     var b = arguments[1]
     var t = arguments[2]
+    if expr.arguments[0]._type.isVectorType && !expr.arguments[2]._type.isVectorType
+        t = expand_scalar(g_builder, t, expr.arguments[0]._type)
     var b_sub_a = LLVMBuildFSub(g_builder, b, a, "")
     var b_a_mul_t = LLVMBuildFMul(g_builder, b_sub_a, t, "")
     return LLVMBuildFAdd(g_builder, b_a_mul_t, a, "lerp")
