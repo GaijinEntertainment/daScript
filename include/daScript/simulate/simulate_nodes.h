@@ -2444,6 +2444,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             char * ptr;
             if ( !persistent ) {
                 ptr = context.heap->allocate(bytes);
+                if ( !ptr ) context.throw_error_at(debugInfo,"out of heap");
                 context.heap->mark_comment(ptr, "new");
                 context.heap->mark_location(ptr, &debugInfo);
             } else {
@@ -2472,6 +2473,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             char * ptr;
             if ( !persistent ) {
                 ptr = context.heap->allocate(bytes + (typeInfo ? 16 : 0));
+                if ( !ptr ) context.throw_error_at(debugInfo,"out of heap");
                 context.heap->mark_comment(ptr, "new [[ ]]");
                 context.heap->mark_location(ptr, &debugInfo);
             } else {
@@ -2509,6 +2511,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             char * ptr;
             if ( !persistent ) {
                 ptr = context.heap->allocate(bytes + (typeInfo ? 16 : 0));
+                if ( !ptr ) context.throw_error_at(debugInfo,"out of heap");
                 context.heap->mark_comment(ptr, "new [[ ]]");
                 context.heap->mark_location(ptr, &debugInfo);
             } else {
@@ -2579,6 +2582,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             char * ptr;
             if ( !persistent ) {
                 ptr = context.heap->allocate(bytes);
+                if ( !ptr ) context.throw_error_at(debugInfo,"out of heap");
                 context.heap->mark_comment(ptr, "new with initializer");
                 context.heap->mark_location(ptr, &debugInfo);
             } else {
@@ -2606,6 +2610,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             char* ptr;
             if (!persistent) {
                 ptr = context.heap->allocate(bytes);
+                if ( !ptr ) context.throw_error_at(debugInfo,"out of heap");
                 context.heap->mark_comment(ptr, "new with initializer");
                 context.heap->mark_location(ptr, &debugInfo);
             } else {
@@ -3529,6 +3534,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             vec4f ll = source->eval(context);
             TT * array = cast<TT *>::to(ll);
             char * iter = context.heap->allocateIterator(sizeof(IterT),"any iterator",&debugInfo);
+            if ( !iter ) context.throw_error_at(debugInfo,"out of heap");
             new (iter) IterT(array);
             return cast<char *>::from(iter);
         }

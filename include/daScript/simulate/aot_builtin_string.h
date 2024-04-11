@@ -78,7 +78,7 @@ namespace das {
     __forceinline char * format ( const char * fmt, TT value, Context * context ) {
         char buf[256];
         snprintf(buf, 256, fmt ? fmt : "", value);
-        return context->stringHeap->allocateString(buf, uint32_t(strlen(buf)));
+        return context->stringHeap->allocateString(context, buf, uint32_t(strlen(buf)));
     }
 
     template <typename TT>
@@ -95,7 +95,7 @@ namespace das {
         block(writer);
         auto length = writer.tellp();
         if ( length ) {
-            return context->stringHeap->allocateString(writer.c_str(), length);
+            return context->stringHeap->allocateString(context,writer.c_str(), length);
         } else {
             return nullptr;
         }

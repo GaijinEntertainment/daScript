@@ -32,7 +32,7 @@ char * das::makeNewGuid( das::Context * context, LineInfoArg * at ) {
 	if ( UuidCreate(&id)!=RPC_S_OK ) context->throw_error_at(at, "can't create UUID");
     CHAR* uuidstr = NULL;
     if ( UuidToStringA(&id, (RPC_CSTR *)&uuidstr)!=RPC_S_OK ) context->throw_error_at(at, "can't convert UUID to string");
-    char * res = context->stringHeap->allocateString(uuidstr);
+    char * res = context->stringHeap->allocateString(context,uuidstr);
     RpcStringFreeA((RPC_CSTR *)&uuidstr);
     return res;
 }
@@ -49,7 +49,7 @@ char * das::makeNewGuid( das::Context * context, LineInfoArg * ) {
     uuid_generate(data.data);
     TextWriter tw;
     tw << HEX << data.data32[0] << "-" << data.data32[1] << "-" << data.data32[2] << "-" << data.data32[3] << DEC;
-    return context->stringHeap->allocateString(tw.str());
+    return context->stringHeap->allocateString(context,tw.str());
 }
 
 #elif defined(__APPLE__)
@@ -64,7 +64,7 @@ char * das::makeNewGuid( das::Context * context, LineInfoArg * ) {
     uuid_generate(data.data);
     TextWriter tw;
     tw << HEX << data.data32[0] << "-" << data.data32[1] << "-" << data.data32[2] << "-" << data.data32[3] << DEC;
-    return context->stringHeap->allocateString(tw.str());
+    return context->stringHeap->allocateString(context,tw.str());
 }
 
 #else
@@ -83,7 +83,7 @@ char * uri_to_unix_file_name ( char * uristr, Context * context ) {
     auto buf = new char[len + 1];
     char * result = nullptr;
     if ( uriUriStringToUnixFilenameA(uristr, buf) == URI_SUCCESS ) {
-        result = context->stringHeap->allocateString(buf, uint32_t(strlen(buf)));
+        result = context->stringHeap->allocateString(context,buf, uint32_t(strlen(buf)));
     }
     delete [] buf;
     return result;
@@ -95,7 +95,7 @@ char * uri_to_windows_file_name ( char * uristr, Context * context ) {
     auto buf = new char[len + 1];
     char * result = nullptr;
     if ( uriUriStringToWindowsFilenameA(uristr, buf) == URI_SUCCESS ) {
-        result = context->stringHeap->allocateString(buf, uint32_t(strlen(buf)));
+        result = context->stringHeap->allocateString(context,buf, uint32_t(strlen(buf)));
     }
     delete [] buf;
     return result;
@@ -107,7 +107,7 @@ char * unix_file_name_to_uri ( char * uristr, Context * context ) {
     auto buf = new char[3 * len + 1];
     char * result = nullptr;
     if ( uriUnixFilenameToUriStringA(uristr, buf) == URI_SUCCESS ) {
-        result = context->stringHeap->allocateString(buf, uint32_t(strlen(buf)));
+        result = context->stringHeap->allocateString(context,buf, uint32_t(strlen(buf)));
     }
     delete [] buf;
     return result;
@@ -119,7 +119,7 @@ char * windows_file_name_to_uri ( char * uristr, Context * context ) {
     auto buf = new char[8 + 3 * len + 1];
     char * result = nullptr;
     if ( uriWindowsFilenameToUriStringA(uristr, buf) == URI_SUCCESS ) {
-        result = context->stringHeap->allocateString(buf, uint32_t(strlen(buf)));
+        result = context->stringHeap->allocateString(context,buf, uint32_t(strlen(buf)));
     }
     delete [] buf;
     return result;
@@ -131,7 +131,7 @@ char * escape_uri ( char * uristr, bool spaceToPlus, bool normalizeBreaks, Conte
     auto buf = new char[len*6];
     char * result = nullptr;
     if ( uriEscapeA(uristr, buf, spaceToPlus, normalizeBreaks) ) {
-        result = context->stringHeap->allocateString(buf, uint32_t(strlen(buf)));
+        result = context->stringHeap->allocateString(context,buf, uint32_t(strlen(buf)));
     }
     delete [] buf;
     return result;
@@ -145,7 +145,7 @@ char * unescape_uri ( char * uristr,Context * context ) {
     buf[len] = 0;
     char * result = nullptr;
     if ( uriUnescapeInPlaceA(buf) ) {
-        result = context->stringHeap->allocateString(buf, uint32_t(strlen(buf)));
+        result = context->stringHeap->allocateString(context,buf, uint32_t(strlen(buf)));
     }
     delete [] buf;
     return result;
@@ -171,7 +171,7 @@ char* normalize_uri(char* uristr, Context* context) {
     charsRequired++;
     char* buf = new char[charsRequired];
     if (uriToStringA(buf, &uri, charsRequired, nullptr) == URI_SUCCESS) {
-        result = context->stringHeap->allocateString(buf, uint32_t(strlen(buf)));
+        result = context->stringHeap->allocateString(context,buf, uint32_t(strlen(buf)));
     }
     delete[] buf;
     uriFreeUriMembersA(&uri);
@@ -253,27 +253,27 @@ void clone_uri ( Uri & uri, const Uri & uriS ) {
 }
 
 char * uri_to_string ( const Uri & uri, Context * context ) {
-    return context->stringHeap->allocateString(uri.str());
+    return context->stringHeap->allocateString(context,uri.str());
 }
 
 char * text_range_to_string ( const UriTextRangeA & trange, Context * context ) {
     if ( auto slen = trange.afterLast - trange.first ) {
-        return context->stringHeap->allocateString(trange.first, uint32_t(slen));
+        return context->stringHeap->allocateString(context,trange.first, uint32_t(slen));
     } else {
         return nullptr;
     }
 }
 
 char * to_unix_file_name ( const Uri & uri, Context * context ) {
-    return context->stringHeap->allocateString(uri.toUnixFileName());
+    return context->stringHeap->allocateString(context,uri.toUnixFileName());
 }
 
 char * to_windows_file_name ( const Uri & uri, Context * context ) {
-    return context->stringHeap->allocateString(uri.toWindowsFileName());
+    return context->stringHeap->allocateString(context,uri.toWindowsFileName());
 }
 
 char * to_file_name ( const Uri & uri, Context * context ) {
-    return context->stringHeap->allocateString(uri.toFileName());
+    return context->stringHeap->allocateString(context,uri.toFileName());
 }
 
 Uri from_file_name ( const char * str ) {

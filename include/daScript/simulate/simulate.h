@@ -274,14 +274,8 @@ namespace das
 
         void makeWorkerFor(const Context & ctx);
 
-        uint32_t getGlobalSize() const {
-            return globalsSize;
-        }
-
-        uint32_t getSharedSize() const {
-            return sharedSize;
-        }
-
+        uint64_t getGlobalSize() const { return globalsSize; }
+        uint64_t getSharedSize() const { return sharedSize; }
         uint64_t getInitSemanticHash();
 
         __forceinline void * getVariable ( int index ) const {

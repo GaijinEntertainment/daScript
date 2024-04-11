@@ -1219,7 +1219,7 @@ namespace das {
         }
     protected:
         TextWriter          ss;
-        int                 lastNewLine = -1;
+        uint64_t            lastNewLine = -1ul;
         int                 tab = 0;
     };
 

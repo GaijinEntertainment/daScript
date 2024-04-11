@@ -113,6 +113,7 @@ namespace das
         const AnnotationArgument * find ( const string & name, Type type ) const;
         bool getBoolOption(const string & name, bool def = false) const;
         int32_t getIntOption(const string & name, int32_t def = false) const;
+        uint64_t getUInt64Option(const string & name, uint64_t def = false) const;
         void serialize ( AstSerializer & ser );
     };
 
@@ -1347,6 +1348,8 @@ namespace das
         bool        macro_context_persistent_heap = true;   // if true, then persistent heap is used for macro context
         bool        macro_context_collect = false;          // GC collect macro context after major passes
         uint64_t    max_static_variables_size = 0x100000000;   // 4GB
+        uint64_t    max_heap_allocated = 0;
+        uint64_t    max_string_heap_allocated = 0;
     // rtti
         bool rtti = false;                              // create extended RTTI
     // language

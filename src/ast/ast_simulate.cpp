@@ -3017,7 +3017,9 @@ namespace das
             context.stringHeap = make_smart<LinearStringAllocator>();
         }
         context.heap->setInitialSize ( options.getIntOption("heap_size_hint", policies.heap_size_hint) );
+        context.heap->setLimit ( options.getUInt64Option("heap_size_limit", policies.max_heap_allocated) );
         context.stringHeap->setInitialSize ( options.getIntOption("string_heap_size_hint", policies.string_heap_size_hint) );
+        context.stringHeap->setLimit ( options.getUInt64Option("string_heap_size_limit", policies.max_string_heap_allocated) );
         context.constStringHeap = make_shared<ConstStringAllocator>();
         if ( globalStringHeapSize ) {
             context.constStringHeap->setInitialSize(globalStringHeapSize);
@@ -3044,11 +3046,11 @@ namespace das
                     gvar.debugInfo = helper.makeVariableDebugInfo(*pvar);
                     gvar.flags = 0;
                     if ( pvar->global_shared ) {
-                        gvar.offset = pvar->stackTop = context.sharedSize;
+                        gvar.offset = pvar->stackTop = (uint32_t) context.sharedSize;
                         gvar.shared = true;
                         context.sharedSize = (context.sharedSize + uint64_t(gvar.size) + 0xful) & ~0xfull;
                     } else {
-                        gvar.offset = pvar->stackTop = context.globalsSize;
+                        gvar.offset = pvar->stackTop = (uint32_t) context.globalsSize;
                         context.globalsSize = (context.globalsSize + uint64_t(gvar.size) + 0xful) & ~0xfull;
                     }
                     gvar.mangledNameHash = pvar->getMangledNameHash();
@@ -3057,11 +3059,11 @@ namespace das
             }
         }
         bool canAllocateVariables = true;
-        if ( context.globalsSize >= policies.max_static_variables_size ) {
+        if ( context.globalsSize >= policies.max_static_variables_size || context.globalsSize >= 0x100000000ul ) {
             error("Global variables size exceeds " + to_string(policies.max_static_variables_size), "Global variables size is " + to_string(context.globalsSize) + " bytes", "", LineInfo());
             canAllocateVariables = false;
         }
-        if ( context.sharedSize >= 0x100000000ul ) {
+        if ( context.sharedSize >= policies.max_static_variables_size || context.sharedSize >= 0x100000000ul ) {
             error("Shared variables size exceeds " + to_string(policies.max_static_variables_size), "Shared variables size is " + to_string(context.sharedSize) + " bytes", "", LineInfo());
             canAllocateVariables = false;
         }

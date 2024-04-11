@@ -1815,7 +1815,7 @@ namespace das {
 
     template <typename TT>
     __forceinline char * das_lexical_cast ( TT x, Context * __context__ ) {
-        return __context__->stringHeap->allocateString(to_string(x));
+        return __context__->stringHeap->allocateString(__context__,to_string(x));
     }
 
     __forceinline char * das_string_builder ( Context * __context__, const SimNode_AotInteropBase & node ) {
@@ -1826,7 +1826,7 @@ namespace das {
         }
         auto length = writer.tellp();
         if ( length ) {
-            return __context__->stringHeap->allocateString(writer.c_str(), length);
+            return __context__->stringHeap->allocateString(__context__,writer.c_str(),uint32_t(length));
         } else {
             return nullptr;
         }
@@ -1840,7 +1840,7 @@ namespace das {
         }
         auto length = writer.tellp();
         if ( length ) {
-            auto str = __context__->stringHeap->allocateString(writer.c_str(), length);
+            auto str = __context__->stringHeap->allocateString(__context__,writer.c_str(), uint32_t(length));
             __context__->freeTempString(str);
             return str;
         } else {
@@ -2541,6 +2541,7 @@ namespace das {
     Sequence das_vector_each_sequence ( const TT & vec, Context * context ) {
         using VectorIterator = StdVectorIterator<TT>;
         char * iter = context->heap->allocateIterator(sizeof(VectorIterator), "std::vector<> iterator");
+        if ( !iter ) context->throw_error("out of heap");
         new (iter) VectorIterator((TT *)&vec);
         return { (Iterator *) iter };
     }

@@ -681,12 +681,14 @@ namespace das
 
     TSequence<int32_t> builtin_count ( int32_t start, int32_t step, Context * context ) {
         char * iter = context->heap->allocateIterator(sizeof(CountIterator), "count iterator");
+        if ( !iter ) context->throw_error_at(nullptr,"out of heap");
         new (iter) CountIterator(start, step);
         return TSequence<int>((Iterator *)iter);
     }
 
     TSequence<uint32_t> builtin_ucount ( uint32_t start, uint32_t step, Context * context ) {
         char * iter = context->heap->allocateIterator(sizeof(CountIterator), "ucount iterator");
+        if ( !iter ) context->throw_error_at(nullptr,"out of heap");
         new (iter) CountIterator(start, step);
         return TSequence<int>((Iterator *)iter);
     }
@@ -852,18 +854,21 @@ namespace das
 
     void builtin_make_good_array_iterator ( Sequence & result, const Array & arr, int stride, Context * context ) {
         char * iter = context->heap->allocateIterator(sizeof(GoodArrayIterator), "array<> iterator");
+        if ( !iter ) context->throw_error_at(nullptr,"out of heap");
         new (iter) GoodArrayIterator((Array *)&arr, stride);
         result = { (Iterator *) iter };
     }
 
     void builtin_make_fixed_array_iterator ( Sequence & result, void * data, int size, int stride, Context * context ) {
         char * iter = context->heap->allocateIterator(sizeof(FixedArrayIterator), "fixed array iterator");
+        if ( !iter ) context->throw_error_at(nullptr,"out of heap");
         new (iter) FixedArrayIterator((char *)data, size, stride);
         result = { (Iterator *) iter };
     }
 
     void builtin_make_range_iterator ( Sequence & result, range rng, Context * context ) {
         char * iter = context->heap->allocateIterator(sizeof(RangeIterator<range>), "range iterator");
+        if ( !iter ) context->throw_error_at(nullptr,"out of heap");
         new (iter) RangeIterator<range>(rng);
         result = { (Iterator *) iter };
     }
@@ -884,14 +889,17 @@ namespace das
         switch ( tinfo->type ) {
         case Type::tEnumeration:
             iter = context.heap->allocateIterator(sizeof(EnumIterator<int32_t>), "enum iterator");
+            if ( !iter ) context.throw_error_at(call->debugInfo,"out of heap");
             new (iter) EnumIterator<int32_t>(einfo);
             break;
         case Type::tEnumeration8:
             iter = context.heap->allocateIterator(sizeof(EnumIterator<int8_t>), "enum8 iterator");
+            if ( !iter ) context.throw_error_at(call->debugInfo,"out of heap");
             new (iter) EnumIterator<int8_t>(einfo);
             break;
         case Type::tEnumeration16:
             iter = context.heap->allocateIterator(sizeof(EnumIterator<int16_t>), "enum16 iterator");
+            if ( !iter ) context.throw_error_at(call->debugInfo,"out of heap");
             new (iter) EnumIterator<int16_t>(einfo);
             break;
         default:
@@ -904,6 +912,7 @@ namespace das
 
     void builtin_make_string_iterator ( Sequence & result, char * str, Context * context ) {
         char * iter = context->heap->allocateIterator(sizeof(StringIterator), "string iterator");
+        if ( !iter ) context->throw_error_at(nullptr,"out of heap");
         new (iter) StringIterator(str);
         result = { (Iterator *) iter };
     }
@@ -918,6 +927,7 @@ namespace das
 
     void builtin_make_nil_iterator ( Sequence & result, Context * context ) {
         char * iter = context->heap->allocateIterator(sizeof(NilIterator), "nil iterator");
+        if ( !iter ) context->throw_error_at(nullptr,"out of heap");
         new (iter) NilIterator();
         result = { (Iterator *) iter };
     }
@@ -975,6 +985,7 @@ namespace das
 
     void builtin_make_lambda_iterator ( Sequence & result, const Lambda lambda, int stride, Context * context ) {
         char * iter = context->heap->allocateIterator(sizeof(LambdaIterator), "lambda iterator");
+        if ( !iter ) context->throw_error_at(nullptr,"out of heap");
         new (iter) LambdaIterator(*context, lambda, stride);
         result = { (Iterator *) iter };
     }
@@ -991,7 +1002,7 @@ namespace das
     char * collectProfileInfo( Context * context ) {
         TextWriter tout;
         context->collectProfileInfo(tout);
-        return context->stringHeap->allocateString(tout.str());
+        return context->stringHeap->allocateString(context,tout.str());
     }
 
     void builtin_array_free ( Array & dim, int szt, Context * __context__, LineInfoArg * at ) {
@@ -1248,7 +1259,7 @@ namespace das
         auto res = args[0];
         auto flags = cast<uint32_t>::to(args[1]);
         ssw << debug_type(typeInfo) << " = " << debug_value(res, typeInfo, PrintFlags(flags));
-        auto sres = context.stringHeap->allocateString(ssw.str());
+        auto sres = context.stringHeap->allocateString(&context,ssw.str());
         return cast<char *>::from(sres);
     }
 
@@ -1257,7 +1268,7 @@ namespace das
         auto res = args[0];
         auto humanReadable = cast<bool>::to(args[1]);
         auto ssw = debug_json_value(res, typeInfo, humanReadable);
-        auto sres = context.stringHeap->allocateString(ssw);
+        auto sres = context.stringHeap->allocateString(&context,ssw);
         return cast<char *>::from(sres);
     }
 
@@ -1276,11 +1287,11 @@ namespace das
     }
 
     char * builtin_das_root ( Context * context ) {
-        return context->stringHeap->allocateString(getDasRoot());
+        return context->stringHeap->allocateString(context,getDasRoot());
     }
 
     char * to_das_string(const string & str, Context * ctx) {
-        return ctx->stringHeap->allocateString(str);
+        return ctx->stringHeap->allocateString(ctx,str);
     }
 
     char * pass_string(char * str) {
@@ -1289,7 +1300,7 @@ namespace das
 
     char * clone_pass_string(char * str, Context * ctx ) {
         if ( !str ) return nullptr;
-        return ctx->stringHeap->allocateString(str);
+        return ctx->stringHeap->allocateString(ctx,str);
     }
 
     void set_das_string(string & str, const char * bs) {
@@ -1297,7 +1308,7 @@ namespace das
     }
 
     void set_string_das(char * & bs, const string & str, Context * ctx ) {
-        bs = ctx->stringHeap->allocateString(str);
+        bs = ctx->stringHeap->allocateString(ctx,str);
     }
 
     void peek_das_string(const string & str, const TBlock<void,TTemporary<const char *>> & block, Context * context, LineInfoArg * at) {
@@ -1310,7 +1321,7 @@ namespace das
         const uint32_t strLen = stringLengthSafe ( *context, str );
         if (!strLen)
             return nullptr;
-        return context->stringHeap->allocateString(str, strLen);
+        return context->stringHeap->allocateString(context,str, strLen);
     }
 
     void builtin_temp_array ( void * data, int size, const Block & block, Context * context, LineInfoArg * at ) {

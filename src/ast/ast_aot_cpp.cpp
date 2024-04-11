@@ -955,7 +955,7 @@ namespace das {
     public:
         TextWriter                  ss, sti, stg;
     protected:
-        int                         lastNewLine = -1;
+        uint64_t                    lastNewLine = -1ul;
         int                         tab = 0;
         int                         debugInfoGlobal = 0;
         AotDebugInfoHelper          helper;
@@ -1081,7 +1081,7 @@ namespace das {
             return Visitor::visit(that);
         }
     // program body
-        virtual void preVisitProgramBody ( Program * prog, Module * that ) override {
+        virtual void preVisitProgramBody ( Program * prog, Module * ) override {
             // functions
             ss << "\n";
             prog->thisModule->functions.foreach([&](auto fn){

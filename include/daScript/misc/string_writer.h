@@ -137,7 +137,7 @@ namespace das {
     public:
         virtual void output() override;
     protected:
-        int pos = 0;
+        uint64_t pos = 0;
         static mutex pmut;
     };
 
@@ -178,7 +178,7 @@ namespace das {
     public:
         LOG ( int level = LogLevel::debug ) : logLevel(level) {}
         virtual void output() override {
-            int newPos = tellp();
+            auto newPos = tellp();
             if (newPos != pos) {
                 string st(data.data() + pos, newPos - pos);
                 logger(logLevel, useMarker ? getLogMarker(logLevel) : "", st.c_str(), /*ctx*/nullptr, /*at*/nullptr);
@@ -188,7 +188,7 @@ namespace das {
             }
         }
     protected:
-        int pos = 0;
+        uint64_t pos = 0;
         int logLevel = LogLevel::debug;
         bool useMarker = true;
     };

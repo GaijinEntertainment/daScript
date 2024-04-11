@@ -95,7 +95,7 @@ extern "C" {
         }
         auto length = writer.tellp();
         if ( length ) {
-            return context.stringHeap->allocateString(writer.c_str(), length);
+            return context.stringHeap->allocateString(&context,writer.c_str(), uint32_t(length));
         } else {
             return nullptr;
         }
@@ -109,7 +109,7 @@ extern "C" {
         }
         auto length = writer.tellp();
         if ( length ) {
-            auto str = context.stringHeap->allocateString(writer.c_str(), length);
+            auto str = context.stringHeap->allocateString(&context,writer.c_str(), uint32_t(length));
             context.freeTempString(str);
             return str;
         } else {
@@ -127,7 +127,9 @@ extern "C" {
     }
 
     void * jit_alloc_heap ( uint32_t bytes, Context * context ) {
-        return context->heap->allocate(bytes);
+        auto ptr = context->heap->allocate(bytes);
+        if ( !ptr ) context->throw_error_at(nullptr,"out of heap");
+        return ptr;
     }
 
     void * jit_alloc_persistent ( uint32_t bytes, Context * ) {
@@ -162,7 +164,7 @@ extern "C" {
         uint32_t commonLength = la + lb;
         if ( !commonLength ) {
             return nullptr;
-        } else if ( char * sAB = (char * ) context->stringHeap->allocateString(nullptr, commonLength) ) {
+        } else if ( char * sAB = (char * ) context->stringHeap->allocateString(context,nullptr, commonLength) ) {
             memcpy ( sAB, sA, la );
             memcpy ( sAB+la, sB, lb+1 );
             context->stringHeap->recognize(sAB);

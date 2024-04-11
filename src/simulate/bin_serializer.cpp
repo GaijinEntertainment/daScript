@@ -132,7 +132,7 @@ namespace das {
                 load ( length );
                 char * temp = new char[length+1];
                 read ( temp, length );
-                data = (char *) context->stringHeap->allocateString(temp,length);
+                data = (char *) context->stringHeap->allocateString(context,temp,length);
                 delete [] temp;
             } else {
                 uint32_t length = stringLengthSafe(*context, data);
@@ -261,6 +261,7 @@ namespace das {
                 DAS_ASSERTF(info,"type info not found. how did we get type, which is not in the typeinfo hash?");
                 uint32_t size = getTypeSize(info) + 16;
                 char * ptr = context->heap->allocate(size);
+                if ( !ptr ) context->throw_error_at(nullptr,"out of heap");
                 context->heap->mark_comment(ptr, "lambda (via bin serializer)");
                 memset ( ptr, 0, size );
                 *((TypeInfo **)ptr) = info;

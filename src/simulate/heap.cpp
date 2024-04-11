@@ -17,6 +17,7 @@ namespace das {
 
     char * AnyHeapAllocator::allocateIterator ( uint32_t size, const char * name, LineInfo * info ) {
         char * data = allocate(size + 16);
+        if ( !data ) return nullptr;
         *((uint32_t *)data) = size;
         mark_comment(data, name);
         if ( info ) mark_location(data,info);
@@ -41,8 +42,8 @@ namespace das {
         return nullptr;
     }
 
-    char * StringHeapAllocator::allocateString ( const string & str ) {
-        return allocateString ( str.c_str(), uint32_t(str.length()) );
+    char * StringHeapAllocator::allocateString ( Context * context, const string & str ) {
+        return allocateString ( context, str.c_str(), uint32_t(str.length()) );
     }
 
     bool PersistentHeapAllocator::mark() {
@@ -219,7 +220,7 @@ namespace das {
         return nullptr;
     }
 
-    char * StringHeapAllocator::allocateString ( const char * text, uint32_t length ) {
+    char * StringHeapAllocator::allocateString ( Context * context, const char * text, uint32_t length ) {
         if ( length ) {
             if ( needIntern && text ) {
                 auto it = internMap.find(StrHashEntry(text,length));
@@ -235,6 +236,8 @@ namespace das {
                 str[length] = 0;
                 if ( needIntern && text ) internMap.insert(StrHashEntry(str,length));
                 return str;
+            } else if ( context ) {
+                context->throw_error("out of string heap");
             }
         }
         return nullptr;
