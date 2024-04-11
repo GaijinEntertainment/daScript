@@ -113,6 +113,7 @@ namespace das
         const AnnotationArgument * find ( const string & name, Type type ) const;
         bool getBoolOption(const string & name, bool def = false) const;
         int32_t getIntOption(const string & name, int32_t def = false) const;
+        uint64_t getUInt64Option(const string & name, uint64_t def = false) const;
         void serialize ( AstSerializer & ser );
     };
 

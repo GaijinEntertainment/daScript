@@ -87,7 +87,7 @@ namespace das
             return nullptr;
         const char *start = strip_l(str);
         const char *end = strip_r(str, strLen);
-        return end > start ? context->stringHeap->allocateString(start, uint32_t(end-start)) : nullptr;
+        return end > start ? context->stringHeap->allocateString(context,start, uint32_t(end-start)) : nullptr;
     }
 
     char* builtin_string_strip_left ( const char *str, Context * context ) {
@@ -95,7 +95,7 @@ namespace das
         if (!strLen)
             return nullptr;
         const char *start = strip_l(str);
-        return uint32_t(start-str) < strLen ? context->stringHeap->allocateString(start, strLen-uint32_t(start-str)) : nullptr;
+        return uint32_t(start-str) < strLen ? context->stringHeap->allocateString(context,start, strLen-uint32_t(start-str)) : nullptr;
     }
 
     char* builtin_string_strip_right ( const char *str, Context * context ) {
@@ -103,7 +103,7 @@ namespace das
         if (!strLen)
             return nullptr;
         const char *end = strip_r(str, strLen);
-        return end != str ? context->stringHeap->allocateString(str, uint32_t(end-str)) : nullptr;
+        return end != str ? context->stringHeap->allocateString(context,str, uint32_t(end-str)) : nullptr;
     }
 
     static inline int clamp_int(int v, int minv, int maxv) {
@@ -133,7 +133,7 @@ namespace das
 
     char* builtin_string_chop(const char* str, int start, int length, Context* context) {
         if ( !str || length<=0 ) return nullptr;
-        return context->stringHeap->allocateString(str + start, length);
+        return context->stringHeap->allocateString(context,str + start, length);
     }
 
     char* builtin_string_slice1 ( const char *str, int start, int end, Context * context ) {
@@ -142,7 +142,7 @@ namespace das
             return nullptr;
         start = clamp_int((start < 0) ? (strLen + start) : start, 0, strLen);
         end = clamp_int((end < 0) ? (strLen + end) : end, 0, strLen);
-        return end > start ? context->stringHeap->allocateString(str + start, uint32_t(end-start)) : nullptr;
+        return end > start ? context->stringHeap->allocateString(context,str + start, uint32_t(end-start)) : nullptr;
     }
 
     char* builtin_string_slice2 ( const char *str, int start, Context * context ) {
@@ -150,14 +150,14 @@ namespace das
         if (!strLen)
             return nullptr;
         start = clamp_int((start < 0) ? (strLen + start) : start, 0, strLen);
-        return strLen > uint32_t(start) ? context->stringHeap->allocateString(str + start, uint32_t(strLen-start)) : nullptr;
+        return strLen > uint32_t(start) ? context->stringHeap->allocateString(context,str + start, uint32_t(strLen-start)) : nullptr;
     }
 
     char* builtin_string_reverse ( const char *str, Context * context ) {
         const uint32_t strLen = stringLengthSafe ( *context, str );
         if (!strLen)
             return nullptr;
-        char * ret = context->stringHeap->allocateString(str, strLen);
+        char * ret = context->stringHeap->allocateString(context,str, strLen);
         str += strLen-1;
         for (char *d = ret, *end = ret + strLen; d != end; --str, ++d)
           *d = *str;
@@ -172,7 +172,7 @@ namespace das
         const uint32_t strLen = stringLengthSafe ( *context, str );
         if (!strLen)
             return nullptr;
-        char * ret = context->stringHeap->allocateString(str, strLen);
+        char * ret = context->stringHeap->allocateString(context,str, strLen);
         for (char *d = ret, *end = ret + strLen; d != end; ++str, ++d)
           *d = (char)to_lower(*str);
         return ret;
@@ -198,7 +198,7 @@ namespace das
         const uint32_t strLen = stringLengthSafe ( *context, str );
         if (!strLen)
             return nullptr;
-        char * ret = context->stringHeap->allocateString(str, strLen);
+        char * ret = context->stringHeap->allocateString(context,str, strLen);
         for (char *d = ret, *end = ret + strLen; d != end; ++str, ++d)
           *d = (char)to_upper(*str);
         return ret;
@@ -349,7 +349,7 @@ namespace das
         context->invoke(block, args, nullptr, at);
         auto length = writer.tellp();
         if ( length ) {
-            return context->stringHeap->allocateString(writer.c_str(), length);
+            return context->stringHeap->allocateString(context,writer.c_str(), uint32_t(length));
         } else {
             return nullptr;
         }
@@ -383,7 +383,7 @@ namespace das
     }
 
     char * to_string_char ( int ch, Context * context ) {
-        auto st = context->stringHeap->allocateString(nullptr, 1);
+        auto st = context->stringHeap->allocateString(context,nullptr, 1);
         *st = char(ch);
         return st;
     }
@@ -391,7 +391,7 @@ namespace das
     char * string_repeat ( const char * str, int count, Context * context ) {
         uint32_t len = stringLengthSafe ( *context, str );
         if ( !len || count<=0 ) return nullptr;
-        char * res = context->stringHeap->allocateString(nullptr, len * count);
+        char * res = context->stringHeap->allocateString(context,nullptr, len * count);
         for ( char * s = res; count; count--, s+=len ) {
             memcpy ( s, str, len );
         }
@@ -515,7 +515,7 @@ namespace das
             data.replace(pos, toSearchSize, repl);
             pos = data.find(toss, pos + replaceStrSize);
         }
-        return context->stringHeap->allocateString(data);
+        return context->stringHeap->allocateString(context,data);
     }
 
     class StrdupDataWalker : public DataWalker {
@@ -532,7 +532,7 @@ namespace das
 
     char * builtin_string_escape ( const char *str, Context * context ) {
         if ( !str ) return nullptr;
-        return context->stringHeap->allocateString(escapeString(str,false));
+        return context->stringHeap->allocateString(context,escapeString(str,false));
     }
 
     char * builtin_string_unescape ( const char *str, Context * context, LineInfoArg * at ) {
@@ -540,14 +540,14 @@ namespace das
         bool err = false;
         auto estr = unescapeString(str, &err, false);
         if ( err ) context->throw_error_at(at, "invalid escape sequence");
-        return context->stringHeap->allocateString(estr);
+        return context->stringHeap->allocateString(context,estr);
     }
 
     char * builtin_string_safe_unescape ( const char *str, Context * context ) {
         if ( !str ) return nullptr;
         bool err = false;
         auto estr = unescapeString(str, &err, false);
-        return context->stringHeap->allocateString(estr);
+        return context->stringHeap->allocateString(context,estr);
     }
 
     int builtin_find_first_char_of ( const char * str, int Ch, Context * context ) {
@@ -573,7 +573,7 @@ namespace das
 
     char * builtin_string_from_array ( const TArray<uint8_t> & bytes, Context * context ) {
         if ( !bytes.size ) return nullptr;
-        return context->stringHeap->allocateString(bytes.data, bytes.size);
+        return context->stringHeap->allocateString(context,bytes.data, bytes.size);
     }
 
     void delete_string ( char * & str, Context * context ) {
@@ -628,7 +628,7 @@ namespace das
         if ( !s ) return nullptr;
         while ( is_white_space(*s) ) s++;
         if ( *s ) {
-            return context->stringHeap->allocateString(s, uint32_t(strlen(s)));
+            return context->stringHeap->allocateString(context,s, uint32_t(strlen(s)));
         } else  {
             return nullptr;
         }
@@ -643,7 +643,7 @@ namespace das
             return nullptr;
         } else if ( str_end!=str_end_o ) {
             auto len = str_end - s;
-            char * res = context->stringHeap->allocateString(nullptr, int32_t(len));
+            char * res = context->stringHeap->allocateString(context,nullptr, int32_t(len));
             memcpy ( res, s, len );
             res[len] = 0;
             return res;
@@ -669,7 +669,7 @@ namespace das
             return nullptr;
         } else if ( str_end!=str_end_o ) {
             auto len = str_end - s;
-            char * res = context->stringHeap->allocateString(nullptr, int32_t(len));
+            char * res = context->stringHeap->allocateString(context,nullptr, int32_t(len));
             memcpy ( res, s, len );
             res[len] = 0;
             return res;
@@ -693,7 +693,7 @@ namespace das
     char * builtin_string_peek_and_modify ( const char * str, const TBlock<void,TTemporary<TArray<uint8_t>>> & block, Context * context, LineInfoArg * at ) {
         if ( !str ) return nullptr;
         int32_t len = int32_t(strlen(str));
-        char * cstr = context->stringHeap->allocateString(str, len);
+        char * cstr = context->stringHeap->allocateString(context,str, len);
         memcpy(cstr, str, len);
         Array arr;
         arr.data = cstr;

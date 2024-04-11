@@ -912,7 +912,7 @@ namespace das {
             break;
         case Type::tString:
             nada._variant = 7;
-            nada.sValue = context->stringHeap->allocateString(info.sValue);
+            nada.sValue = context->stringHeap->allocateString(context,info.sValue);
             break;
         default:;
         }
@@ -1045,7 +1045,7 @@ namespace das {
 
     char * rtti_get_das_type_name(Type tt, Context * context) {
         string str = das_to_string(tt);
-        return context->stringHeap->allocateString(str);
+        return context->stringHeap->allocateString(context,str);
     }
 
     int rtti_add_annotation_argument(AnnotationArgumentList& list, const char* name) {
@@ -1162,30 +1162,30 @@ namespace das {
     char * builtin_print_data ( void * data, const TypeInfo * typeInfo, Bitfield flags, Context * context ) {
         TextWriter ssw;
         ssw << debug_value(data, (TypeInfo *)typeInfo, PrintFlags(uint32_t(flags)));
-        return context->stringHeap->allocateString(ssw.str());
+        return context->stringHeap->allocateString(context,ssw.str());
     }
 
     char * builtin_print_data_v ( float4 data, const TypeInfo * typeInfo, Bitfield flags, Context * context ) {
         TextWriter ssw;
         ssw << debug_value(vec4f(data), (TypeInfo *)typeInfo, PrintFlags(uint32_t(flags)));
-        return context->stringHeap->allocateString(ssw.str());
+        return context->stringHeap->allocateString(context,ssw.str());
     }
 
     char * builtin_debug_type ( const TypeInfo * typeInfo, Context * context ) {
         if ( !typeInfo ) return nullptr;
         auto dt = debug_type(typeInfo);
-        return context->stringHeap->allocateString(dt);
+        return context->stringHeap->allocateString(context,dt);
     }
 
     char * builtin_debug_line ( const LineInfo & at, bool fully, Context * context ) {
         auto dt = at.describe(fully);
-        return context->stringHeap->allocateString(dt);
+        return context->stringHeap->allocateString(context,dt);
     }
 
     char * builtin_get_typeinfo_mangled_name ( const TypeInfo * typeInfo, Context * context ) {
         if ( !typeInfo ) return nullptr;
         auto dt = getTypeInfoMangledName((TypeInfo*)typeInfo);
-        return context->stringHeap->allocateString(dt);
+        return context->stringHeap->allocateString(context,dt);
     }
 
     const FuncInfo * builtin_get_function_info_by_mnh ( Context &, Func fun ) {

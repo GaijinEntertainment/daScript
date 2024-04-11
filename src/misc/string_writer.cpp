@@ -12,7 +12,7 @@ namespace das {
 
     void TextPrinter::output() {
         lock_guard<mutex> guard(pmut);
-        int newPos = tellp();
+        uint64_t newPos = tellp();
         if (newPos != pos) {
             string st(data.data() + pos, newPos - pos);
             printf("%s", st.c_str());

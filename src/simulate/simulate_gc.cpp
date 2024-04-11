@@ -1063,7 +1063,7 @@ namespace das
             for ( auto f : walker.failed ) {
                 tw << " " << uint64_t(f);
             }
-            auto etext = stringHeap->allocateString(tw.str());
+            auto etext = stringHeap->allocateString(this,tw.str());
             throw_error_at(at, "%s", etext);
         }
     }

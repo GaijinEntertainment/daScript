@@ -182,6 +182,8 @@ namespace das {
         }
     };
 
+    class Context;
+
     typedef das_hash_set<StrHashEntry,StrHashPred,StrEqPred> das_string_set;
 
     class StringHeapAllocator : public AnyHeapAllocator {
@@ -189,8 +191,8 @@ namespace das {
         virtual void forEachString ( const callable<void (const char *)> & fn ) = 0;
         virtual void reset() override;
     public:
-        char * allocateString ( const char * text, uint32_t length );
-        char * allocateString ( const string & str );
+        char * allocateString ( Context * context, const char * text, uint32_t length );
+        char * allocateString ( Context * context, const string & str );
         void freeString ( char * text, uint32_t length );
         void setIntern ( bool on );
         bool isIntern() const { return needIntern; }
@@ -326,9 +328,21 @@ namespace das {
     class PersistentStringAllocator final : public StringHeapAllocator {
     public:
         PersistentStringAllocator() { model.alignMask = 3; }
-        virtual char * allocate ( uint32_t size ) override { return model.allocate(size); }
+        virtual char * allocate ( uint32_t size ) override {
+            if ( limit==0 || model.bytesAllocated()+size<=limit ) {
+                return model.allocate(size);
+            } else {
+                return nullptr;
+            }
+        }
         virtual void free ( char * ptr, uint32_t size ) override { model.free(ptr,size); }
-        virtual char * reallocate ( char * ptr, uint32_t oldSize, uint32_t newSize ) override { return model.reallocate(ptr,oldSize,newSize); }
+        virtual char * reallocate ( char * ptr, uint32_t oldSize, uint32_t newSize ) override {
+            if ( limit==0 || model.bytesAllocated()+newSize-oldSize<=limit ) {
+                return model.reallocate(ptr,oldSize,newSize);
+            } else {
+                return nullptr;
+            }
+        }
         virtual int depth() const override { return model.depth(); }
         virtual uint64_t bytesAllocated() const override { return model.bytesAllocated(); }
         virtual uint64_t totalAlignedMemoryAllocated() const override { return model.totalAlignedMemoryAllocated(); }
@@ -354,9 +368,21 @@ namespace das {
     class LinearStringAllocator final : public StringHeapAllocator {
     public:
         LinearStringAllocator() { model.alignMask = 3; }
-        virtual char * allocate ( uint32_t size ) override { return model.allocate(size); }
+        virtual char * allocate ( uint32_t size ) override {
+            if ( limit==0 || model.bytesAllocated()+size<=limit ) {
+                return model.allocate(size);
+            } else {
+                return nullptr;
+            }
+        }
         virtual void free ( char * ptr, uint32_t size ) override { model.free(ptr,size); }
-        virtual char * reallocate ( char * ptr, uint32_t oldSize, uint32_t newSize ) override { return model.reallocate(ptr,oldSize,newSize); }
+        virtual char * reallocate ( char * ptr, uint32_t oldSize, uint32_t newSize ) override {
+            if ( limit==0 || model.bytesAllocated()+newSize-oldSize<=limit ) {
+                return model.reallocate(ptr,oldSize,newSize);
+            } else {
+                return nullptr;
+            }
+        }
         virtual int depth() const override { return model.depth(); }
         virtual uint64_t bytesAllocated() const override { return model.bytesAllocated(); }
         virtual uint64_t totalAlignedMemoryAllocated() const override { return model.totalAlignedMemoryAllocated(); }

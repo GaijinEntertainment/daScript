@@ -20,7 +20,7 @@ namespace das
         uint32_t commonLength = la + lb;
         if ( !commonLength ) {
             return v_zero();
-        } else if ( char * sAB = (char * ) context.stringHeap->allocateString(nullptr, commonLength) ) {
+        } else if ( char * sAB = (char * ) context.stringHeap->allocateString(&context,nullptr, commonLength) ) {
             memcpy ( sAB, sA, la );
             memcpy ( sAB+la, sB, lb+1 );
             context.stringHeap->recognize(sAB);
@@ -41,7 +41,7 @@ namespace das
         if ( !commonLength ) {
             // *pA = nullptr; is unnecessary, because its already nullptr
             return;
-        } else if ( char * sAB = (char * ) context.stringHeap->allocateString(nullptr, commonLength) ) {
+        } else if ( char * sAB = (char * ) context.stringHeap->allocateString(&context,nullptr, commonLength) ) {
             memcpy ( sAB, sA, la );
             memcpy ( sAB+la, sB, lb+1 );
             *pA = sAB;
@@ -351,9 +351,9 @@ namespace das
         for ( int i=0, is=nArguments; i!=is; ++i ) {
             walker.walk(argValues[i], types[i]);
         }
-        int length = writer.tellp();
+        uint64_t length = writer.tellp();
         if ( length ) {
-            auto pStr = context.stringHeap->allocateString(writer.c_str(), length);
+            auto pStr = context.stringHeap->allocateString(&context,writer.c_str(), uint32_t(length));
             if ( !pStr  ) {
                 context.throw_error_at(debugInfo, "can't allocate string builder result, out of heap");
             }

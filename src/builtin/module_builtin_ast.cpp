@@ -230,7 +230,7 @@ namespace das {
 
     char * ast_describe_typedecl ( smart_ptr_raw<TypeDecl> t, bool d_extra, bool d_contracts, bool d_module, Context * context, LineInfoArg * at ) {
         if ( !t ) context->throw_error_at(at, "expecting type, not null");
-        return context->stringHeap->allocateString(t->describe(
+        return context->stringHeap->allocateString(context,t->describe(
             d_extra ? TypeDecl::DescribeExtra::yes : TypeDecl::DescribeExtra::no,
             d_contracts ? TypeDecl::DescribeContracts::yes : TypeDecl::DescribeContracts::no,
             d_module ? TypeDecl::DescribeModule::yes : TypeDecl::DescribeModule::no));
@@ -238,7 +238,7 @@ namespace das {
 
     char * ast_describe_typedecl_cpp ( smart_ptr_raw<TypeDecl> t, bool d_substitureRef, bool d_skipRef, bool d_skipConst, bool d_redundantConst, Context * context, LineInfoArg * at ) {
         if ( !t ) context->throw_error_at(at, "expecting type, not null");
-        return context->stringHeap->allocateString(describeCppType(t,
+        return context->stringHeap->allocateString(context,describeCppType(t,
             d_substitureRef ? CpptSubstitureRef::yes : CpptSubstitureRef::no,
             d_skipRef ? CpptSkipRef::yes : CpptSkipRef::no,
             d_skipConst ? CpptSkipConst::yes : CpptSkipConst::no,
@@ -249,23 +249,23 @@ namespace das {
         if ( !t ) context->throw_error_at(at, "expecting expression, not null");
         TextWriter ss;
         ss << *t;
-        return context->stringHeap->allocateString(ss.str());
+        return context->stringHeap->allocateString(context,ss.str());
     }
 
     char * ast_describe_function ( smart_ptr_raw<Function> t, Context * context, LineInfoArg * at ) {
         if ( !t ) context->throw_error_at(at, "expecting function, not null");
         TextWriter ss;
         ss << *t;
-        return context->stringHeap->allocateString(ss.str());
+        return context->stringHeap->allocateString(context,ss.str());
     }
 
     char * ast_das_to_string ( Type bt, Context * context ) {
-        return context->stringHeap->allocateString(das_to_string(bt));
+        return context->stringHeap->allocateString(context,das_to_string(bt));
     }
 
     char * ast_find_bitfield_name ( smart_ptr_raw<TypeDecl> bft, Bitfield value, Context * context, LineInfoArg * at ) {
         if ( !bft ) context->throw_error_at(at, "expecting bitfield type, not null");
-        return context->stringHeap->allocateString(bft->findBitfieldName(value));
+        return context->stringHeap->allocateString(context,bft->findBitfieldName(value));
     }
 
     int64_t ast_find_enum_value ( EnumerationPtr enu, const char * value ) {
@@ -408,22 +408,22 @@ namespace das {
 
     char * get_mangled_name ( smart_ptr_raw<Function> func, Context * context, LineInfoArg * at ) {
         if ( !func ) context->throw_error_at(at,"expecting function");
-        return context->stringHeap->allocateString(func->getMangledName());
+        return context->stringHeap->allocateString(context,func->getMangledName());
     }
 
     char * get_mangled_name_t ( smart_ptr_raw<TypeDecl> typ, Context * context, LineInfoArg * at ) {
         if ( !typ ) context->throw_error_at(at,"expecting function");
-        return context->stringHeap->allocateString(typ->getMangledName());
+        return context->stringHeap->allocateString(context,typ->getMangledName());
     }
 
     char * get_mangled_name_v ( smart_ptr_raw<Variable> var, Context * context, LineInfoArg * at ) {
         if ( !var ) context->throw_error_at(at,"expecting function");
-        return context->stringHeap->allocateString(var->getMangledName());
+        return context->stringHeap->allocateString(context,var->getMangledName());
     }
 
     char * get_mangled_name_b ( smart_ptr_raw<ExprBlock> expr, Context * context, LineInfoArg * at ) {
         if ( !expr ) context->throw_error_at(at,"expecting block");
-        return context->stringHeap->allocateString(expr->getMangledName());
+        return context->stringHeap->allocateString(context,expr->getMangledName());
     }
 
     void get_use_global_variables ( smart_ptr_raw<Function> func, const TBlock<void,VariablePtr> & block, Context * context, LineInfoArg * at ) {
