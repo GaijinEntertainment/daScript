@@ -2541,6 +2541,7 @@ namespace das {
     Sequence das_vector_each_sequence ( const TT & vec, Context * context ) {
         using VectorIterator = StdVectorIterator<TT>;
         char * iter = context->heap->allocateIterator(sizeof(VectorIterator), "std::vector<> iterator");
+        if ( !iter ) context->throw_error("out of heap");
         new (iter) VectorIterator((TT *)&vec);
         return { (Iterator *) iter };
     }

@@ -767,7 +767,9 @@ namespace das {
         "multiple_contexts",            Type::tBool,
         "persistent_heap",              Type::tBool,
         "heap_size_hint",               Type::tInt,
+        "heap_size_limit",              Type::tInt,
         "string_heap_size_hint",        Type::tInt,
+        "string_heap_size_limit",       Type::tInt,
         "gc",                           Type::tBool,
         "solid_context",                Type::tBool,    // we will not have AOT or patches
     // aot

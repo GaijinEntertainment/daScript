@@ -17,6 +17,7 @@ namespace das {
 
     char * AnyHeapAllocator::allocateIterator ( uint32_t size, const char * name, LineInfo * info ) {
         char * data = allocate(size + 16);
+        if ( !data ) return nullptr;
         *((uint32_t *)data) = size;
         mark_comment(data, name);
         if ( info ) mark_location(data,info);

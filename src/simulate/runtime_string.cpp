@@ -392,6 +392,7 @@ namespace das
         vec4f ll = source->eval(context);
         char * str = cast<char *>::to(ll);
         char * iter = context.heap->allocateIterator(sizeof(StringIterator),"string iterator",&debugInfo);
+        if ( !iter ) context.throw_error_at(debugInfo,"out of heap");
         new (iter) StringIterator(str);
         return cast<char *>::from(iter);
     }

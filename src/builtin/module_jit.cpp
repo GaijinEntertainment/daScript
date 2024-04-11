@@ -127,7 +127,9 @@ extern "C" {
     }
 
     void * jit_alloc_heap ( uint32_t bytes, Context * context ) {
-        return context->heap->allocate(bytes);
+        auto ptr = context->heap->allocate(bytes);
+        if ( !ptr ) context->throw_error_at(nullptr,"out of heap");
+        return ptr;
     }
 
     void * jit_alloc_persistent ( uint32_t bytes, Context * ) {

@@ -681,12 +681,14 @@ namespace das
 
     TSequence<int32_t> builtin_count ( int32_t start, int32_t step, Context * context ) {
         char * iter = context->heap->allocateIterator(sizeof(CountIterator), "count iterator");
+        if ( !iter ) context->throw_error_at(nullptr,"out of heap");
         new (iter) CountIterator(start, step);
         return TSequence<int>((Iterator *)iter);
     }
 
     TSequence<uint32_t> builtin_ucount ( uint32_t start, uint32_t step, Context * context ) {
         char * iter = context->heap->allocateIterator(sizeof(CountIterator), "ucount iterator");
+        if ( !iter ) context->throw_error_at(nullptr,"out of heap");
         new (iter) CountIterator(start, step);
         return TSequence<int>((Iterator *)iter);
     }
@@ -852,18 +854,21 @@ namespace das
 
     void builtin_make_good_array_iterator ( Sequence & result, const Array & arr, int stride, Context * context ) {
         char * iter = context->heap->allocateIterator(sizeof(GoodArrayIterator), "array<> iterator");
+        if ( !iter ) context->throw_error_at(nullptr,"out of heap");
         new (iter) GoodArrayIterator((Array *)&arr, stride);
         result = { (Iterator *) iter };
     }
 
     void builtin_make_fixed_array_iterator ( Sequence & result, void * data, int size, int stride, Context * context ) {
         char * iter = context->heap->allocateIterator(sizeof(FixedArrayIterator), "fixed array iterator");
+        if ( !iter ) context->throw_error_at(nullptr,"out of heap");
         new (iter) FixedArrayIterator((char *)data, size, stride);
         result = { (Iterator *) iter };
     }
 
     void builtin_make_range_iterator ( Sequence & result, range rng, Context * context ) {
         char * iter = context->heap->allocateIterator(sizeof(RangeIterator<range>), "range iterator");
+        if ( !iter ) context->throw_error_at(nullptr,"out of heap");
         new (iter) RangeIterator<range>(rng);
         result = { (Iterator *) iter };
     }
@@ -884,14 +889,17 @@ namespace das
         switch ( tinfo->type ) {
         case Type::tEnumeration:
             iter = context.heap->allocateIterator(sizeof(EnumIterator<int32_t>), "enum iterator");
+            if ( !iter ) context.throw_error_at(call->debugInfo,"out of heap");
             new (iter) EnumIterator<int32_t>(einfo);
             break;
         case Type::tEnumeration8:
             iter = context.heap->allocateIterator(sizeof(EnumIterator<int8_t>), "enum8 iterator");
+            if ( !iter ) context.throw_error_at(call->debugInfo,"out of heap");
             new (iter) EnumIterator<int8_t>(einfo);
             break;
         case Type::tEnumeration16:
             iter = context.heap->allocateIterator(sizeof(EnumIterator<int16_t>), "enum16 iterator");
+            if ( !iter ) context.throw_error_at(call->debugInfo,"out of heap");
             new (iter) EnumIterator<int16_t>(einfo);
             break;
         default:
@@ -904,6 +912,7 @@ namespace das
 
     void builtin_make_string_iterator ( Sequence & result, char * str, Context * context ) {
         char * iter = context->heap->allocateIterator(sizeof(StringIterator), "string iterator");
+        if ( !iter ) context->throw_error_at(nullptr,"out of heap");
         new (iter) StringIterator(str);
         result = { (Iterator *) iter };
     }
@@ -918,6 +927,7 @@ namespace das
 
     void builtin_make_nil_iterator ( Sequence & result, Context * context ) {
         char * iter = context->heap->allocateIterator(sizeof(NilIterator), "nil iterator");
+        if ( !iter ) context->throw_error_at(nullptr,"out of heap");
         new (iter) NilIterator();
         result = { (Iterator *) iter };
     }
@@ -975,6 +985,7 @@ namespace das
 
     void builtin_make_lambda_iterator ( Sequence & result, const Lambda lambda, int stride, Context * context ) {
         char * iter = context->heap->allocateIterator(sizeof(LambdaIterator), "lambda iterator");
+        if ( !iter ) context->throw_error_at(nullptr,"out of heap");
         new (iter) LambdaIterator(*context, lambda, stride);
         result = { (Iterator *) iter };
     }

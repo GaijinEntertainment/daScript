@@ -521,6 +521,7 @@ namespace das {
     Sequence debugInfoIterator ( ST * st, Context * context ) {
         using StructIterator = DebugInfoIterator<VT,ST>;
         char * iter = context->heap->allocateIterator(sizeof(StructIterator), "debug info iterator");
+        if ( !iter ) context->throw_error_at(nullptr,"out of heap");
         new (iter) StructIterator(st);
         return { (Iterator *) iter };
     }
@@ -703,6 +704,9 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(solid_context)>("solid_context");
             addField<DAS_BIND_MANAGED_FIELD(macro_context_persistent_heap)>("macro_context_persistent_heap");
             addField<DAS_BIND_MANAGED_FIELD(macro_context_collect)>("macro_context_collect");
+            addField<DAS_BIND_MANAGED_FIELD(max_static_variables_size)>("max_static_variables_size");
+            addField<DAS_BIND_MANAGED_FIELD(max_heap_allocated)>("max_heap_allocated");
+            addField<DAS_BIND_MANAGED_FIELD(max_string_heap_allocated)>("max_string_heap_allocated");
         // rtti
             addField<DAS_BIND_MANAGED_FIELD(rtti)>("rtti");
         // language

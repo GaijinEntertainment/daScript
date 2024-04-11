@@ -1054,8 +1054,10 @@ namespace das
         }
         // heap
         heap->setInitialSize(ctx.heap->getInitialSize());
+        heap->setLimit(ctx.heap->getLimit());
         stringHeap->setInitialSize(ctx.stringHeap->getInitialSize());
         stringHeap->setIntern(ctx.stringHeap->isIntern());
+        stringHeap->setLimit(ctx.stringHeap->getLimit());
         // globals
         annotationData = ctx.annotationData;
         globalsSize = ctx.globalsSize;
