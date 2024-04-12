@@ -260,14 +260,17 @@ namespace das {
             }
         }
         virtual void preVisitExpression ( Expression * expr ) override {
-            if ( expr->alwaysSafe && expr->userSaidItsSafe ) {
+            if ( expr->alwaysSafe && expr->userSaidItsSafe && !expr->generated ) {
                 auto origin = func->getOrigin();
-                auto fnMod = origin ? origin->module : func->module;
-                if ( fnMod == program->thisModule.get() ) {
-                    anyUnsafe = true;
-                    if ( checkUnsafe ) {
-                        program->error("unsafe function " + func->getMangledName(), "unsafe functions are prohibited by CodeOfPolicies", "",
-                            expr->at, CompilationError::unsafe_function);
+                if ( !(origin && origin->generated) && !func->generated )
+                {
+                    auto fnMod = origin ? origin->module : func->module;
+                    if ( fnMod == program->thisModule.get() ) {
+                        anyUnsafe = true;
+                        if ( checkUnsafe ) {
+                            program->error("unsafe function " + func->getMangledName(), "unsafe functions are prohibited by CodeOfPolicies", "",
+                                expr->at, CompilationError::unsafe_function);
+                        }
                     }
                 }
             }
@@ -620,13 +623,18 @@ namespace das {
             }
         }
         virtual void preVisit ( ExprUnsafe * expr ) override {
-            auto origin = func->getOrigin();
-            auto fnMod = origin ? origin->module : func->module;
-            if ( fnMod == program->thisModule.get() ) {
-                anyUnsafe = true;
-                if ( checkUnsafe ) {
-                    program->error("unsafe function " + func->getMangledName(), "unsafe functions are prohibited by CodeOfPolicies", "",
-                        expr->at, CompilationError::unsafe_function);
+            if ( !expr->generated ) {
+                auto origin = func->getOrigin();
+                if ( !(origin && origin->generated) && !func->generated )
+                {
+                    auto fnMod = origin ? origin->module : func->module;
+                    if ( fnMod == program->thisModule.get() ) {
+                        anyUnsafe = true;
+                        if ( checkUnsafe ) {
+                            program->error("unsafe function " + func->getMangledName(), "unsafe functions are prohibited by CodeOfPolicies", "",
+                                expr->at, CompilationError::unsafe_function);
+                        }
+                    }
                 }
             }
         }
