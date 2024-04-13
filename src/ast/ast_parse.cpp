@@ -194,6 +194,13 @@ namespace das {
                 if ( log ) {
                     *log << string(tab,'\t') << "require " << mod << "\n";
                 }
+                if ( !access->canBeRequired(mod, fileName) )
+                {
+                    if ( log ) {
+                        *log << string(tab,'\t') << "from " << fileName << " require " << mod << " - CAN'T BE REQUIRED\n";
+                    }
+                    return false;
+                }
                 auto module = Module::requireEx(mod, allowPromoted); // try native with that name
                 if ( !module ) {
                     auto info = access->getModuleInfo(mod, fileName);

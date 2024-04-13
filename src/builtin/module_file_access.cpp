@@ -42,6 +42,7 @@ namespace das {
                 includeGet = context->findFunction("include_get");          // note, this one CAN be null
                 moduleAllowed = context->findFunction("module_allowed");    // note, this one CAN be null
                 moduleUnsafe = context->findFunction("module_allowed_unsafe");    // note, this one CAN be null
+                canModuleBeRequired = context->findFunction("can_module_be_required");    // note, this one CAN be null
                 // get it ready
                 context->restart();
                 context->runInitScript();   // note: we assume sane init stack size here
@@ -87,6 +88,17 @@ namespace das {
         auto res = context->evalWithCatch(moduleUnsafe, args, nullptr);
         auto exc = context->getException(); exc;
         DAS_ASSERTF(!exc, "exception failed in `module_unsafe`: %s", exc);
+        return cast<bool>::to(res);
+    }
+
+    bool ModuleFileAccess::canBeRequired ( const string & mod, const string & fileName ) const {
+        if(failed() || !canModuleBeRequired) return FileAccess::canBeRequired(mod,fileName);
+        vec4f args[2];
+        args[0] = cast<const char *>::from(mod.c_str());
+        args[1] = cast<const char *>::from(fileName.c_str());
+        auto res = context->evalWithCatch(canModuleBeRequired, args, nullptr);
+        auto exc = context->getException(); exc;
+        DAS_ASSERTF(!exc, "exception failed in `can_module_be_required`: %s", exc);
         return cast<bool>::to(res);
     }
 

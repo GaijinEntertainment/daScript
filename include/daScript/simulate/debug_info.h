@@ -149,6 +149,7 @@ namespace das
         virtual ModuleInfo getModuleInfo ( const string & req, const string & from ) const;
         virtual bool isModuleAllowed ( const string &, const string & ) const { return true; };
         virtual bool canModuleBeUnsafe ( const string &, const string & ) const { return true; };
+        virtual bool canBeRequired ( const string &, const string & ) const { return true; };
         virtual bool addFsRoot ( const string & , const string & ) { return false; }
         virtual void serialize ( AstSerializer & ser );
     protected:
@@ -172,6 +173,7 @@ namespace das
         virtual string getIncludeFileName ( const string & fileName, const string & incFileName ) const override;
         virtual bool isModuleAllowed ( const string &, const string & ) const override;
         virtual bool canModuleBeUnsafe ( const string &, const string & ) const override;
+        virtual bool canBeRequired ( const string &, const string & ) const override;
         virtual void serialize ( AstSerializer & ser ) override;
     protected:
         Context *           context = nullptr;
@@ -179,6 +181,7 @@ namespace das
         SimFunction *       includeGet = nullptr;
         SimFunction *       moduleAllowed = nullptr;
         SimFunction *       moduleUnsafe = nullptr;
+        SimFunction *       canModuleBeRequired = nullptr;
     };
     template <> struct isCloneable<ModuleFileAccess> : false_type {};
 
