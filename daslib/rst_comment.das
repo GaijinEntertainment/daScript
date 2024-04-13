@@ -18,6 +18,7 @@ enum ParserState
     method
     global
     variant_alias
+    bitfield_alias
     enum_decl
     type_alias
 
@@ -47,6 +48,7 @@ class RstComment : AstCommentReader
     global_comment : string
     field_comment : string
     variant_comment : string
+    bitfield_comment : string
     enum_comment : string
     alias_comment : string
     field_comments : array<tuple<kind:string;name:string;comment:string>>
@@ -74,6 +76,8 @@ class RstComment : AstCommentReader
             global_comment += comment
         elif state==ParserState variant_alias
             variant_comment += comment
+        elif state==ParserState bitfield_alias
+            bitfield_comment += comment
         elif state==ParserState enum_decl
             enum_comment += comment
         elif state==ParserState type_alias
@@ -107,6 +111,19 @@ class RstComment : AstCommentReader
             write_to_detail("enumeration-{prog.thisModuleName}-{name}", enum_comment)
         state = ParserState none
         enum_comment = ""
+    def override beforeBitfield ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+        debug_rst("beforeBitfield")
+        if state != ParserState none
+            panic("expecting none, got {state}")
+        state = ParserState bitfield_alias
+    def override afterBitfield ( name:string; prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+        debug_rst("afterBitfield {name} // {bitfield_comment}")
+        if state != ParserState bitfield_alias
+            panic("expecting bitfield_alias, got {state}")
+        if bitfield_comment != ""
+            write_to_detail("typedef-{prog.thisModuleName}-{name}", bitfield_comment)
+        state = ParserState none
+        bitfield_comment = ""
     def override beforeVariant ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
         debug_rst("beforeVariant")
         if state != ParserState none

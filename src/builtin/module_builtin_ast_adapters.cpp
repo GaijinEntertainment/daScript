@@ -1879,6 +1879,26 @@ namespace das {
                 });
             }
         }
+        virtual void beforeBitfield ( const LineInfo & info ) override {
+            if ( auto fnBitfield = get_beforeBitfield(classPtr) ) {
+                runMacroFunction(context, "beforeBitfield", [&]() {
+                    invoke_beforeBitfield(context,fnBitfield,classPtr,
+                        daScriptEnvironment::bound->g_Program,
+                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                            info);
+                });
+            }
+        }
+        virtual void afterBitfield ( const char * name, const LineInfo & info ) override {
+            if ( auto fnBitfield = get_afterBitfield(classPtr) ) {
+                runMacroFunction(context, "afterBitfield", [&]() {
+                    invoke_afterBitfield(context,fnBitfield,classPtr,
+                        (char *) name, daScriptEnvironment::bound->g_Program,
+                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                            info);
+                });
+            }
+        }
         virtual void beforeEnumeration ( const LineInfo & info ) override {
             if ( auto fnEnum = get_beforeEnumeration(classPtr) ) {
                 runMacroFunction(context, "beforeEnumeration", [&]() {
