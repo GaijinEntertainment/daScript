@@ -2691,7 +2691,12 @@ variant_alias_declaration
     ;
 
 bitfield_alias_declaration
-    :   DAS_TBITFIELD { yyextra->das_need_oxford_comma=false; } NAME[vname] '{' bitfield_bits[list] ';' '}' {
+    :   DAS_TBITFIELD { yyextra->das_need_oxford_comma=false; } NAME[vname] {
+        if ( !yyextra->g_CommentReaders.empty() ) {
+            auto atvname = tokAt(scanner,@vname);
+            for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeBitfield(atvname);
+        }
+    } '{' bitfield_bits[list] ';' '}' {
         auto btype = make_smart<TypeDecl>(Type::tBitfield);
         btype->alias = *$vname;
         btype->at = tokAt(scanner,@vname);
@@ -2703,6 +2708,10 @@ bitfield_alias_declaration
         if ( !yyextra->g_Program->addAlias(btype) ) {
             das_yyerror(scanner,"type alias is already defined "+*$vname,tokAt(scanner,@vname),
                 CompilationError::type_alias_already_declared);
+        }
+        if ( !yyextra->g_CommentReaders.empty() ) {
+            auto atvname = tokAt(scanner,@vname);
+            for ( auto & crd : yyextra->g_CommentReaders ) crd->afterBitfield($vname->c_str(),atvname);
         }
         delete $vname;
         delete $list;
