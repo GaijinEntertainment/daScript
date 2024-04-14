@@ -396,7 +396,7 @@ namespace das
             }
         } else if ( baseType==Type::option ) {
             for ( auto & argT : argTypes ) {
-                stream << argT->describe(extra);
+                stream << argT->describe(extra, contracts, dmodule);
                 if ( argT != argTypes.back() ) {
                     stream << "|";
                 }
@@ -412,13 +412,13 @@ namespace das
             }
         } else if ( baseType==Type::tArray ) {
             if ( firstType ) {
-                stream << "array<" << firstType->describe(extra) << ">";
+                stream << "array<" << firstType->describe(extra, contracts, dmodule) << ">";
             } else {
                 stream << "array";
             }
         } else if ( baseType==Type::tTable ) {
             if ( firstType && secondType ) {
-                stream << "table<" << firstType->describe(extra) << ";" << secondType->describe(extra) << ">";
+                stream << "table<" << firstType->describe(extra, contracts, dmodule) << ";" << secondType->describe(extra, contracts, dmodule) << ">";
             } else {
                 stream << "table";
             }
@@ -434,7 +434,7 @@ namespace das
         } else if ( baseType==Type::tPointer ) {
             if ( smartPtr ) stream << "smart_ptr<";
             if ( firstType ) {
-                stream << firstType->describe(extra);
+                stream << firstType->describe(extra, contracts, dmodule);
             } else {
                 stream << "void";
             }
@@ -450,7 +450,7 @@ namespace das
             }
         } else if ( baseType==Type::tIterator ) {
             if ( firstType ) {
-                stream << "iterator<" << firstType->describe(extra) << ">";
+                stream << "iterator<" << firstType->describe(extra, contracts, dmodule) << ">";
             } else {
                 stream << "iterator";
             }
@@ -468,7 +468,7 @@ namespace das
                     } else {
                         stream << "arg" << ai << ":";
                     }
-                    stream << argTypes[ai]->describe(extra);
+                    stream << argTypes[ai]->describe(extra, contracts, dmodule);
                 }
                 stream << ")";
             }
@@ -476,7 +476,7 @@ namespace das
                 if ( argTypes.size() ) {
                     stream << ":";
                 }
-                stream << firstType->describe(extra);
+                stream << firstType->describe(extra, contracts, dmodule);
             }
             stream << ">";
             if ( argNames.size() && argNames.size()!=argTypes.size() ) {
@@ -491,7 +491,7 @@ namespace das
                         const auto & argName = argNames[ai];
                         if ( !argName.empty() ) stream << argName << ":";
                     }
-                    stream << arg->describe(extra);
+                    stream << arg->describe(extra, contracts, dmodule);
                     if ( arg != argTypes.back() ) {
                         stream << ";";
                     }
@@ -508,7 +508,7 @@ namespace das
                         const auto & argName = argNames[ai];
                         if ( !argName.empty() ) stream << argName << ":";
                     }
-                    stream << arg->describe(extra);
+                    stream << arg->describe(extra, contracts, dmodule);
                     if ( arg != argTypes.back() ) {
                         stream << ";";
                     }
