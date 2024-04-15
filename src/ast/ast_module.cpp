@@ -420,6 +420,9 @@ namespace das {
         if ( fn->builtIn && fn->sideEffectFlags==uint32_t(SideEffects::none) && fn->result->isVoid() ) {
             DAS_FATAL_ERROR("can't add function %s to module %s; it has no side effects and no return type\n", mangledName.c_str(), name.c_str() );
         }
+        if ( fn->builtIn ) {
+            cumulativeHash = wyhash(mangledName.c_str(), mangledName.size(), cumulativeHash);
+        }
         if ( fn->builtIn && fn->sideEffectFlags==uint32_t(SideEffects::modifyArgument)  ) {
             bool anyRW = false;
             for ( const auto & arg : fn->arguments ) {

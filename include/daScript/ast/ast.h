@@ -1131,6 +1131,7 @@ namespace das
         CommentReaderPtr                            commentReader;      // /* blah */ or // blah
         vector<pair<string,bool>>                   keywords;           // keywords (and if they need oxford comma)
         das_hash_map<string,Type>                   options;            // options
+        uint64_t                                    cumulativeHash = 0; // hash of all mangled names in this module (for builtin modules)
         string  name;
         union {
             struct {
