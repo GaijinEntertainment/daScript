@@ -2047,6 +2047,7 @@ namespace das {
                 *this << m->name;
 
                 if ( m->builtIn && !m->promoted ) {
+                    *this << m->cumulativeHash;
                     continue;
                 }
 
@@ -2069,6 +2070,16 @@ namespace das {
 
                 if ( builtin && !promoted ) {
                     auto m = Module::require(name);
+                    uint64_t savedHash = 0, moduleHash = m->cumulativeHash;
+                    *this << savedHash;
+
+                    if ( moduleHash != savedHash ) {
+                        LOG(LogLevel::warning) << "das: ser: cumulative hash for module " << m->name
+                                               << " differs" << " ( " << moduleHash << " vs " << savedHash << " ) ";
+                        program->failToCompile = true;
+                        return;
+                    }
+
                     program->library.addModule(m);
                     continue;
                 }
@@ -2094,7 +2105,7 @@ namespace das {
     }
 
     uint32_t AstSerializer::getVersion () {
-        static constexpr uint32_t currentVersion = 14;
+        static constexpr uint32_t currentVersion = 15;
         return currentVersion;
     }
 
