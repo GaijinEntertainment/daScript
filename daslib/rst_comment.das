@@ -25,7 +25,7 @@ enum ParserState
     enum_entry
     type_alias
 
-let private DEBUG_COMMENT_READER = true
+let private DEBUG_COMMENT_READER = false
 
 [macro_function]
 def private debug_rst ( s : string )
@@ -33,7 +33,8 @@ def private debug_rst ( s : string )
         to_log(LOG_INFO,"{s}\n")
 
 def panic_rst ( s : string )
-    to_log(LOG_ERROR,"{s} at {get_line_info(1) |> describe}\n")
+    if DEBUG_COMMENT_READER
+        to_log(LOG_ERROR,"{s} at {get_line_info(1) |> describe}\n")
     panic(s)
 
 [macro_function]
