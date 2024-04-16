@@ -138,10 +138,19 @@ class AstCommentReader
     def abstract afterGlobalVariable ( name:string; prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
     def abstract afterGlobalVariables ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
     def abstract beforeVariant ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+    def abstract beforeVariantEntries ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+    def abstract afterVariantEntry ( name:string; prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+    def abstract afterVariantEntries ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
     def abstract afterVariant ( name:string; prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
     def abstract beforeBitfield ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+    def abstract beforeBitfieldEntries ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+    def abstract afterBitfieldEntry ( name:string; prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+    def abstract afterBitfieldEntries ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
     def abstract afterBitfield ( name:string; prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
     def abstract beforeEnumeration ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+    def abstract beforeEnumerationEntries ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+    def abstract afterEnumerationEntry ( name:string; prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+    def abstract afterEnumerationEntries ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
     def abstract afterEnumeration ( name:string; prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
     def abstract beforeAlias ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
     def abstract afterAlias ( name:string; prog:ProgramPtr; mod:Module?; info:LineInfo ) : void

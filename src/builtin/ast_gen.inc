@@ -499,16 +499,25 @@ protected:
     __fn_afterGlobalVariable = 11,
     __fn_afterGlobalVariables = 12,
     __fn_beforeVariant = 13,
-    __fn_afterVariant = 14,
-    __fn_beforeBitfield = 15,
-    __fn_afterBitfield = 16,
-    __fn_beforeEnumeration = 17,
-    __fn_afterEnumeration = 18,
-    __fn_beforeAlias = 19,
-    __fn_afterAlias = 20,
+    __fn_beforeVariantEntries = 14,
+    __fn_afterVariantEntry = 15,
+    __fn_afterVariantEntries = 16,
+    __fn_afterVariant = 17,
+    __fn_beforeBitfield = 18,
+    __fn_beforeBitfieldEntries = 19,
+    __fn_afterBitfieldEntry = 20,
+    __fn_afterBitfieldEntries = 21,
+    __fn_afterBitfield = 22,
+    __fn_beforeEnumeration = 23,
+    __fn_beforeEnumerationEntries = 24,
+    __fn_afterEnumerationEntry = 25,
+    __fn_afterEnumerationEntries = 26,
+    __fn_afterEnumeration = 27,
+    __fn_beforeAlias = 28,
+    __fn_afterAlias = 29,
   };
 protected:
-  int _das_class_method_offset[21];
+  int _das_class_method_offset[30];
 public:
   AstCommentReader_Adapter ( const StructInfo * info ) {
       _das_class_method_offset[__fn_open] = info->fields[2]->offset;
@@ -525,13 +534,22 @@ public:
       _das_class_method_offset[__fn_afterGlobalVariable] = info->fields[13]->offset;
       _das_class_method_offset[__fn_afterGlobalVariables] = info->fields[14]->offset;
       _das_class_method_offset[__fn_beforeVariant] = info->fields[15]->offset;
-      _das_class_method_offset[__fn_afterVariant] = info->fields[16]->offset;
-      _das_class_method_offset[__fn_beforeBitfield] = info->fields[17]->offset;
-      _das_class_method_offset[__fn_afterBitfield] = info->fields[18]->offset;
-      _das_class_method_offset[__fn_beforeEnumeration] = info->fields[19]->offset;
-      _das_class_method_offset[__fn_afterEnumeration] = info->fields[20]->offset;
-      _das_class_method_offset[__fn_beforeAlias] = info->fields[21]->offset;
-      _das_class_method_offset[__fn_afterAlias] = info->fields[22]->offset;
+      _das_class_method_offset[__fn_beforeVariantEntries] = info->fields[16]->offset;
+      _das_class_method_offset[__fn_afterVariantEntry] = info->fields[17]->offset;
+      _das_class_method_offset[__fn_afterVariantEntries] = info->fields[18]->offset;
+      _das_class_method_offset[__fn_afterVariant] = info->fields[19]->offset;
+      _das_class_method_offset[__fn_beforeBitfield] = info->fields[20]->offset;
+      _das_class_method_offset[__fn_beforeBitfieldEntries] = info->fields[21]->offset;
+      _das_class_method_offset[__fn_afterBitfieldEntry] = info->fields[22]->offset;
+      _das_class_method_offset[__fn_afterBitfieldEntries] = info->fields[23]->offset;
+      _das_class_method_offset[__fn_afterBitfield] = info->fields[24]->offset;
+      _das_class_method_offset[__fn_beforeEnumeration] = info->fields[25]->offset;
+      _das_class_method_offset[__fn_beforeEnumerationEntries] = info->fields[26]->offset;
+      _das_class_method_offset[__fn_afterEnumerationEntry] = info->fields[27]->offset;
+      _das_class_method_offset[__fn_afterEnumerationEntries] = info->fields[28]->offset;
+      _das_class_method_offset[__fn_afterEnumeration] = info->fields[29]->offset;
+      _das_class_method_offset[__fn_beforeAlias] = info->fields[30]->offset;
+      _das_class_method_offset[__fn_afterAlias] = info->fields[31]->offset;
   }
   __forceinline Func get_open ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_open]);
@@ -659,6 +677,33 @@ public:
         (__context__,nullptr,__funcCall__,
           self,prog,mod,info);
   }
+  __forceinline Func get_beforeVariantEntries ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_beforeVariantEntries]);
+  }
+  __forceinline void invoke_beforeVariantEntries ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Program> const  prog, Module * const  mod, LineInfo const  & info ) const {
+    das_invoke_function<void>::invoke
+      <void *,smart_ptr_raw<Program> const ,Module * const ,LineInfo const  &>
+        (__context__,nullptr,__funcCall__,
+          self,prog,mod,info);
+  }
+  __forceinline Func get_afterVariantEntry ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_afterVariantEntry]);
+  }
+  __forceinline void invoke_afterVariantEntry ( Context * __context__, Func __funcCall__, void * self, char * const  name, smart_ptr_raw<Program> const  prog, Module * const  mod, LineInfo const  & info ) const {
+    das_invoke_function<void>::invoke
+      <void *,char * const ,smart_ptr_raw<Program> const ,Module * const ,LineInfo const  &>
+        (__context__,nullptr,__funcCall__,
+          self,name,prog,mod,info);
+  }
+  __forceinline Func get_afterVariantEntries ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_afterVariantEntries]);
+  }
+  __forceinline void invoke_afterVariantEntries ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Program> const  prog, Module * const  mod, LineInfo const  & info ) const {
+    das_invoke_function<void>::invoke
+      <void *,smart_ptr_raw<Program> const ,Module * const ,LineInfo const  &>
+        (__context__,nullptr,__funcCall__,
+          self,prog,mod,info);
+  }
   __forceinline Func get_afterVariant ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_afterVariant]);
   }
@@ -677,6 +722,33 @@ public:
         (__context__,nullptr,__funcCall__,
           self,prog,mod,info);
   }
+  __forceinline Func get_beforeBitfieldEntries ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_beforeBitfieldEntries]);
+  }
+  __forceinline void invoke_beforeBitfieldEntries ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Program> const  prog, Module * const  mod, LineInfo const  & info ) const {
+    das_invoke_function<void>::invoke
+      <void *,smart_ptr_raw<Program> const ,Module * const ,LineInfo const  &>
+        (__context__,nullptr,__funcCall__,
+          self,prog,mod,info);
+  }
+  __forceinline Func get_afterBitfieldEntry ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_afterBitfieldEntry]);
+  }
+  __forceinline void invoke_afterBitfieldEntry ( Context * __context__, Func __funcCall__, void * self, char * const  name, smart_ptr_raw<Program> const  prog, Module * const  mod, LineInfo const  & info ) const {
+    das_invoke_function<void>::invoke
+      <void *,char * const ,smart_ptr_raw<Program> const ,Module * const ,LineInfo const  &>
+        (__context__,nullptr,__funcCall__,
+          self,name,prog,mod,info);
+  }
+  __forceinline Func get_afterBitfieldEntries ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_afterBitfieldEntries]);
+  }
+  __forceinline void invoke_afterBitfieldEntries ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Program> const  prog, Module * const  mod, LineInfo const  & info ) const {
+    das_invoke_function<void>::invoke
+      <void *,smart_ptr_raw<Program> const ,Module * const ,LineInfo const  &>
+        (__context__,nullptr,__funcCall__,
+          self,prog,mod,info);
+  }
   __forceinline Func get_afterBitfield ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_afterBitfield]);
   }
@@ -690,6 +762,33 @@ public:
     return getDasClassMethod(self,_das_class_method_offset[__fn_beforeEnumeration]);
   }
   __forceinline void invoke_beforeEnumeration ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Program> const  prog, Module * const  mod, LineInfo const  & info ) const {
+    das_invoke_function<void>::invoke
+      <void *,smart_ptr_raw<Program> const ,Module * const ,LineInfo const  &>
+        (__context__,nullptr,__funcCall__,
+          self,prog,mod,info);
+  }
+  __forceinline Func get_beforeEnumerationEntries ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_beforeEnumerationEntries]);
+  }
+  __forceinline void invoke_beforeEnumerationEntries ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Program> const  prog, Module * const  mod, LineInfo const  & info ) const {
+    das_invoke_function<void>::invoke
+      <void *,smart_ptr_raw<Program> const ,Module * const ,LineInfo const  &>
+        (__context__,nullptr,__funcCall__,
+          self,prog,mod,info);
+  }
+  __forceinline Func get_afterEnumerationEntry ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_afterEnumerationEntry]);
+  }
+  __forceinline void invoke_afterEnumerationEntry ( Context * __context__, Func __funcCall__, void * self, char * const  name, smart_ptr_raw<Program> const  prog, Module * const  mod, LineInfo const  & info ) const {
+    das_invoke_function<void>::invoke
+      <void *,char * const ,smart_ptr_raw<Program> const ,Module * const ,LineInfo const  &>
+        (__context__,nullptr,__funcCall__,
+          self,name,prog,mod,info);
+  }
+  __forceinline Func get_afterEnumerationEntries ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_afterEnumerationEntries]);
+  }
+  __forceinline void invoke_afterEnumerationEntries ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Program> const  prog, Module * const  mod, LineInfo const  & info ) const {
     das_invoke_function<void>::invoke
       <void *,smart_ptr_raw<Program> const ,Module * const ,LineInfo const  &>
         (__context__,nullptr,__funcCall__,

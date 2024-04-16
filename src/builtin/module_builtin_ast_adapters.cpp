@@ -1869,6 +1869,36 @@ namespace das {
                 });
             }
         }
+        virtual void beforeVariantEntries ( const LineInfo & info ) override {
+            if ( auto fnVariant = get_beforeVariantEntries(classPtr) ) {
+                runMacroFunction(context, "beforeVariantEntries", [&]() {
+                    invoke_beforeVariantEntries(context,fnVariant,classPtr,
+                        daScriptEnvironment::bound->g_Program,
+                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                            info);
+                });
+            }
+        }
+        virtual void afterVariantEntry ( const char * name, const LineInfo & info ) override {
+            if ( auto fnVariant = get_afterVariantEntry(classPtr) ) {
+                runMacroFunction(context, "afterVariantEntry", [&]() {
+                    invoke_afterVariantEntry(context,fnVariant,classPtr,
+                        (char *) name, daScriptEnvironment::bound->g_Program,
+                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                            info);
+                });
+            }
+        }
+        virtual void afterVariantEntries ( const LineInfo & info ) override {
+            if ( auto fnVariant = get_afterVariantEntries(classPtr) ) {
+                runMacroFunction(context, "afterVariantEntries", [&]() {
+                    invoke_afterVariantEntries(context,fnVariant,classPtr,
+                        daScriptEnvironment::bound->g_Program,
+                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                            info);
+                });
+            }
+        }
         virtual void afterVariant ( const char * name, const LineInfo & info ) override {
             if ( auto fnVariant = get_afterVariant(classPtr) ) {
                 runMacroFunction(context, "afterVariant", [&]() {
@@ -1889,6 +1919,36 @@ namespace das {
                 });
             }
         }
+        virtual void beforeBitfieldEntries ( const LineInfo & info ) override {
+            if ( auto fnBitfield = get_beforeBitfieldEntries(classPtr) ) {
+                runMacroFunction(context, "beforeBitfieldEntries", [&]() {
+                    invoke_beforeBitfieldEntries(context,fnBitfield,classPtr,
+                        daScriptEnvironment::bound->g_Program,
+                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                            info);
+                });
+            }
+        }
+        virtual void afterBitfieldEntry ( const char * name, const LineInfo & info ) override {
+            if ( auto fnBitfield = get_afterBitfieldEntry(classPtr) ) {
+                runMacroFunction(context, "afterBitfieldEntry", [&]() {
+                    invoke_afterBitfieldEntry(context,fnBitfield,classPtr,
+                        (char *) name, daScriptEnvironment::bound->g_Program,
+                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                            info);
+                });
+            }
+        }
+        virtual void afterBitfieldEntries ( const LineInfo & info ) override {
+            if ( auto fnBitfield = get_afterBitfieldEntries(classPtr) ) {
+                runMacroFunction(context, "afterBitfieldEntries", [&]() {
+                    invoke_afterBitfieldEntries(context,fnBitfield,classPtr,
+                        daScriptEnvironment::bound->g_Program,
+                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                            info);
+                });
+            }
+        }
         virtual void afterBitfield ( const char * name, const LineInfo & info ) override {
             if ( auto fnBitfield = get_afterBitfield(classPtr) ) {
                 runMacroFunction(context, "afterBitfield", [&]() {
@@ -1903,6 +1963,36 @@ namespace das {
             if ( auto fnEnum = get_beforeEnumeration(classPtr) ) {
                 runMacroFunction(context, "beforeEnumeration", [&]() {
                     invoke_beforeEnumeration(context,fnEnum,classPtr,
+                        daScriptEnvironment::bound->g_Program,
+                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                            info);
+                });
+            }
+        }
+        virtual void beforeEnumerationEntries ( const LineInfo & info ) override {
+            if ( auto fnEnum = get_beforeEnumerationEntries(classPtr) ) {
+                runMacroFunction(context, "beforeEnumerationEntries", [&]() {
+                    invoke_beforeEnumerationEntries(context,fnEnum,classPtr,
+                        daScriptEnvironment::bound->g_Program,
+                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                            info);
+                });
+            }
+        }
+        virtual void afterEnumerationEntry ( const char * name, const LineInfo & info ) override {
+            if ( auto fnEnum = get_afterEnumerationEntry(classPtr) ) {
+                runMacroFunction(context, "afterEnumerationEntry", [&]() {
+                    invoke_afterEnumerationEntry(context,fnEnum,classPtr,
+                        (char *) name, daScriptEnvironment::bound->g_Program,
+                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                            info);
+                });
+            }
+        }
+        virtual void afterEnumerationEntries ( const LineInfo & info ) override {
+            if ( auto fnEnum = get_afterEnumerationEntries(classPtr) ) {
+                runMacroFunction(context, "afterEnumerationEntries", [&]() {
+                    invoke_afterEnumerationEntries(context,fnEnum,classPtr,
                         daScriptEnvironment::bound->g_Program,
                         daScriptEnvironment::bound->g_Program->thisModule.get(),
                             info);
