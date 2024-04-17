@@ -438,7 +438,7 @@ namespace das
                 while ( *ch && !strchr(delim,*ch) ) ch++;
                 words.push_back(string(tok,ch-tok));
                 if ( !*ch ) break;
-                while ( *ch && strchr(delim,*ch) ) ch++;
+                if ( *ch && strchr(delim,*ch) ) ch++;
                 if ( !*ch ) words.push_back("");
             }
         } else {
@@ -477,7 +477,7 @@ namespace das
                 while ( *ch && strncmp(delim,ch,delimLen)!=0 ) ch++;
                 words.push_back(string(tok,ch-tok));
                 if ( !*ch ) break;
-                while ( *ch && strncmp(delim,ch,delimLen)==0 ) ch+=delimLen;
+                if ( *ch && strncmp(delim,ch,delimLen)==0 ) ch+=delimLen;
                 if ( !*ch ) words.push_back("");
             }
         } else {

@@ -75,4 +75,55 @@ def test_split_and_join ( t:T? )
             t |> accept ( join(arr, fake |> any_string) )
 
 
+[test]
+def tricky_test_split_and_join ( t:T? )
+    let splStr = ",,12,,34,56,,"
+    let spl <- split(splStr, ",")
+    t |> equal(length(spl),8)
+    t |> equal(spl[0],"")
+    t |> equal(spl[1],"")
+    t |> equal(spl[2],"12")
+    t |> equal(spl[3],"")
+    t |> equal(spl[4],"34")
+    t |> equal(spl[5],"56")
+    t |> equal(spl[6],"")
+    t |> equal(spl[7],"")
+    t |> equal(join(spl, ","), splStr)
+
+
+    split(splStr, ",") <| $ ( splb )
+        t |> equal(length(spl),8)
+        t |> equal(spl[0],"")
+        t |> equal(spl[1],"")
+        t |> equal(spl[2],"12")
+        t |> equal(spl[3],"")
+        t |> equal(spl[4],"34")
+        t |> equal(spl[5],"56")
+        t |> equal(spl[6],"")
+        t |> equal(spl[7],"")
+        t |> equal(join(spl, ","), splStr)
+
+    let splbcStr = ";;12,,34;56,,"
+    let splbc <- split_by_chars(splbcStr, ",;")
+    t |> equal(length(spl),8)
+    t |> equal(splbc[0],"")
+    t |> equal(splbc[1],"")
+    t |> equal(splbc[2],"12")
+    t |> equal(splbc[3],"")
+    t |> equal(splbc[4],"34")
+    t |> equal(splbc[5],"56")
+    t |> equal(splbc[6],"")
+    t |> equal(splbc[7],"")
+
+    split_by_chars(splbcStr, ",;") <| $ ( splb )
+        t |> equal(length(spl),8)
+        t |> equal(splb[0],"")
+        t |> equal(splb[1],"")
+        t |> equal(splb[2],"12")
+        t |> equal(splb[3],"")
+        t |> equal(splb[4],"34")
+        t |> equal(splb[5],"56")
+        t |> equal(splb[6],"")
+        t |> equal(splb[7],"")
+
 
