@@ -1154,7 +1154,7 @@ class LlvmJitVisitor : AstVisitor
         elif subExprT.dim |> length != 0
             var inscope etype <- clone_type(subExprT)
             assume vec = etype.dim
-            let maxIndex = vec[vec |> length-1]
+            let maxIndex = vec[0]
             for i in range(1, length(vec))
                 vec[i - 1] = vec[i]
             vec |> resize( vec |> length - 1 )
@@ -1218,7 +1218,7 @@ class LlvmJitVisitor : AstVisitor
         if subExprT.dim |> length != 0 || (subExprT.isPointer && subExprT.firstType.dim |> length != 0)
             var inscope etype <- subExprT.isPointer ? clone_type(subExprT.firstType) : clone_type(subExprT)
             assume vec = etype.dim
-            let maxIndex = vec[vec |> length-1]
+            let maxIndex = vec[0]
             for i in range(1, length(vec))
                 vec[i - 1] = vec[i]
             vec |> resize( vec |> length - 1 )
