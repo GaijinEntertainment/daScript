@@ -389,6 +389,7 @@
 %type <b>               optional_public_or_private_structure
 %type <b>               optional_public_or_private_function
 %type <b>               optional_public_or_private_member_variable
+%type <b>               optional_public_or_private_alias
 %type <b>               optional_static_member_variable
 %type <b>               optional_public_or_private_enum
 %type <b>               optional_in_scope
@@ -2232,14 +2233,22 @@ enum_list
     ;
 
 
+optional_public_or_private_alias
+    :                { $$ = yyextra->g_Program->thisModule->isPublic; }
+    |   DAS_PRIVATE  { $$ = false; }
+    |   DAS_PUBLIC   { $$ = true; }
+    ;
+
+
 single_alias
-    :   NAME[name] {
+    :  optional_public_or_private_alias[pubA] NAME[name] {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto pubename = tokAt(scanner,@name);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeAlias(pubename);
         }
     } '=' type_declaration[tdecl] {
         das_checkName(scanner,*$name,tokAt(scanner,@name));
+        $tdecl->isPrivateAlias = !$pubA;
         $tdecl->alias = *$name;
         if ( !yyextra->g_Program->addAlias(TypeDeclPtr($tdecl)) ) {
             das_yyerror(scanner,"type alias is already defined "+*$name,tokAt(scanner,@name),
@@ -2741,7 +2750,7 @@ type_declaration
     ;
 
 variant_alias_declaration
-    :   DAS_TVARIANT { yyextra->das_need_oxford_comma=false; } NAME[vname] {
+    :   DAS_TVARIANT optional_public_or_private_alias[pubA] { yyextra->das_need_oxford_comma=false; } NAME[vname] {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto atvname = tokAt(scanner,@vname);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeVariant(atvname);
@@ -2761,6 +2770,7 @@ variant_alias_declaration
         auto vtype = make_smart<TypeDecl>(Type::tVariant);
         vtype->alias = *$vname;
         vtype->at = tokAt(scanner,@vname);
+        vtype->isPrivateAlias = !$pubA;
         varDeclToTypeDecl(scanner, vtype.get(), $list, true);
         deleteVariableDeclarationList($list);
         if ( !yyextra->g_Program->addAlias(vtype) ) {
@@ -2776,7 +2786,7 @@ variant_alias_declaration
     ;
 
 bitfield_alias_declaration
-    :   DAS_TBITFIELD { yyextra->das_need_oxford_comma=false; } NAME[vname] {
+    :   DAS_TBITFIELD optional_public_or_private_alias[pubA] { yyextra->das_need_oxford_comma=false; } NAME[vname] {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto atvname = tokAt(scanner,@vname);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeBitfield(atvname);
@@ -2796,6 +2806,7 @@ bitfield_alias_declaration
         btype->alias = *$vname;
         btype->at = tokAt(scanner,@vname);
         btype->argNames = *$list;
+        btype->isPrivateAlias = !$pubA;
         if ( btype->argNames.size()>32 ) {
             das_yyerror(scanner,"only 32 different bits are allowed in a bitfield",tokAt(scanner,@vname),
                 CompilationError::invalid_type);
