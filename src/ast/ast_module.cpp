@@ -778,34 +778,6 @@ namespace das {
         }, moduleName);
     }
 
-    void ModuleLibrary::findAlias ( vector<TypeDeclPtr> & ptr, Module * pm, const string & aliasName, Module * inWhichModule ) const {
-        if ( auto pp = pm->findAlias(aliasName) ) {
-            if ( pp->isEnumT() ) {
-                if ( !pp->enumType->isPrivate || pp->enumType->module==inWhichModule ) {
-                    ptr.push_back(das::move(pp));
-                }
-            } else if ( pp->baseType==Type::tStructure ) {
-                if ( !pp->structType->privateStructure || pp->structType->module==inWhichModule ) {
-                    ptr.push_back(das::move(pp));
-                }
-            } else {
-                ptr.push_back(das::move(pp));
-            }
-        }
-    }
-
-    vector<TypeDeclPtr> ModuleLibrary::findAlias ( const string & name, Module * inWhichModule ) const {
-        vector<TypeDeclPtr> ptr;
-        string moduleName, aliasName;
-        splitTypeName(name, moduleName, aliasName);
-        foreach([&](Module * pm) -> bool {
-            if ( !inWhichModule || inWhichModule->isVisibleDirectly(pm) )
-                findAlias(ptr, pm, aliasName, inWhichModule);
-            return true;
-        }, moduleName);
-        return ptr;
-    }
-
     void ModuleLibrary::findAnnotation ( vector<AnnotationPtr> & ptr, Module * pm, const string & annotationName, Module * ) const {
         if ( auto pp = pm->findAnnotation(annotationName) )
             ptr.push_back(das::move(pp));
@@ -856,6 +828,37 @@ namespace das {
         }, moduleName);
         return ptr;
     }
+
+    void ModuleLibrary::findAlias ( vector<TypeDeclPtr> & ptr, Module * pm, const string & aliasName, Module * inWhichModule ) const {
+        if ( auto pp = pm->findAlias(aliasName) ) {
+            if ( !pp->isPrivateAlias || pp->module==inWhichModule ) {
+                if ( pp->isEnumT() ) {
+                    if ( !pp->enumType->isPrivate || pp->enumType->module==inWhichModule ) {
+                        ptr.push_back(das::move(pp));
+                    }
+                } else if ( pp->baseType==Type::tStructure ) {
+                    if ( !pp->structType->privateStructure || pp->structType->module==inWhichModule ) {
+                        ptr.push_back(das::move(pp));
+                    }
+                } else {
+                    ptr.push_back(das::move(pp));
+                }
+            }
+        }
+    }
+
+    vector<TypeDeclPtr> ModuleLibrary::findAlias ( const string & name, Module * inWhichModule ) const {
+        vector<TypeDeclPtr> ptr;
+        string moduleName, aliasName;
+        splitTypeName(name, moduleName, aliasName);
+        foreach([&](Module * pm) -> bool {
+            if ( !inWhichModule || inWhichModule->isVisibleDirectly(pm) )
+                findAlias(ptr, pm, aliasName, inWhichModule);
+            return true;
+        }, moduleName);
+        return ptr;
+    }
+
 
     void ModuleLibrary::findEnum ( vector<EnumerationPtr> & ptr, Module * pm, const string & enumName, Module * inWhichModule ) const {
         if ( auto pp = pm->findEnum(enumName) ) {

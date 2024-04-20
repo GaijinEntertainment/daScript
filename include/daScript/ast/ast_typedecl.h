@@ -242,6 +242,7 @@ namespace das {
                 bool    isNativeDim : 1;
                 bool    isTag: 1;
                 bool    explicitRef : 1;
+                bool    isPrivateAlias : 1;    // this is a private alias. only matters in the context of module aliasTypes (for now)
             };
             uint32_t flags = 0;
         };
