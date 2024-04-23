@@ -146,9 +146,9 @@ def public quads_view ( quads : array<FontVertex>; scale:float2; h:HJust = HJust
     else
         o.y = 0.
     return compose(
-        float4(o,0.,0.),
+        float3(o,0.),
         float4(1,0,0,0),
-        float4(scale,0.,1.))
+        float3(scale,0.))
 
 
 
