@@ -1044,7 +1044,9 @@ namespace mandelbrot {
         int l = 0;
         float2 z = c;
         while ( v_extract_x(v_length2_x(z)) < 2.0 && l < 255 ) {
-            z = float2(z.x * z.x - z.y * z.y, z.x * z.y + z.y * z.x) + c;
+            z = float2(z.x * z.x - z.y * z.y, z.x * z.y + z.y * z.x);
+            z.x += c.x;
+            z.y += c.y;
             l++;
         }
         return l - 1;

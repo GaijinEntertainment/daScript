@@ -989,7 +989,7 @@ class GlslExport : AstVisitor
     def override preVisitExprSafeAt(expr:smart_ptr<ExprSafeAt>): void
         self->error ("safe index is not supported", expr.at)
 // is
-    def override preVisitExprIsType(expr:smart_ptr<ExprAt>;typeDecl:TypeDeclPtr)
+    def override preVisitExprIsType(expr:smart_ptr<ExprIs>;typeDecl:TypeDeclPtr): void
         self->error ("is type is not supported", expr.at)
 // op2
     def getReplaceOp2(expr:smart_ptr<ExprOp2>) : tuple<fun:string;replOp:bool>

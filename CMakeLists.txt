@@ -24,13 +24,11 @@ option(DAS_AOT_EXAMPLES_DISABLED "Disable dasAOT examples" OFF)
 option(DAS_PROFILE_DISABLED "Disable dasProfile" OFF)
 option(DAS_TUTORIAL_DISABLED "Disable dasTutorial" OFF)
 option(DAS_TESTS_DISABLED "Disable dasTests" OFF)
-set(DAS_INSTALL_BINDIR ${CMAKE_INSTALL_BINDIR} CACHE STRING "Directory where to install binaries")
-set(DAS_INSTALL_DOCDIR ${CMAKE_INSTALL_DOCDIR} CACHE STRING "Directory where to install documentation")
-set(DAS_INSTALL_DATADIR ${CMAKE_INSTALL_DATADIR}/${CMAKE_PROJECT_NAME} CACHE STRING "Directory where to install data")
-
-set(DAS_INSTALL_DASLIBDIR ${DAS_INSTALL_DATADIR}/daslib)
-set(DAS_INSTALL_EXAMPLESDIR ${DAS_INSTALL_DATADIR}/examples)
-set(DAS_INSTALL_MODULESDIR ${DAS_INSTALL_DATADIR}/modules)
+set(DAS_INSTALL_BINDIR bin CACHE STRING "Directory where to install binaries")
+set(DAS_INSTALL_DOCDIR . CACHE STRING "Directory where to install documentation")
+set(DAS_INSTALL_DASLIBDIR daslib CACHE STRING "Directory where to install daslib")
+set(DAS_INSTALL_EXAMPLESDIR examples CACHE STRING "Directory where to install examples")
+set(DAS_INSTALL_MODULESDIR modules CACHE STRING "Directory where to install modules")
 
 
 IF(WIN32)
@@ -706,9 +704,11 @@ if (NOT ${DAS_TOOLS_DISABLED})
         RUNTIME DESTINATION ${DAS_INSTALL_BINDIR}
     )
 
-    install(DIRECTORY ${PROJECT_SOURCE_DIR}/daslib/
+    file(GLOB DASLIB_SOURCES
+        ${PROJECT_SOURCE_DIR}/daslib/*.das
+    )
+    install(FILES ${DASLIB_SOURCES}
         DESTINATION ${DAS_INSTALL_DASLIBDIR}
-		PATTERN "daslib/*"
     )
 
     #IF(APPLE)
