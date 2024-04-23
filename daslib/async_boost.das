@@ -3,7 +3,7 @@ options no_unused_block_arguments = false
 options no_unused_function_arguments = false
 options strict_smart_pointers = true
 
-module async_boost shared public
+module async_boost shared private
 
 require strings
 require daslib/ast_boost
@@ -11,7 +11,7 @@ require daslib/templates_boost
 require daslib/macro_boost
 
 
-def await_next_frame()
+def public await_next_frame()
     //! This function is used to suspend coroutine until next frame.
     panic("await_next_frame() should not be called directly, add [async] annotation to the function in that you want to use it")
 
@@ -53,7 +53,7 @@ class AwaitCoroutineMacro : AstFunctionAnnotation
 
 
 [function_macro(name="async")]
-class private AsyncMacro : AstFunctionAnnotation
+class AsyncMacro : AstFunctionAnnotation
     //! This macro converts function into generator.
     //! Generator yields bool if its a void function (coroutine), and yields the return type otherwise (async return).
     //! async function can wait for another async function using await(<async fn call>).
