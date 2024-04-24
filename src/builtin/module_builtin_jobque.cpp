@@ -226,15 +226,18 @@ namespace das {
             return TypeDecl::gcFlag_heap | TypeDecl::gcFlag_stringHeap;
         }
         virtual void walk(DataWalker & walker, void * data) override {
+            bool gResolve = daScriptEnvironment::bound->g_resolve_annotations;
+            daScriptEnvironment::bound->g_resolve_annotations = false;
             BasicStructureAnnotation::walk(walker, data);
             Channel * ch = (Channel *) data;
             if ( !ch->isValid() ) {
                 walker.invalidData();
-                return;
+            } else {
+                ch->for_each_item([&](void * data, TypeInfo * ti, Context *) {
+                    walker.walk((char *)&data, ti);
+                });
             }
-            ch->for_each_item([&](void * data, TypeInfo * ti, Context *) {
-                walker.walk((char *)&data, ti);
-            });
+            daScriptEnvironment::bound->g_resolve_annotations = gResolve;
         }
     };
 
@@ -296,15 +299,18 @@ namespace das {
             return TypeDecl::gcFlag_heap | TypeDecl::gcFlag_stringHeap;
         }
         virtual void walk(DataWalker & walker, void * data) override {
+            bool gResolve = daScriptEnvironment::bound->g_resolve_annotations;
+            daScriptEnvironment::bound->g_resolve_annotations = false;
             BasicStructureAnnotation::walk(walker, data);
             LockBox * ch = (LockBox *) data;
             if ( !ch->isValid() ) {
                 walker.invalidData();
-                return;
+            } else {
+                ch->peek([&](void * data, TypeInfo * ti, Context *) {
+                    walker.walk((char *)&data, ti);
+                });
             }
-            ch->peek([&](void * data, TypeInfo * ti, Context *) {
-                walker.walk((char *)&data, ti);
-            });
+            daScriptEnvironment::bound->g_resolve_annotations = gResolve;
         }
     };
 
