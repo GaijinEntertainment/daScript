@@ -142,18 +142,25 @@ class private JsonReader : AstReaderMacro
 [expect_any_enum(ent), template(ent)]
 def from_JV ( v:JsonValue explicit?; ent : auto(EnumT); defV : EnumT = [[EnumT]] ) : EnumT
     //! Parse a JSON value and return the corresponding native value.
-    if v==null || !(v.value is _string)
+    if v==null || !((v.value is _string) || (v.value is _number))
         return defV
-    let name = v.value as _string
-    var res : auto(EnumTT) = [[EnumT]]
-    var ti = typeinfo(rtti_typeinfo type<EnumT>)
-    for ef in *ti.enumType
-        if name==ef.name
-            unsafe
-                res = reinterpret<EnumTT> (ef.value)
-            return res
-    panic("not a valid enumeration {name} in {typeinfo(typename type<EnumT>)}")
-    return res
+    if v.value is _string
+        let name = v.value as _string
+        var res : auto(EnumTT) = [[EnumT]]
+        var ti = typeinfo(rtti_typeinfo type<EnumT>)
+        for ef in *ti.enumType
+            if name==ef.name
+                unsafe
+                    res = reinterpret<EnumTT> (ef.value)
+                return res
+        panic("not a valid enumeration {name} in {typeinfo(typename type<EnumT>)}")
+    else
+        let intValue = int(v.value as _number)
+        for it in each_enum(defV)
+            if intValue == int(it)
+                return it
+        panic("not a valid enumeration {intValue} in {typeinfo(typename type<EnumT>)}")
+    return defV
 
 [generic,template(ent)]
 def from_JV ( var v : JsonValue explicit?; ent:string; defV:string="" )
