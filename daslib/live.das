@@ -163,6 +163,7 @@ def set_new_context ( var ptr : smart_ptr<Context>; full_restart:bool = false )
     appPtr := ptr
     delete liveFunctionLookup
     if appPtr != null
+        appPtr.alwaysErrorOnException = true
         appPtr.alwaysStackWalkOnException = true
         unsafe
             // fixup decs if its there

@@ -659,6 +659,7 @@ namespace das
         bool                            ownStack = false;
         bool                            shutdown = false;
         bool                            breakOnException = false;
+        bool                            alwaysErrorOnException = false;
         bool                            alwaysStackWalkOnException = false;
     public:
         string                          name;
