@@ -26,25 +26,24 @@ namespace das {
 
     void Context::throw_fatal_error ( const char * message, const LineInfo & at ) {
         exceptionMessage = message;
+        exceptionMessage += "\n";
         exception = exceptionMessage.c_str();
         exceptionAt = at;
 #if DAS_ENABLE_EXCEPTIONS
+        if ( alwaysErrorOnException ) {
+            to_err(&at, exception);
+        }
         if ( alwaysStackWalkOnException ) {
-            if (message) {
-                to_err(&at, message);
-                to_err(&at, "\n");
-            }
             stackWalk(&at, false, false);
         }
         if ( breakOnException ) breakPoint(at, "exception", message);
         throw dasException(message ? message : "", at);
 #else
         if ( throwBuf ) {
+            if ( alwaysErrorOnException ) {
+                to_err(&at, exception);
+            }
             if ( alwaysStackWalkOnException ) {
-                if (message) {
-                    to_err(&at, message);
-                    to_err(&at, "\n");
-                }
                 stackWalk(&at, false, false);
             }
             if ( breakOnException ) breakPoint(at, "exception", message);
@@ -56,11 +55,8 @@ namespace das {
             longjmp(*throwBuf,1);
         } else {
             to_err(&at, "\nunhandled exception\n");
-            if ( exception ) {
-                string msg = exceptionAt.describe() + ": " + exception;
-                to_err(&at, msg.c_str());
-                to_err(&at, "\n");
-            }
+            string msg = exceptionAt.describe() + ": " + exception;
+            to_err(&at, msg.c_str());
             stackWalk(&at, false, false);
             breakPoint(at, "exception", message);
         }

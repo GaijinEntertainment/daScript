@@ -279,6 +279,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
             addFieldEx("category", "category", offsetof(Context, category), makeContextCategoryFlags());
             addField<DAS_BIND_MANAGED_FIELD(breakOnException)>("breakOnException");
+            addField<DAS_BIND_MANAGED_FIELD(alwaysErrorOnException)>("alwaysErrorOnException");
             addField<DAS_BIND_MANAGED_FIELD(alwaysStackWalkOnException)>("alwaysStackWalkOnException");
             addField<DAS_BIND_MANAGED_FIELD(exception)>("exception");
             addField<DAS_BIND_MANAGED_FIELD(last_exception)>("last_exception");
