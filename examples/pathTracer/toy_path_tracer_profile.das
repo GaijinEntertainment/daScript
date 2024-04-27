@@ -2,6 +2,8 @@
 // options logCpp
 // options log_nodes
 
+options solid_context
+
 require path_tracer
 
 require strings

@@ -1,3 +1,5 @@
+options solid_context
+
 // options log
 // options logCpp
 // options log_nodes
@@ -51,6 +53,7 @@ def main
             var dt = get_time_usec(t0)
             var sec = double(dt)/1000000.0lf
             print("{totalRays} in {sec} sec, {format("%.3f",double(totalRays)/double(dt))} mrays/sec\n")
+            print("{totalRays/nJobs} {format("%.3f",double(totalRays/nJobs)/double(dt))} mrays/sec per job\n")
     elif USE_MODE == Mode Threads
         var t0 = ref_time_ticks()
         var totalRays = 0
@@ -77,6 +80,7 @@ def main
         var dt = get_time_usec(t0)
         var sec = double(dt)/1000000.0lf
         print("{totalRays} in {sec} sec, {format("%.3f",double(totalRays)/double(dt))} mrays/sec\n")
+        print("{totalRays/hwThreads} {format("%.3f",double(totalRays/hwThreads)/double(dt))} mrays/sec per thread\n")
     elif USE_MODE == Mode SimulateGpu
         profile(kFrameCount,"ray-trace frame via per ray prep") <|
             init_path_tracer()

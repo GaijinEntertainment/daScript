@@ -4,6 +4,9 @@
 
 module path_tracer public
 
+options solid_context
+
+
 require math
 require strings
 
@@ -114,6 +117,7 @@ def init_path_tracer
     s_SphereMats[7] = [[Material mtype = Type Dielectric, albedo = float3(0.4, 0.4, 0.4), emissive = float3(0,0,0),     roughness = 0.,  ri = 1.5]]
     s_SphereMats[8] = [[Material mtype = Type Lambert,    albedo = float3(0.8, 0.6, 0.2), emissive = float3(30,25,15),  roughness = 0.,  ri = 0.]]
 
+[hint(unsafe_range_check)]
 def hitSpheres(r:Ray const;tMin,tMax:float;var outHit:Hit)
     var hitT = tMax
     var id = -1
@@ -142,6 +146,7 @@ def hitWorld(r:Ray const;tMin,tMax:float;var outHit:Hit;var outID:int&)
     outID = r|>hitSpheres(tMin,tMax,outHit)
     return outID != -1
 
+[hint(unsafe_range_check)]
 def scatter(mat:Material const; r_in:Ray const; rec:Hit; var attenuation:float3&; var scattered:Ray; var outLightE:float3&; var inoutRayCount:int&)
     outLightE = float3(0)
     if mat.mtype==Type Lambert
@@ -199,6 +204,7 @@ def scatter(mat:Material const; r_in:Ray const; rec:Hit; var attenuation:float3&
         return false
     return true
 
+[hint(unsafe_range_check)]
 def trace(r:Ray;var inoutRayCount:int&)
     var ray = r
     var col = float3(0.)
@@ -230,6 +236,7 @@ def trace(r:Ray;var inoutRayCount:int&)
             break
     return col
 
+[hint(unsafe_range_check)]
 def trace(screenWidth,screenHeight,frameCount,ymin,ymax:int;var backbuffer:array<float3>;cam:Camera)
     let invWH = float(1) / float2(screenWidth, screenHeight)
     let lerpFac = float3(float(frameCount) / float(frameCount + 1))
