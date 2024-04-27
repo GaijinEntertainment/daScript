@@ -769,6 +769,7 @@ namespace das {
         "strict_smart_pointers",        Type::tBool,
         "no_init",                      Type::tBool,
         "no_local_class_members",       Type::tBool,
+        "report_invisible_functions",   Type::tBool,
     // memory
         "stack",                        Type::tInt,
         "intern_strings",               Type::tBool,
