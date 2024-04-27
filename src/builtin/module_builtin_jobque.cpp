@@ -17,6 +17,21 @@ MAKE_TYPE_FACTORY(Atomic64, AtomicTT<int64_t>)
 
 namespace das {
 
+    template <typename TT>
+    struct AddReleaseGuard {
+        AddReleaseGuard ( TT * tt, Context * c, LineInfoArg * a ) : t(tt), at(a), context(c) {
+            t->addRef();
+        }
+        ~AddReleaseGuard () {
+            if ( int ref = t->releaseRef() ) {
+                context->throw_error_at(at, "synch primitive deleted while being used (ref=%i)", ref);
+            }
+        }
+        TT * t;
+        LineInfoArg * at;
+        Context * context;
+    };
+
     LockBox::~LockBox() {
         lock_guard<mutex> guard(mCompleteMutex);
         box.clear();
@@ -183,23 +198,16 @@ namespace das {
         if ( !ch ) context->throw_error_at(at, "jobAppend: job is null");
         return ch->append(size);
     }
-
     void withChannel ( const TBlock<void,Channel *> & blk, Context * context, LineInfoArg * at ) {
         Channel ch(context);
-        ch.addRef();
+        AddReleaseGuard<Channel> guard(&ch, context, at);
         das_invoke<void>::invoke<Channel *>(context, at, blk, &ch);
-        if ( ch.releaseRef() ) {
-            context->throw_error_at(at, "channel beeing deleted while being used");
-        }
     }
 
     void withChannelEx ( int32_t count, const TBlock<void,Channel *> & blk, Context * context, LineInfoArg * at ) {
         Channel ch(context,count);
-        ch.addRef();
+        AddReleaseGuard<Channel> guard(&ch, context, at);
         das_invoke<void>::invoke<Channel *>(context, at, blk, &ch);
-        if ( ch.releaseRef() ) {
-            context->throw_error_at(at, "channel beeing deleted while being used");
-        }
     }
 
     Channel * channelCreate( Context * context, LineInfoArg * ) {
@@ -266,11 +274,8 @@ namespace das {
 
     void withLockBox ( const TBlock<void,LockBox *> & blk, Context * context, LineInfoArg * at ) {
         LockBox ch;
-        ch.addRef();
+        AddReleaseGuard<LockBox> guard(&ch, context, at);
         das_invoke<void>::invoke<LockBox *>(context, at, blk, &ch);
-        if ( ch.releaseRef() ) {
-            context->throw_error_at(at, "lock box beeing deleted while being used");
-        }
     }
 
     vec4f lockBoxSet ( Context & context, SimNode_CallBase * call, vec4f * args ) {
@@ -443,13 +448,10 @@ namespace das {
 
     void withJobStatus ( int32_t total, const TBlock<void,JobStatus *> & block, Context * context, LineInfoArg * lineInfo ) {
         JobStatus status(total);
-        status.addRef();
+        AddReleaseGuard<JobStatus> guard(&status, context, lineInfo);
         vec4f args[1];
         args[0] = cast<JobStatus *>::from(&status);
         context->invoke(block,args,nullptr,lineInfo);
-        if ( int ref = status.releaseRef() ) {
-            context->throw_error_at(lineInfo, "job status beeing deleted while being used (ref %i)", ref);
-        }
     }
 
     JobStatus * jobStatusCreate( Context *, LineInfoArg * ) {
@@ -487,7 +489,7 @@ namespace das {
     }
 
     int getTotalHwThreads () {
-        return thread::hardware_concurrency();
+        return JobQue::get_num_threads();
     }
 
     class Module_JobQue : public Module {
