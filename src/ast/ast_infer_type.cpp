@@ -49,6 +49,7 @@ namespace das {
             disableInit = prog->options.getBoolOption("no_init", prog->policies.no_init);
             skipModuleLockChecks = prog->options.getBoolOption("skip_module_lock_checks", false);
             strictUnsafeDelete = prog->options.getBoolOption("strict_unsafe_delete", prog->policies.strict_unsafe_delete);
+            reportInvisibleFunctions = prog->options.getBoolOption("report_invisible_functions", prog->policies.report_invisible_functions);
         }
         bool finished() const { return !needRestart; }
         bool verbose = true;
@@ -83,6 +84,7 @@ namespace das {
         bool                    disableInit = false;
         bool                    skipModuleLockChecks = false;
         bool                    strictUnsafeDelete = false;
+        bool                    reportInvisibleFunctions = false;
     public:
         vector<FunctionPtr>     extraFunctions;
     protected:
@@ -1224,6 +1226,13 @@ namespace das {
                 splitTypeName(name, moduleName, funcName);
                 auto inWhichModule = getSearchModule(moduleName);
                 for ( auto & missFn : candidateFunctions ) {
+                    auto visM = getFunctionVisModule(missFn);
+                    bool isVisible = isVisibleFunc(inWhichModule,visM);
+                    bool isPrivate = missFn->privateFunction && !canCallPrivate(missFn,inWhichModule,program->thisModule.get());
+                    if ( !reportInvisibleFunctions ) {
+                        if ( !isVisible ) continue;
+                        if ( !isPrivate ) continue;
+                    }
                     ss << "\t";
                     if ( missFn->module && !missFn->module->name.empty() && !(missFn->module->name=="$") )
                         ss << missFn->module->name << "::";
@@ -1237,8 +1246,7 @@ namespace das {
                     if ( reportDetails ) {
                         ss << describeMismatchingFunction(missFn, types, inferAuto, inferBlocks);
                     }
-                    auto visM = getFunctionVisModule(missFn);
-                    if ( !isVisibleFunc(inWhichModule,visM) ) {
+                    if ( !isVisible ) {
                         ss << "\t\tmodule " << visM->name << " is not visible directly from ";
                         if ( inWhichModule->name.empty()) {
                             ss << "the current module\n";
@@ -1246,7 +1254,7 @@ namespace das {
                             ss << inWhichModule->name << "\n";
                         }
                     }
-                    if ( missFn->privateFunction && !canCallPrivate(missFn,inWhichModule,program->thisModule.get()) ) {
+                    if ( isPrivate ) {
                         ss << "\t\tfunction is private";
                         if ( missFn->module && !missFn->module->name.empty() ) {
                             ss << " to module " << missFn->module->name;
@@ -1281,6 +1289,13 @@ namespace das {
                 splitTypeName(name, moduleName, funcName);
                 auto inWhichModule = getSearchModule(moduleName);
                 for ( auto & missFn : candidateFunctions ) {
+                    auto visM = getFunctionVisModule(missFn);
+                    bool isVisible = isVisibleFunc(inWhichModule,visM);
+                    bool isPrivate = missFn->privateFunction && !canCallPrivate(missFn,inWhichModule,program->thisModule.get());
+                    if ( !reportInvisibleFunctions ) {
+                        if ( !isVisible ) continue;
+                        if ( !isPrivate ) continue;
+                    }
                     ss << "\t";
                     if ( missFn->module && !missFn->module->name.empty() && !(missFn->module->name=="$") )
                         ss << missFn->module->name << "::";
@@ -1294,8 +1309,7 @@ namespace das {
                     if ( reportDetails ) {
                         ss << describeMismatchingFunction(missFn, nonNamedTypes, arguments, inferAuto, inferBlocks);
                     }
-                    auto visM = getFunctionVisModule(missFn);
-                    if ( !isVisibleFunc(inWhichModule,visM) ) {
+                    if ( !isVisible ) {
                         ss << "\t\tmodule " << visM->name << " is not visible directly from ";
                         if ( inWhichModule->name.empty()) {
                             ss << "the current module\n";
@@ -1303,7 +1317,7 @@ namespace das {
                             ss << inWhichModule->name << "\n";
                         }
                     }
-                    if ( missFn->privateFunction && !canCallPrivate(missFn,inWhichModule,program->thisModule.get()) ) {
+                    if ( isPrivate ) {
                         ss << "\t\tfunction is private";
                         if ( missFn->module && !missFn->module->name.empty() ) {
                             ss << " to module " << missFn->module->name;
