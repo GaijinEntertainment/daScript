@@ -31,7 +31,8 @@ def main
         with_job_que <|
             var t0 = ref_time_ticks()
             var totalRays = 0
-            profile(kFrameCount,"ray-trace frame (with JOB-QUE)") <|
+            let nJobs = get_total_hw_jobs()
+            profile(kFrameCount,"ray-trace frame (with {nJobs} JOB-QUE)") <|
                 var pbb : array<float3>?
                 var ptr : int?
                 unsafe

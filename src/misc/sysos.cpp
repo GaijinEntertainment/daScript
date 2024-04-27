@@ -18,6 +18,38 @@
         }
 
 #if !defined(_M_ARM64)
+        int GetLogicalProcessorCountInWindows() {
+            DWORD returnLength = 0;
+            std::vector<unsigned char> buffer;
+            PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX info = nullptr;
+            // First, call to get the size of the data needed.
+            GetLogicalProcessorInformationEx(RelationAll, NULL, &returnLength);
+            buffer.resize(returnLength);
+            // Now retrieve the data.
+            if (GetLogicalProcessorInformationEx(RelationAll, reinterpret_cast<SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX *>(buffer.data()), &returnLength)) {
+                int logicalProcessorCount = 0;
+                DWORD offset = 0;
+                // Parse the returned buffer for processor information
+                while (offset < returnLength) {
+                    info = reinterpret_cast<SYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX *>(buffer.data() + offset);
+                    if (info->Relationship == RelationProcessorCore) {
+                        // For each core, count the number of set bits in the GroupMask
+                        for (int i = 0; i < info->Processor.GroupCount; ++i) {
+                            auto mask = info->Processor.GroupMask[i].Mask;
+                            // Count bits set to 1 in the processor mask
+                            while (mask) {
+                                logicalProcessorCount += (mask & 1);
+                                mask >>= 1;
+                            }
+                        }
+                    }
+                    offset += info->Size;
+                }
+                return logicalProcessorCount;
+            }
+            return 0;
+        }
+
         bool g_isVHSet = false;
         void ( * g_HwBpHandler ) ( int, void * ) = nullptr;
 
