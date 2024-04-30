@@ -287,58 +287,6 @@ def public openai_create_chat_completion ( completion:ChatCompletion )
                     delete JV
     return <- ccr
 
-struct public Edit
-    //! edit request
-    model:string
-    input:string
-    instruction:string
-    n:int = 1                           // how many completions to generate
-    temperature:float = 1.0             // 0..2
-    top_p:float = 1.0                   // 0..1
-
-struct public EditResponse
-    //! edit response
-    object : string
-    created : int
-    choices : array<EditResponseChoicesInner>
-    usage : EditResponseUsage
-
-def public is_valid ( object:EditResponse )
-    return object.object=="edit"
-
-struct public EditResponseChoicesInner
-    //! edit response choices
-    text : string
-    index : int
-
-struct public EditResponseUsage
-    //! edit response usage
-    prompt_tokens : int
-    completion_tokens : int
-    total_tokens : int
-
-def public openai_create_edit ( completion:Edit )
-    //! create an edit
-    var req_jv <- JV(completion)
-    var req = write_request_json(req_jv)
-    unsafe
-        delete req_jv
-    var ccr : EditResponse
-    LAST_ERROR = ""
-    POST("https://api.openai.com/v1/edits", req, {{"Authorization" => "Bearer {OPENAI_API_KEY}"; "Content-Type" => "application/json"}}) <| $ ( resp )
-        log_resp(resp)
-        if resp.status_code != http_status OK
-            LAST_ERROR = "HTTPS POST failed with status {resp.status_code}\n{resp.body}"
-        else
-            var JV <- read_json(string(resp.body),LAST_ERROR)
-            if is_valid_response(JV)
-                ccr <- from_JV(JV,type<EditResponse>)
-            else
-                LAST_ERROR = collect_error(JV)
-            unsafe
-                delete JV
-    return <- ccr
-
 struct public Image
     //! image request
     prompt:string
