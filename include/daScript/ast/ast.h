@@ -1376,7 +1376,8 @@ namespace das
         bool strict_unsafe_delete = false;              // if true, delete of type which contains 'unsafe' delete is unsafe // TODO: enable when need be
         bool no_members_functions_in_struct = false;    // structures can't have member functions
         bool no_local_class_members = true;             // members of the class can't be classes
-        bool report_invisible_functions = false;        // report invisible functions (report functions not visible from current module)
+        bool report_invisible_functions = true;         // report invisible functions (report functions not visible from current module)
+        bool report_private_functions = true;           // report private functions (report functions which are not accessible due to private module)
     // environment
         bool no_optimizations = false;                  // disable optimizations, regardless of settings
         bool fail_on_no_aot = true;                     // AOT link failure is error
