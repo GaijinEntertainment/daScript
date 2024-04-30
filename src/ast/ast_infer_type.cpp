@@ -50,6 +50,7 @@ namespace das {
             skipModuleLockChecks = prog->options.getBoolOption("skip_module_lock_checks", false);
             strictUnsafeDelete = prog->options.getBoolOption("strict_unsafe_delete", prog->policies.strict_unsafe_delete);
             reportInvisibleFunctions = prog->options.getBoolOption("report_invisible_functions", prog->policies.report_invisible_functions);
+            reportPrivateFunctions = prog->options.getBoolOption("report_private_functions", prog->policies.report_private_functions);
         }
         bool finished() const { return !needRestart; }
         bool verbose = true;
@@ -85,6 +86,7 @@ namespace das {
         bool                    skipModuleLockChecks = false;
         bool                    strictUnsafeDelete = false;
         bool                    reportInvisibleFunctions = false;
+        bool                    reportPrivateFunctions = false;
     public:
         vector<FunctionPtr>     extraFunctions;
     protected:
@@ -1228,11 +1230,9 @@ namespace das {
                 for ( auto & missFn : candidateFunctions ) {
                     auto visM = getFunctionVisModule(missFn);
                     bool isVisible = isVisibleFunc(inWhichModule,visM);
+                    if ( !reportInvisibleFunctions  && !isVisible ) continue;
                     bool isPrivate = missFn->privateFunction && !canCallPrivate(missFn,inWhichModule,program->thisModule.get());
-                    if ( !reportInvisibleFunctions ) {
-                        if ( !isVisible ) continue;
-                        if ( !isPrivate ) continue;
-                    }
+                    if ( !reportPrivateFunctions && isPrivate ) continue;
                     ss << "\t";
                     if ( missFn->module && !missFn->module->name.empty() && !(missFn->module->name=="$") )
                         ss << missFn->module->name << "::";
@@ -1291,11 +1291,9 @@ namespace das {
                 for ( auto & missFn : candidateFunctions ) {
                     auto visM = getFunctionVisModule(missFn);
                     bool isVisible = isVisibleFunc(inWhichModule,visM);
+                    if ( !reportInvisibleFunctions  && !isVisible ) continue;
                     bool isPrivate = missFn->privateFunction && !canCallPrivate(missFn,inWhichModule,program->thisModule.get());
-                    if ( !reportInvisibleFunctions ) {
-                        if ( !isVisible ) continue;
-                        if ( !isPrivate ) continue;
-                    }
+                    if ( !reportPrivateFunctions && isPrivate ) continue;
                     ss << "\t";
                     if ( missFn->module && !missFn->module->name.empty() && !(missFn->module->name=="$") )
                         ss << missFn->module->name << "::";
@@ -2207,6 +2205,64 @@ namespace das {
             return Visitor::visit(expr);
         }
     // ExprAddr
+        void reportFunctionNotFound ( ExprAddr * expr ) {
+            if ( verbose && (reportInvisibleFunctions || reportPrivateFunctions) ) {
+                TextWriter ss;
+                if ( func ) {
+                    ss << "while compiling: " << func->describe() << "\n";
+                }
+                string moduleName, funcName;
+                splitTypeName(expr->target, moduleName, funcName);
+                MatchingFunctions result;
+                auto inWhichModule = getSearchModule(moduleName);
+                auto hFuncName = hash64z(funcName.c_str());
+                program->library.foreach([&](Module * mod) -> bool {
+                    auto itFnList = mod->functionsByName.find(hFuncName);
+                    if ( itFnList != mod->functionsByName.end() ) {
+                        auto & goodFunctions = itFnList->second;
+                        for ( auto & missFn : goodFunctions ) {
+                            auto visM = getFunctionVisModule(missFn.get());
+                            bool isVisible = isVisibleFunc(inWhichModule,visM);
+                            if ( !reportInvisibleFunctions  && !isVisible ) continue;
+                            bool isPrivate = missFn->privateFunction && !canCallPrivate(missFn,inWhichModule,program->thisModule.get());
+                            if ( !reportPrivateFunctions && isPrivate ) continue;
+                            ss << "\t";
+                            if ( missFn->module && !missFn->module->name.empty() && !(missFn->module->name=="$") )
+                                ss << missFn->module->name << "::";
+                            ss << describeFunction(missFn);
+                            if ( missFn->builtIn ) {
+                                ss << " // builtin";
+                            } else {
+                                ss << " at " << missFn->at.describe();
+                            }
+                            ss << "\n";
+                            if ( !isVisible ) {
+                                ss << "\t\tmodule " << visM->name << " is not visible directly from ";
+                                if ( inWhichModule->name.empty()) {
+                                    ss << "the current module\n";
+                                } else {
+                                    ss << inWhichModule->name << "\n";
+                                }
+                            }
+                            if ( isPrivate ) {
+                                ss << "\t\tfunction is private";
+                                if ( missFn->module && !missFn->module->name.empty() ) {
+                                    ss << " to module " << missFn->module->name;
+                                }
+                                ss << "\n";
+                            }
+                        }
+                    }
+                    return true;
+                },moduleName);
+                error("function not found " + expr->target,  ss.str(), "",
+                    expr->at, CompilationError::function_not_found);
+            } else {
+                error("function not found " + expr->target,  "", "",
+                    expr->at, CompilationError::function_not_found);
+            }
+        }
+
         virtual ExpressionPtr visit ( ExprAddr * expr ) override {
             if (expr->funcType) {
                 // when we infer function type, we really don't care for the result.
@@ -2267,8 +2323,12 @@ namespace das {
                 }
                 verifyType(expr->type);
             } else if ( fns.size()==0 ) {
-                error("function not found " + expr->target,  "", "",
-                    expr->at, CompilationError::function_not_found);
+                if ( !expr->funcType ) {
+                    reportFunctionNotFound(expr);
+                } else {
+                    error("function not found " + expr->target,  "", "",
+                        expr->at, CompilationError::function_not_found);
+                }
             } else {
                 string candidates = verbose ? program->describeCandidates(fns) : "";
                 error("function not found " + expr->target, candidates, "",
