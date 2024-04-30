@@ -770,6 +770,7 @@ namespace das {
         "no_init",                      Type::tBool,
         "no_local_class_members",       Type::tBool,
         "report_invisible_functions",   Type::tBool,
+        "report_private_functions",     Type::tBool,
     // memory
         "stack",                        Type::tInt,
         "intern_strings",               Type::tBool,
