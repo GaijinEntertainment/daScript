@@ -9,7 +9,7 @@ require llvm public
 require daslib/safe_addr
 require daslib/defer
 require strings
-require ast_boost
+require daslib/ast_boost
 
 def LLVMBuildSRemInt32 ( builder:LLVMOpaqueBuilder?; lhs, rhs:LLVMOpaqueValue?; name:string )
     // convert lhs % rhs to lhs - int(double(lhs)/double(rhs))*rhs
