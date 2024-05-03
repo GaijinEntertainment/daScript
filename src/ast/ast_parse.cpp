@@ -174,6 +174,24 @@ namespace das {
 
     string getDasRoot ( void );
 
+    bool sameFileName ( const string & a, const string & b ) {
+        if ( a.size() != b.size() ) return false;
+        auto it_a = a.begin();
+        auto it_b = b.begin();
+        while ( it_a != a.end() ) {
+            bool isSlahA = *it_a=='\\' || *it_a=='/';
+            bool isSlahB = *it_b=='\\' || *it_b=='/';
+            if ( isSlahA != isSlahB ) {
+                return false;
+            } else if ( !isSlahA && (tolower(*it_a) != tolower(*it_b)) ) {
+                return false;
+            }
+            ++it_a;
+            ++it_b;
+        }
+        return true;
+    }
+
     bool getPrerequisits ( const string & fileName,
                           const FileAccessPtr & access,
                           vector<ModuleInfo> & req,
@@ -243,8 +261,17 @@ namespace das {
                             }
                             req.push_back(info);
                         } else {
-                            if ( log ) {
-                                *log << string(tab,'\t') << "from " << fileName << " require " << mod << " - already required\n";
+                            if ( !sameFileName(it_r->fileName, info.fileName) ) {
+                                if ( log ) {
+                                    *log << string(tab,'\t') << "from " << fileName << " require " << mod << " - module name collision\n"
+                                         << string(tab+1,'\t') << "requested from " << it_r->fileName << " and from " << info.fileName << "\n";
+                                }
+                                missing.push_back(mod);
+                                return false;
+                            } else {
+                                if ( log ) {
+                                    *log << string(tab,'\t') << "from " << fileName << " require " << mod << " - already required\n";
+                                }
                             }
                         }
                     } else {
@@ -495,7 +522,7 @@ namespace das {
         }
     }
 
-    void addExtraDependency(
+    bool addExtraDependency(
         string modName,
         string modFile,
         vector<string> & missing,
@@ -505,7 +532,8 @@ namespace das {
         das_set<string> & dependencies,
         const FileAccessPtr & access,
         ModuleGroup & libGroup,
-        CodeOfPolicies policies ) {
+        CodeOfPolicies policies,
+        TextWriter * log = nullptr) {
         bool hasModule = false;
         for ( auto & mod : req ) {
             if ( mod.moduleName==modName) {
@@ -514,8 +542,13 @@ namespace das {
             }
         }
         if ( !hasModule && !modFile.empty() ) {
-            getPrerequisits(modFile, access, req, missing, circular, notAllowed,
-                dependencies, libGroup, nullptr, 1, !policies.ignore_shared_modules);
+            if ( !getPrerequisits(modFile, access, req, missing, circular, notAllowed,
+                dependencies, libGroup, nullptr, 1, !policies.ignore_shared_modules) ) {
+                if ( log ) {
+                    *log << "failed to add extra dependency " << modName << " from " << modFile << "\n";
+                }
+                return false;
+            }
             auto finfo = access->getFileInfo(modFile);
             ModuleInfo info;
             info.fileName = finfo->name;
@@ -523,6 +556,7 @@ namespace das {
             info.moduleName = modName;
             req.push_back(info);
         }
+        return true;
     }
 
     bool aotModuleHasName ( ProgramPtr program, const ModuleInfo & mod ) {
@@ -677,12 +711,16 @@ namespace das {
                 dependencies, libGroup, nullptr, 1, !policies.ignore_shared_modules) ) {
             preqT = get_time_usec(time0);
             disableSerializationOnDebugger(req);
+            bool allGood = true;
             if ( policies.debugger ) {
-                addExtraDependency("debug", policies.debug_module, missing, circular, notAllowed, req, dependencies, access, libGroup, policies);
+                allGood = addExtraDependency("debug", policies.debug_module, missing, circular, notAllowed, req, dependencies, access, libGroup, policies, &logs) && allGood;
             } else if ( policies.profiler ) {
-                addExtraDependency("profiler", policies.profile_module, missing, circular, notAllowed, req, dependencies, access, libGroup, policies);
+                allGood = addExtraDependency("profiler", policies.profile_module, missing, circular, notAllowed, req, dependencies, access, libGroup, policies, &logs) && allGood;
             } /* else */ if ( policies.jit ) {
-                addExtraDependency("just_in_time", policies.jit_module, missing, circular, notAllowed, req, dependencies, access, libGroup, policies);
+                allGood = addExtraDependency("just_in_time", policies.jit_module, missing, circular, notAllowed, req, dependencies, access, libGroup, policies, &logs) && allGood;
+            }
+            if ( !allGood ) {
+                return make_smart<Program>();
             }
             if ( !verifyModuleNamesUnique(req, logs) ) {
                 return make_smart<Program>();
@@ -703,6 +741,7 @@ namespace das {
                     program->thisModule->name = mod.moduleName;
                     program->thisModule->wasParsedNameless = true;
                 }
+                program->thisModule->fileName = mod.fileName;
                 if ( program->promoteToBuiltin ) {
                     if ( canShareModule(program) ) {
                         program->thisModule->promoteToBuiltin(access);

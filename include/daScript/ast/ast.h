@@ -1132,7 +1132,8 @@ namespace das
         vector<pair<string,bool>>                   keywords;           // keywords (and if they need oxford comma)
         das_hash_map<string,Type>                   options;            // options
         uint64_t                                    cumulativeHash = 0; // hash of all mangled names in this module (for builtin modules)
-        string  name;
+        string                                      name;
+        string                                      fileName;           // where the module was found, if not built-in
         union {
             struct {
                 bool    builtIn : 1;
