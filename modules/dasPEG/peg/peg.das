@@ -7,7 +7,7 @@ options strict_smart_pointers = true
 module peg shared
 
 require peg/parse_macro public
-require peg/detail/colors public
+require detail/colors public
 
 require daslib/strings_boost public
 require daslib/algorithm public
