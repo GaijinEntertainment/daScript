@@ -762,6 +762,7 @@ namespace das {
         pLet->at = kwd_letAt;
         pLet->atInit = declAt;
         pLet->inScope = inScope;
+        pLet->isTupleExpansion = decl->isTupleExpansion;
         if ( decl->pTypeDecl ) {
             for ( const auto & name_at : *decl->pNameList ) {
                 if ( !pLet->find(name_at.name) ) {
