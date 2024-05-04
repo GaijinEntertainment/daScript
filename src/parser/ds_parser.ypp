@@ -331,6 +331,7 @@
 %type <pEnum>           enum_name
 %type <pNameList>       bitfield_bits
 %type <pNameList>       bitfield_alias_bits
+%type <pNameList>       tuple_expansion
 %type <pNameWithPosList>variable_name_with_pos_list
 %type <pNameWithPosList>let_variable_name_with_pos_list
 %type <type>            basic_type_declaration
@@ -350,6 +351,7 @@
 %type <pVarDecl>        function_argument_declaration
 %type <pVarDecl>        structure_variable_declaration
 %type <pVarDecl>        let_variable_declaration
+%type <pVarDecl>        tuple_expansion_variable_declaration
 %type <pVarDecl>        tuple_type
 %type <pVarDeclList>    tuple_type_list
 %type <pVarDecl>        variant_type
@@ -1404,8 +1406,40 @@ optional_in_scope
     |   /* empty */  { $$ = false; }
     ;
 
+tuple_expansion
+    :   NAME [name] {
+        $$ = new vector<string>();
+        $$->push_back(*$name);
+    }
+    |   tuple_expansion[list] ',' NAME[name] {
+        $list->push_back(*$name);
+        $$ = $list;
+    }
+    ;
+
+tuple_expansion_variable_declaration
+    :   BRABRAB tuple_expansion[list] ']' ']' ':' type_declaration_no_options[typeDecl] copy_or_move_or_clone[com] expr[init] ';' {
+        $$ = new VariableDeclaration($list,tokAt(scanner,@list),$typeDecl,$init);
+        $$->init_via_move  = ($com & CorM_MOVE) !=0;
+        $$->init_via_clone = ($com & CorM_CLONE) !=0;
+        $$->isTupleExpansion = true;
+    }
+    |   BRABRAB tuple_expansion[list] ']' ']' optional_ref[ref] copy_or_move_or_clone[com] expr[init] ';' {
+        auto typeDecl = new TypeDecl(Type::autoinfer);
+        typeDecl->at = tokAt(scanner,@list);
+        typeDecl->ref = $ref;
+        $$ = new VariableDeclaration($list,tokAt(scanner,@list),typeDecl,$init);
+        $$->init_via_move  = ($com & CorM_MOVE) !=0;
+        $$->init_via_clone = ($com & CorM_CLONE) !=0;
+        $$->isTupleExpansion = true;
+    }
+    ;
+
 expression_let
     :   kwd_let optional_in_scope let_variable_declaration[decl] {
+        $$ = ast_Let(scanner,$kwd_let,$optional_in_scope,$decl,tokAt(scanner,@kwd_let),tokAt(scanner,@decl));
+    }
+    |   kwd_let optional_in_scope tuple_expansion_variable_declaration[decl] {
         $$ = ast_Let(scanner,$kwd_let,$optional_in_scope,$decl,tokAt(scanner,@kwd_let),tokAt(scanner,@decl));
     }
     ;

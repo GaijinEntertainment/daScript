@@ -876,6 +876,7 @@ namespace das
             struct {
                 bool    inScope : 1;
                 bool    hasEarlyOut : 1;
+                bool    isTupleExpansion : 1;
             };
             uint32_t    letFlags = 0;
         };

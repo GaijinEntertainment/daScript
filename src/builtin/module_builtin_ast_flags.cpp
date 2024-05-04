@@ -20,7 +20,7 @@ namespace das {
     TypeDeclPtr makeExprLetFlagsFlags() {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
         ft->alias = "ExprLetFlags";
-        ft->argNames = { "inScope", "hasEarlyOut" };
+        ft->argNames = { "inScope", "hasEarlyOut", "itTupleExpansion" };
         return ft;
     }
 

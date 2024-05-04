@@ -62,7 +62,7 @@ namespace das {
         vector<ExprBlock *>     blocks;
         vector<ExprBlock *>     scopes;
         vector<ExprWith *>      with;
-        vector<ExprAssume *>    assume;
+        vector<smart_ptr<ExprAssume>> assume;
         vector<size_t>          varStack;
         vector<size_t>          assumeStack;
         vector<bool>            inFinally;
@@ -6721,6 +6721,37 @@ namespace das {
                 expr->hasEarlyOut = hasEarlyOut;
                 for ( auto & var : expr->variables ) {
                     var->early_out = hasEarlyOut;
+                }
+            }
+            if ( expr->isTupleExpansion ) {
+                for ( auto & var : expr->variables ) {
+                    if ( !var->type->isTuple() ) {
+                        error("expansion of " + var->name + " should be tuple", "", "",
+                            var->at, CompilationError::invalid_type);
+                    }
+                    string name = var->name;
+                    // split name which consits of multiple names separated by ` into parts
+                    vector<string> parts;
+                    size_t pos = 0;
+                    while ( pos < name.size() ) {
+                        auto npos = name.find("`",pos);
+                        if ( npos==string::npos ) {
+                            parts.push_back(name.substr(pos));
+                            break;
+                        } else {
+                            parts.push_back(name.substr(pos,npos-pos));
+                            pos = npos+1;
+                        }
+                    }
+                    int partIndex = 0;
+                    for ( auto & part : parts ) {
+                        // we build var_name._partIndex
+                        auto varName = make_smart<ExprVar>(var->at,var->name);
+                        auto partExpr = make_smart<ExprField>(var->at,varName,"_" + to_string(partIndex),true);
+                        assume.push_back(make_smart<ExprAssume>(var->at,part,partExpr));
+                        partIndex ++;
+                    }
+
                 }
             }
             return Visitor::visit(expr);

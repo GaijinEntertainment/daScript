@@ -23,6 +23,18 @@ namespace das {
     };
 
     struct VariableDeclaration {
+        VariableDeclaration ( vector<string> * n, const LineInfo & at, TypeDecl * t, Expression * i )
+            : pNameList(nullptr), pTypeDecl(t), pInit(i) {
+            pNameList = new vector<VariableNameAndPosition>;
+            TextWriter ss;
+            bool first = true;
+            for ( auto & name : *n ) {
+                if ( first ) first = false; else ss << "`";
+                ss << name;
+            }
+            pNameList->push_back({ss.str(), "", at, nullptr});
+            delete n;
+        }
         VariableDeclaration ( vector<VariableNameAndPosition> * n, TypeDecl * t, Expression * i )
             : pNameList(n), pTypeDecl(t), pInit(i) {}
         virtual ~VariableDeclaration () {
@@ -40,6 +52,7 @@ namespace das {
         bool                    sealed = false;
         bool                    isPrivate = false;
         bool                    isStatic = false;
+        bool                    isTupleExpansion = false;
         AnnotationArgumentList  *annotation = nullptr;
     };
 
