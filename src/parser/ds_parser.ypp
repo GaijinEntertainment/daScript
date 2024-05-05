@@ -1341,11 +1341,11 @@ expression_return_no_pipe
     :   DAS_RETURN[loc] {
         $$ = new ExprReturn(tokAt(scanner,@loc),nullptr);
     }
-    |   DAS_RETURN[loc] expr[subexpr] {
-        $$ = new ExprReturn(tokAt(scanner,@loc),ExpressionPtr($subexpr));
+    |   DAS_RETURN[loc] expr_list[subexpr] {
+        $$ = new ExprReturn(tokAt(scanner,@loc),sequenceToTuple($subexpr));
     }
-    |   DAS_RETURN[loc] LARROW expr[subexpr] {
-        auto pRet = new ExprReturn(tokAt(scanner,@loc),ExpressionPtr($subexpr));
+    |   DAS_RETURN[loc] LARROW expr_list[subexpr] {
+        auto pRet = new ExprReturn(tokAt(scanner,@loc),sequenceToTuple($subexpr));
         pRet->moveSemantics = true;
         $$ = pRet;
     }

@@ -60,6 +60,7 @@ namespace das {
     void das_checkName ( yyscan_t scanner, const string & name, const LineInfo &at );
 
     vector<ExpressionPtr> sequenceToList ( Expression * arguments );
+    Expression * sequenceToTuple ( Expression * arguments );
     ExprLooksLikeCall * parseFunctionArguments ( ExprLooksLikeCall * pCall, Expression * arguments );
     void deleteVariableDeclarationList ( vector<VariableDeclaration *> * list );
     void varDeclToTypeDecl ( yyscan_t scanner, TypeDecl * pType, vector<VariableDeclaration*> * list, bool needNames = true );

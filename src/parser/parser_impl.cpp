@@ -43,6 +43,16 @@ namespace das {
         return argList;
     }
 
+    Expression * sequenceToTuple ( Expression * arguments ) {
+        if ( arguments->rtti_isSequence() ) {
+            auto tup = new ExprMakeTuple(arguments->at);
+            tup->values = sequenceToList(arguments);
+            return tup;
+        } else {
+            return arguments;
+        }
+    }
+
     ExprLooksLikeCall * parseFunctionArguments ( ExprLooksLikeCall * pCall, Expression * arguments ) {
         pCall->arguments = sequenceToList(arguments);
         return pCall;
