@@ -1,7 +1,7 @@
 require dastest/testing_boost public
 
 def foo
-    return [[auto 1, "2", 3.0]]
+    return 1, "2", 3.0
 
 [test]
 def test_tuple_expansion ( t : T? )
