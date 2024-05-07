@@ -26,7 +26,7 @@ namespace das
             context.stringHeap->recognize(sAB);
             return cast<char *>::from(sAB);
         } else {
-            context.throw_error_at(at, "can't add two strings, out of heap");
+            context.throw_out_of_memory(true, commonLength, at);
             return v_zero();
         }
     }
@@ -47,7 +47,7 @@ namespace das
             *pA = sAB;
             context.stringHeap->recognize(sAB);
         } else {
-            context.throw_error_at(at, "can't add two strings, out of heap");
+            context.throw_out_of_memory(true, commonLength, at);
         }
     }
 
@@ -355,7 +355,7 @@ namespace das
         if ( length ) {
             auto pStr = context.stringHeap->allocateString(&context,writer.c_str(), uint32_t(length));
             if ( !pStr  ) {
-                context.throw_error_at(debugInfo, "can't allocate string builder result, out of heap");
+                context.throw_out_of_memory(true, uint32_t(length), &debugInfo);
             }
             if ( isTempString ) context.freeTempString(pStr);
             return cast<char *>::from(pStr);
@@ -392,7 +392,7 @@ namespace das
         vec4f ll = source->eval(context);
         char * str = cast<char *>::to(ll);
         char * iter = context.heap->allocateIterator(sizeof(StringIterator),"string iterator",&debugInfo);
-        if ( !iter ) context.throw_error_at(debugInfo,"out of heap");
+        if ( !iter ) context.throw_out_of_memory(false, sizeof(StringIterator)+16, &debugInfo);
         new (iter) StringIterator(str);
         return cast<char *>::from(iter);
     }

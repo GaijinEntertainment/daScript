@@ -1334,14 +1334,14 @@ namespace das {
     struct das_new {
         static __forceinline TT * make ( Context * __context__ ) {
             char * data = __context__->heap->allocate( sizeof(TT) );
-            if ( !data ) __context__->throw_error("out of heap");
+            if ( !data ) __context__->throw_out_of_memory(false, sizeof(TT));
             memset ( data, 0, sizeof(TT) );
             return (TT *) data;
         }
         template <typename QQ>
         static __forceinline TT * make_and_init ( Context * __context__, QQ && init ) {
             TT * data = (TT *) __context__->heap->allocate( sizeof(TT) );
-            if ( !data ) __context__->throw_error("out of heap");
+            if ( !data ) __context__->throw_out_of_memory(false, sizeof(TT));
             *data = init();
             return data;
         }
@@ -1612,7 +1612,8 @@ namespace das {
     template <typename TT, typename AT, bool moveIt = false>
     struct das_ascend {
         static __forceinline TT * make(Context * __context__,TypeInfo * typeInfo,const AT & init) {
-            if ( char * ptr = (char *)__context__->heap->allocate(sizeof(AT)+ (typeInfo ? 16 : 0)) ) {
+            auto size = sizeof(AT)+ (typeInfo ? 16 : 0);
+            if ( char * ptr = (char *)__context__->heap->allocate(size) ) {
                 if ( typeInfo ) {
                     *((TypeInfo **)ptr) = typeInfo;
                     ptr += 16;
@@ -1623,7 +1624,7 @@ namespace das {
                 }
                 return (TT *) ptr;
             } else {
-                __context__->throw_error("out of heap");
+                __context__->throw_out_of_memory(false, size);
                 return nullptr;
             }
         }
@@ -1664,7 +1665,8 @@ namespace das {
     template <typename AT>
     struct das_ascend<Lambda,AT,false> {
         static __forceinline Lambda make(Context * __context__,TypeInfo * typeInfo,const AT & init) {
-            if ( char * ptr = (char *)__context__->heap->allocate(sizeof(AT)+ (typeInfo ? 16 : 0)) ) {
+            auto size = sizeof(AT)+ (typeInfo ? 16 : 0);
+            if ( char * ptr = (char *)__context__->heap->allocate(size) ) {
                 if ( typeInfo ) {
                     *((TypeInfo **)ptr) = typeInfo;
                     ptr += 16;
@@ -1672,7 +1674,7 @@ namespace das {
                 memcpy(ptr, &init, sizeof(AT));
                 return Lambda(ptr);
             } else {
-                __context__->throw_error("out of heap");
+                __context__->throw_out_of_memory(false, size);
                 return Lambda(nullptr);
             }
         }
@@ -2541,7 +2543,7 @@ namespace das {
     Sequence das_vector_each_sequence ( const TT & vec, Context * context ) {
         using VectorIterator = StdVectorIterator<TT>;
         char * iter = context->heap->allocateIterator(sizeof(VectorIterator), "std::vector<> iterator");
-        if ( !iter ) context->throw_error("out of heap");
+        if ( !iter ) context->throw_out_of_memory(false, sizeof(VectorIterator)+16);
         new (iter) VectorIterator((TT *)&vec);
         return { (Iterator *) iter };
     }

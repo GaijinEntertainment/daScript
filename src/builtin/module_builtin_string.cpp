@@ -606,7 +606,7 @@ namespace das
     // TODO: do we need a corresponding delete?
     char * builtin_reserve_string_buffer ( const char * str, int32_t length, Context * context ) {
         auto buf = context->heap->allocate(length);
-        if ( !buf ) context->throw_error_at(nullptr,"out of heap");
+        if ( !buf ) context->throw_out_of_memory(false, length);
         if ( str ) {
             auto slen = min ( int32_t(strlen(str)), length-1 );
             memcpy ( buf, str, slen );

@@ -2444,19 +2444,15 @@ SIM_NODE_AT_VECTOR(Float, float)
             char * ptr;
             if ( !persistent ) {
                 ptr = context.heap->allocate(bytes);
-                if ( !ptr ) context.throw_error_at(debugInfo,"out of heap");
+                if ( !ptr ) context.throw_out_of_memory(false, bytes, &debugInfo);
                 context.heap->mark_comment(ptr, "new");
                 context.heap->mark_location(ptr, &debugInfo);
             } else {
                 ptr = (char *) das_aligned_alloc16(bytes);
+                if ( !ptr ) context.throw_error_at(debugInfo,"out of C++ heap memory, requested %u bytes", uint32_t(bytes));
             }
-            if ( ptr ) {
-                memset ( ptr, 0, bytes );
-                return ptr;
-            } else {
-                context.throw_error_at(debugInfo,"out of heap");
-                return nullptr;
-            }
+            memset ( ptr, 0, bytes );
+            return ptr;
         }
         int32_t     bytes;
         bool        persistent;
@@ -2473,27 +2469,23 @@ SIM_NODE_AT_VECTOR(Float, float)
             char * ptr;
             if ( !persistent ) {
                 ptr = context.heap->allocate(bytes + (typeInfo ? 16 : 0));
-                if ( !ptr ) context.throw_error_at(debugInfo,"out of heap");
+                if ( !ptr ) context.throw_out_of_memory(false, bytes + (typeInfo ? 16 : 0), &debugInfo);
                 context.heap->mark_comment(ptr, "new [[ ]]");
                 context.heap->mark_location(ptr, &debugInfo);
             } else {
                 ptr = (char *) das_aligned_alloc16(bytes + (typeInfo ? 16 : 0));
+                if ( !ptr ) context.throw_error_at(debugInfo,"out of C++ heap memory, requested %u bytes", uint32_t(bytes + (typeInfo ? 16 : 0)));
             }
-            if ( ptr ) {
-                if ( typeInfo ) {
-                    *((TypeInfo **)ptr) = typeInfo;
-                    ptr += 16;
-                }
-                auto src = subexpr->evalPtr(context);
-                memcpy ( ptr, src, bytes );
-                if ( move ) {
-                    memset ( src, 0, bytes );
-                }
-                return ptr;
-            } else {
-                context.throw_error_at(debugInfo,"out of heap");
-                return nullptr;
+            if ( typeInfo ) {
+                *((TypeInfo **)ptr) = typeInfo;
+                ptr += 16;
             }
+            auto src = subexpr->evalPtr(context);
+            memcpy ( ptr, src, bytes );
+            if ( move ) {
+                memset ( src, 0, bytes );
+            }
+            return ptr;
         }
         SimNode *   subexpr;
         uint32_t    bytes;
@@ -2511,26 +2503,22 @@ SIM_NODE_AT_VECTOR(Float, float)
             char * ptr;
             if ( !persistent ) {
                 ptr = context.heap->allocate(bytes + (typeInfo ? 16 : 0));
-                if ( !ptr ) context.throw_error_at(debugInfo,"out of heap");
+                if ( !ptr ) context.throw_out_of_memory(false, bytes + (typeInfo ? 16 : 0), &debugInfo);
                 context.heap->mark_comment(ptr, "new [[ ]]");
                 context.heap->mark_location(ptr, &debugInfo);
             } else {
                 ptr = (char *) das_aligned_alloc16(bytes + (typeInfo ? 16 : 0));
+                if ( !ptr ) context.throw_error_at(debugInfo,"out of C++ heap memory, requested %u bytes", uint32_t(bytes + (typeInfo ? 16 : 0)));
             }
-            if ( ptr ) {
-                if ( typeInfo ) {
-                    *((TypeInfo **)ptr) = typeInfo;
-                    ptr += 16;
-                }
-                memset ( ptr, 0, bytes );
-                char ** pRef = (char **)(context.stack.sp()+stackTop);
-                *pRef = ptr;
-                subexpr->evalPtr(context);
-                return ptr;
-            } else {
-                context.throw_error_at(debugInfo,"out of heap");
-                return nullptr;
+            if ( typeInfo ) {
+                *((TypeInfo **)ptr) = typeInfo;
+                ptr += 16;
             }
+            memset ( ptr, 0, bytes );
+            char ** pRef = (char **)(context.stack.sp()+stackTop);
+            *pRef = ptr;
+            subexpr->evalPtr(context);
+            return ptr;
         }
         SimNode *   subexpr;
         uint32_t    bytes;
@@ -2582,21 +2570,17 @@ SIM_NODE_AT_VECTOR(Float, float)
             char * ptr;
             if ( !persistent ) {
                 ptr = context.heap->allocate(bytes);
-                if ( !ptr ) context.throw_error_at(debugInfo,"out of heap");
+                if ( !ptr ) context.throw_out_of_memory(false, bytes, &debugInfo);
                 context.heap->mark_comment(ptr, "new with initializer");
                 context.heap->mark_location(ptr, &debugInfo);
             } else {
                 ptr = (char *) das_aligned_alloc16(bytes);
+                if ( !ptr ) context.throw_error_at(debugInfo,"out of C++ heap memory, requested %u bytes", uint32_t(bytes));
             }
-            if ( ptr ) {
-                vec4f argValues[argCount ? argCount : 1];
-                EvalBlock<argCount>::eval(context, arguments, argValues);
-                context.callWithCopyOnReturn(fnPtr, argValues, ptr, &debugInfo);
-                return ptr;
-            } else {
-                context.throw_error_at(debugInfo,"out of heap");
-                return nullptr;
-            }
+            vec4f argValues[argCount ? argCount : 1];
+            EvalBlock<argCount>::eval(context, arguments, argValues);
+            context.callWithCopyOnReturn(fnPtr, argValues, ptr, &debugInfo);
+            return ptr;
         }
     };
 
@@ -2610,21 +2594,17 @@ SIM_NODE_AT_VECTOR(Float, float)
             char* ptr;
             if (!persistent) {
                 ptr = context.heap->allocate(bytes);
-                if ( !ptr ) context.throw_error_at(debugInfo,"out of heap");
+                if ( !ptr ) context.throw_out_of_memory(false, bytes, &debugInfo);
                 context.heap->mark_comment(ptr, "new with initializer");
                 context.heap->mark_location(ptr, &debugInfo);
             } else {
                 ptr = (char*)das_aligned_alloc16(bytes);
+                if ( !ptr ) context.throw_error_at(debugInfo,"out of C++ heap memory, requested %u bytes", uint32_t(bytes));
             }
-            if (ptr) {
-                vec4f argValues[DAS_MAX_FUNCTION_ARGUMENTS];
-                evalArgs(context, argValues);
-                context.callWithCopyOnReturn(fnPtr, argValues, ptr, &debugInfo);
-                return ptr;
-            } else {
-                context.throw_error_at(debugInfo, "out of heap");
-                return nullptr;
-            }
+            vec4f argValues[DAS_MAX_FUNCTION_ARGUMENTS];
+            evalArgs(context, argValues);
+            context.callWithCopyOnReturn(fnPtr, argValues, ptr, &debugInfo);
+            return ptr;
         }
     };
 
@@ -3534,7 +3514,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             vec4f ll = source->eval(context);
             TT * array = cast<TT *>::to(ll);
             char * iter = context.heap->allocateIterator(sizeof(IterT),"any iterator",&debugInfo);
-            if ( !iter ) context.throw_error_at(debugInfo,"out of heap");
+            if ( !iter ) context.throw_out_of_memory(false,sizeof(IterT),&debugInfo);
             new (iter) IterT(array);
             return cast<char *>::from(iter);
         }
