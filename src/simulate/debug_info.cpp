@@ -750,6 +750,24 @@ namespace das
         }
     }
 
+    bool FileAccess::isSameFileName ( const string & a, const string & b ) const {
+        if ( a.size() != b.size() ) return false;
+        auto it_a = a.begin();
+        auto it_b = b.begin();
+        while ( it_a != a.end() ) {
+            bool isSlahA = *it_a=='\\' || *it_a=='/';
+            bool isSlahB = *it_b=='\\' || *it_b=='/';
+            if ( isSlahA != isSlahB ) {
+                return false;
+            } else if ( !isSlahA && (tolower(*it_a) != tolower(*it_b)) ) {
+                return false;
+            }
+            ++it_a;
+            ++it_b;
+        }
+        return true;
+    }
+
     FileInfoPtr FileAccess::letGoOfFileInfo ( const string & fileName ) {
         auto it = files.find(fileName);
         if ( it == files.end() ) return nullptr;

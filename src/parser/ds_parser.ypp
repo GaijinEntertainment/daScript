@@ -663,8 +663,14 @@ expr_reader
 options_declaration
     :   DAS_OPTIONS annotation_argument_list[list] {
         if ( yyextra->g_Program->options.size() ) {
-            yyextra->g_Program->options.insert ( yyextra->g_Program->options.begin(),
-                $list->begin(), $list->end() );
+            for ( auto & opt : *$list ) {
+                if ( yyextra->g_Access->isOptionAllowed(opt.name, yyextra->g_Program->thisModuleName) ) {
+                    yyextra->g_Program->options.push_back(opt);
+                } else {
+                    das_yyerror(scanner,"option " + opt.name + " is not allowed here",
+                        tokAt(scanner,@list), CompilationError::invalid_option);
+                }
+            }
         } else {
             swap ( yyextra->g_Program->options, *$list );
         }
