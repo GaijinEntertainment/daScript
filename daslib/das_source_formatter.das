@@ -446,10 +446,21 @@ def mark_token_context(var ctx: FormatterCtx)
 
     // struct / class / variant or multiline variables
     for i in range(0, length(ctx.tokens) - 3)
-        if ctx |> new_line_before(i) && (ctx |> eq(i, "struct") || ctx |> eq(i, "class") || ctx |> eq(i, "variant") ||
+        if ctx |> new_line_before(i)
+            var skip = 0
+            if (ctx |> eq(i, "struct") || ctx |> eq(i, "class") || ctx |> eq(i, "variant") ||
                 ((ctx |> eq(i, "typedef") || ctx |> eq(i, "var") || ctx |> eq(i, "let")) && ctx |> new_line_before(i + 1)))
+                skip = 1
+
+            if ((ctx |> eq(i, "typedef") || ctx |> eq(i, "var") || ctx |> eq(i, "let")) && (ctx |> eq(i + 1, "private") || ctx |> eq(i + 1, "public")) &&
+                ctx |> new_line_before(i + 2))
+                skip = 2
+
+            if skip == 0
+                continue
+
             let ident = ctx.tokens[i].spaces
-            for j in range(i + 1, length(ctx.tokens) - 3)
+            for j in range(i + skip, length(ctx.tokens) - 3)
                 if ctx |> new_line_before(j)
                     if ctx |> eq(j, "def")
                         break
