@@ -305,7 +305,8 @@ namespace das {
             ProgramPtr          & program,
             const FileAccessPtr & access,
             const string        & fileName,
-            ModuleGroup         & libGroup ) {
+            ModuleGroup         & libGroup,
+            TextWriter & logs ) {
         auto & serializer_read = daScriptEnvironment::bound->serializer_read;
         auto & serializer_write = daScriptEnvironment::bound->serializer_write;
 
@@ -319,6 +320,12 @@ namespace das {
 
         if ( saved_filename != fileName || file_mtime != saved_mtime ) {
             serializer_read->seenNewModule = true;
+            if (saved_filename != fileName) {
+                logs << "ser: file name mismatch. Expected '" << saved_filename << "', got '" << fileName << "'\n";
+            }
+            if (file_mtime != saved_mtime) {
+                logs << "ser: file mtime mismatch. Expected " << saved_mtime << ", got " << file_mtime << "\n";
+            }
             return false;
         }
 
@@ -329,6 +336,7 @@ namespace das {
             serializer_read->seenNewModule = true;
             serializer_read->failed = true;
             program = make_smart<Program>();
+            logs << "ser: program failed '" << fileName << "'\n";
             return false;
         }
 
@@ -337,6 +345,7 @@ namespace das {
         if ( serializer_read->failed ) {
             serializer_read->seenNewModule = true;
             program = make_smart<Program>();
+            logs << "ser: serialization failed. Internal issue.\n";
             return false;
         }
 
@@ -358,7 +367,7 @@ namespace das {
         ReuseCacheGuard rcg;
         auto time0 = ref_time_ticks();
 
-        if ( trySerializeProgramModule(program, access, fileName, libGroup) ) {
+        if ( trySerializeProgramModule(program, access, fileName, libGroup, logs) ) {
             return program;
         }
 
