@@ -128,7 +128,7 @@ extern "C" {
 
     void * jit_alloc_heap ( uint32_t bytes, Context * context ) {
         auto ptr = context->heap->allocate(bytes);
-        if ( !ptr ) context->throw_error_at(nullptr,"out of heap");
+        if ( !ptr ) context->throw_out_of_memory(false, bytes);
         return ptr;
     }
 
@@ -170,7 +170,7 @@ extern "C" {
             context->stringHeap->recognize(sAB);
             return sAB;
         } else {
-            context->throw_error("can't add two strings, out of heap"); // this is so unlikely
+            context->throw_out_of_memory(true, commonLength);
             return nullptr;
         }
     }
@@ -371,7 +371,7 @@ extern "C" {
 
     void * das_instrument_line_info ( const LineInfo & info, Context * context, LineInfoArg * at ) {
         LineInfo * info_ptr = (LineInfo *) context->code->allocate(sizeof(LineInfo));
-        if ( !info_ptr ) context->throw_error_at(at, "can't instrument line info, out of heap");
+        if ( !info_ptr ) context->throw_error_at(at, "can't instrument line info, out of code heap");
         *info_ptr = info;
         return (void *) info_ptr;
     }

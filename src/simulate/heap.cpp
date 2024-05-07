@@ -237,7 +237,7 @@ namespace das {
                 if ( needIntern && text ) internMap.insert(StrHashEntry(str,length));
                 return str;
             } else if ( context ) {
-                context->throw_error("out of string heap");
+                context->throw_out_of_memory(true, length + 1);
             }
         }
         return nullptr;

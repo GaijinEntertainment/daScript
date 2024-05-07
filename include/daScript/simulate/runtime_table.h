@@ -178,7 +178,7 @@ namespace das
             uint32_t memSize = uint32_t(memSize64);
             newTab.data = (char *) context->heap->allocate(memSize);
             if ( !newTab.data ) {
-                context->throw_error("can't grow table, out of heap");
+                context->throw_out_of_memory(false, memSize);
                 return false;
             }
             context->heap->mark_comment(newTab.data, "table");

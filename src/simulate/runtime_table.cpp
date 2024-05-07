@@ -79,14 +79,14 @@ namespace das
 
     void builtin_table_keys ( Sequence & result, const Table & tab, int32_t stride, Context * __context__ ) {
         char * iter = __context__->heap->allocateIterator(sizeof(TableKeysIterator),"table keys iterator");
-        if ( !iter ) __context__->throw_error_at(nullptr,"out of heap");
+        if ( !iter ) __context__->throw_out_of_memory(false, sizeof(TableKeysIterator)+16);
         new (iter) TableKeysIterator(&tab, stride);
         result = { (Iterator *) iter };
     }
 
     void builtin_table_values ( Sequence & result, const Table & tab, int32_t stride, Context * __context__ ) {
-        char * iter = __context__->heap->allocateIterator(sizeof(TableKeysIterator),"table values iterator");
-        if ( !iter ) __context__->throw_error_at(nullptr,"out of heap");
+        char * iter = __context__->heap->allocateIterator(sizeof(TableValuesIterator),"table values iterator");
+        if ( !iter ) __context__->throw_out_of_memory(false, sizeof(TableValuesIterator)+16);
         new (iter) TableValuesIterator(&tab, stride);
         result = { (Iterator *) iter };
     }

@@ -522,7 +522,7 @@ namespace das {
     Sequence debugInfoIterator ( ST * st, Context * context ) {
         using StructIterator = DebugInfoIterator<VT,ST>;
         char * iter = context->heap->allocateIterator(sizeof(StructIterator), "debug info iterator");
-        if ( !iter ) context->throw_error_at(nullptr,"out of heap");
+        if ( !iter ) context->throw_out_of_memory(false, sizeof(StructIterator) + 16);
         new (iter) StructIterator(st);
         return { (Iterator *) iter };
     }

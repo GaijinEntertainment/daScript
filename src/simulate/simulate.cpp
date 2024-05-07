@@ -1720,6 +1720,14 @@ namespace das
         throw_fatal_error(buffer, at);
     }
 
+    void Context::throw_out_of_memory ( bool isStringHeap, uint32_t size, const LineInfo * at ) {
+        if ( isStringHeap ) {
+            throw_error_at(at, "out of string heap memory, requested %u bytes, limit is %llu bytes", size, (unsigned long long) stringHeap->getLimit());
+        } else {
+            throw_error_at(at, "out of heap memory, requested %u bytes, limit is %llu bytes", size, (unsigned long long) heap->getLimit());
+        }
+    }
+
     void Context::throw_error_ex ( DAS_FORMAT_STRING_PREFIX const char * message, ... ) {
         const int PRINT_BUFFER_SIZE = 8192;
         char buffer[PRINT_BUFFER_SIZE];

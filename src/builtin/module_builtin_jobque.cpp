@@ -349,7 +349,7 @@ namespace das {
         shared_ptr<Context> forkContext;
         forkContext.reset(get_clone_context(context, uint32_t(ContextCategory::job_clone)));
         auto ptr = forkContext->heap->allocate(lambdaSize + 16);
-        if ( !ptr ) context->throw_error_at(lineinfo,"out of heap");
+        if ( !ptr ) context->throw_out_of_memory(false, lambdaSize + 16, lineinfo);
         forkContext->heap->mark_comment(ptr, "new [[ ]] in new_job");
         memset ( ptr, 0, lambdaSize + 16 );
         ptr += 16;
@@ -375,7 +375,7 @@ namespace das {
         shared_ptr<Context> forkContext;
         forkContext.reset(get_clone_context(context, uint32_t(ContextCategory::thread_clone)));
         auto ptr = forkContext->heap->allocate(lambdaSize + 16);
-        if ( !ptr ) context->throw_error_at(lineinfo,"out of heap");
+        if ( !ptr ) context->throw_out_of_memory(false, lambdaSize + 16, lineinfo);
         forkContext->heap->mark_comment(ptr, "new [[ ]] in new_thread");
         memset ( ptr, 0, lambdaSize + 16 );
         ptr += 16;

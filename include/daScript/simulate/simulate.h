@@ -346,6 +346,7 @@ namespace das
         DAS_NORETURN_PREFIX void throw_error_at ( const LineInfo * at, DAS_FORMAT_STRING_PREFIX const char * message, ... ) DAS_NORETURN_SUFFIX DAS_FORMAT_PRINT_ATTRIBUTE(3,4);
         DAS_NORETURN_PREFIX void throw_fatal_error ( const char * message, const LineInfo & at ) DAS_NORETURN_SUFFIX;
         DAS_NORETURN_PREFIX void rethrow () DAS_NORETURN_SUFFIX;
+        DAS_NORETURN_PREFIX void throw_out_of_memory ( bool stringHeap, uint32_t size, const LineInfo * at=nullptr ) DAS_NORETURN_SUFFIX;
 
         __forceinline SimFunction * getFunction ( int index ) const {
             return (index>=0 && index<totalFunctions) ? functions + index : nullptr;
