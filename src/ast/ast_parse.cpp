@@ -174,24 +174,6 @@ namespace das {
 
     string getDasRoot ( void );
 
-    bool sameFileName ( const string & a, const string & b ) {
-        if ( a.size() != b.size() ) return false;
-        auto it_a = a.begin();
-        auto it_b = b.begin();
-        while ( it_a != a.end() ) {
-            bool isSlahA = *it_a=='\\' || *it_a=='/';
-            bool isSlahB = *it_b=='\\' || *it_b=='/';
-            if ( isSlahA != isSlahB ) {
-                return false;
-            } else if ( !isSlahA && (tolower(*it_a) != tolower(*it_b)) ) {
-                return false;
-            }
-            ++it_a;
-            ++it_b;
-        }
-        return true;
-    }
-
     bool getPrerequisits ( const string & fileName,
                           const FileAccessPtr & access,
                           vector<ModuleInfo> & req,
@@ -261,7 +243,7 @@ namespace das {
                             }
                             req.push_back(info);
                         } else {
-                            if ( !sameFileName(it_r->fileName, info.fileName) ) {
+                            if ( !access->isSameFileName(it_r->fileName, info.fileName) ) {
                                 if ( log ) {
                                     *log << string(tab,'\t') << "from " << fileName << " require " << mod << " - module name collision\n"
                                          << string(tab+1,'\t') << "requested from " << it_r->fileName << " and from " << info.fileName << "\n";

@@ -43,6 +43,8 @@ namespace das {
                 moduleAllowed = context->findFunction("module_allowed");    // note, this one CAN be null
                 moduleUnsafe = context->findFunction("module_allowed_unsafe");    // note, this one CAN be null
                 canModuleBeRequired = context->findFunction("can_module_be_required");    // note, this one CAN be null
+                sameFileName = context->findFunction("is_same_file_name");    // note, this one CAN be null
+                optionAllowed = context->findFunction("option_allowed");    // note, this one CAN be null
                 // get it ready
                 context->restart();
                 context->runInitScript();   // note: we assume sane init stack size here
@@ -144,5 +146,27 @@ namespace das {
         DAS_ASSERTF(!exc, "exception failed in `include_get`: %s", exc);
         auto fname = cast<const char *>::to(res);
         return fname ? fname : "";
+    }
+
+    bool ModuleFileAccess::isSameFileName ( const string & a, const string & b ) const {
+        if (failed() || !sameFileName) return FileAccess::isSameFileName(a,b);
+        vec4f args[2];
+        args[0] = cast<const char *>::from(a.c_str());
+        args[1] = cast<const char *>::from(b.c_str());
+        vec4f res = context->evalWithCatch(sameFileName, args, nullptr);
+        auto exc = context->getException(); exc;
+        DAS_ASSERTF(!exc, "exception failed in `is_same_file_name`: %s", exc);
+        return cast<bool>::to(res);
+    }
+
+    bool ModuleFileAccess::isOptionAllowed ( const string & opt, const string & from ) const {
+        if (failed() || !optionAllowed) return FileAccess::isOptionAllowed(opt,from);
+        vec4f args[2];
+        args[0] = cast<const char *>::from(opt.c_str());
+        args[1] = cast<const char *>::from(from.c_str());
+        vec4f res = context->evalWithCatch(optionAllowed, args, nullptr);
+        auto exc = context->getException(); exc;
+        DAS_ASSERTF(!exc, "exception failed in `option_allowed`: %s", exc);
+        return cast<bool>::to(res);
     }
 }
