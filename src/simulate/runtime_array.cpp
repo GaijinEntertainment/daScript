@@ -25,7 +25,7 @@ namespace das
         if ( arr.isLocked() ) context.throw_error_at(at, "can't change capacity of a locked array");
         if ( arr.capacity >= newCapacity ) return;
         auto newData = (char *)context.heap->reallocate(arr.data, arr.capacity*stride, newCapacity*stride);
-        if ( !newData ) context.throw_error_at(at, "out of linear allocator memory");
+        if ( !newData ) context.throw_out_of_memory(false, newCapacity*stride, at);
         context.heap->mark_comment(newData, "array");
         if ( newData != arr.data ) {
             // memcpy(newData, arr.data, arr.capacity);
