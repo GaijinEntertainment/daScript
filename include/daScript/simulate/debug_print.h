@@ -9,15 +9,9 @@ namespace das {
 
     uint64_t getCancelLimit();
 
-    class StringBuilderWriter : public StringWriter<VectorAllocationPolicy> {
+    class StringBuilderWriter : public StringWriter<StringBuilderPolicy> {
     public:
         StringBuilderWriter() { }
-        __forceinline char * c_str() const {
-            if ( !data.empty() && data.back() ) {
-                data.push_back(0);
-            }
-            return (char *) data.data();
-        }
     };
 
     template <typename Writer>

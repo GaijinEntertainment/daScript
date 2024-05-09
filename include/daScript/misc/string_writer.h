@@ -41,27 +41,49 @@ namespace das {
         int32_t size = 0;
     };
 
-    class VectorAllocationPolicy {
-    public:
-        virtual ~VectorAllocationPolicy() {}
+#define DAS_STRING_BUILDER_BUFFER_SIZE   256
 
+    class StringBuilderPolicy {
+    public:
+        virtual ~StringBuilderPolicy() {
+            if ( largeBuffer != fixedBuffer ) {
+                das_aligned_free16(largeBuffer);
+            }
+        }
         string str() const {            // todo: replace via stringview
-            return string(data.data(), data.size());
+            return string(largeBuffer, size);
         }
         uint64_t tellp() const {
-            return uint64_t(data.size());
+            return uint64_t(size);
         }
-    protected:
-        __forceinline void append(const char * s, int l) {
-            data.insert(data.end(), s, s + l);
+        bool empty() const {
+            return size == 0;
         }
-        __forceinline char * allocate (int l) {
-            data.resize(data.size() + l);
-            return data.data() + data.size() - l;
+        char * c_str() {
+            char * at = allocate(1);
+            *at = 0;
+            return largeBuffer;
+        }
+        char * data() {
+            return largeBuffer;
+        }
+        void clear() {
+            size = 0;
         }
         virtual void output() {}
-        mutable vector<char> data;
+    protected:
+        void append(const char * s, int l) {
+            char * at = allocate(l);
+            memcpy(at, s, l);
+        }
+        char * allocate (int l);
+    protected:
+        char    fixedBuffer[DAS_STRING_BUILDER_BUFFER_SIZE];
+        char *  largeBuffer = fixedBuffer;
+        int32_t size = 0;
+        int32_t capacity = DAS_STRING_BUILDER_BUFFER_SIZE;
     };
+
 
     // todo: support hex
     struct StringWriterTag {};
@@ -129,7 +151,7 @@ namespace das {
         bool fixed = false;
     };
 
-    typedef StringWriter<VectorAllocationPolicy> TextWriter;
+    typedef StringWriter<StringBuilderPolicy> TextWriter;
 
     typedef StringWriter<SmallBufferPolicy> FixedBufferTextWriter;
 
@@ -180,10 +202,10 @@ namespace das {
         virtual void output() override {
             auto newPos = tellp();
             if (newPos != pos) {
-                string st(data.data() + pos, newPos - pos);
+                string st(data() + pos, newPos - pos);
                 logger(logLevel, useMarker ? getLogMarker(logLevel) : "", st.c_str(), /*ctx*/nullptr, /*at*/nullptr);
                 useMarker = false;
-                data.clear();
+                clear();
                 pos = newPos = 0;
             }
         }
