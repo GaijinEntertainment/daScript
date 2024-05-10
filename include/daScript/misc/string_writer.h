@@ -5,7 +5,9 @@ namespace das {
     class Context;
     struct LineInfo;
 
+    #ifndef DAS_SMALL_BUFFER_SIZE
     #define DAS_SMALL_BUFFER_SIZE   4096
+    #endif
 
     class SmallBufferPolicy {
     public:
@@ -41,7 +43,9 @@ namespace das {
         int32_t size = 0;
     };
 
-#define DAS_STRING_BUILDER_BUFFER_SIZE   256
+    #ifndef DAS_STRING_BUILDER_BUFFER_SIZE
+    #define DAS_STRING_BUILDER_BUFFER_SIZE   256
+    #endif
 
     class StringBuilderPolicy {
     public:
@@ -59,11 +63,7 @@ namespace das {
         bool empty() const {
             return size == 0;
         }
-        char * c_str() {
-            char * at = allocate(1);
-            *at = 0;
-            return largeBuffer;
-        }
+        char * c_str();
         char * data() {
             return largeBuffer;
         }
