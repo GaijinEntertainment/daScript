@@ -21,6 +21,23 @@ namespace das {
         }
     }
 
+    char * StringBuilderPolicy::c_str() {
+        if ( size < capacity ) {
+            largeBuffer[size] = 0;
+            return largeBuffer;
+        } else {
+            char * newBuffer = (char *) das_aligned_alloc16(size + 1);
+            memcpy(newBuffer, largeBuffer, size);
+            newBuffer[size] = 0;
+            if ( largeBuffer != fixedBuffer ) {
+                das_aligned_free16(largeBuffer);
+            }
+            largeBuffer = newBuffer;
+            capacity = size + 1;
+            return largeBuffer;
+        }
+    }
+
     char * StringBuilderPolicy::allocate (int l) {
         // keep data in the fixed buffer, if it fits
         if ( size + l <= capacity ) {
