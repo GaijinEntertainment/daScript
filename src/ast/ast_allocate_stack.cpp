@@ -307,7 +307,8 @@ namespace das {
             // what we do here is check, if the function can't possibly capture string
             // and if so, we mark the LAST string builder as temporary
             auto efun = expr->func;
-            if ( efun->builtIn && !efun->policyBased && !efun->invoke && !efun->captureString ) {
+            if ( /*efun->builtIn &&*/       // BBATKIN: if captureString side effects are not calculated correctly, this will blow up!!!
+                 !efun->policyBased && !efun->invoke && !efun->captureString ) {
                 for ( int ai=int(expr->arguments.size())-1; ai>=0; ai-- ) {
                     auto & arg = expr->arguments[ai];
                     if ( arg->rtti_isStringBuilder() ) {

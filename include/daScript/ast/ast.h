@@ -258,6 +258,7 @@ namespace das
         bool isTemp( das_set<Structure *> & dep ) const;
         bool isShareable ( das_set<Structure *> & dep ) const;
         bool hasClasses( das_set<Structure *> & dep ) const;
+        bool hasStringData( das_set<void*> & dep ) const;
         bool hasNonTrivialCtor ( das_set<Structure *> & dep ) const;
         bool hasNonTrivialDtor ( das_set<Structure *> & dep ) const;
         bool hasNonTrivialCopy ( das_set<Structure *> & dep ) const;
@@ -462,6 +463,7 @@ namespace das
         virtual bool isPod() const { return false; }
         virtual bool isRawPod() const { return false; }
         virtual bool isRefType() const { return false; }
+        virtual bool hasStringData(das_set<void *> &) const { return false; }
         virtual bool hasNonTrivialCtor() const { return true; }
         virtual bool hasNonTrivialDtor() const { return true; }
         virtual bool hasNonTrivialCopy() const { return true; }
@@ -894,6 +896,8 @@ namespace das
                 bool    requestNoJit : 1;
                 bool    jitContextAndLineInfo : 1;
                 bool    nodiscard : 1;
+                bool    captureString : 1;
+                bool    callCaptureString : 1;
             };
             uint32_t moreFlags = 0;
         };

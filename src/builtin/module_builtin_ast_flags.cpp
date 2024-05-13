@@ -195,7 +195,7 @@ namespace das {
             "macroFunction", "needStringCast", "aotHashDeppendsOnArguments", "lateInit", "requestJit",
             "unsafeOutsideOfFor", "skipLockCheck", "safeImplicit", "deprecated", "aliasCMRES", "neverAliasCMRES",
             "addressTaken", "propertyFunction", "pinvoke", "jitOnly", "isStaticClassMethod", "requestNoJit",
-            "jitContextAndLineInfo", "nodiscard"
+            "jitContextAndLineInfo", "nodiscard", "captureString", "callCaptureString"
         };
         return ft;
     }

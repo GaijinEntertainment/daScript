@@ -157,6 +157,7 @@ namespace das {
             func->useFunctions.clear();
             func->useGlobalVariables.clear();
             func->used = false;
+            func->callCaptureString = false;
             DAS_ASSERTF(!func->builtIn, "visitor should never call 'visit' on builtin function at top level.");
         }
         virtual FunctionPtr visit(Function * that) override {
@@ -191,6 +192,9 @@ namespace das {
         virtual void preVisit(ExprCall * call) override {
             Visitor::preVisit(call);
             if ( !call->func ) return;
+            if ( func && call->func->captureString ) {
+                func->callCaptureString = true;
+            }
             if (builtInDependencies || !call->func->builtIn) {
                 if (func) {
                     func->useFunctions.insert(call->func);

@@ -17,6 +17,17 @@ namespace das {
         }
     }
 
+    bool BasicStructureAnnotation::hasStringData(das_set<void *> & dep) const {
+        for ( auto & it : fields ) {
+            auto & sfield = it.second;
+            if ( sfield.decl ) {
+                if ( sfield.decl->isString() ) return true;
+                if ( sfield.decl->hasStringData(dep) ) return true;
+            }
+        }
+        return false;
+    }
+
 
     bool BasicStructureAnnotation::canSubstitute(TypeAnnotation * ann) const {
         if ( this==ann ) return true;

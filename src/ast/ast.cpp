@@ -447,6 +447,15 @@ namespace das {
         return true;
     }
 
+    bool Structure::hasStringData( das_set<void*> & dep ) const { // ||
+        for ( const auto & fd : fields ) {
+            if ( fd.type && fd.type->hasStringData(dep) ) {
+                return true;
+            }
+        }
+        return false;
+    }
+
     bool Structure::hasClasses(das_set<Structure *> & dep) const {    // ||
         if ( isClass ) return true;
         for ( const auto & fd : fields ) {

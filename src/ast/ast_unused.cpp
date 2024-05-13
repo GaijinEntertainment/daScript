@@ -267,6 +267,36 @@ namespace das {
                     flags |= uint32_t(SideEffects::modifyArgument);
                 }
             }
+        // string capture
+            // if it calls string capture, it captures string
+            if ( fnc->callCaptureString || fnc->captureString ) {
+                flags |= uint32_t(SideEffects::captureString);
+            }
+            // it captures strings if it touches globals with strings
+            if ( !(flags & uint32_t(SideEffects::captureString)) ) {
+                for ( auto & gv : fnc->useGlobalVariables ) {
+                    if ( gv->type->hasStringData() ) {
+                        flags |= uint32_t(SideEffects::captureString);
+                        break;
+                    }
+                }
+            }
+            // it captures strings if it returns a string
+            if ( !(flags & uint32_t(SideEffects::captureString)) ) {
+                if ( fnc->result->hasStringData() ) {
+                    flags |= uint32_t(SideEffects::captureString);
+                }
+            }
+            // it captures strings if it writes to an argument, that is a string
+            if ( !(flags & uint32_t(SideEffects::captureString)) ) {
+                for ( auto & arg : fnc->arguments ) {
+                    if ( arg->access_ref && arg->type->hasStringData() ) {
+                        flags |= uint32_t(SideEffects::captureString);
+                        break;
+                    }
+                }
+            }
+            // append side effects of the functions it calls
             for ( auto & depF : fnc->useFunctions ) {
                 auto dep = depF;
                 if ( dep != fnc ) {
@@ -276,6 +306,10 @@ namespace das {
                 }
             }
             fnc->knownSideEffects = true;
+            if ( flags & uint32_t(SideEffects::captureString) ) {
+                fnc->captureString = true;
+                flags &= ~uint32_t(SideEffects::captureString);
+            }
             fnc->sideEffectFlags |= flags;
             return flags;
         }

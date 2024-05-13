@@ -243,21 +243,13 @@ namespace das {
                 ss << "[nosideeffects]\n";
                 } else {
                     ss << "// ";
-                    if ( fn->sideEffectFlags & uint32_t(SideEffects::userScenario) ) {
-                        ss << "[user_scenario]";
-                    }
-                    if ( fn->sideEffectFlags & uint32_t(SideEffects::modifyExternal) ) {
-                        ss << "[modify_external]";
-                    }
-                    if ( fn->sideEffectFlags & uint32_t(SideEffects::modifyArgument) ) {
-                        ss << "[modify_argument]";
-                    }
-                    if ( fn->sideEffectFlags & uint32_t(SideEffects::accessGlobal) ) {
-                        ss << "[access_global]";
-                    }
-                    if ( fn->sideEffectFlags & uint32_t(SideEffects::invoke) ) {
-                        ss << "[invoke]";
-                    }
+                    if ( fn->userScenario ) { ss << "[user_scenario]"; }
+                    if ( fn->modifyExternal ) { ss << "[modify_external]"; }
+                    if ( fn->modifyArgument ) { ss << "[modify_argument]"; }
+                    if ( fn->accessGlobal ) { ss << "[access_global]"; }
+                    if ( fn->invoke ) { ss << "[invoke]"; }
+                    if ( fn->captureString ) { ss << "[capture_string]"; }
+                    if ( fn->callCaptureString ) { ss << "[call_capture_string]"; }
                     ss << "\n";
                 }
             }
