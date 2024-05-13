@@ -1613,7 +1613,7 @@ namespace das {
     struct das_ascend {
         static __forceinline TT * make(Context * __context__,TypeInfo * typeInfo,const AT & init) {
             auto size = sizeof(AT)+ (typeInfo ? 16 : 0);
-            if ( char * ptr = (char *)__context__->heap->allocate(size) ) {
+            if ( char * ptr = (char *)__context__->heap->allocate(uint32_t(size)) ) {
                 if ( typeInfo ) {
                     *((TypeInfo **)ptr) = typeInfo;
                     ptr += 16;
@@ -1624,7 +1624,7 @@ namespace das {
                 }
                 return (TT *) ptr;
             } else {
-                __context__->throw_out_of_memory(false, size);
+                __context__->throw_out_of_memory(false, uint32_t(size));
                 return nullptr;
             }
         }

@@ -910,7 +910,6 @@ namespace das
                 bool modifyArgument : 1;
                 bool accessGlobal : 1;
                 bool invoke : 1;
-                bool captureString : 1;
             };
             uint32_t    sideEffectFlags = 0;
         };
