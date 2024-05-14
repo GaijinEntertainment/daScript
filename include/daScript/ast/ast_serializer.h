@@ -13,7 +13,7 @@ namespace das {
         static constexpr uint64_t INITIAL_CAPACITY = 250 << 20;
 
         SerializationStorage () = default;
-        ~SerializationStorage () { free(data_); }
+        ~SerializationStorage () { delete[] data_; }
 
         static auto from_vector ( das::vector<uint8_t> & v ) -> std::optional<SerializationStorage> {
             SerializationStorage s;
@@ -34,7 +34,7 @@ namespace das {
 
         SerializationStorage & operator = ( SerializationStorage && other ) noexcept {
             if (this != &other) {
-                free(data_);
+                delete[] data_;
                 data_ = std::exchange(other.data_, nullptr);
                 size_ = std::exchange(other.size_, 0);
                 capacity_ = std::exchange(other.capacity_, 0);
@@ -52,7 +52,7 @@ namespace das {
         auto move ( uint32_t bytes ) -> bool { size_ += bytes; return true; }
 
         bool init ( uint64_t size = INITIAL_CAPACITY ) {
-            data_ = ( uint8_t * ) malloc(size);
+            data_ = new(std::nothrow) uint8_t[size];
             if ( data_ == nullptr ) return false;
             capacity_ = (uint32_t) size;
             return true;
