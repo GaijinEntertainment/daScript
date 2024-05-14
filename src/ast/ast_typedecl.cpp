@@ -871,6 +871,41 @@ namespace das
         return true;
     }
 
+    bool TypeDecl::hasStringData() const {
+        das_set<void *> dep;
+        return hasStringData(dep);
+    }
+
+    bool TypeDecl::hasStringData( das_set<void*> & dep ) const {
+        if ( baseType==Type::tString ) {
+            return true;
+        } else if ( baseType==Type::tHandle ) {
+            if(dep.find(annotation) != dep.end()) return false;
+            dep.insert(annotation);
+            return annotation->hasStringData(dep);
+        } else if ( baseType==Type::tStructure ) {
+            if (structType) {
+                if (dep.find(structType) != dep.end()) return false;
+                dep.insert(structType);
+                return structType->hasStringData(dep);
+            }
+        } else if ( baseType==Type::tTuple || baseType==Type::tVariant || baseType == Type::option ) {
+            for ( const auto & arg : argTypes ) {
+                if ( arg->hasStringData(dep) ) {
+                    return true;
+                }
+            }
+            return false;
+        } else if ( baseType==Type::tArray || baseType==Type::tTable ) {
+            if ( firstType && firstType->hasStringData(dep) ) return true;
+            if ( secondType && secondType->hasStringData(dep) ) return true;
+        } else if ( baseType==Type::tPointer) {
+            return firstType && firstType->hasStringData(dep);
+        }
+        return false;
+    }
+
+
     bool TypeDecl::needInScope() const {
         das_set<Structure *> dep;
         return needInScope(dep);

@@ -188,6 +188,8 @@ namespace das {
         bool canBePlacedInContainer( das_set<Structure*> & dep ) const;
         bool needInScope() const;
         bool needInScope( das_set<Structure*> & dep ) const;
+        bool hasStringData() const;
+        bool hasStringData( das_set<void*> & dep ) const;
         Annotation * isPointerToAnnotation() const;
         Type getVectorBaseType() const;
         int getVectorDim() const;

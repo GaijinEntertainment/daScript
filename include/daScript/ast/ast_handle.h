@@ -44,6 +44,7 @@ namespace das
                 dw.String(pss);
             }
         }
+        virtual bool hasStringData(das_set<void *> &) const override { return true; }
         virtual bool canCopy() const override { return false; }
         virtual bool canMove() const override { return false; }
         virtual bool canClone() const override { return true; }
@@ -98,6 +99,7 @@ namespace das
         virtual void aotVisitGetField(TextWriter & ss, const string & fieldName) override;
         virtual void aotVisitGetFieldPtr(TextWriter & ss, const string & fieldName) override;
         virtual bool canSubstitute(TypeAnnotation * ann) const override;
+        virtual bool hasStringData(das_set<void *> & dep) const override;
         StructureField & addFieldEx(const string & na, const string & cppNa, off_t offset, const TypeDeclPtr & pT);
         virtual void walk(DataWalker & walker, void * data) override;
         void updateTypeInfo() const;
