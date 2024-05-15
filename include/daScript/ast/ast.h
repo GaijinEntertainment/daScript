@@ -898,6 +898,7 @@ namespace das
                 bool    nodiscard : 1;
                 bool    captureString : 1;
                 bool    callCaptureString : 1;
+                bool    hasStringBuilder : 1;
             };
             uint32_t moreFlags = 0;
         };

@@ -158,11 +158,17 @@ namespace das {
             func->useGlobalVariables.clear();
             func->used = false;
             func->callCaptureString = false;
+            func->hasStringBuilder = false;
             DAS_ASSERTF(!func->builtIn, "visitor should never call 'visit' on builtin function at top level.");
         }
         virtual FunctionPtr visit(Function * that) override {
             func.reset();
             return Visitor::visit(that);
+        }
+        // string builder
+        virtual void preVisit ( ExprStringBuilder * expr ) override {
+            Visitor::preVisit(expr);
+            if (func) func->hasStringBuilder = true;
         }
         // variable
         virtual void preVisit(ExprVar * expr) override {

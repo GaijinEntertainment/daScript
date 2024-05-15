@@ -268,14 +268,15 @@ namespace das {
                 }
             }
         // string capture
-            // if it calls string capture, it captures string
-            if ( fnc->callCaptureString || fnc->captureString ) {
+            // if it calls string capture, it captures string, or has string builder at all
+            // note - having string builder is there because we git rid of temp string in the string builder. if we had better place to put it, we could get rid of this
+            if ( fnc->callCaptureString || fnc->captureString || fnc->hasStringBuilder ) {
                 flags |= uint32_t(SideEffects::captureString);
             }
             // it captures strings if it touches globals with strings
             if ( !(flags & uint32_t(SideEffects::captureString)) ) {
                 for ( auto & gv : fnc->useGlobalVariables ) {
-                    if ( gv->type->hasStringData() ) {
+                    if ( !gv->type->constant && gv->type->hasStringData() ) {
                         flags |= uint32_t(SideEffects::captureString);
                         break;
                     }
@@ -290,9 +291,14 @@ namespace das {
             // it captures strings if it writes to an argument, that is a string
             if ( !(flags & uint32_t(SideEffects::captureString)) ) {
                 for ( auto & arg : fnc->arguments ) {
-                    if ( arg->access_ref && arg->type->hasStringData() ) {
-                        flags |= uint32_t(SideEffects::captureString);
-                        break;
+                    if ( !arg->type->constant && arg->access_ref ) {
+                        if ( arg->type->ref && arg->type->isString() ) {    // string &, otherwise we can write but its not a capture
+                            flags |= uint32_t(SideEffects::captureString);
+                            break;
+                        } else if ( arg->type->hasStringData() ) {          // [[ string ]]
+                            flags |= uint32_t(SideEffects::captureString);
+                            break;
+                        }
                     }
                 }
             }
