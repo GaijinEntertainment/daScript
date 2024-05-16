@@ -917,9 +917,12 @@ protected:
     __fn_onTick = 11,
     __fn_onCollect = 12,
     __fn_onLog = 13,
+    __fn_onBeforeGC = 14,
+    __fn_onAfterGC = 15,
+    __fn_onUserCommand = 16,
   };
 protected:
-  int _das_class_method_offset[14];
+  int _das_class_method_offset[17];
 public:
   DapiDebugAgent_Adapter ( const StructInfo * info ) {
       _das_class_method_offset[__fn_onInstall] = info->fields[2]->offset;
@@ -936,6 +939,9 @@ public:
       _das_class_method_offset[__fn_onTick] = info->fields[13]->offset;
       _das_class_method_offset[__fn_onCollect] = info->fields[14]->offset;
       _das_class_method_offset[__fn_onLog] = info->fields[15]->offset;
+      _das_class_method_offset[__fn_onBeforeGC] = info->fields[16]->offset;
+      _das_class_method_offset[__fn_onAfterGC] = info->fields[17]->offset;
+      _das_class_method_offset[__fn_onUserCommand] = info->fields[18]->offset;
   }
   __forceinline Func get_onInstall ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_onInstall]);
@@ -1062,6 +1068,33 @@ public:
       <void *,Context * const ,LineInfo const  * const ,int32_t,char * const >
         (__context__,nullptr,__funcCall__,
           self,context,at,level,text);
+  }
+  __forceinline Func get_onBeforeGC ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_onBeforeGC]);
+  }
+  __forceinline void invoke_onBeforeGC ( Context * __context__, Func __funcCall__, void * self, Context & ctx ) const {
+    das_invoke_function<void>::invoke
+      <void *,Context &>
+        (__context__,nullptr,__funcCall__,
+          self,ctx);
+  }
+  __forceinline Func get_onAfterGC ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_onAfterGC]);
+  }
+  __forceinline void invoke_onAfterGC ( Context * __context__, Func __funcCall__, void * self, Context & ctx ) const {
+    das_invoke_function<void>::invoke
+      <void *,Context &>
+        (__context__,nullptr,__funcCall__,
+          self,ctx);
+  }
+  __forceinline Func get_onUserCommand ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_onUserCommand]);
+  }
+  __forceinline bool invoke_onUserCommand ( Context * __context__, Func __funcCall__, void * self, char * const  command ) const {
+    return das_invoke_function<bool>::invoke
+      <void *,char * const >
+        (__context__,nullptr,__funcCall__,
+          self,command);
   }
 };
 

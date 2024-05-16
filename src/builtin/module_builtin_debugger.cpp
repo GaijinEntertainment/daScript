@@ -49,7 +49,31 @@ namespace debugapi {
     struct DebugAgentAdapter : DebugAgent, DapiDebugAgent_Adapter {
         DebugAgentAdapter ( char * pClass, const StructInfo * info, Context * ctx )
             : DapiDebugAgent_Adapter(info), classPtr(pClass), classInfo(info), context(ctx) {
-       }
+        }
+        virtual void onBeforeGC ( Context * ctx ) override {
+            if ( auto fnOnBeforeGC = get_onBeforeGC(classPtr) ) {
+                context->lock();
+                invoke_onBeforeGC(context,fnOnBeforeGC,classPtr,*ctx);
+                context->unlock();
+            }
+        }
+        virtual void onAfterGC ( Context * ctx ) override {
+            if ( auto fnOnAfterGC = get_onAfterGC(classPtr) ) {
+                context->lock();
+                invoke_onAfterGC(context,fnOnAfterGC,classPtr,*ctx);
+                context->unlock();
+            }
+        }
+        virtual bool onUserCommand ( const char * cmd ) override {
+            if ( auto fnOnUserCommand = get_onUserCommand(classPtr) ) {
+                context->lock();
+                auto res = invoke_onUserCommand(context,fnOnUserCommand,classPtr,(char *)cmd);
+                context->unlock();
+                return res;
+            } else {
+                return false;
+            }
+        }
         virtual void onInstall ( DebugAgent * agent ) override {
             if ( auto fnOnInstall = get_onInstall(classPtr) ) {
                 context->lock();
@@ -1216,6 +1240,10 @@ namespace debugapi {
             addExtern<DAS_BIND_FUN(clear_instruments)>(*this, lib,  "clear_instruments",
                 SideEffects::modifyExternal, "clear_instruments")
                     ->arg("context");
+            // user commands
+            addExtern<DAS_BIND_FUN(dapiUserCommand)>(*this, lib,  "debug_agent_command",
+                SideEffects::modifyExternal, "dapiUserCommand")
+                    ->args({"command"});
             // data walker
             addExtern<DAS_BIND_FUN(makeDataWalker)>(*this, lib,  "make_data_walker",
                 SideEffects::modifyExternal, "makeDataWalker")
