@@ -970,9 +970,14 @@ namespace das
         }
     };
 
-
+    struct GcGuard {
+        GcGuard(Context * c) : ctx(c) { dapiOnBeforeGC(*ctx); }
+        ~GcGuard() { dapiOnAfterGC(*ctx); }
+        Context * ctx = nullptr;
+    };
 
     void Context::collectHeap ( LineInfo * at, bool sheap, bool validate ) {
+        GcGuard guard(this);
         // clean up, so that all small allocations are marked as 'free'
         stringDisposeQue = nullptr;
         if ( sheap && !stringHeap->mark() ) return;

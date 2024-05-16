@@ -225,6 +225,9 @@ namespace das
         virtual bool onLog ( Context *, const LineInfo * /*at*/, int /*level*/, const char * /*text*/ ) { return false; }
         virtual void onBreakpointsReset ( const char * /*file*/, int /*breakpointsNum*/ ) {}
         virtual bool isCppOnlyAgent() const { return false; }
+        virtual void onBeforeGC ( Context * ) {}
+        virtual void onAfterGC ( Context * ) {}
+        virtual bool onUserCommand ( const char * /*cmd*/ ) { return false; }
         bool isThreadLocal = false;
     };
     typedef smart_ptr<DebugAgent> DebugAgentPtr;
@@ -251,6 +254,9 @@ namespace das
     void dumpTrackingLeaks();
     void dapiReportContextState ( Context & ctx, const char * category, const char * name, const TypeInfo * info, void * data );
     void dapiSimulateContext ( Context & ctx );
+    void dapiUserCommand ( const char * command );
+    void dapiOnBeforeGC ( Context & ctx );
+    void dapiOnAfterGC ( Context & ctx );
 
     typedef shared_ptr<Context> ContextPtr;
 

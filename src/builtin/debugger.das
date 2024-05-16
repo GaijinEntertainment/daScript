@@ -22,6 +22,9 @@ class DapiDebugAgent
     def abstract onTick : void
     def abstract onCollect ( var ctx:Context; at:LineInfo ) : void
     def abstract onLog ( context : Context?; at : LineInfo const?; level:int; text:string# ) : bool
+    def abstract onBeforeGC ( var ctx:Context ) : void
+    def abstract onAfterGC ( var ctx:Context ) : void
+    def abstract onUserCommand ( command : string# ) : bool
     [[do_not_delete]] thisAgent:DebugAgent?
 
 def install_new_debug_agent ( var agentPtr; category:string )

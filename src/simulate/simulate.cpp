@@ -873,6 +873,26 @@ namespace das
         });
     }
 
+    void dapiUserCommand ( const char * command ) {
+        if ( !command ) command = "";
+        bool any = false;
+        for_each_debug_agent([&]( const DebugAgentPtr & pAgent ){
+            if ( !any ) any = pAgent->onUserCommand(command);
+        });
+    }
+
+    void dapiOnBeforeGC ( Context & ctx ) {
+        for_each_debug_agent([&]( const DebugAgentPtr & pAgent ){
+            pAgent->onBeforeGC(&ctx);
+        });
+    }
+
+    void dapiOnAfterGC ( Context & ctx ) {
+        for_each_debug_agent([&]( const DebugAgentPtr & pAgent ){
+            pAgent->onAfterGC(&ctx);
+        });
+    }
+
     Context::Context(uint32_t stackSize, bool ph) : stack(stackSize) {
         code = make_shared<NodeAllocator>();
         constStringHeap = make_shared<ConstStringAllocator>();
