@@ -4134,9 +4134,17 @@ namespace das {
             Visitor::preVisitNewArg(call, arg, last);
             arg->isCallArgument = true;
         }
+        void checkEmptyBlock( Expression *arg ) {
+            if ( arg->rtti_isBlock() ) {
+                error("block can't be function argument", "", "",
+                    arg->at, CompilationError::invalid_argument_type);
+            }
+        }
+
         virtual ExpressionPtr visitNewArg ( ExprNew * call, Expression * arg , bool last ) override {
             if ( !arg->type ) call->argumentsFailedToInfer = true;
             if ( arg->type && arg->type->isAliasOrExpr() ) call->argumentsFailedToInfer = true;
+            checkEmptyBlock(arg);
             return Visitor::visitNewArg(call, arg, last);
         }
         virtual ExpressionPtr visit ( ExprNew * expr ) override {
@@ -6794,6 +6802,7 @@ namespace das {
         virtual ExpressionPtr visitLooksLikeCallArg ( ExprLooksLikeCall * call, Expression * arg , bool last ) override {
             if ( !arg->type ) call->argumentsFailedToInfer = true;
             if ( arg->type && arg->type->isAliasOrExpr() ) call->argumentsFailedToInfer = true;
+            checkEmptyBlock(arg);
             return Visitor::visitLooksLikeCallArg(call, arg, last);
         }
     // ExprNamedCall
@@ -7088,6 +7097,7 @@ namespace das {
             } else if (arg->type && arg->type->isAliasOrExpr()) {
                 call->argumentsFailedToInfer = true;
             }
+            checkEmptyBlock(arg);
             return Visitor::visitCallArg(call, arg, last);
         }
         string getGenericInstanceName(const Function * fn) const {
