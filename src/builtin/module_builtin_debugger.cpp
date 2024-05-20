@@ -767,6 +767,10 @@ namespace debugapi {
         walker->walk((vec4f)data,(TypeInfo*)&info);
     }
 
+    void dapiWalkDataS ( DataWalkerPtr walker, void * data, const StructInfo & info ) {
+        walker->walk_struct((char *)data,(StructInfo*)&info);
+    }
+
     int32_t dapiStackDepth ( Context & context ) {
     #if DAS_ENABLE_STACK_WALK
         char * sp = context.stack.ap();
@@ -1254,6 +1258,9 @@ namespace debugapi {
             addExtern<DAS_BIND_FUN(dapiWalkDataV)>(*this, lib,  "walk_data",
                 SideEffects::modifyExternal, "dapiWalkDataV")
                     ->args({"walker","data","info"});
+            addExtern<DAS_BIND_FUN(dapiWalkDataS)>(*this, lib,  "walk_data",
+                SideEffects::modifyExternal, "dapiWalkDataS")
+                    ->args({"walker","data","struct_info"});
             // stack walker
             addExtern<DAS_BIND_FUN(makeStackWalker)>(*this, lib,  "make_stack_walker",
                 SideEffects::modifyExternal, "makeStackWalker")
