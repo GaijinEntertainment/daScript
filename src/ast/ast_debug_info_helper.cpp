@@ -154,6 +154,9 @@ namespace das {
         for ( uint32_t i=0, is=sti->count; i!=is; ++i ) {
             auto & var = st.fields[i];
             VarInfo * vi = makeVariableDebugInfo(st, var);
+            if (var.privateField) {
+                vi->flags |= TypeInfo::flag_private;
+            }
             sti->fields[i] = vi;
         }
         sti->firstGcField = sti->count;

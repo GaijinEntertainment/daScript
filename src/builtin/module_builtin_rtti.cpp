@@ -584,7 +584,7 @@ namespace das {
         ft->alias = "TypeInfoFlags";
         ft->argNames = { "ref", "refType", "canCopy", "isPod", "isRawPod", "isConst", "isTemp", "isImplicit",
             "refValue", "hasInitValue", "isSmartPtr", "isSmartPtrNative", "isHandled",
-            "heapGC", "stringHeapGC", "lockCheck" };
+            "heapGC", "stringHeapGC", "lockCheck", "isPrivate" };
         return ft;
     }
 

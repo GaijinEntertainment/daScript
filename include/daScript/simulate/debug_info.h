@@ -229,6 +229,7 @@ namespace das
             flag_heapGC = 1<<13,
             flag_stringHeapGC = 1<<14,
             flag_lockCheck = 1<<15,
+            flag_private = 1<<16,
         };
         union {
             StructInfo *                structType;

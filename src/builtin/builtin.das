@@ -232,7 +232,7 @@ def back ( a : array<auto(TT)> const ==const # ) : TT # const &
 
 [expect_any_vector(arr)]
 def back ( var arr : auto(TT) ==const ) : auto &
-    let n = length(arr)
+    let n = _::length(arr)
     if n == 0
         panic("vector is empty")
     unsafe
@@ -240,7 +240,7 @@ def back ( var arr : auto(TT) ==const ) : auto &
 
 [expect_any_vector(arr)]
 def back ( arr : auto(TT) ==const ) : auto & const
-    let n = length(arr)
+    let n = _::length(arr)
     if n == 0
         panic("vector is empty")
     unsafe
