@@ -1101,9 +1101,9 @@ namespace das {
     }
 
     bool introduceFile ( smart_ptr_raw<FileAccess> access, char * fname, char * str, Context * context, LineInfoArg * at ) {
-        if ( !str ) context->throw_error_at(at, "can't introduce empty file");
-        uint32_t str_len = stringLengthSafe(*context, str);
-        auto fileInfo = make_unique<TextFileInfo>(str, str_len, false);
+        const char * safeStr = str ? str : "";
+        uint32_t str_len = stringLength(*context, safeStr);
+        auto fileInfo = make_unique<TextFileInfo>(safeStr, str_len, false);
         return access->setFileInfo(fname, das::move(fileInfo)) != nullptr;
     }
 
