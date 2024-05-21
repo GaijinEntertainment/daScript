@@ -56,7 +56,7 @@ namespace das {
         }
         template <typename QQ>
         __forceinline static const TT & cast ( const QQ & expr ) {
-            return expr;
+            return (const TT &) expr;
         }
     };
 
