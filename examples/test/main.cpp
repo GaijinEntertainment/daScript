@@ -26,12 +26,14 @@ TextPrinter tout;
 template <typename F>
 bool with_program_serialized ( F callback, ProgramPtr program ) {
 // serialize
-    AstSerializer ser;
+    unique_ptr<SerializationStorageVector> writeTo = make_unique<SerializationStorageVector>();
+    AstSerializer ser ( writeTo.get(), true );
     program->serialize(ser);
     program.reset();
 // deserialize
-    AstSerializer deser ( ForReading{} );
-    deser.buffer = das::move(ser.buffer);
+    unique_ptr<SerializationStorageVector> readFrom = make_unique<SerializationStorageVector>();
+    AstSerializer deser ( readFrom.get(), false );
+    readFrom->buffer = das::move(writeTo->buffer);
     auto new_program = make_smart<Program>();
     new_program->serialize(deser);
     program = new_program;

@@ -1542,7 +1542,7 @@ namespace das
         string                      thisModuleName;
         unique_ptr<Module>          thisModule;
         ModuleLibrary               library;
-        ModuleGroup *               thisModuleGroup;
+        ModuleGroup *               thisModuleGroup = nullptr;
         int                         totalFunctions = 0;
         int                         totalVariables = 0;
         int                         newLambdaIndex = 1;
