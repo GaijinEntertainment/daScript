@@ -7,67 +7,34 @@
 #include <utility>
 
 namespace das {
-    struct ForReading {};
-
     struct SerializationStorage {
-        static constexpr uint64_t INITIAL_CAPACITY = 250 << 20;
+        virtual bool read ( void * data, size_t size ) = 0;
+        virtual void write ( const void * data, size_t size ) = 0;
+        virtual size_t size() const = 0;
+    };
 
-        SerializationStorage () = default;
-        ~SerializationStorage () { delete[] data_; }
-
-        static auto from_vector ( das::vector<uint8_t> & v ) -> std::optional<SerializationStorage> {
-            SerializationStorage s;
-            if ( s.init(v.size()) ) {
-                memcpy(v.data(), s.begin(), v.size());
-                return {das::move(s)};
-            } else {
-                return {};
-            }
+    struct SerializationStorageVector : SerializationStorage {
+        vector<uint8_t> buffer;
+        size_t readOffset = 0;
+        virtual size_t size() const override {
+            return buffer.size();
         }
-
-        SerializationStorage ( SerializationStorage && other ) noexcept
-            : data_(other.data_), size_(other.size_), capacity_(other.capacity_) {
-            other.data_ = nullptr;
-            other.size_ = 0;
-            other.capacity_ = 0;
-        }
-
-        SerializationStorage & operator = ( SerializationStorage && other ) noexcept {
-            if (this != &other) {
-                delete[] data_;
-                data_ = std::exchange(other.data_, nullptr);
-                size_ = std::exchange(other.size_, 0);
-                capacity_ = std::exchange(other.capacity_, 0);
-            }
-            return *this;
-        }
-
-        SerializationStorage ( const SerializationStorage & ) = delete;
-        SerializationStorage & operator = ( const SerializationStorage & ) = delete;
-
-        auto begin () const -> uint8_t * { return data_; }
-        auto end () const -> uint8_t * { return data_ + size_; }
-        auto size () const -> uint32_t { return size_; }
-        auto capacity () const -> uint32_t { return capacity_; }
-        auto move ( uint32_t bytes ) -> bool { size_ += bytes; return true; }
-
-        bool init ( uint64_t size = INITIAL_CAPACITY ) {
-            data_ = new(std::nothrow) uint8_t[size];
-            if ( data_ == nullptr ) return false;
-            capacity_ = (uint32_t) size;
+        virtual bool read ( void * data, size_t size ) override {
+            if ( readOffset + size > buffer.size() ) return false;
+            memcpy(data, buffer.data() + readOffset, size);
+            readOffset += size;
             return true;
         }
-
-        private:
-            uint8_t * data_ = nullptr;
-            uint32_t size_ = 0;
-            uint32_t capacity_ = 0;
+        virtual void write ( const void * data, size_t size ) override {
+            auto at = buffer.size();
+            buffer.resize(at + size);
+            memcpy(buffer.data() + at, data, size);
+        }
     };
 
     struct AstSerializer {
         ~AstSerializer ();
-        AstSerializer ( void );
-        AstSerializer ( ForReading );
+        AstSerializer ( SerializationStorage * storage, bool isWriting );
 
         AstSerializer ( const AstSerializer & from ) = delete;
         AstSerializer ( AstSerializer && from ) = default;
@@ -82,7 +49,7 @@ namespace das {
         bool                writing = false;
         bool                failed = false;
         size_t              readOffset = 0;
-        SerializationStorage buffer;
+        SerializationStorage * buffer = nullptr;
         vector<uint8_t>     metadata;
         bool                seenNewModule = false;
     // file info clean up

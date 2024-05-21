@@ -25,11 +25,11 @@ public:
 // registering module, so that its available via 'NEED_MODULE' macro
 REGISTER_MODULE(Module_Tutorial08);
 
-// #define TUTORIAL_NAME   "/examples/tutorial/tutorial08.das"
+#define TUTORIAL_NAME   "/examples/tutorial/tutorial08.das"
 // #define TUTORIAL_NAME   "/examples/test/unit_tests/abc.das"
 // #define TUTORIAL_NAME   "/examples/test/unit_tests/access_private_from_lambda.das"
 // #define TUTORIAL_NAME   "/examples/test/unit_tests/aka.das"
-#define TUTORIAL_NAME   "/examples/test/unit_tests/aonce.das"
+// #define TUTORIAL_NAME   "/examples/test/unit_tests/aonce.das"
 
 void tutorial () {
     TextPrinter tout;                               // output stream for all compiler messages (stdout. for stringstream use TextWriter)
@@ -46,15 +46,18 @@ void tutorial () {
         return;
     }
 // serialize
-    AstSerializer ser;
+    auto writeTo = make_unique<SerializationStorageVector>();
+    AstSerializer ser ( writeTo.get(), true );
     program->serialize(ser);
     program.reset();
+    tout << "serialized size: " << writeTo->buffer.size() << "\n";
 // deserialize
-    AstSerializer deser ( ForReading{});
-    deser.buffer = das::move(ser.buffer);
-    auto new_program = make_smart<Program>();
-    new_program->serialize(deser);
-    program = new_program;
+    auto readFrom = make_unique<SerializationStorageVector>();
+    readFrom->buffer = das::move(writeTo->buffer);
+    AstSerializer deser ( readFrom.get(), false );
+    program = make_smart<Program>();
+    program->serialize(deser);
+    tout << "deserialized\n";
 
     // create daScript context
     Context ctx(program->getContextStackSize());
@@ -89,6 +92,8 @@ void tutorial () {
         return;
     }
     tout << "ok\n";
+
+    program.reset();    // kill it before serializer. library is in the serializer??
 }
 
 int main( int, char * [] ) {

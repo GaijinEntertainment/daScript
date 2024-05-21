@@ -9,14 +9,10 @@
 
 namespace das {
 
-    AstSerializer::AstSerializer ( ForReading ) {
+    AstSerializer::AstSerializer ( SerializationStorage * storage, bool isWriting ) {
         astModule = Module::require("ast");
-        writing = false;
-    }
-
-    AstSerializer::AstSerializer ( void ) {
-        astModule = Module::require("ast");
-        writing = true;
+        writing = isWriting;
+        buffer = storage;
     }
 
     void AstSerializer::collectFileInfo ( vector<FileInfoPtr> & orphanedFileInfos ) {
@@ -113,16 +109,13 @@ namespace das {
     }
 
     void AstSerializer::write ( const void * data, size_t size ) {
-        memcpy(buffer.end(), data, size);
-        buffer.move((uint32_t)size);
+        buffer->write(data, size);
     }
 
     void AstSerializer::read ( void * data, size_t size ) {
-        if ( readOffset + size > buffer.capacity() ) {
+        if ( !buffer->read(data, size) ) {
             throw_formatted_error("ast serializer read overflow");
         }
-        memcpy(data, buffer.end(), size);
-        buffer.move(uint32_t(size));
     }
 
     void AstSerializer::serialize ( void * data, size_t size ) {
@@ -689,7 +682,7 @@ namespace das {
         }
         if ( writing ) {
             if ( writingFileInfoMap[info] == 0 ) {
-                uint64_t curOffset = buffer.size() + sizeof(curOffset);
+                uint64_t curOffset = buffer->size() + sizeof(curOffset);
                 *this << curOffset;
                 writingFileInfoMap[info] = curOffset;
                 info->serialize(*this);
