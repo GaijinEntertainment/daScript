@@ -249,7 +249,7 @@ namespace das {
         struct stat st;
         int fd = fileno((FILE*)f);
         fstat(fd, &st);
-        char * res = context->stringHeap->allocateString(context,nullptr, st.st_size);
+        char * res = context->allocateString(nullptr, st.st_size,at);
         fseek((FILE*)f, 0, SEEK_SET);
         auto bytes = fread(res, 1, st.st_size, (FILE *)f);
         if ( uint64_t(bytes) != uint64_t(st.st_size) ) {
@@ -263,7 +263,7 @@ namespace das {
         if ( !f ) context->throw_error_at(at, "can't fgets NULL");
         vector<char> buffer(16384);
         if (char* buf = fgets(buffer.data(), int(buffer.size()), (FILE *)f)) {
-            return context->stringHeap->allocateString(context,buf, uint32_t(strlen(buf)));
+            return context->allocateString(buf, uint32_t(strlen(buf)),at);
         } else {
             return nullptr;
         }
@@ -337,7 +337,7 @@ namespace das {
     }
 
 
-    char * builtin_dirname ( const char * name, Context * context, LineInfoArg * ) {
+    char * builtin_dirname ( const char * name, Context * context, LineInfoArg * at ) {
         if ( name ) {
 #if defined(_MSC_VER)
             char full_path[ _MAX_PATH ];
@@ -352,11 +352,11 @@ namespace das {
                     full_path[--len] = 0;
                 }
             }
-            return context->stringHeap->allocateString(context,full_path, len);
+            return context->allocateString(full_path, len, at);
 #else
             char * tempName = strdup(name);
             char * dirName = dirname(tempName);
-            char * result = context->stringHeap->allocateString(context,dirName, strlen(dirName));
+            char * result = context->allocateString(dirName, strlen(dirName), at);
             free(tempName);
             return result;
 #endif
@@ -365,7 +365,7 @@ namespace das {
         }
     }
 
-    char * builtin_basename ( const char * name, Context * context, LineInfoArg * ) {
+    char * builtin_basename ( const char * name, Context * context, LineInfoArg * at ) {
         if ( name ) {
 #if defined(_MSC_VER)
             char drive[ _MAX_DRIVE ];
@@ -374,11 +374,11 @@ namespace das {
             char ext[ _MAX_EXT ];
             _splitpath(name, drive, dir, full_path, ext);
             strcat(full_path, ext);
-            return context->stringHeap->allocateString(context,full_path, uint32_t(strlen(full_path)));
+            return context->allocateString(full_path, uint32_t(strlen(full_path)), at);
 #else
             char * tempName = strdup(name);
             char * dirName = basename(tempName);
-            char * result = context->stringHeap->allocateString(context,dirName, strlen(dirName));
+            char * result = context->allocateString(dirName, strlen(dirName), at);
             free(tempName);
             return result;
 #endif
@@ -407,7 +407,7 @@ namespace das {
         string findPath = string(path ? path : "") + "/*";
         if ((hFile = _findfirst(findPath.c_str(), &c_file)) != -1L) {
             do {
-                char * fname = context->stringHeap->allocateString(context,c_file.name, uint32_t(strlen(c_file.name)));
+                char * fname = context->allocateString(c_file.name, uint32_t(strlen(c_file.name)),at);
                 vec4f args[1] = {
                     cast<char *>::from(fname)
                 };
@@ -420,7 +420,7 @@ namespace das {
         struct dirent *ent;
         if ((dir = opendir (path ? path : "")) != NULL) {
             while ((ent = readdir (dir)) != NULL) {
-                char * fname = context->stringHeap->allocateString(context,ent->d_name,uint32_t(strlen(ent->d_name)));
+                char * fname = context->allocateString(ent->d_name,uint32_t(strlen(ent->d_name)),at);
                 vec4f args[1] = {
                     cast<char *>::from(fname)
                 };
@@ -449,7 +449,7 @@ namespace das {
 #else
         char * buf = getcwd(nullptr, 0);
         if ( buf ) {
-            char * res = context->stringHeap->allocateString(context,buf, uint32_t(strlen(buf)));
+            char * res = context->allocateString(buf, uint32_t(strlen(buf)));
             free(buf);
             return res;
         } else {
@@ -522,11 +522,11 @@ namespace das {
         return builtin_popen_impl(cmd, false, blk, context, at);
     }
 
-    char * get_full_file_name ( const char * path, Context * context, LineInfoArg * ) {
+    char * get_full_file_name ( const char * path, Context * context, LineInfoArg * at ) {
         if ( !path ) return nullptr;
         auto res = normalizeFileName(path);
         if ( res.length()==0 ) return nullptr;
-        return context->stringHeap->allocateString(context,res);
+        return context->allocateString(res,at);
     }
 
     bool builtin_remove_file ( const char * path ) {
@@ -543,7 +543,7 @@ namespace das {
         if ( !var ) return nullptr;
         auto res = getenv(var);
         if ( !res ) return nullptr;
-        return context->stringHeap->allocateString(context,res);
+        return context->allocateString(res);
     }
 
     char * sanitize_command_line ( const char * cmd, Context * context, LineInfoArg * at ) {
@@ -565,7 +565,7 @@ namespace das {
             }
         }
         if ( ss.str().size() > UINT_MAX ) context->throw_error_at(at, "string too long");
-        return context->stringHeap->allocateString(context,ss.str().data(), uint32_t(ss.str().size()));
+        return context->allocateString(ss.str().data(), uint32_t(ss.str().size()), at);
     }
 
     class Module_FIO : public Module {

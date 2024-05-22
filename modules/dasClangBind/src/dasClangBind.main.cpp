@@ -12,7 +12,7 @@ namespace das {
 
 char * from_CXString_to_string ( const CXString & cxs, Context * context ) {
     auto cst = clang_getCString(cxs);
-    auto res = context->stringHeap->allocateString(context,cst);
+    auto res = context->allocateString(cst);
     clang_disposeString(cxs);
     return res;
 }
