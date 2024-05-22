@@ -1643,18 +1643,21 @@ namespace das {
     protected:
         virtual void preVisitExpression ( Expression * expr ) override {
             Visitor::preVisitExpression(expr);
-            if ( first ) {
-                enclosure = expr->at;
-                first = false;
-            } else {
-                minPoint(enclosure.line, enclosure.column, expr->at.line, expr->at.column);
-                maxPoint(enclosure.last_line, enclosure.last_column, expr->at.last_line, expr->at.last_column);
-            }
+            expandEnclosure(expr->at);
             if ( expr->rtti_isCallLikeExpr() ) {
                 auto ellc = static_cast<ExprLooksLikeCall *>(expr);
-                if ( !ellc->atEnclosure.empty() ) {
-                    minPoint(enclosure.line, enclosure.column, ellc->atEnclosure.line, ellc->atEnclosure.column);
-                    maxPoint(enclosure.last_line, enclosure.last_column, ellc->atEnclosure.last_line, ellc->atEnclosure.last_column);
+                expandEnclosure(ellc->atEnclosure);
+            }
+        }
+
+        void expandEnclosure ( const LineInfo & at ) {
+            if ( ! at.empty() ) {
+                if ( first ) {
+                    enclosure = at;
+                    first = false;
+                } else {
+                    minPoint(enclosure.line, enclosure.column, at.line, at.column);
+                    maxPoint(enclosure.last_line, enclosure.last_column, at.last_line, at.last_column);
                 }
             }
         }
