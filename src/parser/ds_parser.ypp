@@ -1416,9 +1416,11 @@ tuple_expansion
     :   NAME [name] {
         $$ = new vector<string>();
         $$->push_back(*$name);
+        delete $name;
     }
     |   tuple_expansion[list] ',' NAME[name] {
         $list->push_back(*$name);
+        delete $name;
         $$ = $list;
     }
     ;
