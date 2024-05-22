@@ -191,8 +191,7 @@ namespace das {
         virtual void forEachString ( const callable<void (const char *)> & fn ) = 0;
         virtual void reset() override;
     public:
-        char * allocateString ( Context * context, const char * text, uint32_t length );
-        char * allocateString ( Context * context, const string & str );
+        char * allocateString ( Context * context, const char * text, uint32_t length, const LineInfo * at = nullptr );
         void freeString ( char * text, uint32_t length );
         void setIntern ( bool on );
         bool isIntern() const { return needIntern; }

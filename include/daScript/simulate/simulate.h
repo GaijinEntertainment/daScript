@@ -284,6 +284,14 @@ namespace das
         uint64_t getSharedSize() const { return sharedSize; }
         uint64_t getInitSemanticHash();
 
+        __forceinline char * allocateString ( const char * text, uint32_t length, const LineInfo * at = nullptr ) {
+            return stringHeap->allocateString(this, text, length, at);
+        }
+
+        __forceinline char * allocateString ( const string & str, const LineInfo * at = nullptr ) {
+            return stringHeap->allocateString(this, str.c_str(), uint32_t(str.size()), at);
+        }
+
         __forceinline void * getVariable ( int index ) const {
             if ( uint32_t(index)<uint32_t(totalVariables) ) {
                 const auto & gvar = globalVariables[index];

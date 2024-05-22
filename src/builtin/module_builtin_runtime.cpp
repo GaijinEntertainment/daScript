@@ -1002,7 +1002,7 @@ namespace das
     char * collectProfileInfo( Context * context ) {
         TextWriter tout;
         context->collectProfileInfo(tout);
-        return context->stringHeap->allocateString(context,tout.str());
+        return context->allocateString(tout.str());
     }
 
     void builtin_array_free ( Array & dim, int szt, Context * __context__, LineInfoArg * at ) {
@@ -1259,7 +1259,7 @@ namespace das
         auto res = args[0];
         auto flags = cast<uint32_t>::to(args[1]);
         ssw << debug_type(typeInfo) << " = " << debug_value(res, typeInfo, PrintFlags(flags));
-        auto sres = context.stringHeap->allocateString(&context,ssw.str());
+        auto sres = context.allocateString(ssw.str(),&call->debugInfo);
         return cast<char *>::from(sres);
     }
 
@@ -1268,7 +1268,7 @@ namespace das
         auto res = args[0];
         auto humanReadable = cast<bool>::to(args[1]);
         auto ssw = debug_json_value(res, typeInfo, humanReadable);
-        auto sres = context.stringHeap->allocateString(&context,ssw);
+        auto sres = context.allocateString(ssw,&call->debugInfo);
         return cast<char *>::from(sres);
     }
 
@@ -1287,11 +1287,11 @@ namespace das
     }
 
     char * builtin_das_root ( Context * context ) {
-        return context->stringHeap->allocateString(context,getDasRoot());
+        return context->allocateString(getDasRoot());
     }
 
     char * to_das_string(const string & str, Context * ctx) {
-        return ctx->stringHeap->allocateString(ctx,str);
+        return ctx->allocateString(str);
     }
 
     char * pass_string(char * str) {
@@ -1300,7 +1300,7 @@ namespace das
 
     char * clone_pass_string(char * str, Context * ctx ) {
         if ( !str ) return nullptr;
-        return ctx->stringHeap->allocateString(ctx,str);
+        return ctx->allocateString(str);
     }
 
     void set_das_string(string & str, const char * bs) {
@@ -1308,7 +1308,7 @@ namespace das
     }
 
     void set_string_das(char * & bs, const string & str, Context * ctx ) {
-        bs = ctx->stringHeap->allocateString(ctx,str);
+        bs = ctx->allocateString(str);
     }
 
     void peek_das_string(const string & str, const TBlock<void,TTemporary<const char *>> & block, Context * context, LineInfoArg * at) {
@@ -1321,7 +1321,7 @@ namespace das
         const uint32_t strLen = stringLengthSafe ( *context, str );
         if (!strLen)
             return nullptr;
-        return context->stringHeap->allocateString(context,str, strLen);
+        return context->allocateString(str, strLen);
     }
 
     void builtin_temp_array ( void * data, int size, const Block & block, Context * context, LineInfoArg * at ) {

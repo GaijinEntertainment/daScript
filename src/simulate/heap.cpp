@@ -42,10 +42,6 @@ namespace das {
         return nullptr;
     }
 
-    char * StringHeapAllocator::allocateString ( Context * context, const string & str ) {
-        return allocateString ( context, str.c_str(), uint32_t(str.length()) );
-    }
-
     bool PersistentHeapAllocator::mark() {
         model.shoe.beforeGC();
         return true;
@@ -220,7 +216,7 @@ namespace das {
         return nullptr;
     }
 
-    char * StringHeapAllocator::allocateString ( Context * context, const char * text, uint32_t length ) {
+    char * StringHeapAllocator::allocateString ( Context * context, const char * text, uint32_t length, const LineInfo * at ) {
         if ( length ) {
             if ( needIntern && text ) {
                 auto it = internMap.find(StrHashEntry(text,length));
@@ -237,7 +233,7 @@ namespace das {
                 if ( needIntern && text ) internMap.insert(StrHashEntry(str,length));
                 return str;
             } else if ( context ) {
-                context->throw_out_of_memory(true, length + 1);
+                context->throw_out_of_memory(true, length + 1, at);
             }
         }
         return nullptr;

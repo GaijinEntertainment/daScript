@@ -132,7 +132,7 @@ namespace das {
                 load ( length );
                 char * temp = new char[length+1];
                 read ( temp, length );
-                data = (char *) context->stringHeap->allocateString(context,temp,length);
+                data = (char *) context->allocateString(temp,length);
                 delete [] temp;
             } else {
                 uint32_t length = stringLengthSafe(*context, data);

@@ -13,7 +13,7 @@ char * GetSaveFileDlg ( const char * initialFileName , const char * initialPath,
         initialPath ? initialPath : "",
         filter ? filter : ""
     );
-    return ctx->stringHeap->allocateString(ctx,sf);
+    return ctx->allocateString(sf);
 }
 
 char * GetOpenFileDlg ( const char * initialPath, const char * filter, Context * ctx ) {
@@ -21,7 +21,7 @@ char * GetOpenFileDlg ( const char * initialPath, const char * filter, Context *
         initialPath ? initialPath : "",
         filter ? filter : ""
     );
-    return ctx->stringHeap->allocateString(ctx,sf);
+    return ctx->allocateString(sf);
 }
 
 class Module_StdDlg : public Module {

@@ -1817,7 +1817,7 @@ namespace das {
 
     template <typename TT>
     __forceinline char * das_lexical_cast ( TT x, Context * __context__ ) {
-        return __context__->stringHeap->allocateString(__context__,to_string(x));
+        return __context__->allocateString(to_string(x));
     }
 
     __forceinline char * das_string_builder ( Context * __context__, const SimNode_AotInteropBase & node ) {
@@ -1828,7 +1828,7 @@ namespace das {
         }
         auto length = writer.tellp();
         if ( length ) {
-            return __context__->stringHeap->allocateString(__context__,writer.c_str(),uint32_t(length));
+            return __context__->allocateString(writer.c_str(),uint32_t(length), &node.debugInfo);
         } else {
             return nullptr;
         }
@@ -1842,7 +1842,7 @@ namespace das {
         }
         auto length = writer.tellp();
         if ( length ) {
-            auto str = __context__->stringHeap->allocateString(__context__,writer.c_str(), uint32_t(length));
+            auto str = __context__->allocateString(writer.c_str(), uint32_t(length), &node.debugInfo);
             __context__->freeTempString(str);
             return str;
         } else {

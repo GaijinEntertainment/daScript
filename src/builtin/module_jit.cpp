@@ -95,7 +95,7 @@ extern "C" {
         }
         auto length = writer.tellp();
         if ( length ) {
-            return context.stringHeap->allocateString(&context,writer.c_str(), uint32_t(length));
+            return context.allocateString(writer.c_str(), uint32_t(length),&call->debugInfo);
         } else {
             return nullptr;
         }
@@ -109,7 +109,7 @@ extern "C" {
         }
         auto length = writer.tellp();
         if ( length ) {
-            auto str = context.stringHeap->allocateString(&context,writer.c_str(), uint32_t(length));
+            auto str = context.allocateString(writer.c_str(), uint32_t(length),&call->debugInfo);
             context.freeTempString(str);
             return str;
         } else {
@@ -164,7 +164,7 @@ extern "C" {
         uint32_t commonLength = la + lb;
         if ( !commonLength ) {
             return nullptr;
-        } else if ( char * sAB = (char * ) context->stringHeap->allocateString(context,nullptr, commonLength) ) {
+        } else if ( char * sAB = (char * ) context->allocateString(nullptr, commonLength) ) {
             memcpy ( sAB, sA, la );
             memcpy ( sAB+la, sB, lb+1 );
             context->stringHeap->recognize(sAB);

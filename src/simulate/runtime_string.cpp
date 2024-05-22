@@ -20,7 +20,7 @@ namespace das
         uint32_t commonLength = la + lb;
         if ( !commonLength ) {
             return v_zero();
-        } else if ( char * sAB = (char * ) context.stringHeap->allocateString(&context,nullptr, commonLength) ) {
+        } else if ( char * sAB = (char * ) context.allocateString(nullptr, commonLength, at) ) {
             memcpy ( sAB, sA, la );
             memcpy ( sAB+la, sB, lb+1 );
             context.stringHeap->recognize(sAB);
@@ -41,7 +41,7 @@ namespace das
         if ( !commonLength ) {
             // *pA = nullptr; is unnecessary, because its already nullptr
             return;
-        } else if ( char * sAB = (char * ) context.stringHeap->allocateString(&context,nullptr, commonLength) ) {
+        } else if ( char * sAB = (char * ) context.allocateString(nullptr, commonLength, at) ) {
             memcpy ( sAB, sA, la );
             memcpy ( sAB+la, sB, lb+1 );
             *pA = sAB;
@@ -353,7 +353,7 @@ namespace das
         }
         uint64_t length = writer.tellp();
         if ( length ) {
-            auto pStr = context.stringHeap->allocateString(&context,writer.c_str(), uint32_t(length));
+            auto pStr = context.allocateString(writer.c_str(), uint32_t(length), &debugInfo);
             if ( !pStr  ) {
                 context.throw_out_of_memory(true, uint32_t(length), &debugInfo);
             }
