@@ -2540,11 +2540,11 @@ namespace das {
     };
 
     template <typename TT>
-    Sequence das_vector_each_sequence ( const TT & vec, Context * context ) {
+    Sequence das_vector_each_sequence ( TT & vec, Context * context ) {
         using VectorIterator = StdVectorIterator<TT>;
         char * iter = context->heap->allocateIterator(sizeof(VectorIterator), "std::vector<> iterator");
         if ( !iter ) context->throw_out_of_memory(false, sizeof(VectorIterator)+16);
-        new (iter) VectorIterator((TT *)&vec);
+        new (iter) VectorIterator(&vec);
         return { (Iterator *) iter };
     }
 
