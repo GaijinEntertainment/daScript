@@ -120,6 +120,11 @@
 
 .. |function-strings-set_element| replace:: Gen character set element by element index (not character index).
 
+.. |function-strings-build_hash| replace:: Build hash of the string (as oppose to building entire string).
+
+.. |function-strings-ltrim| replace:: Removes leading white space.
+
+.. |function-strings-trim| replace:: Removes leading and trailing white space.
 
 
 

@@ -54,6 +54,13 @@ def handle_label_name(value)
 def call_macro_label_name(mod,value)
     return "call-macro-{module_name(mod)}-{value}"
 
+def public function_file_name(value:FunctionPtr)
+    var mn = string(value.name)
+    mn = mn |> replace_multiple([{auto
+        "?" => "_qm_";
+    }])
+    return mn
+
 def function_label_name(value:FunctionPtr)
     var mn = get_mangled_name(value)
     mn = mn |> replace_multiple([{auto
@@ -66,7 +73,10 @@ def function_label_name(value:FunctionPtr)
         ">" => "_gr_";
         "`" => "_rq_";
         "!" => "_ex_";
-        "=" => "_eq_"
+        "=" => "_eq_";
+        "?" => "_qm_";
+        "[" => "_lb_";
+        "]" => "_rb_";
     }])
     return "function-{mn}"
 
@@ -767,7 +777,7 @@ def document_function(doc_file:file;mod:Module?;func:FunctionPtr)
     if func.moreFlags.deprecated
         document_warning(doc_file,"This function is deprecated.")
     document_function_arguments(doc_file,argNames,argTypes)
-    document_topic(doc_file,topic("function",mod,"{func.name}"))
+    document_topic(doc_file,topic("function",mod,"{function_file_name(func)}"))
 
 def document_functions(doc_file:file;mod:Module?;groups:array<DocGroup>)
     var tab : table<Function?;bool>
@@ -880,10 +890,10 @@ def private generate_substitute_stub(mod:Module?;substname:string)
                     generate_topic_stub(tab,stub_file,topic("structure",mod,string(value.name)))
             for_each_function(mod, "") <| $(func)
                 if function_needs_documenting(func)
-                    generate_topic_stub(tab,stub_file,topic("function",mod,"{func.name}"))
+                    generate_topic_stub(tab,stub_file,topic("function",mod,"{function_file_name(func)}"))
             for_each_generic(mod) <| $(func)
                 if function_needs_documenting(func)
-                    generate_topic_stub(tab,stub_file,topic("function",mod,"{func.name}"))
+                    generate_topic_stub(tab,stub_file,topic("function",mod,"{function_file_name(func)}"))
             // annotations
             module_for_each_annotation(mod) <| $(value)
                 if value.isBasicStructureAnnotation

@@ -165,6 +165,8 @@
 .. |method-ast-AstReaderMacro.accept| replace:: This callback occurs during the `parse` pass for every character. When the macro is done with the input (i.e. recognizeable input ends) it should return `false`.
     Typically characters are appended to the `expr.sequence` inside the ExprReader.
 
+.. |method-ast-AstReaderMacro.suffix| replace:: This callback occurs during the `parse` pass after the macro is done with the input. It returns text, which is to be parsed again by the parser.
+
 .. |method-ast-AstReaderMacro.visit| replace:: This callback occurs during the `infer` pass for every instance of `ExprReader` for that specific macro. Macro needs to convert `ExprReader` to some meaningful expression.
 
 .. |class-ast-AstCommentReader| replace:: This macro is used to implement custom comment parsing function (such as doxygen-style documentation etc).
@@ -193,7 +195,29 @@
 
 .. |method-ast-AstCommentReader.afterVariant| replace:: This callback occurs during the `parse` after the variant alias declaration.
 
+.. |method-ast-AstCommentReader.beforeVariantEntries| replace:: This callback occurs during the `parse` before the first variant entry is declared.
+
+.. |method-ast-AstCommentReader.afterVariantEntry| replace:: This callback occurs during the `parse` after the variant entry is declared (after the following comment section, should it have one).
+
+.. |method-ast-AstCommentReader.afterVariantEntries| replace:: This callback occurs during the `parse` after the last variant entry is declared.
+
+.. |method-ast-AstCommentReader.beforeBitfield| replace:: This callback occurs during the `parse` before the bitfield declaration.
+
+.. |method-ast-AstCommentReader.beforeBitfieldEntries| replace:: This callback occurs during the `parse` before the first bitfield entry is declared.
+
+.. |method-ast-AstCommentReader.afterBitfieldEntry| replace:: This callback occurs during the `parse` after the bitfield entry is declared (after the following comment section, should it have one).
+
+.. |method-ast-AstCommentReader.afterBitfieldEntries| replace:: This callback occurs during the `parse` after the last bitfield entry is declared.
+
+.. |method-ast-AstCommentReader.afterBitfield| replace:: This callback occurs during the `parse` after the bitfield declaration.
+
 .. |method-ast-AstCommentReader.beforeEnumeration| replace:: This callback occurs during the `parse` before the enumeration declaration.
+
+.. |method-ast-AstCommentReader.beforeEnumerationEntries| replace:: This callback occurs during the `parse` before the first enumeration entry is declared.
+
+.. |method-ast-AstCommentReader.afterEnumerationEntry| replace:: This callback occurs during the `parse` after the enumeration entry is declared (after the following comment section, should it have one).
+
+.. |method-ast-AstCommentReader.afterEnumerationEntries| replace:: This callback occurs during the `parse` after the last enumeration entry is declared.
 
 .. |method-ast-AstCommentReader.afterEnumeration| replace:: This callback occurs during the `parse` after the enumeration declaration.
 
@@ -517,6 +541,10 @@
 .. |method-ast-AstVisitor.canVisitMakeStructBlock| replace:: if true the visitor can visit the block behind `ExprMakeStruct`
 
 .. |method-ast-AstVisitor.preVisitExprMakeStruct| replace:: before `ExprMakeStruct`
+
+.. |method-ast-AstVisitor.preVisitMakeStructureBlock| replace:: before the block behind `ExprMakeStruct`
+
+.. |method-ast-AstVisitor.visitMakeStructureBlock| replace:: after the block behind `ExprMakeStruct`
 
 .. |method-ast-AstVisitor.visitExprMakeStruct| replace:: after `ExprMakeStruct`
 
@@ -933,6 +961,8 @@
 .. |function-ast-add_variable| replace:: Adds variable to a `Module`. Will return false on duplicates.
 
 .. |function-ast-find_variable| replace:: Finds variable in the `Module`.
+
+.. |function-ast-find_matching_variable| replace:: Finds global or shared variable in the given function, according to visibility and privacy rules.
 
 .. |function-ast-add_structure| replace:: Adds structure to a `Module`. Will return false on duplicates.
 
@@ -1389,5 +1419,11 @@
 
 .. |function-ast-get_handled_type_field_type| replace:: Returns type of the field in the ManagedStructure handled type.
 
+.. |function-ast-get_current_search_module| replace:: Returns the module which is currently being searched for the function, given module name. Resolves "", "_", "*", and "__" correctly.
 
+.. |function-ast-get_handled_type_field_type_declaration| replace:: Returns type declaration of the field in the ManagedStructure handled type.
+
+.. |function-ast-get_function_aot_hash| replace:: Returns hash of the function for the AOT matching.
+
+.. |function-ast-can_access_global_variable| replace:: Returns true if global variable is accessible from the specified module.
 

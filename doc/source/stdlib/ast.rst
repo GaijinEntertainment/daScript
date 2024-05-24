@@ -57,6 +57,8 @@ Type aliases
 +---------------+---+-----+
 +explicitRef    +15 +32768+
 +---------------+---+-----+
++isPrivateAlias +16 +65536+
++---------------+---+-----+
 
 
 |typedef-ast-TypeDeclFlags|
@@ -152,13 +154,15 @@ Type aliases
 
 .. das:attribute:: ExprLetFlags is a bitfield
 
-+-----------+---+-----+
-+field      +bit+value+
-+===========+===+=====+
-+inScope    +0  +1    +
-+-----------+---+-----+
-+hasEarlyOut+1  +2    +
-+-----------+---+-----+
++----------------+---+-----+
++field           +bit+value+
++================+===+=====+
++inScope         +0  +1    +
++----------------+---+-----+
++hasEarlyOut     +1  +2    +
++----------------+---+-----+
++itTupleExpansion+2  +4    +
++----------------+---+-----+
 
 
 |typedef-ast-ExprLetFlags|
@@ -280,41 +284,53 @@ Type aliases
 
 .. das:attribute:: MoreFunctionFlags is a bitfield
 
-+--------------------------+---+-----+
-+field                     +bit+value+
-+==========================+===+=====+
-+macroFunction             +0  +1    +
-+--------------------------+---+-----+
-+needStringCast            +1  +2    +
-+--------------------------+---+-----+
-+aotHashDeppendsOnArguments+2  +4    +
-+--------------------------+---+-----+
-+lateInit                  +3  +8    +
-+--------------------------+---+-----+
-+requestJit                +4  +16   +
-+--------------------------+---+-----+
-+unsafeOutsideOfFor        +5  +32   +
-+--------------------------+---+-----+
-+skipLockCheck             +6  +64   +
-+--------------------------+---+-----+
-+safeImplicit              +7  +128  +
-+--------------------------+---+-----+
-+deprecated                +8  +256  +
-+--------------------------+---+-----+
-+aliasCMRES                +9  +512  +
-+--------------------------+---+-----+
-+neverAliasCMRES           +10 +1024 +
-+--------------------------+---+-----+
-+addressTaken              +11 +2048 +
-+--------------------------+---+-----+
-+propertyFunction          +12 +4096 +
-+--------------------------+---+-----+
-+pinvoke                   +13 +8192 +
-+--------------------------+---+-----+
-+jitOnly                   +14 +16384+
-+--------------------------+---+-----+
-+isStaticClassMethod       +15 +32768+
-+--------------------------+---+-----+
++--------------------------+---+-------+
++field                     +bit+value  +
++==========================+===+=======+
++macroFunction             +0  +1      +
++--------------------------+---+-------+
++needStringCast            +1  +2      +
++--------------------------+---+-------+
++aotHashDeppendsOnArguments+2  +4      +
++--------------------------+---+-------+
++lateInit                  +3  +8      +
++--------------------------+---+-------+
++requestJit                +4  +16     +
++--------------------------+---+-------+
++unsafeOutsideOfFor        +5  +32     +
++--------------------------+---+-------+
++skipLockCheck             +6  +64     +
++--------------------------+---+-------+
++safeImplicit              +7  +128    +
++--------------------------+---+-------+
++deprecated                +8  +256    +
++--------------------------+---+-------+
++aliasCMRES                +9  +512    +
++--------------------------+---+-------+
++neverAliasCMRES           +10 +1024   +
++--------------------------+---+-------+
++addressTaken              +11 +2048   +
++--------------------------+---+-------+
++propertyFunction          +12 +4096   +
++--------------------------+---+-------+
++pinvoke                   +13 +8192   +
++--------------------------+---+-------+
++jitOnly                   +14 +16384  +
++--------------------------+---+-------+
++isStaticClassMethod       +15 +32768  +
++--------------------------+---+-------+
++requestNoJit              +16 +65536  +
++--------------------------+---+-------+
++jitContextAndLineInfo     +17 +131072 +
++--------------------------+---+-------+
++nodiscard                 +18 +262144 +
++--------------------------+---+-------+
++captureString             +19 +524288 +
++--------------------------+---+-------+
++callCaptureString         +20 +1048576+
++--------------------------+---+-------+
++hasStringBuilder          +21 +2097152+
++--------------------------+---+-------+
 
 
 |typedef-ast-MoreFunctionFlags|
@@ -443,6 +459,8 @@ Type aliases
 +--------------------------+---+-----+
 +hasEarlyOut               +12 +4096 +
 +--------------------------+---+-----+
++forLoop                   +13 +8192 +
++--------------------------+---+-----+
 
 
 |typedef-ast-ExprBlockFlags|
@@ -550,13 +568,17 @@ Type aliases
 
 .. das:attribute:: ExprMakeStructFlags is a bitfield
 
-+--------------+---+-----+
-+field         +bit+value+
-+==============+===+=====+
-+useInitializer+0  +1    +
-+--------------+---+-----+
-+isNewHandle   +1  +2    +
-+--------------+---+-----+
++----------------------+---+-----+
++field                 +bit+value+
++======================+===+=====+
++useInitializer        +0  +1    +
++----------------------+---+-----+
++isNewHandle           +1  +2    +
++----------------------+---+-----+
++usedInitializer       +2  +4    +
++----------------------+---+-----+
++nativeClassInitializer+3  +8    +
++----------------------+---+-----+
 
 
 |typedef-ast-ExprMakeStructFlags|
@@ -733,19 +755,19 @@ Type aliases
 
 .. _alias-ExpressionPtr:
 
-.. das:attribute:: ExpressionPtr = smart_ptr<ast::Expression>
+.. das:attribute:: ExpressionPtr = smart_ptr<Expression>
 
 |typedef-ast-ExpressionPtr|
 
 .. _alias-ProgramPtr:
 
-.. das:attribute:: ProgramPtr = smart_ptr<rtti::Program>
+.. das:attribute:: ProgramPtr = smart_ptr<Program>
 
 |typedef-ast-ProgramPtr|
 
 .. _alias-TypeDeclPtr:
 
-.. das:attribute:: TypeDeclPtr = smart_ptr<ast::TypeDecl>
+.. das:attribute:: TypeDeclPtr = smart_ptr<TypeDecl>
 
 |typedef-ast-TypeDeclPtr|
 
@@ -757,103 +779,103 @@ Type aliases
 
 .. _alias-EnumerationPtr:
 
-.. das:attribute:: EnumerationPtr = smart_ptr<ast::Enumeration>
+.. das:attribute:: EnumerationPtr = smart_ptr<Enumeration>
 
 |typedef-ast-EnumerationPtr|
 
 .. _alias-StructurePtr:
 
-.. das:attribute:: StructurePtr = smart_ptr<ast::Structure>
+.. das:attribute:: StructurePtr = smart_ptr<Structure>
 
 |typedef-ast-StructurePtr|
 
 .. _alias-FunctionPtr:
 
-.. das:attribute:: FunctionPtr = smart_ptr<ast::Function>
+.. das:attribute:: FunctionPtr = smart_ptr<Function>
 
 |typedef-ast-FunctionPtr|
 
 .. _alias-VariablePtr:
 
-.. das:attribute:: VariablePtr = smart_ptr<ast::Variable>
+.. das:attribute:: VariablePtr = smart_ptr<Variable>
 
 |typedef-ast-VariablePtr|
 
 .. _alias-MakeFieldDeclPtr:
 
-.. das:attribute:: MakeFieldDeclPtr = smart_ptr<ast::MakeFieldDecl>
+.. das:attribute:: MakeFieldDeclPtr = smart_ptr<MakeFieldDecl>
 
 |typedef-ast-MakeFieldDeclPtr|
 
 .. _alias-FunctionAnnotationPtr:
 
-.. das:attribute:: FunctionAnnotationPtr = smart_ptr<ast::FunctionAnnotation>
+.. das:attribute:: FunctionAnnotationPtr = smart_ptr<FunctionAnnotation>
 
 |typedef-ast-FunctionAnnotationPtr|
 
 .. _alias-StructureAnnotationPtr:
 
-.. das:attribute:: StructureAnnotationPtr = smart_ptr<ast::StructureAnnotation>
+.. das:attribute:: StructureAnnotationPtr = smart_ptr<StructureAnnotation>
 
 |typedef-ast-StructureAnnotationPtr|
 
 .. _alias-EnumerationAnnotationPtr:
 
-.. das:attribute:: EnumerationAnnotationPtr = smart_ptr<ast::EnumerationAnnotation>
+.. das:attribute:: EnumerationAnnotationPtr = smart_ptr<EnumerationAnnotation>
 
 |typedef-ast-EnumerationAnnotationPtr|
 
 .. _alias-PassMacroPtr:
 
-.. das:attribute:: PassMacroPtr = smart_ptr<ast::PassMacro>
+.. das:attribute:: PassMacroPtr = smart_ptr<PassMacro>
 
 |typedef-ast-PassMacroPtr|
 
 .. _alias-VariantMacroPtr:
 
-.. das:attribute:: VariantMacroPtr = smart_ptr<ast::VariantMacro>
+.. das:attribute:: VariantMacroPtr = smart_ptr<VariantMacro>
 
 |typedef-ast-VariantMacroPtr|
 
 .. _alias-ReaderMacroPtr:
 
-.. das:attribute:: ReaderMacroPtr = smart_ptr<ast::ReaderMacro>
+.. das:attribute:: ReaderMacroPtr = smart_ptr<ReaderMacro>
 
 |typedef-ast-ReaderMacroPtr|
 
 .. _alias-CommentReaderPtr:
 
-.. das:attribute:: CommentReaderPtr = smart_ptr<ast::CommentReader>
+.. das:attribute:: CommentReaderPtr = smart_ptr<CommentReader>
 
 |typedef-ast-CommentReaderPtr|
 
 .. _alias-CallMacroPtr:
 
-.. das:attribute:: CallMacroPtr = smart_ptr<ast::CallMacro>
+.. das:attribute:: CallMacroPtr = smart_ptr<CallMacro>
 
 |typedef-ast-CallMacroPtr|
 
 .. _alias-TypeInfoMacroPtr:
 
-.. das:attribute:: TypeInfoMacroPtr = smart_ptr<ast::TypeInfoMacro>
+.. das:attribute:: TypeInfoMacroPtr = smart_ptr<TypeInfoMacro>
 
 |typedef-ast-TypeInfoMacroPtr|
 
 .. _alias-ForLoopMacroPtr:
 
-.. das:attribute:: ForLoopMacroPtr = smart_ptr<ast::ForLoopMacro>
+.. das:attribute:: ForLoopMacroPtr = smart_ptr<ForLoopMacro>
 
 |typedef-ast-ForLoopMacroPtr|
 
 .. _alias-CaptureMacroPtr:
 
-.. das:attribute:: CaptureMacroPtr = smart_ptr<ast::CaptureMacro>
+.. das:attribute:: CaptureMacroPtr = smart_ptr<CaptureMacro>
 
 |typedef-ast-CaptureMacroPtr|
 
 .. _alias-SimulateMacroPtr:
 
-.. das:attribute:: SimulateMacroPtr = smart_ptr<ast::SimulateMacro>
+.. das:attribute:: SimulateMacroPtr = smart_ptr<SimulateMacro>
 
 |typedef-ast-SimulateMacroPtr|
 
@@ -1472,21 +1494,23 @@ ExprLet fields are
 
 ExprStringBuilder fields are
 
-+----------+-------------------------------------------------------+
-+at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
-+----------+-------------------------------------------------------+
-+elements  +vector<smart_ptr<Expression>>                          +
-+----------+-------------------------------------------------------+
-+printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
-+----------+-------------------------------------------------------+
-+genFlags  + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
-+----------+-------------------------------------------------------+
-+_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
-+----------+-------------------------------------------------------+
-+__rtti    +string const                                           +
-+----------+-------------------------------------------------------+
-+flags     + :ref:`ExprFlags <alias-ExprFlags>`                    +
-+----------+-------------------------------------------------------+
++------------------+-------------------------------------------------------+
++stringBuilderFlags+ :ref:`StringBuilderFlags <alias-StringBuilderFlags>`  +
++------------------+-------------------------------------------------------+
++at                + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
++------------------+-------------------------------------------------------+
++elements          +vector<smart_ptr<Expression>>                          +
++------------------+-------------------------------------------------------+
++printFlags        + :ref:`ExprPrintFlags <alias-ExprPrintFlags>`          +
++------------------+-------------------------------------------------------+
++genFlags          + :ref:`ExprGenFlags <alias-ExprGenFlags>`              +
++------------------+-------------------------------------------------------+
++_type             +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >+
++------------------+-------------------------------------------------------+
++__rtti            +string const                                           +
++------------------+-------------------------------------------------------+
++flags             + :ref:`ExprFlags <alias-ExprFlags>`                    +
++------------------+-------------------------------------------------------+
 
 
 |structure_annotation-ast-ExprStringBuilder|
@@ -1660,6 +1684,8 @@ ExprCall fields are
 +func                  + :ref:`ast::Function <handle-ast-Function>` ?           +
 +----------------------+--------------------------------------------------------+
 +arguments             +vector<smart_ptr<Expression>>                           +
++----------------------+--------------------------------------------------------+
++notDiscarded          +bool                                                    +
 +----------------------+--------------------------------------------------------+
 +at                    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`           +
 +----------------------+--------------------------------------------------------+
@@ -2262,6 +2288,8 @@ ExprMakeStruct fields are
 
 +---------------+-----------------------------------------------------------+
 +makeType       +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
++---------------+-----------------------------------------------------------+
++constructor    + :ref:`ast::Function <handle-ast-Function>` ?              +
 +---------------+-----------------------------------------------------------+
 +at             + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
 +---------------+-----------------------------------------------------------+
@@ -2991,6 +3019,8 @@ ExprDelete fields are
 +----------+-----------------------------------------------------------+
 +at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`              +
 +----------+-----------------------------------------------------------+
++sizeexpr  +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >+
++----------+-----------------------------------------------------------+
 +native    +bool                                                       +
 +----------+-----------------------------------------------------------+
 +printFlags+ :ref:`ExprPrintFlags <alias-ExprPrintFlags>`              +
@@ -3001,9 +3031,9 @@ ExprDelete fields are
 +----------+-----------------------------------------------------------+
 +_type     +smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >    +
 +----------+-----------------------------------------------------------+
-+__rtti    +string const                                               +
-+----------+-----------------------------------------------------------+
 +flags     + :ref:`ExprFlags <alias-ExprFlags>`                        +
++----------+-----------------------------------------------------------+
++__rtti    +string const                                               +
 +----------+-----------------------------------------------------------+
 
 
@@ -3502,6 +3532,8 @@ ExprFakeContext fields are
 
 ExprFakeLineInfo fields are
 
++----------+-------------------------------------------------------+
++value     +void?                                                  +
 +----------+-------------------------------------------------------+
 +at        + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`          +
 +----------+-------------------------------------------------------+
@@ -4652,9 +4684,9 @@ Classes
 it defines as follows
 
 
-.. das:function:: AstFunctionAnnotation.transform(self: AstFunctionAnnotation; call: smart_ptr<ast::ExprCallFunc>; errors: das_string)
+.. das:function:: AstFunctionAnnotation.transform(self: AstFunctionAnnotation; call: smart_ptr<ExprCallFunc>; errors: das_string)
 
-transform returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+transform returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+----------------------------------------------------------------------+
 +argument+argument type                                                         +
@@ -4669,7 +4701,7 @@ transform returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstFunctionAnnotation.transform|
 
-.. das:function:: AstFunctionAnnotation.verifyCall(self: AstFunctionAnnotation; call: smart_ptr<ast::ExprCallFunc>; args: AnnotationArgumentList const; progArgs: AnnotationArgumentList const; errors: das_string)
+.. das:function:: AstFunctionAnnotation.verifyCall(self: AstFunctionAnnotation; call: smart_ptr<ExprCallFunc>; args: AnnotationArgumentList const; progArgs: AnnotationArgumentList const; errors: das_string)
 
 verifyCall returns bool
 
@@ -4826,7 +4858,7 @@ lint returns bool
 
 |method-ast-AstFunctionAnnotation.lint|
 
-.. das:function:: AstFunctionAnnotation.complete(self: AstFunctionAnnotation; func: FunctionPtr; ctx: smart_ptr<rtti::Context>)
+.. das:function:: AstFunctionAnnotation.complete(self: AstFunctionAnnotation; func: FunctionPtr; ctx: smart_ptr<Context>)
 
 +--------+----------------------------------------------------------------------+
 +argument+argument type                                                         +
@@ -4894,7 +4926,7 @@ isSpecialized returns bool
 it defines as follows
 
 
-.. das:function:: AstBlockAnnotation.apply(self: AstBlockAnnotation; blk: smart_ptr<ast::ExprBlock>; group: ModuleGroup; args: AnnotationArgumentList const; errors: das_string)
+.. das:function:: AstBlockAnnotation.apply(self: AstBlockAnnotation; blk: smart_ptr<ExprBlock>; group: ModuleGroup; args: AnnotationArgumentList const; errors: das_string)
 
 apply returns bool
 
@@ -4915,7 +4947,7 @@ apply returns bool
 
 |method-ast-AstBlockAnnotation.apply|
 
-.. das:function:: AstBlockAnnotation.finish(self: AstBlockAnnotation; blk: smart_ptr<ast::ExprBlock>; group: ModuleGroup; args: AnnotationArgumentList const; progArgs: AnnotationArgumentList const; errors: das_string)
+.. das:function:: AstBlockAnnotation.finish(self: AstBlockAnnotation; blk: smart_ptr<ExprBlock>; group: ModuleGroup; args: AnnotationArgumentList const; progArgs: AnnotationArgumentList const; errors: das_string)
 
 finish returns bool
 
@@ -5012,7 +5044,7 @@ patch returns bool
 
 |method-ast-AstStructureAnnotation.patch|
 
-.. das:function:: AstStructureAnnotation.complete(self: AstStructureAnnotation; st: StructurePtr; ctx: smart_ptr<rtti::Context>)
+.. das:function:: AstStructureAnnotation.complete(self: AstStructureAnnotation; st: StructurePtr; ctx: smart_ptr<Context>)
 
 +--------+------------------------------------------------------------------------+
 +argument+argument type                                                           +
@@ -5087,7 +5119,7 @@ patch returns bool
 it defines as follows
 
 
-.. das:function:: AstPassMacro.apply(self: AstPassMacro; prog: ProgramPtr; mod: rtti::Module? const)
+.. das:function:: AstPassMacro.apply(self: AstPassMacro; prog: ProgramPtr; mod: Module? const)
 
 apply returns bool
 
@@ -5113,9 +5145,9 @@ apply returns bool
 it defines as follows
 
 
-.. das:function:: AstVariantMacro.visitExprIsVariant(self: AstVariantMacro; prog: ProgramPtr; mod: rtti::Module? const; expr: smart_ptr<ast::ExprIsVariant> const)
+.. das:function:: AstVariantMacro.visitExprIsVariant(self: AstVariantMacro; prog: ProgramPtr; mod: Module? const; expr: smart_ptr<ExprIsVariant> const)
 
-visitExprIsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprIsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -5132,9 +5164,9 @@ visitExprIsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVariantMacro.visitExprIsVariant|
 
-.. das:function:: AstVariantMacro.visitExprAsVariant(self: AstVariantMacro; prog: ProgramPtr; mod: rtti::Module? const; expr: smart_ptr<ast::ExprAsVariant> const)
+.. das:function:: AstVariantMacro.visitExprAsVariant(self: AstVariantMacro; prog: ProgramPtr; mod: Module? const; expr: smart_ptr<ExprAsVariant> const)
 
-visitExprAsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprAsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -5151,9 +5183,9 @@ visitExprAsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVariantMacro.visitExprAsVariant|
 
-.. das:function:: AstVariantMacro.visitExprSafeAsVariant(self: AstVariantMacro; prog: ProgramPtr; mod: rtti::Module? const; expr: smart_ptr<ast::ExprSafeAsVariant> const)
+.. das:function:: AstVariantMacro.visitExprSafeAsVariant(self: AstVariantMacro; prog: ProgramPtr; mod: Module? const; expr: smart_ptr<ExprSafeAsVariant> const)
 
-visitExprSafeAsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprSafeAsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-------------------------------------------------------------------------------+
 +argument+argument type                                                                  +
@@ -5179,9 +5211,9 @@ visitExprSafeAsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 it defines as follows
 
 
-.. das:function:: AstForLoopMacro.visitExprFor(self: AstForLoopMacro; prog: ProgramPtr; mod: rtti::Module? const; expr: smart_ptr<ast::ExprFor> const)
+.. das:function:: AstForLoopMacro.visitExprFor(self: AstForLoopMacro; prog: ProgramPtr; mod: Module? const; expr: smart_ptr<ExprFor> const)
 
-visitExprFor returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprFor returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -5207,9 +5239,9 @@ visitExprFor returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 it defines as follows
 
 
-.. das:function:: AstCaptureMacro.captureExpression(self: AstCaptureMacro; prog: rtti::Program? const; mod: rtti::Module? const; expr: ExpressionPtr; etype: TypeDeclPtr)
+.. das:function:: AstCaptureMacro.captureExpression(self: AstCaptureMacro; prog: Program? const; mod: Module? const; expr: ExpressionPtr; etype: TypeDeclPtr)
 
-captureExpression returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+captureExpression returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+----------------------------------------------------------+
 +argument+argument type                                             +
@@ -5228,7 +5260,7 @@ captureExpression returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstCaptureMacro.captureExpression|
 
-.. das:function:: AstCaptureMacro.captureFunction(self: AstCaptureMacro; prog: rtti::Program? const; mod: rtti::Module? const; lcs: ast::Structure?; fun: FunctionPtr)
+.. das:function:: AstCaptureMacro.captureFunction(self: AstCaptureMacro; prog: Program? const; mod: Module? const; lcs: Structure?; fun: FunctionPtr)
 
 +--------+----------------------------------------------------------+
 +argument+argument type                                             +
@@ -5256,7 +5288,7 @@ captureExpression returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 it defines as follows
 
 
-.. das:function:: AstSimulateMacro.preSimulate(self: AstSimulateMacro; prog: rtti::Program? const; ctx: rtti::Context? const)
+.. das:function:: AstSimulateMacro.preSimulate(self: AstSimulateMacro; prog: Program? const; ctx: Context? const)
 
 preSimulate returns bool
 
@@ -5273,7 +5305,7 @@ preSimulate returns bool
 
 |method-ast-AstSimulateMacro.preSimulate|
 
-.. das:function:: AstSimulateMacro.simulate(self: AstSimulateMacro; prog: rtti::Program? const; ctx: rtti::Context? const)
+.. das:function:: AstSimulateMacro.simulate(self: AstSimulateMacro; prog: Program? const; ctx: Context? const)
 
 simulate returns bool
 
@@ -5299,7 +5331,7 @@ simulate returns bool
 it defines as follows
 
 
-.. das:function:: AstReaderMacro.accept(self: AstReaderMacro; prog: ProgramPtr; mod: rtti::Module? const; expr: ast::ExprReader? const; ch: int const; info: LineInfo const)
+.. das:function:: AstReaderMacro.accept(self: AstReaderMacro; prog: ProgramPtr; mod: Module? const; expr: ExprReader? const; ch: int const; info: LineInfo const)
 
 accept returns bool
 
@@ -5322,9 +5354,34 @@ accept returns bool
 
 |method-ast-AstReaderMacro.accept|
 
-.. das:function:: AstReaderMacro.visit(self: AstReaderMacro; prog: ProgramPtr; mod: rtti::Module? const; expr: smart_ptr<ast::ExprReader> const)
+.. das:function:: AstReaderMacro.suffix(self: AstReaderMacro; prog: ProgramPtr; mod: Module? const; expr: ExprReader? const; info: LineInfo const; outLine: int&; outFile: FileInfo?&)
 
-visit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+suffix returns string
+
++--------+--------------------------------------------------------+
++argument+argument type                                           +
++========+========================================================+
++self    + :ref:`ast::AstReaderMacro <struct-ast-AstReaderMacro>` +
++--------+--------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                   +
++--------+--------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const       +
++--------+--------------------------------------------------------+
++expr    + :ref:`ast::ExprReader <handle-ast-ExprReader>` ? const +
++--------+--------------------------------------------------------+
++info    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const    +
++--------+--------------------------------------------------------+
++outLine +int&                                                    +
++--------+--------------------------------------------------------+
++outFile + :ref:`rtti::FileInfo <handle-rtti-FileInfo>` ?&        +
++--------+--------------------------------------------------------+
+
+
+|method-ast-AstReaderMacro.suffix|
+
+.. das:function:: AstReaderMacro.visit(self: AstReaderMacro; prog: ProgramPtr; mod: Module? const; expr: smart_ptr<ExprReader> const)
+
+visit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-----------------------------------------------------------------+
 +argument+argument type                                                    +
@@ -5350,7 +5407,7 @@ visit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 it defines as follows
 
 
-.. das:function:: AstCommentReader.open(self: AstCommentReader; prog: ProgramPtr; mod: rtti::Module? const; cpp: bool const; info: LineInfo const)
+.. das:function:: AstCommentReader.open(self: AstCommentReader; prog: ProgramPtr; mod: Module? const; cpp: bool const; info: LineInfo const)
 
 +--------+------------------------------------------------------------+
 +argument+argument type                                               +
@@ -5369,7 +5426,7 @@ it defines as follows
 
 |method-ast-AstCommentReader.open|
 
-.. das:function:: AstCommentReader.accept(self: AstCommentReader; prog: ProgramPtr; mod: rtti::Module? const; ch: int const; info: LineInfo const)
+.. das:function:: AstCommentReader.accept(self: AstCommentReader; prog: ProgramPtr; mod: Module? const; ch: int const; info: LineInfo const)
 
 +--------+------------------------------------------------------------+
 +argument+argument type                                               +
@@ -5388,7 +5445,7 @@ it defines as follows
 
 |method-ast-AstCommentReader.accept|
 
-.. das:function:: AstCommentReader.close(self: AstCommentReader; prog: ProgramPtr; mod: rtti::Module? const; info: LineInfo const)
+.. das:function:: AstCommentReader.close(self: AstCommentReader; prog: ProgramPtr; mod: Module? const; info: LineInfo const)
 
 +--------+------------------------------------------------------------+
 +argument+argument type                                               +
@@ -5405,7 +5462,7 @@ it defines as follows
 
 |method-ast-AstCommentReader.close|
 
-.. das:function:: AstCommentReader.beforeStructure(self: AstCommentReader; prog: ProgramPtr; mod: rtti::Module? const; info: LineInfo const)
+.. das:function:: AstCommentReader.beforeStructure(self: AstCommentReader; prog: ProgramPtr; mod: Module? const; info: LineInfo const)
 
 +--------+------------------------------------------------------------+
 +argument+argument type                                               +
@@ -5422,7 +5479,7 @@ it defines as follows
 
 |method-ast-AstCommentReader.beforeStructure|
 
-.. das:function:: AstCommentReader.afterStructure(self: AstCommentReader; st: StructurePtr; prog: ProgramPtr; mod: rtti::Module? const; info: LineInfo const)
+.. das:function:: AstCommentReader.afterStructure(self: AstCommentReader; st: StructurePtr; prog: ProgramPtr; mod: Module? const; info: LineInfo const)
 
 +--------+------------------------------------------------------------+
 +argument+argument type                                               +
@@ -5441,7 +5498,7 @@ it defines as follows
 
 |method-ast-AstCommentReader.afterStructure|
 
-.. das:function:: AstCommentReader.beforeStructureFields(self: AstCommentReader; prog: ProgramPtr; mod: rtti::Module? const; info: LineInfo const)
+.. das:function:: AstCommentReader.beforeStructureFields(self: AstCommentReader; prog: ProgramPtr; mod: Module? const; info: LineInfo const)
 
 +--------+------------------------------------------------------------+
 +argument+argument type                                               +
@@ -5458,7 +5515,7 @@ it defines as follows
 
 |method-ast-AstCommentReader.beforeStructureFields|
 
-.. das:function:: AstCommentReader.afterStructureField(self: AstCommentReader; name: string const; prog: ProgramPtr; mod: rtti::Module? const; info: LineInfo const)
+.. das:function:: AstCommentReader.afterStructureField(self: AstCommentReader; name: string const; prog: ProgramPtr; mod: Module? const; info: LineInfo const)
 
 +--------+------------------------------------------------------------+
 +argument+argument type                                               +
@@ -5477,7 +5534,7 @@ it defines as follows
 
 |method-ast-AstCommentReader.afterStructureField|
 
-.. das:function:: AstCommentReader.afterStructureFields(self: AstCommentReader; prog: ProgramPtr; mod: rtti::Module? const; info: LineInfo const)
+.. das:function:: AstCommentReader.afterStructureFields(self: AstCommentReader; prog: ProgramPtr; mod: Module? const; info: LineInfo const)
 
 +--------+------------------------------------------------------------+
 +argument+argument type                                               +
@@ -5494,7 +5551,7 @@ it defines as follows
 
 |method-ast-AstCommentReader.afterStructureFields|
 
-.. das:function:: AstCommentReader.beforeFunction(self: AstCommentReader; prog: ProgramPtr; mod: rtti::Module? const; info: LineInfo const)
+.. das:function:: AstCommentReader.beforeFunction(self: AstCommentReader; prog: ProgramPtr; mod: Module? const; info: LineInfo const)
 
 +--------+------------------------------------------------------------+
 +argument+argument type                                               +
@@ -5511,7 +5568,7 @@ it defines as follows
 
 |method-ast-AstCommentReader.beforeFunction|
 
-.. das:function:: AstCommentReader.afterFunction(self: AstCommentReader; fn: FunctionPtr; prog: ProgramPtr; mod: rtti::Module? const; info: LineInfo const)
+.. das:function:: AstCommentReader.afterFunction(self: AstCommentReader; fn: FunctionPtr; prog: ProgramPtr; mod: Module? const; info: LineInfo const)
 
 +--------+------------------------------------------------------------+
 +argument+argument type                                               +
@@ -5530,7 +5587,7 @@ it defines as follows
 
 |method-ast-AstCommentReader.afterFunction|
 
-.. das:function:: AstCommentReader.beforeGlobalVariables(self: AstCommentReader; prog: ProgramPtr; mod: rtti::Module? const; info: LineInfo const)
+.. das:function:: AstCommentReader.beforeGlobalVariables(self: AstCommentReader; prog: ProgramPtr; mod: Module? const; info: LineInfo const)
 
 +--------+------------------------------------------------------------+
 +argument+argument type                                               +
@@ -5547,7 +5604,7 @@ it defines as follows
 
 |method-ast-AstCommentReader.beforeGlobalVariables|
 
-.. das:function:: AstCommentReader.afterGlobalVariable(self: AstCommentReader; name: string const; prog: ProgramPtr; mod: rtti::Module? const; info: LineInfo const)
+.. das:function:: AstCommentReader.afterGlobalVariable(self: AstCommentReader; name: string const; prog: ProgramPtr; mod: Module? const; info: LineInfo const)
 
 +--------+------------------------------------------------------------+
 +argument+argument type                                               +
@@ -5566,7 +5623,7 @@ it defines as follows
 
 |method-ast-AstCommentReader.afterGlobalVariable|
 
-.. das:function:: AstCommentReader.afterGlobalVariables(self: AstCommentReader; prog: ProgramPtr; mod: rtti::Module? const; info: LineInfo const)
+.. das:function:: AstCommentReader.afterGlobalVariables(self: AstCommentReader; prog: ProgramPtr; mod: Module? const; info: LineInfo const)
 
 +--------+------------------------------------------------------------+
 +argument+argument type                                               +
@@ -5583,7 +5640,7 @@ it defines as follows
 
 |method-ast-AstCommentReader.afterGlobalVariables|
 
-.. das:function:: AstCommentReader.beforeVariant(self: AstCommentReader; prog: ProgramPtr; mod: rtti::Module? const; info: LineInfo const)
+.. das:function:: AstCommentReader.beforeVariant(self: AstCommentReader; prog: ProgramPtr; mod: Module? const; info: LineInfo const)
 
 +--------+------------------------------------------------------------+
 +argument+argument type                                               +
@@ -5600,7 +5657,60 @@ it defines as follows
 
 |method-ast-AstCommentReader.beforeVariant|
 
-.. das:function:: AstCommentReader.afterVariant(self: AstCommentReader; name: string const; prog: ProgramPtr; mod: rtti::Module? const; info: LineInfo const)
+.. das:function:: AstCommentReader.beforeVariantEntries(self: AstCommentReader; prog: ProgramPtr; mod: Module? const; info: LineInfo const)
+
++--------+------------------------------------------------------------+
++argument+argument type                                               +
++========+============================================================+
++self    + :ref:`ast::AstCommentReader <struct-ast-AstCommentReader>` +
++--------+------------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                       +
++--------+------------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const           +
++--------+------------------------------------------------------------+
++info    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const        +
++--------+------------------------------------------------------------+
+
+
+|method-ast-AstCommentReader.beforeVariantEntries|
+
+.. das:function:: AstCommentReader.afterVariantEntry(self: AstCommentReader; name: string const; prog: ProgramPtr; mod: Module? const; info: LineInfo const)
+
++--------+------------------------------------------------------------+
++argument+argument type                                               +
++========+============================================================+
++self    + :ref:`ast::AstCommentReader <struct-ast-AstCommentReader>` +
++--------+------------------------------------------------------------+
++name    +string const                                                +
++--------+------------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                       +
++--------+------------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const           +
++--------+------------------------------------------------------------+
++info    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const        +
++--------+------------------------------------------------------------+
+
+
+|method-ast-AstCommentReader.afterVariantEntry|
+
+.. das:function:: AstCommentReader.afterVariantEntries(self: AstCommentReader; prog: ProgramPtr; mod: Module? const; info: LineInfo const)
+
++--------+------------------------------------------------------------+
++argument+argument type                                               +
++========+============================================================+
++self    + :ref:`ast::AstCommentReader <struct-ast-AstCommentReader>` +
++--------+------------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                       +
++--------+------------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const           +
++--------+------------------------------------------------------------+
++info    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const        +
++--------+------------------------------------------------------------+
+
+
+|method-ast-AstCommentReader.afterVariantEntries|
+
+.. das:function:: AstCommentReader.afterVariant(self: AstCommentReader; name: string const; prog: ProgramPtr; mod: Module? const; info: LineInfo const)
 
 +--------+------------------------------------------------------------+
 +argument+argument type                                               +
@@ -5619,7 +5729,96 @@ it defines as follows
 
 |method-ast-AstCommentReader.afterVariant|
 
-.. das:function:: AstCommentReader.beforeEnumeration(self: AstCommentReader; prog: ProgramPtr; mod: rtti::Module? const; info: LineInfo const)
+.. das:function:: AstCommentReader.beforeBitfield(self: AstCommentReader; prog: ProgramPtr; mod: Module? const; info: LineInfo const)
+
++--------+------------------------------------------------------------+
++argument+argument type                                               +
++========+============================================================+
++self    + :ref:`ast::AstCommentReader <struct-ast-AstCommentReader>` +
++--------+------------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                       +
++--------+------------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const           +
++--------+------------------------------------------------------------+
++info    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const        +
++--------+------------------------------------------------------------+
+
+
+|method-ast-AstCommentReader.beforeBitfield|
+
+.. das:function:: AstCommentReader.beforeBitfieldEntries(self: AstCommentReader; prog: ProgramPtr; mod: Module? const; info: LineInfo const)
+
++--------+------------------------------------------------------------+
++argument+argument type                                               +
++========+============================================================+
++self    + :ref:`ast::AstCommentReader <struct-ast-AstCommentReader>` +
++--------+------------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                       +
++--------+------------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const           +
++--------+------------------------------------------------------------+
++info    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const        +
++--------+------------------------------------------------------------+
+
+
+|method-ast-AstCommentReader.beforeBitfieldEntries|
+
+.. das:function:: AstCommentReader.afterBitfieldEntry(self: AstCommentReader; name: string const; prog: ProgramPtr; mod: Module? const; info: LineInfo const)
+
++--------+------------------------------------------------------------+
++argument+argument type                                               +
++========+============================================================+
++self    + :ref:`ast::AstCommentReader <struct-ast-AstCommentReader>` +
++--------+------------------------------------------------------------+
++name    +string const                                                +
++--------+------------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                       +
++--------+------------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const           +
++--------+------------------------------------------------------------+
++info    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const        +
++--------+------------------------------------------------------------+
+
+
+|method-ast-AstCommentReader.afterBitfieldEntry|
+
+.. das:function:: AstCommentReader.afterBitfieldEntries(self: AstCommentReader; prog: ProgramPtr; mod: Module? const; info: LineInfo const)
+
++--------+------------------------------------------------------------+
++argument+argument type                                               +
++========+============================================================+
++self    + :ref:`ast::AstCommentReader <struct-ast-AstCommentReader>` +
++--------+------------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                       +
++--------+------------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const           +
++--------+------------------------------------------------------------+
++info    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const        +
++--------+------------------------------------------------------------+
+
+
+|method-ast-AstCommentReader.afterBitfieldEntries|
+
+.. das:function:: AstCommentReader.afterBitfield(self: AstCommentReader; name: string const; prog: ProgramPtr; mod: Module? const; info: LineInfo const)
+
++--------+------------------------------------------------------------+
++argument+argument type                                               +
++========+============================================================+
++self    + :ref:`ast::AstCommentReader <struct-ast-AstCommentReader>` +
++--------+------------------------------------------------------------+
++name    +string const                                                +
++--------+------------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                       +
++--------+------------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const           +
++--------+------------------------------------------------------------+
++info    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const        +
++--------+------------------------------------------------------------+
+
+
+|method-ast-AstCommentReader.afterBitfield|
+
+.. das:function:: AstCommentReader.beforeEnumeration(self: AstCommentReader; prog: ProgramPtr; mod: Module? const; info: LineInfo const)
 
 +--------+------------------------------------------------------------+
 +argument+argument type                                               +
@@ -5636,7 +5835,60 @@ it defines as follows
 
 |method-ast-AstCommentReader.beforeEnumeration|
 
-.. das:function:: AstCommentReader.afterEnumeration(self: AstCommentReader; name: string const; prog: ProgramPtr; mod: rtti::Module? const; info: LineInfo const)
+.. das:function:: AstCommentReader.beforeEnumerationEntries(self: AstCommentReader; prog: ProgramPtr; mod: Module? const; info: LineInfo const)
+
++--------+------------------------------------------------------------+
++argument+argument type                                               +
++========+============================================================+
++self    + :ref:`ast::AstCommentReader <struct-ast-AstCommentReader>` +
++--------+------------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                       +
++--------+------------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const           +
++--------+------------------------------------------------------------+
++info    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const        +
++--------+------------------------------------------------------------+
+
+
+|method-ast-AstCommentReader.beforeEnumerationEntries|
+
+.. das:function:: AstCommentReader.afterEnumerationEntry(self: AstCommentReader; name: string const; prog: ProgramPtr; mod: Module? const; info: LineInfo const)
+
++--------+------------------------------------------------------------+
++argument+argument type                                               +
++========+============================================================+
++self    + :ref:`ast::AstCommentReader <struct-ast-AstCommentReader>` +
++--------+------------------------------------------------------------+
++name    +string const                                                +
++--------+------------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                       +
++--------+------------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const           +
++--------+------------------------------------------------------------+
++info    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const        +
++--------+------------------------------------------------------------+
+
+
+|method-ast-AstCommentReader.afterEnumerationEntry|
+
+.. das:function:: AstCommentReader.afterEnumerationEntries(self: AstCommentReader; prog: ProgramPtr; mod: Module? const; info: LineInfo const)
+
++--------+------------------------------------------------------------+
++argument+argument type                                               +
++========+============================================================+
++self    + :ref:`ast::AstCommentReader <struct-ast-AstCommentReader>` +
++--------+------------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                       +
++--------+------------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const           +
++--------+------------------------------------------------------------+
++info    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const        +
++--------+------------------------------------------------------------+
+
+
+|method-ast-AstCommentReader.afterEnumerationEntries|
+
+.. das:function:: AstCommentReader.afterEnumeration(self: AstCommentReader; name: string const; prog: ProgramPtr; mod: Module? const; info: LineInfo const)
 
 +--------+------------------------------------------------------------+
 +argument+argument type                                               +
@@ -5655,7 +5907,7 @@ it defines as follows
 
 |method-ast-AstCommentReader.afterEnumeration|
 
-.. das:function:: AstCommentReader.beforeAlias(self: AstCommentReader; prog: ProgramPtr; mod: rtti::Module? const; info: LineInfo const)
+.. das:function:: AstCommentReader.beforeAlias(self: AstCommentReader; prog: ProgramPtr; mod: Module? const; info: LineInfo const)
 
 +--------+------------------------------------------------------------+
 +argument+argument type                                               +
@@ -5672,7 +5924,7 @@ it defines as follows
 
 |method-ast-AstCommentReader.beforeAlias|
 
-.. das:function:: AstCommentReader.afterAlias(self: AstCommentReader; name: string const; prog: ProgramPtr; mod: rtti::Module? const; info: LineInfo const)
+.. das:function:: AstCommentReader.afterAlias(self: AstCommentReader; name: string const; prog: ProgramPtr; mod: Module? const; info: LineInfo const)
 
 +--------+------------------------------------------------------------+
 +argument+argument type                                               +
@@ -5700,7 +5952,7 @@ it defines as follows
 it defines as follows
 
 
-.. das:function:: AstCallMacro.preVisit(self: AstCallMacro; prog: ProgramPtr; mod: rtti::Module? const; expr: smart_ptr<ast::ExprCallMacro> const)
+.. das:function:: AstCallMacro.preVisit(self: AstCallMacro; prog: ProgramPtr; mod: Module? const; expr: smart_ptr<ExprCallMacro> const)
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -5717,9 +5969,9 @@ it defines as follows
 
 |method-ast-AstCallMacro.preVisit|
 
-.. das:function:: AstCallMacro.visit(self: AstCallMacro; prog: ProgramPtr; mod: rtti::Module? const; expr: smart_ptr<ast::ExprCallMacro> const)
+.. das:function:: AstCallMacro.visit(self: AstCallMacro; prog: ProgramPtr; mod: Module? const; expr: smart_ptr<ExprCallMacro> const)
 
-visit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -5736,7 +5988,7 @@ visit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstCallMacro.visit|
 
-.. das:function:: AstCallMacro.canVisitArgument(self: AstCallMacro; expr: smart_ptr<ast::ExprCallMacro> const; argIndex: int const)
+.. das:function:: AstCallMacro.canVisitArgument(self: AstCallMacro; expr: smart_ptr<ExprCallMacro> const; argIndex: int const)
 
 canVisitArgument returns bool
 
@@ -5753,7 +6005,7 @@ canVisitArgument returns bool
 
 |method-ast-AstCallMacro.canVisitArgument|
 
-.. das:function:: AstCallMacro.canFoldReturnResult(self: AstCallMacro; expr: smart_ptr<ast::ExprCallMacro> const)
+.. das:function:: AstCallMacro.canFoldReturnResult(self: AstCallMacro; expr: smart_ptr<ExprCallMacro> const)
 
 canFoldReturnResult returns bool
 
@@ -5777,9 +6029,9 @@ canFoldReturnResult returns bool
 it defines as follows
 
 
-.. das:function:: AstTypeInfoMacro.getAstChange(self: AstTypeInfoMacro; expr: smart_ptr<ast::ExprTypeInfo> const; errors: das_string)
+.. das:function:: AstTypeInfoMacro.getAstChange(self: AstTypeInfoMacro; expr: smart_ptr<ExprTypeInfo> const; errors: das_string)
 
-getAstChange returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+getAstChange returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+---------------------------------------------------------------------+
 +argument+argument type                                                        +
@@ -5794,9 +6046,9 @@ getAstChange returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstTypeInfoMacro.getAstChange|
 
-.. das:function:: AstTypeInfoMacro.getAstType(self: AstTypeInfoMacro; lib: ModuleLibrary; expr: smart_ptr<ast::ExprTypeInfo> const; errors: das_string)
+.. das:function:: AstTypeInfoMacro.getAstType(self: AstTypeInfoMacro; lib: ModuleLibrary; expr: smart_ptr<ExprTypeInfo> const; errors: das_string)
 
-getAstType returns  :ref:`TypeDeclPtr <alias-TypeDeclPtr>`
+getAstType returns  :ref:`TypeDeclPtr <alias-TypeDeclPtr>` 
 
 +--------+---------------------------------------------------------------------+
 +argument+argument type                                                        +
@@ -5878,7 +6130,7 @@ it defines as follows
 
 |method-ast-AstVisitor.visitProgram|
 
-.. das:function:: AstVisitor.preVisitProgramBody(self: AstVisitor; prog: ProgramPtr; mod: rtti::Module? const)
+.. das:function:: AstVisitor.preVisitProgramBody(self: AstVisitor; prog: ProgramPtr; mod: Module? const)
 
 +--------+-------------------------------------------------+
 +argument+argument type                                    +
@@ -5893,7 +6145,7 @@ it defines as follows
 
 |method-ast-AstVisitor.preVisitProgramBody|
 
-.. das:function:: AstVisitor.preVisitModule(self: AstVisitor; mod: rtti::Module? const)
+.. das:function:: AstVisitor.preVisitModule(self: AstVisitor; mod: Module? const)
 
 +--------+-------------------------------------------------+
 +argument+argument type                                    +
@@ -5906,7 +6158,7 @@ it defines as follows
 
 |method-ast-AstVisitor.preVisitModule|
 
-.. das:function:: AstVisitor.visitModule(self: AstVisitor; mod: rtti::Module? const)
+.. das:function:: AstVisitor.visitModule(self: AstVisitor; mod: Module? const)
 
 +--------+-------------------------------------------------+
 +argument+argument type                                    +
@@ -5919,7 +6171,7 @@ it defines as follows
 
 |method-ast-AstVisitor.visitModule|
 
-.. das:function:: AstVisitor.preVisitExprTypeDecl(self: AstVisitor; expr: smart_ptr<ast::ExprTypeDecl> const)
+.. das:function:: AstVisitor.preVisitExprTypeDecl(self: AstVisitor; expr: smart_ptr<ExprTypeDecl> const)
 
 +--------+---------------------------------------------------------------------+
 +argument+argument type                                                        +
@@ -5932,9 +6184,9 @@ it defines as follows
 
 |method-ast-AstVisitor.preVisitExprTypeDecl|
 
-.. das:function:: AstVisitor.visitExprTypeDecl(self: AstVisitor; expr: smart_ptr<ast::ExprTypeDecl> const)
+.. das:function:: AstVisitor.visitExprTypeDecl(self: AstVisitor; expr: smart_ptr<ExprTypeDecl> const)
 
-visitExprTypeDecl returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprTypeDecl returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+---------------------------------------------------------------------+
 +argument+argument type                                                        +
@@ -5962,7 +6214,7 @@ visitExprTypeDecl returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitTypeDecl(self: AstVisitor; typ: TypeDeclPtr)
 
-visitTypeDecl returns  :ref:`TypeDeclPtr <alias-TypeDeclPtr>`
+visitTypeDecl returns  :ref:`TypeDeclPtr <alias-TypeDeclPtr>` 
 
 +--------+------------------------------------------------+
 +argument+argument type                                   +
@@ -5992,7 +6244,7 @@ visitTypeDecl returns  :ref:`TypeDeclPtr <alias-TypeDeclPtr>`
 
 .. das:function:: AstVisitor.visitAlias(self: AstVisitor; typ: TypeDeclPtr; name: das_string const)
 
-visitAlias returns  :ref:`TypeDeclPtr <alias-TypeDeclPtr>`
+visitAlias returns  :ref:`TypeDeclPtr <alias-TypeDeclPtr>` 
 
 +--------+--------------------------------------------------------------+
 +argument+argument type                                                 +
@@ -6007,7 +6259,7 @@ visitAlias returns  :ref:`TypeDeclPtr <alias-TypeDeclPtr>`
 
 |method-ast-AstVisitor.visitAlias|
 
-.. das:function:: AstVisitor.canVisitEnumeration(self: AstVisitor; arg: ast::Enumeration? const)
+.. das:function:: AstVisitor.canVisitEnumeration(self: AstVisitor; arg: Enumeration? const)
 
 canVisitEnumeration returns bool
 
@@ -6056,7 +6308,7 @@ canVisitEnumeration returns bool
 
 .. das:function:: AstVisitor.visitEnumerationValue(self: AstVisitor; enu: EnumerationPtr; name: das_string const; value: ExpressionPtr; last: bool const)
 
-visitEnumerationValue returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitEnumerationValue returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+--------------------------------------------------------------+
 +argument+argument type                                                 +
@@ -6077,7 +6329,7 @@ visitEnumerationValue returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitEnumeration(self: AstVisitor; enu: EnumerationPtr)
 
-visitEnumeration returns  :ref:`EnumerationPtr <alias-EnumerationPtr>`
+visitEnumeration returns  :ref:`EnumerationPtr <alias-EnumerationPtr>` 
 
 +--------+------------------------------------------------+
 +argument+argument type                                   +
@@ -6090,7 +6342,7 @@ visitEnumeration returns  :ref:`EnumerationPtr <alias-EnumerationPtr>`
 
 |method-ast-AstVisitor.visitEnumeration|
 
-.. das:function:: AstVisitor.canVisitStructure(self: AstVisitor; arg: ast::Structure? const)
+.. das:function:: AstVisitor.canVisitStructure(self: AstVisitor; arg: Structure? const)
 
 canVisitStructure returns bool
 
@@ -6154,7 +6406,7 @@ canVisitStructure returns bool
 
 .. das:function:: AstVisitor.visitStructure(self: AstVisitor; str: StructurePtr)
 
-visitStructure returns  :ref:`StructurePtr <alias-StructurePtr>`
+visitStructure returns  :ref:`StructurePtr <alias-StructurePtr>` 
 
 +--------+------------------------------------------------+
 +argument+argument type                                   +
@@ -6167,7 +6419,7 @@ visitStructure returns  :ref:`StructurePtr <alias-StructurePtr>`
 
 |method-ast-AstVisitor.visitStructure|
 
-.. das:function:: AstVisitor.canVisitFunction(self: AstVisitor; fun: ast::Function? const)
+.. das:function:: AstVisitor.canVisitFunction(self: AstVisitor; fun: Function? const)
 
 canVisitFunction returns bool
 
@@ -6182,7 +6434,7 @@ canVisitFunction returns bool
 
 |method-ast-AstVisitor.canVisitFunction|
 
-.. das:function:: AstVisitor.canVisitFunctionArgumentInit(self: AstVisitor; fun: ast::Function? const; arg: VariablePtr; value: ExpressionPtr)
+.. das:function:: AstVisitor.canVisitFunctionArgumentInit(self: AstVisitor; fun: Function? const; arg: VariablePtr; value: ExpressionPtr)
 
 canVisitFunctionArgumentInit returns bool
 
@@ -6216,7 +6468,7 @@ canVisitFunctionArgumentInit returns bool
 
 .. das:function:: AstVisitor.visitFunction(self: AstVisitor; fun: FunctionPtr)
 
-visitFunction returns  :ref:`FunctionPtr <alias-FunctionPtr>`
+visitFunction returns  :ref:`FunctionPtr <alias-FunctionPtr>` 
 
 +--------+------------------------------------------------+
 +argument+argument type                                   +
@@ -6248,7 +6500,7 @@ visitFunction returns  :ref:`FunctionPtr <alias-FunctionPtr>`
 
 .. das:function:: AstVisitor.visitFunctionArgument(self: AstVisitor; fun: FunctionPtr; arg: VariablePtr; lastArg: bool const)
 
-visitFunctionArgument returns  :ref:`VariablePtr <alias-VariablePtr>`
+visitFunctionArgument returns  :ref:`VariablePtr <alias-VariablePtr>` 
 
 +--------+------------------------------------------------+
 +argument+argument type                                   +
@@ -6284,7 +6536,7 @@ visitFunctionArgument returns  :ref:`VariablePtr <alias-VariablePtr>`
 
 .. das:function:: AstVisitor.visitFunctionArgumentInit(self: AstVisitor; fun: FunctionPtr; arg: VariablePtr; value: ExpressionPtr)
 
-visitFunctionArgumentInit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitFunctionArgumentInit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+------------------------------------------------+
 +argument+argument type                                   +
@@ -6318,7 +6570,7 @@ visitFunctionArgumentInit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitFunctionBody(self: AstVisitor; fun: FunctionPtr; expr: ExpressionPtr)
 
-visitFunctionBody returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitFunctionBody returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+------------------------------------------------+
 +argument+argument type                                   +
@@ -6348,7 +6600,7 @@ visitFunctionBody returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 .. das:function:: AstVisitor.visitExpression(self: AstVisitor; expr: ExpressionPtr)
 
-visitExpression returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExpression returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+------------------------------------------------+
 +argument+argument type                                   +
@@ -6361,7 +6613,7 @@ visitExpression returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExpression|
 
-.. das:function:: AstVisitor.preVisitExprBlock(self: AstVisitor; blk: smart_ptr<ast::ExprBlock> const)
+.. das:function:: AstVisitor.preVisitExprBlock(self: AstVisitor; blk: smart_ptr<ExprBlock> const)
 
 +--------+---------------------------------------------------------------+
 +argument+argument type                                                  +
@@ -6374,9 +6626,9 @@ visitExpression returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprBlock|
 
-.. das:function:: AstVisitor.visitExprBlock(self: AstVisitor; blk: smart_ptr<ast::ExprBlock> const)
+.. das:function:: AstVisitor.visitExprBlock(self: AstVisitor; blk: smart_ptr<ExprBlock> const)
 
-visitExprBlock returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprBlock returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+---------------------------------------------------------------+
 +argument+argument type                                                  +
@@ -6389,7 +6641,7 @@ visitExprBlock returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprBlock|
 
-.. das:function:: AstVisitor.preVisitExprBlockArgument(self: AstVisitor; blk: smart_ptr<ast::ExprBlock> const; arg: VariablePtr; lastArg: bool const)
+.. das:function:: AstVisitor.preVisitExprBlockArgument(self: AstVisitor; blk: smart_ptr<ExprBlock> const; arg: VariablePtr; lastArg: bool const)
 
 +--------+---------------------------------------------------------------+
 +argument+argument type                                                  +
@@ -6406,9 +6658,9 @@ visitExprBlock returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprBlockArgument|
 
-.. das:function:: AstVisitor.visitExprBlockArgument(self: AstVisitor; blk: smart_ptr<ast::ExprBlock> const; arg: VariablePtr; lastArg: bool const)
+.. das:function:: AstVisitor.visitExprBlockArgument(self: AstVisitor; blk: smart_ptr<ExprBlock> const; arg: VariablePtr; lastArg: bool const)
 
-visitExprBlockArgument returns  :ref:`VariablePtr <alias-VariablePtr>`
+visitExprBlockArgument returns  :ref:`VariablePtr <alias-VariablePtr>` 
 
 +--------+---------------------------------------------------------------+
 +argument+argument type                                                  +
@@ -6425,7 +6677,7 @@ visitExprBlockArgument returns  :ref:`VariablePtr <alias-VariablePtr>`
 
 |method-ast-AstVisitor.visitExprBlockArgument|
 
-.. das:function:: AstVisitor.preVisitExprBlockArgumentInit(self: AstVisitor; blk: smart_ptr<ast::ExprBlock> const; arg: VariablePtr; expr: ExpressionPtr)
+.. das:function:: AstVisitor.preVisitExprBlockArgumentInit(self: AstVisitor; blk: smart_ptr<ExprBlock> const; arg: VariablePtr; expr: ExpressionPtr)
 
 +--------+---------------------------------------------------------------+
 +argument+argument type                                                  +
@@ -6442,9 +6694,9 @@ visitExprBlockArgument returns  :ref:`VariablePtr <alias-VariablePtr>`
 
 |method-ast-AstVisitor.preVisitExprBlockArgumentInit|
 
-.. das:function:: AstVisitor.visitExprBlockArgumentInit(self: AstVisitor; blk: smart_ptr<ast::ExprBlock> const; arg: VariablePtr; expr: ExpressionPtr)
+.. das:function:: AstVisitor.visitExprBlockArgumentInit(self: AstVisitor; blk: smart_ptr<ExprBlock> const; arg: VariablePtr; expr: ExpressionPtr)
 
-visitExprBlockArgumentInit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprBlockArgumentInit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+---------------------------------------------------------------+
 +argument+argument type                                                  +
@@ -6461,7 +6713,7 @@ visitExprBlockArgumentInit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprBlockArgumentInit|
 
-.. das:function:: AstVisitor.preVisitExprBlockExpression(self: AstVisitor; blk: smart_ptr<ast::ExprBlock> const; expr: ExpressionPtr)
+.. das:function:: AstVisitor.preVisitExprBlockExpression(self: AstVisitor; blk: smart_ptr<ExprBlock> const; expr: ExpressionPtr)
 
 +--------+---------------------------------------------------------------+
 +argument+argument type                                                  +
@@ -6476,9 +6728,9 @@ visitExprBlockArgumentInit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprBlockExpression|
 
-.. das:function:: AstVisitor.visitExprBlockExpression(self: AstVisitor; blk: smart_ptr<ast::ExprBlock> const; expr: ExpressionPtr)
+.. das:function:: AstVisitor.visitExprBlockExpression(self: AstVisitor; blk: smart_ptr<ExprBlock> const; expr: ExpressionPtr)
 
-visitExprBlockExpression returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprBlockExpression returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+---------------------------------------------------------------+
 +argument+argument type                                                  +
@@ -6493,7 +6745,7 @@ visitExprBlockExpression returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprBlockExpression|
 
-.. das:function:: AstVisitor.preVisitExprBlockFinal(self: AstVisitor; blk: smart_ptr<ast::ExprBlock> const)
+.. das:function:: AstVisitor.preVisitExprBlockFinal(self: AstVisitor; blk: smart_ptr<ExprBlock> const)
 
 +--------+---------------------------------------------------------------+
 +argument+argument type                                                  +
@@ -6506,7 +6758,7 @@ visitExprBlockExpression returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprBlockFinal|
 
-.. das:function:: AstVisitor.visitExprBlockFinal(self: AstVisitor; blk: smart_ptr<ast::ExprBlock> const)
+.. das:function:: AstVisitor.visitExprBlockFinal(self: AstVisitor; blk: smart_ptr<ExprBlock> const)
 
 +--------+---------------------------------------------------------------+
 +argument+argument type                                                  +
@@ -6519,7 +6771,7 @@ visitExprBlockExpression returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprBlockFinal|
 
-.. das:function:: AstVisitor.preVisitExprBlockFinalExpression(self: AstVisitor; blk: smart_ptr<ast::ExprBlock> const; expr: ExpressionPtr)
+.. das:function:: AstVisitor.preVisitExprBlockFinalExpression(self: AstVisitor; blk: smart_ptr<ExprBlock> const; expr: ExpressionPtr)
 
 +--------+---------------------------------------------------------------+
 +argument+argument type                                                  +
@@ -6534,9 +6786,9 @@ visitExprBlockExpression returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprBlockFinalExpression|
 
-.. das:function:: AstVisitor.visitExprBlockFinalExpression(self: AstVisitor; blk: smart_ptr<ast::ExprBlock> const; expr: ExpressionPtr)
+.. das:function:: AstVisitor.visitExprBlockFinalExpression(self: AstVisitor; blk: smart_ptr<ExprBlock> const; expr: ExpressionPtr)
 
-visitExprBlockFinalExpression returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprBlockFinalExpression returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+---------------------------------------------------------------+
 +argument+argument type                                                  +
@@ -6551,7 +6803,7 @@ visitExprBlockFinalExpression returns  :ref:`ExpressionPtr <alias-ExpressionPtr>
 
 |method-ast-AstVisitor.visitExprBlockFinalExpression|
 
-.. das:function:: AstVisitor.preVisitExprLet(self: AstVisitor; expr: smart_ptr<ast::ExprLet> const)
+.. das:function:: AstVisitor.preVisitExprLet(self: AstVisitor; expr: smart_ptr<ExprLet> const)
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -6564,9 +6816,9 @@ visitExprBlockFinalExpression returns  :ref:`ExpressionPtr <alias-ExpressionPtr>
 
 |method-ast-AstVisitor.preVisitExprLet|
 
-.. das:function:: AstVisitor.visitExprLet(self: AstVisitor; expr: smart_ptr<ast::ExprLet> const)
+.. das:function:: AstVisitor.visitExprLet(self: AstVisitor; expr: smart_ptr<ExprLet> const)
 
-visitExprLet returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprLet returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -6579,7 +6831,7 @@ visitExprLet returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprLet|
 
-.. das:function:: AstVisitor.preVisitExprLetVariable(self: AstVisitor; expr: smart_ptr<ast::ExprLet> const; arg: VariablePtr; lastArg: bool const)
+.. das:function:: AstVisitor.preVisitExprLetVariable(self: AstVisitor; expr: smart_ptr<ExprLet> const; arg: VariablePtr; lastArg: bool const)
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -6596,9 +6848,9 @@ visitExprLet returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprLetVariable|
 
-.. das:function:: AstVisitor.visitExprLetVariable(self: AstVisitor; expr: smart_ptr<ast::ExprLet> const; arg: VariablePtr; lastArg: bool const)
+.. das:function:: AstVisitor.visitExprLetVariable(self: AstVisitor; expr: smart_ptr<ExprLet> const; arg: VariablePtr; lastArg: bool const)
 
-visitExprLetVariable returns  :ref:`VariablePtr <alias-VariablePtr>`
+visitExprLetVariable returns  :ref:`VariablePtr <alias-VariablePtr>` 
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -6615,7 +6867,7 @@ visitExprLetVariable returns  :ref:`VariablePtr <alias-VariablePtr>`
 
 |method-ast-AstVisitor.visitExprLetVariable|
 
-.. das:function:: AstVisitor.preVisitExprLetVariableInit(self: AstVisitor; blk: smart_ptr<ast::ExprLet> const; arg: VariablePtr; expr: ExpressionPtr)
+.. das:function:: AstVisitor.preVisitExprLetVariableInit(self: AstVisitor; blk: smart_ptr<ExprLet> const; arg: VariablePtr; expr: ExpressionPtr)
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -6632,9 +6884,9 @@ visitExprLetVariable returns  :ref:`VariablePtr <alias-VariablePtr>`
 
 |method-ast-AstVisitor.preVisitExprLetVariableInit|
 
-.. das:function:: AstVisitor.visitExprLetVariableInit(self: AstVisitor; blk: smart_ptr<ast::ExprLet> const; arg: VariablePtr; expr: ExpressionPtr)
+.. das:function:: AstVisitor.visitExprLetVariableInit(self: AstVisitor; blk: smart_ptr<ExprLet> const; arg: VariablePtr; expr: ExpressionPtr)
 
-visitExprLetVariableInit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprLetVariableInit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -6651,7 +6903,7 @@ visitExprLetVariableInit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprLetVariableInit|
 
-.. das:function:: AstVisitor.canVisitGlobalVariable(self: AstVisitor; arg: ast::Variable? const)
+.. das:function:: AstVisitor.canVisitGlobalVariable(self: AstVisitor; arg: Variable? const)
 
 canVisitGlobalVariable returns bool
 
@@ -6709,7 +6961,7 @@ canVisitGlobalVariable returns bool
 
 .. das:function:: AstVisitor.visitGlobalLetVariable(self: AstVisitor; arg: VariablePtr; lastArg: bool const)
 
-visitGlobalLetVariable returns  :ref:`VariablePtr <alias-VariablePtr>`
+visitGlobalLetVariable returns  :ref:`VariablePtr <alias-VariablePtr>` 
 
 +--------+------------------------------------------------+
 +argument+argument type                                   +
@@ -6741,7 +6993,7 @@ visitGlobalLetVariable returns  :ref:`VariablePtr <alias-VariablePtr>`
 
 .. das:function:: AstVisitor.visitGlobalLetVariableInit(self: AstVisitor; arg: VariablePtr; expr: ExpressionPtr)
 
-visitGlobalLetVariableInit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitGlobalLetVariableInit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+------------------------------------------------+
 +argument+argument type                                   +
@@ -6756,7 +7008,7 @@ visitGlobalLetVariableInit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitGlobalLetVariableInit|
 
-.. das:function:: AstVisitor.preVisitExprStringBuilder(self: AstVisitor; expr: smart_ptr<ast::ExprStringBuilder> const)
+.. das:function:: AstVisitor.preVisitExprStringBuilder(self: AstVisitor; expr: smart_ptr<ExprStringBuilder> const)
 
 +--------+-------------------------------------------------------------------------------+
 +argument+argument type                                                                  +
@@ -6769,9 +7021,9 @@ visitGlobalLetVariableInit returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprStringBuilder|
 
-.. das:function:: AstVisitor.visitExprStringBuilder(self: AstVisitor; expr: smart_ptr<ast::ExprStringBuilder> const)
+.. das:function:: AstVisitor.visitExprStringBuilder(self: AstVisitor; expr: smart_ptr<ExprStringBuilder> const)
 
-visitExprStringBuilder returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprStringBuilder returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-------------------------------------------------------------------------------+
 +argument+argument type                                                                  +
@@ -6784,7 +7036,7 @@ visitExprStringBuilder returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprStringBuilder|
 
-.. das:function:: AstVisitor.preVisitExprStringBuilderElement(self: AstVisitor; expr: smart_ptr<ast::ExprStringBuilder> const; elem: ExpressionPtr; last: bool const)
+.. das:function:: AstVisitor.preVisitExprStringBuilderElement(self: AstVisitor; expr: smart_ptr<ExprStringBuilder> const; elem: ExpressionPtr; last: bool const)
 
 +--------+-------------------------------------------------------------------------------+
 +argument+argument type                                                                  +
@@ -6801,9 +7053,9 @@ visitExprStringBuilder returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprStringBuilderElement|
 
-.. das:function:: AstVisitor.visitExprStringBuilderElement(self: AstVisitor; expr: smart_ptr<ast::ExprStringBuilder> const; elem: ExpressionPtr; last: bool const)
+.. das:function:: AstVisitor.visitExprStringBuilderElement(self: AstVisitor; expr: smart_ptr<ExprStringBuilder> const; elem: ExpressionPtr; last: bool const)
 
-visitExprStringBuilderElement returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprStringBuilderElement returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-------------------------------------------------------------------------------+
 +argument+argument type                                                                  +
@@ -6820,7 +7072,7 @@ visitExprStringBuilderElement returns  :ref:`ExpressionPtr <alias-ExpressionPtr>
 
 |method-ast-AstVisitor.visitExprStringBuilderElement|
 
-.. das:function:: AstVisitor.preVisitExprNew(self: AstVisitor; expr: smart_ptr<ast::ExprNew> const)
+.. das:function:: AstVisitor.preVisitExprNew(self: AstVisitor; expr: smart_ptr<ExprNew> const)
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -6833,9 +7085,9 @@ visitExprStringBuilderElement returns  :ref:`ExpressionPtr <alias-ExpressionPtr>
 
 |method-ast-AstVisitor.preVisitExprNew|
 
-.. das:function:: AstVisitor.visitExprNew(self: AstVisitor; expr: smart_ptr<ast::ExprNew> const)
+.. das:function:: AstVisitor.visitExprNew(self: AstVisitor; expr: smart_ptr<ExprNew> const)
 
-visitExprNew returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprNew returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -6848,7 +7100,7 @@ visitExprNew returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprNew|
 
-.. das:function:: AstVisitor.preVisitExprNewArgument(self: AstVisitor; expr: smart_ptr<ast::ExprNew> const; arg: ExpressionPtr; last: bool const)
+.. das:function:: AstVisitor.preVisitExprNewArgument(self: AstVisitor; expr: smart_ptr<ExprNew> const; arg: ExpressionPtr; last: bool const)
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -6865,9 +7117,9 @@ visitExprNew returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprNewArgument|
 
-.. das:function:: AstVisitor.visitExprNewArgument(self: AstVisitor; expr: smart_ptr<ast::ExprNew> const; arg: ExpressionPtr; last: bool const)
+.. das:function:: AstVisitor.visitExprNewArgument(self: AstVisitor; expr: smart_ptr<ExprNew> const; arg: ExpressionPtr; last: bool const)
 
-visitExprNewArgument returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprNewArgument returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -6884,7 +7136,7 @@ visitExprNewArgument returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprNewArgument|
 
-.. das:function:: AstVisitor.preVisitExprNamedCall(self: AstVisitor; expr: smart_ptr<ast::ExprNamedCall> const)
+.. das:function:: AstVisitor.preVisitExprNamedCall(self: AstVisitor; expr: smart_ptr<ExprNamedCall> const)
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -6897,9 +7149,9 @@ visitExprNewArgument returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprNamedCall|
 
-.. das:function:: AstVisitor.visitExprNamedCall(self: AstVisitor; expr: smart_ptr<ast::ExprNamedCall> const)
+.. das:function:: AstVisitor.visitExprNamedCall(self: AstVisitor; expr: smart_ptr<ExprNamedCall> const)
 
-visitExprNamedCall returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprNamedCall returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -6912,7 +7164,7 @@ visitExprNamedCall returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprNamedCall|
 
-.. das:function:: AstVisitor.preVisitExprNamedCallArgument(self: AstVisitor; expr: smart_ptr<ast::ExprNamedCall> const; arg: MakeFieldDeclPtr; last: bool const)
+.. das:function:: AstVisitor.preVisitExprNamedCallArgument(self: AstVisitor; expr: smart_ptr<ExprNamedCall> const; arg: MakeFieldDeclPtr; last: bool const)
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -6929,9 +7181,9 @@ visitExprNamedCall returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprNamedCallArgument|
 
-.. das:function:: AstVisitor.visitExprNamedCallArgument(self: AstVisitor; expr: smart_ptr<ast::ExprNamedCall> const; arg: MakeFieldDeclPtr; last: bool const)
+.. das:function:: AstVisitor.visitExprNamedCallArgument(self: AstVisitor; expr: smart_ptr<ExprNamedCall> const; arg: MakeFieldDeclPtr; last: bool const)
 
-visitExprNamedCallArgument returns  :ref:`MakeFieldDeclPtr <alias-MakeFieldDeclPtr>`
+visitExprNamedCallArgument returns  :ref:`MakeFieldDeclPtr <alias-MakeFieldDeclPtr>` 
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -6948,7 +7200,7 @@ visitExprNamedCallArgument returns  :ref:`MakeFieldDeclPtr <alias-MakeFieldDeclP
 
 |method-ast-AstVisitor.visitExprNamedCallArgument|
 
-.. das:function:: AstVisitor.preVisitExprLooksLikeCall(self: AstVisitor; expr: smart_ptr<ast::ExprLooksLikeCall> const)
+.. das:function:: AstVisitor.preVisitExprLooksLikeCall(self: AstVisitor; expr: smart_ptr<ExprLooksLikeCall> const)
 
 +--------+-------------------------------------------------------------------------------+
 +argument+argument type                                                                  +
@@ -6961,9 +7213,9 @@ visitExprNamedCallArgument returns  :ref:`MakeFieldDeclPtr <alias-MakeFieldDeclP
 
 |method-ast-AstVisitor.preVisitExprLooksLikeCall|
 
-.. das:function:: AstVisitor.visitExprLooksLikeCall(self: AstVisitor; expr: smart_ptr<ast::ExprLooksLikeCall> const)
+.. das:function:: AstVisitor.visitExprLooksLikeCall(self: AstVisitor; expr: smart_ptr<ExprLooksLikeCall> const)
 
-visitExprLooksLikeCall returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprLooksLikeCall returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-------------------------------------------------------------------------------+
 +argument+argument type                                                                  +
@@ -6976,7 +7228,7 @@ visitExprLooksLikeCall returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprLooksLikeCall|
 
-.. das:function:: AstVisitor.preVisitExprLooksLikeCallArgument(self: AstVisitor; expr: smart_ptr<ast::ExprLooksLikeCall> const; arg: ExpressionPtr; last: bool const)
+.. das:function:: AstVisitor.preVisitExprLooksLikeCallArgument(self: AstVisitor; expr: smart_ptr<ExprLooksLikeCall> const; arg: ExpressionPtr; last: bool const)
 
 +--------+-------------------------------------------------------------------------------+
 +argument+argument type                                                                  +
@@ -6993,9 +7245,9 @@ visitExprLooksLikeCall returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprLooksLikeCallArgument|
 
-.. das:function:: AstVisitor.visitExprLooksLikeCallArgument(self: AstVisitor; expr: smart_ptr<ast::ExprLooksLikeCall> const; arg: ExpressionPtr; last: bool const)
+.. das:function:: AstVisitor.visitExprLooksLikeCallArgument(self: AstVisitor; expr: smart_ptr<ExprLooksLikeCall> const; arg: ExpressionPtr; last: bool const)
 
-visitExprLooksLikeCallArgument returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprLooksLikeCallArgument returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-------------------------------------------------------------------------------+
 +argument+argument type                                                                  +
@@ -7012,7 +7264,7 @@ visitExprLooksLikeCallArgument returns  :ref:`ExpressionPtr <alias-ExpressionPtr
 
 |method-ast-AstVisitor.visitExprLooksLikeCallArgument|
 
-.. das:function:: AstVisitor.canVisitCall(self: AstVisitor; expr: ast::ExprCall? const)
+.. das:function:: AstVisitor.canVisitCall(self: AstVisitor; expr: ExprCall? const)
 
 canVisitCall returns bool
 
@@ -7027,7 +7279,7 @@ canVisitCall returns bool
 
 |method-ast-AstVisitor.canVisitCall|
 
-.. das:function:: AstVisitor.preVisitExprCall(self: AstVisitor; expr: smart_ptr<ast::ExprCall> const)
+.. das:function:: AstVisitor.preVisitExprCall(self: AstVisitor; expr: smart_ptr<ExprCall> const)
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -7040,9 +7292,9 @@ canVisitCall returns bool
 
 |method-ast-AstVisitor.preVisitExprCall|
 
-.. das:function:: AstVisitor.visitExprCall(self: AstVisitor; expr: smart_ptr<ast::ExprCall> const)
+.. das:function:: AstVisitor.visitExprCall(self: AstVisitor; expr: smart_ptr<ExprCall> const)
 
-visitExprCall returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprCall returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -7055,7 +7307,7 @@ visitExprCall returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprCall|
 
-.. das:function:: AstVisitor.preVisitExprCallArgument(self: AstVisitor; expr: smart_ptr<ast::ExprCall> const; arg: ExpressionPtr; last: bool const)
+.. das:function:: AstVisitor.preVisitExprCallArgument(self: AstVisitor; expr: smart_ptr<ExprCall> const; arg: ExpressionPtr; last: bool const)
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -7072,9 +7324,9 @@ visitExprCall returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprCallArgument|
 
-.. das:function:: AstVisitor.visitExprCallArgument(self: AstVisitor; expr: smart_ptr<ast::ExprCall> const; arg: ExpressionPtr; last: bool const)
+.. das:function:: AstVisitor.visitExprCallArgument(self: AstVisitor; expr: smart_ptr<ExprCall> const; arg: ExpressionPtr; last: bool const)
 
-visitExprCallArgument returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprCallArgument returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -7091,7 +7343,7 @@ visitExprCallArgument returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprCallArgument|
 
-.. das:function:: AstVisitor.preVisitExprNullCoalescing(self: AstVisitor; expr: smart_ptr<ast::ExprNullCoalescing> const)
+.. das:function:: AstVisitor.preVisitExprNullCoalescing(self: AstVisitor; expr: smart_ptr<ExprNullCoalescing> const)
 
 +--------+---------------------------------------------------------------------------------+
 +argument+argument type                                                                    +
@@ -7104,9 +7356,9 @@ visitExprCallArgument returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprNullCoalescing|
 
-.. das:function:: AstVisitor.visitExprNullCoalescing(self: AstVisitor; expr: smart_ptr<ast::ExprNullCoalescing> const)
+.. das:function:: AstVisitor.visitExprNullCoalescing(self: AstVisitor; expr: smart_ptr<ExprNullCoalescing> const)
 
-visitExprNullCoalescing returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprNullCoalescing returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+---------------------------------------------------------------------------------+
 +argument+argument type                                                                    +
@@ -7119,7 +7371,7 @@ visitExprNullCoalescing returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprNullCoalescing|
 
-.. das:function:: AstVisitor.preVisitExprNullCoalescingDefault(self: AstVisitor; expr: smart_ptr<ast::ExprNullCoalescing> const; defval: ExpressionPtr)
+.. das:function:: AstVisitor.preVisitExprNullCoalescingDefault(self: AstVisitor; expr: smart_ptr<ExprNullCoalescing> const; defval: ExpressionPtr)
 
 +--------+---------------------------------------------------------------------------------+
 +argument+argument type                                                                    +
@@ -7134,7 +7386,7 @@ visitExprNullCoalescing returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprNullCoalescingDefault|
 
-.. das:function:: AstVisitor.preVisitExprAt(self: AstVisitor; expr: smart_ptr<ast::ExprAt> const)
+.. das:function:: AstVisitor.preVisitExprAt(self: AstVisitor; expr: smart_ptr<ExprAt> const)
 
 +--------+---------------------------------------------------------+
 +argument+argument type                                            +
@@ -7147,9 +7399,9 @@ visitExprNullCoalescing returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprAt|
 
-.. das:function:: AstVisitor.visitExprAt(self: AstVisitor; expr: smart_ptr<ast::ExprAt> const)
+.. das:function:: AstVisitor.visitExprAt(self: AstVisitor; expr: smart_ptr<ExprAt> const)
 
-visitExprAt returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprAt returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+---------------------------------------------------------+
 +argument+argument type                                            +
@@ -7162,7 +7414,7 @@ visitExprAt returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprAt|
 
-.. das:function:: AstVisitor.preVisitExprAtIndex(self: AstVisitor; expr: smart_ptr<ast::ExprAt> const; index: ExpressionPtr)
+.. das:function:: AstVisitor.preVisitExprAtIndex(self: AstVisitor; expr: smart_ptr<ExprAt> const; index: ExpressionPtr)
 
 +--------+---------------------------------------------------------+
 +argument+argument type                                            +
@@ -7177,7 +7429,7 @@ visitExprAt returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprAtIndex|
 
-.. das:function:: AstVisitor.preVisitExprSafeAt(self: AstVisitor; expr: smart_ptr<ast::ExprSafeAt> const)
+.. das:function:: AstVisitor.preVisitExprSafeAt(self: AstVisitor; expr: smart_ptr<ExprSafeAt> const)
 
 +--------+-----------------------------------------------------------------+
 +argument+argument type                                                    +
@@ -7190,9 +7442,9 @@ visitExprAt returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprSafeAt|
 
-.. das:function:: AstVisitor.visitExprSafeAt(self: AstVisitor; expr: smart_ptr<ast::ExprSafeAt> const)
+.. das:function:: AstVisitor.visitExprSafeAt(self: AstVisitor; expr: smart_ptr<ExprSafeAt> const)
 
-visitExprSafeAt returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprSafeAt returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-----------------------------------------------------------------+
 +argument+argument type                                                    +
@@ -7205,7 +7457,7 @@ visitExprSafeAt returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprSafeAt|
 
-.. das:function:: AstVisitor.preVisitExprSafeAtIndex(self: AstVisitor; expr: smart_ptr<ast::ExprAt> const; index: ExpressionPtr)
+.. das:function:: AstVisitor.preVisitExprSafeAtIndex(self: AstVisitor; expr: smart_ptr<ExprAt> const; index: ExpressionPtr)
 
 +--------+---------------------------------------------------------+
 +argument+argument type                                            +
@@ -7220,7 +7472,7 @@ visitExprSafeAt returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprSafeAtIndex|
 
-.. das:function:: AstVisitor.preVisitExprIs(self: AstVisitor; expr: smart_ptr<ast::ExprIs> const)
+.. das:function:: AstVisitor.preVisitExprIs(self: AstVisitor; expr: smart_ptr<ExprIs> const)
 
 +--------+---------------------------------------------------------+
 +argument+argument type                                            +
@@ -7233,9 +7485,9 @@ visitExprSafeAt returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprIs|
 
-.. das:function:: AstVisitor.visitExprIs(self: AstVisitor; expr: smart_ptr<ast::ExprIs> const)
+.. das:function:: AstVisitor.visitExprIs(self: AstVisitor; expr: smart_ptr<ExprIs> const)
 
-visitExprIs returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprIs returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+---------------------------------------------------------+
 +argument+argument type                                            +
@@ -7248,7 +7500,7 @@ visitExprIs returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprIs|
 
-.. das:function:: AstVisitor.preVisitExprIsType(self: AstVisitor; expr: smart_ptr<ast::ExprIs> const; typeDecl: TypeDeclPtr)
+.. das:function:: AstVisitor.preVisitExprIsType(self: AstVisitor; expr: smart_ptr<ExprIs> const; typeDecl: TypeDeclPtr)
 
 +--------+---------------------------------------------------------+
 +argument+argument type                                            +
@@ -7263,7 +7515,7 @@ visitExprIs returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprIsType|
 
-.. das:function:: AstVisitor.preVisitExprOp2(self: AstVisitor; expr: smart_ptr<ast::ExprOp2> const)
+.. das:function:: AstVisitor.preVisitExprOp2(self: AstVisitor; expr: smart_ptr<ExprOp2> const)
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -7276,9 +7528,9 @@ visitExprIs returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprOp2|
 
-.. das:function:: AstVisitor.visitExprOp2(self: AstVisitor; expr: smart_ptr<ast::ExprOp2> const)
+.. das:function:: AstVisitor.visitExprOp2(self: AstVisitor; expr: smart_ptr<ExprOp2> const)
 
-visitExprOp2 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprOp2 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -7291,7 +7543,7 @@ visitExprOp2 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprOp2|
 
-.. das:function:: AstVisitor.preVisitExprOp2Right(self: AstVisitor; expr: smart_ptr<ast::ExprOp2> const; right: ExpressionPtr)
+.. das:function:: AstVisitor.preVisitExprOp2Right(self: AstVisitor; expr: smart_ptr<ExprOp2> const; right: ExpressionPtr)
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -7306,7 +7558,7 @@ visitExprOp2 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprOp2Right|
 
-.. das:function:: AstVisitor.preVisitExprOp3(self: AstVisitor; expr: smart_ptr<ast::ExprOp3> const)
+.. das:function:: AstVisitor.preVisitExprOp3(self: AstVisitor; expr: smart_ptr<ExprOp3> const)
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -7319,9 +7571,9 @@ visitExprOp2 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprOp3|
 
-.. das:function:: AstVisitor.visitExprOp3(self: AstVisitor; expr: smart_ptr<ast::ExprOp3> const)
+.. das:function:: AstVisitor.visitExprOp3(self: AstVisitor; expr: smart_ptr<ExprOp3> const)
 
-visitExprOp3 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprOp3 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -7334,7 +7586,7 @@ visitExprOp3 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprOp3|
 
-.. das:function:: AstVisitor.preVisitExprOp3Left(self: AstVisitor; expr: smart_ptr<ast::ExprOp3> const; left: ExpressionPtr)
+.. das:function:: AstVisitor.preVisitExprOp3Left(self: AstVisitor; expr: smart_ptr<ExprOp3> const; left: ExpressionPtr)
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -7349,7 +7601,7 @@ visitExprOp3 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprOp3Left|
 
-.. das:function:: AstVisitor.preVisitExprOp3Right(self: AstVisitor; expr: smart_ptr<ast::ExprOp3> const; right: ExpressionPtr)
+.. das:function:: AstVisitor.preVisitExprOp3Right(self: AstVisitor; expr: smart_ptr<ExprOp3> const; right: ExpressionPtr)
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -7364,7 +7616,7 @@ visitExprOp3 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprOp3Right|
 
-.. das:function:: AstVisitor.preVisitExprCopy(self: AstVisitor; expr: smart_ptr<ast::ExprCopy> const)
+.. das:function:: AstVisitor.preVisitExprCopy(self: AstVisitor; expr: smart_ptr<ExprCopy> const)
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -7377,9 +7629,9 @@ visitExprOp3 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprCopy|
 
-.. das:function:: AstVisitor.visitExprCopy(self: AstVisitor; expr: smart_ptr<ast::ExprCopy> const)
+.. das:function:: AstVisitor.visitExprCopy(self: AstVisitor; expr: smart_ptr<ExprCopy> const)
 
-visitExprCopy returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprCopy returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -7392,7 +7644,7 @@ visitExprCopy returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprCopy|
 
-.. das:function:: AstVisitor.preVisitExprCopyRight(self: AstVisitor; expr: smart_ptr<ast::ExprCopy> const; right: ExpressionPtr)
+.. das:function:: AstVisitor.preVisitExprCopyRight(self: AstVisitor; expr: smart_ptr<ExprCopy> const; right: ExpressionPtr)
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -7407,7 +7659,7 @@ visitExprCopy returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprCopyRight|
 
-.. das:function:: AstVisitor.preVisitExprMove(self: AstVisitor; expr: smart_ptr<ast::ExprMove> const)
+.. das:function:: AstVisitor.preVisitExprMove(self: AstVisitor; expr: smart_ptr<ExprMove> const)
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -7420,9 +7672,9 @@ visitExprCopy returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprMove|
 
-.. das:function:: AstVisitor.visitExprMove(self: AstVisitor; expr: smart_ptr<ast::ExprMove> const)
+.. das:function:: AstVisitor.visitExprMove(self: AstVisitor; expr: smart_ptr<ExprMove> const)
 
-visitExprMove returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprMove returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -7435,7 +7687,7 @@ visitExprMove returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprMove|
 
-.. das:function:: AstVisitor.preVisitExprMoveRight(self: AstVisitor; expr: smart_ptr<ast::ExprMove> const; right: ExpressionPtr)
+.. das:function:: AstVisitor.preVisitExprMoveRight(self: AstVisitor; expr: smart_ptr<ExprMove> const; right: ExpressionPtr)
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -7450,7 +7702,7 @@ visitExprMove returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprMoveRight|
 
-.. das:function:: AstVisitor.preVisitExprClone(self: AstVisitor; expr: smart_ptr<ast::ExprClone> const)
+.. das:function:: AstVisitor.preVisitExprClone(self: AstVisitor; expr: smart_ptr<ExprClone> const)
 
 +--------+---------------------------------------------------------------+
 +argument+argument type                                                  +
@@ -7463,9 +7715,9 @@ visitExprMove returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprClone|
 
-.. das:function:: AstVisitor.visitExprClone(self: AstVisitor; expr: smart_ptr<ast::ExprClone> const)
+.. das:function:: AstVisitor.visitExprClone(self: AstVisitor; expr: smart_ptr<ExprClone> const)
 
-visitExprClone returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprClone returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+---------------------------------------------------------------+
 +argument+argument type                                                  +
@@ -7478,7 +7730,7 @@ visitExprClone returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprClone|
 
-.. das:function:: AstVisitor.preVisitExprCloneRight(self: AstVisitor; expr: smart_ptr<ast::ExprClone> const; right: ExpressionPtr)
+.. das:function:: AstVisitor.preVisitExprCloneRight(self: AstVisitor; expr: smart_ptr<ExprClone> const; right: ExpressionPtr)
 
 +--------+---------------------------------------------------------------+
 +argument+argument type                                                  +
@@ -7493,7 +7745,7 @@ visitExprClone returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprCloneRight|
 
-.. das:function:: AstVisitor.canVisitWithAliasSubexpression(self: AstVisitor; expr: smart_ptr<ast::ExprAssume> const)
+.. das:function:: AstVisitor.canVisitWithAliasSubexpression(self: AstVisitor; expr: smart_ptr<ExprAssume> const)
 
 canVisitWithAliasSubexpression returns bool
 
@@ -7508,7 +7760,7 @@ canVisitWithAliasSubexpression returns bool
 
 |method-ast-AstVisitor.canVisitWithAliasSubexpression|
 
-.. das:function:: AstVisitor.preVisitExprAssume(self: AstVisitor; expr: smart_ptr<ast::ExprAssume> const)
+.. das:function:: AstVisitor.preVisitExprAssume(self: AstVisitor; expr: smart_ptr<ExprAssume> const)
 
 +--------+-----------------------------------------------------------------+
 +argument+argument type                                                    +
@@ -7521,9 +7773,9 @@ canVisitWithAliasSubexpression returns bool
 
 |method-ast-AstVisitor.preVisitExprAssume|
 
-.. das:function:: AstVisitor.visitExprAssume(self: AstVisitor; expr: smart_ptr<ast::ExprAssume> const)
+.. das:function:: AstVisitor.visitExprAssume(self: AstVisitor; expr: smart_ptr<ExprAssume> const)
 
-visitExprAssume returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprAssume returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-----------------------------------------------------------------+
 +argument+argument type                                                    +
@@ -7536,7 +7788,7 @@ visitExprAssume returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprAssume|
 
-.. das:function:: AstVisitor.preVisitExprWith(self: AstVisitor; expr: smart_ptr<ast::ExprWith> const)
+.. das:function:: AstVisitor.preVisitExprWith(self: AstVisitor; expr: smart_ptr<ExprWith> const)
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -7549,9 +7801,9 @@ visitExprAssume returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprWith|
 
-.. das:function:: AstVisitor.visitExprWith(self: AstVisitor; expr: smart_ptr<ast::ExprWith> const)
+.. das:function:: AstVisitor.visitExprWith(self: AstVisitor; expr: smart_ptr<ExprWith> const)
 
-visitExprWith returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprWith returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -7564,7 +7816,7 @@ visitExprWith returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprWith|
 
-.. das:function:: AstVisitor.preVisitExprWithBody(self: AstVisitor; expr: smart_ptr<ast::ExprWith> const; right: ExpressionPtr)
+.. das:function:: AstVisitor.preVisitExprWithBody(self: AstVisitor; expr: smart_ptr<ExprWith> const; right: ExpressionPtr)
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -7579,7 +7831,7 @@ visitExprWith returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprWithBody|
 
-.. das:function:: AstVisitor.preVisitExprWhile(self: AstVisitor; expr: smart_ptr<ast::ExprWhile> const)
+.. das:function:: AstVisitor.preVisitExprWhile(self: AstVisitor; expr: smart_ptr<ExprWhile> const)
 
 +--------+---------------------------------------------------------------+
 +argument+argument type                                                  +
@@ -7592,9 +7844,9 @@ visitExprWith returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprWhile|
 
-.. das:function:: AstVisitor.visitExprWhile(self: AstVisitor; expr: smart_ptr<ast::ExprWhile> const)
+.. das:function:: AstVisitor.visitExprWhile(self: AstVisitor; expr: smart_ptr<ExprWhile> const)
 
-visitExprWhile returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprWhile returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+---------------------------------------------------------------+
 +argument+argument type                                                  +
@@ -7607,7 +7859,7 @@ visitExprWhile returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprWhile|
 
-.. das:function:: AstVisitor.preVisitExprWhileBody(self: AstVisitor; expr: smart_ptr<ast::ExprWhile> const; right: ExpressionPtr)
+.. das:function:: AstVisitor.preVisitExprWhileBody(self: AstVisitor; expr: smart_ptr<ExprWhile> const; right: ExpressionPtr)
 
 +--------+---------------------------------------------------------------+
 +argument+argument type                                                  +
@@ -7622,7 +7874,7 @@ visitExprWhile returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprWhileBody|
 
-.. das:function:: AstVisitor.preVisitExprTryCatch(self: AstVisitor; expr: smart_ptr<ast::ExprTryCatch> const)
+.. das:function:: AstVisitor.preVisitExprTryCatch(self: AstVisitor; expr: smart_ptr<ExprTryCatch> const)
 
 +--------+---------------------------------------------------------------------+
 +argument+argument type                                                        +
@@ -7635,9 +7887,9 @@ visitExprWhile returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprTryCatch|
 
-.. das:function:: AstVisitor.visitExprTryCatch(self: AstVisitor; expr: smart_ptr<ast::ExprTryCatch> const)
+.. das:function:: AstVisitor.visitExprTryCatch(self: AstVisitor; expr: smart_ptr<ExprTryCatch> const)
 
-visitExprTryCatch returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprTryCatch returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+---------------------------------------------------------------------+
 +argument+argument type                                                        +
@@ -7650,7 +7902,7 @@ visitExprTryCatch returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprTryCatch|
 
-.. das:function:: AstVisitor.preVisitExprTryCatchCatch(self: AstVisitor; expr: smart_ptr<ast::ExprTryCatch> const; right: ExpressionPtr)
+.. das:function:: AstVisitor.preVisitExprTryCatchCatch(self: AstVisitor; expr: smart_ptr<ExprTryCatch> const; right: ExpressionPtr)
 
 +--------+---------------------------------------------------------------------+
 +argument+argument type                                                        +
@@ -7665,7 +7917,7 @@ visitExprTryCatch returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprTryCatchCatch|
 
-.. das:function:: AstVisitor.preVisitExprIfThenElse(self: AstVisitor; expr: smart_ptr<ast::ExprIfThenElse> const)
+.. das:function:: AstVisitor.preVisitExprIfThenElse(self: AstVisitor; expr: smart_ptr<ExprIfThenElse> const)
 
 +--------+-------------------------------------------------------------------------+
 +argument+argument type                                                            +
@@ -7678,9 +7930,9 @@ visitExprTryCatch returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprIfThenElse|
 
-.. das:function:: AstVisitor.visitExprIfThenElse(self: AstVisitor; expr: smart_ptr<ast::ExprIfThenElse> const)
+.. das:function:: AstVisitor.visitExprIfThenElse(self: AstVisitor; expr: smart_ptr<ExprIfThenElse> const)
 
-visitExprIfThenElse returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprIfThenElse returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-------------------------------------------------------------------------+
 +argument+argument type                                                            +
@@ -7693,7 +7945,7 @@ visitExprIfThenElse returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprIfThenElse|
 
-.. das:function:: AstVisitor.preVisitExprIfThenElseIfBlock(self: AstVisitor; expr: smart_ptr<ast::ExprIfThenElse> const; ifBlock: ExpressionPtr)
+.. das:function:: AstVisitor.preVisitExprIfThenElseIfBlock(self: AstVisitor; expr: smart_ptr<ExprIfThenElse> const; ifBlock: ExpressionPtr)
 
 +--------+-------------------------------------------------------------------------+
 +argument+argument type                                                            +
@@ -7708,7 +7960,7 @@ visitExprIfThenElse returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprIfThenElseIfBlock|
 
-.. das:function:: AstVisitor.preVisitExprIfThenElseElseBlock(self: AstVisitor; expr: smart_ptr<ast::ExprIfThenElse> const; elseBlock: ExpressionPtr)
+.. das:function:: AstVisitor.preVisitExprIfThenElseElseBlock(self: AstVisitor; expr: smart_ptr<ExprIfThenElse> const; elseBlock: ExpressionPtr)
 
 +---------+-------------------------------------------------------------------------+
 +argument +argument type                                                            +
@@ -7723,7 +7975,7 @@ visitExprIfThenElse returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprIfThenElseElseBlock|
 
-.. das:function:: AstVisitor.preVisitExprFor(self: AstVisitor; expr: smart_ptr<ast::ExprFor> const)
+.. das:function:: AstVisitor.preVisitExprFor(self: AstVisitor; expr: smart_ptr<ExprFor> const)
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -7736,9 +7988,9 @@ visitExprIfThenElse returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprFor|
 
-.. das:function:: AstVisitor.visitExprFor(self: AstVisitor; expr: smart_ptr<ast::ExprFor> const)
+.. das:function:: AstVisitor.visitExprFor(self: AstVisitor; expr: smart_ptr<ExprFor> const)
 
-visitExprFor returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprFor returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -7751,7 +8003,7 @@ visitExprFor returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprFor|
 
-.. das:function:: AstVisitor.preVisitExprForVariable(self: AstVisitor; expr: smart_ptr<ast::ExprFor> const; svar: VariablePtr; last: bool const)
+.. das:function:: AstVisitor.preVisitExprForVariable(self: AstVisitor; expr: smart_ptr<ExprFor> const; svar: VariablePtr; last: bool const)
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -7768,9 +8020,9 @@ visitExprFor returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprForVariable|
 
-.. das:function:: AstVisitor.visitExprForVariable(self: AstVisitor; expr: smart_ptr<ast::ExprFor> const; svar: VariablePtr; last: bool const)
+.. das:function:: AstVisitor.visitExprForVariable(self: AstVisitor; expr: smart_ptr<ExprFor> const; svar: VariablePtr; last: bool const)
 
-visitExprForVariable returns  :ref:`VariablePtr <alias-VariablePtr>`
+visitExprForVariable returns  :ref:`VariablePtr <alias-VariablePtr>` 
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -7787,7 +8039,7 @@ visitExprForVariable returns  :ref:`VariablePtr <alias-VariablePtr>`
 
 |method-ast-AstVisitor.visitExprForVariable|
 
-.. das:function:: AstVisitor.preVisitExprForSource(self: AstVisitor; expr: smart_ptr<ast::ExprFor> const; source: ExpressionPtr; last: bool const)
+.. das:function:: AstVisitor.preVisitExprForSource(self: AstVisitor; expr: smart_ptr<ExprFor> const; source: ExpressionPtr; last: bool const)
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -7804,9 +8056,9 @@ visitExprForVariable returns  :ref:`VariablePtr <alias-VariablePtr>`
 
 |method-ast-AstVisitor.preVisitExprForSource|
 
-.. das:function:: AstVisitor.visitExprForSource(self: AstVisitor; expr: smart_ptr<ast::ExprFor> const; source: ExpressionPtr; last: bool const)
+.. das:function:: AstVisitor.visitExprForSource(self: AstVisitor; expr: smart_ptr<ExprFor> const; source: ExpressionPtr; last: bool const)
 
-visitExprForSource returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprForSource returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -7823,7 +8075,7 @@ visitExprForSource returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprForSource|
 
-.. das:function:: AstVisitor.preVisitExprForStack(self: AstVisitor; expr: smart_ptr<ast::ExprFor> const)
+.. das:function:: AstVisitor.preVisitExprForStack(self: AstVisitor; expr: smart_ptr<ExprFor> const)
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -7836,7 +8088,7 @@ visitExprForSource returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprForStack|
 
-.. das:function:: AstVisitor.preVisitExprForBody(self: AstVisitor; expr: smart_ptr<ast::ExprFor> const)
+.. das:function:: AstVisitor.preVisitExprForBody(self: AstVisitor; expr: smart_ptr<ExprFor> const)
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -7849,7 +8101,7 @@ visitExprForSource returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprForBody|
 
-.. das:function:: AstVisitor.preVisitExprMakeVariant(self: AstVisitor; expr: smart_ptr<ast::ExprMakeVariant> const)
+.. das:function:: AstVisitor.preVisitExprMakeVariant(self: AstVisitor; expr: smart_ptr<ExprMakeVariant> const)
 
 +--------+---------------------------------------------------------------------------+
 +argument+argument type                                                              +
@@ -7862,9 +8114,9 @@ visitExprForSource returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprMakeVariant|
 
-.. das:function:: AstVisitor.visitExprMakeVariant(self: AstVisitor; expr: smart_ptr<ast::ExprMakeVariant> const)
+.. das:function:: AstVisitor.visitExprMakeVariant(self: AstVisitor; expr: smart_ptr<ExprMakeVariant> const)
 
-visitExprMakeVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprMakeVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+---------------------------------------------------------------------------+
 +argument+argument type                                                              +
@@ -7877,7 +8129,7 @@ visitExprMakeVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprMakeVariant|
 
-.. das:function:: AstVisitor.preVisitExprMakeVariantField(self: AstVisitor; expr: smart_ptr<ast::ExprMakeVariant> const; index: int const; decl: MakeFieldDeclPtr; last: bool const)
+.. das:function:: AstVisitor.preVisitExprMakeVariantField(self: AstVisitor; expr: smart_ptr<ExprMakeVariant> const; index: int const; decl: MakeFieldDeclPtr; last: bool const)
 
 +--------+---------------------------------------------------------------------------+
 +argument+argument type                                                              +
@@ -7896,9 +8148,9 @@ visitExprMakeVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprMakeVariantField|
 
-.. das:function:: AstVisitor.visitExprMakeVariantField(self: AstVisitor; expr: smart_ptr<ast::ExprMakeVariant> const; index: int const; decl: MakeFieldDeclPtr; last: bool const)
+.. das:function:: AstVisitor.visitExprMakeVariantField(self: AstVisitor; expr: smart_ptr<ExprMakeVariant> const; index: int const; decl: MakeFieldDeclPtr; last: bool const)
 
-visitExprMakeVariantField returns  :ref:`MakeFieldDeclPtr <alias-MakeFieldDeclPtr>`
+visitExprMakeVariantField returns  :ref:`MakeFieldDeclPtr <alias-MakeFieldDeclPtr>` 
 
 +--------+---------------------------------------------------------------------------+
 +argument+argument type                                                              +
@@ -7917,7 +8169,7 @@ visitExprMakeVariantField returns  :ref:`MakeFieldDeclPtr <alias-MakeFieldDeclPt
 
 |method-ast-AstVisitor.visitExprMakeVariantField|
 
-.. das:function:: AstVisitor.canVisitMakeStructBody(self: AstVisitor; expr: smart_ptr<ast::ExprMakeStruct> const)
+.. das:function:: AstVisitor.canVisitMakeStructBody(self: AstVisitor; expr: smart_ptr<ExprMakeStruct> const)
 
 canVisitMakeStructBody returns bool
 
@@ -7932,7 +8184,7 @@ canVisitMakeStructBody returns bool
 
 |method-ast-AstVisitor.canVisitMakeStructBody|
 
-.. das:function:: AstVisitor.canVisitMakeStructBlock(self: AstVisitor; expr: smart_ptr<ast::ExprMakeStruct> const; blk: ExpressionPtr)
+.. das:function:: AstVisitor.canVisitMakeStructBlock(self: AstVisitor; expr: smart_ptr<ExprMakeStruct> const; blk: ExpressionPtr)
 
 canVisitMakeStructBlock returns bool
 
@@ -7949,7 +8201,7 @@ canVisitMakeStructBlock returns bool
 
 |method-ast-AstVisitor.canVisitMakeStructBlock|
 
-.. das:function:: AstVisitor.preVisitExprMakeStruct(self: AstVisitor; expr: smart_ptr<ast::ExprMakeStruct> const)
+.. das:function:: AstVisitor.preVisitExprMakeStruct(self: AstVisitor; expr: smart_ptr<ExprMakeStruct> const)
 
 +--------+-------------------------------------------------------------------------+
 +argument+argument type                                                            +
@@ -7962,9 +8214,9 @@ canVisitMakeStructBlock returns bool
 
 |method-ast-AstVisitor.preVisitExprMakeStruct|
 
-.. das:function:: AstVisitor.visitExprMakeStruct(self: AstVisitor; expr: smart_ptr<ast::ExprMakeStruct> const)
+.. das:function:: AstVisitor.visitExprMakeStruct(self: AstVisitor; expr: smart_ptr<ExprMakeStruct> const)
 
-visitExprMakeStruct returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprMakeStruct returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-------------------------------------------------------------------------+
 +argument+argument type                                                            +
@@ -7977,7 +8229,7 @@ visitExprMakeStruct returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprMakeStruct|
 
-.. das:function:: AstVisitor.preVisitExprMakeStructIndex(self: AstVisitor; expr: smart_ptr<ast::ExprMakeStruct> const; index: int const; last: bool const)
+.. das:function:: AstVisitor.preVisitExprMakeStructIndex(self: AstVisitor; expr: smart_ptr<ExprMakeStruct> const; index: int const; last: bool const)
 
 +--------+-------------------------------------------------------------------------+
 +argument+argument type                                                            +
@@ -7994,7 +8246,7 @@ visitExprMakeStruct returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprMakeStructIndex|
 
-.. das:function:: AstVisitor.visitExprMakeStructIndex(self: AstVisitor; expr: smart_ptr<ast::ExprMakeStruct> const; index: int const; last: bool const)
+.. das:function:: AstVisitor.visitExprMakeStructIndex(self: AstVisitor; expr: smart_ptr<ExprMakeStruct> const; index: int const; last: bool const)
 
 +--------+-------------------------------------------------------------------------+
 +argument+argument type                                                            +
@@ -8011,7 +8263,7 @@ visitExprMakeStruct returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprMakeStructIndex|
 
-.. das:function:: AstVisitor.preVisitExprMakeStructField(self: AstVisitor; expr: smart_ptr<ast::ExprMakeStruct> const; index: int const; decl: MakeFieldDeclPtr; last: bool const)
+.. das:function:: AstVisitor.preVisitExprMakeStructField(self: AstVisitor; expr: smart_ptr<ExprMakeStruct> const; index: int const; decl: MakeFieldDeclPtr; last: bool const)
 
 +--------+-------------------------------------------------------------------------+
 +argument+argument type                                                            +
@@ -8030,9 +8282,9 @@ visitExprMakeStruct returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprMakeStructField|
 
-.. das:function:: AstVisitor.visitExprMakeStructField(self: AstVisitor; expr: smart_ptr<ast::ExprMakeStruct> const; index: int const; decl: MakeFieldDeclPtr; last: bool const)
+.. das:function:: AstVisitor.visitExprMakeStructField(self: AstVisitor; expr: smart_ptr<ExprMakeStruct> const; index: int const; decl: MakeFieldDeclPtr; last: bool const)
 
-visitExprMakeStructField returns  :ref:`MakeFieldDeclPtr <alias-MakeFieldDeclPtr>`
+visitExprMakeStructField returns  :ref:`MakeFieldDeclPtr <alias-MakeFieldDeclPtr>` 
 
 +--------+-------------------------------------------------------------------------+
 +argument+argument type                                                            +
@@ -8051,7 +8303,39 @@ visitExprMakeStructField returns  :ref:`MakeFieldDeclPtr <alias-MakeFieldDeclPtr
 
 |method-ast-AstVisitor.visitExprMakeStructField|
 
-.. das:function:: AstVisitor.preVisitExprMakeArray(self: AstVisitor; expr: smart_ptr<ast::ExprMakeArray> const)
+.. das:function:: AstVisitor.preVisitMakeStructureBlock(self: AstVisitor; expr: smart_ptr<ExprMakeStruct> const; blk: smart_ptr<Expression> const)
+
++--------+-------------------------------------------------------------------------+
++argument+argument type                                                            +
++========+=========================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
++--------+-------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprMakeStruct <handle-ast-ExprMakeStruct>` > const+
++--------+-------------------------------------------------------------------------+
++blk     +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` > const        +
++--------+-------------------------------------------------------------------------+
+
+
+|method-ast-AstVisitor.preVisitMakeStructureBlock|
+
+.. das:function:: AstVisitor.visitMakeStructureBlock(self: AstVisitor; expr: smart_ptr<ExprMakeStruct> const; blk: smart_ptr<Expression> const)
+
+visitMakeStructureBlock returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
+
++--------+-------------------------------------------------------------------------+
++argument+argument type                                                            +
++========+=========================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                          +
++--------+-------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprMakeStruct <handle-ast-ExprMakeStruct>` > const+
++--------+-------------------------------------------------------------------------+
++blk     +smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` > const        +
++--------+-------------------------------------------------------------------------+
+
+
+|method-ast-AstVisitor.visitMakeStructureBlock|
+
+.. das:function:: AstVisitor.preVisitExprMakeArray(self: AstVisitor; expr: smart_ptr<ExprMakeArray> const)
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -8064,9 +8348,9 @@ visitExprMakeStructField returns  :ref:`MakeFieldDeclPtr <alias-MakeFieldDeclPtr
 
 |method-ast-AstVisitor.preVisitExprMakeArray|
 
-.. das:function:: AstVisitor.visitExprMakeArray(self: AstVisitor; expr: smart_ptr<ast::ExprMakeArray> const)
+.. das:function:: AstVisitor.visitExprMakeArray(self: AstVisitor; expr: smart_ptr<ExprMakeArray> const)
 
-visitExprMakeArray returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprMakeArray returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -8079,7 +8363,7 @@ visitExprMakeArray returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprMakeArray|
 
-.. das:function:: AstVisitor.preVisitExprMakeArrayIndex(self: AstVisitor; expr: smart_ptr<ast::ExprMakeArray> const; index: int const; init: ExpressionPtr; last: bool const)
+.. das:function:: AstVisitor.preVisitExprMakeArrayIndex(self: AstVisitor; expr: smart_ptr<ExprMakeArray> const; index: int const; init: ExpressionPtr; last: bool const)
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -8098,9 +8382,9 @@ visitExprMakeArray returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprMakeArrayIndex|
 
-.. das:function:: AstVisitor.visitExprMakeArrayIndex(self: AstVisitor; expr: smart_ptr<ast::ExprMakeArray> const; index: int const; init: ExpressionPtr; last: bool const)
+.. das:function:: AstVisitor.visitExprMakeArrayIndex(self: AstVisitor; expr: smart_ptr<ExprMakeArray> const; index: int const; init: ExpressionPtr; last: bool const)
 
-visitExprMakeArrayIndex returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprMakeArrayIndex returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -8119,7 +8403,7 @@ visitExprMakeArrayIndex returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprMakeArrayIndex|
 
-.. das:function:: AstVisitor.preVisitExprMakeTuple(self: AstVisitor; expr: smart_ptr<ast::ExprMakeTuple> const)
+.. das:function:: AstVisitor.preVisitExprMakeTuple(self: AstVisitor; expr: smart_ptr<ExprMakeTuple> const)
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -8132,9 +8416,9 @@ visitExprMakeArrayIndex returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprMakeTuple|
 
-.. das:function:: AstVisitor.visitExprMakeTuple(self: AstVisitor; expr: smart_ptr<ast::ExprMakeTuple> const)
+.. das:function:: AstVisitor.visitExprMakeTuple(self: AstVisitor; expr: smart_ptr<ExprMakeTuple> const)
 
-visitExprMakeTuple returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprMakeTuple returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -8147,7 +8431,7 @@ visitExprMakeTuple returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprMakeTuple|
 
-.. das:function:: AstVisitor.preVisitExprMakeTupleIndex(self: AstVisitor; expr: smart_ptr<ast::ExprMakeTuple> const; index: int const; init: ExpressionPtr; last: bool const)
+.. das:function:: AstVisitor.preVisitExprMakeTupleIndex(self: AstVisitor; expr: smart_ptr<ExprMakeTuple> const; index: int const; init: ExpressionPtr; last: bool const)
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -8166,9 +8450,9 @@ visitExprMakeTuple returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprMakeTupleIndex|
 
-.. das:function:: AstVisitor.visitExprMakeTupleIndex(self: AstVisitor; expr: smart_ptr<ast::ExprMakeTuple> const; index: int const; init: ExpressionPtr; last: bool const)
+.. das:function:: AstVisitor.visitExprMakeTupleIndex(self: AstVisitor; expr: smart_ptr<ExprMakeTuple> const; index: int const; init: ExpressionPtr; last: bool const)
 
-visitExprMakeTupleIndex returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprMakeTupleIndex returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -8187,7 +8471,7 @@ visitExprMakeTupleIndex returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprMakeTupleIndex|
 
-.. das:function:: AstVisitor.preVisitExprArrayComprehension(self: AstVisitor; expr: smart_ptr<ast::ExprArrayComprehension> const)
+.. das:function:: AstVisitor.preVisitExprArrayComprehension(self: AstVisitor; expr: smart_ptr<ExprArrayComprehension> const)
 
 +--------+-----------------------------------------------------------------------------------------+
 +argument+argument type                                                                            +
@@ -8200,9 +8484,9 @@ visitExprMakeTupleIndex returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprArrayComprehension|
 
-.. das:function:: AstVisitor.visitExprArrayComprehension(self: AstVisitor; expr: smart_ptr<ast::ExprArrayComprehension> const)
+.. das:function:: AstVisitor.visitExprArrayComprehension(self: AstVisitor; expr: smart_ptr<ExprArrayComprehension> const)
 
-visitExprArrayComprehension returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprArrayComprehension returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-----------------------------------------------------------------------------------------+
 +argument+argument type                                                                            +
@@ -8215,7 +8499,7 @@ visitExprArrayComprehension returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprArrayComprehension|
 
-.. das:function:: AstVisitor.preVisitExprArrayComprehensionSubexpr(self: AstVisitor; expr: smart_ptr<ast::ExprArrayComprehension> const; subexrp: ExpressionPtr)
+.. das:function:: AstVisitor.preVisitExprArrayComprehensionSubexpr(self: AstVisitor; expr: smart_ptr<ExprArrayComprehension> const; subexrp: ExpressionPtr)
 
 +--------+-----------------------------------------------------------------------------------------+
 +argument+argument type                                                                            +
@@ -8230,7 +8514,7 @@ visitExprArrayComprehension returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprArrayComprehensionSubexpr|
 
-.. das:function:: AstVisitor.preVisitExprArrayComprehensionWhere(self: AstVisitor; expr: smart_ptr<ast::ExprArrayComprehension> const; filter: ExpressionPtr)
+.. das:function:: AstVisitor.preVisitExprArrayComprehensionWhere(self: AstVisitor; expr: smart_ptr<ExprArrayComprehension> const; filter: ExpressionPtr)
 
 +--------+-----------------------------------------------------------------------------------------+
 +argument+argument type                                                                            +
@@ -8245,7 +8529,7 @@ visitExprArrayComprehension returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprArrayComprehensionWhere|
 
-.. das:function:: AstVisitor.preVisitExprTypeInfo(self: AstVisitor; expr: smart_ptr<ast::ExprTypeInfo> const)
+.. das:function:: AstVisitor.preVisitExprTypeInfo(self: AstVisitor; expr: smart_ptr<ExprTypeInfo> const)
 
 +--------+---------------------------------------------------------------------+
 +argument+argument type                                                        +
@@ -8258,9 +8542,9 @@ visitExprArrayComprehension returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprTypeInfo|
 
-.. das:function:: AstVisitor.visitExprTypeInfo(self: AstVisitor; expr: smart_ptr<ast::ExprTypeInfo> const)
+.. das:function:: AstVisitor.visitExprTypeInfo(self: AstVisitor; expr: smart_ptr<ExprTypeInfo> const)
 
-visitExprTypeInfo returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprTypeInfo returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+---------------------------------------------------------------------+
 +argument+argument type                                                        +
@@ -8273,7 +8557,7 @@ visitExprTypeInfo returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprTypeInfo|
 
-.. das:function:: AstVisitor.preVisitExprPtr2Ref(self: AstVisitor; expr: smart_ptr<ast::ExprPtr2Ref> const)
+.. das:function:: AstVisitor.preVisitExprPtr2Ref(self: AstVisitor; expr: smart_ptr<ExprPtr2Ref> const)
 
 +--------+-------------------------------------------------------------------+
 +argument+argument type                                                      +
@@ -8286,9 +8570,9 @@ visitExprTypeInfo returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprPtr2Ref|
 
-.. das:function:: AstVisitor.visitExprPtr2Ref(self: AstVisitor; expr: smart_ptr<ast::ExprPtr2Ref> const)
+.. das:function:: AstVisitor.visitExprPtr2Ref(self: AstVisitor; expr: smart_ptr<ExprPtr2Ref> const)
 
-visitExprPtr2Ref returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprPtr2Ref returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-------------------------------------------------------------------+
 +argument+argument type                                                      +
@@ -8301,7 +8585,7 @@ visitExprPtr2Ref returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprPtr2Ref|
 
-.. das:function:: AstVisitor.preVisitExprLabel(self: AstVisitor; expr: smart_ptr<ast::ExprLabel> const)
+.. das:function:: AstVisitor.preVisitExprLabel(self: AstVisitor; expr: smart_ptr<ExprLabel> const)
 
 +--------+---------------------------------------------------------------+
 +argument+argument type                                                  +
@@ -8314,9 +8598,9 @@ visitExprPtr2Ref returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprLabel|
 
-.. das:function:: AstVisitor.visitExprLabel(self: AstVisitor; expr: smart_ptr<ast::ExprLabel> const)
+.. das:function:: AstVisitor.visitExprLabel(self: AstVisitor; expr: smart_ptr<ExprLabel> const)
 
-visitExprLabel returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprLabel returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+---------------------------------------------------------------+
 +argument+argument type                                                  +
@@ -8329,7 +8613,7 @@ visitExprLabel returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprLabel|
 
-.. das:function:: AstVisitor.preVisitExprGoto(self: AstVisitor; expr: smart_ptr<ast::ExprGoto> const)
+.. das:function:: AstVisitor.preVisitExprGoto(self: AstVisitor; expr: smart_ptr<ExprGoto> const)
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -8342,9 +8626,9 @@ visitExprLabel returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprGoto|
 
-.. das:function:: AstVisitor.visitExprGoto(self: AstVisitor; expr: smart_ptr<ast::ExprGoto> const)
+.. das:function:: AstVisitor.visitExprGoto(self: AstVisitor; expr: smart_ptr<ExprGoto> const)
 
-visitExprGoto returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprGoto returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -8357,7 +8641,7 @@ visitExprGoto returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprGoto|
 
-.. das:function:: AstVisitor.preVisitExprRef2Value(self: AstVisitor; expr: smart_ptr<ast::ExprRef2Value> const)
+.. das:function:: AstVisitor.preVisitExprRef2Value(self: AstVisitor; expr: smart_ptr<ExprRef2Value> const)
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -8370,9 +8654,9 @@ visitExprGoto returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprRef2Value|
 
-.. das:function:: AstVisitor.visitExprRef2Value(self: AstVisitor; expr: smart_ptr<ast::ExprRef2Value> const)
+.. das:function:: AstVisitor.visitExprRef2Value(self: AstVisitor; expr: smart_ptr<ExprRef2Value> const)
 
-visitExprRef2Value returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprRef2Value returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -8385,7 +8669,7 @@ visitExprRef2Value returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprRef2Value|
 
-.. das:function:: AstVisitor.preVisitExprRef2Ptr(self: AstVisitor; expr: smart_ptr<ast::ExprRef2Ptr> const)
+.. das:function:: AstVisitor.preVisitExprRef2Ptr(self: AstVisitor; expr: smart_ptr<ExprRef2Ptr> const)
 
 +--------+-------------------------------------------------------------------+
 +argument+argument type                                                      +
@@ -8398,9 +8682,9 @@ visitExprRef2Value returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprRef2Ptr|
 
-.. das:function:: AstVisitor.visitExprRef2Ptr(self: AstVisitor; expr: smart_ptr<ast::ExprRef2Ptr> const)
+.. das:function:: AstVisitor.visitExprRef2Ptr(self: AstVisitor; expr: smart_ptr<ExprRef2Ptr> const)
 
-visitExprRef2Ptr returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprRef2Ptr returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-------------------------------------------------------------------+
 +argument+argument type                                                      +
@@ -8413,7 +8697,7 @@ visitExprRef2Ptr returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprRef2Ptr|
 
-.. das:function:: AstVisitor.preVisitExprAddr(self: AstVisitor; expr: smart_ptr<ast::ExprAddr> const)
+.. das:function:: AstVisitor.preVisitExprAddr(self: AstVisitor; expr: smart_ptr<ExprAddr> const)
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -8426,9 +8710,9 @@ visitExprRef2Ptr returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprAddr|
 
-.. das:function:: AstVisitor.visitExprAddr(self: AstVisitor; expr: smart_ptr<ast::ExprAddr> const)
+.. das:function:: AstVisitor.visitExprAddr(self: AstVisitor; expr: smart_ptr<ExprAddr> const)
 
-visitExprAddr returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprAddr returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -8441,7 +8725,7 @@ visitExprAddr returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprAddr|
 
-.. das:function:: AstVisitor.preVisitExprAssert(self: AstVisitor; expr: smart_ptr<ast::ExprAssert> const)
+.. das:function:: AstVisitor.preVisitExprAssert(self: AstVisitor; expr: smart_ptr<ExprAssert> const)
 
 +--------+-----------------------------------------------------------------+
 +argument+argument type                                                    +
@@ -8454,9 +8738,9 @@ visitExprAddr returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprAssert|
 
-.. das:function:: AstVisitor.visitExprAssert(self: AstVisitor; expr: smart_ptr<ast::ExprAssert> const)
+.. das:function:: AstVisitor.visitExprAssert(self: AstVisitor; expr: smart_ptr<ExprAssert> const)
 
-visitExprAssert returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprAssert returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-----------------------------------------------------------------+
 +argument+argument type                                                    +
@@ -8469,7 +8753,7 @@ visitExprAssert returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprAssert|
 
-.. das:function:: AstVisitor.preVisitExprStaticAssert(self: AstVisitor; expr: smart_ptr<ast::ExprStaticAssert> const)
+.. das:function:: AstVisitor.preVisitExprStaticAssert(self: AstVisitor; expr: smart_ptr<ExprStaticAssert> const)
 
 +--------+-----------------------------------------------------------------------------+
 +argument+argument type                                                                +
@@ -8482,9 +8766,9 @@ visitExprAssert returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprStaticAssert|
 
-.. das:function:: AstVisitor.visitExprStaticAssert(self: AstVisitor; expr: smart_ptr<ast::ExprStaticAssert> const)
+.. das:function:: AstVisitor.visitExprStaticAssert(self: AstVisitor; expr: smart_ptr<ExprStaticAssert> const)
 
-visitExprStaticAssert returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprStaticAssert returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-----------------------------------------------------------------------------+
 +argument+argument type                                                                +
@@ -8497,7 +8781,7 @@ visitExprStaticAssert returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprStaticAssert|
 
-.. das:function:: AstVisitor.preVisitExprQuote(self: AstVisitor; expr: smart_ptr<ast::ExprQuote> const)
+.. das:function:: AstVisitor.preVisitExprQuote(self: AstVisitor; expr: smart_ptr<ExprQuote> const)
 
 +--------+---------------------------------------------------------------+
 +argument+argument type                                                  +
@@ -8510,9 +8794,9 @@ visitExprStaticAssert returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprQuote|
 
-.. das:function:: AstVisitor.visitExprQuote(self: AstVisitor; expr: smart_ptr<ast::ExprQuote> const)
+.. das:function:: AstVisitor.visitExprQuote(self: AstVisitor; expr: smart_ptr<ExprQuote> const)
 
-visitExprQuote returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprQuote returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+---------------------------------------------------------------+
 +argument+argument type                                                  +
@@ -8525,7 +8809,7 @@ visitExprQuote returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprQuote|
 
-.. das:function:: AstVisitor.preVisitExprDebug(self: AstVisitor; expr: smart_ptr<ast::ExprDebug> const)
+.. das:function:: AstVisitor.preVisitExprDebug(self: AstVisitor; expr: smart_ptr<ExprDebug> const)
 
 +--------+---------------------------------------------------------------+
 +argument+argument type                                                  +
@@ -8538,9 +8822,9 @@ visitExprQuote returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprDebug|
 
-.. das:function:: AstVisitor.visitExprDebug(self: AstVisitor; expr: smart_ptr<ast::ExprDebug> const)
+.. das:function:: AstVisitor.visitExprDebug(self: AstVisitor; expr: smart_ptr<ExprDebug> const)
 
-visitExprDebug returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprDebug returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+---------------------------------------------------------------+
 +argument+argument type                                                  +
@@ -8553,7 +8837,7 @@ visitExprDebug returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprDebug|
 
-.. das:function:: AstVisitor.preVisitExprInvoke(self: AstVisitor; expr: smart_ptr<ast::ExprInvoke> const)
+.. das:function:: AstVisitor.preVisitExprInvoke(self: AstVisitor; expr: smart_ptr<ExprInvoke> const)
 
 +--------+-----------------------------------------------------------------+
 +argument+argument type                                                    +
@@ -8566,9 +8850,9 @@ visitExprDebug returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprInvoke|
 
-.. das:function:: AstVisitor.visitExprInvoke(self: AstVisitor; expr: smart_ptr<ast::ExprInvoke> const)
+.. das:function:: AstVisitor.visitExprInvoke(self: AstVisitor; expr: smart_ptr<ExprInvoke> const)
 
-visitExprInvoke returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprInvoke returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-----------------------------------------------------------------+
 +argument+argument type                                                    +
@@ -8581,7 +8865,7 @@ visitExprInvoke returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprInvoke|
 
-.. das:function:: AstVisitor.preVisitExprErase(self: AstVisitor; expr: smart_ptr<ast::ExprErase> const)
+.. das:function:: AstVisitor.preVisitExprErase(self: AstVisitor; expr: smart_ptr<ExprErase> const)
 
 +--------+---------------------------------------------------------------+
 +argument+argument type                                                  +
@@ -8594,9 +8878,9 @@ visitExprInvoke returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprErase|
 
-.. das:function:: AstVisitor.visitExprErase(self: AstVisitor; expr: smart_ptr<ast::ExprErase> const)
+.. das:function:: AstVisitor.visitExprErase(self: AstVisitor; expr: smart_ptr<ExprErase> const)
 
-visitExprErase returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprErase returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+---------------------------------------------------------------+
 +argument+argument type                                                  +
@@ -8609,7 +8893,7 @@ visitExprErase returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprErase|
 
-.. das:function:: AstVisitor.preVisitExprSetInsert(self: AstVisitor; expr: smart_ptr<ast::ExprSetInsert> const)
+.. das:function:: AstVisitor.preVisitExprSetInsert(self: AstVisitor; expr: smart_ptr<ExprSetInsert> const)
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -8622,9 +8906,9 @@ visitExprErase returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprSetInsert|
 
-.. das:function:: AstVisitor.visitExprSetInsert(self: AstVisitor; expr: smart_ptr<ast::ExprSetInsert> const)
+.. das:function:: AstVisitor.visitExprSetInsert(self: AstVisitor; expr: smart_ptr<ExprSetInsert> const)
 
-visitExprSetInsert returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprSetInsert returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -8637,7 +8921,7 @@ visitExprSetInsert returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprSetInsert|
 
-.. das:function:: AstVisitor.preVisitExprFind(self: AstVisitor; expr: smart_ptr<ast::ExprFind> const)
+.. das:function:: AstVisitor.preVisitExprFind(self: AstVisitor; expr: smart_ptr<ExprFind> const)
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -8650,9 +8934,9 @@ visitExprSetInsert returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprFind|
 
-.. das:function:: AstVisitor.visitExprFind(self: AstVisitor; expr: smart_ptr<ast::ExprFind> const)
+.. das:function:: AstVisitor.visitExprFind(self: AstVisitor; expr: smart_ptr<ExprFind> const)
 
-visitExprFind returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprFind returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -8665,7 +8949,7 @@ visitExprFind returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprFind|
 
-.. das:function:: AstVisitor.preVisitExprKeyExists(self: AstVisitor; expr: smart_ptr<ast::ExprKeyExists> const)
+.. das:function:: AstVisitor.preVisitExprKeyExists(self: AstVisitor; expr: smart_ptr<ExprKeyExists> const)
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -8678,9 +8962,9 @@ visitExprFind returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprKeyExists|
 
-.. das:function:: AstVisitor.visitExprKeyExists(self: AstVisitor; expr: smart_ptr<ast::ExprKeyExists> const)
+.. das:function:: AstVisitor.visitExprKeyExists(self: AstVisitor; expr: smart_ptr<ExprKeyExists> const)
 
-visitExprKeyExists returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprKeyExists returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -8693,7 +8977,7 @@ visitExprKeyExists returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprKeyExists|
 
-.. das:function:: AstVisitor.preVisitExprAscend(self: AstVisitor; expr: smart_ptr<ast::ExprAscend> const)
+.. das:function:: AstVisitor.preVisitExprAscend(self: AstVisitor; expr: smart_ptr<ExprAscend> const)
 
 +--------+-----------------------------------------------------------------+
 +argument+argument type                                                    +
@@ -8706,9 +8990,9 @@ visitExprKeyExists returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprAscend|
 
-.. das:function:: AstVisitor.visitExprAscend(self: AstVisitor; expr: smart_ptr<ast::ExprAscend> const)
+.. das:function:: AstVisitor.visitExprAscend(self: AstVisitor; expr: smart_ptr<ExprAscend> const)
 
-visitExprAscend returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprAscend returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-----------------------------------------------------------------+
 +argument+argument type                                                    +
@@ -8721,7 +9005,7 @@ visitExprAscend returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprAscend|
 
-.. das:function:: AstVisitor.preVisitExprCast(self: AstVisitor; expr: smart_ptr<ast::ExprCast> const)
+.. das:function:: AstVisitor.preVisitExprCast(self: AstVisitor; expr: smart_ptr<ExprCast> const)
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -8734,9 +9018,9 @@ visitExprAscend returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprCast|
 
-.. das:function:: AstVisitor.visitExprCast(self: AstVisitor; expr: smart_ptr<ast::ExprCast> const)
+.. das:function:: AstVisitor.visitExprCast(self: AstVisitor; expr: smart_ptr<ExprCast> const)
 
-visitExprCast returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprCast returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-------------------------------------------------------------+
 +argument+argument type                                                +
@@ -8749,7 +9033,7 @@ visitExprCast returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprCast|
 
-.. das:function:: AstVisitor.preVisitExprDelete(self: AstVisitor; expr: smart_ptr<ast::ExprDelete> const)
+.. das:function:: AstVisitor.preVisitExprDelete(self: AstVisitor; expr: smart_ptr<ExprDelete> const)
 
 +--------+-----------------------------------------------------------------+
 +argument+argument type                                                    +
@@ -8762,9 +9046,9 @@ visitExprCast returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprDelete|
 
-.. das:function:: AstVisitor.visitExprDelete(self: AstVisitor; expr: smart_ptr<ast::ExprDelete> const)
+.. das:function:: AstVisitor.visitExprDelete(self: AstVisitor; expr: smart_ptr<ExprDelete> const)
 
-visitExprDelete returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprDelete returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-----------------------------------------------------------------+
 +argument+argument type                                                    +
@@ -8777,7 +9061,7 @@ visitExprDelete returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprDelete|
 
-.. das:function:: AstVisitor.preVisitExprVar(self: AstVisitor; expr: smart_ptr<ast::ExprVar> const)
+.. das:function:: AstVisitor.preVisitExprVar(self: AstVisitor; expr: smart_ptr<ExprVar> const)
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -8790,9 +9074,9 @@ visitExprDelete returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprVar|
 
-.. das:function:: AstVisitor.visitExprVar(self: AstVisitor; expr: smart_ptr<ast::ExprVar> const)
+.. das:function:: AstVisitor.visitExprVar(self: AstVisitor; expr: smart_ptr<ExprVar> const)
 
-visitExprVar returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprVar returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -8805,7 +9089,7 @@ visitExprVar returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprVar|
 
-.. das:function:: AstVisitor.preVisitExprTag(self: AstVisitor; expr: smart_ptr<ast::ExprTag> const)
+.. das:function:: AstVisitor.preVisitExprTag(self: AstVisitor; expr: smart_ptr<ExprTag> const)
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -8818,7 +9102,7 @@ visitExprVar returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprTag|
 
-.. das:function:: AstVisitor.preVisitExprTagValue(self: AstVisitor; expr: smart_ptr<ast::ExprTag> const; value: ExpressionPtr)
+.. das:function:: AstVisitor.preVisitExprTagValue(self: AstVisitor; expr: smart_ptr<ExprTag> const; value: ExpressionPtr)
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -8833,9 +9117,9 @@ visitExprVar returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprTagValue|
 
-.. das:function:: AstVisitor.visitExprTag(self: AstVisitor; expr: smart_ptr<ast::ExprTag> const)
+.. das:function:: AstVisitor.visitExprTag(self: AstVisitor; expr: smart_ptr<ExprTag> const)
 
-visitExprTag returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprTag returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -8848,7 +9132,7 @@ visitExprTag returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprTag|
 
-.. das:function:: AstVisitor.preVisitExprField(self: AstVisitor; expr: smart_ptr<ast::ExprField> const)
+.. das:function:: AstVisitor.preVisitExprField(self: AstVisitor; expr: smart_ptr<ExprField> const)
 
 +--------+---------------------------------------------------------------+
 +argument+argument type                                                  +
@@ -8861,9 +9145,9 @@ visitExprTag returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprField|
 
-.. das:function:: AstVisitor.visitExprField(self: AstVisitor; expr: smart_ptr<ast::ExprField> const)
+.. das:function:: AstVisitor.visitExprField(self: AstVisitor; expr: smart_ptr<ExprField> const)
 
-visitExprField returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprField returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+---------------------------------------------------------------+
 +argument+argument type                                                  +
@@ -8876,7 +9160,7 @@ visitExprField returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprField|
 
-.. das:function:: AstVisitor.preVisitExprSafeField(self: AstVisitor; expr: smart_ptr<ast::ExprSafeField> const)
+.. das:function:: AstVisitor.preVisitExprSafeField(self: AstVisitor; expr: smart_ptr<ExprSafeField> const)
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -8889,9 +9173,9 @@ visitExprField returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprSafeField|
 
-.. das:function:: AstVisitor.visitExprSafeField(self: AstVisitor; expr: smart_ptr<ast::ExprSafeField> const)
+.. das:function:: AstVisitor.visitExprSafeField(self: AstVisitor; expr: smart_ptr<ExprSafeField> const)
 
-visitExprSafeField returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprSafeField returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -8904,7 +9188,7 @@ visitExprSafeField returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprSafeField|
 
-.. das:function:: AstVisitor.preVisitExprSwizzle(self: AstVisitor; expr: smart_ptr<ast::ExprSwizzle> const)
+.. das:function:: AstVisitor.preVisitExprSwizzle(self: AstVisitor; expr: smart_ptr<ExprSwizzle> const)
 
 +--------+-------------------------------------------------------------------+
 +argument+argument type                                                      +
@@ -8917,9 +9201,9 @@ visitExprSafeField returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprSwizzle|
 
-.. das:function:: AstVisitor.visitExprSwizzle(self: AstVisitor; expr: smart_ptr<ast::ExprSwizzle> const)
+.. das:function:: AstVisitor.visitExprSwizzle(self: AstVisitor; expr: smart_ptr<ExprSwizzle> const)
 
-visitExprSwizzle returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprSwizzle returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-------------------------------------------------------------------+
 +argument+argument type                                                      +
@@ -8932,7 +9216,7 @@ visitExprSwizzle returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprSwizzle|
 
-.. das:function:: AstVisitor.preVisitExprIsVariant(self: AstVisitor; expr: smart_ptr<ast::ExprIsVariant> const)
+.. das:function:: AstVisitor.preVisitExprIsVariant(self: AstVisitor; expr: smart_ptr<ExprIsVariant> const)
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -8945,9 +9229,9 @@ visitExprSwizzle returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprIsVariant|
 
-.. das:function:: AstVisitor.visitExprIsVariant(self: AstVisitor; expr: smart_ptr<ast::ExprIsVariant> const)
+.. das:function:: AstVisitor.visitExprIsVariant(self: AstVisitor; expr: smart_ptr<ExprIsVariant> const)
 
-visitExprIsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprIsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -8960,7 +9244,7 @@ visitExprIsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprIsVariant|
 
-.. das:function:: AstVisitor.preVisitExprAsVariant(self: AstVisitor; expr: smart_ptr<ast::ExprAsVariant> const)
+.. das:function:: AstVisitor.preVisitExprAsVariant(self: AstVisitor; expr: smart_ptr<ExprAsVariant> const)
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -8973,9 +9257,9 @@ visitExprIsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprAsVariant|
 
-.. das:function:: AstVisitor.visitExprAsVariant(self: AstVisitor; expr: smart_ptr<ast::ExprAsVariant> const)
+.. das:function:: AstVisitor.visitExprAsVariant(self: AstVisitor; expr: smart_ptr<ExprAsVariant> const)
 
-visitExprAsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprAsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -8988,7 +9272,7 @@ visitExprAsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprAsVariant|
 
-.. das:function:: AstVisitor.preVisitExprSafeAsVariant(self: AstVisitor; expr: smart_ptr<ast::ExprSafeAsVariant> const)
+.. das:function:: AstVisitor.preVisitExprSafeAsVariant(self: AstVisitor; expr: smart_ptr<ExprSafeAsVariant> const)
 
 +--------+-------------------------------------------------------------------------------+
 +argument+argument type                                                                  +
@@ -9001,9 +9285,9 @@ visitExprAsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprSafeAsVariant|
 
-.. das:function:: AstVisitor.visitExprSafeAsVariant(self: AstVisitor; expr: smart_ptr<ast::ExprSafeAsVariant> const)
+.. das:function:: AstVisitor.visitExprSafeAsVariant(self: AstVisitor; expr: smart_ptr<ExprSafeAsVariant> const)
 
-visitExprSafeAsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprSafeAsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-------------------------------------------------------------------------------+
 +argument+argument type                                                                  +
@@ -9016,7 +9300,7 @@ visitExprSafeAsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprSafeAsVariant|
 
-.. das:function:: AstVisitor.preVisitExprOp1(self: AstVisitor; expr: smart_ptr<ast::ExprOp1> const)
+.. das:function:: AstVisitor.preVisitExprOp1(self: AstVisitor; expr: smart_ptr<ExprOp1> const)
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -9029,9 +9313,9 @@ visitExprSafeAsVariant returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprOp1|
 
-.. das:function:: AstVisitor.visitExprOp1(self: AstVisitor; expr: smart_ptr<ast::ExprOp1> const)
+.. das:function:: AstVisitor.visitExprOp1(self: AstVisitor; expr: smart_ptr<ExprOp1> const)
 
-visitExprOp1 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprOp1 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-----------------------------------------------------------+
 +argument+argument type                                              +
@@ -9044,7 +9328,7 @@ visitExprOp1 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprOp1|
 
-.. das:function:: AstVisitor.preVisitExprReturn(self: AstVisitor; expr: smart_ptr<ast::ExprReturn> const)
+.. das:function:: AstVisitor.preVisitExprReturn(self: AstVisitor; expr: smart_ptr<ExprReturn> const)
 
 +--------+-----------------------------------------------------------------+
 +argument+argument type                                                    +
@@ -9057,9 +9341,9 @@ visitExprOp1 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprReturn|
 
-.. das:function:: AstVisitor.visitExprReturn(self: AstVisitor; expr: smart_ptr<ast::ExprReturn> const)
+.. das:function:: AstVisitor.visitExprReturn(self: AstVisitor; expr: smart_ptr<ExprReturn> const)
 
-visitExprReturn returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprReturn returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-----------------------------------------------------------------+
 +argument+argument type                                                    +
@@ -9072,7 +9356,7 @@ visitExprReturn returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprReturn|
 
-.. das:function:: AstVisitor.preVisitExprYield(self: AstVisitor; expr: smart_ptr<ast::ExprYield> const)
+.. das:function:: AstVisitor.preVisitExprYield(self: AstVisitor; expr: smart_ptr<ExprYield> const)
 
 +--------+---------------------------------------------------------------+
 +argument+argument type                                                  +
@@ -9085,9 +9369,9 @@ visitExprReturn returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprYield|
 
-.. das:function:: AstVisitor.visitExprYield(self: AstVisitor; expr: smart_ptr<ast::ExprYield> const)
+.. das:function:: AstVisitor.visitExprYield(self: AstVisitor; expr: smart_ptr<ExprYield> const)
 
-visitExprYield returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprYield returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+---------------------------------------------------------------+
 +argument+argument type                                                  +
@@ -9100,7 +9384,7 @@ visitExprYield returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprYield|
 
-.. das:function:: AstVisitor.preVisitExprBreak(self: AstVisitor; expr: smart_ptr<ast::ExprBreak> const)
+.. das:function:: AstVisitor.preVisitExprBreak(self: AstVisitor; expr: smart_ptr<ExprBreak> const)
 
 +--------+---------------------------------------------------------------+
 +argument+argument type                                                  +
@@ -9113,9 +9397,9 @@ visitExprYield returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprBreak|
 
-.. das:function:: AstVisitor.visitExprBreak(self: AstVisitor; expr: smart_ptr<ast::ExprBreak> const)
+.. das:function:: AstVisitor.visitExprBreak(self: AstVisitor; expr: smart_ptr<ExprBreak> const)
 
-visitExprBreak returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprBreak returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+---------------------------------------------------------------+
 +argument+argument type                                                  +
@@ -9128,7 +9412,7 @@ visitExprBreak returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprBreak|
 
-.. das:function:: AstVisitor.preVisitExprContinue(self: AstVisitor; expr: smart_ptr<ast::ExprContinue> const)
+.. das:function:: AstVisitor.preVisitExprContinue(self: AstVisitor; expr: smart_ptr<ExprContinue> const)
 
 +--------+---------------------------------------------------------------------+
 +argument+argument type                                                        +
@@ -9141,9 +9425,9 @@ visitExprBreak returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprContinue|
 
-.. das:function:: AstVisitor.visitExprContinue(self: AstVisitor; expr: smart_ptr<ast::ExprContinue> const)
+.. das:function:: AstVisitor.visitExprContinue(self: AstVisitor; expr: smart_ptr<ExprContinue> const)
 
-visitExprContinue returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprContinue returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+---------------------------------------------------------------------+
 +argument+argument type                                                        +
@@ -9156,7 +9440,7 @@ visitExprContinue returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprContinue|
 
-.. das:function:: AstVisitor.canVisitMakeBlockBody(self: AstVisitor; expr: smart_ptr<ast::ExprMakeBlock> const)
+.. das:function:: AstVisitor.canVisitMakeBlockBody(self: AstVisitor; expr: smart_ptr<ExprMakeBlock> const)
 
 canVisitMakeBlockBody returns bool
 
@@ -9171,7 +9455,7 @@ canVisitMakeBlockBody returns bool
 
 |method-ast-AstVisitor.canVisitMakeBlockBody|
 
-.. das:function:: AstVisitor.preVisitExprMakeBlock(self: AstVisitor; expr: smart_ptr<ast::ExprMakeBlock> const)
+.. das:function:: AstVisitor.preVisitExprMakeBlock(self: AstVisitor; expr: smart_ptr<ExprMakeBlock> const)
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -9184,9 +9468,9 @@ canVisitMakeBlockBody returns bool
 
 |method-ast-AstVisitor.preVisitExprMakeBlock|
 
-.. das:function:: AstVisitor.visitExprMakeBlock(self: AstVisitor; expr: smart_ptr<ast::ExprMakeBlock> const)
+.. das:function:: AstVisitor.visitExprMakeBlock(self: AstVisitor; expr: smart_ptr<ExprMakeBlock> const)
 
-visitExprMakeBlock returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprMakeBlock returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -9199,7 +9483,7 @@ visitExprMakeBlock returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprMakeBlock|
 
-.. das:function:: AstVisitor.preVisitExprMakeGenerator(self: AstVisitor; expr: smart_ptr<ast::ExprMakeGenerator> const)
+.. das:function:: AstVisitor.preVisitExprMakeGenerator(self: AstVisitor; expr: smart_ptr<ExprMakeGenerator> const)
 
 +--------+-------------------------------------------------------------------------------+
 +argument+argument type                                                                  +
@@ -9212,9 +9496,9 @@ visitExprMakeBlock returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprMakeGenerator|
 
-.. das:function:: AstVisitor.visitExprMakeGenerator(self: AstVisitor; expr: smart_ptr<ast::ExprMakeGenerator> const)
+.. das:function:: AstVisitor.visitExprMakeGenerator(self: AstVisitor; expr: smart_ptr<ExprMakeGenerator> const)
 
-visitExprMakeGenerator returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprMakeGenerator returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-------------------------------------------------------------------------------+
 +argument+argument type                                                                  +
@@ -9227,7 +9511,7 @@ visitExprMakeGenerator returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprMakeGenerator|
 
-.. das:function:: AstVisitor.preVisitExprMemZero(self: AstVisitor; expr: smart_ptr<ast::ExprMemZero> const)
+.. das:function:: AstVisitor.preVisitExprMemZero(self: AstVisitor; expr: smart_ptr<ExprMemZero> const)
 
 +--------+-------------------------------------------------------------------+
 +argument+argument type                                                      +
@@ -9240,9 +9524,9 @@ visitExprMakeGenerator returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprMemZero|
 
-.. das:function:: AstVisitor.visitExprMemZero(self: AstVisitor; expr: smart_ptr<ast::ExprMemZero> const)
+.. das:function:: AstVisitor.visitExprMemZero(self: AstVisitor; expr: smart_ptr<ExprMemZero> const)
 
-visitExprMemZero returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprMemZero returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-------------------------------------------------------------------+
 +argument+argument type                                                      +
@@ -9255,7 +9539,7 @@ visitExprMemZero returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprMemZero|
 
-.. das:function:: AstVisitor.preVisitExprConst(self: AstVisitor; expr: smart_ptr<ast::ExprConst> const)
+.. das:function:: AstVisitor.preVisitExprConst(self: AstVisitor; expr: smart_ptr<ExprConst> const)
 
 +--------+---------------------------------------------------------------+
 +argument+argument type                                                  +
@@ -9268,9 +9552,9 @@ visitExprMemZero returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprConst|
 
-.. das:function:: AstVisitor.visitExprConst(self: AstVisitor; expr: smart_ptr<ast::ExprConst> const)
+.. das:function:: AstVisitor.visitExprConst(self: AstVisitor; expr: smart_ptr<ExprConst> const)
 
-visitExprConst returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprConst returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+---------------------------------------------------------------+
 +argument+argument type                                                  +
@@ -9283,7 +9567,7 @@ visitExprConst returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprConst|
 
-.. das:function:: AstVisitor.preVisitExprConstPtr(self: AstVisitor; expr: smart_ptr<ast::ExprConstPtr> const)
+.. das:function:: AstVisitor.preVisitExprConstPtr(self: AstVisitor; expr: smart_ptr<ExprConstPtr> const)
 
 +--------+---------------------------------------------------------------------+
 +argument+argument type                                                        +
@@ -9296,9 +9580,9 @@ visitExprConst returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprConstPtr|
 
-.. das:function:: AstVisitor.visitExprConstPtr(self: AstVisitor; expr: smart_ptr<ast::ExprConstPtr> const)
+.. das:function:: AstVisitor.visitExprConstPtr(self: AstVisitor; expr: smart_ptr<ExprConstPtr> const)
 
-visitExprConstPtr returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprConstPtr returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+---------------------------------------------------------------------+
 +argument+argument type                                                        +
@@ -9311,7 +9595,7 @@ visitExprConstPtr returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprConstPtr|
 
-.. das:function:: AstVisitor.preVisitExprConstEnumeration(self: AstVisitor; expr: smart_ptr<ast::ExprConstEnumeration> const)
+.. das:function:: AstVisitor.preVisitExprConstEnumeration(self: AstVisitor; expr: smart_ptr<ExprConstEnumeration> const)
 
 +--------+-------------------------------------------------------------------------------------+
 +argument+argument type                                                                        +
@@ -9324,9 +9608,9 @@ visitExprConstPtr returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprConstEnumeration|
 
-.. das:function:: AstVisitor.visitExprConstEnumeration(self: AstVisitor; expr: smart_ptr<ast::ExprConstEnumeration> const)
+.. das:function:: AstVisitor.visitExprConstEnumeration(self: AstVisitor; expr: smart_ptr<ExprConstEnumeration> const)
 
-visitExprConstEnumeration returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprConstEnumeration returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-------------------------------------------------------------------------------------+
 +argument+argument type                                                                        +
@@ -9339,7 +9623,7 @@ visitExprConstEnumeration returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprConstEnumeration|
 
-.. das:function:: AstVisitor.preVisitExprConstBitfield(self: AstVisitor; expr: smart_ptr<ast::ExprConstBitfield> const)
+.. das:function:: AstVisitor.preVisitExprConstBitfield(self: AstVisitor; expr: smart_ptr<ExprConstBitfield> const)
 
 +--------+-------------------------------------------------------------------------------+
 +argument+argument type                                                                  +
@@ -9352,9 +9636,9 @@ visitExprConstEnumeration returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprConstBitfield|
 
-.. das:function:: AstVisitor.visitExprConstBitfield(self: AstVisitor; expr: smart_ptr<ast::ExprConstBitfield> const)
+.. das:function:: AstVisitor.visitExprConstBitfield(self: AstVisitor; expr: smart_ptr<ExprConstBitfield> const)
 
-visitExprConstBitfield returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprConstBitfield returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-------------------------------------------------------------------------------+
 +argument+argument type                                                                  +
@@ -9367,7 +9651,7 @@ visitExprConstBitfield returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprConstBitfield|
 
-.. das:function:: AstVisitor.preVisitExprConstInt8(self: AstVisitor; expr: smart_ptr<ast::ExprConstInt8> const)
+.. das:function:: AstVisitor.preVisitExprConstInt8(self: AstVisitor; expr: smart_ptr<ExprConstInt8> const)
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -9380,9 +9664,9 @@ visitExprConstBitfield returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprConstInt8|
 
-.. das:function:: AstVisitor.visitExprConstInt8(self: AstVisitor; expr: smart_ptr<ast::ExprConstInt8> const)
+.. das:function:: AstVisitor.visitExprConstInt8(self: AstVisitor; expr: smart_ptr<ExprConstInt8> const)
 
-visitExprConstInt8 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprConstInt8 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -9395,7 +9679,7 @@ visitExprConstInt8 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprConstInt8|
 
-.. das:function:: AstVisitor.preVisitExprConstInt16(self: AstVisitor; expr: smart_ptr<ast::ExprConstInt16> const)
+.. das:function:: AstVisitor.preVisitExprConstInt16(self: AstVisitor; expr: smart_ptr<ExprConstInt16> const)
 
 +--------+-------------------------------------------------------------------------+
 +argument+argument type                                                            +
@@ -9408,9 +9692,9 @@ visitExprConstInt8 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprConstInt16|
 
-.. das:function:: AstVisitor.visitExprConstInt16(self: AstVisitor; expr: smart_ptr<ast::ExprConstInt16> const)
+.. das:function:: AstVisitor.visitExprConstInt16(self: AstVisitor; expr: smart_ptr<ExprConstInt16> const)
 
-visitExprConstInt16 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprConstInt16 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-------------------------------------------------------------------------+
 +argument+argument type                                                            +
@@ -9423,7 +9707,7 @@ visitExprConstInt16 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprConstInt16|
 
-.. das:function:: AstVisitor.preVisitExprConstInt64(self: AstVisitor; expr: smart_ptr<ast::ExprConstInt64> const)
+.. das:function:: AstVisitor.preVisitExprConstInt64(self: AstVisitor; expr: smart_ptr<ExprConstInt64> const)
 
 +--------+-------------------------------------------------------------------------+
 +argument+argument type                                                            +
@@ -9436,9 +9720,9 @@ visitExprConstInt16 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprConstInt64|
 
-.. das:function:: AstVisitor.visitExprConstInt64(self: AstVisitor; expr: smart_ptr<ast::ExprConstInt64> const)
+.. das:function:: AstVisitor.visitExprConstInt64(self: AstVisitor; expr: smart_ptr<ExprConstInt64> const)
 
-visitExprConstInt64 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprConstInt64 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-------------------------------------------------------------------------+
 +argument+argument type                                                            +
@@ -9451,7 +9735,7 @@ visitExprConstInt64 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprConstInt64|
 
-.. das:function:: AstVisitor.preVisitExprConstInt(self: AstVisitor; expr: smart_ptr<ast::ExprConstInt> const)
+.. das:function:: AstVisitor.preVisitExprConstInt(self: AstVisitor; expr: smart_ptr<ExprConstInt> const)
 
 +--------+---------------------------------------------------------------------+
 +argument+argument type                                                        +
@@ -9464,9 +9748,9 @@ visitExprConstInt64 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprConstInt|
 
-.. das:function:: AstVisitor.visitExprConstInt(self: AstVisitor; expr: smart_ptr<ast::ExprConstInt> const)
+.. das:function:: AstVisitor.visitExprConstInt(self: AstVisitor; expr: smart_ptr<ExprConstInt> const)
 
-visitExprConstInt returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprConstInt returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+---------------------------------------------------------------------+
 +argument+argument type                                                        +
@@ -9479,7 +9763,7 @@ visitExprConstInt returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprConstInt|
 
-.. das:function:: AstVisitor.preVisitExprConstInt2(self: AstVisitor; expr: smart_ptr<ast::ExprConstInt2> const)
+.. das:function:: AstVisitor.preVisitExprConstInt2(self: AstVisitor; expr: smart_ptr<ExprConstInt2> const)
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -9492,9 +9776,9 @@ visitExprConstInt returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprConstInt2|
 
-.. das:function:: AstVisitor.visitExprConstInt2(self: AstVisitor; expr: smart_ptr<ast::ExprConstInt2> const)
+.. das:function:: AstVisitor.visitExprConstInt2(self: AstVisitor; expr: smart_ptr<ExprConstInt2> const)
 
-visitExprConstInt2 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprConstInt2 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -9507,7 +9791,7 @@ visitExprConstInt2 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprConstInt2|
 
-.. das:function:: AstVisitor.preVisitExprConstInt3(self: AstVisitor; expr: smart_ptr<ast::ExprConstInt3> const)
+.. das:function:: AstVisitor.preVisitExprConstInt3(self: AstVisitor; expr: smart_ptr<ExprConstInt3> const)
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -9520,9 +9804,9 @@ visitExprConstInt2 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprConstInt3|
 
-.. das:function:: AstVisitor.visitExprConstInt3(self: AstVisitor; expr: smart_ptr<ast::ExprConstInt3> const)
+.. das:function:: AstVisitor.visitExprConstInt3(self: AstVisitor; expr: smart_ptr<ExprConstInt3> const)
 
-visitExprConstInt3 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprConstInt3 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -9535,7 +9819,7 @@ visitExprConstInt3 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprConstInt3|
 
-.. das:function:: AstVisitor.preVisitExprConstInt4(self: AstVisitor; expr: smart_ptr<ast::ExprConstInt4> const)
+.. das:function:: AstVisitor.preVisitExprConstInt4(self: AstVisitor; expr: smart_ptr<ExprConstInt4> const)
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -9548,9 +9832,9 @@ visitExprConstInt3 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprConstInt4|
 
-.. das:function:: AstVisitor.visitExprConstInt4(self: AstVisitor; expr: smart_ptr<ast::ExprConstInt4> const)
+.. das:function:: AstVisitor.visitExprConstInt4(self: AstVisitor; expr: smart_ptr<ExprConstInt4> const)
 
-visitExprConstInt4 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprConstInt4 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -9563,7 +9847,7 @@ visitExprConstInt4 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprConstInt4|
 
-.. das:function:: AstVisitor.preVisitExprConstUInt8(self: AstVisitor; expr: smart_ptr<ast::ExprConstUInt8> const)
+.. das:function:: AstVisitor.preVisitExprConstUInt8(self: AstVisitor; expr: smart_ptr<ExprConstUInt8> const)
 
 +--------+-------------------------------------------------------------------------+
 +argument+argument type                                                            +
@@ -9576,9 +9860,9 @@ visitExprConstInt4 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprConstUInt8|
 
-.. das:function:: AstVisitor.visitExprConstUInt8(self: AstVisitor; expr: smart_ptr<ast::ExprConstUInt8> const)
+.. das:function:: AstVisitor.visitExprConstUInt8(self: AstVisitor; expr: smart_ptr<ExprConstUInt8> const)
 
-visitExprConstUInt8 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprConstUInt8 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-------------------------------------------------------------------------+
 +argument+argument type                                                            +
@@ -9591,7 +9875,7 @@ visitExprConstUInt8 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprConstUInt8|
 
-.. das:function:: AstVisitor.preVisitExprConstUInt16(self: AstVisitor; expr: smart_ptr<ast::ExprConstUInt16> const)
+.. das:function:: AstVisitor.preVisitExprConstUInt16(self: AstVisitor; expr: smart_ptr<ExprConstUInt16> const)
 
 +--------+---------------------------------------------------------------------------+
 +argument+argument type                                                              +
@@ -9604,9 +9888,9 @@ visitExprConstUInt8 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprConstUInt16|
 
-.. das:function:: AstVisitor.visitExprConstUInt16(self: AstVisitor; expr: smart_ptr<ast::ExprConstUInt16> const)
+.. das:function:: AstVisitor.visitExprConstUInt16(self: AstVisitor; expr: smart_ptr<ExprConstUInt16> const)
 
-visitExprConstUInt16 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprConstUInt16 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+---------------------------------------------------------------------------+
 +argument+argument type                                                              +
@@ -9619,7 +9903,7 @@ visitExprConstUInt16 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprConstUInt16|
 
-.. das:function:: AstVisitor.preVisitExprConstUInt64(self: AstVisitor; expr: smart_ptr<ast::ExprConstUInt64> const)
+.. das:function:: AstVisitor.preVisitExprConstUInt64(self: AstVisitor; expr: smart_ptr<ExprConstUInt64> const)
 
 +--------+---------------------------------------------------------------------------+
 +argument+argument type                                                              +
@@ -9632,9 +9916,9 @@ visitExprConstUInt16 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprConstUInt64|
 
-.. das:function:: AstVisitor.visitExprConstUInt64(self: AstVisitor; expr: smart_ptr<ast::ExprConstUInt64> const)
+.. das:function:: AstVisitor.visitExprConstUInt64(self: AstVisitor; expr: smart_ptr<ExprConstUInt64> const)
 
-visitExprConstUInt64 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprConstUInt64 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+---------------------------------------------------------------------------+
 +argument+argument type                                                              +
@@ -9647,7 +9931,7 @@ visitExprConstUInt64 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprConstUInt64|
 
-.. das:function:: AstVisitor.preVisitExprConstUInt(self: AstVisitor; expr: smart_ptr<ast::ExprConstUInt> const)
+.. das:function:: AstVisitor.preVisitExprConstUInt(self: AstVisitor; expr: smart_ptr<ExprConstUInt> const)
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -9660,9 +9944,9 @@ visitExprConstUInt64 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprConstUInt|
 
-.. das:function:: AstVisitor.visitExprConstUInt(self: AstVisitor; expr: smart_ptr<ast::ExprConstUInt> const)
+.. das:function:: AstVisitor.visitExprConstUInt(self: AstVisitor; expr: smart_ptr<ExprConstUInt> const)
 
-visitExprConstUInt returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprConstUInt returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -9675,7 +9959,7 @@ visitExprConstUInt returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprConstUInt|
 
-.. das:function:: AstVisitor.preVisitExprConstUInt2(self: AstVisitor; expr: smart_ptr<ast::ExprConstUInt2> const)
+.. das:function:: AstVisitor.preVisitExprConstUInt2(self: AstVisitor; expr: smart_ptr<ExprConstUInt2> const)
 
 +--------+-------------------------------------------------------------------------+
 +argument+argument type                                                            +
@@ -9688,9 +9972,9 @@ visitExprConstUInt returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprConstUInt2|
 
-.. das:function:: AstVisitor.visitExprConstUInt2(self: AstVisitor; expr: smart_ptr<ast::ExprConstUInt2> const)
+.. das:function:: AstVisitor.visitExprConstUInt2(self: AstVisitor; expr: smart_ptr<ExprConstUInt2> const)
 
-visitExprConstUInt2 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprConstUInt2 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-------------------------------------------------------------------------+
 +argument+argument type                                                            +
@@ -9703,7 +9987,7 @@ visitExprConstUInt2 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprConstUInt2|
 
-.. das:function:: AstVisitor.preVisitExprConstUInt3(self: AstVisitor; expr: smart_ptr<ast::ExprConstUInt3> const)
+.. das:function:: AstVisitor.preVisitExprConstUInt3(self: AstVisitor; expr: smart_ptr<ExprConstUInt3> const)
 
 +--------+-------------------------------------------------------------------------+
 +argument+argument type                                                            +
@@ -9716,9 +10000,9 @@ visitExprConstUInt2 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprConstUInt3|
 
-.. das:function:: AstVisitor.visitExprConstUInt3(self: AstVisitor; expr: smart_ptr<ast::ExprConstUInt3> const)
+.. das:function:: AstVisitor.visitExprConstUInt3(self: AstVisitor; expr: smart_ptr<ExprConstUInt3> const)
 
-visitExprConstUInt3 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprConstUInt3 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-------------------------------------------------------------------------+
 +argument+argument type                                                            +
@@ -9731,7 +10015,7 @@ visitExprConstUInt3 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprConstUInt3|
 
-.. das:function:: AstVisitor.preVisitExprConstUInt4(self: AstVisitor; expr: smart_ptr<ast::ExprConstUInt4> const)
+.. das:function:: AstVisitor.preVisitExprConstUInt4(self: AstVisitor; expr: smart_ptr<ExprConstUInt4> const)
 
 +--------+-------------------------------------------------------------------------+
 +argument+argument type                                                            +
@@ -9744,9 +10028,9 @@ visitExprConstUInt3 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprConstUInt4|
 
-.. das:function:: AstVisitor.visitExprConstUInt4(self: AstVisitor; expr: smart_ptr<ast::ExprConstUInt4> const)
+.. das:function:: AstVisitor.visitExprConstUInt4(self: AstVisitor; expr: smart_ptr<ExprConstUInt4> const)
 
-visitExprConstUInt4 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprConstUInt4 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-------------------------------------------------------------------------+
 +argument+argument type                                                            +
@@ -9759,7 +10043,7 @@ visitExprConstUInt4 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprConstUInt4|
 
-.. das:function:: AstVisitor.preVisitExprConstRange(self: AstVisitor; expr: smart_ptr<ast::ExprConstRange> const)
+.. das:function:: AstVisitor.preVisitExprConstRange(self: AstVisitor; expr: smart_ptr<ExprConstRange> const)
 
 +--------+-------------------------------------------------------------------------+
 +argument+argument type                                                            +
@@ -9772,9 +10056,9 @@ visitExprConstUInt4 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprConstRange|
 
-.. das:function:: AstVisitor.visitExprConstRange(self: AstVisitor; expr: smart_ptr<ast::ExprConstRange> const)
+.. das:function:: AstVisitor.visitExprConstRange(self: AstVisitor; expr: smart_ptr<ExprConstRange> const)
 
-visitExprConstRange returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprConstRange returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-------------------------------------------------------------------------+
 +argument+argument type                                                            +
@@ -9787,7 +10071,7 @@ visitExprConstRange returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprConstRange|
 
-.. das:function:: AstVisitor.preVisitExprConstURange(self: AstVisitor; expr: smart_ptr<ast::ExprConstURange> const)
+.. das:function:: AstVisitor.preVisitExprConstURange(self: AstVisitor; expr: smart_ptr<ExprConstURange> const)
 
 +--------+---------------------------------------------------------------------------+
 +argument+argument type                                                              +
@@ -9800,9 +10084,9 @@ visitExprConstRange returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprConstURange|
 
-.. das:function:: AstVisitor.visitExprConstURange(self: AstVisitor; expr: smart_ptr<ast::ExprConstURange> const)
+.. das:function:: AstVisitor.visitExprConstURange(self: AstVisitor; expr: smart_ptr<ExprConstURange> const)
 
-visitExprConstURange returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprConstURange returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+---------------------------------------------------------------------------+
 +argument+argument type                                                              +
@@ -9815,7 +10099,7 @@ visitExprConstURange returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprConstURange|
 
-.. das:function:: AstVisitor.preVisitExprConstRange64(self: AstVisitor; expr: smart_ptr<ast::ExprConstRange64> const)
+.. das:function:: AstVisitor.preVisitExprConstRange64(self: AstVisitor; expr: smart_ptr<ExprConstRange64> const)
 
 +--------+-----------------------------------------------------------------------------+
 +argument+argument type                                                                +
@@ -9828,9 +10112,9 @@ visitExprConstURange returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprConstRange64|
 
-.. das:function:: AstVisitor.visitExprConstRange64(self: AstVisitor; expr: smart_ptr<ast::ExprConstRange64> const)
+.. das:function:: AstVisitor.visitExprConstRange64(self: AstVisitor; expr: smart_ptr<ExprConstRange64> const)
 
-visitExprConstRange64 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprConstRange64 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-----------------------------------------------------------------------------+
 +argument+argument type                                                                +
@@ -9843,7 +10127,7 @@ visitExprConstRange64 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprConstRange64|
 
-.. das:function:: AstVisitor.preVisitExprConstURange64(self: AstVisitor; expr: smart_ptr<ast::ExprConstURange64> const)
+.. das:function:: AstVisitor.preVisitExprConstURange64(self: AstVisitor; expr: smart_ptr<ExprConstURange64> const)
 
 +--------+-------------------------------------------------------------------------------+
 +argument+argument type                                                                  +
@@ -9856,9 +10140,9 @@ visitExprConstRange64 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprConstURange64|
 
-.. das:function:: AstVisitor.visitExprConstURange64(self: AstVisitor; expr: smart_ptr<ast::ExprConstURange64> const)
+.. das:function:: AstVisitor.visitExprConstURange64(self: AstVisitor; expr: smart_ptr<ExprConstURange64> const)
 
-visitExprConstURange64 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprConstURange64 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-------------------------------------------------------------------------------+
 +argument+argument type                                                                  +
@@ -9871,7 +10155,7 @@ visitExprConstURange64 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprConstURange64|
 
-.. das:function:: AstVisitor.preVisitExprConstBool(self: AstVisitor; expr: smart_ptr<ast::ExprConstBool> const)
+.. das:function:: AstVisitor.preVisitExprConstBool(self: AstVisitor; expr: smart_ptr<ExprConstBool> const)
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -9884,9 +10168,9 @@ visitExprConstURange64 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprConstBool|
 
-.. das:function:: AstVisitor.visitExprConstBool(self: AstVisitor; expr: smart_ptr<ast::ExprConstBool> const)
+.. das:function:: AstVisitor.visitExprConstBool(self: AstVisitor; expr: smart_ptr<ExprConstBool> const)
 
-visitExprConstBool returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprConstBool returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -9899,7 +10183,7 @@ visitExprConstBool returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprConstBool|
 
-.. das:function:: AstVisitor.preVisitExprConstFloat(self: AstVisitor; expr: smart_ptr<ast::ExprConstFloat> const)
+.. das:function:: AstVisitor.preVisitExprConstFloat(self: AstVisitor; expr: smart_ptr<ExprConstFloat> const)
 
 +--------+-------------------------------------------------------------------------+
 +argument+argument type                                                            +
@@ -9912,9 +10196,9 @@ visitExprConstBool returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprConstFloat|
 
-.. das:function:: AstVisitor.visitExprConstFloat(self: AstVisitor; expr: smart_ptr<ast::ExprConstFloat> const)
+.. das:function:: AstVisitor.visitExprConstFloat(self: AstVisitor; expr: smart_ptr<ExprConstFloat> const)
 
-visitExprConstFloat returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprConstFloat returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-------------------------------------------------------------------------+
 +argument+argument type                                                            +
@@ -9927,7 +10211,7 @@ visitExprConstFloat returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprConstFloat|
 
-.. das:function:: AstVisitor.preVisitExprConstFloat2(self: AstVisitor; expr: smart_ptr<ast::ExprConstFloat2> const)
+.. das:function:: AstVisitor.preVisitExprConstFloat2(self: AstVisitor; expr: smart_ptr<ExprConstFloat2> const)
 
 +--------+---------------------------------------------------------------------------+
 +argument+argument type                                                              +
@@ -9940,9 +10224,9 @@ visitExprConstFloat returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprConstFloat2|
 
-.. das:function:: AstVisitor.visitExprConstFloat2(self: AstVisitor; expr: smart_ptr<ast::ExprConstFloat2> const)
+.. das:function:: AstVisitor.visitExprConstFloat2(self: AstVisitor; expr: smart_ptr<ExprConstFloat2> const)
 
-visitExprConstFloat2 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprConstFloat2 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+---------------------------------------------------------------------------+
 +argument+argument type                                                              +
@@ -9955,7 +10239,7 @@ visitExprConstFloat2 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprConstFloat2|
 
-.. das:function:: AstVisitor.preVisitExprConstFloat3(self: AstVisitor; expr: smart_ptr<ast::ExprConstFloat3> const)
+.. das:function:: AstVisitor.preVisitExprConstFloat3(self: AstVisitor; expr: smart_ptr<ExprConstFloat3> const)
 
 +--------+---------------------------------------------------------------------------+
 +argument+argument type                                                              +
@@ -9968,9 +10252,9 @@ visitExprConstFloat2 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprConstFloat3|
 
-.. das:function:: AstVisitor.visitExprConstFloat3(self: AstVisitor; expr: smart_ptr<ast::ExprConstFloat3> const)
+.. das:function:: AstVisitor.visitExprConstFloat3(self: AstVisitor; expr: smart_ptr<ExprConstFloat3> const)
 
-visitExprConstFloat3 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprConstFloat3 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+---------------------------------------------------------------------------+
 +argument+argument type                                                              +
@@ -9983,7 +10267,7 @@ visitExprConstFloat3 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprConstFloat3|
 
-.. das:function:: AstVisitor.preVisitExprConstFloat4(self: AstVisitor; expr: smart_ptr<ast::ExprConstFloat4> const)
+.. das:function:: AstVisitor.preVisitExprConstFloat4(self: AstVisitor; expr: smart_ptr<ExprConstFloat4> const)
 
 +--------+---------------------------------------------------------------------------+
 +argument+argument type                                                              +
@@ -9996,9 +10280,9 @@ visitExprConstFloat3 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprConstFloat4|
 
-.. das:function:: AstVisitor.visitExprConstFloat4(self: AstVisitor; expr: smart_ptr<ast::ExprConstFloat4> const)
+.. das:function:: AstVisitor.visitExprConstFloat4(self: AstVisitor; expr: smart_ptr<ExprConstFloat4> const)
 
-visitExprConstFloat4 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprConstFloat4 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+---------------------------------------------------------------------------+
 +argument+argument type                                                              +
@@ -10011,7 +10295,7 @@ visitExprConstFloat4 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprConstFloat4|
 
-.. das:function:: AstVisitor.preVisitExprConstString(self: AstVisitor; expr: smart_ptr<ast::ExprConstString> const)
+.. das:function:: AstVisitor.preVisitExprConstString(self: AstVisitor; expr: smart_ptr<ExprConstString> const)
 
 +--------+---------------------------------------------------------------------------+
 +argument+argument type                                                              +
@@ -10024,9 +10308,9 @@ visitExprConstFloat4 returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprConstString|
 
-.. das:function:: AstVisitor.visitExprConstString(self: AstVisitor; expr: smart_ptr<ast::ExprConstString> const)
+.. das:function:: AstVisitor.visitExprConstString(self: AstVisitor; expr: smart_ptr<ExprConstString> const)
 
-visitExprConstString returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprConstString returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+---------------------------------------------------------------------------+
 +argument+argument type                                                              +
@@ -10039,7 +10323,7 @@ visitExprConstString returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprConstString|
 
-.. das:function:: AstVisitor.preVisitExprConstDouble(self: AstVisitor; expr: smart_ptr<ast::ExprConstDouble> const)
+.. das:function:: AstVisitor.preVisitExprConstDouble(self: AstVisitor; expr: smart_ptr<ExprConstDouble> const)
 
 +--------+---------------------------------------------------------------------------+
 +argument+argument type                                                              +
@@ -10052,9 +10336,9 @@ visitExprConstString returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprConstDouble|
 
-.. das:function:: AstVisitor.visitExprConstDouble(self: AstVisitor; expr: smart_ptr<ast::ExprConstDouble> const)
+.. das:function:: AstVisitor.visitExprConstDouble(self: AstVisitor; expr: smart_ptr<ExprConstDouble> const)
 
-visitExprConstDouble returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprConstDouble returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+---------------------------------------------------------------------------+
 +argument+argument type                                                              +
@@ -10067,7 +10351,7 @@ visitExprConstDouble returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprConstDouble|
 
-.. das:function:: AstVisitor.preVisitExprFakeContext(self: AstVisitor; expr: smart_ptr<ast::ExprFakeContext> const)
+.. das:function:: AstVisitor.preVisitExprFakeContext(self: AstVisitor; expr: smart_ptr<ExprFakeContext> const)
 
 +--------+---------------------------------------------------------------------------+
 +argument+argument type                                                              +
@@ -10080,9 +10364,9 @@ visitExprConstDouble returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprFakeContext|
 
-.. das:function:: AstVisitor.visitExprFakeContext(self: AstVisitor; expr: smart_ptr<ast::ExprFakeContext> const)
+.. das:function:: AstVisitor.visitExprFakeContext(self: AstVisitor; expr: smart_ptr<ExprFakeContext> const)
 
-visitExprFakeContext returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprFakeContext returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+---------------------------------------------------------------------------+
 +argument+argument type                                                              +
@@ -10095,7 +10379,7 @@ visitExprFakeContext returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprFakeContext|
 
-.. das:function:: AstVisitor.preVisitExprFakeLineInfo(self: AstVisitor; expr: smart_ptr<ast::ExprFakeLineInfo> const)
+.. das:function:: AstVisitor.preVisitExprFakeLineInfo(self: AstVisitor; expr: smart_ptr<ExprFakeLineInfo> const)
 
 +--------+-----------------------------------------------------------------------------+
 +argument+argument type                                                                +
@@ -10108,9 +10392,9 @@ visitExprFakeContext returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprFakeLineInfo|
 
-.. das:function:: AstVisitor.visitExprFakeLineInfo(self: AstVisitor; expr: smart_ptr<ast::ExprFakeLineInfo> const)
+.. das:function:: AstVisitor.visitExprFakeLineInfo(self: AstVisitor; expr: smart_ptr<ExprFakeLineInfo> const)
 
-visitExprFakeLineInfo returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprFakeLineInfo returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-----------------------------------------------------------------------------+
 +argument+argument type                                                                +
@@ -10123,7 +10407,7 @@ visitExprFakeLineInfo returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprFakeLineInfo|
 
-.. das:function:: AstVisitor.preVisitExprReader(self: AstVisitor; expr: smart_ptr<ast::ExprReader> const)
+.. das:function:: AstVisitor.preVisitExprReader(self: AstVisitor; expr: smart_ptr<ExprReader> const)
 
 +--------+-----------------------------------------------------------------+
 +argument+argument type                                                    +
@@ -10136,9 +10420,9 @@ visitExprFakeLineInfo returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprReader|
 
-.. das:function:: AstVisitor.visitExprReader(self: AstVisitor; expr: smart_ptr<ast::ExprReader> const)
+.. das:function:: AstVisitor.visitExprReader(self: AstVisitor; expr: smart_ptr<ExprReader> const)
 
-visitExprReader returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprReader returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-----------------------------------------------------------------+
 +argument+argument type                                                    +
@@ -10151,7 +10435,7 @@ visitExprReader returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprReader|
 
-.. das:function:: AstVisitor.preVisitExprUnsafe(self: AstVisitor; expr: smart_ptr<ast::ExprUnsafe> const)
+.. das:function:: AstVisitor.preVisitExprUnsafe(self: AstVisitor; expr: smart_ptr<ExprUnsafe> const)
 
 +--------+-----------------------------------------------------------------+
 +argument+argument type                                                    +
@@ -10164,9 +10448,9 @@ visitExprReader returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprUnsafe|
 
-.. das:function:: AstVisitor.visitExprUnsafe(self: AstVisitor; expr: smart_ptr<ast::ExprUnsafe> const)
+.. das:function:: AstVisitor.visitExprUnsafe(self: AstVisitor; expr: smart_ptr<ExprUnsafe> const)
 
-visitExprUnsafe returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprUnsafe returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-----------------------------------------------------------------+
 +argument+argument type                                                    +
@@ -10179,7 +10463,7 @@ visitExprUnsafe returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.visitExprUnsafe|
 
-.. das:function:: AstVisitor.preVisitExprCallMacro(self: AstVisitor; expr: smart_ptr<ast::ExprCallMacro> const)
+.. das:function:: AstVisitor.preVisitExprCallMacro(self: AstVisitor; expr: smart_ptr<ExprCallMacro> const)
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -10192,9 +10476,9 @@ visitExprUnsafe returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |method-ast-AstVisitor.preVisitExprCallMacro|
 
-.. das:function:: AstVisitor.visitExprCallMacro(self: AstVisitor; expr: smart_ptr<ast::ExprCallMacro> const)
+.. das:function:: AstVisitor.visitExprCallMacro(self: AstVisitor; expr: smart_ptr<ExprCallMacro> const)
 
-visitExprCallMacro returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+visitExprCallMacro returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-----------------------------------------------------------------------+
 +argument+argument type                                                          +
@@ -10211,7 +10495,7 @@ visitExprCallMacro returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 Call generation
 +++++++++++++++
 
-  *  :ref:`make_call (at:rtti::LineInfo const implicit;name:string const implicit) : smart_ptr\<ast::Expression\> <function-_at_ast_c__c_make_call_CIH_ls_rtti_c__c_LineInfo_gr__CIs>`
+  *  :ref:`make_call (at:rtti::LineInfo const implicit;name:string const implicit) : smart_ptr\<ast::Expression\> <function-_at_ast_c__c_make_call_CIH_ls_rtti_c__c_LineInfo_gr__CIs>` 
 
 .. _function-_at_ast_c__c_make_call_CIH_ls_rtti_c__c_LineInfo_gr__CIs:
 
@@ -10234,15 +10518,15 @@ make_call returns smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >
 Visitor pattern
 +++++++++++++++
 
-  *  :ref:`visit (program:smart_ptr\<rtti::Program\> const implicit;adapter:smart_ptr\<ast::VisitorAdapter\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_visit_CI1_ls_H_ls_rtti_c__c_Program_gr__gr_?M_CI1_ls_H_ls_ast_c__c_VisitorAdapter_gr__gr_?M_C_c_C_l>`
-  *  :ref:`visit_modules (program:smart_ptr\<rtti::Program\> const implicit;adapter:smart_ptr\<ast::VisitorAdapter\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_visit_modules_CI1_ls_H_ls_rtti_c__c_Program_gr__gr_?M_CI1_ls_H_ls_ast_c__c_VisitorAdapter_gr__gr_?M_C_c_C_l>`
-  *  :ref:`visit (function:smart_ptr\<ast::Function\> const implicit;adapter:smart_ptr\<ast::VisitorAdapter\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_visit_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?M_CI1_ls_H_ls_ast_c__c_VisitorAdapter_gr__gr_?M_C_c_C_l>`
-  *  :ref:`visit (expression:smart_ptr\<ast::Expression\> const implicit;adapter:smart_ptr\<ast::VisitorAdapter\> const implicit;context:__context const;line:__lineInfo const) : smart_ptr\<ast::Expression\> <function-_at_ast_c__c_visit_CI1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_CI1_ls_H_ls_ast_c__c_VisitorAdapter_gr__gr_?M_C_c_C_l>`
-  *  :ref:`visit_finally (expression:smart_ptr\<ast::ExprBlock\> const implicit;adapter:smart_ptr\<ast::VisitorAdapter\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_visit_finally_CI1_ls_H_ls_ast_c__c_ExprBlock_gr__gr_?M_CI1_ls_H_ls_ast_c__c_VisitorAdapter_gr__gr_?M_C_c_C_l>`
+  *  :ref:`visit (program:smart_ptr\<rtti::Program\> const implicit;adapter:smart_ptr\<ast::VisitorAdapter\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_visit_CI1_ls_H_ls_rtti_c__c_Program_gr__gr__qm_M_CI1_ls_H_ls_ast_c__c_VisitorAdapter_gr__gr__qm_M_C_c_C_l>` 
+  *  :ref:`visit_modules (program:smart_ptr\<rtti::Program\> const implicit;adapter:smart_ptr\<ast::VisitorAdapter\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_visit_modules_CI1_ls_H_ls_rtti_c__c_Program_gr__gr__qm_M_CI1_ls_H_ls_ast_c__c_VisitorAdapter_gr__gr__qm_M_C_c_C_l>` 
+  *  :ref:`visit (function:smart_ptr\<ast::Function\> const implicit;adapter:smart_ptr\<ast::VisitorAdapter\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_visit_CI1_ls_H_ls_ast_c__c_Function_gr__gr__qm_M_CI1_ls_H_ls_ast_c__c_VisitorAdapter_gr__gr__qm_M_C_c_C_l>` 
+  *  :ref:`visit (expression:smart_ptr\<ast::Expression\> const implicit;adapter:smart_ptr\<ast::VisitorAdapter\> const implicit;context:__context const;line:__lineInfo const) : smart_ptr\<ast::Expression\> <function-_at_ast_c__c_visit_CI1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_M_CI1_ls_H_ls_ast_c__c_VisitorAdapter_gr__gr__qm_M_C_c_C_l>` 
+  *  :ref:`visit_finally (expression:smart_ptr\<ast::ExprBlock\> const implicit;adapter:smart_ptr\<ast::VisitorAdapter\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_visit_finally_CI1_ls_H_ls_ast_c__c_ExprBlock_gr__gr__qm_M_CI1_ls_H_ls_ast_c__c_VisitorAdapter_gr__gr__qm_M_C_c_C_l>` 
 
-.. _function-_at_ast_c__c_visit_CI1_ls_H_ls_rtti_c__c_Program_gr__gr_?M_CI1_ls_H_ls_ast_c__c_VisitorAdapter_gr__gr_?M_C_c_C_l:
+.. _function-_at_ast_c__c_visit_CI1_ls_H_ls_rtti_c__c_Program_gr__gr__qm_M_CI1_ls_H_ls_ast_c__c_VisitorAdapter_gr__gr__qm_M_C_c_C_l:
 
-.. das:function:: visit(program: smart_ptr<rtti::Program> const implicit; adapter: smart_ptr<ast::VisitorAdapter> const implicit)
+.. das:function:: visit(program: smart_ptr<Program> const implicit; adapter: smart_ptr<VisitorAdapter> const implicit)
 
 +--------+----------------------------------------------------------------------------------+
 +argument+argument type                                                                     +
@@ -10255,9 +10539,9 @@ Visitor pattern
 
 |function-ast-visit|
 
-.. _function-_at_ast_c__c_visit_modules_CI1_ls_H_ls_rtti_c__c_Program_gr__gr_?M_CI1_ls_H_ls_ast_c__c_VisitorAdapter_gr__gr_?M_C_c_C_l:
+.. _function-_at_ast_c__c_visit_modules_CI1_ls_H_ls_rtti_c__c_Program_gr__gr__qm_M_CI1_ls_H_ls_ast_c__c_VisitorAdapter_gr__gr__qm_M_C_c_C_l:
 
-.. das:function:: visit_modules(program: smart_ptr<rtti::Program> const implicit; adapter: smart_ptr<ast::VisitorAdapter> const implicit)
+.. das:function:: visit_modules(program: smart_ptr<Program> const implicit; adapter: smart_ptr<VisitorAdapter> const implicit)
 
 +--------+----------------------------------------------------------------------------------+
 +argument+argument type                                                                     +
@@ -10270,9 +10554,9 @@ Visitor pattern
 
 |function-ast-visit_modules|
 
-.. _function-_at_ast_c__c_visit_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?M_CI1_ls_H_ls_ast_c__c_VisitorAdapter_gr__gr_?M_C_c_C_l:
+.. _function-_at_ast_c__c_visit_CI1_ls_H_ls_ast_c__c_Function_gr__gr__qm_M_CI1_ls_H_ls_ast_c__c_VisitorAdapter_gr__gr__qm_M_C_c_C_l:
 
-.. das:function:: visit(function: smart_ptr<ast::Function> const implicit; adapter: smart_ptr<ast::VisitorAdapter> const implicit)
+.. das:function:: visit(function: smart_ptr<Function> const implicit; adapter: smart_ptr<VisitorAdapter> const implicit)
 
 +--------+----------------------------------------------------------------------------------+
 +argument+argument type                                                                     +
@@ -10285,9 +10569,9 @@ Visitor pattern
 
 |function-ast-visit|
 
-.. _function-_at_ast_c__c_visit_CI1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_CI1_ls_H_ls_ast_c__c_VisitorAdapter_gr__gr_?M_C_c_C_l:
+.. _function-_at_ast_c__c_visit_CI1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_M_CI1_ls_H_ls_ast_c__c_VisitorAdapter_gr__gr__qm_M_C_c_C_l:
 
-.. das:function:: visit(expression: smart_ptr<ast::Expression> const implicit; adapter: smart_ptr<ast::VisitorAdapter> const implicit)
+.. das:function:: visit(expression: smart_ptr<Expression> const implicit; adapter: smart_ptr<VisitorAdapter> const implicit)
 
 visit returns smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >
 
@@ -10302,9 +10586,9 @@ visit returns smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >
 
 |function-ast-visit|
 
-.. _function-_at_ast_c__c_visit_finally_CI1_ls_H_ls_ast_c__c_ExprBlock_gr__gr_?M_CI1_ls_H_ls_ast_c__c_VisitorAdapter_gr__gr_?M_C_c_C_l:
+.. _function-_at_ast_c__c_visit_finally_CI1_ls_H_ls_ast_c__c_ExprBlock_gr__gr__qm_M_CI1_ls_H_ls_ast_c__c_VisitorAdapter_gr__gr__qm_M_C_c_C_l:
 
-.. das:function:: visit_finally(expression: smart_ptr<ast::ExprBlock> const implicit; adapter: smart_ptr<ast::VisitorAdapter> const implicit)
+.. das:function:: visit_finally(expression: smart_ptr<ExprBlock> const implicit; adapter: smart_ptr<VisitorAdapter> const implicit)
 
 +----------+----------------------------------------------------------------------------------+
 +argument  +argument type                                                                     +
@@ -10321,13 +10605,13 @@ visit returns smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >
 Expression generation
 +++++++++++++++++++++
 
-  *  :ref:`force_generated (expression:smart_ptr\<ast::Expression\> const& implicit;value:bool const) : void <function-_at_ast_c__c_force_generated_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_Cb>`
-  *  :ref:`get_expression_annotation (expr:ast::Expression? const implicit;context:__context const;line:__lineInfo const) : rtti::Annotation? <function-_at_ast_c__c_get_expression_annotation_CI1_ls_H_ls_ast_c__c_Expression_gr__gr_?_C_c_C_l>`
-  *  :ref:`make_type_info_structure (ctx:rtti::Context implicit;type:smart_ptr\<ast::TypeDecl\> const implicit;context:__context const;at:__lineInfo const) : rtti::TypeInfo? <function-_at_ast_c__c_make_type_info_structure_IH_ls_rtti_c__c_Context_gr__CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_C_c_C_l>`
+  *  :ref:`force_generated (expression:smart_ptr\<ast::Expression\> const& implicit;value:bool const) : void <function-_at_ast_c__c_force_generated_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_M_Cb>` 
+  *  :ref:`get_expression_annotation (expr:ast::Expression? const implicit;context:__context const;line:__lineInfo const) : rtti::Annotation? <function-_at_ast_c__c_get_expression_annotation_CI1_ls_H_ls_ast_c__c_Expression_gr__gr__qm__C_c_C_l>` 
+  *  :ref:`make_type_info_structure (ctx:rtti::Context implicit;type:smart_ptr\<ast::TypeDecl\> const implicit;context:__context const;at:__lineInfo const) : rtti::TypeInfo? <function-_at_ast_c__c_make_type_info_structure_IH_ls_rtti_c__c_Context_gr__CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_W_C_c_C_l>` 
 
-.. _function-_at_ast_c__c_force_generated_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_Cb:
+.. _function-_at_ast_c__c_force_generated_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_M_Cb:
 
-.. das:function:: force_generated(expression: smart_ptr<ast::Expression> const& implicit; value: bool const)
+.. das:function:: force_generated(expression: smart_ptr<Expression> const& implicit; value: bool const)
 
 +----------+---------------------------------------------------------------------------+
 +argument  +argument type                                                              +
@@ -10340,9 +10624,9 @@ Expression generation
 
 |function-ast-force_generated|
 
-.. _function-_at_ast_c__c_get_expression_annotation_CI1_ls_H_ls_ast_c__c_Expression_gr__gr_?_C_c_C_l:
+.. _function-_at_ast_c__c_get_expression_annotation_CI1_ls_H_ls_ast_c__c_Expression_gr__gr__qm__C_c_C_l:
 
-.. das:function:: get_expression_annotation(expr: ast::Expression? const implicit)
+.. das:function:: get_expression_annotation(expr: Expression? const implicit)
 
 get_expression_annotation returns  :ref:`rtti::Annotation <handle-rtti-Annotation>` ?
 
@@ -10355,9 +10639,9 @@ get_expression_annotation returns  :ref:`rtti::Annotation <handle-rtti-Annotatio
 
 |function-ast-get_expression_annotation|
 
-.. _function-_at_ast_c__c_make_type_info_structure_IH_ls_rtti_c__c_Context_gr__CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_C_c_C_l:
+.. _function-_at_ast_c__c_make_type_info_structure_IH_ls_rtti_c__c_Context_gr__CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_W_C_c_C_l:
 
-.. das:function:: make_type_info_structure(ctx: Context implicit; type: smart_ptr<ast::TypeDecl> const implicit)
+.. das:function:: make_type_info_structure(ctx: Context implicit; type: smart_ptr<TypeDecl> const implicit)
 
 make_type_info_structure returns  :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>` ?
 
@@ -10376,39 +10660,39 @@ make_type_info_structure returns  :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>` ?
 Adapter generation
 ++++++++++++++++++
 
-  *  :ref:`make_visitor (class:void? const implicit;info:rtti::StructInfo const? const implicit;context:__context const) : smart_ptr\<ast::VisitorAdapter\> <function-_at_ast_c__c_make_visitor_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c>`
-  *  :ref:`make_function_annotation (name:string const implicit;class:void? const implicit;info:rtti::StructInfo const? const implicit;context:__context const) : smart_ptr\<ast::FunctionAnnotation\> <function-_at_ast_c__c_make_function_annotation_CIs_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c>`
-  *  :ref:`make_block_annotation (name:string const implicit;class:void? const implicit;info:rtti::StructInfo const? const implicit;context:__context const) : smart_ptr\<ast::FunctionAnnotation\> <function-_at_ast_c__c_make_block_annotation_CIs_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c>`
-  *  :ref:`make_structure_annotation (name:string const implicit;class:void? const implicit;info:rtti::StructInfo const? const implicit;context:__context const) : smart_ptr\<ast::StructureAnnotation\> <function-_at_ast_c__c_make_structure_annotation_CIs_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c>`
-  *  :ref:`make_enumeration_annotation (name:string const implicit;class:void? const implicit;info:rtti::StructInfo const? const implicit;context:__context const) : smart_ptr\<ast::EnumerationAnnotation\> <function-_at_ast_c__c_make_enumeration_annotation_CIs_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c>`
-  *  :ref:`make_pass_macro (name:string const implicit;class:void? const implicit;info:rtti::StructInfo const? const implicit;context:__context const) : smart_ptr\<ast::PassMacro\> <function-_at_ast_c__c_make_pass_macro_CIs_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c>`
-  *  :ref:`make_reader_macro (name:string const implicit;class:void? const implicit;info:rtti::StructInfo const? const implicit;context:__context const) : smart_ptr\<ast::ReaderMacro\> <function-_at_ast_c__c_make_reader_macro_CIs_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c>`
-  *  :ref:`make_comment_reader (class:void? const implicit;info:rtti::StructInfo const? const implicit;context:__context const) : smart_ptr\<ast::CommentReader\> <function-_at_ast_c__c_make_comment_reader_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c>`
-  *  :ref:`make_call_macro (name:string const implicit;class:void? const implicit;info:rtti::StructInfo const? const implicit;context:__context const) : smart_ptr\<ast::CallMacro\> <function-_at_ast_c__c_make_call_macro_CIs_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c>`
-  *  :ref:`make_typeinfo_macro (name:string const implicit;class:void? const implicit;info:rtti::StructInfo const? const implicit;context:__context const) : smart_ptr\<ast::TypeInfoMacro\> <function-_at_ast_c__c_make_typeinfo_macro_CIs_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c>`
-  *  :ref:`make_variant_macro (name:string const implicit;class:void? const implicit;info:rtti::StructInfo const? const implicit;context:__context const) : smart_ptr\<ast::VariantMacro\> <function-_at_ast_c__c_make_variant_macro_CIs_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c>`
-  *  :ref:`make_for_loop_macro (name:string const implicit;class:void? const implicit;info:rtti::StructInfo const? const implicit;context:__context const) : smart_ptr\<ast::ForLoopMacro\> <function-_at_ast_c__c_make_for_loop_macro_CIs_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c>`
-  *  :ref:`make_capture_macro (name:string const implicit;class:void? const implicit;info:rtti::StructInfo const? const implicit;context:__context const) : smart_ptr\<ast::CaptureMacro\> <function-_at_ast_c__c_make_capture_macro_CIs_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c>`
-  *  :ref:`make_simulate_macro (name:string const implicit;class:void? const implicit;info:rtti::StructInfo const? const implicit;context:__context const) : smart_ptr\<ast::SimulateMacro\> <function-_at_ast_c__c_make_simulate_macro_CIs_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c>`
-  *  :ref:`make_clone_structure (structure:ast::Structure? const implicit) : smart_ptr\<ast::Function\> <function-_at_ast_c__c_make_clone_structure_CI1_ls_H_ls_ast_c__c_Structure_gr__gr_?>`
-  *  :ref:`make_function_annotation (name:string const;someClassPtr:auto const) : smart_ptr\<ast::FunctionAnnotation\> <function-_at_ast_c__c_make_function_annotation_Cs_C.>`
-  *  :ref:`make_block_annotation (name:string const;someClassPtr:auto const) : smart_ptr\<ast::FunctionAnnotation\> <function-_at_ast_c__c_make_block_annotation_Cs_C.>`
-  *  :ref:`make_structure_annotation (name:string const;someClassPtr:auto const) : smart_ptr\<ast::StructureAnnotation\> <function-_at_ast_c__c_make_structure_annotation_Cs_C.>`
-  *  :ref:`make_enumeration_annotation (name:string const;someClassPtr:auto const) : smart_ptr\<ast::EnumerationAnnotation\> <function-_at_ast_c__c_make_enumeration_annotation_Cs_C.>`
-  *  :ref:`make_visitor (someClass:auto const) : smart_ptr\<ast::VisitorAdapter\> <function-_at_ast_c__c_make_visitor_C.>`
-  *  :ref:`make_reader_macro (name:string const;someClassPtr:auto const) : smart_ptr\<ast::ReaderMacro\> <function-_at_ast_c__c_make_reader_macro_Cs_C.>`
-  *  :ref:`make_comment_reader (name:string const;someClassPtr:auto const) : smart_ptr\<ast::CommentReader\> <function-_at_ast_c__c_make_comment_reader_Cs_C.>`
-  *  :ref:`make_call_macro (name:string const;someClassPtr:auto const) : smart_ptr\<ast::CallMacro\> <function-_at_ast_c__c_make_call_macro_Cs_C.>`
-  *  :ref:`make_typeinfo_macro (name:string const;someClassPtr:auto const) : smart_ptr\<ast::TypeInfoMacro\> <function-_at_ast_c__c_make_typeinfo_macro_Cs_C.>`
-  *  :ref:`make_pass_macro (name:string const;someClassPtr:auto const) : smart_ptr\<ast::PassMacro\> <function-_at_ast_c__c_make_pass_macro_Cs_C.>`
-  *  :ref:`make_variant_macro (name:string const;someClassPtr:auto const) : smart_ptr\<ast::VariantMacro\> <function-_at_ast_c__c_make_variant_macro_Cs_C.>`
-  *  :ref:`make_for_loop_macro (name:string const;someClassPtr:auto const) : smart_ptr\<ast::ForLoopMacro\> <function-_at_ast_c__c_make_for_loop_macro_Cs_C.>`
-  *  :ref:`make_capture_macro (name:string const;someClassPtr:auto const) : smart_ptr\<ast::CaptureMacro\> <function-_at_ast_c__c_make_capture_macro_Cs_C.>`
-  *  :ref:`make_simulate_macro (name:string const;someClassPtr:auto const) : smart_ptr\<ast::SimulateMacro\> <function-_at_ast_c__c_make_simulate_macro_Cs_C.>`
+  *  :ref:`make_visitor (class:void? const implicit;info:rtti::StructInfo const? const implicit;context:__context const) : smart_ptr\<ast::VisitorAdapter\> <function-_at_ast_c__c_make_visitor_CI_qm__CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr__qm__C_c>` 
+  *  :ref:`make_function_annotation (name:string const implicit;class:void? const implicit;info:rtti::StructInfo const? const implicit;context:__context const) : smart_ptr\<ast::FunctionAnnotation\> <function-_at_ast_c__c_make_function_annotation_CIs_CI_qm__CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr__qm__C_c>` 
+  *  :ref:`make_block_annotation (name:string const implicit;class:void? const implicit;info:rtti::StructInfo const? const implicit;context:__context const) : smart_ptr\<ast::FunctionAnnotation\> <function-_at_ast_c__c_make_block_annotation_CIs_CI_qm__CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr__qm__C_c>` 
+  *  :ref:`make_structure_annotation (name:string const implicit;class:void? const implicit;info:rtti::StructInfo const? const implicit;context:__context const) : smart_ptr\<ast::StructureAnnotation\> <function-_at_ast_c__c_make_structure_annotation_CIs_CI_qm__CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr__qm__C_c>` 
+  *  :ref:`make_enumeration_annotation (name:string const implicit;class:void? const implicit;info:rtti::StructInfo const? const implicit;context:__context const) : smart_ptr\<ast::EnumerationAnnotation\> <function-_at_ast_c__c_make_enumeration_annotation_CIs_CI_qm__CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr__qm__C_c>` 
+  *  :ref:`make_pass_macro (name:string const implicit;class:void? const implicit;info:rtti::StructInfo const? const implicit;context:__context const) : smart_ptr\<ast::PassMacro\> <function-_at_ast_c__c_make_pass_macro_CIs_CI_qm__CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr__qm__C_c>` 
+  *  :ref:`make_reader_macro (name:string const implicit;class:void? const implicit;info:rtti::StructInfo const? const implicit;context:__context const) : smart_ptr\<ast::ReaderMacro\> <function-_at_ast_c__c_make_reader_macro_CIs_CI_qm__CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr__qm__C_c>` 
+  *  :ref:`make_comment_reader (class:void? const implicit;info:rtti::StructInfo const? const implicit;context:__context const) : smart_ptr\<ast::CommentReader\> <function-_at_ast_c__c_make_comment_reader_CI_qm__CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr__qm__C_c>` 
+  *  :ref:`make_call_macro (name:string const implicit;class:void? const implicit;info:rtti::StructInfo const? const implicit;context:__context const) : smart_ptr\<ast::CallMacro\> <function-_at_ast_c__c_make_call_macro_CIs_CI_qm__CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr__qm__C_c>` 
+  *  :ref:`make_typeinfo_macro (name:string const implicit;class:void? const implicit;info:rtti::StructInfo const? const implicit;context:__context const) : smart_ptr\<ast::TypeInfoMacro\> <function-_at_ast_c__c_make_typeinfo_macro_CIs_CI_qm__CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr__qm__C_c>` 
+  *  :ref:`make_variant_macro (name:string const implicit;class:void? const implicit;info:rtti::StructInfo const? const implicit;context:__context const) : smart_ptr\<ast::VariantMacro\> <function-_at_ast_c__c_make_variant_macro_CIs_CI_qm__CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr__qm__C_c>` 
+  *  :ref:`make_for_loop_macro (name:string const implicit;class:void? const implicit;info:rtti::StructInfo const? const implicit;context:__context const) : smart_ptr\<ast::ForLoopMacro\> <function-_at_ast_c__c_make_for_loop_macro_CIs_CI_qm__CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr__qm__C_c>` 
+  *  :ref:`make_capture_macro (name:string const implicit;class:void? const implicit;info:rtti::StructInfo const? const implicit;context:__context const) : smart_ptr\<ast::CaptureMacro\> <function-_at_ast_c__c_make_capture_macro_CIs_CI_qm__CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr__qm__C_c>` 
+  *  :ref:`make_simulate_macro (name:string const implicit;class:void? const implicit;info:rtti::StructInfo const? const implicit;context:__context const) : smart_ptr\<ast::SimulateMacro\> <function-_at_ast_c__c_make_simulate_macro_CIs_CI_qm__CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr__qm__C_c>` 
+  *  :ref:`make_clone_structure (structure:ast::Structure? const implicit) : smart_ptr\<ast::Function\> <function-_at_ast_c__c_make_clone_structure_CI1_ls_H_ls_ast_c__c_Structure_gr__gr__qm_>` 
+  *  :ref:`make_function_annotation (name:string const;someClassPtr:auto const) : smart_ptr\<ast::FunctionAnnotation\> <function-_at_ast_c__c_make_function_annotation_Cs_C.>` 
+  *  :ref:`make_block_annotation (name:string const;someClassPtr:auto const) : smart_ptr\<ast::FunctionAnnotation\> <function-_at_ast_c__c_make_block_annotation_Cs_C.>` 
+  *  :ref:`make_structure_annotation (name:string const;someClassPtr:auto const) : smart_ptr\<ast::StructureAnnotation\> <function-_at_ast_c__c_make_structure_annotation_Cs_C.>` 
+  *  :ref:`make_enumeration_annotation (name:string const;someClassPtr:auto const) : smart_ptr\<ast::EnumerationAnnotation\> <function-_at_ast_c__c_make_enumeration_annotation_Cs_C.>` 
+  *  :ref:`make_visitor (someClass:auto const) : smart_ptr\<ast::VisitorAdapter\> <function-_at_ast_c__c_make_visitor_C.>` 
+  *  :ref:`make_reader_macro (name:string const;someClassPtr:auto const) : smart_ptr\<ast::ReaderMacro\> <function-_at_ast_c__c_make_reader_macro_Cs_C.>` 
+  *  :ref:`make_comment_reader (name:string const;someClassPtr:auto const) : smart_ptr\<ast::CommentReader\> <function-_at_ast_c__c_make_comment_reader_Cs_C.>` 
+  *  :ref:`make_call_macro (name:string const;someClassPtr:auto const) : smart_ptr\<ast::CallMacro\> <function-_at_ast_c__c_make_call_macro_Cs_C.>` 
+  *  :ref:`make_typeinfo_macro (name:string const;someClassPtr:auto const) : smart_ptr\<ast::TypeInfoMacro\> <function-_at_ast_c__c_make_typeinfo_macro_Cs_C.>` 
+  *  :ref:`make_pass_macro (name:string const;someClassPtr:auto const) : smart_ptr\<ast::PassMacro\> <function-_at_ast_c__c_make_pass_macro_Cs_C.>` 
+  *  :ref:`make_variant_macro (name:string const;someClassPtr:auto const) : smart_ptr\<ast::VariantMacro\> <function-_at_ast_c__c_make_variant_macro_Cs_C.>` 
+  *  :ref:`make_for_loop_macro (name:string const;someClassPtr:auto const) : smart_ptr\<ast::ForLoopMacro\> <function-_at_ast_c__c_make_for_loop_macro_Cs_C.>` 
+  *  :ref:`make_capture_macro (name:string const;someClassPtr:auto const) : smart_ptr\<ast::CaptureMacro\> <function-_at_ast_c__c_make_capture_macro_Cs_C.>` 
+  *  :ref:`make_simulate_macro (name:string const;someClassPtr:auto const) : smart_ptr\<ast::SimulateMacro\> <function-_at_ast_c__c_make_simulate_macro_Cs_C.>` 
 
-.. _function-_at_ast_c__c_make_visitor_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c:
+.. _function-_at_ast_c__c_make_visitor_CI_qm__CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr__qm__C_c:
 
-.. das:function:: make_visitor(class: void? const implicit; info: rtti::StructInfo const? const implicit)
+.. das:function:: make_visitor(class: void? const implicit; info: StructInfo const? const implicit)
 
 make_visitor returns smart_ptr< :ref:`ast::VisitorAdapter <handle-ast-VisitorAdapter>` >
 
@@ -10423,9 +10707,9 @@ make_visitor returns smart_ptr< :ref:`ast::VisitorAdapter <handle-ast-VisitorAda
 
 |function-ast-make_visitor|
 
-.. _function-_at_ast_c__c_make_function_annotation_CIs_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c:
+.. _function-_at_ast_c__c_make_function_annotation_CIs_CI_qm__CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr__qm__C_c:
 
-.. das:function:: make_function_annotation(name: string const implicit; class: void? const implicit; info: rtti::StructInfo const? const implicit)
+.. das:function:: make_function_annotation(name: string const implicit; class: void? const implicit; info: StructInfo const? const implicit)
 
 make_function_annotation returns smart_ptr< :ref:`ast::FunctionAnnotation <handle-ast-FunctionAnnotation>` >
 
@@ -10442,9 +10726,9 @@ make_function_annotation returns smart_ptr< :ref:`ast::FunctionAnnotation <handl
 
 |function-ast-make_function_annotation|
 
-.. _function-_at_ast_c__c_make_block_annotation_CIs_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c:
+.. _function-_at_ast_c__c_make_block_annotation_CIs_CI_qm__CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr__qm__C_c:
 
-.. das:function:: make_block_annotation(name: string const implicit; class: void? const implicit; info: rtti::StructInfo const? const implicit)
+.. das:function:: make_block_annotation(name: string const implicit; class: void? const implicit; info: StructInfo const? const implicit)
 
 make_block_annotation returns smart_ptr< :ref:`ast::FunctionAnnotation <handle-ast-FunctionAnnotation>` >
 
@@ -10461,9 +10745,9 @@ make_block_annotation returns smart_ptr< :ref:`ast::FunctionAnnotation <handle-a
 
 |function-ast-make_block_annotation|
 
-.. _function-_at_ast_c__c_make_structure_annotation_CIs_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c:
+.. _function-_at_ast_c__c_make_structure_annotation_CIs_CI_qm__CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr__qm__C_c:
 
-.. das:function:: make_structure_annotation(name: string const implicit; class: void? const implicit; info: rtti::StructInfo const? const implicit)
+.. das:function:: make_structure_annotation(name: string const implicit; class: void? const implicit; info: StructInfo const? const implicit)
 
 make_structure_annotation returns smart_ptr< :ref:`ast::StructureAnnotation <handle-ast-StructureAnnotation>` >
 
@@ -10480,9 +10764,9 @@ make_structure_annotation returns smart_ptr< :ref:`ast::StructureAnnotation <han
 
 |function-ast-make_structure_annotation|
 
-.. _function-_at_ast_c__c_make_enumeration_annotation_CIs_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c:
+.. _function-_at_ast_c__c_make_enumeration_annotation_CIs_CI_qm__CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr__qm__C_c:
 
-.. das:function:: make_enumeration_annotation(name: string const implicit; class: void? const implicit; info: rtti::StructInfo const? const implicit)
+.. das:function:: make_enumeration_annotation(name: string const implicit; class: void? const implicit; info: StructInfo const? const implicit)
 
 make_enumeration_annotation returns smart_ptr< :ref:`ast::EnumerationAnnotation <handle-ast-EnumerationAnnotation>` >
 
@@ -10499,9 +10783,9 @@ make_enumeration_annotation returns smart_ptr< :ref:`ast::EnumerationAnnotation 
 
 |function-ast-make_enumeration_annotation|
 
-.. _function-_at_ast_c__c_make_pass_macro_CIs_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c:
+.. _function-_at_ast_c__c_make_pass_macro_CIs_CI_qm__CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr__qm__C_c:
 
-.. das:function:: make_pass_macro(name: string const implicit; class: void? const implicit; info: rtti::StructInfo const? const implicit)
+.. das:function:: make_pass_macro(name: string const implicit; class: void? const implicit; info: StructInfo const? const implicit)
 
 make_pass_macro returns smart_ptr< :ref:`ast::PassMacro <handle-ast-PassMacro>` >
 
@@ -10518,9 +10802,9 @@ make_pass_macro returns smart_ptr< :ref:`ast::PassMacro <handle-ast-PassMacro>` 
 
 |function-ast-make_pass_macro|
 
-.. _function-_at_ast_c__c_make_reader_macro_CIs_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c:
+.. _function-_at_ast_c__c_make_reader_macro_CIs_CI_qm__CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr__qm__C_c:
 
-.. das:function:: make_reader_macro(name: string const implicit; class: void? const implicit; info: rtti::StructInfo const? const implicit)
+.. das:function:: make_reader_macro(name: string const implicit; class: void? const implicit; info: StructInfo const? const implicit)
 
 make_reader_macro returns smart_ptr< :ref:`ast::ReaderMacro <handle-ast-ReaderMacro>` >
 
@@ -10537,9 +10821,9 @@ make_reader_macro returns smart_ptr< :ref:`ast::ReaderMacro <handle-ast-ReaderMa
 
 |function-ast-make_reader_macro|
 
-.. _function-_at_ast_c__c_make_comment_reader_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c:
+.. _function-_at_ast_c__c_make_comment_reader_CI_qm__CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr__qm__C_c:
 
-.. das:function:: make_comment_reader(class: void? const implicit; info: rtti::StructInfo const? const implicit)
+.. das:function:: make_comment_reader(class: void? const implicit; info: StructInfo const? const implicit)
 
 make_comment_reader returns smart_ptr< :ref:`ast::CommentReader <handle-ast-CommentReader>` >
 
@@ -10554,9 +10838,9 @@ make_comment_reader returns smart_ptr< :ref:`ast::CommentReader <handle-ast-Comm
 
 |function-ast-make_comment_reader|
 
-.. _function-_at_ast_c__c_make_call_macro_CIs_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c:
+.. _function-_at_ast_c__c_make_call_macro_CIs_CI_qm__CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr__qm__C_c:
 
-.. das:function:: make_call_macro(name: string const implicit; class: void? const implicit; info: rtti::StructInfo const? const implicit)
+.. das:function:: make_call_macro(name: string const implicit; class: void? const implicit; info: StructInfo const? const implicit)
 
 make_call_macro returns smart_ptr< :ref:`ast::CallMacro <handle-ast-CallMacro>` >
 
@@ -10573,9 +10857,9 @@ make_call_macro returns smart_ptr< :ref:`ast::CallMacro <handle-ast-CallMacro>` 
 
 |function-ast-make_call_macro|
 
-.. _function-_at_ast_c__c_make_typeinfo_macro_CIs_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c:
+.. _function-_at_ast_c__c_make_typeinfo_macro_CIs_CI_qm__CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr__qm__C_c:
 
-.. das:function:: make_typeinfo_macro(name: string const implicit; class: void? const implicit; info: rtti::StructInfo const? const implicit)
+.. das:function:: make_typeinfo_macro(name: string const implicit; class: void? const implicit; info: StructInfo const? const implicit)
 
 make_typeinfo_macro returns smart_ptr< :ref:`ast::TypeInfoMacro <handle-ast-TypeInfoMacro>` >
 
@@ -10592,9 +10876,9 @@ make_typeinfo_macro returns smart_ptr< :ref:`ast::TypeInfoMacro <handle-ast-Type
 
 |function-ast-make_typeinfo_macro|
 
-.. _function-_at_ast_c__c_make_variant_macro_CIs_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c:
+.. _function-_at_ast_c__c_make_variant_macro_CIs_CI_qm__CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr__qm__C_c:
 
-.. das:function:: make_variant_macro(name: string const implicit; class: void? const implicit; info: rtti::StructInfo const? const implicit)
+.. das:function:: make_variant_macro(name: string const implicit; class: void? const implicit; info: StructInfo const? const implicit)
 
 make_variant_macro returns smart_ptr< :ref:`ast::VariantMacro <handle-ast-VariantMacro>` >
 
@@ -10611,9 +10895,9 @@ make_variant_macro returns smart_ptr< :ref:`ast::VariantMacro <handle-ast-Varian
 
 |function-ast-make_variant_macro|
 
-.. _function-_at_ast_c__c_make_for_loop_macro_CIs_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c:
+.. _function-_at_ast_c__c_make_for_loop_macro_CIs_CI_qm__CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr__qm__C_c:
 
-.. das:function:: make_for_loop_macro(name: string const implicit; class: void? const implicit; info: rtti::StructInfo const? const implicit)
+.. das:function:: make_for_loop_macro(name: string const implicit; class: void? const implicit; info: StructInfo const? const implicit)
 
 make_for_loop_macro returns smart_ptr< :ref:`ast::ForLoopMacro <handle-ast-ForLoopMacro>` >
 
@@ -10630,9 +10914,9 @@ make_for_loop_macro returns smart_ptr< :ref:`ast::ForLoopMacro <handle-ast-ForLo
 
 |function-ast-make_for_loop_macro|
 
-.. _function-_at_ast_c__c_make_capture_macro_CIs_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c:
+.. _function-_at_ast_c__c_make_capture_macro_CIs_CI_qm__CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr__qm__C_c:
 
-.. das:function:: make_capture_macro(name: string const implicit; class: void? const implicit; info: rtti::StructInfo const? const implicit)
+.. das:function:: make_capture_macro(name: string const implicit; class: void? const implicit; info: StructInfo const? const implicit)
 
 make_capture_macro returns smart_ptr< :ref:`ast::CaptureMacro <handle-ast-CaptureMacro>` >
 
@@ -10649,9 +10933,9 @@ make_capture_macro returns smart_ptr< :ref:`ast::CaptureMacro <handle-ast-Captur
 
 |function-ast-make_capture_macro|
 
-.. _function-_at_ast_c__c_make_simulate_macro_CIs_CI?_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr_?_C_c:
+.. _function-_at_ast_c__c_make_simulate_macro_CIs_CI_qm__CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr__qm__C_c:
 
-.. das:function:: make_simulate_macro(name: string const implicit; class: void? const implicit; info: rtti::StructInfo const? const implicit)
+.. das:function:: make_simulate_macro(name: string const implicit; class: void? const implicit; info: StructInfo const? const implicit)
 
 make_simulate_macro returns smart_ptr< :ref:`ast::SimulateMacro <handle-ast-SimulateMacro>` >
 
@@ -10668,9 +10952,9 @@ make_simulate_macro returns smart_ptr< :ref:`ast::SimulateMacro <handle-ast-Simu
 
 |function-ast-make_simulate_macro|
 
-.. _function-_at_ast_c__c_make_clone_structure_CI1_ls_H_ls_ast_c__c_Structure_gr__gr_?:
+.. _function-_at_ast_c__c_make_clone_structure_CI1_ls_H_ls_ast_c__c_Structure_gr__gr__qm_:
 
-.. das:function:: make_clone_structure(structure: ast::Structure? const implicit)
+.. das:function:: make_clone_structure(structure: Structure? const implicit)
 
 make_clone_structure returns smart_ptr< :ref:`ast::Function <handle-ast-Function>` >
 
@@ -10687,7 +10971,7 @@ make_clone_structure returns smart_ptr< :ref:`ast::Function <handle-ast-Function
 
 .. das:function:: make_function_annotation(name: string const; someClassPtr: auto const)
 
-make_function_annotation returns  :ref:`FunctionAnnotationPtr <alias-FunctionAnnotationPtr>`
+make_function_annotation returns  :ref:`FunctionAnnotationPtr <alias-FunctionAnnotationPtr>` 
 
 +------------+-------------+
 +argument    +argument type+
@@ -10704,7 +10988,7 @@ make_function_annotation returns  :ref:`FunctionAnnotationPtr <alias-FunctionAnn
 
 .. das:function:: make_block_annotation(name: string const; someClassPtr: auto const)
 
-make_block_annotation returns  :ref:`FunctionAnnotationPtr <alias-FunctionAnnotationPtr>`
+make_block_annotation returns  :ref:`FunctionAnnotationPtr <alias-FunctionAnnotationPtr>` 
 
 +------------+-------------+
 +argument    +argument type+
@@ -10721,7 +11005,7 @@ make_block_annotation returns  :ref:`FunctionAnnotationPtr <alias-FunctionAnnota
 
 .. das:function:: make_structure_annotation(name: string const; someClassPtr: auto const)
 
-make_structure_annotation returns  :ref:`StructureAnnotationPtr <alias-StructureAnnotationPtr>`
+make_structure_annotation returns  :ref:`StructureAnnotationPtr <alias-StructureAnnotationPtr>` 
 
 +------------+-------------+
 +argument    +argument type+
@@ -10738,7 +11022,7 @@ make_structure_annotation returns  :ref:`StructureAnnotationPtr <alias-Structure
 
 .. das:function:: make_enumeration_annotation(name: string const; someClassPtr: auto const)
 
-make_enumeration_annotation returns  :ref:`EnumerationAnnotationPtr <alias-EnumerationAnnotationPtr>`
+make_enumeration_annotation returns  :ref:`EnumerationAnnotationPtr <alias-EnumerationAnnotationPtr>` 
 
 +------------+-------------+
 +argument    +argument type+
@@ -10770,7 +11054,7 @@ make_visitor returns smart_ptr< :ref:`ast::VisitorAdapter <handle-ast-VisitorAda
 
 .. das:function:: make_reader_macro(name: string const; someClassPtr: auto const)
 
-make_reader_macro returns  :ref:`ReaderMacroPtr <alias-ReaderMacroPtr>`
+make_reader_macro returns  :ref:`ReaderMacroPtr <alias-ReaderMacroPtr>` 
 
 +------------+-------------+
 +argument    +argument type+
@@ -10787,7 +11071,7 @@ make_reader_macro returns  :ref:`ReaderMacroPtr <alias-ReaderMacroPtr>`
 
 .. das:function:: make_comment_reader(name: string const; someClassPtr: auto const)
 
-make_comment_reader returns  :ref:`CommentReaderPtr <alias-CommentReaderPtr>`
+make_comment_reader returns  :ref:`CommentReaderPtr <alias-CommentReaderPtr>` 
 
 +------------+-------------+
 +argument    +argument type+
@@ -10804,7 +11088,7 @@ make_comment_reader returns  :ref:`CommentReaderPtr <alias-CommentReaderPtr>`
 
 .. das:function:: make_call_macro(name: string const; someClassPtr: auto const)
 
-make_call_macro returns  :ref:`CallMacroPtr <alias-CallMacroPtr>`
+make_call_macro returns  :ref:`CallMacroPtr <alias-CallMacroPtr>` 
 
 +------------+-------------+
 +argument    +argument type+
@@ -10821,7 +11105,7 @@ make_call_macro returns  :ref:`CallMacroPtr <alias-CallMacroPtr>`
 
 .. das:function:: make_typeinfo_macro(name: string const; someClassPtr: auto const)
 
-make_typeinfo_macro returns  :ref:`TypeInfoMacroPtr <alias-TypeInfoMacroPtr>`
+make_typeinfo_macro returns  :ref:`TypeInfoMacroPtr <alias-TypeInfoMacroPtr>` 
 
 +------------+-------------+
 +argument    +argument type+
@@ -10838,7 +11122,7 @@ make_typeinfo_macro returns  :ref:`TypeInfoMacroPtr <alias-TypeInfoMacroPtr>`
 
 .. das:function:: make_pass_macro(name: string const; someClassPtr: auto const)
 
-make_pass_macro returns  :ref:`PassMacroPtr <alias-PassMacroPtr>`
+make_pass_macro returns  :ref:`PassMacroPtr <alias-PassMacroPtr>` 
 
 +------------+-------------+
 +argument    +argument type+
@@ -10855,7 +11139,7 @@ make_pass_macro returns  :ref:`PassMacroPtr <alias-PassMacroPtr>`
 
 .. das:function:: make_variant_macro(name: string const; someClassPtr: auto const)
 
-make_variant_macro returns  :ref:`VariantMacroPtr <alias-VariantMacroPtr>`
+make_variant_macro returns  :ref:`VariantMacroPtr <alias-VariantMacroPtr>` 
 
 +------------+-------------+
 +argument    +argument type+
@@ -10872,7 +11156,7 @@ make_variant_macro returns  :ref:`VariantMacroPtr <alias-VariantMacroPtr>`
 
 .. das:function:: make_for_loop_macro(name: string const; someClassPtr: auto const)
 
-make_for_loop_macro returns  :ref:`ForLoopMacroPtr <alias-ForLoopMacroPtr>`
+make_for_loop_macro returns  :ref:`ForLoopMacroPtr <alias-ForLoopMacroPtr>` 
 
 +------------+-------------+
 +argument    +argument type+
@@ -10889,7 +11173,7 @@ make_for_loop_macro returns  :ref:`ForLoopMacroPtr <alias-ForLoopMacroPtr>`
 
 .. das:function:: make_capture_macro(name: string const; someClassPtr: auto const)
 
-make_capture_macro returns  :ref:`CaptureMacroPtr <alias-CaptureMacroPtr>`
+make_capture_macro returns  :ref:`CaptureMacroPtr <alias-CaptureMacroPtr>` 
 
 +------------+-------------+
 +argument    +argument type+
@@ -10906,7 +11190,7 @@ make_capture_macro returns  :ref:`CaptureMacroPtr <alias-CaptureMacroPtr>`
 
 .. das:function:: make_simulate_macro(name: string const; someClassPtr: auto const)
 
-make_simulate_macro returns  :ref:`SimulateMacroPtr <alias-SimulateMacroPtr>`
+make_simulate_macro returns  :ref:`SimulateMacroPtr <alias-SimulateMacroPtr>` 
 
 +------------+-------------+
 +argument    +argument type+
@@ -10923,51 +11207,51 @@ make_simulate_macro returns  :ref:`SimulateMacroPtr <alias-SimulateMacroPtr>`
 Adapter application
 +++++++++++++++++++
 
-  *  :ref:`add_function_annotation (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::FunctionAnnotation\>& implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_add_function_annotation_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_FunctionAnnotation_gr__gr_?W_C_c_C_l>`
-  *  :ref:`add_function_annotation (function:smart_ptr\<ast::Function\> const implicit;annotation:smart_ptr\<ast::FunctionAnnotation\>& implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_add_function_annotation_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?M_&I1_ls_H_ls_ast_c__c_FunctionAnnotation_gr__gr_?W_C_c_C_l>`
-  *  :ref:`add_function_annotation (function:smart_ptr\<ast::Function\> const implicit;annotation:smart_ptr\<rtti::AnnotationDeclaration\>& implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_add_function_annotation_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?M_&I1_ls_H_ls_rtti_c__c_AnnotationDeclaration_gr__gr_?M_C_c_C_l>`
-  *  :ref:`add_block_annotation (block:smart_ptr\<ast::ExprBlock\> const implicit;annotation:smart_ptr\<ast::FunctionAnnotation\>& implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_add_block_annotation_CI1_ls_H_ls_ast_c__c_ExprBlock_gr__gr_?M_&I1_ls_H_ls_ast_c__c_FunctionAnnotation_gr__gr_?W_C_c_C_l>`
-  *  :ref:`add_block_annotation (block:smart_ptr\<ast::ExprBlock\> const implicit;annotation:smart_ptr\<rtti::AnnotationDeclaration\>& implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_add_block_annotation_CI1_ls_H_ls_ast_c__c_ExprBlock_gr__gr_?M_&I1_ls_H_ls_rtti_c__c_AnnotationDeclaration_gr__gr_?M_C_c_C_l>`
-  *  :ref:`add_structure_annotation (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::StructureAnnotation\>& implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_add_structure_annotation_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_StructureAnnotation_gr__gr_?W_C_c_C_l>`
-  *  :ref:`add_structure_annotation (structure:smart_ptr\<ast::Structure\> const implicit;annotation:smart_ptr\<ast::StructureAnnotation\>& implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_add_structure_annotation_CI1_ls_H_ls_ast_c__c_Structure_gr__gr_?M_&I1_ls_H_ls_ast_c__c_StructureAnnotation_gr__gr_?W_C_c_C_l>`
-  *  :ref:`add_structure_annotation (structure:smart_ptr\<ast::Structure\> const implicit;annotation:smart_ptr\<rtti::AnnotationDeclaration\>& implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_add_structure_annotation_CI1_ls_H_ls_ast_c__c_Structure_gr__gr_?M_&I1_ls_H_ls_rtti_c__c_AnnotationDeclaration_gr__gr_?M_C_c_C_l>`
-  *  :ref:`add_enumeration_annotation (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::EnumerationAnnotation\>& implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_add_enumeration_annotation_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_EnumerationAnnotation_gr__gr_?W_C_c_C_l>`
-  *  :ref:`add_infer_macro (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::PassMacro\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_infer_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_PassMacro_gr__gr_?W_C_c>`
-  *  :ref:`add_dirty_infer_macro (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::PassMacro\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_dirty_infer_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_PassMacro_gr__gr_?W_C_c>`
-  *  :ref:`add_lint_macro (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::PassMacro\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_lint_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_PassMacro_gr__gr_?W_C_c>`
-  *  :ref:`add_global_lint_macro (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::PassMacro\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_global_lint_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_PassMacro_gr__gr_?W_C_c>`
-  *  :ref:`add_optimization_macro (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::PassMacro\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_optimization_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_PassMacro_gr__gr_?W_C_c>`
-  *  :ref:`add_reader_macro (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::ReaderMacro\>& implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_add_reader_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_ReaderMacro_gr__gr_?W_C_c_C_l>`
-  *  :ref:`add_comment_reader (module:rtti::Module? const implicit;reader:smart_ptr\<ast::CommentReader\>& implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_add_comment_reader_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_CommentReader_gr__gr_?W_C_c_C_l>`
-  *  :ref:`add_call_macro (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::CallMacro\>& implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_add_call_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_CallMacro_gr__gr_?W_C_c_C_l>`
-  *  :ref:`add_typeinfo_macro (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::TypeInfoMacro\>& implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_add_typeinfo_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_TypeInfoMacro_gr__gr_?W_C_c_C_l>`
-  *  :ref:`add_variant_macro (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::VariantMacro\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_variant_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_VariantMacro_gr__gr_?W_C_c>`
-  *  :ref:`add_for_loop_macro (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::ForLoopMacro\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_for_loop_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_ForLoopMacro_gr__gr_?W_C_c>`
-  *  :ref:`add_capture_macro (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::CaptureMacro\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_capture_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_CaptureMacro_gr__gr_?W_C_c>`
-  *  :ref:`add_simulate_macro (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::SimulateMacro\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_simulate_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_SimulateMacro_gr__gr_?W_C_c>`
-  *  :ref:`add_module_option (module:rtti::Module? const implicit;option:string const implicit;type:rtti::Type const;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_add_module_option_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CIs_CE_ls_rtti_c__c_Type_gr__C_c_C_l>`
-  *  :ref:`add_new_block_annotation (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_block_annotation_Cs_C.>`
-  *  :ref:`add_new_function_annotation (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_function_annotation_Cs_C.>`
-  *  :ref:`add_new_contract_annotation (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_contract_annotation_Cs_C.>`
-  *  :ref:`add_new_structure_annotation (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_structure_annotation_Cs_C.>`
-  *  :ref:`add_new_enumeration_annotation (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_enumeration_annotation_Cs_C.>`
-  *  :ref:`add_new_variant_macro (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_variant_macro_Cs_C.>`
-  *  :ref:`add_new_for_loop_macro (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_for_loop_macro_Cs_C.>`
-  *  :ref:`add_new_capture_macro (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_capture_macro_Cs_C.>`
-  *  :ref:`add_new_simulate_macro (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_simulate_macro_Cs_C.>`
-  *  :ref:`add_new_reader_macro (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_reader_macro_Cs_C.>`
-  *  :ref:`add_new_comment_reader (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_comment_reader_Cs_C.>`
-  *  :ref:`add_new_call_macro (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_call_macro_Cs_C.>`
-  *  :ref:`add_new_typeinfo_macro (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_typeinfo_macro_Cs_C.>`
-  *  :ref:`add_new_infer_macro (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_infer_macro_Cs_C.>`
-  *  :ref:`add_new_dirty_infer_macro (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_dirty_infer_macro_Cs_C.>`
-  *  :ref:`add_new_lint_macro (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_lint_macro_Cs_C.>`
-  *  :ref:`add_new_global_lint_macro (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_global_lint_macro_Cs_C.>`
-  *  :ref:`add_new_optimization_macro (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_optimization_macro_Cs_C.>`
+  *  :ref:`add_function_annotation (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::FunctionAnnotation\>& implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_add_function_annotation_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__&I1_ls_H_ls_ast_c__c_FunctionAnnotation_gr__gr__qm_W_C_c_C_l>` 
+  *  :ref:`add_function_annotation (function:smart_ptr\<ast::Function\> const implicit;annotation:smart_ptr\<ast::FunctionAnnotation\>& implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_add_function_annotation_CI1_ls_H_ls_ast_c__c_Function_gr__gr__qm_M_&I1_ls_H_ls_ast_c__c_FunctionAnnotation_gr__gr__qm_W_C_c_C_l>` 
+  *  :ref:`add_function_annotation (function:smart_ptr\<ast::Function\> const implicit;annotation:smart_ptr\<rtti::AnnotationDeclaration\>& implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_add_function_annotation_CI1_ls_H_ls_ast_c__c_Function_gr__gr__qm_M_&I1_ls_H_ls_rtti_c__c_AnnotationDeclaration_gr__gr__qm_M_C_c_C_l>` 
+  *  :ref:`add_block_annotation (block:smart_ptr\<ast::ExprBlock\> const implicit;annotation:smart_ptr\<ast::FunctionAnnotation\>& implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_add_block_annotation_CI1_ls_H_ls_ast_c__c_ExprBlock_gr__gr__qm_M_&I1_ls_H_ls_ast_c__c_FunctionAnnotation_gr__gr__qm_W_C_c_C_l>` 
+  *  :ref:`add_block_annotation (block:smart_ptr\<ast::ExprBlock\> const implicit;annotation:smart_ptr\<rtti::AnnotationDeclaration\>& implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_add_block_annotation_CI1_ls_H_ls_ast_c__c_ExprBlock_gr__gr__qm_M_&I1_ls_H_ls_rtti_c__c_AnnotationDeclaration_gr__gr__qm_M_C_c_C_l>` 
+  *  :ref:`add_structure_annotation (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::StructureAnnotation\>& implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_add_structure_annotation_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__&I1_ls_H_ls_ast_c__c_StructureAnnotation_gr__gr__qm_W_C_c_C_l>` 
+  *  :ref:`add_structure_annotation (structure:smart_ptr\<ast::Structure\> const implicit;annotation:smart_ptr\<ast::StructureAnnotation\>& implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_add_structure_annotation_CI1_ls_H_ls_ast_c__c_Structure_gr__gr__qm_M_&I1_ls_H_ls_ast_c__c_StructureAnnotation_gr__gr__qm_W_C_c_C_l>` 
+  *  :ref:`add_structure_annotation (structure:smart_ptr\<ast::Structure\> const implicit;annotation:smart_ptr\<rtti::AnnotationDeclaration\>& implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_add_structure_annotation_CI1_ls_H_ls_ast_c__c_Structure_gr__gr__qm_M_&I1_ls_H_ls_rtti_c__c_AnnotationDeclaration_gr__gr__qm_M_C_c_C_l>` 
+  *  :ref:`add_enumeration_annotation (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::EnumerationAnnotation\>& implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_add_enumeration_annotation_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__&I1_ls_H_ls_ast_c__c_EnumerationAnnotation_gr__gr__qm_W_C_c_C_l>` 
+  *  :ref:`add_infer_macro (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::PassMacro\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_infer_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__&I1_ls_H_ls_ast_c__c_PassMacro_gr__gr__qm_W_C_c>` 
+  *  :ref:`add_dirty_infer_macro (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::PassMacro\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_dirty_infer_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__&I1_ls_H_ls_ast_c__c_PassMacro_gr__gr__qm_W_C_c>` 
+  *  :ref:`add_lint_macro (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::PassMacro\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_lint_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__&I1_ls_H_ls_ast_c__c_PassMacro_gr__gr__qm_W_C_c>` 
+  *  :ref:`add_global_lint_macro (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::PassMacro\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_global_lint_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__&I1_ls_H_ls_ast_c__c_PassMacro_gr__gr__qm_W_C_c>` 
+  *  :ref:`add_optimization_macro (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::PassMacro\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_optimization_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__&I1_ls_H_ls_ast_c__c_PassMacro_gr__gr__qm_W_C_c>` 
+  *  :ref:`add_reader_macro (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::ReaderMacro\>& implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_add_reader_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__&I1_ls_H_ls_ast_c__c_ReaderMacro_gr__gr__qm_W_C_c_C_l>` 
+  *  :ref:`add_comment_reader (module:rtti::Module? const implicit;reader:smart_ptr\<ast::CommentReader\>& implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_add_comment_reader_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__&I1_ls_H_ls_ast_c__c_CommentReader_gr__gr__qm_W_C_c_C_l>` 
+  *  :ref:`add_call_macro (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::CallMacro\>& implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_add_call_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__&I1_ls_H_ls_ast_c__c_CallMacro_gr__gr__qm_W_C_c_C_l>` 
+  *  :ref:`add_typeinfo_macro (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::TypeInfoMacro\>& implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_add_typeinfo_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__&I1_ls_H_ls_ast_c__c_TypeInfoMacro_gr__gr__qm_W_C_c_C_l>` 
+  *  :ref:`add_variant_macro (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::VariantMacro\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_variant_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__&I1_ls_H_ls_ast_c__c_VariantMacro_gr__gr__qm_W_C_c>` 
+  *  :ref:`add_for_loop_macro (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::ForLoopMacro\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_for_loop_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__&I1_ls_H_ls_ast_c__c_ForLoopMacro_gr__gr__qm_W_C_c>` 
+  *  :ref:`add_capture_macro (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::CaptureMacro\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_capture_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__&I1_ls_H_ls_ast_c__c_CaptureMacro_gr__gr__qm_W_C_c>` 
+  *  :ref:`add_simulate_macro (module:rtti::Module? const implicit;annotation:smart_ptr\<ast::SimulateMacro\>& implicit;context:__context const) : void <function-_at_ast_c__c_add_simulate_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__&I1_ls_H_ls_ast_c__c_SimulateMacro_gr__gr__qm_W_C_c>` 
+  *  :ref:`add_module_option (module:rtti::Module? const implicit;option:string const implicit;type:rtti::Type const;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_add_module_option_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__CIs_CE_ls_rtti_c__c_Type_gr__C_c_C_l>` 
+  *  :ref:`add_new_block_annotation (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_block_annotation_Cs_C.>` 
+  *  :ref:`add_new_function_annotation (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_function_annotation_Cs_C.>` 
+  *  :ref:`add_new_contract_annotation (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_contract_annotation_Cs_C.>` 
+  *  :ref:`add_new_structure_annotation (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_structure_annotation_Cs_C.>` 
+  *  :ref:`add_new_enumeration_annotation (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_enumeration_annotation_Cs_C.>` 
+  *  :ref:`add_new_variant_macro (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_variant_macro_Cs_C.>` 
+  *  :ref:`add_new_for_loop_macro (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_for_loop_macro_Cs_C.>` 
+  *  :ref:`add_new_capture_macro (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_capture_macro_Cs_C.>` 
+  *  :ref:`add_new_simulate_macro (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_simulate_macro_Cs_C.>` 
+  *  :ref:`add_new_reader_macro (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_reader_macro_Cs_C.>` 
+  *  :ref:`add_new_comment_reader (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_comment_reader_Cs_C.>` 
+  *  :ref:`add_new_call_macro (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_call_macro_Cs_C.>` 
+  *  :ref:`add_new_typeinfo_macro (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_typeinfo_macro_Cs_C.>` 
+  *  :ref:`add_new_infer_macro (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_infer_macro_Cs_C.>` 
+  *  :ref:`add_new_dirty_infer_macro (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_dirty_infer_macro_Cs_C.>` 
+  *  :ref:`add_new_lint_macro (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_lint_macro_Cs_C.>` 
+  *  :ref:`add_new_global_lint_macro (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_global_lint_macro_Cs_C.>` 
+  *  :ref:`add_new_optimization_macro (name:string const;someClassPtr:auto const) : auto <function-_at_ast_c__c_add_new_optimization_macro_Cs_C.>` 
 
-.. _function-_at_ast_c__c_add_function_annotation_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_FunctionAnnotation_gr__gr_?W_C_c_C_l:
+.. _function-_at_ast_c__c_add_function_annotation_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__&I1_ls_H_ls_ast_c__c_FunctionAnnotation_gr__gr__qm_W_C_c_C_l:
 
-.. das:function:: add_function_annotation(module: rtti::Module? const implicit; annotation: smart_ptr<ast::FunctionAnnotation>& implicit)
+.. das:function:: add_function_annotation(module: Module? const implicit; annotation: smart_ptr<FunctionAnnotation>& implicit)
 
 +----------+-------------------------------------------------------------------------------------+
 +argument  +argument type                                                                        +
@@ -10980,9 +11264,9 @@ Adapter application
 
 |function-ast-add_function_annotation|
 
-.. _function-_at_ast_c__c_add_function_annotation_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?M_&I1_ls_H_ls_ast_c__c_FunctionAnnotation_gr__gr_?W_C_c_C_l:
+.. _function-_at_ast_c__c_add_function_annotation_CI1_ls_H_ls_ast_c__c_Function_gr__gr__qm_M_&I1_ls_H_ls_ast_c__c_FunctionAnnotation_gr__gr__qm_W_C_c_C_l:
 
-.. das:function:: add_function_annotation(function: smart_ptr<ast::Function> const implicit; annotation: smart_ptr<ast::FunctionAnnotation>& implicit)
+.. das:function:: add_function_annotation(function: smart_ptr<Function> const implicit; annotation: smart_ptr<FunctionAnnotation>& implicit)
 
 +----------+-------------------------------------------------------------------------------------+
 +argument  +argument type                                                                        +
@@ -10995,9 +11279,9 @@ Adapter application
 
 |function-ast-add_function_annotation|
 
-.. _function-_at_ast_c__c_add_function_annotation_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?M_&I1_ls_H_ls_rtti_c__c_AnnotationDeclaration_gr__gr_?M_C_c_C_l:
+.. _function-_at_ast_c__c_add_function_annotation_CI1_ls_H_ls_ast_c__c_Function_gr__gr__qm_M_&I1_ls_H_ls_rtti_c__c_AnnotationDeclaration_gr__gr__qm_M_C_c_C_l:
 
-.. das:function:: add_function_annotation(function: smart_ptr<ast::Function> const implicit; annotation: smart_ptr<rtti::AnnotationDeclaration>& implicit)
+.. das:function:: add_function_annotation(function: smart_ptr<Function> const implicit; annotation: smart_ptr<AnnotationDeclaration>& implicit)
 
 +----------+---------------------------------------------------------------------------------------------+
 +argument  +argument type                                                                                +
@@ -11010,9 +11294,9 @@ Adapter application
 
 |function-ast-add_function_annotation|
 
-.. _function-_at_ast_c__c_add_block_annotation_CI1_ls_H_ls_ast_c__c_ExprBlock_gr__gr_?M_&I1_ls_H_ls_ast_c__c_FunctionAnnotation_gr__gr_?W_C_c_C_l:
+.. _function-_at_ast_c__c_add_block_annotation_CI1_ls_H_ls_ast_c__c_ExprBlock_gr__gr__qm_M_&I1_ls_H_ls_ast_c__c_FunctionAnnotation_gr__gr__qm_W_C_c_C_l:
 
-.. das:function:: add_block_annotation(block: smart_ptr<ast::ExprBlock> const implicit; annotation: smart_ptr<ast::FunctionAnnotation>& implicit)
+.. das:function:: add_block_annotation(block: smart_ptr<ExprBlock> const implicit; annotation: smart_ptr<FunctionAnnotation>& implicit)
 
 +----------+-------------------------------------------------------------------------------------+
 +argument  +argument type                                                                        +
@@ -11025,9 +11309,9 @@ Adapter application
 
 |function-ast-add_block_annotation|
 
-.. _function-_at_ast_c__c_add_block_annotation_CI1_ls_H_ls_ast_c__c_ExprBlock_gr__gr_?M_&I1_ls_H_ls_rtti_c__c_AnnotationDeclaration_gr__gr_?M_C_c_C_l:
+.. _function-_at_ast_c__c_add_block_annotation_CI1_ls_H_ls_ast_c__c_ExprBlock_gr__gr__qm_M_&I1_ls_H_ls_rtti_c__c_AnnotationDeclaration_gr__gr__qm_M_C_c_C_l:
 
-.. das:function:: add_block_annotation(block: smart_ptr<ast::ExprBlock> const implicit; annotation: smart_ptr<rtti::AnnotationDeclaration>& implicit)
+.. das:function:: add_block_annotation(block: smart_ptr<ExprBlock> const implicit; annotation: smart_ptr<AnnotationDeclaration>& implicit)
 
 +----------+---------------------------------------------------------------------------------------------+
 +argument  +argument type                                                                                +
@@ -11040,9 +11324,9 @@ Adapter application
 
 |function-ast-add_block_annotation|
 
-.. _function-_at_ast_c__c_add_structure_annotation_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_StructureAnnotation_gr__gr_?W_C_c_C_l:
+.. _function-_at_ast_c__c_add_structure_annotation_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__&I1_ls_H_ls_ast_c__c_StructureAnnotation_gr__gr__qm_W_C_c_C_l:
 
-.. das:function:: add_structure_annotation(module: rtti::Module? const implicit; annotation: smart_ptr<ast::StructureAnnotation>& implicit)
+.. das:function:: add_structure_annotation(module: Module? const implicit; annotation: smart_ptr<StructureAnnotation>& implicit)
 
 +----------+---------------------------------------------------------------------------------------+
 +argument  +argument type                                                                          +
@@ -11055,9 +11339,9 @@ Adapter application
 
 |function-ast-add_structure_annotation|
 
-.. _function-_at_ast_c__c_add_structure_annotation_CI1_ls_H_ls_ast_c__c_Structure_gr__gr_?M_&I1_ls_H_ls_ast_c__c_StructureAnnotation_gr__gr_?W_C_c_C_l:
+.. _function-_at_ast_c__c_add_structure_annotation_CI1_ls_H_ls_ast_c__c_Structure_gr__gr__qm_M_&I1_ls_H_ls_ast_c__c_StructureAnnotation_gr__gr__qm_W_C_c_C_l:
 
-.. das:function:: add_structure_annotation(structure: smart_ptr<ast::Structure> const implicit; annotation: smart_ptr<ast::StructureAnnotation>& implicit)
+.. das:function:: add_structure_annotation(structure: smart_ptr<Structure> const implicit; annotation: smart_ptr<StructureAnnotation>& implicit)
 
 +----------+---------------------------------------------------------------------------------------+
 +argument  +argument type                                                                          +
@@ -11070,9 +11354,9 @@ Adapter application
 
 |function-ast-add_structure_annotation|
 
-.. _function-_at_ast_c__c_add_structure_annotation_CI1_ls_H_ls_ast_c__c_Structure_gr__gr_?M_&I1_ls_H_ls_rtti_c__c_AnnotationDeclaration_gr__gr_?M_C_c_C_l:
+.. _function-_at_ast_c__c_add_structure_annotation_CI1_ls_H_ls_ast_c__c_Structure_gr__gr__qm_M_&I1_ls_H_ls_rtti_c__c_AnnotationDeclaration_gr__gr__qm_M_C_c_C_l:
 
-.. das:function:: add_structure_annotation(structure: smart_ptr<ast::Structure> const implicit; annotation: smart_ptr<rtti::AnnotationDeclaration>& implicit)
+.. das:function:: add_structure_annotation(structure: smart_ptr<Structure> const implicit; annotation: smart_ptr<AnnotationDeclaration>& implicit)
 
 +----------+---------------------------------------------------------------------------------------------+
 +argument  +argument type                                                                                +
@@ -11085,9 +11369,9 @@ Adapter application
 
 |function-ast-add_structure_annotation|
 
-.. _function-_at_ast_c__c_add_enumeration_annotation_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_EnumerationAnnotation_gr__gr_?W_C_c_C_l:
+.. _function-_at_ast_c__c_add_enumeration_annotation_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__&I1_ls_H_ls_ast_c__c_EnumerationAnnotation_gr__gr__qm_W_C_c_C_l:
 
-.. das:function:: add_enumeration_annotation(module: rtti::Module? const implicit; annotation: smart_ptr<ast::EnumerationAnnotation>& implicit)
+.. das:function:: add_enumeration_annotation(module: Module? const implicit; annotation: smart_ptr<EnumerationAnnotation>& implicit)
 
 +----------+-------------------------------------------------------------------------------------------+
 +argument  +argument type                                                                              +
@@ -11100,9 +11384,9 @@ Adapter application
 
 |function-ast-add_enumeration_annotation|
 
-.. _function-_at_ast_c__c_add_infer_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_PassMacro_gr__gr_?W_C_c:
+.. _function-_at_ast_c__c_add_infer_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__&I1_ls_H_ls_ast_c__c_PassMacro_gr__gr__qm_W_C_c:
 
-.. das:function:: add_infer_macro(module: rtti::Module? const implicit; annotation: smart_ptr<ast::PassMacro>& implicit)
+.. das:function:: add_infer_macro(module: Module? const implicit; annotation: smart_ptr<PassMacro>& implicit)
 
 +----------+-------------------------------------------------------------------+
 +argument  +argument type                                                      +
@@ -11115,9 +11399,9 @@ Adapter application
 
 |function-ast-add_infer_macro|
 
-.. _function-_at_ast_c__c_add_dirty_infer_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_PassMacro_gr__gr_?W_C_c:
+.. _function-_at_ast_c__c_add_dirty_infer_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__&I1_ls_H_ls_ast_c__c_PassMacro_gr__gr__qm_W_C_c:
 
-.. das:function:: add_dirty_infer_macro(module: rtti::Module? const implicit; annotation: smart_ptr<ast::PassMacro>& implicit)
+.. das:function:: add_dirty_infer_macro(module: Module? const implicit; annotation: smart_ptr<PassMacro>& implicit)
 
 +----------+-------------------------------------------------------------------+
 +argument  +argument type                                                      +
@@ -11130,9 +11414,9 @@ Adapter application
 
 |function-ast-add_dirty_infer_macro|
 
-.. _function-_at_ast_c__c_add_lint_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_PassMacro_gr__gr_?W_C_c:
+.. _function-_at_ast_c__c_add_lint_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__&I1_ls_H_ls_ast_c__c_PassMacro_gr__gr__qm_W_C_c:
 
-.. das:function:: add_lint_macro(module: rtti::Module? const implicit; annotation: smart_ptr<ast::PassMacro>& implicit)
+.. das:function:: add_lint_macro(module: Module? const implicit; annotation: smart_ptr<PassMacro>& implicit)
 
 +----------+-------------------------------------------------------------------+
 +argument  +argument type                                                      +
@@ -11145,9 +11429,9 @@ Adapter application
 
 |function-ast-add_lint_macro|
 
-.. _function-_at_ast_c__c_add_global_lint_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_PassMacro_gr__gr_?W_C_c:
+.. _function-_at_ast_c__c_add_global_lint_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__&I1_ls_H_ls_ast_c__c_PassMacro_gr__gr__qm_W_C_c:
 
-.. das:function:: add_global_lint_macro(module: rtti::Module? const implicit; annotation: smart_ptr<ast::PassMacro>& implicit)
+.. das:function:: add_global_lint_macro(module: Module? const implicit; annotation: smart_ptr<PassMacro>& implicit)
 
 +----------+-------------------------------------------------------------------+
 +argument  +argument type                                                      +
@@ -11160,9 +11444,9 @@ Adapter application
 
 |function-ast-add_global_lint_macro|
 
-.. _function-_at_ast_c__c_add_optimization_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_PassMacro_gr__gr_?W_C_c:
+.. _function-_at_ast_c__c_add_optimization_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__&I1_ls_H_ls_ast_c__c_PassMacro_gr__gr__qm_W_C_c:
 
-.. das:function:: add_optimization_macro(module: rtti::Module? const implicit; annotation: smart_ptr<ast::PassMacro>& implicit)
+.. das:function:: add_optimization_macro(module: Module? const implicit; annotation: smart_ptr<PassMacro>& implicit)
 
 +----------+-------------------------------------------------------------------+
 +argument  +argument type                                                      +
@@ -11175,9 +11459,9 @@ Adapter application
 
 |function-ast-add_optimization_macro|
 
-.. _function-_at_ast_c__c_add_reader_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_ReaderMacro_gr__gr_?W_C_c_C_l:
+.. _function-_at_ast_c__c_add_reader_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__&I1_ls_H_ls_ast_c__c_ReaderMacro_gr__gr__qm_W_C_c_C_l:
 
-.. das:function:: add_reader_macro(module: rtti::Module? const implicit; annotation: smart_ptr<ast::ReaderMacro>& implicit)
+.. das:function:: add_reader_macro(module: Module? const implicit; annotation: smart_ptr<ReaderMacro>& implicit)
 
 +----------+-----------------------------------------------------------------------+
 +argument  +argument type                                                          +
@@ -11190,9 +11474,9 @@ Adapter application
 
 |function-ast-add_reader_macro|
 
-.. _function-_at_ast_c__c_add_comment_reader_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_CommentReader_gr__gr_?W_C_c_C_l:
+.. _function-_at_ast_c__c_add_comment_reader_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__&I1_ls_H_ls_ast_c__c_CommentReader_gr__gr__qm_W_C_c_C_l:
 
-.. das:function:: add_comment_reader(module: rtti::Module? const implicit; reader: smart_ptr<ast::CommentReader>& implicit)
+.. das:function:: add_comment_reader(module: Module? const implicit; reader: smart_ptr<CommentReader>& implicit)
 
 +--------+---------------------------------------------------------------------------+
 +argument+argument type                                                              +
@@ -11205,9 +11489,9 @@ Adapter application
 
 |function-ast-add_comment_reader|
 
-.. _function-_at_ast_c__c_add_call_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_CallMacro_gr__gr_?W_C_c_C_l:
+.. _function-_at_ast_c__c_add_call_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__&I1_ls_H_ls_ast_c__c_CallMacro_gr__gr__qm_W_C_c_C_l:
 
-.. das:function:: add_call_macro(module: rtti::Module? const implicit; annotation: smart_ptr<ast::CallMacro>& implicit)
+.. das:function:: add_call_macro(module: Module? const implicit; annotation: smart_ptr<CallMacro>& implicit)
 
 +----------+-------------------------------------------------------------------+
 +argument  +argument type                                                      +
@@ -11220,9 +11504,9 @@ Adapter application
 
 |function-ast-add_call_macro|
 
-.. _function-_at_ast_c__c_add_typeinfo_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_TypeInfoMacro_gr__gr_?W_C_c_C_l:
+.. _function-_at_ast_c__c_add_typeinfo_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__&I1_ls_H_ls_ast_c__c_TypeInfoMacro_gr__gr__qm_W_C_c_C_l:
 
-.. das:function:: add_typeinfo_macro(module: rtti::Module? const implicit; annotation: smart_ptr<ast::TypeInfoMacro>& implicit)
+.. das:function:: add_typeinfo_macro(module: Module? const implicit; annotation: smart_ptr<TypeInfoMacro>& implicit)
 
 +----------+---------------------------------------------------------------------------+
 +argument  +argument type                                                              +
@@ -11235,9 +11519,9 @@ Adapter application
 
 |function-ast-add_typeinfo_macro|
 
-.. _function-_at_ast_c__c_add_variant_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_VariantMacro_gr__gr_?W_C_c:
+.. _function-_at_ast_c__c_add_variant_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__&I1_ls_H_ls_ast_c__c_VariantMacro_gr__gr__qm_W_C_c:
 
-.. das:function:: add_variant_macro(module: rtti::Module? const implicit; annotation: smart_ptr<ast::VariantMacro>& implicit)
+.. das:function:: add_variant_macro(module: Module? const implicit; annotation: smart_ptr<VariantMacro>& implicit)
 
 +----------+-------------------------------------------------------------------------+
 +argument  +argument type                                                            +
@@ -11250,9 +11534,9 @@ Adapter application
 
 |function-ast-add_variant_macro|
 
-.. _function-_at_ast_c__c_add_for_loop_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_ForLoopMacro_gr__gr_?W_C_c:
+.. _function-_at_ast_c__c_add_for_loop_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__&I1_ls_H_ls_ast_c__c_ForLoopMacro_gr__gr__qm_W_C_c:
 
-.. das:function:: add_for_loop_macro(module: rtti::Module? const implicit; annotation: smart_ptr<ast::ForLoopMacro>& implicit)
+.. das:function:: add_for_loop_macro(module: Module? const implicit; annotation: smart_ptr<ForLoopMacro>& implicit)
 
 +----------+-------------------------------------------------------------------------+
 +argument  +argument type                                                            +
@@ -11265,9 +11549,9 @@ Adapter application
 
 |function-ast-add_for_loop_macro|
 
-.. _function-_at_ast_c__c_add_capture_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_CaptureMacro_gr__gr_?W_C_c:
+.. _function-_at_ast_c__c_add_capture_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__&I1_ls_H_ls_ast_c__c_CaptureMacro_gr__gr__qm_W_C_c:
 
-.. das:function:: add_capture_macro(module: rtti::Module? const implicit; annotation: smart_ptr<ast::CaptureMacro>& implicit)
+.. das:function:: add_capture_macro(module: Module? const implicit; annotation: smart_ptr<CaptureMacro>& implicit)
 
 +----------+-------------------------------------------------------------------------+
 +argument  +argument type                                                            +
@@ -11280,9 +11564,9 @@ Adapter application
 
 |function-ast-add_capture_macro|
 
-.. _function-_at_ast_c__c_add_simulate_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_SimulateMacro_gr__gr_?W_C_c:
+.. _function-_at_ast_c__c_add_simulate_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__&I1_ls_H_ls_ast_c__c_SimulateMacro_gr__gr__qm_W_C_c:
 
-.. das:function:: add_simulate_macro(module: rtti::Module? const implicit; annotation: smart_ptr<ast::SimulateMacro>& implicit)
+.. das:function:: add_simulate_macro(module: Module? const implicit; annotation: smart_ptr<SimulateMacro>& implicit)
 
 +----------+---------------------------------------------------------------------------+
 +argument  +argument type                                                              +
@@ -11295,9 +11579,9 @@ Adapter application
 
 |function-ast-add_simulate_macro|
 
-.. _function-_at_ast_c__c_add_module_option_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CIs_CE_ls_rtti_c__c_Type_gr__C_c_C_l:
+.. _function-_at_ast_c__c_add_module_option_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__CIs_CE_ls_rtti_c__c_Type_gr__C_c_C_l:
 
-.. das:function:: add_module_option(module: rtti::Module? const implicit; option: string const implicit; type: Type const)
+.. das:function:: add_module_option(module: Module? const implicit; option: string const implicit; type: Type const)
 
 +--------+----------------------------------------------------------+
 +argument+argument type                                             +
@@ -11622,18 +11906,18 @@ add_new_optimization_macro returns auto
 Adding objects to objects
 +++++++++++++++++++++++++
 
-  *  :ref:`add_enumeration_entry (enum:smart_ptr\<ast::Enumeration\> const implicit;name:string const implicit) : int <function-_at_ast_c__c_add_enumeration_entry_CI1_ls_H_ls_ast_c__c_Enumeration_gr__gr_?W_CIs>`
-  *  :ref:`add_function (module:rtti::Module? const implicit;function:smart_ptr\<ast::Function\>& implicit;context:__context const;line:__lineInfo const) : bool <function-_at_ast_c__c_add_function_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_Function_gr__gr_?W_C_c_C_l>`
-  *  :ref:`add_generic (module:rtti::Module? const implicit;function:smart_ptr\<ast::Function\>& implicit;context:__context const;line:__lineInfo const) : bool <function-_at_ast_c__c_add_generic_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_Function_gr__gr_?W_C_c_C_l>`
-  *  :ref:`add_variable (module:rtti::Module? const implicit;variable:smart_ptr\<ast::Variable\>& implicit;context:__context const;line:__lineInfo const) : bool <function-_at_ast_c__c_add_variable_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_Variable_gr__gr_?W_C_c_C_l>`
-  *  :ref:`add_keyword (module:rtti::Module? const implicit;keyword:string const implicit;needOxfordComma:bool const;context:__context const;line:__lineInfo const) : bool <function-_at_ast_c__c_add_keyword_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CIs_Cb_C_c_C_l>`
-  *  :ref:`add_structure (module:rtti::Module? const implicit;structure:smart_ptr\<ast::Structure\>& implicit) : bool <function-_at_ast_c__c_add_structure_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_Structure_gr__gr_?W>`
-  *  :ref:`add_alias (module:rtti::Module? const implicit;structure:smart_ptr\<ast::TypeDecl\>& implicit) : bool <function-_at_ast_c__c_add_alias_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W>`
-  *  :ref:`add_module_require (module:rtti::Module? const implicit;publicModule:rtti::Module? const implicit;pub:bool const) : void <function-_at_ast_c__c_add_module_require_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_Cb>`
+  *  :ref:`add_enumeration_entry (enum:smart_ptr\<ast::Enumeration\> const implicit;name:string const implicit) : int <function-_at_ast_c__c_add_enumeration_entry_CI1_ls_H_ls_ast_c__c_Enumeration_gr__gr__qm_W_CIs>` 
+  *  :ref:`add_function (module:rtti::Module? const implicit;function:smart_ptr\<ast::Function\>& implicit;context:__context const;line:__lineInfo const) : bool <function-_at_ast_c__c_add_function_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__&I1_ls_H_ls_ast_c__c_Function_gr__gr__qm_W_C_c_C_l>` 
+  *  :ref:`add_generic (module:rtti::Module? const implicit;function:smart_ptr\<ast::Function\>& implicit;context:__context const;line:__lineInfo const) : bool <function-_at_ast_c__c_add_generic_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__&I1_ls_H_ls_ast_c__c_Function_gr__gr__qm_W_C_c_C_l>` 
+  *  :ref:`add_variable (module:rtti::Module? const implicit;variable:smart_ptr\<ast::Variable\>& implicit;context:__context const;line:__lineInfo const) : bool <function-_at_ast_c__c_add_variable_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__&I1_ls_H_ls_ast_c__c_Variable_gr__gr__qm_W_C_c_C_l>` 
+  *  :ref:`add_keyword (module:rtti::Module? const implicit;keyword:string const implicit;needOxfordComma:bool const;context:__context const;line:__lineInfo const) : bool <function-_at_ast_c__c_add_keyword_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__CIs_Cb_C_c_C_l>` 
+  *  :ref:`add_structure (module:rtti::Module? const implicit;structure:smart_ptr\<ast::Structure\>& implicit) : bool <function-_at_ast_c__c_add_structure_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__&I1_ls_H_ls_ast_c__c_Structure_gr__gr__qm_W>` 
+  *  :ref:`add_alias (module:rtti::Module? const implicit;structure:smart_ptr\<ast::TypeDecl\>& implicit) : bool <function-_at_ast_c__c_add_alias_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__&I1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_W>` 
+  *  :ref:`add_module_require (module:rtti::Module? const implicit;publicModule:rtti::Module? const implicit;pub:bool const) : void <function-_at_ast_c__c_add_module_require_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__Cb>` 
 
-.. _function-_at_ast_c__c_add_enumeration_entry_CI1_ls_H_ls_ast_c__c_Enumeration_gr__gr_?W_CIs:
+.. _function-_at_ast_c__c_add_enumeration_entry_CI1_ls_H_ls_ast_c__c_Enumeration_gr__gr__qm_W_CIs:
 
-.. das:function:: add_enumeration_entry(enum: smart_ptr<ast::Enumeration> const implicit; name: string const implicit)
+.. das:function:: add_enumeration_entry(enum: smart_ptr<Enumeration> const implicit; name: string const implicit)
 
 add_enumeration_entry returns int
 
@@ -11648,9 +11932,9 @@ add_enumeration_entry returns int
 
 |function-ast-add_enumeration_entry|
 
-.. _function-_at_ast_c__c_add_function_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_Function_gr__gr_?W_C_c_C_l:
+.. _function-_at_ast_c__c_add_function_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__&I1_ls_H_ls_ast_c__c_Function_gr__gr__qm_W_C_c_C_l:
 
-.. das:function:: add_function(module: rtti::Module? const implicit; function: smart_ptr<ast::Function>& implicit)
+.. das:function:: add_function(module: Module? const implicit; function: smart_ptr<Function>& implicit)
 
 add_function returns bool
 
@@ -11665,9 +11949,9 @@ add_function returns bool
 
 |function-ast-add_function|
 
-.. _function-_at_ast_c__c_add_generic_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_Function_gr__gr_?W_C_c_C_l:
+.. _function-_at_ast_c__c_add_generic_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__&I1_ls_H_ls_ast_c__c_Function_gr__gr__qm_W_C_c_C_l:
 
-.. das:function:: add_generic(module: rtti::Module? const implicit; function: smart_ptr<ast::Function>& implicit)
+.. das:function:: add_generic(module: Module? const implicit; function: smart_ptr<Function>& implicit)
 
 add_generic returns bool
 
@@ -11682,9 +11966,9 @@ add_generic returns bool
 
 |function-ast-add_generic|
 
-.. _function-_at_ast_c__c_add_variable_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_Variable_gr__gr_?W_C_c_C_l:
+.. _function-_at_ast_c__c_add_variable_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__&I1_ls_H_ls_ast_c__c_Variable_gr__gr__qm_W_C_c_C_l:
 
-.. das:function:: add_variable(module: rtti::Module? const implicit; variable: smart_ptr<ast::Variable>& implicit)
+.. das:function:: add_variable(module: Module? const implicit; variable: smart_ptr<Variable>& implicit)
 
 add_variable returns bool
 
@@ -11699,9 +11983,9 @@ add_variable returns bool
 
 |function-ast-add_variable|
 
-.. _function-_at_ast_c__c_add_keyword_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CIs_Cb_C_c_C_l:
+.. _function-_at_ast_c__c_add_keyword_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__CIs_Cb_C_c_C_l:
 
-.. das:function:: add_keyword(module: rtti::Module? const implicit; keyword: string const implicit; needOxfordComma: bool const)
+.. das:function:: add_keyword(module: Module? const implicit; keyword: string const implicit; needOxfordComma: bool const)
 
 add_keyword returns bool
 
@@ -11718,9 +12002,9 @@ add_keyword returns bool
 
 |function-ast-add_keyword|
 
-.. _function-_at_ast_c__c_add_structure_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_Structure_gr__gr_?W:
+.. _function-_at_ast_c__c_add_structure_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__&I1_ls_H_ls_ast_c__c_Structure_gr__gr__qm_W:
 
-.. das:function:: add_structure(module: rtti::Module? const implicit; structure: smart_ptr<ast::Structure>& implicit)
+.. das:function:: add_structure(module: Module? const implicit; structure: smart_ptr<Structure>& implicit)
 
 add_structure returns bool
 
@@ -11735,9 +12019,9 @@ add_structure returns bool
 
 |function-ast-add_structure|
 
-.. _function-_at_ast_c__c_add_alias_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W:
+.. _function-_at_ast_c__c_add_alias_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__&I1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_W:
 
-.. das:function:: add_alias(module: rtti::Module? const implicit; structure: smart_ptr<ast::TypeDecl>& implicit)
+.. das:function:: add_alias(module: Module? const implicit; structure: smart_ptr<TypeDecl>& implicit)
 
 add_alias returns bool
 
@@ -11752,9 +12036,9 @@ add_alias returns bool
 
 |function-ast-add_alias|
 
-.. _function-_at_ast_c__c_add_module_require_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_Cb:
+.. _function-_at_ast_c__c_add_module_require_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__Cb:
 
-.. das:function:: add_module_require(module: rtti::Module? const implicit; publicModule: rtti::Module? const implicit; pub: bool const)
+.. das:function:: add_module_require(module: Module? const implicit; publicModule: Module? const implicit; pub: bool const)
 
 +------------+----------------------------------------------------------+
 +argument    +argument type                                             +
@@ -11773,10 +12057,10 @@ add_alias returns bool
 Program and module access
 +++++++++++++++++++++++++
 
-  *  :ref:`this_program (context:__context const) : smart_ptr\<rtti::Program\> <function-_at_ast_c__c_this_program_C_c>`
-  *  :ref:`this_module (context:__context const;line:__lineInfo const) : rtti::Module? <function-_at_ast_c__c_this_module_C_c_C_l>`
-  *  :ref:`compiling_program (context:__context const;at:__lineInfo const) : smart_ptr\<rtti::Program\> <function-_at_ast_c__c_compiling_program_C_c_C_l>`
-  *  :ref:`compiling_module (context:__context const;at:__lineInfo const) : rtti::Module? <function-_at_ast_c__c_compiling_module_C_c_C_l>`
+  *  :ref:`this_program (context:__context const) : smart_ptr\<rtti::Program\> <function-_at_ast_c__c_this_program_C_c>` 
+  *  :ref:`this_module (context:__context const;line:__lineInfo const) : rtti::Module? <function-_at_ast_c__c_this_module_C_c_C_l>` 
+  *  :ref:`compiling_program (context:__context const;at:__lineInfo const) : smart_ptr\<rtti::Program\> <function-_at_ast_c__c_compiling_program_C_c_C_l>` 
+  *  :ref:`compiling_module (context:__context const;at:__lineInfo const) : rtti::Module? <function-_at_ast_c__c_compiling_module_C_c_C_l>` 
 
 .. _function-_at_ast_c__c_this_program_C_c:
 
@@ -11814,19 +12098,19 @@ compiling_module returns  :ref:`rtti::Module <handle-rtti-Module>` ?
 Textual descriptions of the objects
 +++++++++++++++++++++++++++++++++++
 
-  *  :ref:`describe_typedecl (type:smart_ptr\<ast::TypeDecl\> const implicit;extra:bool const;contracts:bool const;module:bool const;context:__context const;lineinfo:__lineInfo const) : string <function-_at_ast_c__c_describe_typedecl_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Cb_Cb_Cb_C_c_C_l>`
-  *  :ref:`describe_typedecl_cpp (type:smart_ptr\<ast::TypeDecl\> const implicit;substitueRef:bool const;skipRef:bool const;skipConst:bool const;redundantConst:bool const;context:__context const;lineinfo:__lineInfo const) : string <function-_at_ast_c__c_describe_typedecl_cpp_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Cb_Cb_Cb_Cb_C_c_C_l>`
-  *  :ref:`describe_expression (expression:smart_ptr\<ast::Expression\> const implicit;context:__context const;lineinfo:__lineInfo const) : string <function-_at_ast_c__c_describe_expression_CI1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_C_c_C_l>`
-  *  :ref:`describe_function (function:smart_ptr\<ast::Function\> const implicit;context:__context const;lineinfo:__lineInfo const) : string <function-_at_ast_c__c_describe_function_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?M_C_c_C_l>`
-  *  :ref:`das_to_string (type:rtti::Type const;context:__context const) : string <function-_at_ast_c__c_das_to_string_CE_ls_rtti_c__c_Type_gr__C_c>`
-  *  :ref:`describe (decl:smart_ptr\<ast::TypeDecl\> const;extra:bool const;contracts:bool const;modules:bool const) : auto <function-_at_ast_c__c_describe_C1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Cb_Cb_Cb>`
-  *  :ref:`describe_cpp (decl:smart_ptr\<ast::TypeDecl\> const;substitureRef:bool const;skipRef:bool const;skipConst:bool const;redundantConst:bool const) : auto <function-_at_ast_c__c_describe_cpp_C1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Cb_Cb_Cb_Cb>`
-  *  :ref:`describe (expr:smart_ptr\<ast::Expression\> const) : auto <function-_at_ast_c__c_describe_C1_ls_H_ls_ast_c__c_Expression_gr__gr_?M>`
-  *  :ref:`describe (expr:smart_ptr\<ast::Function\> const) : auto <function-_at_ast_c__c_describe_C1_ls_H_ls_ast_c__c_Function_gr__gr_?M>`
+  *  :ref:`describe_typedecl (type:smart_ptr\<ast::TypeDecl\> const implicit;extra:bool const;contracts:bool const;module:bool const;context:__context const;lineinfo:__lineInfo const) : string <function-_at_ast_c__c_describe_typedecl_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_M_Cb_Cb_Cb_C_c_C_l>` 
+  *  :ref:`describe_typedecl_cpp (type:smart_ptr\<ast::TypeDecl\> const implicit;substitueRef:bool const;skipRef:bool const;skipConst:bool const;redundantConst:bool const;context:__context const;lineinfo:__lineInfo const) : string <function-_at_ast_c__c_describe_typedecl_cpp_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_M_Cb_Cb_Cb_Cb_C_c_C_l>` 
+  *  :ref:`describe_expression (expression:smart_ptr\<ast::Expression\> const implicit;context:__context const;lineinfo:__lineInfo const) : string <function-_at_ast_c__c_describe_expression_CI1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_M_C_c_C_l>` 
+  *  :ref:`describe_function (function:smart_ptr\<ast::Function\> const implicit;context:__context const;lineinfo:__lineInfo const) : string <function-_at_ast_c__c_describe_function_CI1_ls_H_ls_ast_c__c_Function_gr__gr__qm_M_C_c_C_l>` 
+  *  :ref:`das_to_string (type:rtti::Type const;context:__context const) : string <function-_at_ast_c__c_das_to_string_CE_ls_rtti_c__c_Type_gr__C_c>` 
+  *  :ref:`describe (decl:smart_ptr\<ast::TypeDecl\> const;extra:bool const;contracts:bool const;modules:bool const) : auto <function-_at_ast_c__c_describe_C1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_M_Cb_Cb_Cb>` 
+  *  :ref:`describe_cpp (decl:smart_ptr\<ast::TypeDecl\> const;substitureRef:bool const;skipRef:bool const;skipConst:bool const;redundantConst:bool const) : auto <function-_at_ast_c__c_describe_cpp_C1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_M_Cb_Cb_Cb_Cb>` 
+  *  :ref:`describe (expr:smart_ptr\<ast::Expression\> const) : auto <function-_at_ast_c__c_describe_C1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_M>` 
+  *  :ref:`describe (expr:smart_ptr\<ast::Function\> const) : auto <function-_at_ast_c__c_describe_C1_ls_H_ls_ast_c__c_Function_gr__gr__qm_M>` 
 
-.. _function-_at_ast_c__c_describe_typedecl_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Cb_Cb_Cb_C_c_C_l:
+.. _function-_at_ast_c__c_describe_typedecl_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_M_Cb_Cb_Cb_C_c_C_l:
 
-.. das:function:: describe_typedecl(type: smart_ptr<ast::TypeDecl> const implicit; extra: bool const; contracts: bool const; module: bool const)
+.. das:function:: describe_typedecl(type: smart_ptr<TypeDecl> const implicit; extra: bool const; contracts: bool const; module: bool const)
 
 describe_typedecl returns string
 
@@ -11845,9 +12129,9 @@ describe_typedecl returns string
 
 |function-ast-describe_typedecl|
 
-.. _function-_at_ast_c__c_describe_typedecl_cpp_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Cb_Cb_Cb_Cb_C_c_C_l:
+.. _function-_at_ast_c__c_describe_typedecl_cpp_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_M_Cb_Cb_Cb_Cb_C_c_C_l:
 
-.. das:function:: describe_typedecl_cpp(type: smart_ptr<ast::TypeDecl> const implicit; substitueRef: bool const; skipRef: bool const; skipConst: bool const; redundantConst: bool const)
+.. das:function:: describe_typedecl_cpp(type: smart_ptr<TypeDecl> const implicit; substitueRef: bool const; skipRef: bool const; skipConst: bool const; redundantConst: bool const)
 
 describe_typedecl_cpp returns string
 
@@ -11868,9 +12152,9 @@ describe_typedecl_cpp returns string
 
 |function-ast-describe_typedecl_cpp|
 
-.. _function-_at_ast_c__c_describe_expression_CI1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_C_c_C_l:
+.. _function-_at_ast_c__c_describe_expression_CI1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_M_C_c_C_l:
 
-.. das:function:: describe_expression(expression: smart_ptr<ast::Expression> const implicit)
+.. das:function:: describe_expression(expression: smart_ptr<Expression> const implicit)
 
 describe_expression returns string
 
@@ -11883,9 +12167,9 @@ describe_expression returns string
 
 |function-ast-describe_expression|
 
-.. _function-_at_ast_c__c_describe_function_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?M_C_c_C_l:
+.. _function-_at_ast_c__c_describe_function_CI1_ls_H_ls_ast_c__c_Function_gr__gr__qm_M_C_c_C_l:
 
-.. das:function:: describe_function(function: smart_ptr<ast::Function> const implicit)
+.. das:function:: describe_function(function: smart_ptr<Function> const implicit)
 
 describe_function returns string
 
@@ -11913,9 +12197,9 @@ das_to_string returns string
 
 |function-ast-das_to_string|
 
-.. _function-_at_ast_c__c_describe_C1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Cb_Cb_Cb:
+.. _function-_at_ast_c__c_describe_C1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_M_Cb_Cb_Cb:
 
-.. das:function:: describe(decl: smart_ptr<ast::TypeDecl> const; extra: bool const; contracts: bool const; modules: bool const)
+.. das:function:: describe(decl: smart_ptr<TypeDecl> const; extra: bool const; contracts: bool const; modules: bool const)
 
 describe returns auto
 
@@ -11934,9 +12218,9 @@ describe returns auto
 
 |function-ast-describe|
 
-.. _function-_at_ast_c__c_describe_cpp_C1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Cb_Cb_Cb_Cb:
+.. _function-_at_ast_c__c_describe_cpp_C1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_M_Cb_Cb_Cb_Cb:
 
-.. das:function:: describe_cpp(decl: smart_ptr<ast::TypeDecl> const; substitureRef: bool const; skipRef: bool const; skipConst: bool const; redundantConst: bool const)
+.. das:function:: describe_cpp(decl: smart_ptr<TypeDecl> const; substitureRef: bool const; skipRef: bool const; skipConst: bool const; redundantConst: bool const)
 
 describe_cpp returns auto
 
@@ -11957,9 +12241,9 @@ describe_cpp returns auto
 
 |function-ast-describe_cpp|
 
-.. _function-_at_ast_c__c_describe_C1_ls_H_ls_ast_c__c_Expression_gr__gr_?M:
+.. _function-_at_ast_c__c_describe_C1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_M:
 
-.. das:function:: describe(expr: smart_ptr<ast::Expression> const)
+.. das:function:: describe(expr: smart_ptr<Expression> const)
 
 describe returns auto
 
@@ -11972,9 +12256,9 @@ describe returns auto
 
 |function-ast-describe|
 
-.. _function-_at_ast_c__c_describe_C1_ls_H_ls_ast_c__c_Function_gr__gr_?M:
+.. _function-_at_ast_c__c_describe_C1_ls_H_ls_ast_c__c_Function_gr__gr__qm_M:
 
-.. das:function:: describe(expr: smart_ptr<ast::Function> const)
+.. das:function:: describe(expr: smart_ptr<Function> const)
 
 describe returns auto
 
@@ -11991,20 +12275,21 @@ describe returns auto
 Searching
 +++++++++
 
-  *  :ref:`find_module_via_rtti (program:smart_ptr\<rtti::Program\> const implicit;name:string const implicit;context:__context const;lineinfo:__lineInfo const) : rtti::Module? <function-_at_ast_c__c_find_module_via_rtti_CI1_ls_H_ls_rtti_c__c_Program_gr__gr_?W_CIs_C_c_C_l>`
-  *  :ref:`find_module_function_via_rtti (module:rtti::Module? const implicit;function:function\<\> const;context:__context const;lineinfo:__lineInfo const) : smart_ptr\<ast::Function\> <function-_at_ast_c__c_find_module_function_via_rtti_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_C_at__at__C_c_C_l>`
-  *  :ref:`find_variable (module:rtti::Module? const implicit;variable:string const implicit) : smart_ptr\<ast::Variable\> <function-_at_ast_c__c_find_variable_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CIs>`
-  *  :ref:`find_bitfield_name (bit:smart_ptr\<ast::TypeDecl\> const implicit;value:bitfield const;context:__context const;lineinfo:__lineInfo const) : string <function-_at_ast_c__c_find_bitfield_name_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Ct_C_c_C_l>`
-  *  :ref:`find_enum_value (enum:smart_ptr\<ast::Enumeration\> const implicit;value:string const implicit) : int64 <function-_at_ast_c__c_find_enum_value_CI1_ls_H_ls_ast_c__c_Enumeration_gr__gr_?W_CIs>`
-  *  :ref:`find_structure_field (structPtr:ast::Structure? const implicit;field:string const implicit;context:__context const;lineinfo:__lineInfo const) : ast::FieldDeclaration? <function-_at_ast_c__c_find_structure_field_CI1_ls_H_ls_ast_c__c_Structure_gr__gr_?_CIs_C_c_C_l>`
-  *  :ref:`find_unique_structure (program:smart_ptr\<rtti::Program\> const implicit;name:string const implicit;context:__context const;at:__lineInfo const) : ast::Structure? <function-_at_ast_c__c_find_unique_structure_CI1_ls_H_ls_rtti_c__c_Program_gr__gr_?M_CIs_C_c_C_l>`
-  *  :ref:`find_module (prog:smart_ptr\<rtti::Program\> const;name:string const) : rtti::Module? <function-_at_ast_c__c_find_module_C1_ls_H_ls_rtti_c__c_Program_gr__gr_?M_Cs>`
-  *  :ref:`find_module (name:string const) : rtti::Module? <function-_at_ast_c__c_find_module_Cs>`
-  *  :ref:`find_compiling_module (name:string const) : rtti::Module? <function-_at_ast_c__c_find_compiling_module_Cs>`
+  *  :ref:`find_module_via_rtti (program:smart_ptr\<rtti::Program\> const implicit;name:string const implicit;context:__context const;lineinfo:__lineInfo const) : rtti::Module? <function-_at_ast_c__c_find_module_via_rtti_CI1_ls_H_ls_rtti_c__c_Program_gr__gr__qm_W_CIs_C_c_C_l>` 
+  *  :ref:`find_module_function_via_rtti (module:rtti::Module? const implicit;function:function\<\> const;context:__context const;lineinfo:__lineInfo const) : smart_ptr\<ast::Function\> <function-_at_ast_c__c_find_module_function_via_rtti_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__C_at__at__C_c_C_l>` 
+  *  :ref:`find_variable (module:rtti::Module? const implicit;variable:string const implicit) : smart_ptr\<ast::Variable\> <function-_at_ast_c__c_find_variable_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__CIs>` 
+  *  :ref:`find_matching_variable (program:rtti::Program? const implicit;function:ast::Function? const implicit;name:string const implicit;seePrivate:bool const;block:block\<(var arg0:array\<smart_ptr\<ast::Variable\>\>#):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_find_matching_variable_CI1_ls_H_ls_rtti_c__c_Program_gr__gr__qm__CI1_ls_H_ls_ast_c__c_Function_gr__gr__qm__CIs_Cb_CI0_ls__hh_1_ls_1_ls_H_ls_ast_c__c_Variable_gr__gr__qm_W_gr_A_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`find_bitfield_name (bit:smart_ptr\<ast::TypeDecl\> const implicit;value:bitfield const;context:__context const;lineinfo:__lineInfo const) : string <function-_at_ast_c__c_find_bitfield_name_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_M_Ct_C_c_C_l>` 
+  *  :ref:`find_enum_value (enum:smart_ptr\<ast::Enumeration\> const implicit;value:string const implicit) : int64 <function-_at_ast_c__c_find_enum_value_CI1_ls_H_ls_ast_c__c_Enumeration_gr__gr__qm_W_CIs>` 
+  *  :ref:`find_structure_field (structPtr:ast::Structure? const implicit;field:string const implicit;context:__context const;lineinfo:__lineInfo const) : ast::FieldDeclaration? <function-_at_ast_c__c_find_structure_field_CI1_ls_H_ls_ast_c__c_Structure_gr__gr__qm__CIs_C_c_C_l>` 
+  *  :ref:`find_unique_structure (program:smart_ptr\<rtti::Program\> const implicit;name:string const implicit;context:__context const;at:__lineInfo const) : ast::Structure? <function-_at_ast_c__c_find_unique_structure_CI1_ls_H_ls_rtti_c__c_Program_gr__gr__qm_M_CIs_C_c_C_l>` 
+  *  :ref:`find_module (prog:smart_ptr\<rtti::Program\> const;name:string const) : rtti::Module? <function-_at_ast_c__c_find_module_C1_ls_H_ls_rtti_c__c_Program_gr__gr__qm_M_Cs>` 
+  *  :ref:`find_module (name:string const) : rtti::Module? <function-_at_ast_c__c_find_module_Cs>` 
+  *  :ref:`find_compiling_module (name:string const) : rtti::Module? <function-_at_ast_c__c_find_compiling_module_Cs>` 
 
-.. _function-_at_ast_c__c_find_module_via_rtti_CI1_ls_H_ls_rtti_c__c_Program_gr__gr_?W_CIs_C_c_C_l:
+.. _function-_at_ast_c__c_find_module_via_rtti_CI1_ls_H_ls_rtti_c__c_Program_gr__gr__qm_W_CIs_C_c_C_l:
 
-.. das:function:: find_module_via_rtti(program: smart_ptr<rtti::Program> const implicit; name: string const implicit)
+.. das:function:: find_module_via_rtti(program: smart_ptr<Program> const implicit; name: string const implicit)
 
 find_module_via_rtti returns  :ref:`rtti::Module <handle-rtti-Module>` ?
 
@@ -12019,9 +12304,9 @@ find_module_via_rtti returns  :ref:`rtti::Module <handle-rtti-Module>` ?
 
 |function-ast-find_module_via_rtti|
 
-.. _function-_at_ast_c__c_find_module_function_via_rtti_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_C_at__at__C_c_C_l:
+.. _function-_at_ast_c__c_find_module_function_via_rtti_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__C_at__at__C_c_C_l:
 
-.. das:function:: find_module_function_via_rtti(module: rtti::Module? const implicit; function: function<> const)
+.. das:function:: find_module_function_via_rtti(module: Module? const implicit; function: function<> const)
 
 find_module_function_via_rtti returns smart_ptr< :ref:`ast::Function <handle-ast-Function>` >
 
@@ -12036,9 +12321,9 @@ find_module_function_via_rtti returns smart_ptr< :ref:`ast::Function <handle-ast
 
 |function-ast-find_module_function_via_rtti|
 
-.. _function-_at_ast_c__c_find_variable_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CIs:
+.. _function-_at_ast_c__c_find_variable_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__CIs:
 
-.. das:function:: find_variable(module: rtti::Module? const implicit; variable: string const implicit)
+.. das:function:: find_variable(module: Module? const implicit; variable: string const implicit)
 
 find_variable returns smart_ptr< :ref:`ast::Variable <handle-ast-Variable>` >
 
@@ -12053,9 +12338,30 @@ find_variable returns smart_ptr< :ref:`ast::Variable <handle-ast-Variable>` >
 
 |function-ast-find_variable|
 
-.. _function-_at_ast_c__c_find_bitfield_name_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Ct_C_c_C_l:
+.. _function-_at_ast_c__c_find_matching_variable_CI1_ls_H_ls_rtti_c__c_Program_gr__gr__qm__CI1_ls_H_ls_ast_c__c_Function_gr__gr__qm__CIs_Cb_CI0_ls__hh_1_ls_1_ls_H_ls_ast_c__c_Variable_gr__gr__qm_W_gr_A_gr_1_ls_v_gr__builtin__C_c_C_l:
 
-.. das:function:: find_bitfield_name(bit: smart_ptr<ast::TypeDecl> const implicit; value: bitfield const)
+.. das:function:: find_matching_variable(program: Program? const implicit; function: Function? const implicit; name: string const implicit; seePrivate: bool const; block: block<(var arg0:array<smart_ptr<Variable>>#):void> const implicit)
+
++----------+--------------------------------------------------------------------------------------------+
++argument  +argument type                                                                               +
++==========+============================================================================================+
++program   + :ref:`rtti::Program <handle-rtti-Program>` ? const implicit                                +
++----------+--------------------------------------------------------------------------------------------+
++function  + :ref:`ast::Function <handle-ast-Function>` ? const implicit                                +
++----------+--------------------------------------------------------------------------------------------+
++name      +string const implicit                                                                       +
++----------+--------------------------------------------------------------------------------------------+
++seePrivate+bool const                                                                                  +
++----------+--------------------------------------------------------------------------------------------+
++block     +block<(array<smart_ptr< :ref:`ast::Variable <handle-ast-Variable>` >>#):void> const implicit+
++----------+--------------------------------------------------------------------------------------------+
+
+
+|function-ast-find_matching_variable|
+
+.. _function-_at_ast_c__c_find_bitfield_name_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_M_Ct_C_c_C_l:
+
+.. das:function:: find_bitfield_name(bit: smart_ptr<TypeDecl> const implicit; value: bitfield const)
 
 find_bitfield_name returns string
 
@@ -12070,9 +12376,9 @@ find_bitfield_name returns string
 
 |function-ast-find_bitfield_name|
 
-.. _function-_at_ast_c__c_find_enum_value_CI1_ls_H_ls_ast_c__c_Enumeration_gr__gr_?W_CIs:
+.. _function-_at_ast_c__c_find_enum_value_CI1_ls_H_ls_ast_c__c_Enumeration_gr__gr__qm_W_CIs:
 
-.. das:function:: find_enum_value(enum: smart_ptr<ast::Enumeration> const implicit; value: string const implicit)
+.. das:function:: find_enum_value(enum: smart_ptr<Enumeration> const implicit; value: string const implicit)
 
 find_enum_value returns int64
 
@@ -12087,9 +12393,9 @@ find_enum_value returns int64
 
 |function-ast-find_enum_value|
 
-.. _function-_at_ast_c__c_find_structure_field_CI1_ls_H_ls_ast_c__c_Structure_gr__gr_?_CIs_C_c_C_l:
+.. _function-_at_ast_c__c_find_structure_field_CI1_ls_H_ls_ast_c__c_Structure_gr__gr__qm__CIs_C_c_C_l:
 
-.. das:function:: find_structure_field(structPtr: ast::Structure? const implicit; field: string const implicit)
+.. das:function:: find_structure_field(structPtr: Structure? const implicit; field: string const implicit)
 
 find_structure_field returns  :ref:`ast::FieldDeclaration <handle-ast-FieldDeclaration>` ?
 
@@ -12104,9 +12410,9 @@ find_structure_field returns  :ref:`ast::FieldDeclaration <handle-ast-FieldDecla
 
 |function-ast-find_structure_field|
 
-.. _function-_at_ast_c__c_find_unique_structure_CI1_ls_H_ls_rtti_c__c_Program_gr__gr_?M_CIs_C_c_C_l:
+.. _function-_at_ast_c__c_find_unique_structure_CI1_ls_H_ls_rtti_c__c_Program_gr__gr__qm_M_CIs_C_c_C_l:
 
-.. das:function:: find_unique_structure(program: smart_ptr<rtti::Program> const implicit; name: string const implicit)
+.. das:function:: find_unique_structure(program: smart_ptr<Program> const implicit; name: string const implicit)
 
 find_unique_structure returns  :ref:`ast::Structure <handle-ast-Structure>` ?
 
@@ -12121,9 +12427,9 @@ find_unique_structure returns  :ref:`ast::Structure <handle-ast-Structure>` ?
 
 |function-ast-find_unique_structure|
 
-.. _function-_at_ast_c__c_find_module_C1_ls_H_ls_rtti_c__c_Program_gr__gr_?M_Cs:
+.. _function-_at_ast_c__c_find_module_C1_ls_H_ls_rtti_c__c_Program_gr__gr__qm_M_Cs:
 
-.. das:function:: find_module(prog: smart_ptr<rtti::Program> const; name: string const)
+.. das:function:: find_module(prog: smart_ptr<Program> const; name: string const)
 
 find_module returns  :ref:`rtti::Module <handle-rtti-Module>` ?
 
@@ -12172,26 +12478,26 @@ find_compiling_module returns  :ref:`rtti::Module <handle-rtti-Module>` ?
 Iterating
 +++++++++
 
-  *  :ref:`for_each_module (program:rtti::Program? const implicit;block:block\<(var arg0:rtti::Module?):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_module_CI1_ls_H_ls_rtti_c__c_Program_gr__gr_?_CI0_ls_1_ls_H_ls_rtti_c__c_Module_gr__gr_?_gr_1_ls_v_gr__builtin__C_c_C_l>`
-  *  :ref:`for_each_function (module:rtti::Module? const implicit;name:string const implicit;block:block\<(var arg0:smart_ptr\<ast::Function\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_function_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CIs_CI0_ls_1_ls_H_ls_ast_c__c_Function_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l>`
-  *  :ref:`for_each_generic (module:rtti::Module? const implicit;name:string const implicit;block:block\<(var arg0:smart_ptr\<ast::Function\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_generic_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CIs_CI0_ls_1_ls_H_ls_ast_c__c_Function_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l>`
-  *  :ref:`any_table_foreach (table:void? const implicit;keyStride:int const;valueStride:int const;block:block\<(var arg0:void?;var arg1:void?):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_any_table_foreach_CI?_Ci_Ci_CI0_ls_?;?_gr_1_ls_v_gr__builtin__C_c_C_l>`
-  *  :ref:`any_array_foreach (array:void? const implicit;stride:int const;block:block\<(var arg0:void?):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_any_array_foreach_CI?_Ci_CI0_ls_?_gr_1_ls_v_gr__builtin__C_c_C_l>`
-  *  :ref:`for_each_typedef (module:rtti::Module? const implicit;block:block\<(var arg0:string#;var arg1:smart_ptr\<ast::TypeDecl\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_typedef_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls__hh_s;1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l>`
-  *  :ref:`for_each_enumeration (module:rtti::Module? const implicit;block:block\<(var arg0:smart_ptr\<ast::Enumeration\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_enumeration_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_1_ls_H_ls_ast_c__c_Enumeration_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l>`
-  *  :ref:`for_each_structure (module:rtti::Module? const implicit;block:block\<(var arg0:smart_ptr\<ast::Structure\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_structure_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_1_ls_H_ls_ast_c__c_Structure_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l>`
-  *  :ref:`for_each_generic (module:rtti::Module? const implicit;block:block\<(var arg0:smart_ptr\<ast::Function\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_generic_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_1_ls_H_ls_ast_c__c_Function_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l>`
-  *  :ref:`for_each_global (module:rtti::Module? const implicit;block:block\<(var arg0:smart_ptr\<ast::Variable\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_global_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_1_ls_H_ls_ast_c__c_Variable_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l>`
-  *  :ref:`for_each_call_macro (module:rtti::Module? const implicit;block:block\<(var arg0:string#):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_call_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls__hh_s_gr_1_ls_v_gr__builtin__C_c_C_l>`
-  *  :ref:`for_each_reader_macro (module:rtti::Module? const implicit;block:block\<(var arg0:string#):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_reader_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls__hh_s_gr_1_ls_v_gr__builtin__C_c_C_l>`
-  *  :ref:`for_each_variant_macro (module:rtti::Module? const implicit;block:block\<(var arg0:smart_ptr\<ast::VariantMacro\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_variant_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_1_ls_H_ls_ast_c__c_VariantMacro_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l>`
-  *  :ref:`for_each_for_loop_macro (module:rtti::Module? const implicit;block:block\<(var arg0:smart_ptr\<ast::ForLoopMacro\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_for_loop_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_1_ls_H_ls_ast_c__c_ForLoopMacro_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l>`
-  *  :ref:`for_each_typeinfo_macro (module:rtti::Module? const implicit;block:block\<(var arg0:smart_ptr\<ast::TypeInfoMacro\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_typeinfo_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_1_ls_H_ls_ast_c__c_TypeInfoMacro_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l>`
-  *  :ref:`for_each_field (annotation:rtti::BasicStructureAnnotation const implicit;block:block\<(var arg0:string;var arg1:string;var arg2:smart_ptr\<ast::TypeDecl\>;var arg3:uint):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_field_CIH_ls_rtti_c__c_BasicStructureAnnotation_gr__CI0_ls_s;s;1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W;u_gr_1_ls_v_gr__builtin__C_c_C_l>`
+  *  :ref:`for_each_module (program:rtti::Program? const implicit;block:block\<(var arg0:rtti::Module?):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_module_CI1_ls_H_ls_rtti_c__c_Program_gr__gr__qm__CI0_ls_1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`for_each_function (module:rtti::Module? const implicit;name:string const implicit;block:block\<(var arg0:smart_ptr\<ast::Function\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_function_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__CIs_CI0_ls_1_ls_H_ls_ast_c__c_Function_gr__gr__qm_W_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`for_each_generic (module:rtti::Module? const implicit;name:string const implicit;block:block\<(var arg0:smart_ptr\<ast::Function\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_generic_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__CIs_CI0_ls_1_ls_H_ls_ast_c__c_Function_gr__gr__qm_W_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`any_table_foreach (table:void? const implicit;keyStride:int const;valueStride:int const;block:block\<(var arg0:void?;var arg1:void?):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_any_table_foreach_CI_qm__Ci_Ci_CI0_ls__qm_;_qm__gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`any_array_foreach (array:void? const implicit;stride:int const;block:block\<(var arg0:void?):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_any_array_foreach_CI_qm__Ci_CI0_ls__qm__gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`for_each_typedef (module:rtti::Module? const implicit;block:block\<(var arg0:string#;var arg1:smart_ptr\<ast::TypeDecl\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_typedef_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__CI0_ls__hh_s;1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_W_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`for_each_enumeration (module:rtti::Module? const implicit;block:block\<(var arg0:smart_ptr\<ast::Enumeration\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_enumeration_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__CI0_ls_1_ls_H_ls_ast_c__c_Enumeration_gr__gr__qm_W_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`for_each_structure (module:rtti::Module? const implicit;block:block\<(var arg0:smart_ptr\<ast::Structure\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_structure_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__CI0_ls_1_ls_H_ls_ast_c__c_Structure_gr__gr__qm_W_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`for_each_generic (module:rtti::Module? const implicit;block:block\<(var arg0:smart_ptr\<ast::Function\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_generic_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__CI0_ls_1_ls_H_ls_ast_c__c_Function_gr__gr__qm_W_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`for_each_global (module:rtti::Module? const implicit;block:block\<(var arg0:smart_ptr\<ast::Variable\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_global_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__CI0_ls_1_ls_H_ls_ast_c__c_Variable_gr__gr__qm_W_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`for_each_call_macro (module:rtti::Module? const implicit;block:block\<(var arg0:string#):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_call_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__CI0_ls__hh_s_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`for_each_reader_macro (module:rtti::Module? const implicit;block:block\<(var arg0:string#):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_reader_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__CI0_ls__hh_s_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`for_each_variant_macro (module:rtti::Module? const implicit;block:block\<(var arg0:smart_ptr\<ast::VariantMacro\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_variant_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__CI0_ls_1_ls_H_ls_ast_c__c_VariantMacro_gr__gr__qm_W_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`for_each_for_loop_macro (module:rtti::Module? const implicit;block:block\<(var arg0:smart_ptr\<ast::ForLoopMacro\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_for_loop_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__CI0_ls_1_ls_H_ls_ast_c__c_ForLoopMacro_gr__gr__qm_W_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`for_each_typeinfo_macro (module:rtti::Module? const implicit;block:block\<(var arg0:smart_ptr\<ast::TypeInfoMacro\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_typeinfo_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__CI0_ls_1_ls_H_ls_ast_c__c_TypeInfoMacro_gr__gr__qm_W_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`for_each_field (annotation:rtti::BasicStructureAnnotation const implicit;block:block\<(var arg0:string;var arg1:string;var arg2:smart_ptr\<ast::TypeDecl\>;var arg3:uint):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_for_each_field_CIH_ls_rtti_c__c_BasicStructureAnnotation_gr__CI0_ls_s;s;1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_W;u_gr_1_ls_v_gr__builtin__C_c_C_l>` 
 
-.. _function-_at_ast_c__c_for_each_module_CI1_ls_H_ls_rtti_c__c_Program_gr__gr_?_CI0_ls_1_ls_H_ls_rtti_c__c_Module_gr__gr_?_gr_1_ls_v_gr__builtin__C_c_C_l:
+.. _function-_at_ast_c__c_for_each_module_CI1_ls_H_ls_rtti_c__c_Program_gr__gr__qm__CI0_ls_1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__gr_1_ls_v_gr__builtin__C_c_C_l:
 
-.. das:function:: for_each_module(program: rtti::Program? const implicit; block: block<(var arg0:rtti::Module?):void> const implicit)
+.. das:function:: for_each_module(program: Program? const implicit; block: block<(var arg0:Module?):void> const implicit)
 
 +--------+------------------------------------------------------------------------+
 +argument+argument type                                                           +
@@ -12204,9 +12510,9 @@ Iterating
 
 |function-ast-for_each_module|
 
-.. _function-_at_ast_c__c_for_each_function_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CIs_CI0_ls_1_ls_H_ls_ast_c__c_Function_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l:
+.. _function-_at_ast_c__c_for_each_function_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__CIs_CI0_ls_1_ls_H_ls_ast_c__c_Function_gr__gr__qm_W_gr_1_ls_v_gr__builtin__C_c_C_l:
 
-.. das:function:: for_each_function(module: rtti::Module? const implicit; name: string const implicit; block: block<(var arg0:smart_ptr<ast::Function>):void> const implicit)
+.. das:function:: for_each_function(module: Module? const implicit; name: string const implicit; block: block<(var arg0:smart_ptr<Function>):void> const implicit)
 
 +--------+------------------------------------------------------------------------------------+
 +argument+argument type                                                                       +
@@ -12221,9 +12527,9 @@ Iterating
 
 |function-ast-for_each_function|
 
-.. _function-_at_ast_c__c_for_each_generic_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CIs_CI0_ls_1_ls_H_ls_ast_c__c_Function_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l:
+.. _function-_at_ast_c__c_for_each_generic_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__CIs_CI0_ls_1_ls_H_ls_ast_c__c_Function_gr__gr__qm_W_gr_1_ls_v_gr__builtin__C_c_C_l:
 
-.. das:function:: for_each_generic(module: rtti::Module? const implicit; name: string const implicit; block: block<(var arg0:smart_ptr<ast::Function>):void> const implicit)
+.. das:function:: for_each_generic(module: Module? const implicit; name: string const implicit; block: block<(var arg0:smart_ptr<Function>):void> const implicit)
 
 +--------+------------------------------------------------------------------------------------+
 +argument+argument type                                                                       +
@@ -12238,7 +12544,7 @@ Iterating
 
 |function-ast-for_each_generic|
 
-.. _function-_at_ast_c__c_any_table_foreach_CI?_Ci_Ci_CI0_ls_?;?_gr_1_ls_v_gr__builtin__C_c_C_l:
+.. _function-_at_ast_c__c_any_table_foreach_CI_qm__Ci_Ci_CI0_ls__qm_;_qm__gr_1_ls_v_gr__builtin__C_c_C_l:
 
 .. das:function:: any_table_foreach(table: void? const implicit; keyStride: int const; valueStride: int const; block: block<(var arg0:void?;var arg1:void?):void> const implicit)
 
@@ -12257,7 +12563,7 @@ Iterating
 
 |function-ast-any_table_foreach|
 
-.. _function-_at_ast_c__c_any_array_foreach_CI?_Ci_CI0_ls_?_gr_1_ls_v_gr__builtin__C_c_C_l:
+.. _function-_at_ast_c__c_any_array_foreach_CI_qm__Ci_CI0_ls__qm__gr_1_ls_v_gr__builtin__C_c_C_l:
 
 .. das:function:: any_array_foreach(array: void? const implicit; stride: int const; block: block<(var arg0:void?):void> const implicit)
 
@@ -12274,9 +12580,9 @@ Iterating
 
 |function-ast-any_array_foreach|
 
-.. _function-_at_ast_c__c_for_each_typedef_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls__hh_s;1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l:
+.. _function-_at_ast_c__c_for_each_typedef_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__CI0_ls__hh_s;1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_W_gr_1_ls_v_gr__builtin__C_c_C_l:
 
-.. das:function:: for_each_typedef(module: rtti::Module? const implicit; block: block<(var arg0:string#;var arg1:smart_ptr<ast::TypeDecl>):void> const implicit)
+.. das:function:: for_each_typedef(module: Module? const implicit; block: block<(var arg0:string#;var arg1:smart_ptr<TypeDecl>):void> const implicit)
 
 +--------+--------------------------------------------------------------------------------------------+
 +argument+argument type                                                                               +
@@ -12289,9 +12595,9 @@ Iterating
 
 |function-ast-for_each_typedef|
 
-.. _function-_at_ast_c__c_for_each_enumeration_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_1_ls_H_ls_ast_c__c_Enumeration_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l:
+.. _function-_at_ast_c__c_for_each_enumeration_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__CI0_ls_1_ls_H_ls_ast_c__c_Enumeration_gr__gr__qm_W_gr_1_ls_v_gr__builtin__C_c_C_l:
 
-.. das:function:: for_each_enumeration(module: rtti::Module? const implicit; block: block<(var arg0:smart_ptr<ast::Enumeration>):void> const implicit)
+.. das:function:: for_each_enumeration(module: Module? const implicit; block: block<(var arg0:smart_ptr<Enumeration>):void> const implicit)
 
 +--------+------------------------------------------------------------------------------------------+
 +argument+argument type                                                                             +
@@ -12304,9 +12610,9 @@ Iterating
 
 |function-ast-for_each_enumeration|
 
-.. _function-_at_ast_c__c_for_each_structure_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_1_ls_H_ls_ast_c__c_Structure_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l:
+.. _function-_at_ast_c__c_for_each_structure_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__CI0_ls_1_ls_H_ls_ast_c__c_Structure_gr__gr__qm_W_gr_1_ls_v_gr__builtin__C_c_C_l:
 
-.. das:function:: for_each_structure(module: rtti::Module? const implicit; block: block<(var arg0:smart_ptr<ast::Structure>):void> const implicit)
+.. das:function:: for_each_structure(module: Module? const implicit; block: block<(var arg0:smart_ptr<Structure>):void> const implicit)
 
 +--------+--------------------------------------------------------------------------------------+
 +argument+argument type                                                                         +
@@ -12319,9 +12625,9 @@ Iterating
 
 |function-ast-for_each_structure|
 
-.. _function-_at_ast_c__c_for_each_generic_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_1_ls_H_ls_ast_c__c_Function_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l:
+.. _function-_at_ast_c__c_for_each_generic_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__CI0_ls_1_ls_H_ls_ast_c__c_Function_gr__gr__qm_W_gr_1_ls_v_gr__builtin__C_c_C_l:
 
-.. das:function:: for_each_generic(module: rtti::Module? const implicit; block: block<(var arg0:smart_ptr<ast::Function>):void> const implicit)
+.. das:function:: for_each_generic(module: Module? const implicit; block: block<(var arg0:smart_ptr<Function>):void> const implicit)
 
 +--------+------------------------------------------------------------------------------------+
 +argument+argument type                                                                       +
@@ -12334,9 +12640,9 @@ Iterating
 
 |function-ast-for_each_generic|
 
-.. _function-_at_ast_c__c_for_each_global_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_1_ls_H_ls_ast_c__c_Variable_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l:
+.. _function-_at_ast_c__c_for_each_global_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__CI0_ls_1_ls_H_ls_ast_c__c_Variable_gr__gr__qm_W_gr_1_ls_v_gr__builtin__C_c_C_l:
 
-.. das:function:: for_each_global(module: rtti::Module? const implicit; block: block<(var arg0:smart_ptr<ast::Variable>):void> const implicit)
+.. das:function:: for_each_global(module: Module? const implicit; block: block<(var arg0:smart_ptr<Variable>):void> const implicit)
 
 +--------+------------------------------------------------------------------------------------+
 +argument+argument type                                                                       +
@@ -12349,9 +12655,9 @@ Iterating
 
 |function-ast-for_each_global|
 
-.. _function-_at_ast_c__c_for_each_call_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls__hh_s_gr_1_ls_v_gr__builtin__C_c_C_l:
+.. _function-_at_ast_c__c_for_each_call_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__CI0_ls__hh_s_gr_1_ls_v_gr__builtin__C_c_C_l:
 
-.. das:function:: for_each_call_macro(module: rtti::Module? const implicit; block: block<(var arg0:string#):void> const implicit)
+.. das:function:: for_each_call_macro(module: Module? const implicit; block: block<(var arg0:string#):void> const implicit)
 
 +--------+----------------------------------------------------------+
 +argument+argument type                                             +
@@ -12364,9 +12670,9 @@ Iterating
 
 |function-ast-for_each_call_macro|
 
-.. _function-_at_ast_c__c_for_each_reader_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls__hh_s_gr_1_ls_v_gr__builtin__C_c_C_l:
+.. _function-_at_ast_c__c_for_each_reader_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__CI0_ls__hh_s_gr_1_ls_v_gr__builtin__C_c_C_l:
 
-.. das:function:: for_each_reader_macro(module: rtti::Module? const implicit; block: block<(var arg0:string#):void> const implicit)
+.. das:function:: for_each_reader_macro(module: Module? const implicit; block: block<(var arg0:string#):void> const implicit)
 
 +--------+----------------------------------------------------------+
 +argument+argument type                                             +
@@ -12379,9 +12685,9 @@ Iterating
 
 |function-ast-for_each_reader_macro|
 
-.. _function-_at_ast_c__c_for_each_variant_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_1_ls_H_ls_ast_c__c_VariantMacro_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l:
+.. _function-_at_ast_c__c_for_each_variant_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__CI0_ls_1_ls_H_ls_ast_c__c_VariantMacro_gr__gr__qm_W_gr_1_ls_v_gr__builtin__C_c_C_l:
 
-.. das:function:: for_each_variant_macro(module: rtti::Module? const implicit; block: block<(var arg0:smart_ptr<ast::VariantMacro>):void> const implicit)
+.. das:function:: for_each_variant_macro(module: Module? const implicit; block: block<(var arg0:smart_ptr<VariantMacro>):void> const implicit)
 
 +--------+--------------------------------------------------------------------------------------------+
 +argument+argument type                                                                               +
@@ -12394,9 +12700,9 @@ Iterating
 
 |function-ast-for_each_variant_macro|
 
-.. _function-_at_ast_c__c_for_each_for_loop_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_1_ls_H_ls_ast_c__c_ForLoopMacro_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l:
+.. _function-_at_ast_c__c_for_each_for_loop_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__CI0_ls_1_ls_H_ls_ast_c__c_ForLoopMacro_gr__gr__qm_W_gr_1_ls_v_gr__builtin__C_c_C_l:
 
-.. das:function:: for_each_for_loop_macro(module: rtti::Module? const implicit; block: block<(var arg0:smart_ptr<ast::ForLoopMacro>):void> const implicit)
+.. das:function:: for_each_for_loop_macro(module: Module? const implicit; block: block<(var arg0:smart_ptr<ForLoopMacro>):void> const implicit)
 
 +--------+--------------------------------------------------------------------------------------------+
 +argument+argument type                                                                               +
@@ -12409,9 +12715,9 @@ Iterating
 
 |function-ast-for_each_for_loop_macro|
 
-.. _function-_at_ast_c__c_for_each_typeinfo_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI0_ls_1_ls_H_ls_ast_c__c_TypeInfoMacro_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l:
+.. _function-_at_ast_c__c_for_each_typeinfo_macro_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__CI0_ls_1_ls_H_ls_ast_c__c_TypeInfoMacro_gr__gr__qm_W_gr_1_ls_v_gr__builtin__C_c_C_l:
 
-.. das:function:: for_each_typeinfo_macro(module: rtti::Module? const implicit; block: block<(var arg0:smart_ptr<ast::TypeInfoMacro>):void> const implicit)
+.. das:function:: for_each_typeinfo_macro(module: Module? const implicit; block: block<(var arg0:smart_ptr<TypeInfoMacro>):void> const implicit)
 
 +--------+----------------------------------------------------------------------------------------------+
 +argument+argument type                                                                                 +
@@ -12424,9 +12730,9 @@ Iterating
 
 |function-ast-for_each_typeinfo_macro|
 
-.. _function-_at_ast_c__c_for_each_field_CIH_ls_rtti_c__c_BasicStructureAnnotation_gr__CI0_ls_s;s;1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W;u_gr_1_ls_v_gr__builtin__C_c_C_l:
+.. _function-_at_ast_c__c_for_each_field_CIH_ls_rtti_c__c_BasicStructureAnnotation_gr__CI0_ls_s;s;1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_W;u_gr_1_ls_v_gr__builtin__C_c_C_l:
 
-.. das:function:: for_each_field(annotation: BasicStructureAnnotation const implicit; block: block<(var arg0:string;var arg1:string;var arg2:smart_ptr<ast::TypeDecl>;var arg3:uint):void> const implicit)
+.. das:function:: for_each_field(annotation: BasicStructureAnnotation const implicit; block: block<(var arg0:string;var arg1:string;var arg2:smart_ptr<TypeDecl>;var arg3:uint):void> const implicit)
 
 +----------+-------------------------------------------------------------------------------------------------------+
 +argument  +argument type                                                                                          +
@@ -12443,15 +12749,15 @@ Iterating
 Cloning
 +++++++
 
-  *  :ref:`clone_structure (structure:ast::Structure const? const implicit) : smart_ptr\<ast::Structure\> <function-_at_ast_c__c_clone_structure_CI1_ls_CH_ls_ast_c__c_Structure_gr__gr_?>`
-  *  :ref:`clone_expression (expression:smart_ptr\<ast::Expression\> const implicit) : smart_ptr\<ast::Expression\> <function-_at_ast_c__c_clone_expression_CI1_ls_H_ls_ast_c__c_Expression_gr__gr_?W>`
-  *  :ref:`clone_function (function:smart_ptr\<ast::Function\> const implicit) : smart_ptr\<ast::Function\> <function-_at_ast_c__c_clone_function_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?W>`
-  *  :ref:`clone_variable (variable:smart_ptr\<ast::Variable\> const implicit) : smart_ptr\<ast::Variable\> <function-_at_ast_c__c_clone_variable_CI1_ls_H_ls_ast_c__c_Variable_gr__gr_?W>`
-  *  :ref:`clone_type (type:smart_ptr\<ast::TypeDecl\> const implicit) : smart_ptr\<ast::TypeDecl\> <function-_at_ast_c__c_clone_type_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W>`
+  *  :ref:`clone_structure (structure:ast::Structure const? const implicit) : smart_ptr\<ast::Structure\> <function-_at_ast_c__c_clone_structure_CI1_ls_CH_ls_ast_c__c_Structure_gr__gr__qm_>` 
+  *  :ref:`clone_expression (expression:smart_ptr\<ast::Expression\> const implicit) : smart_ptr\<ast::Expression\> <function-_at_ast_c__c_clone_expression_CI1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_W>` 
+  *  :ref:`clone_function (function:smart_ptr\<ast::Function\> const implicit) : smart_ptr\<ast::Function\> <function-_at_ast_c__c_clone_function_CI1_ls_H_ls_ast_c__c_Function_gr__gr__qm_W>` 
+  *  :ref:`clone_variable (variable:smart_ptr\<ast::Variable\> const implicit) : smart_ptr\<ast::Variable\> <function-_at_ast_c__c_clone_variable_CI1_ls_H_ls_ast_c__c_Variable_gr__gr__qm_W>` 
+  *  :ref:`clone_type (type:smart_ptr\<ast::TypeDecl\> const implicit) : smart_ptr\<ast::TypeDecl\> <function-_at_ast_c__c_clone_type_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_W>` 
 
-.. _function-_at_ast_c__c_clone_structure_CI1_ls_CH_ls_ast_c__c_Structure_gr__gr_?:
+.. _function-_at_ast_c__c_clone_structure_CI1_ls_CH_ls_ast_c__c_Structure_gr__gr__qm_:
 
-.. das:function:: clone_structure(structure: ast::Structure const? const implicit)
+.. das:function:: clone_structure(structure: Structure const? const implicit)
 
 clone_structure returns smart_ptr< :ref:`ast::Structure <handle-ast-Structure>` >
 
@@ -12464,9 +12770,9 @@ clone_structure returns smart_ptr< :ref:`ast::Structure <handle-ast-Structure>` 
 
 |function-ast-clone_structure|
 
-.. _function-_at_ast_c__c_clone_expression_CI1_ls_H_ls_ast_c__c_Expression_gr__gr_?W:
+.. _function-_at_ast_c__c_clone_expression_CI1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_W:
 
-.. das:function:: clone_expression(expression: smart_ptr<ast::Expression> const implicit)
+.. das:function:: clone_expression(expression: smart_ptr<Expression> const implicit)
 
 clone_expression returns smart_ptr< :ref:`ast::Expression <handle-ast-Expression>` >
 
@@ -12479,9 +12785,9 @@ clone_expression returns smart_ptr< :ref:`ast::Expression <handle-ast-Expression
 
 |function-ast-clone_expression|
 
-.. _function-_at_ast_c__c_clone_function_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?W:
+.. _function-_at_ast_c__c_clone_function_CI1_ls_H_ls_ast_c__c_Function_gr__gr__qm_W:
 
-.. das:function:: clone_function(function: smart_ptr<ast::Function> const implicit)
+.. das:function:: clone_function(function: smart_ptr<Function> const implicit)
 
 clone_function returns smart_ptr< :ref:`ast::Function <handle-ast-Function>` >
 
@@ -12494,9 +12800,9 @@ clone_function returns smart_ptr< :ref:`ast::Function <handle-ast-Function>` >
 
 |function-ast-clone_function|
 
-.. _function-_at_ast_c__c_clone_variable_CI1_ls_H_ls_ast_c__c_Variable_gr__gr_?W:
+.. _function-_at_ast_c__c_clone_variable_CI1_ls_H_ls_ast_c__c_Variable_gr__gr__qm_W:
 
-.. das:function:: clone_variable(variable: smart_ptr<ast::Variable> const implicit)
+.. das:function:: clone_variable(variable: smart_ptr<Variable> const implicit)
 
 clone_variable returns smart_ptr< :ref:`ast::Variable <handle-ast-Variable>` >
 
@@ -12509,9 +12815,9 @@ clone_variable returns smart_ptr< :ref:`ast::Variable <handle-ast-Variable>` >
 
 |function-ast-clone_variable|
 
-.. _function-_at_ast_c__c_clone_type_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W:
+.. _function-_at_ast_c__c_clone_type_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_W:
 
-.. das:function:: clone_type(type: smart_ptr<ast::TypeDecl> const implicit)
+.. das:function:: clone_type(type: smart_ptr<TypeDecl> const implicit)
 
 clone_type returns smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >
 
@@ -12528,15 +12834,15 @@ clone_type returns smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >
 Mangled name
 ++++++++++++
 
-  *  :ref:`parse_mangled_name (txt:string const implicit;lib:rtti::ModuleGroup implicit;thisModule:rtti::Module? const implicit;context:__context const;line:__lineInfo const) : smart_ptr\<ast::TypeDecl\> <function-_at_ast_c__c_parse_mangled_name_CIs_IH_ls_rtti_c__c_ModuleGroup_gr__CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_C_c_C_l>`
-  *  :ref:`get_mangled_name (function:smart_ptr\<ast::Function\> const implicit;context:__context const;line:__lineInfo const) : string <function-_at_ast_c__c_get_mangled_name_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?M_C_c_C_l>`
-  *  :ref:`get_mangled_name (type:smart_ptr\<ast::TypeDecl\> const implicit;context:__context const;line:__lineInfo const) : string <function-_at_ast_c__c_get_mangled_name_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_C_c_C_l>`
-  *  :ref:`get_mangled_name (variable:smart_ptr\<ast::Variable\> const implicit;context:__context const;line:__lineInfo const) : string <function-_at_ast_c__c_get_mangled_name_CI1_ls_H_ls_ast_c__c_Variable_gr__gr_?M_C_c_C_l>`
-  *  :ref:`get_mangled_name (variable:smart_ptr\<ast::ExprBlock\> const implicit;context:__context const;line:__lineInfo const) : string <function-_at_ast_c__c_get_mangled_name_CI1_ls_H_ls_ast_c__c_ExprBlock_gr__gr_?M_C_c_C_l>`
+  *  :ref:`parse_mangled_name (txt:string const implicit;lib:rtti::ModuleGroup implicit;thisModule:rtti::Module? const implicit;context:__context const;line:__lineInfo const) : smart_ptr\<ast::TypeDecl\> <function-_at_ast_c__c_parse_mangled_name_CIs_IH_ls_rtti_c__c_ModuleGroup_gr__CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__C_c_C_l>` 
+  *  :ref:`get_mangled_name (function:smart_ptr\<ast::Function\> const implicit;context:__context const;line:__lineInfo const) : string <function-_at_ast_c__c_get_mangled_name_CI1_ls_H_ls_ast_c__c_Function_gr__gr__qm_M_C_c_C_l>` 
+  *  :ref:`get_mangled_name (type:smart_ptr\<ast::TypeDecl\> const implicit;context:__context const;line:__lineInfo const) : string <function-_at_ast_c__c_get_mangled_name_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_M_C_c_C_l>` 
+  *  :ref:`get_mangled_name (variable:smart_ptr\<ast::Variable\> const implicit;context:__context const;line:__lineInfo const) : string <function-_at_ast_c__c_get_mangled_name_CI1_ls_H_ls_ast_c__c_Variable_gr__gr__qm_M_C_c_C_l>` 
+  *  :ref:`get_mangled_name (variable:smart_ptr\<ast::ExprBlock\> const implicit;context:__context const;line:__lineInfo const) : string <function-_at_ast_c__c_get_mangled_name_CI1_ls_H_ls_ast_c__c_ExprBlock_gr__gr__qm_M_C_c_C_l>` 
 
-.. _function-_at_ast_c__c_parse_mangled_name_CIs_IH_ls_rtti_c__c_ModuleGroup_gr__CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_C_c_C_l:
+.. _function-_at_ast_c__c_parse_mangled_name_CIs_IH_ls_rtti_c__c_ModuleGroup_gr__CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__C_c_C_l:
 
-.. das:function:: parse_mangled_name(txt: string const implicit; lib: ModuleGroup implicit; thisModule: rtti::Module? const implicit)
+.. das:function:: parse_mangled_name(txt: string const implicit; lib: ModuleGroup implicit; thisModule: Module? const implicit)
 
 parse_mangled_name returns smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >
 
@@ -12553,9 +12859,9 @@ parse_mangled_name returns smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>`
 
 |function-ast-parse_mangled_name|
 
-.. _function-_at_ast_c__c_get_mangled_name_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?M_C_c_C_l:
+.. _function-_at_ast_c__c_get_mangled_name_CI1_ls_H_ls_ast_c__c_Function_gr__gr__qm_M_C_c_C_l:
 
-.. das:function:: get_mangled_name(function: smart_ptr<ast::Function> const implicit)
+.. das:function:: get_mangled_name(function: smart_ptr<Function> const implicit)
 
 get_mangled_name returns string
 
@@ -12568,9 +12874,9 @@ get_mangled_name returns string
 
 |function-ast-get_mangled_name|
 
-.. _function-_at_ast_c__c_get_mangled_name_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_C_c_C_l:
+.. _function-_at_ast_c__c_get_mangled_name_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_M_C_c_C_l:
 
-.. das:function:: get_mangled_name(type: smart_ptr<ast::TypeDecl> const implicit)
+.. das:function:: get_mangled_name(type: smart_ptr<TypeDecl> const implicit)
 
 get_mangled_name returns string
 
@@ -12583,9 +12889,9 @@ get_mangled_name returns string
 
 |function-ast-get_mangled_name|
 
-.. _function-_at_ast_c__c_get_mangled_name_CI1_ls_H_ls_ast_c__c_Variable_gr__gr_?M_C_c_C_l:
+.. _function-_at_ast_c__c_get_mangled_name_CI1_ls_H_ls_ast_c__c_Variable_gr__gr__qm_M_C_c_C_l:
 
-.. das:function:: get_mangled_name(variable: smart_ptr<ast::Variable> const implicit)
+.. das:function:: get_mangled_name(variable: smart_ptr<Variable> const implicit)
 
 get_mangled_name returns string
 
@@ -12598,9 +12904,9 @@ get_mangled_name returns string
 
 |function-ast-get_mangled_name|
 
-.. _function-_at_ast_c__c_get_mangled_name_CI1_ls_H_ls_ast_c__c_ExprBlock_gr__gr_?M_C_c_C_l:
+.. _function-_at_ast_c__c_get_mangled_name_CI1_ls_H_ls_ast_c__c_ExprBlock_gr__gr__qm_M_C_c_C_l:
 
-.. das:function:: get_mangled_name(variable: smart_ptr<ast::ExprBlock> const implicit)
+.. das:function:: get_mangled_name(variable: smart_ptr<ExprBlock> const implicit)
 
 get_mangled_name returns string
 
@@ -12617,15 +12923,15 @@ get_mangled_name returns string
 Size and offset
 +++++++++++++++
 
-  *  :ref:`get_variant_field_offset (variant:smart_ptr\<ast::TypeDecl\> const implicit;index:int const;context:__context const;at:__lineInfo const) : int <function-_at_ast_c__c_get_variant_field_offset_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Ci_C_c_C_l>`
-  *  :ref:`get_tuple_field_offset (typle:smart_ptr\<ast::TypeDecl\> const implicit;index:int const;context:__context const;at:__lineInfo const) : int <function-_at_ast_c__c_get_tuple_field_offset_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Ci_C_c_C_l>`
-  *  :ref:`any_array_size (array:void? const implicit) : int <function-_at_ast_c__c_any_array_size_CI?>`
-  *  :ref:`any_table_size (table:void? const implicit) : int <function-_at_ast_c__c_any_table_size_CI?>`
-  *  :ref:`get_handled_type_field_offset (type:smart_ptr\<rtti::TypeAnnotation\> const implicit;field:string const implicit;context:__context const;line:__lineInfo const) : uint <function-_at_ast_c__c_get_handled_type_field_offset_CI1_ls_H_ls_rtti_c__c_TypeAnnotation_gr__gr_?M_CIs_C_c_C_l>`
+  *  :ref:`get_variant_field_offset (variant:smart_ptr\<ast::TypeDecl\> const implicit;index:int const;context:__context const;at:__lineInfo const) : int <function-_at_ast_c__c_get_variant_field_offset_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_M_Ci_C_c_C_l>` 
+  *  :ref:`get_tuple_field_offset (typle:smart_ptr\<ast::TypeDecl\> const implicit;index:int const;context:__context const;at:__lineInfo const) : int <function-_at_ast_c__c_get_tuple_field_offset_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_M_Ci_C_c_C_l>` 
+  *  :ref:`any_array_size (array:void? const implicit) : int <function-_at_ast_c__c_any_array_size_CI_qm_>` 
+  *  :ref:`any_table_size (table:void? const implicit) : int <function-_at_ast_c__c_any_table_size_CI_qm_>` 
+  *  :ref:`get_handled_type_field_offset (type:smart_ptr\<rtti::TypeAnnotation\> const implicit;field:string const implicit;context:__context const;line:__lineInfo const) : uint <function-_at_ast_c__c_get_handled_type_field_offset_CI1_ls_H_ls_rtti_c__c_TypeAnnotation_gr__gr__qm_M_CIs_C_c_C_l>` 
 
-.. _function-_at_ast_c__c_get_variant_field_offset_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Ci_C_c_C_l:
+.. _function-_at_ast_c__c_get_variant_field_offset_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_M_Ci_C_c_C_l:
 
-.. das:function:: get_variant_field_offset(variant: smart_ptr<ast::TypeDecl> const implicit; index: int const)
+.. das:function:: get_variant_field_offset(variant: smart_ptr<TypeDecl> const implicit; index: int const)
 
 get_variant_field_offset returns int
 
@@ -12640,9 +12946,9 @@ get_variant_field_offset returns int
 
 |function-ast-get_variant_field_offset|
 
-.. _function-_at_ast_c__c_get_tuple_field_offset_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_Ci_C_c_C_l:
+.. _function-_at_ast_c__c_get_tuple_field_offset_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_M_Ci_C_c_C_l:
 
-.. das:function:: get_tuple_field_offset(typle: smart_ptr<ast::TypeDecl> const implicit; index: int const)
+.. das:function:: get_tuple_field_offset(typle: smart_ptr<TypeDecl> const implicit; index: int const)
 
 get_tuple_field_offset returns int
 
@@ -12657,7 +12963,7 @@ get_tuple_field_offset returns int
 
 |function-ast-get_tuple_field_offset|
 
-.. _function-_at_ast_c__c_any_array_size_CI?:
+.. _function-_at_ast_c__c_any_array_size_CI_qm_:
 
 .. das:function:: any_array_size(array: void? const implicit)
 
@@ -12672,7 +12978,7 @@ any_array_size returns int
 
 |function-ast-any_array_size|
 
-.. _function-_at_ast_c__c_any_table_size_CI?:
+.. _function-_at_ast_c__c_any_table_size_CI_qm_:
 
 .. das:function:: any_table_size(table: void? const implicit)
 
@@ -12687,9 +12993,9 @@ any_table_size returns int
 
 |function-ast-any_table_size|
 
-.. _function-_at_ast_c__c_get_handled_type_field_offset_CI1_ls_H_ls_rtti_c__c_TypeAnnotation_gr__gr_?M_CIs_C_c_C_l:
+.. _function-_at_ast_c__c_get_handled_type_field_offset_CI1_ls_H_ls_rtti_c__c_TypeAnnotation_gr__gr__qm_M_CIs_C_c_C_l:
 
-.. das:function:: get_handled_type_field_offset(type: smart_ptr<rtti::TypeAnnotation> const implicit; field: string const implicit)
+.. das:function:: get_handled_type_field_offset(type: smart_ptr<TypeAnnotation> const implicit; field: string const implicit)
 
 get_handled_type_field_offset returns uint
 
@@ -12708,15 +13014,15 @@ get_handled_type_field_offset returns uint
 Pointer conversion
 ++++++++++++++++++
 
-  *  :ref:`ExpressionPtr (expr:smart_ptr\<auto(TT)\> const) : smart_ptr\<ast::Expression\> <function-_at_ast_c__c_ExpressionPtr_C1_ls_Y_ls_TT_gr_._gr_?M>`
-  *  :ref:`FunctionPtr (fun:ast::Function? const) : smart_ptr\<ast::Function\> <function-_at_ast_c__c_FunctionPtr_C1_ls_H_ls_ast_c__c_Function_gr__gr_?>`
-  *  :ref:`StructurePtr (stru:ast::Structure? const) : smart_ptr\<ast::Structure\> <function-_at_ast_c__c_StructurePtr_C1_ls_H_ls_ast_c__c_Structure_gr__gr_?>`
+  *  :ref:`ExpressionPtr (expr:smart_ptr\<auto(TT)\> const) : smart_ptr\<ast::Expression\> <function-_at_ast_c__c_ExpressionPtr_C1_ls_Y_ls_TT_gr_._gr__qm_M>` 
+  *  :ref:`FunctionPtr (fun:ast::Function? const) : smart_ptr\<ast::Function\> <function-_at_ast_c__c_FunctionPtr_C1_ls_H_ls_ast_c__c_Function_gr__gr__qm_>` 
+  *  :ref:`StructurePtr (stru:ast::Structure? const) : smart_ptr\<ast::Structure\> <function-_at_ast_c__c_StructurePtr_C1_ls_H_ls_ast_c__c_Structure_gr__gr__qm_>` 
 
-.. _function-_at_ast_c__c_ExpressionPtr_C1_ls_Y_ls_TT_gr_._gr_?M:
+.. _function-_at_ast_c__c_ExpressionPtr_C1_ls_Y_ls_TT_gr_._gr__qm_M:
 
 .. das:function:: ExpressionPtr(expr: smart_ptr<auto(TT)> const)
 
-ExpressionPtr returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
+ExpressionPtr returns  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 +--------+-------------------------+
 +argument+argument type            +
@@ -12727,11 +13033,11 @@ ExpressionPtr returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 |function-ast-ExpressionPtr|
 
-.. _function-_at_ast_c__c_FunctionPtr_C1_ls_H_ls_ast_c__c_Function_gr__gr_?:
+.. _function-_at_ast_c__c_FunctionPtr_C1_ls_H_ls_ast_c__c_Function_gr__gr__qm_:
 
-.. das:function:: FunctionPtr(fun: ast::Function? const)
+.. das:function:: FunctionPtr(fun: Function? const)
 
-FunctionPtr returns  :ref:`FunctionPtr <alias-FunctionPtr>`
+FunctionPtr returns  :ref:`FunctionPtr <alias-FunctionPtr>` 
 
 +--------+---------------------------------------------------+
 +argument+argument type                                      +
@@ -12742,11 +13048,11 @@ FunctionPtr returns  :ref:`FunctionPtr <alias-FunctionPtr>`
 
 |function-ast-FunctionPtr|
 
-.. _function-_at_ast_c__c_StructurePtr_C1_ls_H_ls_ast_c__c_Structure_gr__gr_?:
+.. _function-_at_ast_c__c_StructurePtr_C1_ls_H_ls_ast_c__c_Structure_gr__gr__qm_:
 
-.. das:function:: StructurePtr(stru: ast::Structure? const)
+.. das:function:: StructurePtr(stru: Structure? const)
 
-StructurePtr returns  :ref:`StructurePtr <alias-StructurePtr>`
+StructurePtr returns  :ref:`StructurePtr <alias-StructurePtr>` 
 
 +--------+-----------------------------------------------------+
 +argument+argument type                                        +
@@ -12761,15 +13067,15 @@ StructurePtr returns  :ref:`StructurePtr <alias-StructurePtr>`
 Evaluations
 +++++++++++
 
-  *  :ref:`eval_single_expression (expr:smart_ptr\<ast::Expression\> const& implicit;ok:bool& implicit) : float4 <function-_at_ast_c__c_eval_single_expression_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr_?W_&Ib>`
+  *  :ref:`eval_single_expression (expr:smart_ptr\<ast::Expression\> const& implicit;ok:bool& implicit) : float4 <function-_at_ast_c__c_eval_single_expression_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_W_&Ib>` 
 
-.. _function-_at_ast_c__c_eval_single_expression_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr_?W_&Ib:
+.. _function-_at_ast_c__c_eval_single_expression_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_W_&Ib:
 
-.. das:function:: eval_single_expression(expr: smart_ptr<ast::Expression> const& implicit; ok: bool& implicit)
+.. das:function:: eval_single_expression(expr: smart_ptr<Expression> const& implicit; ok: bool& implicit)
 
 eval_single_expression returns float4
 
-.. warning::
+.. warning:: 
   This is unsafe operation.
 
 +--------+---------------------------------------------------------------------------+
@@ -12787,11 +13093,11 @@ eval_single_expression returns float4
 Error reporting
 +++++++++++++++
 
-  *  :ref:`macro_error (porogram:smart_ptr\<rtti::Program\> const implicit;at:rtti::LineInfo const implicit;message:string const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_macro_error_CI1_ls_H_ls_rtti_c__c_Program_gr__gr_?W_CIH_ls_rtti_c__c_LineInfo_gr__CIs_C_c_C_l>`
+  *  :ref:`macro_error (porogram:smart_ptr\<rtti::Program\> const implicit;at:rtti::LineInfo const implicit;message:string const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_macro_error_CI1_ls_H_ls_rtti_c__c_Program_gr__gr__qm_W_CIH_ls_rtti_c__c_LineInfo_gr__CIs_C_c_C_l>` 
 
-.. _function-_at_ast_c__c_macro_error_CI1_ls_H_ls_rtti_c__c_Program_gr__gr_?W_CIH_ls_rtti_c__c_LineInfo_gr__CIs_C_c_C_l:
+.. _function-_at_ast_c__c_macro_error_CI1_ls_H_ls_rtti_c__c_Program_gr__gr__qm_W_CIH_ls_rtti_c__c_LineInfo_gr__CIs_C_c_C_l:
 
-.. das:function:: macro_error(porogram: smart_ptr<rtti::Program> const implicit; at: LineInfo const implicit; message: string const implicit)
+.. das:function:: macro_error(porogram: smart_ptr<Program> const implicit; at: LineInfo const implicit; message: string const implicit)
 
 +--------+----------------------------------------------------------------------+
 +argument+argument type                                                         +
@@ -12810,13 +13116,13 @@ Error reporting
 Location and context
 ++++++++++++++++++++
 
-  *  :ref:`force_at (expression:smart_ptr\<ast::Expression\> const& implicit;at:rtti::LineInfo const implicit) : void <function-_at_ast_c__c_force_at_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_CIH_ls_rtti_c__c_LineInfo_gr_>`
-  *  :ref:`collect_dependencies (function:smart_ptr\<ast::Function\> const implicit;block:block\<(var arg0:array\<ast::Function?\>;var arg1:array\<ast::Variable?\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_collect_dependencies_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?W_CI0_ls_1_ls_1_ls_H_ls_ast_c__c_Function_gr__gr_?_gr_A;1_ls_1_ls_H_ls_ast_c__c_Variable_gr__gr_?_gr_A_gr_1_ls_v_gr__builtin__C_c_C_l>`
-  *  :ref:`get_ast_context (program:smart_ptr\<rtti::Program\> const implicit;expression:smart_ptr\<ast::Expression\> const implicit;block:block\<(var arg0:bool;var arg1:ast::AstContext):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_get_ast_context_CI1_ls_H_ls_rtti_c__c_Program_gr__gr_?M_CI1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_CI0_ls_b;H_ls_ast_c__c_AstContext_gr__gr_1_ls_v_gr__builtin__C_c_C_l>`
+  *  :ref:`force_at (expression:smart_ptr\<ast::Expression\> const& implicit;at:rtti::LineInfo const implicit) : void <function-_at_ast_c__c_force_at_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_M_CIH_ls_rtti_c__c_LineInfo_gr_>` 
+  *  :ref:`collect_dependencies (function:smart_ptr\<ast::Function\> const implicit;block:block\<(var arg0:array\<ast::Function?\>;var arg1:array\<ast::Variable?\>):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_collect_dependencies_CI1_ls_H_ls_ast_c__c_Function_gr__gr__qm_W_CI0_ls_1_ls_1_ls_H_ls_ast_c__c_Function_gr__gr__qm__gr_A;1_ls_1_ls_H_ls_ast_c__c_Variable_gr__gr__qm__gr_A_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`get_ast_context (program:smart_ptr\<rtti::Program\> const implicit;expression:smart_ptr\<ast::Expression\> const implicit;block:block\<(var arg0:bool;var arg1:ast::AstContext):void\> const implicit;context:__context const;line:__lineInfo const) : void <function-_at_ast_c__c_get_ast_context_CI1_ls_H_ls_rtti_c__c_Program_gr__gr__qm_M_CI1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_M_CI0_ls_b;H_ls_ast_c__c_AstContext_gr__gr_1_ls_v_gr__builtin__C_c_C_l>` 
 
-.. _function-_at_ast_c__c_force_at_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_CIH_ls_rtti_c__c_LineInfo_gr_:
+.. _function-_at_ast_c__c_force_at_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_M_CIH_ls_rtti_c__c_LineInfo_gr_:
 
-.. das:function:: force_at(expression: smart_ptr<ast::Expression> const& implicit; at: LineInfo const implicit)
+.. das:function:: force_at(expression: smart_ptr<Expression> const& implicit; at: LineInfo const implicit)
 
 +----------+---------------------------------------------------------------------------+
 +argument  +argument type                                                              +
@@ -12829,9 +13135,9 @@ Location and context
 
 |function-ast-force_at|
 
-.. _function-_at_ast_c__c_collect_dependencies_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?W_CI0_ls_1_ls_1_ls_H_ls_ast_c__c_Function_gr__gr_?_gr_A;1_ls_1_ls_H_ls_ast_c__c_Variable_gr__gr_?_gr_A_gr_1_ls_v_gr__builtin__C_c_C_l:
+.. _function-_at_ast_c__c_collect_dependencies_CI1_ls_H_ls_ast_c__c_Function_gr__gr__qm_W_CI0_ls_1_ls_1_ls_H_ls_ast_c__c_Function_gr__gr__qm__gr_A;1_ls_1_ls_H_ls_ast_c__c_Variable_gr__gr__qm__gr_A_gr_1_ls_v_gr__builtin__C_c_C_l:
 
-.. das:function:: collect_dependencies(function: smart_ptr<ast::Function> const implicit; block: block<(var arg0:array<ast::Function?>;var arg1:array<ast::Variable?>):void> const implicit)
+.. das:function:: collect_dependencies(function: smart_ptr<Function> const implicit; block: block<(var arg0:array<Function?>;var arg1:array<Variable?>):void> const implicit)
 
 +--------+--------------------------------------------------------------------------------------------------------------------------------------+
 +argument+argument type                                                                                                                         +
@@ -12844,9 +13150,9 @@ Location and context
 
 |function-ast-collect_dependencies|
 
-.. _function-_at_ast_c__c_get_ast_context_CI1_ls_H_ls_rtti_c__c_Program_gr__gr_?M_CI1_ls_H_ls_ast_c__c_Expression_gr__gr_?M_CI0_ls_b;H_ls_ast_c__c_AstContext_gr__gr_1_ls_v_gr__builtin__C_c_C_l:
+.. _function-_at_ast_c__c_get_ast_context_CI1_ls_H_ls_rtti_c__c_Program_gr__gr__qm_M_CI1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_M_CI0_ls_b;H_ls_ast_c__c_AstContext_gr__gr_1_ls_v_gr__builtin__C_c_C_l:
 
-.. das:function:: get_ast_context(program: smart_ptr<rtti::Program> const implicit; expression: smart_ptr<ast::Expression> const implicit; block: block<(var arg0:bool;var arg1:ast::AstContext):void> const implicit)
+.. das:function:: get_ast_context(program: smart_ptr<Program> const implicit; expression: smart_ptr<Expression> const implicit; block: block<(var arg0:bool;var arg1:AstContext):void> const implicit)
 
 +----------+----------------------------------------------------------------------------------+
 +argument  +argument type                                                                     +
@@ -12865,12 +13171,12 @@ Location and context
 Use queries
 +++++++++++
 
-  *  :ref:`get_use_global_variables (func:smart_ptr\<ast::Function\> const implicit;block:block\<(var arg0:smart_ptr\<ast::Variable\>):void\> const implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_get_use_global_variables_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?M_CI0_ls_1_ls_H_ls_ast_c__c_Variable_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l>`
-  *  :ref:`get_use_functions (func:smart_ptr\<ast::Function\> const implicit;block:block\<(var arg0:smart_ptr\<ast::Function\>):void\> const implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_get_use_functions_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?M_CI0_ls_1_ls_H_ls_ast_c__c_Function_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l>`
+  *  :ref:`get_use_global_variables (func:smart_ptr\<ast::Function\> const implicit;block:block\<(var arg0:smart_ptr\<ast::Variable\>):void\> const implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_get_use_global_variables_CI1_ls_H_ls_ast_c__c_Function_gr__gr__qm_M_CI0_ls_1_ls_H_ls_ast_c__c_Variable_gr__gr__qm_W_gr_1_ls_v_gr__builtin__C_c_C_l>` 
+  *  :ref:`get_use_functions (func:smart_ptr\<ast::Function\> const implicit;block:block\<(var arg0:smart_ptr\<ast::Function\>):void\> const implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_get_use_functions_CI1_ls_H_ls_ast_c__c_Function_gr__gr__qm_M_CI0_ls_1_ls_H_ls_ast_c__c_Function_gr__gr__qm_W_gr_1_ls_v_gr__builtin__C_c_C_l>` 
 
-.. _function-_at_ast_c__c_get_use_global_variables_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?M_CI0_ls_1_ls_H_ls_ast_c__c_Variable_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l:
+.. _function-_at_ast_c__c_get_use_global_variables_CI1_ls_H_ls_ast_c__c_Function_gr__gr__qm_M_CI0_ls_1_ls_H_ls_ast_c__c_Variable_gr__gr__qm_W_gr_1_ls_v_gr__builtin__C_c_C_l:
 
-.. das:function:: get_use_global_variables(func: smart_ptr<ast::Function> const implicit; block: block<(var arg0:smart_ptr<ast::Variable>):void> const implicit)
+.. das:function:: get_use_global_variables(func: smart_ptr<Function> const implicit; block: block<(var arg0:smart_ptr<Variable>):void> const implicit)
 
 +--------+------------------------------------------------------------------------------------+
 +argument+argument type                                                                       +
@@ -12883,9 +13189,9 @@ Use queries
 
 |function-ast-get_use_global_variables|
 
-.. _function-_at_ast_c__c_get_use_functions_CI1_ls_H_ls_ast_c__c_Function_gr__gr_?M_CI0_ls_1_ls_H_ls_ast_c__c_Function_gr__gr_?W_gr_1_ls_v_gr__builtin__C_c_C_l:
+.. _function-_at_ast_c__c_get_use_functions_CI1_ls_H_ls_ast_c__c_Function_gr__gr__qm_M_CI0_ls_1_ls_H_ls_ast_c__c_Function_gr__gr__qm_W_gr_1_ls_v_gr__builtin__C_c_C_l:
 
-.. das:function:: get_use_functions(func: smart_ptr<ast::Function> const implicit; block: block<(var arg0:smart_ptr<ast::Function>):void> const implicit)
+.. das:function:: get_use_functions(func: smart_ptr<Function> const implicit; block: block<(var arg0:smart_ptr<Function>):void> const implicit)
 
 +--------+------------------------------------------------------------------------------------+
 +argument+argument type                                                                       +
@@ -12902,7 +13208,7 @@ Use queries
 Log
 +++
 
-  *  :ref:`to_compilation_log (text:string const implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_to_compilation_log_CIs_C_c_C_l>`
+  *  :ref:`to_compilation_log (text:string const implicit;context:__context const;at:__lineInfo const) : void <function-_at_ast_c__c_to_compilation_log_CIs_C_c_C_l>` 
 
 .. _function-_at_ast_c__c_to_compilation_log_CIs_C_c_C_l:
 
@@ -12921,11 +13227,11 @@ Log
 Removal
 +++++++
 
-  *  :ref:`remove_structure (module:rtti::Module? const implicit;structure:smart_ptr\<ast::Structure\>& implicit) : bool <function-_at_ast_c__c_remove_structure_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_Structure_gr__gr_?W>`
+  *  :ref:`remove_structure (module:rtti::Module? const implicit;structure:smart_ptr\<ast::Structure\>& implicit) : bool <function-_at_ast_c__c_remove_structure_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__&I1_ls_H_ls_ast_c__c_Structure_gr__gr__qm_W>` 
 
-.. _function-_at_ast_c__c_remove_structure_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_&I1_ls_H_ls_ast_c__c_Structure_gr__gr_?W:
+.. _function-_at_ast_c__c_remove_structure_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__&I1_ls_H_ls_ast_c__c_Structure_gr__gr__qm_W:
 
-.. das:function:: remove_structure(module: rtti::Module? const implicit; structure: smart_ptr<ast::Structure>& implicit)
+.. das:function:: remove_structure(module: Module? const implicit; structure: smart_ptr<Structure>& implicit)
 
 remove_structure returns bool
 
@@ -12944,19 +13250,61 @@ remove_structure returns bool
 Properties
 ++++++++++
 
-  *  :ref:`is_temp_type (type:smart_ptr\<ast::TypeDecl\> const implicit;refMatters:bool const) : bool <function-_at_ast_c__c_is_temp_type_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_Cb>`
-  *  :ref:`is_same_type (leftType:smart_ptr\<ast::TypeDecl\> const implicit;rightType:smart_ptr\<ast::TypeDecl\> const implicit;refMatters:rtti::RefMatters const;constMatters:rtti::ConstMatters const;tempMatters:rtti::TemporaryMatters const;context:__context const;at:__lineInfo const) : bool <function-_at_ast_c__c_is_same_type_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_CE_ls_rtti_c__c_RefMatters_gr__CE_ls_rtti_c__c_ConstMatters_gr__CE_ls_rtti_c__c_TemporaryMatters_gr__C_c_C_l>`
-  *  :ref:`get_underlying_value_type (type:smart_ptr\<ast::TypeDecl\> const implicit;context:__context const;line:__lineInfo const) : smart_ptr\<ast::TypeDecl\> <function-_at_ast_c__c_get_underlying_value_type_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_C_c_C_l>`
-  *  :ref:`get_handled_type_field_type (type:smart_ptr\<rtti::TypeAnnotation\> const implicit;field:string const implicit;context:__context const;line:__lineInfo const) : rtti::TypeInfo? <function-_at_ast_c__c_get_handled_type_field_type_CI1_ls_H_ls_rtti_c__c_TypeAnnotation_gr__gr_?M_CIs_C_c_C_l>`
-  *  :ref:`has_field (type:smart_ptr\<ast::TypeDecl\> const implicit;fieldName:string const implicit;constant:bool const) : bool <function-_at_ast_c__c_has_field_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_CIs_Cb>`
-  *  :ref:`get_field_type (type:smart_ptr\<ast::TypeDecl\> const implicit;fieldName:string const implicit;constant:bool const) : smart_ptr\<ast::TypeDecl\> <function-_at_ast_c__c_get_field_type_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_CIs_Cb>`
-  *  :ref:`is_visible_directly (from_module:rtti::Module? const implicit;which_module:rtti::Module? const implicit) : bool <function-_at_ast_c__c_is_visible_directly_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?>`
-  *  :ref:`is_expr_like_call (expression:smart_ptr\<ast::Expression\> const& implicit) : bool <function-_at_ast_c__c_is_expr_like_call_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr_?W>`
-  *  :ref:`is_expr_const (expression:smart_ptr\<ast::Expression\> const& implicit) : bool <function-_at_ast_c__c_is_expr_const_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr_?W>`
+  *  :ref:`get_current_search_module (program:rtti::Program? const implicit;function:ast::Function? const implicit;moduleName:string const implicit) : rtti::Module? <function-_at_ast_c__c_get_current_search_module_CI1_ls_H_ls_rtti_c__c_Program_gr__gr__qm__CI1_ls_H_ls_ast_c__c_Function_gr__gr__qm__CIs>` 
+  *  :ref:`can_access_global_variable (variable:smart_ptr\<ast::Variable\> const& implicit;module:rtti::Module? const implicit;thisModule:rtti::Module? const implicit) : bool <function-_at_ast_c__c_can_access_global_variable_C&I1_ls_H_ls_ast_c__c_Variable_gr__gr__qm_W_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm_>` 
+  *  :ref:`is_temp_type (type:smart_ptr\<ast::TypeDecl\> const implicit;refMatters:bool const) : bool <function-_at_ast_c__c_is_temp_type_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_W_Cb>` 
+  *  :ref:`is_same_type (leftType:smart_ptr\<ast::TypeDecl\> const implicit;rightType:smart_ptr\<ast::TypeDecl\> const implicit;refMatters:rtti::RefMatters const;constMatters:rtti::ConstMatters const;tempMatters:rtti::TemporaryMatters const;context:__context const;at:__lineInfo const) : bool <function-_at_ast_c__c_is_same_type_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_W_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_W_CE_ls_rtti_c__c_RefMatters_gr__CE_ls_rtti_c__c_ConstMatters_gr__CE_ls_rtti_c__c_TemporaryMatters_gr__C_c_C_l>` 
+  *  :ref:`get_underlying_value_type (type:smart_ptr\<ast::TypeDecl\> const implicit;context:__context const;line:__lineInfo const) : smart_ptr\<ast::TypeDecl\> <function-_at_ast_c__c_get_underlying_value_type_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_M_C_c_C_l>` 
+  *  :ref:`get_handled_type_field_type (type:smart_ptr\<rtti::TypeAnnotation\> const implicit;field:string const implicit;context:__context const;line:__lineInfo const) : rtti::TypeInfo? <function-_at_ast_c__c_get_handled_type_field_type_CI1_ls_H_ls_rtti_c__c_TypeAnnotation_gr__gr__qm_M_CIs_C_c_C_l>` 
+  *  :ref:`get_handled_type_field_type_declaration (type:smart_ptr\<rtti::TypeAnnotation\> const implicit;field:string const implicit;isConst:bool const;context:__context const;line:__lineInfo const) : smart_ptr\<ast::TypeDecl\> <function-_at_ast_c__c_get_handled_type_field_type_declaration_CI1_ls_H_ls_rtti_c__c_TypeAnnotation_gr__gr__qm_M_CIs_Cb_C_c_C_l>` 
+  *  :ref:`has_field (type:smart_ptr\<ast::TypeDecl\> const implicit;fieldName:string const implicit;constant:bool const) : bool <function-_at_ast_c__c_has_field_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_W_CIs_Cb>` 
+  *  :ref:`get_field_type (type:smart_ptr\<ast::TypeDecl\> const implicit;fieldName:string const implicit;constant:bool const) : smart_ptr\<ast::TypeDecl\> <function-_at_ast_c__c_get_field_type_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_W_CIs_Cb>` 
+  *  :ref:`is_visible_directly (from_module:rtti::Module? const implicit;which_module:rtti::Module? const implicit) : bool <function-_at_ast_c__c_is_visible_directly_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm_>` 
+  *  :ref:`is_expr_like_call (expression:smart_ptr\<ast::Expression\> const& implicit) : bool <function-_at_ast_c__c_is_expr_like_call_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_W>` 
+  *  :ref:`is_expr_const (expression:smart_ptr\<ast::Expression\> const& implicit) : bool <function-_at_ast_c__c_is_expr_const_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_W>` 
+  *  :ref:`get_function_aot_hash (fun:ast::Function const? const implicit) : uint64 <function-_at_ast_c__c_get_function_aot_hash_CI1_ls_CH_ls_ast_c__c_Function_gr__gr__qm_>` 
 
-.. _function-_at_ast_c__c_is_temp_type_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_Cb:
+.. _function-_at_ast_c__c_get_current_search_module_CI1_ls_H_ls_rtti_c__c_Program_gr__gr__qm__CI1_ls_H_ls_ast_c__c_Function_gr__gr__qm__CIs:
 
-.. das:function:: is_temp_type(type: smart_ptr<ast::TypeDecl> const implicit; refMatters: bool const)
+.. das:function:: get_current_search_module(program: Program? const implicit; function: Function? const implicit; moduleName: string const implicit)
+
+get_current_search_module returns  :ref:`rtti::Module <handle-rtti-Module>` ?
+
++----------+------------------------------------------------------------+
++argument  +argument type                                               +
++==========+============================================================+
++program   + :ref:`rtti::Program <handle-rtti-Program>` ? const implicit+
++----------+------------------------------------------------------------+
++function  + :ref:`ast::Function <handle-ast-Function>` ? const implicit+
++----------+------------------------------------------------------------+
++moduleName+string const implicit                                       +
++----------+------------------------------------------------------------+
+
+
+|function-ast-get_current_search_module|
+
+.. _function-_at_ast_c__c_can_access_global_variable_C&I1_ls_H_ls_ast_c__c_Variable_gr__gr__qm_W_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm_:
+
+.. das:function:: can_access_global_variable(variable: smart_ptr<Variable> const& implicit; module: Module? const implicit; thisModule: Module? const implicit)
+
+can_access_global_variable returns bool
+
++----------+-----------------------------------------------------------------------+
++argument  +argument type                                                          +
++==========+=======================================================================+
++variable  +smart_ptr< :ref:`ast::Variable <handle-ast-Variable>` > const& implicit+
++----------+-----------------------------------------------------------------------+
++module    + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit             +
++----------+-----------------------------------------------------------------------+
++thisModule+ :ref:`rtti::Module <handle-rtti-Module>` ? const implicit             +
++----------+-----------------------------------------------------------------------+
+
+
+|function-ast-can_access_global_variable|
+
+.. _function-_at_ast_c__c_is_temp_type_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_W_Cb:
+
+.. das:function:: is_temp_type(type: smart_ptr<TypeDecl> const implicit; refMatters: bool const)
 
 is_temp_type returns bool
 
@@ -12971,9 +13319,9 @@ is_temp_type returns bool
 
 |function-ast-is_temp_type|
 
-.. _function-_at_ast_c__c_is_same_type_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_CE_ls_rtti_c__c_RefMatters_gr__CE_ls_rtti_c__c_ConstMatters_gr__CE_ls_rtti_c__c_TemporaryMatters_gr__C_c_C_l:
+.. _function-_at_ast_c__c_is_same_type_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_W_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_W_CE_ls_rtti_c__c_RefMatters_gr__CE_ls_rtti_c__c_ConstMatters_gr__CE_ls_rtti_c__c_TemporaryMatters_gr__C_c_C_l:
 
-.. das:function:: is_same_type(leftType: smart_ptr<ast::TypeDecl> const implicit; rightType: smart_ptr<ast::TypeDecl> const implicit; refMatters: RefMatters const; constMatters: ConstMatters const; tempMatters: TemporaryMatters const)
+.. das:function:: is_same_type(leftType: smart_ptr<TypeDecl> const implicit; rightType: smart_ptr<TypeDecl> const implicit; refMatters: RefMatters const; constMatters: ConstMatters const; tempMatters: TemporaryMatters const)
 
 is_same_type returns bool
 
@@ -12994,9 +13342,9 @@ is_same_type returns bool
 
 |function-ast-is_same_type|
 
-.. _function-_at_ast_c__c_get_underlying_value_type_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?M_C_c_C_l:
+.. _function-_at_ast_c__c_get_underlying_value_type_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_M_C_c_C_l:
 
-.. das:function:: get_underlying_value_type(type: smart_ptr<ast::TypeDecl> const implicit)
+.. das:function:: get_underlying_value_type(type: smart_ptr<TypeDecl> const implicit)
 
 get_underlying_value_type returns smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >
 
@@ -13009,9 +13357,9 @@ get_underlying_value_type returns smart_ptr< :ref:`ast::TypeDecl <handle-ast-Typ
 
 |function-ast-get_underlying_value_type|
 
-.. _function-_at_ast_c__c_get_handled_type_field_type_CI1_ls_H_ls_rtti_c__c_TypeAnnotation_gr__gr_?M_CIs_C_c_C_l:
+.. _function-_at_ast_c__c_get_handled_type_field_type_CI1_ls_H_ls_rtti_c__c_TypeAnnotation_gr__gr__qm_M_CIs_C_c_C_l:
 
-.. das:function:: get_handled_type_field_type(type: smart_ptr<rtti::TypeAnnotation> const implicit; field: string const implicit)
+.. das:function:: get_handled_type_field_type(type: smart_ptr<TypeAnnotation> const implicit; field: string const implicit)
 
 get_handled_type_field_type returns  :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>` ?
 
@@ -13026,9 +13374,28 @@ get_handled_type_field_type returns  :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>
 
 |function-ast-get_handled_type_field_type|
 
-.. _function-_at_ast_c__c_has_field_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_CIs_Cb:
+.. _function-_at_ast_c__c_get_handled_type_field_type_declaration_CI1_ls_H_ls_rtti_c__c_TypeAnnotation_gr__gr__qm_M_CIs_Cb_C_c_C_l:
 
-.. das:function:: has_field(type: smart_ptr<ast::TypeDecl> const implicit; fieldName: string const implicit; constant: bool const)
+.. das:function:: get_handled_type_field_type_declaration(type: smart_ptr<TypeAnnotation> const implicit; field: string const implicit; isConst: bool const)
+
+get_handled_type_field_type_declaration returns smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >
+
++--------+------------------------------------------------------------------------------------+
++argument+argument type                                                                       +
++========+====================================================================================+
++type    +smart_ptr< :ref:`rtti::TypeAnnotation <handle-rtti-TypeAnnotation>` > const implicit+
++--------+------------------------------------------------------------------------------------+
++field   +string const implicit                                                               +
++--------+------------------------------------------------------------------------------------+
++isConst +bool const                                                                          +
++--------+------------------------------------------------------------------------------------+
+
+
+|function-ast-get_handled_type_field_type_declaration|
+
+.. _function-_at_ast_c__c_has_field_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_W_CIs_Cb:
+
+.. das:function:: has_field(type: smart_ptr<TypeDecl> const implicit; fieldName: string const implicit; constant: bool const)
 
 has_field returns bool
 
@@ -13045,9 +13412,9 @@ has_field returns bool
 
 |function-ast-has_field|
 
-.. _function-_at_ast_c__c_get_field_type_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr_?W_CIs_Cb:
+.. _function-_at_ast_c__c_get_field_type_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_W_CIs_Cb:
 
-.. das:function:: get_field_type(type: smart_ptr<ast::TypeDecl> const implicit; fieldName: string const implicit; constant: bool const)
+.. das:function:: get_field_type(type: smart_ptr<TypeDecl> const implicit; fieldName: string const implicit; constant: bool const)
 
 get_field_type returns smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >
 
@@ -13064,9 +13431,9 @@ get_field_type returns smart_ptr< :ref:`ast::TypeDecl <handle-ast-TypeDecl>` >
 
 |function-ast-get_field_type|
 
-.. _function-_at_ast_c__c_is_visible_directly_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?_CI1_ls_H_ls_rtti_c__c_Module_gr__gr_?:
+.. _function-_at_ast_c__c_is_visible_directly_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm_:
 
-.. das:function:: is_visible_directly(from_module: rtti::Module? const implicit; which_module: rtti::Module? const implicit)
+.. das:function:: is_visible_directly(from_module: Module? const implicit; which_module: Module? const implicit)
 
 is_visible_directly returns bool
 
@@ -13081,9 +13448,9 @@ is_visible_directly returns bool
 
 |function-ast-is_visible_directly|
 
-.. _function-_at_ast_c__c_is_expr_like_call_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr_?W:
+.. _function-_at_ast_c__c_is_expr_like_call_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_W:
 
-.. das:function:: is_expr_like_call(expression: smart_ptr<ast::Expression> const& implicit)
+.. das:function:: is_expr_like_call(expression: smart_ptr<Expression> const& implicit)
 
 is_expr_like_call returns bool
 
@@ -13096,9 +13463,9 @@ is_expr_like_call returns bool
 
 |function-ast-is_expr_like_call|
 
-.. _function-_at_ast_c__c_is_expr_const_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr_?W:
+.. _function-_at_ast_c__c_is_expr_const_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_W:
 
-.. das:function:: is_expr_const(expression: smart_ptr<ast::Expression> const& implicit)
+.. das:function:: is_expr_const(expression: smart_ptr<Expression> const& implicit)
 
 is_expr_const returns bool
 
@@ -13110,5 +13477,20 @@ is_expr_const returns bool
 
 
 |function-ast-is_expr_const|
+
+.. _function-_at_ast_c__c_get_function_aot_hash_CI1_ls_CH_ls_ast_c__c_Function_gr__gr__qm_:
+
+.. das:function:: get_function_aot_hash(fun: Function const? const implicit)
+
+get_function_aot_hash returns uint64
+
++--------+------------------------------------------------------------------+
++argument+argument type                                                     +
++========+==================================================================+
++fun     + :ref:`ast::Function <handle-ast-Function>`  const? const implicit+
++--------+------------------------------------------------------------------+
+
+
+|function-ast-get_function_aot_hash|
 
 

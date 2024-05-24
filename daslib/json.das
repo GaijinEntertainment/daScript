@@ -31,6 +31,7 @@ variant Token
     _error  : string
 
 struct TokenAt
+    //! JSON parsing token. Contains token and its position.
     value : Token
     line, row : int
 

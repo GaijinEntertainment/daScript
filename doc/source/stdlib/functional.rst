@@ -17,27 +17,27 @@ All functions and symbols are in "functional" module, use require to get access 
 Map, reduce
 +++++++++++
 
-  *  :ref:`filter (src:iterator\<auto(TT)\> -const;blk:lambda\<(what:TT const -&):bool\> const) : auto <function-_at_functional_c__c_filter_1_ls_Y_ls_TT_gr_._gr_G_CN_ls_what_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_b_gr__at_>`
-  *  :ref:`filter (src:iterator\<auto(TT)\> -const;blk:function\<(what:TT const -&):bool\> const) : auto <function-_at_functional_c__c_filter_1_ls_Y_ls_TT_gr_._gr_G_CN_ls_what_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_b_gr__at__at_>`
-  *  :ref:`map (src:iterator\<auto(TT)\> -const;blk:lambda\<(what:TT const -&):auto(QQ)\> const) : auto <function-_at_functional_c__c_map_1_ls_Y_ls_TT_gr_._gr_G_CN_ls_what_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_Y_ls_QQ_gr_._gr__at_>`
-  *  :ref:`map (src:iterator\<auto(TT)\> -const;blk:function\<(what:TT const -&):auto(QQ)\> const) : auto <function-_at_functional_c__c_map_1_ls_Y_ls_TT_gr_._gr_G_CN_ls_what_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_Y_ls_QQ_gr_._gr__at__at_>`
-  *  :ref:`reduce (it:iterator\<auto(TT)\> const;blk:lambda\<(left:TT const -&;right:TT const -&):TT const -&\> const) : auto <function-_at_functional_c__c_reduce_C1_ls_Y_ls_TT_gr_._gr_G_CN_ls_left;right_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_CY_ls_TT_gr_L_gr__at_>`
-  *  :ref:`reduce (it:iterator\<auto(TT)\> const;blk:function\<(left:TT const -&;right:TT const -&):TT const -&\> const) : auto <function-_at_functional_c__c_reduce_C1_ls_Y_ls_TT_gr_._gr_G_CN_ls_left;right_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_CY_ls_TT_gr_L_gr__at__at_>`
-  *  :ref:`reduce (it:iterator\<auto(TT)\> const;blk:block\<(left:TT const -&;right:TT const -&):TT const -&\> const) : auto <function-_at_functional_c__c_reduce_C1_ls_Y_ls_TT_gr_._gr_G_CN_ls_left;right_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_CY_ls_TT_gr_L_gr__builtin_>`
-  *  :ref:`sum (it:iterator\<auto(TT)\> const) : auto <function-_at_functional_c__c_sum_C1_ls_Y_ls_TT_gr_._gr_G>`
-  *  :ref:`any (it:auto const) : auto <function-_at_functional_c__c_any_C.>`
-  *  :ref:`all (it:auto const) : auto <function-_at_functional_c__c_all_C.>`
-  *  :ref:`cycle (src:iterator\<auto(TT)\> -const) : auto <function-_at_functional_c__c_cycle_1_ls_Y_ls_TT_gr_._gr_G>`
-  *  :ref:`islice (src:iterator\<auto(TT)\> -const;start:int const;stop:int const) : auto <function-_at_functional_c__c_islice_1_ls_Y_ls_TT_gr_._gr_G_Ci_Ci>`
-  *  :ref:`repeat_ref (value:auto(TT) const;total:int -const) : auto <function-_at_functional_c__c_repeat_ref_CY_ls_TT_gr_._i>`
-  *  :ref:`repeat (value:auto(TT) const;count:int -const) : auto <function-_at_functional_c__c_repeat_CY_ls_TT_gr_._i>`
-  *  :ref:`not (x:auto const) : auto <function-_at_functional_c__c_not_C.>`
-  *  :ref:`echo (x:auto -const;extra:string const) : auto <function-_at_functional_c__c_echo_._Cs>`
-  *  :ref:`flatten (it:iterator\<auto(TT)\> -const) : auto <function-_at_functional_c__c_flatten_1_ls_Y_ls_TT_gr_._gr_G>`
+  *  :ref:`filter (src:iterator\<auto(TT)\> -const;blk:lambda\<(what:TT const -&):bool\> const) : auto <function-_at_functional_c__c_filter_1_ls_Y_ls_TT_gr_._gr_G_CN_ls_what_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_b_gr__at_>` 
+  *  :ref:`filter (src:iterator\<auto(TT)\> -const;blk:function\<(what:TT const -&):bool\> const) : auto <function-_at_functional_c__c_filter_1_ls_Y_ls_TT_gr_._gr_G_CN_ls_what_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_b_gr__at__at_>` 
+  *  :ref:`map (src:iterator\<auto(TT)\> -const;blk:lambda\<(what:TT const -&):auto(QQ)\> const) : auto <function-_at_functional_c__c_map_1_ls_Y_ls_TT_gr_._gr_G_CN_ls_what_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_Y_ls_QQ_gr_._gr__at_>` 
+  *  :ref:`map (src:iterator\<auto(TT)\> -const;blk:function\<(what:TT const -&):auto(QQ)\> const) : auto <function-_at_functional_c__c_map_1_ls_Y_ls_TT_gr_._gr_G_CN_ls_what_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_Y_ls_QQ_gr_._gr__at__at_>` 
+  *  :ref:`reduce (it:iterator\<auto(TT)\> const;blk:lambda\<(left:TT const -&;right:TT const -&):TT const -&\> const) : auto <function-_at_functional_c__c_reduce_C1_ls_Y_ls_TT_gr_._gr_G_CN_ls_left;right_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_CY_ls_TT_gr_L_gr__at_>` 
+  *  :ref:`reduce (it:iterator\<auto(TT)\> const;blk:function\<(left:TT const -&;right:TT const -&):TT const -&\> const) : auto <function-_at_functional_c__c_reduce_C1_ls_Y_ls_TT_gr_._gr_G_CN_ls_left;right_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_CY_ls_TT_gr_L_gr__at__at_>` 
+  *  :ref:`reduce (it:iterator\<auto(TT)\> const;blk:block\<(left:TT const -&;right:TT const -&):TT const -&\> const) : auto <function-_at_functional_c__c_reduce_C1_ls_Y_ls_TT_gr_._gr_G_CN_ls_left;right_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_CY_ls_TT_gr_L_gr__builtin_>` 
+  *  :ref:`sum (it:iterator\<auto(TT)\> const) : auto <function-_at_functional_c__c_sum_C1_ls_Y_ls_TT_gr_._gr_G>` 
+  *  :ref:`any (it:auto const) : auto <function-_at_functional_c__c_any_C.>` 
+  *  :ref:`all (it:auto const) : auto <function-_at_functional_c__c_all_C.>` 
+  *  :ref:`cycle (src:iterator\<auto(TT)\> -const) : auto <function-_at_functional_c__c_cycle_1_ls_Y_ls_TT_gr_._gr_G>` 
+  *  :ref:`islice (src:iterator\<auto(TT)\> -const;start:int const;stop:int const) : auto <function-_at_functional_c__c_islice_1_ls_Y_ls_TT_gr_._gr_G_Ci_Ci>` 
+  *  :ref:`repeat_ref (value:auto(TT) const;total:int -const) : auto <function-_at_functional_c__c_repeat_ref_CY_ls_TT_gr_._i>` 
+  *  :ref:`repeat (value:auto(TT) const;count:int -const) : auto <function-_at_functional_c__c_repeat_CY_ls_TT_gr_._i>` 
+  *  :ref:`not (x:auto const) : auto <function-_at_functional_c__c_not_C.>` 
+  *  :ref:`echo (x:auto -const;extra:string const) : auto <function-_at_functional_c__c_echo_._Cs>` 
+  *  :ref:`flatten (it:iterator\<auto(TT)\> -const) : auto <function-_at_functional_c__c_flatten_1_ls_Y_ls_TT_gr_._gr_G>` 
 
 .. _function-_at_functional_c__c_filter_1_ls_Y_ls_TT_gr_._gr_G_CN_ls_what_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_b_gr__at_:
 
-.. das:function:: filter(src: iterator<auto(TT)>; blk: lambda<(what:TT const -&):bool> const)
+.. das:function:: filter(src: iterator<auto(TT)>; blk: lambda<(what:TT const):bool> const)
 
 filter returns auto
 
@@ -54,7 +54,7 @@ iterates over `src` and yields only those elements for which `blk` returns true
 
 .. _function-_at_functional_c__c_filter_1_ls_Y_ls_TT_gr_._gr_G_CN_ls_what_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_b_gr__at__at_:
 
-.. das:function:: filter(src: iterator<auto(TT)>; blk: function<(what:TT const -&):bool> const)
+.. das:function:: filter(src: iterator<auto(TT)>; blk: function<(what:TT const):bool> const)
 
 filter returns auto
 
@@ -71,7 +71,7 @@ iterates over `src` and yields only those elements for which `blk` returns true
 
 .. _function-_at_functional_c__c_map_1_ls_Y_ls_TT_gr_._gr_G_CN_ls_what_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_Y_ls_QQ_gr_._gr__at_:
 
-.. das:function:: map(src: iterator<auto(TT)>; blk: lambda<(what:TT const -&):auto(QQ)> const)
+.. das:function:: map(src: iterator<auto(TT)>; blk: lambda<(what:TT const):auto(QQ)> const)
 
 map returns auto
 
@@ -88,7 +88,7 @@ iterates over `src` and yields the result of `blk` for each element
 
 .. _function-_at_functional_c__c_map_1_ls_Y_ls_TT_gr_._gr_G_CN_ls_what_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_Y_ls_QQ_gr_._gr__at__at_:
 
-.. das:function:: map(src: iterator<auto(TT)>; blk: function<(what:TT const -&):auto(QQ)> const)
+.. das:function:: map(src: iterator<auto(TT)>; blk: function<(what:TT const):auto(QQ)> const)
 
 map returns auto
 
@@ -105,7 +105,7 @@ iterates over `src` and yields the result of `blk` for each element
 
 .. _function-_at_functional_c__c_reduce_C1_ls_Y_ls_TT_gr_._gr_G_CN_ls_left;right_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_CY_ls_TT_gr_L_gr__at_:
 
-.. das:function:: reduce(it: iterator<auto(TT)> const; blk: lambda<(left:TT const -&;right:TT const -&):TT const -&> const)
+.. das:function:: reduce(it: iterator<auto(TT)> const; blk: lambda<(left:TT const;right:TT const):TT const> const)
 
 reduce returns auto
 
@@ -123,7 +123,7 @@ and previous reduction result
 
 .. _function-_at_functional_c__c_reduce_C1_ls_Y_ls_TT_gr_._gr_G_CN_ls_left;right_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_CY_ls_TT_gr_L_gr__at__at_:
 
-.. das:function:: reduce(it: iterator<auto(TT)> const; blk: function<(left:TT const -&;right:TT const -&):TT const -&> const)
+.. das:function:: reduce(it: iterator<auto(TT)> const; blk: function<(left:TT const;right:TT const):TT const> const)
 
 reduce returns auto
 
@@ -141,7 +141,7 @@ and previous reduction result
 
 .. _function-_at_functional_c__c_reduce_C1_ls_Y_ls_TT_gr_._gr_G_CN_ls_left;right_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_CY_ls_TT_gr_L_gr__builtin_:
 
-.. das:function:: reduce(it: iterator<auto(TT)> const; blk: block<(left:TT const -&;right:TT const -&):TT const -&> const)
+.. das:function:: reduce(it: iterator<auto(TT)> const; blk: block<(left:TT const;right:TT const):TT const> const)
 
 reduce returns auto
 
@@ -322,8 +322,8 @@ iterates over `it`, than iterates over each element of each element of `it` and 
 Queries
 +++++++
 
-  *  :ref:`is_equal (a:auto const;b:auto const) : auto <function-_at_functional_c__c_is_equal_C._C.>`
-  *  :ref:`is_not_equal (a:auto const;b:auto const) : auto <function-_at_functional_c__c_is_not_equal_C._C.>`
+  *  :ref:`is_equal (a:auto const;b:auto const) : auto <function-_at_functional_c__c_is_equal_C._C.>` 
+  *  :ref:`is_not_equal (a:auto const;b:auto const) : auto <function-_at_functional_c__c_is_not_equal_C._C.>` 
 
 .. _function-_at_functional_c__c_is_equal_C._C.:
 

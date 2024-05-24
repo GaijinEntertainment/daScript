@@ -9,6 +9,7 @@ module rst_comment private
 require daslib/ast_boost
 require fio
 require strings
+require rst
 
 enum ParserState
     none
@@ -283,7 +284,7 @@ class RstComment : AstCommentReader
         if state==ParserState func
             state = ParserState none
             if function_comment != ""
-                write_to_detail("function-{prog.thisModuleName}-{fn.name}", function_comment)
+                write_to_detail("function-{prog.thisModuleName}-{function_file_name(fn)}", function_comment)
         else
             if function_comment != ""
                 field_comments |> push([[auto "method",string(fn.name),function_comment]])
@@ -312,7 +313,7 @@ class RstComment : AstCommentReader
         let fname = get_das_root() + "/doc/source/stdlib/detail/{name}.rst"
         fopen(fname,"wb") <| $ ( f )
             if f==null
-                panic("can't open {fname}")
+                to_log(LOG_ERROR, "can't open {fname}\n")
             else
                 f |> fwrite(text)
 
