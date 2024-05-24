@@ -476,3 +476,14 @@
 
 .. |function-builtin-remove_value| replace:: removes first occurance of the key from the array.
 
+.. |function_annotation-builtin-no_jit| replace:: Disables JIT compilation for the function.
+
+.. |function_annotation-builtin-nodiscard| replace:: Marks function as nodiscard. Result of the function should be used.
+
+.. |function_annotation-builtin-expect_dim| replace:: A contract to mark function argument to be a static array.
+
+.. |function-builtin-mul128| replace:: Multiplies two 64 bit values and returns 128 bit result in form of two 64 bit values (low and high) as urange64.
+
+.. |function-builtin-aot_enabled| replace:: Returns true if AOT is enabled.
+
+.. |function-builtin-mktime| replace:: Converts calendar time to time since epoch.

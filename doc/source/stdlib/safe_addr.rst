@@ -53,7 +53,7 @@ safe_addr returns T?#
 +--------+-------------+
 
 
-returns temporary pointer to the given expression
+returns temporary pointer to the given expressio
 
 .. _function-_at_safe_addr_c__c_safe_addr_C&_eq_Y_ls_T_gr_.:
 
@@ -68,7 +68,7 @@ safe_addr returns T? const#
 +--------+---------------+
 
 
-returns temporary pointer to the given expression
+returns temporary pointer to the given expressio
 
 .. _function-_at_safe_addr_c__c_shared_addr_C1_ls_Y_ls_KEY_gr_._gr_2_ls_Y_ls_VAL_gr_._gr_T_CY_ls_KEY_gr_L:
 
@@ -106,10 +106,10 @@ returns address of the given shared variable. it's safe because shared variables
 Temporary pointers
 ++++++++++++++++++
 
-  *  :ref:`temp_ptr (x:auto(T)? const implicit ==const) : T? const# <function-_at_safe_addr_c__c_temp_ptr_CI_eq_1_ls_Y_ls_T_gr_._gr_?>` 
-  *  :ref:`temp_ptr (x:auto(T)? implicit ==const -const) : T?# <function-_at_safe_addr_c__c_temp_ptr_I_eq_1_ls_Y_ls_T_gr_._gr_?>` 
+  *  :ref:`temp_ptr (x:auto(T)? const implicit ==const) : T? const# <function-_at_safe_addr_c__c_temp_ptr_CI_eq_1_ls_Y_ls_T_gr_._gr__qm_>` 
+  *  :ref:`temp_ptr (x:auto(T)? implicit ==const -const) : T?# <function-_at_safe_addr_c__c_temp_ptr_I_eq_1_ls_Y_ls_T_gr_._gr__qm_>` 
 
-.. _function-_at_safe_addr_c__c_temp_ptr_CI_eq_1_ls_Y_ls_T_gr_._gr_?:
+.. _function-_at_safe_addr_c__c_temp_ptr_CI_eq_1_ls_Y_ls_T_gr_._gr__qm_:
 
 .. das:function:: temp_ptr(x: auto(T)? const implicit ==const)
 
@@ -124,7 +124,7 @@ temp_ptr returns T? const#
 
 returns temporary pointer from a given pointer
 
-.. _function-_at_safe_addr_c__c_temp_ptr_I_eq_1_ls_Y_ls_T_gr_._gr_?:
+.. _function-_at_safe_addr_c__c_temp_ptr_I_eq_1_ls_Y_ls_T_gr_._gr__qm_:
 
 .. das:function:: temp_ptr(x: auto(T)? implicit ==const)
 

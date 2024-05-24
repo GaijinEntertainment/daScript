@@ -19,6 +19,7 @@ def public safe_addr(var x : auto(T)& ==const) : T-& ? #
 
 [tag_function(safe_addr_tag)]
 def public safe_addr(x : auto(T)& ==const) : T-& ? const #
+    //! returns temporary pointer to the given expressio
     unsafe
         return reinterpret<T-&? const #>(addr(x))
 
@@ -39,6 +40,7 @@ def public temp_ptr(x : auto(T)? implicit ==const) : T ? const #
 
 // [tag_function(temp_addr_tag)]
 def public temp_ptr(var x : auto(T)? implicit ==const) : T ?#
+    //! returns temporary pointer from a given pointer
     unsafe
         return reinterpret<T?#>(x)
 

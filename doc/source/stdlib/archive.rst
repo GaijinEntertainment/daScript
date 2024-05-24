@@ -208,10 +208,10 @@ Serialization
   *  :ref:`serialize (arch:archive::Archive -const;value:auto(TT)& -const) : auto <function-_at_archive_c__c_serialize_S_ls_archive_c__c_Archive_gr__&Y_ls_TT_gr_._%_ls_IsAnyStructMacro_c_expect_any_struct(value_eq_true)_gr_>` 
   *  :ref:`serialize (arch:archive::Archive -const;value:auto(TT)& -const) : auto <function-_at_archive_c__c_serialize_S_ls_archive_c__c_Archive_gr__&Y_ls_TT_gr_._%_ls_IsAnyTupleNonPtrMacro_c_expect_any_tuple(value_eq_true)_gr_>` 
   *  :ref:`serialize (arch:archive::Archive -const;value:auto(TT)& -const) : auto <function-_at_archive_c__c_serialize_S_ls_archive_c__c_Archive_gr__&Y_ls_TT_gr_._%_ls_IsAnyVariantNonPtrMacro_c_expect_any_variant(value_eq_true)_gr_>` 
-  *  :ref:`serialize (arch:archive::Archive -const;value:auto(TT)[] -const) : auto <function-_at_archive_c__c_serialize_S_ls_archive_c__c_Archive_gr__[-1]Y_ls_TT_gr_.>` 
+  *  :ref:`serialize (arch:archive::Archive -const;value:auto(TT)[] -const) : auto <function-_at_archive_c__c_serialize_S_ls_archive_c__c_Archive_gr___lb_-1_rb_Y_ls_TT_gr_.>` 
   *  :ref:`serialize (arch:archive::Archive -const;value:array\<auto(TT)\> -const) : auto <function-_at_archive_c__c_serialize_S_ls_archive_c__c_Archive_gr__1_ls_Y_ls_TT_gr_._gr_A>` 
   *  :ref:`serialize (arch:archive::Archive -const;value:table\<auto(KT);auto(VT)\> -const) : auto <function-_at_archive_c__c_serialize_S_ls_archive_c__c_Archive_gr__1_ls_Y_ls_KT_gr_._gr_2_ls_Y_ls_VT_gr_._gr_T>` 
-  *  :ref:`serialize (arch:archive::Archive -const;value:auto(TT)? -const) : auto <function-_at_archive_c__c_serialize_S_ls_archive_c__c_Archive_gr__1_ls_Y_ls_TT_gr_._gr_?>` 
+  *  :ref:`serialize (arch:archive::Archive -const;value:auto(TT)? -const) : auto <function-_at_archive_c__c_serialize_S_ls_archive_c__c_Archive_gr__1_ls_Y_ls_TT_gr_._gr__qm_>` 
 
 .. _function-_at_archive_c__c_serialize_S_ls_archive_c__c_Archive_gr__H_ls_math_c__c_float3x3_gr_:
 
@@ -409,7 +409,7 @@ serialize returns auto
 
 Serializes structured data, based on the `value` type.
 
-.. _function-_at_archive_c__c_serialize_S_ls_archive_c__c_Archive_gr__[-1]Y_ls_TT_gr_.:
+.. _function-_at_archive_c__c_serialize_S_ls_archive_c__c_Archive_gr___lb_-1_rb_Y_ls_TT_gr_.:
 
 .. das:function:: serialize(arch: Archive; value: auto(TT)[])
 
@@ -460,7 +460,7 @@ serialize returns auto
 
 Serializes structured data, based on the `value` type.
 
-.. _function-_at_archive_c__c_serialize_S_ls_archive_c__c_Archive_gr__1_ls_Y_ls_TT_gr_._gr_?:
+.. _function-_at_archive_c__c_serialize_S_ls_archive_c__c_Archive_gr__1_ls_Y_ls_TT_gr_._gr__qm_:
 
 .. das:function:: serialize(arch: Archive; value: auto(TT)?)
 

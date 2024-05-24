@@ -195,3 +195,9 @@
 
 .. |function-math-euler_from_un_quat| replace:: Construct euler angles from quaternion.
 
+.. |function-math-euler_from_quat| replace:: Construct euler angles from quaternion.
+
+.. |function-math-quat| replace:: Construct quaternion from matrix.
+
+.. |function-math-quat_slerp| replace:: Spherical linear interpolation between `a` and `b` by `t`.
+

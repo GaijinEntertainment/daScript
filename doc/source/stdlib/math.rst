@@ -647,31 +647,15 @@ float* and double
   *  :ref:`sin (x:float const) : float <function-_at_math_c__c_sin_Cf>` 
   *  :ref:`cos (x:float const) : float <function-_at_math_c__c_cos_Cf>` 
   *  :ref:`tan (x:float const) : float <function-_at_math_c__c_tan_Cf>` 
-  *  :ref:`atan (x:float const) : float <function-_at_math_c__c_atan_Cf>` 
-  *  :ref:`asin (x:float const) : float <function-_at_math_c__c_asin_Cf>` 
-  *  :ref:`acos (x:float const) : float <function-_at_math_c__c_acos_Cf>` 
-  *  :ref:`atan2 (y:float const;x:float const) : float <function-_at_math_c__c_atan2_Cf_Cf>` 
   *  :ref:`sin (x:float2 const) : float2 <function-_at_math_c__c_sin_Cf2>` 
   *  :ref:`cos (x:float2 const) : float2 <function-_at_math_c__c_cos_Cf2>` 
   *  :ref:`tan (x:float2 const) : float2 <function-_at_math_c__c_tan_Cf2>` 
-  *  :ref:`atan (x:float2 const) : float2 <function-_at_math_c__c_atan_Cf2>` 
-  *  :ref:`asin (x:float2 const) : float2 <function-_at_math_c__c_asin_Cf2>` 
-  *  :ref:`acos (x:float2 const) : float2 <function-_at_math_c__c_acos_Cf2>` 
-  *  :ref:`atan2 (y:float2 const;x:float2 const) : float2 <function-_at_math_c__c_atan2_Cf2_Cf2>` 
   *  :ref:`sin (x:float3 const) : float3 <function-_at_math_c__c_sin_Cf3>` 
   *  :ref:`cos (x:float3 const) : float3 <function-_at_math_c__c_cos_Cf3>` 
   *  :ref:`tan (x:float3 const) : float3 <function-_at_math_c__c_tan_Cf3>` 
-  *  :ref:`atan (x:float3 const) : float3 <function-_at_math_c__c_atan_Cf3>` 
-  *  :ref:`asin (x:float3 const) : float3 <function-_at_math_c__c_asin_Cf3>` 
-  *  :ref:`acos (x:float3 const) : float3 <function-_at_math_c__c_acos_Cf3>` 
-  *  :ref:`atan2 (y:float3 const;x:float3 const) : float3 <function-_at_math_c__c_atan2_Cf3_Cf3>` 
   *  :ref:`sin (x:float4 const) : float4 <function-_at_math_c__c_sin_Cf4>` 
   *  :ref:`cos (x:float4 const) : float4 <function-_at_math_c__c_cos_Cf4>` 
   *  :ref:`tan (x:float4 const) : float4 <function-_at_math_c__c_tan_Cf4>` 
-  *  :ref:`atan (x:float4 const) : float4 <function-_at_math_c__c_atan_Cf4>` 
-  *  :ref:`asin (x:float4 const) : float4 <function-_at_math_c__c_asin_Cf4>` 
-  *  :ref:`acos (x:float4 const) : float4 <function-_at_math_c__c_acos_Cf4>` 
-  *  :ref:`atan2 (y:float4 const;x:float4 const) : float4 <function-_at_math_c__c_atan2_Cf4_Cf4>` 
   *  :ref:`exp (x:float const) : float <function-_at_math_c__c_exp_Cf>` 
   *  :ref:`log (x:float const) : float <function-_at_math_c__c_log_Cf>` 
   *  :ref:`exp2 (x:float const) : float <function-_at_math_c__c_exp2_Cf>` 
@@ -762,6 +746,22 @@ float* and double
   *  :ref:`atan2 (y:double const;x:double const) : double <function-_at_math_c__c_atan2_Cd_Cd>` 
   *  :ref:`sincos (x:float const;s:float& implicit;c:float& implicit) : void <function-_at_math_c__c_sincos_Cf_&If_&If>` 
   *  :ref:`sincos (x:double const;s:double& implicit;c:double& implicit) : void <function-_at_math_c__c_sincos_Cd_&Id_&Id>` 
+  *  :ref:`asin (x:float const) : float <function-_at_math_c__c_asin_Cf>` 
+  *  :ref:`acos (x:float const) : float <function-_at_math_c__c_acos_Cf>` 
+  *  :ref:`atan (x:float const) : float <function-_at_math_c__c_atan_Cf>` 
+  *  :ref:`atan2 (y:float const;x:float const) : float <function-_at_math_c__c_atan2_Cf_Cf>` 
+  *  :ref:`asin (x:float2 const) : float2 <function-_at_math_c__c_asin_Cf2>` 
+  *  :ref:`asin (x:float3 const) : float3 <function-_at_math_c__c_asin_Cf3>` 
+  *  :ref:`asin (x:float4 const) : float4 <function-_at_math_c__c_asin_Cf4>` 
+  *  :ref:`acos (x:float2 const) : float2 <function-_at_math_c__c_acos_Cf2>` 
+  *  :ref:`acos (x:float3 const) : float3 <function-_at_math_c__c_acos_Cf3>` 
+  *  :ref:`acos (x:float4 const) : float4 <function-_at_math_c__c_acos_Cf4>` 
+  *  :ref:`atan (x:float2 const) : float2 <function-_at_math_c__c_atan_Cf2>` 
+  *  :ref:`atan (x:float3 const) : float3 <function-_at_math_c__c_atan_Cf3>` 
+  *  :ref:`atan (x:float4 const) : float4 <function-_at_math_c__c_atan_Cf4>` 
+  *  :ref:`atan2 (y:float2 const;x:float2 const) : float2 <function-_at_math_c__c_atan2_Cf2_Cf2>` 
+  *  :ref:`atan2 (y:float3 const;x:float3 const) : float3 <function-_at_math_c__c_atan2_Cf3_Cf3>` 
+  *  :ref:`atan2 (y:float4 const;x:float4 const) : float4 <function-_at_math_c__c_atan2_Cf4_Cf4>` 
 
 .. _function-_at_math_c__c_sin_Cf:
 
@@ -808,68 +808,6 @@ tan returns float
 
 |function-math-tan|
 
-.. _function-_at_math_c__c_atan_Cf:
-
-.. das:function:: atan(x: float const)
-
-atan returns float
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+x       +float const  +
-+--------+-------------+
-
-
-|function-math-atan|
-
-.. _function-_at_math_c__c_asin_Cf:
-
-.. das:function:: asin(x: float const)
-
-asin returns float
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+x       +float const  +
-+--------+-------------+
-
-
-|function-math-asin|
-
-.. _function-_at_math_c__c_acos_Cf:
-
-.. das:function:: acos(x: float const)
-
-acos returns float
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+x       +float const  +
-+--------+-------------+
-
-
-|function-math-acos|
-
-.. _function-_at_math_c__c_atan2_Cf_Cf:
-
-.. das:function:: atan2(y: float const; x: float const)
-
-atan2 returns float
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+y       +float const  +
-+--------+-------------+
-+x       +float const  +
-+--------+-------------+
-
-
-|function-math-atan2|
-
 .. _function-_at_math_c__c_sin_Cf2:
 
 .. das:function:: sin(x: float2 const)
@@ -914,68 +852,6 @@ tan returns float2
 
 
 |function-math-tan|
-
-.. _function-_at_math_c__c_atan_Cf2:
-
-.. das:function:: atan(x: float2 const)
-
-atan returns float2
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+x       +float2 const +
-+--------+-------------+
-
-
-|function-math-atan|
-
-.. _function-_at_math_c__c_asin_Cf2:
-
-.. das:function:: asin(x: float2 const)
-
-asin returns float2
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+x       +float2 const +
-+--------+-------------+
-
-
-|function-math-asin|
-
-.. _function-_at_math_c__c_acos_Cf2:
-
-.. das:function:: acos(x: float2 const)
-
-acos returns float2
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+x       +float2 const +
-+--------+-------------+
-
-
-|function-math-acos|
-
-.. _function-_at_math_c__c_atan2_Cf2_Cf2:
-
-.. das:function:: atan2(y: float2 const; x: float2 const)
-
-atan2 returns float2
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+y       +float2 const +
-+--------+-------------+
-+x       +float2 const +
-+--------+-------------+
-
-
-|function-math-atan2|
 
 .. _function-_at_math_c__c_sin_Cf3:
 
@@ -1022,68 +898,6 @@ tan returns float3
 
 |function-math-tan|
 
-.. _function-_at_math_c__c_atan_Cf3:
-
-.. das:function:: atan(x: float3 const)
-
-atan returns float3
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+x       +float3 const +
-+--------+-------------+
-
-
-|function-math-atan|
-
-.. _function-_at_math_c__c_asin_Cf3:
-
-.. das:function:: asin(x: float3 const)
-
-asin returns float3
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+x       +float3 const +
-+--------+-------------+
-
-
-|function-math-asin|
-
-.. _function-_at_math_c__c_acos_Cf3:
-
-.. das:function:: acos(x: float3 const)
-
-acos returns float3
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+x       +float3 const +
-+--------+-------------+
-
-
-|function-math-acos|
-
-.. _function-_at_math_c__c_atan2_Cf3_Cf3:
-
-.. das:function:: atan2(y: float3 const; x: float3 const)
-
-atan2 returns float3
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+y       +float3 const +
-+--------+-------------+
-+x       +float3 const +
-+--------+-------------+
-
-
-|function-math-atan2|
-
 .. _function-_at_math_c__c_sin_Cf4:
 
 .. das:function:: sin(x: float4 const)
@@ -1128,68 +942,6 @@ tan returns float4
 
 
 |function-math-tan|
-
-.. _function-_at_math_c__c_atan_Cf4:
-
-.. das:function:: atan(x: float4 const)
-
-atan returns float4
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+x       +float4 const +
-+--------+-------------+
-
-
-|function-math-atan|
-
-.. _function-_at_math_c__c_asin_Cf4:
-
-.. das:function:: asin(x: float4 const)
-
-asin returns float4
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+x       +float4 const +
-+--------+-------------+
-
-
-|function-math-asin|
-
-.. _function-_at_math_c__c_acos_Cf4:
-
-.. das:function:: acos(x: float4 const)
-
-acos returns float4
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+x       +float4 const +
-+--------+-------------+
-
-
-|function-math-acos|
-
-.. _function-_at_math_c__c_atan2_Cf4_Cf4:
-
-.. das:function:: atan2(y: float4 const; x: float4 const)
-
-atan2 returns float4
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+y       +float4 const +
-+--------+-------------+
-+x       +float4 const +
-+--------+-------------+
-
-
-|function-math-atan2|
 
 .. _function-_at_math_c__c_exp_Cf:
 
@@ -2557,18 +2309,258 @@ atan2 returns double
 
 |function-math-sincos|
 
+.. _function-_at_math_c__c_asin_Cf:
+
+.. das:function:: asin(x: float const)
+
+asin returns float
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float const  +
++--------+-------------+
+
+
+|function-math-asin|
+
+.. _function-_at_math_c__c_acos_Cf:
+
+.. das:function:: acos(x: float const)
+
+acos returns float
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float const  +
++--------+-------------+
+
+
+|function-math-acos|
+
+.. _function-_at_math_c__c_atan_Cf:
+
+.. das:function:: atan(x: float const)
+
+atan returns float
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float const  +
++--------+-------------+
+
+
+|function-math-atan|
+
+.. _function-_at_math_c__c_atan2_Cf_Cf:
+
+.. das:function:: atan2(y: float const; x: float const)
+
+atan2 returns float
+
++--------+-------------+
++argument+argument type+
++========+=============+
++y       +float const  +
++--------+-------------+
++x       +float const  +
++--------+-------------+
+
+
+|function-math-atan2|
+
+.. _function-_at_math_c__c_asin_Cf2:
+
+.. das:function:: asin(x: float2 const)
+
+asin returns float2
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float2 const +
++--------+-------------+
+
+
+|function-math-asin|
+
+.. _function-_at_math_c__c_asin_Cf3:
+
+.. das:function:: asin(x: float3 const)
+
+asin returns float3
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float3 const +
++--------+-------------+
+
+
+|function-math-asin|
+
+.. _function-_at_math_c__c_asin_Cf4:
+
+.. das:function:: asin(x: float4 const)
+
+asin returns float4
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float4 const +
++--------+-------------+
+
+
+|function-math-asin|
+
+.. _function-_at_math_c__c_acos_Cf2:
+
+.. das:function:: acos(x: float2 const)
+
+acos returns float2
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float2 const +
++--------+-------------+
+
+
+|function-math-acos|
+
+.. _function-_at_math_c__c_acos_Cf3:
+
+.. das:function:: acos(x: float3 const)
+
+acos returns float3
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float3 const +
++--------+-------------+
+
+
+|function-math-acos|
+
+.. _function-_at_math_c__c_acos_Cf4:
+
+.. das:function:: acos(x: float4 const)
+
+acos returns float4
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float4 const +
++--------+-------------+
+
+
+|function-math-acos|
+
+.. _function-_at_math_c__c_atan_Cf2:
+
+.. das:function:: atan(x: float2 const)
+
+atan returns float2
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float2 const +
++--------+-------------+
+
+
+|function-math-atan|
+
+.. _function-_at_math_c__c_atan_Cf3:
+
+.. das:function:: atan(x: float3 const)
+
+atan returns float3
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float3 const +
++--------+-------------+
+
+
+|function-math-atan|
+
+.. _function-_at_math_c__c_atan_Cf4:
+
+.. das:function:: atan(x: float4 const)
+
+atan returns float4
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float4 const +
++--------+-------------+
+
+
+|function-math-atan|
+
+.. _function-_at_math_c__c_atan2_Cf2_Cf2:
+
+.. das:function:: atan2(y: float2 const; x: float2 const)
+
+atan2 returns float2
+
++--------+-------------+
++argument+argument type+
++========+=============+
++y       +float2 const +
++--------+-------------+
++x       +float2 const +
++--------+-------------+
+
+
+|function-math-atan2|
+
+.. _function-_at_math_c__c_atan2_Cf3_Cf3:
+
+.. das:function:: atan2(y: float3 const; x: float3 const)
+
+atan2 returns float3
+
++--------+-------------+
++argument+argument type+
++========+=============+
++y       +float3 const +
++--------+-------------+
++x       +float3 const +
++--------+-------------+
+
+
+|function-math-atan2|
+
+.. _function-_at_math_c__c_atan2_Cf4_Cf4:
+
+.. das:function:: atan2(y: float4 const; x: float4 const)
+
+atan2 returns float4
+
++--------+-------------+
++argument+argument type+
++========+=============+
++y       +float4 const +
++--------+-------------+
++x       +float4 const +
++--------+-------------+
+
+
+|function-math-atan2|
+
 +++++++++++
 float* only
 +++++++++++
 
-  *  :ref:`atan_est (x:float const) : float <function-_at_math_c__c_atan_est_Cf>` 
-  *  :ref:`atan2_est (y:float const;x:float const) : float <function-_at_math_c__c_atan2_est_Cf_Cf>` 
-  *  :ref:`atan_est (x:float2 const) : float2 <function-_at_math_c__c_atan_est_Cf2>` 
-  *  :ref:`atan2_est (y:float2 const;x:float2 const) : float2 <function-_at_math_c__c_atan2_est_Cf2_Cf2>` 
-  *  :ref:`atan_est (x:float3 const) : float3 <function-_at_math_c__c_atan_est_Cf3>` 
-  *  :ref:`atan2_est (y:float3 const;x:float3 const) : float3 <function-_at_math_c__c_atan2_est_Cf3_Cf3>` 
-  *  :ref:`atan_est (x:float4 const) : float4 <function-_at_math_c__c_atan_est_Cf4>` 
-  *  :ref:`atan2_est (y:float4 const;x:float4 const) : float4 <function-_at_math_c__c_atan2_est_Cf4_Cf4>` 
   *  :ref:`rcp_est (x:float const) : float <function-_at_math_c__c_rcp_est_Cf>` 
   *  :ref:`rcp_est (x:float2 const) : float2 <function-_at_math_c__c_rcp_est_Cf2>` 
   *  :ref:`rcp_est (x:float3 const) : float3 <function-_at_math_c__c_rcp_est_Cf3>` 
@@ -2585,6 +2577,14 @@ float* only
   *  :ref:`fract (x:float4 const) : float4 <function-_at_math_c__c_fract_Cf4>` 
   *  :ref:`rsqrt (x:float4 const) : float4 <function-_at_math_c__c_rsqrt_Cf4>` 
   *  :ref:`rsqrt_est (x:float4 const) : float4 <function-_at_math_c__c_rsqrt_est_Cf4>` 
+  *  :ref:`atan_est (x:float const) : float <function-_at_math_c__c_atan_est_Cf>` 
+  *  :ref:`atan2_est (y:float const;x:float const) : float <function-_at_math_c__c_atan2_est_Cf_Cf>` 
+  *  :ref:`atan_est (x:float2 const) : float2 <function-_at_math_c__c_atan_est_Cf2>` 
+  *  :ref:`atan_est (x:float3 const) : float3 <function-_at_math_c__c_atan_est_Cf3>` 
+  *  :ref:`atan_est (x:float4 const) : float4 <function-_at_math_c__c_atan_est_Cf4>` 
+  *  :ref:`atan2_est (y:float2 const;x:float2 const) : float2 <function-_at_math_c__c_atan2_est_Cf2_Cf2>` 
+  *  :ref:`atan2_est (y:float3 const;x:float3 const) : float3 <function-_at_math_c__c_atan2_est_Cf3_Cf3>` 
+  *  :ref:`atan2_est (y:float4 const;x:float4 const) : float4 <function-_at_math_c__c_atan2_est_Cf4_Cf4>` 
   *  :ref:`floori (x:float const) : int <function-_at_math_c__c_floori_Cf>` 
   *  :ref:`ceili (x:float const) : int <function-_at_math_c__c_ceili_Cf>` 
   *  :ref:`roundi (x:float const) : int <function-_at_math_c__c_roundi_Cf>` 
@@ -2608,134 +2608,6 @@ float* only
   *  :ref:`- (x:math::float4x4 const implicit) : math::float4x4 <function-_at_math_c__c_-_CIH_ls_math_c__c_float4x4_gr_>` 
   *  :ref:`- (x:math::float3x4 const implicit) : math::float3x4 <function-_at_math_c__c_-_CIH_ls_math_c__c_float3x4_gr_>` 
   *  :ref:`- (x:math::float3x3 const implicit) : math::float3x3 <function-_at_math_c__c_-_CIH_ls_math_c__c_float3x3_gr_>` 
-
-.. _function-_at_math_c__c_atan_est_Cf:
-
-.. das:function:: atan_est(x: float const)
-
-atan_est returns float
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+x       +float const  +
-+--------+-------------+
-
-
-|function-math-atan_est|
-
-.. _function-_at_math_c__c_atan2_est_Cf_Cf:
-
-.. das:function:: atan2_est(y: float const; x: float const)
-
-atan2_est returns float
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+y       +float const  +
-+--------+-------------+
-+x       +float const  +
-+--------+-------------+
-
-
-|function-math-atan2_est|
-
-.. _function-_at_math_c__c_atan_est_Cf2:
-
-.. das:function:: atan_est(x: float2 const)
-
-atan_est returns float2
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+x       +float2 const +
-+--------+-------------+
-
-
-|function-math-atan_est|
-
-.. _function-_at_math_c__c_atan2_est_Cf2_Cf2:
-
-.. das:function:: atan2_est(y: float2 const; x: float2 const)
-
-atan2_est returns float2
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+y       +float2 const +
-+--------+-------------+
-+x       +float2 const +
-+--------+-------------+
-
-
-|function-math-atan2_est|
-
-.. _function-_at_math_c__c_atan_est_Cf3:
-
-.. das:function:: atan_est(x: float3 const)
-
-atan_est returns float3
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+x       +float3 const +
-+--------+-------------+
-
-
-|function-math-atan_est|
-
-.. _function-_at_math_c__c_atan2_est_Cf3_Cf3:
-
-.. das:function:: atan2_est(y: float3 const; x: float3 const)
-
-atan2_est returns float3
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+y       +float3 const +
-+--------+-------------+
-+x       +float3 const +
-+--------+-------------+
-
-
-|function-math-atan2_est|
-
-.. _function-_at_math_c__c_atan_est_Cf4:
-
-.. das:function:: atan_est(x: float4 const)
-
-atan_est returns float4
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+x       +float4 const +
-+--------+-------------+
-
-
-|function-math-atan_est|
-
-.. _function-_at_math_c__c_atan2_est_Cf4_Cf4:
-
-.. das:function:: atan2_est(y: float4 const; x: float4 const)
-
-atan2_est returns float4
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+y       +float4 const +
-+--------+-------------+
-+x       +float4 const +
-+--------+-------------+
-
-
-|function-math-atan2_est|
 
 .. _function-_at_math_c__c_rcp_est_Cf:
 
@@ -2976,6 +2848,134 @@ rsqrt_est returns float4
 
 
 |function-math-rsqrt_est|
+
+.. _function-_at_math_c__c_atan_est_Cf:
+
+.. das:function:: atan_est(x: float const)
+
+atan_est returns float
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float const  +
++--------+-------------+
+
+
+|function-math-atan_est|
+
+.. _function-_at_math_c__c_atan2_est_Cf_Cf:
+
+.. das:function:: atan2_est(y: float const; x: float const)
+
+atan2_est returns float
+
++--------+-------------+
++argument+argument type+
++========+=============+
++y       +float const  +
++--------+-------------+
++x       +float const  +
++--------+-------------+
+
+
+|function-math-atan2_est|
+
+.. _function-_at_math_c__c_atan_est_Cf2:
+
+.. das:function:: atan_est(x: float2 const)
+
+atan_est returns float2
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float2 const +
++--------+-------------+
+
+
+|function-math-atan_est|
+
+.. _function-_at_math_c__c_atan_est_Cf3:
+
+.. das:function:: atan_est(x: float3 const)
+
+atan_est returns float3
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float3 const +
++--------+-------------+
+
+
+|function-math-atan_est|
+
+.. _function-_at_math_c__c_atan_est_Cf4:
+
+.. das:function:: atan_est(x: float4 const)
+
+atan_est returns float4
+
++--------+-------------+
++argument+argument type+
++========+=============+
++x       +float4 const +
++--------+-------------+
+
+
+|function-math-atan_est|
+
+.. _function-_at_math_c__c_atan2_est_Cf2_Cf2:
+
+.. das:function:: atan2_est(y: float2 const; x: float2 const)
+
+atan2_est returns float2
+
++--------+-------------+
++argument+argument type+
++========+=============+
++y       +float2 const +
++--------+-------------+
++x       +float2 const +
++--------+-------------+
+
+
+|function-math-atan2_est|
+
+.. _function-_at_math_c__c_atan2_est_Cf3_Cf3:
+
+.. das:function:: atan2_est(y: float3 const; x: float3 const)
+
+atan2_est returns float3
+
++--------+-------------+
++argument+argument type+
++========+=============+
++y       +float3 const +
++--------+-------------+
++x       +float3 const +
++--------+-------------+
+
+
+|function-math-atan2_est|
+
+.. _function-_at_math_c__c_atan2_est_Cf4_Cf4:
+
+.. das:function:: atan2_est(y: float4 const; x: float4 const)
+
+atan2_est returns float4
+
++--------+-------------+
++argument+argument type+
++========+=============+
++y       +float4 const +
++--------+-------------+
++x       +float4 const +
++--------+-------------+
+
+
+|function-math-atan2_est|
 
 .. _function-_at_math_c__c_floori_Cf:
 
@@ -5612,7 +5612,6 @@ Quaternion operations
 
   *  :ref:`quat_from_unit_arc (v0:float3 const;v1:float3 const) : float4 <function-_at_math_c__c_quat_from_unit_arc_Cf3_Cf3>` 
   *  :ref:`quat_from_unit_vec_ang (v:float3 const;ang:float const) : float4 <function-_at_math_c__c_quat_from_unit_vec_ang_Cf3_Cf>` 
-  *  :ref:`un_quat (m:math::float4x4 const implicit) : float4 <function-_at_math_c__c_un_quat_CIH_ls_math_c__c_float4x4_gr_>` 
   *  :ref:`quat_mul (q1:float4 const;q2:float4 const) : float4 <function-_at_math_c__c_quat_mul_Cf4_Cf4>` 
   *  :ref:`quat_mul_vec (q:float4 const;v:float3 const) : float3 <function-_at_math_c__c_quat_mul_vec_Cf4_Cf3>` 
   *  :ref:`quat_conjugate (q:float4 const) : float4 <function-_at_math_c__c_quat_conjugate_Cf4>` 
@@ -5650,21 +5649,6 @@ quat_from_unit_vec_ang returns float4
 
 
 |function-math-quat_from_unit_vec_ang|
-
-.. _function-_at_math_c__c_un_quat_CIH_ls_math_c__c_float4x4_gr_:
-
-.. das:function:: un_quat(m: float4x4 const implicit)
-
-un_quat returns float4
-
-+--------+-------------------------------------------------------------+
-+argument+argument type                                                +
-+========+=============================================================+
-+m       + :ref:`math::float4x4 <handle-math-float4x4>`  const implicit+
-+--------+-------------------------------------------------------------+
-
-
-|function-math-un_quat|
 
 .. _function-_at_math_c__c_quat_mul_Cf4_Cf4:
 
@@ -5756,7 +5740,7 @@ unpack_byte_to_float returns float4
 Uncategorized
 +++++++++++++
 
-.. _function-_at_math_c__c_[]_I_eq_H_ls_math_c__c_float4x4_gr__Ci_C_c_C_l:
+.. _function-_at_math_c__c__lb__rb__I_eq_H_ls_math_c__c_float4x4_gr__Ci_C_c_C_l:
 
 .. das:function:: operator [](m: float4x4 implicit ==const; i: int const)
 
@@ -5773,7 +5757,7 @@ Uncategorized
 
 |function-math-[]|
 
-.. _function-_at_math_c__c_[]_CI_eq_H_ls_math_c__c_float4x4_gr__Ci_C_c_C_l:
+.. _function-_at_math_c__c__lb__rb__CI_eq_H_ls_math_c__c_float4x4_gr__Ci_C_c_C_l:
 
 .. das:function:: operator [](m: float4x4 const implicit ==const; i: int const)
 
@@ -5790,7 +5774,7 @@ Uncategorized
 
 |function-math-[]|
 
-.. _function-_at_math_c__c_[]_I_eq_H_ls_math_c__c_float4x4_gr__Cu_C_c_C_l:
+.. _function-_at_math_c__c__lb__rb__I_eq_H_ls_math_c__c_float4x4_gr__Cu_C_c_C_l:
 
 .. das:function:: operator [](m: float4x4 implicit ==const; i: uint const)
 
@@ -5807,7 +5791,7 @@ Uncategorized
 
 |function-math-[]|
 
-.. _function-_at_math_c__c_[]_CI_eq_H_ls_math_c__c_float4x4_gr__Cu_C_c_C_l:
+.. _function-_at_math_c__c__lb__rb__CI_eq_H_ls_math_c__c_float4x4_gr__Cu_C_c_C_l:
 
 .. das:function:: operator [](m: float4x4 const implicit ==const; i: uint const)
 
@@ -5854,7 +5838,7 @@ determinant returns float
 
 |function-math-determinant|
 
-.. _function-_at_math_c__c_[]_I_eq_H_ls_math_c__c_float3x4_gr__Ci_C_c_C_l:
+.. _function-_at_math_c__c__lb__rb__I_eq_H_ls_math_c__c_float3x4_gr__Ci_C_c_C_l:
 
 .. das:function:: operator [](m: float3x4 implicit ==const; i: int const)
 
@@ -5871,7 +5855,7 @@ determinant returns float
 
 |function-math-[]|
 
-.. _function-_at_math_c__c_[]_CI_eq_H_ls_math_c__c_float3x4_gr__Ci_C_c_C_l:
+.. _function-_at_math_c__c__lb__rb__CI_eq_H_ls_math_c__c_float3x4_gr__Ci_C_c_C_l:
 
 .. das:function:: operator [](m: float3x4 const implicit ==const; i: int const)
 
@@ -5888,7 +5872,7 @@ determinant returns float
 
 |function-math-[]|
 
-.. _function-_at_math_c__c_[]_I_eq_H_ls_math_c__c_float3x4_gr__Cu_C_c_C_l:
+.. _function-_at_math_c__c__lb__rb__I_eq_H_ls_math_c__c_float3x4_gr__Cu_C_c_C_l:
 
 .. das:function:: operator [](m: float3x4 implicit ==const; i: uint const)
 
@@ -5905,7 +5889,7 @@ determinant returns float
 
 |function-math-[]|
 
-.. _function-_at_math_c__c_[]_CI_eq_H_ls_math_c__c_float3x4_gr__Cu_C_c_C_l:
+.. _function-_at_math_c__c__lb__rb__CI_eq_H_ls_math_c__c_float3x4_gr__Cu_C_c_C_l:
 
 .. das:function:: operator [](m: float3x4 const implicit ==const; i: uint const)
 
@@ -5956,11 +5940,11 @@ quat_from_euler returns float4
 
 |function-math-quat_from_euler|
 
-.. _function-_at_math_c__c_euler_from_un_quat_Cf4:
+.. _function-_at_math_c__c_euler_from_quat_Cf4:
 
-.. das:function:: euler_from_un_quat(angles: float4 const)
+.. das:function:: euler_from_quat(angles: float4 const)
 
-euler_from_un_quat returns float3
+euler_from_quat returns float3
 
 +--------+-------------+
 +argument+argument type+
@@ -5969,7 +5953,71 @@ euler_from_un_quat returns float3
 +--------+-------------+
 
 
-|function-math-euler_from_un_quat|
+|function-math-euler_from_quat|
+
+.. _function-_at_math_c__c_quat_CIH_ls_math_c__c_float3x3_gr_:
+
+.. das:function:: quat(m: float3x3 const implicit)
+
+quat returns float4
+
++--------+-------------------------------------------------------------+
++argument+argument type                                                +
++========+=============================================================+
++m       + :ref:`math::float3x3 <handle-math-float3x3>`  const implicit+
++--------+-------------------------------------------------------------+
+
+
+|function-math-quat|
+
+.. _function-_at_math_c__c_quat_CIH_ls_math_c__c_float3x4_gr_:
+
+.. das:function:: quat(m: float3x4 const implicit)
+
+quat returns float4
+
++--------+-------------------------------------------------------------+
++argument+argument type                                                +
++========+=============================================================+
++m       + :ref:`math::float3x4 <handle-math-float3x4>`  const implicit+
++--------+-------------------------------------------------------------+
+
+
+|function-math-quat|
+
+.. _function-_at_math_c__c_quat_CIH_ls_math_c__c_float4x4_gr_:
+
+.. das:function:: quat(m: float4x4 const implicit)
+
+quat returns float4
+
++--------+-------------------------------------------------------------+
++argument+argument type                                                +
++========+=============================================================+
++m       + :ref:`math::float4x4 <handle-math-float4x4>`  const implicit+
++--------+-------------------------------------------------------------+
+
+
+|function-math-quat|
+
+.. _function-_at_math_c__c_quat_slerp_Cf_Cf4_Cf4:
+
+.. das:function:: quat_slerp(t: float const; a: float4 const; b: float4 const)
+
+quat_slerp returns float4
+
++--------+-------------+
++argument+argument type+
++========+=============+
++t       +float const  +
++--------+-------------+
++a       +float4 const +
++--------+-------------+
++b       +float4 const +
++--------+-------------+
+
+
+|function-math-quat_slerp|
 
 .. _function-_at_math_c__c_determinant_CIH_ls_math_c__c_float3x3_gr_:
 
@@ -5986,7 +6034,7 @@ determinant returns float
 
 |function-math-determinant|
 
-.. _function-_at_math_c__c_[]_I_eq_H_ls_math_c__c_float3x3_gr__Ci_C_c_C_l:
+.. _function-_at_math_c__c__lb__rb__I_eq_H_ls_math_c__c_float3x3_gr__Ci_C_c_C_l:
 
 .. das:function:: operator [](m: float3x3 implicit ==const; i: int const)
 
@@ -6003,7 +6051,7 @@ determinant returns float
 
 |function-math-[]|
 
-.. _function-_at_math_c__c_[]_CI_eq_H_ls_math_c__c_float3x3_gr__Ci_C_c_C_l:
+.. _function-_at_math_c__c__lb__rb__CI_eq_H_ls_math_c__c_float3x3_gr__Ci_C_c_C_l:
 
 .. das:function:: operator [](m: float3x3 const implicit ==const; i: int const)
 
@@ -6020,7 +6068,7 @@ determinant returns float
 
 |function-math-[]|
 
-.. _function-_at_math_c__c_[]_I_eq_H_ls_math_c__c_float3x3_gr__Cu_C_c_C_l:
+.. _function-_at_math_c__c__lb__rb__I_eq_H_ls_math_c__c_float3x3_gr__Cu_C_c_C_l:
 
 .. das:function:: operator [](m: float3x3 implicit ==const; i: uint const)
 
@@ -6037,7 +6085,7 @@ determinant returns float
 
 |function-math-[]|
 
-.. _function-_at_math_c__c_[]_CI_eq_H_ls_math_c__c_float3x3_gr__Cu_C_c_C_l:
+.. _function-_at_math_c__c__lb__rb__CI_eq_H_ls_math_c__c_float3x3_gr__Cu_C_c_C_l:
 
 .. das:function:: operator [](m: float3x3 const implicit ==const; i: uint const)
 

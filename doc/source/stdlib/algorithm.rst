@@ -75,7 +75,7 @@ Returns an iterator pointing to the first element in the range [first, last) tha
 
 .. _function-_at_algorithm_c__c_lower_bound_C1_ls_Y_ls_TT_gr_._gr_A_Ci_Ci_CY_ls_TT_gr_L_CN_ls_a;b_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_b_gr__builtin_:
 
-.. das:function:: lower_bound(a: array<auto(TT)> const; f: int const; l: int const; value: TT const; less: block<(a:TT const -&;b:TT const -&):bool> const)
+.. das:function:: lower_bound(a: array<auto(TT)> const; f: int const; l: int const; value: TT const; less: block<(a:TT const;b:TT const):bool> const)
 
 lower_bound returns auto
 
@@ -98,7 +98,7 @@ Returns an iterator pointing to the first element in the range [first, last) tha
 
 .. _function-_at_algorithm_c__c_lower_bound_C1_ls_Y_ls_TT_gr_._gr_A_CY_ls_TT_gr_L_CN_ls_a;b_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_b_gr__builtin_:
 
-.. das:function:: lower_bound(a: array<auto(TT)> const; value: TT const; less: block<(a:TT const -&;b:TT const -&):bool> const)
+.. das:function:: lower_bound(a: array<auto(TT)> const; value: TT const; less: block<(a:TT const;b:TT const):bool> const)
 
 lower_bound returns auto
 
@@ -157,7 +157,7 @@ Array a must be sorted.
 
 .. _function-_at_algorithm_c__c_binary_search_C1_ls_Y_ls_TT_gr_._gr_A_CY_ls_TT_gr_L_CN_ls_a;b_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_b_gr__builtin_:
 
-.. das:function:: binary_search(a: array<auto(TT)> const; val: TT const; less: block<(a:TT const -&;b:TT const -&):bool> const)
+.. das:function:: binary_search(a: array<auto(TT)> const; val: TT const; less: block<(a:TT const;b:TT const):bool> const)
 
 binary_search returns auto
 
@@ -177,7 +177,7 @@ Array a must be sorted.
 
 .. _function-_at_algorithm_c__c_binary_search_C1_ls_Y_ls_TT_gr_._gr_A_Ci_Ci_CY_ls_TT_gr_L_CN_ls_a;b_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_b_gr__builtin_:
 
-.. das:function:: binary_search(a: array<auto(TT)> const; f: int const; last: int const; val: TT const; less: block<(a:TT const -&;b:TT const -&):bool> const)
+.. das:function:: binary_search(a: array<auto(TT)> const; f: int const; last: int const; val: TT const; less: block<(a:TT const;b:TT const):bool> const)
 
 binary_search returns auto
 
@@ -239,7 +239,7 @@ Returns an iterator pointing to the first element in the range [first, last) tha
 
 .. _function-_at_algorithm_c__c_lower_bound_C._Ci_Ci_CY_ls_TT_gr_._CN_ls_a;b_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_b_gr__builtin__%_ls_IsAnyArrayMacro_c_expect_any_array(a_eq_true)_gr_:
 
-.. das:function:: lower_bound(a: auto const; f: int const; l: int const; val: auto(TT) const; less: block<(a:TT const -&;b:TT const -&):bool> const)
+.. das:function:: lower_bound(a: auto const; f: int const; l: int const; val: auto(TT) const; less: block<(a:TT const;b:TT const):bool> const)
 
 lower_bound returns auto
 
@@ -262,7 +262,7 @@ Returns an iterator pointing to the first element in the range [first, last) tha
 
 .. _function-_at_algorithm_c__c_lower_bound_C._CY_ls_TT_gr_._CN_ls_a;b_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_b_gr__builtin__%_ls_IsAnyArrayMacro_c_expect_any_array(a_eq_true)_gr_:
 
-.. das:function:: lower_bound(a: auto const; val: auto(TT) const; less: block<(a:TT const -&;b:TT const -&):bool> const)
+.. das:function:: lower_bound(a: auto const; val: auto(TT) const; less: block<(a:TT const;b:TT const):bool> const)
 
 lower_bound returns auto
 
@@ -321,7 +321,7 @@ Array a must be sorted.
 
 .. _function-_at_algorithm_c__c_binary_search_C._CY_ls_TT_gr_._CN_ls_a;b_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_b_gr__builtin__%_ls_IsAnyArrayMacro_c_expect_any_array(a_eq_true)_gr_:
 
-.. das:function:: binary_search(a: auto const; val: auto(TT) const; less: block<(a:TT const -&;b:TT const -&):bool> const)
+.. das:function:: binary_search(a: auto const; val: auto(TT) const; less: block<(a:TT const;b:TT const):bool> const)
 
 binary_search returns auto
 
@@ -341,7 +341,7 @@ Array a must be sorted.
 
 .. _function-_at_algorithm_c__c_binary_search_C._Ci_Ci_CY_ls_TT_gr_._CN_ls_a;b_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_b_gr__builtin__%_ls_IsAnyArrayMacro_c_expect_any_array(a_eq_true)_gr_:
 
-.. das:function:: binary_search(a: auto const; f: int const; last: int const; val: auto(TT) const; less: block<(a:TT const -&;b:TT const -&):bool> const)
+.. das:function:: binary_search(a: auto const; f: int const; last: int const; val: auto(TT) const; less: block<(a:TT const;b:TT const):bool> const)
 
 binary_search returns auto
 
@@ -508,5 +508,73 @@ Topological sort of a graph.
 Each node has an id, and set (table with no values) of dependencies.
 Dependency `before` represents a link from a node, which should appear in the sorted list before the node.
 Returns a sorted list of nodes.
+
+.. _function-_at_algorithm_c__c_intersection_C1_ls_Y_ls_TT_gr_._gr_2_ls_v_gr_T_C1_ls_Y_ls_TT_gr_._gr_2_ls_v_gr_T:
+
+.. das:function:: intersection(a: table<auto(TT);void> const; b: table<auto(TT);void> const)
+
+intersection returns table<TT;void>
+
++--------+--------------------------+
++argument+argument type             +
++========+==========================+
++a       +table<auto(TT);void> const+
++--------+--------------------------+
++b       +table<auto(TT);void> const+
++--------+--------------------------+
+
+
+Returns the intersection of two sets
+
+.. _function-_at_algorithm_c__c_union_C1_ls_Y_ls_TT_gr_._gr_2_ls_v_gr_T_C1_ls_Y_ls_TT_gr_._gr_2_ls_v_gr_T:
+
+.. das:function:: union(a: table<auto(TT);void> const; b: table<auto(TT);void> const)
+
+union returns table<TT;void>
+
++--------+--------------------------+
++argument+argument type             +
++========+==========================+
++a       +table<auto(TT);void> const+
++--------+--------------------------+
++b       +table<auto(TT);void> const+
++--------+--------------------------+
+
+
+Returns the union of two sets
+
+.. _function-_at_algorithm_c__c_difference_C1_ls_Y_ls_TT_gr_._gr_2_ls_v_gr_T_C1_ls_Y_ls_TT_gr_._gr_2_ls_v_gr_T:
+
+.. das:function:: difference(a: table<auto(TT);void> const; b: table<auto(TT);void> const)
+
+difference returns table<TT;void>
+
++--------+--------------------------+
++argument+argument type             +
++========+==========================+
++a       +table<auto(TT);void> const+
++--------+--------------------------+
++b       +table<auto(TT);void> const+
++--------+--------------------------+
+
+
+Returns the difference of two sets
+
+.. _function-_at_algorithm_c__c_identical_C1_ls_Y_ls_TT_gr_._gr_2_ls_v_gr_T_C1_ls_Y_ls_TT_gr_._gr_2_ls_v_gr_T:
+
+.. das:function:: identical(a: table<auto(TT);void> const; b: table<auto(TT);void> const)
+
+identical returns bool
+
++--------+--------------------------+
++argument+argument type             +
++========+==========================+
++a       +table<auto(TT);void> const+
++--------+--------------------------+
++b       +table<auto(TT);void> const+
++--------+--------------------------+
+
+
+Returns true if the two sets are identical
 
 
