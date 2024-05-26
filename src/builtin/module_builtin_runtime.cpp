@@ -748,6 +748,22 @@ namespace das
         bytes[1] = ctx.stringHeap->bytesAllocated();
     }
 
+    urange64 heap_allocation_stats ( Context * context ) {
+        return urange64 ( context->heap->getTotalBytesAllocated(), context->heap->getTotalBytesDeleted() );
+    }
+
+    uint64_t heap_allocation_count ( Context * context ) {
+        return context->heap->getTotalAllocations();
+    }
+
+    urange64 string_heap_allocation_stats ( Context * context ) {
+        return urange64 ( context->stringHeap->getTotalBytesAllocated(), context->stringHeap->getTotalBytesDeleted() );
+    }
+
+    uint64_t string_heap_allocation_count ( Context * context ) {
+        return context->stringHeap->getTotalAllocations();
+    }
+
     uint64_t heap_bytes_allocated ( Context * context ) {
         return context->heap->bytesAllocated();
     }
@@ -1584,6 +1600,18 @@ namespace das
             SideEffects::modifyArgument, "set_variant_index")
                 ->args({"variant","index"})->unsafeOperation = true;
         // heap
+        addExtern<DAS_BIND_FUN(heap_allocation_stats)>(*this, lib, "heap_allocation_stats",
+            SideEffects::modifyExternal, "heap_allocation_stats")
+                ->arg("context");
+        addExtern<DAS_BIND_FUN(heap_allocation_count)>(*this, lib, "heap_allocation_count",
+            SideEffects::modifyExternal, "heap_allocation_count")
+                ->arg("context");
+        addExtern<DAS_BIND_FUN(string_heap_allocation_stats)>(*this, lib, "string_heap_allocation_stats",
+            SideEffects::modifyExternal, "string_heap_allocation_stats")
+                ->arg("context");
+        addExtern<DAS_BIND_FUN(string_heap_allocation_count)>(*this, lib, "string_heap_allocation_count",
+            SideEffects::modifyExternal, "string_heap_allocation_count")
+                ->arg("context");
         addExtern<DAS_BIND_FUN(heap_bytes_allocated)>(*this, lib, "heap_bytes_allocated",
             SideEffects::modifyExternal, "heap_bytes_allocated")
                 ->arg("context");
