@@ -145,6 +145,9 @@ namespace das {
         virtual void setGrowFunction ( CustomGrowFunction && fun ) = 0;
         __forceinline void setLimit ( uint64_t l ) { limit = l; }
         __forceinline uint64_t getLimit() const { return limit; }
+        __forceinline uint64_t getTotalAllocations() const { return totalAllocations; }
+        __forceinline uint64_t getTotalBytesAllocated() const { return totalBytesAllocated; }
+        __forceinline uint64_t getTotalBytesDeleted() const { return totalBytesDeleted; }
     public:
 #if DAS_TRACK_ALLOCATIONS
         virtual void mark_location ( void *, LineInfo * )  {}
@@ -159,6 +162,9 @@ namespace das {
         void   freeIterator ( char * ptr );
     protected:
         uint64_t limit = 0;
+        uint64_t totalAllocations = 0;
+        uint64_t totalBytesAllocated = 0;
+        uint64_t totalBytesDeleted = 0;
     };
 
     struct StrHashEntry {
@@ -231,13 +237,18 @@ namespace das {
         }
 #else
     public:
-        virtual void free ( char * ptr, uint32_t size ) override { model.free(ptr,size); }
+        virtual void free ( char * ptr, uint32_t size ) override {
+            totalBytesDeleted += size;
+            model.free(ptr,size);
+        }
         virtual void sweep() override { model.sweep(); }
 #endif
     public:
         PersistentHeapAllocator() {}
         virtual char * allocate ( uint32_t size ) override {
             if ( limit==0 || model.bytesAllocated()+size<=limit ) {
+                totalAllocations ++;
+                totalBytesAllocated += size;
                 return model.allocate(size);
             } else {
                 return nullptr;
@@ -245,6 +256,8 @@ namespace das {
         }
         virtual char * reallocate ( char * ptr, uint32_t oldSize, uint32_t newSize ) override {
             if ( limit==0 || model.bytesAllocated()+newSize-oldSize<=limit ) {
+                totalAllocations ++;
+                totalBytesAllocated += newSize-oldSize;
                 return model.reallocate(ptr,oldSize,newSize);
             } else {
                 return nullptr;
@@ -275,14 +288,21 @@ namespace das {
         LinearHeapAllocator() {}
         virtual char * allocate ( uint32_t size ) override {
             if ( limit==0 || model.bytesAllocated()+size<=limit ) {
+                totalAllocations ++;
+                totalBytesAllocated += size;
                 return model.allocate(size);
             } else {
                 return nullptr;
             }
         }
-        virtual void free ( char * ptr, uint32_t size ) override { model.free(ptr,size); }
+        virtual void free ( char * ptr, uint32_t size ) override {
+            totalBytesDeleted += size;
+            model.free(ptr,size);
+        }
         virtual char * reallocate ( char * ptr, uint32_t oldSize, uint32_t newSize ) override {
             if ( limit==0 || model.bytesAllocated()+newSize-oldSize<=limit ) {
+                totalAllocations ++;
+                totalBytesAllocated += newSize-oldSize;
                 return model.reallocate(ptr,oldSize,newSize);
             } else {
                 return nullptr;
@@ -329,14 +349,21 @@ namespace das {
         PersistentStringAllocator() { model.alignMask = 3; }
         virtual char * allocate ( uint32_t size ) override {
             if ( limit==0 || model.bytesAllocated()+size<=limit ) {
+                totalAllocations ++;
+                totalBytesAllocated += size;
                 return model.allocate(size);
             } else {
                 return nullptr;
             }
         }
-        virtual void free ( char * ptr, uint32_t size ) override { model.free(ptr,size); }
+        virtual void free ( char * ptr, uint32_t size ) override {
+            totalBytesDeleted += size;
+            model.free(ptr,size);
+        }
         virtual char * reallocate ( char * ptr, uint32_t oldSize, uint32_t newSize ) override {
             if ( limit==0 || model.bytesAllocated()+newSize-oldSize<=limit ) {
+                totalAllocations ++;
+                totalBytesAllocated += newSize-oldSize;
                 return model.reallocate(ptr,oldSize,newSize);
             } else {
                 return nullptr;
@@ -369,14 +396,21 @@ namespace das {
         LinearStringAllocator() { model.alignMask = 3; }
         virtual char * allocate ( uint32_t size ) override {
             if ( limit==0 || model.bytesAllocated()+size<=limit ) {
+                totalAllocations ++;
+                totalBytesAllocated += size;
                 return model.allocate(size);
             } else {
                 return nullptr;
             }
         }
-        virtual void free ( char * ptr, uint32_t size ) override { model.free(ptr,size); }
+        virtual void free ( char * ptr, uint32_t size ) override {
+            totalBytesDeleted += size;
+            model.free(ptr,size);
+        }
         virtual char * reallocate ( char * ptr, uint32_t oldSize, uint32_t newSize ) override {
             if ( limit==0 || model.bytesAllocated()+newSize-oldSize<=limit ) {
+                totalAllocations ++;
+                totalBytesAllocated += newSize-oldSize;
                 return model.reallocate(ptr,oldSize,newSize);
             } else {
                 return nullptr;

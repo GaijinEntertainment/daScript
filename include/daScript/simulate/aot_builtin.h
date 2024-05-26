@@ -27,6 +27,10 @@ namespace das {
     int builtin_table_capacity ( const Table & arr );
     void builtin_table_clear ( Table & arr, Context * context, LineInfoArg * at );
     void heap_stats ( Context & context, uint64_t * bytes );
+    urange64 heap_allocation_stats ( Context * context );
+    uint64_t heap_allocation_count ( Context * context );
+    urange64 string_heap_allocation_stats ( Context * context );
+    uint64_t string_heap_allocation_count ( Context * context );
     uint64_t heap_bytes_allocated ( Context * context );
     int32_t heap_depth ( Context * context );
     uint64_t string_heap_bytes_allocated ( Context * context );
