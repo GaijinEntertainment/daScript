@@ -1207,11 +1207,11 @@ namespace das {
                 ss << name << "(";
                 bool first = true;
                 for ( auto &it : types ) {
-                    ss << it->describe();
                     if ( !first ) {
                         ss << ", ";
                     }
                     first = false;
+                    ss << it->describe();
                 }
                 ss << ")\n";
                 if ( func ) {
