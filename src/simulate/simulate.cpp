@@ -1618,18 +1618,18 @@ namespace das
         auto it = g_DebugAgents.find(category);
         if ( it != g_DebugAgents.end() ) {
             DebugAgent * oldAgentPtr = it->second.debugAgent.get();
-            for ( auto & ap : g_DebugAgents ) {
-                ap.second.debugAgent->onUninstall(oldAgentPtr);
-            }
+            for_each_debug_agent([&](const DebugAgentPtr & pAgent){
+                pAgent->onUninstall(oldAgentPtr);
+            });
         }
         g_DebugAgents[category] = {
             newAgent,
             context->shared_from_this()
         };
         DebugAgent * newAgentPtr = newAgent.get();
-        for ( auto & ap : g_DebugAgents ) {
-            ap.second.debugAgent->onInstall(newAgentPtr);
-        }
+        for_each_debug_agent([&](const DebugAgentPtr & pAgent){
+            pAgent->onInstall(newAgentPtr);
+        });
     }
 
     Context & getDebugAgentContext ( const char * category, LineInfoArg * at, Context * context ) {
@@ -1679,9 +1679,12 @@ namespace das
 
     void shutdownDebugAgent() {
         for_each_debug_agent([&](const DebugAgentPtr & pAgent){
-           for ( auto & ap : g_DebugAgents ) {
-               ap.second.debugAgent->onUninstall(pAgent.get());
-           }
+            if ( daScriptEnvironment::bound && daScriptEnvironment::bound->g_threadLocalDebugAgent.debugAgent ) {
+                daScriptEnvironment::bound->g_threadLocalDebugAgent.debugAgent->onUninstall(pAgent.get());
+            }
+            for ( auto & ap : g_DebugAgents ) {
+                ap.second.debugAgent->onUninstall(pAgent.get());
+            }
         });
         das_safe_map<string,DebugAgentInstance> agents;
         {
