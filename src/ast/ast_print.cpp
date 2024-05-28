@@ -445,7 +445,10 @@ namespace das {
     // string builder
         virtual void preVisit ( ExprStringBuilder * expr ) override {
             Visitor::preVisit(expr);
-            ss << "string_builder(";
+            ss << "string_builder";
+            if ( expr->isTempString )
+                ss << "_temp";
+            ss << "(";
         }
         virtual ExpressionPtr visitStringBuilderElement ( ExprStringBuilder * sb, Expression * expr, bool last ) override {
             if ( !last ) ss << ", ";
