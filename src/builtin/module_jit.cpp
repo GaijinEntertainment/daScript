@@ -110,7 +110,7 @@ extern "C" {
         auto length = writer.tellp();
         if ( length ) {
             auto str = context.allocateString(writer.c_str(), uint32_t(length),&call->debugInfo);
-            context.freeTempString(str);
+            context.freeTempString(str,&call->debugInfo);
             return str;
         } else {
             return nullptr;
@@ -127,7 +127,7 @@ extern "C" {
     }
 
     void * jit_alloc_heap ( uint32_t bytes, Context * context ) {
-        auto ptr = context->heap->allocate(bytes);
+        auto ptr = context->allocate(bytes);
         if ( !ptr ) context->throw_out_of_memory(false, bytes);
         return ptr;
     }
@@ -137,7 +137,7 @@ extern "C" {
     }
 
     void jit_free_heap ( void * bytes, uint32_t size, Context * context ) {
-        context->heap->free((char *)bytes,size);
+        context->free((char *)bytes,size);
     }
 
     void jit_free_persistent ( void * bytes, Context * ) {

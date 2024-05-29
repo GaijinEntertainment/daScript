@@ -15,7 +15,7 @@ namespace das {
     }
 #endif
 
-    char * AnyHeapAllocator::allocateIterator ( uint32_t size, const char * name, LineInfo * info ) {
+    char * AnyHeapAllocator::allocateIterator ( uint32_t size, const char * name, const LineInfo * info ) {
         char * data = allocate(size + 16);
         if ( !data ) return nullptr;
         *((uint32_t *)data) = size;

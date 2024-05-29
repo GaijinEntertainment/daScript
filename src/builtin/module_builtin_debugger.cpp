@@ -177,6 +177,31 @@ namespace debugapi {
                 context->unlock();
             }
         }
+        virtual void onAllocate ( Context * ctx, void * data, uint64_t size, const LineInfo & at ) override {
+            if ( auto fnOnAllocate = get_onAllocate(classPtr) ) {
+                invoke_onAllocate(context,fnOnAllocate,classPtr,*ctx,data,size,at);
+            }
+        }
+        virtual void onReallocate ( Context * ctx, void * data, uint64_t oldSize, void * newData, uint64_t newSize, const LineInfo & at ) override {
+            if ( auto fnOnReallocate = get_onReallocate(classPtr) ) {
+                invoke_onReallocate(context,fnOnReallocate,classPtr,*ctx,data,oldSize,newData,newSize,at);
+            }
+        }
+        virtual void onFree ( Context * ctx, void * data, const LineInfo & at ) override {
+            if ( auto fnOnFree = get_onFree(classPtr) ) {
+                invoke_onFree(context,fnOnFree,classPtr,*ctx,data,at);
+            }
+        }
+        virtual void onAllocateString ( Context * ctx, void * data, uint64_t size, const LineInfo & at ) override {
+            if ( auto fnOnAllocateString = get_onAllocateString(classPtr) ) {
+                invoke_onAllocateString(context,fnOnAllocateString,classPtr,*ctx,data,size,at);
+            }
+        }
+        virtual void onFreeString ( Context * ctx, void * data, const LineInfo & at ) override {
+            if ( auto fnOnFreeString = get_onFreeString(classPtr) ) {
+                invoke_onFreeString(context,fnOnFreeString,classPtr,*ctx,data,at);
+            }
+        }
     public:
         void *              classPtr = nullptr;
         const StructInfo *  classInfo = nullptr;
@@ -1085,6 +1110,10 @@ namespace debugapi {
         return cast<void *>::from(ctx->getVariable(vidx));
     }
 
+    void instrument_context_allocations ( Context & ctx, bool isInstrumenting ) {
+        ctx.instrumentAllocations = isInstrumenting;
+    }
+
     void instrument_context ( Context & ctx, bool isInstrumenting, const TBlock<bool,LineInfo> & blk, Context * context, LineInfoArg * line ) {
         ctx.instrumentContextNode(blk, isInstrumenting, context, line);
     }
@@ -1223,6 +1252,9 @@ namespace debugapi {
                 SideEffects::modifyExternal, "dapiReportContextState")
                     ->args({"context","category","name","info","data"});
             // instrumentation
+            addExtern<DAS_BIND_FUN(instrument_context_allocations)>(*this, lib,  "instrument_context_allocations",
+                SideEffects::modifyExternal, "instrument_context_allocations")
+                    ->args({"context","isInstrumenting"});
             addExtern<DAS_BIND_FUN(instrument_context)>(*this, lib,  "instrument_node",
                 SideEffects::modifyExternal, "instrument_context")
                     ->args({"context","isInstrumenting","block","context","line"});

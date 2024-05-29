@@ -176,7 +176,7 @@ namespace das
 
             }
             uint32_t memSize = uint32_t(memSize64);
-            newTab.data = (char *) context->heap->allocate(memSize);
+            newTab.data = (char *) context->allocate(memSize);
             if ( !newTab.data ) {
                 context->throw_out_of_memory(false, memSize);
                 return false;
@@ -210,7 +210,7 @@ namespace das
             }
             if (tab.capacity) {
                 uint32_t oldSize = tab.capacity*(valueTypeSize + sizeof(KeyType) + sizeof(TableHashKey));
-                context->heap->free(tab.data, oldSize);
+                context->free(tab.data, oldSize);
             }
             swap ( newTab, tab );
             return true;

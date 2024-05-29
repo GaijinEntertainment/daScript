@@ -3,7 +3,7 @@
 #include "daScript/ast/ast_typefactory.h"
 
 namespace das {
-    void delete_string ( char * & str, Context * context );
+    void delete_string ( char * & str, Context * context, LineInfoArg * at );
 
     char * builtin_build_string ( const TBlock<void,StringBuilderWriter> & block, Context * context, LineInfoArg * lineinfo );
     uint64_t builtin_build_hash ( const TBlock<void,StringBuilderWriter> & block, Context * context, LineInfoArg * at );
