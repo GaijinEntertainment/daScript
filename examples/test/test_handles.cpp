@@ -187,7 +187,7 @@ vec4f new_and_init ( Context & context, SimNode_CallBase * call, vec4f * ) {
         return v_zero();
     }
     auto size = getTypeSize(typeInfo);
-    auto data = context.heap->allocate(size);
+    auto data = context.allocate(size, &call->debugInfo);
     if ( typeInfo->structType && typeInfo->structType->init_mnh ) {
         auto fn = context.fnByMangledName(typeInfo->structType->init_mnh);
         context.callWithCopyOnReturn(fn, nullptr, data, 0);

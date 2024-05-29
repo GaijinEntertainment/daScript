@@ -150,15 +150,15 @@ namespace das {
         __forceinline uint64_t getTotalBytesDeleted() const { return totalBytesDeleted; }
     public:
 #if DAS_TRACK_ALLOCATIONS
-        virtual void mark_location ( void *, LineInfo * )  {}
+        virtual void mark_location ( void *, const LineInfo * )  {}
         virtual  void mark_comment ( void *, const char * ) {}
 #else
-        __forceinline void mark_location ( void *, LineInfo * ) {}
+        __forceinline void mark_location ( void *, const LineInfo * ) {}
         __forceinline void mark_comment ( void *, const char * ) {}
 #endif
     public:
         char * allocateName ( const string & name );
-        char * allocateIterator ( uint32_t size, const char * name="", LineInfo * info=nullptr );
+        char * allocateIterator ( uint32_t size, const char * name="", const LineInfo * info=nullptr );
         void   freeIterator ( char * ptr );
     protected:
         uint64_t limit = 0;
@@ -276,7 +276,7 @@ namespace das {
         virtual int32_t getInitialSize() const override { return model.initialSize; }
         virtual void setGrowFunction ( CustomGrowFunction && fun ) override { model.customGrow = fun; };
 #if DAS_TRACK_ALLOCATIONS
-        virtual void mark_location ( void * ptr, LineInfo * at ) override  { model.mark_location(ptr,at); };
+        virtual void mark_location ( void * ptr, const LineInfo * at ) override  { model.mark_location(ptr,at); };
         virtual  void mark_comment ( void * ptr, const char * what ) override { model.mark_comment(ptr,what); };
 #endif
     protected:
@@ -384,7 +384,7 @@ namespace das {
         virtual int32_t getInitialSize() const override { return model.initialSize; }
         virtual void setGrowFunction ( CustomGrowFunction && fun ) override { model.customGrow = fun; };
 #if DAS_TRACK_ALLOCATIONS
-        virtual void mark_location ( void * ptr, LineInfo * at ) override { model.mark_location(ptr,at); };
+        virtual void mark_location ( void * ptr, const LineInfo * at ) override { model.mark_location(ptr,at); };
         virtual  void mark_comment ( void * ptr, const char * what ) override { model.mark_comment(ptr,what); };
 #endif
     protected:

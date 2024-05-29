@@ -653,7 +653,7 @@ namespace das
             }
         }
         virtual void close ( Context & context, char * ) override {
-            context.heap->freeIterator((char *)this);
+            context.freeIterator((char *)this);
         }
         EnumInfo *  info = nullptr;
         int32_t     count = 0;
@@ -673,21 +673,21 @@ namespace das
             return true;
         }
         virtual void close ( Context & context, char * ) override {
-            context.heap->freeIterator((char *)this);
+            context.freeIterator((char *)this);
         }
         int32_t start = 0;
         int32_t step = 0;
     };
 
     TSequence<int32_t> builtin_count ( int32_t start, int32_t step, Context * context ) {
-        char * iter = context->heap->allocateIterator(sizeof(CountIterator), "count iterator");
+        char * iter = context->allocateIterator(sizeof(CountIterator), "count iterator");
         if ( !iter ) context->throw_out_of_memory(false, sizeof(CountIterator)+16);
         new (iter) CountIterator(start, step);
         return TSequence<int>((Iterator *)iter);
     }
 
     TSequence<uint32_t> builtin_ucount ( uint32_t start, uint32_t step, Context * context ) {
-        char * iter = context->heap->allocateIterator(sizeof(CountIterator), "ucount iterator");
+        char * iter = context->allocateIterator(sizeof(CountIterator), "ucount iterator");
         if ( !iter ) context->throw_out_of_memory(false, sizeof(CountIterator)+16);
         new (iter) CountIterator(start, step);
         return TSequence<int>((Iterator *)iter);
@@ -869,21 +869,21 @@ namespace das
     }
 
     void builtin_make_good_array_iterator ( Sequence & result, const Array & arr, int stride, Context * context ) {
-        char * iter = context->heap->allocateIterator(sizeof(GoodArrayIterator), "array<> iterator");
+        char * iter = context->allocateIterator(sizeof(GoodArrayIterator), "array<> iterator");
         if ( !iter ) context->throw_out_of_memory(false, sizeof(GoodArrayIterator)+16);
         new (iter) GoodArrayIterator((Array *)&arr, stride);
         result = { (Iterator *) iter };
     }
 
     void builtin_make_fixed_array_iterator ( Sequence & result, void * data, int size, int stride, Context * context ) {
-        char * iter = context->heap->allocateIterator(sizeof(FixedArrayIterator), "fixed array iterator");
+        char * iter = context->allocateIterator(sizeof(FixedArrayIterator), "fixed array iterator");
         if ( !iter ) context->throw_out_of_memory(false, sizeof(FixedArrayIterator)+16);
         new (iter) FixedArrayIterator((char *)data, size, stride);
         result = { (Iterator *) iter };
     }
 
     void builtin_make_range_iterator ( Sequence & result, range rng, Context * context ) {
-        char * iter = context->heap->allocateIterator(sizeof(RangeIterator<range>), "range iterator");
+        char * iter = context->allocateIterator(sizeof(RangeIterator<range>), "range iterator");
         if ( !iter ) context->throw_out_of_memory(false, sizeof(RangeIterator<range>)+16);
         new (iter) RangeIterator<range>(rng);
         result = { (Iterator *) iter };
@@ -904,17 +904,17 @@ namespace das
         char * iter = nullptr;
         switch ( tinfo->type ) {
         case Type::tEnumeration:
-            iter = context.heap->allocateIterator(sizeof(EnumIterator<int32_t>), "enum iterator");
+            iter = context.allocateIterator(sizeof(EnumIterator<int32_t>), "enum iterator");
             if ( !iter ) context.throw_out_of_memory(false, sizeof(EnumIterator<int32_t>)+16, &call->debugInfo);
             new (iter) EnumIterator<int32_t>(einfo);
             break;
         case Type::tEnumeration8:
-            iter = context.heap->allocateIterator(sizeof(EnumIterator<int8_t>), "enum8 iterator");
+            iter = context.allocateIterator(sizeof(EnumIterator<int8_t>), "enum8 iterator");
             if ( !iter ) context.throw_out_of_memory(false, sizeof(EnumIterator<int8_t>)+16, &call->debugInfo);
             new (iter) EnumIterator<int8_t>(einfo);
             break;
         case Type::tEnumeration16:
-            iter = context.heap->allocateIterator(sizeof(EnumIterator<int16_t>), "enum16 iterator");
+            iter = context.allocateIterator(sizeof(EnumIterator<int16_t>), "enum16 iterator");
             if ( !iter ) context.throw_out_of_memory(false, sizeof(EnumIterator<int16_t>)+16, &call->debugInfo);
             new (iter) EnumIterator<int16_t>(einfo);
             break;
@@ -927,7 +927,7 @@ namespace das
     }
 
     void builtin_make_string_iterator ( Sequence & result, char * str, Context * context ) {
-        char * iter = context->heap->allocateIterator(sizeof(StringIterator), "string iterator");
+        char * iter = context->allocateIterator(sizeof(StringIterator), "string iterator");
         if ( !iter ) context->throw_out_of_memory(false, sizeof(StringIterator)+16);
         new (iter) StringIterator(str);
         result = { (Iterator *) iter };
@@ -937,12 +937,12 @@ namespace das
         virtual bool first ( Context &, char * ) override { return false; }
         virtual bool next  ( Context &, char * ) override { return false; }
         virtual void close ( Context & context, char * ) override {
-            context.heap->freeIterator((char *)this);
+            context.freeIterator((char *)this);
         }
     };
 
     void builtin_make_nil_iterator ( Sequence & result, Context * context ) {
-        char * iter = context->heap->allocateIterator(sizeof(NilIterator), "nil iterator");
+        char * iter = context->allocateIterator(sizeof(NilIterator), "nil iterator");
         if ( !iter ) context->throw_out_of_memory(false, sizeof(NilIterator)+16);
         new (iter) NilIterator();
         result = { (Iterator *) iter };
@@ -985,7 +985,7 @@ namespace das
             };
             auto flags = context.stopFlags; // need to save stop flags, we can be in the middle of some return or something
             context.call(finFunc, argValues, 0);
-            context.heap->freeIterator((char *)this);
+            context.freeIterator((char *)this);
             context.stopFlags = flags;
         }
         virtual void walk ( DataWalker & walker ) override {
@@ -1000,7 +1000,7 @@ namespace das
     };
 
     void builtin_make_lambda_iterator ( Sequence & result, const Lambda lambda, int stride, Context * context ) {
-        char * iter = context->heap->allocateIterator(sizeof(LambdaIterator), "lambda iterator");
+        char * iter = context->allocateIterator(sizeof(LambdaIterator), "lambda iterator");
         if ( !iter ) context->throw_out_of_memory(false, sizeof(LambdaIterator)+16);
         new (iter) LambdaIterator(*context, lambda, stride);
         result = { (Iterator *) iter };
@@ -1025,7 +1025,7 @@ namespace das
         if ( dim.data ) {
             if ( !dim.lock || dim.hopeless ) {
                 uint32_t oldSize = dim.capacity*szt;
-                __context__->heap->free(dim.data, oldSize);
+                __context__->free(dim.data, oldSize, at);
             } else {
                 __context__->throw_error_at(at, "can't delete locked array");
             }
@@ -1042,7 +1042,7 @@ namespace das
         if ( tab.data ) {
             if ( !tab.lock || tab.hopeless ) {
                 uint32_t oldSize = tab.capacity*(szk+szv+sizeof(TableHashKey));
-                __context__->heap->free(tab.data, oldSize);
+                __context__->free(tab.data, oldSize, at);
             } else {
                 __context__->throw_error_at(at, "can't delete locked table");
             }

@@ -920,9 +920,14 @@ protected:
     __fn_onBeforeGC = 14,
     __fn_onAfterGC = 15,
     __fn_onUserCommand = 16,
+    __fn_onAllocate = 17,
+    __fn_onReallocate = 18,
+    __fn_onFree = 19,
+    __fn_onAllocateString = 20,
+    __fn_onFreeString = 21,
   };
 protected:
-  int _das_class_method_offset[17];
+  int _das_class_method_offset[22];
 public:
   DapiDebugAgent_Adapter ( const StructInfo * info ) {
       _das_class_method_offset[__fn_onInstall] = info->fields[2]->offset;
@@ -942,6 +947,11 @@ public:
       _das_class_method_offset[__fn_onBeforeGC] = info->fields[16]->offset;
       _das_class_method_offset[__fn_onAfterGC] = info->fields[17]->offset;
       _das_class_method_offset[__fn_onUserCommand] = info->fields[18]->offset;
+      _das_class_method_offset[__fn_onAllocate] = info->fields[19]->offset;
+      _das_class_method_offset[__fn_onReallocate] = info->fields[20]->offset;
+      _das_class_method_offset[__fn_onFree] = info->fields[21]->offset;
+      _das_class_method_offset[__fn_onAllocateString] = info->fields[22]->offset;
+      _das_class_method_offset[__fn_onFreeString] = info->fields[23]->offset;
   }
   __forceinline Func get_onInstall ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_onInstall]);
@@ -1095,6 +1105,51 @@ public:
       <void *,char * const >
         (__context__,nullptr,__funcCall__,
           self,command);
+  }
+  __forceinline Func get_onAllocate ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_onAllocate]);
+  }
+  __forceinline void invoke_onAllocate ( Context * __context__, Func __funcCall__, void * self, Context & ctx, void * const  data, uint64_t size, LineInfo const  & at ) const {
+    das_invoke_function<void>::invoke
+      <void *,Context &,void * const ,uint64_t,LineInfo const  &>
+        (__context__,nullptr,__funcCall__,
+          self,ctx,data,size,at);
+  }
+  __forceinline Func get_onReallocate ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_onReallocate]);
+  }
+  __forceinline void invoke_onReallocate ( Context * __context__, Func __funcCall__, void * self, Context & ctx, void * const  data, uint64_t size, void * const  newData, uint64_t newSize, LineInfo const  & at ) const {
+    das_invoke_function<void>::invoke
+      <void *,Context &,void * const ,uint64_t,void * const ,uint64_t,LineInfo const  &>
+        (__context__,nullptr,__funcCall__,
+          self,ctx,data,size,newData,newSize,at);
+  }
+  __forceinline Func get_onFree ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_onFree]);
+  }
+  __forceinline void invoke_onFree ( Context * __context__, Func __funcCall__, void * self, Context & ctx, void * const  data, LineInfo const  & at ) const {
+    das_invoke_function<void>::invoke
+      <void *,Context &,void * const ,LineInfo const  &>
+        (__context__,nullptr,__funcCall__,
+          self,ctx,data,at);
+  }
+  __forceinline Func get_onAllocateString ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_onAllocateString]);
+  }
+  __forceinline void invoke_onAllocateString ( Context * __context__, Func __funcCall__, void * self, Context & ctx, void * const  data, uint64_t size, LineInfo const  & at ) const {
+    das_invoke_function<void>::invoke
+      <void *,Context &,void * const ,uint64_t,LineInfo const  &>
+        (__context__,nullptr,__funcCall__,
+          self,ctx,data,size,at);
+  }
+  __forceinline Func get_onFreeString ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_onFreeString]);
+  }
+  __forceinline void invoke_onFreeString ( Context * __context__, Func __funcCall__, void * self, Context & ctx, void * const  data, LineInfo const  & at ) const {
+    das_invoke_function<void>::invoke
+      <void *,Context &,void * const ,LineInfo const  &>
+        (__context__,nullptr,__funcCall__,
+          self,ctx,data,at);
   }
 };
 

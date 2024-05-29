@@ -25,6 +25,11 @@ class DapiDebugAgent
     def abstract onBeforeGC ( var ctx:Context ) : void
     def abstract onAfterGC ( var ctx:Context ) : void
     def abstract onUserCommand ( command : string# ) : bool
+    def abstract onAllocate ( var ctx:Context; data:void?; size:uint64; at:LineInfo ) : void
+    def abstract onReallocate ( var ctx:Context; data:void?; size:uint64; newData:void?; newSize:uint64; at:LineInfo ) : void
+    def abstract onFree ( var ctx:Context; data:void?; at:LineInfo ) : void
+    def abstract onAllocateString ( var ctx:Context; data:void?; size:uint64; at:LineInfo ) : void
+    def abstract onFreeString ( var ctx:Context; data:void?; at:LineInfo ) : void
     [[do_not_delete]] thisAgent:DebugAgent?
 
 def install_new_debug_agent ( var agentPtr; category:string )

@@ -50,7 +50,7 @@ namespace das
             char ** value = (char **) _value;
             *value = nullptr;
         }
-        context.heap->freeIterator((char *)this);
+        context.freeIterator((char *)this);
     }
 
     // this is here to occasionally investigate untyped evaluation paths
@@ -140,9 +140,9 @@ namespace das
                 if ( persistent ) {
                     das_aligned_free16(*pStruct);
                 } else if ( isLambda ) {
-                    context.heap->free(*pStruct - 16, structSize + 16);
+                    context.free(*pStruct - 16, structSize + 16, &debugInfo);
                 } else {
-                    context.heap->free(*pStruct, structSize);
+                    context.free(*pStruct, structSize, &debugInfo);
                 }
                 *pStruct = nullptr;
             }
@@ -160,7 +160,7 @@ namespace das
                 if (persistent) {
                     das_aligned_free16(*pStruct);
                 } else {
-                    context.heap->free(*pStruct, sizeOf);
+                    context.free(*pStruct, sizeOf, &debugInfo);
                 }
                 *pStruct = nullptr;
             }
@@ -1913,6 +1913,36 @@ namespace das
         for ( int fni=0, fnis=totalFunctions; fni!=fnis; ++fni ) {
             const auto & fn = functions[fni];
             if ( fn.code ) fn.code->visit(*vis);
+        }
+    }
+
+    void Context::onAllocateString ( void * ptr, uint64_t size, const LineInfo & at ) {
+        if ( g_envTotal > 0 && daScriptEnvironment::bound && daScriptEnvironment::bound->g_threadLocalDebugAgent.debugAgent ) {
+            daScriptEnvironment::bound->g_threadLocalDebugAgent.debugAgent->onAllocateString(this, ptr, size, at);
+        }
+    }
+
+    void Context::onFreeString ( void * ptr, const LineInfo & at ) {
+        if ( g_envTotal > 0 && daScriptEnvironment::bound && daScriptEnvironment::bound->g_threadLocalDebugAgent.debugAgent ) {
+            daScriptEnvironment::bound->g_threadLocalDebugAgent.debugAgent->onFreeString(this, ptr, at);
+        }
+    }
+
+    void Context::onAllocate ( void * ptr, uint64_t size, const LineInfo & at ) {
+        if ( g_envTotal > 0 && daScriptEnvironment::bound && daScriptEnvironment::bound->g_threadLocalDebugAgent.debugAgent ) {
+            daScriptEnvironment::bound->g_threadLocalDebugAgent.debugAgent->onAllocate(this, ptr, size, at);
+        }
+    }
+
+    void Context::onReallocate ( void * ptr, uint64_t size, void * newPtr, uint64_t newSize, const LineInfo & at ) {
+        if ( g_envTotal > 0 && daScriptEnvironment::bound && daScriptEnvironment::bound->g_threadLocalDebugAgent.debugAgent ) {
+            daScriptEnvironment::bound->g_threadLocalDebugAgent.debugAgent->onReallocate(this, ptr, size, newPtr, newSize, at);
+        }
+    }
+
+    void Context::onFree ( void * ptr, const LineInfo & at ) {
+        if ( g_envTotal > 0 && daScriptEnvironment::bound && daScriptEnvironment::bound->g_threadLocalDebugAgent.debugAgent ) {
+            daScriptEnvironment::bound->g_threadLocalDebugAgent.debugAgent->onFree(this, ptr, at);
         }
     }
 

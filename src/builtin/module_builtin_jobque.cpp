@@ -348,7 +348,7 @@ namespace das {
         if ( !g_jobQue ) context->throw_error_at(lineinfo, "need to be in 'with_job_que' block");
         shared_ptr<Context> forkContext;
         forkContext.reset(get_clone_context(context, uint32_t(ContextCategory::job_clone)));
-        auto ptr = forkContext->heap->allocate(lambdaSize + 16);
+        auto ptr = forkContext->allocate(lambdaSize + 16,lineinfo);
         if ( !ptr ) context->throw_out_of_memory(false, lambdaSize + 16, lineinfo);
         forkContext->heap->mark_comment(ptr, "new [[ ]] in new_job");
         memset ( ptr, 0, lambdaSize + 16 );
@@ -374,7 +374,7 @@ namespace das {
     void new_thread_invoke ( Lambda lambda, Func fn, int32_t lambdaSize, Context * context, LineInfoArg * lineinfo ) {
         shared_ptr<Context> forkContext;
         forkContext.reset(get_clone_context(context, uint32_t(ContextCategory::thread_clone)));
-        auto ptr = forkContext->heap->allocate(lambdaSize + 16);
+        auto ptr = forkContext->allocate(lambdaSize + 16,lineinfo);
         if ( !ptr ) context->throw_out_of_memory(false, lambdaSize + 16, lineinfo);
         forkContext->heap->mark_comment(ptr, "new [[ ]] in new_thread");
         memset ( ptr, 0, lambdaSize + 16 );

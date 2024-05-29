@@ -1333,14 +1333,14 @@ namespace das {
     template <typename TT>
     struct das_new {
         static __forceinline TT * make ( Context * __context__ ) {
-            char * data = __context__->heap->allocate( sizeof(TT) );
+            char * data = __context__->allocate( sizeof(TT) );
             if ( !data ) __context__->throw_out_of_memory(false, sizeof(TT));
             memset ( data, 0, sizeof(TT) );
             return (TT *) data;
         }
         template <typename QQ>
         static __forceinline TT * make_and_init ( Context * __context__, QQ && init ) {
-            TT * data = (TT *) __context__->heap->allocate( sizeof(TT) );
+            TT * data = (TT *) __context__->allocate( sizeof(TT) );
             if ( !data ) __context__->throw_out_of_memory(false, sizeof(TT));
             *data = init();
             return data;
@@ -1436,7 +1436,7 @@ namespace das {
     template <typename TT>
     struct das_delete_lambda_struct<TT *> {
         static __forceinline void clear ( Context * __context__, TT * ptr ) {
-            __context__->heap->free(((char *)ptr)-16, sizeof(TT)+16);
+            __context__->free(((char *)ptr)-16, sizeof(TT)+16);
         }
     };
 
@@ -1446,10 +1446,10 @@ namespace das {
     template <typename TT>
     struct das_delete_ptr<TT *> {
         static __forceinline void clear ( Context * __context__, TT * ptr ) {
-            __context__->heap->free((char *)ptr, sizeof(TT));
+            __context__->free((char *)ptr, sizeof(TT));
         }
         static __forceinline void clear ( Context * __context__, TT * ptr, int sizeOf ) {
-            __context__->heap->free((char *)ptr, sizeOf);
+            __context__->free((char *)ptr, sizeOf);
         }
     };
 
@@ -1530,7 +1530,7 @@ namespace das {
             if ( dim.data ) {
                 if ( !dim.lock ) {
                     uint32_t oldSize = dim.capacity*sizeof(TT);
-                    __context__->heap->free(dim.data, oldSize);
+                    __context__->free(dim.data, oldSize);
                 } else {
                     __context__->throw_error("can't delete locked array");
                 }
@@ -1545,7 +1545,7 @@ namespace das {
             if ( tab.data ) {
                 if ( !tab.lock ) {
                     uint32_t oldSize = tab.capacity*(sizeof(TKey)+sizeof(TVal)+sizeof(TableHashKey));
-                    __context__->heap->free(tab.data, oldSize);
+                    __context__->free(tab.data, oldSize);
                 } else {
                     __context__->throw_error("can't delete locked table");
                 }
@@ -1613,7 +1613,7 @@ namespace das {
     struct das_ascend {
         static __forceinline TT * make(Context * __context__,TypeInfo * typeInfo,const AT & init) {
             auto size = sizeof(AT)+ (typeInfo ? 16 : 0);
-            if ( char * ptr = (char *)__context__->heap->allocate(uint32_t(size)) ) {
+            if ( char * ptr = (char *)__context__->allocate(uint32_t(size)) ) {
                 if ( typeInfo ) {
                     *((TypeInfo **)ptr) = typeInfo;
                     ptr += 16;
@@ -1666,7 +1666,7 @@ namespace das {
     struct das_ascend<Lambda,AT,false> {
         static __forceinline Lambda make(Context * __context__,TypeInfo * typeInfo,const AT & init) {
             auto size = sizeof(AT)+ (typeInfo ? 16 : 0);
-            if ( char * ptr = (char *)__context__->heap->allocate(size) ) {
+            if ( char * ptr = (char *)__context__->allocate(size) ) {
                 if ( typeInfo ) {
                     *((TypeInfo **)ptr) = typeInfo;
                     ptr += 16;
@@ -1843,7 +1843,7 @@ namespace das {
         auto length = writer.tellp();
         if ( length ) {
             auto str = __context__->allocateString(writer.c_str(), uint32_t(length), &node.debugInfo);
-            __context__->freeTempString(str);
+            __context__->freeTempString(str, &node.debugInfo);
             return str;
         } else {
             return nullptr;
@@ -2533,7 +2533,7 @@ namespace das {
                 char ** value = (char **) _value;
                 *value = nullptr;
             }
-            context.heap->freeIterator((char *)this);
+            context.freeIterator((char *)this);
         }
         VectorType * array;
         size_t index = 0;
@@ -2542,7 +2542,7 @@ namespace das {
     template <typename TT>
     Sequence das_vector_each_sequence ( TT & vec, Context * context ) {
         using VectorIterator = StdVectorIterator<TT>;
-        char * iter = context->heap->allocateIterator(sizeof(VectorIterator), "std::vector<> iterator");
+        char * iter = context->allocateIterator(sizeof(VectorIterator), "std::vector<> iterator");
         if ( !iter ) context->throw_out_of_memory(false, sizeof(VectorIterator)+16);
         new (iter) VectorIterator(&vec);
         return { (Iterator *) iter };

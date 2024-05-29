@@ -357,7 +357,7 @@ namespace das
             if ( !pStr  ) {
                 context.throw_out_of_memory(true, uint32_t(length), &debugInfo);
             }
-            if ( isTempString ) context.freeTempString(pStr);
+            if ( isTempString ) context.freeTempString(pStr, &debugInfo);
             return cast<char *>::from(pStr);
         } else {
             return v_zero();
@@ -384,14 +384,14 @@ namespace das
             int32_t * value = (int32_t *) _value;
             *value = 0;
         }
-        context.heap->freeIterator((char *)this);
+        context.freeIterator((char *)this);
     }
 
     vec4f SimNode_StringIterator::eval ( Context & context ) {
         DAS_PROFILE_NODE
         vec4f ll = source->eval(context);
         char * str = cast<char *>::to(ll);
-        char * iter = context.heap->allocateIterator(sizeof(StringIterator),"string iterator",&debugInfo);
+        char * iter = context.allocateIterator(sizeof(StringIterator),"string iterator",&debugInfo);
         if ( !iter ) context.throw_out_of_memory(false, sizeof(StringIterator)+16, &debugInfo);
         new (iter) StringIterator(str);
         return cast<char *>::from(iter);

@@ -228,6 +228,11 @@ namespace das
         virtual void onBeforeGC ( Context * ) {}
         virtual void onAfterGC ( Context * ) {}
         virtual bool onUserCommand ( const char * /*cmd*/ ) { return false; }
+        virtual void onAllocate ( Context *, void *, uint64_t, const LineInfo & ) {}
+        virtual void onReallocate ( Context *, void *, uint64_t, void *, uint64_t, const LineInfo & ) {}
+        virtual void onFree ( Context *, void *, const LineInfo & ) {}
+        virtual void onAllocateString ( Context *, void *, uint64_t, const LineInfo & ) {}
+        virtual void onFreeString ( Context *, void *, const LineInfo & ) {}
         bool isThreadLocal = false;
     };
     typedef smart_ptr<DebugAgent> DebugAgentPtr;
@@ -284,12 +289,81 @@ namespace das
         uint64_t getSharedSize() const { return sharedSize; }
         uint64_t getInitSemanticHash();
 
+        void onAllocateString ( void * ptr, uint64_t size, const LineInfo & at );
+        void onFreeString ( void * ptr, const LineInfo & at );
+        void onAllocate ( void * ptr, uint64_t size, const LineInfo & at );
+        void onReallocate ( void * ptr, uint64_t size, void * newPtr, uint64_t newSize, const LineInfo & at );
+        void onFree ( void * ptr, const LineInfo & at );
+
+        __forceinline char * allocateIterator ( uint32_t size, const char * iterName, const LineInfo * at = nullptr ) {
+            if ( instrumentAllocations ) {
+                auto aptr = heap->allocateIterator(size, iterName, at);
+                onAllocate(aptr - 16, size + 16, at ? *at : LineInfo());
+                return aptr;
+            } else {
+                return heap->allocateIterator(size, iterName, at);
+            }
+        }
+
+        __forceinline void freeIterator ( char * ptr, const LineInfo * at = nullptr ) {
+            if ( instrumentAllocations ) onFree(ptr - 16, at ? *at : LineInfo());
+            heap->freeIterator(ptr);
+        }
+
+        __forceinline char * allocate ( uint32_t size, const LineInfo * at = nullptr ) {
+            if ( instrumentAllocations ) {
+                auto aptr = heap->allocate(size);
+                onAllocate(aptr, size, at ? *at : LineInfo());
+                return aptr;
+            } else {
+                return heap->allocate(size);
+            }
+        }
+
+        __forceinline char * reallocate ( char * ptr, uint32_t oldSize, uint32_t size, const LineInfo * at = nullptr ) {
+            if ( instrumentAllocations ) {
+                auto aptr = heap->reallocate(ptr, oldSize, size);
+                onReallocate(ptr, size, aptr, size, at ? *at : LineInfo());
+                return aptr;
+            } else {
+                return heap->reallocate(ptr, oldSize, size);
+            }
+        }
+
+        __forceinline void free ( char * ptr, uint32_t size, const LineInfo * at = nullptr ) {
+            if ( instrumentAllocations ) onFree(ptr, at ? *at : LineInfo());
+            heap->free(ptr, size);
+        }
+
         __forceinline char * allocateString ( const char * text, uint32_t length, const LineInfo * at = nullptr ) {
-            return stringHeap->allocateString(this, text, length, at);
+            if ( instrumentAllocations ) {
+                auto astr = stringHeap->allocateString(this, text, length, at);
+                onAllocateString(astr, length, at ? *at : LineInfo());
+                return astr;
+            } else {
+                return stringHeap->allocateString(this, text, length, at);
+            }
         }
 
         __forceinline char * allocateString ( const string & str, const LineInfo * at = nullptr ) {
-            return stringHeap->allocateString(this, str.c_str(), uint32_t(str.size()), at);
+            if ( instrumentAllocations ) {
+                auto astr = stringHeap->allocateString(this, str.c_str(), uint32_t(str.size()), at);
+                onAllocateString(astr, str.size(), at ? *at : LineInfo());
+                return astr;
+            } else {
+                return stringHeap->allocateString(this, str.c_str(), uint32_t(str.size()), at);
+            }
+        }
+
+        __forceinline void freeString ( char * ptr, uint32_t length, const LineInfo * at = nullptr) {
+            if ( instrumentAllocations ) onFreeString(ptr, at ? *at : LineInfo());
+            stringHeap->freeString(ptr, length);
+        }
+
+        __forceinline void freeTempString ( char * ptr, const LineInfo * at = nullptr ) {
+            if ( stringHeap->isIntern() ) return;
+            if ( stringDisposeQue ) freeString(stringDisposeQue,(uint32_t)strlen(stringDisposeQue),at);
+            stringDisposeQue = ptr;
         }
 
         __forceinline void * getVariable ( int index ) const {
@@ -653,12 +727,6 @@ namespace das
             }
         }
     public:
-        __forceinline void freeTempString ( char * ptr ) {
-            if ( stringHeap->isIntern() ) return;
-            if ( stringDisposeQue ) stringHeap->freeString(stringDisposeQue,(uint32_t)strlen(stringDisposeQue));
-            stringDisposeQue = ptr;
-        }
-    public:
         smart_ptr<StringHeapAllocator>  stringHeap;
         smart_ptr<AnyHeapAllocator>     heap;
         shared_ptr<ConstStringAllocator> constStringHeap;
@@ -676,6 +744,7 @@ namespace das
         bool                            breakOnException = false;
         bool                            alwaysErrorOnException = false;
         bool                            alwaysStackWalkOnException = false;
+        bool                            instrumentAllocations = false;
     public:
         string                          name;
         Bitfield                        category = 0;

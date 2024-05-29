@@ -2443,7 +2443,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             DAS_PROFILE_NODE
             char * ptr;
             if ( !persistent ) {
-                ptr = context.heap->allocate(bytes);
+                ptr = context.allocate(bytes,&debugInfo);
                 if ( !ptr ) context.throw_out_of_memory(false, bytes, &debugInfo);
                 context.heap->mark_comment(ptr, "new");
                 context.heap->mark_location(ptr, &debugInfo);
@@ -2468,7 +2468,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             DAS_PROFILE_NODE
             char * ptr;
             if ( !persistent ) {
-                ptr = context.heap->allocate(bytes + (typeInfo ? 16 : 0));
+                ptr = context.allocate(bytes + (typeInfo ? 16 : 0), &debugInfo);
                 if ( !ptr ) context.throw_out_of_memory(false, bytes + (typeInfo ? 16 : 0), &debugInfo);
                 context.heap->mark_comment(ptr, "new [[ ]]");
                 context.heap->mark_location(ptr, &debugInfo);
@@ -2502,7 +2502,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             DAS_PROFILE_NODE
             char * ptr;
             if ( !persistent ) {
-                ptr = context.heap->allocate(bytes + (typeInfo ? 16 : 0));
+                ptr = context.allocate(bytes + (typeInfo ? 16 : 0), &debugInfo);
                 if ( !ptr ) context.throw_out_of_memory(false, bytes + (typeInfo ? 16 : 0), &debugInfo);
                 context.heap->mark_comment(ptr, "new [[ ]]");
                 context.heap->mark_location(ptr, &debugInfo);
@@ -2569,7 +2569,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             DAS_PROFILE_NODE
             char * ptr;
             if ( !persistent ) {
-                ptr = context.heap->allocate(bytes);
+                ptr = context.allocate(bytes, &debugInfo);
                 if ( !ptr ) context.throw_out_of_memory(false, bytes, &debugInfo);
                 context.heap->mark_comment(ptr, "new with initializer");
                 context.heap->mark_location(ptr, &debugInfo);
@@ -2593,7 +2593,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             DAS_PROFILE_NODE
             char* ptr;
             if (!persistent) {
-                ptr = context.heap->allocate(bytes);
+                ptr = context.allocate(bytes, &debugInfo);
                 if ( !ptr ) context.throw_out_of_memory(false, bytes, &debugInfo);
                 context.heap->mark_comment(ptr, "new with initializer");
                 context.heap->mark_location(ptr, &debugInfo);
@@ -3513,7 +3513,7 @@ SIM_NODE_AT_VECTOR(Float, float)
             DAS_PROFILE_NODE
             vec4f ll = source->eval(context);
             TT * array = cast<TT *>::to(ll);
-            char * iter = context.heap->allocateIterator(sizeof(IterT),"any iterator",&debugInfo);
+            char * iter = context.allocateIterator(sizeof(IterT),"any iterator",&debugInfo);
             if ( !iter ) context.throw_out_of_memory(false,sizeof(IterT),&debugInfo);
             new (iter) IterT(array);
             return cast<char *>::from(iter);

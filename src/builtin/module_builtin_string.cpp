@@ -576,10 +576,10 @@ namespace das
         return context->allocateString(bytes.data, bytes.size);
     }
 
-    void delete_string ( char * & str, Context * context ) {
+    void delete_string ( char * & str, Context * context, LineInfoArg * at ) {
         if ( !str ) return;
         uint32_t len = stringLengthSafe(*context, str);
-        context->stringHeap->freeString(str, len);
+        context->freeString(str, len, at);
         str = nullptr;
     }
 
@@ -605,7 +605,7 @@ namespace das
 
     // TODO: do we need a corresponding delete?
     char * builtin_reserve_string_buffer ( const char * str, int32_t length, Context * context ) {
-        auto buf = context->heap->allocate(length);
+        auto buf = context->allocate(length);
         if ( !buf ) context->throw_out_of_memory(false, length);
         if ( str ) {
             auto slen = min ( int32_t(strlen(str)), length-1 );
@@ -723,7 +723,7 @@ namespace das
             // string builder writer
             addAnnotation(make_smart<StringBuilderWriterAnnotation>(lib));
             addExtern<DAS_BIND_FUN(delete_string)>(*this, lib, "delete_string",
-                SideEffects::modifyArgumentAndExternal,"delete_string")->args({"str","context"})->unsafeOperation = true;
+                SideEffects::modifyArgumentAndExternal,"delete_string")->args({"str","context","lineinfo"})->unsafeOperation = true;
             addExtern<DAS_BIND_FUN(builtin_build_string)>(*this, lib, "build_string",
                 SideEffects::modifyExternal,"builtin_build_string_T")->args({"block","context","lineinfo"})->setAotTemplate();
             addExtern<DAS_BIND_FUN(builtin_build_hash)>(*this, lib, "build_hash",
