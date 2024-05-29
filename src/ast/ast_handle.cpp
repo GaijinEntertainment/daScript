@@ -181,6 +181,7 @@ namespace das {
                     }
                 }
             }
+            sti->module_name = debugInfo->allocateCachedName(this->module->name);
         }
 
     }
