@@ -292,6 +292,7 @@ namespace das {
         auto block = make_smart<ExprBlock>();
         block->at = str->at;
         auto makeT = make_smart<ExprMakeStruct>(str->at);
+        if ( str->isClass ) makeT->alwaysSafe = true;
         makeT->useInitializer = false;
         makeT->nativeClassInitializer = true;
         for ( auto & f : str->fields ) {
@@ -1722,6 +1723,7 @@ namespace das {
         }
         // lef self = [[Foo()]]
         auto makeT = make_smart<ExprMakeStruct>(baseClass->at);
+        makeT->alwaysSafe = true;
         makeT->at = func->at;
         makeT->useInitializer = true;
         makeT->nativeClassInitializer = true;
