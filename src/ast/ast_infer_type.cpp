@@ -4075,26 +4075,30 @@ namespace das {
             return Visitor::visit(expr);
         }
     // ExprAscend
-        virtual void preVisit ( ExprAscend * expr ) override {
-            Visitor::preVisit(expr);
-            if ( !expr->subexpr->type ) return;
-            if ( expr->subexpr->type->baseType==Type::tHandle && expr->subexpr->rtti_isMakeStruct() ) {
+        void updateNewFlags ( ExprAscend * expr ) {
+            if ( expr->subexpr->rtti_isMakeStruct() ) {
                 auto mks = static_pointer_cast<ExprMakeStruct>(expr->subexpr);
-                if ( !mks->isNewHandle ) {
-                    reportAstChanged();
-                    mks->isNewHandle = true;
+                if ( expr->subexpr->type->baseType==Type::tHandle  ) {
+                    if ( !mks->isNewHandle ) {
+                        reportAstChanged();
+                        mks->isNewHandle = true;
+                    }
+                } else {
+                    if ( !mks->isNewClass ) {
+                        reportAstChanged();
+                        mks->isNewClass = true;
+                    }
                 }
             }
         }
+        virtual void preVisit ( ExprAscend * expr ) override {
+            Visitor::preVisit(expr);
+            if ( !expr->subexpr->type ) return;
+            updateNewFlags(expr);
+        }
         virtual ExpressionPtr visit ( ExprAscend * expr ) override {
             if ( !expr->subexpr->type ) return Visitor::visit(expr);
-            if ( expr->subexpr->type->baseType==Type::tHandle && expr->subexpr->rtti_isMakeStruct() ) {
-                auto mks = static_pointer_cast<ExprMakeStruct>(expr->subexpr);
-                if ( !mks->isNewHandle ) {
-                    reportAstChanged();
-                    mks->isNewHandle = true;
-                }
-            }
+            updateNewFlags(expr);
             if ( !expr->subexpr->type->isRef() ) {
                 error("can't ascend (to heap) non-reference value",  "", "",
                     expr->at, CompilationError::invalid_new_type);
@@ -7792,6 +7796,14 @@ namespace das {
                     }
                 }
             }
+            if ( expr->func && expr->func->isClassMethod && expr->func->result && expr->func->result->isClass() ) {
+                if ( expr->func->name == expr->func->result->structType->name ) {
+                    if ( !safeExpression(expr) ) {
+                        error("Constructing class on stack is unsafe. Allocate it on the heap via new [[...]] or new " + expr->func->name + "() instead.", "", "",
+                            expr->at, CompilationError::unsafe);
+                    }
+                }
+            }
             return Visitor::visit(expr);
         }
     // StringBuilder
@@ -7908,7 +7920,13 @@ namespace das {
                 error("new [[" + describeType(expr->makeType) + "]] struct requires initializer syntax", "",
                         "use new [[" + describeType(expr->makeType) + "()]] instead",
                     expr->at, CompilationError::invalid_type);
+            } else if ( !expr->isNewClass && expr->makeType->isClass() ) {
+                if ( !safeExpression(expr) ) {
+                    error("Constructing class on stack is unsafe. Allocate it on the heap via new [[...]] or new " + expr->makeType->structType->name + "() instead.", "", "",
+                        expr->at, CompilationError::unsafe);
+                }
             }
+
         }
         virtual MakeFieldDeclPtr visitMakeStructureField ( ExprMakeStruct * expr, int index, MakeFieldDecl * decl, bool last ) override {
             if ( !decl->value->type ) {
