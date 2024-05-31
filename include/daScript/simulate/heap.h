@@ -127,9 +127,9 @@ namespace das {
     class AnyHeapAllocator : public ptr_ref_count {
     public:
         virtual bool breakOnFree ( void *, uint32_t ) { return false; }
-        virtual char * allocate ( uint32_t ) = 0;
-        virtual void free ( char *, uint32_t ) = 0;
-        virtual char * reallocate ( char *, uint32_t, uint32_t ) = 0;
+        virtual char * impl_allocate ( uint32_t ) = 0;
+        virtual void impl_free ( char *, uint32_t ) = 0;
+        virtual char * impl_reallocate ( char *, uint32_t, uint32_t ) = 0;
         virtual int depth() const = 0;
         virtual uint64_t bytesAllocated() const = 0;
         virtual uint64_t totalAlignedMemoryAllocated() const = 0;
@@ -158,8 +158,8 @@ namespace das {
 #endif
     public:
         char * allocateName ( const string & name );
-        char * allocateIterator ( uint32_t size, const char * name="", const LineInfo * info=nullptr );
-        void   freeIterator ( char * ptr );
+        char * impl_allocateIterator ( uint32_t size, const char * name="", const LineInfo * info=nullptr );
+        void   impl_freeIterator ( char * ptr );
     protected:
         uint64_t limit = 0;
         uint64_t totalAllocations = 0;
@@ -197,8 +197,8 @@ namespace das {
         virtual void forEachString ( const callable<void (const char *)> & fn ) = 0;
         virtual void reset() override;
     public:
-        char * allocateString ( Context * context, const char * text, uint32_t length, const LineInfo * at = nullptr );
-        void freeString ( char * text, uint32_t length );
+        char * impl_allocateString ( Context * context, const char * text, uint32_t length, const LineInfo * at = nullptr );
+        void impl_freeString ( char * text, uint32_t length );
         void setIntern ( bool on );
         bool isIntern() const { return needIntern; }
         char * intern ( const char * str, uint32_t length ) const;
@@ -237,7 +237,7 @@ namespace das {
         }
 #else
     public:
-        virtual void free ( char * ptr, uint32_t size ) override {
+        virtual void impl_free ( char * ptr, uint32_t size ) override {
             totalBytesDeleted += size;
             model.free(ptr,size);
         }
@@ -245,7 +245,7 @@ namespace das {
 #endif
     public:
         PersistentHeapAllocator() {}
-        virtual char * allocate ( uint32_t size ) override {
+        virtual char * impl_allocate ( uint32_t size ) override {
             if ( limit==0 || model.bytesAllocated()+size<=limit ) {
                 totalAllocations ++;
                 totalBytesAllocated += size;
@@ -254,7 +254,7 @@ namespace das {
                 return nullptr;
             }
         }
-        virtual char * reallocate ( char * ptr, uint32_t oldSize, uint32_t newSize ) override {
+        virtual char * impl_reallocate ( char * ptr, uint32_t oldSize, uint32_t newSize ) override {
             if ( limit==0 || model.bytesAllocated()+newSize-oldSize<=limit ) {
                 totalAllocations ++;
                 totalBytesAllocated += newSize-oldSize;
@@ -286,7 +286,7 @@ namespace das {
     class LinearHeapAllocator final : public AnyHeapAllocator {
     public:
         LinearHeapAllocator() {}
-        virtual char * allocate ( uint32_t size ) override {
+        virtual char * impl_allocate ( uint32_t size ) override {
             if ( limit==0 || model.bytesAllocated()+size<=limit ) {
                 totalAllocations ++;
                 totalBytesAllocated += size;
@@ -295,11 +295,11 @@ namespace das {
                 return nullptr;
             }
         }
-        virtual void free ( char * ptr, uint32_t size ) override {
+        virtual void impl_free ( char * ptr, uint32_t size ) override {
             totalBytesDeleted += size;
             model.free(ptr,size);
         }
-        virtual char * reallocate ( char * ptr, uint32_t oldSize, uint32_t newSize ) override {
+        virtual char * impl_reallocate ( char * ptr, uint32_t oldSize, uint32_t newSize ) override {
             if ( limit==0 || model.bytesAllocated()+newSize-oldSize<=limit ) {
                 totalAllocations ++;
                 totalBytesAllocated += newSize-oldSize;
@@ -334,9 +334,9 @@ namespace das {
     class ConstStringAllocator : public LinearChunkAllocator {
     public:
         ConstStringAllocator() { alignMask = 3; }
-        char * allocateString ( const char * text, uint32_t length );
-        __forceinline char * allocateString ( const string & str ) {
-            return allocateString ( str.c_str(), uint32_t(str.length()) );
+        char * impl_allocateString ( const char * text, uint32_t length );
+        __forceinline char * impl_allocateString ( const string & str ) {
+            return impl_allocateString ( str.c_str(), uint32_t(str.length()) );
         }
         virtual void reset () override;
         char * intern ( const char * str, uint32_t length ) const;
@@ -347,7 +347,7 @@ namespace das {
     class PersistentStringAllocator final : public StringHeapAllocator {
     public:
         PersistentStringAllocator() { model.alignMask = 3; }
-        virtual char * allocate ( uint32_t size ) override {
+        virtual char * impl_allocate ( uint32_t size ) override {
             if ( limit==0 || model.bytesAllocated()+size<=limit ) {
                 totalAllocations ++;
                 totalBytesAllocated += size;
@@ -356,11 +356,11 @@ namespace das {
                 return nullptr;
             }
         }
-        virtual void free ( char * ptr, uint32_t size ) override {
+        virtual void impl_free ( char * ptr, uint32_t size ) override {
             totalBytesDeleted += size;
             model.free(ptr,size);
         }
-        virtual char * reallocate ( char * ptr, uint32_t oldSize, uint32_t newSize ) override {
+        virtual char * impl_reallocate ( char * ptr, uint32_t oldSize, uint32_t newSize ) override {
             if ( limit==0 || model.bytesAllocated()+newSize-oldSize<=limit ) {
                 totalAllocations ++;
                 totalBytesAllocated += newSize-oldSize;
@@ -394,7 +394,7 @@ namespace das {
     class LinearStringAllocator final : public StringHeapAllocator {
     public:
         LinearStringAllocator() { model.alignMask = 3; }
-        virtual char * allocate ( uint32_t size ) override {
+        virtual char * impl_allocate ( uint32_t size ) override {
             if ( limit==0 || model.bytesAllocated()+size<=limit ) {
                 totalAllocations ++;
                 totalBytesAllocated += size;
@@ -403,11 +403,11 @@ namespace das {
                 return nullptr;
             }
         }
-        virtual void free ( char * ptr, uint32_t size ) override {
+        virtual void impl_free ( char * ptr, uint32_t size ) override {
             totalBytesDeleted += size;
             model.free(ptr,size);
         }
-        virtual char * reallocate ( char * ptr, uint32_t oldSize, uint32_t newSize ) override {
+        virtual char * impl_reallocate ( char * ptr, uint32_t oldSize, uint32_t newSize ) override {
             if ( limit==0 || model.bytesAllocated()+newSize-oldSize<=limit ) {
                 totalAllocations ++;
                 totalBytesAllocated += newSize-oldSize;

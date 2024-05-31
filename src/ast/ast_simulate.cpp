@@ -1166,7 +1166,7 @@ namespace das
 
     SimNode * ExprConstString::simulate (Context & context) const {
         if ( !text.empty() ) {
-            char* str = context.constStringHeap->allocateString(text);
+            char* str = context.constStringHeap->impl_allocateString(text);
             return context.code->makeNode<SimNode_ConstString>(at, str);
         } else {
             return context.code->makeNode<SimNode_ConstString>(at, nullptr);
@@ -1181,7 +1181,7 @@ namespace das
         string message;
         if ( arguments.size()==2 && arguments[1]->rtti_isStringConstant() )
             message = static_pointer_cast<ExprConstString>(arguments[1])->getValue();
-        return context.code->makeNode<SimNode_Assert>(at,arguments[0]->simulate(context),context.constStringHeap->allocateString(message));
+        return context.code->makeNode<SimNode_Assert>(at,arguments[0]->simulate(context),context.constStringHeap->impl_allocateString(message));
     }
 
     struct SimNode_AstGetExpression : SimNode_CallBase {
@@ -1227,7 +1227,7 @@ namespace das
         return context.code->makeNode<SimNode_Debug>(at,
                                                arguments[0]->simulate(context),
                                                pTypeInfo,
-                                               context.constStringHeap->allocateString(message));
+                                               context.constStringHeap->impl_allocateString(message));
     }
 
     SimNode * ExprMemZero::simulate (Context & context) const {
@@ -2376,7 +2376,7 @@ namespace das
         if (subexpr && subexpr->type && subexpr->rtti_isConstant()) {
             if (subexpr->type->isSimpleType(Type::tString)) {
                 auto cVal = static_pointer_cast<ExprConstString>(subexpr);
-                char * str = context.constStringHeap->allocateString(cVal->text);
+                char * str = context.constStringHeap->impl_allocateString(cVal->text);
                 return context.code->makeNode<SimNode_ReturnConstString>(at, str);
             }
         }
