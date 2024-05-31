@@ -462,11 +462,11 @@ namespace das {
         TT * makeNode(Params... args) {
             totalNodesAllocated ++;
             if ( prefixWithHeader ) {
-                char * data = impl_allocate(sizeof(TT) + sizeof(NodePrefix));
+                char * data = allocate(sizeof(TT) + sizeof(NodePrefix));
                 new ((void *)data) NodePrefix(sizeof(TT));
                 return new ((void *)(data + sizeof(NodePrefix))) TT(args...);
             } else {
-                return new ((void *)impl_allocate(sizeof(TT))) TT(args...);
+                return new ((void *)allocate(sizeof(TT))) TT(args...);
             }
         }
 #else
