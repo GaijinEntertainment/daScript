@@ -310,6 +310,8 @@ class RstComment : AstCommentReader
         state = ParserState structure
         field_comment = ""
     def write_to_detail ( name, text : string ) : void
+        if is_in_aot() || is_in_completion()
+            return
         let fname = get_das_root() + "/doc/source/stdlib/detail/{name}.rst"
         fopen(fname,"wb") <| $ ( f )
             if f==null
