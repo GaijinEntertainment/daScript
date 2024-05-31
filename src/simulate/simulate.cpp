@@ -1244,7 +1244,7 @@ namespace das
         if ( !str || !len ) return nullptr;
         char * ist = constStringHeap->intern(str,len);
         if ( !ist ) ist = stringHeap->intern(str,len);
-        return ist ? ist : stringHeap->allocateString(this,str,len);
+        return ist ? ist : stringHeap->impl_allocateString(this,str,len);
     }
 
     class SharedDataWalker : public DataWalker {
