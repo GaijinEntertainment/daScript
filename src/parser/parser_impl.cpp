@@ -858,7 +858,7 @@ namespace das {
     void ast_requireModule ( yyscan_t scanner, string * name, string * modalias, bool pub, const LineInfo & atName ) {
         auto info = yyextra->g_Access->getModuleInfo(*name, yyextra->g_FileAccessStack.back()->name);
         if ( auto mod = yyextra->g_Program->addModule(info.moduleName) ) {
-            yyextra->g_Program->allRequireDecl.push_back(make_tuple(mod,*name,"",pub,atName));
+            yyextra->g_Program->allRequireDecl.push_back(make_tuple(mod,*name,info.fileName,pub,atName));
             yyextra->g_Program->thisModule->addDependency(mod, pub);
             das_collect_all_keywords(mod,scanner);
             if ( !info.importName.empty() ) {
@@ -874,7 +874,7 @@ namespace das {
                 }
             }
         } else {
-            yyextra->g_Program->allRequireDecl.push_back(make_tuple((Module *)nullptr,*name,"",pub,atName));
+            yyextra->g_Program->allRequireDecl.push_back(make_tuple((Module *)nullptr,*name,info.fileName,pub,atName));
             das_yyerror(scanner,"required module not found " + *name,atName,
                 CompilationError::module_not_found);
         }
