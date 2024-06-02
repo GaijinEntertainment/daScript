@@ -884,6 +884,13 @@ namespace das {
         });
     }
 
+    void rtti_builtin_module_for_each_dependency ( Module * module, const TBlock<void,Module *,bool> & block, Context * context, LineInfoArg * at ) {
+        for ( auto it : module->requireModule ) {
+            vec4f args[2] = { cast<Module *>::from(it.first), cast<bool>::from(it.second) };
+            context->invoke(block, args, nullptr, at);
+        }
+    }
+
     void rtti_builtin_module_for_each_enumeration ( Module * module, const TBlock<void,const EnumInfo> & block, Context * context, LineInfoArg * at ) {
         DebugInfoHelper helper;
         helper.rtti = true;
@@ -1461,6 +1468,9 @@ namespace das {
             addExtern<DAS_BIND_FUN(rtti_builtin_program_for_each_module)>(*this, lib, "program_for_each_module",
                 SideEffects::modifyExternal, "rtti_builtin_program_for_each_module")
                     ->args({"program","block","context","line"});
+            addExtern<DAS_BIND_FUN(rtti_builtin_module_for_each_dependency)>(*this, lib, "module_for_each_dependency",
+                SideEffects::modifyExternal, "rtti_builtin_module_for_each_dependency")
+                    ->args({"module","block","context","line"});
             addExtern<DAS_BIND_FUN(rtti_builtin_program_for_each_registered_module)>(*this, lib, "program_for_each_registered_module",
                 SideEffects::modifyExternal, "rtti_builtin_program_for_each_registered_module")
                     ->args({"block","context","line"});

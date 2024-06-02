@@ -138,6 +138,8 @@ namespace das {
     void rtti_builtin_program_for_each_module(smart_ptr_raw<Program> prog, const TBlock<void, Module *> & block, Context * context, LineInfoArg * lineinfo);
     void rtti_builtin_program_for_each_registered_module(const TBlock<void, Module *> & block, Context * context, LineInfoArg * lineinfo);
 
+    void rtti_builtin_module_for_each_dependency ( Module * module, const TBlock<void,Module *,bool> & block, Context * context, LineInfoArg * at );
+
     Module * rtti_get_this_module(smart_ptr_raw<Program> prog);
     Module * rtti_get_builtin_module(const char * name);
 
