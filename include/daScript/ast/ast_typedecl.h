@@ -104,6 +104,7 @@ namespace das {
         bool isNumericStorage() const;
         bool isNumericComparable() const;
         __forceinline bool isPointer() const;
+        __forceinline bool isSmartPointer() const;
         __forceinline bool isVoidPointer() const;
         __forceinline bool isIterator() const;
         __forceinline bool isLambda() const;
@@ -757,6 +758,10 @@ namespace das {
 
     __forceinline bool TypeDecl::isPointer() const {
         return (baseType==Type::tPointer) && (dim.size()==0);
+    }
+
+    __forceinline bool TypeDecl::isSmartPointer() const {
+        return (baseType==Type::tPointer) && (smartPtr) && (dim.size()==0);
     }
 
     __forceinline bool TypeDecl::isVoidPointer() const {

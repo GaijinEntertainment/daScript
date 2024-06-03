@@ -806,6 +806,7 @@ namespace das
         }
         FunctionPtr addToModule ( Module & mod, SideEffects seFlags );
         FunctionPtr getOrigin() const;
+        Function * getOriginPtr() const;
         void serialize ( AstSerializer & ser );
     public:
         AnnotationList      annotations;
