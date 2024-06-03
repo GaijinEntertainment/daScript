@@ -71,6 +71,7 @@ namespace das {
             addProperty<DAS_BIND_MANAGED_PROP(isNumeric)>("isNumeric","isNumeric");
             addProperty<DAS_BIND_MANAGED_PROP(isNumericComparable)>("isNumericComparable","isNumericComparable");
             addProperty<DAS_BIND_MANAGED_PROP(isPointer)>("isPointer","isPointer");
+            addProperty<DAS_BIND_MANAGED_PROP(isSmartPointer)>("isSmartPointer","isSmartPointer");
             addProperty<DAS_BIND_MANAGED_PROP(isVoidPointer)>("isVoidPointer","isVoidPointer");
             addProperty<DAS_BIND_MANAGED_PROP(isIterator)>("isIterator","isIterator");
             addProperty<DAS_BIND_MANAGED_PROP(isEnum)>("isEnum","isEnum");
@@ -217,7 +218,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(hash)>("hash");
             addField<DAS_BIND_MANAGED_FIELD(aotHash)>("aotHash");
             // properties
-            addProperty<DAS_BIND_MANAGED_PROP(getOrigin)>("origin","getOrigin");
+            addProperty<DAS_BIND_MANAGED_PROP(getOriginPtr)>("origin","getOriginPtr");
             addProperty<DAS_BIND_MANAGED_PROP(isGeneric)>("isGeneric","isGeneric");
         }
     };
