@@ -12,30 +12,6 @@
 namespace das {
 #include "dasLLVM.func.aot.decl.inc"
 void Module_dasLLVM::initFunctions_1() {
-// from C:\Program Files (x86)\Windows Kits\10\Include\10.0.22000.0\ucrt\inttypes.h:45:27
-	makeExtern< intmax_t (*)(intmax_t) , imaxabs , SimNode_ExtFuncCall >(lib,"imaxabs","imaxabs")
-		->args({"_Number"})
-		->addToModule(*this, SideEffects::worstDefault);
-// from C:\Program Files (x86)\Windows Kits\10\Include\10.0.22000.0\ucrt\inttypes.h:50:28
-	makeExtern< _Lldiv_t (*)(intmax_t,intmax_t) , imaxdiv , SimNode_ExtFuncCallAndCopyOrMove >(lib,"imaxdiv","imaxdiv")
-		->args({"_Numerator","_Denominator"})
-		->addToModule(*this, SideEffects::worstDefault);
-// from C:\Program Files (x86)\Windows Kits\10\Include\10.0.22000.0\ucrt\inttypes.h:55:27
-	makeExtern< intmax_t (*)(const char *,char **,int) , strtoimax , SimNode_ExtFuncCall >(lib,"strtoimax","strtoimax")
-		->args({"_String","_EndPtr","_Radix"})
-		->addToModule(*this, SideEffects::worstDefault);
-// from C:\Program Files (x86)\Windows Kits\10\Include\10.0.22000.0\ucrt\inttypes.h:68:28
-	makeExtern< uintmax_t (*)(const char *,char **,int) , strtoumax , SimNode_ExtFuncCall >(lib,"strtoumax","strtoumax")
-		->args({"_String","_EndPtr","_Radix"})
-		->addToModule(*this, SideEffects::worstDefault);
-// from C:\Program Files (x86)\Windows Kits\10\Include\10.0.22000.0\ucrt\inttypes.h:81:27
-	makeExtern< intmax_t (*)(const wchar_t *,wchar_t **,int) , wcstoimax , SimNode_ExtFuncCall >(lib,"wcstoimax","wcstoimax")
-		->args({"_String","_EndPtr","_Radix"})
-		->addToModule(*this, SideEffects::worstDefault);
-// from C:\Program Files (x86)\Windows Kits\10\Include\10.0.22000.0\ucrt\inttypes.h:94:28
-	makeExtern< uintmax_t (*)(const wchar_t *,wchar_t **,int) , wcstoumax , SimNode_ExtFuncCall >(lib,"wcstoumax","wcstoumax")
-		->args({"_String","_EndPtr","_Radix"})
-		->addToModule(*this, SideEffects::worstDefault);
 // from D:\Work\libclang\include\llvm-c/Analysis.h:44:10
 	makeExtern< int (*)(LLVMOpaqueModule *,LLVMVerifierFailureAction,char **) , LLVMVerifyModule , SimNode_ExtFuncCall >(lib,"LLVMVerifyModule","LLVMVerifyModule")
 		->args({"M","Action","OutMessage"})
