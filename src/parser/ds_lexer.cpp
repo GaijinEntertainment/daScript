@@ -1242,7 +1242,7 @@ static const flex_int32_t yy_rule_can_match_eol[250] =
         yylloc_param->first_line = yylloc_param->last_line = \
             (yytext[yyleng - 1] == '\n' || yytext[yyleng - 1] == '\r') ? yylineno - 1 : yylineno; \
         yylloc_param->first_column = yyextra->das_yycolumn; \
-        yylloc_param->last_column = yyextra->das_yycolumn + yyleng - 1; \
+        yylloc_param->last_column = yyextra->das_yycolumn + yyleng; \
         YYCOLUMN (yyextra->das_yycolumn += yyleng, "YY_USER_ACTION");
 
 #ifdef FLEX_DEBUG
