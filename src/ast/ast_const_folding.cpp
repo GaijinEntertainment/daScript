@@ -492,7 +492,7 @@ namespace das {
             if (expr->func->sideEffectFlags) {
                 return Visitor::visit(expr);
             }
-            if ( expr->subexpr->constexpression ) {
+            if ( expr->subexpr->constexpression && expr->func->builtIn ) {
                 if ( expr->type->isFoldable() && expr->subexpr->type->isFoldable() ) {
                     return evalAndFold(expr);
                 }
@@ -504,7 +504,7 @@ namespace das {
             if (expr->func->sideEffectFlags) {
                 return Visitor::visit(expr);
             }
-            if ( expr->left->constexpression && expr->right->constexpression ) {
+            if ( expr->left->constexpression && expr->right->constexpression && expr->func->builtIn ) {
                 if ( expr->type->isFoldable() && expr->left->type->isFoldable() && expr->right->type->isFoldable() ) {
                     return evalAndFold(expr);
                 }
@@ -551,7 +551,7 @@ namespace das {
         }
     // op3
         virtual ExpressionPtr visit ( ExprOp3 * expr ) override {
-            if ( expr->type->isFoldable() && expr->subexpr->constexpression && expr->left->constexpression && expr->right->constexpression ) {
+            if ( expr->type->isFoldable() && expr->subexpr->constexpression && expr->left->constexpression && expr->right->constexpression && expr->func->builtIn ) {
                 return evalAndFold(expr);
             } else if ( expr->type->isFoldable() && expr->subexpr->noSideEffects && expr->left->constexpression && expr->right->constexpression ) {
                 bool failed;
