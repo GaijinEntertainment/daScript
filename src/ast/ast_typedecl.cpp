@@ -784,6 +784,8 @@ namespace das
             return false;
         } else if (baseType == Type::tPointer) {
             return true;
+        } else if ( baseType == Type::tLambda ) {
+            return false;
         } else {
             return true;
         }
