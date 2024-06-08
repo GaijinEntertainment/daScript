@@ -323,7 +323,7 @@ namespace das
         __forceinline char * reallocate ( char * ptr, uint32_t oldSize, uint32_t size, const LineInfo * at = nullptr ) {
             if ( instrumentAllocations ) {
                 auto aptr = heap->impl_reallocate(ptr, oldSize, size);
-                onReallocate(ptr, size, aptr, size, at ? *at : LineInfo());
+                onReallocate(ptr, oldSize, aptr, size, at ? *at : LineInfo());
                 return aptr;
             } else {
                 return heap->impl_reallocate(ptr, oldSize, size);
