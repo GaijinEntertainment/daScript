@@ -433,6 +433,19 @@ namespace das
         }
     };
 
+    struct UnsafeWhenUninitializedAnnotation : StructureAnnotation {
+        UnsafeWhenUninitializedAnnotation() : StructureAnnotation("unsafe_when_uninitialized") {}
+        virtual bool touch(const StructurePtr & ps, ModuleGroup &,
+                           const AnnotationArgumentList & args, string & ) override {
+            ps->unsafeWhenUninitialized = true;
+            return true;
+        }
+        virtual bool look ( const StructurePtr &, ModuleGroup &,
+                           const AnnotationArgumentList &, string & ) override {
+            return true;
+        }
+    };
+
     struct LocalOnlyFunctionAnnotation : FunctionAnnotation {
         LocalOnlyFunctionAnnotation() : FunctionAnnotation("local_only") { }
         virtual bool apply ( ExprBlock *, ModuleGroup &, const AnnotationArgumentList &, string & err ) override {
@@ -1456,6 +1469,7 @@ namespace das
         addAnnotation(make_smart<SkipLockCheckStructureAnnotation>());
         addAnnotation(make_smart<MarkFunctionOrBlockAnnotation>());
         addAnnotation(make_smart<CppAlignmentAnnotation>());
+        addAnnotation(make_smart<UnsafeWhenUninitializedAnnotation>());
         addAnnotation(make_smart<GenericFunctionAnnotation>());
         addAnnotation(make_smart<MacroFunctionAnnotation>());
         addAnnotation(make_smart<MacroFnFunctionAnnotation>());
