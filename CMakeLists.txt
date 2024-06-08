@@ -151,7 +151,7 @@ MACRO(DAS_AOT_DIR inFiles genList mainTarget dasAotTool)
     endif()
 ENDMACRO()
 
-SET(UNITZE_BUILD_BATCH_SIZE 5)
+SET(UNITZE_BUILD_BATCH_SIZE 10)
 
 MACRO(UNITIZE_BUILD input_dir genList)
     set(unitList)
