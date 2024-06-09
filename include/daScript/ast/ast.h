@@ -293,6 +293,7 @@ namespace das
                 bool    generator : 1;
                 bool    hasStaticMembers : 1;
                 bool    hasStaticFunctions : 1;
+                bool    unsafeWhenUninitialized : 1;
             };
             uint32_t    flags = 0;
         };

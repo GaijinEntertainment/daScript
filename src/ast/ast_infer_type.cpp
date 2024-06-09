@@ -7925,8 +7925,12 @@ namespace das {
                     error("Constructing class on stack is unsafe. Allocate it on the heap via new [[...]] or new " + expr->makeType->structType->name + "() instead.", "", "",
                         expr->at, CompilationError::unsafe);
                 }
+            } else if ( !(expr->useInitializer||expr->usedInitializer) && expr->makeType->structType && expr->makeType->structType->unsafeWhenUninitialized ) {
+                if ( !safeExpression(expr) ) {
+                    error("Uninitialized structure " + expr->makeType->structType->name + " is unsafe (maked [unsafe_if_uninitalized]). Use initializer syntax.", "", "",
+                        expr->at, CompilationError::unsafe);
+                }
             }
-
         }
         virtual MakeFieldDeclPtr visitMakeStructureField ( ExprMakeStruct * expr, int index, MakeFieldDecl * decl, bool last ) override {
             if ( !decl->value->type ) {

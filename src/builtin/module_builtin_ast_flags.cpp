@@ -162,7 +162,8 @@ namespace das {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
         ft->alias = "FieldDeclarationFlags";
         ft->argNames = { "moveSemantics", "parentType", "capturedConstant",
-            "generated", "capturedRef", "doNotDelete", "privateField", "_sealed", "implemented" };
+            "generated", "capturedRef", "doNotDelete", "privateField", "_sealed",
+            "implemented" };
         return ft;
     }
 
@@ -172,7 +173,7 @@ namespace das {
         ft->argNames = { "isClass", "genCtor", "cppLayout", "cppLayoutNotPod",
             "generated", "persistent", "isLambda", "privateStructure",
             "macroInterface", "_sealed", "skipLockCheck", "circular",
-            "_generator", "hasStaticMembers", "hasStaticFunctions" };
+            "_generator", "hasStaticMembers", "hasStaticFunctions", "unsafeWhenUninitialized" };
         return ft;
     }
 
