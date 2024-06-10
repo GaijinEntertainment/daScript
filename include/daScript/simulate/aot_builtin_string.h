@@ -12,9 +12,9 @@ namespace das {
     void builtin_string_peek ( const char * str, const TBlock<void,TTemporary<TArray<uint8_t> const>> & block, Context * context, LineInfoArg * lineinfo );
     char * builtin_string_peek_and_modify ( const char * str, const TBlock<void,TTemporary<TArray<uint8_t>>> & block, Context * context, LineInfoArg * lineinfo );
 
-    char * builtin_string_escape ( const char *str, Context * context );
+    char * builtin_string_escape ( const char *str, Context * context, LineInfoArg * at );
     char * builtin_string_unescape ( const char *str, Context * context, LineInfoArg * at );
-    char * builtin_string_safe_unescape ( const char *str, Context * context );
+    char * builtin_string_safe_unescape ( const char *str, Context * context, LineInfoArg * at );
 
     vec4f builtin_strdup ( Context &, SimNode_CallBase * call, vec4f * args );
 
@@ -25,23 +25,23 @@ namespace das {
     bool builtin_string_startswith2 ( const char * str, const char * cmp, uint32_t cmpLen, Context * context );
     bool builtin_string_startswith3 ( const char * str, int32_t offset, const char * cmp, Context * context );
     bool builtin_string_startswith4 ( const char * str, int32_t offset, const char * cmp, uint32_t cmpLen, Context * context );
-    char* builtin_string_strip ( const char *str, Context * context );
-    char* builtin_string_strip_left ( const char *str, Context * context );
-    char* builtin_string_strip_right ( const char *str, Context * context );
+    char* builtin_string_strip ( const char *str, Context * context, LineInfoArg * at );
+    char* builtin_string_strip_left ( const char *str, Context * context, LineInfoArg * at );
+    char* builtin_string_strip_right ( const char *str, Context * context, LineInfoArg * at );
     int builtin_string_find1 ( const char *str, const char *substr, int start, Context * context );
     int builtin_string_find2 (const char *str, const char *substr);
     int builtin_find_first_of ( const char * str, const char * substr, Context * context );
     int builtin_find_first_char_of ( const char * str, int Ch, Context * context );
     int builtin_find_first_char_of2 ( const char * str, int Ch, int start, Context * context );
     int builtin_string_length ( const char *str, Context * context );
-    char* builtin_string_slice1 ( const char *str, int start, int end, Context * context );
-    char* builtin_string_slice2 ( const char *str, int start, Context * context );
-    char* builtin_string_reverse ( const char *str, Context * context );
-    char* builtin_string_tolower ( const char *str, Context * context );
+    char* builtin_string_slice1 ( const char *str, int start, int end, Context * context, LineInfoArg * at );
+    char* builtin_string_slice2 ( const char *str, int start, Context * context, LineInfoArg * at );
+    char* builtin_string_reverse ( const char *str, Context * context, LineInfoArg * at );
+    char* builtin_string_tolower ( const char *str, Context * context, LineInfoArg * at );
     char* builtin_string_tolower_in_place ( char* str );
-    char* builtin_string_toupper ( const char *str, Context * context );
+    char* builtin_string_toupper ( const char *str, Context * context, LineInfoArg * at );
     char* builtin_string_toupper_in_place ( char* str );
-    char* builtin_string_chop( const char * str, int start, int length, Context * context );
+    char* builtin_string_chop( const char * str, int start, int length, Context * context, LineInfoArg * at );
     uint32_t string_to_uint ( const char *str, Context * context, LineInfoArg * at );
     int32_t string_to_int ( const char *str, Context * context, LineInfoArg * at );
     uint64_t string_to_uint64 ( const char *str, Context * context, LineInfoArg * at );
@@ -58,27 +58,27 @@ namespace das {
     bool builtin_string_ends_with(const string &str, char * substr, Context * context);
     int32_t builtin_ext_string_length(const string & str);
     void builtin_resize_string(string & str, int32_t newLength);
-    char * string_repeat ( const char * str, int count, Context * context );
-    char * to_string_char(int ch, Context * context);
+    char * string_repeat ( const char * str, int count, Context * context, LineInfoArg * at );
+    char * to_string_char(int ch, Context * context, LineInfoArg * at);
     StringBuilderWriter & write_string_char(StringBuilderWriter & writer, int32_t ch);
     StringBuilderWriter & write_string_chars(StringBuilderWriter & writer, int32_t ch, int32_t count);
     StringBuilderWriter & write_escape_string ( StringBuilderWriter & writer, char * str );
     void builtin_string_split_by_char ( const char * str, const char * delim, const Block & sblk, Context * context, LineInfoArg * lineinfo );
     void builtin_string_split ( const char * str, const char * delim, const Block & sblk, Context * context, LineInfoArg * lineinfo );
-    char * builtin_string_from_array ( const TArray<uint8_t> & bytes, Context * context );
-    char * builtin_string_replace ( const char * str, const char * toSearch, const char * replaceStr, Context * context );
-    char * builtin_string_rtrim ( char* s, Context * context );
-    char * builtin_string_rtrim_ts ( char* s, char * ts, Context * context );
-    char * builtin_string_ltrim ( char* s, Context * context );
-    char * builtin_string_trim ( char* s, Context * context );
+    char * builtin_string_from_array ( const TArray<uint8_t> & bytes, Context * context, LineInfoArg * at );
+    char * builtin_string_replace ( const char * str, const char * toSearch, const char * replaceStr, Context * context, LineInfoArg * at );
+    char * builtin_string_rtrim ( char* s, Context * context, LineInfoArg * at );
+    char * builtin_string_rtrim_ts ( char* s, char * ts, Context * context, LineInfoArg * at );
+    char * builtin_string_ltrim ( char* s, Context * context, LineInfoArg * at );
+    char * builtin_string_trim ( char* s, Context * context, LineInfoArg * at );
 
     char * builtin_reserve_string_buffer ( const char * str, int32_t length, Context * context );
 
     template <typename TT>
-    __forceinline char * format ( const char * fmt, TT value, Context * context ) {
+    __forceinline char * format ( const char * fmt, TT value, Context * context, LineInfoArg * at ) {
         char buf[256];
         snprintf(buf, 256, fmt ? fmt : "", value);
-        return context->allocateString(buf, uint32_t(strlen(buf)));
+        return context->allocateString(buf, uint32_t(strlen(buf)), at);
     }
 
     template <typename TT>

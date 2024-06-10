@@ -481,8 +481,8 @@ namespace das {
 
     template <typename VT, typename ST>
     struct DebugInfoIterator : PointerDimIterator {
-        DebugInfoIterator  ( ST * ar )
-            : PointerDimIterator((char **)ar->fields, ar->count, sizeof(DebugInfoIterator<VT,ST>)) {}
+        DebugInfoIterator  ( ST * ar, LineInfo * at )
+            : PointerDimIterator((char **)ar->fields, ar->count, sizeof(DebugInfoIterator<VT,ST>), at) {}
     };
 
     template <typename VT, typename ST>
@@ -519,11 +519,11 @@ namespace das {
     };
 
     template <typename ST, typename VT>
-    Sequence debugInfoIterator ( ST * st, Context * context ) {
+    Sequence debugInfoIterator ( ST * st, Context * context, LineInfoArg * at ) {
         using StructIterator = DebugInfoIterator<VT,ST>;
-        char * iter = context->allocateIterator(sizeof(StructIterator), "debug info iterator");
-        if ( !iter ) context->throw_out_of_memory(false, sizeof(StructIterator) + 16);
-        new (iter) StructIterator(st);
+        char * iter = context->allocateIterator(sizeof(StructIterator), "debug info iterator", at);
+        if ( !iter ) context->throw_out_of_memory(false, sizeof(StructIterator) + 16, at);
+        new (iter) StructIterator(st, at);
         return { (Iterator *) iter };
     }
 
@@ -538,12 +538,12 @@ namespace das {
         }
     };
 
-    TSequence<EnumValueInfo&> each_EnumInfo ( EnumInfo & st, Context * context ) {
-        return debugInfoIterator<EnumInfo,EnumValueInfo>(&st, context);
+    TSequence<EnumValueInfo&> each_EnumInfo ( EnumInfo & st, Context * context, LineInfoArg * at ) {
+        return debugInfoIterator<EnumInfo,EnumValueInfo>(&st, context, at);
     }
 
-    TSequence<const EnumValueInfo&> each_const_EnumInfo ( const EnumInfo & st, Context * context ) {
-        return debugInfoIterator<EnumInfo,EnumValueInfo>((EnumInfo *)&st, context);
+    TSequence<const EnumValueInfo&> each_const_EnumInfo ( const EnumInfo & st, Context * context, LineInfoArg * at ) {
+        return debugInfoIterator<EnumInfo,EnumValueInfo>((EnumInfo *)&st, context, at);
     }
 
 
@@ -571,12 +571,12 @@ namespace das {
         }
     };
 
-    TSequence<VarInfo&> each_StructInfo ( StructInfo & st, Context * context ) {
-        return debugInfoIterator<StructInfo,VarInfo>(&st, context);
+    TSequence<VarInfo&> each_StructInfo ( StructInfo & st, Context * context, LineInfoArg * at ) {
+        return debugInfoIterator<StructInfo,VarInfo>(&st, context, at);
     }
 
-    TSequence<const VarInfo&> each_const_StructInfo ( const StructInfo & st, Context * context ) {
-        return debugInfoIterator<StructInfo,VarInfo>((StructInfo *)&st, context);
+    TSequence<const VarInfo&> each_const_StructInfo ( const StructInfo & st, Context * context, LineInfoArg * at ) {
+        return debugInfoIterator<StructInfo,VarInfo>((StructInfo *)&st, context, at);
     }
 
     TypeDeclPtr makeTypeInfoFlags() {
@@ -678,12 +678,12 @@ namespace das {
         }
     };
 
-    TSequence<VarInfo&> each_FuncInfo ( FuncInfo & st, Context * context ) {
-        return debugInfoIterator<FuncInfo,VarInfo>(&st, context);
+    TSequence<VarInfo&> each_FuncInfo ( FuncInfo & st, Context * context, LineInfoArg * at ) {
+        return debugInfoIterator<FuncInfo,VarInfo>(&st, context, at);
     }
 
-    TSequence<const VarInfo&> each_const_FuncInfo ( const FuncInfo & st, Context * context ) {
-        return debugInfoIterator<FuncInfo,VarInfo>((FuncInfo *)&st, context);
+    TSequence<const VarInfo&> each_const_FuncInfo ( const FuncInfo & st, Context * context, LineInfoArg * at ) {
+        return debugInfoIterator<FuncInfo,VarInfo>((FuncInfo *)&st, context, at);
     }
 
     struct CodeOfPoliciesAnnotation : ManagedStructureAnnotation<CodeOfPolicies,false,false> {
@@ -903,7 +903,7 @@ namespace das {
         });
     }
 
-    RttiValue rtti_builtin_argument_value(const AnnotationArgument & info, Context * context ) {
+    RttiValue rtti_builtin_argument_value(const AnnotationArgument & info, Context * context, LineInfoArg * at ) {
         RttiValue nada;
         nada._variant = 8;  // nothing
         nada.nothing = v_zero();
@@ -922,7 +922,7 @@ namespace das {
             break;
         case Type::tString:
             nada._variant = 7;
-            nada.sValue = context->allocateString(info.sValue);
+            nada.sValue = context->allocateString(info.sValue, at);
             break;
         default:;
         }
@@ -1053,9 +1053,9 @@ namespace das {
     }
 
 
-    char * rtti_get_das_type_name(Type tt, Context * context) {
+    char * rtti_get_das_type_name(Type tt, Context * context, LineInfoArg * at) {
         string str = das_to_string(tt);
-        return context->allocateString(str);
+        return context->allocateString(str, at);
     }
 
     int rtti_add_annotation_argument(AnnotationArgumentList& list, const char* name) {
@@ -1169,33 +1169,33 @@ namespace das {
         return lineInfo ? *lineInfo : LineInfo();
     }
 
-    char * builtin_print_data ( void * data, const TypeInfo * typeInfo, Bitfield flags, Context * context ) {
+    char * builtin_print_data ( void * data, const TypeInfo * typeInfo, Bitfield flags, Context * context, LineInfoArg * at ) {
         TextWriter ssw;
         ssw << debug_value(data, (TypeInfo *)typeInfo, PrintFlags(uint32_t(flags)));
-        return context->allocateString(ssw.str());
+        return context->allocateString(ssw.str(), at);
     }
 
-    char * builtin_print_data_v ( float4 data, const TypeInfo * typeInfo, Bitfield flags, Context * context ) {
+    char * builtin_print_data_v ( float4 data, const TypeInfo * typeInfo, Bitfield flags, Context * context, LineInfoArg * at ) {
         TextWriter ssw;
         ssw << debug_value(vec4f(data), (TypeInfo *)typeInfo, PrintFlags(uint32_t(flags)));
-        return context->allocateString(ssw.str());
+        return context->allocateString(ssw.str(), at);
     }
 
-    char * builtin_debug_type ( const TypeInfo * typeInfo, Context * context ) {
+    char * builtin_debug_type ( const TypeInfo * typeInfo, Context * context, LineInfoArg * at ) {
         if ( !typeInfo ) return nullptr;
         auto dt = debug_type(typeInfo);
-        return context->allocateString(dt);
+        return context->allocateString(dt, at);
     }
 
-    char * builtin_debug_line ( const LineInfo & at, bool fully, Context * context ) {
+    char * builtin_debug_line ( const LineInfo & at, bool fully, Context * context, LineInfoArg * lineInfo ) {
         auto dt = at.describe(fully);
-        return context->allocateString(dt);
+        return context->allocateString(dt, lineInfo);
     }
 
-    char * builtin_get_typeinfo_mangled_name ( const TypeInfo * typeInfo, Context * context ) {
+    char * builtin_get_typeinfo_mangled_name ( const TypeInfo * typeInfo, Context * context, LineInfoArg * at ) {
         if ( !typeInfo ) return nullptr;
         auto dt = getTypeInfoMangledName((TypeInfo*)typeInfo);
-        return context->allocateString(dt);
+        return context->allocateString(dt, at);
     }
 
     const FuncInfo * builtin_get_function_info_by_mnh ( Context &, Func fun ) {
@@ -1482,7 +1482,7 @@ namespace das {
                     ->arg("varInfo");
             addExtern<DAS_BIND_FUN(rtti_builtin_argument_value),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "get_annotation_argument_value",
                 SideEffects::modifyExternal, "rtti_builtin_argument_value")
-                    ->args({"info","context"});
+                    ->args({"info","context","at"});
             addExtern<DAS_BIND_FUN(rtti_builtin_module_for_each_enumeration)>(*this, lib, "module_for_each_enumeration",
                 SideEffects::modifyExternal, "rtti_builtin_module_for_each_enumeration")
                     ->args({"module","block","context","line"});
@@ -1527,28 +1527,28 @@ namespace das {
                     ->args({"from","to"});
             addExtern<DAS_BIND_FUN(rtti_get_das_type_name)>(*this, lib,  "get_das_type_name",
                 SideEffects::none, "rtti_get_das_type_name")
-                    ->args({"type","context"});
+                    ->args({"type","context","at"});
             addExtern<DAS_BIND_FUN(rtti_add_annotation_argument)>(*this, lib,  "add_annotation_argument",
                 SideEffects::none, "add_annotation_argument")
                     ->args({"annotation","name"});
             // data printer
             addExtern<DAS_BIND_FUN(builtin_print_data)>(*this, lib, "sprint_data",
                 SideEffects::none, "builtin_print_data")
-                    ->args({"data","type","flags","context"});
+                    ->args({"data","type","flags","context","at"});
             addExtern<DAS_BIND_FUN(builtin_print_data_v)>(*this, lib, "sprint_data",
                 SideEffects::none, "builtin_print_data_v")
-                    ->args({"data","type","flags","context"});
+                    ->args({"data","type","flags","context","at"});
             // debug typeinfo
             addExtern<DAS_BIND_FUN(builtin_debug_type)>(*this, lib, "describe",
                 SideEffects::none, "builtin_debug_type")
-                    ->args({"type","context"});
+                    ->args({"type","context","at"});
             auto dl = addExtern<DAS_BIND_FUN(builtin_debug_line)>(*this, lib, "describe",
                 SideEffects::none, "builtin_debug_line_info")
-                    ->args({"lineinfo","fully","context"});
+                    ->args({"lineinfo","fully","context","at"});
             dl->arguments[1]->init = make_smart<ExprConstBool>(false);
             addExtern<DAS_BIND_FUN(builtin_get_typeinfo_mangled_name)>(*this, lib, "get_mangled_name",
                 SideEffects::none, "getTypeInfoMangledName")
-                    ->args({"type","context"});
+                    ->args({"type","context","at"});
             // function mnh lookup
             addExtern<DAS_BIND_FUN(builtin_get_function_info_by_mnh)>(*this, lib, "get_function_info",
                 SideEffects::none, "builtin_get_function_info_by_mnh")
@@ -1596,22 +1596,22 @@ namespace das {
             // 'each' iterators for jit
             addExtern<DAS_BIND_FUN(each_FuncInfo),SimNode_ExtFuncCallAndCopyOrMove,explicitConstArgFn>(*this, lib, "each",
                 SideEffects::none, "each_FuncInfo")
-                    ->args({"info","context"});
+                    ->args({"info","context","at"});
             addExtern<DAS_BIND_FUN(each_const_FuncInfo),SimNode_ExtFuncCallAndCopyOrMove,explicitConstArgFn>(*this, lib, "each",
                 SideEffects::none, "each_const_FuncInfo")
-                    ->args({"info","context"});
+                    ->args({"info","context","at"});
             addExtern<DAS_BIND_FUN(each_StructInfo),SimNode_ExtFuncCallAndCopyOrMove,explicitConstArgFn>(*this, lib, "each",
                 SideEffects::none, "each_StructInfo")
-                    ->args({"info","context"});
+                    ->args({"info","context","at"});
             addExtern<DAS_BIND_FUN(each_const_StructInfo),SimNode_ExtFuncCallAndCopyOrMove,explicitConstArgFn>(*this, lib, "each",
                 SideEffects::none, "each_const_StructInfo")
-                    ->args({"info","context"});
+                    ->args({"info","context","at"});
             addExtern<DAS_BIND_FUN(each_EnumInfo),SimNode_ExtFuncCallAndCopyOrMove,explicitConstArgFn>(*this, lib, "each",
                 SideEffects::none, "each_EnumInfo")
-                    ->args({"info","context"});
+                    ->args({"info","context","at"});
             addExtern<DAS_BIND_FUN(each_const_EnumInfo),SimNode_ExtFuncCallAndCopyOrMove,explicitConstArgFn>(*this, lib, "each",
                 SideEffects::none, "each_const_EnumInfo")
-                    ->args({"info","context"});
+                    ->args({"info","context","at"});
             // add builtin module
             compileBuiltinModule("rtti.das",rtti_das, sizeof(rtti_das));
             // lets make sure its all aot ready

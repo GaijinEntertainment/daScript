@@ -644,7 +644,7 @@ namespace das
 
     template <typename intT>
     struct EnumIterator : Iterator {
-        EnumIterator ( EnumInfo * ei ) : info(ei) {}
+        EnumIterator ( EnumInfo * ei, LineInfo * at ) : Iterator(at), info(ei) {}
         virtual bool first ( Context &, char * _value ) override {
             count = 0;
             range_to = int32_t(info->count);
@@ -666,7 +666,7 @@ namespace das
             }
         }
         virtual void close ( Context & context, char * ) override {
-            context.freeIterator((char *)this);
+            context.freeIterator((char *)this, debugInfo);
         }
         EnumInfo *  info = nullptr;
         int32_t     count = 0;
@@ -674,7 +674,7 @@ namespace das
     };
 
     struct CountIterator : Iterator {
-        CountIterator ( int32_t _start, int32_t _step ) : start(_start), step(_step) {};
+        CountIterator ( int32_t _start, int32_t _step, LineInfo * at ) : Iterator(at), start(_start), step(_step) {}
         virtual bool first ( Context &, char * _value ) override {
             int32_t * value = (int32_t *) _value;
             *value = start;
@@ -686,23 +686,23 @@ namespace das
             return true;
         }
         virtual void close ( Context & context, char * ) override {
-            context.freeIterator((char *)this);
+            context.freeIterator((char *)this, debugInfo);
         }
         int32_t start = 0;
         int32_t step = 0;
     };
 
-    TSequence<int32_t> builtin_count ( int32_t start, int32_t step, Context * context ) {
-        char * iter = context->allocateIterator(sizeof(CountIterator), "count iterator");
-        if ( !iter ) context->throw_out_of_memory(false, sizeof(CountIterator)+16);
-        new (iter) CountIterator(start, step);
+    TSequence<int32_t> builtin_count ( int32_t start, int32_t step, Context * context, LineInfoArg * at ) {
+        char * iter = context->allocateIterator(sizeof(CountIterator), "count iterator", at);
+        if ( !iter ) context->throw_out_of_memory(false, sizeof(CountIterator)+16, at);
+        new (iter) CountIterator(start, step, at);
         return TSequence<int>((Iterator *)iter);
     }
 
-    TSequence<uint32_t> builtin_ucount ( uint32_t start, uint32_t step, Context * context ) {
-        char * iter = context->allocateIterator(sizeof(CountIterator), "ucount iterator");
-        if ( !iter ) context->throw_out_of_memory(false, sizeof(CountIterator)+16);
-        new (iter) CountIterator(start, step);
+    TSequence<uint32_t> builtin_ucount ( uint32_t start, uint32_t step, Context * context, LineInfoArg * at ) {
+        char * iter = context->allocateIterator(sizeof(CountIterator), "ucount iterator", at);
+        if ( !iter ) context->throw_out_of_memory(false, sizeof(CountIterator)+16, at);
+        new (iter) CountIterator(start, step, at);
         return TSequence<int>((Iterator *)iter);
     }
 
@@ -881,24 +881,24 @@ namespace das
         }
     }
 
-    void builtin_make_good_array_iterator ( Sequence & result, const Array & arr, int stride, Context * context ) {
-        char * iter = context->allocateIterator(sizeof(GoodArrayIterator), "array<> iterator");
-        if ( !iter ) context->throw_out_of_memory(false, sizeof(GoodArrayIterator)+16);
-        new (iter) GoodArrayIterator((Array *)&arr, stride);
+    void builtin_make_good_array_iterator ( Sequence & result, const Array & arr, int stride, Context * context, LineInfoArg * at ) {
+        char * iter = context->allocateIterator(sizeof(GoodArrayIterator), "array<> iterator", at);
+        if ( !iter ) context->throw_out_of_memory(false, sizeof(GoodArrayIterator)+16, at);
+        new (iter) GoodArrayIterator((Array *)&arr, stride, at);
         result = { (Iterator *) iter };
     }
 
-    void builtin_make_fixed_array_iterator ( Sequence & result, void * data, int size, int stride, Context * context ) {
-        char * iter = context->allocateIterator(sizeof(FixedArrayIterator), "fixed array iterator");
-        if ( !iter ) context->throw_out_of_memory(false, sizeof(FixedArrayIterator)+16);
-        new (iter) FixedArrayIterator((char *)data, size, stride);
+    void builtin_make_fixed_array_iterator ( Sequence & result, void * data, int size, int stride, Context * context, LineInfoArg * at ) {
+        char * iter = context->allocateIterator(sizeof(FixedArrayIterator), "fixed array iterator", at);
+        if ( !iter ) context->throw_out_of_memory(false, sizeof(FixedArrayIterator)+16, at);
+        new (iter) FixedArrayIterator((char *)data, size, stride, at);
         result = { (Iterator *) iter };
     }
 
-    void builtin_make_range_iterator ( Sequence & result, range rng, Context * context ) {
-        char * iter = context->allocateIterator(sizeof(RangeIterator<range>), "range iterator");
-        if ( !iter ) context->throw_out_of_memory(false, sizeof(RangeIterator<range>)+16);
-        new (iter) RangeIterator<range>(rng);
+    void builtin_make_range_iterator ( Sequence & result, range rng, Context * context, LineInfoArg * at ) {
+        char * iter = context->allocateIterator(sizeof(RangeIterator<range>), "range iterator", at);
+        if ( !iter ) context->throw_out_of_memory(false, sizeof(RangeIterator<range>)+16, at);
+        new (iter) RangeIterator<range>(rng, at);
         result = { (Iterator *) iter };
     }
 
@@ -917,19 +917,19 @@ namespace das
         char * iter = nullptr;
         switch ( tinfo->type ) {
         case Type::tEnumeration:
-            iter = context.allocateIterator(sizeof(EnumIterator<int32_t>), "enum iterator");
+            iter = context.allocateIterator(sizeof(EnumIterator<int32_t>), "enum iterator", &call->debugInfo);
             if ( !iter ) context.throw_out_of_memory(false, sizeof(EnumIterator<int32_t>)+16, &call->debugInfo);
-            new (iter) EnumIterator<int32_t>(einfo);
+            new (iter) EnumIterator<int32_t>(einfo, &call->debugInfo);
             break;
         case Type::tEnumeration8:
-            iter = context.allocateIterator(sizeof(EnumIterator<int8_t>), "enum8 iterator");
+            iter = context.allocateIterator(sizeof(EnumIterator<int8_t>), "enum8 iterator", &call->debugInfo);
             if ( !iter ) context.throw_out_of_memory(false, sizeof(EnumIterator<int8_t>)+16, &call->debugInfo);
-            new (iter) EnumIterator<int8_t>(einfo);
+            new (iter) EnumIterator<int8_t>(einfo, &call->debugInfo);
             break;
         case Type::tEnumeration16:
-            iter = context.allocateIterator(sizeof(EnumIterator<int16_t>), "enum16 iterator");
+            iter = context.allocateIterator(sizeof(EnumIterator<int16_t>), "enum16 iterator", &call->debugInfo);
             if ( !iter ) context.throw_out_of_memory(false, sizeof(EnumIterator<int16_t>)+16, &call->debugInfo);
-            new (iter) EnumIterator<int16_t>(einfo);
+            new (iter) EnumIterator<int16_t>(einfo, &call->debugInfo);
             break;
         default:
             DAS_ASSERT(0 && "how???");
@@ -939,31 +939,32 @@ namespace das
         return v_zero();
     }
 
-    void builtin_make_string_iterator ( Sequence & result, char * str, Context * context ) {
-        char * iter = context->allocateIterator(sizeof(StringIterator), "string iterator");
-        if ( !iter ) context->throw_out_of_memory(false, sizeof(StringIterator)+16);
-        new (iter) StringIterator(str);
+    void builtin_make_string_iterator ( Sequence & result, char * str, Context * context, LineInfoArg * at ) {
+        char * iter = context->allocateIterator(sizeof(StringIterator), "string iterator", at);
+        if ( !iter ) context->throw_out_of_memory(false, sizeof(StringIterator)+16, at);
+        new (iter) StringIterator(str, at);
         result = { (Iterator *) iter };
     }
 
     struct NilIterator : Iterator {
+        NilIterator(LineInfo * at) : Iterator(at) {}
         virtual bool first ( Context &, char * ) override { return false; }
         virtual bool next  ( Context &, char * ) override { return false; }
         virtual void close ( Context & context, char * ) override {
-            context.freeIterator((char *)this);
+            context.freeIterator((char *)this, debugInfo);
         }
     };
 
-    void builtin_make_nil_iterator ( Sequence & result, Context * context ) {
-        char * iter = context->allocateIterator(sizeof(NilIterator), "nil iterator");
+    void builtin_make_nil_iterator ( Sequence & result, Context * context, LineInfoArg * at ) {
+        char * iter = context->allocateIterator(sizeof(NilIterator), "nil iterator", at);
         if ( !iter ) context->throw_out_of_memory(false, sizeof(NilIterator)+16);
-        new (iter) NilIterator();
+        new (iter) NilIterator(at);
         result = { (Iterator *) iter };
     }
 
     struct LambdaIterator : Iterator {
         using lambdaFunc = bool (*) (Context *,void*, char*);
-        LambdaIterator ( Context & context, const Lambda & ll, int st ) : lambda(ll), stride(st) {
+        LambdaIterator ( Context & context, const Lambda & ll, int st, LineInfo * at ) : Iterator(at), lambda(ll), stride(st) {
             SimFunction ** fnMnh = (SimFunction **) lambda.capture;
             if (!fnMnh) context.throw_error("invoke null lambda");
             simFunc = *fnMnh;
@@ -998,7 +999,7 @@ namespace das
             };
             auto flags = context.stopFlags; // need to save stop flags, we can be in the middle of some return or something
             context.call(finFunc, argValues, 0);
-            context.freeIterator((char *)this);
+            context.freeIterator((char *)this, debugInfo);
             context.stopFlags = flags;
         }
         virtual void walk ( DataWalker & walker ) override {
@@ -1012,10 +1013,10 @@ namespace das
         int             stride = 0;
     };
 
-    void builtin_make_lambda_iterator ( Sequence & result, const Lambda lambda, int stride, Context * context ) {
-        char * iter = context->allocateIterator(sizeof(LambdaIterator), "lambda iterator");
+    void builtin_make_lambda_iterator ( Sequence & result, const Lambda lambda, int stride, Context * context, LineInfoArg * at ) {
+        char * iter = context->allocateIterator(sizeof(LambdaIterator), "lambda iterator", at);
         if ( !iter ) context->throw_out_of_memory(false, sizeof(LambdaIterator)+16);
-        new (iter) LambdaIterator(*context, lambda, stride);
+        new (iter) LambdaIterator(*context, lambda, stride, at);
         result = { (Iterator *) iter };
     }
 
@@ -1028,10 +1029,10 @@ namespace das
         context->collectProfileInfo(tp);
     }
 
-    char * collectProfileInfo( Context * context ) {
+    char * collectProfileInfo( Context * context, LineInfoArg * at ) {
         TextWriter tout;
         context->collectProfileInfo(tout);
-        return context->allocateString(tout.str());
+        return context->allocateString(tout.str(), at);
     }
 
     void builtin_array_free ( Array & dim, int szt, Context * __context__, LineInfoArg * at ) {
@@ -1315,29 +1316,29 @@ namespace das
         arr = g_CommandLineArguments;
     }
 
-    char * builtin_das_root ( Context * context ) {
-        return context->allocateString(getDasRoot());
+    char * builtin_das_root ( Context * context, LineInfoArg * at ) {
+        return context->allocateString(getDasRoot(), at);
     }
 
-    char * to_das_string(const string & str, Context * ctx) {
-        return ctx->allocateString(str);
+    char * to_das_string(const string & str, Context * ctx, LineInfoArg * at) {
+        return ctx->allocateString(str, at);
     }
 
     char * pass_string(char * str) {
         return str;
     }
 
-    char * clone_pass_string(char * str, Context * ctx ) {
+    char * clone_pass_string(char * str, Context * ctx, LineInfoArg * at ) {
         if ( !str ) return nullptr;
-        return ctx->allocateString(str);
+        return ctx->allocateString(str, at);
     }
 
     void set_das_string(string & str, const char * bs) {
         str = bs ? bs : "";
     }
 
-    void set_string_das(char * & bs, const string & str, Context * ctx ) {
-        bs = ctx->allocateString(str);
+    void set_string_das(char * & bs, const string & str, Context * ctx, LineInfoArg * at ) {
+        bs = ctx->allocateString(str, at);
     }
 
     void peek_das_string(const string & str, const TBlock<void,TTemporary<const char *>> & block, Context * context, LineInfoArg * at) {
@@ -1346,11 +1347,11 @@ namespace das
         context->invoke(block, args, nullptr, at);
     }
 
-    char * builtin_string_clone ( const char *str, Context * context ) {
+    char * builtin_string_clone ( const char *str, Context * context, LineInfoArg * at ) {
         const uint32_t strLen = stringLengthSafe ( *context, str );
         if (!strLen)
             return nullptr;
-        return context->allocateString(str, strLen);
+        return context->allocateString(str, strLen, at);
     }
 
     void builtin_temp_array ( void * data, int size, const Block & block, Context * context, LineInfoArg * at ) {
@@ -1506,7 +1507,7 @@ namespace das
         // command line arguments
         addExtern<DAS_BIND_FUN(builtin_das_root)>(*this, lib, "get_das_root",
             SideEffects::accessExternal,"builtin_das_root")
-                ->arg("context");
+                ->args({"context","at"});
         addExtern<DAS_BIND_FUN(getCommandLineArguments)>(*this, lib, "builtin_get_command_line_arguments",
             SideEffects::accessExternal,"getCommandLineArguments")
                 ->arg("arguments");
@@ -1542,33 +1543,33 @@ namespace das
         // count and ucount iterators
         auto fnCount = addExtern<DAS_BIND_FUN(builtin_count),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "count",
             SideEffects::modifyExternal, "builtin_count")
-                ->args({"start","step","context"})->setNoDiscard();
+                ->args({"start","step","context","at"})->setNoDiscard();
         fnCount->arguments[0]->init = make_smart<ExprConstInt>(0);  // start=0
         fnCount->arguments[1]->init = make_smart<ExprConstInt>(1);  // step=0
         auto fnuCount = addExtern<DAS_BIND_FUN(builtin_ucount),SimNode_ExtFuncCallAndCopyOrMove>(*this, lib, "ucount",
             SideEffects::none, "builtin_ucount")
-                ->args({"start","step","context"})->setNoDiscard();
+                ->args({"start","step","context","at"})->setNoDiscard();
         fnuCount->arguments[0]->init = make_smart<ExprConstUInt>(0);  // start=0
         fnuCount->arguments[1]->init = make_smart<ExprConstUInt>(1);  // step=0
         // make-iterator functions
         addExtern<DAS_BIND_FUN(builtin_make_good_array_iterator)>(*this, lib,  "_builtin_make_good_array_iterator",
             SideEffects::modifyArgumentAndExternal, "builtin_make_good_array_iterator")
-                ->args({"iterator","array","stride","context"});
+                ->args({"iterator","array","stride","context","at"});
         addExtern<DAS_BIND_FUN(builtin_make_fixed_array_iterator)>(*this, lib,  "_builtin_make_fixed_array_iterator",
             SideEffects::modifyArgumentAndExternal, "builtin_make_fixed_array_iterator")
-                ->args({"iterator","data","size","stride","context"});;
+                ->args({"iterator","data","size","stride","context","at"});
         addExtern<DAS_BIND_FUN(builtin_make_range_iterator)>(*this, lib,  "_builtin_make_range_iterator",
             SideEffects::modifyArgumentAndExternal, "builtin_make_range_iterator")
-                ->args({"iterator","range","context"});;
+                ->args({"iterator","range","context","at"});
         addExtern<DAS_BIND_FUN(builtin_make_string_iterator)>(*this, lib,  "_builtin_make_string_iterator",
             SideEffects::modifyArgumentAndExternal, "builtin_make_string_iterator")
-                ->args({"iterator","string","context"})->setCaptureString();
+                ->args({"iterator","string","context","at"})->setCaptureString();
         addExtern<DAS_BIND_FUN(builtin_make_nil_iterator)>(*this, lib,  "_builtin_make_nil_iterator",
             SideEffects::modifyArgumentAndExternal, "builtin_make_nil_iterator")
-                ->args({"iterator","context"});;
+                ->args({"iterator","context", "at"});
         addExtern<DAS_BIND_FUN(builtin_make_lambda_iterator)>(*this, lib,  "_builtin_make_lambda_iterator",
             SideEffects::modifyArgumentAndExternal, "builtin_make_lambda_iterator")
-                ->args({"iterator","lambda","stride","context"});
+                ->args({"iterator","lambda","stride","context","at"});
         addInterop<builtin_make_enum_iterator,void,vec4f>(*this, lib, "_builtin_make_enum_iterator",
             SideEffects::modifyArgumentAndExternal, "builtin_make_enum_iterator")
                 ->arg("iterator");
@@ -1607,7 +1608,7 @@ namespace das
                 ->arg("context");
         addExtern<DAS_BIND_FUN(collectProfileInfo)>(*this, lib, "collect_profile_info",
             SideEffects::modifyExternal, "collectProfileInfo")
-                ->arg("context");
+                ->args({"context","at"});
         // variant
         addExtern<DAS_BIND_FUN(variant_index)>(*this, lib, "variant_index", SideEffects::none, "variant_index");
         addExtern<DAS_BIND_FUN(set_variant_index)>(*this, lib, "set_variant_index",
@@ -1719,10 +1720,10 @@ namespace das
                 ->args({"table","context"});
         addExtern<DAS_BIND_FUN(builtin_table_keys)>(*this, lib, "__builtin_table_keys",
             SideEffects::modifyArgumentAndExternal, "builtin_table_keys")
-                ->args({"iterator","table","stride","context"});
+                ->args({"iterator","table","stride","context","at"});
         addExtern<DAS_BIND_FUN(builtin_table_values)>(*this, lib, "__builtin_table_values",
             SideEffects::modifyArgumentAndExternal, "builtin_table_values")
-                ->args({"iterator","table","stride","context"});
+                ->args({"iterator","table","stride","context","at"});
         // array and table free
         addExtern<DAS_BIND_FUN(builtin_array_free)>(*this, lib, "__builtin_array_free",
             SideEffects::modifyArgumentAndExternal, "builtin_array_free")
@@ -1848,25 +1849,25 @@ namespace das
         // das string binding
         addExtern<DAS_BIND_FUN(to_das_string)>(*this, lib, "string",
             SideEffects::none, "to_das_string")
-                ->args({"source","context"});
+                ->args({"source","context","at"});
         addExtern<DAS_BIND_FUN(pass_string)>(*this, lib, "string",
             SideEffects::none, "pass_string", permanentArgFn())
                 ->args({"source"})->setCaptureString();
         addExtern<DAS_BIND_FUN(clone_pass_string)>(*this, lib, "string",
             SideEffects::none, "clone_pass_string", temporaryArgFn())
-                ->args({"source","context"});
+                ->args({"source","context","at"});
         addExtern<DAS_BIND_FUN(set_das_string)>(*this, lib, "clone",
             SideEffects::modifyArgument,"set_das_string")
                 ->args({"target","src"});
         addExtern<DAS_BIND_FUN(set_string_das)>(*this, lib, "clone",
             SideEffects::modifyArgument,"set_string_das")
-                ->args({"target","src","context"});
+                ->args({"target","src","context","at"});
         addExtern<DAS_BIND_FUN(peek_das_string)>(*this, lib, "peek",
             SideEffects::modifyExternal,"peek_das_string_T")
                 ->args({"src","block","context","line"})->setAotTemplate();
         addExtern<DAS_BIND_FUN(builtin_string_clone)>(*this, lib, "clone_string",
             SideEffects::none, "builtin_string_clone")
-                ->args({"src","context"});
+                ->args({"src","context","at"});
         // das-string
         addExtern<DAS_BIND_FUN(das_str_equ)>(*this, lib, "==", SideEffects::none, "das_str_equ");
         addExtern<DAS_BIND_FUN(das_str_nequ)>(*this, lib, "!=", SideEffects::none, "das_str_nequ");

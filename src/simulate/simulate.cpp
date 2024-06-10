@@ -50,7 +50,7 @@ namespace das
             char ** value = (char **) _value;
             *value = nullptr;
         }
-        context.freeIterator((char *)this);
+        context.freeIterator((char *)this, debugInfo);
     }
 
     // this is here to occasionally investigate untyped evaluation paths

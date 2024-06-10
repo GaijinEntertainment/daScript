@@ -163,11 +163,11 @@ namespace das
         addFunctionBasic<char *>(*this,lib);
         addFunctionOrdered<char *>(*this,lib);
         addFunctionConcat<char *>(*this,lib);
-        addExtern<DAS_BIND_FUN(das_lexical_cast<int32_t>)>(*this, lib, "string", SideEffects::none, "das_lexical_cast")->args({"value","context"});
-        addExtern<DAS_BIND_FUN(das_lexical_cast<uint32_t>)>(*this, lib, "string", SideEffects::none, "das_lexical_cast")->args({"value","context"});
-        addExtern<DAS_BIND_FUN(das_lexical_cast<int64_t>)>(*this, lib, "string", SideEffects::none, "das_lexical_cast")->args({"value","context"});
-        addExtern<DAS_BIND_FUN(das_lexical_cast<uint64_t>)>(*this, lib, "string", SideEffects::none, "das_lexical_cast")->args({"value","context"});
-        addExtern<DAS_BIND_FUN(das_lexical_cast<float>)>(*this, lib, "string", SideEffects::none, "das_lexical_cast")->args({"value","context"});
+        addExtern<DAS_BIND_FUN(das_lexical_cast<int32_t>)>(*this, lib, "string", SideEffects::none, "das_lexical_cast")->args({"value","context","at"});
+        addExtern<DAS_BIND_FUN(das_lexical_cast<uint32_t>)>(*this, lib, "string", SideEffects::none, "das_lexical_cast")->args({"value","context","at"});
+        addExtern<DAS_BIND_FUN(das_lexical_cast<int64_t>)>(*this, lib, "string", SideEffects::none, "das_lexical_cast")->args({"value","context","at"});
+        addExtern<DAS_BIND_FUN(das_lexical_cast<uint64_t>)>(*this, lib, "string", SideEffects::none, "das_lexical_cast")->args({"value","context","at"});
+        addExtern<DAS_BIND_FUN(das_lexical_cast<float>)>(*this, lib, "string", SideEffects::none, "das_lexical_cast")->args({"value","context","at"});
     }
 }
 

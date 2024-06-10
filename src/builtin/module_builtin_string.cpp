@@ -81,29 +81,29 @@ namespace das
         return t + 1;
     }
 
-    char* builtin_string_strip ( const char *str, Context * context ) {
+    char* builtin_string_strip ( const char *str, Context * context, LineInfoArg * at ) {
         const uint32_t strLen = stringLengthSafe ( *context, str );
         if (!strLen)
             return nullptr;
         const char *start = strip_l(str);
         const char *end = strip_r(str, strLen);
-        return end > start ? context->allocateString(start, uint32_t(end-start)) : nullptr;
+        return end > start ? context->allocateString(start, uint32_t(end-start), at) : nullptr;
     }
 
-    char* builtin_string_strip_left ( const char *str, Context * context ) {
+    char* builtin_string_strip_left ( const char *str, Context * context, LineInfoArg * at ) {
         const uint32_t strLen = stringLengthSafe ( *context, str );
         if (!strLen)
             return nullptr;
         const char *start = strip_l(str);
-        return uint32_t(start-str) < strLen ? context->allocateString(start, strLen-uint32_t(start-str)) : nullptr;
+        return uint32_t(start-str) < strLen ? context->allocateString(start, strLen-uint32_t(start-str), at) : nullptr;
     }
 
-    char* builtin_string_strip_right ( const char *str, Context * context ) {
+    char* builtin_string_strip_right ( const char *str, Context * context, LineInfoArg * at ) {
         const uint32_t strLen = stringLengthSafe ( *context, str );
         if (!strLen)
             return nullptr;
         const char *end = strip_r(str, strLen);
-        return end != str ? context->allocateString(str, uint32_t(end-str)) : nullptr;
+        return end != str ? context->allocateString(str, uint32_t(end-str), at) : nullptr;
     }
 
     static inline int clamp_int(int v, int minv, int maxv) {
@@ -131,33 +131,33 @@ namespace das
         return stringLengthSafe ( *context, str );
     }
 
-    char* builtin_string_chop(const char* str, int start, int length, Context* context) {
+    char* builtin_string_chop(const char* str, int start, int length, Context* context, LineInfoArg * at) {
         if ( !str || length<=0 ) return nullptr;
-        return context->allocateString(str + start, length);
+        return context->allocateString(str + start, length, at);
     }
 
-    char* builtin_string_slice1 ( const char *str, int start, int end, Context * context ) {
+    char* builtin_string_slice1 ( const char *str, int start, int end, Context * context, LineInfoArg * at ) {
         const uint32_t strLen = stringLengthSafe ( *context, str );
         if (!strLen)
             return nullptr;
         start = clamp_int((start < 0) ? (strLen + start) : start, 0, strLen);
         end = clamp_int((end < 0) ? (strLen + end) : end, 0, strLen);
-        return end > start ? context->allocateString(str + start, uint32_t(end-start)) : nullptr;
+        return end > start ? context->allocateString(str + start, uint32_t(end-start), at) : nullptr;
     }
 
-    char* builtin_string_slice2 ( const char *str, int start, Context * context ) {
+    char* builtin_string_slice2 ( const char *str, int start, Context * context, LineInfoArg * at ) {
         const uint32_t strLen = stringLengthSafe ( *context, str );
         if (!strLen)
             return nullptr;
         start = clamp_int((start < 0) ? (strLen + start) : start, 0, strLen);
-        return strLen > uint32_t(start) ? context->allocateString(str + start, uint32_t(strLen-start)) : nullptr;
+        return strLen > uint32_t(start) ? context->allocateString(str + start, uint32_t(strLen-start), at) : nullptr;
     }
 
-    char* builtin_string_reverse ( const char *str, Context * context ) {
+    char* builtin_string_reverse ( const char *str, Context * context, LineInfoArg * at ) {
         const uint32_t strLen = stringLengthSafe ( *context, str );
         if (!strLen)
             return nullptr;
-        char * ret = context->allocateString(str, strLen);
+        char * ret = context->allocateString(str, strLen, at);
         str += strLen-1;
         for (char *d = ret, *end = ret + strLen; d != end; --str, ++d)
           *d = *str;
@@ -168,11 +168,11 @@ namespace das
         return (ch >= 'A' && ch <= 'Z') ? (ch - 'A' + 'a') : ch;
     }
 
-    char* builtin_string_tolower ( const char *str, Context * context ) {
+    char* builtin_string_tolower ( const char *str, Context * context, LineInfoArg * at ) {
         const uint32_t strLen = stringLengthSafe ( *context, str );
         if (!strLen)
             return nullptr;
-        char * ret = context->allocateString(str, strLen);
+        char * ret = context->allocateString(str, strLen, at);
         for (char *d = ret, *end = ret + strLen; d != end; ++str, ++d)
           *d = (char)to_lower(*str);
         return ret;
@@ -194,11 +194,11 @@ namespace das
         return (ch >= 'a' && ch <= 'z') ? (ch - 'a' + 'A') : ch;
     }
 
-    char* builtin_string_toupper ( const char *str, Context * context ) {
+    char* builtin_string_toupper ( const char *str, Context * context, LineInfoArg * at ) {
         const uint32_t strLen = stringLengthSafe ( *context, str );
         if (!strLen)
             return nullptr;
-        char * ret = context->allocateString(str, strLen);
+        char * ret = context->allocateString(str, strLen, at);
         for (char *d = ret, *end = ret + strLen; d != end; ++str, ++d)
           *d = (char)to_upper(*str);
         return ret;
@@ -382,16 +382,16 @@ namespace das
         return writer;
     }
 
-    char * to_string_char ( int ch, Context * context ) {
-        auto st = context->allocateString(nullptr, 1);
+    char * to_string_char ( int ch, Context * context, LineInfoArg * at ) {
+        auto st = context->allocateString(nullptr, 1, at);
         *st = char(ch);
         return st;
     }
 
-    char * string_repeat ( const char * str, int count, Context * context ) {
+    char * string_repeat ( const char * str, int count, Context * context, LineInfoArg * at ) {
         uint32_t len = stringLengthSafe ( *context, str );
         if ( !len || count<=0 ) return nullptr;
-        char * res = context->allocateString(nullptr, len * count);
+        char * res = context->allocateString(nullptr, len * count, at);
         for ( char * s = res; count; count--, s+=len ) {
             memcpy ( s, str, len );
         }
@@ -503,7 +503,7 @@ namespace das
         context->invoke(block, args, nullptr, at);
     }
 
-    char * builtin_string_replace ( const char * str, const char * toSearch, const char * replaceStr, Context * context ) {
+    char * builtin_string_replace ( const char * str, const char * toSearch, const char * replaceStr, Context * context, LineInfoArg * at ) {
         auto toSearchSize = stringLengthSafe(*context, toSearch);
         if ( !toSearchSize ) return (char *) str;
         string data = str ? str : "";
@@ -515,7 +515,7 @@ namespace das
             data.replace(pos, toSearchSize, repl);
             pos = data.find(toss, pos + replaceStrSize);
         }
-        return context->allocateString(data);
+        return context->allocateString(data, at);
     }
 
     class StrdupDataWalker : public DataWalker {
@@ -530,9 +530,9 @@ namespace das
         return v_zero();
     }
 
-    char * builtin_string_escape ( const char *str, Context * context ) {
+    char * builtin_string_escape ( const char *str, Context * context, LineInfoArg * at ) {
         if ( !str ) return nullptr;
-        return context->allocateString(escapeString(str,false));
+        return context->allocateString(escapeString(str,false), at);
     }
 
     char * builtin_string_unescape ( const char *str, Context * context, LineInfoArg * at ) {
@@ -543,11 +543,11 @@ namespace das
         return context->allocateString(estr,at);
     }
 
-    char * builtin_string_safe_unescape ( const char *str, Context * context ) {
+    char * builtin_string_safe_unescape ( const char *str, Context * context, LineInfoArg * at ) {
         if ( !str ) return nullptr;
         bool err = false;
         auto estr = unescapeString(str, &err, false);
-        return context->allocateString(estr);
+        return context->allocateString(estr, at);
     }
 
     int builtin_find_first_char_of ( const char * str, int Ch, Context * context ) {
@@ -571,9 +571,9 @@ namespace das
         return -1;
     }
 
-    char * builtin_string_from_array ( const TArray<uint8_t> & bytes, Context * context ) {
+    char * builtin_string_from_array ( const TArray<uint8_t> & bytes, Context * context, LineInfoArg * at ) {
         if ( !bytes.size ) return nullptr;
-        return context->allocateString(bytes.data, bytes.size);
+        return context->allocateString(bytes.data, bytes.size, at);
     }
 
     void delete_string ( char * & str, Context * context, LineInfoArg * at ) {
@@ -617,24 +617,24 @@ namespace das
         return buf;
     }
 
-    char * builtin_string_trim ( char* s, Context * context ) {
+    char * builtin_string_trim ( char* s, Context * context, LineInfoArg * at ) {
         if ( !s ) return nullptr;
         while ( is_white_space(*s) ) s++;
-        if ( *s ) return builtin_string_rtrim(s, context);
+        if ( *s ) return builtin_string_rtrim(s, context, at);
         return nullptr;
     }
 
-    char * builtin_string_ltrim ( char* s, Context * context ) {
+    char * builtin_string_ltrim ( char* s, Context * context, LineInfoArg * at ) {
         if ( !s ) return nullptr;
         while ( is_white_space(*s) ) s++;
         if ( *s ) {
-            return context->allocateString(s, uint32_t(strlen(s)));
+            return context->allocateString(s, uint32_t(strlen(s)), at);
         } else  {
             return nullptr;
         }
     }
 
-    char * builtin_string_rtrim ( char* s, Context * context ) {
+    char * builtin_string_rtrim ( char* s, Context * context, LineInfoArg * at ) {
         if ( !s ) return nullptr;
         char * str_end_o = s + strlen(s);
         char * str_end = str_end_o;
@@ -643,7 +643,7 @@ namespace das
             return nullptr;
         } else if ( str_end!=str_end_o ) {
             auto len = str_end - s;
-            char * res = context->allocateString(nullptr, int32_t(len));
+            char * res = context->allocateString(nullptr, int32_t(len), at);
             memcpy ( res, s, len );
             res[len] = 0;
             return res;
@@ -659,7 +659,7 @@ namespace das
         return false;
     }
 
-    char * builtin_string_rtrim_ts ( char* s, char * ts, Context * context ) {
+    char * builtin_string_rtrim_ts ( char* s, char * ts, Context * context, LineInfoArg * at ) {
         if ( !s ) return nullptr;
         if ( !ts ) return s;
         char * str_end_o = s + strlen(s);
@@ -669,7 +669,7 @@ namespace das
             return nullptr;
         } else if ( str_end!=str_end_o ) {
             auto len = str_end - s;
-            char * res = context->allocateString(nullptr, int32_t(len));
+            char * res = context->allocateString(nullptr, int32_t(len), at);
             memcpy ( res, s, len );
             res[len] = 0;
             return res;
@@ -753,7 +753,7 @@ namespace das
             addExtern<DAS_BIND_FUN(format_and_write<double>),SimNode_ExtFuncCallRef>  (*this, lib, "format",
                 SideEffects::modifyExternal, "format_and_write<double>")->args({"writer","format","value"});
             addExtern<DAS_BIND_FUN(builtin_string_from_array)>(*this, lib, "string",
-                SideEffects::none, "builtin_string_from_array")->args({"bytes","context"});
+                SideEffects::none, "builtin_string_from_array")->args({"bytes","context","at"});
             // dup
             addInterop<builtin_strdup,void,vec4f> (*this, lib, "builtin_strdup",
                 SideEffects::modifyArgumentAndExternal, "builtin_strdup")->arg("anything")->unsafeOperation = true;
@@ -763,9 +763,9 @@ namespace das
             addExtern<DAS_BIND_FUN(get_character_uat)>(*this, lib, "character_uat",
                 SideEffects::none, "get_character_uat")->args({"str","idx"})->unsafeOperation = true;
             addExtern<DAS_BIND_FUN(string_repeat)>(*this, lib, "repeat",
-                SideEffects::none, "string_repeat")->args({"str","count","context"});
+                SideEffects::none, "string_repeat")->args({"str","count","context","at"});
             addExtern<DAS_BIND_FUN(to_string_char)>(*this, lib, "to_char",
-                SideEffects::none, "to_string_char")->args({"char","context"});
+                SideEffects::none, "to_string_char")->args({"char","context","at"});
             addExtern<DAS_BIND_FUN(builtin_string_endswith)>(*this, lib, "ends_with",
                 SideEffects::none, "builtin_string_endswith")->args({"str","cmp","context"});
             addExtern<DAS_BIND_FUN(builtin_string_ends_with)>(*this, lib, "ends_with",
@@ -779,17 +779,17 @@ namespace das
             addExtern<DAS_BIND_FUN(builtin_string_startswith4)>(*this, lib, "starts_with",
                 SideEffects::none, "builtin_string_startswith4")->args({"str","offset","cmp","cmpLen","context"});
             addExtern<DAS_BIND_FUN(builtin_string_strip)>(*this, lib, "strip",
-                SideEffects::none, "builtin_string_strip")->args({"str","context"});
+                SideEffects::none, "builtin_string_strip")->args({"str","context","at"});
             addExtern<DAS_BIND_FUN(builtin_string_strip_right)>(*this, lib, "strip_right",
-                SideEffects::none, "builtin_string_strip_right")->args({"str","context"});
+                SideEffects::none, "builtin_string_strip_right")->args({"str","context","at"});
             addExtern<DAS_BIND_FUN(builtin_string_strip_left)>(*this, lib, "strip_left",
-                SideEffects::none, "builtin_string_strip_left")->args({"str","context"});
+                SideEffects::none, "builtin_string_strip_left")->args({"str","context","at"});
             addExtern<DAS_BIND_FUN(builtin_string_chop)>(*this, lib, "chop",
-                SideEffects::none, "builtin_string_chop")->args({"str","start","length","context"});
+                SideEffects::none, "builtin_string_chop")->args({"str","start","length","context","at"});
             addExtern<DAS_BIND_FUN(builtin_string_slice1)>(*this, lib, "slice",
-                SideEffects::none, "builtin_string_slice1")->args({"str","start","end","context"});
+                SideEffects::none, "builtin_string_slice1")->args({"str","start","end","context","at"});
             addExtern<DAS_BIND_FUN(builtin_string_slice2)>(*this, lib, "slice",
-                SideEffects::none, "builtin_string_slice2")->args({"str","start","context"});
+                SideEffects::none, "builtin_string_slice2")->args({"str","start","context","at"});
             addExtern<DAS_BIND_FUN(builtin_string_find1)>(*this, lib, "find",
                 SideEffects::none, "builtin_string_find1")->args({"str","substr","start","context"});
             addExtern<DAS_BIND_FUN(builtin_string_find2)>(*this, lib, "find",
@@ -801,7 +801,7 @@ namespace das
             addExtern<DAS_BIND_FUN(builtin_string_length)>(*this, lib, "length",
                 SideEffects::none, "builtin_string_length")->args({"str","context"});
             addExtern<DAS_BIND_FUN(builtin_string_reverse)>(*this, lib, "reverse",
-                SideEffects::none, "builtin_string_reverse")->args({"str","context"});
+                SideEffects::none, "builtin_string_reverse")->args({"str","context","at"});
             addExtern<DAS_BIND_FUN(builtin_append_char_to_string)>(*this, lib, "append",
                 SideEffects::modifyArgumentAndExternal, "builtin_append_char_to_string")->args({"str","ch"});
             addExtern<DAS_BIND_FUN(builtin_resize_string)>(*this, lib, "resize",
@@ -809,9 +809,9 @@ namespace das
             addExtern<DAS_BIND_FUN(builtin_ext_string_length)>(*this, lib, "length",
                 SideEffects::none, "builtin_ext_string_length")->arg("str");
             addExtern<DAS_BIND_FUN(builtin_string_toupper)>(*this, lib, "to_upper",
-                SideEffects::none, "builtin_string_toupper")->args({"str","context"});
+                SideEffects::none, "builtin_string_toupper")->args({"str","context","at"});
             addExtern<DAS_BIND_FUN(builtin_string_tolower)>(*this, lib, "to_lower",
-                SideEffects::none, "builtin_string_tolower")->args({"str","context"});
+                SideEffects::none, "builtin_string_tolower")->args({"str","context","at"});
             addExtern<DAS_BIND_FUN(builtin_string_tolower_in_place)>(*this, lib, "to_lower_in_place",
                 SideEffects::none, "builtin_string_tolower_in_place")->arg("str")->setCaptureString()->unsafeOperation = true;
             addExtern<DAS_BIND_FUN(builtin_string_toupper_in_place)>(*this, lib, "to_upper_in_place",
@@ -849,34 +849,34 @@ namespace das
             addExtern<DAS_BIND_FUN(fast_to_double)>(*this, lib, "to_double",
                 SideEffects::none, "fast_to_double")->arg("value");
             addExtern<DAS_BIND_FUN(builtin_string_escape)>(*this, lib, "escape",
-                SideEffects::none, "builtin_string_escape")->args({"str","context"});
+                SideEffects::none, "builtin_string_escape")->args({"str","context","at"});
             addExtern<DAS_BIND_FUN(builtin_string_unescape)>(*this, lib, "unescape",
                 SideEffects::none, "builtin_string_unescape")->args({"str","context", "at"});
             addExtern<DAS_BIND_FUN(builtin_string_safe_unescape)>(*this, lib, "safe_unescape",
-                SideEffects::none, "builtin_string_safe_unescape")->args({"str","context"});
+                SideEffects::none, "builtin_string_safe_unescape")->args({"str","context","at"});
             addExtern<DAS_BIND_FUN(builtin_string_replace)>(*this, lib, "replace",
-                SideEffects::none, "builtin_string_replace")->args({"str","toSearch","replace","context"});
+                SideEffects::none, "builtin_string_replace")->args({"str","toSearch","replace","context","at"});
             addExtern<DAS_BIND_FUN(builtin_string_rtrim)>(*this, lib, "rtrim",
-                SideEffects::none, "builtin_string_rtrim")->args({"str","context"});
+                SideEffects::none, "builtin_string_rtrim")->args({"str","context","at"});
             addExtern<DAS_BIND_FUN(builtin_string_rtrim_ts)>(*this, lib, "rtrim",
-                SideEffects::none, "builtin_string_rtrim_ts")->args({"str","chars","context"});
+                SideEffects::none, "builtin_string_rtrim_ts")->args({"str","chars","context","at"});
             addExtern<DAS_BIND_FUN(builtin_string_ltrim)>(*this, lib, "ltrim",
-                SideEffects::none, "builtin_string_ltrim")->args({"str","context"});
+                SideEffects::none, "builtin_string_ltrim")->args({"str","context","at"});
             addExtern<DAS_BIND_FUN(builtin_string_trim)>(*this, lib, "trim",
-                SideEffects::none, "builtin_string_trim")->args({"str","context"});
+                SideEffects::none, "builtin_string_trim")->args({"str","context","at"});
             // format
             addExtern<DAS_BIND_FUN(format<int32_t>)> (*this, lib, "format",
-                SideEffects::none, "format<int32_t>")->args({"format","value","context"});
+                SideEffects::none, "format<int32_t>")->args({"format","value","context","at"});
             addExtern<DAS_BIND_FUN(format<uint32_t>)>(*this, lib, "format",
-                SideEffects::none, "format<uint32_t>")->args({"format","value","context"});
+                SideEffects::none, "format<uint32_t>")->args({"format","value","context","at"});
             addExtern<DAS_BIND_FUN(format<int64_t>)> (*this, lib, "format",
-                SideEffects::none, "format<int64_t>")->args({"format","value","context"});
+                SideEffects::none, "format<int64_t>")->args({"format","value","context","at"});
             addExtern<DAS_BIND_FUN(format<uint64_t>)>(*this, lib, "format",
-                SideEffects::none, "format<uint64_t>")->args({"format","value","context"});
+                SideEffects::none, "format<uint64_t>")->args({"format","value","context","at"});
             addExtern<DAS_BIND_FUN(format<float>)>   (*this, lib, "format",
-                SideEffects::none, "format<float>")->args({"format","value","context"});
+                SideEffects::none, "format<float>")->args({"format","value","context","at"});
             addExtern<DAS_BIND_FUN(format<double>)>  (*this, lib, "format",
-                SideEffects::none, "format<double>")->args({"format","value","context"});
+                SideEffects::none, "format<double>")->args({"format","value","context","at"});
             // queries
             addExtern<DAS_BIND_FUN(is_alpha)> (*this, lib, "is_alpha",
                 SideEffects::none, "is_alpha")->arg("Character");

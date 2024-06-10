@@ -7,7 +7,7 @@ namespace das
     template <typename TRange>
     struct RangeIterator : Iterator {
         using baseType = typename TRange::baseType;
-        RangeIterator ( const TRange & r ) : rng(r) {}
+        RangeIterator ( const TRange & r, LineInfo * at ) : Iterator(at), rng(r) {}
         virtual bool first ( Context &, char * _value ) override {
             baseType * value = (baseType *) _value;
             *value      = rng.from;
@@ -23,7 +23,7 @@ namespace das
         }
 
         virtual void close ( Context & context, char * ) override {
-            context.freeIterator((char *)this);
+            context.freeIterator((char *)this, debugInfo);
         }
         TRange  rng;
         baseType range_to;
@@ -38,9 +38,9 @@ namespace das
             DAS_PROFILE_NODE
             vec4f ll = subexpr->eval(context);
             TRange r = cast<TRange>::to(ll);
-            char * iter = context.allocateIterator(sizeof(RangeIterator<TRange>),"range iterator",&debugInfo);
+            char * iter = context.allocateIterator(sizeof(RangeIterator<TRange>),"range iterator", &debugInfo);
             if ( !iter ) context.throw_out_of_memory(false, sizeof(RangeIterator<TRange>) + 16, &debugInfo);
-            new (iter) RangeIterator<TRange>(r);
+            new (iter) RangeIterator<TRange>(r, &debugInfo);
             return cast<char *>::from(iter);
         }
         SimNode * subexpr;

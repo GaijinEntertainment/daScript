@@ -71,7 +71,7 @@ namespace das
             *value = nullptr;
         }
         array_unlock(context, *array, nullptr);
-        context.freeIterator((char *)this);
+        context.freeIterator((char *)this, debugInfo);
     }
 
     vec4f SimNode_GoodArrayIterator::eval ( Context & context ) {
@@ -80,7 +80,7 @@ namespace das
         Array * arr = cast<Array *>::to(ll);
         char * iter = context.allocateIterator(sizeof(GoodArrayIterator),"array<> iterator", &debugInfo);
         if ( !iter ) context.throw_out_of_memory(false, sizeof(GoodArrayIterator)+16, &debugInfo);
-        new (iter) GoodArrayIterator(arr, stride);
+        new (iter) GoodArrayIterator(arr, stride, &debugInfo);
         return cast<char *>::from(iter);
     }
 
@@ -105,7 +105,7 @@ namespace das
             char ** value = (char **) _value;
             *value = nullptr;
         }
-        context.freeIterator((char *)this);
+        context.freeIterator((char *)this, debugInfo);
     }
 
     vec4f SimNode_FixedArrayIterator::eval ( Context & context ) {
@@ -114,7 +114,7 @@ namespace das
         char * data = cast<char *>::to(ll);
         char * iter = context.allocateIterator(sizeof(FixedArrayIterator),"fixed array iterator", &debugInfo);
         if ( !iter ) context.throw_out_of_memory(false, sizeof(FixedArrayIterator)+16, &debugInfo);
-        new (iter) FixedArrayIterator(data, size, stride);
+        new (iter) FixedArrayIterator(data, size, stride, &debugInfo);
         return cast<char *>::from(iter);
     }
 

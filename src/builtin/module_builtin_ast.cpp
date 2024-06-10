@@ -259,8 +259,8 @@ namespace das {
         return context->allocateString(ss.str(),at);
     }
 
-    char * ast_das_to_string ( Type bt, Context * context ) {
-        return context->allocateString(das_to_string(bt));
+    char * ast_das_to_string ( Type bt, Context * context, LineInfoArg * at ) {
+        return context->allocateString(das_to_string(bt), at);
     }
 
     char * ast_find_bitfield_name ( smart_ptr_raw<TypeDecl> bft, Bitfield value, Context * context, LineInfoArg * at ) {
@@ -781,7 +781,7 @@ namespace das {
         // type conversion functions
         addExtern<DAS_BIND_FUN(ast_das_to_string)>(*this, lib,  "das_to_string",
             SideEffects::none, "das_to_string")
-                ->args({"type","context"});
+                ->args({"type","context","at"});
         // clone
         addExtern<DAS_BIND_FUN(clone_expression)>(*this, lib,  "clone_expression",
             SideEffects::none, "clone_expression")

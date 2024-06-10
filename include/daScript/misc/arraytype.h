@@ -5,6 +5,7 @@ namespace das
     struct SimNode;
     struct TypeInfo;
     struct FuncInfo;
+    struct LineInfoArg;
 
     struct Block {
         uint32_t    stackOffset;
@@ -167,8 +168,8 @@ namespace das
     void table_unlock ( Context & context, Table & arr, LineInfo * at );
 
     struct Sequence;
-    void builtin_table_keys ( Sequence & result, const Table & tab, int32_t stride, Context * __context__ );
-    void builtin_table_values ( Sequence & result, const Table & tab, int32_t stride, Context * __context__ );
+    void builtin_table_keys ( Sequence & result, const Table & tab, int32_t stride, Context * __context__, LineInfoArg * at );
+    void builtin_table_values ( Sequence & result, const Table & tab, int32_t stride, Context * __context__, LineInfoArg * at );
 
     template <typename TT>
     struct EnumStubAny  {

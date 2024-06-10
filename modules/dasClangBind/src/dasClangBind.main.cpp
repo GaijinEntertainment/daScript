@@ -10,9 +10,9 @@
 
 namespace das {
 
-char * from_CXString_to_string ( const CXString & cxs, Context * context ) {
+char * from_CXString_to_string ( const CXString & cxs, Context * context, LineInfoArg * at ) {
     auto cst = clang_getCString(cxs);
-    auto res = context->allocateString(cst);
+    auto res = context->allocateString(cst,at);
     clang_disposeString(cxs);
     return res;
 }
@@ -45,7 +45,7 @@ void das_clangVisitChildren ( CXCursor cursor, const TBlock<CXChildVisitResult,C
 void Module_dasClangBind::initMain() {
     addExtern<DAS_BIND_FUN(from_CXString_to_string)>(*this, lib,  "string",
         SideEffects::worstDefault, "from_CXString_to_string")
-            ->args({"CXString","context"});
+            ->args({"CXString","context","at"});
     addExtern<DAS_BIND_FUN(peek_CXString)>(*this, lib,  "peek",
         SideEffects::worstDefault, "peek_CXString")
             ->args({"CXString","blk","context","line"});

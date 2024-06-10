@@ -443,13 +443,13 @@ namespace das {
 #endif
     }
 
-    char * builtin_getcwd ( Context * context ) {
+    char * builtin_getcwd ( Context * context, LineInfoArg * at) {
 #if defined(_EMSCRIPTEN_VER)
         return nullptr;
 #else
         char * buf = getcwd(nullptr, 0);
         if ( buf ) {
-            char * res = context->allocateString(buf, uint32_t(strlen(buf)));
+            char * res = context->allocateString(buf, uint32_t(strlen(buf)), at);
             free(buf);
             return res;
         } else {
@@ -539,11 +539,11 @@ namespace das {
         return rename(old_path, new_path) == 0;
     }
 
-    char * get_env_variable ( const char * var, Context * context ) {
+    char * get_env_variable ( const char * var, Context * context, LineInfoArg * at ) {
         if ( !var ) return nullptr;
         auto res = getenv(var);
         if ( !res ) return nullptr;
-        return context->allocateString(res);
+        return context->allocateString(res, at);
     }
 
     char * sanitize_command_line ( const char * cmd, Context * context, LineInfoArg * at ) {
@@ -655,7 +655,7 @@ namespace das {
                     ->arg("path");
             addExtern<DAS_BIND_FUN(builtin_getcwd)>(*this, lib, "getcwd",
                 SideEffects::modifyExternal, "builtin_getcwd")
-                    ->arg("path");
+                    ->args({"context","at"});
             addExtern<DAS_BIND_FUN(builtin_stdin)>(*this, lib, "fstdin",
                 SideEffects::modifyExternal, "builtin_stdin");
             addExtern<DAS_BIND_FUN(builtin_stdout)>(*this, lib, "fstdout",
@@ -681,7 +681,7 @@ namespace das {
                     ->args({"path","context","at"});
             addExtern<DAS_BIND_FUN(get_env_variable)>(*this, lib, "get_env_variable",
                 SideEffects::accessExternal, "get_env_variable")
-                    ->args({"var","context"});
+                    ->args({"var","context","at"});
             addExtern<DAS_BIND_FUN(sanitize_command_line)>(*this, lib, "sanitize_command_line",
                 SideEffects::none, "sanitize_command_line")
                     ->args({"var","context","at"});
