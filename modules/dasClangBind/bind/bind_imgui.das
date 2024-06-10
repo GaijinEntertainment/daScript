@@ -41,7 +41,6 @@ class ImguiGen : CppGenBind
             "ImGuiCond"                 => "ImGuiCond_";
             "ImGuiDataType"             => "ImGuiDataType_";
             "ImGuiDir"                  => "ImGuiDir_";
-            "ImGuiKey"                  => "ImGuiKey_";
             "ImGuiNavInput"             => "ImGuiNavInput_";
             "ImGuiMouseButton"          => "ImGuiMouseButton_";
             "ImGuiMouseCursor"          => "ImGuiMouseCursor_";
@@ -71,7 +70,8 @@ class ImguiGen : CppGenBind
             "ImGuiTableRowFlags"        => "ImGuiTableRowFlags_";
             "ImGuiTreeNodeFlags"        => "ImGuiTreeNodeFlags_";
             "ImGuiViewportFlags"        => "ImGuiViewportFlags_";
-            "ImGuiWindowFlags"          => "ImGuiWindowFlags_"
+            "ImGuiWindowFlags"          => "ImGuiWindowFlags_";
+            "ImGuiChildFlags"           => "ImGuiChildFlags_"
         }}
         local_type_names <- {{
             "ImGuiTableColumnSortSpecs" => true;
