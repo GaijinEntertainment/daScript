@@ -551,7 +551,8 @@ namespace das {
         }
     // op3
         virtual ExpressionPtr visit ( ExprOp3 * expr ) override {
-            if ( expr->type->isFoldable() && expr->subexpr->constexpression && expr->left->constexpression && expr->right->constexpression && expr->func->builtIn ) {
+            if ( expr->type->isFoldable() && expr->subexpr->constexpression && expr->left->constexpression && expr->right->constexpression &&
+                (expr->func && expr->func->builtIn) ) {
                 return evalAndFold(expr);
             } else if ( expr->type->isFoldable() && expr->subexpr->noSideEffects && expr->left->constexpression && expr->right->constexpression ) {
                 bool failed;
