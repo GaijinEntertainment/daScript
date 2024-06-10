@@ -59,7 +59,7 @@ namespace das {
                     }
                     // set it
                     char ** gpr = (char **) context->getVariable(ipr);
-                    *gpr = context->allocateString(pakRoot);
+                    *gpr = context->allocateString(pakRoot, /*at*/nullptr);
                 }
                 // logs
                 auto tostr = tout.str();

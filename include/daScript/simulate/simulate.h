@@ -295,17 +295,17 @@ namespace das
         void onReallocate ( void * ptr, uint64_t size, void * newPtr, uint64_t newSize, const LineInfo & at );
         void onFree ( void * ptr, const LineInfo & at );
 
-        __forceinline char * allocateIterator ( uint32_t size, const char * iterName, const LineInfo * at = nullptr ) {
+        __forceinline char * allocateIterator ( uint32_t size, const char * iterName, const LineInfo * at ) {
             if ( instrumentAllocations ) {
-                auto aptr = heap->impl_allocateIterator(size, iterName, at);
+                auto aptr = heap->impl_allocateIterator(size, iterName);
                 onAllocate(aptr - 16, size + 16, at ? *at : LineInfo());
                 return aptr;
             } else {
-                return heap->impl_allocateIterator(size, iterName, at);
+                return heap->impl_allocateIterator(size, iterName);
             }
         }
 
-        __forceinline void freeIterator ( char * ptr, const LineInfo * at = nullptr ) {
+        __forceinline void freeIterator ( char * ptr, const LineInfo * at ) {
             if ( instrumentAllocations ) onFree(ptr - 16, at ? *at : LineInfo());
             heap->impl_freeIterator(ptr);
         }
@@ -320,7 +320,7 @@ namespace das
             }
         }
 
-        __forceinline char * reallocate ( char * ptr, uint32_t oldSize, uint32_t size, const LineInfo * at = nullptr ) {
+        __forceinline char * reallocate ( char * ptr, uint32_t oldSize, uint32_t size, const LineInfo * at ) {
             if ( instrumentAllocations ) {
                 auto aptr = heap->impl_reallocate(ptr, oldSize, size);
                 onReallocate(ptr, oldSize, aptr, size, at ? *at : LineInfo());
@@ -335,7 +335,7 @@ namespace das
             heap->impl_free(ptr, size);
         }
 
-        __forceinline char * allocateString ( const char * text, uint32_t length, const LineInfo * at = nullptr ) {
+        __forceinline char * allocateString ( const char * text, uint32_t length, const LineInfo * at ) {
             if ( instrumentAllocations ) {
                 auto astr = stringHeap->impl_allocateString(this, text, length, at);
                 onAllocateString(astr, length, at ? *at : LineInfo());
@@ -345,7 +345,7 @@ namespace das
             }
         }
 
-        __forceinline char * allocateString ( const string & str, const LineInfo * at = nullptr ) {
+        __forceinline char * allocateString ( const string & str, const LineInfo * at ) {
             if ( instrumentAllocations ) {
                 auto astr = stringHeap->impl_allocateString(this, str.c_str(), uint32_t(str.size()), at);
                 onAllocateString(astr, str.size(), at ? *at : LineInfo());
@@ -355,12 +355,12 @@ namespace das
             }
         }
 
-        __forceinline void freeString ( char * ptr, uint32_t length, const LineInfo * at = nullptr) {
+        __forceinline void freeString ( char * ptr, uint32_t length, const LineInfo * at) {
             if ( instrumentAllocations ) onFreeString(ptr, at ? *at : LineInfo());
             stringHeap->impl_freeString(ptr, length);
         }
 
-        __forceinline void freeTempString ( char * ptr, const LineInfo * at = nullptr ) {
+        __forceinline void freeTempString ( char * ptr, const LineInfo * at ) {
             if ( stringHeap->isIntern() ) return;
             if ( stringDisposeQue ) freeString(stringDisposeQue,(uint32_t)strlen(stringDisposeQue),at);
             stringDisposeQue = ptr;
@@ -849,17 +849,19 @@ namespace das
     struct DataWalker;
 
     struct Iterator {
+        Iterator(LineInfo * at) : debugInfo(at) {}
         virtual ~Iterator() {}
         virtual bool first ( Context & context, char * value ) = 0;
         virtual bool next  ( Context & context, char * value ) = 0;
         virtual void close ( Context & context, char * value ) = 0;    // can't throw
         virtual void walk ( DataWalker & ) { }
        bool isOpen = false;
+       LineInfo * debugInfo;
     };
 
     struct PointerDimIterator : Iterator {
-        PointerDimIterator  ( char ** d, uint32_t cnt, uint32_t sz )
-            : data(d), data_end(d+cnt), size(sz) {}
+        PointerDimIterator  ( char ** d, uint32_t cnt, uint32_t sz, LineInfo * at )
+            : Iterator(at), data(d), data_end(d+cnt), size(sz) {}
         virtual bool first(Context &, char * _value) override;
         virtual bool next(Context &, char * _value) override;
         virtual void close(Context & context, char * _value) override;

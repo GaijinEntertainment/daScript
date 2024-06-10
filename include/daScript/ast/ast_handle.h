@@ -634,10 +634,10 @@ namespace das
                     ->args({"vec","index","count","context"})->generated = true;
             addExtern<DAS_BIND_FUN(das_vector_each<TT>),SimNode_ExtFuncCallAndCopyOrMove,explicitConstArgFn>(*mod, lib, "each",
                 SideEffects::none, "das_vector_each")
-                    ->args({"vec","context"})->generated = true;
+                    ->args({"vec","context","at"})->generated = true;
             addExtern<DAS_BIND_FUN(das_vector_each_const<TT>),SimNode_ExtFuncCallAndCopyOrMove,explicitConstArgFn>(*mod, lib, "each",
                 SideEffects::none, "das_vector_each_const")
-                    ->args({"vec","context"})->generated = true;
+                    ->args({"vec","context","at"})->generated = true;
             addExtern<DAS_BIND_FUN(das_vector_length<TT>)>(*mod, lib, "length",
                 SideEffects::none, "das_vector_length")->generated = true;
             addExtern<DAS_BIND_FUN(das_vector_capacity<TT>)>(*mod, lib, "capacity",

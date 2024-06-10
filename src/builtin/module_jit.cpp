@@ -156,7 +156,7 @@ extern "C" {
         return strcmp(a ? a : "",b ? b : "");
     }
 
-    char * jit_str_cat ( const char * sA, const char * sB, Context * context ) {
+    char * jit_str_cat ( const char * sA, const char * sB, Context * context, LineInfoArg * at ) {
         sA = sA ? sA : "";
         sB = sB ? sB : "";
         auto la = stringLength(*context, sA);
@@ -164,7 +164,7 @@ extern "C" {
         uint32_t commonLength = la + lb;
         if ( !commonLength ) {
             return nullptr;
-        } else if ( char * sAB = (char * ) context->allocateString(nullptr, commonLength) ) {
+        } else if ( char * sAB = (char * ) context->allocateString(nullptr, commonLength, at) ) {
             memcpy ( sAB, sA, la );
             memcpy ( sAB+la, sB, lb+1 );
             context->stringHeap->recognize(sAB);
@@ -324,10 +324,10 @@ extern "C" {
     void *das_get_jit_ast_typedecl () { return (void*)&jit_ast_typedecl; }
 
     template <typename KeyType>
-    int32_t jit_table_at ( Table * tab, KeyType key, int32_t valueTypeSize, Context * context ) {
+    int32_t jit_table_at ( Table * tab, KeyType key, int32_t valueTypeSize, Context * context, LineInfoArg * at ) {
         TableHash<KeyType> thh(context,valueTypeSize);
         auto hfn = hash_function(*context, key);
-        return thh.reserve(*tab, key, hfn);
+        return thh.reserve(*tab, key, hfn, at);
     }
 
     void * das_get_jit_table_at ( int32_t baseType, Context * context, LineInfoArg * at ) {

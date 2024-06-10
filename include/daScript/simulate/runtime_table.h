@@ -74,10 +74,10 @@ namespace das
             }
         }
 
-        __forceinline int reserve ( Table & tab, KeyType key, uint64_t hash ) {
+        __forceinline int reserve ( Table & tab, KeyType key, uint64_t hash, LineInfo * at = nullptr ) {
             DAS_ASSERT(hash>1);
-            if ( tab.size >= (tab.capacity/2) ) grow(tab);
-            else if ( (tab.capacity-tab.size)/2 < tab.tombstones ) rehash(tab);
+            if ( tab.size >= (tab.capacity/2) ) grow(tab, at);
+            else if ( (tab.capacity-tab.size)/2 < tab.tombstones ) rehash(tab, at);
             uint32_t mask = tab.capacity - 1;
             uint32_t index = uint32_t(hash) & mask;
             uint32_t insertI = -1u;
@@ -128,16 +128,16 @@ namespace das
             }
         }
 
-        bool grow ( Table & tab ) {
+        bool grow ( Table & tab, LineInfo * at ) {
             uint32_t newCapacity = das::max(uint32_t(minCapacity), tab.capacity*2);
-            return reserveInternal(tab, newCapacity);
+            return reserveInternal(tab, newCapacity, at);
         }
 
-        bool rehash ( Table & tab ) {
-            return reserveInternal(tab, tab.capacity);
+        bool rehash ( Table & tab, LineInfo * at ) {
+            return reserveInternal(tab, tab.capacity, at);
         }
 
-        bool reserve(Table & tab, int size) {
+        bool reserve(Table & tab, int size, LineInfo * at ) {
             if (size <= tab.capacity)
               return true;
 
@@ -147,7 +147,7 @@ namespace das
               newCapacity *= 2;
             }
 
-            return reserveInternal(tab, newCapacity);
+            return reserveInternal(tab, newCapacity, at);
         }
 
     private:
@@ -166,7 +166,7 @@ namespace das
             }
         }
 
-        bool reserveInternal(Table & tab, uint32_t newCapacity) {
+        bool reserveInternal(Table & tab, uint32_t newCapacity, LineInfo * at) {
             DAS_VERIFYF((newCapacity & (newCapacity) - 1) == 0, "newCapacity must be power of 2, and not %i", int(newCapacity));
             Table newTab;
             uint64_t memSize64 = uint64_t(newCapacity) * (uint64_t(valueTypeSize) + uint64_t(sizeof(KeyType)) + uint64_t(sizeof(TableHashKey)));
@@ -176,9 +176,9 @@ namespace das
 
             }
             uint32_t memSize = uint32_t(memSize64);
-            newTab.data = (char *) context->allocate(memSize);
+            newTab.data = (char *) context->allocate(memSize, at);
             if ( !newTab.data ) {
-                context->throw_out_of_memory(false, memSize);
+                context->throw_out_of_memory(false, memSize, at);
                 return false;
             }
             context->heap->mark_comment(newTab.data, "table");
@@ -210,7 +210,7 @@ namespace das
             }
             if (tab.capacity) {
                 uint32_t oldSize = tab.capacity*(valueTypeSize + sizeof(KeyType) + sizeof(TableHashKey));
-                context->free(tab.data, oldSize);
+                context->free(tab.data, oldSize, at);
             }
             swap ( newTab, tab );
             return true;

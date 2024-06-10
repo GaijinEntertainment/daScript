@@ -64,7 +64,7 @@ namespace das
             *value = nullptr;
         }
         table_unlock(context, *(Table *)table, nullptr);
-        context.freeIterator((char *)this);
+        context.freeIterator((char *)this, debugInfo);
     }
 
     // keys and values
@@ -77,17 +77,17 @@ namespace das
         return table->data;
     }
 
-    void builtin_table_keys ( Sequence & result, const Table & tab, int32_t stride, Context * __context__ ) {
-        char * iter = __context__->allocateIterator(sizeof(TableKeysIterator),"table keys iterator");
-        if ( !iter ) __context__->throw_out_of_memory(false, sizeof(TableKeysIterator)+16);
-        new (iter) TableKeysIterator(&tab, stride);
+    void builtin_table_keys ( Sequence & result, const Table & tab, int32_t stride, Context * __context__, LineInfoArg * at ) {
+        char * iter = __context__->allocateIterator(sizeof(TableKeysIterator),"table keys iterator", at);
+        if ( !iter ) __context__->throw_out_of_memory(false, sizeof(TableKeysIterator)+16, at);
+        new (iter) TableKeysIterator(&tab, stride, at);
         result = { (Iterator *) iter };
     }
 
-    void builtin_table_values ( Sequence & result, const Table & tab, int32_t stride, Context * __context__ ) {
-        char * iter = __context__->allocateIterator(sizeof(TableValuesIterator),"table values iterator");
-        if ( !iter ) __context__->throw_out_of_memory(false, sizeof(TableValuesIterator)+16);
-        new (iter) TableValuesIterator(&tab, stride);
+    void builtin_table_values ( Sequence & result, const Table & tab, int32_t stride, Context * __context__, LineInfoArg * at ) {
+        char * iter = __context__->allocateIterator(sizeof(TableValuesIterator),"table values iterator", at);
+        if ( !iter ) __context__->throw_out_of_memory(false, sizeof(TableValuesIterator)+16, at);
+        new (iter) TableValuesIterator(&tab, stride, at);
         result = { (Iterator *) iter };
     }
 

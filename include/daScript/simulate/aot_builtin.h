@@ -13,11 +13,11 @@ namespace das {
     void builtin_error ( char * text, Context * context, LineInfoArg * at );
     vec4f builtin_sprint ( Context & context, SimNode_CallBase * call, vec4f * args );
     vec4f builtin_json_sprint ( Context & context, SimNode_CallBase * call, vec4f * args );
-    char * builtin_print_data ( void * data, const TypeInfo * typeInfo, Bitfield flags, Context * context );
-    char * builtin_print_data_v ( float4 data, const TypeInfo * typeInfo, Bitfield flags, Context * context );
-    char * builtin_debug_type ( const TypeInfo * typeInfo, Context * context );
-    char * builtin_debug_line ( const LineInfo & at, bool fully, Context * context );
-    char * builtin_get_typeinfo_mangled_name ( const TypeInfo * typeInfo, Context * context );
+    char * builtin_print_data ( void * data, const TypeInfo * typeInfo, Bitfield flags, Context * context, LineInfoArg * at );
+    char * builtin_print_data_v ( float4 data, const TypeInfo * typeInfo, Bitfield flags, Context * context, LineInfoArg * at );
+    char * builtin_debug_type ( const TypeInfo * typeInfo, Context * context, LineInfoArg * at );
+    char * builtin_debug_line ( const LineInfo & at, bool fully, Context * context, LineInfoArg * lineInfo );
+    char * builtin_get_typeinfo_mangled_name ( const TypeInfo * typeInfo, Context * context, LineInfoArg * at );
     const FuncInfo * builtin_get_function_info_by_mnh ( Context & context, Func fun );
     Func builtin_SimFunction_by_MNH ( Context & context, uint64_t MNH );
     vec4f builtin_breakpoint ( Context & context, SimNode_CallBase * call, vec4f * );
@@ -75,17 +75,17 @@ namespace das {
     void builtin_iterator_delete ( const Sequence & it, Context * context );
     __forceinline bool builtin_iterator_empty ( const Sequence & seq ) { return seq.iter==nullptr; }
 
-    void builtin_make_good_array_iterator ( Sequence & result, const Array & arr, int stride, Context * context );
-    void builtin_make_fixed_array_iterator ( Sequence & result, void * data, int size, int stride, Context * context );
-    void builtin_make_range_iterator ( Sequence & result, range rng, Context * context );
-    void builtin_make_lambda_iterator ( Sequence & result, const Lambda lambda, int stride, Context * context );
-    void builtin_make_nil_iterator ( Sequence & result, Context * context );
+    void builtin_make_good_array_iterator ( Sequence & result, const Array & arr, int stride, Context * context, LineInfoArg * at );
+    void builtin_make_fixed_array_iterator ( Sequence & result, void * data, int size, int stride, Context * context, LineInfoArg * at );
+    void builtin_make_range_iterator ( Sequence & result, range rng, Context * context, LineInfoArg * at );
+    void builtin_make_lambda_iterator ( Sequence & result, const Lambda lambda, int stride, Context * context, LineInfoArg * at );
+    void builtin_make_nil_iterator ( Sequence & result, Context * context, LineInfoArg * at );
     vec4f builtin_make_enum_iterator ( Context & context, SimNode_CallBase * call, vec4f * );
-    void builtin_make_string_iterator ( Sequence & result, char * str, Context * context );
+    void builtin_make_string_iterator ( Sequence & result, char * str, Context * context, LineInfoArg * at );
 
     void resetProfiler( Context * context );
     void dumpProfileInfo( Context * context );
-    char * collectProfileInfo( Context * context );
+    char * collectProfileInfo( Context * context, LineInfoArg * at );
 
     template <typename TT>
     __forceinline void builtin_sort ( TT * data, int32_t length ) {

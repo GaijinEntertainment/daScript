@@ -12,17 +12,20 @@ namespace das {
 
     struct BinDataSerialize : DataWalker {
         char * bytesAt = nullptr;
+        LineInfo * debugInfo = nullptr;
         uint32_t bytesAllocated = 0;
         uint32_t bytesWritten = 0;
         uint32_t bytesGrow = 1024;
     // writer
-        BinDataSerialize ( Context & ctx ) {
+        BinDataSerialize ( Context & ctx, LineInfo * at ) {
             DEBUG_BIN_DATA("writing\n");
             context = &ctx;
+            debugInfo = at;
             reading = false;
         }
-        BinDataSerialize ( Context & ctx, char * b, uint32_t l ) {
+        BinDataSerialize ( Context & ctx, LineInfo * at, char * b, uint32_t l ) {
             context = &ctx;
+            debugInfo = at;
             reading = true;
             bytesAt = b;
             bytesAllocated = l;
@@ -40,7 +43,7 @@ namespace das {
         __forceinline void write ( void * data, uint32_t size ) {
             if ( bytesWritten + size > bytesAllocated ) {
                 uint32_t newSize = das::max ( bytesAllocated + bytesGrow, bytesWritten + size );
-                bytesAt = context->reallocate(bytesAt, bytesAllocated, newSize);
+                bytesAt = context->reallocate(bytesAt, bytesAllocated, newSize, debugInfo);
                 context->heap->mark_comment(bytesAt, "binary serializer write");
                 bytesAllocated = newSize;
             }
@@ -93,7 +96,7 @@ namespace das {
         void close () {
             if ( !reading && bytesAt ) {
                 DEBUG_BIN_DATA("close at %i bytes\n\n", bytesWritten);
-                bytesAt = context->reallocate(bytesAt, bytesAllocated, bytesWritten);
+                bytesAt = context->reallocate(bytesAt, bytesAllocated, bytesWritten, debugInfo);
             }
         }
     // data structures
@@ -132,7 +135,7 @@ namespace das {
                 load ( length );
                 char * temp = new char[length+1];
                 read ( temp, length );
-                data = (char *) context->allocateString(temp,length);
+                data = (char *) context->allocateString(temp,length, debugInfo);
                 delete [] temp;
             } else {
                 uint32_t length = stringLengthSafe(*context, data);
@@ -276,7 +279,7 @@ namespace das {
 
     // save ( obj, block<(bytesAt)> )
     vec4f _builtin_binary_save ( Context & context, SimNode_CallBase * call, vec4f * args ) {
-        BinDataSerialize writer(context);
+        BinDataSerialize writer(context, &call->debugInfo);
         // args
         Block * block = cast<Block *>::to(args[1]);
         auto info = call->types[0];
@@ -294,16 +297,16 @@ namespace das {
     }
 
     // load ( obj, bytesAt )
-    void _builtin_binary_load ( Context & context, TypeInfo* info, const char *data, uint32_t len, char *to) {
+    void _builtin_binary_load ( Context & context, LineInfo * at, TypeInfo* info, const char *data, uint32_t len, char *to) {
         if ( !(info->flags&(TypeInfo::flag_refType | TypeInfo::flag_ref)) )
             return;
-        BinDataSerialize reader(context, const_cast<char*>(data), len);
+        BinDataSerialize reader(context, at, const_cast<char*>(data), len);
         reader.walk(to, info);
     }
 
     vec4f _builtin_binary_load ( Context & context, SimNode_CallBase * call, vec4f * args ) {
         Array * ba = cast<Array *>::to(args[1]);
-        _builtin_binary_load(context, call->types[0], ba->data, ba->size, cast<char *>::to(args[0]));
+        _builtin_binary_load(context, &call->debugInfo, call->types[0], ba->data, ba->size, cast<char *>::to(args[0]));
         return v_zero();
     }
 

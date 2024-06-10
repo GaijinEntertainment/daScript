@@ -500,7 +500,7 @@ namespace das {
     struct SimNode_JitBlock;
 
     struct JitBlock : Block {
-        vec4f   node[8];
+        vec4f   node[10];
     };
 
     struct SimNode_JitBlock : SimNode_ClosureBlock {
@@ -3513,9 +3513,9 @@ SIM_NODE_AT_VECTOR(Float, float)
             DAS_PROFILE_NODE
             vec4f ll = source->eval(context);
             TT * array = cast<TT *>::to(ll);
-            char * iter = context.allocateIterator(sizeof(IterT),"any iterator",&debugInfo);
+            char * iter = context.allocateIterator(sizeof(IterT),"any iterator", &debugInfo);
             if ( !iter ) context.throw_out_of_memory(false,sizeof(IterT),&debugInfo);
-            new (iter) IterT(array);
+            new (iter) IterT(array, &debugInfo);
             return cast<char *>::from(iter);
         }
         virtual SimNode * visit(SimVisitor & vis) override {

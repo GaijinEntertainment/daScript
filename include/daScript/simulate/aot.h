@@ -1120,8 +1120,8 @@ namespace das {
         __forceinline TSequence<TT> & operator = ( const Sequence & s ) { this->iter = s.iter; return *this; }
     };
 
-    TSequence<int32_t> builtin_count ( int32_t start, int32_t step, Context * context );
-    TSequence<uint32_t> builtin_ucount ( uint32_t start, uint32_t step, Context * context );
+    TSequence<int32_t> builtin_count ( int32_t start, int32_t step, Context * context, LineInfoArg * at );
+    TSequence<uint32_t> builtin_ucount ( uint32_t start, uint32_t step, Context * context, LineInfoArg * at );
 
     template <typename TT>
     struct das_iterator;
@@ -1816,8 +1816,8 @@ namespace das {
     };
 
     template <typename TT>
-    __forceinline char * das_lexical_cast ( TT x, Context * __context__ ) {
-        return __context__->allocateString(to_string(x));
+    __forceinline char * das_lexical_cast ( TT x, Context * __context__, LineInfoArg * at ) {
+        return __context__->allocateString(to_string(x),at);
     }
 
     __forceinline char * das_string_builder ( Context * __context__, const SimNode_AotInteropBase & node ) {
@@ -2514,7 +2514,7 @@ namespace das {
     template <typename VectorType>
     struct StdVectorIterator : Iterator {
         using OT = typename VectorType::value_type;
-        StdVectorIterator  ( VectorType * ar ) : array(ar) {}
+        StdVectorIterator  ( VectorType * ar, LineInfo * at ) : Iterator(at), array(ar) {}
         virtual bool first ( Context &, char * _value ) override {
             char ** value = (char **) _value;
             *value = (char *) array->data();
@@ -2533,29 +2533,29 @@ namespace das {
                 char ** value = (char **) _value;
                 *value = nullptr;
             }
-            context.freeIterator((char *)this);
+            context.freeIterator((char *)this, debugInfo);
         }
         VectorType * array;
         size_t index = 0;
     };
 
     template <typename TT>
-    Sequence das_vector_each_sequence ( TT & vec, Context * context ) {
+    Sequence das_vector_each_sequence ( TT & vec, Context * context, LineInfoArg * at ) {
         using VectorIterator = StdVectorIterator<TT>;
-        char * iter = context->allocateIterator(sizeof(VectorIterator), "std::vector<> iterator");
-        if ( !iter ) context->throw_out_of_memory(false, sizeof(VectorIterator)+16);
-        new (iter) VectorIterator(&vec);
+        char * iter = context->allocateIterator(sizeof(VectorIterator), "std::vector<> iterator", at);
+        if ( !iter ) context->throw_out_of_memory(false, sizeof(VectorIterator)+16, at);
+        new (iter) VectorIterator(&vec, at);
         return { (Iterator *) iter };
     }
 
     template <typename TT, typename QQ = typename TT::value_type>
-    __forceinline TSequence<QQ &> das_vector_each ( TT & vec, Context * context ) {
-        return das_vector_each_sequence(vec,context);
+    __forceinline TSequence<QQ &> das_vector_each ( TT & vec, Context * context, LineInfoArg * at ) {
+        return das_vector_each_sequence(vec,context,at);
     }
 
     template <typename TT, typename QQ = typename TT::value_type>
-    __forceinline TSequence<const QQ &> das_vector_each_const ( const TT & vec, Context * context ) {
-        return das_vector_each_sequence(vec,context);
+    __forceinline TSequence<const QQ &> das_vector_each_const ( const TT & vec, Context * context, LineInfoArg * at ) {
+        return das_vector_each_sequence(vec,context,at);
     }
 
     template <typename TT, typename QQ = typename TT::value_type>
@@ -2654,7 +2654,7 @@ namespace das {
         block((char *)str.c_str());
     }
     void peek_das_string(const string & str, const TBlock<void,TTemporary<const char *>> & block, Context * context, LineInfoArg *);
-    char * builtin_string_clone ( const char *str, Context * context );
+    char * builtin_string_clone ( const char *str, Context * context, LineInfoArg * at );
 
     __forceinline bool builtin_empty(const char* str) { return !str || str[0] == 0; }
     __forceinline bool builtin_empty_das_string(const string & str) { return str.empty(); }
@@ -2666,11 +2666,11 @@ namespace das {
         }
     };
 
-    char * to_das_string(const string & str, Context * ctx);
+    char * to_das_string(const string & str, Context * ctx, LineInfoArg * at);
     char * pass_string( char * str );
-    char * clone_pass_string( char * str, Context * ctx);
+    char * clone_pass_string( char * str, Context * ctx, LineInfoArg * at);
     void set_das_string(string & str, const char * bs);
-    void set_string_das(char * & bs, const string & str, Context * ctx);
+    void set_string_das(char * & bs, const string & str, Context * ctx, LineInfoArg * at);
 
     __forceinline bool das_str_equ ( const string & a, const string & b ) { return a==b; }
     __forceinline bool das_str_nequ ( const string & a, const string & b ) { return a!=b; }
