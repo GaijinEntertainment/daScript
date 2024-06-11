@@ -49,7 +49,7 @@ void Module_dasLLVM::initFunctions_53() {
 		->args({"J","JD","TSM"})
 		->addToModule(*this, SideEffects::worstDefault);
 // from D:\Work\libclang\include\llvm-c/LLJIT.h:217:14
-	makeExtern< LLVMOpaqueError * (*)(LLVMOrcOpaqueLLJIT *,unsigned long long *,const char *) , LLVMOrcLLJITLookup , SimNode_ExtFuncCall >(lib,"LLVMOrcLLJITLookup","LLVMOrcLLJITLookup")
+	makeExtern< LLVMOpaqueError * (*)(LLVMOrcOpaqueLLJIT *,uint64_t *,const char *) , LLVMOrcLLJITLookup , SimNode_ExtFuncCall >(lib,"LLVMOrcLLJITLookup","LLVMOrcLLJITLookup")
 		->args({"J","Result","Name"})
 		->addToModule(*this, SideEffects::worstDefault);
 // from D:\Work\libclang\include\llvm-c/LLJIT.h:224:23

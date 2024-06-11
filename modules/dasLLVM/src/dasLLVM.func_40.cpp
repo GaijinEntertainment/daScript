@@ -37,7 +37,7 @@ void Module_dasLLVM::initFunctions_40() {
 		->args({"Builder","Data","NumElements"})
 		->addToModule(*this, SideEffects::worstDefault);
 // from D:\Work\libclang\include\llvm-c/DebugInfo.h:1114:17
-	makeExtern< LLVMOpaqueMetadata * (*)(LLVMOpaqueDIBuilder *,unsigned long long *,size_t) , LLVMDIBuilderCreateExpression , SimNode_ExtFuncCall >(lib,"LLVMDIBuilderCreateExpression","LLVMDIBuilderCreateExpression")
+	makeExtern< LLVMOpaqueMetadata * (*)(LLVMOpaqueDIBuilder *,uint64_t *,size_t) , LLVMDIBuilderCreateExpression , SimNode_ExtFuncCall >(lib,"LLVMDIBuilderCreateExpression","LLVMDIBuilderCreateExpression")
 		->args({"Builder","Addr","Length"})
 		->addToModule(*this, SideEffects::worstDefault);
 // from D:\Work\libclang\include\llvm-c/DebugInfo.h:1124:1

@@ -85,7 +85,8 @@ void Module_dasLLVM::initFunctions_15() {
 		->args({"IntTy","N","SignExtend"})
 		->addToModule(*this, SideEffects::worstDefault);
 // from D:\Work\libclang\include\llvm-c/Core.h:1992:14
-	makeExtern< LLVMOpaqueValue * (*)(LLVMOpaqueType *,unsigned int,const unsigned long long[]) , LLVMConstIntOfArbitraryPrecision , SimNode_ExtFuncCall >(lib,"LLVMConstIntOfArbitraryPrecision","LLVMConstIntOfArbitraryPrecision")
+
+	makeExtern< LLVMOpaqueValue * (*)(LLVMOpaqueType *,unsigned int,const uint64_t[]) , LLVMConstIntOfArbitraryPrecision , SimNode_ExtFuncCall >(lib,"LLVMConstIntOfArbitraryPrecision","LLVMConstIntOfArbitraryPrecision")
 		->args({"IntTy","NumWords","Words"})
 		->addToModule(*this, SideEffects::worstDefault);
 // from D:\Work\libclang\include\llvm-c/Core.h:2005:14
