@@ -6,6 +6,7 @@
 #include "daScript/ast/ast_handle.h"
 #include "daScript/ast/ast.h"
 #include <cstdarg>
+#include <stdexcept>
 
 namespace das {
 
