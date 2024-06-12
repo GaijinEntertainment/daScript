@@ -19,3 +19,6 @@ def main
 	let e = fixed_array<int[1]>(1)
 	print("e = {e}\n")
 
+	let t <- table ( 1=>"1", 2=>"2", 3=>"3" )
+	print("t = {t}\n")
+

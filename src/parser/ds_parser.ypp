@@ -410,6 +410,7 @@
 %type <pExpression>     expr_assign
 %type <pExpression>     expr_assign_pipe
 %type <pExpression>     expr_list
+%type <pExpression>     expr_map_tuple_list
 %type <pExpression>     expression_label
 %type <pExpression>     expression_goto
 %type <pExpression>     expression_let
@@ -3138,6 +3139,15 @@ make_table
     }
     ;
 
+expr_map_tuple_list
+    :   make_map_tuple[subexpr] {
+        $$ = $subexpr;
+    }
+    |   expr_map_tuple_list[left] ',' make_map_tuple[right]     {
+            $$ = new ExprSequence(tokAt(scanner,@left),ExpressionPtr($left),ExpressionPtr($right));
+    }
+    ;
+
 make_table_decl
     :   CBRCBRB [loc] make_table[mka] optional_trailing_semicolon_cur_cur {
         auto mkt = make_smart<TypeDecl>(Type::autoinfer);
@@ -3146,6 +3156,14 @@ make_table_decl
         $mka->at = tokAt(scanner,@loc);
         auto ttm = yyextra->g_Program->makeCall(tokAt(scanner,@loc),"to_table_move");
         ttm->arguments.push_back(ExpressionPtr($mka));
+        $$ = ttm;
+    }
+    |   DAS_TABLE[loc] '(' expr_map_tuple_list[arguments] ')' {
+        auto mka = make_smart<ExprMakeArray>(tokAt(scanner,@loc));
+        mka->values = sequenceToList($arguments);
+        mka->makeType = make_smart<TypeDecl>(Type::autoinfer);
+        auto ttm = yyextra->g_Program->makeCall(tokAt(scanner,@loc),"to_table_move");
+        ttm->arguments.push_back(mka);
         $$ = ttm;
     }
     ;
