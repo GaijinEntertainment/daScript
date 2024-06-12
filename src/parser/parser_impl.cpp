@@ -942,12 +942,24 @@ namespace das {
             delete pVar;
             pCall->arguments.insert(pCall->arguments.begin(),ExpressionPtr(arg));
             return pCall;
-        }
-        else if (fncall->rtti_isNamedCall()) {
+        } else if (fncall->rtti_isNamedCall()) {
             auto pCall = (ExprNamedCall*)fncall;
             pCall->nonNamedArguments.insert(pCall->nonNamedArguments.begin(), ExpressionPtr(arg));
             return fncall;
-
+        } else if (fncall->rtti_isField() ) {
+            auto pField = (ExprField*)fncall;
+            if ( auto pipeto = ast_rpipe(scanner, arg, pField->value.get(), locAt) ) {
+                return pField;
+            } else {
+                return nullptr;
+            }
+        } else if (fncall->rtti_isSafeField() ) {
+            auto pField = (ExprSafeField*)fncall;
+            if ( auto pipeto = ast_rpipe(scanner, arg, pField->value.get(), locAt) ) {
+                return pField;
+            } else {
+                return nullptr;
+            }
         } else {
             das_yyerror(scanner,"can only rpipe into a function call",locAt,CompilationError::cant_pipe);
             return fncall;
