@@ -1832,6 +1832,11 @@ expr
     |   expr_block[subexpr]                     { $$ = $subexpr; }
     |   expr[fncall] LPIPE[loc] expr[arg]       { $$ = ast_lpipe(scanner,$fncall,$arg,tokAt(scanner,@loc)); }
     |   expr[arg] RPIPE[loc] expr[fncall]       { $$ = ast_rpipe(scanner,$arg,$fncall,tokAt(scanner,@loc)); }
+
+    |   expr[arg] RPIPE[loc] basic_type_declaration[type] {
+        auto fncall = yyextra->g_Program->makeCall(tokAt(scanner,@type),tokAt(scanner,@type),das_to_string($type));
+        $$ = ast_rpipe(scanner,$arg,fncall,tokAt(scanner,@loc));
+    }
     | name_in_namespace[ena] NAME[eni]          { $$ = ast_NameName(scanner,$ena,$eni,tokAt(scanner,@ena),tokAt(scanner,@eni)); }
     |   DAS_UNSAFE '(' expr[subexpr] ')' {
         $subexpr->alwaysSafe = true;
