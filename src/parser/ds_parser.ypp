@@ -3105,7 +3105,7 @@ make_dim_decl
         tam->arguments.push_back(mka);
         $$ = tam;
     }
-    |   DAS_ARRAY[loc] '<' type_declaration_no_options[mkt] '>' '(' expr_list[arguments] ')' {
+    |   DAS_ARRAY[loc] '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' expr_list[arguments] ')' {
         auto mka = make_smart<ExprMakeArray>(tokAt(scanner,@loc));
         mka->values = sequenceToList($arguments);
         mka->makeType = TypeDeclPtr($mkt);
@@ -3117,12 +3117,14 @@ make_dim_decl
         auto mka = new ExprMakeArray(tokAt(scanner,@loc));
         mka->values = sequenceToList($arguments);
         mka->makeType = make_smart<TypeDecl>(Type::autoinfer);
+        mka->makeType->dim.push_back(TypeDecl::dimAuto);
         $$ = mka;
     }
-    |   DAS_FIXED_ARRAY[loc] '<' type_declaration_no_options[mkt] '>' '(' expr_list[arguments] ')' {
+    |   DAS_FIXED_ARRAY[loc] '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' expr_list[arguments] ')' {
         auto mka = new ExprMakeArray(tokAt(scanner,@loc));
         mka->values = sequenceToList($arguments);
         mka->makeType = TypeDeclPtr($mkt);
+        if ( !mka->makeType->dim.size() ) mka->makeType->dim.push_back(TypeDecl::dimAuto);
         $$ = mka;
     }
     ;
@@ -3162,6 +3164,24 @@ make_table_decl
         auto mka = make_smart<ExprMakeArray>(tokAt(scanner,@loc));
         mka->values = sequenceToList($arguments);
         mka->makeType = make_smart<TypeDecl>(Type::autoinfer);
+        auto ttm = yyextra->g_Program->makeCall(tokAt(scanner,@loc),"to_table_move");
+        ttm->arguments.push_back(mka);
+        $$ = ttm;
+    }
+    |   DAS_TABLE[loc] '<' type_declaration_no_options[decl] '>' '(' expr_map_tuple_list[arguments] ')' {
+        auto mka = make_smart<ExprMakeArray>(tokAt(scanner,@loc));
+        mka->values = sequenceToList($arguments);
+        mka->makeType = TypeDeclPtr($decl);
+        auto ttm = yyextra->g_Program->makeCall(tokAt(scanner,@loc),"to_table_move");
+        ttm->arguments.push_back(mka);
+        $$ = ttm;
+    }
+    |   DAS_TABLE[loc] '<' type_declaration_no_options[decl] ';' type_declaration_no_options[to_decl] '>' '(' expr_map_tuple_list[arguments] ')' {
+        auto mka = make_smart<ExprMakeArray>(tokAt(scanner,@loc));
+        mka->values = sequenceToList($arguments);
+        mka->makeType = make_smart<TypeDecl>(Type::tTuple);
+        mka->makeType->argTypes.push_back($decl);
+        mka->makeType->argTypes.push_back($to_decl);
         auto ttm = yyextra->g_Program->makeCall(tokAt(scanner,@loc),"to_table_move");
         ttm->arguments.push_back(mka);
         $$ = ttm;

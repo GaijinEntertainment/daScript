@@ -19,6 +19,18 @@ def main
 	let e = fixed_array<int[1]>(1)
 	print("e = {e}\n")
 
+	let q = fixed_array<int>(1)
+	print("q = {q}\n")
+
+	let qq = fixed_array(1)
+	print("qq = {qq}\n")
+
 	let t <- table ( 1=>"1", 2=>"2", 3=>"3" )
 	print("t = {t}\n")
+
+	let st <- table <int> ( 1, 2, 3, 4 )
+	print("st = {st}\n")
+
+	let tt <- table <int; string> ( 1=>"1", 2=>"2", 3=>"3" )
+	print("tt = {tt}\n")
 
