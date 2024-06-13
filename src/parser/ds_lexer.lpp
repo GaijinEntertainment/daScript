@@ -879,7 +879,9 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
     yyextra->das_nested_square_braces -= 2;
     return COMMA_SQR_SQR;
 }
-
+<normal>\\([ \t\r])*\n {
+    YYCOLUMN(yyextra->das_yycolumn = 0, "NEW LINE");
+}
 <normal>(\/\/.*)*\n {
     YYCOLUMN(yyextra->das_yycolumn = 0, "NEW LINE");
     das_accept_cpp_comment(yyextra->g_CommentReaders, yyscanner, *yylloc_param, yytext);
