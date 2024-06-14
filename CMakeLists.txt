@@ -628,6 +628,10 @@ include/ska/flat_hash_map.hpp
 )
 SOURCE_GROUP_FILES("flat_hash_map" FLAT_HASH_MAP_SRC)
 
+SET(FAST_FLOAT_SRC
+include/fastfloat/fast_float.h
+)
+
 SET(MAIN_SRC
 include/daScript/daScript.h
 include/daScript/daScriptC.h
@@ -647,7 +651,7 @@ list(SORT DAS_LIB_SRC)
 include_directories(include)
 ADD_LIBRARY(libDaScript ${PARSER_GENERATED_SRC} ${PARSER_SRC} ${VECMATH_SRC} ${AST_SRC} ${BUILTIN_SRC}
     ${MISC_SRC} ${SIMULATE_SRC} ${SIMULATE_FUSION_SRC} ${TEST_SRC} ${MAIN_SRC}
-	${DAGOR_NOISE_SRC} ${FLAT_HASH_MAP_SRC} ${DAS_LIB_SRC} ${SMMALLOC_SRC})
+	${DAGOR_NOISE_SRC} ${FLAT_HASH_MAP_SRC} ${FAST_FLOAT_SRC}  ${SMMALLOC_SRC})
 ADD_DEPENDENCIES(libDaScript need_and_resolve)
 ADD_PROJECT_XXD_DEPENDS(libDaScript)
 target_include_directories(libDaScript PUBLIC

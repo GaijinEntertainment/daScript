@@ -17,6 +17,7 @@ namespace das
     ,   comment_contains_eof                    =   10007
     ,   invalid_escape_sequence                 =   10008       //  blah/yblah
     ,   invalid_line_directive                  =   10009       // #row,col,"filename" is bad somehow
+    ,   floating_point_constant_out_of_range    =   10010
 
 // parser errors
 

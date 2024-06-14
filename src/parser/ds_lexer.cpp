@@ -1220,10 +1220,9 @@ static const flex_int32_t yy_rule_can_match_eol[252] =
 #line 2 "ds_lexer.lpp"
     #include "daScript/misc/platform.h"
     #include <inttypes.h>
+    #include "fastfloat/fast_float.h"
     #include "daScript/ast/ast.h"
-
     #include "parser_state.h"
-
     #include "ds_parser.hpp"
 
     #ifndef SCNi64
@@ -1273,11 +1272,11 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 
 #define YY_EXTRA_TYPE das::DasParserState *
 
-#line 1276 "ds_lexer.cpp"
+#line 1275 "ds_lexer.cpp"
 #define YY_NO_UNISTD_H 1
 /* %option debug */
 
-#line 1280 "ds_lexer.cpp"
+#line 1279 "ds_lexer.cpp"
 
 #define INITIAL 0
 #define indent 1
@@ -1558,10 +1557,10 @@ YY_DECL
 		}
 
 	{
-#line 78 "ds_lexer.lpp"
+#line 77 "ds_lexer.lpp"
 
 
-#line 1564 "ds_lexer.cpp"
+#line 1563 "ds_lexer.cpp"
 
 	while ( /*CONSTCOND*/1 )		/* loops until end-of-file is reached */
 		{
@@ -1629,7 +1628,7 @@ do_action:	/* This label is used only to access EOF actions. */
 case 1:
 /* rule 1 can match eol */
 YY_RULE_SETUP
-#line 80 "ds_lexer.lpp"
+#line 79 "ds_lexer.lpp"
 {
     string txt = yytext;
     int lRow, lCol;
@@ -1655,12 +1654,12 @@ YY_RULE_SETUP
 	YY_BREAK
 case 2:
 YY_RULE_SETUP
-#line 102 "ds_lexer.lpp"
+#line 101 "ds_lexer.lpp"
 das_yyfatalerror(yylloc_param,yyscanner,"Unexpected */", CompilationError::unexpected_close_comment); return LEXER_ERROR;
 	YY_BREAK
 case 3:
 YY_RULE_SETUP
-#line 103 "ds_lexer.lpp"
+#line 102 "ds_lexer.lpp"
 {
     BEGIN(c_comment);
     yyextra->das_c_style_depth = 1;
@@ -1673,12 +1672,12 @@ YY_RULE_SETUP
 	YY_BREAK
 case 4:
 YY_RULE_SETUP
-#line 112 "ds_lexer.lpp"
+#line 111 "ds_lexer.lpp"
 das_yyfatalerror(yylloc_param,yyscanner,"Unexpected */", CompilationError::unexpected_close_comment); return LEXER_ERROR;
 	YY_BREAK
 case 5:
 YY_RULE_SETUP
-#line 113 "ds_lexer.lpp"
+#line 112 "ds_lexer.lpp"
 {
     BEGIN(c_comment);
     yyextra->das_c_style_depth = 1;
@@ -1691,7 +1690,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 6:
 YY_RULE_SETUP
-#line 122 "ds_lexer.lpp"
+#line 121 "ds_lexer.lpp"
 {
     BEGIN(cpp_comment);
     if ( !yyextra->g_CommentReaders.empty() ) {
@@ -1702,7 +1701,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 7:
 YY_RULE_SETUP
-#line 129 "ds_lexer.lpp"
+#line 128 "ds_lexer.lpp"
 {
     BEGIN(cpp_comment);
     if ( !yyextra->g_CommentReaders.empty() ) {
@@ -1714,7 +1713,7 @@ YY_RULE_SETUP
 case 8:
 /* rule 8 can match eol */
 YY_RULE_SETUP
-#line 136 "ds_lexer.lpp"
+#line 135 "ds_lexer.lpp"
 {
     BEGIN(normal);
     unput('\n');
@@ -1725,12 +1724,12 @@ YY_RULE_SETUP
 }
 	YY_BREAK
 case YY_STATE_EOF(cpp_comment):
-#line 144 "ds_lexer.lpp"
+#line 143 "ds_lexer.lpp"
 BEGIN(normal);
 	YY_BREAK
 case 9:
 YY_RULE_SETUP
-#line 145 "ds_lexer.lpp"
+#line 144 "ds_lexer.lpp"
 {
     if ( !yyextra->g_CommentReaders.empty() ) {
         auto tak = tokAt(yyscanner,*yylloc_param);
@@ -1740,14 +1739,14 @@ YY_RULE_SETUP
 	YY_BREAK
 case 10:
 YY_RULE_SETUP
-#line 151 "ds_lexer.lpp"
+#line 150 "ds_lexer.lpp"
 {
     yyextra->das_c_style_depth ++;
 }
 	YY_BREAK
 case 11:
 YY_RULE_SETUP
-#line 154 "ds_lexer.lpp"
+#line 153 "ds_lexer.lpp"
 {
     yyextra->das_c_style_depth --;
     if ( yyextra->das_c_style_depth==0 ) {
@@ -1765,7 +1764,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 12:
 YY_RULE_SETUP
-#line 168 "ds_lexer.lpp"
+#line 167 "ds_lexer.lpp"
 {                      /* skipping comment body */
     if ( !yyextra->g_CommentReaders.empty() ) {
         auto tak = tokAt(yyscanner,*yylloc_param);
@@ -1776,7 +1775,7 @@ YY_RULE_SETUP
 case 13:
 /* rule 13 can match eol */
 YY_RULE_SETUP
-#line 174 "ds_lexer.lpp"
+#line 173 "ds_lexer.lpp"
 {                 /* skipping comment eol */
     if ( !yyextra->g_CommentReaders.empty() ) {
         auto tak = tokAt(yyscanner,*yylloc_param);
@@ -1785,14 +1784,14 @@ YY_RULE_SETUP
 }
 	YY_BREAK
 case YY_STATE_EOF(c_comment):
-#line 180 "ds_lexer.lpp"
+#line 179 "ds_lexer.lpp"
 {
     das_yyfatalerror(yylloc_param,yyscanner,"end of file encountered inside c-style comment", CompilationError::comment_contains_eof);
     BEGIN(normal);
 }
 	YY_BREAK
 case YY_STATE_EOF(reader):
-#line 184 "ds_lexer.lpp"
+#line 183 "ds_lexer.lpp"
 {
     das_yyfatalerror(yylloc_param,yyscanner,"reader constant exceeds file", CompilationError::string_constant_exceeds_file);
     BEGIN(normal);
@@ -1802,7 +1801,7 @@ case YY_STATE_EOF(reader):
 case 14:
 /* rule 14 can match eol */
 YY_RULE_SETUP
-#line 189 "ds_lexer.lpp"
+#line 188 "ds_lexer.lpp"
 {
     YYNEWLINE(yyscanner);
     yylval_param->ch = yytext[0];
@@ -1811,7 +1810,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 15:
 YY_RULE_SETUP
-#line 194 "ds_lexer.lpp"
+#line 193 "ds_lexer.lpp"
 {
     yylval_param->ch = yytext[0];
     return STRING_CHARACTER;
@@ -1819,7 +1818,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 16:
 YY_RULE_SETUP
-#line 198 "ds_lexer.lpp"
+#line 197 "ds_lexer.lpp"
 {
     // assert(nested_sb==0);
     BEGIN(normal);
@@ -1828,7 +1827,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 17:
 YY_RULE_SETUP
-#line 203 "ds_lexer.lpp"
+#line 202 "ds_lexer.lpp"
 {
     DAS_ASSERT(yyextra->das_nested_sb==0);
     yyextra->das_nested_sb ++;
@@ -1837,7 +1836,7 @@ YY_RULE_SETUP
 }
 	YY_BREAK
 case YY_STATE_EOF(strb):
-#line 209 "ds_lexer.lpp"
+#line 208 "ds_lexer.lpp"
 {
     das_yyfatalerror(yylloc_param,yyscanner,"string constant exceeds file", CompilationError::string_constant_exceeds_file);
     BEGIN(normal);
@@ -1846,14 +1845,14 @@ case YY_STATE_EOF(strb):
 	YY_BREAK
 case 18:
 YY_RULE_SETUP
-#line 214 "ds_lexer.lpp"
+#line 213 "ds_lexer.lpp"
 {
     return STRING_CHARACTER_ESC;
 }
 	YY_BREAK
 case 19:
 YY_RULE_SETUP
-#line 217 "ds_lexer.lpp"
+#line 216 "ds_lexer.lpp"
 {
     yylval_param->ch = yytext[1];
     return STRING_CHARACTER;
@@ -1861,13 +1860,13 @@ YY_RULE_SETUP
 	YY_BREAK
 case 20:
 YY_RULE_SETUP
-#line 221 "ds_lexer.lpp"
+#line 220 "ds_lexer.lpp"
 /* do exactly nothing */
 	YY_BREAK
 case 21:
 /* rule 21 can match eol */
 YY_RULE_SETUP
-#line 222 "ds_lexer.lpp"
+#line 221 "ds_lexer.lpp"
 {
     yylval_param->ch = *yytext;
     YYNEWLINE(yyscanner);
@@ -1876,7 +1875,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 22:
 YY_RULE_SETUP
-#line 227 "ds_lexer.lpp"
+#line 226 "ds_lexer.lpp"
 {
     YYTAB();
     yylval_param->ch = *yytext;
@@ -1885,7 +1884,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 23:
 YY_RULE_SETUP
-#line 232 "ds_lexer.lpp"
+#line 231 "ds_lexer.lpp"
 {
     yylval_param->ch = *yytext;
     return STRING_CHARACTER;
@@ -1894,7 +1893,7 @@ YY_RULE_SETUP
 case 24:
 /* rule 24 can match eol */
 YY_RULE_SETUP
-#line 236 "ds_lexer.lpp"
+#line 235 "ds_lexer.lpp"
 /* skip empty line */ {
     yyextra->das_current_line_indent = 0;
     YYNEWLINE(yyscanner);
@@ -1902,7 +1901,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 25:
 YY_RULE_SETUP
-#line 240 "ds_lexer.lpp"
+#line 239 "ds_lexer.lpp"
 {
     yyextra->das_current_line_indent++;
     #ifdef FLEX_DEBUG
@@ -1912,7 +1911,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 26:
 YY_RULE_SETUP
-#line 246 "ds_lexer.lpp"
+#line 245 "ds_lexer.lpp"
 {
     yyextra->das_current_line_indent = (yyextra->das_current_line_indent + yyextra->das_tab_size) & ~(yyextra->das_tab_size-1);
     #ifdef FLEX_DEBUG
@@ -1924,7 +1923,7 @@ YY_RULE_SETUP
 case 27:
 /* rule 27 can match eol */
 YY_RULE_SETUP
-#line 253 "ds_lexer.lpp"
+#line 252 "ds_lexer.lpp"
 {
     yyextra->das_current_line_indent = 0;
     yyextra->das_need_oxford_comma = true;
@@ -1937,7 +1936,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 28:
 YY_RULE_SETUP
-#line 262 "ds_lexer.lpp"
+#line 261 "ds_lexer.lpp"
 {
     unput(*yytext);
     YYCOLUMN(yyextra->das_yycolumn--, "UNPUT");
@@ -1973,7 +1972,7 @@ YY_RULE_SETUP
 }
 	YY_BREAK
 case YY_STATE_EOF(indent):
-#line 295 "ds_lexer.lpp"
+#line 294 "ds_lexer.lpp"
 {
     if ( yyextra->g_FileAccessStack.size()==1 ) {
         if ( yyextra->das_indent_level ) {
@@ -1996,19 +1995,19 @@ case YY_STATE_EOF(indent):
 	YY_BREAK
 case 29:
 YY_RULE_SETUP
-#line 315 "ds_lexer.lpp"
+#line 314 "ds_lexer.lpp"
 /* eat the whitespace */
 	YY_BREAK
 case 30:
 YY_RULE_SETUP
-#line 316 "ds_lexer.lpp"
+#line 315 "ds_lexer.lpp"
 {
     YYTAB();
 }
 	YY_BREAK
 case 31:
 YY_RULE_SETUP
-#line 319 "ds_lexer.lpp"
+#line 318 "ds_lexer.lpp"
 { /* got the include file name */
     auto cfi = yyextra->g_FileAccessStack.back();
     string incFileName = yyextra->g_Access->getIncludeFileName(cfi->name,yytext);
@@ -2034,73 +2033,73 @@ YY_RULE_SETUP
 	YY_BREAK
 case 32:
 YY_RULE_SETUP
-#line 342 "ds_lexer.lpp"
+#line 341 "ds_lexer.lpp"
 BEGIN(include);
 	YY_BREAK
 case 33:
 YY_RULE_SETUP
-#line 343 "ds_lexer.lpp"
+#line 342 "ds_lexer.lpp"
 /* yyextra->das_need_oxford_comma = false; */ return DAS_FOR;
 	YY_BREAK
 case 34:
 YY_RULE_SETUP
-#line 344 "ds_lexer.lpp"
+#line 343 "ds_lexer.lpp"
 yyextra->das_need_oxford_comma = false; return DAS_WHILE;
 	YY_BREAK
 case 35:
 YY_RULE_SETUP
-#line 345 "ds_lexer.lpp"
+#line 344 "ds_lexer.lpp"
 yyextra->das_need_oxford_comma = false; return DAS_IF;
 	YY_BREAK
 case 36:
 YY_RULE_SETUP
-#line 346 "ds_lexer.lpp"
+#line 345 "ds_lexer.lpp"
 yyextra->das_need_oxford_comma = false; return DAS_STATIC_IF;
 	YY_BREAK
 case 37:
 YY_RULE_SETUP
-#line 347 "ds_lexer.lpp"
+#line 346 "ds_lexer.lpp"
 yyextra->das_need_oxford_comma = false; return DAS_ELIF;
 	YY_BREAK
 case 38:
 YY_RULE_SETUP
-#line 348 "ds_lexer.lpp"
+#line 347 "ds_lexer.lpp"
 yyextra->das_need_oxford_comma = false; return DAS_STATIC_ELIF;
 	YY_BREAK
 case 39:
 YY_RULE_SETUP
-#line 349 "ds_lexer.lpp"
+#line 348 "ds_lexer.lpp"
 yyextra->das_need_oxford_comma = false; return DAS_ELSE;
 	YY_BREAK
 case 40:
 YY_RULE_SETUP
-#line 350 "ds_lexer.lpp"
+#line 349 "ds_lexer.lpp"
 yyextra->das_need_oxford_comma = false; return DAS_FINALLY;
 	YY_BREAK
 case 41:
 YY_RULE_SETUP
-#line 351 "ds_lexer.lpp"
+#line 350 "ds_lexer.lpp"
 yyextra->das_need_oxford_comma = false; return DAS_DEF;
 	YY_BREAK
 case 42:
 YY_RULE_SETUP
-#line 352 "ds_lexer.lpp"
+#line 351 "ds_lexer.lpp"
 yyextra->das_need_oxford_comma = false; return DAS_WITH;
 	YY_BREAK
 case 43:
 YY_RULE_SETUP
-#line 353 "ds_lexer.lpp"
+#line 352 "ds_lexer.lpp"
 return DAS_AKA;
 	YY_BREAK
 case 44:
 YY_RULE_SETUP
-#line 354 "ds_lexer.lpp"
+#line 353 "ds_lexer.lpp"
 return DAS_ASSUME;
 	YY_BREAK
 case 45:
 /* rule 45 can match eol */
 YY_RULE_SETUP
-#line 355 "ds_lexer.lpp"
+#line 354 "ds_lexer.lpp"
 {
     yyextra->das_need_oxford_comma = false;
     unput('\n');
@@ -2110,13 +2109,13 @@ YY_RULE_SETUP
 	YY_BREAK
 case 46:
 YY_RULE_SETUP
-#line 361 "ds_lexer.lpp"
+#line 360 "ds_lexer.lpp"
 return DAS_LET;
 	YY_BREAK
 case 47:
 /* rule 47 can match eol */
 YY_RULE_SETUP
-#line 362 "ds_lexer.lpp"
+#line 361 "ds_lexer.lpp"
 {
     yyextra->das_need_oxford_comma = false;
     unput('\n');
@@ -2126,212 +2125,212 @@ YY_RULE_SETUP
 	YY_BREAK
 case 48:
 YY_RULE_SETUP
-#line 368 "ds_lexer.lpp"
+#line 367 "ds_lexer.lpp"
 return DAS_VAR;
 	YY_BREAK
 case 49:
 YY_RULE_SETUP
-#line 369 "ds_lexer.lpp"
+#line 368 "ds_lexer.lpp"
 yyextra->das_need_oxford_comma = false; return DAS_STRUCT;
 	YY_BREAK
 case 50:
 YY_RULE_SETUP
-#line 370 "ds_lexer.lpp"
+#line 369 "ds_lexer.lpp"
 yyextra->das_need_oxford_comma = false; return DAS_CLASS;
 	YY_BREAK
 case 51:
 YY_RULE_SETUP
-#line 371 "ds_lexer.lpp"
+#line 370 "ds_lexer.lpp"
 yyextra->das_need_oxford_comma = false; return DAS_ENUM;
 	YY_BREAK
 case 52:
 YY_RULE_SETUP
-#line 372 "ds_lexer.lpp"
+#line 371 "ds_lexer.lpp"
 yyextra->das_need_oxford_comma = false; return DAS_TRY;
 	YY_BREAK
 case 53:
 YY_RULE_SETUP
-#line 373 "ds_lexer.lpp"
+#line 372 "ds_lexer.lpp"
 yyextra->das_need_oxford_comma = false; return DAS_CATCH;
 	YY_BREAK
 case 54:
 YY_RULE_SETUP
-#line 374 "ds_lexer.lpp"
+#line 373 "ds_lexer.lpp"
 yyextra->das_need_oxford_comma = false; return DAS_TYPEDEF;
 	YY_BREAK
 case 55:
 YY_RULE_SETUP
-#line 375 "ds_lexer.lpp"
+#line 374 "ds_lexer.lpp"
 return DAS_LABEL;
 	YY_BREAK
 case 56:
 YY_RULE_SETUP
-#line 376 "ds_lexer.lpp"
+#line 375 "ds_lexer.lpp"
 return DAS_GOTO;
 	YY_BREAK
 case 57:
 YY_RULE_SETUP
-#line 377 "ds_lexer.lpp"
+#line 376 "ds_lexer.lpp"
 return DAS_MODULE;
 	YY_BREAK
 case 58:
 YY_RULE_SETUP
-#line 378 "ds_lexer.lpp"
+#line 377 "ds_lexer.lpp"
 return DAS_PUBLIC;
 	YY_BREAK
 case 59:
 YY_RULE_SETUP
-#line 379 "ds_lexer.lpp"
+#line 378 "ds_lexer.lpp"
 return DAS_OPTIONS;
 	YY_BREAK
 case 60:
 YY_RULE_SETUP
-#line 380 "ds_lexer.lpp"
+#line 379 "ds_lexer.lpp"
 return DAS_OPERATOR;
 	YY_BREAK
 case 61:
 YY_RULE_SETUP
-#line 381 "ds_lexer.lpp"
+#line 380 "ds_lexer.lpp"
 return DAS_REQUIRE;
 	YY_BREAK
 case 62:
 YY_RULE_SETUP
-#line 382 "ds_lexer.lpp"
+#line 381 "ds_lexer.lpp"
 return DAS_TBLOCK;
 	YY_BREAK
 case 63:
 YY_RULE_SETUP
-#line 383 "ds_lexer.lpp"
+#line 382 "ds_lexer.lpp"
 return DAS_TFUNCTION;
 	YY_BREAK
 case 64:
 YY_RULE_SETUP
-#line 384 "ds_lexer.lpp"
+#line 383 "ds_lexer.lpp"
 return DAS_TLAMBDA;
 	YY_BREAK
 case 65:
 YY_RULE_SETUP
-#line 385 "ds_lexer.lpp"
+#line 384 "ds_lexer.lpp"
 return DAS_GENERATOR;
 	YY_BREAK
 case 66:
 YY_RULE_SETUP
-#line 386 "ds_lexer.lpp"
+#line 385 "ds_lexer.lpp"
 return DAS_TTUPLE;
 	YY_BREAK
 case 67:
 YY_RULE_SETUP
-#line 387 "ds_lexer.lpp"
+#line 386 "ds_lexer.lpp"
 return DAS_TVARIANT;
 	YY_BREAK
 case 68:
 YY_RULE_SETUP
-#line 388 "ds_lexer.lpp"
+#line 387 "ds_lexer.lpp"
 return DAS_CONST;
 	YY_BREAK
 case 69:
 YY_RULE_SETUP
-#line 389 "ds_lexer.lpp"
+#line 388 "ds_lexer.lpp"
 return DAS_CONTINUE;
 	YY_BREAK
 case 70:
 YY_RULE_SETUP
-#line 390 "ds_lexer.lpp"
+#line 389 "ds_lexer.lpp"
 return DAS_WHERE;
 	YY_BREAK
 case 71:
 YY_RULE_SETUP
-#line 391 "ds_lexer.lpp"
+#line 390 "ds_lexer.lpp"
 return DAS_CAST;
 	YY_BREAK
 case 72:
 YY_RULE_SETUP
-#line 392 "ds_lexer.lpp"
+#line 391 "ds_lexer.lpp"
 return DAS_UPCAST;
 	YY_BREAK
 case 73:
 YY_RULE_SETUP
-#line 393 "ds_lexer.lpp"
+#line 392 "ds_lexer.lpp"
 return DAS_PASS;
 	YY_BREAK
 case 74:
 YY_RULE_SETUP
-#line 394 "ds_lexer.lpp"
+#line 393 "ds_lexer.lpp"
 return DAS_REINTERPRET;
 	YY_BREAK
 case 75:
 YY_RULE_SETUP
-#line 395 "ds_lexer.lpp"
+#line 394 "ds_lexer.lpp"
 return DAS_OVERRIDE;
 	YY_BREAK
 case 76:
 YY_RULE_SETUP
-#line 396 "ds_lexer.lpp"
+#line 395 "ds_lexer.lpp"
 return DAS_SEALED;
 	YY_BREAK
 case 77:
 YY_RULE_SETUP
-#line 397 "ds_lexer.lpp"
+#line 396 "ds_lexer.lpp"
 return DAS_ABSTRACT;
 	YY_BREAK
 case 78:
 YY_RULE_SETUP
-#line 398 "ds_lexer.lpp"
+#line 397 "ds_lexer.lpp"
 return DAS_EXPECT;
 	YY_BREAK
 case 79:
 YY_RULE_SETUP
-#line 399 "ds_lexer.lpp"
+#line 398 "ds_lexer.lpp"
 return DAS_TABLE;
 	YY_BREAK
 case 80:
 YY_RULE_SETUP
-#line 400 "ds_lexer.lpp"
+#line 399 "ds_lexer.lpp"
 return DAS_ARRAY;
 	YY_BREAK
 case 81:
 YY_RULE_SETUP
-#line 401 "ds_lexer.lpp"
+#line 400 "ds_lexer.lpp"
 return DAS_FIXED_ARRAY;
 	YY_BREAK
 case 82:
 YY_RULE_SETUP
-#line 402 "ds_lexer.lpp"
+#line 401 "ds_lexer.lpp"
 return DAS_ITERATOR;
 	YY_BREAK
 case 83:
 YY_RULE_SETUP
-#line 403 "ds_lexer.lpp"
+#line 402 "ds_lexer.lpp"
 return DAS_IN;
 	YY_BREAK
 case 84:
 YY_RULE_SETUP
-#line 404 "ds_lexer.lpp"
+#line 403 "ds_lexer.lpp"
 return DAS_IMPLICIT;
 	YY_BREAK
 case 85:
 YY_RULE_SETUP
-#line 405 "ds_lexer.lpp"
+#line 404 "ds_lexer.lpp"
 return DAS_EXPLICIT;
 	YY_BREAK
 case 86:
 YY_RULE_SETUP
-#line 406 "ds_lexer.lpp"
+#line 405 "ds_lexer.lpp"
 return DAS_SHARED;
 	YY_BREAK
 case 87:
 YY_RULE_SETUP
-#line 407 "ds_lexer.lpp"
+#line 406 "ds_lexer.lpp"
 return DAS_PRIVATE;
 	YY_BREAK
 case 88:
 YY_RULE_SETUP
-#line 408 "ds_lexer.lpp"
+#line 407 "ds_lexer.lpp"
 return DAS_SMART_PTR;
 	YY_BREAK
 case 89:
 YY_RULE_SETUP
-#line 409 "ds_lexer.lpp"
+#line 408 "ds_lexer.lpp"
 {
     unput('(');
     YYCOLUMN(yyextra->das_yycolumn--, "UNPUT (");
@@ -2340,232 +2339,232 @@ YY_RULE_SETUP
 	YY_BREAK
 case 90:
 YY_RULE_SETUP
-#line 414 "ds_lexer.lpp"
+#line 413 "ds_lexer.lpp"
 yyextra->das_need_oxford_comma = false; return DAS_UNSAFE;
 	YY_BREAK
 case 91:
 YY_RULE_SETUP
-#line 415 "ds_lexer.lpp"
+#line 414 "ds_lexer.lpp"
 return DAS_INSCOPE;
 	YY_BREAK
 case 92:
 YY_RULE_SETUP
-#line 416 "ds_lexer.lpp"
+#line 415 "ds_lexer.lpp"
 return DAS_STATIC;
 	YY_BREAK
 case 93:
 YY_RULE_SETUP
-#line 417 "ds_lexer.lpp"
+#line 416 "ds_lexer.lpp"
 return DAS_AS;
 	YY_BREAK
 case 94:
 YY_RULE_SETUP
-#line 418 "ds_lexer.lpp"
+#line 417 "ds_lexer.lpp"
 return DAS_IS;
 	YY_BREAK
 case 95:
 YY_RULE_SETUP
-#line 419 "ds_lexer.lpp"
+#line 418 "ds_lexer.lpp"
 return DAS_DEREF;
 	YY_BREAK
 case 96:
 YY_RULE_SETUP
-#line 420 "ds_lexer.lpp"
+#line 419 "ds_lexer.lpp"
 return DAS_ADDR;
 	YY_BREAK
 case 97:
 YY_RULE_SETUP
-#line 421 "ds_lexer.lpp"
+#line 420 "ds_lexer.lpp"
 return DAS_NULL;
 	YY_BREAK
 case 98:
 YY_RULE_SETUP
-#line 422 "ds_lexer.lpp"
+#line 421 "ds_lexer.lpp"
 return DAS_RETURN;
 	YY_BREAK
 case 99:
 YY_RULE_SETUP
-#line 423 "ds_lexer.lpp"
+#line 422 "ds_lexer.lpp"
 return DAS_YIELD;
 	YY_BREAK
 case 100:
 YY_RULE_SETUP
-#line 424 "ds_lexer.lpp"
+#line 423 "ds_lexer.lpp"
 return DAS_BREAK;
 	YY_BREAK
 case 101:
 YY_RULE_SETUP
-#line 425 "ds_lexer.lpp"
+#line 424 "ds_lexer.lpp"
 return DAS_TYPEINFO;
 	YY_BREAK
 case 102:
 YY_RULE_SETUP
-#line 426 "ds_lexer.lpp"
+#line 425 "ds_lexer.lpp"
 return DAS_TYPE;
 	YY_BREAK
 case 103:
 YY_RULE_SETUP
-#line 427 "ds_lexer.lpp"
+#line 426 "ds_lexer.lpp"
 return DAS_NEWT;
 	YY_BREAK
 case 104:
 YY_RULE_SETUP
-#line 428 "ds_lexer.lpp"
+#line 427 "ds_lexer.lpp"
 return DAS_DELETE;
 	YY_BREAK
 case 105:
 YY_RULE_SETUP
-#line 429 "ds_lexer.lpp"
+#line 428 "ds_lexer.lpp"
 return DAS_TRUE;
 	YY_BREAK
 case 106:
 YY_RULE_SETUP
-#line 430 "ds_lexer.lpp"
+#line 429 "ds_lexer.lpp"
 return DAS_FALSE;
 	YY_BREAK
 case 107:
 YY_RULE_SETUP
-#line 431 "ds_lexer.lpp"
+#line 430 "ds_lexer.lpp"
 return DAS_TAUTO;
 	YY_BREAK
 case 108:
 YY_RULE_SETUP
-#line 432 "ds_lexer.lpp"
+#line 431 "ds_lexer.lpp"
 return DAS_TBOOL;
 	YY_BREAK
 case 109:
 YY_RULE_SETUP
-#line 433 "ds_lexer.lpp"
+#line 432 "ds_lexer.lpp"
 return DAS_TVOID;
 	YY_BREAK
 case 110:
 YY_RULE_SETUP
-#line 434 "ds_lexer.lpp"
+#line 433 "ds_lexer.lpp"
 return DAS_TSTRING;
 	YY_BREAK
 case 111:
 YY_RULE_SETUP
-#line 435 "ds_lexer.lpp"
+#line 434 "ds_lexer.lpp"
 return DAS_TRANGE64;
 	YY_BREAK
 case 112:
 YY_RULE_SETUP
-#line 436 "ds_lexer.lpp"
+#line 435 "ds_lexer.lpp"
 return DAS_TURANGE64;
 	YY_BREAK
 case 113:
 YY_RULE_SETUP
-#line 437 "ds_lexer.lpp"
+#line 436 "ds_lexer.lpp"
 return DAS_TRANGE;
 	YY_BREAK
 case 114:
 YY_RULE_SETUP
-#line 438 "ds_lexer.lpp"
+#line 437 "ds_lexer.lpp"
 return DAS_TURANGE;
 	YY_BREAK
 case 115:
 YY_RULE_SETUP
-#line 439 "ds_lexer.lpp"
+#line 438 "ds_lexer.lpp"
 return DAS_TINT;
 	YY_BREAK
 case 116:
 YY_RULE_SETUP
-#line 440 "ds_lexer.lpp"
+#line 439 "ds_lexer.lpp"
 return DAS_TINT8;
 	YY_BREAK
 case 117:
 YY_RULE_SETUP
-#line 441 "ds_lexer.lpp"
+#line 440 "ds_lexer.lpp"
 return DAS_TINT16;
 	YY_BREAK
 case 118:
 YY_RULE_SETUP
-#line 442 "ds_lexer.lpp"
+#line 441 "ds_lexer.lpp"
 return DAS_TINT64;
 	YY_BREAK
 case 119:
 YY_RULE_SETUP
-#line 443 "ds_lexer.lpp"
+#line 442 "ds_lexer.lpp"
 return DAS_TINT2;
 	YY_BREAK
 case 120:
 YY_RULE_SETUP
-#line 444 "ds_lexer.lpp"
+#line 443 "ds_lexer.lpp"
 return DAS_TINT3;
 	YY_BREAK
 case 121:
 YY_RULE_SETUP
-#line 445 "ds_lexer.lpp"
+#line 444 "ds_lexer.lpp"
 return DAS_TINT4;
 	YY_BREAK
 case 122:
 YY_RULE_SETUP
-#line 446 "ds_lexer.lpp"
+#line 445 "ds_lexer.lpp"
 return DAS_TUINT;
 	YY_BREAK
 case 123:
 YY_RULE_SETUP
-#line 447 "ds_lexer.lpp"
+#line 446 "ds_lexer.lpp"
 return DAS_TBITFIELD;
 	YY_BREAK
 case 124:
 YY_RULE_SETUP
-#line 448 "ds_lexer.lpp"
+#line 447 "ds_lexer.lpp"
 return DAS_TUINT8;
 	YY_BREAK
 case 125:
 YY_RULE_SETUP
-#line 449 "ds_lexer.lpp"
+#line 448 "ds_lexer.lpp"
 return DAS_TUINT16;
 	YY_BREAK
 case 126:
 YY_RULE_SETUP
-#line 450 "ds_lexer.lpp"
+#line 449 "ds_lexer.lpp"
 return DAS_TUINT64;
 	YY_BREAK
 case 127:
 YY_RULE_SETUP
-#line 451 "ds_lexer.lpp"
+#line 450 "ds_lexer.lpp"
 return DAS_TUINT2;
 	YY_BREAK
 case 128:
 YY_RULE_SETUP
-#line 452 "ds_lexer.lpp"
+#line 451 "ds_lexer.lpp"
 return DAS_TUINT3;
 	YY_BREAK
 case 129:
 YY_RULE_SETUP
-#line 453 "ds_lexer.lpp"
+#line 452 "ds_lexer.lpp"
 return DAS_TUINT4;
 	YY_BREAK
 case 130:
 YY_RULE_SETUP
-#line 454 "ds_lexer.lpp"
+#line 453 "ds_lexer.lpp"
 return DAS_TDOUBLE;
 	YY_BREAK
 case 131:
 YY_RULE_SETUP
-#line 455 "ds_lexer.lpp"
+#line 454 "ds_lexer.lpp"
 return DAS_TFLOAT;
 	YY_BREAK
 case 132:
 YY_RULE_SETUP
-#line 456 "ds_lexer.lpp"
+#line 455 "ds_lexer.lpp"
 return DAS_TFLOAT2;
 	YY_BREAK
 case 133:
 YY_RULE_SETUP
-#line 457 "ds_lexer.lpp"
+#line 456 "ds_lexer.lpp"
 return DAS_TFLOAT3;
 	YY_BREAK
 case 134:
 YY_RULE_SETUP
-#line 458 "ds_lexer.lpp"
+#line 457 "ds_lexer.lpp"
 return DAS_TFLOAT4;
 	YY_BREAK
 case 135:
 YY_RULE_SETUP
-#line 459 "ds_lexer.lpp"
+#line 458 "ds_lexer.lpp"
 {
     yylval_param->s = new string(yytext);
     auto it = yyextra->das_keywords.find(*yylval_param->s);
@@ -2579,7 +2578,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 136:
 YY_RULE_SETUP
-#line 469 "ds_lexer.lpp"
+#line 468 "ds_lexer.lpp"
 {
         BEGIN(strb);
         return BEGIN_STRING;
@@ -2587,317 +2586,385 @@ YY_RULE_SETUP
 	YY_BREAK
 case 137:
 YY_RULE_SETUP
-#line 473 "ds_lexer.lpp"
+#line 472 "ds_lexer.lpp"
 yylval_param->ui = 8; return UNSIGNED_INT8;
 	YY_BREAK
 case 138:
 YY_RULE_SETUP
-#line 474 "ds_lexer.lpp"
+#line 473 "ds_lexer.lpp"
 yylval_param->ui = 9; return UNSIGNED_INT8;
 	YY_BREAK
 case 139:
 YY_RULE_SETUP
-#line 475 "ds_lexer.lpp"
+#line 474 "ds_lexer.lpp"
 yylval_param->ui = 10; return UNSIGNED_INT8;
 	YY_BREAK
 case 140:
 YY_RULE_SETUP
-#line 476 "ds_lexer.lpp"
+#line 475 "ds_lexer.lpp"
 yylval_param->ui = 12; return UNSIGNED_INT8;
 	YY_BREAK
 case 141:
 YY_RULE_SETUP
-#line 477 "ds_lexer.lpp"
+#line 476 "ds_lexer.lpp"
 yylval_param->ui = 13; return UNSIGNED_INT8;
 	YY_BREAK
 case 142:
 YY_RULE_SETUP
-#line 478 "ds_lexer.lpp"
+#line 477 "ds_lexer.lpp"
 yylval_param->ui = '\\'; return UNSIGNED_INT8;
 	YY_BREAK
 case 143:
 YY_RULE_SETUP
-#line 479 "ds_lexer.lpp"
+#line 478 "ds_lexer.lpp"
 yylval_param->ui = uint32_t(yytext[1]); return UNSIGNED_INT8;
 	YY_BREAK
 case 144:
 YY_RULE_SETUP
-#line 481 "ds_lexer.lpp"
+#line 480 "ds_lexer.lpp"
 yylval_param->ui = 8; return UNSIGNED_INTEGER;
 	YY_BREAK
 case 145:
 YY_RULE_SETUP
-#line 482 "ds_lexer.lpp"
+#line 481 "ds_lexer.lpp"
 yylval_param->ui = 9; return UNSIGNED_INTEGER;
 	YY_BREAK
 case 146:
 YY_RULE_SETUP
-#line 483 "ds_lexer.lpp"
+#line 482 "ds_lexer.lpp"
 yylval_param->ui = 10; return UNSIGNED_INTEGER;
 	YY_BREAK
 case 147:
 YY_RULE_SETUP
-#line 484 "ds_lexer.lpp"
+#line 483 "ds_lexer.lpp"
 yylval_param->ui = 12; return UNSIGNED_INTEGER;
 	YY_BREAK
 case 148:
 YY_RULE_SETUP
-#line 485 "ds_lexer.lpp"
+#line 484 "ds_lexer.lpp"
 yylval_param->ui = 13; return UNSIGNED_INTEGER;
 	YY_BREAK
 case 149:
 YY_RULE_SETUP
-#line 486 "ds_lexer.lpp"
+#line 485 "ds_lexer.lpp"
 yylval_param->ui = '\\'; return UNSIGNED_INTEGER;
 	YY_BREAK
 case 150:
 YY_RULE_SETUP
-#line 487 "ds_lexer.lpp"
+#line 486 "ds_lexer.lpp"
 yylval_param->ui = uint32_t(yytext[1]); return UNSIGNED_INTEGER;
 	YY_BREAK
 case 151:
 YY_RULE_SETUP
-#line 489 "ds_lexer.lpp"
+#line 488 "ds_lexer.lpp"
 yylval_param->i = 8; return INTEGER;
 	YY_BREAK
 case 152:
 YY_RULE_SETUP
-#line 490 "ds_lexer.lpp"
+#line 489 "ds_lexer.lpp"
 yylval_param->i = 9; return INTEGER;
 	YY_BREAK
 case 153:
 YY_RULE_SETUP
-#line 491 "ds_lexer.lpp"
+#line 490 "ds_lexer.lpp"
 yylval_param->i = 10; return INTEGER;
 	YY_BREAK
 case 154:
 YY_RULE_SETUP
-#line 492 "ds_lexer.lpp"
+#line 491 "ds_lexer.lpp"
 yylval_param->i = 12; return INTEGER;
 	YY_BREAK
 case 155:
 YY_RULE_SETUP
-#line 493 "ds_lexer.lpp"
+#line 492 "ds_lexer.lpp"
 yylval_param->i = 13; return INTEGER;
 	YY_BREAK
 case 156:
 YY_RULE_SETUP
-#line 494 "ds_lexer.lpp"
+#line 493 "ds_lexer.lpp"
 yylval_param->i = '\\'; return INTEGER;
 	YY_BREAK
 case 157:
 YY_RULE_SETUP
-#line 496 "ds_lexer.lpp"
+#line 495 "ds_lexer.lpp"
 yylval_param->i = int32_t(yytext[1]); return INTEGER;
 	YY_BREAK
 case 158:
 YY_RULE_SETUP
-#line 497 "ds_lexer.lpp"
+#line 496 "ds_lexer.lpp"
 {
         char temptext[128];
         int templength = skip_underscode(yytext,temptext,temptext+sizeof(temptext));
-        char * endtext = nullptr;
-        yylval_param->ui64 = strtoull(temptext,&endtext,10);
-        return ( endtext!=(temptext+templength-2) ) ? LEXER_ERROR : UNSIGNED_LONG_INTEGER;
+        auto res = fast_float::from_chars(temptext, temptext+templength, yylval_param->ui64);
+        if ( res.ec == std::errc::result_out_of_range ) {
+            das_yyfatalerror(yylloc_param,yyscanner,"uint64 constant out of range", CompilationError::integer_constant_out_of_range);
+        } else if ( res.ec != std::errc() || res.ptr != temptext+templength-2 ) {
+            return LEXER_ERROR;
+        }
+        return UNSIGNED_LONG_INTEGER;
     }
 	YY_BREAK
 case 159:
 YY_RULE_SETUP
-#line 504 "ds_lexer.lpp"
+#line 507 "ds_lexer.lpp"
 {
         char temptext[128];
         int templength = skip_underscode(yytext,temptext,temptext+sizeof(temptext));
-        char * endtext = nullptr;
-        yylval_param->i64 = strtoll(temptext,&endtext,10);
-        return ( endtext!=(temptext+templength-1) ) ? LEXER_ERROR : LONG_INTEGER;
+        auto res = fast_float::from_chars(temptext, temptext+templength, yylval_param->i64);
+        if ( res.ec == std::errc::result_out_of_range ) {
+            das_yyfatalerror(yylloc_param,yyscanner,"int64 constant out of range", CompilationError::integer_constant_out_of_range);
+        } else if ( res.ec != std::errc() || res.ptr != temptext+templength-1 ) {
+            return LEXER_ERROR;
+        }
+        return LONG_INTEGER;
     }
 	YY_BREAK
 case 160:
 YY_RULE_SETUP
-#line 511 "ds_lexer.lpp"
+#line 518 "ds_lexer.lpp"
 {
         char temptext[128];
         int templength = skip_underscode(yytext,temptext,temptext+sizeof(temptext));
-        char * endtext = nullptr;
-        uint64_t uint_const = strtoull(temptext,&endtext,10);
-        if ( endtext!=(temptext+templength-2) ) {
+        uint8_t u8_const;
+        auto res = fast_float::from_chars(temptext, temptext+templength, u8_const);
+        if ( res.ec == std::errc::result_out_of_range ) {
+            das_yyfatalerror(yylloc_param,yyscanner,"uint8 constant out of range", CompilationError::integer_constant_out_of_range);
+        } else if ( res.ec != std::errc() || res.ptr != temptext+templength-2 ) {
             return LEXER_ERROR;
-        } else {
-            if ( uint_const>UINT8_MAX ) {
-                das_yyfatalerror(yylloc_param,yyscanner,"uint8 constant out of range", CompilationError::integer_constant_out_of_range);
-            }
-            yylval_param->ui = uint8_t(uint_const);
-            return UNSIGNED_INT8;
         }
+        yylval_param->ui = u8_const;
+        return UNSIGNED_INT8;
     }
 	YY_BREAK
 case 161:
 YY_RULE_SETUP
-#line 526 "ds_lexer.lpp"
+#line 531 "ds_lexer.lpp"
 {
         char temptext[128];
         int templength = skip_underscode(yytext,temptext,temptext+sizeof(temptext));
-        char * endtext = nullptr;
-        uint64_t uint_const = strtoull(temptext,&endtext,10);
-        if ( endtext!=(temptext+templength-1) ) {
+        auto res = fast_float::from_chars(temptext, temptext+templength, yylval_param->ui);
+        if ( res.ec == std::errc::result_out_of_range ) {
+            das_yyfatalerror(yylloc_param,yyscanner,"uint constant out of range", CompilationError::integer_constant_out_of_range);
+        } else if ( res.ec != std::errc() || res.ptr != temptext+templength-1 ) {
             return LEXER_ERROR;
-        } else {
-            if ( uint_const>UINT32_MAX ) {
-                das_yyfatalerror(yylloc_param,yyscanner,"uint constant out of range", CompilationError::integer_constant_out_of_range);
-            }
-            yylval_param->ui = uint32_t(uint_const);
-            return UNSIGNED_INTEGER;
         }
+        return UNSIGNED_INTEGER;
     }
 	YY_BREAK
 case 162:
 YY_RULE_SETUP
-#line 541 "ds_lexer.lpp"
+#line 542 "ds_lexer.lpp"
 {
         char temptext[128];
         int templength = skip_underscode(yytext,temptext,temptext+sizeof(temptext));
-        char * endtext = nullptr;
-        int64_t int_const = strtoll(temptext,&endtext,10);
-        if ( endtext!=(temptext+templength-2) ) {
+        auto res = fast_float::from_chars(temptext, temptext+templength, yylval_param->i);
+        if ( res.ec == std::errc::result_out_of_range ) {
+            das_yyfatalerror(yylloc_param,yyscanner,"int constant out of range", CompilationError::integer_constant_out_of_range);
+        } else if ( res.ec != std::errc() || res.ptr != temptext+templength-2 ) {
             return LEXER_ERROR;
-        } else {
-            if ( int_const<INT32_MIN || int_const>INT32_MAX ) {
-                das_yyfatalerror(yylloc_param,yyscanner,"int constant out of range", CompilationError::integer_constant_out_of_range);
-            }
-            yylval_param->i = int32_t(int_const);
-            unput('.');
-            YYCOLUMN(yyextra->das_yycolumn--, "UNPUT .");
-            unput('.');
-            YYCOLUMN(yyextra->das_yycolumn--, "UNPUT .");
-            return INTEGER;
         }
+        unput('.');
+        YYCOLUMN(yyextra->das_yycolumn--, "UNPUT .");
+        unput('.');
+        YYCOLUMN(yyextra->das_yycolumn--, "UNPUT .");
+        return INTEGER;
     }
 	YY_BREAK
 case 163:
 YY_RULE_SETUP
-#line 560 "ds_lexer.lpp"
+#line 557 "ds_lexer.lpp"
 {
         char temptext[128];
         int templength = skip_underscode(yytext,temptext,temptext+sizeof(temptext));
-        char * endtext = nullptr;
-        int64_t int_const = strtoll(temptext,&endtext,10);
-        if ( endtext!=(temptext+templength) ) {
+        auto res = fast_float::from_chars(temptext, temptext+templength, yylval_param->i);
+        if ( res.ec == std::errc::result_out_of_range ) {
+            das_yyfatalerror(yylloc_param,yyscanner,"int constant out of range", CompilationError::integer_constant_out_of_range);
+        } else if ( res.ec != std::errc() || res.ptr != temptext+templength ) {
             return LEXER_ERROR;
-        } else {
-            if ( int_const<INT32_MIN || int_const>INT32_MAX ) {
-                das_yyfatalerror(yylloc_param,yyscanner,"int constant out of range", CompilationError::integer_constant_out_of_range);
-            }
-            yylval_param->i = int32_t(int_const);
-            return INTEGER;
         }
+        return INTEGER;
     }
 	YY_BREAK
 case 164:
 YY_RULE_SETUP
-#line 575 "ds_lexer.lpp"
+#line 568 "ds_lexer.lpp"
 {
         char temptext[128];
         skip_underscode(yytext,temptext,temptext+sizeof(temptext));
-        return sscanf(temptext, "%" SCNx64, &yylval_param->ui64)!=1 ? LEXER_ERROR : UNSIGNED_LONG_INTEGER;
+        auto res = fast_float::from_chars(temptext + 2, temptext+strlen(temptext), yylval_param->ui64, 16);
+        if ( res.ec == std::errc::result_out_of_range ) {
+            das_yyfatalerror(yylloc_param,yyscanner,"uint64 constant out of range", CompilationError::integer_constant_out_of_range);
+        } else if ( res.ec != std::errc() || res.ptr != temptext+strlen(temptext)-2 ) {
+            return LEXER_ERROR;
+        }
+        return UNSIGNED_LONG_INTEGER;
     }
 	YY_BREAK
 case 165:
 YY_RULE_SETUP
-#line 580 "ds_lexer.lpp"
+#line 579 "ds_lexer.lpp"
 {
         char temptext[128];
         skip_underscode(yytext,temptext,temptext+sizeof(temptext));
-        return sscanf(temptext, "%" SCNx64, &yylval_param->ui64)!=1 ? LEXER_ERROR : UNSIGNED_LONG_INTEGER;
+        auto res = fast_float::from_chars(temptext + 2, temptext+strlen(temptext), yylval_param->ui64, 16);
+        if ( res.ec == std::errc::result_out_of_range ) {
+            das_yyfatalerror(yylloc_param,yyscanner,"int64 constant out of range", CompilationError::integer_constant_out_of_range);
+        } else if ( res.ec != std::errc() || res.ptr != temptext+strlen(temptext)-1 ) {
+            return LEXER_ERROR;
+        }
+        return UNSIGNED_LONG_INTEGER;
     }
 	YY_BREAK
 case 166:
 YY_RULE_SETUP
-#line 585 "ds_lexer.lpp"
+#line 590 "ds_lexer.lpp"
 {
         char temptext[128];
         int templength = skip_underscode(yytext,temptext,temptext+sizeof(temptext));
-        uint64_t uint_const;
-        if ( sscanf(temptext, "%" SCNx64,  &uint_const)!=1 ) {
-            return LEXER_ERROR;
-        } else {
-            if ( templength>2 &&
-                (temptext[templength-2]=='u' || temptext[templength-2]=='U') && temptext[templength-1]=='8' ) {
-                if ( uint_const>UINT8_MAX ) {
-                    das_yyfatalerror(yylloc_param,yyscanner,"uint8 constant out of range", CompilationError::integer_constant_out_of_range);
-                }
-                yylval_param->ui = uint8_t(uint_const);
-                return UNSIGNED_INT8;
-            } else {
-                if ( uint_const>UINT32_MAX ) {
-                    das_yyfatalerror(yylloc_param,yyscanner,"uint constant out of range", CompilationError::integer_constant_out_of_range);
-                }
-                yylval_param->ui = uint32_t(uint_const);
-                return UNSIGNED_INTEGER;
+        if ( templength>2 && (temptext[templength-2]=='u' || temptext[templength-2]=='U') && temptext[templength-1]=='8' ) {
+            uint8_t u8_const;
+            auto res = fast_float::from_chars(temptext + 2, temptext+strlen(temptext)-2, u8_const, 16);
+            if ( res.ec == std::errc::result_out_of_range ) {
+                das_yyfatalerror(yylloc_param,yyscanner,"uint8 constant out of range", CompilationError::integer_constant_out_of_range);
+            } else if ( res.ec != std::errc() || res.ptr != temptext+strlen(temptext)-2 ) {
+                return LEXER_ERROR;
             }
+            yylval_param->ui = u8_const;
+            return UNSIGNED_INT8;
+        } else {
+            auto res = fast_float::from_chars(temptext + 2, temptext+strlen(temptext), yylval_param->ui, 16);
+            if ( res.ec == std::errc::result_out_of_range ) {
+                das_yyfatalerror(yylloc_param,yyscanner,"uint constant out of range", CompilationError::integer_constant_out_of_range);
+            } else if ( res.ec != std::errc() || res.ptr != temptext+strlen(temptext)-1 ) {
+                return LEXER_ERROR;
+            }
+            return UNSIGNED_INTEGER;
         }
     }
 	YY_BREAK
 case 167:
 YY_RULE_SETUP
-#line 608 "ds_lexer.lpp"
+#line 613 "ds_lexer.lpp"
 {
         char temptext[128];
         skip_underscode(yytext,temptext,temptext+sizeof(temptext));
-        uint64_t int_const;
-        if ( sscanf(temptext, "%" SCNx64,  &int_const)!=1 ) {
+        auto res = fast_float::from_chars(temptext + 2, temptext+strlen(temptext), yylval_param->ui, 16);
+        if ( res.ec == std::errc::result_out_of_range ) {
+            das_yyfatalerror(yylloc_param,yyscanner,"uint constant out of range", CompilationError::integer_constant_out_of_range);
+        } else if ( res.ec != std::errc() || res.ptr != temptext+strlen(temptext) ) {
             return LEXER_ERROR;
-        } else {
-            if ( int_const>UINT32_MAX ) {
-                das_yyfatalerror(yylloc_param,yyscanner,"int constant out of range", CompilationError::integer_constant_out_of_range);
-            }
-            yylval_param->ui = uint32_t(int_const);
-            return UNSIGNED_INTEGER;
         }
+        return UNSIGNED_INTEGER;
     }
 	YY_BREAK
 case 168:
 YY_RULE_SETUP
-#line 622 "ds_lexer.lpp"
-return sscanf(yytext, "%lf", &yylval_param->fd)!=1 ? LEXER_ERROR : FLOAT;
+#line 624 "ds_lexer.lpp"
+{
+    auto res = fast_float::from_chars(yytext, yytext+strlen(yytext), yylval_param->fd);
+    if ( res.ec == std::errc::result_out_of_range ) {
+        das_yyfatalerror(yylloc_param,yyscanner,"float constant out of range", CompilationError::floating_point_constant_out_of_range);
+    } else if ( res.ec != std::errc() ) {
+        return LEXER_ERROR;
+    }
+    return FLOAT;
+}
 	YY_BREAK
 case 169:
 YY_RULE_SETUP
-#line 623 "ds_lexer.lpp"
-return sscanf(yytext, "%lf", &yylval_param->fd)!=1 ? LEXER_ERROR : FLOAT;
+#line 633 "ds_lexer.lpp"
+{
+    auto res = fast_float::from_chars(yytext, yytext+strlen(yytext), yylval_param->fd);
+    if ( res.ec == std::errc::result_out_of_range ) {
+        das_yyfatalerror(yylloc_param,yyscanner,"float constant out of range", CompilationError::floating_point_constant_out_of_range);
+    } else if ( res.ec != std::errc() ) {
+        return LEXER_ERROR;
+    }
+    return FLOAT;
+
+}
 	YY_BREAK
 case 170:
 YY_RULE_SETUP
-#line 624 "ds_lexer.lpp"
-return sscanf(yytext, "%lf", &yylval_param->fd)!=1 ? LEXER_ERROR : FLOAT;
+#line 643 "ds_lexer.lpp"
+{
+    auto res = fast_float::from_chars(yytext, yytext+strlen(yytext), yylval_param->fd);
+    if ( res.ec == std::errc::result_out_of_range ) {
+        das_yyfatalerror(yylloc_param,yyscanner,"float constant out of range", CompilationError::floating_point_constant_out_of_range);
+    } else if ( res.ec != std::errc() ) {
+        return LEXER_ERROR;
+    }
+    return FLOAT;
+}
 	YY_BREAK
 case 171:
 YY_RULE_SETUP
-#line 625 "ds_lexer.lpp"
-return sscanf(yytext, "%lf", &yylval_param->fd)!=1 ? LEXER_ERROR : FLOAT;
+#line 652 "ds_lexer.lpp"
+{
+    auto res = fast_float::from_chars(yytext, yytext+strlen(yytext), yylval_param->fd);
+    if ( res.ec == std::errc::result_out_of_range ) {
+        das_yyfatalerror(yylloc_param,yyscanner,"float constant out of range", CompilationError::floating_point_constant_out_of_range);
+    } else if ( res.ec != std::errc() ) {
+        return LEXER_ERROR;
+    }
+    return FLOAT;
+}
 	YY_BREAK
 case 172:
 YY_RULE_SETUP
-#line 627 "ds_lexer.lpp"
-return sscanf(yytext, "%lf", &yylval_param->d)!=1 ? LEXER_ERROR : DOUBLE;
+#line 661 "ds_lexer.lpp"
+{
+    auto res = fast_float::from_chars(yytext, yytext+strlen(yytext), yylval_param->d);
+    if ( res.ec == std::errc::result_out_of_range ) {
+        das_yyfatalerror(yylloc_param,yyscanner,"double constant out of range", CompilationError::floating_point_constant_out_of_range);
+    } else if ( res.ec != std::errc() ) {
+        return LEXER_ERROR;
+    }
+    return DOUBLE;
+}
 	YY_BREAK
 case 173:
 YY_RULE_SETUP
-#line 628 "ds_lexer.lpp"
-return sscanf(yytext, "%lf", &yylval_param->d)!=1 ? LEXER_ERROR : DOUBLE;
+#line 670 "ds_lexer.lpp"
+{
+    auto res = fast_float::from_chars(yytext, yytext+strlen(yytext), yylval_param->d);
+    if ( res.ec == std::errc::result_out_of_range ) {
+        das_yyfatalerror(yylloc_param,yyscanner,"double constant out of range", CompilationError::floating_point_constant_out_of_range);
+    } else if ( res.ec != std::errc() ) {
+        return LEXER_ERROR;
+    }
+    return DOUBLE;
+}
 	YY_BREAK
 case 174:
 YY_RULE_SETUP
-#line 629 "ds_lexer.lpp"
-return sscanf(yytext, "%lf", &yylval_param->d)!=1 ? LEXER_ERROR : DOUBLE;
+#line 679 "ds_lexer.lpp"
+{
+    auto res = fast_float::from_chars(yytext, yytext+strlen(yytext), yylval_param->d);
+    if ( res.ec == std::errc::result_out_of_range ) {
+        das_yyfatalerror(yylloc_param,yyscanner,"double constant out of range", CompilationError::floating_point_constant_out_of_range);
+    } else if ( res.ec != std::errc() ) {
+        return LEXER_ERROR;
+    }
+    return DOUBLE;
+}
 	YY_BREAK
 case 175:
 YY_RULE_SETUP
-#line 630 "ds_lexer.lpp"
-return sscanf(yytext, "%lf", &yylval_param->d)!=1 ? LEXER_ERROR : DOUBLE;
+#line 688 "ds_lexer.lpp"
+{
+    auto res = fast_float::from_chars(yytext, yytext+strlen(yytext), yylval_param->d);
+    if ( res.ec == std::errc::result_out_of_range ) {
+        das_yyfatalerror(yylloc_param,yyscanner,"double constant out of range", CompilationError::floating_point_constant_out_of_range);
+    } else if ( res.ec != std::errc() ) {
+        return LEXER_ERROR;
+    }
+    return DOUBLE;
+}
 	YY_BREAK
 case 176:
 YY_RULE_SETUP
-#line 631 "ds_lexer.lpp"
+#line 697 "ds_lexer.lpp"
 {
     if ( !yyextra->das_nested_parentheses ) {
         das_yyfatalerror(yylloc_param,yyscanner,"mismatching parentheses", CompilationError::mismatching_parentheses);
@@ -2909,7 +2976,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 177:
 YY_RULE_SETUP
-#line 639 "ds_lexer.lpp"
+#line 705 "ds_lexer.lpp"
 {
     yyextra->das_nested_parentheses ++;
     return '(';
@@ -2917,7 +2984,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 178:
 YY_RULE_SETUP
-#line 643 "ds_lexer.lpp"
+#line 709 "ds_lexer.lpp"
 {
     if ( !yyextra->das_nested_square_braces ) {
         das_yyfatalerror(yylloc_param,yyscanner,"mismatching square braces", CompilationError::mismatching_parentheses);
@@ -2929,7 +2996,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 179:
 YY_RULE_SETUP
-#line 651 "ds_lexer.lpp"
+#line 717 "ds_lexer.lpp"
 {
     yyextra->das_nested_square_braces ++;
     return '[';
@@ -2937,7 +3004,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 180:
 YY_RULE_SETUP
-#line 655 "ds_lexer.lpp"
+#line 721 "ds_lexer.lpp"
 {
     if ( yyextra->das_nested_sb ) {
         yyextra->das_nested_sb --;
@@ -2959,7 +3026,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 181:
 YY_RULE_SETUP
-#line 673 "ds_lexer.lpp"
+#line 739 "ds_lexer.lpp"
 {
     if ( yyextra->das_nested_sb ) {
         yyextra->das_nested_sb ++;
@@ -2971,28 +3038,28 @@ YY_RULE_SETUP
 	YY_BREAK
 case 182:
 YY_RULE_SETUP
-#line 681 "ds_lexer.lpp"
+#line 747 "ds_lexer.lpp"
 return COLCOL;
 	YY_BREAK
 case 183:
 YY_RULE_SETUP
-#line 682 "ds_lexer.lpp"
+#line 748 "ds_lexer.lpp"
 return MTAG_DOTDOTDOT;
 	YY_BREAK
 case 184:
 YY_RULE_SETUP
-#line 683 "ds_lexer.lpp"
+#line 749 "ds_lexer.lpp"
 return DOTDOT;
 	YY_BREAK
 case 185:
 YY_RULE_SETUP
-#line 684 "ds_lexer.lpp"
+#line 750 "ds_lexer.lpp"
 return RPIPE;
 	YY_BREAK
 case 186:
 /* rule 186 can match eol */
 YY_RULE_SETUP
-#line 685 "ds_lexer.lpp"
+#line 751 "ds_lexer.lpp"
 {
     yyextra->das_need_oxford_comma = false;
     unput('\n');
@@ -3003,12 +3070,12 @@ YY_RULE_SETUP
 case 187:
 /* rule 187 can match eol */
 YY_RULE_SETUP
-#line 691 "ds_lexer.lpp"
+#line 757 "ds_lexer.lpp"
 yyextra->das_need_oxford_comma = false; unput('\n'); return LBPIPE;
 	YY_BREAK
 case 188:
 YY_RULE_SETUP
-#line 692 "ds_lexer.lpp"
+#line 758 "ds_lexer.lpp"
 {
     unput('$');
     YYCOLUMN(yyextra->das_yycolumn--, "UNPUT $");
@@ -3022,7 +3089,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 189:
 YY_RULE_SETUP
-#line 702 "ds_lexer.lpp"
+#line 768 "ds_lexer.lpp"
 {
     unput('@');
     YYCOLUMN(yyextra->das_yycolumn--, "UNPUT @");
@@ -3036,7 +3103,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 190:
 YY_RULE_SETUP
-#line 712 "ds_lexer.lpp"
+#line 778 "ds_lexer.lpp"
 {
     unput('@');
     unput('@');
@@ -3051,7 +3118,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 191:
 YY_RULE_SETUP
-#line 723 "ds_lexer.lpp"
+#line 789 "ds_lexer.lpp"
 {
     unput('@');
     YYCOLUMN(yyextra->das_yycolumn--, "UNPUT @");
@@ -3065,7 +3132,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 192:
 YY_RULE_SETUP
-#line 733 "ds_lexer.lpp"
+#line 799 "ds_lexer.lpp"
 {
     unput('$');
     YYCOLUMN(yyextra->das_yycolumn--, "UNPUT $");
@@ -3079,62 +3146,62 @@ YY_RULE_SETUP
 	YY_BREAK
 case 193:
 YY_RULE_SETUP
-#line 743 "ds_lexer.lpp"
+#line 809 "ds_lexer.lpp"
 return LPIPE;
 	YY_BREAK
 case 194:
 YY_RULE_SETUP
-#line 744 "ds_lexer.lpp"
+#line 810 "ds_lexer.lpp"
 return MTAG_E;
 	YY_BREAK
 case 195:
 YY_RULE_SETUP
-#line 745 "ds_lexer.lpp"
+#line 811 "ds_lexer.lpp"
 return MTAG_E;
 	YY_BREAK
 case 196:
 YY_RULE_SETUP
-#line 746 "ds_lexer.lpp"
+#line 812 "ds_lexer.lpp"
 return MTAG_I;
 	YY_BREAK
 case 197:
 YY_RULE_SETUP
-#line 747 "ds_lexer.lpp"
+#line 813 "ds_lexer.lpp"
 return MTAG_V;
 	YY_BREAK
 case 198:
 YY_RULE_SETUP
-#line 748 "ds_lexer.lpp"
+#line 814 "ds_lexer.lpp"
 return MTAG_B;
 	YY_BREAK
 case 199:
 YY_RULE_SETUP
-#line 749 "ds_lexer.lpp"
+#line 815 "ds_lexer.lpp"
 return MTAG_A;
 	YY_BREAK
 case 200:
 YY_RULE_SETUP
-#line 750 "ds_lexer.lpp"
+#line 816 "ds_lexer.lpp"
 return MTAG_T;
 	YY_BREAK
 case 201:
 YY_RULE_SETUP
-#line 751 "ds_lexer.lpp"
+#line 817 "ds_lexer.lpp"
 return MTAG_C;
 	YY_BREAK
 case 202:
 YY_RULE_SETUP
-#line 752 "ds_lexer.lpp"
+#line 818 "ds_lexer.lpp"
 return MTAG_F;
 	YY_BREAK
 case 203:
 YY_RULE_SETUP
-#line 753 "ds_lexer.lpp"
+#line 819 "ds_lexer.lpp"
 return QQ;
 	YY_BREAK
 case 204:
 YY_RULE_SETUP
-#line 754 "ds_lexer.lpp"
+#line 820 "ds_lexer.lpp"
 {
     yyextra->das_nested_square_braces ++;
     return QBRA;
@@ -3142,127 +3209,127 @@ YY_RULE_SETUP
 	YY_BREAK
 case 205:
 YY_RULE_SETUP
-#line 758 "ds_lexer.lpp"
+#line 824 "ds_lexer.lpp"
 return QDOT;
 	YY_BREAK
 case 206:
 YY_RULE_SETUP
-#line 759 "ds_lexer.lpp"
+#line 825 "ds_lexer.lpp"
 return CLONEEQU;
 	YY_BREAK
 case 207:
 YY_RULE_SETUP
-#line 760 "ds_lexer.lpp"
+#line 826 "ds_lexer.lpp"
 return RARROW;
 	YY_BREAK
 case 208:
 YY_RULE_SETUP
-#line 761 "ds_lexer.lpp"
+#line 827 "ds_lexer.lpp"
 return LARROW;
 	YY_BREAK
 case 209:
 YY_RULE_SETUP
-#line 762 "ds_lexer.lpp"
+#line 828 "ds_lexer.lpp"
 return ADDEQU;
 	YY_BREAK
 case 210:
 YY_RULE_SETUP
-#line 763 "ds_lexer.lpp"
+#line 829 "ds_lexer.lpp"
 return SUBEQU;
 	YY_BREAK
 case 211:
 YY_RULE_SETUP
-#line 764 "ds_lexer.lpp"
+#line 830 "ds_lexer.lpp"
 return DIVEQU;
 	YY_BREAK
 case 212:
 YY_RULE_SETUP
-#line 765 "ds_lexer.lpp"
+#line 831 "ds_lexer.lpp"
 return MULEQU;
 	YY_BREAK
 case 213:
 YY_RULE_SETUP
-#line 766 "ds_lexer.lpp"
+#line 832 "ds_lexer.lpp"
 return MODEQU;
 	YY_BREAK
 case 214:
 YY_RULE_SETUP
-#line 767 "ds_lexer.lpp"
+#line 833 "ds_lexer.lpp"
 return ANDANDEQU;
 	YY_BREAK
 case 215:
 YY_RULE_SETUP
-#line 768 "ds_lexer.lpp"
+#line 834 "ds_lexer.lpp"
 return OROREQU;
 	YY_BREAK
 case 216:
 YY_RULE_SETUP
-#line 769 "ds_lexer.lpp"
+#line 835 "ds_lexer.lpp"
 return XORXOREQU;
 	YY_BREAK
 case 217:
 YY_RULE_SETUP
-#line 770 "ds_lexer.lpp"
+#line 836 "ds_lexer.lpp"
 return ANDAND;
 	YY_BREAK
 case 218:
 YY_RULE_SETUP
-#line 771 "ds_lexer.lpp"
+#line 837 "ds_lexer.lpp"
 return OROR;
 	YY_BREAK
 case 219:
 YY_RULE_SETUP
-#line 772 "ds_lexer.lpp"
+#line 838 "ds_lexer.lpp"
 return XORXOR;
 	YY_BREAK
 case 220:
 YY_RULE_SETUP
-#line 773 "ds_lexer.lpp"
+#line 839 "ds_lexer.lpp"
 return ANDEQU;
 	YY_BREAK
 case 221:
 YY_RULE_SETUP
-#line 774 "ds_lexer.lpp"
+#line 840 "ds_lexer.lpp"
 return OREQU;
 	YY_BREAK
 case 222:
 YY_RULE_SETUP
-#line 775 "ds_lexer.lpp"
+#line 841 "ds_lexer.lpp"
 return XOREQU;
 	YY_BREAK
 case 223:
 YY_RULE_SETUP
-#line 776 "ds_lexer.lpp"
+#line 842 "ds_lexer.lpp"
 return ADDADD;
 	YY_BREAK
 case 224:
 YY_RULE_SETUP
-#line 777 "ds_lexer.lpp"
+#line 843 "ds_lexer.lpp"
 return SUBSUB;
 	YY_BREAK
 case 225:
 YY_RULE_SETUP
-#line 778 "ds_lexer.lpp"
+#line 844 "ds_lexer.lpp"
 return LEEQU;
 	YY_BREAK
 case 226:
 YY_RULE_SETUP
-#line 779 "ds_lexer.lpp"
+#line 845 "ds_lexer.lpp"
 return GREQU;
 	YY_BREAK
 case 227:
 YY_RULE_SETUP
-#line 780 "ds_lexer.lpp"
+#line 846 "ds_lexer.lpp"
 return EQUEQU;
 	YY_BREAK
 case 228:
 YY_RULE_SETUP
-#line 781 "ds_lexer.lpp"
+#line 847 "ds_lexer.lpp"
 return NOTEQU;
 	YY_BREAK
 case 229:
 YY_RULE_SETUP
-#line 782 "ds_lexer.lpp"
+#line 848 "ds_lexer.lpp"
 {
     if ( yyextra->das_arrow_depth ) {
         unput('>');
@@ -3276,7 +3343,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 230:
 YY_RULE_SETUP
-#line 792 "ds_lexer.lpp"
+#line 858 "ds_lexer.lpp"
 {
     if ( yyextra->das_arrow_depth ) {
         unput('>');
@@ -3289,42 +3356,42 @@ YY_RULE_SETUP
 	YY_BREAK
 case 231:
 YY_RULE_SETUP
-#line 801 "ds_lexer.lpp"
+#line 867 "ds_lexer.lpp"
 return ROTL;
 	YY_BREAK
 case 232:
 YY_RULE_SETUP
-#line 802 "ds_lexer.lpp"
+#line 868 "ds_lexer.lpp"
 return SHL;
 	YY_BREAK
 case 233:
 YY_RULE_SETUP
-#line 803 "ds_lexer.lpp"
+#line 869 "ds_lexer.lpp"
 return SHREQU;
 	YY_BREAK
 case 234:
 YY_RULE_SETUP
-#line 804 "ds_lexer.lpp"
+#line 870 "ds_lexer.lpp"
 return SHLEQU;
 	YY_BREAK
 case 235:
 YY_RULE_SETUP
-#line 805 "ds_lexer.lpp"
+#line 871 "ds_lexer.lpp"
 return ROTREQU;
 	YY_BREAK
 case 236:
 YY_RULE_SETUP
-#line 806 "ds_lexer.lpp"
+#line 872 "ds_lexer.lpp"
 return ROTLEQU;
 	YY_BREAK
 case 237:
 YY_RULE_SETUP
-#line 807 "ds_lexer.lpp"
+#line 873 "ds_lexer.lpp"
 return MAPTO;
 	YY_BREAK
 case 238:
 YY_RULE_SETUP
-#line 808 "ds_lexer.lpp"
+#line 874 "ds_lexer.lpp"
 {
         yyextra->das_nested_square_braces ++;
         yyextra->das_nested_square_braces ++;
@@ -3333,7 +3400,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 239:
 YY_RULE_SETUP
-#line 813 "ds_lexer.lpp"
+#line 879 "ds_lexer.lpp"
 {
         yyextra->das_nested_square_braces ++;
         yyextra->das_nested_curly_braces ++;
@@ -3342,7 +3409,7 @@ YY_RULE_SETUP
 	YY_BREAK
 case 240:
 YY_RULE_SETUP
-#line 818 "ds_lexer.lpp"
+#line 884 "ds_lexer.lpp"
 {
         yyextra->das_nested_curly_braces ++;
         yyextra->das_nested_curly_braces ++;
@@ -3351,12 +3418,12 @@ YY_RULE_SETUP
 	YY_BREAK
 case 241:
 YY_RULE_SETUP
-#line 823 "ds_lexer.lpp"
+#line 889 "ds_lexer.lpp"
 /* skip white space */
 	YY_BREAK
 case 242:
 YY_RULE_SETUP
-#line 824 "ds_lexer.lpp"
+#line 890 "ds_lexer.lpp"
 {
     YYTAB();
 }
@@ -3364,7 +3431,7 @@ YY_RULE_SETUP
 case 243:
 /* rule 243 can match eol */
 YY_RULE_SETUP
-#line 828 "ds_lexer.lpp"
+#line 894 "ds_lexer.lpp"
 {
     if ( yyextra->das_nested_curly_braces < 2 ) {
         das_yyfatalerror(yylloc_param,yyscanner,"mismatching curly braces", CompilationError::mismatching_parentheses);
@@ -3377,7 +3444,7 @@ YY_RULE_SETUP
 case 244:
 /* rule 244 can match eol */
 YY_RULE_SETUP
-#line 837 "ds_lexer.lpp"
+#line 903 "ds_lexer.lpp"
 {
     if ( !yyextra->das_nested_curly_braces ) {
         das_yyfatalerror(yylloc_param,yyscanner,"mismatching curly braces", CompilationError::mismatching_parentheses);
@@ -3395,7 +3462,7 @@ YY_RULE_SETUP
 case 245:
 /* rule 245 can match eol */
 YY_RULE_SETUP
-#line 851 "ds_lexer.lpp"
+#line 917 "ds_lexer.lpp"
 {
     if ( !yyextra->das_nested_curly_braces ) {
         das_yyfatalerror(yylloc_param,yyscanner,"mismatching curly braces", CompilationError::mismatching_parentheses);
@@ -3413,7 +3480,7 @@ YY_RULE_SETUP
 case 246:
 /* rule 246 can match eol */
 YY_RULE_SETUP
-#line 865 "ds_lexer.lpp"
+#line 931 "ds_lexer.lpp"
 {
     if ( yyextra->das_nested_square_braces < 2) {
         das_yyfatalerror(yylloc_param,yyscanner,"mismatching square braces", CompilationError::mismatching_parentheses);
@@ -3426,7 +3493,7 @@ YY_RULE_SETUP
 case 247:
 /* rule 247 can match eol */
 YY_RULE_SETUP
-#line 874 "ds_lexer.lpp"
+#line 940 "ds_lexer.lpp"
 {
     if ( yyextra->das_nested_square_braces < 2) {
         das_yyfatalerror(yylloc_param,yyscanner,"mismatching square braces", CompilationError::mismatching_parentheses);
@@ -3439,7 +3506,7 @@ YY_RULE_SETUP
 case 248:
 /* rule 248 can match eol */
 YY_RULE_SETUP
-#line 882 "ds_lexer.lpp"
+#line 948 "ds_lexer.lpp"
 {
     YYCOLUMN(yyextra->das_yycolumn = 0, "NEW LINE");
 }
@@ -3447,7 +3514,7 @@ YY_RULE_SETUP
 case 249:
 /* rule 249 can match eol */
 YY_RULE_SETUP
-#line 885 "ds_lexer.lpp"
+#line 951 "ds_lexer.lpp"
 {
     YYCOLUMN(yyextra->das_yycolumn = 0, "NEW LINE");
     das_accept_cpp_comment(yyextra->g_CommentReaders, yyscanner, *yylloc_param, yytext);
@@ -3470,7 +3537,7 @@ YY_RULE_SETUP
 }
 	YY_BREAK
 case YY_STATE_EOF(normal):
-#line 905 "ds_lexer.lpp"
+#line 971 "ds_lexer.lpp"
 {
     if ( yyextra->g_FileAccessStack.size()==1 ) {
         YYCOLUMN(yyextra->das_yycolumn = 0,"EOF");
@@ -3498,15 +3565,15 @@ case YY_STATE_EOF(normal):
 	YY_BREAK
 case 250:
 YY_RULE_SETUP
-#line 929 "ds_lexer.lpp"
+#line 995 "ds_lexer.lpp"
 return *yytext;
 	YY_BREAK
 case 251:
 YY_RULE_SETUP
-#line 931 "ds_lexer.lpp"
+#line 997 "ds_lexer.lpp"
 ECHO;
 	YY_BREAK
-#line 3509 "ds_lexer.cpp"
+#line 3576 "ds_lexer.cpp"
 case YY_STATE_EOF(INITIAL):
 case YY_STATE_EOF(include):
 	yyterminate();
@@ -4700,7 +4767,7 @@ void yyfree (void * ptr , yyscan_t yyscanner)
 
 #define YYTABLES_NAME "yytables"
 
-#line 931 "ds_lexer.lpp"
+#line 997 "ds_lexer.lpp"
 
 
 void das_accept_sequence ( yyscan_t yyscanner, const char * seq, size_t seqLen, int lineNo, FileInfo * info ) {
