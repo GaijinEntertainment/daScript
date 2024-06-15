@@ -220,131 +220,107 @@ namespace das
     uint32_t string_to_uint ( const char *str, Context * context, LineInfoArg * at ) {
         if ( !str ) context->throw_error_at(at, "expecting string");
         uint32_t result = 0;
-        auto len = strlen(str);
-        auto res = fast_float::from_chars(str, str+len, result);
-        if (res.ec != std::errc() || res.ptr != str+len) {
-            context->throw_error_at(at, "failed to convert `%s` to uint", str);
-        }
+        while ( is_white_space(*str) ) str++;
+        auto res = fast_float::from_chars(str, str+strlen(str), result);
+        if (res.ec != std::errc()) context->throw_error_at(at, "failed to convert `%s` to uint", str);
         return result;
     }
 
     int32_t string_to_int ( const char *str, Context * context, LineInfoArg * at ) {
         if ( !str ) context->throw_error_at(at, "expecting string");
         int32_t result = 0;
-        auto len = strlen(str);
-        auto res = fast_float::from_chars(str, str+len, result);
-        if (res.ec != std::errc() || res.ptr != str+len) {
-            context->throw_error_at(at, "failed to convert `%s` to int", str);
-        }
+        while ( is_white_space(*str) ) str++;
+        auto res = fast_float::from_chars(str, str+strlen(str), result);
+        if (res.ec != std::errc()) context->throw_error_at(at, "failed to convert `%s` to int", str);
         return result;
     }
 
     uint64_t string_to_uint64 ( const char *str, Context * context, LineInfoArg * at ) {
         if ( !str ) context->throw_error_at(at, "expecting string");
         uint64_t result = 0;
-        auto len = strlen(str);
-        auto res = fast_float::from_chars(str, str+len, result);
-        if (res.ec != std::errc() || res.ptr != str+len) {
-            context->throw_error_at(at, "failed to convert `%s` to uint64", str);
-        }
+        while ( is_white_space(*str) ) str++;
+        auto res = fast_float::from_chars(str, str+strlen(str), result);
+        if (res.ec != std::errc()) context->throw_error_at(at, "failed to convert `%s` to uint64", str);
         return result;
     }
 
     int64_t string_to_int64 ( const char *str, Context * context, LineInfoArg * at ) {
         if ( !str ) context->throw_error_at(at, "expecting string");
         int64_t result = 0;
-        auto len = strlen(str);
-        auto res = fast_float::from_chars(str, str+len, result);
-        if (res.ec != std::errc() || res.ptr != str+len) {
-            context->throw_error_at(at, "failed to convert `%s` to int64", str);
-        }
+        while ( is_white_space(*str) ) str++;
+        auto res = fast_float::from_chars(str, str+strlen(str), result);
+        if (res.ec != std::errc()) context->throw_error_at(at, "failed to convert `%s` to int64", str);
         return result;
     }
 
     float string_to_float ( const char *str, Context * context, LineInfoArg * at ) {
         if ( !str ) context->throw_error_at(at, "expecting string");
         float result = 0;
-        auto len = strlen(str);
-        auto res = fast_float::from_chars(str, str+len, result);
-        if (res.ec != std::errc() || res.ptr != str+len) {
-            context->throw_error_at(at, "failed to convert `%s` to float", str);
-        }
+        while ( is_white_space(*str) ) str++;
+        auto res = fast_float::from_chars(str, str+strlen(str), result);
+        if (res.ec != std::errc()) context->throw_error_at(at, "failed to convert `%s` to float", str);
         return result;
     }
 
     double string_to_double ( const char *str, Context * context, LineInfoArg * at ) {
         if ( !str ) context->throw_error_at(at, "expecting string");
         double result = 0;
-        auto len = strlen(str);
-        auto res = fast_float::from_chars(str, str+len, result);
-        if (res.ec != std::errc() || res.ptr != str+len) {
-            context->throw_error_at(at, "failed to convert `%s` to double", str);
-        }
+        while ( is_white_space(*str) ) str++;
+        auto res = fast_float::from_chars(str, str+strlen(str), result);
+        if (res.ec != std::errc()) context->throw_error_at(at, "failed to convert `%s` to double", str);
         return result;
     }
 
     float fast_to_float ( const char *str ) {
         if ( !str ) return 0.0f;
         float result = 0;
-        auto len = strlen(str);
-        auto res = fast_float::from_chars(str, str+len, result);
-        return (res.ec == std::errc() && res.ptr == str+len) ? result : 0.0f;
+        while ( is_white_space(*str) ) str++;
+        auto res = fast_float::from_chars(str, str+strlen(str), result);
+        return (res.ec == std::errc()) ? result : 0.0f;
     }
 
     double fast_to_double ( const char *str ) {
         if ( !str ) return 0.0;
         double result = 0;
-        auto len = strlen(str);
-        auto res = fast_float::from_chars(str, str+len, result);
-        return (res.ec == std::errc() && res.ptr == str+len) ? result : 0.0;
+        while ( is_white_space(*str) ) str++;
+        auto res = fast_float::from_chars(str, str+strlen(str), result);
+        return (res.ec == std::errc()) ? result : 0.0;
     }
 
     int32_t fast_to_int ( const char *str, bool hex ) {
         if ( !str ) return 0;
         int32_t result = 0;
-        auto len = strlen(str);
-        if ( hex && str[0]=='0' && (str[1]=='x' || str[1]=='X') ) {
-            str += 2;
-            len -= 2;
-        }
-        auto res = fast_float::from_chars(str, str+len, result, hex ? 16 : 10);
-        return (res.ec == std::errc() && res.ptr == str+len) ? result : 0;
+        while ( is_white_space(*str) ) str++;
+        if ( hex && str[0]=='0' && (str[1]=='x' || str[1]=='X') ) str += 2;
+        auto res = fast_float::from_chars(str, str+strlen(str), result, hex ? 16 : 10);
+        return (res.ec == std::errc()) ? result : 0;
     }
 
     uint32_t fast_to_uint ( const char *str, bool hex ) {
         if ( !str ) return 0;
         uint32_t result = 0;
-        auto len = strlen(str);
-        if ( hex && str[0]=='0' && (str[1]=='x' || str[1]=='X') ) {
-            str += 2;
-            len -= 2;
-        }
-        auto res = fast_float::from_chars(str, str+len, result, hex ? 16 : 10);
-        return (res.ec == std::errc() && res.ptr == str+len) ? result : 0;
+        while ( is_white_space(*str) ) str++;
+        if ( hex && str[0]=='0' && (str[1]=='x' || str[1]=='X') ) str += 2;
+        auto res = fast_float::from_chars(str, str+strlen(str), result, hex ? 16 : 10);
+        return (res.ec == std::errc()) ? result : 0;
     }
 
     int64_t fast_to_int64 ( const char *str, bool hex ) {
         if ( !str ) return 0;
         int64_t result = 0;
-        auto len = strlen(str);
-        if ( hex && str[0]=='0' && (str[1]=='x' || str[1]=='X') ) {
-            str += 2;
-            len -= 2;
-        }
-        auto res = fast_float::from_chars(str, str+len, result, hex ? 16 : 10);
-        return (res.ec == std::errc() && res.ptr == str+len) ? result : 0;
+        while ( is_white_space(*str) ) str++;
+        if ( hex && str[0]=='0' && (str[1]=='x' || str[1]=='X') ) str += 2;
+        auto res = fast_float::from_chars(str, str+strlen(str), result, hex ? 16 : 10);
+        return (res.ec == std::errc()) ? result : 0;
     }
 
     uint64_t fast_to_uint64 ( const char *str, bool hex ) {
         if ( !str ) return 0;
         uint64_t result = 0;
-        auto len = strlen(str);
-        if ( hex && str[0]=='0' && (str[1]=='x' || str[1]=='X') ) {
-            str += 2;
-            len -= 2;
-        }
-        auto res = fast_float::from_chars(str, str+len, result, hex ? 16 : 10);
-        return (res.ec == std::errc() && res.ptr == str+len) ? result : 0;
+        while ( is_white_space(*str) ) str++;
+        if ( hex && str[0]=='0' && (str[1]=='x' || str[1]=='X') ) str += 2;
+        auto res = fast_float::from_chars(str, str+strlen(str), result, hex ? 16 : 10);
+        return (res.ec == std::errc()) ? result : 0;
     }
 
     char * builtin_build_string ( const TBlock<void,StringBuilderWriter> & block, Context * context, LineInfoArg * at ) {
