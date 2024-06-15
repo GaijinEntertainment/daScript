@@ -270,3 +270,4 @@ inline void deleteFancyClass(FancyClass& fclass) { fclass.~FancyClass(); }
 inline void deleteFancyClassDummy(FancyClass& ) {  } // this one in AOT version, since local class will be deleted by dtor
 
 void test_abi_lambda_and_function ( das::Lambda lambda, das::Func fn, int32_t lambdaSize, das::Context * context, das::LineInfoArg * lineinfo );
+

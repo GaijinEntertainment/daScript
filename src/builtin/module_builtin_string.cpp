@@ -10,6 +10,7 @@
 #include "daScript/misc/debug_break.h"
 
 #include <inttypes.h>
+#include "fastfloat/fast_float.h"
 
 MAKE_TYPE_FACTORY(StringBuilderWriter, StringBuilderWriter)
 
@@ -217,129 +218,109 @@ namespace das
     }
 
     uint32_t string_to_uint ( const char *str, Context * context, LineInfoArg * at ) {
-        const uint32_t strLen = stringLengthSafe(*context, str);
-        if (strLen == 0) {
-            context->throw_error_at(at, "empty string is not an uint");
-            return 0;
-        }
-        char *endptr;
-        unsigned long int ret = strtoul(str, &endptr, 10);
-        if (endptr == str) {
-            context->throw_error_at(at, "`%s` is not an uint", str);
-            return 0;
-        }
-        return (uint32_t) ret;
+        if ( !str ) context->throw_error_at(at, "expecting string");
+        uint32_t result = 0;
+        while ( is_white_space(*str) ) str++;
+        auto res = fast_float::from_chars(str, str+strlen(str), result);
+        if (res.ec != std::errc()) context->throw_error_at(at, "failed to convert `%s` to uint", str);
+        return result;
     }
 
     int32_t string_to_int ( const char *str, Context * context, LineInfoArg * at ) {
-        const uint32_t strLen = stringLengthSafe(*context, str);
-        if (strLen == 0) {
-            context->throw_error_at(at, "empty string is not an int");
-            return 0;
-        }
-        char *endptr;
-        long int ret = strtol(str, &endptr, 10);
-        if (endptr == str) {
-            context->throw_error_at(at, "`%s` is not an int", str);
-            return 0;
-        }
-        return (int32_t) ret;
+        if ( !str ) context->throw_error_at(at, "expecting string");
+        int32_t result = 0;
+        while ( is_white_space(*str) ) str++;
+        auto res = fast_float::from_chars(str, str+strlen(str), result);
+        if (res.ec != std::errc()) context->throw_error_at(at, "failed to convert `%s` to int", str);
+        return result;
     }
 
     uint64_t string_to_uint64 ( const char *str, Context * context, LineInfoArg * at ) {
-        const uint32_t strLen = stringLengthSafe(*context, str);
-        if (strLen == 0) {
-            context->throw_error_at(at, "empty string is not an uint64");
-            return 0;
-        }
-        char *endptr;
-        unsigned long long ret = strtoull(str, &endptr, 10);
-        if (endptr == str) {
-            context->throw_error_at(at, "`%s` is not an uint64", str);
-            return 0;
-        }
-        return (uint64_t) ret;
+        if ( !str ) context->throw_error_at(at, "expecting string");
+        uint64_t result = 0;
+        while ( is_white_space(*str) ) str++;
+        auto res = fast_float::from_chars(str, str+strlen(str), result);
+        if (res.ec != std::errc()) context->throw_error_at(at, "failed to convert `%s` to uint64", str);
+        return result;
     }
 
     int64_t string_to_int64 ( const char *str, Context * context, LineInfoArg * at ) {
-        const uint32_t strLen = stringLengthSafe(*context, str);
-        if (strLen == 0) {
-            context->throw_error_at(at, "empty string is not an int64");
-            return 0;
-        }
-        char *endptr;
-        long long ret = strtoll(str, &endptr, 10);
-        if (endptr == str) {
-            context->throw_error_at(at, "`%s` is not an int64", str);
-            return 0;
-        }
-        return (int64_t) ret;
+        if ( !str ) context->throw_error_at(at, "expecting string");
+        int64_t result = 0;
+        while ( is_white_space(*str) ) str++;
+        auto res = fast_float::from_chars(str, str+strlen(str), result);
+        if (res.ec != std::errc()) context->throw_error_at(at, "failed to convert `%s` to int64", str);
+        return result;
     }
 
     float string_to_float ( const char *str, Context * context, LineInfoArg * at ) {
-        const uint32_t strLen = stringLengthSafe(*context, str);
-        if (strLen == 0) {
-            context->throw_error_at(at, "empty string is not a float");
-            return 0.f;
-        }
-        char *endptr;
-        float ret = strtof(str, &endptr);
-        if (endptr == str) {
-            context->throw_error_at(at, "`%s` is not a float number", str);
-            return 0.f;
-        }
-        return (float) ret;
+        if ( !str ) context->throw_error_at(at, "expecting string");
+        float result = 0;
+        while ( is_white_space(*str) ) str++;
+        auto res = fast_float::from_chars(str, str+strlen(str), result);
+        if (res.ec != std::errc()) context->throw_error_at(at, "failed to convert `%s` to float", str);
+        return result;
     }
 
     double string_to_double ( const char *str, Context * context, LineInfoArg * at ) {
-        const uint32_t strLen = stringLengthSafe(*context, str);
-        if (strLen == 0) {
-            context->throw_error_at(at, "empty string is not a double");
-            return 0.0;
-        }
-        char *endptr;
-        double ret = strtod(str, &endptr);
-        if (endptr == str) {
-            context->throw_error_at(at, "`%s` is not a double", str);
-            return 0.0;
-        }
-        return ret;
+        if ( !str ) context->throw_error_at(at, "expecting string");
+        double result = 0;
+        while ( is_white_space(*str) ) str++;
+        auto res = fast_float::from_chars(str, str+strlen(str), result);
+        if (res.ec != std::errc()) context->throw_error_at(at, "failed to convert `%s` to double", str);
+        return result;
     }
 
     float fast_to_float ( const char *str ) {
-        return str ? float(atof(str)) : 0.0f;
+        if ( !str ) return 0.0f;
+        float result = 0;
+        while ( is_white_space(*str) ) str++;
+        auto res = fast_float::from_chars(str, str+strlen(str), result);
+        return (res.ec == std::errc()) ? result : 0.0f;
     }
 
     double fast_to_double ( const char *str ) {
-        return str ? atof(str) : 0.0;
+        if ( !str ) return 0.0;
+        double result = 0;
+        while ( is_white_space(*str) ) str++;
+        auto res = fast_float::from_chars(str, str+strlen(str), result);
+        return (res.ec == std::errc()) ? result : 0.0;
     }
 
     int32_t fast_to_int ( const char *str, bool hex ) {
         if ( !str ) return 0;
-        int32_t res = 0;
-        if ( sscanf(str,hex ? ("%" SCNx32) : ("%" SCNd32),&res)!=1 ) res = 0;
-        return res;
+        int32_t result = 0;
+        while ( is_white_space(*str) ) str++;
+        if ( hex && str[0]=='0' && (str[1]=='x' || str[1]=='X') ) str += 2;
+        auto res = fast_float::from_chars(str, str+strlen(str), result, hex ? 16 : 10);
+        return (res.ec == std::errc()) ? result : 0;
     }
 
     uint32_t fast_to_uint ( const char *str, bool hex ) {
         if ( !str ) return 0;
-        uint32_t res = 0;
-        if ( sscanf(str, hex ? ("%" SCNx32) : ("%" SCNu32),&res)!=1 ) res = 0;
-        return res;
+        uint32_t result = 0;
+        while ( is_white_space(*str) ) str++;
+        if ( hex && str[0]=='0' && (str[1]=='x' || str[1]=='X') ) str += 2;
+        auto res = fast_float::from_chars(str, str+strlen(str), result, hex ? 16 : 10);
+        return (res.ec == std::errc()) ? result : 0;
     }
 
     int64_t fast_to_int64 ( const char *str, bool hex ) {
         if ( !str ) return 0;
-        int64_t res = 0;
-        if ( sscanf(str,hex ? ("%" SCNx64) : ("%" SCNd64),&res)!=1 ) res = 0;
-        return res;
+        int64_t result = 0;
+        while ( is_white_space(*str) ) str++;
+        if ( hex && str[0]=='0' && (str[1]=='x' || str[1]=='X') ) str += 2;
+        auto res = fast_float::from_chars(str, str+strlen(str), result, hex ? 16 : 10);
+        return (res.ec == std::errc()) ? result : 0;
     }
 
     uint64_t fast_to_uint64 ( const char *str, bool hex ) {
         if ( !str ) return 0;
-        uint64_t res = 0;
-        if ( sscanf(str, hex ? ("%" SCNx64) : ("%" SCNu64),&res)!=1 ) res = 0;
-        return res;
+        uint64_t result = 0;
+        while ( is_white_space(*str) ) str++;
+        if ( hex && str[0]=='0' && (str[1]=='x' || str[1]=='X') ) str += 2;
+        auto res = fast_float::from_chars(str, str+strlen(str), result, hex ? 16 : 10);
+        return (res.ec == std::errc()) ? result : 0;
     }
 
     char * builtin_build_string ( const TBlock<void,StringBuilderWriter> & block, Context * context, LineInfoArg * at ) {

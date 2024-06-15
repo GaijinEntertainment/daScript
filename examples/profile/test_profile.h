@@ -116,3 +116,4 @@ uint32_t queryEs(const das::Block & block, das::Context * context, das::LineInfo
 int testQueens();
 double testSnorm();
 int testMandelbrot();
+float test_f2i ( const das::TArray<char *> & nums, int TOTAL_NUMBERS, int TOTAL_TIMES );

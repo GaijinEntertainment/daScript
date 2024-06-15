@@ -1079,6 +1079,16 @@ int testMandelbrot() {
     return mandelbrot::test();
 }
 
+float test_f2i ( const TArray<char *> & nums, int TOTAL_NUMBERS, int TOTAL_TIMES ) {
+    auto data = (const char **) nums.data;
+    float summ = 0.0f;
+    for ( int i=0; i!=TOTAL_TIMES; ++i ) {
+        for ( int j=0; j!=TOTAL_NUMBERS; ++j ) {
+            summ += float(atof(data[j]));
+        }
+    }
+    return summ;
+}
 
 class Module_TestProfile : public Module {
 public:
@@ -1133,6 +1143,7 @@ public:
         addExtern<DAS_BIND_FUN(testQueens)>(*this, lib, "testQueens",SideEffects::modifyExternal,"testQueens");
         addExtern<DAS_BIND_FUN(testSnorm)>(*this, lib, "testSnorm",SideEffects::modifyExternal,"testSnorm");
         addExtern<DAS_BIND_FUN(testMandelbrot)>(*this, lib, "testMandelbrot",SideEffects::modifyExternal,"testMandelbrot");
+        addExtern<DAS_BIND_FUN(test_f2i)>(*this, lib, "test_f2i",SideEffects::none, "test_f2i");
         // its AOT ready
         verifyAotReady();
     }
