@@ -9,13 +9,18 @@
 #include "daScript/misc/string_writer.h"
 #include "daScript/misc/debug_break.h"
 
+#include "daScript/simulate/bind_enum.h"
+
 #include <inttypes.h>
 #include "fastfloat/fast_float.h"
 
 MAKE_TYPE_FACTORY(StringBuilderWriter, StringBuilderWriter)
 
+DAS_BASE_BIND_ENUM(das::ConversionResult, ConversionResult, ok, invalid_argument, out_of_range)
+
 namespace das
 {
+
     struct StringBuilderWriterAnnotation : ManagedStructureAnnotation <StringBuilderWriter,false> {
         StringBuilderWriterAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("StringBuilderWriter", ml) {
@@ -695,6 +700,84 @@ namespace das
         return hash_blockz64((const uint8_t *)writer.c_str());
     }
 
+    template <typename TT>
+    TT convert_from_string ( const char * str, ConversionResult & result, int32_t & offset ) {
+        offset = 0;
+        if ( !str ) {
+            result = ConversionResult::invalid_argument;
+            return TT();
+        }
+        TT value = 0;
+        while ( is_white_space(str[offset]) ) offset++;
+        auto res = fast_float::from_chars(str+offset, str+strlen(str), value);
+        if (res.ec != std::errc()) {
+            result = ConversionResult(res.ec);
+            return TT();
+        }
+        offset = int32_t(res.ptr - str);
+        return value;
+    }
+
+    template <typename TT>
+    TT convert_int_from_string ( const char * str, ConversionResult & result, int32_t & offset, int32_t base ) {
+        offset = 0;
+        if ( !str ) {
+            result = ConversionResult::invalid_argument;
+            return TT();
+        }
+        TT value = 0;
+        int32_t eoffset = 0;
+        while ( is_white_space(str[offset]) ) offset++;
+        if ( base==16 && str[0]=='0' && (str[1]=='x' || str[1]=='X') ) str += 2;
+        auto res = fast_float::from_chars(str+offset, str+strlen(str), value, base);
+        if (res.ec != std::errc()) {
+            result = ConversionResult(res.ec);
+            return TT();
+        }
+        offset = int32_t(res.ptr - str);
+        return value;
+    }
+
+    int8_t convert_from_string_int8 ( const char * str, ConversionResult & result, int32_t & offset, int32_t base ) {
+        return convert_int_from_string<int8_t>(str, result, offset, base);
+    }
+
+    uint8_t convert_from_string_uint8 ( const char * str, ConversionResult & result, int32_t & offset, int32_t base ) {
+        return convert_int_from_string<uint8_t>(str, result, offset, base);
+    }
+
+    int16_t convert_from_string_int16 ( const char * str, ConversionResult & result, int32_t & offset, int32_t base ) {
+        return convert_int_from_string<int16_t>(str, result, offset, base);
+    }
+
+    uint16_t convert_from_string_uint16 ( const char * str, ConversionResult & result, int32_t & offset, int32_t base ) {
+        return convert_int_from_string<uint16_t>(str, result, offset, base);
+    }
+
+    int32_t convert_from_string_int32 ( const char * str, ConversionResult & result, int32_t & offset, int32_t base ) {
+        return convert_int_from_string<int32_t>(str, result, offset, base);
+    }
+
+    uint32_t convert_from_string_uint32 ( const char * str, ConversionResult & result, int32_t & offset, int32_t base ) {
+        return convert_int_from_string<uint32_t>(str, result, offset, base);
+    }
+
+    int64_t convert_from_string_int64 ( const char * str, ConversionResult & result, int32_t & offset, int32_t base ) {
+        return convert_int_from_string<int64_t>(str, result, offset, base);
+    }
+
+    uint64_t convert_from_string_uint64 ( const char * str, ConversionResult & result, int32_t & offset, int32_t base ) {
+        return convert_int_from_string<uint64_t>(str, result, offset, base);
+    }
+
+    float convert_from_string_float ( const char * str, ConversionResult & result, int32_t & offset ) {
+        return convert_from_string<float>(str, result, offset);
+    }
+
+    double convert_from_string_double ( const char * str, ConversionResult & result, int32_t & offset ) {
+        return convert_from_string<double>(str, result, offset);
+    }
+
     class Module_Strings : public Module {
     public:
         Module_Strings() : Module("strings") {
@@ -702,6 +785,7 @@ namespace das
             ModuleLibrary lib(this);
             lib.addBuiltInModule();
             // string builder writer
+            addEnumeration(make_smart<EnumerationConversionResult>());
             addAnnotation(make_smart<StringBuilderWriterAnnotation>(lib));
             addExtern<DAS_BIND_FUN(delete_string)>(*this, lib, "delete_string",
                 SideEffects::modifyArgumentAndExternal,"delete_string")->args({"str","context","lineinfo"})->unsafeOperation = true;
@@ -829,6 +913,26 @@ namespace das
                 SideEffects::none, "fast_to_float")->arg("value");
             addExtern<DAS_BIND_FUN(fast_to_double)>(*this, lib, "to_double",
                 SideEffects::none, "fast_to_double")->arg("value");
+            addExtern<DAS_BIND_FUN(convert_from_string_int8)>(*this, lib, "int8",
+                SideEffects::modifyArgument, "convert_from_string_int8")->args({"str","result","offset","base"})->arg_init(3,make_smart<ExprConstInt>(10));
+            addExtern<DAS_BIND_FUN(convert_from_string_uint8)>(*this, lib, "uint8",
+                SideEffects::modifyArgument, "convert_from_string_uint8")->args({"str","result","offset","base"})->arg_init(3,make_smart<ExprConstInt>(10));
+            addExtern<DAS_BIND_FUN(convert_from_string_int16)>(*this, lib, "int16",
+                SideEffects::modifyArgument, "convert_from_string_int16")->args({"str","result","offset","base"})->arg_init(3,make_smart<ExprConstInt>(10));
+            addExtern<DAS_BIND_FUN(convert_from_string_uint16)>(*this, lib, "uint16",
+                SideEffects::modifyArgument, "convert_from_string_uint16")->args({"str","result","offset","base"})->arg_init(3,make_smart<ExprConstInt>(10));
+            addExtern<DAS_BIND_FUN(convert_from_string_int32)>(*this, lib, "int",
+                SideEffects::modifyArgument, "convert_from_string_int32")->args({"str","result","offset","base"})->arg_init(3,make_smart<ExprConstInt>(10));
+            addExtern<DAS_BIND_FUN(convert_from_string_uint32)>(*this, lib, "uint",
+                SideEffects::modifyArgument, "convert_from_string_uint32")->args({"str","result","offset","base"})->arg_init(3,make_smart<ExprConstInt>(10));
+            addExtern<DAS_BIND_FUN(convert_from_string_int64)>(*this, lib, "int64",
+                SideEffects::modifyArgument, "convert_from_string_int64")->args({"str","result","offset","base"})->arg_init(3,make_smart<ExprConstInt>(10));
+            addExtern<DAS_BIND_FUN(convert_from_string_uint64)>(*this, lib, "uint64",
+                SideEffects::modifyArgument, "convert_from_string_uint64")->args({"str","result","offset","base"})->arg_init(3,make_smart<ExprConstInt>(10));
+            addExtern<DAS_BIND_FUN(convert_from_string_float)>(*this, lib, "float",
+                SideEffects::modifyArgument, "convert_from_string_float")->args({"str","result","offset"});
+            addExtern<DAS_BIND_FUN(convert_from_string_double)>(*this, lib, "double",
+                SideEffects::modifyArgument, "convert_from_string_double")->args({"str","result","offset"});
             addExtern<DAS_BIND_FUN(builtin_string_escape)>(*this, lib, "escape",
                 SideEffects::none, "builtin_string_escape")->args({"str","context","at"});
             addExtern<DAS_BIND_FUN(builtin_string_unescape)>(*this, lib, "unescape",
@@ -877,6 +981,7 @@ namespace das
             // string buffer
             addExtern<DAS_BIND_FUN(builtin_reserve_string_buffer)>(*this, lib, "reserve_string_buffer",
                 SideEffects::none,"builtin_reserve_string_buffer")->args({"str","length","context"});
+
             // lets make sure its all aot ready
             verifyAotReady();
         }
