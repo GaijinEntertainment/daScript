@@ -49,6 +49,11 @@ namespace das {
     char* builtin_string_toupper ( const char *str, Context * context, LineInfoArg * at );
     char* builtin_string_toupper_in_place ( char* str );
     char* builtin_string_chop( const char * str, int start, int length, Context * context, LineInfoArg * at );
+
+    uint8_t string_to_uint8 ( const char *str, Context * context, LineInfoArg * at );
+    int8_t string_to_int8 ( const char *str, Context * context, LineInfoArg * at );
+    uint16_t string_to_uint16 ( const char *str, Context * context, LineInfoArg * at );
+    int16_t string_to_int16 ( const char *str, Context * context, LineInfoArg * at );
     uint32_t string_to_uint ( const char *str, Context * context, LineInfoArg * at );
     int32_t string_to_int ( const char *str, Context * context, LineInfoArg * at );
     uint64_t string_to_uint64 ( const char *str, Context * context, LineInfoArg * at );
@@ -57,6 +62,10 @@ namespace das {
     double string_to_double ( const char *str, Context * context, LineInfoArg * at );
     float fast_to_float ( const char *str );
     double fast_to_double ( const char *str );
+    int8_t fast_to_int8 ( const char *str, bool hex );
+    uint8_t fast_to_uint8 ( const char *str, bool hex );
+    int16_t fast_to_int16 ( const char *str, bool hex );
+    uint16_t fast_to_uint16 ( const char *str, bool hex );
     int32_t fast_to_int ( const char *str, bool hex );
     uint32_t fast_to_uint ( const char *str, bool hex );
     int64_t fast_to_int64 ( const char *str, bool hex );
@@ -122,14 +131,14 @@ namespace das {
     __forceinline bool is_number ( int32_t ch ) { return (ch>='0' && ch<='9'); }
     __forceinline bool is_new_line ( int32_t ch ) { return ch=='\n' || ch=='\r'; }
 
-    int8_t convert_from_string_int8 ( const char * str, ConversionResult & result, int32_t & offset, int32_t base );
-    uint8_t convert_from_string_uint8 ( const char * str, ConversionResult & result, int32_t & offset, int32_t base );
-    int16_t convert_from_string_int16 ( const char * str, ConversionResult & result, int32_t & offset, int32_t base );
-    uint16_t convert_from_string_uint16 ( const char * str, ConversionResult & result, int32_t & offset, int32_t base );
-    int32_t convert_from_string_int32 ( const char * str, ConversionResult & result, int32_t & offset, int32_t base );
-    uint32_t convert_from_string_uint32 ( const char * str, ConversionResult & result, int32_t & offset, int32_t base );
-    int64_t convert_from_string_int64 ( const char * str, ConversionResult & result, int32_t & offset, int32_t base );
-    uint64_t convert_from_string_uint64 ( const char * str, ConversionResult & result, int32_t & offset, int32_t base );
+    int8_t convert_from_string_int8 ( const char * str, ConversionResult & result, int32_t & offset, bool hex );
+    uint8_t convert_from_string_uint8 ( const char * str, ConversionResult & result, int32_t & offset, bool hex );
+    int16_t convert_from_string_int16 ( const char * str, ConversionResult & result, int32_t & offset, bool hex );
+    uint16_t convert_from_string_uint16 ( const char * str, ConversionResult & result, int32_t & offset, bool hex );
+    int32_t convert_from_string_int32 ( const char * str, ConversionResult & result, int32_t & offset, bool hex );
+    uint32_t convert_from_string_uint32 ( const char * str, ConversionResult & result, int32_t & offset, bool hex );
+    int64_t convert_from_string_int64 ( const char * str, ConversionResult & result, int32_t & offset, bool hex );
+    uint64_t convert_from_string_uint64 ( const char * str, ConversionResult & result, int32_t & offset, bool hex );
     float convert_from_string_float ( const char * str, ConversionResult & result, int32_t & offset );
     double convert_from_string_double ( const char * str, ConversionResult & result, int32_t & offset );
 }
