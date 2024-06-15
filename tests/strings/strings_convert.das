@@ -4,6 +4,94 @@ require daslib/faker
 require daslib/fuzzer
 require daslib/regex
 
+def test_conversions ( t:T?; good_string:string; good_result:auto(TT); out_of_range_string:string )
+    var errC : ConversionResult
+    var ofs : int
+
+    var res = TT(good_string,errC,ofs)  // as is
+    t |> equal(good_result, res)
+    t |> equal(ConversionResult ok, errC)
+    t |> equal(length(good_string), ofs)
+
+    res = TT("  {good_string}  ",errC,ofs)   // with spaces
+    t |> equal(good_result, res)
+    t |> equal(ConversionResult ok, errC)
+    t |> equal(length(good_string)+2, ofs)
+
+    res = TT("", errC, ofs) // empty string
+    t |> equal(TT(), res)
+    t |> equal(ConversionResult invalid_argument, errC)
+    t |> equal(0, ofs)
+
+    res = TT("random goo", errC, ofs) // not a number
+    t |> equal(TT(), res)
+    t |> equal(ConversionResult invalid_argument, errC)
+    t |> equal(0, ofs)
+
+    res = TT(out_of_range_string, errC, ofs) // out of range
+    t |> equal(TT(), res)
+    t |> equal(ConversionResult out_of_range, errC)
+    t |> equal(0, ofs)
+
+def test_hex_conversions ( t:T?; good_string:string; good_result:auto(TT); out_of_range_string:string )
+    var errC : ConversionResult
+    var ofs : int
+
+    var res = TT(good_string,errC,ofs,16)  // as is
+    t |> equal(good_result, res)
+    t |> equal(ConversionResult ok, errC)
+    t |> equal(length(good_string), ofs)
+
+    res = TT("  {good_string}  ",errC,ofs,16)   // with spaces
+    t |> equal(good_result, res)
+    t |> equal(ConversionResult ok, errC)
+    t |> equal(length(good_string)+2 , ofs)
+
+    res = TT("", errC, ofs,16) // empty string
+    t |> equal(TT(), res)
+    t |> equal(ConversionResult invalid_argument, errC)
+    t |> equal(0, ofs)
+
+    res = TT("random goo", errC, ofs,16) // not a number
+    t |> equal(TT(), res)
+    t |> equal(ConversionResult invalid_argument, errC)
+    t |> equal(0, ofs)
+
+    res = TT(out_of_range_string, errC, ofs,16) // out of range
+    t |> equal(TT(), res)
+    t |> equal(ConversionResult out_of_range, errC)
+    t |> equal(0, ofs)
+
+
+[test]
+def test_convert_with_errors ( t:T? )
+    test_conversions(t,"13",int8(13),"128")
+    test_hex_conversions(t,"13",int8(0x13),"0x100")
+
+    test_conversions(t,"13",uint8(13),"256")
+    test_hex_conversions(t,"13",uint8(0x13),"0x100")
+
+    test_conversions(t,"13",int16(13),"32768")
+    test_hex_conversions(t,"13",int16(0x13),"0x10000")
+
+    test_conversions(t,"13",uint16(13),"65536")
+    test_hex_conversions(t,"13",uint16(0x13),"0x10000")
+
+    test_conversions(t,"13",int(13),"2147483648")
+    test_hex_conversions(t,"13",int(0x13),"0x100000000")
+
+    test_conversions(t,"13",uint(13),"4294967296")
+    test_hex_conversions(t,"13",uint(0x13),"0x100000000")
+
+    test_conversions(t,"13",int64(13),"9223372036854775808")
+    test_hex_conversions(t,"13",int64(0x13),"0x10000000000000000")
+
+    test_conversions(t,"13",uint64(13),"18446744073709551616")
+    test_hex_conversions(t,"13",uint64(0x13),"0x10000000000000000")
+
+    test_conversions(t,"13",float(13.),"1e39")
+    test_conversions(t,"13",double(13.lf),"1e309")
+
 [test]
 def test_convert ( t:T? )
 

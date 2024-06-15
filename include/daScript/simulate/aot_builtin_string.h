@@ -3,6 +3,13 @@
 #include "daScript/ast/ast_typefactory.h"
 
 namespace das {
+
+    enum class ConversionResult {
+        ok
+    ,   invalid_argument = int(std::errc::invalid_argument)  // fast_float.h
+    ,   out_of_range = int(std::errc::result_out_of_range)   // fast_float.h
+    };
+
     void delete_string ( char * & str, Context * context, LineInfoArg * at );
 
     char * builtin_build_string ( const TBlock<void,StringBuilderWriter> & block, Context * context, LineInfoArg * lineinfo );
@@ -114,4 +121,15 @@ namespace das {
     __forceinline bool is_white_space ( int32_t ch ) { return  ch==' ' || ch=='\n' || ch=='\r' || ch=='\t'; }
     __forceinline bool is_number ( int32_t ch ) { return (ch>='0' && ch<='9'); }
     __forceinline bool is_new_line ( int32_t ch ) { return ch=='\n' || ch=='\r'; }
+
+    int8_t convert_from_string_int8 ( const char * str, ConversionResult & result, int32_t & offset, int32_t base );
+    uint8_t convert_from_string_uint8 ( const char * str, ConversionResult & result, int32_t & offset, int32_t base );
+    int16_t convert_from_string_int16 ( const char * str, ConversionResult & result, int32_t & offset, int32_t base );
+    uint16_t convert_from_string_uint16 ( const char * str, ConversionResult & result, int32_t & offset, int32_t base );
+    int32_t convert_from_string_int32 ( const char * str, ConversionResult & result, int32_t & offset, int32_t base );
+    uint32_t convert_from_string_uint32 ( const char * str, ConversionResult & result, int32_t & offset, int32_t base );
+    int64_t convert_from_string_int64 ( const char * str, ConversionResult & result, int32_t & offset, int32_t base );
+    uint64_t convert_from_string_uint64 ( const char * str, ConversionResult & result, int32_t & offset, int32_t base );
+    float convert_from_string_float ( const char * str, ConversionResult & result, int32_t & offset );
+    double convert_from_string_double ( const char * str, ConversionResult & result, int32_t & offset );
 }
