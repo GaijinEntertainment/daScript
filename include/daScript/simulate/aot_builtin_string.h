@@ -6,8 +6,8 @@ namespace das {
 
     enum class ConversionResult {
         ok
-    ,   invalid_argument = std::errc::invalid_argument  // fast_float.h
-    ,   out_of_range = std::errc::result_out_of_range   // fast_float.h
+    ,   invalid_argument = int(std::errc::invalid_argument)  // fast_float.h
+    ,   out_of_range = int(std::errc::result_out_of_range)   // fast_float.h
     };
 
     void delete_string ( char * & str, Context * context, LineInfoArg * at );
