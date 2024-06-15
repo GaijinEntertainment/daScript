@@ -37,27 +37,27 @@ def test_hex_conversions ( t:T?; good_string:string; good_result:auto(TT); out_o
     var errC : ConversionResult
     var ofs : int
 
-    var res = TT(good_string,errC,ofs,16)  // as is
+    var res = TT(good_string,errC,ofs,true)  // as is
     t |> equal(good_result, res)
     t |> equal(ConversionResult ok, errC)
     t |> equal(length(good_string), ofs)
 
-    res = TT("  {good_string}  ",errC,ofs,16)   // with spaces
+    res = TT("  {good_string}  ",errC,ofs,true)   // with spaces
     t |> equal(good_result, res)
     t |> equal(ConversionResult ok, errC)
     t |> equal(length(good_string)+2 , ofs)
 
-    res = TT("", errC, ofs,16) // empty string
+    res = TT("", errC, ofs,true) // empty string
     t |> equal(TT(), res)
     t |> equal(ConversionResult invalid_argument, errC)
     t |> equal(0, ofs)
 
-    res = TT("random goo", errC, ofs,16) // not a number
+    res = TT("random goo", errC, ofs,true) // not a number
     t |> equal(TT(), res)
     t |> equal(ConversionResult invalid_argument, errC)
     t |> equal(0, ofs)
 
-    res = TT(out_of_range_string, errC, ofs,16) // out of range
+    res = TT(out_of_range_string, errC, ofs,true) // out of range
     t |> equal(TT(), res)
     t |> equal(ConversionResult out_of_range, errC)
     t |> equal(0, ofs)

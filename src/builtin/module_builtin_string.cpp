@@ -222,110 +222,128 @@ namespace das
         return str;
     }
 
-    uint32_t string_to_uint ( const char *str, Context * context, LineInfoArg * at ) {
+    template <typename TT>
+    TT string_to_int_number ( const char *str, Context * context, LineInfoArg * at ) {
         if ( !str ) context->throw_error_at(at, "expecting string");
-        uint32_t result = 0;
+        TT result = 0;
         while ( is_white_space(*str) ) str++;
-        auto res = fast_float::from_chars(str, str+strlen(str), result);
-        if (res.ec != std::errc()) context->throw_error_at(at, "failed to convert `%s` to uint", str);
+        bool hex = false;
+        if ( str[0]=='0' && (str[1]=='x' || str[1]=='X') ) {
+            hex = true;
+            str += 2;
+        }
+        auto res = fast_float::from_chars(str, str+strlen(str), result, hex ? 16 : 10);
+        if (res.ec != std::errc()) context->throw_error_at(at, "failed to convert `%s` to number", str);
         return result;
+    }
+
+    uint8_t string_to_uint8 ( const char *str, Context * context, LineInfoArg * at ) {
+        return string_to_int_number<uint8_t>(str, context, at);
+    }
+
+    int8_t string_to_int8 ( const char *str, Context * context, LineInfoArg * at ) {
+        return string_to_int_number<int8_t>(str, context, at);
+    }
+
+    uint16_t string_to_uint16 ( const char *str, Context * context, LineInfoArg * at ) {
+        return string_to_int_number<uint16_t>(str, context, at);
+    }
+
+    int16_t string_to_int16 ( const char *str, Context * context, LineInfoArg * at ) {
+        return string_to_int_number<int16_t>(str, context, at);
+    }
+
+    uint32_t string_to_uint ( const char *str, Context * context, LineInfoArg * at ) {
+        return string_to_int_number<uint32_t>(str, context, at);
     }
 
     int32_t string_to_int ( const char *str, Context * context, LineInfoArg * at ) {
-        if ( !str ) context->throw_error_at(at, "expecting string");
-        int32_t result = 0;
-        while ( is_white_space(*str) ) str++;
-        auto res = fast_float::from_chars(str, str+strlen(str), result);
-        if (res.ec != std::errc()) context->throw_error_at(at, "failed to convert `%s` to int", str);
-        return result;
+        return string_to_int_number<int32_t>(str, context, at);
     }
 
     uint64_t string_to_uint64 ( const char *str, Context * context, LineInfoArg * at ) {
-        if ( !str ) context->throw_error_at(at, "expecting string");
-        uint64_t result = 0;
-        while ( is_white_space(*str) ) str++;
-        auto res = fast_float::from_chars(str, str+strlen(str), result);
-        if (res.ec != std::errc()) context->throw_error_at(at, "failed to convert `%s` to uint64", str);
-        return result;
+        return string_to_int_number<uint64_t>(str, context, at);
     }
 
     int64_t string_to_int64 ( const char *str, Context * context, LineInfoArg * at ) {
+        return string_to_int_number<int64_t>(str, context, at);
+    }
+
+    template <typename TT>
+    TT string_to_real_number ( const char *str, Context * context, LineInfoArg * at ) {
         if ( !str ) context->throw_error_at(at, "expecting string");
-        int64_t result = 0;
+        TT result = 0;
         while ( is_white_space(*str) ) str++;
         auto res = fast_float::from_chars(str, str+strlen(str), result);
-        if (res.ec != std::errc()) context->throw_error_at(at, "failed to convert `%s` to int64", str);
+        if (res.ec != std::errc()) context->throw_error_at(at, "failed to convert `%s` to number", str);
         return result;
     }
 
     float string_to_float ( const char *str, Context * context, LineInfoArg * at ) {
-        if ( !str ) context->throw_error_at(at, "expecting string");
-        float result = 0;
-        while ( is_white_space(*str) ) str++;
-        auto res = fast_float::from_chars(str, str+strlen(str), result);
-        if (res.ec != std::errc()) context->throw_error_at(at, "failed to convert `%s` to float", str);
-        return result;
+        return string_to_real_number<float>(str, context, at);
     }
 
     double string_to_double ( const char *str, Context * context, LineInfoArg * at ) {
-        if ( !str ) context->throw_error_at(at, "expecting string");
-        double result = 0;
+        return string_to_real_number<double>(str, context, at);
+    }
+
+    template <typename TT>
+    TT fast_to_real ( const char *str ) {
+        if ( !str ) return 0;
+        TT result = 0;
         while ( is_white_space(*str) ) str++;
         auto res = fast_float::from_chars(str, str+strlen(str), result);
-        if (res.ec != std::errc()) context->throw_error_at(at, "failed to convert `%s` to double", str);
-        return result;
+        return (res.ec == std::errc()) ? result : 0;
     }
 
     float fast_to_float ( const char *str ) {
-        if ( !str ) return 0.0f;
-        float result = 0;
-        while ( is_white_space(*str) ) str++;
-        auto res = fast_float::from_chars(str, str+strlen(str), result);
-        return (res.ec == std::errc()) ? result : 0.0f;
+        return fast_to_real<float>(str);
     }
 
     double fast_to_double ( const char *str ) {
-        if ( !str ) return 0.0;
-        double result = 0;
+        return fast_to_real<double>(str);
+    }
+
+    template <typename TT>
+    TT fast_to_int_TT ( const char *str, bool hex ) {
+        if ( !str ) return 0;
+        TT result = 0;
         while ( is_white_space(*str) ) str++;
-        auto res = fast_float::from_chars(str, str+strlen(str), result);
-        return (res.ec == std::errc()) ? result : 0.0;
+        if ( hex && str[0]=='0' && (str[1]=='x' || str[1]=='X') ) str += 2;
+        auto res = fast_float::from_chars(str, str+strlen(str), result, hex ? 16 : 10);
+        return (res.ec == std::errc()) ? result : 0;
+    }
+
+    int8_t fast_to_int8 ( const char *str, bool hex ) {
+        return fast_to_int_TT<int8_t>(str, hex);
+    }
+
+    uint8_t fast_to_uint8 ( const char *str, bool hex ) {
+        return fast_to_int_TT<uint8_t>(str, hex);
+    }
+
+    int16_t fast_to_int16 ( const char *str, bool hex ) {
+        return fast_to_int_TT<int16_t>(str, hex);
+    }
+
+    uint16_t fast_to_uint16 ( const char *str, bool hex ) {
+        return fast_to_int_TT<uint16_t>(str, hex);
     }
 
     int32_t fast_to_int ( const char *str, bool hex ) {
-        if ( !str ) return 0;
-        int32_t result = 0;
-        while ( is_white_space(*str) ) str++;
-        if ( hex && str[0]=='0' && (str[1]=='x' || str[1]=='X') ) str += 2;
-        auto res = fast_float::from_chars(str, str+strlen(str), result, hex ? 16 : 10);
-        return (res.ec == std::errc()) ? result : 0;
+        return fast_to_int_TT<int32_t>(str, hex);
     }
 
     uint32_t fast_to_uint ( const char *str, bool hex ) {
-        if ( !str ) return 0;
-        uint32_t result = 0;
-        while ( is_white_space(*str) ) str++;
-        if ( hex && str[0]=='0' && (str[1]=='x' || str[1]=='X') ) str += 2;
-        auto res = fast_float::from_chars(str, str+strlen(str), result, hex ? 16 : 10);
-        return (res.ec == std::errc()) ? result : 0;
+        return fast_to_int_TT<uint32_t>(str, hex);
     }
 
     int64_t fast_to_int64 ( const char *str, bool hex ) {
-        if ( !str ) return 0;
-        int64_t result = 0;
-        while ( is_white_space(*str) ) str++;
-        if ( hex && str[0]=='0' && (str[1]=='x' || str[1]=='X') ) str += 2;
-        auto res = fast_float::from_chars(str, str+strlen(str), result, hex ? 16 : 10);
-        return (res.ec == std::errc()) ? result : 0;
+        return fast_to_int_TT<int64_t>(str, hex);
     }
 
     uint64_t fast_to_uint64 ( const char *str, bool hex ) {
-        if ( !str ) return 0;
-        uint64_t result = 0;
-        while ( is_white_space(*str) ) str++;
-        if ( hex && str[0]=='0' && (str[1]=='x' || str[1]=='X') ) str += 2;
-        auto res = fast_float::from_chars(str, str+strlen(str), result, hex ? 16 : 10);
-        return (res.ec == std::errc()) ? result : 0;
+        return fast_to_int_TT<uint64_t>(str, hex);
     }
 
     char * builtin_build_string ( const TBlock<void,StringBuilderWriter> & block, Context * context, LineInfoArg * at ) {
@@ -719,17 +737,16 @@ namespace das
     }
 
     template <typename TT>
-    TT convert_int_from_string ( const char * str, ConversionResult & result, int32_t & offset, int32_t base ) {
+    TT convert_int_from_string ( const char * str, ConversionResult & result, int32_t & offset, bool hex ) {
         offset = 0;
         if ( !str ) {
             result = ConversionResult::invalid_argument;
             return TT();
         }
         TT value = 0;
-        int32_t eoffset = 0;
         while ( is_white_space(str[offset]) ) offset++;
-        if ( base==16 && str[0]=='0' && (str[1]=='x' || str[1]=='X') ) str += 2;
-        auto res = fast_float::from_chars(str+offset, str+strlen(str), value, base);
+        if ( hex && str[0]=='0' && (str[1]=='x' || str[1]=='X') ) str += 2;
+        auto res = fast_float::from_chars(str+offset, str+strlen(str), value, hex ? 16 : 10);
         if (res.ec != std::errc()) {
             result = ConversionResult(res.ec);
             return TT();
@@ -738,36 +755,36 @@ namespace das
         return value;
     }
 
-    int8_t convert_from_string_int8 ( const char * str, ConversionResult & result, int32_t & offset, int32_t base ) {
-        return convert_int_from_string<int8_t>(str, result, offset, base);
+    int8_t convert_from_string_int8 ( const char * str, ConversionResult & result, int32_t & offset, bool hex ) {
+        return convert_int_from_string<int8_t>(str, result, offset, hex);
     }
 
-    uint8_t convert_from_string_uint8 ( const char * str, ConversionResult & result, int32_t & offset, int32_t base ) {
-        return convert_int_from_string<uint8_t>(str, result, offset, base);
+    uint8_t convert_from_string_uint8 ( const char * str, ConversionResult & result, int32_t & offset, bool hex ) {
+        return convert_int_from_string<uint8_t>(str, result, offset, hex);
     }
 
-    int16_t convert_from_string_int16 ( const char * str, ConversionResult & result, int32_t & offset, int32_t base ) {
-        return convert_int_from_string<int16_t>(str, result, offset, base);
+    int16_t convert_from_string_int16 ( const char * str, ConversionResult & result, int32_t & offset, bool hex ) {
+        return convert_int_from_string<int16_t>(str, result, offset, hex);
     }
 
-    uint16_t convert_from_string_uint16 ( const char * str, ConversionResult & result, int32_t & offset, int32_t base ) {
-        return convert_int_from_string<uint16_t>(str, result, offset, base);
+    uint16_t convert_from_string_uint16 ( const char * str, ConversionResult & result, int32_t & offset, bool hex ) {
+        return convert_int_from_string<uint16_t>(str, result, offset, hex);
     }
 
-    int32_t convert_from_string_int32 ( const char * str, ConversionResult & result, int32_t & offset, int32_t base ) {
-        return convert_int_from_string<int32_t>(str, result, offset, base);
+    int32_t convert_from_string_int32 ( const char * str, ConversionResult & result, int32_t & offset, bool hex ) {
+        return convert_int_from_string<int32_t>(str, result, offset, hex);
     }
 
-    uint32_t convert_from_string_uint32 ( const char * str, ConversionResult & result, int32_t & offset, int32_t base ) {
-        return convert_int_from_string<uint32_t>(str, result, offset, base);
+    uint32_t convert_from_string_uint32 ( const char * str, ConversionResult & result, int32_t & offset, bool hex ) {
+        return convert_int_from_string<uint32_t>(str, result, offset, hex);
     }
 
-    int64_t convert_from_string_int64 ( const char * str, ConversionResult & result, int32_t & offset, int32_t base ) {
-        return convert_int_from_string<int64_t>(str, result, offset, base);
+    int64_t convert_from_string_int64 ( const char * str, ConversionResult & result, int32_t & offset, bool hex ) {
+        return convert_int_from_string<int64_t>(str, result, offset, hex);
     }
 
-    uint64_t convert_from_string_uint64 ( const char * str, ConversionResult & result, int32_t & offset, int32_t base ) {
-        return convert_int_from_string<uint64_t>(str, result, offset, base);
+    uint64_t convert_from_string_uint64 ( const char * str, ConversionResult & result, int32_t & offset, bool hex ) {
+        return convert_int_from_string<uint64_t>(str, result, offset, hex);
     }
 
     float convert_from_string_float ( const char * str, ConversionResult & result, int32_t & offset ) {
@@ -885,6 +902,15 @@ namespace das
                 SideEffects::modifyExternal, "builtin_string_split_by_char")->args({"str","delimiter","block","context","lineinfo"});
             addExtern<DAS_BIND_FUN(builtin_string_split)>(*this, lib, "builtin_string_split",
                 SideEffects::modifyExternal, "builtin_string_split")->args({"str","delimiter","block","context","lineinfo"});
+            // conversion which throws exception on error. detects hex automatically
+            addExtern<DAS_BIND_FUN(string_to_int8)>(*this, lib, "int8",
+                SideEffects::none, "string_to_int8")->args({"str","context","at"});
+            addExtern<DAS_BIND_FUN(string_to_uint8)>(*this, lib, "uint8",
+                SideEffects::none, "string_to_uint8")->args({"str","context","at"});
+            addExtern<DAS_BIND_FUN(string_to_int16)>(*this, lib, "int16",
+                SideEffects::none, "string_to_int16")->args({"str","context","at"});
+            addExtern<DAS_BIND_FUN(string_to_uint16)>(*this, lib, "uint16",
+                SideEffects::none, "string_to_uint16")->args({"str","context","at"});
             addExtern<DAS_BIND_FUN(string_to_int)>(*this, lib, "int",
                 SideEffects::none, "string_to_int")->args({"str","context","at"});
             addExtern<DAS_BIND_FUN(string_to_uint)>(*this, lib, "uint",
@@ -897,42 +923,47 @@ namespace das
                 SideEffects::none, "string_to_float")->args({"str","context","at"});
             addExtern<DAS_BIND_FUN(string_to_double)>(*this, lib, "double",
                 SideEffects::none, "string_to_double")->args({"str","context","at"});
-            auto toi = addExtern<DAS_BIND_FUN(fast_to_int)>(*this, lib, "to_int",
-                SideEffects::none, "fast_to_int")->args({"value","hex"});
-            toi->arguments[1]->init = make_smart<ExprConstBool>(false);
-            auto toui =addExtern<DAS_BIND_FUN(fast_to_uint)>(*this, lib, "to_uint",
-                SideEffects::none, "fast_to_uint")->args({"value","hex"});
-            toui->arguments[1]->init = make_smart<ExprConstBool>(false);
-            auto ti64 = addExtern<DAS_BIND_FUN(fast_to_int64)>(*this, lib, "to_int64",
-                SideEffects::none, "fast_to_int64")->args({"value","hex"});
-            ti64->arguments[1]->init = make_smart<ExprConstBool>(false);
-            auto toui64 = addExtern<DAS_BIND_FUN(fast_to_uint64)>(*this, lib, "to_uint64",
-                SideEffects::none, "fast_to_uint64")->args({"value","hex"});
-            toui64->arguments[1]->init = make_smart<ExprConstBool>(false);
+            // fast conversion, returns 0 if fails
+            addExtern<DAS_BIND_FUN(fast_to_int8)>(*this, lib, "to_int8",
+                SideEffects::none, "fast_to_int8")->args({"value","hex"})->arg_init(1,make_smart<ExprConstBool>(false));
+            addExtern<DAS_BIND_FUN(fast_to_uint8)>(*this, lib, "to_uint8",
+                SideEffects::none, "fast_to_uint8")->args({"value","hex"})->arg_init(1,make_smart<ExprConstBool>(false));
+            addExtern<DAS_BIND_FUN(fast_to_int16)>(*this, lib, "to_int16",
+                SideEffects::none, "fast_to_int16")->args({"value","hex"})->arg_init(1,make_smart<ExprConstBool>(false));
+            addExtern<DAS_BIND_FUN(fast_to_int)>(*this, lib, "to_int",
+                SideEffects::none, "fast_to_int")->args({"value","hex"})->arg_init(1,make_smart<ExprConstBool>(false));
+            addExtern<DAS_BIND_FUN(fast_to_uint)>(*this, lib, "to_uint",
+                SideEffects::none, "fast_to_uint")->args({"value","hex"})->arg_init(1,make_smart<ExprConstBool>(false));
+            addExtern<DAS_BIND_FUN(fast_to_int64)>(*this, lib, "to_int64",
+                SideEffects::none, "fast_to_int64")->args({"value","hex"})->arg_init(1,make_smart<ExprConstBool>(false));
+            addExtern<DAS_BIND_FUN(fast_to_uint64)>(*this, lib, "to_uint64",
+                SideEffects::none, "fast_to_uint64")->args({"value","hex"})->arg_init(1,make_smart<ExprConstBool>(false));
             addExtern<DAS_BIND_FUN(fast_to_float)>(*this, lib, "to_float",
                 SideEffects::none, "fast_to_float")->arg("value");
             addExtern<DAS_BIND_FUN(fast_to_double)>(*this, lib, "to_double",
                 SideEffects::none, "fast_to_double")->arg("value");
+            // conversion which returns error and offset of the first invalid character
             addExtern<DAS_BIND_FUN(convert_from_string_int8)>(*this, lib, "int8",
-                SideEffects::modifyArgument, "convert_from_string_int8")->args({"str","result","offset","base"})->arg_init(3,make_smart<ExprConstInt>(10));
+                SideEffects::modifyArgument, "convert_from_string_int8")->args({"str","result","offset","hex"})->arg_init(3,make_smart<ExprConstBool>(false));
             addExtern<DAS_BIND_FUN(convert_from_string_uint8)>(*this, lib, "uint8",
-                SideEffects::modifyArgument, "convert_from_string_uint8")->args({"str","result","offset","base"})->arg_init(3,make_smart<ExprConstInt>(10));
+                SideEffects::modifyArgument, "convert_from_string_uint8")->args({"str","result","offset","hex"})->arg_init(3,make_smart<ExprConstBool>(false));
             addExtern<DAS_BIND_FUN(convert_from_string_int16)>(*this, lib, "int16",
-                SideEffects::modifyArgument, "convert_from_string_int16")->args({"str","result","offset","base"})->arg_init(3,make_smart<ExprConstInt>(10));
+                SideEffects::modifyArgument, "convert_from_string_int16")->args({"str","result","offset","hex"})->arg_init(3,make_smart<ExprConstBool>(false));
             addExtern<DAS_BIND_FUN(convert_from_string_uint16)>(*this, lib, "uint16",
-                SideEffects::modifyArgument, "convert_from_string_uint16")->args({"str","result","offset","base"})->arg_init(3,make_smart<ExprConstInt>(10));
+                SideEffects::modifyArgument, "convert_from_string_uint16")->args({"str","result","offset","hex"})->arg_init(3,make_smart<ExprConstBool>(false));
             addExtern<DAS_BIND_FUN(convert_from_string_int32)>(*this, lib, "int",
-                SideEffects::modifyArgument, "convert_from_string_int32")->args({"str","result","offset","base"})->arg_init(3,make_smart<ExprConstInt>(10));
+                SideEffects::modifyArgument, "convert_from_string_int32")->args({"str","result","offset","hex"})->arg_init(3,make_smart<ExprConstBool>(false));
             addExtern<DAS_BIND_FUN(convert_from_string_uint32)>(*this, lib, "uint",
-                SideEffects::modifyArgument, "convert_from_string_uint32")->args({"str","result","offset","base"})->arg_init(3,make_smart<ExprConstInt>(10));
+                SideEffects::modifyArgument, "convert_from_string_uint32")->args({"str","result","offset","hex"})->arg_init(3,make_smart<ExprConstBool>(false));
             addExtern<DAS_BIND_FUN(convert_from_string_int64)>(*this, lib, "int64",
-                SideEffects::modifyArgument, "convert_from_string_int64")->args({"str","result","offset","base"})->arg_init(3,make_smart<ExprConstInt>(10));
+                SideEffects::modifyArgument, "convert_from_string_int64")->args({"str","result","offset","hex"})->arg_init(3,make_smart<ExprConstBool>(false));
             addExtern<DAS_BIND_FUN(convert_from_string_uint64)>(*this, lib, "uint64",
-                SideEffects::modifyArgument, "convert_from_string_uint64")->args({"str","result","offset","base"})->arg_init(3,make_smart<ExprConstInt>(10));
+                SideEffects::modifyArgument, "convert_from_string_uint64")->args({"str","result","offset","hex"})->arg_init(3,make_smart<ExprConstBool>(false));
             addExtern<DAS_BIND_FUN(convert_from_string_float)>(*this, lib, "float",
                 SideEffects::modifyArgument, "convert_from_string_float")->args({"str","result","offset"});
             addExtern<DAS_BIND_FUN(convert_from_string_double)>(*this, lib, "double",
                 SideEffects::modifyArgument, "convert_from_string_double")->args({"str","result","offset"});
+            // escaping etc
             addExtern<DAS_BIND_FUN(builtin_string_escape)>(*this, lib, "escape",
                 SideEffects::none, "builtin_string_escape")->args({"str","context","at"});
             addExtern<DAS_BIND_FUN(builtin_string_unescape)>(*this, lib, "unescape",
