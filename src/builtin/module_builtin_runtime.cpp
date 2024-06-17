@@ -1423,7 +1423,7 @@ namespace das
             emscripten_cancel_main_loop();
         }
     }
-#endif TRY_MAIN_LOOP
+#endif
 #endif
 
     void builtin_main_loop ( const TBlock<bool> & block, Context * context, LineInfoArg * at ) {
