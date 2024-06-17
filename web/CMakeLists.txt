@@ -602,7 +602,7 @@ list(SORT DAS_LIB_SRC)
 SOURCE_GROUP_FILES("daslib" DSA_LIB_SRC)
 list(SORT DAS_LIB_SRC)
 
-add_subdirectory(${PROJECT_SOURCE_DIR}/../3rdparty/fmt)
+add_subdirectory("${PROJECT_SOURCE_DIR}/../3rdparty/fmt" "${CMAKE_BINARY_DIR}/fmt")
 
 include_directories(../include)
 include_directories(${PROJECT_SOURCE_DIR}/../3rdparty/fmt/include)
