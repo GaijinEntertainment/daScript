@@ -599,7 +599,7 @@ list(SORT DAS_LIB_SRC)
 SOURCE_GROUP_FILES("daslib" DSA_LIB_SRC)
 list(SORT DAS_LIB_SRC)
 
-add_subdirectory(3rdparty/fmt)
+add_subdirectory(../3rdparty/fmt)
 
 include_directories(../include)
 include_directories(../3rdparty/fmt/include)
