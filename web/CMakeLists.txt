@@ -599,10 +599,10 @@ list(SORT DAS_LIB_SRC)
 SOURCE_GROUP_FILES("daslib" DSA_LIB_SRC)
 list(SORT DAS_LIB_SRC)
 
-add_subdirectory(${CMAKE_SOURCE_DIR}/../3rdparty/fmt)
+add_subdirectory(${PROJECT_SOURCE_DIR}/../3rdparty/fmt)
 
 include_directories(../include)
-include_directories(../3rdparty/fmt/include)
+include_directories(${PROJECT_SOURCE_DIR}/../3rdparty/fmt/include)
 ADD_LIBRARY(libDaScript ${PARSER_GENERATED_SRC} ${PARSER_SRC} ${VECMATH_SRC} ${AST_SRC} ${BUILTIN_SRC}
     ${MISC_SRC} ${SIMULATE_SRC} ${SIMULATE_FUSION_SRC} ${TEST_SRC} ${MAIN_SRC}
 	${DAGOR_NOISE_SRC} ${FLAT_HASH_MAP_SRC} ${DAS_LIB_SRC} ${SMMALLOC_SRC})
