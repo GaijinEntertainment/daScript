@@ -1,6 +1,9 @@
 cmake_minimum_required (VERSION 3.16)
 project (DAS)
 
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 option(DAS_FLEX_BISON_DISABLED "Disable FLEX/BISON stage" ON)
 option(DAS_CLANG_BIND_DISABLED "Disable dasClangBind (libclang bindings, C/C++ parsing)" ON)
 option(DAS_LLVM_DISABLED "Disable dasLLVM (llvm bindings)" ON)

@@ -2,6 +2,10 @@ cmake_minimum_required (VERSION 3.16)
 project (DAS)
 include(GNUInstallDirs)
 
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+#set(CMAKE_CXX_EXTENSIONS OFF)
+
 option(DAS_FLEX_BISON_DISABLED "Disable FLEX/BISON stage" OFF)
 option(DAS_CLANG_BIND_DISABLED "Disable dasClangBind (libclang bindings, C/C++ parsing)" ON)
 option(DAS_LLVM_DISABLED "Disable dasLLVM (llvm bindings)" ON)
