@@ -163,11 +163,26 @@ namespace das
         addFunctionBasic<char *>(*this,lib);
         addFunctionOrdered<char *>(*this,lib);
         addFunctionConcat<char *>(*this,lib);
-        addExtern<DAS_BIND_FUN(das_lexical_cast<int32_t>)>(*this, lib, "string", SideEffects::none, "das_lexical_cast")->args({"value","context","at"});
-        addExtern<DAS_BIND_FUN(das_lexical_cast<uint32_t>)>(*this, lib, "string", SideEffects::none, "das_lexical_cast")->args({"value","context","at"});
-        addExtern<DAS_BIND_FUN(das_lexical_cast<int64_t>)>(*this, lib, "string", SideEffects::none, "das_lexical_cast")->args({"value","context","at"});
-        addExtern<DAS_BIND_FUN(das_lexical_cast<uint64_t>)>(*this, lib, "string", SideEffects::none, "das_lexical_cast")->args({"value","context","at"});
-        addExtern<DAS_BIND_FUN(das_lexical_cast<float>)>(*this, lib, "string", SideEffects::none, "das_lexical_cast")->args({"value","context","at"});
+        addExtern<DAS_BIND_FUN(das_lexical_cast_int<int8_t>)>(*this, lib, "string",
+            SideEffects::none, "das_lexical_cast_int")->args({"value","hex","context","at"})->arg_init(1,make_smart<ExprConstBool>(false));
+        addExtern<DAS_BIND_FUN(das_lexical_cast_int<uint8_t>)>(*this, lib, "string",
+            SideEffects::none, "das_lexical_cast_int")->args({"value","hex","context","at"})->arg_init(1,make_smart<ExprConstBool>(false));
+        addExtern<DAS_BIND_FUN(das_lexical_cast_int<int16_t>)>(*this, lib, "string",
+            SideEffects::none, "das_lexical_cast_int")->args({"value","hex","context","at"})->arg_init(1,make_smart<ExprConstBool>(false));
+        addExtern<DAS_BIND_FUN(das_lexical_cast_int<uint16_t>)>(*this, lib, "string",
+            SideEffects::none, "das_lexical_cast_int")->args({"value","hex","context","at"})->arg_init(1,make_smart<ExprConstBool>(false));
+        addExtern<DAS_BIND_FUN(das_lexical_cast_int<int32_t>)>(*this, lib, "string",
+            SideEffects::none, "das_lexical_cast_int")->args({"value","hex","context","at"})->arg_init(1,make_smart<ExprConstBool>(false));
+        addExtern<DAS_BIND_FUN(das_lexical_cast_int<uint32_t>)>(*this, lib, "string",
+            SideEffects::none, "das_lexical_cast_int")->args({"value","hex","context","at"})->arg_init(1,make_smart<ExprConstBool>(false));
+        addExtern<DAS_BIND_FUN(das_lexical_cast_int<int64_t>)>(*this, lib, "string",
+            SideEffects::none, "das_lexical_cast_int")->args({"value","hex","context","at"})->arg_init(1,make_smart<ExprConstBool>(false));
+        addExtern<DAS_BIND_FUN(das_lexical_cast_int<uint64_t>)>(*this, lib, "string",
+            SideEffects::none, "das_lexical_cast_int")->args({"value","hex","context","at"})->arg_init(1,make_smart<ExprConstBool>(false));
+        addExtern<DAS_BIND_FUN(das_lexical_cast<float>)>(*this, lib, "string", SideEffects::none,
+            "das_lexical_cast")->args({"value","context","at"});
+        addExtern<DAS_BIND_FUN(das_lexical_cast<double>)>(*this, lib, "string", SideEffects::none,
+            "das_lexical_cast")->args({"value","context","at"});
     }
 }
 

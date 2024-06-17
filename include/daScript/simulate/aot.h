@@ -1817,7 +1817,23 @@ namespace das {
 
     template <typename TT>
     __forceinline char * das_lexical_cast ( TT x, Context * __context__, LineInfoArg * at ) {
-        return __context__->allocateString(to_string(x),at);
+        char buffer[128];
+        auto result = fmt::format_to(buffer,"{}",x);
+        *result = 0;
+        return __context__->allocateString(buffer,at);
+    }
+
+    template <typename TT>
+    __forceinline char * das_lexical_cast_int ( TT x, bool hex, Context * __context__, LineInfoArg * at ) {
+        char buffer[128];
+        char * result;
+        if ( hex ) {
+            result = fmt::format_to(buffer,"{:X}",x);
+        } else {
+            result = fmt::format_to(buffer,"{}",x);
+        }
+        *result = 0;
+        return __context__->allocateString(buffer,at);
     }
 
     __forceinline char * das_string_builder ( Context * __context__, const SimNode_AotInteropBase & node ) {

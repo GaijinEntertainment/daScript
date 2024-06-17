@@ -1,6 +1,9 @@
 cmake_minimum_required (VERSION 3.16)
 project (DAS)
 
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+
 option(DAS_FLEX_BISON_DISABLED "Disable FLEX/BISON stage" ON)
 option(DAS_CLANG_BIND_DISABLED "Disable dasClangBind (libclang bindings, C/C++ parsing)" ON)
 option(DAS_LLVM_DISABLED "Disable dasLLVM (llvm bindings)" ON)
@@ -599,7 +602,10 @@ list(SORT DAS_LIB_SRC)
 SOURCE_GROUP_FILES("daslib" DSA_LIB_SRC)
 list(SORT DAS_LIB_SRC)
 
+add_subdirectory("${PROJECT_SOURCE_DIR}/../3rdparty/fmt" "${CMAKE_BINARY_DIR}/fmt")
+
 include_directories(../include)
+include_directories(${PROJECT_SOURCE_DIR}/../3rdparty/fmt/include)
 ADD_LIBRARY(libDaScript ${PARSER_GENERATED_SRC} ${PARSER_SRC} ${VECMATH_SRC} ${AST_SRC} ${BUILTIN_SRC}
     ${MISC_SRC} ${SIMULATE_SRC} ${SIMULATE_FUSION_SRC} ${TEST_SRC} ${MAIN_SRC}
 	${DAGOR_NOISE_SRC} ${FLAT_HASH_MAP_SRC} ${DAS_LIB_SRC} ${SMMALLOC_SRC})
@@ -610,6 +616,7 @@ target_include_directories(libDaScript PUBLIC
     ${CMAKE_SOURCE_DIR}/../3rdparty/uriparser/include
 )
 target_link_libraries(libDaScript libUriParser)
+target_link_libraries(libDaScript fmt::fmt)
 IF(LINUX_UUID)
 target_link_libraries(libDaScript uuid)
 ENDIF()
