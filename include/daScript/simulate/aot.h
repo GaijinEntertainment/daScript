@@ -1818,18 +1818,21 @@ namespace das {
     template <typename TT>
     __forceinline char * das_lexical_cast ( TT x, Context * __context__, LineInfoArg * at ) {
         char buffer[128];
-        fmt::format_to(buffer,"{}",x);
+        auto result = fmt::format_to(buffer,"{}",x);
+        *result = 0;
         return __context__->allocateString(buffer,at);
     }
 
     template <typename TT>
     __forceinline char * das_lexical_cast_int ( TT x, bool hex, Context * __context__, LineInfoArg * at ) {
         char buffer[128];
+        char * result;
         if ( hex ) {
-            fmt::format_to(buffer,"{:X}",x);
+            result = fmt::format_to(buffer,"{:X}",x);
         } else {
-            fmt::format_to(buffer,"{}",x);
+            result = fmt::format_to(buffer,"{}",x);
         }
+        *result = 0;
         return __context__->allocateString(buffer,at);
     }
 

@@ -178,7 +178,7 @@ namespace das
         addExtern<DAS_BIND_FUN(das_lexical_cast_int<int64_t>)>(*this, lib, "string",
             SideEffects::none, "das_lexical_cast_int")->args({"value","hex","context","at"})->arg_init(1,make_smart<ExprConstBool>(false));
         addExtern<DAS_BIND_FUN(das_lexical_cast_int<uint64_t>)>(*this, lib, "string",
-            SideEffects::none, "das_lexical_cast_int")->args({"value","hex","context","at"});
+            SideEffects::none, "das_lexical_cast_int")->args({"value","hex","context","at"})->arg_init(1,make_smart<ExprConstBool>(false));
         addExtern<DAS_BIND_FUN(das_lexical_cast<float>)>(*this, lib, "string", SideEffects::none,
             "das_lexical_cast")->args({"value","context","at"});
         addExtern<DAS_BIND_FUN(das_lexical_cast<double>)>(*this, lib, "string", SideEffects::none,
