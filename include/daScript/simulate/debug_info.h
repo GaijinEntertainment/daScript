@@ -81,7 +81,7 @@ namespace das
     template <typename T>
     struct isCloneable  {
         template<typename U>
-        static decltype(declval<U&>() = declval<const U&>(), U (declval<const U&>()), true_type{}) func (das::remove_reference_t<U>*);
+        static decltype(declval<U&>() = declval<const U&>(), U (declval<const U&>()), true_type{}) func (das::remove_reference<U>*);
         template<typename U>
         static false_type func (...);
         using  type = decltype(func<T>(nullptr));
