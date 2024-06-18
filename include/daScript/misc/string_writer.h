@@ -97,10 +97,11 @@ namespace das {
     public:
         virtual ~StringWriter() {}
         template <typename TT>
-        StringWriter & write(const char * format, TT value) {
+        StringWriter & format(const char * format, TT value) {
             char buf[128];
-            int realL = snprintf(buf, sizeof(buf), format, value);
-            if ( auto at = this->allocate(realL) ) {
+            auto tail = fmt::format_to(buf, format, value);
+            auto realL = tail - buf;
+            if ( auto at = this->allocate(int(realL)) ) {
                 memcpy(at, buf, realL);
                 this->output();
             }
@@ -132,20 +133,20 @@ namespace das {
             else if (&v == &SCIENTIFIC) fixed = false;
             return *this;
         }
-        StringWriter & operator << (char v)                 { return write("%c", v); }
-        StringWriter & operator << (unsigned char v)        { return write("%c", v); }
+        StringWriter & operator << (char v)                 { return format("{}", v); }
+        StringWriter & operator << (unsigned char v)        { return format("{}", v); }
         StringWriter & operator << (bool v)                 { return write(v ? "true" : "false"); }
-        StringWriter & operator << (int v)                  { return write(hex ? "%x" : "%d", v); }
-        StringWriter & operator << (long v)                 { return write(hex ? "%lx" : "%ld", v); }
-        StringWriter & operator << (long long v)            { return write(hex ? "%llx" : "%lld", v); }
-        StringWriter & operator << (unsigned v)             { return write(hex ? "%x" : "%u", v); }
-        StringWriter & operator << (unsigned long v)        { return write(hex ? "%lx" : "%lu", v); }
-        StringWriter & operator << (unsigned long long v)   { return write(hex ? "%llx" : "%llu", v); }
-        StringWriter & operator << (float v)                { return write(fixed ? "%.9f" : "%g", v); }
-        StringWriter & operator << (double v)               { return write(fixed ? "%.17f" : "%g", v); }
+        StringWriter & operator << (int v)                  { return format(hex ? "{:x}" : "{}", v); }
+        StringWriter & operator << (long v)                 { return format(hex ? "{:x}" : "{}", v); }
+        StringWriter & operator << (long long v)            { return format(hex ? "{:x}" : "{}", v); }
+        StringWriter & operator << (unsigned v)             { return format(hex ? "{:x}" : "{}", v); }
+        StringWriter & operator << (unsigned long v)        { return format(hex ? "{:x}" : "{}", v); }
+        StringWriter & operator << (unsigned long long v)   { return format(hex ? "{:x}" : "{}", v); }
         StringWriter & operator << (char * v)               { return write(v ? (const char*)v : ""); }
         StringWriter & operator << (const char * v)         { return write(v ? v : ""); }
         StringWriter & operator << (const string & v)       { return v.length() ? writeStr(v.c_str(), v.length()) : *this; }
+        StringWriter & operator << (float v)                { return format(fixed ? "{:.9}" : "{:g}", v); }
+        StringWriter & operator << (double v)               { return format(fixed ? "{:.17}" : "{:g}", v); }
     protected:
         bool hex = false;
         bool fixed = false;

@@ -589,6 +589,7 @@ namespace das {
             lib.addBuiltInModule();
             // constants
             addConstant(*this,"PI",(float)M_PI);
+            addConstant(*this,"DBL_PI",(double)M_PI);
             addConstant(*this,"FLT_EPSILON",FLT_EPSILON);
             addConstant(*this,"DBL_EPSILON",DBL_EPSILON);
             // trigonometry functions

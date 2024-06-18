@@ -1090,6 +1090,19 @@ float test_f2i ( const TArray<char *> & nums, int TOTAL_NUMBERS, int TOTAL_TIMES
     return summ;
 }
 
+int32_t test_f2s ( const TArray<float> & nums, int TOTAL_NUMBERS, int TOTAL_TIMES ) {
+    auto data = (const float *) nums.data;
+    int32_t summ = 0;
+    char buffer[128];
+    for ( int i=0; i!=TOTAL_TIMES; ++i ) {
+        for ( int j=0; j!=TOTAL_NUMBERS; ++j ) {
+            snprintf(buffer, 128, "%f", data[j]);
+            summ += (int32_t) strlen(buffer);
+        }
+    }
+    return summ;
+}
+
 class Module_TestProfile : public Module {
 public:
     Module_TestProfile() : Module("testProfile") {
@@ -1144,6 +1157,7 @@ public:
         addExtern<DAS_BIND_FUN(testSnorm)>(*this, lib, "testSnorm",SideEffects::modifyExternal,"testSnorm");
         addExtern<DAS_BIND_FUN(testMandelbrot)>(*this, lib, "testMandelbrot",SideEffects::modifyExternal,"testMandelbrot");
         addExtern<DAS_BIND_FUN(test_f2i)>(*this, lib, "test_f2i",SideEffects::none, "test_f2i");
+        addExtern<DAS_BIND_FUN(test_f2s)>(*this, lib, "test_f2s",SideEffects::none, "test_f2s");
         // its AOT ready
         verifyAotReady();
     }

@@ -431,7 +431,7 @@ namespace das
     ,   singleLine =            (1<<5)
     ,   fixedFloatingPoint =    (1<<6)
 
-    ,   string_builder  =   PrintFlags::fixedFloatingPoint
+    ,   string_builder  =   PrintFlags::humanReadable
     ,   debugger        =   PrintFlags::escapeString | PrintFlags::namesAndDimensions
             | PrintFlags::humanReadable | PrintFlags::typeQualifiers | PrintFlags::refAddresses | PrintFlags::fixedFloatingPoint
     ,   stackwalker     =   PrintFlags::escapeString | PrintFlags::namesAndDimensions
