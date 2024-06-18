@@ -4,7 +4,7 @@ require jit
 
 [jit]
 def print_me ( foo : int )
-    return sprint(foo,print_flags humanReadable)
+    return sprint(foo,print_flags singleLine)
 
 [test]
 def test_ref ( t:T? )
