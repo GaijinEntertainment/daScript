@@ -107,16 +107,6 @@ namespace das {
             }
             return *this;
         }
-        template <typename TT>
-        StringWriter & write(const char * format, TT value) {
-            char buf[128];
-            int realL = snprintf(buf, sizeof(buf), format, value);
-            if ( auto at = this->allocate(realL) ) {
-                memcpy(at, buf, realL);
-                this->output();
-            }
-            return *this;
-        }
         StringWriter & writeStr(const char * st, size_t len) {
             this->append(st, int(len));
             this->output();
@@ -143,8 +133,8 @@ namespace das {
             else if (&v == &SCIENTIFIC) fixed = false;
             return *this;
         }
-        StringWriter & operator << (char v)                 { return format("%c", v); }
-        StringWriter & operator << (unsigned char v)        { return format("%c", v); }
+        StringWriter & operator << (char v)                 { return format("{}", v); }
+        StringWriter & operator << (unsigned char v)        { return format("{}", v); }
         StringWriter & operator << (bool v)                 { return write(v ? "true" : "false"); }
         StringWriter & operator << (int v)                  { return format(hex ? "{:x}" : "{}", v); }
         StringWriter & operator << (long v)                 { return format(hex ? "{:x}" : "{}", v); }
