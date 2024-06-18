@@ -27,13 +27,13 @@ def main
         for i in range(TOTAL_NUMBERS)
             summ += mk_float(i)
     var f1 = 0.0
-    profile(20,"f2i") <|
+    profile(20,"string2float") <|
         f1 = f2i(nums)
     assert(f1==summ)
     if is_cpp_time()
         cpp_label()
         var f4 = 0.0
-        profile(20,"f2i") <|
+        profile(20,"string2float") <|
             f4 = test_f2i(nums, TOTAL_NUMBERS, TOTAL_TIMES)
         assert(f4==summ)
         run_files([[TestFile
@@ -43,8 +43,8 @@ def main
             // nutFile = "f2i.nut",
             // nutModifiedFile = "f2i.nut",
             // asFile = "f2i.as",
-            // jsFile = "f2i.js",
-            // monoFile = "f2i.cs", // this one - interpreter goes bonkers
+            jsFile = "f2i.js",
+            monoFile = "f2i.cs", // this one - interpreter goes bonkers
             dotNetFile = "f2i.cs",
         ]])
 

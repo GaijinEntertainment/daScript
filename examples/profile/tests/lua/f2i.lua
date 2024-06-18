@@ -22,5 +22,5 @@
 
   loadfile("profile.lua")()
   ---
-  io.write(string.format("\"f2i\", %.8f, 20\n", profile_it(20, function () update(nums) end)))
+  io.write(string.format("\"string2float\", %.8f, 20\n", profile_it(20, function () update(nums) end)))
 

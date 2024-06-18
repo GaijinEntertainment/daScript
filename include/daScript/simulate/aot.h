@@ -1826,7 +1826,8 @@ namespace das {
     template <typename TT>
     __forceinline char * das_lexical_cast_fp ( TT x, Context * __context__, LineInfoArg * at ) {
         char buffer[128];
-        auto result = das_human_readable_fp(x, buffer, false);
+        auto result = fmt::format_to(buffer,"{}",x);
+        *result = 0;
         return __context__->allocateString(buffer,uint32_t(result-buffer),at);
     }
 

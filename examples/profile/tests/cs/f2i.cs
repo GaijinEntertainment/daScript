@@ -49,9 +49,15 @@ class HelloWorld {
         return nums;
     }
 
+    public static bool IsRunningOnMono()
+    {
+        return Type.GetType("Mono.Runtime") != null;
+    }
+
     static void Main() {
         var nums = Init();
-        profile(20, "f2i", () => {
+        var count = IsRunningOnMono() ? 1 : 20;
+        profile(count, "string2float", () => {
             test_f2i(nums);
         });
     }

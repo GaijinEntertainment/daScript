@@ -5,7 +5,6 @@ let
     print_flags_debugger = (
             print_flags escapeString
         |   print_flags namesAndDimensions
-        |   print_flags humanReadable
         |   print_flags typeQualifiers
         |   print_flags refAddresses
     )

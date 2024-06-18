@@ -145,8 +145,8 @@ namespace das {
         StringWriter & operator << (char * v)               { return write(v ? (const char*)v : ""); }
         StringWriter & operator << (const char * v)         { return write(v ? v : ""); }
         StringWriter & operator << (const string & v)       { return v.length() ? writeStr(v.c_str(), v.length()) : *this; }
-        StringWriter & operator << (float v)                { return format(fixed ? "{:.9}" : "{:g}", v); }
-        StringWriter & operator << (double v)               { return format(fixed ? "{:.17}" : "{:g}", v); }
+        StringWriter & operator << (float v)                { return format(fixed ? "{:.9}" : "{}", v); }
+        StringWriter & operator << (double v)               { return format(fixed ? "{:.17}" : "{}", v); }
     protected:
         bool hex = false;
         bool fixed = false;

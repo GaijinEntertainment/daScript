@@ -427,15 +427,14 @@ namespace das
     ,   namesAndDimensions =    (1<<1)
     ,   typeQualifiers =        (1<<2)
     ,   refAddresses =          (1<<3)
-    ,   humanReadable =         (1<<4)
-    ,   singleLine =            (1<<5)
-    ,   fixedFloatingPoint =    (1<<6)
+    ,   singleLine =            (1<<4)
+    ,   fixedFloatingPoint =    (1<<5)
 
-    ,   string_builder  =   PrintFlags::humanReadable
+    ,   string_builder  =   PrintFlags::none
     ,   debugger        =   PrintFlags::escapeString | PrintFlags::namesAndDimensions
-            | PrintFlags::humanReadable | PrintFlags::typeQualifiers | PrintFlags::refAddresses | PrintFlags::fixedFloatingPoint
+            | PrintFlags::typeQualifiers | PrintFlags::refAddresses | PrintFlags::fixedFloatingPoint
     ,   stackwalker     =   PrintFlags::escapeString | PrintFlags::namesAndDimensions
-            | PrintFlags::typeQualifiers | PrintFlags::humanReadable | PrintFlags::fixedFloatingPoint
+            | PrintFlags::typeQualifiers | PrintFlags::fixedFloatingPoint
     };
 
     string debug_type ( const TypeInfo * info );
