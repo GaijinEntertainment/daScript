@@ -117,3 +117,4 @@ int testQueens();
 double testSnorm();
 int testMandelbrot();
 float test_f2i ( const das::TArray<char *> & nums, int TOTAL_NUMBERS, int TOTAL_TIMES );
+int32_t test_f2s ( const das::TArray<float> & nums, int TOTAL_NUMBERS, int TOTAL_TIMES );
