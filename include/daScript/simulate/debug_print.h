@@ -14,6 +14,39 @@ namespace das {
         StringBuilderWriter() { }
     };
 
+    template <typename FT, typename BT>
+    void das_human_readable_fp ( FT value, BT & buffer, bool add_qualifier ) {
+        static_assert(sizeof(buffer) >= 32, "buffer is too small");
+        if ( isnan(value) ) {
+            strncpy(buffer, "nan", sizeof(buffer));
+        } else if ( !isfinite(value) ) {
+            strncpy(buffer, value < 0 ? "-inf" : "inf", sizeof(buffer));
+        } else {
+            auto buffer_size = sizeof(buffer) - 2 - (add_qualifier ? 2 : 0);
+            char * end = fmt::format_to_n(buffer, buffer_size, "{}", value).out;
+            bool addDot = true;
+            for (char * p = buffer; p < end; p++) {
+                if (*p == 'e' || *p == '.') {
+                    addDot = false;
+                    break;
+                }
+            }
+            if ( addDot ) {
+                *end++ = '.';
+                *end++ = '0';
+            }
+            if ( add_qualifier ) {
+                if (sizeof(FT) == 4) {
+                    *end++ = 'f';
+                } else {
+                    *end++ = 'l';
+                    *end++ = 'f';
+                }
+            }
+            *end++ = '\0';
+        }
+    }
+
     template <typename Writer>
     struct DebugDataWalker : DataWalker {
         using loop_point = pair<void *,uint64_t>;
@@ -315,21 +348,33 @@ namespace das {
             }
         }
         virtual void Float ( float & f ) override {
-            if ( int(flags) & int(PrintFlags::fixedFloatingPoint) )
-                ss << FIXEDFP << f << SCIENTIFIC;
-            else
-                ss << f;
-            if ( int(flags) & int(PrintFlags::typeQualifiers) ) {
-                ss << "f";
+            if ( int(flags) & int(PrintFlags::humanReadable) ) {
+                char buffer[128];
+                das_human_readable_fp(f, buffer, int(flags) & int(PrintFlags::typeQualifiers));
+                ss << buffer;
+            } else {
+                if ( int(flags) & int(PrintFlags::fixedFloatingPoint) )
+                    ss << FIXEDFP << f << SCIENTIFIC;
+                else
+                    ss << f;
+                if ( int(flags) & int(PrintFlags::typeQualifiers) ) {
+                    ss << "f";
+                }
             }
         }
         virtual void Double ( double & f ) override {
-            if ( int(flags) & int(PrintFlags::fixedFloatingPoint) )
-                ss << FIXEDFP << f << SCIENTIFIC;
-            else
-                ss << f;
-            if ( int(flags) & int(PrintFlags::typeQualifiers) ) {
-                ss << "lf";
+            if ( int(flags) & int(PrintFlags::humanReadable) ) {
+                char buffer[128];
+                das_human_readable_fp(f, buffer, int(flags) & int(PrintFlags::typeQualifiers));
+                ss << buffer;
+            } else {
+                if ( int(flags) & int(PrintFlags::fixedFloatingPoint) )
+                    ss << FIXEDFP << f << SCIENTIFIC;
+                else
+                    ss << f;
+                if ( int(flags) & int(PrintFlags::typeQualifiers) ) {
+                    ss << "lf";
+                }
             }
         }
         virtual void Int ( int32_t & i ) override {

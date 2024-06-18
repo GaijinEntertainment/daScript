@@ -1824,11 +1824,18 @@ namespace das {
     }
 
     template <typename TT>
+    __forceinline char * das_lexical_cast_fp ( TT x, Context * __context__, LineInfoArg * at ) {
+        char buffer[128];
+        das_human_readable_fp(x, buffer, false);
+        return __context__->allocateString(buffer,at);
+    }
+
+    template <typename TT>
     __forceinline char * das_lexical_cast_int ( TT x, bool hex, Context * __context__, LineInfoArg * at ) {
         char buffer[128];
         char * result;
         if ( hex ) {
-            result = fmt::format_to(buffer,"{:X}",x);
+            result = fmt::format_to(buffer,"{:#x}",x);
         } else {
             result = fmt::format_to(buffer,"{}",x);
         }
