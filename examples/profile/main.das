@@ -130,8 +130,8 @@ def make_table ( tablename:string; entries:array<ProfileEntry>; languages:table<
                 let time = cattime[l]
                 let mintime = categories[c]
                 let factor = time / mintime
-                let ts = format("%.4f", float(time))
-                let fs = format("%.2f", float(factor))
+                let ts = fmt(":.4f", float(time))
+                let fs = fmt(":.2f", float(factor))
                 if int(factor*100.0lf) == 100
                     print("<td><b>{fs} ({ts})</b></td>")
                 else

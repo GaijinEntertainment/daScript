@@ -118,6 +118,15 @@ namespace das
         }
     };
 
+    FunctionPtr Function::setDeprecated(const string & message) {
+        deprecated = true; // this is instead of apply above
+        AnnotationDeclarationPtr decl = make_smart<AnnotationDeclaration>();
+        decl->arguments.push_back(AnnotationArgument("message",message));
+        decl->annotation = make_smart<DeprecatedFunctionAnnotation>();
+        annotations.push_back(decl);
+        return this;
+    }
+
     struct NeverAliasCMRESFunctionAnnotation : MarkFunctionAnnotation {
         NeverAliasCMRESFunctionAnnotation() : MarkFunctionAnnotation("never_alias_cmres") { }
         virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {

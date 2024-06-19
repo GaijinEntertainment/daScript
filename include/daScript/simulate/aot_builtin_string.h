@@ -98,10 +98,50 @@ namespace das {
     }
 
     template <typename TT>
+    __forceinline char * fmt ( const char * fmt, TT value, Context * context, LineInfoArg * at ) {
+        char ffmt[64] = "{";
+        char buf[256];
+        char * head = ffmt + 1;
+        if ( fmt ) {
+            char * tail = ffmt + 61;
+            while ( head<tail && *fmt ) *head++ = *fmt++;
+        }
+        *head++ = '}'; *head = 0;
+        try {
+            auto result = fmt::format_to(buf, ffmt, value);
+            *result= 0;
+            return context->allocateString(buf, uint32_t(result-buf), at);
+        } catch (const std::exception & e) {
+            context->throw_error_at(at, "fmt error: %s", e.what());
+            return nullptr;
+        }
+    }
+
+    template <typename TT>
     StringBuilderWriter & format_and_write ( StringBuilderWriter & writer, const char * fmt, TT value  ) {
         char buf[256];
         snprintf(buf, 256, fmt ? fmt : "", value);
         writer.writeStr(buf, strlen(buf));
+        return writer;
+    }
+
+    template <typename TT>
+    StringBuilderWriter & fmt_and_write ( StringBuilderWriter & writer, const char * fmt, TT value, Context * context, LineInfoArg * at ) {
+        char ffmt[64] = "{";
+        char buf[256];
+        char * head = ffmt + 1;
+        if ( fmt ) {
+            char * tail = ffmt + 61;
+            while ( head<tail && *fmt ) *head++ = *fmt++;
+        }
+        *head++ = '}'; *head = 0;
+        try {
+            auto result = fmt::format_to(buf, ffmt, value);
+            *result = 0;
+            writer.writeStr(buf, result - buf);
+        } catch ( const std::exception & e ) {
+            context->throw_error_at(at, "fmt error: %s", e.what());
+        }
         return writer;
     }
 

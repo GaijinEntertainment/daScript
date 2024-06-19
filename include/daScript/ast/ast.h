@@ -793,6 +793,7 @@ namespace das
         FunctionPtr setTempResult();
         FunctionPtr setCaptureString();
         FunctionPtr setNoDiscard();
+        FunctionPtr setDeprecated(const string & message);
         FunctionPtr arg_init ( int argIndex, const ExpressionPtr & initValue ) {
             arguments[argIndex]->init = initValue;
             return this;
