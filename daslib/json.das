@@ -324,7 +324,7 @@ def private write_value ( var writer : StringBuilderWriter; jsv : JsonValue?; de
         write(writer, "\"")
     elif jsv.value is _number
         if no_trailing_zeros
-            write(writer, format("%.17f",jsv.value as _number) |> rtrim("0") |> rtrim("."))
+            write(writer, fmt(":.17f",jsv.value as _number) |> rtrim("0") |> rtrim("."))
         else
             write(writer, jsv.value as _number)
     elif jsv.value is _array

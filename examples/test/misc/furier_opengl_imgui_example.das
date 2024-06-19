@@ -100,10 +100,10 @@ def angle ( c:float2 )
     return atan2(C.y,C.x)
 
 def format_angle ( c:float2 )
-    return format("%.2f",angle(c) / PI) + "*PI"
+    return fmt(":.2f",angle(c) / PI) + "*PI"
 
 def format_length ( c:float2 )
-    return format("%.2f",length(c))
+    return fmt(":.2f",length(c))
 
 def editCoefficientsWindow(p_open: bool? implicit)
     if !Begin("Setup vectors and circles", p_open, ImGuiWindowFlags None)

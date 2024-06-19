@@ -1404,16 +1404,16 @@ class GlslExport : AstVisitor
         *writer |> write("{expr.value}")
 // const float
     def override preVisitExprConstFloat(expr:smart_ptr<ExprConstFloat>) : void
-        *writer |> format("%g",expr.value)
+        *writer |> fmt(":g",expr.value)
 // const float2
     def override preVisitExprConstFloat2(expr:smart_ptr<ExprConstFloat2>) : void
         if caps.output_compatibility_constructors
             *writer |> write("VEC2(")
         else
             *writer |> write("vec2(")
-        *writer |> format("%g", expr.value.x)
+        *writer |> fmt(":g", expr.value.x)
         *writer |> write(",")
-        *writer |> format("%g", expr.value.y)
+        *writer |> fmt(":g", expr.value.y)
         *writer |> write(")")
 // const float3
     def override preVisitExprConstFloat3(expr:smart_ptr<ExprConstFloat3>) : void
@@ -1421,11 +1421,11 @@ class GlslExport : AstVisitor
             *writer |> write("VEC3(")
         else
             *writer |> write("vec3(")
-        *writer |> format("%g", expr.value.x)
+        *writer |> fmt(":g", expr.value.x)
         *writer |> write(",")
-        *writer |> format("%g", expr.value.y)
+        *writer |> fmt(":g", expr.value.y)
         *writer |> write(",")
-        *writer |> format("%g", expr.value.z)
+        *writer |> fmt(":g", expr.value.z)
         *writer |> write(")")
 // const float4
     def override preVisitExprConstFloat4(expr:smart_ptr<ExprConstFloat4>) : void
@@ -1433,13 +1433,13 @@ class GlslExport : AstVisitor
             *writer |> write("VEC4(")
         else
             *writer |> write("vec4(")
-        *writer |> format("%g", expr.value.x)
+        *writer |> fmt(":g", expr.value.x)
         *writer |> write(",")
-        *writer |> format("%g", expr.value.y)
+        *writer |> fmt(":g", expr.value.y)
         *writer |> write(",")
-        *writer |> format("%g", expr.value.z)
+        *writer |> fmt(":g", expr.value.z)
         *writer |> write(",")
-        *writer |> format("%g", expr.value.w)
+        *writer |> fmt(":g", expr.value.w)
         *writer |> write(")")
 // string
     def override preVisitExprConstString(expr:smart_ptr<ExprConstString>) : void

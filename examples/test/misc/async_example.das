@@ -7,7 +7,7 @@ require daslib/coroutines
 let begin = ref_time_ticks()
 
 def log(msg)
-    print("{format("%0.3f", float(get_time_usec(begin)) / 1000000.)}: {msg}")
+    print("{fmt(":0.3f", float(get_time_usec(begin)) / 1000000.)}: {msg}")
 
 struct Data
     a : int
