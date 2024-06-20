@@ -378,7 +378,7 @@ def main
     draw(i, width, height, 0, height, backbuffer, totalRays)
     var dt = get_time_usec(t0)
     var sec = double(dt)/1000000.0lf
-    print("JIT: {totalRays} in {sec} sec, {format("%.3f",double(totalRays)/double(dt))} mrays/sec\n")
+    print("JIT: {totalRays} in {sec} sec, {fmt(":.3f",double(totalRays)/double(dt))} mrays/sec\n")
 
     var pixels : array<uint>
     pixels |> reserve(width*height)

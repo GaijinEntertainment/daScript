@@ -2,12 +2,14 @@ require dastest/testing_boost
 
 require jit
 
+[safe_when_uninitialized]
 struct Foo
     a : int = 1234
     b : float = 1234.0
     c : string = "1234"
     d : int = 1234
 
+[safe_when_uninitialized]
 struct Bar
     a : int = 13
     foo : Foo
