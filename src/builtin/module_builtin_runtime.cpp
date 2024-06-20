@@ -442,11 +442,11 @@ namespace das
         }
     };
 
-    struct UnsafeWhenUninitializedAnnotation : StructureAnnotation {
-        UnsafeWhenUninitializedAnnotation() : StructureAnnotation("unsafe_when_uninitialized") {}
+    struct SafeWhenUninitializedAnnotation : StructureAnnotation {
+        SafeWhenUninitializedAnnotation() : StructureAnnotation("safe_when_uninitialized") {}
         virtual bool touch(const StructurePtr & ps, ModuleGroup &,
                            const AnnotationArgumentList & args, string & ) override {
-            ps->unsafeWhenUninitialized = true;
+            ps->safeWhenUninitialized = true;
             return true;
         }
         virtual bool look ( const StructurePtr &, ModuleGroup &,
@@ -1479,7 +1479,7 @@ namespace das
         addAnnotation(make_smart<SkipLockCheckStructureAnnotation>());
         addAnnotation(make_smart<MarkFunctionOrBlockAnnotation>());
         addAnnotation(make_smart<CppAlignmentAnnotation>());
-        addAnnotation(make_smart<UnsafeWhenUninitializedAnnotation>());
+        addAnnotation(make_smart<SafeWhenUninitializedAnnotation>());
         addAnnotation(make_smart<GenericFunctionAnnotation>());
         addAnnotation(make_smart<MacroFunctionAnnotation>());
         addAnnotation(make_smart<MacroFnFunctionAnnotation>());

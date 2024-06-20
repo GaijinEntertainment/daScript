@@ -51,6 +51,7 @@ namespace das {
             strictUnsafeDelete = prog->options.getBoolOption("strict_unsafe_delete", prog->policies.strict_unsafe_delete);
             reportInvisibleFunctions = prog->options.getBoolOption("report_invisible_functions", prog->policies.report_invisible_functions);
             reportPrivateFunctions = prog->options.getBoolOption("report_private_functions", prog->policies.report_private_functions);
+            noUnsafeUninitializedStructs = prog->options.getBoolOption("no_unsafe_uninitialized_structures", prog->policies.no_unsafe_uninitialized_structures);
         }
         bool finished() const { return !needRestart; }
         bool verbose = true;
@@ -87,6 +88,7 @@ namespace das {
         bool                    strictUnsafeDelete = false;
         bool                    reportInvisibleFunctions = false;
         bool                    reportPrivateFunctions = false;
+        bool                    noUnsafeUninitializedStructs = false;
     public:
         vector<FunctionPtr>     extraFunctions;
     protected:
@@ -1639,6 +1641,7 @@ namespace das {
             cppLayoutPod = !that->cppLayoutNotPod;
             cppLayoutParent = nullptr;
             that->fieldLookup.clear();
+            that->hasInitFields = false;
             fieldIndex = 0;
         }
         virtual void preVisitStructureField ( Structure * that, Structure::FieldDeclaration & decl, bool last ) override {
@@ -1650,6 +1653,7 @@ namespace das {
             }
         }
         virtual void visitStructureField ( Structure * st, Structure::FieldDeclaration & decl, bool ) override {
+            if ( decl.init ) st->hasInitFields = true;
             if ( decl.type && decl.type->isExprType() ) {
                 return;
             }
@@ -7925,9 +7929,11 @@ namespace das {
                     error("Constructing class on stack is unsafe. Allocate it on the heap via new [[...]] or new " + expr->makeType->structType->name + "() instead.", "", "",
                         expr->at, CompilationError::unsafe);
                 }
-            } else if ( !(expr->useInitializer||expr->usedInitializer) && expr->makeType->structType && expr->makeType->structType->unsafeWhenUninitialized ) {
+            } else if ( noUnsafeUninitializedStructs && !(expr->useInitializer||expr->usedInitializer) && expr->makeType->structType
+                && !expr->makeType->structType->safeWhenUninitialized && !expr->makeType->structType->isLambda
+                    && expr->makeType->structType->hasInitFields ) {
                 if ( !safeExpression(expr) ) {
-                    error("Uninitialized structure " + expr->makeType->structType->name + " is unsafe (maked [unsafe_if_uninitalized]). Use initializer syntax.", "", "",
+                    error("Uninitialized structure " + expr->makeType->structType->name + " is unsafe. Use initializer syntax or [safe_when_uninitialized] when intended.", "", "",
                         expr->at, CompilationError::unsafe);
                 }
             }

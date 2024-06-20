@@ -173,7 +173,8 @@ namespace das {
         ft->argNames = { "isClass", "genCtor", "cppLayout", "cppLayoutNotPod",
             "generated", "persistent", "isLambda", "privateStructure",
             "macroInterface", "_sealed", "skipLockCheck", "circular",
-            "_generator", "hasStaticMembers", "hasStaticFunctions", "unsafeWhenUninitialized" };
+            "_generator", "hasStaticMembers", "hasStaticFunctions",
+            "hasInitFields", "safeWhenUninitialized" };
         return ft;
     }
 
