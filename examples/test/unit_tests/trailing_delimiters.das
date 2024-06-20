@@ -1,6 +1,6 @@
 require dastest/testing_boost public
 
-
+[safe_when_uninitialized]
 struct AAA
     x : int = 1
     y : int = 1

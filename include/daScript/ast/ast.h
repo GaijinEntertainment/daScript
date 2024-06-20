@@ -293,7 +293,8 @@ namespace das
                 bool    generator : 1;
                 bool    hasStaticMembers : 1;
                 bool    hasStaticFunctions : 1;
-                bool    unsafeWhenUninitialized : 1;
+                bool    hasInitFields : 1;
+                bool    safeWhenUninitialized : 1;
             };
             uint32_t    flags = 0;
         };
@@ -1386,6 +1387,7 @@ namespace das
         bool no_local_class_members = true;             // members of the class can't be classes
         bool report_invisible_functions = true;         // report invisible functions (report functions not visible from current module)
         bool report_private_functions = true;           // report private functions (report functions which are not accessible due to private module)
+        bool no_unsafe_uninitialized_structures = false;// if true, then unsafe uninitialized structures are not allowed
     // environment
         bool no_optimizations = false;                  // disable optimizations, regardless of settings
         bool fail_on_no_aot = true;                     // AOT link failure is error

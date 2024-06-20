@@ -46,7 +46,6 @@ def SuiteCtx(args: array<string>): SuiteCtx
     collect_tests_names(args, ctx.testNames)
     return <- ctx
 
-
 struct FileCtx
     [[do_not_delete]] context: rtti::Context?
     uriPaths: bool = false
@@ -64,7 +63,7 @@ def FileCtx(ctx: SuiteCtx): FileCtx
 
 
 def private internalFileCtx(ctx: SuiteCtx): FileCtx
-    return <- [[FileCtx uriPaths=ctx.uriPaths, verbose=ctx.verbose]]
+    return <- [[FileCtx() uriPaths=ctx.uriPaths, verbose=ctx.verbose]]
 
 
 def private match_test_name(name: string; ctx: SuiteCtx)

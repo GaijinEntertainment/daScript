@@ -824,6 +824,7 @@ namespace das {
         "disable_run",                  Type::tBool,
         "max_infer_passes",             Type::tInt,
         "indenting",                    Type::tInt,
+        "no_unsafe_uninitialized_structures", Type::tBool,
     // debugger
         "debugger",                     Type::tBool,
     // profiler
