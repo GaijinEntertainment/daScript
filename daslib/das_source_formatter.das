@@ -40,6 +40,7 @@ struct TokenTemplate
     codes: array<uint8>
     length: int = 0
 
+[safe_when_uninitialized]
 struct Token
     str: string
     spaces: int = 0
