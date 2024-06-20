@@ -139,7 +139,7 @@ def lower_bound ( a; f, l : int; val:auto(TT); less : block<(a, b:TT const-&):bo
         return -1
     else
         unsafe
-            return lower_bound(temp_array(a), f, l, value, less)
+            return lower_bound(temp_array(a), f, l, val, less)
 
 [expect_any_array(a)]
 def lower_bound ( a; val:auto(TT); less : block<(a, b:TT const-&):bool> )
