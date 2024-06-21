@@ -797,7 +797,8 @@ namespace das {
             for ( uint32_t i=0, is=totalLabels; i!=is; ++i ) {
                 if ( labels[i]!=-1U ) {
                     char name[32];
-                    snprintf(name, 32, "label_%i", i);
+                    auto result = fmt::format_to(name, "label_{}", i);
+                    *result = 0;
                     vis.arg(labels[i], name);
                 }
             }
@@ -911,12 +912,12 @@ namespace das {
     SimNode * SimNode_ForBase::visitFor ( SimVisitor & vis, int totalC, const char * loopName ) {
         char nbuf[32];
         V_BEGIN_CR();
-        snprintf(nbuf, sizeof(nbuf), "%s_%i", loopName, total );
+        auto result = fmt::format_to(nbuf, "{}_{}", loopName, total); *result = 0;
         vis.op(nbuf);
         for ( int t=0; t!=totalC; ++t ) {
-            snprintf(nbuf, sizeof(nbuf), "stackTop[%i]", t );
+            result = fmt::format_to(nbuf, "stackTop[{}]", t); *result = 0;
             vis.sp(stackTop[t],nbuf);
-            snprintf(nbuf, sizeof(nbuf), "strides[%i]", t );
+            result = fmt::format_to(nbuf, "strides[{}]", t); *result = 0;
             vis.arg(strides[t],nbuf);
             sources[t] = vis.sub(sources[t]);
         }
@@ -928,10 +929,10 @@ namespace das {
     SimNode * SimNode_ForWithIteratorBase::visitFor ( SimVisitor & vis, int totalC ) {
         char nbuf[32];
         V_BEGIN_CR();
-        snprintf(nbuf, sizeof(nbuf), "ForWithIterator_%i", total );
+        auto result = fmt::format_to(nbuf, "ForWithIterator_{}", total); *result = 0;
         vis.op(nbuf);
         for ( int t=0; t!=totalC; ++t ) {
-            snprintf(nbuf, sizeof(nbuf), "stackTop[%i]", t );
+            result = fmt::format_to(nbuf, "stackTop[{}]", t); *result = 0;
             vis.sp(stackTop[t],nbuf);
             source_iterators[t] = vis.sub(source_iterators[t]);
         }

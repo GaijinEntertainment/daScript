@@ -403,12 +403,13 @@ extern "C" {
         }
 
         #if defined(_WIN32) || defined(_WIN64)
-            snprintf(cmd, sizeof(cmd), "clang-cl %s %s -link -DLL -OUT:%s 2>&1", objFilePath, jitModuleObj, libraryName);
+            auto result = fmt::format_to(cmd, "clang-cl {} {} -link -DLL -OUT:{} 2>&1", objFilePath, jitModuleObj, libraryName);
         #elif defined(__APPLE__)
-            snprintf(cmd, sizeof(cmd), "clang -shared -o %s %s %s 2>&1", libraryName, objFilePath, jitModuleObj);
+            auto result = fmt::format_to(cmd, "clang -shared -o {} {} {} 2>&1", libraryName, objFilePath, jitModuleObj);
         #else
-            snprintf(cmd, sizeof(cmd), "gcc -shared -o %s %s %s 2>&1", libraryName, objFilePath, jitModuleObj);
+            auto result = fmt::format_to(cmd, "gcc -shared -o {} {} {} 2>&1", libraryName, objFilePath, jitModuleObj);
         #endif
+            *result = '\0';
 
 #if defined(_WIN32) || defined(_WIN64)
     #define popen _popen
