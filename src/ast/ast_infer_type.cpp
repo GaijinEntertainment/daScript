@@ -8026,6 +8026,38 @@ namespace das {
             }
             return Visitor::visitMakeStructureField(expr,index,decl,last);
         }
+        virtual ExpressionPtr structToTuple ( const TypeDeclPtr & makeType, const MakeStructPtr & st, const LineInfo & at ) {
+            if ( makeType->isAutoOrAlias() ) { // not fully inferred?
+                error("can't infer tuple type " + describeType(makeType), "", "",
+                    at, CompilationError::invalid_type);
+                return nullptr;
+            }
+            auto mkt = make_smart<ExprMakeTuple>(at);
+            mkt->recordType = make_smart<TypeDecl>(*makeType);
+            mkt->values.resize(makeType->argTypes.size());
+            for ( auto & fld : *st ) {
+                auto idx = makeType->findArgumentIndex(fld->name);
+                if ( idx==-1 ) {
+                    error("tuple field not found, " + fld->name, "", "",
+                        fld->at, CompilationError::cant_get_field);
+                    return nullptr;
+                } else if ( mkt->values[idx] ) {
+                    error("tuple field already initialized, " + fld->name, "", "",
+                        fld->at, CompilationError::field_already_initialized);
+                    return nullptr;
+                } else {
+                    mkt->values[idx] = fld->value->clone();
+                }
+            }
+            for ( size_t i=0, s=mkt->values.size(); i!=s; ++i ) {
+                if ( !mkt->values[i] ) {
+                    auto mks = make_smart<ExprMakeStruct>(at);
+                    mks->makeType = make_smart<TypeDecl>(*makeType->argTypes[i]);
+                    mkt->values[i] = mks;
+                }
+            }
+            return mkt;
+        }
         virtual ExpressionPtr visit ( ExprMakeStruct * expr ) override {
             if ( expr->makeType && expr->makeType->isExprType() ) {
                 return Visitor::visit(expr);
@@ -8118,6 +8150,34 @@ namespace das {
                     return mkv;
                 }
             }
+            // promote to make tuple
+            if ( expr->makeType->baseType == Type::tTuple && expr->structs.size() ) {
+                if ( expr->block ) {
+                    error("[[tuple]] can't have where closure",  "", "",
+                        expr->block->at, CompilationError::invalid_block );
+                    return Visitor::visit(expr);
+                }
+                if ( expr->structs.size() == 1 ) {
+                    auto mkt = structToTuple(expr->makeType, expr->structs.front(), expr->at);
+                    if ( mkt ) {
+                        reportAstChanged();
+                        return mkt;
+                    }
+                } else {
+                    auto mka = make_smart<ExprMakeArray>(expr->at);
+                    mka->makeType = make_smart<TypeDecl>(*expr->makeType);
+                    mka->values.resize(expr->structs.size());
+                    for ( size_t i=0; i!=expr->structs.size(); ++i ) {
+                        mka->values[i] = structToTuple(expr->makeType, expr->structs[i], expr->at);
+                        if ( !mka->values[i] ) {
+                            return Visitor::visit(expr);
+                        }
+                    }
+                    reportAstChanged();
+                    return mka;
+                }
+            }
+
             // see if there are any duplicate fields
             if ( expr->makeType->baseType == Type::tStructure ) {
                 bool anyDuplicates = false;
@@ -8314,6 +8374,9 @@ namespace das {
                     valT->ref = false;
                     valT->constant = false;
                     mkt->argTypes.push_back(valT);
+                    if ( expr->recordType->argNames.size() > ai ) {
+                        mkt->argNames.push_back(expr->recordType->argNames[ai]);
+                    }
                 }
                 expr->makeType = mkt;
             } else {
