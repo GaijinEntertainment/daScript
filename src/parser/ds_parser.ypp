@@ -2825,27 +2825,20 @@ type_declaration
 
 tuple_alias_declaration
     :   DAS_TTUPLE optional_public_or_private_alias[pubA] { yyextra->das_need_oxford_comma=false; } NAME[vname] {
-        /*
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto atvname = tokAt(scanner,@vname);
-            for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeVariant(atvname);
+            for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeTuple(atvname);
         }
-        */
     } '{' {
-        /*
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto atvname = tokAt(scanner,@vname);
-            for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeVariantEntries(atvname);
+            for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeTupleEntries(atvname);
         }
-        */
-
     } tuple_alias_type_list[list] {
-        /*
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto atvname = tokAt(scanner,@vname);
-            for ( auto & crd : yyextra->g_CommentReaders ) crd->afterVariantEntries(atvname);
+            for ( auto & crd : yyextra->g_CommentReaders ) crd->afterTupleEntries(atvname);
         }
-        */
     } '}' {
         auto vtype = make_smart<TypeDecl>(Type::tTuple);
         vtype->alias = *$vname;
@@ -2857,12 +2850,10 @@ tuple_alias_declaration
             das_yyerror(scanner,"type alias is already defined "+*$vname,tokAt(scanner,@vname),
                 CompilationError::type_alias_already_declared);
         }
-        /*
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto atvname = tokAt(scanner,@vname);
-            for ( auto & crd : yyextra->g_CommentReaders ) crd->afterVariant($vname->c_str(),atvname);
+            for ( auto & crd : yyextra->g_CommentReaders ) crd->afterTuple($vname->c_str(),atvname);
         }
-        */
         delete $vname;
     }
     ;

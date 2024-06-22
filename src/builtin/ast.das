@@ -142,6 +142,11 @@ class AstCommentReader
     def abstract afterVariantEntry ( name:string; prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
     def abstract afterVariantEntries ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
     def abstract afterVariant ( name:string; prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+    def abstract beforeTuple ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+    def abstract beforeTupleEntries ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+    def abstract afterTupleEntry ( name:string; prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+    def abstract afterTupleEntries ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+    def abstract afterTuple ( name:string; prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
     def abstract beforeBitfield ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
     def abstract beforeBitfieldEntries ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
     def abstract afterBitfieldEntry ( name:string; prog:ProgramPtr; mod:Module?; info:LineInfo ) : void

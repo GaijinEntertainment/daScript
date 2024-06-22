@@ -1859,6 +1859,56 @@ namespace das {
                 });
             }
         }
+        virtual void beforeTuple ( const LineInfo & info ) override {
+            if ( auto fnTuple = get_beforeTuple(classPtr) ) {
+                runMacroFunction(context, "beforeTuple", [&]() {
+                    invoke_beforeTuple(context,fnTuple,classPtr,
+                        daScriptEnvironment::bound->g_Program,
+                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                            info);
+                });
+            }
+        }
+        virtual void beforeTupleEntries ( const LineInfo & info ) override {
+            if ( auto fnTuple = get_beforeTupleEntries(classPtr) ) {
+                runMacroFunction(context, "beforeTupleEntries", [&]() {
+                    invoke_beforeTupleEntries(context,fnTuple,classPtr,
+                        daScriptEnvironment::bound->g_Program,
+                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                            info);
+                });
+            }
+        }
+        virtual void afterTupleEntry ( const char * name, const LineInfo & info ) override {
+            if ( auto fnTuple = get_afterTupleEntry(classPtr) ) {
+                runMacroFunction(context, "afterTupleEntry", [&]() {
+                    invoke_afterTupleEntry(context,fnTuple,classPtr,
+                        (char *) name, daScriptEnvironment::bound->g_Program,
+                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                            info);
+                });
+            }
+        }
+        virtual void afterTupleEntries ( const LineInfo & info ) override {
+            if ( auto fnTuple = get_afterTupleEntries(classPtr) ) {
+                runMacroFunction(context, "afterTupleEntries", [&]() {
+                    invoke_afterTupleEntries(context,fnTuple,classPtr,
+                        daScriptEnvironment::bound->g_Program,
+                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                            info);
+                });
+            }
+        }
+        virtual void afterTuple ( const char * name, const LineInfo & info ) override {
+            if ( auto fnTuple = get_afterTuple(classPtr) ) {
+                runMacroFunction(context, "afterTuple", [&]() {
+                    invoke_afterTuple(context,fnTuple,classPtr,
+                        (char *) name, daScriptEnvironment::bound->g_Program,
+                        daScriptEnvironment::bound->g_Program->thisModule.get(),
+                            info);
+                });
+            }
+        }
         virtual void beforeVariant ( const LineInfo & info ) override {
             if ( auto fnVariant = get_beforeVariant(classPtr) ) {
                 runMacroFunction(context, "beforeVariant", [&]() {

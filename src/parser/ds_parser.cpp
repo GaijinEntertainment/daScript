@@ -1074,15 +1074,15 @@ static const yytype_int16 yyrline[] =
     2717,  2717,  2723,  2723,  2723,  2728,  2732,  2732,  2732,  2737,
     2737,  2737,  2746,  2750,  2750,  2750,  2755,  2755,  2755,  2764,
     2768,  2768,  2768,  2773,  2773,  2773,  2782,  2782,  2782,  2788,
-    2788,  2788,  2797,  2800,  2811,  2827,  2827,  2834,  2842,  2827,
-    2871,  2871,  2876,  2882,  2871,  2907,  2907,  2912,  2917,  2907,
-    2947,  2948,  2949,  2950,  2951,  2955,  2962,  2969,  2975,  2981,
-    2988,  2995,  3001,  3011,  3016,  3023,  3024,  3029,  3030,  3034,
-    3035,  3039,  3040,  3044,  3045,  3046,  3050,  3051,  3052,  3057,
-    3063,  3070,  3078,  3085,  3093,  3105,  3108,  3114,  3128,  3134,
-    3140,  3149,  3154,  3161,  3166,  3173,  3181,  3181,  3181,  3189,
-    3196,  3196,  3196,  3206,  3211,  3218,  3221,  3227,  3236,  3244,
-    3252,  3265,  3266,  3270,  3273
+    2788,  2788,  2797,  2800,  2811,  2827,  2827,  2832,  2837,  2827,
+    2862,  2862,  2867,  2873,  2862,  2898,  2898,  2903,  2908,  2898,
+    2938,  2939,  2940,  2941,  2942,  2946,  2953,  2960,  2966,  2972,
+    2979,  2986,  2992,  3002,  3007,  3014,  3015,  3020,  3021,  3025,
+    3026,  3030,  3031,  3035,  3036,  3037,  3041,  3042,  3043,  3048,
+    3054,  3061,  3069,  3076,  3084,  3096,  3099,  3105,  3119,  3125,
+    3131,  3140,  3145,  3152,  3157,  3164,  3172,  3172,  3172,  3180,
+    3187,  3187,  3187,  3197,  3202,  3209,  3212,  3218,  3227,  3235,
+    3243,  3256,  3257,  3261,  3264
 };
 #endif
 
@@ -9632,35 +9632,28 @@ yyreduce:
 
   case 696: /* $@70: %empty  */
                                                                                                                 {
-        /*
         if ( !yyextra->g_CommentReaders.empty() ) {
-            auto atvname = tokAt(scanner,@vname);
-            for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeVariant(atvname);
+            auto atvname = tokAt(scanner,(yylsp[0]));
+            for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeTuple(atvname);
         }
-        */
     }
     break;
 
   case 697: /* $@71: %empty  */
           {
-        /*
         if ( !yyextra->g_CommentReaders.empty() ) {
-            auto atvname = tokAt(scanner,@vname);
-            for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeVariantEntries(atvname);
+            auto atvname = tokAt(scanner,(yylsp[-2]));
+            for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeTupleEntries(atvname);
         }
-        */
-
     }
     break;
 
   case 698: /* $@72: %empty  */
                                   {
-        /*
         if ( !yyextra->g_CommentReaders.empty() ) {
-            auto atvname = tokAt(scanner,@vname);
-            for ( auto & crd : yyextra->g_CommentReaders ) crd->afterVariantEntries(atvname);
+            auto atvname = tokAt(scanner,(yylsp[-4]));
+            for ( auto & crd : yyextra->g_CommentReaders ) crd->afterTupleEntries(atvname);
         }
-        */
     }
     break;
 
@@ -9676,12 +9669,10 @@ yyreduce:
             das_yyerror(scanner,"type alias is already defined "+*(yyvsp[-6].s),tokAt(scanner,(yylsp[-6])),
                 CompilationError::type_alias_already_declared);
         }
-        /*
         if ( !yyextra->g_CommentReaders.empty() ) {
-            auto atvname = tokAt(scanner,@vname);
-            for ( auto & crd : yyextra->g_CommentReaders ) crd->afterVariant($vname->c_str(),atvname);
+            auto atvname = tokAt(scanner,(yylsp[-6]));
+            for ( auto & crd : yyextra->g_CommentReaders ) crd->afterTuple((yyvsp[-6].s)->c_str(),atvname);
         }
-        */
         delete (yyvsp[-6].s);
     }
     break;

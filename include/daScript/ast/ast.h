@@ -1433,6 +1433,11 @@ namespace das
         virtual void afterVariantEntry ( const char * name, const LineInfo & at ) = 0;
         virtual void afterVariantEntries ( const LineInfo & at ) = 0;
         virtual void afterVariant ( const char * name, const LineInfo & at ) = 0;
+        virtual void beforeTuple ( const LineInfo & at ) = 0;
+        virtual void beforeTupleEntries ( const LineInfo & at ) = 0;
+        virtual void afterTupleEntry ( const char * name, const LineInfo & at ) = 0;
+        virtual void afterTupleEntries ( const LineInfo & at ) = 0;
+        virtual void afterTuple ( const char * name, const LineInfo & at ) = 0;
         virtual void beforeBitfield ( const LineInfo & at ) = 0;
         virtual void beforeBitfieldEntries ( const LineInfo & at ) = 0;
         virtual void afterBitfieldEntry ( const char * name, const LineInfo & at ) = 0;

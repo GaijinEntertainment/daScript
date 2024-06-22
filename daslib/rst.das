@@ -328,6 +328,15 @@ def document_variant(doc_file:file; value:TypeDeclPtr)
         emplace(tab,line)
     fwrite(doc_file,make_table(tab))
 
+def document_tuple(doc_file:file; value:TypeDeclPtr)
+    var tab : array<array<string>>
+    for an,at in value.argNames,value.argTypes
+        var line : array<string>
+        push(line,string(an))
+        push(line,describe_type(at))
+        emplace(tab,line)
+    fwrite(doc_file,make_table(tab))
+
 def document_typedef(doc_file:file;mod:Module?;name:string implicit;value)
     fwrite(doc_file,make_label(alias_label_name(value)))
     fwrite(doc_file,make_domain("das:attribute"))
@@ -338,6 +347,9 @@ def document_typedef(doc_file:file;mod:Module?;name:string implicit;value)
     elif value.baseType==Type tVariant
         fwrite(doc_file," is a variant type\n\n")
         document_variant(doc_file,value)
+    elif value.baseType==Type tTuple
+        fwrite(doc_file," is a tuple type\n\n")
+        document_tuple(doc_file,value)
     else
         var tp = describe(value,false,false,false)
         tp = replace(tp,"$::","")
