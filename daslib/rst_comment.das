@@ -20,6 +20,8 @@ enum ParserState
     global
     variant_alias
     variant_entry
+    tuple_alias
+    tuple_entry
     bitfield_alias
     bitfield_entry
     enum_decl
@@ -58,6 +60,8 @@ class RstComment : AstCommentReader
     field_comment : string
     variant_comment : string
     variant_entry_comment : string
+    tuple_comment : string
+    tuple_entry_comment : string
     bitfield_comment : string
     bitfield_entry_comment : string
     enum_comment : string
@@ -92,6 +96,10 @@ class RstComment : AstCommentReader
             variant_comment += comment
         elif state==ParserState variant_entry
             variant_entry_comment += comment
+        elif state==ParserState tuple_alias
+            tuple_comment += comment
+        elif state==ParserState tuple_entry
+            tuple_entry_comment += comment
         elif state==ParserState bitfield_alias
             bitfield_comment += comment
         elif state==ParserState bitfield_entry
@@ -172,6 +180,35 @@ class RstComment : AstCommentReader
             write_to_detail("typedef-{prog.thisModuleName}-{name}", bitfield_comment)
         state = ParserState none
         bitfield_comment = ""
+    def override beforeTuple ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+        debug_rst("beforeTuple")
+        if state != ParserState none
+            panic_rst("expecting none, got {state}")
+        state = ParserState tuple_alias
+    def override beforeTupleEntries ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+        debug_rst("beforeTupleEntries")
+        if state != ParserState tuple_alias
+            panic_rst("expecting tuple_alias, got {state}")
+        state = ParserState tuple_entry
+        tuple_entry_comment = ""
+    def override afterTupleEntry ( name:string; prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+        debug_rst("afterTupleEntry {name} // {tuple_entry_comment}")
+        if state != ParserState tuple_entry
+            panic_rst("expecting tuple_entry, got {state}")
+        tuple_entry_comment = ""
+    def override afterTupleEntries ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+        debug_rst("afterTupleEntries")
+        if state != ParserState tuple_entry
+            panic_rst("expecting none, got {state}")
+        state = ParserState tuple_alias
+    def override afterTuple ( name:string; prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
+        debug_rst("afterTuple {name} // {tuple_comment}")
+        if state != ParserState tuple_alias
+            panic_rst("expecting tuple_alias, got {state}")
+        if tuple_comment != ""
+            write_to_detail("typedef-{prog.thisModuleName}-{name}", tuple_comment)
+        state = ParserState none
+        tuple_comment = ""
     def override beforeVariant ( prog:ProgramPtr; mod:Module?; info:LineInfo ) : void
         debug_rst("beforeVariant")
         if state != ParserState none

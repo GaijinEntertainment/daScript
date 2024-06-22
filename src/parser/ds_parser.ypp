@@ -355,6 +355,7 @@
 %type <pVarDecl>        tuple_expansion_variable_declaration
 %type <pVarDecl>        tuple_type
 %type <pVarDeclList>    tuple_type_list
+%type <pVarDeclList>    tuple_alias_type_list
 %type <pVarDecl>        variant_type
 %type <pVarDeclList>    variant_type_list
 %type <pVarDeclList>    variant_alias_type_list
@@ -522,6 +523,7 @@ program
     |   program options_declaration
     |   program alias_declaration               { yyextra->das_has_type_declarations = true; }
     |   program variant_alias_declaration       { yyextra->das_has_type_declarations = true; }
+    |   program tuple_alias_declaration         { yyextra->das_has_type_declarations = true; }
     |   program bitfield_alias_declaration      { yyextra->das_has_type_declarations = true; }
     |   program top_level_reader_macro
     |   program ';'
@@ -2033,6 +2035,28 @@ tuple_type_list
     |   tuple_type_list[list] ';' tuple_type[decl]     { $$ = $list; $list->push_back($decl); }
     ;
 
+tuple_alias_type_list
+    :   {
+        $$ = new vector<VariableDeclaration*>();
+    }
+    | tuple_alias_type_list[list] ';' {
+        $$ = $list;
+    }
+    |   tuple_alias_type_list[list] tuple_type[decl] ';' {
+        $$ = $list; $list->push_back($decl);
+        /*
+        if ( !yyextra->g_CommentReaders.empty() ) {
+            auto tokName = tokAt(scanner,@decl);
+            for ( auto & crd : yyextra->g_CommentReaders ) {
+                for ( const auto & nl : *($decl->pNameList) ) {
+                    crd->afterVariantEntry(nl.name.c_str(), nl.at);
+                }
+            }
+        }
+        */
+    }
+    ;
+
 variant_type
     :   NAME[name] ':' type_declaration [typeDecl] {
         auto na = new vector<VariableNameAndPosition>();
@@ -2796,6 +2820,41 @@ type_declaration
             $$->argTypes.push_back(make_smart<TypeDecl>(*$list));
             $$->argTypes.back()->temporary ^= true;
         }
+    }
+    ;
+
+tuple_alias_declaration
+    :   DAS_TTUPLE optional_public_or_private_alias[pubA] { yyextra->das_need_oxford_comma=false; } NAME[vname] {
+        if ( !yyextra->g_CommentReaders.empty() ) {
+            auto atvname = tokAt(scanner,@vname);
+            for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeTuple(atvname);
+        }
+    } '{' {
+        if ( !yyextra->g_CommentReaders.empty() ) {
+            auto atvname = tokAt(scanner,@vname);
+            for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeTupleEntries(atvname);
+        }
+    } tuple_alias_type_list[list] {
+        if ( !yyextra->g_CommentReaders.empty() ) {
+            auto atvname = tokAt(scanner,@vname);
+            for ( auto & crd : yyextra->g_CommentReaders ) crd->afterTupleEntries(atvname);
+        }
+    } '}' {
+        auto vtype = make_smart<TypeDecl>(Type::tTuple);
+        vtype->alias = *$vname;
+        vtype->at = tokAt(scanner,@vname);
+        vtype->isPrivateAlias = !$pubA;
+        varDeclToTypeDecl(scanner, vtype.get(), $list, true);
+        deleteVariableDeclarationList($list);
+        if ( !yyextra->g_Program->addAlias(vtype) ) {
+            das_yyerror(scanner,"type alias is already defined "+*$vname,tokAt(scanner,@vname),
+                CompilationError::type_alias_already_declared);
+        }
+        if ( !yyextra->g_CommentReaders.empty() ) {
+            auto atvname = tokAt(scanner,@vname);
+            for ( auto & crd : yyextra->g_CommentReaders ) crd->afterTuple($vname->c_str(),atvname);
+        }
+        delete $vname;
     }
     ;
 
