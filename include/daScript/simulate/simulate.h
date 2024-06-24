@@ -174,15 +174,6 @@ namespace das
     } }
 
 #if DAS_ENABLE_EXCEPTIONS
-#if __APPLE__
-    class dasException final : public std::runtime_error {
-    public:
-        dasException ( const char * why, const LineInfo & at )
-            : runtime_error(why?why:""), exceptionAt(at) {}
-    public:
-        LineInfo exceptionAt;
-    };
-#else
     class dasException final : public std::exception {
     public:
         dasException ( const char * why, const LineInfo & at )
@@ -194,7 +185,6 @@ namespace das
         LineInfo exceptionAt;
         const char * exceptionWhat = nullptr;
     };
-#endif
 #endif
 
     struct SimVisitor {

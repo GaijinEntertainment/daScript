@@ -3,7 +3,7 @@ project (DAS)
 include(GNUInstallDirs)
 
 # for now we gonna run with exceptions enabled
-add_compile_definitions(DAS_ENABLE_EXCEPTIONS=1)
+#add_compile_definitions(DAS_ENABLE_EXCEPTIONS=1)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
