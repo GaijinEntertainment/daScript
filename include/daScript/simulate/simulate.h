@@ -177,7 +177,7 @@ namespace das
     class dasException final : public std::exception {
     public:
         dasException ( const char * why, const LineInfo & at )
-            : exception(why), exceptionAt(at), exceptionWhat(why) {}
+            : exceptionAt(at), exceptionWhat(why) {}
         virtual char const* what() const noexcept override {
             return exceptionWhat ? exceptionWhat : "unknown exception";
         }
