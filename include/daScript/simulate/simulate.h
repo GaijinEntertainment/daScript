@@ -178,7 +178,7 @@ namespace das
     public:
         dasException ( const char * why, const LineInfo & at )
             : exception(why), exceptionAt(at), exceptionWhat(why) {}
-        virtual char const* what() const {
+        virtual char const* what() const override {
             return exceptionWhat ? exceptionWhat : "unknown exception";
         }
     public:
