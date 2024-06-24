@@ -25,7 +25,7 @@
 namespace das {
 
     void Context::throw_fatal_error ( const char * message, const LineInfo & at ) {
-        exceptionMessage = message;
+        exceptionMessage = message ? message : "";
         exceptionMessage += "\n";
         exception = exceptionMessage.c_str();
         exceptionAt = at;
@@ -36,8 +36,8 @@ namespace das {
         if ( alwaysStackWalkOnException ) {
             stackWalk(&at, false, false);
         }
-        if ( breakOnException ) breakPoint(at, "exception", message);
-        throw dasException(message ? message : "", at);
+        if ( breakOnException ) breakPoint(at, "exception", exception);
+        throw dasException(exception, at);
 #else
         if ( throwBuf ) {
             if ( alwaysErrorOnException ) {
@@ -46,7 +46,7 @@ namespace das {
             if ( alwaysStackWalkOnException ) {
                 stackWalk(&at, false, false);
             }
-            if ( breakOnException ) breakPoint(at, "exception", message);
+            if ( breakOnException ) breakPoint(at, "exception", exception);
 #if defined(WIN64) || defined(_WIN64)
             //  "An invalid or unaligned stack was encountered during an unwind operation." exception is issued via longjmp
             //  this is a known issue with longjmp on x64, and this workaround disables stack unwinding
@@ -58,7 +58,7 @@ namespace das {
             string msg = exceptionAt.describe() + ": " + exception;
             to_err(&at, msg.c_str());
             stackWalk(&at, false, false);
-            breakPoint(at, "exception", message);
+            breakPoint(at, "exception", exception);
         }
 #endif
 #if !defined(_MSC_VER) || (_MSC_VER>1900)

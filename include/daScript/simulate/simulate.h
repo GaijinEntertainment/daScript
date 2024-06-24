@@ -174,11 +174,16 @@ namespace das
     } }
 
 #if DAS_ENABLE_EXCEPTIONS
-    class dasException : public std::runtime_error {
+    class dasException final : public std::exception {
     public:
-        dasException ( const char * why, const LineInfo & at ) : runtime_error(why), exceptionAt(at) {}
+        dasException ( const char * why, const LineInfo & at )
+            : exception(why), exceptionAt(at), exceptionWhat(why) {}
+        virtual char const* what() const {
+            return exceptionWhat ? exceptionWhat : "unknown exception";
+        }
     public:
         LineInfo exceptionAt;
+        const char * exceptionWhat = nullptr;
     };
 #endif
 
