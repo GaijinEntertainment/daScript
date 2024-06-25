@@ -132,6 +132,9 @@ IF ((NOT DAS_LLVM_INCLUDED) AND DAS_LIBCLANG_DETECTED AND ((NOT ${DAS_LLVM_DISAB
 	ADD_MODULE_DAS(llvm daslib llvm_jit_common)
 	ADD_LIBRARY(libDasModuleLlvm ${DAS_LLVM_MODULE_SRC} ${DAS_LLVM_MODULE_PLATFORM_SRC})
 	IF(APPLE)
+		find_package(ZSTD REQUIRED)
+		find_package(ZLIB REQUIRED)
+		find_library(Terminfo_LIBRARIES NAMES terminfo tinfo curses ncurses ncursesw)
 		file(GLOB LLVM_LIB_SRC_A
 			${LIBCLANG_LIB}/*.a
 		)
@@ -139,21 +142,10 @@ IF ((NOT DAS_LLVM_INCLUDED) AND DAS_LIBCLANG_DETECTED AND ((NOT ${DAS_LLVM_DISAB
 			${LIBCLANG_LIB}/libLTO.dylib
 			${LIBCLANG_LIB}/libRemarks.dylib
 			${LLVM_LIB_SRC_A}
+			${zstd_STATIC_LIBRARY}
+			${ZLIB_LIBRARY}
+			${Terminfo_LIBRARIES}
 		)
-
-
-		find_package(ZSTD REQUIRED)
-
-		SET(LLVM_DIR ${PATH_TO_LIBCLANG}/LIB/CMAKE/LLVM)
-
-		find_package(LLVM REQUIRED CONFIG)
-
-		message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
-		message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
-		include_directories(${LLVM_INCLUDE_DIRS})
-		add_definitions(${LLVM_DEFINITIONS})
-		llvm_map_components_to_libnames(llvm_libs support core irreader)
-		target_link_libraries(libDasModuleLlvm ${llvm_libs})
 	ELSEIF(UNIX)
 		file(GLOB LLVM_LIB_SRC_A
 			${LIBCLANG_LIB}/*.a
