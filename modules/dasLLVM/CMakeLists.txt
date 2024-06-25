@@ -155,20 +155,11 @@ IF ((NOT DAS_LLVM_INCLUDED) AND DAS_LIBCLANG_DETECTED AND ((NOT ${DAS_LLVM_DISAB
 			${LIBCLANG_LIB}/libRemarks.so
 			${LLVM_LIB_SRC_A}
 		)
-
-
 #		find_package(ZSTD REQUIRED)
-
 		SET(LLVM_DIR ${PATH_TO_LIBCLANG}/LIB/CMAKE/LLVM)
-
 		find_package(LLVM REQUIRED CONFIG)
-
-		message(STATUS "Found LLVM ${LLVM_PACKAGE_VERSION}")
-		message(STATUS "Using LLVMConfig.cmake in: ${LLVM_DIR}")
-		include_directories(${LLVM_INCLUDE_DIRS})
-		add_definitions(${LLVM_DEFINITIONS})
-		llvm_map_components_to_libnames(llvm_libs support core irreader)
-		target_link_libraries(libDasModuleLlvm ${llvm_libs})
+		link_directories("${LIBCLANG_LIB}")
+		target_link_libraries(libDasModuleLlvm "LLVMSupport;LLVMCore;LLVMIRReader")
 	ELSEIF(WIN32)
 		TARGET_LINK_LIBRARIES(libDasModuleLlvm ${LLVM_LIBRARIES}
 			${LIBCLANG_LIB}/LLVM-C.lib
