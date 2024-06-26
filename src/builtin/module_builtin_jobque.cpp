@@ -396,6 +396,7 @@ namespace das {
     extern atomic<bool>       debugger_started;
     extern atomic<bool>       stopped;
     extern mutex              debugger_mutex;
+    extern atomic<bool>       stop_requested;
 
     static void stop_debugger() {
         g_jobQueTotalThreads --;
@@ -417,6 +418,7 @@ namespace das {
             das_invoke<void>::invoke(forkContext.get(), lineinfo, lambda);
             forkContext.reset();
             stop_debugger();
+            stop_requested = false;
         }).detach();
     }
 

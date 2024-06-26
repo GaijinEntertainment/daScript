@@ -94,11 +94,11 @@ namespace das {
         addExtern<DAS_BIND_FUN(ref_time_ticks)>(*this, lib, "ref_time_ticks",
             SideEffects::accessExternal, "ref_time_ticks");
         addExtern<DAS_BIND_FUN(get_time_usec)>(*this, lib, "get_time_usec",
-            SideEffects::accessExternal, "get_time_usec");
+            SideEffects::accessExternal, "get_time_usec")->arg("ref");
         addExtern<DAS_BIND_FUN(cast_int64)>(*this, lib, "int64",
-            SideEffects::none, "cast_int64");
+            SideEffects::none, "cast_int64")->arg("time");
         addExtern<DAS_BIND_FUN(get_time_nsec)>(*this, lib, "get_time_nsec",
-            SideEffects::accessExternal, "get_time_nsec");
+            SideEffects::accessExternal, "get_time_nsec")->arg("ref");
     }
 }
 
