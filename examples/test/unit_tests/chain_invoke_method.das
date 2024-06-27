@@ -13,10 +13,11 @@ class MyString
 		return addr(self)
 
 [export]
-def main
-	let res = new MyString()->to_upper()->utf8()
-	print("ctor_count: {ctor_count}\n")
-	print("to_upper_count: {to_upper_count}\n")
-	print("utf8_count: {utf8_count}\n")
+def test
+    let res = new MyString()->to_upper()->utf8()
+    assert(1 == ctor_count)
+    assert(1 == to_upper_count)
+    assert(1 == utf8_count)
+    return true
 
 

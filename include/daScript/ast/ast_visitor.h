@@ -113,6 +113,7 @@ namespace das {
         virtual void preVisitCallArg ( ExprCall * call, Expression * arg, bool last ) {}
         virtual ExpressionPtr visitCallArg ( ExprCall * call, Expression * arg , bool last ) { return arg; }
         // CALL
+        virtual bool canVisitLooksLikeCallArg ( ExprLooksLikeCall * call, Expression * arg, bool last ) { return true; }
         virtual void preVisitLooksLikeCallArg ( ExprLooksLikeCall * call, Expression * arg, bool last ) {}
         virtual ExpressionPtr visitLooksLikeCallArg ( ExprLooksLikeCall * call, Expression * arg , bool last ) { return arg; }
         // NULL COAELESCING

@@ -1272,6 +1272,16 @@ namespace das
     SimNode * ExprInvoke::simulate (Context & context) const {
         auto blockT = arguments[0]->type;
         SimNode_CallBase * pInvoke;
+        uint32_t methodOffset = 0;
+        if ( isInvokeMethod ) {
+            if ( arguments[0]->rtti_isField() ) {
+                auto field = static_pointer_cast<ExprField>(arguments[0]);
+                methodOffset = field->field->offset;
+            } else {
+                context.thisProgram->error("internal compilation error, invoke method expects field", "", "", at);
+                return nullptr;
+            }
+        }
         {
             if ( isCopyOrMove() ) {
                 DAS_ASSERTF ( blockT->baseType!=Type::tString, "its never CMRES for named function" );
@@ -1279,6 +1289,10 @@ namespace das
                 if ( blockT->baseType==Type::tBlock ) {
                     pInvoke = (SimNode_CallBase *) context.code->makeNodeUnrollAny<SimNode_InvokeAndCopyOrMove>(
                                                         int(arguments.size()), at, getSp);
+                } else if ( blockT->baseType==Type::tFunction && isInvokeMethod ) {
+                    pInvoke = (SimNode_CallBase *) context.code->makeNodeUnrollAny<SimNode_InvokeAndCopyOrMoveMethod>(
+                                                        int(arguments.size()-1), at, getSp);
+                    ((SimNode_InvokeAndCopyOrMoveMethodAny *) pInvoke)->methodOffset = methodOffset;
                 } else if ( blockT->baseType==Type::tFunction ) {
                     pInvoke = (SimNode_CallBase *) context.code->makeNodeUnrollAny<SimNode_InvokeAndCopyOrMoveFn>(
                                                         int(arguments.size()), at, getSp);
@@ -1291,6 +1305,9 @@ namespace das
                     pInvoke = (SimNode_CallBase *) context.code->makeNodeUnrollAny<SimNode_InvokeFnByName>(int(arguments.size()),at);
                 } else if ( blockT->baseType==Type::tBlock ) {
                     pInvoke = (SimNode_CallBase *) context.code->makeNodeUnrollAny<SimNode_Invoke>(int(arguments.size()),at);
+                } else if ( blockT->baseType==Type::tFunction && isInvokeMethod ) {
+                    pInvoke = (SimNode_CallBase *) context.code->makeNodeUnrollAny<SimNode_InvokeMethod>(int(arguments.size()-1),at);
+                    ((SimNode_InvokeMethodAny *) pInvoke)->methodOffset = methodOffset;
                 } else if ( blockT->baseType==Type::tFunction ) {
                     pInvoke = (SimNode_CallBase *) context.code->makeNodeUnrollAny<SimNode_InvokeFn>(int(arguments.size()),at);
                 } else {
@@ -1299,11 +1316,19 @@ namespace das
             }
         }
         pInvoke->debugInfo = at;
-        if ( int nArg = (int) arguments.size() ) {
+        int nArg = (int) arguments.size();
+        if ( isInvokeMethod ) nArg --;
+        if (  nArg ) {
             pInvoke->arguments = (SimNode **) context.code->allocate(nArg * sizeof(SimNode *));
             pInvoke->nArguments = nArg;
-            for ( int a=0; a!=nArg; ++a ) {
-                pInvoke->arguments[a] = arguments[a]->simulate(context);
+            if ( !isInvokeMethod ) {
+                for ( int a=0; a!=nArg; ++a ) {
+                    pInvoke->arguments[a] = arguments[a]->simulate(context);
+                }
+            } else {
+                for ( int a=0; a!=nArg; ++a ) {
+                    pInvoke->arguments[a] = arguments[a+1]->simulate(context);
+                }
             }
         } else {
             pInvoke->arguments = nullptr;

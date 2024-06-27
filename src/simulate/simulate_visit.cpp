@@ -143,6 +143,14 @@ namespace das {
         V_END();
     }
 
+    SimNode* SimNode_InvokeMethodAny::visit(SimVisitor& vis) {
+        V_BEGIN();
+        V_OP(InvokeMethod);
+        V_ARG(methodOffset);
+        V_CALL();
+        V_END();
+    }
+
     SimNode* SimNode_InvokeFnByNameAny::visit(SimVisitor& vis) {
         V_BEGIN();
         V_OP(InvokeFnByName);
@@ -153,6 +161,14 @@ namespace das {
     SimNode* SimNode_InvokeLambdaAny::visit(SimVisitor& vis) {
         V_BEGIN();
         V_OP(InvokeLambda);
+        V_CALL();
+        V_END();
+    }
+
+   SimNode* SimNode_InvokeAndCopyOrMoveMethodAny::visit(SimVisitor& vis) {
+        V_BEGIN();
+        V_OP(InvokeAndCopyOrMoveMethod);
+        V_ARG(methodOffset);
         V_CALL();
         V_END();
     }

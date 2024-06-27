@@ -1320,6 +1320,66 @@ SIM_NODE_AT_VECTOR(Float, float)
 #undef  EVAL_NODE
     };
 
+    // Invoke class method
+
+    struct SimNode_InvokeMethodAny : SimNode_CallBase {
+        SimNode_InvokeMethodAny(const LineInfo& at) : SimNode_CallBase(at) {}
+        virtual SimNode* visit(SimVisitor& vis) override;
+        uint32_t methodOffset = 0;
+    };
+
+    template <int argCount>
+    struct SimNode_InvokeMethod : SimNode_InvokeMethodAny {
+        SimNode_InvokeMethod ( const LineInfo & at ) : SimNode_InvokeMethodAny(at) {}
+        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE \
+            vec4f argValues[argCount ? argCount : 1];
+            EvalBlock<argCount>::eval(context, arguments, argValues);
+            char * classPtr = cast<char *>::to(argValues[0]);
+            SimFunction* simFunc = ((Func *)(classPtr + methodOffset))->PTR;
+            if (!simFunc) context.throw_error_at(debugInfo,"invoke null function");
+            return context.call(simFunc, argValues, &debugInfo);
+        }
+#define EVAL_NODE(TYPE,CTYPE)                                                                   \
+        virtual CTYPE eval##TYPE ( Context & context ) override {                               \
+            DAS_PROFILE_NODE \
+            vec4f argValues[argCount ? argCount : 1]; \
+            EvalBlock<argCount>::eval(context, arguments, argValues);                           \
+            char * classPtr = cast<char *>::to(argValues[0]);                                   \
+            SimFunction* simFunc = ((Func *)(classPtr + methodOffset))->PTR;                    \
+            if (!simFunc) context.throw_error_at(debugInfo,"invoke null function");             \
+            return cast<CTYPE>::to(context.call(simFunc, argValues, &debugInfo));           \
+        }
+        DAS_EVAL_NODE
+#undef  EVAL_NODE
+    };
+
+    template <>
+    struct SimNode_InvokeMethod<-1> : SimNode_InvokeMethodAny {
+        SimNode_InvokeMethod(const LineInfo& at) : SimNode_InvokeMethodAny(at) {}
+        DAS_EVAL_ABI virtual vec4f eval(Context& context) override {
+            DAS_PROFILE_NODE
+            vec4f argValues[DAS_MAX_FUNCTION_ARGUMENTS];
+            evalArgs(context, argValues);
+            char * classPtr = cast<char *>::to(argValues[0]);
+            SimFunction* simFunc = ((Func *)(classPtr + methodOffset))->PTR;
+            if (!simFunc) context.throw_error_at(debugInfo, "invoke null function");
+            return context.call(simFunc, argValues, &debugInfo);
+        }
+#define EVAL_NODE(TYPE,CTYPE) \
+        virtual CTYPE eval##TYPE ( Context & context ) override { \
+            DAS_PROFILE_NODE \
+            vec4f argValues[DAS_MAX_FUNCTION_ARGUMENTS]; \
+            evalArgs(context, argValues); \
+            char * classPtr = cast<char *>::to(argValues[0]); \
+            SimFunction* simFunc = ((Func *)(classPtr + methodOffset))->PTR; \
+            if (!simFunc) context.throw_error_at(debugInfo,"invoke null function"); \
+            return cast<CTYPE>::to(context.call(simFunc, argValues, &debugInfo)); \
+        }
+        DAS_EVAL_NODE
+#undef  EVAL_NODE
+    };
+
     // Invoke function by name
 
     struct SimNode_InvokeFnByNameAny : SimNode_CallBase {
@@ -1538,6 +1598,74 @@ SIM_NODE_AT_VECTOR(Float, float)
             SimFunction * simFunc = cast<Func>::to(argValues[0]).PTR; \
             if (!simFunc) context.throw_error_at(debugInfo,"invoke null function"); \
             return cast<CTYPE>::to(context.callWithCopyOnReturn(simFunc, argValues + 1, cmres, &debugInfo)); \
+        }
+        DAS_EVAL_NODE
+#undef  EVAL_NODE
+    };
+
+    // Invoke method with copy-or-move-on-return
+
+    struct SimNode_InvokeAndCopyOrMoveMethodAny : SimNode_CallBase {
+        SimNode_InvokeAndCopyOrMoveMethodAny(const LineInfo& at) : SimNode_CallBase(at) {}
+        virtual SimNode* visit(SimVisitor& vis) override;
+        uint32_t methodOffset = 0;
+    };
+
+    template <int argCount>
+    struct SimNode_InvokeAndCopyOrMoveMethod : SimNode_InvokeAndCopyOrMoveMethodAny {
+        SimNode_InvokeAndCopyOrMoveMethod ( const LineInfo & at, SimNode * spEval )
+            : SimNode_InvokeAndCopyOrMoveMethodAny(at) { cmresEval = spEval; }
+        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
+            DAS_PROFILE_NODE \
+            auto cmres = cmresEval->evalPtr(context);
+            vec4f argValues[argCount ? argCount : 1];
+            EvalBlock<argCount>::eval(context, arguments, argValues);
+            char * classPtr = cast<char *>::to(argValues[0]);
+            SimFunction* simFunc = ((Func *)(classPtr + methodOffset))->PTR;
+            if (!simFunc) context.throw_error_at(debugInfo,"invoke null function");
+            return context.callWithCopyOnReturn(simFunc, argValues, cmres, &debugInfo);
+        }
+#define EVAL_NODE(TYPE,CTYPE)                                                                       \
+        virtual CTYPE eval##TYPE ( Context & context ) override {                                   \
+            DAS_PROFILE_NODE \
+            auto cmres = cmresEval->evalPtr(context);                                               \
+            vec4f argValues[argCount ? argCount : 1]; \
+            EvalBlock<argCount>::eval(context, arguments, argValues);                               \
+            char * classPtr = cast<char *>::to(argValues[0]);                                       \
+            SimFunction* simFunc = ((Func *)(classPtr + methodOffset))->PTR;                        \
+            if (!simFunc) context.throw_error_at(debugInfo,"invoke null function");                 \
+            return cast<CTYPE>::to(context.callWithCopyOnReturn(simFunc, argValues, cmres, &debugInfo)); \
+        }
+        DAS_EVAL_NODE
+#undef  EVAL_NODE
+    };
+
+    template <>
+    struct SimNode_InvokeAndCopyOrMoveMethod<-1> : SimNode_InvokeAndCopyOrMoveMethodAny {
+        SimNode_InvokeAndCopyOrMoveMethod(const LineInfo& at, SimNode* spEval)
+            : SimNode_InvokeAndCopyOrMoveMethodAny(at) {
+            cmresEval = spEval;
+        }
+        DAS_EVAL_ABI virtual vec4f eval(Context& context) override {
+            DAS_PROFILE_NODE
+            auto cmres = cmresEval->evalPtr(context);
+            vec4f argValues[DAS_MAX_FUNCTION_ARGUMENTS];
+            evalArgs(context, argValues);
+            char * classPtr = cast<char *>::to(argValues[0]);
+            SimFunction* simFunc = ((Func *)(classPtr + methodOffset))->PTR;
+            if (!simFunc) context.throw_error_at(debugInfo, "invoke null function");
+            return context.callWithCopyOnReturn(simFunc, argValues, cmres, &debugInfo);
+        }
+#define EVAL_NODE(TYPE,CTYPE) \
+        virtual CTYPE eval##TYPE ( Context & context ) override { \
+            DAS_PROFILE_NODE \
+            auto cmres = cmresEval->evalPtr(context); \
+            vec4f argValues[DAS_MAX_FUNCTION_ARGUMENTS]; \
+            evalArgs(context, argValues); \
+            char * classPtr = cast<char *>::to(argValues[0]); \
+            SimFunction* simFunc = ((Func *)(classPtr + methodOffset))->PTR; \
+            if (!simFunc) context.throw_error_at(debugInfo,"invoke null function"); \
+            return cast<CTYPE>::to(context.callWithCopyOnReturn(simFunc, argValues, cmres, &debugInfo)); \
         }
         DAS_EVAL_NODE
 #undef  EVAL_NODE

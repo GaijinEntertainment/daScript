@@ -2920,13 +2920,32 @@ namespace das {
                 ss << "__builtin_table_values(__context__,";
             } else if ( call->name=="invoke" ) {
                 auto bt = call->arguments[0]->type->baseType;
+                int methodOffset = -1;
+                string methodName;
+                if ( bt==Type::tFunction ) {
+                    auto einv = static_cast<ExprInvoke *>(call);
+                    if ( einv->isInvokeMethod ) {
+                        if ( call->arguments[0]->rtti_isField() ) {
+                            auto field = static_pointer_cast<ExprField>(call->arguments[0]);
+                            methodOffset = field->field->offset;
+                            methodName = field->field->name;
+                        } else {
+                            DAS_FATAL_ERROR("internal error. expected field");
+                        }
+                    }
+                }
                 if (bt == Type::tBlock) ss << "das_invoke";
                 else if (bt == Type::tLambda) ss << "das_invoke_lambda";
+                else if (bt == Type::tFunction && methodOffset!=-1) ss << "das_invoke_method";
                 else if (bt == Type::tFunction) ss << "das_invoke_function";
                 else if (bt == Type::tString) ss << "das_invoke_function_by_name";
                 else ss << "das_invoke /*unknown*/";
                 ExprInvoke * einv = static_cast<ExprInvoke *>(call);
-                ss << "<" << describeCppType(call->type) << ">::invoke";
+                ss << "<" << describeCppType(call->type);
+                if ( methodOffset!=-1 ) {
+                    ss << "," << methodOffset << "/*" << methodName << "*/";
+                }
+                ss << ">::invoke";
                 if ( einv->isCopyOrMove() ) ss << "_cmres";
                 if ( call->arguments.size()>1 ) {
                     ss << "<";
@@ -2951,6 +2970,13 @@ namespace das {
             } else {
                 ss << call->name << "(";
             }
+        }
+        virtual bool canVisitLooksLikeCallArg ( ExprLooksLikeCall * call, Expression * arg, bool last ) override {
+            if ( call->arguments[0].get()==arg &&  call->rtti_isInvoke() ) {
+                auto * inv = (ExprInvoke *) call;
+                if ( inv->isInvokeMethod ) return false;
+            }
+            return true;
         }
         virtual void preVisitLooksLikeCallArg ( ExprLooksLikeCall * call, Expression * arg, bool last ) override {
             Visitor::preVisitLooksLikeCallArg(call, arg, last);
