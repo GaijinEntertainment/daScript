@@ -2974,30 +2974,11 @@ class LlvmJitVisitor : AstVisitor
         return expr
 
 // ExprInvoke
-    def build_invoke_params ( expr:smart_ptr<ExprInvoke> )
-        assume blockT = expr.arguments[0]._type
-        var params : array<LLVMOpaqueValue?>
-        for a,ai in expr.arguments,count()
-            if ai==0        // skip first argument
-                continue
-            if a._type.baseType==Type fakeContext
-                params |> push(get_context_param())
-            elif a._type.baseType==Type fakeLineInfo
-                var pinfo = getE(a)
-                params |> push(pinfo)
-            elif a._type.baseType==Type tPointer
-                assume funcArg = blockT.argTypes[ai-1]
-                var ptrType = type_to_llvm_abi_type(funcArg)
-                var ptrValue = LLVMBuildPointerCast(g_builder, getE(a), ptrType, "arg_{ai-1}_ptr")
-                params |> push( ptrValue )
-            elif (a._type.baseType==Type tArray || a._type.baseType==Type tTable)
-                assume funcArg = blockT.argTypes[ai-1]
-                var destType = type_to_llvm_abi_type(funcArg)
-                var arg = LLVMBuildPointerCast(g_builder, getE(a), destType, "any_array_{ai}_ptr")
-                params |> push(arg)
-            else
-                params |> push(getE(a))
-        return <- params
+    def override canVisitLooksLikeCallArgument(expr:smart_ptr<ExprLooksLikeCall>;arg:ExpressionPtr;last:bool): bool
+        if expr is ExprInvoke
+            if expr.arguments[0] == arg && (expr as ExprInvoke).isInvokeMethod
+                return false
+        return true
 
     def override visitExprInvoke(expr:smart_ptr<ExprInvoke>) : ExpressionPtr
         assume blockT = expr.arguments[0]._type
@@ -3013,7 +2994,38 @@ class LlvmJitVisitor : AstVisitor
                     cmresEval = LLVMBuildAlloca(g_builder, vtype, "invoke_cmres_eval_{int(expr.at.line)}_var")
                     LLVMSetAlignment(cmresEval, 16u)
                     cmresEvalPtr = LLVMBuildPointerCast(g_builder, cmresEval, LLVMPointerType(LLVMVoidType(),0u), "invoke_cmres_eval_{int(expr.at.line)}_ptr")
-        if blockT.isGoodFunctionType
+        if blockT.isGoodFunctionType && expr.isInvokeMethod
+            var methodOffset = -1
+            if expr.arguments[0] is ExprField
+                var efield = expr.arguments[0] as ExprField
+                methodOffset = efield.field.offset
+            else
+                failed_E(expr, "method call expects field and got {describe(expr.arguments[1])}")
+            var args = build_array_of_arguments(expr.arguments, true)
+            var classPtr = getE(expr.arguments[1])
+            classPtr = LLVMBuildPointerCast(g_builder, classPtr, LLVMPointerType(LLVMInt8Type(), 0u), "")
+            classPtr = LLVMBuildGEP2(g_builder, LLVMInt8Type(), classPtr, LLVMConstInt(LLVMInt32Type(), uint64(methodOffset), 0), "")
+            var FUNC = LLVMBuildPointerCast(g_builder, classPtr, LLVMPointerType(g_t_function,0u), "")
+            FUNC = LLVMBuildLoad2(g_builder, g_t_function, FUNC, "FUNC")
+            var SIMFUNCTION = LLVMBuildExtractValue(g_builder, FUNC, uint(JIT_FUNCTION SIM_FUNCTION), "SIMFUNCTION")
+            SIMFUNCTION = LLVMBuildPointerCast(g_builder, SIMFUNCTION, LLVMPointerType(LLVMVoidType(), 0u), "")
+            var params : array<LLVMOpaqueValue?>
+            params |> push(SIMFUNCTION)
+            params |> push(args)
+            if cmresEval!=null
+                params |> push(cmresEvalPtr)
+            params |> push(get_context_param())
+            var func = LLVMGetNamedFunction(g_mod, cmresEval!=null ? FN_JIT_CALL_WITH_CMRES : FN_JIT_CALL_OR_FASTCALL)
+            var typ = g_fn_types[cmresEval!=null ? FN_JIT_CALL_WITH_CMRES : FN_JIT_CALL_OR_FASTCALL]
+            var ccall = LLVMBuildCall2(g_builder, typ, func, params, "invoke")
+            if cmresEval != null
+                setE(expr, cmresEval)
+            elif blockT.firstType.isVoid
+                setE(expr, ccall)
+            else
+                var cres = cast_from_vec4f(expr, expr._type, ccall)
+                setE(expr, cres)
+        elif blockT.isGoodFunctionType
             var args = build_array_of_arguments(expr.arguments, true)
             var FUNC = getE(expr.arguments[0])
             var SIMFUNCTION = LLVMBuildExtractValue(g_builder, FUNC, uint(JIT_FUNCTION SIM_FUNCTION), "SIMFUNCTION")
