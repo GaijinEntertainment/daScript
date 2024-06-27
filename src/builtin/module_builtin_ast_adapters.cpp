@@ -721,6 +721,17 @@ namespace das {
             }
         }
         // CALL
+        virtual bool canVisitLooksLikeCallArg ( ExprLooksLikeCall * call, Expression * arg, bool last ) override {
+            if ( auto fnCanVisit = get_canVisitLooksLikeCallArgument(classPtr) ) {
+                bool result = true;
+                runMacroFunction(context, "canVisitLooksLikeCallArg", [&]() {
+                    result = invoke_canVisitLooksLikeCallArgument(context,fnCanVisit,classPtr,call,arg,last);
+                });
+                return result;
+            } else {
+                return true;
+            }
+        }
         virtual void preVisitLooksLikeCallArg ( ExprLooksLikeCall * call, Expression * arg, bool last ) override {
             if ( auto fnPreVisit = get_preVisitExprLooksLikeCallArgument(classPtr) ) {
                 runMacroFunction(context, "preVisitLooksLikeCallArg", [&]() {
