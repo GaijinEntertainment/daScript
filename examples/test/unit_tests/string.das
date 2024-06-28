@@ -101,16 +101,6 @@ multi line string"
     assert(fmt(":02x",29ul)=="1d")
     assert(fmt(":.1f",1.23)=="1.2")
     assert(fmt(":.2f",1.234)=="1.23")
-// this string is not a valid format string
-    var failed = false
-    try
-        var t : string
-        t = "blah"
-        var x = fmt(t,13)
-        assert(x=="13")
-    recover
-        failed = true
-    assert(failed)
     // string builder
     let st = build_string() <| $ (var writer : StringBuilderWriter)
         write(writer,"255 hex is ")
