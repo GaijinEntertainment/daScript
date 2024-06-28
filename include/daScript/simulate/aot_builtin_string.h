@@ -107,6 +107,7 @@ namespace das {
             while ( head<tail && *fmt ) *head++ = *fmt++;
         }
         *head++ = '}'; *head = 0;
+#if DAS_ENABLE_EXCEPTIONS
         try {
             auto result = fmt::format_to(buf, fmt::runtime(ffmt), value);
             *result= 0;
@@ -115,6 +116,17 @@ namespace das {
             context->throw_error_at(at, "fmt error: %s", e.what());
             return nullptr;
         }
+#else
+    char * return_value = nullptr;
+    das_trycatch([&]{
+        auto result = fmt::format_to(buf, fmt::runtime(ffmt), value);
+        *result= 0;
+        return_value = context->allocateString(buf, uint32_t(result-buf), at);
+    },[&](const char * e){
+        context->throw_error_at(at, "fmt error: %s", e);
+    });
+    return return_value;
+#endif
     }
 
     template <typename TT>
@@ -135,6 +147,7 @@ namespace das {
             while ( head<tail && *fmt ) *head++ = *fmt++;
         }
         *head++ = '}'; *head = 0;
+#if DAS_ENABLE_EXCEPTIONS
         try {
             auto result = fmt::format_to(buf, fmt::runtime(ffmt), value);
             *result = 0;
@@ -142,6 +155,15 @@ namespace das {
         } catch ( const std::exception & e ) {
             context->throw_error_at(at, "fmt error: %s", e.what());
         }
+#else
+        das_trycatch([&]{
+            auto result = fmt::format_to(buf, fmt::runtime(ffmt), value);
+            *result = 0;
+            writer.writeStr(buf, result - buf);
+        },[&](const char * e){
+            context->throw_error_at(at, "fmt error: %s", e);
+        });
+#endif
         return writer;
     }
 

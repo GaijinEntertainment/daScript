@@ -498,6 +498,7 @@ src/misc/job_que.cpp
 src/misc/free_list.cpp
 src/misc/daScriptC.cpp
 src/misc/uric.cpp
+src/misc/format.cpp
 )
 list(SORT MISC_SRC)
 SOURCE_GROUP_FILES("misc" MISC_SRC)
@@ -655,13 +656,11 @@ list(SORT DAS_LIB_SRC)
 SOURCE_GROUP_FILES("daslib" DSA_LIB_SRC)
 list(SORT DAS_LIB_SRC)
 
-add_subdirectory(3rdparty/fmt)
-
 include_directories(include)
 include_directories(3rdparty/fmt/include)
 ADD_LIBRARY(libDaScript ${PARSER_GENERATED_SRC} ${PARSER_SRC} ${VECMATH_SRC} ${AST_SRC} ${BUILTIN_SRC}
     ${MISC_SRC} ${SIMULATE_SRC} ${SIMULATE_FUSION_SRC} ${TEST_SRC} ${MAIN_SRC}
-	${DAGOR_NOISE_SRC} ${FLAT_HASH_MAP_SRC} ${FAST_FLOAT_SRC}  ${SMMALLOC_SRC})
+	${DAGOR_NOISE_SRC} ${FLAT_HASH_MAP_SRC} ${FAST_FLOAT_SRC})
 ADD_DEPENDENCIES(libDaScript need_and_resolve)
 ADD_PROJECT_XXD_DEPENDS(libDaScript)
 target_include_directories(libDaScript PUBLIC
@@ -669,7 +668,7 @@ target_include_directories(libDaScript PUBLIC
     ${CMAKE_SOURCE_DIR}/3rdparty/uriparser/include
 )
 target_link_libraries(libDaScript libUriParser)
-target_link_libraries(libDaScript fmt::fmt)
+#target_link_libraries(libDaScript fmt::fmt)
 IF(LINUX_UUID)
 target_link_libraries(libDaScript uuid)
 ENDIF()

@@ -40,6 +40,11 @@ namespace das {
 
     void das_debug ( Context * context, TypeInfo * typeInfo, const char * FILE, int LINE, vec4f res, const char * message = nullptr );
 
+#if (!defined(DAS_ENABLE_EXCEPTIONS)) || (!DAS_ENABLE_EXCEPTIONS)
+    void das_throw(const char * msg);
+    void das_trycatch(callable<void()> tryBody, callable<void(const char * msg)> catchBody);
+#endif
+
     template <typename TT>
     struct das_auto_cast {
         template <typename QQ>
