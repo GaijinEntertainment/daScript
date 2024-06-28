@@ -939,9 +939,9 @@ namespace das {
                                 !alias.empty(), argTypes.empty(), argNames.empty());
                 break;
             case option:
-                ser << argTypes;
+                ser << argTypes << dim << dimExpr;
                 DAS_VERIFYF_MULTI(!annotation, !structType, !enumType, !firstType, !secondType,
-                                alias.empty(), !argTypes.empty(), argNames.empty(), dim.empty(), dimExpr.empty());
+                                alias.empty(), !argTypes.empty(), argNames.empty());
                 break;
             case autoinfer:
                 ser << dim << dimExpr << alias;
@@ -982,9 +982,9 @@ namespace das {
             case tURange:
             case tRange64:
             case tURange64: // blow up!
-                ser << alias;
+                ser << alias << dim << dimExpr;
                 DAS_VERIFYF_MULTI(!annotation, !structType, !enumType, !firstType, !secondType,
-                                argTypes.empty(), argNames.empty(), dim.empty(), dimExpr.empty());
+                                argTypes.empty(), argNames.empty());
                 break;
             case tStructure:
                 ser << alias << structType << dim << dimExpr;
@@ -1004,9 +1004,9 @@ namespace das {
                                 argTypes.empty(), argNames.empty());
                 break;
             case tBitfield:  // blow up!
-                ser << alias << argNames;
+                ser << alias << argNames << dim << dimExpr;
                 DAS_VERIFYF_MULTI(!annotation, !structType, !enumType, !firstType, !secondType,
-                                argTypes.empty(), dim.empty(), dimExpr.empty());
+                                argTypes.empty());
                 break;
             case tIterator:
             case tPointer:
@@ -1018,14 +1018,13 @@ namespace das {
             case tFunction:
             case tLambda:
             case tBlock:
-                ser << alias << firstType << argTypes << argNames;
-                DAS_VERIFYF_MULTI(!annotation, !structType, !enumType, !secondType,
-                                dim.empty(), dimExpr.empty());
+                ser << alias << firstType << argTypes << argNames << dim << dimExpr;
+                DAS_VERIFYF_MULTI(!annotation, !structType, !enumType, !secondType);
                 break;
             case tTable:
-                ser << alias << firstType << secondType;
-                DAS_VERIFYF_MULTI(!annotation, !structType, !enumType, !!firstType, !!secondType,
-                                argTypes.empty(), argNames.empty(), dim.empty(), dimExpr.empty());
+                ser << alias << firstType << secondType << dim << dimExpr;
+                DAS_VERIFYF_MULTI(!annotation, !structType, !enumType, !!firstType,
+                                argTypes.empty(), argNames.empty());
                 break;
             case tTuple:
             case tVariant:
@@ -2099,7 +2098,7 @@ namespace das {
     }
 
     uint32_t AstSerializer::getVersion () {
-        static constexpr uint32_t currentVersion = 15;
+        static constexpr uint32_t currentVersion = 22;
         return currentVersion;
     }
 
