@@ -403,3 +403,4 @@ inline size_t das_aligned_memsize(void * ptr){
 
 #include "daScript/misc/smart_ptr.h"
 
+

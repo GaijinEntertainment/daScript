@@ -24,6 +24,35 @@
 
 namespace das {
 
+#if (!defined(DAS_ENABLE_EXCEPTIONS)) || (!DAS_ENABLE_EXCEPTIONS)
+
+    DAS_THREAD_LOCAL jmp_buf * g_throwBuf = nullptr;
+    DAS_THREAD_LOCAL string g_throwMsg;
+
+    void das_throw(const char * msg) {
+        if ( g_throwBuf ) {
+            g_throwMsg = msg;
+            longjmp(*g_throwBuf,1);
+        } else {
+            DAS_FATAL_ERROR("unhanded das_throw, %s\n", msg);
+        }
+    }
+
+    void das_trycatch(callable<void()> tryBody, callable<void(const char * msg)> catchBody) {
+        DAS_ASSERTF(g_throwBuf==nullptr, "das_trycatch without g_throwBuf");
+        jmp_buf ev;
+        g_throwBuf = &ev;
+        if ( !setjmp(ev) ) {
+            tryBody();
+        } else {
+            g_throwBuf = nullptr;
+            catchBody(g_throwMsg.c_str());
+        }
+    }
+#endif
+
+
+
     void Context::throw_fatal_error ( const char * message, const LineInfo & at ) {
         exceptionMessage = message ? message : "";
         exceptionMessage += "\n";
