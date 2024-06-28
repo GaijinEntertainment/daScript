@@ -332,13 +332,6 @@ namespace das {
             }
         }
     // ExprInvoke
-        virtual bool canVisitLooksLikeCallArg ( ExprLooksLikeCall * call, Expression * arg, bool last ) override {
-            if ( call->arguments.size()>=1 && call->arguments[0].get()==arg &&  call->rtti_isInvoke() ) {
-                auto * inv = (ExprInvoke *) call;
-                if ( inv->isInvokeMethod ) return false;
-            }
-            return true;
-        }
         virtual void preVisit ( ExprInvoke * expr ) override {
             Visitor::preVisit(expr);
             if ( inStruct ) return;

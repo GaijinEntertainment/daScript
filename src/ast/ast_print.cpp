@@ -666,20 +666,7 @@ namespace das {
             }
             ss << "(";
         }
-        virtual bool canVisitLooksLikeCallArg ( ExprLooksLikeCall * call, Expression * arg, bool last ) override {
-            if ( call->arguments.size()>=2 && call->arguments[1].get()==arg && call->rtti_isInvoke() ) {
-                auto * inv = (ExprInvoke *) call;
-                if ( inv->isInvokeMethod ) return false;
-            }
-            return true;
-        }
         virtual ExpressionPtr visitLooksLikeCallArg ( ExprLooksLikeCall * call, Expression * arg, bool last ) override {
-            if ( call->rtti_isInvoke() ) {
-                auto * inv = (ExprInvoke *) call;
-                if ( inv->isInvokeMethod && call->arguments.size()==2) {
-                    last = true;
-                }
-            }
             if ( !last ) ss << ",";
             return Visitor::visitLooksLikeCallArg(call, arg, last);
         }

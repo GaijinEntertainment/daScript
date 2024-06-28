@@ -3052,6 +3052,27 @@ namespace das {
             } else {
                 expr->type = make_smart<TypeDecl>();
             }
+            // we replace invoke/*method*/(cptr.method, cptr, ...) with invoke/*method*/(typedecl(cptr.type).method, cptr, ...)
+            if ( expr->isInvokeMethod && expr->arguments.size() ) {
+                ExprField * eField = nullptr;
+                if ( expr->arguments[0]->rtti_isField() ) {
+                    eField = (ExprField *) expr->arguments[0].get();
+                } else if ( expr->arguments[0]->rtti_isR2V() ) {
+                    auto eR2V = (ExprRef2Value *) expr->arguments[0].get();
+                    if ( eR2V->subexpr->rtti_isField() ) {
+                        eField = (ExprField *) eR2V->subexpr.get();
+                    }
+                }
+                if ( eField && !eField->value->rtti_isTypeDecl() && !eField->value->type->isAutoOrAlias() ) {
+                    auto fType = eField->value->type->isPointer() ? eField->value->type->firstType : eField->value->type;
+                    auto cType = make_smart<TypeDecl>(*fType);
+                    auto mkType = make_smart<ExprTypeDecl>(eField->at, cType);
+                    cType->ref = false;
+                    eField->value = mkType;
+                    reportAstChanged();
+                }
+
+            }
             return Visitor::visit(expr);
         }
 
