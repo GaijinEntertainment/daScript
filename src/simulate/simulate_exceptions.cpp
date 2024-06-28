@@ -45,9 +45,9 @@ namespace das {
         if ( !setjmp(ev) ) {
             tryBody();
         } else {
-            g_throwBuf = nullptr;
             catchBody(g_throwMsg.c_str());
         }
+        g_throwBuf = nullptr;
     }
 #endif
 
