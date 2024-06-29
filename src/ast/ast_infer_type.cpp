@@ -95,14 +95,12 @@ namespace das {
         string generateNewLambdaName(const LineInfo & at) {
             string mod = ctx.thisProgram->thisModule->name;
             if ( mod.empty() ) mod = "thismodule";
-            return "_lambda_" + mod + "_" + to_string(at.line) + "_" + to_string(at.column)
-                + "_" + to_string(program->newLambdaIndex++);
+            return "_lambda_" + mod + "_" + to_string(at.line) + "_" + to_string(program->newLambdaIndex++);
         }
         string generateNewLocalFunctionName(const LineInfo & at) {
             string mod = ctx.thisProgram->thisModule->name;
             if ( mod.empty() ) mod = "thismodule";
-            return "_localfunction_" + mod + "_" + to_string(at.line) + "_" + to_string(at.column)
-                + "_" + to_string(program->newLambdaIndex++);
+            return "_localfunction_" + mod + "_" + to_string(at.line) + "_" + to_string(program->newLambdaIndex++);
         }
         void pushVarStack() {
             varStack.push_back(local.size());
