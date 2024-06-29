@@ -2,7 +2,7 @@ require dastest/testing_boost public
 
 require daslib/strings_boost
 
-require operators_derived
+require _operators_derived
 
 struct Foo
     a : int
