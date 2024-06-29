@@ -1,4 +1,4 @@
-module operators_parent public
+module _operators_parent public
 
 class FooOp
     a : int = 42
