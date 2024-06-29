@@ -292,20 +292,14 @@ namespace das
     }
 
     string to_string_ex ( double dnum ) {
-        char buffer[32];
-        memset(buffer, 0, sizeof(buffer));
-        snprintf(buffer, sizeof(buffer), "%.17g", dnum);
-        string stst(buffer);
+        string stst = fmt::format("{:.17g}", dnum);
         if ( stst.find_first_of(".e")==string::npos )
             stst += ".";
         return stst;
     }
 
     string to_string_ex ( float dnum ) {
-        char buffer[32];
-        memset(buffer, 0, sizeof(buffer));
-        snprintf(buffer, sizeof(buffer), "%.9g", dnum);
-        string stst(buffer);
+        string stst = fmt::format("{:.9g}", dnum);
         if ( stst.find_first_of(".e")==string::npos )
             stst += ".";
         return stst;

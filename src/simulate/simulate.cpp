@@ -1822,7 +1822,7 @@ namespace das
                     char total[20];
                     if ( fi->profileData.size()>size_t(line) && fi->profileData[line] ) {
                         uint64_t samples = fi->profileData[line];
-                        snprintf(total, 20, "%-6.2f", samples*100.1/totalGoo);
+                        auto result = fmt::format_to(total, "{:6.2f}", samples*100.0/totalGoo); *result = 0;
                         tout << total;
                     } else {
                         tout << "      ";
