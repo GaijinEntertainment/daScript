@@ -9,6 +9,9 @@
 
 namespace das {
 
+    // in ast_handle of all places, due to reporting fields
+    void reportTrait ( const TypeDeclPtr & type, const string & prefix, const callable<void(const TypeDeclPtr &, const string &)> & report );
+
     // todo: check for eastl and look for better container
     typedef vector<Function *>  MatchingFunctions;
     class CaptureLambda : public Visitor {
@@ -1332,6 +1335,22 @@ namespace das {
             }
         }
 
+        void reportCantClone ( const string & message, const TypeDeclPtr & type, const LineInfo & at ) {
+            if ( verbose ) {
+                TextWriter ss;
+                reportTrait(type, type->describe(TypeDecl::DescribeExtra::no,TypeDecl::DescribeContracts::no), [&](const TypeDeclPtr & subT, const string & trait) {
+                    if ( subT != type && !subT->canClone() ) {
+                        if ( !(subT->baseType==Type::tStructure || subT->baseType==Type::tVariant || subT->baseType==Type::tTuple) ) {
+                            ss << "\tcan't clone " << trait << " : " << describeType(subT) << "\n";
+                        }
+                    }
+                });
+                error(message, ss.str(), "", at, CompilationError::cant_copy);
+            } else {
+                error(message, "", "", at, CompilationError::cant_copy);
+            }
+        }
+
         bool hasUserConstructor ( const string & sna ) const {
             vector<TypeDeclPtr> argDummy;
             auto fnlist = findMatchingFunctions(sna, argDummy);
@@ -1842,8 +1861,8 @@ namespace das {
                 if ( fnList.size() && verifyCloneFunc(fnList, var->at) ) {
                     return promoteToCloneToMove(var);
                 } else {
-                    error("global variable " + var->name + " can't be cloned",  "", "",
-                        var->at, CompilationError::cant_copy);
+                    reportCantClone("global variable " + var->name + " can't be cloned",
+                        var->init->type, var->at);
                 }
             } else {
                 if ( var->init_via_clone ) {
@@ -5756,8 +5775,8 @@ namespace das {
                 error("can't write to a constant value", "", "",
                     expr->at, CompilationError::cant_write_to_const);
             } else if ( !expr->left->type->canClone() ) {
-                error("type " + describeType(expr->left->type) + " can't be cloned from " + describeType(expr->right->type), "", "",
-                    expr->at, CompilationError::cant_copy);
+                reportCantClone("type " + describeType(expr->left->type) + " can't be cloned from " + describeType(expr->right->type),
+                    expr->left->type, expr->at);
             } else {
                 auto cloneType = expr->left->type;
                 if ( cloneType->isHandle() ) {
@@ -5847,8 +5866,8 @@ namespace das {
                     cloneFn->arguments.push_back(expr->right->clone());
                     return ExpressionPtr(cloneFn);
                 } else {
-                    error("this type can't be cloned " + describeType(cloneType), "", "",
-                        expr->at, CompilationError::cant_copy);
+                    reportCantClone("this type can't be cloned " + describeType(cloneType),
+                        cloneType, expr->at);
                 }
             }
             return Visitor::visit(expr);
@@ -6709,9 +6728,8 @@ namespace das {
                 if ( fnList.size() && verifyCloneFunc(fnList, expr->at) ) {
                     return promoteToCloneToMove(var);
                 } else {
-                    error("local variable " + var->name + " of type " + describeType(var->type)
-                    + " can't be cloned from " + describeType(var->init->type),"", "",
-                      var->at, CompilationError::cant_copy);
+                    reportCantClone("local variable " + var->name + " of type " + describeType(var->type)
+                    + " can't be cloned from " + describeType(var->init->type), var->init->type, var->at);
                 }
             } else {
                 if ( var->init_via_clone ) {
