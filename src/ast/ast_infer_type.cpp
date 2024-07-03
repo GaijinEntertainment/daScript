@@ -394,11 +394,12 @@ namespace das {
             return isFullySealedType(ptr, all);
         }
         // infer alias type
-        TypeDeclPtr inferAlias ( const TypeDeclPtr & decl, const FunctionPtr & fptr = nullptr, AliasMap * aliases = nullptr, OptionsMap * options = nullptr ) const {
-            if ( decl->baseType==Type::autoinfer ) {    // until alias is fully resolved, can't infer
+        TypeDeclPtr inferAlias ( const TypeDeclPtr & decl, const FunctionPtr & fptr = nullptr, AliasMap * aliases = nullptr, OptionsMap * options = nullptr, bool autoToAlias=false ) const {
+            autoToAlias |= decl->autoToAlias;
+            if ( decl->baseType==Type::autoinfer && !autoToAlias ) {    // until alias is fully resolved, can't infer
                 return nullptr;
             }
-            if ( decl->baseType==Type::alias ) {
+            if ( decl->baseType==Type::alias || (decl->baseType==Type::autoinfer && autoToAlias) ) {
                 if ( decl->isTag ) return nullptr;  // we can never infer a tag type
                 auto aT = fptr ? findFuncAlias(fptr, decl->alias) : findAlias(decl->alias);
                 if ( aliases ) {
@@ -431,44 +432,44 @@ namespace das {
             auto resT = make_smart<TypeDecl>(*decl);
             if ( decl->baseType==Type::tPointer ) {
                 if ( decl->firstType ) {
-                    resT->firstType = inferAlias(decl->firstType,fptr,aliases,options);
+                    resT->firstType = inferAlias(decl->firstType,fptr,aliases,options,autoToAlias);
                     if ( !resT->firstType ) return nullptr;
                 }
             } else if ( decl->baseType==Type::tIterator ) {
                 if ( decl->firstType ) {
-                    resT->firstType = inferAlias(decl->firstType,fptr,aliases,options);
+                    resT->firstType = inferAlias(decl->firstType,fptr,aliases,options,autoToAlias);
                     if ( !resT->firstType ) return nullptr;
                 }
             } else if ( decl->baseType==Type::tArray ) {
                 if ( decl->firstType ) {
-                    resT->firstType = inferAlias(decl->firstType,fptr,aliases,options);
+                    resT->firstType = inferAlias(decl->firstType,fptr,aliases,options,autoToAlias);
                     if ( !resT->firstType ) return nullptr;
                 }
             } else if ( decl->baseType==Type::tTable ) {
                 if ( decl->firstType ) {
-                    resT->firstType = inferAlias(decl->firstType,fptr,aliases,options);
+                    resT->firstType = inferAlias(decl->firstType,fptr,aliases,options,autoToAlias);
                     if ( !resT->firstType ) return nullptr;
                 }
                 if ( decl->secondType ) {
-                    resT->secondType = inferAlias(decl->secondType,fptr,aliases,options);
+                    resT->secondType = inferAlias(decl->secondType,fptr,aliases,options,autoToAlias);
                     if ( !resT->secondType ) return nullptr;
                 }
             } else if ( decl->baseType==Type::tFunction || decl->baseType==Type::tLambda || decl->baseType==Type::tBlock  ) {
                 for ( size_t iA=0, iAs=decl->argTypes.size(); iA!=iAs; ++iA ) {
                     auto & declAT = decl->argTypes[iA];
-                    if ( auto infAT = inferAlias(declAT,fptr,aliases,options) ) {
+                    if ( auto infAT = inferAlias(declAT,fptr,aliases,options,autoToAlias) ) {
                         resT->argTypes[iA] = infAT;
                     } else {
                         return nullptr;
                     }
                 }
                 if ( !resT->firstType ) return nullptr;
-                resT->firstType = inferAlias(decl->firstType,fptr,aliases,options);
+                resT->firstType = inferAlias(decl->firstType,fptr,aliases,options,autoToAlias);
                 if ( !resT->firstType ) return nullptr;
             } else if ( decl->baseType==Type::tVariant || decl->baseType==Type::tTuple || decl->baseType==Type::option ) {
                 for ( size_t iA=0, iAs=decl->argTypes.size(); iA!=iAs; ++iA ) {
                     auto & declAT = decl->argTypes[iA];
-                    if ( auto infAT = inferAlias(declAT,fptr,aliases,options) ) {
+                    if ( auto infAT = inferAlias(declAT,fptr,aliases,options,autoToAlias) ) {
                         resT->argTypes[iA] = infAT;
                     } else {
                         return nullptr;
@@ -485,12 +486,13 @@ namespace das {
             return tw.str();
         }
 
-        void reportInferAliasErrors ( const TypeDeclPtr & decl, TextWriter & tw ) const {
-            if ( decl->baseType==Type::autoinfer ) {    // until alias is fully resolved, can't infer
+        void reportInferAliasErrors ( const TypeDeclPtr & decl, TextWriter & tw, bool autoToAlias=false ) const {
+            autoToAlias |= decl->autoToAlias;
+            if ( decl->baseType==Type::autoinfer && !autoToAlias ) {    // until alias is fully resolved, can't infer
                 tw << "\tcan't infer type for auto\n";
                 return;
             }
-            if ( decl->baseType==Type::alias ) {
+            if ( decl->baseType==Type::alias || (decl->baseType==Type::autoinfer && autoToAlias) ) {
                 if ( decl->isTag ) {
                     tw << "\tcan't infer type for $t\n";
                     return;

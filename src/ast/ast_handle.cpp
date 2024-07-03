@@ -244,9 +244,12 @@ namespace das {
     void reportTrait ( const TypeDeclPtr & type, const string & prefix, set<Structure *> & visited, const callable<void(const TypeDeclPtr &, const string &)> & report ) {
         report(type, prefix);
         if ( type->baseType==Type::tPointer ) {
-            if ( type->firstType ) reportTrait(type->firstType, prefix, visited, report);
+            // trait never propages via pointer
+            //if ( type->firstType ) reportTrait(type->firstType, prefix, visited, report);
         } else if ( type->baseType==Type::tStructure ) {
             if ( type->structType ) {
+                if ( visited.find(type->structType)!=visited.end() ) return;
+                visited.insert(type->structType);
                 for ( auto & fld : type->structType->fields ) {
                     reportTrait(fld.type, prefix+"."+fld.name, visited, report);
                 }

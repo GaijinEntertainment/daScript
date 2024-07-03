@@ -375,6 +375,9 @@ namespace das
 
     string TypeDecl::describe ( DescribeExtra extra, DescribeContracts contracts, DescribeModule dmodule ) const {
         TextWriter stream;
+        if ( autoToAlias ) {
+            stream << "type<";
+        }
         if ( baseType==Type::alias ) {
             if ( isTag ) {
                 if ( firstType) {
@@ -577,6 +580,9 @@ namespace das
                     stream << " -#";
                 }
             }
+        }
+        if ( autoToAlias ) {
+            stream << ">";
         }
         return stream.str();
     }
@@ -1681,33 +1687,40 @@ namespace das
     }
 
     bool TypeDecl::isAlias() const {
+        return isAliasOrA2A(false);
+    }
+
+    bool TypeDecl::isAliasOrA2A(bool a2a) const {
+        a2a |= autoToAlias;
         // auto is auto.... or auto....?
-        if ( baseType==Type::alias ) {
+        if ( baseType==Type::autoinfer && a2a ) {
+            return true;
+        } else if ( baseType==Type::alias ) {
             return true;
         } else  if ( baseType==Type::tPointer ) {
             if ( firstType )
-                return firstType->isAlias();
+                return firstType->isAliasOrA2A(a2a);
         } else  if ( baseType==Type::tIterator ) {
             if ( firstType )
-                return firstType->isAlias();
+                return firstType->isAliasOrA2A(a2a);
         } else if ( baseType==Type::tArray ) {
             if ( firstType )
-                return firstType->isAlias();
+                return firstType->isAliasOrA2A(a2a);
         } else if ( baseType==Type::tTable ) {
             bool any = false;
             if ( firstType )
-                any |= firstType->isAlias();
+                any |= firstType->isAliasOrA2A(a2a);
             if ( secondType )
-                any |= secondType->isAlias();
+                any |= secondType->isAliasOrA2A(a2a);
             return any;
         } else if ( baseType==Type::tBlock || baseType==Type::tFunction ||
                    baseType==Type::tLambda || baseType==Type::tTuple ||
                    baseType==Type::tVariant || baseType==Type::option ) {
             bool any = false;
             if ( firstType )
-                any |= firstType->isAlias();
+                any |= firstType->isAliasOrA2A(a2a);
             for ( auto & arg : argTypes )
-                any |= arg->isAlias();
+                any |= arg->isAliasOrA2A(a2a);
             return any;
         }
         return false;
