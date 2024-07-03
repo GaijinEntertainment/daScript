@@ -164,6 +164,7 @@ namespace das {
         bool isAutoOrAlias() const;
         bool isAutoWithoutOptions(bool & appendHasOptions) const;
         bool isAotAlias () const;
+        bool isAliasOrA2A(bool a2a) const;
         bool isAlias() const;
         bool isAliasOrExpr() const;
         __forceinline bool isVectorType() const;
@@ -246,6 +247,7 @@ namespace das {
                 bool    isTag: 1;
                 bool    explicitRef : 1;
                 bool    isPrivateAlias : 1;    // this is a private alias. only matters in the context of module aliasTypes (for now)
+                bool    autoToAlias : 1;       // this allows conversion of auto to alias
             };
             uint32_t flags = 0;
         };

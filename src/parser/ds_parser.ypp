@@ -2642,6 +2642,10 @@ type_declaration_no_options
         $typeDecl->removeDim = false;
         $$ = $typeDecl;
     }
+    |   DAS_TYPE '<' { yyextra->das_arrow_depth ++; } type_declaration[typeDecl] '>' { yyextra->das_arrow_depth --; } {
+        $typeDecl->autoToAlias = true;
+        $$ = $typeDecl;
+    }
     |   type_declaration_no_options[typeDecl] '-' '[' ']' {
         $typeDecl->removeDim = true;
         $$ = $typeDecl;
