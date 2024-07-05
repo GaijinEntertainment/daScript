@@ -59,8 +59,7 @@ namespace das
     template <typename TT>
     struct vec2 {
         TT   x, y;
-        template <typename AP>
-        __forceinline friend StringWriter<AP> & operator<< (StringWriter<AP> & stream, const vec2<TT> & vec) {
+        __forceinline friend StringWriter & operator<< (StringWriter & stream, const vec2<TT> & vec) {
             stream << vec.x << DAS_PRINT_VEC_SEPARATROR << vec.y;
             return stream;
         }
@@ -82,8 +81,7 @@ namespace das
     template <typename TT>
     struct vec3 {
         TT   x, y, z;
-        template <typename AP>
-        __forceinline friend StringWriter<AP> & operator<< (StringWriter<AP> & stream, const vec3<TT> & vec) {
+        __forceinline friend StringWriter & operator<< (StringWriter & stream, const vec3<TT> & vec) {
             stream << vec.x << DAS_PRINT_VEC_SEPARATROR << vec.y << DAS_PRINT_VEC_SEPARATROR << vec.z;
             return stream;
         }
@@ -106,8 +104,7 @@ namespace das
     template <typename TT>
     struct vec4 {
         TT  x, y, z, w;
-        template <typename AP>
-        __forceinline friend StringWriter<AP> & operator<< (StringWriter<AP> & stream, const vec4<TT> & vec) {
+        __forceinline friend StringWriter & operator<< (StringWriter & stream, const vec4<TT> & vec) {
             stream << vec.x << DAS_PRINT_VEC_SEPARATROR << vec.y << DAS_PRINT_VEC_SEPARATROR << vec.z << DAS_PRINT_VEC_SEPARATROR << vec.w;
             return stream;
         }
