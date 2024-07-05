@@ -1225,7 +1225,7 @@ namespace das {
     }
 
     template <typename TT>
-    __forceinline TextWriter&  print ( TextWriter& stream, const TT & value ) {
+    __forceinline StringWriter&  print ( StringWriter& stream, const TT & value ) {
         SetPrinterFlags flags;
         const_cast<TT&>(value).visit(flags);
         Printer log(nullptr);
@@ -1234,7 +1234,7 @@ namespace das {
         return stream;
     }
 
-    TextWriter& operator<< (TextWriter& stream, const Program & program) {
+    StringWriter& operator<< (StringWriter& stream, const Program & program) {
         bool any = false;
         program.library.foreach([&](Module * pm) {
             if ( !pm->name.empty() && pm->name!="$" ) {
@@ -1253,11 +1253,11 @@ namespace das {
         return stream;
     }
 
-    TextWriter& operator<< (TextWriter& stream, const Expression & expr) {
+    StringWriter& operator<< (StringWriter& stream, const Expression & expr) {
         return print(stream,expr);
     }
 
-    TextWriter& operator<< (TextWriter& stream, const Function & func) {
+    StringWriter& operator<< (StringWriter& stream, const Function & func) {
         return print(stream,func);
     }
 }

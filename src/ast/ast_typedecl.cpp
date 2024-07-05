@@ -587,7 +587,7 @@ namespace das
         return stream.str();
     }
 
-    TextWriter& operator<< (TextWriter& stream, const TypeDecl & decl) {
+    StringWriter& operator<< (StringWriter& stream, const TypeDecl & decl) {
         stream << decl.describe();
         return stream;
     }

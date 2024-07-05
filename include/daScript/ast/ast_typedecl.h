@@ -56,7 +56,7 @@ namespace das {
         TypeDecl(const StructurePtr & sp) : baseType(Type::tStructure), structType(sp.get()) {}
         TypeDecl(const EnumerationPtr & ep);
         TypeDeclPtr visit ( Visitor & vis );
-        friend TextWriter& operator<< (TextWriter& stream, const TypeDecl & decl);
+        friend StringWriter& operator<< (StringWriter& stream, const TypeDecl & decl);
         string getMangledName ( bool fullName=false ) const;
         void getMangledName ( FixedBufferTextWriter & tw, bool fullName=false ) const;
         bool canAot() const;

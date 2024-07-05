@@ -579,7 +579,7 @@ namespace das
         Expression() = default;
         Expression(const LineInfo & a) : at(a) {}
         virtual ~Expression() {}
-        friend TextWriter& operator<< (TextWriter& stream, const Expression & func);
+        friend StringWriter& operator<< (StringWriter& stream, const Expression & func);
         virtual ExpressionPtr visit(Visitor & /*vis*/ )  { DAS_ASSERT(0); return this; };
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const;
         static ExpressionPtr autoDereference ( const ExpressionPtr & expr );
@@ -770,7 +770,7 @@ namespace das
         enum class DescribeModule    { no, yes };
     public:
         virtual ~Function() {}
-        friend TextWriter& operator<< (TextWriter& stream, const Function & func);
+        friend StringWriter& operator<< (StringWriter& stream, const Function & func);
         void getMangledName(FixedBufferTextWriter & ss) const;
         string getMangledName() const;
         uint64_t getMangledNameHash() const;
@@ -1456,7 +1456,7 @@ namespace das
     public:
         Program();
         int getContextStackSize() const;
-        friend TextWriter& operator<< (TextWriter& stream, const Program & program);
+        friend StringWriter& operator<< (StringWriter& stream, const Program & program);
         vector<StructurePtr> findStructure ( const string & name ) const;
         vector<AnnotationPtr> findAnnotation ( const string & name ) const;
         vector<TypeInfoMacroPtr> findTypeInfoMacro ( const string & name ) const;

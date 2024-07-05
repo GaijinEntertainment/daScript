@@ -9,7 +9,7 @@ namespace das {
 
     uint64_t getCancelLimit();
 
-    class StringBuilderWriter : public StringWriter<StringBuilderPolicy> {
+    class StringBuilderWriter : public TextWriter {
     public:
         StringBuilderWriter() { }
     };
