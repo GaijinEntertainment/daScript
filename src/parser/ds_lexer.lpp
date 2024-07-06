@@ -371,6 +371,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 <normal>"try"                                           yyextra->das_need_oxford_comma = false; return DAS_TRY;
 <normal>"recover"                                       yyextra->das_need_oxford_comma = false; return DAS_CATCH;
 <normal>"typedef"                                       yyextra->das_need_oxford_comma = false; return DAS_TYPEDEF;
+<normal>"typedecl"                                      return DAS_TYPEDECL;
 <normal>"label"                                         return DAS_LABEL;
 <normal>"goto"                                          return DAS_GOTO;
 <normal>"module"                                        return DAS_MODULE;

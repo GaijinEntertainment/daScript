@@ -75,10 +75,18 @@ namespace das
     }
 
     TypeDeclPtr TypeDecl::visit ( Visitor & vis ) {
-        for ( size_t i=0, is=dim.size(); i!=is; ++i ) {
-            if ( dim[i]==TypeDecl::dimConst ) {
+        if ( baseType==Type::typeDecl ) {
+            for ( size_t i=0, is=dimExpr.size(); i!=is; ++i ) {
                 if ( dimExpr[i] ) {
                     dimExpr[i] = dimExpr[i]->visit(vis);
+                }
+            }
+        } else {
+            for ( size_t i=0, is=dim.size(); i!=is; ++i ) {
+                if ( dim[i]==TypeDecl::dimConst ) {
+                    if ( dimExpr[i] ) {
+                        dimExpr[i] = dimExpr[i]->visit(vis);
+                    }
                 }
             }
         }
@@ -403,6 +411,12 @@ namespace das
                 if ( argT != argTypes.back() ) {
                     stream << "|";
                 }
+            }
+        } else if ( baseType==Type::typeDecl ) {
+            if ( dimExpr.size()==1 ) {
+                stream << "typedecl(" << (*dimExpr[0]) << ")";
+            } else {
+                stream << "typedecl(/*invalid expression*/)";
             }
         } else if ( baseType==Type::tHandle ) {
             if ( annotation ) {
@@ -1734,7 +1748,9 @@ namespace das
             }
         }
         // auto is auto.... or auto....?
-        if ( baseType==Type::alias ) {
+        if ( baseType==Type::typeDecl ) {
+            return true;
+        } if ( baseType==Type::alias ) {
             return true;
         } else  if ( baseType==Type::tPointer ) {
             if ( firstType )
@@ -1782,7 +1798,9 @@ namespace das
                 return true;
             }
         }
-        if ( baseType==Type::autoinfer ) {
+        if ( baseType==Type::typeDecl ) {
+            return true;
+        } else if ( baseType==Type::autoinfer ) {
             return true;
         } else if ( baseType==Type::option ) {
             return true;
@@ -1823,7 +1841,9 @@ namespace das
                 return true;
             }
         }
-        if ( baseType==Type::autoinfer ) {
+        if ( baseType==Type::typeDecl ) {
+            return true;
+        } else if ( baseType==Type::autoinfer ) {
             return true;
         } else if ( baseType==Type::tPointer ) {
             if ( firstType )
@@ -1864,7 +1884,9 @@ namespace das
                 return true;
             }
         }
-        if (baseType == Type::autoinfer) {
+        if (baseType == Type::typeDecl ) {
+            return true;
+        } else if (baseType == Type::autoinfer) {
             return true;
         } else if ( baseType==Type::option ) {
             return true;
@@ -2718,6 +2740,7 @@ namespace das
                 case Type::fakeLineInfo:    ss << "_l"; break;
                 case Type::autoinfer:       ss << "."; break;
                 case Type::option:          ss << "|"; break;
+                case Type::typeDecl:        ss << "D"; break;
                 case Type::alias:           ss << "L"; break;
                 case Type::tIterator:       ss << "G"; break;
                 case Type::tArray:          ss << "A"; break;
@@ -3051,6 +3074,7 @@ namespace das
                 else                                        { ch+=1; return make_smart<TypeDecl>(Type::tFloat); }
             case '.':   ch++; return make_smart<TypeDecl>(Type::autoinfer);
             case '|':   ch++; return make_smart<TypeDecl>(Type::option);
+            case 'D':   ch++; return make_smart<TypeDecl>(Type::typeDecl);
             case '*':   ch++; return make_smart<TypeDecl>(Type::anyArgument);
             case 'L':   ch++; return make_smart<TypeDecl>(Type::alias);
             case 'A':   ch++; return make_smart<TypeDecl>(Type::tArray);
