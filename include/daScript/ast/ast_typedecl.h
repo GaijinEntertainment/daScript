@@ -718,7 +718,7 @@ namespace das {
     __forceinline bool TypeDecl::isSimpleType() const {
         if ( baseType==Type::none || baseType==Type::tVoid
             || baseType==Type::autoinfer || baseType==Type::alias || baseType==Type::option
-            || baseType==Type::anyArgument ) return false;
+            || baseType==Type::anyArgument || baseType==Type::typeDecl ) return false;
         return !isRefType();
     }
 

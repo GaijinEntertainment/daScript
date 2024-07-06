@@ -396,6 +396,9 @@ namespace das {
         // infer alias type
         TypeDeclPtr inferAlias ( const TypeDeclPtr & decl, const FunctionPtr & fptr = nullptr, AliasMap * aliases = nullptr, OptionsMap * options = nullptr, bool autoToAlias=false ) const {
             autoToAlias |= decl->autoToAlias;
+            if ( decl->baseType==Type::typeDecl ) {
+                return nullptr;
+            }
             if ( decl->baseType==Type::autoinfer && !autoToAlias ) {    // until alias is fully resolved, can't infer
                 return nullptr;
             }
@@ -488,6 +491,10 @@ namespace das {
 
         void reportInferAliasErrors ( const TypeDeclPtr & decl, TextWriter & tw, bool autoToAlias=false ) const {
             autoToAlias |= decl->autoToAlias;
+            if ( decl->baseType==Type::typeDecl ) {
+                tw << "\tcan't infer type for typeDecl\n";
+                return;
+            }
             if ( decl->baseType==Type::autoinfer && !autoToAlias ) {    // until alias is fully resolved, can't infer
                 tw << "\tcan't infer type for auto\n";
                 return;
@@ -546,6 +553,9 @@ namespace das {
 
         // infer alias type
         TypeDeclPtr inferPartialAliases ( const TypeDeclPtr & decl, const FunctionPtr & fptr = nullptr, AliasMap * aliases = nullptr ) const {
+            if ( decl->baseType==Type::typeDecl ) {
+                return decl;
+            }
             if ( decl->baseType==Type::autoinfer ) {
                 return decl;
             }
@@ -1487,44 +1497,65 @@ namespace das {
             return nullptr;
         }
 
-        bool inferTypeExpr ( TypeDecl * type ) {
+        bool inferTypeExpr ( TypeDeclPtr & type ) {
             bool any = false;
-            for ( size_t i=0, is=type->dim.size(); i!=is; ++i ) {
-                if ( type->dim[i]==TypeDecl::dimConst ) {
-                    if ( type->dimExpr[i] ) {
-                        if ( auto constExpr = getConstExpr(type->dimExpr[i].get()) ) {
-                            if ( constExpr->type->isIndex() ) {
-                                auto cI = static_pointer_cast<ExprConstInt>(constExpr);
-                                auto dI = cI->getValue();
-                                if ( dI>0) {
-                                    type->dim[i] = dI;
-                                    any = true;
+            if ( type->baseType != Type::typeDecl ) {
+                for ( size_t i=0, is=type->dim.size(); i!=is; ++i ) {
+                    if ( type->dim[i]==TypeDecl::dimConst ) {
+                        if ( type->dimExpr[i] ) {
+                            if ( auto constExpr = getConstExpr(type->dimExpr[i].get()) ) {
+                                if ( constExpr->type->isIndex() ) {
+                                    auto cI = static_pointer_cast<ExprConstInt>(constExpr);
+                                    auto dI = cI->getValue();
+                                    if ( dI>0) {
+                                        type->dim[i] = dI;
+                                        any = true;
+                                    } else {
+                                        error("array dimension can't be 0 or less",  "", "",
+                                            type->at, CompilationError::invalid_array_dimension);
+                                    }
                                 } else {
-                                    error("array dimension can't be 0 or less",  "", "",
+                                    error("array dimension must be int32 or uint32",  "", "",
                                         type->at, CompilationError::invalid_array_dimension);
                                 }
                             } else {
-                                error("array dimension must be int32 or uint32",  "", "",
+                                error("array dimension must be constant",  "", "",
                                     type->at, CompilationError::invalid_array_dimension);
                             }
                         } else {
-                            error("array dimension must be constant",  "", "",
+                            error("can't deduce array dimension",  "", "",
                                 type->at, CompilationError::invalid_array_dimension);
                         }
-                    } else {
-                        error("can't deduce array dimension",  "", "",
-                            type->at, CompilationError::invalid_array_dimension);
                     }
+                }
+            } else if ( type->baseType==Type::typeDecl ) {
+                if ( type->dimExpr.size()!=1 ) {
+                    error("typeDecl must have exactly one dimension",  "", "",
+                        type->at, CompilationError::invalid_type);
+                } else if ( type->dimExpr[0]->type ) {
+                    if ( !type->dimExpr[0]->type->isAutoOrAlias() ) {
+                        auto resType = make_smart<TypeDecl>(*type->dimExpr[0]->type);
+                        resType->ref = false;
+                        TypeDecl::applyAutoContracts(resType,type);
+                        type = resType;
+                        return true;
+                    } else {
+                        error("can't deduce typeDecl type",  "", "",
+                            type->at, CompilationError::invalid_type);
+                    }
+                } else {
+                    error("can't deduce type",  "", "",
+                        type->at, CompilationError::invalid_type);
                 }
             }
             if ( type->firstType ) {
-                any |= inferTypeExpr(type->firstType.get());
+                any |= inferTypeExpr(type->firstType);
             }
             if ( type->secondType ) {
-                any |= inferTypeExpr(type->secondType.get());
+                any |= inferTypeExpr(type->secondType);
             }
             for ( auto & argType : type->argTypes ) {
-                any |= inferTypeExpr(argType.get());
+                any |= inferTypeExpr(argType);
             }
             return any;
         }
@@ -1532,28 +1563,12 @@ namespace das {
     protected:
 
     // type
-        virtual void preVisit ( TypeDecl * type ) override {
-            if ( inferTypeExpr(type) ) {
+        virtual TypeDeclPtr visit ( TypeDecl * type ) override {
+            TypeDeclPtr newType = type;
+            if ( inferTypeExpr(newType) ) {
                 reportAstChanged();
             }
-#if 0
-            // note: this code here is for debugging mangled names facilities
-            //  do not delete, until those are stabilized
-            auto mname = type->getMangledName(true);
-            if ( mname=="CN<;f>0<i;f>U" ) {
-                mname = type->getMangledName(true);
-            }
-            MangledNameParser parser;
-            const char * mnamec = mname.c_str();
-            auto mtype = parser.parseTypeFromMangledName ( mnamec, program->library, program->thisModule.get() );
-            if ( !type->isSameExactType(*mtype) ) {
-                LOG(LogLevel::error) tp;
-                auto mtname = mtype->getMangledName(true);
-                tp << "Not exactly the same type '" << mname << "` vs `" << mtname << "`\n";
-                if ( mname==mtname ) tp << "however strings match\n";
-                DAS_ASSERT(type->isSameExactType(*mtype) && "type validation failed");
-            }
-#endif
+            return newType;
         }
 
         virtual  TypeDeclPtr visitAlias ( TypeDecl * td, const string & ) override {

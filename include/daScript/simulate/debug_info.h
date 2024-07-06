@@ -12,6 +12,7 @@ namespace das
         autoinfer,
         alias,
         option,
+        typeDecl,
         fakeContext,
         fakeLineInfo,
         anyArgument,

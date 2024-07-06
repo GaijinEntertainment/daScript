@@ -132,152 +132,153 @@ extern int das_yydebug;
     DAS_DELETE = 292,              /* "delete"  */
     DAS_DEREF = 293,               /* "deref"  */
     DAS_TYPEDEF = 294,             /* "typedef"  */
-    DAS_WITH = 295,                /* "with"  */
-    DAS_AKA = 296,                 /* "aka"  */
-    DAS_ASSUME = 297,              /* "assume"  */
-    DAS_CAST = 298,                /* "cast"  */
-    DAS_OVERRIDE = 299,            /* "override"  */
-    DAS_ABSTRACT = 300,            /* "abstract"  */
-    DAS_UPCAST = 301,              /* "upcast"  */
-    DAS_ITERATOR = 302,            /* "iterator"  */
-    DAS_VAR = 303,                 /* "var"  */
-    DAS_ADDR = 304,                /* "addr"  */
-    DAS_CONTINUE = 305,            /* "continue"  */
-    DAS_WHERE = 306,               /* "where"  */
-    DAS_PASS = 307,                /* "pass"  */
-    DAS_REINTERPRET = 308,         /* "reinterpret"  */
-    DAS_MODULE = 309,              /* "module"  */
-    DAS_PUBLIC = 310,              /* "public"  */
-    DAS_LABEL = 311,               /* "label"  */
-    DAS_GOTO = 312,                /* "goto"  */
-    DAS_IMPLICIT = 313,            /* "implicit"  */
-    DAS_EXPLICIT = 314,            /* "explicit"  */
-    DAS_SHARED = 315,              /* "shared"  */
-    DAS_PRIVATE = 316,             /* "private"  */
-    DAS_SMART_PTR = 317,           /* "smart_ptr"  */
-    DAS_UNSAFE = 318,              /* "unsafe"  */
-    DAS_INSCOPE = 319,             /* "inscope"  */
-    DAS_STATIC = 320,              /* "static"  */
-    DAS_FIXED_ARRAY = 321,         /* "fixed_array"  */
-    DAS_TBOOL = 322,               /* "bool"  */
-    DAS_TVOID = 323,               /* "void"  */
-    DAS_TSTRING = 324,             /* "string"  */
-    DAS_TAUTO = 325,               /* "auto"  */
-    DAS_TINT = 326,                /* "int"  */
-    DAS_TINT2 = 327,               /* "int2"  */
-    DAS_TINT3 = 328,               /* "int3"  */
-    DAS_TINT4 = 329,               /* "int4"  */
-    DAS_TUINT = 330,               /* "uint"  */
-    DAS_TBITFIELD = 331,           /* "bitfield"  */
-    DAS_TUINT2 = 332,              /* "uint2"  */
-    DAS_TUINT3 = 333,              /* "uint3"  */
-    DAS_TUINT4 = 334,              /* "uint4"  */
-    DAS_TFLOAT = 335,              /* "float"  */
-    DAS_TFLOAT2 = 336,             /* "float2"  */
-    DAS_TFLOAT3 = 337,             /* "float3"  */
-    DAS_TFLOAT4 = 338,             /* "float4"  */
-    DAS_TRANGE = 339,              /* "range"  */
-    DAS_TURANGE = 340,             /* "urange"  */
-    DAS_TRANGE64 = 341,            /* "range64"  */
-    DAS_TURANGE64 = 342,           /* "urange64"  */
-    DAS_TBLOCK = 343,              /* "block"  */
-    DAS_TINT64 = 344,              /* "int64"  */
-    DAS_TUINT64 = 345,             /* "uint64"  */
-    DAS_TDOUBLE = 346,             /* "double"  */
-    DAS_TFUNCTION = 347,           /* "function"  */
-    DAS_TLAMBDA = 348,             /* "lambda"  */
-    DAS_TINT8 = 349,               /* "int8"  */
-    DAS_TUINT8 = 350,              /* "uint8"  */
-    DAS_TINT16 = 351,              /* "int16"  */
-    DAS_TUINT16 = 352,             /* "uint16"  */
-    DAS_TTUPLE = 353,              /* "tuple"  */
-    DAS_TVARIANT = 354,            /* "variant"  */
-    DAS_GENERATOR = 355,           /* "generator"  */
-    DAS_YIELD = 356,               /* "yield"  */
-    DAS_SEALED = 357,              /* "sealed"  */
-    ADDEQU = 358,                  /* "+="  */
-    SUBEQU = 359,                  /* "-="  */
-    DIVEQU = 360,                  /* "/="  */
-    MULEQU = 361,                  /* "*="  */
-    MODEQU = 362,                  /* "%="  */
-    ANDEQU = 363,                  /* "&="  */
-    OREQU = 364,                   /* "|="  */
-    XOREQU = 365,                  /* "^="  */
-    SHL = 366,                     /* "<<"  */
-    SHR = 367,                     /* ">>"  */
-    ADDADD = 368,                  /* "++"  */
-    SUBSUB = 369,                  /* "--"  */
-    LEEQU = 370,                   /* "<="  */
-    SHLEQU = 371,                  /* "<<="  */
-    SHREQU = 372,                  /* ">>="  */
-    GREQU = 373,                   /* ">="  */
-    EQUEQU = 374,                  /* "=="  */
-    NOTEQU = 375,                  /* "!="  */
-    RARROW = 376,                  /* "->"  */
-    LARROW = 377,                  /* "<-"  */
-    QQ = 378,                      /* "??"  */
-    QDOT = 379,                    /* "?."  */
-    QBRA = 380,                    /* "?["  */
-    LPIPE = 381,                   /* "<|"  */
-    LBPIPE = 382,                  /* " <|"  */
-    LLPIPE = 383,                  /* "$ <|"  */
-    LAPIPE = 384,                  /* "@ <|"  */
-    LFPIPE = 385,                  /* "@@ <|"  */
-    RPIPE = 386,                   /* "|>"  */
-    CLONEEQU = 387,                /* ":="  */
-    ROTL = 388,                    /* "<<<"  */
-    ROTR = 389,                    /* ">>>"  */
-    ROTLEQU = 390,                 /* "<<<="  */
-    ROTREQU = 391,                 /* ">>>="  */
-    MAPTO = 392,                   /* "=>"  */
-    COLCOL = 393,                  /* "::"  */
-    ANDAND = 394,                  /* "&&"  */
-    OROR = 395,                    /* "||"  */
-    XORXOR = 396,                  /* "^^"  */
-    ANDANDEQU = 397,               /* "&&="  */
-    OROREQU = 398,                 /* "||="  */
-    XORXOREQU = 399,               /* "^^="  */
-    DOTDOT = 400,                  /* ".."  */
-    MTAG_E = 401,                  /* "$$"  */
-    MTAG_I = 402,                  /* "$i"  */
-    MTAG_V = 403,                  /* "$v"  */
-    MTAG_B = 404,                  /* "$b"  */
-    MTAG_A = 405,                  /* "$a"  */
-    MTAG_T = 406,                  /* "$t"  */
-    MTAG_C = 407,                  /* "$c"  */
-    MTAG_F = 408,                  /* "$f"  */
-    MTAG_DOTDOTDOT = 409,          /* "..."  */
-    BRABRAB = 410,                 /* "[["  */
-    BRACBRB = 411,                 /* "[{"  */
-    CBRCBRB = 412,                 /* "{{"  */
-    INTEGER = 413,                 /* "integer constant"  */
-    LONG_INTEGER = 414,            /* "long integer constant"  */
-    UNSIGNED_INTEGER = 415,        /* "unsigned integer constant"  */
-    UNSIGNED_LONG_INTEGER = 416,   /* "unsigned long integer constant"  */
-    UNSIGNED_INT8 = 417,           /* "unsigned int8 constant"  */
-    FLOAT = 418,                   /* "floating point constant"  */
-    DOUBLE = 419,                  /* "double constant"  */
-    NAME = 420,                    /* "name"  */
-    KEYWORD = 421,                 /* "keyword"  */
-    BEGIN_STRING = 422,            /* "start of the string"  */
-    STRING_CHARACTER = 423,        /* STRING_CHARACTER  */
-    STRING_CHARACTER_ESC = 424,    /* STRING_CHARACTER_ESC  */
-    END_STRING = 425,              /* "end of the string"  */
-    BEGIN_STRING_EXPR = 426,       /* "{"  */
-    END_STRING_EXPR = 427,         /* "}"  */
-    END_OF_READ = 428,             /* "end of failed eader macro"  */
-    SEMICOLON_CUR_CUR = 429,       /* ";}}"  */
-    SEMICOLON_CUR_SQR = 430,       /* ";}]"  */
-    SEMICOLON_SQR_SQR = 431,       /* ";]]"  */
-    COMMA_SQR_SQR = 432,           /* ",]]"  */
-    COMMA_CUR_SQR = 433,           /* ",}]"  */
-    UNARY_MINUS = 434,             /* UNARY_MINUS  */
-    UNARY_PLUS = 435,              /* UNARY_PLUS  */
-    PRE_INC = 436,                 /* PRE_INC  */
-    PRE_DEC = 437,                 /* PRE_DEC  */
-    POST_INC = 438,                /* POST_INC  */
-    POST_DEC = 439,                /* POST_DEC  */
-    DEREF = 440                    /* DEREF  */
+    DAS_TYPEDECL = 295,            /* "typedecl"  */
+    DAS_WITH = 296,                /* "with"  */
+    DAS_AKA = 297,                 /* "aka"  */
+    DAS_ASSUME = 298,              /* "assume"  */
+    DAS_CAST = 299,                /* "cast"  */
+    DAS_OVERRIDE = 300,            /* "override"  */
+    DAS_ABSTRACT = 301,            /* "abstract"  */
+    DAS_UPCAST = 302,              /* "upcast"  */
+    DAS_ITERATOR = 303,            /* "iterator"  */
+    DAS_VAR = 304,                 /* "var"  */
+    DAS_ADDR = 305,                /* "addr"  */
+    DAS_CONTINUE = 306,            /* "continue"  */
+    DAS_WHERE = 307,               /* "where"  */
+    DAS_PASS = 308,                /* "pass"  */
+    DAS_REINTERPRET = 309,         /* "reinterpret"  */
+    DAS_MODULE = 310,              /* "module"  */
+    DAS_PUBLIC = 311,              /* "public"  */
+    DAS_LABEL = 312,               /* "label"  */
+    DAS_GOTO = 313,                /* "goto"  */
+    DAS_IMPLICIT = 314,            /* "implicit"  */
+    DAS_EXPLICIT = 315,            /* "explicit"  */
+    DAS_SHARED = 316,              /* "shared"  */
+    DAS_PRIVATE = 317,             /* "private"  */
+    DAS_SMART_PTR = 318,           /* "smart_ptr"  */
+    DAS_UNSAFE = 319,              /* "unsafe"  */
+    DAS_INSCOPE = 320,             /* "inscope"  */
+    DAS_STATIC = 321,              /* "static"  */
+    DAS_FIXED_ARRAY = 322,         /* "fixed_array"  */
+    DAS_TBOOL = 323,               /* "bool"  */
+    DAS_TVOID = 324,               /* "void"  */
+    DAS_TSTRING = 325,             /* "string"  */
+    DAS_TAUTO = 326,               /* "auto"  */
+    DAS_TINT = 327,                /* "int"  */
+    DAS_TINT2 = 328,               /* "int2"  */
+    DAS_TINT3 = 329,               /* "int3"  */
+    DAS_TINT4 = 330,               /* "int4"  */
+    DAS_TUINT = 331,               /* "uint"  */
+    DAS_TBITFIELD = 332,           /* "bitfield"  */
+    DAS_TUINT2 = 333,              /* "uint2"  */
+    DAS_TUINT3 = 334,              /* "uint3"  */
+    DAS_TUINT4 = 335,              /* "uint4"  */
+    DAS_TFLOAT = 336,              /* "float"  */
+    DAS_TFLOAT2 = 337,             /* "float2"  */
+    DAS_TFLOAT3 = 338,             /* "float3"  */
+    DAS_TFLOAT4 = 339,             /* "float4"  */
+    DAS_TRANGE = 340,              /* "range"  */
+    DAS_TURANGE = 341,             /* "urange"  */
+    DAS_TRANGE64 = 342,            /* "range64"  */
+    DAS_TURANGE64 = 343,           /* "urange64"  */
+    DAS_TBLOCK = 344,              /* "block"  */
+    DAS_TINT64 = 345,              /* "int64"  */
+    DAS_TUINT64 = 346,             /* "uint64"  */
+    DAS_TDOUBLE = 347,             /* "double"  */
+    DAS_TFUNCTION = 348,           /* "function"  */
+    DAS_TLAMBDA = 349,             /* "lambda"  */
+    DAS_TINT8 = 350,               /* "int8"  */
+    DAS_TUINT8 = 351,              /* "uint8"  */
+    DAS_TINT16 = 352,              /* "int16"  */
+    DAS_TUINT16 = 353,             /* "uint16"  */
+    DAS_TTUPLE = 354,              /* "tuple"  */
+    DAS_TVARIANT = 355,            /* "variant"  */
+    DAS_GENERATOR = 356,           /* "generator"  */
+    DAS_YIELD = 357,               /* "yield"  */
+    DAS_SEALED = 358,              /* "sealed"  */
+    ADDEQU = 359,                  /* "+="  */
+    SUBEQU = 360,                  /* "-="  */
+    DIVEQU = 361,                  /* "/="  */
+    MULEQU = 362,                  /* "*="  */
+    MODEQU = 363,                  /* "%="  */
+    ANDEQU = 364,                  /* "&="  */
+    OREQU = 365,                   /* "|="  */
+    XOREQU = 366,                  /* "^="  */
+    SHL = 367,                     /* "<<"  */
+    SHR = 368,                     /* ">>"  */
+    ADDADD = 369,                  /* "++"  */
+    SUBSUB = 370,                  /* "--"  */
+    LEEQU = 371,                   /* "<="  */
+    SHLEQU = 372,                  /* "<<="  */
+    SHREQU = 373,                  /* ">>="  */
+    GREQU = 374,                   /* ">="  */
+    EQUEQU = 375,                  /* "=="  */
+    NOTEQU = 376,                  /* "!="  */
+    RARROW = 377,                  /* "->"  */
+    LARROW = 378,                  /* "<-"  */
+    QQ = 379,                      /* "??"  */
+    QDOT = 380,                    /* "?."  */
+    QBRA = 381,                    /* "?["  */
+    LPIPE = 382,                   /* "<|"  */
+    LBPIPE = 383,                  /* " <|"  */
+    LLPIPE = 384,                  /* "$ <|"  */
+    LAPIPE = 385,                  /* "@ <|"  */
+    LFPIPE = 386,                  /* "@@ <|"  */
+    RPIPE = 387,                   /* "|>"  */
+    CLONEEQU = 388,                /* ":="  */
+    ROTL = 389,                    /* "<<<"  */
+    ROTR = 390,                    /* ">>>"  */
+    ROTLEQU = 391,                 /* "<<<="  */
+    ROTREQU = 392,                 /* ">>>="  */
+    MAPTO = 393,                   /* "=>"  */
+    COLCOL = 394,                  /* "::"  */
+    ANDAND = 395,                  /* "&&"  */
+    OROR = 396,                    /* "||"  */
+    XORXOR = 397,                  /* "^^"  */
+    ANDANDEQU = 398,               /* "&&="  */
+    OROREQU = 399,                 /* "||="  */
+    XORXOREQU = 400,               /* "^^="  */
+    DOTDOT = 401,                  /* ".."  */
+    MTAG_E = 402,                  /* "$$"  */
+    MTAG_I = 403,                  /* "$i"  */
+    MTAG_V = 404,                  /* "$v"  */
+    MTAG_B = 405,                  /* "$b"  */
+    MTAG_A = 406,                  /* "$a"  */
+    MTAG_T = 407,                  /* "$t"  */
+    MTAG_C = 408,                  /* "$c"  */
+    MTAG_F = 409,                  /* "$f"  */
+    MTAG_DOTDOTDOT = 410,          /* "..."  */
+    BRABRAB = 411,                 /* "[["  */
+    BRACBRB = 412,                 /* "[{"  */
+    CBRCBRB = 413,                 /* "{{"  */
+    INTEGER = 414,                 /* "integer constant"  */
+    LONG_INTEGER = 415,            /* "long integer constant"  */
+    UNSIGNED_INTEGER = 416,        /* "unsigned integer constant"  */
+    UNSIGNED_LONG_INTEGER = 417,   /* "unsigned long integer constant"  */
+    UNSIGNED_INT8 = 418,           /* "unsigned int8 constant"  */
+    FLOAT = 419,                   /* "floating point constant"  */
+    DOUBLE = 420,                  /* "double constant"  */
+    NAME = 421,                    /* "name"  */
+    KEYWORD = 422,                 /* "keyword"  */
+    BEGIN_STRING = 423,            /* "start of the string"  */
+    STRING_CHARACTER = 424,        /* STRING_CHARACTER  */
+    STRING_CHARACTER_ESC = 425,    /* STRING_CHARACTER_ESC  */
+    END_STRING = 426,              /* "end of the string"  */
+    BEGIN_STRING_EXPR = 427,       /* "{"  */
+    END_STRING_EXPR = 428,         /* "}"  */
+    END_OF_READ = 429,             /* "end of failed eader macro"  */
+    SEMICOLON_CUR_CUR = 430,       /* ";}}"  */
+    SEMICOLON_CUR_SQR = 431,       /* ";}]"  */
+    SEMICOLON_SQR_SQR = 432,       /* ";]]"  */
+    COMMA_SQR_SQR = 433,           /* ",]]"  */
+    COMMA_CUR_SQR = 434,           /* ",}]"  */
+    UNARY_MINUS = 435,             /* UNARY_MINUS  */
+    UNARY_PLUS = 436,              /* UNARY_PLUS  */
+    PRE_INC = 437,                 /* PRE_INC  */
+    PRE_DEC = 438,                 /* PRE_DEC  */
+    POST_INC = 439,                /* POST_INC  */
+    POST_DEC = 440,                /* POST_DEC  */
+    DEREF = 441                    /* DEREF  */
   };
   typedef enum das_yytokentype das_yytoken_kind_t;
 #endif

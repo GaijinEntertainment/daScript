@@ -7,7 +7,7 @@
 #include "daScript/simulate/aot_builtin_rtti.h"
 
 DAS_BASE_BIND_ENUM(das::Type, Type,
-    none,    autoinfer,    alias,    option,    fakeContext,    fakeLineInfo,
+    none,    autoinfer,    alias,    option,    typeDecl, fakeContext,    fakeLineInfo,
     anyArgument,    tVoid,    tBool,    tInt8,    tUInt8,    tInt16,    tUInt16,
     tInt64,    tUInt64,    tInt,    tInt2,    tInt3,    tInt4,    tUInt,
     tUInt2,    tUInt3,    tUInt4,    tFloat,    tFloat2,    tFloat3,    tFloat4,

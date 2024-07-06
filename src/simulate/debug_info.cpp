@@ -14,6 +14,7 @@ namespace das
         {   Type::autoinfer,    "auto"  },
         {   Type::alias,        "alias"  },
         {   Type::option,       "option"  },
+        {   Type::typeDecl,     "typedecl" },
         {   Type::anyArgument,  "any"  },
         {   Type::tVoid,        "void"  },
         {   Type::tBool,        "bool"  },

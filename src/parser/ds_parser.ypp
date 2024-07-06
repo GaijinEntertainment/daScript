@@ -177,6 +177,7 @@
 %token  DAS_DELETE          "delete"
 %token  DAS_DEREF           "deref"
 %token  DAS_TYPEDEF         "typedef"
+%token  DAS_TYPEDECL        "typedecl"
 %token  DAS_WITH            "with"
 %token  DAS_AKA             "aka"
 %token  DAS_ASSUME          "assume"
@@ -2623,6 +2624,10 @@ type_declaration_no_options
     |   bitfield_type_declaration[typeDecl]                 { $$ = $typeDecl; }
     |   structure_type_declaration[typeDecl]                { $$ = $typeDecl; }
     |   type_declaration_no_options[typeDecl] '[' expr[dimExpr] ']' {
+        if ( $typeDecl->baseType==Type::typeDecl ) {
+            das_yyerror(scanner,"type declaration can`t be used as array base type",tokAt(scanner,@typeDecl),
+                CompilationError::invalid_type);
+        }
         int32_t dI = TypeDecl::dimConst;
         if ( $dimExpr->rtti_isConstant() ) {                // note: this shortcut is here so we don`t get extra infer pass on every array
             auto cI = (ExprConst *) $dimExpr;
@@ -2645,6 +2650,11 @@ type_declaration_no_options
     |   DAS_TYPE '<' { yyextra->das_arrow_depth ++; } type_declaration[typeDecl] '>' { yyextra->das_arrow_depth --; } {
         $typeDecl->autoToAlias = true;
         $$ = $typeDecl;
+    }
+    |   DAS_TYPEDECL[td] '(' expr[subexpr] ')' {
+        $$ = new TypeDecl(Type::typeDecl);
+        $$->at = tokRangeAt(scanner,@td,@subexpr);
+        $$->dimExpr.push_back($subexpr);
     }
     |   type_declaration_no_options[typeDecl] '-' '[' ']' {
         $typeDecl->removeDim = true;
