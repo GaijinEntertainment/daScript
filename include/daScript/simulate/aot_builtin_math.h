@@ -1,6 +1,10 @@
 #pragma once
 
 #include <dag_noise/dag_uint_noise.h>
+#if (__clang_major__ < 12 || (__clang_major__ >= 17 && __clang_major__ <= 18)) && defined(__clang__) && defined(__FAST_MATH__)
+#include <cstring> // memcpy
+#include <cmath> // INFINITY
+#endif 
 
 namespace das {
     __forceinline unsigned int uint_noise2D_int2(das::int2 pos, unsigned int seed)
@@ -75,8 +79,6 @@ namespace das {
 #pragma float_control(precise, on)
 #endif
 #if (__clang_major__ < 12 || (__clang_major__ >= 17 && __clang_major__ <= 18)) && defined(__clang__) && defined(__FAST_MATH__)
-#include <cstring> // memcpy
-#include <cmath> // INFINITY
     //unfortunately older clang versions do not work with float_control, and in clang 17-18.1 it's broken
     __forceinline DAS_FINITE_MATH bool   fisnan(float  a) { volatile float b = a; return b != a; }
     __forceinline DAS_FINITE_MATH bool   disnan(double  a) { volatile double b = a; return b != a; }
