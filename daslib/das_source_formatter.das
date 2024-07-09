@@ -19,11 +19,11 @@ let sorted_tokens_source <- [[auto "<<<="; ">>>=";
     ]]
 
 let dont_need_space_around <- [[auto "("; ")"; "["; "]"; "\{"; "\}";
-    "."; ";"; ","; "`"; "::"; "++"; "--"; "?."; "?["; "@@"; "!"; "~"; "#"; "->"
+    "."; ";"; ","; "`"; "::"; "++"; "--"; "?."; "?["; "@@"; "!"; "~"; "#"; "->"; "$"
     ]]
 
 let type_after_keyword <- [[auto "generator"; "cast"; "upcast"; "smart_ptr"; "match_type";
-    "type"; "reinterpret"; "variant"; "variant_index"; "function"
+    "type"; "reinterpret"; "variant"; "variant_index"; "function"; "has_field"
     ]]
 
 enum TokenType
@@ -39,6 +39,7 @@ struct TokenTemplate
     str: string = ""
     codes: array<uint8>
     length: int = 0
+
 
 [safe_when_uninitialized]
 struct Token
@@ -96,6 +97,21 @@ def isUtf8Bom(var text: array<uint8>&): bool
 
 def eq(ctx: FormatterCtx; index: int; s: string const implicit)
     return (index < 0 || index >= length(ctx.tokens)) ? false : ctx.tokens[index].str == s
+
+
+def eq(ctx: FormatterCtx; index: int; s0, s1: string const implicit)
+    return (index < 0 || index >= length(ctx.tokens)) ? false : (ctx.tokens[index].str == s0 ||
+        ctx.tokens[index].str == s1)
+
+
+def eq(ctx: FormatterCtx; index: int; s0, s1, s2: string const implicit)
+    return (index < 0 || index >= length(ctx.tokens)) ? false : (ctx.tokens[index].str == s0 ||
+        ctx.tokens[index].str == s1 || ctx.tokens[index].str == s2)
+
+
+def eq(ctx: FormatterCtx; index: int; s0, s1, s2, s3: string const implicit)
+    return (index < 0 || index >= length(ctx.tokens)) ? false : (ctx.tokens[index].str == s0 ||
+        ctx.tokens[index].str == s1 || ctx.tokens[index].str == s2 || ctx.tokens[index].str == s3)
 
 
 def new_line_before(ctx: FormatterCtx; index: int)
@@ -345,16 +361,65 @@ def find_pair_square(var ctx: FormatterCtx; from_index: int): int
     return from_index
 
 
-def mark_tokens_as_type(var ctx: FormatterCtx; i: int)
+def find_pair_angle(var ctx: FormatterCtx; from_index: int): int
     var pc: ParenCounter
-    for j in range(i, length(ctx.tokens))
+    for j in range(from_index + 1, length(ctx.tokens))
         ctx |> update_paren(j, pc)
-        if pc.angle <= 0 && pc.paren <= 0
-            if (ctx |> new_line_before(j) || pc.paren < 0 || pc.square < 0 ||
-                ctx |> eq(j, ":=") || ctx |> eq(j, "<-") || ctx |> eq(j, ";") || ctx |> eq(j, "="))
+        if pc.angle < 0
+            return j
+    return from_index
+
+
+def mark_range_as_type(var ctx: FormatterCtx; from, to: int) // [from..to)
+    for i in range(from, to)
+        if ctx.tokens[i].tokenType != TokenType COMMENT
+            ctx.tokens[i].isInType = true
+
+
+def mark_tokens_as_type(var ctx: FormatterCtx; i: int)
+    var pos = i
+    if ctx |> eq(pos, "auto")
+        pos++
+        if ctx |> eq(pos, "(")
+            pos = ctx |> find_pair_paren(pos)
+            pos++
+    else
+        // 'ident :: ident ...'
+        while pos < length(ctx.tokens)
+            if ctx |> new_line_before(pos)
                 break
-        if (ctx.tokens[j].tokenType != TokenType COMMENT)
-            ctx.tokens[j].isInType = true
+            if ctx |> eq(pos, "::") || ctx.tokens[pos].tokenType == TokenType KEYWORD_OR_IDENTIFIER
+                pos++
+            else
+                break
+
+        // template <...>
+        if ctx |> eq(pos, "<")
+            pos = ctx |> find_pair_angle(pos)
+            pos++
+
+    if ctx |> new_line_before(pos)
+        mark_range_as_type(ctx, i, pos)
+        return
+
+    if ctx |> eq(pos, "[") && ctx |> eq(pos + 1, "]")
+        pos += 2
+
+    for j in range(pos, length(ctx.tokens))
+        if ctx |> eq(j, "-", "==") && ctx |> eq(j + 1, "const", "&", "#", "?")
+            pos = j + 2
+        elif ctx |> eq(j, "const", "&", "#", "?") || ctx |> eq(j, "implicit")
+            pos = j + 1;
+        else
+            break
+
+    mark_range_as_type(ctx, i, pos)
+
+    if ctx |> eq(pos, "|")
+        ctx.tokens[pos].spaces = 1
+        pos++
+        mark_tokens_as_type(ctx, pos)
+
 
 
 def mark_tokens_as_type_inside_angle(var ctx: FormatterCtx; i: int)
@@ -432,7 +497,7 @@ def mark_token_context(var ctx: FormatterCtx)
                     (assignPos0 > colonPos || assignPos0 <= 0) &&
                     (assignPos1 > colonPos || assignPos1 <= 0) &&
                     (assignPos2 > colonPos || assignPos2 <= 0))
-                ctx |> mark_tokens_as_type(colonPos)
+                ctx |> mark_tokens_as_type(colonPos + 1)
 
     // type in angle brackets
     for i in range(0, length(ctx.tokens) - 3)
@@ -440,9 +505,23 @@ def mark_token_context(var ctx: FormatterCtx)
             if (type_after_keyword |> find_index(ctx.tokens[i].str) >= 0)
                 ctx |> mark_tokens_as_type_inside_angle(i + 1)
 
-    // array type
+    // type macros  $t(identifier)
     for i in range(0, length(ctx.tokens) - 3)
-        if ctx |> eq(i, "[") && ctx |> eq(i + 1, "[")
+        if ctx |> eq(i, "$") && ctx |> eq(i + 1, "t") && ctx |> eq(i + 2, "(")
+            var beginParams = i + 2
+            var endParams = ctx |> find_pair_paren(i + 2)
+            for j in range(i, endParams + 1)
+                ctx.tokens[j].isInType = true
+            for j in range(endParams + 1, length(ctx.tokens))
+                if !(ctx |> eq(j, "-", "#", "&", "?") || ctx |> eq(j, "==", "const", "implicit"))
+                    break
+                if ctx |> new_line_before(j)
+                    break
+                ctx.tokens[j].isInType = true
+
+    // array, table type
+    for i in range(0, length(ctx.tokens) - 3)
+        if (ctx |> eq(i, "[") && ctx |> eq(i + 1, "[", "\{")) || (ctx |> eq(i, "\{") && ctx |> eq(i + 1, "\{"))
             ctx |> mark_tokens_as_type(i + 2)
 
     // struct / class / variant or multiline variables
@@ -484,25 +563,39 @@ def mark_token_context(var ctx: FormatterCtx)
 
     // functions
     for i in range(0, length(ctx.tokens) - 3)
-        if ctx |> new_line_before(i) && ctx |> eq(i, "def") && ctx |> eq(i + 2, ":")
-            ctx |> mark_tokens_as_type(i + 2)
-        if (ctx |> new_line_before(i) && ctx |> eq(i, "def")) || ((ctx |> eq(i, "$") || ctx |> eq(i, "@")) && (ctx |> eq(i + 1, "(") || ctx |> eq(i + 1, "[")))
-            var beginParams: int = i
-            if ctx |> eq(i + 1, "[")
-                beginParams = ctx |> find_pair_square(i + 1) + 1
-            beginParams = ctx |> search_token_in_line(beginParams, "(")
+        var pos = -1
+        if ctx |> new_line_before(i) && ctx |> eq(i, "def")
+            pos = i + 1
+        elif ctx |> eq(i, "$",  "@", "@@") && ctx |> eq(i + 1, "(", "[")
+            pos = i
 
-            if beginParams > 0
-                var endParams = ctx |> find_pair_paren(beginParams)
-                for j in range(beginParams, endParams + 1)
-                    ctx.tokens[j].isInFunctionParam = true
-                    if j - 1 == beginParams || ctx |> eq(j - 1, ";")
-                        var colonPos = ctx |> search_token_in_line(j, ":")
-                        if colonPos > 0
-                            ctx |> mark_tokens_as_type(colonPos)
-                if endParams < length(ctx.tokens) - 1
-                    if ctx |> eq(endParams + 1, ":")
-                        ctx |> mark_tokens_as_type(endParams + 1)
+        if pos == -1
+            continue
+
+        while ctx |> eq(pos, "private", "public", "const", "implicit") || ctx |> eq(pos, "abstract", "override")
+            pos++
+
+        if ctx |> eq(pos, "operator")
+            pos = ctx |> search_token_in_line(pos, "(") - 1
+
+        if ctx |> eq(pos + 1, "[") // skip [...]
+            pos = ctx |> find_pair_square(pos + 1)
+
+        if ctx |> eq(pos + 1, ":") // def [const | private | public] name:
+            ctx |> mark_tokens_as_type(i + 2)
+        elif ctx |> eq(pos + 1, "(") // def [const | private | public] name(
+            var beginParams = pos + 1
+            ctx.tokens[beginParams].dontAddSpacesAround = true
+            var endParams = ctx |> find_pair_paren(pos + 1)
+            for j in range(beginParams, endParams + 1)
+                ctx.tokens[j].isInFunctionParam = true
+                if j - 1 == beginParams || ctx |> eq(j - 1, ";")
+                    var colonPos = ctx |> search_token_in_line(j, ":")
+                    if colonPos > 0
+                        ctx |> mark_tokens_as_type(colonPos + 1)
+            if endParams < length(ctx.tokens) - 1
+                if ctx |> eq(endParams + 1, ":")
+                    ctx |> mark_tokens_as_type(endParams + 2)
 
     // annotations
     for i in range(0, length(ctx.tokens) - 1)
@@ -549,6 +642,16 @@ def fmt_function_arguments(var ctx: FormatterCtx)
 
                 i++
         i++
+
+
+def fmt_remove_space_before_generator_args(var ctx: FormatterCtx)
+    // generator<int> () -> generator<int>()
+    for i in range(0, length(ctx.tokens) - 3)
+        if ctx |> eq(i, "generator") && ctx |> eq(i + 1, "<")
+            var beginParams = i + 1
+            var endParams = ctx |> find_pair_angle(i + 1)
+            if ctx |> eq(endParams + 1, "(")
+                ctx |> remove_space_before(endParams + 1)
 
 
 def debug_print_tokens(ctx: FormatterCtx)
@@ -759,13 +862,19 @@ def fmt_remove_space_before_as(var ctx: FormatterCtx)
             ctx |> remove_space_before(i)
 
 
-let type_specifiers = [[string "-"; "?"; "&"; "#"]]
+let type_specifiers = [[string "?"; "&"; "#"]]
 
 def fmt_glue_type_specifiers(var ctx: FormatterCtx)
     for i in range(1, length(ctx.tokens))
-        if (ctx.tokens[i].isInType && ctx.tokens[i].tokenType == TokenType UNKNOWN &&
-                type_specifiers |> find_index(ctx.tokens[i].str) >= 0)
-            ctx |> remove_space_before(i)
+        if ctx.tokens[i].isInType
+            if ctx.tokens[i].tokenType == TokenType UNKNOWN && type_specifiers |> find_index(ctx.tokens[i].str) >= 0
+                ctx |> remove_space_before(i)
+            if ctx |> eq(i, "const") && ctx |> eq(i - 1, "-", "==")
+                ctx |> remove_space_before(i)
+            if ctx |> eq(i, "-", "==")
+                ctx |> add_space_before(i)
+            if ctx |> eq(i - 1, "|")
+                ctx |> add_space_before(i)
 
 
 def fmt_space_after_cast_type(var ctx: FormatterCtx)
@@ -803,6 +912,7 @@ def do_format(var ctx: FormatterCtx)
     ctx |> fmt_space_after_paren()
     ctx |> fmt_space_after_square_brackets()
     ctx |> fmt_function_arguments()
+    ctx |> fmt_remove_space_before_generator_args()
 
 
 def public format_source_string(file_data: string const& implicit): string
