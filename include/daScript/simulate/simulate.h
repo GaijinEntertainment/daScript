@@ -707,8 +707,7 @@ namespace das
             if ( singleStepMode ) {
                 if ( hwBpIndex!=-1 ) {
                     char reason[128];
-                    auto reason_end =  fmt::format_to(reason, "hardware breakpoint 0x{}", hwBpAddress);
-                    *reason_end = 0;
+                    snprintf(reason, sizeof(reason), "hardware breakpoint 0x%p", hwBpAddress);
                     breakPoint(at, "exception",reason);
                     hwBpIndex = -1;
                 } else if ( forceStep || singleStepAt==nullptr || (singleStepAt->fileInfo!=at.fileInfo || singleStepAt->line!=at.line) ) {

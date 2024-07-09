@@ -10,6 +10,7 @@
 #include "daScript/ast/ast_visitor.h"
 #include "daScript/misc/fpe.h"
 #include "daScript/misc/sysos.h"
+#include "misc/include_fmt.h"
 #include "module_builtin_rtti.h"
 #include "module_builtin_ast.h"
 

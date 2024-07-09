@@ -823,26 +823,26 @@ namespace das
             addExtern<DAS_BIND_FUN(write_escape_string),SimNode_ExtFuncCallRef>(*this, lib, "write_escape_string",
                 SideEffects::modifyExternal, "write_escape_string")->args({"writer","str"});
             // fmt
-            addExtern<DAS_BIND_FUN(fmt_and_write<int8_t>),SimNode_ExtFuncCallRef> (*this, lib, "fmt",
-                SideEffects::modifyExternal, "fmt_and_write<int8_t>")->args({"writer","format","value","context","lineinfo"});
-            addExtern<DAS_BIND_FUN(fmt_and_write<uint8_t>),SimNode_ExtFuncCallRef>(*this, lib, "fmt",
-                SideEffects::modifyExternal, "fmt_and_write<uint8_t>")->args({"writer","format","value","context","lineinfo"});
-            addExtern<DAS_BIND_FUN(fmt_and_write<int16_t>),SimNode_ExtFuncCallRef> (*this, lib, "fmt",
-                SideEffects::modifyExternal, "fmt_and_write<int16_t>")->args({"writer","format","value","context","lineinfo"});
-            addExtern<DAS_BIND_FUN(fmt_and_write<uint16_t>),SimNode_ExtFuncCallRef>(*this, lib, "fmt",
-                SideEffects::modifyExternal, "fmt_and_write<uint16_t>")->args({"writer","format","value","context","lineinfo"});
-            addExtern<DAS_BIND_FUN(fmt_and_write<int32_t>),SimNode_ExtFuncCallRef> (*this, lib, "fmt",
-                SideEffects::modifyExternal, "fmt_and_write<int32_t>")->args({"writer","format","value","context","lineinfo"});
-            addExtern<DAS_BIND_FUN(fmt_and_write<uint32_t>),SimNode_ExtFuncCallRef>(*this, lib, "fmt",
-                SideEffects::modifyExternal, "fmt_and_write<uint32_t>")->args({"writer","format","value","context","lineinfo"});
-            addExtern<DAS_BIND_FUN(fmt_and_write<int64_t>),SimNode_ExtFuncCallRef> (*this, lib, "fmt",
-                SideEffects::modifyExternal, "fmt_and_write<int64_t>")->args({"writer","format","value","context","lineinfo"});
-            addExtern<DAS_BIND_FUN(fmt_and_write<uint64_t>),SimNode_ExtFuncCallRef>(*this, lib, "fmt",
-                SideEffects::modifyExternal, "fmt_and_write<uint64_t>")->args({"writer","format","value","context","lineinfo"});
-            addExtern<DAS_BIND_FUN(fmt_and_write<float>),SimNode_ExtFuncCallRef>   (*this, lib, "fmt",
-                SideEffects::modifyExternal, "fmt_and_write<float>")->args({"writer","format","value","context","lineinfo"});
-            addExtern<DAS_BIND_FUN(fmt_and_write<double>),SimNode_ExtFuncCallRef>  (*this, lib, "fmt",
-                SideEffects::modifyExternal, "fmt_and_write<double>")->args({"writer","format","value","context","lineinfo"});
+            addExtern<DAS_BIND_FUN(fmt_and_write_i8),SimNode_ExtFuncCallRef> (*this, lib, "fmt",
+                SideEffects::modifyExternal, "fmt_and_write_i8")->args({"writer","format","value","context","lineinfo"});
+            addExtern<DAS_BIND_FUN(fmt_and_write_u8),SimNode_ExtFuncCallRef>(*this, lib, "fmt",
+                SideEffects::modifyExternal, "fmt_and_write_u8")->args({"writer","format","value","context","lineinfo"});
+            addExtern<DAS_BIND_FUN(fmt_and_write_i16),SimNode_ExtFuncCallRef> (*this, lib, "fmt",
+                SideEffects::modifyExternal, "fmt_and_write_i16")->args({"writer","format","value","context","lineinfo"});
+            addExtern<DAS_BIND_FUN(fmt_and_write_u16),SimNode_ExtFuncCallRef>(*this, lib, "fmt",
+                SideEffects::modifyExternal, "fmt_and_write_u16")->args({"writer","format","value","context","lineinfo"});
+            addExtern<DAS_BIND_FUN(fmt_and_write_i32),SimNode_ExtFuncCallRef> (*this, lib, "fmt",
+                SideEffects::modifyExternal, "fmt_and_write_i32")->args({"writer","format","value","context","lineinfo"});
+            addExtern<DAS_BIND_FUN(fmt_and_write_u32),SimNode_ExtFuncCallRef>(*this, lib, "fmt",
+                SideEffects::modifyExternal, "fmt_and_write_u32")->args({"writer","format","value","context","lineinfo"});
+            addExtern<DAS_BIND_FUN(fmt_and_write_i64),SimNode_ExtFuncCallRef> (*this, lib, "fmt",
+                SideEffects::modifyExternal, "fmt_and_write_i64")->args({"writer","format","value","context","lineinfo"});
+            addExtern<DAS_BIND_FUN(fmt_and_write_u64),SimNode_ExtFuncCallRef>(*this, lib, "fmt",
+                SideEffects::modifyExternal, "fmt_and_write_u64")->args({"writer","format","value","context","lineinfo"});
+            addExtern<DAS_BIND_FUN(fmt_and_write_f),SimNode_ExtFuncCallRef>   (*this, lib, "fmt",
+                SideEffects::modifyExternal, "fmt_and_write_f")->args({"writer","format","value","context","lineinfo"});
+            addExtern<DAS_BIND_FUN(fmt_and_write_d),SimNode_ExtFuncCallRef>  (*this, lib, "fmt",
+                SideEffects::modifyExternal, "fmt_and_write_d")->args({"writer","format","value","context","lineinfo"});
             // format (deprecated)
             addExtern<DAS_BIND_FUN(format_and_write<int32_t>),SimNode_ExtFuncCallRef> (*this, lib, "format",
                 SideEffects::modifyExternal, "format_and_write<int32_t>")->args({"writer","format","value"})->setDeprecated("use fmt() instead");
@@ -1003,26 +1003,26 @@ namespace das
             addExtern<DAS_BIND_FUN(builtin_string_trim)>(*this, lib, "trim",
                 SideEffects::none, "builtin_string_trim")->args({"str","context","at"});
             // fmt
-            addExtern<DAS_BIND_FUN(fmt<int8_t>)>(*this, lib, "fmt",
-                SideEffects::none, "fmt<int8_t>")->args({"format","value","context","at"});
-            addExtern<DAS_BIND_FUN(fmt<uint8_t>)>(*this, lib, "fmt",
-                SideEffects::none, "fmt<uint8_t>")->args({"format","value","context","at"});
-            addExtern<DAS_BIND_FUN(fmt<int16_t>)>(*this, lib, "fmt",
-                SideEffects::none, "fmt<int16_t>")->args({"format","value","context","at"});
-            addExtern<DAS_BIND_FUN(fmt<uint16_t>)>(*this, lib, "fmt",
-                SideEffects::none, "fmt<uint16_t>")->args({"format","value","context","at"});
-            addExtern<DAS_BIND_FUN(fmt<int32_t>)>(*this, lib, "fmt",
-                SideEffects::none, "fmt<int32_t>")->args({"format","value","context","at"});
-            addExtern<DAS_BIND_FUN(fmt<uint32_t>)>(*this, lib, "fmt",
-                SideEffects::none, "fmt<uint32_t>")->args({"format","value","context","at"});
-            addExtern<DAS_BIND_FUN(fmt<int64_t>)>(*this, lib, "fmt",
-                SideEffects::none, "fmt<int64_t>")->args({"format","value","context","at"});
-            addExtern<DAS_BIND_FUN(fmt<uint64_t>)>(*this, lib, "fmt",
-                SideEffects::none, "fmt<uint64_t>")->args({"format","value","context","at"});
-            addExtern<DAS_BIND_FUN(fmt<float>)>(*this, lib, "fmt",
-                SideEffects::none, "fmt<float>")->args({"format","value","context","at"});
-            addExtern<DAS_BIND_FUN(fmt<double>)>(*this, lib, "fmt",
-                SideEffects::none, "fmt<double>")->args({"format","value","context","at"});
+            addExtern<DAS_BIND_FUN(fmt_i8)>(*this, lib, "fmt",
+                SideEffects::none, "fmt_i8")->args({"format","value","context","at"});
+            addExtern<DAS_BIND_FUN(fmt_u8)>(*this, lib, "fmt",
+                SideEffects::none, "fmt_u8")->args({"format","value","context","at"});
+            addExtern<DAS_BIND_FUN(fmt_i16)>(*this, lib, "fmt",
+                SideEffects::none, "fmt_i16")->args({"format","value","context","at"});
+            addExtern<DAS_BIND_FUN(fmt_u16)>(*this, lib, "fmt",
+                SideEffects::none, "fmt_u16")->args({"format","value","context","at"});
+            addExtern<DAS_BIND_FUN(fmt_i32)>(*this, lib, "fmt",
+                SideEffects::none, "fmt_i32")->args({"format","value","context","at"});
+            addExtern<DAS_BIND_FUN(fmt_u32)>(*this, lib, "fmt",
+                SideEffects::none, "fmt_u32")->args({"format","value","context","at"});
+            addExtern<DAS_BIND_FUN(fmt_i64)>(*this, lib, "fmt",
+                SideEffects::none, "fmt_i64")->args({"format","value","context","at"});
+            addExtern<DAS_BIND_FUN(fmt_u64)>(*this, lib, "fmt",
+                SideEffects::none, "fmt_u64")->args({"format","value","context","at"});
+            addExtern<DAS_BIND_FUN(fmt_f)>(*this, lib, "fmt",
+                SideEffects::none, "fmt_f")->args({"format","value","context","at"});
+            addExtern<DAS_BIND_FUN(fmt_d)>(*this, lib, "fmt",
+                SideEffects::none, "fmt_d")->args({"format","value","context","at"});
             // format (deprecated)
             addExtern<DAS_BIND_FUN(format<int32_t>)> (*this, lib, "format",
                 SideEffects::none, "format<int32_t>")->args({"format","value","context","at"})->setDeprecated("use fmt() instead");
