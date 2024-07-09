@@ -7,6 +7,7 @@
 #include "daScript/misc/fpe.h"
 #include "daScript/misc/debug_break.h"
 #include "daScript/ast/ast.h"
+#include "misc/include_fmt.h"
 
 #include <stdarg.h>
 #include <atomic>

@@ -1820,34 +1820,17 @@ namespace das {
         }
     };
 
-    template <typename TT>
-    __forceinline char * das_lexical_cast ( TT x, Context * __context__, LineInfoArg * at ) {
-        char buffer[128];
-        auto result = fmt::format_to(buffer,"{}",x);
-        *result = 0;
-        return __context__->allocateString(buffer,uint32_t(result-buffer),at);
-    }
+    char * das_lexical_cast_fp_f ( float x, Context * __context__, LineInfoArg * at );
+    char * das_lexical_cast_fp_d ( double x, Context * __context__, LineInfoArg * at );
 
-    template <typename TT>
-    __forceinline char * das_lexical_cast_fp ( TT x, Context * __context__, LineInfoArg * at ) {
-        char buffer[128];
-        auto result = fmt::format_to(buffer,"{}",x);
-        *result = 0;
-        return __context__->allocateString(buffer,uint32_t(result-buffer),at);
-    }
-
-    template <typename TT>
-    __forceinline char * das_lexical_cast_int ( TT x, bool hex, Context * __context__, LineInfoArg * at ) {
-        char buffer[128];
-        char * result;
-        if ( hex ) {
-            result = fmt::format_to(buffer,"{:#x}",x);
-        } else {
-            result = fmt::format_to(buffer,"{}",x);
-        }
-        *result = 0;
-        return __context__->allocateString(buffer,uint32_t(result-buffer),at);
-    }
+    char * das_lexical_cast_int_i8 ( int8_t x, bool hex, Context * __context__, LineInfoArg * at );
+    char * das_lexical_cast_int_u8 ( uint8_t x, bool hex, Context * __context__, LineInfoArg * at );
+    char * das_lexical_cast_int_i16 ( int16_t x, bool hex, Context * __context__, LineInfoArg * at );
+    char * das_lexical_cast_int_u16 ( uint16_t x, bool hex, Context * __context__, LineInfoArg * at );
+    char * das_lexical_cast_int_i32 ( int32_t x, bool hex, Context * __context__, LineInfoArg * at );
+    char * das_lexical_cast_int_u32 ( uint32_t x, bool hex, Context * __context__, LineInfoArg * at );
+    char * das_lexical_cast_int_i64 ( int64_t x, bool hex, Context * __context__, LineInfoArg * at );
+    char * das_lexical_cast_int_u64 ( uint64_t x, bool hex, Context * __context__, LineInfoArg * at );
 
     __forceinline char * das_string_builder ( Context * __context__, const SimNode_AotInteropBase & node ) {
         StringBuilderWriter writer;

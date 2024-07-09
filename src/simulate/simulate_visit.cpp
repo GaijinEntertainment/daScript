@@ -7,6 +7,7 @@
 #include "daScript/simulate/runtime_string_delete.h"
 #include "daScript/simulate/simulate_nodes.h"
 #include "daScript/simulate/simulate_visit_op.h"
+#include "misc/include_fmt.h"
 
 namespace das {
 

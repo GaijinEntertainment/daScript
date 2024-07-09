@@ -1,6 +1,6 @@
 #include "daScript/misc/platform.h"
-
 #include "daScript/misc/string_writer.h"
+#include "misc/include_fmt.h"
 
 namespace das {
     StringWriterTag HEX;

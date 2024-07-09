@@ -7,9 +7,216 @@
 #include "daScript/simulate/runtime_string_delete.h"
 #include "daScript/simulate/simulate_nodes.h"
 #include "daScript/simulate/sim_policy.h"
+#include "misc/include_fmt.h"
 
 namespace das
 {
+
+    #if (!defined(DAS_ENABLE_EXCEPTIONS)) || (!DAS_ENABLE_EXCEPTIONS)
+
+    DAS_THREAD_LOCAL jmp_buf * g_throwBuf = nullptr;
+    DAS_THREAD_LOCAL string g_throwMsg;
+
+    void das_throw(const char * msg) {
+        if ( g_throwBuf ) {
+            g_throwMsg = msg;
+            longjmp(*g_throwBuf,1);
+        } else {
+            DAS_FATAL_ERROR("unhanded das_throw, %s\n", msg);
+        }
+    }
+
+    void das_trycatch(callable<void()> tryBody, callable<void(const char * msg)> catchBody) {
+        DAS_ASSERTF(g_throwBuf==nullptr, "das_trycatch without g_throwBuf");
+        jmp_buf ev;
+        g_throwBuf = &ev;
+        if ( !setjmp(ev) ) {
+            tryBody();
+        } else {
+            g_throwBuf = nullptr;
+            catchBody(g_throwMsg.c_str());
+        }
+        g_throwBuf = nullptr;
+    }
+    #endif
+
+    template <typename TT>
+    __forceinline StringBuilderWriter & fmt_and_write_T ( StringBuilderWriter & writer, const char * fmt, TT value, Context * context, LineInfoArg * at ) {
+        char ffmt[64] = "{";
+        char buf[256];
+        char * head = ffmt + 1;
+        if ( fmt ) {
+            char * tail = ffmt + 61;
+            while ( head<tail && *fmt ) *head++ = *fmt++;
+        }
+        *head++ = '}'; *head = 0;
+#if DAS_ENABLE_EXCEPTIONS
+        try {
+            auto result = fmt::format_to(buf, fmt::runtime(ffmt), value);
+            *result = 0;
+            writer.writeStr(buf, result - buf);
+        } catch ( const std::exception & e ) {
+            context->throw_error_at(at, "fmt error: %s", e.what());
+        }
+#else
+        das_trycatch([&]{
+            auto result = fmt::format_to(buf, fmt::runtime(ffmt), value);
+            *result = 0;
+            writer.writeStr(buf, result - buf);
+        },[&](const char * e){
+            context->throw_error_at(at, "fmt error: %s", e);
+        });
+#endif
+        return writer;
+    }
+
+    StringBuilderWriter & fmt_and_write_i8 ( StringBuilderWriter & writer, const char * fmt, int8_t value, Context * context, LineInfoArg * at ) {
+        return fmt_and_write_T(writer, fmt, value, context, at);
+    }
+    StringBuilderWriter & fmt_and_write_u8 ( StringBuilderWriter & writer, const char * fmt, uint8_t value, Context * context, LineInfoArg * at ) {
+        return fmt_and_write_T(writer, fmt, value, context, at);
+    }
+    StringBuilderWriter & fmt_and_write_i16 ( StringBuilderWriter & writer, const char * fmt, int16_t value, Context * context, LineInfoArg * at ) {
+        return fmt_and_write_T(writer, fmt, value, context, at);
+    }
+    StringBuilderWriter & fmt_and_write_u16 ( StringBuilderWriter & writer, const char * fmt, uint16_t value, Context * context, LineInfoArg * at ) {
+        return fmt_and_write_T(writer, fmt, value, context, at);
+    }
+    StringBuilderWriter & fmt_and_write_i32 ( StringBuilderWriter & writer, const char * fmt, int32_t value, Context * context, LineInfoArg * at ) {
+        return fmt_and_write_T(writer, fmt, value, context, at);
+    }
+    StringBuilderWriter & fmt_and_write_u32 ( StringBuilderWriter & writer, const char * fmt, uint32_t value, Context * context, LineInfoArg * at ) {
+        return fmt_and_write_T(writer, fmt, value, context, at);
+    }
+    StringBuilderWriter & fmt_and_write_i64 ( StringBuilderWriter & writer, const char * fmt, int64_t value, Context * context, LineInfoArg * at ) {
+        return fmt_and_write_T(writer, fmt, value, context, at);
+    }
+    StringBuilderWriter & fmt_and_write_u64 ( StringBuilderWriter & writer, const char * fmt, uint64_t value, Context * context, LineInfoArg * at ) {
+        return fmt_and_write_T(writer, fmt, value, context, at);
+    }
+    StringBuilderWriter & fmt_and_write_f ( StringBuilderWriter & writer, const char * fmt, float value, Context * context, LineInfoArg * at ) {
+        return fmt_and_write_T(writer, fmt, value, context, at);
+    }
+    StringBuilderWriter & fmt_and_write_d ( StringBuilderWriter & writer, const char * fmt, double value, Context * context, LineInfoArg * at ) {
+        return fmt_and_write_T(writer, fmt, value, context, at);
+    }
+
+    template <typename TT>
+    __forceinline char * fmt_T ( const char * fmt, TT value, Context * context, LineInfoArg * at ) {
+        char ffmt[64] = "{";
+        char buf[256];
+        char * head = ffmt + 1;
+        if ( fmt ) {
+            char * tail = ffmt + 61;
+            while ( head<tail && *fmt ) *head++ = *fmt++;
+        }
+        *head++ = '}'; *head = 0;
+#if DAS_ENABLE_EXCEPTIONS
+        try {
+            auto result = fmt::format_to(buf, fmt::runtime(ffmt), value);
+            *result= 0;
+            return context->allocateString(buf, uint32_t(result-buf), at);
+        } catch (const std::exception & e) {
+            context->throw_error_at(at, "fmt error: %s", e.what());
+            return nullptr;
+        }
+#else
+    char * return_value = nullptr;
+    das_trycatch([&]{
+        auto result = fmt::format_to(buf, fmt::runtime(ffmt), value);
+        *result= 0;
+        return_value = context->allocateString(buf, uint32_t(result-buf), at);
+    },[&](const char * e){
+        context->throw_error_at(at, "fmt error: %s", e);
+    });
+    return return_value;
+#endif
+    }
+
+    char * fmt_i8 ( const char * fmt, int8_t value, Context * context, LineInfoArg * at ) {
+        return fmt_T(fmt, value, context, at);
+    }
+    char * fmt_u8 ( const char * fmt, uint8_t value, Context * context, LineInfoArg * at ) {
+        return fmt_T(fmt, value, context, at);
+    }
+    char * fmt_i16 ( const char * fmt, int16_t value, Context * context, LineInfoArg * at ) {
+        return fmt_T(fmt, value, context, at);
+    }
+    char * fmt_u16 ( const char * fmt, uint16_t value, Context * context, LineInfoArg * at ) {
+        return fmt_T(fmt, value, context, at);
+    }
+    char * fmt_i32 ( const char * fmt, int32_t value, Context * context, LineInfoArg * at ) {
+        return fmt_T(fmt, value, context, at);
+    }
+    char * fmt_u32 ( const char * fmt, uint32_t value, Context * context, LineInfoArg * at ) {
+        return fmt_T(fmt, value, context, at);
+    }
+    char * fmt_i64 ( const char * fmt, int64_t value, Context * context, LineInfoArg * at ) {
+        return fmt_T(fmt, value, context, at);
+    }
+    char * fmt_u64 ( const char * fmt, uint64_t value, Context * context, LineInfoArg * at ) {
+        return fmt_T(fmt, value, context, at);
+    }
+    char * fmt_f ( const char * fmt, float value, Context * context, LineInfoArg * at ) {
+        return fmt_T(fmt, value, context, at);
+    }
+    char * fmt_d ( const char * fmt, double value, Context * context, LineInfoArg * at ) {
+        return fmt_T(fmt, value, context, at);
+    }
+
+    template <typename TT>
+    __forceinline char * das_lexical_cast_int_T ( TT x, bool hex, Context * __context__, LineInfoArg * at ) {
+        char buffer[128];
+        char * result;
+        if ( hex ) {
+            result = fmt::format_to(buffer,"{:#x}",x);
+        } else {
+            result = fmt::format_to(buffer,"{}",x);
+        }
+        *result = 0;
+        return __context__->allocateString(buffer,uint32_t(result-buffer),at);
+    }
+
+    char * das_lexical_cast_int_i8 ( int8_t x, bool hex, Context * __context__, LineInfoArg * at ) {
+        return das_lexical_cast_int_T(x, hex, __context__, at);
+    }
+    char * das_lexical_cast_int_u8 ( uint8_t x, bool hex, Context * __context__, LineInfoArg * at ) {
+        return das_lexical_cast_int_T(x, hex, __context__, at);
+    }
+    char * das_lexical_cast_int_i16 ( int16_t x, bool hex, Context * __context__, LineInfoArg * at ) {
+        return das_lexical_cast_int_T(x, hex, __context__, at);
+    }
+    char * das_lexical_cast_int_u16 ( uint16_t x, bool hex, Context * __context__, LineInfoArg * at ) {
+        return das_lexical_cast_int_T(x, hex, __context__, at);
+    }
+    char * das_lexical_cast_int_i32 ( int32_t x, bool hex, Context * __context__, LineInfoArg * at ) {
+        return das_lexical_cast_int_T(x, hex, __context__, at);
+    }
+    char * das_lexical_cast_int_u32 ( uint32_t x, bool hex, Context * __context__, LineInfoArg * at ) {
+        return das_lexical_cast_int_T(x, hex, __context__, at);
+    }
+    char * das_lexical_cast_int_i64 ( int64_t x, bool hex, Context * __context__, LineInfoArg * at ) {
+        return das_lexical_cast_int_T(x, hex, __context__, at);
+    }
+    char * das_lexical_cast_int_u64 ( uint64_t x, bool hex, Context * __context__, LineInfoArg * at ) {
+        return das_lexical_cast_int_T(x, hex, __context__, at);
+    }
+
+    template <typename TT>
+    __forceinline char * das_lexical_cast_fp_T ( TT x, Context * __context__, LineInfoArg * at ) {
+        char buffer[128];
+        auto result = fmt::format_to(buffer,"{}",x);
+        *result = 0;
+        return __context__->allocateString(buffer,uint32_t(result-buffer),at);
+    }
+
+    char * das_lexical_cast_fp_f ( float x, Context * __context__, LineInfoArg * at ) {
+        return das_lexical_cast_fp_T(x, __context__, at);
+    }
+    char * das_lexical_cast_fp_d ( double x, Context * __context__, LineInfoArg * at ) {
+        return das_lexical_cast_fp_T(x, __context__, at);
+    }
+
     // string operations
 
     vec4f SimPolicy_String::Add ( vec4f a, vec4f b, Context & context, LineInfo * at ) {
@@ -292,14 +499,14 @@ namespace das
     }
 
     string to_string_ex ( double dnum ) {
-        string stst = fmt::format("{:.17g}", dnum);
+        string stst = fmt::format("{:.17g}", dnum).c_str();
         if ( stst.find_first_of(".e")==string::npos )
             stst += ".";
         return stst;
     }
 
     string to_string_ex ( float dnum ) {
-        string stst = fmt::format("{:.9g}", dnum);
+        string stst = fmt::format("{:.9g}", dnum).c_str();
         if ( stst.find_first_of(".e")==string::npos )
             stst += ".";
         return stst;
