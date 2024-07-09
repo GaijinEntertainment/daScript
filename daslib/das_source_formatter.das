@@ -41,7 +41,6 @@ struct TokenTemplate
     length: int = 0
 
 
-[safe_when_uninitialized]
 struct Token
     str: string
     spaces: int = 0
@@ -174,7 +173,7 @@ def on_token_added(var ctx: FormatterCtx)
 
 def push_token(var ctx: FormatterCtx; from_char_idx, to_char_idx, space_count, new_lines, src_line, column: int; token_type: TokenType)
     var buf <- [{ for i in range(from_char_idx, to_char_idx); uint8(ctx.data[i]) }]
-    ctx.tokens |> push([[ Token
+    ctx.tokens |> push([[ Token()
         str = string(buf), spaces = space_count, newLines = new_lines,
         lineInSource = src_line, column = column, tokenType = token_type
         ]])
@@ -281,7 +280,7 @@ def parse_token(var ctx: FormatterCtx)
 
 def parse_all_tokens(var ctx: FormatterCtx)
     ctx |> initialize_token_templates()
-    let emptyToken: Token
+    let emptyToken <- Token()
     ctx.tokens |> clear()
     ctx.tokens |> push(emptyToken)
     ctx.pos = 0
