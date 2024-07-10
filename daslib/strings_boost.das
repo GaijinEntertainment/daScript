@@ -72,6 +72,15 @@ def split_by_chars ( text, delim : string implicit ) : array<string>
         res := arr
     return <- res
 
+def split_by_chars_with_quotes ( text, delim, quotes : string implicit; blk : block< (arg:array<string>#) > )
+    builtin_string_split_by_char_with_quotes ( text, delim, quotes, blk )
+
+def split_by_chars_with_quotes ( text, delim, quotes: string implicit ) : array<string>
+    var res : array<string>
+    builtin_string_split_by_char_with_quotes (text, delim, quotes) <| $ ( arr : array<string># ) : void
+        res := arr
+    return <- res
+
 [generic]
 def is_character_at(foo:array<uint8> implicit; idx:int; ch:int)
     return int(foo[idx])==ch

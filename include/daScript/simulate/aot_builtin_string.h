@@ -80,6 +80,7 @@ namespace das {
     StringBuilderWriter & write_string_chars(StringBuilderWriter & writer, int32_t ch, int32_t count);
     StringBuilderWriter & write_escape_string ( StringBuilderWriter & writer, char * str );
     void builtin_string_split_by_char ( const char * str, const char * delim, const Block & sblk, Context * context, LineInfoArg * lineinfo );
+    void builtin_string_split_by_char_with_quotes ( const char * str, const char * delim, const char * quotes, const Block & sblk, Context * context, LineInfoArg * lineinfo );
     void builtin_string_split ( const char * str, const char * delim, const Block & sblk, Context * context, LineInfoArg * lineinfo );
     char * builtin_string_from_array ( const TArray<uint8_t> & bytes, Context * context, LineInfoArg * at );
     char * builtin_string_replace ( const char * str, const char * toSearch, const char * replaceStr, Context * context, LineInfoArg * at );

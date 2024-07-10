@@ -468,6 +468,69 @@ namespace das
         context->invoke(block, args, nullptr, at);
     }
 
+    void builtin_string_split_by_char_with_quotes ( const char * str, const char * delim, const char * quotes, const Block & block, Context * context, LineInfoArg * at ) {
+        if ( !str ) str = "";
+        if ( !delim ) delim = "";
+        if ( !quotes ) quotes = "";
+        vector<const char *> tokens;
+        vector<string> words;
+        const char * ch = str;
+        bool inQuote = false;
+        auto delimLen = stringLengthSafe(*context,delim);
+        if ( delimLen ) {
+            while ( *ch ) {
+                const char * tok = ch;
+                while ( *ch && ( inQuote || !strchr(delim,*ch) ) )
+                {
+                    if ( strchr(quotes,*ch) ) inQuote = !inQuote;
+                    ch++;
+                }
+                words.push_back(string(tok,ch-tok));
+                if ( !*ch ) break;
+                if ( strchr(delim,*ch) ) ch++;
+                if ( !*ch ) words.push_back("");
+            }
+        } else {
+            auto len = stringLengthSafe(*context,str);
+            words.reserve(len);
+            const char * tok = ch;
+            while ( *ch ) {
+                if ( strchr(quotes,*ch) )
+                {
+                    if ( !inQuote )
+                    {
+                        tok = ch;
+                        ch++;
+                    }
+                    else
+                    {
+                        ch++;
+                        words.push_back(string(tok,ch-tok));
+                    }
+                    inQuote = !inQuote;
+                    continue;
+                }
+
+                if (!inQuote)
+                    words.push_back(string(1,*ch));
+                ch ++;
+            }
+        }
+        tokens.reserve(words.size());
+        for ( auto & tok : words ) {
+            tokens.push_back(tok.c_str());
+        }
+        if ( tokens.empty() ) tokens.push_back("");
+        Array arr;
+        arr.data = (char *) tokens.data();
+        arr.capacity = arr.size = uint32_t(tokens.size());
+        arr.lock = 1;
+        arr.flags = 0;
+        vec4f args[1];
+        args[0] = cast<Array *>::from(&arr);
+        context->invoke(block, args, nullptr, at);
+    }
+
     void builtin_string_split ( const char * str, const char * delim, const Block & block, Context * context, LineInfoArg * at ) {
         if ( !str ) str = "";
         if ( !delim ) delim = "";
@@ -922,6 +985,8 @@ namespace das
                 SideEffects::none, "builtin_string_toupper_in_place")->arg("str")->setCaptureString()->unsafeOperation = true;
             addExtern<DAS_BIND_FUN(builtin_string_split_by_char)>(*this, lib, "builtin_string_split_by_char",
                 SideEffects::modifyExternal, "builtin_string_split_by_char")->args({"str","delimiter","block","context","lineinfo"});
+            addExtern<DAS_BIND_FUN(builtin_string_split_by_char_with_quotes)>(*this, lib, "builtin_string_split_by_char_with_quotes",
+                SideEffects::modifyExternal, "builtin_string_split_by_char_with_quotes")->args({"str","delimiter","quotes","block","context","lineinfo"});
             addExtern<DAS_BIND_FUN(builtin_string_split)>(*this, lib, "builtin_string_split",
                 SideEffects::modifyExternal, "builtin_string_split")->args({"str","delimiter","block","context","lineinfo"});
             // conversion which throws exception on error. detects hex automatically
