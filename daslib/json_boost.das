@@ -89,6 +89,11 @@ def operator ?? ( a : json::JsonValue?; val:string ) : string
     //! Returns the value of the JSON object, if it exists, otherwise returns the default value.
     return a != null && a.value is _string ? a.value as _string : val
 
+def operator ?. value ( a : JsonValue? == const ) : JsValue const?
+    return a . ?. value
+
+def operator ?. value ( var a : JsonValue? == const ) : JsValue?
+    return a . ?. value
 
 [macro_function]
 def private is_json_ptr_value ( td : TypeDeclPtr )

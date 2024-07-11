@@ -67,6 +67,7 @@ namespace das {
 
     class TextWriter : public StringWriter {
     public:
+        TextWriter() {}
         virtual ~TextWriter();
         virtual string str() const override;
         virtual uint64_t tellp() const override;
@@ -87,6 +88,7 @@ namespace das {
 
     class TextPrinter : public TextWriter {
     public:
+        TextPrinter() {}
         virtual void output() override;
     protected:
         uint64_t pos = 0;
