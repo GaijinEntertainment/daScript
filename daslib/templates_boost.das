@@ -667,6 +667,9 @@ def private apply_qrules ( var expr:smart_ptr<Expression>& ) : smart_ptr<ExprBlo
         eblk := null
     unsafe
         delete astVisitor
+    eblk |> append_annotation("$", "unused_argument", [{auto
+        [[auto "rules", [[RttiValue tBool=true]] ]]
+    }])
     return <- eblk
 
 def public apply_qmacro ( var expr:smart_ptr<Expression>; blk:block<(var rules:Template):void> ) : ExpressionPtr
@@ -878,8 +881,6 @@ def public add_structure_field ( var cls:StructurePtr; name:string; var t:TypeDe
     return fi
 
 def public make_class ( name:string; mod:Module? )
-    if mod == null
-        panic("expecting module")
     //! Creates a class structure. Adds __rtti, __finalize fields.
     var inscope st <- new [[Structure() name:=name, flags = bitfield(1)]]
     unsafe(builtin_ast_make_class_rtti(get_ptr(st)))
@@ -893,8 +894,6 @@ def public make_class ( name:string; baseClass:StructurePtr; mod:Module? )
 def public make_class ( name:string; baseClass:Structure?; mod:Module? )
     if mod == null
         panic("expecting module")
-    if baseClass==null || !baseClass.flags.isClass
-        panic("expecting base class")
     var inscope st <- clone_structure(baseClass)
     st.name := name
     st.parent = baseClass
