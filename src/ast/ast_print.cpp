@@ -215,6 +215,22 @@ namespace das {
     // global
         virtual void preVisitGlobalLet ( const VariablePtr & var ) override {
             Visitor::preVisitGlobalLet(var);
+            if ( printFuncUse ) {
+                if ( var->useFunctions.size() ) {
+                    ss << "// use functions";
+                    for ( auto & ufn : var->useFunctions ) {
+                        ss << " " << ufn->getMangledName();
+                    }
+                    ss << "\n";
+                }
+                if ( var->useGlobalVariables.size() ) {
+                    ss << "// use global variables";
+                    for ( auto & uvar : var->useGlobalVariables ) {
+                        ss << " " << uvar->getMangledName();
+                    }
+                    ss << "\n";
+                }
+            }
             ss  << (var->type->constant ? "let" : "var")
                 << (var->global_shared ? " shared" : "")
                 << (var->private_variable ? " private" : "")
