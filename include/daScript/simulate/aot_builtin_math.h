@@ -4,7 +4,7 @@
 #if (__clang_major__ < 12 || (__clang_major__ >= 17 && __clang_major__ <= 18)) && defined(__clang__) && defined(__FAST_MATH__)
 #include <cstring> // memcpy
 #include <cmath> // INFINITY
-#endif 
+#endif
 
 namespace das {
     __forceinline unsigned int uint_noise2D_int2(das::int2 pos, unsigned int seed)
