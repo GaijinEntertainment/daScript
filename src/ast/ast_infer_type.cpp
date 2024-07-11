@@ -8590,7 +8590,10 @@ namespace das {
                 auto initl = static_cast<ExprMakeLocal *>(init);
                 expr->initAllFields &= initl->initAllFields;
             }
-            return Visitor::visitMakeArrayIndex(expr,index,init,last);
+            if ( init->type && !init->type->isSmartPointer() )// in reality only need for foldable
+                return Expression::autoDereference(Visitor::visitMakeArrayIndex(expr,index,init,last));
+            else
+                return Visitor::visitMakeArrayIndex(expr,index,init,last);
         }
         virtual ExpressionPtr visit ( ExprMakeArray * expr ) override {
             if ( expr->makeType && expr->makeType->isExprType() ) {
