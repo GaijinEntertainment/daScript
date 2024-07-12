@@ -2081,22 +2081,14 @@ namespace das {
             return Visitor::visit(c);
         }
         void writeOutDouble ( double val ) {
-            if ( val==DBL_MIN ) ss << "DBL_MIN";
-            else if ( val==-DBL_MIN ) ss << "(-DBL_MIN)";
-            else if ( val==DBL_MAX ) ss << "DBL_MAX";
-            else if ( val==-DBL_MAX ) ss << "(-DBL_MAX)";
-            else ss << to_string_ex(val);
+            ss << to_cpp_double(val);
         }
         virtual ExpressionPtr visit ( ExprConstDouble * c ) override {
             writeOutDouble(c->getValue());
             return Visitor::visit(c);
         }
         void writeOutFloat ( float val ) {
-            if ( val==FLT_MIN ) ss << "FLT_MIN";
-            else if ( val==-FLT_MIN ) ss << "(-FLT_MIN)";
-            else if ( val==FLT_MAX ) ss << "FLT_MAX";
-            else if ( val==-FLT_MAX ) ss << "(-FLT_MAX)";
-            else ss << to_string_ex(val) << "f";
+            ss << to_cpp_float(val);
         }
         virtual ExpressionPtr visit ( ExprConstFloat * c ) override {
             writeOutFloat(c->getValue());
