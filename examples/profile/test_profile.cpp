@@ -366,11 +366,11 @@ void aotEsRunBlock ( TextWriter & ss, EsAttributeTable * table, const vector<EsC
             if (def_s) {
                 ss << "\"" << def_s << "\"";
             } else if ( table->attributes[a].size==4 ) {
-                ss << to_string_ex(v_extract_x(def)) << "f";
+                ss << to_cpp_float(v_extract_x(def));
             } else {
                 ss << "v_make_vec4f("
-                    << to_string_ex(v_extract_x(def)) << "f," << to_string_ex(v_extract_y(def)) << "f,"
-                    << to_string_ex(v_extract_z(def)) << "f," << to_string_ex(v_extract_w(def)) << "f)";
+                    << to_cpp_float(v_extract_x(def)) << "," << to_cpp_float(v_extract_y(def)) << ","
+                    << to_cpp_float(v_extract_z(def)) << "," << to_cpp_float(v_extract_w(def)) << ")";
             }
         }
     }

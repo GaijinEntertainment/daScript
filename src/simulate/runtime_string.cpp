@@ -498,18 +498,20 @@ namespace das
         return text.str();
     }
 
-    string to_string_ex ( double dnum ) {
-        string stst = fmt::format("{:.17g}", dnum).c_str();
-        if ( stst.find_first_of(".e")==string::npos )
-            stst += ".";
-        return stst;
+    string to_cpp_double ( double val ) {
+        if ( val==DBL_MIN ) return "DBL_MIN";
+        else if ( val==-DBL_MIN ) return "(-DBL_MIN)";
+        else if ( val==DBL_MAX ) return "DBL_MAX";
+        else if ( val==-DBL_MAX ) return "(-DBL_MAX)";
+        else return fmt::format("{:e}", val);
     }
 
-    string to_string_ex ( float dnum ) {
-        string stst = fmt::format("{:.9g}", dnum).c_str();
-        if ( stst.find_first_of(".e")==string::npos )
-            stst += ".";
-        return stst;
+    string to_cpp_float ( float val ) {
+        if ( val==FLT_MIN ) return "FLT_MIN";
+        else if ( val==-FLT_MIN ) return "(-FLT_MIN)";
+        else if ( val==FLT_MAX ) return "FLT_MAX";
+        else if ( val==-FLT_MAX ) return "(-FLT_MAX)";
+        else return fmt::format("{:e}f", val);
     }
 
     string reportError(const struct LineInfo & at, const string & message,
