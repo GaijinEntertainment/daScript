@@ -49,6 +49,7 @@ void tutorial () {
     auto writeTo = make_unique<SerializationStorageVector>();
     AstSerializer ser ( writeTo.get(), true );
     program->serialize(ser);
+    ser.moduleLibrary = nullptr;
     program.reset();
     tout << "serialized size: " << writeTo->buffer.size() << "\n";
 // deserialize
@@ -57,6 +58,7 @@ void tutorial () {
     AstSerializer deser ( readFrom.get(), false );
     program = make_smart<Program>();
     program->serialize(deser);
+    deser.moduleLibrary = nullptr;
     tout << "deserialized\n";
 
     // create daScript context
@@ -92,8 +94,6 @@ void tutorial () {
         return;
     }
     tout << "ok\n";
-
-    program.reset();    // kill it before serializer. library is in the serializer??
 }
 
 int main( int, char * [] ) {
