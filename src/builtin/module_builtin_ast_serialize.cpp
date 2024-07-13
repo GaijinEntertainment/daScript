@@ -1719,12 +1719,11 @@ namespace das {
                 ser << builtin;
                 if ( builtin ) {
                     string module = usedFun->module->name;
-                    string name = usedFun->getMangledName();
-                    ser << module << name;
+                    uint64_t mnh = usedFun->getMangledNameHash();
+                    ser << module << mnh;
                 } else {
                     void * addr = usedFun;
-                    string name = usedFun->name;
-                    ser << addr << name;
+                    ser << addr;
                 }
             }
         } else {
@@ -1733,19 +1732,19 @@ namespace das {
             uint64_t size = 0; ser << size;
             f->useFunctions.reserve(size);
             for ( uint64_t i = 0; i < size; i++ ) {
-                bool builtin = false; ser << builtin;
+                bool builtin = false;
+                ser << builtin;
                 if ( builtin ) {
-                    string module, name;
-                    ser << module << name;
-                    auto fun = ser.moduleLibrary->findModule(module)->findFunction(name);
+                    string module;
+                    uint64_t mnh;
+                    ser << module << mnh;
+                    auto fun = ser.moduleLibrary->findModule(module)->findFunctionByMangledNameHash(mnh);
                     SERIALIZER_VERIFYF(fun, "expected to find function");
                     f->useFunctions.emplace(fun.get());
                 } else {
                     void * addr = nullptr; ser << addr;
-                    string name; ser << name;
                     auto fun = ser.smartFunctionMap[(uint64_t)(uintptr_t) addr];
-                    string expected = fun->name;
-                    SERIALIZER_VERIFYF(expected == name, "expected different function");
+                    SERIALIZER_VERIFYF(fun, "expected to find function");
                     f->useFunctions.emplace(fun.get());
                 }
             }
@@ -1759,8 +1758,17 @@ namespace das {
             uint64_t sz = f->useFunctions.size();
             ser << sz;
             for ( auto & usedFun : f->useFunctions ) {
-                void * addr = usedFun;
-                ser << addr;
+                bool builtin = usedFun->module->builtIn;
+                ser << builtin;
+                if ( builtin ) {
+                    string module = usedFun->module->name;
+                    uint64_t mnh = usedFun->getMangledNameHash();
+                    ser << module << mnh;
+                } else {
+                    // we serialize the address of the function (not the function itself
+                    void * addr = usedFun;
+                    ser << addr;
+                }
             }
         } else {
             string name; ser << name;
@@ -1768,9 +1776,21 @@ namespace das {
             uint64_t size = 0; ser << size;
             f->useFunctions.reserve(size);
             for ( uint64_t i = 0; i < size; i++ ) {
-                void * addr = nullptr; ser << addr;
-                auto fun = ser.smartFunctionMap[(uint64_t)(uintptr_t) addr];
-                f->useFunctions.emplace(fun.get());
+                bool builtin = false;
+                ser << builtin;
+                if ( builtin ) {
+                    string module;
+                    uint64_t mnh;
+                    ser << module << mnh;
+                    auto fun = ser.moduleLibrary->findModule(module)->findFunctionByMangledNameHash(mnh);
+                    SERIALIZER_VERIFYF(fun, "expected to find function");
+                    f->useFunctions.emplace(fun.get());
+                } else {
+                    void * addr = nullptr; ser << addr;
+                    auto fun = ser.smartFunctionMap[(uint64_t)(uintptr_t) addr];
+                    SERIALIZER_VERIFYF(fun, "expected to find function");
+                    f->useFunctions.emplace(fun.get());
+                }
             }
         }
     }
@@ -1782,7 +1802,16 @@ namespace das {
             uint64_t sz = f->useGlobalVariables.size();
             ser << sz;
             for ( auto & use : f->useGlobalVariables ) {
-                ser << use;
+                bool builtin = use->module->builtIn;
+                ser << builtin;
+                if ( builtin ) {
+                    string module = use->module->name;
+                    string varname = use->name;
+                    ser << module << varname;
+                } else {
+                    void * addr = use;
+                    ser << addr;
+                }
             }
         } else {
             string name; ser << name;
@@ -1790,8 +1819,20 @@ namespace das {
             uint64_t size = 0; ser << size;
             f->useGlobalVariables.reserve(size);
             for ( uint64_t i = 0; i < size; i++ ) {
-                Variable * fun = nullptr; ser << fun;
-                f->useGlobalVariables.emplace(fun);
+                bool builtin = false;
+                ser << builtin;
+                if ( builtin ) {
+                    string module, varname;
+                    ser << module << varname;
+                    auto var = ser.moduleLibrary->findModule(module)->findVariable(varname);
+                    SERIALIZER_VERIFYF(var, "expected to find variable %s::%s", module.c_str(), varname.c_str());
+                    f->useGlobalVariables.emplace(var.get());
+                } else {
+                    void * addr = nullptr; ser << addr;
+                    auto var = ser.smartVariableMap[(uint64_t)(uintptr_t) addr];
+                    SERIALIZER_VERIFYF(var, "expected to find variable");
+                    f->useGlobalVariables.emplace(var.get());
+                }
             }
         }
     }
@@ -1803,8 +1844,16 @@ namespace das {
             uint64_t sz = f->useGlobalVariables.size();
             ser << sz;
             for ( auto & use : f->useGlobalVariables ) {
-                void * addr = use;
-                ser << addr;
+                bool builtin = use->module->builtIn;
+                ser << builtin;
+                if ( builtin ) {
+                    string module = use->module->name;
+                    string varname = use->name;
+                    ser << module << varname;
+                } else {
+                    void * addr = use;
+                    ser << addr;
+                }
             }
         } else {
             string name; ser << name;
@@ -1812,9 +1861,20 @@ namespace das {
             uint64_t size = 0; ser << size;
             f->useGlobalVariables.reserve(size);
             for ( uint64_t i = 0; i < size; i++ ) {
-                void * addr = nullptr; ser << addr;
-                auto fun = ser.smartVariableMap[(uint64_t)(uintptr_t) addr];
-                f->useGlobalVariables.emplace(fun.get());
+                bool builtin = false;
+                ser << builtin;
+                if ( builtin ) {
+                    string module, varname;
+                    ser << module << varname;
+                    auto var = ser.moduleLibrary->findModule(module)->findVariable(varname);
+                    SERIALIZER_VERIFYF(var, "expected to find variable %s::%s", module.c_str(), varname.c_str());
+                    f->useGlobalVariables.emplace(var.get());
+                } else {
+                    void * addr = nullptr; ser << addr;
+                    auto var = ser.smartVariableMap[(uint64_t)(uintptr_t) addr];
+                    SERIALIZER_VERIFYF(var, "expected to find variable");
+                    f->useGlobalVariables.emplace(var.get());
+                }
             }
         }
     }
@@ -2098,7 +2158,7 @@ namespace das {
     }
 
     uint32_t AstSerializer::getVersion () {
-        static constexpr uint32_t currentVersion = 23;
+        static constexpr uint32_t currentVersion = 24;
         return currentVersion;
     }
 

@@ -472,6 +472,10 @@ namespace das {
         return globals.find(na);
     }
 
+    FunctionPtr Module::findFunctionByMangledNameHash ( uint64_t hash ) const {
+        return functions.find(hash);
+    }
+
     FunctionPtr Module::findFunction ( const string & mangledName ) const {
         return functions.find(mangledName);
     }
