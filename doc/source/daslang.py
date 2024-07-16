@@ -1,9 +1,9 @@
 # -*- coding: utf-8 -*-
 """
-    dascript
+    daslang
     ~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    The daScript domain.
+    The Daslang domain.
 
     :copyright: Copyright 2007-2019 by the Sphinx team, see AUTHORS.
     :license: BSD, see LICENSE for details.
@@ -35,7 +35,7 @@ if False:
 
 class DASObject(ObjectDescription):
     """
-    Description of a daScript object.
+    Description of a Daslang object.
     """
     #: If set to ``True`` this object is callable and a `desc_parameterlist` is
     #: added
@@ -145,7 +145,7 @@ class DASObject(ObjectDescription):
         # type: () -> None
         """Handle object nesting before content
 
-        :py:class:`DASObject` represents daScript language constructs. For
+        :py:class:`DASObject` represents Daslang language constructs. For
         constructs that are nestable, this method will build up a stack of the
         nesting heirarchy so that it can be later de-nested correctly, in
         :py:meth:`after_content`.
@@ -200,7 +200,7 @@ class DASObject(ObjectDescription):
 
 
 class DASCallable(DASObject):
-    """Description of a daScript function, method or constructor."""
+    """Description of a Daslang function, method or constructor."""
     has_arguments = True
 
     doc_field_types = [
@@ -225,7 +225,7 @@ class DASConstructor(DASCallable):
 
 class DASModule(SphinxDirective):
     """
-    Directive to mark description of a new daScript module.
+    Directive to mark description of a new Daslang module.
 
     This directive specifies the module name that will be used by objects that
     follow this directive.
@@ -259,7 +259,7 @@ class DASModule(SphinxDirective):
         if not noindex:
             self.env.domaindata['das']['modules'][mod_name] = self.env.docname
             # Make a duplicate entry in 'objects' to facilitate searching for
-            # the module in daScriptDomain.find_obj()
+            # the module in DaslangDomain.find_obj()
             self.env.domaindata['das']['objects'][mod_name] = (self.env.docname, 'module')
             targetnode = nodes.target('', '', ids=['module-' + mod_name],
                                       ismod=True)
@@ -292,10 +292,10 @@ class DASXRefRole(XRefRole):
         return title, target
 
 
-class DaScriptDomain(Domain):
-    """daScript language domain."""
+class DaslangDomain(Domain):
+    """Daslang language domain."""
     name = 'das'
-    label = 'daScript'
+    label = 'Daslang'
     # if you add a new object type make sure to edit DASObject.get_index_string
     object_types = {
         'function':  ObjType(_('function'),  'func'),
@@ -413,7 +413,7 @@ class DaScriptDomain(Domain):
 
 def setup(app):
     # type: (Sphinx) -> Dict[unicode, Any]
-    app.add_domain(DaScriptDomain)
+    app.add_domain(DaslangDomain)
 
     return {
         'version': 'builtin',
