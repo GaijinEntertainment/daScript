@@ -15,7 +15,7 @@ namespace das {
     template <typename TT>
     StringWriter & StringWriter::format(const char * format, TT value) {
         char buf[128];
-        auto tail = fmt::format_to(buf, format, value);
+        auto tail = fmt::format_to(buf, fmt::format(format), value);
         auto realL = tail - buf;
         if ( auto at = this->allocate(int(realL)) ) {
             memcpy(at, buf, realL);
