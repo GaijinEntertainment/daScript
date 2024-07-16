@@ -750,6 +750,7 @@ namespace das
         bool                            alwaysErrorOnException = false;
         bool                            alwaysStackWalkOnException = false;
         bool                            instrumentAllocations = false;
+        bool                            failed = false;
     public:
         string                          name;
         Bitfield                        category = 0;

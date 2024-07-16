@@ -1129,16 +1129,18 @@ namespace das
     }
 
     Context::~Context() {
-        on_debug_agent_mutex([&](){
-            // unregister
-            category.value |= uint32_t(ContextCategory::dead);
-            // register
-            for_each_debug_agent([&](const DebugAgentPtr & pAgent){
-                pAgent->onDestroyContext(this);
+        if ( !failed ) {
+            on_debug_agent_mutex([&](){
+                // unregister
+                category.value |= uint32_t(ContextCategory::dead);
+                // register
+                for_each_debug_agent([&](const DebugAgentPtr & pAgent){
+                    pAgent->onDestroyContext(this);
+                });
             });
-        });
-        // shutdown
-        runShutdownScript();
+            // shutdown
+            runShutdownScript();
+        }
         // and free memory
         if ( globals && globalsOwner ) {
             das_aligned_free16(globals);

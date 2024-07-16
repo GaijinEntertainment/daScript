@@ -2970,26 +2970,40 @@ namespace das
         return nullptr;
     }
 
-    void Program::buildGMNLookup ( Context & context, TextWriter & logs ) {
+void Program::buildGMNLookup ( Context & context, TextWriter & logs ) {
         context.tabGMnLookup = make_shared<das_hash_map<uint64_t,uint32_t>>();
         context.tabGMnLookup->clear();
         for ( int i=0, is=context.totalVariables; i!=is; ++i ) {
-            auto mnh = context.globalVariables[i].mangledNameHash;
-            (*context.tabGMnLookup)[mnh] = context.globalVariables[i].offset;
+            auto & gvar = context.globalVariables[i];
+            auto mnh = gvar.mangledNameHash;
+            auto it = context.tabGMnLookup->find(mnh);
+            if ( it != context.tabGMnLookup->end() ) {
+                GlobalVariable * collision = context.globalVariables + it->second;
+                LineInfo * errorAt = nullptr;
+                TextWriter message;
+                message << "internal compiler error. global variable mangled name hash collision "
+                    << gvar.name << " : " << debug_type(gvar.debugInfo)
+                    << " hash=" << HEX << gvar.mangledNameHash << DEC
+                    << " offset=" << gvar.offset;
+                if ( collision ) {
+                    message << " and " << collision->name << " : " << debug_type(collision->debugInfo)
+                        << " hash=" << HEX << collision->mangledNameHash << DEC
+                        << " offset=" << collision->offset;
+                }
+                if ( gvar.init ) {
+                    errorAt = &gvar.init->debugInfo;
+                } else if ( collision && collision->init ) {
+                    errorAt = &collision->init->debugInfo;
+                }
+                error(message.str(), "", "", errorAt ? *errorAt : LineInfo());
+                return;
+            }
+            context.tabGMnLookup->insert({mnh, context.globalVariables[i].offset});
         }
         if ( options.getBoolOption("log_gmn_hash",false) ) {
             logs
                 << "totalGlobals: " << context.totalVariables << "\n"
                 << "tabGMnLookup:" << context.tabGMnLookup->size() << "\n";
-        }
-        for ( int i=0, is=context.totalVariables; i!=is; ++i ) {
-            auto & gvar = context.globalVariables[i];
-            uint32_t voffset = context.globalOffsetByMangledName(gvar.mangledNameHash);
-            if ( voffset != gvar.offset ) {
-                error("internal compiler error. global variable mangled name hash collision "
-                        + string(context.functions[i].mangledName), "", "", LineInfo());
-                return;
-            }
         }
     }
 
@@ -2998,7 +3012,13 @@ namespace das
         context.tabMnLookup->clear();
         for ( const auto & fn : lookupFunctions ) {
             auto mnh = fn->getMangledNameHash();
-            (*context.tabMnLookup)[mnh] = context.functions + fn->index;
+            auto it = context.tabMnLookup->find(mnh);
+            if ( it != context.tabMnLookup->end() ) {
+                error("internal compiler error. function mangled name hash collision " + fn->name,
+                    "", "", LineInfo());
+                return;
+            }
+            context.tabMnLookup->insert({mnh, context.functions + fn->index});
         }
         if ( options.getBoolOption("log_mn_hash",false) ) {
             logs
@@ -3011,7 +3031,13 @@ namespace das
         context.tabAdLookup = make_shared<das_hash_map<uint64_t,uint64_t>>();
         for (auto & pm : library.modules ) {
             for(auto s2d : pm->annotationData ) {
-                (*context.tabAdLookup)[s2d.first] = s2d.second;
+                auto it = context.tabAdLookup->find(s2d.first);
+                if ( it != context.tabAdLookup->end() ) {
+                    error("internal compiler error. annotation data hash collision " + s2d.second,
+                        "", "", LineInfo());
+                    return;
+                }
+                context.tabAdLookup->insert(s2d);
             }
         }
         if ( options.getBoolOption("log_ad_hash",false) ) {
@@ -3039,6 +3065,7 @@ namespace das
     bool Program::simulate ( Context & context, TextWriter & logs, StackAllocator * sharedStack ) {
         auto time0 = ref_time_ticks();
         isSimulating = true;
+        context.failed = true;
         astTypeInfo.clear();    // this is to be filled via typeinfo(ast_typedecl and such)
         auto disableInit = options.getBoolOption("no_init", policies.no_init);
         context.thisProgram = this;
@@ -3223,6 +3250,7 @@ namespace das
             isSimulating = false;
             return false;
         }
+        context.failed = false;
         bool aot_hint = policies.aot && !folding && !thisModule->isModule;
 #if DAS_FUSION
         if ( !folding ) {               // note: only run fusion when not folding
