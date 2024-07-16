@@ -1118,4 +1118,34 @@ Returns the value of the JSON object, if it exists, otherwise returns the defaul
 
 Returns the value of the JSON object, if it exists, otherwise returns the default value.
 
+.. _function-_at_json_boost_c__c__qm_._rq_value_C_eq_1_ls_S_ls_json_c__c_JsonValue_gr__gr__qm_:
+
+.. das:function:: operator ?.`value(a: JsonValue? const ==const)
+
+?.`value returns  :ref:`JsValue <alias-JsValue>` ?
+
++--------+--------------------------------------------------------+
++argument+argument type                                           +
++========+========================================================+
++a       + :ref:`json::JsonValue <struct-json-JsonValue>` ? const!+
++--------+--------------------------------------------------------+
+
+
+|function-json_boost-_qm_.`value|
+
+.. _function-_at_json_boost_c__c__qm_._rq_value__eq_1_ls_S_ls_json_c__c_JsonValue_gr__gr__qm_:
+
+.. das:function:: operator ?.`value(a: JsonValue? ==const)
+
+?.`value returns  :ref:`JsValue <alias-JsValue>` ?
+
++--------+--------------------------------------------------+
++argument+argument type                                     +
++========+==================================================+
++a       + :ref:`json::JsonValue <struct-json-JsonValue>` ?!+
++--------+--------------------------------------------------+
+
+
+|function-json_boost-_qm_.`value|
+
 

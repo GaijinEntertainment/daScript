@@ -29,9 +29,9 @@ Type aliases
 +------------------+---+-----+
 +refAddresses      +3  +8    +
 +------------------+---+-----+
-+humanReadable     +4  +16   +
++singleLine        +4  +16   +
 +------------------+---+-----+
-+singleLine        +5  +32   +
++fixedPoint        +5  +32   +
 +------------------+---+-----+
 
 
@@ -85,25 +85,25 @@ Constants
 
 .. _global-builtin-FLT_MIN:
 
-.. das:attribute:: FLT_MIN = 1.17549e-38f
+.. das:attribute:: FLT_MIN = 1.1754944e-38f
 
 |variable-builtin-FLT_MIN|
 
 .. _global-builtin-FLT_MAX:
 
-.. das:attribute:: FLT_MAX = 3.40282e+38f
+.. das:attribute:: FLT_MAX = 3.4028235e+38f
 
 |variable-builtin-FLT_MAX|
 
 .. _global-builtin-DBL_MIN:
 
-.. das:attribute:: DBL_MIN = 2.22507e-308lf
+.. das:attribute:: DBL_MIN = 2.2250738585072014e-308lf
 
 |variable-builtin-DBL_MIN|
 
 .. _global-builtin-DBL_MAX:
 
-.. das:attribute:: DBL_MAX = 1.79769e+308lf
+.. das:attribute:: DBL_MAX = 1.7976931348623157e+308lf
 
 |variable-builtin-DBL_MAX|
 
@@ -151,7 +151,7 @@ Constants
 
 .. _global-builtin-print_flags_debugger:
 
-.. das:attribute:: print_flags_debugger = bitfield(0x1f)
+.. das:attribute:: print_flags_debugger = bitfield(0xf)
 
 |variable-builtin-print_flags_debugger|
 
@@ -476,6 +476,12 @@ Structure macros
 .. das:attribute:: cpp_layout
 
 |structure_macro-builtin-cpp_layout|
+
+.. _handle-builtin-safe_when_uninitialized:
+
+.. das:attribute:: safe_when_uninitialized
+
+|structure_macro-builtin-safe_when_uninitialized|
 
 .. _handle-builtin-persistent:
 
@@ -2407,6 +2413,10 @@ das::string manipulation
 Heap reporting
 ++++++++++++++
 
+  *  :ref:`heap_allocation_stats (context:__context const) : urange64 <function-_at__builtin__c__c_heap_allocation_stats_C_c>` 
+  *  :ref:`heap_allocation_count (context:__context const) : uint64 <function-_at__builtin__c__c_heap_allocation_count_C_c>` 
+  *  :ref:`string_heap_allocation_stats (context:__context const) : urange64 <function-_at__builtin__c__c_string_heap_allocation_stats_C_c>` 
+  *  :ref:`string_heap_allocation_count (context:__context const) : uint64 <function-_at__builtin__c__c_string_heap_allocation_count_C_c>` 
   *  :ref:`heap_bytes_allocated (context:__context const) : uint64 <function-_at__builtin__c__c_heap_bytes_allocated_C_c>` 
   *  :ref:`heap_depth (context:__context const) : int <function-_at__builtin__c__c_heap_depth_C_c>` 
   *  :ref:`string_heap_bytes_allocated (context:__context const) : uint64 <function-_at__builtin__c__c_string_heap_bytes_allocated_C_c>` 
@@ -2415,6 +2425,38 @@ Heap reporting
   *  :ref:`string_heap_report (context:__context const;line:__lineInfo const) : void <function-_at__builtin__c__c_string_heap_report_C_c_C_l>` 
   *  :ref:`heap_report (context:__context const;line:__lineInfo const) : void <function-_at__builtin__c__c_heap_report_C_c_C_l>` 
   *  :ref:`memory_report (errorsOnly:bool const;context:__context const;lineinfo:__lineInfo const) : void <function-_at__builtin__c__c_memory_report_Cb_C_c_C_l>` 
+
+.. _function-_at__builtin__c__c_heap_allocation_stats_C_c:
+
+.. das:function:: heap_allocation_stats()
+
+heap_allocation_stats returns urange64
+
+|function-builtin-heap_allocation_stats|
+
+.. _function-_at__builtin__c__c_heap_allocation_count_C_c:
+
+.. das:function:: heap_allocation_count()
+
+heap_allocation_count returns uint64
+
+|function-builtin-heap_allocation_count|
+
+.. _function-_at__builtin__c__c_string_heap_allocation_stats_C_c:
+
+.. das:function:: string_heap_allocation_stats()
+
+string_heap_allocation_stats returns urange64
+
+|function-builtin-string_heap_allocation_stats|
+
+.. _function-_at__builtin__c__c_string_heap_allocation_count_C_c:
+
+.. das:function:: string_heap_allocation_count()
+
+string_heap_allocation_count returns uint64
+
+|function-builtin-string_heap_allocation_count|
 
 .. _function-_at__builtin__c__c_heap_bytes_allocated_C_c:
 
@@ -2804,7 +2846,7 @@ Profiler
 
   *  :ref:`reset_profiler (context:__context const) : void <function-_at__builtin__c__c_reset_profiler_C_c>` 
   *  :ref:`dump_profile_info (context:__context const) : void <function-_at__builtin__c__c_dump_profile_info_C_c>` 
-  *  :ref:`collect_profile_info (context:__context const) : string <function-_at__builtin__c__c_collect_profile_info_C_c>` 
+  *  :ref:`collect_profile_info (context:__context const;at:__lineInfo const) : string <function-_at__builtin__c__c_collect_profile_info_C_c_C_l>` 
   *  :ref:`profile (count:int const;category:string const implicit;block:block\<\> const implicit;context:__context const;line:__lineInfo const) : float <function-_at__builtin__c__c_profile_Ci_CIs_CI_builtin__C_c_C_l>` 
 
 .. _function-_at__builtin__c__c_reset_profiler_C_c:
@@ -2819,7 +2861,7 @@ Profiler
 
 |function-builtin-dump_profile_info|
 
-.. _function-_at__builtin__c__c_collect_profile_info_C_c:
+.. _function-_at__builtin__c__c_collect_profile_info_C_c_C_l:
 
 .. das:function:: collect_profile_info()
 
@@ -2850,11 +2892,11 @@ profile returns float
 System infastructure
 ++++++++++++++++++++
 
-  *  :ref:`get_das_root (context:__context const) : string <function-_at__builtin__c__c_get_das_root_C_c>` 
+  *  :ref:`get_das_root (context:__context const;at:__lineInfo const) : string <function-_at__builtin__c__c_get_das_root_C_c_C_l>` 
   *  :ref:`panic (text:string const implicit;context:__context const;at:__lineInfo const) : void <function-_at__builtin__c__c_panic_CIs_C_c_C_l>` 
   *  :ref:`print (text:string const implicit;context:__context const;at:__lineInfo const) : void <function-_at__builtin__c__c_print_CIs_C_c_C_l>` 
   *  :ref:`error (text:string const implicit;context:__context const;at:__lineInfo const) : void <function-_at__builtin__c__c_error_CIs_C_c_C_l>` 
-  *  :ref:`sprint (value:any;flags:bitfield\<escapeString;namesAndDimensions;typeQualifiers;refAddresses;humanReadable;singleLine\> const) : string <function-_at__builtin__c__c_sprint_*_CY_ls_print_flags_gr_N_ls_escapeString;namesAndDimensions;typeQualifiers;refAddresses;humanReadable;singleLine_gr_t>` 
+  *  :ref:`sprint (value:any;flags:bitfield\<escapeString;namesAndDimensions;typeQualifiers;refAddresses;singleLine;fixedPoint\> const) : string <function-_at__builtin__c__c_sprint_*_CY_ls_print_flags_gr_N_ls_escapeString;namesAndDimensions;typeQualifiers;refAddresses;singleLine;fixedPoint_gr_t>` 
   *  :ref:`sprint_json (value:any;humanReadable:bool const) : string <function-_at__builtin__c__c_sprint_json_*_Cb>` 
   *  :ref:`terminate (context:__context const;at:__lineInfo const) : void <function-_at__builtin__c__c_terminate_C_c_C_l>` 
   *  :ref:`breakpoint () : void <function-_at__builtin__c__c_breakpoint>` 
@@ -2866,7 +2908,7 @@ System infastructure
   *  :ref:`eval_main_loop (block:block\<bool\> const implicit;context:__context const;at:__lineInfo const) : void <function-_at__builtin__c__c_eval_main_loop_CI1_ls_b_gr__builtin__C_c_C_l>` 
   *  :ref:`aot_enabled (context:__context const;at:__lineInfo const) : bool <function-_at__builtin__c__c_aot_enabled_C_c_C_l>` 
 
-.. _function-_at__builtin__c__c_get_das_root_C_c:
+.. _function-_at__builtin__c__c_get_das_root_C_c_C_l:
 
 .. das:function:: get_das_root()
 
@@ -2913,7 +2955,7 @@ get_das_root returns string
 
 |function-builtin-error|
 
-.. _function-_at__builtin__c__c_sprint_*_CY_ls_print_flags_gr_N_ls_escapeString;namesAndDimensions;typeQualifiers;refAddresses;humanReadable;singleLine_gr_t:
+.. _function-_at__builtin__c__c_sprint_*_CY_ls_print_flags_gr_N_ls_escapeString;namesAndDimensions;typeQualifiers;refAddresses;singleLine;fixedPoint_gr_t:
 
 .. das:function:: sprint(value: any; flags: print_flags)
 
@@ -3523,8 +3565,8 @@ Time and date
   *  :ref:`get_clock () : $::clock <function-_at__builtin__c__c_get_clock>` 
   *  :ref:`mktime (year:int const;month:int const;mday:int const;hour:int const;min:int const;sec:int const) : $::clock <function-_at__builtin__c__c_mktime_Ci_Ci_Ci_Ci_Ci_Ci>` 
   *  :ref:`ref_time_ticks () : int64 <function-_at__builtin__c__c_ref_time_ticks>` 
-  *  :ref:`get_time_usec (arg0:int64 const) : int <function-_at__builtin__c__c_get_time_usec_Ci64>` 
-  *  :ref:`get_time_nsec (arg0:int64 const) : int64 <function-_at__builtin__c__c_get_time_nsec_Ci64>` 
+  *  :ref:`get_time_usec (ref:int64 const) : int <function-_at__builtin__c__c_get_time_usec_Ci64>` 
+  *  :ref:`get_time_nsec (ref:int64 const) : int64 <function-_at__builtin__c__c_get_time_nsec_Ci64>` 
 
 .. _function-_at__builtin__c__c_get_clock:
 
@@ -3569,14 +3611,14 @@ ref_time_ticks returns int64
 
 .. _function-_at__builtin__c__c_get_time_usec_Ci64:
 
-.. das:function:: get_time_usec(arg0: int64 const)
+.. das:function:: get_time_usec(ref: int64 const)
 
 get_time_usec returns int
 
 +--------+-------------+
 +argument+argument type+
 +========+=============+
-+arg0    +int64 const  +
++ref     +int64 const  +
 +--------+-------------+
 
 
@@ -3584,14 +3626,14 @@ get_time_usec returns int
 
 .. _function-_at__builtin__c__c_get_time_nsec_Ci64:
 
-.. das:function:: get_time_nsec(arg0: int64 const)
+.. das:function:: get_time_nsec(ref: int64 const)
 
 get_time_nsec returns int64
 
 +--------+-------------+
 +argument+argument type+
 +========+=============+
-+arg0    +int64 const  +
++ref     +int64 const  +
 +--------+-------------+
 
 
@@ -3997,12 +4039,12 @@ Initialization and finalization
 Algorithms
 ++++++++++
 
-  *  :ref:`count (start:int const;step:int const;context:__context const) : iterator\<int\> <function-_at__builtin__c__c_count_Ci_Ci_C_c>` 
-  *  :ref:`ucount (start:uint const;step:uint const;context:__context const) : iterator\<uint\> <function-_at__builtin__c__c_ucount_Cu_Cu_C_c>` 
+  *  :ref:`count (start:int const;step:int const;context:__context const;at:__lineInfo const) : iterator\<int\> <function-_at__builtin__c__c_count_Ci_Ci_C_c_C_l>` 
+  *  :ref:`ucount (start:uint const;step:uint const;context:__context const;at:__lineInfo const) : iterator\<uint\> <function-_at__builtin__c__c_ucount_Cu_Cu_C_c_C_l>` 
   *  :ref:`iter_range (foo:auto const) : auto <function-_at__builtin__c__c_iter_range_C.>` 
   *  :ref:`swap (a:auto(TT)& -const;b:auto(TT)& -const) : auto <function-_at__builtin__c__c_swap_&Y_ls_TT_gr_._&Y_ls_TT_gr_.>` 
 
-.. _function-_at__builtin__c__c_count_Ci_Ci_C_c:
+.. _function-_at__builtin__c__c_count_Ci_Ci_C_c_C_l:
 
 .. das:function:: count(start: int const; step: int const)
 
@@ -4019,7 +4061,7 @@ count returns iterator<int>
 
 |function-builtin-count|
 
-.. _function-_at__builtin__c__c_ucount_Cu_Cu_C_c:
+.. _function-_at__builtin__c__c_ucount_Cu_Cu_C_c_C_l:
 
 .. das:function:: ucount(start: uint const; step: uint const)
 

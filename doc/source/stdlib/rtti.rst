@@ -480,93 +480,95 @@ Enumerations
 +--------------+--+
 +option        +3 +
 +--------------+--+
-+fakeContext   +4 +
++typeDecl      +4 +
 +--------------+--+
-+fakeLineInfo  +5 +
++fakeContext   +5 +
 +--------------+--+
-+anyArgument   +6 +
++fakeLineInfo  +6 +
 +--------------+--+
-+tVoid         +7 +
++anyArgument   +7 +
 +--------------+--+
-+tBool         +8 +
++tVoid         +8 +
 +--------------+--+
-+tInt8         +9 +
++tBool         +9 +
 +--------------+--+
-+tUInt8        +10+
++tInt8         +10+
 +--------------+--+
-+tInt16        +11+
++tUInt8        +11+
 +--------------+--+
-+tUInt16       +12+
++tInt16        +12+
 +--------------+--+
-+tInt64        +13+
++tUInt16       +13+
 +--------------+--+
-+tUInt64       +14+
++tInt64        +14+
 +--------------+--+
-+tInt          +15+
++tUInt64       +15+
 +--------------+--+
-+tInt2         +16+
++tInt          +16+
 +--------------+--+
-+tInt3         +17+
++tInt2         +17+
 +--------------+--+
-+tInt4         +18+
++tInt3         +18+
 +--------------+--+
-+tUInt         +19+
++tInt4         +19+
 +--------------+--+
-+tUInt2        +20+
++tUInt         +20+
 +--------------+--+
-+tUInt3        +21+
++tUInt2        +21+
 +--------------+--+
-+tUInt4        +22+
++tUInt3        +22+
 +--------------+--+
-+tFloat        +23+
++tUInt4        +23+
 +--------------+--+
-+tFloat2       +24+
++tFloat        +24+
 +--------------+--+
-+tFloat3       +25+
++tFloat2       +25+
 +--------------+--+
-+tFloat4       +26+
++tFloat3       +26+
 +--------------+--+
-+tDouble       +27+
++tFloat4       +27+
 +--------------+--+
-+tRange        +28+
++tDouble       +28+
 +--------------+--+
-+tURange       +29+
++tRange        +29+
 +--------------+--+
-+tRange64      +30+
++tURange       +30+
 +--------------+--+
-+tURange64     +31+
++tRange64      +31+
 +--------------+--+
-+tString       +32+
++tURange64     +32+
 +--------------+--+
-+tStructure    +33+
++tString       +33+
 +--------------+--+
-+tHandle       +34+
++tStructure    +34+
 +--------------+--+
-+tEnumeration  +35+
++tHandle       +35+
 +--------------+--+
-+tEnumeration8 +36+
++tEnumeration  +36+
 +--------------+--+
-+tEnumeration16+37+
++tEnumeration8 +37+
 +--------------+--+
-+tBitfield     +38+
++tEnumeration16+38+
 +--------------+--+
-+tPointer      +39+
++tBitfield     +39+
 +--------------+--+
-+tFunction     +40+
++tPointer      +40+
 +--------------+--+
-+tLambda       +41+
++tFunction     +41+
 +--------------+--+
-+tIterator     +42+
++tLambda       +42+
 +--------------+--+
-+tArray        +43+
++tIterator     +43+
 +--------------+--+
-+tTable        +44+
++tArray        +44+
 +--------------+--+
-+tBlock        +45+
++tTable        +45+
 +--------------+--+
-+tTuple        +46+
++tBlock        +46+
 +--------------+--+
-+tVariant      +47+
++tTuple        +47+
++--------------+--+
++tVariant      +48+
 +--------------+--+
 
 
@@ -1455,7 +1457,7 @@ Type access
   *  :ref:`get_type_size (type:rtti::TypeInfo? const implicit) : int <function-_at_rtti_c__c_get_type_size_CI1_ls_H_ls_rtti_c__c_TypeInfo_gr__gr__qm_>` 
   *  :ref:`get_type_align (type:rtti::TypeInfo? const implicit) : int <function-_at_rtti_c__c_get_type_align_CI1_ls_H_ls_rtti_c__c_TypeInfo_gr__gr__qm_>` 
   *  :ref:`is_compatible_cast (from:rtti::StructInfo const? const implicit;to:rtti::StructInfo const? const implicit) : bool <function-_at_rtti_c__c_is_compatible_cast_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr__qm__CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr__qm_>` 
-  *  :ref:`get_das_type_name (type:rtti::Type const;context:__context const) : string <function-_at_rtti_c__c_get_das_type_name_CE_ls_rtti_c__c_Type_gr__C_c>` 
+  *  :ref:`get_das_type_name (type:rtti::Type const;context:__context const;at:__lineInfo const) : string <function-_at_rtti_c__c_get_das_type_name_CE_ls_rtti_c__c_Type_gr__C_c_C_l>` 
   *  :ref:`is_same_type (a:rtti::TypeInfo const;b:rtti::TypeInfo const;refMatters:rtti::RefMatters const;constMatters:rtti::ConstMatters const;temporaryMatters:rtti::TemporaryMatters const;topLevel:bool const) : auto <function-_at_rtti_c__c_is_same_type_CH_ls_rtti_c__c_TypeInfo_gr__CH_ls_rtti_c__c_TypeInfo_gr__CE_ls_rtti_c__c_RefMatters_gr__CE_ls_rtti_c__c_ConstMatters_gr__CE_ls_rtti_c__c_TemporaryMatters_gr__Cb>` 
   *  :ref:`is_compatible_cast (a:rtti::StructInfo const;b:rtti::StructInfo const) : auto <function-_at_rtti_c__c_is_compatible_cast_CH_ls_rtti_c__c_StructInfo_gr__CH_ls_rtti_c__c_StructInfo_gr_>` 
   *  :ref:`each_dim (info:rtti::TypeInfo const) : auto <function-_at_rtti_c__c_each_dim_CH_ls_rtti_c__c_TypeInfo_gr_>` 
@@ -1571,7 +1573,7 @@ is_compatible_cast returns bool
 
 |function-rtti-is_compatible_cast|
 
-.. _function-_at_rtti_c__c_get_das_type_name_CE_ls_rtti_c__c_Type_gr__C_c:
+.. _function-_at_rtti_c__c_get_das_type_name_CE_ls_rtti_c__c_Type_gr__C_c_C_l:
 
 .. das:function:: get_das_type_name(type: Type const)
 
@@ -2129,10 +2131,10 @@ Module access
 Annotation access
 +++++++++++++++++
 
-  *  :ref:`get_annotation_argument_value (info:rtti::AnnotationArgument const implicit;context:__context const) : variant\<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any\> <function-_at_rtti_c__c_get_annotation_argument_value_CIH_ls_rtti_c__c_AnnotationArgument_gr__C_c>` 
+  *  :ref:`get_annotation_argument_value (info:rtti::AnnotationArgument const implicit;context:__context const;at:__lineInfo const) : variant\<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any\> <function-_at_rtti_c__c_get_annotation_argument_value_CIH_ls_rtti_c__c_AnnotationArgument_gr__C_c_C_l>` 
   *  :ref:`add_annotation_argument (annotation:rtti::AnnotationArgumentList implicit;name:string const implicit) : int <function-_at_rtti_c__c_add_annotation_argument_IH_ls_rtti_c__c_AnnotationArgumentList_gr__CIs>` 
 
-.. _function-_at_rtti_c__c_get_annotation_argument_value_CIH_ls_rtti_c__c_AnnotationArgument_gr__C_c:
+.. _function-_at_rtti_c__c_get_annotation_argument_value_CIH_ls_rtti_c__c_AnnotationArgument_gr__C_c_C_l:
 
 .. das:function:: get_annotation_argument_value(info: AnnotationArgument const implicit)
 
@@ -2417,13 +2419,13 @@ structure_for_each_annotation returns auto
 Data walking and printing
 +++++++++++++++++++++++++
 
-  *  :ref:`sprint_data (data:void? const implicit;type:rtti::TypeInfo const? const implicit;flags:bitfield const;context:__context const) : string <function-_at_rtti_c__c_sprint_data_CI_qm__CI1_ls_CH_ls_rtti_c__c_TypeInfo_gr__gr__qm__Ct_C_c>` 
-  *  :ref:`sprint_data (data:float4 const;type:rtti::TypeInfo const? const implicit;flags:bitfield const;context:__context const) : string <function-_at_rtti_c__c_sprint_data_Cf4_CI1_ls_CH_ls_rtti_c__c_TypeInfo_gr__gr__qm__Ct_C_c>` 
-  *  :ref:`describe (type:rtti::TypeInfo const? const implicit;context:__context const) : string <function-_at_rtti_c__c_describe_CI1_ls_CH_ls_rtti_c__c_TypeInfo_gr__gr__qm__C_c>` 
-  *  :ref:`describe (lineinfo:rtti::LineInfo const implicit;fully:bool const;context:__context const) : string <function-_at_rtti_c__c_describe_CIH_ls_rtti_c__c_LineInfo_gr__Cb_C_c>` 
-  *  :ref:`get_mangled_name (type:rtti::TypeInfo const? const implicit;context:__context const) : string <function-_at_rtti_c__c_get_mangled_name_CI1_ls_CH_ls_rtti_c__c_TypeInfo_gr__gr__qm__C_c>` 
+  *  :ref:`sprint_data (data:void? const implicit;type:rtti::TypeInfo const? const implicit;flags:bitfield const;context:__context const;at:__lineInfo const) : string <function-_at_rtti_c__c_sprint_data_CI_qm__CI1_ls_CH_ls_rtti_c__c_TypeInfo_gr__gr__qm__Ct_C_c_C_l>` 
+  *  :ref:`sprint_data (data:float4 const;type:rtti::TypeInfo const? const implicit;flags:bitfield const;context:__context const;at:__lineInfo const) : string <function-_at_rtti_c__c_sprint_data_Cf4_CI1_ls_CH_ls_rtti_c__c_TypeInfo_gr__gr__qm__Ct_C_c_C_l>` 
+  *  :ref:`describe (type:rtti::TypeInfo const? const implicit;context:__context const;at:__lineInfo const) : string <function-_at_rtti_c__c_describe_CI1_ls_CH_ls_rtti_c__c_TypeInfo_gr__gr__qm__C_c_C_l>` 
+  *  :ref:`describe (lineinfo:rtti::LineInfo const implicit;fully:bool const;context:__context const;at:__lineInfo const) : string <function-_at_rtti_c__c_describe_CIH_ls_rtti_c__c_LineInfo_gr__Cb_C_c_C_l>` 
+  *  :ref:`get_mangled_name (type:rtti::TypeInfo const? const implicit;context:__context const;at:__lineInfo const) : string <function-_at_rtti_c__c_get_mangled_name_CI1_ls_CH_ls_rtti_c__c_TypeInfo_gr__gr__qm__C_c_C_l>` 
 
-.. _function-_at_rtti_c__c_sprint_data_CI_qm__CI1_ls_CH_ls_rtti_c__c_TypeInfo_gr__gr__qm__Ct_C_c:
+.. _function-_at_rtti_c__c_sprint_data_CI_qm__CI1_ls_CH_ls_rtti_c__c_TypeInfo_gr__gr__qm__Ct_C_c_C_l:
 
 .. das:function:: sprint_data(data: void? const implicit; type: TypeInfo const? const implicit; flags: bitfield const)
 
@@ -2442,7 +2444,7 @@ sprint_data returns string
 
 |function-rtti-sprint_data|
 
-.. _function-_at_rtti_c__c_sprint_data_Cf4_CI1_ls_CH_ls_rtti_c__c_TypeInfo_gr__gr__qm__Ct_C_c:
+.. _function-_at_rtti_c__c_sprint_data_Cf4_CI1_ls_CH_ls_rtti_c__c_TypeInfo_gr__gr__qm__Ct_C_c_C_l:
 
 .. das:function:: sprint_data(data: float4 const; type: TypeInfo const? const implicit; flags: bitfield const)
 
@@ -2461,7 +2463,7 @@ sprint_data returns string
 
 |function-rtti-sprint_data|
 
-.. _function-_at_rtti_c__c_describe_CI1_ls_CH_ls_rtti_c__c_TypeInfo_gr__gr__qm__C_c:
+.. _function-_at_rtti_c__c_describe_CI1_ls_CH_ls_rtti_c__c_TypeInfo_gr__gr__qm__C_c_C_l:
 
 .. das:function:: describe(type: TypeInfo const? const implicit)
 
@@ -2476,7 +2478,7 @@ describe returns string
 
 |function-rtti-describe|
 
-.. _function-_at_rtti_c__c_describe_CIH_ls_rtti_c__c_LineInfo_gr__Cb_C_c:
+.. _function-_at_rtti_c__c_describe_CIH_ls_rtti_c__c_LineInfo_gr__Cb_C_c_C_l:
 
 .. das:function:: describe(lineinfo: LineInfo const implicit; fully: bool const)
 
@@ -2493,7 +2495,7 @@ describe returns string
 
 |function-rtti-describe|
 
-.. _function-_at_rtti_c__c_get_mangled_name_CI1_ls_CH_ls_rtti_c__c_TypeInfo_gr__gr__qm__C_c:
+.. _function-_at_rtti_c__c_get_mangled_name_CI1_ls_CH_ls_rtti_c__c_TypeInfo_gr__gr__qm__C_c_C_l:
 
 .. das:function:: get_mangled_name(type: TypeInfo const? const implicit)
 
@@ -2663,6 +2665,21 @@ get_table_key_index returns int
 Uncategorized
 +++++++++++++
 
+.. _function-_at_rtti_c__c_module_for_each_dependency_CI1_ls_H_ls_rtti_c__c_Module_gr__gr__qm__CI0_ls_1_ls_H_ls_rtti_c__c_Module_gr__gr__qm_;b_gr_1_ls_v_gr__builtin__C_c_C_l:
+
+.. das:function:: module_for_each_dependency(module: Module? const implicit; block: block<(var arg0:Module?;var arg1:bool):void> const implicit)
+
++--------+-----------------------------------------------------------------------------+
++argument+argument type                                                                +
++========+=============================================================================+
++module  + :ref:`rtti::Module <handle-rtti-Module>` ? const implicit                   +
++--------+-----------------------------------------------------------------------------+
++block   +block<( :ref:`rtti::Module <handle-rtti-Module>` ?;bool):void> const implicit+
++--------+-----------------------------------------------------------------------------+
+
+
+|function-rtti-module_for_each_dependency|
+
 .. _function-_at_rtti_c__c_get_tuple_field_offset_CI1_ls_H_ls_rtti_c__c_TypeInfo_gr__gr__qm__Ci:
 
 .. das:function:: get_tuple_field_offset(type: TypeInfo? const implicit; index: int const)
@@ -2697,7 +2714,7 @@ get_variant_field_offset returns int
 
 |function-rtti-get_variant_field_offset|
 
-.. _function-_at_rtti_c__c_each_I_eq_H_ls_rtti_c__c_FuncInfo_gr__C_c:
+.. _function-_at_rtti_c__c_each_I_eq_H_ls_rtti_c__c_FuncInfo_gr__C_c_C_l:
 
 .. das:function:: each(info: FuncInfo implicit ==const)
 
@@ -2712,7 +2729,7 @@ each returns iterator< :ref:`rtti::VarInfo <handle-rtti-VarInfo>` &>
 
 |function-rtti-each|
 
-.. _function-_at_rtti_c__c_each_CI_eq_H_ls_rtti_c__c_FuncInfo_gr__C_c:
+.. _function-_at_rtti_c__c_each_CI_eq_H_ls_rtti_c__c_FuncInfo_gr__C_c_C_l:
 
 .. das:function:: each(info: FuncInfo const implicit ==const)
 
@@ -2727,7 +2744,7 @@ each returns iterator< :ref:`rtti::VarInfo <handle-rtti-VarInfo>`  const&>
 
 |function-rtti-each|
 
-.. _function-_at_rtti_c__c_each_I_eq_H_ls_rtti_c__c_StructInfo_gr__C_c:
+.. _function-_at_rtti_c__c_each_I_eq_H_ls_rtti_c__c_StructInfo_gr__C_c_C_l:
 
 .. das:function:: each(info: StructInfo implicit ==const)
 
@@ -2742,7 +2759,7 @@ each returns iterator< :ref:`rtti::VarInfo <handle-rtti-VarInfo>` &>
 
 |function-rtti-each|
 
-.. _function-_at_rtti_c__c_each_CI_eq_H_ls_rtti_c__c_StructInfo_gr__C_c:
+.. _function-_at_rtti_c__c_each_CI_eq_H_ls_rtti_c__c_StructInfo_gr__C_c_C_l:
 
 .. das:function:: each(info: StructInfo const implicit ==const)
 
@@ -2757,7 +2774,7 @@ each returns iterator< :ref:`rtti::VarInfo <handle-rtti-VarInfo>`  const&>
 
 |function-rtti-each|
 
-.. _function-_at_rtti_c__c_each_I_eq_H_ls_rtti_c__c_EnumInfo_gr__C_c:
+.. _function-_at_rtti_c__c_each_I_eq_H_ls_rtti_c__c_EnumInfo_gr__C_c_C_l:
 
 .. das:function:: each(info: EnumInfo implicit ==const)
 
@@ -2772,7 +2789,7 @@ each returns iterator< :ref:`rtti::EnumValueInfo <handle-rtti-EnumValueInfo>` &>
 
 |function-rtti-each|
 
-.. _function-_at_rtti_c__c_each_CI_eq_H_ls_rtti_c__c_EnumInfo_gr__C_c:
+.. _function-_at_rtti_c__c_each_CI_eq_H_ls_rtti_c__c_EnumInfo_gr__C_c_C_l:
 
 .. das:function:: each(info: EnumInfo const implicit ==const)
 

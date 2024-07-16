@@ -90,9 +90,11 @@ def operator ?? ( a : json::JsonValue?; val:string ) : string
     return a != null && a.value is _string ? a.value as _string : val
 
 def operator ?. value ( a : JsonValue? == const ) : JsValue const?
+    //! Returns the value of the JSON object, if it exists.
     return a . ?. value
 
 def operator ?. value ( var a : JsonValue? == const ) : JsValue?
+    //! Returns the value of the JSON object, if it exists.
     return a . ?. value
 
 [macro_function]

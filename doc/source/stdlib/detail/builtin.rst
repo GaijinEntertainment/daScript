@@ -487,3 +487,14 @@
 .. |function-builtin-aot_enabled| replace:: Returns true if AOT is enabled.
 
 .. |function-builtin-mktime| replace:: Converts calendar time to time since epoch.
+
+.. |structure_macro-builtin-safe_when_uninitialized| replace:: Marks structure as safe to be used when uninitialized.
+
+.. |function-builtin-heap_allocation_stats| replace:: Returns heap allocation statistics (bytes allocated and bytes deleted).
+
+.. |function-builtin-heap_allocation_count| replace:: Returns heap allocation count (total number of allocations).
+
+.. |function-builtin-string_heap_allocation_stats| replace:: Returns string heap allocation statistics (bytes allocated and bytes deleted).
+
+.. |function-builtin-string_heap_allocation_count| replace:: Returns string heap allocation count (total number of allocations).
+
