@@ -20,19 +20,25 @@ Constants
 
 .. _global-math-PI:
 
-.. das:attribute:: PI = 3.14159f
+.. das:attribute:: PI = 3.1415927f
 
 |variable-math-PI|
 
+.. _global-math-DBL_PI:
+
+.. das:attribute:: DBL_PI = 3.141592653589793lf
+
+|variable-math-DBL_PI|
+
 .. _global-math-FLT_EPSILON:
 
-.. das:attribute:: FLT_EPSILON = 1.19209e-07f
+.. das:attribute:: FLT_EPSILON = 1.1920929e-07f
 
 |variable-math-FLT_EPSILON|
 
 .. _global-math-DBL_EPSILON:
 
-.. das:attribute:: DBL_EPSILON = 2.22045e-16lf
+.. das:attribute:: DBL_EPSILON = 2.220446049250313e-16lf
 
 |variable-math-DBL_EPSILON|
 

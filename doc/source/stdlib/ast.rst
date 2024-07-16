@@ -22,43 +22,45 @@ Type aliases
 
 .. das:attribute:: TypeDeclFlags is a bitfield
 
-+---------------+---+-----+
-+field          +bit+value+
-+===============+===+=====+
-+ref            +0  +1    +
-+---------------+---+-----+
-+constant       +1  +2    +
-+---------------+---+-----+
-+temporary      +2  +4    +
-+---------------+---+-----+
-+_implicit      +3  +8    +
-+---------------+---+-----+
-+removeRef      +4  +16   +
-+---------------+---+-----+
-+removeConstant +5  +32   +
-+---------------+---+-----+
-+removeDim      +6  +64   +
-+---------------+---+-----+
-+removeTemporary+7  +128  +
-+---------------+---+-----+
-+explicitConst  +8  +256  +
-+---------------+---+-----+
-+aotAlias       +9  +512  +
-+---------------+---+-----+
-+smartPtr       +10 +1024 +
-+---------------+---+-----+
-+smartPtrNative +11 +2048 +
-+---------------+---+-----+
-+isExplicit     +12 +4096 +
-+---------------+---+-----+
-+isNativeDim    +13 +8192 +
-+---------------+---+-----+
-+isTag          +14 +16384+
-+---------------+---+-----+
-+explicitRef    +15 +32768+
-+---------------+---+-----+
-+isPrivateAlias +16 +65536+
-+---------------+---+-----+
++---------------+---+------+
++field          +bit+value +
++===============+===+======+
++ref            +0  +1     +
++---------------+---+------+
++constant       +1  +2     +
++---------------+---+------+
++temporary      +2  +4     +
++---------------+---+------+
++_implicit      +3  +8     +
++---------------+---+------+
++removeRef      +4  +16    +
++---------------+---+------+
++removeConstant +5  +32    +
++---------------+---+------+
++removeDim      +6  +64    +
++---------------+---+------+
++removeTemporary+7  +128   +
++---------------+---+------+
++explicitConst  +8  +256   +
++---------------+---+------+
++aotAlias       +9  +512   +
++---------------+---+------+
++smartPtr       +10 +1024  +
++---------------+---+------+
++smartPtrNative +11 +2048  +
++---------------+---+------+
++isExplicit     +12 +4096  +
++---------------+---+------+
++isNativeDim    +13 +8192  +
++---------------+---+------+
++isTag          +14 +16384 +
++---------------+---+------+
++explicitRef    +15 +32768 +
++---------------+---+------+
++isPrivateAlias +16 +65536 +
++---------------+---+------+
++autoToAlias    +17 +131072+
++---------------+---+------+
 
 
 |typedef-ast-TypeDeclFlags|
@@ -96,39 +98,43 @@ Type aliases
 
 .. das:attribute:: StructureFlags is a bitfield
 
-+------------------+---+-----+
-+field             +bit+value+
-+==================+===+=====+
-+isClass           +0  +1    +
-+------------------+---+-----+
-+genCtor           +1  +2    +
-+------------------+---+-----+
-+cppLayout         +2  +4    +
-+------------------+---+-----+
-+cppLayoutNotPod   +3  +8    +
-+------------------+---+-----+
-+generated         +4  +16   +
-+------------------+---+-----+
-+persistent        +5  +32   +
-+------------------+---+-----+
-+isLambda          +6  +64   +
-+------------------+---+-----+
-+privateStructure  +7  +128  +
-+------------------+---+-----+
-+macroInterface    +8  +256  +
-+------------------+---+-----+
-+_sealed           +9  +512  +
-+------------------+---+-----+
-+skipLockCheck     +10 +1024 +
-+------------------+---+-----+
-+circular          +11 +2048 +
-+------------------+---+-----+
-+_generator        +12 +4096 +
-+------------------+---+-----+
-+hasStaticMembers  +13 +8192 +
-+------------------+---+-----+
-+hasStaticFunctions+14 +16384+
-+------------------+---+-----+
++---------------------+---+-----+
++field                +bit+value+
++=====================+===+=====+
++isClass              +0  +1    +
++---------------------+---+-----+
++genCtor              +1  +2    +
++---------------------+---+-----+
++cppLayout            +2  +4    +
++---------------------+---+-----+
++cppLayoutNotPod      +3  +8    +
++---------------------+---+-----+
++generated            +4  +16   +
++---------------------+---+-----+
++persistent           +5  +32   +
++---------------------+---+-----+
++isLambda             +6  +64   +
++---------------------+---+-----+
++privateStructure     +7  +128  +
++---------------------+---+-----+
++macroInterface       +8  +256  +
++---------------------+---+-----+
++_sealed              +9  +512  +
++---------------------+---+-----+
++skipLockCheck        +10 +1024 +
++---------------------+---+-----+
++circular             +11 +2048 +
++---------------------+---+-----+
++_generator           +12 +4096 +
++---------------------+---+-----+
++hasStaticMembers     +13 +8192 +
++---------------------+---+-----+
++hasStaticFunctions   +14 +16384+
++---------------------+---+-----+
++hasInitFields        +15 +32768+
++---------------------+---+-----+
++safeWhenUninitialized+16 +65536+
++---------------------+---+-----+
 
 
 |typedef-ast-StructureFlags|
@@ -578,6 +584,8 @@ Type aliases
 +usedInitializer       +2  +4    +
 +----------------------+---+-----+
 +nativeClassInitializer+3  +8    +
++----------------------+---+-----+
++isNewClass            +4  +16   +
 +----------------------+---+-----+
 
 
@@ -1064,6 +1072,8 @@ TypeDecl property operators are
 +-------------------------+------------------------------------+
 +isPointer                +bool                                +
 +-------------------------+------------------------------------+
++isSmartPointer           +bool                                +
++-------------------------+------------------------------------+
 +isVoidPointer            +bool                                +
 +-------------------------+------------------------------------+
 +isIterator               +bool                                +
@@ -1321,11 +1331,11 @@ Function fields are
 
 Function property operators are
 
-+---------+-------------------------------------------------------+
-+origin   +smart_ptr< :ref:`ast::Function <handle-ast-Function>` >+
-+---------+-------------------------------------------------------+
-+isGeneric+bool                                                   +
-+---------+-------------------------------------------------------+
++---------+---------------------------------------------+
++origin   + :ref:`ast::Function <handle-ast-Function>` ?+
++---------+---------------------------------------------+
++isGeneric+bool                                         +
++---------+---------------------------------------------+
 
 
 |structure_annotation-ast-Function|
@@ -5729,6 +5739,95 @@ it defines as follows
 
 |method-ast-AstCommentReader.afterVariant|
 
+.. das:function:: AstCommentReader.beforeTuple(self: AstCommentReader; prog: ProgramPtr; mod: Module? const; info: LineInfo const)
+
++--------+------------------------------------------------------------+
++argument+argument type                                               +
++========+============================================================+
++self    + :ref:`ast::AstCommentReader <struct-ast-AstCommentReader>` +
++--------+------------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                       +
++--------+------------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const           +
++--------+------------------------------------------------------------+
++info    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const        +
++--------+------------------------------------------------------------+
+
+
+|method-ast-AstCommentReader.beforeTuple|
+
+.. das:function:: AstCommentReader.beforeTupleEntries(self: AstCommentReader; prog: ProgramPtr; mod: Module? const; info: LineInfo const)
+
++--------+------------------------------------------------------------+
++argument+argument type                                               +
++========+============================================================+
++self    + :ref:`ast::AstCommentReader <struct-ast-AstCommentReader>` +
++--------+------------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                       +
++--------+------------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const           +
++--------+------------------------------------------------------------+
++info    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const        +
++--------+------------------------------------------------------------+
+
+
+|method-ast-AstCommentReader.beforeTupleEntries|
+
+.. das:function:: AstCommentReader.afterTupleEntry(self: AstCommentReader; name: string const; prog: ProgramPtr; mod: Module? const; info: LineInfo const)
+
++--------+------------------------------------------------------------+
++argument+argument type                                               +
++========+============================================================+
++self    + :ref:`ast::AstCommentReader <struct-ast-AstCommentReader>` +
++--------+------------------------------------------------------------+
++name    +string const                                                +
++--------+------------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                       +
++--------+------------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const           +
++--------+------------------------------------------------------------+
++info    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const        +
++--------+------------------------------------------------------------+
+
+
+|method-ast-AstCommentReader.afterTupleEntry|
+
+.. das:function:: AstCommentReader.afterTupleEntries(self: AstCommentReader; prog: ProgramPtr; mod: Module? const; info: LineInfo const)
+
++--------+------------------------------------------------------------+
++argument+argument type                                               +
++========+============================================================+
++self    + :ref:`ast::AstCommentReader <struct-ast-AstCommentReader>` +
++--------+------------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                       +
++--------+------------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const           +
++--------+------------------------------------------------------------+
++info    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const        +
++--------+------------------------------------------------------------+
+
+
+|method-ast-AstCommentReader.afterTupleEntries|
+
+.. das:function:: AstCommentReader.afterTuple(self: AstCommentReader; name: string const; prog: ProgramPtr; mod: Module? const; info: LineInfo const)
+
++--------+------------------------------------------------------------+
++argument+argument type                                               +
++========+============================================================+
++self    + :ref:`ast::AstCommentReader <struct-ast-AstCommentReader>` +
++--------+------------------------------------------------------------+
++name    +string const                                                +
++--------+------------------------------------------------------------+
++prog    + :ref:`ProgramPtr <alias-ProgramPtr>`                       +
++--------+------------------------------------------------------------+
++mod     + :ref:`rtti::Module <handle-rtti-Module>` ? const           +
++--------+------------------------------------------------------------+
++info    + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const        +
++--------+------------------------------------------------------------+
+
+
+|method-ast-AstCommentReader.afterTuple|
+
 .. das:function:: AstCommentReader.beforeBitfield(self: AstCommentReader; prog: ProgramPtr; mod: Module? const; info: LineInfo const)
 
 +--------+------------------------------------------------------------+
@@ -7227,6 +7326,25 @@ visitExprLooksLikeCall returns  :ref:`ExpressionPtr <alias-ExpressionPtr>`
 
 
 |method-ast-AstVisitor.visitExprLooksLikeCall|
+
+.. das:function:: AstVisitor.canVisitLooksLikeCallArgument(self: AstVisitor; expr: smart_ptr<ExprLooksLikeCall> const; arg: ExpressionPtr; last: bool const)
+
+canVisitLooksLikeCallArgument returns bool
+
++--------+-------------------------------------------------------------------------------+
++argument+argument type                                                                  +
++========+===============================================================================+
++self    + :ref:`ast::AstVisitor <struct-ast-AstVisitor>`                                +
++--------+-------------------------------------------------------------------------------+
++expr    +smart_ptr< :ref:`ast::ExprLooksLikeCall <handle-ast-ExprLooksLikeCall>` > const+
++--------+-------------------------------------------------------------------------------+
++arg     + :ref:`ExpressionPtr <alias-ExpressionPtr>`                                    +
++--------+-------------------------------------------------------------------------------+
++last    +bool const                                                                     +
++--------+-------------------------------------------------------------------------------+
+
+
+|method-ast-AstVisitor.canVisitLooksLikeCallArgument|
 
 .. das:function:: AstVisitor.preVisitExprLooksLikeCallArgument(self: AstVisitor; expr: smart_ptr<ExprLooksLikeCall> const; arg: ExpressionPtr; last: bool const)
 
@@ -12102,7 +12220,7 @@ Textual descriptions of the objects
   *  :ref:`describe_typedecl_cpp (type:smart_ptr\<ast::TypeDecl\> const implicit;substitueRef:bool const;skipRef:bool const;skipConst:bool const;redundantConst:bool const;context:__context const;lineinfo:__lineInfo const) : string <function-_at_ast_c__c_describe_typedecl_cpp_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_M_Cb_Cb_Cb_Cb_C_c_C_l>` 
   *  :ref:`describe_expression (expression:smart_ptr\<ast::Expression\> const implicit;context:__context const;lineinfo:__lineInfo const) : string <function-_at_ast_c__c_describe_expression_CI1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_M_C_c_C_l>` 
   *  :ref:`describe_function (function:smart_ptr\<ast::Function\> const implicit;context:__context const;lineinfo:__lineInfo const) : string <function-_at_ast_c__c_describe_function_CI1_ls_H_ls_ast_c__c_Function_gr__gr__qm_M_C_c_C_l>` 
-  *  :ref:`das_to_string (type:rtti::Type const;context:__context const) : string <function-_at_ast_c__c_das_to_string_CE_ls_rtti_c__c_Type_gr__C_c>` 
+  *  :ref:`das_to_string (type:rtti::Type const;context:__context const;at:__lineInfo const) : string <function-_at_ast_c__c_das_to_string_CE_ls_rtti_c__c_Type_gr__C_c_C_l>` 
   *  :ref:`describe (decl:smart_ptr\<ast::TypeDecl\> const;extra:bool const;contracts:bool const;modules:bool const) : auto <function-_at_ast_c__c_describe_C1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_M_Cb_Cb_Cb>` 
   *  :ref:`describe_cpp (decl:smart_ptr\<ast::TypeDecl\> const;substitureRef:bool const;skipRef:bool const;skipConst:bool const;redundantConst:bool const) : auto <function-_at_ast_c__c_describe_cpp_C1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_M_Cb_Cb_Cb_Cb>` 
   *  :ref:`describe (expr:smart_ptr\<ast::Expression\> const) : auto <function-_at_ast_c__c_describe_C1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_M>` 
@@ -12182,7 +12300,7 @@ describe_function returns string
 
 |function-ast-describe_function|
 
-.. _function-_at_ast_c__c_das_to_string_CE_ls_rtti_c__c_Type_gr__C_c:
+.. _function-_at_ast_c__c_das_to_string_CE_ls_rtti_c__c_Type_gr__C_c_C_l:
 
 .. das:function:: das_to_string(type: Type const)
 

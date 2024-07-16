@@ -109,6 +109,8 @@
 
 .. |variable-math-DBL_EPSILON| replace:: the difference between 1 and the smallest double precision floating point number of type double that is greater than 1.
 
+.. |variable-math-DBL_PI| replace:: The ratio of a circle's circumference to its diameter. π
+
 .. |variable-math-PI| replace:: The ratio of a circle's circumference to its diameter. π
 
 .. |function-math-!=| replace:: Compares x and y per component. Returns true if at least one component does not match.

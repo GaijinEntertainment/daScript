@@ -657,7 +657,7 @@ Directory manipulation
 
   *  :ref:`mkdir (path:string const implicit) : bool <function-_at_fio_c__c_mkdir_CIs>` 
   *  :ref:`chdir (path:string const implicit) : bool <function-_at_fio_c__c_chdir_CIs>` 
-  *  :ref:`getcwd (path:__context const) : string <function-_at_fio_c__c_getcwd_C_c>` 
+  *  :ref:`getcwd (context:__context const;at:__lineInfo const) : string <function-_at_fio_c__c_getcwd_C_c_C_l>` 
   *  :ref:`dir (path:string const;blk:block\<(filename:string const):void\> const) : auto <function-_at_fio_c__c_dir_Cs_CN_ls_filename_gr_0_ls_Cs_gr_1_ls_v_gr__builtin_>` 
 
 .. _function-_at_fio_c__c_mkdir_CIs:
@@ -690,7 +690,7 @@ chdir returns bool
 
 |function-fio-chdir|
 
-.. _function-_at_fio_c__c_getcwd_C_c:
+.. _function-_at_fio_c__c_getcwd_C_c_C_l:
 
 .. das:function:: getcwd()
 
@@ -723,7 +723,7 @@ OS specific routines
   *  :ref:`exit (exitCode:int const) : void <function-_at_fio_c__c_exit_Ci>` 
   *  :ref:`popen (command:string const implicit;scope:block\<(arg0:fio::FILE const? const):void\> const implicit;context:__context const;at:__lineInfo const) : int <function-_at_fio_c__c_popen_CIs_CI0_ls_C1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__gr_1_ls_v_gr__builtin__C_c_C_l>` 
   *  :ref:`popen_binary (command:string const implicit;scope:block\<(arg0:fio::FILE const? const):void\> const implicit;context:__context const;at:__lineInfo const) : int <function-_at_fio_c__c_popen_binary_CIs_CI0_ls_C1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__gr_1_ls_v_gr__builtin__C_c_C_l>` 
-  *  :ref:`get_env_variable (var:string const implicit;context:__context const) : string <function-_at_fio_c__c_get_env_variable_CIs_C_c>` 
+  *  :ref:`get_env_variable (var:string const implicit;context:__context const;at:__lineInfo const) : string <function-_at_fio_c__c_get_env_variable_CIs_C_c_C_l>` 
   *  :ref:`sanitize_command_line (var:string const implicit;context:__context const;at:__lineInfo const) : string <function-_at_fio_c__c_sanitize_command_line_CIs_C_c_C_l>` 
 
 .. _function-_at_fio_c__c_sleep_Cu:
@@ -795,7 +795,7 @@ popen_binary returns int
 
 |function-fio-popen_binary|
 
-.. _function-_at_fio_c__c_get_env_variable_CIs_C_c:
+.. _function-_at_fio_c__c_get_env_variable_CIs_C_c_C_l:
 
 .. das:function:: get_env_variable(var: string const implicit)
 

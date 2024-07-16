@@ -723,7 +723,7 @@ make_expression_block returns smart_ptr< :ref:`ast::ExprBlock <handle-ast-ExprBl
 
 Create ExprBlock and move all expressions from expr to the list of the block.
 
-.. _function-_at_templates_boost_c__c_add_type_ptr_ref_Y_ls_TypeDeclPtr_gr_1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_M_CY_ls_TypeDeclFlags_gr_N_ls_ref;constant;temporary;_implicit;removeRef;removeConstant;removeDim;removeTemporary;explicitConst;aotAlias;smartPtr;smartPtrNative;isExplicit;isNativeDim;isTag;explicitRef;isPrivateAlias_gr_t:
+.. _function-_at_templates_boost_c__c_add_type_ptr_ref_Y_ls_TypeDeclPtr_gr_1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_M_CY_ls_TypeDeclFlags_gr_N_ls_ref;constant;temporary;_implicit;removeRef;removeConstant;removeDim;removeTemporary;explicitConst;aotAlias;smartPtr;smartPtrNative;isExplicit;isNativeDim;isTag;explicitRef;isPrivateAlias;autoToAlias_gr_t:
 
 .. das:function:: add_type_ptr_ref(a: TypeDeclPtr; flags: TypeDeclFlags)
 
@@ -740,7 +740,7 @@ add_type_ptr_ref returns  :ref:`TypeDeclPtr <alias-TypeDeclPtr>`
 
 Implementation details for the reification. This adds any array to the rules.
 
-.. _function-_at_templates_boost_c__c_add_type_ptr_ref_Y_ls_StructurePtr_gr_1_ls_H_ls_ast_c__c_Structure_gr__gr__qm_M_CY_ls_TypeDeclFlags_gr_N_ls_ref;constant;temporary;_implicit;removeRef;removeConstant;removeDim;removeTemporary;explicitConst;aotAlias;smartPtr;smartPtrNative;isExplicit;isNativeDim;isTag;explicitRef;isPrivateAlias_gr_t:
+.. _function-_at_templates_boost_c__c_add_type_ptr_ref_Y_ls_StructurePtr_gr_1_ls_H_ls_ast_c__c_Structure_gr__gr__qm_M_CY_ls_TypeDeclFlags_gr_N_ls_ref;constant;temporary;_implicit;removeRef;removeConstant;removeDim;removeTemporary;explicitConst;aotAlias;smartPtr;smartPtrNative;isExplicit;isNativeDim;isTag;explicitRef;isPrivateAlias;autoToAlias_gr_t:
 
 .. das:function:: add_type_ptr_ref(st: StructurePtr; flags: TypeDeclFlags)
 

@@ -231,6 +231,16 @@
 
 .. |method-ast-AstCommentReader.afterAlias| replace:: This callback occurs during the `parse` pass after the type alias declaration.
 
+.. |method-ast-AstCommentReader.beforeTuple| replace:: This callback occurs during the `parse` pass before the tuple declaration.
+
+.. |method-ast-AstCommentReader.beforeTupleEntries| replace:: This callback occurs during the `parse` before the first tuple entry is declared.
+
+.. |method-ast-AstCommentReader.afterTupleEntry| replace:: This callback occurs during the `parse` after the tuple entry is declared (after the following comment section, should it have one).
+
+.. |method-ast-AstCommentReader.afterTupleEntries| replace:: This callback occurs during the `parse` after the last tuple entry is declared.
+
+.. |method-ast-AstCommentReader.afterTuple| replace:: This callback occurs during the `parse` after the tuple declaration.
+
 .. |class-ast-AstForLoopMacro| replace:: This macro is used to implement custom for-loop handlers. It is similar to visitExprFor callback of the AstVisitor.
 
 .. |method-ast-AstForLoopMacro.visitExprFor| replace:: This callback occurs during the `infer` pass for every `ExprFor`. If no work is necessary it should return `null`, otherwise expression will be replaced by the result.
@@ -409,6 +419,8 @@
 .. |method-ast-AstVisitor.preVisitExprNamedCallArgument| replace:: before every argument
 
 .. |method-ast-AstVisitor.visitExprNamedCallArgument| replace:: after every argument
+
+.. |method-ast-AstVisitor.canVisitLooksLikeCallArgument| replace:: If true `ExprLooksLikeCall` arguments will be visited
 
 .. |method-ast-AstVisitor.preVisitExprLooksLikeCall| replace:: before `ExprLooksLikeCall`
 
