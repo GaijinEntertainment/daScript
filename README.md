@@ -1,4 +1,4 @@
-# daScript
+# Daslang
 Daslang - high-performance statically strong typed scripting language
 
 MacOS/linux/win32/win64 build status [![build](https://github.com/GaijinEntertainment/daScript/actions/workflows/build.yml/badge.svg)](https://github.com/GaijinEntertainment/daScript/actions/workflows/build.yml)\

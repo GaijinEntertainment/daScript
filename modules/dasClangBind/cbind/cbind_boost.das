@@ -714,7 +714,7 @@ class CppGenBind : AnyGenBind
         if f == null
             to_log(LOG_ERROR, "can't open CppGenBind output at {path}, defaulting to stdout\n")
             f = fstdout()
-        f |> fwrite("// this file is generated via daScript automatic C++ binder\n")
+        f |> fwrite("// this file is generated via Daslang automatic C++ binder\n")
         f |> fwrite("// all user modifications will be lost after this file is re-generated\n\n")
         return f
     def closeFile ( var f:FILE const? & )
