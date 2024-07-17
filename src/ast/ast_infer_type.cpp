@@ -6670,6 +6670,13 @@ namespace das {
                             var->at, CompilationError::invalid_variable_type);
                     }
                 }
+
+                if ( noUnsafeUninitializedStructs && !var->init && var->type->unsafeInit() ) {
+                    if ( !safeExpression(expr) ) {
+                        error("Uninitialized variable " + var->name + " is unsafe. Use initializer syntax or [safe_when_uninitialized] when intended.", "", "",
+                            expr->at, CompilationError::unsafe);
+                    }
+                }
             }
             verifyType(var->type);
             return Visitor::visitLet(expr,var,last);
