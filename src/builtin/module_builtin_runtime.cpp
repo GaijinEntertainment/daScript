@@ -118,6 +118,17 @@ namespace das
         }
     };
 
+    struct TypeFunctionFunctionAnnotation : MarkFunctionAnnotation {
+        TypeFunctionFunctionAnnotation() : MarkFunctionAnnotation("type_function") { }
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string & error) override {
+            if ( !daScriptEnvironment::bound->g_Program->thisModule->addTypeFunction(func->name, true) ) {
+                error = "can't add type function. type function " + func->name + " already exists?";
+                return false;
+            }
+            return true;
+        };
+    };
+
     FunctionPtr Function::setDeprecated(const string & message) {
         deprecated = true; // this is instead of apply above
         AnnotationDeclarationPtr decl = make_smart<AnnotationDeclaration>();
@@ -1509,6 +1520,7 @@ namespace das
         addAnnotation(make_smart<IsYetAnotherVectorTemplateAnnotation>());
         addAnnotation(make_smart<IsDimAnnotation>());
         addAnnotation(make_smart<HashBuilderAnnotation>(lib));
+        addAnnotation(make_smart<TypeFunctionFunctionAnnotation>());
         // string
         addAnnotation(make_smart<DasStringTypeAnnotation>());
         // typeinfo macros

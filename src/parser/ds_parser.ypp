@@ -311,6 +311,7 @@
 %token<d>       DOUBLE                  "double constant"
 %token<s>       NAME                    "name"
 %token<s>       KEYWORD                 "keyword"
+%token<s>       TYPE_FUNCTION           "type function"
 
 /* %printer { fprintf (yyo, "%i", $$); } <i> */
 
@@ -412,6 +413,7 @@
 %type <pExpression>     expr_assign
 %type <pExpression>     expr_assign_pipe
 %type <pExpression>     expr_list
+%type <pExpression>     optional_expr_list
 %type <pExpression>     expr_map_tuple_list
 %type <pExpression>     expression_label
 %type <pExpression>     expression_goto
@@ -698,8 +700,9 @@ require_declaration
     ;
 
 keyword_or_name
-    :   NAME[name]      { $$ = $name; }
-    |   KEYWORD[name]   { $$ = $name; }
+    :   NAME[name]          { $$ = $name; }
+    |   KEYWORD[name]       { $$ = $name; }
+    |   TYPE_FUNCTION[name] { $$ = $name; }
     ;
 
 require_module_name
@@ -1118,7 +1121,7 @@ global_function_declaration
     :   optional_annotation_list[annL] DAS_DEF[from] function_declaration[func] {
         $func->atDecl = tokRangeAt(scanner,@from,@func);
         assignDefaultArguments($func);
-        runFunctionAnnotations(scanner, $func, $annL, tokAt(scanner,@annL));
+        runFunctionAnnotations(scanner, yyextra, $func, $annL, tokAt(scanner,@annL));
         if ( $func->isGeneric() ) {
             if ( !yyextra->g_Program->addGeneric($func) ) {
                 das_yyerror(scanner,"generic function is already defined " +
@@ -1232,12 +1235,27 @@ expr_keyword
         $$ = pCall;
     };
 
+optional_expr_list
+    :   { $$ = nullptr; }
+    |   expr_list[arguments] { $$ = $arguments; }
+    ;
+
 expression_keyword
     :   KEYWORD[kwd] '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[decl] '>' { yyextra->das_arrow_depth --; } expr[subexpr] {
-        auto pCall = yyextra->g_Program->makeCall(tokAt(scanner,@kwd),*$kwd);
+        auto pCall = yyextra->g_Program->makeCall(tokAt(scanner,@kwd),tokAt(scanner,@subexpr),*$kwd);
         auto td = new ExprTypeDecl(tokAt(scanner,@decl),TypeDeclPtr($decl));
-        pCall->arguments.push_back(ExpressionPtr(td));
+        pCall->arguments.insert(pCall->arguments.begin(), ExpressionPtr(td));
         pCall->arguments.push_back(ExpressionPtr($subexpr));
+        delete $kwd;
+        $$ = pCall;
+    }
+    |   TYPE_FUNCTION[kwd] '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[decl] '>' { yyextra->das_arrow_depth --; } '(' optional_expr_list[arguments] ')'[atend] {
+        auto pCall = yyextra->g_Program->makeCall(tokAt(scanner,@kwd),tokAt(scanner,@atend),*$kwd);
+        if ( $arguments ) {
+            pCall->arguments = sequenceToList($arguments);
+        }
+        auto td = new ExprTypeDecl(tokAt(scanner,@decl),TypeDeclPtr($decl));
+        pCall->arguments.insert(pCall->arguments.begin(), ExpressionPtr(td));
         delete $kwd;
         $$ = pCall;
     }

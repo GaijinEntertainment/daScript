@@ -463,6 +463,10 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
         if ( !it->second ) yyextra->das_need_oxford_comma = false;
         return KEYWORD;
     } else {
+        auto tit = yyextra->das_type_functions.find(*yylval_param->s);
+        if ( tit != yyextra->das_type_functions.end() ) {
+            return TYPE_FUNCTION;
+        }
         return NAME;
     }
 }

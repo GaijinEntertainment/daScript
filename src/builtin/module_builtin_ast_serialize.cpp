@@ -1933,6 +1933,8 @@ namespace das {
         ser << name           << moduleFlags;
         ser << annotationData << requireModule;
         ser << aliasTypes     << enumerations;
+        ser << keywords;
+        ser << typeFunctions;
         serializeGlobals(ser, globals); // globals require insertion in the same order
         serializeStructures(ser, structures);
         serializeFunctions(ser, functions);
@@ -2158,7 +2160,7 @@ namespace das {
     }
 
     uint32_t AstSerializer::getVersion () {
-        static constexpr uint32_t currentVersion = 24;
+        static constexpr uint32_t currentVersion = 25;
         return currentVersion;
     }
 
