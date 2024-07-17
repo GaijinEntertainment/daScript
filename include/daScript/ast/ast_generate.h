@@ -79,7 +79,7 @@ namespace das {
      def STRUCT_NAME
         return [[STRUCT_NAME field1=init1, field2=init2, ...]]
      */
-    FunctionPtr makeConstructor ( Structure * str );
+    FunctionPtr makeConstructor ( Structure * str, bool isPrivate );
 
     /*
      def clone(var a:STRUCT_NAME; b:STRUCT_NAME)
