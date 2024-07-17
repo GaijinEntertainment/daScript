@@ -260,25 +260,26 @@ extern int das_yydebug;
     DOUBLE = 420,                  /* "double constant"  */
     NAME = 421,                    /* "name"  */
     KEYWORD = 422,                 /* "keyword"  */
-    BEGIN_STRING = 423,            /* "start of the string"  */
-    STRING_CHARACTER = 424,        /* STRING_CHARACTER  */
-    STRING_CHARACTER_ESC = 425,    /* STRING_CHARACTER_ESC  */
-    END_STRING = 426,              /* "end of the string"  */
-    BEGIN_STRING_EXPR = 427,       /* "{"  */
-    END_STRING_EXPR = 428,         /* "}"  */
-    END_OF_READ = 429,             /* "end of failed eader macro"  */
-    SEMICOLON_CUR_CUR = 430,       /* ";}}"  */
-    SEMICOLON_CUR_SQR = 431,       /* ";}]"  */
-    SEMICOLON_SQR_SQR = 432,       /* ";]]"  */
-    COMMA_SQR_SQR = 433,           /* ",]]"  */
-    COMMA_CUR_SQR = 434,           /* ",}]"  */
-    UNARY_MINUS = 435,             /* UNARY_MINUS  */
-    UNARY_PLUS = 436,              /* UNARY_PLUS  */
-    PRE_INC = 437,                 /* PRE_INC  */
-    PRE_DEC = 438,                 /* PRE_DEC  */
-    POST_INC = 439,                /* POST_INC  */
-    POST_DEC = 440,                /* POST_DEC  */
-    DEREF = 441                    /* DEREF  */
+    TYPE_FUNCTION = 423,           /* "type function"  */
+    BEGIN_STRING = 424,            /* "start of the string"  */
+    STRING_CHARACTER = 425,        /* STRING_CHARACTER  */
+    STRING_CHARACTER_ESC = 426,    /* STRING_CHARACTER_ESC  */
+    END_STRING = 427,              /* "end of the string"  */
+    BEGIN_STRING_EXPR = 428,       /* "{"  */
+    END_STRING_EXPR = 429,         /* "}"  */
+    END_OF_READ = 430,             /* "end of failed eader macro"  */
+    SEMICOLON_CUR_CUR = 431,       /* ";}}"  */
+    SEMICOLON_CUR_SQR = 432,       /* ";}]"  */
+    SEMICOLON_SQR_SQR = 433,       /* ";]]"  */
+    COMMA_SQR_SQR = 434,           /* ",]]"  */
+    COMMA_CUR_SQR = 435,           /* ",}]"  */
+    UNARY_MINUS = 436,             /* UNARY_MINUS  */
+    UNARY_PLUS = 437,              /* UNARY_PLUS  */
+    PRE_INC = 438,                 /* PRE_INC  */
+    PRE_DEC = 439,                 /* PRE_DEC  */
+    POST_INC = 440,                /* POST_INC  */
+    POST_DEC = 441,                /* POST_DEC  */
+    DEREF = 442                    /* DEREF  */
   };
   typedef enum das_yytokentype das_yytoken_kind_t;
 #endif

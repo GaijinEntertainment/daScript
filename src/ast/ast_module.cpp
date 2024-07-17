@@ -410,6 +410,20 @@ namespace das {
         return true;
     }
 
+    bool Module::addTypeFunction (const string & kwd, bool canFail ) {
+        auto it = find_if(typeFunctions.begin(), typeFunctions.end(), [&](auto value){
+            return value == kwd;
+        });
+        if ( it != typeFunctions.end() ) {
+            if ( !canFail ) {
+                DAS_FATAL_ERROR("can't add duplicate type function %s to module %s\n", kwd.c_str(), name.c_str() );
+            }
+            return false;
+        }
+        typeFunctions.emplace_back(kwd);
+        return true;
+    }
+
     bool Module::addFunction ( const FunctionPtr & fn, bool canFail ) {
         fn->module = this;
         auto mangledName = fn->getMangledName();
