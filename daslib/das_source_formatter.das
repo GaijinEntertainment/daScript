@@ -58,6 +58,7 @@ struct FormatterToken
     tokenIndex: int
     command: string
 
+[safe_when_uninitialized]
 struct FormatterCtx
     tokenTemplates: array<TokenTemplate>
     tokens: array<Token>
@@ -309,7 +310,7 @@ def parse_all_tokens(var ctx: FormatterCtx)
         ctx.tokens |> push(emptyToken)
 
 
-
+[safe_when_uninitialized]
 struct ParenCounter
     angle: int = 0
     paren: int = 0

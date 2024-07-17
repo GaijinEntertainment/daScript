@@ -188,6 +188,8 @@ namespace das {
         bool hasNonTrivialCopy( das_set<Structure*> & dep ) const;
         bool canBePlacedInContainer() const;
         bool canBePlacedInContainer( das_set<Structure*> & dep ) const;
+        bool unsafeInit() const;
+        bool unsafeInit( das_set<Structure*> & dep ) const;
         bool needInScope() const;
         bool needInScope( das_set<Structure*> & dep ) const;
         bool hasStringData() const;

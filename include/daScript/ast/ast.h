@@ -264,6 +264,7 @@ namespace das
         bool hasNonTrivialCopy ( das_set<Structure *> & dep ) const;
         bool canBePlacedInContainer ( das_set<Structure *> & dep ) const;
         bool needInScope ( das_set<Structure *> & dep ) const;
+        bool unsafeInit ( das_set<Structure *> & dep ) const;
         string describe() const { return name; }
         string getMangledName() const;
         bool hasAnyInitializers() const;

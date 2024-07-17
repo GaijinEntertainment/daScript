@@ -375,6 +375,15 @@ namespace das {
         return module ? module->name+"::"+name : name;
     }
 
+    bool Structure::unsafeInit ( das_set<Structure *> & dep ) const {
+        if ( safeWhenUninitialized ) return false;
+        for ( const auto & fd : fields ) {
+            if ( fd.init ) return true;
+            if ( fd.type && fd.type->unsafeInit(dep) ) return true;
+        }
+        return false;
+    }
+
     bool Structure::needInScope(das_set<Structure *> & dep) const {   // &&
         for ( const auto & fd : fields ) {
             if ( fd.type && fd.type->needInScope(dep) ) {

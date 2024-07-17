@@ -928,6 +928,31 @@ namespace das
     }
 
 
+    bool TypeDecl::unsafeInit() const {
+        das_set<Structure *> dep;
+        return unsafeInit(dep);
+    }
+
+    bool TypeDecl::unsafeInit( das_set<Structure*> & dep ) const {
+        if ( baseType==Type::tHandle ) {
+            return  annotation->hasNonTrivialCtor();
+        } if ( baseType==Type::tStructure ) {
+            if (structType) {
+                if (dep.find(structType) != dep.end()) return false;
+                dep.insert(structType);
+                return structType->unsafeInit(dep);
+            }
+        } else if ( baseType==Type::tTuple || baseType==Type::tVariant ) {
+            for ( const auto & arg : argTypes ) {
+                if ( arg->unsafeInit(dep) ) {
+                    return true;
+                }
+            }
+            return false;
+        }
+        return false;
+    }
+
     bool TypeDecl::needInScope() const {
         das_set<Structure *> dep;
         return needInScope(dep);
