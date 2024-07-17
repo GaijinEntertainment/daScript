@@ -1363,10 +1363,15 @@ namespace das {
             }
         }
 
-        bool hasUserConstructor ( const string & sna ) const {
+        bool hasDefaultUserConstructor ( const string & sna ) const {
             vector<TypeDeclPtr> argDummy;
             auto fnlist = findMatchingFunctions(sna, argDummy);
-            return fnlist.size() != 0;  // at least one. if more its an error, but it has one for sure
+            for ( auto & fn : fnlist ) {
+                if ( fn->arguments.size()==0 ) {
+                    return true;
+                }
+            }
+            return false;
         }
 
         bool verifyAnyFunc ( const MatchingFunctions & fnList, const LineInfo & at ) const {
@@ -1784,23 +1789,18 @@ namespace das {
             }
             verifyType(decl.type);
         }
-        void tryMakeStructureCtor ( Structure * var ) {
-            if ( !var->genCtor  ) {
-                if ( !hasUserConstructor(var->name) ) {
-                    auto ctor = makeConstructor(var);
-                    ctor->exports = program->options.getBoolOption("always_export_initializer", false);
-                    extraFunctions.push_back(ctor);
-                    var->genCtor = true;
-                    reportAstChanged();
-                } else if ( !var->isClass ) {
-                    error("structure already has user defined initializer", "", "",
-                          var->at, CompilationError::structure_already_has_initializer);
-                }
+        void tryMakeStructureCtor ( Structure * var, bool isPrivate ) {
+            if ( !hasDefaultUserConstructor(var->name) ) {
+                auto ctor = makeConstructor(var, isPrivate);
+                ctor->exports = program->options.getBoolOption("always_export_initializer", false);
+                extraFunctions.push_back(ctor);
+                var->genCtor = true;
+                reportAstChanged();
             }
         }
         virtual StructurePtr visit ( Structure * var ) override {
-            if ( !var->genCtor && var->hasAnyInitializers() ) {
-                tryMakeStructureCtor(var);
+            if ( var->hasAnyInitializers() ) {
+                tryMakeStructureCtor(var, var->privateStructure);
             }
             auto tt = make_smart<TypeDecl>(Type::tStructure);
             tt->structType = var;
@@ -7719,7 +7719,7 @@ namespace das {
                         } else if ( aliasT->isStructure() ) {
                             if ( expr->arguments.size()==0 ) {
                                 expr->name = aliasT->structType->name;
-                                tryMakeStructureCtor (aliasT->structType);
+                                tryMakeStructureCtor (aliasT->structType, true);
                                 reportAstChanged();
                             } else {
                                 error("can only generate default structure constructor without arguments",

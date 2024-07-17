@@ -277,9 +277,10 @@ namespace das {
     }
 
     // return [[t()]]
-    FunctionPtr makeConstructor ( Structure * str ) {
+    FunctionPtr makeConstructor ( Structure * str, bool isPrivate ) {
         auto fn = make_smart<Function>();
         fn->generated = true;
+        fn->privateFunction = isPrivate;
         fn->name = str->name;
         fn->at = fn->atDecl = str->at;
         fn->result = make_smart<TypeDecl>(str);
