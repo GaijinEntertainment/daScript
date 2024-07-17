@@ -1789,18 +1789,22 @@ namespace das {
             }
             verifyType(decl.type);
         }
-        void tryMakeStructureCtor ( Structure * var, bool isPrivate ) {
+        bool tryMakeStructureCtor ( Structure * var, bool isPrivate ) {
             if ( !hasDefaultUserConstructor(var->name) ) {
                 auto ctor = makeConstructor(var, isPrivate);
                 ctor->exports = program->options.getBoolOption("always_export_initializer", false);
                 extraFunctions.push_back(ctor);
-                var->genCtor = true;
                 reportAstChanged();
+                return true;
+            } else {
+                return false;
             }
         }
         virtual StructurePtr visit ( Structure * var ) override {
-            if ( var->hasAnyInitializers() ) {
-                tryMakeStructureCtor(var, var->privateStructure);
+            if ( !var->genCtor && var->hasAnyInitializers() ) {
+                if ( tryMakeStructureCtor(var, var->privateStructure) ) {
+                    var->genCtor = true;
+                }
             }
             auto tt = make_smart<TypeDecl>(Type::tStructure);
             tt->structType = var;
