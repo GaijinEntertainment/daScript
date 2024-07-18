@@ -2,6 +2,12 @@
 
 namespace das {
 
+    struct DasKeyword {
+        bool    needs_oxford_comma = false;
+        bool    is_type_function = false;
+        string  keyword;
+    };
+
     struct DasParserState {
         int das_current_line_indent = 0;
         int das_indent_level = 0;
@@ -22,8 +28,7 @@ namespace das {
         vector<int> das_line_no;
         das_hash_set<string> das_already_include;
         das_hash_map<string,string>   das_module_alias;
-        das_hash_map<string,bool> das_keywords;
-        das_hash_set<string> das_type_functions;
+        das_hash_map<string,DasKeyword> das_keywords;
         Structure * g_thisStructure = nullptr;
         vector<CommentReader *> g_CommentReaders;
         ReaderMacro * g_ReaderMacro = nullptr;

@@ -129,7 +129,9 @@ namespace das {
                                 CompilationError::invalid_annotation);
                         } else if ( ann->name=="type_function" && ann->module->name=="$" ) {
                             // this is awkward. we need this so that [type_function] can be used in the same module
-                            extra->das_type_functions.insert(func->name);
+                            auto mod = func->module ? func->module : extra->g_Program->thisModule.get();
+                            string keyword = mod->name.empty() ? func->name : mod->name + "::" + func->name;
+                            extra->das_keywords[func->name] = DasKeyword{false,true,keyword};
                         }
                         itA ++;
                     } else {
