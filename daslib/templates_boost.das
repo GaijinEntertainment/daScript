@@ -423,6 +423,10 @@ def public add_type_ptr_ref ( var st : Structure?; flags:TypeDeclFlags ) : TypeD
     //! Implementation details for the reification. This adds any array to the rules.
     return <- new [[TypeDecl() at=st.at, baseType=Type tStructure, structType = st, flags=flags]]
 
+def public add_type_ptr_ref ( anything; flags:TypeDeclFlags ) : TypeDeclPtr
+    //! Implementation details for the reification. This adds any array to the rules.
+    concept_assert(false,"$t reification only supports TypeDeclPtr, StructurePtr, or Structure?")
+
 def private generatedExpr( var expr : ExpressionPtr ) : ExpressionPtr
     expr.genFlags |= ExprGenFlags generated
     return <- expr
