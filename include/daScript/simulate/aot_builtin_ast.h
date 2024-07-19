@@ -59,6 +59,8 @@ namespace das {
     void addModuleForLoopMacro ( Module * module, ForLoopMacroPtr & _newM, Context * );
     CaptureMacroPtr makeCaptureMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context );
     void addModuleCaptureMacro ( Module * module, CaptureMacroPtr & _newM, Context * );
+    TypeMacroPtr makeTypeMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context );
+    void addModuleTypeMacro ( Module * module, TypeMacroPtr & _newM, Context *, LineInfoArg * );
     SimulateMacroPtr makeSimulateMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context );
     void addModuleSimulateMacro ( Module * module, SimulateMacroPtr & _newM, Context * );
     void addModuleFunctionAnnotation ( Module * module, FunctionAnnotationPtr & ann, Context * context, LineInfoArg * at );

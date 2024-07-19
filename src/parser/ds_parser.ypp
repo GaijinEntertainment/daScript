@@ -2645,6 +2645,9 @@ type_declaration_no_options
         if ( $typeDecl->baseType==Type::typeDecl ) {
             das_yyerror(scanner,"type declaration can`t be used as array base type",tokAt(scanner,@typeDecl),
                 CompilationError::invalid_type);
+        } else if ( $typeDecl->baseType==Type::typeMacro ) {
+            das_yyerror(scanner,"macro can`t be used as array base type",tokAt(scanner,@typeDecl),
+                CompilationError::invalid_type);
         }
         int32_t dI = TypeDecl::dimConst;
         if ( $dimExpr->rtti_isConstant() ) {                // note: this shortcut is here so we don`t get extra infer pass on every array
@@ -2673,6 +2676,13 @@ type_declaration_no_options
         $$ = new TypeDecl(Type::typeDecl);
         $$->at = tokRangeAt(scanner,@td,@subexpr);
         $$->dimExpr.push_back($subexpr);
+    }
+    |   '^' name_in_namespace[name] '(' optional_expr_list[arguments] ')' {
+        $$ = new TypeDecl(Type::typeMacro);
+        $$->at = tokRangeAt(scanner,@name, @arguments);
+        $$->alias = *$name;
+        $$->dimExpr = sequenceToList($arguments);
+        delete $name;
     }
     |   type_declaration_no_options[typeDecl] '-' '[' ']' {
         $typeDecl->removeDim = true;

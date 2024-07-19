@@ -331,6 +331,17 @@ namespace das {
         }
     }
 
+    bool Module::addTypeMacro ( const TypeMacroPtr & ptr, bool canFail ) {
+        if ( typeMacros.insert(make_pair(ptr->name, ptr)).second ) {
+            return true;
+        } else {
+            if ( !canFail ) {
+                DAS_FATAL_ERROR("can't add duplicate type macro %s to module %s\n", ptr->name.c_str(), name.c_str() );
+            }
+            return false;
+        }
+    }
+
     bool Module::addReaderMacro ( const ReaderMacroPtr & ptr, bool canFail ) {
         if ( readMacros.insert(make_pair(ptr->name, ptr)).second ) {
             ptr->seal(this);
@@ -592,6 +603,9 @@ namespace das {
             globalLintMacros.insert(globalLintMacros.end(), ptm->globalLintMacros.begin(), ptm->globalLintMacros.end());
             for ( auto & rm : ptm->readMacros ) {
                 addReaderMacro(rm.second);
+            }
+            for ( auto & tm : ptm->typeMacros ) {
+                addTypeMacro(tm.second);
             }
             commentReader = ptm->commentReader;
             for ( auto & op : ptm->options) {

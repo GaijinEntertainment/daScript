@@ -13,6 +13,7 @@ namespace das
         alias,
         option,
         typeDecl,
+        typeMacro,
         fakeContext,
         fakeLineInfo,
         anyArgument,

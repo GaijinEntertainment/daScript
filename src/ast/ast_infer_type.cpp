@@ -396,7 +396,7 @@ namespace das {
         // infer alias type
         TypeDeclPtr inferAlias ( const TypeDeclPtr & decl, const FunctionPtr & fptr = nullptr, AliasMap * aliases = nullptr, OptionsMap * options = nullptr, bool autoToAlias=false ) const {
             autoToAlias |= decl->autoToAlias;
-            if ( decl->baseType==Type::typeDecl ) {
+            if ( decl->baseType==Type::typeDecl || decl->baseType==Type::typeMacro ) {
                 return nullptr;
             }
             if ( decl->baseType==Type::autoinfer && !autoToAlias ) {    // until alias is fully resolved, can't infer
@@ -491,6 +491,10 @@ namespace das {
 
         void reportInferAliasErrors ( const TypeDeclPtr & decl, TextWriter & tw, bool autoToAlias=false ) const {
             autoToAlias |= decl->autoToAlias;
+            if ( decl->baseType==Type::typeMacro ) {
+                tw << "\tcan't infer type for typeMacro\n";
+                return;
+            }
             if ( decl->baseType==Type::typeDecl ) {
                 tw << "\tcan't infer type for typeDecl\n";
                 return;
@@ -553,7 +557,7 @@ namespace das {
 
         // infer alias type
         TypeDeclPtr inferPartialAliases ( const TypeDeclPtr & decl, const FunctionPtr & fptr = nullptr, AliasMap * aliases = nullptr ) const {
-            if ( decl->baseType==Type::typeDecl ) {
+            if ( decl->baseType==Type::typeDecl || decl->baseType==Type::typeMacro ) {
                 return decl;
             }
             if ( decl->baseType==Type::autoinfer ) {
@@ -1502,9 +1506,26 @@ namespace das {
             return nullptr;
         }
 
+        vector<TypeMacro*> findTypeMacro ( const string & name ) const {
+            string moduleName, funcName;
+            splitTypeName(name, moduleName, funcName);
+            vector<TypeMacro*> result;
+            auto inWhichModule = getSearchModule(moduleName);
+            program->library.foreach([&](Module * mod) -> bool {
+                if ( inWhichModule->isVisibleDirectly(mod) ) {
+                    auto it = mod->typeMacros.find(funcName);
+                    if ( it != mod->typeMacros.end() ) {
+                        result.push_back(it->second.get());
+                    }
+                }
+                return true;
+            },moduleName);
+            return result;
+        }
+
         bool inferTypeExpr ( TypeDeclPtr & type ) {
             bool any = false;
-            if ( type->baseType != Type::typeDecl ) {
+            if ( type->baseType != Type::typeDecl && type->baseType != Type::typeMacro ) {
                 for ( size_t i=0, is=type->dim.size(); i!=is; ++i ) {
                     if ( type->dim[i]==TypeDecl::dimConst ) {
                         if ( type->dimExpr[i] ) {
@@ -1551,6 +1572,36 @@ namespace das {
                 } else {
                     error("can't deduce type",  "", "",
                         type->at, CompilationError::invalid_type);
+                }
+            } else if ( type->baseType==Type::typeMacro ) {
+                bool failedTm = false;
+                for ( auto & de : type->dimExpr ) {
+                    if ( !de->type || de->type->isAutoOrAlias() ) {
+                        error("can't deduce typeMacro " + type->alias + " argument ",  "", "",
+                            de->at, CompilationError::invalid_type);
+                        failedTm = true;
+                        break;
+                    }
+                }
+                if ( !failedTm ) {
+                    auto tms = findTypeMacro(type->alias);
+                    if ( tms.size() == 0 ) {
+                        error("can't find typeMacro " + type->alias,  "", "",
+                            type->at, CompilationError::invalid_type);
+                    } else if ( tms.size() > 1 ) {
+                        error("too many typeMacro " + type->alias + " found",  "", "",
+                            type->at, CompilationError::invalid_type);
+                    } else {
+                        auto resType = tms[0]->visit(program,program->thisModule.get(), type);
+                        if ( !resType ) {
+                            error("can't deduce typeMacro " + type->alias,  "", "",
+                                type->at, CompilationError::invalid_type);
+                        } else {
+                            TypeDecl::applyAutoContracts(resType,type);
+                            type = resType;
+                            return true;
+                        }
+                    }
                 }
             }
             if ( type->firstType ) {
