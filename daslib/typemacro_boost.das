@@ -69,8 +69,8 @@ class TypeMacroMacro : AstFunctionAnnotation
         // mod:Module?
         // td:TypeDeclPtr
         // all other arguments
-        if length(func.arguments) < 3
-            errors := "expecting at least 3 arguments"
+        if length(func.arguments) < 1
+            errors := "expecting at least 1 argument (macroArgument: TypeDeclPtr)"
             return false
 
         let cvtFnName = "{func.name}`cvt`arguments"
@@ -83,18 +83,18 @@ class TypeMacroMacro : AstFunctionAnnotation
         body.list |> clear
 
         // we need to check, if there are enough arugments
-        let expectedArgs = length(func.arguments) - 3
+        let expectedArgs = length(func.arguments) - 1
         var inscope checkE <- qmacro_block() <|
             if length(td.dimExpr) != $v(expectedArgs)
                 macro_error(compiling_program(), td.at, "expecting {$v(expectedArgs)} arguments")
                 return <- [[TypeDeclPtr()]]
         append_expressions(body, checkE)
 
-        var inscope retCall <- qmacro($c(func.name)(prog, mod, td))
+        var inscope retCall <- qmacro($c(func.name)(td))
 
         // allowed are basic types (int, float etc) and TypeDeclPtr
-        for ai in range(3,length(func.arguments))
-            let argIndex = ai - 3
+        for ai in range(1,length(func.arguments))
+            let argIndex = ai - 1
             assume argType = func.arguments[ai]._type
             if length(argType.dim) > 0
                 errors := "expecting non-array arguments"
