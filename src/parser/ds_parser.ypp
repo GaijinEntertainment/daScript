@@ -2677,7 +2677,7 @@ type_declaration_no_options
         $$->at = tokRangeAt(scanner,@td,@subexpr);
         $$->dimExpr.push_back($subexpr);
     }
-    |   '^' name_in_namespace[name] '(' optional_expr_list[arguments] ')' {
+    |   '$' name_in_namespace[name] '(' optional_expr_list[arguments] ')' {
         $$ = new TypeDecl(Type::typeMacro);
         $$->at = tokRangeAt(scanner,@name, @arguments);
         $$->alias = *$name;

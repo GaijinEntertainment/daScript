@@ -558,6 +558,12 @@ namespace das {
         // infer alias type
         TypeDeclPtr inferPartialAliases ( const TypeDeclPtr & decl, const FunctionPtr & fptr = nullptr, AliasMap * aliases = nullptr ) const {
             if ( decl->baseType==Type::typeDecl || decl->baseType==Type::typeMacro ) {
+                for ( auto & de : decl->dimExpr ) {
+                    if ( de && de->rtti_isTypeDecl() ) {
+                        auto td = static_pointer_cast<ExprTypeDecl>(de);
+                        td->typeexpr = inferPartialAliases(td->typeexpr,fptr,aliases);
+                    }
+                }
                 return decl;
             }
             if ( decl->baseType==Type::autoinfer ) {
@@ -1574,33 +1580,22 @@ namespace das {
                         type->at, CompilationError::invalid_type);
                 }
             } else if ( type->baseType==Type::typeMacro ) {
-                bool failedTm = false;
-                for ( auto & de : type->dimExpr ) {
-                    if ( !de->type || de->type->isAutoOrAlias() ) {
-                        error("can't deduce typeMacro " + type->alias + " argument ",  "", "",
-                            de->at, CompilationError::invalid_type);
-                        failedTm = true;
-                        break;
-                    }
-                }
-                if ( !failedTm ) {
-                    auto tms = findTypeMacro(type->alias);
-                    if ( tms.size() == 0 ) {
-                        error("can't find typeMacro " + type->alias,  "", "",
-                            type->at, CompilationError::invalid_type);
-                    } else if ( tms.size() > 1 ) {
-                        error("too many typeMacro " + type->alias + " found",  "", "",
+                auto tms = findTypeMacro(type->alias);
+                if ( tms.size() == 0 ) {
+                    error("can't find typeMacro " + type->alias,  "", "",
+                        type->at, CompilationError::invalid_type);
+                } else if ( tms.size() > 1 ) {
+                    error("too many typeMacro " + type->alias + " found",  "", "",
+                        type->at, CompilationError::invalid_type);
+                } else {
+                    auto resType = tms[0]->visit(program,program->thisModule.get(), type);
+                    if ( !resType ) {
+                        error("can't deduce typeMacro " + type->alias,  "", "",
                             type->at, CompilationError::invalid_type);
                     } else {
-                        auto resType = tms[0]->visit(program,program->thisModule.get(), type);
-                        if ( !resType ) {
-                            error("can't deduce typeMacro " + type->alias,  "", "",
-                                type->at, CompilationError::invalid_type);
-                        } else {
-                            TypeDecl::applyAutoContracts(resType,type);
-                            type = resType;
-                            return true;
-                        }
+                        TypeDecl::applyAutoContracts(resType,type);
+                        type = resType;
+                        return true;
                     }
                 }
             }

@@ -871,7 +871,7 @@ Grammar
 
   647 type_declaration_no_options: "type" '<' $@47 type_declaration '>' $@48
   648                            | "typedecl" '(' expr ')'
-  649                            | '^' name_in_namespace '(' optional_expr_list ')'
+  649                            | '$' name_in_namespace '(' optional_expr_list ')'
   650                            | type_declaration_no_options '-' '[' ']'
   651                            | type_declaration_no_options "explicit"
   652                            | type_declaration_no_options "const"
@@ -1092,7 +1092,7 @@ Terminals, with rules where they appear
     $end (0) 0
     '!' (33) 108 124 384
     '#' (35) 656 658 704
-    '$' (36) 20 311
+    '$' (36) 20 311 649
     '%' (37) 35 42 144 396
     '&' (38) 152 314 403 519 528 654 655 660
     '(' (40) 99 106 112 119 120 249 264 265 303 304 305 356 357 358 359 361 414 422 423 424 425 427 428 429 430 459 461 462 463 464 465 467 468 469 470 471 472 473 474 475 476 500 530 588 627 628 648 649 729 730 731 732 751 752 754 760 765 768 769 772 778 779 780
@@ -1112,7 +1112,7 @@ Terminals, with rules where they appear
     '@' (64) 312 313 362 365 368 476
     '[' (91) 117 167 356 357 415 416 497 643 644 650
     ']' (93) 117 167 168 287 288 321 356 357 415 416 417 418 478 497 643 644 650 739 741 743 746 783 784
-    '^' (94) 154 405 649
+    '^' (94) 154 405
     '{' (123) 215 216 547 561 570 573 586 709 714 719
     '|' (124) 153 404 703 704
     '}' (125) 215 216 547 561 570 573 586 709 714 719 737 739 746 784
@@ -4308,7 +4308,7 @@ State 225
     "::"         shift, and go to state 58
     "$t"         shift, and go to state 343
     "name"       shift, and go to state 59
-    '^'          shift, and go to state 344
+    '$'          shift, and go to state 344
 
     name_in_namespace            go to state 345
     basic_type_declaration       go to state 346
@@ -5229,7 +5229,7 @@ State 343
 
 State 344
 
-  649 type_declaration_no_options: '^' . name_in_namespace '(' optional_expr_list ')'
+  649 type_declaration_no_options: '$' . name_in_namespace '(' optional_expr_list ')'
 
     "::"    shift, and go to state 58
     "name"  shift, and go to state 59
@@ -5487,7 +5487,7 @@ State 367
     "::"         shift, and go to state 58
     "$t"         shift, and go to state 343
     "name"       shift, and go to state 59
-    '^'          shift, and go to state 344
+    '$'          shift, and go to state 344
 
     name_in_namespace            go to state 345
     basic_type_declaration       go to state 346
@@ -5907,7 +5907,7 @@ State 380
     "::"         shift, and go to state 58
     "$t"         shift, and go to state 343
     "name"       shift, and go to state 59
-    '^'          shift, and go to state 344
+    '$'          shift, and go to state 344
 
     name_in_namespace            go to state 345
     basic_type_declaration       go to state 346
@@ -6279,7 +6279,7 @@ State 396
 
 State 397
 
-  649 type_declaration_no_options: '^' name_in_namespace . '(' optional_expr_list ')'
+  649 type_declaration_no_options: '$' name_in_namespace . '(' optional_expr_list ')'
 
     '('  shift, and go to state 577
 
@@ -6514,7 +6514,7 @@ State 408
     "::"         shift, and go to state 58
     "$t"         shift, and go to state 343
     "name"       shift, and go to state 59
-    '^'          shift, and go to state 344
+    '$'          shift, and go to state 344
     '#'          shift, and go to state 586
 
     name_in_namespace            go to state 345
@@ -6587,7 +6587,7 @@ State 410
     "::"         shift, and go to state 58
     "$t"         shift, and go to state 343
     "name"       shift, and go to state 591
-    '^'          shift, and go to state 344
+    '$'          shift, and go to state 344
     ';'          shift, and go to state 592
 
     $default  reduce using rule 708 ($@76)
@@ -8114,7 +8114,7 @@ State 469
     "::"         shift, and go to state 58
     "$t"         shift, and go to state 343
     "name"       shift, and go to state 59
-    '^'          shift, and go to state 344
+    '$'          shift, and go to state 344
 
     name_in_namespace            go to state 345
     basic_type_declaration       go to state 346
@@ -8174,7 +8174,7 @@ State 470
     "::"         shift, and go to state 58
     "$t"         shift, and go to state 343
     "name"       shift, and go to state 59
-    '^'          shift, and go to state 344
+    '$'          shift, and go to state 344
 
     name_in_namespace            go to state 345
     basic_type_declaration       go to state 346
@@ -10216,7 +10216,7 @@ State 560
     "::"         shift, and go to state 58
     "$t"         shift, and go to state 343
     "name"       shift, and go to state 59
-    '^'          shift, and go to state 344
+    '$'          shift, and go to state 344
 
     name_in_namespace            go to state 345
     basic_type_declaration       go to state 346
@@ -10273,7 +10273,7 @@ State 561
     "::"         shift, and go to state 58
     "$t"         shift, and go to state 343
     "name"       shift, and go to state 59
-    '^'          shift, and go to state 344
+    '$'          shift, and go to state 344
 
     name_in_namespace            go to state 345
     basic_type_declaration       go to state 346
@@ -10330,7 +10330,7 @@ State 562
     "::"         shift, and go to state 58
     "$t"         shift, and go to state 343
     "name"       shift, and go to state 59
-    '^'          shift, and go to state 344
+    '$'          shift, and go to state 344
 
     name_in_namespace            go to state 345
     basic_type_declaration       go to state 346
@@ -10486,7 +10486,7 @@ State 564
     "::"         shift, and go to state 58
     "$t"         shift, and go to state 343
     "name"       shift, and go to state 59
-    '^'          shift, and go to state 344
+    '$'          shift, and go to state 344
 
     name_in_namespace            go to state 345
     basic_type_declaration       go to state 346
@@ -10543,7 +10543,7 @@ State 565
     "::"         shift, and go to state 58
     "$t"         shift, and go to state 343
     "name"       shift, and go to state 59
-    '^'          shift, and go to state 344
+    '$'          shift, and go to state 344
 
     name_in_namespace            go to state 345
     basic_type_declaration       go to state 346
@@ -10616,7 +10616,7 @@ State 568
     "::"         shift, and go to state 58
     "$t"         shift, and go to state 343
     "name"       shift, and go to state 59
-    '^'          shift, and go to state 344
+    '$'          shift, and go to state 344
 
     name_in_namespace            go to state 345
     basic_type_declaration       go to state 346
@@ -10684,7 +10684,7 @@ State 570
     "::"         shift, and go to state 58
     "$t"         shift, and go to state 343
     "name"       shift, and go to state 59
-    '^'          shift, and go to state 344
+    '$'          shift, and go to state 344
 
     name_in_namespace            go to state 345
     basic_type_declaration       go to state 346
@@ -10752,7 +10752,7 @@ State 572
     "::"         shift, and go to state 58
     "$t"         shift, and go to state 343
     "name"       shift, and go to state 59
-    '^'          shift, and go to state 344
+    '$'          shift, and go to state 344
 
     name_in_namespace            go to state 345
     basic_type_declaration       go to state 346
@@ -10820,7 +10820,7 @@ State 574
     "::"         shift, and go to state 58
     "$t"         shift, and go to state 343
     "name"       shift, and go to state 591
-    '^'          shift, and go to state 344
+    '$'          shift, and go to state 344
 
     name_in_namespace            go to state 345
     tuple_type                   go to state 782
@@ -10943,7 +10943,7 @@ State 576
 
 State 577
 
-  649 type_declaration_no_options: '^' name_in_namespace '(' . optional_expr_list ')'
+  649 type_declaration_no_options: '$' name_in_namespace '(' . optional_expr_list ')'
 
     "true"                            shift, and go to state 428
     "false"                           shift, and go to state 429
@@ -11626,7 +11626,7 @@ State 607
     "::"         shift, and go to state 58
     "$t"         shift, and go to state 343
     "name"       shift, and go to state 59
-    '^'          shift, and go to state 344
+    '$'          shift, and go to state 344
 
     name_in_namespace            go to state 345
     basic_type_declaration       go to state 346
@@ -12385,7 +12385,7 @@ State 627
     "::"         shift, and go to state 58
     "$t"         shift, and go to state 343
     "name"       shift, and go to state 59
-    '^'          shift, and go to state 344
+    '$'          shift, and go to state 344
 
     name_in_namespace            go to state 345
     basic_type_declaration       go to state 346
@@ -13585,7 +13585,7 @@ State 647
     "::"         shift, and go to state 58
     "$t"         shift, and go to state 343
     "name"       shift, and go to state 59
-    '^'          shift, and go to state 344
+    '$'          shift, and go to state 344
 
     name_in_namespace            go to state 345
     basic_type_declaration       go to state 346
@@ -22072,7 +22072,7 @@ State 786
 
 State 787
 
-  649 type_declaration_no_options: '^' name_in_namespace '(' optional_expr_list . ')'
+  649 type_declaration_no_options: '$' name_in_namespace '(' optional_expr_list . ')'
 
     ')'  shift, and go to state 995
 
@@ -22260,7 +22260,7 @@ State 794
     "::"         shift, and go to state 58
     "$t"         shift, and go to state 343
     "name"       shift, and go to state 59
-    '^'          shift, and go to state 344
+    '$'          shift, and go to state 344
 
     name_in_namespace            go to state 345
     basic_type_declaration       go to state 346
@@ -22331,7 +22331,7 @@ State 797
     "::"         shift, and go to state 58
     "$t"         shift, and go to state 343
     "name"       shift, and go to state 59
-    '^'          shift, and go to state 344
+    '$'          shift, and go to state 344
 
     name_in_namespace            go to state 345
     basic_type_declaration       go to state 346
@@ -22802,7 +22802,7 @@ State 809
     "::"         shift, and go to state 58
     "$t"         shift, and go to state 343
     "name"       shift, and go to state 59
-    '^'          shift, and go to state 344
+    '$'          shift, and go to state 344
 
     name_in_namespace            go to state 345
     basic_type_declaration       go to state 346
@@ -23085,7 +23085,7 @@ State 812
     "::"         shift, and go to state 58
     "$t"         shift, and go to state 343
     "name"       shift, and go to state 59
-    '^'          shift, and go to state 344
+    '$'          shift, and go to state 344
 
     name_in_namespace            go to state 345
     basic_type_declaration       go to state 346
@@ -23142,7 +23142,7 @@ State 813
     "::"         shift, and go to state 58
     "$t"         shift, and go to state 343
     "name"       shift, and go to state 59
-    '^'          shift, and go to state 344
+    '$'          shift, and go to state 344
 
     name_in_namespace            go to state 345
     basic_type_declaration       go to state 346
@@ -23826,7 +23826,7 @@ State 828
     "::"         shift, and go to state 58
     "$t"         shift, and go to state 343
     "name"       shift, and go to state 59
-    '^'          shift, and go to state 344
+    '$'          shift, and go to state 344
 
     name_in_namespace            go to state 345
     basic_type_declaration       go to state 346
@@ -23882,7 +23882,7 @@ State 829
     "::"         shift, and go to state 58
     "$t"         shift, and go to state 343
     "name"       shift, and go to state 59
-    '^'          shift, and go to state 344
+    '$'          shift, and go to state 344
 
     name_in_namespace            go to state 345
     basic_type_declaration       go to state 346
@@ -24036,7 +24036,7 @@ State 831
     "::"         shift, and go to state 58
     "$t"         shift, and go to state 343
     "name"       shift, and go to state 59
-    '^'          shift, and go to state 344
+    '$'          shift, and go to state 344
 
     name_in_namespace            go to state 345
     basic_type_declaration       go to state 346
@@ -24204,7 +24204,7 @@ State 835
     "::"         shift, and go to state 58
     "$t"         shift, and go to state 343
     "name"       shift, and go to state 59
-    '^'          shift, and go to state 344
+    '$'          shift, and go to state 344
 
     name_in_namespace            go to state 345
     basic_type_declaration       go to state 346
@@ -25879,7 +25879,7 @@ State 869
     "::"         shift, and go to state 58
     "$t"         shift, and go to state 343
     "name"       shift, and go to state 59
-    '^'          shift, and go to state 344
+    '$'          shift, and go to state 344
 
     name_in_namespace            go to state 345
     basic_type_declaration       go to state 346
@@ -25942,7 +25942,7 @@ State 871
     "::"         shift, and go to state 58
     "$t"         shift, and go to state 343
     "name"       shift, and go to state 59
-    '^'          shift, and go to state 344
+    '$'          shift, and go to state 344
 
     name_in_namespace            go to state 345
     basic_type_declaration       go to state 346
@@ -31386,7 +31386,7 @@ State 980
     "::"         shift, and go to state 58
     "$t"         shift, and go to state 343
     "name"       shift, and go to state 59
-    '^'          shift, and go to state 344
+    '$'          shift, and go to state 344
 
     name_in_namespace            go to state 345
     basic_type_declaration       go to state 346
@@ -31534,7 +31534,7 @@ State 992
     "::"         shift, and go to state 58
     "$t"         shift, and go to state 343
     "name"       shift, and go to state 591
-    '^'          shift, and go to state 344
+    '$'          shift, and go to state 344
 
     name_in_namespace            go to state 345
     tuple_type                   go to state 1141
@@ -31566,7 +31566,7 @@ State 994
 
 State 995
 
-  649 type_declaration_no_options: '^' name_in_namespace '(' optional_expr_list ')' .
+  649 type_declaration_no_options: '$' name_in_namespace '(' optional_expr_list ')' .
 
     $default  reduce using rule 649 (type_declaration_no_options)
 
@@ -32066,7 +32066,7 @@ State 1013
     "::"         shift, and go to state 58
     "$t"         shift, and go to state 343
     "name"       shift, and go to state 59
-    '^'          shift, and go to state 344
+    '$'          shift, and go to state 344
 
     name_in_namespace            go to state 345
     basic_type_declaration       go to state 346
@@ -34094,7 +34094,7 @@ State 1066
     "::"         shift, and go to state 58
     "$t"         shift, and go to state 343
     "name"       shift, and go to state 59
-    '^'          shift, and go to state 344
+    '$'          shift, and go to state 344
 
     name_in_namespace            go to state 345
     basic_type_declaration       go to state 346
@@ -37708,7 +37708,7 @@ State 1208
     "::"         shift, and go to state 58
     "$t"         shift, and go to state 343
     "name"       shift, and go to state 59
-    '^'          shift, and go to state 344
+    '$'          shift, and go to state 344
 
     name_in_namespace            go to state 345
     basic_type_declaration       go to state 346
@@ -37862,7 +37862,7 @@ State 1210
     "::"         shift, and go to state 58
     "$t"         shift, and go to state 343
     "name"       shift, and go to state 59
-    '^'          shift, and go to state 344
+    '$'          shift, and go to state 344
 
     name_in_namespace            go to state 345
     basic_type_declaration       go to state 346
@@ -40525,7 +40525,7 @@ State 1282
     "::"         shift, and go to state 58
     "$t"         shift, and go to state 343
     "name"       shift, and go to state 59
-    '^'          shift, and go to state 344
+    '$'          shift, and go to state 344
 
     name_in_namespace            go to state 345
     basic_type_declaration       go to state 346
@@ -43065,7 +43065,7 @@ State 1326
     "::"         shift, and go to state 58
     "$t"         shift, and go to state 343
     "name"       shift, and go to state 59
-    '^'          shift, and go to state 344
+    '$'          shift, and go to state 344
 
     name_in_namespace            go to state 345
     basic_type_declaration       go to state 346
