@@ -1,0 +1,128 @@
+options indenting = 4
+options no_unused_block_arguments = false
+options no_unused_function_arguments = false
+options no_aot = true
+options strict_smart_pointers
+
+module typemacro_boost shared private
+
+require daslib/ast_boost
+require daslib/macro_boost
+require daslib/templates_boost
+
+require daslib/ast_boost public
+
+[macro_function]
+def append_expressions ( var blk : ExprBlock?; var eblk : ExpressionPtr )
+    for e in (eblk as ExprBlock).list
+        blk.list |> emplace(e)
+
+[macro_function]
+def is_typedecl_ptr ( t : TypeDeclPtr )
+    if t.baseType!=Type tPointer || !t.flags.smartPtr
+        return false
+    assume pt = t.firstType
+    if pt==null
+        return false
+    if pt.baseType!=Type tHandle || pt.annotation.name!="TypeDecl" || pt.annotation._module.name!="ast"
+        return false
+    return true
+
+[function_macro(name="typemacro_function")]
+class TypeMacroMacro : AstFunctionAnnotation
+    //! This macro converts function into a type macro.
+    def override apply(var func : FunctionPtr; var group : ModuleGroup; args : AnnotationArgumentList; var errors : das_string) : bool
+        let className = "{func.name}`TypeMacro"
+        var inscope parentType <- typeinfo(ast_typedecl type<ast::AstTypeMacro>)
+        if parentType == null
+            errors := "ast::AstTypeMacro not found"
+            return false
+        var inscope cls <- make_class(className, parentType.structType, compiling_module())
+        let cvtFnName = "{func.name}`cvt`arguments"
+        var inscope cvtFn <- qmacro_function(cvtFnName) <| $ ( prog:ProgramPtr; mod:Module?; td:TypeDeclPtr ) : TypeDeclPtr
+            return <- [[TypeDeclPtr]]
+        compiling_module() |> add_function(cvtFn)
+        let visitName = className + "`visit"
+        var inscope visitFn <- qmacro_method(visitName, cls) <| $ ( var slf:$t(cls); prog:ProgramPtr; mod:Module?; td:TypeDeclPtr ) : TypeDeclPtr
+            return <- $c(cvtFnName)(prog, mod, td)
+        compiling_module() |> add_function(visitFn)
+        var field = find_structure_field(get_ptr(cls), "visit")
+        if field == null
+            errors := "visit field does not exist"
+            return false
+        field.init |> move_new <| qmacro(cast<auto> @@$i(visitName))
+        cls |> append_annotation("ast_boost", "type_macro", [{auto
+            [[auto "name", [[RttiValue tString=string(func.name)]] ]]
+        }])
+        compiling_module() |> add_structure(cls)
+        return true
+
+    def override patch ( var func:FunctionPtr; var group:ModuleGroup; args,progArgs:AnnotationArgumentList; var errors : das_string; var astChanged:bool& ) : bool
+
+        for ann in func.annotations
+            if ann.annotation.name=="typemacro_function"
+                if !(find_arg(ann.arguments,"patched") is nothing)
+                    return true
+
+        // we expect the following arguments
+        // prog:ProgramPtr
+        // mod:Module?
+        // td:TypeDeclPtr
+        // all other arguments
+        if length(func.arguments) < 3
+            errors := "expecting at least 3 arguments"
+            return false
+
+        let cvtFnName = "{func.name}`cvt`arguments"
+        var inscope cvtFn <- compiling_module() |> find_unique_function(cvtFnName)
+        if cvtFn == null
+            errors := "cvt function not found"
+            return false
+
+        var body = cvtFn.body as ExprBlock
+        body.list |> clear
+
+        // we need to check, if there are enough arugments
+        let expectedArgs = length(func.arguments) - 3
+        var inscope checkE <- qmacro_block() <|
+            if length(td.dimExpr) != $v(expectedArgs)
+                macro_error(compiling_program(), td.at, "expecting {$v(expectedArgs)} arguments")
+                return <- [[TypeDeclPtr()]]
+        append_expressions(body, checkE)
+
+        var inscope retCall <- qmacro($c(func.name)(prog, mod, td))
+
+        // allowed are basic types (int, float etc) and TypeDeclPtr
+        for ai in range(3,length(func.arguments))
+            let argIndex = ai - 3
+            assume argType = func.arguments[ai]._type
+            if length(argType.dim) > 0
+                errors := "expecting non-array arguments"
+                return false
+            let argName = "arg_{argIndex}"
+            if argType.baseType==Type tInt
+                var inscope expr <- qmacro_block() <|
+                    if !(td.dimExpr[$v(argIndex)] is ExprConstInt)
+                        macro_error(compiling_program(), td.at, "expecting {$v(string(func.arguments[ai].name))} to be int const")
+                        return <- [[TypeDeclPtr]]
+                    let $i(argName) = (td.dimExpr[$v(argIndex)] as ExprConstInt).value
+                append_expressions(body, expr)
+            elif is_typedecl_ptr(argType)
+                var inscope expr <- qmacro_block() <|
+                    var inscope $i(argName) <- clone_type(td.dimExpr[$v(argIndex)]._type)
+                append_expressions(body, expr)
+            else
+                errors := "unsupported argument type {describe(argType)}"
+                return false
+            (retCall as ExprCall).arguments |> emplace_new <| qmacro($i(argName))
+
+        var inscope retExpr <- qmacro_block() <|
+            return <- $e(retCall)
+        append_expressions(body, retExpr)
+
+        for ann in func.annotations
+            if ann.annotation.name=="typemacro_function"
+                astChanged = true
+                ann.arguments |> add_annotation_argument("patched",true)
+
+        return true
