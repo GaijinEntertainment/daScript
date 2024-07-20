@@ -64,6 +64,9 @@ namespace das
     struct SimulateMacro;
     typedef smart_ptr<SimulateMacro> SimulateMacroPtr;
 
+    struct TypeMacro;
+    typedef smart_ptr<TypeMacro> TypeMacroPtr;
+
     struct AnnotationArgumentList;
     struct AnnotationDeclaration;
     typedef smart_ptr<AnnotationDeclaration> AnnotationDeclarationPtr;
@@ -1055,6 +1058,7 @@ namespace das
         void registerAnnotation ( const AnnotationPtr & ptr );
         bool addTypeInfoMacro ( const TypeInfoMacroPtr & ptr, bool canFail = false );
         bool addReaderMacro ( const ReaderMacroPtr & ptr, bool canFail = false );
+        bool addTypeMacro ( const TypeMacroPtr & ptr, bool canFail = false );
         bool addCommentReader ( const CommentReaderPtr & ptr, bool canFail = false );
         bool addCallMacro ( const CallMacroPtr & ptr, bool canFail = false );
         bool addKeyword ( const string & kwd, bool needOxfordComma, bool canFail = false );
@@ -1138,6 +1142,7 @@ namespace das
         vector<ForLoopMacroPtr>                     forLoopMacros;      // for loop macros (for every for loop)
         vector<CaptureMacroPtr>                     captureMacros;      // lambda capture macros
         vector<SimulateMacroPtr>                    simulateMacros;     // simulate macros (every time we simulate context)
+        das_map<string,TypeMacroPtr>                typeMacros;         // type macros (every time we infer type)
         das_map<string,ReaderMacroPtr>              readMacros;         // %foo "blah"
         CommentReaderPtr                            commentReader;      // /* blah */ or // blah
         vector<pair<string,bool>>                   keywords;           // keywords (and if they need oxford comma)
@@ -1294,6 +1299,12 @@ namespace das
         CaptureMacro ( const string & na = "" ) : name(na) {}
         virtual ExpressionPtr captureExpression ( Program *, Module *, Expression *, TypeDecl * ) { return nullptr; }
         virtual void captureFunction ( Program *, Module *, Structure *, Function * ) { }
+        string name;
+    };
+
+    struct TypeMacro : ptr_ref_count {
+        TypeMacro ( const string & na = "" ) : name(na) {}
+        virtual TypeDeclPtr visit ( Program *, Module *, const TypeDeclPtr & ) { return nullptr; }
         string name;
     };
 
