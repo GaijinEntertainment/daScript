@@ -99,22 +99,18 @@ class TypeMacroMacro : AstFunctionAnnotation
             if length(argType.dim) > 0
                 errors := "expecting non-array arguments"
                 return false
-            let argName = "arg_{argIndex}"
             if argType.baseType==Type tInt
                 var inscope expr <- qmacro_block() <|
                     if !(td.dimExpr[$v(argIndex)] is ExprConstInt)
                         macro_error(compiling_program(), td.at, "expecting {$v(string(func.arguments[ai].name))} to be int const")
                         return <- [[TypeDeclPtr]]
-                    let $i(argName) = (td.dimExpr[$v(argIndex)] as ExprConstInt).value
                 append_expressions(body, expr)
+                (retCall as ExprCall).arguments |> emplace_new <| qmacro((td.dimExpr[$v(argIndex)] as ExprConstInt).value)
             elif is_typedecl_ptr(argType)
-                var inscope expr <- qmacro_block() <|
-                    var inscope $i(argName) <- clone_type(td.dimExpr[$v(argIndex)]._type)
-                append_expressions(body, expr)
+                (retCall as ExprCall).arguments |> emplace_new <| qmacro(td.dimExpr[$v(argIndex)]._type)
             else
                 errors := "unsupported argument type {describe(argType)}"
                 return false
-            (retCall as ExprCall).arguments |> emplace_new <| qmacro($i(argName))
 
         var inscope retExpr <- qmacro_block() <|
             return <- $e(retCall)
