@@ -933,6 +933,12 @@ namespace das {
         ser.tag("TypeDecl");
         ser << baseType;
         switch ( baseType ) {
+            case Type::typeMacro:
+            case Type::typeDecl:
+                ser << alias << dimExpr;
+                DAS_VERIFYF_MULTI(!annotation, !structType, !enumType, !firstType, !secondType,
+                                argTypes.empty(), argNames.empty());
+                break;
             case Type::alias:
                 ser << alias << firstType << dim << dimExpr;
                 DAS_VERIFYF_MULTI(!annotation, !structType, !enumType, !secondType,

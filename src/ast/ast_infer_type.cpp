@@ -1622,6 +1622,12 @@ namespace das {
             return newType;
         }
 
+        string saveAliasName;
+
+        virtual void preVisitAlias ( TypeDecl * td, const string & name ) {
+            saveAliasName = name;
+        }
+
         virtual  TypeDeclPtr visitAlias ( TypeDecl * td, const string & ) override {
             if ( td->isAlias() ) {
                 if ( auto ta = inferAlias(td) ) {
@@ -1637,6 +1643,8 @@ namespace das {
                         td->at, CompilationError::invalid_type);
                 }
             }
+            td->alias = saveAliasName;
+            saveAliasName.clear();
             return td;
         }
 

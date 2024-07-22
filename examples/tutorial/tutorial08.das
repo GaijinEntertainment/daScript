@@ -1,8 +1,18 @@
-require tutorial08module
+// require tutorial08module
+
+typedef myType = typedecl(1+2)
+
+def gentd ( var a )
+	return typeinfo(sizeof type<typedecl(a)>)
 
 [export]
-def get_profile_stage_writeoff_spend()
-    let a <- WriteOffProgress()
+def test()
+    print("sizeof myType = {typeinfo(sizeof type<myType>)}\n")
+    return true
 
-options log_infer_passes
+options log
+options log_generics
+
+
+
 
