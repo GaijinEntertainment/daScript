@@ -7079,7 +7079,7 @@ namespace das {
                                 if ( i>1 ) ss << ", ";
                                 ss << *(expr->arguments[i]);
                             }
-                            ss << ")";
+                            ss << ")\n";
                             return ss.str();
                         }
                     }
