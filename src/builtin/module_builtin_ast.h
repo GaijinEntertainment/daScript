@@ -239,6 +239,8 @@ namespace das {
             :  AstExpressionAnnotation<EXPR> (na, ml) {
             using ManagedType = EXPR;
             this->template addField<DAS_BIND_MANAGED_FIELD(subexpr)>("subexpr");
+            this->template addField<DAS_BIND_MANAGED_FIELD(unsafeDeref)>("unsafeDeref");
+            this->template addField<DAS_BIND_MANAGED_FIELD(assumeNoAlias)>("assumeNoAlias");
         }
     };
 
