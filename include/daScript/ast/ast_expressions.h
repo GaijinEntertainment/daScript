@@ -81,6 +81,7 @@ namespace das
         virtual void serialize( AstSerializer & ser ) override;
         ExpressionPtr   subexpr;
         bool unsafeDeref = false;
+        bool assumeNoAlias = false;
     };
 
     struct ExprAddr : Expression {

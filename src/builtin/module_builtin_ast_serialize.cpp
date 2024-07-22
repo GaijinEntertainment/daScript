@@ -1194,7 +1194,7 @@ namespace das {
     void ExprPtr2Ref::serialize ( AstSerializer & ser ) {
         ser.tag("ExprPtr2Ref");
         Expression::serialize(ser);
-        ser << subexpr << unsafeDeref;
+        ser << subexpr << unsafeDeref << assumeNoAlias;
     }
 
     void ExprAddr::serialize ( AstSerializer & ser ) {
@@ -2166,7 +2166,7 @@ namespace das {
     }
 
     uint32_t AstSerializer::getVersion () {
-        static constexpr uint32_t currentVersion = 26;
+        static constexpr uint32_t currentVersion = 27;
         return currentVersion;
     }
 
