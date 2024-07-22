@@ -137,12 +137,12 @@ def private bytes_hr(value : uint64)
 
 class DAWalker: DapiDataWalker
 
-    maxChildrenCount: uint = 500u
+    maxChildrenCount: uint = 1000u
 
     varsStack: array<DAVariable?>
     [[do_not_delete]] frame: DAStackFrame?
     visited: array<tuple<ps: void?; hash: uint64>>
-    inlinePreviewLimit: int = 50
+    inlinePreviewLimit: int = 100
 
     def startWalk(var f: DAStackFrame; var v: DAVariable; cb: block<(): void>)
         unsafe
@@ -259,12 +259,8 @@ class DAWalker: DapiDataWalker
         let n = length(varsStack)
         if n > 0
             var v & = unsafe(varsStack[n - 1])
-            if count > 500u
-                print("IN VARIABLE {v.name} TOO MANY ELEMENTS {int64(count)}\n")
-                assert(false)
-
             if v.children != null
-                let preview = join(*v.children, inlinePreviewLimit - 5)
+                let preview = join(*v.children, inlinePreviewLimit)
                 if !empty(preview)
                     v.value = "[{int64(count)}] {preview}"
             if empty(v.value)
@@ -311,7 +307,7 @@ class DAWalker: DapiDataWalker
         if n > 0
             var v & = unsafe(varsStack[n - 1])
             if v.children != null
-                let preview = join_with_names(*v.children, inlinePreviewLimit - 5)
+                let preview = join_with_names(*v.children, inlinePreviewLimit)
                 if !empty(preview)
                     v.value = "[{int64(pa.size)}] {preview}"
             if empty(v.value)
@@ -372,15 +368,15 @@ def join_with_names(a: array<DAVariable>; limit: int): string
         for child, idx in a, range(n)
             len -= length(child.name) + length(child.value) + 2
             if !first
-                if len <= 3 && idx < n - 1
-                    str |> write(",..")
-                    break
                 str |> write(", ")
                 len -= 2
             first = false
             str |> write(child.name)
             str |> write(": ")
             str |> write(child.value)
+            if len <= 3 && idx < n - 1
+                str |> write(",..")
+                break
 
 
 def join(a: array<DAVariable>; limit: int): string
