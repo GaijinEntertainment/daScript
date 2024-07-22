@@ -1226,7 +1226,7 @@ namespace das {
         void reportFunctionNotFound( const string & name, const string & extra,
                                     const LineInfo & at, const MatchingFunctions & candidateFunctions,
             const vector<TypeDeclPtr> & types, bool inferAuto, bool inferBlocks, bool reportDetails,
-                                    CompilationError cerror, int nExtra ) {
+                                    CompilationError cerror, int nExtra, const string & moreError ) {
             if ( verbose ) {
                 TextWriter ss;
                 ss << name << "(";
@@ -1241,6 +1241,9 @@ namespace das {
                 ss << ")\n";
                 if ( func ) {
                     ss << "while compiling: " << func->describe() << "\n";
+                }
+                if ( !moreError.empty() ) {
+                    ss << moreError;
                 }
                 if ( candidateFunctions.size()==0 ) {
                     ss << "there are no good matching candidates out of " << nExtra << " total functions with the same name\n";
@@ -1300,9 +1303,12 @@ namespace das {
                                     const LineInfo & at, const MatchingFunctions & candidateFunctions,
                                     const vector<TypeDeclPtr>& nonNamedTypes, const vector<MakeFieldDeclPtr> & arguments,
                                     bool inferAuto, bool inferBlocks, bool reportDetails ,
-                                    CompilationError cerror, int nExtra) {
+                                    CompilationError cerror, int nExtra, const string & moreError ) {
             if ( verbose ) {
                 TextWriter ss;
+                if ( !moreError.empty() ) {
+                    ss << moreError;
+                }
                 if ( candidateFunctions.size()==0 ) {
                     ss << "there are no good matching candidates out of " << nExtra << " total functions with the same name\n";
                 } else if ( candidateFunctions.size() > 1 ) {
@@ -7027,7 +7033,7 @@ namespace das {
                 can1.reserve(can1.size()+can2.size());
                 can1.insert(can1.end(), can2.begin(), can2.end());
                 auto nExtra = prepareCandidates(can1, nonNamedArguments, expr->arguments, true, true);
-                reportFunctionNotFound(expr->name, msg + expr->name, expr->at, can1, nonNamedArguments, expr->arguments, false, true, reportDetails, cerror, nExtra);
+                reportFunctionNotFound(expr->name, msg + expr->name, expr->at, can1, nonNamedArguments, expr->arguments, false, true, reportDetails, cerror, nExtra, "");
             } else {
                 error("no matching functions or generics " + expr->name, "", "", expr->at, cerror);
             }
@@ -7037,7 +7043,7 @@ namespace das {
             if ( verbose ) {
                 can1.reserve(can1.size()+can2.size());
                 can1.insert(can1.end(), can2.begin(), can2.end());
-                reportFunctionNotFound(expr->name, msg + expr->name, expr->at, can1, nonNamedArguments,expr->arguments, false, true, false, cerror, 0);
+                reportFunctionNotFound(expr->name, msg + expr->name, expr->at, can1, nonNamedArguments,expr->arguments, false, true, false, cerror, 0, "");
             } else {
                 error("too many matching functions or generics " + expr->name, "", "", expr->at, cerror);
             }
@@ -7054,6 +7060,34 @@ namespace das {
             return sortCandidates(ranked, candidates, int(nonNamedArguments.size()));
         }
 
+        string reportMethodVsCall ( ExprLooksLikeCall * expr ) {
+            if ( verbose && expr->arguments.size()>=1 ) {
+                if ( auto tp = expr->arguments[0]->type.get() ) {
+                    Structure * cls = nullptr;
+                    if ( tp->isClass() ) {
+                        cls = tp->structType;
+                    } else if ( tp->isPointer() && tp->firstType && tp->firstType->isClass() ) {
+                        cls = tp->firstType->structType;
+                    }
+                    if ( cls ) {
+                        auto fld = cls->findField(expr->name);
+                        if ( fld && fld->type->isFunction() ) {
+                            TextWriter ss;
+                            ss << cls->module->name << "::" << cls->name << " has method " << expr->name << ", did u mean ";
+                            ss << *(expr->arguments[0]) << "->" << expr->name << "(";
+                            for ( auto i=1; i<expr->arguments.size(); ++i ) {
+                                if ( i>1 ) ss << ", ";
+                                ss << *(expr->arguments[i]);
+                            }
+                            ss << ")";
+                            return ss.str();
+                        }
+                    }
+                }
+            }
+            return "";
+        }
+
         void reportMissing ( ExprLooksLikeCall * expr, const vector<TypeDeclPtr> & types,
                                     const string & msg, bool reportDetails,
                                     CompilationError cerror = CompilationError::function_not_found) {
@@ -7063,7 +7097,8 @@ namespace das {
                 can1.reserve(can1.size()+can2.size());
                 can1.insert(can1.end(), can2.begin(), can2.end());
                 auto nExtra = prepareCandidates(can1, types, true, true);
-                reportFunctionNotFound(expr->name, msg + (verbose ? expr->describe() : ""), expr->at, can1, types, true, true, reportDetails, cerror, nExtra);
+                reportFunctionNotFound(expr->name, msg + (verbose ? expr->describe() : ""), expr->at, can1, types, true, true,
+                    reportDetails, cerror, nExtra, reportMethodVsCall(expr));
             } else {
                 error("no matching functions or generics " + expr->name, "", "", expr->at, cerror);
             }
@@ -7074,7 +7109,8 @@ namespace das {
             if ( verbose ) {
                 can1.reserve(can1.size()+can2.size());
                 can1.insert(can1.end(), can2.begin(), can2.end());
-                reportFunctionNotFound(expr->name, msg + expr->name, expr->at, can1, types, false, true, false, cerror, 0);
+                reportFunctionNotFound(expr->name, msg + expr->name, expr->at, can1, types, false, true,
+                    false, cerror, 0, reportMethodVsCall(expr));
             } else {
                 error("too many matching functions or generics " + expr->name, "", "", expr->at, cerror);
             }
