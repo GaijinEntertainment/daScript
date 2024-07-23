@@ -347,6 +347,7 @@
 %type <pTypeDecl>       optional_function_type
 %type <pTypeDecl>       structure_type_declaration
 %type <pVarDeclList>    struct_variable_declaration_list
+%type <pVarDeclList>    optional_struct_variable_declaration_list
 %type <pVarDeclList>    global_variable_declaration_list
 %type <pVarDeclList>    optional_function_argument_list
 %type <pVarDeclList>    function_argument_list
@@ -823,7 +824,7 @@ expression_if_then_else
     ;
 
 expression_for_loop
-    :   DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs] ';' expression_block[block] {
+    :   DAS_FOR[loc] { yyextra->das_need_oxford_comma=false; } variable_name_with_pos_list[iters] DAS_IN expr_list[srcs] expression_block[block] {
         $$ = ast_forLoop(scanner,$iters,$srcs,$block,tokAt(scanner,@loc),tokAt(scanner,@block));
     }
     ;
@@ -2458,13 +2459,22 @@ optional_public_or_private_structure
     |   DAS_PUBLIC   { $$ = true; }
     ;
 
+optional_struct_variable_declaration_list
+    :   {
+        $$ = new vector<VariableDeclaration*>();
+    }
+    |   '{' struct_variable_declaration_list[list] '}' {
+        $$ = $list;
+    }
+    ;
+
 structure_declaration
     : optional_annotation_list[annL] class_or_struct[loc] optional_public_or_private_structure[pub_str] {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto tak = tokAt(scanner,@loc);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeStructure(tak);
         }
-    } structure_name[ps] { if ( $ps ) { $ps->isClass = $loc; $ps->privateStructure = !$pub_str; } } '{' struct_variable_declaration_list[list] '}' {
+    } structure_name[ps] { if ( $ps ) { $ps->isClass = $loc; $ps->privateStructure = !$pub_str; } } optional_struct_variable_declaration_list[list] {
         if ( $ps ) {
             ast_structureDeclaration ( scanner, $annL, tokAt(scanner,@loc), $ps, tokAt(scanner,@ps), $list );
             if ( !yyextra->g_CommentReaders.empty() ) {
