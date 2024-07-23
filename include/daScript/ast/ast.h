@@ -1060,7 +1060,6 @@ namespace das
         bool addReaderMacro ( const ReaderMacroPtr & ptr, bool canFail = false );
         bool addTypeMacro ( const TypeMacroPtr & ptr, bool canFail = false );
         bool addCommentReader ( const CommentReaderPtr & ptr, bool canFail = false );
-        bool addCallMacro ( const CallMacroPtr & ptr, bool canFail = false );
         bool addKeyword ( const string & kwd, bool needOxfordComma, bool canFail = false );
         bool addTypeFunction ( const string & name, bool canFail = false );
         TypeDeclPtr findAlias ( const string & name ) const;

@@ -1630,7 +1630,7 @@ namespace das {
 
         string saveAliasName;
 
-        virtual void preVisitAlias ( TypeDecl * td, const string & name ) {
+        virtual void preVisitAlias ( TypeDecl *, const string & name ) {
             saveAliasName = name;
         }
 
@@ -3664,6 +3664,12 @@ namespace das {
                 } else if ( expr->trait=="need_delete" ) {
                     reportAstChanged();
                     return make_smart<ExprConstBool>(expr->at, expr->typeexpr->needDelete());
+                } else if ( expr->trait=="is_workhorse" ) {
+                    reportAstChanged();
+                    return make_smart<ExprConstBool>(expr->at, expr->typeexpr->isWorkhorseType());
+                } else if ( expr->trait=="is_unsafe_when_uninitialized" ) {
+                    reportAstChanged();
+                    return make_smart<ExprConstBool>(expr->at, noUnsafeUninitializedStructs && expr->typeexpr->unsafeInit());
                 } else if ( expr->trait=="has_nontrivial_ctor" ) {
                     reportAstChanged();
                     return make_smart<ExprConstBool>(expr->at, expr->typeexpr->hasNonTrivialCtor());
@@ -6901,6 +6907,7 @@ namespace das {
         virtual void preVisit ( ExprCallMacro * expr ) override {
             auto errc = ctx.thisProgram->errors.size();
             auto thisModule = ctx.thisProgram->thisModule.get();
+            expr->inFunction = func.get();
             canFoldResult = expr->macro->canFoldReturnResult(expr) && canFoldResult;
             expr->macro->preVisit(ctx.thisProgram, thisModule, expr);
             if ( errc==ctx.thisProgram->errors.size() ) {

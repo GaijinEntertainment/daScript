@@ -398,6 +398,7 @@ namespace das
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context &) const override { return nullptr; }
         virtual void serialize( AstSerializer & ser ) override;
+        Function * inFunction = nullptr;
         CallMacro * macro = nullptr;
     };
 

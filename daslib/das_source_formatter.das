@@ -33,7 +33,7 @@ enum TokenType
     COMMENT
     STRING
 
-
+[safe_when_uninitialized]
 struct TokenTemplate
     firstChar: int = 0
     str: string = ""
