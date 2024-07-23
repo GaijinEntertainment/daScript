@@ -126,6 +126,7 @@ namespace das {
             addProperty<DAS_BIND_MANAGED_PROP(getVectorDim)>("vectorDim","getVectorDim");
             addProperty<DAS_BIND_MANAGED_PROP(canInitWithZero)>("canInitWithZero","canInitWithZero");
             addProperty<DAS_BIND_MANAGED_PROP(getRangeBaseType)>("rangeBaseType","getRangeBaseType");
+            addProperty<bool (TypeDecl::*)() const, &ManagedType::unsafeInit>("unsafeInit","unsafeInit");
         }
     };
 

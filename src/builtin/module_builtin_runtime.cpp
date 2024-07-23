@@ -172,6 +172,18 @@ namespace das
         }
     };
 
+    struct MakeFunctionUnsafeCallMacro : CallMacro {
+        MakeFunctionUnsafeCallMacro() : CallMacro("make_function_unsafe") { }
+        virtual ExpressionPtr visit (  Program * prog, Module *, ExprCallMacro * call ) override {
+            if ( !call->inFunction ) {
+                prog->error("make_function_unsafe can only be used inside a function", "", "", call->at);
+                return nullptr;
+            }
+            call->inFunction->unsafeOperation = true;
+            return make_smart<ExprConstBool>(call->at, true);
+        }
+    };
+
     struct UnsafeDerefFunctionAnnotation : MarkFunctionAnnotation {
         UnsafeDerefFunctionAnnotation() : MarkFunctionAnnotation("unsafe_deref") { }
         virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string &) override {
@@ -1521,6 +1533,16 @@ namespace das
         addAnnotation(make_smart<IsDimAnnotation>());
         addAnnotation(make_smart<HashBuilderAnnotation>(lib));
         addAnnotation(make_smart<TypeFunctionFunctionAnnotation>());
+        // and call macro
+        {
+            CallMacroPtr newM = make_smart<MakeFunctionUnsafeCallMacro>();
+            addCallMacro(newM->name, [=](const LineInfo & at) -> ExprLooksLikeCall * {
+                auto ecm = new ExprCallMacro(at, newM->name);
+                ecm->macro = newM.get();
+                newM->module = this;
+                return ecm;
+            });
+        }
         // string
         addAnnotation(make_smart<DasStringTypeAnnotation>());
         // typeinfo macros

@@ -1068,6 +1068,7 @@ namespace das {
         auto cexpr = clonePtr<ExprPtr2Ref>(expr);
         Expression::clone(cexpr);
         cexpr->subexpr = subexpr->clone();
+        cexpr->assumeNoAlias = assumeNoAlias;
         return cexpr;
     }
 
@@ -2363,6 +2364,7 @@ namespace das {
         auto cexpr = clonePtr<ExprCallMacro>(expr);
         ExprLooksLikeCall::clone(cexpr);
         cexpr->macro = macro;
+        cexpr->inFunction = inFunction;
         return cexpr;
     }
 

@@ -1352,7 +1352,7 @@ namespace das {
 
     void ExprCallMacro::serialize ( AstSerializer & ser ) {
         ExprLooksLikeCall::serialize(ser);
-        ser << macro;
+        ser << macro << inFunction;
     }
 
     void ExprCallFunc::serialize ( AstSerializer & ser ) {
@@ -2166,7 +2166,7 @@ namespace das {
     }
 
     uint32_t AstSerializer::getVersion () {
-        static constexpr uint32_t currentVersion = 27;
+        static constexpr uint32_t currentVersion = 28;
         return currentVersion;
     }
 

@@ -48,9 +48,38 @@ def _return_with_lockcheck ( a:auto(valT)& ==const ) : valT&
         return a
 
 def resize(var Arr:array<auto(numT)>;newSize:int)
+	static_if typeinfo(is_unsafe_when_uninitialized type<numT>)
+		make_function_unsafe()
     static_if typeinfo(need_lock_check type<numT>)
         _builtin_verify_locks(Arr)
     __builtin_array_resize(Arr,newSize,typeinfo(sizeof Arr[0]))
+
+def resize_and_init(var Arr:array<auto(numT)>;newSize:int)
+    static_if typeinfo(need_lock_check type<numT>)
+        _builtin_verify_locks(Arr)
+    let oldSize = length(Arr)
+    __builtin_array_resize(Arr,newSize,typeinfo(sizeof Arr[0]))
+    for i in range(oldSize,newSize)
+        static_if typeinfo(is_workhorse type<numT>)
+            Arr[i] = numT()
+        static_elif typeinfo(can_move type<numT>)
+            Arr[i] <- [[numT()]]
+        static_elif typeinfo(can_copy type<numT>)
+            Arr[i] = [[numT()]]
+        else
+            Arr[i] := [[numT()]]
+
+def resize_and_init(var Arr:array<auto(numT)>;newSize:int; initValue:numT)
+    static_if typeinfo(need_lock_check type<numT>)
+        _builtin_verify_locks(Arr)
+    let oldSize = length(Arr)
+    __builtin_array_resize(Arr,newSize,typeinfo(sizeof Arr[0]))
+    for i in range(oldSize,newSize)
+        static_if typeinfo(can_copy initValue)
+            Arr[i] = initValue
+        else
+            Arr[i] := initValue
+
 
 def resize_no_init(var Arr:array<auto(numT)>;newSize:int)
     static_if typeinfo(is_raw type<numT>)
@@ -66,7 +95,7 @@ def reserve(var Arr:array<auto(numT)>;newSize:int)
     __builtin_array_reserve(Arr,newSize,typeinfo(sizeof Arr[0]))
 
 def pop(var Arr:array<auto(numT)>)
-    resize(Arr, length(Arr)-1)  // resize will throw if negative
+    unsafe(resize(Arr, length(Arr)-1))  // resize will throw if negative
 
 def push(var Arr:array<auto(numT)>;value:numT-# const;at:int)
     static_if typeinfo(can_copy value)
@@ -483,7 +512,7 @@ def clone_dim(var a;b:auto|#)
         concept_assert(false,"can't clone this array")
 
 def clone(var a:array<auto(TT)>;b:array<TT>|#)
-    resize(a,length(b))
+    unsafe(resize(a,length(b))) // note: is this safe? do we actaully need to init first???
     for aV,bV in a,b
         aV := bV
 
@@ -659,7 +688,7 @@ def to_array ( it : iterator<auto(TT)> ) : array<TT -const -&>
 [skip_lock_check]
 def to_array(a:auto(TT)[]) : array<TT -const>
     var arr : array<TT -const>
-    resize(arr,length(a))
+    unsafe(resize(arr,length(a)))   // TODO: is this safe? do we actually need to init first???
     unsafe
         reinterpret<TT -const[typeinfo(dim a)]>(addr(arr[0])) := a
     return <- arr
@@ -669,11 +698,11 @@ def to_array_move(var a:auto(TT)[]) : array<TT -const>
     unsafe
         var arr : array<TT -const>
         static_if typeinfo(can_copy a)
-            resize(arr,length(a))
+            unsafe(resize(arr,length(a))) // TODO: is this safe? do we actually need to init first???
             unsafe
                 reinterpret<TT -const[typeinfo(dim a)]>(addr(arr[0])) = a
         static_elif typeinfo(can_move a)
-            resize(arr,length(a))
+            unsafe(resize(arr,length(a))) // TODO: is this safe? do we actually need to init first???
             unsafe
                 reinterpret<TT -const[typeinfo(dim a)]>(addr(arr[0])) <- a
         else
