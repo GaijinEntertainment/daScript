@@ -12,7 +12,7 @@ require daslib/templates_boost
 require daslib/ast_boost
 require daslib/type_traits
 
-[expect_class(instance), template(otherclass)]
+[expect_class(instance), template(otherclass), unused_argument(otherclass)]
 def public is_instance_of(instance : auto(TCLS)?; otherclass : auto(TT) )
     if instance==null
         return false
@@ -29,7 +29,7 @@ def public is_instance_of(instance : auto(TCLS)?; otherclass : auto(TT) )
     else
         return false
 
-[expect_class(instance), template(otherclass)]
+[expect_class(instance), template(otherclass), unused_argument(otherclass)]
 def public dynamic_type_cast(instance; otherclass : auto(TT) ) : TT -const ?
     if instance==null
         return null
@@ -46,7 +46,7 @@ def public dynamic_type_cast(instance; otherclass : auto(TT) ) : TT -const ?
     else
         return null
 
-[expect_class(instance), template(otherclass)]
+[expect_class(instance), template(otherclass), unused_argument(otherclass)]
 def public force_dynamic_type_cast(instance; otherclass : auto(TT) ) : TT -const ?
     if instance==null
         panic("null pointer cast")
