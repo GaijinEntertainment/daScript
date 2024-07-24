@@ -5057,8 +5057,7 @@ namespace das {
             if ( !expr->value->type || expr->value->type->isAliasOrExpr() ) return Visitor::visit(expr);    // failed to infer
             if ( expr->underClone ) { // we wait for the 'right' type to be infered
                 if ( !expr->underClone->right->type || expr->underClone->right->type->isAutoOrAlias() ) {
-                    error("under clone field type not infered yet", "", "",
-                            expr->at, CompilationError::cant_get_field);
+                    program->failToCompile = true;
                     return Visitor::visit(expr);
                 }
             }
@@ -5345,8 +5344,7 @@ namespace das {
         virtual ExpressionPtr visit ( ExprVar * expr ) override {
             if ( expr->underClone ) { // we wait for the 'right' type to be infered
                 if ( !expr->underClone->right->type || expr->underClone->right->type->isAutoOrAlias() ) {
-                    error("under clone field type not infered yet", "", "",
-                            expr->at, CompilationError::variable_not_found);
+                    program->failToCompile = true;
                     return Visitor::visit(expr);
                 }
             }

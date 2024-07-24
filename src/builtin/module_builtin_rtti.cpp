@@ -1109,6 +1109,7 @@ namespace das {
     }
 
     bool introduceFile ( smart_ptr_raw<FileAccess> access, char * fname, char * str, Context * context, LineInfoArg * at ) {
+        if ( !fname ) context->throw_error_at(at, "expecting file name");
         const char * safeStr = str ? str : "";
         uint32_t str_len = stringLength(*context, safeStr);
         auto fileInfo = make_unique<TextFileInfo>(safeStr, str_len, false);
