@@ -1094,7 +1094,7 @@ namespace das
         void verifyBuiltinNames(uint32_t flags);
         void addDependency ( Module * mod, bool pub );
         void addBuiltinDependency ( ModuleLibrary & lib, Module * mod, bool pub = false );
-        void serialize( AstSerializer & ser );
+        void serialize( AstSerializer & ser, bool already_exists );
     public:
         template <typename RecAnn>
         void initRecAnnotation ( const smart_ptr<RecAnn> & rec, ModuleLibrary & lib ) {
