@@ -2125,8 +2125,8 @@ namespace das {
                 return result;
             }
         }
-        template <typename BLK, typename ...ArgType>
-        static __forceinline ResType invoke_cmres ( Context *, LineInfo *, const BLK & blk, ArgType ...arg ) {
+        template <typename ...ArgType, typename BLK>
+        static __forceinline enable_if_t<is_invocable_v<BLK, ArgType...>, ResType> invoke_cmres ( Context *, LineInfo *, const BLK & blk, ArgType ...arg ) {
             return blk(das::forward<ArgType>(arg)...);
         }
     };
@@ -2173,8 +2173,8 @@ namespace das {
                 __context__->invoke(blk, arguments, nullptr, __lineinfo__);
             }
         }
-        template <typename BLK, typename ...ArgType>
-        static __forceinline void invoke ( Context *, LineInfo *, const BLK & blk, ArgType ...arg ) {
+        template <typename ...ArgType, typename BLK>
+        static __forceinline enable_if_t<is_invocable_v<BLK, ArgType...>, void> invoke ( Context *, LineInfo *, const BLK & blk, ArgType ...arg ) {
             return blk(das::forward<ArgType>(arg)...);
         }
     };
