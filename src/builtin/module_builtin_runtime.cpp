@@ -533,7 +533,7 @@ namespace das
                 for ( const auto & field : st->fields ) {
                     if ( !field.type->isPod() ) {
                         allPod = false;
-                        errors += "\t" + field.name + " : " + field.type->describe() + " is not a pod\n";
+                        errors += "\t'" + field.name + ": " + field.type->describe() + "' is not a POD\n";
                     }
                 }
             }

@@ -420,7 +420,7 @@ namespace das {
         }
         if ( func == nullptr ) {
             failed = true;
-            das_to_stderr("das: ser: function '%s' not found", mangledName.c_str());
+            das_to_stderr("das: serialize: function '%s' not found", mangledName.c_str());
         }
     }
 
@@ -1314,11 +1314,11 @@ namespace das {
             }
             ser << mangledName;
             if ( annotation != nullptr && annotation->getFieldOffset(name) == -1 ) {
-                LOG(LogLevel::error) << "Field '" << name << "' not found in " << annotation->name;
+                LOG(LogLevel::error) << "Field '" << name << "' not found in '" << annotation->name << "'";
             }
         } else {
             if ( annotation != nullptr && annotation->getFieldOffset(name) == -1 ) {
-                SERIALIZER_VERIFYF("Field '%s' not found in %s", name.c_str(), annotation->name.c_str());
+                SERIALIZER_VERIFYF("Field '%s' not found in '%s'", name.c_str(), annotation->name.c_str());
             }
             bool has_field = false; ser << has_field;
             if ( !has_field ) return;
@@ -1831,7 +1831,7 @@ namespace das {
                     string module, varname;
                     ser << module << varname;
                     auto var = ser.moduleLibrary->findModule(module)->findVariable(varname);
-                    SERIALIZER_VERIFYF(var, "expected to find variable %s::%s", module.c_str(), varname.c_str());
+                    SERIALIZER_VERIFYF(var, "expected to find variable '%s::%s'", module.c_str(), varname.c_str());
                     f->useGlobalVariables.emplace(var.get());
                 } else {
                     void * addr = nullptr; ser << addr;
@@ -1873,7 +1873,7 @@ namespace das {
                     string module, varname;
                     ser << module << varname;
                     auto var = ser.moduleLibrary->findModule(module)->findVariable(varname);
-                    SERIALIZER_VERIFYF(var, "expected to find variable %s::%s", module.c_str(), varname.c_str());
+                    SERIALIZER_VERIFYF(var, "expected to find variable '%s::%s'", module.c_str(), varname.c_str());
                     f->useGlobalVariables.emplace(var.get());
                 } else {
                     void * addr = nullptr; ser << addr;
@@ -2135,8 +2135,8 @@ namespace das {
                     *this << savedHash;
 
                     if ( moduleHash != savedHash ) {
-                        LOG(LogLevel::warning) << "das: ser: cumulative hash for module " << m->name
-                                               << " differs" << " ( " << moduleHash << " vs " << savedHash << " ) ";
+                        LOG(LogLevel::warning) << "das: serialize: cumulative hash for module '" << m->name
+                                               << "' differs" << " (" << moduleHash << " vs " << savedHash << ") ";
                         program->failToCompile = true;
                         return;
                     }

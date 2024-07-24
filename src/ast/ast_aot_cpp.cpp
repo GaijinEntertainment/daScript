@@ -3369,7 +3369,7 @@ namespace das {
             }
             auto & src = ffor->sources[idx];
             auto & var = ffor->iteratorVariables[idx];
-            ss << string(tab,'\t') << "// " << var->name << " : " << var->type->describe() << "\n";
+            ss << string(tab,'\t') << "// " << var->name << ": " << var->type->describe() << "\n";
             if ( isCountOrUCount(src.get()) ) {
                 ss << string(tab,'\t') << "das_iterator_" << ((ExprCallFunc *) src.get())->func->name << " DAS_COMMENT(";
             } else {
@@ -3592,7 +3592,7 @@ namespace das {
                         return;
                     if ( (pfun->init || pfun->shutdown) && disableInit ) {
                         error("[init] is disabled in the options or CodeOfPolicies",
-                            "internal compiler error. [init] function made it all the way to simulate somehow", "",
+                            "internal compiler error: [init] function made it all the way to simulate somehow", "",
                                 pfun->at, CompilationError::no_init);
                     }
                     logs << "     // totalFunctions  "  << "\n";

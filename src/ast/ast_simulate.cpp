@@ -1476,7 +1476,7 @@ namespace das
                         auto sze = sizeexpr->simulate(context);
                         return context.code->makeNode<SimNode_DeleteClassPtr>(at, sube, total, sze, persistent);
                     } else {
-                        context.thisProgram->error("internal compiler error, SimNode_DeleteClassPtr needs size expression", "", "",
+                        context.thisProgram->error("internal compiler error: SimNode_DeleteClassPtr needs size expression", "", "",
                                                 at, CompilationError::missing_node );
                         return nullptr;
                     }
@@ -1514,7 +1514,7 @@ namespace das
             return context.code->makeNode<SimNode_DeleteLambda>(at, sube, total);
         } else {
             DAS_ASSERTF(0, "we should not be here. this is delete for unsupported type. infer types should have failed.");
-            context.thisProgram->error("internal compilation error, generating node for unsupported ExprDelete", "", "", at);
+            context.thisProgram->error("internal compiler error: generating node for unsupported ExprDelete", "", "", at);
             return nullptr;
         }
     }
@@ -2981,12 +2981,12 @@ void Program::buildGMNLookup ( Context & context, TextWriter & logs ) {
                 GlobalVariable * collision = context.globalVariables + it->second;
                 LineInfo * errorAt = nullptr;
                 TextWriter message;
-                message << "internal compiler error. global variable mangled name hash collision "
-                    << gvar.name << " : " << debug_type(gvar.debugInfo)
+                message << "internal compiler error: global variable mangled name hash collision '"
+                    << gvar.name << ": " << debug_type(gvar.debugInfo) << "'"
                     << " hash=" << HEX << gvar.mangledNameHash << DEC
                     << " offset=" << gvar.offset;
                 if ( collision ) {
-                    message << " and " << collision->name << " : " << debug_type(collision->debugInfo)
+                    message << " and '" << collision->name << ": " << debug_type(collision->debugInfo) << "'"
                         << " hash=" << HEX << collision->mangledNameHash << DEC
                         << " offset=" << collision->offset;
                 }
@@ -3014,7 +3014,7 @@ void Program::buildGMNLookup ( Context & context, TextWriter & logs ) {
             auto mnh = fn->getMangledNameHash();
             auto it = context.tabMnLookup->find(mnh);
             if ( it != context.tabMnLookup->end() ) {
-                error("internal compiler error. function mangled name hash collision " + fn->name,
+                error("internal compiler error: function mangled name hash collision '" + fn->name + "'",
                     "", "", LineInfo());
                 return;
             }
@@ -3033,7 +3033,7 @@ void Program::buildGMNLookup ( Context & context, TextWriter & logs ) {
             for(auto s2d : pm->annotationData ) {
                 auto it = context.tabAdLookup->find(s2d.first);
                 if ( it != context.tabAdLookup->end() ) {
-                    error("internal compiler error. annotation data hash collision " + s2d.second,
+                    error("internal compiler error: annotation data hash collision " + s2d.second,
                         "", "", LineInfo());
                     return;
                 }
@@ -3159,7 +3159,7 @@ void Program::buildGMNLookup ( Context & context, TextWriter & logs ) {
                         return;
                     if ( (pfun->init || pfun->shutdown) && disableInit ) {
                         error("[init] is disabled in the options or CodeOfPolicies",
-                            "internal compiler error. [init] function made it all the way to simulate somehow", "",
+                            "internal compiler error: [init] function made it all the way to simulate somehow", "",
                                 pfun->at, CompilationError::no_init);
                     }
                     auto mangledName = pfun->getMangledName();
@@ -3211,7 +3211,7 @@ void Program::buildGMNLookup ( Context & context, TextWriter & logs ) {
                     if ( !folding && pvar->init ) {
                         if ( disableInit && !pvar->init->rtti_isConstant() ) {
                             error("[init] is disabled in the options or CodeOfPolicies",
-                                "internal compiler error. [init] function made it all the way to simulate somehow", "",
+                                "internal compiler error: [init] function made it all the way to simulate somehow", "",
                                     pvar->at, CompilationError::no_init);
                         }
                         if ( pvar->init->rtti_isMakeLocal() ) {

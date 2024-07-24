@@ -344,7 +344,7 @@ namespace das {
         for (auto & pm : library.modules) {
             for ( auto & var : pm->globals.each() ) {
                 if ( var->used ) {
-                    logs << "let " << var->module->name << "::" << var->name << " : " << var->type->describe() << "\n";
+                    logs << "let " << var->module->name << "::" << var->name << ": " << var->type->describe() << "\n";
                 }
             }
             for ( auto & func : pm->functions.each() ) {

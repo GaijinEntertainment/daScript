@@ -326,11 +326,11 @@ namespace das {
                 }
             }
             ss << "def " << (fn->privateFunction ? "private " : "public ") << fn->name;
-            if ( fn->arguments.size() ) ss << " ( ";
+            if ( fn->arguments.size() ) ss << "(";
         }
         virtual void preVisitFunctionBody ( Function * fn,Expression * expr ) override {
             Visitor::preVisitFunctionBody(fn,expr);
-            if ( fn->arguments.size() ) ss << " )";
+            if ( fn->arguments.size() ) ss << ")";
             if ( fn->result && !fn->result->isVoid() ) ss << " : " << fn->result->describe();
             ss << "\n";
         }

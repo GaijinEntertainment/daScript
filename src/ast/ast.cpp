@@ -620,17 +620,17 @@ namespace das {
         }
         ss << name;
         if ( arguments.size() ) {
-            ss << " ( ";
+            ss << "(";
             for ( auto & arg : arguments ) {
-                ss << arg->name << " : " << *arg->type;
+                ss << arg->name << ": " << *arg->type;
                 if ( extra==DescribeExtra::yes && arg->init ) {
                     ss << " = " << *arg->init;
                 }
                 if ( arg != arguments.back() ) ss << "; ";
             }
-            ss << " )";
+            ss << ")";
         }
-        ss << " : " << result->describe();
+        ss << ": " << result->describe();
         return ss.str();
     }
 
@@ -2395,7 +2395,7 @@ namespace das {
 
     string ExprLooksLikeCall::describe() const {
         TextWriter stream;
-        stream << name << " ( ";
+        stream << name << "(";
         for ( auto & arg : arguments ) {
             if ( arg->type )
                 stream << *arg->type;
@@ -2405,7 +2405,7 @@ namespace das {
                 stream << ", ";
             }
         }
-        stream << " )";
+        stream << ")";
         return stream.str();
     }
 
