@@ -1802,7 +1802,7 @@ expr
     |   name_in_namespace[name] '(' expr_list[arguments] ')'[atend] {
             $$ = parseFunctionArguments(yyextra->g_Program->makeCall(tokAt(scanner,@name),tokAt(scanner,@atend),*$name),$arguments);
             delete $name;
-        }
+    }
     |   basic_type_declaration[type] '(' ')'[atend] {
         $$ = yyextra->g_Program->makeCall(tokAt(scanner,@type),tokAt(scanner,@atend),das_to_string($type));
     }
@@ -3151,6 +3151,12 @@ make_struct_decl
         ((ExprMakeStruct *)$msd)->useInitializer = true;
         ((ExprMakeStruct *)$msd)->block = $blk;
         $msd->at = tokAt(scanner,@loc);
+        auto tam = yyextra->g_Program->makeCall(tokAt(scanner,@loc),"to_array_move");
+        tam->arguments.push_back(ExpressionPtr($msd));
+        $$ = tam;
+    }
+    |   DAS_STRUCT [loc] '<' { yyextra->das_force_oxford_comma=true; yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' make_struct_dim[msd] ')'  {
+        ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
         auto tam = yyextra->g_Program->makeCall(tokAt(scanner,@loc),"to_array_move");
         tam->arguments.push_back(ExpressionPtr($msd));
         $$ = tam;
