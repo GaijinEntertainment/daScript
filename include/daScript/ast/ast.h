@@ -641,6 +641,8 @@ namespace das
         virtual bool rtti_isAscend() const { return false; }
         virtual bool rtti_isTypeDecl() const { return false; }
         virtual bool rtti_isNullPtr() const { return false; }
+        virtual bool rtti_isCopy() const { return false; }
+        virtual bool rtti_isClone() const { return false; }
         virtual Expression * tail() { return this; }
         virtual bool swap_tail ( Expression *, Expression * ) { return false; }
         virtual uint32_t getEvalFlags() const { return 0; }
@@ -1402,6 +1404,7 @@ namespace das
         bool report_invisible_functions = true;         // report invisible functions (report functions not visible from current module)
         bool report_private_functions = true;           // report private functions (report functions which are not accessible due to private module)
         bool no_unsafe_uninitialized_structures = true; // if true, then unsafe uninitialized structures are not allowed
+        bool strict_properties = false;                 // if true, then properties are strict, i.e. a.prop = b does not get promoted to a.prop := b
     // environment
         bool no_optimizations = false;                  // disable optimizations, regardless of settings
         bool fail_on_no_aot = true;                     // AOT link failure is error

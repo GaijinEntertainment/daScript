@@ -735,6 +735,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(no_local_class_members)>("no_local_class_members");
             addField<DAS_BIND_MANAGED_FIELD(report_invisible_functions)>("report_invisible_functions");
             addField<DAS_BIND_MANAGED_FIELD(report_private_functions)>("report_private_functions");
+            addField<DAS_BIND_MANAGED_FIELD(strict_properties)>("strict_properties");
         // environment
             addField<DAS_BIND_MANAGED_FIELD(no_optimizations)>("no_optimizations");
             addField<DAS_BIND_MANAGED_FIELD(fail_on_no_aot)>("fail_on_no_aot");
