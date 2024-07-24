@@ -530,13 +530,14 @@ namespace das
         int row, int col, int lrow, int lcol, int tabSize, const string & message,
         const string & extra, const string & fixme, CompilationError erc ) {
         TextWriter ssw;
-        ssw << "ERROR: ";
+        if (erc != CompilationError::unspecified)
+            ssw << "error[" << int(erc) << "]: ";
+        else
+            ssw << "error: ";
         if ( row ) {
             auto text = st ? getFewLines(st, stlen, row, col, lrow, lcol, tabSize) : "";
-            if (erc != CompilationError::unspecified) ssw << int(erc) << ": ";
             ssw << message << "\n" << fileName << ":" << row << ":" << col << "\n" << text;
         } else {
-            if ( erc != CompilationError::unspecified ) ssw << int(erc) << ": ";
             ssw << message << "\n";
         }
         if (!extra.empty()) ssw << extra << "\n";
