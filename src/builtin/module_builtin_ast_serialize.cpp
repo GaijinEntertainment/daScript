@@ -26,6 +26,13 @@ namespace das {
         doNotDelete.clear();
     }
 
+    void AstSerializer::getCompiledModules ( ) {
+        Module::foreach([this](Module * m) {
+            writingReadyModules.emplace(m);
+            return true;
+        });
+    }
+
     AstSerializer::~AstSerializer () {
         for ( auto fileInfo : deleteUponFinish ) {
             if ( doNotDelete.count(fileInfo) == 0 ) {
@@ -916,7 +923,13 @@ namespace das {
 
     AstSerializer & AstSerializer::operator << ( Module & module ) {
         thisModule = &module;
-        module.serialize(*this);
+        module.serialize(*this, /*already_exists*/false);
+        return *this;
+    }
+
+    AstSerializer & AstSerializer::serializeModule ( Module & module, bool already_exists ) {
+        thisModule = &module;
+        module.serialize(*this, already_exists);
         return *this;
     }
 
@@ -1673,7 +1686,7 @@ namespace das {
     }
 
     // Restores the internal state of macro module
-    void finalizeModule ( AstSerializer & ser, ModuleLibrary & lib, Module * this_mod ) {
+    void finalizeModule ( AstSerializer & ser, ModuleLibrary & lib, Module * this_mod, bool already_exists ) {
         ProgramPtr program;
 
         if ( ser.failed ) return;
@@ -1700,11 +1713,13 @@ namespace das {
             },"*");
         // always finalize annotations
             daScriptEnvironment::bound->g_Program = program;
-            program->finalizeAnnotations();
+            if ( !already_exists ) {
+              program->finalizeAnnotations();
+            }
 
             bool is_macro_module = false;
             ser << is_macro_module;
-            if ( is_macro_module ) {
+            if ( is_macro_module && !already_exists ) {
                 auto time0 = ref_time_ticks();
                 reinstantiateMacroModuleState(ser, program);
                 ser.totMacroTime += get_time_usec(time0);
@@ -1934,7 +1949,7 @@ namespace das {
         }
     }
 
-    void Module::serialize ( AstSerializer & ser ) {
+    void Module::serialize ( AstSerializer & ser, bool already_exists ) {
         ser.tag("Module");
         ser << name           << moduleFlags;
         ser << annotationData << requireModule;
@@ -1987,7 +2002,7 @@ namespace das {
 
         // Now we need to restore the internal state in case this has been a macro module
 
-        finalizeModule(ser, *ser.moduleLibrary, this);
+        finalizeModule(ser, *ser.moduleLibrary, this, already_exists);
     }
 
     class TopSort {
@@ -2166,7 +2181,7 @@ namespace das {
     }
 
     uint32_t AstSerializer::getVersion () {
-        static constexpr uint32_t currentVersion = 30;
+        static constexpr uint32_t currentVersion = 31;
         return currentVersion;
     }
 
@@ -2259,11 +2274,19 @@ namespace das {
             } else if ( builtin && promoted ) {
                 bool isNew = false; ser << isNew;
                 if ( isNew ) {
+                    Module *prev = Module::require(name);
                     auto deser = new Module;
-                    library.addModule(deser);
-                    ser << *deser;
-                    deser->builtIn = false; // suppress assert
-                    deser->promoteToBuiltin(nullptr);
+                    if ( prev ) {
+                        library.addModule(prev);
+                        ser.serializeModule(*deser, /*already_exists*/true);
+                        deser->builtIn = false; // suppress assert
+                        delete deser;
+                    } else {
+                        library.addModule(deser);
+                        ser.serializeModule(*deser, /*already_exists*/false);
+                        deser->builtIn = false; // suppress assert
+                        deser->promoteToBuiltin(nullptr);
+                    }
                 } else {
                     Module * m = Module::require(name);
                     library.addModule(m);

@@ -90,6 +90,7 @@ namespace das {
         void serializeAdaptiveSize64 ( uint64_t & size );
         void serializeAdaptiveSize32 ( uint32_t & size );
         void collectFileInfo ( vector<FileInfoPtr> & orphanedFileInfos );
+        void getCompiledModules ( );
         void patch ();
         AstSerializer & operator << ( string & str );
         AstSerializer & operator << ( const char * & value );
@@ -142,6 +143,7 @@ namespace das {
         AstSerializer & operator << ( MakeStructPtr & ptr );
    // Top-level
         AstSerializer & operator << ( Module & module );
+        AstSerializer & serializeModule ( Module & module, bool already_exists );
 
         uint32_t getVersion ();
 
