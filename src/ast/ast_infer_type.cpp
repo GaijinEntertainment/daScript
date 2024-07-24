@@ -55,6 +55,7 @@ namespace das {
             reportInvisibleFunctions = prog->options.getBoolOption("report_invisible_functions", prog->policies.report_invisible_functions);
             reportPrivateFunctions = prog->options.getBoolOption("report_private_functions", prog->policies.report_private_functions);
             noUnsafeUninitializedStructs = prog->options.getBoolOption("no_unsafe_uninitialized_structures", prog->policies.no_unsafe_uninitialized_structures);
+            strictProperties = prog->options.getBoolOption("strict_properties", prog->policies.strict_properties);
         }
         bool finished() const { return !needRestart; }
         bool verbose = true;
@@ -92,6 +93,7 @@ namespace das {
         bool                    reportInvisibleFunctions = false;
         bool                    reportPrivateFunctions = false;
         bool                    noUnsafeUninitializedStructs = false;
+        bool                    strictProperties = false;
     public:
         vector<FunctionPtr>     extraFunctions;
         das_hash_map<Function *,uint64_t> refreshFunctions;
@@ -5824,12 +5826,14 @@ namespace das {
         }
         void preVisit ( ExprCopy * expr ) override {
             Visitor::preVisit(expr);
-            if ( expr->left->rtti_isField() ) {
-                auto field = static_pointer_cast<ExprField>(expr->left);
-                field->underClone = expr;
-            } else if ( expr->left->rtti_isVar() ) {
-                auto var = static_pointer_cast<ExprVar>(expr->left);
-                var->underClone = expr;
+            if ( !strictProperties ) {
+                if ( expr->left->rtti_isField() ) {
+                    auto field = static_pointer_cast<ExprField>(expr->left);
+                    field->underClone = expr;
+                } else if ( expr->left->rtti_isVar() ) {
+                    auto var = static_pointer_cast<ExprVar>(expr->left);
+                    var->underClone = expr;
+                }
             }
             markNoDiscard(expr->right.get());
         }

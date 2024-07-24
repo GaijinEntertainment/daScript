@@ -1404,6 +1404,7 @@ namespace das
         bool report_invisible_functions = true;         // report invisible functions (report functions not visible from current module)
         bool report_private_functions = true;           // report private functions (report functions which are not accessible due to private module)
         bool no_unsafe_uninitialized_structures = true; // if true, then unsafe uninitialized structures are not allowed
+        bool strict_properties = false;                 // if true, then properties are strict, i.e. a.prop = b does not get promoted to a.prop := b
     // environment
         bool no_optimizations = false;                  // disable optimizations, regardless of settings
         bool fail_on_no_aot = true;                     // AOT link failure is error
