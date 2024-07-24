@@ -319,7 +319,7 @@ def empty(a:array<auto>|#) : bool
 def empty(a:table<auto;auto>|#) : bool
     return length(a)==0
 
-[deprecated(message="use tab?[key] or `get` instead")]
+[deprecated(message="use tab?[key] or 'get' instead")]
 def find(Tab:table<auto(keyT);auto(valT)>|#;at:keyT-#;blk:block<(p:valT?#):void>)
     __builtin_table_lock(Tab)
     var val = __builtin_table_find(Tab,at)
@@ -327,9 +327,9 @@ def find(Tab:table<auto(keyT);auto(valT)>|#;at:keyT-#;blk:block<(p:valT?#):void>
         invoke(blk,reinterpret<valT?#> val)
     __builtin_table_unlock(Tab)
 
-[deprecated(message="use tab?[key] or `get` instead")]
+[deprecated(message="use tab?[key] or 'get' instead")]
 def find(Tab:table<auto(keyT);void>;at:keyT|#;blk:block<(p:void?):void>)
-    concept_assert(false,"find(table<keyT;void>,...) is not supported")
+    concept_assert(false,"find(table<keyT; void>, ...) is not supported")
 
 // one table lookup with block to rule them all 'get'
 
@@ -378,12 +378,12 @@ def get(var Tab:table<auto(keyT);auto(valT)> ==const;at:keyT-#;blk:block<(var p:
         return false
 
 def get(Tab:table<auto(keyT);void>;at:keyT|#;blk:block<(var p:void?):void>)
-    concept_assert(false,"get(table<keyT>,...) is not supported. use `key_exists` instead")
+    concept_assert(false,"get(table<keyT>, ...) is not supported; use 'key_exists' instead")
     return false
 
 // find if exists
 
-[deprecated(message="use tab?[key] or `get` instead")]
+[deprecated(message="use tab?[key] or 'get' instead")]
 def find_if_exists(Tab:table<auto(keyT);auto(valT)>;at:keyT-#;blk:block<(p:valT&):void>)
     var val = __builtin_table_find(Tab,at)
     if val != null
@@ -394,7 +394,7 @@ def find_if_exists(Tab:table<auto(keyT);auto(valT)>;at:keyT-#;blk:block<(p:valT&
     else
         return false
 
-[deprecated(message="use tab?[key] or `get` instead")]
+[deprecated(message="use tab?[key] or 'get' instead")]
 def find_if_exists(Tab:table<auto(keyT);auto(valT)>#;at:keyT-#;blk:block<(p:valT&#):void>)
     var val = __builtin_table_find(Tab,at)
     if val != null
@@ -405,14 +405,14 @@ def find_if_exists(Tab:table<auto(keyT);auto(valT)>#;at:keyT-#;blk:block<(p:valT
     else
         return false
 
-[deprecated(message="use tab?[key] or `get` instead")]
+[deprecated(message="use tab?[key] or 'get' instead")]
 def find_if_exists(Tab:table<auto(keyT);void>;at:keyT-#;blk:block<(p:void?):void>)
-    concept_assert(false,"find_if_exists(table<keyT;void>,...) is not supported")
+    concept_assert(false,"find_if_exists(table<keyT; void>, ...) is not supported")
     return false
 
 // find for edit
 
-[deprecated(message="use tab?[key] or `get` instead")]
+[deprecated(message="use tab?[key] or 'get' instead")]
 def find_for_edit(var Tab:table<auto(keyT);auto(valT)>;at:keyT-#;blk:block<(var p:valT?#):void>)
     __builtin_table_lock(Tab)
     var val = __builtin_table_find(Tab,at)
@@ -420,9 +420,9 @@ def find_for_edit(var Tab:table<auto(keyT);auto(valT)>;at:keyT-#;blk:block<(var 
         invoke(blk,reinterpret<valT?#> val)
     __builtin_table_unlock(Tab)
 
-[deprecated(message="use tab?[key] or `get` instead")]
+[deprecated(message="use tab?[key] or 'get' instead")]
 def find_for_edit(var Tab:table<auto(keyT);void>;at:keyT|#;blk:block<(var p:void?):void>)
-    concept_assert(false,"find_for_edit(table<keyT;void>,...) is not supported")
+    concept_assert(false,"find_for_edit(table<keyT; void>, ...) is not supported")
 
 [unsafe_operation, deprecated(message="use tab?[key] instead")]
 def find_for_edit(var Tab:table<auto(keyT);auto(valT)>|#;at:keyT-#):valT?
@@ -430,11 +430,11 @@ def find_for_edit(var Tab:table<auto(keyT);auto(valT)>|#;at:keyT-#):valT?
 
 [unsafe_operation, deprecated(message="use tab?[key] instead")]
 def find_for_edit(var Tab:table<auto(keyT);void>;at:keyT|#):void?
-    concept_assert(false,"find_for_edit(table<keyT;void>,...) is not supported")
+    concept_assert(false,"find_for_edit(table<keyT; void>, ...) is not supported")
 
 // find for edit if exists
 
-[deprecated(message="use tab?[key] or `get` instead")]
+[deprecated(message="use tab?[key] or 'get' instead")]
 def find_for_edit_if_exists(var Tab:table<auto(keyT);auto(valT)>#;at:keyT-#;blk:block<(var p:valT#&):void>)
     var val = __builtin_table_find(Tab,at)
     if val != null
@@ -446,7 +446,7 @@ def find_for_edit_if_exists(var Tab:table<auto(keyT);auto(valT)>#;at:keyT-#;blk:
     else
         return false
 
-[deprecated(message="use tab?[key] or `get` instead")]
+[deprecated(message="use tab?[key] or 'get' instead")]
 def find_for_edit_if_exists(var Tab:table<auto(keyT);auto(valT)>;at:keyT-#;blk:block<(var p:valT&):void>)
     var val = __builtin_table_find(Tab,at)
     if val != null
@@ -458,9 +458,9 @@ def find_for_edit_if_exists(var Tab:table<auto(keyT);auto(valT)>;at:keyT-#;blk:b
     else
         return false
 
-[deprecated(message="use tab?[key] or `get` instead")]
+[deprecated(message="use tab?[key] or 'get' instead")]
 def find_for_edit_if_exists(var Tab:table<auto(keyT);void>;at:keyT|#;blk:block<(var p:void?):void>)
-    concept_assert(false,"find_for_edit_if_exists(table<keyT;void>,...) is not supported")
+    concept_assert(false,"find_for_edit_if_exists(table<keyT; void>, ...) is not supported")
     return false
 
 def _at_with_lockcheck ( var Tab:table<auto(keyT);auto(valT)>; at:keyT|# ) : valT &
@@ -560,10 +560,10 @@ def keys(a:table<auto(keyT);auto(valT)>|#) : iterator<keyT & const>
     return <- it
 
 def values(a:table<auto(keyT);void> ==const|#)
-    concept_assert(false,"can't iterate over values of a table<...;void>")
+    concept_assert(false,"can't iterate over values of a table<...; void>")
 
 def values(var a:table<auto(keyT);void> ==const|#)
-    concept_assert(false,"can't iterate over values of a table<...;void>")
+    concept_assert(false,"can't iterate over values of a table<...; void>")
 
 [unsafe_outside_of_for,nodiscard]
 def values(a:table<auto(keyT);auto(valT)> ==const|#) : iterator<valT & const>
@@ -683,7 +683,7 @@ def each_ref ( lam : lambda<(var arg:auto(argT)?):bool> ) : iterator<argT &>
 
 [unused_argument(tt),nodiscard]
 def each_enum(tt:auto(TT)) : iterator<TT -const -&>
-    concept_assert(typeinfo(is_enum tt),"expecting each_enum(any enum value)")
+    concept_assert(typeinfo(is_enum tt),"expecting 'each_enum(any_enum_value)'")
     var iter : iterator<TT -const -&>
     _builtin_make_enum_iterator(iter)
     unsafe
@@ -729,7 +729,7 @@ def to_array_move(var a:auto(TT)) : array<TT -const>
     unsafe
         var arr : array<TT -const>
         static_if typeinfo(is_smart_ptr a)
-            concept_assert(false,"can't create array from smart pointer by value. did u mean [\{Type[1] value\}] instead of [\{Type value\}]")
+            concept_assert(false,"can't create array from smart pointer by value. did you mean [\{Type[1] value\}] instead of [\{Type value\}]")
         static_if typeinfo(can_copy a)
             arr |> push(a)
         static_elif typeinfo(can_move a)
@@ -932,7 +932,7 @@ def has_value ( a; key )
                 return true
         return false
     else
-        concept_assert(false,"can't iterate over source. has_value is meaningless")
+        concept_assert(false,"can't iterate over source; 'has_value' is meaningless")
         return false
 
 def get_ptr ( src : smart_ptr<auto(TT)> ) : TT?

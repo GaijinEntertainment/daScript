@@ -830,7 +830,7 @@ def fmt_space_after_keyword(var ctx: FormatterCtx)
         if space_after_keywords |> find_index(ctx.tokens[i].str) >= 0
             if !new_line_before(ctx, i + 1)
                 ctx |> add_space_before(i + 1)
-        // add space only after `return <expr>` expression
+        // add space only after 'return <expr>' expression
         if ctx.tokens[i].str == "return" && length(ctx.tokens[i+1].str) > 0
             if !new_line_before(ctx, i + 1)
                 ctx |> add_space_before(i + 1)

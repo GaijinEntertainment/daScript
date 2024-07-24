@@ -1420,7 +1420,7 @@ namespace das
         }
         virtual void onArgument ( FuncInfo * info, int i, VarInfo * field, vec4f arg ) override {
             ssw << "\t" << info->fields[i]->name
-                << " : " << debug_type(field)
+                << ": " << debug_type(field)
                 << " = \t" << debug_value(arg, field, PrintFlags::stackwalker) << "\n";
         }
         virtual void onBeforeVariables ( ) override {
@@ -1428,7 +1428,7 @@ namespace das
         }
         virtual void onVariable ( FuncInfo *, LocalVariableInfo * lv, void * addr, bool inScope ) override {
             ssw << "\t" << lv->name
-                << " : " << debug_type(lv);
+                << ": " << debug_type(lv);
             string location;
             if ( !inScope ) {
             } else if ( lv->cmres ) {

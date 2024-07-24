@@ -227,7 +227,7 @@ namespace das {
             while (first != nullptr)
             {
                 if (first->name == n) {
-                    DAS_FATAL_ERROR("Module `%s` already created", first->name.c_str());
+                    DAS_FATAL_ERROR("Module '%s' already created", first->name.c_str());
                 }
                 first = first->next;
             }

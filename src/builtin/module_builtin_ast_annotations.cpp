@@ -246,7 +246,7 @@ namespace das {
             auto hashValue = hash_blockz64((uint8_t *)tName.c_str());
             if ( auto oldType = context->thisProgram->astTypeInfo[hashValue] ) {
                 if ( !oldType->isSameType(*exprTypeInfo->typeexpr,RefMatters::yes,ConstMatters::yes,TemporaryMatters::yes,AllowSubstitute::no,false,false) ) {
-                    error = "internal compiler error. type name collision in ast_typedecl. " + oldType->describe() + " vs " + exprTypeInfo->typeexpr->describe();
+                    error = "internal compiler error: type name collision in ast_typedecl. " + oldType->describe() + " vs " + exprTypeInfo->typeexpr->describe();
                     return nullptr;
                 }
             }
