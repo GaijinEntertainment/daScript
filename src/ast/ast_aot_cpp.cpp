@@ -1063,9 +1063,9 @@ namespace das {
         virtual StructurePtr visit ( Structure * that ) override {
             ss << "};\n";   // structure
             if ( that->fields.size() ) {
-                ss << "static_assert(sizeof(" << that->name << ")==" << that->getSizeOf() << ",\"structure size mismatch with DAS\");\n";
+                ss << "static_assert(sizeof(" << aotStructName(that) << ")==" << that->getSizeOf() << ",\"structure size mismatch with DAS\");\n";
                 for ( auto & tf : that->fields ) {
-                    ss << "static_assert(offsetof(" << that->name << "," << tf.name << ")=="
+                    ss << "static_assert(offsetof(" << aotStructName(that) << "," << tf.name << ")=="
                         << tf.offset << ",\"structure field offset mismatch with DAS\");\n";
                 }
             }
