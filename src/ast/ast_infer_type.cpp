@@ -1496,8 +1496,14 @@ namespace das {
                             derefV->type->ref = true;
                             derefV->type->constant |= eWT->constant;
                             if ( expr->underClone ) {
-                                expr->underClone->cloneSet = inferGenericOperator(".`"+expr->name+"`clone",expr->at,derefV,expr->underClone->right);
-                                if ( expr->underClone->cloneSet ) {
+                                if ( auto cloneSet = inferGenericOperator(".`"+expr->name+"`clone",expr->at,derefV,expr->underClone->right) ) {
+                                    if ( expr->underClone->rtti_isClone() ) {
+                                        ((ExprClone *)expr->underClone)->cloneSet = cloneSet;
+                                    } else if ( expr->underClone->rtti_isCopy() ) {
+                                        ((ExprCopy *)expr)->promoteToClone = true;
+                                        expr->underClone = nullptr;
+                                        reportAstChanged();
+                                    }
                                     continue;
                                 }
                             }
@@ -1505,8 +1511,14 @@ namespace das {
                             if ( auto opE = inferGenericOperatorWithName(".",expr->at,derefV,expr->name) ) return opE;
                         } else {
                             if ( expr->underClone ) {
-                                expr->underClone->cloneSet = inferGenericOperator(".`"+expr->name+"`clone",expr->at,eW->with,expr->underClone->right);
-                                if ( expr->underClone->cloneSet ) {
+                                if ( auto cloneSet = inferGenericOperator(".`"+expr->name+"`clone",expr->at,eW->with,expr->underClone->right) ) {
+                                    if ( expr->underClone->rtti_isClone() ) {
+                                        ((ExprClone *)expr->underClone)->cloneSet = cloneSet;
+                                    } else if ( expr->underClone->rtti_isCopy() ) {
+                                        ((ExprCopy *)expr->underClone)->promoteToClone = true;
+                                        expr->underClone = nullptr;
+                                        reportAstChanged();
+                                    }
                                     continue;
                                 }
                             }
@@ -5055,8 +5067,14 @@ namespace das {
             }
             if ( !expr->no_promotion ) {
                 if ( expr->underClone ) {
-                    expr->underClone->cloneSet = inferGenericOperator(".`"+expr->name+"`clone",expr->at,expr->value,expr->underClone->right);
-                    if ( expr->underClone->cloneSet ) {
+                    if ( auto cloneSet = inferGenericOperator(".`"+expr->name+"`clone",expr->at,expr->value,expr->underClone->right) ) {
+                        if ( expr->underClone->rtti_isClone() ) {
+                            ((ExprClone *)expr->underClone)->cloneSet = cloneSet;
+                        } else if ( expr->underClone->rtti_isCopy() ) {
+                            ((ExprCopy *)expr->underClone)->promoteToClone = true;
+                            expr->underClone = nullptr;
+                            reportAstChanged();
+                        }
                         return Visitor::visit(expr);
                     }
                 }
@@ -5072,8 +5090,14 @@ namespace das {
                     derefV->type->ref = true;
                     derefV->type->constant |= valT->constant;
                     if ( expr->underClone ) {
-                        expr->underClone->cloneSet = inferGenericOperator(".`"+expr->name+"`clone",expr->at,derefV,expr->underClone->right);
-                        if ( expr->underClone->cloneSet ) {
+                        if ( auto cloneSet = inferGenericOperator(".`"+expr->name+"`clone",expr->at,derefV,expr->underClone->right) ) {
+                            if ( expr->underClone->rtti_isClone() ) {
+                                ((ExprClone *)expr->underClone)->cloneSet = cloneSet;
+                            } else if ( expr->underClone->rtti_isCopy() ) {
+                                ((ExprCopy *)expr->underClone)->promoteToClone = true;
+                                expr->underClone = nullptr;
+                                reportAstChanged();
+                            }
                             return Visitor::visit(expr);
                         }
                     }
@@ -5800,9 +5824,20 @@ namespace das {
         }
         void preVisit ( ExprCopy * expr ) override {
             Visitor::preVisit(expr);
+            if ( expr->left->rtti_isField() ) {
+                auto field = static_pointer_cast<ExprField>(expr->left);
+                field->underClone = expr;
+            } else if ( expr->left->rtti_isVar() ) {
+                auto var = static_pointer_cast<ExprVar>(expr->left);
+                var->underClone = expr;
+            }
             markNoDiscard(expr->right.get());
         }
         virtual ExpressionPtr visit ( ExprCopy * expr ) override {
+            if ( expr->promoteToClone ) {
+                reportAstChanged();
+                return  make_smart<ExprClone>(expr->at, expr->left, expr->right);
+            }
             if ( !expr->left->type || !expr->right->type ) return Visitor::visit(expr);
             // infer
             if ( !canCopyOrMoveType(expr->left->type,expr->right->type,TemporaryMatters::no,expr->right.get()) ) {

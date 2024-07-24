@@ -641,6 +641,8 @@ namespace das
         virtual bool rtti_isAscend() const { return false; }
         virtual bool rtti_isTypeDecl() const { return false; }
         virtual bool rtti_isNullPtr() const { return false; }
+        virtual bool rtti_isCopy() const { return false; }
+        virtual bool rtti_isClone() const { return false; }
         virtual Expression * tail() { return this; }
         virtual bool swap_tail ( Expression *, Expression * ) { return false; }
         virtual uint32_t getEvalFlags() const { return 0; }

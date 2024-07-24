@@ -234,7 +234,7 @@ namespace das {
     TypeDeclPtr makeExprCopyFlags() {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
         ft->alias = "CopyFlags";
-        ft->argNames = { "allowCopyTemp", "takeOverRightStack" };
+        ft->argNames = { "allowCopyTemp", "takeOverRightStack", "promoteToClone" };
         return ft;
     }
 

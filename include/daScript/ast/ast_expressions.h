@@ -214,6 +214,8 @@ namespace das
                                                             // is a workaround of a compiler bug in 32-bit MVSC 2015
     };
 
+    struct ExprOp2;
+
     struct ExprVar : Expression {
         ExprVar () { __rtti = "ExprVar"; };
         ExprVar ( const LineInfo & a, const string & n )
@@ -228,7 +230,7 @@ namespace das
         string              name;
         VariablePtr         variable;
         ExprBlock *         pBlock = nullptr;
-        ExprClone *         underClone = nullptr;
+        ExprOp2 *           underClone = nullptr;
         int                 argumentIndex = -1;
         union {
             struct {
@@ -279,7 +281,7 @@ namespace das
         const Structure::FieldDeclaration * field = nullptr;
         int             fieldIndex = -1;
         TypeAnnotationPtr annotation;
-        ExprClone *     underClone = nullptr;
+        ExprOp2 *       underClone = nullptr;
         union {
             struct {
                 bool        unsafeDeref : 1;
@@ -462,10 +464,12 @@ namespace das
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual void serialize( AstSerializer & ser ) override;
+        virtual bool rtti_isCopy() const override { return true; }
         union {
             struct {
                 bool allowCopyTemp : 1;
                 bool takeOverRightStack : 1;
+                bool promoteToClone : 1;
             };
             uint32_t copyFlags = 0;
         };
@@ -498,6 +502,7 @@ namespace das
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual void serialize( AstSerializer & ser ) override;
+        virtual bool rtti_isClone() const override { return true; }
         ExpressionPtr cloneSet;
     };
 
