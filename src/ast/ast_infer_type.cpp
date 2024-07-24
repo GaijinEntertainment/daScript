@@ -8297,6 +8297,15 @@ namespace das {
             }
             // promote to make variant
             if ( expr->makeType->baseType == Type::tVariant ) {
+                if ( expr->forceClass ) {
+                    error(expr->makeType->describe() + " is not a class, but a variant", "", "",
+                        expr->at, CompilationError::invalid_type);
+                    return Visitor::visit(expr);
+                } else if ( expr->forceStruct ) {
+                    error(expr->makeType->describe() + " is not a struct, but a variant", "", "",
+                        expr->at, CompilationError::invalid_type);
+                    return Visitor::visit(expr);
+                }
                 if ( expr->block ) {
                     error("[[variant]] can't have where closure",  "", "",
                         expr->block->at, CompilationError::invalid_block );
@@ -8321,6 +8330,19 @@ namespace das {
             }
             // promote to make tuple
             if ( expr->makeType->baseType == Type::tTuple && expr->structs.size() ) {
+                if ( expr->forceClass ) {
+                    error(expr->makeType->describe() + " is not a class, but a tuple", "", "",
+                        expr->at, CompilationError::invalid_type);
+                    return Visitor::visit(expr);
+                } else if ( expr->forceStruct ) {
+                    error(expr->makeType->describe() + " is not a struct, but a tuple", "", "",
+                        expr->at, CompilationError::invalid_type);
+                    return Visitor::visit(expr);
+                } else if ( expr->forceVariant ) {
+                    error(expr->makeType->describe() + " is not a variant, but a tuple", "", "",
+                        expr->at, CompilationError::invalid_type);
+                    return Visitor::visit(expr);
+                }
                 if ( expr->block ) {
                     error("[[tuple]] can't have where closure",  "", "",
                         expr->block->at, CompilationError::invalid_block );
@@ -8485,6 +8507,18 @@ namespace das {
             } else if ( expr->type->isClass() && !expr->usedInitializer && !safeExpression(expr) ) {
                 error("skipping initializer for class initialization requires unsafe", "", "",
                     expr->at, CompilationError::unsafe);
+            }
+            if ( expr->forceClass && !(expr->makeType->baseType==Type::tStructure && expr->makeType->structType && expr->makeType->structType->isClass) ) {
+                error(expr->type->describe() + " is not a class", "", "",
+                    expr->at, CompilationError::invalid_type);
+            }
+            if ( expr->forceStruct && !(expr->makeType->baseType==Type::tStructure && expr->makeType->structType && !expr->makeType->structType->isClass) ) {
+                error(expr->type->describe() + " is not a struct", "", "",
+                    expr->at, CompilationError::invalid_type);
+            }
+            if ( expr->forceVariant && !(expr->makeType->baseType==Type::tVariant) ) {
+                error(expr->type->describe() + " is not a variant", "", "",
+                    expr->at, CompilationError::invalid_type);
             }
             verifyType(expr->type);
             return Visitor::visit(expr);

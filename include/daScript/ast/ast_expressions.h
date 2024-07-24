@@ -1391,6 +1391,9 @@ namespace das
                 bool usedInitializer : 1;
                 bool nativeClassInitializer : 1;
                 bool isNewClass : 1;
+                bool forceClass : 1;
+                bool forceStruct : 1;
+                bool forceVariant : 1;
             };
             uint32_t makeStructFlags = 0;
         };

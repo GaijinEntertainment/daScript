@@ -3156,10 +3156,25 @@ make_struct_decl
         $$ = tam;
     }
     |   DAS_STRUCT [loc] '<' { yyextra->das_force_oxford_comma=true; yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' make_struct_dim[msd] ')'  {
+        $msd->at = tokAt(scanner,@loc);
         ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
-        auto tam = yyextra->g_Program->makeCall(tokAt(scanner,@loc),"to_array_move");
-        tam->arguments.push_back(ExpressionPtr($msd));
-        $$ = tam;
+        ((ExprMakeStruct *)$msd)->useInitializer = true;
+        ((ExprMakeStruct *)$msd)->forceStruct = true;
+        $$ = $msd;
+    }
+    |   DAS_CLASS [loc] '<' { yyextra->das_force_oxford_comma=true; yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' make_struct_dim[msd] ')'  {
+        $msd->at = tokAt(scanner,@loc);
+        ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
+        ((ExprMakeStruct *)$msd)->useInitializer = true;
+        ((ExprMakeStruct *)$msd)->forceClass = true;
+        $$ = $msd;
+    }
+    |   DAS_TVARIANT [loc] '<' { yyextra->das_force_oxford_comma=true; yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' make_struct_dim[msd] ')'  {
+        $msd->at = tokAt(scanner,@loc);
+        ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
+        ((ExprMakeStruct *)$msd)->useInitializer = true;
+        ((ExprMakeStruct *)$msd)->forceVariant = true;
+        $$ = $msd;
     }
     ;
 
