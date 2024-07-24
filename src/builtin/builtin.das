@@ -1021,3 +1021,30 @@ def clear ( var t : table<auto(KT); auto(VT)> )
         _builtin_verify_locks(t)
     _builtin_table_clear(t)
 
+
+def float2(a,b)
+    return float2(float(a),float(b))
+
+def float3(a,b,c)
+    return float3(float(a),float(b),float(c))
+
+def float4(a,b,c,d)
+    return float4(float(a),float(b),float(c),float(d))
+
+def int2(a,b)
+    return int2(int(a),int(b))
+
+def int3(a,b,c)
+    return int3(int(a),int(b),int(c))
+
+def int4(a,b,c,d)
+    return int4(int(a),int(b),int(c),int(d))
+
+def uint2(a,b)
+    return uint2(uint(a),uint(b))
+
+def uint3(a,b,c)
+    return uint3(uint(a),uint(b),uint(c))
+
+def uint4(a,b,c,d)
+    return uint4(uint(a),uint(b),uint(c),uint(d))
