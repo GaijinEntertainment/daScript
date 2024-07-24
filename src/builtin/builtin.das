@@ -284,6 +284,21 @@ def erase(var Arr:array<auto(numT)>;at:int;count:int)
         _builtin_verify_locks(Arr)
     __builtin_array_erase_range(Arr,at,count,typeinfo(sizeof Arr[0]))
 
+
+def erase_if(var arr:array<auto(TT)>; blk:block<(key:TT):bool> | block<(var key:TT&):bool>)
+    static_if typeinfo(need_lock_check type<TT>)
+        _builtin_verify_locks(arr)
+
+    var i = length(arr)
+    while --i >= 0
+        if invoke(blk, arr[i])
+            let endIndex = i
+            while --i >= 0
+                if !invoke(blk, arr[i])
+                    break
+            __builtin_array_erase_range(arr, i + 1, endIndex - i, typeinfo(sizeof arr[0]))
+
+
 def remove_value(var arr : array<auto(TT)>|#; key : TT) : bool
     //! Removes the first occurrence of a specific object from the collection.
     let idx = find_index(arr, key)
