@@ -102,7 +102,7 @@ namespace das {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
         ft->alias = "ExprVarFlags";
         ft->argNames = { "local", "argument", "_block",
-            "thisBlock", "r2v", "r2cr", "write" };
+            "thisBlock", "r2v", "r2cr", "write", "under_clone" };
         return ft;
     }
 
@@ -116,7 +116,7 @@ namespace das {
     TypeDeclPtr makeExprFieldFieldFlags() {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
         ft->alias = "ExprFieldFieldFlags";
-        ft->argNames = { "r2v", "r2cr", "write", "no_promotion" };
+        ft->argNames = { "r2v", "r2cr", "write", "no_promotion", "under_clone" };
         return ft;
     }
 
