@@ -1502,9 +1502,7 @@ namespace das {
                                     if ( expr->underClone->rtti_isClone() ) {
                                         ((ExprClone *)expr->underClone)->cloneSet = cloneSet;
                                     } else if ( expr->underClone->rtti_isCopy() ) {
-                                        ((ExprCopy *)expr->underClone)->promoteToClone = true;
-                                        expr->underClone = nullptr;
-                                        reportAstChanged();
+                                        ((ExprCopy *)expr->underClone)->cloneSet = cloneSet;
                                     }
                                     continue;
                                 }
@@ -1517,9 +1515,7 @@ namespace das {
                                     if ( expr->underClone->rtti_isClone() ) {
                                         ((ExprClone *)expr->underClone)->cloneSet = cloneSet;
                                     } else if ( expr->underClone->rtti_isCopy() ) {
-                                        ((ExprCopy *)expr->underClone)->promoteToClone = true;
-                                        expr->underClone = nullptr;
-                                        reportAstChanged();
+                                        ((ExprCopy *)expr->underClone)->cloneSet = cloneSet;
                                     }
                                     continue;
                                 }
@@ -5055,10 +5051,10 @@ namespace das {
         }
         virtual ExpressionPtr visit ( ExprField * expr ) override {
             if ( !expr->value->type || expr->value->type->isAliasOrExpr() ) return Visitor::visit(expr);    // failed to infer
+            bool canMatchUnderClone = true;
             if ( expr->underClone ) { // we wait for the 'right' type to be infered
                 if ( !expr->underClone->right->type || expr->underClone->right->type->isAutoOrAlias() ) {
-                    program->failToCompile = true;
-                    return Visitor::visit(expr);
+                    canMatchUnderClone = false;
                 }
             }
             if ( expr->name.empty() ) {
@@ -5066,15 +5062,13 @@ namespace das {
                         expr->at, CompilationError::cant_get_field);
                 return Visitor::visit(expr);
             }
-            if ( !expr->no_promotion ) {
+            if ( !expr->no_promotion && canMatchUnderClone ) {
                 if ( expr->underClone ) {
                     if ( auto cloneSet = inferGenericOperator(".`"+expr->name+"`clone",expr->at,expr->value,expr->underClone->right) ) {
                         if ( expr->underClone->rtti_isClone() ) {
                             ((ExprClone *)expr->underClone)->cloneSet = cloneSet;
                         } else if ( expr->underClone->rtti_isCopy() ) {
-                            ((ExprCopy *)expr->underClone)->promoteToClone = true;
-                            expr->underClone = nullptr;
-                            reportAstChanged();
+                            ((ExprCopy *)expr->underClone)->cloneSet = cloneSet;
                         }
                         return Visitor::visit(expr);
                     }
@@ -5095,9 +5089,7 @@ namespace das {
                             if ( expr->underClone->rtti_isClone() ) {
                                 ((ExprClone *)expr->underClone)->cloneSet = cloneSet;
                             } else if ( expr->underClone->rtti_isCopy() ) {
-                                ((ExprCopy *)expr->underClone)->promoteToClone = true;
-                                expr->underClone = nullptr;
-                                reportAstChanged();
+                                ((ExprCopy *)expr->underClone)->cloneSet = cloneSet;
                             }
                             return Visitor::visit(expr);
                         }
@@ -5342,12 +5334,6 @@ namespace das {
             expr->argumentIndex = -1;
         }
         virtual ExpressionPtr visit ( ExprVar * expr ) override {
-            if ( expr->underClone ) { // we wait for the 'right' type to be infered
-                if ( !expr->underClone->right->type || expr->underClone->right->type->isAutoOrAlias() ) {
-                    program->failToCompile = true;
-                    return Visitor::visit(expr);
-                }
-            }
             // assume (that on the stack)
             for ( auto it = assume.rbegin(), its=assume.rend(); it!=its; ++it ) {
                 auto ita = *it;
@@ -5414,9 +5400,19 @@ namespace das {
                 reportAstChanged();
                 return make_smart<ExprField>(expr->at, forceAt(eW->with->clone(),expr->at), expr->name);
             }
-            if ( auto eP = hasMatchingWithProp(expr) ) {
-                reportAstChanged();
-                return eP;
+            // with prop
+            bool canMatchWithProp = true;
+            if ( expr->underClone ) { // we wait for the 'right' type to be infered
+                if ( !expr->underClone->right->type || expr->underClone->right->type->isAutoOrAlias() ) {
+                    canMatchWithProp = false;
+                    return Visitor::visit(expr);
+                }
+            }
+            if ( canMatchWithProp ) {
+                if ( auto eP = hasMatchingWithProp(expr) ) {
+                    reportAstChanged();
+                    return eP;
+                }
             }
             // static class method accessing static variables
             if ( func && func->isStaticClassMethod && func->classParent->hasStaticMembers ) {
@@ -5833,12 +5829,13 @@ namespace das {
                     var->underClone = expr;
                 }
             }
+            expr->cloneSet.reset();
             markNoDiscard(expr->right.get());
         }
         virtual ExpressionPtr visit ( ExprCopy * expr ) override {
-            if ( expr->promoteToClone ) {
+            if ( expr->cloneSet ) {
                 reportAstChanged();
-                return  make_smart<ExprClone>(expr->at, expr->left, expr->right);
+                return expr->cloneSet;   // we've been promoted from underneath
             }
             if ( !expr->left->type || !expr->right->type ) return Visitor::visit(expr);
             // infer
@@ -5879,8 +5876,13 @@ namespace das {
             markNoDiscard(expr->right.get());
         }
         virtual ExpressionPtr visit ( ExprClone * expr ) override {
-            if ( expr->cloneSet ) return expr->cloneSet;   // we've been promoted from underneath
-            if ( !expr->left->type || !expr->right->type ) return Visitor::visit(expr);
+            if ( expr->cloneSet ) {
+                reportAstChanged();
+                return expr->cloneSet;   // we've been promoted from underneath
+            }
+            if ( !expr->left->type || !expr->right->type ) {
+                return Visitor::visit(expr);
+            }
             // lets see if there is clone operator already (a user operator can ignore all the rules bellow)
             auto fnList = getCloneFunc(expr->left->type, expr->right->type);
             if ( fnList.size() ) {

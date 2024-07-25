@@ -1401,7 +1401,6 @@ namespace das {
 
     void ExprClone::serialize ( AstSerializer & ser ) {
         ExprOp2::serialize(ser);
-        ser << cloneSet;
     }
 
     void ExprOp3::serialize ( AstSerializer & ser ) {
@@ -2181,7 +2180,7 @@ namespace das {
     }
 
     uint32_t AstSerializer::getVersion () {
-        static constexpr uint32_t currentVersion = 31;
+        static constexpr uint32_t currentVersion = 32;
         return currentVersion;
     }
 
