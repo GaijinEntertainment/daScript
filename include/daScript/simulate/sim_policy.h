@@ -231,10 +231,10 @@ namespace  das {
         static __forceinline float Fract    ( float a, Context &, LineInfo * )          { return a - v_extract_x(v_floor(v_set_x(a))); }
         static __forceinline float Sqrt     ( float a, Context &, LineInfo * )          { return v_extract_x(v_sqrt_x(v_set_x(a))); }
         static __forceinline float RSqrt    ( float a, Context &, LineInfo * )          { return v_extract_x(v_rsqrt_x(v_set_x(a))); }
-        static __forceinline float RSqrtEst ( float a, Context &, LineInfo * )          { return v_extract_x(v_rsqrt_fast_x(v_set_x(a))); }
+        static __forceinline float RSqrtEst ( float a, Context &, LineInfo * )          { return v_extract_x(v_rsqrt_est_x(v_set_x(a))); }
         static __forceinline float Min      ( float a, float b, Context &, LineInfo * ) { return a < b ? a : b; }
         static __forceinline float Max      ( float a, float b, Context &, LineInfo * ) { return a > b ? a : b; }
-        static __forceinline float Sat      ( float a, Context &, LineInfo * )          { return a > 0 ? (a < 1 ? a : 1) : 0; }
+        static __forceinline float Sat      ( float a, Context &, LineInfo * )          { return a > 0 ? (a < 1.0f ? a : 1.0f) : 0.0f; }
         static __forceinline float Mad      ( float a, float b, float c, Context &, LineInfo * ) { return a*b + c; }
         static __forceinline float Lerp     ( float a, float b, float t, Context &, LineInfo * ) { return (b-a)*t +a; }
         static __forceinline float Clamp    ( float t, float a, float b, Context &, LineInfo * ) { return t>a ? (t<b ? t : b) : a; }
@@ -280,16 +280,16 @@ namespace  das {
         static __forceinline vec4f Floor    ( vec4f a, Context &, LineInfo * )          { return v_floor(a); }
         static __forceinline vec4f Ceil     ( vec4f a, Context &, LineInfo * )          { return v_ceil(a); }
         static __forceinline vec4f Fract    ( vec4f a, Context &, LineInfo * )          { return v_sub(a, v_floor(a)); }
-        static __forceinline vec4f Sqrt     ( vec4f a, Context &, LineInfo * )          { return v_sqrt4(a); }
-        static __forceinline vec4f RSqrt    ( vec4f a, Context &, LineInfo * )          { return v_rsqrt4(a); }
-        static __forceinline vec4f RSqrtEst ( vec4f a, Context &, LineInfo * )          { return v_rsqrt4_fast(a); }
+        static __forceinline vec4f Sqrt     ( vec4f a, Context &, LineInfo * )          { return v_sqrt(a); }
+        static __forceinline vec4f RSqrt    ( vec4f a, Context &, LineInfo * )          { return v_rsqrt(a); }
+        static __forceinline vec4f RSqrtEst ( vec4f a, Context &, LineInfo * )          { return v_rsqrt_est(a); }
         static __forceinline vec4f Min      ( vec4f a, vec4f b, Context &, LineInfo * ) { return v_min(a,b); }
         static __forceinline vec4f Max      ( vec4f a, vec4f b, Context &, LineInfo * ) { return v_max(a,b); }
-        static __forceinline vec4f Sat      ( vec4f a, Context &, LineInfo * )          { return v_min(v_max(a,v_zero()),v_splats(1.0f)); }
-        static __forceinline vec4f Clamp    ( vec4f a, vec4f r0, vec4f r1, Context &, LineInfo * ) { return v_max(v_min(a,r1), r0); }
+        static __forceinline vec4f Sat      ( vec4f a, Context &, LineInfo * )          { return v_saturate(a); }
+        static __forceinline vec4f Clamp    ( vec4f a, vec4f r0, vec4f r1, Context &, LineInfo * ) { return v_clamp(a,r0,r1); }
         static __forceinline vec4f Mad      ( vec4f a, vec4f b, vec4f c, Context &, LineInfo * ) { return v_madd(a,b,c); }
         static __forceinline vec4f MadS     ( vec4f a, vec4f b, vec4f c, Context &, LineInfo * ) { return v_madd(a,v_perm_xxxx(b),c); }
-        static __forceinline vec4f Lerp     ( vec4f a, vec4f b, vec4f t, Context &, LineInfo * ) { return v_madd(v_sub(b,a),t,a); }
+        static __forceinline vec4f Lerp     ( vec4f a, vec4f b, vec4f t, Context &, LineInfo * ) { return v_lerp_vec4f(t,a,b); }
 
         static __forceinline vec4f Exp   ( vec4f a, Context &, LineInfo * )          { return v_exp(a); }
         static __forceinline vec4f Log   ( vec4f a, Context &, LineInfo * )          { return v_log(a); }
