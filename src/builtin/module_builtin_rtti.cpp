@@ -740,6 +740,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(no_optimizations)>("no_optimizations");
             addField<DAS_BIND_MANAGED_FIELD(fail_on_no_aot)>("fail_on_no_aot");
             addField<DAS_BIND_MANAGED_FIELD(fail_on_lack_of_aot_export)>("fail_on_lack_of_aot_export");
+            addField<DAS_BIND_MANAGED_FIELD(no_fast_call)>("no_fast_call");
         // debugger
             addField<DAS_BIND_MANAGED_FIELD(debugger)>("debugger");
             addField<DAS_BIND_MANAGED_FIELD(debug_module)>("debug_module");
