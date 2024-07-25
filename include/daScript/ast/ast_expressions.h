@@ -469,10 +469,10 @@ namespace das
             struct {
                 bool allowCopyTemp : 1;
                 bool takeOverRightStack : 1;
-                bool promoteToClone : 1;
             };
             uint32_t copyFlags = 0;
         };
+        ExpressionPtr cloneSet; // only used during infer
     };
 
     // this moves one object to the other
@@ -503,7 +503,7 @@ namespace das
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual void serialize( AstSerializer & ser ) override;
         virtual bool rtti_isClone() const override { return true; }
-        ExpressionPtr cloneSet;
+        ExpressionPtr cloneSet; // only used during infer
     };
 
     // this only exists during parsing, and can't be
