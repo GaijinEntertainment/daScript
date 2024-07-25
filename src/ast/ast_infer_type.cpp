@@ -1502,7 +1502,7 @@ namespace das {
                                     if ( expr->underClone->rtti_isClone() ) {
                                         ((ExprClone *)expr->underClone)->cloneSet = cloneSet;
                                     } else if ( expr->underClone->rtti_isCopy() ) {
-                                        ((ExprCopy *)expr)->promoteToClone = true;
+                                        ((ExprCopy *)expr->underClone)->promoteToClone = true;
                                         expr->underClone = nullptr;
                                         reportAstChanged();
                                     }
@@ -1645,7 +1645,7 @@ namespace das {
 
         string saveAliasName;
 
-        virtual void preVisitAlias ( TypeDecl *, const string & name ) {
+        virtual void preVisitAlias ( TypeDecl *, const string & name ) override {
             saveAliasName = name;
         }
 
