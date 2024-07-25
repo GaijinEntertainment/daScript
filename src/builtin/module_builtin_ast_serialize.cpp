@@ -2084,6 +2084,7 @@ namespace das {
               << value.no_optimizations
               << value.fail_on_no_aot
               << value.fail_on_lack_of_aot_export
+              << value.no_fast_call
               << value.debugger
               << value.debug_module
               << value.profiler
@@ -2180,7 +2181,7 @@ namespace das {
     }
 
     uint32_t AstSerializer::getVersion () {
-        static constexpr uint32_t currentVersion = 33;
+        static constexpr uint32_t currentVersion = 34;
         return currentVersion;
     }
 
