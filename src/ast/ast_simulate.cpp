@@ -3046,7 +3046,7 @@ void Program::buildGMNLookup ( Context & context, TextWriter & logs ) {
             for(auto s2d : pm->annotationData ) {
                 auto it = context.tabAdLookup->find(s2d.first);
                 if ( it != context.tabAdLookup->end() ) {
-                    error("internal compiler error: annotation data hash collision " + s2d.second,
+                    error("internal compiler error: annotation data hash collision " + to_string(s2d.second),
                         "", "", LineInfo());
                     return;
                 }
