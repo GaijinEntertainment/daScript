@@ -1479,7 +1479,7 @@ namespace das {
             return nullptr;
         }
 
-        ExpressionPtr hasMatchingWithProp ( ExprVar * expr ) {
+        ExpressionPtr promoteToProperty ( ExprVar * expr, const ExpressionPtr & right ) {
             for ( auto it=with.rbegin(), its=with.rend(); it!=its; ++it ) {
                 auto eW = *it;
                 if ( auto eWT = eW->with->type ) {
@@ -1497,31 +1497,19 @@ namespace das {
                             TypeDecl::applyAutoContracts(derefV->type,eWT->firstType);
                             derefV->type->ref = true;
                             derefV->type->constant |= eWT->constant;
-                            if ( expr->underClone ) {
-                                if ( auto cloneSet = inferGenericOperator(".`"+expr->name+"`clone",expr->at,derefV,expr->underClone->right) ) {
-                                    if ( expr->underClone->rtti_isClone() ) {
-                                        ((ExprClone *)expr->underClone)->cloneSet = cloneSet;
-                                    } else if ( expr->underClone->rtti_isCopy() ) {
-                                        ((ExprCopy *)expr->underClone)->cloneSet = cloneSet;
-                                    }
-                                    continue;
-                                }
+                            if ( right ) {
+                                if ( auto cloneSet = inferGenericOperator(".`"+expr->name+"`clone",expr->at,derefV,right) ) return cloneSet;
+                            } else {
+                                if ( auto opE = inferGenericOperator(".`"+expr->name,expr->at,derefV,nullptr) ) return opE;
+                                if ( auto opE = inferGenericOperatorWithName(".",expr->at,derefV,expr->name) ) return opE;
                             }
-                            if ( auto opE = inferGenericOperator(".`"+expr->name,expr->at,derefV,nullptr) ) return opE;
-                            if ( auto opE = inferGenericOperatorWithName(".",expr->at,derefV,expr->name) ) return opE;
                         } else {
-                            if ( expr->underClone ) {
-                                if ( auto cloneSet = inferGenericOperator(".`"+expr->name+"`clone",expr->at,eW->with,expr->underClone->right) ) {
-                                    if ( expr->underClone->rtti_isClone() ) {
-                                        ((ExprClone *)expr->underClone)->cloneSet = cloneSet;
-                                    } else if ( expr->underClone->rtti_isCopy() ) {
-                                        ((ExprCopy *)expr->underClone)->cloneSet = cloneSet;
-                                    }
-                                    continue;
-                                }
+                            if ( right ) {
+                                if ( auto cloneSet = inferGenericOperator(".`"+expr->name+"`clone",expr->at,eW->with,right) ) return cloneSet;
+                            } else {
+                                if ( auto opE = inferGenericOperator(".`"+expr->name,expr->at,eW->with,nullptr) ) return opE;
+                                if ( auto opE = inferGenericOperatorWithName(".",expr->at,eW->with,expr->name) ) return opE;
                             }
-                            if ( auto opE = inferGenericOperator(".`"+expr->name,expr->at,eW->with,nullptr) ) return opE;
-                            if ( auto opE = inferGenericOperatorWithName(".",expr->at,eW->with,expr->name) ) return opE;
                         }
                     }
                 }
@@ -5049,54 +5037,51 @@ namespace das {
             }
             return true;
         }
-        virtual ExpressionPtr visit ( ExprField * expr ) override {
-            if ( !expr->value->type || expr->value->type->isAliasOrExpr() ) return Visitor::visit(expr);    // failed to infer
-            bool canMatchUnderClone = true;
-            if ( expr->underClone ) { // we wait for the 'right' type to be infered
-                if ( !expr->underClone->right->type || expr->underClone->right->type->isAutoOrAlias() ) {
-                    canMatchUnderClone = false;
+        ExpressionPtr promoteToProperty ( ExprField * expr, const ExpressionPtr & right ) {
+            if ( !expr->no_promotion && expr->value->type ) {
+                if ( right ) {
+                    if ( auto cloneSet = inferGenericOperator(".`"+expr->name+"`clone",expr->at,expr->value,right) ) return cloneSet;
+                    auto valT = expr->value->type;
+                    if ( valT->isPointer() && valT->firstType ) {
+                        auto derefV = make_smart<ExprPtr2Ref>(expr->at, expr->value);
+                        derefV->type = valT->firstType;
+                        TypeDecl::applyAutoContracts(derefV->type,valT->firstType);
+                        derefV->type->ref = true;
+                        derefV->type->constant |= valT->constant;
+                        if ( auto cloneSet = inferGenericOperator(".`"+expr->name+"`clone",expr->at,derefV,right) ) return cloneSet;
+                    }
+                } else {
+                    if ( auto opE = inferGenericOperator(".`"+expr->name,expr->at,expr->value,nullptr) ) return opE;
+                    if ( auto opE = inferGenericOperatorWithName(".",expr->at,expr->value,expr->name) ) return opE;
+                    auto valT = expr->value->type;
+                    if ( valT->isPointer() && valT->firstType ) {
+                        auto derefV = make_smart<ExprPtr2Ref>(expr->at, expr->value);
+                        derefV->type = valT->firstType;
+                        TypeDecl::applyAutoContracts(derefV->type,valT->firstType);
+                        derefV->type->ref = true;
+                        derefV->type->constant |= valT->constant;
+                        if ( auto opE = inferGenericOperator(".`"+expr->name,expr->at,derefV,nullptr) ) return opE;
+                        if ( auto opE = inferGenericOperatorWithName(".",expr->at,derefV,expr->name) ) return opE;
+                    }
                 }
             }
+            return nullptr;
+        }
+        virtual ExpressionPtr visit ( ExprField * expr ) override {
+            if ( !expr->value->type || expr->value->type->isAliasOrExpr() ) return Visitor::visit(expr);    // failed to infer
             if ( expr->name.empty() ) {
                 error("syntax error, expecting field after '.'", "", "",
                         expr->at, CompilationError::cant_get_field);
                 return Visitor::visit(expr);
             }
-            if ( !expr->no_promotion && canMatchUnderClone ) {
-                if ( expr->underClone ) {
-                    if ( auto cloneSet = inferGenericOperator(".`"+expr->name+"`clone",expr->at,expr->value,expr->underClone->right) ) {
-                        if ( expr->underClone->rtti_isClone() ) {
-                            ((ExprClone *)expr->underClone)->cloneSet = cloneSet;
-                        } else if ( expr->underClone->rtti_isCopy() ) {
-                            ((ExprCopy *)expr->underClone)->cloneSet = cloneSet;
-                        }
-                        return Visitor::visit(expr);
-                    }
+            if ( !expr->underClone ) {
+                if ( auto getProp = promoteToProperty(expr,nullptr) ) {
+                    reportAstChanged();
+                    return getProp;
                 }
-                if ( auto opE = inferGenericOperator(".`"+expr->name,expr->at,expr->value,nullptr) ) return opE;
-                if ( auto opE = inferGenericOperatorWithName(".",expr->at,expr->value,expr->name) ) return opE;
             }
             auto valT = expr->value->type;
             if ( valT->isPointer() ) {
-                if ( !expr->no_promotion && valT->firstType ) {
-                    auto derefV = make_smart<ExprPtr2Ref>(expr->at, expr->value);
-                    derefV->type = valT->firstType;
-                    TypeDecl::applyAutoContracts(derefV->type,valT->firstType);
-                    derefV->type->ref = true;
-                    derefV->type->constant |= valT->constant;
-                    if ( expr->underClone ) {
-                        if ( auto cloneSet = inferGenericOperator(".`"+expr->name+"`clone",expr->at,derefV,expr->underClone->right) ) {
-                            if ( expr->underClone->rtti_isClone() ) {
-                                ((ExprClone *)expr->underClone)->cloneSet = cloneSet;
-                            } else if ( expr->underClone->rtti_isCopy() ) {
-                                ((ExprCopy *)expr->underClone)->cloneSet = cloneSet;
-                            }
-                            return Visitor::visit(expr);
-                        }
-                    }
-                    if ( auto opE = inferGenericOperator(".`"+expr->name,expr->at,derefV,nullptr) ) return opE;
-                    if ( auto opE = inferGenericOperatorWithName(".",expr->at,derefV,expr->name) ) return opE;
-                }
                 expr->value = Expression::autoDereference(expr->value);
                 expr->unsafeDeref = func ? func->unsafeDeref : false;
                 if ( !valT->firstType ) {
@@ -5401,17 +5386,10 @@ namespace das {
                 return make_smart<ExprField>(expr->at, forceAt(eW->with->clone(),expr->at), expr->name);
             }
             // with prop
-            bool canMatchWithProp = true;
-            if ( expr->underClone ) { // we wait for the 'right' type to be infered
-                if ( !expr->underClone->right->type || expr->underClone->right->type->isAutoOrAlias() ) {
-                    canMatchWithProp = false;
-                    return Visitor::visit(expr);
-                }
-            }
-            if ( canMatchWithProp ) {
-                if ( auto eP = hasMatchingWithProp(expr) ) {
+            if ( !expr->underClone ) {
+                if ( auto getProp = promoteToProperty(expr,nullptr) ) {
                     reportAstChanged();
-                    return eP;
+                    return getProp;
                 }
             }
             // static class method accessing static variables
@@ -5823,19 +5801,18 @@ namespace das {
             if ( !strictProperties ) {
                 if ( expr->left->rtti_isField() ) {
                     auto field = static_pointer_cast<ExprField>(expr->left);
-                    field->underClone = expr;
+                    field->underClone = true;
                 } else if ( expr->left->rtti_isVar() ) {
                     auto var = static_pointer_cast<ExprVar>(expr->left);
-                    var->underClone = expr;
+                    var->underClone = true;
                 }
             }
-            expr->cloneSet.reset();
             markNoDiscard(expr->right.get());
         }
         virtual ExpressionPtr visit ( ExprCopy * expr ) override {
-            if ( expr->cloneSet ) {
+            if ( auto nExpr = promoteAssignmentToProperty(expr) ) {
                 reportAstChanged();
-                return expr->cloneSet;   // we've been promoted from underneath
+                return nExpr;
             }
             if ( !expr->left->type || !expr->right->type ) return Visitor::visit(expr);
             // infer
@@ -5867,18 +5844,41 @@ namespace das {
             Visitor::preVisit(expr);
             if ( expr->left->rtti_isField() ) {
                 auto field = static_pointer_cast<ExprField>(expr->left);
-                field->underClone = expr;
+                field->underClone = true;
             } else if ( expr->left->rtti_isVar() ) {
                 auto var = static_pointer_cast<ExprVar>(expr->left);
-                var->underClone = expr;
+                var->underClone = true;
             }
-            expr->cloneSet.reset();
             markNoDiscard(expr->right.get());
         }
+        ExpressionPtr promoteAssignmentToProperty ( ExprOp2 * expr ) {
+            if ( expr->right->type ) {
+                if ( expr->left->rtti_isVar() ) {
+                    ExprVar * evar = (ExprVar*)(expr->left.get());
+                    if ( auto cloneSet = promoteToProperty(evar, expr->right.get()) ) {
+                        return cloneSet;
+                    }
+                    if ( auto propGet = promoteToProperty(evar, nullptr) ) {
+                        expr->left = propGet;
+                        return expr;
+                    }
+                } else if ( expr->left->rtti_isField() ) {
+                    ExprField * efield = (ExprField*)(expr->left.get());
+                    if ( auto cloneSet = promoteToProperty(efield, expr->right.get()) ) {
+                        return cloneSet;
+                    }
+                    if ( auto propGet = promoteToProperty(efield, nullptr) ) {
+                        expr->left = propGet;
+                        return expr;
+                    }
+                }
+            }
+            return nullptr;
+        }
         virtual ExpressionPtr visit ( ExprClone * expr ) override {
-            if ( expr->cloneSet ) {
+            if ( auto nExpr = promoteAssignmentToProperty(expr) ) {
                 reportAstChanged();
-                return expr->cloneSet;   // we've been promoted from underneath
+                return nExpr;
             }
             if ( !expr->left->type || !expr->right->type ) {
                 return Visitor::visit(expr);

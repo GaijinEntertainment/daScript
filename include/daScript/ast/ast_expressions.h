@@ -230,7 +230,6 @@ namespace das
         string              name;
         VariablePtr         variable;
         ExprBlock *         pBlock = nullptr;
-        ExprOp2 *           underClone = nullptr;
         int                 argumentIndex = -1;
         union {
             struct {
@@ -241,6 +240,7 @@ namespace das
                 bool        r2v  : 1;       // built-in ref2value   (read-only)
                 bool        r2cr : 1;       // built-in ref2contref (read-only, but stay ref)
                 bool        write : 1;
+                bool        underClone : 1; // this variable is [var] := expr or [var] = expr
             };
             uint32_t varFlags = 0;
         };
@@ -281,7 +281,6 @@ namespace das
         const Structure::FieldDeclaration * field = nullptr;
         int             fieldIndex = -1;
         TypeAnnotationPtr annotation;
-        ExprOp2 *       underClone = nullptr;
         union {
             struct {
                 bool        unsafeDeref : 1;
@@ -295,6 +294,7 @@ namespace das
                 bool        r2cr : 1;
                 bool        write : 1;
                 bool        no_promotion : 1;
+                bool        underClone : 1; // this field is [foo.field] := expr or [fool.field] = expr
             };
             uint32_t fieldFlags = 0;
         };
@@ -472,7 +472,6 @@ namespace das
             };
             uint32_t copyFlags = 0;
         };
-        ExpressionPtr cloneSet; // only used during infer
     };
 
     // this moves one object to the other
@@ -503,7 +502,6 @@ namespace das
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual void serialize( AstSerializer & ser ) override;
         virtual bool rtti_isClone() const override { return true; }
-        ExpressionPtr cloneSet; // only used during infer
     };
 
     // this only exists during parsing, and can't be
