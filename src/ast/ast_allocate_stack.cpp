@@ -82,6 +82,7 @@ namespace das {
             log = prog->options.getBoolOption("log_stack");
             log_var_scope = prog->options.getBoolOption("log_var_scope");
             optimize = prog->getOptimize();
+            noFastCall = prog->options.getBoolOption("no_fast_call", prog->policies.no_fast_call);
             if( log ) {
                 logs << "\nSTACK INFORMATION in " << prog->thisModule->name << ":\n";
             }
@@ -98,6 +99,7 @@ namespace das {
         bool                    optimize = false;
         TextWriter &            logs;
         bool                    inStruct = false;
+        bool                    noFastCall = false;
     protected:
         uint32_t allocateStack ( uint32_t size ) {
             auto result = stackTop;
@@ -164,7 +166,7 @@ namespace das {
             func->totalStackSize = das::max(func->totalStackSize, stackTop);
             // detecting fastcall
             func->fastCall = false;
-            if ( !program->getDebugger() && !program->getProfiler() ) {
+            if ( !program->getDebugger() && !program->getProfiler() && !noFastCall ) {
                 if ( !func->exports && !func->addr && func->totalStackSize==sizeof(Prologue) && func->arguments.size()<=32 ) {
                     if (func->body->rtti_isBlock()) {
                         auto block = static_pointer_cast<ExprBlock>(func->body);

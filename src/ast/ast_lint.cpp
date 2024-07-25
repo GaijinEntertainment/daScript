@@ -819,6 +819,7 @@ namespace das {
         "optimize",                     Type::tBool,
         "fusion",                       Type::tBool,
         "remove_unused_symbols",        Type::tBool,
+        "no_fast_call",                 Type::tBool,
     // language
         "always_export_initializer",    Type::tBool,
         "infer_time_folding",           Type::tBool,

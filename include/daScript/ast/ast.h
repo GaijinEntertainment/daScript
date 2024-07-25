@@ -1411,6 +1411,7 @@ namespace das
         bool fail_on_lack_of_aot_export = false;        // remove_unused_symbols = false is missing in the module, which is passed to AOT
         bool log_compile_time = false;                  // if true, then compile time will be printed at the end of the compilation
         bool log_total_compile_time = false;            // if true, then detailed compile time will be printed at the end of the compilation
+        bool no_fast_call = false;                      // disable fastcall
     // debugger
         //  when enabled
         //      1. disables [fastcall]
