@@ -403,7 +403,12 @@ namespace das
             // its ok to generate simplified set here
             auto left = lE->simulate(context);
             auto right = rE->simulate(context);
-            return context.code->makeValueNode<SimNode_Set>(rightType.baseType, at, left, right);
+            if ( rightType.baseType == Type::tHandle ) {
+                // this is a value type, we need to copy it
+                return ((TypeAnnotation*)(rightType.annotation))->simulateCopy(context, at, left, right);
+            } else {
+                return context.code->makeValueNode<SimNode_Set>(rightType.baseType, at, left, right);
+            }
         }
     }
 
@@ -2364,6 +2369,10 @@ namespace das
         if ( left->type->isHandle() ) {
             auto lN = left->simulate(context);
             auto rN = right->simulate(context);
+            auto ta = ((TypeAnnotation *)(right->type->annotation));
+            if ( !ta->isRefType() && right->type->isRef() ) {
+                rN = ta->simulateRef2Value(context, at, rN);
+            }
             retN = left->type->annotation->simulateClone(context, at, lN, rN);
         } else if ( left->type->canCopy() ) {
             retN = makeCopy(at, context, left, right );
@@ -2491,9 +2500,13 @@ namespace das
         }
         DAS_VERIFYF(simSubE, "internal error. can't be zero");
         if ( moveSemantics ) {
-            // TODO: support by-value annotations?
             if ( subexpr->type->isRef() ) {
-                return context.code->makeValueNode<SimNode_ReturnAndMoveR2V>(subexpr->type->baseType, at, simSubE);
+                if ( subexpr->type->isHandle() && !subexpr->type->annotation->isRefType() ) {
+                    auto r2v = subexpr->type->annotation->simulateRef2Value(context, at, simSubE);
+                    return context.code->makeNode<SimNode_Return>(at, r2v);
+                } else {
+                    return context.code->makeValueNode<SimNode_ReturnAndMoveR2V>(subexpr->type->baseType, at, simSubE);
+                }
             } else {
                 return context.code->makeNode<SimNode_Return>(at, simSubE);
             }
