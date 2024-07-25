@@ -1,7 +1,6 @@
 //
-// Dagor Engine 6.5
-// Copyright (C) 2023  Gaijin Games KFT.  All rights reserved
-// (for conditions of use see prog/license.txt)
+// Dagor Engine 6.5 - 1st party libs
+// Copyright (C) Gaijin Games KFT.  All rights reserved.
 //
 #pragma once
 
@@ -52,8 +51,28 @@
 #define _ATAN_EST_S2        0.68193064729268275701e1f
 #define _ATAN_EST_S3        0.28205206687035841409e2f
 
+VECTORCALL VECMATH_FINLINE vec4f v_deg_to_rad(vec4f deg)
+{
+  return v_mul(deg, v_splats(float(M_PI / 180.0)));
+}
+
+VECTORCALL VECMATH_FINLINE vec4f v_rad_to_deg(vec4f rad)
+{
+  return v_mul(rad, v_splats(float(180.0 / M_PI)));
+}
+
+VECTORCALL VECMATH_FINLINE vec4f v_norm_s_angle(vec4f angle)
+{
+  return v_sub(angle, v_mul(v_floor(v_mul(v_add(angle, V_C_PI), v_rcp(V_C_TWOPI))), V_C_TWOPI));
+}
+
+VECTORCALL VECMATH_FINLINE vec4f v_sin_from_cos(vec4f c) { return v_sqrt(v_sub(V_C_ONE, v_sqr(c))); }
+VECTORCALL VECMATH_FINLINE vec4f v_cos_from_sin(vec4f s) { return v_sin_from_cos(s); }
+VECTORCALL VECMATH_FINLINE vec4f v_sin_from_cos_x(vec4f c) { return v_sqrt_x(v_sub_x(V_C_ONE, v_sqr_x(c))); }
+VECTORCALL VECMATH_FINLINE vec4f v_cos_from_sin_x(vec4f s) { return v_sin_from_cos_x(s); }
+
 // calculates 4 in ~2.14x speed of win libc implementation for 1, with same precision
-VECTORCALL VECMATH_FINLINE void v_sincos4(vec4f ang, vec4f& s, vec4f& c)
+VECTORCALL VECMATH_FINLINE void v_sincos(vec4f ang, vec4f& s, vec4f& c)
 {
   vec4f xl, xl2, xl3;
   vec4i q;
@@ -100,7 +119,7 @@ VECTORCALL VECMATH_FINLINE void v_sincos4(vec4f ang, vec4f& s, vec4f& c)
 VECTORCALL VECMATH_FINLINE vec4f v_sin(vec4f ang)
 {
   vec4f s, c;
-  v_sincos4(ang, s, c);
+  v_sincos(ang, s, c);
   return s;
 }
 
@@ -108,7 +127,7 @@ VECTORCALL VECMATH_FINLINE vec4f v_sin(vec4f ang)
 VECTORCALL VECMATH_FINLINE vec4f v_cos(vec4f ang)
 {
   vec4f s, c;
-  v_sincos4(ang, s, c);
+  v_sincos(ang, s, c);
   return c;
 }
 
@@ -159,7 +178,7 @@ VECTORCALL VECMATH_FINLINE vec4f v_asin(vec4f ang)
   vec4f cmp = v_cmp_ge(x, V_C_HALF);
 
   vec4f z1 = v_mul(V_C_HALF, v_sub(V_C_ONE, x));
-  vec4f x1 = v_sqrt4(z1);
+  vec4f x1 = v_sqrt(z1);
   vec4f z2 = v_mul(x, x);
 
   vec4f z = v_sel(z2, z1, cmp);
@@ -192,7 +211,7 @@ VECTORCALL VECMATH_FINLINE vec4f v_acos(vec4f ang)
   x1 = v_and(polyMask1, x1);
   x2 = v_and(polyMask2, x2);
   vec4f x = v_or(x1, x2);
-  x = v_sqrt4(v_mul(V_C_HALF, x));
+  x = v_sqrt(v_mul(V_C_HALF, x));
 
   vec4f polyMask3 = v_or(polyMask1, polyMask2);
   vec4f x3 = v_andnot(polyMask3, ang);
@@ -287,53 +306,35 @@ VECTORCALL VECMATH_INLINE  vec4f v_atan_est(vec4f x)  // any x
 // calculates 4 in ~1.47x speed of win libc implementation for 1, with same precision
 VECTORCALL VECMATH_FINLINE vec4f v_atan2(vec4f y, vec4f x)
 {
-  vec4f maskYgt0 = v_cmp_ge(y, v_zero());
-  vec4f maskYlt0 = v_cmp_ge(v_zero(), y);
-  vec4f tmp1 = v_and(maskYgt0, V_C_HALFPI);
-  vec4f tmp2 = v_and(maskYlt0, V_C_HALFPI);
-  vec4f val = v_sub(tmp1, tmp2);
-
-  vec4f maskXlt0 = v_cmp_ge(v_zero(), x);
-  maskYgt0 = v_andnot(maskYlt0, maskXlt0);
-  maskYlt0 = v_and(maskYlt0, maskXlt0);
-  tmp1 = v_and(maskYgt0, V_C_PI);
-  tmp2 = v_and(maskYlt0, V_C_PI);
-  vec4f offs = v_sub(tmp1, tmp2);
-
   vec4f maskXeq0 = v_is_unsafe_divisor(x);
+  vec4f maskXlt0 = v_cast_vec4f(v_cmp_lti(v_cast_vec4i(x), v_zeroi()));
+  vec4f maskYeq0 = v_cmp_eq(y, v_zero());
+  vec4f signY = v_and(y, V_CI_SIGN_MASK);
+  vec4f zeroXres = v_or(signY, v_sel(V_C_HALFPI, v_and(V_C_PI, maskXlt0), maskYeq0));
+  vec4f offs = v_or(signY, v_and(V_C_PI, maskXlt0));
   vec4f atan = v_atan(v_div(y, x));
-
   atan = v_add(atan, offs);
-  return v_sel(atan, val, maskXeq0);
+  return v_sel(atan, zeroXres, maskXeq0);
 }
 
 // fast approx atan2 version. |error| is < 0.0004
 // calculates 4 in ~1.47x+ (untested, faster than v_atan2) speed of win libc implementation for 1
-VECTORCALL VECMATH_INLINE  vec4f v_atan2_est(vec4f y, vec4f x)
+VECTORCALL VECMATH_INLINE vec4f v_atan2_est(vec4f y, vec4f x)
 {
-  vec4f maskYgt0 = v_cmp_ge(y, v_zero());
-  vec4f maskYlt0 = v_cmp_ge(v_zero(), y);
-  vec4f tmp1 = v_and(maskYgt0, V_C_HALFPI);
-  vec4f tmp2 = v_and(maskYlt0, V_C_HALFPI);
-  vec4f val = v_sub(tmp1, tmp2);
-
-  vec4f maskXlt0 = v_cmp_ge(v_zero(), x);
-  maskYgt0 = v_andnot(maskYlt0, maskXlt0);
-  maskYlt0 = v_and(maskYlt0, maskXlt0);
-  tmp1 = v_and(maskYgt0, V_C_PI);
-  tmp2 = v_and(maskYlt0, V_C_PI);
-  vec4f offs = v_sub(tmp1, tmp2);
-
   vec4f maskXeq0 = v_is_unsafe_divisor(x);
+  vec4f maskXlt0 = v_cast_vec4f(v_cmp_lti(v_cast_vec4i(x), v_zeroi()));
+  vec4f maskYneq0 = v_cmp_neq(y, v_zero());
+  vec4f signY = v_and(y, V_CI_SIGN_MASK);
+  vec4f zeroXres = v_or(signY, v_and(V_C_HALFPI, maskYneq0));
+  vec4f offs = v_or(signY, v_and(V_C_PI, maskXlt0));
   vec4f atan = v_atan_est(v_div(y, x));
-
   atan = v_add(atan, offs);
-  return v_sel(atan, val, maskXeq0);
+  return v_sel(atan, zeroXres, maskXeq0);
 }
 
 VECTORCALL VECMATH_FINLINE void v_sincos_x(vec4f ang, vec4f& s, vec4f& c)
 {
-  v_sincos4(ang, s, c);
+  v_sincos(ang, s, c);
 }
 
 VECTORCALL VECMATH_FINLINE vec4f v_sin_x(vec4f ang)
