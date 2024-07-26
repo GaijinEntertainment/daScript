@@ -5858,7 +5858,7 @@ namespace das {
             markNoDiscard(expr->right.get());
         }
         ExpressionPtr promoteAssignmentToProperty ( ExprOp2 * expr ) {
-            if ( expr->right->type ) {
+            if ( expr->right->type && !expr->right->type->isAutoOrAlias() ) {
                 if ( expr->left->rtti_isVar() ) {
                     ExprVar * evar = (ExprVar*)(expr->left.get());
                     if ( auto cloneSet = promoteToProperty(evar, expr->right.get()) ) {
