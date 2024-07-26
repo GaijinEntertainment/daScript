@@ -4359,6 +4359,12 @@ namespace das {
             if ( expr->type && expr->initializer && !expr->name.empty() ) {
                 auto resultType = expr->type;
                 expr->func = inferFunctionCall(expr).get();
+                if ( !expr->func && expr->typeexpr->baseType==Type::tStructure ) {
+                    auto saveName = expr->name;
+                    expr->name = "_::" + expr->typeexpr->structType->name;
+                    expr->func = inferFunctionCall(expr).get();
+                    if ( !expr->func ) expr->name = saveName;
+                }
                 swap ( resultType, expr->type );
                 if ( expr->func ) {
                     if ( !expr->type->firstType->isSameType(*resultType, RefMatters::yes, ConstMatters::yes, TemporaryMatters::yes) ) {
@@ -7874,8 +7880,9 @@ namespace das {
                             if ( expr->arguments.size()==0 ) {
                                 expr->name = aliasT->structType->name;
                                 tryMakeStructureCtor (aliasT->structType, true);
-                                reportAstChanged();
+
                             } else {
+
                                 error("can only generate default structure constructor without arguments",
                                     "", "", expr->at, CompilationError::invalid_argument_count);
                             }
