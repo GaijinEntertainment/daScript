@@ -3235,7 +3235,15 @@ make_dim
     ;
 
 make_dim_decl
-    :   BRABRAB [loc] type_declaration_no_options[mkt] make_dim[mka] optional_trailing_semicolon_sqr_sqr {
+    :   '[' [loc] expr_list[arguments] optional_comma ']' {
+        auto mka = make_smart<ExprMakeArray>(tokAt(scanner,@loc));
+        mka->values = sequenceToList($arguments);
+        mka->makeType = make_smart<TypeDecl>(Type::autoinfer);
+        auto tam = yyextra->g_Program->makeCall(tokAt(scanner,@loc),"to_array_move");
+        tam->arguments.push_back(mka);
+        $$ = tam;
+    }
+    |   BRABRAB [loc] type_declaration_no_options[mkt] make_dim[mka] optional_trailing_semicolon_sqr_sqr {
         ((ExprMakeArray *)$mka)->makeType = TypeDeclPtr($mkt);
         $mka->at = tokAt(scanner,@loc);
         $$ = $mka;
@@ -3343,8 +3351,17 @@ array_comprehension_where
     |   ';' DAS_WHERE expr[clause]  { $$ = $clause; }
     ;
 
+optional_comma
+    :
+    |   ','
+    ;
+
+
 array_comprehension
-    :   BRABRAB DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' expr[subexpr] array_comprehension_where[where] ']' ']' [forend] {
+    :   '[' DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' expr[subexpr] array_comprehension_where[where] ']' [forend] {
+        $$ = ast_arrayComprehension(scanner,tokAt(scanner,@loc),$iters,$srcs,$subexpr,$where,tokRangeAt(scanner,@subexpr,@forend),false);
+    }
+    |   BRABRAB DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' expr[subexpr] array_comprehension_where[where] ']' ']' [forend] {
         $$ = ast_arrayComprehension(scanner,tokAt(scanner,@loc),$iters,$srcs,$subexpr,$where,tokRangeAt(scanner,@subexpr,@forend),true);
     }
     |   BRACBRB DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' expr[subexpr] array_comprehension_where[where] '}' ']' [forend] {
