@@ -446,6 +446,7 @@
 %type <pExpression>     expr_type_decl
 %type <pExpression>     expr_cast
 %type <pExpression>     expr_block
+%type <pExpression>     expr_full_block
 %type <pExpression>     expr_named_call
 %type <pExpression>     expression_any
 %type <pExpression>     expr_numeric_const
@@ -1606,6 +1607,13 @@ expr_block
     }
     ;
 
+expr_full_block
+    :   block_or_lambda[bal] optional_annotation_list[annL] optional_capture_list[clist] optional_function_argument_list[list]
+                                optional_function_type[result] block_or_simple_block[block] {
+        $$ = ast_makeBlock(scanner,$bal,$annL,$clist,$list,$result,$block,tokAt(scanner,@block),tokAt(scanner,@annL));
+    }
+    ;
+
 expr_numeric_const
     :   INTEGER[const]                        { $$ = new ExprConstInt(tokAt(scanner,@const),(int32_t)$const); }
     |   UNSIGNED_INTEGER[const]               { $$ = new ExprConstUInt(tokAt(scanner,@const),(uint32_t)$const); }
@@ -1864,7 +1872,7 @@ expr
     |   expr_new[subexpr]                       { $$ = $subexpr; }
     |   expr_method_call[subexpr]               { $$ = $subexpr; }
     |   expr_named_call[subexpr]                { $$ = $subexpr; }
-    |   expr_block[subexpr]                     { $$ = $subexpr; }
+    |   expr_full_block[subexpr]                { $$ = $subexpr; }
     |   expr[fncall] LPIPE[loc] expr[arg]       { $$ = ast_lpipe(scanner,$fncall,$arg,tokAt(scanner,@loc)); }
     |   expr[arg] RPIPE[loc] expr[fncall]       { $$ = ast_rpipe(scanner,$arg,$fncall,tokAt(scanner,@loc)); }
 
@@ -3309,7 +3317,15 @@ expr_map_tuple_list
     ;
 
 make_table_decl
-    :   CBRCBRB [loc] make_table[mka] optional_trailing_semicolon_cur_cur {
+    :   '{' [loc] expr_map_tuple_list[arguments] optional_comma '}' {
+        auto mka = make_smart<ExprMakeArray>(tokAt(scanner,@loc));
+        mka->values = sequenceToList($arguments);
+        mka->makeType = make_smart<TypeDecl>(Type::autoinfer);
+        auto ttm = yyextra->g_Program->makeCall(tokAt(scanner,@loc),"to_table_move");
+        ttm->arguments.push_back(mka);
+        $$ = ttm;
+    }
+    |   CBRCBRB [loc] make_table[mka] optional_trailing_semicolon_cur_cur {
         auto mkt = make_smart<TypeDecl>(Type::autoinfer);
         mkt->dim.push_back(TypeDecl::dimAuto);
         ((ExprMakeArray *)$mka)->makeType = mkt;

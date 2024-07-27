@@ -526,7 +526,7 @@ def generate_maybe_repeat(var gen: ParserGenerator; var rule_: Rule_?): array<Ex
         var inscope rule_code <- gen |> with_context("__repetition__") <|
             return <- gen |> generate(rule_.rule)
 
-        rule_code |> append_block_new <| (qmacro_block <| {
+        rule_code |> append_block_new <| (qmacro_block <| $ {
             return_skip_lockcheck <| [[auto true, 0, parser.index]];
             return <- [[auto true, 0, parser.index]];
         })
@@ -549,7 +549,7 @@ def generate_maybe_repeat(var gen: ParserGenerator; var rule_: Rule_?): array<Ex
     var inscope rule_code <- gen |> with_context("__repetition__") <|
         return <- gen |> generate(rule_.rule)
 
-    rule_code |> append_block_new <| (qmacro_block <| {
+    rule_code |> append_block_new <| (qmacro_block <| $ {
         $i(result_handle) |> emplace <| temp_name;
         return_skip_lockcheck <| [[auto true, 0, 0]];
         return <- [[auto true, 0, 0]];
@@ -574,7 +574,7 @@ def generate_not(var gen: ParserGenerator; var rule_: Rule_?): array<ExpressionP
     var inscope rule_code <- gen |> with_context("__PEEK__") <|
         return <- gen |> generate(rule_.rule)
 
-    rule_code |> append_block_new <| (qmacro_block <| {
+    rule_code |> append_block_new <| (qmacro_block <| $ {
         return_skip_lockcheck <| [[auto true, 0, parser.index]];
         return <- [[auto true, 0, parser.index]];
     })
@@ -613,7 +613,7 @@ def generate_and(var gen: ParserGenerator; var rule_: Rule_?): array<ExpressionP
     var inscope rule_code <- gen |> with_context("__PEEK__") <|
         return <- gen |> generate(rule_.rule)
 
-    rule_code |> append_block_new <| (qmacro_block <| {
+    rule_code |> append_block_new <| (qmacro_block <| $ {
         return_skip_lockcheck <| [[auto true, 0, parser.index]];
         return <- [[auto true, 0, parser.index]];
     })
@@ -649,7 +649,7 @@ def generate_repeat(var gen: ParserGenerator; var rule_: Rule_?): array<Expressi
         var inscope rule_code <- gen |> with_context("__repetition__") <|
             return <- gen |> generate(rule_.rule)
 
-        rule_code |> append_block_new <| (qmacro_block <| {
+        rule_code |> append_block_new <| (qmacro_block <| $ {
             return_skip_lockcheck <| [[auto true, 0, parser.index]];
             return <- [[auto true, 0, parser.index]];
         })
@@ -685,7 +685,7 @@ def generate_repeat(var gen: ParserGenerator; var rule_: Rule_?): array<Expressi
     var inscope rule_code <- gen |> with_context("__repetition__") <|
         return <- gen |> generate(rule_.rule)
 
-    rule_code |> append_block_new <| (qmacro_block <| {
+    rule_code |> append_block_new <| (qmacro_block <| $ {
         $i(result_handle) |> emplace <| temp_name;
         return_skip_lockcheck <| [[auto true, 0, parser.index]];
         return <- [[auto true, 0, parser.index]];
@@ -840,7 +840,7 @@ def generate_option(var gen: ParserGenerator; var rule_: Rule_?): array<Expressi
     var inscope rule_code <- gen |> with_context("__option__") <|
         return <- gen |> generate(rule_.rule)
 
-    rule_code |> append_block_new <| (qmacro_block <| {
+    rule_code |> append_block_new <| (qmacro_block <| $ {
         $i(result_handle) |> emplace <| temp_name;
         return_skip_lockcheck <| [[auto false, 0, 0]];
         return <- [[auto false, 0, 0]];
@@ -978,7 +978,7 @@ def generate_terminal(var gen: ParserGenerator; var terminal: Terminal): Express
 
             // Get the currect charachter from the stream
             var inscope rule_code: array<ExpressionPtr>
-            rule_code |> append_block_new <| (qmacro_block <| {
+            rule_code |> append_block_new <| (qmacro_block <| $ {
                 let ch = parser |> get_current_char;
                 return ch != -1 && $v(ranges.chars)[ch];
             })
