@@ -8351,6 +8351,10 @@ namespace das {
                     error(expr->makeType->describe() + " is not a struct, but a variant", "", "",
                         expr->at, CompilationError::invalid_type);
                     return Visitor::visit(expr);
+                } else if ( expr->forceTuple ) {
+                    error(expr->makeType->describe() + " is not a tuple, but a variant", "", "",
+                        expr->at, CompilationError::invalid_type);
+                    return Visitor::visit(expr);
                 }
                 if ( expr->block ) {
                     error("[[variant]] can't have where closure",  "", "",
@@ -8564,6 +8568,10 @@ namespace das {
             }
             if ( expr->forceVariant && !(expr->makeType->baseType==Type::tVariant) ) {
                 error(expr->type->describe() + " is not a variant", "", "",
+                    expr->at, CompilationError::invalid_type);
+            }
+            if ( expr->forceTuple && !(expr->makeType->baseType==Type::tTuple) ) {
+                error(expr->type->describe() + " is not a tuple", "", "",
                     expr->at, CompilationError::invalid_type);
             }
             verifyType(expr->type);

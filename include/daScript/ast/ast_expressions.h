@@ -1397,6 +1397,7 @@ namespace das
                 bool forceClass : 1;
                 bool forceStruct : 1;
                 bool forceVariant : 1;
+                bool forceTuple : 1;
             };
             uint32_t makeStructFlags = 0;
         };
