@@ -116,7 +116,7 @@ namespace das {
     //          if where ....
     //              push(temp, subexpr)
     //      return temp
-    ExpressionPtr generateComprehension ( ExprArrayComprehension * expr ) {
+    ExpressionPtr generateComprehension ( ExprArrayComprehension * expr, bool tableSyntax ) {
         auto compName = "__acomp_" + to_string(expr->at.line);
         auto pClosure = make_smart<ExprBlock>();
         pClosure->at = expr->subexpr->at;
@@ -190,7 +190,13 @@ namespace das {
         pVal->name = compName;
         auto pRet = make_smart<ExprReturn>();
         pRet->at = expr->at;
-        pRet->subexpr = pVal;
+        if ( tableSyntax ) {
+            auto ttM = make_smart<ExprCall>(expr->at, "to_table_move");
+            ttM->arguments.push_back(pVal);
+            pRet->subexpr = ttM;
+        } else {
+            pRet->subexpr = pVal;
+        }
         pRet->moveSemantics = true;
         pRet->fromComprehension = true;
         pRet->skipLockCheck = true;

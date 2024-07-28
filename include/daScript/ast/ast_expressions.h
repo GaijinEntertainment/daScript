@@ -1457,6 +1457,7 @@ namespace das
         ExpressionPtr   exprWhere;
         ExpressionPtr   subexpr;
         bool            generatorSyntax = false;
+        bool            tableSyntax = false;
     };
 
     struct ExprTypeDecl : Expression {

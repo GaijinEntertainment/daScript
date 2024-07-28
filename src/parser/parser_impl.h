@@ -68,7 +68,7 @@ namespace das {
     void runFunctionAnnotations ( yyscan_t scanner, DasParserState * extra, Function * func, AnnotationList * annL, const LineInfo & at );
 
     Expression * ast_arrayComprehension (yyscan_t scanner, const LineInfo & loc, vector<VariableNameAndPosition> * iters,
-        Expression * srcs, Expression * subexpr, Expression * where, const LineInfo & forend, bool genSyntax   );
+        Expression * srcs, Expression * subexpr, Expression * where, const LineInfo & forend, bool genSyntax, bool tableSyntax );
     Structure * ast_structureName ( yyscan_t scanner, bool sealed, string * name, const LineInfo & atName,
         string * parent, const LineInfo & atParent );
     void ast_structureDeclaration (  yyscan_t scanner, AnnotationList * annL, const LineInfo & loc, Structure * ps,

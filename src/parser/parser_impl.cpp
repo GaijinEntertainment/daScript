@@ -152,7 +152,7 @@ namespace das {
     }
 
     Expression * ast_arrayComprehension ( yyscan_t scanner, const LineInfo & loc, vector<VariableNameAndPosition> * iters,
-        Expression * srcs, Expression * subexpr, Expression * where, const LineInfo & forend, bool genSyntax   ) {
+        Expression * srcs, Expression * subexpr, Expression * where, const LineInfo & forend, bool genSyntax, bool tableSyntax ) {
         auto pFor = make_smart<ExprFor>(loc);
         pFor->visibility = forend;
         for ( const auto & np : *iters ) {
@@ -169,6 +169,7 @@ namespace das {
         pFor->sources = sequenceToList(srcs);
         auto pAC = new ExprArrayComprehension(loc);
         pAC->generatorSyntax = genSyntax;
+        pAC->tableSyntax = tableSyntax;
         pAC->exprFor = pFor;
         pAC->subexpr = ExpressionPtr(subexpr);
         if ( where ) {
