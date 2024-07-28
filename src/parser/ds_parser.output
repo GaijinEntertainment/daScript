@@ -560,7 +560,7 @@ Grammar
   415     | "--" expr
   416     | expr "++"
   417     | expr "--"
-  418     | '(' expr ')'
+  418     | '(' expr_list ')'
   419     | expr '[' expr ']'
   420     | expr '.' '[' expr ']'
   421     | expr "?[" expr ']'
@@ -1634,7 +1634,7 @@ Nonterminals, with rules where they appear
         on right: 452
     expr_list <pExpression> (312)
         on left: 307 308
-        on right: 76 244 266 271 272 308 359 361 374 427 429 472 775 778 781 784 785 788 802 803 804
+        on right: 76 244 266 271 272 308 359 361 374 418 427 429 472 775 778 781 784 785 788 802 803 804
     block_or_simple_block <pExpression> (313)
         on left: 309 310 311
         on right: 324 325
@@ -1700,7 +1700,7 @@ Nonterminals, with rules where they appear
         on right: 377
     expr <pExpression> (334)
         on left: 378 379 380 381 382 383 384 385 386 387 388 389 390 391 392 393 394 395 396 397 398 399 400 401 402 403 404 405 406 407 408 409 410 411 412 413 414 415 416 417 418 419 420 421 422 423 424 425 426 427 428 429 430 431 432 433 434 435 436 439 440 441 442 445 446 447 450 451 452 453 454 455 456 457 458 459 460 461 462 463 464
-        on right: 30 56 61 67 72 74 78 79 81 242 247 258 259 276 277 288 289 294 297 300 304 305 306 307 308 310 311 333 334 335 336 337 338 339 340 341 342 343 344 345 346 347 348 349 350 351 352 353 354 355 356 357 360 361 363 371 372 373 374 377 388 389 390 391 392 393 394 395 396 397 398 399 400 401 402 403 404 405 406 407 408 409 410 411 412 413 414 415 416 417 418 419 420 421 422 423 424 430 431 432 434 435 436 439 440 441 442 445 446 447 450 451 459 460 461 463 465 466 467 468 469 471 472 473 474 475 476 477 478 479 480 504 525 526 534 539 541 557 594 634 649 654 731 732 733 734 735 736 737 738 770 771 772 773 774 799 802 803 804
+        on right: 30 56 61 67 72 74 78 79 81 242 247 258 259 276 277 288 289 294 297 300 304 305 306 307 308 310 311 333 334 335 336 337 338 339 340 341 342 343 344 345 346 347 348 349 350 351 352 353 354 355 356 357 360 361 363 371 372 373 374 377 388 389 390 391 392 393 394 395 396 397 398 399 400 401 402 403 404 405 406 407 408 409 410 411 412 413 414 415 416 417 419 420 421 422 423 424 430 431 432 434 435 436 439 440 441 442 445 446 447 450 451 459 460 461 463 465 466 467 468 469 471 472 473 474 475 476 477 478 479 480 504 525 526 534 539 541 557 594 634 649 654 731 732 733 734 735 736 737 738 770 771 772 773 774 799 802 803 804
     $@27 (335)
         on left: 437
         on right: 439
@@ -9305,7 +9305,7 @@ State 491
 
 State 492
 
-  418 expr: '(' . expr ')'
+  418 expr: '(' . expr_list ')'
 
     "struct"                          shift, and go to state 425
     "class"                           shift, and go to state 426
@@ -9398,6 +9398,7 @@ State 492
     expr_cast               go to state 526
     expr_type_decl          go to state 527
     expr_type_info          go to state 528
+    expr_list               go to state 692
     block_or_lambda         go to state 529
     expr_full_block         go to state 530
     expr_numeric_const      go to state 531
@@ -9405,7 +9406,7 @@ State 492
     expr_method_call        go to state 535
     func_addr_expr          go to state 536
     expr_field              go to state 537
-    expr                    go to state 692
+    expr                    go to state 691
     expr_mtag               go to state 539
     basic_type_declaration  go to state 540
     make_decl               go to state 541
@@ -16295,102 +16296,11 @@ State 691
 
 State 692
 
-  360 expr_method_call: expr . "->" "name" '(' ')'
-  361                 | expr . "->" "name" '(' expr_list ')'
-  371 expr_field: expr . '.' "name"
-  372           | expr . '.' '.' "name"
-  373           | expr . '.' "name" '(' ')'
-  374           | expr . '.' "name" '(' expr_list ')'
-  377           | expr . '.' $@25 error $@26
-  392 expr: expr . "<<" expr
-  393     | expr . ">>" expr
-  394     | expr . "<<<" expr
-  395     | expr . ">>>" expr
-  396     | expr . '+' expr
-  397     | expr . '-' expr
-  398     | expr . '*' expr
-  399     | expr . '/' expr
-  400     | expr . '%' expr
-  401     | expr . '<' expr
-  402     | expr . '>' expr
-  403     | expr . "==" expr
-  404     | expr . "!=" expr
-  405     | expr . "<=" expr
-  406     | expr . ">=" expr
-  407     | expr . '&' expr
-  408     | expr . '|' expr
-  409     | expr . '^' expr
-  410     | expr . "&&" expr
-  411     | expr . "||" expr
-  412     | expr . "^^" expr
-  413     | expr . ".." expr
-  416     | expr . "++"
-  417     | expr . "--"
-  418     | '(' expr . ')'
-  419     | expr . '[' expr ']'
-  420     | expr . '.' '[' expr ']'
-  421     | expr . "?[" expr ']'
-  422     | expr . '.' "?[" expr ']'
-  423     | expr . "?." "name"
-  424     | expr . '.' "?." "name"
-  435     | expr . "??" expr
-  436     | expr . '?' expr ':' expr
-  439     | expr . "is" "type" '<' $@27 type_declaration_no_options '>' $@28
-  440     | expr . "is" basic_type_declaration
-  441     | expr . "is" "name"
-  442     | expr . "as" "name"
-  445     | expr . "as" "type" '<' $@29 type_declaration '>' $@30
-  446     | expr . "as" basic_type_declaration
-  447     | expr . '?' "as" "name"
-  450     | expr . '?' "as" "type" '<' $@31 type_declaration '>' $@32
-  451     | expr . '?' "as" basic_type_declaration
-  459     | expr . "<|" expr
-  460     | expr . "|>" expr
-  461     | expr . "|>" basic_type_declaration
-  473 expr_mtag: expr . '.' "$f" '(' expr ')'
-  474          | expr . "?." "$f" '(' expr ')'
-  475          | expr . '.' '.' "$f" '(' expr ')'
-  476          | expr . '.' "?." "$f" '(' expr ')'
-  477          | expr . "as" "$f" '(' expr ')'
-  478          | expr . '?' "as" "$f" '(' expr ')'
-  479          | expr . "is" "$f" '(' expr ')'
+  308 expr_list: expr_list . ',' expr
+  418 expr: '(' expr_list . ')'
 
-    "is"   shift, and go to state 713
-    "as"   shift, and go to state 714
-    "<<"   shift, and go to state 723
-    ">>"   shift, and go to state 724
-    "++"   shift, and go to state 725
-    "--"   shift, and go to state 726
-    "<="   shift, and go to state 727
-    ">="   shift, and go to state 730
-    "=="   shift, and go to state 731
-    "!="   shift, and go to state 732
-    "->"   shift, and go to state 733
-    "??"   shift, and go to state 735
-    "?."   shift, and go to state 736
-    "?["   shift, and go to state 737
-    "<|"   shift, and go to state 738
-    "|>"   shift, and go to state 739
-    "<<<"  shift, and go to state 741
-    ">>>"  shift, and go to state 742
-    "&&"   shift, and go to state 745
-    "||"   shift, and go to state 746
-    "^^"   shift, and go to state 747
-    ".."   shift, and go to state 751
-    '?'    shift, and go to state 753
-    '|'    shift, and go to state 754
-    '^'    shift, and go to state 755
-    '&'    shift, and go to state 756
-    '<'    shift, and go to state 757
-    '>'    shift, and go to state 758
-    '-'    shift, and go to state 759
-    '+'    shift, and go to state 760
-    '*'    shift, and go to state 761
-    '/'    shift, and go to state 762
-    '%'    shift, and go to state 763
-    '.'    shift, and go to state 764
-    '['    shift, and go to state 765
-    ')'    shift, and go to state 896
+    ','  shift, and go to state 833
+    ')'  shift, and go to state 896
 
 
 State 693
@@ -26151,7 +26061,7 @@ State 870
 
 State 871
 
-  418 expr: '(' . expr ')'
+  418 expr: '(' . expr_list ')'
   757 make_struct_decl: "[[" type_declaration_no_options '(' . ')' optional_block optional_trailing_delim_sqr_sqr
   758                 | "[[" type_declaration_no_options '(' . ')' make_struct_dim optional_block optional_trailing_delim_sqr_sqr
 
@@ -26247,6 +26157,7 @@ State 871
     expr_cast               go to state 526
     expr_type_decl          go to state 527
     expr_type_info          go to state 528
+    expr_list               go to state 692
     block_or_lambda         go to state 529
     expr_full_block         go to state 530
     expr_numeric_const      go to state 531
@@ -26254,7 +26165,7 @@ State 871
     expr_method_call        go to state 535
     func_addr_expr          go to state 536
     expr_field              go to state 537
-    expr                    go to state 692
+    expr                    go to state 691
     expr_mtag               go to state 539
     basic_type_declaration  go to state 540
     make_decl               go to state 541
@@ -26439,7 +26350,7 @@ State 878
 
 State 879
 
-  418 expr: '(' . expr ')'
+  418 expr: '(' . expr_list ')'
   760 make_struct_decl: "[{" type_declaration_no_options '(' . ')' make_struct_dim optional_block optional_trailing_delim_cur_sqr
 
     "struct"                          shift, and go to state 425
@@ -26534,6 +26445,7 @@ State 879
     expr_cast               go to state 526
     expr_type_decl          go to state 527
     expr_type_info          go to state 528
+    expr_list               go to state 692
     block_or_lambda         go to state 529
     expr_full_block         go to state 530
     expr_numeric_const      go to state 531
@@ -26541,7 +26453,7 @@ State 879
     expr_method_call        go to state 535
     func_addr_expr          go to state 536
     expr_field              go to state 537
-    expr                    go to state 692
+    expr                    go to state 691
     expr_mtag               go to state 539
     basic_type_declaration  go to state 540
     make_decl               go to state 541
@@ -27213,7 +27125,7 @@ State 895
 
 State 896
 
-  418 expr: '(' expr ')' .
+  418 expr: '(' expr_list ')' .
 
     $default  reduce using rule 418 (expr)
 
