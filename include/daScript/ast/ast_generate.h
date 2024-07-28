@@ -226,7 +226,7 @@ namespace das {
              return temp
     */
     struct ExprArrayComprehension;
-    ExpressionPtr generateComprehension ( ExprArrayComprehension * expr );
+    ExpressionPtr generateComprehension ( ExprArrayComprehension * expr, bool tableSyntax );
 
     /*
          array comprehension [[ for x in src; x_expr; where x_expr ]]

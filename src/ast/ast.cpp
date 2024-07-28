@@ -2647,6 +2647,7 @@ namespace das {
         cexpr->exprFor = exprFor->clone();
         cexpr->subexpr = subexpr->clone();
         cexpr->generatorSyntax = generatorSyntax;
+        cexpr->tableSyntax = tableSyntax;
         if ( exprWhere ) {
             cexpr->exprWhere = exprWhere->clone();
         }

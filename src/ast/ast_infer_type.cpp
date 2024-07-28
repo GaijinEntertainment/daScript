@@ -8886,7 +8886,7 @@ namespace das {
                         expr->at, CompilationError::invalid_type);
                 } else {
                     auto pAC = expr->generatorSyntax ?
-                        generateComprehensionIterator(expr) : generateComprehension(expr);
+                        generateComprehensionIterator(expr) : generateComprehension(expr, expr->tableSyntax);
                     reportAstChanged();
                     return pAC;
                 }
