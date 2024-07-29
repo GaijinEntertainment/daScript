@@ -441,11 +441,6 @@ struct SceneNodeIdAnnotation final: das::ManagedValueAnnotation <SceneNodeId> {
     virtual bool isLocal() const override { return true; }
     virtual bool hasNonTrivialCtor() const override { return false; }
     virtual bool canBePlacedInContainer() const override { return true;}
-
-    virtual bool canClone() const override { return true; }
-    virtual SimNode * simulateClone ( Context & context, const LineInfo & at, SimNode * l, SimNode * r ) const override {
-        return context.code->makeNode<SimNode_Set<SceneNodeId>>(at, l, r);
-    }
 };
 
 SceneNodeId __create_scene_node() {
