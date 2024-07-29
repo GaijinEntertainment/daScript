@@ -1814,7 +1814,14 @@ expr
     |   name_in_namespace[name] '(' ')'[atend] {
             $$ = yyextra->g_Program->makeCall(tokAt(scanner,@name),tokAt(scanner,@atend),*$name);
             delete $name;
-        }
+    }
+    |   name_in_namespace[name] '(' make_struct_dim[dd] ')' {
+            ((ExprMakeStruct *)$dd)->makeType = new TypeDecl(Type::alias);
+            ((ExprMakeStruct *)$dd)->makeType->alias = *$name;
+            ((ExprMakeStruct *)$dd)->useInitializer = true;
+            delete $name;
+            $$ = $dd;
+    }
     |   name_in_namespace[name] '(' expr_list[arguments] ')'[atend] {
             $$ = parseFunctionArguments(yyextra->g_Program->makeCall(tokAt(scanner,@name),tokAt(scanner,@atend),*$name),$arguments);
             delete $name;
