@@ -8153,19 +8153,22 @@ namespace das {
                 }
             }
         }
+        void convertCloneSemanticsToExpression ( ExprMakeStruct * expr, int index, MakeFieldDecl * decl ) {
+            if ( !expr->block ) expr->block = makeStructWhereBlock(expr);
+            DAS_ASSERT(expr->block->rtti_isMakeBlock());
+            auto mkb = static_pointer_cast<ExprMakeBlock>(expr->block);
+            DAS_ASSERT(mkb->block->rtti_isBlock());
+            auto blk = static_pointer_cast<ExprBlock>(mkb->block);
+            auto cle = convertToCloneExpr(expr,index,decl);
+            blk->list.insert(blk->list.begin(), cle); // TODO: fix order. we are making them backwards now
+            reportAstChanged();
+        }
         virtual MakeFieldDeclPtr visitMakeStructureField ( ExprMakeStruct * expr, int index, MakeFieldDecl * decl, bool last ) override {
             if ( !decl->value->type ) {
                 return Visitor::visitMakeStructureField(expr,index,decl,last);
             }
             if ( decl->cloneSemantics ) {
-                if ( !expr->block ) expr->block = makeStructWhereBlock(expr);
-                DAS_ASSERT(expr->block->rtti_isMakeBlock());
-                auto mkb = static_pointer_cast<ExprMakeBlock>(expr->block);
-                DAS_ASSERT(mkb->block->rtti_isBlock());
-                auto blk = static_pointer_cast<ExprBlock>(mkb->block);
-                auto cle = convertToCloneExpr(expr,index,decl);
-                blk->list.insert(blk->list.begin(), cle); // TODO: fix order. we are making them backwards now
-                reportAstChanged();
+                convertCloneSemanticsToExpression(expr,index,decl);
                 return nullptr;
             }
             if ( expr->makeType->baseType == Type::tStructure ) {
@@ -8203,11 +8206,15 @@ namespace das {
                         auto funs = findMatchingFunctions(opName, args);
                         auto gens = findMatchingGenerics(opName, args);
                         if ( funs.size()==1 || gens.size()==1 ) {
-                            TextWriter tw;
-                            extra
-                                << "since there is operator ."  << decl->name << " := ("
-                                    << expr->makeType->structType->name << "," << decl->value->type->describe() << ") , try "
-                                    <<  decl->name << " := " << *(decl->value);
+                            if ( strictProperties ) {
+                                extra
+                                    << "since there is operator ."  << decl->name << " := ("
+                                        << expr->makeType->structType->name << "," << decl->value->type->describe() << ") , try "
+                                        <<  decl->name << " := " << *(decl->value);
+                            } else {
+                                convertCloneSemanticsToExpression(expr,index,decl);
+                                return nullptr;
+                            }
                         }
                     }
                     error("field not found, " + decl->name, extra.str(), "",
