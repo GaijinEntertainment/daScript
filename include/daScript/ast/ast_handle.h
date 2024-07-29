@@ -687,6 +687,8 @@ namespace das
         ManagedValueAnnotation(ModuleLibrary & mlib, const string & n, const string & cpn = string())
             : TypeAnnotation(n,cpn) {
             using wrapType = typename WrapType<OT>::type;
+            static_assert(sizeof(wrapType)<=sizeof(vec4f), "wrap types have to fit to vec4f");
+            static_assert(sizeof(wrapType)>=sizeof(OT), "value types have to fit to their wrap type");
             valueType = makeType<wrapType>(mlib);
         }
         virtual TypeDeclPtr makeValueType() const override {
@@ -695,6 +697,7 @@ namespace das
         virtual bool rtti_isHandledTypeAnnotation() const override { return true; }
         virtual bool canMove() const override { return true; }
         virtual bool canCopy() const override { return true; }
+        virtual bool canClone() const override { return true; }
         virtual bool isLocal() const override { return true; }
         virtual bool hasNonTrivialCtor() const override {
             return !is_trivially_constructible<OT>::value;
@@ -719,6 +722,9 @@ namespace das
         }
         virtual SimNode * simulateNullCoalescing ( Context & context, const LineInfo & at, SimNode * s, SimNode * dv ) const override {
             return context.code->makeNode<SimNode_NullCoalescing<OT>>(at,s,dv);
+        }
+        das::SimNode *simulateClone(das::Context &context, const das::LineInfo &at, das::SimNode *l, das::SimNode *r) const override {
+            return context.code->makeNode<SimNode_Set<OT>>(at, l, r);
         }
         TypeDeclPtr valueType;
     };
