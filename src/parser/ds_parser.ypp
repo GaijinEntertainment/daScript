@@ -1356,6 +1356,11 @@ expr_new
         auto pNew = new ExprNew(tokAt(scanner,@loc),TypeDeclPtr($typeDecl),true);
         $$ = parseFunctionArguments(pNew,$arguments);
     }
+    |   DAS_NEWT[loc] new_type_declaration[typeDecl] '(' make_struct_dim[dd] ')'   {
+        ((ExprMakeStruct *)$dd)->makeType = $typeDecl;
+        ((ExprMakeStruct *)$dd)->useInitializer = true;
+        $$ = new ExprAscend(tokAt(scanner,@loc),ExpressionPtr($dd));
+    }
     |   DAS_NEWT[loc] make_decl[md] {
         $$ = new ExprAscend(tokAt(scanner,@loc),ExpressionPtr($md));
     }
