@@ -1172,6 +1172,15 @@ namespace das {
         return cexpr;
     }
 
+    string TypeDecl::typeMacroName() const {
+        if ( dimExpr.size()<1 ) return "";
+        if ( dimExpr[0]->rtti_isStringConstant() ) {
+            return ((ExprConstString *)dimExpr[0].get())->text;
+        } else {
+            return "";
+        }
+    }
+
     // ExprStaticAssert
 
     ExpressionPtr ExprStaticAssert::clone( const ExpressionPtr & expr ) const {

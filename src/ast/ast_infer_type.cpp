@@ -495,7 +495,7 @@ namespace das {
         void reportInferAliasErrors ( const TypeDeclPtr & decl, TextWriter & tw, bool autoToAlias=false ) const {
             autoToAlias |= decl->autoToAlias;
             if ( decl->baseType==Type::typeMacro ) {
-                tw << "\tcan't infer type for 'typeMacro'\n";
+                tw << "\tcan't infer type for 'typeMacro' ^'" << decl->typeMacroName() << "'\n";
                 return;
             }
             if ( decl->baseType==Type::typeDecl ) {
@@ -1596,17 +1596,18 @@ namespace das {
                         type->at, CompilationError::invalid_type);
                 }
             } else if ( type->baseType==Type::typeMacro ) {
-                auto tms = findTypeMacro(type->alias);
+                auto tmn = type->typeMacroName();
+                auto tms = findTypeMacro(tmn);
                 if ( tms.size() == 0 ) {
-                    error("can't find typeMacro " + type->alias,  "", "",
+                    error("can't find typeMacro " + tmn,  "", "",
                         type->at, CompilationError::invalid_type);
                 } else if ( tms.size() > 1 ) {
-                    error("too many typeMacro " + type->alias + " found",  "", "",
+                    error("too many typeMacro " + tmn + " found",  "", "",
                         type->at, CompilationError::invalid_type);
                 } else {
                     auto resType = tms[0]->visit(program,program->thisModule.get(), type);
                     if ( !resType ) {
-                        error("can't deduce typeMacro " + type->alias,  "", "",
+                        error("can't deduce typeMacro " + tmn,  "", "",
                             type->at, CompilationError::invalid_type);
                     } else {
                         TypeDecl::applyAutoContracts(resType,type);

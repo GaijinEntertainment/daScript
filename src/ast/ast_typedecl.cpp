@@ -419,9 +419,9 @@ namespace das
                 stream << "typedecl(/*invalid expression*/)";
             }
         } else if ( baseType==Type::typeMacro ) {
-            stream << "^" << alias << "(";
-            for ( size_t i=0; i!=dimExpr.size(); ++i ) {
-                if ( i ) stream << ",";
+            stream << "^" << typeMacroName() << "(";
+            for ( size_t i=1; i!=dimExpr.size(); ++i ) {
+                if ( i!=1 ) stream << ",";
                 if ( dimExpr[i] ) {
                     stream << *(dimExpr[i]);
                 } else {
