@@ -18,3 +18,4 @@ def padd_structure ( macroArgument:TypeDeclPtr; elemType:TypeDeclPtr; count:int 
         compiling_module() |> add_structure(st)
     return <- new [[TypeDecl() at=macroArgument.at, baseType=Type tStructure, structType=st_ptr]]
 
+options log

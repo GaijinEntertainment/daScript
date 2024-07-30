@@ -68,7 +68,7 @@ class TypeMacroMacro : AstFunctionAnnotation
         // prog:ProgramPtr
         // mod:Module?
         // td:TypeDeclPtr
-        // all other arguments
+        // all other arguments (exprt arg 0, which is typemacro name)
         if length(func.arguments) < 1
             errors := "expecting at least 1 argument (macroArgument: TypeDeclPtr)"
             return false
@@ -83,10 +83,10 @@ class TypeMacroMacro : AstFunctionAnnotation
         body.list |> clear
 
         // we need to check, if there are enough arugments
-        let expectedArgs = length(func.arguments) - 1
+        let expectedArgs = length(func.arguments)
         var inscope checkE <- qmacro_block() <|
             if length(td.dimExpr) != $v(expectedArgs)
-                macro_error(compiling_program(), td.at, "expecting {$v(expectedArgs)} arguments")
+                macro_error(compiling_program(), td.at, "expecting {$v(expectedArgs)} arguments, got {length(td.dimExpr)}")
                 return <- [[TypeDeclPtr()]]
         append_expressions(body, checkE)
 
@@ -95,19 +95,20 @@ class TypeMacroMacro : AstFunctionAnnotation
         // allowed are basic types (int, float etc) and TypeDeclPtr
         for ai in range(1,length(func.arguments))
             let argIndex = ai - 1
+            let macroArgIndex = ai
             assume argType = func.arguments[ai]._type
             if length(argType.dim) > 0
                 errors := "expecting non-array arguments"
                 return false
             if argType.baseType==Type tInt
                 var inscope expr <- qmacro_block() <|
-                    if !(td.dimExpr[$v(argIndex)] is ExprConstInt)
+                    if !(td.dimExpr[$v(macroArgIndex)] is ExprConstInt)
                         macro_error(compiling_program(), td.at, "expecting {$v(string(func.arguments[ai].name))} to be int const")
                         return <- [[TypeDeclPtr]]
                 append_expressions(body, expr)
-                (retCall as ExprCall).arguments |> emplace_new <| qmacro((td.dimExpr[$v(argIndex)] as ExprConstInt).value)
+                (retCall as ExprCall).arguments |> emplace_new <| qmacro((td.dimExpr[$v(macroArgIndex)] as ExprConstInt).value)
             elif is_typedecl_ptr(argType)
-                (retCall as ExprCall).arguments |> emplace_new <| qmacro(td.dimExpr[$v(argIndex)]._type)
+                (retCall as ExprCall).arguments |> emplace_new <| qmacro(td.dimExpr[$v(macroArgIndex)]._type)
             else
                 errors := "unsupported argument type {describe(argType)}"
                 return false

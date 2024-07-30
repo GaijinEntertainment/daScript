@@ -219,6 +219,7 @@ namespace das {
         void collectAliasing ( TypeAliasMap & aliases, das_set<Structure *> & dep, bool viaPointer ) const;
         void collectContainerAliasing ( TypeAliasMap & aliases, das_set<Structure *> & dep, bool viaPointer ) const;
         void serialize ( AstSerializer & ser );
+        string typeMacroName() const;
     public:
         Type                    baseType = Type::tVoid;
         Structure *             structType = nullptr;

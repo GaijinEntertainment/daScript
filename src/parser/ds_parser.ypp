@@ -2731,8 +2731,10 @@ type_declaration_no_options
     |   '$' name_in_namespace[name] '(' optional_expr_list[arguments] ')' {
         $$ = new TypeDecl(Type::typeMacro);
         $$->at = tokRangeAt(scanner,@name, @arguments);
-        $$->alias = *$name;
-        $$->dimExpr = sequenceToList($arguments);
+        auto args = sequenceToList($arguments);
+        $$->dimExpr.reserve(args.size()+1);
+        $$->dimExpr.push_back(new ExprConstString(tokAt(scanner,@name), *$name));
+        $$->dimExpr.insert($$->dimExpr.end(), args.begin(), args.end());
         delete $name;
     }
     |   type_declaration_no_options[typeDecl] '-' '[' ']' {
