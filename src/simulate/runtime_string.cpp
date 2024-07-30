@@ -502,7 +502,12 @@ namespace das
         else if ( val==-DBL_MIN ) return "(-DBL_MIN)";
         else if ( val==DBL_MAX ) return "DBL_MAX";
         else if ( val==-DBL_MAX ) return "(-DBL_MAX)";
-        else return fmt::format("{:e}", val);
+        else {
+            char buf[256];
+            auto result = fmt::format_to(buf, "{:e}", val);
+            *result = 0;
+            return buf;
+        }
     }
 
     string to_cpp_float ( float val ) {
@@ -510,7 +515,12 @@ namespace das
         else if ( val==-FLT_MIN ) return "(-FLT_MIN)";
         else if ( val==FLT_MAX ) return "FLT_MAX";
         else if ( val==-FLT_MAX ) return "(-FLT_MAX)";
-        else return fmt::format("{:e}f", val);
+        else {
+            char buf[256];
+            auto result = fmt::format_to(buf, "{:e}f", val);
+            *result = 0;
+            return buf;
+        }
     }
 
     string reportError(const struct LineInfo & at, const string & message,
