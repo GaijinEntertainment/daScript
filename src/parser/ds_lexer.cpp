@@ -1220,7 +1220,7 @@ static const flex_int32_t yy_rule_can_match_eol[253] =
 #line 2 "ds_lexer.lpp"
     #include "daScript/misc/platform.h"
     #include <inttypes.h>
-    #include "fastfloat/fast_float.h"
+    #include <fast_float/fast_float.h>
     #include "daScript/ast/ast.h"
     #include "parser_state.h"
     #include "ds_parser.hpp"

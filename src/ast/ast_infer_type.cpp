@@ -2053,6 +2053,7 @@ namespace das {
                     var->at, CompilationError::invalid_type);
             }
             if ( var->type->ref && var->type->isRefType() ) {   // silently fix a : Foo& into a : Foo
+                refreshFunction(fn);
                 var->type->ref = false;
                 auto mname = fn->getMangledName();
                 if ( fn->module->functions.find(mname) ) {
@@ -2060,6 +2061,14 @@ namespace das {
                         var->at, CompilationError::cant_infer_generic );
                     var->type->ref = true;
                 }
+            }
+        }
+        void refreshFunction(Function * f){
+            auto it = refreshFunctions.find(f);
+            if ( it == refreshFunctions.end() ) {
+                // function signature changed, need to refresh
+                // and we remember old hash to avoid multiple refreshes
+                refreshFunctions.insert({f, f->getMangledNameHash()});
             }
         }
         virtual ExpressionPtr visitArgumentInit ( Function * f, const VariablePtr & arg, Expression * that ) override {
@@ -2070,12 +2079,7 @@ namespace das {
                         + describeType(arg->type) + " = " + describeType(arg->init->type), "", "",
                         arg->at, CompilationError::cant_infer_generic );
                 } else {
-                    auto it = refreshFunctions.find(f);
-                    if ( it == refreshFunctions.end() ) {
-                        // function signature changed, need to refresh
-                        // and we remember old hash to avoid multiple refreshes
-                        refreshFunctions.insert({f, f->getMangledNameHash()});
-                    }
+                    refreshFunction(f);
                     TypeDecl::applyAutoContracts(varT, arg->type);
                     arg->type = varT;
                     arg->type->ref = false; // so that def ( a = VAR ) infers as def ( a : var_type ), not as def ( a : var_type & )
@@ -7891,8 +7895,8 @@ namespace das {
                         } else if ( aliasT->isStructure() ) {
                             if ( expr->arguments.size()==0 ) {
                                 expr->name = aliasT->structType->name;
-                                tryMakeStructureCtor (aliasT->structType, true);
-
+                                bool isPrivate = aliasT->structType->privateStructure || aliasT->structType->module != program->thisModule.get();
+                                tryMakeStructureCtor (aliasT->structType, isPrivate);
                             } else {
 
                                 error("can only generate default structure constructor without arguments",
