@@ -80,7 +80,7 @@ void tutorial () {
     // verify if 'test' is a function, with the correct signature
     // note, this operation is slow, so don't do it every time for every call
     if ( !verifyCall<bool>(fnTest->debugInfo, dummyLibGroup) ) {
-        tout << "function 'test', call arguments do not match. expecting def test : void\n";
+        tout << "function 'test', call arguments do not match. expecting def test : bool\n";
         return;
     }
     ctx.restart();

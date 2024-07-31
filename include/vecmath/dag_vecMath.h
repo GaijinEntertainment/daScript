@@ -1,7 +1,6 @@
 //
-// Dagor Engine 6.5
-// Copyright (C) 2023  Gaijin Games KFT.  All rights reserved
-// (for conditions of use see prog/license.txt)
+// Dagor Engine 6.5 - 1st party libs
+// Copyright (C) Gaijin Games KFT.  All rights reserved.
 //
 #pragma once
 
@@ -19,8 +18,6 @@ VECTORCALL VECMATH_FINLINE vec4f v_set_all_bits();
 VECTORCALL VECMATH_FINLINE vec4i v_set_all_bitsi();
 //! 0x80000000
 VECTORCALL VECMATH_FINLINE vec4f v_msbit();
-//! .xyzw = a[0]
-VECTORCALL VECMATH_FINLINE vec4f v_splat4(const float *a);
 //! load vector from 16-byte aligned memory
 NO_ASAN_INLINE vec4f v_ld(const float *m);
 NO_ASAN_INLINE vec4i v_ldi(const int *m);
@@ -81,6 +78,12 @@ VECTORCALL VECMATH_FINLINE vec4f v_make_vec3f(vec4f x, vec4f y, vec4f z);
 
 //! unpack 4 low bits from bitmask to 4x32 bits mask, true=0xFFFFFFFF, false=0
 VECTORCALL VECMATH_FINLINE vec4f v_make_vec4f_mask(uint8_t bitmask);
+
+//! insert one float to vector
+VECTORCALL VECMATH_FINLINE vec4f v_insert_x(vec4f a, float x);
+VECTORCALL VECMATH_FINLINE vec4f v_insert_y(vec4f a, float y);
+VECTORCALL VECMATH_FINLINE vec4f v_insert_z(vec4f a, float z);
+VECTORCALL VECMATH_FINLINE vec4f v_insert_w(vec4f a, float w);
 
 //! store vector to  16-byte aligned memory
 VECTORCALL VECMATH_FINLINE void v_st(void *m, vec4f v);
@@ -254,13 +257,14 @@ VECTORCALL VECMATH_FINLINE vec4f v_div_x(vec4f a, vec4f b);
 VECTORCALL VECMATH_FINLINE vec4f v_madd_x(vec4f a, vec4f b, vec4f c);
 //! .x = (a.x * b.x - c.x)
 VECTORCALL VECMATH_FINLINE vec4f v_msub_x(vec4f a, vec4f b, vec4f c);
+//! 1/a, very unprecise, fastest available on platform
+VECTORCALL VECMATH_FINLINE vec4f v_rcp_unprecise(vec4f a);
+VECTORCALL VECMATH_FINLINE vec4f v_rcp_unprecise_x(vec4f a);
 //! 1/a, fast estimate
 VECTORCALL VECMATH_FINLINE vec4f v_rcp_est(vec4f a);
-//! 1/a
-VECTORCALL VECMATH_FINLINE vec4f v_rcp(vec4f a);
-//! .x = 1/a.x, fast estimate
 VECTORCALL VECMATH_FINLINE vec4f v_rcp_est_x(vec4f a);
-//! .x = 1/a.x
+//! 1/a, precise and recommended to use
+VECTORCALL VECMATH_FINLINE vec4f v_rcp(vec4f a);
 VECTORCALL VECMATH_FINLINE vec4f v_rcp_x(vec4f a);
 //! 1/a if |a|>VERY_SMALL_NUMBER, else def value (component-wise)
 VECTORCALL VECMATH_FINLINE vec4f v_rcp_safe(vec4f a, vec4f def = v_zero());
@@ -282,11 +286,20 @@ VECTORCALL VECMATH_FINLINE vec4i v_negi(vec4i a);
 //! fabs(a)
 VECTORCALL VECMATH_FINLINE vec4f v_abs(vec4f a);
 VECTORCALL VECMATH_FINLINE vec4i v_absi(vec4i a);
+
+//! special floats compare for relative equality
+VECTORCALL VECMATH_FINLINE vec4f v_cmp_relative_equal(vec4f a, vec4f b, vec4f max_diff = v_splats(1e-5f), vec4f max_rel_diff = v_splats(1.192092896e-07f));
+VECTORCALL VECMATH_FINLINE bool v_is_relative_equal_vec3f(vec4f a, vec4f b);
+VECTORCALL VECMATH_FINLINE bool v_is_relative_equal_vec4f(vec4f a, vec4f b);
+
 //! check if /a can produce NaN's or inf
 VECTORCALL VECMATH_FINLINE vec4f v_is_unsafe_divisor(vec4f a);
 
 //! LERP a to b using parameter tttt
 VECTORCALL VECMATH_FINLINE vec4f v_lerp_vec4f(vec4f tttt, vec4f a, vec4f b);
+
+//! Clamps to [0, 1]
+VECTORCALL VECMATH_FINLINE vec4f v_saturate(vec4f a);
 
 //! (a + b)
 VECTORCALL VECMATH_FINLINE vec4i v_addi(vec4i a, vec4i b);
@@ -353,19 +366,20 @@ VECTORCALL VECMATH_FINLINE vec4f v_hmul(vec4f a);
 //! return x*y*z
 VECTORCALL VECMATH_FINLINE vec4f v_hmul3(vec3f a);
 
-//! 1/sqrt_est(a), fast estimate
-VECTORCALL VECMATH_FINLINE vec4f v_rsqrt4_fast(vec4f a);
-//! 1/sqrt(a), Newton-Raphson refinement
-VECTORCALL VECMATH_FINLINE vec4f v_rsqrt4(vec4f a);
-//! .x = 1/sqrt_est(a)
-VECTORCALL VECMATH_FINLINE vec4f v_rsqrt_fast_x(vec4f a);
-//! .x = 1/sqrt(a)
+//! 1/sqrt_est(a), very unprecise, fastest available on platform
+VECTORCALL VECMATH_FINLINE vec4f v_rsqrt_unprecise(vec4f a);
+VECTORCALL VECMATH_FINLINE vec4f v_rsqrt_unprecise_x(vec4f a);
+//! 1/sqrt_est(a), fast estimate with Newton-Raphson refinement
+VECTORCALL VECMATH_FINLINE vec4f v_rsqrt_est(vec4f a);
+VECTORCALL VECMATH_FINLINE vec4f v_rsqrt_est_x(vec4f a);
+//! .x = precise 1/sqrt(a)
+VECTORCALL VECMATH_FINLINE vec4f v_rsqrt(vec4f a);
 VECTORCALL VECMATH_FINLINE vec4f v_rsqrt_x(vec4f a);
 
 //! sqrt_est(a), fast estimate
 VECTORCALL VECMATH_FINLINE vec4f v_sqrt4_fast(vec4f a);
 //! sqrt(a), Newton-Raphson refinement
-VECTORCALL VECMATH_FINLINE vec4f v_sqrt4(vec4f a);
+VECTORCALL VECMATH_FINLINE vec4f v_sqrt(vec4f a);
 //! .x = sqrt_est(a.x)
 VECTORCALL VECMATH_FINLINE vec4f v_sqrt_fast_x(vec4f a);
 //! .x = sqrt(a.x)
@@ -531,19 +545,26 @@ VECTORCALL VECMATH_FINLINE vec4f v_norm4(vec4f a);
 VECTORCALL VECMATH_FINLINE vec3f v_norm3(vec3f a);
 //! normalize: a/length(a), .z, .w could be anything (even NAN). will return NaN for zero vector
 VECTORCALL VECMATH_FINLINE vec4f v_norm2(vec4f a);
-//! nans converted to zero, v_and(a, v_cmp_eq(a,a))
+
+//! safe normalize: a/length(a), return def value for zero vector
+VECTORCALL VECMATH_FINLINE vec4f v_norm4_safe(vec4f a, vec4f def = v_make_vec4f(0, 0, 0, 1));
+VECTORCALL VECMATH_FINLINE vec4f v_norm3_safe(vec3f a, vec3f def = v_make_vec4f(0, 1, 0, 0));
+VECTORCALL VECMATH_FINLINE vec4f v_norm2_safe(vec4f a, vec4f def = v_make_vec4f(0, 1, 0, 0));
+
 VECTORCALL VECMATH_FINLINE vec4f v_remove_nan(vec4f a);
+//! check for NaN component-wise
+VECTORCALL VECMATH_FINLINE vec4f v_is_nan(vec4f a);
+//! check for negative value component-wise
+VECTORCALL VECMATH_FINLINE vec4f v_is_neg(vec4f a);
+//! check for NaN in any of component
+VECTORCALL VECMATH_FINLINE bool v_test_xyzw_nan(vec4f a);
+VECTORCALL VECMATH_FINLINE bool v_test_xyz_nan(vec3f a);
+VECTORCALL VECMATH_FINLINE bool v_test_mat43_nan(mat44f m);
+VECTORCALL VECMATH_FINLINE bool v_test_mat44_nan(mat44f m);
 //! nans and infs converted to zero
 VECTORCALL VECMATH_FINLINE vec4f v_remove_not_finite(vec4f a);
-//! safe normalize: a/length(a)
-//! result is not guaranteed to be normalized, but is definetly not NaN (NAN components will be zero)
-VECTORCALL VECMATH_FINLINE vec4f v_norm4_safe(vec4f a);
-//! safe normalize: a/length(a), .w could be anything (even NAN)
-//! result is not guaranteed to be normalized, but is definetly not NaN (NAN components will be zero)
-VECTORCALL VECMATH_FINLINE vec3f v_norm3_safe(vec3f a);
-//! safe normalize: a/length(a), .z, .w could be anything (even NAN)
-//! result is not guaranteed to be normalized, but is definetly not NaN (NAN components will be zero)
-VECTORCALL VECMATH_FINLINE vec4f v_norm2_safe(vec4f a);
+//! test that all of .xyz less than limit by absolute value
+VECTORCALL VECMATH_FINLINE bool v_test_xyz_abs_lt(vec3f a, vec3f limit);
 
 
 //
@@ -562,10 +583,15 @@ VECTORCALL VECMATH_FINLINE vec3f v_mat33_mul_vec3(mat33f_cref m, vec3f v);
 VECTORCALL VECMATH_FINLINE vec3f v_mat43_mul_vec3v(mat43f_cref m, vec3f v);
 //! m * v,  matrix is treated row-major, v.w=1
 VECTORCALL VECMATH_FINLINE vec3f v_mat43_mul_vec3p(mat43f_cref m, vec3f v);
+//! scale columns
+VECTORCALL VECMATH_FINLINE void v_mat43_apply_scale(mat44f &m, vec3f scale);
 
-//! transfrom position and apply max scale to radius
+  //! transfrom position and apply max scale to radius
 VECTORCALL VECMATH_FINLINE vec4f v_mat44_mul_bsph(mat44f_cref m, vec4f bsph);
 VECTORCALL VECMATH_FINLINE void v_mat44_mul_bsph(mat44f_cref m, vec4f &bsph_pos, vec4f &bsph_rad_x);
+
+//! LERP matrix a to b using parameter tttt
+VECTORCALL VECMATH_FINLINE mat44f v_mat44_lerp(vec4f tttt, mat44f_cref a, mat44f_cref b);
 
 //! q * v, rotate vector using normalized quaternion
 VECTORCALL VECMATH_FINLINE vec3f v_quat_mul_vec3(quat4f q, vec3f v);
@@ -634,6 +660,8 @@ VECTORCALL VECMATH_FINLINE void v_mat33_from_mat44(mat33f &dest, mat44f_cref m);
 VECTORCALL VECMATH_FINLINE void v_mat33_from_quat(mat33f &dest, quat4f q);
 //! make 4x4 matrix from quaternion and position
 VECTORCALL VECMATH_FINLINE void v_mat44_from_quat(mat44f &dest, quat4f q, vec4f pos);
+//! compose 4x4 matrix from position/rotation/scale
+VECTORCALL VECMATH_FINLINE void v_mat44_compose(mat44f &dest, vec4f pos, vec4f scale);
 //! compose 4x4 matrix from position/rotation/scale
 VECTORCALL VECMATH_FINLINE void v_mat44_compose(mat44f &dest, vec4f pos, quat4f rot, vec4f scale);
 //! compose 3x3 matrix from rotation/scale
@@ -709,11 +737,17 @@ VECTORCALL VECMATH_FINLINE vec4f v_mat44_max_scale43_x(mat44f_cref tm);
 //! .xyz = scales of 3 axes
 VECTORCALL VECMATH_FINLINE vec3f v_mat44_scale43_sq(mat44f_cref tm);
 
+//! stores mat33f to unaligned Matrix3
+VECTORCALL VECMATH_FINLINE void v_mat_33cu_from_mat33(float * __restrict m33, const mat33f& tm);
+
 //! stores mat44f to aligned TMatrix from mat44f
 VECTORCALL VECMATH_FINLINE void v_mat_43ca_from_mat44(float * __restrict m43, const mat44f &tm);
 
 //! stores mat44f to unaligned TMatrix
 VECTORCALL VECMATH_FINLINE void v_mat_43cu_from_mat44(float * __restrict m43, const mat44f &tm);
+
+//! mat33f from unaligned Matrix3
+VECTORCALL VECMATH_FINLINE void v_mat33_make_from_33cu(mat33f &tmV, const float *const __restrict m33);
 
 //! mat44f from unaligned TMatrix
 VECTORCALL VECMATH_FINLINE void v_mat44_make_from_43cu(mat44f &tmV, const float *const __restrict m43);
@@ -895,8 +929,10 @@ VECTORCALL VECMATH_INLINE  vec4f v_ray_box_intersect_dist(vec3f bmin, vec3f bmax
 //approximate distance to box intersection (uses v_rcp_est instead of 1/rayDir). A bit faster, v_rcp_est error is < 1e-12
 VECTORCALL VECMATH_INLINE  vec4f v_ray_box_intersect_dist_est(vec3f bmin, vec3f bmax, vec3f ray_origin, vec3f ray_dir, vec3f is_empty_box);
 
-// return -1 if no intersection found, or box side index in [0; 5] and output param 'at' in range [0.0; 1.0]
-VECTORCALL inline int v_segment_box_intersection_side(vec3f start, vec3f end, bbox3f box, float& out_at);
+// return -1 if no intersection found, or box side index in [0; 5]
+// out_at_min and out_at_max in range [0.0; 1.0] set for closest and furthest intersections
+// compiler didn't calculate 'out_at_max' if it's unused
+VECTORCALL inline int v_segment_box_intersection_side(vec3f start, vec3f end, bbox3f box, float& out_at_min, float& out_at_max);
 
 // check ray or segment intersection with sphere
 VECTORCALL VECMATH_FINLINE bool v_test_ray_sphere_intersection(vec3f p0, vec3f dir, vec4f len, vec4f sphere_center, vec4f sphere_r2_x);
@@ -961,14 +997,14 @@ VECTORCALL VECMATH_FINLINE int v_is_visible_b(vec3f bmin, vec3f bmax, mat44f_cre
 
 //! returns triangle vs sphere intersection
 // last parameter is squared radius!
-VECTORCALL VECMATH_INLINE  int v_test_triangle_sphere_intersection(vec3f A, vec3f B, vec3f C, vec4f sph_c, vec4f sph_r2);
+VECTORCALL VECMATH_INLINE int v_test_triangle_sphere_intersection(vec3f A, vec3f B, vec3f C, vec4f sph_c, vec4f sph_r2_x);
 
 //! gets perfect triangle bounding sphere center.
 // Warning - can work incorrectly on degenerative triangles (can produce nans)
-VECTORCALL VECMATH_INLINE  vec3f v_triangle_bounding_sphere_center( const vec3f& p1, const vec3f& p2, const vec3f& p3 );
+VECTORCALL VECMATH_INLINE vec3f v_triangle_bounding_sphere_center(vec3f p1, vec3f p2, vec3f p3);
 
 // check is point p inside triangle with vertices t1,t2,t3 in 2D space
-VECTORCALL VECMATH_INLINE  bool v_is_point_in_triangle_2d(vec4f p, vec4f t1, vec4f t2, vec4f t3);
+VECTORCALL VECMATH_INLINE bool v_is_point_in_triangle_2d(vec4f p, vec4f t1, vec4f t2, vec4f t3);
 
 //
 // Quaternion math
@@ -983,6 +1019,8 @@ VECTORCALL VECMATH_FINLINE quat4f v_quat_from_mat43(mat44f_cref m);
 
 //! make (unnormalized) quaternion to rotate 'ang' radians around normalized 'v';
 VECTORCALL inline quat4f v_quat_from_unit_vec_ang(vec3f v, vec4f ang);
+//! make (unnormalized) quaternion to rotate acos(ang_cos) radians around normalized 'v';
+VECTORCALL VECMATH_FINLINE quat4f v_quat_from_unit_vec_cos(vec3f v, vec4f ang_cos);
 //! make (unnormalized) quaternion to rotate 'v0' to 'v1'; both 'v0' and 'v1' must be normalized
 VECTORCALL VECMATH_FINLINE quat4f v_quat_from_unit_arc(vec3f v0, vec3f v1);
 //! make (unnormalized) quaternion to rotate 'v0' to 'v1', both CAN be not normalized
@@ -1006,8 +1044,21 @@ VECTORCALL VECMATH_FINLINE quat4f v_quat_qsquad(float t,
 // Trigonometry
 //
 
+//! degrees <-> radians
+VECTORCALL VECMATH_FINLINE vec4f v_deg_to_rad(vec4f deg);
+VECTORCALL VECMATH_FINLINE vec4f v_rad_to_deg(vec4f rad);
+
+//! normalize angle to (-PI;PI]
+VECTORCALL VECMATH_FINLINE vec4f v_norm_s_angle(vec4f angle);
+
+//! calculate sine or cosine of same angle
+VECTORCALL VECMATH_FINLINE vec4f v_sin_from_cos(vec4f c);
+VECTORCALL VECMATH_FINLINE vec4f v_cos_from_sin(vec4f s);
+VECTORCALL VECMATH_FINLINE vec4f v_sin_from_cos_x(vec4f c);
+VECTORCALL VECMATH_FINLINE vec4f v_cos_from_sin_x(vec4f s);
+
 //! compute sine and cosine for all components: for C={xyzw}  s.C = sin(a.C); c.C = cos(a.C);
-VECTORCALL VECMATH_FINLINE void v_sincos4(vec4f a, vec4f& s, vec4f& c);
+VECTORCALL VECMATH_FINLINE void v_sincos(vec4f a, vec4f& s, vec4f& c);
 
 //! compute sine and cosine for .x: s.x = sin(a.x); c.x = cos(a.x);
 VECTORCALL VECMATH_FINLINE void v_sincos_x(vec4f a, vec4f& s, vec4f& c);
@@ -1019,7 +1070,7 @@ VECTORCALL VECMATH_FINLINE vec4f v_tan(vec4f a);
 VECTORCALL VECMATH_FINLINE vec4f v_asin(vec4f a);
 VECTORCALL VECMATH_FINLINE vec4f v_acos(vec4f a);
 VECTORCALL VECMATH_FINLINE vec4f v_atan(vec4f a);
-VECTORCALL VECMATH_FINLINE vec4f v_atan2(vec4f x, vec4f y);
+VECTORCALL VECMATH_FINLINE vec4f v_atan2(vec4f x, vec4f y); // handles +-(0;0) like libc
 
 //! compute sine, cosine, tangent or arc for .x component
 VECTORCALL VECMATH_FINLINE vec4f v_sin_x(vec4f a);

@@ -59,6 +59,8 @@ namespace das {
     void addModuleForLoopMacro ( Module * module, ForLoopMacroPtr & _newM, Context * );
     CaptureMacroPtr makeCaptureMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context );
     void addModuleCaptureMacro ( Module * module, CaptureMacroPtr & _newM, Context * );
+    TypeMacroPtr makeTypeMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context );
+    void addModuleTypeMacro ( Module * module, TypeMacroPtr & _newM, Context *, LineInfoArg * );
     SimulateMacroPtr makeSimulateMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context );
     void addModuleSimulateMacro ( Module * module, SimulateMacroPtr & _newM, Context * );
     void addModuleFunctionAnnotation ( Module * module, FunctionAnnotationPtr & ann, Context * context, LineInfoArg * at );
@@ -75,6 +77,7 @@ namespace das {
     bool addModuleGeneric ( Module * module, FunctionPtr & func, Context * context, LineInfoArg * lineInfo );
     bool addModuleVariable ( Module * module, VariablePtr & var, Context * context, LineInfoArg * lineInfo );
     bool addModuleKeyword ( Module * module, char * kwd, bool needOxfordComma, Context * context, LineInfoArg * lineInfo );
+    bool addModuleTypeFunction ( Module * module, char * kwd, Context * context, LineInfoArg * lineInfo );
     VariablePtr findModuleVariable ( Module * module, const char * name );
     bool removeModuleStructure ( Module * module, StructurePtr & _stru );
     bool addModuleStructure ( Module * module, StructurePtr & stru );

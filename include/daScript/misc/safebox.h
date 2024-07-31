@@ -171,6 +171,18 @@ namespace das {
             DAS_VERIFYF(locked == false, "expected to see an unlocked box");
             return objectsInOrder.size();
         }
+        bool refresh_key ( uint64_t oldKey, uint64_t newKey ) {
+            DAS_ASSERT(!locked);
+            auto it = objects.find(oldKey);
+            if ( it != objects.end() ) {
+                auto pObj = it->second;
+                objects.erase(it);
+                objects[newKey] = pObj;
+                return true;
+            } else {
+                return false;
+            }
+        }
     protected:
         safebox_map<ValueType>           objects;
         vector<ValueType>                objectsInOrder;

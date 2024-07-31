@@ -233,7 +233,7 @@ namespace das
             str += 2;
         }
         auto res = fast_float::from_chars(str, str+strlen(str), result, hex ? 16 : 10);
-        if (res.ec != std::errc()) context->throw_error_at(at, "failed to convert `%s` to number", str);
+        if (res.ec != std::errc()) context->throw_error_at(at, "failed to convert '%s' to number", str);
         return result;
     }
 
@@ -275,7 +275,7 @@ namespace das
         TT result = 0;
         while ( is_white_space(*str) ) str++;
         auto res = fast_float::from_chars(str, str+strlen(str), result);
-        if (res.ec != std::errc()) context->throw_error_at(at, "failed to convert `%s` to number", str);
+        if (res.ec != std::errc()) context->throw_error_at(at, "failed to convert '%s' to number", str);
         return result;
     }
 

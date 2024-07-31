@@ -457,14 +457,16 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 <normal>"float3"                                        return DAS_TFLOAT3;
 <normal>"float4"                                        return DAS_TFLOAT4;
 <normal>[_[:alpha:]][_[:alnum:]\`]* {
-    yylval_param->s = new string(yytext);
-    auto it = yyextra->das_keywords.find(*yylval_param->s);
+    auto it = yyextra->das_keywords.find(yytext);
     if ( it != yyextra->das_keywords.end() ) {
-        if ( !it->second ) yyextra->das_need_oxford_comma = false;
-        return KEYWORD;
-    } else {
-        return NAME;
+        if ( !it->second.is_type_function && !it->second.needs_oxford_comma ) {
+            yyextra->das_need_oxford_comma = false;
+        }
+        yylval_param->s = new string(it->second.keyword);
+        return it->second.is_type_function ? TYPE_FUNCTION : KEYWORD;
     }
+    yylval_param->s = new string(yytext);
+    return NAME;
 }
 <normal>\"                                  {
         BEGIN(strb);
@@ -1026,11 +1028,22 @@ void das_collect_keywords ( Module * mod, yyscan_t yyscanner ) {
     struct yyguts_t * yyg = (struct yyguts_t*)yyscanner;
     for ( auto & kwd : mod->keywords ) {
         auto it = yyextra->das_keywords.find(kwd.first);
-        if ( it != yyextra->das_keywords.end() && it->second!=kwd.second ) {
-            yyextra->g_Program->error("mismatching keyword " + kwd.first + " in module " + mod->name,"","",LineInfo());
+        if ( it != yyextra->das_keywords.end() && it->second.keyword!=kwd.first ) {
+            yyextra->g_Program->error("mismatching keyword " + kwd.first + " in module " + mod->name,
+                it->second.keyword + " is already defined","",LineInfo());
             return;
         }
-        yyextra->das_keywords[kwd.first] = kwd.second;
+        yyextra->das_keywords[kwd.first] = DasKeyword{kwd.second,false,kwd.first};
+    }
+    for ( auto & tfun : mod->typeFunctions ) {
+        string keyword = mod->name.empty() ? tfun : mod->name + "::" + tfun;
+        auto it = yyextra->das_keywords.find(tfun);
+        if ( it != yyextra->das_keywords.end() && it->second.keyword!=keyword ) {
+            yyextra->g_Program->error("mismatching type function " + tfun + " in module " + mod->name,
+                it->second.keyword + " is already defined","",LineInfo());
+            return;
+        }
+        yyextra->das_keywords[tfun] = DasKeyword{false,true,keyword};
     }
 }
 

@@ -218,6 +218,7 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(exprWhere)>("exprWhere");
             addField<DAS_BIND_MANAGED_FIELD(subexpr)>("subexpr");
             addField<DAS_BIND_MANAGED_FIELD(generatorSyntax)>("generatorSyntax");
+            addField<DAS_BIND_MANAGED_FIELD(tableSyntax)>("tableSyntax");
         }
     };
 

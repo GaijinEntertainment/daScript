@@ -26,6 +26,13 @@ namespace das {
         doNotDelete.clear();
     }
 
+    void AstSerializer::getCompiledModules ( ) {
+        Module::foreach([this](Module * m) {
+            writingReadyModules.emplace(m);
+            return true;
+        });
+    }
+
     AstSerializer::~AstSerializer () {
         for ( auto fileInfo : deleteUponFinish ) {
             if ( doNotDelete.count(fileInfo) == 0 ) {
@@ -420,7 +427,7 @@ namespace das {
         }
         if ( func == nullptr ) {
             failed = true;
-            das_to_stderr("das: ser: function '%s' not found", mangledName.c_str());
+            das_to_stderr("das: serialize: function '%s' not found", mangledName.c_str());
         }
     }
 
@@ -916,7 +923,13 @@ namespace das {
 
     AstSerializer & AstSerializer::operator << ( Module & module ) {
         thisModule = &module;
-        module.serialize(*this);
+        module.serialize(*this, /*already_exists*/false);
+        return *this;
+    }
+
+    AstSerializer & AstSerializer::serializeModule ( Module & module, bool already_exists ) {
+        thisModule = &module;
+        module.serialize(*this, already_exists);
         return *this;
     }
 
@@ -933,6 +946,12 @@ namespace das {
         ser.tag("TypeDecl");
         ser << baseType;
         switch ( baseType ) {
+            case Type::typeMacro:
+            case Type::typeDecl:
+                ser << alias << dimExpr;
+                DAS_VERIFYF_MULTI(!annotation, !structType, !enumType, !firstType, !secondType,
+                                argTypes.empty(), argNames.empty());
+                break;
             case Type::alias:
                 ser << alias << firstType << dim << dimExpr;
                 DAS_VERIFYF_MULTI(!annotation, !structType, !enumType, !secondType,
@@ -1188,7 +1207,7 @@ namespace das {
     void ExprPtr2Ref::serialize ( AstSerializer & ser ) {
         ser.tag("ExprPtr2Ref");
         Expression::serialize(ser);
-        ser << subexpr << unsafeDeref;
+        ser << subexpr << unsafeDeref << assumeNoAlias;
     }
 
     void ExprAddr::serialize ( AstSerializer & ser ) {
@@ -1308,11 +1327,11 @@ namespace das {
             }
             ser << mangledName;
             if ( annotation != nullptr && annotation->getFieldOffset(name) == -1 ) {
-                LOG(LogLevel::error) << "Field '" << name << "' not found in " << annotation->name;
+                LOG(LogLevel::error) << "Field '" << name << "' not found in '" << annotation->name << "'";
             }
         } else {
             if ( annotation != nullptr && annotation->getFieldOffset(name) == -1 ) {
-                SERIALIZER_VERIFYF("Field '%s' not found in %s", name.c_str(), annotation->name.c_str());
+                SERIALIZER_VERIFYF("Field '%s' not found in '%s'", name.c_str(), annotation->name.c_str());
             }
             bool has_field = false; ser << has_field;
             if ( !has_field ) return;
@@ -1346,7 +1365,7 @@ namespace das {
 
     void ExprCallMacro::serialize ( AstSerializer & ser ) {
         ExprLooksLikeCall::serialize(ser);
-        ser << macro;
+        ser << macro << inFunction;
     }
 
     void ExprCallFunc::serialize ( AstSerializer & ser ) {
@@ -1382,7 +1401,6 @@ namespace das {
 
     void ExprClone::serialize ( AstSerializer & ser ) {
         ExprOp2::serialize(ser);
-        ser << cloneSet;
     }
 
     void ExprOp3::serialize ( AstSerializer & ser ) {
@@ -1574,7 +1592,7 @@ namespace das {
 
     void ExprArrayComprehension::serialize ( AstSerializer & ser ) {
         Expression::serialize(ser);
-        ser << exprFor << exprWhere << subexpr << generatorSyntax;
+        ser << exprFor << exprWhere << subexpr << generatorSyntax << tableSyntax;
     }
 
     void ExprTypeDecl::serialize ( AstSerializer & ser ) {
@@ -1667,7 +1685,7 @@ namespace das {
     }
 
     // Restores the internal state of macro module
-    void finalizeModule ( AstSerializer & ser, ModuleLibrary & lib, Module * this_mod ) {
+    void finalizeModule ( AstSerializer & ser, ModuleLibrary & lib, Module * this_mod, bool already_exists ) {
         ProgramPtr program;
 
         if ( ser.failed ) return;
@@ -1694,11 +1712,13 @@ namespace das {
             },"*");
         // always finalize annotations
             daScriptEnvironment::bound->g_Program = program;
-            program->finalizeAnnotations();
+            if ( !already_exists ) {
+              program->finalizeAnnotations();
+            }
 
             bool is_macro_module = false;
             ser << is_macro_module;
-            if ( is_macro_module ) {
+            if ( is_macro_module && !already_exists ) {
                 auto time0 = ref_time_ticks();
                 reinstantiateMacroModuleState(ser, program);
                 ser.totMacroTime += get_time_usec(time0);
@@ -1825,7 +1845,7 @@ namespace das {
                     string module, varname;
                     ser << module << varname;
                     auto var = ser.moduleLibrary->findModule(module)->findVariable(varname);
-                    SERIALIZER_VERIFYF(var, "expected to find variable %s::%s", module.c_str(), varname.c_str());
+                    SERIALIZER_VERIFYF(var, "expected to find variable '%s::%s'", module.c_str(), varname.c_str());
                     f->useGlobalVariables.emplace(var.get());
                 } else {
                     void * addr = nullptr; ser << addr;
@@ -1867,7 +1887,7 @@ namespace das {
                     string module, varname;
                     ser << module << varname;
                     auto var = ser.moduleLibrary->findModule(module)->findVariable(varname);
-                    SERIALIZER_VERIFYF(var, "expected to find variable %s::%s", module.c_str(), varname.c_str());
+                    SERIALIZER_VERIFYF(var, "expected to find variable '%s::%s'", module.c_str(), varname.c_str());
                     f->useGlobalVariables.emplace(var.get());
                 } else {
                     void * addr = nullptr; ser << addr;
@@ -1928,11 +1948,13 @@ namespace das {
         }
     }
 
-    void Module::serialize ( AstSerializer & ser ) {
+    void Module::serialize ( AstSerializer & ser, bool already_exists ) {
         ser.tag("Module");
         ser << name           << moduleFlags;
         ser << annotationData << requireModule;
         ser << aliasTypes     << enumerations;
+        ser << keywords;
+        ser << typeFunctions;
         serializeGlobals(ser, globals); // globals require insertion in the same order
         serializeStructures(ser, structures);
         serializeFunctions(ser, functions);
@@ -1979,7 +2001,7 @@ namespace das {
 
         // Now we need to restore the internal state in case this has been a macro module
 
-        finalizeModule(ser, *ser.moduleLibrary, this);
+        finalizeModule(ser, *ser.moduleLibrary, this, already_exists);
     }
 
     class TopSort {
@@ -2062,6 +2084,7 @@ namespace das {
               << value.no_optimizations
               << value.fail_on_no_aot
               << value.fail_on_lack_of_aot_export
+              << value.no_fast_call
               << value.debugger
               << value.debug_module
               << value.profiler
@@ -2127,8 +2150,8 @@ namespace das {
                     *this << savedHash;
 
                     if ( moduleHash != savedHash ) {
-                        LOG(LogLevel::warning) << "das: ser: cumulative hash for module " << m->name
-                                               << " differs" << " ( " << moduleHash << " vs " << savedHash << " ) ";
+                        LOG(LogLevel::warning) << "das: serialize: cumulative hash for module '" << m->name
+                                               << "' differs" << " (" << moduleHash << " vs " << savedHash << ") ";
                         program->failToCompile = true;
                         return;
                     }
@@ -2158,7 +2181,7 @@ namespace das {
     }
 
     uint32_t AstSerializer::getVersion () {
-        static constexpr uint32_t currentVersion = 24;
+        static constexpr uint32_t currentVersion = 35;
         return currentVersion;
     }
 
@@ -2251,11 +2274,19 @@ namespace das {
             } else if ( builtin && promoted ) {
                 bool isNew = false; ser << isNew;
                 if ( isNew ) {
+                    Module *prev = Module::require(name);
                     auto deser = new Module;
-                    library.addModule(deser);
-                    ser << *deser;
-                    deser->builtIn = false; // suppress assert
-                    deser->promoteToBuiltin(nullptr);
+                    if ( prev ) {
+                        library.addModule(prev);
+                        ser.serializeModule(*deser, /*already_exists*/true);
+                        deser->builtIn = false; // suppress assert
+                        delete deser;
+                    } else {
+                        library.addModule(deser);
+                        ser.serializeModule(*deser, /*already_exists*/false);
+                        deser->builtIn = false; // suppress assert
+                        deser->promoteToBuiltin(nullptr);
+                    }
                 } else {
                     Module * m = Module::require(name);
                     library.addModule(m);

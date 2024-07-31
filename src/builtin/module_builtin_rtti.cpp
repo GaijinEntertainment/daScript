@@ -735,10 +735,12 @@ namespace das {
             addField<DAS_BIND_MANAGED_FIELD(no_local_class_members)>("no_local_class_members");
             addField<DAS_BIND_MANAGED_FIELD(report_invisible_functions)>("report_invisible_functions");
             addField<DAS_BIND_MANAGED_FIELD(report_private_functions)>("report_private_functions");
+            addField<DAS_BIND_MANAGED_FIELD(strict_properties)>("strict_properties");
         // environment
             addField<DAS_BIND_MANAGED_FIELD(no_optimizations)>("no_optimizations");
             addField<DAS_BIND_MANAGED_FIELD(fail_on_no_aot)>("fail_on_no_aot");
             addField<DAS_BIND_MANAGED_FIELD(fail_on_lack_of_aot_export)>("fail_on_lack_of_aot_export");
+            addField<DAS_BIND_MANAGED_FIELD(no_fast_call)>("no_fast_call");
         // debugger
             addField<DAS_BIND_MANAGED_FIELD(debugger)>("debugger");
             addField<DAS_BIND_MANAGED_FIELD(debug_module)>("debug_module");
@@ -1108,6 +1110,7 @@ namespace das {
     }
 
     bool introduceFile ( smart_ptr_raw<FileAccess> access, char * fname, char * str, Context * context, LineInfoArg * at ) {
+        if ( !fname ) context->throw_error_at(at, "expecting file name");
         const char * safeStr = str ? str : "";
         uint32_t str_len = stringLength(*context, safeStr);
         auto fileInfo = make_unique<TextFileInfo>(safeStr, str_len, false);

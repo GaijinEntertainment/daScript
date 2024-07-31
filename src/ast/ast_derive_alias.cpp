@@ -135,7 +135,7 @@ namespace das {
     // pointer deref - all bets are off
         virtual void preVisit ( ExprPtr2Ref * expr ) override {
             Visitor::preVisit(expr);
-            alwaysAliases = true;
+            if ( !expr->assumeNoAlias ) alwaysAliases = true;
         }
     // function call - does not alias when does not return ref
         virtual void preVisit ( ExprCall * expr ) override {

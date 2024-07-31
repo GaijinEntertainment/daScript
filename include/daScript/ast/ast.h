@@ -64,6 +64,9 @@ namespace das
     struct SimulateMacro;
     typedef smart_ptr<SimulateMacro> SimulateMacroPtr;
 
+    struct TypeMacro;
+    typedef smart_ptr<TypeMacro> TypeMacroPtr;
+
     struct AnnotationArgumentList;
     struct AnnotationDeclaration;
     typedef smart_ptr<AnnotationDeclaration> AnnotationDeclarationPtr;
@@ -264,6 +267,7 @@ namespace das
         bool hasNonTrivialCopy ( das_set<Structure *> & dep ) const;
         bool canBePlacedInContainer ( das_set<Structure *> & dep ) const;
         bool needInScope ( das_set<Structure *> & dep ) const;
+        bool unsafeInit ( das_set<Structure *> & dep ) const;
         string describe() const { return name; }
         string getMangledName() const;
         bool hasAnyInitializers() const;
@@ -637,6 +641,8 @@ namespace das
         virtual bool rtti_isAscend() const { return false; }
         virtual bool rtti_isTypeDecl() const { return false; }
         virtual bool rtti_isNullPtr() const { return false; }
+        virtual bool rtti_isCopy() const { return false; }
+        virtual bool rtti_isClone() const { return false; }
         virtual Expression * tail() { return this; }
         virtual bool swap_tail ( Expression *, Expression * ) { return false; }
         virtual uint32_t getEvalFlags() const { return 0; }
@@ -1054,9 +1060,10 @@ namespace das
         void registerAnnotation ( const AnnotationPtr & ptr );
         bool addTypeInfoMacro ( const TypeInfoMacroPtr & ptr, bool canFail = false );
         bool addReaderMacro ( const ReaderMacroPtr & ptr, bool canFail = false );
+        bool addTypeMacro ( const TypeMacroPtr & ptr, bool canFail = false );
         bool addCommentReader ( const CommentReaderPtr & ptr, bool canFail = false );
-        bool addCallMacro ( const CallMacroPtr & ptr, bool canFail = false );
         bool addKeyword ( const string & kwd, bool needOxfordComma, bool canFail = false );
+        bool addTypeFunction ( const string & name, bool canFail = false );
         TypeDeclPtr findAlias ( const string & name ) const;
         VariablePtr findVariable ( const string & name ) const;
         FunctionPtr findFunction ( const string & mangledName ) const;
@@ -1087,7 +1094,7 @@ namespace das
         void verifyBuiltinNames(uint32_t flags);
         void addDependency ( Module * mod, bool pub );
         void addBuiltinDependency ( ModuleLibrary & lib, Module * mod, bool pub = false );
-        void serialize( AstSerializer & ser );
+        void serialize( AstSerializer & ser, bool already_exists );
     public:
         template <typename RecAnn>
         void initRecAnnotation ( const smart_ptr<RecAnn> & rec, ModuleLibrary & lib ) {
@@ -1136,9 +1143,11 @@ namespace das
         vector<ForLoopMacroPtr>                     forLoopMacros;      // for loop macros (for every for loop)
         vector<CaptureMacroPtr>                     captureMacros;      // lambda capture macros
         vector<SimulateMacroPtr>                    simulateMacros;     // simulate macros (every time we simulate context)
+        das_map<string,TypeMacroPtr>                typeMacros;         // type macros (every time we infer type)
         das_map<string,ReaderMacroPtr>              readMacros;         // %foo "blah"
         CommentReaderPtr                            commentReader;      // /* blah */ or // blah
         vector<pair<string,bool>>                   keywords;           // keywords (and if they need oxford comma)
+        vector<string>                              typeFunctions;      // type functions
         das_hash_map<string,Type>                   options;            // options
         uint64_t                                    cumulativeHash = 0; // hash of all mangled names in this module (for builtin modules)
         string                                      name;
@@ -1294,6 +1303,12 @@ namespace das
         string name;
     };
 
+    struct TypeMacro : ptr_ref_count {
+        TypeMacro ( const string & na = "" ) : name(na) {}
+        virtual TypeDeclPtr visit ( Program *, Module *, const TypeDeclPtr & ) { return nullptr; }
+        string name;
+    };
+
     struct ExprIsVariant;
     struct ExprAsVariant;
     struct ExprSafeAsVariant;
@@ -1389,12 +1404,14 @@ namespace das
         bool report_invisible_functions = true;         // report invisible functions (report functions not visible from current module)
         bool report_private_functions = true;           // report private functions (report functions which are not accessible due to private module)
         bool no_unsafe_uninitialized_structures = true; // if true, then unsafe uninitialized structures are not allowed
+        bool strict_properties = false;                 // if true, then properties are strict, i.e. a.prop = b does not get promoted to a.prop := b
     // environment
         bool no_optimizations = false;                  // disable optimizations, regardless of settings
         bool fail_on_no_aot = true;                     // AOT link failure is error
         bool fail_on_lack_of_aot_export = false;        // remove_unused_symbols = false is missing in the module, which is passed to AOT
         bool log_compile_time = false;                  // if true, then compile time will be printed at the end of the compilation
         bool log_total_compile_time = false;            // if true, then detailed compile time will be printed at the end of the compilation
+        bool no_fast_call = false;                      // disable fastcall
     // debugger
         //  when enabled
         //      1. disables [fastcall]

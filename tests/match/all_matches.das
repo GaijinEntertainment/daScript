@@ -252,7 +252,7 @@ def matching_type_as_is ( cmd:Cmd )
         if _
             return 0.
 
-[match_copy]
+[match_copy,safe_when_uninitialized]
 struct CmdLocate : Cmd
     override rtti = "CmdLocate"
     x : float

@@ -326,11 +326,11 @@ namespace das {
                 }
             }
             ss << "def " << (fn->privateFunction ? "private " : "public ") << fn->name;
-            if ( fn->arguments.size() ) ss << " ( ";
+            if ( fn->arguments.size() ) ss << "(";
         }
         virtual void preVisitFunctionBody ( Function * fn,Expression * expr ) override {
             Visitor::preVisitFunctionBody(fn,expr);
-            if ( fn->arguments.size() ) ss << " )";
+            if ( fn->arguments.size() ) ss << ")";
             if ( fn->result && !fn->result->isVoid() ) ss << " : " << fn->result->describe();
             ss << "\n";
         }
@@ -1206,7 +1206,13 @@ namespace das {
     // array comprehension
         virtual void preVisit ( ExprArrayComprehension * expr ) override {
             Visitor::preVisit(expr);
-            ss << (expr->generatorSyntax ? "[[" : "[{");
+            if ( expr->generatorSyntax ) {
+                ss << "[[";
+            } else if ( expr->tableSyntax ) {
+                ss << "{";
+            } else {
+                ss << "[{";
+            }
         }
         virtual void preVisitArrayComprehensionSubexpr ( ExprArrayComprehension * expr, Expression * subexpr ) override {
             Visitor::preVisitArrayComprehensionSubexpr(expr, subexpr);
@@ -1217,7 +1223,13 @@ namespace das {
             ss << "; where ";
         }
         virtual ExpressionPtr visit ( ExprArrayComprehension * expr ) override {
-            ss << (expr->generatorSyntax ? "]]" : "}]");
+            if ( expr->generatorSyntax ) {
+                ss << "]]";
+            } else if ( expr->tableSyntax ) {
+                ss << "}";
+            } else {
+                ss << "}]";
+            }
             return Visitor::visit(expr);
         }
     // quote

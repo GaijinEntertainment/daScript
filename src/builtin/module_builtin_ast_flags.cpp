@@ -80,7 +80,8 @@ namespace das {
     TypeDeclPtr makeExprMakeStructFlags() {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
         ft->alias = "ExprMakeStructFlags";
-        ft->argNames = { "useInitializer", "isNewHandle", "usedInitializer", "nativeClassInitializer", "isNewClass" };
+        ft->argNames = { "useInitializer", "isNewHandle", "usedInitializer", "nativeClassInitializer",
+            "isNewClass", "forceClass", "forceStruct", "forceVariant", "forceTuple" };
         return ft;
     }
 
@@ -101,7 +102,7 @@ namespace das {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
         ft->alias = "ExprVarFlags";
         ft->argNames = { "local", "argument", "_block",
-            "thisBlock", "r2v", "r2cr", "write" };
+            "thisBlock", "r2v", "r2cr", "write", "under_clone" };
         return ft;
     }
 
@@ -115,7 +116,7 @@ namespace das {
     TypeDeclPtr makeExprFieldFieldFlags() {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
         ft->alias = "ExprFieldFieldFlags";
-        ft->argNames = { "r2v", "r2cr", "write", "no_promotion" };
+        ft->argNames = { "r2v", "r2cr", "write", "no_promotion", "under_clone" };
         return ft;
     }
 
@@ -233,7 +234,7 @@ namespace das {
     TypeDeclPtr makeExprCopyFlags() {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
         ft->alias = "CopyFlags";
-        ft->argNames = { "allowCopyTemp", "takeOverRightStack" };
+        ft->argNames = { "allowCopyTemp", "takeOverRightStack", "promoteToClone" };
         return ft;
     }
 

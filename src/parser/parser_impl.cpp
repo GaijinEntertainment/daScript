@@ -116,7 +116,7 @@ namespace das {
         }
     }
 
-    void runFunctionAnnotations ( yyscan_t scanner, Function * func, AnnotationList * annL, const LineInfo & at ) {
+    void runFunctionAnnotations ( yyscan_t scanner, DasParserState * extra, Function * func, AnnotationList * annL, const LineInfo & at ) {
         if ( annL ) {
             for ( auto itA = annL->begin(); itA!=annL->end();  ) {
                 auto pA = *itA;
@@ -127,6 +127,11 @@ namespace das {
                         if ( !ann->apply(func, *yyextra->g_Program->thisModuleGroup, pA->arguments, err) ) {
                             das_yyerror(scanner,"macro [" +pA->annotation->name + "] failed to apply to a function " + func->name + "\n" + err, at,
                                 CompilationError::invalid_annotation);
+                        } else if ( ann->name=="type_function" && ann->module->name=="$" ) {
+                            // this is awkward. we need this so that [type_function] can be used in the same module
+                            auto mod = func->module ? func->module : extra->g_Program->thisModule.get();
+                            string keyword = mod->name.empty() ? func->name : mod->name + "::" + func->name;
+                            extra->das_keywords[func->name] = DasKeyword{false,true,keyword};
                         }
                         itA ++;
                     } else {
@@ -147,7 +152,7 @@ namespace das {
     }
 
     Expression * ast_arrayComprehension ( yyscan_t scanner, const LineInfo & loc, vector<VariableNameAndPosition> * iters,
-        Expression * srcs, Expression * subexpr, Expression * where, const LineInfo & forend, bool genSyntax   ) {
+        Expression * srcs, Expression * subexpr, Expression * where, const LineInfo & forend, bool genSyntax, bool tableSyntax ) {
         auto pFor = make_smart<ExprFor>(loc);
         pFor->visibility = forend;
         for ( const auto & np : *iters ) {
@@ -164,6 +169,7 @@ namespace das {
         pFor->sources = sequenceToList(srcs);
         auto pAC = new ExprArrayComprehension(loc);
         pAC->generatorSyntax = genSyntax;
+        pAC->tableSyntax = tableSyntax;
         pAC->exprFor = pFor;
         pAC->subexpr = ExpressionPtr(subexpr);
         if ( where ) {
@@ -566,7 +572,7 @@ namespace das {
             }
             modifyToClassMember(func, yyextra->g_thisStructure, false, cnst);
             assignDefaultArguments(func);
-            runFunctionAnnotations(scanner, func, annL, annLAt);
+            runFunctionAnnotations(scanner, nullptr, func, annL, annLAt);
             if ( !yyextra->g_Program->addFunction(func) ) {
                 das_yyerror(scanner,"function is already defined " + func->getMangledName(),
                     func->at, CompilationError::function_already_declared);
@@ -635,7 +641,7 @@ namespace das {
                 }
 
             } else {
-                runFunctionAnnotations(scanner, func, annL, annLAt);
+                runFunctionAnnotations(scanner, nullptr, func, annL, annLAt);
                 if ( !yyextra->g_Program->addFunction(func) ) {
                     das_yyerror(scanner,"function is already defined " + func->getMangledName(),
                         func->at, CompilationError::function_already_declared);

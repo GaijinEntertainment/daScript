@@ -15,6 +15,7 @@ namespace das
         {   Type::alias,        "alias"  },
         {   Type::option,       "option"  },
         {   Type::typeDecl,     "typedecl" },
+        {   Type::typeMacro,    "typemacro" },
         {   Type::anyArgument,  "any"  },
         {   Type::tVoid,        "void"  },
         {   Type::tBool,        "bool"  },

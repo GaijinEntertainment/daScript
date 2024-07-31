@@ -118,6 +118,17 @@ namespace das
         }
     };
 
+    struct TypeFunctionFunctionAnnotation : MarkFunctionAnnotation {
+        TypeFunctionFunctionAnnotation() : MarkFunctionAnnotation("type_function") { }
+        virtual bool apply(const FunctionPtr & func, ModuleGroup &, const AnnotationArgumentList &, string & error) override {
+            if ( !daScriptEnvironment::bound->g_Program->thisModule->addTypeFunction(func->name, true) ) {
+                error = "can't add type function. type function " + func->name + " already exists?";
+                return false;
+            }
+            return true;
+        };
+    };
+
     FunctionPtr Function::setDeprecated(const string & message) {
         deprecated = true; // this is instead of apply above
         AnnotationDeclarationPtr decl = make_smart<AnnotationDeclaration>();
@@ -158,6 +169,18 @@ namespace das
         }
         virtual bool finalize(const FunctionPtr &, ModuleGroup &, const AnnotationArgumentList &, const AnnotationArgumentList &, string &) override {
             return true;
+        }
+    };
+
+    struct MakeFunctionUnsafeCallMacro : CallMacro {
+        MakeFunctionUnsafeCallMacro() : CallMacro("make_function_unsafe") { }
+        virtual ExpressionPtr visit (  Program * prog, Module *, ExprCallMacro * call ) override {
+            if ( !call->inFunction ) {
+                prog->error("make_function_unsafe can only be used inside a function", "", "", call->at);
+                return nullptr;
+            }
+            call->inFunction->unsafeOperation = true;
+            return make_smart<ExprConstBool>(call->at, true);
         }
     };
 
@@ -510,7 +533,7 @@ namespace das
                 for ( const auto & field : st->fields ) {
                     if ( !field.type->isPod() ) {
                         allPod = false;
-                        errors += "\t" + field.name + " : " + field.type->describe() + " is not a pod\n";
+                        errors += "\t'" + field.name + ": " + field.type->describe() + "' is not a POD\n";
                     }
                 }
             }
@@ -1509,6 +1532,17 @@ namespace das
         addAnnotation(make_smart<IsYetAnotherVectorTemplateAnnotation>());
         addAnnotation(make_smart<IsDimAnnotation>());
         addAnnotation(make_smart<HashBuilderAnnotation>(lib));
+        addAnnotation(make_smart<TypeFunctionFunctionAnnotation>());
+        // and call macro
+        {
+            CallMacroPtr newM = make_smart<MakeFunctionUnsafeCallMacro>();
+            addCallMacro(newM->name, [=](const LineInfo & at) -> ExprLooksLikeCall * {
+                auto ecm = new ExprCallMacro(at, newM->name);
+                ecm->macro = newM.get();
+                newM->module = this;
+                return ecm;
+            });
+        }
         // string
         addAnnotation(make_smart<DasStringTypeAnnotation>());
         // typeinfo macros

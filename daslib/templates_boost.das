@@ -419,6 +419,16 @@ def public add_type_ptr_ref ( var st : StructurePtr; flags:TypeDeclFlags ) : Typ
     //! Implementation details for the reification. This adds any array to the rules.
     return <- new [[TypeDecl() at=st.at, baseType=Type tStructure, structType = get_ptr(st), flags=flags]]
 
+def public add_type_ptr_ref ( var st : Structure?; flags:TypeDeclFlags ) : TypeDeclPtr
+    //! Implementation details for the reification. This adds any array to the rules.
+    return <- new [[TypeDecl() at=st.at, baseType=Type tStructure, structType = st, flags=flags]]
+
+[unused_argument(anything), unused_argument(flags)]
+def public add_type_ptr_ref ( anything : auto(TT); flags:TypeDeclFlags ) : TypeDeclPtr
+    //! Implementation details for the reification. This adds any array to the rules.
+    concept_assert(false,"$t reification expected type `TypeDeclPtr`, `StructurePtr`, or `Structure?`, but received {typeinfo(typename type<TT>)}")
+    return <- new [[TypeDecl()]]
+
 def private generatedExpr( var expr : ExpressionPtr ) : ExpressionPtr
     expr.genFlags |= ExprGenFlags generated
     return <- expr

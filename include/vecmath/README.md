@@ -3,10 +3,10 @@ SIMD HAL header-only library
 
 This is one-header-only (it is 7 headers, but you need to include one) Hardware Abstraction Layer over SIMD intrinsics.
 
-Currently for SSE and NEON only, PS3/Xbox360 version is under NDA and not needed nowdays.
+Currently for SSE and NEON only (VMX/VMX128/SPU for PS3/Xbox360 are dropped).
 
 It has been tested on PC, Linux, MacOS, iOS, tvOS, Shield, NSwitch, PlayStation4, Xbox One.
-And with gcc of several versions, VS 2015, VS 2017, clang 3.9+. Visual Studio of earlier versions used to work, but hasn't been tested in a while.
+And with gcc of several versions, VS 2015, VS 2017, VC 2019, VS 2022, clang 3.9+. Visual Studio of earlier versions used to work, but hasn't been tested in a while.
 
 Current version relies on alignas C++11 modifier, although it is easy to re-write it old-way (__attribute__ / __declspec(aligned)) if needed.
 

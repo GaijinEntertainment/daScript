@@ -188,6 +188,8 @@ namespace das {
         bool hasNonTrivialCopy( das_set<Structure*> & dep ) const;
         bool canBePlacedInContainer() const;
         bool canBePlacedInContainer( das_set<Structure*> & dep ) const;
+        bool unsafeInit() const;
+        bool unsafeInit( das_set<Structure*> & dep ) const;
         bool needInScope() const;
         bool needInScope( das_set<Structure*> & dep ) const;
         bool hasStringData() const;
@@ -217,6 +219,7 @@ namespace das {
         void collectAliasing ( TypeAliasMap & aliases, das_set<Structure *> & dep, bool viaPointer ) const;
         void collectContainerAliasing ( TypeAliasMap & aliases, das_set<Structure *> & dep, bool viaPointer ) const;
         void serialize ( AstSerializer & ser );
+        string typeMacroName() const;
     public:
         Type                    baseType = Type::tVoid;
         Structure *             structType = nullptr;
@@ -718,7 +721,7 @@ namespace das {
     __forceinline bool TypeDecl::isSimpleType() const {
         if ( baseType==Type::none || baseType==Type::tVoid
             || baseType==Type::autoinfer || baseType==Type::alias || baseType==Type::option
-            || baseType==Type::anyArgument || baseType==Type::typeDecl ) return false;
+            || baseType==Type::anyArgument || baseType==Type::typeDecl || baseType==Type::typeMacro ) return false;
         return !isRefType();
     }
 

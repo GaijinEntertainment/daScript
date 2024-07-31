@@ -227,7 +227,7 @@ namespace das {
             while (first != nullptr)
             {
                 if (first->name == n) {
-                    DAS_FATAL_ERROR("Module `%s` already created", first->name.c_str());
+                    DAS_FATAL_ERROR("Module '%s' already created", first->name.c_str());
                 }
                 first = first->next;
             }
@@ -331,6 +331,17 @@ namespace das {
         }
     }
 
+    bool Module::addTypeMacro ( const TypeMacroPtr & ptr, bool canFail ) {
+        if ( typeMacros.insert(make_pair(ptr->name, ptr)).second ) {
+            return true;
+        } else {
+            if ( !canFail ) {
+                DAS_FATAL_ERROR("can't add duplicate type macro %s to module %s\n", ptr->name.c_str(), name.c_str() );
+            }
+            return false;
+        }
+    }
+
     bool Module::addReaderMacro ( const ReaderMacroPtr & ptr, bool canFail ) {
         if ( readMacros.insert(make_pair(ptr->name, ptr)).second ) {
             ptr->seal(this);
@@ -407,6 +418,20 @@ namespace das {
             return false;
         }
         keywords.emplace_back(kwd, needOxfordComma);
+        return true;
+    }
+
+    bool Module::addTypeFunction (const string & kwd, bool canFail ) {
+        auto it = find_if(typeFunctions.begin(), typeFunctions.end(), [&](auto value){
+            return value == kwd;
+        });
+        if ( it != typeFunctions.end() ) {
+            if ( !canFail ) {
+                DAS_FATAL_ERROR("can't add duplicate type function %s to module %s\n", kwd.c_str(), name.c_str() );
+            }
+            return false;
+        }
+        typeFunctions.emplace_back(kwd);
         return true;
     }
 
@@ -578,6 +603,9 @@ namespace das {
             globalLintMacros.insert(globalLintMacros.end(), ptm->globalLintMacros.begin(), ptm->globalLintMacros.end());
             for ( auto & rm : ptm->readMacros ) {
                 addReaderMacro(rm.second);
+            }
+            for ( auto & tm : ptm->typeMacros ) {
+                addTypeMacro(tm.second);
             }
             commentReader = ptm->commentReader;
             for ( auto & op : ptm->options) {

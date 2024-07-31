@@ -81,6 +81,7 @@ namespace das
         virtual void serialize( AstSerializer & ser ) override;
         ExpressionPtr   subexpr;
         bool unsafeDeref = false;
+        bool assumeNoAlias = false;
     };
 
     struct ExprAddr : Expression {
@@ -213,6 +214,8 @@ namespace das
                                                             // is a workaround of a compiler bug in 32-bit MVSC 2015
     };
 
+    struct ExprOp2;
+
     struct ExprVar : Expression {
         ExprVar () { __rtti = "ExprVar"; };
         ExprVar ( const LineInfo & a, const string & n )
@@ -227,7 +230,6 @@ namespace das
         string              name;
         VariablePtr         variable;
         ExprBlock *         pBlock = nullptr;
-        ExprClone *         underClone = nullptr;
         int                 argumentIndex = -1;
         union {
             struct {
@@ -238,6 +240,7 @@ namespace das
                 bool        r2v  : 1;       // built-in ref2value   (read-only)
                 bool        r2cr : 1;       // built-in ref2contref (read-only, but stay ref)
                 bool        write : 1;
+                bool        underClone : 1; // this variable is [var] := expr or [var] = expr
             };
             uint32_t varFlags = 0;
         };
@@ -278,7 +281,6 @@ namespace das
         const Structure::FieldDeclaration * field = nullptr;
         int             fieldIndex = -1;
         TypeAnnotationPtr annotation;
-        ExprClone *     underClone = nullptr;
         union {
             struct {
                 bool        unsafeDeref : 1;
@@ -292,6 +294,7 @@ namespace das
                 bool        r2cr : 1;
                 bool        write : 1;
                 bool        no_promotion : 1;
+                bool        underClone : 1; // this field is [foo.field] := expr or [fool.field] = expr
             };
             uint32_t fieldFlags = 0;
         };
@@ -397,6 +400,7 @@ namespace das
         virtual ExpressionPtr clone( const ExpressionPtr & expr = nullptr ) const override;
         virtual SimNode * simulate (Context &) const override { return nullptr; }
         virtual void serialize( AstSerializer & ser ) override;
+        Function * inFunction = nullptr;
         CallMacro * macro = nullptr;
     };
 
@@ -460,6 +464,7 @@ namespace das
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual void serialize( AstSerializer & ser ) override;
+        virtual bool rtti_isCopy() const override { return true; }
         union {
             struct {
                 bool allowCopyTemp : 1;
@@ -496,7 +501,7 @@ namespace das
         virtual SimNode * simulate (Context & context) const override;
         virtual ExpressionPtr visit(Visitor & vis) override;
         virtual void serialize( AstSerializer & ser ) override;
-        ExpressionPtr cloneSet;
+        virtual bool rtti_isClone() const override { return true; }
     };
 
     // this only exists during parsing, and can't be
@@ -1389,6 +1394,10 @@ namespace das
                 bool usedInitializer : 1;
                 bool nativeClassInitializer : 1;
                 bool isNewClass : 1;
+                bool forceClass : 1;
+                bool forceStruct : 1;
+                bool forceVariant : 1;
+                bool forceTuple : 1;
             };
             uint32_t makeStructFlags = 0;
         };
@@ -1449,6 +1458,7 @@ namespace das
         ExpressionPtr   exprWhere;
         ExpressionPtr   subexpr;
         bool            generatorSyntax = false;
+        bool            tableSyntax = false;
     };
 
     struct ExprTypeDecl : Expression {

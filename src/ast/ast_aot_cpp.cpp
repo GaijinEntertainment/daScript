@@ -1063,9 +1063,9 @@ namespace das {
         virtual StructurePtr visit ( Structure * that ) override {
             ss << "};\n";   // structure
             if ( that->fields.size() ) {
-                ss << "static_assert(sizeof(" << that->name << ")==" << that->getSizeOf() << ",\"structure size mismatch with DAS\");\n";
+                ss << "static_assert(sizeof(" << aotStructName(that) << ")==" << that->getSizeOf() << ",\"structure size mismatch with DAS\");\n";
                 for ( auto & tf : that->fields ) {
-                    ss << "static_assert(offsetof(" << that->name << "," << tf.name << ")=="
+                    ss << "static_assert(offsetof(" << aotStructName(that) << "," << tf.name << ")=="
                         << tf.offset << ",\"structure field offset mismatch with DAS\");\n";
                 }
             }
@@ -3369,7 +3369,7 @@ namespace das {
             }
             auto & src = ffor->sources[idx];
             auto & var = ffor->iteratorVariables[idx];
-            ss << string(tab,'\t') << "// " << var->name << " : " << var->type->describe() << "\n";
+            ss << string(tab,'\t') << "// " << var->name << ": " << var->type->describe() << "\n";
             if ( isCountOrUCount(src.get()) ) {
                 ss << string(tab,'\t') << "das_iterator_" << ((ExprCallFunc *) src.get())->func->name << " DAS_COMMENT(";
             } else {
@@ -3592,7 +3592,7 @@ namespace das {
                         return;
                     if ( (pfun->init || pfun->shutdown) && disableInit ) {
                         error("[init] is disabled in the options or CodeOfPolicies",
-                            "internal compiler error. [init] function made it all the way to simulate somehow", "",
+                            "internal compiler error: [init] function made it all the way to simulate somehow", "",
                                 pfun->at, CompilationError::no_init);
                     }
                     logs << "     // totalFunctions  "  << "\n";

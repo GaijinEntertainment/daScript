@@ -311,6 +311,7 @@
 %token<d>       DOUBLE                  "double constant"
 %token<s>       NAME                    "name"
 %token<s>       KEYWORD                 "keyword"
+%token<s>       TYPE_FUNCTION           "type function"
 
 /* %printer { fprintf (yyo, "%i", $$); } <i> */
 
@@ -346,6 +347,7 @@
 %type <pTypeDecl>       optional_function_type
 %type <pTypeDecl>       structure_type_declaration
 %type <pVarDeclList>    struct_variable_declaration_list
+%type <pVarDeclList>    optional_struct_variable_declaration_list
 %type <pVarDeclList>    global_variable_declaration_list
 %type <pVarDeclList>    optional_function_argument_list
 %type <pVarDeclList>    function_argument_list
@@ -412,6 +414,7 @@
 %type <pExpression>     expr_assign
 %type <pExpression>     expr_assign_pipe
 %type <pExpression>     expr_list
+%type <pExpression>     optional_expr_list
 %type <pExpression>     expr_map_tuple_list
 %type <pExpression>     expression_label
 %type <pExpression>     expression_goto
@@ -443,6 +446,7 @@
 %type <pExpression>     expr_type_decl
 %type <pExpression>     expr_cast
 %type <pExpression>     expr_block
+%type <pExpression>     expr_full_block
 %type <pExpression>     expr_named_call
 %type <pExpression>     expression_any
 %type <pExpression>     expr_numeric_const
@@ -698,8 +702,9 @@ require_declaration
     ;
 
 keyword_or_name
-    :   NAME[name]      { $$ = $name; }
-    |   KEYWORD[name]   { $$ = $name; }
+    :   NAME[name]          { $$ = $name; }
+    |   KEYWORD[name]       { $$ = $name; }
+    |   TYPE_FUNCTION[name] { $$ = $name; }
     ;
 
 require_module_name
@@ -820,7 +825,7 @@ expression_if_then_else
     ;
 
 expression_for_loop
-    :   DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs] ';' expression_block[block] {
+    :   DAS_FOR[loc] { yyextra->das_need_oxford_comma=false; } variable_name_with_pos_list[iters] DAS_IN expr_list[srcs] expression_block[block] {
         $$ = ast_forLoop(scanner,$iters,$srcs,$block,tokAt(scanner,@loc),tokAt(scanner,@block));
     }
     ;
@@ -1118,7 +1123,7 @@ global_function_declaration
     :   optional_annotation_list[annL] DAS_DEF[from] function_declaration[func] {
         $func->atDecl = tokRangeAt(scanner,@from,@func);
         assignDefaultArguments($func);
-        runFunctionAnnotations(scanner, $func, $annL, tokAt(scanner,@annL));
+        runFunctionAnnotations(scanner, yyextra, $func, $annL, tokAt(scanner,@annL));
         if ( $func->isGeneric() ) {
             if ( !yyextra->g_Program->addGeneric($func) ) {
                 das_yyerror(scanner,"generic function is already defined " +
@@ -1232,12 +1237,27 @@ expr_keyword
         $$ = pCall;
     };
 
+optional_expr_list
+    :   { $$ = nullptr; }
+    |   expr_list[arguments] { $$ = $arguments; }
+    ;
+
 expression_keyword
     :   KEYWORD[kwd] '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[decl] '>' { yyextra->das_arrow_depth --; } expr[subexpr] {
-        auto pCall = yyextra->g_Program->makeCall(tokAt(scanner,@kwd),*$kwd);
+        auto pCall = yyextra->g_Program->makeCall(tokAt(scanner,@kwd),tokAt(scanner,@subexpr),*$kwd);
         auto td = new ExprTypeDecl(tokAt(scanner,@decl),TypeDeclPtr($decl));
-        pCall->arguments.push_back(ExpressionPtr(td));
+        pCall->arguments.insert(pCall->arguments.begin(), ExpressionPtr(td));
         pCall->arguments.push_back(ExpressionPtr($subexpr));
+        delete $kwd;
+        $$ = pCall;
+    }
+    |   TYPE_FUNCTION[kwd] '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[decl] '>' { yyextra->das_arrow_depth --; } '(' optional_expr_list[arguments] ')'[atend] {
+        auto pCall = yyextra->g_Program->makeCall(tokAt(scanner,@kwd),tokAt(scanner,@atend),*$kwd);
+        if ( $arguments ) {
+            pCall->arguments = sequenceToList($arguments);
+        }
+        auto td = new ExprTypeDecl(tokAt(scanner,@decl),TypeDeclPtr($decl));
+        pCall->arguments.insert(pCall->arguments.begin(), ExpressionPtr(td));
         delete $kwd;
         $$ = pCall;
     }
@@ -1335,6 +1355,11 @@ expr_new
     |   DAS_NEWT[loc] new_type_declaration[typeDecl] '(' expr_list[arguments] ')'   {
         auto pNew = new ExprNew(tokAt(scanner,@loc),TypeDeclPtr($typeDecl),true);
         $$ = parseFunctionArguments(pNew,$arguments);
+    }
+    |   DAS_NEWT[loc] new_type_declaration[typeDecl] '(' make_struct_dim[dd] ')'   {
+        ((ExprMakeStruct *)$dd)->makeType = $typeDecl;
+        ((ExprMakeStruct *)$dd)->useInitializer = true;
+        $$ = new ExprAscend(tokAt(scanner,@loc),ExpressionPtr($dd));
     }
     |   DAS_NEWT[loc] make_decl[md] {
         $$ = new ExprAscend(tokAt(scanner,@loc),ExpressionPtr($md));
@@ -1587,6 +1612,13 @@ expr_block
     }
     ;
 
+expr_full_block
+    :   block_or_lambda[bal] optional_annotation_list[annL] optional_capture_list[clist] optional_function_argument_list[list]
+                                optional_function_type[result] block_or_simple_block[block] {
+        $$ = ast_makeBlock(scanner,$bal,$annL,$clist,$list,$result,$block,tokAt(scanner,@block),tokAt(scanner,@annL));
+    }
+    ;
+
 expr_numeric_const
     :   INTEGER[const]                        { $$ = new ExprConstInt(tokAt(scanner,@const),(int32_t)$const); }
     |   UNSIGNED_INTEGER[const]               { $$ = new ExprConstUInt(tokAt(scanner,@const),(uint32_t)$const); }
@@ -1703,6 +1735,19 @@ expr_field
         $$ = new ExprField(tokAt(scanner,@loc), tokAt(scanner,@name), ExpressionPtr($subexpr), *$name, true);
         delete $name;
     }
+    |   expr[subexpr] '.'[loc] NAME[name] '(' ')' {
+        $$ = new ExprField(tokAt(scanner,@loc), tokAt(scanner,@name), ExpressionPtr($subexpr), *$name);
+        delete $name;
+        das_yyerror(scanner,"foo.bar() method call syntax is not supported, use foo->bar() instead",
+            tokAt(scanner,@loc),CompilationError::syntax_error);
+    }
+    |   expr[subexpr] '.'[loc] NAME[name] '(' expr_list[arguments] ')' {
+        $$ = new ExprField(tokAt(scanner,@loc), tokAt(scanner,@name), ExpressionPtr($subexpr), *$name);
+        delete $name;
+        das_yyerror(scanner,"foo.bar(...) method call syntax is not supported, use foo->bar(...) instead",
+            tokAt(scanner,@loc),CompilationError::syntax_error);
+        delete $arguments;
+    }
     |   expr[subexpr] '.'[loc] { yyextra->das_suppress_errors=true; } error { yyextra->das_suppress_errors=false; } {
         $$ = new ExprField(tokAt(scanner,@loc), tokAt(scanner,@loc), ExpressionPtr($subexpr), "");
         yyerrok;
@@ -1755,7 +1800,15 @@ expr
     |   SUBSUB[loc] expr[subexpr] %prec PRE_DEC  { $$ = new ExprOp1(tokAt(scanner,@loc),"--", ExpressionPtr($subexpr)); }
     |   expr[subexpr] ADDADD[loc] %prec POST_INC { $$ = new ExprOp1(tokAt(scanner,@loc),"+++", ExpressionPtr($subexpr)); }
     |   expr[subexpr] SUBSUB[loc] %prec POST_DEC { $$ = new ExprOp1(tokAt(scanner,@loc),"---", ExpressionPtr($subexpr)); }
-    |   '(' expr[subexpr] ')'                    { $$ = $subexpr; }
+    |   '(' expr_list[subexpr] ')' {
+            if ( $subexpr->rtti_isSequence() ) {
+                auto mkt = new ExprMakeTuple(tokAt(scanner,@subexpr));
+                mkt->values = sequenceToList($subexpr);
+                $$ = mkt;
+            } else {
+                $$ = $subexpr;
+            }
+        }
     |   expr[subexpr] '['[loc] expr[index] ']'   { $$ = new ExprAt(tokAt(scanner,@loc), ExpressionPtr($subexpr), ExpressionPtr($index)); }
     |   expr[subexpr] '.' '['[loc] expr[index] ']'   { $$ = new ExprAt(tokAt(scanner,@loc), ExpressionPtr($subexpr), ExpressionPtr($index), true); }
     |   expr[subexpr] QBRA[loc] expr[index] ']'  { $$ = new ExprSafeAt(tokAt(scanner,@loc), ExpressionPtr($subexpr), ExpressionPtr($index)); }
@@ -1766,11 +1819,18 @@ expr
     |   name_in_namespace[name] '(' ')'[atend] {
             $$ = yyextra->g_Program->makeCall(tokAt(scanner,@name),tokAt(scanner,@atend),*$name);
             delete $name;
-        }
+    }
+    |   name_in_namespace[name] '(' make_struct_dim[dd] ')' {
+            ((ExprMakeStruct *)$dd)->makeType = new TypeDecl(Type::alias);
+            ((ExprMakeStruct *)$dd)->makeType->alias = *$name;
+            ((ExprMakeStruct *)$dd)->useInitializer = true;
+            delete $name;
+            $$ = $dd;
+    }
     |   name_in_namespace[name] '(' expr_list[arguments] ')'[atend] {
             $$ = parseFunctionArguments(yyextra->g_Program->makeCall(tokAt(scanner,@name),tokAt(scanner,@atend),*$name),$arguments);
             delete $name;
-        }
+    }
     |   basic_type_declaration[type] '(' ')'[atend] {
         $$ = yyextra->g_Program->makeCall(tokAt(scanner,@type),tokAt(scanner,@atend),das_to_string($type));
     }
@@ -1832,7 +1892,7 @@ expr
     |   expr_new[subexpr]                       { $$ = $subexpr; }
     |   expr_method_call[subexpr]               { $$ = $subexpr; }
     |   expr_named_call[subexpr]                { $$ = $subexpr; }
-    |   expr_block[subexpr]                     { $$ = $subexpr; }
+    |   expr_full_block[subexpr]                { $$ = $subexpr; }
     |   expr[fncall] LPIPE[loc] expr[arg]       { $$ = ast_lpipe(scanner,$fncall,$arg,tokAt(scanner,@loc)); }
     |   expr[arg] RPIPE[loc] expr[fncall]       { $$ = ast_rpipe(scanner,$arg,$fncall,tokAt(scanner,@loc)); }
 
@@ -2427,13 +2487,22 @@ optional_public_or_private_structure
     |   DAS_PUBLIC   { $$ = true; }
     ;
 
+optional_struct_variable_declaration_list
+    :   {
+        $$ = new vector<VariableDeclaration*>();
+    }
+    |   '{' struct_variable_declaration_list[list] '}' {
+        $$ = $list;
+    }
+    ;
+
 structure_declaration
     : optional_annotation_list[annL] class_or_struct[loc] optional_public_or_private_structure[pub_str] {
         if ( !yyextra->g_CommentReaders.empty() ) {
             auto tak = tokAt(scanner,@loc);
             for ( auto & crd : yyextra->g_CommentReaders ) crd->beforeStructure(tak);
         }
-    } structure_name[ps] { if ( $ps ) { $ps->isClass = $loc; $ps->privateStructure = !$pub_str; } } '{' struct_variable_declaration_list[list] '}' {
+    } structure_name[ps] { if ( $ps ) { $ps->isClass = $loc; $ps->privateStructure = !$pub_str; } } optional_struct_variable_declaration_list[list] {
         if ( $ps ) {
             ast_structureDeclaration ( scanner, $annL, tokAt(scanner,@loc), $ps, tokAt(scanner,@ps), $list );
             if ( !yyextra->g_CommentReaders.empty() ) {
@@ -2627,6 +2696,9 @@ type_declaration_no_options
         if ( $typeDecl->baseType==Type::typeDecl ) {
             das_yyerror(scanner,"type declaration can`t be used as array base type",tokAt(scanner,@typeDecl),
                 CompilationError::invalid_type);
+        } else if ( $typeDecl->baseType==Type::typeMacro ) {
+            das_yyerror(scanner,"macro can`t be used as array base type",tokAt(scanner,@typeDecl),
+                CompilationError::invalid_type);
         }
         int32_t dI = TypeDecl::dimConst;
         if ( $dimExpr->rtti_isConstant() ) {                // note: this shortcut is here so we don`t get extra infer pass on every array
@@ -2655,6 +2727,15 @@ type_declaration_no_options
         $$ = new TypeDecl(Type::typeDecl);
         $$->at = tokRangeAt(scanner,@td,@subexpr);
         $$->dimExpr.push_back($subexpr);
+    }
+    |   '$' name_in_namespace[name] '(' optional_expr_list[arguments] ')' {
+        $$ = new TypeDecl(Type::typeMacro);
+        $$->at = tokRangeAt(scanner,@name, @arguments);
+        auto args = sequenceToList($arguments);
+        $$->dimExpr.reserve(args.size()+1);
+        $$->dimExpr.push_back(new ExprConstString(tokAt(scanner,@name), *$name));
+        $$->dimExpr.insert($$->dimExpr.end(), args.begin(), args.end());
+        delete $name;
     }
     |   type_declaration_no_options[typeDecl] '-' '[' ']' {
         $typeDecl->removeDim = true;
@@ -3104,6 +3185,27 @@ make_struct_decl
         tam->arguments.push_back(ExpressionPtr($msd));
         $$ = tam;
     }
+    |   DAS_STRUCT [loc] '<' { yyextra->das_force_oxford_comma=true; yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' make_struct_dim[msd] ')'  {
+        $msd->at = tokAt(scanner,@loc);
+        ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
+        ((ExprMakeStruct *)$msd)->useInitializer = true;
+        ((ExprMakeStruct *)$msd)->forceStruct = true;
+        $$ = $msd;
+    }
+    |   DAS_CLASS [loc] '<' { yyextra->das_force_oxford_comma=true; yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' make_struct_dim[msd] ')'  {
+        $msd->at = tokAt(scanner,@loc);
+        ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
+        ((ExprMakeStruct *)$msd)->useInitializer = true;
+        ((ExprMakeStruct *)$msd)->forceClass = true;
+        $$ = $msd;
+    }
+    |   DAS_TVARIANT [loc] '<' { yyextra->das_force_oxford_comma=true; yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' make_struct_dim[msd] ')'  {
+        $msd->at = tokAt(scanner,@loc);
+        ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
+        ((ExprMakeStruct *)$msd)->useInitializer = true;
+        ((ExprMakeStruct *)$msd)->forceVariant = true;
+        $$ = $msd;
+    }
     ;
 
 make_tuple
@@ -3148,6 +3250,13 @@ make_tuple_call
         mkt->makeType = make_smart<TypeDecl>(Type::autoinfer);
         $$ = mkt;
     }
+    |   DAS_TTUPLE [loc] '<' { yyextra->das_force_oxford_comma=true; yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' make_struct_dim[msd] ')'  {
+        $msd->at = tokAt(scanner,@loc);
+        ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
+        ((ExprMakeStruct *)$msd)->useInitializer = true;
+        ((ExprMakeStruct *)$msd)->forceTuple = true;
+        $$ = $msd;
+    }
     ;
 
 make_dim
@@ -3163,7 +3272,15 @@ make_dim
     ;
 
 make_dim_decl
-    :   BRABRAB [loc] type_declaration_no_options[mkt] make_dim[mka] optional_trailing_semicolon_sqr_sqr {
+    :   '[' [loc] expr_list[arguments] optional_comma ']' {
+        auto mka = make_smart<ExprMakeArray>(tokAt(scanner,@loc));
+        mka->values = sequenceToList($arguments);
+        mka->makeType = make_smart<TypeDecl>(Type::autoinfer);
+        auto tam = yyextra->g_Program->makeCall(tokAt(scanner,@loc),"to_array_move");
+        tam->arguments.push_back(mka);
+        $$ = tam;
+    }
+    |   BRABRAB [loc] type_declaration_no_options[mkt] make_dim[mka] optional_trailing_semicolon_sqr_sqr {
         ((ExprMakeArray *)$mka)->makeType = TypeDeclPtr($mkt);
         $mka->at = tokAt(scanner,@loc);
         $$ = $mka;
@@ -3229,7 +3346,15 @@ expr_map_tuple_list
     ;
 
 make_table_decl
-    :   CBRCBRB [loc] make_table[mka] optional_trailing_semicolon_cur_cur {
+    :   '{' [loc] expr_map_tuple_list[arguments] optional_comma '}' {
+        auto mka = make_smart<ExprMakeArray>(tokAt(scanner,@loc));
+        mka->values = sequenceToList($arguments);
+        mka->makeType = make_smart<TypeDecl>(Type::autoinfer);
+        auto ttm = yyextra->g_Program->makeCall(tokAt(scanner,@loc),"to_table_move");
+        ttm->arguments.push_back(mka);
+        $$ = ttm;
+    }
+    |   CBRCBRB [loc] make_table[mka] optional_trailing_semicolon_cur_cur {
         auto mkt = make_smart<TypeDecl>(Type::autoinfer);
         mkt->dim.push_back(TypeDecl::dimAuto);
         ((ExprMakeArray *)$mka)->makeType = mkt;
@@ -3271,12 +3396,27 @@ array_comprehension_where
     |   ';' DAS_WHERE expr[clause]  { $$ = $clause; }
     ;
 
+optional_comma
+    :
+    |   ','
+    ;
+
+
 array_comprehension
-    :   BRABRAB DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' expr[subexpr] array_comprehension_where[where] ']' ']' [forend] {
-        $$ = ast_arrayComprehension(scanner,tokAt(scanner,@loc),$iters,$srcs,$subexpr,$where,tokRangeAt(scanner,@subexpr,@forend),true);
+    :   '[' DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' expr[subexpr] array_comprehension_where[where] ']' [forend] {
+        $$ = ast_arrayComprehension(scanner,tokAt(scanner,@loc),$iters,$srcs,$subexpr,$where,tokRangeAt(scanner,@subexpr,@forend),false,false);
+    }
+    |   BRABRAB DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' expr[subexpr] array_comprehension_where[where] ']' ']' [forend] {
+        $$ = ast_arrayComprehension(scanner,tokAt(scanner,@loc),$iters,$srcs,$subexpr,$where,tokRangeAt(scanner,@subexpr,@forend),true,false);
     }
     |   BRACBRB DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' expr[subexpr] array_comprehension_where[where] '}' ']' [forend] {
-        $$ = ast_arrayComprehension(scanner,tokAt(scanner,@loc),$iters,$srcs,$subexpr,$where,tokRangeAt(scanner,@subexpr,@forend),false);
+        $$ = ast_arrayComprehension(scanner,tokAt(scanner,@loc),$iters,$srcs,$subexpr,$where,tokRangeAt(scanner,@subexpr,@forend),false,false);
+    }
+    |   '{' DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' make_map_tuple[subexpr] array_comprehension_where[where] '}' [forend] {
+        $$ = ast_arrayComprehension(scanner,tokAt(scanner,@loc),$iters,$srcs,$subexpr,$where,tokRangeAt(scanner,@subexpr,@forend),false,false);
+    }
+    | CBRCBRB DAS_FOR[loc] variable_name_with_pos_list[iters] DAS_IN expr_list[srcs]  ';' make_map_tuple[subexpr] array_comprehension_where[where] '}' '}' [forend] {
+        $$ = ast_arrayComprehension(scanner,tokAt(scanner,@loc),$iters,$srcs,$subexpr,$where,tokRangeAt(scanner,@subexpr,@forend),true,false);
     }
     ;
 

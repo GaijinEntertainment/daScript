@@ -426,6 +426,28 @@ void test_abi_lambda_and_function ( Lambda lambda, Func fn, int32_t lambdaSize, 
     das_invoke_lambda<void>::invoke(context, lineinfo, lambda, lambdaSize);
 }
 
+MAKE_TYPE_FACTORY(SceneNodeId,SceneNodeId);
+
+
+struct SceneNodeIdAnnotation final: das::ManagedValueAnnotation <SceneNodeId> {
+    SceneNodeIdAnnotation(ModuleLibrary & mlib) : ManagedValueAnnotation  (mlib,"SceneNodeId","SceneNodeId") {}
+    virtual void walk ( das::DataWalker & walker, void * data ) override {
+        if ( !walker.reading ) {
+            const SceneNodeId * t = (SceneNodeId *) data;
+            uint32_t eidV = t->id;
+            walker.UInt(eidV);
+        }
+    }
+    virtual bool isLocal() const override { return true; }
+    virtual bool hasNonTrivialCtor() const override { return false; }
+    virtual bool canBePlacedInContainer() const override { return true;}
+};
+
+SceneNodeId __create_scene_node() {
+    static uint32_t id = 1;
+    return SceneNodeId{id++};
+}
+
 Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     ModuleLibrary lib(this);
     lib.addBuiltInModule();
@@ -582,6 +604,10 @@ Module_UnitTest::Module_UnitTest() : Module("UnitTest") {
     // abit
     addExtern<DAS_BIND_FUN(test_abi_lambda_and_function)>(*this, lib, "test_abi_lambda_and_function",
         SideEffects::invokeAndAccessExternal, "test_abi_lambda_and_function");
+    // SceneNodeId
+    addAnnotation(make_smart<SceneNodeIdAnnotation>(lib));
+    addExtern<DAS_BIND_FUN(__create_scene_node)>(*this, lib, "__create_scene_node",
+        SideEffects::none, "__create_scene_node");
     // and verify
     verifyAotReady();
 }

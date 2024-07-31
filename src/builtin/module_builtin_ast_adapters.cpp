@@ -1639,9 +1639,36 @@ namespace das {
         Context *   context;
     };
 
+    struct TypeMacroAdapter : TypeMacro, AstTypeMacro_Adapter {
+        TypeMacroAdapter ( const string & n, char * pClass, const StructInfo * info, Context * ctx )
+            : TypeMacro(n), AstTypeMacro_Adapter(info), classPtr(pClass), context(ctx) {
+        }
+        virtual TypeDeclPtr visit ( Program * prog, Module * mod, const TypeDeclPtr & typ ) override {
+            if ( auto fnVisit = get_visit(classPtr) ) {
+                TypeDeclPtr result;
+                runMacroFunction(context, "visit", [&]() {
+                    result = invoke_visit(context,fnVisit,classPtr,prog,mod,typ);
+                });
+                return result;
+            } else {
+                return nullptr;
+            }
+        }
+    protected:
+        void *      classPtr;
+        Context *   context;
+    };
+
     struct AstCaptureMacroAnnotation : ManagedStructureAnnotation<CaptureMacro,false,true> {
         AstCaptureMacroAnnotation(ModuleLibrary & ml)
             : ManagedStructureAnnotation ("CaptureMacro", ml) {
+            addField<DAS_BIND_MANAGED_FIELD(name)>("name");
+        }
+    };
+
+    struct AstTypeMacroAnnotation : ManagedStructureAnnotation<TypeMacro,false,true> {
+        AstTypeMacroAnnotation(ModuleLibrary & ml)
+            : ManagedStructureAnnotation ("TypeMacro", ml) {
             addField<DAS_BIND_MANAGED_FIELD(name)>("name");
         }
     };
@@ -2274,6 +2301,19 @@ namespace das {
         module->captureMacros.push_back(newM);
     }
 
+    TypeMacroPtr makeTypeMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context ) {
+        return make_smart<TypeMacroAdapter>(name,(char *)pClass,info,context);
+    }
+
+    void addModuleTypeMacro ( Module * module, TypeMacroPtr & _newM, Context * ctx, LineInfoArg * at ) {
+        auto it = module->typeMacros.find(_newM->name);
+        if ( it != module->typeMacros.end() ) {
+            ctx->throw_error_at(at, "type macro %s already exists in module %s", _newM->name.c_str(), module->name.c_str());
+        }
+        string name = _newM->name;
+        module->typeMacros[name] = das::move(_newM);
+    }
+
     SimulateMacroPtr makeSimulateMacro ( const char * name, const void * pClass, const StructInfo * info, Context * context ) {
         return make_smart<SimulateMacroAdapter>(name,(char *)pClass,info,context);
     }
@@ -2637,6 +2677,14 @@ namespace das {
         addExtern<DAS_BIND_FUN(addModuleCaptureMacro)>(*this, lib,  "add_capture_macro",
             SideEffects::modifyExternal, "addModuleCaptureMacro")
                 ->args({"module","annotation","context"});
+        // type macro
+        addAnnotation(make_smart<AstTypeMacroAnnotation>(lib));
+        addExtern<DAS_BIND_FUN(makeTypeMacro)>(*this, lib,  "make_type_macro",
+            SideEffects::modifyExternal, "makeTypeMacro")
+                ->args({"name","class","info","context"});
+        addExtern<DAS_BIND_FUN(addModuleTypeMacro)>(*this, lib,  "add_type_macro",
+            SideEffects::modifyExternal, "addModuleTypeMacro")
+                ->args({"module","annotation","context","at"});
         // simulate macro macro
         addAnnotation(make_smart<AstSimulateMacroAnnotation>(lib));
         addExtern<DAS_BIND_FUN(makeSimulateMacro)>(*this, lib,  "make_simulate_macro",

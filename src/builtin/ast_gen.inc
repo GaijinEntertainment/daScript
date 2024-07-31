@@ -405,6 +405,28 @@ public:
   }
 };
 
+class AstTypeMacro_Adapter {
+protected:
+  enum {
+    __fn_visit = 0,
+  };
+protected:
+  int _das_class_method_offset[1];
+public:
+  AstTypeMacro_Adapter ( const StructInfo * info ) {
+      _das_class_method_offset[__fn_visit] = info->fields[2]->offset;
+  }
+  __forceinline Func get_visit ( void * self ) const {
+    return getDasClassMethod(self,_das_class_method_offset[__fn_visit]);
+  }
+  __forceinline smart_ptr<TypeDecl> invoke_visit ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Program> const  prog, Module * const  mod, smart_ptr_raw<TypeDecl> const  td ) const {
+    return das_invoke_function<smart_ptr_raw<TypeDecl>>::invoke
+      <void *,smart_ptr_raw<Program> const ,Module * const ,smart_ptr_raw<TypeDecl> const >
+        (__context__,nullptr,__funcCall__,
+          self,prog,mod,td).marshal();
+  }
+};
+
 class AstSimulateMacro_Adapter {
 protected:
   enum {

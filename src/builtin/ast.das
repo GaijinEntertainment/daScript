@@ -29,6 +29,7 @@ typedef
     TypeInfoMacroPtr = smart_ptr<TypeInfoMacro>
     ForLoopMacroPtr = smart_ptr<ForLoopMacro>
     CaptureMacroPtr = smart_ptr<CaptureMacro>
+    TypeMacroPtr = smart_ptr<TypeMacro>
     SimulateMacroPtr = smart_ptr<SimulateMacro>
 
 [generic]
@@ -110,6 +111,10 @@ class AstForLoopMacro
 class AstCaptureMacro
     def abstract captureExpression ( prog:Program?; mod:Module?; expr:ExpressionPtr; etype:TypeDeclPtr ) : ExpressionPtr
     def abstract captureFunction ( prog:Program?; mod:Module?; var lcs:Structure?; var fun:FunctionPtr ) : void
+
+[macro_interface]
+class AstTypeMacro
+    def abstract visit ( prog:ProgramPtr; mod:Module?; td:TypeDeclPtr ) : TypeDeclPtr
 
 [macro_interface]
 class AstSimulateMacro
@@ -737,6 +742,15 @@ def make_capture_macro ( name : string; someClassPtr ) : CaptureMacroPtr
         concept_assert(false,"expecting pointer to class")
         return <- [[CaptureMacroPtr]]
 
+[macro_function]
+def make_type_macro ( name : string; someClassPtr ) : TypeMacroPtr
+    static_if typeinfo(is_pointer someClassPtr) && typeinfo(is_class *someClassPtr)
+        let classInfo = class_info(*someClassPtr)
+        return <- make_type_macro(name, someClassPtr, classInfo)
+    else
+        concept_assert(false,"expecting pointer to class")
+        return <- [[TypeMacroPtr]]
+
 var private gc_root_AstSimulateMacro : array<AstSimulateMacro?>
 
 [macro_function]
@@ -788,6 +802,11 @@ def add_new_for_loop_macro ( name:string; someClassPtr )
 def add_new_capture_macro ( name:string; someClassPtr )
     var inscope ann <- make_capture_macro(name, someClassPtr)
     this_module() |> add_capture_macro(ann)
+
+[macro_function]
+def add_new_type_macro ( name:string; someClassPtr )
+    var inscope ann <- make_type_macro(name, someClassPtr)
+    this_module() |> add_type_macro(ann)
 
 [macro_function]
 def add_new_simulate_macro ( name:string; someClassPtr )
@@ -845,7 +864,7 @@ def find_module(prog:smart_ptr<Program>; name:string) : Module?
         if string(mod.name)==name
             rm = mod
     if rm==null
-        panic("module `{name}` not found")
+        panic("module '{name}' not found")
     return rm
 
 [generic]

@@ -375,6 +375,15 @@ namespace das {
         return module ? module->name+"::"+name : name;
     }
 
+    bool Structure::unsafeInit ( das_set<Structure *> & dep ) const {
+        if ( safeWhenUninitialized ) return false;
+        for ( const auto & fd : fields ) {
+            if ( fd.init ) return true;
+            if ( fd.type && fd.type->unsafeInit(dep) ) return true;
+        }
+        return false;
+    }
+
     bool Structure::needInScope(das_set<Structure *> & dep) const {   // &&
         for ( const auto & fd : fields ) {
             if ( fd.type && fd.type->needInScope(dep) ) {
@@ -611,17 +620,17 @@ namespace das {
         }
         ss << name;
         if ( arguments.size() ) {
-            ss << " ( ";
+            ss << "(";
             for ( auto & arg : arguments ) {
-                ss << arg->name << " : " << *arg->type;
+                ss << arg->name << ": " << *arg->type;
                 if ( extra==DescribeExtra::yes && arg->init ) {
                     ss << " = " << *arg->init;
                 }
                 if ( arg != arguments.back() ) ss << "; ";
             }
-            ss << " )";
+            ss << ")";
         }
-        ss << " : " << result->describe();
+        ss << ": " << result->describe();
         return ss.str();
     }
 
@@ -1059,6 +1068,7 @@ namespace das {
         auto cexpr = clonePtr<ExprPtr2Ref>(expr);
         Expression::clone(cexpr);
         cexpr->subexpr = subexpr->clone();
+        cexpr->assumeNoAlias = assumeNoAlias;
         return cexpr;
     }
 
@@ -1160,6 +1170,15 @@ namespace das {
         cexpr->value = value;
         cexpr->text = text;
         return cexpr;
+    }
+
+    string TypeDecl::typeMacroName() const {
+        if ( dimExpr.size()<1 ) return "";
+        if ( dimExpr[0]->rtti_isStringConstant() ) {
+            return ((ExprConstString *)dimExpr[0].get())->text;
+        } else {
+            return "";
+        }
     }
 
     // ExprStaticAssert
@@ -2354,6 +2373,7 @@ namespace das {
         auto cexpr = clonePtr<ExprCallMacro>(expr);
         ExprLooksLikeCall::clone(cexpr);
         cexpr->macro = macro;
+        cexpr->inFunction = inFunction;
         return cexpr;
     }
 
@@ -2384,7 +2404,7 @@ namespace das {
 
     string ExprLooksLikeCall::describe() const {
         TextWriter stream;
-        stream << name << " ( ";
+        stream << name << "(";
         for ( auto & arg : arguments ) {
             if ( arg->type )
                 stream << *arg->type;
@@ -2394,7 +2414,7 @@ namespace das {
                 stream << ", ";
             }
         }
-        stream << " )";
+        stream << ")";
         return stream.str();
     }
 
@@ -2636,6 +2656,7 @@ namespace das {
         cexpr->exprFor = exprFor->clone();
         cexpr->subexpr = subexpr->clone();
         cexpr->generatorSyntax = generatorSyntax;
+        cexpr->tableSyntax = tableSyntax;
         if ( exprWhere ) {
             cexpr->exprWhere = exprWhere->clone();
         }

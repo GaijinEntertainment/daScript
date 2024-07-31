@@ -403,7 +403,12 @@ namespace das
             // its ok to generate simplified set here
             auto left = lE->simulate(context);
             auto right = rE->simulate(context);
-            return context.code->makeValueNode<SimNode_Set>(rightType.baseType, at, left, right);
+            if ( rightType.baseType == Type::tHandle ) {
+                // this is a value type, we need to copy it
+                return ((TypeAnnotation*)(rightType.annotation))->simulateCopy(context, at, left, right);
+            } else {
+                return context.code->makeValueNode<SimNode_Set>(rightType.baseType, at, left, right);
+            }
         }
     }
 
@@ -1476,7 +1481,7 @@ namespace das
                         auto sze = sizeexpr->simulate(context);
                         return context.code->makeNode<SimNode_DeleteClassPtr>(at, sube, total, sze, persistent);
                     } else {
-                        context.thisProgram->error("internal compiler error, SimNode_DeleteClassPtr needs size expression", "", "",
+                        context.thisProgram->error("internal compiler error: SimNode_DeleteClassPtr needs size expression", "", "",
                                                 at, CompilationError::missing_node );
                         return nullptr;
                     }
@@ -1514,7 +1519,7 @@ namespace das
             return context.code->makeNode<SimNode_DeleteLambda>(at, sube, total);
         } else {
             DAS_ASSERTF(0, "we should not be here. this is delete for unsupported type. infer types should have failed.");
-            context.thisProgram->error("internal compilation error, generating node for unsupported ExprDelete", "", "", at);
+            context.thisProgram->error("internal compiler error: generating node for unsupported ExprDelete", "", "", at);
             return nullptr;
         }
     }
@@ -2364,6 +2369,10 @@ namespace das
         if ( left->type->isHandle() ) {
             auto lN = left->simulate(context);
             auto rN = right->simulate(context);
+            auto ta = ((TypeAnnotation *)(right->type->annotation));
+            if ( !ta->isRefType() && right->type->isRef() ) {
+                rN = ta->simulateRef2Value(context, at, rN);
+            }
             retN = left->type->annotation->simulateClone(context, at, lN, rN);
         } else if ( left->type->canCopy() ) {
             retN = makeCopy(at, context, left, right );
@@ -2491,9 +2500,13 @@ namespace das
         }
         DAS_VERIFYF(simSubE, "internal error. can't be zero");
         if ( moveSemantics ) {
-            // TODO: support by-value annotations?
             if ( subexpr->type->isRef() ) {
-                return context.code->makeValueNode<SimNode_ReturnAndMoveR2V>(subexpr->type->baseType, at, simSubE);
+                if ( subexpr->type->isHandle() && !subexpr->type->annotation->isRefType() ) {
+                    auto r2v = subexpr->type->annotation->simulateRef2Value(context, at, simSubE);
+                    return context.code->makeNode<SimNode_Return>(at, r2v);
+                } else {
+                    return context.code->makeValueNode<SimNode_ReturnAndMoveR2V>(subexpr->type->baseType, at, simSubE);
+                }
             } else {
                 return context.code->makeNode<SimNode_Return>(at, simSubE);
             }
@@ -2981,12 +2994,12 @@ void Program::buildGMNLookup ( Context & context, TextWriter & logs ) {
                 GlobalVariable * collision = context.globalVariables + it->second;
                 LineInfo * errorAt = nullptr;
                 TextWriter message;
-                message << "internal compiler error. global variable mangled name hash collision "
-                    << gvar.name << " : " << debug_type(gvar.debugInfo)
+                message << "internal compiler error: global variable mangled name hash collision '"
+                    << gvar.name << ": " << debug_type(gvar.debugInfo) << "'"
                     << " hash=" << HEX << gvar.mangledNameHash << DEC
                     << " offset=" << gvar.offset;
                 if ( collision ) {
-                    message << " and " << collision->name << " : " << debug_type(collision->debugInfo)
+                    message << " and '" << collision->name << ": " << debug_type(collision->debugInfo) << "'"
                         << " hash=" << HEX << collision->mangledNameHash << DEC
                         << " offset=" << collision->offset;
                 }
@@ -3014,7 +3027,7 @@ void Program::buildGMNLookup ( Context & context, TextWriter & logs ) {
             auto mnh = fn->getMangledNameHash();
             auto it = context.tabMnLookup->find(mnh);
             if ( it != context.tabMnLookup->end() ) {
-                error("internal compiler error. function mangled name hash collision " + fn->name,
+                error("internal compiler error: function mangled name hash collision '" + fn->name + "'",
                     "", "", LineInfo());
                 return;
             }
@@ -3033,7 +3046,7 @@ void Program::buildGMNLookup ( Context & context, TextWriter & logs ) {
             for(auto s2d : pm->annotationData ) {
                 auto it = context.tabAdLookup->find(s2d.first);
                 if ( it != context.tabAdLookup->end() ) {
-                    error("internal compiler error. annotation data hash collision " + s2d.second,
+                    error("internal compiler error: annotation data hash collision " + to_string(s2d.second),
                         "", "", LineInfo());
                     return;
                 }
@@ -3159,7 +3172,7 @@ void Program::buildGMNLookup ( Context & context, TextWriter & logs ) {
                         return;
                     if ( (pfun->init || pfun->shutdown) && disableInit ) {
                         error("[init] is disabled in the options or CodeOfPolicies",
-                            "internal compiler error. [init] function made it all the way to simulate somehow", "",
+                            "internal compiler error: [init] function made it all the way to simulate somehow", "",
                                 pfun->at, CompilationError::no_init);
                     }
                     auto mangledName = pfun->getMangledName();
@@ -3211,7 +3224,7 @@ void Program::buildGMNLookup ( Context & context, TextWriter & logs ) {
                     if ( !folding && pvar->init ) {
                         if ( disableInit && !pvar->init->rtti_isConstant() ) {
                             error("[init] is disabled in the options or CodeOfPolicies",
-                                "internal compiler error. [init] function made it all the way to simulate somehow", "",
+                                "internal compiler error: [init] function made it all the way to simulate somehow", "",
                                     pvar->at, CompilationError::no_init);
                         }
                         if ( pvar->init->rtti_isMakeLocal() ) {
