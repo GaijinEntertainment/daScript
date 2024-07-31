@@ -12,7 +12,7 @@
 #include "daScript/simulate/bind_enum.h"
 
 #include <inttypes.h>
-#include "fastfloat/fast_float.h"
+#include <fast_float/fast_float.h>
 
 MAKE_TYPE_FACTORY(StringBuilderWriter, StringBuilderWriter)
 

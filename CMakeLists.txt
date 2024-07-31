@@ -637,7 +637,7 @@ include/ska/flat_hash_map.hpp
 SOURCE_GROUP_FILES("flat_hash_map" FLAT_HASH_MAP_SRC)
 
 SET(FAST_FLOAT_SRC
-include/fastfloat/fast_float.h
+include/fast_float/fast_float.h
 )
 
 SET(MAIN_SRC
@@ -666,6 +666,7 @@ ADD_PROJECT_XXD_DEPENDS(libDaScript)
 target_include_directories(libDaScript PUBLIC
     ${DAS_SMMALLOC_DIR}
     ${CMAKE_SOURCE_DIR}/3rdparty/uriparser/include
+    ${CMAKE_SOURCE_DIR}/include
 )
 target_link_libraries(libDaScript libUriParser)
 #target_link_libraries(libDaScript fmt::fmt)
