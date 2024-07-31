@@ -648,8 +648,17 @@ namespace das {
         return annotation->getFieldOffset(name);
     }
 
-    void addModuleRequire ( Module * module, Module * reqModule, bool publ ) {
-        module->requireModule[reqModule] |= publ;
+    bool addModuleRequire ( Module * module, Module * reqModule, bool publ ) {
+        auto it = module->requireModule.find(reqModule);
+        if ( it != module->requireModule.end() ) {
+            if ( !publ || it->second ) {
+                return false;
+            }
+            it->second = publ;
+            return true;
+        }
+        module->requireModule[reqModule] = publ;
+        return true;
     }
 
     #include "ast.das.inc"
