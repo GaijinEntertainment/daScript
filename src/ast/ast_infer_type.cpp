@@ -2041,6 +2041,7 @@ namespace das {
             Visitor::preVisitArgument(fn, var, lastArg);
             if ( var->type->isAlias() ) {
                 if ( auto aT = inferAlias(var->type) ) {
+                    refreshFunction(fn);
                     var->type = aT;
                     reportAstChanged();
                 } else {
