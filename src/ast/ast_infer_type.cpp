@@ -8992,16 +8992,16 @@ namespace das {
             for ( auto efn : context.extraFunctions ) {
                 addFunction(efn);
             }
-            vector<pair<Function *,uint64_t>> refreshFunctions;
+            vector<tuple<Function *,uint64_t,uint64_t>> refreshFunctions;
             thisModule->functions.foreach_with_hash([&](auto fn, uint64_t hash) {
                 auto mnh = fn->getMangledNameHash();
                 if ( hash != mnh ) {
-                    refreshFunctions.emplace_back(make_pair(fn.get(),hash));
+                    refreshFunctions.emplace_back(make_tuple(fn.get(), hash, mnh));
                 }
             });
             for ( auto rfn : refreshFunctions ) {
-                if ( !thisModule->functions.refresh_key(rfn.second, rfn.first->getMangledNameHash()) ) {
-                    error("internal compiler error: failed to refresh '" + rfn.first->getMangledName() + "'", "", "", rfn.first->at);
+                if ( !thisModule->functions.refresh_key(get<1>(rfn), get<2>(rfn)) ) {
+                    error("internal compiler error: failed to refresh '" + get<0>(rfn)->getMangledName() + "'", "", "", get<0>(rfn)->at);
                     goto failedIt;
                 }
             }
