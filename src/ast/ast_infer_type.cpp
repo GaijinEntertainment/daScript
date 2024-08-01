@@ -96,7 +96,6 @@ namespace das {
         bool                    strictProperties = false;
     public:
         vector<FunctionPtr>     extraFunctions;
-        das_hash_map<Function *,uint64_t> refreshFunctions;
     protected:
         string generateNewLambdaName(const LineInfo & at) {
             string mod = ctx.thisProgram->thisModule->name;
@@ -2041,7 +2040,6 @@ namespace das {
             Visitor::preVisitArgument(fn, var, lastArg);
             if ( var->type->isAlias() ) {
                 if ( auto aT = inferAlias(var->type) ) {
-                    refreshFunction(fn);
                     var->type = aT;
                     reportAstChanged();
                 } else {
@@ -2054,7 +2052,6 @@ namespace das {
                     var->at, CompilationError::invalid_type);
             }
             if ( var->type->ref && var->type->isRefType() ) {   // silently fix a : Foo& into a : Foo
-                refreshFunction(fn);
                 var->type->ref = false;
                 auto mname = fn->getMangledName();
                 if ( fn->module->functions.find(mname) ) {
@@ -2062,14 +2059,6 @@ namespace das {
                         var->at, CompilationError::cant_infer_generic );
                     var->type->ref = true;
                 }
-            }
-        }
-        void refreshFunction(Function * f){
-            auto it = refreshFunctions.find(f);
-            if ( it == refreshFunctions.end() ) {
-                // function signature changed, need to refresh
-                // and we remember old hash to avoid multiple refreshes
-                refreshFunctions.insert({f, f->getMangledNameHash()});
             }
         }
         virtual ExpressionPtr visitArgumentInit ( Function * f, const VariablePtr & arg, Expression * that ) override {
@@ -2080,7 +2069,6 @@ namespace das {
                         + describeType(arg->type) + " = " + describeType(arg->init->type), "", "",
                         arg->at, CompilationError::cant_infer_generic );
                 } else {
-                    refreshFunction(f);
                     TypeDecl::applyAutoContracts(varT, arg->type);
                     arg->type = varT;
                     arg->type->ref = false; // so that def ( a = VAR ) infers as def ( a : var_type ), not as def ( a : var_type & )
@@ -9004,7 +8992,14 @@ namespace das {
             for ( auto efn : context.extraFunctions ) {
                 addFunction(efn);
             }
-            for ( auto rfn : context.refreshFunctions ) {
+            vector<pair<Function *,uint64_t>> refreshFunctions;
+            thisModule->functions.foreach_with_hash([&](auto fn, uint64_t hash) {
+                auto mnh = fn->getMangledNameHash();
+                if ( hash != mnh ) {
+                    refreshFunctions.emplace_back(make_pair(fn.get(),hash));
+                }
+            });
+            for ( auto rfn : refreshFunctions ) {
                 if ( !thisModule->functions.refresh_key(rfn.second, rfn.first->getMangledNameHash()) ) {
                     error("internal compiler error: failed to refresh '" + rfn.first->getMangledName() + "'", "", "", rfn.first->at);
                     goto failedIt;
