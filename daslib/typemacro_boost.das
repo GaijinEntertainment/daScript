@@ -107,6 +107,27 @@ class TypeMacroMacro : AstFunctionAnnotation
                         return <- [[TypeDeclPtr]]
                 append_expressions(body, expr)
                 (retCall as ExprCall).arguments |> emplace_new <| qmacro((td.dimExpr[$v(macroArgIndex)] as ExprConstInt).value)
+            elif argType.baseType == Type tEnumeration
+                var inscope expr <- qmacro_block() <|
+                    if !(td.dimExpr[$v(macroArgIndex)] is ExprConstEnumeration)
+                        macro_error(compiling_program(), td.at, "expecting {$v(string(func.arguments[ai].name))} to be an enum const")
+                        return <- [[TypeDeclPtr]]
+                append_expressions(body, expr)
+                (retCall as ExprCall).arguments |> emplace_new <| qmacro((td.dimExpr[$v(macroArgIndex)] as ExprConstEnumeration).value)
+            elif argType.baseType == Type tBitfield
+                var inscope expr <- qmacro_block() <|
+                    if !(td.dimExpr[$v(macroArgIndex)] is ExprConstBitfield)
+                        macro_error(compiling_program(), td.at, "expecting {$v(string(func.arguments[ai].name))} to be a bitfield const")
+                        return <- [[TypeDeclPtr]]
+                append_expressions(body, expr)
+                (retCall as ExprCall).arguments |> emplace_new <| qmacro((td.dimExpr[$v(macroArgIndex)] as ExprConstBitfield).value)
+            elif argType.baseType == Type tBool
+                var inscope expr <- qmacro_block() <|
+                    if !(td.dimExpr[$v(macroArgIndex)] is ExprConstBool)
+                        macro_error(compiling_program(), td.at, "expecting {$v(string(func.arguments[ai].name))} to be a bool const")
+                        return <- [[TypeDeclPtr]]
+                append_expressions(body, expr)
+                (retCall as ExprCall).arguments |> emplace_new <| qmacro((td.dimExpr[$v(macroArgIndex)] as ExprConstBool).value)
             elif is_typedecl_ptr(argType)
                 (retCall as ExprCall).arguments |> emplace_new <| qmacro(td.dimExpr[$v(macroArgIndex)]._type)
             else
