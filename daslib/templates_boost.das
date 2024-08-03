@@ -415,6 +415,14 @@ def public add_type_ptr_ref ( var a : TypeDeclPtr; flags:TypeDeclFlags ) : TypeD
         )
     return <- q
 
+def public enum_class_type ( st )
+    if st.baseType==Type tInt8 || st.baseType==Type tUInt8
+        return Type tEnumeration8
+    elif st.baseType==Type tInt16 || st.baseType==Type tUInt16
+        return Type tEnumeration16
+    else
+        return Type tEnumeration
+
 def public add_type_ptr_ref ( var st : StructurePtr; flags:TypeDeclFlags ) : TypeDeclPtr
     //! Implementation details for the reification. This adds any array to the rules.
     return <- new [[TypeDecl() at=st.at, baseType=Type tStructure, structType = get_ptr(st), flags=flags]]
@@ -422,6 +430,14 @@ def public add_type_ptr_ref ( var st : StructurePtr; flags:TypeDeclFlags ) : Typ
 def public add_type_ptr_ref ( var st : Structure?; flags:TypeDeclFlags ) : TypeDeclPtr
     //! Implementation details for the reification. This adds any array to the rules.
     return <- new [[TypeDecl() at=st.at, baseType=Type tStructure, structType = st, flags=flags]]
+
+def public add_type_ptr_ref ( var st : EnumerationPtr; flags:TypeDeclFlags ) : TypeDeclPtr
+    //! Implementation details for the reification. This adds any array to the rules.
+    return <- new [[TypeDecl() at=st.at, baseType=enum_class_type(st), enumType = get_ptr(st), flags=flags]]
+
+def public add_type_ptr_ref ( var st : Enumeration?; flags:TypeDeclFlags ) : TypeDeclPtr
+    //! Implementation details for the reification. This adds any array to the rules.
+    return <- new [[TypeDecl() at=st.at, baseType=enum_class_type(st), enumType = st, flags=flags]]
 
 [unused_argument(anything), unused_argument(flags)]
 def public add_type_ptr_ref ( anything : auto(TT); flags:TypeDeclFlags ) : TypeDeclPtr

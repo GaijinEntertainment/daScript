@@ -811,14 +811,14 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 }
 <normal>"\<\|"                              return LPIPE;
 <normal>"\$\$"                              return MTAG_E;
-<normal>"\$e"                               return MTAG_E;
-<normal>"\$i"                               return MTAG_I;
-<normal>"\$v"                               return MTAG_V;
-<normal>"\$b"                               return MTAG_B;
-<normal>"\$a"                               return MTAG_A;
-<normal>"\$t"                               return MTAG_T;
-<normal>"\$c"                               return MTAG_C;
-<normal>"\$f"                               return MTAG_F;
+<normal>\$e([^a-zA-Z0-9_])                  unput(yytext[yyleng-1]); return MTAG_E;
+<normal>\$i([^a-zA-Z0-9_])                  unput(yytext[yyleng-1]); return MTAG_I;
+<normal>\$v([^a-zA-Z0-9_])                  unput(yytext[yyleng-1]); return MTAG_V;
+<normal>\$b([^a-zA-Z0-9_])                  unput(yytext[yyleng-1]); return MTAG_B;
+<normal>\$a([^a-zA-Z0-9_])                  unput(yytext[yyleng-1]); return MTAG_A;
+<normal>\$t([^a-zA-Z0-9_])                  unput(yytext[yyleng-1]); return MTAG_T;
+<normal>\$c([^a-zA-Z0-9_])                  unput(yytext[yyleng-1]); return MTAG_C;
+<normal>\$f([^a-zA-Z0-9_])                  unput(yytext[yyleng-1]); return MTAG_F;
 <normal>"\?\?"                              return QQ;
 <normal>"\?\["                              {
     yyextra->das_nested_square_braces ++;

@@ -274,9 +274,13 @@ namespace das {
         return context->allocateString(bft->findBitfieldName(value),at);
     }
 
-    int64_t ast_find_enum_value ( EnumerationPtr enu, const char * value ) {
+    int64_t ast_find_enum_value_ex ( Enumeration * enu, const char * value ) {
         if ( !value ) return 0ul;
         return enu->find(value, 0ul);
+    }
+
+    int64_t ast_find_enum_value ( EnumerationPtr enu, const char * value ) {
+        return ast_find_enum_value_ex(enu.get(), value);
     }
 
     void ast_error ( ProgramPtr prog, const LineInfo & at, const char * message, Context * context, LineInfoArg * lineInfo ) {
@@ -777,6 +781,9 @@ namespace das {
                 ->args({"bit","value","context","lineinfo"});
         addExtern<DAS_BIND_FUN(ast_find_enum_value)>(*this, lib,  "find_enum_value",
             SideEffects::none, "ast_find_enum_value")
+                ->args({"enum","value"});
+        addExtern<DAS_BIND_FUN(ast_find_enum_value_ex)>(*this, lib,  "find_enum_value",
+            SideEffects::none, "ast_find_enum_value_ex")
                 ->args({"enum","value"});
         addExtern<DAS_BIND_FUN(ast_findStructureField)>(*this, lib,  "find_structure_field",
             SideEffects::none, "ast_findStructureField")
