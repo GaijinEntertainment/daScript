@@ -12,6 +12,14 @@ require daslib/templates_boost
 
 require daslib/ast_boost public
 
+def public int64_to_enum ( _enu : auto(ET); value: int64 ) : ET
+    static_if typeinfo(sizeof type<ET>)==1
+        return unsafe(reinterpret<ET>(int8(value)))
+    static_elif typeinfo(sizeof type<ET>)==2
+        return unsafe(reinterpret<ET>(int16(value)))
+    else
+        return unsafe(reinterpret<ET>(int(value)))
+
 [macro_function]
 def append_expressions ( var blk : ExprBlock?; var eblk : ExpressionPtr )
     for e in (eblk as ExprBlock).list
@@ -107,6 +115,31 @@ class TypeMacroMacro : AstFunctionAnnotation
                         return <- [[TypeDeclPtr]]
                 append_expressions(body, expr)
                 (retCall as ExprCall).arguments |> emplace_new <| qmacro((td.dimExpr[$v(macroArgIndex)] as ExprConstInt).value)
+            elif argType.baseType==Type tBool
+                var inscope expr <- qmacro_block() <|
+                    if !(td.dimExpr[$v(macroArgIndex)] is ExprConstBool)
+                        macro_error(compiling_program(), td.at, "expecting {$v(string(func.arguments[ai].name))} to be bool const")
+                        return <- [[TypeDeclPtr]]
+                append_expressions(body, expr)
+                (retCall as ExprCall).arguments |> emplace_new <| qmacro((td.dimExpr[$v(macroArgIndex)] as ExprConstBool).value)
+            elif argType.baseType==Type tBitfield
+                var inscope expr <- qmacro_block() <|
+                    if !(td.dimExpr[$v(macroArgIndex)] is ExprConstBitfield)
+                        macro_error(compiling_program(), td.at, "expecting {$v(string(func.arguments[ai].name))} to be bool const")
+                        return <- [[TypeDeclPtr]]
+                append_expressions(body, expr)
+                (retCall as ExprCall).arguments |> emplace_new <| qmacro(bitfield((td.dimExpr[$v(macroArgIndex)] as ExprConstBitfield).value))
+            elif argType.baseType==Type tEnumeration || argType.baseType==Type tEnumeration16 || argType.baseType==Type tEnumeration8
+                let argTypeName = describe(argType)
+                var inscope expr <- qmacro_block() <|
+                    if !(td.dimExpr[$v(macroArgIndex)] is ExprConstEnumeration)
+                        macro_error(compiling_program(), td.at, "expecting {$v(string(func.arguments[ai].name))} to be {$v(argTypeName)}")
+                        return <- [[TypeDeclPtr]]
+                append_expressions(body, expr)
+                (retCall as ExprCall).arguments |> emplace_new <| qmacro(
+                    int64_to_enum(type<$t(argType)>,
+                        find_enum_value(td.dimExpr[$v(macroArgIndex)]._type.enumType,
+                            string((td.dimExpr[$v(macroArgIndex)] as ExprConstEnumeration).value))))
             elif is_typedecl_ptr(argType)
                 (retCall as ExprCall).arguments |> emplace_new <| qmacro(td.dimExpr[$v(macroArgIndex)]._type)
             else
