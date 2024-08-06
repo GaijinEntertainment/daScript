@@ -742,11 +742,6 @@ namespace das {
         ss << describeCppType(vtype,substituteRef,CpptSkipRef::no,skipConst);
     }
 
-    void describeVarLocalCppTypeCR ( TextWriter & ss, const TypeDeclPtr & vtype, CpptSubstitureRef substituteRef = CpptSubstitureRef::yes ) {
-        ss << describeCppType(vtype,substituteRef,CpptSkipRef::no,CpptSkipConst::yes);
-    }
-
-
     void describeVarLocalCppType ( TextWriter & ss, const TypeDeclPtr & vtype, CpptSubstitureRef substituteRef = CpptSubstitureRef::yes ) {
         if ( vtype->isGoodBlockType() ) {
             ss << "auto";
@@ -1300,7 +1295,7 @@ namespace das {
                 mkb->aotFunctorName = vname + "_TempFunctor";
             }
             if ( !collector.isMoved(var) ) {
-                describeVarLocalCppTypeCR(ss, var->type);
+                describeVarLocalCppType(ss, var->type);
                 ss << " ";
             }
             auto cvname = vname;
@@ -1331,7 +1326,9 @@ namespace das {
         }
         virtual void preVisitLetInit ( ExprLet * let, const VariablePtr & var, Expression * expr ) override {
             Visitor::preVisitLetInit(let,var,expr);
-            if ( var->init_via_move ) {
+            if ( var->init_via_move && var->init->rtti_isMakeBlock() ) {
+                ss << " = ";
+            } else if ( var->init_via_move ) {
                 auto vname = collector.getVarName(var);
                 auto cvname = vname;
                 if ( var->type->constant && var->type->isRefType() ) {
@@ -1382,7 +1379,9 @@ namespace das {
             if ( !expr->type->isPointer() && !var->type->ref && expr->type->isAotAlias() && !var->type->isAotAlias() ) {
                 ss << ")";
             }
-            if ( var->init_via_move ) {
+            if ( var->init_via_move && var->init->rtti_isMakeBlock() ) {
+                /* nothing. this is let a <- $ { ... } */
+            } else if ( var->init_via_move ) {
                 ss << ")";
             }
             if ( var->type->constant ) {
