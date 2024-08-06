@@ -1326,7 +1326,9 @@ namespace das {
         }
         virtual void preVisitLetInit ( ExprLet * let, const VariablePtr & var, Expression * expr ) override {
             Visitor::preVisitLetInit(let,var,expr);
-            if ( var->init_via_move ) {
+            if ( var->init_via_move && var->init->rtti_isMakeBlock() ) {
+                ss << " = ";
+            } else if ( var->init_via_move ) {
                 auto vname = collector.getVarName(var);
                 auto cvname = vname;
                 if ( var->type->constant && var->type->isRefType() ) {
@@ -1377,7 +1379,9 @@ namespace das {
             if ( !expr->type->isPointer() && !var->type->ref && expr->type->isAotAlias() && !var->type->isAotAlias() ) {
                 ss << ")";
             }
-            if ( var->init_via_move ) {
+            if ( var->init_via_move && var->init->rtti_isMakeBlock() ) {
+                /* nothing. this is let a <- $ { ... } */
+            } else if ( var->init_via_move ) {
                 ss << ")";
             }
             if ( var->type->constant ) {
