@@ -742,6 +742,11 @@ namespace das {
         ss << describeCppType(vtype,substituteRef,CpptSkipRef::no,skipConst);
     }
 
+    void describeVarLocalCppTypeCR ( TextWriter & ss, const TypeDeclPtr & vtype, CpptSubstitureRef substituteRef = CpptSubstitureRef::yes ) {
+        ss << describeCppType(vtype,substituteRef,CpptSkipRef::no,CpptSkipConst::yes);
+    }
+
+
     void describeVarLocalCppType ( TextWriter & ss, const TypeDeclPtr & vtype, CpptSubstitureRef substituteRef = CpptSubstitureRef::yes ) {
         if ( vtype->isGoodBlockType() ) {
             ss << "auto";
@@ -1295,7 +1300,7 @@ namespace das {
                 mkb->aotFunctorName = vname + "_TempFunctor";
             }
             if ( !collector.isMoved(var) ) {
-                describeVarLocalCppType(ss, var->type);
+                describeVarLocalCppTypeCR(ss, var->type);
                 ss << " ";
             }
             auto cvname = vname;
