@@ -11,6 +11,7 @@ namespace das {
         virtual bool read ( void * data, size_t size ) = 0;
         virtual void write ( const void * data, size_t size ) = 0;
         virtual size_t size() const = 0;
+        virtual ~SerializationStorage() {}
     };
 
     struct SerializationStorageVector : SerializationStorage {
@@ -50,7 +51,6 @@ namespace das {
         bool                failed = false;
         size_t              readOffset = 0;
         SerializationStorage * buffer = nullptr;
-        vector<uint8_t>     metadata;
         bool                seenNewModule = false;
     // file info clean up
         vector<FileInfo*>         deleteUponFinish; // these pointers are for builtins (which we don't serialize) and need to be cleaned manually
@@ -157,6 +157,8 @@ namespace das {
         AstSerializer& operator << ( int (&value)[n] ) {
             serialize(value, n * sizeof(int)); return *this;
         }
+
+        ___noinline bool trySerialize ( const callable<void(AstSerializer&)> &cb ) noexcept;
 
         template <typename TT>
         AstSerializer & operator << ( vector<TT> & value ) {

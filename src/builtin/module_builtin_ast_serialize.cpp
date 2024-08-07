@@ -134,6 +134,16 @@ namespace das {
         }
     }
 
+    ___noinline bool AstSerializer::trySerialize ( const callable<void(AstSerializer&)> &cb ) noexcept {
+        try {
+            cb(*this);
+            return true;
+        } catch ( const std::runtime_error & e ) {
+            failed = true;
+            return false;
+        }
+    }
+
     // copied hash_blockz64 from mics/anyhash.h to avoid binary incompatible changes
     static uint64_t hash_tag ( const uint8_t * block ) {
         auto FNV_offset_basis = 14695981039346656037ul;
@@ -1327,7 +1337,7 @@ namespace das {
             }
             ser << mangledName;
             if ( annotation != nullptr && annotation->getFieldOffset(name) == -1 ) {
-                LOG(LogLevel::error) << "Field '" << name << "' not found in '" << annotation->name << "'";
+                LOG(LogLevel::warning) << "Field '" << name << "' not found in '" << annotation->name << "'";
             }
         } else {
             if ( annotation != nullptr && annotation->getFieldOffset(name) == -1 ) {
@@ -2170,7 +2180,7 @@ namespace das {
                     program->library.addModule(deser);
                     ser << *deser;
                 } catch ( std::runtime_error & r ) {
-                    LOG(LogLevel::error) << r.what();
+                    LOG(LogLevel::warning) << r.what();
                     program->failToCompile = true;
                     return;
                 }
@@ -2181,7 +2191,7 @@ namespace das {
     }
 
     uint32_t AstSerializer::getVersion () {
-        static constexpr uint32_t currentVersion = 35;
+        static constexpr uint32_t currentVersion = 36;
         return currentVersion;
     }
 
@@ -2192,7 +2202,7 @@ namespace das {
             return true;
         } catch ( std::runtime_error & r ) {
             program->failToCompile = true;
-            LOG(LogLevel::error) << r.what();
+            LOG(LogLevel::warning) << r.what();
             return false;
         }
     }
