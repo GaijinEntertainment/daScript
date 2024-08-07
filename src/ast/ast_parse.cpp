@@ -326,6 +326,7 @@ namespace das {
             if (file_mtime != saved_mtime) {
                 logs << "ser: file mtime mismatch. Expected " << saved_mtime << ", got " << file_mtime << "\n";
             }
+            serializer_read->failed = true;
             return false;
         }
 
@@ -746,7 +747,8 @@ namespace das {
             if ( serializer_read && !policies.serialize_main_module ) serializer_read->seenNewModule = true;
             auto res = parseDaScript(fileName, access, logs, libGroup, exportAll, false, policies);
             // wirteback all parsed modules from serializer_write
-            if ( daScriptEnvironment::bound->serializer_write != nullptr ) {
+            if ( daScriptEnvironment::bound->serializer_write != nullptr
+                && (!daScriptEnvironment::bound->serializer_read || daScriptEnvironment::bound->serializer_read->failed) ) {
                 writebackModules(libGroup);
             }
             policies.threadlock_context |= res->options.getBoolOption("threadlock_context",false);
