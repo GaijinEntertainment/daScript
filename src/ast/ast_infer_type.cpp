@@ -1937,7 +1937,7 @@ namespace das {
                 error("global variable '" + var->name + "' can't be initialized at all. " + describeType(var->type), "", "",
                       var->at, CompilationError::invalid_initialization_type);
             } else if ( var->init_via_move && var->init->type->isConst() ) {
-                error("global variable '" + var->name + "' can't init (move) from a constant value",  "", "",
+                error("global variable '" + var->name + "' can't init (move) from a constant value. " + describeType(var->init->type),  "", "",
                     var->at, CompilationError::cant_move);
             } else if ( !(var->init_via_move || var->init_via_clone) && !var->init->type->canCopy() ) {
                 error("global variable '" + var->name + "' can't be copied",  "", "",
@@ -6870,7 +6870,7 @@ namespace das {
                 error("local variable " + var->name + " can only be move-initialized","","use <- for that",
                     var->at, CompilationError::invalid_initialization_type);
             } else if ( var->init_via_move && var->init->type->isConst() ) {
-                error("local variable " + var->name + " can't init (move) from a constant value", "", "",
+                error("local variable " + var->name + " can't init (move) from a constant value. " + describeType(var->init->type), "", "",
                     var->at, CompilationError::cant_move);
             } else if ( var->init_via_clone && !var->init->type->canClone() ) {
                 auto varType = make_smart<TypeDecl>(*var->type);
