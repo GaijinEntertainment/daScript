@@ -330,36 +330,36 @@ def from_JV ( var v:JsonValue explicit?; anything : table< auto(KT);auto(VT) > )
     return <- ret
 
 def from_JV ( var v:JsonValue explicit?; anything : auto(TT) )
-	static_if typeinfo(is_dim anything)
+    static_if typeinfo(is_dim anything)
         var ret : TT[typeinfo(dim anything)]
-		if v==null || !(v.value is _array)
-			return <- ret
-		unsafe
-			var arr & = v.value as _array
-			if arr |> length != typeinfo(dim anything)
-				return <- ret
+        if v==null || !(v.value is _array)
+            return <- ret
+        unsafe
+            var arr & = v.value as _array
+            if arr |> length != typeinfo(dim anything)
+                return <- ret
             for i in 0..typeinfo(dim anything)
                 move_to_ref ( ret[i], _::from_JV(arr[i], decltype_noref(anything[0])) )
-			return <- ret
-	static_elif typeinfo(is_struct anything) || typeinfo(is_tuple anything)
-		var ret : TT
-	    if v==null || !(v.value is _object)
-			return <- ret
-		apply(ret) <| $ ( name:string; var field )
+            return <- ret
+    static_elif typeinfo(is_struct anything) || typeinfo(is_tuple anything)
+        var ret <- [[TT -const()]]
+        if v==null || !(v.value is _object)
+            return <- ret
+        apply(ret) <| $ ( name:string; var field )
             move_to_ref ( field, _::from_JV((v as _object)[name], decltype_noref(field)) )
-		return <- ret
+        return <- ret
     static_elif typeinfo(is_array anything)
         var ret : TT
-		if v==null || !(v.value is _array)
+        if v==null || !(v.value is _array)
             return <- ret
-		unsafe
-			var arr & = v.value as _array
+        unsafe
+            var arr & = v.value as _array
             for i in range(arr |> length)
                 if typeinfo(can_copy anything[0])
                     ret |> push_clone <| _::from_JV(arr[i], decltype_noref(anything[0]))
                 else
                     ret |> emplace <| _::from_JV(arr[i], decltype_noref(anything[0]))
-			return <- ret
+            return <- ret
     static_elif typeinfo(is_variant anything)
         var ret : TT
         if v==null || !(v.value is _object)
@@ -369,10 +369,10 @@ def from_JV ( var v:JsonValue explicit?; anything : auto(TT) )
             return <- ret
         unsafe
             set_variant_index(ret, int(vv.value as _number))
-		apply(ret) <| $ ( name:string; var field )
+        apply(ret) <| $ ( name:string; var field )
             move_to_ref ( field, _::from_JV((v as _object)[name], decltype_noref(field)) )
         return <- ret
-	else
+    else
         concept_assert(false, "unsupported json serialization type. missing 'fromJV")
 
 def JV ( v : float )
