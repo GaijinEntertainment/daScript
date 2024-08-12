@@ -744,6 +744,7 @@ class LlvmJitVisitor : AstVisitor
             LLVMBuildCondBr(g_builder, loop_cond, loop_bb, loop_end_bb)
             LLVMPositionBuilderAtEnd(g_builder,loop_end_bb)
 
+
     def new_entry(expr:smart_ptr<ExprNew>)
         var new_ptr : LLVMOpaqueValue?
         var persistent = false
@@ -753,7 +754,7 @@ class LlvmJitVisitor : AstVisitor
         new_ptr = build_alloc(bytes, persistent)
         check_ptr_zero(new_ptr, expr.at, "new returned null")
         if expr.initializer
-            call2cmres[get_ptr(ExpressionPtr(expr))] = new_ptr
+            call2cmres[get_expr_ptr(expr)] = new_ptr
             make_call(expr, false)
         else
             LLVMBuildMemSet(g_builder, new_ptr, LLVMConstInt(LLVMInt8Type(), 0ul, 0), LLVMConstInt(LLVMInt32Type(), uint64(bytes), 0), 16u)
@@ -842,7 +843,7 @@ class LlvmJitVisitor : AstVisitor
         return args
 
     def register_extern_function ( expr:smart_ptr<ExprCallFunc> ) : LLVMOpaqueValue?
-        let mangled_name = get_mangled_name(FunctionPtr(expr.func))
+        let mangled_name = get_mangled_name(expr.func)
         var ofunc = LLVMGetNamedFunction(g_mod, mangled_name)
         if ofunc == null
             var arg_types : array<LLVMOpaqueType?>
@@ -878,10 +879,10 @@ class LlvmJitVisitor : AstVisitor
         return ofunc
 
     def register_interop_function ( expr:smart_ptr<ExprCallFunc> ) : LLVMOpaqueValue?
-        let mangled_name = get_mangled_name(FunctionPtr(expr.func))
+        let mangled_name = get_mangled_name(expr.func)
         var ofunc = LLVMGetNamedGlobal(g_mod, mangled_name)
         if ofunc == null
-            modules2mnh[expr.func._module] |> push(FunctionPtr(expr.func) |> get_mangled_name)
+            modules2mnh[expr.func._module] |> push(expr.func |> get_mangled_name)
             var fn_type = LLVMInteropFunctionType()
             let funcPtrType = LLVMPointerType(fn_type, 0u)
             ofunc = LLVMAddGlobal(g_mod, funcPtrType, "{mangled_name}")
@@ -923,7 +924,7 @@ class LlvmJitVisitor : AstVisitor
     def get_function_addr ( func:Function? )
         var MNH_ADDR : uint64
         unsafe
-            let mangled_name = get_mangled_name(FunctionPtr(func))
+            let mangled_name = get_mangled_name(func)
             let MNH = hash(mangled_name)
             MNH_ADDR = get_function_address(MNH,*jit_context)
         return MNH_ADDR
@@ -947,7 +948,7 @@ class LlvmJitVisitor : AstVisitor
         var cmresEval : LLVMOpaqueValue?
         if isCMRES(expr.func)
             if call2cmres |> key_exists(get_ptr(expr))
-                cmresEval = call2cmres[get_ptr(ExpressionPtr(expr))]
+                cmresEval = call2cmres[get_expr_ptr(expr)]
             elif !doesNotNeedSp && expr.stackTop!=0u
                 var vtype = type_to_llvm_type(expr._type)
                 var v_ptr_type = get_type_pointer(expr._type)
@@ -983,7 +984,7 @@ class LlvmJitVisitor : AstVisitor
             else
                 var params <- build_call_params(expr, expr.func)
                 var func = register_extern_function(expr)
-                var typ = g_fn_types[FunctionPtr(expr.func) |> get_mangled_name()]
+                var typ = g_fn_types[expr.func |> get_mangled_name()]
                 if expr.func.moreFlags.jitContextAndLineInfo
                     params |> push(get_context_param())
                     params |> push(LLVMConstPointerNull(LLVMPointerType(LLVMVoidType(),0u)))
@@ -1001,7 +1002,7 @@ class LlvmJitVisitor : AstVisitor
                 params |> push(get_context_param())
                 if cmresEval!=null
                     params |> push(LLVMBuildPointerCast(g_builder, cmresEval, LLVMPointerType(LLVMVoidType(),0u), ""))
-                let fmna = get_mangled_name(FunctionPtr(expr.func))
+                let fmna = get_mangled_name(expr.func)
                 var func = LLVMGetNamedFunction(g_mod, "{fmna} implementation")
                 var typ = g_fn_types[("{fmna} implementation")]
                 var ccall = LLVMBuildCall2(g_builder, typ, func, params, "")
@@ -1648,7 +1649,7 @@ class LlvmJitVisitor : AstVisitor
             else
                 monad_result = getE(expr.left)
                 monad_cond = LLVMBuildLoad2(g_builder, LLVMInt1Type(), monad_result, "")
-            monad2block[get_ptr(ExpressionPtr(expr))] = monad_false
+            monad2block[get_expr_ptr(expr)] = monad_false
             setE(expr, monad_result)
             if expr.op=="&&" || expr.op=="||"
                 LLVMBuildStore(g_builder, monad_cond, monad_result)
@@ -1662,7 +1663,7 @@ class LlvmJitVisitor : AstVisitor
         if isExprOp2_Func(expr)
             visitExprOp2_Func(expr)
         elif expr.op=="&&" || expr.op=="&&=" || expr.op=="||" || expr.op=="||="
-            var monad_false = monad2block[get_ptr(ExpressionPtr(expr))]
+            var monad_false = monad2block[get_expr_ptr(expr)]
             LLVMBuildStore(g_builder, getE(expr.right), getE(expr))
             LLVMBuildBr(g_builder, monad_false)
             LLVMPositionBuilderAtEnd(g_builder,monad_false)
@@ -2281,7 +2282,7 @@ class LlvmJitVisitor : AstVisitor
             var params : array<LLVMOpaqueValue?>
             params |> push(get_context_param())
             params |> push(LLVMBuildPointerCast(g_builder, cmresEval, LLVMPointerType(LLVMVoidType(),0u), ""))
-            let fmna = get_mangled_name(FunctionPtr(expr_func))
+            let fmna = get_mangled_name(expr_func)
             var func = LLVMGetNamedFunction(g_mod, "{fmna} implementation")
             var typ = g_fn_types[("{fmna} implementation")]
             var ccall = LLVMBuildCall2(g_builder, typ, func, params, "")
@@ -2986,7 +2987,7 @@ class LlvmJitVisitor : AstVisitor
         var cmresEvalPtr : LLVMOpaqueValue?
         if isCMRESType(expr._type)
             if call2cmres |> key_exists(get_ptr(expr))
-                cmresEval = call2cmres[get_ptr(ExpressionPtr(expr))]
+                cmresEval = call2cmres[get_expr_ptr(expr)]
                 cmresEvalPtr = LLVMBuildPointerCast(g_builder, cmresEval, LLVMPointerType(LLVMVoidType(),0u), "invoke_cmres_eval_{int(expr.at.line)}_ptr")
             else
                 var vtype = type_to_llvm_type(expr._type)
@@ -3786,7 +3787,7 @@ class LlvmJitVisitor : AstVisitor
     def build_debug_trace ( at:LineInfo; func_name:string )
         var message : string
         if thisFunc != null
-            message = FunctionPtr(thisFunc) |> get_mangled_name
+            message = thisFunc |> get_mangled_name
         elif thisBlock != null
             message = "$block"
         var params = [[auto
