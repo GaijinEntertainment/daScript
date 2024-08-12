@@ -70,7 +70,7 @@ def describe_bitfield(bf;merger:string = "")
     else
         concept_assert(false,"requires bitfield")
 
-def describe_function_short(func:FunctionPtr)
+def describe_function_short(func:FunctionPtr|Function?)
     var args <- [{for x in func.arguments; "{x.name}:{describe(x._type,false)}" }]
     let res = "{func.name} ({join(args,";")}) : {describe(func.result,false)}"
     delete args

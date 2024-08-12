@@ -139,6 +139,12 @@ Structure macros
 
 |structure_macro-ast_boost-capture_macro|
 
+.. _handle-ast_boost-type_macro:
+
+.. das:attribute:: type_macro
+
+|structure_macro-ast_boost-type_macro|
+
 .. _handle-ast_boost-simulate_macro:
 
 .. das:attribute:: simulate_macro
@@ -429,6 +435,17 @@ it defines as follows
   | annotation_function_call : string
   | name                     : string
 
+.. _struct-ast_boost-SetupTypeMacro:
+
+.. das:attribute:: SetupTypeMacro : SetupAnyAnnotation
+
+|class-ast_boost-SetupTypeMacro|
+
+it defines as follows
+
+  | annotation_function_call : string
+  | name                     : string
+
 .. _struct-ast_boost-SetupSimulateMacro:
 
 .. das:attribute:: SetupSimulateMacro : SetupAnyAnnotation
@@ -705,11 +722,11 @@ Textual descriptions of the objects
   *  :ref:`describe (ann:rtti::AnnotationDeclaration const) : string <function-_at_ast_boost_c__c_describe_CH_ls_rtti_c__c_AnnotationDeclaration_gr_>` 
   *  :ref:`describe (list:rtti::AnnotationList const) : string const <function-_at_ast_boost_c__c_describe_CH_ls_rtti_c__c_AnnotationList_gr_>` 
   *  :ref:`describe (vvar:smart_ptr\<ast::Variable\> const) : string <function-_at_ast_boost_c__c_describe_CY_ls_VariablePtr_gr_1_ls_H_ls_ast_c__c_Variable_gr__gr__qm_M>` 
-  *  :ref:`describe_function_short (func:smart_ptr\<ast::Function\> const) : string const <function-_at_ast_boost_c__c_describe_function_short_CY_ls_FunctionPtr_gr_1_ls_H_ls_ast_c__c_Function_gr__gr__qm_M>` 
   *  :ref:`debug_expression (expr:smart_ptr\<ast::Expression\> const;deFlags:bitfield\<refCount\> const) : string <function-_at_ast_boost_c__c_debug_expression_CY_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_M_CY_ls_DebugExpressionFlags_gr_N_ls_refCount_gr_t>` 
   *  :ref:`debug_expression (expr:ast::Expression? const) : string <function-_at_ast_boost_c__c_debug_expression_C1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_>` 
   *  :ref:`describe (expr:ast::Expression? const) : string <function-_at_ast_boost_c__c_describe_C1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_>` 
   *  :ref:`describe_bitfield (bf:auto const;merger:string const) : auto <function-_at_ast_boost_c__c_describe_bitfield_C._Cs>` 
+  *  :ref:`describe_function_short (func:smart_ptr\<ast::Function\> const|ast::Function? const const) : auto <function-_at_ast_boost_c__c_describe_function_short_C0_ls_CY_ls_FunctionPtr_gr_1_ls_H_ls_ast_c__c_Function_gr__gr__qm_M;C1_ls_H_ls_ast_c__c_Function_gr__gr__qm__gr_|>` 
 
 .. _function-_at_ast_boost_c__c_describe_CH_ls_rtti_c__c_AnnotationArgumentList_gr_:
 
@@ -770,21 +787,6 @@ describe returns string
 
 
 |function-ast_boost-describe|
-
-.. _function-_at_ast_boost_c__c_describe_function_short_CY_ls_FunctionPtr_gr_1_ls_H_ls_ast_c__c_Function_gr__gr__qm_M:
-
-.. das:function:: describe_function_short(func: FunctionPtr)
-
-describe_function_short returns string const
-
-+--------+----------------------------------------+
-+argument+argument type                           +
-+========+========================================+
-+func    + :ref:`FunctionPtr <alias-FunctionPtr>` +
-+--------+----------------------------------------+
-
-
-|function-ast_boost-describe_function_short|
 
 .. _function-_at_ast_boost_c__c_debug_expression_CY_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_M_CY_ls_DebugExpressionFlags_gr_N_ls_refCount_gr_t:
 
@@ -849,6 +851,21 @@ describe_bitfield returns auto
 
 
 |function-ast_boost-describe_bitfield|
+
+.. _function-_at_ast_boost_c__c_describe_function_short_C0_ls_CY_ls_FunctionPtr_gr_1_ls_H_ls_ast_c__c_Function_gr__gr__qm_M;C1_ls_H_ls_ast_c__c_Function_gr__gr__qm__gr_|:
+
+.. das:function:: describe_function_short(func: smart_ptr<Function> const|Function? const const)
+
+describe_function_short returns auto
+
++--------+-------------+
++argument+argument type+
++========+=============+
++func    +option const +
++--------+-------------+
+
+
+|function-ast_boost-describe_function_short|
 
 +++++++
 Queries

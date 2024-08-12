@@ -337,6 +337,12 @@ Function annotations
 
 |function_annotation-builtin-expect_dim|
 
+.. _handle-builtin-type_function:
+
+.. das:attribute:: type_function
+
+|function_annotation-builtin-type_function|
+
 .. _handle-builtin-builtin_array_sort:
 
 .. das:attribute:: builtin_array_sort
@@ -346,6 +352,12 @@ Function annotations
 +++++++++++
 Call macros
 +++++++++++
+
+.. _call-macro-builtin-make_function_unsafe:
+
+.. das:attribute:: make_function_unsafe
+
+|function_annotation-builtin-make_function_unsafe|
 
 .. _call-macro-builtin-concept_assert:
 
@@ -3707,8 +3719,8 @@ Lock checking internals
 +++++++++++++++++++++++
 
   *  :ref:`_move_with_lockcheck (a:auto(valA)& -const;b:auto(valB)& -const) : auto <function-_at__builtin__c__c__move_with_lockcheck_&Y_ls_valA_gr_._&Y_ls_valB_gr_.>` 
-  *  :ref:`_return_with_lockcheck (a:auto(valT)& ==const -const) : valT& <function-_at__builtin__c__c__return_with_lockcheck_&_eq_Y_ls_valT_gr_.>` 
-  *  :ref:`_return_with_lockcheck (a:auto(valT) const& ==const) : valT& <function-_at__builtin__c__c__return_with_lockcheck_C&_eq_Y_ls_valT_gr_.>` 
+  *  :ref:`_return_with_lockcheck (a:auto(valT)& ==const -const) : auto& <function-_at__builtin__c__c__return_with_lockcheck_&_eq_Y_ls_valT_gr_.>` 
+  *  :ref:`_return_with_lockcheck (a:auto(valT) const& ==const) : auto& <function-_at__builtin__c__c__return_with_lockcheck_C&_eq_Y_ls_valT_gr_.>` 
   *  :ref:`_at_with_lockcheck (Tab:table\<auto(keyT);auto(valT)\> -const;at:keyT const|keyT const# const) : valT& <function-_at__builtin__c__c__at_with_lockcheck_1_ls_Y_ls_keyT_gr_._gr_2_ls_Y_ls_valT_gr_._gr_T_C0_ls_CY_ls_keyT_gr_L;C_hh_Y_ls_keyT_gr_L_gr_|>` 
 
 .. _function-_at__builtin__c__c__move_with_lockcheck_&Y_ls_valA_gr_._&Y_ls_valB_gr_.:
@@ -3732,7 +3744,7 @@ _move_with_lockcheck returns auto
 
 .. das:function:: _return_with_lockcheck(a: auto(valT)& ==const)
 
-_return_with_lockcheck returns valT&
+_return_with_lockcheck returns auto&
 
 +--------+-------------+
 +argument+argument type+
@@ -3747,7 +3759,7 @@ _return_with_lockcheck returns valT&
 
 .. das:function:: _return_with_lockcheck(a: auto(valT) const& ==const)
 
-_return_with_lockcheck returns valT&
+_return_with_lockcheck returns auto&
 
 +--------+------------------+
 +argument+argument type     +
@@ -4279,5 +4291,233 @@ malloc_usable_size returns uint64
 
 
 |function-builtin-malloc_usable_size|
+
++++++++++++++
+Uncategorized
++++++++++++++
+
+.. _function-_at__builtin__c__c_resize_and_init_1_ls_Y_ls_numT_gr_._gr_A_Ci:
+
+.. das:function:: resize_and_init(Arr: array<auto(numT)>; newSize: int const)
+
+resize_and_init returns auto
+
++--------+-----------------+
++argument+argument type    +
++========+=================+
++Arr     +array<auto(numT)>+
++--------+-----------------+
++newSize +int const        +
++--------+-----------------+
+
+
+|function-builtin-resize_and_init|
+
+.. _function-_at__builtin__c__c_resize_and_init_1_ls_Y_ls_numT_gr_._gr_A_Ci_CY_ls_numT_gr_L:
+
+.. das:function:: resize_and_init(Arr: array<auto(numT)>; newSize: int const; initValue: numT const)
+
+resize_and_init returns auto
+
++---------+-----------------+
++argument +argument type    +
++=========+=================+
++Arr      +array<auto(numT)>+
++---------+-----------------+
++newSize  +int const        +
++---------+-----------------+
++initValue+numT const       +
++---------+-----------------+
+
+
+|function-builtin-resize_and_init|
+
+.. _function-_at__builtin__c__c_erase_if_1_ls_Y_ls_TT_gr_._gr_A_C0_ls_CN_ls_key_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_b_gr__builtin_;CN_ls_key_gr_0_ls_&Y_ls_TT_gr_L_gr_1_ls_b_gr__builtin__gr_|:
+
+.. das:function:: erase_if(arr: array<auto(TT)>; blk: block<(key:TT const):bool> const|block<(var key:TT&):bool> const const)
+
+erase_if returns auto
+
++--------+---------------+
++argument+argument type  +
++========+===============+
++arr     +array<auto(TT)>+
++--------+---------------+
++blk     +option const   +
++--------+---------------+
+
+
+|function-builtin-erase_if|
+
+.. _function-_at__builtin__c__c_float2_C._C.:
+
+.. das:function:: float2(a: auto const; b: auto const)
+
+float2 returns auto
+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +auto const   +
++--------+-------------+
++b       +auto const   +
++--------+-------------+
+
+
+|function-builtin-float2|
+
+.. _function-_at__builtin__c__c_float3_C._C._C.:
+
+.. das:function:: float3(a: auto const; b: auto const; c: auto const)
+
+float3 returns auto
+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +auto const   +
++--------+-------------+
++b       +auto const   +
++--------+-------------+
++c       +auto const   +
++--------+-------------+
+
+
+|function-builtin-float3|
+
+.. _function-_at__builtin__c__c_float4_C._C._C._C.:
+
+.. das:function:: float4(a: auto const; b: auto const; c: auto const; d: auto const)
+
+float4 returns auto
+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +auto const   +
++--------+-------------+
++b       +auto const   +
++--------+-------------+
++c       +auto const   +
++--------+-------------+
++d       +auto const   +
++--------+-------------+
+
+
+|function-builtin-float4|
+
+.. _function-_at__builtin__c__c_int2_C._C.:
+
+.. das:function:: int2(a: auto const; b: auto const)
+
+int2 returns auto
+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +auto const   +
++--------+-------------+
++b       +auto const   +
++--------+-------------+
+
+
+|function-builtin-int2|
+
+.. _function-_at__builtin__c__c_int3_C._C._C.:
+
+.. das:function:: int3(a: auto const; b: auto const; c: auto const)
+
+int3 returns auto
+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +auto const   +
++--------+-------------+
++b       +auto const   +
++--------+-------------+
++c       +auto const   +
++--------+-------------+
+
+
+|function-builtin-int3|
+
+.. _function-_at__builtin__c__c_int4_C._C._C._C.:
+
+.. das:function:: int4(a: auto const; b: auto const; c: auto const; d: auto const)
+
+int4 returns auto
+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +auto const   +
++--------+-------------+
++b       +auto const   +
++--------+-------------+
++c       +auto const   +
++--------+-------------+
++d       +auto const   +
++--------+-------------+
+
+
+|function-builtin-int4|
+
+.. _function-_at__builtin__c__c_uint2_C._C.:
+
+.. das:function:: uint2(a: auto const; b: auto const)
+
+uint2 returns auto
+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +auto const   +
++--------+-------------+
++b       +auto const   +
++--------+-------------+
+
+
+|function-builtin-uint2|
+
+.. _function-_at__builtin__c__c_uint3_C._C._C.:
+
+.. das:function:: uint3(a: auto const; b: auto const; c: auto const)
+
+uint3 returns auto
+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +auto const   +
++--------+-------------+
++b       +auto const   +
++--------+-------------+
++c       +auto const   +
++--------+-------------+
+
+
+|function-builtin-uint3|
+
+.. _function-_at__builtin__c__c_uint4_C._C._C._C.:
+
+.. das:function:: uint4(a: auto const; b: auto const; c: auto const; d: auto const)
+
+uint4 returns auto
+
++--------+-------------+
++argument+argument type+
++========+=============+
++a       +auto const   +
++--------+-------------+
++b       +auto const   +
++--------+-------------+
++c       +auto const   +
++--------+-------------+
++d       +auto const   +
++--------+-------------+
+
+
+|function-builtin-uint4|
 
 

@@ -48,20 +48,20 @@ def describe ( expr : smart_ptr<Expression> )
 def describe ( expr : smart_ptr<Function> )
     return describe_function(expr)
 
-def ExpressionPtr ( expr : smart_ptr<auto(TT)> ) : ExpressionPtr
-    static_if starts_with(typeinfo(fulltypename expr),"smart_ptr<ast::Expr")
-        return <- unsafe(reinterpret<smart_ptr<Expression>> expr)
-    else
-        concept_assert(false, "not derived from ast::Expression")
-        return <- [[ExpressionPtr]]
+def clone_function ( fn : Function? ) : FunctionPtr
+    return <- clone_function(unsafe(reinterpret<FunctionPtr> fn))
 
-[generic]
-def FunctionPtr ( fun : Function? ) : FunctionPtr
-    return <- unsafe(reinterpret<FunctionPtr> fun)
+def get_mangled_name ( fn : Function? )
+    return get_mangled_name(unsafe(reinterpret<FunctionPtr> fn))
 
-[generic]
-def StructurePtr ( stru : Structure? ) : StructurePtr
-    return <- unsafe(reinterpret<StructurePtr> stru)
+def get_mangled_name ( decl : TypeDecl? )
+    return get_mangled_name(unsafe(reinterpret<TypeDeclPtr> decl))
+
+def get_mangled_name ( decl : Variable? )
+    return get_mangled_name(unsafe(reinterpret<VariablePtr> decl))
+
+def get_mangled_name ( decl : ExprBlock? )
+    return get_mangled_name(unsafe(reinterpret<smart_ptr<ExprBlock>> decl))
 
 [macro_interface]
 class AstFunctionAnnotation

@@ -757,6 +757,57 @@ add_type_ptr_ref returns  :ref:`TypeDeclPtr <alias-TypeDeclPtr>`
 
 Implementation details for the reification. This adds any array to the rules.
 
+.. _function-_at_templates_boost_c__c_add_type_ptr_ref_1_ls_H_ls_ast_c__c_Structure_gr__gr__qm__CY_ls_TypeDeclFlags_gr_N_ls_ref;constant;temporary;_implicit;removeRef;removeConstant;removeDim;removeTemporary;explicitConst;aotAlias;smartPtr;smartPtrNative;isExplicit;isNativeDim;isTag;explicitRef;isPrivateAlias;autoToAlias_gr_t:
+
+.. das:function:: add_type_ptr_ref(st: Structure?; flags: TypeDeclFlags)
+
+add_type_ptr_ref returns  :ref:`TypeDeclPtr <alias-TypeDeclPtr>` 
+
++--------+-----------------------------------------------+
++argument+argument type                                  +
++========+===============================================+
++st      + :ref:`ast::Structure <handle-ast-Structure>` ?+
++--------+-----------------------------------------------+
++flags   + :ref:`TypeDeclFlags <alias-TypeDeclFlags>`    +
++--------+-----------------------------------------------+
+
+
+Implementation details for the reification. This adds any array to the rules.
+
+.. _function-_at_templates_boost_c__c_add_type_ptr_ref_Y_ls_EnumerationPtr_gr_1_ls_H_ls_ast_c__c_Enumeration_gr__gr__qm_M_CY_ls_TypeDeclFlags_gr_N_ls_ref;constant;temporary;_implicit;removeRef;removeConstant;removeDim;removeTemporary;explicitConst;aotAlias;smartPtr;smartPtrNative;isExplicit;isNativeDim;isTag;explicitRef;isPrivateAlias;autoToAlias_gr_t:
+
+.. das:function:: add_type_ptr_ref(st: EnumerationPtr; flags: TypeDeclFlags)
+
+add_type_ptr_ref returns  :ref:`TypeDeclPtr <alias-TypeDeclPtr>` 
+
++--------+----------------------------------------------+
++argument+argument type                                 +
++========+==============================================+
++st      + :ref:`EnumerationPtr <alias-EnumerationPtr>` +
++--------+----------------------------------------------+
++flags   + :ref:`TypeDeclFlags <alias-TypeDeclFlags>`   +
++--------+----------------------------------------------+
+
+
+Implementation details for the reification. This adds any array to the rules.
+
+.. _function-_at_templates_boost_c__c_add_type_ptr_ref_1_ls_H_ls_ast_c__c_Enumeration_gr__gr__qm__CY_ls_TypeDeclFlags_gr_N_ls_ref;constant;temporary;_implicit;removeRef;removeConstant;removeDim;removeTemporary;explicitConst;aotAlias;smartPtr;smartPtrNative;isExplicit;isNativeDim;isTag;explicitRef;isPrivateAlias;autoToAlias_gr_t:
+
+.. das:function:: add_type_ptr_ref(st: Enumeration?; flags: TypeDeclFlags)
+
+add_type_ptr_ref returns  :ref:`TypeDeclPtr <alias-TypeDeclPtr>` 
+
++--------+---------------------------------------------------+
++argument+argument type                                      +
++========+===================================================+
++st      + :ref:`ast::Enumeration <handle-ast-Enumeration>` ?+
++--------+---------------------------------------------------+
++flags   + :ref:`TypeDeclFlags <alias-TypeDeclFlags>`        +
++--------+---------------------------------------------------+
+
+
+Implementation details for the reification. This adds any array to the rules.
+
 .. _function-_at_templates_boost_c__c_apply_qmacro_1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_M_CN_ls_rules_gr_0_ls_S_ls_templates_boost_c__c_Template_gr__gr_1_ls_v_gr__builtin_:
 
 .. das:function:: apply_qmacro(expr: smart_ptr<Expression>; blk: block<(var rules:Template):void> const)
@@ -1071,6 +1122,38 @@ add_array_ptr_ref returns array<smart_ptr<TT>>
 +========+==========================+
 +a       +array<smart_ptr<auto(TT)>>+
 +--------+--------------------------+
+
+
+Implementation details for the reification. This adds any array to the rules.
+
+.. _function-_at_templates_boost_c__c_enum_class_type_C.:
+
+.. das:function:: enum_class_type(st: auto const)
+
+enum_class_type returns auto
+
++--------+-------------+
++argument+argument type+
++========+=============+
++st      +auto const   +
++--------+-------------+
+
+
+|function-templates_boost-enum_class_type|
+
+.. _function-_at_templates_boost_c__c_add_type_ptr_ref_CY_ls_TT_gr_._CY_ls_TypeDeclFlags_gr_N_ls_ref;constant;temporary;_implicit;removeRef;removeConstant;removeDim;removeTemporary;explicitConst;aotAlias;smartPtr;smartPtrNative;isExplicit;isNativeDim;isTag;explicitRef;isPrivateAlias;autoToAlias_gr_t:
+
+.. das:function:: add_type_ptr_ref(anything: auto(TT) const; flags: TypeDeclFlags)
+
+add_type_ptr_ref returns  :ref:`TypeDeclPtr <alias-TypeDeclPtr>` 
+
++--------+--------------------------------------------+
++argument+argument type                               +
++========+============================================+
++anything+auto(TT) const                              +
++--------+--------------------------------------------+
++flags   + :ref:`TypeDeclFlags <alias-TypeDeclFlags>` +
++--------+--------------------------------------------+
 
 
 Implementation details for the reification. This adds any array to the rules.

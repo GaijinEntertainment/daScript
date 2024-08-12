@@ -28,7 +28,7 @@ class SafeAddrMacro : AstFunctionAnnotation
     //! This macro reports an error if safe_addr is attempted on the object, which is not local to the scope.
     //! I.e. if the object can `expire` while in scope, with delete, garbage collection, or on the C++ side.
     def override transform ( var call : smart_ptr<ExprCallFunc>; var errors : das_string ) : ExpressionPtr
-        if !is_local_or_global_expr(ExpressionPtr(call.arguments[0]))
+        if !is_local_or_global_expr(call.arguments[0])
             compiling_program() |> macro_error(call.at,"not a local value")
         return <- [[ExpressionPtr]]
 
@@ -59,7 +59,7 @@ class SharedAddrMacro : AstFunctionAnnotation
     //! This macro reports an error if shared_addr is attempted on anything other that shared global variables.
     //! I.e. only global variables are safe to use with shared_addr.
     def override verifyCall ( var call : smart_ptr<ExprCallFunc>; args,progArgs:AnnotationArgumentList; var errors : das_string ) : bool
-        if is_shared_expr(ExpressionPtr(call.arguments[0]))
+        if is_shared_expr(call.arguments[0])
             return true
         compiling_program() |> macro_error(call.at,"{call.name} can only be used with shared global variables")
         return false

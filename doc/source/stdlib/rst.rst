@@ -108,17 +108,17 @@ Marks the group as hidden.
 Uncategorized
 +++++++++++++
 
-.. _function-_at_rst_c__c_function_file_name_CY_ls_FunctionPtr_gr_1_ls_H_ls_ast_c__c_Function_gr__gr__qm_M:
+.. _function-_at_rst_c__c_function_file_name_C0_ls_CY_ls_FunctionPtr_gr_1_ls_H_ls_ast_c__c_Function_gr__gr__qm_M;C1_ls_H_ls_ast_c__c_Function_gr__gr__qm__gr_|:
 
-.. das:function:: function_file_name(value: FunctionPtr)
+.. das:function:: function_file_name(value: smart_ptr<Function> const|Function? const const)
 
-function_file_name returns string
+function_file_name returns auto
 
-+--------+----------------------------------------+
-+argument+argument type                           +
-+========+========================================+
-+value   + :ref:`FunctionPtr <alias-FunctionPtr>` +
-+--------+----------------------------------------+
++--------+-------------+
++argument+argument type+
++========+=============+
++value   +option const +
++--------+-------------+
 
 
 Return file name to match function name. Things like ? are replaced via appropriate suffixes.
