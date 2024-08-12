@@ -521,6 +521,7 @@ namespace das
                 uint32_t offset =  extraOffset + index*stride + fieldOffset;
                 auto mkl = static_pointer_cast<ExprMakeLocal>(decl->value);
                 mkl->setRefSp(ref, cmres, sp, offset);
+                mkl->doesNotNeedInit = false;
             } else if ( decl->value->rtti_isCall() ) {
                 auto cll = static_pointer_cast<ExprCall>(decl->value);
                 if ( cll->allowCmresSkip() ) {
