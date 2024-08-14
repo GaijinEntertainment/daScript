@@ -935,7 +935,11 @@ def has_value ( a; key )
         concept_assert(false,"can't iterate over source; 'has_value' is meaningless")
         return false
 
-def get_ptr ( src : smart_ptr<auto(TT)> ) : TT?
+def get_ptr ( src : smart_ptr<auto(TT)> ==const ) : TT? const
+    unsafe
+        return reinterpret<TT?> src
+
+def get_ptr ( var src : smart_ptr<auto(TT)> ==const ) : TT?
     unsafe
         return reinterpret<TT?> src
 
