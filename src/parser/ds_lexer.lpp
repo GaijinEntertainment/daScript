@@ -875,19 +875,37 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 <normal>"\<\<\<\="                          return ROTLEQU;
 <normal>"\=\>"                              return MAPTO;
 <normal>"\[\["                              {
-        yyextra->das_nested_square_braces ++;
-        yyextra->das_nested_square_braces ++;
-        return BRABRAB;
+        if ( yyextra->das_new_make_syntax ) {
+            yyextra->das_nested_square_braces ++;
+            unput('[');
+            return '[';
+        } else {
+            yyextra->das_nested_square_braces ++;
+            yyextra->das_nested_square_braces ++;
+            return BRABRAB;
+        }
     }
 <normal>"\[\{"                              {
-        yyextra->das_nested_square_braces ++;
-        yyextra->das_nested_curly_braces ++;
-        return BRACBRB;
+        if ( yyextra->das_new_make_syntax ) {
+            yyextra->das_nested_square_braces ++;
+            unput('{');
+            return '[';
+        } else {
+            yyextra->das_nested_curly_braces ++;
+            yyextra->das_nested_square_braces ++;
+            return BRACBRB;
+        }
     }
 <normal>"\{\{"                              {
-        yyextra->das_nested_curly_braces ++;
-        yyextra->das_nested_curly_braces ++;
-        return CBRCBRB;
+        if ( yyextra->das_new_make_syntax ) {
+            yyextra->das_nested_curly_braces ++;
+            unput('{');
+            return '{';
+        } else {
+            yyextra->das_nested_curly_braces ++;
+            yyextra->das_nested_curly_braces ++;
+            return CBRCBRB;
+        }
     }
 <normal>[ \r]                             /* skip white space */
 <normal>\t {

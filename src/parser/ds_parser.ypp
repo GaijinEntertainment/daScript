@@ -672,6 +672,18 @@ expr_reader
 
 options_declaration
     :   DAS_OPTIONS annotation_argument_list[list] {
+        for ( auto & opt : *$list ) {
+            if ( opt.name=="indenting" && opt.type==Type::tInt ) {
+                if (opt.iValue != 0 && opt.iValue != 2 && opt.iValue != 4 && opt.iValue != 8) { //this is error
+                    yyextra->das_tab_size = yyextra->das_def_tab_size;
+                } else {
+                    yyextra->das_tab_size = opt.iValue ? opt.iValue : yyextra->das_def_tab_size;//0 is default
+                }
+                yyextra->g_FileAccessStack.back()->tabSize = yyextra->das_tab_size;
+            } else if ( opt.name=="new_make_syntax" && opt.type==Type::tBool ) {
+                yyextra->das_new_make_syntax = opt.bValue;
+            }
+        }
         if ( yyextra->g_Program->options.size() ) {
             for ( auto & opt : *$list ) {
                 if ( yyextra->g_Access->isOptionAllowed(opt.name, yyextra->g_Program->thisModuleName) ) {
@@ -683,15 +695,6 @@ options_declaration
             }
         } else {
             swap ( yyextra->g_Program->options, *$list );
-        }
-        auto opt = yyextra->g_Program->options.find("indenting", tInt);
-        if (opt)
-        {
-            if (opt->iValue != 0 && opt->iValue != 2 && opt->iValue != 4 && opt->iValue != 8)//this is error
-                yyextra->das_tab_size = yyextra->das_def_tab_size;
-            else
-                yyextra->das_tab_size = opt->iValue ? opt->iValue : yyextra->das_def_tab_size;//0 is default
-            yyextra->g_FileAccessStack.back()->tabSize = yyextra->das_tab_size;
         }
         delete $list;
     }
