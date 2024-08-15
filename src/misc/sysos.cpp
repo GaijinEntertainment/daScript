@@ -20,7 +20,7 @@
 #if !defined(_M_ARM64)
         int GetLogicalProcessorCountInWindows() {
             DWORD returnLength = 0;
-            std::vector<unsigned char> buffer;
+            vector<unsigned char> buffer;
             PSYSTEM_LOGICAL_PROCESSOR_INFORMATION_EX info = nullptr;
             // First, call to get the size of the data needed.
             GetLogicalProcessorInformationEx(RelationAll, NULL, &returnLength);
