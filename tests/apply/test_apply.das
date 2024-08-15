@@ -75,3 +75,48 @@ def test_apply_named_tuple ( t:T? )
     apply(foo) <| $ ( name, field )
         if name!="a" && name!="b"
             t->fatal("unknown field")
+
+struct Foos
+    a : int
+    b : float
+
+tuple Foot
+	a : int
+	b : float
+
+variant Foov
+	a : int
+	b : float
+
+[test]
+def test_static_assert_on_name ( t:T? )
+	var f = Foos(a=1, b=2.0)
+	apply(f) <| $ ( name, value )
+		static_if name=="a"
+			assert( value == 1 )
+		else
+			assert( value == 2.0 )
+	var g  = tuple(1, 2.0)
+	apply(g) <| $ ( name, value )
+		static_if name=="_0"
+			assert( value == 1 )
+        else
+            assert( value == 2.0 )
+	var gg = [[Foot a=1, b=2.0]]
+	apply(gg) <| $ ( name, value )
+		static_if name=="a"
+			assert( value == 1 )
+        else
+            assert( value == 2.0 )
+	var h = Foov(a=1)
+	apply(h) <| $ ( name, value )
+		static_if name=="a"
+			assert( value == 1 )
+        else
+            assert( value == 0.0 )
+	var h2 = Foov(b=2.0)
+	apply(h2) <| $ ( name, value )
+		static_if name=="b"
+			assert( value == 2.0 )
+        else
+            assert( value == 0 )
