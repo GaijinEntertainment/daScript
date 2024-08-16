@@ -1379,7 +1379,7 @@ namespace das
     // rtti
         bool rtti = false;                              // create extended RTTI
     // language
-        bool new_make_syntax = false;                   // only new make syntax is allowed (no [[...]] or [{...}])
+        bool gen2_make_syntax = false;                   // only new make syntax is allowed (no [[...]] or [{...}])
         bool no_unsafe = false;
         bool local_ref_is_unsafe = true;                // var a & = ... unsafe. should be
         bool no_global_variables = false;

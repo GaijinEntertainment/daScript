@@ -390,7 +390,7 @@ namespace das {
         parserState.g_Access = access;
         parserState.g_Program = program;
         parserState.das_def_tab_size = daScriptEnvironment::bound->das_def_tab_size;
-        parserState.das_new_make_syntax = policies.new_make_syntax;
+        parserState.das_gen2_make_syntax = policies.gen2_make_syntax;
         yyscan_t scanner = nullptr;
         das_yylex_init_extra(&parserState, &scanner);
         int64_t file_mtime = access->getFileMtime(fileName.c_str());

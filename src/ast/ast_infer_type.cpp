@@ -2214,7 +2214,7 @@ namespace das {
                     c->type->firstType = make_smart<TypeDecl>(*cptr->ptrType);
                     c->type->constant = c->type->firstType->constant;
                 } else {
-                    c->type->constant = true;
+                    c->type->constant = false; // true;
                 }
             } else {
                 c->type = make_smart<TypeDecl>(c->baseType);
