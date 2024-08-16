@@ -6367,8 +6367,8 @@ yyreduce:
                     yyextra->das_tab_size = opt.iValue ? opt.iValue : yyextra->das_def_tab_size;//0 is default
                 }
                 yyextra->g_FileAccessStack.back()->tabSize = yyextra->das_tab_size;
-            } else if ( opt.name=="new_make_syntax" && opt.type==Type::tBool ) {
-                yyextra->das_new_make_syntax = opt.bValue;
+            } else if ( opt.name=="gen2_make_syntax" && opt.type==Type::tBool ) {
+                yyextra->das_gen2_make_syntax = opt.bValue;
             }
         }
         if ( yyextra->g_Program->options.size() ) {

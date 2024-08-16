@@ -25,7 +25,7 @@ namespace das {
         bool das_suppress_errors = false;
         bool das_in_normal = false;
         bool das_has_type_declarations = false;
-        bool das_new_make_syntax = false;
+        bool das_gen2_make_syntax = false;
         vector<int> das_line_no;
         das_hash_set<string> das_already_include;
         das_hash_map<string,string>   das_module_alias;

@@ -3429,7 +3429,7 @@ case 239:
 YY_RULE_SETUP
 #line 877 "ds_lexer.lpp"
 {
-        if ( yyextra->das_new_make_syntax ) {
+        if ( yyextra->das_gen2_make_syntax ) {
             yyextra->das_nested_square_braces ++;
             unput('[');
             return '[';
@@ -3444,7 +3444,7 @@ case 240:
 YY_RULE_SETUP
 #line 888 "ds_lexer.lpp"
 {
-        if ( yyextra->das_new_make_syntax ) {
+        if ( yyextra->das_gen2_make_syntax ) {
             yyextra->das_nested_square_braces ++;
             unput('{');
             return '[';
@@ -3459,7 +3459,7 @@ case 241:
 YY_RULE_SETUP
 #line 899 "ds_lexer.lpp"
 {
-        if ( yyextra->das_new_make_syntax ) {
+        if ( yyextra->das_gen2_make_syntax ) {
             yyextra->das_nested_curly_braces ++;
             unput('{');
             return '{';

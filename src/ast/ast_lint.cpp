@@ -813,7 +813,7 @@ namespace das {
         "print_var_access",             Type::tBool,
         "print_c_style",                Type::tBool,
         "print_func_use",               Type::tBool,
-        "new_make_syntax",              Type::tBool,
+        "gen2_make_syntax",              Type::tBool,
     // rtti
         "rtti",                         Type::tBool,
     // optimization

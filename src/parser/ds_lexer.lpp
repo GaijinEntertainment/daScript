@@ -875,7 +875,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
 <normal>"\<\<\<\="                          return ROTLEQU;
 <normal>"\=\>"                              return MAPTO;
 <normal>"\[\["                              {
-        if ( yyextra->das_new_make_syntax ) {
+        if ( yyextra->das_gen2_make_syntax ) {
             yyextra->das_nested_square_braces ++;
             unput('[');
             return '[';
@@ -886,7 +886,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
         }
     }
 <normal>"\[\{"                              {
-        if ( yyextra->das_new_make_syntax ) {
+        if ( yyextra->das_gen2_make_syntax ) {
             yyextra->das_nested_square_braces ++;
             unput('{');
             return '[';
@@ -897,7 +897,7 @@ void das_accept_cpp_comment ( vector<CommentReader *> & crdi, yyscan_t scanner, 
         }
     }
 <normal>"\{\{"                              {
-        if ( yyextra->das_new_make_syntax ) {
+        if ( yyextra->das_gen2_make_syntax ) {
             yyextra->das_nested_curly_braces ++;
             unput('{');
             return '{';
