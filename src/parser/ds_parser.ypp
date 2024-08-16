@@ -400,6 +400,7 @@
 %type <b>               optional_static_member_variable
 %type <b>               optional_public_or_private_enum
 %type <b>               optional_in_scope
+%type <b>               optional_comma
 
 %type <b>               if_or_static_if
 %type <b>               elif_or_static_elif
@@ -1803,10 +1804,14 @@ expr
     |   SUBSUB[loc] expr[subexpr] %prec PRE_DEC  { $$ = new ExprOp1(tokAt(scanner,@loc),"--", ExpressionPtr($subexpr)); }
     |   expr[subexpr] ADDADD[loc] %prec POST_INC { $$ = new ExprOp1(tokAt(scanner,@loc),"+++", ExpressionPtr($subexpr)); }
     |   expr[subexpr] SUBSUB[loc] %prec POST_DEC { $$ = new ExprOp1(tokAt(scanner,@loc),"---", ExpressionPtr($subexpr)); }
-    |   '(' expr_list[subexpr] ')' {
+    |   '(' expr_list[subexpr] optional_comma[comma] ')' {
             if ( $subexpr->rtti_isSequence() ) {
                 auto mkt = new ExprMakeTuple(tokAt(scanner,@subexpr));
                 mkt->values = sequenceToList($subexpr);
+                $$ = mkt;
+            } else if ( $comma ) {
+                auto mkt = new ExprMakeTuple(tokAt(scanner,@subexpr));
+                mkt->values.push_back($subexpr);
                 $$ = mkt;
             } else {
                 $$ = $subexpr;
@@ -3247,7 +3252,7 @@ make_map_tuple
     ;
 
 make_tuple_call
-    :   DAS_TTUPLE[loc] '(' expr_list[arguments] ')' {
+    :   DAS_TTUPLE[loc] '(' expr_list[arguments] optional_comma ')' {
         auto mkt = new ExprMakeTuple(tokAt(scanner,@loc));
         mkt->values = sequenceToList($arguments);
         mkt->makeType = make_smart<TypeDecl>(Type::autoinfer);
@@ -3295,7 +3300,7 @@ make_dim_decl
         tam->arguments.push_back(ExpressionPtr($mka));
         $$ = tam;
     }
-    |   DAS_ARRAY[loc] '(' expr_list[arguments] ')' {
+    |   DAS_ARRAY[loc] '(' expr_list[arguments] optional_comma ')' {
         auto mka = make_smart<ExprMakeArray>(tokAt(scanner,@loc));
         mka->values = sequenceToList($arguments);
         mka->makeType = make_smart<TypeDecl>(Type::autoinfer);
@@ -3303,7 +3308,7 @@ make_dim_decl
         tam->arguments.push_back(mka);
         $$ = tam;
     }
-    |   DAS_ARRAY[loc] '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' expr_list[arguments] ')' {
+    |   DAS_ARRAY[loc] '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' expr_list[arguments] optional_comma ')' {
         auto mka = make_smart<ExprMakeArray>(tokAt(scanner,@loc));
         mka->values = sequenceToList($arguments);
         mka->makeType = TypeDeclPtr($mkt);
@@ -3311,14 +3316,14 @@ make_dim_decl
         tam->arguments.push_back(mka);
         $$ = tam;
     }
-    |   DAS_FIXED_ARRAY[loc] '(' expr_list[arguments] ')' {
+    |   DAS_FIXED_ARRAY[loc] '(' expr_list[arguments] optional_comma ')' {
         auto mka = new ExprMakeArray(tokAt(scanner,@loc));
         mka->values = sequenceToList($arguments);
         mka->makeType = make_smart<TypeDecl>(Type::autoinfer);
         mka->makeType->dim.push_back(TypeDecl::dimAuto);
         $$ = mka;
     }
-    |   DAS_FIXED_ARRAY[loc] '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' expr_list[arguments] ')' {
+    |   DAS_FIXED_ARRAY[loc] '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' expr_list[arguments] optional_comma ')' {
         auto mka = new ExprMakeArray(tokAt(scanner,@loc));
         mka->values = sequenceToList($arguments);
         mka->makeType = TypeDeclPtr($mkt);
@@ -3366,7 +3371,7 @@ make_table_decl
         ttm->arguments.push_back(ExpressionPtr($mka));
         $$ = ttm;
     }
-    |   DAS_TABLE[loc] '(' expr_map_tuple_list[arguments] ')' {
+    |   DAS_TABLE[loc] '(' expr_map_tuple_list[arguments] optional_comma ')' {
         auto mka = make_smart<ExprMakeArray>(tokAt(scanner,@loc));
         mka->values = sequenceToList($arguments);
         mka->makeType = make_smart<TypeDecl>(Type::autoinfer);
@@ -3374,7 +3379,7 @@ make_table_decl
         ttm->arguments.push_back(mka);
         $$ = ttm;
     }
-    |   DAS_TABLE[loc] '<' type_declaration_no_options[decl] '>' '(' expr_map_tuple_list[arguments] ')' {
+    |   DAS_TABLE[loc] '<' type_declaration_no_options[decl] '>' '(' expr_map_tuple_list[arguments] optional_comma ')' {
         auto mka = make_smart<ExprMakeArray>(tokAt(scanner,@loc));
         mka->values = sequenceToList($arguments);
         mka->makeType = TypeDeclPtr($decl);
@@ -3382,7 +3387,7 @@ make_table_decl
         ttm->arguments.push_back(mka);
         $$ = ttm;
     }
-    |   DAS_TABLE[loc] '<' type_declaration_no_options[decl] ';' type_declaration_no_options[to_decl] '>' '(' expr_map_tuple_list[arguments] ')' {
+    |   DAS_TABLE[loc] '<' type_declaration_no_options[decl] ';' type_declaration_no_options[to_decl] '>' '(' expr_map_tuple_list[arguments] optional_comma ')' {
         auto mka = make_smart<ExprMakeArray>(tokAt(scanner,@loc));
         mka->values = sequenceToList($arguments);
         mka->makeType = make_smart<TypeDecl>(Type::tTuple);
@@ -3400,8 +3405,8 @@ array_comprehension_where
     ;
 
 optional_comma
-    :
-    |   ','
+    :           { $$ = false; }
+    |   ','     { $$ = true; }
     ;
 
 
