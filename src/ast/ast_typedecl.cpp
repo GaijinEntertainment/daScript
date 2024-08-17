@@ -1743,7 +1743,11 @@ namespace das
     bool TypeDecl::isAliasOrA2A(bool a2a) const {
         a2a |= autoToAlias;
         // auto is auto.... or auto....?
-        if ( baseType==Type::autoinfer && a2a ) {
+        if ( baseType==Type::typeDecl ) {
+            return true;
+        } else if ( baseType==Type::typeMacro ) {
+            return true;
+        } else if ( baseType==Type::autoinfer && a2a ) {
             return true;
         } else if ( baseType==Type::alias ) {
             return true;
