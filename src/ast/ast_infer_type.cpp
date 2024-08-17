@@ -566,6 +566,22 @@ namespace das {
                         td->typeexpr = inferPartialAliases(td->typeexpr,fptr,aliases);
                     }
                 }
+                if ( decl->baseType==Type::typeMacro ) {
+                    auto tmn = decl->typeMacroName();
+                    auto tms = findTypeMacro(tmn);
+                    if ( tms.size() == 0 ) {
+                        return decl;
+                    } else if ( tms.size() > 1 ) {
+                        return decl;
+                    } else {
+                        auto resType = tms[0]->visit(program,program->thisModule.get(), decl);
+                        if ( !resType ) {
+                            return decl;
+                        }
+                        TypeDecl::applyAutoContracts(resType,decl);
+                        return resType;
+                    }
+                }
                 return decl;
             }
             if ( decl->baseType==Type::autoinfer ) {
