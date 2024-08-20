@@ -1663,15 +1663,6 @@ namespace das {
     protected:
 
     // type
-
-        virtual void preVisit ( TypeDecl * type ) override {
-            Visitor::preVisit(type);
-            TypeDeclPtr newType = type;
-            if ( inferTypeExpr(newType) ) {
-                reportAstChanged();
-            }
-        }
-
         virtual TypeDeclPtr visit ( TypeDecl * type ) override {
             TypeDeclPtr newType = type;
             if ( inferTypeExpr(newType) ) {
