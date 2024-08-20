@@ -700,7 +700,7 @@ namespace das {
         }
         if ( writing ) {
             if ( writingFileInfoMap[info] == 0 ) {
-                uint64_t curOffset = buffer->size() + sizeof(curOffset);
+                uint64_t curOffset = buffer->writingSize() + sizeof(curOffset);
                 *this << curOffset;
                 writingFileInfoMap[info] = curOffset;
                 info->serialize(*this);
