@@ -8,22 +8,47 @@
 
 namespace das {
     struct SerializationStorage {
-        virtual bool read ( void * data, size_t size ) = 0;
+        vector<uint8_t> buffer;
+        size_t bufferPos = 0;
+        template<typename T>
+        __forceinline bool read ( T & data ) {
+            if ( bufferPos + sizeof(T) < buffer.size() ) {
+                data = *(T*)(buffer.data() + bufferPos);
+                bufferPos += sizeof(T);
+                return true;
+            }
+            return readOverflow(&data, sizeof(T));
+        }
+        __forceinline bool read ( vec4f & data ) {
+            if ( bufferPos + sizeof(vec4f) < buffer.size() ) {
+                data = v_ldu((const float*)(buffer.data() + bufferPos));
+                bufferPos += sizeof(vec4f);
+                return true;
+            }
+            return readOverflow(&data, sizeof(vec4f));
+        }
+        __forceinline bool read ( void * data, size_t size ) {
+            if ( bufferPos + size < buffer.size() ) {
+                memcpy(data, buffer.data() + bufferPos, size);
+                bufferPos += size;
+                return true;
+            }
+            return readOverflow(data, size);
+        }
+        virtual bool readOverflow ( void * data, size_t size ) = 0;
         virtual void write ( const void * data, size_t size ) = 0;
-        virtual size_t size() const = 0;
+        virtual size_t writingSize() const = 0;
         virtual ~SerializationStorage() {}
     };
 
     struct SerializationStorageVector : SerializationStorage {
-        vector<uint8_t> buffer;
-        size_t readOffset = 0;
-        virtual size_t size() const override {
+        virtual size_t writingSize() const override {
             return buffer.size();
         }
-        virtual bool read ( void * data, size_t size ) override {
-            if ( readOffset + size > buffer.size() ) return false;
-            memcpy(data, buffer.data() + readOffset, size);
-            readOffset += size;
+        virtual bool readOverflow ( void * data, size_t size ) override {
+            if ( bufferPos + size > buffer.size() ) return false;
+            memcpy(data, buffer.data() + bufferPos, size);
+            bufferPos += size;
             return true;
         }
         virtual void write ( const void * data, size_t size ) override {
@@ -84,8 +109,18 @@ namespace das {
     // tracking for shared modules
         das_hash_set<Module *>                      writingReadyModules;
         void tag   ( const char * name );
+        template<typename T>
+        void read  ( T & data ) { buffer->read(data); }
         void read  ( void * data, size_t size );
         void write ( const void * data, size_t size );
+        template<typename T>
+        void serialize ( T & data ) {
+            if ( writing ) {
+                write(&data, sizeof(data));
+            } else {
+                read(data);
+            }
+        }
         void serialize ( void * data, size_t size );
         void serializeAdaptiveSize64 ( uint64_t & size );
         void serializeAdaptiveSize32 ( uint32_t & size );
@@ -94,18 +129,18 @@ namespace das {
         void patch ();
         AstSerializer & operator << ( string & str );
         AstSerializer & operator << ( const char * & value );
-        AstSerializer & operator << ( bool & value ) { serialize(&value, sizeof(value)); return *this; }
-        AstSerializer & operator << ( vec4f & value ) { serialize(&value, sizeof(value)); return *this; }
-        AstSerializer & operator << ( float & value ) { serialize(&value, sizeof(value)); return *this; }
-        AstSerializer & operator << ( void * & value ) { serialize(&value, sizeof(value)); return *this; }
-        AstSerializer & operator << ( uint8_t & value ) { serialize(&value, sizeof(value)); return *this; }
-        AstSerializer & operator << ( int32_t & value ) { serialize(&value, sizeof(value)); return *this; }
-        AstSerializer & operator << ( int64_t & value ) { serialize(&value, sizeof(value)); return *this; }
-        AstSerializer & operator << ( uint16_t & value ) { serialize(&value, sizeof(value)); return *this; }
-        AstSerializer & operator << ( uint32_t & value ) { serialize(&value, sizeof(value)); return *this; }
-        AstSerializer & operator << ( uint64_t & value ) { serialize(&value, sizeof(value)); return *this; }
-        AstSerializer & operator << ( pair<uint32_t,uint32_t> & value ) { serialize(&value, sizeof(value)); return *this; }
-        AstSerializer & operator << ( pair<uint64_t,uint64_t> & value ) { serialize(&value, sizeof(value)); return *this; }
+        AstSerializer & operator << ( bool & value ) { serialize(value); return *this; }
+        AstSerializer & operator << ( vec4f & value ) { serialize(value); return *this; }
+        AstSerializer & operator << ( float & value ) { serialize(value); return *this; }
+        AstSerializer & operator << ( void * & value ) { serialize(value); return *this; }
+        AstSerializer & operator << ( uint8_t & value ) { serialize(value); return *this; }
+        AstSerializer & operator << ( int32_t & value ) { serialize(value); return *this; }
+        AstSerializer & operator << ( int64_t & value ) { serialize(value); return *this; }
+        AstSerializer & operator << ( uint16_t & value ) { serialize(value); return *this; }
+        AstSerializer & operator << ( uint32_t & value ) { serialize(value); return *this; }
+        AstSerializer & operator << ( uint64_t & value ) { serialize(value); return *this; }
+        AstSerializer & operator << ( pair<uint32_t,uint32_t> & value ) { serialize(value); return *this; }
+        AstSerializer & operator << ( pair<uint64_t,uint64_t> & value ) { serialize(value); return *this; }
         AstSerializer & operator << ( pair<string,bool> & value ) { *this << value.first << value.second; return *this; }
         AstSerializer & operator << ( tuple<Module *, string, string, bool, LineInfo> & value );
         AstSerializer & operator << ( CodeOfPolicies & ser );
