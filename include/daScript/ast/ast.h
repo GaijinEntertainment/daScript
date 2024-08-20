@@ -1305,7 +1305,7 @@ namespace das
 
     struct TypeMacro : ptr_ref_count {
         TypeMacro ( const string & na = "" ) : name(na) {}
-        virtual TypeDeclPtr visit ( Program *, Module *, const TypeDeclPtr & ) { return nullptr; }
+        virtual TypeDeclPtr visit ( Program *, Module *, const TypeDeclPtr &, const TypeDeclPtr & ) { return nullptr; }
         string name;
     };
 

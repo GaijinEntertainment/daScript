@@ -575,7 +575,7 @@ namespace das {
                     } else if ( tms.size() > 1 ) {
                         return decl;
                     } else {
-                        auto resType = tms[0]->visit(program,program->thisModule.get(), decl);
+                        auto resType = tms[0]->visit(program,program->thisModule.get(), decl, passType);
                         if ( !resType ) {
                             return decl;
                         }
@@ -1637,7 +1637,7 @@ namespace das {
                     error("too many typeMacro " + tmn + " found",  "", "",
                         type->at, CompilationError::invalid_type);
                 } else {
-                    auto resType = tms[0]->visit(program,program->thisModule.get(), type);
+                    auto resType = tms[0]->visit(program,program->thisModule.get(), type, nullptr);
                     if ( !resType ) {
                         error("can't deduce typeMacro " + tmn,  "", "",
                             type->at, CompilationError::invalid_type);
@@ -1663,6 +1663,15 @@ namespace das {
     protected:
 
     // type
+
+        virtual void preVisit ( TypeDecl * type ) override {
+            Visitor::preVisit(type);
+            TypeDeclPtr newType = type;
+            if ( inferTypeExpr(newType) ) {
+                reportAstChanged();
+            }
+        }
+
         virtual TypeDeclPtr visit ( TypeDecl * type ) override {
             TypeDeclPtr newType = type;
             if ( inferTypeExpr(newType) ) {

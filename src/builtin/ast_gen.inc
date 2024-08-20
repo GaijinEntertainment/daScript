@@ -419,11 +419,11 @@ public:
   __forceinline Func get_visit ( void * self ) const {
     return getDasClassMethod(self,_das_class_method_offset[__fn_visit]);
   }
-  __forceinline smart_ptr<TypeDecl> invoke_visit ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Program> const  prog, Module * const  mod, smart_ptr_raw<TypeDecl> const  td ) const {
+  __forceinline smart_ptr<TypeDecl> invoke_visit ( Context * __context__, Func __funcCall__, void * self, smart_ptr_raw<Program> const  prog, Module * const  mod, smart_ptr_raw<TypeDecl> const  td, smart_ptr_raw<TypeDecl> const  passT ) const {
     return das_invoke_function<smart_ptr_raw<TypeDecl>>::invoke
-      <void *,smart_ptr_raw<Program> const ,Module * const ,smart_ptr_raw<TypeDecl> const >
+      <void *,smart_ptr_raw<Program> const ,Module * const ,smart_ptr_raw<TypeDecl> const ,smart_ptr_raw<TypeDecl> const >
         (__context__,nullptr,__funcCall__,
-          self,prog,mod,td).marshal();
+          self,prog,mod,td,passT).marshal();
   }
 };
 
