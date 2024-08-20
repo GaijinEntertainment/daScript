@@ -558,12 +558,13 @@ namespace das {
         }
 
         // infer alias type
-        TypeDeclPtr inferPartialAliases ( const TypeDeclPtr & decl, const FunctionPtr & fptr = nullptr, AliasMap * aliases = nullptr ) const {
+        TypeDeclPtr inferPartialAliases ( const TypeDeclPtr & decl, const TypeDeclPtr & passType, const FunctionPtr & fptr = nullptr, AliasMap * aliases = nullptr ) const {
             if ( decl->baseType==Type::typeDecl || decl->baseType==Type::typeMacro ) {
                 for ( auto & de : decl->dimExpr ) {
                     if ( de && de->rtti_isTypeDecl() ) {
                         auto td = static_pointer_cast<ExprTypeDecl>(de);
-                        td->typeexpr = inferPartialAliases(td->typeexpr,fptr,aliases);
+                        // since we don't have passType in typeexpr(3), we pass what we have
+                        td->typeexpr = inferPartialAliases(td->typeexpr,td->typeexpr,fptr,aliases);
                     }
                 }
                 if ( decl->baseType==Type::typeMacro ) {
@@ -611,40 +612,56 @@ namespace das {
                     return decl;
                 }
             }
+            // if its an option, we go through each
+            if ( decl->baseType == Type::option ) {
+                auto resT = make_smart<TypeDecl>(*decl);
+                for ( size_t iA=0, iAs=decl->argTypes.size(); iA!=iAs; ++iA ) {
+                    auto & declAT = decl->argTypes[iA];
+                    resT->argTypes[iA] = inferPartialAliases(declAT,passType,fptr,aliases);
+                }
+                return resT;
+            }
+            // now, if pass type don't match at all, we use decl as passType
+            auto passT = decl->baseType==passType->baseType ? passType : decl;
+            // if they don't match, it will not infer no matter what, so we early out
             auto resT = make_smart<TypeDecl>(*decl);
             if ( decl->baseType==Type::tPointer ) {
-                if ( decl->firstType ) {
-                    resT->firstType = inferPartialAliases(decl->firstType,fptr,aliases);
+                if ( decl->firstType && passT->firstType ) {
+                    resT->firstType = inferPartialAliases(decl->firstType,passT->firstType,fptr,aliases);
                 }
             } else if ( decl->baseType==Type::tIterator ) {
                 if ( decl->firstType ) {
-                    resT->firstType = inferPartialAliases(decl->firstType,fptr,aliases);
+                    resT->firstType = inferPartialAliases(decl->firstType,passT->firstType,fptr,aliases);
                 }
             } else if ( decl->baseType==Type::tArray ) {
                 if ( decl->firstType ) {
-                    resT->firstType = inferPartialAliases(decl->firstType,fptr,aliases);
+                    resT->firstType = inferPartialAliases(decl->firstType,passT->firstType,fptr,aliases);
                 }
             } else if ( decl->baseType==Type::tTable ) {
-                if ( decl->firstType ) {
-                    resT->firstType = inferPartialAliases(decl->firstType,fptr,aliases);
+                resT->firstType = inferPartialAliases(decl->firstType,passT->firstType,fptr,aliases);
+                resT->secondType = inferPartialAliases(decl->secondType,passT->secondType,fptr,aliases);
+            } else if ( decl->baseType==Type::tFunction || decl->baseType==Type::tLambda || decl->baseType==Type::tBlock  ) {
+                if ( decl->argTypes.size() == passT->argTypes.size() ) {
+                    for ( size_t iA=0, iAs=decl->argTypes.size(); iA!=iAs; ++iA ) {
+                        auto & declAT = decl->argTypes[iA];
+                        auto & passAT = passT->argTypes[iA];
+                        resT->argTypes[iA] = inferPartialAliases(declAT,passAT,fptr,aliases);
+                    }
+                    if ( decl->firstType) {
+                        resT->firstType = inferPartialAliases(decl->firstType,passT->firstType,fptr,aliases);
+                    }
                 }
-                if ( decl->secondType ) {
-                    resT->secondType = inferPartialAliases(decl->secondType,fptr,aliases);
-                }
-            } else if ( decl->baseType==Type::tFunction || decl->baseType==Type::tLambda
-                || decl->baseType==Type::tBlock || decl->baseType==Type::tVariant ||
-                    decl->baseType==Type::tTuple|| decl->baseType==Type::option ) {
-                for ( size_t iA=0, iAs=decl->argTypes.size(); iA!=iAs; ++iA ) {
-                    auto & declAT = decl->argTypes[iA];
-                    resT->argTypes[iA] = inferPartialAliases(declAT,fptr,aliases);
-                }
-                if ( decl->firstType) {
-                    resT->firstType = inferPartialAliases(decl->firstType,fptr,aliases);
+            } else if ( decl->baseType==Type::tVariant || decl->baseType==Type::tTuple ) {
+                if ( decl->argTypes.size() == passT->argTypes.size() ) {
+                    for ( size_t iA=0, iAs=decl->argTypes.size(); iA!=iAs; ++iA ) {
+                        auto & declAT = decl->argTypes[iA];
+                        auto & passAT = passT->argTypes[iA];
+                        resT->argTypes[iA] = inferPartialAliases(declAT,passAT,fptr,aliases);
+                    }
                 }
             }
             return resT;
         }
-
 
         Module * getSearchModule(string & moduleName) const {
             if ( moduleName=="_" ) {
@@ -880,10 +897,10 @@ namespace das {
                     auto totalAliases = aliases.size();
                     for ( size_t ai=0, ais=types.size(); ai!=ais; ++ai ) {
                         auto argType = pFn->arguments[ai]->type;
-                        if ( argType->isAlias() ) {
-                            argType = inferPartialAliases(argType, pFn, &aliases);
-                        }
                         auto passType = types[ai];
+                        if ( argType->isAlias() ) {
+                            argType = inferPartialAliases(argType, passType, pFn, &aliases);
+                        }
                         OptionsMap options;
                         if (!isMatchingArgument(pFn,argType,passType,inferAuto,inferBlock,&aliases,&options)) {
                             anyFailed = true;
@@ -7789,10 +7806,10 @@ namespace das {
                             auto totalAliases = aliases.size();
                             for (size_t ai=0, ais=types.size(); ai!=ais; ++ai) {
                                 auto argType = clone->arguments[ai]->type;
-                                if (argType->isAlias()) {
-                                    argType = inferPartialAliases(argType, clone, &aliases);
-                                }
                                 auto passType = types[ai];
+                                if (argType->isAlias()) {
+                                    argType = inferPartialAliases(argType, passType, clone, &aliases);
+                                }
                                 OptionsMap options;
                                 if (!isMatchingArgument(clone, argType, passType, true, true, &aliases, &options)) {
                                     anyFailed = true;
@@ -7818,13 +7835,13 @@ namespace das {
                         // now, we resolve types given inferred aliases
                         for (size_t sz=0, szs=types.size(); sz!=szs; ++sz) {
                             auto & argT = clone->arguments[sz]->type;
+                            auto & passT = types[sz];
                             if (argT->isAlias()) {
-                                argT = inferPartialAliases(argT, clone, &aliases);
+                                argT = inferPartialAliases(argT, passT, clone, &aliases);
                             }
                             bool appendHasOptions = false;
                             bool isAutoWto = argT->isAutoWithoutOptions(appendHasOptions);
                             if ( isAutoWto || appendHasOptions) {
-                                auto & passT = types[sz];
                                 auto resT = TypeDecl::inferGenericType(argT, passT, true, true, nullptr);
                                 DAS_ASSERTF(resT, "how? we had this working at findMatchingGenerics");
                                 resT->ref = defaultRef[sz];
