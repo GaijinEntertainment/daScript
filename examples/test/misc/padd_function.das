@@ -4,13 +4,10 @@ module padd_function
 require daslib/typemacro_boost
 require daslib/templates_boost
 
-enum public PadFoo
-    A
-    B
-    C
-
 [typemacro_function]
 def padd_structure ( macroArgument:TypeDeclPtr; elemType:TypeDeclPtr; count:int )
+    if elemType==null
+        return <- new [[TypeDecl() at=macroArgument.at, baseType=Type autoinfer]]
     let structName = "PaddStructure`{count}`{macroArgument.at.line}`{macroArgument.at.column}"
     var st_ptr = compiling_program() |> find_unique_structure(structName)
     if st_ptr == null
@@ -23,15 +20,4 @@ def padd_structure ( macroArgument:TypeDeclPtr; elemType:TypeDeclPtr; count:int 
         compiling_module() |> add_structure(st)
     return <- new [[TypeDecl() at=macroArgument.at, baseType=Type tStructure, structType=st_ptr]]
 
-[typemacro_function]
-def tpad_enum ( macroArgument:TypeDeclPtr; foo:PadFoo )
-    return <- new [[TypeDecl() at=macroArgument.at, baseType=Type tInt, alias:="{foo}"]]
-
-[typemacro_function]
-def tpad_bool_const ( macroArgument:TypeDeclPtr; yes:bool )
-    return <- new [[TypeDecl() at=macroArgument.at, baseType=yes ? Type tBool : Type tVoid]]
-
-[typemacro_function]
-def tpad_bitfield ( macroArgument:TypeDeclPtr; field:bitfield )
-    return <- new [[TypeDecl() at=macroArgument.at, baseType=Type tBitfield, alias:="passed {field}"]]
 

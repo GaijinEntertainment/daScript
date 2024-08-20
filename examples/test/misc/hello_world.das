@@ -1,22 +1,15 @@
-var ctor_count = 0
-var to_upper_count = 0
-var utf8_count = 0
+require padd_function
 
-class MyString
-	def MyString
-		ctor_count ++
-	def to_upper(): MyString?
-		to_upper_count ++
-		return addr(self)
-	def utf8(): MyString?
-		utf8_count ++
-		return addr(self)
+def take_structure ( foo : $padd_structure(type<int>,8) )
+	debug(foo)
 
 [export]
 def main
-	let res = new MyString()->to_upper()->utf8()
-	print("ctor_count: {ctor_count}\n")
-	print("to_upper_count: {to_upper_count}\n")
-	print("utf8_count: {utf8_count}\n")
+	var foo : $padd_structure(type<int>,8)
+	take_structure(foo)
+	var bar : $padd_structure(type<float>,8)
+	take_structure(bar)
+
+options log
 
 
