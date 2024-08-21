@@ -408,7 +408,7 @@ namespace das {
                 if ( decl->isTag ) return nullptr;  // we can never infer a tag type
                 auto aT = fptr ? findFuncAlias(fptr, decl->alias) : findAlias(decl->alias);
                 if ( aliases ) {
-                    if ( aT && aT->baseType==Type::autoinfer ) {
+                    if ( !aT || aT->baseType==Type::autoinfer ) {
                         auto it = aliases->find(decl->alias);
                         if ( it != aliases->end() ) {
                             aT = it->second.get();
@@ -591,7 +591,7 @@ namespace das {
             if ( decl->baseType==Type::alias ) {
                 auto aT = fptr ? findFuncAlias(fptr, decl->alias) : findAlias(decl->alias);
                 if ( aliases ) {
-                    if ( aT && aT->baseType==Type::autoinfer ) {
+                    if ( !aT || aT->baseType==Type::autoinfer ) {
                         auto it = aliases->find(decl->alias);
                         if ( it != aliases->end() ) {
                             aT = it->second.get();
@@ -892,6 +892,10 @@ namespace das {
             }
             if ( inferAuto && inferBlock ) {
                 AliasMap aliases;
+                program->updateAliasMapCallback = [&](const TypeDeclPtr & argType, const TypeDeclPtr & passType) {
+                    OptionsMap options;
+                    TypeDecl::updateAliasMap(argType, passType, aliases, options);
+                };
                 for ( ;; ) {
                     bool anyFailed = false;
                     auto totalAliases = aliases.size();
@@ -915,6 +919,8 @@ namespace das {
                         return false;
                     }
                 }
+                // clear callback
+                program->updateAliasMapCallback = nullptr;
             } else {
                 for ( size_t ai=0, ais=types.size(); ai!=ais; ++ai ) {
                     if (!isMatchingArgument(pFn, pFn->arguments[ai]->type, types[ai],inferAuto,inferBlock)) {
@@ -7800,6 +7806,10 @@ namespace das {
                         }
                         // we build alias map for the generic
                         AliasMap aliases;
+                        program->updateAliasMapCallback = [&](const TypeDeclPtr & argType, const TypeDeclPtr & passType) {
+                            OptionsMap options;
+                            TypeDecl::updateAliasMap(argType, passType, aliases, options);
+                        };
                         vector<bool> defaultRef(types.size());
                         for (;; ) {
                             bool anyFailed = false;
@@ -7871,6 +7881,8 @@ namespace das {
                                 return nullptr;
                             }
                         }
+                        // clear callback
+                        program->updateAliasMapCallback = nullptr;
                         // now we verify if tail end can indeed be fully inferred
                         if (!program->addFunction(clone)) {
                             clone->module = program->thisModule.get();

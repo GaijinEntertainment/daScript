@@ -44,12 +44,21 @@ class PaddDimMacro : AstTypeMacro
                 if argT == null
                     return <- [[TypeDeclPtr()]]
                 if argT.isAutoOrAlias
-                    pass // we need to inferGenericType here
+                    var inscope fieldT <- clone_type(field._type)
+                    var inscope resT <- infer_generic_type(argT, fieldT, true, true)
+                    if resT == null
+                        macro_error(compiling_program(), td.at, "type mismatch, expecting {describe(argT)} got {describe(fieldT)}")
+                        return <- [[TypeDeclPtr()]]
+                    if !fieldT |> is_same_type(resT, RefMatters no, ConstMatters no, TemporaryMatters yes)
+                        macro_error(compiling_program(), td.at, "type mismatch, expecting {describe(argT)} got {describe(fieldT)}")
+                        return <- [[TypeDeclPtr()]]
+                    compiling_program() |> update_alias_map(argT, resT)
                 else
                     // do we need to check if passT is auto and do 2-sided infer?
                     var inscope fieldT <- clone_type(field._type)
                     fieldT.dim |> pop
-                    if !fieldT |> is_same_type(argT, RefMatters no, ConstMatters yes, TemporaryMatters yes)
+                    if !fieldT |> is_same_type(argT, RefMatters no, ConstMatters no, TemporaryMatters yes)
+                        macro_error(compiling_program(), td.at, "type mismatch, expecting {describe(argT)} got {describe(fieldT)}")
                         return <- [[TypeDeclPtr()]]
                 return <- clone_type(passT)
             return <- [[TypeDeclPtr()]]
