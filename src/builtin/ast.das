@@ -114,7 +114,7 @@ class AstCaptureMacro
 
 [macro_interface]
 class AstTypeMacro
-    def abstract visit ( prog:ProgramPtr; mod:Module?; td:TypeDeclPtr ) : TypeDeclPtr
+    def abstract visit ( prog:ProgramPtr; mod:Module?; td,passT:TypeDeclPtr ) : TypeDeclPtr
 
 [macro_interface]
 class AstSimulateMacro

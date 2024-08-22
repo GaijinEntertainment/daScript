@@ -419,7 +419,7 @@ namespace das
                 stream << "typedecl(/*invalid expression*/)";
             }
         } else if ( baseType==Type::typeMacro ) {
-            stream << "^" << typeMacroName() << "(";
+            stream << "$" << typeMacroName() << "(";
             for ( size_t i=1; i!=dimExpr.size(); ++i ) {
                 if ( i!=1 ) stream << ",";
                 if ( dimExpr[i] ) {
@@ -2781,6 +2781,13 @@ namespace das
             if ( smartPtr ) {
                 ss << (smartPtrNative ? "W" : "M");
             }
+        } else if ( baseType==Type::typeMacro ) {
+            TextWriter tw;
+            for ( size_t i=1; i<dimExpr.size(); ++i ) {
+                if ( i!=1 ) tw << ",";
+                tw << *dimExpr[i];
+            }
+            ss << "^<" << typeMacroName() << ";" << hash64z(tw.str().c_str()) << ">";
         } else {
             switch ( baseType ) {
                 case Type::anyArgument:     ss << "*"; break;
@@ -2789,7 +2796,6 @@ namespace das
                 case Type::autoinfer:       ss << "."; break;
                 case Type::option:          ss << "|"; break;
                 case Type::typeDecl:        ss << "D"; break;
-                case Type::typeMacro:       ss << "^"; break;
                 case Type::alias:           ss << "L"; break;
                 case Type::tIterator:       ss << "G"; break;
                 case Type::tArray:          ss << "A"; break;

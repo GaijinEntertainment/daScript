@@ -1643,11 +1643,11 @@ namespace das {
         TypeMacroAdapter ( const string & n, char * pClass, const StructInfo * info, Context * ctx )
             : TypeMacro(n), AstTypeMacro_Adapter(info), classPtr(pClass), context(ctx) {
         }
-        virtual TypeDeclPtr visit ( Program * prog, Module * mod, const TypeDeclPtr & typ ) override {
+        virtual TypeDeclPtr visit ( Program * prog, Module * mod, const TypeDeclPtr & typ, const TypeDeclPtr & passT ) override {
             if ( auto fnVisit = get_visit(classPtr) ) {
                 TypeDeclPtr result;
                 runMacroFunction(context, "visit", [&]() {
-                    result = invoke_visit(context,fnVisit,classPtr,prog,mod,typ);
+                    result = invoke_visit(context,fnVisit,classPtr,prog,mod,typ,passT);
                 });
                 return result;
             } else {

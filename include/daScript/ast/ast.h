@@ -1305,7 +1305,7 @@ namespace das
 
     struct TypeMacro : ptr_ref_count {
         TypeMacro ( const string & na = "" ) : name(na) {}
-        virtual TypeDeclPtr visit ( Program *, Module *, const TypeDeclPtr & ) { return nullptr; }
+        virtual TypeDeclPtr visit ( Program *, Module *, const TypeDeclPtr &, const TypeDeclPtr & ) { return nullptr; }
         string name;
     };
 
@@ -1471,6 +1471,8 @@ namespace das
         virtual void afterAlias ( const char * name, const LineInfo & at ) = 0;
     };
 
+    typedef function<void (const TypeDeclPtr & argType, const TypeDeclPtr & passType)> UpdateAliasMapCallback;
+
     class Program : public ptr_ref_count {
     public:
         Program();
@@ -1552,6 +1554,8 @@ namespace das
         //  set CodeOfPolicies::aot instead
         void linkCppAot ( Context & context, AotLibrary & aotLib, TextWriter & logs );
         void linkError ( const string & str, const string & extra );
+    public:
+        UpdateAliasMapCallback updateAliasMapCallback;
     public:
         template <typename TT>
         string describeCandidates ( const TT & result, bool needHeader = true ) const {

@@ -150,7 +150,8 @@ namespace das {
         const TBlock<void,TTemporary<TArray<VariablePtr>>> & block, Context * context, LineInfoArg * arg );
     Module * getCurrentSearchModule(Program * program, Function * func, const char * _moduleName);
     bool canAccessGlobalVariable ( const VariablePtr & pVar, Module * mod, Module * thisMod );
-
+    TypeDeclPtr inferGenericTypeEx ( smart_ptr_raw<TypeDecl> type, smart_ptr_raw<TypeDecl> passType, bool topLevel, bool isPassType );
+    void updateAliasMapEx ( smart_ptr_raw<Program> program, smart_ptr_raw<TypeDecl> argType, smart_ptr_raw<TypeDecl> passType, Context * context, LineInfoArg * at );
 
     template <>
     struct das_iterator <AnnotationArgumentList> : das_iterator<vector<AnnotationArgument>> {

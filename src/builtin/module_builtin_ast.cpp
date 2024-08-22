@@ -665,6 +665,16 @@ namespace das {
         return true;
     }
 
+    TypeDeclPtr inferGenericTypeEx ( smart_ptr_raw<TypeDecl> type, smart_ptr_raw<TypeDecl> passType, bool topLevel, bool isPassType ) {
+        return TypeDecl::inferGenericType(type, passType, topLevel, isPassType, nullptr);
+    }
+
+    void updateAliasMapEx ( smart_ptr_raw<Program> program, smart_ptr_raw<TypeDecl> argType, smart_ptr_raw<TypeDecl> passType, Context * context, LineInfoArg * at ) {
+        if ( !program ) context->throw_error_at(at, "expecting program");
+        if ( !program->updateAliasMapCallback ) context->throw_error_at(at, "can only call during alias inference (in typeinfo macro)");
+        return program->updateAliasMapCallback(argType, passType);
+    }
+
     #include "ast.das.inc"
 
     Module_Ast::Module_Ast() : Module("ast") {
@@ -968,6 +978,14 @@ namespace das {
         addExtern<DAS_BIND_FUN(getFunctionAotHash)>(*this, lib,  "get_function_aot_hash",
             SideEffects::none, "getFunctionAotHash")
                 ->args({"fun"});
+        // infer
+        addExtern<DAS_BIND_FUN(inferGenericTypeEx)>(*this, lib,  "infer_generic_type",
+            SideEffects::none, "inferGenericTypeEx")
+                ->args({"type","passType","topLevel","isPassType"});
+        // alias
+        addExtern<DAS_BIND_FUN(updateAliasMapEx)>(*this, lib,  "update_alias_map",
+            SideEffects::modifyExternal, "updateAliasMapEx")
+                ->args({"program","argType","passType","context","at"});
     }
 
     ModuleAotType Module_Ast::aotRequire ( TextWriter & tw ) const {
