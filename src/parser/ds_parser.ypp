@@ -205,6 +205,7 @@
 %token  DAS_INSCOPE         "inscope"
 %token  DAS_STATIC          "static"
 %token  DAS_FIXED_ARRAY     "fixed_array"
+%token  DAS_DEFAULT         "default"
 
 /* basic types */
 %token  DAS_TBOOL           "bool"
@@ -1363,6 +1364,7 @@ expr_new
     |   DAS_NEWT[loc] new_type_declaration[typeDecl] '(' make_struct_dim[dd] ')'   {
         ((ExprMakeStruct *)$dd)->makeType = $typeDecl;
         ((ExprMakeStruct *)$dd)->useInitializer = true;
+        ((ExprMakeStruct *)$dd)->alwaysUseInitializer = true;
         $$ = new ExprAscend(tokAt(scanner,@loc),ExpressionPtr($dd));
     }
     |   DAS_NEWT[loc] make_decl[md] {
@@ -1832,6 +1834,7 @@ expr
             ((ExprMakeStruct *)$dd)->makeType = new TypeDecl(Type::alias);
             ((ExprMakeStruct *)$dd)->makeType->alias = *$name;
             ((ExprMakeStruct *)$dd)->useInitializer = true;
+            ((ExprMakeStruct *)$dd)->alwaysUseInitializer = true;
             delete $name;
             $$ = $dd;
     }
@@ -3198,6 +3201,7 @@ make_struct_decl
         ((ExprMakeStruct *)$msd)->makeType = TypeDeclPtr($mkt);
         ((ExprMakeStruct *)$msd)->useInitializer = true;
         ((ExprMakeStruct *)$msd)->forceStruct = true;
+        ((ExprMakeStruct *)$msd)->alwaysUseInitializer = true;
         $$ = $msd;
     }
     |   DAS_CLASS [loc] '<' { yyextra->das_force_oxford_comma=true; yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; } '(' make_struct_dim[msd] ')'  {
@@ -3213,6 +3217,14 @@ make_struct_decl
         ((ExprMakeStruct *)$msd)->useInitializer = true;
         ((ExprMakeStruct *)$msd)->forceVariant = true;
         $$ = $msd;
+    }
+    |   DAS_DEFAULT [loc] '<' { yyextra->das_force_oxford_comma=true; yyextra->das_arrow_depth ++; } type_declaration_no_options[mkt] '>' { yyextra->das_arrow_depth --; }  {
+        auto msd = new ExprMakeStruct();
+        msd->at = tokAt(scanner,@loc);
+        msd->makeType = TypeDeclPtr($mkt);
+        msd->useInitializer = true;
+        msd->alwaysUseInitializer = true;
+        $$ = msd;
     }
     ;
 

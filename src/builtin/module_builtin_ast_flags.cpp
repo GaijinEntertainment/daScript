@@ -81,7 +81,7 @@ namespace das {
         auto ft = make_smart<TypeDecl>(Type::tBitfield);
         ft->alias = "ExprMakeStructFlags";
         ft->argNames = { "useInitializer", "isNewHandle", "usedInitializer", "nativeClassInitializer",
-            "isNewClass", "forceClass", "forceStruct", "forceVariant", "forceTuple" };
+            "isNewClass", "forceClass", "forceStruct", "forceVariant", "forceTuple", "alwaysUseInitializer" };
         return ft;
     }
 
