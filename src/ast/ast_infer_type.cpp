@@ -8343,7 +8343,9 @@ namespace das {
                         reportInferAliasErrors(expr->makeType), "", expr->makeType->at, CompilationError::type_not_found );
                 }
             }
-            auto isClassCtor = !expr->nativeClassInitializer && (expr->useInitializer || expr->usedInitializer) && expr->makeType && expr->makeType->isClass();
+            auto isClassCtor = !expr->nativeClassInitializer &&
+                (expr->useInitializer || expr->usedInitializer) &&
+                expr->makeType && (expr->makeType->isClass() || (expr->alwaysUseInitializer && expr->makeType->isStructure()));
             if (  isClassCtor ) {
                 auto st = expr->makeType->structType;
                 auto ctorName = st->module->name  + "::" + st->name;
