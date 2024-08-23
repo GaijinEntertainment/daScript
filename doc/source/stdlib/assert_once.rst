@@ -5,8 +5,6 @@
 Assert once
 ===========
 
-.. include:: detail/assert_once.rst
-
 The assert_once module implements single-time assertion infrastructure.
 
 All functions and symbols are in "assert_once" module, use require to get access to it. ::
@@ -21,32 +19,22 @@ Function annotations
 
 .. das:attribute:: AssertOnceMacro
 
-This macro convert assert_once(expr,message) to the following code::
-
-    var __assert_once_I = true  // this is a global variable
-    if __assert_once_I && !expr
-        __assert_once_I = false
-        assert(false,message)
+|detail/function_annotation-assert_once-AssertOnceMacro|
 
 +++++++++
 Assertion
 +++++++++
 
-  *  :ref:`assert_once (expr:bool const;message:string const) : void <function-_at_assert_once_c__c_assert_once_Cb_Cs>` 
+  *  :ref:`assert_once (expr: bool; message: string = "") <function-_at_assert_once_c__c_assert_once_Cb_Cs>` 
 
 .. _function-_at_assert_once_c__c_assert_once_Cb_Cs:
 
-.. das:function:: assert_once(expr: bool const; message: string const)
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+expr    +bool const   +
-+--------+-------------+
-+message +string const +
-+--------+-------------+
-
+.. das:function:: assert_once(expr: bool; message: string = "")
 
 Same as assert, only the check will be not be repeated after the asseretion failed the first time.
+
+:Arguments: * **expr** : bool
+
+            * **message** : string
 
 

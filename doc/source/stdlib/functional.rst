@@ -5,8 +5,6 @@
 Functional programming library
 ==============================
 
-.. include:: detail/functional.rst
-
 The functional module implements a collection of high-order functions and patters to expose functional programming patters to Daslang.
 
 All functions and symbols are in "functional" module, use require to get access to it. ::
@@ -17,380 +15,231 @@ All functions and symbols are in "functional" module, use require to get access 
 Map, reduce
 +++++++++++
 
-  *  :ref:`filter (src:iterator\<auto(TT)\> -const;blk:lambda\<(what:TT const -&):bool\> const) : auto <function-_at_functional_c__c_filter_1_ls_Y_ls_TT_gr_._gr_G_CN_ls_what_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_b_gr__at_>` 
-  *  :ref:`filter (src:iterator\<auto(TT)\> -const;blk:function\<(what:TT const -&):bool\> const) : auto <function-_at_functional_c__c_filter_1_ls_Y_ls_TT_gr_._gr_G_CN_ls_what_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_b_gr__at__at_>` 
-  *  :ref:`map (src:iterator\<auto(TT)\> -const;blk:lambda\<(what:TT const -&):auto(QQ)\> const) : auto <function-_at_functional_c__c_map_1_ls_Y_ls_TT_gr_._gr_G_CN_ls_what_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_Y_ls_QQ_gr_._gr__at_>` 
-  *  :ref:`map (src:iterator\<auto(TT)\> -const;blk:function\<(what:TT const -&):auto(QQ)\> const) : auto <function-_at_functional_c__c_map_1_ls_Y_ls_TT_gr_._gr_G_CN_ls_what_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_Y_ls_QQ_gr_._gr__at__at_>` 
-  *  :ref:`reduce (it:iterator\<auto(TT)\> const;blk:lambda\<(left:TT const -&;right:TT const -&):TT const -&\> const) : auto <function-_at_functional_c__c_reduce_C1_ls_Y_ls_TT_gr_._gr_G_CN_ls_left;right_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_CY_ls_TT_gr_L_gr__at_>` 
-  *  :ref:`reduce (it:iterator\<auto(TT)\> const;blk:function\<(left:TT const -&;right:TT const -&):TT const -&\> const) : auto <function-_at_functional_c__c_reduce_C1_ls_Y_ls_TT_gr_._gr_G_CN_ls_left;right_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_CY_ls_TT_gr_L_gr__at__at_>` 
-  *  :ref:`reduce (it:iterator\<auto(TT)\> const;blk:block\<(left:TT const -&;right:TT const -&):TT const -&\> const) : auto <function-_at_functional_c__c_reduce_C1_ls_Y_ls_TT_gr_._gr_G_CN_ls_left;right_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_CY_ls_TT_gr_L_gr__builtin_>` 
-  *  :ref:`sum (it:iterator\<auto(TT)\> const) : auto <function-_at_functional_c__c_sum_C1_ls_Y_ls_TT_gr_._gr_G>` 
-  *  :ref:`any (it:auto const) : auto <function-_at_functional_c__c_any_C.>` 
-  *  :ref:`all (it:auto const) : auto <function-_at_functional_c__c_all_C.>` 
-  *  :ref:`cycle (src:iterator\<auto(TT)\> -const) : auto <function-_at_functional_c__c_cycle_1_ls_Y_ls_TT_gr_._gr_G>` 
-  *  :ref:`islice (src:iterator\<auto(TT)\> -const;start:int const;stop:int const) : auto <function-_at_functional_c__c_islice_1_ls_Y_ls_TT_gr_._gr_G_Ci_Ci>` 
-  *  :ref:`repeat_ref (value:auto(TT) const;total:int -const) : auto <function-_at_functional_c__c_repeat_ref_CY_ls_TT_gr_._i>` 
-  *  :ref:`repeat (value:auto(TT) const;count:int -const) : auto <function-_at_functional_c__c_repeat_CY_ls_TT_gr_._i>` 
-  *  :ref:`not (x:auto const) : auto <function-_at_functional_c__c_not_C.>` 
-  *  :ref:`echo (x:auto -const;extra:string const) : auto <function-_at_functional_c__c_echo_._Cs>` 
-  *  :ref:`flatten (it:iterator\<auto(TT)\> -const) : auto <function-_at_functional_c__c_flatten_1_ls_Y_ls_TT_gr_._gr_G>` 
+  *  :ref:`filter (var src: iterator\<auto(TT)\>; blk: lambda\<(what:TT const):bool\>) : auto <function-_at_functional_c__c_filter_1_ls_Y_ls_TT_gr__dot__gr_G_CN_ls_what_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_b_gr__at_>` 
+  *  :ref:`filter (var src: iterator\<auto(TT)\>; blk: function\<(what:TT const):bool\>) : auto <function-_at_functional_c__c_filter_1_ls_Y_ls_TT_gr__dot__gr_G_CN_ls_what_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_b_gr__at__at_>` 
+  *  :ref:`map (var src: iterator\<auto(TT)\>; blk: lambda\<(what:TT const):auto(QQ)\>) : auto <function-_at_functional_c__c_map_1_ls_Y_ls_TT_gr__dot__gr_G_CN_ls_what_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_Y_ls_QQ_gr__dot__gr__at_>` 
+  *  :ref:`map (var src: iterator\<auto(TT)\>; blk: function\<(what:TT const):auto(QQ)\>) : auto <function-_at_functional_c__c_map_1_ls_Y_ls_TT_gr__dot__gr_G_CN_ls_what_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_Y_ls_QQ_gr__dot__gr__at__at_>` 
+  *  :ref:`reduce (it: iterator\<auto(TT)\>; blk: lambda\<(left:TT const;right:TT const):TT const\>) : auto <function-_at_functional_c__c_reduce_C1_ls_Y_ls_TT_gr__dot__gr_G_CN_ls_left;right_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_CY_ls_TT_gr_L_gr__at_>` 
+  *  :ref:`reduce (it: iterator\<auto(TT)\>; blk: function\<(left:TT const;right:TT const):TT const\>) : auto <function-_at_functional_c__c_reduce_C1_ls_Y_ls_TT_gr__dot__gr_G_CN_ls_left;right_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_CY_ls_TT_gr_L_gr__at__at_>` 
+  *  :ref:`reduce (it: iterator\<auto(TT)\>; blk: block\<(left:TT const;right:TT const):TT const\>) : auto <function-_at_functional_c__c_reduce_C1_ls_Y_ls_TT_gr__dot__gr_G_CN_ls_left;right_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_CY_ls_TT_gr_L_gr__builtin_>` 
+  *  :ref:`sum (it: iterator\<auto(TT)\>) : auto <function-_at_functional_c__c_sum_C1_ls_Y_ls_TT_gr__dot__gr_G>` 
+  *  :ref:`any (it: auto) : auto <function-_at_functional_c__c_any_C_dot_>` 
+  *  :ref:`all (it: auto) : auto <function-_at_functional_c__c_all_C_dot_>` 
+  *  :ref:`cycle (var src: iterator\<auto(TT)\>) : auto <function-_at_functional_c__c_cycle_1_ls_Y_ls_TT_gr__dot__gr_G>` 
+  *  :ref:`islice (var src: iterator\<auto(TT)\>; start: int; stop: int) : auto <function-_at_functional_c__c_islice_1_ls_Y_ls_TT_gr__dot__gr_G_Ci_Ci>` 
+  *  :ref:`repeat_ref (value: auto(TT); var total: int) : auto <function-_at_functional_c__c_repeat_ref_CY_ls_TT_gr__dot__i>` 
+  *  :ref:`repeat (value: auto(TT); var count: int = 0) : auto <function-_at_functional_c__c_repeat_CY_ls_TT_gr__dot__i>` 
+  *  :ref:`not (x: auto) : auto <function-_at_functional_c__c_not_C_dot_>` 
+  *  :ref:`echo (var x: auto; extra: string = "\n") : auto <function-_at_functional_c__c_echo__dot__Cs>` 
+  *  :ref:`flatten (var it: iterator\<auto(TT)\>) : auto <function-_at_functional_c__c_flatten_1_ls_Y_ls_TT_gr__dot__gr_G>` 
 
-.. _function-_at_functional_c__c_filter_1_ls_Y_ls_TT_gr_._gr_G_CN_ls_what_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_b_gr__at_:
+.. _function-_at_functional_c__c_filter_1_ls_Y_ls_TT_gr__dot__gr_G_CN_ls_what_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_b_gr__at_:
 
-.. das:function:: filter(src: iterator<auto(TT)>; blk: lambda<(what:TT const):bool> const)
-
-filter returns auto
-
-+--------+----------------------------------+
-+argument+argument type                     +
-+========+==================================+
-+src     +iterator<auto(TT)>                +
-+--------+----------------------------------+
-+blk     +lambda<(what:TT const):bool> const+
-+--------+----------------------------------+
-
+.. das:function:: filter(src: iterator<auto(TT)>; blk: lambda<(what:TT const):bool>) : auto
 
 iterates over `src` and yields only those elements for which `blk` returns true
 
-.. _function-_at_functional_c__c_filter_1_ls_Y_ls_TT_gr_._gr_G_CN_ls_what_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_b_gr__at__at_:
+:Arguments: * **src** : iterator<auto(TT)>
 
-.. das:function:: filter(src: iterator<auto(TT)>; blk: function<(what:TT const):bool> const)
+            * **blk** : lambda<(what:TT):bool>
 
-filter returns auto
+.. _function-_at_functional_c__c_filter_1_ls_Y_ls_TT_gr__dot__gr_G_CN_ls_what_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_b_gr__at__at_:
 
-+--------+------------------------------------+
-+argument+argument type                       +
-+========+====================================+
-+src     +iterator<auto(TT)>                  +
-+--------+------------------------------------+
-+blk     +function<(what:TT const):bool> const+
-+--------+------------------------------------+
+.. das:function:: filter(src: iterator<auto(TT)>; blk: function<(what:TT const):bool>) : auto
 
+|detail/function-functional-filter-0x4748a090d6e00f84|
 
-iterates over `src` and yields only those elements for which `blk` returns true
+:Arguments: * **src** : iterator<auto(TT)>
 
-.. _function-_at_functional_c__c_map_1_ls_Y_ls_TT_gr_._gr_G_CN_ls_what_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_Y_ls_QQ_gr_._gr__at_:
+            * **blk** : function<(what:TT):bool>
 
-.. das:function:: map(src: iterator<auto(TT)>; blk: lambda<(what:TT const):auto(QQ)> const)
+.. _function-_at_functional_c__c_map_1_ls_Y_ls_TT_gr__dot__gr_G_CN_ls_what_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_Y_ls_QQ_gr__dot__gr__at_:
 
-map returns auto
-
-+--------+--------------------------------------+
-+argument+argument type                         +
-+========+======================================+
-+src     +iterator<auto(TT)>                    +
-+--------+--------------------------------------+
-+blk     +lambda<(what:TT const):auto(QQ)> const+
-+--------+--------------------------------------+
-
+.. das:function:: map(src: iterator<auto(TT)>; blk: lambda<(what:TT const):auto(QQ)>) : auto
 
 iterates over `src` and yields the result of `blk` for each element
 
-.. _function-_at_functional_c__c_map_1_ls_Y_ls_TT_gr_._gr_G_CN_ls_what_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_Y_ls_QQ_gr_._gr__at__at_:
+:Arguments: * **src** : iterator<auto(TT)>
 
-.. das:function:: map(src: iterator<auto(TT)>; blk: function<(what:TT const):auto(QQ)> const)
+            * **blk** : lambda<(what:TT):auto(QQ)>
 
-map returns auto
+.. _function-_at_functional_c__c_map_1_ls_Y_ls_TT_gr__dot__gr_G_CN_ls_what_gr_0_ls_CY_ls_TT_gr_L_gr_1_ls_Y_ls_QQ_gr__dot__gr__at__at_:
 
-+--------+----------------------------------------+
-+argument+argument type                           +
-+========+========================================+
-+src     +iterator<auto(TT)>                      +
-+--------+----------------------------------------+
-+blk     +function<(what:TT const):auto(QQ)> const+
-+--------+----------------------------------------+
+.. das:function:: map(src: iterator<auto(TT)>; blk: function<(what:TT const):auto(QQ)>) : auto
 
+|detail/function-functional-map-0x52cf056d8b677155|
 
-iterates over `src` and yields the result of `blk` for each element
+:Arguments: * **src** : iterator<auto(TT)>
 
-.. _function-_at_functional_c__c_reduce_C1_ls_Y_ls_TT_gr_._gr_G_CN_ls_left;right_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_CY_ls_TT_gr_L_gr__at_:
+            * **blk** : function<(what:TT):auto(QQ)>
 
-.. das:function:: reduce(it: iterator<auto(TT)> const; blk: lambda<(left:TT const;right:TT const):TT const> const)
+.. _function-_at_functional_c__c_reduce_C1_ls_Y_ls_TT_gr__dot__gr_G_CN_ls_left;right_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_CY_ls_TT_gr_L_gr__at_:
 
-reduce returns auto
-
-+--------+-----------------------------------------------------+
-+argument+argument type                                        +
-+========+=====================================================+
-+it      +iterator<auto(TT)> const                             +
-+--------+-----------------------------------------------------+
-+blk     +lambda<(left:TT const;right:TT const):TT const> const+
-+--------+-----------------------------------------------------+
-
+.. das:function:: reduce(it: iterator<auto(TT)>; blk: lambda<(left:TT const;right:TT const):TT const>) : auto
 
 iterates over `it` and yields the reduced (combined) result of `blk` for each element
 and previous reduction result
 
-.. _function-_at_functional_c__c_reduce_C1_ls_Y_ls_TT_gr_._gr_G_CN_ls_left;right_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_CY_ls_TT_gr_L_gr__at__at_:
+:Arguments: * **it** : iterator<auto(TT)>
 
-.. das:function:: reduce(it: iterator<auto(TT)> const; blk: function<(left:TT const;right:TT const):TT const> const)
+            * **blk** : lambda<(left:TT;right:TT):TT>
 
-reduce returns auto
+.. _function-_at_functional_c__c_reduce_C1_ls_Y_ls_TT_gr__dot__gr_G_CN_ls_left;right_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_CY_ls_TT_gr_L_gr__at__at_:
 
-+--------+-------------------------------------------------------+
-+argument+argument type                                          +
-+========+=======================================================+
-+it      +iterator<auto(TT)> const                               +
-+--------+-------------------------------------------------------+
-+blk     +function<(left:TT const;right:TT const):TT const> const+
-+--------+-------------------------------------------------------+
+.. das:function:: reduce(it: iterator<auto(TT)>; blk: function<(left:TT const;right:TT const):TT const>) : auto
 
+|detail/function-functional-reduce-0x8b19e5b22fda862f|
 
-iterates over `it` and yields the reduced (combined) result of `blk` for each element
-and previous reduction result
+:Arguments: * **it** : iterator<auto(TT)>
 
-.. _function-_at_functional_c__c_reduce_C1_ls_Y_ls_TT_gr_._gr_G_CN_ls_left;right_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_CY_ls_TT_gr_L_gr__builtin_:
+            * **blk** : function<(left:TT;right:TT):TT>
 
-.. das:function:: reduce(it: iterator<auto(TT)> const; blk: block<(left:TT const;right:TT const):TT const> const)
+.. _function-_at_functional_c__c_reduce_C1_ls_Y_ls_TT_gr__dot__gr_G_CN_ls_left;right_gr_0_ls_CY_ls_TT_gr_L;CY_ls_TT_gr_L_gr_1_ls_CY_ls_TT_gr_L_gr__builtin_:
 
-reduce returns auto
+.. das:function:: reduce(it: iterator<auto(TT)>; blk: block<(left:TT const;right:TT const):TT const>) : auto
 
-+--------+----------------------------------------------------+
-+argument+argument type                                       +
-+========+====================================================+
-+it      +iterator<auto(TT)> const                            +
-+--------+----------------------------------------------------+
-+blk     +block<(left:TT const;right:TT const):TT const> const+
-+--------+----------------------------------------------------+
+|detail/function-functional-reduce-0xffa23ee0e513940c|
 
+:Arguments: * **it** : iterator<auto(TT)>
 
-iterates over `it` and yields the reduced (combined) result of `blk` for each element
-and previous reduction result
+            * **blk** : block<(left:TT;right:TT):TT>
 
-.. _function-_at_functional_c__c_sum_C1_ls_Y_ls_TT_gr_._gr_G:
+.. _function-_at_functional_c__c_sum_C1_ls_Y_ls_TT_gr__dot__gr_G:
 
-.. das:function:: sum(it: iterator<auto(TT)> const)
-
-sum returns auto
-
-+--------+------------------------+
-+argument+argument type           +
-+========+========================+
-+it      +iterator<auto(TT)> const+
-+--------+------------------------+
-
+.. das:function:: sum(it: iterator<auto(TT)>) : auto
 
 iterates over `it` and yields the sum of all elements
 same as reduce(it, @(a,b) => a + b)
 
-.. _function-_at_functional_c__c_any_C.:
+:Arguments: * **it** : iterator<auto(TT)>
 
-.. das:function:: any(it: auto const)
+.. _function-_at_functional_c__c_any_C_dot_:
 
-any returns auto
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+it      +auto const   +
-+--------+-------------+
-
+.. das:function:: any(it: auto) : auto
 
 iterates over `it` and yields true if any element is true
 
-.. _function-_at_functional_c__c_all_C.:
+:Arguments: * **it** : auto
 
-.. das:function:: all(it: auto const)
+.. _function-_at_functional_c__c_all_C_dot_:
 
-all returns auto
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+it      +auto const   +
-+--------+-------------+
-
+.. das:function:: all(it: auto) : auto
 
 iterates over `it` and yields true if all elements are true
 
-.. _function-_at_functional_c__c_cycle_1_ls_Y_ls_TT_gr_._gr_G:
+:Arguments: * **it** : auto
 
-.. das:function:: cycle(src: iterator<auto(TT)>)
+.. _function-_at_functional_c__c_cycle_1_ls_Y_ls_TT_gr__dot__gr_G:
 
-cycle returns auto
-
-+--------+------------------+
-+argument+argument type     +
-+========+==================+
-+src     +iterator<auto(TT)>+
-+--------+------------------+
-
+.. das:function:: cycle(src: iterator<auto(TT)>) : auto
 
 endlessly iterates over `src`
 
-.. _function-_at_functional_c__c_islice_1_ls_Y_ls_TT_gr_._gr_G_Ci_Ci:
+:Arguments: * **src** : iterator<auto(TT)>
 
-.. das:function:: islice(src: iterator<auto(TT)>; start: int const; stop: int const)
+.. _function-_at_functional_c__c_islice_1_ls_Y_ls_TT_gr__dot__gr_G_Ci_Ci:
 
-islice returns auto
-
-+--------+------------------+
-+argument+argument type     +
-+========+==================+
-+src     +iterator<auto(TT)>+
-+--------+------------------+
-+start   +int const         +
-+--------+------------------+
-+stop    +int const         +
-+--------+------------------+
-
+.. das:function:: islice(src: iterator<auto(TT)>; start: int; stop: int) : auto
 
 iterates over `src` and yields only the elements in the range [start,stop)
 
-.. _function-_at_functional_c__c_repeat_ref_CY_ls_TT_gr_._i:
+:Arguments: * **src** : iterator<auto(TT)>
 
-.. das:function:: repeat_ref(value: auto(TT) const; total: int)
+            * **start** : int
 
-repeat_ref returns auto
+            * **stop** : int
 
-+--------+--------------+
-+argument+argument type +
-+========+==============+
-+value   +auto(TT) const+
-+--------+--------------+
-+total   +int           +
-+--------+--------------+
+.. _function-_at_functional_c__c_repeat_ref_CY_ls_TT_gr__dot__i:
 
+.. das:function:: repeat_ref(value: auto(TT); total: int) : auto
 
 yields `value` by reference `count` times
 
-.. _function-_at_functional_c__c_repeat_CY_ls_TT_gr_._i:
+:Arguments: * **value** : auto(TT)
 
-.. das:function:: repeat(value: auto(TT) const; count: int)
+            * **total** : int
 
-repeat returns auto
+.. _function-_at_functional_c__c_repeat_CY_ls_TT_gr__dot__i:
 
-+--------+--------------+
-+argument+argument type +
-+========+==============+
-+value   +auto(TT) const+
-+--------+--------------+
-+count   +int           +
-+--------+--------------+
-
+.. das:function:: repeat(value: auto(TT); count: int = 0) : auto
 
 yields `value` `count` times
 
-.. _function-_at_functional_c__c_not_C.:
+:Arguments: * **value** : auto(TT)
 
-.. das:function:: not(x: auto const)
+            * **count** : int
 
-not returns auto
+.. _function-_at_functional_c__c_not_C_dot_:
 
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+x       +auto const   +
-+--------+-------------+
-
+.. das:function:: not(x: auto) : auto
 
 yeilds !x
 
-.. _function-_at_functional_c__c_echo_._Cs:
+:Arguments: * **x** : auto
 
-.. das:function:: echo(x: auto; extra: string const)
+.. _function-_at_functional_c__c_echo__dot__Cs:
 
-echo returns auto
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+x       +auto         +
-+--------+-------------+
-+extra   +string const +
-+--------+-------------+
-
+.. das:function:: echo(x: auto; extra: string = "\n") : auto
 
 prints contents of the string to the output, with `extra` string appended
 
-.. _function-_at_functional_c__c_flatten_1_ls_Y_ls_TT_gr_._gr_G:
+:Arguments: * **x** : auto
 
-.. das:function:: flatten(it: iterator<auto(TT)>)
+            * **extra** : string
 
-flatten returns auto
+.. _function-_at_functional_c__c_flatten_1_ls_Y_ls_TT_gr__dot__gr_G:
 
-+--------+------------------+
-+argument+argument type     +
-+========+==================+
-+it      +iterator<auto(TT)>+
-+--------+------------------+
-
+.. das:function:: flatten(it: iterator<auto(TT)>) : auto
 
 iterates over `it`, than iterates over each element of each element of `it` and yields it
+
+:Arguments: * **it** : iterator<auto(TT)>
 
 +++++++
 Queries
 +++++++
 
-  *  :ref:`is_equal (a:auto const;b:auto const) : auto <function-_at_functional_c__c_is_equal_C._C.>` 
-  *  :ref:`is_not_equal (a:auto const;b:auto const) : auto <function-_at_functional_c__c_is_not_equal_C._C.>` 
+  *  :ref:`is_equal (a: auto; b: auto) : auto <function-_at_functional_c__c_is_equal_C_dot__C_dot_>` 
+  *  :ref:`is_not_equal (a: auto; b: auto) : auto <function-_at_functional_c__c_is_not_equal_C_dot__C_dot_>` 
 
-.. _function-_at_functional_c__c_is_equal_C._C.:
+.. _function-_at_functional_c__c_is_equal_C_dot__C_dot_:
 
-.. das:function:: is_equal(a: auto const; b: auto const)
-
-is_equal returns auto
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+a       +auto const   +
-+--------+-------------+
-+b       +auto const   +
-+--------+-------------+
-
+.. das:function:: is_equal(a: auto; b: auto) : auto
 
 yields true if `a` and `b` are equal
 
-.. _function-_at_functional_c__c_is_not_equal_C._C.:
+:Arguments: * **a** : auto
 
-.. das:function:: is_not_equal(a: auto const; b: auto const)
+            * **b** : auto
 
-is_not_equal returns auto
+.. _function-_at_functional_c__c_is_not_equal_C_dot__C_dot_:
 
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+a       +auto const   +
-+--------+-------------+
-+b       +auto const   +
-+--------+-------------+
-
+.. das:function:: is_not_equal(a: auto; b: auto) : auto
 
 yields true if `a` and `b` are not equal
+
+:Arguments: * **a** : auto
+
+            * **b** : auto
 
 +++++++++++++
 Uncategorized
 +++++++++++++
 
-.. _function-_at_functional_c__c_sorted_1_ls_._gr_A:
+.. _function-_at_functional_c__c_sorted_1_ls__dot__gr_A:
 
-.. das:function:: sorted(arr: array<auto>)
-
-sorted returns auto
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+arr     +array<auto>  +
-+--------+-------------+
-
+.. das:function:: sorted(arr: array<auto>) : auto
 
 iterates over input and returns it sorted version
 
-.. _function-_at_functional_c__c_sorted_1_ls_Y_ls_TT_gr_._gr_G:
+:Arguments: * **arr** : array<auto>
 
-.. das:function:: sorted(it: iterator<auto(TT)>)
+.. _function-_at_functional_c__c_sorted_1_ls_Y_ls_TT_gr__dot__gr_G:
 
-sorted returns auto
-
-+--------+------------------+
-+argument+argument type     +
-+========+==================+
-+it      +iterator<auto(TT)>+
-+--------+------------------+
-
+.. das:function:: sorted(it: iterator<auto(TT)>) : auto
 
 iterates over input and returns it sorted version
+
+:Arguments: * **it** : iterator<auto(TT)>
 
 

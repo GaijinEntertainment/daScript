@@ -5,8 +5,6 @@
 DECS, Daslang entity component system
 =====================================
 
-.. include:: detail/decs.rst
-
 The DECS module implements low level functionality of Daslang entity component system.
 
 All functions and symbols are in "decs" module, use require to get access to it. ::
@@ -52,38 +50,38 @@ Table of component values for individual entity.
 
 One of the callbacks which form individual pass.
 
+++++++++++
+Structures
+++++++++++
+
 .. _struct-decs-CTypeInfo:
 
 .. das:attribute:: CTypeInfo
 
+Type information for the individual component subtype.
+Consists of type name and collection of type-specific routines to control type values during its lifetime, serialization, etc.
 
+:Fields: * **basicType** :  :ref:`Type <enum-rtti-Type>` 
 
-CTypeInfo fields are
+         * **mangledName** : string
 
-+-----------+-----------------------------------------------------------------------------------------+
-+basicType  + :ref:`rtti::Type <enum-rtti-Type>`                                                      +
-+-----------+-----------------------------------------------------------------------------------------+
-+mangledName+string                                                                                   +
-+-----------+-----------------------------------------------------------------------------------------+
-+fullName   +string                                                                                   +
-+-----------+-----------------------------------------------------------------------------------------+
-+hash       + :ref:`TypeHash <alias-TypeHash>`                                                        +
-+-----------+-----------------------------------------------------------------------------------------+
-+size       +uint                                                                                     +
-+-----------+-----------------------------------------------------------------------------------------+
-+eraser     +function<(arr:array<uint8>):void>                                                        +
-+-----------+-----------------------------------------------------------------------------------------+
-+clonner    +function<(dst:array<uint8>;src:array<uint8> const):void>                                 +
-+-----------+-----------------------------------------------------------------------------------------+
-+serializer +function<(arch: :ref:`archive::Archive <struct-archive-Archive>` ;arr:array<uint8>):void>+
-+-----------+-----------------------------------------------------------------------------------------+
-+dumper     +function<(elem:void? const):string>                                                      +
-+-----------+-----------------------------------------------------------------------------------------+
-+mkTypeInfo +function<>                                                                               +
-+-----------+-----------------------------------------------------------------------------------------+
-+gc         +function<(src:array<uint8>):lambda<>>                                                    +
-+-----------+-----------------------------------------------------------------------------------------+
+         * **fullName** : string
 
+         * **hash** :  :ref:`TypeHash <alias-TypeHash>` 
+
+         * **size** : uint
+
+         * **eraser** : function<(arr:array<uint8>):void>
+
+         * **clonner** : function<(dst:array<uint8>;src:array<uint8>):void>
+
+         * **serializer** : function<(arch: :ref:`Archive <struct-archive-Archive>` ;arr:array<uint8>):void>
+
+         * **dumper** : function<(elem:void?):string>
+
+         * **mkTypeInfo** : function<void>
+
+         * **gc** : function<(src:array<uint8>):lambda<void>>
 
 Type information for the individual component subtype.
 Consists of type name and collection of type-specific routines to control type values during its lifetime, serialization, etc.
@@ -92,24 +90,19 @@ Consists of type name and collection of type-specific routines to control type v
 
 .. das:attribute:: Component
 
+Single ECS component. Contains component name, data, and data layout.
 
+:Fields: * **name** : string
 
-Component fields are
+         * **hash** :  :ref:`ComponentHash <alias-ComponentHash>` 
 
-+--------+------------------------------------------------+
-+name    +string                                          +
-+--------+------------------------------------------------+
-+hash    + :ref:`ComponentHash <alias-ComponentHash>`     +
-+--------+------------------------------------------------+
-+stride  +int                                             +
-+--------+------------------------------------------------+
-+data    +array<uint8>                                    +
-+--------+------------------------------------------------+
-+info    + :ref:`decs::CTypeInfo <struct-decs-CTypeInfo>` +
-+--------+------------------------------------------------+
-+gc_dummy+lambda<>                                        +
-+--------+------------------------------------------------+
+         * **stride** : int
 
+         * **data** : array<uint8>
+
+         * **info** :  :ref:`CTypeInfo <struct-decs-CTypeInfo>` 
+
+         * **gc_dummy** : lambda<void>
 
 Single ECS component. Contains component name, data, and data layout.
 
@@ -117,16 +110,11 @@ Single ECS component. Contains component name, data, and data layout.
 
 .. das:attribute:: EntityId
 
+Unique identifier of the entity. Consists of id (index in the data array) and generation.
 
+:Fields: * **id** : uint
 
-EntityId fields are
-
-+----------+----+
-+id        +uint+
-+----------+----+
-+generation+int +
-+----------+----+
-
+         * **generation** : int
 
 Unique identifier of the entity. Consists of id (index in the data array) and generation.
 
@@ -134,20 +122,15 @@ Unique identifier of the entity. Consists of id (index in the data array) and ge
 
 .. das:attribute:: Archetype
 
+ECS archetype. Archetype is unique combination of components.
 
+:Fields: * **hash** :  :ref:`ComponentHash <alias-ComponentHash>` 
 
-Archetype fields are
+         * **components** : array< :ref:`Component <struct-decs-Component>` >
 
-+----------+-------------------------------------------------------+
-+hash      + :ref:`ComponentHash <alias-ComponentHash>`            +
-+----------+-------------------------------------------------------+
-+components+array< :ref:`decs::Component <struct-decs-Component>` >+
-+----------+-------------------------------------------------------+
-+size      +int                                                    +
-+----------+-------------------------------------------------------+
-+eidIndex  +int                                                    +
-+----------+-------------------------------------------------------+
+         * **size** : int
 
+         * **eidIndex** : int
 
 ECS archetype. Archetype is unique combination of components.
 
@@ -155,18 +138,13 @@ ECS archetype. Archetype is unique combination of components.
 
 .. das:attribute:: ComponentValue
 
+Value of the component during creation or transformation.
 
+:Fields: * **name** : string
 
-ComponentValue fields are
+         * **info** :  :ref:`CTypeInfo <struct-decs-CTypeInfo>` 
 
-+----+------------------------------------------------+
-+name+string                                          +
-+----+------------------------------------------------+
-+info+ :ref:`decs::CTypeInfo <struct-decs-CTypeInfo>` +
-+----+------------------------------------------------+
-+data+float4[4]                                       +
-+----+------------------------------------------------+
-
+         * **data** : float4[4]
 
 Value of the component during creation or transformation.
 
@@ -174,16 +152,11 @@ Value of the component during creation or transformation.
 
 .. das:attribute:: EcsRequestPos
 
+Location of the ECS request in the code (source file and line number).
 
+:Fields: * **file** : string
 
-EcsRequestPos fields are
-
-+----+------+
-+file+string+
-+----+------+
-+line+uint  +
-+----+------+
-
+         * **line** : uint
 
 Location of the ECS request in the code (source file and line number).
 
@@ -191,22 +164,18 @@ Location of the ECS request in the code (source file and line number).
 
 .. das:attribute:: EcsRequest
 
+Individual ESC requests. Contains list of required components, list of components which are required to be absent.
+Caches list of archetypes, which match the request.
 
+:Fields: * **hash** :  :ref:`ComponentHash <alias-ComponentHash>` 
 
-EcsRequest fields are
+         * **req** : array<string>
 
-+----------+--------------------------------------------------------+
-+hash      + :ref:`ComponentHash <alias-ComponentHash>`             +
-+----------+--------------------------------------------------------+
-+req       +array<string>                                           +
-+----------+--------------------------------------------------------+
-+reqn      +array<string>                                           +
-+----------+--------------------------------------------------------+
-+archetypes+array<int>                                              +
-+----------+--------------------------------------------------------+
-+at        + :ref:`decs::EcsRequestPos <struct-decs-EcsRequestPos>` +
-+----------+--------------------------------------------------------+
+         * **reqn** : array<string>
 
+         * **archetypes** : array<int>
+
+         * **at** :  :ref:`EcsRequestPos <struct-decs-EcsRequestPos>` 
 
 Individual ESC requests. Contains list of required components, list of components which are required to be absent.
 Caches list of archetypes, which match the request.
@@ -215,26 +184,22 @@ Caches list of archetypes, which match the request.
 
 .. das:attribute:: DecsState
 
+Entire state of the ECS system.
+Conntains archtypes, entities and entity free-list, entity lokup table, all archetypes and archetype lookups, etc.
 
+:Fields: * **archetypeLookup** : table< :ref:`ComponentHash <alias-ComponentHash>` ;int>
 
-DecsState fields are
+         * **allArchetypes** : array< :ref:`Archetype <struct-decs-Archetype>` >
 
-+------------------+---------------------------------------------------------------------------------------------+
-+archetypeLookup   +table< :ref:`ComponentHash <alias-ComponentHash>` ;int>                                      +
-+------------------+---------------------------------------------------------------------------------------------+
-+allArchetypes     +array< :ref:`decs::Archetype <struct-decs-Archetype>` >                                      +
-+------------------+---------------------------------------------------------------------------------------------+
-+entityFreeList    +array< :ref:`decs::EntityId <struct-decs-EntityId>` >                                        +
-+------------------+---------------------------------------------------------------------------------------------+
-+entityLookup      +array<tuple<generation:int;archetype: :ref:`ComponentHash <alias-ComponentHash>` ;index:int>>+
-+------------------+---------------------------------------------------------------------------------------------+
-+componentTypeCheck+table<string; :ref:`decs::CTypeInfo <struct-decs-CTypeInfo>` >                               +
-+------------------+---------------------------------------------------------------------------------------------+
-+ecsQueries        +array< :ref:`decs::EcsRequest <struct-decs-EcsRequest>` >                                    +
-+------------------+---------------------------------------------------------------------------------------------+
-+queryLookup       +table< :ref:`ComponentHash <alias-ComponentHash>` ;int>                                      +
-+------------------+---------------------------------------------------------------------------------------------+
+         * **entityFreeList** : array< :ref:`EntityId <struct-decs-EntityId>` >
 
+         * **entityLookup** : array<tuple<generation:int;archetype: :ref:`ComponentHash <alias-ComponentHash>` ;index:int>>
+
+         * **componentTypeCheck** : table<string; :ref:`CTypeInfo <struct-decs-CTypeInfo>` >
+
+         * **ecsQueries** : array< :ref:`EcsRequest <struct-decs-EcsRequest>` >
+
+         * **queryLookup** : table< :ref:`ComponentHash <alias-ComponentHash>` ;int>
 
 Entire state of the ECS system.
 Conntains archtypes, entities and entity free-list, entity lokup table, all archetypes and archetype lookups, etc.
@@ -243,752 +208,507 @@ Conntains archtypes, entities and entity free-list, entity lokup table, all arch
 
 .. das:attribute:: DecsPass
 
+:Fields: * **name** : string - Individual pass of the update of the ECS system.
 
+         * **calls** : array< :ref:`PassFunction <alias-PassFunction>` > - Contains pass name and list of all pass calblacks.
 
-DecsPass fields are
-
-+-----+-------------------------------------------------+
-+name +string                                           +
-+-----+-------------------------------------------------+
-+calls+array< :ref:`PassFunction <alias-PassFunction>` >+
-+-----+-------------------------------------------------+
-
-
-Individual pass of the update of the ECS system.
-Contains pass name and list of all pass calblacks.
 
 +++++++++++++++++++++
 Comparison and access
 +++++++++++++++++++++
 
-  *  :ref:`== (a:decs::EntityId const implicit;b:decs::EntityId const implicit) : bool <function-_at_decs_c__c__eq__eq__CIS_ls_decs_c__c_EntityId_gr__CIS_ls_decs_c__c_EntityId_gr_>` 
-  *  :ref:`\!= (a:decs::EntityId const implicit;b:decs::EntityId const implicit) : bool <function-_at_decs_c__c__ex__eq__CIS_ls_decs_c__c_EntityId_gr__CIS_ls_decs_c__c_EntityId_gr_>` 
-  *  :ref:`. (cmp:array\<decs::ComponentValue\> -const;name:string const) : decs::ComponentValue& <function-_at_decs_c__c_._Y_ls_ComponentMap_gr_1_ls_S_ls_decs_c__c_ComponentValue_gr__gr_A_Cs>` 
+  *  :ref:`EntityId implicit== (a: EntityId implicit; b: EntityId implicit) : bool <function-_at_decs_c__c__eq__eq__CIS_ls_decs_c__c_EntityId_gr__CIS_ls_decs_c__c_EntityId_gr_>` 
+  *  :ref:`EntityId implicit\!= (a: EntityId implicit; b: EntityId implicit) : bool <function-_at_decs_c__c__ex__eq__CIS_ls_decs_c__c_EntityId_gr__CIS_ls_decs_c__c_EntityId_gr_>` 
+  *  :ref:`ComponentMap. (var cmp: ComponentMap; name: string) : ComponentValue& <function-_at_decs_c__c__dot__Y_ls_ComponentMap_gr_1_ls_S_ls_decs_c__c_ComponentValue_gr__gr_A_Cs>` 
 
 .. _function-_at_decs_c__c__eq__eq__CIS_ls_decs_c__c_EntityId_gr__CIS_ls_decs_c__c_EntityId_gr_:
 
-.. das:function:: operator ==(a: EntityId const implicit; b: EntityId const implicit)
-
-== returns bool
-
-+--------+-------------------------------------------------------------+
-+argument+argument type                                                +
-+========+=============================================================+
-+a       + :ref:`decs::EntityId <struct-decs-EntityId>`  const implicit+
-+--------+-------------------------------------------------------------+
-+b       + :ref:`decs::EntityId <struct-decs-EntityId>`  const implicit+
-+--------+-------------------------------------------------------------+
-
+.. das:function:: EntityId implicit==(a: EntityId implicit; b: EntityId implicit) : bool
 
 Equality operator for entity IDs.
 
+:Arguments: * **a** :  :ref:`EntityId <struct-decs-EntityId>`  implicit
+
+            * **b** :  :ref:`EntityId <struct-decs-EntityId>`  implicit
+
 .. _function-_at_decs_c__c__ex__eq__CIS_ls_decs_c__c_EntityId_gr__CIS_ls_decs_c__c_EntityId_gr_:
 
-.. das:function:: operator !=(a: EntityId const implicit; b: EntityId const implicit)
-
-!= returns bool
-
-+--------+-------------------------------------------------------------+
-+argument+argument type                                                +
-+========+=============================================================+
-+a       + :ref:`decs::EntityId <struct-decs-EntityId>`  const implicit+
-+--------+-------------------------------------------------------------+
-+b       + :ref:`decs::EntityId <struct-decs-EntityId>`  const implicit+
-+--------+-------------------------------------------------------------+
-
+.. das:function:: EntityId implicit!=(a: EntityId implicit; b: EntityId implicit) : bool
 
 Inequality operator for entity IDs.
 
-.. _function-_at_decs_c__c_._Y_ls_ComponentMap_gr_1_ls_S_ls_decs_c__c_ComponentValue_gr__gr_A_Cs:
+:Arguments: * **a** :  :ref:`EntityId <struct-decs-EntityId>`  implicit
 
-.. das:function:: operator .(cmp: ComponentMap; name: string const)
+            * **b** :  :ref:`EntityId <struct-decs-EntityId>`  implicit
 
-. returns  :ref:`decs::ComponentValue <struct-decs-ComponentValue>` &
+.. _function-_at_decs_c__c__dot__Y_ls_ComponentMap_gr_1_ls_S_ls_decs_c__c_ComponentValue_gr__gr_A_Cs:
 
-+--------+------------------------------------------+
-+argument+argument type                             +
-+========+==========================================+
-+cmp     + :ref:`ComponentMap <alias-ComponentMap>` +
-+--------+------------------------------------------+
-+name    +string const                              +
-+--------+------------------------------------------+
-
+.. das:function:: ComponentMap.(cmp: ComponentMap; name: string) : ComponentValue&
 
 Access to component value by name. For example::
 
     create_entity <| @ ( eid, cmp )
         cmp.pos := float3(i)    // same as cmp |> set("pos",float3(i))
 
+:Arguments: * **cmp** :  :ref:`ComponentMap <alias-ComponentMap>` 
+
+            * **name** : string
+
 ++++++++++++++++++++++
 Access (get/set/clone)
 ++++++++++++++++++++++
 
-  *  :ref:`clone (cv:decs::ComponentValue -const;val:decs::EntityId const) : void <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__CS_ls_decs_c__c_EntityId_gr_>` 
-  *  :ref:`clone (cv:decs::ComponentValue -const;val:bool const) : void <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cb>` 
-  *  :ref:`clone (cv:decs::ComponentValue -const;val:range const) : void <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cr>` 
-  *  :ref:`clone (cv:decs::ComponentValue -const;val:urange const) : void <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cz>` 
-  *  :ref:`clone (cv:decs::ComponentValue -const;val:range64 const) : void <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cr64>` 
-  *  :ref:`clone (cv:decs::ComponentValue -const;val:urange64 const) : void <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cz64>` 
-  *  :ref:`clone (cv:decs::ComponentValue -const;val:string const) : void <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cs>` 
-  *  :ref:`clone (cv:decs::ComponentValue -const;val:int const) : void <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Ci>` 
-  *  :ref:`clone (cv:decs::ComponentValue -const;val:int8 const) : void <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Ci8>` 
-  *  :ref:`clone (cv:decs::ComponentValue -const;val:int16 const) : void <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Ci16>` 
-  *  :ref:`clone (cv:decs::ComponentValue -const;val:int64 const) : void <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Ci64>` 
-  *  :ref:`clone (cv:decs::ComponentValue -const;val:int2 const) : void <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Ci2>` 
-  *  :ref:`clone (cv:decs::ComponentValue -const;val:int3 const) : void <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Ci3>` 
-  *  :ref:`clone (cv:decs::ComponentValue -const;val:int4 const) : void <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Ci4>` 
-  *  :ref:`clone (cv:decs::ComponentValue -const;val:uint const) : void <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cu>` 
-  *  :ref:`clone (cv:decs::ComponentValue -const;val:uint8 const) : void <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cu8>` 
-  *  :ref:`clone (cv:decs::ComponentValue -const;val:uint16 const) : void <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cu16>` 
-  *  :ref:`clone (cv:decs::ComponentValue -const;val:uint64 const) : void <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cu64>` 
-  *  :ref:`clone (cv:decs::ComponentValue -const;val:uint2 const) : void <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cu2>` 
-  *  :ref:`clone (cv:decs::ComponentValue -const;val:uint3 const) : void <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cu3>` 
-  *  :ref:`clone (cv:decs::ComponentValue -const;val:uint4 const) : void <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cu4>` 
-  *  :ref:`clone (cv:decs::ComponentValue -const;val:float const) : void <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cf>` 
-  *  :ref:`clone (cv:decs::ComponentValue -const;val:float2 const) : void <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cf2>` 
-  *  :ref:`clone (cv:decs::ComponentValue -const;val:float3 const) : void <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cf3>` 
-  *  :ref:`clone (cv:decs::ComponentValue -const;val:float4 const) : void <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cf4>` 
-  *  :ref:`clone (cv:decs::ComponentValue -const;val:math::float3x3 const) : void <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__CH_ls_math_c__c_float3x3_gr_>` 
-  *  :ref:`clone (cv:decs::ComponentValue -const;val:math::float3x4 const) : void <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__CH_ls_math_c__c_float3x4_gr_>` 
-  *  :ref:`clone (cv:decs::ComponentValue -const;val:math::float4x4 const) : void <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__CH_ls_math_c__c_float4x4_gr_>` 
-  *  :ref:`clone (cv:decs::ComponentValue -const;val:double const) : void <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cd>` 
-  *  :ref:`clone (dst:decs::Component -const;src:decs::Component const) : void <function-_at_decs_c__c_clone_S_ls_decs_c__c_Component_gr__CS_ls_decs_c__c_Component_gr_>` 
-  *  :ref:`has (arch:decs::Archetype const;name:string const) : bool <function-_at_decs_c__c_has_CS_ls_decs_c__c_Archetype_gr__Cs>` 
-  *  :ref:`has (cmp:array\<decs::ComponentValue\> -const;name:string const) : bool <function-_at_decs_c__c_has_Y_ls_ComponentMap_gr_1_ls_S_ls_decs_c__c_ComponentValue_gr__gr_A_Cs>` 
-  *  :ref:`remove (cmp:array\<decs::ComponentValue\> -const;name:string const) : void <function-_at_decs_c__c_remove_Y_ls_ComponentMap_gr_1_ls_S_ls_decs_c__c_ComponentValue_gr__gr_A_Cs>` 
-  *  :ref:`set (cv:decs::ComponentValue -const;val:auto const) : auto <function-_at_decs_c__c_set_S_ls_decs_c__c_ComponentValue_gr__C.>` 
-  *  :ref:`get (arch:decs::Archetype const;name:string const;value:auto(TT) const) : auto <function-_at_decs_c__c_get_CS_ls_decs_c__c_Archetype_gr__Cs_CY_ls_TT_gr_.>` 
-  *  :ref:`get (cmp:array\<decs::ComponentValue\> -const;name:string const;value:auto(TT) -const) : auto <function-_at_decs_c__c_get_Y_ls_ComponentMap_gr_1_ls_S_ls_decs_c__c_ComponentValue_gr__gr_A_Cs_Y_ls_TT_gr_.>` 
-  *  :ref:`set (cmp:array\<decs::ComponentValue\> -const;name:string const;value:auto(TT) const) : auto <function-_at_decs_c__c_set_Y_ls_ComponentMap_gr_1_ls_S_ls_decs_c__c_ComponentValue_gr__gr_A_Cs_CY_ls_TT_gr_.>` 
+  *  :ref:`clone (var cv: ComponentValue; val: EntityId) <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__CS_ls_decs_c__c_EntityId_gr_>` 
+  *  :ref:`clone (var cv: ComponentValue; val: bool) <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cb>` 
+  *  :ref:`clone (var cv: ComponentValue; val: range) <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cr>` 
+  *  :ref:`clone (var cv: ComponentValue; val: urange) <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cz>` 
+  *  :ref:`clone (var cv: ComponentValue; val: range64) <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cr64>` 
+  *  :ref:`clone (var cv: ComponentValue; val: urange64) <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cz64>` 
+  *  :ref:`clone (var cv: ComponentValue; val: string) <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cs>` 
+  *  :ref:`clone (var cv: ComponentValue; val: int) <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Ci>` 
+  *  :ref:`clone (var cv: ComponentValue; val: int8) <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Ci8>` 
+  *  :ref:`clone (var cv: ComponentValue; val: int16) <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Ci16>` 
+  *  :ref:`clone (var cv: ComponentValue; val: int64) <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Ci64>` 
+  *  :ref:`clone (var cv: ComponentValue; val: int2) <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Ci2>` 
+  *  :ref:`clone (var cv: ComponentValue; val: int3) <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Ci3>` 
+  *  :ref:`clone (var cv: ComponentValue; val: int4) <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Ci4>` 
+  *  :ref:`clone (var cv: ComponentValue; val: uint) <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cu>` 
+  *  :ref:`clone (var cv: ComponentValue; val: uint8) <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cu8>` 
+  *  :ref:`clone (var cv: ComponentValue; val: uint16) <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cu16>` 
+  *  :ref:`clone (var cv: ComponentValue; val: uint64) <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cu64>` 
+  *  :ref:`clone (var cv: ComponentValue; val: uint2) <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cu2>` 
+  *  :ref:`clone (var cv: ComponentValue; val: uint3) <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cu3>` 
+  *  :ref:`clone (var cv: ComponentValue; val: uint4) <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cu4>` 
+  *  :ref:`clone (var cv: ComponentValue; val: float) <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cf>` 
+  *  :ref:`clone (var cv: ComponentValue; val: float2) <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cf2>` 
+  *  :ref:`clone (var cv: ComponentValue; val: float3) <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cf3>` 
+  *  :ref:`clone (var cv: ComponentValue; val: float4) <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cf4>` 
+  *  :ref:`clone (var cv: ComponentValue; val: float3x3) <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__CH_ls_math_c__c_float3x3_gr_>` 
+  *  :ref:`clone (var cv: ComponentValue; val: float3x4) <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__CH_ls_math_c__c_float3x4_gr_>` 
+  *  :ref:`clone (var cv: ComponentValue; val: float4x4) <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__CH_ls_math_c__c_float4x4_gr_>` 
+  *  :ref:`clone (var cv: ComponentValue; val: double) <function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cd>` 
+  *  :ref:`clone (var dst: Component; src: Component) <function-_at_decs_c__c_clone_S_ls_decs_c__c_Component_gr__CS_ls_decs_c__c_Component_gr_>` 
+  *  :ref:`has (arch: Archetype; name: string) : bool <function-_at_decs_c__c_has_CS_ls_decs_c__c_Archetype_gr__Cs>` 
+  *  :ref:`has (var cmp: ComponentMap; name: string) : bool <function-_at_decs_c__c_has_Y_ls_ComponentMap_gr_1_ls_S_ls_decs_c__c_ComponentValue_gr__gr_A_Cs>` 
+  *  :ref:`remove (var cmp: ComponentMap; name: string) <function-_at_decs_c__c_remove_Y_ls_ComponentMap_gr_1_ls_S_ls_decs_c__c_ComponentValue_gr__gr_A_Cs>` 
+  *  :ref:`set (var cv: ComponentValue; val: auto) : auto <function-_at_decs_c__c_set_S_ls_decs_c__c_ComponentValue_gr__C_dot_>` 
+  *  :ref:`get (arch: Archetype; name: string; value: auto(TT)) : auto <function-_at_decs_c__c_get_CS_ls_decs_c__c_Archetype_gr__Cs_CY_ls_TT_gr__dot_>` 
+  *  :ref:`get (var cmp: ComponentMap; name: string; var value: auto(TT)) : auto <function-_at_decs_c__c_get_Y_ls_ComponentMap_gr_1_ls_S_ls_decs_c__c_ComponentValue_gr__gr_A_Cs_Y_ls_TT_gr__dot_>` 
+  *  :ref:`set (var cmp: ComponentMap; name: string; value: auto(TT)) : auto <function-_at_decs_c__c_set_Y_ls_ComponentMap_gr_1_ls_S_ls_decs_c__c_ComponentValue_gr__gr_A_Cs_CY_ls_TT_gr__dot_>` 
 
 .. _function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__CS_ls_decs_c__c_EntityId_gr_:
 
-.. das:function:: clone(cv: ComponentValue; val: EntityId const)
+.. das:function:: clone(cv: ComponentValue; val: EntityId)
 
-+--------+----------------------------------------------------------+
-+argument+argument type                                             +
-+========+==========================================================+
-+cv      + :ref:`decs::ComponentValue <struct-decs-ComponentValue>` +
-+--------+----------------------------------------------------------+
-+val     + :ref:`decs::EntityId <struct-decs-EntityId>`  const      +
-+--------+----------------------------------------------------------+
+|detail/function-decs-clone-0x620b30871767098a|
 
+:Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
-Clones component value.
+            * **val** :  :ref:`EntityId <struct-decs-EntityId>` 
 
 .. _function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cb:
 
-.. das:function:: clone(cv: ComponentValue; val: bool const)
+.. das:function:: clone(cv: ComponentValue; val: bool)
 
-+--------+----------------------------------------------------------+
-+argument+argument type                                             +
-+========+==========================================================+
-+cv      + :ref:`decs::ComponentValue <struct-decs-ComponentValue>` +
-+--------+----------------------------------------------------------+
-+val     +bool const                                                +
-+--------+----------------------------------------------------------+
+|detail/function-decs-clone-0xf9a2f5f617d86441|
 
+:Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
-Clones component value.
+            * **val** : bool
 
 .. _function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cr:
 
-.. das:function:: clone(cv: ComponentValue; val: range const)
+.. das:function:: clone(cv: ComponentValue; val: range)
 
-+--------+----------------------------------------------------------+
-+argument+argument type                                             +
-+========+==========================================================+
-+cv      + :ref:`decs::ComponentValue <struct-decs-ComponentValue>` +
-+--------+----------------------------------------------------------+
-+val     +range const                                               +
-+--------+----------------------------------------------------------+
+|detail/function-decs-clone-0xbabbfb43e1247e5a|
 
+:Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
-Clones component value.
+            * **val** : range
 
 .. _function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cz:
 
-.. das:function:: clone(cv: ComponentValue; val: urange const)
+.. das:function:: clone(cv: ComponentValue; val: urange)
 
-+--------+----------------------------------------------------------+
-+argument+argument type                                             +
-+========+==========================================================+
-+cv      + :ref:`decs::ComponentValue <struct-decs-ComponentValue>` +
-+--------+----------------------------------------------------------+
-+val     +urange const                                              +
-+--------+----------------------------------------------------------+
+|detail/function-decs-clone-0x9e0783c33915b72d|
 
+:Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
-Clones component value.
+            * **val** : urange
 
 .. _function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cr64:
 
-.. das:function:: clone(cv: ComponentValue; val: range64 const)
+.. das:function:: clone(cv: ComponentValue; val: range64)
 
-+--------+----------------------------------------------------------+
-+argument+argument type                                             +
-+========+==========================================================+
-+cv      + :ref:`decs::ComponentValue <struct-decs-ComponentValue>` +
-+--------+----------------------------------------------------------+
-+val     +range64 const                                             +
-+--------+----------------------------------------------------------+
+|detail/function-decs-clone-0x71b6605790aa7584|
 
+:Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
-Clones component value.
+            * **val** : range64
 
 .. _function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cz64:
 
-.. das:function:: clone(cv: ComponentValue; val: urange64 const)
+.. das:function:: clone(cv: ComponentValue; val: urange64)
 
-+--------+----------------------------------------------------------+
-+argument+argument type                                             +
-+========+==========================================================+
-+cv      + :ref:`decs::ComponentValue <struct-decs-ComponentValue>` +
-+--------+----------------------------------------------------------+
-+val     +urange64 const                                            +
-+--------+----------------------------------------------------------+
+|detail/function-decs-clone-0x27fdb97b14c17b|
 
+:Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
-Clones component value.
+            * **val** : urange64
 
 .. _function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cs:
 
-.. das:function:: clone(cv: ComponentValue; val: string const)
+.. das:function:: clone(cv: ComponentValue; val: string)
 
-+--------+----------------------------------------------------------+
-+argument+argument type                                             +
-+========+==========================================================+
-+cv      + :ref:`decs::ComponentValue <struct-decs-ComponentValue>` +
-+--------+----------------------------------------------------------+
-+val     +string const                                              +
-+--------+----------------------------------------------------------+
+|detail/function-decs-clone-0xf7cb3737e5c057e2|
 
+:Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
-Clones component value.
+            * **val** : string
 
 .. _function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Ci:
 
-.. das:function:: clone(cv: ComponentValue; val: int const)
+.. das:function:: clone(cv: ComponentValue; val: int)
 
-+--------+----------------------------------------------------------+
-+argument+argument type                                             +
-+========+==========================================================+
-+cv      + :ref:`decs::ComponentValue <struct-decs-ComponentValue>` +
-+--------+----------------------------------------------------------+
-+val     +int const                                                 +
-+--------+----------------------------------------------------------+
+|detail/function-decs-clone-0x1435a0ae1e5d4aa4|
 
+:Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
-Clones component value.
+            * **val** : int
 
 .. _function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Ci8:
 
-.. das:function:: clone(cv: ComponentValue; val: int8 const)
+.. das:function:: clone(cv: ComponentValue; val: int8)
 
-+--------+----------------------------------------------------------+
-+argument+argument type                                             +
-+========+==========================================================+
-+cv      + :ref:`decs::ComponentValue <struct-decs-ComponentValue>` +
-+--------+----------------------------------------------------------+
-+val     +int8 const                                                +
-+--------+----------------------------------------------------------+
+|detail/function-decs-clone-0xb46aa3dd9885c714|
 
+:Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
-Clones component value.
+            * **val** : int8
 
 .. _function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Ci16:
 
-.. das:function:: clone(cv: ComponentValue; val: int16 const)
+.. das:function:: clone(cv: ComponentValue; val: int16)
 
-+--------+----------------------------------------------------------+
-+argument+argument type                                             +
-+========+==========================================================+
-+cv      + :ref:`decs::ComponentValue <struct-decs-ComponentValue>` +
-+--------+----------------------------------------------------------+
-+val     +int16 const                                               +
-+--------+----------------------------------------------------------+
+|detail/function-decs-clone-0xb49c9cdd98dab12f|
 
+:Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
-Clones component value.
+            * **val** : int16
 
 .. _function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Ci64:
 
-.. das:function:: clone(cv: ComponentValue; val: int64 const)
+.. das:function:: clone(cv: ComponentValue; val: int64)
 
-+--------+----------------------------------------------------------+
-+argument+argument type                                             +
-+========+==========================================================+
-+cv      + :ref:`decs::ComponentValue <struct-decs-ComponentValue>` +
-+--------+----------------------------------------------------------+
-+val     +int64 const                                               +
-+--------+----------------------------------------------------------+
+|detail/function-decs-clone-0xb49e99dd98de1216|
 
+:Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
-Clones component value.
+            * **val** : int64
 
 .. _function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Ci2:
 
-.. das:function:: clone(cv: ComponentValue; val: int2 const)
+.. das:function:: clone(cv: ComponentValue; val: int2)
 
-+--------+----------------------------------------------------------+
-+argument+argument type                                             +
-+========+==========================================================+
-+cv      + :ref:`decs::ComponentValue <struct-decs-ComponentValue>` +
-+--------+----------------------------------------------------------+
-+val     +int2 const                                                +
-+--------+----------------------------------------------------------+
+|detail/function-decs-clone-0xb46a9ddd9885bce2|
 
+:Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
-Clones component value.
+            * **val** : int2
 
 .. _function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Ci3:
 
-.. das:function:: clone(cv: ComponentValue; val: int3 const)
+.. das:function:: clone(cv: ComponentValue; val: int3)
 
-+--------+----------------------------------------------------------+
-+argument+argument type                                             +
-+========+==========================================================+
-+cv      + :ref:`decs::ComponentValue <struct-decs-ComponentValue>` +
-+--------+----------------------------------------------------------+
-+val     +int3 const                                                +
-+--------+----------------------------------------------------------+
+|detail/function-decs-clone-0xb46a9edd9885be95|
 
+:Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
-Clones component value.
+            * **val** : int3
 
 .. _function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Ci4:
 
-.. das:function:: clone(cv: ComponentValue; val: int4 const)
+.. das:function:: clone(cv: ComponentValue; val: int4)
 
-+--------+----------------------------------------------------------+
-+argument+argument type                                             +
-+========+==========================================================+
-+cv      + :ref:`decs::ComponentValue <struct-decs-ComponentValue>` +
-+--------+----------------------------------------------------------+
-+val     +int4 const                                                +
-+--------+----------------------------------------------------------+
+|detail/function-decs-clone-0xb46a97dd9885b2b0|
 
+:Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
-Clones component value.
+            * **val** : int4
 
 .. _function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cu:
 
-.. das:function:: clone(cv: ComponentValue; val: uint const)
+.. das:function:: clone(cv: ComponentValue; val: uint)
 
-+--------+----------------------------------------------------------+
-+argument+argument type                                             +
-+========+==========================================================+
-+cv      + :ref:`decs::ComponentValue <struct-decs-ComponentValue>` +
-+--------+----------------------------------------------------------+
-+val     +uint const                                                +
-+--------+----------------------------------------------------------+
+|detail/function-decs-clone-0xe46da66cff0afff|
 
+:Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
-Clones component value.
+            * **val** : uint
 
 .. _function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cu8:
 
-.. das:function:: clone(cv: ComponentValue; val: uint8 const)
+.. das:function:: clone(cv: ComponentValue; val: uint8)
 
-+--------+----------------------------------------------------------+
-+argument+argument type                                             +
-+========+==========================================================+
-+cv      + :ref:`decs::ComponentValue <struct-decs-ComponentValue>` +
-+--------+----------------------------------------------------------+
-+val     +uint8 const                                               +
-+--------+----------------------------------------------------------+
+|detail/function-decs-clone-0xe0eda66cf9187ff|
 
+:Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
-Clones component value.
+            * **val** : uint8
 
 .. _function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cu16:
 
-.. das:function:: clone(cv: ComponentValue; val: uint16 const)
+.. das:function:: clone(cv: ComponentValue; val: uint16)
 
-+--------+----------------------------------------------------------+
-+argument+argument type                                             +
-+========+==========================================================+
-+cv      + :ref:`decs::ComponentValue <struct-decs-ComponentValue>` +
-+--------+----------------------------------------------------------+
-+val     +uint16 const                                              +
-+--------+----------------------------------------------------------+
+|detail/function-decs-clone-0x935ae5b2ce462b8b|
 
+:Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
-Clones component value.
+            * **val** : uint16
 
 .. _function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cu64:
 
-.. das:function:: clone(cv: ComponentValue; val: uint64 const)
+.. das:function:: clone(cv: ComponentValue; val: uint64)
 
-+--------+----------------------------------------------------------+
-+argument+argument type                                             +
-+========+==========================================================+
-+cv      + :ref:`decs::ComponentValue <struct-decs-ComponentValue>` +
-+--------+----------------------------------------------------------+
-+val     +uint64 const                                              +
-+--------+----------------------------------------------------------+
+|detail/function-decs-clone-0x96c0e7b2d12957f1|
 
+:Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
-Clones component value.
+            * **val** : uint64
 
 .. _function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cu2:
 
-.. das:function:: clone(cv: ComponentValue; val: uint2 const)
+.. das:function:: clone(cv: ComponentValue; val: uint2)
 
-+--------+----------------------------------------------------------+
-+argument+argument type                                             +
-+========+==========================================================+
-+cv      + :ref:`decs::ComponentValue <struct-decs-ComponentValue>` +
-+--------+----------------------------------------------------------+
-+val     +uint2 const                                               +
-+--------+----------------------------------------------------------+
+|detail/function-decs-clone-0xe14da66cf9bb9ff|
 
+:Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
-Clones component value.
+            * **val** : uint2
 
 .. _function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cu3:
 
-.. das:function:: clone(cv: ComponentValue; val: uint3 const)
+.. das:function:: clone(cv: ComponentValue; val: uint3)
 
-+--------+----------------------------------------------------------+
-+argument+argument type                                             +
-+========+==========================================================+
-+cv      + :ref:`decs::ComponentValue <struct-decs-ComponentValue>` +
-+--------+----------------------------------------------------------+
-+val     +uint3 const                                               +
-+--------+----------------------------------------------------------+
+|detail/function-decs-clone-0xe15da66cf9d6cff|
 
+:Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
-Clones component value.
+            * **val** : uint3
 
 .. _function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cu4:
 
-.. das:function:: clone(cv: ComponentValue; val: uint4 const)
+.. das:function:: clone(cv: ComponentValue; val: uint4)
 
-+--------+----------------------------------------------------------+
-+argument+argument type                                             +
-+========+==========================================================+
-+cv      + :ref:`decs::ComponentValue <struct-decs-ComponentValue>` +
-+--------+----------------------------------------------------------+
-+val     +uint4 const                                               +
-+--------+----------------------------------------------------------+
+|detail/function-decs-clone-0xe1ada66cfa5ebff|
 
+:Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
-Clones component value.
+            * **val** : uint4
 
 .. _function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cf:
 
-.. das:function:: clone(cv: ComponentValue; val: float const)
+.. das:function:: clone(cv: ComponentValue; val: float)
 
-+--------+----------------------------------------------------------+
-+argument+argument type                                             +
-+========+==========================================================+
-+cv      + :ref:`decs::ComponentValue <struct-decs-ComponentValue>` +
-+--------+----------------------------------------------------------+
-+val     +float const                                               +
-+--------+----------------------------------------------------------+
+|detail/function-decs-clone-0x9aced908009e13d1|
 
+:Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
-Clones component value.
+            * **val** : float
 
 .. _function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cf2:
 
-.. das:function:: clone(cv: ComponentValue; val: float2 const)
+.. das:function:: clone(cv: ComponentValue; val: float2)
 
-+--------+----------------------------------------------------------+
-+argument+argument type                                             +
-+========+==========================================================+
-+cv      + :ref:`decs::ComponentValue <struct-decs-ComponentValue>` +
-+--------+----------------------------------------------------------+
-+val     +float2 const                                              +
-+--------+----------------------------------------------------------+
+|detail/function-decs-clone-0xab8eab990c9bcab9|
 
+:Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
-Clones component value.
+            * **val** : float2
 
 .. _function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cf3:
 
-.. das:function:: clone(cv: ComponentValue; val: float3 const)
+.. das:function:: clone(cv: ComponentValue; val: float3)
 
-+--------+----------------------------------------------------------+
-+argument+argument type                                             +
-+========+==========================================================+
-+cv      + :ref:`decs::ComponentValue <struct-decs-ComponentValue>` +
-+--------+----------------------------------------------------------+
-+val     +float3 const                                              +
-+--------+----------------------------------------------------------+
+|detail/function-decs-clone-0xab8eaa990c9bc906|
 
+:Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
-Clones component value.
+            * **val** : float3
 
 .. _function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cf4:
 
-.. das:function:: clone(cv: ComponentValue; val: float4 const)
+.. das:function:: clone(cv: ComponentValue; val: float4)
 
-+--------+----------------------------------------------------------+
-+argument+argument type                                             +
-+========+==========================================================+
-+cv      + :ref:`decs::ComponentValue <struct-decs-ComponentValue>` +
-+--------+----------------------------------------------------------+
-+val     +float4 const                                              +
-+--------+----------------------------------------------------------+
+|detail/function-decs-clone-0xab8ead990c9bce1f|
 
+:Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
-Clones component value.
+            * **val** : float4
 
 .. _function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__CH_ls_math_c__c_float3x3_gr_:
 
-.. das:function:: clone(cv: ComponentValue; val: float3x3 const)
+.. das:function:: clone(cv: ComponentValue; val: float3x3)
 
-+--------+----------------------------------------------------------+
-+argument+argument type                                             +
-+========+==========================================================+
-+cv      + :ref:`decs::ComponentValue <struct-decs-ComponentValue>` +
-+--------+----------------------------------------------------------+
-+val     + :ref:`math::float3x3 <handle-math-float3x3>`  const      +
-+--------+----------------------------------------------------------+
+|detail/function-decs-clone-0x4a4517116accfd0f|
 
+:Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
-Clones component value.
+            * **val** :  :ref:`float3x3 <handle-math-float3x3>` 
 
 .. _function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__CH_ls_math_c__c_float3x4_gr_:
 
-.. das:function:: clone(cv: ComponentValue; val: float3x4 const)
+.. das:function:: clone(cv: ComponentValue; val: float3x4)
 
-+--------+----------------------------------------------------------+
-+argument+argument type                                             +
-+========+==========================================================+
-+cv      + :ref:`decs::ComponentValue <struct-decs-ComponentValue>` +
-+--------+----------------------------------------------------------+
-+val     + :ref:`math::float3x4 <handle-math-float3x4>`  const      +
-+--------+----------------------------------------------------------+
+|detail/function-decs-clone-0x4a4514116accf7f6|
 
+:Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
-Clones component value.
+            * **val** :  :ref:`float3x4 <handle-math-float3x4>` 
 
 .. _function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__CH_ls_math_c__c_float4x4_gr_:
 
-.. das:function:: clone(cv: ComponentValue; val: float4x4 const)
+.. das:function:: clone(cv: ComponentValue; val: float4x4)
 
-+--------+----------------------------------------------------------+
-+argument+argument type                                             +
-+========+==========================================================+
-+cv      + :ref:`decs::ComponentValue <struct-decs-ComponentValue>` +
-+--------+----------------------------------------------------------+
-+val     + :ref:`math::float4x4 <handle-math-float4x4>`  const      +
-+--------+----------------------------------------------------------+
+|detail/function-decs-clone-0x4a4f26116ad56b11|
 
+:Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
-Clones component value.
+            * **val** :  :ref:`float4x4 <handle-math-float4x4>` 
 
 .. _function-_at_decs_c__c_clone_S_ls_decs_c__c_ComponentValue_gr__Cd:
 
-.. das:function:: clone(cv: ComponentValue; val: double const)
+.. das:function:: clone(cv: ComponentValue; val: double)
 
-+--------+----------------------------------------------------------+
-+argument+argument type                                             +
-+========+==========================================================+
-+cv      + :ref:`decs::ComponentValue <struct-decs-ComponentValue>` +
-+--------+----------------------------------------------------------+
-+val     +double const                                              +
-+--------+----------------------------------------------------------+
+|detail/function-decs-clone-0xf10e5962d149721e|
 
+:Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
-Clones component value.
+            * **val** : double
 
 .. _function-_at_decs_c__c_clone_S_ls_decs_c__c_Component_gr__CS_ls_decs_c__c_Component_gr_:
 
-.. das:function:: clone(dst: Component; src: Component const)
-
-+--------+------------------------------------------------------+
-+argument+argument type                                         +
-+========+======================================================+
-+dst     + :ref:`decs::Component <struct-decs-Component>`       +
-+--------+------------------------------------------------------+
-+src     + :ref:`decs::Component <struct-decs-Component>`  const+
-+--------+------------------------------------------------------+
-
+.. das:function:: clone(dst: Component; src: Component)
 
 Clones component value.
 
+:Arguments: * **dst** :  :ref:`Component <struct-decs-Component>` 
+
+            * **src** :  :ref:`Component <struct-decs-Component>` 
+
 .. _function-_at_decs_c__c_has_CS_ls_decs_c__c_Archetype_gr__Cs:
 
-.. das:function:: has(arch: Archetype const; name: string const)
-
-has returns bool
-
-+--------+------------------------------------------------------+
-+argument+argument type                                         +
-+========+======================================================+
-+arch    + :ref:`decs::Archetype <struct-decs-Archetype>`  const+
-+--------+------------------------------------------------------+
-+name    +string const                                          +
-+--------+------------------------------------------------------+
-
+.. das:function:: has(arch: Archetype; name: string) : bool
 
 Returns true if object has specified subobjec.
+
+:Arguments: * **arch** :  :ref:`Archetype <struct-decs-Archetype>` 
+
+            * **name** : string
 
 .. _function-_at_decs_c__c_has_Y_ls_ComponentMap_gr_1_ls_S_ls_decs_c__c_ComponentValue_gr__gr_A_Cs:
 
-.. das:function:: has(cmp: ComponentMap; name: string const)
+.. das:function:: has(cmp: ComponentMap; name: string) : bool
 
-has returns bool
+|detail/function-decs-has-0x8f4b2bc860fc05e6|
 
-+--------+------------------------------------------+
-+argument+argument type                             +
-+========+==========================================+
-+cmp     + :ref:`ComponentMap <alias-ComponentMap>` +
-+--------+------------------------------------------+
-+name    +string const                              +
-+--------+------------------------------------------+
+:Arguments: * **cmp** :  :ref:`ComponentMap <alias-ComponentMap>` 
 
-
-Returns true if object has specified subobjec.
+            * **name** : string
 
 .. _function-_at_decs_c__c_remove_Y_ls_ComponentMap_gr_1_ls_S_ls_decs_c__c_ComponentValue_gr__gr_A_Cs:
 
-.. das:function:: remove(cmp: ComponentMap; name: string const)
-
-+--------+------------------------------------------+
-+argument+argument type                             +
-+========+==========================================+
-+cmp     + :ref:`ComponentMap <alias-ComponentMap>` +
-+--------+------------------------------------------+
-+name    +string const                              +
-+--------+------------------------------------------+
-
+.. das:function:: remove(cmp: ComponentMap; name: string)
 
 Removes speicified value from the component map.
 
-.. _function-_at_decs_c__c_set_S_ls_decs_c__c_ComponentValue_gr__C.:
+:Arguments: * **cmp** :  :ref:`ComponentMap <alias-ComponentMap>` 
 
-.. das:function:: set(cv: ComponentValue; val: auto const)
+            * **name** : string
 
-set returns auto
+.. _function-_at_decs_c__c_set_S_ls_decs_c__c_ComponentValue_gr__C_dot_:
 
-+--------+----------------------------------------------------------+
-+argument+argument type                                             +
-+========+==========================================================+
-+cv      + :ref:`decs::ComponentValue <struct-decs-ComponentValue>` +
-+--------+----------------------------------------------------------+
-+val     +auto const                                                +
-+--------+----------------------------------------------------------+
+.. das:function:: set(cv: ComponentValue; val: auto) : auto
 
+Sets individual component value. Verifies that the value is of the correct type.
 
-Set component value specified by name and type.
-If value already exists, it is overwritten. If already existing value type is not the same - panic.
+:Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
-.. _function-_at_decs_c__c_get_CS_ls_decs_c__c_Archetype_gr__Cs_CY_ls_TT_gr_.:
+            * **val** : auto
 
-.. das:function:: get(arch: Archetype const; name: string const; value: auto(TT) const)
+.. _function-_at_decs_c__c_get_CS_ls_decs_c__c_Archetype_gr__Cs_CY_ls_TT_gr__dot_:
 
-get returns auto
+.. das:function:: get(arch: Archetype; name: string; value: auto(TT)) : auto
 
-+--------+------------------------------------------------------+
-+argument+argument type                                         +
-+========+======================================================+
-+arch    + :ref:`decs::Archetype <struct-decs-Archetype>`  const+
-+--------+------------------------------------------------------+
-+name    +string const                                          +
-+--------+------------------------------------------------------+
-+value   +auto(TT) const                                        +
-+--------+------------------------------------------------------+
+Creates temporary array of component given specific name and type of component.
+If component is not found - panic.
 
+:Arguments: * **arch** :  :ref:`Archetype <struct-decs-Archetype>` 
+
+            * **name** : string
+
+            * **value** : auto(TT)
+
+.. _function-_at_decs_c__c_get_Y_ls_ComponentMap_gr_1_ls_S_ls_decs_c__c_ComponentValue_gr__gr_A_Cs_Y_ls_TT_gr__dot_:
+
+.. das:function:: get(cmp: ComponentMap; name: string; value: auto(TT)) : auto
 
 Gets component value specified by name and type.
 Will panic if name matches but type does not.
 
-.. _function-_at_decs_c__c_get_Y_ls_ComponentMap_gr_1_ls_S_ls_decs_c__c_ComponentValue_gr__gr_A_Cs_Y_ls_TT_gr_.:
+:Arguments: * **cmp** :  :ref:`ComponentMap <alias-ComponentMap>` 
 
-.. das:function:: get(cmp: ComponentMap; name: string const; value: auto(TT))
+            * **name** : string
 
-get returns auto
+            * **value** : auto(TT)
 
-+--------+------------------------------------------+
-+argument+argument type                             +
-+========+==========================================+
-+cmp     + :ref:`ComponentMap <alias-ComponentMap>` +
-+--------+------------------------------------------+
-+name    +string const                              +
-+--------+------------------------------------------+
-+value   +auto(TT)                                  +
-+--------+------------------------------------------+
+.. _function-_at_decs_c__c_set_Y_ls_ComponentMap_gr_1_ls_S_ls_decs_c__c_ComponentValue_gr__gr_A_Cs_CY_ls_TT_gr__dot_:
 
-
-Gets component value specified by name and type.
-Will panic if name matches but type does not.
-
-.. _function-_at_decs_c__c_set_Y_ls_ComponentMap_gr_1_ls_S_ls_decs_c__c_ComponentValue_gr__gr_A_Cs_CY_ls_TT_gr_.:
-
-.. das:function:: set(cmp: ComponentMap; name: string const; value: auto(TT) const)
-
-set returns auto
-
-+--------+------------------------------------------+
-+argument+argument type                             +
-+========+==========================================+
-+cmp     + :ref:`ComponentMap <alias-ComponentMap>` +
-+--------+------------------------------------------+
-+name    +string const                              +
-+--------+------------------------------------------+
-+value   +auto(TT) const                            +
-+--------+------------------------------------------+
-
+.. das:function:: set(cmp: ComponentMap; name: string; value: auto(TT)) : auto
 
 Set component value specified by name and type.
 If value already exists, it is overwritten. If already existing value type is not the same - panic.
+
+:Arguments: * **cmp** :  :ref:`ComponentMap <alias-ComponentMap>` 
+
+            * **name** : string
+
+            * **value** : auto(TT)
 
 +++++++++++++++++++++++
 Deubg and serialization
 +++++++++++++++++++++++
 
-  *  :ref:`describe (info:decs::CTypeInfo const) : string <function-_at_decs_c__c_describe_CS_ls_decs_c__c_CTypeInfo_gr_>` 
-  *  :ref:`serialize (arch:archive::Archive -const;src:decs::Component -const) : void <function-_at_decs_c__c_serialize_S_ls_archive_c__c_Archive_gr__S_ls_decs_c__c_Component_gr_>` 
-  *  :ref:`finalize (cmp:decs::Component -const) : void <function-_at_decs_c__c_finalize_S_ls_decs_c__c_Component_gr_>` 
-  *  :ref:`debug_dump () : void <function-_at_decs_c__c_debug_dump>` 
+  *  :ref:`describe (info: CTypeInfo) : string <function-_at_decs_c__c_describe_CS_ls_decs_c__c_CTypeInfo_gr_>` 
+  *  :ref:`serialize (var arch: Archive; var src: Component) <function-_at_decs_c__c_serialize_S_ls_archive_c__c_Archive_gr__S_ls_decs_c__c_Component_gr_>` 
+  *  :ref:`finalize (var cmp: Component) <function-_at_decs_c__c_finalize_S_ls_decs_c__c_Component_gr_>` 
+  *  :ref:`debug_dump () <function-_at_decs_c__c_debug_dump>` 
 
 .. _function-_at_decs_c__c_describe_CS_ls_decs_c__c_CTypeInfo_gr_:
 
-.. das:function:: describe(info: CTypeInfo const)
-
-describe returns string
-
-+--------+------------------------------------------------------+
-+argument+argument type                                         +
-+========+======================================================+
-+info    + :ref:`decs::CTypeInfo <struct-decs-CTypeInfo>`  const+
-+--------+------------------------------------------------------+
-
+.. das:function:: describe(info: CTypeInfo) : string
 
 Returns textual description of the type.
+
+:Arguments: * **info** :  :ref:`CTypeInfo <struct-decs-CTypeInfo>` 
 
 .. _function-_at_decs_c__c_serialize_S_ls_archive_c__c_Archive_gr__S_ls_decs_c__c_Component_gr_:
 
 .. das:function:: serialize(arch: Archive; src: Component)
 
-+--------+--------------------------------------------------+
-+argument+argument type                                     +
-+========+==================================================+
-+arch    + :ref:`archive::Archive <struct-archive-Archive>` +
-+--------+--------------------------------------------------+
-+src     + :ref:`decs::Component <struct-decs-Component>`   +
-+--------+--------------------------------------------------+
-
-
 Serializes component value.
+
+:Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
+
+            * **src** :  :ref:`Component <struct-decs-Component>` 
 
 .. _function-_at_decs_c__c_finalize_S_ls_decs_c__c_Component_gr_:
 
 .. das:function:: finalize(cmp: Component)
 
-+--------+------------------------------------------------+
-+argument+argument type                                   +
-+========+================================================+
-+cmp     + :ref:`decs::Component <struct-decs-Component>` +
-+--------+------------------------------------------------+
-
-
 Deletes component.
+
+:Arguments: * **cmp** :  :ref:`Component <struct-decs-Component>` 
 
 .. _function-_at_decs_c__c_debug_dump:
 
@@ -1000,38 +720,28 @@ Prints out state of the ECS system.
 Stages
 ++++++
 
-  *  :ref:`register_decs_stage_call (name:string const;pcall:function\<void\> const) : void <function-_at_decs_c__c_register_decs_stage_call_Cs_CY_ls_PassFunction_gr_1_ls_v_gr__at__at_>` 
-  *  :ref:`decs_stage (name:string const) : void <function-_at_decs_c__c_decs_stage_Cs>` 
-  *  :ref:`commit () : void <function-_at_decs_c__c_commit>` 
+  *  :ref:`register_decs_stage_call (name: string; pcall: PassFunction) <function-_at_decs_c__c_register_decs_stage_call_Cs_CY_ls_PassFunction_gr_1_ls_v_gr__at__at_>` 
+  *  :ref:`decs_stage (name: string) <function-_at_decs_c__c_decs_stage_Cs>` 
+  *  :ref:`commit () <function-_at_decs_c__c_commit>` 
 
 .. _function-_at_decs_c__c_register_decs_stage_call_Cs_CY_ls_PassFunction_gr_1_ls_v_gr__at__at_:
 
-.. das:function:: register_decs_stage_call(name: string const; pcall: PassFunction)
-
-+--------+------------------------------------------+
-+argument+argument type                             +
-+========+==========================================+
-+name    +string const                              +
-+--------+------------------------------------------+
-+pcall   + :ref:`PassFunction <alias-PassFunction>` +
-+--------+------------------------------------------+
-
+.. das:function:: register_decs_stage_call(name: string; pcall: PassFunction)
 
 Registration of a single pass callback. This is a low-level function, used by decs_boost macros.
 
+:Arguments: * **name** : string
+
+            * **pcall** :  :ref:`PassFunction <alias-PassFunction>` 
+
 .. _function-_at_decs_c__c_decs_stage_Cs:
 
-.. das:function:: decs_stage(name: string const)
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+name    +string const +
-+--------+-------------+
-
+.. das:function:: decs_stage(name: string)
 
 Invokes specific ECS pass.
 `commit` is called before and after the invocation.
+
+:Arguments: * **name** : string
 
 .. _function-_at_decs_c__c_commit:
 
@@ -1043,60 +753,43 @@ Finishes all deferred actions.
 Deferred actions
 ++++++++++++++++
 
-  *  :ref:`update_entity (entityid:decs::EntityId const implicit;blk:lambda\<(eid:decs::EntityId const;var cmp:array\<decs::ComponentValue\> -const):void\> -const) : void <function-_at_decs_c__c_update_entity_CIS_ls_decs_c__c_EntityId_gr__N_ls_eid;cmp_gr_0_ls_CS_ls_decs_c__c_EntityId_gr_;Y_ls_ComponentMap_gr_1_ls_S_ls_decs_c__c_ComponentValue_gr__gr_A_gr_1_ls_v_gr__at_>` 
-  *  :ref:`create_entity (blk:lambda\<(eid:decs::EntityId const;var cmp:array\<decs::ComponentValue\> -const):void\> -const) : decs::EntityId <function-_at_decs_c__c_create_entity_N_ls_eid;cmp_gr_0_ls_CS_ls_decs_c__c_EntityId_gr_;Y_ls_ComponentMap_gr_1_ls_S_ls_decs_c__c_ComponentValue_gr__gr_A_gr_1_ls_v_gr__at_>` 
-  *  :ref:`delete_entity (entityid:decs::EntityId const implicit) : void <function-_at_decs_c__c_delete_entity_CIS_ls_decs_c__c_EntityId_gr_>` 
+  *  :ref:`update_entity (entityid: EntityId implicit; var blk: lambda\<(eid:EntityId const;var cmp:array\<ComponentValue\>):void\>) <function-_at_decs_c__c_update_entity_CIS_ls_decs_c__c_EntityId_gr__N_ls_eid;cmp_gr_0_ls_CS_ls_decs_c__c_EntityId_gr_;Y_ls_ComponentMap_gr_1_ls_S_ls_decs_c__c_ComponentValue_gr__gr_A_gr_1_ls_v_gr__at_>` 
+  *  :ref:`create_entity (var blk: lambda\<(eid:EntityId const;var cmp:array\<ComponentValue\>):void\>) : EntityId <function-_at_decs_c__c_create_entity_N_ls_eid;cmp_gr_0_ls_CS_ls_decs_c__c_EntityId_gr_;Y_ls_ComponentMap_gr_1_ls_S_ls_decs_c__c_ComponentValue_gr__gr_A_gr_1_ls_v_gr__at_>` 
+  *  :ref:`delete_entity (entityid: EntityId implicit) <function-_at_decs_c__c_delete_entity_CIS_ls_decs_c__c_EntityId_gr_>` 
 
 .. _function-_at_decs_c__c_update_entity_CIS_ls_decs_c__c_EntityId_gr__N_ls_eid;cmp_gr_0_ls_CS_ls_decs_c__c_EntityId_gr_;Y_ls_ComponentMap_gr_1_ls_S_ls_decs_c__c_ComponentValue_gr__gr_A_gr_1_ls_v_gr__at_:
 
-.. das:function:: update_entity(entityid: EntityId const implicit; blk: lambda<(eid:EntityId const;var cmp:array<ComponentValue>):void>)
-
-+--------+----------------------------------------------------------------------------------------------------------------------+
-+argument+argument type                                                                                                         +
-+========+======================================================================================================================+
-+entityid+ :ref:`decs::EntityId <struct-decs-EntityId>`  const implicit                                                         +
-+--------+----------------------------------------------------------------------------------------------------------------------+
-+blk     +lambda<(eid: :ref:`decs::EntityId <struct-decs-EntityId>`  const;cmp: :ref:`ComponentMap <alias-ComponentMap>` ):void>+
-+--------+----------------------------------------------------------------------------------------------------------------------+
-
+.. das:function:: update_entity(entityid: EntityId implicit; blk: lambda<(eid:EntityId const;var cmp:array<ComponentValue>):void>)
 
 Creates deferred action to update entity specified by id.
 
+:Arguments: * **entityid** :  :ref:`EntityId <struct-decs-EntityId>`  implicit
+
+            * **blk** : lambda<(eid: :ref:`EntityId <struct-decs-EntityId>` ;cmp: :ref:`ComponentMap <alias-ComponentMap>` ):void>
+
 .. _function-_at_decs_c__c_create_entity_N_ls_eid;cmp_gr_0_ls_CS_ls_decs_c__c_EntityId_gr_;Y_ls_ComponentMap_gr_1_ls_S_ls_decs_c__c_ComponentValue_gr__gr_A_gr_1_ls_v_gr__at_:
 
-.. das:function:: create_entity(blk: lambda<(eid:EntityId const;var cmp:array<ComponentValue>):void>)
-
-create_entity returns  :ref:`decs::EntityId <struct-decs-EntityId>` 
-
-+--------+----------------------------------------------------------------------------------------------------------------------+
-+argument+argument type                                                                                                         +
-+========+======================================================================================================================+
-+blk     +lambda<(eid: :ref:`decs::EntityId <struct-decs-EntityId>`  const;cmp: :ref:`ComponentMap <alias-ComponentMap>` ):void>+
-+--------+----------------------------------------------------------------------------------------------------------------------+
-
+.. das:function:: create_entity(blk: lambda<(eid:EntityId const;var cmp:array<ComponentValue>):void>) : EntityId
 
 Creates deferred action to create entity.
 
+:Arguments: * **blk** : lambda<(eid: :ref:`EntityId <struct-decs-EntityId>` ;cmp: :ref:`ComponentMap <alias-ComponentMap>` ):void>
+
 .. _function-_at_decs_c__c_delete_entity_CIS_ls_decs_c__c_EntityId_gr_:
 
-.. das:function:: delete_entity(entityid: EntityId const implicit)
-
-+--------+-------------------------------------------------------------+
-+argument+argument type                                                +
-+========+=============================================================+
-+entityid+ :ref:`decs::EntityId <struct-decs-EntityId>`  const implicit+
-+--------+-------------------------------------------------------------+
-
+.. das:function:: delete_entity(entityid: EntityId implicit)
 
 Creates deferred action to delete entity specified by id.
+
+:Arguments: * **entityid** :  :ref:`EntityId <struct-decs-EntityId>`  implicit
 
 ++++++++++++
 GC and reset
 ++++++++++++
 
-  *  :ref:`restart () : void <function-_at_decs_c__c_restart>` 
-  *  :ref:`before_gc () : void <function-_at_decs_c__c_before_gc>` 
-  *  :ref:`after_gc () : void <function-_at_decs_c__c_after_gc>` 
+  *  :ref:`restart () <function-_at_decs_c__c_restart>` 
+  *  :ref:`before_gc () <function-_at_decs_c__c_before_gc>` 
+  *  :ref:`after_gc () <function-_at_decs_c__c_after_gc>` 
 
 .. _function-_at_decs_c__c_restart:
 
@@ -1122,255 +815,169 @@ This is a low-level function typically used by `live`.
 Iteration
 +++++++++
 
-  *  :ref:`for_each_archetype (erq:decs::EcsRequest -const;blk:block\<(arch:decs::Archetype const):void\> const) : void <function-_at_decs_c__c_for_each_archetype_S_ls_decs_c__c_EcsRequest_gr__CN_ls_arch_gr_0_ls_CS_ls_decs_c__c_Archetype_gr__gr_1_ls_v_gr__builtin_>` 
-  *  :ref:`for_eid_archetype (eid:decs::EntityId const implicit;hash:uint64 const;erq:function\<decs::EcsRequest\> -const;blk:block\<(arch:decs::Archetype const;index:int const):void\> const) : bool const <function-_at_decs_c__c_for_eid_archetype_CIS_ls_decs_c__c_EntityId_gr__CY_ls_ComponentHash_gr_u64_1_ls_S_ls_decs_c__c_EcsRequest_gr__gr__at__at__CN_ls_arch;index_gr_0_ls_CS_ls_decs_c__c_Archetype_gr_;Ci_gr_1_ls_v_gr__builtin_>` 
-  *  :ref:`for_each_archetype (hash:uint64 const;erq:function\<decs::EcsRequest\> -const;blk:block\<(arch:decs::Archetype const):void\> const) : void <function-_at_decs_c__c_for_each_archetype_CY_ls_ComponentHash_gr_u64_1_ls_S_ls_decs_c__c_EcsRequest_gr__gr__at__at__CN_ls_arch_gr_0_ls_CS_ls_decs_c__c_Archetype_gr__gr_1_ls_v_gr__builtin_>` 
-  *  :ref:`for_each_archetype_find (hash:uint64 const;erq:function\<decs::EcsRequest\> -const;blk:block\<(arch:decs::Archetype const):bool\> const) : bool const <function-_at_decs_c__c_for_each_archetype_find_CY_ls_ComponentHash_gr_u64_1_ls_S_ls_decs_c__c_EcsRequest_gr__gr__at__at__CN_ls_arch_gr_0_ls_CS_ls_decs_c__c_Archetype_gr__gr_1_ls_b_gr__builtin_>` 
-  *  :ref:`decs_array (atype:auto(TT) const;src:array\<uint8\> const;capacity:int const) : auto <function-_at_decs_c__c_decs_array_CY_ls_TT_gr_._C1_ls_u8_gr_A_Ci>` 
-  *  :ref:`get_ro (arch:decs::Archetype const;name:string const;value:auto(TT) const[]) : array\<TT[-2] -const -& -#\> const <function-_at_decs_c__c_get_ro_CS_ls_decs_c__c_Archetype_gr__Cs_C_lb_-1_rb_Y_ls_TT_gr_.>` 
-  *  :ref:`get_ro (arch:decs::Archetype const;name:string const;value:auto(TT) const) : array\<TT -const -& -#\> const <function-_at_decs_c__c_get_ro_CS_ls_decs_c__c_Archetype_gr__Cs_CY_ls_TT_gr_._%_ls__ex_()_gr_>` 
-  *  :ref:`get_default_ro (arch:decs::Archetype const;name:string const;value:auto(TT) const) : iterator\<TT const&\> <function-_at_decs_c__c_get_default_ro_CS_ls_decs_c__c_Archetype_gr__Cs_CY_ls_TT_gr_.>` 
-  *  :ref:`get_optional (arch:decs::Archetype const;name:string const;value:auto(TT)? const) : iterator\<TT -const -& -#?\> <function-_at_decs_c__c_get_optional_CS_ls_decs_c__c_Archetype_gr__Cs_C1_ls_Y_ls_TT_gr_._gr__qm_>` 
+  *  :ref:`for_each_archetype (var erq: EcsRequest; blk: block\<(arch:Archetype const):void\>) <function-_at_decs_c__c_for_each_archetype_S_ls_decs_c__c_EcsRequest_gr__CN_ls_arch_gr_0_ls_CS_ls_decs_c__c_Archetype_gr__gr_1_ls_v_gr__builtin_>` 
+  *  :ref:`for_eid_archetype (eid: EntityId implicit; hash: ComponentHash; var erq: function\<EcsRequest\>; blk: block\<(arch:Archetype const;index:int const):void\>) : bool <function-_at_decs_c__c_for_eid_archetype_CIS_ls_decs_c__c_EntityId_gr__CY_ls_ComponentHash_gr_u64_1_ls_S_ls_decs_c__c_EcsRequest_gr__gr__at__at__CN_ls_arch;index_gr_0_ls_CS_ls_decs_c__c_Archetype_gr_;Ci_gr_1_ls_v_gr__builtin_>` 
+  *  :ref:`for_each_archetype (hash: ComponentHash; var erq: function\<EcsRequest\>; blk: block\<(arch:Archetype const):void\>) <function-_at_decs_c__c_for_each_archetype_CY_ls_ComponentHash_gr_u64_1_ls_S_ls_decs_c__c_EcsRequest_gr__gr__at__at__CN_ls_arch_gr_0_ls_CS_ls_decs_c__c_Archetype_gr__gr_1_ls_v_gr__builtin_>` 
+  *  :ref:`for_each_archetype_find (hash: ComponentHash; var erq: function\<EcsRequest\>; blk: block\<(arch:Archetype const):bool\>) : bool <function-_at_decs_c__c_for_each_archetype_find_CY_ls_ComponentHash_gr_u64_1_ls_S_ls_decs_c__c_EcsRequest_gr__gr__at__at__CN_ls_arch_gr_0_ls_CS_ls_decs_c__c_Archetype_gr__gr_1_ls_b_gr__builtin_>` 
+  *  :ref:`decs_array (atype: auto(TT); src: array\<uint8\>; capacity: int) : auto <function-_at_decs_c__c_decs_array_CY_ls_TT_gr__dot__C1_ls_u8_gr_A_Ci>` 
+  *  :ref:`get_ro (arch: Archetype; name: string; value: auto(TT)[]) : array\<TT[-2]\> <function-_at_decs_c__c_get_ro_CS_ls_decs_c__c_Archetype_gr__Cs_C_lb_-1_rb_Y_ls_TT_gr__dot_>` 
+  *  :ref:`get_ro (arch: Archetype; name: string; value: auto(TT)) : array\<TT\> <function-_at_decs_c__c_get_ro_CS_ls_decs_c__c_Archetype_gr__Cs_CY_ls_TT_gr__dot__%_ls__ex_()_gr_>` 
+  *  :ref:`get_default_ro (arch: Archetype; name: string; value: auto(TT)) : iterator\<TT const&\> <function-_at_decs_c__c_get_default_ro_CS_ls_decs_c__c_Archetype_gr__Cs_CY_ls_TT_gr__dot_>` 
+  *  :ref:`get_optional (arch: Archetype; name: string; value: auto(TT)?) : iterator\<TT?\> <function-_at_decs_c__c_get_optional_CS_ls_decs_c__c_Archetype_gr__Cs_C1_ls_Y_ls_TT_gr__dot__gr__qm_>` 
 
 .. _function-_at_decs_c__c_for_each_archetype_S_ls_decs_c__c_EcsRequest_gr__CN_ls_arch_gr_0_ls_CS_ls_decs_c__c_Archetype_gr__gr_1_ls_v_gr__builtin_:
 
-.. das:function:: for_each_archetype(erq: EcsRequest; blk: block<(arch:Archetype const):void> const)
-
-+--------+-------------------------------------------------------------------------------+
-+argument+argument type                                                                  +
-+========+===============================================================================+
-+erq     + :ref:`decs::EcsRequest <struct-decs-EcsRequest>`                              +
-+--------+-------------------------------------------------------------------------------+
-+blk     +block<(arch: :ref:`decs::Archetype <struct-decs-Archetype>`  const):void> const+
-+--------+-------------------------------------------------------------------------------+
-
+.. das:function:: for_each_archetype(erq: EcsRequest; blk: block<(arch:Archetype const):void>)
 
 Invokes block for each entity of each archetype that can be processed by the request.
-Request is returned by a specified function.
+
+:Arguments: * **erq** :  :ref:`EcsRequest <struct-decs-EcsRequest>` 
+
+            * **blk** : block<(arch: :ref:`Archetype <struct-decs-Archetype>` ):void>
 
 .. _function-_at_decs_c__c_for_eid_archetype_CIS_ls_decs_c__c_EntityId_gr__CY_ls_ComponentHash_gr_u64_1_ls_S_ls_decs_c__c_EcsRequest_gr__gr__at__at__CN_ls_arch;index_gr_0_ls_CS_ls_decs_c__c_Archetype_gr_;Ci_gr_1_ls_v_gr__builtin_:
 
-.. das:function:: for_eid_archetype(eid: EntityId const implicit; hash: ComponentHash; erq: function<EcsRequest>; blk: block<(arch:Archetype const;index:int const):void> const)
-
-for_eid_archetype returns bool const
-
-+--------+-----------------------------------------------------------------------------------------------+
-+argument+argument type                                                                                  +
-+========+===============================================================================================+
-+eid     + :ref:`decs::EntityId <struct-decs-EntityId>`  const implicit                                  +
-+--------+-----------------------------------------------------------------------------------------------+
-+hash    + :ref:`ComponentHash <alias-ComponentHash>`                                                    +
-+--------+-----------------------------------------------------------------------------------------------+
-+erq     +function<>                                                                                     +
-+--------+-----------------------------------------------------------------------------------------------+
-+blk     +block<(arch: :ref:`decs::Archetype <struct-decs-Archetype>`  const;index:int const):void> const+
-+--------+-----------------------------------------------------------------------------------------------+
-
+.. das:function:: for_eid_archetype(eid: EntityId implicit; hash: ComponentHash; erq: function<EcsRequest>; blk: block<(arch:Archetype const;index:int const):void>) : bool
 
 Invokes block for the specific entity id, given request.
 Request is returned by a specified function.
 
+:Arguments: * **eid** :  :ref:`EntityId <struct-decs-EntityId>`  implicit
+
+            * **hash** :  :ref:`ComponentHash <alias-ComponentHash>` 
+
+            * **erq** : function<void>
+
+            * **blk** : block<(arch: :ref:`Archetype <struct-decs-Archetype>` ;index:int):void>
+
 .. _function-_at_decs_c__c_for_each_archetype_CY_ls_ComponentHash_gr_u64_1_ls_S_ls_decs_c__c_EcsRequest_gr__gr__at__at__CN_ls_arch_gr_0_ls_CS_ls_decs_c__c_Archetype_gr__gr_1_ls_v_gr__builtin_:
 
-.. das:function:: for_each_archetype(hash: ComponentHash; erq: function<EcsRequest>; blk: block<(arch:Archetype const):void> const)
-
-+--------+-------------------------------------------------------------------------------+
-+argument+argument type                                                                  +
-+========+===============================================================================+
-+hash    + :ref:`ComponentHash <alias-ComponentHash>`                                    +
-+--------+-------------------------------------------------------------------------------+
-+erq     +function<>                                                                     +
-+--------+-------------------------------------------------------------------------------+
-+blk     +block<(arch: :ref:`decs::Archetype <struct-decs-Archetype>`  const):void> const+
-+--------+-------------------------------------------------------------------------------+
-
+.. das:function:: for_each_archetype(hash: ComponentHash; erq: function<EcsRequest>; blk: block<(arch:Archetype const):void>)
 
 Invokes block for each entity of each archetype that can be processed by the request.
 Request is returned by a specified function.
 
+:Arguments: * **hash** :  :ref:`ComponentHash <alias-ComponentHash>` 
+
+            * **erq** : function<void>
+
+            * **blk** : block<(arch: :ref:`Archetype <struct-decs-Archetype>` ):void>
+
 .. _function-_at_decs_c__c_for_each_archetype_find_CY_ls_ComponentHash_gr_u64_1_ls_S_ls_decs_c__c_EcsRequest_gr__gr__at__at__CN_ls_arch_gr_0_ls_CS_ls_decs_c__c_Archetype_gr__gr_1_ls_b_gr__builtin_:
 
-.. das:function:: for_each_archetype_find(hash: ComponentHash; erq: function<EcsRequest>; blk: block<(arch:Archetype const):bool> const)
-
-for_each_archetype_find returns bool const
-
-+--------+-------------------------------------------------------------------------------+
-+argument+argument type                                                                  +
-+========+===============================================================================+
-+hash    + :ref:`ComponentHash <alias-ComponentHash>`                                    +
-+--------+-------------------------------------------------------------------------------+
-+erq     +function<>                                                                     +
-+--------+-------------------------------------------------------------------------------+
-+blk     +block<(arch: :ref:`decs::Archetype <struct-decs-Archetype>`  const):bool> const+
-+--------+-------------------------------------------------------------------------------+
-
+.. das:function:: for_each_archetype_find(hash: ComponentHash; erq: function<EcsRequest>; blk: block<(arch:Archetype const):bool>) : bool
 
 Invokes block for each entity of each archetype that can be processed by the request.
 Request is returned by a specified function.
 If block returns true, iteration is stopped.
 
-.. _function-_at_decs_c__c_decs_array_CY_ls_TT_gr_._C1_ls_u8_gr_A_Ci:
+:Arguments: * **hash** :  :ref:`ComponentHash <alias-ComponentHash>` 
 
-.. das:function:: decs_array(atype: auto(TT) const; src: array<uint8> const; capacity: int const)
+            * **erq** : function<void>
 
-decs_array returns auto
+            * **blk** : block<(arch: :ref:`Archetype <struct-decs-Archetype>` ):bool>
 
-+--------+------------------+
-+argument+argument type     +
-+========+==================+
-+atype   +auto(TT) const    +
-+--------+------------------+
-+src     +array<uint8> const+
-+--------+------------------+
-+capacity+int const         +
-+--------+------------------+
+.. _function-_at_decs_c__c_decs_array_CY_ls_TT_gr__dot__C1_ls_u8_gr_A_Ci:
 
+.. das:function:: decs_array(atype: auto(TT); src: array<uint8>; capacity: int) : auto
 
 Low level function returns temporary array of component given specific type of component.
 
-.. _function-_at_decs_c__c_get_ro_CS_ls_decs_c__c_Archetype_gr__Cs_C_lb_-1_rb_Y_ls_TT_gr_.:
+:Arguments: * **atype** : auto(TT)
 
-.. das:function:: get_ro(arch: Archetype const; name: string const; value: auto(TT) const[])
+            * **src** : array<uint8>
 
-get_ro returns array<TT[-2]> const
+            * **capacity** : int
 
-+--------+------------------------------------------------------+
-+argument+argument type                                         +
-+========+======================================================+
-+arch    + :ref:`decs::Archetype <struct-decs-Archetype>`  const+
-+--------+------------------------------------------------------+
-+name    +string const                                          +
-+--------+------------------------------------------------------+
-+value   +auto(TT) const[-1]                                    +
-+--------+------------------------------------------------------+
+.. _function-_at_decs_c__c_get_ro_CS_ls_decs_c__c_Archetype_gr__Cs_C_lb_-1_rb_Y_ls_TT_gr__dot_:
 
+.. das:function:: get_ro(arch: Archetype; name: string; value: auto(TT)[]) : array<TT[-2]>
 
-Returns const temporary array of component given specific name and type of component for regular components.
+Returns const temporary array of component given specific name and type of component for array components.
 
-.. _function-_at_decs_c__c_get_ro_CS_ls_decs_c__c_Archetype_gr__Cs_CY_ls_TT_gr_._%_ls__ex_()_gr_:
+:Arguments: * **arch** :  :ref:`Archetype <struct-decs-Archetype>` 
 
-.. das:function:: get_ro(arch: Archetype const; name: string const; value: auto(TT) const)
+            * **name** : string
 
-get_ro returns array<TT> const
+            * **value** : auto(TT)[-1]
 
-+--------+------------------------------------------------------+
-+argument+argument type                                         +
-+========+======================================================+
-+arch    + :ref:`decs::Archetype <struct-decs-Archetype>`  const+
-+--------+------------------------------------------------------+
-+name    +string const                                          +
-+--------+------------------------------------------------------+
-+value   +auto(TT) const                                        +
-+--------+------------------------------------------------------+
+.. _function-_at_decs_c__c_get_ro_CS_ls_decs_c__c_Archetype_gr__Cs_CY_ls_TT_gr__dot__%_ls__ex_()_gr_:
 
+.. das:function:: get_ro(arch: Archetype; name: string; value: auto(TT)) : array<TT>
 
 Returns const temporary array of component given specific name and type of component for regular components.
 
-.. _function-_at_decs_c__c_get_default_ro_CS_ls_decs_c__c_Archetype_gr__Cs_CY_ls_TT_gr_.:
+:Arguments: * **arch** :  :ref:`Archetype <struct-decs-Archetype>` 
 
-.. das:function:: get_default_ro(arch: Archetype const; name: string const; value: auto(TT) const)
+            * **name** : string
 
-get_default_ro returns iterator<TT const&>
+            * **value** : auto(TT)
 
-+--------+------------------------------------------------------+
-+argument+argument type                                         +
-+========+======================================================+
-+arch    + :ref:`decs::Archetype <struct-decs-Archetype>`  const+
-+--------+------------------------------------------------------+
-+name    +string const                                          +
-+--------+------------------------------------------------------+
-+value   +auto(TT) const                                        +
-+--------+------------------------------------------------------+
+.. _function-_at_decs_c__c_get_default_ro_CS_ls_decs_c__c_Archetype_gr__Cs_CY_ls_TT_gr__dot_:
 
+.. das:function:: get_default_ro(arch: Archetype; name: string; value: auto(TT)) : iterator<TT const&>
 
 Returns const iterator of component given specific name and type of component.
 If component is not found - iterator will kepp returning the specified value.
 
-.. _function-_at_decs_c__c_get_optional_CS_ls_decs_c__c_Archetype_gr__Cs_C1_ls_Y_ls_TT_gr_._gr__qm_:
+:Arguments: * **arch** :  :ref:`Archetype <struct-decs-Archetype>` 
 
-.. das:function:: get_optional(arch: Archetype const; name: string const; value: auto(TT)? const)
+            * **name** : string
 
-get_optional returns iterator<TT?>
+            * **value** : auto(TT)
 
-+--------+------------------------------------------------------+
-+argument+argument type                                         +
-+========+======================================================+
-+arch    + :ref:`decs::Archetype <struct-decs-Archetype>`  const+
-+--------+------------------------------------------------------+
-+name    +string const                                          +
-+--------+------------------------------------------------------+
-+value   +auto(TT)? const                                       +
-+--------+------------------------------------------------------+
+.. _function-_at_decs_c__c_get_optional_CS_ls_decs_c__c_Archetype_gr__Cs_C1_ls_Y_ls_TT_gr__dot__gr__qm_:
 
+.. das:function:: get_optional(arch: Archetype; name: string; value: auto(TT)?) : iterator<TT?>
 
 Returns const iterator of component given specific name and type of component.
 If component is not found - iterator will kepp returning default value for the component type.
+
+:Arguments: * **arch** :  :ref:`Archetype <struct-decs-Archetype>` 
+
+            * **name** : string
+
+            * **value** : auto(TT)?
 
 +++++++
 Request
 +++++++
 
-  *  :ref:`EcsRequestPos (at:rtti::LineInfo const) : decs::EcsRequestPos <function-_at_decs_c__c_EcsRequestPos_CH_ls_rtti_c__c_LineInfo_gr_>` 
-  *  :ref:`verify_request (erq:decs::EcsRequest -const) : tuple\<ok:bool;error:string\> <function-_at_decs_c__c_verify_request_S_ls_decs_c__c_EcsRequest_gr_>` 
-  *  :ref:`compile_request (erq:decs::EcsRequest -const) : void <function-_at_decs_c__c_compile_request_S_ls_decs_c__c_EcsRequest_gr_>` 
-  *  :ref:`lookup_request (erq:decs::EcsRequest -const) : int <function-_at_decs_c__c_lookup_request_S_ls_decs_c__c_EcsRequest_gr_>` 
+  *  :ref:`EcsRequestPos (at: LineInfo) : EcsRequestPos <function-_at_decs_c__c_EcsRequestPos_CH_ls_rtti_c__c_LineInfo_gr_>` 
+  *  :ref:`verify_request (var erq: EcsRequest) : tuple\<ok:bool;error:string\> <function-_at_decs_c__c_verify_request_S_ls_decs_c__c_EcsRequest_gr_>` 
+  *  :ref:`compile_request (var erq: EcsRequest) <function-_at_decs_c__c_compile_request_S_ls_decs_c__c_EcsRequest_gr_>` 
+  *  :ref:`lookup_request (var erq: EcsRequest) : int <function-_at_decs_c__c_lookup_request_S_ls_decs_c__c_EcsRequest_gr_>` 
 
 .. _function-_at_decs_c__c_EcsRequestPos_CH_ls_rtti_c__c_LineInfo_gr_:
 
-.. das:function:: EcsRequestPos(at: LineInfo const)
-
-EcsRequestPos returns  :ref:`decs::EcsRequestPos <struct-decs-EcsRequestPos>` 
-
-+--------+----------------------------------------------------+
-+argument+argument type                                       +
-+========+====================================================+
-+at      + :ref:`rtti::LineInfo <handle-rtti-LineInfo>`  const+
-+--------+----------------------------------------------------+
-
+.. das:function:: EcsRequestPos(at: LineInfo) : EcsRequestPos
 
 Constructs EcsRequestPos from rtti::LineInfo.
 
+:Arguments: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` 
+
 .. _function-_at_decs_c__c_verify_request_S_ls_decs_c__c_EcsRequest_gr_:
 
-.. das:function:: verify_request(erq: EcsRequest)
-
-verify_request returns tuple<ok:bool;error:string>
-
-+--------+--------------------------------------------------+
-+argument+argument type                                     +
-+========+==================================================+
-+erq     + :ref:`decs::EcsRequest <struct-decs-EcsRequest>` +
-+--------+--------------------------------------------------+
-
+.. das:function:: verify_request(erq: EcsRequest) : tuple<ok:bool;error:string>
 
 Verifies ESC request. Returns pair of boolean (true for OK) and error message.
+
+:Arguments: * **erq** :  :ref:`EcsRequest <struct-decs-EcsRequest>` 
 
 .. _function-_at_decs_c__c_compile_request_S_ls_decs_c__c_EcsRequest_gr_:
 
 .. das:function:: compile_request(erq: EcsRequest)
 
-+--------+--------------------------------------------------+
-+argument+argument type                                     +
-+========+==================================================+
-+erq     + :ref:`decs::EcsRequest <struct-decs-EcsRequest>` +
-+--------+--------------------------------------------------+
-
-
 Compiles ESC request, by creating request hash.
+
+:Arguments: * **erq** :  :ref:`EcsRequest <struct-decs-EcsRequest>` 
 
 .. _function-_at_decs_c__c_lookup_request_S_ls_decs_c__c_EcsRequest_gr_:
 
-.. das:function:: lookup_request(erq: EcsRequest)
-
-lookup_request returns int
-
-+--------+--------------------------------------------------+
-+argument+argument type                                     +
-+========+==================================================+
-+erq     + :ref:`decs::EcsRequest <struct-decs-EcsRequest>` +
-+--------+--------------------------------------------------+
-
+.. das:function:: lookup_request(erq: EcsRequest) : int
 
 Looks up ESC request in the request cache.
+
+:Arguments: * **erq** :  :ref:`EcsRequest <struct-decs-EcsRequest>` 
 
 

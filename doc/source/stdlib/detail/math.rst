@@ -1,205 +1,192 @@
-.. |function-math-sign| replace:: returns sign of x, or 0 if x == 0
+.. |handmade/function-math-sin| replace:: to be documented in |handmade/function-math-sin|.rst
 
-.. |function-math-abs| replace:: returns the absolute value of x
+.. |handmade/function-math-cos| replace:: to be documented in |handmade/function-math-cos|.rst
 
-.. |function-math-acos| replace:: returns the arccosine of x
+.. |handmade/function-math-tan| replace:: to be documented in |handmade/function-math-tan|.rst
 
-.. |function-math-asin| replace:: returns the arcsine of x
+.. |handmade/function-math-exp| replace:: to be documented in |handmade/function-math-exp|.rst
 
-.. |function-math-atan| replace:: returns the arctangent of x
+.. |handmade/function-math-log| replace:: to be documented in |handmade/function-math-log|.rst
 
-.. |function-math-atan2| replace:: returns the arctangent of y/x
+.. |handmade/function-math-exp2| replace:: to be documented in |handmade/function-math-exp2|.rst
 
-.. |function-math-atan2_est| replace:: returns the fast approximation of arctangent of y/x
+.. |handmade/function-math-log2| replace:: to be documented in |handmade/function-math-log2|.rst
 
-.. |function-math-ceil| replace:: returns a float value representing the smallest integer (type is still float) that is greater than or equal to arg0
+.. |handmade/function-math-rcp| replace:: to be documented in |handmade/function-math-rcp|.rst
 
-.. |function-math-ceili| replace:: returns a value representing the smallest integer (integer type!) that is greater than or equal to arg0
+.. |handmade/function-math-rcp_est| replace:: to be documented in |handmade/function-math-rcp_est|.rst
 
-.. |function-math-clamp| replace:: returns vector or scalar representing min(max(t, a), b)
+.. |handmade/function-math-pow| replace:: to be documented in |handmade/function-math-pow|.rst
 
-.. |function-math-cos| replace:: returns the cosine of x
+.. |handmade/function-math-mad| replace:: to be documented in |handmade/function-math-mad|.rst
 
-.. |function-math-cross| replace:: returns vector representing cross product between x and y
+.. |handmade/function-math-lerp| replace:: to be documented in |handmade/function-math-lerp|.rst
 
-.. |function-math-distance| replace:: returns a non-negative value representing distance between x and y
+.. |handmade/function-math-floor| replace:: to be documented in |handmade/function-math-floor|.rst
 
-.. |function-math-distance_sq| replace:: returns a non-negative value representing squared distance between x and y
+.. |handmade/function-math-ceil| replace:: to be documented in |handmade/function-math-ceil|.rst
 
-.. |function-math-dot| replace:: returns scalar representing dot product between x and y
+.. |handmade/function-math-fract| replace:: to be documented in |handmade/function-math-fract|.rst
 
-.. |function-math-exp| replace:: returns the e^x value of x
+.. |handmade/function-math-sqrt| replace:: to be documented in |handmade/function-math-sqrt|.rst
 
-.. |function-math-exp2| replace:: returns the 2^x value of x
+.. |handmade/function-math-rsqrt| replace:: to be documented in |handmade/function-math-rsqrt|.rst
 
-.. |function-math-fast_normalize| replace:: returns the fast approximation of normalized x, or nan if length(x) is 0
+.. |handmade/function-math-rsqrt_est| replace:: to be documented in |handmade/function-math-rsqrt_est|.rst
 
-.. |function-math-floor| replace:: returns a float value representing the largest integer that is less than or equal to x
+.. |handmade/function-math-saturate| replace:: to be documented in |handmade/function-math-saturate|.rst
 
-.. |function-math-floori| replace:: returns a integer value representing the largest integer that is less than or equal to x
+.. |handmade/function-math-min| replace:: to be documented in |handmade/function-math-min|.rst
 
-.. |function-math-inv_distance| replace:: returns a non-negative value representing 1/distance between x and y
+.. |handmade/function-math-max| replace:: to be documented in |handmade/function-math-max|.rst
 
-.. |function-math-inv_distance_sq| replace:: returns a non-negative value representing 1/squared distance between x and y
+.. |handmade/function-math-clamp| replace:: to be documented in |handmade/function-math-clamp|.rst
 
-.. |function-math-inv_length| replace:: returns a non-negative value representing 1/magnitude of x
+.. |handmade/function-math-abs| replace:: to be documented in |handmade/function-math-abs|.rst
 
-.. |function-math-inv_length_sq| replace:: returns a non-negative value representing 1/squared magnitude of x
+.. |handmade/function-math-sign| replace:: to be documented in |handmade/function-math-sign|.rst
 
-.. |function-math-length| replace:: returns a non-negative value representing magnitude of x
+.. |handmade/function-math-uint32_hash| replace:: to be documented in |handmade/function-math-uint32_hash|.rst
 
-.. |function-math-length_sq| replace:: returns a non-negative value representing squared magnitude of x
+.. |handmade/function-math-uint_noise_1D| replace:: to be documented in |handmade/function-math-uint_noise_1D|.rst
 
-.. |function-math-lerp| replace:: returns vector or scalar representing a + (b - a) * t
+.. |handmade/function-math-uint_noise_2D| replace:: to be documented in |handmade/function-math-uint_noise_2D|.rst
 
-.. |function-math-log| replace:: returns the natural logarithm of x
+.. |handmade/function-math-uint_noise_3D| replace:: to be documented in |handmade/function-math-uint_noise_3D|.rst
 
-.. |function-math-log2| replace:: returns the logarithm base-2 of x
+.. |handmade/function-math-dot| replace:: to be documented in |handmade/function-math-dot|.rst
 
-.. |function-math-mad| replace:: returns vector or scalar representing a * b + c
+.. |handmade/function-math-cross| replace:: to be documented in |handmade/function-math-cross|.rst
 
-.. |function-math-max| replace:: returns the maximum of x and y
+.. |handmade/function-math-fast_normalize| replace:: to be documented in |handmade/function-math-fast_normalize|.rst
 
-.. |function-math-min| replace:: returns the minimum of x and y
+.. |handmade/function-math-normalize| replace:: to be documented in |handmade/function-math-normalize|.rst
 
-.. |function-math-normalize| replace:: returns normalized x, or nan if length(x) is 0
+.. |handmade/function-math-length| replace:: to be documented in |handmade/function-math-length|.rst
 
-.. |function-math-pow| replace:: returns x raised to the power of y
+.. |handmade/function-math-inv_length| replace:: to be documented in |handmade/function-math-inv_length|.rst
 
-.. |function-math-rcp| replace:: returns the 1/x
+.. |handmade/function-math-inv_length_sq| replace:: to be documented in |handmade/function-math-inv_length_sq|.rst
 
-.. |function-math-rcp_est| replace:: returns the fast approximation 1/x
+.. |handmade/function-math-length_sq| replace:: to be documented in |handmade/function-math-length_sq|.rst
 
-.. |function-math-reflect| replace:: see function-math-reflect.rst for details
+.. |handmade/function-math-distance| replace:: to be documented in |handmade/function-math-distance|.rst
 
-.. |function-math-refract| replace:: see function-math-refract.rst for details
+.. |handmade/function-math-distance_sq| replace:: to be documented in |handmade/function-math-distance_sq|.rst
 
-.. |function-math-roundi| replace:: returns a integer value representing the integer that is closest to x
+.. |handmade/function-math-inv_distance| replace:: to be documented in |handmade/function-math-inv_distance|.rst
 
-.. |function-math-rsqrt| replace:: returns 1/sqrt(x)
+.. |handmade/function-math-inv_distance_sq| replace:: to be documented in |handmade/function-math-inv_distance_sq|.rst
 
-.. |function-math-rsqrt_est| replace:: returns the fast approximation 1/sqrt(x)
+.. |handmade/function-math-is_nan| replace:: to be documented in |handmade/function-math-is_nan|.rst
 
-.. |function-math-saturate| replace:: returns a clamped to [0..1] inclusive range x
+.. |handmade/function-math-is_finite| replace:: to be documented in |handmade/function-math-is_finite|.rst
 
-.. |function-math-sin| replace:: returns the sine of x
+.. |handmade/function-math-asin| replace:: to be documented in |handmade/function-math-asin|.rst
 
-.. |function-math-sincos| replace:: returns oth sine and cosine of x
+.. |handmade/function-math-acos| replace:: to be documented in |handmade/function-math-acos|.rst
 
-.. |function-math-sqrt| replace:: returns the square root of x
+.. |handmade/function-math-atan| replace:: to be documented in |handmade/function-math-atan|.rst
 
-.. |function-math-tan| replace:: returns the tangent of x
+.. |handmade/function-math-atan2| replace:: to be documented in |handmade/function-math-atan2|.rst
 
-.. |function-math-trunci| replace:: returns a integer value representing the float without fraction part of x
+.. |handmade/function-math-sincos| replace:: to be documented in |handmade/function-math-sincos|.rst
 
-.. |function-math-fract| replace:: returns a fraction part of x
+.. |handmade/function-math-atan_est| replace:: to be documented in |handmade/function-math-atan_est|.rst
 
-.. |function-math-uint32_hash| replace:: returns hashed value of seed
+.. |handmade/function-math-atan2_est| replace:: to be documented in |handmade/function-math-atan2_est|.rst
 
-.. |function-math-uint_noise_1D| replace:: returns noise value of position in the seeded sequence
+.. |handmade/function-math-reflect| replace:: to be documented in |handmade/function-math-reflect|.rst
 
-.. |function-math-uint_noise_2D| replace:: returns noise value of position in the seeded sequence
+.. |handmade/function-math-refract| replace:: to be documented in |handmade/function-math-refract|.rst
 
-.. |function-math-uint_noise_3D| replace:: returns noise value of position in the seeded sequence
+.. |handmade/function-math-floori| replace:: to be documented in |handmade/function-math-floori|.rst
 
-.. |function-math--| replace:: returns -x
+.. |handmade/function-math-ceili| replace:: to be documented in |handmade/function-math-ceili|.rst
 
+.. |handmade/function-math-roundi| replace:: to be documented in |handmade/function-math-roundi|.rst
 
-.. |variable-math-FLT_EPSILON| replace:: the difference between 1 and the smallest floating point number of type float that is greater than 1.
+.. |handmade/function-math-trunci| replace:: to be documented in |handmade/function-math-trunci|.rst
 
-.. |variable-math-DBL_EPSILON| replace:: the difference between 1 and the smallest double precision floating point number of type double that is greater than 1.
+.. |handmade/function-math-float3x3| replace:: to be documented in |handmade/function-math-float3x3|.rst
 
-.. |variable-math-DBL_PI| replace:: The ratio of a circle's circumference to its diameter. π
+.. |handmade/function-math-float3x4| replace:: to be documented in |handmade/function-math-float3x4|.rst
 
-.. |variable-math-PI| replace:: The ratio of a circle's circumference to its diameter. π
+.. |handmade/function-math-float4x4| replace:: to be documented in |handmade/function-math-float4x4|.rst
 
-.. |function-math-!=| replace:: Compares x and y per component. Returns true if at least one component does not match.
+.. |handmade/function-math-identity| replace:: to be documented in |handmade/function-math-identity|.rst
 
-.. |function-math-*| replace:: Multiplies x by y.
+.. |handmade/function-math-identity4x4| replace:: to be documented in |handmade/function-math-identity4x4|.rst
 
-.. |function-math-==| replace:: Compares x and y per component. Returns false if at least one component does not match.
+.. |handmade/function-math-translation| replace:: to be documented in |handmade/function-math-translation|.rst
 
-.. |function-math-float3x4| replace:: Returns empty matrix, where each component is 0.
+.. |handmade/function-math-transpose| replace:: to be documented in |handmade/function-math-transpose|.rst
 
-.. |function-math-float4x4| replace:: Returns empty matrix, where each component is 0.
+.. |handmade/function-math-persp_forward| replace:: to be documented in |handmade/function-math-persp_forward|.rst
 
-.. |function-math-float3x3| replace:: Returns empty matrix, where each component is 0.
+.. |handmade/function-math-persp_reverse| replace:: to be documented in |handmade/function-math-persp_reverse|.rst
 
-.. |function-math-identity| replace:: Returns identity matrix, where diagonal is 1 and every other component is 0.
+.. |handmade/function-math-look_at| replace:: to be documented in |handmade/function-math-look_at|.rst
 
-.. |function-math-identity4x4| replace:: Returns identity matrix, where diagonal is 1 and every other component is 0.
+.. |handmade/function-math-compose| replace:: to be documented in |handmade/function-math-compose|.rst
 
-.. |function-math-identity3x4| replace:: Returns identity matrix, where diagonal is 1 and every other component is 0.
+.. |handmade/function-math-*| replace:: to be documented in |handmade/function-math-*|.rst
 
-.. |function-math-identity3x3| replace:: Returns identity matrix, where diagonal is 1 and every other component is 0.
+.. |handmade/function-math-decompose| replace:: to be documented in |handmade/function-math-decompose|.rst
 
-.. |function-math-inverse| replace:: Returns the inverse of the matrix x.
+.. |handmade/function-math-==| replace:: to be documented in |handmade/function-math-==|.rst
 
-.. |function-math-rotate| replace:: Rotates vector y by 3x4 matrix x. Only 3x3 portion of x is multiplied by y.
+.. |handmade/function-math-!=| replace:: to be documented in |handmade/function-math-!=|.rst
 
-.. |function-math-transpose| replace:: Transposes the specified input matrix x.
+.. |handmade/function-math--| replace:: to be documented in |handmade/function-math--|.rst
 
-.. |any_annotation-math-float3x4| replace:: floating point matrix with 4 rows and 3 columns
+.. |handmade/function-math-[]| replace:: to be documented in |handmade/function-math-[]|.rst
 
-.. |any_annotation-math-float4x4| replace:: floating point matrix with 4 rows and 4 columns
+.. |handmade/function-math-identity3x4| replace:: to be documented in |handmade/function-math-identity3x4|.rst
 
-.. |any_annotation-math-float3x3| replace:: floating point matrix with 3 rows and 3 columns
+.. |handmade/function-math-determinant| replace:: to be documented in |handmade/function-math-determinant|.rst
 
-.. |function-math-is_nan| replace:: Returns true if `x` is NaN (not a number)
+.. |handmade/function-math-inverse| replace:: to be documented in |handmade/function-math-inverse|.rst
 
-.. |function-math-is_finite| replace:: Returns true if `x` is not a negative or positive infinity
+.. |handmade/function-math-orthonormal_inverse| replace:: to be documented in |handmade/function-math-orthonormal_inverse|.rst
 
-.. |function-math-un_quat_from_unit_arc| replace:: Quaternion which represents rotation from `v0` to `v1`, both arguments need to be normalized
+.. |handmade/function-math-rotate| replace:: to be documented in |handmade/function-math-rotate|.rst
 
-.. |function-math-un_quat_from_unit_vec_ang| replace:: Quaternion which represents rotation for `ang` radians around vector `v`. `v` needs to be normalized
+.. |handmade/function-math-quat_from_unit_arc| replace:: to be documented in |handmade/function-math-quat_from_unit_arc|.rst
 
-.. |function-math-un_quat| replace:: Quaternion from the rotation part of the matrix
+.. |handmade/function-math-quat_from_unit_vec_ang| replace:: to be documented in |handmade/function-math-quat_from_unit_vec_ang|.rst
 
-.. |function-math-quat_mul| replace:: Quaternion which is multiplication of `q1` and `q2`
+.. |handmade/function-math-quat_from_euler| replace:: to be documented in |handmade/function-math-quat_from_euler|.rst
 
-.. |function-math-quat_mul_vec| replace:: Transform vector `v` by quaternion `q`
+.. |handmade/function-math-euler_from_quat| replace:: to be documented in |handmade/function-math-euler_from_quat|.rst
 
-.. |function-math-quat_conjugate| replace:: Quaternion which is conjugate of `q`
+.. |handmade/function-math-quat| replace:: to be documented in |handmade/function-math-quat|.rst
 
-.. |function-math-pack_float_to_byte| replace:: Packs float4 vector `v` to byte4 vector and returns it as uint. Each component is clamped to [0..255] range.
+.. |handmade/function-math-quat_mul| replace:: to be documented in |handmade/function-math-quat_mul|.rst
 
-.. |function-math-unpack_byte_to_float| replace:: Unpacks byte4 vector to float4 vector.
+.. |handmade/function-math-quat_mul_vec| replace:: to be documented in |handmade/function-math-quat_mul_vec|.rst
 
-.. |function-math-persp_forward| replace:: Perspective matrix, zn - 0, zf - 1
+.. |handmade/function-math-quat_conjugate| replace:: to be documented in |handmade/function-math-quat_conjugate|.rst
 
-.. |function-math-persp_reverse| replace:: Perspective matrix, zn - 1, zf - 0
+.. |handmade/function-math-quat_slerp| replace:: to be documented in |handmade/function-math-quat_slerp|.rst
 
-.. |function-math-look_at| replace:: Look-at matrix with the origin at `eye`, looking at `at`, with `up` as up direction.
+.. |handmade/function-math-identity3x3| replace:: to be documented in |handmade/function-math-identity3x3|.rst
 
-.. |function-math-compose| replace:: Compose transformation out of translation, rotation and scale.
+.. |handmade/function-math-pack_float_to_byte| replace:: to be documented in |handmade/function-math-pack_float_to_byte|.rst
 
-.. |function-math-decompose| replace:: Decompose transformation into translation, rotation and scale.
+.. |handmade/function-math-unpack_byte_to_float| replace:: to be documented in |handmade/function-math-unpack_byte_to_float|.rst
 
-.. |function-math-orthonormal_inverse| replace:: Fast `inverse` for the orthonormal matrix.
+.. |handmade/structure_annotation-math-float4x4| replace:: to be documented in |handmade/structure_annotation-math-float4x4|.rst
 
-.. |function-math-atan_est| replace:: Fast estimation for the `atan`.
+.. |handmade/structure_annotation-math-float3x4| replace:: to be documented in |handmade/structure_annotation-math-float3x4|.rst
 
-.. |structure_annotation-math-float4x4| replace:: floating point matrix with 4 rows and 4 columns
+.. |handmade/structure_annotation-math-float3x3| replace:: to be documented in |handmade/structure_annotation-math-float3x3|.rst
 
-.. |structure_annotation-math-float3x4| replace:: floating point matrix with 4 rows and 3 columns
+.. |handmade/variable-math-PI| replace:: to be documented in |handmade/variable-math-PI|.rst
 
-.. |structure_annotation-math-float3x3| replace:: floating point matrix with 3 rows and 3 columns
+.. |handmade/variable-math-DBL_PI| replace:: to be documented in |handmade/variable-math-DBL_PI|.rst
 
-.. |function-math-quat_from_unit_arc| replace:: Quaternion which represents rotation from `v0` to `v1`, both arguments need to be normalized
+.. |handmade/variable-math-FLT_EPSILON| replace:: to be documented in |handmade/variable-math-FLT_EPSILON|.rst
 
-.. |function-math-quat_from_unit_vec_ang| replace:: Quaternion which represents rotation for `ang` radians around vector `v`. `v` needs to be normalized
-
-.. |function-math-[]| replace:: Returns the component of the matrix `m` at the specified row.
-
-.. |function-math-determinant| replace:: Returns the determinant of the matrix `m`.
-
-.. |function-math-quat_from_euler| replace:: Construct quaternion from euler angles.
-
-.. |function-math-euler_from_un_quat| replace:: Construct euler angles from quaternion.
-
-.. |function-math-euler_from_quat| replace:: Construct euler angles from quaternion.
-
-.. |function-math-quat| replace:: Construct quaternion from matrix.
-
-.. |function-math-quat_slerp| replace:: Spherical linear interpolation between `a` and `b` by `t`.
+.. |handmade/variable-math-DBL_EPSILON| replace:: to be documented in |handmade/variable-math-DBL_EPSILON|.rst
 

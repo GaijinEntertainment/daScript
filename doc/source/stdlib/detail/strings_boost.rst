@@ -1,21 +1,22 @@
-.. |function-strings_boost-wide| replace:: Pad string with ` ` character to make it certain width.
+.. |handmade/function-strings_boost-wide| replace:: to be documented in |handmade/function-strings_boost-wide|.rst
 
-.. |function-strings_boost-split| replace:: Split string given delimiter.
+.. |handmade/function-strings_boost-split| replace:: to be documented in |handmade/function-strings_boost-split|.rst
 
-.. |function-strings_boost-split_by_chars| replace:: Split string given set of delimiters (string treated as characters).
+.. |handmade/function-strings_boost-split_by_chars| replace:: to be documented in |handmade/function-strings_boost-split_by_chars|.rst
 
-.. |function-strings_boost-join| replace:: Join mulitiple strings with delimiter.
+.. |handmade/function-strings_boost-levenshtein_distance| replace:: to be documented in |handmade/function-strings_boost-levenshtein_distance|.rst
 
-.. |function-strings_boost-is_character_at| replace:: Returns true if specific character is at specific string position.
+.. |handmade/function-strings_boost-levenshtein_distance_fast| replace:: to be documented in |handmade/function-strings_boost-levenshtein_distance_fast|.rst
 
-.. |function-strings_boost-eq| replace:: Compares das_string and string. True if equal.
+.. |handmade/function-strings_boost-replace_multiple| replace:: to be documented in |handmade/function-strings_boost-replace_multiple|.rst
 
-.. |function-strings_boost-levenshtein_distance| replace:: Returns Levenshtein distance between two strings.
+.. |handmade/function-strings_boost-is_hex| replace:: to be documented in |handmade/function-strings_boost-is_hex|.rst
 
-.. |function-strings_boost-levenshtein_distance_fast| replace:: Returns Levenshtein distance between two strings, fast implementation.
+.. |handmade/function-strings_boost-is_tab_or_space| replace:: to be documented in |handmade/function-strings_boost-is_tab_or_space|.rst
 
-.. |function-strings_boost-replace_multiple| replace:: Replace multiple substrings in string.
+.. |handmade/function-strings_boost-join| replace:: to be documented in |handmade/function-strings_boost-join|.rst
 
-.. |function-strings_boost-is_hex| replace:: Returns true if character is hex digit.
+.. |handmade/function-strings_boost-is_character_at| replace:: to be documented in |handmade/function-strings_boost-is_character_at|.rst
 
-.. |function-strings_boost-is_tab_or_space| replace:: Returns true if character is tab or space.
+.. |handmade/function-strings_boost-eq| replace:: to be documented in |handmade/function-strings_boost-eq|.rst
+

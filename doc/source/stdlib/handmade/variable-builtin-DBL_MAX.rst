@@ -1,0 +1,1 @@
+Maximum normalized double-precision floating-point number.

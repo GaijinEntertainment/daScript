@@ -5,8 +5,6 @@
 Boost package for the builtin sort
 ==================================
 
-.. include:: detail/sort_boost.rst
-
 The sort_boost module implements additional infrastructure for the sorting routines.
 
 All functions and symbols are in "sort_boost" module, use require to get access to it. ::

@@ -1,10 +1,6 @@
-.. |class-unroll-RemoveDerefVisitor| replace:: to be documented in |class-unroll-RemoveDerefVisitor|.rst
+.. |detail/class-unroll-UnrollMacro| replace:: to be documented in |detail/class-unroll-UnrollMacro|.rst
 
-.. |method-unroll-RemoveDerefVisitor.visitExprRef2Value| replace:: to be documented in |method-unroll-RemoveDerefVisitor.visitExprRef2Value|.rst
+.. |detail/method-unroll-UnrollMacro.transform| replace:: to be documented in |detail/method-unroll-UnrollMacro.transform|.rst
 
-.. |class-unroll-UnrollMacro| replace:: to be documented in |class-unroll-UnrollMacro|.rst
-
-.. |method-unroll-UnrollMacro.transform| replace:: to be documented in |method-unroll-UnrollMacro.transform|.rst
-
-.. |function-unroll-unroll| replace:: to be documented in |function-unroll-unroll|.rst
+.. |detail/function-unroll-unroll| replace:: to be documented in |detail/function-unroll-unroll|.rst
 

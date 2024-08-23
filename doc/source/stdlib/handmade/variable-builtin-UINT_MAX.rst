@@ -1,0 +1,1 @@
+Maximum 32-bit unsigned integer value.

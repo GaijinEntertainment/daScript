@@ -5,8 +5,6 @@
 Boost package for DECS
 ======================
 
-.. include:: detail/decs_boost.rst
-
 The DECS_BOOST module implements queries, stages, and templates for the DECS.
 Under normal circumstances this is the main require module for DECS.
 
@@ -14,23 +12,6 @@ All functions and symbols are in "decs_boost" module, use require to get access 
 
     require daslib/desc_boost
 
-
-++++++++++++
-Type aliases
-++++++++++++
-
-.. _alias-ItCheck:
-
-.. das:attribute:: ItCheck is a variant type
-
-+---+------+
-+yes+string+
-+---+------+
-+no +bool  +
-+---+------+
-
-
-DECS prefix check.
 
 ++++++++++++++++++++
 Function annotations

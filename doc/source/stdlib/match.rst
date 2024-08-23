@@ -5,8 +5,6 @@
 Pattern matching
 ================
 
-.. include:: detail/match.rst
-
 .. _match:
 
 The MATCH module implements pattern matching in Daslang.

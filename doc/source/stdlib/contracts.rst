@@ -5,8 +5,6 @@
 Miscelanious contract annotations
 =================================
 
-.. include:: detail/contracts.rst
-
 The CONTRACTS module exposes collection of type matching contracts.
 
 All functions and symbols are in "contracts" module, use require to get access to it. ::
@@ -119,19 +117,13 @@ Workhorse types are: bool,int*,uint*,float*,double,range and urange, range64 and
 Type queries
 ++++++++++++
 
-  *  :ref:`isYetAnotherVectorTemplate (td:smart_ptr\<ast::TypeDecl\> const) : bool <function-_at_contracts_c__c_isYetAnotherVectorTemplate_CY_ls_TypeDeclPtr_gr_1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_M>` 
+  *  :ref:`isYetAnotherVectorTemplate (td: TypeDeclPtr) : bool <function-_at_contracts_c__c_isYetAnotherVectorTemplate_CY_ls_TypeDeclPtr_gr_1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_M>` 
 
 .. _function-_at_contracts_c__c_isYetAnotherVectorTemplate_CY_ls_TypeDeclPtr_gr_1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_M:
 
-.. das:function:: isYetAnotherVectorTemplate(td: TypeDeclPtr)
+.. das:function:: isYetAnotherVectorTemplate(td: TypeDeclPtr) : bool
 
-isYetAnotherVectorTemplate returns bool
-
-+--------+----------------------------------------+
-+argument+argument type                           +
-+========+========================================+
-+td      + :ref:`TypeDeclPtr <alias-TypeDeclPtr>` +
-+--------+----------------------------------------+
+:Arguments: * **td** :  :ref:`TypeDeclPtr <alias-TypeDeclPtr>` 
 
 
 returns true if the given type declaration is a das::vector template bound on C++ side

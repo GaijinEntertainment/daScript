@@ -1,87 +1,86 @@
-.. |typedef-fio-file| replace:: alias for the `FILE const?`; its there since most file functions expect exactly this type
+.. |handmade/typedef-fio-file| replace:: to be documented in |handmade/typedef-fio-file|.rst
 
-.. |any_annotation-fio-FILE| replace:: Holds system specific `FILE` type.
+.. |handmade/structure-fio-df_header| replace:: to be documented in |handmade/structure-fio-df_header|.rst
 
-.. |structure-fio-df_header| replace:: obsolete. header for the `fsave` and `fload` which internally use `binary_save` and `binary_load`.
+.. |handmade/function-fio-remove| replace:: to be documented in |handmade/function-fio-remove|.rst
 
-.. |function-fio-base_name| replace:: equivalent to linux `basename`. Splits path and returns the string up to, but not including, the final '/'.
+.. |handmade/function-fio-rename| replace:: to be documented in |handmade/function-fio-rename|.rst
 
-.. |function-fio-builtin_dir| replace:: iterates through all files in the specified `path`.
+.. |handmade/function-fio-fopen| replace:: to be documented in |handmade/function-fio-fopen|.rst
 
-.. |function-fio-dir_name| replace:: equivalent to linux `dirname`. Splits path and returns the component preceding the final '/'.  Trailing '/' characters are not counted as part of the pathname.
+.. |handmade/function-fio-fclose| replace:: to be documented in |handmade/function-fio-fclose|.rst
 
-.. |function-fio-fclose| replace:: equivalent to C `fclose`. Closes file.
+.. |handmade/function-fio-fflush| replace:: to be documented in |handmade/function-fio-fflush|.rst
 
-.. |function-fio-feof| replace:: equivalent to C `feof`. Returns true if end of file has been reached.
+.. |handmade/function-fio-fprint| replace:: to be documented in |handmade/function-fio-fprint|.rst
 
-.. |function-fio-fgets| replace:: equivalent to C `fgets`. Reads and returns new string from the line.
+.. |handmade/function-fio-fread| replace:: to be documented in |handmade/function-fio-fread|.rst
 
-.. |function-fio-fmap| replace:: create map view of file, i.e. maps file contents to memory. Data is available as array<uint8> inside the block.
+.. |handmade/function-fio-fmap| replace:: to be documented in |handmade/function-fio-fmap|.rst
 
-.. |function-fio-fopen| replace:: equivalent to C `fopen`. Opens file in different modes.
+.. |handmade/function-fio-fgets| replace:: to be documented in |handmade/function-fio-fgets|.rst
 
-.. |function-fio-popen_binary| replace:: opens pipe to command and returns FILE pointer to it, in binary mode.
+.. |handmade/function-fio-fwrite| replace:: to be documented in |handmade/function-fio-fwrite|.rst
 
-.. |function-fio-fprint| replace:: same as `print` but outputs to file.
+.. |handmade/function-fio-feof| replace:: to be documented in |handmade/function-fio-feof|.rst
 
-.. |function-fio-fread| replace:: reads data from file.
+.. |handmade/function-fio-fseek| replace:: to be documented in |handmade/function-fio-fseek|.rst
 
-.. |function-fio-fstat| replace:: equivalent to C `fstat`. Returns information about file, such as file size, timestamp, etc.
+.. |handmade/function-fio-ftell| replace:: to be documented in |handmade/function-fio-ftell|.rst
 
-.. |function-fio-fstderr| replace:: returns FILE pointer to standard error.
+.. |handmade/function-fio-dir_name| replace:: to be documented in |handmade/function-fio-dir_name|.rst
 
-.. |function-fio-fstdin| replace:: returns FILE pointer to standard input.
+.. |handmade/function-fio-base_name| replace:: to be documented in |handmade/function-fio-base_name|.rst
 
-.. |function-fio-fstdout| replace:: returns FILE pointer to standard output.
+.. |handmade/function-fio-fstat| replace:: to be documented in |handmade/function-fio-fstat|.rst
 
-.. |function-fio-fwrite| replace:: writes data fo file.
+.. |handmade/function-fio-stat| replace:: to be documented in |handmade/function-fio-stat|.rst
 
-.. |function-fio-mkdir| replace:: makes directory.
+.. |handmade/function-fio-builtin_dir| replace:: to be documented in |handmade/function-fio-builtin_dir|.rst
 
-.. |function-fio-sleep| replace:: sleeps for specified number of milliseconds.
+.. |handmade/function-fio-mkdir| replace:: to be documented in |handmade/function-fio-mkdir|.rst
 
-.. |function-fio-stat| replace:: same as fstat, but file is specified by file name.
+.. |handmade/function-fio-chdir| replace:: to be documented in |handmade/function-fio-chdir|.rst
 
-.. |function-fio-dir| replace:: iterates through all files in the specified `path`.
+.. |handmade/function-fio-getcwd| replace:: to be documented in |handmade/function-fio-getcwd|.rst
 
-.. |function-fio-fload| replace:: obsolete. saves data to file.
+.. |handmade/function-fio-fstdin| replace:: to be documented in |handmade/function-fio-fstdin|.rst
 
-.. |function-fio-fsave| replace:: obsolete. loads data from file.
+.. |handmade/function-fio-fstdout| replace:: to be documented in |handmade/function-fio-fstdout|.rst
 
-.. |structure_annotation-fio-FILE| replace:: this is C FILE *
+.. |handmade/function-fio-fstderr| replace:: to be documented in |handmade/function-fio-fstderr|.rst
 
-.. |structure_annotation-fio-FStat| replace:: `stat` and `fstat` return file information in this structure.
+.. |handmade/function-fio-sleep| replace:: to be documented in |handmade/function-fio-sleep|.rst
 
-.. |variable-fio-df_magic| replace:: obsolete. magic number for `binary_save` and `binary_load`.
+.. |handmade/function-fio-getchar| replace:: to be documented in |handmade/function-fio-getchar|.rst
 
-.. |function-fio-fseek| replace:: equivalent to C `fseek`. Rewinds position of the current FILE pointer.
+.. |handmade/function-fio-exit| replace:: to be documented in |handmade/function-fio-exit|.rst
 
-.. |function-fio-ftell| replace:: equivalent to C `ftell`. Returns current FILE pointer position.
+.. |handmade/function-fio-popen| replace:: to be documented in |handmade/function-fio-popen|.rst
 
-.. |function-fio-getchar| replace:: equivalent to C `getchar`. Reads and returns next character from standard input.
+.. |handmade/function-fio-popen_binary| replace:: to be documented in |handmade/function-fio-popen_binary|.rst
 
-.. |function-fio-exit| replace:: equivalent to C `exit`. Terminates program.
+.. |handmade/function-fio-get_full_file_name| replace:: to be documented in |handmade/function-fio-get_full_file_name|.rst
 
-.. |function-fio-popen| replace:: equivalent to linux `popen`. Opens pipe to command.
+.. |handmade/function-fio-get_env_variable| replace:: to be documented in |handmade/function-fio-get_env_variable|.rst
 
-.. |function-fio-get_full_file_name| replace:: returns full name of the file in normalized form.
+.. |handmade/function-fio-sanitize_command_line| replace:: to be documented in |handmade/function-fio-sanitize_command_line|.rst
 
-.. |variable-fio-seek_set| replace:: constant for `fseek` which sets the file pointer to the beginning of the file plus the offset.
+.. |handmade/function-fio-fload| replace:: to be documented in |handmade/function-fio-fload|.rst
 
-.. |variable-fio-seek_cur| replace:: constant for `fseek` which sets the file pointer to the current position of the file plus the offset.
+.. |handmade/function-fio-dir| replace:: to be documented in |handmade/function-fio-dir|.rst
 
-.. |variable-fio-seek_end| replace:: constant for `fseek` which sets the file pointer to the end of the file plus the offset.
+.. |handmade/function-fio-fsave| replace:: to be documented in |handmade/function-fio-fsave|.rst
 
-.. |function-fio-remove| replace:: deletes file specified by name
+.. |handmade/any_annotation-fio-FILE| replace:: to be documented in |handmade/any_annotation-fio-FILE|.rst
 
-.. |function-fio-fflush| replace:: equivalent to C `fflush`. Flushes FILE buffers.
+.. |handmade/structure_annotation-fio-FStat| replace:: to be documented in |handmade/structure_annotation-fio-FStat|.rst
 
-.. |function-fio-get_env_variable| replace:: returns value of the environment variable.
+.. |handmade/variable-fio-seek_set| replace:: to be documented in |handmade/variable-fio-seek_set|.rst
 
-.. |function-fio-sanitize_command_line| replace:: sanitizes command line arguments.
+.. |handmade/variable-fio-seek_cur| replace:: to be documented in |handmade/variable-fio-seek_cur|.rst
 
-.. |function-fio-rename| replace:: renames file.
+.. |handmade/variable-fio-seek_end| replace:: to be documented in |handmade/variable-fio-seek_end|.rst
 
-.. |function-fio-chdir| replace:: changes current directory.
+.. |handmade/variable-fio-df_magic| replace:: to be documented in |handmade/variable-fio-df_magic|.rst
 
-.. |function-fio-getcwd| replace:: returns current working directory.

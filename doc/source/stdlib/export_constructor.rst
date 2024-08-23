@@ -5,8 +5,6 @@
 Export constructor
 ==================
 
-.. include:: detail/export_constructor.rst
-
 The export_constructor module simplifies creation of Daslang structure and classes from C++ side.
 
 In the following example::

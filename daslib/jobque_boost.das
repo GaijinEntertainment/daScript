@@ -142,6 +142,9 @@ def pop_one ( channel:Channel?; blk:block<(res:auto(TT)#):void> )
 
 def pop_and_clone_one ( channel:Channel?; blk:block<(res:auto(TT)#):void> )
     //! reads one command from channel
+    //! :param channel: channel to read from
+    //! :param blk: block to invoke on the read value
+    //! :return: true if value was read, false if channel is empty
     var any = false
     var temp : TT-#-&-const
     _builtin_channel_pop(channel) <| $ ( vd )

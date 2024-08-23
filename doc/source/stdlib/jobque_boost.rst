@@ -5,8 +5,6 @@
 Boost package for jobs and threads
 ==================================
 
-.. include:: detail/jobque_boost.rst
-
 The JOBQUE boost module implements collection of helper macros and functions to accompany :ref:`JOBQUE <stdlib_jobque>`.
 
 All functions and symbols are in "jobque_boost" module, use require to get access to it. ::
@@ -22,27 +20,18 @@ Function annotations
 
 .. das:attribute:: NewJobMacro
 
-this macro handles `new_job` and `new_thread` calls.
-the call is replaced with `new_job_invoke` and `new_thread_invoke` accordingly.
-a cloning infastructure is generated for the lambda, which is invoked in the new context.
+|detail/function_annotation-jobque_boost-NewJobMacro|
 
 +++++++++++
 Invocations
 +++++++++++
 
-  *  :ref:`new_job (l:lambda\<\> -const) : void <function-_at_jobque_boost_c__c_new_job__at_>` 
-  *  :ref:`new_thread (l:lambda\<\> -const) : void <function-_at_jobque_boost_c__c_new_thread__at_>` 
+  *  :ref:`new_job (var l: lambda\<\>) <function-_at_jobque_boost_c__c_new_job__at_>` 
+  *  :ref:`new_thread (var l: lambda\<\>) <function-_at_jobque_boost_c__c_new_thread__at_>` 
 
 .. _function-_at_jobque_boost_c__c_new_job__at_:
 
 .. das:function:: new_job(l: lambda<>)
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+l       +lambda<>     +
-+--------+-------------+
-
 
 Create a new job.
     * new context is cloned from the current context.
@@ -50,16 +39,11 @@ Create a new job.
     * new job is added to the job queue.
     * once new job is invoked, lambda is invoked on the new context on the job thread.
 
+:Arguments: * **l** : lambda<void>
+
 .. _function-_at_jobque_boost_c__c_new_thread__at_:
 
 .. das:function:: new_thread(l: lambda<>)
-
-+--------+-------------+
-+argument+argument type+
-+========+=============+
-+l       +lambda<>     +
-+--------+-------------+
-
 
 Create a new thread
     * new context is cloned from the current context.
@@ -67,162 +51,112 @@ Create a new thread
     * new thread is created.
     * lambda is invoked on the new context on the new thread.
 
+:Arguments: * **l** : lambda<void>
+
 +++++++++
 Iteration
 +++++++++
 
-  *  :ref:`for_each (channel:jobque::Channel? const;blk:block\<(res:auto(TT) const#):void\> const) : auto <function-_at_jobque_boost_c__c_for_each_C1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm__CN_ls_res_gr_0_ls_C_hh_Y_ls_TT_gr_._gr_1_ls_v_gr__builtin_>` 
-  *  :ref:`each (channel:jobque::Channel? -const;tinfo:auto(TT) const) : auto <function-_at_jobque_boost_c__c_each_1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm__CY_ls_TT_gr_.>` 
+  *  :ref:`for_each (channel: Channel?; blk: block\<(res:auto(TT) const#):void\>) : auto <function-_at_jobque_boost_c__c_for_each_C1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm__CN_ls_res_gr_0_ls_C_hh_Y_ls_TT_gr__dot__gr_1_ls_v_gr__builtin_>` 
+  *  :ref:`each (var channel: Channel?; tinfo: auto(TT)) : auto <function-_at_jobque_boost_c__c_each_1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm__CY_ls_TT_gr__dot_>` 
 
-.. _function-_at_jobque_boost_c__c_for_each_C1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm__CN_ls_res_gr_0_ls_C_hh_Y_ls_TT_gr_._gr_1_ls_v_gr__builtin_:
+.. _function-_at_jobque_boost_c__c_for_each_C1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm__CN_ls_res_gr_0_ls_C_hh_Y_ls_TT_gr__dot__gr_1_ls_v_gr__builtin_:
 
-.. das:function:: for_each(channel: Channel? const; blk: block<(res:auto(TT) const#):void> const)
-
-for_each returns auto
+.. das:function:: for_each(channel: Channel?; blk: block<(res:auto(TT) const#):void>) : auto
 
 .. warning:: 
   This function is deprecated.
-
-+--------+-------------------------------------------------------+
-+argument+argument type                                          +
-+========+=======================================================+
-+channel + :ref:`jobque::Channel <handle-jobque-Channel>` ? const+
-+--------+-------------------------------------------------------+
-+blk     +block<(res:auto(TT) const#):void> const                +
-+--------+-------------------------------------------------------+
-
 
 reads input from the channel (in order it was pushed) and invokes the block on each input.
 stops once channel is depleted (internal entry counter is 0)
 this can happen on multiple threads or jobs at the same time.
 
-.. _function-_at_jobque_boost_c__c_each_1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm__CY_ls_TT_gr_.:
+:Arguments: * **channel** :  :ref:`Channel <handle-jobque-Channel>` ?
 
-.. das:function:: each(channel: Channel?; tinfo: auto(TT) const)
+            * **blk** : block<(res:auto(TT)#):void>
 
-each returns auto
+.. _function-_at_jobque_boost_c__c_each_1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm__CY_ls_TT_gr__dot_:
+
+.. das:function:: each(channel: Channel?; tinfo: auto(TT)) : auto
 
 .. warning:: 
   This function is deprecated.
-
-+--------+-------------------------------------------------+
-+argument+argument type                                    +
-+========+=================================================+
-+channel + :ref:`jobque::Channel <handle-jobque-Channel>` ?+
-+--------+-------------------------------------------------+
-+tinfo   +auto(TT) const                                   +
-+--------+-------------------------------------------------+
-
 
 this iterator is used to iterate over the channel in order it was pushed.
 iterator stops once channel is depleted (internal entry counter is 0)
 iteration can happen on multiple threads or jobs at the same time.
 
+:Arguments: * **channel** :  :ref:`Channel <handle-jobque-Channel>` ?
+
+            * **tinfo** : auto(TT)
+
 ++++++++++++
 Passing data
 ++++++++++++
 
-  *  :ref:`push_clone (channel:jobque::Channel? const;data:auto(TT) const) : auto <function-_at_jobque_boost_c__c_push_clone_C1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm__CY_ls_TT_gr_.>` 
-  *  :ref:`push (channel:jobque::Channel? const;data:auto? const) : auto <function-_at_jobque_boost_c__c_push_C1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm__C1_ls_._gr__qm_>` 
+  *  :ref:`push_clone (channel: Channel?; data: auto(TT)) : auto <function-_at_jobque_boost_c__c_push_clone_C1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm__CY_ls_TT_gr__dot_>` 
+  *  :ref:`push (channel: Channel?; data: auto?) : auto <function-_at_jobque_boost_c__c_push_C1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm__C1_ls__dot__gr__qm_>` 
 
-.. _function-_at_jobque_boost_c__c_push_clone_C1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm__CY_ls_TT_gr_.:
+.. _function-_at_jobque_boost_c__c_push_clone_C1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm__CY_ls_TT_gr__dot_:
 
-.. das:function:: push_clone(channel: Channel? const; data: auto(TT) const)
-
-push_clone returns auto
-
-+--------+-------------------------------------------------------+
-+argument+argument type                                          +
-+========+=======================================================+
-+channel + :ref:`jobque::Channel <handle-jobque-Channel>` ? const+
-+--------+-------------------------------------------------------+
-+data    +auto(TT) const                                         +
-+--------+-------------------------------------------------------+
-
+.. das:function:: push_clone(channel: Channel?; data: auto(TT)) : auto
 
 clones data and pushed value to the channel (at the end)
 
-.. _function-_at_jobque_boost_c__c_push_C1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm__C1_ls_._gr__qm_:
+:Arguments: * **channel** :  :ref:`Channel <handle-jobque-Channel>` ?
 
-.. das:function:: push(channel: Channel? const; data: auto? const)
+            * **data** : auto(TT)
 
-push returns auto
+.. _function-_at_jobque_boost_c__c_push_C1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm__C1_ls__dot__gr__qm_:
 
-+--------+-------------------------------------------------------+
-+argument+argument type                                          +
-+========+=======================================================+
-+channel + :ref:`jobque::Channel <handle-jobque-Channel>` ? const+
-+--------+-------------------------------------------------------+
-+data    +auto? const                                            +
-+--------+-------------------------------------------------------+
-
+.. das:function:: push(channel: Channel?; data: auto?) : auto
 
 pushes value to the channel (at the end)
+
+:Arguments: * **channel** :  :ref:`Channel <handle-jobque-Channel>` ?
+
+            * **data** : auto?
 
 ++++++++++++++++++++++++
 Internal capture details
 ++++++++++++++++++++++++
 
-  *  :ref:`capture_jobque_channel (ch:jobque::Channel? const) : jobque::Channel? <function-_at_jobque_boost_c__c_capture_jobque_channel_C1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm_>` 
-  *  :ref:`capture_jobque_job_status (js:jobque::JobStatus? const) : jobque::JobStatus? <function-_at_jobque_boost_c__c_capture_jobque_job_status_C1_ls_H_ls_jobque_c__c_JobStatus_gr__gr__qm_>` 
-  *  :ref:`release_capture_jobque_channel (ch:jobque::Channel? const) : void <function-_at_jobque_boost_c__c_release_capture_jobque_channel_C1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm_>` 
-  *  :ref:`release_capture_jobque_job_status (js:jobque::JobStatus? const) : void <function-_at_jobque_boost_c__c_release_capture_jobque_job_status_C1_ls_H_ls_jobque_c__c_JobStatus_gr__gr__qm_>` 
+  *  :ref:`capture_jobque_channel (ch: Channel?) : Channel? <function-_at_jobque_boost_c__c_capture_jobque_channel_C1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm_>` 
+  *  :ref:`capture_jobque_job_status (js: JobStatus?) : JobStatus? <function-_at_jobque_boost_c__c_capture_jobque_job_status_C1_ls_H_ls_jobque_c__c_JobStatus_gr__gr__qm_>` 
+  *  :ref:`release_capture_jobque_channel (ch: Channel?) <function-_at_jobque_boost_c__c_release_capture_jobque_channel_C1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm_>` 
+  *  :ref:`release_capture_jobque_job_status (js: JobStatus?) <function-_at_jobque_boost_c__c_release_capture_jobque_job_status_C1_ls_H_ls_jobque_c__c_JobStatus_gr__gr__qm_>` 
 
 .. _function-_at_jobque_boost_c__c_capture_jobque_channel_C1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm_:
 
-.. das:function:: capture_jobque_channel(ch: Channel? const)
-
-capture_jobque_channel returns  :ref:`jobque::Channel <handle-jobque-Channel>` ?
-
-+--------+-------------------------------------------------------+
-+argument+argument type                                          +
-+========+=======================================================+
-+ch      + :ref:`jobque::Channel <handle-jobque-Channel>` ? const+
-+--------+-------------------------------------------------------+
-
+.. das:function:: capture_jobque_channel(ch: Channel?) : Channel?
 
 this function is used to capture a channel that is used by the jobque.
 
+:Arguments: * **ch** :  :ref:`Channel <handle-jobque-Channel>` ?
+
 .. _function-_at_jobque_boost_c__c_capture_jobque_job_status_C1_ls_H_ls_jobque_c__c_JobStatus_gr__gr__qm_:
 
-.. das:function:: capture_jobque_job_status(js: JobStatus? const)
-
-capture_jobque_job_status returns  :ref:`jobque::JobStatus <handle-jobque-JobStatus>` ?
-
-+--------+-----------------------------------------------------------+
-+argument+argument type                                              +
-+========+===========================================================+
-+js      + :ref:`jobque::JobStatus <handle-jobque-JobStatus>` ? const+
-+--------+-----------------------------------------------------------+
-
+.. das:function:: capture_jobque_job_status(js: JobStatus?) : JobStatus?
 
 this function is used to capture a job status that is used by the jobque.
 
+:Arguments: * **js** :  :ref:`JobStatus <handle-jobque-JobStatus>` ?
+
 .. _function-_at_jobque_boost_c__c_release_capture_jobque_channel_C1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm_:
 
-.. das:function:: release_capture_jobque_channel(ch: Channel? const)
-
-+--------+-------------------------------------------------------+
-+argument+argument type                                          +
-+========+=======================================================+
-+ch      + :ref:`jobque::Channel <handle-jobque-Channel>` ? const+
-+--------+-------------------------------------------------------+
-
+.. das:function:: release_capture_jobque_channel(ch: Channel?)
 
 this function is used to release a channel that is used by the jobque.
 
+:Arguments: * **ch** :  :ref:`Channel <handle-jobque-Channel>` ?
+
 .. _function-_at_jobque_boost_c__c_release_capture_jobque_job_status_C1_ls_H_ls_jobque_c__c_JobStatus_gr__gr__qm_:
 
-.. das:function:: release_capture_jobque_job_status(js: JobStatus? const)
-
-+--------+-----------------------------------------------------------+
-+argument+argument type                                              +
-+========+===========================================================+
-+js      + :ref:`jobque::JobStatus <handle-jobque-JobStatus>` ? const+
-+--------+-----------------------------------------------------------+
-
+.. das:function:: release_capture_jobque_job_status(js: JobStatus?)
 
 this function is used to release a job status that is used by the jobque.
+
+:Arguments: * **js** :  :ref:`JobStatus <handle-jobque-JobStatus>` ?
 
 +++++++++++++
 Uncategorized
@@ -230,298 +164,185 @@ Uncategorized
 
 .. _function-_at_jobque_boost_c__c_capture_jobque_lock_box_C1_ls_H_ls_jobque_c__c_LockBox_gr__gr__qm_:
 
-.. das:function:: capture_jobque_lock_box(js: LockBox? const)
-
-capture_jobque_lock_box returns  :ref:`jobque::LockBox <handle-jobque-LockBox>` ?
-
-+--------+-------------------------------------------------------+
-+argument+argument type                                          +
-+========+=======================================================+
-+js      + :ref:`jobque::LockBox <handle-jobque-LockBox>` ? const+
-+--------+-------------------------------------------------------+
-
+.. das:function:: capture_jobque_lock_box(js: LockBox?) : LockBox?
 
 this function is used to capture a lock box that is used by the jobque.
 
+:Arguments: * **js** :  :ref:`LockBox <handle-jobque-LockBox>` ?
+
 .. _function-_at_jobque_boost_c__c_release_capture_jobque_lock_box_C1_ls_H_ls_jobque_c__c_LockBox_gr__gr__qm_:
 
-.. das:function:: release_capture_jobque_lock_box(js: LockBox? const)
-
-+--------+-------------------------------------------------------+
-+argument+argument type                                          +
-+========+=======================================================+
-+js      + :ref:`jobque::LockBox <handle-jobque-LockBox>` ? const+
-+--------+-------------------------------------------------------+
-
+.. das:function:: release_capture_jobque_lock_box(js: LockBox?)
 
 this function is used to release a lock box that is used by the jobque.
 
-.. _function-_at_jobque_boost_c__c_gather_C1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm__CN_ls_arg_gr_0_ls_C_hh_Y_ls_TT_gr_._gr_1_ls_v_gr__builtin_:
+:Arguments: * **js** :  :ref:`LockBox <handle-jobque-LockBox>` ?
 
-.. das:function:: gather(ch: Channel? const; blk: block<(arg:auto(TT) const#):void> const)
+.. _function-_at_jobque_boost_c__c_gather_C1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm__CN_ls_arg_gr_0_ls_C_hh_Y_ls_TT_gr__dot__gr_1_ls_v_gr__builtin_:
 
-gather returns auto
-
-+--------+-------------------------------------------------------+
-+argument+argument type                                          +
-+========+=======================================================+
-+ch      + :ref:`jobque::Channel <handle-jobque-Channel>` ? const+
-+--------+-------------------------------------------------------+
-+blk     +block<(arg:auto(TT) const#):void> const                +
-+--------+-------------------------------------------------------+
-
+.. das:function:: gather(ch: Channel?; blk: block<(arg:auto(TT) const#):void>) : auto
 
 reads input from the channel (in order it was pushed) and invokes the block on each input.
 afterwards input is consumed
 
-.. _function-_at_jobque_boost_c__c_gather_ex_C1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm__CN_ls_arg;info;ctx_gr_0_ls_C_hh_Y_ls_TT_gr_.;C1_ls_CH_ls_rtti_c__c_TypeInfo_gr__gr__qm_;H_ls_rtti_c__c_Context_gr__gr_1_ls_v_gr__builtin_:
+:Arguments: * **ch** :  :ref:`Channel <handle-jobque-Channel>` ?
 
-.. das:function:: gather_ex(ch: Channel? const; blk: block<(arg:auto(TT) const#;info:TypeInfo const? const;var ctx:Context):void> const)
+            * **blk** : block<(arg:auto(TT)#):void>
 
-gather_ex returns auto
+.. _function-_at_jobque_boost_c__c_gather_ex_C1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm__CN_ls_arg;info;ctx_gr_0_ls_C_hh_Y_ls_TT_gr__dot_;C1_ls_CH_ls_rtti_c__c_TypeInfo_gr__gr__qm_;H_ls_rtti_c__c_Context_gr__gr_1_ls_v_gr__builtin_:
 
-+--------+---------------------------------------------------------------------------------------------------------------------------------------------------------+
-+argument+argument type                                                                                                                                            +
-+========+=========================================================================================================================================================+
-+ch      + :ref:`jobque::Channel <handle-jobque-Channel>` ? const                                                                                                  +
-+--------+---------------------------------------------------------------------------------------------------------------------------------------------------------+
-+blk     +block<(arg:auto(TT) const#;info: :ref:`rtti::TypeInfo <handle-rtti-TypeInfo>`  const? const;ctx: :ref:`rtti::Context <handle-rtti-Context>` ):void> const+
-+--------+---------------------------------------------------------------------------------------------------------------------------------------------------------+
-
+.. das:function:: gather_ex(ch: Channel?; blk: block<(arg:auto(TT) const#;info:TypeInfo const? const;var ctx:Context):void>) : auto
 
 reads input from the channel (in order it was pushed) and invokes the block on each input.
 afterwards input is consumed
 
-.. _function-_at_jobque_boost_c__c_gather_and_forward_C1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm__C1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm__CN_ls_arg_gr_0_ls_C_hh_Y_ls_TT_gr_._gr_1_ls_v_gr__builtin_:
+:Arguments: * **ch** :  :ref:`Channel <handle-jobque-Channel>` ?
 
-.. das:function:: gather_and_forward(ch: Channel? const; toCh: Channel? const; blk: block<(arg:auto(TT) const#):void> const)
+            * **blk** : block<(arg:auto(TT)#;info: :ref:`TypeInfo <handle-rtti-TypeInfo>` ?;ctx: :ref:`Context <handle-rtti-Context>` ):void>
 
-gather_and_forward returns auto
+.. _function-_at_jobque_boost_c__c_gather_and_forward_C1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm__C1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm__CN_ls_arg_gr_0_ls_C_hh_Y_ls_TT_gr__dot__gr_1_ls_v_gr__builtin_:
 
-+--------+-------------------------------------------------------+
-+argument+argument type                                          +
-+========+=======================================================+
-+ch      + :ref:`jobque::Channel <handle-jobque-Channel>` ? const+
-+--------+-------------------------------------------------------+
-+toCh    + :ref:`jobque::Channel <handle-jobque-Channel>` ? const+
-+--------+-------------------------------------------------------+
-+blk     +block<(arg:auto(TT) const#):void> const                +
-+--------+-------------------------------------------------------+
-
+.. das:function:: gather_and_forward(ch: Channel?; toCh: Channel?; blk: block<(arg:auto(TT) const#):void>) : auto
 
 reads input from the channel (in order it was pushed) and invokes the block on each input.
 afterwards input is consumed
 
-.. _function-_at_jobque_boost_c__c_peek_C1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm__CN_ls_arg_gr_0_ls_C_hh_Y_ls_TT_gr_._gr_1_ls_v_gr__builtin_:
+:Arguments: * **ch** :  :ref:`Channel <handle-jobque-Channel>` ?
 
-.. das:function:: peek(ch: Channel? const; blk: block<(arg:auto(TT) const#):void> const)
+            * **toCh** :  :ref:`Channel <handle-jobque-Channel>` ?
 
-peek returns auto
+            * **blk** : block<(arg:auto(TT)#):void>
 
-+--------+-------------------------------------------------------+
-+argument+argument type                                          +
-+========+=======================================================+
-+ch      + :ref:`jobque::Channel <handle-jobque-Channel>` ? const+
-+--------+-------------------------------------------------------+
-+blk     +block<(arg:auto(TT) const#):void> const                +
-+--------+-------------------------------------------------------+
+.. _function-_at_jobque_boost_c__c_peek_C1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm__CN_ls_arg_gr_0_ls_C_hh_Y_ls_TT_gr__dot__gr_1_ls_v_gr__builtin_:
 
+.. das:function:: peek(ch: Channel?; blk: block<(arg:auto(TT) const#):void>) : auto
 
 reads input from the channel (in order it was pushed) and invokes the block on each input.
 afterwards input is not consumed
 
-.. _function-_at_jobque_boost_c__c_for_each_clone_C1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm__CN_ls_res_gr_0_ls_C_hh_Y_ls_TT_gr_._gr_1_ls_v_gr__builtin_:
+:Arguments: * **ch** :  :ref:`Channel <handle-jobque-Channel>` ?
 
-.. das:function:: for_each_clone(channel: Channel? const; blk: block<(res:auto(TT) const#):void> const)
+            * **blk** : block<(arg:auto(TT)#):void>
 
-for_each_clone returns auto
+.. _function-_at_jobque_boost_c__c_for_each_clone_C1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm__CN_ls_res_gr_0_ls_C_hh_Y_ls_TT_gr__dot__gr_1_ls_v_gr__builtin_:
 
-+--------+-------------------------------------------------------+
-+argument+argument type                                          +
-+========+=======================================================+
-+channel + :ref:`jobque::Channel <handle-jobque-Channel>` ? const+
-+--------+-------------------------------------------------------+
-+blk     +block<(res:auto(TT) const#):void> const                +
-+--------+-------------------------------------------------------+
-
+.. das:function:: for_each_clone(channel: Channel?; blk: block<(res:auto(TT) const#):void>) : auto
 
 reads input from the channel (in order it was pushed) and invokes the block on each input.
 stops once channel is depleted (internal entry counter is 0)
 this can happen on multiple threads or jobs at the same time.
 
-.. _function-_at_jobque_boost_c__c_pop_one_C1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm__CN_ls_res_gr_0_ls_C_hh_Y_ls_TT_gr_._gr_1_ls_v_gr__builtin_:
+:Arguments: * **channel** :  :ref:`Channel <handle-jobque-Channel>` ?
 
-.. das:function:: pop_one(channel: Channel? const; blk: block<(res:auto(TT) const#):void> const)
+            * **blk** : block<(res:auto(TT)#):void>
 
-pop_one returns auto
+.. _function-_at_jobque_boost_c__c_pop_one_C1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm__CN_ls_res_gr_0_ls_C_hh_Y_ls_TT_gr__dot__gr_1_ls_v_gr__builtin_:
+
+.. das:function:: pop_one(channel: Channel?; blk: block<(res:auto(TT) const#):void>) : auto
 
 .. warning:: 
   This function is deprecated.
 
-+--------+-------------------------------------------------------+
-+argument+argument type                                          +
-+========+=======================================================+
-+channel + :ref:`jobque::Channel <handle-jobque-Channel>` ? const+
-+--------+-------------------------------------------------------+
-+blk     +block<(res:auto(TT) const#):void> const                +
-+--------+-------------------------------------------------------+
+reads one command from channel
 
+:Arguments: * **channel** :  :ref:`Channel <handle-jobque-Channel>` ?
+
+            * **blk** : block<(res:auto(TT)#):void>
+
+.. _function-_at_jobque_boost_c__c_pop_and_clone_one_C1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm__CN_ls_res_gr_0_ls_C_hh_Y_ls_TT_gr__dot__gr_1_ls_v_gr__builtin_:
+
+.. das:function:: pop_and_clone_one(channel: Channel?; blk: block<(res:auto(TT) const#):void>) : auto
 
 reads one command from channel
 
-.. _function-_at_jobque_boost_c__c_pop_and_clone_one_C1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm__CN_ls_res_gr_0_ls_C_hh_Y_ls_TT_gr_._gr_1_ls_v_gr__builtin_:
 
-.. das:function:: pop_and_clone_one(channel: Channel? const; blk: block<(res:auto(TT) const#):void> const)
+:Arguments: * **channel** :  :ref:`Channel <handle-jobque-Channel>` ? -  channel to read from
 
-pop_and_clone_one returns auto
-
-+--------+-------------------------------------------------------+
-+argument+argument type                                          +
-+========+=======================================================+
-+channel + :ref:`jobque::Channel <handle-jobque-Channel>` ? const+
-+--------+-------------------------------------------------------+
-+blk     +block<(res:auto(TT) const#):void> const                +
-+--------+-------------------------------------------------------+
+            * **blk** : block<(res:auto(TT)#):void> -  block to invoke on the read value
 
 
-reads one command from channel
+:return: true if value was read, false if channel is empty
 
-.. _function-_at_jobque_boost_c__c_push_batch_clone_C1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm__C1_ls_Y_ls_TT_gr_._gr_A:
+.. _function-_at_jobque_boost_c__c_push_batch_clone_C1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm__C1_ls_Y_ls_TT_gr__dot__gr_A:
 
-.. das:function:: push_batch_clone(channel: Channel? const; data: array<auto(TT)> const)
-
-push_batch_clone returns auto
-
-+--------+-------------------------------------------------------+
-+argument+argument type                                          +
-+========+=======================================================+
-+channel + :ref:`jobque::Channel <handle-jobque-Channel>` ? const+
-+--------+-------------------------------------------------------+
-+data    +array<auto(TT)> const                                  +
-+--------+-------------------------------------------------------+
-
+.. das:function:: push_batch_clone(channel: Channel?; data: array<auto(TT)>) : auto
 
 clones data and pushed values to the channel (at the end)
 
-.. _function-_at_jobque_boost_c__c_push_batch_C1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm__C1_ls_1_ls_._gr__qm__gr_A:
+:Arguments: * **channel** :  :ref:`Channel <handle-jobque-Channel>` ?
 
-.. das:function:: push_batch(channel: Channel? const; data: array<auto?> const)
+            * **data** : array<auto(TT)>
 
-push_batch returns auto
+.. _function-_at_jobque_boost_c__c_push_batch_C1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm__C1_ls_1_ls__dot__gr__qm__gr_A:
 
-+--------+-------------------------------------------------------+
-+argument+argument type                                          +
-+========+=======================================================+
-+channel + :ref:`jobque::Channel <handle-jobque-Channel>` ? const+
-+--------+-------------------------------------------------------+
-+data    +array<auto?> const                                     +
-+--------+-------------------------------------------------------+
-
+.. das:function:: push_batch(channel: Channel?; data: array<auto?>) : auto
 
 pushes values to the channel (at the end)
 
-.. _function-_at_jobque_boost_c__c_set_C1_ls_H_ls_jobque_c__c_LockBox_gr__gr__qm__CY_ls_TT_gr_.:
+:Arguments: * **channel** :  :ref:`Channel <handle-jobque-Channel>` ?
 
-.. das:function:: set(box: LockBox? const; data: auto(TT) const)
+            * **data** : array<auto?>
 
-set returns auto
+.. _function-_at_jobque_boost_c__c_set_C1_ls_H_ls_jobque_c__c_LockBox_gr__gr__qm__CY_ls_TT_gr__dot_:
 
-+--------+-------------------------------------------------------+
-+argument+argument type                                          +
-+========+=======================================================+
-+box     + :ref:`jobque::LockBox <handle-jobque-LockBox>` ? const+
-+--------+-------------------------------------------------------+
-+data    +auto(TT) const                                         +
-+--------+-------------------------------------------------------+
+.. das:function:: set(box: LockBox?; data: auto(TT)) : auto
 
+clones data and sets value to the lock box
 
-sets value to the lock box
+:Arguments: * **box** :  :ref:`LockBox <handle-jobque-LockBox>` ?
 
-.. _function-_at_jobque_boost_c__c_set_C1_ls_H_ls_jobque_c__c_LockBox_gr__gr__qm__C1_ls_._gr__qm_:
+            * **data** : auto(TT)
 
-.. das:function:: set(box: LockBox? const; data: auto? const)
+.. _function-_at_jobque_boost_c__c_set_C1_ls_H_ls_jobque_c__c_LockBox_gr__gr__qm__C1_ls__dot__gr__qm_:
 
-set returns auto
-
-+--------+-------------------------------------------------------+
-+argument+argument type                                          +
-+========+=======================================================+
-+box     + :ref:`jobque::LockBox <handle-jobque-LockBox>` ? const+
-+--------+-------------------------------------------------------+
-+data    +auto? const                                            +
-+--------+-------------------------------------------------------+
-
+.. das:function:: set(box: LockBox?; data: auto?) : auto
 
 sets value to the lock box
 
-.. _function-_at_jobque_boost_c__c_get_C1_ls_H_ls_jobque_c__c_LockBox_gr__gr__qm__CN_ls_res_gr_0_ls_C_hh_Y_ls_TT_gr_._gr_1_ls_v_gr__builtin_:
+:Arguments: * **box** :  :ref:`LockBox <handle-jobque-LockBox>` ?
 
-.. das:function:: get(box: LockBox? const; blk: block<(res:auto(TT) const#):void> const)
+            * **data** : auto?
 
-get returns auto
+.. _function-_at_jobque_boost_c__c_get_C1_ls_H_ls_jobque_c__c_LockBox_gr__gr__qm__CN_ls_res_gr_0_ls_C_hh_Y_ls_TT_gr__dot__gr_1_ls_v_gr__builtin_:
 
-+--------+-------------------------------------------------------+
-+argument+argument type                                          +
-+========+=======================================================+
-+box     + :ref:`jobque::LockBox <handle-jobque-LockBox>` ? const+
-+--------+-------------------------------------------------------+
-+blk     +block<(res:auto(TT) const#):void> const                +
-+--------+-------------------------------------------------------+
-
+.. das:function:: get(box: LockBox?; blk: block<(res:auto(TT) const#):void>) : auto
 
 reads value from the lock box and invokes the block on it
 
-.. _function-_at_jobque_boost_c__c_update_C1_ls_H_ls_jobque_c__c_LockBox_gr__gr__qm__CN_ls_res_gr_0_ls__hh_Y_ls_TT_gr_._gr_1_ls_v_gr__builtin_:
+:Arguments: * **box** :  :ref:`LockBox <handle-jobque-LockBox>` ?
 
-.. das:function:: update(box: LockBox? const; blk: block<(var res:auto(TT)#):void> const)
+            * **blk** : block<(res:auto(TT)#):void>
 
-update returns auto
+.. _function-_at_jobque_boost_c__c_update_C1_ls_H_ls_jobque_c__c_LockBox_gr__gr__qm__CN_ls_res_gr_0_ls__hh_Y_ls_TT_gr__dot__gr_1_ls_v_gr__builtin_:
 
-+--------+-------------------------------------------------------+
-+argument+argument type                                          +
-+========+=======================================================+
-+box     + :ref:`jobque::LockBox <handle-jobque-LockBox>` ? const+
-+--------+-------------------------------------------------------+
-+blk     +block<(res:auto(TT)#):void> const                      +
-+--------+-------------------------------------------------------+
-
+.. das:function:: update(box: LockBox?; blk: block<(var res:auto(TT)#):void>) : auto
 
 update value in the lock box and invokes the block on it
 
-.. _function-_at_jobque_boost_c__c_clear_C1_ls_H_ls_jobque_c__c_LockBox_gr__gr__qm__CY_ls_TT_gr_.:
+:Arguments: * **box** :  :ref:`LockBox <handle-jobque-LockBox>` ?
 
-.. das:function:: clear(box: LockBox? const; type_: auto(TT) const)
+            * **blk** : block<(res:auto(TT)#):void>
 
-clear returns auto
+.. _function-_at_jobque_boost_c__c_clear_C1_ls_H_ls_jobque_c__c_LockBox_gr__gr__qm__CY_ls_TT_gr__dot_:
 
-+--------+-------------------------------------------------------+
-+argument+argument type                                          +
-+========+=======================================================+
-+box     + :ref:`jobque::LockBox <handle-jobque-LockBox>` ? const+
-+--------+-------------------------------------------------------+
-+type_   +auto(TT) const                                         +
-+--------+-------------------------------------------------------+
-
+.. das:function:: clear(box: LockBox?; type_: auto(TT)) : auto
 
 clear value from the lock box
 
-.. _function-_at_jobque_boost_c__c_each_clone_1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm__CY_ls_TT_gr_.:
+:Arguments: * **box** :  :ref:`LockBox <handle-jobque-LockBox>` ?
 
-.. das:function:: each_clone(channel: Channel?; tinfo: auto(TT) const)
+            * **type_** : auto(TT)
 
-each_clone returns auto
+.. _function-_at_jobque_boost_c__c_each_clone_1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm__CY_ls_TT_gr__dot_:
 
-+--------+-------------------------------------------------+
-+argument+argument type                                    +
-+========+=================================================+
-+channel + :ref:`jobque::Channel <handle-jobque-Channel>` ?+
-+--------+-------------------------------------------------+
-+tinfo   +auto(TT) const                                   +
-+--------+-------------------------------------------------+
-
+.. das:function:: each_clone(channel: Channel?; tinfo: auto(TT)) : auto
 
 this iterator is used to iterate over the channel in order it was pushed.
 iterator stops once channel is depleted (internal entry counter is 0)
 iteration can happen on multiple threads or jobs at the same time.
+
+:Arguments: * **channel** :  :ref:`Channel <handle-jobque-Channel>` ?
+
+            * **tinfo** : auto(TT)
 
 

@@ -5,8 +5,6 @@
 Interfaces
 ==========
 
-.. include:: detail/interfaces.rst
-
 The interface module implements [interface] pattern, which allows classes to expose multiple interfaces.
 
 All functions and symbols are in "interfaces" module, use require to get access to it. ::

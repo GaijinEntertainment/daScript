@@ -1,47 +1,46 @@
-.. |class-network-Server| replace:: Single socket listener combined with single socket connection.
+.. |handmade/class-network-Server| replace:: to be documented in |handmade/class-network-Server|.rst
 
-.. |method-network-Server.init| replace:: Initializes server with specific port
+.. |handmade/method-network-Server.make_server_adapter| replace:: to be documented in |handmade/method-network-Server.make_server_adapter|.rst
 
-.. |method-network-Server.restore| replace:: Restore server state from after the context switch.
+.. |handmade/method-network-Server.init| replace:: to be documented in |handmade/method-network-Server.init|.rst
 
-.. |method-network-Server.save| replace:: Saves server to orphaned state to support context switching and live reloading. The idea is that server is saved to the orphaned state, which is not part of the context state.
+.. |handmade/method-network-Server.restore| replace:: to be documented in |handmade/method-network-Server.restore|.rst
 
-.. |method-network-Server.has_session| replace:: Returns true if network session already exists. This is used to determine if the server should be initialized or not.
+.. |handmade/method-network-Server.save| replace:: to be documented in |handmade/method-network-Server.save|.rst
 
-.. |method-network-Server.is_open| replace:: Returns true if server is listening to the port.
+.. |handmade/method-network-Server.has_session| replace:: to be documented in |handmade/method-network-Server.has_session|.rst
 
-.. |method-network-Server.is_connected| replace:: Returns true if server is connected to the client.
+.. |handmade/method-network-Server.is_open| replace:: to be documented in |handmade/method-network-Server.is_open|.rst
 
-.. |method-network-Server.tick| replace:: This needs to be called periodically to support the server communication and connections.
+.. |handmade/method-network-Server.is_connected| replace:: to be documented in |handmade/method-network-Server.is_connected|.rst
 
-.. |method-network-Server.send| replace:: Send data.
+.. |handmade/method-network-Server.tick| replace:: to be documented in |handmade/method-network-Server.tick|.rst
 
-.. |method-network-Server.onConnect| replace:: This callback is called when server accepts the connection.
+.. |handmade/method-network-Server.send| replace:: to be documented in |handmade/method-network-Server.send|.rst
 
-.. |method-network-Server.onDisconnect| replace:: This callback is called when server or client drops the connection.
+.. |handmade/method-network-Server.onConnect| replace:: to be documented in |handmade/method-network-Server.onConnect|.rst
 
-.. |method-network-Server.onData| replace:: This callback is called when data is received from the client.
+.. |handmade/method-network-Server.onDisconnect| replace:: to be documented in |handmade/method-network-Server.onDisconnect|.rst
 
-.. |method-network-Server.onError| replace:: This callback is called on any error.
+.. |handmade/method-network-Server.onData| replace:: to be documented in |handmade/method-network-Server.onData|.rst
 
-.. |method-network-Server.onLog| replace:: This is how server logs are printed.
+.. |handmade/method-network-Server.onError| replace:: to be documented in |handmade/method-network-Server.onError|.rst
 
-.. |function-network-make_server| replace:: Creates new instance of the server.
+.. |handmade/method-network-Server.onLog| replace:: to be documented in |handmade/method-network-Server.onLog|.rst
 
-.. |function-network-server_init| replace:: Initializes server with given port.
+.. |handmade/function-network-make_server| replace:: to be documented in |handmade/function-network-make_server|.rst
 
-.. |function-network-server_is_connected| replace:: Returns true if server is connected to the client.
+.. |handmade/function-network-server_init| replace:: to be documented in |handmade/function-network-server_init|.rst
 
-.. |function-network-server_is_open| replace:: Returns true if server is listening to the port.
+.. |handmade/function-network-server_is_open| replace:: to be documented in |handmade/function-network-server_is_open|.rst
 
-.. |function-network-server_restore| replace:: Restores server from orphaned state.
+.. |handmade/function-network-server_is_connected| replace:: to be documented in |handmade/function-network-server_is_connected|.rst
 
-.. |function-network-server_send| replace:: Sends data from server to the client.
+.. |handmade/function-network-server_tick| replace:: to be documented in |handmade/function-network-server_tick|.rst
 
-.. |function-network-server_tick| replace:: This needs to be called periodically for the server to work.
+.. |handmade/function-network-server_send| replace:: to be documented in |handmade/function-network-server_send|.rst
 
-.. |structure_annotation-network-NetworkServer| replace:: Base impliemntation of the server.
+.. |handmade/function-network-server_restore| replace:: to be documented in |handmade/function-network-server_restore|.rst
 
-.. |method-network-Server.make_server_adapter| replace:: Creates new instance of the server adapter. Adapter is responsible for communicating with the Server class.
-
+.. |handmade/structure_annotation-network-NetworkServer| replace:: to be documented in |handmade/structure_annotation-network-NetworkServer|.rst
 
