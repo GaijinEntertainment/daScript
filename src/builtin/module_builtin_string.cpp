@@ -524,7 +524,7 @@ namespace das
 
     class StrdupDataWalker : public DataWalker {
         virtual void String ( char * & str ) {
-            if (str) str = strdup(str);
+            if (str) str = _strdup(str);
         }
     };
 

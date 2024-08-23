@@ -123,7 +123,7 @@
             return LoadLibraryA(fileName);
         }
         void * getFunctionAddress ( void * module, const char * func ) {
-            return GetProcAddress(HMODULE(module),func);
+            return (void*)GetProcAddress(HMODULE(module),func);
         }
         void * getLibraryHandle ( const char * moduleName ) {
             return GetModuleHandleA(moduleName);
@@ -567,9 +567,11 @@ namespace das {
                 } else {
                     g_dasRoot = get_prefix(ep);     // remove bin
                 }
+                #ifdef DAS_INSTALL_BINDIR
                 if ( ep == DAS_INSTALL_BINDIR ) {
                     g_dasRoot = DAS_INSTALL_DATADIR;
                 }
+                #endif
             } else {
                 g_dasRoot = ".";
             }

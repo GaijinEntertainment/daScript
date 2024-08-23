@@ -220,7 +220,7 @@ namespace das {
     void builtin_map_file(const FILE* f, const TBlock<void, TTemporary<TArray<uint8_t>>>& blk, Context* context, LineInfoArg * at) {
         if ( !f ) context->throw_error_at(at, "can't map NULL file");
         struct stat st;
-        int fd = fileno((FILE *)f);
+        int fd = _fileno((FILE *)f);
         fstat(fd, &st);
         void* data = mmap(nullptr, st.st_size, PROT_READ, MAP_SHARED, fd, 0);
         Array arr;
@@ -247,7 +247,7 @@ namespace das {
     char * builtin_fread ( const FILE * f, Context * context, LineInfoArg * at ) {
         if ( !f ) context->throw_error_at(at, "can't fread NULL");
         struct stat st;
-        int fd = fileno((FILE*)f);
+        int fd = _fileno((FILE*)f);
         fstat(fd, &st);
         char * res = context->allocateString(nullptr, st.st_size,at);
         fseek((FILE*)f, 0, SEEK_SET);
@@ -389,7 +389,7 @@ namespace das {
 
     bool builtin_fstat ( const FILE * f, FStat & fs, Context * context, LineInfoArg * at ) {
         if ( !f ) context->throw_error_at(at, "fstat of null");
-        return fstat(fileno((FILE *)f), &fs.stats) == 0;
+        return fstat(_fileno((FILE *)f), &fs.stats) == 0;
     }
 
     bool builtin_stat ( const char * filename, FStat & fs ) {
@@ -436,7 +436,7 @@ namespace das {
         return false;
 #else
         if ( path ) {
-            return chdir(path) == 0;
+            return _chdir(path) == 0;
         } else {
             return false;
         }
@@ -447,7 +447,7 @@ namespace das {
 #if defined(_EMSCRIPTEN_VER)
         return nullptr;
 #else
-        char * buf = getcwd(nullptr, 0);
+        char * buf = _getcwd(nullptr, 0);
         if ( buf ) {
             char * res = context->allocateString(buf, uint32_t(strlen(buf)), at);
             free(buf);
