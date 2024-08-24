@@ -215,25 +215,27 @@ namespace das {
         -- ptr;
     }
 
-    template <typename TT>
-    __forceinline TT * das_ptr_add ( TT * ptr, int value, int ) {
-        return ptr + value;
-    }
+    // int32
+    template <typename TT> __forceinline TT * das_ptr_add_int32 ( TT * ptr, int32_t value, int ) { return ptr + value; }
+    template <typename TT> __forceinline TT * das_ptr_sub_int32 ( TT * & ptr, int32_t value, int ) { return ptr - value; }
+    template <typename TT> __forceinline void das_ptr_set_add_int32 ( TT * & ptr, int32_t value, int ) { ptr += value; }
+    template <typename TT> __forceinline void das_ptr_set_sub_int32 ( TT * & ptr, int32_t value, int ) { ptr -= value; }
+    // int64
+    template <typename TT> __forceinline TT * das_ptr_add_int64 ( TT * ptr, int64_t value, int ) { return ptr + value; }
+    template <typename TT> __forceinline TT * das_ptr_sub_int64 ( TT * & ptr, int64_t value, int ) { return ptr - value; }
+    template <typename TT> __forceinline void das_ptr_set_add_int64 ( TT * & ptr, int64_t value, int ) { ptr += value; }
+    template <typename TT> __forceinline void das_ptr_set_sub_int64 ( TT * & ptr, int64_t value, int ) { ptr -= value; }
+    // uint32
+    template <typename TT> __forceinline TT * das_ptr_add_uint32 ( TT * ptr, uint32_t value, int ) { return ptr + value; }
+    template <typename TT> __forceinline TT * das_ptr_sub_uint32 ( TT * & ptr, uint32_t value, int ) { return ptr - value; }
+    template <typename TT> __forceinline void das_ptr_set_add_uint32 ( TT * & ptr, uint32_t value, int ) { ptr += value; }
+    template <typename TT> __forceinline void das_ptr_set_sub_uint32 ( TT * & ptr, uint32_t value, int ) { ptr -= value; }
+    // uint64
+    template <typename TT> __forceinline TT * das_ptr_add_uint64 ( TT * ptr, uint64_t value, int ) { return ptr + value; }
+    template <typename TT> __forceinline TT * das_ptr_sub_uint64 ( TT * & ptr, uint64_t value, int ) { return ptr - value; }
+    template <typename TT> __forceinline void das_ptr_set_add_uint64 ( TT * & ptr, uint64_t value, int ) { ptr += value; }
+    template <typename TT> __forceinline void das_ptr_set_sub_uint64 ( TT * & ptr, uint64_t value, int ) { ptr -= value; }
 
-    template <typename TT>
-    __forceinline TT * das_ptr_sub ( TT * & ptr, int value, int ) {
-        return ptr - value;
-    }
-
-    template <typename TT>
-    __forceinline void das_ptr_set_add ( TT * & ptr, int value, int ) {
-        ptr += value;
-    }
-
-    template <typename TT>
-    __forceinline void das_ptr_set_sub ( TT * & ptr, int value, int ) {
-        ptr -= value;
-    }
 
     __forceinline int64_t i_das_ptr_diff ( void * a, void *b, int stride ) {
         return int64_t((char *)a - (char *)b) / int64_t(stride);
@@ -750,6 +752,12 @@ namespace das {
             return value[index];
         }
         static __forceinline TT & at ( TT * value, uint32_t index, Context * ) {
+            return value[index];
+        }
+        static __forceinline TT & at ( TT * value, int64_t index, Context * ) {
+            return value[index];
+        }
+        static __forceinline TT & at ( TT * value, uint64_t index, Context * ) {
             return value[index];
         }
     };

@@ -118,6 +118,15 @@ namespace das
         virtual ~SimNode() {}
     };
 
+    template <typename TT> struct evalNode;
+    template <> struct evalNode<bool> { static __forceinline bool eval(Context & context, SimNode * node) { return node->evalBool(context); } };
+    template <> struct evalNode<int32_t> { static __forceinline int32_t eval(Context & context, SimNode * node) { return node->evalInt(context); } };
+    template <> struct evalNode<uint32_t> { static __forceinline uint32_t eval(Context & context, SimNode * node) { return node->evalUInt(context); } };
+    template <> struct evalNode<int64_t> { static __forceinline int64_t eval(Context & context, SimNode * node) { return node->evalInt64(context); } };
+    template <> struct evalNode<uint64_t> { static __forceinline uint64_t eval(Context & context, SimNode * node) { return node->evalUInt64(context); } };
+    template <> struct evalNode<float> { static __forceinline float eval(Context & context, SimNode * node) { return node->evalFloat(context); } };
+    template <> struct evalNode<double> { static __forceinline double eval(Context & context, SimNode * node) { return node->evalDouble(context); } };
+
     struct alignas(16) Prologue {
         union {
             FuncInfo *  info;

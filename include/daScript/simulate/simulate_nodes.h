@@ -915,6 +915,41 @@ namespace das {
 
     // AT (INDEX)
     template <typename TT>
+    struct SimNode_PtrAt : SimNode_At {
+        DAS_PTR_NODE;
+        SimNode_PtrAt ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t strd, uint32_t o )
+            : SimNode_At(at,rv,idx,strd,o,0xffffffff) {}
+        __forceinline char * compute (Context & context) {
+            DAS_PROFILE_NODE
+            auto pValue = value->evalPtr(context);
+            auto idx = evalNode<TT>::eval(context,index);
+            return pValue + (idx*TT(stride) + TT(offset));
+        }
+    };
+
+    template <typename IDXT, typename TT>
+    struct SimNode_PtrAtR2V : SimNode_PtrAt<IDXT> {
+        SimNode_PtrAtR2V ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t strd, uint32_t o )
+            : SimNode_PtrAt(at,rv,idx,strd,o) {}
+        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
+            TT * pR = (TT *) compute(context);
+            return cast<TT>::from(*pR);
+        }
+#define EVAL_NODE(TYPE,CTYPE)                                       \
+        virtual CTYPE eval##TYPE ( Context & context ) override {   \
+            return *(CTYPE *)compute(context);                      \
+        }
+        DAS_EVAL_NODE
+#undef EVAL_NODE
+    };
+
+    template <typename TT> using SimNode_PtrAtR2V_Int = SimNode_PtrAtR2V<int32_t,TT>;
+    template <typename TT> using SimNode_PtrAtR2V_UInt = SimNode_PtrAtR2V<uint32_t,TT>;
+    template <typename TT> using SimNode_PtrAtR2V_Int64 = SimNode_PtrAtR2V<int64_t,TT>;
+    template <typename TT> using SimNode_PtrAtR2V_UInt64 = SimNode_PtrAtR2V<uint64_t,TT>;
+
+    // AT (INDEX)
+    template <typename TT>
     struct SimNode_AtVector;
 
 #define SIM_NODE_AT_VECTOR(TYPE,CTYPE)                                                          \
