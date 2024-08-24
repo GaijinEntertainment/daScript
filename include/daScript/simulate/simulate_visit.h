@@ -144,10 +144,10 @@ namespace das {
     SimNode * SimNode_PtrAt<TT>::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP_TT(PtrAt);
-        V_SUB(value);
-        V_SUB(index);
-        V_ARG(stride);
-        V_ARG(offset);
+        V_SUB_THIS(value);
+        V_SUB_THIS(index);
+        V_ARG_THIS(stride);
+        V_ARG_THIS(offset);
         V_END();
     }
 
@@ -155,10 +155,10 @@ namespace das {
     SimNode * SimNode_PtrAtR2V<IDXT,TT>::visit ( SimVisitor & vis ) {
         V_BEGIN();
         V_OP_TT(PtrAtR2V);
-        V_SUB(value);
-        V_SUB(index);
-        V_ARG(stride);
-        V_ARG(offset);
+        V_SUB_THIS(value);
+        V_SUB_THIS(index);
+        V_ARG_THIS(stride);
+        V_ARG_THIS(offset);
         V_END();
     }
 
