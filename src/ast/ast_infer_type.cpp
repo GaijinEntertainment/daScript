@@ -4485,8 +4485,8 @@ namespace das {
                     error("index of the pointer must be inside the 'unsafe' block",  "", "",
                         expr->at, CompilationError::unsafe);
                 }
-                if ( !ixT->isIndex() ) {
-                    error("index type must be 'int' or 'uint', not '" + describeType(ixT) + "'",  "", "",
+                if ( !ixT->isIndexExt() ) {
+                    error("index type must be 'int', 'int64', 'uint', or 'uint64' and not '" + describeType(ixT) + "'",  "", "",
                         expr->index->at, CompilationError::invalid_index_type);
                     return Visitor::visit(expr);
                 } else if ( !seT->firstType || seT->firstType->getSizeOf()==0 ){
@@ -5638,7 +5638,7 @@ namespace das {
                 }
             }
             // pointer arithmetics
-            if ( expr->left->type->isPointer() && expr->right->type->isSimpleType(Type::tInt) ) {
+            if ( expr->left->type->isPointer() && expr->right->type->isIndexExt() ) {
                 if ( !expr->left->type->firstType ) {
                     error("operations on 'void' pointers are prohibited; " +
                         describeType(expr->left->type), "", "",

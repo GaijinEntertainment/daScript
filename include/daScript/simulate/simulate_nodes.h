@@ -915,6 +915,45 @@ namespace das {
 
     // AT (INDEX)
     template <typename TT>
+    struct SimNode_PtrAt : SimNode {
+        DAS_PTR_NODE;
+        SimNode_PtrAt ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t strd, uint32_t o )
+            : SimNode(at), value(rv), index(idx), stride(strd), offset(o) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        __forceinline char * compute (Context & context) {
+            DAS_PROFILE_NODE
+            auto pValue = value->evalPtr(context);
+            auto idx = evalNode<TT>::eval(context,index);
+            return pValue + (idx*TT(stride) + TT(offset));
+        }
+        SimNode * value, * index;
+        uint32_t  stride, offset;
+    };
+
+    template <typename IDXT, typename TT>
+    struct SimNode_PtrAtR2V : SimNode_PtrAt<IDXT> {
+        SimNode_PtrAtR2V ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t strd, uint32_t o )
+            : SimNode_PtrAt<IDXT>(at,rv,idx,strd,o) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
+        DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
+            TT * pR = (TT *) this->compute(context);
+            return cast<TT>::from(*pR);
+        }
+#define EVAL_NODE(TYPE,CTYPE)                                       \
+        virtual CTYPE eval##TYPE ( Context & context ) override {   \
+            return *(CTYPE *)this->compute(context);                      \
+        }
+        DAS_EVAL_NODE
+#undef EVAL_NODE
+    };
+
+    template <typename TT> using SimNode_PtrAtR2V_Int = SimNode_PtrAtR2V<int32_t,TT>;
+    template <typename TT> using SimNode_PtrAtR2V_UInt = SimNode_PtrAtR2V<uint32_t,TT>;
+    template <typename TT> using SimNode_PtrAtR2V_Int64 = SimNode_PtrAtR2V<int64_t,TT>;
+    template <typename TT> using SimNode_PtrAtR2V_UInt64 = SimNode_PtrAtR2V<uint64_t,TT>;
+
+    // AT (INDEX)
+    template <typename TT>
     struct SimNode_AtVector;
 
 #define SIM_NODE_AT_VECTOR(TYPE,CTYPE)                                                          \
