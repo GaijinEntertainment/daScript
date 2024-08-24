@@ -1,11 +1,11 @@
 
 def test_signed( t : auto(TT) )
 	// print("testing {typeinfo(typename type<TT>)} ")
-	let zero = TT(0)
-	let one = TT(1)
-	let two = TT(2)
-	let three = TT(3)
-	let neg_one = TT(-1)
+	var zero = TT(0); zero--; zero++
+	var one = TT(1); one--; one++
+	var two = TT(2); two--; two++
+	var three = TT(3); three--; three++
+	var neg_one = TT(-1); neg_one--; neg_one++
 	unsafe
 		var a <- [[int 0;1;2;3]]
 		var pA = addr(a[1])			// at 1
@@ -28,10 +28,10 @@ def test_signed( t : auto(TT) )
 
 def test_unsigned( t : auto(TT) )
 	// print("testing {typeinfo(typename type<TT>)} ")
-	let zero = TT(0)
-	let one = TT(1)
-	let two = TT(2)
-	let three = TT(3)
+	var zero = TT(0); zero--; zero++
+	var one = TT(1); one--; one++
+	var two = TT(2); two--; two++
+	var three = TT(3); three--; three++
 	unsafe
 		var a <- [[int 0;1;2;3]]
 		var pA = addr(a[1])			// at 1
