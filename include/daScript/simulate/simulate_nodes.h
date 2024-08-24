@@ -930,14 +930,14 @@ namespace das {
     template <typename IDXT, typename TT>
     struct SimNode_PtrAtR2V : SimNode_PtrAt<IDXT> {
         SimNode_PtrAtR2V ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t strd, uint32_t o )
-            : SimNode_PtrAt(at,rv,idx,strd,o) {}
+            : SimNode_PtrAt<IDXT>(at,rv,idx,strd,o) {}
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
-            TT * pR = (TT *) compute(context);
+            TT * pR = (TT *) this->compute(context);
             return cast<TT>::from(*pR);
         }
 #define EVAL_NODE(TYPE,CTYPE)                                       \
         virtual CTYPE eval##TYPE ( Context & context ) override {   \
-            return *(CTYPE *)compute(context);                      \
+            return *(CTYPE *)this->compute(context);                      \
         }
         DAS_EVAL_NODE
 #undef EVAL_NODE
