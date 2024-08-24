@@ -915,22 +915,26 @@ namespace das {
 
     // AT (INDEX)
     template <typename TT>
-    struct SimNode_PtrAt : SimNode_At {
+    struct SimNode_PtrAt : SimNode {
         DAS_PTR_NODE;
         SimNode_PtrAt ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t strd, uint32_t o )
-            : SimNode_At(at,rv,idx,strd,o,0xffffffff) {}
+            : SimNode(at), value(rv), index(idx), stride(strd), offset(o) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
         __forceinline char * compute (Context & context) {
             DAS_PROFILE_NODE
             auto pValue = value->evalPtr(context);
             auto idx = evalNode<TT>::eval(context,index);
             return pValue + (idx*TT(stride) + TT(offset));
         }
+        SimNode * value, * index;
+        uint32_t  stride, offset;
     };
 
     template <typename IDXT, typename TT>
     struct SimNode_PtrAtR2V : SimNode_PtrAt<IDXT> {
         SimNode_PtrAtR2V ( const LineInfo & at, SimNode * rv, SimNode * idx, uint32_t strd, uint32_t o )
             : SimNode_PtrAt<IDXT>(at,rv,idx,strd,o) {}
+        virtual SimNode * visit ( SimVisitor & vis ) override;
         DAS_EVAL_ABI virtual vec4f eval ( Context & context ) override {
             TT * pR = (TT *) this->compute(context);
             return cast<TT>::from(*pR);
