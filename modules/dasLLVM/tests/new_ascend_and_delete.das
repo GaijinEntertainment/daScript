@@ -85,17 +85,17 @@ def ref_count_test ( t : T? )
     var pptr : TestObjectSmart?
     pptr = get_ptr(sptr)
     t |> success(sptr==ptr)
-    t |> success(get_const_ptr(sptr)==ptr)
+    t |> success(get_ptr(sptr)==ptr)
     var qptr : smart_ptr<TestObjectSmart>
     qptr := get_ptr(sptr)                   // ref_count = 2
     t |> equal(2u, smart_ptr_use_count(sptr))
     t |> success(qptr==ptr)
-    t |> success(get_const_ptr(qptr)==ptr)
+    t |> success(get_ptr(qptr)==ptr)
     t |> success(qptr==sptr)
     var fptr := qptr                        // ref_count = 3
     t |> equal(3u, smart_ptr_use_count(sptr))
     t |> success(fptr!=null)
-    t |> success(get_const_ptr(fptr)==sptr)
+    t |> success(get_ptr(fptr)==sptr)
     t |> success(fptr==qptr)
     t |> success(fptr==sptr)
     t |> equal(3u, smart_ptr_use_count(sptr))

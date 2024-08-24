@@ -3237,6 +3237,8 @@ class LlvmJitVisitor : AstVisitor
             res = LLVMBuildPointerCast(g_builder, getE(expr.subexpr), LLVMPointerType(type_to_llvm_type(ect),0u), "")
         elif ect.isInteger && (ect.baseType==Type tInt64 || ect.baseType==Type tUInt64) && subT.isPointer
             res = LLVMBuildPtrToInt(g_builder, getE(expr.subexpr), type_to_llvm_type(ect), "")
+        elif ect.isPointer && subT.isInteger
+            res = LLVMBuildIntToPtr(g_builder, getE(expr.subexpr), type_to_llvm_type(ect), "")
         elif !ect.isRefType && !subT.isRefType
             if ect.sizeOf == subT.sizeOf
                 res = LLVMBuildBitCast(g_builder, getE(expr.subexpr), type_to_llvm_type(ect), "")

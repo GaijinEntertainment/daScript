@@ -16,6 +16,8 @@ let g_intrin_lookup <- {{
     // pointer math
         "$::i_das_ptr_set_add" => @@intrinsic_das_ptr_set_add;
         "$::i_das_ptr_add" => @@intrinsic_das_ptr_add;
+        "$::i_das_ptr_set_sub" => @@intrinsic_das_ptr_set_sub;
+        "$::i_das_ptr_sub" => @@intrinsic_das_ptr_sub;
     // memset
         "$::memset8" => @@intrinsic_memset8;
         "$::memset16" => @@intrinsic_memset16;
@@ -654,21 +656,44 @@ def intrinsic_math_inv_length(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprC
 def intrinsic_das_ptr_set_add(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
     assume opType = expr.arguments[0]._type
     assert(opType.isPointer)
-    var value_stride = LLVMBuildMul(g_builder, arguments[1], arguments[2], "")
+    var arg1 = arguments[1]
+    var arg2 = arguments[2]
+    if expr.arguments[1]._type.baseType != Type tInt
+        arg2 = LLVMBuildZExtOrBitCast(g_builder, arguments[2], type_to_llvm_type(expr.arguments[1]._type), "")
+    var value_stride = LLVMBuildMul(g_builder, arg1, arg2, "")
+    value_stride = LLVMBuildSExt(g_builder, value_stride, LLVMInt64Type(), "")
     var ptr_value = LLVMBuildLoad2(g_builder, type_to_llvm_type(expr.arguments[0]._type), arguments[0], "")
     var ptr_value_i8 = LLVMBuildPointerCast(g_builder, ptr_value, LLVMPointerType(LLVMInt8Type(), 0u), "")
     var ptr_value_stride = LLVMBuildGEP2(g_builder, LLVMInt8Type(), ptr_value_i8, value_stride, "")
     var vptr_value_stride = LLVMBuildPointerCast(g_builder, ptr_value_stride, type_to_llvm_type(expr.arguments[0]._type), "")
     return LLVMBuildStore(g_builder, vptr_value_stride, arguments[0])
 
+def intrinsic_das_ptr_set_sub(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+    var args := arguments
+    args[1] = LLVMBuildNeg(g_builder, args[1], "")
+    return intrinsic_das_ptr_set_add(g_builder, expr, args)
+
 def intrinsic_das_ptr_add(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
     assume opType = expr.arguments[0]._type
     assert(opType.isPointer)
-    var value_stride = LLVMBuildMul(g_builder, arguments[1], arguments[2], "")
+    var arg1 = arguments[1]
+    var arg2 = arguments[2]
+    if expr.arguments[1]._type.baseType != Type tInt
+        arg2 = LLVMBuildZExtOrBitCast(g_builder, arg2, type_to_llvm_type(expr.arguments[1]._type), "")
+    var value_stride = LLVMBuildMul(g_builder, arg1, arg2, "")
+    value_stride = LLVMBuildSExt(g_builder, value_stride, LLVMInt64Type(), "")
     var ptr_value = arguments[0]
+    if expr.arguments[0]._type.flags.ref
+        ptr_value = LLVMBuildLoad2(g_builder, type_to_llvm_type(expr.arguments[0]._type), arguments[0], "")
     var ptr_value_i8 = LLVMBuildPointerCast(g_builder, ptr_value, LLVMPointerType(LLVMInt8Type(), 0u), "")
     var ptr_value_stride = LLVMBuildGEP2(g_builder, LLVMInt8Type(), ptr_value_i8, value_stride, "")
-    return LLVMBuildPointerCast(g_builder, ptr_value_stride, type_to_llvm_type(expr.arguments[0]._type), "")
+    var vptr_value_stride = LLVMBuildPointerCast(g_builder, ptr_value_stride, type_to_llvm_type(expr.arguments[0]._type), "")
+    return vptr_value_stride
+
+def intrinsic_das_ptr_sub(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
+    var args := arguments
+    args[1] = LLVMBuildNeg(g_builder, args[1], "")
+    return intrinsic_das_ptr_add(g_builder, expr, args)
 
 def intrinsic_memset8(g_builder:LLVMOpaqueBuilder?; expr:smart_ptr<ExprCallFunc>; arguments:array<LLVMOpaqueValue?>) : LLVMOpaqueValue?
     assume opType = expr.arguments[0]._type
