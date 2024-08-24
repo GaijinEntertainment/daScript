@@ -14,6 +14,10 @@
 #include <inttypes.h>
 #include <fast_float/fast_float.h>
 
+#if defined(_WIN32) && defined(__clang__)
+    #define strdup _strdup
+#endif
+
 MAKE_TYPE_FACTORY(StringBuilderWriter, StringBuilderWriter)
 
 DAS_BASE_BIND_ENUM(das::ConversionResult, ConversionResult, ok, invalid_argument, out_of_range)
@@ -524,7 +528,7 @@ namespace das
 
     class StrdupDataWalker : public DataWalker {
         virtual void String ( char * & str ) {
-            if (str) str = _strdup(str);
+            if (str) str = strdup(str);
         }
     };
 

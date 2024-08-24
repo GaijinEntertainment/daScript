@@ -28,6 +28,12 @@ MAKE_TYPE_FACTORY(clock, das::Time)// use MAKE_TYPE_FACTORY out of namespace. So
     void* mmap(void* start, size_t length, int prot, int flags, int fd, off_t offset);
     int munmap(void* start, size_t length);
     static int getchar_wrapper(void) { return getchar(); } // workaround for non-std callconv (fastcall, vectorcall...)
+
+    #ifdef __clang__
+        #define fileno _fileno
+        #define getcwd _getcwd
+        #define chdir _chdir
+    #endif
 #else
 #define getchar_wrapper getchar
 #endif
@@ -220,7 +226,7 @@ namespace das {
     void builtin_map_file(const FILE* f, const TBlock<void, TTemporary<TArray<uint8_t>>>& blk, Context* context, LineInfoArg * at) {
         if ( !f ) context->throw_error_at(at, "can't map NULL file");
         struct stat st;
-        int fd = _fileno((FILE *)f);
+        int fd = fileno((FILE *)f);
         fstat(fd, &st);
         void* data = mmap(nullptr, st.st_size, PROT_READ, MAP_SHARED, fd, 0);
         Array arr;
@@ -247,7 +253,7 @@ namespace das {
     char * builtin_fread ( const FILE * f, Context * context, LineInfoArg * at ) {
         if ( !f ) context->throw_error_at(at, "can't fread NULL");
         struct stat st;
-        int fd = _fileno((FILE*)f);
+        int fd = fileno((FILE*)f);
         fstat(fd, &st);
         char * res = context->allocateString(nullptr, st.st_size,at);
         fseek((FILE*)f, 0, SEEK_SET);
@@ -389,7 +395,7 @@ namespace das {
 
     bool builtin_fstat ( const FILE * f, FStat & fs, Context * context, LineInfoArg * at ) {
         if ( !f ) context->throw_error_at(at, "fstat of null");
-        return fstat(_fileno((FILE *)f), &fs.stats) == 0;
+        return fstat(fileno((FILE *)f), &fs.stats) == 0;
     }
 
     bool builtin_stat ( const char * filename, FStat & fs ) {
@@ -436,7 +442,7 @@ namespace das {
         return false;
 #else
         if ( path ) {
-            return _chdir(path) == 0;
+            return chdir(path) == 0;
         } else {
             return false;
         }
@@ -447,7 +453,7 @@ namespace das {
 #if defined(_EMSCRIPTEN_VER)
         return nullptr;
 #else
-        char * buf = _getcwd(nullptr, 0);
+        char * buf = getcwd(nullptr, 0);
         if ( buf ) {
             char * res = context->allocateString(buf, uint32_t(strlen(buf)), at);
             free(buf);

@@ -7,6 +7,10 @@
 #define DASLIB_MODULE_NAME  "daslib"
 #define DASTEST_MODULE_NAME "dastest"
 
+#if defined(_WIN32) && defined(__clang__)
+    #define fileno _fileno
+#endif
+
 #if !defined(DAS_NO_FILEIO)
 #include <sys/stat.h>
 #endif
@@ -16,7 +20,7 @@ namespace das {
     FileInfo * FsFileSystem::tryOpenFile ( const string & fileName ) {
         if ( FILE * ff = fopen ( fileName.c_str(), "rb" ) ) {
             struct stat st;
-            int fd = _fileno((FILE *)ff);
+            int fd = fileno((FILE *)ff);
             fstat(fd, &st);
             char *source = (char *) das_aligned_alloc16(st.st_size);
             auto info = new TextFileInfo(source, st.st_size, true);
@@ -47,7 +51,7 @@ namespace das {
             // we inserted
             if ( FILE * ff = fopen ( fileName.c_str(), "rb" ) ) {
                 struct stat st;
-                int fd = _fileno((FILE *)ff);
+                int fd = fileno((FILE *)ff);
                 fstat(fd, &st);
                 char *source = (char *) das_aligned_alloc16(st.st_size);
                 hfile.reset(new TextFileInfo(source, st.st_size, true));
