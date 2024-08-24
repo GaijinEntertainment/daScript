@@ -1630,14 +1630,29 @@ namespace das
                 return context.code->makeNode<SimNode_ArrayAt>(at, prv, pidx, stride, extraOffset);
             }
         } else if ( subexpr->type->isPointer() ) {
-            uint32_t range = 0xffffffff;
             uint32_t stride = subexpr->type->firstType->getSizeOf();
             auto prv = subexpr->simulate(context);
             auto pidx = index->simulate(context);
             if ( r2vType->baseType!=Type::none ) {
-                return context.code->makeValueNode<SimNode_AtR2V>(r2vType->baseType, at, prv, pidx, stride, extraOffset, range);
+                switch ( index->type->baseType ) {
+                case Type::tInt:    return context.code->makeValueNode<SimNode_PtrAtR2V_Int>(r2vType->baseType, at, prv, pidx, stride, extraOffset);
+                case Type::tUInt:   return context.code->makeValueNode<SimNode_PtrAtR2V_UInt>(r2vType->baseType, at, prv, pidx, stride, extraOffset);
+                case Type::tInt64:  return context.code->makeValueNode<SimNode_PtrAtR2V_Int64>(r2vType->baseType, at, prv, pidx, stride, extraOffset);
+                case Type::tUInt64: return context.code->makeValueNode<SimNode_PtrAtR2V_UInt64>(r2vType->baseType, at, prv, pidx, stride, extraOffset);
+                default:
+                    context.thisProgram->error("internal compilation error, generating ptr at for unsupported index type " + index->type->describe(), "", "", at);
+                    return nullptr;
+                };
             } else {
-                return context.code->makeNode<SimNode_At>(at, prv, pidx, stride, extraOffset, range);
+                switch ( index->type->baseType ) {
+                case Type::tInt:    return context.code->makeNode<SimNode_PtrAt<int32_t>>(at, prv, pidx, stride, extraOffset);
+                case Type::tUInt:   return context.code->makeNode<SimNode_PtrAt<uint32_t>>(at, prv, pidx, stride, extraOffset);
+                case Type::tInt64:  return context.code->makeNode<SimNode_PtrAt<int64_t>>(at, prv, pidx, stride, extraOffset);
+                case Type::tUInt64: return context.code->makeNode<SimNode_PtrAt<uint64_t>>(at, prv, pidx, stride, extraOffset);
+                default:
+                    context.thisProgram->error("internal compilation error, generating ptr at for unsupported index type " + index->type->describe(), "", "", at);
+                    return nullptr;
+                };
             }
         } else {
             uint32_t range = subexpr->type->dim[0];

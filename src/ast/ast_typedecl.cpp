@@ -2445,6 +2445,10 @@ namespace das
         return (baseType==Type::tInt || baseType==Type::tUInt) && dim.size()==0;
     }
 
+    bool TypeDecl::isIndexExt() const {
+        return (baseType==Type::tInt || baseType==Type::tUInt || baseType==Type::tInt64 || baseType==Type::tUInt64) && dim.size()==0;
+    }
+
     int TypeDecl::getTupleFieldOffset ( int index ) const {
         DAS_ASSERT(baseType==Type::tTuple);
         DAS_ASSERT(index>=0 && index<int(argTypes.size()));

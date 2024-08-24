@@ -1261,21 +1261,26 @@ namespace das
         ptr = (char*) ptr - stride;
     }
 
-    __forceinline void * i_das_ptr_add ( void * ptr, int value, int stride ) {
-        return (char*) ptr + value * stride;
-    }
-
-    __forceinline void * i_das_ptr_sub ( void * & ptr, int value, int stride ) {
-        return (char*) ptr - value * stride;
-    }
-
-    __forceinline void i_das_ptr_set_add ( void * & ptr, int value, int stride ) {
-        ptr = (char*) ptr + value * stride;
-    }
-
-    __forceinline void i_das_ptr_set_sub ( void * & ptr, int value, int stride ) {
-        ptr = (char*) ptr + value * stride;
-    }
+    // int32_t
+    __forceinline void * i_das_ptr_add_int32 ( void * ptr, int32_t value, int32_t stride )     { return (char*) ptr + value * stride; }
+    __forceinline void * i_das_ptr_sub_int32 ( void * & ptr, int32_t value, int32_t stride )   { return (char*) ptr - value * stride; }
+    __forceinline void i_das_ptr_set_add_int32 ( void * & ptr, int32_t value, int32_t stride ) { ptr = (char*) ptr + value * stride; }
+    __forceinline void i_das_ptr_set_sub_int32 ( void * & ptr, int32_t value, int32_t stride ) { ptr = (char*) ptr - value * stride; }
+    // int64_t
+    __forceinline void * i_das_ptr_add_int64 ( void * ptr, int64_t value, int32_t stride )     { return (char*) ptr + value * stride; }
+    __forceinline void * i_das_ptr_sub_int64 ( void * & ptr, int64_t value, int32_t stride )   { return (char*) ptr - value * stride; }
+    __forceinline void i_das_ptr_set_add_int64 ( void * & ptr, int64_t value, int32_t stride ) { ptr = (char*) ptr + value * stride; }
+    __forceinline void i_das_ptr_set_sub_int64 ( void * & ptr, int64_t value, int32_t stride ) { ptr = (char*) ptr - value * stride; }
+    // uint32_t
+    __forceinline void * i_das_ptr_add_uint32 ( void * ptr, uint32_t value, int32_t stride )     { return (char*) ptr + value * stride; }
+    __forceinline void * i_das_ptr_sub_uint32 ( void * & ptr, uint32_t value, int32_t stride )   { return (char*) ptr - value * stride; }
+    __forceinline void i_das_ptr_set_add_uint32 ( void * & ptr, uint32_t value, int32_t stride ) { ptr = (char*) ptr + value * stride; }
+    __forceinline void i_das_ptr_set_sub_uint32 ( void * & ptr, uint32_t value, int32_t stride ) { ptr = (char*) ptr - value * stride; }
+    // uint64_t
+    __forceinline void * i_das_ptr_add_uint64 ( void * ptr, uint64_t value, int32_t stride )     { return (char*) ptr + value * stride; }
+    __forceinline void * i_das_ptr_sub_uint64 ( void * & ptr, uint64_t value, int32_t stride )   { return (char*) ptr - value * stride; }
+    __forceinline void i_das_ptr_set_add_uint64 ( void * & ptr, uint64_t value, int32_t stride ) { ptr = (char*) ptr + value * stride; }
+    __forceinline void i_das_ptr_set_sub_uint64 ( void * & ptr, uint64_t value, int32_t stride ) { ptr = (char*) ptr - value * stride; }
 
     Module_BuiltIn::~Module_BuiltIn() {
         gc0_reset();
@@ -1490,6 +1495,12 @@ namespace das
 #define STR_DSTR_REG(OPNAME,EXPR) \
     addExtern<DAS_BIND_FUN(OPNAME##_str_dstr)>(*this, lib, #EXPR, SideEffects::none, DAS_TOSTRING(OPNAME##_str_dstr)); \
     addExtern<DAS_BIND_FUN(OPNAME##_dstr_str)>(*this, lib, #EXPR, SideEffects::none, DAS_TOSTRING(OPNAME##_dstr_str));
+
+    void PointerOp ( const FunctionPtr & idpi ) {
+        idpi->unsafeOperation = true;
+        idpi->firstArgReturnType = true;
+        idpi->noPointerCast = true;
+    }
 
     void Module_BuiltIn::addRuntime(ModuleLibrary & lib) {
         // printer flags
@@ -1856,30 +1867,29 @@ namespace das
             SideEffects::none, "das_aligned_memsize")
                 ->args({"ptr"})->unsafeOperation = true;
         // pointer ari
-        auto idpi = addExtern<DAS_BIND_FUN(i_das_ptr_inc)>(*this, lib, "i_das_ptr_inc", SideEffects::modifyArgument, "das_ptr_inc");
-        idpi->unsafeOperation = true;
-        idpi->firstArgReturnType = true;
-        idpi->noPointerCast = true;
-        auto idpd = addExtern<DAS_BIND_FUN(i_das_ptr_dec)>(*this, lib, "i_das_ptr_dec", SideEffects::modifyArgument, "das_ptr_dec");
-        idpd->unsafeOperation = true;
-        idpd->firstArgReturnType = true;
-        idpd->noPointerCast = true;
-        auto idpa = addExtern<DAS_BIND_FUN(i_das_ptr_add)>(*this, lib, "i_das_ptr_add", SideEffects::none, "das_ptr_add");
-        idpa->unsafeOperation = true;
-        idpa->firstArgReturnType = true;
-        idpa->noPointerCast = true;
-        auto idps = addExtern<DAS_BIND_FUN(i_das_ptr_sub)>(*this, lib, "i_das_ptr_sub", SideEffects::none, "das_ptr_sub");
-        idps->unsafeOperation = true;
-        idps->firstArgReturnType = true;
-        idps->noPointerCast = true;
-        auto idpsa = addExtern<DAS_BIND_FUN(i_das_ptr_set_add)>(*this, lib, "i_das_ptr_set_add", SideEffects::modifyArgument, "das_ptr_set_add");
-        idpsa->unsafeOperation = true;
-        idpsa->firstArgReturnType = true;
-        idpsa->noPointerCast = true;
-        auto idpss = addExtern<DAS_BIND_FUN(i_das_ptr_set_sub)>(*this, lib, "i_das_ptr_set_sub", SideEffects::modifyArgument, "das_ptr_set_sub");
-        idpss->unsafeOperation = true;
-        idpss->firstArgReturnType = true;
-        idpss->noPointerCast = true;
+        PointerOp(addExtern<DAS_BIND_FUN(i_das_ptr_inc)>(*this, lib, "i_das_ptr_inc", SideEffects::modifyArgument, "das_ptr_inc"));
+        PointerOp(addExtern<DAS_BIND_FUN(i_das_ptr_dec)>(*this, lib, "i_das_ptr_dec", SideEffects::modifyArgument, "das_ptr_dec"));
+        // int32
+        PointerOp(addExtern<DAS_BIND_FUN(i_das_ptr_add_int32)>(*this, lib, "i_das_ptr_add", SideEffects::none, "das_ptr_add_int32"));
+        PointerOp(addExtern<DAS_BIND_FUN(i_das_ptr_sub_int32)>(*this, lib, "i_das_ptr_sub", SideEffects::none, "das_ptr_sub_int32"));
+        PointerOp(addExtern<DAS_BIND_FUN(i_das_ptr_set_add_int32)>(*this, lib, "i_das_ptr_set_add", SideEffects::modifyArgument, "das_ptr_set_add_int32"));
+        PointerOp(addExtern<DAS_BIND_FUN(i_das_ptr_set_sub_int32)>(*this, lib, "i_das_ptr_set_sub", SideEffects::modifyArgument, "das_ptr_set_sub_int32"));
+        // int64
+        PointerOp(addExtern<DAS_BIND_FUN(i_das_ptr_add_int64)>(*this, lib, "i_das_ptr_add", SideEffects::none, "das_ptr_add_int64"));
+        PointerOp(addExtern<DAS_BIND_FUN(i_das_ptr_sub_int64)>(*this, lib, "i_das_ptr_sub", SideEffects::none, "das_ptr_sub_int64"));
+        PointerOp(addExtern<DAS_BIND_FUN(i_das_ptr_set_add_int64)>(*this, lib, "i_das_ptr_set_add", SideEffects::modifyArgument, "das_ptr_set_add_int64"));
+        PointerOp(addExtern<DAS_BIND_FUN(i_das_ptr_set_sub_int64)>(*this, lib, "i_das_ptr_set_sub", SideEffects::modifyArgument, "das_ptr_set_sub_int64"));
+        // uint32
+        PointerOp(addExtern<DAS_BIND_FUN(i_das_ptr_add_uint32)>(*this, lib, "i_das_ptr_add", SideEffects::none, "das_ptr_add_uint32"));
+        PointerOp(addExtern<DAS_BIND_FUN(i_das_ptr_sub_uint32)>(*this, lib, "i_das_ptr_sub", SideEffects::none, "das_ptr_sub_uint32"));
+        PointerOp(addExtern<DAS_BIND_FUN(i_das_ptr_set_add_uint32)>(*this, lib, "i_das_ptr_set_add", SideEffects::modifyArgument, "das_ptr_set_add_uint32"));
+        PointerOp(addExtern<DAS_BIND_FUN(i_das_ptr_set_sub_uint32)>(*this, lib, "i_das_ptr_set_sub", SideEffects::modifyArgument, "das_ptr_set_sub_uint32"));
+        // uint64
+        PointerOp(addExtern<DAS_BIND_FUN(i_das_ptr_add_uint64)>(*this, lib, "i_das_ptr_add", SideEffects::none, "das_ptr_add_uint64"));
+        PointerOp(addExtern<DAS_BIND_FUN(i_das_ptr_sub_uint64)>(*this, lib, "i_das_ptr_sub", SideEffects::none, "das_ptr_sub_uint64"));
+        PointerOp(addExtern<DAS_BIND_FUN(i_das_ptr_set_add_uint64)>(*this, lib, "i_das_ptr_set_add", SideEffects::modifyArgument, "das_ptr_set_add_uint64"));
+        PointerOp(addExtern<DAS_BIND_FUN(i_das_ptr_set_sub_uint64)>(*this, lib, "i_das_ptr_set_sub", SideEffects::modifyArgument, "das_ptr_set_sub_uint64"));
+        // diff
         addExtern<DAS_BIND_FUN(i_das_ptr_diff)>(*this, lib, "i_das_ptr_diff", SideEffects::none, "i_das_ptr_diff");
         // rtti
         addExtern<DAS_BIND_FUN(class_rtti_size)>(*this, lib, "class_rtti_size",
