@@ -93,6 +93,7 @@ namespace das {
         bool isShareable(das_set<Structure*> & dep) const;
         bool isShareable() const;
         bool isIndex() const;
+        bool isIndexExt() const;
         bool isBool() const;
         bool isInteger() const;
         bool isSignedInteger() const;

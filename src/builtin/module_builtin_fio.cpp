@@ -28,6 +28,12 @@ MAKE_TYPE_FACTORY(clock, das::Time)// use MAKE_TYPE_FACTORY out of namespace. So
     void* mmap(void* start, size_t length, int prot, int flags, int fd, off_t offset);
     int munmap(void* start, size_t length);
     static int getchar_wrapper(void) { return getchar(); } // workaround for non-std callconv (fastcall, vectorcall...)
+
+    #ifdef __clang__
+        #define fileno _fileno
+        #define getcwd _getcwd
+        #define chdir _chdir
+    #endif
 #else
 #define getchar_wrapper getchar
 #endif
