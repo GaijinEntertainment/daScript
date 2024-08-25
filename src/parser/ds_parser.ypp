@@ -105,6 +105,7 @@
     VariableDeclaration *           pVarDecl;
     vector<VariableDeclaration*> *  pVarDeclList;
     TypeDecl *                      pTypeDecl;
+    vector<Expression *> *          pTypeDeclList;
     Expression *                    pExpression;
     Type                            type;
     AnnotationArgument *            aa;
@@ -126,6 +127,7 @@
 %destructor { delete $$; } <pVarDecl>
 %destructor { deleteVariableDeclarationList($$); } <pVarDeclList>
 %destructor { delete $$; } <pTypeDecl>
+%destructor { deleteTypeDeclarationList($$); } <pTypeDeclList>
 %destructor { delete $$; } <pExpression>
 %destructor { delete $$; } <aa>
 %destructor { delete $$; } <aaList>
@@ -347,6 +349,7 @@
 %type <pTypeDecl>       bitfield_type_declaration
 %type <pTypeDecl>       optional_function_type
 %type <pTypeDecl>       structure_type_declaration
+%type <pTypeDeclList>   type_declaration_no_options_list
 %type <pVarDeclList>    struct_variable_declaration_list
 %type <pVarDeclList>    optional_struct_variable_declaration_list
 %type <pVarDeclList>    global_variable_declaration_list
@@ -1247,22 +1250,27 @@ optional_expr_list
     |   expr_list[arguments] { $$ = $arguments; }
     ;
 
+type_declaration_no_options_list
+    :   type_declaration[decl] {
+        $$ = new vector<Expression *>();
+        $$->push_back(new ExprTypeDecl(tokAt(scanner,@decl),$decl));
+    }
+    |   type_declaration_no_options_list[declL] ';' type_declaration[decl] {
+        $$ = $declL;
+        $$->push_back(new ExprTypeDecl(tokAt(scanner,@decl),$decl));
+    }
+    ;
+
 expression_keyword
-    :   KEYWORD[kwd] '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[decl] '>' { yyextra->das_arrow_depth --; } expr[subexpr] {
+    :   KEYWORD[kwd] '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options_list[declL] '>' { yyextra->das_arrow_depth --; } expr[subexpr] {
         auto pCall = yyextra->g_Program->makeCall(tokAt(scanner,@kwd),tokAt(scanner,@subexpr),*$kwd);
-        auto td = new ExprTypeDecl(tokAt(scanner,@decl),TypeDeclPtr($decl));
-        pCall->arguments.insert(pCall->arguments.begin(), ExpressionPtr(td));
-        pCall->arguments.push_back(ExpressionPtr($subexpr));
+        pCall->arguments = typesAndSequenceToList($declL,$subexpr);
         delete $kwd;
         $$ = pCall;
     }
-    |   TYPE_FUNCTION[kwd] '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options[decl] '>' { yyextra->das_arrow_depth --; } '(' optional_expr_list[arguments] ')'[atend] {
-        auto pCall = yyextra->g_Program->makeCall(tokAt(scanner,@kwd),tokAt(scanner,@atend),*$kwd);
-        if ( $arguments ) {
-            pCall->arguments = sequenceToList($arguments);
-        }
-        auto td = new ExprTypeDecl(tokAt(scanner,@decl),TypeDeclPtr($decl));
-        pCall->arguments.insert(pCall->arguments.begin(), ExpressionPtr(td));
+    |   TYPE_FUNCTION[kwd] '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options_list[declL] '>' { yyextra->das_arrow_depth --; } '(' expr_list[subexpr] ')' {
+        auto pCall = yyextra->g_Program->makeCall(tokAt(scanner,@kwd),tokAt(scanner,@subexpr),*$kwd);
+        pCall->arguments = typesAndSequenceToList($declL,$subexpr);
         delete $kwd;
         $$ = pCall;
     }
@@ -2742,10 +2750,15 @@ type_declaration_no_options
     |   '$' name_in_namespace[name] '(' optional_expr_list[arguments] ')' {
         $$ = new TypeDecl(Type::typeMacro);
         $$->at = tokRangeAt(scanner,@name, @arguments);
-        auto args = sequenceToList($arguments);
-        $$->dimExpr.reserve(args.size()+1);
-        $$->dimExpr.push_back(new ExprConstString(tokAt(scanner,@name), *$name));
-        $$->dimExpr.insert($$->dimExpr.end(), args.begin(), args.end());
+        $$->dimExpr = sequenceToList($arguments);
+        $$->dimExpr.insert($$->dimExpr.begin(), new ExprConstString(tokAt(scanner,@name), *$name));
+        delete $name;
+    }
+    |   '$' name_in_namespace[name] '<' { yyextra->das_arrow_depth ++; } type_declaration_no_options_list[declL] '>' '(' optional_expr_list[arguments] ')' {
+        $$ = new TypeDecl(Type::typeMacro);
+        $$->at = tokRangeAt(scanner,@name, @arguments);
+        $$->dimExpr = typesAndSequenceToList($declL,$arguments);
+        $$->dimExpr.insert($$->dimExpr.begin(), new ExprConstString(tokAt(scanner,@name), *$name));
         delete $name;
     }
     |   type_declaration_no_options[typeDecl] '-' '[' ']' {
