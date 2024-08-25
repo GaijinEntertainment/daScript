@@ -43,6 +43,16 @@ namespace das {
         return argList;
     }
 
+    vector<ExpressionPtr> typesAndSequenceToList  ( vector<Expression *> * declL, Expression * arguments ) {
+        vector<ExpressionPtr> args;
+        vector<ExpressionPtr> seq = sequenceToList(arguments);
+        args.reserve(declL->size() + seq.size());
+        for ( auto & decl : *declL ) args.push_back(ExpressionPtr(decl));
+        for ( auto & arg : seq ) args.push_back(move(arg));
+        delete declL;
+        return args;
+    }
+
     Expression * sequenceToTuple ( Expression * arguments ) {
         if ( arguments->rtti_isSequence() ) {
             auto tup = new ExprMakeTuple(arguments->at);
@@ -56,6 +66,13 @@ namespace das {
     ExprLooksLikeCall * parseFunctionArguments ( ExprLooksLikeCall * pCall, Expression * arguments ) {
         pCall->arguments = sequenceToList(arguments);
         return pCall;
+    }
+
+    void deleteTypeDeclarationList ( vector<Expression *> * list ) {
+        if ( !list ) return;
+        for ( auto pD : *list )
+            delete pD;
+        delete list;
     }
 
     void deleteVariableDeclarationList ( vector<VariableDeclaration *> * list ) {
