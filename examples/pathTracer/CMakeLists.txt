@@ -21,10 +21,10 @@ ${CMAKE_SOURCE_DIR}/examples/pathTracer/path_tracer.cpp
 ${CMAKE_SOURCE_DIR}/examples/pathTracer/path_tracer.das
 ${CMAKE_SOURCE_DIR}/examples/pathTracer/toy_path_tracer_profile.das
 )
-add_executable(path_tracer ${PATHTRACER_AOT_SRC} ${PATHTRACER_AOT_GENERATED_SRC} ${AOT_GENERATED_SRC})
+add_executable(path_tracer ${PATHTRACER_AOT_SRC} ${PATHTRACER_AOT_GENERATED_SRC})
 target_include_directories(path_tracer PUBLIC ${PROJECT_SOURCE_DIR}/examples/pathTracer)
-TARGET_LINK_LIBRARIES(path_tracer libDaScript ${DAS_MODULES_LIBS})
-ADD_DEPENDENCIES(path_tracer libDaScript pathtracer_dasAotStub)
+TARGET_LINK_LIBRARIES(path_tracer libDaScript libDaScriptAot ${DAS_MODULES_LIBS})
+ADD_DEPENDENCIES(path_tracer libDaScript libDaScriptAot pathtracer_dasAotStub)
 SETUP_CPP11(path_tracer)
 
 install(DIRECTORY ${PROJECT_SOURCE_DIR}/examples/pathTracer

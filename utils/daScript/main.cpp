@@ -17,6 +17,7 @@ static bool pauseAfterErrors = false;
 static bool quiet = false;
 static bool paranoid_validation = false;
 static bool jitEnabled = false;
+static bool isAotLib = false;
 
 das::Context * get_context ( int stackSize=0 );
 
@@ -151,7 +152,7 @@ bool compile ( const string & fn, const string & cppFn, bool dryRun ) {
                 tw << "\tresolveTypeInfoAnnotations();\n";
                 tw << "};\n";
                 tw << "\n";
-                tw << "AotListBase impl(registerAotFunctions);\n";
+                if ( !isAotLib ) tw << "AotListBase impl(registerAotFunctions);\n";
                 // validation stuff
                 if ( paranoid_validation ) {
                     program->validateAotCpp(tw,*pctx);
@@ -159,6 +160,7 @@ bool compile ( const string & fn, const string & cppFn, bool dryRun ) {
                 }
                 // footer
                 tw << "}\n";
+                if ( isAotLib ) tw << "AotListBase impl_aot_" << program->thisModule->name << "(" << program->thisNamespace << "::registerAotFunctions);\n";
                 tw << "}\n";
                 tw << "#if defined(_MSC_VER)\n";
                 tw << "#pragma warning(pop)\n";
@@ -421,7 +423,9 @@ void print_help() {
 #endif
 
 int MAIN_FUNC_NAME ( int argc, char * argv[] ) {
-    if ( argc>2 && strcmp(argv[1],"-aot")==0 ) {
+    bool isArgAot = strcmp(argv[1],"-aot")==0;
+    isAotLib = !isArgAot && strcmp(argv[1],"-aotlib")==0;
+    if ( argc>2 && (isArgAot || isAotLib) ) {
         return das_aot_main(argc, argv);
     }
     use_utf8();
