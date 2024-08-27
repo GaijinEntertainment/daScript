@@ -93,7 +93,7 @@ SETUP_COMPILER()
 set(THREADS_PREFER_PTHREAD_FLAG ON)
 find_package(Threads REQUIRED)
 
-MACRO(DAS_AOT input genList mainTarget dasAotTool)
+MACRO(DAS_AOT_EXT input genList mainTarget dasAotTool dasAotToolArg)
     get_filename_component(input_src ${input} ABSOLUTE)
     get_filename_component(input_dir ${input_src} DIRECTORY)
     get_filename_component(input_name ${input} NAME)
@@ -105,13 +105,21 @@ MACRO(DAS_AOT input genList mainTarget dasAotTool)
         DEPENDS ${dasAotTool}
         OUTPUT  ${out_src}
         COMMENT "AOT precompiling ${input_src} -> ${out_src}"
-        COMMAND ${dasAotTool} -aot ${input_src} ${out_src}
+        COMMAND ${dasAotTool} ${dasAotToolArg} ${input_src} ${out_src}
     )
     list(APPEND ${genList} ${out_src})
     set(custom_name ${mainTarget}_${input_name}_aot)
     ADD_CUSTOM_TARGET(${custom_name} DEPENDS ${out_src})
     SET_TARGET_PROPERTIES(${custom_name} PROPERTIES FOLDER _${mainTarget}_aot)
     ADD_DEPENDENCIES(${mainTarget} ${custom_name})
+ENDMACRO()
+
+MACRO(DAS_AOT input genList mainTarget dasAotTool)
+    DAS_AOT_EXT(${input} ${genList} ${mainTarget} ${dasAotTool} -aot)
+ENDMACRO()
+
+MACRO(DAS_AOT_LIB input genList mainTarget dasAotTool)
+    DAS_AOT_EXT(${input} ${genList} ${mainTarget} ${dasAotTool} -aotlib)
 ENDMACRO()
 
 MACRO(DAS_AOT_D input genList mainTarget dasAotTool)
@@ -683,19 +691,33 @@ SETUP_CPP11(libDaScript)
 #target_precompile_headers(libDaScript PUBLIC include/daScript/misc/platform.h)
 
 if(NOT ${DAS_AOT_EXAMPLES_DISABLED})
+
+    if(${DAS_TOOLS_DISABLED})
+        # error, we need tools to generate aot
+        message(FATAL_ERROR "DAS_AOT_EXAMPLES_DISABLED requires DAS_TOOLS_DISABLED to be OFF")
+    endif()
+
     add_custom_target(dasAotStub)
     SET(AOT_GENERATED_SRC)
-    DAS_AOT("daslib/functional.das" AOT_GENERATED_SRC dasAotStub daScript)
-    DAS_AOT("daslib/json.das" AOT_GENERATED_SRC dasAotStub daScript)
-    DAS_AOT("daslib/json_boost.das" AOT_GENERATED_SRC dasAotStub daScript)
-    DAS_AOT("daslib/regex.das" AOT_GENERATED_SRC dasAotStub daScript)
-    DAS_AOT("daslib/regex_boost.das" AOT_GENERATED_SRC dasAotStub daScript)
-    DAS_AOT("daslib/strings_boost.das" AOT_GENERATED_SRC dasAotStub daScript)
-    DAS_AOT("daslib/random.das" AOT_GENERATED_SRC dasAotStub daScript)
-    DAS_AOT("daslib/math_boost.das" AOT_GENERATED_SRC dasAotStub daScript)
-    DAS_AOT("daslib/utf8_utils.das" AOT_GENERATED_SRC dasAotStub daScript)
+    DAS_AOT_LIB("daslib/functional.das" AOT_GENERATED_SRC dasAotStub daScript)
+    DAS_AOT_LIB("daslib/json.das" AOT_GENERATED_SRC dasAotStub daScript)
+    DAS_AOT_LIB("daslib/json_boost.das" AOT_GENERATED_SRC dasAotStub daScript)
+    DAS_AOT_LIB("daslib/regex.das" AOT_GENERATED_SRC dasAotStub daScript)
+    DAS_AOT_LIB("daslib/regex_boost.das" AOT_GENERATED_SRC dasAotStub daScript)
+    DAS_AOT_LIB("daslib/strings_boost.das" AOT_GENERATED_SRC dasAotStub daScript)
+    DAS_AOT_LIB("daslib/random.das" AOT_GENERATED_SRC dasAotStub daScript)
+    DAS_AOT_LIB("daslib/math_boost.das" AOT_GENERATED_SRC dasAotStub daScript)
+    DAS_AOT_LIB("daslib/utf8_utils.das" AOT_GENERATED_SRC dasAotStub daScript)
     SOURCE_GROUP_FILES("aot stub" AOT_GENERATED_SRC)
     #UNITIZE_BUILD("daslib" AOT_GENERATED_SRC)
+
+    SET(AOT_STUB_SRC
+        utils/daScript/aot_stub.cpp
+    )
+    add_library(libDaScriptAot STATIC ${AOT_GENERATED_SRC} ${AOT_STUB_SRC})
+    ADD_DEPENDENCIES(libDaScriptAot dasAotStub daScript libDaScript)
+    TARGET_LINK_LIBRARIES(libDaScriptAot libDaScript)
+    SETUP_CPP11(libDaScriptAot)
 endif()
 
 SET(DAS_DASCRIPT_MAIN_SRC
