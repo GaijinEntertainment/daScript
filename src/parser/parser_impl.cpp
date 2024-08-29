@@ -24,6 +24,20 @@ namespace das {
         }
     }
 
+    void appendDimExpr ( TypeDecl * typeDecl, Expression * dimExpr ) {
+        int32_t dI = TypeDecl::dimConst;
+        if ( dimExpr->rtti_isConstant() ) {                // note: this shortcut is here so we don`t get extra infer pass on every array
+            auto cI = (ExprConst *) dimExpr;
+            auto bt = cI->baseType;
+            if ( bt==Type::tInt || bt==Type::tUInt ) {
+                dI = cast<int32_t>::to(cI->value);
+            }
+        }
+        typeDecl->dim.push_back(dI);
+        typeDecl->dimExpr.push_back(ExpressionPtr(dimExpr));
+        typeDecl->removeDim = false;
+    }
+
     vector<ExpressionPtr> sequenceToList ( Expression * arguments ) {
         vector<ExpressionPtr> argList;
         auto arg = arguments;
