@@ -349,6 +349,7 @@
 %type <pTypeDecl>       bitfield_type_declaration
 %type <pTypeDecl>       optional_function_type
 %type <pTypeDecl>       structure_type_declaration
+%type <pTypeDecl>       dim_list
 %type <pTypeDeclList>   type_declaration_no_options_list
 %type <pVarDeclList>    struct_variable_declaration_list
 %type <pVarDeclList>    optional_struct_variable_declaration_list
@@ -2706,12 +2707,23 @@ table_type_pair
     }
     ;
 
+dim_list
+    :  '[' expr[dimExpr] ']' {
+        $$ = new TypeDecl(Type::autoinfer);
+        appendDimExpr($$, $dimExpr);
+    }
+    |  dim_list[list] '[' expr[dimExpr] ']' {
+        $$ = $list;
+        appendDimExpr($$, $dimExpr);
+    }
+    ;
+
 type_declaration_no_options
     :   basic_type_declaration[basicType]                   { $$ = new TypeDecl($basicType); $$->at = tokAt(scanner,@basicType); }
     |   auto_type_declaration[typeDecl]                     { $$ = $typeDecl; }
     |   bitfield_type_declaration[typeDecl]                 { $$ = $typeDecl; }
     |   structure_type_declaration[typeDecl]                { $$ = $typeDecl; }
-    |   type_declaration_no_options[typeDecl] '[' expr[dimExpr] ']' {
+    |   type_declaration_no_options[typeDecl] dim_list[dimlist] {
         if ( $typeDecl->baseType==Type::typeDecl ) {
             das_yyerror(scanner,"type declaration can`t be used as array base type",tokAt(scanner,@typeDecl),
                 CompilationError::invalid_type);
@@ -2719,18 +2731,12 @@ type_declaration_no_options
             das_yyerror(scanner,"macro can`t be used as array base type",tokAt(scanner,@typeDecl),
                 CompilationError::invalid_type);
         }
-        int32_t dI = TypeDecl::dimConst;
-        if ( $dimExpr->rtti_isConstant() ) {                // note: this shortcut is here so we don`t get extra infer pass on every array
-            auto cI = (ExprConst *) $dimExpr;
-            auto bt = cI->baseType;
-            if ( bt==Type::tInt || bt==Type::tUInt ) {
-                dI = cast<int32_t>::to(cI->value);
-            }
-        }
-        $typeDecl->dim.push_back(dI);
-        $typeDecl->dimExpr.push_back(ExpressionPtr($dimExpr));
+        $typeDecl->dim.insert($typeDecl->dim.begin(), $dimlist->dim.begin(), $dimlist->dim.end());
+        $typeDecl->dimExpr.insert($typeDecl->dimExpr.begin(), $dimlist->dimExpr.begin(), $dimlist->dimExpr.end());
         $typeDecl->removeDim = false;
         $$ = $typeDecl;
+        $dimlist->dimExpr.clear();
+        delete $dimlist;
     }
     |   type_declaration_no_options[typeDecl] '[' ']' {
         $typeDecl->dim.push_back(TypeDecl::dimAuto);
