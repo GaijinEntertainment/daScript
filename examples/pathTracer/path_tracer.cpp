@@ -4,6 +4,8 @@ using namespace das;
 
 #define PATHTRACER_NAME   "/examples/pathTracer/toy_path_tracer_profile.das"
 
+namespace das { vector<void *> force_aot_stub(); }
+
 void pathtracer () {
     TextPrinter tout;                               // output stream for all compiler messages (stdout. for stringstream use TextWriter)
     ModuleGroup dummyLibGroup;                      // module group for compiled program
@@ -51,7 +53,11 @@ void pathtracer () {
     }
 }
 
+namespace das { vector<void *> force_aot_stub(); }
+
 int main( int, char * [] ) {
+    // force libDaScriptAot linking
+    force_aot_stub();
     // request all da-script built in modules
     NEED_ALL_DEFAULT_MODULES;
     // request external modules

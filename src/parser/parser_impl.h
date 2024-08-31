@@ -60,12 +60,15 @@ namespace das {
     void das_checkName ( yyscan_t scanner, const string & name, const LineInfo &at );
 
     vector<ExpressionPtr> sequenceToList ( Expression * arguments );
+    vector<ExpressionPtr> typesAndSequenceToList  ( vector<Expression *> * declL, Expression * arguments );
     Expression * sequenceToTuple ( Expression * arguments );
     ExprLooksLikeCall * parseFunctionArguments ( ExprLooksLikeCall * pCall, Expression * arguments );
     void deleteVariableDeclarationList ( vector<VariableDeclaration *> * list );
+    void deleteTypeDeclarationList ( vector<Expression *> * list );
     void varDeclToTypeDecl ( yyscan_t scanner, TypeDecl * pType, vector<VariableDeclaration*> * list, bool needNames = true );
     Annotation * findAnnotation ( yyscan_t scanner, const string & name, const LineInfo & at );
     void runFunctionAnnotations ( yyscan_t scanner, DasParserState * extra, Function * func, AnnotationList * annL, const LineInfo & at );
+    void appendDimExpr ( TypeDecl * typeDecl, Expression * dimExpr );
 
     Expression * ast_arrayComprehension (yyscan_t scanner, const LineInfo & loc, vector<VariableNameAndPosition> * iters,
         Expression * srcs, Expression * subexpr, Expression * where, const LineInfo & forend, bool genSyntax, bool tableSyntax );

@@ -228,6 +228,7 @@ namespace  das {
         static __forceinline float Abs      ( float a, Context &, LineInfo * )          { return v_extract_x(v_abs(v_set_x(a))); }
         static __forceinline float Floor    ( float a, Context &, LineInfo * )          { return v_extract_x(v_floor(v_set_x(a))); }
         static __forceinline float Ceil     ( float a, Context &, LineInfo * )          { return v_extract_x(v_ceil(v_set_x(a))); }
+        static __forceinline float Round    ( float a, Context &, LineInfo * )          { return v_extract_x(v_round(v_set_x(a))); }
         static __forceinline float Fract    ( float a, Context &, LineInfo * )          { return a - v_extract_x(v_floor(v_set_x(a))); }
         static __forceinline float Sqrt     ( float a, Context &, LineInfo * )          { return v_extract_x(v_sqrt_x(v_set_x(a))); }
         static __forceinline float RSqrt    ( float a, Context &, LineInfo * )          { return v_extract_x(v_rsqrt_x(v_set_x(a))); }
@@ -280,6 +281,7 @@ namespace  das {
         static __forceinline vec4f Floor    ( vec4f a, Context &, LineInfo * )          { return v_floor(a); }
         static __forceinline vec4f Ceil     ( vec4f a, Context &, LineInfo * )          { return v_ceil(a); }
         static __forceinline vec4f Fract    ( vec4f a, Context &, LineInfo * )          { return v_sub(a, v_floor(a)); }
+        static __forceinline vec4f Round    ( vec4f a, Context &, LineInfo * )          { return v_round(a); }
         static __forceinline vec4f Sqrt     ( vec4f a, Context &, LineInfo * )          { return v_sqrt(a); }
         static __forceinline vec4f RSqrt    ( vec4f a, Context &, LineInfo * )          { return v_rsqrt(a); }
         static __forceinline vec4f RSqrtEst ( vec4f a, Context &, LineInfo * )          { return v_rsqrt_est(a); }

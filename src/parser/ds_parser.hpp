@@ -304,6 +304,7 @@ union DAS_YYSTYPE
     VariableDeclaration *           pVarDecl;
     vector<VariableDeclaration*> *  pVarDeclList;
     TypeDecl *                      pTypeDecl;
+    vector<Expression *> *          pTypeDeclList;
     Expression *                    pExpression;
     Type                            type;
     AnnotationArgument *            aa;

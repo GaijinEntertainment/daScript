@@ -24,6 +24,20 @@ namespace das {
         }
     }
 
+    void appendDimExpr ( TypeDecl * typeDecl, Expression * dimExpr ) {
+        int32_t dI = TypeDecl::dimConst;
+        if ( dimExpr->rtti_isConstant() ) {                // note: this shortcut is here so we don`t get extra infer pass on every array
+            auto cI = (ExprConst *) dimExpr;
+            auto bt = cI->baseType;
+            if ( bt==Type::tInt || bt==Type::tUInt ) {
+                dI = cast<int32_t>::to(cI->value);
+            }
+        }
+        typeDecl->dim.push_back(dI);
+        typeDecl->dimExpr.push_back(ExpressionPtr(dimExpr));
+        typeDecl->removeDim = false;
+    }
+
     vector<ExpressionPtr> sequenceToList ( Expression * arguments ) {
         vector<ExpressionPtr> argList;
         auto arg = arguments;
@@ -43,6 +57,16 @@ namespace das {
         return argList;
     }
 
+    vector<ExpressionPtr> typesAndSequenceToList  ( vector<Expression *> * declL, Expression * arguments ) {
+        vector<ExpressionPtr> args;
+        vector<ExpressionPtr> seq = sequenceToList(arguments);
+        args.reserve(declL->size() + seq.size());
+        for ( auto & decl : *declL ) args.push_back(ExpressionPtr(decl));
+        for ( auto & arg : seq ) args.push_back(move(arg));
+        delete declL;
+        return args;
+    }
+
     Expression * sequenceToTuple ( Expression * arguments ) {
         if ( arguments->rtti_isSequence() ) {
             auto tup = new ExprMakeTuple(arguments->at);
@@ -56,6 +80,13 @@ namespace das {
     ExprLooksLikeCall * parseFunctionArguments ( ExprLooksLikeCall * pCall, Expression * arguments ) {
         pCall->arguments = sequenceToList(arguments);
         return pCall;
+    }
+
+    void deleteTypeDeclarationList ( vector<Expression *> * list ) {
+        if ( !list ) return;
+        for ( auto pD : *list )
+            delete pD;
+        delete list;
     }
 
     void deleteVariableDeclarationList ( vector<VariableDeclaration *> * list ) {
