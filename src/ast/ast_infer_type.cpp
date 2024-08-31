@@ -406,14 +406,15 @@ namespace das {
             }
             if ( decl->baseType==Type::alias || (decl->baseType==Type::autoinfer && autoToAlias) ) {
                 if ( decl->isTag ) return nullptr;  // we can never infer a tag type
-                auto aT = fptr ? findFuncAlias(fptr, decl->alias) : findAlias(decl->alias);
+                TypeDeclPtr aT;
                 if ( aliases ) {
-                    if ( !aT || aT->baseType==Type::autoinfer ) {
-                        auto it = aliases->find(decl->alias);
-                        if ( it != aliases->end() ) {
-                            aT = it->second.get();
-                        }
+                    auto it = aliases->find(decl->alias);
+                    if ( it != aliases->end() ) {
+                        aT = it->second.get();
                     }
+                }
+                if ( !aT ) {
+                    aT = fptr ? findFuncAlias(fptr, decl->alias) : findAlias(decl->alias);
                 }
                 if ( !aT ) {
                     auto bT = nameToBasicType(decl->alias);
@@ -428,6 +429,7 @@ namespace das {
                     resT->constant = (resT->constant || decl->constant) && !decl->removeConstant;
                     resT->temporary = (resT->temporary || decl->temporary) && !decl->removeTemporary;
                     resT->dim = decl->dim;
+                    resT->aotAlias = false;
                     resT->alias.clear();
                     return resT;
                 } else {
@@ -589,14 +591,15 @@ namespace das {
                 return decl;
             }
             if ( decl->baseType==Type::alias ) {
-                auto aT = fptr ? findFuncAlias(fptr, decl->alias) : findAlias(decl->alias);
+                TypeDeclPtr aT;
                 if ( aliases ) {
-                    if ( !aT || aT->baseType==Type::autoinfer ) {
-                        auto it = aliases->find(decl->alias);
-                        if ( it != aliases->end() ) {
-                            aT = it->second.get();
-                        }
+                    auto it = aliases->find(decl->alias);
+                    if ( it != aliases->end() ) {
+                        aT = it->second.get();
                     }
+                }
+                if ( !aT ) {
+                    aT = fptr ? findFuncAlias(fptr, decl->alias) : findAlias(decl->alias);
                 }
                 if ( aT ) {
                     auto resT = make_smart<TypeDecl>(*aT);
@@ -606,6 +609,7 @@ namespace das {
                     resT->temporary = (resT->temporary || decl->temporary) && !decl->removeTemporary;
                     resT->implicit = (resT->implicit || decl->implicit);
                     resT->dim = decl->dim;
+                    resT->aotAlias = false;
                     resT->alias.clear();
                     return resT;
                 } else {
