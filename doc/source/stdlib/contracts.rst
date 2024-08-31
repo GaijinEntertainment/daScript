@@ -123,9 +123,9 @@ Type queries
 
 .. das:function:: isYetAnotherVectorTemplate(td: TypeDeclPtr) : bool
 
-:Arguments: * **td** :  :ref:`TypeDeclPtr <alias-TypeDeclPtr>` 
-
-
 returns true if the given type declaration is a das::vector template bound on C++ side
+
+
+:Arguments: * **td** :  :ref:`TypeDeclPtr <alias-TypeDeclPtr>` 
 
 

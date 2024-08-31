@@ -131,6 +131,7 @@ Channel, JobStatus, Lockbox
 // stub
 
 
+
 :Arguments: * **box** :  :ref:`LockBox <handle-jobque-LockBox>` ?& implicit
 
 .. _function-_at_jobque_c__c_append_CI1_ls_H_ls_jobque_c__c_JobStatus_gr__gr__qm__Ci_C_c_C_l:
@@ -138,6 +139,7 @@ Channel, JobStatus, Lockbox
 .. das:function:: append(channel: JobStatus? implicit; size: int) : int
 
 // stub
+
 
 
 :Arguments: * **channel** :  :ref:`JobStatus <handle-jobque-JobStatus>` ? implicit
@@ -164,6 +166,7 @@ Channel, JobStatus, Lockbox
 // stub
 
 
+
 :Arguments: * **channel** :  :ref:`Channel <handle-jobque-Channel>` ?& implicit
 
 .. _function-_at_jobque_c__c_add_ref_CI1_ls_H_ls_jobque_c__c_JobStatus_gr__gr__qm__C_c_C_l:
@@ -171,6 +174,7 @@ Channel, JobStatus, Lockbox
 .. das:function:: add_ref(status: JobStatus? implicit)
 
 // stub
+
 
 
 :Arguments: * **status** :  :ref:`JobStatus <handle-jobque-JobStatus>` ? implicit
@@ -182,6 +186,7 @@ Channel, JobStatus, Lockbox
 // stub
 
 
+
 :Arguments: * **status** :  :ref:`JobStatus <handle-jobque-JobStatus>` ?& implicit
 
 .. _function-_at_jobque_c__c_join_CI1_ls_H_ls_jobque_c__c_JobStatus_gr__gr__qm__C_c_C_l:
@@ -189,6 +194,7 @@ Channel, JobStatus, Lockbox
 .. das:function:: join(job: JobStatus? implicit)
 
 // stub
+
 
 
 :Arguments: * **job** :  :ref:`JobStatus <handle-jobque-JobStatus>` ? implicit
@@ -200,6 +206,7 @@ Channel, JobStatus, Lockbox
 // stub
 
 
+
 :Arguments: * **job** :  :ref:`JobStatus <handle-jobque-JobStatus>` ? implicit
 
 .. _function-_at_jobque_c__c_notify_and_release_&I1_ls_H_ls_jobque_c__c_JobStatus_gr__gr__qm__C_c_C_l:
@@ -207,6 +214,7 @@ Channel, JobStatus, Lockbox
 .. das:function:: notify_and_release(job: JobStatus?& implicit)
 
 // stub
+
 
 
 :Arguments: * **job** :  :ref:`JobStatus <handle-jobque-JobStatus>` ?& implicit
@@ -226,6 +234,7 @@ Channel, JobStatus, Lockbox
   This is unsafe operation.
 
 // stub
+
 
 
 :Arguments: * **jobStatus** :  :ref:`JobStatus <handle-jobque-JobStatus>` ?& implicit
@@ -274,6 +283,7 @@ Internal invocations
 // stub
 
 
+
 :Arguments: * **lambda** : lambda<void>
 
             * **function** : function<void>
@@ -287,6 +297,7 @@ Internal invocations
 // stub
 
 
+
 :Arguments: * **lambda** : lambda<void>
 
             * **function** : function<void>
@@ -298,6 +309,7 @@ Internal invocations
 .. das:function:: new_debugger_thread(block: block<> implicit)
 
 // stub
+
 
 
 :Arguments: * **block** : block<void> implicit
@@ -319,6 +331,7 @@ Construction
 // stub
 
 
+
 :Arguments: * **block** : block<( :ref:`LockBox <handle-jobque-LockBox>` ?):void> implicit
 
 .. _function-_at_jobque_c__c_with_channel_CI0_ls_1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm__gr_1_ls_v_gr__builtin__C_c_C_l:
@@ -328,6 +341,7 @@ Construction
 // stub
 
 
+
 :Arguments: * **block** : block<( :ref:`Channel <handle-jobque-Channel>` ?):void> implicit
 
 .. _function-_at_jobque_c__c_with_channel_Ci_CI0_ls_1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm__gr_1_ls_v_gr__builtin__C_c_C_l:
@@ -335,6 +349,7 @@ Construction
 .. das:function:: with_channel(count: int; block: block<(var arg0:Channel?):void> implicit)
 
 // stub
+
 
 
 :Arguments: * **count** : int
@@ -348,6 +363,7 @@ Construction
 // stub
 
 
+
 :Arguments: * **total** : int
 
             * **block** : block<( :ref:`JobStatus <handle-jobque-JobStatus>` ?):void> implicit
@@ -357,6 +373,7 @@ Construction
 .. das:function:: with_job_que(block: block<void> implicit)
 
 // stub
+
 
 
 :Arguments: * **block** : block<void> implicit
@@ -397,6 +414,7 @@ Atomic
 // stub
 
 
+
 :Arguments: * **atomic** :  :ref:`Atomic32 <handle-jobque-Atomic32>` ?& implicit
 
 .. _function-_at_jobque_c__c_with_atomic32_CI0_ls_1_ls_H_ls_jobque_c__c_Atomic32_gr__gr__qm__gr_1_ls_v_gr__builtin__C_c_C_l:
@@ -406,6 +424,7 @@ Atomic
 // stub
 
 
+
 :Arguments: * **block** : block<( :ref:`Atomic32 <handle-jobque-Atomic32>` ?):void> implicit
 
 .. _function-_at_jobque_c__c_set_CI1_ls_H_ls_jobque_c__c_Atomic32_gr__gr__qm__Ci_C_c_C_l:
@@ -413,6 +432,7 @@ Atomic
 .. das:function:: set(atomic: Atomic32? implicit; value: int)
 
 // stub
+
 
 
 :Arguments: * **atomic** :  :ref:`Atomic32 <handle-jobque-Atomic32>` ? implicit
@@ -426,6 +446,7 @@ Atomic
 // stub
 
 
+
 :Arguments: * **atomic** :  :ref:`Atomic32 <handle-jobque-Atomic32>` ? implicit
 
 .. _function-_at_jobque_c__c_inc_CI1_ls_H_ls_jobque_c__c_Atomic32_gr__gr__qm__C_c_C_l:
@@ -435,6 +456,7 @@ Atomic
 // stub
 
 
+
 :Arguments: * **atomic** :  :ref:`Atomic32 <handle-jobque-Atomic32>` ? implicit
 
 .. _function-_at_jobque_c__c_dec_CI1_ls_H_ls_jobque_c__c_Atomic32_gr__gr__qm__C_c_C_l:
@@ -442,6 +464,7 @@ Atomic
 .. das:function:: dec(atomic: Atomic32? implicit) : int
 
 // stub
+
 
 
 :Arguments: * **atomic** :  :ref:`Atomic32 <handle-jobque-Atomic32>` ? implicit
@@ -463,6 +486,7 @@ Atomic
 // stub
 
 
+
 :Arguments: * **atomic** :  :ref:`Atomic64 <handle-jobque-Atomic64>` ?& implicit
 
 .. _function-_at_jobque_c__c_with_atomic64_CI0_ls_1_ls_H_ls_jobque_c__c_Atomic64_gr__gr__qm__gr_1_ls_v_gr__builtin__C_c_C_l:
@@ -472,6 +496,7 @@ Atomic
 // stub
 
 
+
 :Arguments: * **block** : block<( :ref:`Atomic64 <handle-jobque-Atomic64>` ?):void> implicit
 
 .. _function-_at_jobque_c__c_set_CI1_ls_H_ls_jobque_c__c_Atomic64_gr__gr__qm__Ci64_C_c_C_l:
@@ -479,6 +504,7 @@ Atomic
 .. das:function:: set(atomic: Atomic64? implicit; value: int64)
 
 // stub
+
 
 
 :Arguments: * **atomic** :  :ref:`Atomic64 <handle-jobque-Atomic64>` ? implicit
@@ -492,6 +518,7 @@ Atomic
 // stub
 
 
+
 :Arguments: * **atomic** :  :ref:`Atomic64 <handle-jobque-Atomic64>` ? implicit
 
 .. _function-_at_jobque_c__c_inc_CI1_ls_H_ls_jobque_c__c_Atomic64_gr__gr__qm__C_c_C_l:
@@ -501,6 +528,7 @@ Atomic
 // stub
 
 
+
 :Arguments: * **atomic** :  :ref:`Atomic64 <handle-jobque-Atomic64>` ? implicit
 
 .. _function-_at_jobque_c__c_dec_CI1_ls_H_ls_jobque_c__c_Atomic64_gr__gr__qm__C_c_C_l:
@@ -508,6 +536,7 @@ Atomic
 .. das:function:: dec(atomic: Atomic64? implicit) : int64
 
 // stub
+
 
 
 :Arguments: * **atomic** :  :ref:`Atomic64 <handle-jobque-Atomic64>` ? implicit

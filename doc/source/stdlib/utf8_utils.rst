@@ -48,6 +48,7 @@ Uncategorized
 
 Converts a codepoint (UTF-32 symbol) to the UTF-8 byte array
 
+
 :Arguments: * **ch** : uint
 
 .. _function-_at_utf8_utils_c__c_utf8_encode_1_ls_u8_gr_A_CI1_ls_u_gr_A:
@@ -66,6 +67,7 @@ Converts a codepoint (UTF-32 symbol) to the UTF-8 byte array
 
 Converts UTF-32 string to UTF-8 and returns it as a UTF-8 byte array
 
+
 :Arguments: * **source_utf32_string** : array<uint> implicit
 
 .. _function-_at_utf8_utils_c__c_utf8_length_CI1_ls_u8_gr_A:
@@ -74,6 +76,7 @@ Converts UTF-32 string to UTF-8 and returns it as a UTF-8 byte array
 
 Returns the number of characters in the UTF-8 string
 
+
 :Arguments: * **utf8_string** : array<uint8> implicit
 
 .. _function-_at_utf8_utils_c__c_utf8_length_Cs:
@@ -81,6 +84,7 @@ Returns the number of characters in the UTF-8 string
 .. das:function:: utf8_length(utf8_string: string) : int
 
 Returns the number of characters in the UTF-8 string
+
 
 :Arguments: * **utf8_string** : string
 
@@ -140,6 +144,7 @@ Returns the number of characters in the UTF-8 string
 
 Converts UTF-8 string to UTF-32 and returns it as an array of codepoints (UTF-32 string)
 
+
 :Arguments: * **source_utf8_string** : array<uint8> implicit
 
 .. _function-_at_utf8_utils_c__c_utf8_decode_Cs:
@@ -148,6 +153,7 @@ Converts UTF-8 string to UTF-32 and returns it as an array of codepoints (UTF-32
 
 Converts UTF-8 string to UTF-32 and returns it as an array of codepoints (UTF-32 string)
 
+
 :Arguments: * **source_utf8_string** : string
 
 .. _function-_at_utf8_utils_c__c_utf8_decode_1_ls_u_gr_A_Cs:
@@ -155,6 +161,7 @@ Converts UTF-8 string to UTF-32 and returns it as an array of codepoints (UTF-32
 .. das:function:: utf8_decode(dest_utf32_string: array<uint>; source_utf8_string: string)
 
 Converts UTF-8 string to UTF-32 and appends it to the array of codepoints (UTF-32 string)
+
 
 :Arguments: * **dest_utf32_string** : array<uint>
 

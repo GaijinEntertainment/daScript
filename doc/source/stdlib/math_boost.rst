@@ -65,6 +65,7 @@ Angle conversions
 
 convert radians to degrees
 
+
 :Arguments: * **f** : float
 
 .. _function-_at_math_boost_c__c_radians_Cf:
@@ -72,6 +73,7 @@ convert radians to degrees
 .. das:function:: radians(f: float) : float
 
 convert degrees to radians
+
 
 :Arguments: * **f** : float
 
@@ -87,12 +89,12 @@ Intersections
 
 .. das:function:: is_intersecting(a: AABR; b: AABR) : bool
 
+returns true if inputs intersect
+
+
 :Arguments: * **a** :  :ref:`AABR <struct-math_boost-AABR>` 
 
             * **b** :  :ref:`AABR <struct-math_boost-AABR>` 
-
-
-returns true if inputs intersect
 
 .. _function-_at_math_boost_c__c_is_intersecting_CS_ls_math_boost_c__c_AABB_gr__CS_ls_math_boost_c__c_AABB_gr_:
 
@@ -136,6 +138,7 @@ Matrices
 
 left-handed (z forward) look at matrix with origin at `Eye` and target at `At`, and up vector `Up`.
 
+
 :Arguments: * **Eye** : float3
 
             * **At** : float3
@@ -148,6 +151,7 @@ left-handed (z forward) look at matrix with origin at `Eye` and target at `At`, 
 
 right-handed (z towards viewer) look at matrix with origin at `Eye` and target at `At`, and up vector `Up`.
 
+
 :Arguments: * **Eye** : float3
 
             * **At** : float3
@@ -159,6 +163,7 @@ right-handed (z towards viewer) look at matrix with origin at `Eye` and target a
 .. das:function:: perspective_lh(fovy: float; aspect: float; zn: float; zf: float) : float4x4
 
 left-handed (z forward) perspective matrix
+
 
 :Arguments: * **fovy** : float
 
@@ -174,6 +179,7 @@ left-handed (z forward) perspective matrix
 
 right-handed (z toward viewer) perspective matrix
 
+
 :Arguments: * **fovy** : float
 
             * **aspect** : float
@@ -188,6 +194,7 @@ right-handed (z toward viewer) perspective matrix
 
 right-handed (z toward viewer) opengl (z in [-1..1]) perspective matrix
 
+
 :Arguments: * **fovy** : float
 
             * **aspect** : float
@@ -201,6 +208,7 @@ right-handed (z toward viewer) opengl (z in [-1..1]) perspective matrix
 .. das:function:: ortho_rh(left: float; right: float; bottom: float; top: float; zNear: float; zFar: float) : float4x4
 
 right handed (z towards viwer) orthographic (parallel) projection matrix
+
 
 :Arguments: * **left** : float
 
@@ -220,6 +228,7 @@ right handed (z towards viwer) orthographic (parallel) projection matrix
 
 planar shadow projection matrix, i.e. all light shadows to be projected on a plane
 
+
 :Arguments: * **Light** : float4
 
             * **Plane** : float4
@@ -238,6 +247,7 @@ Plane
 
 dot product of `Plane` and 'Vec'
 
+
 :Arguments: * **Plane** : float4
 
             * **Vec** : float4
@@ -248,6 +258,7 @@ dot product of `Plane` and 'Vec'
 
 normalize `Plane', length xyz will be 1.0 (or 0.0 for no plane)
 
+
 :Arguments: * **Plane** : float4
 
 .. _function-_at_math_boost_c__c_plane_from_point_normal_Cf3_Cf3:
@@ -255,6 +266,7 @@ normalize `Plane', length xyz will be 1.0 (or 0.0 for no plane)
 .. das:function:: plane_from_point_normal(p: float3; n: float3) : float4
 
 construct plane from point `p` and normal `n`
+
 
 :Arguments: * **p** : float3
 
@@ -274,6 +286,7 @@ Color packig and unpacking
 .. das:function:: RGBA_TO_UCOLOR(x: float; y: float; z: float; w: float) : uint
 
 conversion from RGBA to ucolor. x,y,z,w are in [0,1] range
+
 
 :Arguments: * **x** : float
 
@@ -297,6 +310,7 @@ conversion from RGBA to ucolor. x,y,z,w are in [0,1] range
 
 conversion from ucolor to RGBA. x components are in [0,255] range
 
+
 :Arguments: * **x** : uint
 
 .. _function-_at_math_boost_c__c_UCOLOR_TO_RGB_Cu:
@@ -304,6 +318,7 @@ conversion from ucolor to RGBA. x components are in [0,255] range
 .. das:function:: UCOLOR_TO_RGB(x: uint) : float3
 
 conversion from ucolor to RGB. x components are in [0,255] range. result is float3(x,y,z)
+
 
 :Arguments: * **x** : uint
 
@@ -316,6 +331,7 @@ Uncategorized
 .. das:function:: linear_to_SRGB(x: float) : float
 
 convert value from linear space to sRGB curve space
+
 
 :Arguments: * **x** : float
 

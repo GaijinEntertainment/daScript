@@ -65,6 +65,7 @@ Implementation details
 
 Same as verify, only the check will produce macro error, followed by return [[ExpressionPtr]]
 
+
 :Arguments: * **expr** : bool
 
             * **prog** :  :ref:`ProgramPtr <alias-ProgramPtr>` 
@@ -83,6 +84,7 @@ Uncategorized
 
 Collect all captured variables in the expression.
 
+
 :Arguments: * **expr** :  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 .. _function-_at_macro_boost_c__c_collect_finally_CY_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_M_Cb:
@@ -92,6 +94,7 @@ Collect all captured variables in the expression.
 Collect all finally blocks in the expression.
 Returns array of ExprBlock? with all the blocks which have `finally` section
 Does not go into 'make_block' expression, such as `lambda`, or 'block' expressions
+
 
 :Arguments: * **expr** :  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
@@ -103,6 +106,7 @@ Does not go into 'make_block' expression, such as `lambda`, or 'block' expressio
 
 Collect all labels in the expression. Returns array of integer with label indices
 Does not go into 'make_block' expression, such as `lambda`, or 'block' expressions
+
 
 :Arguments: * **expr** :  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 

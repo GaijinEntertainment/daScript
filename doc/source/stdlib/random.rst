@@ -47,6 +47,7 @@ Seed and basic generators
 
 constructs seed vector out of single integer seed
 
+
 :Arguments: * **seed** : int
 
 .. _function-_at_random_c__c_random_seed2D_&i4_Ci2_Ci:
@@ -54,6 +55,7 @@ constructs seed vector out of single integer seed
 .. das:function:: random_seed2D(seed: int4&; co: int2; cf: int = 0) : auto
 
 constructs seed vector out of 2d screen coordinates and frame counter `cf`
+
 
 :Arguments: * **seed** : int4&
 
@@ -67,6 +69,7 @@ constructs seed vector out of 2d screen coordinates and frame counter `cf`
 
 random integer 0..32767 (LCG_RAND_MAX)
 
+
 :Arguments: * **seed** : int4&
 
 .. _function-_at_random_c__c_random_big_int_&i4:
@@ -74,6 +77,7 @@ random integer 0..32767 (LCG_RAND_MAX)
 .. das:function:: random_big_int(seed: int4&) : auto
 
 random integer 0..32768*32768-1 (LCG_RAND_MAX_BIG)
+
 
 :Arguments: * **seed** : int4&
 
@@ -83,6 +87,7 @@ random integer 0..32768*32768-1 (LCG_RAND_MAX_BIG)
 
 random integer 0..32768*32768-1 (LCG_RAND_MAX_BIG)
 
+
 :Arguments: * **seed** : int4&
 
 .. _function-_at_random_c__c_random_int4_&i4:
@@ -90,6 +95,7 @@ random integer 0..32768*32768-1 (LCG_RAND_MAX_BIG)
 .. das:function:: random_int4(seed: int4&) : auto
 
 random int4, each component is 0..32767 (LCG_RAND_MAX)
+
 
 :Arguments: * **seed** : int4&
 
@@ -99,6 +105,7 @@ random int4, each component is 0..32767 (LCG_RAND_MAX)
 
 random float 0..1
 
+
 :Arguments: * **seed** : int4&
 
 .. _function-_at_random_c__c_random_float4_&i4:
@@ -106,6 +113,7 @@ random float 0..1
 .. das:function:: random_float4(seed: int4&) : auto
 
 random float4, each component is 0..1
+
 
 :Arguments: * **seed** : int4&
 
@@ -137,6 +145,7 @@ Specific distributions
 
 random float3 unit vector (length=1.)
 
+
 :Arguments: * **seed** : int4&
 
 .. _function-_at_random_c__c_random_in_unit_sphere_&i4:
@@ -145,6 +154,7 @@ random float3 unit vector (length=1.)
 
 random float3 unit vector (length=1) which happens to be inside a sphere R=1
 
+
 :Arguments: * **seed** : int4&
 
 .. _function-_at_random_c__c_random_in_unit_disk_&i4:
@@ -152,6 +162,7 @@ random float3 unit vector (length=1) which happens to be inside a sphere R=1
 .. das:function:: random_in_unit_disk(seed: int4&) : auto
 
 random float3 unit vector (length=1) which happens to be inside a disk R=1, Z=0
+
 
 :Arguments: * **seed** : int4&
 

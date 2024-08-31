@@ -190,6 +190,7 @@ File manipulation
 // stub
 
 
+
 :Arguments: * **name** : string implicit
 
 .. _function-_at_fio_c__c_rename_CIs_CIs:
@@ -197,6 +198,7 @@ File manipulation
 .. das:function:: rename(old_name: string implicit; new_name: string implicit) : bool
 
 // stub
+
 
 
 :Arguments: * **old_name** : string implicit
@@ -210,6 +212,7 @@ File manipulation
 // stub
 
 
+
 :Arguments: * **name** : string implicit
 
             * **mode** : string implicit
@@ -221,6 +224,7 @@ File manipulation
 // stub
 
 
+
 :Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>` ? implicit
 
 .. _function-_at_fio_c__c_fflush_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__C_c_C_l:
@@ -230,6 +234,7 @@ File manipulation
 // stub
 
 
+
 :Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>` ? implicit
 
 .. _function-_at_fio_c__c_fprint_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__CIs_C_c_C_l:
@@ -237,6 +242,7 @@ File manipulation
 .. das:function:: fprint(file: FILE const? implicit; text: string implicit)
 
 // stub
+
 
 
 :Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>` ? implicit
@@ -250,6 +256,7 @@ File manipulation
 // stub
 
 
+
 :Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>` ? implicit
 
 .. _function-_at_fio_c__c_fmap_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__CI0_ls__hh_1_ls_u8_gr_A_gr_1_ls_v_gr__builtin__C_c_C_l:
@@ -257,6 +264,7 @@ File manipulation
 .. das:function:: fmap(file: FILE const? implicit; block: block<(var arg0:array<uint8>#):void> implicit)
 
 // stub
+
 
 
 :Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>` ? implicit
@@ -270,6 +278,7 @@ File manipulation
 // stub
 
 
+
 :Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>` ? implicit
 
 .. _function-_at_fio_c__c_fwrite_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__CIs_C_c_C_l:
@@ -277,6 +286,7 @@ File manipulation
 .. das:function:: fwrite(file: FILE const? implicit; text: string implicit)
 
 // stub
+
 
 
 :Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>` ? implicit
@@ -290,6 +300,7 @@ File manipulation
 // stub
 
 
+
 :Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>` ? implicit
 
 .. _function-_at_fio_c__c_fseek_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__Ci64_Ci_C_c_C_l:
@@ -297,6 +308,7 @@ File manipulation
 .. das:function:: fseek(file: FILE const? implicit; offset: int64; mode: int) : int64
 
 // stub
+
 
 
 :Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>` ? implicit
@@ -312,6 +324,7 @@ File manipulation
 // stub
 
 
+
 :Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>` ? implicit
 
 .. _function-_at_fio_c__c_fstat_CI1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__IH_ls_fio_c__c_FStat_gr__C_c_C_l:
@@ -319,6 +332,7 @@ File manipulation
 .. das:function:: fstat(file: FILE const? implicit; stat: FStat implicit) : bool
 
 // stub
+
 
 
 :Arguments: * **file** :  :ref:`FILE <handle-fio-FILE>` ? implicit
@@ -330,6 +344,7 @@ File manipulation
 .. das:function:: stat(file: string implicit; stat: FStat implicit) : bool
 
 // stub
+
 
 
 :Arguments: * **file** : string implicit
@@ -371,6 +386,7 @@ File manipulation
 // stub
 
 
+
 :Arguments: * **file** :  :ref:`file <alias-file>` 
 
             * **size** : int
@@ -382,6 +398,7 @@ File manipulation
 .. das:function:: fopen(name: string; mode: string; blk: block<(f:FILE const? const):void>) : auto
 
 // stub
+
 
 
 :Arguments: * **name** : string
@@ -397,6 +414,7 @@ File manipulation
 // stub
 
 
+
 :Arguments: * **path** : string
 
 .. _function-_at_fio_c__c_fstat_CY_ls_file_gr_1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm_:
@@ -406,6 +424,7 @@ File manipulation
 // stub
 
 
+
 :Arguments: * **f** :  :ref:`file <alias-file>` 
 
 .. _function-_at_fio_c__c_fread_CY_ls_file_gr_1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__CN_ls_data_gr_0_ls_C_hh_s_gr_1_ls__dot__gr__builtin_:
@@ -413,6 +432,7 @@ File manipulation
 .. das:function:: fread(f: file; blk: block<(data:string const#):auto>) : auto
 
 // stub
+
 
 
 :Arguments: * **f** :  :ref:`file <alias-file>` 
@@ -426,6 +446,7 @@ File manipulation
 // stub
 
 
+
 :Arguments: * **f** :  :ref:`file <alias-file>` 
 
             * **buf** : auto(BufType)
@@ -435,6 +456,7 @@ File manipulation
 .. das:function:: fsave(f: file; buf: auto(BufType)) : auto
 
 // stub
+
 
 
 :Arguments: * **f** :  :ref:`file <alias-file>` 
@@ -448,6 +470,7 @@ File manipulation
 // stub
 
 
+
 :Arguments: * **f** :  :ref:`file <alias-file>` 
 
             * **buf** : auto(BufType) implicit
@@ -457,6 +480,7 @@ File manipulation
 .. das:function:: fread(f: file; buf: array<auto(BufType)> implicit) : auto
 
 // stub
+
 
 
 :Arguments: * **f** :  :ref:`file <alias-file>` 
@@ -470,6 +494,7 @@ File manipulation
 // stub
 
 
+
 :Arguments: * **f** :  :ref:`file <alias-file>` 
 
             * **buf** : auto(BufType) implicit
@@ -479,6 +504,7 @@ File manipulation
 .. das:function:: fwrite(f: file; buf: array<auto(BufType)> implicit) : auto
 
 // stub
+
 
 
 :Arguments: * **f** :  :ref:`file <alias-file>` 
@@ -500,6 +526,7 @@ Path manipulation
 // stub
 
 
+
 :Arguments: * **name** : string implicit
 
 .. _function-_at_fio_c__c_base_name_CIs_C_c_C_l:
@@ -509,6 +536,7 @@ Path manipulation
 // stub
 
 
+
 :Arguments: * **name** : string implicit
 
 .. _function-_at_fio_c__c_get_full_file_name_CIs_C_c_C_l:
@@ -516,6 +544,7 @@ Path manipulation
 .. das:function:: get_full_file_name(path: string implicit) : string
 
 // stub
+
 
 
 :Arguments: * **path** : string implicit
@@ -536,6 +565,7 @@ Directory manipulation
 // stub
 
 
+
 :Arguments: * **path** : string implicit
 
 .. _function-_at_fio_c__c_chdir_CIs:
@@ -543,6 +573,7 @@ Directory manipulation
 .. das:function:: chdir(path: string implicit) : bool
 
 // stub
+
 
 
 :Arguments: * **path** : string implicit
@@ -559,6 +590,7 @@ Directory manipulation
 .. das:function:: dir(path: string; blk: block<(filename:string const):void>) : auto
 
 // stub
+
 
 
 :Arguments: * **path** : string
@@ -583,6 +615,7 @@ OS specific routines
 // stub
 
 
+
 :Arguments: * **msec** : uint
 
 .. _function-_at_fio_c__c_exit_Ci:
@@ -595,6 +628,7 @@ OS specific routines
 // stub
 
 
+
 :Arguments: * **exitCode** : int
 
 .. _function-_at_fio_c__c_popen_CIs_CI0_ls_C1_ls_CH_ls_fio_c__c_FILE_gr__gr__qm__gr_1_ls_v_gr__builtin__C_c_C_l:
@@ -605,6 +639,7 @@ OS specific routines
   This is unsafe operation.
 
 // stub
+
 
 
 :Arguments: * **command** : string implicit
@@ -621,6 +656,7 @@ OS specific routines
 // stub
 
 
+
 :Arguments: * **command** : string implicit
 
             * **scope** : block<( :ref:`FILE <handle-fio-FILE>` ?):void> implicit
@@ -632,6 +668,7 @@ OS specific routines
 // stub
 
 
+
 :Arguments: * **var** : string implicit
 
 .. _function-_at_fio_c__c_sanitize_command_line_CIs_C_c_C_l:
@@ -639,6 +676,7 @@ OS specific routines
 .. das:function:: sanitize_command_line(var: string implicit) : string
 
 // stub
+
 
 
 :Arguments: * **var** : string implicit

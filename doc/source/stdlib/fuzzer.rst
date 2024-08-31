@@ -56,6 +56,7 @@ Fuzzer tests
 run block however many times
 ignore panic, so that we can see that runtime crashes
 
+
 :Arguments: * **blk** : block<void>
 
 .. _function-_at_fuzzer_c__c_fuzz_Ci_C_builtin_:
@@ -64,6 +65,7 @@ ignore panic, so that we can see that runtime crashes
 
 run block however many times
 ignore panic, so that we can see that runtime crashes
+
 
 :Arguments: * **fuzz_count** : int
 
@@ -77,6 +79,7 @@ run block however many times
 do not ignore panic, so that we can see where the runtime fails
 this is here so that `fuzz` can be easily replaced with `fuzz_debug` for the purpose of debugging
 
+
 :Arguments: * **blk** : block<void>
 
 .. _function-_at_fuzzer_c__c_fuzz_debug_Ci_C_builtin_:
@@ -86,6 +89,7 @@ this is here so that `fuzz` can be easily replaced with `fuzz_debug` for the pur
 run block however many times
 do not ignore panic, so that we can see where the runtime fails
 this is here so that `fuzz` can be easily replaced with `fuzz_debug` for the purpose of debugging
+
 
 :Arguments: * **fuzz_count** : int
 
@@ -97,6 +101,7 @@ this is here so that `fuzz` can be easily replaced with `fuzz_debug` for the pur
 
 fuzzes generic function that takes single numeric or vector argument.
 arguments are: int, uint, float, double, string, int2, int3, int4, uint2, uint3, uint4, float2, float3, float4
+
 
 :Arguments: * **t** :  :ref:`T <struct-testing-T>` ?
 
@@ -111,6 +116,7 @@ arguments are: int, uint, float, double, string, int2, int3, int4, uint2, uint3,
 fuzzes generic function that takes single numeric or vector argument.
 arguments are: int, uint, float, double, string, int2, int3, int4, uint2, uint3, uint4, float2, float3, float4
 
+
 :Arguments: * **t** :  :ref:`T <struct-testing-T>` ?
 
             * **fake** :  :ref:`Faker <struct-faker-Faker>` 
@@ -123,6 +129,7 @@ arguments are: int, uint, float, double, string, int2, int3, int4, uint2, uint3,
 
 fuzzes generic function that takes single numeric or vector argument.
 arguments are: int, uint, float, double
+
 
 :Arguments: * **t** :  :ref:`T <struct-testing-T>` ?
 
@@ -137,6 +144,7 @@ arguments are: int, uint, float, double
 fuzzes generic function that takes single numeric or vector argument.
 arguments are: int, uint, int8, uint8, int16, uint16, int64, uint64, float, double
 
+
 :Arguments: * **t** :  :ref:`T <struct-testing-T>` ?
 
             * **fake** :  :ref:`Faker <struct-faker-Faker>` 
@@ -149,6 +157,7 @@ arguments are: int, uint, int8, uint8, int16, uint16, int64, uint64, float, doub
 
 fuzzes generic function that takes single numeric or vector argument.
 arguments are: int, uint, int64, uint64
+
 
 :Arguments: * **t** :  :ref:`T <struct-testing-T>` ?
 
@@ -163,6 +172,7 @@ arguments are: int, uint, int64, uint64
 fuzzes generic function that takes single numeric or vector argument.
 arguments are: uint, uint64
 
+
 :Arguments: * **t** :  :ref:`T <struct-testing-T>` ?
 
             * **fake** :  :ref:`Faker <struct-faker-Faker>` 
@@ -175,6 +185,7 @@ arguments are: uint, uint64
 
 fuzzes generic function that takes single numeric or vector argument.
 arguments are: float, double, float2, float3, float4
+
 
 :Arguments: * **t** :  :ref:`T <struct-testing-T>` ?
 
@@ -189,6 +200,7 @@ arguments are: float, double, float2, float3, float4
 fuzzes generic function that takes single numeric or vector argument.
 arguments are: float, float2, float3, float4
 
+
 :Arguments: * **t** :  :ref:`T <struct-testing-T>` ?
 
             * **fake** :  :ref:`Faker <struct-faker-Faker>` 
@@ -201,6 +213,7 @@ arguments are: float, float2, float3, float4
 
 fuzzes generic function that takes two numeric or vector arguments.
 arguments are: float, float2, float3, float4
+
 
 :Arguments: * **t** :  :ref:`T <struct-testing-T>` ?
 
@@ -215,6 +228,7 @@ arguments are: float, float2, float3, float4
 fuzzes generic function that takes two numeric or vector arguments.
 arguments are: float, double, float2, float3, float4
 
+
 :Arguments: * **t** :  :ref:`T <struct-testing-T>` ?
 
             * **fake** :  :ref:`Faker <struct-faker-Faker>` 
@@ -227,6 +241,7 @@ arguments are: float, double, float2, float3, float4
 
 fuzzes generic function that takes two numeric or vector arguments.
 arguments are: int, uint, float, double, int2, int3, int4, uint2, uint3, uint4, float2, float3, float4
+
 
 :Arguments: * **t** :  :ref:`T <struct-testing-T>` ?
 
@@ -241,6 +256,7 @@ arguments are: int, uint, float, double, int2, int3, int4, uint2, uint3, uint4, 
 fuzzes generic function that takes two numeric or vector arguments.
 arguments are: int, uint, float, double, int2, int3, int4, float2, float3, float4
 
+
 :Arguments: * **t** :  :ref:`T <struct-testing-T>` ?
 
             * **fake** :  :ref:`Faker <struct-faker-Faker>` 
@@ -253,6 +269,7 @@ arguments are: int, uint, float, double, int2, int3, int4, float2, float3, float
 
 fuzzes generic function that takes two numeric or vector arguments.
 arguments are: int, uint, float, double
+
 
 :Arguments: * **t** :  :ref:`T <struct-testing-T>` ?
 
@@ -267,6 +284,7 @@ arguments are: int, uint, float, double
 fuzzes generic function that takes two numeric or vector arguments.
 arguments are: int, uint, float, double, int64, uint64, string
 
+
 :Arguments: * **t** :  :ref:`T <struct-testing-T>` ?
 
             * **fake** :  :ref:`Faker <struct-faker-Faker>` 
@@ -279,6 +297,7 @@ arguments are: int, uint, float, double, int64, uint64, string
 
 fuzzes generic function that takes two numeric or vector arguments.
 arguments are: int, uint, int64, uint64, float, double, string, int2, int3, int4, uint2, uint3, uint4, float2, float3, float4
+
 
 :Arguments: * **t** :  :ref:`T <struct-testing-T>` ?
 
@@ -293,6 +312,7 @@ arguments are: int, uint, int64, uint64, float, double, string, int2, int3, int4
 fuzzes generic function that takes vector and matching scalar on the right
 arguments pairs are: int2,int; int3,int; uint2,uint; uint3,uint; uint4,uint; int4,int; float2,float; float3,float; float4,float
 
+
 :Arguments: * **t** :  :ref:`T <struct-testing-T>` ?
 
             * **fake** :  :ref:`Faker <struct-faker-Faker>` 
@@ -305,6 +325,7 @@ arguments pairs are: int2,int; int3,int; uint2,uint; uint3,uint; uint4,uint; int
 
 fuzzes generic function that takes vector and matching scalar on the left
 arguments pairs are: int2,int; int3,int; uint2,uint; uint3,uint; uint4,uint; int4,int; float2,float; float3,float; float4,float
+
 
 :Arguments: * **t** :  :ref:`T <struct-testing-T>` ?
 
@@ -319,6 +340,7 @@ arguments pairs are: int2,int; int3,int; uint2,uint; uint3,uint; uint4,uint; int
 fuzzes generic function that takes two numeric or vector arguments.
 arguments are: int, uint, int2, int3, int4, uint2, uint3, uint4
 
+
 :Arguments: * **t** :  :ref:`T <struct-testing-T>` ?
 
             * **fake** :  :ref:`Faker <struct-faker-Faker>` 
@@ -331,6 +353,7 @@ arguments are: int, uint, int2, int3, int4, uint2, uint3, uint4
 
 fuzzes generic function that takes numeric or vector argument, with matching shift type on the right.
 arguments are: int, uint, int2, int3, int4, uint2, uint3, uint4
+
 
 :Arguments: * **t** :  :ref:`T <struct-testing-T>` ?
 
@@ -345,6 +368,7 @@ arguments are: int, uint, int2, int3, int4, uint2, uint3, uint4
 fuzzes generic function that takes numeric or vector argument, with matching rotate type on the right.
 arguments are: int, uint
 
+
 :Arguments: * **t** :  :ref:`T <struct-testing-T>` ?
 
             * **fake** :  :ref:`Faker <struct-faker-Faker>` 
@@ -357,6 +381,7 @@ arguments are: int, uint
 
 fuzzes generic function that takes three numeric or vector arguments.
 arguments are: int, uint, float, double
+
 
 :Arguments: * **t** :  :ref:`T <struct-testing-T>` ?
 
@@ -371,6 +396,7 @@ arguments are: int, uint, float, double
 fuzzes generic function that takes three numeric or vector arguments.
 arguments are: float2, float3, float4, int2, int3, int4, uint2, uint3, uint4
 
+
 :Arguments: * **t** :  :ref:`T <struct-testing-T>` ?
 
             * **fake** :  :ref:`Faker <struct-faker-Faker>` 
@@ -383,6 +409,7 @@ arguments are: float2, float3, float4, int2, int3, int4, uint2, uint3, uint4
 
 fuzzes generic function that takes three numeric or vector arguments.
 arguments are: float2, float3, float4, int2, int3, int4, uint2, uint3, uint4 second argument is float, int, uint accordingly
+
 
 :Arguments: * **t** :  :ref:`T <struct-testing-T>` ?
 
@@ -397,6 +424,7 @@ arguments are: float2, float3, float4, int2, int3, int4, uint2, uint3, uint4 sec
 fuzzes generic function that takes three numeric or vector arguments.
 arguments are: float, double, float2, float3, float4
 
+
 :Arguments: * **t** :  :ref:`T <struct-testing-T>` ?
 
             * **fake** :  :ref:`Faker <struct-faker-Faker>` 
@@ -409,6 +437,7 @@ arguments are: float, double, float2, float3, float4
 
 fuzzes generic function that takes four numeric or vector arguments.
 arguments are: int, uint, float, double
+
 
 :Arguments: * **t** :  :ref:`T <struct-testing-T>` ?
 

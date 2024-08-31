@@ -33,6 +33,7 @@ float in int,uint
 
 bit representation of x is interpreted as a float
 
+
 :Arguments: * **x** : int
 
 .. _function-_at_math_bits_c__c_int_bits_to_float_Ci2:
@@ -64,6 +65,7 @@ bit representation of x is interpreted as a float
 .. das:function:: uint_bits_to_float(x: uint) : float
 
 bit representation of x is interpreted as a float
+
 
 :Arguments: * **x** : uint
 
@@ -110,6 +112,7 @@ int,uint in float
 
 bit representation of x is interpreted as a int
 
+
 :Arguments: * **x** : float
 
 .. _function-_at_math_bits_c__c_float_bits_to_int_Cf2:
@@ -141,6 +144,7 @@ bit representation of x is interpreted as a int
 .. das:function:: float_bits_to_uint(x: float) : uint
 
 bit representation of x is interpreted as a uint
+
 
 :Arguments: * **x** : float
 
@@ -183,6 +187,7 @@ int64,uint64 in double
 
 bit representation of x is interpreted as a double
 
+
 :Arguments: * **x** : int64
 
 .. _function-_at_math_bits_c__c_uint64_bits_to_double_Cu64:
@@ -190,6 +195,7 @@ bit representation of x is interpreted as a double
 .. das:function:: uint64_bits_to_double(x: uint64) : double
 
 bit representation of x is interpreted as a double
+
 
 :Arguments: * **x** : uint64
 
@@ -199,6 +205,7 @@ bit representation of x is interpreted as a double
 
 bit representation of x is interpreted as a int64
 
+
 :Arguments: * **x** : double
 
 .. _function-_at_math_bits_c__c_double_bits_to_uint64_Cd:
@@ -206,6 +213,7 @@ bit representation of x is interpreted as a int64
 .. das:function:: double_bits_to_uint64(x: double) : uint64
 
 bit representation of x is interpreted as a uint64
+
 
 :Arguments: * **x** : double
 
@@ -226,72 +234,72 @@ bit-cast vec4f
 
 .. das:function:: cast_to_vec4f(x: bool) : float4
 
-:Arguments: * **x** : bool
-
-
 return a float4 which stores bit-cast version of x
+
+
+:Arguments: * **x** : bool
 
 .. _function-_at_math_bits_c__c_cast_to_vec4f_Ci64:
 
 .. das:function:: cast_to_vec4f(x: int64) : float4
 
-:Arguments: * **x** : int64
-
-
 return a float4 which stores bit-cast version of x
+
+
+:Arguments: * **x** : int64
 
 .. _function-_at_math_bits_c__c_cast_to_int64_Cf4:
 
 .. das:function:: cast_to_int64(data: float4) : int64
 
-:Arguments: * **data** : float4
-
-
 return an int64 which was bit-cast from x
+
+
+:Arguments: * **data** : float4
 
 .. _function-_at_math_bits_c__c_cast_to_int32_Cf4:
 
 .. das:function:: cast_to_int32(data: float4) : int
 
-:Arguments: * **data** : float4
-
-
 return an int32 which was bit-cast from x
+
+
+:Arguments: * **data** : float4
 
 .. _function-_at_math_bits_c__c_cast_to_int16_Cf4:
 
 .. das:function:: cast_to_int16(data: float4) : int16
 
-:Arguments: * **data** : float4
-
-
 return an int16 which was bit-cast from x
+
+
+:Arguments: * **data** : float4
 
 .. _function-_at_math_bits_c__c_cast_to_int8_Cf4:
 
 .. das:function:: cast_to_int8(data: float4) : int8
 
-:Arguments: * **data** : float4
-
-
 return an int8 which was bit-cast from x
+
+
+:Arguments: * **data** : float4
 
 .. _function-_at_math_bits_c__c_cast_to_string_Cf4:
 
 .. das:function:: cast_to_string(data: float4) : string
 
-:Arguments: * **data** : float4
-
-
 return a string which pointer was bit-cast from x
+
+
+:Arguments: * **data** : float4
 
 .. _function-_at_math_bits_c__c_cast_to_pointer_Cf4:
 
 .. das:function:: cast_to_pointer(data: float4) : void?
 
-:Arguments: * **data** : float4
-
-
 return a pointer which was bit-cast from x
+
+
+:Arguments: * **data** : float4
 
 

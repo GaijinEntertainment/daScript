@@ -51,6 +51,7 @@ defer a block of code. For example::
 
 Will close the file when 'a' is out of scope.
 
+
 :Arguments: * **blk** : block<void>
 
 ++++

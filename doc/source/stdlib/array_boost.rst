@@ -34,6 +34,7 @@ Important requirements are:
     * each element follows the next one directly, with the stride equal to size of the element
     * object memory does not change within the lifetime of the returned array
 
+
 :Arguments: * **arr** : auto implicit!
 
 .. _function-_at_array_boost_c__c_temp_array_CI_eq__dot_:
@@ -87,10 +88,10 @@ Empty check
 
 .. das:function:: empty(v: auto(VecT)) : auto
 
-:Arguments: * **v** : auto(VecT)
-
-
 returns true if 'v' has 0 elements. this also implies that `length(v)` is defined.
+
+
+:Arguments: * **v** : auto(VecT)
 
 +++++++++++++
 Uncategorized
@@ -101,6 +102,7 @@ Uncategorized
 .. das:function:: array_view(bytes: array<auto(TT)> const ==const; offset: int; length: int; blk: block<(view:array<TT> const#):void>) : auto
 
 creates a view of the array, which is a temporary array that is valid only within the block
+
 
 :Arguments: * **bytes** : array<auto(TT)>!
 
@@ -115,6 +117,7 @@ creates a view of the array, which is a temporary array that is valid only withi
 .. das:function:: array_view(bytes: array<auto(TT)> ==const; offset: int; length: int; blk: block<(var view:array<TT>#):void>) : auto
 
 creates a view of the array, which is a temporary array that is valid only within the block
+
 
 :Arguments: * **bytes** : array<auto(TT)>!
 

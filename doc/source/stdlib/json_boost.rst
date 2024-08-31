@@ -168,6 +168,7 @@ Value conversion
 
 Parse a JSON value and return the corresponding native value.
 
+
 :Arguments: * **v** :  :ref:`JsonValue <struct-json-JsonValue>` ?
 
             * **ent** : auto(EnumT)
@@ -335,6 +336,7 @@ Parse a JSON value and return the corresponding native value.
 .. das:function:: JV(v: auto(VecT)) : auto
 
 Creates `JsonValue` out of value.
+
 
 :Arguments: * **v** : auto(VecT)
 
@@ -550,6 +552,7 @@ Uncategorized
 
 Returns the value of the key in the JSON object, if it exists.
 
+
 :Arguments: * **a** :  :ref:`JsonValue <struct-json-JsonValue>` ?!
 
             * **key** : string
@@ -559,6 +562,7 @@ Returns the value of the key in the JSON object, if it exists.
 .. das:function:: JsonValue? ==const?[](a: JsonValue? ==const; key: string) : JsonValue?
 
 Returns the value of the key in the JSON object, if it exists.
+
 
 :Arguments: * **a** :  :ref:`JsonValue <struct-json-JsonValue>` ?!
 
@@ -570,6 +574,7 @@ Returns the value of the key in the JSON object, if it exists.
 
 Returns the value of the key in the JSON object, if it exists.
 
+
 :Arguments: * **a** :  :ref:`JsonValue <struct-json-JsonValue>` ?!
 
             * **key** : string
@@ -579,6 +584,7 @@ Returns the value of the key in the JSON object, if it exists.
 .. das:function:: JsonValue? ==const?.(a: JsonValue? ==const; key: string) : JsonValue?
 
 Returns the value of the key in the JSON object, if it exists.
+
 
 :Arguments: * **a** :  :ref:`JsonValue <struct-json-JsonValue>` ?!
 
@@ -590,6 +596,7 @@ Returns the value of the key in the JSON object, if it exists.
 
 Returns the value of the index in the JSON array, if it exists.
 
+
 :Arguments: * **a** :  :ref:`JsonValue <struct-json-JsonValue>` ?!
 
             * **idx** : int
@@ -599,6 +606,7 @@ Returns the value of the index in the JSON array, if it exists.
 .. das:function:: JsonValue? ==const?[](a: JsonValue? ==const; idx: int) : JsonValue?
 
 Returns the value of the index in the JSON array, if it exists.
+
 
 :Arguments: * **a** :  :ref:`JsonValue <struct-json-JsonValue>` ?!
 
@@ -610,6 +618,7 @@ Returns the value of the index in the JSON array, if it exists.
 
 Returns the value of the JSON object, if it exists, otherwise returns the default value.
 
+
 :Arguments: * **a** :  :ref:`JsonValue <struct-json-JsonValue>` ?
 
             * **val** : double
@@ -619,6 +628,7 @@ Returns the value of the JSON object, if it exists, otherwise returns the defaul
 .. das:function:: JsonValue???(a: JsonValue?; val: float) : float
 
 Returns the value of the JSON object, if it exists, otherwise returns the default value.
+
 
 :Arguments: * **a** :  :ref:`JsonValue <struct-json-JsonValue>` ?
 
@@ -630,6 +640,7 @@ Returns the value of the JSON object, if it exists, otherwise returns the defaul
 
 Returns the value of the JSON object, if it exists, otherwise returns the default value.
 
+
 :Arguments: * **a** :  :ref:`JsonValue <struct-json-JsonValue>` ?
 
             * **val** : int8
@@ -639,6 +650,7 @@ Returns the value of the JSON object, if it exists, otherwise returns the defaul
 .. das:function:: JsonValue???(a: JsonValue?; val: int16) : int16
 
 Returns the value of the JSON object, if it exists, otherwise returns the default value.
+
 
 :Arguments: * **a** :  :ref:`JsonValue <struct-json-JsonValue>` ?
 
@@ -650,6 +662,7 @@ Returns the value of the JSON object, if it exists, otherwise returns the defaul
 
 Returns the value of the JSON object, if it exists, otherwise returns the default value.
 
+
 :Arguments: * **a** :  :ref:`JsonValue <struct-json-JsonValue>` ?
 
             * **val** : int
@@ -659,6 +672,7 @@ Returns the value of the JSON object, if it exists, otherwise returns the defaul
 .. das:function:: JsonValue???(a: JsonValue?; val: int64) : int64
 
 Returns the value of the JSON object, if it exists, otherwise returns the default value.
+
 
 :Arguments: * **a** :  :ref:`JsonValue <struct-json-JsonValue>` ?
 
@@ -670,6 +684,7 @@ Returns the value of the JSON object, if it exists, otherwise returns the defaul
 
 Returns the value of the JSON object, if it exists, otherwise returns the default value.
 
+
 :Arguments: * **a** :  :ref:`JsonValue <struct-json-JsonValue>` ?
 
             * **val** : uint8
@@ -679,6 +694,7 @@ Returns the value of the JSON object, if it exists, otherwise returns the defaul
 .. das:function:: JsonValue???(a: JsonValue?; val: uint16) : uint16
 
 Returns the value of the JSON object, if it exists, otherwise returns the default value.
+
 
 :Arguments: * **a** :  :ref:`JsonValue <struct-json-JsonValue>` ?
 
@@ -690,6 +706,7 @@ Returns the value of the JSON object, if it exists, otherwise returns the defaul
 
 Returns the value of the JSON object, if it exists, otherwise returns the default value.
 
+
 :Arguments: * **a** :  :ref:`JsonValue <struct-json-JsonValue>` ?
 
             * **val** : uint
@@ -699,6 +716,7 @@ Returns the value of the JSON object, if it exists, otherwise returns the defaul
 .. das:function:: JsonValue???(a: JsonValue?; val: uint64) : uint64
 
 Returns the value of the JSON object, if it exists, otherwise returns the default value.
+
 
 :Arguments: * **a** :  :ref:`JsonValue <struct-json-JsonValue>` ?
 
@@ -710,6 +728,7 @@ Returns the value of the JSON object, if it exists, otherwise returns the defaul
 
 Returns the value of the JSON object, if it exists, otherwise returns the default value.
 
+
 :Arguments: * **a** :  :ref:`JsonValue <struct-json-JsonValue>` ?
 
             * **val** : bool
@@ -719,6 +738,7 @@ Returns the value of the JSON object, if it exists, otherwise returns the defaul
 .. das:function:: JsonValue???(a: JsonValue?; val: string) : string
 
 Returns the value of the JSON object, if it exists, otherwise returns the default value.
+
 
 :Arguments: * **a** :  :ref:`JsonValue <struct-json-JsonValue>` ?
 
@@ -730,6 +750,7 @@ Returns the value of the JSON object, if it exists, otherwise returns the defaul
 
 Returns the value of the JSON object, if it exists.
 
+
 :Arguments: * **a** :  :ref:`JsonValue <struct-json-JsonValue>` ?!
 
 .. _function-_at_json_boost_c__c__qm__dot__rq_value__eq_1_ls_S_ls_json_c__c_JsonValue_gr__gr__qm_:
@@ -737,6 +758,7 @@ Returns the value of the JSON object, if it exists.
 .. das:function:: JsonValue? ==const?.`value(a: JsonValue? ==const) : variant<_object:table<string;JsonValue?>;_array:array<JsonValue?>;_string:string;_number:double;_bool:bool;_null:void?>?
 
 Returns the value of the JSON object, if it exists.
+
 
 :Arguments: * **a** :  :ref:`JsonValue <struct-json-JsonValue>` ?!
 

@@ -36,6 +36,7 @@ Static variable declarations
 Given a scope with the variable declarations, this function will make those variables global.
 Variable will be renamed under the hood, and all local access to it will be renamed as well.
 
+
 :Arguments: * **blk** : block<void>
 
 .. _function-_at_static_let_c__c_static_let_finalize_C_builtin_:
@@ -43,6 +44,7 @@ Variable will be renamed under the hood, and all local access to it will be rena
 .. das:function:: static_let_finalize(blk: block<>)
 
 This is very similar to regular static_let, but additionally the variable will be deleted on the context shutdown.
+
 
 :Arguments: * **blk** : block<void>
 

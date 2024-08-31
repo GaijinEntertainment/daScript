@@ -26,6 +26,7 @@ Scope checks
 
 Returns true if the expression is local to the current scope.
 
+
 :Arguments: * **expr** :  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 .. _function-_at_is_local_c__c_is_local_or_global_expr_CY_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_M:
@@ -34,6 +35,7 @@ Returns true if the expression is local to the current scope.
 
 Returns true if expression is local the current scope or global scope.
 
+
 :Arguments: * **expr** :  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 .. _function-_at_is_local_c__c_is_scope_expr_CY_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_M:
@@ -41,6 +43,7 @@ Returns true if expression is local the current scope or global scope.
 .. das:function:: is_scope_expr(expr: ExpressionPtr) : bool
 
 Returns true if the expression is a scoped expression, i.e. eventually points to a variable.
+
 
 :Arguments: * **expr** :  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
@@ -53,6 +56,7 @@ Uncategorized
 .. das:function:: is_shared_expr(expr: ExpressionPtr) : bool
 
 Returns true if the expression is local to the current scope.
+
 
 :Arguments: * **expr** :  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 

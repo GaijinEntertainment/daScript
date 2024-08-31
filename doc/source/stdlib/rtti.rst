@@ -1567,6 +1567,7 @@ Initialization and finalization
 // stub
 
 
+
 :Arguments: * **arg0** :  :ref:`FileInfo <handle-rtti-FileInfo>` ? implicit
 
             * **arg1** : int
@@ -1582,6 +1583,7 @@ Initialization and finalization
 .. das:function:: using(arg0: block<(var arg0:recursive_mutex):void> implicit)
 
 // stub
+
 
 
 :Arguments: * **arg0** : block<( :ref:`recursive_mutex <handle-rtti-recursive_mutex>` ):void> implicit
@@ -1600,6 +1602,7 @@ Initialization and finalization
 // stub
 
 
+
 :Arguments: * **arg0** : block<( :ref:`CodeOfPolicies <handle-rtti-CodeOfPolicies>` ):void> implicit
 
 .. _function-_at_rtti_c__c_using_CI0_ls_XH_ls_rtti_c__c_ModuleGroup_gr__gr_1_ls_v_gr__builtin_:
@@ -1607,6 +1610,7 @@ Initialization and finalization
 .. das:function:: using(arg0: block<(var arg0:ModuleGroup):void> implicit)
 
 // stub
+
 
 
 :Arguments: * **arg0** : block<( :ref:`ModuleGroup <handle-rtti-ModuleGroup>` ):void> implicit
@@ -1645,6 +1649,7 @@ Type access
 // stub
 
 
+
 :Arguments: * **typeinfo** :  :ref:`TypeInfo <handle-rtti-TypeInfo>`  implicit
 
             * **index** : int
@@ -1656,6 +1661,7 @@ Type access
 // stub
 
 
+
 :Arguments: * **typeinfo** :  :ref:`VarInfo <handle-rtti-VarInfo>`  implicit
 
             * **index** : int
@@ -1665,6 +1671,7 @@ Type access
 .. das:function:: builtin_is_same_type(a: TypeInfo const? implicit; b: TypeInfo const? implicit; refMatters: RefMatters; cosntMatters: ConstMatters; tempMatters: TemporaryMatters; topLevel: bool) : bool
 
 // stub
+
 
 
 :Arguments: * **a** :  :ref:`TypeInfo <handle-rtti-TypeInfo>` ? implicit
@@ -1686,6 +1693,7 @@ Type access
 // stub
 
 
+
 :Arguments: * **type** :  :ref:`TypeInfo <handle-rtti-TypeInfo>` ? implicit
 
 .. _function-_at_rtti_c__c_get_type_align_CI1_ls_H_ls_rtti_c__c_TypeInfo_gr__gr__qm_:
@@ -1695,6 +1703,7 @@ Type access
 // stub
 
 
+
 :Arguments: * **type** :  :ref:`TypeInfo <handle-rtti-TypeInfo>` ? implicit
 
 .. _function-_at_rtti_c__c_is_compatible_cast_CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr__qm__CI1_ls_CH_ls_rtti_c__c_StructInfo_gr__gr__qm_:
@@ -1702,6 +1711,7 @@ Type access
 .. das:function:: is_compatible_cast(from: StructInfo const? implicit; to: StructInfo const? implicit) : bool
 
 // stub
+
 
 
 :Arguments: * **from** :  :ref:`StructInfo <handle-rtti-StructInfo>` ? implicit
@@ -1715,6 +1725,7 @@ Type access
 // stub
 
 
+
 :Arguments: * **type** :  :ref:`Type <enum-rtti-Type>` 
 
 .. _function-_at_rtti_c__c_is_same_type_CH_ls_rtti_c__c_TypeInfo_gr__CH_ls_rtti_c__c_TypeInfo_gr__CE_ls_rtti_c__c_RefMatters_gr__CE_ls_rtti_c__c_ConstMatters_gr__CE_ls_rtti_c__c_TemporaryMatters_gr__Cb:
@@ -1722,6 +1733,7 @@ Type access
 .. das:function:: is_same_type(a: TypeInfo; b: TypeInfo; refMatters: RefMatters = rtti::RefMatters yes; constMatters: ConstMatters = rtti::ConstMatters yes; temporaryMatters: TemporaryMatters = rtti::TemporaryMatters yes; topLevel: bool = true) : auto
 
 // stub
+
 
 
 :Arguments: * **a** :  :ref:`TypeInfo <handle-rtti-TypeInfo>` 
@@ -1743,6 +1755,7 @@ Type access
 // stub
 
 
+
 :Arguments: * **a** :  :ref:`StructInfo <handle-rtti-StructInfo>` 
 
             * **b** :  :ref:`StructInfo <handle-rtti-StructInfo>` 
@@ -1754,6 +1767,7 @@ Type access
 // stub
 
 
+
 :Arguments: * **info** :  :ref:`TypeInfo <handle-rtti-TypeInfo>` 
 
 .. _function-_at_rtti_c__c_each_dim_CH_ls_rtti_c__c_VarInfo_gr_:
@@ -1761,6 +1775,7 @@ Type access
 .. das:function:: each_dim(info: VarInfo) : auto
 
 // stub
+
 
 
 :Arguments: * **info** :  :ref:`VarInfo <handle-rtti-VarInfo>` 
@@ -1772,6 +1787,7 @@ Type access
 // stub
 
 
+
 :Arguments: * **info** :  :ref:`TypeInfo <handle-rtti-TypeInfo>` 
 
 .. _function-_at_rtti_c__c_arg_types_CH_ls_rtti_c__c_VarInfo_gr_:
@@ -1779,6 +1795,7 @@ Type access
 .. das:function:: arg_types(info: VarInfo) : auto
 
 // stub
+
 
 
 :Arguments: * **info** :  :ref:`VarInfo <handle-rtti-VarInfo>` 
@@ -1790,6 +1807,7 @@ Type access
 // stub
 
 
+
 :Arguments: * **info** :  :ref:`TypeInfo <handle-rtti-TypeInfo>` 
 
 .. _function-_at_rtti_c__c_arg_names_CH_ls_rtti_c__c_VarInfo_gr_:
@@ -1797,6 +1815,7 @@ Type access
 .. das:function:: arg_names(info: VarInfo) : auto
 
 // stub
+
 
 
 :Arguments: * **info** :  :ref:`VarInfo <handle-rtti-VarInfo>` 
@@ -1828,6 +1847,7 @@ Rtti context access
 // stub
 
 
+
 :Arguments: * **context** :  :ref:`Context <handle-rtti-Context>`  implicit
 
 .. _function-_at_rtti_c__c_get_total_variables_IH_ls_rtti_c__c_Context_gr_:
@@ -1837,6 +1857,7 @@ Rtti context access
 // stub
 
 
+
 :Arguments: * **context** :  :ref:`Context <handle-rtti-Context>`  implicit
 
 .. _function-_at_rtti_c__c_get_function_info__st__Ci:
@@ -1844,6 +1865,7 @@ Rtti context access
 .. das:function:: get_function_info(context: any; index: int) : FuncInfo const&
 
 // stub
+
 
 
 :Arguments: * **context** : any
@@ -1857,6 +1879,7 @@ Rtti context access
 // stub
 
 
+
 :Arguments: * **context** : any
 
             * **index** : int
@@ -1868,6 +1891,7 @@ Rtti context access
 // stub
 
 
+
 :Arguments: * **varInfo** :  :ref:`VarInfo <handle-rtti-VarInfo>`  implicit
 
 .. _function-_at_rtti_c__c_get_function_info_IH_ls_rtti_c__c_Context_gr__C_at__at_:
@@ -1875,6 +1899,7 @@ Rtti context access
 .. das:function:: get_function_info(context: Context implicit; function: function<>) : FuncInfo const?
 
 // stub
+
 
 
 :Arguments: * **context** :  :ref:`Context <handle-rtti-Context>`  implicit
@@ -1886,6 +1911,7 @@ Rtti context access
 .. das:function:: get_function_by_mnh(context: Context implicit; MNH: uint64) : function<>
 
 // stub
+
 
 
 :Arguments: * **context** :  :ref:`Context <handle-rtti-Context>`  implicit
@@ -1906,6 +1932,7 @@ Rtti context access
 // stub
 
 
+
 :Arguments: * **depth** : int
 
 .. _function-_at_rtti_c__c_this_context_C_c:
@@ -1922,6 +1949,7 @@ Rtti context access
 // stub
 
 
+
 :Arguments: * **blk** : block<(info: :ref:`FuncInfo <handle-rtti-FuncInfo>` ):void>
 
 .. _function-_at_rtti_c__c_context_for_each_variable_CN_ls_info_gr_0_ls_CH_ls_rtti_c__c_VarInfo_gr__gr_1_ls_v_gr__builtin_:
@@ -1929,6 +1957,7 @@ Rtti context access
 .. das:function:: context_for_each_variable(blk: block<(info:VarInfo const):void>) : auto
 
 // stub
+
 
 
 :Arguments: * **blk** : block<(info: :ref:`VarInfo <handle-rtti-VarInfo>` ):void>
@@ -1940,6 +1969,7 @@ Rtti context access
 // stub
 
 
+
 :Arguments: * **cl** : auto
 
 .. _function-_at_rtti_c__c_type_info_CH_ls_rtti_c__c_LocalVariableInfo_gr_:
@@ -1949,6 +1979,7 @@ Rtti context access
 // stub
 
 
+
 :Arguments: * **vinfo** :  :ref:`LocalVariableInfo <handle-rtti-LocalVariableInfo>` 
 
 .. _function-_at_rtti_c__c_type_info_CH_ls_rtti_c__c_VarInfo_gr_:
@@ -1956,6 +1987,7 @@ Rtti context access
 .. das:function:: type_info(vinfo: VarInfo) : TypeInfo const?
 
 // stub
+
 
 
 :Arguments: * **vinfo** :  :ref:`VarInfo <handle-rtti-VarInfo>` 
@@ -1976,6 +2008,7 @@ Program access
 // stub
 
 
+
 :Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>` > implicit
 
 .. _function-_at_rtti_c__c_get_module_CIs:
@@ -1983,6 +2016,7 @@ Program access
 .. das:function:: get_module(name: string implicit) : Module?
 
 // stub
+
 
 
 :Arguments: * **name** : string implicit
@@ -1994,6 +2028,7 @@ Program access
 // stub
 
 
+
 :Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>` > implicit
 
             * **block** : block<( :ref:`Module <handle-rtti-Module>` ?):void> implicit
@@ -2003,6 +2038,7 @@ Program access
 .. das:function:: program_for_each_registered_module(block: block<(var arg0:Module?):void> implicit)
 
 // stub
+
 
 
 :Arguments: * **block** : block<( :ref:`Module <handle-rtti-Module>` ?):void> implicit
@@ -2025,6 +2061,7 @@ Module access
 // stub
 
 
+
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
             * **block** : block<( :ref:`StructInfo <handle-rtti-StructInfo>` ):void> implicit
@@ -2034,6 +2071,7 @@ Module access
 .. das:function:: module_for_each_enumeration(module: Module? implicit; block: block<(arg0:EnumInfo const):void> implicit)
 
 // stub
+
 
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
@@ -2047,6 +2085,7 @@ Module access
 // stub
 
 
+
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
             * **block** : block<( :ref:`FuncInfo <handle-rtti-FuncInfo>` ):void> implicit
@@ -2056,6 +2095,7 @@ Module access
 .. das:function:: module_for_each_generic(module: Module? implicit; block: block<(arg0:FuncInfo const):void> implicit)
 
 // stub
+
 
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
@@ -2069,6 +2109,7 @@ Module access
 // stub
 
 
+
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
             * **block** : block<( :ref:`VarInfo <handle-rtti-VarInfo>` ):void> implicit
@@ -2078,6 +2119,7 @@ Module access
 .. das:function:: module_for_each_annotation(module: Module? implicit; block: block<(arg0:Annotation const):void> implicit)
 
 // stub
+
 
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
@@ -2098,6 +2140,7 @@ Annotation access
 // stub
 
 
+
 :Arguments: * **info** :  :ref:`AnnotationArgument <handle-rtti-AnnotationArgument>`  implicit
 
 .. _function-_at_rtti_c__c_add_annotation_argument_IH_ls_rtti_c__c_AnnotationArgumentList_gr__CIs:
@@ -2105,6 +2148,7 @@ Annotation access
 .. das:function:: add_annotation_argument(annotation: AnnotationArgumentList implicit; name: string implicit) : int
 
 // stub
+
 
 
 :Arguments: * **annotation** :  :ref:`AnnotationArgumentList <handle-rtti-AnnotationArgumentList>`  implicit
@@ -2129,6 +2173,7 @@ Compilation and simulation
 // stub
 
 
+
 :Arguments: * **module_name** : string implicit
 
             * **codeText** : string implicit
@@ -2142,6 +2187,7 @@ Compilation and simulation
 .. das:function:: compile(module_name: string implicit; codeText: string implicit; codeOfPolicies: CodeOfPolicies implicit; exportAll: bool; block: block<(var arg0:bool;var arg1:smart_ptr<Program>;arg2:das_string const):void> implicit)
 
 // stub
+
 
 
 :Arguments: * **module_name** : string implicit
@@ -2161,6 +2207,7 @@ Compilation and simulation
 // stub
 
 
+
 :Arguments: * **module_name** : string implicit
 
             * **fileAccess** : smart_ptr< :ref:`FileAccess <handle-rtti-FileAccess>` > implicit
@@ -2178,6 +2225,7 @@ Compilation and simulation
 // stub
 
 
+
 :Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>` > implicit
 
             * **block** : block<( :ref:`CompilationError <enum-rtti-CompilationError>` ;int):void> implicit
@@ -2189,6 +2237,7 @@ Compilation and simulation
 // stub
 
 
+
 :Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>` > implicit
 
             * **block** : block<( :ref:`Module <handle-rtti-Module>` ?;string#;string#;bool; :ref:`LineInfo <handle-rtti-LineInfo>` &):void> implicit
@@ -2198,6 +2247,7 @@ Compilation and simulation
 .. das:function:: simulate(program: smart_ptr<Program> const& implicit; block: block<(var arg0:bool;var arg1:smart_ptr<Context>;var arg2:das_string):void> implicit)
 
 // stub
+
 
 
 :Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>` >& implicit
@@ -2219,6 +2269,7 @@ File access
 // stub
 
 
+
 :Arguments: * **project** : string implicit
 
 .. _function-_at_rtti_c__c_set_file_source_CI1_ls_H_ls_rtti_c__c_FileAccess_gr__gr__qm_M_CIs_CIs_C_c_C_l:
@@ -2226,6 +2277,7 @@ File access
 .. das:function:: set_file_source(access: smart_ptr<FileAccess> implicit; fileName: string implicit; text: string implicit) : bool
 
 // stub
+
 
 
 :Arguments: * **access** : smart_ptr< :ref:`FileAccess <handle-rtti-FileAccess>` > implicit
@@ -2239,6 +2291,7 @@ File access
 .. das:function:: add_file_access_root(access: smart_ptr<FileAccess> implicit; mod: string implicit; path: string implicit) : bool
 
 // stub
+
 
 
 :Arguments: * **access** : smart_ptr< :ref:`FileAccess <handle-rtti-FileAccess>` > implicit
@@ -2263,6 +2316,7 @@ Structure access
 // stub
 
 
+
 :Arguments: * **struct** :  :ref:`StructInfo <handle-rtti-StructInfo>`  implicit
 
             * **block** : block<void> implicit
@@ -2272,6 +2326,7 @@ Structure access
 .. das:function:: basic_struct_for_each_field(annotation: BasicStructureAnnotation implicit; block: block<(var arg0:string;var arg1:string;arg2:TypeInfo const;var arg3:uint):void> implicit)
 
 // stub
+
 
 
 :Arguments: * **annotation** :  :ref:`BasicStructureAnnotation <handle-rtti-BasicStructureAnnotation>`  implicit
@@ -2285,6 +2340,7 @@ Structure access
 // stub
 
 
+
 :Arguments: * **annotation** :  :ref:`BasicStructureAnnotation <handle-rtti-BasicStructureAnnotation>`  implicit
 
             * **block** : block<( :ref:`Annotation <handle-rtti-Annotation>` ?):void> implicit
@@ -2294,6 +2350,7 @@ Structure access
 .. das:function:: structure_for_each_annotation(st: StructInfo; subexpr: block<(ann:Annotation const;args:AnnotationArguments const):void>) : auto
 
 // stub
+
 
 
 :Arguments: * **st** :  :ref:`StructInfo <handle-rtti-StructInfo>` 
@@ -2317,6 +2374,7 @@ Data walking and printing
 // stub
 
 
+
 :Arguments: * **data** : void? implicit
 
             * **type** :  :ref:`TypeInfo <handle-rtti-TypeInfo>` ? implicit
@@ -2328,6 +2386,7 @@ Data walking and printing
 .. das:function:: sprint_data(data: float4; type: TypeInfo const? implicit; flags: bitfield) : string
 
 // stub
+
 
 
 :Arguments: * **data** : float4
@@ -2343,6 +2402,7 @@ Data walking and printing
 // stub
 
 
+
 :Arguments: * **type** :  :ref:`TypeInfo <handle-rtti-TypeInfo>` ? implicit
 
 .. _function-_at_rtti_c__c_describe_CIH_ls_rtti_c__c_LineInfo_gr__Cb_C_c_C_l:
@@ -2350,6 +2410,7 @@ Data walking and printing
 .. das:function:: describe(lineinfo: LineInfo implicit; fully: bool = false) : string
 
 // stub
+
 
 
 :Arguments: * **lineinfo** :  :ref:`LineInfo <handle-rtti-LineInfo>`  implicit
@@ -2361,6 +2422,7 @@ Data walking and printing
 .. das:function:: get_mangled_name(type: TypeInfo const? implicit) : string
 
 // stub
+
 
 
 :Arguments: * **type** :  :ref:`TypeInfo <handle-rtti-TypeInfo>` ? implicit
@@ -2381,6 +2443,7 @@ Function and mangled name hash
 // stub
 
 
+
 :Arguments: * **src** : uint64
 
 .. _function-_at_rtti_c__c_get_function_by_mangled_name_hash_Cu64_IH_ls_rtti_c__c_Context_gr_:
@@ -2388,6 +2451,7 @@ Function and mangled name hash
 .. das:function:: get_function_by_mangled_name_hash(src: uint64; context: Context implicit) : function<>
 
 // stub
+
 
 
 :Arguments: * **src** : uint64
@@ -2401,6 +2465,7 @@ Function and mangled name hash
 // stub
 
 
+
 :Arguments: * **src** : function<void>
 
 .. _function-_at_rtti_c__c_get_function_address_Cu64_IH_ls_rtti_c__c_Context_gr_:
@@ -2408,6 +2473,7 @@ Function and mangled name hash
 .. das:function:: get_function_address(MNH: uint64; at: Context implicit) : uint64
 
 // stub
+
 
 
 :Arguments: * **MNH** : uint64
@@ -2429,6 +2495,7 @@ Context and mutex locking
 // stub
 
 
+
 :Arguments: * **block** : block<void> implicit
 
 .. _function-_at_rtti_c__c_lock_context_IH_ls_rtti_c__c_Context_gr__CI1_ls_v_gr__builtin__C_c_C_l:
@@ -2436,6 +2503,7 @@ Context and mutex locking
 .. das:function:: lock_context(lock_context: Context implicit; block: block<void> implicit)
 
 // stub
+
 
 
 :Arguments: * **lock_context** :  :ref:`Context <handle-rtti-Context>`  implicit
@@ -2447,6 +2515,7 @@ Context and mutex locking
 .. das:function:: lock_mutex(mutex: recursive_mutex implicit; block: block<void> implicit)
 
 // stub
+
 
 
 :Arguments: * **mutex** :  :ref:`recursive_mutex <handle-rtti-recursive_mutex>`  implicit
@@ -2464,6 +2533,7 @@ Runtime data access
 .. das:function:: get_table_key_index(table: void? implicit; key: any; baseType: Type; valueTypeSize: int) : int
 
 // stub
+
 
 
 :Arguments: * **table** : void? implicit
@@ -2485,6 +2555,7 @@ Uncategorized
 // stub
 
 
+
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
             * **block** : block<( :ref:`Module <handle-rtti-Module>` ?;bool):void> implicit
@@ -2494,6 +2565,7 @@ Uncategorized
 .. das:function:: get_tuple_field_offset(type: TypeInfo? implicit; index: int) : int
 
 // stub
+
 
 
 :Arguments: * **type** :  :ref:`TypeInfo <handle-rtti-TypeInfo>` ? implicit
@@ -2507,6 +2579,7 @@ Uncategorized
 // stub
 
 
+
 :Arguments: * **type** :  :ref:`TypeInfo <handle-rtti-TypeInfo>` ? implicit
 
             * **index** : int
@@ -2518,6 +2591,7 @@ Uncategorized
 // stub
 
 
+
 :Arguments: * **info** :  :ref:`FuncInfo <handle-rtti-FuncInfo>`  implicit!
 
 .. _function-_at_rtti_c__c_each_CI_eq_H_ls_rtti_c__c_FuncInfo_gr__C_c_C_l:
@@ -2525,6 +2599,7 @@ Uncategorized
 .. das:function:: each(info: FuncInfo const implicit ==const) : iterator<VarInfo const&>
 
 // stub
+
 
 
 :Arguments: * **info** :  :ref:`FuncInfo <handle-rtti-FuncInfo>`  implicit!
@@ -2536,6 +2611,7 @@ Uncategorized
 // stub
 
 
+
 :Arguments: * **info** :  :ref:`StructInfo <handle-rtti-StructInfo>`  implicit!
 
 .. _function-_at_rtti_c__c_each_CI_eq_H_ls_rtti_c__c_StructInfo_gr__C_c_C_l:
@@ -2543,6 +2619,7 @@ Uncategorized
 .. das:function:: each(info: StructInfo const implicit ==const) : iterator<VarInfo const&>
 
 // stub
+
 
 
 :Arguments: * **info** :  :ref:`StructInfo <handle-rtti-StructInfo>`  implicit!
@@ -2554,6 +2631,7 @@ Uncategorized
 // stub
 
 
+
 :Arguments: * **info** :  :ref:`EnumInfo <handle-rtti-EnumInfo>`  implicit!
 
 .. _function-_at_rtti_c__c_each_CI_eq_H_ls_rtti_c__c_EnumInfo_gr__C_c_C_l:
@@ -2561,6 +2639,7 @@ Uncategorized
 .. das:function:: each(info: EnumInfo const implicit ==const) : iterator<EnumValueInfo const&>
 
 // stub
+
 
 
 :Arguments: * **info** :  :ref:`EnumInfo <handle-rtti-EnumInfo>`  implicit!

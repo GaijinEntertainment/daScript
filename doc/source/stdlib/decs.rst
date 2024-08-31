@@ -227,6 +227,7 @@ Comparison and access
 
 Equality operator for entity IDs.
 
+
 :Arguments: * **a** :  :ref:`EntityId <struct-decs-EntityId>`  implicit
 
             * **b** :  :ref:`EntityId <struct-decs-EntityId>`  implicit
@@ -236,6 +237,7 @@ Equality operator for entity IDs.
 .. das:function:: EntityId implicit!=(a: EntityId implicit; b: EntityId implicit) : bool
 
 Inequality operator for entity IDs.
+
 
 :Arguments: * **a** :  :ref:`EntityId <struct-decs-EntityId>`  implicit
 
@@ -249,6 +251,7 @@ Access to component value by name. For example::
 
     create_entity <| @ ( eid, cmp )
         cmp.pos := float3(i)    // same as cmp |> set("pos",float3(i))
+
 
 :Arguments: * **cmp** :  :ref:`ComponentMap <alias-ComponentMap>` 
 
@@ -592,6 +595,7 @@ Access (get/set/clone)
 
 Clones component value.
 
+
 :Arguments: * **dst** :  :ref:`Component <struct-decs-Component>` 
 
             * **src** :  :ref:`Component <struct-decs-Component>` 
@@ -601,6 +605,7 @@ Clones component value.
 .. das:function:: has(arch: Archetype; name: string) : bool
 
 Returns true if object has specified subobjec.
+
 
 :Arguments: * **arch** :  :ref:`Archetype <struct-decs-Archetype>` 
 
@@ -622,6 +627,7 @@ Returns true if object has specified subobjec.
 
 Removes speicified value from the component map.
 
+
 :Arguments: * **cmp** :  :ref:`ComponentMap <alias-ComponentMap>` 
 
             * **name** : string
@@ -631,6 +637,7 @@ Removes speicified value from the component map.
 .. das:function:: set(cv: ComponentValue; val: auto) : auto
 
 Sets individual component value. Verifies that the value is of the correct type.
+
 
 :Arguments: * **cv** :  :ref:`ComponentValue <struct-decs-ComponentValue>` 
 
@@ -642,6 +649,7 @@ Sets individual component value. Verifies that the value is of the correct type.
 
 Creates temporary array of component given specific name and type of component.
 If component is not found - panic.
+
 
 :Arguments: * **arch** :  :ref:`Archetype <struct-decs-Archetype>` 
 
@@ -656,6 +664,7 @@ If component is not found - panic.
 Gets component value specified by name and type.
 Will panic if name matches but type does not.
 
+
 :Arguments: * **cmp** :  :ref:`ComponentMap <alias-ComponentMap>` 
 
             * **name** : string
@@ -668,6 +677,7 @@ Will panic if name matches but type does not.
 
 Set component value specified by name and type.
 If value already exists, it is overwritten. If already existing value type is not the same - panic.
+
 
 :Arguments: * **cmp** :  :ref:`ComponentMap <alias-ComponentMap>` 
 
@@ -690,6 +700,7 @@ Deubg and serialization
 
 Returns textual description of the type.
 
+
 :Arguments: * **info** :  :ref:`CTypeInfo <struct-decs-CTypeInfo>` 
 
 .. _function-_at_decs_c__c_serialize_S_ls_archive_c__c_Archive_gr__S_ls_decs_c__c_Component_gr_:
@@ -697,6 +708,7 @@ Returns textual description of the type.
 .. das:function:: serialize(arch: Archive; src: Component)
 
 Serializes component value.
+
 
 :Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
 
@@ -707,6 +719,7 @@ Serializes component value.
 .. das:function:: finalize(cmp: Component)
 
 Deletes component.
+
 
 :Arguments: * **cmp** :  :ref:`Component <struct-decs-Component>` 
 
@@ -730,6 +743,7 @@ Stages
 
 Registration of a single pass callback. This is a low-level function, used by decs_boost macros.
 
+
 :Arguments: * **name** : string
 
             * **pcall** :  :ref:`PassFunction <alias-PassFunction>` 
@@ -740,6 +754,7 @@ Registration of a single pass callback. This is a low-level function, used by de
 
 Invokes specific ECS pass.
 `commit` is called before and after the invocation.
+
 
 :Arguments: * **name** : string
 
@@ -763,6 +778,7 @@ Deferred actions
 
 Creates deferred action to update entity specified by id.
 
+
 :Arguments: * **entityid** :  :ref:`EntityId <struct-decs-EntityId>`  implicit
 
             * **blk** : lambda<(eid: :ref:`EntityId <struct-decs-EntityId>` ;cmp: :ref:`ComponentMap <alias-ComponentMap>` ):void>
@@ -773,6 +789,7 @@ Creates deferred action to update entity specified by id.
 
 Creates deferred action to create entity.
 
+
 :Arguments: * **blk** : lambda<(eid: :ref:`EntityId <struct-decs-EntityId>` ;cmp: :ref:`ComponentMap <alias-ComponentMap>` ):void>
 
 .. _function-_at_decs_c__c_delete_entity_CIS_ls_decs_c__c_EntityId_gr_:
@@ -780,6 +797,7 @@ Creates deferred action to create entity.
 .. das:function:: delete_entity(entityid: EntityId implicit)
 
 Creates deferred action to delete entity specified by id.
+
 
 :Arguments: * **entityid** :  :ref:`EntityId <struct-decs-EntityId>`  implicit
 
@@ -831,6 +849,7 @@ Iteration
 
 Invokes block for each entity of each archetype that can be processed by the request.
 
+
 :Arguments: * **erq** :  :ref:`EcsRequest <struct-decs-EcsRequest>` 
 
             * **blk** : block<(arch: :ref:`Archetype <struct-decs-Archetype>` ):void>
@@ -841,6 +860,7 @@ Invokes block for each entity of each archetype that can be processed by the req
 
 Invokes block for the specific entity id, given request.
 Request is returned by a specified function.
+
 
 :Arguments: * **eid** :  :ref:`EntityId <struct-decs-EntityId>`  implicit
 
@@ -857,6 +877,7 @@ Request is returned by a specified function.
 Invokes block for each entity of each archetype that can be processed by the request.
 Request is returned by a specified function.
 
+
 :Arguments: * **hash** :  :ref:`ComponentHash <alias-ComponentHash>` 
 
             * **erq** : function<void>
@@ -871,6 +892,7 @@ Invokes block for each entity of each archetype that can be processed by the req
 Request is returned by a specified function.
 If block returns true, iteration is stopped.
 
+
 :Arguments: * **hash** :  :ref:`ComponentHash <alias-ComponentHash>` 
 
             * **erq** : function<void>
@@ -882,6 +904,7 @@ If block returns true, iteration is stopped.
 .. das:function:: decs_array(atype: auto(TT); src: array<uint8>; capacity: int) : auto
 
 Low level function returns temporary array of component given specific type of component.
+
 
 :Arguments: * **atype** : auto(TT)
 
@@ -895,6 +918,7 @@ Low level function returns temporary array of component given specific type of c
 
 Returns const temporary array of component given specific name and type of component for array components.
 
+
 :Arguments: * **arch** :  :ref:`Archetype <struct-decs-Archetype>` 
 
             * **name** : string
@@ -906,6 +930,7 @@ Returns const temporary array of component given specific name and type of compo
 .. das:function:: get_ro(arch: Archetype; name: string; value: auto(TT)) : array<TT>
 
 Returns const temporary array of component given specific name and type of component for regular components.
+
 
 :Arguments: * **arch** :  :ref:`Archetype <struct-decs-Archetype>` 
 
@@ -920,6 +945,7 @@ Returns const temporary array of component given specific name and type of compo
 Returns const iterator of component given specific name and type of component.
 If component is not found - iterator will kepp returning the specified value.
 
+
 :Arguments: * **arch** :  :ref:`Archetype <struct-decs-Archetype>` 
 
             * **name** : string
@@ -932,6 +958,7 @@ If component is not found - iterator will kepp returning the specified value.
 
 Returns const iterator of component given specific name and type of component.
 If component is not found - iterator will kepp returning default value for the component type.
+
 
 :Arguments: * **arch** :  :ref:`Archetype <struct-decs-Archetype>` 
 
@@ -954,6 +981,7 @@ Request
 
 Constructs EcsRequestPos from rtti::LineInfo.
 
+
 :Arguments: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` 
 
 .. _function-_at_decs_c__c_verify_request_S_ls_decs_c__c_EcsRequest_gr_:
@@ -961,6 +989,7 @@ Constructs EcsRequestPos from rtti::LineInfo.
 .. das:function:: verify_request(erq: EcsRequest) : tuple<ok:bool;error:string>
 
 Verifies ESC request. Returns pair of boolean (true for OK) and error message.
+
 
 :Arguments: * **erq** :  :ref:`EcsRequest <struct-decs-EcsRequest>` 
 
@@ -970,6 +999,7 @@ Verifies ESC request. Returns pair of boolean (true for OK) and error message.
 
 Compiles ESC request, by creating request hash.
 
+
 :Arguments: * **erq** :  :ref:`EcsRequest <struct-decs-EcsRequest>` 
 
 .. _function-_at_decs_c__c_lookup_request_S_ls_decs_c__c_EcsRequest_gr_:
@@ -977,6 +1007,7 @@ Compiles ESC request, by creating request hash.
 .. das:function:: lookup_request(erq: EcsRequest) : int
 
 Looks up ESC request in the request cache.
+
 
 :Arguments: * **erq** :  :ref:`EcsRequest <struct-decs-EcsRequest>` 
 

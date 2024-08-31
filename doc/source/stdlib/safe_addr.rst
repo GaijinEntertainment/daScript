@@ -41,39 +41,39 @@ Safe temporary address
 
 .. das:function:: safe_addr(x: auto(T)& ==const) : T?#
 
-:Arguments: * **x** : auto(T)&!
-
-
 returns temporary pointer to the given expression
+
+
+:Arguments: * **x** : auto(T)&!
 
 .. _function-_at_safe_addr_c__c_safe_addr_C&_eq_Y_ls_T_gr__dot_:
 
 .. das:function:: safe_addr(x: auto(T) const& ==const) : T?#
 
-:Arguments: * **x** : auto(T)&!
-
-
 returns temporary pointer to the given expressio
+
+
+:Arguments: * **x** : auto(T)&!
 
 .. _function-_at_safe_addr_c__c_shared_addr_C1_ls_Y_ls_KEY_gr__dot__gr_2_ls_Y_ls_VAL_gr__dot__gr_T_CY_ls_KEY_gr_L:
 
 .. das:function:: shared_addr(tab: table<auto(KEY);auto(VAL)>; k: KEY) : auto
 
+returns address of the given shared variable. it's safe because shared variables never go out of scope
+
+
 :Arguments: * **tab** : table<auto(KEY);auto(VAL)>
 
             * **k** : KEY
-
-
-returns address of the given shared variable. it's safe because shared variables never go out of scope
 
 .. _function-_at_safe_addr_c__c_shared_addr_C&Y_ls_VALUE_gr__dot_:
 
 .. das:function:: shared_addr(val: auto(VALUE) const&) : auto
 
-:Arguments: * **val** : auto(VALUE)&
-
-
 returns address of the given shared variable. it's safe because shared variables never go out of scope
+
+
+:Arguments: * **val** : auto(VALUE)&
 
 ++++++++++++++++++
 Temporary pointers
@@ -86,18 +86,18 @@ Temporary pointers
 
 .. das:function:: temp_ptr(x: auto(T)? const implicit ==const) : T?#
 
-:Arguments: * **x** : auto(T)? implicit!
-
-
 returns temporary pointer from a given pointer
+
+
+:Arguments: * **x** : auto(T)? implicit!
 
 .. _function-_at_safe_addr_c__c_temp_ptr_I_eq_1_ls_Y_ls_T_gr__dot__gr__qm_:
 
 .. das:function:: temp_ptr(x: auto(T)? implicit ==const) : T?#
 
-:Arguments: * **x** : auto(T)? implicit!
-
-
 returns temporary pointer from a given pointer
+
+
+:Arguments: * **x** : auto(T)? implicit!
 
 

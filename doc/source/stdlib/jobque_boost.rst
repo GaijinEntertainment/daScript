@@ -39,6 +39,7 @@ Create a new job.
     * new job is added to the job queue.
     * once new job is invoked, lambda is invoked on the new context on the job thread.
 
+
 :Arguments: * **l** : lambda<void>
 
 .. _function-_at_jobque_boost_c__c_new_thread__at_:
@@ -50,6 +51,7 @@ Create a new thread
     * lambda is cloned to the new context.
     * new thread is created.
     * lambda is invoked on the new context on the new thread.
+
 
 :Arguments: * **l** : lambda<void>
 
@@ -71,6 +73,7 @@ reads input from the channel (in order it was pushed) and invokes the block on e
 stops once channel is depleted (internal entry counter is 0)
 this can happen on multiple threads or jobs at the same time.
 
+
 :Arguments: * **channel** :  :ref:`Channel <handle-jobque-Channel>` ?
 
             * **blk** : block<(res:auto(TT)#):void>
@@ -85,6 +88,7 @@ this can happen on multiple threads or jobs at the same time.
 this iterator is used to iterate over the channel in order it was pushed.
 iterator stops once channel is depleted (internal entry counter is 0)
 iteration can happen on multiple threads or jobs at the same time.
+
 
 :Arguments: * **channel** :  :ref:`Channel <handle-jobque-Channel>` ?
 
@@ -103,6 +107,7 @@ Passing data
 
 clones data and pushed value to the channel (at the end)
 
+
 :Arguments: * **channel** :  :ref:`Channel <handle-jobque-Channel>` ?
 
             * **data** : auto(TT)
@@ -112,6 +117,7 @@ clones data and pushed value to the channel (at the end)
 .. das:function:: push(channel: Channel?; data: auto?) : auto
 
 pushes value to the channel (at the end)
+
 
 :Arguments: * **channel** :  :ref:`Channel <handle-jobque-Channel>` ?
 
@@ -132,6 +138,7 @@ Internal capture details
 
 this function is used to capture a channel that is used by the jobque.
 
+
 :Arguments: * **ch** :  :ref:`Channel <handle-jobque-Channel>` ?
 
 .. _function-_at_jobque_boost_c__c_capture_jobque_job_status_C1_ls_H_ls_jobque_c__c_JobStatus_gr__gr__qm_:
@@ -139,6 +146,7 @@ this function is used to capture a channel that is used by the jobque.
 .. das:function:: capture_jobque_job_status(js: JobStatus?) : JobStatus?
 
 this function is used to capture a job status that is used by the jobque.
+
 
 :Arguments: * **js** :  :ref:`JobStatus <handle-jobque-JobStatus>` ?
 
@@ -148,6 +156,7 @@ this function is used to capture a job status that is used by the jobque.
 
 this function is used to release a channel that is used by the jobque.
 
+
 :Arguments: * **ch** :  :ref:`Channel <handle-jobque-Channel>` ?
 
 .. _function-_at_jobque_boost_c__c_release_capture_jobque_job_status_C1_ls_H_ls_jobque_c__c_JobStatus_gr__gr__qm_:
@@ -155,6 +164,7 @@ this function is used to release a channel that is used by the jobque.
 .. das:function:: release_capture_jobque_job_status(js: JobStatus?)
 
 this function is used to release a job status that is used by the jobque.
+
 
 :Arguments: * **js** :  :ref:`JobStatus <handle-jobque-JobStatus>` ?
 
@@ -168,6 +178,7 @@ Uncategorized
 
 this function is used to capture a lock box that is used by the jobque.
 
+
 :Arguments: * **js** :  :ref:`LockBox <handle-jobque-LockBox>` ?
 
 .. _function-_at_jobque_boost_c__c_release_capture_jobque_lock_box_C1_ls_H_ls_jobque_c__c_LockBox_gr__gr__qm_:
@@ -175,6 +186,7 @@ this function is used to capture a lock box that is used by the jobque.
 .. das:function:: release_capture_jobque_lock_box(js: LockBox?)
 
 this function is used to release a lock box that is used by the jobque.
+
 
 :Arguments: * **js** :  :ref:`LockBox <handle-jobque-LockBox>` ?
 
@@ -184,6 +196,7 @@ this function is used to release a lock box that is used by the jobque.
 
 reads input from the channel (in order it was pushed) and invokes the block on each input.
 afterwards input is consumed
+
 
 :Arguments: * **ch** :  :ref:`Channel <handle-jobque-Channel>` ?
 
@@ -196,6 +209,7 @@ afterwards input is consumed
 reads input from the channel (in order it was pushed) and invokes the block on each input.
 afterwards input is consumed
 
+
 :Arguments: * **ch** :  :ref:`Channel <handle-jobque-Channel>` ?
 
             * **blk** : block<(arg:auto(TT)#;info: :ref:`TypeInfo <handle-rtti-TypeInfo>` ?;ctx: :ref:`Context <handle-rtti-Context>` ):void>
@@ -206,6 +220,7 @@ afterwards input is consumed
 
 reads input from the channel (in order it was pushed) and invokes the block on each input.
 afterwards input is consumed
+
 
 :Arguments: * **ch** :  :ref:`Channel <handle-jobque-Channel>` ?
 
@@ -220,6 +235,7 @@ afterwards input is consumed
 reads input from the channel (in order it was pushed) and invokes the block on each input.
 afterwards input is not consumed
 
+
 :Arguments: * **ch** :  :ref:`Channel <handle-jobque-Channel>` ?
 
             * **blk** : block<(arg:auto(TT)#):void>
@@ -231,6 +247,7 @@ afterwards input is not consumed
 reads input from the channel (in order it was pushed) and invokes the block on each input.
 stops once channel is depleted (internal entry counter is 0)
 this can happen on multiple threads or jobs at the same time.
+
 
 :Arguments: * **channel** :  :ref:`Channel <handle-jobque-Channel>` ?
 
@@ -245,6 +262,7 @@ this can happen on multiple threads or jobs at the same time.
 
 reads one command from channel
 
+
 :Arguments: * **channel** :  :ref:`Channel <handle-jobque-Channel>` ?
 
             * **blk** : block<(res:auto(TT)#):void>
@@ -256,18 +274,22 @@ reads one command from channel
 reads one command from channel
 
 
+
+
 :Arguments: * **channel** :  :ref:`Channel <handle-jobque-Channel>` ? -  channel to read from
 
             * **blk** : block<(res:auto(TT)#):void> -  block to invoke on the read value
 
 
-:return: true if value was read, false if channel is empty
+:Returns: true if value was read, false if channel is empty
+
 
 .. _function-_at_jobque_boost_c__c_push_batch_clone_C1_ls_H_ls_jobque_c__c_Channel_gr__gr__qm__C1_ls_Y_ls_TT_gr__dot__gr_A:
 
 .. das:function:: push_batch_clone(channel: Channel?; data: array<auto(TT)>) : auto
 
 clones data and pushed values to the channel (at the end)
+
 
 :Arguments: * **channel** :  :ref:`Channel <handle-jobque-Channel>` ?
 
@@ -279,6 +301,7 @@ clones data and pushed values to the channel (at the end)
 
 pushes values to the channel (at the end)
 
+
 :Arguments: * **channel** :  :ref:`Channel <handle-jobque-Channel>` ?
 
             * **data** : array<auto?>
@@ -288,6 +311,7 @@ pushes values to the channel (at the end)
 .. das:function:: set(box: LockBox?; data: auto(TT)) : auto
 
 clones data and sets value to the lock box
+
 
 :Arguments: * **box** :  :ref:`LockBox <handle-jobque-LockBox>` ?
 
@@ -299,6 +323,7 @@ clones data and sets value to the lock box
 
 sets value to the lock box
 
+
 :Arguments: * **box** :  :ref:`LockBox <handle-jobque-LockBox>` ?
 
             * **data** : auto?
@@ -308,6 +333,7 @@ sets value to the lock box
 .. das:function:: get(box: LockBox?; blk: block<(res:auto(TT) const#):void>) : auto
 
 reads value from the lock box and invokes the block on it
+
 
 :Arguments: * **box** :  :ref:`LockBox <handle-jobque-LockBox>` ?
 
@@ -319,6 +345,7 @@ reads value from the lock box and invokes the block on it
 
 update value in the lock box and invokes the block on it
 
+
 :Arguments: * **box** :  :ref:`LockBox <handle-jobque-LockBox>` ?
 
             * **blk** : block<(res:auto(TT)#):void>
@@ -328,6 +355,7 @@ update value in the lock box and invokes the block on it
 .. das:function:: clear(box: LockBox?; type_: auto(TT)) : auto
 
 clear value from the lock box
+
 
 :Arguments: * **box** :  :ref:`LockBox <handle-jobque-LockBox>` ?
 
@@ -340,6 +368,7 @@ clear value from the lock box
 this iterator is used to iterate over the channel in order it was pushed.
 iterator stops once channel is depleted (internal entry counter is 0)
 iteration can happen on multiple threads or jobs at the same time.
+
 
 :Arguments: * **channel** :  :ref:`Channel <handle-jobque-Channel>` ?
 

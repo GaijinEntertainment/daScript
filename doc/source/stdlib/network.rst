@@ -49,6 +49,7 @@ Classes
 // stub
 
 
+
 :Arguments: * **port** : int
 
 .. das:function:: Server.restore(shared_orphan: smart_ptr<NetworkServer>&)
@@ -56,11 +57,13 @@ Classes
 // stub
 
 
+
 :Arguments: * **shared_orphan** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>` >&
 
 .. das:function:: Server.save(shared_orphan: smart_ptr<NetworkServer>&)
 
 // stub
+
 
 
 :Arguments: * **shared_orphan** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>` >&
@@ -88,6 +91,7 @@ Classes
 .. das:function:: Server.send(data: uint8?; size: int) : bool
 
 // stub
+
 
 
 :Arguments: * **data** : uint8?
@@ -120,6 +124,7 @@ Low lever NetworkServer IO
 // stub
 
 
+
 :Arguments: * **class** : void? implicit
 
             * **info** :  :ref:`StructInfo <handle-rtti-StructInfo>` ? implicit
@@ -129,6 +134,7 @@ Low lever NetworkServer IO
 .. das:function:: server_init(server: smart_ptr<NetworkServer> implicit; port: int) : bool
 
 // stub
+
 
 
 :Arguments: * **server** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>` > implicit
@@ -142,6 +148,7 @@ Low lever NetworkServer IO
 // stub
 
 
+
 :Arguments: * **server** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>` > implicit
 
 .. _function-_at_network_c__c_server_is_connected_CI1_ls_H_ls_network_c__c_NetworkServer_gr__gr__qm_M_C_c_C_l:
@@ -149,6 +156,7 @@ Low lever NetworkServer IO
 .. das:function:: server_is_connected(server: smart_ptr<NetworkServer> implicit) : bool
 
 // stub
+
 
 
 :Arguments: * **server** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>` > implicit
@@ -160,6 +168,7 @@ Low lever NetworkServer IO
 // stub
 
 
+
 :Arguments: * **server** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>` > implicit
 
 .. _function-_at_network_c__c_server_send_CI1_ls_H_ls_network_c__c_NetworkServer_gr__gr__qm_M_CI1_ls_u8_gr__qm__Ci_C_c_C_l:
@@ -167,6 +176,7 @@ Low lever NetworkServer IO
 .. das:function:: server_send(server: smart_ptr<NetworkServer> implicit; data: uint8? implicit; size: int) : bool
 
 // stub
+
 
 
 :Arguments: * **server** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>` > implicit
@@ -180,6 +190,7 @@ Low lever NetworkServer IO
 .. das:function:: server_restore(server: smart_ptr<NetworkServer> implicit; class: void? implicit; info: StructInfo const? implicit)
 
 // stub
+
 
 
 :Arguments: * **server** : smart_ptr< :ref:`NetworkServer <handle-network-NetworkServer>` > implicit

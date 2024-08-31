@@ -62,6 +62,7 @@ This serializer stores data in memory (in the array<uint8>)
 
 Appends bytes at the end of the data.
 
+
 :Arguments: * **bytes** : void? implicit
 
             * **size** : int
@@ -70,6 +71,7 @@ Appends bytes at the end of the data.
 
 Reads bytes from data, advances the reading position.
 
+
 :Arguments: * **bytes** : void? implicit
 
             * **size** : int
@@ -77,6 +79,7 @@ Reads bytes from data, advances the reading position.
 .. das:function:: MemSerializer.error(code: string)
 
 Sets the last error code.
+
 
 :Arguments: * **code** : string
 
@@ -177,6 +180,7 @@ Serialization
 
 Serialize raw data (straight up bytes for raw pod)
 
+
 :Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
 
             * **value** : auto(TT)&
@@ -186,6 +190,7 @@ Serialize raw data (straight up bytes for raw pod)
 .. das:function:: read_raw(arch: Archive; value: auto(TT)&) : auto
 
 Read raw data (straight up bytes for raw pod)
+
 
 :Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
 
@@ -197,6 +202,7 @@ Read raw data (straight up bytes for raw pod)
 
 Write raw data (straight up bytes for raw pod)
 
+
 :Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
 
             * **value** : auto(TT)&
@@ -206,6 +212,7 @@ Write raw data (straight up bytes for raw pod)
 .. das:function:: serialize(arch: Archive; value: auto(TT)&) : auto
 
 Serializes structured data, based on the `value` type.
+
 
 :Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
 
@@ -217,6 +224,7 @@ Serializes structured data, based on the `value` type.
 
 Serializes structured data, based on the `value` type.
 
+
 :Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
 
             * **value** : auto(TT)&
@@ -226,6 +234,7 @@ Serializes structured data, based on the `value` type.
 .. das:function:: serialize(arch: Archive; value: auto(TT)&) : auto
 
 Serializes structured data, based on the `value` type.
+
 
 :Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
 
@@ -237,6 +246,7 @@ Serializes structured data, based on the `value` type.
 
 Serializes structured data, based on the `value` type.
 
+
 :Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
 
             * **value** : auto(TT)&
@@ -246,6 +256,7 @@ Serializes structured data, based on the `value` type.
 .. das:function:: serialize(arch: Archive; value: auto(TT)&) : auto
 
 Serializes structured data, based on the `value` type.
+
 
 :Arguments: * **arch** :  :ref:`Archive <struct-archive-Archive>` 
 
@@ -304,6 +315,7 @@ Memory archive
 
 Saves the object to a memory archive. Result is array<uint8> with the serialized data.
 
+
 :Arguments: * **t** : auto&
 
 .. _function-_at_archive_c__c_mem_archive_load_1_ls_u8_gr_A_&_dot__Cb:
@@ -311,6 +323,7 @@ Saves the object to a memory archive. Result is array<uint8> with the serialized
 .. das:function:: mem_archive_load(data: array<uint8>; t: auto&; canfail: bool = false) : bool
 
 Loads the object from a memory archive. `data` is the array<uint8> with the serialized data, returned from `mem_archive_save`.
+
 
 :Arguments: * **data** : array<uint8>
 

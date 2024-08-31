@@ -39,6 +39,7 @@ Map, reduce
 
 iterates over `src` and yields only those elements for which `blk` returns true
 
+
 :Arguments: * **src** : iterator<auto(TT)>
 
             * **blk** : lambda<(what:TT):bool>
@@ -58,6 +59,7 @@ iterates over `src` and yields only those elements for which `blk` returns true
 .. das:function:: map(src: iterator<auto(TT)>; blk: lambda<(what:TT const):auto(QQ)>) : auto
 
 iterates over `src` and yields the result of `blk` for each element
+
 
 :Arguments: * **src** : iterator<auto(TT)>
 
@@ -79,6 +81,7 @@ iterates over `src` and yields the result of `blk` for each element
 
 iterates over `it` and yields the reduced (combined) result of `blk` for each element
 and previous reduction result
+
 
 :Arguments: * **it** : iterator<auto(TT)>
 
@@ -111,6 +114,7 @@ and previous reduction result
 iterates over `it` and yields the sum of all elements
 same as reduce(it, @(a,b) => a + b)
 
+
 :Arguments: * **it** : iterator<auto(TT)>
 
 .. _function-_at_functional_c__c_any_C_dot_:
@@ -118,6 +122,7 @@ same as reduce(it, @(a,b) => a + b)
 .. das:function:: any(it: auto) : auto
 
 iterates over `it` and yields true if any element is true
+
 
 :Arguments: * **it** : auto
 
@@ -127,6 +132,7 @@ iterates over `it` and yields true if any element is true
 
 iterates over `it` and yields true if all elements are true
 
+
 :Arguments: * **it** : auto
 
 .. _function-_at_functional_c__c_cycle_1_ls_Y_ls_TT_gr__dot__gr_G:
@@ -135,6 +141,7 @@ iterates over `it` and yields true if all elements are true
 
 endlessly iterates over `src`
 
+
 :Arguments: * **src** : iterator<auto(TT)>
 
 .. _function-_at_functional_c__c_islice_1_ls_Y_ls_TT_gr__dot__gr_G_Ci_Ci:
@@ -142,6 +149,7 @@ endlessly iterates over `src`
 .. das:function:: islice(src: iterator<auto(TT)>; start: int; stop: int) : auto
 
 iterates over `src` and yields only the elements in the range [start,stop)
+
 
 :Arguments: * **src** : iterator<auto(TT)>
 
@@ -155,6 +163,7 @@ iterates over `src` and yields only the elements in the range [start,stop)
 
 yields `value` by reference `count` times
 
+
 :Arguments: * **value** : auto(TT)
 
             * **total** : int
@@ -164,6 +173,7 @@ yields `value` by reference `count` times
 .. das:function:: repeat(value: auto(TT); count: int = 0) : auto
 
 yields `value` `count` times
+
 
 :Arguments: * **value** : auto(TT)
 
@@ -175,6 +185,7 @@ yields `value` `count` times
 
 yeilds !x
 
+
 :Arguments: * **x** : auto
 
 .. _function-_at_functional_c__c_echo__dot__Cs:
@@ -182,6 +193,7 @@ yeilds !x
 .. das:function:: echo(x: auto; extra: string = "\n") : auto
 
 prints contents of the string to the output, with `extra` string appended
+
 
 :Arguments: * **x** : auto
 
@@ -192,6 +204,7 @@ prints contents of the string to the output, with `extra` string appended
 .. das:function:: flatten(it: iterator<auto(TT)>) : auto
 
 iterates over `it`, than iterates over each element of each element of `it` and yields it
+
 
 :Arguments: * **it** : iterator<auto(TT)>
 
@@ -208,6 +221,7 @@ Queries
 
 yields true if `a` and `b` are equal
 
+
 :Arguments: * **a** : auto
 
             * **b** : auto
@@ -217,6 +231,7 @@ yields true if `a` and `b` are equal
 .. das:function:: is_not_equal(a: auto; b: auto) : auto
 
 yields true if `a` and `b` are not equal
+
 
 :Arguments: * **a** : auto
 
@@ -232,6 +247,7 @@ Uncategorized
 
 iterates over input and returns it sorted version
 
+
 :Arguments: * **arr** : array<auto>
 
 .. _function-_at_functional_c__c_sorted_1_ls_Y_ls_TT_gr__dot__gr_G:
@@ -239,6 +255,7 @@ iterates over input and returns it sorted version
 .. das:function:: sorted(it: iterator<auto(TT)>) : auto
 
 iterates over input and returns it sorted version
+
 
 :Arguments: * **it** : iterator<auto(TT)>
 

@@ -99,6 +99,7 @@ Value conversion
 
 Creates `JsonValue` out of value.
 
+
 :Arguments: * **v** : string
 
 .. _function-_at_json_c__c_JV_Cd:
@@ -155,6 +156,7 @@ Read and write
 reads JSON from the `text` string.
 if `error` is not empty, it contains the parsing error message.
 
+
 :Arguments: * **text** : string implicit
 
             * **error** : string&
@@ -173,16 +175,17 @@ if `error` is not empty, it contains the parsing error message.
 
 .. das:function:: write_json(val: JsonValue?) : string
 
-:Arguments: * **val** :  :ref:`JsonValue <struct-json-JsonValue>` ?
-
-
 returns JSON (textual) representation of JsonValue as a string.
+
+
+:Arguments: * **val** :  :ref:`JsonValue <struct-json-JsonValue>` ?
 
 .. _function-_at_json_c__c_write_json_C_hh_1_ls_S_ls_json_c__c_JsonValue_gr__gr__qm_:
 
 .. das:function:: write_json(val: JsonValue?#) : string
 
 Overload accepting temporary type
+
 
 :Arguments: * **val** :  :ref:`JsonValue <struct-json-JsonValue>` ?#
 
@@ -200,6 +203,7 @@ JSON properties
 
 if `value` is true, then numbers are written without trailing zeros.
 
+
 :Arguments: * **value** : bool
 
 .. _function-_at_json_c__c_set_no_empty_arrays_Cb:
@@ -208,6 +212,7 @@ if `value` is true, then numbers are written without trailing zeros.
 
 if `value` is true, then empty arrays are not written at all
 
+
 :Arguments: * **value** : bool
 
 .. _function-_at_json_c__c_set_allow_duplicate_keys_Cb:
@@ -215,6 +220,7 @@ if `value` is true, then empty arrays are not written at all
 .. das:function:: set_allow_duplicate_keys(value: bool) : bool
 
 if `value` is true, then duplicate keys are allowed in objects. the later key overwrites the earlier one.
+
 
 :Arguments: * **value** : bool
 
@@ -233,6 +239,7 @@ fixes broken json. so far supported
 2. "text "nested text" text" nested quotes
 3. extra , at the end of object or array
 4. /uXXXXXX sequences in the middle of white space
+
 
 :Arguments: * **bad** : string
 

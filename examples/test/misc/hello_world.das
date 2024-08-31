@@ -1,19 +1,20 @@
-require padd_function
+struct MyStruct {
+    value: int;
+}
 
-def take_structure ( foo : $padd_structure(type<auto(TT)>,null); value : TT )
-	print("general {typeinfo(typename foo)} with TT = {typeinfo(typename value)}\n")
+var a = 1
 
-def take_structure ( foo : $padd_structure(type<tuple<auto(TT);float>>,null); value : TT )
-	print("tuple specialized {typeinfo(typename foo)} with TT = {typeinfo(typename value)}\n")
+def my_func(t: type<auto(TT)>; func: lambda<(arg:TT?):void>) {
+    invoke(func, null);
+}
 
 [export]
-def main
-	var foo : $padd_structure(type<int>,4)
-	take_structure(foo, 13)
-	var bar : $padd_structure(type<float>,8)
-	take_structure(bar, 3.14)
-	var dar : $padd_structure(type<tuple<int;float>>,4)
-	take_structure(dar, 13)
-
-options log_infer_passes
-
+def test() {
+    my_func(type<MyStruct>, @(arg: MyStruct?){
+        assert(arg==null);
+        assert(a == 1);
+        a ++;
+    });
+    assert(a == 2);
+    return true;
+}

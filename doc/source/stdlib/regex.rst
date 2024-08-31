@@ -160,10 +160,10 @@ Compilation and validation
 
 .. das:function:: is_valid(re: Regex) : bool
 
-:Arguments: * **re** :  :ref:`Regex <struct-regex-Regex>` 
-
-
 returns `true` if enumeration compiled correctly
+
+
+:Arguments: * **re** :  :ref:`Regex <struct-regex-Regex>` 
 
 .. _function-_at_regex_c__c_regex_compile_S_ls_regex_c__c_Regex_gr__Cs:
 
@@ -171,6 +171,7 @@ returns `true` if enumeration compiled correctly
 
 Compile regular expression.
 Validity of the compiled expression is checked by `is_valid`.
+
 
 :Arguments: * **re** :  :ref:`Regex <struct-regex-Regex>` 
 
@@ -198,6 +199,7 @@ Validity of the compiled expression is checked by `is_valid`.
 
 Prints regular expression and its related information in human readable form.
 
+
 :Arguments: * **regex** :  :ref:`Regex <struct-regex-Regex>` 
 
 .. _function-_at_regex_c__c_debug_set_C_lb_8_rb_Y_ls_CharSet_gr_u:
@@ -205,6 +207,7 @@ Prints regular expression and its related information in human readable form.
 .. das:function:: debug_set(cset: CharSet)
 
 Prints character set in human readable form.
+
 
 :Arguments: * **cset** :  :ref:`CharSet <alias-CharSet>` 
 
@@ -221,6 +224,7 @@ Access
 
 Returns string for the given group index and match result.
 
+
 :Arguments: * **regex** :  :ref:`Regex <struct-regex-Regex>` 
 
             * **index** : int
@@ -232,6 +236,7 @@ Returns string for the given group index and match result.
 .. das:function:: regex_foreach(regex: Regex; str: string; blk: block<(at:range const):bool>)
 
 Iterates through all matches for the given regular expression in `str`.
+
 
 :Arguments: * **regex** :  :ref:`Regex <struct-regex-Regex>` 
 
@@ -251,6 +256,7 @@ Match
 
 Returns first match for the regular expression in `str`.
 If `offset` is specified, first that many number of symbols will not be matched.
+
 
 :Arguments: * **regex** :  :ref:`Regex <struct-regex-Regex>` 
 
@@ -290,6 +296,7 @@ Uncategorized
 .. das:function:: regex_replace(regex: Regex; str: string; blk: block<(at:string const):string>) : string
 
 Iterates through all matches for the given regular expression in `str`.
+
 
 :Arguments: * **regex** :  :ref:`Regex <struct-regex-Regex>` 
 

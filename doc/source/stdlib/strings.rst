@@ -55,6 +55,7 @@ Character set
 // stub
 
 
+
 :Arguments: * **Character** : int
 
             * **Charset** : uint[8] implicit
@@ -66,6 +67,7 @@ Character set
 // stub
 
 
+
 :Arguments: * **Charset** : uint[8] implicit
 
 .. _function-_at_strings_c__c_set_element_Ci_CI_lb_8_rb_u:
@@ -73,6 +75,7 @@ Character set
 .. das:function:: set_element(Character: int; Charset: uint const[8] implicit) : int
 
 // stub
+
 
 
 :Arguments: * **Character** : int
@@ -95,6 +98,7 @@ Character groups
 // stub
 
 
+
 :Arguments: * **Character** : int
 
 .. _function-_at_strings_c__c_is_new_line_Ci:
@@ -102,6 +106,7 @@ Character groups
 .. das:function:: is_new_line(Character: int) : bool
 
 // stub
+
 
 
 :Arguments: * **Character** : int
@@ -113,6 +118,7 @@ Character groups
 // stub
 
 
+
 :Arguments: * **Character** : int
 
 .. _function-_at_strings_c__c_is_number_Ci:
@@ -120,6 +126,7 @@ Character groups
 .. das:function:: is_number(Character: int) : bool
 
 // stub
+
 
 
 :Arguments: * **Character** : int
@@ -138,6 +145,7 @@ Character by index
 // stub
 
 
+
 :Arguments: * **str** : string implicit
 
             * **idx** : int
@@ -150,6 +158,7 @@ Character by index
   This is unsafe operation.
 
 // stub
+
 
 
 :Arguments: * **str** : string implicit
@@ -176,6 +185,7 @@ String properties
 // stub
 
 
+
 :Arguments: * **str** : string implicit
 
             * **cmp** : string implicit
@@ -185,6 +195,7 @@ String properties
 .. das:function:: ends_with(str: das_string implicit; cmp: string implicit) : bool
 
 // stub
+
 
 
 :Arguments: * **str** :  :ref:`das_string <handle-builtin-das_string>`  implicit
@@ -198,6 +209,7 @@ String properties
 // stub
 
 
+
 :Arguments: * **str** : string implicit
 
             * **cmp** : string implicit
@@ -207,6 +219,7 @@ String properties
 .. das:function:: starts_with(str: string implicit; cmp: string implicit; cmpLen: uint) : bool
 
 // stub
+
 
 
 :Arguments: * **str** : string implicit
@@ -222,6 +235,7 @@ String properties
 // stub
 
 
+
 :Arguments: * **str** : string implicit
 
             * **offset** : int
@@ -233,6 +247,7 @@ String properties
 .. das:function:: starts_with(str: string implicit; offset: int; cmp: string implicit; cmpLen: uint) : bool
 
 // stub
+
 
 
 :Arguments: * **str** : string implicit
@@ -250,6 +265,7 @@ String properties
 // stub
 
 
+
 :Arguments: * **str** : string implicit
 
 .. _function-_at_strings_c__c_length_CIH_ls__builtin__c__c_das_string_gr_:
@@ -257,6 +273,7 @@ String properties
 .. das:function:: length(str: das_string implicit) : int
 
 // stub
+
 
 
 :Arguments: * **str** :  :ref:`das_string <handle-builtin-das_string>`  implicit
@@ -291,6 +308,7 @@ String builder
 // stub
 
 
+
 :Arguments: * **block** : block<( :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>` ):void> implicit
 
 .. _function-_at_strings_c__c_build_hash_CI0_ls_H_ls_strings_c__c_StringBuilderWriter_gr__gr_1_ls_v_gr__builtin__C_c_C_l:
@@ -300,6 +318,7 @@ String builder
 // stub
 
 
+
 :Arguments: * **block** : block<( :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>` ):void> implicit
 
 .. _function-_at_strings_c__c_write_H_ls_strings_c__c_StringBuilderWriter_gr___st_:
@@ -307,6 +326,7 @@ String builder
 .. das:function:: write(writer: StringBuilderWriter; anything: any) : StringBuilderWriter&
 
 // stub
+
 
 
 :Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>` 
@@ -320,6 +340,7 @@ String builder
 // stub
 
 
+
 :Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
 
             * **ch** : int
@@ -329,6 +350,7 @@ String builder
 .. das:function:: write_chars(writer: StringBuilderWriter implicit; ch: int; count: int) : StringBuilderWriter&
 
 // stub
+
 
 
 :Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
@@ -344,6 +366,7 @@ String builder
 // stub
 
 
+
 :Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
 
             * **str** : string implicit
@@ -356,6 +379,7 @@ String builder
   This function is deprecated.
 
 // stub
+
 
 
 :Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
@@ -374,6 +398,7 @@ String builder
 // stub
 
 
+
 :Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
 
             * **format** : string implicit
@@ -388,6 +413,7 @@ String builder
   This function is deprecated.
 
 // stub
+
 
 
 :Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
@@ -406,6 +432,7 @@ String builder
 // stub
 
 
+
 :Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
 
             * **format** : string implicit
@@ -420,6 +447,7 @@ String builder
   This function is deprecated.
 
 // stub
+
 
 
 :Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
@@ -438,6 +466,7 @@ String builder
 // stub
 
 
+
 :Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
 
             * **format** : string implicit
@@ -454,6 +483,7 @@ String builder
 // stub
 
 
+
 :Arguments: * **format** : string implicit
 
             * **value** : int
@@ -466,6 +496,7 @@ String builder
   This function is deprecated.
 
 // stub
+
 
 
 :Arguments: * **format** : string implicit
@@ -482,6 +513,7 @@ String builder
 // stub
 
 
+
 :Arguments: * **format** : string implicit
 
             * **value** : int64
@@ -494,6 +526,7 @@ String builder
   This function is deprecated.
 
 // stub
+
 
 
 :Arguments: * **format** : string implicit
@@ -510,6 +543,7 @@ String builder
 // stub
 
 
+
 :Arguments: * **format** : string implicit
 
             * **value** : float
@@ -522,6 +556,7 @@ String builder
   This function is deprecated.
 
 // stub
+
 
 
 :Arguments: * **format** : string implicit
@@ -542,6 +577,7 @@ das::string manipulation
 // stub
 
 
+
 :Arguments: * **str** :  :ref:`das_string <handle-builtin-das_string>`  implicit
 
             * **ch** : int
@@ -551,6 +587,7 @@ das::string manipulation
 .. das:function:: resize(str: das_string implicit; new_length: int)
 
 // stub
+
 
 
 :Arguments: * **str** :  :ref:`das_string <handle-builtin-das_string>`  implicit
@@ -589,6 +626,7 @@ String modifications
 // stub
 
 
+
 :Arguments: * **str** : string implicit
 
             * **count** : int
@@ -600,6 +638,7 @@ String modifications
 // stub
 
 
+
 :Arguments: * **str** : string implicit
 
 .. _function-_at_strings_c__c_strip_right_CIs_C_c_C_l:
@@ -607,6 +646,7 @@ String modifications
 .. das:function:: strip_right(str: string implicit) : string
 
 // stub
+
 
 
 :Arguments: * **str** : string implicit
@@ -618,6 +658,7 @@ String modifications
 // stub
 
 
+
 :Arguments: * **str** : string implicit
 
 .. _function-_at_strings_c__c_chop_CIs_Ci_Ci_C_c_C_l:
@@ -625,6 +666,7 @@ String modifications
 .. das:function:: chop(str: string implicit; start: int; length: int) : string
 
 // stub
+
 
 
 :Arguments: * **str** : string implicit
@@ -640,6 +682,7 @@ String modifications
 // stub
 
 
+
 :Arguments: * **str** : string implicit
 
             * **start** : int
@@ -653,6 +696,7 @@ String modifications
 // stub
 
 
+
 :Arguments: * **str** : string implicit
 
             * **start** : int
@@ -664,6 +708,7 @@ String modifications
 // stub
 
 
+
 :Arguments: * **str** : string implicit
 
 .. _function-_at_strings_c__c_to_upper_CIs_C_c_C_l:
@@ -673,6 +718,7 @@ String modifications
 // stub
 
 
+
 :Arguments: * **str** : string implicit
 
 .. _function-_at_strings_c__c_to_lower_CIs_C_c_C_l:
@@ -680,6 +726,7 @@ String modifications
 .. das:function:: to_lower(str: string implicit) : string
 
 // stub
+
 
 
 :Arguments: * **str** : string implicit
@@ -694,6 +741,7 @@ String modifications
 // stub
 
 
+
 :Arguments: * **str** : string implicit
 
 .. _function-_at_strings_c__c_to_upper_in_place_CIs:
@@ -706,6 +754,7 @@ String modifications
 // stub
 
 
+
 :Arguments: * **str** : string implicit
 
 .. _function-_at_strings_c__c_escape_CIs_C_c_C_l:
@@ -713,6 +762,7 @@ String modifications
 .. das:function:: escape(str: string implicit) : string
 
 // stub
+
 
 
 :Arguments: * **str** : string implicit
@@ -724,6 +774,7 @@ String modifications
 // stub
 
 
+
 :Arguments: * **str** : string implicit
 
 .. _function-_at_strings_c__c_safe_unescape_CIs_C_c_C_l:
@@ -733,6 +784,7 @@ String modifications
 // stub
 
 
+
 :Arguments: * **str** : string implicit
 
 .. _function-_at_strings_c__c_replace_CIs_CIs_CIs_C_c_C_l:
@@ -740,6 +792,7 @@ String modifications
 .. das:function:: replace(str: string implicit; toSearch: string implicit; replace: string implicit) : string
 
 // stub
+
 
 
 :Arguments: * **str** : string implicit
@@ -755,6 +808,7 @@ String modifications
 // stub
 
 
+
 :Arguments: * **str** : string implicit
 
 .. _function-_at_strings_c__c_rtrim_CIs_CIs_C_c_C_l:
@@ -762,6 +816,7 @@ String modifications
 .. das:function:: rtrim(str: string implicit; chars: string implicit) : string
 
 // stub
+
 
 
 :Arguments: * **str** : string implicit
@@ -775,6 +830,7 @@ String modifications
 // stub
 
 
+
 :Arguments: * **str** : string implicit
 
 .. _function-_at_strings_c__c_trim_CIs_C_c_C_l:
@@ -782,6 +838,7 @@ String modifications
 .. das:function:: trim(str: string implicit) : string
 
 // stub
+
 
 
 :Arguments: * **str** : string implicit
@@ -802,6 +859,7 @@ Search substrings
 // stub
 
 
+
 :Arguments: * **str** : string implicit
 
             * **substr** : string implicit
@@ -815,6 +873,7 @@ Search substrings
 // stub
 
 
+
 :Arguments: * **str** : string implicit
 
             * **substr** : string implicit
@@ -826,6 +885,7 @@ Search substrings
 // stub
 
 
+
 :Arguments: * **str** : string implicit
 
             * **substr** : int
@@ -835,6 +895,7 @@ Search substrings
 .. das:function:: find(str: string implicit; substr: int; start: int) : int
 
 // stub
+
 
 
 :Arguments: * **str** : string implicit
@@ -875,6 +936,7 @@ String conversion routines
 // stub
 
 
+
 :Arguments: * **bytes** : array<uint8> implicit
 
 .. _function-_at_strings_c__c_to_char_Ci_C_c_C_l:
@@ -882,6 +944,7 @@ String conversion routines
 .. das:function:: to_char(char: int) : string
 
 // stub
+
 
 
 :Arguments: * **char** : int
@@ -893,6 +956,7 @@ String conversion routines
 // stub
 
 
+
 :Arguments: * **str** : string implicit
 
 .. _function-_at_strings_c__c_uint_CIs_C_c_C_l:
@@ -900,6 +964,7 @@ String conversion routines
 .. das:function:: uint(str: string implicit) : uint
 
 // stub
+
 
 
 :Arguments: * **str** : string implicit
@@ -911,6 +976,7 @@ String conversion routines
 // stub
 
 
+
 :Arguments: * **str** : string implicit
 
 .. _function-_at_strings_c__c_uint64_CIs_C_c_C_l:
@@ -918,6 +984,7 @@ String conversion routines
 .. das:function:: uint64(str: string implicit) : uint64
 
 // stub
+
 
 
 :Arguments: * **str** : string implicit
@@ -929,6 +996,7 @@ String conversion routines
 // stub
 
 
+
 :Arguments: * **str** : string implicit
 
 .. _function-_at_strings_c__c_double_CIs_C_c_C_l:
@@ -938,6 +1006,7 @@ String conversion routines
 // stub
 
 
+
 :Arguments: * **str** : string implicit
 
 .. _function-_at_strings_c__c_to_int_CIs_Cb:
@@ -945,6 +1014,7 @@ String conversion routines
 .. das:function:: to_int(value: string implicit; hex: bool = false) : int
 
 // stub
+
 
 
 :Arguments: * **value** : string implicit
@@ -958,6 +1028,7 @@ String conversion routines
 // stub
 
 
+
 :Arguments: * **value** : string implicit
 
             * **hex** : bool
@@ -967,6 +1038,7 @@ String conversion routines
 .. das:function:: to_int64(value: string implicit; hex: bool = false) : int64
 
 // stub
+
 
 
 :Arguments: * **value** : string implicit
@@ -980,6 +1052,7 @@ String conversion routines
 // stub
 
 
+
 :Arguments: * **value** : string implicit
 
             * **hex** : bool
@@ -991,6 +1064,7 @@ String conversion routines
 // stub
 
 
+
 :Arguments: * **value** : string implicit
 
 .. _function-_at_strings_c__c_to_double_CIs:
@@ -1000,6 +1074,7 @@ String conversion routines
 // stub
 
 
+
 :Arguments: * **value** : string implicit
 
 .. _function-_at_strings_c__c_int_CIs_&IE_ls_strings_c__c_ConversionResult_gr__&Ii_Cb:
@@ -1007,6 +1082,7 @@ String conversion routines
 .. das:function:: int(str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : int
 
 // stub
+
 
 
 :Arguments: * **str** : string implicit
@@ -1024,6 +1100,7 @@ String conversion routines
 // stub
 
 
+
 :Arguments: * **str** : string implicit
 
             * **result** :  :ref:`ConversionResult <enum-strings-ConversionResult>` & implicit
@@ -1037,6 +1114,7 @@ String conversion routines
 .. das:function:: int64(str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : int64
 
 // stub
+
 
 
 :Arguments: * **str** : string implicit
@@ -1054,6 +1132,7 @@ String conversion routines
 // stub
 
 
+
 :Arguments: * **str** : string implicit
 
             * **result** :  :ref:`ConversionResult <enum-strings-ConversionResult>` & implicit
@@ -1069,6 +1148,7 @@ String conversion routines
 // stub
 
 
+
 :Arguments: * **str** : string implicit
 
             * **result** :  :ref:`ConversionResult <enum-strings-ConversionResult>` & implicit
@@ -1080,6 +1160,7 @@ String conversion routines
 .. das:function:: double(str: string implicit; result: ConversionResult& implicit; offset: int& implicit) : double
 
 // stub
+
 
 
 :Arguments: * **str** : string implicit
@@ -1102,6 +1183,7 @@ String as array
 // stub
 
 
+
 :Arguments: * **str** : string implicit
 
             * **block** : block<(array<uint8>#):void> implicit
@@ -1111,6 +1193,7 @@ String as array
 .. das:function:: modify_data(str: string implicit; block: block<(var arg0:array<uint8>#):void> implicit) : string
 
 // stub
+
 
 
 :Arguments: * **str** : string implicit
@@ -1134,6 +1217,7 @@ Low level memory allocation
 // stub
 
 
+
 :Arguments: * **str** : string& implicit
 
 .. _function-_at_strings_c__c_reserve_string_buffer_CIs_Ci_C_c:
@@ -1141,6 +1225,7 @@ Low level memory allocation
 .. das:function:: reserve_string_buffer(str: string implicit; length: int) : string
 
 // stub
+
 
 
 :Arguments: * **str** : string implicit
@@ -1158,6 +1243,7 @@ Uncategorized
 // stub
 
 
+
 :Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
 
             * **format** : string implicit
@@ -1169,6 +1255,7 @@ Uncategorized
 .. das:function:: fmt(writer: StringBuilderWriter implicit; format: string implicit; value: uint8) : StringBuilderWriter&
 
 // stub
+
 
 
 :Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
@@ -1184,6 +1271,7 @@ Uncategorized
 // stub
 
 
+
 :Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
 
             * **format** : string implicit
@@ -1195,6 +1283,7 @@ Uncategorized
 .. das:function:: fmt(writer: StringBuilderWriter implicit; format: string implicit; value: uint16) : StringBuilderWriter&
 
 // stub
+
 
 
 :Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
@@ -1210,6 +1299,7 @@ Uncategorized
 // stub
 
 
+
 :Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
 
             * **format** : string implicit
@@ -1221,6 +1311,7 @@ Uncategorized
 .. das:function:: fmt(writer: StringBuilderWriter implicit; format: string implicit; value: uint) : StringBuilderWriter&
 
 // stub
+
 
 
 :Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
@@ -1236,6 +1327,7 @@ Uncategorized
 // stub
 
 
+
 :Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
 
             * **format** : string implicit
@@ -1247,6 +1339,7 @@ Uncategorized
 .. das:function:: fmt(writer: StringBuilderWriter implicit; format: string implicit; value: uint64) : StringBuilderWriter&
 
 // stub
+
 
 
 :Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
@@ -1262,6 +1355,7 @@ Uncategorized
 // stub
 
 
+
 :Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
 
             * **format** : string implicit
@@ -1273,6 +1367,7 @@ Uncategorized
 .. das:function:: fmt(writer: StringBuilderWriter implicit; format: string implicit; value: double) : StringBuilderWriter&
 
 // stub
+
 
 
 :Arguments: * **writer** :  :ref:`StringBuilderWriter <handle-strings-StringBuilderWriter>`  implicit
@@ -1288,6 +1383,7 @@ Uncategorized
 // stub
 
 
+
 :Arguments: * **str** : string implicit
 
 .. _function-_at_strings_c__c_uint8_CIs_C_c_C_l:
@@ -1295,6 +1391,7 @@ Uncategorized
 .. das:function:: uint8(str: string implicit) : uint8
 
 // stub
+
 
 
 :Arguments: * **str** : string implicit
@@ -1306,6 +1403,7 @@ Uncategorized
 // stub
 
 
+
 :Arguments: * **str** : string implicit
 
 .. _function-_at_strings_c__c_uint16_CIs_C_c_C_l:
@@ -1315,6 +1413,7 @@ Uncategorized
 // stub
 
 
+
 :Arguments: * **str** : string implicit
 
 .. _function-_at_strings_c__c_to_int8_CIs_Cb:
@@ -1322,6 +1421,7 @@ Uncategorized
 .. das:function:: to_int8(value: string implicit; hex: bool = false) : int8
 
 // stub
+
 
 
 :Arguments: * **value** : string implicit
@@ -1335,6 +1435,7 @@ Uncategorized
 // stub
 
 
+
 :Arguments: * **value** : string implicit
 
             * **hex** : bool
@@ -1346,6 +1447,7 @@ Uncategorized
 // stub
 
 
+
 :Arguments: * **value** : string implicit
 
             * **hex** : bool
@@ -1355,6 +1457,7 @@ Uncategorized
 .. das:function:: int8(str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : int8
 
 // stub
+
 
 
 :Arguments: * **str** : string implicit
@@ -1372,6 +1475,7 @@ Uncategorized
 // stub
 
 
+
 :Arguments: * **str** : string implicit
 
             * **result** :  :ref:`ConversionResult <enum-strings-ConversionResult>` & implicit
@@ -1385,6 +1489,7 @@ Uncategorized
 .. das:function:: int16(str: string implicit; result: ConversionResult& implicit; offset: int& implicit; hex: bool = false) : int16
 
 // stub
+
 
 
 :Arguments: * **str** : string implicit
@@ -1402,6 +1507,7 @@ Uncategorized
 // stub
 
 
+
 :Arguments: * **str** : string implicit
 
             * **result** :  :ref:`ConversionResult <enum-strings-ConversionResult>` & implicit
@@ -1417,6 +1523,7 @@ Uncategorized
 // stub
 
 
+
 :Arguments: * **format** : string implicit
 
             * **value** : int8
@@ -1426,6 +1533,7 @@ Uncategorized
 .. das:function:: fmt(format: string implicit; value: uint8) : string
 
 // stub
+
 
 
 :Arguments: * **format** : string implicit
@@ -1439,6 +1547,7 @@ Uncategorized
 // stub
 
 
+
 :Arguments: * **format** : string implicit
 
             * **value** : int16
@@ -1448,6 +1557,7 @@ Uncategorized
 .. das:function:: fmt(format: string implicit; value: uint16) : string
 
 // stub
+
 
 
 :Arguments: * **format** : string implicit
@@ -1461,6 +1571,7 @@ Uncategorized
 // stub
 
 
+
 :Arguments: * **format** : string implicit
 
             * **value** : int
@@ -1470,6 +1581,7 @@ Uncategorized
 .. das:function:: fmt(format: string implicit; value: uint) : string
 
 // stub
+
 
 
 :Arguments: * **format** : string implicit
@@ -1483,6 +1595,7 @@ Uncategorized
 // stub
 
 
+
 :Arguments: * **format** : string implicit
 
             * **value** : int64
@@ -1492,6 +1605,7 @@ Uncategorized
 .. das:function:: fmt(format: string implicit; value: uint64) : string
 
 // stub
+
 
 
 :Arguments: * **format** : string implicit
@@ -1505,6 +1619,7 @@ Uncategorized
 // stub
 
 
+
 :Arguments: * **format** : string implicit
 
             * **value** : float
@@ -1514,6 +1629,7 @@ Uncategorized
 .. das:function:: fmt(format: string implicit; value: double) : string
 
 // stub
+
 
 
 :Arguments: * **format** : string implicit

@@ -37,6 +37,7 @@ Intended use::
 
     log_cpp_class_adapter(cppFileNameDotInc, "daslangClassName", typeinfo(ast_typedecl type<daslangClassName>))
 
+
 :Arguments: * **cpp_file** :  :ref:`file <alias-file>` 
 
             * **name** : string

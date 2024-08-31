@@ -39,6 +39,7 @@ Search
 
 Returns an iterator pointing to the first element in the range [first, last) that is not less than (i.e. greater or equal to) value, or last if no such element is found.
 
+
 :Arguments: * **a** : array<auto(TT)>
 
             * **f** : int
@@ -101,6 +102,7 @@ Returns an iterator pointing to the first element in the range [first, last) tha
 
 Returns true if an val appears within the range [f, last).
 Array a must be sorted.
+
 
 :Arguments: * **a** : array<auto(TT)>
 
@@ -259,6 +261,7 @@ Array manipulation
 
 Returns array of the elements of a with duplicates removed.
 
+
 :Arguments: * **a** : array<auto(TT)>
 
 .. _function-_at_algorithm_c__c_sort_unique_1_ls_Y_ls_TT_gr__dot__gr_A:
@@ -269,6 +272,7 @@ Returns array of the elements of a, sorted and with duplicates removed.
 The elements of a are sorted in ascending order.
 The resulted array has only unqiue elements.
 
+
 :Arguments: * **a** : array<auto(TT)>
 
 .. _function-_at_algorithm_c__c_reverse_1_ls__dot__gr_A:
@@ -277,6 +281,7 @@ The resulted array has only unqiue elements.
 
 Returns array of the elements of a in reverse order.
 
+
 :Arguments: * **a** : array<auto>
 
 .. _function-_at_algorithm_c__c_combine_C1_ls_Y_ls_TT_gr__dot__gr_A_C1_ls_Y_ls_TT_gr__dot__gr_A:
@@ -284,6 +289,7 @@ Returns array of the elements of a in reverse order.
 .. das:function:: combine(a: array<auto(TT)>; b: array<auto(TT)>) : auto
 
 Returns array of the elements of a and then b.
+
 
 :Arguments: * **a** : array<auto(TT)>
 
@@ -317,6 +323,7 @@ Uncategorized
 
 Erase all elements equal to value from arr
 
+
 :Arguments: * **arr** : auto
 
             * **value** : auto
@@ -330,6 +337,7 @@ Each node has an id, and set (table with no values) of dependencies.
 Dependency `before` represents a link from a node, which should appear in the sorted list before the node.
 Returns a sorted list of nodes.
 
+
 :Arguments: * **nodes** : array<auto(Node)>
 
 .. _function-_at_algorithm_c__c_intersection_C1_ls_Y_ls_TT_gr__dot__gr_2_ls_v_gr_T_C1_ls_Y_ls_TT_gr__dot__gr_2_ls_v_gr_T:
@@ -337,6 +345,7 @@ Returns a sorted list of nodes.
 .. das:function:: intersection(a: table<auto(TT);void>; b: table<auto(TT);void>) : table<TT;void>
 
 Returns the intersection of two sets
+
 
 :Arguments: * **a** : table<auto(TT);void>
 
@@ -348,6 +357,7 @@ Returns the intersection of two sets
 
 Returns the union of two sets
 
+
 :Arguments: * **a** : table<auto(TT);void>
 
             * **b** : table<auto(TT);void>
@@ -358,6 +368,7 @@ Returns the union of two sets
 
 Returns the difference of two sets
 
+
 :Arguments: * **a** : table<auto(TT);void>
 
             * **b** : table<auto(TT);void>
@@ -367,6 +378,7 @@ Returns the difference of two sets
 .. das:function:: identical(a: table<auto(TT);void>; b: table<auto(TT);void>) : bool
 
 Returns true if the two sets are identical
+
 
 :Arguments: * **a** : table<auto(TT);void>
 

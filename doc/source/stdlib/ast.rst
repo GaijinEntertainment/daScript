@@ -4882,6 +4882,7 @@ Call generation
 // stub
 
 
+
 :Arguments: * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  implicit
 
             * **name** : string implicit
@@ -4903,6 +4904,7 @@ Visitor pattern
 // stub
 
 
+
 :Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>` > implicit
 
             * **adapter** : smart_ptr< :ref:`VisitorAdapter <handle-ast-VisitorAdapter>` > implicit
@@ -4912,6 +4914,7 @@ Visitor pattern
 .. das:function:: visit_modules(program: smart_ptr<Program> implicit; adapter: smart_ptr<VisitorAdapter> implicit)
 
 // stub
+
 
 
 :Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>` > implicit
@@ -4925,6 +4928,7 @@ Visitor pattern
 // stub
 
 
+
 :Arguments: * **function** : smart_ptr< :ref:`Function <handle-ast-Function>` > implicit
 
             * **adapter** : smart_ptr< :ref:`VisitorAdapter <handle-ast-VisitorAdapter>` > implicit
@@ -4936,6 +4940,7 @@ Visitor pattern
 // stub
 
 
+
 :Arguments: * **expression** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > implicit
 
             * **adapter** : smart_ptr< :ref:`VisitorAdapter <handle-ast-VisitorAdapter>` > implicit
@@ -4945,6 +4950,7 @@ Visitor pattern
 .. das:function:: visit_finally(expression: smart_ptr<ExprBlock> implicit; adapter: smart_ptr<VisitorAdapter> implicit)
 
 // stub
+
 
 
 :Arguments: * **expression** : smart_ptr< :ref:`ExprBlock <handle-ast-ExprBlock>` > implicit
@@ -4966,6 +4972,7 @@ Expression generation
 // stub
 
 
+
 :Arguments: * **expression** : smart_ptr< :ref:`Expression <handle-ast-Expression>` >& implicit
 
             * **value** : bool
@@ -4977,6 +4984,7 @@ Expression generation
 // stub
 
 
+
 :Arguments: * **expr** :  :ref:`Expression <handle-ast-Expression>` ? implicit
 
 .. _function-_at_ast_c__c_make_type_info_structure_IH_ls_rtti_c__c_Context_gr__CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_W_C_c_C_l:
@@ -4984,6 +4992,7 @@ Expression generation
 .. das:function:: make_type_info_structure(ctx: Context implicit; type: smart_ptr<TypeDecl> implicit) : TypeInfo?
 
 // stub
+
 
 
 :Arguments: * **ctx** :  :ref:`Context <handle-rtti-Context>`  implicit
@@ -5033,6 +5042,7 @@ Adapter generation
 // stub
 
 
+
 :Arguments: * **class** : void? implicit
 
             * **info** :  :ref:`StructInfo <handle-rtti-StructInfo>` ? implicit
@@ -5042,6 +5052,7 @@ Adapter generation
 .. das:function:: make_function_annotation(name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr<FunctionAnnotation>
 
 // stub
+
 
 
 :Arguments: * **name** : string implicit
@@ -5057,6 +5068,7 @@ Adapter generation
 // stub
 
 
+
 :Arguments: * **name** : string implicit
 
             * **class** : void? implicit
@@ -5068,6 +5080,7 @@ Adapter generation
 .. das:function:: make_structure_annotation(name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr<StructureAnnotation>
 
 // stub
+
 
 
 :Arguments: * **name** : string implicit
@@ -5083,6 +5096,7 @@ Adapter generation
 // stub
 
 
+
 :Arguments: * **name** : string implicit
 
             * **class** : void? implicit
@@ -5094,6 +5108,7 @@ Adapter generation
 .. das:function:: make_pass_macro(name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr<PassMacro>
 
 // stub
+
 
 
 :Arguments: * **name** : string implicit
@@ -5109,6 +5124,7 @@ Adapter generation
 // stub
 
 
+
 :Arguments: * **name** : string implicit
 
             * **class** : void? implicit
@@ -5122,6 +5138,7 @@ Adapter generation
 // stub
 
 
+
 :Arguments: * **class** : void? implicit
 
             * **info** :  :ref:`StructInfo <handle-rtti-StructInfo>` ? implicit
@@ -5131,6 +5148,7 @@ Adapter generation
 .. das:function:: make_call_macro(name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr<CallMacro>
 
 // stub
+
 
 
 :Arguments: * **name** : string implicit
@@ -5146,6 +5164,7 @@ Adapter generation
 // stub
 
 
+
 :Arguments: * **name** : string implicit
 
             * **class** : void? implicit
@@ -5157,6 +5176,7 @@ Adapter generation
 .. das:function:: make_variant_macro(name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr<VariantMacro>
 
 // stub
+
 
 
 :Arguments: * **name** : string implicit
@@ -5172,6 +5192,7 @@ Adapter generation
 // stub
 
 
+
 :Arguments: * **name** : string implicit
 
             * **class** : void? implicit
@@ -5183,6 +5204,7 @@ Adapter generation
 .. das:function:: make_capture_macro(name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr<CaptureMacro>
 
 // stub
+
 
 
 :Arguments: * **name** : string implicit
@@ -5198,6 +5220,7 @@ Adapter generation
 // stub
 
 
+
 :Arguments: * **name** : string implicit
 
             * **class** : void? implicit
@@ -5209,6 +5232,7 @@ Adapter generation
 .. das:function:: make_simulate_macro(name: string implicit; class: void? implicit; info: StructInfo const? implicit) : smart_ptr<SimulateMacro>
 
 // stub
+
 
 
 :Arguments: * **name** : string implicit
@@ -5224,6 +5248,7 @@ Adapter generation
 // stub
 
 
+
 :Arguments: * **structure** :  :ref:`Structure <handle-ast-Structure>` ? implicit
 
 .. _function-_at_ast_c__c_make_function_annotation_Cs_C_dot_:
@@ -5231,6 +5256,7 @@ Adapter generation
 .. das:function:: make_function_annotation(name: string; someClassPtr: auto) : FunctionAnnotationPtr
 
 // stub
+
 
 
 :Arguments: * **name** : string
@@ -5244,6 +5270,7 @@ Adapter generation
 // stub
 
 
+
 :Arguments: * **name** : string
 
             * **someClassPtr** : auto
@@ -5253,6 +5280,7 @@ Adapter generation
 .. das:function:: make_structure_annotation(name: string; someClassPtr: auto) : StructureAnnotationPtr
 
 // stub
+
 
 
 :Arguments: * **name** : string
@@ -5266,6 +5294,7 @@ Adapter generation
 // stub
 
 
+
 :Arguments: * **name** : string
 
             * **someClassPtr** : auto
@@ -5277,6 +5306,7 @@ Adapter generation
 // stub
 
 
+
 :Arguments: * **someClass** : auto
 
 .. _function-_at_ast_c__c_make_reader_macro_Cs_C_dot_:
@@ -5284,6 +5314,7 @@ Adapter generation
 .. das:function:: make_reader_macro(name: string; someClassPtr: auto) : ReaderMacroPtr
 
 // stub
+
 
 
 :Arguments: * **name** : string
@@ -5297,6 +5328,7 @@ Adapter generation
 // stub
 
 
+
 :Arguments: * **name** : string
 
             * **someClassPtr** : auto
@@ -5306,6 +5338,7 @@ Adapter generation
 .. das:function:: make_call_macro(name: string; someClassPtr: auto) : CallMacroPtr
 
 // stub
+
 
 
 :Arguments: * **name** : string
@@ -5319,6 +5352,7 @@ Adapter generation
 // stub
 
 
+
 :Arguments: * **name** : string
 
             * **someClassPtr** : auto
@@ -5328,6 +5362,7 @@ Adapter generation
 .. das:function:: make_pass_macro(name: string; someClassPtr: auto) : PassMacroPtr
 
 // stub
+
 
 
 :Arguments: * **name** : string
@@ -5341,6 +5376,7 @@ Adapter generation
 // stub
 
 
+
 :Arguments: * **name** : string
 
             * **someClassPtr** : auto
@@ -5350,6 +5386,7 @@ Adapter generation
 .. das:function:: make_for_loop_macro(name: string; someClassPtr: auto) : ForLoopMacroPtr
 
 // stub
+
 
 
 :Arguments: * **name** : string
@@ -5363,6 +5400,7 @@ Adapter generation
 // stub
 
 
+
 :Arguments: * **name** : string
 
             * **someClassPtr** : auto
@@ -5374,6 +5412,7 @@ Adapter generation
 // stub
 
 
+
 :Arguments: * **name** : string
 
             * **someClassPtr** : auto
@@ -5383,6 +5422,7 @@ Adapter generation
 .. das:function:: make_simulate_macro(name: string; someClassPtr: auto) : SimulateMacroPtr
 
 // stub
+
 
 
 :Arguments: * **name** : string
@@ -5444,6 +5484,7 @@ Adapter application
 // stub
 
 
+
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
             * **annotation** : smart_ptr< :ref:`FunctionAnnotation <handle-ast-FunctionAnnotation>` >& implicit
@@ -5453,6 +5494,7 @@ Adapter application
 .. das:function:: add_function_annotation(function: smart_ptr<Function> implicit; annotation: smart_ptr<FunctionAnnotation>& implicit)
 
 // stub
+
 
 
 :Arguments: * **function** : smart_ptr< :ref:`Function <handle-ast-Function>` > implicit
@@ -5466,6 +5508,7 @@ Adapter application
 // stub
 
 
+
 :Arguments: * **function** : smart_ptr< :ref:`Function <handle-ast-Function>` > implicit
 
             * **annotation** : smart_ptr< :ref:`AnnotationDeclaration <handle-rtti-AnnotationDeclaration>` >& implicit
@@ -5475,6 +5518,7 @@ Adapter application
 .. das:function:: add_block_annotation(block: smart_ptr<ExprBlock> implicit; annotation: smart_ptr<FunctionAnnotation>& implicit)
 
 // stub
+
 
 
 :Arguments: * **block** : smart_ptr< :ref:`ExprBlock <handle-ast-ExprBlock>` > implicit
@@ -5488,6 +5532,7 @@ Adapter application
 // stub
 
 
+
 :Arguments: * **block** : smart_ptr< :ref:`ExprBlock <handle-ast-ExprBlock>` > implicit
 
             * **annotation** : smart_ptr< :ref:`AnnotationDeclaration <handle-rtti-AnnotationDeclaration>` >& implicit
@@ -5497,6 +5542,7 @@ Adapter application
 .. das:function:: add_structure_annotation(module: Module? implicit; annotation: smart_ptr<StructureAnnotation>& implicit)
 
 // stub
+
 
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
@@ -5510,6 +5556,7 @@ Adapter application
 // stub
 
 
+
 :Arguments: * **structure** : smart_ptr< :ref:`Structure <handle-ast-Structure>` > implicit
 
             * **annotation** : smart_ptr< :ref:`StructureAnnotation <handle-ast-StructureAnnotation>` >& implicit
@@ -5519,6 +5566,7 @@ Adapter application
 .. das:function:: add_structure_annotation(structure: smart_ptr<Structure> implicit; annotation: smart_ptr<AnnotationDeclaration>& implicit)
 
 // stub
+
 
 
 :Arguments: * **structure** : smart_ptr< :ref:`Structure <handle-ast-Structure>` > implicit
@@ -5532,6 +5580,7 @@ Adapter application
 // stub
 
 
+
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
             * **annotation** : smart_ptr< :ref:`EnumerationAnnotation <handle-ast-EnumerationAnnotation>` >& implicit
@@ -5541,6 +5590,7 @@ Adapter application
 .. das:function:: add_infer_macro(module: Module? implicit; annotation: smart_ptr<PassMacro>& implicit)
 
 // stub
+
 
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
@@ -5554,6 +5604,7 @@ Adapter application
 // stub
 
 
+
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
             * **annotation** : smart_ptr< :ref:`PassMacro <handle-ast-PassMacro>` >& implicit
@@ -5563,6 +5614,7 @@ Adapter application
 .. das:function:: add_lint_macro(module: Module? implicit; annotation: smart_ptr<PassMacro>& implicit)
 
 // stub
+
 
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
@@ -5576,6 +5628,7 @@ Adapter application
 // stub
 
 
+
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
             * **annotation** : smart_ptr< :ref:`PassMacro <handle-ast-PassMacro>` >& implicit
@@ -5585,6 +5638,7 @@ Adapter application
 .. das:function:: add_optimization_macro(module: Module? implicit; annotation: smart_ptr<PassMacro>& implicit)
 
 // stub
+
 
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
@@ -5598,6 +5652,7 @@ Adapter application
 // stub
 
 
+
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
             * **annotation** : smart_ptr< :ref:`ReaderMacro <handle-ast-ReaderMacro>` >& implicit
@@ -5607,6 +5662,7 @@ Adapter application
 .. das:function:: add_comment_reader(module: Module? implicit; reader: smart_ptr<CommentReader>& implicit)
 
 // stub
+
 
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
@@ -5620,6 +5676,7 @@ Adapter application
 // stub
 
 
+
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
             * **annotation** : smart_ptr< :ref:`CallMacro <handle-ast-CallMacro>` >& implicit
@@ -5629,6 +5686,7 @@ Adapter application
 .. das:function:: add_typeinfo_macro(module: Module? implicit; annotation: smart_ptr<TypeInfoMacro>& implicit)
 
 // stub
+
 
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
@@ -5642,6 +5700,7 @@ Adapter application
 // stub
 
 
+
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
             * **annotation** : smart_ptr< :ref:`VariantMacro <handle-ast-VariantMacro>` >& implicit
@@ -5651,6 +5710,7 @@ Adapter application
 .. das:function:: add_for_loop_macro(module: Module? implicit; annotation: smart_ptr<ForLoopMacro>& implicit)
 
 // stub
+
 
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
@@ -5664,6 +5724,7 @@ Adapter application
 // stub
 
 
+
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
             * **annotation** : smart_ptr< :ref:`CaptureMacro <handle-ast-CaptureMacro>` >& implicit
@@ -5673,6 +5734,7 @@ Adapter application
 .. das:function:: add_type_macro(module: Module? implicit; annotation: smart_ptr<TypeMacro>& implicit)
 
 // stub
+
 
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
@@ -5686,6 +5748,7 @@ Adapter application
 // stub
 
 
+
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
             * **annotation** : smart_ptr< :ref:`SimulateMacro <handle-ast-SimulateMacro>` >& implicit
@@ -5695,6 +5758,7 @@ Adapter application
 .. das:function:: add_module_option(module: Module? implicit; option: string implicit; type: Type)
 
 // stub
+
 
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
@@ -5710,6 +5774,7 @@ Adapter application
 // stub
 
 
+
 :Arguments: * **name** : string
 
             * **someClassPtr** : auto
@@ -5719,6 +5784,7 @@ Adapter application
 .. das:function:: add_new_function_annotation(name: string; someClassPtr: auto) : auto
 
 // stub
+
 
 
 :Arguments: * **name** : string
@@ -5732,6 +5798,7 @@ Adapter application
 // stub
 
 
+
 :Arguments: * **name** : string
 
             * **someClassPtr** : auto
@@ -5741,6 +5808,7 @@ Adapter application
 .. das:function:: add_new_structure_annotation(name: string; someClassPtr: auto) : auto
 
 // stub
+
 
 
 :Arguments: * **name** : string
@@ -5754,6 +5822,7 @@ Adapter application
 // stub
 
 
+
 :Arguments: * **name** : string
 
             * **someClassPtr** : auto
@@ -5763,6 +5832,7 @@ Adapter application
 .. das:function:: add_new_variant_macro(name: string; someClassPtr: auto) : auto
 
 // stub
+
 
 
 :Arguments: * **name** : string
@@ -5776,6 +5846,7 @@ Adapter application
 // stub
 
 
+
 :Arguments: * **name** : string
 
             * **someClassPtr** : auto
@@ -5785,6 +5856,7 @@ Adapter application
 .. das:function:: add_new_capture_macro(name: string; someClassPtr: auto) : auto
 
 // stub
+
 
 
 :Arguments: * **name** : string
@@ -5798,6 +5870,7 @@ Adapter application
 // stub
 
 
+
 :Arguments: * **name** : string
 
             * **someClassPtr** : auto
@@ -5807,6 +5880,7 @@ Adapter application
 .. das:function:: add_new_simulate_macro(name: string; someClassPtr: auto) : auto
 
 // stub
+
 
 
 :Arguments: * **name** : string
@@ -5820,6 +5894,7 @@ Adapter application
 // stub
 
 
+
 :Arguments: * **name** : string
 
             * **someClassPtr** : auto
@@ -5829,6 +5904,7 @@ Adapter application
 .. das:function:: add_new_comment_reader(name: string; someClassPtr: auto) : auto
 
 // stub
+
 
 
 :Arguments: * **name** : string
@@ -5842,6 +5918,7 @@ Adapter application
 // stub
 
 
+
 :Arguments: * **name** : string
 
             * **someClassPtr** : auto
@@ -5851,6 +5928,7 @@ Adapter application
 .. das:function:: add_new_typeinfo_macro(name: string; someClassPtr: auto) : auto
 
 // stub
+
 
 
 :Arguments: * **name** : string
@@ -5864,6 +5942,7 @@ Adapter application
 // stub
 
 
+
 :Arguments: * **name** : string
 
             * **someClassPtr** : auto
@@ -5873,6 +5952,7 @@ Adapter application
 .. das:function:: add_new_dirty_infer_macro(name: string; someClassPtr: auto) : auto
 
 // stub
+
 
 
 :Arguments: * **name** : string
@@ -5886,6 +5966,7 @@ Adapter application
 // stub
 
 
+
 :Arguments: * **name** : string
 
             * **someClassPtr** : auto
@@ -5897,6 +5978,7 @@ Adapter application
 // stub
 
 
+
 :Arguments: * **name** : string
 
             * **someClassPtr** : auto
@@ -5906,6 +5988,7 @@ Adapter application
 .. das:function:: add_new_optimization_macro(name: string; someClassPtr: auto) : auto
 
 // stub
+
 
 
 :Arguments: * **name** : string
@@ -5933,6 +6016,7 @@ Adding objects to objects
 // stub
 
 
+
 :Arguments: * **enum** : smart_ptr< :ref:`Enumeration <handle-ast-Enumeration>` > implicit
 
             * **name** : string implicit
@@ -5942,6 +6026,7 @@ Adding objects to objects
 .. das:function:: add_function(module: Module? implicit; function: smart_ptr<Function>& implicit) : bool
 
 // stub
+
 
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
@@ -5955,6 +6040,7 @@ Adding objects to objects
 // stub
 
 
+
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
             * **function** : smart_ptr< :ref:`Function <handle-ast-Function>` >& implicit
@@ -5966,6 +6052,7 @@ Adding objects to objects
 // stub
 
 
+
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
             * **variable** : smart_ptr< :ref:`Variable <handle-ast-Variable>` >& implicit
@@ -5975,6 +6062,7 @@ Adding objects to objects
 .. das:function:: add_keyword(module: Module? implicit; keyword: string implicit; needOxfordComma: bool) : bool
 
 // stub
+
 
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
@@ -5990,6 +6078,7 @@ Adding objects to objects
 // stub
 
 
+
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
             * **keyword** : string implicit
@@ -5999,6 +6088,7 @@ Adding objects to objects
 .. das:function:: add_structure(module: Module? implicit; structure: smart_ptr<Structure>& implicit) : bool
 
 // stub
+
 
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
@@ -6012,6 +6102,7 @@ Adding objects to objects
 // stub
 
 
+
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
             * **structure** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` >& implicit
@@ -6021,6 +6112,7 @@ Adding objects to objects
 .. das:function:: add_module_require(module: Module? implicit; publicModule: Module? implicit; pub: bool) : bool
 
 // stub
+
 
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
@@ -6087,6 +6179,7 @@ Textual descriptions of the objects
 // stub
 
 
+
 :Arguments: * **type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
 
             * **extra** : bool
@@ -6100,6 +6193,7 @@ Textual descriptions of the objects
 .. das:function:: describe_typedecl_cpp(type: smart_ptr<TypeDecl> implicit; substitueRef: bool; skipRef: bool; skipConst: bool; redundantConst: bool) : string
 
 // stub
+
 
 
 :Arguments: * **type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
@@ -6119,6 +6213,7 @@ Textual descriptions of the objects
 // stub
 
 
+
 :Arguments: * **expression** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > implicit
 
 .. _function-_at_ast_c__c_describe_function_CI1_ls_H_ls_ast_c__c_Function_gr__gr__qm_M_C_c_C_l:
@@ -6126,6 +6221,7 @@ Textual descriptions of the objects
 .. das:function:: describe_function(function: smart_ptr<Function> implicit) : string
 
 // stub
+
 
 
 :Arguments: * **function** : smart_ptr< :ref:`Function <handle-ast-Function>` > implicit
@@ -6137,6 +6233,7 @@ Textual descriptions of the objects
 // stub
 
 
+
 :Arguments: * **type** :  :ref:`Type <enum-rtti-Type>` 
 
 .. _function-_at_ast_c__c_describe_C1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_M_Cb_Cb_Cb:
@@ -6144,6 +6241,7 @@ Textual descriptions of the objects
 .. das:function:: describe(decl: smart_ptr<TypeDecl>; extra: bool = true; contracts: bool = true; modules: bool = true) : auto
 
 // stub
+
 
 
 :Arguments: * **decl** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` >
@@ -6159,6 +6257,7 @@ Textual descriptions of the objects
 .. das:function:: describe_cpp(decl: smart_ptr<TypeDecl>; substitureRef: bool = false; skipRef: bool = false; skipConst: bool = false; redundantConst: bool = true) : auto
 
 // stub
+
 
 
 :Arguments: * **decl** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` >
@@ -6178,6 +6277,7 @@ Textual descriptions of the objects
 // stub
 
 
+
 :Arguments: * **expr** : smart_ptr< :ref:`Expression <handle-ast-Expression>` >
 
 .. _function-_at_ast_c__c_describe_C1_ls_H_ls_ast_c__c_Function_gr__gr__qm_M:
@@ -6185,6 +6285,7 @@ Textual descriptions of the objects
 .. das:function:: describe(expr: smart_ptr<Function>) : auto
 
 // stub
+
 
 
 :Arguments: * **expr** : smart_ptr< :ref:`Function <handle-ast-Function>` >
@@ -6213,6 +6314,7 @@ Searching
 // stub
 
 
+
 :Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>` > implicit
 
             * **name** : string implicit
@@ -6222,6 +6324,7 @@ Searching
 .. das:function:: find_module_function_via_rtti(module: Module? implicit; function: function<>) : smart_ptr<Function>
 
 // stub
+
 
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
@@ -6235,6 +6338,7 @@ Searching
 // stub
 
 
+
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
             * **variable** : string implicit
@@ -6244,6 +6348,7 @@ Searching
 .. das:function:: find_matching_variable(program: Program? implicit; function: Function? implicit; name: string implicit; seePrivate: bool; block: block<(var arg0:array<smart_ptr<Variable>>#):void> implicit)
 
 // stub
+
 
 
 :Arguments: * **program** :  :ref:`Program <handle-rtti-Program>` ? implicit
@@ -6263,6 +6368,7 @@ Searching
 // stub
 
 
+
 :Arguments: * **bit** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
 
             * **value** : bitfield<>
@@ -6272,6 +6378,7 @@ Searching
 .. das:function:: find_enum_value(enum: smart_ptr<Enumeration> implicit; value: string implicit) : int64
 
 // stub
+
 
 
 :Arguments: * **enum** : smart_ptr< :ref:`Enumeration <handle-ast-Enumeration>` > implicit
@@ -6285,6 +6392,7 @@ Searching
 // stub
 
 
+
 :Arguments: * **enum** :  :ref:`Enumeration <handle-ast-Enumeration>` ? implicit
 
             * **value** : string implicit
@@ -6294,6 +6402,7 @@ Searching
 .. das:function:: find_structure_field(structPtr: Structure? implicit; field: string implicit) : FieldDeclaration?
 
 // stub
+
 
 
 :Arguments: * **structPtr** :  :ref:`Structure <handle-ast-Structure>` ? implicit
@@ -6307,6 +6416,7 @@ Searching
 // stub
 
 
+
 :Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>` > implicit
 
             * **name** : string implicit
@@ -6316,6 +6426,7 @@ Searching
 .. das:function:: find_module(prog: smart_ptr<Program>; name: string) : Module?
 
 // stub
+
 
 
 :Arguments: * **prog** : smart_ptr< :ref:`Program <handle-rtti-Program>` >
@@ -6329,6 +6440,7 @@ Searching
 // stub
 
 
+
 :Arguments: * **name** : string
 
 .. _function-_at_ast_c__c_find_compiling_module_Cs:
@@ -6336,6 +6448,7 @@ Searching
 .. das:function:: find_compiling_module(name: string) : Module?
 
 // stub
+
 
 
 :Arguments: * **name** : string
@@ -6368,6 +6481,7 @@ Iterating
 // stub
 
 
+
 :Arguments: * **program** :  :ref:`Program <handle-rtti-Program>` ? implicit
 
             * **block** : block<( :ref:`Module <handle-rtti-Module>` ?):void> implicit
@@ -6377,6 +6491,7 @@ Iterating
 .. das:function:: for_each_function(module: Module? implicit; name: string implicit; block: block<(var arg0:smart_ptr<Function>):void> implicit)
 
 // stub
+
 
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
@@ -6392,6 +6507,7 @@ Iterating
 // stub
 
 
+
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
             * **name** : string implicit
@@ -6403,6 +6519,7 @@ Iterating
 .. das:function:: any_table_foreach(table: void? implicit; keyStride: int; valueStride: int; block: block<(var arg0:void?;var arg1:void?):void> implicit)
 
 // stub
+
 
 
 :Arguments: * **table** : void? implicit
@@ -6420,6 +6537,7 @@ Iterating
 // stub
 
 
+
 :Arguments: * **array** : void? implicit
 
             * **stride** : int
@@ -6433,6 +6551,7 @@ Iterating
 // stub
 
 
+
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
             * **block** : block<(string#;smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` >):void> implicit
@@ -6442,6 +6561,7 @@ Iterating
 .. das:function:: for_each_enumeration(module: Module? implicit; block: block<(var arg0:smart_ptr<Enumeration>):void> implicit)
 
 // stub
+
 
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
@@ -6455,6 +6575,7 @@ Iterating
 // stub
 
 
+
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
             * **block** : block<(smart_ptr< :ref:`Structure <handle-ast-Structure>` >):void> implicit
@@ -6464,6 +6585,7 @@ Iterating
 .. das:function:: for_each_generic(module: Module? implicit; block: block<(var arg0:smart_ptr<Function>):void> implicit)
 
 // stub
+
 
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
@@ -6477,6 +6599,7 @@ Iterating
 // stub
 
 
+
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
             * **block** : block<(smart_ptr< :ref:`Variable <handle-ast-Variable>` >):void> implicit
@@ -6486,6 +6609,7 @@ Iterating
 .. das:function:: for_each_call_macro(module: Module? implicit; block: block<(var arg0:string#):void> implicit)
 
 // stub
+
 
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
@@ -6499,6 +6623,7 @@ Iterating
 // stub
 
 
+
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
             * **block** : block<(string#):void> implicit
@@ -6508,6 +6633,7 @@ Iterating
 .. das:function:: for_each_variant_macro(module: Module? implicit; block: block<(var arg0:smart_ptr<VariantMacro>):void> implicit)
 
 // stub
+
 
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
@@ -6521,6 +6647,7 @@ Iterating
 // stub
 
 
+
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
             * **block** : block<(smart_ptr< :ref:`ForLoopMacro <handle-ast-ForLoopMacro>` >):void> implicit
@@ -6532,6 +6659,7 @@ Iterating
 // stub
 
 
+
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
             * **block** : block<(smart_ptr< :ref:`TypeInfoMacro <handle-ast-TypeInfoMacro>` >):void> implicit
@@ -6541,6 +6669,7 @@ Iterating
 .. das:function:: for_each_field(annotation: BasicStructureAnnotation implicit; block: block<(var arg0:string;var arg1:string;var arg2:smart_ptr<TypeDecl>;var arg3:uint):void> implicit)
 
 // stub
+
 
 
 :Arguments: * **annotation** :  :ref:`BasicStructureAnnotation <handle-rtti-BasicStructureAnnotation>`  implicit
@@ -6565,6 +6694,7 @@ Cloning
 // stub
 
 
+
 :Arguments: * **structure** :  :ref:`Structure <handle-ast-Structure>` ? implicit
 
 .. _function-_at_ast_c__c_clone_expression_CI1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_W:
@@ -6572,6 +6702,7 @@ Cloning
 .. das:function:: clone_expression(expression: smart_ptr<Expression> implicit) : smart_ptr<Expression>
 
 // stub
+
 
 
 :Arguments: * **expression** : smart_ptr< :ref:`Expression <handle-ast-Expression>` > implicit
@@ -6583,6 +6714,7 @@ Cloning
 // stub
 
 
+
 :Arguments: * **function** : smart_ptr< :ref:`Function <handle-ast-Function>` > implicit
 
 .. _function-_at_ast_c__c_clone_variable_CI1_ls_H_ls_ast_c__c_Variable_gr__gr__qm_W:
@@ -6590,6 +6722,7 @@ Cloning
 .. das:function:: clone_variable(variable: smart_ptr<Variable> implicit) : smart_ptr<Variable>
 
 // stub
+
 
 
 :Arguments: * **variable** : smart_ptr< :ref:`Variable <handle-ast-Variable>` > implicit
@@ -6601,6 +6734,7 @@ Cloning
 // stub
 
 
+
 :Arguments: * **type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
 
 .. _function-_at_ast_c__c_clone_function_C1_ls_H_ls_ast_c__c_Function_gr__gr__qm_:
@@ -6608,6 +6742,7 @@ Cloning
 .. das:function:: clone_function(fn: Function?) : FunctionPtr
 
 // stub
+
 
 
 :Arguments: * **fn** :  :ref:`Function <handle-ast-Function>` ?
@@ -6633,6 +6768,7 @@ Mangled name
 // stub
 
 
+
 :Arguments: * **txt** : string implicit
 
             * **lib** :  :ref:`ModuleGroup <handle-rtti-ModuleGroup>`  implicit
@@ -6646,6 +6782,7 @@ Mangled name
 // stub
 
 
+
 :Arguments: * **function** : smart_ptr< :ref:`Function <handle-ast-Function>` > implicit
 
 .. _function-_at_ast_c__c_get_mangled_name_CI1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_M_C_c_C_l:
@@ -6653,6 +6790,7 @@ Mangled name
 .. das:function:: get_mangled_name(type: smart_ptr<TypeDecl> implicit) : string
 
 // stub
+
 
 
 :Arguments: * **type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
@@ -6664,6 +6802,7 @@ Mangled name
 // stub
 
 
+
 :Arguments: * **variable** : smart_ptr< :ref:`Variable <handle-ast-Variable>` > implicit
 
 .. _function-_at_ast_c__c_get_mangled_name_CI1_ls_H_ls_ast_c__c_ExprBlock_gr__gr__qm_M_C_c_C_l:
@@ -6671,6 +6810,7 @@ Mangled name
 .. das:function:: get_mangled_name(variable: smart_ptr<ExprBlock> implicit) : string
 
 // stub
+
 
 
 :Arguments: * **variable** : smart_ptr< :ref:`ExprBlock <handle-ast-ExprBlock>` > implicit
@@ -6682,6 +6822,7 @@ Mangled name
 // stub
 
 
+
 :Arguments: * **fn** :  :ref:`Function <handle-ast-Function>` ?
 
 .. _function-_at_ast_c__c_get_mangled_name_C1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_:
@@ -6689,6 +6830,7 @@ Mangled name
 .. das:function:: get_mangled_name(decl: TypeDecl?) : string
 
 // stub
+
 
 
 :Arguments: * **decl** :  :ref:`TypeDecl <handle-ast-TypeDecl>` ?
@@ -6700,6 +6842,7 @@ Mangled name
 // stub
 
 
+
 :Arguments: * **decl** :  :ref:`Variable <handle-ast-Variable>` ?
 
 .. _function-_at_ast_c__c_get_mangled_name_C1_ls_H_ls_ast_c__c_ExprBlock_gr__gr__qm_:
@@ -6707,6 +6850,7 @@ Mangled name
 .. das:function:: get_mangled_name(decl: ExprBlock?) : string
 
 // stub
+
 
 
 :Arguments: * **decl** :  :ref:`ExprBlock <handle-ast-ExprBlock>` ?
@@ -6728,6 +6872,7 @@ Size and offset
 // stub
 
 
+
 :Arguments: * **variant** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
 
             * **index** : int
@@ -6737,6 +6882,7 @@ Size and offset
 .. das:function:: get_tuple_field_offset(typle: smart_ptr<TypeDecl> implicit; index: int) : int
 
 // stub
+
 
 
 :Arguments: * **typle** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
@@ -6750,6 +6896,7 @@ Size and offset
 // stub
 
 
+
 :Arguments: * **array** : void? implicit
 
 .. _function-_at_ast_c__c_any_table_size_CI_qm_:
@@ -6759,6 +6906,7 @@ Size and offset
 // stub
 
 
+
 :Arguments: * **table** : void? implicit
 
 .. _function-_at_ast_c__c_get_handled_type_field_offset_CI1_ls_H_ls_rtti_c__c_TypeAnnotation_gr__gr__qm_M_CIs_C_c_C_l:
@@ -6766,6 +6914,7 @@ Size and offset
 .. das:function:: get_handled_type_field_offset(type: smart_ptr<TypeAnnotation> implicit; field: string implicit) : uint
 
 // stub
+
 
 
 :Arguments: * **type** : smart_ptr< :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>` > implicit
@@ -6788,6 +6937,7 @@ Evaluations
 // stub
 
 
+
 :Arguments: * **expr** : smart_ptr< :ref:`Expression <handle-ast-Expression>` >& implicit
 
             * **ok** : bool& implicit
@@ -6803,6 +6953,7 @@ Error reporting
 .. das:function:: macro_error(porogram: smart_ptr<Program> implicit; at: LineInfo implicit; message: string implicit)
 
 // stub
+
 
 
 :Arguments: * **porogram** : smart_ptr< :ref:`Program <handle-rtti-Program>` > implicit
@@ -6826,6 +6977,7 @@ Location and context
 // stub
 
 
+
 :Arguments: * **expression** : smart_ptr< :ref:`Expression <handle-ast-Expression>` >& implicit
 
             * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>`  implicit
@@ -6837,6 +6989,7 @@ Location and context
 // stub
 
 
+
 :Arguments: * **function** : smart_ptr< :ref:`Function <handle-ast-Function>` > implicit
 
             * **block** : block<(array< :ref:`Function <handle-ast-Function>` ?>;array< :ref:`Variable <handle-ast-Variable>` ?>):void> implicit
@@ -6846,6 +6999,7 @@ Location and context
 .. das:function:: get_ast_context(program: smart_ptr<Program> implicit; expression: smart_ptr<Expression> implicit; block: block<(var arg0:bool;var arg1:AstContext):void> implicit)
 
 // stub
+
 
 
 :Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>` > implicit
@@ -6868,6 +7022,7 @@ Use queries
 // stub
 
 
+
 :Arguments: * **func** : smart_ptr< :ref:`Function <handle-ast-Function>` > implicit
 
             * **block** : block<(smart_ptr< :ref:`Variable <handle-ast-Variable>` >):void> implicit
@@ -6877,6 +7032,7 @@ Use queries
 .. das:function:: get_use_functions(func: smart_ptr<Function> implicit; block: block<(var arg0:smart_ptr<Function>):void> implicit)
 
 // stub
+
 
 
 :Arguments: * **func** : smart_ptr< :ref:`Function <handle-ast-Function>` > implicit
@@ -6896,6 +7052,7 @@ Log
 // stub
 
 
+
 :Arguments: * **text** : string implicit
 
 +++++++
@@ -6909,6 +7066,7 @@ Removal
 .. das:function:: remove_structure(module: Module? implicit; structure: smart_ptr<Structure>& implicit) : bool
 
 // stub
+
 
 
 :Arguments: * **module** :  :ref:`Module <handle-rtti-Module>` ? implicit
@@ -6940,6 +7098,7 @@ Properties
 // stub
 
 
+
 :Arguments: * **program** :  :ref:`Program <handle-rtti-Program>` ? implicit
 
             * **function** :  :ref:`Function <handle-ast-Function>` ? implicit
@@ -6951,6 +7110,7 @@ Properties
 .. das:function:: can_access_global_variable(variable: smart_ptr<Variable> const& implicit; module: Module? implicit; thisModule: Module? implicit) : bool
 
 // stub
+
 
 
 :Arguments: * **variable** : smart_ptr< :ref:`Variable <handle-ast-Variable>` >& implicit
@@ -6966,6 +7126,7 @@ Properties
 // stub
 
 
+
 :Arguments: * **type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
 
             * **refMatters** : bool
@@ -6975,6 +7136,7 @@ Properties
 .. das:function:: is_same_type(leftType: smart_ptr<TypeDecl> implicit; rightType: smart_ptr<TypeDecl> implicit; refMatters: RefMatters; constMatters: ConstMatters; tempMatters: TemporaryMatters) : bool
 
 // stub
+
 
 
 :Arguments: * **leftType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
@@ -6994,6 +7156,7 @@ Properties
 // stub
 
 
+
 :Arguments: * **type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
 
 .. _function-_at_ast_c__c_get_handled_type_field_type_CI1_ls_H_ls_rtti_c__c_TypeAnnotation_gr__gr__qm_M_CIs_C_c_C_l:
@@ -7001,6 +7164,7 @@ Properties
 .. das:function:: get_handled_type_field_type(type: smart_ptr<TypeAnnotation> implicit; field: string implicit) : TypeInfo?
 
 // stub
+
 
 
 :Arguments: * **type** : smart_ptr< :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>` > implicit
@@ -7012,6 +7176,7 @@ Properties
 .. das:function:: get_handled_type_field_type_declaration(type: smart_ptr<TypeAnnotation> implicit; field: string implicit; isConst: bool) : smart_ptr<TypeDecl>
 
 // stub
+
 
 
 :Arguments: * **type** : smart_ptr< :ref:`TypeAnnotation <handle-rtti-TypeAnnotation>` > implicit
@@ -7027,6 +7192,7 @@ Properties
 // stub
 
 
+
 :Arguments: * **type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
 
             * **fieldName** : string implicit
@@ -7038,6 +7204,7 @@ Properties
 .. das:function:: get_field_type(type: smart_ptr<TypeDecl> implicit; fieldName: string implicit; constant: bool) : smart_ptr<TypeDecl>
 
 // stub
+
 
 
 :Arguments: * **type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
@@ -7053,6 +7220,7 @@ Properties
 // stub
 
 
+
 :Arguments: * **from_module** :  :ref:`Module <handle-rtti-Module>` ? implicit
 
             * **which_module** :  :ref:`Module <handle-rtti-Module>` ? implicit
@@ -7064,6 +7232,7 @@ Properties
 // stub
 
 
+
 :Arguments: * **expression** : smart_ptr< :ref:`Expression <handle-ast-Expression>` >& implicit
 
 .. _function-_at_ast_c__c_is_expr_const_C&I1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_W:
@@ -7073,6 +7242,7 @@ Properties
 // stub
 
 
+
 :Arguments: * **expression** : smart_ptr< :ref:`Expression <handle-ast-Expression>` >& implicit
 
 .. _function-_at_ast_c__c_get_function_aot_hash_CI1_ls_CH_ls_ast_c__c_Function_gr__gr__qm_:
@@ -7080,6 +7250,7 @@ Properties
 .. das:function:: get_function_aot_hash(fun: Function const? implicit) : uint64
 
 // stub
+
 
 
 :Arguments: * **fun** :  :ref:`Function <handle-ast-Function>` ? implicit
@@ -7095,6 +7266,7 @@ Uncategorized
 // stub
 
 
+
 :Arguments: * **type** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
 
             * **passType** : smart_ptr< :ref:`TypeDecl <handle-ast-TypeDecl>` > implicit
@@ -7108,6 +7280,7 @@ Uncategorized
 .. das:function:: update_alias_map(program: smart_ptr<Program> implicit; argType: smart_ptr<TypeDecl> implicit; passType: smart_ptr<TypeDecl> implicit)
 
 // stub
+
 
 
 :Arguments: * **program** : smart_ptr< :ref:`Program <handle-rtti-Program>` > implicit

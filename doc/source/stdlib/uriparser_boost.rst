@@ -26,6 +26,7 @@ Split and compose
 
 Split the full path of a URI into its components.
 
+
 :Arguments: * **uri** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
 
 .. _function-_at_uriparser_boost_c__c_uri_compose_query_C1_ls_s_gr_2_ls_s_gr_T:
@@ -33,6 +34,7 @@ Split the full path of a URI into its components.
 .. das:function:: uri_compose_query(query: table<string;string>) : string
 
 Compose a query string from a table of key-value pairs.
+
 
 :Arguments: * **query** : table<string;string>
 
@@ -42,6 +44,7 @@ Compose a query string from a table of key-value pairs.
 
 Compose a query string from a table of key-value pairs, in the sorted order.
 
+
 :Arguments: * **query** : table<string;string>
 
 .. _function-_at_uriparser_boost_c__c_uri_compose_Cs_Cs_Cs_Cs_Cs_Cs_Cs:
@@ -49,6 +52,7 @@ Compose a query string from a table of key-value pairs, in the sorted order.
 .. das:function:: uri_compose(scheme: string; userInfo: string; hostText: string; portText: string; path: string; query: string; fragment: string) : Uri
 
 Compose a URI from its components.
+
 
 :Arguments: * **scheme** : string
 
@@ -82,6 +86,7 @@ Component accessors
 
 Returns the scheme of a URI.
 
+
 :Arguments: * **uri** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
 
 .. _function-_at_uriparser_boost_c__c_user_info_CIH_ls_uriparser_c__c_Uri_gr_:
@@ -89,6 +94,7 @@ Returns the scheme of a URI.
 .. das:function:: user_info(uri: Uri implicit) : string
 
 Return the user info of a URI.
+
 
 :Arguments: * **uri** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
 
@@ -98,6 +104,7 @@ Return the user info of a URI.
 
 Return the host of a URI.
 
+
 :Arguments: * **uri** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
 
 .. _function-_at_uriparser_boost_c__c_port_CIH_ls_uriparser_c__c_Uri_gr_:
@@ -105,6 +112,7 @@ Return the host of a URI.
 .. das:function:: port(uri: Uri implicit) : string
 
 Return the port of a URI.
+
 
 :Arguments: * **uri** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
 
@@ -114,6 +122,7 @@ Return the port of a URI.
 
 Return the path of a URI.
 
+
 :Arguments: * **uri** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
 
 .. _function-_at_uriparser_boost_c__c_query_CIH_ls_uriparser_c__c_Uri_gr_:
@@ -122,6 +131,7 @@ Return the path of a URI.
 
 Return the query of a URI.
 
+
 :Arguments: * **uri** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
 
 .. _function-_at_uriparser_boost_c__c_fragment_CIH_ls_uriparser_c__c_Uri_gr_:
@@ -129,6 +139,7 @@ Return the query of a URI.
 .. das:function:: fragment(uri: Uri implicit) : string
 
 Return the fragment of a URI.
+
 
 :Arguments: * **uri** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
 

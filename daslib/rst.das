@@ -451,8 +451,8 @@ def document_function_topic(doc_file:file;topic:string implicit; var args : arra
             let l = lines[lineIdx]
             var found = false
             if l |> starts_with(":param")
-                if lineIdx > 0 && !empty(lines[lineIdx-1])
-                    lines[lineIdx-1] = "{lines[lineIdx-1]}\n"
+                if lineIdx > 0 // && !empty(lines[lineIdx-1])
+                    lines[lineIdx-1] = "{lines[lineIdx-1]}\n\n"
                 var parts <- l |> slice(7) |> split(":")
                 var name = parts[0] |> trim()
                 for arg, idx in args, count()
@@ -471,7 +471,7 @@ def document_function_topic(doc_file:file;topic:string implicit; var args : arra
             elif l |> starts_with(":returns")
                 lines[lineIdx] = l |> replace(":returns", ":Returns")
                 returnsIdx = lineIdx
-            elif l |> starts_with("return")
+            elif l |> starts_with(":return")
                 lines[lineIdx] = l |> replace(":return", ":Returns")
                 returnsIdx = lineIdx
 
@@ -491,6 +491,9 @@ def document_function_topic(doc_file:file;topic:string implicit; var args : arra
                         args[i] |> push("")
 
         if length(args) > 1
+
+            lines |> push("")
+
             if paramsIdx >= 0
                 lines |> push(make_table(header, args), paramsIdx)
 

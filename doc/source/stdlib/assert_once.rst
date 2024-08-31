@@ -33,6 +33,7 @@ Assertion
 
 Same as assert, only the check will be not be repeated after the asseretion failed the first time.
 
+
 :Arguments: * **expr** : bool
 
             * **message** : string

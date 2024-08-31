@@ -117,6 +117,7 @@ Top level coroutine evaluation
 
 This function runs coroutine until it is finished.
 
+
 :Arguments: * **a** :  :ref:`Coroutine <alias-Coroutine>` 
 
 .. _function-_at_coroutines_c__c_cr_run_all_Y_ls_Coroutines_gr_1_ls_Y_ls_Coroutine_gr_1_ls_b_gr_G_gr_A:
@@ -124,6 +125,7 @@ This function runs coroutine until it is finished.
 .. das:function:: cr_run_all(a: Coroutines)
 
 This function runs all coroutines until they are finished.
+
 
 :Arguments: * **a** :  :ref:`Coroutines <alias-Coroutines>` 
 

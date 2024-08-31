@@ -228,6 +228,7 @@ Classes
 // stub
 
 
+
 :Arguments: * **func** :  :ref:`FunctionPtr <alias-FunctionPtr>` 
 
             * **group** :  :ref:`ModuleGroup <handle-rtti-ModuleGroup>` 
@@ -248,6 +249,7 @@ Classes
 // stub
 
 
+
 :Arguments: * **func** :  :ref:`FunctionPtr <alias-FunctionPtr>` 
 
             * **group** :  :ref:`ModuleGroup <handle-rtti-ModuleGroup>` 
@@ -266,6 +268,7 @@ Classes
 .. das:function:: TagStructureAnnotation.apply(str: StructurePtr; group: ModuleGroup; args: AnnotationArgumentList; errors: das_string) : bool
 
 // stub
+
 
 
 :Arguments: * **str** :  :ref:`StructurePtr <alias-StructurePtr>` 
@@ -292,6 +295,7 @@ Classes
 // stub
 
 
+
 :Arguments: * **st** :  :ref:`StructurePtr <alias-StructurePtr>` 
 
             * **group** :  :ref:`ModuleGroup <handle-rtti-ModuleGroup>` 
@@ -303,6 +307,7 @@ Classes
 .. das:function:: SetupAnyAnnotation.setup_call(st: StructurePtr; cll: smart_ptr<ExprCall>)
 
 // stub
+
 
 
 :Arguments: * **st** :  :ref:`StructurePtr <alias-StructurePtr>` 
@@ -456,6 +461,7 @@ Classes
 // stub
 
 
+
 :Arguments: * **st** :  :ref:`StructurePtr <alias-StructurePtr>` 
 
             * **group** :  :ref:`ModuleGroup <handle-rtti-ModuleGroup>` 
@@ -467,6 +473,7 @@ Classes
 .. das:function:: TagFunctionMacro.setup_call(st: StructurePtr; cll: smart_ptr<ExprCall>)
 
 // stub
+
 
 
 :Arguments: * **st** :  :ref:`StructurePtr <alias-StructurePtr>` 
@@ -485,6 +492,7 @@ Classes
 // stub
 
 
+
 :Arguments: * **prog** :  :ref:`ProgramPtr <alias-ProgramPtr>` 
 
             * **mod** :  :ref:`Module <handle-rtti-Module>` ?
@@ -496,6 +504,7 @@ Classes
 // stub
 
 
+
 :Arguments: * **prog** :  :ref:`ProgramPtr <alias-ProgramPtr>` 
 
             * **mod** :  :ref:`Module <handle-rtti-Module>` ?
@@ -505,6 +514,7 @@ Classes
 .. das:function:: BetterRttiVisitor.visitExprSafeAsVariant(prog: ProgramPtr; mod: Module?; expr: smart_ptr<ExprSafeAsVariant>) : ExpressionPtr
 
 // stub
+
 
 
 :Arguments: * **prog** :  :ref:`ProgramPtr <alias-ProgramPtr>` 
@@ -529,6 +539,7 @@ Containers
 // stub
 
 
+
 :Arguments: * **vec** : vector<smart_ptr<Expression>>
 
             * **ptr** : smart_ptr< :ref:`Expression <handle-ast-Expression>` >
@@ -538,6 +549,7 @@ Containers
 .. das:function:: emplace_new(vec: dasvector`smart_ptr`TypeDecl; ptr: smart_ptr<TypeDecl>)
 
 // stub
+
 
 
 :Arguments: * **vec** : vector<smart_ptr<TypeDecl>>
@@ -551,6 +563,7 @@ Containers
 // stub
 
 
+
 :Arguments: * **vec** : vector<smart_ptr<Variable>>
 
             * **ptr** : smart_ptr< :ref:`Variable <handle-ast-Variable>` >
@@ -560,6 +573,7 @@ Containers
 .. das:function:: emplace_new(vec: MakeStruct; ptr: smart_ptr<MakeFieldDecl>)
 
 // stub
+
 
 
 :Arguments: * **vec** :  :ref:`MakeStruct <handle-ast-MakeStruct>` 
@@ -587,6 +601,7 @@ Textual descriptions of the objects
 // stub
 
 
+
 :Arguments: * **list** :  :ref:`AnnotationArgumentList <handle-rtti-AnnotationArgumentList>` 
 
 .. _function-_at_ast_boost_c__c_describe_CH_ls_rtti_c__c_AnnotationDeclaration_gr_:
@@ -594,6 +609,7 @@ Textual descriptions of the objects
 .. das:function:: describe(ann: AnnotationDeclaration) : string
 
 // stub
+
 
 
 :Arguments: * **ann** :  :ref:`AnnotationDeclaration <handle-rtti-AnnotationDeclaration>` 
@@ -605,6 +621,7 @@ Textual descriptions of the objects
 // stub
 
 
+
 :Arguments: * **list** :  :ref:`AnnotationList <handle-rtti-AnnotationList>` 
 
 .. _function-_at_ast_boost_c__c_describe_CY_ls_VariablePtr_gr_1_ls_H_ls_ast_c__c_Variable_gr__gr__qm_M:
@@ -614,6 +631,7 @@ Textual descriptions of the objects
 // stub
 
 
+
 :Arguments: * **vvar** :  :ref:`VariablePtr <alias-VariablePtr>` 
 
 .. _function-_at_ast_boost_c__c_debug_expression_CY_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_M_CY_ls_DebugExpressionFlags_gr_N_ls_refCount_gr_t:
@@ -621,6 +639,7 @@ Textual descriptions of the objects
 .. das:function:: debug_expression(expr: ExpressionPtr; deFlags: DebugExpressionFlags = bitfield(0x0)) : string
 
 // stub
+
 
 
 :Arguments: * **expr** :  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
@@ -634,6 +653,7 @@ Textual descriptions of the objects
 // stub
 
 
+
 :Arguments: * **expr** :  :ref:`Expression <handle-ast-Expression>` ?
 
 .. _function-_at_ast_boost_c__c_describe_C1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_:
@@ -641,6 +661,7 @@ Textual descriptions of the objects
 .. das:function:: describe(expr: Expression?) : string
 
 // stub
+
 
 
 :Arguments: * **expr** :  :ref:`Expression <handle-ast-Expression>` ?
@@ -652,6 +673,7 @@ Textual descriptions of the objects
 // stub
 
 
+
 :Arguments: * **bf** : auto
 
             * **merger** : string
@@ -661,6 +683,7 @@ Textual descriptions of the objects
 .. das:function:: describe_function_short(func: smart_ptr<Function>|Function?) : auto
 
 // stub
+
 
 
 :Arguments: * **func** : option< :ref:`FunctionPtr <alias-FunctionPtr>` | :ref:`Function <handle-ast-Function>` ?>
@@ -698,6 +721,7 @@ Queries
 // stub
 
 
+
 :Arguments: * **typ** :  :ref:`Type <enum-rtti-Type>` 
 
 .. _function-_at_ast_boost_c__c_isExpression_CY_ls_TypeDeclPtr_gr_1_ls_H_ls_ast_c__c_TypeDecl_gr__gr__qm_M_Cb:
@@ -705,6 +729,7 @@ Queries
 .. das:function:: isExpression(t: TypeDeclPtr; top: bool = true) : bool
 
 // stub
+
 
 
 :Arguments: * **t** :  :ref:`TypeDeclPtr <alias-TypeDeclPtr>` 
@@ -718,6 +743,7 @@ Queries
 // stub
 
 
+
 :Arguments: * **parent** :  :ref:`Structure <handle-ast-Structure>` ?
 
             * **child** :  :ref:`Structure <handle-ast-Structure>` ?
@@ -727,6 +753,7 @@ Queries
 .. das:function:: is_class_method(cinfo: StructurePtr; finfo: TypeDeclPtr) : bool
 
 // stub
+
 
 
 :Arguments: * **cinfo** :  :ref:`StructurePtr <alias-StructurePtr>` 
@@ -743,6 +770,7 @@ Queries
 // stub
 
 
+
 :Arguments: * **argn** : string
 
             * **args** :  :ref:`AnnotationArgumentList <handle-rtti-AnnotationArgumentList>` 
@@ -754,6 +782,7 @@ Queries
 // stub
 
 
+
 :Arguments: * **args** :  :ref:`AnnotationArgumentList <handle-rtti-AnnotationArgumentList>` 
 
             * **argn** : string
@@ -763,6 +792,7 @@ Queries
 .. das:function:: find_unique_function(mod: Module?; name: string; canfail: bool = false) : smart_ptr<Function>
 
 // stub
+
 
 
 :Arguments: * **mod** :  :ref:`Module <handle-rtti-Module>` ?
@@ -778,6 +808,7 @@ Queries
 // stub
 
 
+
 :Arguments: * **mod** :  :ref:`Module <handle-rtti-Module>` ?
 
             * **name** : string
@@ -791,6 +822,7 @@ Queries
 // stub
 
 
+
 :Arguments: * **mod_name** : string
 
             * **ann_name** : string
@@ -800,6 +832,7 @@ Queries
 .. das:function:: get_for_source_index(expr: smart_ptr<ExprFor>; svar: VariablePtr) : int
 
 // stub
+
 
 
 :Arguments: * **expr** : smart_ptr< :ref:`ExprFor <handle-ast-ExprFor>` >
@@ -813,6 +846,7 @@ Queries
 // stub
 
 
+
 :Arguments: * **expr** : smart_ptr< :ref:`ExprFor <handle-ast-ExprFor>` >
 
             * **source** :  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
@@ -824,6 +858,7 @@ Queries
 // stub
 
 
+
 :Arguments: * **fun** :  :ref:`FunctionPtr <alias-FunctionPtr>` 
 
 .. _function-_at_ast_boost_c__c_isCMRES_C1_ls_H_ls_ast_c__c_Function_gr__gr__qm_:
@@ -833,6 +868,7 @@ Queries
 // stub
 
 
+
 :Arguments: * **fun** :  :ref:`Function <handle-ast-Function>` ?
 
 .. _function-_at_ast_boost_c__c_isMakeLocal_CY_ls_ExpressionPtr_gr_1_ls_H_ls_ast_c__c_Expression_gr__gr__qm_M:
@@ -840,6 +876,7 @@ Queries
 .. das:function:: isMakeLocal(expr: ExpressionPtr) : bool
 
 // stub
+
 
 
 :Arguments: * **expr** :  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
@@ -858,6 +895,7 @@ Queries
 // stub
 
 
+
 :Arguments: * **typ** :  :ref:`TypeDeclPtr <alias-TypeDeclPtr>` 
 
             * **name** : string
@@ -869,6 +907,7 @@ Queries
 // stub
 
 
+
 :Arguments: * **blockT** :  :ref:`TypeDeclPtr <alias-TypeDeclPtr>` 
 
 .. _function-_at_ast_boost_c__c_getVectorElementCount_CE_ls_rtti_c__c_Type_gr_:
@@ -876,6 +915,7 @@ Queries
 .. das:function:: getVectorElementCount(bt: Type) : int
 
 // stub
+
 
 
 :Arguments: * **bt** :  :ref:`Type <enum-rtti-Type>` 
@@ -887,6 +927,7 @@ Queries
 // stub
 
 
+
 :Arguments: * **bt** :  :ref:`Type <enum-rtti-Type>` 
 
 .. _function-_at_ast_boost_c__c_getVectorElementType_CE_ls_rtti_c__c_Type_gr_:
@@ -896,6 +937,7 @@ Queries
 // stub
 
 
+
 :Arguments: * **bt** :  :ref:`Type <enum-rtti-Type>` 
 
 .. _function-_at_ast_boost_c__c_getVectorOffset_CE_ls_rtti_c__c_Type_gr__Cs:
@@ -903,6 +945,7 @@ Queries
 .. das:function:: getVectorOffset(bt: Type; ident: string) : int
 
 // stub
+
 
 
 :Arguments: * **bt** :  :ref:`Type <enum-rtti-Type>` 
@@ -934,6 +977,7 @@ Annotations
 // stub
 
 
+
 :Arguments: * **mod_name** : string
 
             * **ann_name** : string
@@ -947,6 +991,7 @@ Annotations
 // stub
 
 
+
 :Arguments: * **mod_name** : string
 
             * **ann_name** : string
@@ -956,6 +1001,7 @@ Annotations
 .. das:function:: append_annotation(func: FunctionPtr; mod_name: string; ann_name: string)
 
 // stub
+
 
 
 :Arguments: * **func** :  :ref:`FunctionPtr <alias-FunctionPtr>` 
@@ -971,6 +1017,7 @@ Annotations
 // stub
 
 
+
 :Arguments: * **blk** : smart_ptr< :ref:`ExprBlock <handle-ast-ExprBlock>` >
 
             * **mod_name** : string
@@ -984,6 +1031,7 @@ Annotations
 // stub
 
 
+
 :Arguments: * **st** : smart_ptr< :ref:`Structure <handle-ast-Structure>` >
 
             * **mod_name** : string
@@ -995,6 +1043,7 @@ Annotations
 .. das:function:: append_annotation(func: FunctionPtr; mod_name: string; ann_name: string; args: array<tuple<argname:string;argvalue:variant<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any>>>)
 
 // stub
+
 
 
 :Arguments: * **func** :  :ref:`FunctionPtr <alias-FunctionPtr>` 
@@ -1012,6 +1061,7 @@ Annotations
 // stub
 
 
+
 :Arguments: * **blk** : smart_ptr< :ref:`ExprBlock <handle-ast-ExprBlock>` >
 
             * **mod_name** : string
@@ -1025,6 +1075,7 @@ Annotations
 .. das:function:: append_annotation(st: smart_ptr<Structure>; mod_name: string; ann_name: string; args: array<tuple<argname:string;argvalue:variant<tBool:bool;tInt:int;tUInt:uint;tInt64:int64;tUInt64:uint64;tFloat:float;tDouble:double;tString:string;nothing:any>>>)
 
 // stub
+
 
 
 :Arguments: * **st** : smart_ptr< :ref:`Structure <handle-ast-Structure>` >
@@ -1042,6 +1093,7 @@ Annotations
 // stub
 
 
+
 :Arguments: * **arguments** :  :ref:`AnnotationArgumentList <handle-rtti-AnnotationArgumentList>` 
 
             * **argName** : string
@@ -1053,6 +1105,7 @@ Annotations
 .. das:function:: add_annotation_argument(arguments: AnnotationArgumentList; argName: string; val: int) : int
 
 // stub
+
 
 
 :Arguments: * **arguments** :  :ref:`AnnotationArgumentList <handle-rtti-AnnotationArgumentList>` 
@@ -1068,6 +1121,7 @@ Annotations
 // stub
 
 
+
 :Arguments: * **arguments** :  :ref:`AnnotationArgumentList <handle-rtti-AnnotationArgumentList>` 
 
             * **argName** : string
@@ -1081,6 +1135,7 @@ Annotations
 // stub
 
 
+
 :Arguments: * **arguments** :  :ref:`AnnotationArgumentList <handle-rtti-AnnotationArgumentList>` 
 
             * **argName** : string
@@ -1092,6 +1147,7 @@ Annotations
 .. das:function:: add_annotation_argument(arguments: AnnotationArgumentList; ann: AnnotationArgument) : int
 
 // stub
+
 
 
 :Arguments: * **arguments** :  :ref:`AnnotationArgumentList <handle-rtti-AnnotationArgumentList>` 
@@ -1117,6 +1173,7 @@ Expression generation
 // stub
 
 
+
 :Arguments: * **str** :  :ref:`StructurePtr <alias-StructurePtr>` 
 
             * **name** : string
@@ -1137,6 +1194,7 @@ Expression generation
 // stub
 
 
+
 :Arguments: * **text** : string
 
             * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` 
@@ -1146,6 +1204,7 @@ Expression generation
 .. das:function:: convert_to_expression(value: auto& ==const; at: LineInfo) : auto
 
 // stub
+
 
 
 :Arguments: * **value** : auto&!
@@ -1159,6 +1218,7 @@ Expression generation
 // stub
 
 
+
 :Arguments: * **value** : auto!
 
             * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` 
@@ -1170,6 +1230,7 @@ Expression generation
 // stub
 
 
+
 :Arguments: * **value** : auto!
 
 .. _function-_at_ast_boost_c__c_convert_to_expression_C_eq__dot_:
@@ -1177,6 +1238,7 @@ Expression generation
 .. das:function:: convert_to_expression(value: auto const ==const) : auto
 
 // stub
+
 
 
 :Arguments: * **value** : auto!
@@ -1194,6 +1256,7 @@ Visitors
 // stub
 
 
+
 :Arguments: * **blk** :  :ref:`ExprBlock <handle-ast-ExprBlock>` ?
 
             * **adapter** : smart_ptr< :ref:`VisitorAdapter <handle-ast-VisitorAdapter>` >
@@ -1209,6 +1272,7 @@ Type generation
 .. das:function:: function_to_type(fn: FunctionPtr) : TypeDeclPtr
 
 // stub
+
 
 
 :Arguments: * **fn** :  :ref:`FunctionPtr <alias-FunctionPtr>` 
@@ -1229,6 +1293,7 @@ Setup
 // stub
 
 
+
 :Arguments: * **name** : string
 
             * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` 
@@ -1240,6 +1305,7 @@ Setup
 .. das:function:: setup_call_list(name: string; at: LineInfo; isInit: bool = false; isPrivate: bool = true; isLateInit: bool = false) : ExprBlock?
 
 // stub
+
 
 
 :Arguments: * **name** : string
@@ -1259,6 +1325,7 @@ Setup
 // stub
 
 
+
 :Arguments: * **name** : string
 
             * **at** :  :ref:`LineInfo <handle-rtti-LineInfo>` 
@@ -1268,6 +1335,7 @@ Setup
 .. das:function:: setup_tag_annotation(name: string; tag: string; classPtr: auto) : auto
 
 // stub
+
 
 
 :Arguments: * **name** : string

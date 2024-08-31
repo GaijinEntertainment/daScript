@@ -155,6 +155,7 @@ Initialization and finalization
 // stub
 
 
+
 :Arguments: * **arg0** : block<( :ref:`Uri <handle-uriparser-Uri>` #):void> implicit
 
 .. _function-_at_uriparser_c__c_Uri_CIs:
@@ -164,6 +165,7 @@ Initialization and finalization
 // stub
 
 
+
 :Arguments: * **arg0** : string implicit
 
 .. _function-_at_uriparser_c__c_using_CIs_CI0_ls__hh_XH_ls_uriparser_c__c_Uri_gr__gr_1_ls_v_gr__builtin_:
@@ -171,6 +173,7 @@ Initialization and finalization
 .. das:function:: using(arg0: string implicit; arg1: block<(var arg0:Uri#):void> implicit)
 
 // stub
+
 
 
 :Arguments: * **arg0** : string implicit
@@ -184,6 +187,7 @@ Initialization and finalization
 // stub
 
 
+
 :Arguments: * **uri** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
 
 .. _function-_at_uriparser_c__c_clone_IH_ls_uriparser_c__c_Uri_gr__CIH_ls_uriparser_c__c_Uri_gr_:
@@ -191,6 +195,7 @@ Initialization and finalization
 .. das:function:: clone(dest: Uri implicit; src: Uri implicit)
 
 // stub
+
 
 
 :Arguments: * **dest** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
@@ -211,6 +216,7 @@ Escape and unescape
 // stub
 
 
+
 :Arguments: * **uriStr** : string implicit
 
             * **spaceToPlus** : bool
@@ -222,6 +228,7 @@ Escape and unescape
 .. das:function:: unescape_uri(uriStr: string implicit) : string
 
 // stub
+
 
 
 :Arguments: * **uriStr** : string implicit
@@ -246,6 +253,7 @@ Uri manipulations
 // stub
 
 
+
 :Arguments: * **uri** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
 
             * **query** : bool
@@ -259,6 +267,7 @@ Uri manipulations
 // stub
 
 
+
 :Arguments: * **base** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
 
             * **relative** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
@@ -268,6 +277,7 @@ Uri manipulations
 .. das:function:: remove_base_uri(base: Uri implicit; relative: Uri implicit) : Uri
 
 // stub
+
 
 
 :Arguments: * **base** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
@@ -281,6 +291,7 @@ Uri manipulations
 // stub
 
 
+
 :Arguments: * **uri** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
 
 .. _function-_at_uriparser_c__c_string_CIH_ls_uriparser_c__c_Uri_gr__C_c_C_l:
@@ -288,6 +299,7 @@ Uri manipulations
 .. das:function:: string(uri: Uri implicit) : string
 
 // stub
+
 
 
 :Arguments: * **uri** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
@@ -299,6 +311,7 @@ Uri manipulations
 // stub
 
 
+
 :Arguments: * **range** :  :ref:`UriTextRangeA <handle-uriparser-UriTextRangeA>`  implicit
 
 .. _function-_at_uriparser_c__c_uri_for_each_query_kv_CIH_ls_uriparser_c__c_Uri_gr__CI0_ls__hh_s;_hh_s_gr_1_ls_v_gr__builtin__C_c_C_l:
@@ -306,6 +319,7 @@ Uri manipulations
 .. das:function:: uri_for_each_query_kv(uri: Uri implicit; block: block<(var arg0:string#;var arg1:string#):void> implicit)
 
 // stub
+
 
 
 :Arguments: * **uri** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
@@ -317,6 +331,7 @@ Uri manipulations
 .. das:function:: normalize_uri(uriStr: string implicit) : string
 
 // stub
+
 
 
 :Arguments: * **uriStr** : string implicit
@@ -345,6 +360,7 @@ File name conversions
 // stub
 
 
+
 :Arguments: * **uri** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
 
 .. _function-_at_uriparser_c__c_to_windows_file_name_CIH_ls_uriparser_c__c_Uri_gr__C_c_C_l:
@@ -352,6 +368,7 @@ File name conversions
 .. das:function:: to_windows_file_name(uri: Uri implicit) : string
 
 // stub
+
 
 
 :Arguments: * **uri** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
@@ -363,6 +380,7 @@ File name conversions
 // stub
 
 
+
 :Arguments: * **uri** :  :ref:`Uri <handle-uriparser-Uri>`  implicit
 
 .. _function-_at_uriparser_c__c_uri_from_file_name_CIs:
@@ -370,6 +388,7 @@ File name conversions
 .. das:function:: uri_from_file_name(filename: string implicit) : Uri
 
 // stub
+
 
 
 :Arguments: * **filename** : string implicit
@@ -381,6 +400,7 @@ File name conversions
 // stub
 
 
+
 :Arguments: * **filename** : string implicit
 
 .. _function-_at_uriparser_c__c_uri_from_unix_file_name_CIs:
@@ -388,6 +408,7 @@ File name conversions
 .. das:function:: uri_from_unix_file_name(filename: string implicit) : Uri
 
 // stub
+
 
 
 :Arguments: * **filename** : string implicit
@@ -399,6 +420,7 @@ File name conversions
 // stub
 
 
+
 :Arguments: * **uriStr** : string implicit
 
 .. _function-_at_uriparser_c__c_uri_to_windows_file_name_CIs_C_c_C_l:
@@ -406,6 +428,7 @@ File name conversions
 .. das:function:: uri_to_windows_file_name(uriStr: string implicit) : string
 
 // stub
+
 
 
 :Arguments: * **uriStr** : string implicit
@@ -417,6 +440,7 @@ File name conversions
 // stub
 
 
+
 :Arguments: * **uriStr** : string implicit
 
 .. _function-_at_uriparser_c__c_windows_file_name_to_uri_CIs_C_c_C_l:
@@ -424,6 +448,7 @@ File name conversions
 .. das:function:: windows_file_name_to_uri(uriStr: string implicit) : string
 
 // stub
+
 
 
 :Arguments: * **uriStr** : string implicit
@@ -435,6 +460,7 @@ File name conversions
 // stub
 
 
+
 :Arguments: * **uriStr** : string implicit
 
 .. _function-_at_uriparser_c__c_file_name_to_uri_CIs_C_c_C_l:
@@ -442,6 +468,7 @@ File name conversions
 .. das:function:: file_name_to_uri(uriStr: string implicit) : string
 
 // stub
+
 
 
 :Arguments: * **uriStr** : string implicit

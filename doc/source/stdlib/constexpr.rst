@@ -57,6 +57,7 @@ Macro helpers
 
 This macro function retrusn true if the expression is a constant expression
 
+
 :Arguments: * **expr** :  :ref:`ExpressionPtr <alias-ExpressionPtr>` 
 
 

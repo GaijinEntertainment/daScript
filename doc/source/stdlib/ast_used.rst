@@ -40,6 +40,7 @@ Collecting type information
 Goes through list of functions `vfun` and variables `vvar` and collects list of which enumeration and structure types are used in them.
 Calls `blk` with said list.
 
+
 :Arguments: * **vfun** : array< :ref:`Function <handle-ast-Function>` ?>
 
             * **vvar** : array< :ref:`Variable <handle-ast-Variable>` ?>

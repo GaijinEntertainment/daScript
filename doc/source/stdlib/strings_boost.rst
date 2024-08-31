@@ -32,6 +32,7 @@ Split and join
 // stub
 
 
+
 :Arguments: * **text** : string implicit
 
             * **delim** : string implicit
@@ -41,6 +42,7 @@ Split and join
 .. das:function:: split_by_chars(text: string implicit; delim: string implicit) : array<string>
 
 // stub
+
 
 
 :Arguments: * **text** : string implicit
@@ -54,6 +56,7 @@ Split and join
 // stub
 
 
+
 :Arguments: * **it** : auto
 
             * **separator** : string implicit
@@ -63,6 +66,7 @@ Split and join
 .. das:function:: join(iterable: array<auto(TT)>; separator: string; blk: block<(var writer:StringBuilderWriter;elem:TT const):void>) : string
 
 // stub
+
 
 
 :Arguments: * **iterable** : array<auto(TT)>
@@ -78,6 +82,7 @@ Split and join
 // stub
 
 
+
 :Arguments: * **iterable** : iterator<auto(TT)>
 
             * **separator** : string
@@ -89,6 +94,7 @@ Split and join
 .. das:function:: join(iterable: auto(TT)[]; separator: string; blk: block<(var writer:StringBuilderWriter;elem:TT const):void>) : string
 
 // stub
+
 
 
 :Arguments: * **iterable** : auto(TT)[-1]
@@ -104,6 +110,7 @@ Split and join
 // stub
 
 
+
 :Arguments: * **text** : string implicit
 
             * **delim** : string implicit
@@ -115,6 +122,7 @@ Split and join
 .. das:function:: split_by_chars(text: string implicit; delim: string implicit; blk: block<(arg:array<string> const#):auto>) : auto
 
 // stub
+
 
 
 :Arguments: * **text** : string implicit
@@ -136,6 +144,7 @@ Formatting
 // stub
 
 
+
 :Arguments: * **text** : string implicit
 
             * **width** : int
@@ -155,6 +164,7 @@ Queries and comparisons
 // stub
 
 
+
 :Arguments: * **foo** : array<uint8> implicit
 
             * **idx** : int
@@ -168,6 +178,7 @@ Queries and comparisons
 // stub
 
 
+
 :Arguments: * **a** : string implicit
 
             * **b** :  :ref:`das_string <handle-builtin-das_string>` 
@@ -177,6 +188,7 @@ Queries and comparisons
 .. das:function:: eq(b: das_string; a: string implicit) : auto
 
 // stub
+
 
 
 :Arguments: * **b** :  :ref:`das_string <handle-builtin-das_string>` 
@@ -194,6 +206,7 @@ Replace
 .. das:function:: replace_multiple(source: string; replaces: array<tuple<text:string;replacement:string>>) : string
 
 // stub
+
 
 
 :Arguments: * **source** : string
@@ -214,6 +227,7 @@ Levenshtein distance
 // stub
 
 
+
 :Arguments: * **s** : string implicit
 
             * **t** : string implicit
@@ -223,6 +237,7 @@ Levenshtein distance
 .. das:function:: levenshtein_distance_fast(s: string implicit; t: string implicit) : int
 
 // stub
+
 
 
 :Arguments: * **s** : string implicit
@@ -243,6 +258,7 @@ Character traits
 // stub
 
 
+
 :Arguments: * **ch** : int
 
 .. _function-_at_strings_boost_c__c_is_tab_or_space_Ci:
@@ -250,6 +266,7 @@ Character traits
 .. das:function:: is_tab_or_space(ch: int) : bool
 
 // stub
+
 
 
 :Arguments: * **ch** : int
